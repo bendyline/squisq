@@ -1,0 +1,441 @@
+/**
+ * Doc Animations
+ *
+ * CSS keyframe animations for the visual doc system.
+ * Designed to be ES2015/Chrome 49 compatible for Coherent GT (MSFS).
+ *
+ * Animation classes are applied dynamically based on Doc.
+ * Each animation has variants for common durations.
+ */
+
+/* ============================================
+   Slow Zoom Effect
+   Slow zoom with optional pan for cinematic feel
+   ============================================ */
+
+@keyframes slowZoomIn {
+  from {
+    transform: scale(1);
+  }
+  to {
+    transform: scale(1.15);
+  }
+}
+
+@keyframes slowZoomOut {
+  from {
+    transform: scale(1.15);
+  }
+  to {
+    transform: scale(1);
+  }
+}
+
+@keyframes slowZoomPanLeft {
+  from {
+    transform: translateX(0) scale(1.1);
+  }
+  to {
+    transform: translateX(-8%) scale(1.1);
+  }
+}
+
+@keyframes slowZoomPanRight {
+  from {
+    transform: translateX(-8%) scale(1.1);
+  }
+  to {
+    transform: translateX(0) scale(1.1);
+  }
+}
+
+@keyframes slowZoomPanUp {
+  from {
+    transform: translateY(0) scale(1.1);
+  }
+  to {
+    transform: translateY(-8%) scale(1.1);
+  }
+}
+
+@keyframes slowZoomPanDown {
+  from {
+    transform: translateY(-8%) scale(1.1);
+  }
+  to {
+    transform: translateY(0) scale(1.1);
+  }
+}
+
+/* Slow zoom combined zoom + pan */
+@keyframes slowZoomCombinedPanLeft {
+  from {
+    transform: translateX(0) scale(1);
+  }
+  to {
+    transform: translateX(-5%) scale(1.12);
+  }
+}
+
+@keyframes slowZoomCombinedPanRight {
+  from {
+    transform: translateX(-5%) scale(1.12);
+  }
+  to {
+    transform: translateX(0) scale(1);
+  }
+}
+
+/* ============================================
+   Fade Animations
+   ============================================ */
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes fadeOut {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes fadeInDown {
+  from {
+    opacity: 0;
+    transform: translateY(-20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* ============================================
+   Zoom Animations
+   ============================================ */
+
+@keyframes zoomIn {
+  from {
+    transform: scale(0.9);
+    opacity: 0;
+  }
+  to {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+@keyframes zoomOut {
+  from {
+    transform: scale(1);
+    opacity: 1;
+  }
+  to {
+    transform: scale(0.9);
+    opacity: 0;
+  }
+}
+
+/* ============================================
+   Pan/Slide Animations
+   ============================================ */
+
+@keyframes panLeft {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-10%);
+  }
+}
+
+@keyframes panRight {
+  from {
+    transform: translateX(-10%);
+  }
+  to {
+    transform: translateX(0);
+  }
+}
+
+@keyframes slideInLeft {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(0);
+  }
+}
+
+@keyframes slideInRight {
+  from {
+    transform: translateX(100%);
+  }
+  to {
+    transform: translateX(0);
+  }
+}
+
+@keyframes slideOutLeft {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-100%);
+  }
+}
+
+@keyframes slideOutRight {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(100%);
+  }
+}
+
+/* ============================================
+   Text Animations
+   ============================================ */
+
+@keyframes typewriter {
+  from {
+    clip-path: inset(0 100% 0 0);
+  }
+  to {
+    clip-path: inset(0 0 0 0);
+  }
+}
+
+/* Fallback for browsers without clip-path */
+@keyframes typewriterFallback {
+  from {
+    width: 0;
+    overflow: hidden;
+  }
+  to {
+    width: 100%;
+    overflow: hidden;
+  }
+}
+
+/* ============================================
+   Block Transitions
+   Applied to entire block containers
+   ============================================ */
+
+.transition-fade-enter {
+  animation: fadeIn var(--transition-duration, 1.5s) ease-out forwards;
+}
+
+.transition-fade-exit {
+  animation: fadeOut var(--transition-duration, 1.5s) ease-out forwards;
+}
+
+.transition-dissolve-enter {
+  animation: fadeIn var(--transition-duration, 2s) ease-in-out forwards;
+}
+
+.transition-dissolve-exit {
+  animation: fadeOut var(--transition-duration, 2s) ease-in-out forwards;
+}
+
+.transition-slideLeft-enter {
+  animation: slideInRight var(--transition-duration, 0.8s) ease-out forwards;
+}
+
+.transition-slideLeft-exit {
+  animation: slideOutLeft var(--transition-duration, 0.8s) ease-out forwards;
+}
+
+.transition-slideRight-enter {
+  animation: slideInLeft var(--transition-duration, 0.8s) ease-out forwards;
+}
+
+.transition-slideRight-exit {
+  animation: slideOutRight var(--transition-duration, 0.8s) ease-out forwards;
+}
+
+/* ============================================
+   Animation Utility Classes
+   Applied dynamically based on layer.animation
+   ============================================ */
+
+.anim-none {
+  animation: none;
+}
+
+.anim-fadeIn {
+  animation: fadeIn var(--anim-duration, 1s) var(--anim-easing, ease-out) var(--anim-delay, 0s) forwards;
+}
+
+.anim-fadeOut {
+  animation: fadeOut var(--anim-duration, 1s) var(--anim-easing, ease-out) var(--anim-delay, 0s) forwards;
+}
+
+.anim-fadeInUp {
+  animation: fadeInUp var(--anim-duration, 0.6s) var(--anim-easing, ease-out) var(--anim-delay, 0s) forwards;
+}
+
+.anim-slowZoom-in {
+  animation: slowZoomIn var(--anim-duration, 8s) var(--anim-easing, linear) var(--anim-delay, 0s) forwards;
+}
+
+.anim-slowZoom-out {
+  animation: slowZoomOut var(--anim-duration, 8s) var(--anim-easing, linear) var(--anim-delay, 0s) forwards;
+}
+
+.anim-slowZoom-panLeft {
+  animation: slowZoomCombinedPanLeft var(--anim-duration, 8s) var(--anim-easing, linear) var(--anim-delay, 0s) forwards;
+}
+
+.anim-slowZoom-panRight {
+  animation: slowZoomCombinedPanRight var(--anim-duration, 8s) var(--anim-easing, linear) var(--anim-delay, 0s) forwards;
+}
+
+.anim-zoomIn {
+  animation: zoomIn var(--anim-duration, 0.5s) var(--anim-easing, ease-out) var(--anim-delay, 0s) forwards;
+}
+
+.anim-zoomOut {
+  animation: zoomOut var(--anim-duration, 0.5s) var(--anim-easing, ease-out) var(--anim-delay, 0s) forwards;
+}
+
+.anim-panLeft {
+  animation: panLeft var(--anim-duration, 8s) var(--anim-easing, linear) var(--anim-delay, 0s) forwards;
+}
+
+.anim-panRight {
+  animation: panRight var(--anim-duration, 8s) var(--anim-easing, linear) var(--anim-delay, 0s) forwards;
+}
+
+.anim-typewriter {
+  animation: typewriter var(--anim-duration, 2s) var(--anim-easing, steps(40, end)) var(--anim-delay, 0s) forwards;
+}
+
+/* ============================================
+   Doc Player Container Styles
+   ============================================ */
+
+.doc-player {
+  position: relative;
+  overflow: hidden;
+  /* clip-path provides a hard pixel clip that catches SVG foreignObject bleed
+     which can escape overflow:hidden in some browsers */
+  clip-path: inset(0);
+  background: #000;
+  /* Ensure max dimensions work with aspect-ratio */
+  max-width: 100%;
+  max-height: 100%;
+}
+
+.doc-player__viewport {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.doc-player__block {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.doc-player__block--active {
+  z-index: 2;
+}
+
+.doc-player__block--previous {
+  z-index: 1;
+}
+
+/* Tap-to-toggle play/pause feedback */
+.doc-player__tap-feedback {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 150;
+  pointer-events: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 72px;
+  height: 72px;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.45);
+  animation: tap-feedback-fade 0.6s ease-out forwards;
+}
+
+@keyframes tap-feedback-fade {
+  0% { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+  100% { opacity: 0; transform: translate(-50%, -50%) scale(1.3); }
+}
+
+/* SVG block container */
+.block-svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+/* Layer containers within SVG */
+.block-layer {
+  overflow: hidden;
+}
+
+.block-layer--image {
+  /* Images need overflow visible for Ken Burns */
+  overflow: visible;
+}
+
+/* ============================================
+   Text Styling Helpers
+   ============================================ */
+
+.text-shadow {
+  text-shadow:
+    0 2px 4px rgba(0, 0, 0, 0.8),
+    0 4px 8px rgba(0, 0, 0, 0.4);
+}
+
+.text-shadow-light {
+  text-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.6);
+}
+
+/* Text background box */
+.text-box {
+  background: rgba(0, 0, 0, 0.6);
+  padding: 16px 24px;
+  border-radius: 4px;
+}
+
+.text-box--light {
+  background: rgba(255, 255, 255, 0.9);
+  color: #1a1a1a;
+}

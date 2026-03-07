@@ -1,0 +1,21 @@
+{
+  "name": "prodcore",
+  "private": true,
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "build": "npm run build -ws",
+    "build:core": "npm run build -w @bendyline/prodcore",
+    "build:react": "npm run build -w @bendyline/prodcore-react",
+    "typecheck": "tsc -b packages/core packages/react",
+    "test": "vitest",
+    "clean": "rimraf packages/*/dist"
+  },
+  "devDependencies": {
+    "rimraf": "^5.0.0",
+    "tsup": "^8.0.0",
+    "typescript": "^5.3.0",
+    "vitest": "^2.0.0"
+  }
+}

@@ -1,0 +1,64 @@
+{
+  "name": "@bendyline/prodcore",
+  "version": "0.1.1",
+  "type": "module",
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": ["dist", "src"],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    },
+    "./schemas": {
+      "types": "./dist/schemas/index.d.ts",
+      "import": "./dist/schemas/index.js",
+      "default": "./dist/schemas/index.js"
+    },
+    "./spatial": {
+      "types": "./dist/spatial/index.d.ts",
+      "import": "./dist/spatial/index.js",
+      "default": "./dist/spatial/index.js"
+    },
+    "./story": {
+      "types": "./dist/story/index.d.ts",
+      "import": "./dist/story/index.js",
+      "default": "./dist/story/index.js"
+    },
+    "./doc": {
+      "types": "./dist/doc/index.d.ts",
+      "import": "./dist/doc/index.js",
+      "default": "./dist/doc/index.js"
+    },
+    "./storage": {
+      "types": "./dist/storage/index.d.ts",
+      "import": "./dist/storage/index.js",
+      "default": "./dist/storage/index.js"
+    },
+    "./markdown": {
+      "types": "./dist/markdown/index.d.ts",
+      "import": "./dist/markdown/index.js",
+      "default": "./dist/markdown/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsup",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "ngeohash": "^0.6.3",
+    "unified": "^11.0.0",
+    "remark-parse": "^11.0.0",
+    "remark-stringify": "^11.0.0",
+    "remark-gfm": "^4.0.0",
+    "remark-math": "^6.0.0",
+    "remark-directive": "^3.0.0",
+    "hast-util-from-html": "^2.0.0"
+  },
+  "devDependencies": {
+    "tsup": "^8.0.0",
+    "typescript": "^5.3.0"
+  }
+}
