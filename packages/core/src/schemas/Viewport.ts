@@ -64,7 +64,9 @@ export function getViewport(viewport: ViewportPreset | ViewportConfig): Viewport
  */
 export function calculateFontScale(viewport: ViewportConfig): number {
   const referenceDiagonal = Math.sqrt(1920 * 1920 + 1080 * 1080); // ~2203
-  const currentDiagonal = Math.sqrt(viewport.width * viewport.width + viewport.height * viewport.height);
+  const currentDiagonal = Math.sqrt(
+    viewport.width * viewport.width + viewport.height * viewport.height,
+  );
   return currentDiagonal / referenceDiagonal;
 }
 

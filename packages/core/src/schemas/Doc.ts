@@ -291,10 +291,10 @@ export interface VideoLayer extends BaseLayer {
  * Available map tile styles from free/open-source providers.
  */
 export type MapTileStyle =
-  | 'terrain'     // OpenTopoMap - topographic/terrain (default)
-  | 'satellite'   // ESRI World Imagery
-  | 'road'        // OpenStreetMap standard
-  | 'toner'       // Stadia Toner (high contrast B&W)
+  | 'terrain' // OpenTopoMap - topographic/terrain (default)
+  | 'satellite' // ESRI World Imagery
+  | 'road' // OpenStreetMap standard
+  | 'toner' // Stadia Toner (high contrast B&W)
   | 'watercolor'; // Stadia Watercolor (artistic)
 
 /**
@@ -389,12 +389,12 @@ export type AnimationType =
   | 'none'
   | 'fadeIn'
   | 'fadeOut'
-  | 'slowZoom'      // Slow zoom with optional pan
+  | 'slowZoom' // Slow zoom with optional pan
   | 'zoomIn'
   | 'zoomOut'
   | 'panLeft'
   | 'panRight'
-  | 'typewriter';   // Text appears letter by letter
+  | 'typewriter'; // Text appears letter by letter
 
 /**
  * Transition between blocks.
@@ -407,11 +407,11 @@ export interface Transition {
 }
 
 export type TransitionType =
-  | 'cut'           // Instant switch
-  | 'fade'          // Cross-fade
-  | 'dissolve'      // Soft dissolve
-  | 'slideLeft'     // New block enters from right
-  | 'slideRight';   // New block enters from left
+  | 'cut' // Instant switch
+  | 'fade' // Cross-fade
+  | 'dissolve' // Soft dissolve
+  | 'slideLeft' // New block enters from right
+  | 'slideRight'; // New block enters from left
 
 // ============================================
 // Audio Configuration
@@ -509,7 +509,10 @@ export function getBlockAtTime(blocks: Block[], time: number): Block | null {
 /**
  * Find the caption phrase that should be displayed at a given time.
  */
-export function getCaptionAtTime(captions: CaptionTrack | undefined, time: number): CaptionPhrase | null {
+export function getCaptionAtTime(
+  captions: CaptionTrack | undefined,
+  time: number,
+): CaptionPhrase | null {
   if (!captions || !captions.phrases.length) return null;
 
   for (const phrase of captions.phrases) {

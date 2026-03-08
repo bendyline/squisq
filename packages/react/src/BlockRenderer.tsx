@@ -116,37 +116,15 @@ function LayerRenderer({ layer, basePath, viewport, blockTime, isPlaying }: Laye
   switch (layer.type) {
     case 'image':
       return (
-        <ImageLayer
-          layer={layer}
-          basePath={basePath}
-          viewport={viewport}
-          blockTime={blockTime}
-        />
+        <ImageLayer layer={layer} basePath={basePath} viewport={viewport} blockTime={blockTime} />
       );
     case 'text':
-      return (
-        <TextLayer
-          layer={layer}
-          viewport={viewport}
-          blockTime={blockTime}
-        />
-      );
+      return <TextLayer layer={layer} viewport={viewport} blockTime={blockTime} />;
     case 'shape':
-      return (
-        <ShapeLayer
-          layer={layer}
-          viewport={viewport}
-          blockTime={blockTime}
-        />
-      );
+      return <ShapeLayer layer={layer} viewport={viewport} blockTime={blockTime} />;
     case 'map':
       return (
-        <MapLayer
-          layer={layer}
-          basePath={basePath}
-          viewport={viewport}
-          blockTime={blockTime}
-        />
+        <MapLayer layer={layer} basePath={basePath} viewport={viewport} blockTime={blockTime} />
       );
     case 'video':
       return (

@@ -49,10 +49,7 @@ export async function markdownDocToPptx(
  *
  * @throws Error — PPTX support is not yet implemented
  */
-export async function docToPptx(
-  _doc: Doc,
-  _options?: PptxExportOptions,
-): Promise<Blob> {
+export async function docToPptx(_doc: Doc, _options?: PptxExportOptions): Promise<Blob> {
   throw new Error('PPTX export is not yet implemented');
 }
 

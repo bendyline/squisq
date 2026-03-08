@@ -1,6 +1,27 @@
 {
   "name": "@bendyline/squisq",
   "version": "0.1.1",
+  "description": "Headless utilities for doc/block rendering, spatial math, Markdown, and storage",
+  "license": "MIT",
+  "author": "Bendyline",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/nicknisi/squisq.git",
+    "directory": "packages/core"
+  },
+  "homepage": "https://github.com/nicknisi/squisq",
+  "keywords": [
+    "doc",
+    "block",
+    "template",
+    "spatial",
+    "geohash",
+    "markdown",
+    "storage"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
   "type": "module",
   "main": "./dist/index.js",
   "module": "./dist/index.js",
@@ -48,7 +69,8 @@
   },
   "scripts": {
     "build": "tsup",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "prepublishOnly": "npm run build"
   },
   "dependencies": {
     "hast-util-from-html": "^2.0.0",

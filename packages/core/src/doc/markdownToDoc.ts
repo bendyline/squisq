@@ -23,11 +23,7 @@
  */
 
 import type { Doc, Block } from '../schemas/Doc.js';
-import type {
-  MarkdownDocument,
-  MarkdownBlockNode,
-  MarkdownHeading,
-} from '../markdown/types.js';
+import type { MarkdownDocument, MarkdownBlockNode, MarkdownHeading } from '../markdown/types.js';
 import { extractPlainText } from '../markdown/utils.js';
 
 // ============================================
@@ -60,13 +56,15 @@ export interface MarkdownToDocOptions {
  * "Getting Started & More" → "getting-started-more"
  */
 function slugify(text: string): string {
-  return text
-    .toLowerCase()
-    .replace(/[^\w\s-]/g, '')   // Remove non-word chars (except spaces and hyphens)
-    .replace(/[\s_]+/g, '-')    // Replace spaces/underscores with hyphens
-    .replace(/-+/g, '-')        // Collapse multiple hyphens
-    .replace(/^-|-$/g, '')      // Trim leading/trailing hyphens
-    || 'block';                 // Fallback for empty result
+  return (
+    text
+      .toLowerCase()
+      .replace(/[^\w\s-]/g, '') // Remove non-word chars (except spaces and hyphens)
+      .replace(/[\s_]+/g, '-') // Replace spaces/underscores with hyphens
+      .replace(/-+/g, '-') // Collapse multiple hyphens
+      .replace(/^-|-$/g, '') || // Trim leading/trailing hyphens
+    'block'
+  ); // Fallback for empty result
 }
 
 /**
@@ -106,10 +104,7 @@ function createIdGenerator() {
  * @param options - Conversion options
  * @returns A Doc whose blocks mirror the markdown heading structure
  */
-export function markdownToDoc(
-  markdownDoc: MarkdownDocument,
-  options?: MarkdownToDocOptions,
-): Doc {
+export function markdownToDoc(markdownDoc: MarkdownDocument, options?: MarkdownToDocOptions): Doc {
   const articleId = options?.articleId ?? 'markdown-doc';
   const defaultTemplate = options?.defaultTemplate ?? 'sectionHeader';
   const defaultDuration = options?.defaultDuration ?? 5;
@@ -135,9 +130,7 @@ export function markdownToDoc(
   }
 
   function makeBlock(heading: MarkdownHeading | null): Block {
-    const id = heading
-      ? generateId(heading, headingIndex++)
-      : 'preamble';
+    const id = heading ? generateId(heading, headingIndex++) : 'preamble';
 
     // Use template from annotation if present, otherwise fall back to default
     const annotation = heading?.templateAnnotation;

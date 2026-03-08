@@ -99,11 +99,7 @@ export async function getAllSlotMeta(): Promise<(SlotMeta | null)[]> {
 /**
  * Save a document to a slot.
  */
-export async function saveSlot(
-  slot: number,
-  markdown: string,
-  name?: string,
-): Promise<void> {
+export async function saveSlot(slot: number, markdown: string, name?: string): Promise<void> {
   const existing = await getSlotMeta(slot);
   const mediaCount = existing?.mediaCount ?? 0;
 
@@ -178,7 +174,10 @@ export async function addSlotMedia(
   // Store binary data
   await store.set(key, data);
   // Store companion metadata
-  const size = data instanceof Blob ? data.size : (data as ArrayBuffer).byteLength ?? (data as Uint8Array).length;
+  const size =
+    data instanceof Blob
+      ? data.size
+      : ((data as ArrayBuffer).byteLength ?? (data as Uint8Array).length);
   await store.set(key + ':info', { mimeType, size });
 
   // Update slot meta media count
@@ -258,7 +257,11 @@ export function createSlotMediaProvider(slot: number): MediaProvider {
       return listSlotMedia(slot);
     },
 
-    async addMedia(name: string, data: ArrayBuffer | Blob | Uint8Array, mimeType: string): Promise<string> {
+    async addMedia(
+      name: string,
+      data: ArrayBuffer | Blob | Uint8Array,
+      mimeType: string,
+    ): Promise<string> {
       return addSlotMedia(slot, name, data, mimeType);
     },
 

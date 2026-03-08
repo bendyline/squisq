@@ -21,9 +21,7 @@ export function StatusBar({ className }: StatusBarProps) {
 
   const stats = useMemo(() => {
     const chars = markdownSource.length;
-    const words = markdownSource.trim()
-      ? markdownSource.trim().split(/\s+/).length
-      : 0;
+    const words = markdownSource.trim() ? markdownSource.trim().split(/\s+/).length : 0;
     const lines = markdownSource.split('\n').length;
     const blocks = doc?.blocks.length ?? 0;
     return { chars, words, lines, blocks };
@@ -31,33 +29,19 @@ export function StatusBar({ className }: StatusBarProps) {
 
   return (
     <div className={`squisq-status-bar ${className || ''}`}>
-      <span className="squisq-status-item">
-        {stats.words} words
-      </span>
-      <span className="squisq-status-item">
-        {stats.chars} chars
-      </span>
-      <span className="squisq-status-item">
-        {stats.lines} lines
-      </span>
-      <span className="squisq-status-item">
-        {stats.blocks} blocks
-      </span>
+      <span className="squisq-status-item">{stats.words} words</span>
+      <span className="squisq-status-item">{stats.chars} chars</span>
+      <span className="squisq-status-item">{stats.lines} lines</span>
+      <span className="squisq-status-item">{stats.blocks} blocks</span>
       <span className="squisq-status-spacer" />
-      {isParsing && (
-        <span className="squisq-status-item squisq-status-parsing">
-          Parsing…
-        </span>
-      )}
+      {isParsing && <span className="squisq-status-item squisq-status-parsing">Parsing…</span>}
       {parseError && (
         <span className="squisq-status-item squisq-status-error" title={parseError}>
           ⚠ Error
         </span>
       )}
       {!isParsing && !parseError && (
-        <span className="squisq-status-item squisq-status-ok">
-          ✓ OK
-        </span>
+        <span className="squisq-status-item squisq-status-ok">✓ OK</span>
       )}
     </div>
   );

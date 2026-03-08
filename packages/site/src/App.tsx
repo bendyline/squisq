@@ -71,8 +71,8 @@ export function App() {
 
   const handleImport = useCallback((markdown: string) => {
     setCurrentSource(markdown);
-    setSelectedSample('');          // deselect sample dropdown
-    setEditorKey((k) => k + 1);    // remount editor with new content
+    setSelectedSample(''); // deselect sample dropdown
+    setEditorKey((k) => k + 1); // remount editor with new content
   }, []);
 
   return (
@@ -150,11 +150,13 @@ export function App() {
             padding: '2px 10px',
             cursor: 'pointer',
             background: showDebug
-              ? (isDark ? '#2563eb' : '#2563eb')
-              : (isDark ? '#374151' : '#e5e7eb'),
-            color: showDebug
-              ? '#fff'
-              : (isDark ? '#d1d5db' : '#374151'),
+              ? isDark
+                ? '#2563eb'
+                : '#2563eb'
+              : isDark
+                ? '#374151'
+                : '#e5e7eb',
+            color: showDebug ? '#fff' : isDark ? '#d1d5db' : '#374151',
             border: 'none',
             borderRadius: 4,
           }}

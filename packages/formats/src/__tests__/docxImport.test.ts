@@ -215,11 +215,7 @@ describe('docxToMarkdownDoc', () => {
 
   it('merges adjacent plain text runs', async () => {
     const data = await buildTestDocx({
-      bodyXml:
-        `<w:p>` +
-        `<w:r><w:t>Hello </w:t></w:r>` +
-        `<w:r><w:t>world</w:t></w:r>` +
-        `</w:p>`,
+      bodyXml: `<w:p>` + `<w:r><w:t>Hello </w:t></w:r>` + `<w:r><w:t>world</w:t></w:r>` + `</w:p>`,
     });
 
     const doc = await docxToMarkdownDoc(data);
@@ -362,8 +358,7 @@ describe('docxToMarkdownDoc', () => {
 
   it('imports line breaks', async () => {
     const data = await buildTestDocx({
-      bodyXml:
-        `<w:p><w:r><w:t>Before</w:t></w:r><w:r><w:br/></w:r><w:r><w:t>After</w:t></w:r></w:p>`,
+      bodyXml: `<w:p><w:r><w:t>Before</w:t></w:r><w:r><w:br/></w:r><w:r><w:t>After</w:t></w:r></w:p>`,
     });
 
     const doc = await docxToMarkdownDoc(data);

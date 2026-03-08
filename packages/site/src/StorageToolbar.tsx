@@ -7,13 +7,7 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import type { SlotMeta } from './slotStorage';
-import {
-  SLOT_COUNT,
-  getAllSlotMeta,
-  saveSlot,
-  loadSlot,
-  clearSlot,
-} from './slotStorage';
+import { SLOT_COUNT, getAllSlotMeta, saveSlot, loadSlot, clearSlot } from './slotStorage';
 
 // ============================================
 // Types
@@ -36,7 +30,10 @@ interface StorageToolbarProps {
 // Styles
 // ============================================
 
-function btnStyle(isDark: boolean, variant: 'default' | 'primary' | 'danger' = 'default'): React.CSSProperties {
+function btnStyle(
+  isDark: boolean,
+  variant: 'default' | 'primary' | 'danger' = 'default',
+): React.CSSProperties {
   const base: React.CSSProperties = {
     fontSize: 12,
     padding: '2px 8px',
@@ -49,7 +46,11 @@ function btnStyle(isDark: boolean, variant: 'default' | 'primary' | 'danger' = '
     case 'primary':
       return { ...base, background: '#2563eb', color: '#fff' };
     case 'danger':
-      return { ...base, background: isDark ? '#7f1d1d' : '#fecaca', color: isDark ? '#fca5a5' : '#991b1b' };
+      return {
+        ...base,
+        background: isDark ? '#7f1d1d' : '#fecaca',
+        color: isDark ? '#fca5a5' : '#991b1b',
+      };
     default:
       return {
         ...base,
@@ -90,10 +91,13 @@ export function StorageToolbar({
     statusTimer.current = setTimeout(() => setStatus(''), 2000);
   }, []);
 
-  const handleSlotSelect = useCallback((e: React.ChangeEvent<HTMLSelectElement>) => {
-    const val = e.target.value;
-    onSlotChange(val === '' ? null : parseInt(val, 10));
-  }, [onSlotChange]);
+  const handleSlotSelect = useCallback(
+    (e: React.ChangeEvent<HTMLSelectElement>) => {
+      const val = e.target.value;
+      onSlotChange(val === '' ? null : parseInt(val, 10));
+    },
+    [onSlotChange],
+  );
 
   const handleSave = useCallback(async () => {
     if (activeSlot === null) return;
@@ -159,7 +163,11 @@ export function StorageToolbar({
 
       {activeSlot !== null && (
         <>
-          <button style={btnStyle(isDark, 'primary')} onClick={handleSave} title="Save current document to this slot">
+          <button
+            style={btnStyle(isDark, 'primary')}
+            onClick={handleSave}
+            title="Save current document to this slot"
+          >
             Save
           </button>
           <button

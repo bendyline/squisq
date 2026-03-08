@@ -32,28 +32,16 @@ import type {
   MarkdownTable,
   MarkdownTableRow,
   MarkdownTableCell,
-  MarkdownThematicBreak,
   MarkdownHtmlBlock,
   MarkdownMathBlock,
   MarkdownFootnoteDefinition,
-  MarkdownText,
-  MarkdownEmphasis,
-  MarkdownStrong,
-  MarkdownStrikethrough,
-  MarkdownInlineCode,
   MarkdownLink,
   MarkdownImage,
-  MarkdownBreak,
-  MarkdownInlineHtml,
-  MarkdownInlineMath,
   MarkdownFootnoteReference,
 } from '@bendyline/squisq/markdown';
 
 import { createPackage } from '../ooxml/writer.js';
-import {
-  xmlDeclaration,
-  escapeXml,
-} from '../ooxml/xmlUtils.js';
+import { xmlDeclaration, escapeXml } from '../ooxml/xmlUtils.js';
 import {
   NS_WML,
   NS_R,
@@ -64,7 +52,6 @@ import {
   REL_SETTINGS,
   REL_FONT_TABLE,
   REL_HYPERLINK,
-  REL_IMAGE,
   REL_FOOTNOTES,
   CONTENT_TYPE_DOCX_DOCUMENT,
   CONTENT_TYPE_DOCX_STYLES,
@@ -130,10 +117,7 @@ export async function markdownDocToDocx(
  * @param options - Export options
  * @returns An ArrayBuffer containing the .docx file
  */
-export async function docToDocx(
-  doc: Doc,
-  options: DocxExportOptions = {},
-): Promise<ArrayBuffer> {
+export async function docToDocx(doc: Doc, options: DocxExportOptions = {}): Promise<ArrayBuffer> {
   const markdownDoc = docToMarkdown(doc);
   return markdownDocToDocx(markdownDoc, options);
 }
@@ -246,11 +230,7 @@ function convertBlocks(nodes: MarkdownBlockNode[], ctx: ExportContext): string {
   return parts.join('');
 }
 
-function convertBlock(
-  node: MarkdownBlockNode,
-  ctx: ExportContext,
-  listDepth: number,
-): string {
+function convertBlock(node: MarkdownBlockNode, ctx: ExportContext, listDepth: number): string {
   switch (node.type) {
     case 'heading':
       return convertHeading(node, ctx);
@@ -281,26 +261,15 @@ function convertBlock(
 function convertHeading(node: MarkdownHeading, ctx: ExportContext): string {
   const styleId = DEPTH_TO_STYLE_ID[node.depth] ?? 'Heading1';
   const runs = convertInlines(node.children, ctx);
-  return (
-    `<w:p>` +
-    `<w:pPr><w:pStyle w:val="${styleId}"/></w:pPr>` +
-    runs +
-    `</w:p>`
-  );
+  return `<w:p>` + `<w:pPr><w:pStyle w:val="${styleId}"/></w:pPr>` + runs + `</w:p>`;
 }
 
-function convertParagraph(
-  node: MarkdownParagraph,
-  ctx: ExportContext,
-): string {
+function convertParagraph(node: MarkdownParagraph, ctx: ExportContext): string {
   const runs = convertInlines(node.children, ctx);
   return `<w:p>${runs}</w:p>`;
 }
 
-function convertBlockquote(
-  node: MarkdownBlockquote,
-  ctx: ExportContext,
-): string {
+function convertBlockquote(node: MarkdownBlockquote, ctx: ExportContext): string {
   // Render each child block as a paragraph with Quote style
   const parts: string[] = [];
   for (const child of node.children) {
@@ -308,12 +277,12 @@ function convertBlockquote(
       const runs = convertInlines(child.children, ctx);
       parts.push(
         `<w:p>` +
-        `<w:pPr><w:pStyle w:val="Quote"/>` +
-        `<w:ind w:left="${pointsToTwips(36)}"/>` +
-        `<w:pBdr><w:left w:val="single" w:sz="12" w:space="4" w:color="CCCCCC"/></w:pBdr>` +
-        `</w:pPr>` +
-        runs +
-        `</w:p>`,
+          `<w:pPr><w:pStyle w:val="Quote"/>` +
+          `<w:ind w:left="${pointsToTwips(36)}"/>` +
+          `<w:pBdr><w:left w:val="single" w:sz="12" w:space="4" w:color="CCCCCC"/></w:pBdr>` +
+          `</w:pPr>` +
+          runs +
+          `</w:p>`,
       );
     } else {
       // Nested non-paragraph (e.g., nested blockquote, list) — recurse
@@ -323,11 +292,7 @@ function convertBlockquote(
   return parts.join('');
 }
 
-function convertList(
-  node: MarkdownList,
-  ctx: ExportContext,
-  depth: number,
-): string {
+function convertList(node: MarkdownList, ctx: ExportContext, depth: number): string {
   const numId = ctx.allocNumbering(node.ordered ?? false);
   const parts: string[] = [];
   for (const item of node.children) {
@@ -348,12 +313,12 @@ function convertListItem(
       const runs = convertInlines(child.children, ctx);
       parts.push(
         `<w:p>` +
-        `<w:pPr>` +
-        `<w:pStyle w:val="ListParagraph"/>` +
-        `<w:numPr><w:ilvl w:val="${depth}"/><w:numId w:val="${numId}"/></w:numPr>` +
-        `</w:pPr>` +
-        runs +
-        `</w:p>`,
+          `<w:pPr>` +
+          `<w:pStyle w:val="ListParagraph"/>` +
+          `<w:numPr><w:ilvl w:val="${depth}"/><w:numId w:val="${numId}"/></w:numPr>` +
+          `</w:pPr>` +
+          runs +
+          `</w:p>`,
       );
     } else if (child.type === 'list') {
       // Nested list — increase depth
@@ -372,22 +337,22 @@ function convertCodeBlock(node: MarkdownCodeBlock): string {
   for (const line of lines) {
     parts.push(
       `<w:p>` +
-      `<w:pPr>` +
-      `<w:pStyle w:val="Code"/>` +
-      `<w:pBdr>` +
-      `<w:top w:val="single" w:sz="4" w:space="1" w:color="CCCCCC"/>` +
-      `<w:left w:val="single" w:sz="4" w:space="4" w:color="CCCCCC"/>` +
-      `<w:bottom w:val="single" w:sz="4" w:space="1" w:color="CCCCCC"/>` +
-      `<w:right w:val="single" w:sz="4" w:space="4" w:color="CCCCCC"/>` +
-      `</w:pBdr>` +
-      `<w:shd w:val="clear" w:color="auto" w:fill="F5F5F5"/>` +
-      `</w:pPr>` +
-      `<w:r>` +
-      `<w:rPr><w:rFonts w:ascii="${DEFAULT_CODE_FONT}" w:hAnsi="${DEFAULT_CODE_FONT}"/>` +
-      `<w:sz w:val="${DEFAULT_CODE_FONT_SIZE}"/></w:rPr>` +
-      `<w:t xml:space="preserve">${escapeXml(line)}</w:t>` +
-      `</w:r>` +
-      `</w:p>`,
+        `<w:pPr>` +
+        `<w:pStyle w:val="Code"/>` +
+        `<w:pBdr>` +
+        `<w:top w:val="single" w:sz="4" w:space="1" w:color="CCCCCC"/>` +
+        `<w:left w:val="single" w:sz="4" w:space="4" w:color="CCCCCC"/>` +
+        `<w:bottom w:val="single" w:sz="4" w:space="1" w:color="CCCCCC"/>` +
+        `<w:right w:val="single" w:sz="4" w:space="4" w:color="CCCCCC"/>` +
+        `</w:pBdr>` +
+        `<w:shd w:val="clear" w:color="auto" w:fill="F5F5F5"/>` +
+        `</w:pPr>` +
+        `<w:r>` +
+        `<w:rPr><w:rFonts w:ascii="${DEFAULT_CODE_FONT}" w:hAnsi="${DEFAULT_CODE_FONT}"/>` +
+        `<w:sz w:val="${DEFAULT_CODE_FONT_SIZE}"/></w:rPr>` +
+        `<w:t xml:space="preserve">${escapeXml(line)}</w:t>` +
+        `</w:r>` +
+        `</w:p>`,
     );
   }
   return parts.join('');
@@ -446,7 +411,7 @@ function convertTableCell(
   const rPr = isHeader ? '<w:rPr><w:b/></w:rPr>' : '';
   const jcMap = { left: 'left', center: 'center', right: 'right' };
   const jc = align ? `<w:jc w:val="${jcMap[align]}"/>` : '';
-  const pPr = (rPr || jc) ? `<w:pPr>${jc}</w:pPr>` : '';
+  const pPr = rPr || jc ? `<w:pPr>${jc}</w:pPr>` : '';
   return `<w:tc><w:p>${pPr}${runs}</w:p></w:tc>`;
 }
 
@@ -480,10 +445,7 @@ function convertMathBlock(node: MarkdownMathBlock): string {
   );
 }
 
-function convertFootnoteDefinition(
-  node: MarkdownFootnoteDefinition,
-  ctx: ExportContext,
-): string {
+function convertFootnoteDefinition(node: MarkdownFootnoteDefinition, ctx: ExportContext): string {
   const fnId = ctx.getFootnoteId(node.identifier);
 
   // Build the footnote body XML
@@ -532,11 +494,7 @@ function convertInlines(
   return parts.join('');
 }
 
-function convertInline(
-  node: MarkdownInlineNode,
-  ctx: ExportContext,
-  format: InlineFormat,
-): string {
+function convertInline(node: MarkdownInlineNode, ctx: ExportContext, format: InlineFormat): string {
   switch (node.type) {
     case 'text':
       return makeRun(node.value, format);
@@ -586,13 +544,9 @@ function makeRun(text: string, format: InlineFormat): string {
   return `<w:r>${rPr}<w:t xml:space="preserve">${escapeXml(text)}</w:t></w:r>`;
 }
 
-function convertLink(
-  node: MarkdownLink,
-  ctx: ExportContext,
-  format: InlineFormat,
-): string {
+function convertLink(node: MarkdownLink, ctx: ExportContext, format: InlineFormat): string {
   const rId = ctx.addHyperlink(node.url);
-  const runs = convertInlines(node.children, ctx, { ...format });
+  const _runs = convertInlines(node.children, ctx, { ...format });
 
   // Wrap each run's rPr with hyperlink styling
   // For simplicity, emit inline runs with hyperlink color + underline
@@ -644,10 +598,7 @@ function convertImage(_node: MarkdownImage): string {
   return makeRun(`[Image: ${alt}]`, { italic: true });
 }
 
-function convertFootnoteRef(
-  node: MarkdownFootnoteReference,
-  ctx: ExportContext,
-): string {
+function convertFootnoteRef(node: MarkdownFootnoteReference, ctx: ExportContext): string {
   const fnId = ctx.getFootnoteId(node.identifier);
   return (
     `<w:r>` +
@@ -947,38 +898,34 @@ function buildNumberingXml(ctx: ExportContext): string {
       if (def.ordered) {
         levels.push(
           `<w:lvl w:ilvl="${lvl}">` +
-          `<w:start w:val="1"/>` +
-          `<w:numFmt w:val="decimal"/>` +
-          `<w:lvlText w:val="%${lvl + 1}."/>` +
-          `<w:lvlJc w:val="left"/>` +
-          `<w:pPr><w:ind w:left="${720 * (lvl + 1)}" w:hanging="360"/></w:pPr>` +
-          `</w:lvl>`,
+            `<w:start w:val="1"/>` +
+            `<w:numFmt w:val="decimal"/>` +
+            `<w:lvlText w:val="%${lvl + 1}."/>` +
+            `<w:lvlJc w:val="left"/>` +
+            `<w:pPr><w:ind w:left="${720 * (lvl + 1)}" w:hanging="360"/></w:pPr>` +
+            `</w:lvl>`,
         );
       } else {
         const bullets = ['\u2022', '\u25E6', '\u25AA']; // •, ◦, ▪
         const bullet = bullets[lvl % bullets.length];
         levels.push(
           `<w:lvl w:ilvl="${lvl}">` +
-          `<w:start w:val="1"/>` +
-          `<w:numFmt w:val="bullet"/>` +
-          `<w:lvlText w:val="${bullet}"/>` +
-          `<w:lvlJc w:val="left"/>` +
-          `<w:pPr><w:ind w:left="${720 * (lvl + 1)}" w:hanging="360"/></w:pPr>` +
-          `<w:rPr><w:rFonts w:ascii="Symbol" w:hAnsi="Symbol"/></w:rPr>` +
-          `</w:lvl>`,
+            `<w:start w:val="1"/>` +
+            `<w:numFmt w:val="bullet"/>` +
+            `<w:lvlText w:val="${bullet}"/>` +
+            `<w:lvlJc w:val="left"/>` +
+            `<w:pPr><w:ind w:left="${720 * (lvl + 1)}" w:hanging="360"/></w:pPr>` +
+            `<w:rPr><w:rFonts w:ascii="Symbol" w:hAnsi="Symbol"/></w:rPr>` +
+            `</w:lvl>`,
         );
       }
     }
 
     abstract.push(
-      `<w:abstractNum w:abstractNumId="${absId}">` +
-      levels.join('') +
-      `</w:abstractNum>`,
+      `<w:abstractNum w:abstractNumId="${absId}">` + levels.join('') + `</w:abstractNum>`,
     );
     concrete.push(
-      `<w:num w:numId="${def.numId}">` +
-      `<w:abstractNumId w:val="${absId}"/>` +
-      `</w:num>`,
+      `<w:num w:numId="${def.numId}">` + `<w:abstractNumId w:val="${absId}"/>` + `</w:num>`,
     );
   }
 
@@ -997,13 +944,13 @@ function buildFootnotesXml(ctx: ExportContext): string {
   // Separator and continuation separator (required by Word)
   footnotes.push(
     `<w:footnote w:type="separator" w:id="-1">` +
-    `<w:p><w:r><w:separator/></w:r></w:p>` +
-    `</w:footnote>`,
+      `<w:p><w:r><w:separator/></w:r></w:p>` +
+      `</w:footnote>`,
   );
   footnotes.push(
     `<w:footnote w:type="continuationSeparator" w:id="0">` +
-    `<w:p><w:r><w:continuationSeparator/></w:r></w:p>` +
-    `</w:footnote>`,
+      `<w:p><w:r><w:continuationSeparator/></w:r></w:p>` +
+      `</w:footnote>`,
   );
 
   // User footnotes

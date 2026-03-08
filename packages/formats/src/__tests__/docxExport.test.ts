@@ -10,7 +10,6 @@ import JSZip from 'jszip';
 import type {
   MarkdownDocument,
   MarkdownHeading,
-  MarkdownParagraph,
   MarkdownList,
   MarkdownListItem,
   MarkdownTable,
@@ -19,12 +18,10 @@ import type {
   MarkdownCodeBlock,
   MarkdownBlockquote,
   MarkdownThematicBreak,
-  MarkdownText,
   MarkdownStrong,
   MarkdownEmphasis,
   MarkdownInlineCode,
   MarkdownLink,
-  MarkdownBreak,
 } from '@bendyline/squisq/markdown';
 
 import { markdownDocToDocx, docToDocx } from '../docx/export';
@@ -33,7 +30,10 @@ import { markdownDocToDocx, docToDocx } from '../docx/export';
 // Helpers
 // ============================================
 
-async function exportAndParse(doc: MarkdownDocument, options?: Parameters<typeof markdownDocToDocx>[1]) {
+async function exportAndParse(
+  doc: MarkdownDocument,
+  options?: Parameters<typeof markdownDocToDocx>[1],
+) {
   const buffer = await markdownDocToDocx(doc, options);
   expect(buffer).toBeInstanceOf(ArrayBuffer);
   expect(buffer.byteLength).toBeGreaterThan(0);
@@ -47,7 +47,7 @@ async function getDocumentXml(zip: JSZip): Promise<Document> {
   return new DOMParser().parseFromString(text, 'application/xml');
 }
 
-function getBodyParagraphs(doc: Document): Element[] {
+function _getBodyParagraphs(doc: Document): Element[] {
   const body = doc.getElementsByTagName('w:body')[0];
   return Array.from(body.children).filter((el) => el.localName === 'p');
 }
@@ -60,9 +60,7 @@ describe('markdownDocToDocx', () => {
   it('produces a valid zip with required parts', async () => {
     const doc: MarkdownDocument = {
       type: 'document',
-      children: [
-        { type: 'paragraph', children: [{ type: 'text', value: 'Hello' }] },
-      ],
+      children: [{ type: 'paragraph', children: [{ type: 'text', value: 'Hello' }] }],
     };
 
     const zip = await exportAndParse(doc);
@@ -177,9 +175,7 @@ describe('markdownDocToDocx', () => {
       children: [
         {
           type: 'paragraph',
-          children: [
-            { type: 'inlineCode', value: 'console.log()' } satisfies MarkdownInlineCode,
-          ],
+          children: [{ type: 'inlineCode', value: 'console.log()' } satisfies MarkdownInlineCode],
         },
       ],
     };
@@ -204,15 +200,11 @@ describe('markdownDocToDocx', () => {
           children: [
             {
               type: 'listItem',
-              children: [
-                { type: 'paragraph', children: [{ type: 'text', value: 'Item 1' }] },
-              ],
+              children: [{ type: 'paragraph', children: [{ type: 'text', value: 'Item 1' }] }],
             } satisfies MarkdownListItem,
             {
               type: 'listItem',
-              children: [
-                { type: 'paragraph', children: [{ type: 'text', value: 'Item 2' }] },
-              ],
+              children: [{ type: 'paragraph', children: [{ type: 'text', value: 'Item 2' }] }],
             } satisfies MarkdownListItem,
           ],
         } satisfies MarkdownList,
@@ -244,9 +236,7 @@ describe('markdownDocToDocx', () => {
           children: [
             {
               type: 'listItem',
-              children: [
-                { type: 'paragraph', children: [{ type: 'text', value: 'First' }] },
-              ],
+              children: [{ type: 'paragraph', children: [{ type: 'text', value: 'First' }] }],
             } satisfies MarkdownListItem,
           ],
         } satisfies MarkdownList,
@@ -272,15 +262,29 @@ describe('markdownDocToDocx', () => {
             {
               type: 'tableRow',
               children: [
-                { type: 'tableCell', isHeader: true, children: [{ type: 'text', value: 'Name' }] } satisfies MarkdownTableCell,
-                { type: 'tableCell', isHeader: true, children: [{ type: 'text', value: 'Value' }] } satisfies MarkdownTableCell,
+                {
+                  type: 'tableCell',
+                  isHeader: true,
+                  children: [{ type: 'text', value: 'Name' }],
+                } satisfies MarkdownTableCell,
+                {
+                  type: 'tableCell',
+                  isHeader: true,
+                  children: [{ type: 'text', value: 'Value' }],
+                } satisfies MarkdownTableCell,
               ],
             } satisfies MarkdownTableRow,
             {
               type: 'tableRow',
               children: [
-                { type: 'tableCell', children: [{ type: 'text', value: 'A' }] } satisfies MarkdownTableCell,
-                { type: 'tableCell', children: [{ type: 'text', value: '1' }] } satisfies MarkdownTableCell,
+                {
+                  type: 'tableCell',
+                  children: [{ type: 'text', value: 'A' }],
+                } satisfies MarkdownTableCell,
+                {
+                  type: 'tableCell',
+                  children: [{ type: 'text', value: '1' }],
+                } satisfies MarkdownTableCell,
               ],
             } satisfies MarkdownTableRow,
           ],
@@ -329,9 +333,7 @@ describe('markdownDocToDocx', () => {
       children: [
         {
           type: 'blockquote',
-          children: [
-            { type: 'paragraph', children: [{ type: 'text', value: 'A wise quote' }] },
-          ],
+          children: [{ type: 'paragraph', children: [{ type: 'text', value: 'A wise quote' }] }],
         } satisfies MarkdownBlockquote,
       ],
     };
@@ -381,9 +383,7 @@ describe('markdownDocToDocx', () => {
   it('exports thematic breaks', async () => {
     const doc: MarkdownDocument = {
       type: 'document',
-      children: [
-        { type: 'thematicBreak' } satisfies MarkdownThematicBreak,
-      ],
+      children: [{ type: 'thematicBreak' } satisfies MarkdownThematicBreak],
     };
 
     const zip = await exportAndParse(doc);
@@ -399,9 +399,7 @@ describe('markdownDocToDocx', () => {
   it('includes core properties when options are provided', async () => {
     const doc: MarkdownDocument = {
       type: 'document',
-      children: [
-        { type: 'paragraph', children: [{ type: 'text', value: 'test' }] },
-      ],
+      children: [{ type: 'paragraph', children: [{ type: 'text', value: 'test' }] }],
     };
 
     const zip = await exportAndParse(doc, {

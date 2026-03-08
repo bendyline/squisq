@@ -21,7 +21,7 @@ import { scaledFontSize } from '../../schemas/BlockTemplates.js';
 
 export function videoPullQuote(input: VideoPullQuoteInput, context: TemplateContext): Layer[] {
   const { text, attribution, backgroundVideo } = input;
-  const { theme } = context;
+  const { theme: _theme } = context;
 
   const quoteFontSize = scaledFontSize(52, context, true);
   const attrFontSize = scaledFontSize(24, context, false);

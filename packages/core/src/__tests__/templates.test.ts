@@ -14,10 +14,22 @@ import type { TemplateBlock } from '../schemas/BlockTemplates';
 describe('templateRegistry', () => {
   it('contains all expected templates', () => {
     const expected = [
-      'titleBlock', 'sectionHeader', 'statHighlight', 'quoteBlock',
-      'factCard', 'twoColumn', 'dateEvent', 'imageWithCaption',
-      'mapBlock', 'fullBleedQuote', 'listBlock', 'photoGrid',
-      'definitionCard', 'comparisonBar', 'pullQuote', 'videoWithCaption',
+      'titleBlock',
+      'sectionHeader',
+      'statHighlight',
+      'quoteBlock',
+      'factCard',
+      'twoColumn',
+      'dateEvent',
+      'imageWithCaption',
+      'mapBlock',
+      'fullBleedQuote',
+      'listBlock',
+      'photoGrid',
+      'definitionCard',
+      'comparisonBar',
+      'pullQuote',
+      'videoWithCaption',
       'videoPullQuote',
     ];
     for (const name of expected) {
@@ -80,7 +92,7 @@ describe('expandTemplateBlock', () => {
 
     expect(result.layers.length).toBeGreaterThan(0);
     // Should have at least a shape background + text layers
-    const textLayers = result.layers.filter(l => l.type === 'text');
+    const textLayers = result.layers.filter((l) => l.type === 'text');
     expect(textLayers.length).toBeGreaterThan(0);
   });
 
@@ -147,8 +159,22 @@ describe('expandDocBlocks', () => {
   it('expands array of template blocks with cumulative timing', () => {
     const blocks: TemplateBlock[] = [
       { template: 'titleBlock', id: 'slide-1', duration: 5, audioSegment: 0, title: 'Hello' },
-      { template: 'factCard', id: 'slide-2', duration: 8, audioSegment: 0, fact: 'A fact', explanation: 'Why' },
-      { template: 'statHighlight', id: 'slide-3', duration: 6, audioSegment: 0, stat: '99', description: 'percent' },
+      {
+        template: 'factCard',
+        id: 'slide-2',
+        duration: 8,
+        audioSegment: 0,
+        fact: 'A fact',
+        explanation: 'Why',
+      },
+      {
+        template: 'statHighlight',
+        id: 'slide-3',
+        duration: 6,
+        audioSegment: 0,
+        stat: '99',
+        description: 'percent',
+      },
     ];
 
     const result = expandDocBlocks(blocks);
@@ -161,7 +187,14 @@ describe('expandDocBlocks', () => {
   it('expands with audio segment timing', () => {
     const blocks: TemplateBlock[] = [
       { template: 'sectionHeader', id: 'header-1', duration: 3, audioSegment: 0, title: 'Intro' },
-      { template: 'factCard', id: 'fact-1', duration: 10, audioSegment: 0, fact: 'F', explanation: 'E' },
+      {
+        template: 'factCard',
+        id: 'fact-1',
+        duration: 10,
+        audioSegment: 0,
+        fact: 'F',
+        explanation: 'E',
+      },
     ];
 
     const result = expandDocBlocks(blocks, {

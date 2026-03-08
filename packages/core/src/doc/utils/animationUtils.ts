@@ -22,7 +22,7 @@ interface AnimationResult {
  */
 export function getAnimationStyle(
   animation: Animation | undefined,
-  currentTime: number = 0
+  _currentTime: number = 0,
 ): AnimationResult {
   if (!animation || animation.type === 'none') {
     return { className: '', style: {} };
@@ -112,10 +112,7 @@ export function getDefaultAnimationDuration(type: AnimationType): number {
 /**
  * Get transition class for slide entry/exit.
  */
-export function getTransitionClass(
-  type: string,
-  entering: boolean
-): string {
+export function getTransitionClass(type: string, entering: boolean): string {
   const mode = entering ? 'enter' : 'exit';
   return `transition-${type}-${mode}`;
 }
@@ -126,7 +123,7 @@ export function getTransitionClass(
 export function getAnimationProgress(
   animation: Animation,
   currentTime: number,
-  slideDuration: number
+  slideDuration: number,
 ): number {
   const delay = animation.delay || 0;
   const duration = animation.duration || slideDuration;

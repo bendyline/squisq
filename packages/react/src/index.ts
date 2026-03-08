@@ -26,7 +26,14 @@ export { MediaContext, useMediaProvider, useMediaUrl } from './hooks/MediaContex
 
 // Types
 export type { AudioProvider, AudioState, AudioActions } from './hooks/AudioProvider.js';
-export type { PlaybackState, PlaybackActions, BlockMarker, ControlsLayout, DisplayMode, SlideNavActions } from './types.js';
+export type {
+  PlaybackState,
+  PlaybackActions,
+  BlockMarker,
+  ControlsLayout,
+  DisplayMode,
+  SlideNavActions,
+} from './types.js';
 export { formatTime } from './types.js';
 
 // Utilities

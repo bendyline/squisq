@@ -15,7 +15,12 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import type { Doc, Block } from '@bendyline/squisq/schemas';
 import { getBlockAtTime } from '@bendyline/squisq/schemas';
-import { expandDocBlocks, isTemplateBlock, VIEWPORT_PRESETS, type ViewportConfig } from '@bendyline/squisq/doc';
+import {
+  expandDocBlocks,
+  isTemplateBlock,
+  VIEWPORT_PRESETS,
+  type ViewportConfig,
+} from '@bendyline/squisq/doc';
 
 interface PlaybackState {
   /** Currently visible block */
@@ -51,7 +56,7 @@ export function useDocPlayback(
   script: Doc | null,
   currentTime: number,
   viewport: ViewportConfig = VIEWPORT_PRESETS.landscape,
-  renderMode: boolean = false
+  renderMode: boolean = false,
 ): PlaybackState & PlaybackActions {
   const [transitionState, setTransitionState] = useState<{
     entering: boolean;
@@ -79,7 +84,7 @@ export function useDocPlayback(
 
     if (hasTemplates) {
       // Extract audio segment timing for proper block synchronization
-      const audioSegments = script.audio?.segments?.map(seg => ({
+      const audioSegments = script.audio?.segments?.map((seg) => ({
         startTime: seg.startTime,
         duration: seg.duration,
       }));
@@ -101,14 +106,11 @@ export function useDocPlayback(
   }, [script?.blocks, script?.audio?.segments, script?.persistentLayers, viewport]);
 
   // Find current block based on time
-  const currentBlock = useMemo(
-    () => getBlockAtTime(blocks, currentTime),
-    [blocks, currentTime]
-  );
+  const currentBlock = useMemo(() => getBlockAtTime(blocks, currentTime), [blocks, currentTime]);
 
   const currentBlockIndex = useMemo(
     () => (currentBlock ? blocks.indexOf(currentBlock) : -1),
-    [blocks, currentBlock]
+    [blocks, currentBlock],
   );
 
   // Calculate block-relative time
@@ -132,7 +134,7 @@ export function useDocPlayback(
   // In render mode, transitions are computed from blockTime so they stay
   // synchronized with the seekTo timeline. In normal mode, setTimeout drives
   // transitions at the browser's real-time clock speed.
-  const prevBlockRef = useMemo(() => currentBlock, [currentBlockIndex]);
+  const _prevBlockRef = useMemo(() => currentBlock, [currentBlockIndex]);
 
   useEffect(() => {
     if (!currentBlock || renderMode) return;
@@ -182,7 +184,7 @@ export function useDocPlayback(
       const oldPrev = transitionState.previousBlock;
       renderPrevBlockRef.current = oldPrev;
       // Store current block as the "last seen" for next transition
-      setTransitionState(prev => ({
+      setTransitionState((prev) => ({
         ...prev,
         previousBlock: currentBlock,
       }));
@@ -191,7 +193,8 @@ export function useDocPlayback(
 
   // In render mode, derive entering/exiting from blockTime
   const renderTransitionDuration = currentBlock?.transition?.duration || 0;
-  const renderIsEntering = renderMode && renderTransitionDuration > 0 && blockTime < renderTransitionDuration;
+  const renderIsEntering =
+    renderMode && renderTransitionDuration > 0 && blockTime < renderTransitionDuration;
   const renderIsExiting = renderIsEntering && renderPrevBlockRef.current !== null;
 
   // Manual navigation
@@ -206,7 +209,7 @@ export function useDocPlayback(
         return targetBlock.startTime;
       }
     },
-    [script, blocks]
+    [script, blocks],
   );
 
   const nextBlock = useCallback(() => {
@@ -225,8 +228,12 @@ export function useDocPlayback(
     currentBlock,
     currentBlockIndex,
     previousBlock: renderMode
-      ? (renderIsExiting ? renderPrevBlockRef.current : null)
-      : (transitionState.exiting ? transitionState.previousBlock : null),
+      ? renderIsExiting
+        ? renderPrevBlockRef.current
+        : null
+      : transitionState.exiting
+        ? transitionState.previousBlock
+        : null,
     isEntering: renderMode ? renderIsEntering : transitionState.entering,
     isExiting: renderMode ? renderIsExiting : transitionState.exiting,
     blockTime,

@@ -45,7 +45,7 @@ export function DocControlsBottom({
         aria-label="Restart from beginning"
       >
         <svg viewBox="0 0 24 24" fill="currentColor" width="18" height="18">
-          <path d="M12 5V1L7 6l5 5V7c3.31 0 6 2.69 6 6s-2.69 6-6 6-6-2.69-6-6H4c0 4.42 3.58 8 8 8s8-3.58 8-8-3.58-8-8-8z"/>
+          <path d="M12 5V1L7 6l5 5V7c3.31 0 6 2.69 6 6s-2.69 6-6 6-6-2.69-6-6H4c0 4.42 3.58 8 8 8s8-3.58 8-8-3.58-8-8-8z" />
         </svg>
       </button>
 
@@ -57,11 +57,11 @@ export function DocControlsBottom({
       >
         {state.isPlaying ? (
           <svg viewBox="0 0 24 24" fill="currentColor" width="20" height="20">
-            <path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/>
+            <path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z" />
           </svg>
         ) : (
           <svg viewBox="0 0 24 24" fill="currentColor" width="20" height="20">
-            <path d="M8 5v14l11-7z"/>
+            <path d="M8 5v14l11-7z" />
           </svg>
         )}
       </button>
@@ -94,7 +94,7 @@ export function DocControlsBottom({
           aria-label={state.captionsEnabled ? 'Hide captions' : 'Show captions'}
         >
           <svg viewBox="0 0 24 24" fill="currentColor" width="18" height="18">
-            <path d="M19 4H5a2 2 0 00-2 2v12a2 2 0 002 2h14a2 2 0 002-2V6a2 2 0 00-2-2zm-8 7H9.5v-.5h-2v3h2V13H11v1a1 1 0 01-1 1H7a1 1 0 01-1-1v-4a1 1 0 011-1h3a1 1 0 011 1v1zm7 0h-1.5v-.5h-2v3h2V13H18v1a1 1 0 01-1 1h-3a1 1 0 01-1-1v-4a1 1 0 011-1h3a1 1 0 011 1v1z"/>
+            <path d="M19 4H5a2 2 0 00-2 2v12a2 2 0 002 2h14a2 2 0 002-2V6a2 2 0 00-2-2zm-8 7H9.5v-.5h-2v3h2V13H11v1a1 1 0 01-1 1H7a1 1 0 01-1-1v-4a1 1 0 011-1h3a1 1 0 011 1v1zm7 0h-1.5v-.5h-2v3h2V13H18v1a1 1 0 01-1 1h-3a1 1 0 01-1-1v-4a1 1 0 011-1h3a1 1 0 011 1v1z" />
           </svg>
         </button>
       )}

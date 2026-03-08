@@ -9,18 +9,8 @@
  */
 
 import JSZip from 'jszip';
-import type {
-  OoxmlPackage,
-  ContentTypeMap,
-  Relationship,
-  CoreProperties,
-} from './types.js';
-import {
-  NS_RELATIONSHIPS,
-  NS_DC,
-  NS_DCTERMS,
-  NS_CORE_PROPERTIES,
-} from './namespaces.js';
+import type { OoxmlPackage, ContentTypeMap, Relationship, CoreProperties } from './types.js';
+import { NS_RELATIONSHIPS, NS_DC, NS_DCTERMS, NS_CORE_PROPERTIES } from './namespaces.js';
 
 // ============================================
 // Package Opening
@@ -34,9 +24,7 @@ import {
  * @param data - The raw .docx/.pptx/.xlsx file as ArrayBuffer or Blob
  * @returns A parsed OoxmlPackage
  */
-export async function openPackage(
-  data: ArrayBuffer | Blob,
-): Promise<OoxmlPackage> {
+export async function openPackage(data: ArrayBuffer | Blob): Promise<OoxmlPackage> {
   const zip = await JSZip.loadAsync(data);
   const contentTypes = await parseContentTypes(zip);
   const rootRelationships = await parseRelationships(zip, '');
@@ -110,13 +98,8 @@ export async function getPartRelationships(
  * For root relationships, relsPath = "_rels/.rels".
  * For part relationships, relsPath = "<dir>/_rels/<filename>.rels".
  */
-async function parseRelationships(
-  zip: JSZip,
-  partPath: string,
-): Promise<Relationship[]> {
-  const relsPath = partPath === ''
-    ? '_rels/.rels'
-    : buildRelsPath(partPath);
+async function parseRelationships(zip: JSZip, partPath: string): Promise<Relationship[]> {
+  const relsPath = partPath === '' ? '_rels/.rels' : buildRelsPath(partPath);
 
   const file = zip.file(relsPath);
   if (!file) return [];
@@ -135,10 +118,7 @@ async function parseRelationships(
     const type = el.getAttribute('Type');
     const target = el.getAttribute('Target');
     if (id && type && target) {
-      const targetMode = el.getAttribute('TargetMode') as
-        | 'Internal'
-        | 'External'
-        | null;
+      const targetMode = el.getAttribute('TargetMode') as 'Internal' | 'External' | null;
       result.push({
         id,
         type,
@@ -178,10 +158,7 @@ function buildRelsPath(partPath: string): string {
  * @param partPath - Path within the archive (e.g., "word/document.xml")
  * @returns Parsed XML Document, or null if the part doesn't exist
  */
-export async function getPartXml(
-  pkg: OoxmlPackage,
-  partPath: string,
-): Promise<Document | null> {
+export async function getPartXml(pkg: OoxmlPackage, partPath: string): Promise<Document | null> {
   const file = pkg.zip.file(partPath);
   if (!file) return null;
 
@@ -215,9 +192,7 @@ export async function getPartBinary(
  * @param pkg - The OOXML package
  * @returns Parsed core properties (all fields optional)
  */
-export async function getCoreProperties(
-  pkg: OoxmlPackage,
-): Promise<CoreProperties> {
+export async function getCoreProperties(pkg: OoxmlPackage): Promise<CoreProperties> {
   const doc = await getPartXml(pkg, 'docProps/core.xml');
   if (!doc) return {};
 

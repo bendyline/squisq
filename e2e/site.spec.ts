@@ -46,8 +46,8 @@ test.describe('Site navigation', () => {
 
   test('sample picker contains template-annotations', async ({ page }) => {
     const options = page.locator('select').first().locator('option');
-    const values = await options.evaluateAll(opts =>
-      opts.map(o => (o as HTMLOptionElement).value),
+    const values = await options.evaluateAll((opts) =>
+      opts.map((o) => (o as HTMLOptionElement).value),
     );
     expect(values).toContain('template-annotations');
   });
@@ -89,11 +89,12 @@ test.describe('DocPlayer preview', () => {
   });
 
   test('first block has visible layers (not blank)', async ({ page }) => {
-    // The first rendered block should have shape + text layers
+    // The first rendered block should have shape + text layers.
+    // Layers may animate in from opacity:0, so allow extra time.
     const svg = activeBlock(page).locator('svg');
     // foreignObject elements host text layers, rect/circle are shapes
     const layerElements = svg.locator('foreignObject, rect, circle, image');
-    await expect(layerElements.first()).toBeVisible();
+    await expect(layerElements.first()).toBeVisible({ timeout: 10_000 });
   });
 
   test('first block displays the title "Story: Climate Report"', async ({ page }) => {
@@ -138,6 +139,7 @@ test.describe('DocPlayer preview', () => {
 
 test.describe('Template rendering correctness', () => {
   test('all template-annotations blocks render with layers', async ({ page }) => {
+    test.setTimeout(60_000);
     await page.goto('/');
     await page.waitForLoadState('networkidle');
     await selectSample(page, 'template-annotations');
@@ -149,10 +151,12 @@ test.describe('Template rendering correctness', () => {
 
     const emptyBlocks: string[] = [];
     for (let i = 0; i < 7; i++) {
+      // Wait for an animated layer to become visible before checking
       const svg = activeBlock(page).locator('svg');
       const layers = svg.locator('foreignObject, rect, circle, image');
-      const count = await layers.count();
-      if (count === 0) {
+      try {
+        await expect(layers.first()).toBeVisible({ timeout: 6_000 });
+      } catch {
         const blockId = await svg.getAttribute('data-block-id');
         emptyBlocks.push(blockId ?? `unknown-at-${i * 5}s`);
       }
@@ -207,7 +211,7 @@ test.describe('DocPlayer controls', () => {
     await page.waitForTimeout(1_000);
 
     // Should be playing — content should be at non-zero time
-    const textAfterPlay = await activeBlock(page).textContent();
+    const _textAfterPlay = await activeBlock(page).textContent();
 
     // Press space to pause
     await page.keyboard.press('Space');
@@ -225,7 +229,9 @@ test.describe('DocPlayer controls', () => {
     await page.waitForTimeout(1_000);
 
     // DocPlayer renders a progress bar
-    const progressBar = page.locator('.doc-player .doc-progress-bar, .doc-player .doc-player__scrubber');
+    const progressBar = page.locator(
+      '.doc-player .doc-progress-bar, .doc-player .doc-player__scrubber',
+    );
     // At least one of the progress bar selectors should be visible
     const barCount = await progressBar.count();
     expect(barCount).toBeGreaterThan(0);

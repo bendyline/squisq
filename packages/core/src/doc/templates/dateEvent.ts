@@ -23,7 +23,7 @@ const MOOD_COLORS = {
 
 export function dateEvent(input: DateEventInput, context: TemplateContext): Layer[] {
   const { date, description, footer, mood = 'neutral', accentImage } = input;
-  const { theme, layout } = context;
+  const { theme, layout: _layout } = context;
   const colors = MOOD_COLORS[mood];
 
   // Get layout adjustments if accent image is present

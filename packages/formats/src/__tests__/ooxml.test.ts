@@ -21,9 +21,7 @@ import { REL_OFFICE_DOCUMENT } from '../ooxml/namespaces';
 
 describe('escapeXml', () => {
   it('escapes all five XML entities', () => {
-    expect(escapeXml('a & b < c > d " e \' f')).toBe(
-      'a &amp; b &lt; c &gt; d &quot; e &apos; f',
-    );
+    expect(escapeXml('a & b < c > d " e \' f')).toBe('a &amp; b &lt; c &gt; d &quot; e &apos; f');
   });
 
   it('returns empty string unchanged', () => {
@@ -90,9 +88,7 @@ describe('textElement', () => {
 
 describe('xmlDeclaration', () => {
   it('returns standard XML declaration', () => {
-    expect(xmlDeclaration()).toBe(
-      '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>',
-    );
+    expect(xmlDeclaration()).toBe('<?xml version="1.0" encoding="UTF-8" standalone="yes"?>');
   });
 });
 
@@ -128,7 +124,8 @@ describe('createPackage / openPackage round-trip', () => {
 
   it('round-trips XML part content', async () => {
     const pkg = createPackage();
-    const testXml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><root><child attr="value">text</child></root>';
+    const testXml =
+      '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><root><child attr="value">text</child></root>';
     pkg.addPart('test/data.xml', testXml, 'application/xml');
 
     const buffer = await pkg.toArrayBuffer();
@@ -188,7 +185,7 @@ describe('createPackage / openPackage round-trip', () => {
 
   it('handles binary parts', async () => {
     const pkg = createPackage();
-    const testData = new Uint8Array([0x89, 0x50, 0x4E, 0x47]); // PNG magic bytes
+    const testData = new Uint8Array([0x89, 0x50, 0x4e, 0x47]); // PNG magic bytes
     pkg.addBinaryPart('word/media/image1.png', testData, 'image/png');
 
     const buffer = await pkg.toArrayBuffer();

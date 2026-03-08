@@ -90,9 +90,10 @@ export function photoGrid(input: PhotoGridInput, context: TemplateContext): Laye
         height: `${pos.h}%`,
       },
       // Apply ambient motion to the first (largest) image only
-      animation: i === 0 && ambientMotion
-        ? { type: ambientMotion, duration: 15 }
-        : { type: 'fadeIn', duration: 1, delay: 0.2 * i },
+      animation:
+        i === 0 && ambientMotion
+          ? { type: ambientMotion, duration: 15 }
+          : { type: 'fadeIn', duration: 1, delay: 0.2 * i },
     });
   }
 
@@ -135,7 +136,12 @@ export function photoGrid(input: PhotoGridInput, context: TemplateContext): Laye
   return layers;
 }
 
-interface GridPos { x: number; y: number; w: number; h: number }
+interface GridPos {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
 
 function getGridPositions(count: number, gridHeight: number, stacked: boolean): GridPos[] {
   const halfW = 50 - GAP / 2;
@@ -157,11 +163,11 @@ function getGridPositions(count: number, gridHeight: number, stacked: boolean): 
     case 3: {
       if (stacked) {
         // Portrait: stack all three vertically
-        const thirdH = gridHeight / 3 - GAP * 2 / 3;
+        const thirdH = gridHeight / 3 - (GAP * 2) / 3;
         return [
           { x: 0, y: 0, w: 100, h: thirdH },
           { x: 0, y: gridHeight / 3 + GAP / 3, w: 100, h: thirdH },
-          { x: 0, y: gridHeight * 2 / 3 + GAP * 2 / 3, w: 100, h: thirdH },
+          { x: 0, y: (gridHeight * 2) / 3 + (GAP * 2) / 3, w: 100, h: thirdH },
         ];
       }
       const leftW = 60 - GAP / 2;

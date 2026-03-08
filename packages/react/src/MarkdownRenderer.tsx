@@ -180,11 +180,7 @@ function renderBlock(node: MarkdownBlockNode, key: string): React.ReactNode {
     case 'list':
       if (node.ordered) {
         return (
-          <ol
-            key={key}
-            className="squisq-md-list squisq-md-ol"
-            start={node.start ?? undefined}
-          >
+          <ol key={key} className="squisq-md-list squisq-md-ol" start={node.start ?? undefined}>
             {node.children.map((item, i) => renderListItem(item, `${key}li${i}`))}
           </ol>
         );
@@ -198,9 +194,7 @@ function renderBlock(node: MarkdownBlockNode, key: string): React.ReactNode {
     case 'code':
       return (
         <pre key={key} className="squisq-md-code-block">
-          <code className={node.lang ? `language-${node.lang}` : undefined}>
-            {node.value}
-          </code>
+          <code className={node.lang ? `language-${node.lang}` : undefined}>{node.value}</code>
         </pre>
       );
 
@@ -245,9 +239,7 @@ function renderBlock(node: MarkdownBlockNode, key: string): React.ReactNode {
           className={`squisq-md-directive squisq-md-directive-${node.name}`}
           data-directive={node.name}
         >
-          {node.label && (
-            <div className="squisq-md-directive-label">{node.label}</div>
-          )}
+          {node.label && <div className="squisq-md-directive-label">{node.label}</div>}
           {renderBlocks(node.children, key)}
         </div>
       );
@@ -294,12 +286,7 @@ function renderListItem(item: MarkdownListItem, key: string): React.ReactNode {
   return (
     <li key={key} className={`squisq-md-li${isTask ? ' squisq-md-task' : ''}`}>
       {isTask && (
-        <input
-          type="checkbox"
-          checked={!!item.checked}
-          readOnly
-          className="squisq-md-checkbox"
-        />
+        <input type="checkbox" checked={!!item.checked} readOnly className="squisq-md-checkbox" />
       )}
       {renderBlocks(item.children, key)}
     </li>
@@ -369,9 +356,5 @@ function renderBlocks(nodes: MarkdownBlockNode[], keyPrefix = ''): React.ReactNo
 export function MarkdownRenderer({ nodes, className }: MarkdownRendererProps) {
   if (!nodes || nodes.length === 0) return null;
 
-  return (
-    <div className={`squisq-md ${className || ''}`}>
-      {renderBlocks(nodes)}
-    </div>
-  );
+  return <div className={`squisq-md ${className || ''}`}>{renderBlocks(nodes)}</div>;
 }

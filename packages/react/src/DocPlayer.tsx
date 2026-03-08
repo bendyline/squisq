@@ -24,19 +24,31 @@
 
 import { Fragment, useRef, useState, useEffect, useCallback, useMemo } from 'react';
 import type { Doc, Block, TextLayer, StartBlockConfig } from '@bendyline/squisq/schemas';
-import { BlockRenderer, VIEWPORT } from './BlockRenderer';
+import { BlockRenderer } from './BlockRenderer';
 import { CaptionOverlay } from './CaptionOverlay';
 import { getCaptionAtTime } from '@bendyline/squisq/schemas';
 import { useAudioSync } from './hooks/useAudioSync';
 import { useDocPlayback } from './hooks/useDocPlayback';
 import { useViewportOrientation } from './hooks/useViewportOrientation';
 import type { AudioProvider } from './hooks/AudioProvider';
-import { expandCoverBlock, createTemplateContext, DEFAULT_THEME, VIEWPORT_PRESETS, type ViewportConfig } from '@bendyline/squisq/doc';
+import {
+  expandCoverBlock,
+  createTemplateContext,
+  DEFAULT_THEME,
+  VIEWPORT_PRESETS,
+  type ViewportConfig,
+} from '@bendyline/squisq/doc';
 import { DocControlsOverlay } from './DocControlsOverlay';
 import { DocControlsSlideshow } from './DocControlsSlideshow';
 import { DocProgressBar } from './DocProgressBar';
 import { LinearDocView } from './LinearDocView';
-import type { PlaybackState, PlaybackActions, BlockMarker, DisplayMode, SlideNavActions } from './types';
+import type {
+  PlaybackState,
+  PlaybackActions,
+  BlockMarker,
+  DisplayMode,
+  SlideNavActions,
+} from './types';
 
 /**
  * Build a map of audio segment index -> display-friendly title.
@@ -66,13 +78,29 @@ function buildSegmentTitleMap(script: Doc): Map<number, string> {
         map.set(i, 'Flight Context');
       } else {
         // Title-case the slug: "hands-on-history" -> "Hands on History"
-        const SMALL_WORDS = new Set(['a', 'an', 'the', 'and', 'but', 'or', 'for', 'nor', 'on', 'at', 'to', 'in', 'of', 'by', 'is']);
+        const SMALL_WORDS = new Set([
+          'a',
+          'an',
+          'the',
+          'and',
+          'but',
+          'or',
+          'for',
+          'nor',
+          'on',
+          'at',
+          'to',
+          'in',
+          'of',
+          'by',
+          'is',
+        ]);
         const words = name.split('-');
-        const titled = words.map((w, idx) =>
-          idx === 0 || !SMALL_WORDS.has(w)
-            ? w.charAt(0).toUpperCase() + w.slice(1)
-            : w
-        ).join(' ');
+        const titled = words
+          .map((w, idx) =>
+            idx === 0 || !SMALL_WORDS.has(w) ? w.charAt(0).toUpperCase() + w.slice(1) : w,
+          )
+          .join(' ');
         map.set(i, titled);
       }
     }
@@ -111,10 +139,12 @@ interface DocPlayerProps {
   /** Callback for playback state changes (for external controls) */
   onPlaybackStateChange?: (state: PlaybackState) => void;
   /** Callback when playback controls are ready (for external controls) */
-  onControlsReady?: (controls: PlaybackActions & {
-    play: () => void;
-    pause: () => void;
-  }) => void;
+  onControlsReady?: (
+    controls: PlaybackActions & {
+      play: () => void;
+      pause: () => void;
+    },
+  ) => void;
   /** Whether the player is currently in fullscreen mode */
   isFullscreen?: boolean;
   /** Callback to toggle fullscreen mode */
@@ -199,23 +229,31 @@ export function DocPlayer({
     pause,
     toggle,
     seekTo,
-    skipToSegment,
+    skipToSegment: _skipToSegment,
     restart,
   } = audio;
 
   // Tap the player surface to toggle play/pause (disabled in slideshow and linear mode)
-  const handleContainerClick = useCallback((e: React.MouseEvent) => {
-    if (renderMode || isSlideshowMode || isLinearMode) return;
-    const target = e.target as HTMLElement;
-    // Don't toggle if user clicked a control element
-    if (target.closest('button, a, input, .doc-player__controls, .doc-player__scrubber, .doc-controls-sidebar, .doc-controls-slideshow')) return;
-    toggle();
-    // Show visual feedback (show the state we're transitioning TO)
-    const nextState = isPlaying ? 'play' : 'pause';
-    setTapFeedback(nextState);
-    clearTimeout(tapFeedbackTimer.current);
-    tapFeedbackTimer.current = setTimeout(() => setTapFeedback(null), 600);
-  }, [renderMode, toggle, isPlaying]);
+  const handleContainerClick = useCallback(
+    (e: React.MouseEvent) => {
+      if (renderMode || isSlideshowMode || isLinearMode) return;
+      const target = e.target as HTMLElement;
+      // Don't toggle if user clicked a control element
+      if (
+        target.closest(
+          'button, a, input, .doc-player__controls, .doc-player__scrubber, .doc-controls-sidebar, .doc-controls-slideshow',
+        )
+      )
+        return;
+      toggle();
+      // Show visual feedback (show the state we're transitioning TO)
+      const nextState = isPlaying ? 'play' : 'pause';
+      setTapFeedback(nextState);
+      clearTimeout(tapFeedbackTimer.current);
+      tapFeedbackTimer.current = setTimeout(() => setTapFeedback(null), 600);
+    },
+    [renderMode, toggle, isPlaying],
+  );
 
   // Doc playback hook - pass viewport for responsive template expansion
   const {
@@ -225,10 +263,10 @@ export function DocPlayer({
     isEntering,
     isExiting,
     blockTime,
-    blockProgress,
+    blockProgress: _blockProgress,
     docProgress,
-    nextBlock,
-    prevBlock,
+    nextBlock: _nextBlock,
+    prevBlock: _prevBlock,
     blocks: expandedBlocks,
   } = useDocPlayback(script, currentTime, activeViewport, renderMode);
 
@@ -243,7 +281,7 @@ export function DocPlayer({
     return {
       id: 'cover-block',
       startTime: -1, // Not part of timeline
-      duration: 0,   // Static
+      duration: 0, // Static
       audioSegment: -1,
       layers,
     };
@@ -274,7 +312,13 @@ export function DocPlayer({
   // Show cover when: has cover block, not playing, at time 0, not in render mode
   // OR during the grace period after first play, OR when coverForced (render mode)
   // Cover block is suppressed in slideshow and linear mode — start directly on content
-  const showCoverBlock = !isSlideshowMode && !isLinearMode && coverBlock && (coverForced || coverGraceActive || (!isPlaying && currentTime === 0 && !renderMode && !autoPlay));
+  const showCoverBlock =
+    !isSlideshowMode &&
+    !isLinearMode &&
+    coverBlock &&
+    (coverForced ||
+      coverGraceActive ||
+      (!isPlaying && currentTime === 0 && !renderMode && !autoPlay));
 
   // Auto-play if enabled (wait for audio to be ready)
   // Use a ref to track if we've already auto-played to avoid repeating on every render
@@ -320,7 +364,7 @@ export function DocPlayer({
             const elapsedMs = (time - blockStartTime) * 1000;
 
             // Set all CSS animations to the correct timeline position
-            document.getAnimations().forEach(anim => {
+            document.getAnimations().forEach((anim) => {
               const target = (anim.effect as KeyframeEffect)?.target as Element | null;
               if (!target) return;
 
@@ -353,14 +397,16 @@ export function DocPlayer({
                 video.pause();
                 video.currentTime = targetTime;
 
-                videoSeekPromises.push(new Promise<void>((r) => {
-                  if (Math.abs(video.currentTime - targetTime) < 0.1) {
-                    r();
-                  } else {
-                    video.addEventListener('seeked', () => r(), { once: true });
-                    setTimeout(r, 200); // Fallback if seeked never fires
-                  }
-                }));
+                videoSeekPromises.push(
+                  new Promise<void>((r) => {
+                    if (Math.abs(video.currentTime - targetTime) < 0.1) {
+                      r();
+                    } else {
+                      video.addEventListener('seeked', () => r(), { once: true });
+                      setTimeout(r, 200); // Fallback if seeked never fires
+                    }
+                  }),
+                );
               });
             }
 
@@ -373,25 +419,28 @@ export function DocPlayer({
       };
       (window as any).getDuration = () => totalDuration;
       // Expose block metadata for testing -- allows tests to find specific templates
-      (window as any).getBlocks = () => expandedBlocks.map((s: Block) => ({
-        id: s.id,
-        template: (s as any).template || 'raw',
-        startTime: s.startTime,
-        duration: s.duration,
-      }));
+      (window as any).getBlocks = () =>
+        expandedBlocks.map((s: Block) => ({
+          id: s.id,
+          template: (s as any).template || 'raw',
+          startTime: s.startTime,
+          duration: s.duration,
+        }));
       // Audio segment info for video production -- returns the actual files in composition order
-      (window as any).getAudioSegments = () => script.audio.segments.map(seg => ({
-        src: seg.src,
-        name: seg.name,
-        duration: seg.duration,
-        startTime: seg.startTime,
-      }));
+      (window as any).getAudioSegments = () =>
+        script.audio.segments.map((seg) => ({
+          src: seg.src,
+          name: seg.name,
+          duration: seg.duration,
+          startTime: seg.startTime,
+        }));
       // Caption phrases for SRT/subtitle export
-      (window as any).getCaptions = () => script.captions?.phrases?.map(p => ({
-        text: p.text,
-        startTime: p.startTime,
-        endTime: p.endTime,
-      })) || [];
+      (window as any).getCaptions = () =>
+        script.captions?.phrases?.map((p) => ({
+          text: p.text,
+          startTime: p.startTime,
+          endTime: p.endTime,
+        })) || [];
       // Chapter markers for YouTube timestamps -- uses segment titles from sectionHeader blocks
       (window as any).getChapters = () => {
         const titleMap = buildSegmentTitleMap(script);
@@ -429,70 +478,96 @@ export function DocPlayer({
 
   // Captions state: use prop if provided, otherwise default to true
   const captionsEnabled = captionsEnabledProp !== undefined ? captionsEnabledProp : true;
-  const setCaptionsEnabled = useCallback((enabled: boolean) => {
-    onCaptionsToggle?.(enabled);
-  }, [onCaptionsToggle]);
+  const setCaptionsEnabled = useCallback(
+    (enabled: boolean) => {
+      onCaptionsToggle?.(enabled);
+    },
+    [onCaptionsToggle],
+  );
   const hasCaptions = script.captions && script.captions.phrases.length > 0;
 
   // Map segment indices to human-readable titles (from sectionHeader blocks)
   const segmentTitleMap = useMemo(() => buildSegmentTitleMap(script), [script]);
 
   // Build shared playback state for extracted controls
-  const playbackState: PlaybackState = useMemo(() => ({
-    isPlaying,
-    currentTime,
-    totalDuration,
-    currentBlockIndex,
-    totalBlocks: expandedBlocks.length,
-    docProgress,
-    hasCaptions: !!hasCaptions,
-    captionsEnabled,
-    isFullscreen,
-    currentSegmentIndex: currentSegment,
-    currentSegmentName: segmentTitleMap.get(currentSegment) ?? script.audio.segments[currentSegment]?.name ?? null,
-    currentBlock: currentBlock ?? null,
-  }), [isPlaying, currentTime, totalDuration, currentBlockIndex, expandedBlocks.length, docProgress, hasCaptions, captionsEnabled, isFullscreen, currentSegment, segmentTitleMap, currentBlock]);
+  const playbackState: PlaybackState = useMemo(
+    () => ({
+      isPlaying,
+      currentTime,
+      totalDuration,
+      currentBlockIndex,
+      totalBlocks: expandedBlocks.length,
+      docProgress,
+      hasCaptions: !!hasCaptions,
+      captionsEnabled,
+      isFullscreen,
+      currentSegmentIndex: currentSegment,
+      currentSegmentName:
+        segmentTitleMap.get(currentSegment) ?? script.audio.segments[currentSegment]?.name ?? null,
+      currentBlock: currentBlock ?? null,
+    }),
+    [
+      isPlaying,
+      currentTime,
+      totalDuration,
+      currentBlockIndex,
+      expandedBlocks.length,
+      docProgress,
+      hasCaptions,
+      captionsEnabled,
+      isFullscreen,
+      currentSegment,
+      segmentTitleMap,
+      currentBlock,
+    ],
+  );
 
   // Build shared playback actions for extracted controls
-  const playbackActions: PlaybackActions = useMemo(() => ({
-    toggle,
-    restart,
-    seekTo,
-    setCaptionsEnabled,
-    toggleFullscreen: onFullscreenToggle,
-  }), [toggle, restart, seekTo, setCaptionsEnabled, onFullscreenToggle]);
+  const playbackActions: PlaybackActions = useMemo(
+    () => ({
+      toggle,
+      restart,
+      seekTo,
+      setCaptionsEnabled,
+      toggleFullscreen: onFullscreenToggle,
+    }),
+    [toggle, restart, seekTo, setCaptionsEnabled, onFullscreenToggle],
+  );
 
   // Slide navigation actions for slideshow mode
   // These seek to the target block's startTime and keep the player paused.
-  const slideNavActions: SlideNavActions = useMemo(() => ({
-    nextSlide: () => {
-      if (currentBlockIndex < expandedBlocks.length - 1) {
-        const target = expandedBlocks[currentBlockIndex + 1];
-        if (target) {
-          seekTo(target.startTime);
-          pause();
+  const slideNavActions: SlideNavActions = useMemo(
+    () => ({
+      nextSlide: () => {
+        if (currentBlockIndex < expandedBlocks.length - 1) {
+          const target = expandedBlocks[currentBlockIndex + 1];
+          if (target) {
+            seekTo(target.startTime);
+            pause();
+          }
         }
-      }
-    },
-    prevSlide: () => {
-      if (currentBlockIndex > 0) {
-        const target = expandedBlocks[currentBlockIndex - 1];
-        if (target) {
-          seekTo(target.startTime);
-          pause();
+      },
+      prevSlide: () => {
+        if (currentBlockIndex > 0) {
+          const target = expandedBlocks[currentBlockIndex - 1];
+          if (target) {
+            seekTo(target.startTime);
+            pause();
+          }
         }
-      }
-    },
-    goToSlide: (index: number) => {
-      if (index >= 0 && index < expandedBlocks.length) {
-        const target = expandedBlocks[index];
-        if (target) {
-          seekTo(target.startTime);
-          pause();
+      },
+      goToSlide: (index: number) => {
+        if (index >= 0 && index < expandedBlocks.length) {
+          const target = expandedBlocks[index];
+          if (target) {
+            seekTo(target.startTime);
+            pause();
+          }
         }
-      }
-    },
-  }), [currentBlockIndex, expandedBlocks, seekTo, pause]);
+      },
+    }),
+    [currentBlockIndex, expandedBlocks, seekTo, pause],
+  );
 
   // Callback for playback state changes (for external controls)
   useEffect(() => {
@@ -532,7 +607,7 @@ export function DocPlayer({
     }
 
     // Fallback to formatted id
-    return block.id.replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+    return block.id.replace(/-/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
   }, []);
 
   // Compute block markers for progress bar (using expanded blocks)
@@ -564,7 +639,12 @@ export function DocPlayer({
     (e: KeyboardEvent) => {
       // Don't capture keyboard events when focus is on an input/textarea
       const activeEl = document.activeElement;
-      if (activeEl && (activeEl.tagName === 'INPUT' || activeEl.tagName === 'TEXTAREA' || activeEl.tagName === 'SELECT')) {
+      if (
+        activeEl &&
+        (activeEl.tagName === 'INPUT' ||
+          activeEl.tagName === 'TEXTAREA' ||
+          activeEl.tagName === 'SELECT')
+      ) {
         return;
       }
 
@@ -610,7 +690,16 @@ export function DocPlayer({
         }
       }
     },
-    [isSlideshowMode, isLinearMode, toggle, seekTo, currentTime, totalDuration, slideNavActions, expandedBlocks.length]
+    [
+      isSlideshowMode,
+      isLinearMode,
+      toggle,
+      seekTo,
+      currentTime,
+      totalDuration,
+      slideNavActions,
+      expandedBlocks.length,
+    ],
   );
 
   useEffect(() => {
@@ -632,11 +721,7 @@ export function DocPlayer({
           overflow: 'hidden',
         }}
       >
-        <LinearDocView
-          doc={script}
-          basePath={basePath}
-          viewport={activeViewport}
-        />
+        <LinearDocView doc={script} basePath={basePath} viewport={activeViewport} />
       </div>
     );
   }
@@ -655,7 +740,6 @@ export function DocPlayer({
         cursor: renderMode ? undefined : 'pointer',
       }}
     >
-
       {/* Hidden audio element */}
       <audio ref={audioRef} preload="auto" muted={muted} />
 
@@ -737,36 +821,31 @@ export function DocPlayer({
             </div>
             <div>
               <span style={{ color: '#888' }}>template:</span>{' '}
-              <span style={{ color: '#ff6b6b' }}>
-                {(currentBlock as any)?.template || 'raw'}
-              </span>
+              <span style={{ color: '#ff6b6b' }}>{(currentBlock as any)?.template || 'raw'}</span>
             </div>
             <div>
-              <span style={{ color: '#888' }}>block:</span>{' '}
-              {currentBlockIndex + 1}/{expandedBlocks.length}
-              {' '}
+              <span style={{ color: '#888' }}>block:</span> {currentBlockIndex + 1}/
+              {expandedBlocks.length}{' '}
               <span style={{ color: '#666' }}>({currentBlock?.id || 'none'})</span>
             </div>
             <div>
-              <span style={{ color: '#888' }}>time:</span>{' '}
-              {currentTime.toFixed(2)}s / {totalDuration.toFixed(1)}s
+              <span style={{ color: '#888' }}>time:</span> {currentTime.toFixed(2)}s /{' '}
+              {totalDuration.toFixed(1)}s
             </div>
             <div>
-              <span style={{ color: '#888' }}>blockTime:</span>{' '}
-              {blockTime.toFixed(2)}s / {(currentBlock?.duration || 0).toFixed(1)}s
+              <span style={{ color: '#888' }}>blockTime:</span> {blockTime.toFixed(2)}s /{' '}
+              {(currentBlock?.duration || 0).toFixed(1)}s
             </div>
             <div>
-              <span style={{ color: '#888' }}>segment:</span>{' '}
-              {currentSegment}/{script.audio.segments.length - 1}
-              {' '}
+              <span style={{ color: '#888' }}>segment:</span> {currentSegment}/
+              {script.audio.segments.length - 1}{' '}
               <span style={{ color: '#666' }}>
                 ({script.audio.segments[currentSegment]?.name || 'none'})
               </span>
             </div>
             <div>
               <span style={{ color: '#888' }}>viewport:</span>{' '}
-              {activeViewport.name || `${activeViewport.width}x${activeViewport.height}`}
-              {' '}
+              {activeViewport.name || `${activeViewport.width}x${activeViewport.height}`}{' '}
               <span style={{ color: '#666' }}>({orientation})</span>
             </div>
             <div>
@@ -774,50 +853,47 @@ export function DocPlayer({
               <span style={{ color: isPlaying ? '#4ade80' : '#f87171' }}>
                 {isPlaying ? 'yes' : 'no'}
               </span>
-              {showCoverBlock && (
-                <span style={{ color: '#60a5fa' }}> (cover)</span>
-              )}
+              {showCoverBlock && <span style={{ color: '#60a5fa' }}> (cover)</span>}
             </div>
-            {hasCaptions && (() => {
-              const debugPhrase = getCaptionAtTime(script.captions!, currentTime);
-              const debugEnabled = captionsEnabled && (isPlaying || currentTime > 0);
-              return (
-                <Fragment>
-                  <div>
-                    <span style={{ color: '#888' }}>captions:</span>{' '}
-                    {script.captions?.phrases.length || 0} phrases
-                    {' '}
-                    <span style={{ color: captionsEnabled ? '#4ade80' : '#666' }}>
-                      ({captionsEnabled ? 'on' : 'off'})
-                    </span>
-                  </div>
-                  <div>
-                    <span style={{ color: '#888' }}>cc.enabled:</span>{' '}
-                    <span style={{ color: debugEnabled ? '#4ade80' : '#f87171' }}>
-                      {String(debugEnabled)}
-                    </span>
-                    {' '}
-                    <span style={{ color: '#666' }}>
-                      (playing={String(isPlaying)} t&gt;0={String(currentTime > 0)})
-                    </span>
-                  </div>
-                  <div>
-                    <span style={{ color: '#888' }}>cc.phrase:</span>{' '}
-                    <span style={{ color: debugPhrase ? '#4ade80' : '#f87171' }}>
-                      {debugPhrase ? `"${debugPhrase.text.slice(0, 30)}..."` : 'null'}
-                    </span>
-                  </div>
-                  {debugPhrase && (
+            {hasCaptions &&
+              (() => {
+                const debugPhrase = getCaptionAtTime(script.captions!, currentTime);
+                const debugEnabled = captionsEnabled && (isPlaying || currentTime > 0);
+                return (
+                  <Fragment>
                     <div>
-                      <span style={{ color: '#888' }}>cc.range:</span>{' '}
-                      <span style={{ color: '#60a5fa' }}>
-                        {debugPhrase.startTime.toFixed(2)}-{debugPhrase.endTime.toFixed(2)}
+                      <span style={{ color: '#888' }}>captions:</span>{' '}
+                      {script.captions?.phrases.length || 0} phrases{' '}
+                      <span style={{ color: captionsEnabled ? '#4ade80' : '#666' }}>
+                        ({captionsEnabled ? 'on' : 'off'})
                       </span>
                     </div>
-                  )}
-                </Fragment>
-              );
-            })()}
+                    <div>
+                      <span style={{ color: '#888' }}>cc.enabled:</span>{' '}
+                      <span style={{ color: debugEnabled ? '#4ade80' : '#f87171' }}>
+                        {String(debugEnabled)}
+                      </span>{' '}
+                      <span style={{ color: '#666' }}>
+                        (playing={String(isPlaying)} t&gt;0={String(currentTime > 0)})
+                      </span>
+                    </div>
+                    <div>
+                      <span style={{ color: '#888' }}>cc.phrase:</span>{' '}
+                      <span style={{ color: debugPhrase ? '#4ade80' : '#f87171' }}>
+                        {debugPhrase ? `"${debugPhrase.text.slice(0, 30)}..."` : 'null'}
+                      </span>
+                    </div>
+                    {debugPhrase && (
+                      <div>
+                        <span style={{ color: '#888' }}>cc.range:</span>{' '}
+                        <span style={{ color: '#60a5fa' }}>
+                          {debugPhrase.startTime.toFixed(2)}-{debugPhrase.endTime.toFixed(2)}
+                        </span>
+                      </div>
+                    )}
+                  </Fragment>
+                );
+              })()}
           </div>
         )}
       </div>
@@ -887,10 +963,7 @@ export function DocPlayer({
 
       {/* Slideshow controls (prev / counter / next) */}
       {!renderMode && isSlideshowMode && (
-        <DocControlsSlideshow
-          state={playbackState}
-          slideNav={slideNavActions}
-        />
+        <DocControlsSlideshow state={playbackState} slideNav={slideNavActions} />
       )}
 
       {/* Tap feedback animation -- shows play/pause icon briefly on tap (video mode only) */}
@@ -898,9 +971,9 @@ export function DocPlayer({
         <div className="doc-player__tap-feedback" key={Date.now()}>
           <svg viewBox="0 0 24 24" fill="white" width="48" height="48">
             {tapFeedback === 'pause' ? (
-              <path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/>
+              <path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z" />
             ) : (
-              <path d="M8 5v14l11-7z"/>
+              <path d="M8 5v14l11-7z" />
             )}
           </svg>
         </div>

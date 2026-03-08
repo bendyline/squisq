@@ -93,7 +93,7 @@ export function getPixelOffset(
   lat: number,
   lng: number,
   zoom: number,
-  tileSize: number = 256
+  tileSize: number = 256,
 ): { x: number; y: number } {
   const n = Math.pow(2, zoom);
   const xTile = ((lng + 180) / 360) * n;
@@ -115,7 +115,7 @@ export function getTilesForViewport(
   zoom: number,
   viewportWidth: number,
   viewportHeight: number,
-  tileSize: number = 256
+  tileSize: number = 256,
 ): Array<{ x: number; y: number; screenX: number; screenY: number }> {
   const centerTile = latLngToTile(centerLat, centerLng, zoom);
   const pixelOffset = getPixelOffset(centerLat, centerLng, zoom, tileSize);
@@ -253,7 +253,7 @@ function drawMarker(
   zoom: number,
   width: number,
   height: number,
-  tileSize: number
+  tileSize: number,
 ): void {
   // Calculate screen position of marker relative to center
   const centerTile = latLngToTile(center.lat, center.lng, zoom);
@@ -322,7 +322,7 @@ function drawStar(
   cy: number,
   spikes: number,
   outerRadius: number,
-  innerRadius: number
+  innerRadius: number,
 ): void {
   let rot = (Math.PI / 2) * 3;
   const step = Math.PI / spikes;
@@ -348,7 +348,7 @@ function drawAttribution(
   ctx: CanvasRenderingContext2D,
   text: string,
   width: number,
-  height: number
+  height: number,
 ): void {
   ctx.save();
 

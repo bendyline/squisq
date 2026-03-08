@@ -87,7 +87,7 @@ export function calculateSegmentTiming(segments: AudioSegment[] | undefined): {
 export function findSegmentAtTime(
   time: number,
   segments: AudioSegment[] | undefined,
-  segmentStarts: number[]
+  segmentStarts: number[],
 ): { segmentIndex: number; segmentStart: number } {
   if (!segments?.length) {
     return { segmentIndex: 0, segmentStart: 0 };

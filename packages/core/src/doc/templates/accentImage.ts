@@ -77,7 +77,7 @@ export function getAccentLayout(position: AccentPosition): AccentLayout {
     case 'left-strip':
       return {
         textCenterX: `${50 + STRIP_SIZE / 2}%`, // Shift center right
-        textWidth: `${100 - STRIP_SIZE - 8}%`,   // Leave margin
+        textWidth: `${100 - STRIP_SIZE - 8}%`, // Leave margin
         textYAdjust: 0,
         adjustY: false,
       };
@@ -111,10 +111,7 @@ export function getAccentLayout(position: AccentPosition): AccentLayout {
  * Create layers for an accent image.
  * Returns the image layer and any overlay/gradient layers needed.
  */
-export function createAccentLayers(
-  accent: AccentImage,
-  slideId: string
-): Layer[] {
+export function createAccentLayers(accent: AccentImage, slideId: string): Layer[] {
   const layers: Layer[] = [];
   const { src, alt, position, ambientMotion, credit, license } = accent;
 
@@ -178,10 +175,7 @@ function createStripImage(
 /**
  * Create a gradient overlay for strip images (fades to background).
  */
-function createStripGradient(
-  side: 'left' | 'right',
-  slideId: string
-): ShapeLayer {
+function createStripGradient(side: 'left' | 'right', slideId: string): ShapeLayer {
   // Gradient from transparent to background color at the edge
   const gradientId = side === 'left' ? 'accent-gradient-left' : 'accent-gradient-right';
 
@@ -311,10 +305,7 @@ function createCornerVignette(slideId: string): ShapeLayer {
  * Adjust a Y position value based on accent layout.
  * Used by templates to shift content when bottom-strip is present.
  */
-export function adjustY(
-  originalY: string | number,
-  layout: AccentLayout
-): string {
+export function adjustY(originalY: string | number, layout: AccentLayout): string {
   if (!layout.adjustY || layout.textYAdjust === 0) {
     return typeof originalY === 'number' ? `${originalY}%` : originalY;
   }

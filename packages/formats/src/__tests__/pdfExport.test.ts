@@ -137,16 +137,28 @@ describe('markdownDocToPdf', () => {
       type: 'list',
       ordered: false,
       children: [
-        { type: 'listItem', children: [{ type: 'paragraph', children: [text('Apple')] } as MarkdownParagraph] } as MarkdownListItem,
-        { type: 'listItem', children: [{ type: 'paragraph', children: [text('Banana')] } as MarkdownParagraph] } as MarkdownListItem,
+        {
+          type: 'listItem',
+          children: [{ type: 'paragraph', children: [text('Apple')] } as MarkdownParagraph],
+        } as MarkdownListItem,
+        {
+          type: 'listItem',
+          children: [{ type: 'paragraph', children: [text('Banana')] } as MarkdownParagraph],
+        } as MarkdownListItem,
       ],
     };
     const ordered: MarkdownList = {
       type: 'list',
       ordered: true,
       children: [
-        { type: 'listItem', children: [{ type: 'paragraph', children: [text('First')] } as MarkdownParagraph] } as MarkdownListItem,
-        { type: 'listItem', children: [{ type: 'paragraph', children: [text('Second')] } as MarkdownParagraph] } as MarkdownListItem,
+        {
+          type: 'listItem',
+          children: [{ type: 'paragraph', children: [text('First')] } as MarkdownParagraph],
+        } as MarkdownListItem,
+        {
+          type: 'listItem',
+          children: [{ type: 'paragraph', children: [text('Second')] } as MarkdownParagraph],
+        } as MarkdownListItem,
       ],
     };
     const doc: MarkdownDocument = { type: 'document', children: [unordered, ordered] };
@@ -174,9 +186,7 @@ describe('markdownDocToPdf', () => {
       children: [
         {
           type: 'blockquote',
-          children: [
-            { type: 'paragraph', children: [text('Quoted text')] } as MarkdownParagraph,
-          ],
+          children: [{ type: 'paragraph', children: [text('Quoted text')] } as MarkdownParagraph],
         } as MarkdownBlockquote,
       ],
     };
@@ -187,11 +197,14 @@ describe('markdownDocToPdf', () => {
   it('renders a table', async () => {
     const row = (cells: string[], isHeader: boolean): MarkdownTableRow => ({
       type: 'tableRow',
-      children: cells.map((c) => ({
-        type: 'tableCell',
-        isHeader,
-        children: [text(c)],
-      } as MarkdownTableCell)),
+      children: cells.map(
+        (c) =>
+          ({
+            type: 'tableCell',
+            isHeader,
+            children: [text(c)],
+          }) as MarkdownTableCell,
+      ),
     });
 
     const doc: MarkdownDocument = {
@@ -256,7 +269,10 @@ describe('markdownDocToPdf', () => {
       type: 'list',
       ordered: false,
       children: [
-        { type: 'listItem', children: [{ type: 'paragraph', children: [text('Nested item')] } as MarkdownParagraph] } as MarkdownListItem,
+        {
+          type: 'listItem',
+          children: [{ type: 'paragraph', children: [text('Nested item')] } as MarkdownParagraph],
+        } as MarkdownListItem,
       ],
     };
     const outer: MarkdownList = {

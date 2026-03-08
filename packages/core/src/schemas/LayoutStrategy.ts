@@ -125,7 +125,7 @@ export function scaledFontSize(
   basePx: number,
   viewport: ViewportConfig,
   orientation: ViewportOrientation,
-  isTitle: boolean = false
+  isTitle: boolean = false,
 ): number {
   const fontScale = calculateFontScale(viewport);
   const layout = getLayoutHints(orientation);

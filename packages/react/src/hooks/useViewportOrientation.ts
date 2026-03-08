@@ -12,7 +12,11 @@
  */
 
 import { useState, useEffect, useMemo } from 'react';
-import { VIEWPORT_PRESETS, type ViewportConfig, type ViewportOrientation } from '@bendyline/squisq/doc';
+import {
+  VIEWPORT_PRESETS,
+  type ViewportConfig,
+  type ViewportOrientation,
+} from '@bendyline/squisq/doc';
 
 interface UseViewportOrientationResult {
   /** Current viewport preset configuration */
@@ -97,14 +101,11 @@ export function useViewportOrientation(): UseViewportOrientationResult {
   // Calculate orientation from window size
   const orientation = useMemo(
     () => getOrientationFromWindow(windowSize.width, windowSize.height),
-    [windowSize.width, windowSize.height]
+    [windowSize.width, windowSize.height],
   );
 
   // Get appropriate viewport preset
-  const viewport = useMemo(
-    () => getViewportForOrientation(orientation),
-    [orientation]
-  );
+  const viewport = useMemo(() => getViewportForOrientation(orientation), [orientation]);
 
   return {
     viewport,

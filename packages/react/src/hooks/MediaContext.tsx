@@ -42,7 +42,11 @@ export function useMediaUrl(relativePath: string, basePath: string): string {
   const provider = useMediaProvider();
 
   // For absolute/http URLs, skip resolution entirely
-  const isAbsolute = relativePath.startsWith('http') || relativePath.startsWith('/') || relativePath.startsWith('data:') || relativePath.startsWith('blob:');
+  const isAbsolute =
+    relativePath.startsWith('http') ||
+    relativePath.startsWith('/') ||
+    relativePath.startsWith('data:') ||
+    relativePath.startsWith('blob:');
 
   const fallback = isAbsolute ? relativePath : `${basePath}/${relativePath}`;
 
@@ -59,7 +63,9 @@ export function useMediaUrl(relativePath: string, basePath: string): string {
       if (!cancelled) setUrl(resolved);
     });
 
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [provider, relativePath, basePath, isAbsolute, fallback]);
 
   return url;

@@ -88,10 +88,7 @@ export interface RenderContext {
  * @param context Render context (theme, viewport, persistent layers, position).
  * @returns The computed Layer[] for the block, ready for BlockRenderer.
  */
-export function getLayers(
-  block: DocBlock,
-  context: RenderContext = {},
-): Layer[] {
+export function getLayers(block: DocBlock, context: RenderContext = {}): Layer[] {
   const theme = context.theme ?? DEFAULT_THEME;
   const viewport = context.viewport ?? VIEWPORT_PRESETS.landscape;
   const blockIndex = context.blockIndex ?? 0;
@@ -134,11 +131,7 @@ export function getLayers(
  * Inject persistent bottom/top layers around the block's own layers,
  * respecting per-block opt-out flags.
  */
-function injectPersistentLayers(
-  layers: Layer[],
-  block: DocBlock,
-  context: RenderContext,
-): Layer[] {
+function injectPersistentLayers(layers: Layer[], block: DocBlock, context: RenderContext): Layer[] {
   const { persistentLayers } = context;
   if (!persistentLayers) return layers;
 
@@ -151,9 +144,5 @@ function injectPersistentLayers(
   const useBottom = templateBlock.useBottomLayer !== false;
   const useTop = templateBlock.useTopLayer !== false;
 
-  return [
-    ...(useBottom ? bottomLayers : []),
-    ...layers,
-    ...(useTop ? topLayers : []),
-  ];
+  return [...(useBottom ? bottomLayers : []), ...layers, ...(useTop ? topLayers : [])];
 }

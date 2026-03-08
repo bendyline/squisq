@@ -2,7 +2,6 @@ import { describe, it, expect } from 'vitest';
 import { parseMarkdown, stringifyMarkdown } from '../markdown/index';
 import { markdownToDoc, flattenBlocks, countBlocks, getBlockDepth } from '../doc/markdownToDoc';
 import { docToMarkdown } from '../doc/docToMarkdown';
-import type { MarkdownParagraph, MarkdownHeading } from '../markdown/types';
 
 // Helper: strip positions from markdown nodes for cleaner assertions
 function stripPositions(obj: unknown): unknown {
@@ -46,7 +45,9 @@ describe('markdownToDoc', () => {
   });
 
   it('nests H2 under H1 as children', () => {
-    const md = parseMarkdown('# Chapter\n\nIntro\n\n## Section A\n\nContent A\n\n## Section B\n\nContent B');
+    const md = parseMarkdown(
+      '# Chapter\n\nIntro\n\n## Section A\n\nContent A\n\n## Section B\n\nContent B',
+    );
     const doc = markdownToDoc(md);
 
     expect(doc.blocks).toHaveLength(1); // One root block (H1)
@@ -73,7 +74,7 @@ describe('markdownToDoc', () => {
 
   it('handles deep nesting H1→H2→H3→H4→H5→H6', () => {
     const md = parseMarkdown(
-      '# L1\n\n## L2\n\n### L3\n\n#### L4\n\n##### L5\n\n###### L6\n\nDeep content'
+      '# L1\n\n## L2\n\n### L3\n\n#### L4\n\n##### L5\n\n###### L6\n\nDeep content',
     );
     const doc = markdownToDoc(md);
 
@@ -91,7 +92,7 @@ describe('markdownToDoc', () => {
 
   it('handles mixed content between headings', () => {
     const md = parseMarkdown(
-      '# Title\n\nParagraph\n\n- Item 1\n- Item 2\n\n```js\ncode\n```\n\n> Quote'
+      '# Title\n\nParagraph\n\n- Item 1\n- Item 2\n\n```js\ncode\n```\n\n> Quote',
     );
     const doc = markdownToDoc(md);
 
@@ -165,8 +166,8 @@ describe('markdownToDoc', () => {
 
     const flat = flattenBlocks(doc.blocks);
     expect(flat).toHaveLength(4);
-    expect(flat[0].startTime).toBe(0);  // # A
-    expect(flat[1].startTime).toBe(5);  // ## A1
+    expect(flat[0].startTime).toBe(0); // # A
+    expect(flat[1].startTime).toBe(5); // ## A1
     expect(flat[2].startTime).toBe(10); // ## A2
     expect(flat[3].startTime).toBe(15); // # B
     expect(doc.duration).toBe(20);
@@ -192,7 +193,7 @@ describe('flattenBlocks', () => {
     const doc = markdownToDoc(md);
     const flat = flattenBlocks(doc.blocks);
 
-    expect(flat.map(b => b.id)).toEqual(['a', 'a1', 'a1a', 'a2', 'b']);
+    expect(flat.map((b) => b.id)).toEqual(['a', 'a1', 'a1a', 'a2', 'b']);
   });
 });
 
@@ -330,7 +331,7 @@ describe('template annotation in markdownToDoc', () => {
 
     // The heading children should have the annotation stripped
     expect(heading.templateAnnotation).toEqual({ template: 'chart' });
-    const textChild = heading.children.find(c => c.type === 'text') as any;
+    const textChild = heading.children.find((c) => c.type === 'text') as any;
     expect(textChild.value).toBe('My Section');
   });
 

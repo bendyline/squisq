@@ -7,12 +7,7 @@
  */
 
 import JSZip from 'jszip';
-import type {
-  CoreProperties,
-  PackagePart,
-  PendingRelationship,
-  Relationship,
-} from './types.js';
+import type { CoreProperties, PackagePart, PendingRelationship, Relationship } from './types.js';
 import {
   NS_CONTENT_TYPES,
   NS_RELATIONSHIPS,
@@ -24,13 +19,7 @@ import {
   CONTENT_TYPE_CORE_PROPERTIES,
   REL_CORE_PROPERTIES,
 } from './namespaces.js';
-import {
-  xmlDeclaration,
-  escapeXml,
-  xmlElement,
-  textElement,
-  attrString,
-} from './xmlUtils.js';
+import { xmlDeclaration, escapeXml } from './xmlUtils.js';
 
 // ============================================
 // Package Builder
@@ -71,11 +60,7 @@ export interface OoxmlPackageBuilder {
    * @param data - Binary content
    * @param contentType - MIME content type (e.g., "image/png")
    */
-  addBinaryPart(
-    path: string,
-    data: ArrayBuffer | Uint8Array,
-    contentType: string,
-  ): void;
+  addBinaryPart(path: string, data: ArrayBuffer | Uint8Array, contentType: string): void;
 
   /**
    * Register a relationship.
@@ -186,8 +171,7 @@ function assemble(
   // Build and write _rels/*.rels files
   const relsBySource = groupRelationshipsBySource(relationships);
   for (const [sourcePart, rels] of relsBySource) {
-    const relsPath =
-      sourcePart === '' ? '_rels/.rels' : buildRelsPath(sourcePart);
+    const relsPath = sourcePart === '' ? '_rels/.rels' : buildRelsPath(sourcePart);
     zip.file(relsPath, buildRelationshipsXml(rels));
   }
 
@@ -198,14 +182,9 @@ function assemble(
 // [Content_Types].xml
 // ============================================
 
-function buildContentTypesXml(
-  parts: PackagePart[],
-  coreProps?: CoreProperties,
-): string {
+function buildContentTypesXml(parts: PackagePart[], coreProps?: CoreProperties): string {
   const lines: string[] = [xmlDeclaration()];
-  lines.push(
-    `<Types xmlns="${NS_CONTENT_TYPES}">`,
-  );
+  lines.push(`<Types xmlns="${NS_CONTENT_TYPES}">`);
 
   // Default extension types
   const extensionTypes = new Map<string, string>();
@@ -223,9 +202,7 @@ function buildContentTypesXml(
   }
 
   for (const [ext, ct] of extensionTypes) {
-    lines.push(
-      `  <Default Extension="${escapeXml(ext)}" ContentType="${escapeXml(ct)}"/>`,
-    );
+    lines.push(`  <Default Extension="${escapeXml(ext)}" ContentType="${escapeXml(ct)}"/>`);
   }
 
   // Override entries for each XML part
@@ -280,24 +257,30 @@ function buildCorePropertiesXml(props: CoreProperties): string {
   const lines: string[] = [xmlDeclaration()];
   lines.push(
     `<cp:coreProperties` +
-    ` xmlns:cp="${NS_CORE_PROPERTIES}"` +
-    ` xmlns:dc="${NS_DC}"` +
-    ` xmlns:dcterms="${NS_DCTERMS}"` +
-    ` xmlns:xsi="${NS_XSI}">`,
+      ` xmlns:cp="${NS_CORE_PROPERTIES}"` +
+      ` xmlns:dc="${NS_DC}"` +
+      ` xmlns:dcterms="${NS_DCTERMS}"` +
+      ` xmlns:xsi="${NS_XSI}">`,
   );
 
   if (props.title) lines.push(`  <dc:title>${escapeXml(props.title)}</dc:title>`);
   if (props.subject) lines.push(`  <dc:subject>${escapeXml(props.subject)}</dc:subject>`);
   if (props.creator) lines.push(`  <dc:creator>${escapeXml(props.creator)}</dc:creator>`);
-  if (props.description) lines.push(`  <dc:description>${escapeXml(props.description)}</dc:description>`);
+  if (props.description)
+    lines.push(`  <dc:description>${escapeXml(props.description)}</dc:description>`);
   if (props.keywords) lines.push(`  <cp:keywords>${escapeXml(props.keywords)}</cp:keywords>`);
-  if (props.lastModifiedBy) lines.push(`  <cp:lastModifiedBy>${escapeXml(props.lastModifiedBy)}</cp:lastModifiedBy>`);
+  if (props.lastModifiedBy)
+    lines.push(`  <cp:lastModifiedBy>${escapeXml(props.lastModifiedBy)}</cp:lastModifiedBy>`);
   if (props.revision) lines.push(`  <cp:revision>${escapeXml(props.revision)}</cp:revision>`);
   if (props.created) {
-    lines.push(`  <dcterms:created xsi:type="dcterms:W3CDTF">${escapeXml(props.created)}</dcterms:created>`);
+    lines.push(
+      `  <dcterms:created xsi:type="dcterms:W3CDTF">${escapeXml(props.created)}</dcterms:created>`,
+    );
   }
   if (props.modified) {
-    lines.push(`  <dcterms:modified xsi:type="dcterms:W3CDTF">${escapeXml(props.modified)}</dcterms:modified>`);
+    lines.push(
+      `  <dcterms:modified xsi:type="dcterms:W3CDTF">${escapeXml(props.modified)}</dcterms:modified>`,
+    );
   }
 
   lines.push('</cp:coreProperties>');
@@ -324,9 +307,7 @@ function buildRelsPath(partPath: string): string {
   return `${dir}/_rels/${file}.rels`;
 }
 
-function groupRelationshipsBySource(
-  pending: PendingRelationship[],
-): Map<string, Relationship[]> {
+function groupRelationshipsBySource(pending: PendingRelationship[]): Map<string, Relationship[]> {
   const grouped = new Map<string, Relationship[]>();
   for (const { sourcePart, relationship } of pending) {
     let list = grouped.get(sourcePart);

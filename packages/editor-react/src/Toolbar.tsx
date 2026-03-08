@@ -7,7 +7,7 @@
  * Hidden in Preview mode.
  */
 
-import { useCallback, useState, useEffect } from 'react';
+import { useCallback } from 'react';
 import { useEditorContext } from './EditorContext';
 import { getAvailableTemplates } from '@bendyline/squisq/doc';
 
@@ -28,9 +28,30 @@ interface ToolbarButton {
 
 const BUTTONS: ToolbarButton[] = [
   // Format group
-  { id: 'bold', label: 'B', icon: 'B', title: 'Bold (Ctrl+B)', group: 'format', iconStyle: { fontWeight: 700 } },
-  { id: 'italic', label: 'I', icon: 'I', title: 'Italic (Ctrl+I)', group: 'format', iconStyle: { fontStyle: 'italic' } },
-  { id: 'strikethrough', label: 'S', icon: 'S', title: 'Strikethrough', group: 'format', iconStyle: { textDecoration: 'line-through' } },
+  {
+    id: 'bold',
+    label: 'B',
+    icon: 'B',
+    title: 'Bold (Ctrl+B)',
+    group: 'format',
+    iconStyle: { fontWeight: 700 },
+  },
+  {
+    id: 'italic',
+    label: 'I',
+    icon: 'I',
+    title: 'Italic (Ctrl+I)',
+    group: 'format',
+    iconStyle: { fontStyle: 'italic' },
+  },
+  {
+    id: 'strikethrough',
+    label: 'S',
+    icon: 'S',
+    title: 'Strikethrough',
+    group: 'format',
+    iconStyle: { textDecoration: 'line-through' },
+  },
   { id: 'code', label: '<>', icon: '`', title: 'Inline code', group: 'format' },
 
   // Structure group
@@ -53,18 +74,30 @@ const BUTTONS: ToolbarButton[] = [
 function isTiptapActive(editor: any, id: string): boolean {
   if (!editor) return false;
   switch (id) {
-    case 'bold':          return editor.isActive('bold');
-    case 'italic':        return editor.isActive('italic');
-    case 'strikethrough': return editor.isActive('strike');
-    case 'code':          return editor.isActive('code');
-    case 'h1':            return editor.isActive('heading', { level: 1 });
-    case 'h2':            return editor.isActive('heading', { level: 2 });
-    case 'h3':            return editor.isActive('heading', { level: 3 });
-    case 'quote':         return editor.isActive('blockquote');
-    case 'ul':            return editor.isActive('bulletList');
-    case 'ol':            return editor.isActive('orderedList');
-    case 'codeblock':     return editor.isActive('codeBlock');
-    default:              return false;
+    case 'bold':
+      return editor.isActive('bold');
+    case 'italic':
+      return editor.isActive('italic');
+    case 'strikethrough':
+      return editor.isActive('strike');
+    case 'code':
+      return editor.isActive('code');
+    case 'h1':
+      return editor.isActive('heading', { level: 1 });
+    case 'h2':
+      return editor.isActive('heading', { level: 2 });
+    case 'h3':
+      return editor.isActive('heading', { level: 3 });
+    case 'quote':
+      return editor.isActive('blockquote');
+    case 'ul':
+      return editor.isActive('bulletList');
+    case 'ol':
+      return editor.isActive('orderedList');
+    case 'codeblock':
+      return editor.isActive('codeBlock');
+    default:
+      return false;
   }
 }
 
@@ -74,7 +107,8 @@ function isTiptapActive(editor: any, id: string): boolean {
  * - Raw: appends markdown syntax to the source
  */
 export function Toolbar({ className }: ToolbarProps) {
-  const { activeView, markdownSource, setMarkdownSource, tiptapEditor, monacoEditor } = useEditorContext();
+  const { activeView, markdownSource, setMarkdownSource, tiptapEditor, monacoEditor } =
+    useEditorContext();
 
   // ── Tiptap handler ─────────────────────────────────────
   const handleTiptap = useCallback(
@@ -82,18 +116,42 @@ export function Toolbar({ className }: ToolbarProps) {
       if (!tiptapEditor) return;
       const chain = tiptapEditor.chain().focus();
       switch (id) {
-        case 'bold':          chain.toggleBold().run(); break;
-        case 'italic':        chain.toggleItalic().run(); break;
-        case 'strikethrough': chain.toggleStrike().run(); break;
-        case 'code':          chain.toggleCode().run(); break;
-        case 'h1':            chain.toggleHeading({ level: 1 }).run(); break;
-        case 'h2':            chain.toggleHeading({ level: 2 }).run(); break;
-        case 'h3':            chain.toggleHeading({ level: 3 }).run(); break;
-        case 'quote':         chain.toggleBlockquote().run(); break;
-        case 'ul':            chain.toggleBulletList().run(); break;
-        case 'ol':            chain.toggleOrderedList().run(); break;
-        case 'codeblock':     chain.toggleCodeBlock().run(); break;
-        case 'hr':            chain.setHorizontalRule().run(); break;
+        case 'bold':
+          chain.toggleBold().run();
+          break;
+        case 'italic':
+          chain.toggleItalic().run();
+          break;
+        case 'strikethrough':
+          chain.toggleStrike().run();
+          break;
+        case 'code':
+          chain.toggleCode().run();
+          break;
+        case 'h1':
+          chain.toggleHeading({ level: 1 }).run();
+          break;
+        case 'h2':
+          chain.toggleHeading({ level: 2 }).run();
+          break;
+        case 'h3':
+          chain.toggleHeading({ level: 3 }).run();
+          break;
+        case 'quote':
+          chain.toggleBlockquote().run();
+          break;
+        case 'ul':
+          chain.toggleBulletList().run();
+          break;
+        case 'ol':
+          chain.toggleOrderedList().run();
+          break;
+        case 'codeblock':
+          chain.toggleCodeBlock().run();
+          break;
+        case 'hr':
+          chain.setHorizontalRule().run();
+          break;
         case 'link': {
           const url = window.prompt('URL:');
           if (url) {
@@ -146,16 +204,36 @@ export function Toolbar({ className }: ToolbarProps) {
         };
 
         switch (id) {
-          case 'bold':          wrapInline('**', '**', 'bold text'); break;
-          case 'italic':        wrapInline('*', '*', 'italic text'); break;
-          case 'strikethrough': wrapInline('~~', '~~', 'strikethrough'); break;
-          case 'code':          wrapInline('`', '`', 'code'); break;
-          case 'h1':            prefixLines('# ', 'Heading 1'); break;
-          case 'h2':            prefixLines('## ', 'Heading 2'); break;
-          case 'h3':            prefixLines('### ', 'Heading 3'); break;
-          case 'quote':         prefixLines('> ', 'Quote'); break;
-          case 'ul':            prefixLines('- ', 'Item'); break;
-          case 'ol':            prefixLines('1. ', 'Item'); break;
+          case 'bold':
+            wrapInline('**', '**', 'bold text');
+            break;
+          case 'italic':
+            wrapInline('*', '*', 'italic text');
+            break;
+          case 'strikethrough':
+            wrapInline('~~', '~~', 'strikethrough');
+            break;
+          case 'code':
+            wrapInline('`', '`', 'code');
+            break;
+          case 'h1':
+            prefixLines('# ', 'Heading 1');
+            break;
+          case 'h2':
+            prefixLines('## ', 'Heading 2');
+            break;
+          case 'h3':
+            prefixLines('### ', 'Heading 3');
+            break;
+          case 'quote':
+            prefixLines('> ', 'Quote');
+            break;
+          case 'ul':
+            prefixLines('- ', 'Item');
+            break;
+          case 'ol':
+            prefixLines('1. ', 'Item');
+            break;
           case 'codeblock': {
             const inner = hasSelection ? selectedText : 'code';
             replacement = '```\n' + inner + '\n```';
@@ -179,17 +257,18 @@ export function Toolbar({ className }: ToolbarProps) {
 
         // Apply the edit via Monaco's executeEdits for proper undo support
         const range = selection;
-        monacoEditor.executeEdits('toolbar', [
-          { range, text: replacement },
-        ]);
+        monacoEditor.executeEdits('toolbar', [{ range, text: replacement }]);
 
         // If no selection, select the placeholder text so user can type over it
         if (!hasSelection && newCursorOffset > 0) {
           const startPos = model.getPositionAt(
             model.getOffsetAt(range.getStartPosition()) + newCursorOffset,
           );
-          const placeholderLen = replacement.length - newCursorOffset
-            - (replacement.length - replacement.lastIndexOf(replacement.charAt(replacement.length - 1)));
+          const _placeholderLen =
+            replacement.length -
+            newCursorOffset -
+            (replacement.length -
+              replacement.lastIndexOf(replacement.charAt(replacement.length - 1)));
           // Just place cursor after the prefix
           monacoEditor.setPosition(startPos);
         }
@@ -199,19 +278,45 @@ export function Toolbar({ className }: ToolbarProps) {
         // Fallback: no Monaco instance, just append
         let insertion = '';
         switch (id) {
-          case 'bold': insertion = '**bold text**'; break;
-          case 'italic': insertion = '*italic text*'; break;
-          case 'strikethrough': insertion = '~~strikethrough~~'; break;
-          case 'code': insertion = '`code`'; break;
-          case 'h1': insertion = '\n# Heading 1\n'; break;
-          case 'h2': insertion = '\n## Heading 2\n'; break;
-          case 'h3': insertion = '\n### Heading 3\n'; break;
-          case 'quote': insertion = '\n> Quote\n'; break;
-          case 'ul': insertion = '\n- Item\n'; break;
-          case 'ol': insertion = '\n1. Item\n'; break;
-          case 'codeblock': insertion = '\n```\ncode\n```\n'; break;
-          case 'hr': insertion = '\n---\n'; break;
-          case 'link': insertion = '[link text](url)'; break;
+          case 'bold':
+            insertion = '**bold text**';
+            break;
+          case 'italic':
+            insertion = '*italic text*';
+            break;
+          case 'strikethrough':
+            insertion = '~~strikethrough~~';
+            break;
+          case 'code':
+            insertion = '`code`';
+            break;
+          case 'h1':
+            insertion = '\n# Heading 1\n';
+            break;
+          case 'h2':
+            insertion = '\n## Heading 2\n';
+            break;
+          case 'h3':
+            insertion = '\n### Heading 3\n';
+            break;
+          case 'quote':
+            insertion = '\n> Quote\n';
+            break;
+          case 'ul':
+            insertion = '\n- Item\n';
+            break;
+          case 'ol':
+            insertion = '\n1. Item\n';
+            break;
+          case 'codeblock':
+            insertion = '\n```\ncode\n```\n';
+            break;
+          case 'hr':
+            insertion = '\n---\n';
+            break;
+          case 'link':
+            insertion = '[link text](url)';
+            break;
         }
         if (insertion) {
           setMarkdownSource(markdownSource + insertion);
@@ -239,22 +344,22 @@ export function Toolbar({ className }: ToolbarProps) {
 
   // Detect current heading template (WYSIWYG mode only)
   const currentTemplate = isWysiwyg
-    ? (tiptapEditor.isActive('heading')
-        ? (tiptapEditor.getAttributes('heading')?.dataTemplate ?? '')
-        : null)
+    ? tiptapEditor.isActive('heading')
+      ? (tiptapEditor.getAttributes('heading')?.dataTemplate ?? '')
+      : null
     : null;
 
   const handleTemplatePick = (value: string) => {
     if (!tiptapEditor) return;
     if (value === '') {
       // Clear template
-      tiptapEditor.chain().focus()
+      tiptapEditor
+        .chain()
+        .focus()
         .updateAttributes('heading', { dataTemplate: null, dataTemplateParams: null })
         .run();
     } else {
-      tiptapEditor.chain().focus()
-        .updateAttributes('heading', { dataTemplate: value })
-        .run();
+      tiptapEditor.chain().focus().updateAttributes('heading', { dataTemplate: value }).run();
     }
   };
 
@@ -302,7 +407,9 @@ export function Toolbar({ className }: ToolbarProps) {
               >
                 <option value="">— none —</option>
                 {templateNames.map((name) => (
-                  <option key={name} value={name}>{name}</option>
+                  <option key={name} value={name}>
+                    {name}
+                  </option>
                 ))}
               </select>
             </label>

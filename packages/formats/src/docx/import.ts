@@ -46,7 +46,7 @@ import type {
   MarkdownFootnoteDefinition,
 } from '@bendyline/squisq/markdown';
 
-import { openPackage, getPartXml, getPartRelationships, getPartBinary } from '../ooxml/reader.js';
+import { openPackage, getPartXml, getPartRelationships } from '../ooxml/reader.js';
 import type { OoxmlPackage, Relationship } from '../ooxml/types.js';
 import { NS_WML, NS_R } from '../ooxml/namespaces.js';
 import {
@@ -314,10 +314,7 @@ async function parseFootnotes(pkg: OoxmlPackage, ctx: ImportContext): Promise<vo
 // Body Conversion
 // ============================================
 
-async function convertBody(
-  body: Element,
-  ctx: ImportContext,
-): Promise<MarkdownBlockNode[]> {
+async function convertBody(body: Element, ctx: ImportContext): Promise<MarkdownBlockNode[]> {
   const result: MarkdownBlockNode[] = [];
   const children = Array.from(body.children);
 
@@ -429,10 +426,7 @@ async function convertRuns(
   return mergeAdjacentText(result);
 }
 
-async function convertRun(
-  runEl: Element,
-  ctx: ImportContext,
-): Promise<MarkdownInlineNode[]> {
+async function convertRun(runEl: Element, ctx: ImportContext): Promise<MarkdownInlineNode[]> {
   const result: MarkdownInlineNode[] = [];
   const rPr = getFirstChildElement(runEl, 'rPr');
   const format = parseRunFormat(rPr, ctx);
@@ -490,7 +484,8 @@ function parseRunFormat(rPr: Element | null, ctx: ImportContext): RunFormat {
 
   const bold = hasChildElement(rPr, 'b') && !isFalseToggle(getFirstChildElement(rPr, 'b')!);
   const italic = hasChildElement(rPr, 'i') && !isFalseToggle(getFirstChildElement(rPr, 'i')!);
-  const strike = hasChildElement(rPr, 'strike') && !isFalseToggle(getFirstChildElement(rPr, 'strike')!);
+  const strike =
+    hasChildElement(rPr, 'strike') && !isFalseToggle(getFirstChildElement(rPr, 'strike')!);
 
   // Check for inline code via character style
   const rStyle = getFirstChildElement(rPr, 'rStyle');
@@ -499,9 +494,7 @@ function parseRunFormat(rPr: Element | null, ctx: ImportContext): RunFormat {
 
   // Check for monospace font as a code indicator
   const rFonts = getFirstChildElement(rPr, 'rFonts');
-  const fontName = rFonts
-    ? (getAttr(rFonts, 'ascii') ?? getAttr(rFonts, 'hAnsi') ?? '')
-    : '';
+  const fontName = rFonts ? (getAttr(rFonts, 'ascii') ?? getAttr(rFonts, 'hAnsi') ?? '') : '';
   const isMonospace = /consolas|courier|mono/i.test(fontName);
 
   return { bold, italic, strike, code: isCodeStyle || isMonospace };
@@ -516,10 +509,7 @@ function isFalseToggle(el: Element): boolean {
 // Hyperlink Conversion
 // ============================================
 
-async function convertHyperlink(
-  el: Element,
-  ctx: ImportContext,
-): Promise<MarkdownLink | null> {
+async function convertHyperlink(el: Element, ctx: ImportContext): Promise<MarkdownLink | null> {
   const rId = el.getAttributeNS(NS_R, 'id') ?? el.getAttribute('r:id');
 
   let url = '';
@@ -554,10 +544,7 @@ async function convertHyperlink(
 // Image Extraction
 // ============================================
 
-async function extractImage(
-  _el: Element,
-  _ctx: ImportContext,
-): Promise<MarkdownImage | null> {
+async function extractImage(_el: Element, _ctx: ImportContext): Promise<MarkdownImage | null> {
   // Image extraction is complex (DrawingML with blip references).
   // For v1, emit a placeholder. Full implementation requires:
   // 1. Find <a:blip r:embed="rId_"/> in the drawing tree
@@ -714,10 +701,7 @@ function getNumPr(el: Element): NumPrInfo | null {
 // Table Conversion
 // ============================================
 
-async function convertTable(
-  tblEl: Element,
-  ctx: ImportContext,
-): Promise<MarkdownTable | null> {
+async function convertTable(tblEl: Element, ctx: ImportContext): Promise<MarkdownTable | null> {
   const rows: MarkdownTableRow[] = [];
 
   const trEls = getAllChildElements(tblEl, 'tr');
@@ -842,9 +826,8 @@ function getAllChildElements(parent: Element, localName: string): Element[] {
  */
 function getAllElements(doc: Document | Element, localName: string): Element[] {
   // Try namespace-aware first
-  const nsEls = 'getElementsByTagNameNS' in doc
-    ? doc.getElementsByTagNameNS(NS_WML, localName)
-    : null;
+  const nsEls =
+    'getElementsByTagNameNS' in doc ? doc.getElementsByTagNameNS(NS_WML, localName) : null;
   if (nsEls && nsEls.length > 0) return Array.from(nsEls);
 
   // Fallback: try with w: prefix
@@ -867,11 +850,7 @@ function getFirstElement(doc: Document | Element, localName: string): Element | 
  * Get a w:-prefixed attribute, trying namespace-aware first then fallback.
  */
 function getAttr(el: Element, localName: string): string | null {
-  return (
-    el.getAttributeNS(NS_WML, localName) ||
-    el.getAttribute(`w:${localName}`) ||
-    null
-  );
+  return el.getAttributeNS(NS_WML, localName) || el.getAttribute(`w:${localName}`) || null;
 }
 
 /**
@@ -919,10 +898,7 @@ function mergeAdjacentText(nodes: MarkdownInlineNode[]): MarkdownInlineNode[] {
   const result: MarkdownInlineNode[] = [];
   for (const node of nodes) {
     const prev = result[result.length - 1];
-    if (
-      node.type === 'text' &&
-      prev?.type === 'text'
-    ) {
+    if (node.type === 'text' && prev?.type === 'text') {
       // Merge into previous text node
       (prev as MarkdownText).value += (node as MarkdownText).value;
     } else {

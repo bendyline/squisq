@@ -23,11 +23,7 @@
  */
 
 import type { Doc, Block } from '../schemas/Doc.js';
-import type {
-  MarkdownDocument,
-  MarkdownBlockNode,
-  MarkdownHeading,
-} from '../markdown/types.js';
+import type { MarkdownDocument, MarkdownBlockNode, MarkdownHeading } from '../markdown/types.js';
 
 /**
  * Convert a Doc with heading-driven blocks back to a MarkdownDocument.

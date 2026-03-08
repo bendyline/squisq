@@ -10,12 +10,10 @@
 // ============================================
 
 /** Relationships namespace (used in _rels/*.rels files) */
-export const NS_RELATIONSHIPS =
-  'http://schemas.openxmlformats.org/package/2006/relationships';
+export const NS_RELATIONSHIPS = 'http://schemas.openxmlformats.org/package/2006/relationships';
 
 /** Content Types namespace ([Content_Types].xml) */
-export const NS_CONTENT_TYPES =
-  'http://schemas.openxmlformats.org/package/2006/content-types';
+export const NS_CONTENT_TYPES = 'http://schemas.openxmlformats.org/package/2006/content-types';
 
 // ============================================
 // Relationship type URIs
@@ -70,72 +68,62 @@ export const REL_THEME =
 // ============================================
 
 /** WordprocessingML main namespace (w:) */
-export const NS_WML =
-  'http://schemas.openxmlformats.org/wordprocessingml/2006/main';
+export const NS_WML = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main';
 
 // ============================================
 // PresentationML (PPTX)
 // ============================================
 
 /** PresentationML main namespace (p:) */
-export const NS_PML =
-  'http://schemas.openxmlformats.org/presentationml/2006/main';
+export const NS_PML = 'http://schemas.openxmlformats.org/presentationml/2006/main';
 
 // ============================================
 // SpreadsheetML (XLSX)
 // ============================================
 
 /** SpreadsheetML main namespace */
-export const NS_SML =
-  'http://schemas.openxmlformats.org/spreadsheetml/2006/main';
+export const NS_SML = 'http://schemas.openxmlformats.org/spreadsheetml/2006/main';
 
 // ============================================
 // DrawingML (shared across formats)
 // ============================================
 
 /** DrawingML main namespace (a:) */
-export const NS_DRAWINGML =
-  'http://schemas.openxmlformats.org/drawingml/2006/main';
+export const NS_DRAWINGML = 'http://schemas.openxmlformats.org/drawingml/2006/main';
 
 /** DrawingML WordprocessingML drawing namespace (wp:) */
 export const NS_WP_DRAWING =
   'http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing';
 
 /** DrawingML picture namespace (pic:) */
-export const NS_PICTURE =
-  'http://schemas.openxmlformats.org/drawingml/2006/picture';
+export const NS_PICTURE = 'http://schemas.openxmlformats.org/drawingml/2006/picture';
 
 // ============================================
 // Dublin Core / Core Properties
 // ============================================
 
 /** Dublin Core elements namespace */
-export const NS_DC =
-  'http://purl.org/dc/elements/1.1/';
+export const NS_DC = 'http://purl.org/dc/elements/1.1/';
 
 /** Dublin Core terms namespace */
-export const NS_DCTERMS =
-  'http://purl.org/dc/terms/';
+export const NS_DCTERMS = 'http://purl.org/dc/terms/';
 
 /** Core properties namespace */
 export const NS_CORE_PROPERTIES =
   'http://schemas.openxmlformats.org/package/2006/metadata/core-properties';
 
 /** XML Schema Instance namespace */
-export const NS_XSI =
-  'http://www.w3.org/2001/XMLSchema-instance';
+export const NS_XSI = 'http://www.w3.org/2001/XMLSchema-instance';
 
 // ============================================
 // Markup Compatibility
 // ============================================
 
 /** Markup Compatibility namespace (mc:) */
-export const NS_MC =
-  'http://schemas.openxmlformats.org/markup-compatibility/2006';
+export const NS_MC = 'http://schemas.openxmlformats.org/markup-compatibility/2006';
 
 /** Office relationships namespace (r:) */
-export const NS_R =
-  'http://schemas.openxmlformats.org/officeDocument/2006/relationships';
+export const NS_R = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships';
 
 // ============================================
 // Content type strings

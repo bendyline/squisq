@@ -32,7 +32,8 @@ import { isPersistentLayerTemplate } from '../../schemas/BlockTemplates.js';
 // ============================================
 
 const GRADIENT_PRESETS: Record<string, string> = {
-  'dark-vignette': 'radial-gradient(ellipse at center, rgba(26,32,44,0.8) 0%, rgba(0,0,0,0.95) 100%)',
+  'dark-vignette':
+    'radial-gradient(ellipse at center, rgba(26,32,44,0.8) 0%, rgba(0,0,0,0.95) 100%)',
   'radial-dark': 'radial-gradient(ellipse at center, #1a202c 0%, #000000 100%)',
   'warm-sunset': 'linear-gradient(135deg, rgba(124,58,48,0.9) 0%, rgba(26,32,44,0.95) 100%)',
   'cool-blue': 'linear-gradient(135deg, rgba(26,54,93,0.9) 0%, rgba(26,32,44,0.95) 100%)',
@@ -93,10 +94,12 @@ function expandImageBackground(config: ImageBackgroundConfig): Layer[] {
       fit: 'cover',
     },
     position: { x: 0, y: 0, width: '100%', height: '100%' },
-    animation: config.ambientMotion ? {
-      type: config.ambientMotion,
-      duration: 30, // Long ambient motion
-    } : undefined,
+    animation: config.ambientMotion
+      ? {
+          type: config.ambientMotion,
+          duration: 30, // Long ambient motion
+        }
+      : undefined,
   };
 
   layers.push(imageLayer);
@@ -157,9 +160,7 @@ function expandTitleCaption(config: TitleCaptionConfig): Layer[] {
   // Pill dimensions — taller when subtitle present
   const pillHeight = hasSubtitle ? '15%' : '7%';
   // Position above player controls
-  const bgYPos = isBottom
-    ? (hasSubtitle ? '78%' : '84%')
-    : '2%';
+  const bgYPos = isBottom ? (hasSubtitle ? '78%' : '84%') : '2%';
   const bgXPos = isLeft ? `${pad}%` : '68%';
 
   // Thumbnail sizing — use different width/height to appear square in 16:9 viewport
@@ -169,18 +170,17 @@ function expandTitleCaption(config: TitleCaptionConfig): Layer[] {
   const thumbPad = 1.5; // padding inside pill around thumbnail (percent)
 
   // Text X offset: after thumbnail + padding, or just pill padding
-  const textX = config.showThumbnail && isLeft
-    ? `${pad + thumbPad + 6 + thumbPad}%` // pill edge + thumb padding + thumb width + gap
-    : `${pad + thumbPad}%`;
+  const textX =
+    config.showThumbnail && isLeft
+      ? `${pad + thumbPad + 6 + thumbPad}%` // pill edge + thumb padding + thumb width + gap
+      : `${pad + thumbPad}%`;
   // Text area width: pill width minus thumbnail area minus padding
   const textWidth = config.showThumbnail
-    ? '19%'  // narrower when thumbnail takes space
+    ? '19%' // narrower when thumbnail takes space
     : '24%';
 
   // Title Y: top of text area inside pill
-  const titleYPos = isBottom
-    ? (hasSubtitle ? '80%' : '86%')
-    : '4%';
+  const titleYPos = isBottom ? (hasSubtitle ? '80%' : '86%') : '4%';
 
   // Background pill for readability
   layers.push({
@@ -201,13 +201,9 @@ function expandTitleCaption(config: TitleCaptionConfig): Layer[] {
 
   // Thumbnail if configured
   if (config.showThumbnail && config.thumbnailSrc) {
-    const thumbX = isLeft
-      ? `${pad + thumbPad}%`
-      : '93%';
+    const thumbX = isLeft ? `${pad + thumbPad}%` : '93%';
     // Center thumbnail vertically in pill
-    const thumbY = isBottom
-      ? (hasSubtitle ? `${78 + thumbPad}%` : '85%')
-      : '3%';
+    const thumbY = isBottom ? (hasSubtitle ? `${78 + thumbPad}%` : '85%') : '3%';
 
     layers.push({
       type: 'image',
@@ -386,9 +382,7 @@ export function expandPersistentLayer(layer: PersistentLayer): Layer[] {
 /**
  * Expand all persistent layers in a config to raw Layer arrays.
  */
-export function expandPersistentLayers(
-  layers: PersistentLayer[] | undefined
-): Layer[] {
+export function expandPersistentLayers(layers: PersistentLayer[] | undefined): Layer[] {
   if (!layers || layers.length === 0) {
     return [];
   }
@@ -412,7 +406,7 @@ export function getDocStyleConfig(
   preset: DocStylePreset,
   articleTitle: string,
   heroSrc?: string,
-  subtitle?: string
+  subtitle?: string,
 ): PersistentLayerConfig {
   switch (preset) {
     case 'minimal':

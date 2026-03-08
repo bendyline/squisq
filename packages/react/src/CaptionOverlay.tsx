@@ -31,7 +31,7 @@ export function CaptionOverlay({
 }: CaptionOverlayProps) {
   // Derive caption directly from currentTime -- pure computation, no hooks.
   // This avoids race conditions between timeupdate events and async state updates.
-  const phrase = (enabled && captions) ? getCaptionAtTime(captions, currentTime) : null;
+  const phrase = enabled && captions ? getCaptionAtTime(captions, currentTime) : null;
   const captionText = phrase?.text ?? null;
 
   return (

@@ -95,11 +95,12 @@ export async function pdfToMarkdownDoc(
   data: ArrayBuffer | Uint8Array | Blob,
   options: PdfImportOptions = {},
 ): Promise<MarkdownDocument> {
-  const bytes = data instanceof Blob
-    ? new Uint8Array(await data.arrayBuffer())
-    : data instanceof ArrayBuffer
-      ? new Uint8Array(data)
-      : data;
+  const bytes =
+    data instanceof Blob
+      ? new Uint8Array(await data.arrayBuffer())
+      : data instanceof ArrayBuffer
+        ? new Uint8Array(data)
+        : data;
 
   const textLines = await extractTextLines(bytes);
 
@@ -228,10 +229,7 @@ async function extractTextLines(data: Uint8Array): Promise<TextLine[]> {
     const content = await page.getTextContent();
 
     // Build a fontName → fontFamily lookup from pdfjs styles
-    const styleMap = (content.styles || {}) as Record<
-      string,
-      { fontFamily?: string }
-    >;
+    const styleMap = (content.styles || {}) as Record<string, { fontFamily?: string }>;
 
     // Group text items into lines by y-coordinate
     const items: TextItem[] = [];
@@ -310,7 +308,10 @@ function mode(arr: number[]): number {
   let maxCount = 0;
   let maxVal = 0;
   for (const [v, c] of freq) {
-    if (c > maxCount) { maxCount = c; maxVal = v; }
+    if (c > maxCount) {
+      maxCount = c;
+      maxVal = v;
+    }
   }
   return maxVal;
 }
@@ -321,7 +322,10 @@ function modeStr(arr: string[]): string {
   let maxCount = 0;
   let maxVal = '';
   for (const [v, c] of freq) {
-    if (c > maxCount) { maxCount = c; maxVal = v; }
+    if (c > maxCount) {
+      maxCount = c;
+      maxVal = v;
+    }
   }
   return maxVal;
 }
@@ -339,7 +343,7 @@ function classifyLines(
   const detectTables = options.detectTables !== false;
   const detectCodeBlocks = options.detectCodeBlocks !== false;
   const detectBlockquotes = options.detectBlockquotes !== false;
-  const detectLinks = options.detectLinks !== false;
+  const _detectLinks = options.detectLinks !== false;
 
   // Determine typical left margin (most common minX)
   const leftMargins = lines.map((l) => Math.round(l.minX));
@@ -401,16 +405,22 @@ function classifyLines(
     // --- Blockquote detection (indented text) ---
     if (detectBlockquotes && line.minX > typicalLeftMargin + 20) {
       const quoteLines: TextLine[] = [];
-      while (i < lines.length && lines[i].minX > typicalLeftMargin + 20
-        && !isMonospaceLine(lines[i])
-        && lines[i].fontSize <= bodySize + 1) {
+      while (
+        i < lines.length &&
+        lines[i].minX > typicalLeftMargin + 20 &&
+        !isMonospaceLine(lines[i]) &&
+        lines[i].fontSize <= bodySize + 1
+      ) {
         quoteLines.push(lines[i]);
         i++;
       }
-      const quoteBlocks: MarkdownBlockNode[] = quoteLines.map((ql) => ({
-        type: 'paragraph',
-        children: buildInlineNodes(ql, options),
-      } as MarkdownParagraph));
+      const quoteBlocks: MarkdownBlockNode[] = quoteLines.map(
+        (ql) =>
+          ({
+            type: 'paragraph',
+            children: buildInlineNodes(ql, options),
+          }) as MarkdownParagraph,
+      );
       blocks.push({
         type: 'blockquote',
         children: quoteBlocks,
@@ -531,10 +541,7 @@ function isItalicFont(fontName: string): boolean {
 // Inline Node Construction
 // ============================================
 
-function buildInlineNodes(
-  line: TextLine,
-  options: PdfImportOptions,
-): MarkdownInlineNode[] {
+function buildInlineNodes(line: TextLine, options: PdfImportOptions): MarkdownInlineNode[] {
   const nodes: MarkdownInlineNode[] = [];
   const detectLinksOpt = options.detectLinks !== false;
 
@@ -636,9 +643,9 @@ interface ListResult {
 function consumeList(
   lines: TextLine[],
   startIdx: number,
-  typicalLeftMargin: number,
-  bodySize: number,
-  options: PdfImportOptions,
+  _typicalLeftMargin: number,
+  _bodySize: number,
+  _options: PdfImportOptions,
 ): ListResult {
   const firstLine = lines[startIdx];
   const isOrdered = !!firstLine.text.match(IMPORT_ORDERED_PREFIX);
@@ -685,11 +692,7 @@ function consumeList(
  * Look ahead from index `start` and return the number of consecutive
  * lines that form an aligned table, or 0 if no table detected.
  */
-function tryDetectTable(
-  lines: TextLine[],
-  start: number,
-  typicalLeftMargin: number,
-): number {
+function tryDetectTable(lines: TextLine[], start: number, _typicalLeftMargin: number): number {
   // A table needs multiple items per line (columns) on consecutive lines
   // with roughly the same x-alignment pattern.
 
@@ -740,10 +743,7 @@ function getColumnPositions(line: TextLine): number[] {
   return positions.sort((a, b) => a - b);
 }
 
-function buildTable(
-  lines: TextLine[],
-  options: PdfImportOptions,
-): MarkdownTable | null {
+function buildTable(lines: TextLine[], _options: PdfImportOptions): MarkdownTable | null {
   if (lines.length === 0) return null;
 
   // Use the first line's column positions as anchors
@@ -761,17 +761,16 @@ function buildTable(
       const colRight = ci + 1 < cols.length ? cols[ci + 1] - IMPORT_COLUMN_TOLERANCE : Infinity;
 
       // Collect items in this column
-      const cellItems = line.items.filter(
-        (item) => item.x >= colLeft && item.x < colRight,
-      );
-      const text = cellItems.map((i) => i.str).join(' ').trim();
+      const cellItems = line.items.filter((item) => item.x >= colLeft && item.x < colRight);
+      const text = cellItems
+        .map((i) => i.str)
+        .join(' ')
+        .trim();
 
       cells.push({
         type: 'tableCell',
         isHeader: ri === 0,
-        children: text.length > 0
-          ? [{ type: 'text', value: text } as MarkdownText]
-          : [],
+        children: text.length > 0 ? [{ type: 'text', value: text } as MarkdownText] : [],
       } as MarkdownTableCell);
     }
 
@@ -800,11 +799,7 @@ function mergeAdjacentText(nodes: MarkdownInlineNode[]): MarkdownInlineNode[] {
   const result: MarkdownInlineNode[] = [];
   for (const node of nodes) {
     const prev = result[result.length - 1];
-    if (
-      prev &&
-      prev.type === 'text' &&
-      node.type === 'text'
-    ) {
+    if (prev && prev.type === 'text' && node.type === 'text') {
       (prev as MarkdownText).value += (node as MarkdownText).value;
     } else {
       result.push(node);

@@ -24,7 +24,6 @@ import type {
   MarkdownLink,
   MarkdownImage,
   MarkdownHtmlBlock,
-  MarkdownInlineHtml,
   MarkdownMathBlock,
   MarkdownInlineMath,
   MarkdownStrikethrough,
@@ -33,7 +32,6 @@ import type {
   MarkdownLinkDefinition,
   MarkdownLinkReference,
   MarkdownImageReference,
-  MarkdownNode,
 } from '../markdown/index';
 
 // ============================================
@@ -221,12 +219,16 @@ describe('parseMarkdown / stringifyMarkdown', () => {
 
       // Find footnote reference in the paragraph
       const p = doc.children[0] as MarkdownParagraph;
-      const ref = p.children.find(c => c.type === 'footnoteReference') as MarkdownFootnoteReference;
+      const ref = p.children.find(
+        (c) => c.type === 'footnoteReference',
+      ) as MarkdownFootnoteReference;
       expect(ref).toBeDefined();
       expect(ref.identifier).toBe('1');
 
       // Find footnote definition
-      const fnDef = doc.children.find(c => c.type === 'footnoteDefinition') as MarkdownFootnoteDefinition;
+      const fnDef = doc.children.find(
+        (c) => c.type === 'footnoteDefinition',
+      ) as MarkdownFootnoteDefinition;
       expect(fnDef).toBeDefined();
       expect(fnDef.identifier).toBe('1');
     });
@@ -240,7 +242,7 @@ describe('parseMarkdown / stringifyMarkdown', () => {
     it('parses inline math', () => {
       const doc = parse('The equation $E = mc^2$ is famous');
       const p = doc.children[0] as MarkdownParagraph;
-      const math = p.children.find(c => c.type === 'inlineMath') as MarkdownInlineMath;
+      const math = p.children.find((c) => c.type === 'inlineMath') as MarkdownInlineMath;
       expect(math).toBeDefined();
       expect(math.value).toBe('E = mc^2');
     });
@@ -262,7 +264,7 @@ describe('parseMarkdown / stringifyMarkdown', () => {
       const md = '[example]: https://example.com "Example"\n\nSee [example].';
       const doc = parse(md);
 
-      const def = doc.children.find(c => c.type === 'definition') as MarkdownLinkDefinition;
+      const def = doc.children.find((c) => c.type === 'definition') as MarkdownLinkDefinition;
       expect(def).toBeDefined();
       expect(def.identifier).toBe('example');
       expect(def.url).toBe('https://example.com');
@@ -305,7 +307,7 @@ describe('parseMarkdown / stringifyMarkdown', () => {
     it('parses inline HTML', () => {
       const doc = parse('Text with <em>emphasis</em> inline');
       const p = doc.children[0] as MarkdownParagraph;
-      const htmlNodes = p.children.filter(c => c.type === 'htmlInline');
+      const htmlNodes = p.children.filter((c) => c.type === 'htmlInline');
       expect(htmlNodes.length).toBeGreaterThan(0);
     });
 
@@ -339,7 +341,7 @@ describe('parseMarkdown / stringifyMarkdown', () => {
       const firstItem = outerList.children[0];
       // First item should have a paragraph and a nested list
       expect(firstItem.children.length).toBeGreaterThanOrEqual(2);
-      const nestedList = firstItem.children.find(c => c.type === 'list') as MarkdownList;
+      const nestedList = firstItem.children.find((c) => c.type === 'list') as MarkdownList;
       expect(nestedList).toBeDefined();
       expect(nestedList.children).toHaveLength(2);
     });
@@ -563,9 +565,7 @@ describe('Tree utilities', () => {
     walkMarkdownTree(doc, (node) => {
       types.push(node.type);
     });
-    expect(types).toEqual([
-      'document', 'heading', 'text', 'paragraph', 'text', 'link', 'text',
-    ]);
+    expect(types).toEqual(['document', 'heading', 'text', 'paragraph', 'text', 'link', 'text']);
   });
 
   it('walkMarkdownTree supports pruning', () => {
@@ -595,9 +595,7 @@ describe('Tree utilities', () => {
   });
 
   it('createDocument creates a minimal document', () => {
-    const d = createDocument(
-      { type: 'paragraph', children: [{ type: 'text', value: 'Hello' }] },
-    );
+    const d = createDocument({ type: 'paragraph', children: [{ type: 'text', value: 'Hello' }] });
     expect(d.type).toBe('document');
     expect(d.children).toHaveLength(1);
   });
@@ -728,7 +726,7 @@ describe('heading template annotation', () => {
 
     expect(heading.templateAnnotation).toEqual({ template: 'quoteBlock' });
     // The bold node should remain, trailing text stripped
-    const types = heading.children.map(c => c.type);
+    const types = heading.children.map((c) => c.type);
     expect(types).toContain('strong');
   });
 

@@ -21,11 +21,7 @@ describe('BlockRenderer', () => {
 
   it('renders an SVG element', () => {
     const { container } = render(
-      <BlockRenderer
-        block={minimalBlock}
-        blockTime={0}
-        basePath="/test"
-      />
+      <BlockRenderer block={minimalBlock} blockTime={0} basePath="/test" />,
     );
     const svg = container.querySelector('svg');
     expect(svg).toBeTruthy();
@@ -33,11 +29,7 @@ describe('BlockRenderer', () => {
 
   it('renders with correct viewBox', () => {
     const { container } = render(
-      <BlockRenderer
-        block={minimalBlock}
-        blockTime={0}
-        basePath="/test"
-      />
+      <BlockRenderer block={minimalBlock} blockTime={0} basePath="/test" />,
     );
     const svg = container.querySelector('svg');
     expect(svg?.getAttribute('viewBox')).toBe('0 0 1920 1080');
@@ -50,7 +42,7 @@ describe('BlockRenderer', () => {
         blockTime={0}
         basePath="/test"
         viewport={{ width: 1080, height: 1920 }}
-      />
+      />,
     );
     const svg = container.querySelector('svg');
     expect(svg?.getAttribute('viewBox')).toBe('0 0 1080 1920');
@@ -79,11 +71,7 @@ describe('BlockRenderer', () => {
     };
 
     const { container } = render(
-      <BlockRenderer
-        block={blockWithText}
-        blockTime={0}
-        basePath="/test"
-      />
+      <BlockRenderer block={blockWithText} blockTime={0} basePath="/test" />,
     );
     // Text should be rendered somewhere in the SVG
     expect(container.textContent).toContain('Hello World');
@@ -109,11 +97,7 @@ describe('BlockRenderer', () => {
     };
 
     const { container } = render(
-      <BlockRenderer
-        block={blockWithShape}
-        blockTime={0}
-        basePath="/test"
-      />
+      <BlockRenderer block={blockWithShape} blockTime={0} basePath="/test" />,
     );
     const rect = container.querySelector('rect');
     expect(rect).toBeTruthy();

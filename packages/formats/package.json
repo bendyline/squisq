@@ -1,6 +1,27 @@
 {
   "name": "@bendyline/squisq-formats",
   "version": "0.1.0",
+  "description": "Document format converters — DOCX, PDF, OOXML import/export",
+  "license": "MIT",
+  "author": "Bendyline",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/nicknisi/squisq.git",
+    "directory": "packages/formats"
+  },
+  "homepage": "https://github.com/nicknisi/squisq",
+  "keywords": [
+    "docx",
+    "pdf",
+    "ooxml",
+    "pptx",
+    "xlsx",
+    "document",
+    "converter"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
   "type": "module",
   "main": "./dist/index.js",
   "module": "./dist/index.js",
@@ -43,7 +64,8 @@
   },
   "scripts": {
     "build": "tsup",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "prepublishOnly": "npm run build"
   },
   "dependencies": {
     "@bendyline/squisq": "0.1.1",

@@ -81,9 +81,9 @@ export type ColorScheme = 'blue' | 'green' | 'purple' | 'red' | 'orange' | 'teal
  * Accents are tasteful image additions that complement rather than overwhelm text.
  */
 export type AccentPosition =
-  | 'left-strip'    // Vertical strip on left (25-30% width), text shifts right
-  | 'right-strip'   // Vertical strip on right (25-30% width), text shifts left
-  | 'bottom-strip'  // Horizontal strip at bottom (25-30% height), text shifts up
+  | 'left-strip' // Vertical strip on left (25-30% width), text shifts right
+  | 'right-strip' // Vertical strip on right (25-30% width), text shifts left
+  | 'bottom-strip' // Horizontal strip at bottom (25-30% height), text shifts up
   | 'corner-inset'; // Small inset image in corner with vignette edge
 
 /**
@@ -549,7 +549,7 @@ export function createTemplateContext(
   theme: ThemeColors,
   blockIndex: number,
   totalBlocks: number,
-  viewport: ViewportConfig = VIEWPORT_PRESETS.landscape
+  viewport: ViewportConfig = VIEWPORT_PRESETS.landscape,
 ): TemplateContext {
   const orientation = getViewportOrientation(viewport);
   return {
@@ -571,7 +571,11 @@ export function createTemplateContext(
  * @param context - Template context with viewport info
  * @param isTitle - Whether this is title text (larger scale) or body text
  */
-export function scaledFontSize(basePx: number, context: TemplateContext, isTitle: boolean = false): number {
+export function scaledFontSize(
+  basePx: number,
+  context: TemplateContext,
+  isTitle: boolean = false,
+): number {
   return scaleFontSize(basePx, context.viewport, context.orientation, isTitle);
 }
 
@@ -581,7 +585,7 @@ export function scaledFontSize(basePx: number, context: TemplateContext, isTitle
  */
 export type TemplateFunction<T extends TemplateBlock> = (
   input: T,
-  context: TemplateContext
+  context: TemplateContext,
 ) => Layer[];
 
 /**
@@ -614,7 +618,9 @@ export type PersistentLayer = PersistentLayerTemplate | Layer;
 /**
  * Check if a persistent layer is a template.
  */
-export function isPersistentLayerTemplate(layer: PersistentLayer): layer is PersistentLayerTemplate {
+export function isPersistentLayerTemplate(
+  layer: PersistentLayer,
+): layer is PersistentLayerTemplate {
   return 'template' in layer && typeof layer.template === 'string';
 }
 
@@ -630,13 +636,13 @@ export interface PersistentLayerTemplate {
  * Available persistent layer template types.
  */
 export type PersistentLayerTemplateType =
-  | 'solidBackground'     // Solid color fill
-  | 'gradientBackground'  // CSS gradient or preset
-  | 'imageBackground'     // Blurred/faded hero image
-  | 'patternBackground'   // Subtle pattern (dots, grid)
-  | 'titleCaption'        // Article title in corner
-  | 'cornerBranding'      // Logo or text badge
-  | 'progressIndicator';  // Bar/dots showing position
+  | 'solidBackground' // Solid color fill
+  | 'gradientBackground' // CSS gradient or preset
+  | 'imageBackground' // Blurred/faded hero image
+  | 'patternBackground' // Subtle pattern (dots, grid)
+  | 'titleCaption' // Article title in corner
+  | 'cornerBranding' // Logo or text badge
+  | 'progressIndicator'; // Bar/dots showing position
 
 /**
  * Union of all persistent layer template configs.
@@ -762,8 +768,8 @@ export interface ProgressIndicatorConfig {
  * AI/algorithms can use these without complex layer definitions.
  */
 export type DocStylePreset =
-  | 'minimal'       // No persistent layers
-  | 'documentary'   // Dark gradient + subtle title overlay
-  | 'branded'       // Gradient + prominent title + thumbnail
-  | 'cinematic'     // Hero blur background + minimal overlay
-  | 'clean';        // Solid dark background, no overlay
+  | 'minimal' // No persistent layers
+  | 'documentary' // Dark gradient + subtle title overlay
+  | 'branded' // Gradient + prominent title + thumbnail
+  | 'cinematic' // Hero blur background + minimal overlay
+  | 'clean'; // Solid dark background, no overlay

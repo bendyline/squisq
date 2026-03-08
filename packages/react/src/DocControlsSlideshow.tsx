@@ -18,10 +18,7 @@ interface DocControlsSlideshowProps {
   slideNav: SlideNavActions;
 }
 
-export function DocControlsSlideshow({
-  state,
-  slideNav,
-}: DocControlsSlideshowProps) {
+export function DocControlsSlideshow({ state, slideNav }: DocControlsSlideshowProps) {
   const { currentBlockIndex, totalBlocks } = state;
   const isFirst = currentBlockIndex <= 0;
   const isLast = currentBlockIndex >= totalBlocks - 1;
@@ -48,7 +45,10 @@ export function DocControlsSlideshow({
     >
       {/* Previous button */}
       <button
-        onClick={(e) => { e.stopPropagation(); slideNav.prevSlide(); }}
+        onClick={(e) => {
+          e.stopPropagation();
+          slideNav.prevSlide();
+        }}
         disabled={isFirst}
         data-testid="slide-prev"
         aria-label="Previous slide"
@@ -66,7 +66,7 @@ export function DocControlsSlideshow({
           transition: 'background 0.15s',
         }}
         onMouseEnter={(e) => {
-          if (!isFirst) (e.currentTarget.style.background = 'rgba(255,255,255,0.1)');
+          if (!isFirst) e.currentTarget.style.background = 'rgba(255,255,255,0.1)';
         }}
         onMouseLeave={(e) => {
           e.currentTarget.style.background = 'none';
@@ -96,7 +96,10 @@ export function DocControlsSlideshow({
 
       {/* Next button */}
       <button
-        onClick={(e) => { e.stopPropagation(); slideNav.nextSlide(); }}
+        onClick={(e) => {
+          e.stopPropagation();
+          slideNav.nextSlide();
+        }}
         disabled={isLast}
         data-testid="slide-next"
         aria-label="Next slide"
@@ -114,7 +117,7 @@ export function DocControlsSlideshow({
           transition: 'background 0.15s',
         }}
         onMouseEnter={(e) => {
-          if (!isLast) (e.currentTarget.style.background = 'rgba(255,255,255,0.1)');
+          if (!isLast) e.currentTarget.style.background = 'rgba(255,255,255,0.1)';
         }}
         onMouseLeave={(e) => {
           e.currentTarget.style.background = 'none';

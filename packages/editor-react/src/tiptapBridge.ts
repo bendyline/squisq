@@ -21,7 +21,7 @@ export function markdownToTiptap(markdown: string): string {
 
   // Simple conversion of markdown constructs to HTML that Tiptap understands.
   // This is intentionally straightforward — Tiptap's parser handles the HTML.
-  let html = markdown;
+  const html = markdown;
 
   // Process blocks line by line for accurate conversion
   const lines = html.split('\n');
@@ -91,7 +91,7 @@ export function markdownToTiptap(markdown: string): string {
         text = text.slice(0, annotMatch.index!).trimEnd();
         const tokens = annotMatch[1].trim().split(/\s+/);
         attrs = ` data-template="${escapeHtml(tokens[0])}"`;
-        const params = tokens.slice(1).filter(t => t.includes('='));
+        const params = tokens.slice(1).filter((t) => t.includes('='));
         if (params.length > 0) {
           attrs += ` data-template-params="${escapeHtml(params.join(' '))}"`;
         }
@@ -210,7 +210,9 @@ export function tiptapToMarkdown(html: string): string {
     }
 
     // Code blocks
-    const codeMatch = remaining.match(/^<pre><code(?:\s+class="language-([^"]*)")?>(.*?)<\/code><\/pre>/s);
+    const codeMatch = remaining.match(
+      /^<pre><code(?:\s+class="language-([^"]*)")?>(.*?)<\/code><\/pre>/s,
+    );
     if (codeMatch) {
       const lang = codeMatch[1] || '';
       const code = unescapeHtml(codeMatch[2]);
@@ -233,7 +235,11 @@ export function tiptapToMarkdown(html: string): string {
     }
 
     // Horizontal rule
-    if (remaining.startsWith('<hr>') || remaining.startsWith('<hr/>') || remaining.startsWith('<hr />')) {
+    if (
+      remaining.startsWith('<hr>') ||
+      remaining.startsWith('<hr/>') ||
+      remaining.startsWith('<hr />')
+    ) {
       const hrMatch = remaining.match(/^<hr\s*\/?>/);
       lines.push('---');
       lines.push('');
@@ -244,7 +250,9 @@ export function tiptapToMarkdown(html: string): string {
     // Task list
     const taskListMatch = remaining.match(/^<ul[^>]*data-type="taskList"[^>]*>(.*?)<\/ul>/s);
     if (taskListMatch) {
-      const items = taskListMatch[1].matchAll(/<li[^>]*data-type="taskItem"[^>]*(data-checked="true")?[^>]*>.*?<\/li>/gs);
+      const items = taskListMatch[1].matchAll(
+        /<li[^>]*data-type="taskItem"[^>]*(data-checked="true")?[^>]*>.*?<\/li>/gs,
+      );
       for (const item of items) {
         const checked = item[0].includes('data-checked="true"') || item[0].includes('checked');
         const textMatch = item[0].match(/<label>.*?<\/label>|<p>(.*?)<\/p>/s);
@@ -312,7 +320,12 @@ export function tiptapToMarkdown(html: string): string {
   }
 
   // Clean up trailing blank lines
-  return lines.join('\n').replace(/\n{3,}/g, '\n\n').trim() + '\n';
+  return (
+    lines
+      .join('\n')
+      .replace(/\n{3,}/g, '\n\n')
+      .trim() + '\n'
+  );
 }
 
 // ─── Helpers ─────────────────────────────────────────────

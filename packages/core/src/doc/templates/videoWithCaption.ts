@@ -22,10 +22,16 @@ import { cleanCaption } from './captionUtils.js';
 
 export function videoWithCaption(input: VideoWithCaptionInput, context: TemplateContext): Layer[] {
   const {
-    videoSrc, posterSrc, videoAlt,
-    clipStart, clipEnd, sourceDuration,
-    caption: rawCaption, captionPosition = 'bottom',
-    videoCredit, videoLicense,
+    videoSrc,
+    posterSrc,
+    videoAlt,
+    clipStart,
+    clipEnd,
+    sourceDuration,
+    caption: rawCaption,
+    captionPosition = 'bottom',
+    videoCredit,
+    videoLicense,
   } = input;
   const caption = rawCaption ? cleanCaption(rawCaption) : rawCaption;
   const { theme, layout } = context;
@@ -70,9 +76,8 @@ export function videoWithCaption(input: VideoWithCaptionInput, context: Template
       },
     });
 
-    const captionY = captionPosition === 'top' ? '15%'
-      : captionPosition === 'center' ? '50%'
-      : '82%';
+    const captionY =
+      captionPosition === 'top' ? '15%' : captionPosition === 'center' ? '50%' : '82%';
 
     layers.push({
       type: 'text',

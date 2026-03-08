@@ -58,11 +58,13 @@ export function ImageLayer({ layer, basePath, viewport, blockTime }: ImageLayerP
     return (
       <g className="block-layer block-layer--image" data-layer-id={layer.id}>
         <foreignObject x={finalX} y={finalY} width={width} height={height}>
-          <div style={{
-            width: '100%',
-            height: '100%',
-            overflow: 'hidden',
-          }}>
+          <div
+            style={{
+              width: '100%',
+              height: '100%',
+              overflow: 'hidden',
+            }}
+          >
             <img
               src={src}
               alt={content.alt || ''}
@@ -151,7 +153,7 @@ function resolveValue(value: number | string, dimension: number): number {
 function getAnchorOffset(
   anchor: string | undefined,
   width: number,
-  height: number
+  height: number,
 ): { x: number; y: number } {
   switch (anchor) {
     case 'center':
@@ -188,9 +190,7 @@ function getPreserveAspectRatio(fit?: 'cover' | 'contain' | 'fill'): string {
 // ============================================
 
 /** Animation types that use CSS transforms (translate/scale). */
-const SPATIAL_ANIMATION_TYPES = new Set([
-  'panLeft', 'panRight', 'slowZoom', 'zoomIn', 'zoomOut',
-]);
+const SPATIAL_ANIMATION_TYPES = new Set(['panLeft', 'panRight', 'slowZoom', 'zoomIn', 'zoomOut']);
 
 /**
  * Remap animation for Ken Burns inner-image rendering.

@@ -15,7 +15,7 @@
 import { useState, useEffect } from 'react';
 import type { MapLayer as MapLayerType } from '@bendyline/squisq/schemas';
 import { getAnimationStyle } from '../utils/animationUtils';
-import { composeMapImage, getAttribution } from '../utils/mapTileUtils';
+import { composeMapImage } from '../utils/mapTileUtils';
 
 interface MapLayerProps {
   layer: MapLayerType;
@@ -199,7 +199,7 @@ function resolveValue(value: number | string, dimension: number): number {
 function getAnchorOffset(
   anchor: string | undefined,
   width: number,
-  height: number
+  height: number,
 ): { x: number; y: number } {
   switch (anchor) {
     case 'center':

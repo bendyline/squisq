@@ -39,7 +39,6 @@ import { twoColumn } from './twoColumn.js';
 import { dateEvent } from './dateEvent.js';
 import { imageWithCaption } from './imageWithCaption.js';
 import { mapBlock } from './mapBlock.js';
-import { coverBlock, expandCoverBlock } from './coverBlock.js';
 import { fullBleedQuote } from './fullBleedQuote.js';
 import { listBlock } from './listBlock.js';
 import { photoGrid } from './photoGrid.js';
@@ -77,10 +76,7 @@ export const templateRegistry: TemplateRegistry = {
 /**
  * Expand a template block into a full Block with layers.
  */
-export function expandTemplateBlock(
-  templateBlock: TemplateBlock,
-  context: TemplateContext
-): Block {
+export function expandTemplateBlock(templateBlock: TemplateBlock, context: TemplateContext): Block {
   const templateFn = templateRegistry[templateBlock.template];
 
   if (!templateFn) {
@@ -101,7 +97,10 @@ export function expandTemplateBlock(
   try {
     layers = (templateFn as any)(templateBlock, context);
     if (!Array.isArray(layers)) {
-      console.error(`Template ${templateBlock.template} did not return an array, got:`, typeof layers);
+      console.error(
+        `Template ${templateBlock.template} did not return an array, got:`,
+        typeof layers,
+      );
       layers = [];
     }
   } catch (err) {
@@ -161,7 +160,7 @@ export interface ExpandDocBlocksOptions {
  */
 export function expandDocBlocks(
   blocks: DocBlock[],
-  options: ExpandDocBlocksOptions | ThemeColors = {}
+  options: ExpandDocBlocksOptions | ThemeColors = {},
 ): Block[] {
   // Handle legacy signature: expandDocBlocks(blocks, theme)
   const opts: ExpandDocBlocksOptions =
@@ -183,9 +182,9 @@ export function expandDocBlocks(
     let currentTime = 0;
     return blocks.map((block, index) => {
       const context = createTemplateContext(theme, index, totalBlocks, viewport);
-      let expandedBlock = isTemplateBlock(block)
+      const expandedBlock = isTemplateBlock(block)
         ? expandTemplateBlock(block, context)
-        : block as Block;
+        : (block as Block);
 
       // Inject persistent layers
       const templateBlock = block as TemplateBlock;
@@ -225,9 +224,9 @@ export function expandDocBlocks(
       let offsetTime = 0;
       for (const { block, originalIndex } of segmentBlocks) {
         const context = createTemplateContext(theme, originalIndex, totalBlocks, viewport);
-        let expandedBlock = isTemplateBlock(block)
+        const expandedBlock = isTemplateBlock(block)
           ? expandTemplateBlock(block, context)
-          : block as Block;
+          : (block as Block);
 
         const templateBlock = block as TemplateBlock;
         const useBottom = templateBlock.useBottomLayer !== false;
@@ -275,9 +274,10 @@ export function expandDocBlocks(
     const remainingDuration = audioSegment.duration - fixedDuration;
 
     // Scale factor only applies to content blocks
-    const scaleFactor = contentBlockDuration > 0 && remainingDuration > 0
-      ? remainingDuration / contentBlockDuration
-      : 1;
+    const scaleFactor =
+      contentBlockDuration > 0 && remainingDuration > 0
+        ? remainingDuration / contentBlockDuration
+        : 1;
 
     // First pass: expand all blocks and track which have source timing
     interface ExpandedSlideInfo {
@@ -290,9 +290,9 @@ export function expandDocBlocks(
 
     for (const { block, originalIndex } of segmentBlocks) {
       const context = createTemplateContext(theme, originalIndex, totalBlocks, viewport);
-      let expandedBlock = isTemplateBlock(block)
+      const expandedBlock = isTemplateBlock(block)
         ? expandTemplateBlock(block, context)
-        : block as Block;
+        : (block as Block);
 
       const templateBlock = block as TemplateBlock;
       const useBottom = templateBlock.useBottomLayer !== false;
@@ -318,7 +318,7 @@ export function expandDocBlocks(
     // are placed first since they are intro cards for the segment. When there
     // is no source timing (e.g., preview/synthetic mode), keep original
     // document order so the slideshow matches what the author wrote.
-    const hasAnySourceTiming = expandedInfos.some(info => info.hasSourceTiming);
+    const hasAnySourceTiming = expandedInfos.some((info) => info.hasSourceTiming);
 
     expandedInfos.sort((a, b) => {
       if (hasAnySourceTiming) {
@@ -380,7 +380,7 @@ export function expandDocBlocks(
     // Third pass: fix overlaps and gaps by adjusting durations
     // Sort by startTime for overlap detection
     const segmentExpandedBlocks = expandedInfos
-      .map(info => expandedBlocks[info.originalIndex])
+      .map((info) => expandedBlocks[info.originalIndex])
       .sort((a, b) => a.startTime - b.startTime);
 
     for (let i = 0; i < segmentExpandedBlocks.length - 1; i++) {
@@ -412,7 +412,9 @@ export function expandDocBlocks(
 
       if (timeFromLastToEnd < MIN_TRANSITION_GAP && lastBlock.template !== 'sectionHeader') {
         const prevBlock = segmentExpandedBlocks[segmentExpandedBlocks.length - 2];
-        console.log(`[expandDocBlocks] Eliminated block ${lastBlock.id} (${timeFromLastToEnd.toFixed(1)}s from section end) - extended ${prevBlock.id}`);
+        console.log(
+          `[expandDocBlocks] Eliminated block ${lastBlock.id} (${timeFromLastToEnd.toFixed(1)}s from section end) - extended ${prevBlock.id}`,
+        );
         prevBlock.duration = segmentEnd - prevBlock.startTime;
         lastBlock.duration = 0;
         lastBlock.startTime = segmentEnd;
@@ -445,7 +447,9 @@ export function expandDocBlocks(
         if (block.duration > 0 && block.duration < MIN_TRANSITION_GAP) {
           const prev = segmentExpandedBlocks[i - 1];
           const blockEnd = block.startTime + block.duration;
-          console.log(`[expandDocBlocks] Eliminated short block ${block.id} (${block.duration.toFixed(1)}s < ${MIN_TRANSITION_GAP}s) - merged into ${prev.id}`);
+          console.log(
+            `[expandDocBlocks] Eliminated short block ${block.id} (${block.duration.toFixed(1)}s < ${MIN_TRANSITION_GAP}s) - merged into ${prev.id}`,
+          );
           prev.duration = blockEnd - prev.startTime;
           block.duration = 0;
           block.startTime = segmentEnd;
@@ -478,10 +482,10 @@ export function expandDocBlocks(
           for (let p = 1; p < numParts; p++) {
             const splitBlock: Block = {
               id: `${block.id}-split-${p}`,
-              startTime: block.startTime + (p * partDuration),
+              startTime: block.startTime + p * partDuration,
               duration: partDuration,
               audioSegment: block.audioSegment,
-              layers: (block.layers ?? []).map(layer => ({
+              layers: (block.layers ?? []).map((layer) => ({
                 ...layer,
                 id: `${layer.id}-split-${p}`,
               })),
@@ -492,14 +496,16 @@ export function expandDocBlocks(
             expandedBlocks.push(splitBlock);
           }
 
-          console.log(`[expandDocBlocks] Split block ${block.id} (${originalDuration.toFixed(1)}s) into ${numParts} parts of ${partDuration.toFixed(1)}s each`);
+          console.log(
+            `[expandDocBlocks] Split block ${block.id} (${originalDuration.toFixed(1)}s) into ${numParts} parts of ${partDuration.toFixed(1)}s each`,
+          );
         }
       }
     }
   }
 
   // Filter out zero-duration blocks (eliminated in earlier passes)
-  return expandedBlocks.filter(block => block && block.duration > 0);
+  return expandedBlocks.filter((block) => block && block.duration > 0);
 }
 
 /**
@@ -517,11 +523,27 @@ export function hasTemplate(name: string): boolean {
 }
 
 // Re-export types and utilities from schemas
-export { isTemplateBlock, DEFAULT_THEME, createTemplateContext, scaledFontSize } from '../../schemas/BlockTemplates.js';
-export type { TemplateBlock, DocBlock, ThemeColors, TemplateContext, PersistentLayerConfig, DocStylePreset } from '../../schemas/BlockTemplates.js';
+export {
+  isTemplateBlock,
+  DEFAULT_THEME,
+  createTemplateContext,
+  scaledFontSize,
+} from '../../schemas/BlockTemplates.js';
+export type {
+  TemplateBlock,
+  DocBlock,
+  ThemeColors,
+  TemplateContext,
+  PersistentLayerConfig,
+  DocStylePreset,
+} from '../../schemas/BlockTemplates.js';
 // Re-export timing types (AudioSegmentTiming and ExpandDocBlocksOptions are already exported above)
 export { VIEWPORT_PRESETS, getViewport, getViewportOrientation } from '../../schemas/Viewport.js';
-export type { ViewportConfig, ViewportPreset, ViewportOrientation } from '../../schemas/Viewport.js';
+export type {
+  ViewportConfig,
+  ViewportPreset,
+  ViewportOrientation,
+} from '../../schemas/Viewport.js';
 export { getLayoutHints, getTwoColumnPositions } from '../../schemas/LayoutStrategy.js';
 export type { LayoutHints } from '../../schemas/LayoutStrategy.js';
 export { expandPersistentLayers, getDocStyleConfig } from './persistentLayers.js';

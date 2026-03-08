@@ -116,9 +116,7 @@ export function getGeohashPath(from: string, to: string, precision = 4): string[
   const dLng = Math.abs(toCenter.lng - fromCenter.lng);
   // Rough km: 1 degree lat ≈ 111km, 1 degree lng ≈ 111km * cos(midLat)
   const midLatRad = ((fromCenter.lat + toCenter.lat) / 2) * (Math.PI / 180);
-  const approxKm = Math.sqrt(
-    (dLat * 111) ** 2 + (dLng * 111 * Math.cos(midLatRad)) ** 2
-  );
+  const approxKm = Math.sqrt((dLat * 111) ** 2 + (dLng * 111 * Math.cos(midLatRad)) ** 2);
 
   // Step every ~15km to avoid skipping any geohash4 cell (~39x19km)
   const steps = Math.max(2, Math.ceil(approxKm / 15));
@@ -148,7 +146,7 @@ export function getGeohashPath(from: string, to: string, precision = 4): string[
  */
 export function geohashOverlapsBounds(
   hash: string,
-  bounds: { north: number; south: number; east: number; west: number }
+  bounds: { north: number; south: number; east: number; west: number },
 ): boolean {
   const { lat, lng, latErr, lngErr } = decodeGeohash(hash);
 

@@ -1,6 +1,26 @@
 {
   "name": "@bendyline/squisq-editor-react",
   "version": "0.1.0",
+  "description": "React editor shell with raw/WYSIWYG/preview modes for Squisq documents",
+  "license": "MIT",
+  "author": "Bendyline",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/nicknisi/squisq.git",
+    "directory": "packages/editor-react"
+  },
+  "homepage": "https://github.com/nicknisi/squisq",
+  "keywords": [
+    "editor",
+    "react",
+    "markdown",
+    "wysiwyg",
+    "monaco",
+    "tiptap"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
   "type": "module",
   "main": "./dist/index.js",
   "module": "./dist/index.js",
@@ -18,7 +38,8 @@
   },
   "scripts": {
     "build": "tsup",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "prepublishOnly": "npm run build"
   },
   "peerDependencies": {
     "react": "^18.0.0 || ^19.0.0",

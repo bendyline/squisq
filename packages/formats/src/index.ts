@@ -25,30 +25,15 @@
  */
 
 // DOCX (fully implemented)
-export {
-  markdownDocToDocx,
-  docToDocx,
-  docxToMarkdownDoc,
-  docxToDoc,
-} from './docx/index.js';
+export { markdownDocToDocx, docToDocx, docxToMarkdownDoc, docxToDoc } from './docx/index.js';
 export type { DocxExportOptions, DocxImportOptions } from './docx/index.js';
 
 // PPTX (stub)
-export {
-  markdownDocToPptx,
-  docToPptx,
-  pptxToMarkdownDoc,
-  pptxToDoc,
-} from './pptx/index.js';
+export { markdownDocToPptx, docToPptx, pptxToMarkdownDoc, pptxToDoc } from './pptx/index.js';
 export type { PptxExportOptions, PptxImportOptions } from './pptx/index.js';
 
 // XLSX (stub)
-export {
-  markdownDocToXlsx,
-  docToXlsx,
-  xlsxToMarkdownDoc,
-  xlsxToDoc,
-} from './xlsx/index.js';
+export { markdownDocToXlsx, docToXlsx, xlsxToMarkdownDoc, xlsxToDoc } from './xlsx/index.js';
 export type { XlsxExportOptions, XlsxImportOptions } from './xlsx/index.js';
 
 // PDF (fully implemented)

@@ -49,10 +49,7 @@ export async function markdownDocToXlsx(
  *
  * @throws Error — XLSX support is not yet implemented
  */
-export async function docToXlsx(
-  _doc: Doc,
-  _options?: XlsxExportOptions,
-): Promise<Blob> {
+export async function docToXlsx(_doc: Doc, _options?: XlsxExportOptions): Promise<Blob> {
   throw new Error('XLSX export is not yet implemented');
 }
 

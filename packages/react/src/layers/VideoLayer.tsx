@@ -37,7 +37,13 @@ interface VideoLayerProps {
   isPlaying?: boolean;
 }
 
-export function VideoLayer({ layer, basePath, viewport, blockTime, isPlaying }: VideoLayerProps) {
+export function VideoLayer({
+  layer,
+  basePath,
+  viewport,
+  blockTime: _blockTime,
+  isPlaying,
+}: VideoLayerProps) {
   const { content, position } = layer;
   const videoRef = useRef<HTMLVideoElement>(null);
   const hasStartedRef = useRef(false);
@@ -156,7 +162,7 @@ function resolveValue(value: number | string, dimension: number): number {
 function getAnchorOffset(
   anchor: string | undefined,
   width: number,
-  height: number
+  height: number,
 ): { x: number; y: number } {
   switch (anchor) {
     case 'center':

@@ -17,7 +17,7 @@ import { createAccentLayers, getAccentLayout, adjustY, DEFAULT_LAYOUT } from './
 
 export function factCard(input: FactCardInput, context: TemplateContext): Layer[] {
   const { fact, explanation, source, accentImage } = input;
-  const { theme, layout } = context;
+  const { theme, layout: _layout } = context;
 
   // Get layout adjustments if accent image is present
   const accentLayout = accentImage ? getAccentLayout(accentImage.position) : DEFAULT_LAYOUT;

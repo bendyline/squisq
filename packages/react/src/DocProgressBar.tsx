@@ -54,15 +54,18 @@ export function DocProgressBar({
     setHoverPosition(null);
   }, []);
 
-  const getBlockAtTimeLocal = useCallback((time: number): { block: Block; index: number } | null => {
-    for (let i = expandedBlocks.length - 1; i >= 0; i--) {
-      const blk = expandedBlocks[i];
-      if (time >= blk.startTime) {
-        return { block: blk, index: i };
+  const getBlockAtTimeLocal = useCallback(
+    (time: number): { block: Block; index: number } | null => {
+      for (let i = expandedBlocks.length - 1; i >= 0; i--) {
+        const blk = expandedBlocks[i];
+        if (time >= blk.startTime) {
+          return { block: blk, index: i };
+        }
       }
-    }
-    return expandedBlocks.length > 0 ? { block: expandedBlocks[0], index: 0 } : null;
-  }, [expandedBlocks]);
+      return expandedBlocks.length > 0 ? { block: expandedBlocks[0], index: 0 } : null;
+    },
+    [expandedBlocks],
+  );
 
   return (
     <div
@@ -120,7 +123,8 @@ export function DocProgressBar({
             width: '10px',
             height: '10px',
             borderRadius: '50%',
-            background: marker.index === state.currentBlockIndex ? '#ffffff' : 'rgba(255,255,255,0.5)',
+            background:
+              marker.index === state.currentBlockIndex ? '#ffffff' : 'rgba(255,255,255,0.5)',
             border: '2px solid #3d5a80',
             cursor: 'pointer',
             zIndex: 2,

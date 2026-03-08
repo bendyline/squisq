@@ -89,13 +89,13 @@ export const BLOCKQUOTE_BAR_WIDTH = 3;
 // ============================================
 
 export const COLOR_TEXT = { r: 0.12, g: 0.12, b: 0.14 };
-export const COLOR_HEADING = { r: 0.08, g: 0.08, b: 0.10 };
+export const COLOR_HEADING = { r: 0.08, g: 0.08, b: 0.1 };
 export const COLOR_LINK = { r: 0.05, g: 0.27, b: 0.73 };
 export const COLOR_CODE_BG = { r: 0.95, g: 0.95, b: 0.97 };
-export const COLOR_CODE_TEXT = { r: 0.20, g: 0.20, b: 0.22 };
+export const COLOR_CODE_TEXT = { r: 0.2, g: 0.2, b: 0.22 };
 export const COLOR_BLOCKQUOTE_BAR = { r: 0.75, g: 0.75, b: 0.78 };
 export const COLOR_BLOCKQUOTE_TEXT = { r: 0.35, g: 0.35, b: 0.38 };
-export const COLOR_THEMATIC_BREAK = { r: 0.78, g: 0.78, b: 0.80 };
+export const COLOR_THEMATIC_BREAK = { r: 0.78, g: 0.78, b: 0.8 };
 export const COLOR_TABLE_BORDER = { r: 0.75, g: 0.75, b: 0.78 };
 export const COLOR_TABLE_HEADER_BG = { r: 0.93, g: 0.93, b: 0.95 };
 
@@ -144,7 +144,18 @@ export const IMPORT_PARAGRAPH_GAP = 4;
 /**
  * Characters that indicate an unordered list bullet at the start of a line.
  */
-export const IMPORT_BULLET_CHARS = new Set(['\u2022', '\u2023', '\u25E6', '\u2043', '-', '*', '\u2013', '\u2014', '\u25AA', '\u25AB']);
+export const IMPORT_BULLET_CHARS = new Set([
+  '\u2022',
+  '\u2023',
+  '\u25E6',
+  '\u2043',
+  '-',
+  '*',
+  '\u2013',
+  '\u2014',
+  '\u25AA',
+  '\u25AB',
+]);
 
 /**
  * Regex to detect an ordered list prefix (e.g. "1.", "2)", "iv.").

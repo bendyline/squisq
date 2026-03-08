@@ -6,8 +6,8 @@
  * in an EditorProvider for shared state.
  */
 
-import { useCallback, useEffect } from 'react';
-import { EditorProvider, useEditorContext, type EditorView, type EditorProviderProps } from './EditorContext';
+import { useEffect } from 'react';
+import { EditorProvider, useEditorContext, type EditorView } from './EditorContext';
 import { ViewSwitcher } from './ViewSwitcher';
 import { Toolbar } from './Toolbar';
 import { StatusBar } from './StatusBar';
@@ -74,12 +74,7 @@ interface EditorShellInnerProps {
   height: string;
 }
 
-function EditorShellInner({
-  basePath,
-  onChange,
-  className,
-  height,
-}: EditorShellInnerProps) {
+function EditorShellInner({ basePath, onChange, className, height }: EditorShellInnerProps) {
   const { activeView, markdownSource, theme } = useEditorContext();
 
   // Notify parent of changes

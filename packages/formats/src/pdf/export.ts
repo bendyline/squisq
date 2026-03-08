@@ -19,13 +19,7 @@
  * ```
  */
 
-import {
-  PDFDocument,
-  StandardFonts,
-  rgb,
-  PDFFont,
-  PDFPage,
-} from 'pdf-lib';
+import { PDFDocument, StandardFonts, rgb, PDFFont, PDFPage } from 'pdf-lib';
 
 import type { Doc } from '@bendyline/squisq/schemas';
 import { docToMarkdown } from '@bendyline/squisq/doc';
@@ -42,7 +36,6 @@ import type {
   MarkdownTable,
   MarkdownTableRow,
   MarkdownTableCell,
-  MarkdownThematicBreak,
   MarkdownHtmlBlock,
   MarkdownMathBlock,
   MarkdownFootnoteDefinition,
@@ -53,7 +46,6 @@ import type {
   MarkdownInlineCode,
   MarkdownLink,
   MarkdownImage,
-  MarkdownBreak,
   MarkdownInlineHtml,
   MarkdownInlineMath,
   MarkdownFootnoteReference,
@@ -79,7 +71,6 @@ import {
   COLOR_TEXT,
   COLOR_HEADING,
   COLOR_LINK,
-  COLOR_CODE_BG,
   COLOR_CODE_TEXT,
   COLOR_BLOCKQUOTE_BAR,
   COLOR_BLOCKQUOTE_TEXT,
@@ -142,10 +133,7 @@ export async function markdownDocToPdf(
  *
  * Convenience wrapper: Doc → MarkdownDocument → PDF.
  */
-export async function docToPdf(
-  doc: Doc,
-  options: PdfExportOptions = {},
-): Promise<ArrayBuffer> {
+export async function docToPdf(doc: Doc, options: PdfExportOptions = {}): Promise<ArrayBuffer> {
   const markdownDoc = docToMarkdown(doc);
   return markdownDocToPdf(markdownDoc, options);
 }
@@ -251,7 +239,14 @@ interface TextSpan {
 function flattenInlines(
   nodes: MarkdownInlineNode[],
   ctx: ExportContext,
-  state: { bold: boolean; italic: boolean; code: boolean; link?: string; color?: { r: number; g: number; b: number }; strikethrough?: boolean },
+  state: {
+    bold: boolean;
+    italic: boolean;
+    code: boolean;
+    link?: string;
+    color?: { r: number; g: number; b: number };
+    strikethrough?: boolean;
+  },
 ): TextSpan[] {
   const spans: TextSpan[] = [];
 
@@ -259,7 +254,9 @@ function flattenInlines(
     switch (node.type) {
       case 'text': {
         const font = state.code
-          ? (state.bold ? ctx.fonts.monoBold : ctx.fonts.mono)
+          ? state.bold
+            ? ctx.fonts.monoBold
+            : ctx.fonts.mono
           : pickFont(ctx, state.bold, state.italic);
         spans.push({
           text: (node as MarkdownText).value,
@@ -273,27 +270,24 @@ function flattenInlines(
       }
 
       case 'strong':
-        spans.push(...flattenInlines(
-          (node as MarkdownStrong).children,
-          ctx,
-          { ...state, bold: true },
-        ));
+        spans.push(
+          ...flattenInlines((node as MarkdownStrong).children, ctx, { ...state, bold: true }),
+        );
         break;
 
       case 'emphasis':
-        spans.push(...flattenInlines(
-          (node as MarkdownEmphasis).children,
-          ctx,
-          { ...state, italic: true },
-        ));
+        spans.push(
+          ...flattenInlines((node as MarkdownEmphasis).children, ctx, { ...state, italic: true }),
+        );
         break;
 
       case 'delete':
-        spans.push(...flattenInlines(
-          (node as MarkdownStrikethrough).children,
-          ctx,
-          { ...state, strikethrough: true },
-        ));
+        spans.push(
+          ...flattenInlines((node as MarkdownStrikethrough).children, ctx, {
+            ...state,
+            strikethrough: true,
+          }),
+        );
         break;
 
       case 'inlineCode': {
@@ -309,11 +303,13 @@ function flattenInlines(
 
       case 'link': {
         const linkNode = node as MarkdownLink;
-        spans.push(...flattenInlines(
-          linkNode.children,
-          ctx,
-          { ...state, link: linkNode.url, color: COLOR_LINK },
-        ));
+        spans.push(
+          ...flattenInlines(linkNode.children, ctx, {
+            ...state,
+            link: linkNode.url,
+            color: COLOR_LINK,
+          }),
+        );
         break;
       }
 
@@ -329,13 +325,23 @@ function flattenInlines(
       }
 
       case 'break':
-        spans.push({ text: '\n', font: ctx.fonts.regular, fontSize: ctx.fontSize, color: COLOR_TEXT });
+        spans.push({
+          text: '\n',
+          font: ctx.fonts.regular,
+          fontSize: ctx.fontSize,
+          color: COLOR_TEXT,
+        });
         break;
 
       case 'htmlInline': {
         const html = (node as MarkdownInlineHtml).rawHtml;
         if (html) {
-          spans.push({ text: html, font: ctx.fonts.mono, fontSize: CODE_FONT_SIZE, color: COLOR_CODE_TEXT });
+          spans.push({
+            text: html,
+            font: ctx.fonts.mono,
+            fontSize: CODE_FONT_SIZE,
+            color: COLOR_CODE_TEXT,
+          });
         }
         break;
       }
@@ -534,21 +540,13 @@ function getLineHeight(line: TextSpan[]): number {
 // Block Renderers
 // ============================================
 
-function renderBlocks(
-  nodes: MarkdownBlockNode[],
-  ctx: ExportContext,
-  extraIndent: number,
-): void {
+function renderBlocks(nodes: MarkdownBlockNode[], ctx: ExportContext, extraIndent: number): void {
   for (const node of nodes) {
     renderBlock(node, ctx, extraIndent);
   }
 }
 
-function renderBlock(
-  node: MarkdownBlockNode,
-  ctx: ExportContext,
-  extraIndent: number,
-): void {
+function renderBlock(node: MarkdownBlockNode, ctx: ExportContext, extraIndent: number): void {
   switch (node.type) {
     case 'heading':
       renderHeading(node as MarkdownHeading, ctx, extraIndent);
@@ -590,11 +588,7 @@ function renderBlock(
 
 // ---- Heading ----
 
-function renderHeading(
-  node: MarkdownHeading,
-  ctx: ExportContext,
-  extraIndent: number,
-): void {
+function renderHeading(node: MarkdownHeading, ctx: ExportContext, extraIndent: number): void {
   const origFontSize = ctx.fontSize;
   ctx.fontSize = HEADING_SIZES[node.depth] ?? DEFAULT_FONT_SIZE;
 
@@ -640,11 +634,7 @@ function renderParagraph(
 
 // ---- Blockquote ----
 
-function renderBlockquote(
-  node: MarkdownBlockquote,
-  ctx: ExportContext,
-  extraIndent: number,
-): void {
+function renderBlockquote(node: MarkdownBlockquote, ctx: ExportContext, extraIndent: number): void {
   const barX = ctx.margin + extraIndent + 4;
   const indent = extraIndent + BLOCKQUOTE_INDENT;
   const startY = ctx.y;
@@ -726,7 +716,9 @@ function renderListItem(
     if (child.type === 'paragraph' && isFirstChild) {
       // First paragraph: render on same line as bullet
       const spans = flattenInlines((child as MarkdownParagraph).children, ctx, {
-        bold: false, italic: false, code: false,
+        bold: false,
+        italic: false,
+        code: false,
       });
       drawSpans(spans, ctx, textWidth, ctx.margin + textIndent);
       ctx.y -= PARAGRAPH_SPACING / 2;
@@ -741,23 +733,19 @@ function renderListItem(
 
 // ---- Code Block ----
 
-function renderCodeBlock(
-  node: MarkdownCodeBlock,
-  ctx: ExportContext,
-  extraIndent: number,
-): void {
+function renderCodeBlock(node: MarkdownCodeBlock, ctx: ExportContext, extraIndent: number): void {
   const x0 = ctx.margin + extraIndent;
-  const w = ctx.contentWidth - extraIndent;
+  const _w = ctx.contentWidth - extraIndent;
   const lines = node.value.split('\n');
   const lineH = CODE_FONT_SIZE * LINE_HEIGHT_FACTOR;
   const totalHeight = lines.length * lineH + 12; // 12 = vertical padding
 
   ensureSpace(ctx, Math.min(totalHeight, ctx.y - ctx.bottomY));
 
-  const bgTop = ctx.y;
+  const _bgTop = ctx.y;
 
   // Draw background first (we'll adjust after we know the final y)
-  const bgStartY = ctx.y;
+  const _bgStartY = ctx.y;
   ctx.y -= 6; // top padding
 
   for (const line of lines) {
@@ -797,11 +785,7 @@ function renderCodeBlock(
 
 // ---- Table ----
 
-function renderTable(
-  node: MarkdownTable,
-  ctx: ExportContext,
-  extraIndent: number,
-): void {
+function renderTable(node: MarkdownTable, ctx: ExportContext, extraIndent: number): void {
   if (node.children.length === 0) return;
 
   const x0 = ctx.margin + extraIndent;
@@ -824,12 +808,17 @@ function renderTable(
     const rowCellHeights = row.children.map((cell) => {
       const cellNode = cell as MarkdownTableCell;
       const spans = flattenInlines(cellNode.children, ctx, {
-        bold: isHeader, italic: false, code: false,
+        bold: isHeader,
+        italic: false,
+        code: false,
       });
       const lines = wrapSpans(spans, colWidth - 2 * TABLE_CELL_PAD_X);
       return lines.length * ctx.fontSize * LINE_HEIGHT_FACTOR + 2 * TABLE_CELL_PAD_Y;
     });
-    const rowHeight = Math.max(...rowCellHeights, ctx.fontSize * LINE_HEIGHT_FACTOR + 2 * TABLE_CELL_PAD_Y);
+    const rowHeight = Math.max(
+      ...rowCellHeights,
+      ctx.fontSize * LINE_HEIGHT_FACTOR + 2 * TABLE_CELL_PAD_Y,
+    );
 
     ensureSpace(ctx, rowHeight);
 
@@ -861,7 +850,9 @@ function renderTable(
       if (colIdx < row.children.length) {
         const cellNode = row.children[colIdx] as MarkdownTableCell;
         const spans = flattenInlines(cellNode.children, ctx, {
-          bold: isHeader, italic: false, code: false,
+          bold: isHeader,
+          italic: false,
+          code: false,
         });
 
         // Draw text inside cell
@@ -917,11 +908,7 @@ function renderThematicBreak(ctx: ExportContext, extraIndent: number): void {
 
 // ---- HTML Block ----
 
-function renderHtmlBlock(
-  node: MarkdownHtmlBlock,
-  ctx: ExportContext,
-  extraIndent: number,
-): void {
+function renderHtmlBlock(node: MarkdownHtmlBlock, ctx: ExportContext, extraIndent: number): void {
   if (!node.rawHtml) return;
   // Render raw HTML as monospace text (best effort)
   const lines = node.rawHtml.split('\n');
@@ -944,11 +931,7 @@ function renderHtmlBlock(
 
 // ---- Math Block ----
 
-function renderMathBlock(
-  node: MarkdownMathBlock,
-  ctx: ExportContext,
-  extraIndent: number,
-): void {
+function renderMathBlock(node: MarkdownMathBlock, ctx: ExportContext, extraIndent: number): void {
   // Render LaTeX source in monospace as fallback
   const lines = node.value.split('\n');
   const x0 = ctx.margin + extraIndent;
@@ -1006,10 +989,21 @@ function renderFallbackBlock(
     if (anyNode.children.length > 0 && typeof anyNode.children[0]?.type === 'string') {
       const firstType = anyNode.children[0].type;
       // Heuristic: if first child looks like an inline node, wrap as paragraph
-      const inlineTypes = new Set(['text', 'strong', 'emphasis', 'delete', 'inlineCode', 'link', 'image', 'break']);
+      const inlineTypes = new Set([
+        'text',
+        'strong',
+        'emphasis',
+        'delete',
+        'inlineCode',
+        'link',
+        'image',
+        'break',
+      ]);
       if (inlineTypes.has(firstType)) {
         const spans = flattenInlines(anyNode.children, ctx, {
-          bold: false, italic: false, code: false,
+          bold: false,
+          italic: false,
+          code: false,
         });
         drawSpans(spans, ctx, ctx.contentWidth - extraIndent, ctx.margin + extraIndent);
         ctx.y -= PARAGRAPH_SPACING;

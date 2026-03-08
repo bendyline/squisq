@@ -74,7 +74,7 @@ export function stringifyMarkdown(doc: MarkdownDocument, options?: StringifyOpti
   // Prepend YAML frontmatter if present
   if (doc.frontmatter && Object.keys(doc.frontmatter).length > 0) {
     const yamlLines = Object.entries(doc.frontmatter).map(
-      ([k, v]) => `${k}: ${typeof v === 'string' ? v : JSON.stringify(v)}`
+      ([k, v]) => `${k}: ${typeof v === 'string' ? v : JSON.stringify(v)}`,
     );
     return `---\n${yamlLines.join('\n')}\n---\n\n${cleaned}`;
   }

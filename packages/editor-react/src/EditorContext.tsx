@@ -20,7 +20,7 @@ import {
 import type { Doc } from '@bendyline/squisq/schemas';
 import type { MarkdownDocument } from '@bendyline/squisq/markdown';
 import { parseMarkdown, stringifyMarkdown } from '@bendyline/squisq/markdown';
-import { markdownToDoc, docToMarkdown } from '@bendyline/squisq/doc';
+import { markdownToDoc } from '@bendyline/squisq/doc';
 
 // ─── Types ───────────────────────────────────────────────
 
@@ -181,31 +181,28 @@ export function EditorProvider({
     setMarkdownSourceRaw(source);
   }, []);
 
-  const setMarkdownDoc = useCallback(
-    (newDoc: MarkdownDocument) => {
-      setMarkdownDocState(newDoc);
-      // Stringify to update the raw source
-      try {
-        const newSource = stringifyMarkdown(newDoc);
-        setMarkdownSourceRaw(newSource);
-        setParseError(null);
+  const setMarkdownDoc = useCallback((newDoc: MarkdownDocument) => {
+    setMarkdownDocState(newDoc);
+    // Stringify to update the raw source
+    try {
+      const newSource = stringifyMarkdown(newDoc);
+      setMarkdownSourceRaw(newSource);
+      setParseError(null);
 
-        // Generate Doc
-        try {
-          const generatedDoc = markdownToDoc(newDoc, {
-            articleId: articleIdRef.current,
-          });
-          setDoc(generatedDoc);
-        } catch (docErr: any) {
-          setDoc(null);
-          console.warn('Doc generation failed:', docErr.message);
-        }
-      } catch (err: any) {
-        setParseError(err.message || 'Stringify error');
+      // Generate Doc
+      try {
+        const generatedDoc = markdownToDoc(newDoc, {
+          articleId: articleIdRef.current,
+        });
+        setDoc(generatedDoc);
+      } catch (docErr: any) {
+        setDoc(null);
+        console.warn('Doc generation failed:', docErr.message);
       }
-    },
-    [],
-  );
+    } catch (err: any) {
+      setParseError(err.message || 'Stringify error');
+    }
+  }, []);
 
   const value = useMemo<EditorContextValue>(
     () => ({
@@ -244,9 +241,5 @@ export function EditorProvider({
     ],
   );
 
-  return (
-    <EditorContext.Provider value={value}>
-      {children}
-    </EditorContext.Provider>
-  );
+  return <EditorContext.Provider value={value}>{children}</EditorContext.Provider>;
 }

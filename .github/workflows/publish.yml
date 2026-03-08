@@ -1,0 +1,100 @@
+name: Release & Deploy
+
+on:
+  workflow_dispatch:
+    inputs:
+      deploy_pages:
+        description: 'Deploy site to GitHub Pages'
+        type: boolean
+        default: true
+      publish_release:
+        description: 'Run semantic-release (version bump + GitHub Release + tarballs)'
+        type: boolean
+        default: true
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+  issues: write
+  pull-requests: write
+
+# Only allow one release at a time
+concurrency:
+  group: 'release'
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Build & Test
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: '.nvmrc'
+          cache: 'npm'
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build packages
+        run: npm run build
+
+      - name: Unit tests
+        run: npm test
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Lint
+        run: npm run lint
+
+      # ── Release ──────────────────────────────────────────────────
+      - name: Pack tarballs
+        if: inputs.publish_release
+        run: |
+          npm pack -w @bendyline/squisq -w @bendyline/squisq-react -w @bendyline/squisq-formats -w @bendyline/squisq-editor-react
+          mkdir -p release-assets
+          mv *.tgz release-assets/
+
+      - name: Semantic Release
+        if: inputs.publish_release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: npx multi-semantic-release
+
+      # ── Pages ────────────────────────────────────────────────────
+      - name: Build site
+        if: inputs.deploy_pages
+        run: npm run build -w squisq-site
+        env:
+          VITE_BASE: /squisq/
+
+      - name: Upload pages artifact
+        if: inputs.deploy_pages
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: packages/site/dist
+
+  deploy-pages:
+    name: Deploy Pages
+    runs-on: ubuntu-latest
+    needs: build
+    if: inputs.deploy_pages
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

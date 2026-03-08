@@ -63,7 +63,7 @@ export function mapBlock(input: MapBlockInput, context: TemplateContext): Layer[
         style: mapStyle,
         markers,
         showAttribution: true,
-        staticSrc,  // Use pre-rendered image if available
+        staticSrc, // Use pre-rendered image if available
       },
       position: { x: 0, y: 0, width: '100%', height: '100%' },
       animation: mapAnimation,

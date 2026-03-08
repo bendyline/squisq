@@ -13,7 +13,10 @@ function paragraph(...children: MarkdownInlineNode[]): MarkdownBlockNode {
   return { type: 'paragraph', children };
 }
 
-function heading(depth: 1 | 2 | 3 | 4 | 5 | 6, ...children: MarkdownInlineNode[]): MarkdownBlockNode {
+function heading(
+  depth: 1 | 2 | 3 | 4 | 5 | 6,
+  ...children: MarkdownInlineNode[]
+): MarkdownBlockNode {
   return { type: 'heading', depth, children };
 }
 
@@ -26,9 +29,7 @@ describe('MarkdownRenderer', () => {
   });
 
   it('renders a paragraph', () => {
-    const { container } = render(
-      <MarkdownRenderer nodes={[paragraph(text('Hello world'))]} />,
-    );
+    const { container } = render(<MarkdownRenderer nodes={[paragraph(text('Hello world'))]} />);
     const p = container.querySelector('p.squisq-md-p');
     expect(p).toBeTruthy();
     expect(p?.textContent).toBe('Hello world');
@@ -48,12 +49,10 @@ describe('MarkdownRenderer', () => {
 
   it('renders emphasis and strong inline', () => {
     const nodes: MarkdownBlockNode[] = [
-      paragraph(
-        text('normal '),
-        { type: 'emphasis', children: [text('italic')] },
-        text(' and '),
-        { type: 'strong', children: [text('bold')] },
-      ),
+      paragraph(text('normal '), { type: 'emphasis', children: [text('italic')] }, text(' and '), {
+        type: 'strong',
+        children: [text('bold')],
+      }),
     ];
     const { container } = render(<MarkdownRenderer nodes={nodes} />);
     expect(container.querySelector('em')?.textContent).toBe('italic');
@@ -125,9 +124,7 @@ describe('MarkdownRenderer', () => {
         type: 'list',
         ordered: true,
         start: 3,
-        children: [
-          { type: 'listItem', children: [paragraph(text('Third'))] },
-        ],
+        children: [{ type: 'listItem', children: [paragraph(text('Third'))] }],
       },
     ];
     const { container } = render(<MarkdownRenderer nodes={nodes} />);
@@ -216,18 +213,14 @@ describe('MarkdownRenderer', () => {
   });
 
   it('renders strikethrough', () => {
-    const nodes: MarkdownBlockNode[] = [
-      paragraph({ type: 'delete', children: [text('removed')] }),
-    ];
+    const nodes: MarkdownBlockNode[] = [paragraph({ type: 'delete', children: [text('removed')] })];
     const { container } = render(<MarkdownRenderer nodes={nodes} />);
     const del = container.querySelector('del.squisq-md-del');
     expect(del?.textContent).toBe('removed');
   });
 
   it('renders a hard break', () => {
-    const nodes: MarkdownBlockNode[] = [
-      paragraph(text('line1'), { type: 'break' }, text('line2')),
-    ];
+    const nodes: MarkdownBlockNode[] = [paragraph(text('line1'), { type: 'break' }, text('line2'))];
     const { container } = render(<MarkdownRenderer nodes={nodes} />);
     expect(container.querySelector('br')).toBeTruthy();
   });

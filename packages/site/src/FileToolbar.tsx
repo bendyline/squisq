@@ -10,7 +10,11 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { parseMarkdown, stringifyMarkdown } from '@bendyline/squisq/markdown';
 import { markdownDocToDocx, docxToMarkdownDoc } from '@bendyline/squisq-formats/docx';
-import { markdownDocToPdf, pdfToMarkdownDoc, configurePdfWorker } from '@bendyline/squisq-formats/pdf';
+import {
+  markdownDocToPdf,
+  pdfToMarkdownDoc,
+  configurePdfWorker,
+} from '@bendyline/squisq-formats/pdf';
 import { addSlotMedia } from './slotStorage';
 
 // Configure pdfjs-dist worker for the browser.
@@ -47,12 +51,8 @@ function buttonStyle(isDark: boolean, active = false): React.CSSProperties {
     fontSize: 13,
     padding: '2px 10px',
     cursor: 'pointer',
-    background: active
-      ? '#2563eb'
-      : isDark ? '#374151' : '#e5e7eb',
-    color: active
-      ? '#fff'
-      : isDark ? '#d1d5db' : '#374151',
+    background: active ? '#2563eb' : isDark ? '#374151' : '#e5e7eb',
+    color: active ? '#fff' : isDark ? '#d1d5db' : '#374151',
     border: 'none',
     borderRadius: 4,
     position: 'relative' as const,
@@ -133,35 +133,38 @@ export function FileToolbar({ currentSource, onImport, isDark, activeSlot }: Fil
 
   // ---- Download ----
 
-  const handleDownload = useCallback(async (format: DownloadFormat) => {
-    setShowDownload(false);
-    setBusy(true);
-    try {
-      const filename = filenameForFormat(format);
+  const handleDownload = useCallback(
+    async (format: DownloadFormat) => {
+      setShowDownload(false);
+      setBusy(true);
+      try {
+        const filename = filenameForFormat(format);
 
-      if (format === 'md' || format === 'txt') {
-        const blob = new Blob([currentSource], { type: 'text/plain;charset=utf-8' });
-        downloadBlob(blob, filename);
-      } else if (format === 'docx') {
-        const mdDoc = parseMarkdown(currentSource);
-        const buffer = await markdownDocToDocx(mdDoc);
-        const blob = new Blob([buffer], {
-          type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-        });
-        downloadBlob(blob, filename);
-      } else if (format === 'pdf') {
-        const mdDoc = parseMarkdown(currentSource);
-        const buffer = await markdownDocToPdf(mdDoc);
-        const blob = new Blob([buffer], { type: 'application/pdf' });
-        downloadBlob(blob, filename);
+        if (format === 'md' || format === 'txt') {
+          const blob = new Blob([currentSource], { type: 'text/plain;charset=utf-8' });
+          downloadBlob(blob, filename);
+        } else if (format === 'docx') {
+          const mdDoc = parseMarkdown(currentSource);
+          const buffer = await markdownDocToDocx(mdDoc);
+          const blob = new Blob([buffer], {
+            type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+          });
+          downloadBlob(blob, filename);
+        } else if (format === 'pdf') {
+          const mdDoc = parseMarkdown(currentSource);
+          const buffer = await markdownDocToPdf(mdDoc);
+          const blob = new Blob([buffer], { type: 'application/pdf' });
+          downloadBlob(blob, filename);
+        }
+      } catch (err) {
+        console.error('Download failed:', err);
+        alert('Download failed — see console for details.');
+      } finally {
+        setBusy(false);
       }
-    } catch (err) {
-      console.error('Download failed:', err);
-      alert('Download failed — see console for details.');
-    } finally {
-      setBusy(false);
-    }
-  }, [currentSource]);
+    },
+    [currentSource],
+  );
 
   // ---- Upload ----
 
@@ -169,50 +172,55 @@ export function FileToolbar({ currentSource, onImport, isDark, activeSlot }: Fil
     fileInputRef.current?.click();
   }, []);
 
-  const handleFileChange = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+  const handleFileChange = useCallback(
+    async (e: React.ChangeEvent<HTMLInputElement>) => {
+      const file = e.target.files?.[0];
+      if (!file) return;
 
-    setBusy(true);
-    try {
-      const ext = file.name.split('.').pop()?.toLowerCase() ?? '';
+      setBusy(true);
+      try {
+        const ext = file.name.split('.').pop()?.toLowerCase() ?? '';
 
-      if (ext === 'md' || ext === 'txt' || ext === 'markdown') {
-        const text = await file.text();
-        onImport(text);
-      } else if (ext === 'docx') {
-        const buffer = await file.arrayBuffer();
-        const mdDoc = await docxToMarkdownDoc(buffer);
-        const markdown = stringifyMarkdown(mdDoc);
-        onImport(markdown);
-      } else if (ext === 'pdf') {
-        const buffer = await file.arrayBuffer();
-        const mdDoc = await pdfToMarkdownDoc(buffer);
-        const markdown = stringifyMarkdown(mdDoc);
-        onImport(markdown);
-      } else if (IMAGE_EXTENSIONS.has(ext)) {
-        if (activeSlot === null) {
-          alert('Select a storage slot first to upload images.');
-          return;
+        if (ext === 'md' || ext === 'txt' || ext === 'markdown') {
+          const text = await file.text();
+          onImport(text);
+        } else if (ext === 'docx') {
+          const buffer = await file.arrayBuffer();
+          const mdDoc = await docxToMarkdownDoc(buffer);
+          const markdown = stringifyMarkdown(mdDoc);
+          onImport(markdown);
+        } else if (ext === 'pdf') {
+          const buffer = await file.arrayBuffer();
+          const mdDoc = await pdfToMarkdownDoc(buffer);
+          const markdown = stringifyMarkdown(mdDoc);
+          onImport(markdown);
+        } else if (IMAGE_EXTENSIONS.has(ext)) {
+          if (activeSlot === null) {
+            alert('Select a storage slot first to upload images.');
+            return;
+          }
+          const buffer = await file.arrayBuffer();
+          const mimeType = file.type || `image/${ext === 'jpg' ? 'jpeg' : ext}`;
+          const relativePath = await addSlotMedia(activeSlot, file.name, buffer, mimeType);
+          // Insert markdown image reference at the end of the current source
+          const imageMarkdown = `\n![${file.name}](${relativePath})\n`;
+          onImport(currentSource + imageMarkdown);
+        } else {
+          alert(
+            `Unsupported file type: .${ext}\nSupported: .md, .txt, .docx, .pdf, .jpg, .png, .gif, .webp, .svg`,
+          );
         }
-        const buffer = await file.arrayBuffer();
-        const mimeType = file.type || `image/${ext === 'jpg' ? 'jpeg' : ext}`;
-        const relativePath = await addSlotMedia(activeSlot, file.name, buffer, mimeType);
-        // Insert markdown image reference at the end of the current source
-        const imageMarkdown = `\n![${file.name}](${relativePath})\n`;
-        onImport(currentSource + imageMarkdown);
-      } else {
-        alert(`Unsupported file type: .${ext}\nSupported: .md, .txt, .docx, .pdf, .jpg, .png, .gif, .webp, .svg`);
+      } catch (err) {
+        console.error('Import failed:', err);
+        alert('Import failed — see console for details.');
+      } finally {
+        setBusy(false);
+        // Reset so re-uploading the same file triggers onChange
+        if (fileInputRef.current) fileInputRef.current.value = '';
       }
-    } catch (err) {
-      console.error('Import failed:', err);
-      alert('Import failed — see console for details.');
-    } finally {
-      setBusy(false);
-      // Reset so re-uploading the same file triggers onChange
-      if (fileInputRef.current) fileInputRef.current.value = '';
-    }
-  }, [onImport, activeSlot, currentSource]);
+    },
+    [onImport, activeSlot, currentSource],
+  );
 
   return (
     <>
@@ -230,7 +238,9 @@ export function FileToolbar({ currentSource, onImport, isDark, activeSlot }: Fil
           <div style={dropdownStyle(isDark)}>
             <button
               style={dropdownItemStyle(isDark)}
-              onMouseEnter={(e) => (e.currentTarget.style.background = isDark ? '#374151' : '#f3f4f6')}
+              onMouseEnter={(e) =>
+                (e.currentTarget.style.background = isDark ? '#374151' : '#f3f4f6')
+              }
               onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
               onClick={() => handleDownload('md')}
             >
@@ -238,7 +248,9 @@ export function FileToolbar({ currentSource, onImport, isDark, activeSlot }: Fil
             </button>
             <button
               style={dropdownItemStyle(isDark)}
-              onMouseEnter={(e) => (e.currentTarget.style.background = isDark ? '#374151' : '#f3f4f6')}
+              onMouseEnter={(e) =>
+                (e.currentTarget.style.background = isDark ? '#374151' : '#f3f4f6')
+              }
               onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
               onClick={() => handleDownload('docx')}
             >
@@ -246,7 +258,9 @@ export function FileToolbar({ currentSource, onImport, isDark, activeSlot }: Fil
             </button>
             <button
               style={dropdownItemStyle(isDark)}
-              onMouseEnter={(e) => (e.currentTarget.style.background = isDark ? '#374151' : '#f3f4f6')}
+              onMouseEnter={(e) =>
+                (e.currentTarget.style.background = isDark ? '#374151' : '#f3f4f6')
+              }
               onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
               onClick={() => handleDownload('pdf')}
             >
@@ -254,7 +268,9 @@ export function FileToolbar({ currentSource, onImport, isDark, activeSlot }: Fil
             </button>
             <button
               style={dropdownItemStyle(isDark)}
-              onMouseEnter={(e) => (e.currentTarget.style.background = isDark ? '#374151' : '#f3f4f6')}
+              onMouseEnter={(e) =>
+                (e.currentTarget.style.background = isDark ? '#374151' : '#f3f4f6')
+              }
               onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
               onClick={() => handleDownload('txt')}
             >

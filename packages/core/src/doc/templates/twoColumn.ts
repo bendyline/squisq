@@ -68,7 +68,6 @@ export function twoColumn(input: TwoColumnInput, context: TemplateContext): Laye
       },
       position: { x: '53%', y: '15%', width: '44%', height: '70%' },
     });
-
   }
 
   // Header position adjusts based on layout

@@ -165,10 +165,7 @@ export function startBlockToCoverInput(config: StartBlockConfig): CoverBlockInpu
  * Expand a StartBlockConfig into a renderable Block.
  * This is used by the player to render the cover block at rest.
  */
-export function expandCoverBlock(
-  config: StartBlockConfig,
-  context: TemplateContext
-): Layer[] {
+export function expandCoverBlock(config: StartBlockConfig, context: TemplateContext): Layer[] {
   const input = startBlockToCoverInput(config);
   return coverBlock(input, context);
 }

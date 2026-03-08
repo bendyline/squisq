@@ -14,7 +14,17 @@ import { scaledFontSize } from '../../schemas/BlockTemplates.js';
 import { cleanCaption } from './captionUtils.js';
 
 export function imageWithCaption(input: ImageWithCaptionInput, context: TemplateContext): Layer[] {
-  const { imageSrc, imageAlt, caption: rawCaption, captionPosition = 'bottom', ambientMotion, isTitle, subtitle, imageCredit, imageLicense } = input;
+  const {
+    imageSrc,
+    imageAlt,
+    caption: rawCaption,
+    captionPosition: _captionPosition = 'bottom',
+    ambientMotion,
+    isTitle,
+    subtitle,
+    imageCredit,
+    imageLicense,
+  } = input;
   const caption = rawCaption ? cleanCaption(rawCaption) : rawCaption;
   const { theme, layout } = context;
 

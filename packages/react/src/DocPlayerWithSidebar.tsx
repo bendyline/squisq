@@ -80,25 +80,31 @@ export function DocPlayerWithSidebar({
   const [, setTick] = useState(0);
 
   // Update ref without triggering re-render
-  const handleStateChange = useCallback((state: PlaybackState) => {
-    stateRef.current = state;
-    if (onPlayingChange && state.isPlaying !== wasPlayingRef.current) {
-      wasPlayingRef.current = state.isPlaying;
-      onPlayingChange(state.isPlaying);
-    }
-  }, [onPlayingChange]);
+  const handleStateChange = useCallback(
+    (state: PlaybackState) => {
+      stateRef.current = state;
+      if (onPlayingChange && state.isPlaying !== wasPlayingRef.current) {
+        wasPlayingRef.current = state.isPlaying;
+        onPlayingChange(state.isPlaying);
+      }
+    },
+    [onPlayingChange],
+  );
 
-  const handleControlsReady = useCallback((controls: PlaybackActions & { play: () => void; pause: () => void }) => {
-    const isFirst = !actionsRef.current;
-    actionsRef.current = controls;
-    // Force one re-render on first call to show the sidebar
-    if (isFirst) setTick(t => t + 1);
-  }, []);
+  const handleControlsReady = useCallback(
+    (controls: PlaybackActions & { play: () => void; pause: () => void }) => {
+      const isFirst = !actionsRef.current;
+      actionsRef.current = controls;
+      // Force one re-render on first call to show the sidebar
+      if (isFirst) setTick((t) => t + 1);
+    },
+    [],
+  );
 
   // Periodically sync the ref to trigger sidebar UI updates
   useEffect(() => {
     const interval = setInterval(() => {
-      setTick(t => t + 1);
+      setTick((t) => t + 1);
     }, 250); // 4 updates per second is smooth enough for time/progress display
     return () => clearInterval(interval);
   }, []);
@@ -125,10 +131,7 @@ export function DocPlayerWithSidebar({
         />
       </div>
       {actionsRef.current && (
-        <DocControlsSidebar
-          state={stateRef.current}
-          actions={actionsRef.current}
-        />
+        <DocControlsSidebar state={stateRef.current} actions={actionsRef.current} />
       )}
     </div>
   );

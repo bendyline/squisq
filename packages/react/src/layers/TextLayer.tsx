@@ -39,7 +39,10 @@ export function TextLayer({ layer, viewport, blockTime }: TextLayerProps) {
   // Split text into lines, and wrap if maxWidth is specified
   const rawLines = text.split('\n');
   let lines = maxWidth
-    ? rawLines.reduce<string[]>((acc, line) => acc.concat(wrapText(line, style.fontSize, maxWidth)), [])
+    ? rawLines.reduce<string[]>(
+        (acc, line) => acc.concat(wrapText(line, style.fontSize, maxWidth)),
+        [],
+      )
     : rawLines;
 
   // Truncate to maxLines if specified
@@ -65,10 +68,7 @@ export function TextLayer({ layer, viewport, blockTime }: TextLayerProps) {
   const filterId = style.shadow ? `shadow-${layer.id}` : undefined;
 
   return (
-    <g
-      className={`block-layer block-layer--text ${animStyle.className}`}
-      data-layer-id={layer.id}
-    >
+    <g className={`block-layer block-layer--text ${animStyle.className}`} data-layer-id={layer.id}>
       {/* Shadow filter definition */}
       {style.shadow && (
         <defs>
@@ -101,11 +101,7 @@ export function TextLayer({ layer, viewport, blockTime }: TextLayerProps) {
         filter={filterId ? `url(#${filterId})` : undefined}
       >
         {lines.map((line, i) => (
-          <tspan
-            key={i}
-            x={x}
-            dy={i === 0 ? 0 : lineHeightPx}
-          >
+          <tspan key={i} x={x} dy={i === 0 ? 0 : lineHeightPx}>
             {line || '\u00A0'} {/* Non-breaking space for empty lines */}
           </tspan>
         ))}
@@ -131,10 +127,7 @@ function resolveValue(value: number | string, dimension: number): number {
 /**
  * Map text alignment to SVG text-anchor.
  */
-function getTextAnchor(
-  align?: 'left' | 'center' | 'right',
-  anchor?: string
-): string {
+function getTextAnchor(align?: 'left' | 'center' | 'right', anchor?: string): string {
   // Explicit alignment takes precedence
   if (align === 'center') return 'middle';
   if (align === 'right') return 'end';
@@ -159,7 +152,7 @@ function getDominantBaseline(anchor?: string): string {
  * Estimate text box width based on content (rough approximation).
  */
 function getTextBoxWidth(lines: string[], style: { fontSize: number }): number {
-  const maxLineLength = Math.max(...lines.map(l => l.length));
+  const maxLineLength = Math.max(...lines.map((l) => l.length));
   // Rough estimate: average character width is ~0.5 * fontSize
   return maxLineLength * style.fontSize * 0.55;
 }

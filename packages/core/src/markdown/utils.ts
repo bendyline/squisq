@@ -58,10 +58,7 @@ export function walkMarkdownTree(
  * const links = findNodesByType(doc, 'link');
  * ```
  */
-export function findNodesByType<T extends MarkdownNode>(
-  root: MarkdownNode,
-  type: T['type'],
-): T[] {
+export function findNodesByType<T extends MarkdownNode>(root: MarkdownNode, type: T['type']): T[] {
   const results: T[] = [];
   walkMarkdownTree(root, (node) => {
     if (node.type === type) {
@@ -160,9 +157,7 @@ export function parseFrontmatter(yaml: string): Record<string, unknown> | null {
  * Create a minimal MarkdownDocument from a list of block nodes.
  * Convenience function for programmatic document construction.
  */
-export function createDocument(
-  ...children: MarkdownDocument['children']
-): MarkdownDocument {
+export function createDocument(...children: MarkdownDocument['children']): MarkdownDocument {
   return {
     type: 'document',
     children,

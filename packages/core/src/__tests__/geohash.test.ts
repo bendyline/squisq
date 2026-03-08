@@ -40,7 +40,7 @@ describe('getNeighbors', () => {
   it('returns 8 neighbors', () => {
     const neighbors = getNeighbors('c23n');
     expect(neighbors).toHaveLength(8);
-    neighbors.forEach(n => expect(n).toHaveLength(4));
+    neighbors.forEach((n) => expect(n).toHaveLength(4));
   });
 });
 
@@ -83,7 +83,7 @@ describe('getGeohashPath', () => {
   it('returns intermediate cells between two geohashes', () => {
     const path = getGeohashPath('c23n', 'c24k');
     expect(path.length).toBeGreaterThan(0);
-    path.forEach(h => {
+    path.forEach((h) => {
       expect(h).toHaveLength(4);
       expect(h).not.toBe('c23n');
       expect(h).not.toBe('c24k');

@@ -7,7 +7,7 @@
  */
 
 import { fromHtml } from 'hast-util-from-html';
-import type { HtmlNode, HtmlElement, HtmlText, HtmlComment } from './types.js';
+import type { HtmlNode } from './types.js';
 
 // ============================================
 // Hast → HtmlNode conversion
@@ -26,8 +26,20 @@ const HAST_PROP_TO_ATTR: Record<string, string> = {
 
 /** HTML void elements that are self-closing. */
 const VOID_ELEMENTS = new Set([
-  'area', 'base', 'br', 'col', 'embed', 'hr', 'img', 'input',
-  'link', 'meta', 'param', 'source', 'track', 'wbr',
+  'area',
+  'base',
+  'br',
+  'col',
+  'embed',
+  'hr',
+  'img',
+  'input',
+  'link',
+  'meta',
+  'param',
+  'source',
+  'track',
+  'wbr',
 ]);
 
 /**
@@ -38,12 +50,24 @@ function propertyToAttribute(prop: string): string {
 
   // data-* attributes: dataFooBar → data-foo-bar
   if (prop.length > 4 && prop.startsWith('data') && prop[4] >= 'A' && prop[4] <= 'Z') {
-    return 'data-' + prop.slice(4).replace(/[A-Z]/g, m => '-' + m.toLowerCase()).replace(/^-/, '');
+    return (
+      'data-' +
+      prop
+        .slice(4)
+        .replace(/[A-Z]/g, (m) => '-' + m.toLowerCase())
+        .replace(/^-/, '')
+    );
   }
 
   // aria-* attributes: ariaLabel → aria-label
   if (prop.length > 4 && prop.startsWith('aria') && prop[4] >= 'A' && prop[4] <= 'Z') {
-    return 'aria-' + prop.slice(4).replace(/[A-Z]/g, m => '-' + m.toLowerCase()).replace(/^-/, '');
+    return (
+      'aria-' +
+      prop
+        .slice(4)
+        .replace(/[A-Z]/g, (m) => '-' + m.toLowerCase())
+        .replace(/^-/, '')
+    );
   }
 
   // Most HTML attributes are lowercase (tabIndex → tabindex, readOnly → readonly, etc.)
@@ -146,11 +170,8 @@ export function parseHtmlToNodes(html: string): HtmlNode[] {
 /**
  * Escape special HTML characters in text content.
  */
-function escapeHtmlText(text: string): string {
-  return text
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;');
+function _escapeHtmlText(text: string): string {
+  return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
 /**
@@ -171,7 +192,7 @@ function stringifyNode(node: HtmlNode): string {
   switch (node.type) {
     case 'htmlElement': {
       const attrs = Object.entries(node.attributes)
-        .map(([k, v]) => v === '' ? k : `${k}="${escapeHtmlAttr(v)}"`)
+        .map(([k, v]) => (v === '' ? k : `${k}="${escapeHtmlAttr(v)}"`))
         .join(' ');
       const open = attrs ? `<${node.tagName} ${attrs}>` : `<${node.tagName}>`;
 

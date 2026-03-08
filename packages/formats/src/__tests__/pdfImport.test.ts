@@ -8,17 +8,13 @@
  * Standard fonts embedded by pdf-lib should produce readable text items.
  */
 
-import { describe, it, expect, beforeAll } from 'vitest';
+import { describe, it, expect } from 'vitest';
 import { PDFDocument, StandardFonts, rgb } from 'pdf-lib';
 
 import { pdfToMarkdownDoc, pdfToDoc } from '../pdf/import';
-import type { PdfImportOptions } from '../pdf/import';
 import type {
-  MarkdownDocument,
-  MarkdownParagraph,
   MarkdownHeading,
   MarkdownBlockNode,
-  MarkdownText,
   MarkdownCodeBlock,
 } from '@bendyline/squisq/markdown';
 
@@ -87,9 +83,7 @@ describe('pdfToMarkdownDoc', () => {
   });
 
   it('imports a single paragraph', async () => {
-    const buffer = await buildSimplePdf([
-      { text: 'Hello World', x: 72, y: 700, fontSize: 11 },
-    ]);
+    const buffer = await buildSimplePdf([{ text: 'Hello World', x: 72, y: 700, fontSize: 11 }]);
     const md = await pdfToMarkdownDoc(buffer);
     expect(md.children.length).toBeGreaterThanOrEqual(1);
 
@@ -256,9 +250,7 @@ describe('pdfToMarkdownDoc', () => {
   });
 
   it('accepts Uint8Array input', async () => {
-    const buffer = await buildSimplePdf([
-      { text: 'Uint8Array test', x: 72, y: 700, fontSize: 11 },
-    ]);
+    const buffer = await buildSimplePdf([{ text: 'Uint8Array test', x: 72, y: 700, fontSize: 11 }]);
     const uint8 = new Uint8Array(buffer);
     const md = await pdfToMarkdownDoc(uint8);
     expect(md.children.length).toBeGreaterThanOrEqual(1);

@@ -48,31 +48,17 @@ export const DEPTH_TO_STYLE_ID: Record<number, string> = {
 /**
  * Paragraph style IDs that map to blockquotes on import.
  */
-export const QUOTE_STYLE_IDS = new Set([
-  'Quote',
-  'IntenseQuote',
-  'quote',
-  'BlockQuote',
-]);
+export const QUOTE_STYLE_IDS = new Set(['Quote', 'IntenseQuote', 'quote', 'BlockQuote']);
 
 /**
  * Paragraph style ID for code blocks.
  */
-export const CODE_STYLE_IDS = new Set([
-  'Code',
-  'CodeBlock',
-  'HTMLCode',
-  'PlainText',
-]);
+export const CODE_STYLE_IDS = new Set(['Code', 'CodeBlock', 'HTMLCode', 'PlainText']);
 
 /**
  * Character style IDs that indicate inline code.
  */
-export const INLINE_CODE_STYLE_IDS = new Set([
-  'CodeChar',
-  'HTMLCodeChar',
-  'VerbatimChar',
-]);
+export const INLINE_CODE_STYLE_IDS = new Set(['CodeChar', 'HTMLCodeChar', 'VerbatimChar']);
 
 // ============================================
 // Numbering Formats
@@ -81,10 +67,7 @@ export const INLINE_CODE_STYLE_IDS = new Set([
 /**
  * Word numbering format values that indicate an unordered (bullet) list.
  */
-export const BULLET_NUM_FORMATS = new Set([
-  'bullet',
-  'none',
-]);
+export const BULLET_NUM_FORMATS = new Set(['bullet', 'none']);
 
 /**
  * Word numbering format values that indicate an ordered (numbered) list.

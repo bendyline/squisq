@@ -67,7 +67,7 @@ export function DebugPanel({ source, theme = 'light' }: DebugPanelProps) {
               cursor: 'pointer',
               fontSize: 12,
               fontWeight: tab === t ? 600 : 400,
-              color: tab === t ? '#3b82f6' : (isDark ? '#9ca3af' : '#6b7280'),
+              color: tab === t ? '#3b82f6' : isDark ? '#9ca3af' : '#6b7280',
               borderBottom: tab === t ? '2px solid #3b82f6' : '2px solid transparent',
             }}
           >

@@ -22,8 +22,6 @@ import TaskItem from '@tiptap/extension-task-item';
 import Placeholder from '@tiptap/extension-placeholder';
 import { HeadingWithTemplate } from './TemplateAnnotation';
 import { useEditorContext } from './EditorContext';
-import { parseMarkdown, stringifyMarkdown } from '@bendyline/squisq/markdown';
-import type { MarkdownDocument } from '@bendyline/squisq/markdown';
 import { markdownToTiptap, tiptapToMarkdown } from './tiptapBridge';
 
 // ── Frontmatter helpers ────────────────────────────────────────────
@@ -123,10 +121,7 @@ export function WysiwygEditor({
       style={{ width: '100%', height: '100%', overflow: 'auto' }}
       data-testid="wysiwyg-container"
     >
-      <EditorContent
-        editor={editor}
-        style={{ height: '100%' }}
-      />
+      <EditorContent editor={editor} style={{ height: '100%' }} />
     </div>
   );
 }

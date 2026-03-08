@@ -97,11 +97,15 @@ function toMdastPosition(pos: MarkdownSourcePosition): MdastPosition {
 }
 
 /** Conditionally include position in node. */
-function posField(pos?: MarkdownSourcePosition): { position: MarkdownSourcePosition } | Record<string, never> {
+function posField(
+  pos?: MarkdownSourcePosition,
+): { position: MarkdownSourcePosition } | Record<string, never> {
   return pos ? { position: pos } : {};
 }
 
-function mdastPosField(pos?: MarkdownSourcePosition): { position: MdastPosition } | Record<string, never> {
+function mdastPosField(
+  pos?: MarkdownSourcePosition,
+): { position: MdastPosition } | Record<string, never> {
   return pos ? { position: toMdastPosition(pos) } : {};
 }
 
@@ -215,10 +219,7 @@ function serializeTemplateAnnotation(annotation: HeadingTemplateAnnotation): str
  * @param options - Conversion options
  * @returns A MarkdownDocument
  */
-export function fromMdast(
-  root: MdastNode,
-  options?: { parseHtml?: boolean },
-): MarkdownDocument {
+export function fromMdast(root: MdastNode, options?: { parseHtml?: boolean }): MarkdownDocument {
   const doParseHtml = options?.parseHtml !== false;
   return {
     type: 'document',
@@ -284,7 +285,7 @@ function convertBlockNode(node: MdastNode, parseHtml: boolean): MarkdownBlockNod
         ordered: node.ordered ?? false,
         ...(node.start != null ? { start: node.start } : {}),
         ...(node.spread != null ? { spread: node.spread } : {}),
-        children: (node.children ?? []).map(item => convertListItem(item, parseHtml)),
+        children: (node.children ?? []).map((item) => convertListItem(item, parseHtml)),
         ...posField(pos),
       };
 
@@ -306,7 +307,9 @@ function convertBlockNode(node: MdastNode, parseHtml: boolean): MarkdownBlockNod
     case 'table':
       return {
         type: 'table',
-        ...(node.align ? { align: node.align.map(a => a as 'left' | 'right' | 'center' | null) } : {}),
+        ...(node.align
+          ? { align: node.align.map((a) => a as 'left' | 'right' | 'center' | null) }
+          : {}),
         children: (node.children ?? []).map((row, i) => convertTableRow(row, i === 0, parseHtml)),
         ...posField(pos),
       };
@@ -365,7 +368,9 @@ function convertBlockNode(node: MdastNode, parseHtml: boolean): MarkdownBlockNod
         type: 'containerDirective',
         name: node.name ?? '',
         ...(label ? { label } : {}),
-        ...(node.attributes && Object.keys(node.attributes).length > 0 ? { attributes: node.attributes } : {}),
+        ...(node.attributes && Object.keys(node.attributes).length > 0
+          ? { attributes: node.attributes }
+          : {}),
         children: convertBlockChildren(contentChildren, parseHtml),
         ...posField(pos),
       };
@@ -375,7 +380,9 @@ function convertBlockNode(node: MdastNode, parseHtml: boolean): MarkdownBlockNod
       return {
         type: 'leafDirective',
         name: node.name ?? '',
-        ...(node.attributes && Object.keys(node.attributes).length > 0 ? { attributes: node.attributes } : {}),
+        ...(node.attributes && Object.keys(node.attributes).length > 0
+          ? { attributes: node.attributes }
+          : {}),
         children: convertInlineChildren(node.children ?? [], parseHtml),
         ...posField(pos),
       };
@@ -408,12 +415,16 @@ function convertTableRow(node: MdastNode, isHeader: boolean, parseHtml: boolean)
   const pos = convertPosition(node.position);
   return {
     type: 'tableRow',
-    children: (node.children ?? []).map(cell => convertTableCell(cell, isHeader, parseHtml)),
+    children: (node.children ?? []).map((cell) => convertTableCell(cell, isHeader, parseHtml)),
     ...posField(pos),
   };
 }
 
-function convertTableCell(node: MdastNode, isHeader: boolean, parseHtml: boolean): MarkdownTableCell {
+function convertTableCell(
+  node: MdastNode,
+  isHeader: boolean,
+  parseHtml: boolean,
+): MarkdownTableCell {
   const pos = convertPosition(node.position);
   return {
     type: 'tableCell',
@@ -533,7 +544,9 @@ function convertInlineNode(node: MdastNode, parseHtml: boolean): MarkdownInlineN
       return {
         type: 'textDirective',
         name: node.name ?? '',
-        ...(node.attributes && Object.keys(node.attributes).length > 0 ? { attributes: node.attributes } : {}),
+        ...(node.attributes && Object.keys(node.attributes).length > 0
+          ? { attributes: node.attributes }
+          : {}),
         children: convertInlineChildren(node.children ?? [], parseHtml),
         ...posField(pos),
       };
@@ -559,7 +572,7 @@ function convertInlineNode(node: MdastNode, parseHtml: boolean): MarkdownInlineN
 export function toMdast(doc: MarkdownDocument): MdastNode {
   return {
     type: 'root',
-    children: doc.children.map(n => blockToMdast(n)),
+    children: doc.children.map((n) => blockToMdast(n)),
     ...mdastPosField(doc.position),
   };
 }
@@ -864,13 +877,15 @@ function inlineToMdast(node: MarkdownInlineNode): MdastNode {
  * Convert a MarkdownDefinitionList to an HTML <dl> string.
  * Fallback for serialization since mdast doesn't support definition lists.
  */
-function definitionListToHtml(list: { children: Array<{ type: string; children?: unknown[] }> }): string {
+function definitionListToHtml(list: {
+  children: Array<{ type: string; children?: unknown[] }>;
+}): string {
   let html = '<dl>\n';
   for (const child of list.children) {
     if (child.type === 'definitionTerm') {
       // Extract plain text from inline children
       const text = (child.children as Array<{ value?: string; children?: unknown[] }>)
-        .map(c => c.value ?? '')
+        .map((c) => c.value ?? '')
         .join('');
       html += `  <dt>${text}</dt>\n`;
     } else if (child.type === 'definitionDescription') {

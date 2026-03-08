@@ -7,6 +7,7 @@ rendering and spatial utilities. It was extracted from the Qualla project and is
 designed to be framework-agnostic at the core, with a React component layer on top.
 
 **npm packages:**
+
 - `@bendyline/squisq` — Headless utilities (schemas, templates, spatial math, storage)
 - `@bendyline/squisq-react` — React component library (doc player, block renderer, controls)
 - `@bendyline/squisq-formats` — Document format converters (DOCX import/export, OOXML infrastructure)
@@ -62,6 +63,7 @@ npm run build -w @bendyline/squisq-formats # Build formats only
 ## Relationship to Qualla
 
 Qualla (`c:\gh\qualla-internal`) consumes squisq via checked-in tarballs:
+
 - `qualla-internal/lib/bendyline-squisq-*.tgz`
 - Referenced as `"file:lib/bendyline-squisq-*.tgz"` in qualla's package.json
 
@@ -79,18 +81,21 @@ Qualla import exclusively from squisq are a future step.
 ## Subpath Exports
 
 `@bendyline/squisq` exposes subpath entries:
+
 - `@bendyline/squisq/schemas` — Type definitions (Doc, BlockTemplates, Viewport)
 - `@bendyline/squisq/doc` — Template registry + all 17 templates + animationUtils
 - `@bendyline/squisq/spatial` — Haversine, Geohash utilities
 - `@bendyline/squisq/storage` — StorageAdapter, MemoryStorageAdapter, LocalStorageAdapter
 
 `@bendyline/squisq-react` exports everything from the root:
+
 - Components: DocPlayer, BlockRenderer, CaptionOverlay, DocProgressBar, etc.
 - Hooks: useAudioSync, useDocPlayback, useViewportOrientation
 - Layers: ImageLayer, TextLayer, ShapeLayer, VideoLayer, MapLayer
 - Styles: `@bendyline/squisq-react/styles` for CSS
 
 `@bendyline/squisq-formats` exposes subpath entries:
+
 - `@bendyline/squisq-formats/docx` — DOCX import/export (markdownDocToDocx, docxToMarkdownDoc, docToDocx, docxToDoc)
 - `@bendyline/squisq-formats/ooxml` — Shared OOXML package reader/writer, XML utilities, namespace constants
 - `@bendyline/squisq-formats/pptx` — PPTX stubs (not yet implemented)

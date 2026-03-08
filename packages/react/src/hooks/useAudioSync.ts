@@ -15,12 +15,11 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import type { RefObject } from 'react';
 import type { AudioTrack } from '@bendyline/squisq/schemas';
 import type { AudioProvider } from './AudioProvider';
-import { calculateSegmentTiming, findSegmentAtTime } from './AudioProvider';
 
 export function useAudioSync(
   audioRef: RefObject<HTMLAudioElement>,
   audioTrack: AudioTrack | undefined,
-  basePath: string = ''
+  basePath: string = '',
 ): AudioProvider {
   const [currentTime, setCurrentTime] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -59,39 +58,42 @@ export function useAudioSync(
   }, [audioTrack]);
 
   // Preload audio file as blob (enables seeking without range request support)
-  const preloadAudio = useCallback(async (src: string): Promise<string> => {
-    const audioUrl = basePath ? `${basePath}/${src}` : src;
+  const preloadAudio = useCallback(
+    async (src: string): Promise<string> => {
+      const audioUrl = basePath ? `${basePath}/${src}` : src;
 
-    // Return cached blob URL if available
-    if (blobUrls.current.has(src)) {
-      return blobUrls.current.get(src)!;
-    }
-
-    // Return existing loading promise if in progress
-    if (loadingPromises.current.has(src)) {
-      return loadingPromises.current.get(src)!;
-    }
-
-    // Start loading
-    const loadPromise = (async () => {
-      try {
-        const response = await fetch(audioUrl);
-        if (!response.ok) throw new Error(`HTTP ${response.status}`);
-        const blob = await response.blob();
-        const blobUrl = URL.createObjectURL(blob);
-        blobUrls.current.set(src, blobUrl);
-        return blobUrl;
-      } catch {
-        // Fall back to direct URL if blob loading fails
-        return audioUrl;
-      } finally {
-        loadingPromises.current.delete(src);
+      // Return cached blob URL if available
+      if (blobUrls.current.has(src)) {
+        return blobUrls.current.get(src)!;
       }
-    })();
 
-    loadingPromises.current.set(src, loadPromise);
-    return loadPromise;
-  }, [basePath]);
+      // Return existing loading promise if in progress
+      if (loadingPromises.current.has(src)) {
+        return loadingPromises.current.get(src)!;
+      }
+
+      // Start loading
+      const loadPromise = (async () => {
+        try {
+          const response = await fetch(audioUrl);
+          if (!response.ok) throw new Error(`HTTP ${response.status}`);
+          const blob = await response.blob();
+          const blobUrl = URL.createObjectURL(blob);
+          blobUrls.current.set(src, blobUrl);
+          return blobUrl;
+        } catch {
+          // Fall back to direct URL if blob loading fails
+          return audioUrl;
+        } finally {
+          loadingPromises.current.delete(src);
+        }
+      })();
+
+      loadingPromises.current.set(src, loadPromise);
+      return loadPromise;
+    },
+    [basePath],
+  );
 
   // Preload all audio segments on mount
   useEffect(() => {
@@ -123,7 +125,10 @@ export function useAudioSync(
       setCurrentTime(overallTime);
     };
 
-    const handlePlay = () => { fallbackMode.current = false; setIsPlaying(true); };
+    const handlePlay = () => {
+      fallbackMode.current = false;
+      setIsPlaying(true);
+    };
     const handlePause = () => setIsPlaying(false);
     const handleError = () => {
       // Audio source failed to load (e.g., 404 in CI or missing files).
@@ -186,10 +191,8 @@ export function useAudioSync(
     // For blob URLs, check by segment src key
     const currentSrc = audio.src;
     const cachedBlobUrl = blobUrls.current.get(segment.src);
-    const isSameSource = currentSrc && (
-      currentSrc === cachedBlobUrl ||
-      currentSrc.endsWith(segment.src)
-    );
+    const isSameSource =
+      currentSrc && (currentSrc === cachedBlobUrl || currentSrc.endsWith(segment.src));
 
     if (!isSameSource) {
       // Need to load new source - use preloaded blob URL
@@ -231,8 +234,11 @@ export function useAudioSync(
         setCurrentSegment(0);
         setIsEnded(false);
       }
-      audio.play()
-        .then(() => { fallbackMode.current = false; })
+      audio
+        .play()
+        .then(() => {
+          fallbackMode.current = false;
+        })
         .catch(() => {
           // Audio playback failed (e.g., autoplay policy or 404).
           // Enable fallback timer so blocks progress without audio.
@@ -305,7 +311,7 @@ export function useAudioSync(
         setCurrentTime(clampedTime);
       }
     },
-    [audioRef, audioTrack, currentSegment, totalDuration]
+    [audioRef, audioTrack, currentSegment, totalDuration],
   );
 
   const skipToSegment = useCallback(
@@ -316,14 +322,14 @@ export function useAudioSync(
       setCurrentSegment(index);
       setIsEnded(false);
     },
-    [audioTrack]
+    [audioTrack],
   );
 
   // Restart from beginning
   const restart = useCallback(async () => {
     seekTo(0);
     // Small delay to ensure seek completes before playing
-    await new Promise(resolve => setTimeout(resolve, 50));
+    await new Promise((resolve) => setTimeout(resolve, 50));
     play();
   }, [seekTo, play]);
 
@@ -343,7 +349,7 @@ export function useAudioSync(
       const dt = (now - lastTime) / 1000;
       lastTime = now;
 
-      setCurrentTime(prev => {
+      setCurrentTime((prev) => {
         const next = prev + dt;
         if (next >= totalDuration) {
           fallbackMode.current = false;

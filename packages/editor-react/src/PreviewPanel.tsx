@@ -191,9 +191,7 @@ function buildPreviewDoc(doc: Doc): Doc {
     audio: {
       // Synthetic segment — audio will fail to load and DocPlayer will use
       // its fallback timer to advance currentTime via requestAnimationFrame.
-      segments: t > 0
-        ? [{ src: '', name: 'preview', duration: t, startTime: 0 }]
-        : [],
+      segments: t > 0 ? [{ src: '', name: 'preview', duration: t, startTime: 0 }] : [],
     },
   };
 }
@@ -261,10 +259,7 @@ function resolveDisplayMode(value: unknown): DisplayMode | null {
  * Includes a viewport format dropdown above the player. The default
  * format can be hinted via YAML frontmatter `document-render-as:`.
  */
-export function PreviewPanel({
-  basePath = '/',
-  className,
-}: PreviewPanelProps) {
+export function PreviewPanel({ basePath = '/', className }: PreviewPanelProps) {
   const { doc, parseError, isParsing } = useEditorContext();
 
   // Determine the frontmatter-hinted viewport preset (if any)
@@ -362,10 +357,7 @@ export function PreviewPanel({
           fontSize: '13px',
         }}
       >
-        <label
-          htmlFor="viewport-preset"
-          style={{ color: 'var(--squisq-text-muted, #6b7280)' }}
-        >
+        <label htmlFor="viewport-preset" style={{ color: 'var(--squisq-text-muted, #6b7280)' }}>
           Format:
         </label>
         <select
@@ -401,18 +393,17 @@ export function PreviewPanel({
         )}
 
         {/* Divider */}
-        <span style={{
-          width: '1px',
-          height: '18px',
-          background: 'var(--squisq-border, #d1d5db)',
-          margin: '0 4px',
-        }} />
+        <span
+          style={{
+            width: '1px',
+            height: '18px',
+            background: 'var(--squisq-border, #d1d5db)',
+            margin: '0 4px',
+          }}
+        />
 
         {/* Display mode selector */}
-        <label
-          htmlFor="display-mode"
-          style={{ color: 'var(--squisq-text-muted, #6b7280)' }}
-        >
+        <label htmlFor="display-mode" style={{ color: 'var(--squisq-text-muted, #6b7280)' }}>
           Mode:
         </label>
         <select
@@ -461,11 +452,7 @@ export function PreviewPanel({
         }}
       >
         {activeDisplayMode === 'linear' ? (
-          <LinearDocView
-            doc={doc!}
-            basePath={basePath}
-            viewport={activeViewport}
-          />
+          <LinearDocView doc={doc!} basePath={basePath} viewport={activeViewport} />
         ) : (
           <DocPlayer
             script={previewDoc}

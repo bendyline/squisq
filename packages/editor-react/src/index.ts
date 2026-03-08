@@ -23,7 +23,13 @@ export type { EditorShellProps, EditorTheme } from './EditorShell.js';
 
 // Context
 export { EditorProvider, useEditorContext } from './EditorContext.js';
-export type { EditorView, EditorState, EditorActions, EditorContextValue, EditorProviderProps } from './EditorContext.js';
+export type {
+  EditorView,
+  EditorState,
+  EditorActions,
+  EditorContextValue,
+  EditorProviderProps,
+} from './EditorContext.js';
 
 // Individual editors (for custom layouts)
 export { RawEditor } from './RawEditor.js';

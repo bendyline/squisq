@@ -45,11 +45,10 @@ export function calculateBearing(from: Coordinates, to: Coordinates): number {
   const lat2 = toRadians(to.lat);
 
   const x = Math.sin(dLng) * Math.cos(lat2);
-  const y =
-    Math.cos(lat1) * Math.sin(lat2) - Math.sin(lat1) * Math.cos(lat2) * Math.cos(dLng);
+  const y = Math.cos(lat1) * Math.sin(lat2) - Math.sin(lat1) * Math.cos(lat2) * Math.cos(dLng);
 
   const bearing = Math.atan2(x, y);
-  return ((bearing * 180 / Math.PI) + 360) % 360;
+  return ((bearing * 180) / Math.PI + 360) % 360;
 }
 
 /**

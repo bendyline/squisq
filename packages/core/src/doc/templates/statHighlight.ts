@@ -17,7 +17,7 @@ import { createAccentLayers, getAccentLayout, adjustY, DEFAULT_LAYOUT } from './
 
 export function statHighlight(input: StatHighlightInput, context: TemplateContext): Layer[] {
   const { stat, description, detail, colorScheme = 'blue', accentImage } = input;
-  const { theme, layout } = context;
+  const { theme, layout: _layout } = context;
   const colors = COLOR_SCHEMES[colorScheme] ?? COLOR_SCHEMES.blue;
 
   // Get layout adjustments if accent image is present

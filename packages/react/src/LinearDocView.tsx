@@ -21,11 +21,7 @@ import { useMemo } from 'react';
 import type { Doc, Block } from '@bendyline/squisq/schemas';
 import type { ViewportConfig } from '@bendyline/squisq/schemas';
 import { VIEWPORT_PRESETS } from '@bendyline/squisq/schemas';
-import {
-  getLayers,
-  hasTemplate,
-  DEFAULT_THEME,
-} from '@bendyline/squisq/doc';
+import { getLayers, hasTemplate, DEFAULT_THEME } from '@bendyline/squisq/doc';
 import type { RenderContext } from '@bendyline/squisq/doc';
 import { extractPlainText } from '@bendyline/squisq/markdown';
 import type { MarkdownBlockNode } from '@bendyline/squisq/markdown';
@@ -85,13 +81,7 @@ interface BlockSectionProps {
  * Render a single block section: heading + body content or SVG card.
  * Recurses into children to render the full heading tree.
  */
-function BlockSection({
-  block,
-  basePath,
-  viewport,
-  renderContext,
-  blockIndex,
-}: BlockSectionProps) {
+function BlockSection({ block, basePath, viewport, renderContext, blockIndex }: BlockSectionProps) {
   const isAnnotated = isAnnotatedBlock(block);
 
   // For annotated blocks, compute layers and build a Block with them
@@ -136,9 +126,7 @@ function BlockSection({
       data-template={isAnnotated ? block.sourceHeading?.templateAnnotation?.template : undefined}
     >
       {/* Render the heading (if present — preamble has no sourceHeading) */}
-      {block.sourceHeading && !isAnnotated && (
-        <MarkdownRenderer nodes={[block.sourceHeading]} />
-      )}
+      {block.sourceHeading && !isAnnotated && <MarkdownRenderer nodes={[block.sourceHeading]} />}
 
       {/* Annotated block: render SVG card */}
       {isAnnotated && visualBlock && (
@@ -199,7 +187,10 @@ function BlockSection({
 /** Extract plain text from block contents. */
 function extractBodyPlainText(contents?: MarkdownBlockNode[]): string {
   if (!contents || contents.length === 0) return '';
-  return contents.map((n) => extractPlainText(n)).join('\n').trim();
+  return contents
+    .map((n) => extractPlainText(n))
+    .join('\n')
+    .trim();
 }
 
 /** Extract list items as plain text. */
@@ -263,12 +254,7 @@ function getTemplateDefaults(
  * <LinearDocView doc={doc} basePath="/media/" />
  * ```
  */
-export function LinearDocView({
-  doc,
-  basePath = '/',
-  viewport,
-  className,
-}: LinearDocViewProps) {
+export function LinearDocView({ doc, basePath = '/', viewport, className }: LinearDocViewProps) {
   const activeViewport = viewport ?? VIEWPORT_PRESETS.landscape;
   const totalBlocks = useMemo(() => countAll(doc.blocks), [doc.blocks]);
 
