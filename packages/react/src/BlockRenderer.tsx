@@ -86,7 +86,7 @@ export function BlockRenderer({
 
       {/* All layers clipped to viewBox bounds */}
       <g clipPath={`url(#${clipId})`}>
-        {block.layers.map((layer) => (
+        {(block.layers ?? []).map((layer) => (
           <LayerRenderer
             key={layer.id}
             layer={layer}

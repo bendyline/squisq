@@ -18,6 +18,8 @@ import type {
   MarkdownTableRow,
   MarkdownTableCell,
   MarkdownSourcePosition,
+  HeadingTemplateAnnotation,
+  MarkdownHeading,
 } from './types.js';
 import { parseHtmlToNodes } from './htmlParse.js';
 
@@ -119,6 +121,93 @@ function extractText(node: MdastNode): string {
   return '';
 }
 
+// ============================================
+// Template annotation helpers
+// ============================================
+
+/**
+ * Regex matching a trailing `{[templateName key=value …]}` annotation.
+ * Captures the content between `{[` and `]}`.
+ */
+const TEMPLATE_ANNOTATION_RE = /\s*\{\[([^\]]+)\]\}\s*$/;
+
+/**
+ * Extract a `{[templateName key=value …]}` annotation from a heading's
+ * inline children. Mutates the children array in-place: strips the
+ * annotation text from the last text node (or removes the node entirely).
+ *
+ * @returns The parsed annotation, or null if none found.
+ */
+function extractTemplateAnnotation(
+  children: MarkdownInlineNode[],
+): HeadingTemplateAnnotation | null {
+  // Walk backwards to find the last text node
+  for (let i = children.length - 1; i >= 0; i--) {
+    const child = children[i];
+    if (child.type === 'text') {
+      const match = child.value.match(TEMPLATE_ANNOTATION_RE);
+      if (match) {
+        const inner = match[1].trim();
+        const annotation = parseAnnotationTokens(inner);
+
+        // Strip the matched portion from the text
+        const stripped = child.value.slice(0, match.index!).replace(/\s+$/, '');
+        if (stripped) {
+          (child as any).value = stripped;
+        } else {
+          // Remove the now-empty text node
+          children.splice(i, 1);
+        }
+        return annotation;
+      }
+      // Only check the last text node (trailing position)
+      break;
+    }
+    // If the last child isn't a text node, there's no annotation
+    break;
+  }
+  return null;
+}
+
+/**
+ * Parse the inner content of a `{[…]}` annotation into template + params.
+ *
+ * Input: `"chart colorScheme=blue size=large"`
+ * Output: `{ template: 'chart', params: { colorScheme: 'blue', size: 'large' } }`
+ */
+function parseAnnotationTokens(inner: string): HeadingTemplateAnnotation {
+  const tokens = inner.split(/\s+/);
+  const template = tokens[0];
+  const params: Record<string, string> = {};
+
+  for (let i = 1; i < tokens.length; i++) {
+    const eqIdx = tokens[i].indexOf('=');
+    if (eqIdx > 0) {
+      params[tokens[i].slice(0, eqIdx)] = tokens[i].slice(eqIdx + 1);
+    }
+  }
+
+  const result: HeadingTemplateAnnotation = { template };
+  if (Object.keys(params).length > 0) {
+    result.params = params;
+  }
+  return result;
+}
+
+/**
+ * Serialize a HeadingTemplateAnnotation back to `{[templateName key=value …]}` text.
+ */
+function serializeTemplateAnnotation(annotation: HeadingTemplateAnnotation): string {
+  let result = `{[${annotation.template}`;
+  if (annotation.params) {
+    for (const [key, value] of Object.entries(annotation.params)) {
+      result += ` ${key}=${value}`;
+    }
+  }
+  result += ']}';
+  return result;
+}
+
 /**
  * Convert an mdast Root node to a MarkdownDocument.
  *
@@ -160,13 +249,20 @@ function convertBlockNode(node: MdastNode, parseHtml: boolean): MarkdownBlockNod
   const pos = convertPosition(node.position);
 
   switch (node.type) {
-    case 'heading':
-      return {
+    case 'heading': {
+      const headingChildren = convertInlineChildren(node.children ?? [], parseHtml);
+      const annotation = extractTemplateAnnotation(headingChildren);
+      const result: MarkdownHeading = {
         type: 'heading',
         depth: (node.depth ?? 1) as 1 | 2 | 3 | 4 | 5 | 6,
-        children: convertInlineChildren(node.children ?? [], parseHtml),
+        children: headingChildren,
         ...posField(pos),
       };
+      if (annotation) {
+        result.templateAnnotation = annotation;
+      }
+      return result;
+    }
 
     case 'paragraph':
       return {
@@ -283,6 +379,10 @@ function convertBlockNode(node: MdastNode, parseHtml: boolean): MarkdownBlockNod
         children: convertInlineChildren(node.children ?? [], parseHtml),
         ...posField(pos),
       };
+
+    case 'yaml':
+      // YAML frontmatter nodes are handled separately in parse.ts — skip silently
+      return null;
 
     default:
       // Unknown block node — skip with a warning
@@ -466,13 +566,25 @@ export function toMdast(doc: MarkdownDocument): MdastNode {
 
 function blockToMdast(node: MarkdownBlockNode): MdastNode {
   switch (node.type) {
-    case 'heading':
+    case 'heading': {
+      const mdastChildren = node.children.map(inlineToMdast);
+      if (node.templateAnnotation) {
+        const suffix = serializeTemplateAnnotation(node.templateAnnotation);
+        // Append to last text node, or create a new one
+        const lastChild = mdastChildren[mdastChildren.length - 1];
+        if (lastChild && lastChild.type === 'text') {
+          lastChild.value = (lastChild.value ?? '') + ' ' + suffix;
+        } else {
+          mdastChildren.push({ type: 'text', value: ' ' + suffix });
+        }
+      }
       return {
         type: 'heading',
         depth: node.depth,
-        children: node.children.map(inlineToMdast),
+        children: mdastChildren,
         ...mdastPosField(node.position),
       };
+    }
 
     case 'paragraph':
       return {

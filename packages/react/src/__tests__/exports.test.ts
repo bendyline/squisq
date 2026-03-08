@@ -25,8 +25,14 @@ describe('@bendyline/prodcore-react exports', () => {
     expect(typeof prodcoreReact.DocControlsOverlay).toBe('function');
     expect(typeof prodcoreReact.DocControlsBottom).toBe('function');
     expect(typeof prodcoreReact.DocControlsSidebar).toBe('function');
+    expect(typeof prodcoreReact.DocControlsSlideshow).toBe('function');
     expect(typeof prodcoreReact.DocPlayerWithSidebar).toBe('function');
     expect(typeof prodcoreReact.DocProgressBar).toBe('function');
+  });
+
+  it('exports MarkdownRenderer and LinearDocView', () => {
+    expect(typeof prodcoreReact.MarkdownRenderer).toBe('function');
+    expect(typeof prodcoreReact.LinearDocView).toBe('function');
   });
 
   it('exports hooks', () => {

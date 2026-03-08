@@ -16,7 +16,7 @@ import { createAccentLayers, getAccentLayout, adjustY, DEFAULT_LAYOUT } from './
 export function definitionCard(input: DefinitionCardInput, context: TemplateContext): Layer[] {
   const { term, definition, origin, colorScheme = 'blue', accentImage } = input;
   const { theme } = context;
-  const colors = COLOR_SCHEMES[colorScheme];
+  const colors = COLOR_SCHEMES[colorScheme] ?? COLOR_SCHEMES.blue;
 
   // Get layout adjustments if accent image is present
   const accentLayout = accentImage ? getAccentLayout(accentImage.position) : DEFAULT_LAYOUT;

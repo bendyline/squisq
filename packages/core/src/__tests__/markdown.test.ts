@@ -10,6 +10,7 @@ import {
   extractPlainText,
   countNodes,
   createDocument,
+  parseFrontmatter,
 } from '../markdown/index';
 import type {
   MarkdownDocument,
@@ -641,5 +642,166 @@ const x = 1;
 
     // After one round-trip, the AST should be stable
     expect(stripPositions(doc3)).toEqual(stripPositions(doc2));
+  });
+});
+
+// ============================================
+// Template Annotation on Headings
+// ============================================
+
+describe('heading template annotation', () => {
+  it('parses {[templateName]} from heading text', () => {
+    const doc = parseMarkdown('### Report Data {[chart]}');
+    const heading = doc.children[0] as MarkdownHeading;
+
+    expect(heading.type).toBe('heading');
+    expect(heading.depth).toBe(3);
+    expect(heading.templateAnnotation).toEqual({ template: 'chart' });
+    // The annotation text should be stripped from children
+    expect(heading.children).toHaveLength(1);
+    expect(heading.children[0].type).toBe('text');
+    expect((heading.children[0] as any).value).toBe('Report Data');
+  });
+
+  it('parses template name with key=value params', () => {
+    const doc = parseMarkdown('## Data {[statHighlight colorScheme=blue size=large]}');
+    const heading = doc.children[0] as MarkdownHeading;
+
+    expect(heading.templateAnnotation).toEqual({
+      template: 'statHighlight',
+      params: { colorScheme: 'blue', size: 'large' },
+    });
+    expect((heading.children[0] as any).value).toBe('Data');
+  });
+
+  it('returns no annotation for plain headings', () => {
+    const doc = parseMarkdown('# Just a title');
+    const heading = doc.children[0] as MarkdownHeading;
+
+    expect(heading.templateAnnotation).toBeUndefined();
+    expect((heading.children[0] as any).value).toBe('Just a title');
+  });
+
+  it('does not match incomplete bracket syntax', () => {
+    const doc = parseMarkdown('## Title {chart}');
+    const heading = doc.children[0] as MarkdownHeading;
+
+    // Regular curly braces should not trigger annotation parsing
+    expect(heading.templateAnnotation).toBeUndefined();
+  });
+
+  it('does not match {[...]} in the middle of heading text', () => {
+    // The annotation must be trailing
+    const doc = parseMarkdown('## The {[chart]} section');
+    const heading = doc.children[0] as MarkdownHeading;
+
+    // remark may split this into multiple text nodes or keep as one;
+    // either way, no trailing annotation should be extracted
+    expect(heading.templateAnnotation).toBeUndefined();
+  });
+
+  it('round-trips annotation through parse → stringify → parse', () => {
+    const input = '### My Section {[factCard colorScheme=warm]}';
+    const doc1 = parseMarkdown(input);
+    const output = stringifyMarkdown(doc1);
+    const doc2 = parseMarkdown(output);
+
+    const h1 = doc1.children[0] as MarkdownHeading;
+    const h2 = doc2.children[0] as MarkdownHeading;
+
+    expect(h2.templateAnnotation).toEqual(h1.templateAnnotation);
+    expect(stripPositions(h2.children)).toEqual(stripPositions(h1.children));
+  });
+
+  it('handles heading with only annotation (no display text)', () => {
+    const doc = parseMarkdown('## {[chart]}');
+    const heading = doc.children[0] as MarkdownHeading;
+
+    expect(heading.templateAnnotation).toEqual({ template: 'chart' });
+    // Children should be empty after stripping the annotation
+    expect(heading.children).toHaveLength(0);
+  });
+
+  it('handles heading with bold text before annotation', () => {
+    const doc = parseMarkdown('## **Bold Title** {[quoteBlock]}');
+    const heading = doc.children[0] as MarkdownHeading;
+
+    expect(heading.templateAnnotation).toEqual({ template: 'quoteBlock' });
+    // The bold node should remain, trailing text stripped
+    const types = heading.children.map(c => c.type);
+    expect(types).toContain('strong');
+  });
+
+  it('preserves annotation through stringify', () => {
+    const input = '## Section {[chart]}';
+    const doc = parseMarkdown(input);
+    const output = stringifyMarkdown(doc);
+
+    // Output should contain the annotation
+    expect(output).toContain('{[chart]}');
+    // The heading text should be there too
+    expect(output).toContain('Section');
+  });
+});
+
+// ============================================
+// YAML Frontmatter
+// ============================================
+
+describe('parseFrontmatter', () => {
+  it('parses simple key-value pairs', () => {
+    const result = parseFrontmatter('title: My Doc\nauthor: Jane');
+    expect(result).toEqual({ title: 'My Doc', author: 'Jane' });
+  });
+
+  it('parses booleans and numbers', () => {
+    const result = parseFrontmatter('draft: true\ncount: 42\nratio: 3.14');
+    expect(result).toEqual({ draft: true, count: 42, ratio: 3.14 });
+  });
+
+  it('strips surrounding quotes', () => {
+    const result = parseFrontmatter('title: "Hello World"\nname: \'Jane\'');
+    expect(result).toEqual({ title: 'Hello World', name: 'Jane' });
+  });
+
+  it('skips comment lines and blank lines', () => {
+    const result = parseFrontmatter('# comment\n\ntitle: Test');
+    expect(result).toEqual({ title: 'Test' });
+  });
+
+  it('returns null for empty input', () => {
+    expect(parseFrontmatter('')).toBeNull();
+    expect(parseFrontmatter('  \n  ')).toBeNull();
+  });
+});
+
+describe('frontmatter in parseMarkdown', () => {
+  it('extracts frontmatter from markdown with YAML header', () => {
+    const md = '---\ndocument-render-as: landscape\ntitle: Test\n---\n\n# Hello';
+    const doc = parseMarkdown(md);
+    expect(doc.frontmatter).toEqual({ 'document-render-as': 'landscape', title: 'Test' });
+    // The heading should still be there
+    expect(doc.children.length).toBeGreaterThanOrEqual(1);
+    expect(doc.children[0].type).toBe('heading');
+  });
+
+  it('has no frontmatter when YAML header is absent', () => {
+    const doc = parseMarkdown('# Just a heading');
+    expect(doc.frontmatter).toBeUndefined();
+  });
+
+  it('round-trips frontmatter through stringify', () => {
+    const md = '---\ndocument-render-as: portrait\n---\n\n# Test';
+    const doc = parseMarkdown(md);
+    const output = stringifyMarkdown(doc);
+    expect(output).toContain('---');
+    expect(output).toContain('document-render-as: portrait');
+    expect(output).toContain('# Test');
+  });
+
+  it('can disable frontmatter parsing', () => {
+    const md = '---\ntitle: Disabled\n---\n\n# Hello';
+    const doc = parseMarkdown(md, { frontmatter: false });
+    expect(doc.frontmatter).toBeUndefined();
   });
 });

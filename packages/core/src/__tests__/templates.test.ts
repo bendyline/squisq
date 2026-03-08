@@ -93,7 +93,7 @@ describe('expandTemplateBlock', () => {
     };
     const context = createTemplateContext(DEFAULT_THEME, 0, 1, VIEWPORT_PRESETS.landscape);
     const result = expandTemplateBlock(block, context);
-    expect(result.layers).toEqual([]);
+    expect(result.layers ?? []).toEqual([]);
   });
 
   it('each registered template returns valid layers', () => {

@@ -16,7 +16,7 @@ import { COLOR_SCHEMES, scaledFontSize } from '../../schemas/BlockTemplates.js';
 export function sectionHeader(input: SectionHeaderInput, context: TemplateContext): Layer[] {
   const { title, colorScheme = 'blue', imageSrc, imageAlt, ambientMotion } = input;
   const { layout } = context;
-  const colors = COLOR_SCHEMES[colorScheme];
+  const colors = COLOR_SCHEMES[colorScheme] ?? COLOR_SCHEMES.blue;
 
   // Scale font sizes for viewport
   const titleFontSize = scaledFontSize(72, context, true);

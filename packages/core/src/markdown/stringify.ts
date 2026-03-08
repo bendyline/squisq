@@ -65,5 +65,19 @@ export function stringifyMarkdown(doc: MarkdownDocument, options?: StringifyOpti
   });
 
   // Stringify mdast → markdown string
-  return processor.stringify(mdastTree) as string;
+  const result = processor.stringify(mdastTree) as string;
+
+  // remark-stringify escapes `[` in text nodes (to prevent link syntax),
+  // which turns `{[template]}` into `{\[template]}`. Unescape our annotation syntax.
+  const cleaned = result.replace(/\{\\\[([^\]]+)\]\}/g, '{[$1]}');
+
+  // Prepend YAML frontmatter if present
+  if (doc.frontmatter && Object.keys(doc.frontmatter).length > 0) {
+    const yamlLines = Object.entries(doc.frontmatter).map(
+      ([k, v]) => `${k}: ${typeof v === 'string' ? v : JSON.stringify(v)}`
+    );
+    return `---\n${yamlLines.join('\n')}\n---\n\n${cleaned}`;
+  }
+
+  return cleaned;
 }

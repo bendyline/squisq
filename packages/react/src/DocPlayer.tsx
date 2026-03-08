@@ -33,8 +33,10 @@ import { useViewportOrientation } from './hooks/useViewportOrientation';
 import type { AudioProvider } from './hooks/AudioProvider';
 import { expandCoverBlock, createTemplateContext, DEFAULT_THEME, VIEWPORT_PRESETS, type ViewportConfig } from '@bendyline/prodcore/doc';
 import { DocControlsOverlay } from './DocControlsOverlay';
+import { DocControlsSlideshow } from './DocControlsSlideshow';
 import { DocProgressBar } from './DocProgressBar';
-import type { PlaybackState, PlaybackActions, BlockMarker } from './types';
+import { LinearDocView } from './LinearDocView';
+import type { PlaybackState, PlaybackActions, BlockMarker, DisplayMode, SlideNavActions } from './types';
 
 /**
  * Build a map of audio segment index -> display-friendly title.
@@ -123,6 +125,15 @@ interface DocPlayerProps {
    *  Used when the player is rendered in a constrained container (e.g., map overlay panel)
    *  whose shape differs from the window's. */
   forceViewport?: ViewportConfig;
+  /**
+   * Display mode for the player.
+   * - `'video'` (default) — Traditional video playback with play/pause, scrub bar, auto-advance.
+   * - `'slideshow'` — PowerPoint-style with prev/next buttons. Blocks are static slides
+   *   that only change on user click. No auto-advance, no scrub bar.
+   * - `'linear'` — Long-scrolling document view. Renders markdown as readable HTML with
+   *   template-annotated sections as inline SVG cards. No audio, no timeline.
+   */
+  displayMode?: DisplayMode;
 }
 
 export function DocPlayer({
@@ -144,7 +155,10 @@ export function DocPlayer({
   onFullscreenToggle,
   onBlockMarkers,
   forceViewport,
+  displayMode = 'video',
 }: DocPlayerProps) {
+  const isSlideshowMode = displayMode === 'slideshow';
+  const isLinearMode = displayMode === 'linear';
   const audioRef = useRef<HTMLAudioElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -189,12 +203,12 @@ export function DocPlayer({
     restart,
   } = audio;
 
-  // Tap the player surface to toggle play/pause
+  // Tap the player surface to toggle play/pause (disabled in slideshow and linear mode)
   const handleContainerClick = useCallback((e: React.MouseEvent) => {
-    if (renderMode) return;
+    if (renderMode || isSlideshowMode || isLinearMode) return;
     const target = e.target as HTMLElement;
     // Don't toggle if user clicked a control element
-    if (target.closest('button, a, input, .doc-player__controls, .doc-player__scrubber, .doc-controls-sidebar')) return;
+    if (target.closest('button, a, input, .doc-player__controls, .doc-player__scrubber, .doc-controls-sidebar, .doc-controls-slideshow')) return;
     toggle();
     // Show visual feedback (show the state we're transitioning TO)
     const nextState = isPlaying ? 'play' : 'pause';
@@ -259,7 +273,8 @@ export function DocPlayer({
   // Determine if we should show the cover block
   // Show cover when: has cover block, not playing, at time 0, not in render mode
   // OR during the grace period after first play, OR when coverForced (render mode)
-  const showCoverBlock = coverBlock && (coverForced || coverGraceActive || (!isPlaying && currentTime === 0 && !renderMode && !autoPlay));
+  // Cover block is suppressed in slideshow and linear mode — start directly on content
+  const showCoverBlock = !isSlideshowMode && !isLinearMode && coverBlock && (coverForced || coverGraceActive || (!isPlaying && currentTime === 0 && !renderMode && !autoPlay));
 
   // Auto-play if enabled (wait for audio to be ready)
   // Use a ref to track if we've already auto-played to avoid repeating on every render
@@ -447,6 +462,38 @@ export function DocPlayer({
     toggleFullscreen: onFullscreenToggle,
   }), [toggle, restart, seekTo, setCaptionsEnabled, onFullscreenToggle]);
 
+  // Slide navigation actions for slideshow mode
+  // These seek to the target block's startTime and keep the player paused.
+  const slideNavActions: SlideNavActions = useMemo(() => ({
+    nextSlide: () => {
+      if (currentBlockIndex < expandedBlocks.length - 1) {
+        const target = expandedBlocks[currentBlockIndex + 1];
+        if (target) {
+          seekTo(target.startTime);
+          pause();
+        }
+      }
+    },
+    prevSlide: () => {
+      if (currentBlockIndex > 0) {
+        const target = expandedBlocks[currentBlockIndex - 1];
+        if (target) {
+          seekTo(target.startTime);
+          pause();
+        }
+      }
+    },
+    goToSlide: (index: number) => {
+      if (index >= 0 && index < expandedBlocks.length) {
+        const target = expandedBlocks[index];
+        if (target) {
+          seekTo(target.startTime);
+          pause();
+        }
+      }
+    },
+  }), [currentBlockIndex, expandedBlocks, seekTo, pause]);
+
   // Callback for playback state changes (for external controls)
   useEffect(() => {
     onPlaybackStateChange?.(playbackState);
@@ -461,18 +508,7 @@ export function DocPlayer({
 
   // Extract display title from a block (handles both template and expanded blocks)
   const getBlockTitle = useCallback((block: Block): string => {
-    // For expanded blocks with layers, try to find text content
-    if (block.layers && Array.isArray(block.layers)) {
-      const textLayer = block.layers.find((l): l is TextLayer => l.type === 'text');
-      if (textLayer) {
-        // Get first line of text, truncate if too long
-        const firstLine = textLayer.content.text.split('\n')[0];
-        if (firstLine.length <= 30) return firstLine;
-        return firstLine.slice(0, 27) + '...';
-      }
-    }
-
-    // For template blocks, extract title from template-specific properties
+    // For template blocks, extract title from template-specific properties first
     const templateBlock = block as any;
     if (templateBlock.title) return templateBlock.title;
     if (templateBlock.stat) return templateBlock.stat;
@@ -483,6 +519,17 @@ export function DocPlayer({
     }
     if (templateBlock.date) return templateBlock.date;
     if (templateBlock.fact) return templateBlock.fact;
+
+    // For expanded blocks with layers, try to find text content
+    if (block.layers && Array.isArray(block.layers)) {
+      const textLayer = block.layers.find((l): l is TextLayer => l.type === 'text');
+      if (textLayer) {
+        // Get first line of text, truncate if too long
+        const firstLine = textLayer.content.text.split('\n')[0];
+        if (firstLine.length <= 30) return firstLine;
+        return firstLine.slice(0, 27) + '...';
+      }
+    }
 
     // Fallback to formatted id
     return block.id.replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
@@ -517,24 +564,53 @@ export function DocPlayer({
     (e: KeyboardEvent) => {
       // Don't capture keyboard events when focus is on an input/textarea
       const activeEl = document.activeElement;
-      if (activeEl && (activeEl.tagName === 'INPUT' || activeEl.tagName === 'TEXTAREA')) {
+      if (activeEl && (activeEl.tagName === 'INPUT' || activeEl.tagName === 'TEXTAREA' || activeEl.tagName === 'SELECT')) {
         return;
       }
 
-      switch (e.key) {
-        case ' ':
-          e.preventDefault();
-          toggle();
-          break;
-        case 'ArrowRight':
-          seekTo(Math.min(currentTime + 10, totalDuration));
-          break;
-        case 'ArrowLeft':
-          seekTo(Math.max(currentTime - 10, 0));
-          break;
+      // Linear mode: no keyboard shortcuts (native scrolling handles it)
+      if (isLinearMode) return;
+
+      if (isSlideshowMode) {
+        // Slideshow mode: arrow keys navigate slides
+        switch (e.key) {
+          case 'ArrowRight':
+          case 'ArrowDown':
+          case ' ':
+            e.preventDefault();
+            slideNavActions.nextSlide();
+            break;
+          case 'ArrowLeft':
+          case 'ArrowUp':
+            e.preventDefault();
+            slideNavActions.prevSlide();
+            break;
+          case 'Home':
+            e.preventDefault();
+            slideNavActions.goToSlide(0);
+            break;
+          case 'End':
+            e.preventDefault();
+            slideNavActions.goToSlide(expandedBlocks.length - 1);
+            break;
+        }
+      } else {
+        // Video mode: standard playback controls
+        switch (e.key) {
+          case ' ':
+            e.preventDefault();
+            toggle();
+            break;
+          case 'ArrowRight':
+            seekTo(Math.min(currentTime + 10, totalDuration));
+            break;
+          case 'ArrowLeft':
+            seekTo(Math.max(currentTime - 10, 0));
+            break;
+        }
       }
     },
-    [toggle, seekTo, currentTime, totalDuration]
+    [isSlideshowMode, isLinearMode, toggle, seekTo, currentTime, totalDuration, slideNavActions, expandedBlocks.length]
   );
 
   useEffect(() => {
@@ -542,6 +618,28 @@ export function DocPlayer({
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [handleKeyDown, renderMode]);
+
+  // ── Linear mode: render as scrollable document ──────────────────
+  if (isLinearMode) {
+    return (
+      <div
+        ref={containerRef}
+        className="doc-player doc-player--linear"
+        style={{
+          position: 'relative',
+          width: '100%',
+          height: '100%',
+          overflow: 'hidden',
+        }}
+      >
+        <LinearDocView
+          doc={script}
+          basePath={basePath}
+          viewport={activeViewport}
+        />
+      </div>
+    );
+  }
 
   return (
     <div
@@ -750,8 +848,8 @@ export function DocPlayer({
         </div>
       )}
 
-      {/* Full overlay controls (default layout) */}
-      {!renderMode && showControls && (
+      {/* Full overlay controls (default video layout) */}
+      {!renderMode && !isSlideshowMode && showControls && (
         <DocControlsOverlay
           state={playbackState}
           actions={playbackActions}
@@ -762,7 +860,7 @@ export function DocPlayer({
       )}
 
       {/* Scrubber-only mode (for sidebar/bottom layouts where other controls are external) */}
-      {!renderMode && !showControls && showScrubber && (
+      {!renderMode && !isSlideshowMode && !showControls && showScrubber && (
         <div
           className="doc-player__scrubber"
           style={{
@@ -787,8 +885,16 @@ export function DocPlayer({
         </div>
       )}
 
-      {/* Tap feedback animation -- shows play/pause icon briefly on tap */}
-      {tapFeedback && (
+      {/* Slideshow controls (prev / counter / next) */}
+      {!renderMode && isSlideshowMode && (
+        <DocControlsSlideshow
+          state={playbackState}
+          slideNav={slideNavActions}
+        />
+      )}
+
+      {/* Tap feedback animation -- shows play/pause icon briefly on tap (video mode only) */}
+      {!isSlideshowMode && tapFeedback && (
         <div className="doc-player__tap-feedback" key={Date.now()}>
           <svg viewBox="0 0 24 24" fill="white" width="48" height="48">
             {tapFeedback === 'pause' ? (

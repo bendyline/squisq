@@ -16,7 +16,7 @@ import { createAccentLayers, getAccentLayout, adjustY, DEFAULT_LAYOUT } from './
 export function listBlock(input: ListBlockInput, context: TemplateContext): Layer[] {
   const { items, title, colorScheme = 'blue', accentImage } = input;
   const { theme } = context;
-  const colors = COLOR_SCHEMES[colorScheme];
+  const colors = COLOR_SCHEMES[colorScheme] ?? COLOR_SCHEMES.blue;
 
   // Get layout adjustments if accent image is present
   const accentLayout = accentImage ? getAccentLayout(accentImage.position) : DEFAULT_LAYOUT;

@@ -15,7 +15,7 @@ import { COLOR_SCHEMES, scaledFontSize } from '../../schemas/BlockTemplates.js';
 export function comparisonBar(input: ComparisonBarInput, context: TemplateContext): Layer[] {
   const { leftLabel, leftValue, rightLabel, rightValue, unit, colorScheme = 'blue' } = input;
   const { theme } = context;
-  const colors = COLOR_SCHEMES[colorScheme];
+  const colors = COLOR_SCHEMES[colorScheme] ?? COLOR_SCHEMES.blue;
 
   const labelFontSize = scaledFontSize(28, context, false);
   const valueFontSize = scaledFontSize(48, context, true);

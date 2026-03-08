@@ -109,6 +109,54 @@ export function countNodes(node: MarkdownNode): number {
 }
 
 /**
+ * Parse a YAML frontmatter string into a key-value record.
+ *
+ * Handles simple `key: value` pairs common in markdown frontmatter.
+ * Values are trimmed; quoted strings have their quotes removed.
+ * Returns `null` if parsing fails or the input is empty.
+ *
+ * @param yaml - The raw YAML string (without the `---` delimiters)
+ * @returns A record of string keys to parsed values, or null
+ */
+export function parseFrontmatter(yaml: string): Record<string, unknown> | null {
+  if (!yaml || !yaml.trim()) return null;
+
+  const result: Record<string, unknown> = {};
+
+  for (const line of yaml.split('\n')) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith('#')) continue;
+
+    const colonIdx = trimmed.indexOf(':');
+    if (colonIdx < 1) continue;
+
+    const key = trimmed.slice(0, colonIdx).trim();
+    let value: string | boolean | number = trimmed.slice(colonIdx + 1).trim();
+
+    // Remove surrounding quotes
+    if (
+      (value.startsWith('"') && value.endsWith('"')) ||
+      (value.startsWith("'") && value.endsWith("'"))
+    ) {
+      value = value.slice(1, -1);
+    }
+
+    // Parse booleans and numbers
+    if (value === 'true') {
+      result[key] = true;
+    } else if (value === 'false') {
+      result[key] = false;
+    } else if (value !== '' && !isNaN(Number(value))) {
+      result[key] = Number(value);
+    } else {
+      result[key] = value;
+    }
+  }
+
+  return Object.keys(result).length > 0 ? result : null;
+}
+
+/**
  * Create a minimal MarkdownDocument from a list of block nodes.
  * Convenience function for programmatic document construction.
  */

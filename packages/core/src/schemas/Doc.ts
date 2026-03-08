@@ -76,10 +76,22 @@ export interface Doc {
     generatedBy?: string;
     version?: number;
   };
+
+  /**
+   * YAML frontmatter from the source markdown.
+   * Carries rendering hints like `document-render-as` and custom metadata.
+   */
+  frontmatter?: Record<string, unknown>;
 }
 
 /**
  * A single block in the doc.
+ *
+ * Blocks can be flat (audio-synced timeline) or nested (markdown-driven hierarchy).
+ * When derived from markdown, a block corresponds to a heading section:
+ * - `sourceHeading` references the original MarkdownHeading node
+ * - `contents` holds the body markdown between this heading and the next
+ * - `children` holds sub-heading blocks (e.g., H2s under an H1)
  */
 export interface Block {
   /** Unique identifier for this block */
@@ -94,14 +106,54 @@ export interface Block {
   /** Which audio segment this block belongs to (0-indexed) */
   audioSegment: number;
 
-  /** Visual layers, rendered back-to-front */
-  layers: Layer[];
+  /**
+   * Pre-computed visual layers, rendered back-to-front.
+   *
+   * Optional — template-derived blocks typically omit this and compute
+   * layers on demand via `getLayers()` from `@bendyline/prodcore/doc`.
+   * Raw blocks (e.g., hand-crafted by AI) may provide layers directly.
+   */
+  layers?: Layer[];
 
   /** Entry transition from previous block */
   transition?: Transition;
 
   /** Template name that generated this block (for debugging) */
   template?: string;
+
+  // ── Markdown-driven hierarchy (optional) ──
+
+  /**
+   * Nested sub-blocks (heading hierarchy).
+   * When a doc is derived from markdown, sub-headings within this
+   * heading's section become child blocks. For example, H2 blocks
+   * under an H1 block appear here.
+   */
+  children?: Block[];
+
+  /**
+   * Markdown body content for this block's section.
+   * Contains the block-level markdown nodes (paragraphs, lists, code,
+   * blockquotes, etc.) that appear between this heading and the next
+   * heading or sub-heading. Empty for pure structural blocks.
+   */
+  contents?: import('../markdown/types.js').MarkdownBlockNode[];
+
+  /**
+   * Reference to the MarkdownHeading node that created this block.
+   * Present when the block was derived from markdown via markdownToDoc().
+   * Enables round-tripping back to markdown and provides heading depth.
+   * Absent for the preamble block (content before the first heading).
+   */
+  sourceHeading?: import('../markdown/types.js').MarkdownHeading;
+
+  /**
+   * Template overrides extracted from markdown directives.
+   * For example, `### Data Section {template=chart colorScheme=blue}`
+   * would produce `{ template: 'chart', colorScheme: 'blue' }`.
+   * Allows per-block customization of template selection and parameters.
+   */
+  templateOverrides?: Record<string, string>;
 }
 
 // ============================================

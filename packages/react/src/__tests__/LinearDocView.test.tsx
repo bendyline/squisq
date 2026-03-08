@@ -1,0 +1,176 @@
+import { describe, it, expect } from 'vitest';
+import { render } from '@testing-library/react';
+import { LinearDocView } from '../LinearDocView';
+import type { Doc, Block } from '@bendyline/prodcore/schemas';
+import type { MarkdownBlockNode, MarkdownInlineNode, MarkdownHeading } from '@bendyline/prodcore/markdown';
+
+// ── Helpers ────────────────────────────────────────────────────────
+
+function text(value: string): MarkdownInlineNode {
+  return { type: 'text', value };
+}
+
+function paragraph(...children: MarkdownInlineNode[]): MarkdownBlockNode {
+  return { type: 'paragraph', children };
+}
+
+function mkHeading(depth: 1 | 2 | 3, value: string): MarkdownHeading {
+  return { type: 'heading', depth, children: [text(value)] };
+}
+
+function mkBlock(overrides: Partial<Block> = {}): Block {
+  return {
+    id: 'block-1',
+    startTime: 0,
+    duration: 3,
+    audioSegment: 0,
+    ...overrides,
+  };
+}
+
+function mkDoc(blocks: Block[]): Doc {
+  return {
+    articleId: 'test-article',
+    duration: 10,
+    blocks,
+    audio: { segments: [] },
+  };
+}
+
+// ── Tests ──────────────────────────────────────────────────────────
+
+describe('LinearDocView', () => {
+  it('renders a scrollable container', () => {
+    const doc = mkDoc([
+      mkBlock({
+        id: 'preamble',
+        contents: [paragraph(text('Introduction text'))],
+      }),
+    ]);
+    const { container } = render(<LinearDocView doc={doc} />);
+    const el = container.querySelector('.prodcore-linear');
+    expect(el).toBeTruthy();
+    expect((el as HTMLElement).style.overflowY).toBe('auto');
+  });
+
+  it('renders preamble content (no heading)', () => {
+    const doc = mkDoc([
+      mkBlock({
+        id: 'preamble',
+        contents: [paragraph(text('Preamble body'))],
+      }),
+    ]);
+    const { container } = render(<LinearDocView doc={doc} />);
+    // Should render paragraph but no heading
+    expect(container.textContent).toContain('Preamble body');
+    const headings = container.querySelectorAll('h1, h2, h3');
+    expect(headings.length).toBe(0);
+  });
+
+  it('renders non-annotated block with heading + content', () => {
+    const doc = mkDoc([
+      mkBlock({
+        id: 'section-1',
+        sourceHeading: mkHeading(2, 'My Section'),
+        contents: [paragraph(text('Section body text'))],
+      }),
+    ]);
+    const { container } = render(<LinearDocView doc={doc} />);
+    expect(container.querySelector('h2')?.textContent).toBe('My Section');
+    expect(container.textContent).toContain('Section body text');
+  });
+
+  it('renders annotated block as SVG card', () => {
+    const doc = mkDoc([
+      mkBlock({
+        id: 'annotated-1',
+        template: 'sectionHeader',
+        sourceHeading: {
+          type: 'heading',
+          depth: 2,
+          children: [text('Visual Block')],
+          templateAnnotation: {
+            template: 'sectionHeader',
+          },
+        },
+        contents: [paragraph(text('Body'))],
+      }),
+    ]);
+    const { container } = render(<LinearDocView doc={doc} />);
+    // Should have a card wrapper
+    const card = container.querySelector('.prodcore-linear-card');
+    expect(card).toBeTruthy();
+    // Should contain an SVG (from BlockRenderer)
+    const svg = card?.querySelector('svg');
+    expect(svg).toBeTruthy();
+  });
+
+  it('renders children recursively', () => {
+    const doc = mkDoc([
+      mkBlock({
+        id: 'parent',
+        sourceHeading: mkHeading(1, 'Parent'),
+        contents: [paragraph(text('Parent body'))],
+        children: [
+          mkBlock({
+            id: 'child',
+            sourceHeading: mkHeading(2, 'Child'),
+            contents: [paragraph(text('Child body'))],
+          }),
+        ],
+      }),
+    ]);
+    const { container } = render(<LinearDocView doc={doc} />);
+    expect(container.querySelector('h1')?.textContent).toBe('Parent');
+    expect(container.querySelector('h2')?.textContent).toBe('Child');
+    expect(container.textContent).toContain('Parent body');
+    expect(container.textContent).toContain('Child body');
+  });
+
+  it('renders multiple top-level blocks', () => {
+    const doc = mkDoc([
+      mkBlock({
+        id: 'b1',
+        sourceHeading: mkHeading(1, 'First'),
+        contents: [],
+      }),
+      mkBlock({
+        id: 'b2',
+        sourceHeading: mkHeading(1, 'Second'),
+        contents: [],
+      }),
+    ]);
+    const { container } = render(<LinearDocView doc={doc} />);
+    const sections = container.querySelectorAll('.prodcore-linear-section');
+    expect(sections.length).toBe(2);
+  });
+
+  it('does not render SVG for non-annotated blocks', () => {
+    const doc = mkDoc([
+      mkBlock({
+        id: 'plain',
+        sourceHeading: mkHeading(2, 'Plain Section'),
+        contents: [paragraph(text('Just text'))],
+      }),
+    ]);
+    const { container } = render(<LinearDocView doc={doc} />);
+    expect(container.querySelector('.prodcore-linear-card')).toBeNull();
+    expect(container.querySelector('svg')).toBeNull();
+  });
+
+  it('applies custom className', () => {
+    const doc = mkDoc([mkBlock({ id: 'x', contents: [] })]);
+    const { container } = render(<LinearDocView doc={doc} className="my-class" />);
+    expect(container.querySelector('.prodcore-linear.my-class')).toBeTruthy();
+  });
+
+  it('sets data-block-id on each section', () => {
+    const doc = mkDoc([
+      mkBlock({ id: 'alpha', contents: [] }),
+      mkBlock({ id: 'beta', contents: [] }),
+    ]);
+    const { container } = render(<LinearDocView doc={doc} />);
+    expect(container.querySelector('[data-block-id="alpha"]')).toBeTruthy();
+    expect(container.querySelector('[data-block-id="beta"]')).toBeTruthy();
+  });
+});

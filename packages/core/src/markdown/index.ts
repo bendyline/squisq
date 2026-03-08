@@ -29,6 +29,9 @@ export type {
   MarkdownPoint,
   MarkdownSourcePosition,
 
+  // Heading template annotation
+  HeadingTemplateAnnotation,
+
   // HTML sub-DOM
   HtmlElement,
   HtmlText,
@@ -103,4 +106,5 @@ export {
   extractPlainText,
   countNodes,
   createDocument,
+  parseFrontmatter,
 } from './utils.js';

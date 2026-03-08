@@ -85,13 +85,12 @@ export function expandTemplateBlock(
 
   if (!templateFn) {
     console.warn(`Unknown template: ${templateBlock.template}`);
-    // Return empty block
+    // Return block with no layers
     return {
       id: templateBlock.id,
       startTime: 0,
       duration: templateBlock.duration,
       audioSegment: templateBlock.audioSegment,
-      layers: [],
       transition: templateBlock.transition,
       template: templateBlock.template, // Preserve for debugging
     };
@@ -115,7 +114,7 @@ export function expandTemplateBlock(
     startTime: 0, // Will be calculated later
     duration: templateBlock.duration,
     audioSegment: templateBlock.audioSegment,
-    layers,
+    ...(layers.length > 0 ? { layers } : {}),
     transition: templateBlock.transition,
     template: templateBlock.template, // Preserve for debugging
   };
@@ -195,7 +194,7 @@ export function expandDocBlocks(
       if (bottomLayers.length > 0 || topLayers.length > 0) {
         expandedBlock.layers = [
           ...(useBottom ? bottomLayers : []),
-          ...expandedBlock.layers,
+          ...(expandedBlock.layers ?? []),
           ...(useTop ? topLayers : []),
         ];
       }
@@ -236,7 +235,7 @@ export function expandDocBlocks(
         if (bottomLayers.length > 0 || topLayers.length > 0) {
           expandedBlock.layers = [
             ...(useBottom ? bottomLayers : []),
-            ...expandedBlock.layers,
+            ...(expandedBlock.layers ?? []),
             ...(useTop ? topLayers : []),
           ];
         }
@@ -301,7 +300,7 @@ export function expandDocBlocks(
       if (bottomLayers.length > 0 || topLayers.length > 0) {
         expandedBlock.layers = [
           ...(useBottom ? bottomLayers : []),
-          ...expandedBlock.layers,
+          ...(expandedBlock.layers ?? []),
           ...(useTop ? topLayers : []),
         ];
       }
@@ -314,26 +313,33 @@ export function expandDocBlocks(
       });
     }
 
-    // Sort blocks by source timing, keeping section headers first
-    // Section headers have no sourceStartTime but should stay at the beginning
+    // Sort blocks within this segment.
+    // When ANY block has source timing (from audio analysis), section headers
+    // are placed first since they are intro cards for the segment. When there
+    // is no source timing (e.g., preview/synthetic mode), keep original
+    // document order so the slideshow matches what the author wrote.
+    const hasAnySourceTiming = expandedInfos.some(info => info.hasSourceTiming);
+
     expandedInfos.sort((a, b) => {
-      const aIsHeader = a.templateBlock.template === 'sectionHeader';
-      const bIsHeader = b.templateBlock.template === 'sectionHeader';
+      if (hasAnySourceTiming) {
+        const aIsHeader = a.templateBlock.template === 'sectionHeader';
+        const bIsHeader = b.templateBlock.template === 'sectionHeader';
 
-      // Section headers always come first
-      if (aIsHeader && !bIsHeader) return -1;
-      if (!aIsHeader && bIsHeader) return 1;
+        // Section headers come first when we have audio-based timing
+        if (aIsHeader && !bIsHeader) return -1;
+        if (!aIsHeader && bIsHeader) return 1;
 
-      // Both have source timing - sort by time
-      if (a.hasSourceTiming && b.hasSourceTiming) {
-        return a.templateBlock.sourceStartTime! - b.templateBlock.sourceStartTime!;
+        // Both have source timing - sort by time
+        if (a.hasSourceTiming && b.hasSourceTiming) {
+          return a.templateBlock.sourceStartTime! - b.templateBlock.sourceStartTime!;
+        }
+
+        // One has timing, one doesn't - timing comes first
+        if (a.hasSourceTiming && !b.hasSourceTiming) return -1;
+        if (!a.hasSourceTiming && b.hasSourceTiming) return 1;
       }
 
-      // One has timing, one doesn't - timing comes first (it knows when to appear)
-      if (a.hasSourceTiming && !b.hasSourceTiming) return -1;
-      if (!a.hasSourceTiming && b.hasSourceTiming) return 1;
-
-      // Neither has timing - keep original order
+      // Keep original document order
       return a.originalIndex - b.originalIndex;
     });
 
@@ -475,7 +481,7 @@ export function expandDocBlocks(
               startTime: block.startTime + (p * partDuration),
               duration: partDuration,
               audioSegment: block.audioSegment,
-              layers: block.layers.map(layer => ({
+              layers: (block.layers ?? []).map(layer => ({
                 ...layer,
                 id: `${layer.id}-split-${p}`,
               })),

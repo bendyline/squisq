@@ -10,8 +10,10 @@ import remarkParse from 'remark-parse';
 import remarkGfm from 'remark-gfm';
 import remarkMath from 'remark-math';
 import remarkDirective from 'remark-directive';
+import remarkFrontmatter from 'remark-frontmatter';
 import type { MarkdownDocument, ParseOptions } from './types.js';
 import { fromMdast } from './convert.js';
+import { parseFrontmatter } from './utils.js';
 
 /**
  * Parse a markdown string into a MarkdownDocument.
@@ -45,10 +47,26 @@ export function parseMarkdown(markdown: string, options?: ParseOptions): Markdow
   if (options?.directive !== false) {
     processor = processor.use(remarkDirective);
   }
+  if (options?.frontmatter !== false) {
+    processor = processor.use(remarkFrontmatter, ['yaml']);
+  }
 
   // Parse markdown → mdast tree
   const mdastTree = processor.parse(markdown);
 
   // Convert mdast → MarkdownDocument
-  return fromMdast(mdastTree, { parseHtml: options?.parseHtml });
+  const doc = fromMdast(mdastTree, { parseHtml: options?.parseHtml });
+
+  // Extract YAML frontmatter if present
+  if (options?.frontmatter !== false) {
+    const yamlNode = mdastTree.children?.find((n: any) => n.type === 'yaml');
+    if (yamlNode?.value) {
+      const fm = parseFrontmatter(yamlNode.value);
+      if (fm && Object.keys(fm).length > 0) {
+        doc.frontmatter = fm;
+      }
+    }
+  }
+
+  return doc;
 }

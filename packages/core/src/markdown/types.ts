@@ -90,6 +90,12 @@ export interface MarkdownDocument {
   children: MarkdownBlockNode[];
   /** Source position (present when parsed from markdown) */
   position?: MarkdownSourcePosition;
+  /**
+   * YAML frontmatter key-value pairs extracted from the `---` block
+   * at the top of the document. Present only when the source contains
+   * frontmatter and `frontmatter` parsing is enabled (default: true).
+   */
+  frontmatter?: Record<string, unknown>;
 }
 
 // ============================================
@@ -103,6 +109,22 @@ interface MarkdownNodeBase {
 }
 
 /**
+ * Template annotation extracted from a heading's trailing `{[templateName key=value …]}` syntax.
+ *
+ * @example
+ * ```markdown
+ * ### Report Data {[chart colorScheme=blue]}
+ * ```
+ * → `{ template: 'chart', params: { colorScheme: 'blue' } }`
+ */
+export interface HeadingTemplateAnnotation {
+  /** Template name (first token inside `{[…]}`) */
+  template: string;
+  /** Optional key-value parameters (remaining `key=value` tokens) */
+  params?: Record<string, string>;
+}
+
+/**
  * ATX or setext heading (# Heading).
  */
 export interface MarkdownHeading extends MarkdownNodeBase {
@@ -111,6 +133,13 @@ export interface MarkdownHeading extends MarkdownNodeBase {
   depth: 1 | 2 | 3 | 4 | 5 | 6;
   /** Inline content */
   children: MarkdownInlineNode[];
+  /**
+   * Template annotation parsed from trailing `{[templateName …]}` syntax.
+   * Present only when the heading text ends with `{[…]}`. The annotation
+   * is stripped from `children` during parsing and re-injected during
+   * stringification, so it round-trips transparently.
+   */
+  templateAnnotation?: HeadingTemplateAnnotation;
 }
 
 /**
@@ -545,6 +574,8 @@ export interface ParseOptions {
   directive?: boolean;
   /** Parse raw HTML into HtmlNode sub-DOM trees. Default: true */
   parseHtml?: boolean;
+  /** Enable YAML frontmatter parsing (--- blocks at top of document). Default: true */
+  frontmatter?: boolean;
 }
 
 /**

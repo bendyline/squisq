@@ -15,7 +15,7 @@ import { COLOR_SCHEMES, scaledFontSize } from '../../schemas/BlockTemplates.js';
 export function fullBleedQuote(input: FullBleedQuoteInput, context: TemplateContext): Layer[] {
   const { text, colorScheme = 'blue' } = input;
   const { theme } = context;
-  const colors = COLOR_SCHEMES[colorScheme];
+  const colors = COLOR_SCHEMES[colorScheme] ?? COLOR_SCHEMES.blue;
 
   // Massive font for dramatic impact
   const textFontSize = scaledFontSize(120, context, true);

@@ -5,8 +5,11 @@ export { CaptionOverlay } from './CaptionOverlay.js';
 export { DocControlsOverlay } from './DocControlsOverlay.js';
 export { DocControlsBottom } from './DocControlsBottom.js';
 export { DocControlsSidebar } from './DocControlsSidebar.js';
+export { DocControlsSlideshow } from './DocControlsSlideshow.js';
 export { DocPlayerWithSidebar } from './DocPlayerWithSidebar.js';
 export { DocProgressBar } from './DocProgressBar.js';
+export { MarkdownRenderer } from './MarkdownRenderer.js';
+export { LinearDocView } from './LinearDocView.js';
 
 // Layer components
 export { ImageLayer } from './layers/ImageLayer.js';
@@ -22,7 +25,7 @@ export { useViewportOrientation } from './hooks/useViewportOrientation.js';
 
 // Types
 export type { AudioProvider, AudioState, AudioActions } from './hooks/AudioProvider.js';
-export type { PlaybackState, PlaybackActions, BlockMarker, ControlsLayout } from './types.js';
+export type { PlaybackState, PlaybackActions, BlockMarker, ControlsLayout, DisplayMode, SlideNavActions } from './types.js';
 export { formatTime } from './types.js';
 
 // Utilities

@@ -18,6 +18,30 @@ import type { Block } from '@bendyline/prodcore/schemas';
 /** Layout mode for doc player controls */
 export type ControlsLayout = 'overlay' | 'sidebar' | 'bottom';
 
+/**
+ * Display mode for DocPlayer.
+ *
+ * - `'video'` — Traditional video-style playback with play/pause, scrub bar,
+ *   and time-based auto-advance. Default mode.
+ * - `'slideshow'` — PowerPoint-style presentation with prev/next navigation.
+ *   Blocks are treated as static slides that only change on user click.
+ *   No auto-advance, no scrub bar.
+ * - `'linear'` — Long-scrolling document view. Renders the full markdown as
+ *   readable HTML with template-annotated sections shown as inline SVG cards.
+ *   No audio, no timeline, no controls — just a scrollable page.
+ */
+export type DisplayMode = 'video' | 'slideshow' | 'linear';
+
+/** Slide navigation actions for slideshow display mode */
+export interface SlideNavActions {
+  /** Navigate to the next slide */
+  nextSlide: () => void;
+  /** Navigate to the previous slide */
+  prevSlide: () => void;
+  /** Navigate to a specific slide by index (0-based) */
+  goToSlide: (index: number) => void;
+}
+
 /** Playback state exposed to external control components */
 export interface PlaybackState {
   isPlaying: boolean;
