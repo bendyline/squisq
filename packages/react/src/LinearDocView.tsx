@@ -18,13 +18,13 @@
  */
 
 import { useMemo } from 'react';
-import type { Doc, Block } from '@bendyline/squisq/schemas';
+import type { Doc, Block, DocBlock } from '@bendyline/squisq/schemas';
 import type { ViewportConfig } from '@bendyline/squisq/schemas';
 import { VIEWPORT_PRESETS } from '@bendyline/squisq/schemas';
 import { getLayers, hasTemplate, DEFAULT_THEME } from '@bendyline/squisq/doc';
 import type { RenderContext } from '@bendyline/squisq/doc';
 import { extractPlainText } from '@bendyline/squisq/markdown';
-import type { MarkdownBlockNode } from '@bendyline/squisq/markdown';
+import type { MarkdownBlockNode, MarkdownList } from '@bendyline/squisq/markdown';
 import { BlockRenderer } from './BlockRenderer';
 import { MarkdownRenderer } from './MarkdownRenderer';
 
@@ -110,7 +110,7 @@ function BlockSection({ block, basePath, viewport, renderContext, blockIndex }: 
       ...renderContext,
       blockIndex,
     };
-    const layers = getLayers(templateBlock as any, ctx);
+    const layers = getLayers(templateBlock as unknown as DocBlock, ctx);
 
     return {
       ...block,
@@ -198,8 +198,8 @@ function extractListItems(contents?: MarkdownBlockNode[]): string[] {
   if (!contents) return [];
   const items: string[] = [];
   for (const node of contents) {
-    if (node.type === 'list' && 'children' in node) {
-      for (const item of (node as any).children || []) {
+    if (node.type === 'list') {
+      for (const item of (node as MarkdownList).children) {
         const text = extractPlainText(item).trim();
         if (text) items.push(text);
       }

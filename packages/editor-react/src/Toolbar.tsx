@@ -8,6 +8,7 @@
  */
 
 import { useCallback } from 'react';
+import type { Editor as TiptapEditor } from '@tiptap/core';
 import { useEditorContext } from './EditorContext';
 import { getAvailableTemplates } from '@bendyline/squisq/doc';
 
@@ -71,7 +72,7 @@ const BUTTONS: ToolbarButton[] = [
 // ─── Tiptap active-state map ────────────────────────────
 
 /** Returns true if the given button id is currently active in Tiptap */
-function isTiptapActive(editor: any, id: string): boolean {
+function isTiptapActive(editor: TiptapEditor, id: string): boolean {
   if (!editor) return false;
   switch (id) {
     case 'bold':
@@ -155,7 +156,7 @@ export function Toolbar({ className }: ToolbarProps) {
         case 'link': {
           const url = window.prompt('URL:');
           if (url) {
-            chain.setLink?.({ href: url }).run();
+            (chain as unknown as Record<string, (opts: { href: string }) => typeof chain>).setLink?.({ href: url }).run();
           }
           break;
         }

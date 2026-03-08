@@ -3,14 +3,14 @@
 ## Project Overview
 
 Squisq is an open-source monorepo providing reusable libraries for doc/block
-rendering and spatial utilities. It was extracted from the Qualla project and is
-designed to be framework-agnostic at the core, with a React component layer on top.
+rendering and spatial utilities. It is designed to be framework-agnostic at the core, with a React component layer on top. It is also designed to be pure JavaScript that can run in a browser or in NodeJS (**it should have no NodeJS-specific dependencies**)
 
 **npm packages:**
 
-- `@bendyline/squisq` — Headless utilities (schemas, templates, spatial math, storage)
+- `@bendyline/squisq` — Headless utilities (schemas, templates, spatial math, markdown, storage)
 - `@bendyline/squisq-react` — React component library (doc player, block renderer, controls)
-- `@bendyline/squisq-formats` — Document format converters (DOCX import/export, OOXML infrastructure)
+- `@bendyline/squisq-formats` — Document format converters (DOCX, PDF, OOXML infrastructure)
+- `@bendyline/squisq-editor-react` — React editor shell (Monaco raw, Tiptap WYSIWYG, block preview)
 
 ## Repository Structure
 
@@ -43,8 +43,23 @@ squisq/
       src/
         ooxml/              # Shared OOXML infrastructure (reader, writer, XML utils)
         docx/               # DOCX import + export (WordprocessingML)
+        pdf/                # PDF import + export (pdf-lib, pdfjs-dist)
         pptx/               # PPTX stubs (PresentationML, not yet implemented)
         xlsx/               # XLSX stubs (SpreadsheetML, not yet implemented)
+    editor-react/           # @bendyline/squisq-editor-react
+      src/
+        EditorShell.tsx     # Top-level editor component
+        EditorContext.tsx    # State management (markdown, parsed doc, editor refs)
+        RawEditor.tsx       # Monaco code editor
+        WysiwygEditor.tsx   # Tiptap rich text editor
+        PreviewPanel.tsx    # Rendered block preview via DocPlayer
+        Toolbar.tsx         # Formatting toolbar (bold, italic, headings, lists, etc.)
+        tiptapBridge.ts     # Bidirectional markdown ↔ Tiptap conversion
+        TemplateAnnotation.ts # Tiptap extension for heading template annotations
+    site/                   # squisq-site (dev/demo, not published)
+      src/
+        App.tsx             # Sample picker + view switching
+        samples.ts          # Sample documents for testing
 ```
 
 ## Build System
@@ -54,29 +69,19 @@ squisq/
 - **Output:** `packages/*/dist/`
 
 ```bash
-npm run build              # Build all packages
-npm run build -w @bendyline/squisq        # Build core only
-npm run build -w @bendyline/squisq-react  # Build react only
-npm run build -w @bendyline/squisq-formats # Build formats only
+npm run build              # Build all packages (core → formats → react → editor)
+npm run build:core         # Build core only
+npm run build:react        # Build react only
+npm run build:formats      # Build formats only
+npm run build:editor       # Build editor-react only
+npm test                   # Run vitest unit tests
+npm run test:e2e           # Run Playwright E2E tests
+npm run typecheck          # Type-check all packages (no emit)
+npm run site               # Build all + start dev site
+npm run dev                # Start dev site only (Vite, port 5199)
+npm run lint               # ESLint
+npm run format             # Prettier format
 ```
-
-## Relationship to Qualla
-
-Qualla (`c:\gh\qualla-internal`) consumes squisq via checked-in tarballs:
-
-- `qualla-internal/lib/bendyline-squisq-*.tgz`
-- Referenced as `"file:lib/bendyline-squisq-*.tgz"` in qualla's package.json
-
-### After making changes to squisq:
-
-1. Build: `cd c:\gh\squisq && npm run build`
-2. Pack: run `npm run pack-squisq` from qualla-internal (rebuilds tarballs)
-3. Install: `cd c:\gh\qualla-internal && npm install`
-
-The code in squisq was extracted from qualla's `shared/doc/templates/`,
-`schemas/`, `shared/spatial/`, and `site/src/components/doc/`. Qualla currently
-has both its own copies and the squisq copies — the re-export shims to make
-Qualla import exclusively from squisq are a future step.
 
 ## Subpath Exports
 
@@ -86,6 +91,8 @@ Qualla import exclusively from squisq are a future step.
 - `@bendyline/squisq/doc` — Template registry + all 17 templates + animationUtils
 - `@bendyline/squisq/spatial` — Haversine, Geohash utilities
 - `@bendyline/squisq/storage` — StorageAdapter, MemoryStorageAdapter, LocalStorageAdapter
+- `@bendyline/squisq/markdown` — Markdown parsing, stringifying, AST types (MarkdownDocument), tree utilities
+- `@bendyline/squisq/story` — Alias for `@bendyline/squisq/doc` (legacy compatibility)
 
 `@bendyline/squisq-react` exports everything from the root:
 
@@ -98,22 +105,46 @@ Qualla import exclusively from squisq are a future step.
 
 - `@bendyline/squisq-formats/docx` — DOCX import/export (markdownDocToDocx, docxToMarkdownDoc, docToDocx, docxToDoc)
 - `@bendyline/squisq-formats/ooxml` — Shared OOXML package reader/writer, XML utilities, namespace constants
+- `@bendyline/squisq-formats/pdf` — PDF import/export (markdownDocToPdf, pdfToMarkdownDoc, configurePdfWorker)
 - `@bendyline/squisq-formats/pptx` — PPTX stubs (not yet implemented)
 - `@bendyline/squisq-formats/xlsx` — XLSX stubs (not yet implemented)
+
+`@bendyline/squisq-editor-react` exports everything from the root:
+
+- Components: EditorShell, RawEditor, WysiwygEditor, PreviewPanel, Toolbar, StatusBar, ViewSwitcher
+- Context: EditorProvider, useEditor
+- Styles: `@bendyline/squisq-editor-react/styles` for CSS
 
 ## Code Style
 
 - TypeScript strict mode
 - ESM only (no CJS)
-- React package uses `react` imports (consumed via preact/compat in Qualla)
+- React packages use `react` imports (consumed via preact/compat in Qualla)
 - Core package has zero framework dependencies
-- Formats package depends on jszip (ZIP archives) and core's MarkdownDocument as pivot format
+- Formats package depends on jszip (ZIP archives), pdf-lib, pdfjs-dist, and core's MarkdownDocument as pivot format
+- Editor-react depends on @tiptap and monaco-editor as peer dependencies
 - All block templates are pure functions: `(input, context) => Layer[]`
+- Use `catch (err: unknown)` with `instanceof Error` narrowing, never `catch (err: any)`
+- Use `isTemplateBlock()` type guard instead of `(block as any).template` patterns
+- Discriminated union: `DocBlock = Block | TemplateBlock` — use the guard to narrow
+- **No `console.log` in production code** — remove all debug logging before committing. Use `console.warn` for degraded-but-functional scenarios, `console.error` for failures that affect output.
+- **Test files should maintain type safety** — use typed test helpers instead of `as any` casts. Provide all required fields in test data.
 
 ## Key Design Decisions
 
 - **Templates are pure functions** — no side effects, no state, just data in → layers out
-- **SVG-based rendering** — blocks render as SVG for resolution independence
+- **SVG-based rendering** — blocks render as SVG foreignObject for resolution independence
 - **React, not Preact** — the react package targets standard React; Qualla aliases via preact/compat
-- **Subpath exports** — consumers import only what they need
-- **No Qualla-specific code** — everything here must be generic and reusable
+- **Subpath exports** — consumers import only what they need via granular entry points
+- **No app-specific code** — everything here must be generic and reusable
+- **MarkdownDocument as pivot format** — format converters (DOCX, PDF) use core's markdown AST as the intermediate representation
+- **Unified/remark processor typing** — the chained `.use()` pattern requires `any` for the processor variable; this is documented with eslint-disable comments and is the one accepted `any` exception
+- **Editor isolation** — heavy editor dependencies (Monaco, Tiptap) are isolated in editor-react, separate from the lighter react package
+
+## Type Safety Conventions
+
+- **Zero `any` in published production code** (except the unified processor exception above)
+- **`isTemplateBlock()` guard** — always use this to narrow `DocBlock` to `TemplateBlock`, never cast with `as any`
+- **`SquisqWindow` type** — use `window as SquisqWindow` for render-mode API access, never `window as any`
+- **`catch (err: unknown)`** — always narrow with `instanceof Error`, never use `catch (err: any)`
+- **`as unknown as X`** — when a cast is truly necessary (e.g., runtime data shapes), use double-cast through `unknown`, not `as any`

@@ -33,6 +33,12 @@ export type {
   ControlsLayout,
   DisplayMode,
   SlideNavActions,
+  SquisqRenderAPI,
+  SquisqWindow,
+  RenderBlockInfo,
+  RenderAudioSegmentInfo,
+  RenderCaptionInfo,
+  RenderChapterInfo,
 } from './types.js';
 export { formatTime } from './types.js';
 

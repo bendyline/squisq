@@ -13,7 +13,7 @@
  */
 
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
-import type { Doc, Block } from '@bendyline/squisq/schemas';
+import type { Doc, Block, DocBlock } from '@bendyline/squisq/schemas';
 import { getBlockAtTime } from '@bendyline/squisq/schemas';
 import {
   expandDocBlocks,
@@ -71,16 +71,11 @@ export function useDocPlayback(
   // Expand any template blocks into full blocks
   const blocks = useMemo(() => {
     if (!script?.blocks) {
-      console.log('[useDocPlayback] No blocks in script');
       return [];
     }
 
-    console.log('[useDocPlayback] Processing blocks:', script.blocks.length);
-    console.log('[useDocPlayback] First block:', script.blocks[0]);
-
     // Check if any blocks are templates
     const hasTemplates = script.blocks.some(isTemplateBlock);
-    console.log('[useDocPlayback] Has templates:', hasTemplates);
 
     if (hasTemplates) {
       // Extract audio segment timing for proper block synchronization
@@ -88,16 +83,13 @@ export function useDocPlayback(
         startTime: seg.startTime,
         duration: seg.duration,
       }));
-      console.log('[useDocPlayback] Audio segments for timing:', audioSegments);
-      console.log('[useDocPlayback] Using viewport:', viewport.name);
 
       // Expand template blocks with audio segment timing, viewport, and persistent layers
-      const expanded = expandDocBlocks(script.blocks as any, {
+      const expanded = expandDocBlocks(script.blocks as DocBlock[], {
         audioSegments,
         viewport,
         persistentLayers: script.persistentLayers,
       });
-      console.log('[useDocPlayback] Expanded blocks:', expanded.length, expanded);
       return expanded;
     }
 

@@ -34,7 +34,9 @@ import { parseFrontmatter } from './utils.js';
  * ```
  */
 export function parseMarkdown(markdown: string, options?: ParseOptions): MarkdownDocument {
-  // Build the processor with requested extensions
+  // Build the processor with requested extensions.
+  // unified's .use() chaining changes the generic signature each time,
+  // making strict typing impractical — use a widened Processor type.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let processor: any = unified().use(remarkParse);
 
@@ -51,15 +53,15 @@ export function parseMarkdown(markdown: string, options?: ParseOptions): Markdow
     processor = processor.use(remarkFrontmatter, ['yaml']);
   }
 
-  // Parse markdown → mdast tree
-  const mdastTree = processor.parse(markdown);
+  // Parse markdown → mdast tree (result is an mdast Root node)
+  const mdastTree = processor.parse(markdown) as { type: string; children?: Array<{ type: string; value?: string }> };
 
   // Convert mdast → MarkdownDocument
-  const doc = fromMdast(mdastTree, { parseHtml: options?.parseHtml });
+  const doc = fromMdast(mdastTree as Parameters<typeof fromMdast>[0], { parseHtml: options?.parseHtml });
 
   // Extract YAML frontmatter if present
   if (options?.frontmatter !== false) {
-    const yamlNode = mdastTree.children?.find((n: any) => n.type === 'yaml');
+    const yamlNode = mdastTree.children?.find((n) => n.type === 'yaml');
     if (yamlNode?.value) {
       const fm = parseFrontmatter(yamlNode.value);
       if (fm && Object.keys(fm).length > 0) {

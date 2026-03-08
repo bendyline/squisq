@@ -35,7 +35,8 @@ export function imageWithCaption(input: ImageWithCaptionInput, context: Template
 
   // Determine animation based on ambientMotion setting
   // Support both new 'ambientMotion' and legacy 'kenBurns' property
-  const motion = ambientMotion || (input as any).kenBurns;
+  const legacyKenBurns = (input as unknown as Record<string, unknown>).kenBurns as string | undefined;
+  const motion: string | undefined = ambientMotion || legacyKenBurns;
   let imageAnimation: Animation | undefined;
   if (motion) {
     switch (motion) {

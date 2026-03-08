@@ -40,7 +40,9 @@ export function stringifyMarkdown(doc: MarkdownDocument, options?: StringifyOpti
   // Convert MarkdownDocument → mdast tree
   const mdastTree = toMdast(doc);
 
-  // Build the processor with serialization options
+  // Build the processor with serialization options.
+  // unified's .use() chaining changes the generic signature each time,
+  // making strict typing impractical — use a widened Processor type.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let processor: any = unified();
 

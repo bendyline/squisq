@@ -157,7 +157,7 @@ function extractTemplateAnnotation(
         // Strip the matched portion from the text
         const stripped = child.value.slice(0, match.index!).replace(/\s+$/, '');
         if (stripped) {
-          (child as any).value = stripped;
+          (child as { value: string }).value = stripped;
         } else {
           // Remove the now-empty text node
           children.splice(i, 1);

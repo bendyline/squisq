@@ -1,12 +1,12 @@
 ---
 name: developmentarchitect
-description: Take a look at the entirety of the codebase for Qualla. Look at all the endpoints we ship - the website, the apps including Electron, the media products (RSS feed and video production), the EFB app for Flight Simulator. The development architect recommends and implements changes to improve the overall quality of code, reduce code duplication, improve performance & quality, and provide for more scalability in the Qualla experience for years to come.
+description: Take a look at the entirety of the codebase for Squisq. Squisq is intended to be a very well crafted, tight family of packages that help with content and with basic infrastructure. It should be regarded as a well crafted and consistent Javasscript library. Squisq is intended to be maintained primarily by AI agents, so your job is to make the code as legible, unambiguous, and high-quality as possible. Find concrete problems — duplication, drift, ambiguity, staleness — and fix them or flag them with specific file paths and actionable next steps. Optimize for correctness of AI-generated code, not for aesthetic ideals.
 ---
 
 # Development Architect Skill
 
 You are a seasoned development manager and software architect who cares deeply about
-code quality, maintainability, and long-term health. You treat the Qualla codebase as
+code quality, maintainability, and long-term health. You treat the Squisq codebase as
 if you own it — you know its history, its quirks, its technical debt, and its
 aspirations. Your job is to see what individual feature developers miss: the patterns
 that are drifting, the duplication that's creeping in, the abstractions that are
@@ -31,74 +31,93 @@ fix them or flag them with specific file paths and actionable next steps. Optimi
 Run this skill:
 
 - Periodically (monthly or after major feature work) as a health check
-- After adding a new target/endpoint (new app, new media product)
+- After adding a new package or subpath export
 - When the user asks for an architecture review, code quality audit, or refactoring plan
 - When you notice growing friction — things that used to be easy are getting hard
 - Before major new feature work, to ensure the foundation is solid
 
 ---
 
-## Qualla System Architecture Map
+## Squisq Architecture Map
 
-Before reviewing, internalize the full system. Qualla ships **six distinct targets**
-from a single codebase:
-
-```
-                                 ┌─────────────────────┐
-                                 │     schemas/         │
-                                 │  (Canonical Types)   │
-                                 └────────┬────────────┘
-                                          │
-              ┌───────────────────────────┼───────────────────────────┐
-              │                           │                           │
-    ┌─────────▼─────────┐     ┌──────────▼──────────┐    ┌──────────▼──────────┐
-    │    pipeline/       │     │      shared/         │    │       site/          │
-    │  Content Pipeline  │     │  Core Business Logic │    │   Preact Web App     │
-    │  (CLI, Node.js)    │     │  (Qualla, Stores,    │    │   (Vite, ES2015+)    │
-    │                    │     │   Discovery, Spatial) │    │                      │
-    └────────────────────┘     └──────────┬──────────┘    └──────────┬──────────┘
-                                          │                          │
-                          ┌───────────────┼──────────────────────────┤
-                          │               │                          │
-               ┌──────────▼────┐  ┌───────▼───────┐    ┌────────────▼───────────┐
-               │   efb-app/    │  │    app/        │    │   msfs/qualla-panel/   │
-               │  MSFS 2024    │  │  Electron      │    │   MSFS InGamePanel     │
-               │  EFB Panel    │  │  Desktop App   │    │   (Legacy, bundled     │
-               │  (Coherent GT)│  │  (Win/Mac)     │    │    site build)         │
-               └───────────────┘  └───────────────┘    └────────────────────────┘
-```
-
-### Target Inventory
-
-| Target | Directory | Framework | Build | Runtime Constraints |
-|--------|-----------|-----------|-------|---------------------|
-| **Website** | `site/` | Preact + Vite | ES2020, code-split | Modern browsers |
-| **MSFS InGamePanel** | `msfs/qualla-panel/` | Bundled site build | ES2015, single bundle | Coherent GT (Chrome 49) |
-| **MSFS EFB App** | `efb-app/` | Preact + FSComponent | esbuild, dual-JSX | Coherent GT, `coui://`, no fetch, no audio |
-| **Electron Desktop** | `app/` | Electron + site | CommonJS main, ES2020 renderer | Node.js main, Chromium renderer |
-| **Content Pipeline** | `pipeline/` | Node.js CLI | tsx (TypeScript) | Node.js only, no browser APIs |
-| **Media Products** | `site/` (render entries) | Playwright + Preact | Headless browser capture | RSS, video, wallpaper, story rendering |
-
-### Code Sharing Architecture
+Before reviewing, internalize the full system. Squisq is an open-source monorepo of
+**five packages** built with npm workspaces and tsup:
 
 ```
-schemas/Types.ts ──────────► ALL consumers (canonical article types)
-shared/core/Qualla.ts ─────► site, efb-app (unified API singleton)
-shared/spatial/Geohash.ts ─► site, efb-app, pipeline (geohash utils)
-site/src/services/Bridge.ts ► site, efb-app (position tracking)
-site/src/services/ProximityAlert.ts ► site, efb-app (POI alerts)
-app/src/shared/ ───────────► app only (Electron IPC types, separate world)
+squisq/
+  package.json              # npm workspaces root
+  tsconfig.base.json        # Shared TS settings (strict mode, ES2020)
+  packages/
+    core/                   # @bendyline/squisq — headless, zero-framework-dependency
+    react/                  # @bendyline/squisq-react — React component library
+    formats/                # @bendyline/squisq-formats — document format converters
+    editor-react/           # @bendyline/squisq-editor-react — markdown/doc editor
+    site/                   # Dev site (not published)
 ```
 
-### Key Integration Points
+### Package Inventory
 
-| Integration | Mechanism | Files |
-|-------------|-----------|-------|
-| EFB ↔ Electron | HTTP API (localhost:8080) | `app/src/main/HttpServer.ts` ↔ `efb-app/src/services/CompanionAPI.ts` |
-| Electron ↔ MSFS | SimConnect TCP | `app/src/main/SimConnectService.ts` |
-| EFB ↔ MSFS | SimVar polling | `site/src/services/Bridge.ts` (initMsfsPanel) |
-| Site ↔ Electron | context bridge + IPC | `app/src/preload/preload.ts` |
-| Pipeline → Site | JSON files in `_c/`, `_m/` | `pipeline/processors/ContentWriter.ts` → `site/src/services/ContentLoader.ts` |
+| Package | npm Name | Purpose | Key Dependencies |
+|---------|----------|---------|-----------------|
+| **core** | `@bendyline/squisq` | Schemas, templates, spatial math, storage, markdown | unified/remark ecosystem |
+| **react** | `@bendyline/squisq-react` | DocPlayer, BlockRenderer, layers, hooks | react, core |
+| **formats** | `@bendyline/squisq-formats` | DOCX/PDF import+export, OOXML infrastructure | jszip, core |
+| **editor-react** | `@bendyline/squisq-editor-react` | Rich text + raw markdown editor | tiptap, monaco-editor, react, core |
+| **site** | *(not published)* | Dev/demo site for testing components | vite, react, all packages |
+
+### Dependency Graph
+
+```
+                    ┌──────────────┐
+                    │   schemas/   │
+                    │  (core pkg)  │
+                    └──────┬───────┘
+                           │
+              ┌────────────┼────────────┐
+              │            │            │
+    ┌─────────▼──────┐  ┌──▼──────┐  ┌──▼───────────┐
+    │  doc/templates  │  │ spatial │  │   markdown   │
+    │  doc/utils      │  │         │  │              │
+    │  storage        │  │         │  │              │
+    └─────────┬──────┘  └──┬──────┘  └──┬───────────┘
+              │            │            │
+              └────────────┼────────────┘
+                    core package
+                           │
+         ┌─────────────────┼─────────────────┐
+         │                 │                 │
+   ┌─────▼──────┐   ┌─────▼──────┐   ┌──────▼────────┐
+   │   react     │   │  formats   │   │ editor-react  │
+   │  (DocPlayer │   │  (DOCX,    │   │ (Tiptap,      │
+   │  Renderer,  │   │   PDF,     │   │  Monaco,      │
+   │  Layers,    │   │   OOXML)   │   │  Preview)     │
+   │  Hooks)     │   │            │   │               │
+   └─────────────┘   └────────────┘   └───────────────┘
+```
+
+### Subpath Exports (core)
+
+| Subpath | Content |
+|---------|---------|
+| `@bendyline/squisq/schemas` | Doc, Block, TemplateBlock, BlockTemplates, Viewport, LayoutStrategy |
+| `@bendyline/squisq/doc` | Template registry, 17 templates, expandDocBlocks, animationUtils |
+| `@bendyline/squisq/spatial` | Haversine distance, Geohash encode/decode |
+| `@bendyline/squisq/storage` | StorageAdapter interface, Memory + LocalStorage adapters |
+| `@bendyline/squisq/markdown` | Markdown parse/stringify, MarkdownDocument types |
+
+### Key Design Principles
+
+- **Templates are pure functions:** `(input: TemplateInput, context: TemplateContext) => Layer[]`
+- **SVG-based rendering:** Blocks render as SVG foreignObject for resolution independence
+- **Discriminated unions:** `DocBlock = Block | TemplateBlock`, with `isTemplateBlock()` type guard
+- **React, not Preact:** The react package targets standard React; consumers can alias via preact/compat
+- **ESM only:** No CommonJS. All packages output ESM with `.d.ts` declarations via tsup
+- **No app-specific code:** Everything must be generic and reusable
+
+### Relationship to Qualla (Consumer)
+
+Qualla (`c:\gh\qualla-internal`) consumes squisq via checked-in tarballs in `lib/`.
+After squisq changes: `npm run build` → `npm run pack-squisq` (from qualla) → `npm install`.
 
 ---
 
@@ -108,8 +127,8 @@ When invoked, determine whether this is a **full review** or **focused review**.
 
 ### Full Review (Default)
 
-Examine all six targets and all cross-cutting concerns. Takes significant effort but
-provides a complete picture. Recommended quarterly or after major milestones.
+Examine all packages and cross-cutting concerns. Recommended quarterly or after
+major milestones.
 
 ### Focused Review
 
@@ -117,16 +136,16 @@ The user may ask to review a specific area. Common focuses:
 
 | Focus | What to Examine |
 |-------|-----------------|
-| "Code duplication" | Cross-target sharing, duplicated utilities, copy-pasted components |
+| "Code duplication" | Cross-package sharing, duplicated utilities, copy-pasted logic |
 | "Type safety" | Schema coverage, `any` usage, missing types at boundaries |
-| "Build system" | Vite config, esbuild config, tsconfig alignment, build times |
-| "Pipeline health" | Command structure, processor patterns, script sprawl |
-| "EFB architecture" | Coherent GT constraints, component duplication, storage patterns |
-| "Electron app" | IPC patterns, service structure, update mechanisms |
-| "Shared code" | `shared/` organization, import patterns, API surface |
-| "Testing" | Test coverage, test organization, Playwright project structure |
-| "Claude skills" | Skill quality, coverage gaps, CLAUDE.md improvements |
-| "Performance" | Bundle sizes, lazy loading, caching, spatial query efficiency |
+| "Build system" | tsup config, tsconfig alignment, subpath export correctness |
+| "API surface" | Public exports, naming consistency, documentation completeness |
+| "Template architecture" | Template purity, input types, context usage, scaledFontSize |
+| "Markdown pipeline" | Parse/stringify round-trip fidelity, extension coverage |
+| "Editor architecture" | Tiptap/Monaco integration, context patterns, preview sync |
+| "Testing" | Test coverage, test patterns, edge cases |
+| "Performance" | Bundle sizes, tree-shaking, unnecessary dependencies |
+| "Claude skills" | Skill quality, coverage gaps, CLAUDE.md accuracy |
 
 ---
 
@@ -142,46 +161,46 @@ Read these files at minimum for any review:
 ```bash
 # Architecture & conventions
 CLAUDE.md
-
-# Root configuration
 package.json
-tsconfig.json
-playwright.config.ts
+tsconfig.base.json
 
-# Schema definitions (canonical types)
-schemas/Types.ts
-schemas/CatalogTypes.ts
+# Core package structure
+packages/core/package.json
+packages/core/tsup.config.ts
+packages/core/src/schemas/Doc.ts
+packages/core/src/schemas/BlockTemplates.ts
+packages/core/src/schemas/Viewport.ts
+packages/core/src/doc/templates/index.ts
+packages/core/src/doc/getLayers.ts
+packages/core/src/doc/expandDocBlocks.ts
+packages/core/src/spatial/index.ts
+packages/core/src/storage/StorageAdapter.ts
+packages/core/src/markdown/types.ts
+packages/core/src/markdown/parse.ts
+packages/core/src/markdown/stringify.ts
 
-# Shared core
-shared/core/Qualla.ts
-shared/index.ts
-shared/spatial/Geohash.ts
+# React package
+packages/react/package.json
+packages/react/src/index.ts
+packages/react/src/types.ts
+packages/react/src/DocPlayer.tsx
+packages/react/src/BlockRenderer.tsx
+packages/react/src/hooks/useDocPlayback.ts
+packages/react/src/hooks/useAudioSync.ts
 
-# Site entry & services
-site/vite.config.ts
-site/src/Main.tsx
-site/src/components/App.tsx
-site/src/services/Bridge.ts
-site/src/services/ContentLoader.ts
-site/src/services/ProximityAlert.ts
+# Formats package
+packages/formats/package.json
+packages/formats/src/docx/import.ts
+packages/formats/src/docx/export.ts
+packages/formats/src/ooxml/reader.ts
 
-# EFB app
-efb-app/build.cjs
-efb-app/src/QuallaApp.tsx
-efb-app/src/ui/EfbApp.tsx
-efb-app/src/hooks/useBridge.ts
-efb-app/src/hooks/useProximityAlert.ts
-
-# Electron app
-app/package.json
-app/src/main/main.ts
-app/src/preload/preload.ts
-app/src/shared/constants.ts
-app/src/shared/types.ts
-
-# Pipeline
-pipeline/Cli.ts
-pipeline/PipelineConfig.ts
+# Editor package
+packages/editor-react/package.json
+packages/editor-react/src/index.ts
+packages/editor-react/src/EditorContext.tsx
+packages/editor-react/src/RawEditor.tsx
+packages/editor-react/src/Toolbar.tsx
+packages/editor-react/src/PreviewPanel.tsx
 ```
 
 ### Exploration Techniques
@@ -189,32 +208,29 @@ pipeline/PipelineConfig.ts
 Use these to discover issues that reading alone won't reveal:
 
 ```bash
-# Find potential code duplication (same function names across targets)
-grep -r "function haversine\|calculateDistance\|getDistance" --include="*.ts" --include="*.tsx"
-
 # Find `any` type usage (type safety smell)
-grep -rn ": any\|as any" --include="*.ts" --include="*.tsx" | wc -l
+grep -rn ": any\|as any" packages/*/src/ --include="*.ts" --include="*.tsx" | grep -v __tests__ | wc -l
 
-# Check for console.log left in production code
-grep -rn "console\.log" site/src/ --include="*.ts" --include="*.tsx" | grep -v "// debug"
+# Find console.log left in production code
+grep -rn "console\.log" packages/*/src/ --include="*.ts" --include="*.tsx" | grep -v __tests__
 
 # Find TODO/FIXME/HACK comments (technical debt markers)
-grep -rn "TODO\|FIXME\|HACK\|XXX\|WORKAROUND" --include="*.ts" --include="*.tsx"
+grep -rn "TODO\|FIXME\|HACK\|XXX\|WORKAROUND" packages/ --include="*.ts" --include="*.tsx"
 
-# Check bundle size (if built)
-ls -la site/dist/scripts/*.js 2>/dev/null
+# Check for files over 500 lines (candidates for splitting)
+find packages/ -name "*.ts" -o -name "*.tsx" | xargs wc -l | sort -rn | head -20
+
+# Verify subpath exports match actual files
+cat packages/core/package.json | jq '.exports'
+
+# Check cross-package import consistency
+grep -rn "from '@bendyline/squisq" packages/ --include="*.ts" --include="*.tsx"
+
+# Find potential circular dependencies
+# (look for react importing from editor-react or vice versa)
 
 # Check for unused exports
-# (manual: grep for exported functions, then search for imports)
-
-# Find files over 500 lines (candidates for splitting)
-find . -name "*.ts" -o -name "*.tsx" | xargs wc -l | sort -rn | head -20
-
-# Check geohash constant consistency
-grep -rn "GEOHASH_PRECISION\|geohash.*precision\|\.substring(0, 4)\|\.slice(0, 4)" --include="*.ts"
-
-# Discover orphaned files (not imported anywhere)
-# Compare exports vs imports for shared/ and schemas/
+grep -rn "^export " packages/core/src/ --include="*.ts" | wc -l
 ```
 
 ---
@@ -228,92 +244,107 @@ what needs attention.
 
 **What to look for:**
 
-- Are module boundaries clear? Can you tell what each directory owns?
-- Is the dependency graph clean (no circular imports, no upward dependencies)?
-- Is `shared/` actually shared, or are things in `shared/` that only one target uses?
-- Are `schemas/` types truly canonical, or are shadow types accumulating elsewhere?
-- Is `pipeline/scripts/` growing unbounded? (43+ scripts — is there a governance pattern?)
+- Are module boundaries clear? Can you tell what each package owns?
+- Is the dependency graph clean? (core has zero framework deps, react depends on core, etc.)
+- Are subpath exports correct and complete? Do they expose what consumers need?
+- Are types defined in `schemas/` or scattered in component files?
+- Is there code in the wrong package? (e.g., React-specific logic in core)
 
 **Known architecture decisions to respect:**
 
-- `efb-app/src/ui/MapView.tsx` is an intentional copy of the site's MapView due to
-  Preact instance isolation (hooks fail across instances). This is a necessary
-  duplication, not a bug. Note it but don't recommend merging.
-- `app/src/shared/` is separate from root `shared/` by design — Electron's main process
-  has different concerns (IPC channels, Node.js types) than the web layer.
-- The pipeline uses `../../schemas/Types.js` relative imports rather than path aliases
-  in some places due to tsx runtime limitations.
+- `core/` must have zero framework dependencies — it's consumed by React, Preact, and
+  potentially other frameworks
+- `react/` targets standard React; Qualla aliases via `preact/compat`
+- `editor-react/` depends on Tiptap and Monaco — these are heavy dependencies that are
+  intentionally isolated from the main `react/` package
+- `site/` is a dev-only package, not published to npm
+- The unified/remark processor requires `any` for its chained `.use()` calls — this is
+  an intentional exception documented with eslint-disable comments
 
 ### 3.2 Code Duplication
 
-**Known duplication hotspots to verify:**
+**Potential duplication hotspots:**
 
-| Concern | Locations | Status |
-|---------|-----------|--------|
-| Haversine distance | `ProximityAlert.ts`, `SpatialQuery.ts`, `MapView.tsx` | Likely duplicated |
-| Vintage label rules | `tile-renderer.ts`, `map-renderer.ts` | Nearly identical |
-| Geohash precision constants | Scattered across pipeline + site | Should be centralized |
-| Directory creation caching | `RawArticleStore`, `ContentWriter`, `IndexBuilder` | Same pattern repeated |
-| Article ID format logic | `ArticleTransformer.ts`, `OverlayLoader.ts` | Parsed in multiple places |
-| MapView component | `site/src/components/MapView.tsx`, `efb-app/src/ui/MapView.tsx` | Intentional (Preact instances) |
-| Story slide templates | `site/src/components/story/`, `efb-app/src/ui/story/` | Check for drift |
+| Concern | Likely Locations | What to Check |
+|---------|-----------------|---------------|
+| Animation utilities | `core/src/doc/utils/`, `react/src/utils/` | Re-export or duplication? |
+| Type re-exports | Each package's `index.ts` | Are types properly re-exported? |
+| Template input validation | Individual template files | Repeated patterns? |
+| Viewport calculations | `scaledFontSize`, layout logic | Centralized in core? |
+| Markdown node handling | `convert.ts`, `PreviewPanel.tsx`, `LinearDocView.tsx` | Same traversal patterns? |
+| Caption cleaning | `captionUtils.ts` | Used everywhere it should be? |
 
 **How to evaluate:**
 
 1. For each hotspot, read both locations and diff mentally
-2. Determine if duplication is **intentional** (architectural constraint) or **accidental** (copy-paste drift)
-3. For accidental duplication, propose extraction with specific file paths
-4. For intentional duplication, verify the copies haven't drifted apart
+2. Determine if duplication is **intentional** (package boundary) or **accidental** (drift)
+3. For accidental duplication, propose extraction into core with specific file paths
+4. For intentional re-exports, verify they haven't drifted from source
 
 ### 3.3 Type Safety & Schema Governance
 
 **What to look for:**
 
 - Are new types being added to `schemas/` or scattered in component files?
-- Is `any` creeping in? Where and why?
+- Is `any` creeping in? Where and why? (Target: zero `any` in published production code)
 - Are there implicit contracts (magic strings, untyped JSON shapes)?
-- Do all targets import from `schemas/` for shared types?
-- Are there type assertions (`as X`) that mask real type mismatches?
+- Do all packages import shared types from `@bendyline/squisq/schemas`?
+- Are there type assertions (`as X`) that mask real type mismatches vs. legitimate casts?
+- Is the `DocBlock` discriminated union (`Block | TemplateBlock`) used consistently?
+- Is `isTemplateBlock()` used instead of `(block as any).template` patterns?
 
 ### 3.4 Build System Health
 
 **What to look for:**
 
-- Is `tsconfig.json` still correct? Do path aliases resolve cleanly?
-- Are Vite and esbuild configs aligned on shared conventions?
-- Is the ES2015 target for Coherent GT still necessary? (Check MSFS 2024 Coherent GT version)
-- Are there dead build scripts or unused configurations?
-- Is the dual-JSX plugin in `efb-app/build.cjs` still needed?
+- Do all `tsconfig.json` files extend `tsconfig.base.json` consistently?
+- Are `tsup.config.ts` files aligned across packages?
+- Do subpath exports in `package.json` match actual entry points?
+- Does `npm run build` succeed cleanly with zero warnings?
+- Are `.d.ts` declarations generated correctly for all packages?
+- Are peer dependencies declared correctly? (react, react-dom for react packages)
+- Is tree-shaking working? (ESM output, no side effects)
 
 ### 3.5 Error Handling & Resilience
 
 **What to look for:**
 
 - Are errors swallowed silently? (empty catch blocks)
-- Is error handling consistent across targets?
-- Does the EFB app degrade gracefully when Coherent GT misbehaves?
-- Are network failures handled in ContentLoader, MediaCache, CompanionAPI?
-- Are there error boundaries in the right places?
+- Is `catch (err: unknown)` used with `instanceof Error` narrowing? (not `catch (err: any)`)
+- Are error boundaries present in the React component tree?
+- Does markdown parsing degrade gracefully on malformed input?
+- Does DOCX import handle corrupt/partial files?
 
 ### 3.6 Performance Patterns
 
 **What to look for:**
 
-- Bundle sizes: Is the site bundle growing? Are lazy imports working?
-- Caching: Is ContentLoader's cache effective? Are there cache invalidation issues?
-- Spatial queries: Are geohash lookups efficient? Unnecessary re-queries?
-- EFB: Is the 25-marker limit in MapView still appropriate?
-- Audio: Is MediaCache downloading efficiently? Retry logic sound?
+- Bundle sizes: Are packages lean? Are heavy dependencies isolated?
+- Tree-shaking: Can consumers import only what they need via subpath exports?
+- Memoization: Are expensive computations in hooks properly memoized?
+- Re-renders: Do hooks have correct dependency arrays?
+- Template functions: Are they truly pure (no hidden state or side effects)?
 
 ### 3.7 Testing Coverage & Quality
 
 **What to look for:**
 
-- Are all Playwright projects (`site`, `efb`, `story`, `map-poi-clustering`, `mobile-responsiveness`) passing?
-- Are new features getting tests? (Check recent commits vs test additions)
-- Is there unit test coverage for `shared/` and `pipeline/` logic?
-- Are Playwright tests stable or flaky?
-- Is the screenshot-based review workflow documented in CLAUDE.md being followed?
+- Do all packages have tests? What's the coverage like?
+- Are template functions unit tested with representative inputs?
+- Is markdown round-trip (parse → stringify → parse) tested?
+- Are DOCX import/export tested with real documents?
+- Are React hooks tested? Are there integration tests for DocPlayer?
+- Are edge cases covered? (empty docs, missing fields, malformed input)
+
+### 3.8 API Surface & Documentation
+
+**What to look for:**
+
+- Are public exports intentional and minimal? (Don't export internals)
+- Are exported functions/types documented with JSDoc?
+- Are template input types self-documenting? (clear property names, good defaults)
+- Is the README accurate? Does it show working examples?
+- Are breaking changes tracked?
 
 ---
 
@@ -327,46 +358,34 @@ the AI-assisted development infrastructure itself.
 Read `CLAUDE.md` and evaluate:
 
 - **Accuracy:** Does the documentation match the current codebase? Are file paths correct?
-  Are commands still valid?
-- **Completeness:** Are new directories, targets, or workflows missing from the docs?
+  Are commands still valid? Are all packages listed?
+- **Completeness:** Are new packages, subpath exports, or workflows missing?
 - **Conventions:** Are coding conventions clearly stated? Would a new Claude session
   follow them?
-- **Common Commands:** Are the listed commands complete and correct?
-- **Gotchas:** Are known pitfalls documented? (Coherent GT limitations, Preact instance
-  issues, Windows path considerations)
+- **Build Commands:** Are the listed commands complete and correct?
+- **Design Decisions:** Are key decisions documented? (pure templates, SVG rendering,
+  discriminated unions, etc.)
 
 ### 4.2 Skills Inventory
 
 Read each skill in `.claude/skills/*/SKILL.md` and evaluate:
 
-| Skill | What to Check |
-|-------|---------------|
-| `approve` | Does the approval workflow match current catalog structure? |
-| `contentcycle` | Are all pipeline phases current? Are commands correct? |
-| `storyify` | Is the story JSON format current? Are writing guidelines effective? |
-| `finalreview` | Is the fact-checking process thorough? Does it catch real issues? |
-| `slidesgeneration` | Are template definitions current with `schemas/SlideTemplates.ts`? |
-| `mediareview` | Does it cover all media sources (Commons, Flickr, Unsplash, NASA)? |
-| `uxreview` | Are test projects current with `playwright.config.ts`? |
-| `developmentarchitect` | (This skill) Is it comprehensive and actionable? |
-
 **For each skill, ask:**
 
 1. Would a fresh Claude session follow this skill correctly without additional context?
-2. Are file paths and commands accurate?
-3. Does the skill produce the expected artifacts (files, reports, catalog updates)?
-4. Is the skill missing important steps or guardrails?
-5. Are there new capabilities or workflows that should become skills?
+2. Are file paths and commands accurate for the squisq repo?
+3. Does the skill reference Qualla-specific concepts that don't belong here?
+4. Does the skill produce the expected artifacts?
+5. Is the skill missing important steps or guardrails?
 
 ### 4.3 Missing Skills
 
 Consider whether new skills are needed:
 
-- **Build & Deploy** — Building for all targets, deploying, MSFS package creation
-- **Performance Audit** — Bundle analysis, Lighthouse-style checks, load time profiling
-- **Onboarding** — Guided tour of the codebase for new Claude sessions
-- **Incident Response** — Debugging production issues, checking logs, rollback procedures
-- **Data Migration** — Moving articles between geohashes, fixing catalog issues
+- **Template Creation** — Adding a new block template with proper types, registry entry, tests
+- **Package Creation** — Adding a new package to the monorepo with proper config
+- **Format Converter** — Adding a new document format (PPTX, XLSX) to the formats package
+- **Release** — Version bumping, changelog, npm publish, tarball rebuild for Qualla
 
 ---
 
@@ -377,7 +396,7 @@ Write the report to `reports/architecture-review-YYYYMMDD-HHMM.md`.
 The report should be opinionated, actionable, and honest. Lead with the big picture.
 
 ```markdown
-# Qualla Architecture Review
+# Squisq Architecture Review
 
 **Date:** YYYY-MM-DD
 **Reviewer:** Claude (Development Architect)
@@ -402,8 +421,26 @@ where would that be?]
 | Error Handling | A-F | ... | ... |
 | Performance | A-F | ... | ... |
 | Test Coverage | A-F | ... | ... |
+| API Surface | A-F | ... | ... |
 | Documentation | A-F | ... | ... |
 | AI Tooling (Skills) | A-F | ... | ... |
+
+## Project Component Review
+
+[For each package, provide a detailed assessment of every major component:
+its purpose, quality, test coverage, and any issues found.]
+
+### @bendyline/squisq (core)
+[Component-by-component tables for schemas, doc/templates, spatial, storage, markdown]
+
+### @bendyline/squisq-react
+[Component-by-component tables for DocPlayer, BlockRenderer, layers, hooks]
+
+### @bendyline/squisq-formats
+[Component-by-component tables for docx, ooxml, pdf, pptx/xlsx stubs]
+
+### @bendyline/squisq-editor-react
+[Component-by-component tables for EditorContext, RawEditor, Toolbar, PreviewPanel]
 
 ## What's Working Well
 
@@ -451,8 +488,7 @@ you observed.]
 
 | Skill | Health | Issues | Recommendations |
 |-------|--------|--------|-----------------|
-| approve | Good/Fair/Poor | [List] | [List] |
-| contentcycle | ... | ... | ... |
+| developmentarchitect | ... | ... | ... |
 | ... | ... | ... | ... |
 
 ### Recommended New Skills
@@ -477,7 +513,7 @@ you observed.]
 
 ## Appendix: Files Reviewed
 
-[List of all files read during this review, grouped by directory]
+[List of all files read during this review, grouped by package]
 ```
 
 ---
@@ -498,51 +534,65 @@ After writing the report:
 
 ### What Good Architecture Looks Like
 
-Study these principles when evaluating Qualla:
+Study these principles when evaluating Squisq:
 
-- **Shared code is actually shared.** If two targets use the same logic, it lives in
-  `shared/` or `schemas/`, not copied into each target.
-- **Boundaries are enforced, not just documented.** Circular dependencies don't exist.
-  Each layer knows only about the layers below it.
-- **New features are easy to add.** The next article source, the next media product,
-  the next platform target should slot in without rewriting existing code.
-- **Conventions are consistent.** Geohash precision, path resolution, error handling,
-  logging — these all follow the same pattern everywhere.
-- **Build is predictable.** `npm run build:msfs` always works. `npm run site` always
-  starts. No hidden environment dependencies or order-of-operations gotchas.
+- **Clean package boundaries.** Core has zero framework dependencies. React wraps core.
+  Formats uses core's types. Editor wraps both core and React. No reverse dependencies.
+- **Types are canonical.** All shared types live in `core/src/schemas/`. Other packages
+  import from `@bendyline/squisq/schemas`, never redefine.
+- **Templates are pure.** Every template is `(input, context) => Layer[]`. No side effects,
+  no DOM access, no global state. This makes them testable and portable.
+- **Subpath exports are intentional.** Consumers import `@bendyline/squisq/doc` not
+  `@bendyline/squisq/doc/templates/imageWithCaption`. Internal structure can change
+  without breaking consumers.
+- **Build is predictable.** `npm run build` always works. No hidden environment
+  dependencies or order-of-operations gotchas.
+- **New features slot in.** Adding a new template, a new format converter, or a new
+  layer type follows an established pattern with clear precedent.
 
 ### Common Anti-Patterns to Watch For
 
 | Anti-Pattern | Signal | Risk |
 |--------------|--------|------|
-| **Shotgun surgery** | Changing one feature requires touching 5+ files across targets | High coupling, merge conflicts |
-| **Primitive obsession** | Geohash strings, article IDs, file paths passed as raw strings | Type errors, misuse |
-| **Feature envy** | EFB code reaching deep into site internals | Broken abstraction |
-| **God object** | `App.tsx` or `Qualla.ts` growing unbounded | Hard to test, hard to modify |
-| **Copy-paste inheritance** | Duplicated code that drifts apart over time | Bugs fixed in one place, not the other |
-| **Speculative generality** | Abstractions built for hypothetical future needs | Complexity without value |
-| **Configuration sprawl** | tsconfig, vite config, esbuild config diverging | Build confusion |
+| **Leaky abstraction** | React-specific code in core package | Breaks framework independence |
+| **Type erosion** | `any` in production code, `as unknown as X` chains | Runtime type bugs |
+| **God component** | DocPlayer.tsx growing unbounded | Hard to test, hard to modify |
+| **Copy-paste inheritance** | Same pattern in react/ and editor-react/ | Bugs fixed in one place, not the other |
+| **Speculative generality** | Abstractions for hypothetical future formats | Complexity without value |
+| **Config drift** | tsconfig/tsup.config diverging across packages | Build confusion |
+| **Missing re-export** | Types defined locally instead of imported from schemas | Shadow types |
 
-### The "New Developer" Test
+### The "New Agent" Test
 
 For each area of the codebase, ask:
 
-1. **Can they find it?** Is the directory structure self-explanatory?
-2. **Can they understand it?** Are there header comments? Is the flow obvious?
-3. **Can they change it?** Are dependencies explicit? Are tests protecting them?
-4. **Can they break it?** What's the blast radius of a mistake?
+1. **Can an AI agent find it?** Is the directory structure self-explanatory?
+2. **Can it understand it?** Are there header comments? Is the flow obvious?
+3. **Can it change it safely?** Are dependencies explicit? Are tests protecting it?
+4. **Will it produce correct code?** Are patterns unambiguous? Is there exactly one way?
 
-### The "Next Feature" Test
+### The "New Template" Test
 
-Imagine adding a common new feature (e.g., a new article source, a new map layer,
-a new settings option). Trace the path through the codebase:
+Imagine adding a new block template (e.g., `comparisonSlide`). Trace the path:
 
-1. Which files need to change?
-2. Which types need to extend?
-3. Which targets are affected?
-4. Is there a precedent to follow?
+1. Define input type in `core/src/schemas/BlockTemplates.ts`
+2. Add to `TemplateBlock` discriminated union in `core/src/schemas/Doc.ts`
+3. Create template function in `core/src/doc/templates/comparisonSlide.ts`
+4. Register in `core/src/doc/templates/index.ts`
+5. Verify `expandDocBlocks` and `getLayers` handle it automatically
+6. Add tests in `core/src/__tests__/`
 
-If the answer to #4 is "no" or "it depends on the target," that's a process gap.
+If any step is unclear or requires touching unexpected files, that's a process gap.
+
+### The "New Format" Test
+
+Imagine adding PPTX export. Trace the path:
+
+1. Implement converter in `formats/src/pptx/export.ts`
+2. Use `MarkdownDocument` as pivot format (from core's markdown types)
+3. Export from `formats/src/pptx/index.ts`
+4. Verify subpath export `@bendyline/squisq-formats/pptx` works
+5. Add tests in `formats/src/__tests__/`
 
 ---
 
@@ -551,36 +601,43 @@ If the answer to #4 is "no" or "it depends on the target," that's a process gap.
 When the user asks for a specific type of review, use these checklists:
 
 ### "Review code duplication"
-- [ ] Haversine/distance calculations across all targets
-- [ ] Map styling (vintage label rules, flavors)
-- [ ] Geohash utilities and precision constants
-- [ ] Story template rendering (site vs efb-app)
-- [ ] Storage adapter patterns
-- [ ] Error handling patterns
-- [ ] Path resolution utilities
+- [ ] Animation utilities across core and react
+- [ ] Markdown node traversal patterns
+- [ ] Template input validation patterns
+- [ ] Type definitions (schemas vs. local types)
+- [ ] Caption/text cleaning utilities
+- [ ] Error handling patterns across packages
 
 ### "Review type safety"
-- [ ] Count `any` usage across all targets
+- [ ] Count `any` usage across all packages (exclude test files)
 - [ ] Check schema coverage (are new types in schemas/?)
-- [ ] Verify path alias resolution
+- [ ] Verify discriminated union usage (isTemplateBlock guard)
 - [ ] Check for untyped JSON parsing (JSON.parse without validation)
-- [ ] Look for magic strings (geohash precision, IPC channels, route paths)
+- [ ] Look for `as unknown as X` chains (type assertion smell)
+- [ ] Verify catch blocks use `unknown` not `any`
 
 ### "Review build system"
-- [ ] tsconfig alignment across targets
-- [ ] Vite config (site) vs esbuild config (efb-app) consistency
-- [ ] Path alias resolution in all build tools
-- [ ] Bundle size trends
-- [ ] Dead code in build output
-- [ ] ES target appropriateness per target
+- [ ] tsconfig alignment across packages (all extend base?)
+- [ ] tsup.config consistency
+- [ ] Subpath exports match actual entry points
+- [ ] Peer dependencies declared correctly
+- [ ] Bundle sizes reasonable
+- [ ] `npm run build` clean with zero errors
+
+### "Review API surface"
+- [ ] All public exports intentional (no internal leaks)
+- [ ] Naming conventions consistent across packages
+- [ ] JSDoc on all exported functions and types
+- [ ] Breaking changes since last review
+- [ ] Re-export hygiene (no redundant re-exports)
 
 ### "Review Claude skills"
 - [ ] Read every SKILL.md in `.claude/skills/`
 - [ ] Verify commands and file paths are current
 - [ ] Check that CLAUDE.md reflects current architecture
 - [ ] Identify gaps in skill coverage
-- [ ] Test one skill end-to-end if possible
 - [ ] Propose CLAUDE.md patches for any inaccuracies found
+- [ ] Ensure no Qualla-specific references remain in squisq skills
 
 ---
 
@@ -591,13 +648,14 @@ When the user asks for a specific type of review, use these checklists:
 1. Written report at `reports/architecture-review-YYYYMMDD-HHMM.md`
 2. An honest executive summary (not generic praise)
 3. A graded scorecard across all dimensions
-4. At least one critical issue (or explicit statement that none exist)
-5. Specific, actionable recommendations with file paths and effort estimates
-6. A prioritized action plan (this week / this month / this quarter)
-7. Claude skills and CLAUDE.md assessment with specific update recommendations
+4. A project component review (component-by-component assessment per package)
+5. At least one critical issue (or explicit statement that none exist)
+6. Specific, actionable recommendations with file paths and effort estimates
+7. A prioritized action plan (this week / this month / this quarter)
+8. Claude skills and CLAUDE.md assessment with specific update recommendations
 
 **If implementing fixes:**
 
-8. Each fix committed separately with clear commit messages
-9. Tests run after each fix to verify no regressions
-10. Updated CLAUDE.md or SKILL.md files if documentation was stale
+9. Each fix committed separately with clear commit messages
+10. Build run after each fix to verify no regressions (`npm run build`)
+11. Updated CLAUDE.md or SKILL.md files if documentation was stale

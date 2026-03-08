@@ -9,7 +9,7 @@
  * This is shared code used by both site and efb-app doc renderers.
  */
 
-import type { Layer } from '../../schemas/Doc.js';
+import type { Layer, AnimationType } from '../../schemas/Doc.js';
 import type { SectionHeaderInput, TemplateContext } from '../../schemas/BlockTemplates.js';
 import { COLOR_SCHEMES, scaledFontSize } from '../../schemas/BlockTemplates.js';
 
@@ -36,7 +36,7 @@ export function sectionHeader(input: SectionHeaderInput, context: TemplateContex
       },
       position: { x: 0, y: 0, width: '100%', height: '100%' },
       animation: ambientMotion
-        ? { type: ambientMotion as any, duration: 8 }
+        ? { type: ambientMotion as AnimationType, duration: 8 }
         : { type: 'slowZoom', duration: 8, direction: 'in' },
     });
 

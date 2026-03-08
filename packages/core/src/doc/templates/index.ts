@@ -95,7 +95,9 @@ export function expandTemplateBlock(templateBlock: TemplateBlock, context: Templ
   // Generate layers from template with error handling
   let layers: Layer[];
   try {
-    layers = (templateFn as any)(templateBlock, context);
+    // Each registry entry accepts its specific TemplateBlock variant; the
+    // discriminated union guarantees the shapes match at runtime.
+    layers = (templateFn as (input: TemplateBlock, ctx: TemplateContext) => Layer[])(templateBlock, context);
     if (!Array.isArray(layers)) {
       console.error(
         `Template ${templateBlock.template} did not return an array, got:`,
@@ -412,9 +414,6 @@ export function expandDocBlocks(
 
       if (timeFromLastToEnd < MIN_TRANSITION_GAP && lastBlock.template !== 'sectionHeader') {
         const prevBlock = segmentExpandedBlocks[segmentExpandedBlocks.length - 2];
-        console.log(
-          `[expandDocBlocks] Eliminated block ${lastBlock.id} (${timeFromLastToEnd.toFixed(1)}s from section end) - extended ${prevBlock.id}`,
-        );
         prevBlock.duration = segmentEnd - prevBlock.startTime;
         lastBlock.duration = 0;
         lastBlock.startTime = segmentEnd;
@@ -447,9 +446,6 @@ export function expandDocBlocks(
         if (block.duration > 0 && block.duration < MIN_TRANSITION_GAP) {
           const prev = segmentExpandedBlocks[i - 1];
           const blockEnd = block.startTime + block.duration;
-          console.log(
-            `[expandDocBlocks] Eliminated short block ${block.id} (${block.duration.toFixed(1)}s < ${MIN_TRANSITION_GAP}s) - merged into ${prev.id}`,
-          );
           prev.duration = blockEnd - prev.startTime;
           block.duration = 0;
           block.startTime = segmentEnd;
@@ -496,9 +492,6 @@ export function expandDocBlocks(
             expandedBlocks.push(splitBlock);
           }
 
-          console.log(
-            `[expandDocBlocks] Split block ${block.id} (${originalDuration.toFixed(1)}s) into ${numParts} parts of ${partDuration.toFixed(1)}s each`,
-          );
         }
       }
     }

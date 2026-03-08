@@ -24,7 +24,7 @@ import { hasTemplate } from '@bendyline/squisq/doc';
 import { extractPlainText } from '@bendyline/squisq/markdown';
 import type { Block, Doc, ViewportConfig, ViewportPreset } from '@bendyline/squisq/schemas';
 import { VIEWPORT_PRESETS } from '@bendyline/squisq/schemas';
-import type { MarkdownBlockNode } from '@bendyline/squisq/markdown';
+import type { MarkdownBlockNode, MarkdownList } from '@bendyline/squisq/markdown';
 import { useEditorContext } from './EditorContext';
 
 export interface PreviewPanelProps {
@@ -57,8 +57,8 @@ function extractListItems(contents: MarkdownBlockNode[] | undefined): string[] {
   if (!contents) return [];
   const items: string[] = [];
   for (const node of contents) {
-    if (node.type === 'list' && 'children' in node) {
-      for (const item of (node as any).children || []) {
+    if (node.type === 'list') {
+      for (const item of (node as MarkdownList).children) {
         const text = extractPlainText(item).trim();
         if (text) items.push(text);
       }

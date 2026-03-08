@@ -80,6 +80,70 @@ export interface BlockMarker {
   isSectionStart: boolean;
 }
 
+// ============================================
+// Render-mode API (exposed on window for Playwright / debug)
+// ============================================
+
+/** Block metadata returned by SquisqRenderAPI.getBlocks() */
+export interface RenderBlockInfo {
+  id: string;
+  template: string;
+  startTime: number;
+  duration: number;
+}
+
+/** Audio segment info returned by SquisqRenderAPI.getAudioSegments() */
+export interface RenderAudioSegmentInfo {
+  src: string;
+  name: string;
+  duration: number;
+  startTime: number;
+}
+
+/** Caption phrase info returned by SquisqRenderAPI.getCaptions() */
+export interface RenderCaptionInfo {
+  text: string;
+  startTime: number;
+  endTime: number;
+}
+
+/** Chapter marker returned by SquisqRenderAPI.getChapters() */
+export interface RenderChapterInfo {
+  title: string;
+  startTime: number;
+  duration: number;
+}
+
+/**
+ * API surface exposed on `window` in render mode and debug mode.
+ * Used by Playwright for video export and by ?debug=true for testing.
+ *
+ * @example
+ * ```ts
+ * // In Playwright:
+ * const w = window as unknown as SquisqWindow;
+ * await w.seekTo!(5.0);
+ * const blocks = w.getBlocks!();
+ * ```
+ */
+export interface SquisqRenderAPI {
+  seekTo: (time: number) => Promise<void>;
+  getDuration: () => number;
+  getBlocks: () => RenderBlockInfo[];
+  getAudioSegments: () => RenderAudioSegmentInfo[];
+  getCaptions: () => RenderCaptionInfo[];
+  getChapters: () => RenderChapterInfo[];
+  showCover: () => Promise<void>;
+  hideCover: () => Promise<void>;
+  hasCoverBlock: () => boolean;
+}
+
+/**
+ * Window augmented with optional SquisqRenderAPI properties.
+ * Each property is optional because they're only present in render/debug mode.
+ */
+export type SquisqWindow = Window & typeof globalThis & Partial<SquisqRenderAPI>;
+
 /** Format time in seconds to MM:SS string */
 export function formatTime(seconds: number): string {
   const mins = Math.floor(seconds / 60);

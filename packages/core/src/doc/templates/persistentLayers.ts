@@ -374,7 +374,7 @@ export function expandPersistentLayer(layer: PersistentLayer): Layer[] {
     case 'progressIndicator':
       return [expandProgressIndicator(config)];
     default:
-      console.warn('Unknown persistent layer template:', (config as any).type);
+      console.warn('Unknown persistent layer template:', (config as Record<string, unknown>).type);
       return [];
   }
 }

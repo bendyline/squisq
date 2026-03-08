@@ -21,6 +21,11 @@ import type { Doc } from '@bendyline/squisq/schemas';
 import type { MarkdownDocument } from '@bendyline/squisq/markdown';
 import { parseMarkdown, stringifyMarkdown } from '@bendyline/squisq/markdown';
 import { markdownToDoc } from '@bendyline/squisq/doc';
+import type { Editor as TiptapEditor } from '@tiptap/core';
+import type { editor as MonacoEditorNs } from 'monaco-editor';
+
+/** Monaco standalone code editor instance type */
+type MonacoEditor = MonacoEditorNs.IStandaloneCodeEditor;
 
 // ─── Types ───────────────────────────────────────────────
 
@@ -52,18 +57,18 @@ export interface EditorActions {
   /** Switch the active view */
   setActiveView: (view: EditorView) => void;
   /** Register / unregister the Tiptap editor instance (called by WysiwygEditor) */
-  setTiptapEditor: (editor: any | null) => void;
+  setTiptapEditor: (editor: TiptapEditor | null) => void;
   /** Register / unregister the Monaco editor instance (called by RawEditor) */
-  setMonacoEditor: (editor: any | null) => void;
+  setMonacoEditor: (editor: MonacoEditor | null) => void;
   /** Set the color theme */
   setTheme: (theme: EditorTheme) => void;
 }
 
 export interface EditorContextValue extends EditorState, EditorActions {
   /** The live Tiptap editor instance (null when WYSIWYG is not mounted) */
-  tiptapEditor: any | null;
+  tiptapEditor: TiptapEditor | null;
   /** The live Monaco editor instance (null when Raw is not mounted) */
-  monacoEditor: any | null;
+  monacoEditor: MonacoEditor | null;
 }
 
 // ─── Context ─────────────────────────────────────────────
@@ -113,8 +118,8 @@ export function EditorProvider({
   const [parseError, setParseError] = useState<string | null>(null);
   const [isParsing, setIsParsing] = useState(false);
   const [theme, setTheme] = useState<EditorTheme>(initialTheme);
-  const [tiptapEditor, setTiptapEditor] = useState<any | null>(null);
-  const [monacoEditor, setMonacoEditor] = useState<any | null>(null);
+  const [tiptapEditor, setTiptapEditor] = useState<TiptapEditor | null>(null);
+  const [monacoEditor, setMonacoEditor] = useState<MonacoEditor | null>(null);
 
   const articleIdRef = useRef(articleId);
   articleIdRef.current = articleId;
@@ -140,13 +145,13 @@ export function EditorProvider({
           articleId: articleIdRef.current,
         });
         setDoc(generatedDoc);
-      } catch (docErr: any) {
+      } catch (docErr: unknown) {
         // Doc generation can fail but markdown parse succeeded
         setDoc(null);
-        console.warn('Doc generation failed:', docErr.message);
+        console.warn('Doc generation failed:', docErr instanceof Error ? docErr.message : docErr);
       }
-    } catch (err: any) {
-      setParseError(err.message || 'Parse error');
+    } catch (err: unknown) {
+      setParseError(err instanceof Error ? err.message : 'Parse error');
       setMarkdownDocState(null);
       setDoc(null);
     } finally {
@@ -195,12 +200,12 @@ export function EditorProvider({
           articleId: articleIdRef.current,
         });
         setDoc(generatedDoc);
-      } catch (docErr: any) {
+      } catch (docErr: unknown) {
         setDoc(null);
-        console.warn('Doc generation failed:', docErr.message);
+        console.warn('Doc generation failed:', docErr instanceof Error ? docErr.message : docErr);
       }
-    } catch (err: any) {
-      setParseError(err.message || 'Stringify error');
+    } catch (err: unknown) {
+      setParseError(err instanceof Error ? err.message : 'Stringify error');
     }
   }, []);
 

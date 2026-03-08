@@ -32,8 +32,8 @@ export function DebugPanel({ source, theme = 'light' }: DebugPanelProps) {
         // Doc generation may fail
       }
       return { markdownDoc, doc, error: null };
-    } catch (err: any) {
-      return { markdownDoc: null, doc: null, error: err.message };
+    } catch (err: unknown) {
+      return { markdownDoc: null, doc: null, error: err instanceof Error ? err.message : String(err) };
     }
   }, [source]);
 

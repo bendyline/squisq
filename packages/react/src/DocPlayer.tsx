@@ -23,10 +23,10 @@
  */
 
 import { Fragment, useRef, useState, useEffect, useCallback, useMemo } from 'react';
-import type { Doc, Block, TextLayer, StartBlockConfig } from '@bendyline/squisq/schemas';
+import type { Doc, Block, TextLayer, StartBlockConfig, DocBlock } from '@bendyline/squisq/schemas';
+import { isTemplateBlock, getCaptionAtTime } from '@bendyline/squisq/schemas';
 import { BlockRenderer } from './BlockRenderer';
 import { CaptionOverlay } from './CaptionOverlay';
-import { getCaptionAtTime } from '@bendyline/squisq/schemas';
 import { useAudioSync } from './hooks/useAudioSync';
 import { useDocPlayback } from './hooks/useDocPlayback';
 import { useViewportOrientation } from './hooks/useViewportOrientation';
@@ -48,6 +48,7 @@ import type {
   BlockMarker,
   DisplayMode,
   SlideNavActions,
+  SquisqWindow,
 } from './types';
 
 /**
@@ -59,11 +60,11 @@ function buildSegmentTitleMap(script: Doc): Map<number, string> {
   const map = new Map<number, string>();
 
   // Scan blocks for sectionHeader templates which carry the real title
-  for (const block of script.blocks) {
-    if ((block as any).template === 'sectionHeader' && (block as any).title) {
-      const segIdx = (block as any).audioSegment as number;
-      if (typeof segIdx === 'number' && !map.has(segIdx)) {
-        map.set(segIdx, (block as any).title);
+  for (const block of script.blocks as DocBlock[]) {
+    if (isTemplateBlock(block) && block.template === 'sectionHeader' && 'title' in block) {
+      const segIdx = block.audioSegment;
+      if (!map.has(segIdx)) {
+        map.set(segIdx, (block as { title: string }).title);
       }
     }
   }
@@ -345,7 +346,8 @@ export function DocPlayer({
   // Expose seekTo globally for render mode (Playwright) and debug mode (testing)
   useEffect(() => {
     if ((renderMode || isDebugMode) && typeof window !== 'undefined') {
-      (window as any).seekTo = (time: number) => {
+      const w = window as SquisqWindow;
+      w.seekTo = (time: number) => {
         seekTo(time);
         // After React renders the correct block, advance CSS animations
         // (Ken Burns, transitions) to match the doc timeline position.
@@ -417,17 +419,17 @@ export function DocPlayer({
           });
         });
       };
-      (window as any).getDuration = () => totalDuration;
+      w.getDuration = () => totalDuration;
       // Expose block metadata for testing -- allows tests to find specific templates
-      (window as any).getBlocks = () =>
+      w.getBlocks = () =>
         expandedBlocks.map((s: Block) => ({
           id: s.id,
-          template: (s as any).template || 'raw',
+          template: (s as DocBlock).template ?? 'raw',
           startTime: s.startTime,
           duration: s.duration,
         }));
       // Audio segment info for video production -- returns the actual files in composition order
-      (window as any).getAudioSegments = () =>
+      w.getAudioSegments = () =>
         script.audio.segments.map((seg) => ({
           src: seg.src,
           name: seg.name,
@@ -435,14 +437,14 @@ export function DocPlayer({
           startTime: seg.startTime,
         }));
       // Caption phrases for SRT/subtitle export
-      (window as any).getCaptions = () =>
+      w.getCaptions = () =>
         script.captions?.phrases?.map((p) => ({
           text: p.text,
           startTime: p.startTime,
           endTime: p.endTime,
         })) || [];
       // Chapter markers for YouTube timestamps -- uses segment titles from sectionHeader blocks
-      (window as any).getChapters = () => {
+      w.getChapters = () => {
         const titleMap = buildSegmentTitleMap(script);
         return script.audio.segments.map((seg, i) => ({
           title: titleMap.get(i) || seg.name,
@@ -451,27 +453,28 @@ export function DocPlayer({
         }));
       };
       // Cover block control for video pre-roll -- force-show or hide the cover block
-      (window as any).showCover = () => {
+      w.showCover = () => {
         setCoverForced(true);
-        return new Promise((resolve) => requestAnimationFrame(resolve));
+        return new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
       };
-      (window as any).hideCover = () => {
+      w.hideCover = () => {
         setCoverForced(false);
-        return new Promise((resolve) => requestAnimationFrame(resolve));
+        return new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
       };
-      (window as any).hasCoverBlock = () => !!coverBlock;
+      w.hasCoverBlock = () => !!coverBlock;
     }
     return () => {
       if (typeof window !== 'undefined') {
-        delete (window as any).seekTo;
-        delete (window as any).getDuration;
-        delete (window as any).getBlocks;
-        delete (window as any).getAudioSegments;
-        delete (window as any).getCaptions;
-        delete (window as any).getChapters;
-        delete (window as any).showCover;
-        delete (window as any).hideCover;
-        delete (window as any).hasCoverBlock;
+        const w = window as SquisqWindow;
+        delete w.seekTo;
+        delete w.getDuration;
+        delete w.getBlocks;
+        delete w.getAudioSegments;
+        delete w.getCaptions;
+        delete w.getChapters;
+        delete w.showCover;
+        delete w.hideCover;
+        delete w.hasCoverBlock;
       }
     };
   }, [renderMode, isDebugMode, seekTo, totalDuration, expandedBlocks, coverBlock]);
@@ -584,16 +587,19 @@ export function DocPlayer({
   // Extract display title from a block (handles both template and expanded blocks)
   const getBlockTitle = useCallback((block: Block): string => {
     // For template blocks, extract title from template-specific properties first
-    const templateBlock = block as any;
-    if (templateBlock.title) return templateBlock.title;
-    if (templateBlock.stat) return templateBlock.stat;
-    if (templateBlock.quote) {
-      const firstLine = templateBlock.quote.split('\n')[0];
-      if (firstLine.length <= 30) return firstLine;
-      return firstLine.slice(0, 27) + '...';
+    const docBlock = block as DocBlock;
+    if (isTemplateBlock(docBlock)) {
+      const props = docBlock as unknown as Record<string, unknown>;
+      if (typeof props.title === 'string') return props.title;
+      if (typeof props.stat === 'string') return props.stat;
+      if (typeof props.quote === 'string') {
+        const firstLine = props.quote.split('\n')[0];
+        if (firstLine.length <= 30) return firstLine;
+        return firstLine.slice(0, 27) + '...';
+      }
+      if (typeof props.date === 'string') return props.date;
+      if (typeof props.fact === 'string') return props.fact;
     }
-    if (templateBlock.date) return templateBlock.date;
-    if (templateBlock.fact) return templateBlock.fact;
 
     // For expanded blocks with layers, try to find text content
     if (block.layers && Array.isArray(block.layers)) {
@@ -821,7 +827,7 @@ export function DocPlayer({
             </div>
             <div>
               <span style={{ color: '#888' }}>template:</span>{' '}
-              <span style={{ color: '#ff6b6b' }}>{(currentBlock as any)?.template || 'raw'}</span>
+              <span style={{ color: '#ff6b6b' }}>{(currentBlock as DocBlock | null)?.template ?? 'raw'}</span>
             </div>
             <div>
               <span style={{ color: '#888' }}>block:</span> {currentBlockIndex + 1}/

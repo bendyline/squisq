@@ -26,6 +26,7 @@ import type { Block, Layer } from '../schemas/Doc.js';
 import type {
   ThemeColors,
   TemplateBlock,
+  TemplateContext,
   PersistentLayerConfig,
   DocBlock,
 } from '../schemas/BlockTemplates.js';
@@ -101,12 +102,15 @@ export function getLayers(block: DocBlock, context: RenderContext = {}): Layer[]
   }
 
   // 2. Template path: look up and call the template function
-  const templateName = (block as any).template as string | undefined;
-  if (templateName && templateName in templateRegistry) {
+  if (isTemplateBlock(block) && block.template in templateRegistry) {
+    const templateName = block.template as keyof typeof templateRegistry;
     const templateCtx = createTemplateContext(theme, blockIndex, totalBlocks, viewport);
     let layers: Layer[];
     try {
-      layers = (templateRegistry as any)[templateName](block, templateCtx);
+      // Each registry entry accepts its specific TemplateBlock variant; the
+      // discriminated union guarantees the shapes match at runtime.
+      const templateFn = templateRegistry[templateName] as (input: TemplateBlock, ctx: TemplateContext) => Layer[];
+      layers = templateFn(block, templateCtx);
       if (!Array.isArray(layers)) {
         console.error(`Template ${templateName} did not return an array, got:`, typeof layers);
         layers = [];

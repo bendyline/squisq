@@ -40,9 +40,9 @@ export function RawEditor({
   className,
 }: RawEditorProps) {
   const { markdownSource, setMarkdownSource, setMonacoEditor } = useEditorContext();
-  const editorRef = useRef<any>(null);
+  const editorRef = useRef<monaco.editor.IStandaloneCodeEditor | null>(null);
   const isExternalUpdate = useRef(false);
-  const completionDisposable = useRef<any>(null);
+  const completionDisposable = useRef<monaco.IDisposable | null>(null);
 
   const handleMount: OnMount = useCallback(
     (editor, monaco) => {
@@ -57,7 +57,7 @@ export function RawEditor({
       const templates = getAvailableTemplates();
       completionDisposable.current = monaco.languages.registerCompletionItemProvider('markdown', {
         triggerCharacters: ['['],
-        provideCompletionItems(model: any, position: any) {
+        provideCompletionItems(model: monaco.editor.ITextModel, position: monaco.Position) {
           const lineContent = model.getLineContent(position.lineNumber);
 
           // Only trigger inside a heading line that has {[ before the cursor
