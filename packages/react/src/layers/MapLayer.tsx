@@ -13,7 +13,7 @@
  */
 
 import { useState, useEffect } from 'react';
-import type { MapLayer as MapLayerType } from '@bendyline/prodcore/schemas';
+import type { MapLayer as MapLayerType } from '@bendyline/squisq/schemas';
 import { getAnimationStyle } from '../utils/animationUtils';
 import { composeMapImage, getAttribution } from '../utils/mapTileUtils';
 

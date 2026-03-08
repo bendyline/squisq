@@ -1,5 +1,5 @@
 {
-  "name": "@bendyline/prodcore-formats",
+  "name": "@bendyline/squisq-formats",
   "version": "0.1.0",
   "type": "module",
   "main": "./dist/index.js",
@@ -46,7 +46,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@bendyline/prodcore": "0.1.1",
+    "@bendyline/squisq": "0.1.1",
     "jszip": "^3.10.1",
     "pdf-lib": "^1.17.1",
     "pdfjs-dist": "^4.9.155"

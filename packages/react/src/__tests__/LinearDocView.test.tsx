@@ -1,8 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import { render } from '@testing-library/react';
 import { LinearDocView } from '../LinearDocView';
-import type { Doc, Block } from '@bendyline/prodcore/schemas';
-import type { MarkdownBlockNode, MarkdownInlineNode, MarkdownHeading } from '@bendyline/prodcore/markdown';
+import type { Doc, Block } from '@bendyline/squisq/schemas';
+import type { MarkdownBlockNode, MarkdownInlineNode, MarkdownHeading } from '@bendyline/squisq/markdown';
 
 // ── Helpers ────────────────────────────────────────────────────────
 
@@ -48,7 +48,7 @@ describe('LinearDocView', () => {
       }),
     ]);
     const { container } = render(<LinearDocView doc={doc} />);
-    const el = container.querySelector('.prodcore-linear');
+    const el = container.querySelector('.squisq-linear');
     expect(el).toBeTruthy();
     expect((el as HTMLElement).style.overflowY).toBe('auto');
   });
@@ -98,7 +98,7 @@ describe('LinearDocView', () => {
     ]);
     const { container } = render(<LinearDocView doc={doc} />);
     // Should have a card wrapper
-    const card = container.querySelector('.prodcore-linear-card');
+    const card = container.querySelector('.squisq-linear-card');
     expect(card).toBeTruthy();
     // Should contain an SVG (from BlockRenderer)
     const svg = card?.querySelector('svg');
@@ -141,7 +141,7 @@ describe('LinearDocView', () => {
       }),
     ]);
     const { container } = render(<LinearDocView doc={doc} />);
-    const sections = container.querySelectorAll('.prodcore-linear-section');
+    const sections = container.querySelectorAll('.squisq-linear-section');
     expect(sections.length).toBe(2);
   });
 
@@ -154,14 +154,14 @@ describe('LinearDocView', () => {
       }),
     ]);
     const { container } = render(<LinearDocView doc={doc} />);
-    expect(container.querySelector('.prodcore-linear-card')).toBeNull();
+    expect(container.querySelector('.squisq-linear-card')).toBeNull();
     expect(container.querySelector('svg')).toBeNull();
   });
 
   it('applies custom className', () => {
     const doc = mkDoc([mkBlock({ id: 'x', contents: [] })]);
     const { container } = render(<LinearDocView doc={doc} className="my-class" />);
-    expect(container.querySelector('.prodcore-linear.my-class')).toBeTruthy();
+    expect(container.querySelector('.squisq-linear.my-class')).toBeTruthy();
   });
 
   it('sets data-block-id on each section', () => {

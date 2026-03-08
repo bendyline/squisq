@@ -1,7 +1,7 @@
 import { defineConfig, devices } from '@playwright/test';
 
 /**
- * Playwright configuration for prodcore E2E tests.
+ * Playwright configuration for squisq E2E tests.
  *
  * Targets the dev site (packages/site) running on Vite.
  * Tests cover the editor shell, DocPlayer preview, and sample interaction.
@@ -29,7 +29,7 @@ export default defineConfig({
 
   /* Start the Vite dev server before running tests */
   webServer: {
-    command: 'npm run dev -w prodcore-site',
+    command: 'npm run dev -w squisq-site',
     url: 'http://localhost:5199',
     reuseExistingServer: !process.env.CI,
     timeout: 30_000,

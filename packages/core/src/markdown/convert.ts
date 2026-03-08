@@ -1,7 +1,7 @@
 /**
- * mdast ↔ Prodcore Markdown Node Conversion
+ * mdast ↔ Squisq Markdown Node Conversion
  *
- * Converts between the remark/mdast AST format and the prodcore
+ * Converts between the remark/mdast AST format and the squisq
  * MarkdownDocument JSON format. This is the bridge layer that allows
  * us to use the battle-tested unified/remark ecosystem for parsing
  * and serialization while exposing our own clean, well-typed interfaces.
@@ -106,7 +106,7 @@ function mdastPosField(pos?: MarkdownSourcePosition): { position: MdastPosition 
 }
 
 // ============================================
-// mdast → Prodcore (fromMdast)
+// mdast → Squisq (fromMdast)
 // ============================================
 
 /**
@@ -387,7 +387,7 @@ function convertBlockNode(node: MdastNode, parseHtml: boolean): MarkdownBlockNod
     default:
       // Unknown block node — skip with a warning
       if (typeof console !== 'undefined') {
-        console.warn(`[prodcore/markdown] Unknown mdast block node type: "${node.type}"`);
+        console.warn(`[squisq/markdown] Unknown mdast block node type: "${node.type}"`);
       }
       return null;
   }
@@ -540,14 +540,14 @@ function convertInlineNode(node: MdastNode, parseHtml: boolean): MarkdownInlineN
 
     default:
       if (typeof console !== 'undefined') {
-        console.warn(`[prodcore/markdown] Unknown mdast inline node type: "${node.type}"`);
+        console.warn(`[squisq/markdown] Unknown mdast inline node type: "${node.type}"`);
       }
       return null;
   }
 }
 
 // ============================================
-// Prodcore → mdast (toMdast)
+// Squisq → mdast (toMdast)
 // ============================================
 
 /**

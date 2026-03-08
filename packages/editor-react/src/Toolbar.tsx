@@ -9,7 +9,7 @@
 
 import { useCallback, useState, useEffect } from 'react';
 import { useEditorContext } from './EditorContext';
-import { getAvailableTemplates } from '@bendyline/prodcore/doc';
+import { getAvailableTemplates } from '@bendyline/squisq/doc';
 
 export interface ToolbarProps {
   /** Additional class name */
@@ -262,19 +262,19 @@ export function Toolbar({ className }: ToolbarProps) {
 
   return (
     <div
-      className={`prodcore-toolbar ${className || ''}`}
+      className={`squisq-toolbar ${className || ''}`}
       role="toolbar"
       aria-label="Formatting toolbar"
     >
       {groups.map((group, gi) => (
-        <div key={group} className="prodcore-toolbar-group">
-          {gi > 0 && <div className="prodcore-toolbar-separator" />}
+        <div key={group} className="squisq-toolbar-group">
+          {gi > 0 && <div className="squisq-toolbar-separator" />}
           {BUTTONS.filter((b) => b.group === group).map((btn) => {
             const active = isWysiwyg ? isTiptapActive(tiptapEditor, btn.id) : false;
             return (
               <button
                 key={btn.id}
-                className={`prodcore-toolbar-button${active ? ' prodcore-toolbar-button--active' : ''}`}
+                className={`squisq-toolbar-button${active ? ' squisq-toolbar-button--active' : ''}`}
                 title={btn.title}
                 onClick={() => handleAction(btn.id)}
                 aria-label={btn.title}
@@ -291,12 +291,12 @@ export function Toolbar({ className }: ToolbarProps) {
       {/* Template picker — visible when cursor is in a heading (WYSIWYG) */}
       {currentTemplate !== null && (
         <>
-          <div className="prodcore-toolbar-separator" />
-          <div className="prodcore-toolbar-group prodcore-template-picker">
-            <label className="prodcore-template-picker-label" title="Block template for this heading">
+          <div className="squisq-toolbar-separator" />
+          <div className="squisq-toolbar-group squisq-template-picker">
+            <label className="squisq-template-picker-label" title="Block template for this heading">
               Template:
               <select
-                className="prodcore-template-picker-select"
+                className="squisq-template-picker-select"
                 value={currentTemplate}
                 onChange={(e) => handleTemplatePick(e.target.value)}
               >

@@ -17,10 +17,10 @@ import {
   useEffect,
   type ReactNode,
 } from 'react';
-import type { Doc } from '@bendyline/prodcore/schemas';
-import type { MarkdownDocument } from '@bendyline/prodcore/markdown';
-import { parseMarkdown, stringifyMarkdown } from '@bendyline/prodcore/markdown';
-import { markdownToDoc, docToMarkdown } from '@bendyline/prodcore/doc';
+import type { Doc } from '@bendyline/squisq/schemas';
+import type { MarkdownDocument } from '@bendyline/squisq/markdown';
+import { parseMarkdown, stringifyMarkdown } from '@bendyline/squisq/markdown';
+import { markdownToDoc, docToMarkdown } from '@bendyline/squisq/doc';
 
 // ─── Types ───────────────────────────────────────────────
 

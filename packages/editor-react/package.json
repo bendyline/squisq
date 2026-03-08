@@ -1,5 +1,5 @@
 {
-  "name": "@bendyline/prodcore-editor-react",
+  "name": "@bendyline/squisq-editor-react",
   "version": "0.1.0",
   "type": "module",
   "main": "./dist/index.js",
@@ -25,8 +25,8 @@
     "react-dom": "^18.0.0 || ^19.0.0"
   },
   "dependencies": {
-    "@bendyline/prodcore": "^0.1.0",
-    "@bendyline/prodcore-react": "^0.1.0",
+    "@bendyline/squisq": "^0.1.0",
+    "@bendyline/squisq-react": "^0.1.0",
     "@monaco-editor/react": "^4.6.0",
     "@tiptap/extension-placeholder": "^2.11.0",
     "@tiptap/extension-table": "^2.11.0",

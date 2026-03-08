@@ -12,7 +12,7 @@
  */
 
 import { useState, useEffect, useMemo } from 'react';
-import { VIEWPORT_PRESETS, type ViewportConfig, type ViewportOrientation } from '@bendyline/prodcore/doc';
+import { VIEWPORT_PRESETS, type ViewportConfig, type ViewportOrientation } from '@bendyline/squisq/doc';
 
 interface UseViewportOrientationResult {
   /** Current viewport preset configuration */

@@ -5,7 +5,7 @@
 export const SAMPLES: Record<string, string> = {
   'hello-world': `# Hello World
 
-Welcome to the **Prodcore Editor**. This is a simple markdown document.
+Welcome to the **Squisq Editor**. This is a simple markdown document.
 
 ## Getting Started
 
@@ -28,7 +28,7 @@ Start editing this document in any of the three views:
 
   'features-demo': `# Features Demo
 
-This sample demonstrates all the markdown features supported by Prodcore.
+This sample demonstrates all the markdown features supported by Squisq.
 
 ## Inline Formatting
 
@@ -88,7 +88,7 @@ interface MarkdownDocument {
 
 ## Links and Images
 
-Visit [Prodcore on GitHub](https://github.com/example/prodcore) for more.
+Visit [Squisq on GitHub](https://github.com/example/squisq) for more.
 
 ---
 

@@ -5,7 +5,7 @@
  * Useful for visual accents, dividers, and background elements.
  */
 
-import type { ShapeLayer as ShapeLayerType } from '@bendyline/prodcore/schemas';
+import type { ShapeLayer as ShapeLayerType } from '@bendyline/squisq/schemas';
 import { getAnimationStyle } from '../utils/animationUtils';
 
 interface ShapeLayerProps {

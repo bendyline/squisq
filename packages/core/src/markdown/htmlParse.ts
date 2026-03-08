@@ -1,7 +1,7 @@
 /**
  * HTML ↔ HtmlNode Conversion
  *
- * Parses raw HTML strings into the prodcore HtmlNode tree representation
+ * Parses raw HTML strings into the squisq HtmlNode tree representation
  * using hast-util-from-html (parse5-backed), and serializes HtmlNode trees
  * back to HTML strings with a lightweight custom serializer.
  */

@@ -13,8 +13,8 @@
  *
  * @example
  * ```ts
- * import { markdownToDoc, docToMarkdown } from '@bendyline/prodcore/doc';
- * import { parseMarkdown, stringifyMarkdown } from '@bendyline/prodcore/markdown';
+ * import { markdownToDoc, docToMarkdown } from '@bendyline/squisq/doc';
+ * import { parseMarkdown, stringifyMarkdown } from '@bendyline/squisq/markdown';
  *
  * const md = '# Hello\n\nWorld\n';
  * const doc = markdownToDoc(parseMarkdown(md));

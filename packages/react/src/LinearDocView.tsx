@@ -18,17 +18,17 @@
  */
 
 import { useMemo } from 'react';
-import type { Doc, Block } from '@bendyline/prodcore/schemas';
-import type { ViewportConfig } from '@bendyline/prodcore/schemas';
-import { VIEWPORT_PRESETS } from '@bendyline/prodcore/schemas';
+import type { Doc, Block } from '@bendyline/squisq/schemas';
+import type { ViewportConfig } from '@bendyline/squisq/schemas';
+import { VIEWPORT_PRESETS } from '@bendyline/squisq/schemas';
 import {
   getLayers,
   hasTemplate,
   DEFAULT_THEME,
-} from '@bendyline/prodcore/doc';
-import type { RenderContext } from '@bendyline/prodcore/doc';
-import { extractPlainText } from '@bendyline/prodcore/markdown';
-import type { MarkdownBlockNode } from '@bendyline/prodcore/markdown';
+} from '@bendyline/squisq/doc';
+import type { RenderContext } from '@bendyline/squisq/doc';
+import { extractPlainText } from '@bendyline/squisq/markdown';
+import type { MarkdownBlockNode } from '@bendyline/squisq/markdown';
 import { BlockRenderer } from './BlockRenderer';
 import { MarkdownRenderer } from './MarkdownRenderer';
 
@@ -131,7 +131,7 @@ function BlockSection({
 
   return (
     <div
-      className="prodcore-linear-section"
+      className="squisq-linear-section"
       data-block-id={block.id}
       data-template={isAnnotated ? block.sourceHeading?.templateAnnotation?.template : undefined}
     >
@@ -142,15 +142,15 @@ function BlockSection({
 
       {/* Annotated block: render SVG card */}
       {isAnnotated && visualBlock && (
-        <div className="prodcore-linear-card">
+        <div className="squisq-linear-card">
           {/* Optional heading label above the card */}
           {block.sourceHeading && (
-            <div className="prodcore-linear-card-label prodcore-md">
+            <div className="squisq-linear-card-label squisq-md">
               <MarkdownRenderer nodes={[block.sourceHeading]} />
             </div>
           )}
           <div
-            className="prodcore-linear-card-svg"
+            className="squisq-linear-card-svg"
             style={{
               width: '100%',
               aspectRatio: `${viewport.width} / ${viewport.height}`,
@@ -177,7 +177,7 @@ function BlockSection({
 
       {/* Recurse into children */}
       {block.children && block.children.length > 0 && (
-        <div className="prodcore-linear-children">
+        <div className="squisq-linear-children">
           {block.children.map((child, i) => (
             <BlockSection
               key={child.id}
@@ -283,7 +283,7 @@ export function LinearDocView({
 
   return (
     <div
-      className={`prodcore-linear ${className || ''}`}
+      className={`squisq-linear ${className || ''}`}
       style={{
         width: '100%',
         height: '100%',
@@ -292,14 +292,14 @@ export function LinearDocView({
       }}
     >
       <div
-        className="prodcore-linear-content"
+        className="squisq-linear-content"
         style={{
           maxWidth: '720px',
           margin: '0 auto',
           padding: '24px 16px',
           lineHeight: 1.7,
           fontSize: '16px',
-          color: 'var(--prodcore-text, #1f2937)',
+          color: 'var(--squisq-text, #1f2937)',
         }}
       >
         {doc.blocks.map((block, i) => (

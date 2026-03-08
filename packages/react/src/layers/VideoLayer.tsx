@@ -22,7 +22,7 @@
  */
 
 import { useRef, useEffect } from 'react';
-import type { VideoLayer as VideoLayerType } from '@bendyline/prodcore/schemas';
+import type { VideoLayer as VideoLayerType } from '@bendyline/squisq/schemas';
 import { useMediaUrl } from '../hooks/MediaContext';
 
 interface VideoLayerProps {

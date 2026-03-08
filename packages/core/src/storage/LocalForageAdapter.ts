@@ -16,13 +16,13 @@ import localforage from 'localforage';
 import type { StorageAdapter } from './Storage.js';
 
 export interface LocalForageAdapterOptions {
-  /** IndexedDB database name (default: 'prodcore') */
+  /** IndexedDB database name (default: 'squisq') */
   name?: string;
   /** IndexedDB object store name (default: 'data') */
   storeName?: string;
   /** Key prefix for namespacing (default: '') */
   prefix?: string;
-  /** Human-readable description (default: 'Prodcore storage') */
+  /** Human-readable description (default: 'Squisq storage') */
   description?: string;
 }
 
@@ -33,10 +33,10 @@ export class LocalForageAdapter implements StorageAdapter {
 
   constructor(options: LocalForageAdapterOptions = {}) {
     const {
-      name = 'prodcore',
+      name = 'squisq',
       storeName = 'data',
       prefix = '',
-      description = 'Prodcore storage',
+      description = 'Squisq storage',
     } = options;
 
     this.prefix = prefix;

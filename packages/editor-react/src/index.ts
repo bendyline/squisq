@@ -1,5 +1,5 @@
 /**
- * @bendyline/prodcore-editor-react
+ * @bendyline/squisq-editor-react
  *
  * React component library for editing markdown content with three views:
  * - Raw (Monaco) — Full markdown source editing
@@ -8,8 +8,8 @@
  *
  * @example
  * ```tsx
- * import { EditorShell } from '@bendyline/prodcore-editor-react';
- * import '@bendyline/prodcore-editor-react/styles';
+ * import { EditorShell } from '@bendyline/squisq-editor-react';
+ * import '@bendyline/squisq-editor-react/styles';
  *
  * function App() {
  *   return <EditorShell initialMarkdown="# Hello World" />;

@@ -13,7 +13,7 @@
  * - DocControlsBottom.tsx — Horizontal bottom strip controls
  */
 
-import type { Block } from '@bendyline/prodcore/schemas';
+import type { Block } from '@bendyline/squisq/schemas';
 
 /** Layout mode for doc player controls */
 export type ControlsLayout = 'overlay' | 'sidebar' | 'bottom';

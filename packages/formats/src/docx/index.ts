@@ -1,7 +1,7 @@
 /**
- * @bendyline/prodcore-formats DOCX Module
+ * @bendyline/squisq-formats DOCX Module
  *
- * Import and export prodcore documents (MarkdownDocument / Doc)
+ * Import and export squisq documents (MarkdownDocument / Doc)
  * to/from Microsoft Word .docx files (Office Open XML WordprocessingML).
  *
  * All operations run in the browser — no server required.
@@ -13,7 +13,7 @@
  *   docToDocx,
  *   docxToMarkdownDoc,
  *   docxToDoc,
- * } from '@bendyline/prodcore-formats/docx';
+ * } from '@bendyline/squisq-formats/docx';
  * ```
  */
 

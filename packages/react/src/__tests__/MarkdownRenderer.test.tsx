@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { render } from '@testing-library/react';
 import { MarkdownRenderer } from '../MarkdownRenderer';
-import type { MarkdownBlockNode, MarkdownInlineNode } from '@bendyline/prodcore/markdown';
+import type { MarkdownBlockNode, MarkdownInlineNode } from '@bendyline/squisq/markdown';
 
 // ── Helpers ────────────────────────────────────────────────────────
 
@@ -29,7 +29,7 @@ describe('MarkdownRenderer', () => {
     const { container } = render(
       <MarkdownRenderer nodes={[paragraph(text('Hello world'))]} />,
     );
-    const p = container.querySelector('p.prodcore-md-p');
+    const p = container.querySelector('p.squisq-md-p');
     expect(p).toBeTruthy();
     expect(p?.textContent).toBe('Hello world');
   });
@@ -65,7 +65,7 @@ describe('MarkdownRenderer', () => {
       paragraph(text('run '), { type: 'inlineCode', value: 'npm install' }),
     ];
     const { container } = render(<MarkdownRenderer nodes={nodes} />);
-    const code = container.querySelector('code.prodcore-md-inline-code');
+    const code = container.querySelector('code.squisq-md-inline-code');
     expect(code?.textContent).toBe('npm install');
   });
 
@@ -79,7 +79,7 @@ describe('MarkdownRenderer', () => {
       }),
     ];
     const { container } = render(<MarkdownRenderer nodes={nodes} />);
-    const a = container.querySelector('a.prodcore-md-link') as HTMLAnchorElement;
+    const a = container.querySelector('a.squisq-md-link') as HTMLAnchorElement;
     expect(a).toBeTruthy();
     expect(a.href).toContain('example.com');
     expect(a.target).toBe('_blank');
@@ -95,7 +95,7 @@ describe('MarkdownRenderer', () => {
       }),
     ];
     const { container } = render(<MarkdownRenderer nodes={nodes} />);
-    const img = container.querySelector('img.prodcore-md-image') as HTMLImageElement;
+    const img = container.querySelector('img.squisq-md-image') as HTMLImageElement;
     expect(img).toBeTruthy();
     expect(img.alt).toBe('A cat');
   });
@@ -112,7 +112,7 @@ describe('MarkdownRenderer', () => {
       },
     ];
     const { container } = render(<MarkdownRenderer nodes={nodes} />);
-    const ul = container.querySelector('ul.prodcore-md-ul');
+    const ul = container.querySelector('ul.squisq-md-ul');
     expect(ul).toBeTruthy();
     const items = ul?.querySelectorAll('li');
     expect(items?.length).toBe(2);
@@ -131,7 +131,7 @@ describe('MarkdownRenderer', () => {
       },
     ];
     const { container } = render(<MarkdownRenderer nodes={nodes} />);
-    const ol = container.querySelector('ol.prodcore-md-ol') as HTMLOListElement;
+    const ol = container.querySelector('ol.squisq-md-ol') as HTMLOListElement;
     expect(ol).toBeTruthy();
     expect(ol.start).toBe(3);
   });
@@ -159,7 +159,7 @@ describe('MarkdownRenderer', () => {
       { type: 'code', lang: 'typescript', value: 'const x = 1;' },
     ];
     const { container } = render(<MarkdownRenderer nodes={nodes} />);
-    const pre = container.querySelector('pre.prodcore-md-code-block');
+    const pre = container.querySelector('pre.squisq-md-code-block');
     expect(pre).toBeTruthy();
     const code = pre?.querySelector('code.language-typescript');
     expect(code?.textContent).toBe('const x = 1;');
@@ -170,7 +170,7 @@ describe('MarkdownRenderer', () => {
       { type: 'blockquote', children: [paragraph(text('Quoted text'))] },
     ];
     const { container } = render(<MarkdownRenderer nodes={nodes} />);
-    const bq = container.querySelector('blockquote.prodcore-md-blockquote');
+    const bq = container.querySelector('blockquote.squisq-md-blockquote');
     expect(bq).toBeTruthy();
     expect(bq?.textContent).toBe('Quoted text');
   });
@@ -182,7 +182,7 @@ describe('MarkdownRenderer', () => {
       paragraph(text('After')),
     ];
     const { container } = render(<MarkdownRenderer nodes={nodes} />);
-    expect(container.querySelector('hr.prodcore-md-hr')).toBeTruthy();
+    expect(container.querySelector('hr.squisq-md-hr')).toBeTruthy();
   });
 
   it('renders a table', () => {
@@ -209,7 +209,7 @@ describe('MarkdownRenderer', () => {
       },
     ];
     const { container } = render(<MarkdownRenderer nodes={nodes} />);
-    const table = container.querySelector('table.prodcore-md-table');
+    const table = container.querySelector('table.squisq-md-table');
     expect(table).toBeTruthy();
     expect(table?.querySelectorAll('th').length).toBe(2);
     expect(table?.querySelectorAll('td').length).toBe(2);
@@ -220,7 +220,7 @@ describe('MarkdownRenderer', () => {
       paragraph({ type: 'delete', children: [text('removed')] }),
     ];
     const { container } = render(<MarkdownRenderer nodes={nodes} />);
-    const del = container.querySelector('del.prodcore-md-del');
+    const del = container.querySelector('del.squisq-md-del');
     expect(del?.textContent).toBe('removed');
   });
 
@@ -236,6 +236,6 @@ describe('MarkdownRenderer', () => {
     const { container } = render(
       <MarkdownRenderer nodes={[paragraph(text('test'))]} className="custom" />,
     );
-    expect(container.querySelector('.prodcore-md.custom')).toBeTruthy();
+    expect(container.querySelector('.squisq-md.custom')).toBeTruthy();
   });
 });

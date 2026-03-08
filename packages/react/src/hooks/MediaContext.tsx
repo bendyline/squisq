@@ -14,7 +14,7 @@
  */
 
 import { createContext, useContext, useState, useEffect } from 'react';
-import type { MediaProvider } from '@bendyline/prodcore/schemas';
+import type { MediaProvider } from '@bendyline/squisq/schemas';
 
 /**
  * React context holding the current MediaProvider (or null if none provided).

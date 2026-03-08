@@ -1,5 +1,5 @@
 /**
- * Core geographic types shared across prodcore.
+ * Core geographic types shared across squisq.
  */
 
 export interface Coordinates {

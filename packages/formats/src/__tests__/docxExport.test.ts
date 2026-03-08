@@ -25,7 +25,7 @@ import type {
   MarkdownInlineCode,
   MarkdownLink,
   MarkdownBreak,
-} from '@bendyline/prodcore/markdown';
+} from '@bendyline/squisq/markdown';
 
 import { markdownDocToDocx, docToDocx } from '../docx/export';
 

@@ -1,7 +1,7 @@
 /**
  * PDF Export
  *
- * Converts a prodcore MarkdownDocument (or Doc) into a PDF file
+ * Converts a squisq MarkdownDocument (or Doc) into a PDF file
  * using pdf-lib. Generates paginated, styled output with support for
  * headings, paragraphs, inline formatting, lists, code blocks,
  * blockquotes, tables, thematic breaks, and hyperlinks.
@@ -11,8 +11,8 @@
  *
  * @example
  * ```ts
- * import { parseMarkdown } from '@bendyline/prodcore/markdown';
- * import { markdownDocToPdf } from '@bendyline/prodcore-formats/pdf';
+ * import { parseMarkdown } from '@bendyline/squisq/markdown';
+ * import { markdownDocToPdf } from '@bendyline/squisq-formats/pdf';
  *
  * const md = parseMarkdown('# Hello\n\nWorld **bold** text');
  * const buffer = await markdownDocToPdf(md);
@@ -27,8 +27,8 @@ import {
   PDFPage,
 } from 'pdf-lib';
 
-import type { Doc } from '@bendyline/prodcore/schemas';
-import { docToMarkdown } from '@bendyline/prodcore/doc';
+import type { Doc } from '@bendyline/squisq/schemas';
+import { docToMarkdown } from '@bendyline/squisq/doc';
 import type {
   MarkdownDocument,
   MarkdownBlockNode,
@@ -57,7 +57,7 @@ import type {
   MarkdownInlineHtml,
   MarkdownInlineMath,
   MarkdownFootnoteReference,
-} from '@bendyline/prodcore/markdown';
+} from '@bendyline/squisq/markdown';
 
 import {
   PAGE_WIDTH_LETTER,
@@ -138,7 +138,7 @@ export async function markdownDocToPdf(
 }
 
 /**
- * Convert a prodcore Doc to a PDF ArrayBuffer.
+ * Convert a squisq Doc to a PDF ArrayBuffer.
  *
  * Convenience wrapper: Doc → MarkdownDocument → PDF.
  */

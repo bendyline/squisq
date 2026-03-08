@@ -1,7 +1,7 @@
 /**
  * PDF Import
  *
- * Parses a PDF file and converts its content into a prodcore
+ * Parses a PDF file and converts its content into a squisq
  * MarkdownDocument (or Doc) using heuristic detection of headings,
  * lists, code blocks, tables, blockquotes, and hyperlinks.
  *
@@ -12,7 +12,7 @@
  *
  * @example
  * ```ts
- * import { pdfToMarkdownDoc } from '@bendyline/prodcore-formats/pdf';
+ * import { pdfToMarkdownDoc } from '@bendyline/squisq-formats/pdf';
  *
  * const response = await fetch('document.pdf');
  * const data = await response.arrayBuffer();
@@ -20,8 +20,8 @@
  * ```
  */
 
-import type { Doc } from '@bendyline/prodcore/schemas';
-import { markdownToDoc } from '@bendyline/prodcore/doc';
+import type { Doc } from '@bendyline/squisq/schemas';
+import { markdownToDoc } from '@bendyline/squisq/doc';
 import type {
   MarkdownDocument,
   MarkdownBlockNode,
@@ -40,7 +40,7 @@ import type {
   MarkdownStrong,
   MarkdownInlineCode,
   MarkdownLink,
-} from '@bendyline/prodcore/markdown';
+} from '@bendyline/squisq/markdown';
 
 import {
   DEFAULT_FONT_SIZE,
@@ -114,7 +114,7 @@ export async function pdfToMarkdownDoc(
 }
 
 /**
- * Convert a PDF file to a prodcore Doc.
+ * Convert a PDF file to a squisq Doc.
  *
  * Convenience wrapper: PDF → MarkdownDocument → Doc.
  */

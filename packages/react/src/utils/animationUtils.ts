@@ -10,4 +10,4 @@ export {
   getDefaultAnimationDuration,
   getTransitionClass,
   getAnimationProgress,
-} from '@bendyline/prodcore/doc';
+} from '@bendyline/squisq/doc';

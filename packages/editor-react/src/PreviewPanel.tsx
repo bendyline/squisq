@@ -2,7 +2,7 @@
  * PreviewPanel
  *
  * Renders a live preview of the current markdown document as a slideshow
- * using the DocPlayer component from @bendyline/prodcore-react.
+ * using the DocPlayer component from @bendyline/squisq-react.
  *
  * The markdown-derived Doc (from markdownToDoc) contains hierarchical blocks
  * with template names, heading text, and body content — but no audio or
@@ -17,14 +17,14 @@
  */
 
 import { useMemo, useState, useEffect } from 'react';
-import { DocPlayer, LinearDocView } from '@bendyline/prodcore-react';
-import type { DisplayMode } from '@bendyline/prodcore-react';
-import { flattenBlocks } from '@bendyline/prodcore/doc';
-import { hasTemplate } from '@bendyline/prodcore/doc';
-import { extractPlainText } from '@bendyline/prodcore/markdown';
-import type { Block, Doc, ViewportConfig, ViewportPreset } from '@bendyline/prodcore/schemas';
-import { VIEWPORT_PRESETS } from '@bendyline/prodcore/schemas';
-import type { MarkdownBlockNode } from '@bendyline/prodcore/markdown';
+import { DocPlayer, LinearDocView } from '@bendyline/squisq-react';
+import type { DisplayMode } from '@bendyline/squisq-react';
+import { flattenBlocks } from '@bendyline/squisq/doc';
+import { hasTemplate } from '@bendyline/squisq/doc';
+import { extractPlainText } from '@bendyline/squisq/markdown';
+import type { Block, Doc, ViewportConfig, ViewportPreset } from '@bendyline/squisq/schemas';
+import { VIEWPORT_PRESETS } from '@bendyline/squisq/schemas';
+import type { MarkdownBlockNode } from '@bendyline/squisq/markdown';
 import { useEditorContext } from './EditorContext';
 
 export interface PreviewPanelProps {
@@ -255,7 +255,7 @@ function resolveDisplayMode(value: unknown): DisplayMode | null {
 
 /**
  * Live preview panel that renders the current document as a slideshow.
- * Uses DocPlayer from @bendyline/prodcore-react for SVG block rendering
+ * Uses DocPlayer from @bendyline/squisq-react for SVG block rendering
  * with template expansion, transitions, and playback controls.
  *
  * Includes a viewport format dropdown above the player. The default
@@ -313,7 +313,7 @@ export function PreviewPanel({
   // Status overlays for non-ready states
   if (isParsing) {
     return (
-      <div className={`prodcore-preview-status ${className || ''}`} data-testid="preview-panel">
+      <div className={`squisq-preview-status ${className || ''}`} data-testid="preview-panel">
         <p>Parsing…</p>
       </div>
     );
@@ -321,7 +321,7 @@ export function PreviewPanel({
 
   if (parseError) {
     return (
-      <div className={`prodcore-preview-status ${className || ''}`} data-testid="preview-panel">
+      <div className={`squisq-preview-status ${className || ''}`} data-testid="preview-panel">
         <h3>Parse Error</h3>
         <pre>{parseError}</pre>
       </div>
@@ -330,7 +330,7 @@ export function PreviewPanel({
 
   if (!previewDoc) {
     return (
-      <div className={`prodcore-preview-status ${className || ''}`} data-testid="preview-panel">
+      <div className={`squisq-preview-status ${className || ''}`} data-testid="preview-panel">
         <p>No content to preview. Start typing in the editor.</p>
       </div>
     );
@@ -338,7 +338,7 @@ export function PreviewPanel({
 
   return (
     <div
-      className={`prodcore-preview-container ${className || ''}`}
+      className={`squisq-preview-container ${className || ''}`}
       data-testid="preview-panel"
       style={{
         width: '100%',
@@ -346,25 +346,25 @@ export function PreviewPanel({
         display: 'flex',
         flexDirection: 'column',
         overflow: 'hidden',
-        background: 'var(--prodcore-bg, #f5f5f5)',
+        background: 'var(--squisq-bg, #f5f5f5)',
       }}
     >
       {/* Viewport format selector */}
       <div
-        className="prodcore-preview-toolbar"
+        className="squisq-preview-toolbar"
         style={{
           display: 'flex',
           alignItems: 'center',
           gap: '8px',
           padding: '6px 12px',
-          borderBottom: '1px solid var(--prodcore-border, #e0e0e0)',
+          borderBottom: '1px solid var(--squisq-border, #e0e0e0)',
           flexShrink: 0,
           fontSize: '13px',
         }}
       >
         <label
           htmlFor="viewport-preset"
-          style={{ color: 'var(--prodcore-text-muted, #6b7280)' }}
+          style={{ color: 'var(--squisq-text-muted, #6b7280)' }}
         >
           Format:
         </label>
@@ -375,9 +375,9 @@ export function PreviewPanel({
           style={{
             padding: '3px 8px',
             borderRadius: '4px',
-            border: '1px solid var(--prodcore-border, #d1d5db)',
-            background: 'var(--prodcore-input-bg, #fff)',
-            color: 'var(--prodcore-text, #1f2937)',
+            border: '1px solid var(--squisq-border, #d1d5db)',
+            background: 'var(--squisq-input-bg, #fff)',
+            color: 'var(--squisq-text, #1f2937)',
             fontSize: '13px',
             cursor: 'pointer',
           }}
@@ -392,7 +392,7 @@ export function PreviewPanel({
           <span
             style={{
               fontSize: '11px',
-              color: 'var(--prodcore-text-muted, #9ca3af)',
+              color: 'var(--squisq-text-muted, #9ca3af)',
               fontStyle: 'italic',
             }}
           >
@@ -404,14 +404,14 @@ export function PreviewPanel({
         <span style={{
           width: '1px',
           height: '18px',
-          background: 'var(--prodcore-border, #d1d5db)',
+          background: 'var(--squisq-border, #d1d5db)',
           margin: '0 4px',
         }} />
 
         {/* Display mode selector */}
         <label
           htmlFor="display-mode"
-          style={{ color: 'var(--prodcore-text-muted, #6b7280)' }}
+          style={{ color: 'var(--squisq-text-muted, #6b7280)' }}
         >
           Mode:
         </label>
@@ -422,9 +422,9 @@ export function PreviewPanel({
           style={{
             padding: '3px 8px',
             borderRadius: '4px',
-            border: '1px solid var(--prodcore-border, #d1d5db)',
-            background: 'var(--prodcore-input-bg, #fff)',
-            color: 'var(--prodcore-text, #1f2937)',
+            border: '1px solid var(--squisq-border, #d1d5db)',
+            background: 'var(--squisq-input-bg, #fff)',
+            color: 'var(--squisq-text, #1f2937)',
             fontSize: '13px',
             cursor: 'pointer',
           }}
@@ -439,7 +439,7 @@ export function PreviewPanel({
           <span
             style={{
               fontSize: '11px',
-              color: 'var(--prodcore-text-muted, #9ca3af)',
+              color: 'var(--squisq-text-muted, #9ca3af)',
               fontStyle: 'italic',
             }}
           >
@@ -450,7 +450,7 @@ export function PreviewPanel({
 
       {/* Player / Document view */}
       <div
-        className="prodcore-preview-player"
+        className="squisq-preview-player"
         style={{
           flex: 1,
           display: 'flex',

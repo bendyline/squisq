@@ -11,7 +11,7 @@
  * allowing the same component code to work in both environments.
  */
 
-import type { AudioTrack, AudioSegment } from '@bendyline/prodcore/schemas';
+import type { AudioTrack, AudioSegment } from '@bendyline/squisq/schemas';
 
 export interface AudioState {
   /** Current time in overall timeline (seconds) */

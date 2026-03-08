@@ -8,9 +8,9 @@
  */
 
 import { useState, useRef, useCallback, useEffect } from 'react';
-import { parseMarkdown, stringifyMarkdown } from '@bendyline/prodcore/markdown';
-import { markdownDocToDocx, docxToMarkdownDoc } from '@bendyline/prodcore-formats/docx';
-import { markdownDocToPdf, pdfToMarkdownDoc, configurePdfWorker } from '@bendyline/prodcore-formats/pdf';
+import { parseMarkdown, stringifyMarkdown } from '@bendyline/squisq/markdown';
+import { markdownDocToDocx, docxToMarkdownDoc } from '@bendyline/squisq-formats/docx';
+import { markdownDocToPdf, pdfToMarkdownDoc, configurePdfWorker } from '@bendyline/squisq-formats/pdf';
 import { addSlotMedia } from './slotStorage';
 
 // Configure pdfjs-dist worker for the browser.

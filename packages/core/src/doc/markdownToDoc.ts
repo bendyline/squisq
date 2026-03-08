@@ -11,8 +11,8 @@
  *
  * @example
  * ```ts
- * import { parseMarkdown } from '@bendyline/prodcore/markdown';
- * import { markdownToDoc } from '@bendyline/prodcore/doc';
+ * import { parseMarkdown } from '@bendyline/squisq/markdown';
+ * import { markdownToDoc } from '@bendyline/squisq/doc';
  *
  * const md = parseMarkdown('# Intro\n\nHello world\n\n## Details\n\nMore text');
  * const doc = markdownToDoc(md);

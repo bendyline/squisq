@@ -6,7 +6,7 @@
  * with proper aspect ratio handling.
  */
 
-import type { ImageLayer as ImageLayerType, Animation } from '@bendyline/prodcore/schemas';
+import type { ImageLayer as ImageLayerType, Animation } from '@bendyline/squisq/schemas';
 import { getAnimationStyle } from '../utils/animationUtils';
 import { useMediaUrl } from '../hooks/MediaContext';
 

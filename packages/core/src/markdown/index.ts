@@ -1,5 +1,5 @@
 /**
- * @bendyline/prodcore Markdown Module
+ * @bendyline/squisq Markdown Module
  *
  * Provides a complete JSON representation of markdown documents with
  * perfect-fidelity round-trip conversion (markdown ↔ JSON).
@@ -10,7 +10,7 @@
  *
  * @example
  * ```ts
- * import { parseMarkdown, stringifyMarkdown } from '@bendyline/prodcore/markdown';
+ * import { parseMarkdown, stringifyMarkdown } from '@bendyline/squisq/markdown';
  *
  * // Parse markdown to JSON
  * const doc = parseMarkdown('# Hello\n\nWorld **bold** and *italic*');

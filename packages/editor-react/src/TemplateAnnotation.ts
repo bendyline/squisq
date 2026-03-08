@@ -52,11 +52,11 @@ export const HeadingWithTemplate = Heading.extend({
       return [
         tag,
         HTMLAttributes,
-        ['span', { class: 'prodcore-heading-content' }, 0],
+        ['span', { class: 'squisq-heading-content' }, 0],
         [
           'span',
           {
-            class: 'prodcore-template-badge',
+            class: 'squisq-template-badge',
             contenteditable: 'false',
             'data-template': templateName,
           },

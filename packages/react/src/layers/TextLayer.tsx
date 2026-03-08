@@ -8,8 +8,8 @@
  * Text is rendered using SVG <text> elements with <tspan> for line breaks.
  */
 
-import type { TextLayer as TextLayerType } from '@bendyline/prodcore/schemas';
-import { DEFAULT_DOC_FONT } from '@bendyline/prodcore/schemas';
+import type { TextLayer as TextLayerType } from '@bendyline/squisq/schemas';
+import { DEFAULT_DOC_FONT } from '@bendyline/squisq/schemas';
 import { getAnimationStyle } from '../utils/animationUtils';
 
 interface TextLayerProps {

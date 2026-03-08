@@ -1,7 +1,7 @@
 /**
- * @bendyline/prodcore-formats
+ * @bendyline/squisq-formats
  *
- * Format converters for prodcore documents. Converts between prodcore's
+ * Format converters for squisq documents. Converts between squisq's
  * MarkdownDocument / Doc and various file formats via Office Open XML.
  *
  * Supported formats:
@@ -16,11 +16,11 @@
  * @example
  * ```ts
  * // Import from root
- * import { markdownDocToDocx, docxToMarkdownDoc } from '@bendyline/prodcore-formats';
+ * import { markdownDocToDocx, docxToMarkdownDoc } from '@bendyline/squisq-formats';
  *
  * // Or import from subpath
- * import { markdownDocToDocx } from '@bendyline/prodcore-formats/docx';
- * import { createPackage } from '@bendyline/prodcore-formats/ooxml';
+ * import { markdownDocToDocx } from '@bendyline/squisq-formats/docx';
+ * import { createPackage } from '@bendyline/squisq-formats/ooxml';
  * ```
  */
 

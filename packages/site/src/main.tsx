@@ -3,7 +3,7 @@ import { createRoot } from 'react-dom/client';
 import { App } from './App';
 
 // DocPlayer animations (used by the Preview panel slideshow)
-import '@bendyline/prodcore-react/styles';
+import '@bendyline/squisq-react/styles';
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

@@ -2,7 +2,7 @@
  * WysiwygEditor
  *
  * Tiptap-based rich text editor that provides a WYSIWYG editing experience
- * for markdown content. Uses prodcore's parseMarkdown/stringifyMarkdown for
+ * for markdown content. Uses squisq's parseMarkdown/stringifyMarkdown for
  * conversion rather than Tiptap's built-in HTML serialization, ensuring
  * perfect fidelity with the markdown format.
  *
@@ -22,8 +22,8 @@ import TaskItem from '@tiptap/extension-task-item';
 import Placeholder from '@tiptap/extension-placeholder';
 import { HeadingWithTemplate } from './TemplateAnnotation';
 import { useEditorContext } from './EditorContext';
-import { parseMarkdown, stringifyMarkdown } from '@bendyline/prodcore/markdown';
-import type { MarkdownDocument } from '@bendyline/prodcore/markdown';
+import { parseMarkdown, stringifyMarkdown } from '@bendyline/squisq/markdown';
+import type { MarkdownDocument } from '@bendyline/squisq/markdown';
 import { markdownToTiptap, tiptapToMarkdown } from './tiptapBridge';
 
 // ── Frontmatter helpers ────────────────────────────────────────────
@@ -65,7 +65,7 @@ export function WysiwygEditor({
         // Disable built-in heading; we use HeadingWithTemplate instead
         heading: false,
         codeBlock: {
-          HTMLAttributes: { class: 'prodcore-code-block' },
+          HTMLAttributes: { class: 'squisq-code-block' },
         },
       }),
       HeadingWithTemplate.configure({ levels: [1, 2, 3, 4, 5, 6] }),
@@ -88,7 +88,7 @@ export function WysiwygEditor({
     },
     editorProps: {
       attributes: {
-        class: 'prodcore-wysiwyg-editor',
+        class: 'squisq-wysiwyg-editor',
         'data-testid': 'wysiwyg-editor',
       },
     },

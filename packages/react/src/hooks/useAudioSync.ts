@@ -13,7 +13,7 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react';
 import type { RefObject } from 'react';
-import type { AudioTrack } from '@bendyline/prodcore/schemas';
+import type { AudioTrack } from '@bendyline/squisq/schemas';
 import type { AudioProvider } from './AudioProvider';
 import { calculateSegmentTiming, findSegmentAtTime } from './AudioProvider';
 

@@ -10,7 +10,7 @@ import { useRef, useCallback, useEffect } from 'react';
 import Editor, { loader, type OnMount, type OnChange } from '@monaco-editor/react';
 import * as monaco from 'monaco-editor';
 import { useEditorContext } from './EditorContext';
-import { getAvailableTemplates } from '@bendyline/prodcore/doc';
+import { getAvailableTemplates } from '@bendyline/squisq/doc';
 
 // Use locally installed monaco-editor instead of CDN
 loader.config({ monaco });

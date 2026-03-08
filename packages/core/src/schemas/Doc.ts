@@ -110,7 +110,7 @@ export interface Block {
    * Pre-computed visual layers, rendered back-to-front.
    *
    * Optional — template-derived blocks typically omit this and compute
-   * layers on demand via `getLayers()` from `@bendyline/prodcore/doc`.
+   * layers on demand via `getLayers()` from `@bendyline/squisq/doc`.
    * Raw blocks (e.g., hand-crafted by AI) may provide layers directly.
    */
   layers?: Layer[];

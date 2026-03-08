@@ -6,8 +6,8 @@
  */
 
 import { useState, useMemo } from 'react';
-import { parseMarkdown } from '@bendyline/prodcore/markdown';
-import { markdownToDoc } from '@bendyline/prodcore/doc';
+import { parseMarkdown } from '@bendyline/squisq/markdown';
+import { markdownToDoc } from '@bendyline/squisq/doc';
 
 type Tab = 'markdown' | 'doc';
 

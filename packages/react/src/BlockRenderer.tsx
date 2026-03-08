@@ -6,7 +6,7 @@
  * Handles positioning, animations, and transitions.
  */
 
-import type { Block, Layer } from '@bendyline/prodcore/schemas';
+import type { Block, Layer } from '@bendyline/squisq/schemas';
 import { ImageLayer } from './layers/ImageLayer';
 import { TextLayer } from './layers/TextLayer';
 import { ShapeLayer } from './layers/ShapeLayer';

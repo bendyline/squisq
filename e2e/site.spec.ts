@@ -1,7 +1,7 @@
 import { test, expect, type Page } from '@playwright/test';
 
 /**
- * E2E tests for the Prodcore dev site.
+ * E2E tests for the Squisq dev site.
  *
  * These tests exercise the editor shell (sample picker, view switching)
  * and the DocPlayer preview (template expansion, block progression, controls).

@@ -113,7 +113,7 @@ function EditorShellInner({
 
   return (
     <div
-      className={`prodcore-editor-shell ${className || ''}`}
+      className={`squisq-editor-shell ${className || ''}`}
       data-theme={theme}
       style={{
         display: 'flex',
@@ -123,8 +123,8 @@ function EditorShellInner({
       }}
     >
       {/* Header: ViewSwitcher + Toolbar */}
-      <div className="prodcore-editor-header">
-        <div className="prodcore-editor-header-row">
+      <div className="squisq-editor-header">
+        <div className="squisq-editor-header-row">
           <ViewSwitcher />
         </div>
         <Toolbar />
@@ -132,7 +132,7 @@ function EditorShellInner({
 
       {/* Main content area */}
       <div
-        className="prodcore-editor-content"
+        className="squisq-editor-content"
         style={{ flex: 1, overflow: 'hidden', position: 'relative' }}
       >
         {activeView === 'raw' && <RawEditor theme={theme === 'dark' ? 'vs-dark' : 'vs'} />}

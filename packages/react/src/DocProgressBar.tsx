@@ -19,7 +19,7 @@
 import { useRef, useState, useCallback } from 'react';
 import type { PlaybackState, PlaybackActions, BlockMarker } from './types';
 import { formatTime } from './types';
-import type { Block } from '@bendyline/prodcore/schemas';
+import type { Block } from '@bendyline/squisq/schemas';
 
 interface DocProgressBarProps {
   state: PlaybackState;

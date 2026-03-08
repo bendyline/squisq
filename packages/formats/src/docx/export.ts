@@ -1,7 +1,7 @@
 /**
  * DOCX Export
  *
- * Converts a prodcore MarkdownDocument (or Doc) into a .docx file
+ * Converts a squisq MarkdownDocument (or Doc) into a .docx file
  * by generating WordprocessingML XML and assembling the OOXML package.
  *
  * No third-party docx library — all XML is generated directly using
@@ -9,16 +9,16 @@
  *
  * @example
  * ```ts
- * import { parseMarkdown } from '@bendyline/prodcore/markdown';
- * import { markdownDocToDocx } from '@bendyline/prodcore-formats/docx';
+ * import { parseMarkdown } from '@bendyline/squisq/markdown';
+ * import { markdownDocToDocx } from '@bendyline/squisq-formats/docx';
  *
  * const md = parseMarkdown('# Hello\n\nWorld **bold** text');
  * const blob = await markdownDocToDocx(md);
  * ```
  */
 
-import type { Doc } from '@bendyline/prodcore/schemas';
-import { docToMarkdown } from '@bendyline/prodcore/doc';
+import type { Doc } from '@bendyline/squisq/schemas';
+import { docToMarkdown } from '@bendyline/squisq/doc';
 import type {
   MarkdownDocument,
   MarkdownBlockNode,
@@ -47,7 +47,7 @@ import type {
   MarkdownInlineHtml,
   MarkdownInlineMath,
   MarkdownFootnoteReference,
-} from '@bendyline/prodcore/markdown';
+} from '@bendyline/squisq/markdown';
 
 import { createPackage } from '../ooxml/writer.js';
 import {
@@ -122,11 +122,11 @@ export async function markdownDocToDocx(
 }
 
 /**
- * Convert a prodcore Doc to a .docx Blob.
+ * Convert a squisq Doc to a .docx Blob.
  *
  * Convenience wrapper that converts Doc → MarkdownDocument → DOCX.
  *
- * @param doc - The prodcore Doc
+ * @param doc - The squisq Doc
  * @param options - Export options
  * @returns An ArrayBuffer containing the .docx file
  */

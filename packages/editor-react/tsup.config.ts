@@ -9,8 +9,8 @@ export default defineConfig({
   external: [
     'react',
     'react-dom',
-    '@bendyline/prodcore',
-    '@bendyline/prodcore-react',
+    '@bendyline/squisq',
+    '@bendyline/squisq-react',
     'monaco-editor',
   ],
   esbuildOptions(options) {

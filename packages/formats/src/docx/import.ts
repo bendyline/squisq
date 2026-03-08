@@ -2,7 +2,7 @@
  * DOCX Import
  *
  * Parses a .docx file (Office Open XML WordprocessingML) and converts
- * its content into a prodcore MarkdownDocument (or Doc).
+ * its content into a squisq MarkdownDocument (or Doc).
  *
  * Uses JSZip + DOMParser to read the archive and parse the XML — no
  * third-party docx library. Handles headings, paragraphs, inline
@@ -11,7 +11,7 @@
  *
  * @example
  * ```ts
- * import { docxToMarkdownDoc } from '@bendyline/prodcore-formats/docx';
+ * import { docxToMarkdownDoc } from '@bendyline/squisq-formats/docx';
  *
  * const response = await fetch('document.docx');
  * const data = await response.arrayBuffer();
@@ -19,8 +19,8 @@
  * ```
  */
 
-import type { Doc } from '@bendyline/prodcore/schemas';
-import { markdownToDoc } from '@bendyline/prodcore/doc';
+import type { Doc } from '@bendyline/squisq/schemas';
+import { markdownToDoc } from '@bendyline/squisq/doc';
 import type {
   MarkdownDocument,
   MarkdownBlockNode,
@@ -44,7 +44,7 @@ import type {
   MarkdownBreak,
   MarkdownFootnoteReference,
   MarkdownFootnoteDefinition,
-} from '@bendyline/prodcore/markdown';
+} from '@bendyline/squisq/markdown';
 
 import { openPackage, getPartXml, getPartRelationships, getPartBinary } from '../ooxml/reader.js';
 import type { OoxmlPackage, Relationship } from '../ooxml/types.js';
@@ -103,13 +103,13 @@ export async function docxToMarkdownDoc(
 }
 
 /**
- * Convert a .docx file to a prodcore Doc.
+ * Convert a .docx file to a squisq Doc.
  *
  * Convenience wrapper: DOCX → MarkdownDocument → Doc.
  *
  * @param data - The raw .docx file as ArrayBuffer or Blob
  * @param options - Import options
- * @returns A prodcore Doc
+ * @returns A squisq Doc
  */
 export async function docxToDoc(
   data: ArrayBuffer | Blob,

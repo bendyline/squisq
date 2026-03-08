@@ -11,7 +11,7 @@
  * - Inline: text, emphasis, strong, delete, inlineCode, link,
  *   image, break, inlineMath, htmlInline, footnoteReference
  *
- * All elements use the `prodcore-md-*` CSS class prefix for styling.
+ * All elements use the `squisq-md-*` CSS class prefix for styling.
  */
 
 import { Fragment } from 'react';
@@ -21,7 +21,7 @@ import type {
   MarkdownListItem,
   MarkdownTableRow,
   MarkdownTableCell,
-} from '@bendyline/prodcore/markdown';
+} from '@bendyline/squisq/markdown';
 
 // ── Props ──────────────────────────────────────────────────────────
 
@@ -44,28 +44,28 @@ function renderInline(nodes: MarkdownInlineNode[], keyPrefix = ''): React.ReactN
 
       case 'emphasis':
         return (
-          <em key={key} className="prodcore-md-em">
+          <em key={key} className="squisq-md-em">
             {renderInline(node.children, key)}
           </em>
         );
 
       case 'strong':
         return (
-          <strong key={key} className="prodcore-md-strong">
+          <strong key={key} className="squisq-md-strong">
             {renderInline(node.children, key)}
           </strong>
         );
 
       case 'delete':
         return (
-          <del key={key} className="prodcore-md-del">
+          <del key={key} className="squisq-md-del">
             {renderInline(node.children, key)}
           </del>
         );
 
       case 'inlineCode':
         return (
-          <code key={key} className="prodcore-md-inline-code">
+          <code key={key} className="squisq-md-inline-code">
             {node.value}
           </code>
         );
@@ -74,7 +74,7 @@ function renderInline(nodes: MarkdownInlineNode[], keyPrefix = ''): React.ReactN
         return (
           <a
             key={key}
-            className="prodcore-md-link"
+            className="squisq-md-link"
             href={node.url}
             title={node.title ?? undefined}
             target="_blank"
@@ -88,7 +88,7 @@ function renderInline(nodes: MarkdownInlineNode[], keyPrefix = ''): React.ReactN
         return (
           <img
             key={key}
-            className="prodcore-md-image"
+            className="squisq-md-image"
             src={node.url}
             alt={node.alt ?? ''}
             title={node.title ?? undefined}
@@ -100,7 +100,7 @@ function renderInline(nodes: MarkdownInlineNode[], keyPrefix = ''): React.ReactN
 
       case 'inlineMath':
         return (
-          <code key={key} className="prodcore-md-inline-math">
+          <code key={key} className="squisq-md-inline-math">
             {node.value}
           </code>
         );
@@ -109,14 +109,14 @@ function renderInline(nodes: MarkdownInlineNode[], keyPrefix = ''): React.ReactN
         return (
           <span
             key={key}
-            className="prodcore-md-html-inline"
+            className="squisq-md-html-inline"
             dangerouslySetInnerHTML={{ __html: node.rawHtml }}
           />
         );
 
       case 'footnoteReference':
         return (
-          <sup key={key} className="prodcore-md-footnote-ref">
+          <sup key={key} className="squisq-md-footnote-ref">
             <a href={`#fn-${node.identifier}`}>[{node.label ?? node.identifier}]</a>
           </sup>
         );
@@ -124,21 +124,21 @@ function renderInline(nodes: MarkdownInlineNode[], keyPrefix = ''): React.ReactN
       case 'linkReference':
         // Render as plain text (definition targets not available at render time)
         return (
-          <span key={key} className="prodcore-md-link-ref">
+          <span key={key} className="squisq-md-link-ref">
             {renderInline(node.children, key)}
           </span>
         );
 
       case 'imageReference':
         return (
-          <span key={key} className="prodcore-md-image-ref">
+          <span key={key} className="squisq-md-image-ref">
             [{node.alt ?? node.identifier}]
           </span>
         );
 
       case 'textDirective':
         return (
-          <span key={key} className="prodcore-md-text-directive" data-directive={node.name}>
+          <span key={key} className="squisq-md-text-directive" data-directive={node.name}>
             {renderInline(node.children, key)}
           </span>
         );
@@ -156,7 +156,7 @@ function renderBlock(node: MarkdownBlockNode, key: string): React.ReactNode {
   switch (node.type) {
     case 'paragraph':
       return (
-        <p key={key} className="prodcore-md-p">
+        <p key={key} className="squisq-md-p">
           {renderInline(node.children, key)}
         </p>
       );
@@ -164,7 +164,7 @@ function renderBlock(node: MarkdownBlockNode, key: string): React.ReactNode {
     case 'heading': {
       const Tag = `h${node.depth}` as 'h1' | 'h2' | 'h3' | 'h4' | 'h5' | 'h6';
       return (
-        <Tag key={key} className={`prodcore-md-heading prodcore-md-h${node.depth}`}>
+        <Tag key={key} className={`squisq-md-heading squisq-md-h${node.depth}`}>
           {renderInline(node.children, key)}
         </Tag>
       );
@@ -172,7 +172,7 @@ function renderBlock(node: MarkdownBlockNode, key: string): React.ReactNode {
 
     case 'blockquote':
       return (
-        <blockquote key={key} className="prodcore-md-blockquote">
+        <blockquote key={key} className="squisq-md-blockquote">
           {renderBlocks(node.children, key)}
         </blockquote>
       );
@@ -182,7 +182,7 @@ function renderBlock(node: MarkdownBlockNode, key: string): React.ReactNode {
         return (
           <ol
             key={key}
-            className="prodcore-md-list prodcore-md-ol"
+            className="squisq-md-list squisq-md-ol"
             start={node.start ?? undefined}
           >
             {node.children.map((item, i) => renderListItem(item, `${key}li${i}`))}
@@ -190,14 +190,14 @@ function renderBlock(node: MarkdownBlockNode, key: string): React.ReactNode {
         );
       }
       return (
-        <ul key={key} className="prodcore-md-list prodcore-md-ul">
+        <ul key={key} className="squisq-md-list squisq-md-ul">
           {node.children.map((item, i) => renderListItem(item, `${key}li${i}`))}
         </ul>
       );
 
     case 'code':
       return (
-        <pre key={key} className="prodcore-md-code-block">
+        <pre key={key} className="squisq-md-code-block">
           <code className={node.lang ? `language-${node.lang}` : undefined}>
             {node.value}
           </code>
@@ -205,7 +205,7 @@ function renderBlock(node: MarkdownBlockNode, key: string): React.ReactNode {
       );
 
     case 'thematicBreak':
-      return <hr key={key} className="prodcore-md-hr" />;
+      return <hr key={key} className="squisq-md-hr" />;
 
     case 'table':
       return renderTable(node.children, node.align, key);
@@ -214,14 +214,14 @@ function renderBlock(node: MarkdownBlockNode, key: string): React.ReactNode {
       return (
         <div
           key={key}
-          className="prodcore-md-html-block"
+          className="squisq-md-html-block"
           dangerouslySetInnerHTML={{ __html: node.rawHtml }}
         />
       );
 
     case 'math':
       return (
-        <pre key={key} className="prodcore-md-math-block">
+        <pre key={key} className="squisq-md-math-block">
           <code>{node.value}</code>
         </pre>
       );
@@ -232,7 +232,7 @@ function renderBlock(node: MarkdownBlockNode, key: string): React.ReactNode {
 
     case 'footnoteDefinition':
       return (
-        <div key={key} className="prodcore-md-footnote-def" id={`fn-${node.identifier}`}>
+        <div key={key} className="squisq-md-footnote-def" id={`fn-${node.identifier}`}>
           <sup>{node.label ?? node.identifier}</sup>
           {renderBlocks(node.children, key)}
         </div>
@@ -242,11 +242,11 @@ function renderBlock(node: MarkdownBlockNode, key: string): React.ReactNode {
       return (
         <div
           key={key}
-          className={`prodcore-md-directive prodcore-md-directive-${node.name}`}
+          className={`squisq-md-directive squisq-md-directive-${node.name}`}
           data-directive={node.name}
         >
           {node.label && (
-            <div className="prodcore-md-directive-label">{node.label}</div>
+            <div className="squisq-md-directive-label">{node.label}</div>
           )}
           {renderBlocks(node.children, key)}
         </div>
@@ -256,7 +256,7 @@ function renderBlock(node: MarkdownBlockNode, key: string): React.ReactNode {
       return (
         <div
           key={key}
-          className={`prodcore-md-directive prodcore-md-directive-${node.name}`}
+          className={`squisq-md-directive squisq-md-directive-${node.name}`}
           data-directive={node.name}
         >
           {renderInline(node.children, key)}
@@ -265,17 +265,17 @@ function renderBlock(node: MarkdownBlockNode, key: string): React.ReactNode {
 
     case 'definitionList':
       return (
-        <dl key={key} className="prodcore-md-dl">
+        <dl key={key} className="squisq-md-dl">
           {node.children.map((child, i) => {
             if (child.type === 'definitionTerm') {
               return (
-                <dt key={`${key}dt${i}`} className="prodcore-md-dt">
+                <dt key={`${key}dt${i}`} className="squisq-md-dt">
                   {renderInline(child.children, `${key}dt${i}`)}
                 </dt>
               );
             }
             return (
-              <dd key={`${key}dd${i}`} className="prodcore-md-dd">
+              <dd key={`${key}dd${i}`} className="squisq-md-dd">
                 {renderBlocks(child.children, `${key}dd${i}`)}
               </dd>
             );
@@ -292,13 +292,13 @@ function renderBlock(node: MarkdownBlockNode, key: string): React.ReactNode {
 function renderListItem(item: MarkdownListItem, key: string): React.ReactNode {
   const isTask = item.checked !== null && item.checked !== undefined;
   return (
-    <li key={key} className={`prodcore-md-li${isTask ? ' prodcore-md-task' : ''}`}>
+    <li key={key} className={`squisq-md-li${isTask ? ' squisq-md-task' : ''}`}>
       {isTask && (
         <input
           type="checkbox"
           checked={!!item.checked}
           readOnly
-          className="prodcore-md-checkbox"
+          className="squisq-md-checkbox"
         />
       )}
       {renderBlocks(item.children, key)}
@@ -314,14 +314,14 @@ function renderTable(
 ): React.ReactNode {
   const [headerRow, ...bodyRows] = rows;
   return (
-    <table key={key} className="prodcore-md-table">
+    <table key={key} className="squisq-md-table">
       {headerRow && (
         <thead>
           <tr>
             {headerRow.children.map((cell: MarkdownTableCell, ci: number) => (
               <th
                 key={`${key}th${ci}`}
-                className="prodcore-md-th"
+                className="squisq-md-th"
                 style={align?.[ci] ? { textAlign: align[ci]! } : undefined}
               >
                 {renderInline(cell.children, `${key}th${ci}`)}
@@ -337,7 +337,7 @@ function renderTable(
               {row.children.map((cell: MarkdownTableCell, ci: number) => (
                 <td
                   key={`${key}td${ri}-${ci}`}
-                  className="prodcore-md-td"
+                  className="squisq-md-td"
                   style={align?.[ci] ? { textAlign: align[ci]! } : undefined}
                 >
                   {renderInline(cell.children, `${key}td${ri}-${ci}`)}
@@ -370,7 +370,7 @@ export function MarkdownRenderer({ nodes, className }: MarkdownRendererProps) {
   if (!nodes || nodes.length === 0) return null;
 
   return (
-    <div className={`prodcore-md ${className || ''}`}>
+    <div className={`squisq-md ${className || ''}`}>
       {renderBlocks(nodes)}
     </div>
   );

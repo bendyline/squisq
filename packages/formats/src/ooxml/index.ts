@@ -1,5 +1,5 @@
 /**
- * @bendyline/prodcore-formats OOXML Module
+ * @bendyline/squisq-formats OOXML Module
  *
  * Shared infrastructure for reading and writing Office Open XML packages
  * (DOCX, PPTX, XLSX). Provides ZIP archive handling, relationship management,
@@ -10,7 +10,7 @@
  *
  * @example
  * ```ts
- * import { createPackage, openPackage } from '@bendyline/prodcore-formats/ooxml';
+ * import { createPackage, openPackage } from '@bendyline/squisq-formats/ooxml';
  * ```
  */
 

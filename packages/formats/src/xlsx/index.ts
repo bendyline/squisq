@@ -1,5 +1,5 @@
 /**
- * @bendyline/prodcore-formats XLSX Module (Stub)
+ * @bendyline/squisq-formats XLSX Module (Stub)
  *
  * Placeholder for Excel .xlsx import/export support.
  * Will use SpreadsheetML (`<spreadsheet>`, `<worksheet>`, `<sheetData>`)
@@ -7,12 +7,12 @@
  *
  * @example
  * ```ts
- * import { markdownDocToXlsx } from '@bendyline/prodcore-formats/xlsx';
+ * import { markdownDocToXlsx } from '@bendyline/squisq-formats/xlsx';
  * ```
  */
 
-import type { MarkdownDocument } from '@bendyline/prodcore/markdown';
-import type { Doc } from '@bendyline/prodcore/schemas';
+import type { MarkdownDocument } from '@bendyline/squisq/markdown';
+import type { Doc } from '@bendyline/squisq/schemas';
 
 /**
  * Options for XLSX export (placeholder).
@@ -45,7 +45,7 @@ export async function markdownDocToXlsx(
 }
 
 /**
- * Convert a prodcore Doc to a .xlsx Blob.
+ * Convert a squisq Doc to a .xlsx Blob.
  *
  * @throws Error — XLSX support is not yet implemented
  */
@@ -69,7 +69,7 @@ export async function xlsxToMarkdownDoc(
 }
 
 /**
- * Convert a .xlsx file to a prodcore Doc.
+ * Convert a .xlsx file to a squisq Doc.
  *
  * @throws Error — XLSX support is not yet implemented
  */

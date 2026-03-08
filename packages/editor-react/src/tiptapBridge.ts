@@ -8,7 +8,7 @@
  *
  * This bridge preserves markdown semantics much better than going through
  * Tiptap's native markdown extension, since we control the conversion
- * using prodcore's own parser.
+ * using squisq's own parser.
  */
 
 /**

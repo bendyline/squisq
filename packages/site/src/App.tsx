@@ -6,16 +6,16 @@
  */
 
 import { useState, useCallback, useEffect, useRef } from 'react';
-import { EditorShell } from '@bendyline/prodcore-editor-react';
-import type { EditorTheme } from '@bendyline/prodcore-editor-react';
-import '@bendyline/prodcore-editor-react/styles';
-import { MediaContext } from '@bendyline/prodcore-react';
+import { EditorShell } from '@bendyline/squisq-editor-react';
+import type { EditorTheme } from '@bendyline/squisq-editor-react';
+import '@bendyline/squisq-editor-react/styles';
+import { MediaContext } from '@bendyline/squisq-react';
 import { SAMPLES } from './samples';
 import { DebugPanel } from './DebugPanel';
 import { FileToolbar } from './FileToolbar';
 import { StorageToolbar } from './StorageToolbar';
 import { createSlotMediaProvider } from './slotStorage';
-import type { MediaProvider } from '@bendyline/prodcore/schemas';
+import type { MediaProvider } from '@bendyline/squisq/schemas';
 
 export function App() {
   const [selectedSample, setSelectedSample] = useState('hello-world');
@@ -100,7 +100,7 @@ export function App() {
           transition: 'background 0.2s, border-color 0.2s',
         }}
       >
-        <strong style={{ fontSize: 14 }}>Prodcore Editor</strong>
+        <strong style={{ fontSize: 14 }}>Squisq Editor</strong>
 
         <label style={{ fontSize: 13, display: 'flex', alignItems: 'center', gap: 6 }}>
           Sample:

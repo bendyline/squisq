@@ -20,7 +20,7 @@ import type {
   MarkdownBlockNode,
   MarkdownText,
   MarkdownCodeBlock,
-} from '@bendyline/prodcore/markdown';
+} from '@bendyline/squisq/markdown';
 
 // ============================================
 // Helpers

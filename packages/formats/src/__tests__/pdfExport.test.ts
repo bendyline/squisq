@@ -24,7 +24,7 @@ import type {
   MarkdownEmphasis,
   MarkdownInlineCode,
   MarkdownLink,
-} from '@bendyline/prodcore/markdown';
+} from '@bendyline/squisq/markdown';
 
 import { markdownDocToPdf, docToPdf } from '../pdf/export';
 

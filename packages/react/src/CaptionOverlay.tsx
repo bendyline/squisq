@@ -9,8 +9,8 @@
  * on article text and audio segment timing.
  */
 
-import type { CaptionTrack } from '@bendyline/prodcore/schemas';
-import { getCaptionAtTime } from '@bendyline/prodcore/schemas';
+import type { CaptionTrack } from '@bendyline/squisq/schemas';
+import { getCaptionAtTime } from '@bendyline/squisq/schemas';
 
 interface CaptionOverlayProps {
   /** Caption track with timestamped phrases */

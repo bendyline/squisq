@@ -19,8 +19,8 @@
  */
 
 import { useRef, useState, useCallback, useEffect } from 'react';
-import type { Doc } from '@bendyline/prodcore/schemas';
-import type { ViewportConfig } from '@bendyline/prodcore/schemas';
+import type { Doc } from '@bendyline/squisq/schemas';
+import type { ViewportConfig } from '@bendyline/squisq/schemas';
 import type { AudioProvider } from './hooks/AudioProvider';
 import { DocPlayer } from './DocPlayer';
 import { DocControlsSidebar } from './DocControlsSidebar';

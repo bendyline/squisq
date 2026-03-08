@@ -30,32 +30,32 @@ export function StatusBar({ className }: StatusBarProps) {
   }, [markdownSource, doc]);
 
   return (
-    <div className={`prodcore-status-bar ${className || ''}`}>
-      <span className="prodcore-status-item">
+    <div className={`squisq-status-bar ${className || ''}`}>
+      <span className="squisq-status-item">
         {stats.words} words
       </span>
-      <span className="prodcore-status-item">
+      <span className="squisq-status-item">
         {stats.chars} chars
       </span>
-      <span className="prodcore-status-item">
+      <span className="squisq-status-item">
         {stats.lines} lines
       </span>
-      <span className="prodcore-status-item">
+      <span className="squisq-status-item">
         {stats.blocks} blocks
       </span>
-      <span className="prodcore-status-spacer" />
+      <span className="squisq-status-spacer" />
       {isParsing && (
-        <span className="prodcore-status-item prodcore-status-parsing">
+        <span className="squisq-status-item squisq-status-parsing">
           Parsing…
         </span>
       )}
       {parseError && (
-        <span className="prodcore-status-item prodcore-status-error" title={parseError}>
+        <span className="squisq-status-item squisq-status-error" title={parseError}>
           ⚠ Error
         </span>
       )}
       {!isParsing && !parseError && (
-        <span className="prodcore-status-item prodcore-status-ok">
+        <span className="squisq-status-item squisq-status-ok">
           ✓ OK
         </span>
       )}

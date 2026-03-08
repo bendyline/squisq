@@ -377,7 +377,7 @@ describe('docxToMarkdownDoc', () => {
 // ============================================
 
 describe('docxToDoc', () => {
-  it('converts docx to a prodcore Doc', async () => {
+  it('converts docx to a squisq Doc', async () => {
     const data = await buildTestDocx({
       bodyXml:
         `<w:p><w:pPr><w:pStyle w:val="Heading1"/></w:pPr><w:r><w:t>Main Title</w:t></w:r></w:p>` +

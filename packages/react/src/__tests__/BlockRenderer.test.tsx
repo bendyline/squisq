@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { render } from '@testing-library/react';
 import { BlockRenderer, VIEWPORT } from '../BlockRenderer';
-import type { Block } from '@bendyline/prodcore/schemas';
+import type { Block } from '@bendyline/squisq/schemas';
 
 describe('VIEWPORT constant', () => {
   it('has correct 1080p dimensions', () => {

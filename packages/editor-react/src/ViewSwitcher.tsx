@@ -25,7 +25,7 @@ export function ViewSwitcher({ className }: ViewSwitcherProps) {
 
   return (
     <div
-      className={`prodcore-view-switcher ${className || ''}`}
+      className={`squisq-view-switcher ${className || ''}`}
       role="tablist"
       aria-label="Editor view"
     >
@@ -34,7 +34,7 @@ export function ViewSwitcher({ className }: ViewSwitcherProps) {
           key={view.id}
           role="tab"
           aria-selected={activeView === view.id}
-          className={`prodcore-view-tab ${activeView === view.id ? 'prodcore-view-tab--active' : ''}`}
+          className={`squisq-view-tab ${activeView === view.id ? 'squisq-view-tab--active' : ''}`}
           onClick={() => setActiveView(view.id)}
           title={`${view.label} (${view.shortcut})`}
         >

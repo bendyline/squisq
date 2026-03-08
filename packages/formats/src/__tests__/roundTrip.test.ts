@@ -11,7 +11,7 @@ import type {
   MarkdownParagraph,
   MarkdownStrong,
   MarkdownEmphasis,
-} from '@bendyline/prodcore/markdown';
+} from '@bendyline/squisq/markdown';
 
 import { markdownDocToDocx } from '../docx/export';
 import { docxToMarkdownDoc } from '../docx/import';

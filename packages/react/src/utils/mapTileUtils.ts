@@ -15,7 +15,7 @@
  * See docs/MAP_TILES.md for full provider details and terms.
  */
 
-import type { MapTileStyle, MapMarker } from '@bendyline/prodcore/schemas';
+import type { MapTileStyle, MapMarker } from '@bendyline/squisq/schemas';
 
 /**
  * Tile provider configuration.

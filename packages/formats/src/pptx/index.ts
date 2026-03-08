@@ -1,5 +1,5 @@
 /**
- * @bendyline/prodcore-formats PPTX Module (Stub)
+ * @bendyline/squisq-formats PPTX Module (Stub)
  *
  * Placeholder for PowerPoint .pptx import/export support.
  * Will use PresentationML (`<p:presentation>`, `<p:sld>`) via the
@@ -7,12 +7,12 @@
  *
  * @example
  * ```ts
- * import { markdownDocToPptx } from '@bendyline/prodcore-formats/pptx';
+ * import { markdownDocToPptx } from '@bendyline/squisq-formats/pptx';
  * ```
  */
 
-import type { MarkdownDocument } from '@bendyline/prodcore/markdown';
-import type { Doc } from '@bendyline/prodcore/schemas';
+import type { MarkdownDocument } from '@bendyline/squisq/markdown';
+import type { Doc } from '@bendyline/squisq/schemas';
 
 /**
  * Options for PPTX export (placeholder).
@@ -45,7 +45,7 @@ export async function markdownDocToPptx(
 }
 
 /**
- * Convert a prodcore Doc to a .pptx Blob.
+ * Convert a squisq Doc to a .pptx Blob.
  *
  * @throws Error — PPTX support is not yet implemented
  */
@@ -69,7 +69,7 @@ export async function pptxToMarkdownDoc(
 }
 
 /**
- * Convert a .pptx file to a prodcore Doc.
+ * Convert a .pptx file to a squisq Doc.
  *
  * @throws Error — PPTX support is not yet implemented
  */

@@ -1,7 +1,7 @@
 /**
- * @bendyline/prodcore-formats PDF Module
+ * @bendyline/squisq-formats PDF Module
  *
- * Import and export prodcore documents (MarkdownDocument / Doc)
+ * Import and export squisq documents (MarkdownDocument / Doc)
  * to/from PDF files.
  *
  * - **Export** uses pdf-lib (zero dependencies, standard fonts, pure JS).
@@ -16,7 +16,7 @@
  *   docToPdf,
  *   pdfToMarkdownDoc,
  *   pdfToDoc,
- * } from '@bendyline/prodcore-formats/pdf';
+ * } from '@bendyline/squisq-formats/pdf';
  * ```
  */
 

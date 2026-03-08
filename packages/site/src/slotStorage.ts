@@ -15,8 +15,8 @@
  * resolves relative paths to blob URLs from the slot's stored media.
  */
 
-import { LocalForageAdapter } from '@bendyline/prodcore/storage';
-import type { MediaProvider, MediaEntry } from '@bendyline/prodcore/schemas';
+import { LocalForageAdapter } from '@bendyline/squisq/storage';
+import type { MediaProvider, MediaEntry } from '@bendyline/squisq/schemas';
 
 // ============================================
 // Constants
@@ -24,7 +24,7 @@ import type { MediaProvider, MediaEntry } from '@bendyline/prodcore/schemas';
 
 export const SLOT_COUNT = 10;
 
-const DB_NAME = 'prodcore-site';
+const DB_NAME = 'squisq-site';
 const STORE_NAME = 'slots';
 
 // ============================================

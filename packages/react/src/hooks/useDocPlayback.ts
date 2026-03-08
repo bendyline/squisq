@@ -13,9 +13,9 @@
  */
 
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
-import type { Doc, Block } from '@bendyline/prodcore/schemas';
-import { getBlockAtTime } from '@bendyline/prodcore/schemas';
-import { expandDocBlocks, isTemplateBlock, VIEWPORT_PRESETS, type ViewportConfig } from '@bendyline/prodcore/doc';
+import type { Doc, Block } from '@bendyline/squisq/schemas';
+import { getBlockAtTime } from '@bendyline/squisq/schemas';
+import { expandDocBlocks, isTemplateBlock, VIEWPORT_PRESETS, type ViewportConfig } from '@bendyline/squisq/doc';
 
 interface PlaybackState {
   /** Currently visible block */

@@ -11,7 +11,7 @@
  *
  * @example
  * ```ts
- * import { getLayers } from '@bendyline/prodcore/doc';
+ * import { getLayers } from '@bendyline/squisq/doc';
  *
  * const layers = getLayers(block, {
  *   theme: DEFAULT_THEME,

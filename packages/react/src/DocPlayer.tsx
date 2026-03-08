@@ -23,15 +23,15 @@
  */
 
 import { Fragment, useRef, useState, useEffect, useCallback, useMemo } from 'react';
-import type { Doc, Block, TextLayer, StartBlockConfig } from '@bendyline/prodcore/schemas';
+import type { Doc, Block, TextLayer, StartBlockConfig } from '@bendyline/squisq/schemas';
 import { BlockRenderer, VIEWPORT } from './BlockRenderer';
 import { CaptionOverlay } from './CaptionOverlay';
-import { getCaptionAtTime } from '@bendyline/prodcore/schemas';
+import { getCaptionAtTime } from '@bendyline/squisq/schemas';
 import { useAudioSync } from './hooks/useAudioSync';
 import { useDocPlayback } from './hooks/useDocPlayback';
 import { useViewportOrientation } from './hooks/useViewportOrientation';
 import type { AudioProvider } from './hooks/AudioProvider';
-import { expandCoverBlock, createTemplateContext, DEFAULT_THEME, VIEWPORT_PRESETS, type ViewportConfig } from '@bendyline/prodcore/doc';
+import { expandCoverBlock, createTemplateContext, DEFAULT_THEME, VIEWPORT_PRESETS, type ViewportConfig } from '@bendyline/squisq/doc';
 import { DocControlsOverlay } from './DocControlsOverlay';
 import { DocControlsSlideshow } from './DocControlsSlideshow';
 import { DocProgressBar } from './DocProgressBar';
