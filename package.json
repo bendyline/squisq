@@ -6,15 +6,16 @@
   ],
   "scripts": {
     "all": "npm install && npm run build && npm test",
-    "build": "npm run build:core && npm run build:react && npm run build:editor",
+    "build": "npm run build:core && npm run build:formats && npm run build:react && npm run build:editor",
     "build:core": "npm run build -w @bendyline/prodcore",
+    "build:formats": "npm run build -w @bendyline/prodcore-formats",
     "build:react": "npm run build -w @bendyline/prodcore-react",
     "build:editor": "npm run build -w @bendyline/prodcore-editor-react",
     "test": "vitest run",
     "test:e2e": "playwright test",
     "site": "npm run build && npm run dev -w prodcore-site",
     "dev": "npm run dev -w prodcore-site",
-    "typecheck": "tsc -b packages/core packages/react packages/editor-react",
+    "typecheck": "tsc -b packages/core packages/formats packages/react packages/editor-react",
     "clean": "rimraf packages/*/dist"
   },
   "devDependencies": {

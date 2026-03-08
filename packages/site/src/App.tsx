@@ -5,18 +5,53 @@
  * for inspecting the parsed MarkdownDocument and Doc.
  */
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { EditorShell } from '@bendyline/prodcore-editor-react';
 import type { EditorTheme } from '@bendyline/prodcore-editor-react';
 import '@bendyline/prodcore-editor-react/styles';
+import { MediaContext } from '@bendyline/prodcore-react';
 import { SAMPLES } from './samples';
 import { DebugPanel } from './DebugPanel';
+import { FileToolbar } from './FileToolbar';
+import { StorageToolbar } from './StorageToolbar';
+import { createSlotMediaProvider } from './slotStorage';
+import type { MediaProvider } from '@bendyline/prodcore/schemas';
 
 export function App() {
   const [selectedSample, setSelectedSample] = useState('hello-world');
   const [showDebug, setShowDebug] = useState(false);
   const [currentSource, setCurrentSource] = useState(SAMPLES['hello-world']);
   const [theme, setTheme] = useState<EditorTheme>('light');
+  // Key to force EditorShell remount on upload
+  const [editorKey, setEditorKey] = useState(0);
+  // Storage slot state
+  const [activeSlot, setActiveSlot] = useState<number | null>(null);
+  const [mediaProvider, setMediaProvider] = useState<MediaProvider | null>(null);
+  const mediaProviderRef = useRef<MediaProvider | null>(null);
+
+  // Create/dispose MediaProvider when active slot changes
+  useEffect(() => {
+    // Dispose previous provider
+    if (mediaProviderRef.current) {
+      mediaProviderRef.current.dispose();
+      mediaProviderRef.current = null;
+    }
+
+    if (activeSlot !== null) {
+      const provider = createSlotMediaProvider(activeSlot);
+      mediaProviderRef.current = provider;
+      setMediaProvider(provider);
+    } else {
+      setMediaProvider(null);
+    }
+
+    return () => {
+      if (mediaProviderRef.current) {
+        mediaProviderRef.current.dispose();
+        mediaProviderRef.current = null;
+      }
+    };
+  }, [activeSlot]);
 
   const isDark = theme === 'dark';
 
@@ -34,6 +69,12 @@ export function App() {
     setCurrentSource(source);
   }, []);
 
+  const handleImport = useCallback((markdown: string) => {
+    setCurrentSource(markdown);
+    setSelectedSample('');          // deselect sample dropdown
+    setEditorKey((k) => k + 1);    // remount editor with new content
+  }, []);
+
   return (
     <div
       style={{
@@ -49,9 +90,10 @@ export function App() {
       <div
         style={{
           display: 'flex',
+          flexWrap: 'wrap',
           alignItems: 'center',
           padding: '8px 16px',
-          gap: 16,
+          gap: '8px 16px',
           borderBottom: `1px solid ${isDark ? '#374151' : '#e5e7eb'}`,
           background: isDark ? '#1e293b' : '#f3f4f6',
           flexShrink: 0,
@@ -119,34 +161,54 @@ export function App() {
         >
           {showDebug ? 'Hide' : 'Show'} Debug
         </button>
+
+        {/* Spacer */}
+        <div style={{ flex: 1 }} />
+
+        <FileToolbar
+          currentSource={currentSource}
+          onImport={handleImport}
+          isDark={isDark}
+          activeSlot={activeSlot}
+        />
+
+        <StorageToolbar
+          currentSource={currentSource}
+          onLoad={handleImport}
+          isDark={isDark}
+          activeSlot={activeSlot}
+          onSlotChange={setActiveSlot}
+        />
       </div>
 
       {/* Main area */}
-      <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
-        <div style={{ flex: 1, overflow: 'hidden' }}>
-          <EditorShell
-            key={selectedSample}
-            initialMarkdown={SAMPLES[selectedSample]}
-            articleId={selectedSample}
-            onChange={handleChange}
-            theme={theme}
-            height="100%"
-          />
-        </div>
-
-        {showDebug && (
-          <div
-            style={{
-              width: 420,
-              borderLeft: `1px solid ${isDark ? '#374151' : '#e5e7eb'}`,
-              overflow: 'auto',
-              flexShrink: 0,
-            }}
-          >
-            <DebugPanel source={currentSource} theme={theme} />
+      <MediaContext.Provider value={mediaProvider}>
+        <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
+          <div style={{ flex: 1, overflow: 'hidden' }}>
+            <EditorShell
+              key={`${selectedSample}-${editorKey}`}
+              initialMarkdown={currentSource}
+              articleId={selectedSample || 'uploaded'}
+              onChange={handleChange}
+              theme={theme}
+              height="100%"
+            />
           </div>
-        )}
-      </div>
+
+          {showDebug && (
+            <div
+              style={{
+                width: 420,
+                borderLeft: `1px solid ${isDark ? '#374151' : '#e5e7eb'}`,
+                overflow: 'auto',
+                flexShrink: 0,
+              }}
+            >
+              <DebugPanel source={currentSource} theme={theme} />
+            </div>
+          )}
+        </div>
+      </MediaContext.Provider>
     </div>
   );
 }

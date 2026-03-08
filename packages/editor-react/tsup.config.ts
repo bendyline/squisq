@@ -11,6 +11,7 @@ export default defineConfig({
     'react-dom',
     '@bendyline/prodcore',
     '@bendyline/prodcore-react',
+    'monaco-editor',
   ],
   esbuildOptions(options) {
     options.jsx = 'automatic';

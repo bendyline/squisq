@@ -8,6 +8,7 @@
 
 import type { ImageLayer as ImageLayerType, Animation } from '@bendyline/prodcore/schemas';
 import { getAnimationStyle } from '../utils/animationUtils';
+import { useMediaUrl } from '../hooks/MediaContext';
 
 interface ImageLayerProps {
   layer: ImageLayerType;
@@ -33,11 +34,8 @@ export function ImageLayer({ layer, basePath, viewport, blockTime }: ImageLayerP
   const finalX = x + offset.x;
   const finalY = y + offset.y;
 
-  // Build image URL — absolute paths (starting with /) and http URLs used as-is,
-  // otherwise resolve relative to basePath
-  const src = content.src.startsWith('http') || content.src.startsWith('/')
-    ? content.src
-    : `${basePath}/${content.src}`;
+  // Resolve image URL via MediaProvider (if available), falling back to basePath
+  const src = useMediaUrl(content.src, basePath);
 
   // Get animation styles
   const animStyle = getAnimationStyle(animation, blockTime);

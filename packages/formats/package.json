@@ -1,0 +1,58 @@
+{
+  "name": "@bendyline/prodcore-formats",
+  "version": "0.1.0",
+  "type": "module",
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist",
+    "src"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    },
+    "./docx": {
+      "types": "./dist/docx/index.d.ts",
+      "import": "./dist/docx/index.js",
+      "default": "./dist/docx/index.js"
+    },
+    "./pptx": {
+      "types": "./dist/pptx/index.d.ts",
+      "import": "./dist/pptx/index.js",
+      "default": "./dist/pptx/index.js"
+    },
+    "./xlsx": {
+      "types": "./dist/xlsx/index.d.ts",
+      "import": "./dist/xlsx/index.js",
+      "default": "./dist/xlsx/index.js"
+    },
+    "./ooxml": {
+      "types": "./dist/ooxml/index.d.ts",
+      "import": "./dist/ooxml/index.js",
+      "default": "./dist/ooxml/index.js"
+    },
+    "./pdf": {
+      "types": "./dist/pdf/index.d.ts",
+      "import": "./dist/pdf/index.js",
+      "default": "./dist/pdf/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsup",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@bendyline/prodcore": "0.1.1",
+    "jszip": "^3.10.1",
+    "pdf-lib": "^1.17.1",
+    "pdfjs-dist": "^4.9.155"
+  },
+  "devDependencies": {
+    "tsup": "^8.0.0",
+    "typescript": "^5.3.0"
+  }
+}

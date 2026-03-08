@@ -23,6 +23,7 @@
 
 import { useRef, useEffect } from 'react';
 import type { VideoLayer as VideoLayerType } from '@bendyline/prodcore/schemas';
+import { useMediaUrl } from '../hooks/MediaContext';
 
 interface VideoLayerProps {
   layer: VideoLayerType;
@@ -52,17 +53,12 @@ export function VideoLayer({ layer, basePath, viewport, blockTime, isPlaying }: 
   const finalX = x + offset.x;
   const finalY = y + offset.y;
 
-  // Build video URL — absolute paths and http URLs used as-is,
-  // otherwise resolve relative to basePath
-  const src = content.src.startsWith('http') || content.src.startsWith('/')
-    ? content.src
-    : `${basePath}/${content.src}`;
+  // Resolve video URL via MediaProvider (if available), falling back to basePath
+  const src = useMediaUrl(content.src, basePath);
 
-  const posterSrc = content.posterSrc
-    ? (content.posterSrc.startsWith('http') || content.posterSrc.startsWith('/')
-        ? content.posterSrc
-        : `${basePath}/${content.posterSrc}`)
-    : undefined;
+  // Always call the hook (Rules of Hooks), but pass empty string when no poster
+  const resolvedPoster = useMediaUrl(content.posterSrc || '', basePath);
+  const posterSrc = content.posterSrc ? resolvedPoster : undefined;
 
   // On mount: seek to clipStart and set up clipEnd boundary.
   // The video will be muted and play silently alongside the narration.

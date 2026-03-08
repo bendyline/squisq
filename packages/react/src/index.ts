@@ -22,6 +22,7 @@ export { MapLayer } from './layers/MapLayer.js';
 export { useAudioSync } from './hooks/useAudioSync.js';
 export { useDocPlayback } from './hooks/useDocPlayback.js';
 export { useViewportOrientation } from './hooks/useViewportOrientation.js';
+export { MediaContext, useMediaProvider, useMediaUrl } from './hooks/MediaContext.js';
 
 // Types
 export type { AudioProvider, AudioState, AudioActions } from './hooks/AudioProvider.js';

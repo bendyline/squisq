@@ -52,6 +52,7 @@
   },
   "dependencies": {
     "hast-util-from-html": "^2.0.0",
+    "localforage": "^1.10.0",
     "ngeohash": "^0.6.3",
     "remark-directive": "^3.0.0",
     "remark-frontmatter": "^5.0.0",

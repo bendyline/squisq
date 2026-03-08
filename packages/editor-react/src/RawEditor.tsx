@@ -7,9 +7,13 @@
  */
 
 import { useRef, useCallback, useEffect } from 'react';
-import Editor, { type OnMount, type OnChange } from '@monaco-editor/react';
+import Editor, { loader, type OnMount, type OnChange } from '@monaco-editor/react';
+import * as monaco from 'monaco-editor';
 import { useEditorContext } from './EditorContext';
 import { getAvailableTemplates } from '@bendyline/prodcore/doc';
+
+// Use locally installed monaco-editor instead of CDN
+loader.config({ monaco });
 
 export interface RawEditorProps {
   /** Monaco editor theme (default: 'vs-dark') */

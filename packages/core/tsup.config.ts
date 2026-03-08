@@ -14,5 +14,5 @@ export default defineConfig({
   dts: true,
   sourcemap: true,
   clean: true,
-  external: ['ngeohash'],
+  external: ['ngeohash', 'localforage'],
 });

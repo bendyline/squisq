@@ -9,6 +9,7 @@ designed to be framework-agnostic at the core, with a React component layer on t
 **npm packages:**
 - `@bendyline/prodcore` — Headless utilities (schemas, templates, spatial math, storage)
 - `@bendyline/prodcore-react` — React component library (doc player, block renderer, controls)
+- `@bendyline/prodcore-formats` — Document format converters (DOCX import/export, OOXML infrastructure)
 
 ## Repository Structure
 
@@ -37,6 +38,12 @@ prodcore/
         DocProgressBar.tsx
         DocControls*.tsx    # Overlay, Bottom, Sidebar variants
         DocPlayerWithSidebar.tsx
+    formats/                # @bendyline/prodcore-formats
+      src/
+        ooxml/              # Shared OOXML infrastructure (reader, writer, XML utils)
+        docx/               # DOCX import + export (WordprocessingML)
+        pptx/               # PPTX stubs (PresentationML, not yet implemented)
+        xlsx/               # XLSX stubs (SpreadsheetML, not yet implemented)
 ```
 
 ## Build System
@@ -49,6 +56,7 @@ prodcore/
 npm run build              # Build all packages
 npm run build -w @bendyline/prodcore        # Build core only
 npm run build -w @bendyline/prodcore-react  # Build react only
+npm run build -w @bendyline/prodcore-formats # Build formats only
 ```
 
 ## Relationship to Qualla
@@ -82,12 +90,19 @@ Qualla import exclusively from prodcore are a future step.
 - Layers: ImageLayer, TextLayer, ShapeLayer, VideoLayer, MapLayer
 - Styles: `@bendyline/prodcore-react/styles` for CSS
 
+`@bendyline/prodcore-formats` exposes subpath entries:
+- `@bendyline/prodcore-formats/docx` — DOCX import/export (markdownDocToDocx, docxToMarkdownDoc, docToDocx, docxToDoc)
+- `@bendyline/prodcore-formats/ooxml` — Shared OOXML package reader/writer, XML utilities, namespace constants
+- `@bendyline/prodcore-formats/pptx` — PPTX stubs (not yet implemented)
+- `@bendyline/prodcore-formats/xlsx` — XLSX stubs (not yet implemented)
+
 ## Code Style
 
 - TypeScript strict mode
 - ESM only (no CJS)
 - React package uses `react` imports (consumed via preact/compat in Qualla)
 - Core package has zero framework dependencies
+- Formats package depends on jszip (ZIP archives) and core's MarkdownDocument as pivot format
 - All block templates are pure functions: `(input, context) => Layer[]`
 
 ## Key Design Decisions

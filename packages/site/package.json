@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@bendyline/prodcore": "^0.1.0",
+    "@bendyline/prodcore-formats": "^0.1.0",
     "@bendyline/prodcore-react": "^0.1.0",
     "@bendyline/prodcore-editor-react": "^0.1.0",
     "react": "^18.3.0",

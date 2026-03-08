@@ -12,4 +12,9 @@ export default defineConfig({
     strictPort: true,
     open: true,
   },
+  // Optimise monaco-editor: tell Vite to pre-bundle it so workers are served
+  // from the local dev server instead of CDN.
+  optimizeDeps: {
+    include: ['monaco-editor'],
+  },
 });
