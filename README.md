@@ -17,6 +17,10 @@ Open-source monorepo providing reusable libraries for document/block rendering, 
 | [`@bendyline/squisq-formats`](packages/formats)           | Format converters — DOCX, PDF, OOXML import/export                       |
 | [`@bendyline/squisq-editor-react`](packages/editor-react) | React editor shell — raw/WYSIWYG/preview modes                           |
 
+## Documentation
+
+- **API Reference:** [docs/API.md](docs/API.md)
+
 ## Quick Start
 
 ```bash
