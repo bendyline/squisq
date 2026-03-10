@@ -101,6 +101,19 @@ export function App() {
         }}
       >
         <strong style={{ fontSize: 14 }}>Squisq Editor</strong>
+        <a
+          href="https://github.com/bendyline/squisq/blob/main/docs/SquiggleSquare.md"
+          target="_blank"
+          rel="noopener noreferrer"
+          style={{
+            fontSize: 13,
+            marginLeft: 12,
+            color: isDark ? '#93C5FD' : '#2563eb',
+            textDecoration: 'none',
+          }}
+        >
+          Squiggle Square
+        </a>
 
         <label style={{ fontSize: 13, display: 'flex', alignItems: 'center', gap: 6 }}>
           Sample:

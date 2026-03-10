@@ -27,7 +27,7 @@ import type {
  */
 async function buildSimplePdf(
   lines: Array<{ text: string; x: number; y: number; fontSize: number; fontName?: string }>,
-): Promise<ArrayBuffer> {
+): Promise<Uint8Array> {
   const doc = await PDFDocument.create();
   const page = doc.addPage([612, 792]); // Letter
 

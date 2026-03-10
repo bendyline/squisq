@@ -34,7 +34,8 @@ describe('templateRegistry', () => {
     ];
     for (const name of expected) {
       expect(templateRegistry).toHaveProperty(name);
-      expect(typeof templateRegistry[name]).toBe('function');
+      const tpl = (templateRegistry as any)[name];
+      expect(typeof tpl).toBe('function');
     }
   });
 });
@@ -74,8 +75,8 @@ describe('expandTemplateBlock', () => {
 
     expect(result.id).toBe('title-1');
     expect(result.duration).toBe(10);
-    expect(result.layers).toBeInstanceOf(Array);
-    expect(result.layers.length).toBeGreaterThan(0);
+    expect((result.layers ?? [])).toBeInstanceOf(Array);
+    expect((result.layers ?? []).length).toBeGreaterThan(0);
   });
 
   it('expands statHighlight template', () => {
@@ -90,19 +91,19 @@ describe('expandTemplateBlock', () => {
     const context = createTemplateContext(DEFAULT_THEME, 0, 5, VIEWPORT_PRESETS.landscape);
     const result = expandTemplateBlock(block, context);
 
-    expect(result.layers.length).toBeGreaterThan(0);
+    expect((result.layers ?? []).length).toBeGreaterThan(0);
     // Should have at least a shape background + text layers
-    const textLayers = result.layers.filter((l) => l.type === 'text');
+    const textLayers = (result.layers ?? []).filter((l) => l.type === 'text');
     expect(textLayers.length).toBeGreaterThan(0);
   });
 
   it('returns empty layers for unknown template', () => {
-    const block: TemplateBlock = {
-      template: 'nonexistent' as any,
+    const block = ({
+      template: 'nonexistent',
       id: 'unknown-1',
       duration: 5,
       audioSegment: 0,
-    };
+    } as unknown) as TemplateBlock;
     const context = createTemplateContext(DEFAULT_THEME, 0, 1, VIEWPORT_PRESETS.landscape);
     const result = expandTemplateBlock(block, context);
     expect(result.layers ?? []).toEqual([]);
@@ -113,8 +114,9 @@ describe('expandTemplateBlock', () => {
     const context = createTemplateContext(DEFAULT_THEME, 0, 10, VIEWPORT_PRESETS.landscape);
 
     for (const name of templates) {
-      const block: TemplateBlock = {
-        template: name,
+      // `getAvailableTemplates()` returns string[]; cast when creating a TemplateBlock
+      const block = ({
+        template: name as any,
         id: `test-${name}`,
         duration: 10,
         audioSegment: 0,
@@ -145,12 +147,12 @@ describe('expandTemplateBlock', () => {
         rightLabel: 'B',
         leftValue: 50,
         rightValue: 50,
-      };
+      } as unknown) as TemplateBlock;
       const result = expandTemplateBlock(block, context);
       expect(result.id).toBe(`test-${name}`);
-      expect(result.layers).toBeInstanceOf(Array);
+      expect((result.layers ?? [])).toBeInstanceOf(Array);
       // Each template should produce at least 1 layer
-      expect(result.layers.length).toBeGreaterThanOrEqual(1);
+      expect((result.layers ?? []).length).toBeGreaterThanOrEqual(1);
     }
   });
 });
@@ -217,8 +219,8 @@ describe('expandDocBlocks', () => {
     expect(landscape).toHaveLength(1);
     expect(portrait).toHaveLength(1);
     // Both should produce valid blocks
-    expect(landscape[0].layers.length).toBeGreaterThan(0);
-    expect(portrait[0].layers.length).toBeGreaterThan(0);
+    expect((landscape[0].layers ?? []).length).toBeGreaterThan(0);
+    expect((portrait[0].layers ?? []).length).toBeGreaterThan(0);
   });
 });
 

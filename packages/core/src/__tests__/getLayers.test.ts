@@ -8,7 +8,7 @@ import type { Block, Layer } from '../schemas/Doc.js';
 // Helpers
 // ---------------------------------------------------------------------------
 
-function makeTemplateBlock(overrides: Partial<TemplateBlock> = {}): TemplateBlock {
+function makeTemplateBlock(overrides: Partial<TemplateBlock> = {}): any {
   return {
     template: 'titleBlock',
     id: 'test-title-1',
@@ -23,6 +23,8 @@ function makeRawBlock(layers: Layer[]): Block {
   return {
     id: 'raw-block-1',
     duration: 5,
+    startTime: 0,
+    audioSegment: 0,
     layers,
   };
 }
@@ -56,7 +58,7 @@ describe('getLayers', () => {
     const block = makeTemplateBlock({
       template: 'statHighlight',
       stat: '42%',
-      subtitle: 'of users',
+      description: 'of users',
     });
     const layers = getLayers(block, defaultContext);
 
@@ -80,14 +82,19 @@ describe('getLayers', () => {
   });
 
   it('returns empty array for unknown template', () => {
-    const block = makeTemplateBlock({ template: 'totally_nonexistent' as any });
+    const block = ({
+      template: 'totally_nonexistent',
+      id: 'unknown-1',
+      duration: 5,
+      audioSegment: 0,
+    } as unknown) as TemplateBlock;
     const layers = getLayers(block, defaultContext);
 
     expect(layers).toEqual([]);
   });
 
   it('returns empty array for block with no template and no layers', () => {
-    const block: Block = { id: 'empty-1', duration: 5 };
+    const block: Block = { id: 'empty-1', duration: 5, startTime: 0, audioSegment: 0 } as any;
     const layers = getLayers(block, defaultContext);
 
     expect(layers).toEqual([]);
