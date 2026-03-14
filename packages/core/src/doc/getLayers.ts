@@ -115,7 +115,7 @@ export function getLayers(block: DocBlock, context: RenderContext = {}): Layer[]
         console.error(`Template ${templateName} did not return an array, got:`, typeof layers);
         layers = [];
       }
-    } catch (err) {
+    } catch (err: unknown) {
       console.error(`Error expanding template ${templateName}:`, err);
       layers = [];
     }

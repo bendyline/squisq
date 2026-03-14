@@ -14,6 +14,7 @@ import type { Layer } from '../../schemas/Doc.js';
 import type { QuoteBlockInput, TemplateContext } from '../../schemas/BlockTemplates.js';
 import { scaledFontSize } from '../../schemas/BlockTemplates.js';
 import { createAccentLayers, getAccentLayout, adjustY, DEFAULT_LAYOUT } from './accentImage.js';
+import { createBackgroundLayer } from './captionUtils.js';
 
 export function quoteBlock(input: QuoteBlockInput, context: TemplateContext): Layer[] {
   const { quote, attribution, accentImage } = input;
@@ -30,16 +31,7 @@ export function quoteBlock(input: QuoteBlockInput, context: TemplateContext): La
   const decorativeQuoteFontSize = scaledFontSize(280, context, true);
 
   const layers: Layer[] = [
-    // Background — slightly warmer than other dark templates
-    {
-      type: 'shape',
-      id: 'bg',
-      content: {
-        shape: 'rect',
-        fill: `linear-gradient(160deg, ${theme.backgroundLight} 0%, #1e2636 100%)`,
-      },
-      position: { x: 0, y: 0, width: '100%', height: '100%' },
-    },
+    createBackgroundLayer('bg', `linear-gradient(160deg, ${theme.backgroundLight} 0%, #1e2636 100%)`),
   ];
 
   // Add accent image layers (behind text, after background)

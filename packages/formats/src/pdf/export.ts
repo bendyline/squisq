@@ -368,12 +368,12 @@ function flattenInlines(
 
       // linkReference, imageReference, textDirective — render children or identifier
       default: {
-        const anyNode = node as any;
-        if (anyNode.children) {
-          spans.push(...flattenInlines(anyNode.children, ctx, state));
-        } else if (anyNode.value) {
+        const fallback = node as unknown as { children?: MarkdownInlineNode[]; value?: string };
+        if (fallback.children) {
+          spans.push(...flattenInlines(fallback.children, ctx, state));
+        } else if (fallback.value) {
           spans.push({
-            text: anyNode.value,
+            text: fallback.value,
             font: pickFont(ctx, state.bold, state.italic),
             fontSize: ctx.fontSize,
             color: state.color ?? COLOR_TEXT,
@@ -983,11 +983,11 @@ function renderFallbackBlock(
   ctx: ExportContext,
   extraIndent: number,
 ): void {
-  const anyNode = node as any;
-  if (anyNode.children && Array.isArray(anyNode.children)) {
+  const fallback = node as unknown as { children?: (MarkdownBlockNode | MarkdownInlineNode)[]; value?: string };
+  if (fallback.children && Array.isArray(fallback.children)) {
     // Could be block children or inline children
-    if (anyNode.children.length > 0 && typeof anyNode.children[0]?.type === 'string') {
-      const firstType = anyNode.children[0].type;
+    if (fallback.children.length > 0 && typeof fallback.children[0]?.type === 'string') {
+      const firstType = fallback.children[0].type;
       // Heuristic: if first child looks like an inline node, wrap as paragraph
       const inlineTypes = new Set([
         'text',
@@ -1000,7 +1000,7 @@ function renderFallbackBlock(
         'break',
       ]);
       if (inlineTypes.has(firstType)) {
-        const spans = flattenInlines(anyNode.children, ctx, {
+        const spans = flattenInlines(fallback.children as MarkdownInlineNode[], ctx, {
           bold: false,
           italic: false,
           code: false,
@@ -1010,11 +1010,11 @@ function renderFallbackBlock(
         return;
       }
     }
-    renderBlocks(anyNode.children, ctx, extraIndent);
-  } else if (anyNode.value && typeof anyNode.value === 'string') {
+    renderBlocks(fallback.children as MarkdownBlockNode[], ctx, extraIndent);
+  } else if (fallback.value && typeof fallback.value === 'string') {
     const lineH = ctx.fontSize * LINE_HEIGHT_FACTOR;
     ensureSpace(ctx, lineH);
-    ctx.page.drawText(anyNode.value, {
+    ctx.page.drawText(fallback.value, {
       x: ctx.margin + extraIndent,
       y: ctx.y - ctx.fontSize,
       size: ctx.fontSize,

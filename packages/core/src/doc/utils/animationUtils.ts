@@ -8,7 +8,7 @@
  * This is shared code used by both site and efb-app doc renderers.
  */
 
-import type { Animation, AnimationType } from '../../schemas/Doc.js';
+import type { Animation, AnimationType, TransitionType } from '../../schemas/Doc.js';
 
 interface AnimationResult {
   /** CSS class name to apply */
@@ -112,7 +112,7 @@ export function getDefaultAnimationDuration(type: AnimationType): number {
 /**
  * Get transition class for slide entry/exit.
  */
-export function getTransitionClass(type: string, entering: boolean): string {
+export function getTransitionClass(type: TransitionType, entering: boolean): string {
   const mode = entering ? 'enter' : 'exit';
   return `transition-${type}-${mode}`;
 }

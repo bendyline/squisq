@@ -191,7 +191,35 @@ export function configurePdfWorker(workerSrc: string): void {
 /** Module-level storage for the worker source URL. */
 let _workerSrc: string | undefined;
 
-async function applyWorkerConfig(pdfjsLib: any): Promise<void> {
+/** Minimal typed surface of the pdfjs-dist library used by the import path. */
+interface PdfjsLib {
+  GlobalWorkerOptions?: { workerSrc?: string };
+  getDocument(params: {
+    data: Uint8Array;
+    isEvalSupported?: boolean;
+    useSystemFonts?: boolean;
+  }): { promise: Promise<PdfjsDocument> };
+}
+
+interface PdfjsDocument {
+  numPages: number;
+  getPage(pageNum: number): Promise<PdfjsPage>;
+}
+
+interface PdfjsPage {
+  getTextContent(): Promise<{
+    items: Array<{
+      str: string;
+      transform: number[];
+      height: number;
+      width?: number;
+      fontName?: string;
+    }>;
+    styles?: Record<string, { fontFamily?: string }>;
+  }>;
+}
+
+async function applyWorkerConfig(pdfjsLib: PdfjsLib): Promise<void> {
   if (!pdfjsLib.GlobalWorkerOptions) return;
   if (pdfjsLib.GlobalWorkerOptions.workerSrc) return;
 
@@ -206,11 +234,11 @@ async function applyWorkerConfig(pdfjsLib: any): Promise<void> {
 async function extractTextLines(data: Uint8Array): Promise<TextLine[]> {
   // Dynamic import — the legacy build bundles a fake-worker fallback
   // that avoids a real Web Worker in environments that don't support it.
-  let pdfjsLib: any;
+  let pdfjsLib: PdfjsLib;
   try {
-    pdfjsLib = await import('pdfjs-dist/legacy/build/pdf.mjs');
+    pdfjsLib = (await import('pdfjs-dist/legacy/build/pdf.mjs')) as unknown as PdfjsLib;
   } catch {
-    pdfjsLib = await import('pdfjs-dist');
+    pdfjsLib = (await import('pdfjs-dist')) as unknown as PdfjsLib;
   }
 
   await applyWorkerConfig(pdfjsLib);
@@ -229,7 +257,7 @@ async function extractTextLines(data: Uint8Array): Promise<TextLine[]> {
     const content = await page.getTextContent();
 
     // Build a fontName → fontFamily lookup from pdfjs styles
-    const styleMap = (content.styles || {}) as Record<string, { fontFamily?: string }>;
+    const styleMap = content.styles || {};
 
     // Group text items into lines by y-coordinate
     const items: TextItem[] = [];

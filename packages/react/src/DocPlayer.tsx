@@ -51,6 +51,11 @@ import type {
   SquisqWindow,
 } from './types';
 
+const SMALL_WORDS = new Set([
+  'a', 'an', 'the', 'and', 'but', 'or', 'for', 'nor',
+  'on', 'at', 'to', 'in', 'of', 'by', 'is',
+]);
+
 /**
  * Build a map of audio segment index -> display-friendly title.
  * Uses sectionHeader blocks to find real titles, with fallbacks
@@ -79,23 +84,6 @@ function buildSegmentTitleMap(script: Doc): Map<number, string> {
         map.set(i, 'Flight Context');
       } else {
         // Title-case the slug: "hands-on-history" -> "Hands on History"
-        const SMALL_WORDS = new Set([
-          'a',
-          'an',
-          'the',
-          'and',
-          'but',
-          'or',
-          'for',
-          'nor',
-          'on',
-          'at',
-          'to',
-          'in',
-          'of',
-          'by',
-          'is',
-        ]);
         const words = name.split('-');
         const titled = words
           .map((w, idx) =>
@@ -233,6 +221,14 @@ export function DocPlayer({
     skipToSegment: _skipToSegment,
     restart,
   } = audio;
+
+  // Refs for frequently-changing values used in the keyboard handler,
+  // so the handler callback doesn't need to be recreated every frame.
+  const currentTimeRef = useRef(currentTime);
+  currentTimeRef.current = currentTime;
+  const totalDurationRef = useRef(totalDuration);
+  totalDurationRef.current = totalDuration;
+  const expandedBlocksLenRef = useRef(0);
 
   // Tap the player surface to toggle play/pause (disabled in slideshow and linear mode)
   const handleContainerClick = useCallback(
@@ -640,7 +636,12 @@ export function DocPlayer({
     }
   }, [blockMarkers, onBlockMarkers]);
 
-  // Handle keyboard controls
+  // Keep expandedBlocks length in a ref so keyboard handler stays stable
+  expandedBlocksLenRef.current = expandedBlocks.length;
+
+  // Handle keyboard controls — uses refs for frequently-changing values
+  // (currentTime, totalDuration, expandedBlocks.length) to avoid
+  // re-registering the event listener on every animation frame.
   const handleKeyDown = useCallback(
     (e: KeyboardEvent) => {
       // Don't capture keyboard events when focus is on an input/textarea
@@ -677,7 +678,7 @@ export function DocPlayer({
             break;
           case 'End':
             e.preventDefault();
-            slideNavActions.goToSlide(expandedBlocks.length - 1);
+            slideNavActions.goToSlide(expandedBlocksLenRef.current - 1);
             break;
         }
       } else {
@@ -688,24 +689,15 @@ export function DocPlayer({
             toggle();
             break;
           case 'ArrowRight':
-            seekTo(Math.min(currentTime + 10, totalDuration));
+            seekTo(Math.min(currentTimeRef.current + 10, totalDurationRef.current));
             break;
           case 'ArrowLeft':
-            seekTo(Math.max(currentTime - 10, 0));
+            seekTo(Math.max(currentTimeRef.current - 10, 0));
             break;
         }
       }
     },
-    [
-      isSlideshowMode,
-      isLinearMode,
-      toggle,
-      seekTo,
-      currentTime,
-      totalDuration,
-      slideNavActions,
-      expandedBlocks.length,
-    ],
+    [isSlideshowMode, isLinearMode, toggle, seekTo, slideNavActions],
   );
 
   useEffect(() => {

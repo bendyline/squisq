@@ -14,10 +14,11 @@ import type { Layer } from '../../schemas/Doc.js';
 import type { FactCardInput, TemplateContext } from '../../schemas/BlockTemplates.js';
 import { scaledFontSize } from '../../schemas/BlockTemplates.js';
 import { createAccentLayers, getAccentLayout, adjustY, DEFAULT_LAYOUT } from './accentImage.js';
+import { createBackgroundLayer } from './captionUtils.js';
 
 export function factCard(input: FactCardInput, context: TemplateContext): Layer[] {
   const { fact, explanation, source, accentImage } = input;
-  const { theme, layout: _layout } = context;
+  const { theme } = context;
 
   // Get layout adjustments if accent image is present
   const accentLayout = accentImage ? getAccentLayout(accentImage.position) : DEFAULT_LAYOUT;
@@ -28,16 +29,7 @@ export function factCard(input: FactCardInput, context: TemplateContext): Layer[
   const sourceFontSize = scaledFontSize(20, context, false);
 
   const layers: Layer[] = [
-    // Background — subtle top-to-bottom gradient to differentiate from other dark templates
-    {
-      type: 'shape',
-      id: 'bg',
-      content: {
-        shape: 'rect',
-        fill: `linear-gradient(170deg, #1e2030 0%, ${theme.background} 100%)`,
-      },
-      position: { x: 0, y: 0, width: '100%', height: '100%' },
-    },
+    createBackgroundLayer('bg', `linear-gradient(170deg, #1e2030 0%, ${theme.background} 100%)`),
   ];
 
   // Add accent image layers (behind text, after background)

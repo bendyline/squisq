@@ -15,6 +15,9 @@ import type { MarkdownDocument, ParseOptions } from './types.js';
 import { fromMdast } from './convert.js';
 import { parseFrontmatter } from './utils.js';
 
+// Cache the default processor (all extensions enabled) to avoid rebuilding on every call.
+let defaultProcessor: any;
+
 /**
  * Parse a markdown string into a MarkdownDocument.
  *
@@ -34,23 +37,44 @@ import { parseFrontmatter } from './utils.js';
  * ```
  */
 export function parseMarkdown(markdown: string, options?: ParseOptions): MarkdownDocument {
-  // Build the processor with requested extensions.
-  // unified's .use() chaining changes the generic signature each time,
-  // making strict typing impractical — use a widened Processor type.
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  let processor: any = unified().use(remarkParse);
+  // Use cached default processor when all extensions are enabled (the common case).
+  const useDefaults =
+    !options ||
+    (options.gfm !== false &&
+      options.math !== false &&
+      options.directive !== false &&
+      options.frontmatter !== false);
 
-  if (options?.gfm !== false) {
-    processor = processor.use(remarkGfm);
-  }
-  if (options?.math !== false) {
-    processor = processor.use(remarkMath);
-  }
-  if (options?.directive !== false) {
-    processor = processor.use(remarkDirective);
-  }
-  if (options?.frontmatter !== false) {
-    processor = processor.use(remarkFrontmatter, ['yaml']);
+  let processor: any;
+
+  if (useDefaults) {
+    if (!defaultProcessor) {
+      defaultProcessor = unified()
+        .use(remarkParse)
+        .use(remarkGfm)
+        .use(remarkMath)
+        .use(remarkDirective)
+        .use(remarkFrontmatter, ['yaml']);
+    }
+    processor = defaultProcessor;
+  } else {
+    // Build a custom processor with requested extensions.
+    // unified's .use() chaining changes the generic signature each time,
+    // making strict typing impractical — use a widened Processor type.
+    processor = unified().use(remarkParse);
+
+    if (options?.gfm !== false) {
+      processor = processor.use(remarkGfm);
+    }
+    if (options?.math !== false) {
+      processor = processor.use(remarkMath);
+    }
+    if (options?.directive !== false) {
+      processor = processor.use(remarkDirective);
+    }
+    if (options?.frontmatter !== false) {
+      processor = processor.use(remarkFrontmatter, ['yaml']);
+    }
   }
 
   // Parse markdown → mdast tree (result is an mdast Root node)

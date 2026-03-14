@@ -10,20 +10,18 @@
 
 import type { Layer } from '../../schemas/Doc.js';
 import type { ListBlockInput, TemplateContext } from '../../schemas/BlockTemplates.js';
-import { COLOR_SCHEMES, scaledFontSize } from '../../schemas/BlockTemplates.js';
+import { scaledFontSize } from '../../schemas/BlockTemplates.js';
 import { createAccentLayers, getAccentLayout, adjustY, DEFAULT_LAYOUT } from './accentImage.js';
 
 export function listBlock(input: ListBlockInput, context: TemplateContext): Layer[] {
-  const { items, title, colorScheme = 'blue', accentImage } = input;
+  const { items, title, accentImage } = input;
   const { theme } = context;
-  const _colors = COLOR_SCHEMES[colorScheme] ?? COLOR_SCHEMES.blue;
 
   // Get layout adjustments if accent image is present
   const accentLayout = accentImage ? getAccentLayout(accentImage.position) : DEFAULT_LAYOUT;
 
   const titleFontSize = scaledFontSize(44, context, true);
   const itemFontSize = scaledFontSize(34, context, false);
-  const _numberFontSize = scaledFontSize(28, context, false);
 
   const layers: Layer[] = [
     // Background — gradient

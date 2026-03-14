@@ -105,7 +105,7 @@ export function expandTemplateBlock(templateBlock: TemplateBlock, context: Templ
       );
       layers = [];
     }
-  } catch (err) {
+  } catch (err: unknown) {
     console.error(`Error expanding template ${templateBlock.template}:`, err);
     layers = [];
   }
@@ -471,7 +471,6 @@ export function expandDocBlocks(
         // Only split if each part would meet minimum transition gap
         if (partDuration >= MIN_TRANSITION_GAP) {
           // Shorten original block to first part
-          const originalDuration = block.duration;
           block.duration = partDuration;
 
           // Create additional blocks for remaining parts

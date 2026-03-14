@@ -14,10 +14,11 @@
  * This is shared code used by both site and efb-app doc renderers.
  */
 
-import type { Layer, Animation } from '../../schemas/Doc.js';
+import type { Layer } from '../../schemas/Doc.js';
 import type { TemplateContext } from '../../schemas/BlockTemplates.js';
 import { scaledFontSize } from '../../schemas/BlockTemplates.js';
 import type { StartBlockConfig } from '../../schemas/Doc.js';
+import { mapAmbientMotion } from './accentImage.js';
 
 /**
  * Input for coverBlock template - matches StartBlockConfig
@@ -51,23 +52,7 @@ export function coverBlock(input: CoverBlockInput, context: TemplateContext): La
   const subtitleFontSize = scaledFontSize(36, context, false);
 
   // Determine Ken Burns animation
-  let imageAnimation: Animation | undefined;
-  if (ambientMotion) {
-    switch (ambientMotion) {
-      case 'zoomIn':
-        imageAnimation = { type: 'slowZoom', direction: 'in' };
-        break;
-      case 'zoomOut':
-        imageAnimation = { type: 'slowZoom', direction: 'out' };
-        break;
-      case 'panLeft':
-        imageAnimation = { type: 'panLeft' };
-        break;
-      case 'panRight':
-        imageAnimation = { type: 'panRight' };
-        break;
-    }
-  }
+  const imageAnimation = mapAmbientMotion(ambientMotion);
 
   const layers: Layer[] = [
     // Full-screen hero image

@@ -168,13 +168,6 @@ export function parseHtmlToNodes(html: string): HtmlNode[] {
 }
 
 /**
- * Escape special HTML characters in text content.
- */
-function _escapeHtmlText(text: string): string {
-  return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-}
-
-/**
  * Escape special characters in HTML attribute values.
  */
 function escapeHtmlAttr(value: string): string {

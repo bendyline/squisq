@@ -15,6 +15,7 @@
 import { useState, useEffect } from 'react';
 import type { MapLayer as MapLayerType } from '@bendyline/squisq/schemas';
 import { getAnimationStyle } from '../utils/animationUtils';
+import { resolveValue, getAnchorOffset } from '../utils/layerUtils';
 import { composeMapImage } from '../utils/mapTileUtils';
 
 interface MapLayerProps {
@@ -77,10 +78,10 @@ export function MapLayer({ layer, basePath, viewport, blockTime }: MapLayerProps
           setIsLoading(false);
         }
       })
-      .catch((err) => {
+      .catch((err: unknown) => {
         if (!cancelled) {
           console.error('Failed to compose map:', err);
-          setError(err.message);
+          setError(err instanceof Error ? err.message : String(err));
           setIsLoading(false);
         }
       });
@@ -177,43 +178,6 @@ export function MapLayer({ layer, basePath, viewport, blockTime }: MapLayerProps
       </g>
     </g>
   );
-}
-
-/**
- * Resolve a position value (number or percentage string) to pixels.
- */
-function resolveValue(value: number | string, dimension: number): number {
-  if (typeof value === 'number') {
-    return value;
-  }
-  if (value.endsWith('%')) {
-    const percent = parseFloat(value);
-    return (percent / 100) * dimension;
-  }
-  return parseFloat(value);
-}
-
-/**
- * Get offset based on anchor point.
- */
-function getAnchorOffset(
-  anchor: string | undefined,
-  width: number,
-  height: number,
-): { x: number; y: number } {
-  switch (anchor) {
-    case 'center':
-      return { x: -width / 2, y: -height / 2 };
-    case 'top-right':
-      return { x: -width, y: 0 };
-    case 'bottom-left':
-      return { x: 0, y: -height };
-    case 'bottom-right':
-      return { x: -width, y: -height };
-    case 'top-left':
-    default:
-      return { x: 0, y: 0 };
-  }
 }
 
 export default MapLayer;

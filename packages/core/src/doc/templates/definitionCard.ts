@@ -12,6 +12,7 @@ import type { Layer } from '../../schemas/Doc.js';
 import type { DefinitionCardInput, TemplateContext } from '../../schemas/BlockTemplates.js';
 import { COLOR_SCHEMES, scaledFontSize } from '../../schemas/BlockTemplates.js';
 import { createAccentLayers, getAccentLayout, adjustY, DEFAULT_LAYOUT } from './accentImage.js';
+import { createBackgroundLayer } from './captionUtils.js';
 
 export function definitionCard(input: DefinitionCardInput, context: TemplateContext): Layer[] {
   const { term, definition, origin, colorScheme = 'blue', accentImage } = input;
@@ -26,16 +27,7 @@ export function definitionCard(input: DefinitionCardInput, context: TemplateCont
   const originFontSize = scaledFontSize(22, context, false);
 
   const layers: Layer[] = [
-    // Background — warm gradient
-    {
-      type: 'shape',
-      id: 'bg',
-      content: {
-        shape: 'rect',
-        fill: `linear-gradient(145deg, #1e2030 0%, ${theme.background} 100%)`,
-      },
-      position: { x: 0, y: 0, width: '100%', height: '100%' },
-    },
+    createBackgroundLayer('bg', `linear-gradient(145deg, #1e2030 0%, ${theme.background} 100%)`),
   ];
 
   // Add accent image layers

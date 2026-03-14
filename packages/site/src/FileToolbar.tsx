@@ -156,7 +156,7 @@ export function FileToolbar({ currentSource, onImport, isDark, activeSlot }: Fil
           const blob = new Blob([buffer], { type: 'application/pdf' });
           downloadBlob(blob, filename);
         }
-      } catch (err) {
+      } catch (err: unknown) {
         console.error('Download failed:', err);
         alert('Download failed — see console for details.');
       } finally {
@@ -210,7 +210,7 @@ export function FileToolbar({ currentSource, onImport, isDark, activeSlot }: Fil
             `Unsupported file type: .${ext}\nSupported: .md, .txt, .docx, .pdf, .jpg, .png, .gif, .webp, .svg`,
           );
         }
-      } catch (err) {
+      } catch (err: unknown) {
         console.error('Import failed:', err);
         alert('Import failed — see console for details.');
       } finally {

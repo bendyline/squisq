@@ -8,10 +8,11 @@
  * This is shared code used by both site and efb-app doc renderers.
  */
 
-import type { Layer, Animation } from '../../schemas/Doc.js';
+import type { Layer } from '../../schemas/Doc.js';
 import type { ImageWithCaptionInput, TemplateContext } from '../../schemas/BlockTemplates.js';
 import { scaledFontSize } from '../../schemas/BlockTemplates.js';
 import { cleanCaption } from './captionUtils.js';
+import { mapAmbientMotion } from './accentImage.js';
 
 export function imageWithCaption(input: ImageWithCaptionInput, context: TemplateContext): Layer[] {
   const {
@@ -37,27 +38,7 @@ export function imageWithCaption(input: ImageWithCaptionInput, context: Template
   // Support both new 'ambientMotion' and legacy 'kenBurns' property
   const legacyKenBurns = (input as unknown as Record<string, unknown>).kenBurns as string | undefined;
   const motion: string | undefined = ambientMotion || legacyKenBurns;
-  let imageAnimation: Animation | undefined;
-  if (motion) {
-    switch (motion) {
-      case 'zoomIn':
-      case 'in':
-        imageAnimation = { type: 'slowZoom', direction: 'in' };
-        break;
-      case 'zoomOut':
-      case 'out':
-        imageAnimation = { type: 'slowZoom', direction: 'out' };
-        break;
-      case 'panLeft':
-      case 'left':
-        imageAnimation = { type: 'panLeft' };
-        break;
-      case 'panRight':
-      case 'right':
-        imageAnimation = { type: 'panRight' };
-        break;
-    }
-  }
+  const imageAnimation = mapAmbientMotion(motion);
 
   const layers: Layer[] = [
     // Background image

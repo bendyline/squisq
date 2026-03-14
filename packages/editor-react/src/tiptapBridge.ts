@@ -11,6 +11,26 @@
  * using squisq's own parser.
  */
 
+// Hoisted regex patterns for inline markdown ↔ HTML conversion
+const RE_BOLD_STAR = /\*\*(.+?)\*\*/g;
+const RE_BOLD_UNDER = /__(.+?)__/g;
+const RE_ITALIC_STAR = /\*(.+?)\*/g;
+const RE_ITALIC_UNDER = /_(.+?)_/g;
+const RE_STRIKETHROUGH = /~~(.+?)~~/g;
+const RE_INLINE_CODE = /`(.+?)`/g;
+const RE_LINK = /\[(.+?)\]\((.+?)\)/g;
+const RE_IMAGE = /!\[(.+?)\]\((.+?)\)/g;
+const RE_STRONG_TAG = /<strong>(.*?)<\/strong>/g;
+const RE_B_TAG = /<b>(.*?)<\/b>/g;
+const RE_EM_TAG = /<em>(.*?)<\/em>/g;
+const RE_I_TAG = /<i>(.*?)<\/i>/g;
+const RE_S_TAG = /<s>(.*?)<\/s>/g;
+const RE_DEL_TAG = /<del>(.*?)<\/del>/g;
+const RE_CODE_TAG = /<code>(.*?)<\/code>/g;
+const RE_A_TAG = /<a[^>]+href="([^"]*)"[^>]*>(.*?)<\/a>/g;
+const RE_IMG_TAG = /<img[^>]+alt="([^"]*)"[^>]+src="([^"]*)"[^>]*>/g;
+const RE_STRIP_TAGS = /<[^>]+>/g;
+
 /**
  * Convert raw markdown source to Tiptap-consumable HTML content.
  * Uses a simple markdown-to-HTML conversion that maps cleanly to
@@ -351,24 +371,24 @@ function inlineToHtml(text: string): string {
   let result = escapeHtml(text);
 
   // Bold: **text** or __text__
-  result = result.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
-  result = result.replace(/__(.+?)__/g, '<strong>$1</strong>');
+  result = result.replace(RE_BOLD_STAR, '<strong>$1</strong>');
+  result = result.replace(RE_BOLD_UNDER, '<strong>$1</strong>');
 
   // Italic: *text* or _text_
-  result = result.replace(/\*(.+?)\*/g, '<em>$1</em>');
-  result = result.replace(/_(.+?)_/g, '<em>$1</em>');
+  result = result.replace(RE_ITALIC_STAR, '<em>$1</em>');
+  result = result.replace(RE_ITALIC_UNDER, '<em>$1</em>');
 
   // Strikethrough: ~~text~~
-  result = result.replace(/~~(.+?)~~/g, '<s>$1</s>');
+  result = result.replace(RE_STRIKETHROUGH, '<s>$1</s>');
 
   // Inline code: `text`
-  result = result.replace(/`(.+?)`/g, '<code>$1</code>');
+  result = result.replace(RE_INLINE_CODE, '<code>$1</code>');
 
   // Links: [text](url)
-  result = result.replace(/\[(.+?)\]\((.+?)\)/g, '<a href="$2">$1</a>');
+  result = result.replace(RE_LINK, '<a href="$2">$1</a>');
 
   // Images: ![alt](src)
-  result = result.replace(/!\[(.+?)\]\((.+?)\)/g, '<img alt="$1" src="$2">');
+  result = result.replace(RE_IMAGE, '<img alt="$1" src="$2">');
 
   return result;
 }
@@ -378,28 +398,28 @@ function htmlToInline(html: string): string {
   let result = html;
 
   // Strong
-  result = result.replace(/<strong>(.*?)<\/strong>/g, '**$1**');
-  result = result.replace(/<b>(.*?)<\/b>/g, '**$1**');
+  result = result.replace(RE_STRONG_TAG, '**$1**');
+  result = result.replace(RE_B_TAG, '**$1**');
 
   // Em
-  result = result.replace(/<em>(.*?)<\/em>/g, '*$1*');
-  result = result.replace(/<i>(.*?)<\/i>/g, '*$1*');
+  result = result.replace(RE_EM_TAG, '*$1*');
+  result = result.replace(RE_I_TAG, '*$1*');
 
   // Strikethrough
-  result = result.replace(/<s>(.*?)<\/s>/g, '~~$1~~');
-  result = result.replace(/<del>(.*?)<\/del>/g, '~~$1~~');
+  result = result.replace(RE_S_TAG, '~~$1~~');
+  result = result.replace(RE_DEL_TAG, '~~$1~~');
 
   // Code
-  result = result.replace(/<code>(.*?)<\/code>/g, '`$1`');
+  result = result.replace(RE_CODE_TAG, '`$1`');
 
   // Links
-  result = result.replace(/<a[^>]+href="([^"]*)"[^>]*>(.*?)<\/a>/g, '[$2]($1)');
+  result = result.replace(RE_A_TAG, '[$2]($1)');
 
   // Images
-  result = result.replace(/<img[^>]+alt="([^"]*)"[^>]+src="([^"]*)"[^>]*>/g, '![$1]($2)');
+  result = result.replace(RE_IMG_TAG, '![$1]($2)');
 
   // Strip remaining tags
-  result = result.replace(/<[^>]+>/g, '');
+  result = result.replace(RE_STRIP_TAGS, '');
 
   return unescapeHtml(result);
 }

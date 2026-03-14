@@ -16,6 +16,8 @@
 import type { Layer, ImageLayer, ShapeLayer, Animation } from '../../schemas/Doc.js';
 import type { AccentImage, AccentPosition } from '../../schemas/BlockTemplates.js';
 
+const PERCENTAGE_RE = /^(\d+(?:\.\d+)?)\s*%?$/;
+
 /**
  * Layout adjustments when an accent image is present.
  * Templates use these values to reposition their text content.
@@ -43,20 +45,32 @@ export const DEFAULT_LAYOUT: AccentLayout = {
 
 /**
  * Map ambientMotion values to proper Ken Burns animations.
- * Matches the mapping in imageWithCaption.ts — uses slowZoom variants
- * which provide smooth pan/zoom without opacity changes.
+ * Uses slowZoom variants which provide smooth pan/zoom without opacity changes.
+ * Supports both standard values ('zoomIn', 'panLeft', etc.) and legacy
+ * aliases ('in', 'out', 'left', 'right') for backward compatibility.
+ *
+ * @param motion - The ambient motion value (e.g., 'zoomIn', 'panLeft')
+ * @param duration - Optional animation duration in seconds
  */
-function mapAmbientMotion(motion: AccentImage['ambientMotion']): Animation | undefined {
+export function mapAmbientMotion(
+  motion: string | undefined,
+  duration?: number,
+): Animation | undefined {
   if (!motion) return undefined;
+  const base = duration !== undefined ? { duration } : {};
   switch (motion) {
     case 'zoomIn':
-      return { type: 'slowZoom', direction: 'in', duration: 15 };
+    case 'in':
+      return { type: 'slowZoom', direction: 'in', ...base };
     case 'zoomOut':
-      return { type: 'slowZoom', direction: 'out', duration: 15 };
+    case 'out':
+      return { type: 'slowZoom', direction: 'out', ...base };
     case 'panLeft':
-      return { type: 'slowZoom', panDirection: 'left', duration: 15 };
+    case 'left':
+      return { type: 'slowZoom', panDirection: 'left', ...base };
     case 'panRight':
-      return { type: 'slowZoom', panDirection: 'right', duration: 15 };
+    case 'right':
+      return { type: 'slowZoom', panDirection: 'right', ...base };
     default:
       return undefined;
   }
@@ -168,7 +182,7 @@ function createStripImage(
       width: STRIP_SIZE_PCT,
       height: '100%',
     },
-    animation: mapAmbientMotion(ambientMotion),
+    animation: mapAmbientMotion(ambientMotion, 15),
   };
 }
 
@@ -224,7 +238,7 @@ function createBottomStripImage(
       width: '100%',
       height: STRIP_SIZE_PCT,
     },
-    animation: mapAmbientMotion(ambientMotion),
+    animation: mapAmbientMotion(ambientMotion, 15),
   };
 }
 
@@ -276,7 +290,7 @@ function createCornerInsetImage(
       height: '38%',
       anchor: 'top-left',
     },
-    animation: mapAmbientMotion(ambientMotion) ?? { type: 'fadeIn', duration: 2, delay: 0.5 },
+    animation: mapAmbientMotion(ambientMotion, 15) ?? { type: 'fadeIn', duration: 2, delay: 0.5 },
   };
 }
 
@@ -312,7 +326,7 @@ export function adjustY(originalY: string | number, layout: AccentLayout): strin
 
   // Parse percentage value
   const yStr = typeof originalY === 'number' ? `${originalY}` : originalY;
-  const match = yStr.match(/^(\d+(?:\.\d+)?)\s*%?$/);
+  const match = yStr.match(PERCENTAGE_RE);
 
   if (match) {
     const yValue = parseFloat(match[1]);

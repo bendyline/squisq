@@ -7,6 +7,7 @@
 
 import type { ShapeLayer as ShapeLayerType } from '@bendyline/squisq/schemas';
 import { getAnimationStyle } from '../utils/animationUtils';
+import { resolveValue } from '../utils/layerUtils';
 
 interface ShapeLayerProps {
   layer: ShapeLayerType;
@@ -101,20 +102,6 @@ export function ShapeLayer({ layer, viewport, blockTime }: ShapeLayerProps) {
       )}
     </g>
   );
-}
-
-/**
- * Resolve a position value (number or percentage string) to pixels.
- */
-function resolveValue(value: number | string, dimension: number): number {
-  if (typeof value === 'number') {
-    return value;
-  }
-  if (value.endsWith('%')) {
-    const percent = parseFloat(value);
-    return (percent / 100) * dimension;
-  }
-  return parseFloat(value);
 }
 
 export default ShapeLayer;

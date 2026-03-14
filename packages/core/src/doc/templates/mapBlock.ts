@@ -12,9 +12,10 @@
  * This is shared code used by both site and efb-app doc renderers.
  */
 
-import type { Layer, Animation } from '../../schemas/Doc.js';
+import type { Layer } from '../../schemas/Doc.js';
 import type { MapBlockInput, TemplateContext } from '../../schemas/BlockTemplates.js';
 import { scaledFontSize } from '../../schemas/BlockTemplates.js';
+import { mapAmbientMotion } from './accentImage.js';
 
 export function mapBlock(input: MapBlockInput, context: TemplateContext): Layer[] {
   const {
@@ -34,23 +35,7 @@ export function mapBlock(input: MapBlockInput, context: TemplateContext): Layer[
   const captionFontSize = scaledFontSize(32, context, false);
 
   // Determine animation based on ambientMotion setting
-  let mapAnimation: Animation | undefined;
-  if (ambientMotion) {
-    switch (ambientMotion) {
-      case 'zoomIn':
-        mapAnimation = { type: 'slowZoom', direction: 'in' };
-        break;
-      case 'zoomOut':
-        mapAnimation = { type: 'slowZoom', direction: 'out' };
-        break;
-      case 'panLeft':
-        mapAnimation = { type: 'panLeft' };
-        break;
-      case 'panRight':
-        mapAnimation = { type: 'panRight' };
-        break;
-    }
-  }
+  const mapAnimation = mapAmbientMotion(ambientMotion);
 
   const layers: Layer[] = [
     // Map background

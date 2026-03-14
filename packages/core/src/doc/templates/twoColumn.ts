@@ -204,7 +204,7 @@ export function twoColumn(input: TwoColumnInput, context: TemplateContext): Laye
       anchor: 'center',
       width: columnWidth,
     },
-    animation: { type: 'fadeIn', duration: 1, delay: isStacked ? 0.5 : 0.5 },
+    animation: { type: 'fadeIn', duration: 1, delay: 0.5 },
   });
 
   if (right.sublabel) {
@@ -226,7 +226,7 @@ export function twoColumn(input: TwoColumnInput, context: TemplateContext): Laye
         anchor: 'center',
         width: columnWidth,
       },
-      animation: { type: 'fadeIn', duration: 0.8, delay: isStacked ? 0.8 : 0.8 },
+      animation: { type: 'fadeIn', duration: 0.8, delay: 0.8 },
     });
   }
 

@@ -11,6 +11,7 @@
 import type { TextLayer as TextLayerType } from '@bendyline/squisq/schemas';
 import { DEFAULT_DOC_FONT } from '@bendyline/squisq/schemas';
 import { getAnimationStyle } from '../utils/animationUtils';
+import { resolveValue } from '../utils/layerUtils';
 
 interface TextLayerProps {
   layer: TextLayerType;
@@ -108,20 +109,6 @@ export function TextLayer({ layer, viewport, blockTime }: TextLayerProps) {
       </text>
     </g>
   );
-}
-
-/**
- * Resolve a position value (number or percentage string) to pixels.
- */
-function resolveValue(value: number | string, dimension: number): number {
-  if (typeof value === 'number') {
-    return value;
-  }
-  if (value.endsWith('%')) {
-    const percent = parseFloat(value);
-    return (percent / 100) * dimension;
-  }
-  return parseFloat(value);
 }
 
 /**

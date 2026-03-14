@@ -13,7 +13,7 @@
  *   </MediaContext.Provider>
  */
 
-import { createContext, useContext, useState, useEffect } from 'react';
+import { createContext, useContext, useState, useEffect, useMemo } from 'react';
 import type { MediaProvider } from '@bendyline/squisq/schemas';
 
 /**
@@ -48,25 +48,34 @@ export function useMediaUrl(relativePath: string, basePath: string): string {
     relativePath.startsWith('data:') ||
     relativePath.startsWith('blob:');
 
-  const fallback = isAbsolute ? relativePath : `${basePath}/${relativePath}`;
+  // Memoize fallback to avoid recalculating on every render
+  const fallback = useMemo(
+    () => (isAbsolute ? relativePath : `${basePath}/${relativePath}`),
+    [isAbsolute, relativePath, basePath],
+  );
+
+  // Fast path: no provider or absolute URL — return synchronously, skip effect entirely
+  const needsProvider = !isAbsolute && !!provider;
 
   const [url, setUrl] = useState(fallback);
 
   useEffect(() => {
-    if (isAbsolute || !provider) {
+    if (!needsProvider) {
       setUrl(fallback);
       return;
     }
 
     let cancelled = false;
-    provider.resolveUrl(relativePath).then((resolved) => {
+    provider!.resolveUrl(relativePath).then((resolved) => {
       if (!cancelled) setUrl(resolved);
     });
 
     return () => {
       cancelled = true;
     };
-  }, [provider, relativePath, basePath, isAbsolute, fallback]);
+  }, [needsProvider, provider, relativePath, fallback]);
 
-  return url;
+  // When provider is not needed, return fallback directly to avoid
+  // the one-frame delay from the initial useState → useEffect cycle
+  return needsProvider ? url : fallback;
 }

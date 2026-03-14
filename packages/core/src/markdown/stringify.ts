@@ -13,6 +13,9 @@ import remarkDirective from 'remark-directive';
 import type { MarkdownDocument, StringifyOptions } from './types.js';
 import { toMdast } from './convert.js';
 
+// Cache the default processor (all extensions, default formatting) to avoid rebuilding on every call.
+let defaultProcessor: any;
+
 /**
  * Serialize a MarkdownDocument back to a markdown string.
  *
@@ -40,31 +43,65 @@ export function stringifyMarkdown(doc: MarkdownDocument, options?: StringifyOpti
   // Convert MarkdownDocument → mdast tree
   const mdastTree = toMdast(doc);
 
-  // Build the processor with serialization options.
-  // unified's .use() chaining changes the generic signature each time,
-  // making strict typing impractical — use a widened Processor type.
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  let processor: any = unified();
+  // Use cached default processor when all extensions and default formatting are used.
+  const useDefaults =
+    !options ||
+    (options.gfm !== false &&
+      options.math !== false &&
+      options.directive !== false &&
+      !options.bullet &&
+      !options.bulletOrdered &&
+      !options.emphasis &&
+      !options.strong &&
+      !options.rule &&
+      !options.fence &&
+      options.setext == null);
 
-  if (options?.gfm !== false) {
-    processor = processor.use(remarkGfm);
-  }
-  if (options?.math !== false) {
-    processor = processor.use(remarkMath);
-  }
-  if (options?.directive !== false) {
-    processor = processor.use(remarkDirective);
-  }
+  let processor: any;
 
-  processor = processor.use(remarkStringify, {
-    bullet: options?.bullet ?? '-',
-    bulletOrdered: options?.bulletOrdered ?? '.',
-    emphasis: options?.emphasis ?? '*',
-    strong: options?.strong ?? '*',
-    rule: options?.rule ?? '-',
-    fence: options?.fence ?? '`',
-    setext: options?.setext ?? false,
-  });
+  if (useDefaults) {
+    if (!defaultProcessor) {
+      defaultProcessor = unified()
+        .use(remarkGfm)
+        .use(remarkMath)
+        .use(remarkDirective)
+        .use(remarkStringify, {
+          bullet: '-',
+          bulletOrdered: '.',
+          emphasis: '*',
+          strong: '*',
+          rule: '-',
+          fence: '`',
+          setext: false,
+        });
+    }
+    processor = defaultProcessor;
+  } else {
+    // Build a custom processor with requested options.
+    // unified's .use() chaining changes the generic signature each time,
+    // making strict typing impractical — use a widened Processor type.
+    processor = unified();
+
+    if (options?.gfm !== false) {
+      processor = processor.use(remarkGfm);
+    }
+    if (options?.math !== false) {
+      processor = processor.use(remarkMath);
+    }
+    if (options?.directive !== false) {
+      processor = processor.use(remarkDirective);
+    }
+
+    processor = processor.use(remarkStringify, {
+      bullet: options?.bullet ?? '-',
+      bulletOrdered: options?.bulletOrdered ?? '.',
+      emphasis: options?.emphasis ?? '*',
+      strong: options?.strong ?? '*',
+      rule: options?.rule ?? '-',
+      fence: options?.fence ?? '`',
+      setext: options?.setext ?? false,
+    });
+  }
 
   // Stringify mdast → markdown string
   const result = processor.stringify(mdastTree) as string;

@@ -62,12 +62,13 @@ export function getViewport(viewport: ViewportPreset | ViewportConfig): Viewport
  * Based on diagonal pixels relative to 1080p landscape reference.
  * This ensures text remains readable across different viewport sizes.
  */
+const REFERENCE_DIAGONAL = Math.sqrt(1920 * 1920 + 1080 * 1080); // ~2203
+
 export function calculateFontScale(viewport: ViewportConfig): number {
-  const referenceDiagonal = Math.sqrt(1920 * 1920 + 1080 * 1080); // ~2203
   const currentDiagonal = Math.sqrt(
     viewport.width * viewport.width + viewport.height * viewport.height,
   );
-  return currentDiagonal / referenceDiagonal;
+  return currentDiagonal / REFERENCE_DIAGONAL;
 }
 
 /**

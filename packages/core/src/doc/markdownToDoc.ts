@@ -55,14 +55,19 @@ export interface MarkdownToDocOptions {
  * Convert text to a URL-friendly slug.
  * "Getting Started & More" → "getting-started-more"
  */
+const SLUG_NON_WORD_RE = /[^\w\s-]/g;
+const SLUG_SPACES_RE = /[\s_]+/g;
+const SLUG_MULTI_HYPHEN_RE = /-+/g;
+const SLUG_TRIM_HYPHEN_RE = /^-|-$/g;
+
 function slugify(text: string): string {
   return (
     text
       .toLowerCase()
-      .replace(/[^\w\s-]/g, '') // Remove non-word chars (except spaces and hyphens)
-      .replace(/[\s_]+/g, '-') // Replace spaces/underscores with hyphens
-      .replace(/-+/g, '-') // Collapse multiple hyphens
-      .replace(/^-|-$/g, '') || // Trim leading/trailing hyphens
+      .replace(SLUG_NON_WORD_RE, '') // Remove non-word chars (except spaces and hyphens)
+      .replace(SLUG_SPACES_RE, '-') // Replace spaces/underscores with hyphens
+      .replace(SLUG_MULTI_HYPHEN_RE, '-') // Collapse multiple hyphens
+      .replace(SLUG_TRIM_HYPHEN_RE, '') || // Trim leading/trailing hyphens
     'block'
   ); // Fallback for empty result
 }

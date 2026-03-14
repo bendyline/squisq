@@ -26,7 +26,7 @@ export const HeadingWithTemplate = Heading.extend({
       dataTemplate: {
         default: null,
         parseHTML: (element: HTMLElement) => element.getAttribute('data-template') || null,
-        renderHTML: (attributes: Record<string, any>) => {
+        renderHTML: (attributes: Record<string, unknown>) => {
           if (!attributes.dataTemplate) return {};
           return { 'data-template': attributes.dataTemplate };
         },
@@ -34,7 +34,7 @@ export const HeadingWithTemplate = Heading.extend({
       dataTemplateParams: {
         default: null,
         parseHTML: (element: HTMLElement) => element.getAttribute('data-template-params') || null,
-        renderHTML: (attributes: Record<string, any>) => {
+        renderHTML: (attributes: Record<string, unknown>) => {
           if (!attributes.dataTemplateParams) return {};
           return { 'data-template-params': attributes.dataTemplateParams };
         },

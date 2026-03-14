@@ -222,7 +222,7 @@ export async function composeMapImage(options: ComposeMapOptions): Promise<strin
     try {
       const img = await fetchTileImage(url);
       ctx.drawImage(img, tile.screenX, tile.screenY, tileSize, tileSize);
-    } catch (err) {
+    } catch (err: unknown) {
       // Tile failed to load - leave background color
       console.warn(`Tile load failed: ${url}`, err);
     }

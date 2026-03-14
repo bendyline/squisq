@@ -47,7 +47,7 @@ export class LocalForageAdapter implements StorageAdapter {
     try {
       const value = await this.store.getItem<T>(this.prefix + key);
       return value;
-    } catch (e) {
+    } catch (e: unknown) {
       console.warn('[Storage] get (IndexedDB) failed:', key, e);
       return null;
     }
@@ -56,7 +56,7 @@ export class LocalForageAdapter implements StorageAdapter {
   async set<T>(key: string, value: T): Promise<void> {
     try {
       await this.store.setItem(this.prefix + key, value);
-    } catch (e) {
+    } catch (e: unknown) {
       console.error('[Storage] set (IndexedDB) failed:', key, e);
       throw e;
     }
@@ -65,7 +65,7 @@ export class LocalForageAdapter implements StorageAdapter {
   async remove(key: string): Promise<void> {
     try {
       await this.store.removeItem(this.prefix + key);
-    } catch (e) {
+    } catch (e: unknown) {
       console.warn('[Storage] remove (IndexedDB) failed:', key, e);
     }
   }
@@ -81,7 +81,7 @@ export class LocalForageAdapter implements StorageAdapter {
         // No prefix — clear the entire store
         await this.store.clear();
       }
-    } catch (e) {
+    } catch (e: unknown) {
       console.error('[Storage] clear (IndexedDB) failed:', e);
     }
   }
@@ -95,7 +95,7 @@ export class LocalForageAdapter implements StorageAdapter {
           .map((k) => k.slice(this.prefix.length));
       }
       return allKeys;
-    } catch (e) {
+    } catch (e: unknown) {
       console.warn('[Storage] keys (IndexedDB) failed:', e);
       return [];
     }
