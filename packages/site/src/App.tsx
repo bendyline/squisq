@@ -206,6 +206,21 @@ export function App() {
           activeSlot={activeSlot}
           onSlotChange={setActiveSlot}
         />
+
+        <a
+          href="https://github.com/bendyline/squisq/blob/main/LICENSE"
+          target="_blank"
+          rel="noopener noreferrer"
+          style={{
+            fontSize: 12,
+            fontFamily: 'system-ui, -apple-system, sans-serif',
+            color: '#4a3c1f',
+            textDecoration: 'underline',
+            whiteSpace: 'nowrap',
+          }}
+        >
+          Terms of Use
+        </a>
       </div>
 
       {/* Main area */}

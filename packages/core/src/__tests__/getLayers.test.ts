@@ -16,7 +16,7 @@ function makeTemplateBlock(overrides: Partial<TemplateBlock> = {}): TemplateBloc
     audioSegment: 0,
     title: 'Hello World',
     ...overrides,
-  };
+  } as TemplateBlock;
 }
 
 function makeRawBlock(layers: Layer[]): Block {

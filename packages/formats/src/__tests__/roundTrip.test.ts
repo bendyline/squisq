@@ -125,7 +125,7 @@ describe('DOCX round-trip', () => {
     // Find the bold node
     const boldNode = para.children.find((c: MarkdownInlineNode) => c.type === 'strong');
     expect(boldNode).toBeDefined();
-    expect(extractText(boldNode)).toBe('bold');
+    expect(extractText(boldNode!)).toBe('bold');
   });
 
   it('round-trips italic text', async () => {
@@ -148,7 +148,7 @@ describe('DOCX round-trip', () => {
     const para = result.children[0] as MarkdownParagraph;
     const italicNode = para.children.find((c: MarkdownInlineNode) => c.type === 'emphasis');
     expect(italicNode).toBeDefined();
-    expect(extractText(italicNode)).toBe('italic');
+    expect(extractText(italicNode!)).toBe('italic');
   });
 
   it('round-trips mixed content document', async () => {

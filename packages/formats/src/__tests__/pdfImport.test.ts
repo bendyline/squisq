@@ -61,7 +61,7 @@ async function buildSimplePdf(
 function flatText(node: MarkdownBlockNode): string {
   const parts: string[] = [];
   function walk(n: TreeNode) {
-    if (n.type === 'text') parts.push(n.value);
+    if (n.type === 'text' && n.value) parts.push(n.value);
     if (n.value && n.type === 'code') parts.push(n.value);
     if (n.value && n.type === 'inlineCode') parts.push(n.value);
     if (n.children) for (const c of n.children) walk(c);

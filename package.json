@@ -8,7 +8,7 @@
     "node": ">=22"
   },
   "scripts": {
-    "all": "npm install && npm run build && npm test",
+    "all": "npm install && npm run build && npm run lint && npm run typecheck && npm test",
     "build": "npm run build:core && npm run build:formats && npm run build:react && npm run build:editor",
     "build:core": "npm run build -w @bendyline/squisq",
     "build:formats": "npm run build -w @bendyline/squisq-formats",
