@@ -36,4 +36,5 @@ writeFileSync(
   'utf-8',
 );
 
+// eslint-disable-next-line no-undef, no-console
 console.log(`Generated standalone-source.js (${(source.length / 1024).toFixed(1)} KB source)`);

@@ -18,6 +18,9 @@ import type {
   MarkdownCodeBlock,
 } from '@bendyline/squisq/markdown';
 
+/** Structural shape shared by all markdown node types, for recursive walkers. */
+type TreeNode = { type: string; value?: string; children?: TreeNode[] };
+
 // ============================================
 // Helpers
 // ============================================
@@ -57,7 +60,7 @@ async function buildSimplePdf(
 
 function flatText(node: MarkdownBlockNode): string {
   const parts: string[] = [];
-  function walk(n: any) {
+  function walk(n: TreeNode) {
     if (n.type === 'text') parts.push(n.value);
     if (n.value && n.type === 'code') parts.push(n.value);
     if (n.value && n.type === 'inlineCode') parts.push(n.value);
@@ -145,7 +148,7 @@ describe('pdfToMarkdownDoc', () => {
     expect(md.children.length).toBeGreaterThanOrEqual(1);
 
     // Monospace lines should become code blocks or inline code
-    function hasCode(node: any): boolean {
+    function hasCode(node: TreeNode): boolean {
       if (node.type === 'code' || node.type === 'inlineCode') return true;
       if (node.children) return node.children.some(hasCode);
       return false;
@@ -209,7 +212,7 @@ describe('pdfToMarkdownDoc', () => {
     ]);
     const md = await pdfToMarkdownDoc(buffer, { detectLinks: true });
 
-    function hasLink(node: any): boolean {
+    function hasLink(node: TreeNode): boolean {
       if (node.type === 'link') return true;
       if (node.children) return node.children.some(hasLink);
       return false;

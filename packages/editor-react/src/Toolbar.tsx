@@ -359,7 +359,7 @@ export function Toolbar({ className }: ToolbarProps) {
         handleRaw(id);
       }
     },
-    [activeView, tiptapEditor, monacoEditor, handleTiptap, handleRaw],
+    [activeView, tiptapEditor, handleTiptap, handleRaw],
   );
 
   const groups = ['format', 'structure', 'insert'] as const;

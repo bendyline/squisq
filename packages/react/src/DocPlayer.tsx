@@ -262,7 +262,7 @@ export function DocPlayer({
       clearTimeout(tapFeedbackTimer.current);
       tapFeedbackTimer.current = setTimeout(() => setTapFeedback(null), 600);
     },
-    [renderMode, toggle, isPlaying],
+    [renderMode, toggle, isPlaying, isSlideshowMode, isLinearMode],
   );
 
   // Doc playback hook - pass viewport for responsive template expansion
@@ -386,6 +386,7 @@ export function DocPlayer({
               // Animations on the exiting block (during crossfade): use current
               // block elapsed for transition animations, keep Ken Burns at their
               // natural position based on when that block started
+              // eslint-disable-next-line sonarjs/no-duplicated-branches
               else if (target.closest('.doc-player__block--previous')) {
                 anim.currentTime = Math.max(0, elapsedMs);
               }
@@ -486,6 +487,7 @@ export function DocPlayer({
         delete w.hasCoverBlock;
       }
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- script is a stable prop; re-registering on every script change is unnecessary
   }, [renderMode, isDebugMode, seekTo, totalDuration, expandedBlocks, coverBlock]);
 
   // Captions state: use prop if provided, otherwise default to true
@@ -518,6 +520,7 @@ export function DocPlayer({
         segmentTitleMap.get(currentSegment) ?? script.audio.segments[currentSegment]?.name ?? null,
       currentBlock: currentBlock ?? null,
     }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- script.audio.segments is stable within a given script
     [
       isPlaying,
       currentTime,

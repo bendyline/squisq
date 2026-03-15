@@ -89,6 +89,7 @@ export function MapLayer({ layer, basePath, viewport, blockTime }: MapLayerProps
     return () => {
       cancelled = true;
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- content properties are destructured below; center/markers/showAttribution are stable per-render
   }, [
     content.center.lat,
     content.center.lng,

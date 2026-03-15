@@ -7,7 +7,7 @@
 
 import { describe, it, expect } from 'vitest';
 import JSZip from 'jszip';
-import type { Doc, Block, ImageLayer, AudioTrack } from '@bendyline/squisq/schemas';
+import type { Doc, Block, ImageLayer } from '@bendyline/squisq/schemas';
 import { docToHtml, docToHtmlZip, collectImagePaths } from '../html/index';
 import { inferMimeType, arrayBufferToBase64DataUrl, extractFilename } from '../html/imageUtils';
 

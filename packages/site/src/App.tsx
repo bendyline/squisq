@@ -101,7 +101,7 @@ export function App() {
         }}
       >
         <a
-          href="https://github.com/bendyline/squisq/blob/main/docs/SquiggleSquare.md"
+          href="https://github.com/bendyline/squisq/blob/main/docs/SquigglySquare.md"
           target="_blank"
           rel="noopener noreferrer"
         >

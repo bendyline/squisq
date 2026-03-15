@@ -11,7 +11,7 @@
  */
 
 import type { Doc, Layer, Block } from '@bendyline/squisq/schemas';
-import { arrayBufferToBase64DataUrl, inferMimeType, extractFilename } from './imageUtils.js';
+import { arrayBufferToBase64DataUrl, inferMimeType } from './imageUtils.js';
 
 // ── Types ──────────────────────────────────────────────────────────
 

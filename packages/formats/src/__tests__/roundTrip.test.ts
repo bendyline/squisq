@@ -11,6 +11,8 @@ import type {
   MarkdownParagraph,
   MarkdownStrong,
   MarkdownEmphasis,
+  MarkdownInlineNode,
+  MarkdownBlockNode,
 } from '@bendyline/squisq/markdown';
 
 import { markdownDocToDocx } from '../docx/export';
@@ -28,16 +30,17 @@ async function roundTrip(doc: MarkdownDocument): Promise<MarkdownDocument> {
 /**
  * Extract plain text from an inline node tree.
  */
-function extractText(node: any): string {
+function extractText(node: MarkdownInlineNode): string {
   if (node.type === 'text') return node.value;
-  if (node.children) return node.children.map(extractText).join('');
-  if (node.value) return node.value;
+  if ('children' in node) return (node.children as MarkdownInlineNode[]).map(extractText).join('');
+  if ('value' in node) return node.value as string;
   return '';
 }
 
-function extractBlockText(block: any): string {
-  if (block.children) return block.children.map(extractText).join('');
-  if (block.value) return block.value;
+function extractBlockText(block: MarkdownBlockNode): string {
+  if ('children' in block)
+    return (block.children as MarkdownInlineNode[]).map(extractText).join('');
+  if ('value' in block) return block.value as string;
   return '';
 }
 
@@ -67,11 +70,11 @@ describe('DOCX round-trip', () => {
 
     expect(result.children.length).toBeGreaterThanOrEqual(2);
     expect(result.children[0].type).toBe('heading');
-    expect((result.children[0] as any).depth).toBe(1);
+    expect((result.children[0] as MarkdownHeading).depth).toBe(1);
     expect(extractBlockText(result.children[0])).toBe('Main Title');
 
     expect(result.children[1].type).toBe('heading');
-    expect((result.children[1] as any).depth).toBe(2);
+    expect((result.children[1] as MarkdownHeading).depth).toBe(2);
     expect(extractBlockText(result.children[1])).toBe('Section');
   });
 
@@ -116,11 +119,11 @@ describe('DOCX round-trip', () => {
     };
 
     const result = await roundTrip(original);
-    const para = result.children[0] as any;
+    const para = result.children[0] as MarkdownParagraph;
     expect(para.type).toBe('paragraph');
 
     // Find the bold node
-    const boldNode = para.children.find((c: any) => c.type === 'strong');
+    const boldNode = para.children.find((c: MarkdownInlineNode) => c.type === 'strong');
     expect(boldNode).toBeDefined();
     expect(extractText(boldNode)).toBe('bold');
   });
@@ -142,8 +145,8 @@ describe('DOCX round-trip', () => {
     };
 
     const result = await roundTrip(original);
-    const para = result.children[0] as any;
-    const italicNode = para.children.find((c: any) => c.type === 'emphasis');
+    const para = result.children[0] as MarkdownParagraph;
+    const italicNode = para.children.find((c: MarkdownInlineNode) => c.type === 'emphasis');
     expect(italicNode).toBeDefined();
     expect(extractText(italicNode)).toBe('italic');
   });
@@ -191,7 +194,7 @@ describe('DOCX round-trip', () => {
 
     // Then paragraph with mixed content
     expect(result.children[1].type).toBe('paragraph');
-    const fullText = (result.children[1] as any).children.map(extractText).join('');
+    const fullText = (result.children[1] as MarkdownParagraph).children.map(extractText).join('');
     expect(fullText).toContain('important');
     expect(fullText).toContain('content');
   });

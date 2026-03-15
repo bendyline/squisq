@@ -130,4 +130,5 @@ export function WysiwygEditor({
  * Hook to access the Tiptap editor instance for toolbar commands.
  * The WysiwygEditor must be mounted as a sibling or descendant.
  */
+// eslint-disable-next-line react-refresh/only-export-components
 export { useEditor as useTiptapEditor } from '@tiptap/react';

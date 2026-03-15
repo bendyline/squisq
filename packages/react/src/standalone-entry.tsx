@@ -28,7 +28,6 @@ import { LinearDocView } from './LinearDocView';
 import { MediaContext } from './hooks/MediaContext';
 
 // CSS is loaded as text via esbuild's text loader (configured in tsup.standalone.config.ts)
-// eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-expect-error — .css import returns a string when esbuild uses 'text' loader (standalone build only)
 import animationCss from './styles/doc-animations.css';
 

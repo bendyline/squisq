@@ -15,6 +15,7 @@ import { VideoLayer } from './layers/VideoLayer';
 import { getTransitionClass } from './utils/animationUtils';
 
 /** Default viewport dimensions (1080p landscape) - for backwards compatibility */
+// eslint-disable-next-line react-refresh/only-export-components
 export const VIEWPORT = {
   width: 1920,
   height: 1080,

@@ -27,6 +27,7 @@ import type {
 } from '@bendyline/squisq/markdown';
 
 import { markdownDocToPdf, docToPdf } from '../pdf/export';
+import type { Doc } from '@bendyline/squisq/schemas';
 
 // ============================================
 // Helpers
@@ -300,19 +301,20 @@ describe('markdownDocToPdf', () => {
 
 describe('docToPdf', () => {
   it('converts a Doc object to PDF', async () => {
-    const doc = {
-      id: 'test-doc',
-      name: 'Test',
-      description: 'A test document',
+    const doc: Doc = {
+      articleId: 'test-article',
+      duration: 3,
+      audio: { segments: [] },
       blocks: [
         {
           id: 'block-1',
+          startTime: 0,
+          duration: 3,
+          audioSegment: 0,
           template: 'titleBlock',
-          data: { title: 'Hello' },
-          durationMs: 3000,
         },
       ],
-    } as any;
+    };
     const buffer = await docToPdf(doc);
     expect(buffer).toBeInstanceOf(ArrayBuffer);
     expect(buffer.byteLength).toBeGreaterThan(0);

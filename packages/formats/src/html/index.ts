@@ -34,10 +34,9 @@ import JSZip from 'jszip';
 import {
   generateInlineHtml,
   generateExternalHtml,
-  collectImagePaths,
   type HtmlExportOptions,
 } from './htmlTemplate.js';
-import { inferMimeType, extractFilename } from './imageUtils.js';
+import { extractFilename } from './imageUtils.js';
 
 // ── Public Types ───────────────────────────────────────────────────
 

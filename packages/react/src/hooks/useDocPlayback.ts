@@ -126,7 +126,11 @@ export function useDocPlayback(
   // In render mode, transitions are computed from blockTime so they stay
   // synchronized with the seekTo timeline. In normal mode, setTimeout drives
   // transitions at the browser's real-time clock speed.
-  const _prevBlockRef = useMemo(() => currentBlock, [currentBlockIndex]);
+  const _prevBlockRef = useMemo(
+    () => currentBlock,
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- intentionally keyed on index, not block reference
+    [currentBlockIndex],
+  );
 
   useEffect(() => {
     if (!currentBlock || renderMode) return;
@@ -163,6 +167,7 @@ export function useDocPlayback(
         });
       }
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- intentionally keyed on currentBlock?.id only; reading transitionState.previousBlock without dep to avoid infinite loop
   }, [currentBlock?.id, renderMode]);
 
   // Render mode: track previous block via ref and compute transition from time
@@ -181,6 +186,7 @@ export function useDocPlayback(
         previousBlock: currentBlock,
       }));
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- same pattern: keyed on block identity change
   }, [currentBlock?.id, renderMode]);
 
   // In render mode, derive entering/exiting from blockTime

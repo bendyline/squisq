@@ -2,13 +2,13 @@ import { describe, it, expect, vi } from 'vitest';
 import { getLayers, RenderContext } from '../doc/getLayers.js';
 import { DEFAULT_THEME, TemplateBlock, PersistentLayerConfig } from '../schemas/BlockTemplates.js';
 import { VIEWPORT_PRESETS } from '../schemas/Viewport.js';
-import type { Block, Layer } from '../schemas/Doc.js';
+import type { Block, Layer, TextLayer, ShapeLayer } from '../schemas/Doc.js';
 
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 
-function makeTemplateBlock(overrides: Partial<TemplateBlock> = {}): any {
+function makeTemplateBlock(overrides: Partial<TemplateBlock> = {}): TemplateBlock {
   return {
     template: 'titleBlock',
     id: 'test-title-1',
@@ -51,7 +51,7 @@ describe('getLayers', () => {
     // titleBlock always produces at least a text layer with the title
     const textLayer = layers.find((l) => l.type === 'text');
     expect(textLayer).toBeDefined();
-    expect((textLayer as any).content.text).toContain('Test Title');
+    expect((textLayer as TextLayer).content.text).toContain('Test Title');
   });
 
   it('generates layers for statHighlight template', () => {
@@ -71,9 +71,10 @@ describe('getLayers', () => {
     const existingLayers: Layer[] = [
       {
         type: 'shape',
+        id: 'test-shape',
         content: { shape: 'rect', fill: '#ff0000' },
         position: { x: 0, y: 0, width: 100, height: 100 },
-      } as any,
+      } as ShapeLayer,
     ];
     const block = makeRawBlock(existingLayers);
     const layers = getLayers(block, defaultContext);
@@ -94,7 +95,7 @@ describe('getLayers', () => {
   });
 
   it('returns empty array for block with no template and no layers', () => {
-    const block: Block = { id: 'empty-1', duration: 5, startTime: 0, audioSegment: 0 } as any;
+    const block: Block = { id: 'empty-1', duration: 5, startTime: 0, audioSegment: 0 };
     const layers = getLayers(block, defaultContext);
 
     expect(layers).toEqual([]);
@@ -127,15 +128,17 @@ describe('getLayers', () => {
   describe('persistent layers injection', () => {
     const bottomLayer: Layer = {
       type: 'shape',
+      id: 'bottom',
       content: { shape: 'rect', fill: '#000' },
       position: { x: 0, y: 0, width: 100, height: 100 },
-    } as any;
+    } as ShapeLayer;
 
     const topLayer: Layer = {
       type: 'shape',
+      id: 'top',
       content: { shape: 'rect', fill: '#fff' },
       position: { x: 0, y: 0, width: 100, height: 100 },
-    } as any;
+    } as ShapeLayer;
 
     const persistentConfig: PersistentLayerConfig = {
       bottomLayers: [bottomLayer],

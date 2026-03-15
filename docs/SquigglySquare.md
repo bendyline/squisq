@@ -1,6 +1,6 @@
-# Squiggle Square — Template Annotation Syntax
+# Squiggly Square — Template Annotation Syntax
 
-This document describes the "Squiggle Square" annotation notation used in Squisq Markdown to embed template blocks inline in Markdown documents.
+This document describes the "Squiggly Square" annotation notation used in Squisq Markdown to embed template blocks inline in Markdown documents.
 
 Synopsis
 
@@ -161,4 +161,4 @@ If you'd like, I can also:
 - Add a short example authoring guide to the dev site sample docs.
 - Add convenience helpers to parse common attribute shapes (e.g., `parseLatLng`, `parseCsv`).
 
-Would you like me to commit and push `docs/SquiggleSquare.md` now?
+Would you like me to commit and push `docs/SquigglySquare.md` now?

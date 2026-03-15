@@ -20,6 +20,18 @@ import {
 } from '../ooxml/namespaces';
 import { xmlDeclaration } from '../ooxml/xmlUtils';
 import { docxToMarkdownDoc, docxToDoc } from '../docx/import';
+import type {
+  MarkdownHeading,
+  MarkdownParagraph,
+  MarkdownList,
+  MarkdownTable,
+  MarkdownText,
+  MarkdownStrong,
+  MarkdownEmphasis,
+  MarkdownStrikethrough,
+  MarkdownLink,
+  MarkdownInlineNode,
+} from '@bendyline/squisq/markdown';
 
 // ============================================
 // Test Fixture Builder
@@ -122,15 +134,15 @@ describe('docxToMarkdownDoc', () => {
     expect(doc.children.length).toBe(2);
 
     expect(doc.children[0].type).toBe('heading');
-    const h1 = doc.children[0] as any;
+    const h1 = doc.children[0] as MarkdownHeading;
     expect(h1.depth).toBe(1);
     expect(h1.children[0].type).toBe('text');
-    expect(h1.children[0].value).toBe('Title');
+    expect((h1.children[0] as MarkdownText).value).toBe('Title');
 
     expect(doc.children[1].type).toBe('heading');
-    const h2 = doc.children[1] as any;
+    const h2 = doc.children[1] as MarkdownHeading;
     expect(h2.depth).toBe(2);
-    expect(h2.children[0].value).toBe('Subtitle');
+    expect((h2.children[0] as MarkdownText).value).toBe('Subtitle');
   });
 
   // ============================================
@@ -147,7 +159,9 @@ describe('docxToMarkdownDoc', () => {
     const doc = await docxToMarkdownDoc(data);
     expect(doc.children.length).toBe(2);
     expect(doc.children[0].type).toBe('paragraph');
-    expect((doc.children[0] as any).children[0].value).toBe('Hello world');
+    expect(((doc.children[0] as MarkdownParagraph).children[0] as MarkdownText).value).toBe(
+      'Hello world',
+    );
   });
 
   it('skips empty paragraphs', async () => {
@@ -157,7 +171,7 @@ describe('docxToMarkdownDoc', () => {
 
     const doc = await docxToMarkdownDoc(data);
     expect(doc.children.length).toBe(1);
-    expect((doc.children[0] as any).children[0].value).toBe('Text');
+    expect(((doc.children[0] as MarkdownParagraph).children[0] as MarkdownText).value).toBe('Text');
   });
 
   // ============================================
@@ -170,10 +184,11 @@ describe('docxToMarkdownDoc', () => {
     });
 
     const doc = await docxToMarkdownDoc(data);
-    const para = doc.children[0] as any;
+    const para = doc.children[0] as MarkdownParagraph;
     expect(para.children[0].type).toBe('strong');
-    expect(para.children[0].children[0].type).toBe('text');
-    expect(para.children[0].children[0].value).toBe('bold');
+    const strong = para.children[0] as MarkdownStrong;
+    expect(strong.children[0].type).toBe('text');
+    expect((strong.children[0] as MarkdownText).value).toBe('bold');
   });
 
   it('imports italic text', async () => {
@@ -182,9 +197,10 @@ describe('docxToMarkdownDoc', () => {
     });
 
     const doc = await docxToMarkdownDoc(data);
-    const para = doc.children[0] as any;
+    const para = doc.children[0] as MarkdownParagraph;
     expect(para.children[0].type).toBe('emphasis');
-    expect(para.children[0].children[0].value).toBe('italic');
+    const em = para.children[0] as MarkdownEmphasis;
+    expect((em.children[0] as MarkdownText).value).toBe('italic');
   });
 
   it('imports strikethrough text', async () => {
@@ -193,11 +209,10 @@ describe('docxToMarkdownDoc', () => {
     });
 
     const doc = await docxToMarkdownDoc(data);
-    const para = doc.children[0] as any;
-    // Strikethrough wraps in delete, which may also wrap in emphasis depending on nesting
-    // Let's check: strike wraps first, then italic, then bold
-    expect(para.children[0].type).toBe('delete');
-    expect(para.children[0].children[0].value).toBe('struck');
+    const para = doc.children[0] as MarkdownParagraph;
+    const del = para.children[0] as MarkdownStrikethrough;
+    expect(del.type).toBe('delete');
+    expect((del.children[0] as MarkdownText).value).toBe('struck');
   });
 
   it('imports bold+italic combined formatting', async () => {
@@ -206,11 +221,13 @@ describe('docxToMarkdownDoc', () => {
     });
 
     const doc = await docxToMarkdownDoc(data);
-    const para = doc.children[0] as any;
+    const para = doc.children[0] as MarkdownParagraph;
     // Should be strong > emphasis > text (bold wraps italic wraps text)
-    expect(para.children[0].type).toBe('strong');
-    expect(para.children[0].children[0].type).toBe('emphasis');
-    expect(para.children[0].children[0].children[0].value).toBe('bold italic');
+    const strong = para.children[0] as MarkdownStrong;
+    expect(strong.type).toBe('strong');
+    const em = strong.children[0] as MarkdownEmphasis;
+    expect(em.type).toBe('emphasis');
+    expect((em.children[0] as MarkdownText).value).toBe('bold italic');
   });
 
   it('merges adjacent plain text runs', async () => {
@@ -219,10 +236,10 @@ describe('docxToMarkdownDoc', () => {
     });
 
     const doc = await docxToMarkdownDoc(data);
-    const para = doc.children[0] as any;
+    const para = doc.children[0] as MarkdownParagraph;
     expect(para.children.length).toBe(1);
     expect(para.children[0].type).toBe('text');
-    expect(para.children[0].value).toBe('Hello world');
+    expect((para.children[0] as MarkdownText).value).toBe('Hello world');
   });
 
   // ============================================
@@ -248,11 +265,12 @@ describe('docxToMarkdownDoc', () => {
     });
 
     const doc = await docxToMarkdownDoc(data);
-    const para = doc.children[0] as any;
-    expect(para.children[0].type).toBe('link');
-    expect(para.children[0].url).toBe('https://example.com');
-    expect(para.children[0].children[0].type).toBe('text');
-    expect(para.children[0].children[0].value).toBe('click me');
+    const para = doc.children[0] as MarkdownParagraph;
+    const link = para.children[0] as MarkdownLink;
+    expect(link.type).toBe('link');
+    expect(link.url).toBe('https://example.com');
+    expect(link.children[0].type).toBe('text');
+    expect((link.children[0] as MarkdownText).value).toBe('click me');
   });
 
   // ============================================
@@ -280,11 +298,12 @@ describe('docxToMarkdownDoc', () => {
 
     const doc = await docxToMarkdownDoc(data);
     expect(doc.children[0].type).toBe('list');
-    const list = doc.children[0] as any;
+    const list = doc.children[0] as MarkdownList;
     expect(list.ordered).toBe(false);
     expect(list.children.length).toBe(2);
     expect(list.children[0].type).toBe('listItem');
-    expect(list.children[0].children[0].children[0].value).toBe('Item A');
+    const listPara = list.children[0].children[0] as MarkdownParagraph;
+    expect((listPara.children[0] as MarkdownText).value).toBe('Item A');
   });
 
   it('imports ordered lists', async () => {
@@ -307,7 +326,7 @@ describe('docxToMarkdownDoc', () => {
     });
 
     const doc = await docxToMarkdownDoc(data);
-    const list = doc.children[0] as any;
+    const list = doc.children[0] as MarkdownList;
     expect(list.type).toBe('list');
     expect(list.ordered).toBe(true);
   });
@@ -333,12 +352,15 @@ describe('docxToMarkdownDoc', () => {
 
     const doc = await docxToMarkdownDoc(data);
     expect(doc.children[0].type).toBe('table');
-    const table = doc.children[0] as any;
+    const table = doc.children[0] as MarkdownTable;
     expect(table.children.length).toBe(2);
     expect(table.children[0].children.length).toBe(2);
-    expect(table.children[0].children[0].children[0].value).toBe('A');
-    expect(table.children[0].children[1].children[0].value).toBe('B');
-    expect(table.children[1].children[0].children[0].value).toBe('1');
+    const cell00 = table.children[0].children[0];
+    const cell01 = table.children[0].children[1];
+    const cell10 = table.children[1].children[0];
+    expect((cell00.children[0] as MarkdownText).value).toBe('A');
+    expect((cell01.children[0] as MarkdownText).value).toBe('B');
+    expect((cell10.children[0] as MarkdownText).value).toBe('1');
   });
 
   // ============================================
@@ -362,8 +384,8 @@ describe('docxToMarkdownDoc', () => {
     });
 
     const doc = await docxToMarkdownDoc(data);
-    const para = doc.children[0] as any;
-    expect(para.children.some((c: any) => c.type === 'break')).toBe(true);
+    const para = doc.children[0] as MarkdownParagraph;
+    expect(para.children.some((c: MarkdownInlineNode) => c.type === 'break')).toBe(true);
   });
 });
 

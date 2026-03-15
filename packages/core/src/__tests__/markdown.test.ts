@@ -32,6 +32,7 @@ import type {
   MarkdownLinkDefinition,
   MarkdownLinkReference,
   MarkdownImageReference,
+  MarkdownText,
 } from '../markdown/index';
 
 // ============================================
@@ -658,7 +659,7 @@ describe('heading template annotation', () => {
     // The annotation text should be stripped from children
     expect(heading.children).toHaveLength(1);
     expect(heading.children[0].type).toBe('text');
-    expect((heading.children[0] as any).value).toBe('Report Data');
+    expect((heading.children[0] as MarkdownText).value).toBe('Report Data');
   });
 
   it('parses template name with key=value params', () => {
@@ -669,7 +670,7 @@ describe('heading template annotation', () => {
       template: 'statHighlight',
       params: { colorScheme: 'blue', size: 'large' },
     });
-    expect((heading.children[0] as any).value).toBe('Data');
+    expect((heading.children[0] as MarkdownText).value).toBe('Data');
   });
 
   it('returns no annotation for plain headings', () => {
@@ -677,7 +678,7 @@ describe('heading template annotation', () => {
     const heading = doc.children[0] as MarkdownHeading;
 
     expect(heading.templateAnnotation).toBeUndefined();
-    expect((heading.children[0] as any).value).toBe('Just a title');
+    expect((heading.children[0] as MarkdownText).value).toBe('Just a title');
   });
 
   it('does not match incomplete bracket syntax', () => {

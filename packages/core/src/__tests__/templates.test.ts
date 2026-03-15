@@ -34,7 +34,7 @@ describe('templateRegistry', () => {
     ];
     for (const name of expected) {
       expect(templateRegistry).toHaveProperty(name);
-      const tpl = (templateRegistry as any)[name];
+      const tpl = (templateRegistry as Record<string, unknown>)[name];
       expect(typeof tpl).toBe('function');
     }
   });
@@ -116,7 +116,7 @@ describe('expandTemplateBlock', () => {
     for (const name of templates) {
       // `getAvailableTemplates()` returns string[]; cast when creating a TemplateBlock
       const block = {
-        template: name as any,
+        template: name as TemplateBlock['template'],
         id: `test-${name}`,
         duration: 10,
         audioSegment: 0,

@@ -398,7 +398,8 @@ export function expandDocBlocks(
         current.duration = next.startTime - current.startTime;
       } else if (currentEnd < next.startTime - 0.5) {
         // Gap > 0.5s - extend current block to fill (visual continuity)
-        current.duration = next.startTime - current.startTime;
+        // Same formula as overlap: snap to next block start
+        current.duration = Math.max(0.1, next.startTime - current.startTime);
       }
     }
 

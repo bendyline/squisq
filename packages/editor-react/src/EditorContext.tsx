@@ -78,6 +78,7 @@ const EditorContext = createContext<EditorContextValue | null>(null);
 /**
  * Hook to access the editor context. Must be used within an EditorProvider.
  */
+// eslint-disable-next-line react-refresh/only-export-components
 export function useEditorContext(): EditorContextValue {
   const ctx = useContext(EditorContext);
   if (!ctx) {

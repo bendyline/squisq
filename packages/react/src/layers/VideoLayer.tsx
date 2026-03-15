@@ -100,6 +100,7 @@ export function VideoLayer({
       video.removeEventListener('timeupdate', handleTimeUpdate);
       video.pause();
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- isPlaying is handled by the separate sync effect below
   }, [content.src, content.clipStart, content.clipEnd]);
 
   // Sync video play/pause with doc playback state

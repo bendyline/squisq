@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { parseMarkdown, stringifyMarkdown } from '../markdown/index';
+import type { MarkdownText } from '../markdown/types';
 import { markdownToDoc, flattenBlocks, countBlocks, getBlockDepth } from '../doc/markdownToDoc';
 import { docToMarkdown } from '../doc/docToMarkdown';
 
@@ -331,7 +332,7 @@ describe('template annotation in markdownToDoc', () => {
 
     // The heading children should have the annotation stripped
     expect(heading.templateAnnotation).toEqual({ template: 'chart' });
-    const textChild = heading.children.find((c) => c.type === 'text') as any;
+    const textChild = heading.children.find((c) => c.type === 'text') as MarkdownText;
     expect(textChild.value).toBe('My Section');
   });
 

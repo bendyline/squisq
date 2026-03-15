@@ -105,11 +105,12 @@ export function useAudioSync(
     });
 
     // Cleanup blob URLs on unmount
+    const currentBlobUrls = blobUrls.current;
     return () => {
-      blobUrls.current.forEach((url) => {
+      currentBlobUrls.forEach((url) => {
         URL.revokeObjectURL(url);
       });
-      blobUrls.current.clear();
+      currentBlobUrls.clear();
     };
   }, [audioTrack, preloadAudio]);
 
