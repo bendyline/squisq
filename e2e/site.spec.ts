@@ -227,8 +227,6 @@ test.describe('DocPlayer controls', () => {
   });
 
   test('space bar toggles play/pause', async ({ page }) => {
-    const player = page.locator('.doc-player');
-
     // Start playback (dismisses cover block after grace period)
     await startPlaybackAndWaitForActiveBlock(page);
 
