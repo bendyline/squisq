@@ -76,8 +76,6 @@ jobs:
       - name: Build site
         if: inputs.deploy_pages
         run: npm run build -w squisq-site
-        env:
-          VITE_BASE: /squisq/
 
       - name: Upload pages artifact
         if: inputs.deploy_pages
