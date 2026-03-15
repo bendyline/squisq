@@ -112,7 +112,16 @@ export function App() {
           />
         </a>
 
-        <label style={{ fontSize: 13, fontFamily: 'system-ui, -apple-system, sans-serif', color: '#4a3c1f', display: 'flex', alignItems: 'center', gap: 6 }}>
+        <label
+          style={{
+            fontSize: 13,
+            fontFamily: 'system-ui, -apple-system, sans-serif',
+            color: '#4a3c1f',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 6,
+          }}
+        >
           Sample:
           <select
             value={selectedSample}
@@ -135,7 +144,16 @@ export function App() {
           </select>
         </label>
 
-        <label style={{ fontSize: 13, fontFamily: 'system-ui, -apple-system, sans-serif', color: '#4a3c1f', display: 'flex', alignItems: 'center', gap: 6 }}>
+        <label
+          style={{
+            fontSize: 13,
+            fontFamily: 'system-ui, -apple-system, sans-serif',
+            color: '#4a3c1f',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 6,
+          }}
+        >
           Theme:
           <select
             value={theme}

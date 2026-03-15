@@ -52,8 +52,21 @@ import type {
 } from './types';
 
 const SMALL_WORDS = new Set([
-  'a', 'an', 'the', 'and', 'but', 'or', 'for', 'nor',
-  'on', 'at', 'to', 'in', 'of', 'by', 'is',
+  'a',
+  'an',
+  'the',
+  'and',
+  'but',
+  'or',
+  'for',
+  'nor',
+  'on',
+  'at',
+  'to',
+  'in',
+  'of',
+  'by',
+  'is',
 ]);
 
 /**
@@ -819,7 +832,9 @@ export function DocPlayer({
             </div>
             <div>
               <span style={{ color: '#888' }}>template:</span>{' '}
-              <span style={{ color: '#ff6b6b' }}>{(currentBlock as DocBlock | null)?.template ?? 'raw'}</span>
+              <span style={{ color: '#ff6b6b' }}>
+                {(currentBlock as DocBlock | null)?.template ?? 'raw'}
+              </span>
             </div>
             <div>
               <span style={{ color: '#888' }}>block:</span> {currentBlockIndex + 1}/

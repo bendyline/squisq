@@ -114,8 +114,14 @@ function isTiptapActive(editor: TiptapEditor, id: string): boolean {
  * - Raw: appends markdown syntax to the source
  */
 export function Toolbar({ className }: ToolbarProps) {
-  const { activeView, setActiveView, markdownSource, setMarkdownSource, tiptapEditor, monacoEditor } =
-    useEditorContext();
+  const {
+    activeView,
+    setActiveView,
+    markdownSource,
+    setMarkdownSource,
+    tiptapEditor,
+    monacoEditor,
+  } = useEditorContext();
 
   // Force re-render when Tiptap selection or formatting state changes
   const [, forceUpdate] = useReducer((c: number) => c + 1, 0);
@@ -172,7 +178,9 @@ export function Toolbar({ className }: ToolbarProps) {
         case 'link': {
           const url = window.prompt('URL:');
           if (url) {
-            (chain as unknown as Record<string, (opts: { href: string }) => typeof chain>).setLink?.({ href: url }).run();
+            (chain as unknown as Record<string, (opts: { href: string }) => typeof chain>)
+              .setLink?.({ href: url })
+              .run();
           }
           break;
         }
@@ -406,27 +414,28 @@ export function Toolbar({ className }: ToolbarProps) {
 
       {/* Formatting buttons — hidden in preview mode */}
       {!isPreview && <div className="squisq-toolbar-separator" />}
-      {!isPreview && groups.map((group, gi) => (
-        <div key={group} className="squisq-toolbar-group">
-          {gi > 0 && <div className="squisq-toolbar-separator" />}
-          {BUTTONS.filter((b) => b.group === group).map((btn) => {
-            const active = isWysiwyg ? isTiptapActive(tiptapEditor, btn.id) : false;
-            return (
-              <button
-                key={btn.id}
-                className={`squisq-toolbar-button${active ? ' squisq-toolbar-button--active' : ''}`}
-                title={btn.title}
-                onClick={() => handleAction(btn.id)}
-                aria-label={btn.title}
-                aria-pressed={active}
-                style={btn.iconStyle}
-              >
-                {btn.icon}
-              </button>
-            );
-          })}
-        </div>
-      ))}
+      {!isPreview &&
+        groups.map((group, gi) => (
+          <div key={group} className="squisq-toolbar-group">
+            {gi > 0 && <div className="squisq-toolbar-separator" />}
+            {BUTTONS.filter((b) => b.group === group).map((btn) => {
+              const active = isWysiwyg ? isTiptapActive(tiptapEditor, btn.id) : false;
+              return (
+                <button
+                  key={btn.id}
+                  className={`squisq-toolbar-button${active ? ' squisq-toolbar-button--active' : ''}`}
+                  title={btn.title}
+                  onClick={() => handleAction(btn.id)}
+                  aria-label={btn.title}
+                  aria-pressed={active}
+                  style={btn.iconStyle}
+                >
+                  {btn.icon}
+                </button>
+              );
+            })}
+          </div>
+        ))}
 
       {/* Template picker — visible when cursor is in a heading (WYSIWYG) */}
       {!isPreview && currentTemplate !== null && (

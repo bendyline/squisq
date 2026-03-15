@@ -57,13 +57,13 @@ squisq/
 
 ### Package Inventory
 
-| Package | npm Name | Purpose | Key Dependencies |
-|---------|----------|---------|-----------------|
-| **core** | `@bendyline/squisq` | Schemas, templates, spatial math, storage, markdown | unified/remark ecosystem |
-| **react** | `@bendyline/squisq-react` | DocPlayer, BlockRenderer, layers, hooks | react, core |
-| **formats** | `@bendyline/squisq-formats` | DOCX/PDF import+export, OOXML infrastructure | jszip, core |
-| **editor-react** | `@bendyline/squisq-editor-react` | Rich text + raw markdown editor | tiptap, monaco-editor, react, core |
-| **site** | *(not published)* | Dev/demo site for testing components | vite, react, all packages |
+| Package          | npm Name                         | Purpose                                             | Key Dependencies                   |
+| ---------------- | -------------------------------- | --------------------------------------------------- | ---------------------------------- |
+| **core**         | `@bendyline/squisq`              | Schemas, templates, spatial math, storage, markdown | unified/remark ecosystem           |
+| **react**        | `@bendyline/squisq-react`        | DocPlayer, BlockRenderer, layers, hooks             | react, core                        |
+| **formats**      | `@bendyline/squisq-formats`      | DOCX/PDF import+export, OOXML infrastructure        | jszip, core                        |
+| **editor-react** | `@bendyline/squisq-editor-react` | Rich text + raw markdown editor                     | tiptap, monaco-editor, react, core |
+| **site**         | _(not published)_                | Dev/demo site for testing components                | vite, react, all packages          |
 
 ### Dependency Graph
 
@@ -97,13 +97,13 @@ squisq/
 
 ### Subpath Exports (core)
 
-| Subpath | Content |
-|---------|---------|
-| `@bendyline/squisq/schemas` | Doc, Block, TemplateBlock, BlockTemplates, Viewport, LayoutStrategy |
-| `@bendyline/squisq/doc` | Template registry, 17 templates, expandDocBlocks, animationUtils |
-| `@bendyline/squisq/spatial` | Haversine distance, Geohash encode/decode |
-| `@bendyline/squisq/storage` | StorageAdapter interface, Memory + LocalStorage adapters |
-| `@bendyline/squisq/markdown` | Markdown parse/stringify, MarkdownDocument types |
+| Subpath                      | Content                                                             |
+| ---------------------------- | ------------------------------------------------------------------- |
+| `@bendyline/squisq/schemas`  | Doc, Block, TemplateBlock, BlockTemplates, Viewport, LayoutStrategy |
+| `@bendyline/squisq/doc`      | Template registry, 17 templates, expandDocBlocks, animationUtils    |
+| `@bendyline/squisq/spatial`  | Haversine distance, Geohash encode/decode                           |
+| `@bendyline/squisq/storage`  | StorageAdapter interface, Memory + LocalStorage adapters            |
+| `@bendyline/squisq/markdown` | Markdown parse/stringify, MarkdownDocument types                    |
 
 ### Key Design Principles
 
@@ -134,18 +134,18 @@ major milestones.
 
 The user may ask to review a specific area. Common focuses:
 
-| Focus | What to Examine |
-|-------|-----------------|
-| "Code duplication" | Cross-package sharing, duplicated utilities, copy-pasted logic |
-| "Type safety" | Schema coverage, `any` usage, missing types at boundaries |
-| "Build system" | tsup config, tsconfig alignment, subpath export correctness |
-| "API surface" | Public exports, naming consistency, documentation completeness |
-| "Template architecture" | Template purity, input types, context usage, scaledFontSize |
-| "Markdown pipeline" | Parse/stringify round-trip fidelity, extension coverage |
-| "Editor architecture" | Tiptap/Monaco integration, context patterns, preview sync |
-| "Testing" | Test coverage, test patterns, edge cases |
-| "Performance" | Bundle sizes, tree-shaking, unnecessary dependencies |
-| "Claude skills" | Skill quality, coverage gaps, CLAUDE.md accuracy |
+| Focus                   | What to Examine                                                |
+| ----------------------- | -------------------------------------------------------------- |
+| "Code duplication"      | Cross-package sharing, duplicated utilities, copy-pasted logic |
+| "Type safety"           | Schema coverage, `any` usage, missing types at boundaries      |
+| "Build system"          | tsup config, tsconfig alignment, subpath export correctness    |
+| "API surface"           | Public exports, naming consistency, documentation completeness |
+| "Template architecture" | Template purity, input types, context usage, scaledFontSize    |
+| "Markdown pipeline"     | Parse/stringify round-trip fidelity, extension coverage        |
+| "Editor architecture"   | Tiptap/Monaco integration, context patterns, preview sync      |
+| "Testing"               | Test coverage, test patterns, edge cases                       |
+| "Performance"           | Bundle sizes, tree-shaking, unnecessary dependencies           |
+| "Claude skills"         | Skill quality, coverage gaps, CLAUDE.md accuracy               |
 
 ---
 
@@ -265,14 +265,14 @@ what needs attention.
 
 **Potential duplication hotspots:**
 
-| Concern | Likely Locations | What to Check |
-|---------|-----------------|---------------|
-| Animation utilities | `core/src/doc/utils/`, `react/src/utils/` | Re-export or duplication? |
-| Type re-exports | Each package's `index.ts` | Are types properly re-exported? |
-| Template input validation | Individual template files | Repeated patterns? |
-| Viewport calculations | `scaledFontSize`, layout logic | Centralized in core? |
-| Markdown node handling | `convert.ts`, `PreviewPanel.tsx`, `LinearDocView.tsx` | Same traversal patterns? |
-| Caption cleaning | `captionUtils.ts` | Used everywhere it should be? |
+| Concern                   | Likely Locations                                      | What to Check                   |
+| ------------------------- | ----------------------------------------------------- | ------------------------------- |
+| Animation utilities       | `core/src/doc/utils/`, `react/src/utils/`             | Re-export or duplication?       |
+| Type re-exports           | Each package's `index.ts`                             | Are types properly re-exported? |
+| Template input validation | Individual template files                             | Repeated patterns?              |
+| Viewport calculations     | `scaledFontSize`, layout logic                        | Centralized in core?            |
+| Markdown node handling    | `convert.ts`, `PreviewPanel.tsx`, `LinearDocView.tsx` | Same traversal patterns?        |
+| Caption cleaning          | `captionUtils.ts`                                     | Used everywhere it should be?   |
 
 **How to evaluate:**
 
@@ -412,18 +412,18 @@ where would that be?]
 
 ## Architecture Scorecard
 
-| Dimension | Grade | Trend | Notes |
-|-----------|-------|-------|-------|
-| Code Organization | A-F | Improving/Stable/Declining | One-line summary |
-| Code Duplication | A-F | ... | ... |
-| Type Safety | A-F | ... | ... |
-| Build System | A-F | ... | ... |
-| Error Handling | A-F | ... | ... |
-| Performance | A-F | ... | ... |
-| Test Coverage | A-F | ... | ... |
-| API Surface | A-F | ... | ... |
-| Documentation | A-F | ... | ... |
-| AI Tooling (Skills) | A-F | ... | ... |
+| Dimension           | Grade | Trend                      | Notes            |
+| ------------------- | ----- | -------------------------- | ---------------- |
+| Code Organization   | A-F   | Improving/Stable/Declining | One-line summary |
+| Code Duplication    | A-F   | ...                        | ...              |
+| Type Safety         | A-F   | ...                        | ...              |
+| Build System        | A-F   | ...                        | ...              |
+| Error Handling      | A-F   | ...                        | ...              |
+| Performance         | A-F   | ...                        | ...              |
+| Test Coverage       | A-F   | ...                        | ...              |
+| API Surface         | A-F   | ...                        | ...              |
+| Documentation       | A-F   | ...                        | ...              |
+| AI Tooling (Skills) | A-F   | ...                        | ...              |
 
 ## Project Component Review
 
@@ -431,15 +431,19 @@ where would that be?]
 its purpose, quality, test coverage, and any issues found.]
 
 ### @bendyline/squisq (core)
+
 [Component-by-component tables for schemas, doc/templates, spatial, storage, markdown]
 
 ### @bendyline/squisq-react
+
 [Component-by-component tables for DocPlayer, BlockRenderer, layers, hooks]
 
 ### @bendyline/squisq-formats
+
 [Component-by-component tables for docx, ooxml, pdf, pptx/xlsx stubs]
 
 ### @bendyline/squisq-editor-react
+
 [Component-by-component tables for EditorContext, RawEditor, Toolbar, PreviewPanel]
 
 ## What's Working Well
@@ -450,6 +454,7 @@ and replicate. Reference specific files.]
 ## Critical Issues (Must Address)
 
 ### [Issue Title]
+
 - **Impact:** [What breaks or degrades if not fixed]
 - **Location:** [File paths]
 - **Root Cause:** [Why this happened]
@@ -459,6 +464,7 @@ and replicate. Reference specific files.]
 ## Improvement Opportunities (Should Address)
 
 ### [Issue Title]
+
 - **Current State:** [What exists today]
 - **Better State:** [What it should look like]
 - **Files Involved:** [Specific paths]
@@ -473,41 +479,47 @@ you observed.]
 
 ## Code Duplication Inventory
 
-| Duplicated Code | Location A | Location B | Type | Recommendation |
-|-----------------|------------|------------|------|----------------|
+| Duplicated Code    | Location A  | Location B  | Type                   | Recommendation        |
+| ------------------ | ----------- | ----------- | ---------------------- | --------------------- |
 | [Function/pattern] | [Path:line] | [Path:line] | Intentional/Accidental | Extract/Leave/Monitor |
 
 ## Claude Skills & Instructions Review
 
 ### CLAUDE.md Health
+
 - **Accuracy:** [Current / Stale / Mixed]
 - **Specific issues found:** [List]
 - **Recommended updates:** [List]
 
 ### Skills Assessment
 
-| Skill | Health | Issues | Recommendations |
-|-------|--------|--------|-----------------|
-| developmentarchitect | ... | ... | ... |
-| ... | ... | ... | ... |
+| Skill                | Health | Issues | Recommendations |
+| -------------------- | ------ | ------ | --------------- |
+| developmentarchitect | ...    | ...    | ...             |
+| ...                  | ...    | ...    | ...             |
 
 ### Recommended New Skills
+
 [List any new skills that would improve developer productivity or code quality]
 
 ### Recommended CLAUDE.md Changes
+
 [Specific additions, corrections, or restructuring suggestions]
 
 ## Prioritized Action Plan
 
 ### This Week (Quick Wins)
+
 1. [Action] — [Why] — [Effort: hours]
 2. ...
 
 ### This Month (Medium Effort)
+
 1. [Action] — [Why] — [Effort: days]
 2. ...
 
 ### This Quarter (Strategic)
+
 1. [Action] — [Why] — [Effort: weeks]
 2. ...
 
@@ -552,15 +564,15 @@ Study these principles when evaluating Squisq:
 
 ### Common Anti-Patterns to Watch For
 
-| Anti-Pattern | Signal | Risk |
-|--------------|--------|------|
-| **Leaky abstraction** | React-specific code in core package | Breaks framework independence |
-| **Type erosion** | `any` in production code, `as unknown as X` chains | Runtime type bugs |
-| **God component** | DocPlayer.tsx growing unbounded | Hard to test, hard to modify |
-| **Copy-paste inheritance** | Same pattern in react/ and editor-react/ | Bugs fixed in one place, not the other |
-| **Speculative generality** | Abstractions for hypothetical future formats | Complexity without value |
-| **Config drift** | tsconfig/tsup.config diverging across packages | Build confusion |
-| **Missing re-export** | Types defined locally instead of imported from schemas | Shadow types |
+| Anti-Pattern               | Signal                                                 | Risk                                   |
+| -------------------------- | ------------------------------------------------------ | -------------------------------------- |
+| **Leaky abstraction**      | React-specific code in core package                    | Breaks framework independence          |
+| **Type erosion**           | `any` in production code, `as unknown as X` chains     | Runtime type bugs                      |
+| **God component**          | DocPlayer.tsx growing unbounded                        | Hard to test, hard to modify           |
+| **Copy-paste inheritance** | Same pattern in react/ and editor-react/               | Bugs fixed in one place, not the other |
+| **Speculative generality** | Abstractions for hypothetical future formats           | Complexity without value               |
+| **Config drift**           | tsconfig/tsup.config diverging across packages         | Build confusion                        |
+| **Missing re-export**      | Types defined locally instead of imported from schemas | Shadow types                           |
 
 ### The "New Agent" Test
 
@@ -601,6 +613,7 @@ Imagine adding PPTX export. Trace the path:
 When the user asks for a specific type of review, use these checklists:
 
 ### "Review code duplication"
+
 - [ ] Animation utilities across core and react
 - [ ] Markdown node traversal patterns
 - [ ] Template input validation patterns
@@ -609,6 +622,7 @@ When the user asks for a specific type of review, use these checklists:
 - [ ] Error handling patterns across packages
 
 ### "Review type safety"
+
 - [ ] Count `any` usage across all packages (exclude test files)
 - [ ] Check schema coverage (are new types in schemas/?)
 - [ ] Verify discriminated union usage (isTemplateBlock guard)
@@ -617,6 +631,7 @@ When the user asks for a specific type of review, use these checklists:
 - [ ] Verify catch blocks use `unknown` not `any`
 
 ### "Review build system"
+
 - [ ] tsconfig alignment across packages (all extend base?)
 - [ ] tsup.config consistency
 - [ ] Subpath exports match actual entry points
@@ -625,6 +640,7 @@ When the user asks for a specific type of review, use these checklists:
 - [ ] `npm run build` clean with zero errors
 
 ### "Review API surface"
+
 - [ ] All public exports intentional (no internal leaks)
 - [ ] Naming conventions consistent across packages
 - [ ] JSDoc on all exported functions and types
@@ -632,6 +648,7 @@ When the user asks for a specific type of review, use these checklists:
 - [ ] Re-export hygiene (no redundant re-exports)
 
 ### "Review Claude skills"
+
 - [ ] Read every SKILL.md in `.claude/skills/`
 - [ ] Verify commands and file paths are current
 - [ ] Check that CLAUDE.md reflects current architecture

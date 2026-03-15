@@ -97,7 +97,10 @@ export function expandTemplateBlock(templateBlock: TemplateBlock, context: Templ
   try {
     // Each registry entry accepts its specific TemplateBlock variant; the
     // discriminated union guarantees the shapes match at runtime.
-    layers = (templateFn as (input: TemplateBlock, ctx: TemplateContext) => Layer[])(templateBlock, context);
+    layers = (templateFn as (input: TemplateBlock, ctx: TemplateContext) => Layer[])(
+      templateBlock,
+      context,
+    );
     if (!Array.isArray(layers)) {
       console.error(
         `Template ${templateBlock.template} did not return an array, got:`,
@@ -490,7 +493,6 @@ export function expandDocBlocks(
             // Insert into expanded blocks array
             expandedBlocks.push(splitBlock);
           }
-
         }
       }
     }

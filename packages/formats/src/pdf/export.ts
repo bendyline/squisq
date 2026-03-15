@@ -983,7 +983,10 @@ function renderFallbackBlock(
   ctx: ExportContext,
   extraIndent: number,
 ): void {
-  const fallback = node as unknown as { children?: (MarkdownBlockNode | MarkdownInlineNode)[]; value?: string };
+  const fallback = node as unknown as {
+    children?: (MarkdownBlockNode | MarkdownInlineNode)[];
+    value?: string;
+  };
   if (fallback.children && Array.isArray(fallback.children)) {
     // Could be block children or inline children
     if (fallback.children.length > 0 && typeof fallback.children[0]?.type === 'string') {

@@ -156,7 +156,11 @@ export async function docToHtmlZip(doc: Doc, options: HtmlZipExportOptions): Pro
   zip.file('index.html', html);
 
   // 5. Generate ZIP blob
-  return zip.generateAsync({ type: 'blob', compression: 'DEFLATE', compressionOptions: { level: 6 } });
+  return zip.generateAsync({
+    type: 'blob',
+    compression: 'DEFLATE',
+    compressionOptions: { level: 6 },
+  });
 }
 
 // ── Re-exports ─────────────────────────────────────────────────────

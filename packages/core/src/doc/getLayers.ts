@@ -109,7 +109,10 @@ export function getLayers(block: DocBlock, context: RenderContext = {}): Layer[]
     try {
       // Each registry entry accepts its specific TemplateBlock variant; the
       // discriminated union guarantees the shapes match at runtime.
-      const templateFn = templateRegistry[templateName] as (input: TemplateBlock, ctx: TemplateContext) => Layer[];
+      const templateFn = templateRegistry[templateName] as (
+        input: TemplateBlock,
+        ctx: TemplateContext,
+      ) => Layer[];
       layers = templateFn(block, templateCtx);
       if (!Array.isArray(layers)) {
         console.error(`Template ${templateName} did not return an array, got:`, typeof layers);

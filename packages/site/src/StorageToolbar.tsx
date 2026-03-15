@@ -144,7 +144,16 @@ export function StorageToolbar({
 
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-      <label style={{ fontSize: 12, fontFamily: 'system-ui, -apple-system, sans-serif', color: '#4a3c1f', display: 'flex', alignItems: 'center', gap: 4 }}>
+      <label
+        style={{
+          fontSize: 12,
+          fontFamily: 'system-ui, -apple-system, sans-serif',
+          color: '#4a3c1f',
+          display: 'flex',
+          alignItems: 'center',
+          gap: 4,
+        }}
+      >
         Storage:
         <select
           value={activeSlot === null ? '' : activeSlot}
@@ -198,9 +207,7 @@ export function StorageToolbar({
       )}
 
       {status && (
-        <span style={{ fontSize: 11, color: '#8a7a5a', fontStyle: 'italic' }}>
-          {status}
-        </span>
+        <span style={{ fontSize: 11, color: '#8a7a5a', fontStyle: 'italic' }}>{status}</span>
       )}
     </div>
   );

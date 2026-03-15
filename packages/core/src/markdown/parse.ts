@@ -78,10 +78,15 @@ export function parseMarkdown(markdown: string, options?: ParseOptions): Markdow
   }
 
   // Parse markdown → mdast tree (result is an mdast Root node)
-  const mdastTree = processor.parse(markdown) as { type: string; children?: Array<{ type: string; value?: string }> };
+  const mdastTree = processor.parse(markdown) as {
+    type: string;
+    children?: Array<{ type: string; value?: string }>;
+  };
 
   // Convert mdast → MarkdownDocument
-  const doc = fromMdast(mdastTree as Parameters<typeof fromMdast>[0], { parseHtml: options?.parseHtml });
+  const doc = fromMdast(mdastTree as Parameters<typeof fromMdast>[0], {
+    parseHtml: options?.parseHtml,
+  });
 
   // Extract YAML frontmatter if present
   if (options?.frontmatter !== false) {

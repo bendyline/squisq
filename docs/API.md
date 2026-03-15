@@ -84,7 +84,7 @@ interface BlockTransition {
 
 interface DocMetadata {
   author?: string;
-  created?: string;  // ISO date
+  created?: string; // ISO date
   modified?: string; // ISO date
   tags?: string[];
   description?: string;
@@ -96,7 +96,7 @@ interface AudioConfig {
 }
 
 interface AudioSyncPoint {
-  time: number;      // seconds
+  time: number; // seconds
   blockIndex: number;
 }
 ```
@@ -146,7 +146,7 @@ interface Layer {
 }
 
 interface Position {
-  x: number;      // 0–100 percentage
+  x: number; // 0–100 percentage
   y: number;
   width: number;
   height: number;
@@ -173,8 +173,8 @@ interface TextStyle {
 
 interface Animation {
   type: 'fadeIn' | 'slideIn' | 'zoomIn' | 'typewriter' | 'none';
-  duration?: number;  // ms
-  delay?: number;     // ms
+  duration?: number; // ms
+  delay?: number; // ms
   easing?: string;
 }
 
@@ -211,25 +211,25 @@ interface TemplateContext {
 
 ##### Built-in Template Block Inputs
 
-| Template | Key Input Fields |
-|---|---|
-| `titleBlock` | `title`, `subtitle?`, `backgroundImage?`, `backgroundGradient?` |
-| `textBlock` | `heading?`, `body`, `backgroundImage?` |
-| `imageBlock` | `src`, `alt?`, `caption?`, `objectFit?` |
-| `twoColumnBlock` | `leftContent`, `rightContent`, `heading?` |
-| `quoteBlock` | `quote`, `attribution?`, `backgroundImage?` |
-| `statHighlight` | `value`, `label`, `description?`, `trend?`, `trendDirection?` |
-| `timelineBlock` | `events[]` (each: `date`, `title`, `description?`) |
-| `comparisonBlock` | `items[]` (each: `title`, `features[]`), `heading?` |
-| `mapBlock` | `center`, `zoom?`, `markers?`, `tileUrl?`, `heading?` |
-| `videoBlock` | `src`, `poster?`, `caption?`, `autoplay?`, `loop?` |
-| `codeBlock` | `code`, `language?`, `heading?`, `theme?` |
-| `chartBlock` | `chartType`, `data`, `heading?`, `description?` |
-| `bulletListBlock` | `heading?`, `items[]`, `icon?`, `backgroundImage?` |
-| `numberedListBlock` | `heading?`, `items[]`, `startNumber?` |
-| `tableBlock` | `heading?`, `headers[]`, `rows[][]` |
-| `calloutBlock` | `type` (`info`/`warning`/`success`/`error`), `heading?`, `body` |
-| `dividerBlock` | `style?` (`solid`/`dashed`/`dotted`/`gradient`), `color?` |
+| Template            | Key Input Fields                                                |
+| ------------------- | --------------------------------------------------------------- |
+| `titleBlock`        | `title`, `subtitle?`, `backgroundImage?`, `backgroundGradient?` |
+| `textBlock`         | `heading?`, `body`, `backgroundImage?`                          |
+| `imageBlock`        | `src`, `alt?`, `caption?`, `objectFit?`                         |
+| `twoColumnBlock`    | `leftContent`, `rightContent`, `heading?`                       |
+| `quoteBlock`        | `quote`, `attribution?`, `backgroundImage?`                     |
+| `statHighlight`     | `value`, `label`, `description?`, `trend?`, `trendDirection?`   |
+| `timelineBlock`     | `events[]` (each: `date`, `title`, `description?`)              |
+| `comparisonBlock`   | `items[]` (each: `title`, `features[]`), `heading?`             |
+| `mapBlock`          | `center`, `zoom?`, `markers?`, `tileUrl?`, `heading?`           |
+| `videoBlock`        | `src`, `poster?`, `caption?`, `autoplay?`, `loop?`              |
+| `codeBlock`         | `code`, `language?`, `heading?`, `theme?`                       |
+| `chartBlock`        | `chartType`, `data`, `heading?`, `description?`                 |
+| `bulletListBlock`   | `heading?`, `items[]`, `icon?`, `backgroundImage?`              |
+| `numberedListBlock` | `heading?`, `items[]`, `startNumber?`                           |
+| `tableBlock`        | `heading?`, `headers[]`, `rows[][]`                             |
+| `calloutBlock`      | `type` (`info`/`warning`/`success`/`error`), `heading?`, `body` |
+| `dividerBlock`      | `style?` (`solid`/`dashed`/`dotted`/`gradient`), `color?`       |
 
 > All template inputs extend a common `TemplateBlockInput` base with optional `backgroundGradient`, `backgroundImage`, and `backgroundColor`.
 
@@ -237,9 +237,9 @@ interface TemplateContext {
 
 ```ts
 interface ViewportConfig {
-  width: number;          // Default: 1920
-  height: number;         // Default: 1080
-  aspectRatio?: string;   // e.g. '16:9'
+  width: number; // Default: 1920
+  height: number; // Default: 1080
+  aspectRatio?: string; // e.g. '16:9'
   responsive?: boolean;
 }
 
@@ -268,12 +268,7 @@ interface LayoutHints {
   padding?: number;
 }
 
-type LayoutStrategy =
-  | 'absolute'
-  | 'stack-vertical'
-  | 'stack-horizontal'
-  | 'grid'
-  | 'flow';
+type LayoutStrategy = 'absolute' | 'stack-vertical' | 'stack-horizontal' | 'grid' | 'flow';
 
 interface MediaProvider {
   resolveUrl(src: string): string | Promise<string>;
@@ -293,10 +288,10 @@ interface PersistentLayer extends Layer {
 #### Schema Constants & Helpers
 
 ```ts
-const DEFAULT_VIEWPORT: ViewportConfig;      // { width: 1920, height: 1080 }
+const DEFAULT_VIEWPORT: ViewportConfig; // { width: 1920, height: 1080 }
 const DEFAULT_THEME: ThemeColors;
-const DEFAULT_ANIMATION_DURATION: number;    // 500
-const DEFAULT_BLOCK_DURATION: number;        // 5000
+const DEFAULT_ANIMATION_DURATION: number; // 500
+const DEFAULT_BLOCK_DURATION: number; // 5000
 
 function createDoc(overrides?: Partial<Doc>): Doc;
 function createBlock(overrides?: Partial<Block>): Block;
@@ -356,7 +351,7 @@ function getBlockAnimationDelay(blockIndex: number, layerIndex: number): number;
 function haversineDistance(
   point1: Coordinates,
   point2: Coordinates,
-  unit?: 'km' | 'miles' | 'meters' | 'feet'
+  unit?: 'km' | 'miles' | 'meters' | 'feet',
 ): number;
 
 function geohashEncode(latitude: number, longitude: number, precision?: number): string;
@@ -381,8 +376,12 @@ interface StorageAdapter {
   clear(): Promise<void>;
 }
 
-class MemoryStorageAdapter implements StorageAdapter { /* in-memory Map */ }
-class LocalStorageAdapter implements StorageAdapter { /* window.localStorage */ }
+class MemoryStorageAdapter implements StorageAdapter {
+  /* in-memory Map */
+}
+class LocalStorageAdapter implements StorageAdapter {
+  /* window.localStorage */
+}
 class LocalForageAdapter implements StorageAdapter {
   /** Wraps a localforage-compatible instance */
   constructor(store: LocalForageLike);
@@ -402,15 +401,15 @@ function parseMarkdown(source: string, options?: MarkdownParseOptions): Markdown
 function stringifyMarkdown(doc: MarkdownDocument, options?: MarkdownStringifyOptions): string;
 
 interface MarkdownParseOptions {
-  gfm?: boolean;      // Default: true — GitHub Flavored Markdown tables, strikethrough, etc.
+  gfm?: boolean; // Default: true — GitHub Flavored Markdown tables, strikethrough, etc.
 }
 
 interface MarkdownStringifyOptions {
-  bullet?: '-' | '*' | '+';         // Default: '-'
-  listItemIndent?: 'one' | 'tab';   // Default: 'one'
-  emphasis?: '_' | '*';             // Default: '*'
-  strong?: '__' | '**';             // Default: '**'
-  rule?: '-' | '_' | '*';           // Default: '-'
+  bullet?: '-' | '*' | '+'; // Default: '-'
+  listItemIndent?: 'one' | 'tab'; // Default: 'one'
+  emphasis?: '_' | '*'; // Default: '*'
+  strong?: '__' | '**'; // Default: '**'
+  rule?: '-' | '_' | '*'; // Default: '-'
 }
 ```
 
@@ -424,32 +423,112 @@ interface MarkdownDocument {
 }
 
 type MarkdownNode =
-  | HeadingNode | ParagraphNode | TextNode | EmphasisNode
-  | StrongNode | InlineCodeNode | CodeBlockNode | BlockquoteNode
-  | ListNode | ListItemNode | LinkNode | ImageNode
-  | ThematicBreakNode | HtmlNode | TableNode | TableRowNode
-  | TableCellNode | DeleteNode | BreakNode
+  | HeadingNode
+  | ParagraphNode
+  | TextNode
+  | EmphasisNode
+  | StrongNode
+  | InlineCodeNode
+  | CodeBlockNode
+  | BlockquoteNode
+  | ListNode
+  | ListItemNode
+  | LinkNode
+  | ImageNode
+  | ThematicBreakNode
+  | HtmlNode
+  | TableNode
+  | TableRowNode
+  | TableCellNode
+  | DeleteNode
+  | BreakNode
   | TemplateAnnotationNode;
 
-interface HeadingNode   { type: 'heading'; depth: 1|2|3|4|5|6; children: MarkdownNode[]; }
-interface ParagraphNode { type: 'paragraph'; children: MarkdownNode[]; }
-interface TextNode      { type: 'text'; value: string; }
-interface EmphasisNode  { type: 'emphasis'; children: MarkdownNode[]; }
-interface StrongNode    { type: 'strong'; children: MarkdownNode[]; }
-interface InlineCodeNode{ type: 'inlineCode'; value: string; }
-interface CodeBlockNode { type: 'code'; value: string; lang?: string; meta?: string; }
-interface BlockquoteNode{ type: 'blockquote'; children: MarkdownNode[]; }
-interface ListNode      { type: 'list'; ordered: boolean; start?: number; children: ListItemNode[]; }
-interface ListItemNode  { type: 'listItem'; children: MarkdownNode[]; checked?: boolean; }
-interface LinkNode      { type: 'link'; url: string; title?: string; children: MarkdownNode[]; }
-interface ImageNode     { type: 'image'; url: string; alt?: string; title?: string; }
-interface ThematicBreakNode { type: 'thematicBreak'; }
-interface HtmlNode      { type: 'html'; value: string; }
-interface TableNode     { type: 'table'; align?: Array<'left'|'center'|'right'|null>; children: TableRowNode[]; }
-interface TableRowNode  { type: 'tableRow'; children: TableCellNode[]; }
-interface TableCellNode { type: 'tableCell'; children: MarkdownNode[]; }
-interface DeleteNode    { type: 'delete'; children: MarkdownNode[]; }
-interface BreakNode     { type: 'break'; }
+interface HeadingNode {
+  type: 'heading';
+  depth: 1 | 2 | 3 | 4 | 5 | 6;
+  children: MarkdownNode[];
+}
+interface ParagraphNode {
+  type: 'paragraph';
+  children: MarkdownNode[];
+}
+interface TextNode {
+  type: 'text';
+  value: string;
+}
+interface EmphasisNode {
+  type: 'emphasis';
+  children: MarkdownNode[];
+}
+interface StrongNode {
+  type: 'strong';
+  children: MarkdownNode[];
+}
+interface InlineCodeNode {
+  type: 'inlineCode';
+  value: string;
+}
+interface CodeBlockNode {
+  type: 'code';
+  value: string;
+  lang?: string;
+  meta?: string;
+}
+interface BlockquoteNode {
+  type: 'blockquote';
+  children: MarkdownNode[];
+}
+interface ListNode {
+  type: 'list';
+  ordered: boolean;
+  start?: number;
+  children: ListItemNode[];
+}
+interface ListItemNode {
+  type: 'listItem';
+  children: MarkdownNode[];
+  checked?: boolean;
+}
+interface LinkNode {
+  type: 'link';
+  url: string;
+  title?: string;
+  children: MarkdownNode[];
+}
+interface ImageNode {
+  type: 'image';
+  url: string;
+  alt?: string;
+  title?: string;
+}
+interface ThematicBreakNode {
+  type: 'thematicBreak';
+}
+interface HtmlNode {
+  type: 'html';
+  value: string;
+}
+interface TableNode {
+  type: 'table';
+  align?: Array<'left' | 'center' | 'right' | null>;
+  children: TableRowNode[];
+}
+interface TableRowNode {
+  type: 'tableRow';
+  children: TableCellNode[];
+}
+interface TableCellNode {
+  type: 'tableCell';
+  children: MarkdownNode[];
+}
+interface DeleteNode {
+  type: 'delete';
+  children: MarkdownNode[];
+}
+interface BreakNode {
+  type: 'break';
+}
 interface TemplateAnnotationNode {
   type: 'templateAnnotation';
   template: string;
@@ -492,9 +571,9 @@ interface DocPlayerProps {
   doc: Doc;
   width?: number | string;
   height?: number | string;
-  autoplay?: boolean;            // Default: false
-  loop?: boolean;                // Default: false
-  showControls?: boolean;        // Default: true
+  autoplay?: boolean; // Default: false
+  loop?: boolean; // Default: false
+  showControls?: boolean; // Default: true
   controlsVariant?: 'overlay' | 'bottom' | 'sidebar' | 'slideshow';
   className?: string;
   style?: React.CSSProperties;
@@ -549,12 +628,12 @@ interface DocProgressBarProps {
 
 #### Control Components
 
-| Component | Description |
-|---|---|
-| `DocControlsOverlay` | Floating play/pause, prev/next over the player |
-| `DocControlsBottom` | Bottom bar with progress, play/pause, block counter |
-| `DocControlsSidebar` | Side panel with block thumbnails |
-| `DocControlsSlideshow` | Minimal slideshow controls (arrows + counter) |
+| Component              | Description                                         |
+| ---------------------- | --------------------------------------------------- |
+| `DocControlsOverlay`   | Floating play/pause, prev/next over the player      |
+| `DocControlsBottom`    | Bottom bar with progress, play/pause, block counter |
+| `DocControlsSidebar`   | Side panel with block thumbnails                    |
+| `DocControlsSlideshow` | Minimal slideshow controls (arrows + counter)       |
 
 All accept `className?: string` and receive playback state via context.
 
@@ -590,13 +669,13 @@ interface MarkdownRendererProps {
 
 Layer components used internally by `BlockRenderer`. Can be used standalone for custom rendering.
 
-| Component | Props Summary |
-|---|---|
+| Component    | Props Summary                                                |
+| ------------ | ------------------------------------------------------------ |
 | `ImageLayer` | `layer: Layer`, `viewport: ViewportConfig`, `mediaProvider?` |
-| `TextLayer` | `layer: Layer`, `viewport: ViewportConfig` |
-| `ShapeLayer` | `layer: Layer`, `viewport: ViewportConfig` |
+| `TextLayer`  | `layer: Layer`, `viewport: ViewportConfig`                   |
+| `ShapeLayer` | `layer: Layer`, `viewport: ViewportConfig`                   |
 | `VideoLayer` | `layer: Layer`, `viewport: ViewportConfig`, `mediaProvider?` |
-| `MapLayer` | `layer: Layer`, `viewport: ViewportConfig` |
+| `MapLayer`   | `layer: Layer`, `viewport: ViewportConfig`                   |
 
 ### React Hooks
 
@@ -653,7 +732,7 @@ Returns `'landscape' | 'portrait'` based on container or window size.
 
 ```ts
 function useViewportOrientation(
-  containerRef?: React.RefObject<HTMLElement>
+  containerRef?: React.RefObject<HTMLElement>,
 ): 'landscape' | 'portrait';
 ```
 
@@ -695,14 +774,11 @@ Document format converters. Uses `MarkdownDocument` from core as the pivot repre
 **Import:** `@bendyline/squisq-formats/docx`
 
 ```ts
-async function markdownDocToDocx(
-  doc: MarkdownDocument,
-  options?: DocxExportOptions
-): Promise<Blob>;
+async function markdownDocToDocx(doc: MarkdownDocument, options?: DocxExportOptions): Promise<Blob>;
 
 async function docxToMarkdownDoc(
   data: ArrayBuffer | Blob,
-  options?: DocxImportOptions
+  options?: DocxImportOptions,
 ): Promise<MarkdownDocument>;
 
 // Convenience wrappers that convert through MarkdownDocument
@@ -728,12 +804,12 @@ interface DocxImportOptions {
 ```ts
 async function markdownDocToPdf(
   doc: MarkdownDocument,
-  options?: PdfExportOptions
+  options?: PdfExportOptions,
 ): Promise<Uint8Array>;
 
 async function pdfToMarkdownDoc(
   data: ArrayBuffer | Uint8Array,
-  options?: PdfImportOptions
+  options?: PdfImportOptions,
 ): Promise<MarkdownDocument>;
 
 // Convenience wrappers
@@ -745,8 +821,8 @@ function configurePdfWorker(workerSrc: string): void;
 interface PdfExportOptions {
   title?: string;
   author?: string;
-  fontSize?: number;     // Default: 12
-  margin?: number;       // Default: 72 (points)
+  fontSize?: number; // Default: 12
+  margin?: number; // Default: 72 (points)
   pageSize?: 'letter' | 'a4'; // Default: 'letter'
 }
 
@@ -817,8 +893,16 @@ function xmlDeclaration(): string;
 function escapeXml(text: string): string;
 function attrString(attrs?: Record<string, string | undefined>): string;
 function selfClosingElement(tag: string, attrs?: Record<string, string | undefined>): string;
-function xmlElement(tag: string, attrs?: Record<string, string | undefined>, ...children: string[]): string;
-function textElement(tag: string, attrs?: Record<string, string | undefined>, text?: string): string;
+function xmlElement(
+  tag: string,
+  attrs?: Record<string, string | undefined>,
+  ...children: string[]
+): string;
+function textElement(
+  tag: string,
+  attrs?: Record<string, string | undefined>,
+  text?: string,
+): string;
 ```
 
 #### Namespace Constants
@@ -826,43 +910,43 @@ function textElement(tag: string, attrs?: Record<string, string | undefined>, te
 <details>
 <summary>All exported namespace and content-type constants</summary>
 
-| Constant | Description |
-|---|---|
-| `NS_RELATIONSHIPS` | Package relationships namespace |
-| `NS_CONTENT_TYPES` | Content types namespace |
-| `REL_OFFICE_DOCUMENT` | Office document relationship type |
-| `REL_CORE_PROPERTIES` | Core properties relationship type |
-| `REL_EXTENDED_PROPERTIES` | Extended properties relationship type |
-| `REL_STYLES` | Styles relationship type |
-| `REL_NUMBERING` | Numbering relationship type |
-| `REL_FONT_TABLE` | Font table relationship type |
-| `REL_SETTINGS` | Settings relationship type |
-| `REL_HYPERLINK` | Hyperlink relationship type |
-| `REL_IMAGE` | Image relationship type |
-| `REL_FOOTNOTES` | Footnotes relationship type |
-| `REL_THEME` | Theme relationship type |
-| `NS_WML` | WordprocessingML main namespace |
-| `NS_PML` | PresentationML main namespace |
-| `NS_SML` | SpreadsheetML main namespace |
-| `NS_DRAWINGML` | DrawingML main namespace |
-| `NS_WP_DRAWING` | DrawingML WordprocessingML drawing namespace |
-| `NS_PICTURE` | DrawingML picture namespace |
-| `NS_DC` | Dublin Core elements namespace |
-| `NS_DCTERMS` | Dublin Core terms namespace |
-| `NS_CORE_PROPERTIES` | Core properties namespace |
-| `NS_XSI` | XML Schema Instance namespace |
-| `NS_MC` | Markup Compatibility namespace |
-| `NS_R` | Office relationships namespace |
-| `CONTENT_TYPE_RELATIONSHIPS` | OOXML relationships content type |
-| `CONTENT_TYPE_CORE_PROPERTIES` | Core properties content type |
-| `CONTENT_TYPE_DOCX_DOCUMENT` | DOCX main document content type |
-| `CONTENT_TYPE_DOCX_STYLES` | DOCX styles content type |
-| `CONTENT_TYPE_DOCX_NUMBERING` | DOCX numbering content type |
-| `CONTENT_TYPE_DOCX_SETTINGS` | DOCX settings content type |
-| `CONTENT_TYPE_DOCX_FONT_TABLE` | DOCX font table content type |
-| `CONTENT_TYPE_DOCX_FOOTNOTES` | DOCX footnotes content type |
-| `CONTENT_TYPE_PPTX_PRESENTATION` | PPTX main presentation content type |
-| `CONTENT_TYPE_XLSX_WORKBOOK` | XLSX main workbook content type |
+| Constant                         | Description                                  |
+| -------------------------------- | -------------------------------------------- |
+| `NS_RELATIONSHIPS`               | Package relationships namespace              |
+| `NS_CONTENT_TYPES`               | Content types namespace                      |
+| `REL_OFFICE_DOCUMENT`            | Office document relationship type            |
+| `REL_CORE_PROPERTIES`            | Core properties relationship type            |
+| `REL_EXTENDED_PROPERTIES`        | Extended properties relationship type        |
+| `REL_STYLES`                     | Styles relationship type                     |
+| `REL_NUMBERING`                  | Numbering relationship type                  |
+| `REL_FONT_TABLE`                 | Font table relationship type                 |
+| `REL_SETTINGS`                   | Settings relationship type                   |
+| `REL_HYPERLINK`                  | Hyperlink relationship type                  |
+| `REL_IMAGE`                      | Image relationship type                      |
+| `REL_FOOTNOTES`                  | Footnotes relationship type                  |
+| `REL_THEME`                      | Theme relationship type                      |
+| `NS_WML`                         | WordprocessingML main namespace              |
+| `NS_PML`                         | PresentationML main namespace                |
+| `NS_SML`                         | SpreadsheetML main namespace                 |
+| `NS_DRAWINGML`                   | DrawingML main namespace                     |
+| `NS_WP_DRAWING`                  | DrawingML WordprocessingML drawing namespace |
+| `NS_PICTURE`                     | DrawingML picture namespace                  |
+| `NS_DC`                          | Dublin Core elements namespace               |
+| `NS_DCTERMS`                     | Dublin Core terms namespace                  |
+| `NS_CORE_PROPERTIES`             | Core properties namespace                    |
+| `NS_XSI`                         | XML Schema Instance namespace                |
+| `NS_MC`                          | Markup Compatibility namespace               |
+| `NS_R`                           | Office relationships namespace               |
+| `CONTENT_TYPE_RELATIONSHIPS`     | OOXML relationships content type             |
+| `CONTENT_TYPE_CORE_PROPERTIES`   | Core properties content type                 |
+| `CONTENT_TYPE_DOCX_DOCUMENT`     | DOCX main document content type              |
+| `CONTENT_TYPE_DOCX_STYLES`       | DOCX styles content type                     |
+| `CONTENT_TYPE_DOCX_NUMBERING`    | DOCX numbering content type                  |
+| `CONTENT_TYPE_DOCX_SETTINGS`     | DOCX settings content type                   |
+| `CONTENT_TYPE_DOCX_FONT_TABLE`   | DOCX font table content type                 |
+| `CONTENT_TYPE_DOCX_FOOTNOTES`    | DOCX footnotes content type                  |
+| `CONTENT_TYPE_PPTX_PRESENTATION` | PPTX main presentation content type          |
+| `CONTENT_TYPE_XLSX_WORKBOOK`     | XLSX main workbook content type              |
 
 </details>
 
@@ -875,11 +959,19 @@ function textElement(tag: string, attrs?: Record<string, string | undefined>, te
 ```ts
 async function markdownDocToPptx(doc: MarkdownDocument, options?: PptxExportOptions): Promise<Blob>;
 async function docToPptx(doc: Doc, options?: PptxExportOptions): Promise<Blob>;
-async function pptxToMarkdownDoc(data: ArrayBuffer | Blob, options?: PptxImportOptions): Promise<MarkdownDocument>;
+async function pptxToMarkdownDoc(
+  data: ArrayBuffer | Blob,
+  options?: PptxImportOptions,
+): Promise<MarkdownDocument>;
 async function pptxToDoc(data: ArrayBuffer | Blob, options?: PptxImportOptions): Promise<Doc>;
 
-interface PptxExportOptions { title?: string; author?: string; }
-interface PptxImportOptions { extractImages?: boolean; }
+interface PptxExportOptions {
+  title?: string;
+  author?: string;
+}
+interface PptxImportOptions {
+  extractImages?: boolean;
+}
 ```
 
 ### Subpath: XLSX (stub)
@@ -891,11 +983,19 @@ interface PptxImportOptions { extractImages?: boolean; }
 ```ts
 async function markdownDocToXlsx(doc: MarkdownDocument, options?: XlsxExportOptions): Promise<Blob>;
 async function docToXlsx(doc: Doc, options?: XlsxExportOptions): Promise<Blob>;
-async function xlsxToMarkdownDoc(data: ArrayBuffer | Blob, options?: XlsxImportOptions): Promise<MarkdownDocument>;
+async function xlsxToMarkdownDoc(
+  data: ArrayBuffer | Blob,
+  options?: XlsxImportOptions,
+): Promise<MarkdownDocument>;
 async function xlsxToDoc(data: ArrayBuffer | Blob, options?: XlsxImportOptions): Promise<Doc>;
 
-interface XlsxExportOptions { title?: string; author?: string; }
-interface XlsxImportOptions { sheet?: number | string; }
+interface XlsxExportOptions {
+  title?: string;
+  author?: string;
+}
+interface XlsxImportOptions {
+  sheet?: number | string;
+}
 ```
 
 ---
@@ -916,14 +1016,14 @@ Top-level editor with toolbar, view switcher, and three editing modes.
 
 ```ts
 interface EditorShellProps {
-  initialMarkdown?: string;    // Default: ''
-  initialView?: EditorView;    // Default: 'raw'
-  articleId?: string;          // Default: 'untitled'
-  basePath?: string;           // Default: '/'
+  initialMarkdown?: string; // Default: ''
+  initialView?: EditorView; // Default: 'raw'
+  articleId?: string; // Default: 'untitled'
+  basePath?: string; // Default: '/'
   onChange?: (source: string) => void;
-  theme?: 'light' | 'dark';   // Default: 'light'
+  theme?: 'light' | 'dark'; // Default: 'light'
   className?: string;
-  height?: string;             // Default: '100vh'
+  height?: string; // Default: '100vh'
 }
 ```
 
@@ -933,9 +1033,9 @@ Monaco-based code editor for raw markdown editing.
 
 ```ts
 interface RawEditorProps {
-  theme?: string;              // Default: 'vs-dark'
-  minimap?: boolean;           // Default: false
-  fontSize?: number;           // Default: 14
+  theme?: string; // Default: 'vs-dark'
+  minimap?: boolean; // Default: false
+  fontSize?: number; // Default: 14
   wordWrap?: 'on' | 'off' | 'wordWrapColumn' | 'bounded'; // Default: 'on'
   className?: string;
 }
@@ -947,7 +1047,7 @@ Tiptap-based WYSIWYG editor.
 
 ```ts
 interface WysiwygEditorProps {
-  placeholder?: string;        // Default: 'Start typing your markdown…'
+  placeholder?: string; // Default: 'Start typing your markdown…'
   className?: string;
 }
 ```

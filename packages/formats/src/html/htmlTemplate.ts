@@ -176,8 +176,13 @@ function escapeForScript(str: string): string {
  * @returns Complete HTML string
  */
 export function generateInlineHtml(doc: Doc, options: HtmlExportOptions): string {
-  const { playerScript, images, mode = 'slideshow', title = 'Squisq Document', autoPlay = false } =
-    options;
+  const {
+    playerScript,
+    images,
+    mode = 'slideshow',
+    title = 'Squisq Document',
+    autoPlay = false,
+  } = options;
 
   // Build base64 image map
   const imageMap: Record<string, string> = {};

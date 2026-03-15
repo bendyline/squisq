@@ -202,7 +202,11 @@ export function mount(element: Element, doc: Doc, options: MountOptions = {}): v
 /**
  * Mount a static scrollable document view (alias for mount with mode='static').
  */
-export function mountStatic(element: Element, doc: Doc, options: Omit<MountOptions, 'mode'> = {}): void {
+export function mountStatic(
+  element: Element,
+  doc: Doc,
+  options: Omit<MountOptions, 'mode'> = {},
+): void {
   mount(element, doc, { ...options, mode: 'static' });
 }
 
@@ -219,4 +223,5 @@ export function unmount(element: Element): void {
 
 /** Package version — injected at build time via esbuild define */
 declare const __SQUISQ_VERSION__: string;
-export const version: string = typeof __SQUISQ_VERSION__ !== 'undefined' ? __SQUISQ_VERSION__ : '0.0.0';
+export const version: string =
+  typeof __SQUISQ_VERSION__ !== 'undefined' ? __SQUISQ_VERSION__ : '0.0.0';

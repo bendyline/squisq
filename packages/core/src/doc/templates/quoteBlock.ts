@@ -31,7 +31,10 @@ export function quoteBlock(input: QuoteBlockInput, context: TemplateContext): La
   const decorativeQuoteFontSize = scaledFontSize(280, context, true);
 
   const layers: Layer[] = [
-    createBackgroundLayer('bg', `linear-gradient(160deg, ${theme.backgroundLight} 0%, #1e2636 100%)`),
+    createBackgroundLayer(
+      'bg',
+      `linear-gradient(160deg, ${theme.backgroundLight} 0%, #1e2636 100%)`,
+    ),
   ];
 
   // Add accent image layers (behind text, after background)

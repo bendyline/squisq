@@ -82,12 +82,12 @@ describe('getLayers', () => {
   });
 
   it('returns empty array for unknown template', () => {
-    const block = ({
+    const block = {
       template: 'totally_nonexistent',
       id: 'unknown-1',
       duration: 5,
       audioSegment: 0,
-    } as unknown) as TemplateBlock;
+    } as unknown as TemplateBlock;
     const layers = getLayers(block, defaultContext);
 
     expect(layers).toEqual([]);

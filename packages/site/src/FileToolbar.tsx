@@ -240,9 +240,7 @@ export function FileToolbar({ currentSource, onImport, isDark, activeSlot }: Fil
           <div style={dropdownStyle(isDark)}>
             <button
               style={dropdownItemStyle(isDark)}
-              onMouseEnter={(e) =>
-                (e.currentTarget.style.background = '#F3EBD6')
-              }
+              onMouseEnter={(e) => (e.currentTarget.style.background = '#F3EBD6')}
               onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
               onClick={() => handleDownload('md')}
             >
@@ -250,9 +248,7 @@ export function FileToolbar({ currentSource, onImport, isDark, activeSlot }: Fil
             </button>
             <button
               style={dropdownItemStyle(isDark)}
-              onMouseEnter={(e) =>
-                (e.currentTarget.style.background = '#F3EBD6')
-              }
+              onMouseEnter={(e) => (e.currentTarget.style.background = '#F3EBD6')}
               onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
               onClick={() => handleDownload('docx')}
             >
@@ -260,9 +256,7 @@ export function FileToolbar({ currentSource, onImport, isDark, activeSlot }: Fil
             </button>
             <button
               style={dropdownItemStyle(isDark)}
-              onMouseEnter={(e) =>
-                (e.currentTarget.style.background = '#F3EBD6')
-              }
+              onMouseEnter={(e) => (e.currentTarget.style.background = '#F3EBD6')}
               onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
               onClick={() => handleDownload('pdf')}
             >
@@ -270,9 +264,7 @@ export function FileToolbar({ currentSource, onImport, isDark, activeSlot }: Fil
             </button>
             <button
               style={dropdownItemStyle(isDark)}
-              onMouseEnter={(e) =>
-                (e.currentTarget.style.background = '#F3EBD6')
-              }
+              onMouseEnter={(e) => (e.currentTarget.style.background = '#F3EBD6')}
               onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
               onClick={() => handleDownload('txt')}
             >

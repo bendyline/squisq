@@ -75,7 +75,7 @@ describe('expandTemplateBlock', () => {
 
     expect(result.id).toBe('title-1');
     expect(result.duration).toBe(10);
-    expect((result.layers ?? [])).toBeInstanceOf(Array);
+    expect(result.layers ?? []).toBeInstanceOf(Array);
     expect((result.layers ?? []).length).toBeGreaterThan(0);
   });
 
@@ -98,12 +98,12 @@ describe('expandTemplateBlock', () => {
   });
 
   it('returns empty layers for unknown template', () => {
-    const block = ({
+    const block = {
       template: 'nonexistent',
       id: 'unknown-1',
       duration: 5,
       audioSegment: 0,
-    } as unknown) as TemplateBlock;
+    } as unknown as TemplateBlock;
     const context = createTemplateContext(DEFAULT_THEME, 0, 1, VIEWPORT_PRESETS.landscape);
     const result = expandTemplateBlock(block, context);
     expect(result.layers ?? []).toEqual([]);
@@ -115,7 +115,7 @@ describe('expandTemplateBlock', () => {
 
     for (const name of templates) {
       // `getAvailableTemplates()` returns string[]; cast when creating a TemplateBlock
-      const block = ({
+      const block = {
         template: name as any,
         id: `test-${name}`,
         duration: 10,
@@ -150,10 +150,10 @@ describe('expandTemplateBlock', () => {
         rightLabel: 'B',
         leftValue: 50,
         rightValue: 50,
-      } as unknown) as TemplateBlock;
+      } as unknown as TemplateBlock;
       const result = expandTemplateBlock(block, context);
       expect(result.id).toBe(`test-${name}`);
-      expect((result.layers ?? [])).toBeInstanceOf(Array);
+      expect(result.layers ?? []).toBeInstanceOf(Array);
       // Each template should produce at least 1 layer
       expect((result.layers ?? []).length).toBeGreaterThanOrEqual(1);
     }

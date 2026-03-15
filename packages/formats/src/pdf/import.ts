@@ -194,11 +194,9 @@ let _workerSrc: string | undefined;
 /** Minimal typed surface of the pdfjs-dist library used by the import path. */
 interface PdfjsLib {
   GlobalWorkerOptions?: { workerSrc?: string };
-  getDocument(params: {
-    data: Uint8Array;
-    isEvalSupported?: boolean;
-    useSystemFonts?: boolean;
-  }): { promise: Promise<PdfjsDocument> };
+  getDocument(params: { data: Uint8Array; isEvalSupported?: boolean; useSystemFonts?: boolean }): {
+    promise: Promise<PdfjsDocument>;
+  };
 }
 
 interface PdfjsDocument {

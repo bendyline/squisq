@@ -33,7 +33,11 @@ export function DebugPanel({ source, theme = 'light' }: DebugPanelProps) {
       }
       return { markdownDoc, doc, error: null };
     } catch (err: unknown) {
-      return { markdownDoc: null, doc: null, error: err instanceof Error ? err.message : String(err) };
+      return {
+        markdownDoc: null,
+        doc: null,
+        error: err instanceof Error ? err.message : String(err),
+      };
     }
   }, [source]);
 
