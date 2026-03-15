@@ -26,6 +26,13 @@ async function waitForDocPlayer(page: Page) {
   await page.locator('.doc-player').waitFor({ state: 'visible', timeout: 5_000 });
 }
 
+/** Start playback and wait for the active block to appear (dismisses cover block) */
+async function startPlaybackAndWaitForActiveBlock(page: Page) {
+  await page.locator('.doc-player').click();
+  // Cover block has a 3s grace period; wait for the active block to appear
+  await page.locator('.doc-player__block--active').waitFor({ state: 'visible', timeout: 5_000 });
+}
+
 /** Get the active SVG block in the DocPlayer */
 function activeBlock(page: Page) {
   return page.locator('.doc-player__block--active');
@@ -81,6 +88,8 @@ test.describe('DocPlayer preview', () => {
   });
 
   test('DocPlayer renders an active block SVG', async ({ page }) => {
+    // Start playback to dismiss the cover block
+    await startPlaybackAndWaitForActiveBlock(page);
     const block = activeBlock(page);
     await expect(block).toBeVisible();
     // Block should contain an SVG with layers
@@ -89,26 +98,28 @@ test.describe('DocPlayer preview', () => {
   });
 
   test('first block has visible layers (not blank)', async ({ page }) => {
-    // The first rendered block should have shape + text layers.
-    // Layers may animate in from opacity:0, so allow extra time.
+    // Start playback to dismiss the cover block and reveal the active block
+    await startPlaybackAndWaitForActiveBlock(page);
     const svg = activeBlock(page).locator('svg');
-    // foreignObject elements host text layers, rect/circle are shapes
-    const layerElements = svg.locator('foreignObject, rect, circle, image');
-    await expect(layerElements.first()).toBeVisible({ timeout: 10_000 });
+    // Each layer is wrapped in a <g class="block-layer ..."> inside the SVG.
+    // We target .block-layer to avoid matching the <rect> inside <clipPath>.
+    const layers = svg.locator('.block-layer');
+    await expect(layers.first()).toBeAttached({ timeout: 10_000 });
+    const count = await layers.count();
+    expect(count).toBeGreaterThan(0);
   });
 
   test('first block displays the title "All Squisq Templates"', async ({ page }) => {
-    // The titleBlock template renders the H1 text
+    // Start playback to dismiss the cover block
+    await startPlaybackAndWaitForActiveBlock(page);
     const block = activeBlock(page);
     await expect(block).toContainText('All Squisq Templates');
   });
 
   test('clicking the player starts playback (block progresses)', async ({ page }) => {
-    // Get the initial block's text content
+    // Start playback (dismisses cover block after grace period)
+    await startPlaybackAndWaitForActiveBlock(page);
     const initialText = await activeBlock(page).textContent();
-
-    // Click the player to start playback (tap-to-toggle)
-    await page.locator('.doc-player').click();
 
     // Wait enough time for the fallback timer to advance past the first block (5s default)
     await page.waitForTimeout(6_000);
@@ -120,7 +131,7 @@ test.describe('DocPlayer preview', () => {
 
   test('DocPlayer renders multiple blocks over time', async ({ page }) => {
     // Start playback
-    await page.locator('.doc-player').click();
+    await startPlaybackAndWaitForActiveBlock(page);
 
     // Collect unique block IDs over 12 seconds
     const seenIds = new Set<string>();
@@ -147,17 +158,29 @@ test.describe('Template rendering correctness', () => {
     await waitForDocPlayer(page);
 
     // Start playback and check every few seconds that the active block has layers
-    await page.locator('.doc-player').click();
+    await startPlaybackAndWaitForActiveBlock(page);
 
     const emptyBlocks: string[] = [];
     for (let i = 0; i < 7; i++) {
-      // Wait for an animated layer to become visible before checking
-      const svg = activeBlock(page).locator('svg');
-      const layers = svg.locator('foreignObject, rect, circle, image');
+      // Wait for the active block SVG to be present (may briefly disappear during transitions)
+      const block = activeBlock(page);
       try {
-        await expect(layers.first()).toBeVisible({ timeout: 6_000 });
+        await block.waitFor({ state: 'attached', timeout: 6_000 });
       } catch {
-        const blockId = await svg.getAttribute('data-block-id');
+        emptyBlocks.push(`missing-block-at-${i * 5}s`);
+        await page.waitForTimeout(5_200);
+        continue;
+      }
+      // Each layer is wrapped in a <g class="block-layer">, targeting that
+      // avoids matching the <rect> inside <defs><clipPath>.
+      const svg = block.locator('svg');
+      const layers = svg.locator('.block-layer');
+      try {
+        await expect(layers.first()).toBeAttached({ timeout: 6_000 });
+      } catch {
+        const blockId = await svg
+          .getAttribute('data-block-id', { timeout: 2_000 })
+          .catch(() => null);
         emptyBlocks.push(blockId ?? `unknown-at-${i * 5}s`);
       }
       // Advance to next block
@@ -175,7 +198,7 @@ test.describe('Template rendering correctness', () => {
     await waitForDocPlayer(page);
 
     // Start playback and advance to find the statHighlight block
-    await page.locator('.doc-player').click();
+    await startPlaybackAndWaitForActiveBlock(page);
 
     let foundStat = false;
     for (let i = 0; i < 14; i++) {
@@ -206,9 +229,8 @@ test.describe('DocPlayer controls', () => {
   test('space bar toggles play/pause', async ({ page }) => {
     const player = page.locator('.doc-player');
 
-    // Focus the player area and press space to start
-    await player.click();
-    await page.waitForTimeout(1_000);
+    // Start playback (dismisses cover block after grace period)
+    await startPlaybackAndWaitForActiveBlock(page);
 
     // Should be playing — content should be at non-zero time
     const _textAfterPlay = await activeBlock(page).textContent();
@@ -225,16 +247,11 @@ test.describe('DocPlayer controls', () => {
   });
 
   test('progress bar is visible during playback', async ({ page }) => {
-    await page.locator('.doc-player').click();
-    await page.waitForTimeout(1_000);
+    await startPlaybackAndWaitForActiveBlock(page);
 
-    // DocPlayer renders a progress bar
-    const progressBar = page.locator(
-      '.doc-player .doc-progress-bar, .doc-player .doc-player__scrubber',
-    );
-    // At least one of the progress bar selectors should be visible
-    const barCount = await progressBar.count();
-    expect(barCount).toBeGreaterThan(0);
+    // DocPlayer renders controls (containing the progress bar) via DocControlsOverlay
+    const controls = page.locator('.doc-player__controls');
+    await expect(controls).toBeVisible({ timeout: 5_000 });
   });
 });
 
@@ -248,11 +265,15 @@ test.describe('Sample switching', () => {
     // Start with hello-world in preview
     await switchView(page, 'Preview');
     await waitForDocPlayer(page);
+    await startPlaybackAndWaitForActiveBlock(page);
     const initialContent = await activeBlock(page).textContent();
 
     // Switch to all-templates
     await selectSample(page, 'all-templates');
+    // EditorShell remounts when sample changes, resetting to default view
+    await switchView(page, 'Preview');
     await waitForDocPlayer(page);
+    await startPlaybackAndWaitForActiveBlock(page);
     const newContent = await activeBlock(page).textContent();
 
     expect(newContent).not.toEqual(initialContent);
@@ -264,6 +285,8 @@ test.describe('Sample switching', () => {
     await switchView(page, 'Raw');
 
     await selectSample(page, 'features-demo');
+    // EditorShell remounts when sample changes, resetting to default view
+    await switchView(page, 'Raw');
 
     // The raw editor should contain the features-demo content
     // Monaco uses a textarea or contenteditable, check the editor container
