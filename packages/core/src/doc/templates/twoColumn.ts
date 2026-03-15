@@ -17,6 +17,10 @@ import { getTwoColumnPositions } from '../../schemas/LayoutStrategy.js';
 
 export function twoColumn(input: TwoColumnInput, context: TemplateContext): Layer[] {
   const { left, right, header, leftColor = 'green', rightColor = 'blue' } = input;
+
+  // Guard: required fields may be absent when generated from sparse markdown
+  if (!left?.label || !right?.label) return [];
+
   const { theme, layout, orientation } = context;
   const leftColors = COLOR_SCHEMES[leftColor];
   const rightColors = COLOR_SCHEMES[rightColor];

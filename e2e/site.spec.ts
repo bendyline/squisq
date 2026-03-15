@@ -44,12 +44,12 @@ test.describe('Site navigation', () => {
     await expect(select).toHaveValue('hello-world');
   });
 
-  test('sample picker contains template-annotations', async ({ page }) => {
+  test('sample picker contains all-templates', async ({ page }) => {
     const options = page.locator('select').first().locator('option');
     const values = await options.evaluateAll((opts) =>
       opts.map((o) => (o as HTMLOptionElement).value),
     );
-    expect(values).toContain('template-annotations');
+    expect(values).toContain('all-templates');
   });
 
   test('view switcher has Raw, Editor, Preview tabs', async ({ page }) => {
@@ -75,7 +75,7 @@ test.describe('DocPlayer preview', () => {
   test.beforeEach(async ({ page }) => {
     await page.goto('/');
     await page.waitForLoadState('networkidle');
-    await selectSample(page, 'template-annotations');
+    await selectSample(page, 'all-templates');
     await switchView(page, 'Preview');
     await waitForDocPlayer(page);
   });
@@ -97,10 +97,10 @@ test.describe('DocPlayer preview', () => {
     await expect(layerElements.first()).toBeVisible({ timeout: 10_000 });
   });
 
-  test('first block displays the title "Story: Climate Report"', async ({ page }) => {
+  test('first block displays the title "All Squisq Templates"', async ({ page }) => {
     // The titleBlock template renders the H1 text
     const block = activeBlock(page);
-    await expect(block).toContainText('Story: Climate Report');
+    await expect(block).toContainText('All Squisq Templates');
   });
 
   test('clicking the player starts playback (block progresses)', async ({ page }) => {
@@ -138,11 +138,11 @@ test.describe('DocPlayer preview', () => {
 // ── Template Rendering ──────────────────────────────────────────────
 
 test.describe('Template rendering correctness', () => {
-  test('all template-annotations blocks render with layers', async ({ page }) => {
+  test('all all-templates blocks render with layers', async ({ page }) => {
     test.setTimeout(60_000);
     await page.goto('/');
     await page.waitForLoadState('networkidle');
-    await selectSample(page, 'template-annotations');
+    await selectSample(page, 'all-templates');
     await switchView(page, 'Preview');
     await waitForDocPlayer(page);
 
@@ -170,7 +170,7 @@ test.describe('Template rendering correctness', () => {
   test('statHighlight block renders stat text', async ({ page }) => {
     await page.goto('/');
     await page.waitForLoadState('networkidle');
-    await selectSample(page, 'template-annotations');
+    await selectSample(page, 'all-templates');
     await switchView(page, 'Preview');
     await waitForDocPlayer(page);
 
@@ -181,8 +181,8 @@ test.describe('Template rendering correctness', () => {
     for (let i = 0; i < 14; i++) {
       await page.waitForTimeout(2_500);
       const text = await activeBlock(page).textContent();
-      // The statHighlight block shows "Key Finding" as title and "1.5°C" as stat
-      if (text && (text.includes('1.5') || text.includes('Key Finding'))) {
+      // The statHighlight block shows "The Big Number" as title and "42%" as stat
+      if (text && (text.includes('42%') || text.includes('Big Number'))) {
         foundStat = true;
         break;
       }
@@ -198,7 +198,7 @@ test.describe('DocPlayer controls', () => {
   test.beforeEach(async ({ page }) => {
     await page.goto('/');
     await page.waitForLoadState('networkidle');
-    await selectSample(page, 'template-annotations');
+    await selectSample(page, 'all-templates');
     await switchView(page, 'Preview');
     await waitForDocPlayer(page);
   });
@@ -250,8 +250,8 @@ test.describe('Sample switching', () => {
     await waitForDocPlayer(page);
     const initialContent = await activeBlock(page).textContent();
 
-    // Switch to template-annotations
-    await selectSample(page, 'template-annotations');
+    // Switch to all-templates
+    await selectSample(page, 'all-templates');
     await waitForDocPlayer(page);
     const newContent = await activeBlock(page).textContent();
 

@@ -1,4 +1,10 @@
-# squisq
+<p align="center">
+  <img src="packages/site/public/res/squisq.jpg" alt="Squisq" width="128" />
+</p>
+
+# Squggle Square (squisq)
+
+Squiggle Square is a core library, set of React components, and format interop elements for creating multimedia documents out of markdown using "squiggle square" tags - like {[ ]}
 
 [![CI](https://github.com/bendyline/squisq/actions/workflows/ci.yml/badge.svg)](https://github.com/bendyline/squisq/actions/workflows/ci.yml)
 [![npm @bendyline/squisq](https://img.shields.io/npm/v/@bendyline/squisq)](https://www.npmjs.com/package/@bendyline/squisq)

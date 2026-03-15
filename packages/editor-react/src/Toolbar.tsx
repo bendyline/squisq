@@ -7,10 +7,16 @@
  * Hidden in Preview mode.
  */
 
-import { useCallback } from 'react';
+import { useCallback, useEffect, useReducer } from 'react';
 import type { Editor as TiptapEditor } from '@tiptap/core';
-import { useEditorContext } from './EditorContext';
+import { useEditorContext, type EditorView } from './EditorContext';
 import { getAvailableTemplates } from '@bendyline/squisq/doc';
+
+const VIEWS: { id: EditorView; label: string; shortcut: string }[] = [
+  { id: 'wysiwyg', label: 'Editor', shortcut: '⌘1' },
+  { id: 'raw', label: 'Raw', shortcut: '⌘2' },
+  { id: 'preview', label: 'Preview', shortcut: '⌘3' },
+];
 
 export interface ToolbarProps {
   /** Additional class name */
@@ -108,8 +114,18 @@ function isTiptapActive(editor: TiptapEditor, id: string): boolean {
  * - Raw: appends markdown syntax to the source
  */
 export function Toolbar({ className }: ToolbarProps) {
-  const { activeView, markdownSource, setMarkdownSource, tiptapEditor, monacoEditor } =
+  const { activeView, setActiveView, markdownSource, setMarkdownSource, tiptapEditor, monacoEditor } =
     useEditorContext();
+
+  // Force re-render when Tiptap selection or formatting state changes
+  const [, forceUpdate] = useReducer((c: number) => c + 1, 0);
+  useEffect(() => {
+    if (!tiptapEditor) return;
+    tiptapEditor.on('transaction', forceUpdate);
+    return () => {
+      tiptapEditor.off('transaction', forceUpdate);
+    };
+  }, [tiptapEditor]);
 
   // ── Tiptap handler ─────────────────────────────────────
   const handleTiptap = useCallback(
@@ -338,10 +354,9 @@ export function Toolbar({ className }: ToolbarProps) {
     [activeView, tiptapEditor, monacoEditor, handleTiptap, handleRaw],
   );
 
-  if (activeView === 'preview') return null;
-
   const groups = ['format', 'structure', 'insert'] as const;
   const isWysiwyg = activeView === 'wysiwyg' && tiptapEditor;
+  const isPreview = activeView === 'preview';
 
   // Detect current heading template (WYSIWYG mode only)
   const currentTemplate = isWysiwyg
@@ -372,7 +387,26 @@ export function Toolbar({ className }: ToolbarProps) {
       role="toolbar"
       aria-label="Formatting toolbar"
     >
-      {groups.map((group, gi) => (
+      {/* View tabs */}
+      <div className="squisq-toolbar-view-tabs" role="tablist" aria-label="Editor view">
+        {VIEWS.map((view) => (
+          <button
+            key={view.id}
+            role="tab"
+            data-view={view.id}
+            aria-selected={activeView === view.id}
+            className={`squisq-toolbar-view-tab${activeView === view.id ? ' squisq-toolbar-view-tab--active' : ''}`}
+            onClick={() => setActiveView(view.id)}
+            title={`${view.label} (${view.shortcut})`}
+          >
+            {view.label}
+          </button>
+        ))}
+      </div>
+
+      {/* Formatting buttons — hidden in preview mode */}
+      {!isPreview && <div className="squisq-toolbar-separator" />}
+      {!isPreview && groups.map((group, gi) => (
         <div key={group} className="squisq-toolbar-group">
           {gi > 0 && <div className="squisq-toolbar-separator" />}
           {BUTTONS.filter((b) => b.group === group).map((btn) => {
@@ -395,7 +429,7 @@ export function Toolbar({ className }: ToolbarProps) {
       ))}
 
       {/* Template picker — visible when cursor is in a heading (WYSIWYG) */}
-      {currentTemplate !== null && (
+      {!isPreview && currentTemplate !== null && (
         <>
           <div className="squisq-toolbar-separator" />
           <div className="squisq-toolbar-group squisq-template-picker">

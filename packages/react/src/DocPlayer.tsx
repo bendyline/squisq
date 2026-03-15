@@ -600,7 +600,7 @@ export function DocPlayer({
     // For expanded blocks with layers, try to find text content
     if (block.layers && Array.isArray(block.layers)) {
       const textLayer = block.layers.find((l): l is TextLayer => l.type === 'text');
-      if (textLayer) {
+      if (textLayer?.content?.text) {
         // Get first line of text, truncate if too long
         const firstLine = textLayer.content.text.split('\n')[0];
         if (firstLine.length <= 30) return firstLine;

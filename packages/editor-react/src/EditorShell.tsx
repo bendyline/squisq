@@ -8,7 +8,6 @@
 
 import { useEffect } from 'react';
 import { EditorProvider, useEditorContext, type EditorView } from './EditorContext';
-import { ViewSwitcher } from './ViewSwitcher';
 import { Toolbar } from './Toolbar';
 import { StatusBar } from './StatusBar';
 import { RawEditor } from './RawEditor';
@@ -21,6 +20,7 @@ export interface EditorShellProps {
   /** Initial markdown content */
   initialMarkdown?: string;
   /** Initial active view */
+  /** Initial active view (default: 'wysiwyg') */
   initialView?: EditorView;
   /** Article ID for Doc generation */
   articleId?: string;
@@ -42,7 +42,7 @@ export interface EditorShellProps {
  */
 export function EditorShell({
   initialMarkdown = '',
-  initialView = 'raw',
+  initialView = 'wysiwyg',
   articleId = 'untitled',
   basePath = '/',
   onChange,
@@ -89,11 +89,11 @@ function EditorShellInner({ basePath, onChange, className, height }: EditorShell
         switch (e.key) {
           case '1':
             e.preventDefault();
-            document.querySelector<HTMLButtonElement>('[data-view="raw"]')?.click();
+            document.querySelector<HTMLButtonElement>('[data-view="wysiwyg"]')?.click();
             break;
           case '2':
             e.preventDefault();
-            document.querySelector<HTMLButtonElement>('[data-view="wysiwyg"]')?.click();
+            document.querySelector<HTMLButtonElement>('[data-view="raw"]')?.click();
             break;
           case '3':
             e.preventDefault();
@@ -117,11 +117,8 @@ function EditorShellInner({ basePath, onChange, className, height }: EditorShell
         overflow: 'hidden',
       }}
     >
-      {/* Header: ViewSwitcher + Toolbar */}
+      {/* Header: Toolbar (includes view tabs) */}
       <div className="squisq-editor-header">
-        <div className="squisq-editor-header-row">
-          <ViewSwitcher />
-        </div>
         <Toolbar />
       </div>
 

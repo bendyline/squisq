@@ -94,39 +94,37 @@ export function App() {
           alignItems: 'center',
           padding: '8px 16px',
           gap: '8px 16px',
-          borderBottom: `1px solid ${isDark ? '#374151' : '#e5e7eb'}`,
-          background: isDark ? '#1e293b' : '#f3f4f6',
+          borderBottom: '1px solid #e5e7eb',
+          background: '#F3EBD6',
           flexShrink: 0,
           transition: 'background 0.2s, border-color 0.2s',
         }}
       >
-        <strong style={{ fontSize: 14 }}>Squisq Editor</strong>
         <a
           href="https://github.com/bendyline/squisq/blob/main/docs/SquiggleSquare.md"
           target="_blank"
           rel="noopener noreferrer"
-          style={{
-            fontSize: 13,
-            marginLeft: 12,
-            color: isDark ? '#93C5FD' : '#2563eb',
-            textDecoration: 'none',
-          }}
         >
-          Squiggle Square
+          <img
+            src="/res/squisq.jpg"
+            alt="Squisq"
+            style={{ height: 28, position: 'relative', top: 3 }}
+          />
         </a>
 
-        <label style={{ fontSize: 13, display: 'flex', alignItems: 'center', gap: 6 }}>
+        <label style={{ fontSize: 13, fontFamily: 'system-ui, -apple-system, sans-serif', color: '#4a3c1f', display: 'flex', alignItems: 'center', gap: 6 }}>
           Sample:
           <select
             value={selectedSample}
             onChange={handleSampleChange}
             style={{
               fontSize: 13,
-              padding: '2px 8px',
-              background: isDark ? '#374151' : '#fff',
-              color: isDark ? '#e5e7eb' : '#1f2937',
-              border: `1px solid ${isDark ? '#4b5563' : '#d1d5db'}`,
-              borderRadius: 4,
+              fontFamily: 'system-ui, -apple-system, sans-serif',
+              padding: '4px 8px',
+              background: '#FFFDF7',
+              color: '#4a3c1f',
+              border: '1px solid #c9b98a',
+              borderRadius: 0,
             }}
           >
             {Object.keys(SAMPLES).map((key) => (
@@ -137,18 +135,19 @@ export function App() {
           </select>
         </label>
 
-        <label style={{ fontSize: 13, display: 'flex', alignItems: 'center', gap: 6 }}>
+        <label style={{ fontSize: 13, fontFamily: 'system-ui, -apple-system, sans-serif', color: '#4a3c1f', display: 'flex', alignItems: 'center', gap: 6 }}>
           Theme:
           <select
             value={theme}
             onChange={handleThemeChange}
             style={{
               fontSize: 13,
-              padding: '2px 8px',
-              background: isDark ? '#374151' : '#fff',
-              color: isDark ? '#e5e7eb' : '#1f2937',
-              border: `1px solid ${isDark ? '#4b5563' : '#d1d5db'}`,
-              borderRadius: 4,
+              fontFamily: 'system-ui, -apple-system, sans-serif',
+              padding: '4px 8px',
+              background: '#FFFDF7',
+              color: '#4a3c1f',
+              border: '1px solid #c9b98a',
+              borderRadius: 0,
             }}
           >
             <option value="light">Light</option>
@@ -160,18 +159,13 @@ export function App() {
           onClick={() => setShowDebug((prev) => !prev)}
           style={{
             fontSize: 13,
-            padding: '2px 10px',
+            fontFamily: 'system-ui, -apple-system, sans-serif',
+            padding: '4px 12px',
             cursor: 'pointer',
-            background: showDebug
-              ? isDark
-                ? '#2563eb'
-                : '#2563eb'
-              : isDark
-                ? '#374151'
-                : '#e5e7eb',
-            color: showDebug ? '#fff' : isDark ? '#d1d5db' : '#374151',
-            border: 'none',
-            borderRadius: 4,
+            background: showDebug ? '#8B6914' : '#E8DFC6',
+            color: showDebug ? '#fff' : '#4a3c1f',
+            border: `1px solid ${showDebug ? '#7a5c10' : '#c9b98a'}`,
+            borderRadius: 0,
           }}
         >
           {showDebug ? 'Hide' : 'Show'} Debug

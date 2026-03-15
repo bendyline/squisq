@@ -15,6 +15,9 @@ import { scaledFontSize } from '../../schemas/BlockTemplates.js';
 export function pullQuote(input: PullQuoteInput, context: TemplateContext): Layer[] {
   const { text, attribution, backgroundImage, ambientMotion } = input;
 
+  // Guard: backgroundImage is required
+  if (!backgroundImage?.src) return [];
+
   const quoteFontSize = scaledFontSize(52, context, true);
   const attrFontSize = scaledFontSize(24, context, false);
   const decoFontSize = scaledFontSize(200, context, true);

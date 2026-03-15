@@ -17,13 +17,6 @@
   flex-shrink: 0;
 }
 
-.squisq-editor-header-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 4px 12px;
-}
-
 .squisq-editor-content {
   flex: 1;
   overflow: hidden;
@@ -66,7 +59,37 @@
   align-items: center;
   padding: 4px 12px;
   gap: 2px;
-  border-top: 1px solid #e5e7eb;
+}
+
+/* ─── View Tabs (inside toolbar) ─────────────────────── */
+
+.squisq-toolbar-view-tabs {
+  display: flex;
+  gap: 0;
+  margin-right: 2px;
+}
+
+.squisq-toolbar-view-tab {
+  padding: 4px 14px;
+  border: none;
+  background: transparent;
+  color: #6b7280;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 500;
+  border-bottom: 2px solid transparent;
+  transition:
+    color 0.15s,
+    border-color 0.15s;
+}
+
+.squisq-toolbar-view-tab:hover {
+  color: #1f2937;
+}
+
+.squisq-toolbar-view-tab--active {
+  color: #2563eb;
+  border-bottom-color: #2563eb;
 }
 
 .squisq-toolbar-group {
@@ -359,11 +382,19 @@
 /* ─── CSS custom properties ──────────────────────────── */
 
 .squisq-editor-shell {
+  --squisq-bg: #f5f5f5;
   --squisq-border: #e0e0e0;
+  --squisq-input-bg: #fff;
+  --squisq-text: #1f2937;
+  --squisq-text-muted: #6b7280;
 }
 
 .squisq-editor-shell[data-theme='dark'] {
+  --squisq-bg: #1f2937;
   --squisq-border: #4b5563;
+  --squisq-input-bg: #374151;
+  --squisq-text: #e5e7eb;
+  --squisq-text-muted: #9ca3af;
 }
 
 /* ─── Dark mode ──────────────────────────────────────── */
@@ -396,7 +427,21 @@
 
 /* Toolbar */
 .squisq-editor-shell[data-theme='dark'] .squisq-toolbar {
-  border-top-color: #374151;
+  /* no border-top — sits directly in header */
+}
+
+/* View tabs (dark) */
+.squisq-editor-shell[data-theme='dark'] .squisq-toolbar-view-tab {
+  color: #9ca3af;
+}
+
+.squisq-editor-shell[data-theme='dark'] .squisq-toolbar-view-tab:hover {
+  color: #e5e7eb;
+}
+
+.squisq-editor-shell[data-theme='dark'] .squisq-toolbar-view-tab--active {
+  color: #60a5fa;
+  border-bottom-color: #60a5fa;
 }
 
 .squisq-editor-shell[data-theme='dark'] .squisq-toolbar-button {

@@ -46,44 +46,46 @@ const IMAGE_EXTENSIONS = new Set(['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg']);
 // Styles (inline, matching the existing top bar)
 // ============================================
 
-function buttonStyle(isDark: boolean, active = false): React.CSSProperties {
+function buttonStyle(_isDark: boolean, active = false): React.CSSProperties {
   return {
     fontSize: 13,
-    padding: '2px 10px',
+    fontFamily: 'system-ui, -apple-system, sans-serif',
+    padding: '4px 12px',
     cursor: 'pointer',
-    background: active ? '#2563eb' : isDark ? '#374151' : '#e5e7eb',
-    color: active ? '#fff' : isDark ? '#d1d5db' : '#374151',
-    border: 'none',
-    borderRadius: 4,
+    background: active ? '#8B6914' : '#E8DFC6',
+    color: active ? '#fff' : '#4a3c1f',
+    border: `1px solid ${active ? '#7a5c10' : '#c9b98a'}`,
+    borderRadius: 0,
     position: 'relative' as const,
   };
 }
 
-function dropdownStyle(isDark: boolean): React.CSSProperties {
+function dropdownStyle(_isDark: boolean): React.CSSProperties {
   return {
     position: 'absolute',
     top: '100%',
     left: 0,
     marginTop: 4,
-    minWidth: 140,
-    background: isDark ? '#1e293b' : '#fff',
-    border: `1px solid ${isDark ? '#4b5563' : '#d1d5db'}`,
-    borderRadius: 6,
-    boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+    minWidth: 160,
+    background: '#FFFDF7',
+    border: '1px solid #c9b98a',
+    borderRadius: 0,
+    boxShadow: '0 4px 12px rgba(0,0,0,0.12)',
     zIndex: 100,
     overflow: 'hidden',
   };
 }
 
-function dropdownItemStyle(isDark: boolean): React.CSSProperties {
+function dropdownItemStyle(_isDark: boolean): React.CSSProperties {
   return {
     display: 'block',
     width: '100%',
-    padding: '6px 12px',
+    padding: '8px 14px',
     fontSize: 13,
+    fontFamily: 'system-ui, -apple-system, sans-serif',
     textAlign: 'left' as const,
     background: 'transparent',
-    color: isDark ? '#e5e7eb' : '#1f2937',
+    color: '#4a3c1f',
     border: 'none',
     cursor: 'pointer',
   };
@@ -239,7 +241,7 @@ export function FileToolbar({ currentSource, onImport, isDark, activeSlot }: Fil
             <button
               style={dropdownItemStyle(isDark)}
               onMouseEnter={(e) =>
-                (e.currentTarget.style.background = isDark ? '#374151' : '#f3f4f6')
+                (e.currentTarget.style.background = '#F3EBD6')
               }
               onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
               onClick={() => handleDownload('md')}
@@ -249,7 +251,7 @@ export function FileToolbar({ currentSource, onImport, isDark, activeSlot }: Fil
             <button
               style={dropdownItemStyle(isDark)}
               onMouseEnter={(e) =>
-                (e.currentTarget.style.background = isDark ? '#374151' : '#f3f4f6')
+                (e.currentTarget.style.background = '#F3EBD6')
               }
               onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
               onClick={() => handleDownload('docx')}
@@ -259,7 +261,7 @@ export function FileToolbar({ currentSource, onImport, isDark, activeSlot }: Fil
             <button
               style={dropdownItemStyle(isDark)}
               onMouseEnter={(e) =>
-                (e.currentTarget.style.background = isDark ? '#374151' : '#f3f4f6')
+                (e.currentTarget.style.background = '#F3EBD6')
               }
               onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
               onClick={() => handleDownload('pdf')}
@@ -269,7 +271,7 @@ export function FileToolbar({ currentSource, onImport, isDark, activeSlot }: Fil
             <button
               style={dropdownItemStyle(isDark)}
               onMouseEnter={(e) =>
-                (e.currentTarget.style.background = isDark ? '#374151' : '#f3f4f6')
+                (e.currentTarget.style.background = '#F3EBD6')
               }
               onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
               onClick={() => handleDownload('txt')}

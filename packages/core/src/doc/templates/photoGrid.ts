@@ -25,6 +25,10 @@ const GAP = 0.5;
 
 export function photoGrid(input: PhotoGridInput, context: TemplateContext): Layer[] {
   const { images, caption: rawCaption, ambientMotion } = input;
+
+  // Guard: images array is required
+  if (!images || images.length === 0) return [];
+
   const caption = rawCaption ? cleanCaption(rawCaption) : rawCaption;
   const { theme, layout } = context;
 

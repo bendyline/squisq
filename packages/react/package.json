@@ -34,10 +34,17 @@
       "import": "./dist/index.js",
       "types": "./dist/index.d.ts"
     },
-    "./styles": "./src/styles/doc-animations.css"
+    "./styles": "./src/styles/doc-animations.css",
+    "./standalone": "./dist/squisq-player.global.js",
+    "./standalone-source": {
+      "import": "./dist/standalone-source.js",
+      "types": "./dist/standalone-source.d.ts"
+    }
   },
   "scripts": {
-    "build": "tsup",
+    "build": "tsup && tsup --config tsup.standalone.config.ts && node scripts/generate-standalone-source.mjs",
+    "build:esm": "tsup",
+    "build:standalone": "tsup --config tsup.standalone.config.ts && node scripts/generate-standalone-source.mjs",
     "typecheck": "tsc --noEmit",
     "prepublishOnly": "npm run build"
   },
@@ -50,6 +57,7 @@
   },
   "devDependencies": {
     "@types/react": "^18.0.0",
+    "preact": "^10.25.0",
     "react": "^18.0.0",
     "react-dom": "^18.0.0",
     "@testing-library/react": "^16.0.0",

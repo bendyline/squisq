@@ -31,31 +31,38 @@ interface StorageToolbarProps {
 // ============================================
 
 function btnStyle(
-  isDark: boolean,
+  _isDark: boolean,
   variant: 'default' | 'primary' | 'danger' = 'default',
 ): React.CSSProperties {
   const base: React.CSSProperties = {
     fontSize: 12,
-    padding: '2px 8px',
+    fontFamily: 'system-ui, -apple-system, sans-serif',
+    padding: '4px 10px',
     cursor: 'pointer',
-    border: 'none',
-    borderRadius: 3,
+    borderRadius: 0,
   };
 
   switch (variant) {
     case 'primary':
-      return { ...base, background: '#2563eb', color: '#fff' };
+      return {
+        ...base,
+        background: '#8B6914',
+        color: '#fff',
+        border: '1px solid #7a5c10',
+      };
     case 'danger':
       return {
         ...base,
-        background: isDark ? '#7f1d1d' : '#fecaca',
-        color: isDark ? '#fca5a5' : '#991b1b',
+        background: '#d4a373',
+        color: '#fff',
+        border: '1px solid #b8895a',
       };
     default:
       return {
         ...base,
-        background: isDark ? '#374151' : '#e5e7eb',
-        color: isDark ? '#d1d5db' : '#374151',
+        background: '#E8DFC6',
+        color: '#4a3c1f',
+        border: '1px solid #c9b98a',
       };
   }
 }
@@ -137,18 +144,19 @@ export function StorageToolbar({
 
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-      <label style={{ fontSize: 12, display: 'flex', alignItems: 'center', gap: 4 }}>
+      <label style={{ fontSize: 12, fontFamily: 'system-ui, -apple-system, sans-serif', color: '#4a3c1f', display: 'flex', alignItems: 'center', gap: 4 }}>
         Storage:
         <select
           value={activeSlot === null ? '' : activeSlot}
           onChange={handleSlotSelect}
           style={{
             fontSize: 12,
-            padding: '2px 6px',
-            background: isDark ? '#374151' : '#fff',
-            color: isDark ? '#e5e7eb' : '#1f2937',
-            border: `1px solid ${isDark ? '#4b5563' : '#d1d5db'}`,
-            borderRadius: 3,
+            fontFamily: 'system-ui, -apple-system, sans-serif',
+            padding: '4px 6px',
+            background: '#FFFDF7',
+            color: '#4a3c1f',
+            border: '1px solid #c9b98a',
+            borderRadius: 0,
             maxWidth: 200,
           }}
         >
@@ -190,7 +198,7 @@ export function StorageToolbar({
       )}
 
       {status && (
-        <span style={{ fontSize: 11, color: isDark ? '#9ca3af' : '#6b7280', fontStyle: 'italic' }}>
+        <span style={{ fontSize: 11, color: '#8a7a5a', fontStyle: 'italic' }}>
           {status}
         </span>
       )}

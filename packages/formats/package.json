@@ -60,6 +60,11 @@
       "types": "./dist/pdf/index.d.ts",
       "import": "./dist/pdf/index.js",
       "default": "./dist/pdf/index.js"
+    },
+    "./html": {
+      "types": "./dist/html/index.d.ts",
+      "import": "./dist/html/index.js",
+      "default": "./dist/html/index.js"
     }
   },
   "scripts": {

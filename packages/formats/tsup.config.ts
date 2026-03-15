@@ -8,6 +8,7 @@ export default defineConfig({
     'xlsx/index': 'src/xlsx/index.ts',
     'ooxml/index': 'src/ooxml/index.ts',
     'pdf/index': 'src/pdf/index.ts',
+    'html/index': 'src/html/index.ts',
   },
   format: ['esm'],
   dts: true,
