@@ -28,7 +28,10 @@ export function definitionCard(input: DefinitionCardInput, context: TemplateCont
   const originFontSize = scaledFontSize(22, context, false);
 
   const layers: Layer[] = [
-    createBackgroundLayer('bg', `linear-gradient(145deg, #1e2030 0%, ${theme.colors.background} 100%)`),
+    createBackgroundLayer(
+      'bg',
+      `linear-gradient(145deg, #1e2030 0%, ${theme.colors.background} 100%)`,
+    ),
   ];
 
   // Add accent image layers

@@ -31,7 +31,10 @@ export function statHighlight(input: StatHighlightInput, context: TemplateContex
   const detailFontSize = scaledFontSize(26, context, false);
 
   const layers: Layer[] = [
-    createBackgroundLayer('bg', `linear-gradient(180deg, ${theme.colors.background} 0%, #0f1520 100%)`),
+    createBackgroundLayer(
+      'bg',
+      `linear-gradient(180deg, ${theme.colors.background} 0%, #0f1520 100%)`,
+    ),
   ];
 
   // Add accent image layers (behind text, after background)

@@ -224,7 +224,10 @@ function deepMerge<T extends Record<string, unknown>>(target: T, source: DeepPar
  * ```
  */
 export function createTheme(base: Theme, overrides: DeepPartial<Theme>): Theme {
-  const merged = deepMerge(base as unknown as Record<string, unknown>, overrides as DeepPartial<Record<string, unknown>>) as unknown as Theme;
+  const merged = deepMerge(
+    base as unknown as Record<string, unknown>,
+    overrides as DeepPartial<Record<string, unknown>>,
+  ) as unknown as Theme;
   if (!overrides.id && merged.id === base.id) {
     merged.id = `${base.id}-custom`;
   }

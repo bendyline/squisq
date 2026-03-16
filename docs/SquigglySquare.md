@@ -145,12 +145,12 @@ theme: cinematic
 
 Sets the default viewport aspect ratio for rendered output.
 
-| Value | Resolved preset |
-|---|---|
-| `landscape`, `16:9`, `widescreen` | 16:9 Landscape (1920×1080) |
-| `portrait`, `9:16`, `vertical`, `stories` | 9:16 Portrait (1080×1920) |
-| `square`, `1:1` | 1:1 Square (1080×1080) |
-| `standard`, `4:3` | 4:3 Standard (1440×1080) |
+| Value                                     | Resolved preset            |
+| ----------------------------------------- | -------------------------- |
+| `landscape`, `16:9`, `widescreen`         | 16:9 Landscape (1920×1080) |
+| `portrait`, `9:16`, `vertical`, `stories` | 9:16 Portrait (1080×1920)  |
+| `square`, `1:1`                           | 1:1 Square (1080×1080)     |
+| `standard`, `4:3`                         | 4:3 Standard (1440×1080)   |
 
 Default when omitted: `landscape`.
 
@@ -158,11 +158,11 @@ Default when omitted: `landscape`.
 
 Sets the default display/playback mode.
 
-| Value | Resolved mode |
-|---|---|
-| `video` | Video — timeline playback with audio sync, scrub bar, auto-advance |
-| `slideshow`, `slides`, `presentation`, `deck` | Slideshow — prev/next navigation, no auto-advance |
-| `linear`, `document`, `scroll`, `page` | Document — long-scrolling readable view, no audio |
+| Value                                         | Resolved mode                                                      |
+| --------------------------------------------- | ------------------------------------------------------------------ |
+| `video`                                       | Video — timeline playback with audio sync, scrub bar, auto-advance |
+| `slideshow`, `slides`, `presentation`, `deck` | Slideshow — prev/next navigation, no auto-advance                  |
+| `linear`, `document`, `scroll`, `page`        | Document — long-scrolling readable view, no audio                  |
 
 Default when omitted: `video`.
 
@@ -170,16 +170,16 @@ Default when omitted: `video`.
 
 Sets the visual theme for rendered blocks (colors, typography, style).
 
-| Value | Theme |
-|---|---|
-| `documentary` | Documentary (default) — classic dark palette |
-| `minimalist` | Minimalist — clean, reduced contrast |
-| `bold` | Bold — high-contrast, vibrant |
-| `morning-light` | Morning Light — warm, light tones |
-| `tech-dark` | Tech Dark — deep blue-black, neon accents |
-| `magazine` | Magazine — editorial, sophisticated |
-| `cinematic` | Cinematic — moody, filmic palette |
-| `warm-earth` | Warm Earth — natural, earthy tones |
+| Value           | Theme                                        |
+| --------------- | -------------------------------------------- |
+| `documentary`   | Documentary (default) — classic dark palette |
+| `minimalist`    | Minimalist — clean, reduced contrast         |
+| `bold`          | Bold — high-contrast, vibrant                |
+| `morning-light` | Morning Light — warm, light tones            |
+| `tech-dark`     | Tech Dark — deep blue-black, neon accents    |
+| `magazine`      | Magazine — editorial, sophisticated          |
+| `cinematic`     | Cinematic — moody, filmic palette            |
+| `warm-earth`    | Warm Earth — natural, earthy tones           |
 
 Accepts hyphenated ids (`morning-light`) or spaced names (`morning light`). Default when omitted: `documentary`.
 

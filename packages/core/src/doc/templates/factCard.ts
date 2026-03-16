@@ -29,7 +29,10 @@ export function factCard(input: FactCardInput, context: TemplateContext): Layer[
   const sourceFontSize = scaledFontSize(20, context, false);
 
   const layers: Layer[] = [
-    createBackgroundLayer('bg', `linear-gradient(170deg, #1e2030 0%, ${theme.colors.background} 100%)`),
+    createBackgroundLayer(
+      'bg',
+      `linear-gradient(170deg, #1e2030 0%, ${theme.colors.background} 100%)`,
+    ),
   ];
 
   // Add accent image layers (behind text, after background)

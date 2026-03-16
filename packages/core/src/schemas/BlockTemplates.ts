@@ -79,8 +79,6 @@ export interface AccentImage {
   license?: string;
 }
 
-
-
 // ============================================
 // Template Input Types
 // ============================================
@@ -706,5 +704,3 @@ export interface ProgressIndicatorConfig {
   /** Indicator color */
   color?: string;
 }
-
-

@@ -257,7 +257,13 @@ function getTemplateDefaults(
  * <LinearDocView doc={doc} basePath="/media/" />
  * ```
  */
-export function LinearDocView({ doc, basePath = '/', viewport, className, theme }: LinearDocViewProps) {
+export function LinearDocView({
+  doc,
+  basePath = '/',
+  viewport,
+  className,
+  theme,
+}: LinearDocViewProps) {
   const activeViewport = viewport ?? VIEWPORT_PRESETS.landscape;
   const totalBlocks = useMemo(() => countAll(doc.blocks), [doc.blocks]);
 

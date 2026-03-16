@@ -70,7 +70,11 @@ export function photoGrid(input: PhotoGridInput, context: TemplateContext): Laye
         id: `grid-alt-${i}`,
         content: {
           text: img.alt,
-          style: { fontSize: altFontSize, color: theme.colors.textMuted, textAlign: 'center' as const },
+          style: {
+            fontSize: altFontSize,
+            color: theme.colors.textMuted,
+            textAlign: 'center' as const,
+          },
         },
         position: { x: `${pos.x + pos.w / 2}%`, y: `${pos.y + pos.h / 2}%`, anchor: 'center' },
       });

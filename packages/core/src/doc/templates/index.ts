@@ -20,10 +20,7 @@ import type {
   PersistentLayerConfig,
 } from '../../schemas/BlockTemplates.js';
 import type { Theme } from '../../schemas/Theme.js';
-import {
-  isTemplateBlock,
-  createTemplateContext,
-} from '../../schemas/BlockTemplates.js';
+import { isTemplateBlock, createTemplateContext } from '../../schemas/BlockTemplates.js';
 import { DEFAULT_THEME as defaultTheme } from '../../schemas/themeLibrary.js';
 import { expandPersistentLayers } from './persistentLayers.js';
 import type { ViewportConfig } from '../../schemas/Viewport.js';
@@ -163,10 +160,7 @@ export interface ExpandDocBlocksOptions {
  * @param blocks - Array of template or raw blocks
  * @param options - Expansion options including theme, viewport, and persistent layers
  */
-export function expandDocBlocks(
-  blocks: DocBlock[],
-  options: ExpandDocBlocksOptions = {},
-): Block[] {
+export function expandDocBlocks(blocks: DocBlock[], options: ExpandDocBlocksOptions = {}): Block[] {
   const opts: ExpandDocBlocksOptions = options;
 
   const theme = opts.theme ?? defaultTheme;
@@ -525,8 +519,20 @@ export type {
   TemplateContext,
   PersistentLayerConfig,
 } from '../../schemas/BlockTemplates.js';
-export { DEFAULT_THEME, resolveTheme, getAvailableThemes, getThemeSummaries } from '../../schemas/themeLibrary.js';
-export type { Theme, ThemeColorPalette, ThemeColorScheme, ThemeTypography, ThemeStyle, RenderStyle } from '../../schemas/Theme.js';
+export {
+  DEFAULT_THEME,
+  resolveTheme,
+  getAvailableThemes,
+  getThemeSummaries,
+} from '../../schemas/themeLibrary.js';
+export type {
+  Theme,
+  ThemeColorPalette,
+  ThemeColorScheme,
+  ThemeTypography,
+  ThemeStyle,
+  RenderStyle,
+} from '../../schemas/Theme.js';
 export type { DocStylePreset } from './persistentLayers.js';
 // Re-export timing types (AudioSegmentTiming and ExpandDocBlocksOptions are already exported above)
 export { VIEWPORT_PRESETS, getViewport, getViewportOrientation } from '../../schemas/Viewport.js';

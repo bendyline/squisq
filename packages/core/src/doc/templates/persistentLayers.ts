@@ -396,12 +396,7 @@ export function expandPersistentLayers(layers: PersistentLayer[] | undefined): L
 // ============================================
 
 /** Legacy style preset names. Prefer using `Theme.persistentLayers` directly. */
-export type DocStylePreset =
-  | 'minimal'
-  | 'documentary'
-  | 'branded'
-  | 'cinematic'
-  | 'clean';
+export type DocStylePreset = 'minimal' | 'documentary' | 'branded' | 'cinematic' | 'clean';
 
 /**
  * Get a PersistentLayerConfig from a style preset.

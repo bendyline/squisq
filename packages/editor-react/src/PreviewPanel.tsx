@@ -539,7 +539,12 @@ export function PreviewPanel({ basePath = '/', className }: PreviewPanelProps) {
         }}
       >
         {activeDisplayMode === 'linear' ? (
-          <LinearDocView doc={doc!} basePath={basePath} viewport={activeViewport} theme={activeTheme} />
+          <LinearDocView
+            doc={doc!}
+            basePath={basePath}
+            viewport={activeViewport}
+            theme={activeTheme}
+          />
         ) : (
           <DocPlayer
             script={previewDoc}

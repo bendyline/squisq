@@ -32,10 +32,7 @@ import type {
 import type { Theme } from '../schemas/Theme.js';
 import type { ViewportConfig } from '../schemas/Viewport.js';
 import { VIEWPORT_PRESETS } from '../schemas/Viewport.js';
-import {
-  createTemplateContext,
-  isTemplateBlock,
-} from '../schemas/BlockTemplates.js';
+import { createTemplateContext, isTemplateBlock } from '../schemas/BlockTemplates.js';
 import { DEFAULT_THEME } from '../schemas/themeLibrary.js';
 import { templateRegistry } from './templates/index.js';
 import { expandPersistentLayers } from './templates/persistentLayers.js';

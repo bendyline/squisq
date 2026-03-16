@@ -146,6 +146,7 @@ npm run format             # Prettier format
 The Theme system provides unified visual styling for rendered docs. A `Theme` bundles colors, typography, visual style, and render-style algorithms into a single JSON-serializable object.
 
 **Architecture:**
+
 - `Theme` type in `schemas/Theme.ts` — defines `ThemeColorPalette`, `ThemeTypography`, `ThemeStyle`, `RenderStyle`, and per-theme `colorSchemes`
 - `themeLibrary.ts` — 8 built-in themes: documentary, minimalist, bold, morning-light, tech-dark, magazine, cinematic, warm-earth
 - `themeUtils.ts` — template-facing helpers: `resolveColorScheme()`, `themedFontSize()`, `getTemplateHint()`, etc.
@@ -153,12 +154,14 @@ The Theme system provides unified visual styling for rendered docs. A `Theme` bu
 - `createTheme(base, overrides)` — deep-merge utility for customizing a built-in theme
 
 **How templates use themes:**
+
 - Colors: `theme.colors.background`, `theme.colors.text`, `theme.colors.primary`, etc.
 - Color schemes: `resolveColorScheme(context, 'blue')` (not `COLOR_SCHEMES[name]`)
 - Font scaling: `themedFontSize(basePx, context, isTitle)` respects `theme.typography.fontScale`
 - Render hints: `getTemplateHint(context, 'templateName', 'key', fallback)`
 
 **Key rules:**
+
 - Templates access `theme.colors.*` (not `theme.background` directly)
 - Color scheme names are strings; each theme defines its own set via `theme.colorSchemes`
 - `DEFAULT_THEME` is the documentary theme and ships as the fallback
