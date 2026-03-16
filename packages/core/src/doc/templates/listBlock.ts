@@ -30,7 +30,7 @@ export function listBlock(input: ListBlockInput, context: TemplateContext): Laye
       id: 'bg',
       content: {
         shape: 'rect',
-        fill: `linear-gradient(155deg, ${theme.backgroundLight} 0%, ${theme.background} 100%)`,
+        fill: `linear-gradient(155deg, ${theme.colors.backgroundLight} 0%, ${theme.colors.background} 100%)`,
       },
       position: { x: 0, y: 0, width: '100%', height: '100%' },
     },
@@ -52,7 +52,7 @@ export function listBlock(input: ListBlockInput, context: TemplateContext): Laye
         style: {
           fontSize: titleFontSize,
           fontWeight: 'bold',
-          color: theme.text,
+          color: theme.colors.text,
           textAlign: 'center',
           shadow: !!accentImage,
         },
@@ -82,7 +82,7 @@ export function listBlock(input: ListBlockInput, context: TemplateContext): Laye
         text: itemText,
         style: {
           fontSize: itemFontSize,
-          color: theme.text,
+          color: theme.colors.text,
           lineHeight: 1.4,
           shadow: !!accentImage,
         },

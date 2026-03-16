@@ -29,7 +29,10 @@ export function factCard(input: FactCardInput, context: TemplateContext): Layer[
   const sourceFontSize = scaledFontSize(20, context, false);
 
   const layers: Layer[] = [
-    createBackgroundLayer('bg', `linear-gradient(170deg, #1e2030 0%, ${theme.background} 100%)`),
+    createBackgroundLayer(
+      'bg',
+      `linear-gradient(170deg, #1e2030 0%, ${theme.colors.background} 100%)`,
+    ),
   ];
 
   // Add accent image layers (behind text, after background)
@@ -46,7 +49,7 @@ export function factCard(input: FactCardInput, context: TemplateContext): Layer[
       style: {
         fontSize: factFontSize,
         fontWeight: 'bold',
-        color: theme.text,
+        color: theme.colors.text,
         textAlign: 'center',
         lineHeight: 1.4,
         shadow: true,
@@ -69,7 +72,7 @@ export function factCard(input: FactCardInput, context: TemplateContext): Layer[
       text: explanation,
       style: {
         fontSize: explainFontSize,
-        color: theme.textMuted,
+        color: theme.colors.textMuted,
         textAlign: 'center',
         lineHeight: 1.5,
         shadow: !!accentImage,
@@ -93,7 +96,7 @@ export function factCard(input: FactCardInput, context: TemplateContext): Layer[
         text: source,
         style: {
           fontSize: sourceFontSize,
-          color: theme.textMuted,
+          color: theme.colors.textMuted,
           textAlign: 'center',
           shadow: !!accentImage,
         },

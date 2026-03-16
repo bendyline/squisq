@@ -77,7 +77,7 @@ export function mapBlock(input: MapBlockInput, context: TemplateContext): Layer[
         style: {
           fontSize: titleFontSize,
           fontWeight: 'bold',
-          color: theme.text,
+          color: theme.colors.text,
           textAlign: 'center',
           shadow: true,
         },
@@ -113,7 +113,7 @@ export function mapBlock(input: MapBlockInput, context: TemplateContext): Layer[
         text: caption,
         style: {
           fontSize: captionFontSize,
-          color: theme.text,
+          color: theme.colors.text,
           textAlign: 'center',
           shadow: true,
         },

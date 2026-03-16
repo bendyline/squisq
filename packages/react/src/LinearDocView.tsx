@@ -20,6 +20,7 @@
 import { useMemo } from 'react';
 import type { Doc, Block, DocBlock } from '@bendyline/squisq/schemas';
 import type { ViewportConfig } from '@bendyline/squisq/schemas';
+import type { Theme } from '@bendyline/squisq/schemas';
 import { VIEWPORT_PRESETS } from '@bendyline/squisq/schemas';
 import { getLayers, hasTemplate, DEFAULT_THEME } from '@bendyline/squisq/doc';
 import type { RenderContext } from '@bendyline/squisq/doc';
@@ -39,6 +40,8 @@ export interface LinearDocViewProps {
   viewport?: ViewportConfig;
   /** Optional CSS class for the outer container */
   className?: string;
+  /** Theme to use for rendering (default: DEFAULT_THEME from the theme library) */
+  theme?: Theme;
 }
 
 // ── Helpers ────────────────────────────────────────────────────────
@@ -254,17 +257,23 @@ function getTemplateDefaults(
  * <LinearDocView doc={doc} basePath="/media/" />
  * ```
  */
-export function LinearDocView({ doc, basePath = '/', viewport, className }: LinearDocViewProps) {
+export function LinearDocView({
+  doc,
+  basePath = '/',
+  viewport,
+  className,
+  theme,
+}: LinearDocViewProps) {
   const activeViewport = viewport ?? VIEWPORT_PRESETS.landscape;
   const totalBlocks = useMemo(() => countAll(doc.blocks), [doc.blocks]);
 
   const renderContext: RenderContext = useMemo(
     () => ({
-      theme: DEFAULT_THEME,
+      theme: theme ?? DEFAULT_THEME,
       viewport: activeViewport,
       totalBlocks,
     }),
-    [activeViewport, totalBlocks],
+    [activeViewport, totalBlocks, theme],
   );
 
   return (

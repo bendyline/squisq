@@ -59,7 +59,7 @@ export function photoGrid(input: PhotoGridInput, context: TemplateContext): Laye
     layers.push({
       type: 'shape',
       id: `grid-placeholder-${i}`,
-      content: { shape: 'rect', fill: theme.background },
+      content: { shape: 'rect', fill: theme.colors.background },
       position: { x: `${pos.x}%`, y: `${pos.y}%`, width: `${pos.w}%`, height: `${pos.h}%` },
     });
 
@@ -70,7 +70,11 @@ export function photoGrid(input: PhotoGridInput, context: TemplateContext): Laye
         id: `grid-alt-${i}`,
         content: {
           text: img.alt,
-          style: { fontSize: altFontSize, color: theme.textMuted, textAlign: 'center' as const },
+          style: {
+            fontSize: altFontSize,
+            color: theme.colors.textMuted,
+            textAlign: 'center' as const,
+          },
         },
         position: { x: `${pos.x + pos.w / 2}%`, y: `${pos.y + pos.h / 2}%`, anchor: 'center' },
       });
@@ -122,7 +126,7 @@ export function photoGrid(input: PhotoGridInput, context: TemplateContext): Laye
         text: caption,
         style: {
           fontSize: captionFontSize,
-          color: theme.text,
+          color: theme.colors.text,
           textAlign: 'center',
           shadow: true,
         },

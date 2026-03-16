@@ -33,7 +33,7 @@ export function quoteBlock(input: QuoteBlockInput, context: TemplateContext): La
   const layers: Layer[] = [
     createBackgroundLayer(
       'bg',
-      `linear-gradient(160deg, ${theme.backgroundLight} 0%, #1e2636 100%)`,
+      `linear-gradient(160deg, ${theme.colors.backgroundLight} 0%, #1e2636 100%)`,
     ),
   ];
 
@@ -70,7 +70,7 @@ export function quoteBlock(input: QuoteBlockInput, context: TemplateContext): La
       text: quote,
       style: {
         fontSize: quoteFontSize,
-        color: theme.text,
+        color: theme.colors.text,
         textAlign: 'center',
         lineHeight: 1.6,
         shadow: true,
@@ -94,7 +94,7 @@ export function quoteBlock(input: QuoteBlockInput, context: TemplateContext): La
         text: `— ${attribution}`,
         style: {
           fontSize: attrFontSize,
-          color: theme.textMuted,
+          color: theme.colors.textMuted,
           textAlign: 'center',
           shadow: !!accentImage,
         },

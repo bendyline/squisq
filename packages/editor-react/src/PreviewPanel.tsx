@@ -24,6 +24,7 @@ import { hasTemplate } from '@bendyline/squisq/doc';
 import { extractPlainText } from '@bendyline/squisq/markdown';
 import type { Block, Doc, ViewportConfig, ViewportPreset } from '@bendyline/squisq/schemas';
 import { VIEWPORT_PRESETS } from '@bendyline/squisq/schemas';
+import { getThemeSummaries, resolveTheme } from '@bendyline/squisq/schemas';
 import type { MarkdownBlockNode, MarkdownList } from '@bendyline/squisq/markdown';
 import { useEditorContext } from './EditorContext';
 
@@ -237,6 +238,26 @@ const DISPLAY_MODE_OPTIONS: { key: DisplayMode; label: string }[] = [
   { key: 'linear', label: 'Document' },
 ];
 
+/** Theme options for the dropdown */
+const THEME_OPTIONS = getThemeSummaries().map((s) => ({ key: s.id, label: s.name }));
+
+/** Set of valid theme IDs for fast lookup */
+const VALID_THEME_IDS = new Set(THEME_OPTIONS.map((o) => o.key));
+
+/**
+ * Resolve a `theme` frontmatter value to a theme id.
+ * Accepts exact theme ids ('documentary', 'bold') and common aliases.
+ */
+function resolveFrontmatterTheme(value: unknown): string | null {
+  if (typeof value !== 'string') return null;
+  const v = value.trim().toLowerCase();
+  if (VALID_THEME_IDS.has(v)) return v;
+  // Allow hyphenated/spaced aliases: "morning light" → "morning-light"
+  const normalized = v.replace(/\s+/g, '-');
+  if (VALID_THEME_IDS.has(normalized)) return normalized;
+  return null;
+}
+
 /**
  * Resolve a `display-mode` frontmatter value to a DisplayMode.
  */
@@ -298,6 +319,26 @@ export function PreviewPanel({ basePath = '/', className }: PreviewPanelProps) {
 
   // Active display mode: explicit user choice > frontmatter hint > video
   const activeDisplayMode: DisplayMode = selectedDisplayMode ?? frontmatterDisplayMode ?? 'video';
+
+  // ── Theme selection ────────────────────────────────────────────
+
+  // Determine the frontmatter-hinted theme (if any)
+  const frontmatterThemeId = useMemo<string | null>(() => {
+    if (!doc?.frontmatter) return null;
+    return resolveFrontmatterTheme(doc.frontmatter['theme']);
+  }, [doc?.frontmatter]);
+
+  // Track user-selected theme; null means "use frontmatter or default"
+  const [selectedThemeId, setSelectedThemeId] = useState<string | null>(null);
+
+  // When frontmatter theme changes and user hasn't explicitly chosen, sync
+  useEffect(() => {
+    setSelectedThemeId(null);
+  }, [frontmatterThemeId]);
+
+  // Active theme: explicit user choice > frontmatter hint > documentary
+  const activeThemeId = selectedThemeId ?? frontmatterThemeId ?? 'documentary';
+  const activeTheme = useMemo(() => resolveTheme(activeThemeId), [activeThemeId]);
 
   // Build the player-ready Doc whenever the parsed doc changes
   const previewDoc = useMemo(() => {
@@ -437,6 +478,52 @@ export function PreviewPanel({ basePath = '/', className }: PreviewPanelProps) {
             (from frontmatter)
           </span>
         )}
+
+        {/* Divider */}
+        <span
+          style={{
+            width: '1px',
+            height: '18px',
+            background: 'var(--squisq-border, #d1d5db)',
+            margin: '0 4px',
+          }}
+        />
+
+        {/* Theme selector */}
+        <label htmlFor="theme-select" style={{ color: 'var(--squisq-text-muted, #6b7280)' }}>
+          Theme:
+        </label>
+        <select
+          id="theme-select"
+          value={activeThemeId}
+          onChange={(e) => setSelectedThemeId(e.target.value)}
+          style={{
+            padding: '3px 8px',
+            borderRadius: '4px',
+            border: '1px solid var(--squisq-border, #d1d5db)',
+            background: 'var(--squisq-input-bg, #fff)',
+            color: 'var(--squisq-text, #1f2937)',
+            fontSize: '13px',
+            cursor: 'pointer',
+          }}
+        >
+          {THEME_OPTIONS.map((opt) => (
+            <option key={opt.key} value={opt.key}>
+              {opt.label}
+            </option>
+          ))}
+        </select>
+        {frontmatterThemeId && selectedThemeId === null && (
+          <span
+            style={{
+              fontSize: '11px',
+              color: 'var(--squisq-text-muted, #9ca3af)',
+              fontStyle: 'italic',
+            }}
+          >
+            (from frontmatter)
+          </span>
+        )}
       </div>
 
       {/* Player / Document view */}
@@ -452,7 +539,12 @@ export function PreviewPanel({ basePath = '/', className }: PreviewPanelProps) {
         }}
       >
         {activeDisplayMode === 'linear' ? (
-          <LinearDocView doc={doc!} basePath={basePath} viewport={activeViewport} />
+          <LinearDocView
+            doc={doc!}
+            basePath={basePath}
+            viewport={activeViewport}
+            theme={activeTheme}
+          />
         ) : (
           <DocPlayer
             script={previewDoc}
@@ -461,6 +553,7 @@ export function PreviewPanel({ basePath = '/', className }: PreviewPanelProps) {
             muted
             forceViewport={activeViewport}
             displayMode={activeDisplayMode}
+            theme={activeTheme}
           />
         )}
       </div>

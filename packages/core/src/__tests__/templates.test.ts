@@ -229,9 +229,9 @@ describe('expandDocBlocks', () => {
 
 describe('DEFAULT_THEME', () => {
   it('has required color properties', () => {
-    expect(DEFAULT_THEME).toHaveProperty('primary');
-    expect(DEFAULT_THEME).toHaveProperty('background');
-    expect(DEFAULT_THEME).toHaveProperty('text');
+    expect(DEFAULT_THEME.colors).toHaveProperty('primary');
+    expect(DEFAULT_THEME.colors).toHaveProperty('background');
+    expect(DEFAULT_THEME.colors).toHaveProperty('text');
   });
 });
 

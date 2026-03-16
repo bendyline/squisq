@@ -14,6 +14,7 @@
 
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import type { Doc, Block, DocBlock } from '@bendyline/squisq/schemas';
+import type { Theme } from '@bendyline/squisq/schemas';
 import { getBlockAtTime } from '@bendyline/squisq/schemas';
 import {
   expandDocBlocks,
@@ -57,6 +58,7 @@ export function useDocPlayback(
   currentTime: number,
   viewport: ViewportConfig = VIEWPORT_PRESETS.landscape,
   renderMode: boolean = false,
+  theme?: Theme,
 ): PlaybackState & PlaybackActions {
   const [transitionState, setTransitionState] = useState<{
     entering: boolean;
@@ -89,13 +91,14 @@ export function useDocPlayback(
         audioSegments,
         viewport,
         persistentLayers: script.persistentLayers,
+        theme,
       });
       return expanded;
     }
 
     // All raw blocks, use as-is
     return script.blocks;
-  }, [script?.blocks, script?.audio?.segments, script?.persistentLayers, viewport]);
+  }, [script?.blocks, script?.audio?.segments, script?.persistentLayers, viewport, theme]);
 
   // Find current block based on time
   const currentBlock = useMemo(() => getBlockAtTime(blocks, currentTime), [blocks, currentTime]);

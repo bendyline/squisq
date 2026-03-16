@@ -10,12 +10,13 @@
 
 import type { Layer } from '../../schemas/Doc.js';
 import type { FullBleedQuoteInput, TemplateContext } from '../../schemas/BlockTemplates.js';
-import { COLOR_SCHEMES, scaledFontSize } from '../../schemas/BlockTemplates.js';
+import { scaledFontSize } from '../../schemas/BlockTemplates.js';
+import { resolveColorScheme } from '../utils/themeUtils.js';
 
 export function fullBleedQuote(input: FullBleedQuoteInput, context: TemplateContext): Layer[] {
   const { text, colorScheme = 'blue' } = input;
   const { theme } = context;
-  const colors = COLOR_SCHEMES[colorScheme] ?? COLOR_SCHEMES.blue;
+  const colors = resolveColorScheme(context, colorScheme);
 
   // Massive font for dramatic impact
   const textFontSize = scaledFontSize(120, context, true);
@@ -27,7 +28,7 @@ export function fullBleedQuote(input: FullBleedQuoteInput, context: TemplateCont
       id: 'bg',
       content: {
         shape: 'rect',
-        fill: `radial-gradient(ellipse at 50% 50%, ${theme.backgroundLight} 0%, #000000 100%)`,
+        fill: `radial-gradient(ellipse at 50% 50%, ${theme.colors.backgroundLight} 0%, #000000 100%)`,
       },
       position: { x: 0, y: 0, width: '100%', height: '100%' },
     },

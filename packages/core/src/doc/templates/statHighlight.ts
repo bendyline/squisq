@@ -12,14 +12,15 @@
 
 import type { Layer } from '../../schemas/Doc.js';
 import type { StatHighlightInput, TemplateContext } from '../../schemas/BlockTemplates.js';
-import { COLOR_SCHEMES, scaledFontSize } from '../../schemas/BlockTemplates.js';
+import { scaledFontSize } from '../../schemas/BlockTemplates.js';
+import { resolveColorScheme } from '../utils/themeUtils.js';
 import { createAccentLayers, getAccentLayout, adjustY, DEFAULT_LAYOUT } from './accentImage.js';
 import { createBackgroundLayer } from './captionUtils.js';
 
 export function statHighlight(input: StatHighlightInput, context: TemplateContext): Layer[] {
   const { stat, description, detail, colorScheme = 'blue', accentImage } = input;
   const { theme } = context;
-  const colors = COLOR_SCHEMES[colorScheme] ?? COLOR_SCHEMES.blue;
+  const colors = resolveColorScheme(context, colorScheme);
 
   // Get layout adjustments if accent image is present
   const accentLayout = accentImage ? getAccentLayout(accentImage.position) : DEFAULT_LAYOUT;
@@ -30,7 +31,10 @@ export function statHighlight(input: StatHighlightInput, context: TemplateContex
   const detailFontSize = scaledFontSize(26, context, false);
 
   const layers: Layer[] = [
-    createBackgroundLayer('bg', `linear-gradient(180deg, ${theme.background} 0%, #0f1520 100%)`),
+    createBackgroundLayer(
+      'bg',
+      `linear-gradient(180deg, ${theme.colors.background} 0%, #0f1520 100%)`,
+    ),
   ];
 
   // Add accent image layers (behind text, after background)
@@ -67,7 +71,7 @@ export function statHighlight(input: StatHighlightInput, context: TemplateContex
       text: description,
       style: {
         fontSize: descFontSize,
-        color: theme.textMuted,
+        color: theme.colors.textMuted,
         textAlign: 'center',
         lineHeight: 1.6,
         shadow: !!accentImage,

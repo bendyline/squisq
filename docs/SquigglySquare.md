@@ -129,6 +129,64 @@ Below is a concise reference of built-in templates (names match the `template` p
   - Inputs: `videoSrc`, `quote`, `attribution`
   - Usage: combination of video + pull-quote
 
+## YAML Frontmatter
+
+Squisq Markdown documents can include a YAML frontmatter block at the very top (delimited by `---`). Frontmatter properties set document-level rendering hints. The editor's Preview panel reads these values automatically; they can also be overridden via the toolbar dropdowns.
+
+```yaml
+---
+document-render-as: landscape
+display-mode: slideshow
+theme: cinematic
+---
+```
+
+### `document-render-as`
+
+Sets the default viewport aspect ratio for rendered output.
+
+| Value                                     | Resolved preset            |
+| ----------------------------------------- | -------------------------- |
+| `landscape`, `16:9`, `widescreen`         | 16:9 Landscape (1920×1080) |
+| `portrait`, `9:16`, `vertical`, `stories` | 9:16 Portrait (1080×1920)  |
+| `square`, `1:1`                           | 1:1 Square (1080×1080)     |
+| `standard`, `4:3`                         | 4:3 Standard (1440×1080)   |
+
+Default when omitted: `landscape`.
+
+### `display-mode`
+
+Sets the default display/playback mode.
+
+| Value                                         | Resolved mode                                                      |
+| --------------------------------------------- | ------------------------------------------------------------------ |
+| `video`                                       | Video — timeline playback with audio sync, scrub bar, auto-advance |
+| `slideshow`, `slides`, `presentation`, `deck` | Slideshow — prev/next navigation, no auto-advance                  |
+| `linear`, `document`, `scroll`, `page`        | Document — long-scrolling readable view, no audio                  |
+
+Default when omitted: `video`.
+
+### `theme`
+
+Sets the visual theme for rendered blocks (colors, typography, style).
+
+| Value           | Theme                                        |
+| --------------- | -------------------------------------------- |
+| `documentary`   | Documentary (default) — classic dark palette |
+| `minimalist`    | Minimalist — clean, reduced contrast         |
+| `bold`          | Bold — high-contrast, vibrant                |
+| `morning-light` | Morning Light — warm, light tones            |
+| `tech-dark`     | Tech Dark — deep blue-black, neon accents    |
+| `magazine`      | Magazine — editorial, sophisticated          |
+| `cinematic`     | Cinematic — moody, filmic palette            |
+| `warm-earth`    | Warm Earth — natural, earthy tones           |
+
+Accepts hyphenated ids (`morning-light`) or spaced names (`morning light`). Default when omitted: `documentary`.
+
+### Custom frontmatter
+
+Any other YAML key-value pairs in the frontmatter block are preserved in `Doc.frontmatter` as a `Record<string, unknown>` and are available to consuming applications. Squisq itself only reads the three properties above.
+
 Notes on arrays and complex attributes
 
 - For multi-value inputs (e.g. `images`, `items`, `markers`), use a comma-separated string and let the template parse it. Example: `images="a.jpg,b.jpg,c.jpg"`.
@@ -153,12 +211,3 @@ Where to look in the code
 - The editor extension for heading annotations is in `packages/editor-react/src/TemplateAnnotation.ts` and `tiptapBridge.ts`.
 
 See also: `docs/API.md` for the formal API reference and `@bendyline/squisq/schemas` for `TemplateBlock`/`TemplateBlockInput` types.
-
----
-
-If you'd like, I can also:
-
-- Add a short example authoring guide to the dev site sample docs.
-- Add convenience helpers to parse common attribute shapes (e.g., `parseLatLng`, `parseCsv`).
-
-Would you like me to commit and push `docs/SquigglySquare.md` now?

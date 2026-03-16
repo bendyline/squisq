@@ -21,10 +21,10 @@ squisq/
   packages/
     core/                   # @bendyline/squisq
       src/
-        schemas/            # Doc, BlockTemplates, Viewport, LayoutStrategy, Types
+        schemas/            # Doc, BlockTemplates, Viewport, LayoutStrategy, Theme, themeLibrary
         doc/
           templates/        # 17 block templates (titleBlock, statHighlight, etc.)
-          utils/            # animationUtils
+          utils/            # animationUtils, themeUtils
         spatial/            # Haversine distance, Geohash encode/decode
         storage/            # StorageAdapter interface, Memory + LocalStorage adapters
     react/                  # @bendyline/squisq-react
@@ -87,8 +87,8 @@ npm run format             # Prettier format
 
 `@bendyline/squisq` exposes subpath entries:
 
-- `@bendyline/squisq/schemas` — Type definitions (Doc, BlockTemplates, Viewport)
-- `@bendyline/squisq/doc` — Template registry + all 17 templates + animationUtils
+- `@bendyline/squisq/schemas` — Type definitions (Doc, BlockTemplates, Viewport, Theme, themeLibrary)
+- `@bendyline/squisq/doc` — Template registry + all 17 templates + animationUtils + themeUtils
 - `@bendyline/squisq/spatial` — Haversine, Geohash utilities
 - `@bendyline/squisq/storage` — StorageAdapter, MemoryStorageAdapter, LocalStorageAdapter
 - `@bendyline/squisq/markdown` — Markdown parsing, stringifying, AST types (MarkdownDocument), tree utilities
@@ -140,6 +140,32 @@ npm run format             # Prettier format
 - **MarkdownDocument as pivot format** — format converters (DOCX, PDF) use core's markdown AST as the intermediate representation
 - **Unified/remark processor typing** — the chained `.use()` pattern requires `any` for the processor variable; this is documented with eslint-disable comments and is the one accepted `any` exception
 - **Editor isolation** — heavy editor dependencies (Monaco, Tiptap) are isolated in editor-react, separate from the lighter react package
+
+## Theme System
+
+The Theme system provides unified visual styling for rendered docs. A `Theme` bundles colors, typography, visual style, and render-style algorithms into a single JSON-serializable object.
+
+**Architecture:**
+
+- `Theme` type in `schemas/Theme.ts` — defines `ThemeColorPalette`, `ThemeTypography`, `ThemeStyle`, `RenderStyle`, and per-theme `colorSchemes`
+- `themeLibrary.ts` — 8 built-in themes: documentary, minimalist, bold, morning-light, tech-dark, magazine, cinematic, warm-earth
+- `themeUtils.ts` — template-facing helpers: `resolveColorScheme()`, `themedFontSize()`, `getTemplateHint()`, etc.
+- `Doc.themeId` — optional pointer to a theme; resolved at render time via `resolveTheme()`
+- `createTheme(base, overrides)` — deep-merge utility for customizing a built-in theme
+
+**How templates use themes:**
+
+- Colors: `theme.colors.background`, `theme.colors.text`, `theme.colors.primary`, etc.
+- Color schemes: `resolveColorScheme(context, 'blue')` (not `COLOR_SCHEMES[name]`)
+- Font scaling: `themedFontSize(basePx, context, isTitle)` respects `theme.typography.fontScale`
+- Render hints: `getTemplateHint(context, 'templateName', 'key', fallback)`
+
+**Key rules:**
+
+- Templates access `theme.colors.*` (not `theme.background` directly)
+- Color scheme names are strings; each theme defines its own set via `theme.colorSchemes`
+- `DEFAULT_THEME` is the documentary theme and ships as the fallback
+- `RenderStyle` controls layout overrides, default animations, ambient motion, and per-template hints
 
 ## Type Safety Conventions
 

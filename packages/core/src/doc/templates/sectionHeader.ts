@@ -11,12 +11,13 @@
 
 import type { Layer, AnimationType } from '../../schemas/Doc.js';
 import type { SectionHeaderInput, TemplateContext } from '../../schemas/BlockTemplates.js';
-import { COLOR_SCHEMES, scaledFontSize } from '../../schemas/BlockTemplates.js';
+import { scaledFontSize } from '../../schemas/BlockTemplates.js';
+import { resolveColorScheme } from '../utils/themeUtils.js';
 
 export function sectionHeader(input: SectionHeaderInput, context: TemplateContext): Layer[] {
   const { title, colorScheme = 'blue', imageSrc, imageAlt, ambientMotion } = input;
   const { layout } = context;
-  const colors = COLOR_SCHEMES[colorScheme] ?? COLOR_SCHEMES.blue;
+  const colors = resolveColorScheme(context, colorScheme);
 
   // Scale font sizes for viewport
   const titleFontSize = scaledFontSize(72, context, true);

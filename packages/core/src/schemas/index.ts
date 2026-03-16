@@ -1,6 +1,8 @@
 export * from './Types.js';
 export * from './Doc.js';
 export * from './BlockTemplates.js';
+export * from './Theme.js';
+export * from './themeLibrary.js';
 export * from './Viewport.js';
 export {
   getLayoutHints,
