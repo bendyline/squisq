@@ -15,13 +15,13 @@ npm install @bendyline/squisq-formats @bendyline/squisq
 
 ## Supported Formats
 
-| Format | Import | Export | Subpath |
-|---|---|---|---|
-| **DOCX** (Word) | ✅ | ✅ | `@bendyline/squisq-formats/docx` |
-| **PDF** | ✅ | ✅ | `@bendyline/squisq-formats/pdf` |
-| **HTML** | — | ✅ | `@bendyline/squisq-formats/html` |
+| Format                | Import  | Export  | Subpath                          |
+| --------------------- | ------- | ------- | -------------------------------- |
+| **DOCX** (Word)       | ✅      | ✅      | `@bendyline/squisq-formats/docx` |
+| **PDF**               | ✅      | ✅      | `@bendyline/squisq-formats/pdf`  |
+| **HTML**              | —       | ✅      | `@bendyline/squisq-formats/html` |
 | **PPTX** (PowerPoint) | planned | planned | `@bendyline/squisq-formats/pptx` |
-| **XLSX** (Excel) | planned | planned | `@bendyline/squisq-formats/xlsx` |
+| **XLSX** (Excel)      | planned | planned | `@bendyline/squisq-formats/xlsx` |
 
 ## Quick Examples
 
@@ -40,7 +40,11 @@ const markdownDoc = await docxToMarkdownDoc(docxBuffer);
 ### PDF
 
 ```ts
-import { markdownDocToPdf, pdfToMarkdownDoc, configurePdfWorker } from '@bendyline/squisq-formats/pdf';
+import {
+  markdownDocToPdf,
+  pdfToMarkdownDoc,
+  configurePdfWorker,
+} from '@bendyline/squisq-formats/pdf';
 
 // Configure the PDF.js worker (required for import)
 configurePdfWorker('/pdf.worker.min.mjs');
@@ -75,14 +79,14 @@ import { docToPdf, pdfToDoc } from '@bendyline/squisq-formats/pdf';
 
 ## Subpath Exports
 
-| Subpath | Contents |
-|---|---|
-| `@bendyline/squisq-formats/docx` | DOCX import/export |
-| `@bendyline/squisq-formats/pdf` | PDF import/export + worker config |
-| `@bendyline/squisq-formats/html` | HTML export |
+| Subpath                           | Contents                                                       |
+| --------------------------------- | -------------------------------------------------------------- |
+| `@bendyline/squisq-formats/docx`  | DOCX import/export                                             |
+| `@bendyline/squisq-formats/pdf`   | PDF import/export + worker config                              |
+| `@bendyline/squisq-formats/html`  | HTML export                                                    |
 | `@bendyline/squisq-formats/ooxml` | Shared OOXML infrastructure (ZIP reader/writer, XML utilities) |
-| `@bendyline/squisq-formats/pptx` | PPTX stubs (not yet implemented) |
-| `@bendyline/squisq-formats/xlsx` | XLSX stubs (not yet implemented) |
+| `@bendyline/squisq-formats/pptx`  | PPTX stubs (not yet implemented)                               |
+| `@bendyline/squisq-formats/xlsx`  | XLSX stubs (not yet implemented)                               |
 
 ## Architecture
 
@@ -90,11 +94,11 @@ All converters use Squisq's `MarkdownDocument` AST as the pivot format. Importin
 
 ## Related Packages
 
-| Package | Description |
-|---|---|
-| [@bendyline/squisq](https://www.npmjs.com/package/@bendyline/squisq) | Headless core — schemas, templates, spatial, markdown, storage |
-| [@bendyline/squisq-react](https://www.npmjs.com/package/@bendyline/squisq-react) | React components for rendering docs |
-| [@bendyline/squisq-editor-react](https://www.npmjs.com/package/@bendyline/squisq-editor-react) | React editor with raw/WYSIWYG/preview modes |
+| Package                                                                                        | Description                                                    |
+| ---------------------------------------------------------------------------------------------- | -------------------------------------------------------------- |
+| [@bendyline/squisq](https://www.npmjs.com/package/@bendyline/squisq)                           | Headless core — schemas, templates, spatial, markdown, storage |
+| [@bendyline/squisq-react](https://www.npmjs.com/package/@bendyline/squisq-react)               | React components for rendering docs                            |
+| [@bendyline/squisq-editor-react](https://www.npmjs.com/package/@bendyline/squisq-editor-react) | React editor with raw/WYSIWYG/preview modes                    |
 
 ## License
 

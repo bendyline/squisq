@@ -28,18 +28,18 @@ function App() {
 
 ## Editor Views
 
-| View | Powered By | Description |
-|---|---|---|
-| **Raw** | Monaco Editor | Full Markdown source editing with syntax highlighting |
-| **WYSIWYG** | Tiptap | Rich text editing with a formatting toolbar |
-| **Preview** | DocPlayer | Live rendered block preview with theme selection |
+| View        | Powered By    | Description                                           |
+| ----------- | ------------- | ----------------------------------------------------- |
+| **Raw**     | Monaco Editor | Full Markdown source editing with syntax highlighting |
+| **WYSIWYG** | Tiptap        | Rich text editing with a formatting toolbar           |
+| **Preview** | DocPlayer     | Live rendered block preview with theme selection      |
 
 ## Components
 
-| Component | Description |
-|---|---|
-| `EditorShell` | Top-level editor — combines all three views with a view switcher |
-| `EditorProvider` | Context provider for editor state management |
+| Component        | Description                                                      |
+| ---------------- | ---------------------------------------------------------------- |
+| `EditorShell`    | Top-level editor — combines all three views with a view switcher |
+| `EditorProvider` | Context provider for editor state management                     |
 
 ## Context API
 
@@ -65,11 +65,11 @@ import '@bendyline/squisq-editor-react/styles';
 
 ## Related Packages
 
-| Package | Description |
-|---|---|
-| [@bendyline/squisq](https://www.npmjs.com/package/@bendyline/squisq) | Headless core — schemas, templates, spatial, markdown, storage |
-| [@bendyline/squisq-react](https://www.npmjs.com/package/@bendyline/squisq-react) | React components for rendering docs |
-| [@bendyline/squisq-formats](https://www.npmjs.com/package/@bendyline/squisq-formats) | DOCX, PDF, HTML import/export |
+| Package                                                                              | Description                                                    |
+| ------------------------------------------------------------------------------------ | -------------------------------------------------------------- |
+| [@bendyline/squisq](https://www.npmjs.com/package/@bendyline/squisq)                 | Headless core — schemas, templates, spatial, markdown, storage |
+| [@bendyline/squisq-react](https://www.npmjs.com/package/@bendyline/squisq-react)     | React components for rendering docs                            |
+| [@bendyline/squisq-formats](https://www.npmjs.com/package/@bendyline/squisq-formats) | DOCX, PDF, HTML import/export                                  |
 
 ## License
 

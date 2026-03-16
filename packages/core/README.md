@@ -15,13 +15,13 @@ npm install @bendyline/squisq
 
 ## What's Inside
 
-| Module | Description |
-|---|---|
-| **schemas** | Type definitions — `Doc`, `BlockTemplate`, `Viewport`, `Theme`, `LayoutStrategy` |
-| **doc** | Template registry, 17 block templates, animation/theme utilities |
-| **markdown** | Markdown parsing, stringifying, AST types (`MarkdownDocument`), tree utilities |
-| **spatial** | Haversine distance, Geohash encode/decode |
-| **storage** | `StorageAdapter` interface, Memory + LocalStorage + LocalForage adapters |
+| Module       | Description                                                                      |
+| ------------ | -------------------------------------------------------------------------------- |
+| **schemas**  | Type definitions — `Doc`, `BlockTemplate`, `Viewport`, `Theme`, `LayoutStrategy` |
+| **doc**      | Template registry, 17 block templates, animation/theme utilities                 |
+| **markdown** | Markdown parsing, stringifying, AST types (`MarkdownDocument`), tree utilities   |
+| **spatial**  | Haversine distance, Geohash encode/decode                                        |
+| **storage**  | `StorageAdapter` interface, Memory + LocalStorage + LocalForage adapters         |
 
 ## Subpath Imports
 
@@ -74,10 +74,10 @@ const theme = resolveTheme('cinematic');
 
 ## Related Packages
 
-| Package | Description |
-|---|---|
-| [@bendyline/squisq-react](https://www.npmjs.com/package/@bendyline/squisq-react) | React components for rendering docs |
-| [@bendyline/squisq-formats](https://www.npmjs.com/package/@bendyline/squisq-formats) | DOCX, PDF, HTML import/export |
+| Package                                                                                        | Description                                 |
+| ---------------------------------------------------------------------------------------------- | ------------------------------------------- |
+| [@bendyline/squisq-react](https://www.npmjs.com/package/@bendyline/squisq-react)               | React components for rendering docs         |
+| [@bendyline/squisq-formats](https://www.npmjs.com/package/@bendyline/squisq-formats)           | DOCX, PDF, HTML import/export               |
 | [@bendyline/squisq-editor-react](https://www.npmjs.com/package/@bendyline/squisq-editor-react) | React editor with raw/WYSIWYG/preview modes |
 
 ## License
