@@ -23,42 +23,21 @@
 import type { Layer, Block, Transition, MapTileStyle, MapMarker } from './Doc.js';
 import type { ViewportConfig, ViewportOrientation } from './Viewport.js';
 import type { LayoutHints } from './LayoutStrategy.js';
+import type { Theme } from './Theme.js';
 import { VIEWPORT_PRESETS, getViewportOrientation, calculateFontScale } from './Viewport.js';
 import { getLayoutHints, scaledFontSize as scaleFontSize } from './LayoutStrategy.js';
 
-// ============================================
-// Theme System
-// ============================================
-
 /**
- * Color palette for a doc theme.
+ * Name of a color scheme defined in the active theme's `colorSchemes` map.
+ * Templates reference schemes by name (e.g. 'blue', 'green') and the theme
+ * resolves them to actual colors at render time via `resolveColorScheme()`.
  */
-export interface ThemeColors {
-  /** Primary accent color */
-  primary: string;
-  /** Secondary accent color */
-  secondary: string;
-  /** Background color (dark) */
-  background: string;
-  /** Lighter background for contrast */
-  backgroundLight: string;
-  /** Main text color */
-  text: string;
-  /** Muted/secondary text color */
-  textMuted: string;
-  /** Highlight/emphasis color */
-  highlight: string;
-  /** Warning/alert color */
-  warning: string;
-  /** Default font family for body text */
-  fontFamily?: string;
-  /** Font family for titles/headings */
-  titleFontFamily?: string;
-}
+export type ColorScheme = string;
 
 /**
  * Default font family for doc text.
  * PT Serif provides a classic, readable appearance for documentary-style content.
+ * Used as a fallback in TextLayer when no font is specified.
  */
 export const DEFAULT_DOC_FONT = '"PT Serif", Georgia, "Times New Roman", serif';
 
@@ -66,11 +45,6 @@ export const DEFAULT_DOC_FONT = '"PT Serif", Georgia, "Times New Roman", serif';
  * Default font family for titles.
  */
 export const DEFAULT_TITLE_FONT = '"PT Serif", Georgia, "Times New Roman", serif';
-
-/**
- * Preset color schemes for section headers and accents.
- */
-export type ColorScheme = 'blue' | 'green' | 'purple' | 'red' | 'orange' | 'teal';
 
 // ============================================
 // Accent Image System
@@ -105,33 +79,7 @@ export interface AccentImage {
   license?: string;
 }
 
-/**
- * Color definitions for each scheme.
- */
-export const COLOR_SCHEMES: Record<ColorScheme, { bg: string; text: string; accent: string }> = {
-  blue: { bg: '#1a365d', text: '#63b3ed', accent: '#90cdf4' },
-  green: { bg: '#22543d', text: '#9ae6b4', accent: '#68d391' },
-  purple: { bg: '#44337a', text: '#d6bcfa', accent: '#b794f4' },
-  red: { bg: '#742a2a', text: '#fc8181', accent: '#feb2b2' },
-  orange: { bg: '#744210', text: '#fbd38d', accent: '#f6ad55' },
-  teal: { bg: '#234e52', text: '#81e6d9', accent: '#4fd1c5' },
-};
 
-/**
- * Default theme for documentary-style stories.
- */
-export const DEFAULT_THEME: ThemeColors = {
-  primary: '#3d5a80',
-  secondary: '#63b3ed',
-  background: '#1a202c',
-  backgroundLight: '#2d3748',
-  text: '#ffffff',
-  textMuted: '#a0aec0',
-  highlight: '#63b3ed',
-  warning: '#fc8181',
-  fontFamily: DEFAULT_DOC_FONT,
-  titleFontFamily: DEFAULT_TITLE_FONT,
-};
 
 // ============================================
 // Template Input Types
@@ -526,8 +474,8 @@ export function isTemplateBlock(block: DocBlock): block is TemplateBlock {
  * Includes viewport information for multi-aspect ratio support.
  */
 export interface TemplateContext {
-  /** Theme colors */
-  theme: ThemeColors;
+  /** Full theme (colors, typography, style, renderStyle, colorSchemes) */
+  theme: Theme;
   /** Block index in the doc */
   blockIndex: number;
   /** Total number of blocks */
@@ -546,7 +494,7 @@ export interface TemplateContext {
  * Create a template context with viewport-derived values.
  */
 export function createTemplateContext(
-  theme: ThemeColors,
+  theme: Theme,
   blockIndex: number,
   totalBlocks: number,
   viewport: ViewportConfig = VIEWPORT_PRESETS.landscape,
@@ -759,17 +707,4 @@ export interface ProgressIndicatorConfig {
   color?: string;
 }
 
-// ============================================
-// Style Presets
-// ============================================
 
-/**
- * Preset style configurations for easy doc styling.
- * AI/algorithms can use these without complex layer definitions.
- */
-export type DocStylePreset =
-  | 'minimal' // No persistent layers
-  | 'documentary' // Dark gradient + subtle title overlay
-  | 'branded' // Gradient + prominent title + thumbnail
-  | 'cinematic' // Hero blur background + minimal overlay
-  | 'clean'; // Solid dark background, no overlay

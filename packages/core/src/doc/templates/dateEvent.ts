@@ -105,7 +105,7 @@ export function dateEvent(input: DateEventInput, context: TemplateContext): Laye
         text: footer,
         style: {
           fontSize: footerFontSize,
-          color: theme.textMuted,
+          color: theme.colors.textMuted,
           shadow: !!accentImage,
         },
       },

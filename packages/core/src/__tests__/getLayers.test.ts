@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { getLayers, RenderContext } from '../doc/getLayers.js';
-import { DEFAULT_THEME, TemplateBlock, PersistentLayerConfig } from '../schemas/BlockTemplates.js';
+import { DEFAULT_THEME } from '../schemas/themeLibrary.js';
+import { TemplateBlock, PersistentLayerConfig } from '../schemas/BlockTemplates.js';
 import { VIEWPORT_PRESETS } from '../schemas/Viewport.js';
 import type { Block, Layer, TextLayer, ShapeLayer } from '../schemas/Doc.js';
 

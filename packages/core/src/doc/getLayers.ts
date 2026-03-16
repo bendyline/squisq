@@ -24,19 +24,19 @@
 
 import type { Block, Layer } from '../schemas/Doc.js';
 import type {
-  ThemeColors,
   TemplateBlock,
   TemplateContext,
   PersistentLayerConfig,
   DocBlock,
 } from '../schemas/BlockTemplates.js';
+import type { Theme } from '../schemas/Theme.js';
 import type { ViewportConfig } from '../schemas/Viewport.js';
 import { VIEWPORT_PRESETS } from '../schemas/Viewport.js';
 import {
   createTemplateContext,
-  DEFAULT_THEME,
   isTemplateBlock,
 } from '../schemas/BlockTemplates.js';
+import { DEFAULT_THEME } from '../schemas/themeLibrary.js';
 import { templateRegistry } from './templates/index.js';
 import { expandPersistentLayers } from './templates/persistentLayers.js';
 
@@ -52,8 +52,8 @@ import { expandPersistentLayers } from './templates/persistentLayers.js';
  * the doc (for template functions that vary output by index).
  */
 export interface RenderContext {
-  /** Theme colors for template rendering. Defaults to DEFAULT_THEME. */
-  theme?: ThemeColors;
+  /** Theme for template rendering. Defaults to DEFAULT_THEME (documentary). */
+  theme?: Theme;
 
   /** Target viewport configuration. Defaults to 16:9 landscape. */
   viewport?: ViewportConfig;

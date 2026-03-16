@@ -22,7 +22,7 @@
 import { createElement } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import type { Doc, MediaProvider } from '@bendyline/squisq/schemas';
-import type { ThemeColors } from '@bendyline/squisq/schemas';
+import type { Theme } from '@bendyline/squisq/schemas';
 import { DocPlayer } from './DocPlayer';
 import { LinearDocView } from './LinearDocView';
 import { MediaContext } from './hooks/MediaContext';
@@ -50,7 +50,7 @@ export interface MountOptions {
    */
   audio?: Record<string, string>;
   /** Optional theme override */
-  theme?: Partial<ThemeColors>;
+  theme?: Theme;
   /** Auto-play on mount (only for slideshow mode, default: false) */
   autoPlay?: boolean;
 }
@@ -159,7 +159,7 @@ const roots = new WeakMap<Element, Root>();
 export function mount(element: Element, doc: Doc, options: MountOptions = {}): void {
   injectCss();
 
-  const { mode = 'slideshow', basePath = '.', images, audio, autoPlay = false } = options;
+  const { mode = 'slideshow', basePath = '.', images, audio, autoPlay = false, theme } = options;
 
   // Rewrite audio URLs if map provided
   const finalDoc = audio ? rewriteAudioUrls(doc, audio) : doc;
@@ -173,6 +173,7 @@ export function mount(element: Element, doc: Doc, options: MountOptions = {}): v
     content = createElement(LinearDocView, {
       doc: finalDoc,
       basePath,
+      theme,
     });
   } else {
     content = createElement(DocPlayer, {
@@ -181,6 +182,7 @@ export function mount(element: Element, doc: Doc, options: MountOptions = {}): v
       displayMode: 'slideshow',
       autoPlay,
       showControls: true,
+      theme,
     });
   }
 

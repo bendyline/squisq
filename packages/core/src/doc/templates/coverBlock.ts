@@ -88,7 +88,7 @@ export function coverBlock(input: CoverBlockInput, context: TemplateContext): La
         style: {
           fontSize: titleFontSize,
           fontWeight: 'bold',
-          color: theme.text,
+          color: theme.colors.text,
           textAlign: 'center',
           shadow: true,
         },
@@ -113,7 +113,7 @@ export function coverBlock(input: CoverBlockInput, context: TemplateContext): La
         text: subtitle,
         style: {
           fontSize: subtitleFontSize,
-          color: theme.textMuted,
+          color: theme.colors.textMuted,
           textAlign: 'center',
           lineHeight: 1.5,
         },

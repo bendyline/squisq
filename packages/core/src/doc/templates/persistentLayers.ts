@@ -23,8 +23,8 @@ import type {
   TitleCaptionConfig,
   CornerBrandingConfig,
   ProgressIndicatorConfig,
-  DocStylePreset,
 } from '../../schemas/BlockTemplates.js';
+import type { Theme } from '../../schemas/Theme.js';
 import { isPersistentLayerTemplate } from '../../schemas/BlockTemplates.js';
 
 // ============================================
@@ -392,8 +392,16 @@ export function expandPersistentLayers(layers: PersistentLayer[] | undefined): L
 }
 
 // ============================================
-// Style Presets
+// Style Presets (legacy helper — prefer theme.persistentLayers)
 // ============================================
+
+/** Legacy style preset names. Prefer using `Theme.persistentLayers` directly. */
+export type DocStylePreset =
+  | 'minimal'
+  | 'documentary'
+  | 'branded'
+  | 'cinematic'
+  | 'clean';
 
 /**
  * Get a PersistentLayerConfig from a style preset.
@@ -508,4 +516,12 @@ export function getDocStyleConfig(
     default:
       return {};
   }
+}
+
+/**
+ * Get persistent layers from a Theme. Returns the theme's baked-in
+ * persistentLayers config, or an empty config when the theme has none.
+ */
+export function getPersistentLayersFromTheme(theme: Theme): PersistentLayerConfig {
+  return theme.persistentLayers ?? {};
 }

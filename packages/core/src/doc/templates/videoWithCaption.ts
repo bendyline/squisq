@@ -86,7 +86,7 @@ export function videoWithCaption(input: VideoWithCaptionInput, context: Template
         text: caption,
         style: {
           fontSize: captionFontSize,
-          color: theme.text,
+          color: theme.colors.text,
           textAlign: 'center',
           shadow: true,
         },

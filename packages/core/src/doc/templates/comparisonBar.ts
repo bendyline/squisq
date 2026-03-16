@@ -10,12 +10,13 @@
 
 import type { Layer } from '../../schemas/Doc.js';
 import type { ComparisonBarInput, TemplateContext } from '../../schemas/BlockTemplates.js';
-import { COLOR_SCHEMES, scaledFontSize } from '../../schemas/BlockTemplates.js';
+import { scaledFontSize } from '../../schemas/BlockTemplates.js';
+import { resolveColorScheme } from '../utils/themeUtils.js';
 
 export function comparisonBar(input: ComparisonBarInput, context: TemplateContext): Layer[] {
   const { leftLabel, leftValue, rightLabel, rightValue, unit, colorScheme = 'blue' } = input;
   const { theme } = context;
-  const colors = COLOR_SCHEMES[colorScheme] ?? COLOR_SCHEMES.blue;
+  const colors = resolveColorScheme(context, colorScheme);
 
   const labelFontSize = scaledFontSize(28, context, false);
   const valueFontSize = scaledFontSize(48, context, true);
@@ -49,7 +50,7 @@ export function comparisonBar(input: ComparisonBarInput, context: TemplateContex
       id: 'bg',
       content: {
         shape: 'rect',
-        fill: `linear-gradient(180deg, ${theme.background} 0%, #0f1520 100%)`,
+        fill: `linear-gradient(180deg, ${theme.colors.background} 0%, #0f1520 100%)`,
       },
       position: { x: 0, y: 0, width: '100%', height: '100%' },
     },
@@ -60,7 +61,7 @@ export function comparisonBar(input: ComparisonBarInput, context: TemplateContex
       id: 'left-label',
       content: {
         text: leftLabel,
-        style: { fontSize: labelFontSize, color: theme.textMuted },
+        style: { fontSize: labelFontSize, color: theme.colors.textMuted },
       },
       position: { x: `${barStartX}%`, y: `${topBarY - 8}%` },
     },
@@ -101,7 +102,7 @@ export function comparisonBar(input: ComparisonBarInput, context: TemplateContex
       id: 'right-label',
       content: {
         text: rightLabel,
-        style: { fontSize: labelFontSize, color: theme.textMuted },
+        style: { fontSize: labelFontSize, color: theme.colors.textMuted },
       },
       position: { x: `${barStartX}%`, y: `${bottomBarY - 8}%` },
     },

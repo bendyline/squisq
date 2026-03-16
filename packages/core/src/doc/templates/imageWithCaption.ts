@@ -81,7 +81,7 @@ export function imageWithCaption(input: ImageWithCaptionInput, context: Template
         style: {
           fontSize: titleFontSize,
           fontWeight: 'bold',
-          color: theme.text,
+          color: theme.colors.text,
           textAlign: 'center',
           shadow: true,
         },
@@ -104,7 +104,7 @@ export function imageWithCaption(input: ImageWithCaptionInput, context: Template
           text: subtitle,
           style: {
             fontSize: subtitleFontSize,
-            color: theme.textMuted,
+            color: theme.colors.textMuted,
             textAlign: 'center',
             lineHeight: 1.5,
           },
@@ -148,7 +148,7 @@ export function imageWithCaption(input: ImageWithCaptionInput, context: Template
         text: caption,
         style: {
           fontSize: captionFontSize,
-          color: theme.text,
+          color: theme.colors.text,
           textAlign: 'center',
           shadow: true,
         },

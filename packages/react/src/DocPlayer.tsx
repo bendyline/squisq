@@ -25,6 +25,7 @@
 import { Fragment, useRef, useState, useEffect, useCallback, useMemo } from 'react';
 import type { Doc, Block, TextLayer, StartBlockConfig, DocBlock } from '@bendyline/squisq/schemas';
 import { isTemplateBlock, getCaptionAtTime } from '@bendyline/squisq/schemas';
+import type { Theme } from '@bendyline/squisq/schemas';
 import { BlockRenderer } from './BlockRenderer';
 import { CaptionOverlay } from './CaptionOverlay';
 import { useAudioSync } from './hooks/useAudioSync';
@@ -157,6 +158,8 @@ interface DocPlayerProps {
    *  Used when the player is rendered in a constrained container (e.g., map overlay panel)
    *  whose shape differs from the window's. */
   forceViewport?: ViewportConfig;
+  /** Theme to use for rendering (default: DEFAULT_THEME from the theme library) */
+  theme?: Theme;
   /**
    * Display mode for the player.
    * - `'video'` (default) — Traditional video playback with play/pause, scrub bar, auto-advance.
@@ -188,6 +191,7 @@ export function DocPlayer({
   onBlockMarkers,
   forceViewport,
   displayMode = 'video',
+  theme,
 }: DocPlayerProps) {
   const isSlideshowMode = displayMode === 'slideshow';
   const isLinearMode = displayMode === 'linear';
@@ -278,14 +282,14 @@ export function DocPlayer({
     nextBlock: _nextBlock,
     prevBlock: _prevBlock,
     blocks: expandedBlocks,
-  } = useDocPlayback(script, currentTime, activeViewport, renderMode);
+  } = useDocPlayback(script, currentTime, activeViewport, renderMode, theme);
 
   // Expand cover block (startBlock) if present - uses active viewport
   const coverBlock = useMemo((): Block | null => {
     const startBlockConfig = script.startBlock as StartBlockConfig | undefined;
     if (!startBlockConfig) return null;
 
-    const context = createTemplateContext(DEFAULT_THEME, 0, 1, activeViewport);
+    const context = createTemplateContext(theme ?? DEFAULT_THEME, 0, 1, activeViewport);
     const layers = expandCoverBlock(startBlockConfig, context);
 
     return {
@@ -295,7 +299,7 @@ export function DocPlayer({
       audioSegment: -1,
       layers,
     };
-  }, [script.startBlock, activeViewport]);
+  }, [script.startBlock, activeViewport, theme]);
 
   // Render-mode cover block control: allows Playwright to force-show the cover block
   const [coverForced, setCoverForced] = useState(false);

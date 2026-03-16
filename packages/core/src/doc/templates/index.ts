@@ -16,15 +16,15 @@ import type {
   TemplateBlock,
   TemplateContext,
   TemplateRegistry,
-  ThemeColors,
   DocBlock,
   PersistentLayerConfig,
 } from '../../schemas/BlockTemplates.js';
+import type { Theme } from '../../schemas/Theme.js';
 import {
-  DEFAULT_THEME as defaultTheme,
   isTemplateBlock,
   createTemplateContext,
 } from '../../schemas/BlockTemplates.js';
+import { DEFAULT_THEME as defaultTheme } from '../../schemas/themeLibrary.js';
 import { expandPersistentLayers } from './persistentLayers.js';
 import type { ViewportConfig } from '../../schemas/Viewport.js';
 import { VIEWPORT_PRESETS } from '../../schemas/Viewport.js';
@@ -138,8 +138,8 @@ export interface AudioSegmentTiming {
  * Options for expanding doc blocks.
  */
 export interface ExpandDocBlocksOptions {
-  /** Theme colors (defaults to DEFAULT_THEME) */
-  theme?: ThemeColors;
+  /** Theme for template rendering (defaults to DEFAULT_THEME) */
+  theme?: Theme;
   /** Viewport configuration (defaults to 16:9 landscape) */
   viewport?: ViewportConfig;
   /** Persistent layers for visual consistency across blocks */
@@ -165,13 +165,9 @@ export interface ExpandDocBlocksOptions {
  */
 export function expandDocBlocks(
   blocks: DocBlock[],
-  options: ExpandDocBlocksOptions | ThemeColors = {},
+  options: ExpandDocBlocksOptions = {},
 ): Block[] {
-  // Handle legacy signature: expandDocBlocks(blocks, theme)
-  const opts: ExpandDocBlocksOptions =
-    options && 'primary' in options
-      ? { theme: options as ThemeColors }
-      : (options as ExpandDocBlocksOptions);
+  const opts: ExpandDocBlocksOptions = options;
 
   const theme = opts.theme ?? defaultTheme;
   const viewport = opts.viewport ?? VIEWPORT_PRESETS.landscape;
@@ -520,18 +516,18 @@ export function hasTemplate(name: string): boolean {
 // Re-export types and utilities from schemas
 export {
   isTemplateBlock,
-  DEFAULT_THEME,
   createTemplateContext,
   scaledFontSize,
 } from '../../schemas/BlockTemplates.js';
 export type {
   TemplateBlock,
   DocBlock,
-  ThemeColors,
   TemplateContext,
   PersistentLayerConfig,
-  DocStylePreset,
 } from '../../schemas/BlockTemplates.js';
+export { DEFAULT_THEME, resolveTheme, getAvailableThemes, getThemeSummaries } from '../../schemas/themeLibrary.js';
+export type { Theme, ThemeColorPalette, ThemeColorScheme, ThemeTypography, ThemeStyle, RenderStyle } from '../../schemas/Theme.js';
+export type { DocStylePreset } from './persistentLayers.js';
 // Re-export timing types (AudioSegmentTiming and ExpandDocBlocksOptions are already exported above)
 export { VIEWPORT_PRESETS, getViewport, getViewportOrientation } from '../../schemas/Viewport.js';
 export type {

@@ -70,6 +70,12 @@ export interface Doc {
    */
   persistentLayers?: import('./BlockTemplates.js').PersistentLayerConfig;
 
+  /**
+   * Optional theme identifier. Resolved at render time via `resolveTheme()`.
+   * When omitted, the renderer uses the default theme ('documentary').
+   */
+  themeId?: string;
+
   /** Optional metadata */
   meta?: {
     generatedAt?: string;

@@ -12,7 +12,8 @@
 
 import type { Layer } from '../../schemas/Doc.js';
 import type { TwoColumnInput, TemplateContext } from '../../schemas/BlockTemplates.js';
-import { COLOR_SCHEMES, scaledFontSize } from '../../schemas/BlockTemplates.js';
+import { scaledFontSize } from '../../schemas/BlockTemplates.js';
+import { resolveColorScheme } from '../utils/themeUtils.js';
 import { getTwoColumnPositions } from '../../schemas/LayoutStrategy.js';
 
 export function twoColumn(input: TwoColumnInput, context: TemplateContext): Layer[] {
@@ -22,8 +23,8 @@ export function twoColumn(input: TwoColumnInput, context: TemplateContext): Laye
   if (!left?.label || !right?.label) return [];
 
   const { theme, layout, orientation } = context;
-  const leftColors = COLOR_SCHEMES[leftColor];
-  const rightColors = COLOR_SCHEMES[rightColor];
+  const leftColors = resolveColorScheme(context, leftColor);
+  const rightColors = resolveColorScheme(context, rightColor);
 
   // Get column positions based on orientation
   const positions = getTwoColumnPositions(orientation);
@@ -44,7 +45,7 @@ export function twoColumn(input: TwoColumnInput, context: TemplateContext): Laye
       id: 'bg',
       content: {
         shape: 'rect',
-        fill: `linear-gradient(135deg, ${theme.background} 0%, #16202e 100%)`,
+        fill: `linear-gradient(135deg, ${theme.colors.background} 0%, #16202e 100%)`,
       },
       position: { x: 0, y: 0, width: '100%', height: '100%' },
     },
@@ -86,7 +87,7 @@ export function twoColumn(input: TwoColumnInput, context: TemplateContext): Laye
         text: header,
         style: {
           fontSize: headerFontSize,
-          color: theme.textMuted,
+          color: theme.colors.textMuted,
           textAlign: 'center',
         },
       },
@@ -148,7 +149,7 @@ export function twoColumn(input: TwoColumnInput, context: TemplateContext): Laye
         text: left.sublabel,
         style: {
           fontSize: sublabelFontSize,
-          color: theme.textMuted,
+          color: theme.colors.textMuted,
           textAlign: 'center',
           lineHeight: 1.4,
         },
@@ -219,7 +220,7 @@ export function twoColumn(input: TwoColumnInput, context: TemplateContext): Laye
         text: right.sublabel,
         style: {
           fontSize: sublabelFontSize,
-          color: theme.textMuted,
+          color: theme.colors.textMuted,
           textAlign: 'center',
           lineHeight: 1.4,
         },

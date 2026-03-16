@@ -20,7 +20,7 @@ export function titleBlock(input: TitleBlockInput, context: TemplateContext): La
   const titleFontSize = scaledFontSize(96, context, true);
   const subtitleFontSize = scaledFontSize(36, context, false);
 
-  const baseBg = backgroundColor || theme.primary;
+  const baseBg = backgroundColor || theme.colors.primary;
 
   const layers: Layer[] = [
     // Background — radial gradient for depth instead of flat color
@@ -29,7 +29,7 @@ export function titleBlock(input: TitleBlockInput, context: TemplateContext): La
       id: 'bg',
       content: {
         shape: 'rect',
-        fill: `radial-gradient(ellipse at 50% 40%, ${baseBg} 0%, ${theme.background} 100%)`,
+        fill: `radial-gradient(ellipse at 50% 40%, ${baseBg} 0%, ${theme.colors.background} 100%)`,
       },
       position: { x: 0, y: 0, width: '100%', height: '100%' },
     },
@@ -57,7 +57,7 @@ export function titleBlock(input: TitleBlockInput, context: TemplateContext): La
         style: {
           fontSize: titleFontSize,
           fontWeight: 'bold',
-          color: theme.text,
+          color: theme.colors.text,
           textAlign: 'center',
           shadow: true,
         },
@@ -81,7 +81,7 @@ export function titleBlock(input: TitleBlockInput, context: TemplateContext): La
         text: subtitle,
         style: {
           fontSize: subtitleFontSize,
-          color: theme.textMuted,
+          color: theme.colors.textMuted,
           textAlign: 'center',
           lineHeight: 1.5,
         },
