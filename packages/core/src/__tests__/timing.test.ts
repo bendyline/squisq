@@ -26,9 +26,8 @@ describe('estimateSpokenWordCount', () => {
   });
 
   it('expands a large number (175000)', () => {
-    // Recursive: "175"(hundreds) and "thousand" each go through estimateSpokenWordCount
-    // The multiplier compounds at each recursion level, giving ~8.06
-    expect(estimateSpokenWordCount('175000')).toBeCloseTo(8.06, 1);
+    // "one hundred seventy-five" (4 words) + "thousand" (1) = 5 words × 1.3
+    expect(estimateSpokenWordCount('175000')).toBeCloseTo(6.5, 1);
   });
 
   it('handles 2024 as a year', () => {

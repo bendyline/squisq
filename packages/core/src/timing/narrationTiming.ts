@@ -87,19 +87,22 @@ function estimateNumberWordCount(cleaned: string, num: number): number {
   let remaining = absNum;
 
   if (remaining >= 1_000_000_000) {
-    words += estimateSpokenWordCount(String(Math.floor(remaining / 1_000_000_000)));
+    const billions = Math.floor(remaining / 1_000_000_000);
+    words += estimateNumberWordCount(String(billions), billions);
     words += 1; // "billion"
     remaining %= 1_000_000_000;
   }
 
   if (remaining >= 1_000_000) {
-    words += estimateSpokenWordCount(String(Math.floor(remaining / 1_000_000)));
+    const millions = Math.floor(remaining / 1_000_000);
+    words += estimateNumberWordCount(String(millions), millions);
     words += 1; // "million"
     remaining %= 1_000_000;
   }
 
   if (remaining >= 1_000) {
-    words += estimateSpokenWordCount(String(Math.floor(remaining / 1_000)));
+    const thousands = Math.floor(remaining / 1_000);
+    words += estimateNumberWordCount(String(thousands), thousands);
     words += 1; // "thousand"
     remaining %= 1_000;
   }
@@ -129,11 +132,26 @@ export function countSpokenWords(text: string): number {
   let count = 0;
 
   for (const token of tokens) {
-    const stripped = token.replace(/[.,!?;:'"()[\]{}]/g, '');
+    // Strip punctuation only at token boundaries so internal punctuation
+    // (e.g., decimals like "3.14" or digit-grouping commas "1,000") is preserved.
+    const stripped = token.replace(/^[.,!?;:'"()[\]{}]+|[.,!?;:'"()[\]{}]+$/g, '');
     count += estimateSpokenWordCount(stripped);
 
-    const commaCount = (token.match(/,/g) || []).length;
-    count += commaCount * COMMA_PAUSE_PENALTY;
+    // Count only punctuation commas for pauses: exclude digit-grouping commas
+    // (i.e., commas with digits on both sides, like in "1,234").
+    let punctuationCommaCount = 0;
+    for (let i = 0; i < token.length; i++) {
+      if (token[i] === ',') {
+        const prev = i > 0 ? token[i - 1] : '';
+        const next = i < token.length - 1 ? token[i + 1] : '';
+        const prevIsDigit = prev >= '0' && prev <= '9';
+        const nextIsDigit = next >= '0' && next <= '9';
+        if (!(prevIsDigit && nextIsDigit)) {
+          punctuationCommaCount++;
+        }
+      }
+    }
+    count += punctuationCommaCount * COMMA_PAUSE_PENALTY;
   }
 
   return count;

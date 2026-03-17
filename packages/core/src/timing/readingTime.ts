@@ -37,7 +37,9 @@ export function estimateReadingTime(
   text: string,
   options?: ReadingTimeOptions,
 ): ReadingTimeEstimate {
-  const wpm = options?.wordsPerMinute ?? DEFAULT_READING_WPM;
+  const configuredWpm = options?.wordsPerMinute;
+  const wpm =
+    typeof configuredWpm === 'number' && configuredWpm > 0 ? configuredWpm : DEFAULT_READING_WPM;
   const words = text.split(/\s+/).filter((w) => w.length > 0).length;
   const minutes = words / wpm;
 
@@ -78,7 +80,9 @@ export function estimateNarrationTime(
   text: string,
   options?: NarrationTimeOptions,
 ): NarrationTimeEstimate {
-  const wps = options?.wordsPerSecond ?? DEFAULT_WORDS_PER_SECOND;
+  const providedWps = options?.wordsPerSecond;
+  const wps =
+    typeof providedWps === 'number' && providedWps > 0 ? providedWps : DEFAULT_WORDS_PER_SECOND;
   const spokenWords = countSpokenWords(text);
   const totalSeconds = spokenWords / wps;
 

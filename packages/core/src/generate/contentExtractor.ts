@@ -447,40 +447,75 @@ function extractComparisons(text: string): ExtractedElement[] {
   return elements;
 }
 
+/**
+ * Iterate over sentence-like spans in the text, yielding trimmed text and
+ * accurate start/end indices within the original string.
+ *
+ * Sentences are approximated as runs of non-[.!?] characters optionally
+ * followed by [.!?] delimiters. Leading/trailing whitespace is excluded.
+ */
+function forEachSentenceSpan(
+  text: string,
+  callback: (trimmed: string, start: number, end: number) => void,
+): void {
+  const sentenceRegex = /[^.!?]+[.!?]*/g;
+  let match: RegExpExecArray | null;
+
+  while ((match = sentenceRegex.exec(text)) !== null) {
+    const raw = match[0];
+    const rawStart = match.index;
+    const rawEnd = rawStart + raw.length;
+
+    // Compute leading whitespace to exclude
+    let leading = 0;
+    while (leading < raw.length && /\s/.test(raw[leading])) {
+      leading++;
+    }
+
+    // Compute trailing whitespace or sentence-ending punctuation to exclude
+    let trailing = 0;
+    while (trailing < raw.length - leading && /[\s.!?]/.test(raw[raw.length - 1 - trailing])) {
+      trailing++;
+    }
+
+    const start = rawStart + leading;
+    const end = rawEnd - trailing;
+    if (end <= start) continue;
+
+    const trimmed = text.slice(start, end);
+    if (!trimmed) continue;
+
+    callback(trimmed, start, end);
+  }
+}
+
 function extractFacts(text: string): ExtractedElement[] {
   const elements: ExtractedElement[] = [];
-  const sentences = text.split(/[.!?]+/).filter((s) => s.trim().length > 20);
 
-  for (const sentence of sentences) {
-    const trimmed = sentence.trim();
-    const position = text.indexOf(trimmed);
-    if (position < 0) continue;
+  forEachSentenceSpan(text, (trimmed, start, end) => {
+    if (trimmed.length <= 20) return;
 
     const score = scoreSentenceAsFact(trimmed);
-    if (score < 0.4) continue;
+    if (score < 0.4) return;
 
     elements.push({
       type: 'fact',
       text: trimmed,
       confidence: score,
-      sourcePosition: position,
-      endPosition: position + trimmed.length,
+      sourcePosition: start,
+      endPosition: end,
       data: { type: 'fact', fact: trimmed },
     });
-  }
+  });
+
   return elements;
 }
 
 function extractImpactLines(text: string): ExtractedElement[] {
   const elements: ExtractedElement[] = [];
-  const sentences = text.split(/[.!?]+/).filter((s) => s.trim().length > 0);
 
-  for (const sentence of sentences) {
-    const trimmed = sentence.trim();
-    if (trimmed.length < 8 || trimmed.length > 60) continue;
-
-    const position = text.indexOf(trimmed);
-    if (position < 0) continue;
+  forEachSentenceSpan(text, (trimmed, start, end) => {
+    if (trimmed.length < 8 || trimmed.length > 60) return;
 
     let score = 0.3;
     const lower = trimmed.toLowerCase();
@@ -492,22 +527,22 @@ function extractImpactLines(text: string): ExtractedElement[] {
       }
     }
 
-    const endIdx = position + trimmed.length;
-    if (endIdx < text.length && text[endIdx] === '!') score += 0.15;
+    if (end < text.length && text[end] === '!') score += 0.15;
     if (trimmed.length < 30) score += 0.1;
     if (trimmed.includes(',')) score -= 0.1;
     if (/^(and|but|or|the|a|an)\b/i.test(trimmed)) score -= 0.15;
-    if (score < 0.5) continue;
+    if (score < 0.5) return;
 
     elements.push({
       type: 'impactLine',
       text: trimmed,
       confidence: Math.min(1, score),
-      sourcePosition: position,
-      endPosition: position + trimmed.length,
+      sourcePosition: start,
+      endPosition: end,
       data: { type: 'impactLine', text: trimmed },
     });
-  }
+  });
+
   return elements;
 }
 

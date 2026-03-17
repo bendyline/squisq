@@ -18,4 +18,4 @@ export { mapElementToBlock } from './templateMapper.js';
 export type { MapOptions } from './templateMapper.js';
 
 export { generateSlideshow } from './slideshowGenerator.js';
-export type { SlideshowImage, SlideshowOptions } from './slideshowGenerator.js';
+export type { SlideshowDoc, SlideshowImage, SlideshowOptions } from './slideshowGenerator.js';

@@ -12,7 +12,7 @@
  * 6. Return a ready-to-render `Doc`
  */
 
-import type { Doc, Block } from '../schemas/Doc.js';
+import type { Doc } from '../schemas/Doc.js';
 import type {
   TemplateBlock,
   ImageWithCaptionInput,
@@ -27,6 +27,11 @@ import { estimateNarrationDuration } from '../timing/narrationTiming.js';
 import { SeededRandom, hashString } from '../random/SeededRandom.js';
 
 // ── Public types ───────────────────────────────────────────────────
+
+/** A Doc variant whose blocks are TemplateBlocks (no startTime required). */
+export type SlideshowDoc = Omit<Doc, 'blocks'> & {
+  blocks: TemplateBlock[];
+};
 
 /** Image metadata passed to the generator. */
 export interface SlideshowImage {
@@ -96,7 +101,7 @@ export function generateSlideshow(
   text: string,
   images: SlideshowImage[] = [],
   options: SlideshowOptions = {},
-): Doc {
+): SlideshowDoc {
   const {
     seed,
     title,
@@ -128,15 +133,15 @@ export function generateSlideshow(
 
   // Allocate slots between content and images
   const imageSlotCount = images.length > 0 ? Math.max(1, Math.round(slideBudget * 0.4)) : 0;
-  const contentSlotCount = slideBudget - imageSlotCount - (title ? 1 : 0);
+  const contentSlotCount = Math.max(0, slideBudget - imageSlotCount - (title ? 1 : 0));
 
   // Select top elements by confidence, then restore source order
   const sorted = [...allElements].sort((a, b) => b.confidence - a.confidence);
-  const selected = sorted.slice(0, Math.max(1, contentSlotCount));
+  const selected = sorted.slice(0, contentSlotCount);
   selected.sort((a, b) => a.sourcePosition - b.sourcePosition);
 
   // 4. Build slides
-  const blocks: (Block | TemplateBlock)[] = [];
+  const blocks: TemplateBlock[] = [];
   let slideIndex = 0;
   let colorIdx = 0;
   let accentIdx = 0;
@@ -223,10 +228,10 @@ export function generateSlideshow(
   }
 
   // 5. Assemble Doc
-  const doc: Doc = {
+  const doc: SlideshowDoc = {
     articleId: title ?? 'slideshow',
     duration: totalDuration,
-    blocks: blocks as Block[], // TemplateBlock satisfies the union at runtime
+    blocks,
     audio: {
       segments: [{ src: '', name: 'main', duration: totalDuration, startTime: 0 }],
     },
