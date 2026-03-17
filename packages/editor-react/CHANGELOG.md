@@ -1,3 +1,15 @@
+## @bendyline/squisq-editor-react [1.0.1](https://github.com/bendyline/squisq/compare/@bendyline/squisq-editor-react@1.0.0...@bendyline/squisq-editor-react@1.0.1) (2026-03-17)
+
+### Bug Fixes
+
+* Publish update 4 ([#8](https://github.com/bendyline/squisq/issues/8)) ([e987d4b](https://github.com/bendyline/squisq/commit/e987d4b6d79444af448524cdc766d0076efebfab))
+
+
+### Dependencies
+
+* **@bendyline/squisq:** upgraded to 1.0.1
+* **@bendyline/squisq-react:** upgraded to 1.0.1
+
 ## @bendyline/squisq-editor-react 1.0.0 (2026-03-17)
 
 ### Features
