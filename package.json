@@ -5,7 +5,7 @@
     "packages/*"
   ],
   "engines": {
-    "node": ">=22"
+    "node": ">=22.14.0"
   },
   "scripts": {
     "all": "npm install && npm run build && npm run lint && npm run format:check && npm run typecheck && npm test && npm run test:e2e",
@@ -32,7 +32,6 @@
     "@playwright/test": "^1.58.2",
     "@semantic-release/changelog": "^6.0.0",
     "@semantic-release/git": "^10.0.0",
-    "@semantic-release/npm": "^13.1.5",
     "conventional-changelog-conventionalcommits": "^8.0.0",
     "eslint": "^9.0.0",
     "eslint-config-prettier": "^10.0.0",
@@ -43,7 +42,7 @@
     "multi-semantic-release": "^3.0.0",
     "prettier": "^3.0.0",
     "rimraf": "^5.0.0",
-    "semantic-release": "^24.0.0",
+    "semantic-release": "^25.0.0",
     "tsup": "^8.0.0",
     "typescript": "^5.3.0",
     "typescript-eslint": "^8.0.0",
