@@ -1,6 +1,6 @@
 {
   "name": "@bendyline/squisq",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Headless utilities for doc/block rendering, spatial math, Markdown, and storage",
   "license": "MIT",
   "author": "Bendyline",
