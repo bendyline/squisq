@@ -65,6 +65,21 @@
       "types": "./dist/markdown/index.d.ts",
       "import": "./dist/markdown/index.js",
       "default": "./dist/markdown/index.js"
+    },
+    "./timing": {
+      "types": "./dist/timing/index.d.ts",
+      "import": "./dist/timing/index.js",
+      "default": "./dist/timing/index.js"
+    },
+    "./random": {
+      "types": "./dist/random/index.d.ts",
+      "import": "./dist/random/index.js",
+      "default": "./dist/random/index.js"
+    },
+    "./generate": {
+      "types": "./dist/generate/index.d.ts",
+      "import": "./dist/generate/index.js",
+      "default": "./dist/generate/index.js"
     }
   },
   "scripts": {

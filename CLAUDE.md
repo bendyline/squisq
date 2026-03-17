@@ -27,6 +27,9 @@ squisq/
           utils/            # animationUtils, themeUtils
         spatial/            # Haversine distance, Geohash encode/decode
         storage/            # StorageAdapter interface, Memory + LocalStorage adapters
+        timing/             # Narration/reading time estimation
+        random/             # SeededRandom (Mulberry32 PRNG)
+        generate/           # Content extraction + slideshow generator
     react/                  # @bendyline/squisq-react
       src/
         layers/             # ImageLayer, TextLayer, ShapeLayer, VideoLayer, MapLayer
@@ -93,6 +96,9 @@ npm run format             # Prettier format
 - `@bendyline/squisq/storage` — StorageAdapter, MemoryStorageAdapter, LocalStorageAdapter
 - `@bendyline/squisq/markdown` — Markdown parsing, stringifying, AST types (MarkdownDocument), tree utilities
 - `@bendyline/squisq/story` — Alias for `@bendyline/squisq/doc` (legacy compatibility)
+- `@bendyline/squisq/timing` — Narration/reading time estimation (estimateNarrationTime, estimateReadingTime, countSpokenWords)
+- `@bendyline/squisq/random` — SeededRandom PRNG, hashString
+- `@bendyline/squisq/generate` — Content extraction (extractContent, stripMarkdown) + slideshow generator (generateSlideshow)
 
 `@bendyline/squisq-react` exports everything from the root:
 
