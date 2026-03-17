@@ -84,8 +84,7 @@
   },
   "scripts": {
     "build": "tsup",
-    "typecheck": "tsc --noEmit",
-    "prepublishOnly": "npm run build"
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "hast-util-from-html": "^2.0.0",
