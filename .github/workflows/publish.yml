@@ -69,7 +69,7 @@ jobs:
         if: inputs.publish_release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: npx multi-semantic-release --ignore-packages=packages/site
+        run: npx multi-semantic-release --ignore-packages=packages/site --sequential-prepare
 
       # ── Pages ────────────────────────────────────────────────────
       - name: Build site
