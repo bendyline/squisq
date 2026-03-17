@@ -413,52 +413,57 @@ export function Toolbar({ className }: ToolbarProps) {
       </div>
 
       {/* Formatting buttons — hidden in preview mode */}
-      {!isPreview && <div className="squisq-toolbar-separator" />}
-      {!isPreview &&
-        groups.map((group, gi) => (
-          <div key={group} className="squisq-toolbar-group">
-            {gi > 0 && <div className="squisq-toolbar-separator" />}
-            {BUTTONS.filter((b) => b.group === group).map((btn) => {
-              const active = isWysiwyg ? isTiptapActive(tiptapEditor, btn.id) : false;
-              return (
-                <button
-                  key={btn.id}
-                  className={`squisq-toolbar-button${active ? ' squisq-toolbar-button--active' : ''}`}
-                  title={btn.title}
-                  onClick={() => handleAction(btn.id)}
-                  aria-label={btn.title}
-                  aria-pressed={active}
-                  style={btn.iconStyle}
-                >
-                  {btn.icon}
-                </button>
-              );
-            })}
-          </div>
-        ))}
+      {!isPreview && (
+        <div className="squisq-toolbar-actions">
+          {groups.map((group, gi) => (
+            <div key={group} className="squisq-toolbar-group">
+              {gi > 0 && <div className="squisq-toolbar-separator" />}
+              {BUTTONS.filter((b) => b.group === group).map((btn) => {
+                const active = isWysiwyg ? isTiptapActive(tiptapEditor, btn.id) : false;
+                return (
+                  <button
+                    key={btn.id}
+                    className={`squisq-toolbar-button${active ? ' squisq-toolbar-button--active' : ''}`}
+                    title={btn.title}
+                    onClick={() => handleAction(btn.id)}
+                    aria-label={btn.title}
+                    aria-pressed={active}
+                    style={btn.iconStyle}
+                  >
+                    {btn.icon}
+                  </button>
+                );
+              })}
+            </div>
+          ))}
 
-      {/* Template picker — visible when cursor is in a heading (WYSIWYG) */}
-      {!isPreview && currentTemplate !== null && (
-        <>
-          <div className="squisq-toolbar-separator" />
-          <div className="squisq-toolbar-group squisq-template-picker">
-            <label className="squisq-template-picker-label" title="Block template for this heading">
-              Template:
-              <select
-                className="squisq-template-picker-select"
-                value={currentTemplate}
-                onChange={(e) => handleTemplatePick(e.target.value)}
-              >
-                <option value="">— none —</option>
-                {templateNames.map((name) => (
-                  <option key={name} value={name}>
-                    {name}
-                  </option>
-                ))}
-              </select>
-            </label>
-          </div>
-        </>
+          {/* Template picker — visible when cursor is in a heading (WYSIWYG) */}
+          {currentTemplate !== null && (
+            <>
+              <div className="squisq-toolbar-separator" />
+              <div className="squisq-toolbar-group squisq-template-picker">
+                <label
+                  className="squisq-template-picker-label"
+                  title="Block template for this heading"
+                >
+                  Template:
+                  <select
+                    className="squisq-template-picker-select"
+                    value={currentTemplate}
+                    onChange={(e) => handleTemplatePick(e.target.value)}
+                  >
+                    <option value="">— none —</option>
+                    {templateNames.map((name) => (
+                      <option key={name} value={name}>
+                        {name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+            </>
+          )}
+        </div>
       )}
     </div>
   );

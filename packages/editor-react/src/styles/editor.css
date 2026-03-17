@@ -57,6 +57,7 @@
 .squisq-toolbar {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   padding: 4px 12px;
   gap: 2px;
 }
@@ -67,6 +68,12 @@
   display: flex;
   gap: 0;
   margin-right: 2px;
+}
+
+.squisq-toolbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
 }
 
 .squisq-toolbar-view-tab {
@@ -591,4 +598,18 @@
 .squisq-editor-shell[data-theme='dark'] .squisq-preview-inline-code {
   background: #374151;
   color: #e5e7eb;
+}
+
+/* ─── Responsive: toolbar wraps on narrow viewports ──── */
+
+@media (max-width: 640px) {
+  .squisq-toolbar-view-tabs {
+    margin-right: 0;
+  }
+
+  .squisq-toolbar-actions {
+    flex-basis: 100%;
+    flex-wrap: wrap;
+    padding-top: 2px;
+  }
 }

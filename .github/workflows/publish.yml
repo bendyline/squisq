@@ -69,7 +69,6 @@ jobs:
         if: inputs.publish_release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: npx multi-semantic-release
 
       # ── Pages ────────────────────────────────────────────────────
