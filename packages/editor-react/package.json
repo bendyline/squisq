@@ -46,6 +46,7 @@
   },
   "dependencies": {
     "@bendyline/squisq": "1.0.1",
+    "@bendyline/squisq-formats": "1.0.1",
     "@bendyline/squisq-react": "1.0.1",
     "@monaco-editor/react": "^4.6.0",
     "@tiptap/extension-placeholder": "^2.11.0",

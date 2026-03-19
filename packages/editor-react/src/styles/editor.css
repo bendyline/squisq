@@ -779,3 +779,152 @@
 .squisq-editor-shell[data-theme='dark'] .squisq-media-bin .squisq-media-bin-empty {
   color: #6b7280;
 }
+
+/* ============================================
+   Drop Zone Overlay
+   ============================================ */
+
+.squisq-drop-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(4px);
+}
+
+.squisq-drop-overlay-inner {
+  display: flex;
+  gap: 24px;
+  padding: 32px;
+  max-width: 90%;
+}
+
+.squisq-drop-zone {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 200px;
+  min-height: 180px;
+  padding: 24px 16px;
+  border: 2px dashed #94a3b8;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.9);
+  cursor: default;
+  transition: border-color 0.15s, background-color 0.15s, transform 0.15s;
+  text-align: center;
+  user-select: none;
+}
+
+.squisq-drop-zone--active {
+  transform: scale(1.04);
+}
+
+.squisq-drop-zone--disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+/* Variant colors */
+.squisq-drop-zone--media {
+  border-color: #60a5fa;
+}
+.squisq-drop-zone--media.squisq-drop-zone--active {
+  border-color: #3b82f6;
+  background: rgba(219, 234, 254, 0.9);
+}
+
+.squisq-drop-zone--insert {
+  border-color: #34d399;
+}
+.squisq-drop-zone--insert.squisq-drop-zone--active {
+  border-color: #10b981;
+  background: rgba(209, 250, 229, 0.9);
+}
+
+.squisq-drop-zone--replace {
+  border-color: #f97316;
+}
+.squisq-drop-zone--replace.squisq-drop-zone--active {
+  border-color: #ea580c;
+  background: rgba(255, 237, 213, 0.9);
+}
+
+/* Zone content */
+.squisq-drop-zone-icon {
+  font-size: 32px;
+  line-height: 1;
+}
+
+.squisq-drop-zone-label {
+  font-size: 16px;
+  font-weight: 600;
+  color: #1e293b;
+}
+
+.squisq-drop-zone-desc {
+  font-size: 12px;
+  color: #64748b;
+  line-height: 1.4;
+}
+
+/* Dark mode */
+.squisq-editor-shell[data-theme='dark'] .squisq-drop-overlay {
+  background: rgba(17, 24, 39, 0.88);
+}
+
+.squisq-editor-shell[data-theme='dark'] .squisq-drop-zone {
+  border-color: #4b5563;
+  background: rgba(31, 41, 55, 0.9);
+}
+
+.squisq-editor-shell[data-theme='dark'] .squisq-drop-zone--media {
+  border-color: #3b82f6;
+}
+.squisq-editor-shell[data-theme='dark'] .squisq-drop-zone--media.squisq-drop-zone--active {
+  border-color: #60a5fa;
+  background: rgba(30, 58, 138, 0.6);
+}
+
+.squisq-editor-shell[data-theme='dark'] .squisq-drop-zone--insert {
+  border-color: #10b981;
+}
+.squisq-editor-shell[data-theme='dark'] .squisq-drop-zone--insert.squisq-drop-zone--active {
+  border-color: #34d399;
+  background: rgba(6, 78, 59, 0.6);
+}
+
+.squisq-editor-shell[data-theme='dark'] .squisq-drop-zone--replace {
+  border-color: #ea580c;
+}
+.squisq-editor-shell[data-theme='dark'] .squisq-drop-zone--replace.squisq-drop-zone--active {
+  border-color: #f97316;
+  background: rgba(124, 45, 18, 0.6);
+}
+
+.squisq-editor-shell[data-theme='dark'] .squisq-drop-zone-label {
+  color: #e2e8f0;
+}
+
+.squisq-editor-shell[data-theme='dark'] .squisq-drop-zone-desc {
+  color: #94a3b8;
+}
+
+/* Responsive */
+@media (max-width: 640px) {
+  .squisq-drop-overlay-inner {
+    flex-direction: column;
+    gap: 16px;
+    align-items: center;
+  }
+
+  .squisq-drop-zone {
+    width: 100%;
+    max-width: 240px;
+    min-height: 120px;
+  }
+}

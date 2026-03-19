@@ -14,6 +14,9 @@ import { RawEditor } from './RawEditor';
 import { WysiwygEditor } from './WysiwygEditor';
 import { PreviewPanel } from './PreviewPanel';
 import { MediaBin } from './MediaBin';
+import { DropZoneOverlay } from './DropZoneOverlay';
+import { useFileDrop, type DropTarget } from './hooks/useFileDrop';
+import { partitionFiles, processMediaFiles, processTextFile, processTextFiles } from './utils/dropUtils';
 import type { MediaProvider } from '@bendyline/squisq/schemas';
 
 export type { EditorTheme } from './EditorContext';
@@ -90,13 +93,48 @@ interface EditorShellInnerProps {
 }
 
 function EditorShellInner({ basePath, onChange, className, height, mediaProvider, filesToggleEnabled }: EditorShellInnerProps) {
-  const { activeView, markdownSource, theme } = useEditorContext();
+  const { activeView, markdownSource, theme, insertAtCursor, replaceAll } = useEditorContext();
   const [showFiles, setShowFiles] = useState(false);
+  const [mediaRefreshKey, setMediaRefreshKey] = useState(0);
   const isDark = theme === 'dark';
 
   const handleToggleFiles = useCallback(() => {
     setShowFiles((prev) => !prev);
   }, []);
+
+  // ── Drag-and-drop file handling ──
+
+  const handleFileDrop = useCallback(
+    async (files: File[], target: DropTarget) => {
+      const { media, text } = partitionFiles(files);
+
+      // Process media files
+      if (media.length > 0 && mediaProvider) {
+        await processMediaFiles(media, mediaProvider);
+        setMediaRefreshKey((k) => k + 1);
+        // Auto-open the media bin so the user sees the new files
+        if (!showFiles) setShowFiles(true);
+      }
+
+      // Process text files
+      if (text.length > 0) {
+        if (target === 'replace') {
+          // Replace with first text file
+          const content = await processTextFile(text[0]);
+          replaceAll(content);
+        } else {
+          // Insert all text files concatenated
+          const content = await processTextFiles(text);
+          insertAtCursor(content);
+        }
+      }
+    },
+    [mediaProvider, showFiles, replaceAll, insertAtCursor],
+  );
+
+  const { isDragging, dragContentType, containerProps, zoneProps } = useFileDrop({
+    onDrop: handleFileDrop,
+  });
 
   // Notify parent of changes
   useEffect(() => {
@@ -137,6 +175,7 @@ function EditorShellInner({ basePath, onChange, className, height, mediaProvider
         height,
         overflow: 'hidden',
       }}
+      {...containerProps}
     >
       {/* Header: Toolbar (includes view tabs) */}
       <div className="squisq-editor-header">
@@ -158,7 +197,16 @@ function EditorShellInner({ basePath, onChange, className, height, mediaProvider
         </div>
 
         {showFiles && (
-          <MediaBin mediaProvider={mediaProvider} isDark={isDark} />
+          <MediaBin mediaProvider={mediaProvider} isDark={isDark} refreshKey={mediaRefreshKey} />
+        )}
+
+        {/* Drop zone overlay */}
+        {isDragging && (
+          <DropZoneOverlay
+            dragContentType={dragContentType}
+            zoneProps={zoneProps}
+            hasMediaProvider={mediaProvider !== null}
+          />
         )}
       </div>
 
