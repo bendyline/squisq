@@ -48,6 +48,9 @@ export type { ViewSwitcherProps } from './ViewSwitcher.js';
 export { Toolbar } from './Toolbar.js';
 export type { ToolbarProps } from './Toolbar.js';
 
+export { MediaBin } from './MediaBin.js';
+export type { MediaBinProps } from './MediaBin.js';
+
 export { StatusBar } from './StatusBar.js';
 export type { StatusBarProps } from './StatusBar.js';
 

@@ -1,8 +1,8 @@
 /**
  * FileToolbar — Download and Upload controls for the dev site.
  *
- * Download: Exports the current markdown source as .md, .docx, or .txt.
- * Upload:   Ingests a .md, .docx, .txt, or .pdf file and replaces the editor content.
+ * Download: Exports the current markdown source as .md, .docx, .pdf, .txt, or .zip.
+ * Upload:   Ingests a .md, .docx, .txt, .pdf, or .zip file and replaces the editor content.
  *           When a storage slot is active, also accepts images (.jpg, .png, .gif,
  *           .webp, .svg) which are stored in the slot and inserted as markdown.
  */
@@ -15,6 +15,10 @@ import {
   pdfToMarkdownDoc,
   configurePdfWorker,
 } from '@bendyline/squisq-formats/pdf';
+import { containerToZip, zipToContainer } from '@bendyline/squisq-formats/container';
+import { MemoryContentContainer } from '@bendyline/squisq/storage';
+import type { ContentContainer } from '@bendyline/squisq/storage';
+import type { MediaProvider } from '@bendyline/squisq/schemas';
 import { addSlotMedia } from './slotStorage';
 
 // Configure pdfjs-dist worker for the browser.
@@ -31,13 +35,17 @@ interface FileToolbarProps {
   currentSource: string;
   /** Called when an uploaded file is ingested */
   onImport: (markdown: string) => void;
+  /** Called when a zip file is uploaded — provides the container for the caller to create a MediaProvider */
+  onZipImport: (markdown: string, container: ContentContainer) => void;
+  /** Active MediaProvider (used to include media when downloading as zip) */
+  mediaProvider: MediaProvider | null;
   /** Whether the site is in dark mode */
   isDark: boolean;
   /** Currently active storage slot (null = none). Images require a slot. */
   activeSlot: number | null;
 }
 
-type DownloadFormat = 'md' | 'docx' | 'pdf' | 'txt';
+type DownloadFormat = 'md' | 'docx' | 'pdf' | 'txt' | 'zip';
 
 /** File extensions treated as images (stored in slot media, not imported as docs) */
 const IMAGE_EXTENSIONS = new Set(['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg']);
@@ -115,7 +123,14 @@ function filenameForFormat(format: DownloadFormat): string {
 // Component
 // ============================================
 
-export function FileToolbar({ currentSource, onImport, isDark, activeSlot }: FileToolbarProps) {
+export function FileToolbar({
+  currentSource,
+  onImport,
+  onZipImport,
+  mediaProvider,
+  isDark,
+  activeSlot,
+}: FileToolbarProps) {
   const [showDownload, setShowDownload] = useState(false);
   const [busy, setBusy] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -157,6 +172,22 @@ export function FileToolbar({ currentSource, onImport, isDark, activeSlot }: Fil
           const buffer = await markdownDocToPdf(mdDoc);
           const blob = new Blob([buffer], { type: 'application/pdf' });
           downloadBlob(blob, filename);
+        } else if (format === 'zip') {
+          const container = new MemoryContentContainer();
+          await container.writeDocument(currentSource);
+          if (mediaProvider) {
+            const entries = await mediaProvider.listMedia();
+            for (const entry of entries) {
+              const url = await mediaProvider.resolveUrl(entry.name);
+              const res = await fetch(url);
+              if (res.ok) {
+                const data = await res.arrayBuffer();
+                await container.writeFile(entry.name, data, entry.mimeType);
+              }
+            }
+          }
+          const blob = await containerToZip(container);
+          downloadBlob(blob, filename);
         }
       } catch (err: unknown) {
         console.error('Download failed:', err);
@@ -165,7 +196,7 @@ export function FileToolbar({ currentSource, onImport, isDark, activeSlot }: Fil
         setBusy(false);
       }
     },
-    [currentSource],
+    [currentSource, mediaProvider],
   );
 
   // ---- Upload ----
@@ -196,6 +227,11 @@ export function FileToolbar({ currentSource, onImport, isDark, activeSlot }: Fil
           const mdDoc = await pdfToMarkdownDoc(buffer);
           const markdown = stringifyMarkdown(mdDoc);
           onImport(markdown);
+        } else if (ext === 'zip') {
+          const buffer = await file.arrayBuffer();
+          const container = await zipToContainer(buffer);
+          const markdown = (await container.readDocument()) ?? '';
+          onZipImport(markdown, container);
         } else if (IMAGE_EXTENSIONS.has(ext)) {
           if (activeSlot === null) {
             alert('Select a storage slot first to upload images.');
@@ -209,7 +245,7 @@ export function FileToolbar({ currentSource, onImport, isDark, activeSlot }: Fil
           onImport(currentSource + imageMarkdown);
         } else {
           alert(
-            `Unsupported file type: .${ext}\nSupported: .md, .txt, .docx, .pdf, .jpg, .png, .gif, .webp, .svg`,
+            `Unsupported file type: .${ext}\nSupported: .md, .txt, .docx, .pdf, .zip, .jpg, .png, .gif, .webp, .svg`,
           );
         }
       } catch (err: unknown) {
@@ -221,7 +257,7 @@ export function FileToolbar({ currentSource, onImport, isDark, activeSlot }: Fil
         if (fileInputRef.current) fileInputRef.current.value = '';
       }
     },
-    [onImport, activeSlot, currentSource],
+    [onImport, onZipImport, activeSlot, currentSource],
   );
 
   return (
@@ -270,6 +306,14 @@ export function FileToolbar({ currentSource, onImport, isDark, activeSlot }: Fil
             >
               Plain Text (.txt)
             </button>
+            <button
+              style={dropdownItemStyle(isDark)}
+              onMouseEnter={(e) => (e.currentTarget.style.background = '#F3EBD6')}
+              onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
+              onClick={() => handleDownload('zip')}
+            >
+              Content Zip (.zip)
+            </button>
           </div>
         )}
       </div>
@@ -279,7 +323,7 @@ export function FileToolbar({ currentSource, onImport, isDark, activeSlot }: Fil
         onClick={handleUploadClick}
         disabled={busy}
         style={buttonStyle(isDark)}
-        title="Upload .md, .txt, .docx, .pdf, or image file"
+        title="Upload .md, .txt, .docx, .pdf, .zip, or image file"
       >
         ↑ Upload
       </button>
@@ -288,7 +332,7 @@ export function FileToolbar({ currentSource, onImport, isDark, activeSlot }: Fil
       <input
         ref={fileInputRef}
         type="file"
-        accept=".md,.markdown,.txt,.docx,.pdf,.jpg,.jpeg,.png,.gif,.webp,.svg"
+        accept=".md,.markdown,.txt,.docx,.pdf,.zip,.jpg,.jpeg,.png,.gif,.webp,.svg"
         style={{ display: 'none' }}
         onChange={handleFileChange}
       />

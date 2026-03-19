@@ -65,6 +65,11 @@
       "types": "./dist/html/index.d.ts",
       "import": "./dist/html/index.js",
       "default": "./dist/html/index.js"
+    },
+    "./container": {
+      "types": "./dist/container/index.d.ts",
+      "import": "./dist/container/index.js",
+      "default": "./dist/container/index.js"
     }
   },
   "scripts": {

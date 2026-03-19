@@ -21,6 +21,10 @@ const VIEWS: { id: EditorView; label: string; shortcut: string }[] = [
 export interface ToolbarProps {
   /** Additional class name */
   className?: string;
+  /** Whether the Files panel is currently shown */
+  showFiles?: boolean;
+  /** Toggle the Files panel. When provided, a "Files" button appears in the toolbar. */
+  onToggleFiles?: () => void;
 }
 
 interface ToolbarButton {
@@ -113,7 +117,7 @@ function isTiptapActive(editor: TiptapEditor, id: string): boolean {
  * - WYSIWYG: calls Tiptap chain commands (toggleBold, etc.)
  * - Raw: appends markdown syntax to the source
  */
-export function Toolbar({ className }: ToolbarProps) {
+export function Toolbar({ className, showFiles, onToggleFiles }: ToolbarProps) {
   const {
     activeView,
     setActiveView,
@@ -464,6 +468,22 @@ export function Toolbar({ className }: ToolbarProps) {
             </>
           )}
         </div>
+      )}
+
+      {/* Spacer pushes right-side buttons to the end */}
+      {onToggleFiles && <div style={{ flex: 1 }} />}
+
+      {/* Files toggle — visible when callback is provided */}
+      {onToggleFiles && (
+        <button
+          className={`squisq-toolbar-button squisq-toolbar-files-toggle${showFiles ? ' squisq-toolbar-button--active' : ''}`}
+          onClick={onToggleFiles}
+          title={showFiles ? 'Hide Files panel' : 'Show Files panel'}
+          aria-pressed={showFiles}
+          aria-label="Toggle Files panel"
+        >
+          {'\u{1F4CE}'}
+        </button>
       )}
     </div>
   );
