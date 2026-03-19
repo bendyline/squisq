@@ -10,7 +10,10 @@ import { EditorShell } from '@bendyline/squisq-editor-react';
 import type { EditorTheme } from '@bendyline/squisq-editor-react';
 import '@bendyline/squisq-editor-react/styles';
 import { MediaContext } from '@bendyline/squisq-react';
-import { createMediaProviderFromContainer, MemoryContentContainer } from '@bendyline/squisq/storage';
+import {
+  createMediaProviderFromContainer,
+  MemoryContentContainer,
+} from '@bendyline/squisq/storage';
 import type { ContentContainer } from '@bendyline/squisq/storage';
 import { zipToContainer } from '@bendyline/squisq-formats/container';
 import { SAMPLES, CONTENT_SAMPLES } from './samples';
@@ -35,8 +38,8 @@ export function App() {
     [],
   );
 
-  const [mediaProvider, setMediaProvider] = useState<MediaProvider | null>(
-    () => createEmptyProvider(),
+  const [mediaProvider, setMediaProvider] = useState<MediaProvider | null>(() =>
+    createEmptyProvider(),
   );
   const mediaProviderRef = useRef<MediaProvider | null>(mediaProvider);
   // Loading state for content zip samples

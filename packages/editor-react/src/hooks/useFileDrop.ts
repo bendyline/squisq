@@ -12,9 +12,24 @@ import { useCallback, useRef, useState } from 'react';
 // ─── File classification ────────────────────────────────
 
 const MEDIA_EXTENSIONS = new Set([
-  'png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'avif', 'ico',
-  'mp4', 'webm', 'mov', 'avi',
-  'mp3', 'wav', 'ogg', 'aac', 'm4a', 'flac',
+  'png',
+  'jpg',
+  'jpeg',
+  'gif',
+  'webp',
+  'svg',
+  'avif',
+  'ico',
+  'mp4',
+  'webm',
+  'mov',
+  'avi',
+  'mp3',
+  'wav',
+  'ogg',
+  'aac',
+  'm4a',
+  'flac',
 ]);
 
 const TEXT_EXTENSIONS = new Set(['md', 'txt', 'docx']);
@@ -34,7 +49,11 @@ export function classifyFile(file: { name: string; type: string }): FileCategory
   if (TEXT_EXTENSIONS.has(ext)) return 'text';
 
   // Fallback to MIME type
-  if (file.type.startsWith('image/') || file.type.startsWith('video/') || file.type.startsWith('audio/')) {
+  if (
+    file.type.startsWith('image/') ||
+    file.type.startsWith('video/') ||
+    file.type.startsWith('audio/')
+  ) {
     return 'media';
   }
   if (file.type === 'text/plain' || file.type === 'text/markdown') {
@@ -148,7 +167,7 @@ export function useFileDrop({ onDrop, enabled = true }: UseFileDropOptions): Use
     (e: React.DragEvent) => {
       if (!enabled) return;
       e.preventDefault();
-      dragCounterRef.current--;
+      dragCounterRef.current = Math.max(0, dragCounterRef.current - 1);
 
       if (dragCounterRef.current === 0) {
         setIsDragging(false);

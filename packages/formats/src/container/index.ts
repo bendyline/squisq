@@ -65,12 +65,21 @@ export async function zipToContainer(
     if (zipEntry.dir) return;
 
     // Strip leading slash if present
-    const path = relativePath.startsWith('/') ? relativePath.slice(1) : relativePath;
-    if (!path) return;
+    const entryPath = relativePath.startsWith('/') ? relativePath.slice(1) : relativePath;
+    if (!entryPath) return;
+
+    // Path-traversal protection: reject absolute paths, backslashes, and .. segments
+    if (
+      entryPath.startsWith('/') ||
+      entryPath.includes('\\') ||
+      entryPath.split('/').some((seg) => seg === '..')
+    ) {
+      return;
+    }
 
     filePromises.push(
       zipEntry.async('arraybuffer').then((data) => {
-        return container.writeFile(path, data);
+        return container.writeFile(entryPath, data);
       }),
     );
   });

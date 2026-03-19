@@ -56,6 +56,13 @@ export function createMediaProviderFromContainer(container: ContentContainer): M
       data: ArrayBuffer | Blob | Uint8Array,
       mimeType: string,
     ): Promise<string> {
+      // Invalidate any cached blob URL for this path before overwriting
+      const cached = blobUrlCache.get(name);
+      if (cached) {
+        URL.revokeObjectURL(cached);
+        blobUrlCache.delete(name);
+      }
+
       let buffer: ArrayBuffer | Uint8Array;
       if (data instanceof Blob) {
         buffer = await data.arrayBuffer();

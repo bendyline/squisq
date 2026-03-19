@@ -24,7 +24,11 @@ export interface DropZoneOverlayProps {
  * Full-size overlay with contextual drop targets for file uploads.
  * Rendered conditionally by EditorShell when files are dragged over the editor.
  */
-export function DropZoneOverlay({ dragContentType, zoneProps, hasMediaProvider }: DropZoneOverlayProps) {
+export function DropZoneOverlay({
+  dragContentType,
+  zoneProps,
+  hasMediaProvider,
+}: DropZoneOverlayProps) {
   const showMedia = dragContentType === 'media' || dragContentType === 'mixed';
   const showText = dragContentType === 'text' || dragContentType === 'mixed';
 
@@ -79,7 +83,15 @@ interface DropZoneProps {
   variant: 'media' | 'insert' | 'replace';
 }
 
-function DropZone({ target, zoneProps, icon, label, description, disabled, variant }: DropZoneProps) {
+function DropZone({
+  target,
+  zoneProps,
+  icon,
+  label,
+  description,
+  disabled,
+  variant,
+}: DropZoneProps) {
   const [isHovering, setIsHovering] = useState(false);
   const props = zoneProps(target);
 

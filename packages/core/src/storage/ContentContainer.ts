@@ -119,11 +119,7 @@ export class MemoryContentContainer implements ContentContainer {
     return this.files.get(path)?.data ?? null;
   }
 
-  async writeFile(
-    path: string,
-    data: ArrayBuffer | Uint8Array,
-    mimeType?: string,
-  ): Promise<void> {
+  async writeFile(path: string, data: ArrayBuffer | Uint8Array, mimeType?: string): Promise<void> {
     const buffer = data instanceof ArrayBuffer ? data : data.slice().buffer;
     this.files.set(path, {
       data: buffer,

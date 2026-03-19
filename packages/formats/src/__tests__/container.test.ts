@@ -49,7 +49,9 @@ describe('containerToZip', () => {
     const blob = await containerToZip(container);
     const zip = await JSZip.loadAsync(await blobToArrayBuffer(blob));
 
-    const filenames = Object.keys(zip.files).filter((f) => !zip.files[f].dir).sort();
+    const filenames = Object.keys(zip.files)
+      .filter((f) => !zip.files[f].dir)
+      .sort();
     expect(filenames).toEqual(['images/hero.jpg', 'index.md', 'timing.json']);
   });
 
@@ -147,8 +149,16 @@ describe('containerToZip / zipToContainer round-trip', () => {
     const original = new MemoryContentContainer();
     const markdown = '# Round Trip Test\n\n![hero](images/hero.jpg)\n\nSome text.';
     await original.writeDocument(markdown);
-    await original.writeFile('images/hero.jpg', new Uint8Array([0xff, 0xd8, 0xff, 0xe0]), 'image/jpeg');
-    await original.writeFile('audio/narration.mp3', new Uint8Array([0x49, 0x44, 0x33]), 'audio/mpeg');
+    await original.writeFile(
+      'images/hero.jpg',
+      new Uint8Array([0xff, 0xd8, 0xff, 0xe0]),
+      'image/jpeg',
+    );
+    await original.writeFile(
+      'audio/narration.mp3',
+      new Uint8Array([0x49, 0x44, 0x33]),
+      'audio/mpeg',
+    );
     await original.writeFile('timing.json', new TextEncoder().encode('{"segments":[]}'));
 
     // Serialize to ZIP

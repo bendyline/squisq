@@ -16,7 +16,12 @@ import { PreviewPanel } from './PreviewPanel';
 import { MediaBin } from './MediaBin';
 import { DropZoneOverlay } from './DropZoneOverlay';
 import { useFileDrop, type DropTarget } from './hooks/useFileDrop';
-import { partitionFiles, processMediaFiles, processTextFile, processTextFiles } from './utils/dropUtils';
+import {
+  partitionFiles,
+  processMediaFiles,
+  processTextFile,
+  processTextFiles,
+} from './utils/dropUtils';
 import type { MediaProvider } from '@bendyline/squisq/schemas';
 
 export type { EditorTheme } from './EditorContext';
@@ -62,7 +67,7 @@ export function EditorShell({
   showFilesToggle,
 }: EditorShellProps) {
   // Show the toggle when explicitly opted in, or when mediaProvider prop was passed at all
-  const filesToggleEnabled = showFilesToggle ?? (mediaProvider !== undefined);
+  const filesToggleEnabled = showFilesToggle ?? mediaProvider !== undefined;
 
   return (
     <EditorProvider
@@ -92,7 +97,14 @@ interface EditorShellInnerProps {
   filesToggleEnabled: boolean;
 }
 
-function EditorShellInner({ basePath, onChange, className, height, mediaProvider, filesToggleEnabled }: EditorShellInnerProps) {
+function EditorShellInner({
+  basePath,
+  onChange,
+  className,
+  height,
+  mediaProvider,
+  filesToggleEnabled,
+}: EditorShellInnerProps) {
   const { activeView, markdownSource, theme, insertAtCursor, replaceAll } = useEditorContext();
   const [showFiles, setShowFiles] = useState(false);
   const [mediaRefreshKey, setMediaRefreshKey] = useState(0);
@@ -106,27 +118,31 @@ function EditorShellInner({ basePath, onChange, className, height, mediaProvider
 
   const handleFileDrop = useCallback(
     async (files: File[], target: DropTarget) => {
-      const { media, text } = partitionFiles(files);
+      try {
+        const { media, text } = partitionFiles(files);
 
-      // Process media files
-      if (media.length > 0 && mediaProvider) {
-        await processMediaFiles(media, mediaProvider);
-        setMediaRefreshKey((k) => k + 1);
-        // Auto-open the media bin so the user sees the new files
-        if (!showFiles) setShowFiles(true);
-      }
-
-      // Process text files
-      if (text.length > 0) {
-        if (target === 'replace') {
-          // Replace with first text file
-          const content = await processTextFile(text[0]);
-          replaceAll(content);
-        } else {
-          // Insert all text files concatenated
-          const content = await processTextFiles(text);
-          insertAtCursor(content);
+        // Process media files
+        if (media.length > 0 && mediaProvider) {
+          await processMediaFiles(media, mediaProvider);
+          setMediaRefreshKey((k) => k + 1);
+          // Auto-open the media bin so the user sees the new files
+          if (!showFiles) setShowFiles(true);
         }
+
+        // Process text files
+        if (text.length > 0) {
+          if (target === 'replace') {
+            // Replace with first text file
+            const content = await processTextFile(text[0]);
+            replaceAll(content);
+          } else {
+            // Insert all text files concatenated
+            const content = await processTextFiles(text);
+            insertAtCursor(content);
+          }
+        }
+      } catch (err: unknown) {
+        console.error('Failed to process dropped files:', err instanceof Error ? err.message : err);
       }
     },
     [mediaProvider, showFiles, replaceAll, insertAtCursor],

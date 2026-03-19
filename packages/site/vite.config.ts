@@ -2,7 +2,10 @@ import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import fs from 'fs';
 import path from 'path';
+import { fileURLToPath } from 'url';
 import type { Plugin } from 'vite';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 /**
  * Vite plugin to serve content sample .zip files from the repo-root
@@ -21,7 +24,15 @@ function sampleContentPlugin(): Plugin {
       server.middlewares.use((req, res, next) => {
         if (!req.url?.startsWith('/samples/')) return next();
 
-        const relative = decodeURIComponent(req.url.slice('/samples/'.length));
+        let relative: string;
+        try {
+          relative = decodeURIComponent(req.url.slice('/samples/'.length));
+        } catch {
+          res.statusCode = 400;
+          res.end('Bad Request');
+          return;
+        }
+
         const filePath = path.resolve(sampleDir, relative);
 
         // Path-traversal guard
@@ -29,8 +40,15 @@ function sampleContentPlugin(): Plugin {
         if (!fs.existsSync(filePath) || !fs.statSync(filePath).isFile()) return next();
 
         const stat = fs.statSync(filePath);
+        const ext = path.extname(filePath).toLowerCase();
+        const contentType =
+          ext === '.zip'
+            ? 'application/zip'
+            : ext === '.dbk'
+              ? 'application/zip'
+              : 'application/octet-stream';
         res.setHeader('Content-Length', stat.size);
-        res.setHeader('Content-Type', 'application/zip');
+        res.setHeader('Content-Type', contentType);
         fs.createReadStream(filePath).pipe(res);
       });
     },
@@ -43,7 +61,7 @@ function sampleContentPlugin(): Plugin {
       fs.mkdirSync(destDir, { recursive: true });
 
       for (const file of fs.readdirSync(sampleDir)) {
-        if (file.endsWith('.zip')) {
+        if (file.endsWith('.zip') || file.endsWith('.dbk')) {
           fs.copyFileSync(path.join(sampleDir, file), path.join(destDir, file));
         }
       }

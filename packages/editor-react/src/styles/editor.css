@@ -815,7 +815,10 @@
   border-radius: 12px;
   background: rgba(255, 255, 255, 0.9);
   cursor: default;
-  transition: border-color 0.15s, background-color 0.15s, transform 0.15s;
+  transition:
+    border-color 0.15s,
+    background-color 0.15s,
+    transform 0.15s;
   text-align: center;
   user-select: none;
 }

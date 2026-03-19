@@ -162,9 +162,7 @@ export function MediaBin({ mediaProvider, isDark, refreshKey }: MediaBinProps) {
           onClick={handleUploadClick}
           disabled={!mediaProvider || loading}
           title={
-            mediaProvider
-              ? 'Upload files'
-              : 'Load a content zip or select a storage slot first'
+            mediaProvider ? 'Upload files' : 'Load a content zip or select a storage slot first'
           }
         >
           + Upload
@@ -187,9 +185,7 @@ export function MediaBin({ mediaProvider, isDark, refreshKey }: MediaBinProps) {
 
         {entries.map((entry) => {
           const thumb = thumbUrls[entry.name];
-          const basename = entry.name.includes('/')
-            ? entry.name.split('/').pop()!
-            : entry.name;
+          const basename = entry.name.includes('/') ? entry.name.split('/').pop()! : entry.name;
 
           return (
             <div
@@ -199,11 +195,7 @@ export function MediaBin({ mediaProvider, isDark, refreshKey }: MediaBinProps) {
             >
               {/* Thumbnail or icon */}
               {thumb ? (
-                <img
-                  src={thumb}
-                  alt={basename}
-                  className="squisq-media-bin-thumb"
-                />
+                <img src={thumb} alt={basename} className="squisq-media-bin-thumb" />
               ) : (
                 <span className="squisq-media-bin-icon">{iconForMime(entry.mimeType)}</span>
               )}
