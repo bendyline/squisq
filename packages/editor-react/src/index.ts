@@ -48,8 +48,31 @@ export type { ViewSwitcherProps } from './ViewSwitcher.js';
 export { Toolbar } from './Toolbar.js';
 export type { ToolbarProps } from './Toolbar.js';
 
+export { MediaBin } from './MediaBin.js';
+export type { MediaBinProps } from './MediaBin.js';
+
 export { StatusBar } from './StatusBar.js';
 export type { StatusBarProps } from './StatusBar.js';
+
+// Drag-and-drop
+export { DropZoneOverlay } from './DropZoneOverlay.js';
+export type { DropZoneOverlayProps } from './DropZoneOverlay.js';
+
+export { useFileDrop, classifyFile } from './hooks/useFileDrop.js';
+export type {
+  FileCategory,
+  DragContentType,
+  DropTarget,
+  UseFileDropOptions,
+  UseFileDropResult,
+} from './hooks/useFileDrop.js';
+
+export {
+  partitionFiles,
+  processMediaFiles,
+  processTextFile,
+  processTextFiles,
+} from './utils/dropUtils.js';
 
 // Bridge utilities
 export { markdownToTiptap, tiptapToMarkdown } from './tiptapBridge.js';

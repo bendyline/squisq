@@ -2,6 +2,22 @@
  * Sample markdown documents for the dev site.
  */
 
+/**
+ * Content zip samples — fetched at runtime, unpacked into a ContentContainer.
+ * Each entry maps a sample key to its URL under `/samples/` (served from repo-root samplecontent/).
+ */
+export interface ContentSample {
+  label: string;
+  url: string;
+}
+
+export const CONTENT_SAMPLES: Record<string, ContentSample> = {
+  'issaquah-highlands': {
+    label: 'Issaquah Highlands',
+    url: '/samples/issaquah-highlands.dbk',
+  },
+};
+
 export const SAMPLES: Record<string, string> = {
   'hello-world': `# Hello World
 

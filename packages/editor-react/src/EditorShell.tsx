@@ -6,13 +6,23 @@
  * in an EditorProvider for shared state.
  */
 
-import { useEffect } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { EditorProvider, useEditorContext, type EditorView } from './EditorContext';
 import { Toolbar } from './Toolbar';
 import { StatusBar } from './StatusBar';
 import { RawEditor } from './RawEditor';
 import { WysiwygEditor } from './WysiwygEditor';
 import { PreviewPanel } from './PreviewPanel';
+import { MediaBin } from './MediaBin';
+import { DropZoneOverlay } from './DropZoneOverlay';
+import { useFileDrop, type DropTarget } from './hooks/useFileDrop';
+import {
+  partitionFiles,
+  processMediaFiles,
+  processTextFile,
+  processTextFiles,
+} from './utils/dropUtils';
+import type { MediaProvider } from '@bendyline/squisq/schemas';
 
 export type { EditorTheme } from './EditorContext';
 
@@ -34,6 +44,10 @@ export interface EditorShellProps {
   className?: string;
   /** CSS height for the shell container (default: '100vh') */
   height?: string;
+  /** Optional MediaProvider for the Files panel. When set (even to null), a Files toggle appears in the toolbar. */
+  mediaProvider?: MediaProvider | null;
+  /** Show the Files toggle in the toolbar. Defaults to true when mediaProvider is passed. */
+  showFilesToggle?: boolean;
 }
 
 /**
@@ -49,7 +63,12 @@ export function EditorShell({
   theme = 'light',
   className,
   height = '100vh',
+  mediaProvider,
+  showFilesToggle,
 }: EditorShellProps) {
+  // Show the toggle when explicitly opted in, or when mediaProvider prop was passed at all
+  const filesToggleEnabled = showFilesToggle ?? mediaProvider !== undefined;
+
   return (
     <EditorProvider
       initialMarkdown={initialMarkdown}
@@ -62,6 +81,8 @@ export function EditorShell({
         onChange={onChange}
         className={className}
         height={height}
+        mediaProvider={mediaProvider ?? null}
+        filesToggleEnabled={filesToggleEnabled}
       />
     </EditorProvider>
   );
@@ -72,10 +93,64 @@ interface EditorShellInnerProps {
   onChange?: (source: string) => void;
   className?: string;
   height: string;
+  mediaProvider: MediaProvider | null;
+  filesToggleEnabled: boolean;
 }
 
-function EditorShellInner({ basePath, onChange, className, height }: EditorShellInnerProps) {
-  const { activeView, markdownSource, theme } = useEditorContext();
+function EditorShellInner({
+  basePath,
+  onChange,
+  className,
+  height,
+  mediaProvider,
+  filesToggleEnabled,
+}: EditorShellInnerProps) {
+  const { activeView, markdownSource, theme, insertAtCursor, replaceAll } = useEditorContext();
+  const [showFiles, setShowFiles] = useState(false);
+  const [mediaRefreshKey, setMediaRefreshKey] = useState(0);
+  const isDark = theme === 'dark';
+
+  const handleToggleFiles = useCallback(() => {
+    setShowFiles((prev) => !prev);
+  }, []);
+
+  // ── Drag-and-drop file handling ──
+
+  const handleFileDrop = useCallback(
+    async (files: File[], target: DropTarget) => {
+      try {
+        const { media, text } = partitionFiles(files);
+
+        // Process media files
+        if (media.length > 0 && mediaProvider) {
+          await processMediaFiles(media, mediaProvider);
+          setMediaRefreshKey((k) => k + 1);
+          // Auto-open the media bin so the user sees the new files
+          if (!showFiles) setShowFiles(true);
+        }
+
+        // Process text files
+        if (text.length > 0) {
+          if (target === 'replace') {
+            // Replace with first text file
+            const content = await processTextFile(text[0]);
+            replaceAll(content);
+          } else {
+            // Insert all text files concatenated
+            const content = await processTextFiles(text);
+            insertAtCursor(content);
+          }
+        }
+      } catch (err: unknown) {
+        console.error('Failed to process dropped files:', err instanceof Error ? err.message : err);
+      }
+    },
+    [mediaProvider, showFiles, replaceAll, insertAtCursor],
+  );
+
+  const { isDragging, dragContentType, containerProps, zoneProps } = useFileDrop({
+    onDrop: handleFileDrop,
+  });
 
   // Notify parent of changes
   useEffect(() => {
@@ -116,20 +191,39 @@ function EditorShellInner({ basePath, onChange, className, height }: EditorShell
         height,
         overflow: 'hidden',
       }}
+      {...containerProps}
     >
       {/* Header: Toolbar (includes view tabs) */}
       <div className="squisq-editor-header">
-        <Toolbar />
+        <Toolbar
+          showFiles={showFiles}
+          onToggleFiles={filesToggleEnabled ? handleToggleFiles : undefined}
+        />
       </div>
 
       {/* Main content area */}
       <div
         className="squisq-editor-content"
-        style={{ flex: 1, overflow: 'hidden', position: 'relative' }}
+        style={{ flex: 1, overflow: 'hidden', position: 'relative', display: 'flex' }}
       >
-        {activeView === 'raw' && <RawEditor theme={theme === 'dark' ? 'vs-dark' : 'vs'} />}
-        {activeView === 'wysiwyg' && <WysiwygEditor />}
-        {activeView === 'preview' && <PreviewPanel basePath={basePath} />}
+        <div style={{ flex: 1, overflow: 'hidden', position: 'relative' }}>
+          {activeView === 'raw' && <RawEditor theme={theme === 'dark' ? 'vs-dark' : 'vs'} />}
+          {activeView === 'wysiwyg' && <WysiwygEditor />}
+          {activeView === 'preview' && <PreviewPanel basePath={basePath} />}
+        </div>
+
+        {showFiles && (
+          <MediaBin mediaProvider={mediaProvider} isDark={isDark} refreshKey={mediaRefreshKey} />
+        )}
+
+        {/* Drop zone overlay */}
+        {isDragging && (
+          <DropZoneOverlay
+            dragContentType={dragContentType}
+            zoneProps={zoneProps}
+            hasMediaProvider={mediaProvider !== null}
+          />
+        )}
       </div>
 
       {/* Status bar */}

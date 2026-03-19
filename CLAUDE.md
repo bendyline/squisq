@@ -26,7 +26,7 @@ squisq/
           templates/        # 17 block templates (titleBlock, statHighlight, etc.)
           utils/            # animationUtils, themeUtils
         spatial/            # Haversine distance, Geohash encode/decode
-        storage/            # StorageAdapter interface, Memory + LocalStorage adapters
+        storage/            # StorageAdapter interface, Memory + LocalStorage adapters, ContentContainer
         timing/             # Narration/reading time estimation
         random/             # SeededRandom (Mulberry32 PRNG)
         generate/           # Content extraction + slideshow generator
@@ -47,6 +47,7 @@ squisq/
         ooxml/              # Shared OOXML infrastructure (reader, writer, XML utils)
         docx/               # DOCX import + export (WordprocessingML)
         pdf/                # PDF import + export (pdf-lib, pdfjs-dist)
+        container/          # ContentContainer ZIP serialization (containerToZip, zipToContainer)
         pptx/               # PPTX stubs (PresentationML, not yet implemented)
         xlsx/               # XLSX stubs (SpreadsheetML, not yet implemented)
     editor-react/           # @bendyline/squisq-editor-react
@@ -93,7 +94,7 @@ npm run format             # Prettier format
 - `@bendyline/squisq/schemas` — Type definitions (Doc, BlockTemplates, Viewport, Theme, themeLibrary)
 - `@bendyline/squisq/doc` — Template registry + all 17 templates + animationUtils + themeUtils
 - `@bendyline/squisq/spatial` — Haversine, Geohash utilities
-- `@bendyline/squisq/storage` — StorageAdapter, MemoryStorageAdapter, LocalStorageAdapter
+- `@bendyline/squisq/storage` — StorageAdapter, MemoryStorageAdapter, LocalStorageAdapter, ContentContainer, MemoryContentContainer, createMediaProviderFromContainer
 - `@bendyline/squisq/markdown` — Markdown parsing, stringifying, AST types (MarkdownDocument), tree utilities
 - `@bendyline/squisq/story` — Alias for `@bendyline/squisq/doc` (legacy compatibility)
 - `@bendyline/squisq/timing` — Narration/reading time estimation (estimateNarrationTime, estimateReadingTime, countSpokenWords)
@@ -114,6 +115,7 @@ npm run format             # Prettier format
 - `@bendyline/squisq-formats/pdf` — PDF import/export (markdownDocToPdf, pdfToMarkdownDoc, configurePdfWorker)
 - `@bendyline/squisq-formats/pptx` — PPTX stubs (not yet implemented)
 - `@bendyline/squisq-formats/xlsx` — XLSX stubs (not yet implemented)
+- `@bendyline/squisq-formats/container` — ContentContainer ZIP serialization (containerToZip, zipToContainer)
 
 `@bendyline/squisq-editor-react` exports everything from the root:
 

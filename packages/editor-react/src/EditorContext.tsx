@@ -23,6 +23,7 @@ import { parseMarkdown, stringifyMarkdown } from '@bendyline/squisq/markdown';
 import { markdownToDoc } from '@bendyline/squisq/doc';
 import type { Editor as TiptapEditor } from '@tiptap/core';
 import type { editor as MonacoEditorNs } from 'monaco-editor';
+import { markdownToTiptap } from './tiptapBridge';
 
 /** Monaco standalone code editor instance type */
 type MonacoEditor = MonacoEditorNs.IStandaloneCodeEditor;
@@ -62,6 +63,10 @@ export interface EditorActions {
   setMonacoEditor: (editor: MonacoEditor | null) => void;
   /** Set the color theme */
   setTheme: (theme: EditorTheme) => void;
+  /** Insert text at the current cursor position in the active editor */
+  insertAtCursor: (text: string) => void;
+  /** Replace all editor content with the given text */
+  replaceAll: (text: string) => void;
 }
 
 export interface EditorContextValue extends EditorState, EditorActions {
@@ -187,6 +192,53 @@ export function EditorProvider({
     setMarkdownSourceRaw(source);
   }, []);
 
+  const insertAtCursor = useCallback(
+    (text: string) => {
+      if (activeView === 'wysiwyg' && tiptapEditor) {
+        // Insert as HTML so formatting is preserved
+        const html = markdownToTiptap(text);
+        tiptapEditor.chain().focus().insertContent(html).run();
+      } else if (activeView === 'raw' && monacoEditor) {
+        const position = monacoEditor.getPosition();
+        if (position) {
+          const model = monacoEditor.getModel();
+          if (model) {
+            const range = {
+              startLineNumber: position.lineNumber,
+              startColumn: position.column,
+              endLineNumber: position.lineNumber,
+              endColumn: position.column,
+            };
+            monacoEditor.executeEdits('drop', [{ range, text }]);
+          }
+        } else {
+          // No cursor — append
+          setMarkdownSourceRaw((prev) => prev + '\n\n' + text);
+        }
+      } else {
+        // Preview or no editor — append to end
+        setMarkdownSourceRaw((prev) => prev + '\n\n' + text);
+      }
+    },
+    [activeView, tiptapEditor, monacoEditor],
+  );
+
+  const replaceAll = useCallback(
+    (text: string) => {
+      setMarkdownSourceRaw(text);
+
+      // Push to editors if mounted
+      if (tiptapEditor) {
+        const html = markdownToTiptap(text);
+        tiptapEditor.commands.setContent(html);
+      }
+      if (monacoEditor) {
+        monacoEditor.setValue(text);
+      }
+    },
+    [tiptapEditor, monacoEditor],
+  );
+
   const setMarkdownDoc = useCallback((newDoc: MarkdownDocument) => {
     setMarkdownDocState(newDoc);
     // Stringify to update the raw source
@@ -227,6 +279,8 @@ export function EditorProvider({
       setTiptapEditor,
       setMonacoEditor,
       setTheme,
+      insertAtCursor,
+      replaceAll,
     }),
     [
       markdownSource,
@@ -244,6 +298,8 @@ export function EditorProvider({
       setTiptapEditor,
       setMonacoEditor,
       setTheme,
+      insertAtCursor,
+      replaceAll,
     ],
   );
 

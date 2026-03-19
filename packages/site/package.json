@@ -9,10 +9,10 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "@bendyline/squisq": "^0.1.2",
-    "@bendyline/squisq-formats": "^0.1.1",
-    "@bendyline/squisq-react": "^0.1.3",
-    "@bendyline/squisq-editor-react": "^0.1.1",
+    "@bendyline/squisq": "*",
+    "@bendyline/squisq-formats": "*",
+    "@bendyline/squisq-react": "*",
+    "@bendyline/squisq-editor-react": "*",
     "react": "^18.3.0",
     "react-dom": "^18.3.0"
   },
