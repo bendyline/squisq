@@ -1,3 +1,9 @@
+## @bendyline/squisq [1.1.0](https://github.com/bendyline/squisq/compare/@bendyline/squisq@1.0.1...@bendyline/squisq@1.1.0) (2026-03-19)
+
+### Features
+
+* Containers and file structures ([#9](https://github.com/bendyline/squisq/issues/9)) ([8c39675](https://github.com/bendyline/squisq/commit/8c396754ee4e8f587a4aa145dabb080159cc30e5))
+
 ## @bendyline/squisq [1.0.1](https://github.com/bendyline/squisq/compare/@bendyline/squisq@1.0.0...@bendyline/squisq@1.0.1) (2026-03-17)
 
 ### Bug Fixes
