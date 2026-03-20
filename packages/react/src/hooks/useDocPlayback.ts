@@ -18,6 +18,7 @@ import type { Theme } from '@bendyline/squisq/schemas';
 import { getBlockAtTime } from '@bendyline/squisq/schemas';
 import {
   expandDocBlocks,
+  flattenBlocks,
   isTemplateBlock,
   VIEWPORT_PRESETS,
   type ViewportConfig,
@@ -76,8 +77,12 @@ export function useDocPlayback(
       return [];
     }
 
+    // Flatten nested block hierarchy (markdown-derived docs have children)
+    const hasChildren = script.blocks.some((b) => b.children && b.children.length > 0);
+    const flatBlocks = hasChildren ? flattenBlocks(script.blocks) : script.blocks;
+
     // Check if any blocks are templates
-    const hasTemplates = script.blocks.some(isTemplateBlock);
+    const hasTemplates = flatBlocks.some(isTemplateBlock);
 
     if (hasTemplates) {
       // Extract audio segment timing for proper block synchronization
@@ -87,7 +92,7 @@ export function useDocPlayback(
       }));
 
       // Expand template blocks with audio segment timing, viewport, and persistent layers
-      const expanded = expandDocBlocks(script.blocks as DocBlock[], {
+      const expanded = expandDocBlocks(flatBlocks as DocBlock[], {
         audioSegments,
         viewport,
         persistentLayers: script.persistentLayers,
@@ -97,7 +102,7 @@ export function useDocPlayback(
     }
 
     // All raw blocks, use as-is
-    return script.blocks;
+    return flatBlocks;
   }, [script?.blocks, script?.audio?.segments, script?.persistentLayers, viewport, theme]);
 
   // Find current block based on time

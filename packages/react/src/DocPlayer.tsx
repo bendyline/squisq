@@ -433,7 +433,16 @@ export function DocPlayer({
           });
         });
       };
-      w.getDuration = () => totalDuration;
+      w.getDuration = () => {
+        // When audio is present totalDuration comes from audio segments.
+        // For audio-less docs, compute from block timings instead.
+        if (totalDuration > 0) return totalDuration;
+        if (expandedBlocks.length > 0) {
+          const last = expandedBlocks[expandedBlocks.length - 1];
+          return last.startTime + last.duration;
+        }
+        return 0;
+      };
       // Expose block metadata for testing -- allows tests to find specific templates
       w.getBlocks = () =>
         expandedBlocks.map((s: Block) => ({

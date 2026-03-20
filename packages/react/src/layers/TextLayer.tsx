@@ -38,7 +38,7 @@ export function TextLayer({ layer, viewport, blockTime }: TextLayerProps) {
   const animStyle = getAnimationStyle(animation, blockTime);
 
   // Split text into lines, and wrap if maxWidth is specified
-  const rawLines = text.split('\n');
+  const rawLines = (text ?? '').split('\n');
   let lines = maxWidth
     ? rawLines.reduce<string[]>(
         (acc, line) => acc.concat(wrapText(line, style.fontSize, maxWidth)),

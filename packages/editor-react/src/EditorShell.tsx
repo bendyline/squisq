@@ -85,6 +85,7 @@ export function EditorShell({
       initialView={initialView}
       articleId={articleId}
       theme={theme}
+      mediaProvider={mediaProvider}
     >
       <EditorShellInner
         basePath={basePath}

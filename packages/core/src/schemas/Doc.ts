@@ -127,6 +127,13 @@ export interface Block {
   /** Template name that generated this block (for debugging) */
   template?: string;
 
+  /**
+   * Display title for template rendering.
+   * Extracted from the sourceHeading when the block is created by markdownToDoc().
+   * Templates like sectionHeader and titleBlock read this for their title layer.
+   */
+  title?: string;
+
   // ── Markdown-driven hierarchy (optional) ──
 
   /**

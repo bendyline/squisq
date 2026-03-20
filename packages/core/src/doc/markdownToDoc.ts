@@ -141,6 +141,10 @@ export function markdownToDoc(markdownDoc: MarkdownDocument, options?: MarkdownT
     const annotation = heading?.templateAnnotation;
     const template = annotation?.template ?? (heading ? defaultTemplate : undefined);
 
+    // Extract heading text so templates (e.g. sectionHeader) that expect a
+    // `title` property receive it without having to reach into sourceHeading.
+    const title = heading ? extractPlainText(heading) : undefined;
+
     const block: Block = {
       id,
       startTime: 0,
@@ -148,6 +152,7 @@ export function markdownToDoc(markdownDoc: MarkdownDocument, options?: MarkdownT
       audioSegment: 0,
       template,
       ...(heading ? { sourceHeading: heading } : {}),
+      ...(title ? { title } : {}),
     };
 
     // Propagate key-value params from annotation to templateOverrides

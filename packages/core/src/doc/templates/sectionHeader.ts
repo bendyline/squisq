@@ -15,7 +15,7 @@ import { scaledFontSize } from '../../schemas/BlockTemplates.js';
 import { resolveColorScheme } from '../utils/themeUtils.js';
 
 export function sectionHeader(input: SectionHeaderInput, context: TemplateContext): Layer[] {
-  const { title, colorScheme = 'blue', imageSrc, imageAlt, ambientMotion } = input;
+  const { title = '', colorScheme = 'blue', imageSrc, imageAlt, ambientMotion } = input;
   const { layout } = context;
   const colors = resolveColorScheme(context, colorScheme);
 
