@@ -8,21 +8,24 @@
     "node": ">=22.14.0"
   },
   "scripts": {
-    "all": "npm install && npm run build && npm run lint && npm run format:check && npm run typecheck && npm test && npm run test:e2e",
-    "build": "npm run build:core && npm run build:formats && npm run build:react && npm run build:editor",
+    "all": "npm install && npm run build && npm run lint && npm run format:check && npm run typecheck && npm test && npm run test:cli && npm run test:e2e",
+    "build": "npm run build:core && npm run build:formats && npm run build:react && npm run build:editor && npm run build:cli",
     "build:core": "npm run build -w @bendyline/squisq",
     "build:formats": "npm run build -w @bendyline/squisq-formats",
     "build:react": "npm run build -w @bendyline/squisq-react",
     "build:editor": "npm run build -w @bendyline/squisq-editor-react",
+    "build:cli": "npm run build -w @bendyline/squisq-cli",
     "test": "vitest run",
+    "test:cli": "npm test -w @bendyline/squisq-cli",
     "test:e2e": "playwright test",
     "site": "npm run build && npm run dev -w squisq-site",
     "dev": "npm run dev -w squisq-site",
-    "typecheck": "tsc -b packages/core packages/formats packages/react packages/editor-react",
+    "typecheck": "tsc -b packages/core packages/formats packages/react packages/editor-react packages/cli",
     "clean": "rimraf packages/*/dist",
     "lint": "eslint .",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
+    "prettierfix": "prettier --write .",
     "release": "multi-semantic-release"
   },
   "devDependencies": {

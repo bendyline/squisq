@@ -23,6 +23,7 @@ import {
   processTextFiles,
 } from './utils/dropUtils';
 import type { MediaProvider } from '@bendyline/squisq/schemas';
+import type { ReactNode } from 'react';
 
 export type { EditorTheme } from './EditorContext';
 
@@ -48,6 +49,12 @@ export interface EditorShellProps {
   mediaProvider?: MediaProvider | null;
   /** Show the Files toggle in the toolbar. Defaults to true when mediaProvider is passed. */
   showFilesToggle?: boolean;
+  /** Content rendered at the left edge of the toolbar, before the view tabs. */
+  toolbarSlotLeft?: ReactNode;
+  /** Content rendered after the formatting controls (in the middle area of the toolbar). */
+  toolbarSlotAfterActions?: ReactNode;
+  /** Content rendered at the rightmost end of the toolbar, after all other elements. */
+  toolbarSlotRight?: ReactNode;
 }
 
 /**
@@ -65,6 +72,9 @@ export function EditorShell({
   height = '100vh',
   mediaProvider,
   showFilesToggle,
+  toolbarSlotLeft,
+  toolbarSlotAfterActions,
+  toolbarSlotRight,
 }: EditorShellProps) {
   // Show the toggle when explicitly opted in, or when mediaProvider prop was passed at all
   const filesToggleEnabled = showFilesToggle ?? mediaProvider !== undefined;
@@ -83,6 +93,9 @@ export function EditorShell({
         height={height}
         mediaProvider={mediaProvider ?? null}
         filesToggleEnabled={filesToggleEnabled}
+        toolbarSlotLeft={toolbarSlotLeft}
+        toolbarSlotAfterActions={toolbarSlotAfterActions}
+        toolbarSlotRight={toolbarSlotRight}
       />
     </EditorProvider>
   );
@@ -95,6 +108,9 @@ interface EditorShellInnerProps {
   height: string;
   mediaProvider: MediaProvider | null;
   filesToggleEnabled: boolean;
+  toolbarSlotLeft?: ReactNode;
+  toolbarSlotAfterActions?: ReactNode;
+  toolbarSlotRight?: ReactNode;
 }
 
 function EditorShellInner({
@@ -104,6 +120,9 @@ function EditorShellInner({
   height,
   mediaProvider,
   filesToggleEnabled,
+  toolbarSlotLeft,
+  toolbarSlotAfterActions,
+  toolbarSlotRight,
 }: EditorShellInnerProps) {
   const { activeView, markdownSource, theme, insertAtCursor, replaceAll } = useEditorContext();
   const [showFiles, setShowFiles] = useState(false);
@@ -198,6 +217,9 @@ function EditorShellInner({
         <Toolbar
           showFiles={showFiles}
           onToggleFiles={filesToggleEnabled ? handleToggleFiles : undefined}
+          slotLeft={toolbarSlotLeft}
+          slotAfterActions={toolbarSlotAfterActions}
+          slotRight={toolbarSlotRight}
         />
       </div>
 
