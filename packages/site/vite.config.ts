@@ -80,6 +80,10 @@ export default defineConfig({
     port: 5199,
     strictPort: true,
     open: true,
+    headers: {
+      'Cross-Origin-Opener-Policy': 'same-origin',
+      'Cross-Origin-Embedder-Policy': 'require-corp',
+    },
   },
   // Optimise monaco-editor: tell Vite to pre-bundle it so workers are served
   // from the local dev server instead of CDN.

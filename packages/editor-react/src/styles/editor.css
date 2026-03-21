@@ -237,12 +237,18 @@
 
 /* ─── WYSIWYG Editor ─────────────────────────────────── */
 
+.squisq-wysiwyg-container {
+  background: #eeecea;
+}
+
 .squisq-wysiwyg-editor {
   padding: 16px 24px;
   max-width: 800px;
   margin: 0 auto;
   outline: none;
   min-height: 100%;
+  background: #fff;
+  box-shadow: 0 0 8px rgba(0, 0, 0, 0.06);
 }
 
 .squisq-wysiwyg-editor h1 {
@@ -516,8 +522,14 @@
 }
 
 /* WYSIWYG Editor */
+.squisq-editor-shell[data-theme='dark'] .squisq-wysiwyg-container {
+  background: #0f1219;
+}
+
 .squisq-editor-shell[data-theme='dark'] .squisq-wysiwyg-editor {
   color: #e5e7eb;
+  background: #111827;
+  box-shadow: 0 0 8px rgba(0, 0, 0, 0.3);
 }
 
 .squisq-editor-shell[data-theme='dark'] .squisq-wysiwyg-editor blockquote {

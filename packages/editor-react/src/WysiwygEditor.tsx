@@ -119,7 +119,7 @@ export function WysiwygEditor({
 
   return (
     <div
-      className={className}
+      className={`squisq-wysiwyg-container${className ? ` ${className}` : ''}`}
       style={{ width: '100%', height: '100%', overflow: 'auto' }}
       data-testid="wysiwyg-container"
     >

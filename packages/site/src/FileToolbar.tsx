@@ -8,7 +8,10 @@
  */
 
 import { useState, useRef, useCallback, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { parseMarkdown, stringifyMarkdown } from '@bendyline/squisq/markdown';
+import { markdownToDoc } from '@bendyline/squisq/doc';
+import { VideoExportModal } from '@bendyline/squisq-video-react';
 import { markdownDocToDocx, docxToMarkdownDoc } from '@bendyline/squisq-formats/docx';
 import {
   markdownDocToPdf,
@@ -133,8 +136,10 @@ export function FileToolbar({
 }: FileToolbarProps) {
   const [showDownload, setShowDownload] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [showVideoModal, setShowVideoModal] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const playerScriptRef = useRef<string | null>(null);
 
   // Close dropdown on outside click
   useEffect(() => {
@@ -314,6 +319,25 @@ export function FileToolbar({
             >
               Content Zip (.zip)
             </button>
+            <div style={{ height: 1, background: '#c9b98a', margin: '4px 0' }} />
+            <button
+              style={dropdownItemStyle(isDark)}
+              onMouseEnter={(e) => (e.currentTarget.style.background = '#F3EBD6')}
+              onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
+              onClick={async () => {
+                setShowDownload(false);
+                // Lazy-load the player bundle on first use
+                if (!playerScriptRef.current) {
+                  const { PLAYER_BUNDLE } = await import(
+                    '@bendyline/squisq-react/standalone-source'
+                  );
+                  playerScriptRef.current = PLAYER_BUNDLE;
+                }
+                setShowVideoModal(true);
+              }}
+            >
+              Video (.mp4)
+            </button>
           </div>
         )}
       </div>
@@ -336,6 +360,19 @@ export function FileToolbar({
         style={{ display: 'none' }}
         onChange={handleFileChange}
       />
+
+      {/* Video export modal */}
+      {showVideoModal &&
+        playerScriptRef.current &&
+        createPortal(
+          <VideoExportModal
+            doc={markdownToDoc(parseMarkdown(currentSource))}
+            playerScript={playerScriptRef.current}
+            mediaProvider={mediaProvider ?? undefined}
+            onClose={() => setShowVideoModal(false)}
+          />,
+          document.body,
+        )}
     </>
   );
 }

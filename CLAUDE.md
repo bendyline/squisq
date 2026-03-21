@@ -11,6 +11,7 @@ rendering and spatial utilities. It is designed to be framework-agnostic at the 
 - `@bendyline/squisq-react` — React component library (doc player, block renderer, controls)
 - `@bendyline/squisq-formats` — Document format converters (DOCX, PDF, OOXML infrastructure)
 - `@bendyline/squisq-editor-react` — React editor shell (Monaco raw, Tiptap WYSIWYG, block preview)
+- `@bendyline/squisq-video-react` — React components for browser-based video export (WebCodecs, ffmpeg.wasm)
 
 ## Repository Structure
 
@@ -60,6 +61,13 @@ squisq/
         Toolbar.tsx         # Formatting toolbar (bold, italic, headings, lists, etc.)
         tiptapBridge.ts     # Bidirectional markdown ↔ Tiptap conversion
         TemplateAnnotation.ts # Tiptap extension for heading template annotations
+    video-react/            # @bendyline/squisq-video-react
+      src/
+        VideoExportModal.tsx  # Modal dialog for export config + progress
+        VideoExportButton.tsx # Drop-in button wrapper
+        hooks/              # useVideoExport, useFrameCapture
+        workers/            # Web Worker for encoding (WebCodecs + ffmpeg.wasm fallback)
+        mp4Mux.ts           # mp4-muxer wrapper for WebCodecs path
     site/                   # squisq-site (dev/demo, not published)
       src/
         App.tsx             # Sample picker + view switching
@@ -73,11 +81,12 @@ squisq/
 - **Output:** `packages/*/dist/`
 
 ```bash
-npm run build              # Build all packages (core → formats → react → editor)
+npm run build              # Build all packages (core → formats → react → video → video-react → editor)
 npm run build:core         # Build core only
 npm run build:react        # Build react only
 npm run build:formats      # Build formats only
 npm run build:editor       # Build editor-react only
+npm run build:video-react  # Build video-react only
 npm test                   # Run vitest unit tests
 npm run test:e2e           # Run Playwright E2E tests
 npm run typecheck          # Type-check all packages (no emit)
@@ -122,6 +131,13 @@ npm run format             # Prettier format
 - Components: EditorShell, RawEditor, WysiwygEditor, PreviewPanel, Toolbar, StatusBar, ViewSwitcher
 - Context: EditorProvider, useEditor
 - Styles: `@bendyline/squisq-editor-react/styles` for CSS
+
+`@bendyline/squisq-video-react` exports everything from the root:
+
+- Components: VideoExportModal, VideoExportButton
+- Hooks: useVideoExport, useFrameCapture
+- Worker: `@bendyline/squisq-video-react/worker` for the encoding Web Worker
+- Encoding backends: WebCodecs (preferred, streaming H.264) with ffmpeg.wasm fallback (batched)
 
 ## Code Style
 

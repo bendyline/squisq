@@ -372,3 +372,99 @@ describe('template annotation in markdownToDoc', () => {
     expect(doc.blocks[0].children![0].template).toBe('chart');
   });
 });
+
+// ============================================
+// Reading-time durations & caption generation
+// ============================================
+
+describe('reading-time durations', () => {
+  it('sets block duration based on body content reading time', () => {
+    // ~50 words at 200 WPM = 15 seconds
+    const body = Array.from({ length: 50 }, (_, i) => `word${i}`).join(' ');
+    const md = parseMarkdown(`# Title\n\n${body}`);
+    const doc = markdownToDoc(md);
+
+    const block = doc.blocks[0];
+    expect(block.duration).toBeGreaterThan(5); // more than default
+    expect(block.duration).toBe(15); // 50 words / 200 WPM * 60 = 15s
+  });
+
+  it('applies minimum 3s duration for very short content', () => {
+    const md = parseMarkdown('# Title\n\nHi.');
+    const doc = markdownToDoc(md);
+
+    expect(doc.blocks[0].duration).toBe(3);
+  });
+
+  it('uses defaultDuration for blocks with no body content', () => {
+    const md = parseMarkdown('# Title');
+    const doc = markdownToDoc(md);
+
+    expect(doc.blocks[0].duration).toBe(5); // default
+  });
+
+  it('doc.duration sums all reading-time block durations', () => {
+    // Block A: no body → 5s default. Block B: ~20 words → 6s
+    const body = Array.from({ length: 20 }, (_, i) => `word${i}`).join(' ');
+    const md = parseMarkdown(`# A\n\n# B\n\n${body}`);
+    const doc = markdownToDoc(md);
+
+    const flat = flattenBlocks(doc.blocks);
+    expect(flat[0].duration).toBe(5); // A: no body
+    expect(flat[1].duration).toBe(6); // B: 20 words / 200 WPM * 60 = 6s
+    expect(doc.duration).toBe(11);
+  });
+});
+
+describe('caption generation', () => {
+  it('generates captions from body content', () => {
+    const md = parseMarkdown('# Title\n\nThis is the first sentence. This is the second sentence.');
+    const doc = markdownToDoc(md);
+
+    expect(doc.captions).toBeDefined();
+    expect(doc.captions!.phrases.length).toBeGreaterThanOrEqual(2);
+    expect(doc.captions!.phrases[0].text).toContain('first sentence');
+    expect(doc.captions!.phrases[1].text).toContain('second sentence');
+  });
+
+  it('caption times span the block duration', () => {
+    const md = parseMarkdown('# Section\n\nSome text here. More text follows.');
+    const doc = markdownToDoc(md);
+
+    expect(doc.captions).toBeDefined();
+    const phrases = doc.captions!.phrases;
+    // First phrase starts at block start
+    expect(phrases[0].startTime).toBe(doc.blocks[0].startTime);
+    // Last phrase ends at block end
+    const last = phrases[phrases.length - 1];
+    expect(last.endTime).toBeCloseTo(doc.blocks[0].startTime + doc.blocks[0].duration, 1);
+  });
+
+  it('does not generate captions for blocks without body content', () => {
+    const md = parseMarkdown('# A\n\n# B\n\n# C');
+    const doc = markdownToDoc(md);
+
+    // No body content anywhere → no captions
+    expect(doc.captions).toBeUndefined();
+  });
+
+  it('generates captions version and timestamp', () => {
+    const md = parseMarkdown('# Title\n\nHello world and more text.');
+    const doc = markdownToDoc(md);
+
+    expect(doc.captions!.version).toBe(1);
+    expect(doc.captions!.generatedAt).toBeTruthy();
+  });
+
+  it('caption phrases have sequential non-overlapping times', () => {
+    const md = parseMarkdown(
+      '# A\n\nFirst sentence here. Second sentence here.\n\n# B\n\nThird sentence. Fourth sentence.',
+    );
+    const doc = markdownToDoc(md);
+
+    const phrases = doc.captions!.phrases;
+    for (let i = 1; i < phrases.length; i++) {
+      expect(phrases[i].startTime).toBeGreaterThanOrEqual(phrases[i - 1].endTime - 0.001);
+    }
+  });
+});

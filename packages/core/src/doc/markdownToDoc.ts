@@ -22,9 +22,10 @@
  * ```
  */
 
-import type { Doc, Block } from '../schemas/Doc.js';
+import type { Doc, Block, CaptionTrack, CaptionPhrase } from '../schemas/Doc.js';
 import type { MarkdownDocument, MarkdownBlockNode, MarkdownHeading } from '../markdown/types.js';
 import { extractPlainText } from '../markdown/utils.js';
+import { estimateReadingTime } from '../timing/readingTime.js';
 
 // ============================================
 // Options
@@ -222,13 +223,51 @@ export function markdownToDoc(markdownDoc: MarkdownDocument, options?: MarkdownT
     rootBlocks.push(currentBlock);
   }
 
-  // Calculate basic timing
+  // Calculate reading-time-based durations and generate captions
   const allBlocks = flattenBlocks(rootBlocks);
+  const minDuration = 3; // seconds — minimum for blocks with little/no text
+  const phrases: CaptionPhrase[] = [];
+
+  // First pass: compute duration from body-content reading time
+  for (const block of allBlocks) {
+    const bodyText = getBlockBodyText(block);
+    if (bodyText.length > 0) {
+      const estimate = estimateReadingTime(bodyText);
+      block.duration = Math.max(minDuration, estimate.seconds);
+    } else {
+      block.duration = defaultDuration;
+    }
+  }
+
+  // Second pass: assign start times sequentially and build caption phrases
   let currentTime = 0;
   for (const block of allBlocks) {
     block.startTime = currentTime;
+
+    // Generate caption phrases from the block's body content
+    const bodyText = getBlockBodyText(block);
+    if (bodyText.length > 0) {
+      const sentences = splitIntoSentences(bodyText);
+      if (sentences.length > 0) {
+        const timePerSentence = block.duration / sentences.length;
+        for (let i = 0; i < sentences.length; i++) {
+          phrases.push({
+            text: sentences[i],
+            startTime: currentTime + i * timePerSentence,
+            endTime: currentTime + (i + 1) * timePerSentence,
+            audioSegment: 0,
+          });
+        }
+      }
+    }
+
     currentTime += block.duration;
   }
+
+  const captions: CaptionTrack | undefined =
+    phrases.length > 0
+      ? { phrases, generatedAt: new Date().toISOString(), version: 1 }
+      : undefined;
 
   return {
     articleId,
@@ -237,6 +276,7 @@ export function markdownToDoc(markdownDoc: MarkdownDocument, options?: MarkdownT
     audio: {
       segments: [],
     },
+    ...(captions ? { captions } : {}),
     ...(markdownDoc.frontmatter ? { frontmatter: markdownDoc.frontmatter } : {}),
   };
 }
@@ -279,4 +319,39 @@ export function countBlocks(blocks: Block[]): number {
  */
 export function getBlockDepth(block: Block): number {
   return block.sourceHeading?.depth ?? 0;
+}
+
+// ============================================
+// Internal helpers
+// ============================================
+
+/**
+ * Extract the plain text from a block's body contents (excluding heading text).
+ */
+function getBlockBodyText(block: Block): string {
+  if (!block.contents || block.contents.length === 0) return '';
+  return block.contents.map((node) => extractPlainText(node)).join(' ').trim();
+}
+
+/** Sentence-splitting regex: split on period/exclamation/question followed by whitespace. */
+const SENTENCE_RE = /(?<=[.!?])\s+/;
+
+/**
+ * Split text into sentence-sized caption phrases.
+ * Falls back to the whole text as a single phrase if no sentence boundaries exist.
+ */
+function splitIntoSentences(text: string): string[] {
+  const raw = text.split(SENTENCE_RE).map((s) => s.trim()).filter((s) => s.length > 0);
+  if (raw.length === 0) return [];
+
+  // Merge very short fragments (< 20 chars) with the previous sentence
+  const merged: string[] = [raw[0]];
+  for (let i = 1; i < raw.length; i++) {
+    if (raw[i].length < 20 && merged.length > 0) {
+      merged[merged.length - 1] += ' ' + raw[i];
+    } else {
+      merged.push(raw[i]);
+    }
+  }
+  return merged;
 }
