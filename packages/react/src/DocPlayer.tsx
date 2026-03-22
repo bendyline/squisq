@@ -859,7 +859,10 @@ export function DocPlayer({
             </div>
             <div>
               <span style={{ color: '#888' }}>time:</span> {currentTime.toFixed(2)}s /{' '}
-              {totalDuration.toFixed(1)}s
+              {totalDuration.toFixed(1)}s{' '}
+              <span style={{ color: '#666' }}>
+                (progress: {(docProgress * 100).toFixed(1)}%, scriptDur: {script.duration.toFixed(1)})
+              </span>
             </div>
             <div>
               <span style={{ color: '#888' }}>blockTime:</span> {blockTime.toFixed(2)}s /{' '}

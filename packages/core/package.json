@@ -80,6 +80,11 @@
       "types": "./dist/generate/index.d.ts",
       "import": "./dist/generate/index.js",
       "default": "./dist/generate/index.js"
+    },
+    "./transform": {
+      "types": "./dist/transform/index.d.ts",
+      "import": "./dist/transform/index.js",
+      "default": "./dist/transform/index.js"
     }
   },
   "scripts": {

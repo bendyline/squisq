@@ -26,6 +26,7 @@ import type { Block, Doc, ViewportConfig, ViewportPreset } from '@bendyline/squi
 import { VIEWPORT_PRESETS } from '@bendyline/squisq/schemas';
 import { getThemeSummaries, resolveTheme } from '@bendyline/squisq/schemas';
 import type { MarkdownBlockNode, MarkdownList } from '@bendyline/squisq/markdown';
+import { getTransformStyleSummaries, applyTransform } from '@bendyline/squisq/transform';
 import { useEditorContext } from './EditorContext';
 
 export interface PreviewPanelProps {
@@ -144,7 +145,7 @@ function getTemplateDefaults(
 function blockToSlide(block: Block, index: number): Record<string, unknown> {
   const headingText = block.sourceHeading
     ? extractPlainText(block.sourceHeading)
-    : block.id || `Slide ${index + 1}`;
+    : block.title || block.id || `Slide ${index + 1}`;
 
   // Validate template name — fall back to sectionHeader for unknowns
   const requestedTemplate = block.template || 'sectionHeader';
@@ -152,6 +153,16 @@ function blockToSlide(block: Block, index: number): Record<string, unknown> {
 
   // Get sensible defaults for templates that need more than just `title`
   const defaults = getTemplateDefaults(template, headingText, block);
+
+  // Spread the block itself to pick up any template-specific fields
+  // placed directly on the block by applyTransform (e.g. stat, description,
+  // quote, colorScheme). These are not in templateOverrides — they live
+  // on the block object because the transform produces hybrid Block+Template
+  // objects via the timing allocator.
+  const { id: _id, startTime: _st, duration: _d, audioSegment: _as,
+    layers: _l, transition: _tr, template: _t, title: _ti,
+    children: _c, contents: _co, sourceHeading: _sh,
+    templateOverrides: _to, ...extraFields } = block as unknown as Record<string, unknown>;
 
   return {
     id: block.id,
@@ -163,6 +174,8 @@ function blockToSlide(block: Block, index: number): Record<string, unknown> {
     title: headingText,
     // Template-specific defaults (safe fallbacks for required fields)
     ...defaults,
+    // Template-specific fields from transform (stat, description, quote, etc.)
+    ...extraFields,
     // Spread annotation overrides last so explicit values win
     ...block.templateOverrides,
   };
@@ -194,6 +207,7 @@ function buildPreviewDoc(doc: Doc): Doc {
       // its fallback timer to advance currentTime via requestAnimationFrame.
       segments: t > 0 ? [{ src: '', name: 'preview', duration: t, startTime: 0 }] : [],
     },
+    ...(doc.captions ? { captions: doc.captions } : {}),
   };
 }
 
@@ -270,6 +284,31 @@ function resolveDisplayMode(value: unknown): DisplayMode | null {
   return null;
 }
 
+// ── Transform style helpers ─────────────────────────────────────────
+
+/** Transform style options for the dropdown (with "None" prepended). */
+const TRANSFORM_STYLE_OPTIONS = [
+  { key: '', label: 'None' },
+  ...getTransformStyleSummaries().map((s) => ({ key: s.id, label: s.name })),
+];
+
+/** Set of valid transform style IDs for fast lookup. */
+const VALID_TRANSFORM_IDS = new Set(
+  getTransformStyleSummaries().map((s) => s.id),
+);
+
+/**
+ * Resolve a `transform-style` frontmatter value to a transform style id.
+ */
+function resolveFrontmatterTransform(value: unknown): string | null {
+  if (typeof value !== 'string') return null;
+  const v = value.trim().toLowerCase();
+  if (VALID_TRANSFORM_IDS.has(v)) return v;
+  const normalized = v.replace(/\s+/g, '-');
+  if (VALID_TRANSFORM_IDS.has(normalized)) return normalized;
+  return null;
+}
+
 // ── Component ──────────────────────────────────────────────────────
 
 /**
@@ -340,11 +379,40 @@ export function PreviewPanel({ basePath = '/', className }: PreviewPanelProps) {
   const activeThemeId = selectedThemeId ?? frontmatterThemeId ?? 'documentary';
   const activeTheme = useMemo(() => resolveTheme(activeThemeId), [activeThemeId]);
 
-  // Build the player-ready Doc whenever the parsed doc changes
+  // ── Transform style selection ──────────────────────────────────
+
+  // Determine the frontmatter-hinted transform style (if any)
+  const frontmatterTransformStyle = useMemo<string | null>(() => {
+    if (!doc?.frontmatter) return null;
+    return resolveFrontmatterTransform(doc.frontmatter['transform-style']);
+  }, [doc?.frontmatter]);
+
+  // Track user-selected transform style; null means "use frontmatter or default"
+  // Empty string means "None" (no transform applied)
+  const [selectedTransformStyle, setSelectedTransformStyle] = useState<string | null>(null);
+
+  // When frontmatter transform changes and user hasn't explicitly chosen, sync
+  useEffect(() => {
+    setSelectedTransformStyle(null);
+  }, [frontmatterTransformStyle]);
+
+  // Active transform: explicit user choice > frontmatter hint > none
+  const activeTransformStyle = selectedTransformStyle ?? frontmatterTransformStyle ?? '';
+
+  // Build the player-ready Doc whenever the parsed doc changes.
+  // Transform runs on the ORIGINAL doc (which has block.contents with
+  // markdown body text) so the content extractor can analyze it.
+  // Then buildPreviewDoc converts the result for DocPlayer.
   const previewDoc = useMemo(() => {
     if (!doc || !doc.blocks.length) return null;
+
+    if (activeTransformStyle) {
+      const result = applyTransform(doc, activeTransformStyle);
+      return buildPreviewDoc(result.doc);
+    }
+
     return buildPreviewDoc(doc);
-  }, [doc]);
+  }, [doc, activeTransformStyle]);
 
   // Status overlays for non-ready states
   if (isParsing) {
@@ -514,6 +582,52 @@ export function PreviewPanel({ basePath = '/', className }: PreviewPanelProps) {
           ))}
         </select>
         {frontmatterThemeId && selectedThemeId === null && (
+          <span
+            style={{
+              fontSize: '11px',
+              color: 'var(--squisq-text-muted, #9ca3af)',
+              fontStyle: 'italic',
+            }}
+          >
+            (from frontmatter)
+          </span>
+        )}
+
+        {/* Divider */}
+        <span
+          style={{
+            width: '1px',
+            height: '18px',
+            background: 'var(--squisq-border, #d1d5db)',
+            margin: '0 4px',
+          }}
+        />
+
+        {/* Transform style selector */}
+        <label htmlFor="transform-style" style={{ color: 'var(--squisq-text-muted, #6b7280)' }}>
+          Transform:
+        </label>
+        <select
+          id="transform-style"
+          value={activeTransformStyle}
+          onChange={(e) => setSelectedTransformStyle(e.target.value)}
+          style={{
+            padding: '3px 8px',
+            borderRadius: '4px',
+            border: '1px solid var(--squisq-border, #d1d5db)',
+            background: 'var(--squisq-input-bg, #fff)',
+            color: 'var(--squisq-text, #1f2937)',
+            fontSize: '13px',
+            cursor: 'pointer',
+          }}
+        >
+          {TRANSFORM_STYLE_OPTIONS.map((opt) => (
+            <option key={opt.key} value={opt.key}>
+              {opt.label}
+            </option>
+          ))}
+        </select>
+        {frontmatterTransformStyle && selectedTransformStyle === null && (
           <span
             style={{
               fontSize: '11px',
