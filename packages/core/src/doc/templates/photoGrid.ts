@@ -18,6 +18,7 @@
 import type { Layer } from '../../schemas/Doc.js';
 import type { PhotoGridInput, TemplateContext } from '../../schemas/BlockTemplates.js';
 import { scaledFontSize } from '../../schemas/BlockTemplates.js';
+import { getThemeFont } from '../utils/themeUtils.js';
 import { cleanCaption } from './captionUtils.js';
 
 /** Gap between images as percentage */
@@ -72,6 +73,7 @@ export function photoGrid(input: PhotoGridInput, context: TemplateContext): Laye
           text: img.alt,
           style: {
             fontSize: altFontSize,
+            fontFamily: getThemeFont(context, 'body'),
             color: theme.colors.textMuted,
             textAlign: 'center' as const,
           },
@@ -126,6 +128,7 @@ export function photoGrid(input: PhotoGridInput, context: TemplateContext): Laye
         text: caption,
         style: {
           fontSize: captionFontSize,
+          fontFamily: getThemeFont(context, 'body'),
           color: theme.colors.text,
           textAlign: 'center',
           shadow: true,

@@ -16,7 +16,7 @@ import { getAvailableTemplates } from '@bendyline/squisq/doc';
 const VIEWS: { id: EditorView; label: string; shortcut: string }[] = [
   { id: 'wysiwyg', label: 'Editor', shortcut: '⌘1' },
   { id: 'raw', label: 'Raw', shortcut: '⌘2' },
-  { id: 'preview', label: 'Preview', shortcut: '⌘3' },
+  { id: 'preview', label: 'Play', shortcut: '⌘3' },
 ];
 
 export interface ToolbarProps {

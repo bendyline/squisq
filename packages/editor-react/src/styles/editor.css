@@ -58,7 +58,7 @@
   display: flex;
   align-items: center;
   flex-wrap: wrap;
-  padding: 4px 12px;
+  padding: 0 12px 0 0;
   gap: 2px;
 }
 
@@ -67,7 +67,12 @@
 .squisq-toolbar-view-tabs {
   display: flex;
   gap: 0;
-  margin-right: 2px;
+  margin-right: 12px;
+  padding: 0 16px 0 12px;
+  background: rgba(0, 0, 0, 0.07);
+  border-right: 1px solid rgba(0, 0, 0, 0.12);
+  align-self: stretch;
+  align-items: center;
 }
 
 .squisq-toolbar-actions {
@@ -80,7 +85,7 @@
   padding: 4px 14px;
   border: none;
   background: transparent;
-  color: #6b7280;
+  color: #4b5563;
   cursor: pointer;
   font-size: 13px;
   font-weight: 500;
@@ -91,11 +96,12 @@
 }
 
 .squisq-toolbar-view-tab:hover {
-  color: #1f2937;
+  color: #111827;
 }
 
 .squisq-toolbar-view-tab--active {
-  color: #2563eb;
+  color: #1d4ed8;
+  font-weight: 600;
   border-bottom-color: #2563eb;
 }
 
@@ -443,17 +449,22 @@
   /* no border-top — sits directly in header */
 }
 
+.squisq-editor-shell[data-theme='dark'] .squisq-toolbar-view-tabs {
+  background: rgba(255, 255, 255, 0.08);
+  border-right-color: rgba(255, 255, 255, 0.15);
+}
+
 /* View tabs (dark) */
 .squisq-editor-shell[data-theme='dark'] .squisq-toolbar-view-tab {
-  color: #9ca3af;
+  color: #d1d5db;
 }
 
 .squisq-editor-shell[data-theme='dark'] .squisq-toolbar-view-tab:hover {
-  color: #e5e7eb;
+  color: #f9fafb;
 }
 
 .squisq-editor-shell[data-theme='dark'] .squisq-toolbar-view-tab--active {
-  color: #60a5fa;
+  color: #93c5fd;
   border-bottom-color: #60a5fa;
 }
 

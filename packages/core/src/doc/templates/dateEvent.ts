@@ -13,6 +13,7 @@
 import type { Layer } from '../../schemas/Doc.js';
 import type { DateEventInput, TemplateContext } from '../../schemas/BlockTemplates.js';
 import { scaledFontSize } from '../../schemas/BlockTemplates.js';
+import { getThemeFont } from '../utils/themeUtils.js';
 import { createAccentLayers, getAccentLayout, adjustY, DEFAULT_LAYOUT } from './accentImage.js';
 
 const MOOD_COLORS = {
@@ -60,6 +61,7 @@ export function dateEvent(input: DateEventInput, context: TemplateContext): Laye
       text: date,
       style: {
         fontSize: dateFontSize,
+        fontFamily: getThemeFont(context, 'title'),
         fontWeight: 'bold',
         color: colors.date,
         shadow: !!accentImage,
@@ -81,6 +83,7 @@ export function dateEvent(input: DateEventInput, context: TemplateContext): Laye
       text: description,
       style: {
         fontSize: descFontSize,
+        fontFamily: getThemeFont(context, 'body'),
         color: colors.text,
         textAlign: 'center',
         lineHeight: 1.8,
@@ -105,6 +108,7 @@ export function dateEvent(input: DateEventInput, context: TemplateContext): Laye
         text: footer,
         style: {
           fontSize: footerFontSize,
+          fontFamily: getThemeFont(context, 'body'),
           color: theme.colors.textMuted,
           shadow: !!accentImage,
         },

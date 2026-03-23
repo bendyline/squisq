@@ -40,6 +40,7 @@ export interface FrameCaptureHandle {
 export function useFrameCapture(): FrameCaptureHandle {
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
   const renderApiRef = useRef<RenderAPI | null>(null);
+  const blobUrlRef = useRef<string | null>(null);
   const dimensionsRef = useRef<{ width: number; height: number }>({ width: 1920, height: 1080 });
 
   const init = useCallback(
@@ -66,27 +67,40 @@ export function useFrameCapture(): FrameCaptureHandle {
         height,
       });
 
-      // Create hidden iframe
+      // Create hidden iframe using a blob: URL instead of srcdoc.
+      // blob: URLs share the parent's origin, so contentDocument access
+      // works reliably and CSP 'self' rules apply correctly.
+      // Revoke any previous blob URL
+      if (blobUrlRef.current) {
+        URL.revokeObjectURL(blobUrlRef.current);
+      }
+
+      const blob = new Blob([html], { type: 'text/html' });
+      const blobUrl = URL.createObjectURL(blob);
+      blobUrlRef.current = blobUrl;
+
       const iframe = document.createElement('iframe');
       iframe.style.cssText =
-        'position:fixed;left:-9999px;top:-9999px;width:0;height:0;border:none;visibility:hidden;';
+        `position:fixed;left:0;top:0;width:${width}px;height:${height}px;border:none;opacity:0;pointer-events:none;z-index:-1;`;
       iframe.width = String(width);
       iframe.height = String(height);
       document.body.appendChild(iframe);
       iframeRef.current = iframe;
 
-      // Write content into iframe
+      // Load content via blob URL
       return new Promise<number>((resolve, reject) => {
         const timeout = setTimeout(() => {
           reject(new Error('Render API did not initialize within 15 seconds'));
         }, 15000);
 
-        iframe.srcdoc = html;
+        iframe.src = blobUrl;
 
         const checkApi = () => {
           const win = iframe.contentWindow as (Window & RenderAPI) | null;
           if (win && typeof win.getDuration === 'function') {
             clearTimeout(timeout);
+            // Do NOT revoke blobUrl here — the iframe needs it alive
+            // for contentDocument access during frame capture.
             renderApiRef.current = win;
             const duration = win.getDuration();
             resolve(duration);
@@ -116,12 +130,23 @@ export function useFrameCapture(): FrameCaptureHandle {
     // Seek the player to the target time
     api.seekTo(time);
 
-    // Wait a frame for the DOM to update after seek
-    await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+    // Wait for the DOM to update after seek (two frames for layout stability)
+    await new Promise<void>((resolve) => requestAnimationFrame(() =>
+      requestAnimationFrame(() => resolve())
+    ));
 
-    const iframeDoc = iframe.contentDocument;
+    let iframeDoc = iframe.contentDocument;
     if (!iframeDoc) {
-      throw new Error('Cannot access iframe document');
+      // Retry once after a short delay — the document can briefly be null
+      // during navigation or when the browser is under heavy load
+      await new Promise<void>((resolve) => setTimeout(resolve, 100));
+      iframeDoc = iframe.contentDocument;
+      if (!iframeDoc) {
+        throw new Error(
+          'Cannot access iframe document. Ensure the page CSP allows frame-src and ' +
+          'that the iframe has not been removed from the DOM.'
+        );
+      }
     }
 
     const root = iframeDoc.getElementById('squisq-root');
@@ -146,6 +171,10 @@ export function useFrameCapture(): FrameCaptureHandle {
   }, []);
 
   const destroy = useCallback(() => {
+    if (blobUrlRef.current) {
+      URL.revokeObjectURL(blobUrlRef.current);
+      blobUrlRef.current = null;
+    }
     if (iframeRef.current) {
       iframeRef.current.remove();
       iframeRef.current = null;

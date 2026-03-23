@@ -11,7 +11,7 @@
 import type { Layer } from '../../schemas/Doc.js';
 import type { ComparisonBarInput, TemplateContext } from '../../schemas/BlockTemplates.js';
 import { scaledFontSize } from '../../schemas/BlockTemplates.js';
-import { resolveColorScheme } from '../utils/themeUtils.js';
+import { resolveColorScheme, getThemeFont } from '../utils/themeUtils.js';
 
 export function comparisonBar(input: ComparisonBarInput, context: TemplateContext): Layer[] {
   const { leftLabel, leftValue, rightLabel, rightValue, unit, colorScheme = 'blue' } = input;
@@ -61,7 +61,7 @@ export function comparisonBar(input: ComparisonBarInput, context: TemplateContex
       id: 'left-label',
       content: {
         text: leftLabel,
-        style: { fontSize: labelFontSize, color: theme.colors.textMuted },
+        style: { fontSize: labelFontSize, fontFamily: getThemeFont(context, 'body'), color: theme.colors.textMuted },
       },
       position: { x: `${barStartX}%`, y: `${topBarY - 8}%` },
     },
@@ -72,7 +72,7 @@ export function comparisonBar(input: ComparisonBarInput, context: TemplateContex
       id: 'left-value',
       content: {
         text: leftDisplay,
-        style: { fontSize: valueFontSize, fontWeight: 'bold', color: colors.text },
+        style: { fontSize: valueFontSize, fontFamily: getThemeFont(context, 'body'), fontWeight: 'bold', color: colors.text },
       },
       position: { x: `${barStartX + leftBarWidth + 2}%`, y: `${topBarY - 1}%` },
       animation: { type: 'fadeIn', duration: 0.8, delay: 0.3 },
@@ -102,7 +102,7 @@ export function comparisonBar(input: ComparisonBarInput, context: TemplateContex
       id: 'right-label',
       content: {
         text: rightLabel,
-        style: { fontSize: labelFontSize, color: theme.colors.textMuted },
+        style: { fontSize: labelFontSize, fontFamily: getThemeFont(context, 'body'), color: theme.colors.textMuted },
       },
       position: { x: `${barStartX}%`, y: `${bottomBarY - 8}%` },
     },
@@ -113,7 +113,7 @@ export function comparisonBar(input: ComparisonBarInput, context: TemplateContex
       id: 'right-value',
       content: {
         text: rightDisplay,
-        style: { fontSize: valueFontSize, fontWeight: 'bold', color: colors.accent },
+        style: { fontSize: valueFontSize, fontFamily: getThemeFont(context, 'body'), fontWeight: 'bold', color: colors.accent },
       },
       position: { x: `${barStartX + rightBarWidth + 2}%`, y: `${bottomBarY - 1}%` },
       animation: { type: 'fadeIn', duration: 0.8, delay: 0.6 },

@@ -11,7 +11,7 @@
 import type { Doc } from '../schemas/Doc.js';
 import type { TransformStyleId, TransformOptions, TransformResult } from './types.js';
 import { resolveTransformStyle } from './registry.js';
-import { analyzeBlocks } from './blockAnalyzer.js';
+import { analyzeBlocks, extractDocImages } from './blockAnalyzer.js';
 import { selectAndBuild } from './templateSelector.js';
 import { allocateTiming } from './timingAllocator.js';
 import { hashString } from '../random/SeededRandom.js';
@@ -36,7 +36,9 @@ export function applyTransform(
     : baseConfig;
 
   const seed = options?.seed ?? hashString(doc.articleId || 'transform');
-  const images = options?.images ?? [];
+
+  // Use provided images or auto-extract from the doc's markdown content
+  const images = options?.images ?? extractDocImages(doc.blocks);
 
   // 1. Analyze blocks
   const analyzed = analyzeBlocks(doc.blocks, {

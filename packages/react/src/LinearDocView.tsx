@@ -55,7 +55,7 @@ export interface LinearDocViewProps {
 function isAnnotatedBlock(block: Block): boolean {
   const annotation = block.sourceHeading?.templateAnnotation;
   if (!annotation) return false;
-  return hasTemplate(annotation.template);
+  return !!annotation.template && hasTemplate(annotation.template);
 }
 
 /**
@@ -103,7 +103,7 @@ function BlockSection({ block, basePath, viewport, renderContext, blockIndex }: 
       duration: 1,
       audioSegment: 0,
       title: headingText,
-      ...getTemplateDefaults(annotation.template, headingText, bodyText, block.contents),
+      ...getTemplateDefaults(annotation.template ?? 'sectionHeader', headingText, bodyText, block.contents),
       ...annotation.params,
       ...block.templateOverrides,
     };
@@ -276,6 +276,15 @@ export function LinearDocView({
     [activeViewport, totalBlocks, theme],
   );
 
+  const activeTheme = theme ?? DEFAULT_THEME;
+  const bgColor = activeTheme.colors.background;
+  const textColor = activeTheme.colors.text;
+  const mutedColor = activeTheme.colors.textMuted;
+  const primaryColor = activeTheme.colors.primary;
+  const bodyFont = activeTheme.typography.bodyFontFamily;
+  const titleFont = activeTheme.typography.titleFontFamily;
+  const lineHt = activeTheme.typography.lineHeight ?? 1.7;
+
   return (
     <div
       className={`squisq-linear ${className || ''}`}
@@ -284,19 +293,95 @@ export function LinearDocView({
         height: '100%',
         overflowY: 'auto',
         overflowX: 'hidden',
+        background: bgColor,
       }}
     >
       <div
-        className="squisq-linear-content"
+        className="squisq-linear-content squisq-md"
         style={{
           maxWidth: '720px',
           margin: '0 auto',
           padding: '24px 16px',
-          lineHeight: 1.7,
+          lineHeight: lineHt,
           fontSize: '16px',
-          color: 'var(--squisq-text, #1f2937)',
-        }}
+          fontFamily: bodyFont,
+          color: textColor,
+          // CSS custom properties for MarkdownRenderer / nested elements
+          '--squisq-linear-title-font': titleFont,
+          '--squisq-linear-body-font': bodyFont,
+          '--squisq-linear-text': textColor,
+          '--squisq-linear-muted': mutedColor,
+          '--squisq-linear-primary': primaryColor,
+          '--squisq-linear-bg': bgColor,
+        } as React.CSSProperties}
       >
+        {/* Theme-aware typography and layout for document mode */}
+        <style>{`
+          .squisq-linear-content h1,
+          .squisq-linear-content h2,
+          .squisq-linear-content h3,
+          .squisq-linear-content h4,
+          .squisq-linear-content h5,
+          .squisq-linear-content h6 {
+            font-family: var(--squisq-linear-title-font);
+            color: var(--squisq-linear-text);
+            margin-top: 1.2em;
+            margin-bottom: 0.4em;
+          }
+          .squisq-linear-content h1 { font-size: 2em; }
+          .squisq-linear-content h2 { font-size: 1.5em; }
+          .squisq-linear-content h3 { font-size: 1.25em; }
+          .squisq-linear-content p {
+            margin-bottom: 0.75em;
+          }
+          .squisq-linear-content ul,
+          .squisq-linear-content ol {
+            padding-left: 2em;
+            margin-bottom: 0.75em;
+          }
+          .squisq-linear-content li {
+            margin-bottom: 0.3em;
+          }
+          .squisq-linear-content a {
+            color: var(--squisq-linear-primary);
+          }
+          .squisq-linear-content code {
+            color: var(--squisq-linear-primary);
+            font-size: 0.9em;
+            padding: 0.15em 0.3em;
+            border-radius: 3px;
+            background: rgba(128, 128, 128, 0.15);
+          }
+          .squisq-linear-content pre {
+            padding: 1em;
+            border-radius: 6px;
+            background: rgba(0, 0, 0, 0.2);
+            overflow-x: auto;
+            margin-bottom: 0.75em;
+          }
+          .squisq-linear-content pre code {
+            padding: 0;
+            background: none;
+          }
+          .squisq-linear-content blockquote {
+            border-left: 3px solid var(--squisq-linear-muted);
+            color: var(--squisq-linear-muted);
+            padding-left: 1em;
+            margin-left: 0;
+            margin-bottom: 0.75em;
+          }
+          .squisq-linear-content hr {
+            border: none;
+            border-top: 1px solid var(--squisq-linear-muted);
+            margin: 1.5em 0;
+          }
+          .squisq-linear-content strong {
+            font-weight: 700;
+          }
+          .squisq-linear-content em {
+            font-style: italic;
+          }
+        `}</style>
         {doc.blocks.map((block, i) => (
           <BlockSection
             key={block.id}

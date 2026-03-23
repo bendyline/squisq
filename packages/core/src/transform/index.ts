@@ -16,5 +16,5 @@ export type {
   TransformResult,
 } from './types.js';
 
-export type { AnalyzedBlock } from './blockAnalyzer.js';
-export { analyzeBlocks } from './blockAnalyzer.js';
+export type { AnalyzedBlock, BlockImage } from './blockAnalyzer.js';
+export { analyzeBlocks, extractDocImages } from './blockAnalyzer.js';

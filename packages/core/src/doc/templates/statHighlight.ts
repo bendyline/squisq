@@ -13,7 +13,7 @@
 import type { Layer } from '../../schemas/Doc.js';
 import type { StatHighlightInput, TemplateContext } from '../../schemas/BlockTemplates.js';
 import { scaledFontSize } from '../../schemas/BlockTemplates.js';
-import { resolveColorScheme } from '../utils/themeUtils.js';
+import { resolveColorScheme, getThemeFont } from '../utils/themeUtils.js';
 import { createAccentLayers, getAccentLayout, adjustY, DEFAULT_LAYOUT } from './accentImage.js';
 import { createBackgroundLayer } from './captionUtils.js';
 
@@ -50,6 +50,7 @@ export function statHighlight(input: StatHighlightInput, context: TemplateContex
       text: stat,
       style: {
         fontSize: statFontSize,
+        fontFamily: getThemeFont(context, 'title'),
         fontWeight: 'bold',
         color: colors.text,
         shadow: !!accentImage,
@@ -71,6 +72,7 @@ export function statHighlight(input: StatHighlightInput, context: TemplateContex
       text: description,
       style: {
         fontSize: descFontSize,
+        fontFamily: getThemeFont(context, 'body'),
         color: theme.colors.textMuted,
         textAlign: 'center',
         lineHeight: 1.6,
@@ -95,6 +97,7 @@ export function statHighlight(input: StatHighlightInput, context: TemplateContex
         text: detail,
         style: {
           fontSize: detailFontSize,
+          fontFamily: getThemeFont(context, 'body'),
           color: colors.accent,
           textAlign: 'center',
           shadow: !!accentImage,

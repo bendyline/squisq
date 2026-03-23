@@ -32,6 +32,23 @@ export type ControlsLayout = 'overlay' | 'sidebar' | 'bottom';
  */
 export type DisplayMode = 'video' | 'slideshow' | 'linear';
 
+/**
+ * Caption display style.
+ *
+ * - `'standard'` — Traditional broadcast-style captions: small white text
+ *   on a semi-transparent black badge at the top of the player.
+ * - `'social'` — Social media-style (Instagram/TikTok): large centered words
+ *   showing 3-5 words at a time with the active word highlighted in the
+ *   theme's primary color. Font and colors pulled from the active theme.
+ */
+export type CaptionStyle = 'standard' | 'social';
+
+/**
+ * Caption display mode — combines enable/disable with style selection.
+ * The CC button cycles through: off → standard → social → off.
+ */
+export type CaptionMode = 'off' | 'standard' | 'social';
+
 /** Slide navigation actions for slideshow display mode */
 export interface SlideNavActions {
   /** Navigate to the next slide */
@@ -52,6 +69,8 @@ export interface PlaybackState {
   docProgress: number;
   hasCaptions: boolean;
   captionsEnabled: boolean;
+  /** Current caption display mode (off, standard, social). */
+  captionMode: CaptionMode;
   isFullscreen?: boolean;
   /** Current audio segment index (0-based) */
   currentSegmentIndex: number;
@@ -67,6 +86,8 @@ export interface PlaybackActions {
   restart: () => void;
   seekTo: (time: number) => void;
   setCaptionsEnabled: (enabled: boolean) => void;
+  /** Cycle caption mode: off → standard → social → off */
+  cycleCaptionMode: () => void;
   toggleFullscreen?: () => void;
 }
 

@@ -118,8 +118,10 @@ interface MarkdownNodeBase {
  * → `{ template: 'chart', params: { colorScheme: 'blue' } }`
  */
 export interface HeadingTemplateAnnotation {
-  /** Template name (first token inside `{[…]}`) */
-  template: string;
+  /** Template name (first token inside `{[…]}`).
+   *  Optional when the annotation contains only key=value pairs
+   *  (e.g., `{[audio=intro.mp3]}`). */
+  template?: string;
   /** Optional key-value parameters (remaining `key=value` tokens) */
   params?: Record<string, string>;
 }

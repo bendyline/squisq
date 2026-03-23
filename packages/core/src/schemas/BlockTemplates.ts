@@ -39,12 +39,12 @@ export type ColorScheme = string;
  * PT Serif provides a classic, readable appearance for documentary-style content.
  * Used as a fallback in TextLayer when no font is specified.
  */
-export const DEFAULT_DOC_FONT = '"PT Serif", Georgia, "Times New Roman", serif';
+export const DEFAULT_DOC_FONT = 'system-ui, -apple-system, "Segoe UI", Roboto, sans-serif';
 
 /**
  * Default font family for titles.
  */
-export const DEFAULT_TITLE_FONT = '"PT Serif", Georgia, "Times New Roman", serif';
+export const DEFAULT_TITLE_FONT = 'Georgia, "Times New Roman", serif';
 
 // ============================================
 // Accent Image System

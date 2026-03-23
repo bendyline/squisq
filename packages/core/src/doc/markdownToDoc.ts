@@ -330,27 +330,74 @@ export function getBlockDepth(block: Block): number {
  */
 function getBlockBodyText(block: Block): string {
   if (!block.contents || block.contents.length === 0) return '';
-  return block.contents.map((node) => extractPlainText(node)).join(' ').trim();
+  // Join with newlines to preserve paragraph/list-item boundaries.
+  // splitIntoPhrases uses these newlines as natural split points.
+  return block.contents.map((node) => extractPlainText(node)).join('\n').trim();
 }
 
-/** Sentence-splitting regex: split on period/exclamation/question followed by whitespace. */
-const SENTENCE_RE = /(?<=[.!?])\s+/;
+/** Maximum words per caption phrase. Long sentences get split at this point. */
+const MAX_PHRASE_WORDS = 12;
 
 /**
- * Split text into sentence-sized caption phrases.
- * Falls back to the whole text as a single phrase if no sentence boundaries exist.
+ * Split text into caption-sized phrases.
+ *
+ * Splits on:
+ * 1. Newlines (paragraph/list-item boundaries from markdown)
+ * 2. Sentence endings (.!?) followed by whitespace
+ * 3. Long fragments (> MAX_PHRASE_WORDS) at clause boundaries (commas, semicolons, dashes)
+ *
+ * Merges very short fragments (< 15 chars) with the previous phrase.
  */
 function splitIntoSentences(text: string): string[] {
-  const raw = text.split(SENTENCE_RE).map((s) => s.trim()).filter((s) => s.length > 0);
-  if (raw.length === 0) return [];
+  // First split on newlines (each paragraph/list item becomes separate)
+  const lines = text.split(/\n+/).map(s => s.trim()).filter(s => s.length > 0);
 
-  // Merge very short fragments (< 20 chars) with the previous sentence
-  const merged: string[] = [raw[0]];
-  for (let i = 1; i < raw.length; i++) {
-    if (raw[i].length < 20 && merged.length > 0) {
-      merged[merged.length - 1] += ' ' + raw[i];
+  // Then split each line on sentence boundaries
+  const sentenceRe = /(?<=[.!?])\s+/;
+  const fragments: string[] = [];
+  for (const line of lines) {
+    const sentences = line.split(sentenceRe).map(s => s.trim()).filter(s => s.length > 0);
+    fragments.push(...sentences);
+  }
+
+  if (fragments.length === 0) return [];
+
+  // Split long fragments at clause boundaries
+  const split: string[] = [];
+  for (const frag of fragments) {
+    const words = frag.split(/\s+/);
+    if (words.length > MAX_PHRASE_WORDS) {
+      // Try to split at comma, semicolon, or dash near the midpoint
+      const mid = Math.floor(frag.length / 2);
+      const clauseRe = /[,;]\s+|\s+—\s+|\s+-\s+/g;
+      let bestSplit = -1;
+      let bestDist = Infinity;
+      let match;
+      while ((match = clauseRe.exec(frag)) !== null) {
+        const dist = Math.abs(match.index - mid);
+        if (dist < bestDist) {
+          bestDist = dist;
+          bestSplit = match.index + match[0].length;
+        }
+      }
+      if (bestSplit > 0 && bestSplit < frag.length - 5) {
+        split.push(frag.slice(0, bestSplit).trim());
+        split.push(frag.slice(bestSplit).trim());
+      } else {
+        split.push(frag);
+      }
     } else {
-      merged.push(raw[i]);
+      split.push(frag);
+    }
+  }
+
+  // Merge very short fragments (< 15 chars) with the previous phrase
+  const merged: string[] = [split[0]];
+  for (let i = 1; i < split.length; i++) {
+    if (split[i].length < 15 && merged.length > 0) {
+      merged[merged.length - 1] += ' ' + split[i];
+    } else {
+      merged.push(split[i]);
     }
   }
   return merged;

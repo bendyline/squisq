@@ -164,11 +164,18 @@ function buildBlockSequence(
     blockExtractions.set(sel.sourceIndex, list);
   }
 
-  // Limit extractions per block to blocksPerSection.max
+  // Limit extractions per block: cap at blocksPerSection.max and ensure
+  // template type variety within each block (no two same-type extractions).
   for (const [idx, list] of blockExtractions) {
-    if (list.length > config.blocksPerSection.max) {
-      blockExtractions.set(idx, list.slice(0, config.blocksPerSection.max));
+    const diverse: SelectedExtraction[] = [];
+    const usedTypes = new Set<string>();
+    for (const sel of list) {
+      if (usedTypes.has(sel.element.type)) continue;
+      usedTypes.add(sel.element.type);
+      diverse.push(sel);
+      if (diverse.length >= config.blocksPerSection.max) break;
     }
+    blockExtractions.set(idx, diverse);
   }
 
   const blocks: Array<Block | TemplateBlock> = [];

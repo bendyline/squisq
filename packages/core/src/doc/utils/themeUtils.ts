@@ -38,6 +38,38 @@ export function resolveColorScheme(
 }
 
 // ============================================
+// Font Family Resolution
+// ============================================
+
+/** Safe system font fallbacks. */
+const FALLBACK_BODY = 'system-ui, -apple-system, "Segoe UI", Roboto, sans-serif';
+const FALLBACK_TITLE = 'Georgia, "Times New Roman", serif';
+const FALLBACK_MONO = 'Consolas, "Courier New", monospace';
+
+/**
+ * Get the theme font family for a given role.
+ * Templates call this to set `fontFamily` on text layers.
+ *
+ * @param context Template context (includes theme with typography settings)
+ * @param role    'title' for headings, 'body' for descriptions, 'mono' for code
+ * @returns A CSS font-family string with the theme's font and safe fallbacks
+ */
+export function getThemeFont(
+  context: TemplateContext,
+  role: 'title' | 'body' | 'mono',
+): string {
+  const { typography } = context.theme;
+  switch (role) {
+    case 'title':
+      return typography.titleFontFamily || FALLBACK_TITLE;
+    case 'body':
+      return typography.bodyFontFamily || FALLBACK_BODY;
+    case 'mono':
+      return typography.monoFontFamily || FALLBACK_MONO;
+  }
+}
+
+// ============================================
 // Font Sizing
 // ============================================
 

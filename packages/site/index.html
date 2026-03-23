@@ -8,16 +8,25 @@
       content="
         default-src 'self';
         script-src  'self' blob: 'unsafe-inline';
-        style-src   'self' 'unsafe-inline';
+        style-src   'self' 'unsafe-inline' https://fonts.googleapis.com;
         img-src     'self' blob: data:;
         media-src   'self' blob:;
-        font-src    'self' data:;
+        font-src    'self' data: https://fonts.gstatic.com;
         connect-src 'self' blob: ws://localhost:* http://localhost:*;
         worker-src  'self' blob:;
+        frame-src   'self' blob: data:;
+        child-src   'self' blob:;
         object-src  'none';
         base-uri    'self';
         form-action 'self';
       "
+    />
+    <!-- Google Fonts: union of all theme-recommended fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,700;1,400&family=Crimson+Text:ital,wght@0,400;0,700;1,400&family=DM+Sans:wght@400;500;600;700&family=DM+Serif+Display&family=Hanken+Grotesk:wght@400;500;600;700;800&family=IBM+Plex+Sans:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600;700&family=Lora:ital,wght@0,400;0,700;1,400&family=Merriweather:ital,wght@0,400;0,700;1,400&family=Oswald:wght@400;600;700&family=PT+Serif:ital,wght@0,400;0,700;1,400&family=Playfair+Display:wght@400;700;800&family=Roboto:wght@400;500;700&family=Source+Serif+4:ital,wght@0,400;0,700;1,400&display=swap"
+      rel="stylesheet"
     />
     <link rel="icon" type="image/png" sizes="32x32" href="/res/favicon-32.png" />
     <link rel="icon" type="image/png" sizes="16x16" href="/res/favicon-16.png" />

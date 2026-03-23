@@ -48,6 +48,8 @@ import type {
   PlaybackActions,
   BlockMarker,
   DisplayMode,
+  CaptionStyle,
+  CaptionMode,
   SlideNavActions,
   SquisqWindow,
 } from './types';
@@ -169,6 +171,9 @@ interface DocPlayerProps {
    *   template-annotated sections as inline SVG cards. No audio, no timeline.
    */
   displayMode?: DisplayMode;
+  /** Caption display style (default: 'standard').
+   *  'social' shows large centered words with the active word highlighted. */
+  captionStyle?: CaptionStyle;
 }
 
 export function DocPlayer({
@@ -192,6 +197,7 @@ export function DocPlayer({
   forceViewport,
   displayMode = 'video',
   theme,
+  captionStyle = 'standard',
 }: DocPlayerProps) {
   const isSlideshowMode = displayMode === 'slideshow';
   const isLinearMode = displayMode === 'linear';
@@ -503,14 +509,33 @@ export function DocPlayer({
     // eslint-disable-next-line react-hooks/exhaustive-deps -- script is a stable prop; re-registering on every script change is unnecessary
   }, [renderMode, isDebugMode, seekTo, totalDuration, expandedBlocks, coverBlock]);
 
-  // Captions state: use prop if provided, otherwise default to true
-  const captionsEnabled = captionsEnabledProp !== undefined ? captionsEnabledProp : true;
+  // Caption mode state: cycles through off → standard → social → off
+  // The captionStyle prop sets the default active style; captionsEnabledProp
+  // can override the initial on/off state.
+  const defaultMode: CaptionMode =
+    captionsEnabledProp === false ? 'off' : (captionStyle || 'standard');
+  const [captionMode, setCaptionMode] = useState<CaptionMode>(defaultMode);
+
+  // Derive captionsEnabled and active style from the mode
+  const captionsEnabled = captionMode !== 'off';
+  const activeCaptionStyle: CaptionStyle = captionMode === 'social' ? 'social' : 'standard';
+
   const setCaptionsEnabled = useCallback(
     (enabled: boolean) => {
+      setCaptionMode(enabled ? 'standard' : 'off');
       onCaptionsToggle?.(enabled);
     },
     [onCaptionsToggle],
   );
+
+  const cycleCaptionMode = useCallback(() => {
+    setCaptionMode(prev => {
+      const next: CaptionMode = prev === 'off' ? 'standard' : prev === 'standard' ? 'social' : 'off';
+      onCaptionsToggle?.(next !== 'off');
+      return next;
+    });
+  }, [onCaptionsToggle]);
+
   const hasCaptions = script.captions && script.captions.phrases.length > 0;
 
   // Map segment indices to human-readable titles (from sectionHeader blocks)
@@ -527,6 +552,7 @@ export function DocPlayer({
       docProgress,
       hasCaptions: !!hasCaptions,
       captionsEnabled,
+      captionMode,
       isFullscreen,
       currentSegmentIndex: currentSegment,
       currentSegmentName:
@@ -543,6 +569,7 @@ export function DocPlayer({
       docProgress,
       hasCaptions,
       captionsEnabled,
+      captionMode,
       isFullscreen,
       currentSegment,
       segmentTitleMap,
@@ -557,9 +584,10 @@ export function DocPlayer({
       restart,
       seekTo,
       setCaptionsEnabled,
+      cycleCaptionMode,
       toggleFullscreen: onFullscreenToggle,
     }),
-    [toggle, restart, seekTo, setCaptionsEnabled, onFullscreenToggle],
+    [toggle, restart, seekTo, setCaptionsEnabled, cycleCaptionMode, onFullscreenToggle],
   );
 
   // Slide navigation actions for slideshow mode
@@ -819,6 +847,9 @@ export function DocPlayer({
             currentTime={currentTime}
             enabled={captionsEnabled && (isPlaying || currentTime > 0)}
             fontSize={16}
+            captionStyle={activeCaptionStyle}
+            theme={theme}
+            viewport={activeViewport}
           />
         )}
 

@@ -11,6 +11,7 @@
 import type { Layer } from '../../schemas/Doc.js';
 import type { TitleBlockInput, TemplateContext } from '../../schemas/BlockTemplates.js';
 import { scaledFontSize } from '../../schemas/BlockTemplates.js';
+import { getThemeFont } from '../utils/themeUtils.js';
 
 export function titleBlock(input: TitleBlockInput, context: TemplateContext): Layer[] {
   const { title, subtitle, backgroundColor } = input;
@@ -56,6 +57,7 @@ export function titleBlock(input: TitleBlockInput, context: TemplateContext): La
         text: title,
         style: {
           fontSize: titleFontSize,
+          fontFamily: getThemeFont(context, 'title'),
           fontWeight: 'bold',
           color: theme.colors.text,
           textAlign: 'center',
@@ -81,6 +83,7 @@ export function titleBlock(input: TitleBlockInput, context: TemplateContext): La
         text: subtitle,
         style: {
           fontSize: subtitleFontSize,
+          fontFamily: getThemeFont(context, 'body'),
           color: theme.colors.textMuted,
           textAlign: 'center',
           lineHeight: 1.5,

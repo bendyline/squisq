@@ -11,6 +11,7 @@
 import type { Layer } from '../../schemas/Doc.js';
 import type { ImageWithCaptionInput, TemplateContext } from '../../schemas/BlockTemplates.js';
 import { scaledFontSize } from '../../schemas/BlockTemplates.js';
+import { getThemeFont } from '../utils/themeUtils.js';
 import { cleanCaption } from './captionUtils.js';
 import { mapAmbientMotion } from './accentImage.js';
 
@@ -80,6 +81,7 @@ export function imageWithCaption(input: ImageWithCaptionInput, context: Template
         text: caption,
         style: {
           fontSize: titleFontSize,
+          fontFamily: getThemeFont(context, 'title'),
           fontWeight: 'bold',
           color: theme.colors.text,
           textAlign: 'center',
@@ -104,6 +106,7 @@ export function imageWithCaption(input: ImageWithCaptionInput, context: Template
           text: subtitle,
           style: {
             fontSize: subtitleFontSize,
+            fontFamily: getThemeFont(context, 'body'),
             color: theme.colors.textMuted,
             textAlign: 'center',
             lineHeight: 1.5,
@@ -148,6 +151,7 @@ export function imageWithCaption(input: ImageWithCaptionInput, context: Template
         text: caption,
         style: {
           fontSize: captionFontSize,
+          fontFamily: getThemeFont(context, 'body'),
           color: theme.colors.text,
           textAlign: 'center',
           shadow: true,

@@ -181,17 +181,25 @@ function extractTemplateAnnotation(
  */
 function parseAnnotationTokens(inner: string): HeadingTemplateAnnotation {
   const tokens = inner.split(/\s+/);
-  const template = tokens[0];
   const params: Record<string, string> = {};
 
-  for (let i = 1; i < tokens.length; i++) {
+  // If the first token contains '=', there's no template name —
+  // the annotation is purely key-value (e.g., `{[audio=intro.mp3]}`).
+  const firstIsParam = tokens[0].indexOf('=') > 0;
+  const template = firstIsParam ? undefined : tokens[0];
+  const startIdx = firstIsParam ? 0 : 1;
+
+  for (let i = startIdx; i < tokens.length; i++) {
     const eqIdx = tokens[i].indexOf('=');
     if (eqIdx > 0) {
       params[tokens[i].slice(0, eqIdx)] = tokens[i].slice(eqIdx + 1);
     }
   }
 
-  const result: HeadingTemplateAnnotation = { template };
+  const result: HeadingTemplateAnnotation = {};
+  if (template) {
+    result.template = template;
+  }
   if (Object.keys(params).length > 0) {
     result.params = params;
   }
@@ -202,14 +210,16 @@ function parseAnnotationTokens(inner: string): HeadingTemplateAnnotation {
  * Serialize a HeadingTemplateAnnotation back to `{[templateName key=value …]}` text.
  */
 function serializeTemplateAnnotation(annotation: HeadingTemplateAnnotation): string {
-  let result = `{[${annotation.template}`;
+  const parts: string[] = [];
+  if (annotation.template) {
+    parts.push(annotation.template);
+  }
   if (annotation.params) {
     for (const [key, value] of Object.entries(annotation.params)) {
-      result += ` ${key}=${value}`;
+      parts.push(`${key}=${value}`);
     }
   }
-  result += ']}';
-  return result;
+  return `{[${parts.join(' ')}]}`;
 }
 
 /**

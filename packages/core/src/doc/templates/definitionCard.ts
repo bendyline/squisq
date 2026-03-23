@@ -11,7 +11,7 @@
 import type { Layer } from '../../schemas/Doc.js';
 import type { DefinitionCardInput, TemplateContext } from '../../schemas/BlockTemplates.js';
 import { scaledFontSize } from '../../schemas/BlockTemplates.js';
-import { resolveColorScheme } from '../utils/themeUtils.js';
+import { resolveColorScheme, getThemeFont } from '../utils/themeUtils.js';
 import { createAccentLayers, getAccentLayout, adjustY, DEFAULT_LAYOUT } from './accentImage.js';
 import { createBackgroundLayer } from './captionUtils.js';
 
@@ -47,6 +47,7 @@ export function definitionCard(input: DefinitionCardInput, context: TemplateCont
       text: term,
       style: {
         fontSize: termFontSize,
+        fontFamily: getThemeFont(context, 'title'),
         fontWeight: 'bold',
         color: colors.text,
         textAlign: 'center',
@@ -86,6 +87,7 @@ export function definitionCard(input: DefinitionCardInput, context: TemplateCont
       text: definition,
       style: {
         fontSize: defFontSize,
+        fontFamily: getThemeFont(context, 'body'),
         color: theme.colors.text,
         textAlign: 'center',
         lineHeight: 1.6,
@@ -111,6 +113,7 @@ export function definitionCard(input: DefinitionCardInput, context: TemplateCont
         text: origin,
         style: {
           fontSize: originFontSize,
+          fontFamily: getThemeFont(context, 'body'),
           color: theme.colors.textMuted,
           textAlign: 'center',
           shadow: !!accentImage,
