@@ -60,10 +60,12 @@ function arrayBufferToDataUrl(buffer: ArrayBuffer, mime: string): string {
  */
 function createInlineProvider(images: Map<string, ArrayBuffer>): MediaProvider {
   const dataUrls = new Map<string, string>();
+  const mimeTypes = new Map<string, string>();
   for (const [path, buffer] of images) {
     const ext = path.split('.').pop()?.toLowerCase() ?? '';
     const mime = MIME_MAP[ext] ?? 'application/octet-stream';
     dataUrls.set(path, arrayBufferToDataUrl(buffer, mime));
+    mimeTypes.set(path, mime);
   }
 
   return {
@@ -71,7 +73,11 @@ function createInlineProvider(images: Map<string, ArrayBuffer>): MediaProvider {
       return dataUrls.get(relativePath) ?? relativePath;
     },
     async listMedia() {
-      return [...dataUrls.keys()].map((name) => ({ name, mimeType: 'image/jpeg', size: 0 }));
+      return [...dataUrls.keys()].map((name) => ({
+        name,
+        mimeType: mimeTypes.get(name) ?? 'application/octet-stream',
+        size: 0,
+      }));
     },
     async addMedia() {
       throw new Error('Read-only');

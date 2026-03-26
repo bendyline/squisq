@@ -62,6 +62,12 @@ export function createEncoder(config: EncoderConfig): MainThreadEncoder {
     );
   }
 
+  if (!config.fps || config.fps <= 0 || !config.width || !config.height) {
+    throw new Error(
+      `Invalid encoder config: fps=${config.fps}, width=${config.width}, height=${config.height}`,
+    );
+  }
+
   const muxer: Mp4MuxerHandle = createMp4Muxer({
     width: config.width,
     height: config.height,

@@ -501,7 +501,7 @@ export function Toolbar({
         </button>
       )}
       {/* Right slot — rightmost end of toolbar */}
-      {slotRight}{' '}
+      {slotRight}
     </div>
   );
 }

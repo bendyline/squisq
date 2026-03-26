@@ -138,7 +138,7 @@ export async function framesToMp4NativeBytes(
   try {
     await framesToMp4Native(ffmpegPath, frames, audio, tmpOutput, options);
     const data = await readFile(tmpOutput);
-    return new Uint8Array(data.buffer as ArrayBuffer);
+    return new Uint8Array(data.buffer, data.byteOffset, data.byteLength);
   } finally {
     await rm(tmpOutput, { force: true });
   }

@@ -522,10 +522,12 @@ export function DocPlayer({
 
   const setCaptionsEnabled = useCallback(
     (enabled: boolean) => {
-      setCaptionMode(enabled ? 'standard' : 'off');
+      // When re-enabling, restore the prop-specified style rather than
+      // always defaulting to 'standard'
+      setCaptionMode(enabled ? (captionStyle || 'standard') : 'off');
       onCaptionsToggle?.(enabled);
     },
-    [onCaptionsToggle],
+    [onCaptionsToggle, captionStyle],
   );
 
   const cycleCaptionMode = useCallback(() => {

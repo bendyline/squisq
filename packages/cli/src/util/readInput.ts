@@ -89,7 +89,9 @@ async function readMarkdownFile(filePath: string): Promise<ReadInputResult> {
 
 async function readContainer(filePath: string): Promise<ReadInputResult> {
   const data = await readFile(filePath);
-  const container = await zipToContainer(data.buffer as ArrayBuffer);
+  const container = await zipToContainer(
+    data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength) as ArrayBuffer,
+  );
 
   const markdown = await container.readDocument();
   if (!markdown) {
@@ -109,7 +111,7 @@ async function readFolder(dirPath: string): Promise<ReadInputResult> {
     const data = await readFile(absPath);
     await container.writeFile(
       relPath,
-      new Uint8Array(data.buffer as ArrayBuffer),
+      new Uint8Array(data.buffer, data.byteOffset, data.byteLength),
       mimeFromExt(relPath),
     );
   }

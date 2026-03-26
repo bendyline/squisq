@@ -33,9 +33,10 @@ function ImageComponent({ node }: NodeViewProps) {
     }
 
     let cancelled = false;
-    mediaProvider.resolveUrl(src).then((resolved) => {
-      if (!cancelled) setResolvedSrc(resolved);
-    });
+    mediaProvider.resolveUrl(src).then(
+      (resolved) => { if (!cancelled) setResolvedSrc(resolved); },
+      () => { if (!cancelled) setResolvedSrc(src); },
+    );
 
     return () => {
       cancelled = true;

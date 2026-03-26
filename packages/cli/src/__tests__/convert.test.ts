@@ -143,7 +143,9 @@ describe('convert command', () => {
 
     it('DBK container round-trips through zipToContainer', async () => {
       const data = await readFile(join(validationDir, 'test.dbk'));
-      const container = await zipToContainer(data.buffer as ArrayBuffer);
+      const container = await zipToContainer(
+        data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength) as ArrayBuffer,
+      );
       const md = await container.readDocument();
       expect(md).to.be.a('string').that.includes('# Test Document');
     });
