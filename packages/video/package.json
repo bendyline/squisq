@@ -39,8 +39,8 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@bendyline/squisq": "1.1.0",
-    "@bendyline/squisq-react": "1.0.2",
+    "@bendyline/squisq": "1.1.1",
+    "@bendyline/squisq-react": "1.0.3",
     "@ffmpeg/ffmpeg": "^0.12.15",
     "@ffmpeg/util": "^0.12.2"
   },
