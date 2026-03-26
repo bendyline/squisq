@@ -58,7 +58,9 @@ function extractBodyText(contents: MarkdownBlockNode[] | undefined): string {
  * Extract images from a block's markdown contents.
  * Walks the node tree recursively to find all MarkdownImage nodes.
  */
-function extractBlockImages(contents: MarkdownBlockNode[] | undefined): Array<{ src: string; alt: string }> {
+function extractBlockImages(
+  contents: MarkdownBlockNode[] | undefined,
+): Array<{ src: string; alt: string }> {
   if (!contents || contents.length === 0) return [];
   const images: Array<{ src: string; alt: string }> = [];
 
@@ -214,10 +216,21 @@ function blockToSlide(block: Block, index: number): Record<string, unknown> {
   // quote, colorScheme). These are not in templateOverrides — they live
   // on the block object because the transform produces hybrid Block+Template
   // objects via the timing allocator.
-  const { id: _id, startTime: _st, duration: _d, audioSegment: _as,
-    layers: _l, transition: _tr, template: _t, title: _ti,
-    children: _c, contents: _co, sourceHeading: _sh,
-    templateOverrides: _to, ...extraFields } = block as unknown as Record<string, unknown>;
+  const {
+    id: _id,
+    startTime: _st,
+    duration: _d,
+    audioSegment: _as,
+    layers: _l,
+    transition: _tr,
+    template: _t,
+    title: _ti,
+    children: _c,
+    contents: _co,
+    sourceHeading: _sh,
+    templateOverrides: _to,
+    ...extraFields
+  } = block as unknown as Record<string, unknown>;
 
   return {
     id: block.id,
@@ -238,7 +251,10 @@ function blockToSlide(block: Block, index: number): Record<string, unknown> {
 
 /** Ambient motions to rotate on image slides. */
 const IMAGE_MOTIONS: Array<'zoomIn' | 'zoomOut' | 'panLeft' | 'panRight'> = [
-  'zoomIn', 'zoomOut', 'panLeft', 'panRight',
+  'zoomIn',
+  'zoomOut',
+  'panLeft',
+  'panRight',
 ];
 
 /**
@@ -301,7 +317,7 @@ function buildPreviewDoc(doc: Doc): Doc {
 
   // Second pass: interleave unused images as standalone imageWithCaption slides.
   // Spread them evenly through the sequence for visual variety.
-  const unusedImages = allImages.filter(img => !usedImageSrcs.has(img.src));
+  const unusedImages = allImages.filter((img) => !usedImageSrcs.has(img.src));
   if (unusedImages.length > 0 && slides.length > 0) {
     const interval = Math.max(2, Math.floor(slides.length / (unusedImages.length + 1)));
     let insertOffset = 0;
@@ -384,14 +400,16 @@ export function PreviewPanel({ basePath = '/', className, container }: PreviewPa
     // If we have a container, try to resolve audio mapping before building preview
     if (container) {
       let cancelled = false;
-      resolveAudioMapping(sourceDoc, container).then(audioDoc => {
+      resolveAudioMapping(sourceDoc, container).then((audioDoc) => {
         if (!cancelled) {
           setPreviewDoc(buildPreviewDoc(audioDoc));
         }
       });
       // Set an immediate preview without audio while mapping resolves
       setPreviewDoc(buildPreviewDoc(sourceDoc));
-      return () => { cancelled = true; };
+      return () => {
+        cancelled = true;
+      };
     }
 
     setPreviewDoc(buildPreviewDoc(sourceDoc));

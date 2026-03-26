@@ -147,8 +147,19 @@ export function VideoExportModal({
   const [captionMode, setCaptionMode] = useState<CaptionMode>('off');
 
   const exportHook = useVideoExport();
-  const { state, progress, backend, downloadUrl, fileSize, error, elapsed, estimatedRemaining,
-    startExport, cancel: cancelExport, reset: resetExport } = exportHook;
+  const {
+    state,
+    progress,
+    backend,
+    downloadUrl,
+    fileSize,
+    error,
+    elapsed,
+    estimatedRemaining,
+    startExport,
+    cancel: cancelExport,
+    reset: resetExport,
+  } = exportHook;
 
   const handleExport = useCallback(async () => {
     const config: VideoExportConfig = {
@@ -162,7 +173,18 @@ export function VideoExportModal({
       playerScript,
     };
     await startExport(doc, config);
-  }, [doc, quality, fps, orientation, captionMode, images, audio, mediaProvider, playerScript, startExport]);
+  }, [
+    doc,
+    quality,
+    fps,
+    orientation,
+    captionMode,
+    images,
+    audio,
+    mediaProvider,
+    playerScript,
+    startExport,
+  ]);
 
   const handleDownload = useCallback(() => {
     if (!downloadUrl) return;
@@ -292,9 +314,7 @@ export function VideoExportModal({
         {/* ── Complete State ── */}
         {state === 'complete' && (
           <>
-            <p style={{ fontSize: 14, margin: '0 0 8px 0', color: '#2d6a10' }}>
-              Export complete!
-            </p>
+            <p style={{ fontSize: 14, margin: '0 0 8px 0', color: '#2d6a10' }}>Export complete!</p>
             <p style={{ fontSize: 13, color: '#5a4a2a', margin: '0 0 4px 0' }}>
               File size: {(fileSize / (1024 * 1024)).toFixed(1)} MB
             </p>

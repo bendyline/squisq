@@ -11,7 +11,7 @@
  *   squisq video <input> [-o output.mp4] [--fps 30] [--quality normal] [--orientation landscape]
  */
 
-import { writeFile, mkdir } from 'node:fs/promises';
+import { mkdir } from 'node:fs/promises';
 import { dirname, basename, extname, resolve } from 'node:path';
 import type { Command } from 'commander';
 import type { Doc } from '@bendyline/squisq/schemas';
@@ -107,7 +107,9 @@ async function runVideo(inputPath: string, opts: VideoCommandOptions): Promise<v
   const inputBasename = basename(resolvedInput);
   const inputExt = extname(inputBasename);
   const baseName = inputExt ? inputBasename.slice(0, -inputExt.length) : inputBasename;
-  const outputPath = opts.output ? resolve(opts.output) : resolve(dirname(resolvedInput), `${baseName}.mp4`);
+  const outputPath = opts.output
+    ? resolve(opts.output)
+    : resolve(dirname(resolvedInput), `${baseName}.mp4`);
 
   // Ensure output directory exists
   await mkdir(dirname(outputPath), { recursive: true });
@@ -178,7 +180,9 @@ async function runVideo(inputPath: string, opts: VideoCommandOptions): Promise<v
     captionStyle,
   });
 
-  console.error(`Viewport: ${dimensions.width}x${dimensions.height}, ${fps} fps, quality: ${quality}, captions: ${captions}`);
+  console.error(
+    `Viewport: ${dimensions.width}x${dimensions.height}, ${fps} fps, quality: ${quality}, captions: ${captions}`,
+  );
 
   // ── Step 5: Capture frames via Playwright ───────────────────────
   const { chromium } = await import('playwright-core');
@@ -294,10 +298,10 @@ async function runVideo(inputPath: string, opts: VideoCommandOptions): Promise<v
   } else {
     throw new Error(
       'ffmpeg is required but not found in PATH.\n' +
-      'Install it with:\n' +
-      '  macOS:   brew install ffmpeg\n' +
-      '  Ubuntu:  sudo apt install ffmpeg\n' +
-      '  Windows: winget install ffmpeg',
+        'Install it with:\n' +
+        '  macOS:   brew install ffmpeg\n' +
+        '  Ubuntu:  sudo apt install ffmpeg\n' +
+        '  Windows: winget install ffmpeg',
     );
   }
 

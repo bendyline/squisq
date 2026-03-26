@@ -103,7 +103,12 @@ function BlockSection({ block, basePath, viewport, renderContext, blockIndex }: 
       duration: 1,
       audioSegment: 0,
       title: headingText,
-      ...getTemplateDefaults(annotation.template ?? 'sectionHeader', headingText, bodyText, block.contents),
+      ...getTemplateDefaults(
+        annotation.template ?? 'sectionHeader',
+        headingText,
+        bodyText,
+        block.contents,
+      ),
       ...annotation.params,
       ...block.templateOverrides,
     };
@@ -298,22 +303,24 @@ export function LinearDocView({
     >
       <div
         className="squisq-linear-content squisq-md"
-        style={{
-          maxWidth: '720px',
-          margin: '0 auto',
-          padding: '24px 16px',
-          lineHeight: lineHt,
-          fontSize: '16px',
-          fontFamily: bodyFont,
-          color: textColor,
-          // CSS custom properties for MarkdownRenderer / nested elements
-          '--squisq-linear-title-font': titleFont,
-          '--squisq-linear-body-font': bodyFont,
-          '--squisq-linear-text': textColor,
-          '--squisq-linear-muted': mutedColor,
-          '--squisq-linear-primary': primaryColor,
-          '--squisq-linear-bg': bgColor,
-        } as React.CSSProperties}
+        style={
+          {
+            maxWidth: '720px',
+            margin: '0 auto',
+            padding: '24px 16px',
+            lineHeight: lineHt,
+            fontSize: '16px',
+            fontFamily: bodyFont,
+            color: textColor,
+            // CSS custom properties for MarkdownRenderer / nested elements
+            '--squisq-linear-title-font': titleFont,
+            '--squisq-linear-body-font': bodyFont,
+            '--squisq-linear-text': textColor,
+            '--squisq-linear-muted': mutedColor,
+            '--squisq-linear-primary': primaryColor,
+            '--squisq-linear-bg': bgColor,
+          } as React.CSSProperties
+        }
       >
         {/* Theme-aware typography and layout for document mode */}
         <style>{`

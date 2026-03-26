@@ -34,9 +34,14 @@ export interface FrameCaptureHandle {
 
 /** Extension → MIME type map (hoisted to avoid per-image allocation). */
 const MIME_MAP: Record<string, string> = {
-  jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png',
-  gif: 'image/gif', webp: 'image/webp', svg: 'image/svg+xml',
-  bmp: 'image/bmp', avif: 'image/avif',
+  jpg: 'image/jpeg',
+  jpeg: 'image/jpeg',
+  png: 'image/png',
+  gif: 'image/gif',
+  webp: 'image/webp',
+  svg: 'image/svg+xml',
+  bmp: 'image/bmp',
+  avif: 'image/avif',
 };
 
 /** Convert an ArrayBuffer to a base64 data URI using chunked encoding (O(n)). */
@@ -66,10 +71,14 @@ function createInlineProvider(images: Map<string, ArrayBuffer>): MediaProvider {
       return dataUrls.get(relativePath) ?? relativePath;
     },
     async listMedia() {
-      return [...dataUrls.keys()].map(name => ({ name, mimeType: 'image/jpeg', size: 0 }));
+      return [...dataUrls.keys()].map((name) => ({ name, mimeType: 'image/jpeg', size: 0 }));
     },
-    async addMedia() { throw new Error('Read-only'); },
-    async removeMedia() { throw new Error('Read-only'); },
+    async addMedia() {
+      throw new Error('Read-only');
+    },
+    async removeMedia() {
+      throw new Error('Read-only');
+    },
     dispose() {},
   };
 }
@@ -96,7 +105,7 @@ export function useFrameCapture(): FrameCaptureHandle {
         const oldContainer = containerRef.current;
         rootRef.current = null;
         containerRef.current = null;
-        await new Promise<void>(resolve => {
+        await new Promise<void>((resolve) => {
           setTimeout(() => {
             if (oldRoot) oldRoot.unmount();
             if (oldContainer) oldContainer.remove();
@@ -166,10 +175,12 @@ export function useFrameCapture(): FrameCaptureHandle {
           const hasDur = typeof w.getDuration === 'function';
           const rootEl = containerRef.current?.querySelector('#squisq-capture-root');
           const hasPlayer = rootEl ? rootEl.querySelector('.doc-player') !== null : false;
-          reject(new Error(
-            `Render API did not initialize within 15s. ` +
-            `seekTo=${hasSeek}, getDuration=${hasDur}, player=${hasPlayer}, root=${!!rootEl}`
-          ));
+          reject(
+            new Error(
+              `Render API did not initialize within 15s. ` +
+                `seekTo=${hasSeek}, getDuration=${hasDur}, player=${hasPlayer}, root=${!!rootEl}`,
+            ),
+          );
         }, 15000);
 
         const checkApi = () => {
@@ -203,9 +214,9 @@ export function useFrameCapture(): FrameCaptureHandle {
     await w.seekTo(time);
 
     // Wait for the DOM to update after seek
-    await new Promise<void>((resolve) => requestAnimationFrame(() =>
-      requestAnimationFrame(() => resolve())
-    ));
+    await new Promise<void>((resolve) =>
+      requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+    );
 
     const root = container.querySelector('#squisq-capture-root') as HTMLElement;
     if (!root) {

@@ -328,9 +328,8 @@ export function FileToolbar({
                 setShowDownload(false);
                 // Lazy-load the player bundle on first use
                 if (!playerScriptRef.current) {
-                  const { PLAYER_BUNDLE } = await import(
-                    '@bendyline/squisq-react/standalone-source'
-                  );
+                  const { PLAYER_BUNDLE } =
+                    await import('@bendyline/squisq-react/standalone-source');
                   playerScriptRef.current = PLAYER_BUNDLE;
                 }
                 setShowVideoModal(true);

@@ -43,7 +43,7 @@ export interface AnalyzedBlock {
  * Extract plain text from an array of MarkdownBlockNodes.
  */
 function contentsToPlainText(contents: MarkdownBlockNode[]): string {
-  return contents.map(node => extractPlainText(node)).join('\n');
+  return contents.map((node) => extractPlainText(node)).join('\n');
 }
 
 /**
@@ -144,10 +144,7 @@ function collectLeafBlocks(blocks: Block[]): Block[] {
  * @param options - Extraction options (minConfidence, types filter).
  * @returns Analyzed blocks with extractions, in flattened order.
  */
-export function analyzeBlocks(
-  blocks: Block[],
-  options?: ExtractionOptions,
-): AnalyzedBlock[] {
+export function analyzeBlocks(blocks: Block[], options?: ExtractionOptions): AnalyzedBlock[] {
   const flat = collectLeafBlocks(blocks);
   const results: AnalyzedBlock[] = [];
 
@@ -162,7 +159,7 @@ export function analyzeBlocks(
 
     // Strip any remaining markdown syntax
     const stripped = stripMarkdown(plainText);
-    const bodyWordCount = stripped.split(/\s+/).filter(w => w.length > 0).length;
+    const bodyWordCount = stripped.split(/\s+/).filter((w) => w.length > 0).length;
 
     // Run content extraction
     const extraction = extractContent(stripped, options);

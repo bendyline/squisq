@@ -280,9 +280,8 @@ export function useAudioSync(
       // Clamp time to valid range.
       // When totalDuration is 0 (no audio segments), don't clamp — allow
       // seeking by block timing alone (used in render mode / preview).
-      const clampedTime = totalDuration > 0
-        ? Math.max(0, Math.min(time, totalDuration))
-        : Math.max(0, time);
+      const clampedTime =
+        totalDuration > 0 ? Math.max(0, Math.min(time, totalDuration)) : Math.max(0, time);
 
       // Find which segment this time falls into
       let segmentIndex = 0;

@@ -8,10 +8,5 @@ export default defineConfig({
   dts: true,
   sourcemap: true,
   clean: true,
-  external: [
-    '@bendyline/squisq',
-    '@bendyline/squisq-react',
-    '@ffmpeg/ffmpeg',
-    '@ffmpeg/util',
-  ],
+  external: ['@bendyline/squisq', '@bendyline/squisq-react', '@ffmpeg/ffmpeg', '@ffmpeg/util'],
 });

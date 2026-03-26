@@ -9,7 +9,6 @@
 import type { Block } from '../schemas/Doc.js';
 import type {
   TemplateBlock,
-  ColorScheme,
   AccentImage,
   AccentPosition,
   ImageWithCaptionInput,
@@ -75,20 +74,11 @@ export function selectAndBuild(
   const candidates = collectCandidates(analyzed, config);
 
   // 2. Determine how many blocks to transform
-  const maxTransforms = Math.max(
-    1,
-    Math.floor(analyzed.length * config.transformRatio),
-  );
+  const maxTransforms = Math.max(1, Math.floor(analyzed.length * config.transformRatio));
   const selected = candidates.slice(0, maxTransforms);
 
   // 3. Build the output block sequence
-  const result = buildBlockSequence(
-    analyzed,
-    selected,
-    config,
-    images,
-    rng,
-  );
+  const result = buildBlockSequence(analyzed, selected, config, images, rng);
 
   return result;
 }
@@ -245,9 +235,7 @@ function buildBlockSequence(
 
       const templateBlock = mapElementToBlock(sel.element, {
         id: `transform-${blockIdCounter++}`,
-        duration: ab.block.duration > 0
-          ? ab.block.duration / extractions.length
-          : 6,
+        duration: ab.block.duration > 0 ? ab.block.duration / extractions.length : 6,
         audioSegment: ab.block.audioSegment,
         colorScheme,
         accentImage,
@@ -256,10 +244,13 @@ function buildBlockSequence(
 
       // Apply transition based on style
       if (config.transitionStyle !== 'cut') {
-        (templateBlock as TemplateBlock & { transition?: { type: string; duration: number } }).transition = {
-          type: config.transitionStyle === 'mixed'
-            ? rng.pick(['fade', 'dissolve']) ?? 'fade'
-            : config.transitionStyle,
+        (
+          templateBlock as TemplateBlock & { transition?: { type: string; duration: number } }
+        ).transition = {
+          type:
+            config.transitionStyle === 'mixed'
+              ? (rng.pick(['fade', 'dissolve']) ?? 'fade')
+              : config.transitionStyle,
           duration: 0.5,
         };
       }

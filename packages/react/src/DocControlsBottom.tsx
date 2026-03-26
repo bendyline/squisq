@@ -91,8 +91,11 @@ export function DocControlsBottom({
           className={`bottom-ctrl-btn ${state.captionMode !== 'off' ? 'bottom-ctrl-btn--active' : ''}`}
           onClick={() => actions.cycleCaptionMode()}
           title={
-            state.captionMode === 'off' ? 'Captions: Off' :
-            state.captionMode === 'standard' ? 'Captions: Standard' : 'Captions: Social'
+            state.captionMode === 'off'
+              ? 'Captions: Off'
+              : state.captionMode === 'standard'
+                ? 'Captions: Standard'
+                : 'Captions: Social'
           }
           aria-label="Cycle caption style"
         >

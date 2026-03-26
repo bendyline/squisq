@@ -47,7 +47,7 @@ function normalizeToWords(text: string): Set<string> {
     .toLowerCase()
     .replace(/[^\w\s]/g, ' ')
     .split(/\s+/)
-    .filter(w => w.length > 2);
+    .filter((w) => w.length > 2);
   return new Set(words);
 }
 
@@ -129,7 +129,7 @@ interface Mp3Info {
  */
 async function discoverMp3s(container: ContentContainer): Promise<Mp3Info[]> {
   const files = await container.listFiles();
-  const mp3Files = files.filter(f => f.path.endsWith('.mp3'));
+  const mp3Files = files.filter((f) => f.path.endsWith('.mp3'));
   const results: Mp3Info[] = [];
 
   for (const file of mp3Files) {
@@ -165,10 +165,8 @@ function resolveFromAnnotations(
     if (!audioRef) continue;
 
     // Find the MP3 by filename (exact or suffix match)
-    const mp3 = mp3s.find(m =>
-      m.filename === audioRef ||
-      m.path === audioRef ||
-      m.path.endsWith(`/${audioRef}`)
+    const mp3 = mp3s.find(
+      (m) => m.filename === audioRef || m.path === audioRef || m.path.endsWith(`/${audioRef}`),
     );
 
     if (mp3) {
@@ -267,10 +265,7 @@ function autoMatchBlocks(
  * @param container - ContentContainer with MP3 and timing files.
  * @returns New Doc with audio segments resolved, or original doc if no matches.
  */
-export async function resolveAudioMapping(
-  doc: Doc,
-  container: ContentContainer,
-): Promise<Doc> {
+export async function resolveAudioMapping(doc: Doc, container: ContentContainer): Promise<Doc> {
   // Discover MP3 files and their timing data
   const mp3s = await discoverMp3s(container);
   if (mp3s.length === 0) return doc;
@@ -280,7 +275,7 @@ export async function resolveAudioMapping(
 
   // Fall back to auto-matching if no annotations found
   if (matches.length === 0) {
-    matches = autoMatchBlocks(doc.blocks, mp3s).map(m => ({
+    matches = autoMatchBlocks(doc.blocks, mp3s).map((m) => ({
       block: m.block,
       mp3: m.mp3,
     }));
@@ -335,7 +330,7 @@ function assignSegmentIndices(
   blockToSegment: Map<string, number>,
   inheritedSegment?: number,
 ): Block[] {
-  return blocks.map(block => {
+  return blocks.map((block) => {
     const segment = blockToSegment.get(block.id) ?? inheritedSegment ?? block.audioSegment;
     const newBlock: Block = {
       ...block,

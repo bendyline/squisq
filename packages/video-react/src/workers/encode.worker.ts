@@ -34,7 +34,7 @@ let ffmpegConfig: InitMessage | null = null;
 
 // Frame tracking
 let totalFramesReceived = 0;
-let totalFramesEncoded = 0;
+let _totalFramesEncoded = 0;
 
 // ── Helpers ────────────────────────────────────────────────────────
 
@@ -73,7 +73,7 @@ function initWebCodecs(config: InitMessage) {
     output(chunk, meta) {
       if (cancelled) return;
       muxer!.addVideoChunk(chunk, meta ?? undefined);
-      totalFramesEncoded++;
+      _totalFramesEncoded++;
     },
     error(err) {
       postError(`WebCodecs encoder error: ${err.message}`);
@@ -214,7 +214,6 @@ async function encodeFfmpegBatch() {
   }
 
   const firstIndex = ffmpegFrames[0].index;
-  const paddedFirst = String(firstIndex).padStart(6, '0');
   const segmentName = `segment_${batchIndex}.mp4`;
 
   // Encode batch to MP4 segment
@@ -325,7 +324,7 @@ self.onmessage = async (event: MessageEvent<MainToWorkerMessage>) => {
       case 'init': {
         cancelled = false;
         totalFramesReceived = 0;
-        totalFramesEncoded = 0;
+        _totalFramesEncoded = 0;
 
         if (hasWebCodecs()) {
           backend = 'webcodecs';

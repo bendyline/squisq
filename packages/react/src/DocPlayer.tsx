@@ -513,7 +513,7 @@ export function DocPlayer({
   // The captionStyle prop sets the default active style; captionsEnabledProp
   // can override the initial on/off state.
   const defaultMode: CaptionMode =
-    captionsEnabledProp === false ? 'off' : (captionStyle || 'standard');
+    captionsEnabledProp === false ? 'off' : captionStyle || 'standard';
   const [captionMode, setCaptionMode] = useState<CaptionMode>(defaultMode);
 
   // Derive captionsEnabled and active style from the mode
@@ -529,8 +529,9 @@ export function DocPlayer({
   );
 
   const cycleCaptionMode = useCallback(() => {
-    setCaptionMode(prev => {
-      const next: CaptionMode = prev === 'off' ? 'standard' : prev === 'standard' ? 'social' : 'off';
+    setCaptionMode((prev) => {
+      const next: CaptionMode =
+        prev === 'off' ? 'standard' : prev === 'standard' ? 'social' : 'off';
       onCaptionsToggle?.(next !== 'off');
       return next;
     });
@@ -892,7 +893,8 @@ export function DocPlayer({
               <span style={{ color: '#888' }}>time:</span> {currentTime.toFixed(2)}s /{' '}
               {totalDuration.toFixed(1)}s{' '}
               <span style={{ color: '#666' }}>
-                (progress: {(docProgress * 100).toFixed(1)}%, scriptDur: {script.duration.toFixed(1)})
+                (progress: {(docProgress * 100).toFixed(1)}%, scriptDur:{' '}
+                {script.duration.toFixed(1)})
               </span>
             </div>
             <div>

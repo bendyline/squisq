@@ -265,9 +265,7 @@ export function markdownToDoc(markdownDoc: MarkdownDocument, options?: MarkdownT
   }
 
   const captions: CaptionTrack | undefined =
-    phrases.length > 0
-      ? { phrases, generatedAt: new Date().toISOString(), version: 1 }
-      : undefined;
+    phrases.length > 0 ? { phrases, generatedAt: new Date().toISOString(), version: 1 } : undefined;
 
   return {
     articleId,
@@ -332,7 +330,10 @@ function getBlockBodyText(block: Block): string {
   if (!block.contents || block.contents.length === 0) return '';
   // Join with newlines to preserve paragraph/list-item boundaries.
   // splitIntoPhrases uses these newlines as natural split points.
-  return block.contents.map((node) => extractPlainText(node)).join('\n').trim();
+  return block.contents
+    .map((node) => extractPlainText(node))
+    .join('\n')
+    .trim();
 }
 
 /** Maximum words per caption phrase. Long sentences get split at this point. */
@@ -350,13 +351,19 @@ const MAX_PHRASE_WORDS = 12;
  */
 function splitIntoSentences(text: string): string[] {
   // First split on newlines (each paragraph/list item becomes separate)
-  const lines = text.split(/\n+/).map(s => s.trim()).filter(s => s.length > 0);
+  const lines = text
+    .split(/\n+/)
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0);
 
   // Then split each line on sentence boundaries
   const sentenceRe = /(?<=[.!?])\s+/;
   const fragments: string[] = [];
   for (const line of lines) {
-    const sentences = line.split(sentenceRe).map(s => s.trim()).filter(s => s.length > 0);
+    const sentences = line
+      .split(sentenceRe)
+      .map((s) => s.trim())
+      .filter((s) => s.length > 0);
     fragments.push(...sentences);
   }
 

@@ -74,11 +74,7 @@ export async function framesToMp4Wasm(
 
   // Build ffmpeg command
   const padPattern = `frame-%0${padLen}d.png`;
-  const args = [
-    '-y',
-    '-framerate', String(fps),
-    '-i', padPattern,
-  ];
+  const args = ['-y', '-framerate', String(fps), '-i', padPattern];
 
   // Add audio input
   if (audio) {
@@ -87,20 +83,21 @@ export async function framesToMp4Wasm(
 
   // Video encoding settings
   args.push(
-    '-c:v', 'libx264',
-    '-preset', preset.preset,
-    '-crf', String(preset.crf),
-    '-pix_fmt', 'yuv420p',
-    '-vf', `scale=${width}:${height}:force_original_aspect_ratio=decrease,pad=${width}:${height}:(ow-iw)/2:(oh-ih)/2`,
+    '-c:v',
+    'libx264',
+    '-preset',
+    preset.preset,
+    '-crf',
+    String(preset.crf),
+    '-pix_fmt',
+    'yuv420p',
+    '-vf',
+    `scale=${width}:${height}:force_original_aspect_ratio=decrease,pad=${width}:${height}:(ow-iw)/2:(oh-ih)/2`,
   );
 
   // Audio encoding
   if (audio) {
-    args.push(
-      '-c:a', 'aac',
-      '-b:a', '128k',
-      '-shortest',
-    );
+    args.push('-c:a', 'aac', '-b:a', '128k', '-shortest');
   }
 
   args.push('output.mp4');

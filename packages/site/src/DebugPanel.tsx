@@ -9,10 +9,7 @@
 import { useState, useMemo } from 'react';
 import { parseMarkdown } from '@bendyline/squisq/markdown';
 import { markdownToDoc } from '@bendyline/squisq/doc';
-import {
-  applyTransform,
-  getTransformStyleSummaries,
-} from '@bendyline/squisq/transform';
+import { applyTransform, getTransformStyleSummaries } from '@bendyline/squisq/transform';
 
 type Tab = 'markdown' | 'doc' | 'transformed';
 
@@ -112,10 +109,7 @@ export function DebugPanel({ source, theme = 'light' }: DebugPanelProps) {
             flexShrink: 0,
           }}
         >
-          <label
-            htmlFor="debug-transform"
-            style={{ color: isDark ? '#9ca3af' : '#6b7280' }}
-          >
+          <label htmlFor="debug-transform" style={{ color: isDark ? '#9ca3af' : '#6b7280' }}>
             Style:
           </label>
           <select

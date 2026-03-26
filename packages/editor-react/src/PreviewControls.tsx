@@ -49,10 +49,17 @@ function resolveRenderAs(value: unknown): ViewportPreset | null {
   if (typeof value !== 'string') return null;
   const v = value.trim().toLowerCase();
   const mapping: Record<string, ViewportPreset> = {
-    landscape: 'landscape', '16:9': 'landscape', widescreen: 'landscape',
-    portrait: 'portrait', '9:16': 'portrait', vertical: 'portrait', stories: 'portrait',
-    square: 'square', '1:1': 'square',
-    standard: 'standard', '4:3': 'standard',
+    landscape: 'landscape',
+    '16:9': 'landscape',
+    widescreen: 'landscape',
+    portrait: 'portrait',
+    '9:16': 'portrait',
+    vertical: 'portrait',
+    stories: 'portrait',
+    square: 'square',
+    '1:1': 'square',
+    standard: 'standard',
+    '4:3': 'standard',
   };
   return mapping[v] ?? null;
 }
@@ -66,7 +73,7 @@ function resolveDisplayMode(value: unknown): DisplayMode | null {
   return null;
 }
 
-const VALID_THEME_IDS = new Set(getThemeSummaries().map(s => s.id));
+const VALID_THEME_IDS = new Set(getThemeSummaries().map((s) => s.id));
 
 function resolveFrontmatterTheme(value: unknown): string | null {
   if (typeof value !== 'string') return null;
@@ -77,7 +84,7 @@ function resolveFrontmatterTheme(value: unknown): string | null {
   return null;
 }
 
-const VALID_TRANSFORM_IDS = new Set(getTransformStyleSummaries().map(s => s.id));
+const VALID_TRANSFORM_IDS = new Set(getTransformStyleSummaries().map((s) => s.id));
 
 function resolveFrontmatterTransform(value: unknown): string | null {
   if (typeof value !== 'string') return null;
@@ -107,7 +114,10 @@ export function PreviewSettingsProvider({ doc, children }: PreviewSettingsProvid
   const frontmatter = doc?.frontmatter;
 
   // Viewport
-  const fmPreset = useMemo(() => resolveRenderAs(frontmatter?.['document-render-as']), [frontmatter]);
+  const fmPreset = useMemo(
+    () => resolveRenderAs(frontmatter?.['document-render-as']),
+    [frontmatter],
+  );
   const [selectedPreset, setSelectedPreset] = useState<ViewportPreset | null>(null);
   useEffect(() => setSelectedPreset(null), [fmPreset]);
   const activePreset = selectedPreset ?? fmPreset ?? 'landscape';
@@ -127,30 +137,51 @@ export function PreviewSettingsProvider({ doc, children }: PreviewSettingsProvid
   const activeTheme = useMemo(() => resolveTheme(activeThemeId), [activeThemeId]);
 
   // Transform
-  const fmTransform = useMemo(() => resolveFrontmatterTransform(frontmatter?.['transform-style']), [frontmatter]);
+  const fmTransform = useMemo(
+    () => resolveFrontmatterTransform(frontmatter?.['transform-style']),
+    [frontmatter],
+  );
   const [selectedTransformStyle, setSelectedTransformStyle] = useState<string | null>(null);
   useEffect(() => setSelectedTransformStyle(null), [fmTransform]);
   const activeTransformStyle = selectedTransformStyle ?? fmTransform ?? '';
 
   // Caption style
-  const fmCaption = useMemo(() => resolveFrontmatterCaptionStyle(frontmatter?.['caption-style']), [frontmatter]);
+  const fmCaption = useMemo(
+    () => resolveFrontmatterCaptionStyle(frontmatter?.['caption-style']),
+    [frontmatter],
+  );
   const [selectedCaptionStyle, setSelectedCaptionStyle] = useState<CaptionStyle | null>(null);
   useEffect(() => setSelectedCaptionStyle(null), [fmCaption]);
   const activeCaptionStyle = selectedCaptionStyle ?? fmCaption ?? 'standard';
 
-  const value = useMemo<PreviewSettings>(() => ({
-    activePreset, setSelectedPreset,
-    activeViewport,
-    activeDisplayMode, setSelectedDisplayMode,
-    activeThemeId, setSelectedThemeId, activeTheme,
-    activeTransformStyle, setSelectedTransformStyle,
-    activeCaptionStyle, setSelectedCaptionStyle,
-  }), [activePreset, activeViewport, activeDisplayMode, activeThemeId, activeTheme, activeTransformStyle, activeCaptionStyle]);
+  const value = useMemo<PreviewSettings>(
+    () => ({
+      activePreset,
+      setSelectedPreset,
+      activeViewport,
+      activeDisplayMode,
+      setSelectedDisplayMode,
+      activeThemeId,
+      setSelectedThemeId,
+      activeTheme,
+      activeTransformStyle,
+      setSelectedTransformStyle,
+      activeCaptionStyle,
+      setSelectedCaptionStyle,
+    }),
+    [
+      activePreset,
+      activeViewport,
+      activeDisplayMode,
+      activeThemeId,
+      activeTheme,
+      activeTransformStyle,
+      activeCaptionStyle,
+    ],
+  );
 
   return (
-    <PreviewSettingsContext.Provider value={value}>
-      {children}
-    </PreviewSettingsContext.Provider>
+    <PreviewSettingsContext.Provider value={value}>{children}</PreviewSettingsContext.Provider>
   );
 }
 
@@ -169,11 +200,11 @@ const DISPLAY_MODE_OPTIONS: { key: DisplayMode; label: string }[] = [
   { key: 'linear', label: 'Document' },
 ];
 
-const THEME_OPTIONS = getThemeSummaries().map(s => ({ key: s.id, label: s.name }));
+const THEME_OPTIONS = getThemeSummaries().map((s) => ({ key: s.id, label: s.name }));
 
 const TRANSFORM_STYLE_OPTIONS = [
   { key: '', label: 'None' },
-  ...getTransformStyleSummaries().map(s => ({ key: s.id, label: s.name })),
+  ...getTransformStyleSummaries().map((s) => ({ key: s.id, label: s.name })),
 ];
 
 const CAPTION_STYLE_OPTIONS: { key: CaptionStyle; label: string }[] = [
@@ -221,10 +252,14 @@ export function PreviewToolbarControls() {
       <label style={labelStyle}>Format:</label>
       <select
         value={s.activePreset}
-        onChange={e => s.setSelectedPreset(e.target.value as ViewportPreset)}
+        onChange={(e) => s.setSelectedPreset(e.target.value as ViewportPreset)}
         style={selectStyle}
       >
-        {VIEWPORT_OPTIONS.map(o => <option key={o.key} value={o.key}>{o.label}</option>)}
+        {VIEWPORT_OPTIONS.map((o) => (
+          <option key={o.key} value={o.key}>
+            {o.label}
+          </option>
+        ))}
       </select>
 
       <Divider />
@@ -232,10 +267,14 @@ export function PreviewToolbarControls() {
       <label style={labelStyle}>Mode:</label>
       <select
         value={s.activeDisplayMode}
-        onChange={e => s.setSelectedDisplayMode(e.target.value as DisplayMode)}
+        onChange={(e) => s.setSelectedDisplayMode(e.target.value as DisplayMode)}
         style={selectStyle}
       >
-        {DISPLAY_MODE_OPTIONS.map(o => <option key={o.key} value={o.key}>{o.label}</option>)}
+        {DISPLAY_MODE_OPTIONS.map((o) => (
+          <option key={o.key} value={o.key}>
+            {o.label}
+          </option>
+        ))}
       </select>
 
       <Divider />
@@ -243,10 +282,14 @@ export function PreviewToolbarControls() {
       <label style={labelStyle}>Theme:</label>
       <select
         value={s.activeThemeId}
-        onChange={e => s.setSelectedThemeId(e.target.value)}
+        onChange={(e) => s.setSelectedThemeId(e.target.value)}
         style={selectStyle}
       >
-        {THEME_OPTIONS.map(o => <option key={o.key} value={o.key}>{o.label}</option>)}
+        {THEME_OPTIONS.map((o) => (
+          <option key={o.key} value={o.key}>
+            {o.label}
+          </option>
+        ))}
       </select>
 
       <Divider />
@@ -254,10 +297,14 @@ export function PreviewToolbarControls() {
       <label style={labelStyle}>Transform:</label>
       <select
         value={s.activeTransformStyle}
-        onChange={e => s.setSelectedTransformStyle(e.target.value)}
+        onChange={(e) => s.setSelectedTransformStyle(e.target.value)}
         style={selectStyle}
       >
-        {TRANSFORM_STYLE_OPTIONS.map(o => <option key={o.key} value={o.key}>{o.label}</option>)}
+        {TRANSFORM_STYLE_OPTIONS.map((o) => (
+          <option key={o.key} value={o.key}>
+            {o.label}
+          </option>
+        ))}
       </select>
 
       <Divider />
@@ -265,10 +312,14 @@ export function PreviewToolbarControls() {
       <label style={labelStyle}>Captions:</label>
       <select
         value={s.activeCaptionStyle}
-        onChange={e => s.setSelectedCaptionStyle(e.target.value as CaptionStyle)}
+        onChange={(e) => s.setSelectedCaptionStyle(e.target.value as CaptionStyle)}
         style={selectStyle}
       >
-        {CAPTION_STYLE_OPTIONS.map(o => <option key={o.key} value={o.key}>{o.label}</option>)}
+        {CAPTION_STYLE_OPTIONS.map((o) => (
+          <option key={o.key} value={o.key}>
+            {o.label}
+          </option>
+        ))}
       </select>
     </div>
   );
@@ -276,6 +327,13 @@ export function PreviewToolbarControls() {
 
 function Divider() {
   return (
-    <span style={{ width: '1px', height: '16px', background: 'var(--squisq-border, #d1d5db)', margin: '0 2px' }} />
+    <span
+      style={{
+        width: '1px',
+        height: '16px',
+        background: 'var(--squisq-border, #d1d5db)',
+        margin: '0 2px',
+      }}
+    />
   );
 }

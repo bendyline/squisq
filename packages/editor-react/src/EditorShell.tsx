@@ -223,49 +223,49 @@ function EditorShellInner({
       {...containerProps}
     >
       <PreviewSettingsProvider doc={doc}>
-      {/* Header: Toolbar (includes view tabs + preview controls) */}
-      <div className="squisq-editor-header">
-        <Toolbar
-          showFiles={showFiles}
-          onToggleFiles={filesToggleEnabled ? handleToggleFiles : undefined}
-          slotLeft={toolbarSlotLeft}
-          slotAfterActions={
-            <>
-              {toolbarSlotAfterActions}
-              {isPreview && <PreviewToolbarControls />}
-            </>
-          }
-          slotRight={toolbarSlotRight}
-        />
-      </div>
-
-      {/* Main content area */}
-      <div
-        className="squisq-editor-content"
-        style={{ flex: 1, overflow: 'hidden', position: 'relative', display: 'flex' }}
-      >
-        <div style={{ flex: 1, overflow: 'hidden', position: 'relative' }}>
-          {activeView === 'raw' && <RawEditor theme={theme === 'dark' ? 'vs-dark' : 'vs'} />}
-          {activeView === 'wysiwyg' && <WysiwygEditor />}
-          {isPreview && <PreviewPanel basePath={basePath} container={container} />}
+        {/* Header: Toolbar (includes view tabs + preview controls) */}
+        <div className="squisq-editor-header">
+          <Toolbar
+            showFiles={showFiles}
+            onToggleFiles={filesToggleEnabled ? handleToggleFiles : undefined}
+            slotLeft={toolbarSlotLeft}
+            slotAfterActions={
+              <>
+                {toolbarSlotAfterActions}
+                {isPreview && <PreviewToolbarControls />}
+              </>
+            }
+            slotRight={toolbarSlotRight}
+          />
         </div>
 
-        {showFiles && (
-          <MediaBin mediaProvider={mediaProvider} isDark={isDark} refreshKey={mediaRefreshKey} />
-        )}
+        {/* Main content area */}
+        <div
+          className="squisq-editor-content"
+          style={{ flex: 1, overflow: 'hidden', position: 'relative', display: 'flex' }}
+        >
+          <div style={{ flex: 1, overflow: 'hidden', position: 'relative' }}>
+            {activeView === 'raw' && <RawEditor theme={theme === 'dark' ? 'vs-dark' : 'vs'} />}
+            {activeView === 'wysiwyg' && <WysiwygEditor />}
+            {isPreview && <PreviewPanel basePath={basePath} container={container} />}
+          </div>
 
-        {/* Drop zone overlay */}
-        {isDragging && (
-          <DropZoneOverlay
-            dragContentType={dragContentType}
-            zoneProps={zoneProps}
-            hasMediaProvider={mediaProvider !== null}
-          />
-        )}
-      </div>
+          {showFiles && (
+            <MediaBin mediaProvider={mediaProvider} isDark={isDark} refreshKey={mediaRefreshKey} />
+          )}
 
-      {/* Status bar */}
-      <StatusBar />
+          {/* Drop zone overlay */}
+          {isDragging && (
+            <DropZoneOverlay
+              dragContentType={dragContentType}
+              zoneProps={zoneProps}
+              hasMediaProvider={mediaProvider !== null}
+            />
+          )}
+        </div>
+
+        {/* Status bar */}
+        <StatusBar />
       </PreviewSettingsProvider>
     </div>
   );

@@ -47,7 +47,7 @@ export function applyTransform(
   });
 
   // If no blocks have meaningful content, return the doc unchanged
-  const hasContent = analyzed.some(ab => ab.bodyWordCount >= 5);
+  const hasContent = analyzed.some((ab) => ab.bodyWordCount >= 5);
   if (!hasContent) {
     return {
       doc: { ...doc },

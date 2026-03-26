@@ -9,7 +9,6 @@
 import type { Block } from '../schemas/Doc.js';
 import type { TemplateBlock } from '../schemas/BlockTemplates.js';
 import { isTemplateBlock } from '../schemas/BlockTemplates.js';
-import { estimateNarrationDuration } from '../timing/narrationTiming.js';
 
 /** Minimum block duration in seconds. */
 const MIN_BLOCK_DURATION = 3;

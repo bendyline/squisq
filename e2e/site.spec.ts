@@ -121,12 +121,17 @@ test.describe('DocPlayer preview', () => {
     await startPlaybackAndWaitForActiveBlock(page);
     const initialText = await activeBlock(page).textContent();
 
-    // Wait enough time for the fallback timer to advance past the first block (5s default)
-    await page.waitForTimeout(6_000);
-
-    // The active block should now show different content
-    const newText = await activeBlock(page).textContent();
-    expect(newText).not.toEqual(initialText);
+    // Poll until the block changes (up to 15s) — block duration varies
+    let changed = false;
+    for (let i = 0; i < 5; i++) {
+      await page.waitForTimeout(3_000);
+      const newText = await activeBlock(page).textContent();
+      if (newText !== initialText) {
+        changed = true;
+        break;
+      }
+    }
+    expect(changed).toBe(true);
   });
 
   test('DocPlayer renders multiple blocks over time', async ({ page }) => {

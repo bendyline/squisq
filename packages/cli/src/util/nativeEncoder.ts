@@ -74,30 +74,27 @@ export async function framesToMp4Native(
 
     // Build ffmpeg arguments
     const padPattern = join(workDir, `frame-%0${padLen}d.png`);
-    const args = [
-      '-y',
-      '-framerate', String(fps),
-      '-i', padPattern,
-    ];
+    const args = ['-y', '-framerate', String(fps), '-i', padPattern];
 
     if (audioPath) {
       args.push('-i', audioPath);
     }
 
     args.push(
-      '-c:v', 'libx264',
-      '-preset', preset.preset,
-      '-crf', String(preset.crf),
-      '-pix_fmt', 'yuv420p',
-      '-vf', `scale=${width}:${height}:force_original_aspect_ratio=decrease,pad=${width}:${height}:(ow-iw)/2:(oh-ih)/2`,
+      '-c:v',
+      'libx264',
+      '-preset',
+      preset.preset,
+      '-crf',
+      String(preset.crf),
+      '-pix_fmt',
+      'yuv420p',
+      '-vf',
+      `scale=${width}:${height}:force_original_aspect_ratio=decrease,pad=${width}:${height}:(ow-iw)/2:(oh-ih)/2`,
     );
 
     if (audioPath) {
-      args.push(
-        '-c:a', 'aac',
-        '-b:a', '128k',
-        '-shortest',
-      );
+      args.push('-c:a', 'aac', '-b:a', '128k', '-shortest');
     }
 
     args.push(outputPath);

@@ -138,9 +138,11 @@ export function DocControlsOverlay({
             borderRadius: '4px',
           }}
           title={
-            state.captionMode === 'off' ? 'Captions: Off (click for Standard)' :
-            state.captionMode === 'standard' ? 'Captions: Standard (click for Social)' :
-            'Captions: Social (click to turn off)'
+            state.captionMode === 'off'
+              ? 'Captions: Off (click for Standard)'
+              : state.captionMode === 'standard'
+                ? 'Captions: Standard (click for Social)'
+                : 'Captions: Social (click to turn off)'
           }
           aria-label="Cycle caption style"
         >

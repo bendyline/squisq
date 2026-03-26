@@ -15,7 +15,7 @@
  */
 
 import { useMemo } from 'react';
-import type { CaptionTrack, CaptionPhrase, CaptionWord, ViewportConfig } from '@bendyline/squisq/schemas';
+import type { CaptionTrack, CaptionPhrase, ViewportConfig } from '@bendyline/squisq/schemas';
 import type { Theme } from '@bendyline/squisq/schemas';
 
 /** Target words per visible chunk. */
@@ -44,7 +44,7 @@ interface WordChunk {
 function resolvePhraseTiming(phrase: CaptionPhrase): TimedWord[] {
   // Use precise timing when available
   if (phrase.words && phrase.words.length > 0) {
-    return phrase.words.map(w => ({
+    return phrase.words.map((w) => ({
       text: w.text,
       startTime: w.startTime,
       endTime: w.endTime,
@@ -52,7 +52,7 @@ function resolvePhraseTiming(phrase: CaptionPhrase): TimedWord[] {
   }
 
   // Interpolate: split text into words, distribute evenly
-  const rawWords = phrase.text.split(/\s+/).filter(w => w.length > 0);
+  const rawWords = phrase.text.split(/\s+/).filter((w) => w.length > 0);
   if (rawWords.length === 0) return [];
 
   const duration = phrase.endTime - phrase.startTime;

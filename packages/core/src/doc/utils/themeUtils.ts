@@ -54,10 +54,7 @@ const FALLBACK_MONO = 'Consolas, "Courier New", monospace';
  * @param role    'title' for headings, 'body' for descriptions, 'mono' for code
  * @returns A CSS font-family string with the theme's font and safe fallbacks
  */
-export function getThemeFont(
-  context: TemplateContext,
-  role: 'title' | 'body' | 'mono',
-): string {
+export function getThemeFont(context: TemplateContext, role: 'title' | 'body' | 'mono'): string {
   const { typography } = context.theme;
   switch (role) {
     case 'title':
