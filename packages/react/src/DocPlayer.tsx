@@ -524,7 +524,7 @@ export function DocPlayer({
     (enabled: boolean) => {
       // When re-enabling, restore the prop-specified style rather than
       // always defaulting to 'standard'
-      setCaptionMode(enabled ? (captionStyle || 'standard') : 'off');
+      setCaptionMode(enabled ? captionStyle || 'standard' : 'off');
       onCaptionsToggle?.(enabled);
     },
     [onCaptionsToggle, captionStyle],
