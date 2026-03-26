@@ -11,6 +11,7 @@ import { useState, useCallback } from 'react';
 import type { Doc } from '@bendyline/squisq/schemas';
 import type { MediaProvider } from '@bendyline/squisq/schemas';
 import type { VideoQuality, VideoOrientation } from '@bendyline/squisq-video';
+import type { CaptionMode } from '@bendyline/squisq-react';
 import { useVideoExport, type VideoExportConfig } from './hooks/useVideoExport.js';
 
 // ── Types ──────────────────────────────────────────────────────────
@@ -28,6 +29,15 @@ export interface VideoExportModalProps {
   audio?: Map<string, ArrayBuffer>;
   /** Called when the modal should close */
   onClose: () => void;
+}
+
+// ── Helpers ────────────────────────────────────────────────────
+
+function formatDuration(seconds: number): string {
+  if (seconds < 60) return `${seconds}s`;
+  const m = Math.floor(seconds / 60);
+  const s = seconds % 60;
+  return `${m}m ${s}s`;
 }
 
 // ── Styles ─────────────────────────────────────────────────────────
@@ -134,22 +144,25 @@ export function VideoExportModal({
   const [quality, setQuality] = useState<VideoQuality>('normal');
   const [fps, setFps] = useState(24);
   const [orientation, setOrientation] = useState<VideoOrientation>('landscape');
+  const [captionMode, setCaptionMode] = useState<CaptionMode>('off');
 
   const exportHook = useVideoExport();
-  const { state, progress, phase, backend, downloadUrl, fileSize, error } = exportHook;
+  const { state, progress, backend, downloadUrl, fileSize, error, elapsed, estimatedRemaining,
+    startExport, cancel: cancelExport, reset: resetExport } = exportHook;
 
   const handleExport = useCallback(async () => {
     const config: VideoExportConfig = {
       quality,
       fps,
       orientation,
+      captionMode,
       images,
       audio,
       mediaProvider,
       playerScript,
     };
-    await exportHook.startExport(doc, config);
-  }, [doc, quality, fps, orientation, images, audio, mediaProvider, playerScript, exportHook]);
+    await startExport(doc, config);
+  }, [doc, quality, fps, orientation, captionMode, images, audio, mediaProvider, playerScript, startExport]);
 
   const handleDownload = useCallback(() => {
     if (!downloadUrl) return;
@@ -164,11 +177,11 @@ export function VideoExportModal({
 
   const handleClose = useCallback(() => {
     if (state === 'capturing' || state === 'encoding' || state === 'preparing') {
-      exportHook.cancel();
+      cancelExport();
     }
-    exportHook.reset();
+    resetExport();
     onClose();
-  }, [state, exportHook, onClose]);
+  }, [state, cancelExport, resetExport, onClose]);
 
   const isExporting = state === 'preparing' || state === 'capturing' || state === 'encoding';
 
@@ -218,6 +231,19 @@ export function VideoExportModal({
               </select>
             </div>
 
+            <div>
+              <label style={labelStyle}>Captions</label>
+              <select
+                style={selectStyle}
+                value={captionMode}
+                onChange={(e) => setCaptionMode(e.target.value as CaptionMode)}
+              >
+                <option value="off">None</option>
+                <option value="standard">Standard (top bar)</option>
+                <option value="social">Social media (large words)</option>
+              </select>
+            </div>
+
             <div style={footerStyle}>
               <button style={btnSecondary} onClick={handleClose}>
                 Cancel
@@ -249,11 +275,14 @@ export function VideoExportModal({
               />
             </div>
 
-            <p style={{ fontSize: 13, margin: '0 0 4px 0' }}>{phase}</p>
-            <p style={{ fontSize: 12, color: '#8a7a5a', margin: 0 }}>{progress}% complete</p>
+            <p style={{ fontSize: 13, margin: '0 0 4px 0' }}>{progress}% complete</p>
+            <p style={{ fontSize: 12, color: '#8a7a5a', margin: 0 }}>
+              {formatDuration(elapsed)} elapsed
+              {estimatedRemaining > 0 && ` · ~${formatDuration(estimatedRemaining)} remaining`}
+            </p>
 
             <div style={footerStyle}>
-              <button style={btnSecondary} onClick={exportHook.cancel}>
+              <button style={btnSecondary} onClick={cancelExport}>
                 Cancel
               </button>
             </div>

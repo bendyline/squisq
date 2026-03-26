@@ -11,7 +11,7 @@ async function selectSample(page: Page, key: string) {
   await page.locator('select').first().selectOption(key);
 }
 
-async function switchView(page: Page, label: 'Raw' | 'Editor' | 'Preview') {
+async function switchView(page: Page, label: 'Raw' | 'Editor' | 'Play' | 'Preview') {
   await page.getByRole('tab', { name: label }).click();
 }
 
@@ -33,7 +33,7 @@ test.describe('Caption display', () => {
     await page.goto('/');
     await page.waitForLoadState('networkidle');
     await selectSample(page, 'hello-world');
-    await switchView(page, 'Preview');
+    await switchView(page, 'Play');
     await waitForDocPlayer(page);
   });
 

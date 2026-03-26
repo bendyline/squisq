@@ -20,17 +20,21 @@ import { detectFfmpeg } from '../util/detectFfmpeg.js';
 
 import type { VideoQuality, VideoOrientation } from '@bendyline/squisq-video';
 
+type CaptionOption = 'off' | 'standard' | 'social';
+
 interface VideoCommandOptions {
   output?: string;
   fps?: string;
   quality?: VideoQuality;
   orientation?: VideoOrientation;
+  captions?: CaptionOption;
   width?: string;
   height?: string;
 }
 
 const VALID_QUALITIES = ['draft', 'normal', 'high'] as const;
 const VALID_ORIENTATIONS = ['landscape', 'portrait'] as const;
+const VALID_CAPTIONS = ['off', 'standard', 'social'] as const;
 
 export function registerVideoCommand(program: Command): void {
   program
@@ -49,6 +53,11 @@ export function registerVideoCommand(program: Command): void {
       '--orientation <orient>',
       `Video orientation: ${VALID_ORIENTATIONS.join(', ')} (default: landscape)`,
       'landscape',
+    )
+    .option(
+      '--captions <style>',
+      `Caption style: ${VALID_CAPTIONS.join(', ')} (default: off)`,
+      'off',
     )
     .option('--width <pixels>', 'Override video width')
     .option('--height <pixels>', 'Override video height')
@@ -87,6 +96,12 @@ async function runVideo(inputPath: string, opts: VideoCommandOptions): Promise<v
       `Invalid orientation "${orientation}". Valid: ${VALID_ORIENTATIONS.join(', ')}`,
     );
   }
+
+  const captions = opts.captions ?? 'off';
+  if (!VALID_CAPTIONS.includes(captions as (typeof VALID_CAPTIONS)[number])) {
+    throw new Error(`Invalid captions "${captions}". Valid: ${VALID_CAPTIONS.join(', ')}`);
+  }
+  const captionStyle = captions === 'off' ? undefined : (captions as 'standard' | 'social');
 
   // Determine output path
   const inputBasename = basename(resolvedInput);
@@ -160,9 +175,10 @@ async function runVideo(inputPath: string, opts: VideoCommandOptions): Promise<v
     audio: audio.size > 0 ? audio : undefined,
     width: dimensions.width,
     height: dimensions.height,
+    captionStyle,
   });
 
-  console.error(`Viewport: ${dimensions.width}x${dimensions.height}, ${fps} fps, quality: ${quality}`);
+  console.error(`Viewport: ${dimensions.width}x${dimensions.height}, ${fps} fps, quality: ${quality}, captions: ${captions}`);
 
   // ── Step 5: Capture frames via Playwright ───────────────────────
   const { chromium } = await import('playwright-core');

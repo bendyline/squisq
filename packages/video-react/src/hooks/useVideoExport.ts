@@ -20,6 +20,7 @@ import type { Doc } from '@bendyline/squisq/schemas';
 import type { MediaProvider } from '@bendyline/squisq/schemas';
 import type { VideoQuality, VideoOrientation } from '@bendyline/squisq-video';
 import { resolveDimensions } from '@bendyline/squisq-video';
+import type { CaptionMode } from '@bendyline/squisq-react';
 import { createEncoder, supportsWebCodecs, type MainThreadEncoder } from '../mainThreadEncoder.js';
 import { useFrameCapture } from './useFrameCapture.js';
 
@@ -52,8 +53,10 @@ export interface VideoExportConfig {
   audio?: Map<string, ArrayBuffer>;
   /** MediaProvider to resolve media URLs (alternative to passing images directly) */
   mediaProvider?: MediaProvider;
-  /** Player IIFE bundle — import from '@bendyline/squisq-react/standalone-source' */
-  playerScript: string;
+  /** Caption mode for the exported video (default: 'off') */
+  captionMode?: CaptionMode;
+  /** Player IIFE bundle (unused in browser export, kept for CLI/Playwright path) */
+  playerScript?: string;
 }
 
 export interface VideoExportResult {
@@ -73,6 +76,10 @@ export interface VideoExportResult {
   fileSize: number;
   /** Error message (populated when state === 'error') */
   error: string | null;
+  /** Seconds elapsed since export started */
+  elapsed: number;
+  /** Estimated seconds remaining (0 when idle or complete) */
+  estimatedRemaining: number;
   /** Start a new export */
   startExport: (doc: Doc, config: VideoExportConfig) => Promise<void>;
   /** Cancel an in-progress export */
@@ -93,15 +100,21 @@ export function useVideoExport(): VideoExportResult {
   const [fileSize, setFileSize] = useState(0);
   const [error, setError] = useState<string | null>(null);
 
+  const [elapsed, setElapsed] = useState(0);
+  const [estimatedRemaining, setEstimatedRemaining] = useState(0);
+
   const encoderRef = useRef<MainThreadEncoder | null>(null);
   const cancelledRef = useRef(false);
   const downloadUrlRef = useRef<string | null>(null);
+  const startTimeRef = useRef<number>(0);
+  const elapsedTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const frameCapture = useFrameCapture();
 
   // Clean up on unmount
   useEffect(() => {
     return () => {
+      if (elapsedTimerRef.current) clearInterval(elapsedTimerRef.current);
       if (downloadUrlRef.current) {
         URL.revokeObjectURL(downloadUrlRef.current);
       }
@@ -130,11 +143,15 @@ export function useVideoExport(): VideoExportResult {
     setDownloadUrl(null);
     setFileSize(0);
     setError(null);
+    setElapsed(0);
+    setEstimatedRemaining(0);
+    if (elapsedTimerRef.current) clearInterval(elapsedTimerRef.current);
     cancelledRef.current = false;
   }, [frameCapture]);
 
   const cancel = useCallback(() => {
     cancelledRef.current = true;
+    if (elapsedTimerRef.current) clearInterval(elapsedTimerRef.current);
     if (encoderRef.current) {
       encoderRef.current.close();
       encoderRef.current = null;
@@ -171,10 +188,19 @@ export function useVideoExport(): VideoExportResult {
           );
         }
 
-        // ── Step 1: Prepare iframe ────────────────────────────────
+        // ── Step 1: Prepare ───────────────────────────────────────
         setState('preparing');
         setPhase('Loading document…');
         setProgress(0);
+        setElapsed(0);
+        setEstimatedRemaining(0);
+
+        // Start elapsed timer
+        startTimeRef.current = performance.now();
+        if (elapsedTimerRef.current) clearInterval(elapsedTimerRef.current);
+        elapsedTimerRef.current = setInterval(() => {
+          setElapsed(Math.floor((performance.now() - startTimeRef.current) / 1000));
+        }, 1000);
 
         // Collect images from MediaProvider if provided and images not passed directly
         let images = config.images;
@@ -194,7 +220,7 @@ export function useVideoExport(): VideoExportResult {
         const docDuration = await frameCapture.init(
           doc,
           { images, audio: config.audio, width, height },
-          config.playerScript,
+          config.captionMode,
         );
 
         if (cancelledRef.current) return;
@@ -218,13 +244,29 @@ export function useVideoExport(): VideoExportResult {
         setState('capturing');
         const totalFrames = Math.ceil(docDuration * fps);
 
+        const captureStartTime = performance.now();
+        // Throttle UI updates to every ~10 frames to avoid excessive re-renders.
+        // Each setState between awaits triggers a separate render cycle.
+        const UI_UPDATE_INTERVAL = 10;
+
         for (let i = 0; i < totalFrames; i++) {
           if (cancelledRef.current) return;
 
           const time = i / fps;
-          const captureProgress = Math.round((i / totalFrames) * 90);
-          setProgress(5 + captureProgress);
-          setPhase(`Capturing frame ${i + 1}/${totalFrames} (${time.toFixed(1)}s)`);
+
+          // Update UI periodically (not every frame)
+          if (i % UI_UPDATE_INTERVAL === 0 || i === totalFrames - 1) {
+            const captureProgress = Math.round((i / totalFrames) * 90);
+            setProgress(5 + captureProgress);
+            setPhase(`Capturing frame ${i + 1}/${totalFrames} (${time.toFixed(1)}s)`);
+
+            if (i > 0) {
+              const elapsedCapture = (performance.now() - captureStartTime) / 1000;
+              const avgPerFrame = elapsedCapture / i;
+              const remaining = Math.round(avgPerFrame * (totalFrames - i));
+              setEstimatedRemaining(remaining);
+            }
+          }
 
           const bitmap = await frameCapture.captureFrame(time);
 
@@ -259,10 +301,13 @@ export function useVideoExport(): VideoExportResult {
         setState('complete');
         setProgress(100);
         setPhase('Export complete');
+        setEstimatedRemaining(0);
+        if (elapsedTimerRef.current) clearInterval(elapsedTimerRef.current);
 
-        // Clean up iframe
+        // Clean up
         frameCapture.destroy();
       } catch (err: unknown) {
+        if (elapsedTimerRef.current) clearInterval(elapsedTimerRef.current);
         if (cancelledRef.current) return;
         const message = err instanceof Error ? err.message : String(err);
         setState('error');
@@ -289,6 +334,8 @@ export function useVideoExport(): VideoExportResult {
     downloadUrl,
     fileSize,
     error,
+    elapsed,
+    estimatedRemaining,
     startExport,
     cancel,
     reset,

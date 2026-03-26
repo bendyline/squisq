@@ -36,6 +36,9 @@ export interface RenderHtmlOptions {
 
   /** Viewport height in CSS pixels (default: 1080) */
   height?: number;
+
+  /** Caption style for the rendered video. Omit for no captions. */
+  captionStyle?: 'standard' | 'social';
 }
 
 // ── MIME Detection ─────────────────────────────────────────────────
@@ -107,7 +110,7 @@ function escapeHtml(str: string): string {
  * @returns Complete HTML string ready to be loaded in a headless browser
  */
 export function generateRenderHtml(doc: Doc, options: RenderHtmlOptions): string {
-  const { playerScript, images, audio, width = 1920, height = 1080 } = options;
+  const { playerScript, images, audio, width = 1920, height = 1080, captionStyle } = options;
 
   // Build base64 image map
   const imageMap: Record<string, string> = {};
@@ -157,7 +160,7 @@ html,body{margin:0;padding:0;width:${width}px;height:${height}px;overflow:hidden
     audio: audio,
     autoPlay: false,
     basePath: ".",
-    renderMode: true
+    renderMode: true${captionStyle ? `,\n    captionStyle: ${JSON.stringify(captionStyle)}` : ''}
   });
 })();
 </script>

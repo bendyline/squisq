@@ -59,6 +59,8 @@ export interface MountOptions {
    * Disables controls and auto-play. Used by Playwright video export.
    */
   renderMode?: boolean;
+  /** Caption style: 'standard' or 'social'. Omit or set to undefined for no captions. */
+  captionStyle?: 'standard' | 'social';
 }
 
 // ── CSS Injection ──────────────────────────────────────────────────
@@ -173,6 +175,7 @@ export function mount(element: Element, doc: Doc, options: MountOptions = {}): v
     autoPlay = false,
     theme,
     renderMode = false,
+    captionStyle,
   } = options;
 
   // Rewrite audio URLs if map provided
@@ -198,6 +201,8 @@ export function mount(element: Element, doc: Doc, options: MountOptions = {}): v
       showControls: !renderMode,
       renderMode,
       theme,
+      captionsEnabled: !!captionStyle,
+      captionStyle: captionStyle ?? 'standard',
     });
   }
 

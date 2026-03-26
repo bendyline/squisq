@@ -82,7 +82,7 @@ export function createEncoder(config: EncoderConfig): MainThreadEncoder {
   });
 
   encoder.configure({
-    codec: 'avc1.42001f', // H.264 Baseline for maximum compatibility
+    codec: 'avc1.640028', // H.264 High profile, level 4.0 (supports up to 1080p)
     width: config.width,
     height: config.height,
     bitrate: bitrateForQuality(config.quality, config.width, config.height),

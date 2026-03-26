@@ -840,12 +840,12 @@ export function DocPlayer({
           </div>
         )}
 
-        {/* Caption overlay -- hidden in render mode and when stopped on cover block */}
-        {hasCaptions && !renderMode && (
+        {/* Caption overlay -- shown during playback and in render mode when captions are enabled */}
+        {hasCaptions && (renderMode ? captionsEnabled : true) && (
           <CaptionOverlay
             captions={script.captions}
             currentTime={currentTime}
-            enabled={captionsEnabled && (isPlaying || currentTime > 0)}
+            enabled={captionsEnabled && (renderMode || isPlaying || currentTime > 0)}
             fontSize={16}
             captionStyle={activeCaptionStyle}
             theme={theme}
