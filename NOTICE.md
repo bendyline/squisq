@@ -44,6 +44,7 @@ with their licenses. All licenses are permissive and compatible with MIT.
 | @bendyline/squisq              | workspace | MIT     | (internal)                                   |
 | @bendyline/squisq-react        | workspace | MIT     | (internal)                                   |
 | @monaco-editor/react           | 4.7.0     | MIT     | https://github.com/suren-atoyan/monaco-react |
+| @tiptap/extension-image        | 2.27.2    | MIT     | https://tiptap.dev                           |
 | @tiptap/extension-placeholder  | 2.27.2    | MIT     | https://tiptap.dev                           |
 | @tiptap/extension-table        | 2.27.2    | MIT     | https://tiptap.dev                           |
 | @tiptap/extension-table-cell   | 2.27.2    | MIT     | https://tiptap.dev                           |
@@ -57,6 +58,26 @@ with their licenses. All licenses are permissive and compatible with MIT.
 | monaco-editor                  | 0.55.1    | MIT     | https://github.com/microsoft/monaco-editor   |
 | react _(peer)_                 | ^18 / ^19 | MIT     | https://reactjs.org                          |
 | react-dom _(peer)_             | ^18 / ^19 | MIT     | https://reactjs.org                          |
+
+## @bendyline/squisq-video
+
+| Package                 | Version   | License | Repository                                |
+| ----------------------- | --------- | ------- | ----------------------------------------- |
+| @bendyline/squisq       | workspace | MIT     | (internal)                                |
+| @bendyline/squisq-react | workspace | MIT     | (internal)                                |
+| @ffmpeg/ffmpeg          | 0.12.15   | MIT     | https://github.com/ffmpegwasm/ffmpeg.wasm |
+| @ffmpeg/util            | 0.12.2    | MIT     | https://github.com/ffmpegwasm/ffmpeg.wasm |
+
+## @bendyline/squisq-cli
+
+| Package                   | Version   | License    | Repository                              |
+| ------------------------- | --------- | ---------- | --------------------------------------- |
+| @bendyline/squisq         | workspace | MIT        | (internal)                              |
+| @bendyline/squisq-formats | workspace | MIT        | (internal)                              |
+| @bendyline/squisq-react   | workspace | MIT        | (internal)                              |
+| @bendyline/squisq-video   | workspace | MIT        | (internal)                              |
+| commander                 | 12.1.0    | MIT        | https://github.com/tj/commander.js      |
+| playwright-core           | 1.58.2    | Apache-2.0 | https://github.com/microsoft/playwright |
 
 ---
 
@@ -73,13 +94,13 @@ with their licenses. All licenses are permissive and compatible with MIT.
 
 ## License Summary
 
-| License                 | Packages                               |
-| ----------------------- | -------------------------------------- |
-| MIT                     | majority of dependencies               |
-| Apache-2.0              | localforage, pdfjs-dist                |
-| MIT OR GPL-3.0-or-later | jszip (dual-licensed; MIT option used) |
-| MIT AND Zlib            | pako (both permissive)                 |
-| 0BSD                    | tslib (maximally permissive)           |
+| License                 | Packages                                 |
+| ----------------------- | ---------------------------------------- |
+| MIT                     | majority of dependencies                 |
+| Apache-2.0              | localforage, pdfjs-dist, playwright-core |
+| MIT OR GPL-3.0-or-later | jszip (dual-licensed; MIT option used)   |
+| MIT AND Zlib            | pako (both permissive)                   |
+| 0BSD                    | tslib (maximally permissive)             |
 
 All dependencies use permissive licenses compatible with MIT. The jszip
 dual-license allows choosing MIT. Apache-2.0 dependencies (localforage,

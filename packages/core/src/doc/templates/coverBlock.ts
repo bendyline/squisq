@@ -18,6 +18,7 @@ import type { Layer } from '../../schemas/Doc.js';
 import type { TemplateContext } from '../../schemas/BlockTemplates.js';
 import { scaledFontSize } from '../../schemas/BlockTemplates.js';
 import type { StartBlockConfig } from '../../schemas/Doc.js';
+import { getThemeFont } from '../utils/themeUtils.js';
 import { mapAmbientMotion } from './accentImage.js';
 
 /**
@@ -87,6 +88,7 @@ export function coverBlock(input: CoverBlockInput, context: TemplateContext): La
         text: title,
         style: {
           fontSize: titleFontSize,
+          fontFamily: getThemeFont(context, 'title'),
           fontWeight: 'bold',
           color: theme.colors.text,
           textAlign: 'center',
@@ -113,6 +115,7 @@ export function coverBlock(input: CoverBlockInput, context: TemplateContext): La
         text: subtitle,
         style: {
           fontSize: subtitleFontSize,
+          fontFamily: getThemeFont(context, 'body'),
           color: theme.colors.textMuted,
           textAlign: 'center',
           lineHeight: 1.5,

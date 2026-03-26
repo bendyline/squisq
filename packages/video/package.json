@@ -1,0 +1,51 @@
+{
+  "name": "@bendyline/squisq-video",
+  "version": "1.0.0",
+  "description": "Video encoding and render HTML generation for Squisq documents — browser-pure, works in Node and browser",
+  "license": "MIT",
+  "author": "Bendyline",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/bendyline/squisq.git",
+    "directory": "packages/video"
+  },
+  "homepage": "https://github.com/bendyline/squisq",
+  "keywords": [
+    "squisq",
+    "video",
+    "mp4",
+    "ffmpeg",
+    "wasm",
+    "export"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@bendyline/squisq": "1.1.0",
+    "@bendyline/squisq-react": "1.0.2",
+    "@ffmpeg/ffmpeg": "^0.12.15",
+    "@ffmpeg/util": "^0.12.2"
+  },
+  "devDependencies": {
+    "tsup": "^8.0.0",
+    "typescript": "^5.3.0"
+  }
+}

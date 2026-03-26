@@ -13,6 +13,7 @@ import { StatusBar } from './StatusBar';
 import { RawEditor } from './RawEditor';
 import { WysiwygEditor } from './WysiwygEditor';
 import { PreviewPanel } from './PreviewPanel';
+import { PreviewSettingsProvider, PreviewToolbarControls } from './PreviewControls';
 import { MediaBin } from './MediaBin';
 import { DropZoneOverlay } from './DropZoneOverlay';
 import { useFileDrop, type DropTarget } from './hooks/useFileDrop';
@@ -23,6 +24,8 @@ import {
   processTextFiles,
 } from './utils/dropUtils';
 import type { MediaProvider } from '@bendyline/squisq/schemas';
+import type { ContentContainer } from '@bendyline/squisq/storage';
+import type { ReactNode } from 'react';
 
 export type { EditorTheme } from './EditorContext';
 
@@ -46,8 +49,16 @@ export interface EditorShellProps {
   height?: string;
   /** Optional MediaProvider for the Files panel. When set (even to null), a Files toggle appears in the toolbar. */
   mediaProvider?: MediaProvider | null;
+  /** Optional ContentContainer for audio mapping (MP3 discovery + timing.json reading). */
+  container?: ContentContainer | null;
   /** Show the Files toggle in the toolbar. Defaults to true when mediaProvider is passed. */
   showFilesToggle?: boolean;
+  /** Content rendered at the left edge of the toolbar, before the view tabs. */
+  toolbarSlotLeft?: ReactNode;
+  /** Content rendered after the formatting controls (in the middle area of the toolbar). */
+  toolbarSlotAfterActions?: ReactNode;
+  /** Content rendered at the rightmost end of the toolbar, after all other elements. */
+  toolbarSlotRight?: ReactNode;
 }
 
 /**
@@ -64,7 +75,11 @@ export function EditorShell({
   className,
   height = '100vh',
   mediaProvider,
+  container,
   showFilesToggle,
+  toolbarSlotLeft,
+  toolbarSlotAfterActions,
+  toolbarSlotRight,
 }: EditorShellProps) {
   // Show the toggle when explicitly opted in, or when mediaProvider prop was passed at all
   const filesToggleEnabled = showFilesToggle ?? mediaProvider !== undefined;
@@ -75,6 +90,7 @@ export function EditorShell({
       initialView={initialView}
       articleId={articleId}
       theme={theme}
+      mediaProvider={mediaProvider}
     >
       <EditorShellInner
         basePath={basePath}
@@ -82,7 +98,11 @@ export function EditorShell({
         className={className}
         height={height}
         mediaProvider={mediaProvider ?? null}
+        container={container}
         filesToggleEnabled={filesToggleEnabled}
+        toolbarSlotLeft={toolbarSlotLeft}
+        toolbarSlotAfterActions={toolbarSlotAfterActions}
+        toolbarSlotRight={toolbarSlotRight}
       />
     </EditorProvider>
   );
@@ -94,7 +114,11 @@ interface EditorShellInnerProps {
   className?: string;
   height: string;
   mediaProvider: MediaProvider | null;
+  container?: ContentContainer | null;
   filesToggleEnabled: boolean;
+  toolbarSlotLeft?: ReactNode;
+  toolbarSlotAfterActions?: ReactNode;
+  toolbarSlotRight?: ReactNode;
 }
 
 function EditorShellInner({
@@ -103,9 +127,14 @@ function EditorShellInner({
   className,
   height,
   mediaProvider,
+  container,
   filesToggleEnabled,
+  toolbarSlotLeft,
+  toolbarSlotAfterActions,
+  toolbarSlotRight,
 }: EditorShellInnerProps) {
-  const { activeView, markdownSource, theme, insertAtCursor, replaceAll } = useEditorContext();
+  const { activeView, markdownSource, doc, theme, insertAtCursor, replaceAll } = useEditorContext();
+  const isPreview = activeView === 'preview';
   const [showFiles, setShowFiles] = useState(false);
   const [mediaRefreshKey, setMediaRefreshKey] = useState(0);
   const isDark = theme === 'dark';
@@ -193,41 +222,51 @@ function EditorShellInner({
       }}
       {...containerProps}
     >
-      {/* Header: Toolbar (includes view tabs) */}
-      <div className="squisq-editor-header">
-        <Toolbar
-          showFiles={showFiles}
-          onToggleFiles={filesToggleEnabled ? handleToggleFiles : undefined}
-        />
-      </div>
-
-      {/* Main content area */}
-      <div
-        className="squisq-editor-content"
-        style={{ flex: 1, overflow: 'hidden', position: 'relative', display: 'flex' }}
-      >
-        <div style={{ flex: 1, overflow: 'hidden', position: 'relative' }}>
-          {activeView === 'raw' && <RawEditor theme={theme === 'dark' ? 'vs-dark' : 'vs'} />}
-          {activeView === 'wysiwyg' && <WysiwygEditor />}
-          {activeView === 'preview' && <PreviewPanel basePath={basePath} />}
+      <PreviewSettingsProvider doc={doc}>
+        {/* Header: Toolbar (includes view tabs + preview controls) */}
+        <div className="squisq-editor-header">
+          <Toolbar
+            showFiles={showFiles}
+            onToggleFiles={filesToggleEnabled ? handleToggleFiles : undefined}
+            slotLeft={toolbarSlotLeft}
+            slotAfterActions={
+              <>
+                {toolbarSlotAfterActions}
+                {isPreview && <PreviewToolbarControls />}
+              </>
+            }
+            slotRight={toolbarSlotRight}
+          />
         </div>
 
-        {showFiles && (
-          <MediaBin mediaProvider={mediaProvider} isDark={isDark} refreshKey={mediaRefreshKey} />
-        )}
+        {/* Main content area */}
+        <div
+          className="squisq-editor-content"
+          style={{ flex: 1, overflow: 'hidden', position: 'relative', display: 'flex' }}
+        >
+          <div style={{ flex: 1, overflow: 'hidden', position: 'relative' }}>
+            {activeView === 'raw' && <RawEditor theme={theme === 'dark' ? 'vs-dark' : 'vs'} />}
+            {activeView === 'wysiwyg' && <WysiwygEditor />}
+            {isPreview && <PreviewPanel basePath={basePath} container={container} />}
+          </div>
 
-        {/* Drop zone overlay */}
-        {isDragging && (
-          <DropZoneOverlay
-            dragContentType={dragContentType}
-            zoneProps={zoneProps}
-            hasMediaProvider={mediaProvider !== null}
-          />
-        )}
-      </div>
+          {showFiles && (
+            <MediaBin mediaProvider={mediaProvider} isDark={isDark} refreshKey={mediaRefreshKey} />
+          )}
 
-      {/* Status bar */}
-      <StatusBar />
+          {/* Drop zone overlay */}
+          {isDragging && (
+            <DropZoneOverlay
+              dragContentType={dragContentType}
+              zoneProps={zoneProps}
+              hasMediaProvider={mediaProvider !== null}
+            />
+          )}
+        </div>
+
+        {/* Status bar */}
+        <StatusBar />
+      </PreviewSettingsProvider>
     </div>
   );
 }

@@ -22,9 +22,10 @@
  * ```
  */
 
-import type { Doc, Block } from '../schemas/Doc.js';
+import type { Doc, Block, CaptionTrack, CaptionPhrase } from '../schemas/Doc.js';
 import type { MarkdownDocument, MarkdownBlockNode, MarkdownHeading } from '../markdown/types.js';
 import { extractPlainText } from '../markdown/utils.js';
+import { estimateReadingTime } from '../timing/readingTime.js';
 
 // ============================================
 // Options
@@ -141,6 +142,10 @@ export function markdownToDoc(markdownDoc: MarkdownDocument, options?: MarkdownT
     const annotation = heading?.templateAnnotation;
     const template = annotation?.template ?? (heading ? defaultTemplate : undefined);
 
+    // Extract heading text so templates (e.g. sectionHeader) that expect a
+    // `title` property receive it without having to reach into sourceHeading.
+    const title = heading ? extractPlainText(heading) : undefined;
+
     const block: Block = {
       id,
       startTime: 0,
@@ -148,6 +153,7 @@ export function markdownToDoc(markdownDoc: MarkdownDocument, options?: MarkdownT
       audioSegment: 0,
       template,
       ...(heading ? { sourceHeading: heading } : {}),
+      ...(title ? { title } : {}),
     };
 
     // Propagate key-value params from annotation to templateOverrides
@@ -217,13 +223,49 @@ export function markdownToDoc(markdownDoc: MarkdownDocument, options?: MarkdownT
     rootBlocks.push(currentBlock);
   }
 
-  // Calculate basic timing
+  // Calculate reading-time-based durations and generate captions
   const allBlocks = flattenBlocks(rootBlocks);
+  const minDuration = 3; // seconds — minimum for blocks with little/no text
+  const phrases: CaptionPhrase[] = [];
+
+  // First pass: compute duration from body-content reading time
+  for (const block of allBlocks) {
+    const bodyText = getBlockBodyText(block);
+    if (bodyText.length > 0) {
+      const estimate = estimateReadingTime(bodyText);
+      block.duration = Math.max(minDuration, estimate.seconds);
+    } else {
+      block.duration = defaultDuration;
+    }
+  }
+
+  // Second pass: assign start times sequentially and build caption phrases
   let currentTime = 0;
   for (const block of allBlocks) {
     block.startTime = currentTime;
+
+    // Generate caption phrases from the block's body content
+    const bodyText = getBlockBodyText(block);
+    if (bodyText.length > 0) {
+      const sentences = splitIntoSentences(bodyText);
+      if (sentences.length > 0) {
+        const timePerSentence = block.duration / sentences.length;
+        for (let i = 0; i < sentences.length; i++) {
+          phrases.push({
+            text: sentences[i],
+            startTime: currentTime + i * timePerSentence,
+            endTime: currentTime + (i + 1) * timePerSentence,
+            audioSegment: 0,
+          });
+        }
+      }
+    }
+
     currentTime += block.duration;
   }
+
+  const captions: CaptionTrack | undefined =
+    phrases.length > 0 ? { phrases, generatedAt: new Date().toISOString(), version: 1 } : undefined;
 
   return {
     articleId,
@@ -232,6 +274,7 @@ export function markdownToDoc(markdownDoc: MarkdownDocument, options?: MarkdownT
     audio: {
       segments: [],
     },
+    ...(captions ? { captions } : {}),
     ...(markdownDoc.frontmatter ? { frontmatter: markdownDoc.frontmatter } : {}),
   };
 }
@@ -274,4 +317,95 @@ export function countBlocks(blocks: Block[]): number {
  */
 export function getBlockDepth(block: Block): number {
   return block.sourceHeading?.depth ?? 0;
+}
+
+// ============================================
+// Internal helpers
+// ============================================
+
+/**
+ * Extract the plain text from a block's body contents (excluding heading text).
+ */
+function getBlockBodyText(block: Block): string {
+  if (!block.contents || block.contents.length === 0) return '';
+  // Join with newlines to preserve paragraph/list-item boundaries.
+  // splitIntoPhrases uses these newlines as natural split points.
+  return block.contents
+    .map((node) => extractPlainText(node))
+    .join('\n')
+    .trim();
+}
+
+/** Maximum words per caption phrase. Long sentences get split at this point. */
+const MAX_PHRASE_WORDS = 12;
+
+/**
+ * Split text into caption-sized phrases.
+ *
+ * Splits on:
+ * 1. Newlines (paragraph/list-item boundaries from markdown)
+ * 2. Sentence endings (.!?) followed by whitespace
+ * 3. Long fragments (> MAX_PHRASE_WORDS) at clause boundaries (commas, semicolons, dashes)
+ *
+ * Merges very short fragments (< 15 chars) with the previous phrase.
+ */
+function splitIntoSentences(text: string): string[] {
+  // First split on newlines (each paragraph/list item becomes separate)
+  const lines = text
+    .split(/\n+/)
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0);
+
+  // Then split each line on sentence boundaries
+  const sentenceRe = /(?<=[.!?])\s+/;
+  const fragments: string[] = [];
+  for (const line of lines) {
+    const sentences = line
+      .split(sentenceRe)
+      .map((s) => s.trim())
+      .filter((s) => s.length > 0);
+    fragments.push(...sentences);
+  }
+
+  if (fragments.length === 0) return [];
+
+  // Split long fragments at clause boundaries
+  const split: string[] = [];
+  for (const frag of fragments) {
+    const words = frag.split(/\s+/);
+    if (words.length > MAX_PHRASE_WORDS) {
+      // Try to split at comma, semicolon, or dash near the midpoint
+      const mid = Math.floor(frag.length / 2);
+      const clauseRe = /[,;]\s+|\s+—\s+|\s+-\s+/g;
+      let bestSplit = -1;
+      let bestDist = Infinity;
+      let match;
+      while ((match = clauseRe.exec(frag)) !== null) {
+        const dist = Math.abs(match.index - mid);
+        if (dist < bestDist) {
+          bestDist = dist;
+          bestSplit = match.index + match[0].length;
+        }
+      }
+      if (bestSplit > 0 && bestSplit < frag.length - 5) {
+        split.push(frag.slice(0, bestSplit).trim());
+        split.push(frag.slice(bestSplit).trim());
+      } else {
+        split.push(frag);
+      }
+    } else {
+      split.push(frag);
+    }
+  }
+
+  // Merge very short fragments (< 15 chars) with the previous phrase
+  const merged: string[] = [split[0]];
+  for (let i = 1; i < split.length; i++) {
+    if (split[i].length < 15 && merged.length > 0) {
+      merged[merged.length - 1] += ' ' + split[i];
+    } else {
+      merged.push(split[i]);
+    }
+  }
+  return merged;
 }

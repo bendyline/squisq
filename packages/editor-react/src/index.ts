@@ -40,6 +40,12 @@ export type { WysiwygEditorProps } from './WysiwygEditor.js';
 
 export { PreviewPanel } from './PreviewPanel.js';
 export type { PreviewPanelProps } from './PreviewPanel.js';
+export {
+  PreviewSettingsProvider,
+  PreviewToolbarControls,
+  usePreviewSettings,
+} from './PreviewControls.js';
+export type { PreviewSettings } from './PreviewControls.js';
 
 // Chrome (for custom layouts)
 export { ViewSwitcher } from './ViewSwitcher.js';

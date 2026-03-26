@@ -146,3 +146,4 @@ test-results/
 
 # Generated reports
 reports/
+.DS_Store

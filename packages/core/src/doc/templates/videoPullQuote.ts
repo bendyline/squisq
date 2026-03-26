@@ -18,6 +18,7 @@
 import type { Layer } from '../../schemas/Doc.js';
 import type { VideoPullQuoteInput, TemplateContext } from '../../schemas/BlockTemplates.js';
 import { scaledFontSize } from '../../schemas/BlockTemplates.js';
+import { getThemeFont } from '../utils/themeUtils.js';
 
 export function videoPullQuote(input: VideoPullQuoteInput, context: TemplateContext): Layer[] {
   const { text, attribution, backgroundVideo } = input;
@@ -66,6 +67,7 @@ export function videoPullQuote(input: VideoPullQuoteInput, context: TemplateCont
         text: '\u201C',
         style: {
           fontSize: decoFontSize,
+          fontFamily: getThemeFont(context, 'title'),
           color: 'rgba(255, 255, 255, 0.08)',
           textAlign: 'center',
         },
@@ -85,6 +87,7 @@ export function videoPullQuote(input: VideoPullQuoteInput, context: TemplateCont
         text,
         style: {
           fontSize: quoteFontSize,
+          fontFamily: getThemeFont(context, 'title'),
           color: '#ffffff',
           textAlign: 'center',
           lineHeight: 1.5,
@@ -110,6 +113,7 @@ export function videoPullQuote(input: VideoPullQuoteInput, context: TemplateCont
         text: `\u2014 ${attribution}`,
         style: {
           fontSize: attrFontSize,
+          fontFamily: getThemeFont(context, 'body'),
           color: 'rgba(255, 255, 255, 0.7)',
           textAlign: 'center',
           shadow: true,

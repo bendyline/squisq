@@ -15,6 +15,7 @@
 import type { Layer } from '../../schemas/Doc.js';
 import type { MapBlockInput, TemplateContext } from '../../schemas/BlockTemplates.js';
 import { scaledFontSize } from '../../schemas/BlockTemplates.js';
+import { getThemeFont } from '../utils/themeUtils.js';
 import { mapAmbientMotion } from './accentImage.js';
 
 export function mapBlock(input: MapBlockInput, context: TemplateContext): Layer[] {
@@ -76,6 +77,7 @@ export function mapBlock(input: MapBlockInput, context: TemplateContext): Layer[
         text: title,
         style: {
           fontSize: titleFontSize,
+          fontFamily: getThemeFont(context, 'title'),
           fontWeight: 'bold',
           color: theme.colors.text,
           textAlign: 'center',
@@ -113,6 +115,7 @@ export function mapBlock(input: MapBlockInput, context: TemplateContext): Layer[
         text: caption,
         style: {
           fontSize: captionFontSize,
+          fontFamily: getThemeFont(context, 'body'),
           color: theme.colors.text,
           textAlign: 'center',
           shadow: true,

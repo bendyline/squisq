@@ -12,6 +12,8 @@
     "@bendyline/squisq": "*",
     "@bendyline/squisq-formats": "*",
     "@bendyline/squisq-react": "*",
+    "@bendyline/squisq-video": "*",
+    "@bendyline/squisq-video-react": "*",
     "@bendyline/squisq-editor-react": "*",
     "react": "^18.3.0",
     "react-dom": "^18.3.0"

@@ -12,6 +12,7 @@ export default defineConfig({
     'timing/index': 'src/timing/index.ts',
     'random/index': 'src/random/index.ts',
     'generate/index': 'src/generate/index.ts',
+    'transform/index': 'src/transform/index.ts',
   },
   format: ['esm'],
   dts: true,

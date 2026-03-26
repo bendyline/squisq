@@ -121,27 +121,39 @@ export function DocControlsOverlay({
         {state.currentBlockIndex + 1}/{state.totalBlocks}
       </span>
 
-      {/* Caption toggle button */}
+      {/* Caption mode cycle button: off → standard → social → off */}
       {state.hasCaptions && (
         <button
-          onClick={() => actions.setCaptionsEnabled(!state.captionsEnabled)}
+          onClick={() => actions.cycleCaptionMode()}
           style={{
-            background: state.captionsEnabled ? 'rgba(255,255,255,0.2)' : 'none',
+            background: state.captionMode !== 'off' ? 'rgba(255,255,255,0.2)' : 'none',
             border: 'none',
-            color: state.captionsEnabled ? 'white' : 'rgba(255,255,255,0.5)',
+            color: state.captionMode !== 'off' ? 'white' : 'rgba(255,255,255,0.5)',
             cursor: 'pointer',
             padding: '8px',
             fontSize: '12px',
             display: 'flex',
             alignItems: 'center',
+            gap: '4px',
             borderRadius: '4px',
           }}
-          title={state.captionsEnabled ? 'Hide captions' : 'Show captions'}
-          aria-label={state.captionsEnabled ? 'Hide captions' : 'Show captions'}
+          title={
+            state.captionMode === 'off'
+              ? 'Captions: Off (click for Standard)'
+              : state.captionMode === 'standard'
+                ? 'Captions: Standard (click for Social)'
+                : 'Captions: Social (click to turn off)'
+          }
+          aria-label="Cycle caption style"
         >
           <svg viewBox="0 0 24 24" fill="currentColor" width="18" height="18">
             <path d="M19 4H5a2 2 0 00-2 2v12a2 2 0 002 2h14a2 2 0 002-2V6a2 2 0 00-2-2zm-8 7H9.5v-.5h-2v3h2V13H11v1a1 1 0 01-1 1H7a1 1 0 01-1-1v-4a1 1 0 011-1h3a1 1 0 011 1v1zm7 0h-1.5v-.5h-2v3h2V13H18v1a1 1 0 01-1 1h-3a1 1 0 01-1-1v-4a1 1 0 011-1h3a1 1 0 011 1v1z" />
           </svg>
+          {state.captionMode !== 'off' && (
+            <span style={{ fontSize: '10px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+              {state.captionMode === 'standard' ? 'CC' : 'SM'}
+            </span>
+          )}
         </button>
       )}
 

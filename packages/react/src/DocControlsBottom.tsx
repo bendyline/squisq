@@ -85,13 +85,19 @@ export function DocControlsBottom({
         {state.currentBlockIndex + 1}/{state.totalBlocks}
       </span>
 
-      {/* Caption toggle */}
+      {/* Caption mode cycle */}
       {state.hasCaptions && (
         <button
-          className={`bottom-ctrl-btn ${state.captionsEnabled ? 'bottom-ctrl-btn--active' : ''}`}
-          onClick={() => actions.setCaptionsEnabled(!state.captionsEnabled)}
-          title={state.captionsEnabled ? 'Hide captions' : 'Show captions'}
-          aria-label={state.captionsEnabled ? 'Hide captions' : 'Show captions'}
+          className={`bottom-ctrl-btn ${state.captionMode !== 'off' ? 'bottom-ctrl-btn--active' : ''}`}
+          onClick={() => actions.cycleCaptionMode()}
+          title={
+            state.captionMode === 'off'
+              ? 'Captions: Off'
+              : state.captionMode === 'standard'
+                ? 'Captions: Standard'
+                : 'Captions: Social'
+          }
+          aria-label="Cycle caption style"
         >
           <svg viewBox="0 0 24 24" fill="currentColor" width="18" height="18">
             <path d="M19 4H5a2 2 0 00-2 2v12a2 2 0 002 2h14a2 2 0 002-2V6a2 2 0 00-2-2zm-8 7H9.5v-.5h-2v3h2V13H11v1a1 1 0 01-1 1H7a1 1 0 01-1-1v-4a1 1 0 011-1h3a1 1 0 011 1v1zm7 0h-1.5v-.5h-2v3h2V13H18v1a1 1 0 01-1 1h-3a1 1 0 01-1-1v-4a1 1 0 011-1h3a1 1 0 011 1v1z" />

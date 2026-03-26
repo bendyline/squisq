@@ -106,7 +106,7 @@ export function DocProgressBar({
           left: 0,
           width: `${state.docProgress * 100}%`,
           height: '6px',
-          background: '#3d5a80',
+          background: '#5b9bd5',
           borderRadius: '3px',
           transition: 'width 0.1s',
         }}
@@ -125,7 +125,7 @@ export function DocProgressBar({
             borderRadius: '50%',
             background:
               marker.index === state.currentBlockIndex ? '#ffffff' : 'rgba(255,255,255,0.5)',
-            border: '2px solid #3d5a80',
+            border: '2px solid #5b9bd5',
             cursor: 'pointer',
             zIndex: 2,
             transition: 'transform 0.15s, background 0.15s',

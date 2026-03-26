@@ -13,6 +13,7 @@
 import type { Layer } from '../../schemas/Doc.js';
 import type { FactCardInput, TemplateContext } from '../../schemas/BlockTemplates.js';
 import { scaledFontSize } from '../../schemas/BlockTemplates.js';
+import { getThemeFont } from '../utils/themeUtils.js';
 import { createAccentLayers, getAccentLayout, adjustY, DEFAULT_LAYOUT } from './accentImage.js';
 import { createBackgroundLayer } from './captionUtils.js';
 
@@ -48,6 +49,7 @@ export function factCard(input: FactCardInput, context: TemplateContext): Layer[
       text: fact,
       style: {
         fontSize: factFontSize,
+        fontFamily: getThemeFont(context, 'title'),
         fontWeight: 'bold',
         color: theme.colors.text,
         textAlign: 'center',
@@ -72,6 +74,7 @@ export function factCard(input: FactCardInput, context: TemplateContext): Layer[
       text: explanation,
       style: {
         fontSize: explainFontSize,
+        fontFamily: getThemeFont(context, 'body'),
         color: theme.colors.textMuted,
         textAlign: 'center',
         lineHeight: 1.5,
@@ -96,6 +99,7 @@ export function factCard(input: FactCardInput, context: TemplateContext): Layer[
         text: source,
         style: {
           fontSize: sourceFontSize,
+          fontFamily: getThemeFont(context, 'body'),
           color: theme.colors.textMuted,
           textAlign: 'center',
           shadow: !!accentImage,

@@ -11,7 +11,7 @@
 import type { Layer } from '../../schemas/Doc.js';
 import type { FullBleedQuoteInput, TemplateContext } from '../../schemas/BlockTemplates.js';
 import { scaledFontSize } from '../../schemas/BlockTemplates.js';
-import { resolveColorScheme } from '../utils/themeUtils.js';
+import { resolveColorScheme, getThemeFont } from '../utils/themeUtils.js';
 
 export function fullBleedQuote(input: FullBleedQuoteInput, context: TemplateContext): Layer[] {
   const { text, colorScheme = 'blue' } = input;
@@ -40,6 +40,7 @@ export function fullBleedQuote(input: FullBleedQuoteInput, context: TemplateCont
         text,
         style: {
           fontSize: textFontSize,
+          fontFamily: getThemeFont(context, 'title'),
           fontWeight: 'bold',
           color: colors.text,
           textAlign: 'center',

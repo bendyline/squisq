@@ -2,6 +2,7 @@
 export { DocPlayer } from './DocPlayer.js';
 export { BlockRenderer, VIEWPORT } from './BlockRenderer.js';
 export { CaptionOverlay } from './CaptionOverlay.js';
+export { SocialCaptionOverlay } from './SocialCaptionOverlay.js';
 export { DocControlsOverlay } from './DocControlsOverlay.js';
 export { DocControlsBottom } from './DocControlsBottom.js';
 export { DocControlsSidebar } from './DocControlsSidebar.js';
@@ -32,6 +33,8 @@ export type {
   BlockMarker,
   ControlsLayout,
   DisplayMode,
+  CaptionStyle,
+  CaptionMode,
   SlideNavActions,
   SquisqRenderAPI,
   SquisqWindow,

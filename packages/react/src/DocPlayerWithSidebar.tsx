@@ -52,6 +52,7 @@ const DEFAULT_STATE: PlaybackState = {
   docProgress: 0,
   hasCaptions: false,
   captionsEnabled: false,
+  captionMode: 'off',
   currentSegmentIndex: 0,
   currentSegmentName: null,
   currentBlock: null,

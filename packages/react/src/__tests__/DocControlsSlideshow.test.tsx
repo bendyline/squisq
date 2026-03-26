@@ -13,6 +13,7 @@ function makeState(overrides: Partial<PlaybackState> = {}): PlaybackState {
     docProgress: 0.2,
     hasCaptions: false,
     captionsEnabled: false,
+    captionMode: 'off',
     currentSegmentIndex: 0,
     currentSegmentName: null,
     currentBlock: null,

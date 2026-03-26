@@ -11,6 +11,7 @@
 import type { Layer } from '../../schemas/Doc.js';
 import type { ListBlockInput, TemplateContext } from '../../schemas/BlockTemplates.js';
 import { scaledFontSize } from '../../schemas/BlockTemplates.js';
+import { getThemeFont } from '../utils/themeUtils.js';
 import { createAccentLayers, getAccentLayout, adjustY, DEFAULT_LAYOUT } from './accentImage.js';
 
 export function listBlock(input: ListBlockInput, context: TemplateContext): Layer[] {
@@ -51,6 +52,7 @@ export function listBlock(input: ListBlockInput, context: TemplateContext): Laye
         text: title,
         style: {
           fontSize: titleFontSize,
+          fontFamily: getThemeFont(context, 'title'),
           fontWeight: 'bold',
           color: theme.colors.text,
           textAlign: 'center',
@@ -82,6 +84,7 @@ export function listBlock(input: ListBlockInput, context: TemplateContext): Laye
         text: itemText,
         style: {
           fontSize: itemFontSize,
+          fontFamily: getThemeFont(context, 'body'),
           color: theme.colors.text,
           lineHeight: 1.4,
           shadow: !!accentImage,

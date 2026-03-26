@@ -7,6 +7,7 @@
  * Hidden in Preview mode.
  */
 
+import type { ReactNode } from 'react';
 import { useCallback, useEffect, useReducer } from 'react';
 import type { Editor as TiptapEditor } from '@tiptap/core';
 import { useEditorContext, type EditorView } from './EditorContext';
@@ -15,7 +16,7 @@ import { getAvailableTemplates } from '@bendyline/squisq/doc';
 const VIEWS: { id: EditorView; label: string; shortcut: string }[] = [
   { id: 'wysiwyg', label: 'Editor', shortcut: '⌘1' },
   { id: 'raw', label: 'Raw', shortcut: '⌘2' },
-  { id: 'preview', label: 'Preview', shortcut: '⌘3' },
+  { id: 'preview', label: 'Play', shortcut: '⌘3' },
 ];
 
 export interface ToolbarProps {
@@ -25,6 +26,12 @@ export interface ToolbarProps {
   showFiles?: boolean;
   /** Toggle the Files panel. When provided, a "Files" button appears in the toolbar. */
   onToggleFiles?: () => void;
+  /** Content rendered at the left edge of the toolbar, before the view tabs. */
+  slotLeft?: ReactNode;
+  /** Content rendered after the formatting controls (in the middle area). */
+  slotAfterActions?: ReactNode;
+  /** Content rendered at the rightmost end of the toolbar, after all other elements. */
+  slotRight?: ReactNode;
 }
 
 interface ToolbarButton {
@@ -117,7 +124,14 @@ function isTiptapActive(editor: TiptapEditor, id: string): boolean {
  * - WYSIWYG: calls Tiptap chain commands (toggleBold, etc.)
  * - Raw: appends markdown syntax to the source
  */
-export function Toolbar({ className, showFiles, onToggleFiles }: ToolbarProps) {
+export function Toolbar({
+  className,
+  showFiles,
+  onToggleFiles,
+  slotLeft,
+  slotAfterActions,
+  slotRight,
+}: ToolbarProps) {
   const {
     activeView,
     setActiveView,
@@ -399,6 +413,8 @@ export function Toolbar({ className, showFiles, onToggleFiles }: ToolbarProps) {
       role="toolbar"
       aria-label="Formatting toolbar"
     >
+      {/* Left slot — before view tabs */}
+      {slotLeft}
       {/* View tabs */}
       <div className="squisq-toolbar-view-tabs" role="tablist" aria-label="Editor view">
         {VIEWS.map((view) => (
@@ -415,7 +431,6 @@ export function Toolbar({ className, showFiles, onToggleFiles }: ToolbarProps) {
           </button>
         ))}
       </div>
-
       {/* Formatting buttons — hidden in preview mode */}
       {!isPreview && (
         <div className="squisq-toolbar-actions">
@@ -469,10 +484,10 @@ export function Toolbar({ className, showFiles, onToggleFiles }: ToolbarProps) {
           )}
         </div>
       )}
-
+      {/* After-actions slot — after formatting controls */}
+      {slotAfterActions}
       {/* Spacer pushes right-side buttons to the end */}
-      {onToggleFiles && <div style={{ flex: 1 }} />}
-
+      <div style={{ flex: 1 }} />
       {/* Files toggle — visible when callback is provided */}
       {onToggleFiles && (
         <button
@@ -485,6 +500,8 @@ export function Toolbar({ className, showFiles, onToggleFiles }: ToolbarProps) {
           {'\u{1F4CE}'}
         </button>
       )}
+      {/* Right slot — rightmost end of toolbar */}
+      {slotRight}
     </div>
   );
 }

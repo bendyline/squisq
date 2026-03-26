@@ -18,6 +18,7 @@
 import type { Layer } from '../../schemas/Doc.js';
 import type { VideoWithCaptionInput, TemplateContext } from '../../schemas/BlockTemplates.js';
 import { scaledFontSize } from '../../schemas/BlockTemplates.js';
+import { getThemeFont } from '../utils/themeUtils.js';
 import { cleanCaption } from './captionUtils.js';
 
 export function videoWithCaption(input: VideoWithCaptionInput, context: TemplateContext): Layer[] {
@@ -86,6 +87,7 @@ export function videoWithCaption(input: VideoWithCaptionInput, context: Template
         text: caption,
         style: {
           fontSize: captionFontSize,
+          fontFamily: getThemeFont(context, 'body'),
           color: theme.colors.text,
           textAlign: 'center',
           shadow: true,
@@ -110,6 +112,7 @@ export function videoWithCaption(input: VideoWithCaptionInput, context: Template
         text: videoCredit,
         style: {
           fontSize: creditFontSize,
+          fontFamily: getThemeFont(context, 'body'),
           color: 'rgba(255, 255, 255, 0.5)',
           textAlign: 'right',
         },

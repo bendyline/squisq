@@ -17,7 +17,7 @@ async function selectSample(page: Page, key: string) {
 }
 
 /** Switch to a view tab by label text */
-async function switchView(page: Page, label: 'Raw' | 'Editor' | 'Preview') {
+async function switchView(page: Page, label: 'Raw' | 'Editor' | 'Play' | 'Preview') {
   await page.getByRole('tab', { name: label }).click();
 }
 
@@ -59,8 +59,8 @@ test.describe('Site navigation', () => {
     expect(values).toContain('all-templates');
   });
 
-  test('view switcher has Raw, Editor, Preview tabs', async ({ page }) => {
-    for (const label of ['Raw', 'Editor', 'Preview']) {
+  test('view switcher has Raw, Editor, Play tabs', async ({ page }) => {
+    for (const label of ['Raw', 'Editor', 'Play']) {
       await expect(page.getByRole('tab', { name: label })).toBeVisible();
     }
   });
@@ -70,8 +70,8 @@ test.describe('Site navigation', () => {
     await expect(page.locator('[data-testid="raw-editor"]')).toBeVisible();
   });
 
-  test('switching to Preview shows the preview panel', async ({ page }) => {
-    await switchView(page, 'Preview');
+  test('switching to Play shows the preview panel', async ({ page }) => {
+    await switchView(page, 'Play');
     await expect(page.locator('[data-testid="preview-panel"]')).toBeVisible();
   });
 });
@@ -83,7 +83,7 @@ test.describe('DocPlayer preview', () => {
     await page.goto('/');
     await page.waitForLoadState('networkidle');
     await selectSample(page, 'all-templates');
-    await switchView(page, 'Preview');
+    await switchView(page, 'Play');
     await waitForDocPlayer(page);
   });
 
@@ -121,12 +121,17 @@ test.describe('DocPlayer preview', () => {
     await startPlaybackAndWaitForActiveBlock(page);
     const initialText = await activeBlock(page).textContent();
 
-    // Wait enough time for the fallback timer to advance past the first block (5s default)
-    await page.waitForTimeout(6_000);
-
-    // The active block should now show different content
-    const newText = await activeBlock(page).textContent();
-    expect(newText).not.toEqual(initialText);
+    // Poll until the block changes (up to 15s) — block duration varies
+    let changed = false;
+    for (let i = 0; i < 5; i++) {
+      await page.waitForTimeout(3_000);
+      const newText = await activeBlock(page).textContent();
+      if (newText !== initialText) {
+        changed = true;
+        break;
+      }
+    }
+    expect(changed).toBe(true);
   });
 
   test('DocPlayer renders multiple blocks over time', async ({ page }) => {
@@ -154,7 +159,7 @@ test.describe('Template rendering correctness', () => {
     await page.goto('/');
     await page.waitForLoadState('networkidle');
     await selectSample(page, 'all-templates');
-    await switchView(page, 'Preview');
+    await switchView(page, 'Play');
     await waitForDocPlayer(page);
 
     // Start playback and check every few seconds that the active block has layers
@@ -194,7 +199,7 @@ test.describe('Template rendering correctness', () => {
     await page.goto('/');
     await page.waitForLoadState('networkidle');
     await selectSample(page, 'all-templates');
-    await switchView(page, 'Preview');
+    await switchView(page, 'Play');
     await waitForDocPlayer(page);
 
     // Start playback and advance to find the statHighlight block
@@ -222,7 +227,7 @@ test.describe('DocPlayer controls', () => {
     await page.goto('/');
     await page.waitForLoadState('networkidle');
     await selectSample(page, 'all-templates');
-    await switchView(page, 'Preview');
+    await switchView(page, 'Play');
     await waitForDocPlayer(page);
   });
 
@@ -261,7 +266,7 @@ test.describe('Sample switching', () => {
     await page.waitForLoadState('networkidle');
 
     // Start with hello-world in preview
-    await switchView(page, 'Preview');
+    await switchView(page, 'Play');
     await waitForDocPlayer(page);
     await startPlaybackAndWaitForActiveBlock(page);
     const initialContent = await activeBlock(page).textContent();
@@ -269,7 +274,7 @@ test.describe('Sample switching', () => {
     // Switch to all-templates
     await selectSample(page, 'all-templates');
     // EditorShell remounts when sample changes, resetting to default view
-    await switchView(page, 'Preview');
+    await switchView(page, 'Play');
     await waitForDocPlayer(page);
     await startPlaybackAndWaitForActiveBlock(page);
     const newContent = await activeBlock(page).textContent();

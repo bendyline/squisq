@@ -13,6 +13,7 @@
 import type { Layer } from '../../schemas/Doc.js';
 import type { QuoteBlockInput, TemplateContext } from '../../schemas/BlockTemplates.js';
 import { scaledFontSize } from '../../schemas/BlockTemplates.js';
+import { getThemeFont } from '../utils/themeUtils.js';
 import { createAccentLayers, getAccentLayout, adjustY, DEFAULT_LAYOUT } from './accentImage.js';
 import { createBackgroundLayer } from './captionUtils.js';
 
@@ -50,6 +51,7 @@ export function quoteBlock(input: QuoteBlockInput, context: TemplateContext): La
       text: '\u201C',
       style: {
         fontSize: decorativeQuoteFontSize,
+        fontFamily: getThemeFont(context, 'title'),
         color: 'rgba(255, 255, 255, 0.06)',
         textAlign: 'center',
       },
@@ -70,6 +72,7 @@ export function quoteBlock(input: QuoteBlockInput, context: TemplateContext): La
       text: quote,
       style: {
         fontSize: quoteFontSize,
+        fontFamily: getThemeFont(context, 'title'),
         color: theme.colors.text,
         textAlign: 'center',
         lineHeight: 1.6,
@@ -94,6 +97,7 @@ export function quoteBlock(input: QuoteBlockInput, context: TemplateContext): La
         text: `— ${attribution}`,
         style: {
           fontSize: attrFontSize,
+          fontFamily: getThemeFont(context, 'body'),
           color: theme.colors.textMuted,
           textAlign: 'center',
           shadow: !!accentImage,

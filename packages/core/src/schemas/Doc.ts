@@ -127,6 +127,13 @@ export interface Block {
   /** Template name that generated this block (for debugging) */
   template?: string;
 
+  /**
+   * Display title for template rendering.
+   * Extracted from the sourceHeading when the block is created by markdownToDoc().
+   * Templates like sectionHeader and titleBlock read this for their title layer.
+   */
+  title?: string;
+
   // ── Markdown-driven hierarchy (optional) ──
 
   /**
@@ -437,6 +444,19 @@ export interface AudioTrack {
 // ============================================
 
 /**
+ * A single word with precise timing, used for word-level highlighting
+ * in social-style captions. Populated from TTS timing data when available.
+ */
+export interface CaptionWord {
+  /** The word text */
+  text: string;
+  /** Start time in seconds (relative to doc start) */
+  startTime: number;
+  /** End time in seconds */
+  endTime: number;
+}
+
+/**
  * A single caption phrase to display during playback.
  */
 export interface CaptionPhrase {
@@ -448,6 +468,13 @@ export interface CaptionPhrase {
   endTime: number;
   /** Which audio segment this caption belongs to (0-indexed) */
   audioSegment: number;
+  /**
+   * Optional per-word timing from TTS timing data.
+   * When present, enables precise word-level highlighting in social
+   * caption style. When absent, word timing is interpolated evenly
+   * across the phrase duration.
+   */
+  words?: CaptionWord[];
 }
 
 /**
@@ -474,6 +501,39 @@ export interface AudioSegment {
   duration: number;
   /** Start time in overall timeline (calculated) */
   startTime: number;
+}
+
+// ============================================
+// Audio Timing Data (from TTS)
+// ============================================
+
+/**
+ * A single word-level timing bookmark from TTS synthesis.
+ * Used for precise audio-to-content mapping and word-level caption sync.
+ */
+export interface AudioBookmark {
+  /** Unique identifier (e.g., "word-0", "word-1") */
+  id: string;
+  /** Timestamp in seconds from audio start */
+  time: number;
+  /** Character offset in the source text */
+  charOffset: number;
+  /** The word text at this position */
+  textFragment?: string;
+}
+
+/**
+ * Timing data for an audio segment, typically from a `.timing.json` file
+ * generated alongside TTS audio. Contains the source text and per-word
+ * timing bookmarks for precise content matching and caption sync.
+ */
+export interface AudioTimingData {
+  /** The normalized plain text that was synthesized */
+  sourceText: string;
+  /** Word-level timing bookmarks */
+  bookmarks: AudioBookmark[];
+  /** Total audio duration in seconds */
+  duration: number;
 }
 
 // ============================================

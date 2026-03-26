@@ -39,9 +39,8 @@ const RE_STRIP_TAGS = /<[^>]+>/g;
 export function markdownToTiptap(markdown: string): string {
   if (!markdown.trim()) return '<p></p>';
 
-  // Simple conversion of markdown constructs to HTML that Tiptap understands.
-  // This is intentionally straightforward — Tiptap's parser handles the HTML.
-  const html = markdown;
+  // Normalize line endings — content from zip archives may use \r\n
+  const html = markdown.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
 
   // Process blocks line by line for accurate conversion
   const lines = html.split('\n');
@@ -384,11 +383,11 @@ function inlineToHtml(text: string): string {
   // Inline code: `text`
   result = result.replace(RE_INLINE_CODE, '<code>$1</code>');
 
+  // Images first: ![alt](src) — must be before links so the `!` prefix is consumed
+  result = result.replace(RE_IMAGE, '<img alt="$1" src="$2">');
+
   // Links: [text](url)
   result = result.replace(RE_LINK, '<a href="$2">$1</a>');
-
-  // Images: ![alt](src)
-  result = result.replace(RE_IMAGE, '<img alt="$1" src="$2">');
 
   return result;
 }

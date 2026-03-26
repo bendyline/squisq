@@ -13,7 +13,7 @@
 import type { Layer } from '../../schemas/Doc.js';
 import type { TwoColumnInput, TemplateContext } from '../../schemas/BlockTemplates.js';
 import { scaledFontSize } from '../../schemas/BlockTemplates.js';
-import { resolveColorScheme } from '../utils/themeUtils.js';
+import { resolveColorScheme, getThemeFont } from '../utils/themeUtils.js';
 import { getTwoColumnPositions } from '../../schemas/LayoutStrategy.js';
 
 export function twoColumn(input: TwoColumnInput, context: TemplateContext): Layer[] {
@@ -87,6 +87,7 @@ export function twoColumn(input: TwoColumnInput, context: TemplateContext): Laye
         text: header,
         style: {
           fontSize: headerFontSize,
+          fontFamily: getThemeFont(context, 'title'),
           color: theme.colors.textMuted,
           textAlign: 'center',
         },
@@ -126,6 +127,7 @@ export function twoColumn(input: TwoColumnInput, context: TemplateContext): Laye
       text: left.label,
       style: {
         fontSize: labelFontSize,
+        fontFamily: getThemeFont(context, 'body'),
         fontWeight: 'bold',
         color: leftColors.text,
         textAlign: 'center',
@@ -149,6 +151,7 @@ export function twoColumn(input: TwoColumnInput, context: TemplateContext): Laye
         text: left.sublabel,
         style: {
           fontSize: sublabelFontSize,
+          fontFamily: getThemeFont(context, 'body'),
           color: theme.colors.textMuted,
           textAlign: 'center',
           lineHeight: 1.4,
@@ -176,6 +179,7 @@ export function twoColumn(input: TwoColumnInput, context: TemplateContext): Laye
       text: connectorSymbol,
       style: {
         fontSize: connectorFontSize,
+        fontFamily: getThemeFont(context, 'title'),
         fontWeight: 'bold',
         color: 'rgba(255, 255, 255, 0.6)',
         textAlign: 'center',
@@ -197,6 +201,7 @@ export function twoColumn(input: TwoColumnInput, context: TemplateContext): Laye
       text: right.label,
       style: {
         fontSize: labelFontSize,
+        fontFamily: getThemeFont(context, 'body'),
         fontWeight: 'bold',
         color: rightColors.text,
         textAlign: 'center',
@@ -220,6 +225,7 @@ export function twoColumn(input: TwoColumnInput, context: TemplateContext): Laye
         text: right.sublabel,
         style: {
           fontSize: sublabelFontSize,
+          fontFamily: getThemeFont(context, 'body'),
           color: theme.colors.textMuted,
           textAlign: 'center',
           lineHeight: 1.4,

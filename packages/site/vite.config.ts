@@ -80,6 +80,16 @@ export default defineConfig({
     port: 5199,
     strictPort: true,
     open: true,
+    headers: {
+      // COOP/COEP were originally set for SharedArrayBuffer (ffmpeg.wasm).
+      // The current video export uses WebCodecs on the main thread, which
+      // doesn't need SharedArrayBuffer. COEP: require-corp blocks blob: URL
+      // iframes used by the frame capture system, so we use 'credentialless'
+      // which allows blob iframes while still enabling SharedArrayBuffer
+      // in browsers that support it.
+      'Cross-Origin-Opener-Policy': 'same-origin',
+      'Cross-Origin-Embedder-Policy': 'credentialless',
+    },
   },
   // Optimise monaco-editor: tell Vite to pre-bundle it so workers are served
   // from the local dev server instead of CDN.

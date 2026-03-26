@@ -17,7 +17,7 @@ import {
   useEffect,
   type ReactNode,
 } from 'react';
-import type { Doc } from '@bendyline/squisq/schemas';
+import type { Doc, MediaProvider } from '@bendyline/squisq/schemas';
 import type { MarkdownDocument } from '@bendyline/squisq/markdown';
 import { parseMarkdown, stringifyMarkdown } from '@bendyline/squisq/markdown';
 import { markdownToDoc } from '@bendyline/squisq/doc';
@@ -74,6 +74,8 @@ export interface EditorContextValue extends EditorState, EditorActions {
   tiptapEditor: TiptapEditor | null;
   /** The live Monaco editor instance (null when Raw is not mounted) */
   monacoEditor: MonacoEditor | null;
+  /** MediaProvider for resolving image URLs in the WYSIWYG editor */
+  mediaProvider: MediaProvider | null;
 }
 
 // ─── Context ─────────────────────────────────────────────
@@ -103,6 +105,8 @@ export interface EditorProviderProps {
   articleId?: string;
   /** Color theme */
   theme?: EditorTheme;
+  /** MediaProvider for resolving image URLs */
+  mediaProvider?: MediaProvider | null;
   children: ReactNode;
 }
 
@@ -115,6 +119,7 @@ export function EditorProvider({
   initialView = 'raw',
   articleId = 'untitled',
   theme: initialTheme = 'light',
+  mediaProvider = null,
   children,
 }: EditorProviderProps) {
   const [markdownSource, setMarkdownSourceRaw] = useState(initialMarkdown);
@@ -273,6 +278,7 @@ export function EditorProvider({
       theme,
       tiptapEditor,
       monacoEditor,
+      mediaProvider,
       setMarkdownSource,
       setMarkdownDoc,
       setActiveView,
@@ -292,6 +298,7 @@ export function EditorProvider({
       theme,
       tiptapEditor,
       monacoEditor,
+      mediaProvider,
       setMarkdownSource,
       setMarkdownDoc,
       setActiveView,

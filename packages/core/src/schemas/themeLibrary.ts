@@ -19,11 +19,32 @@ import type { Theme, ThemeColorScheme } from './Theme.js';
 // Shared constants
 // ============================================
 
-const SERIF = '"PT Serif", Georgia, "Times New Roman", serif';
-const SANS = '"Inter", "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif';
-const MONO = '"JetBrains Mono", "Fira Code", "Consolas", monospace';
-const MERRIWEATHER = '"Merriweather", Georgia, "Times New Roman", serif';
-const GEORGIA = 'Georgia, "Times New Roman", serif';
+// ── Font stacks ──────────────────────────────────────────────────
+// Each stack lists the recommended Google Font first (works when the
+// wrapping site loads it), then degrades to safe system fonts.
+// Squisq itself does NOT load Google Fonts.
+
+/** System fonts only — no external dependencies. */
+const SYSTEM_SANS = 'system-ui, -apple-system, "Segoe UI", Roboto, sans-serif';
+const SYSTEM_SERIF = 'Georgia, "Times New Roman", serif';
+const SYSTEM_MONO = 'Consolas, "Courier New", monospace';
+
+/** Theme-specific stacks with Google Font leads. */
+const PLAYFAIR = '"Playfair Display", Georgia, serif';
+const SOURCE_SERIF = '"Source Serif 4", "PT Serif", Georgia, serif';
+const INTER = '"Inter", "Segoe UI", Roboto, sans-serif';
+const OSWALD = '"Oswald", Impact, "Arial Black", sans-serif';
+const ROBOTO = '"Roboto", "Segoe UI", Arial, sans-serif';
+const MERRIWEATHER = '"Merriweather", Georgia, serif';
+const LORA = '"Lora", "Merriweather", Georgia, serif';
+const JETBRAINS_MONO = '"JetBrains Mono", "Fira Code", Consolas, monospace';
+const IBM_PLEX_SANS = '"IBM Plex Sans", "Segoe UI", Roboto, sans-serif';
+const DM_SERIF = '"DM Serif Display", Georgia, serif';
+const DM_SANS = '"DM Sans", "Segoe UI", Roboto, sans-serif';
+const CORMORANT = '"Cormorant Garamond", Garamond, Georgia, serif';
+const CRIMSON = '"Crimson Text", Georgia, serif';
+const PT_SERIF = '"PT Serif", Georgia, serif';
+const HANKEN_GROTESK = '"Hanken Grotesk", system-ui, sans-serif';
 
 /** Standard 6-scheme set used by the documentary theme (migrated from old COLOR_SCHEMES). */
 const CLASSIC_COLOR_SCHEMES: Record<string, ThemeColorScheme> = {
@@ -36,13 +57,60 @@ const CLASSIC_COLOR_SCHEMES: Record<string, ThemeColorScheme> = {
 };
 
 // ============================================
-// 1. Documentary (default — migrated from old DEFAULT_THEME)
+// 1. Standard (default — safe system fonts, no external dependencies)
+// ============================================
+
+const standard: Theme = {
+  id: 'standard',
+  name: 'Standard',
+  description: 'Clean and safe. System fonts only — no external font dependencies.',
+  colors: {
+    primary: '#3182ce',
+    secondary: '#4a5568',
+    background: '#1a202c',
+    backgroundLight: '#2d3748',
+    text: '#f7fafc',
+    textMuted: '#a0aec0',
+    highlight: '#4299e1',
+    warning: '#fc8181',
+  },
+  typography: {
+    bodyFontFamily: SYSTEM_SANS,
+    titleFontFamily: SYSTEM_SERIF,
+    monoFontFamily: SYSTEM_MONO,
+    titleWeight: 'bold',
+  },
+  style: {
+    textShadow: true,
+    overlayOpacity: 0.45,
+    animationSpeed: 1.0,
+  },
+  renderStyle: {
+    name: 'standard',
+    defaultTextAnimation: 'fadeIn',
+    defaultImageAnimation: 'slowZoom',
+    ambientMotion: true,
+    defaultTransition: { type: 'fade', duration: 0.7 },
+  },
+  colorSchemes: CLASSIC_COLOR_SCHEMES,
+  persistentLayers: {
+    bottomLayers: [
+      {
+        template: 'gradientBackground',
+        config: { type: 'gradientBackground', preset: 'dark-vignette' },
+      },
+    ],
+  },
+};
+
+// ============================================
+// 2. Documentary
 // ============================================
 
 const documentary: Theme = {
   id: 'documentary',
   name: 'Documentary',
-  description: 'Classic dark cinematic look with serif typography. The original Squisq style.',
+  description: 'Classic dark cinematic look with elegant serif typography.',
   colors: {
     primary: '#3d5a80',
     secondary: '#63b3ed',
@@ -54,8 +122,8 @@ const documentary: Theme = {
     warning: '#fc8181',
   },
   typography: {
-    bodyFontFamily: SERIF,
-    titleFontFamily: SERIF,
+    bodyFontFamily: SOURCE_SERIF,
+    titleFontFamily: PLAYFAIR,
     titleWeight: 'bold',
   },
   style: {
@@ -100,8 +168,8 @@ const minimalist: Theme = {
     warning: '#e53e3e',
   },
   typography: {
-    bodyFontFamily: SANS,
-    titleFontFamily: SANS,
+    bodyFontFamily: INTER,
+    titleFontFamily: INTER,
     titleWeight: 'bold',
     lineHeight: 1.6,
   },
@@ -149,8 +217,8 @@ const bold: Theme = {
     warning: '#fc8181',
   },
   typography: {
-    bodyFontFamily: SANS,
-    titleFontFamily: SANS,
+    bodyFontFamily: ROBOTO,
+    titleFontFamily: OSWALD,
     titleWeight: 'bold',
     titleScale: 1.15,
     bodyScale: 1.0,
@@ -201,7 +269,7 @@ const morningLight: Theme = {
     warning: '#c53030',
   },
   typography: {
-    bodyFontFamily: MERRIWEATHER,
+    bodyFontFamily: LORA,
     titleFontFamily: MERRIWEATHER,
     titleWeight: 'bold',
     lineHeight: 1.7,
@@ -247,9 +315,9 @@ const techDark: Theme = {
     warning: '#ff5252',
   },
   typography: {
-    bodyFontFamily: SANS,
-    titleFontFamily: MONO,
-    monoFontFamily: MONO,
+    bodyFontFamily: IBM_PLEX_SANS,
+    titleFontFamily: JETBRAINS_MONO,
+    monoFontFamily: JETBRAINS_MONO,
     titleWeight: 'bold',
     titleScale: 0.9,
     lineHeight: 1.5,
@@ -299,8 +367,8 @@ const magazine: Theme = {
     warning: '#fc8181',
   },
   typography: {
-    bodyFontFamily: SANS,
-    titleFontFamily: GEORGIA,
+    bodyFontFamily: DM_SANS,
+    titleFontFamily: DM_SERIF,
     titleWeight: 'bold',
     titleScale: 1.05,
     lineHeight: 1.5,
@@ -347,8 +415,8 @@ const cinematic: Theme = {
     warning: '#fc8181',
   },
   typography: {
-    bodyFontFamily: SERIF,
-    titleFontFamily: SERIF,
+    bodyFontFamily: CRIMSON,
+    titleFontFamily: CORMORANT,
     titleWeight: 'bold',
     lineHeight: 1.5,
     titleLineHeight: 1.2,
@@ -405,8 +473,8 @@ const warmEarth: Theme = {
     warning: '#e53e3e',
   },
   typography: {
-    bodyFontFamily: GEORGIA,
-    titleFontFamily: GEORGIA,
+    bodyFontFamily: HANKEN_GROTESK,
+    titleFontFamily: PT_SERIF,
     titleWeight: 'bold',
     lineHeight: 1.6,
   },
@@ -448,6 +516,7 @@ const warmEarth: Theme = {
  * All built-in themes, keyed by id.
  */
 export const THEMES: Record<string, Theme> = {
+  standard,
   documentary,
   minimalist,
   bold,
@@ -459,10 +528,10 @@ export const THEMES: Record<string, Theme> = {
 };
 
 /** The default theme id. */
-export const DEFAULT_THEME_ID = 'documentary';
+export const DEFAULT_THEME_ID = 'standard';
 
-/** The default theme (documentary — migrated from old DEFAULT_THEME). */
-export const DEFAULT_THEME: Theme = documentary;
+/** The default theme (standard — safe system fonts, no external dependencies). */
+export const DEFAULT_THEME: Theme = standard;
 
 /**
  * Resolve a theme by id. Returns the default theme when `id` is

@@ -21,6 +21,7 @@ import TaskList from '@tiptap/extension-task-list';
 import TaskItem from '@tiptap/extension-task-item';
 import Placeholder from '@tiptap/extension-placeholder';
 import { HeadingWithTemplate } from './TemplateAnnotation';
+import { ImageWithMediaProvider } from './ImageNodeView';
 import { useEditorContext } from './EditorContext';
 import { markdownToTiptap, tiptapToMarkdown } from './tiptapBridge';
 
@@ -73,6 +74,7 @@ export function WysiwygEditor({
       TableHeader,
       TaskList,
       TaskItem.configure({ nested: true }),
+      ImageWithMediaProvider.configure({ inline: false }),
       Placeholder.configure({ placeholder }),
     ],
     content: markdownToTiptap(stripFrontmatter(markdownSource).body),
@@ -117,7 +119,7 @@ export function WysiwygEditor({
 
   return (
     <div
-      className={className}
+      className={`squisq-wysiwyg-container${className ? ` ${className}` : ''}`}
       style={{ width: '100%', height: '100%', overflow: 'auto' }}
       data-testid="wysiwyg-container"
     >
