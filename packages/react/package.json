@@ -1,6 +1,6 @@
 {
   "name": "@bendyline/squisq-react",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "React component library for doc playback, block rendering, and media layers",
   "license": "MIT",
   "author": "Bendyline",
@@ -52,7 +52,7 @@
     "react-dom": "^18.0.0 || ^19.0.0"
   },
   "dependencies": {
-    "@bendyline/squisq": "^1.0.0"
+    "@bendyline/squisq": "1.1.1"
   },
   "devDependencies": {
     "@types/react": "^18.0.0",
