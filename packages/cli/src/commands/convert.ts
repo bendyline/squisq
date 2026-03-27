@@ -230,10 +230,10 @@ async function collectContainerImages(
   const images = new Map<string, ArrayBuffer>();
   const files = await container.listFiles();
   for (const file of files) {
-    if (/\.(jpg|jpeg|png|gif|webp|svg|bmp|avif)$/i.test(file.name)) {
-      const data = await container.readFile(file.name);
+    if (/\.(jpg|jpeg|png|gif|webp|svg|bmp|avif)$/i.test(file.path)) {
+      const data = await container.readFile(file.path);
       if (data) {
-        images.set(file.name, data);
+        images.set(file.path, data);
       }
     }
   }
