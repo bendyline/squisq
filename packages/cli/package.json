@@ -1,6 +1,6 @@
 {
   "name": "@bendyline/squisq-cli",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Squisq CLI — convert markdown documents to DOCX, PDF, HTML, and more",
   "license": "MIT",
   "author": "Bendyline",
@@ -37,10 +37,10 @@
     "test": "mocha"
   },
   "dependencies": {
-    "@bendyline/squisq": "^1.0.0",
-    "@bendyline/squisq-formats": "^1.0.0",
-    "@bendyline/squisq-react": "^1.0.0",
-    "@bendyline/squisq-video": "^1.0.0",
+    "@bendyline/squisq": "1.1.1",
+    "@bendyline/squisq-formats": "1.1.1",
+    "@bendyline/squisq-react": "1.0.3",
+    "@bendyline/squisq-video": "1.0.1",
     "commander": "^12.0.0",
     "playwright-core": "^1.48.0"
   },
