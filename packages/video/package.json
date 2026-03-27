@@ -1,6 +1,6 @@
 {
   "name": "@bendyline/squisq-video",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Video encoding and render HTML generation for Squisq documents — browser-pure, works in Node and browser",
   "license": "MIT",
   "author": "Bendyline",
@@ -39,8 +39,8 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@bendyline/squisq": "^1.0.0",
-    "@bendyline/squisq-react": "^1.0.0",
+    "@bendyline/squisq": "1.1.1",
+    "@bendyline/squisq-react": "1.0.3",
     "@ffmpeg/ffmpeg": "^0.12.15",
     "@ffmpeg/util": "^0.12.2"
   },
