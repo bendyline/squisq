@@ -156,5 +156,28 @@ export const CONTENT_TYPE_DOCX_FOOTNOTES =
 export const CONTENT_TYPE_PPTX_PRESENTATION =
   'application/vnd.openxmlformats-officedocument.presentationml.presentation.main+xml';
 
+export const CONTENT_TYPE_PPTX_SLIDE =
+  'application/vnd.openxmlformats-officedocument.presentationml.slide+xml';
+
+export const CONTENT_TYPE_PPTX_SLIDE_LAYOUT =
+  'application/vnd.openxmlformats-officedocument.presentationml.slideLayout+xml';
+
+export const CONTENT_TYPE_PPTX_SLIDE_MASTER =
+  'application/vnd.openxmlformats-officedocument.presentationml.slideMaster+xml';
+
+export const CONTENT_TYPE_PPTX_THEME = 'application/vnd.openxmlformats-officedocument.theme+xml';
+
+/** Relationship type: Slide */
+export const REL_SLIDE =
+  'http://schemas.openxmlformats.org/officeDocument/2006/relationships/slide';
+
+/** Relationship type: Slide layout */
+export const REL_SLIDE_LAYOUT =
+  'http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideLayout';
+
+/** Relationship type: Slide master */
+export const REL_SLIDE_MASTER =
+  'http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideMaster';
+
 export const CONTENT_TYPE_XLSX_WORKBOOK =
   'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml';

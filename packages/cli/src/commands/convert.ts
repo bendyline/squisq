@@ -2,18 +2,23 @@
  * convert command
  *
  * Reads a markdown file, ZIP/DBK container, or folder and exports to
- * all supported formats: DOCX, PDF, HTML, and container ZIP (.dbk).
+ * all supported formats: DOCX, PPTX, PDF, HTML, and container ZIP (.dbk).
+ *
+ * Supports optional --theme and --transform flags to apply a squisq theme
+ * and/or transform style before exporting.
  *
  * Usage:
- *   squisq convert <input> [--output-dir <dir>] [--formats <list>]
+ *   squisq convert <input> [--output-dir <dir>] [--formats <list>] [--theme <id>] [--transform <style>]
  */
 
 import { writeFile, mkdir } from 'node:fs/promises';
 import { dirname, basename, extname, join, resolve } from 'node:path';
 import type { Command } from 'commander';
+import type { MarkdownDocument } from '@bendyline/squisq/markdown';
+import type { ContentContainer } from '@bendyline/squisq/storage';
 import { readInput } from '../util/readInput.js';
 
-const ALL_FORMATS = ['docx', 'pdf', 'html', 'dbk'] as const;
+const ALL_FORMATS = ['docx', 'pptx', 'pdf', 'html', 'dbk'] as const;
 type Format = (typeof ALL_FORMATS)[number];
 
 function parseFormats(value: string): Format[] {
@@ -32,17 +37,29 @@ function parseFormats(value: string): Format[] {
   return valid;
 }
 
+interface ConvertOpts {
+  outputDir?: string;
+  formats?: string;
+  theme?: string;
+  transform?: string;
+}
+
 export function registerConvertCommand(program: Command): void {
   program
     .command('convert')
-    .description('Convert a markdown document to DOCX, PDF, HTML, and DBK container formats')
+    .description('Convert a markdown document to DOCX, PPTX, PDF, HTML, and DBK container formats')
     .argument('<input>', 'Path to .md file, .zip/.dbk container, or folder')
     .option('-o, --output-dir <dir>', 'Output directory (default: same as input)')
     .option(
       '-f, --formats <list>',
       `Comma-separated formats to produce (default: all). Valid: ${ALL_FORMATS.join(', ')}`,
     )
-    .action(async (inputPath: string, opts: { outputDir?: string; formats?: string }) => {
+    .option('-t, --theme <id>', 'Squisq theme ID to apply (e.g., documentary, cinematic, bold)')
+    .option(
+      '--transform <style>',
+      'Transform style to apply before export (e.g., documentary, magazine, minimal)',
+    )
+    .action(async (inputPath: string, opts: ConvertOpts) => {
       try {
         await runConvert(inputPath, opts);
       } catch (err: unknown) {
@@ -53,10 +70,7 @@ export function registerConvertCommand(program: Command): void {
     });
 }
 
-async function runConvert(
-  inputPath: string,
-  opts: { outputDir?: string; formats?: string },
-): Promise<void> {
+async function runConvert(inputPath: string, opts: ConvertOpts): Promise<void> {
   const resolvedInput = resolve(inputPath);
 
   // Determine which formats to produce
@@ -71,8 +85,41 @@ async function runConvert(
   // Ensure output directory exists
   await mkdir(outputDir, { recursive: true });
 
+  // Validate theme and transform IDs
+  if (opts.theme) {
+    const { getAvailableThemes } = await import('@bendyline/squisq/schemas');
+    const themes = getAvailableThemes();
+    if (!themes.includes(opts.theme)) {
+      throw new Error(`Unknown theme "${opts.theme}". Available: ${themes.join(', ')}`);
+    }
+  }
+
+  if (opts.transform) {
+    const { getTransformStyleIds } = await import('@bendyline/squisq/transform');
+    const styles = getTransformStyleIds();
+    if (!styles.includes(opts.transform)) {
+      throw new Error(
+        `Unknown transform style "${opts.transform}". Available: ${styles.join(', ')}`,
+      );
+    }
+  }
+
   console.error(`Reading: ${resolvedInput}`);
   const { container, markdownDoc } = await readInput(resolvedInput);
+
+  // Apply transform if requested
+  let exportMarkdownDoc = markdownDoc;
+  if (opts.transform) {
+    exportMarkdownDoc = await applyTransformToMarkdown(
+      markdownDoc,
+      container,
+      opts.transform,
+      opts.theme,
+    );
+    console.error(`  Applied transform: ${opts.transform}`);
+  }
+
+  const themeId = opts.theme;
 
   for (const format of formats) {
     const outPath = join(outputDir, `${baseName}.${format}`);
@@ -80,14 +127,23 @@ async function runConvert(
     switch (format) {
       case 'docx': {
         const { markdownDocToDocx } = await import('@bendyline/squisq-formats/docx');
-        const buf = await markdownDocToDocx(markdownDoc);
+        const buf = await markdownDocToDocx(exportMarkdownDoc, { themeId });
+        await writeFile(outPath, Buffer.from(buf));
+        break;
+      }
+
+      case 'pptx': {
+        const { markdownDocToPptx } = await import('@bendyline/squisq-formats/pptx');
+        // Collect images from container for PPTX embedding
+        const images = await collectContainerImages(container);
+        const buf = await markdownDocToPptx(exportMarkdownDoc, { themeId, images });
         await writeFile(outPath, Buffer.from(buf));
         break;
       }
 
       case 'pdf': {
         const { markdownDocToPdf } = await import('@bendyline/squisq-formats/pdf');
-        const buf = await markdownDocToPdf(markdownDoc);
+        const buf = await markdownDocToPdf(exportMarkdownDoc, { themeId });
         await writeFile(outPath, Buffer.from(buf));
         break;
       }
@@ -97,7 +153,7 @@ async function runConvert(
         const { docToHtml, collectImagePaths } = await import('@bendyline/squisq-formats/html');
         const { PLAYER_BUNDLE } = await import('@bendyline/squisq-react/standalone-source');
 
-        const doc = markdownToDoc(markdownDoc);
+        const doc = markdownToDoc(exportMarkdownDoc);
 
         // Gather images referenced by the doc from the container
         const imagePaths = collectImagePaths(doc);
@@ -114,6 +170,7 @@ async function runConvert(
           images,
           title: baseName,
           mode: 'static',
+          themeId,
         });
         await writeFile(outPath, html, 'utf-8');
         break;
@@ -132,4 +189,53 @@ async function runConvert(
   }
 
   console.error('Done.');
+}
+
+// ============================================
+// Transform Pipeline
+// ============================================
+
+/**
+ * Apply a transform style to a MarkdownDocument.
+ * Pipeline: MarkdownDocument → Doc → applyTransform → docToMarkdown → MarkdownDocument
+ */
+async function applyTransformToMarkdown(
+  markdownDoc: MarkdownDocument,
+  container: ContentContainer,
+  transformStyle: string,
+  themeId?: string,
+): Promise<MarkdownDocument> {
+  const { markdownToDoc, docToMarkdown } = await import('@bendyline/squisq/doc');
+  const { applyTransform, extractDocImages } = await import('@bendyline/squisq/transform');
+
+  const doc = markdownToDoc(markdownDoc);
+
+  // Extract image metadata from the doc for transform interleaving
+  const images = extractDocImages(doc.blocks);
+
+  const result = applyTransform(doc, transformStyle, {
+    themeId,
+    images,
+  });
+
+  return docToMarkdown(result.doc);
+}
+
+/**
+ * Collect all image files from a container as a Map<path, ArrayBuffer>.
+ */
+async function collectContainerImages(
+  container: ContentContainer,
+): Promise<Map<string, ArrayBuffer>> {
+  const images = new Map<string, ArrayBuffer>();
+  const files = await container.listFiles();
+  for (const file of files) {
+    if (/\.(jpg|jpeg|png|gif|webp|svg|bmp|avif)$/i.test(file.path)) {
+      const data = await container.readFile(file.path);
+      if (data) {
+        images.set(file.path, data);
+      }
+    }
+  }
+  return images;
 }

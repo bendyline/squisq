@@ -41,6 +41,13 @@ export interface HtmlExportOptions {
 
   /** Auto-play slideshow on load (default: false) */
   autoPlay?: boolean;
+
+  /**
+   * Squisq theme ID to apply (e.g., 'documentary', 'cinematic').
+   * When set, the theme is assigned to the Doc before rendering,
+   * so the SquisqPlayer renders with that theme's colors and typography.
+   */
+  themeId?: string;
 }
 
 // ── Image Path Collection ──────────────────────────────────────────
@@ -182,7 +189,13 @@ export function generateInlineHtml(doc: Doc, options: HtmlExportOptions): string
     mode = 'slideshow',
     title = 'Squisq Document',
     autoPlay = false,
+    themeId,
   } = options;
+
+  // Apply theme to doc if specified (the SquisqPlayer respects doc.themeId at render time)
+  if (themeId) {
+    doc = { ...doc, themeId };
+  }
 
   // Build base64 image map
   const imageMap: Record<string, string> = {};

@@ -7,7 +7,7 @@
  * Supported formats:
  * - **DOCX** — Microsoft Word (import + export) ✅
  * - **PDF**  — Portable Document Format (import + export) ✅
- * - **PPTX** — Microsoft PowerPoint (planned)
+ * - **PPTX** — Microsoft PowerPoint (export ✅, import planned)
  * - **XLSX** — Microsoft Excel (planned)
  *
  * All converters run in the browser — no server or native binaries required.
@@ -28,7 +28,7 @@
 export { markdownDocToDocx, docToDocx, docxToMarkdownDoc, docxToDoc } from './docx/index.js';
 export type { DocxExportOptions, DocxImportOptions } from './docx/index.js';
 
-// PPTX (stub)
+// PPTX (export implemented, import stub)
 export { markdownDocToPptx, docToPptx, pptxToMarkdownDoc, pptxToDoc } from './pptx/index.js';
 export type { PptxExportOptions, PptxImportOptions } from './pptx/index.js';
 

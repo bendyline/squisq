@@ -17,7 +17,8 @@
  * ```
  */
 
-import type { Doc } from '@bendyline/squisq/schemas';
+import type { Doc, Theme } from '@bendyline/squisq/schemas';
+import { resolveTheme } from '@bendyline/squisq/schemas';
 import { docToMarkdown } from '@bendyline/squisq/doc';
 import type {
   MarkdownDocument,
@@ -90,6 +91,12 @@ export interface DocxExportOptions {
   defaultFont?: string;
   /** Default body font size in points. Default: 11 */
   defaultFontSize?: number;
+  /**
+   * Squisq theme ID to apply (e.g., 'documentary', 'cinematic').
+   * When set, overrides fonts with the theme's typography and applies
+   * the theme's primary color to headings.
+   */
+  themeId?: string;
 }
 
 /**
@@ -167,13 +174,32 @@ class ExportContext {
   hasFootnotes = false;
 
   readonly font: string;
+  readonly headingFont: string;
   readonly fontSize: number;
+  /** Heading text color (hex without #), or undefined for default */
+  readonly headingColor: string | undefined;
 
   constructor(options: DocxExportOptions) {
-    this.font = options.defaultFont ?? DEFAULT_FONT;
+    let themeFont: string | undefined;
+    let themeTitleFont: string | undefined;
+    let themeHeadingColor: string | undefined;
+
+    if (options.themeId) {
+      const theme: Theme = resolveTheme(options.themeId);
+      themeFont = theme.typography?.bodyFontFamily;
+      themeTitleFont = theme.typography?.titleFontFamily;
+      if (theme.colors?.primary) {
+        const c = theme.colors.primary;
+        themeHeadingColor = c.startsWith('#') ? c.slice(1) : c;
+      }
+    }
+
+    this.font = options.defaultFont ?? themeFont ?? DEFAULT_FONT;
+    this.headingFont = themeTitleFont ?? this.font;
     this.fontSize = options.defaultFontSize
       ? options.defaultFontSize * 2
       : DEFAULT_FONT_SIZE_HALF_POINTS;
+    this.headingColor = themeHeadingColor;
   }
 
   /** Allocate a new relationship ID */
@@ -632,7 +658,7 @@ async function buildDocxPackage(
   pkg.addPart('word/document.xml', documentXml, CONTENT_TYPE_DOCX_DOCUMENT);
 
   // --- word/styles.xml ---
-  const stylesXml = buildStylesXml(options);
+  const stylesXml = buildStylesXml(options, ctx);
   pkg.addPart('word/styles.xml', stylesXml, CONTENT_TYPE_DOCX_STYLES);
 
   // --- word/settings.xml ---
@@ -754,9 +780,9 @@ function buildDocumentXml(bodyXml: string): string {
   );
 }
 
-function buildStylesXml(options: DocxExportOptions): string {
-  const font = options.defaultFont ?? DEFAULT_FONT;
-  const headingFont = DEFAULT_HEADING_FONT;
+function buildStylesXml(options: DocxExportOptions, ctx: ExportContext): string {
+  const font = ctx.font;
+  const headingFont = ctx.headingFont;
 
   return (
     xmlDeclaration() +
@@ -776,7 +802,7 @@ function buildStylesXml(options: DocxExportOptions): string {
     `<w:qFormat/>` +
     `</w:style>` +
     // Heading styles
-    buildHeadingStyles(headingFont) +
+    buildHeadingStyles(headingFont, ctx.headingColor) +
     // Quote style
     `<w:style w:type="paragraph" w:styleId="Quote">` +
     `<w:name w:val="Quote"/>` +
@@ -827,11 +853,12 @@ function buildStylesXml(options: DocxExportOptions): string {
   );
 }
 
-function buildHeadingStyles(headingFont: string): string {
+function buildHeadingStyles(headingFont: string, headingColor?: string): string {
   let result = '';
   for (let depth = 1; depth <= 6; depth++) {
     const styleId = DEPTH_TO_STYLE_ID[depth];
     const fontSize = HEADING_FONT_SIZES[depth] ?? 22;
+    const colorXml = headingColor ? `<w:color w:val="${headingColor}"/>` : '';
     result +=
       `<w:style w:type="paragraph" w:styleId="${styleId}">` +
       `<w:name w:val="heading ${depth}"/>` +
@@ -842,6 +869,7 @@ function buildHeadingStyles(headingFont: string): string {
       `<w:rPr>` +
       `<w:rFonts w:ascii="${escapeXml(headingFont)}" w:hAnsi="${escapeXml(headingFont)}"/>` +
       `<w:b/>` +
+      colorXml +
       `<w:sz w:val="${fontSize}"/>` +
       `<w:szCs w:val="${fontSize}"/>` +
       `</w:rPr>` +
