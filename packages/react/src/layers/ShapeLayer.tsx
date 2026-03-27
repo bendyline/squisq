@@ -7,7 +7,7 @@
 
 import type { ShapeLayer as ShapeLayerType } from '@bendyline/squisq/schemas';
 import { getAnimationStyle } from '../utils/animationUtils';
-import { resolveValue } from '../utils/layerUtils';
+import { resolveValue, getAnchorOffset } from '../utils/layerUtils';
 
 interface ShapeLayerProps {
   layer: ShapeLayerType;
@@ -21,10 +21,15 @@ export function ShapeLayer({ layer, viewport, blockTime }: ShapeLayerProps) {
   const { content, position, animation } = layer;
 
   // Resolve position values to pixels
-  const x = resolveValue(position.x, viewport.width);
-  const y = resolveValue(position.y, viewport.height);
+  const rawX = resolveValue(position.x, viewport.width);
+  const rawY = resolveValue(position.y, viewport.height);
   const width = position.width ? resolveValue(position.width, viewport.width) : 100;
   const height = position.height ? resolveValue(position.height, viewport.height) : 100;
+
+  // Apply anchor offset (e.g., 'center' shifts x by -width/2 and y by -height/2)
+  const anchorOffset = getAnchorOffset(position.anchor, width, height);
+  const x = rawX + anchorOffset.x;
+  const y = rawY + anchorOffset.y;
 
   // Get animation styles
   const animStyle = getAnimationStyle(animation, blockTime);

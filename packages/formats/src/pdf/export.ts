@@ -22,6 +22,7 @@
 import { PDFDocument, StandardFonts, rgb, PDFFont, PDFPage } from 'pdf-lib';
 
 import type { Doc } from '@bendyline/squisq/schemas';
+import { resolveTheme } from '@bendyline/squisq/schemas';
 import { docToMarkdown } from '@bendyline/squisq/doc';
 import type {
   MarkdownDocument,
@@ -103,6 +104,12 @@ export interface PdfExportOptions {
   margin?: number;
   /** Default body font size in points. Default: 11. */
   defaultFontSize?: number;
+  /**
+   * Squisq theme ID to apply (e.g., 'documentary', 'cinematic').
+   * When set, overrides heading, text, and link colors with the theme palette.
+   * Font changes are not supported (pdf-lib uses standard 14 PDF fonts only).
+   */
+  themeId?: string;
 }
 
 /**
@@ -151,6 +158,12 @@ interface FontSet {
   monoBold: PDFFont;
 }
 
+interface RgbColor {
+  r: number;
+  g: number;
+  b: number;
+}
+
 interface ExportContext {
   pdfDoc: PDFDocument;
   fonts: FontSet;
@@ -166,6 +179,12 @@ interface ExportContext {
   contentWidth: number;
   /** Bottom margin y position. */
   bottomY: number;
+  /** Resolved colors (may be overridden by theme). */
+  colors: {
+    text: RgbColor;
+    heading: RgbColor;
+    link: RgbColor;
+  };
 }
 
 async function createExportContext(
@@ -189,6 +208,20 @@ async function createExportContext(
 
   const page = pdfDoc.addPage([pageWidth, pageHeight]);
 
+  // Resolve theme colors if themeId is set
+  let colorText = COLOR_TEXT;
+  let colorHeading = COLOR_HEADING;
+  let colorLink = COLOR_LINK;
+
+  if (options.themeId) {
+    const theme = resolveTheme(options.themeId);
+    if (theme.colors) {
+      colorText = hexToRgb(theme.colors.text) ?? COLOR_TEXT;
+      colorHeading = hexToRgb(theme.colors.primary) ?? COLOR_HEADING;
+      colorLink = hexToRgb(theme.colors.highlight || theme.colors.secondary) ?? COLOR_LINK;
+    }
+  }
+
   return {
     pdfDoc,
     fonts: { regular, bold, italic, boldItalic, mono, monoBold },
@@ -200,6 +233,7 @@ async function createExportContext(
     y: pageHeight - margin,
     contentWidth: pageWidth - 2 * margin,
     bottomY: margin,
+    colors: { text: colorText, heading: colorHeading, link: colorLink },
   };
 }
 
@@ -262,7 +296,7 @@ function flattenInlines(
           text: (node as MarkdownText).value,
           font,
           fontSize: state.code ? CODE_FONT_SIZE : ctx.fontSize,
-          color: state.code ? COLOR_CODE_TEXT : (state.color ?? COLOR_TEXT),
+          color: state.code ? COLOR_CODE_TEXT : (state.color ?? ctx.colors.text),
           link: state.link,
           strikethrough: state.strikethrough,
         });
@@ -307,7 +341,7 @@ function flattenInlines(
           ...flattenInlines(linkNode.children, ctx, {
             ...state,
             link: linkNode.url,
-            color: COLOR_LINK,
+            color: ctx.colors.link,
           }),
         );
         break;
@@ -329,7 +363,7 @@ function flattenInlines(
           text: '\n',
           font: ctx.fonts.regular,
           fontSize: ctx.fontSize,
-          color: COLOR_TEXT,
+          color: ctx.colors.text,
         });
         break;
 
@@ -361,7 +395,7 @@ function flattenInlines(
           text: `[${ref.identifier}]`,
           font: ctx.fonts.regular,
           fontSize: ctx.fontSize * 0.75,
-          color: COLOR_LINK,
+          color: ctx.colors.link,
         });
         break;
       }
@@ -376,7 +410,7 @@ function flattenInlines(
             text: fallback.value,
             font: pickFont(ctx, state.bold, state.italic),
             fontSize: ctx.fontSize,
-            color: state.color ?? COLOR_TEXT,
+            color: state.color ?? ctx.colors.text,
           });
         }
         break;
@@ -601,7 +635,7 @@ function renderHeading(node: MarkdownHeading, ctx: ExportContext, extraIndent: n
     bold: true,
     italic: false,
     code: false,
-    color: COLOR_HEADING,
+    color: ctx.colors.heading,
   });
 
   drawSpans(spans, ctx, w, x0);
@@ -704,7 +738,7 @@ function renderListItem(
     y: ctx.y - ctx.fontSize,
     size: ctx.fontSize,
     font: bulletFont,
-    color: rgb(COLOR_TEXT.r, COLOR_TEXT.g, COLOR_TEXT.b),
+    color: rgb(ctx.colors.text.r, ctx.colors.text.g, ctx.colors.text.b),
   });
 
   const textIndent = indent + bulletWidth + 4;
@@ -969,7 +1003,7 @@ function renderFootnoteDefinition(
     y: ctx.y - ctx.fontSize * 0.75,
     size: ctx.fontSize * 0.75,
     font: ctx.fonts.bold,
-    color: rgb(COLOR_LINK.r, COLOR_LINK.g, COLOR_LINK.b),
+    color: rgb(ctx.colors.link.r, ctx.colors.link.g, ctx.colors.link.b),
   });
 
   // Render children indented
@@ -1022,8 +1056,22 @@ function renderFallbackBlock(
       y: ctx.y - ctx.fontSize,
       size: ctx.fontSize,
       font: ctx.fonts.regular,
-      color: rgb(COLOR_TEXT.r, COLOR_TEXT.g, COLOR_TEXT.b),
+      color: rgb(ctx.colors.text.r, ctx.colors.text.g, ctx.colors.text.b),
     });
     ctx.y -= lineH + PARAGRAPH_SPACING;
   }
+}
+
+// ============================================
+// Color Helpers
+// ============================================
+
+function hexToRgb(hex: string): RgbColor | undefined {
+  const h = hex.startsWith('#') ? hex.slice(1) : hex;
+  if (h.length !== 6) return undefined;
+  const r = parseInt(h.slice(0, 2), 16);
+  const g = parseInt(h.slice(2, 4), 16);
+  const b = parseInt(h.slice(4, 6), 16);
+  if (isNaN(r) || isNaN(g) || isNaN(b)) return undefined;
+  return { r: r / 255, g: g / 255, b: b / 255 };
 }

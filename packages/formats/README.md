@@ -1,6 +1,6 @@
 # @bendyline/squisq-formats
 
-Document format converters for Squisq. Import and export between Squisq's Markdown-based document model and common file formats — DOCX, PDF, and HTML. All converters run entirely in the browser with no server or native binaries required.
+Document format converters for Squisq. Import and export between Squisq's Markdown-based document model and common file formats — DOCX, PPTX, PDF, and HTML. All converters run entirely in the browser with no server or native binaries required.
 
 Part of the [Squisq](https://github.com/bendyline/squisq) monorepo.
 
@@ -15,13 +15,15 @@ npm install @bendyline/squisq-formats @bendyline/squisq
 
 ## Supported Formats
 
-| Format                | Import  | Export  | Subpath                          |
-| --------------------- | ------- | ------- | -------------------------------- |
-| **DOCX** (Word)       | ✅      | ✅      | `@bendyline/squisq-formats/docx` |
-| **PDF**               | ✅      | ✅      | `@bendyline/squisq-formats/pdf`  |
-| **HTML**              | —       | ✅      | `@bendyline/squisq-formats/html` |
-| **PPTX** (PowerPoint) | planned | planned | `@bendyline/squisq-formats/pptx` |
-| **XLSX** (Excel)      | planned | planned | `@bendyline/squisq-formats/xlsx` |
+| Format                | Import  | Export  | Theme | Subpath                          |
+| --------------------- | ------- | ------- | ----- | -------------------------------- |
+| **DOCX** (Word)       | ✅      | ✅      | ✅    | `@bendyline/squisq-formats/docx` |
+| **PDF**               | ✅      | ✅      | ✅    | `@bendyline/squisq-formats/pdf`  |
+| **HTML**              | —       | ✅      | ✅    | `@bendyline/squisq-formats/html` |
+| **PPTX** (PowerPoint) | planned | ✅      | ✅    | `@bendyline/squisq-formats/pptx` |
+| **XLSX** (Excel)      | planned | planned | —     | `@bendyline/squisq-formats/xlsx` |
+
+All export formats accept an optional `themeId` to apply Squisq theme colors and typography.
 
 ## Quick Examples
 
@@ -68,6 +70,16 @@ const html = docToHtml(doc);
 const zipBytes = await docToHtmlZip(doc);
 ```
 
+### PPTX
+
+```ts
+import { markdownDocToPptx } from '@bendyline/squisq-formats/pptx';
+
+// Export: MarkdownDocument → PPTX (ArrayBuffer)
+// Each H1/H2 heading starts a new slide
+const pptxBytes = await markdownDocToPptx(markdownDoc);
+```
+
 ### Doc-level Convenience Functions
 
 Each format also exports `Doc`-level wrappers that handle the Markdown↔Doc conversion internally:
@@ -75,6 +87,7 @@ Each format also exports `Doc`-level wrappers that handle the Markdown↔Doc con
 ```ts
 import { docToDocx, docxToDoc } from '@bendyline/squisq-formats/docx';
 import { docToPdf, pdfToDoc } from '@bendyline/squisq-formats/pdf';
+import { docToPptx } from '@bendyline/squisq-formats/pptx';
 ```
 
 ## Subpath Exports
@@ -85,12 +98,12 @@ import { docToPdf, pdfToDoc } from '@bendyline/squisq-formats/pdf';
 | `@bendyline/squisq-formats/pdf`   | PDF import/export + worker config                              |
 | `@bendyline/squisq-formats/html`  | HTML export                                                    |
 | `@bendyline/squisq-formats/ooxml` | Shared OOXML infrastructure (ZIP reader/writer, XML utilities) |
-| `@bendyline/squisq-formats/pptx`  | PPTX stubs (not yet implemented)                               |
+| `@bendyline/squisq-formats/pptx`  | PPTX export (import planned)                                   |
 | `@bendyline/squisq-formats/xlsx`  | XLSX stubs (not yet implemented)                               |
 
 ## Architecture
 
-All converters use Squisq's `MarkdownDocument` AST as the pivot format. Importing a file parses it into a `MarkdownDocument`; exporting serializes from one. The OOXML subpath provides shared infrastructure for reading and writing Office Open XML packages (used by DOCX, and eventually PPTX/XLSX).
+All converters use Squisq's `MarkdownDocument` AST as the pivot format. Importing a file parses it into a `MarkdownDocument`; exporting serializes from one. The OOXML subpath provides shared infrastructure for reading and writing Office Open XML packages (used by DOCX and PPTX, and eventually XLSX).
 
 ## Related Packages
 

@@ -49,7 +49,7 @@ squisq/
         docx/               # DOCX import + export (WordprocessingML)
         pdf/                # PDF import + export (pdf-lib, pdfjs-dist)
         container/          # ContentContainer ZIP serialization (containerToZip, zipToContainer)
-        pptx/               # PPTX stubs (PresentationML, not yet implemented)
+        pptx/               # PPTX export (PresentationML) + import stubs
         xlsx/               # XLSX stubs (SpreadsheetML, not yet implemented)
     editor-react/           # @bendyline/squisq-editor-react
       src/
@@ -122,7 +122,7 @@ npm run format             # Prettier format
 - `@bendyline/squisq-formats/docx` — DOCX import/export (markdownDocToDocx, docxToMarkdownDoc, docToDocx, docxToDoc)
 - `@bendyline/squisq-formats/ooxml` — Shared OOXML package reader/writer, XML utilities, namespace constants
 - `@bendyline/squisq-formats/pdf` — PDF import/export (markdownDocToPdf, pdfToMarkdownDoc, configurePdfWorker)
-- `@bendyline/squisq-formats/pptx` — PPTX stubs (not yet implemented)
+- `@bendyline/squisq-formats/pptx` — PPTX export (markdownDocToPptx, docToPptx) + import stubs
 - `@bendyline/squisq-formats/xlsx` — XLSX stubs (not yet implemented)
 - `@bendyline/squisq-formats/container` — ContentContainer ZIP serialization (containerToZip, zipToContainer)
 

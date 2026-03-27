@@ -1,9 +1,13 @@
 /**
- * @bendyline/squisq-formats PPTX Module (Stub)
+ * @bendyline/squisq-formats PPTX Module
  *
- * Placeholder for PowerPoint .pptx import/export support.
- * Will use PresentationML (`<p:presentation>`, `<p:sld>`) via the
- * shared ooxml/ infrastructure.
+ * PowerPoint .pptx export support using PresentationML (`<p:presentation>`,
+ * `<p:sld>`) via the shared ooxml/ infrastructure.
+ *
+ * Slide segmentation: each H1/H2 heading starts a new slide by default.
+ * Inline formatting (bold, italic, code, links) is preserved as DrawingML runs.
+ *
+ * Import is not yet implemented.
  *
  * @example
  * ```ts
@@ -11,18 +15,13 @@
  * ```
  */
 
+// Export
+export { markdownDocToPptx, docToPptx } from './export.js';
+export type { PptxExportOptions } from './export.js';
+
+// Import (stubs — not yet implemented)
 import type { MarkdownDocument } from '@bendyline/squisq/markdown';
 import type { Doc } from '@bendyline/squisq/schemas';
-
-/**
- * Options for PPTX export (placeholder).
- */
-export interface PptxExportOptions {
-  /** Presentation title */
-  title?: string;
-  /** Presentation author */
-  author?: string;
-}
 
 /**
  * Options for PPTX import (placeholder).
@@ -33,30 +32,9 @@ export interface PptxImportOptions {
 }
 
 /**
- * Convert a MarkdownDocument to a .pptx Blob.
- *
- * @throws Error — PPTX support is not yet implemented
- */
-export async function markdownDocToPptx(
-  _doc: MarkdownDocument,
-  _options?: PptxExportOptions,
-): Promise<Blob> {
-  throw new Error('PPTX export is not yet implemented');
-}
-
-/**
- * Convert a squisq Doc to a .pptx Blob.
- *
- * @throws Error — PPTX support is not yet implemented
- */
-export async function docToPptx(_doc: Doc, _options?: PptxExportOptions): Promise<Blob> {
-  throw new Error('PPTX export is not yet implemented');
-}
-
-/**
  * Convert a .pptx file to a MarkdownDocument.
  *
- * @throws Error — PPTX support is not yet implemented
+ * @throws Error — PPTX import is not yet implemented
  */
 export async function pptxToMarkdownDoc(
   _data: ArrayBuffer | Blob,
@@ -68,7 +46,7 @@ export async function pptxToMarkdownDoc(
 /**
  * Convert a .pptx file to a squisq Doc.
  *
- * @throws Error — PPTX support is not yet implemented
+ * @throws Error — PPTX import is not yet implemented
  */
 export async function pptxToDoc(
   _data: ArrayBuffer | Blob,

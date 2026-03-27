@@ -12,7 +12,9 @@ import { createPortal } from 'react-dom';
 import { parseMarkdown, stringifyMarkdown } from '@bendyline/squisq/markdown';
 import { markdownToDoc } from '@bendyline/squisq/doc';
 import { VideoExportModal } from '@bendyline/squisq-video-react';
+import { ExportConfigModal } from './ExportConfigModal';
 import { markdownDocToDocx, docxToMarkdownDoc } from '@bendyline/squisq-formats/docx';
+import { markdownDocToPptx } from '@bendyline/squisq-formats/pptx';
 import {
   markdownDocToPdf,
   pdfToMarkdownDoc,
@@ -48,7 +50,7 @@ interface FileToolbarProps {
   activeSlot: number | null;
 }
 
-type DownloadFormat = 'md' | 'docx' | 'pdf' | 'txt' | 'zip';
+type DownloadFormat = 'md' | 'docx' | 'pptx' | 'pdf' | 'txt' | 'zip';
 
 /** File extensions treated as images (stored in slot media, not imported as docs) */
 const IMAGE_EXTENSIONS = new Set(['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg']);
@@ -137,6 +139,7 @@ export function FileToolbar({
   const [showDownload, setShowDownload] = useState(false);
   const [busy, setBusy] = useState(false);
   const [showVideoModal, setShowVideoModal] = useState(false);
+  const [showExportModal, setShowExportModal] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const playerScriptRef = useRef<string | null>(null);
@@ -170,6 +173,29 @@ export function FileToolbar({
           const buffer = await markdownDocToDocx(mdDoc);
           const blob = new Blob([buffer], {
             type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+          });
+          downloadBlob(blob, filename);
+        } else if (format === 'pptx') {
+          const mdDoc = parseMarkdown(currentSource);
+          // Collect images from mediaProvider for embedding
+          const images = new Map<string, ArrayBuffer>();
+          if (mediaProvider) {
+            const entries = await mediaProvider.listMedia();
+            for (const entry of entries) {
+              const url = await mediaProvider.resolveUrl(entry.name);
+              const res = await fetch(url);
+              if (res.ok) {
+                images.set(entry.name, await res.arrayBuffer());
+              }
+            }
+          }
+          // Extract themeId from frontmatter if present
+          const themeId =
+            (mdDoc.frontmatter?.themeId as string | undefined) ??
+            (mdDoc.frontmatter?.theme as string | undefined);
+          const buffer = await markdownDocToPptx(mdDoc, { themeId, images });
+          const blob = new Blob([buffer], {
+            type: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
           });
           downloadBlob(blob, filename);
         } else if (format === 'pdf') {
@@ -280,6 +306,18 @@ export function FileToolbar({
         {showDownload && (
           <div style={dropdownStyle(isDark)}>
             <button
+              style={{ ...dropdownItemStyle(isDark), fontWeight: 500 }}
+              onMouseEnter={(e) => (e.currentTarget.style.background = '#F3EBD6')}
+              onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
+              onClick={() => {
+                setShowDownload(false);
+                setShowExportModal(true);
+              }}
+            >
+              Export with options...
+            </button>
+            <div style={{ height: 1, background: '#c9b98a', margin: '4px 0' }} />
+            <button
               style={dropdownItemStyle(isDark)}
               onMouseEnter={(e) => (e.currentTarget.style.background = '#F3EBD6')}
               onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
@@ -294,6 +332,14 @@ export function FileToolbar({
               onClick={() => handleDownload('docx')}
             >
               Word (.docx)
+            </button>
+            <button
+              style={dropdownItemStyle(isDark)}
+              onMouseEnter={(e) => (e.currentTarget.style.background = '#F3EBD6')}
+              onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
+              onClick={() => handleDownload('pptx')}
+            >
+              PowerPoint (.pptx)
             </button>
             <button
               style={dropdownItemStyle(isDark)}
@@ -369,6 +415,17 @@ export function FileToolbar({
             playerScript={playerScriptRef.current}
             mediaProvider={mediaProvider ?? undefined}
             onClose={() => setShowVideoModal(false)}
+          />,
+          document.body,
+        )}
+
+      {/* Export config modal */}
+      {showExportModal &&
+        createPortal(
+          <ExportConfigModal
+            currentSource={currentSource}
+            mediaProvider={mediaProvider}
+            onClose={() => setShowExportModal(false)}
           />,
           document.body,
         )}
