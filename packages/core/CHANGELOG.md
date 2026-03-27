@@ -1,3 +1,9 @@
+## @bendyline/squisq [1.1.1](https://github.com/bendyline/squisq/compare/@bendyline/squisq@1.1.0...@bendyline/squisq@1.1.1) (2026-03-27)
+
+### Bug Fixes
+
+* Add squisq CLI for simple file ops ([#10](https://github.com/bendyline/squisq/issues/10)) ([ccdfb41](https://github.com/bendyline/squisq/commit/ccdfb4108cb61bc28e5252eb121d143b49b10bdd))
+
 ## @bendyline/squisq [1.1.0](https://github.com/bendyline/squisq/compare/@bendyline/squisq@1.0.1...@bendyline/squisq@1.1.0) (2026-03-19)
 
 ### Features
