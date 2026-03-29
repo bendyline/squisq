@@ -28,7 +28,7 @@ describe('readInput', () => {
   it('reads a .md file into a container and MarkdownDocument', async () => {
     const result = await readInput(FIXTURE_MD);
 
-    expect(result.markdownDoc).to.not.be.null;
+    expect(result.markdownDoc).to.not.equal(null);
     expect(result.markdownDoc).to.have.property('type', 'document');
     expect(result.markdownDoc!.children).to.be.an('array');
     expect(result.markdownDoc!.children.length).to.be.greaterThan(0);
@@ -48,7 +48,7 @@ describe('readInput', () => {
     await writeFile(zipPath, buf);
 
     const result = await readInput(zipPath);
-    expect(result.markdownDoc).to.not.be.null;
+    expect(result.markdownDoc).to.not.equal(null);
     expect(result.markdownDoc!.type).to.equal('document');
     const doc = await result.container.readDocument();
     expect(doc).to.include('# From ZIP');
@@ -64,7 +64,7 @@ describe('readInput', () => {
     await writeFile(dbkPath, buf);
 
     const result = await readInput(dbkPath);
-    expect(result.markdownDoc).to.not.be.null;
+    expect(result.markdownDoc).to.not.equal(null);
     expect(result.markdownDoc!.type).to.equal('document');
     const doc = await result.container.readDocument();
     expect(doc).to.include('# From DBK');
@@ -77,7 +77,7 @@ describe('readInput', () => {
     await writeFile(join(folderPath, 'image.txt'), 'placeholder');
 
     const result = await readInput(folderPath);
-    expect(result.markdownDoc).to.not.be.null;
+    expect(result.markdownDoc).to.not.equal(null);
     expect(result.markdownDoc!.type).to.equal('document');
 
     const doc = await result.container.readDocument();
@@ -114,7 +114,7 @@ describe('readInput', () => {
     await writeFile(jsonPath, JSON.stringify(doc));
 
     const result = await readInput(jsonPath);
-    expect(result.markdownDoc).to.be.null;
+    expect(result.markdownDoc).to.equal(null);
     expect(result.doc).to.deep.include({ articleId: 'test-article', duration: 30 });
     expect(result.doc!.blocks).to.have.length(1);
   });
@@ -132,7 +132,7 @@ describe('readInput', () => {
     await writeFile(join(folderPath, 'image.txt'), 'placeholder');
 
     const result = await readInput(folderPath);
-    expect(result.markdownDoc).to.be.null;
+    expect(result.markdownDoc).to.equal(null);
     expect(result.doc).to.deep.include({ articleId: 'folder-doc' });
 
     // Media files are still in the container

@@ -44,6 +44,7 @@ import { comparisonBar } from './comparisonBar.js';
 import { pullQuote } from './pullQuote.js';
 import { videoWithCaption } from './videoWithCaption.js';
 import { videoPullQuote } from './videoPullQuote.js';
+import { dataTable } from './dataTable.js';
 
 /**
  * Registry mapping template names to their implementation functions.
@@ -68,6 +69,7 @@ export const templateRegistry: TemplateRegistry = {
   pullQuote,
   videoWithCaption,
   videoPullQuote,
+  dataTable,
 };
 
 /**
@@ -565,6 +567,7 @@ export { comparisonBar } from './comparisonBar.js';
 export { pullQuote } from './pullQuote.js';
 export { videoWithCaption } from './videoWithCaption.js';
 export { videoPullQuote } from './videoPullQuote.js';
+export { dataTable } from './dataTable.js';
 
 // Re-export accent image utilities
 export { getAccentLayout, createAccentLayers, adjustY, DEFAULT_LAYOUT } from './accentImage.js';

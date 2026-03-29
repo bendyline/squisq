@@ -57,7 +57,7 @@
 .squisq-toolbar {
   display: flex;
   align-items: center;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   padding: 0 12px 0 0;
   gap: 2px;
 }
@@ -79,6 +79,9 @@
   display: flex;
   align-items: center;
   gap: 2px;
+  overflow: hidden;
+  flex: 1;
+  min-width: 0;
 }
 
 .squisq-toolbar-view-tab {
@@ -153,6 +156,71 @@
 .squisq-toolbar-button--active:hover {
   background: #bfdbfe;
   color: #1d4ed8;
+}
+
+/* ─── Toolbar Overflow Menu ──────────────────────────── */
+
+.squisq-toolbar-overflow {
+  position: relative;
+  flex-shrink: 0;
+  margin-left: 2px;
+}
+
+.squisq-toolbar-overflow-trigger {
+  font-size: 16px;
+  letter-spacing: 1px;
+}
+
+.squisq-toolbar-overflow-menu {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  z-index: 100;
+  min-width: 180px;
+  padding: 4px 0;
+  margin-top: 4px;
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
+}
+
+.squisq-toolbar-overflow-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 6px 12px;
+  border: none;
+  background: transparent;
+  color: #374151;
+  font-size: 13px;
+  cursor: pointer;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.squisq-toolbar-overflow-item:hover {
+  background: #f3f4f6;
+}
+
+.squisq-toolbar-overflow-item:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.squisq-toolbar-overflow-item--active {
+  color: #2563eb;
+  background: #eff6ff;
+}
+
+.squisq-toolbar-overflow-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  font-size: 14px;
+  font-weight: 600;
 }
 
 /* ─── Template Picker (toolbar) ──────────────────────── */
@@ -351,6 +419,81 @@
   font-weight: 600;
 }
 
+/* Tiptap table interaction — resize handles, selection, wrapper */
+
+.squisq-wysiwyg-editor th,
+.squisq-wysiwyg-editor td {
+  position: relative;
+}
+
+.squisq-wysiwyg-editor .tableWrapper {
+  overflow-x: auto;
+  margin: 1em 0;
+}
+
+.squisq-wysiwyg-editor .column-resize-handle {
+  position: absolute;
+  right: -2px;
+  top: 0;
+  bottom: 0;
+  width: 4px;
+  background: #3b82f6;
+  pointer-events: none;
+}
+
+.squisq-wysiwyg-editor.resize-cursor {
+  cursor: col-resize;
+}
+
+.squisq-wysiwyg-editor .selectedCell::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  background: rgba(59, 130, 246, 0.12);
+  pointer-events: none;
+  z-index: 2;
+}
+
+/* ─── Table Controls (toolbar) ───────────────────────── */
+
+.squisq-table-controls {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.squisq-table-controls-label {
+  font-size: 11px;
+  color: #6b7280;
+  font-weight: 500;
+  margin-right: 4px;
+  white-space: nowrap;
+}
+
+.squisq-table-controls .squisq-toolbar-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 3px 5px;
+}
+
+.squisq-table-controls .squisq-toolbar-button svg {
+  display: block;
+  flex-shrink: 0;
+}
+
+.squisq-toolbar-button--danger {
+  color: #dc2626;
+}
+
+.squisq-toolbar-button--danger:hover {
+  background: #fef2f2;
+  color: #b91c1c;
+}
+
 .squisq-wysiwyg-editor a {
   color: #2563eb;
   text-decoration: underline;
@@ -495,6 +638,26 @@
   background: #4b5563;
 }
 
+/* Overflow menu (dark) */
+.squisq-editor-shell[data-theme='dark'] .squisq-toolbar-overflow-menu {
+  background: #1f2937;
+  border-color: #374151;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+}
+
+.squisq-editor-shell[data-theme='dark'] .squisq-toolbar-overflow-item {
+  color: #d1d5db;
+}
+
+.squisq-editor-shell[data-theme='dark'] .squisq-toolbar-overflow-item:hover {
+  background: #374151;
+}
+
+.squisq-editor-shell[data-theme='dark'] .squisq-toolbar-overflow-item--active {
+  color: #60a5fa;
+  background: #1e3a5f;
+}
+
 /* Template picker (dark) */
 .squisq-editor-shell[data-theme='dark'] .squisq-template-picker-label {
   color: #9ca3af;
@@ -575,6 +738,27 @@
   background: #1f2937;
 }
 
+.squisq-editor-shell[data-theme='dark'] .squisq-wysiwyg-editor .column-resize-handle {
+  background: #60a5fa;
+}
+
+.squisq-editor-shell[data-theme='dark'] .squisq-wysiwyg-editor .selectedCell::after {
+  background: rgba(96, 165, 250, 0.15);
+}
+
+.squisq-editor-shell[data-theme='dark'] .squisq-table-controls-label {
+  color: #9ca3af;
+}
+
+.squisq-editor-shell[data-theme='dark'] .squisq-toolbar-button--danger {
+  color: #f87171;
+}
+
+.squisq-editor-shell[data-theme='dark'] .squisq-toolbar-button--danger:hover {
+  background: #450a0a;
+  color: #fca5a5;
+}
+
 .squisq-editor-shell[data-theme='dark'] .squisq-wysiwyg-editor a {
   color: #60a5fa;
 }
@@ -628,12 +812,6 @@
 @media (max-width: 640px) {
   .squisq-toolbar-view-tabs {
     margin-right: 0;
-  }
-
-  .squisq-toolbar-actions {
-    flex-basis: 100%;
-    flex-wrap: wrap;
-    padding-top: 2px;
   }
 }
 

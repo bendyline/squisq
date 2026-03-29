@@ -25,7 +25,7 @@ import { VIEWPORT_PRESETS } from '@bendyline/squisq/schemas';
 import { getLayers, hasTemplate, DEFAULT_THEME } from '@bendyline/squisq/doc';
 import type { RenderContext } from '@bendyline/squisq/doc';
 import { extractPlainText } from '@bendyline/squisq/markdown';
-import type { MarkdownBlockNode, MarkdownList } from '@bendyline/squisq/markdown';
+import type { MarkdownBlockNode, MarkdownList, MarkdownTable } from '@bendyline/squisq/markdown';
 import { BlockRenderer } from './BlockRenderer';
 import { MarkdownRenderer } from './MarkdownRenderer';
 
@@ -216,6 +216,26 @@ function extractListItems(contents?: MarkdownBlockNode[]): string[] {
   return items;
 }
 
+/** Extract table data (headers, rows, alignment) from block contents. */
+function extractTableData(
+  contents?: MarkdownBlockNode[],
+): { headers: string[]; rows: string[][]; align?: (('left' | 'right' | 'center') | null)[] } | null {
+  if (!contents) return null;
+  for (const node of contents) {
+    if (node.type === 'table') {
+      const table = node as MarkdownTable;
+      const [headerRow, ...bodyRows] = table.children;
+      if (!headerRow) return null;
+      const headers = headerRow.children.map((cell) => extractPlainText(cell).trim());
+      const rows = bodyRows.map((row) =>
+        row.children.map((cell) => extractPlainText(cell).trim()),
+      );
+      return { headers, rows, align: table.align };
+    }
+  }
+  return null;
+}
+
 /**
  * Provide sensible default fields for templates that require more than
  * just a `title`. Prevents crashes from undefined required fields.
@@ -243,6 +263,10 @@ function getTemplateDefaults(
       return { term: headingText, definition: bodyText || headingText };
     case 'dateEvent':
       return { date: headingText, description: bodyText || headingText };
+    case 'dataTable': {
+      const tableData = extractTableData(contents);
+      return tableData ?? { headers: ['Column'], rows: [['Data']] };
+    }
     default:
       return {};
   }
@@ -387,6 +411,27 @@ export function LinearDocView({
           }
           .squisq-linear-content em {
             font-style: italic;
+          }
+          .squisq-linear-content table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 1em 0;
+            font-size: 0.95em;
+          }
+          .squisq-linear-content thead th {
+            background: var(--squisq-linear-primary);
+            color: var(--squisq-linear-bg);
+            font-family: var(--squisq-linear-title-font);
+            font-weight: 600;
+            padding: 10px 14px;
+            text-align: left;
+          }
+          .squisq-linear-content tbody td {
+            padding: 8px 14px;
+            border-bottom: 1px solid color-mix(in srgb, var(--squisq-linear-muted) 30%, transparent);
+          }
+          .squisq-linear-content tbody tr:hover {
+            background: color-mix(in srgb, var(--squisq-linear-primary) 8%, transparent);
           }
         `}</style>
         {doc.blocks.map((block, i) => (

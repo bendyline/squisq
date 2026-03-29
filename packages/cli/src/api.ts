@@ -412,3 +412,70 @@ async function addAudioDelay(
     await rm(outputPath, { force: true });
   }
 }
+
+// ── Thumbnail extraction ──────────────────────────────────────────
+
+/** A thumbnail size specification. */
+export interface ThumbnailSpec {
+  /** Label for the thumbnail (used in filename: `{slug}-{width}x{height}.jpg`). */
+  name: string;
+  /** Output width in pixels. */
+  width: number;
+  /** Output height in pixels. */
+  height: number;
+  /** FFmpeg video filter string (e.g., 'scale=1280:720'). */
+  filter: string;
+}
+
+/** Options for extractThumbnails. */
+export interface ExtractThumbnailsOptions {
+  /** Path to the source MP4 video. */
+  videoPath: string;
+  /** Directory to write thumbnails into. */
+  outputDir: string;
+  /** Base slug for filenames (produces `{slug}-{width}x{height}.jpg`). */
+  slug: string;
+  /** Thumbnail sizes to generate. */
+  sizes: ThumbnailSpec[];
+  /** Overwrite existing thumbnails (default: false). */
+  force?: boolean;
+}
+
+/**
+ * Extract thumbnail images from the first frame of an MP4 video.
+ * Produces JPEG files at each specified size using FFmpeg video filters.
+ */
+export async function extractThumbnails(options: ExtractThumbnailsOptions): Promise<void> {
+  const { videoPath, outputDir, slug, sizes, force } = options;
+  const { existsSync } = await import('node:fs');
+  const { join } = await import('node:path');
+  const { execFile } = await import('node:child_process');
+
+  const ffmpegPath = await detectFfmpeg();
+  if (!ffmpegPath) {
+    throw new Error(
+      'ffmpeg is required for thumbnail extraction but not found in PATH.\n' +
+        'Install it with:\n' +
+        '  macOS:   brew install ffmpeg\n' +
+        '  Ubuntu:  sudo apt install ffmpeg\n' +
+        '  Windows: winget install ffmpeg',
+    );
+  }
+
+  for (const thumb of sizes) {
+    const outputPath = join(outputDir, `${slug}-${thumb.width}x${thumb.height}.jpg`);
+    if (!force && existsSync(outputPath)) continue;
+
+    await new Promise<void>((resolve, reject) => {
+      execFile(
+        ffmpegPath,
+        ['-y', '-i', videoPath, '-vf', thumb.filter, '-frames:v', '1', '-q:v', '2', outputPath],
+        { timeout: 30_000 },
+        (err) => {
+          if (err) reject(new Error(`Thumbnail extraction failed (${thumb.name}): ${err.message}`));
+          else resolve();
+        },
+      );
+    });
+  }
+}

@@ -370,9 +370,12 @@ async function concatenateAudioNative(
   ffmpegPath: string,
   buffers: ArrayBuffer[],
 ): Promise<Uint8Array> {
-  const { writeFile: fsWriteFile, readFile: fsReadFile, mkdir: fsMkdir, rm } = await import(
-    'node:fs/promises'
-  );
+  const {
+    writeFile: fsWriteFile,
+    readFile: fsReadFile,
+    mkdir: fsMkdir,
+    rm,
+  } = await import('node:fs/promises');
   const { join } = await import('node:path');
   const { tmpdir } = await import('node:os');
   const { randomBytes } = await import('node:crypto');
@@ -393,9 +396,7 @@ async function concatenateAudioNative(
 
     // Write concat list
     const listPath = join(workDir, 'concat-list.txt');
-    const listContent = segmentPaths
-      .map((p) => `file '${p.replace(/\\/g, '/')}'`)
-      .join('\n');
+    const listContent = segmentPaths.map((p) => `file '${p.replace(/\\/g, '/')}'`).join('\n');
     await fsWriteFile(listPath, listContent);
 
     // Run ffmpeg concat

@@ -12,6 +12,7 @@ import { TextLayer } from './layers/TextLayer';
 import { ShapeLayer } from './layers/ShapeLayer';
 import { MapLayer } from './layers/MapLayer';
 import { VideoLayer } from './layers/VideoLayer';
+import { TableLayer } from './layers/TableLayer';
 import { getTransitionClass } from './utils/animationUtils';
 
 /** Default viewport dimensions (1080p landscape) - for backwards compatibility */
@@ -137,6 +138,8 @@ function LayerRenderer({ layer, basePath, viewport, blockTime, isPlaying }: Laye
           isPlaying={isPlaying}
         />
       );
+    case 'table':
+      return <TableLayer layer={layer} viewport={viewport} blockTime={blockTime} />;
     default:
       console.warn(`Unknown layer type: ${(layer as Layer).type}`);
       return null;
