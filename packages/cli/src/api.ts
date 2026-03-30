@@ -113,6 +113,18 @@ export async function renderDocToMp4(
     height: options.height,
   });
 
+  // Detect ffmpeg early — needed for audio concat and video encoding
+  const ffmpegPath = await detectFfmpeg();
+  if (!ffmpegPath) {
+    throw new Error(
+      'ffmpeg is required but not found in PATH.\n' +
+        'Install it with:\n' +
+        '  macOS:   brew install ffmpeg\n' +
+        '  Ubuntu:  sudo apt install ffmpeg\n' +
+        '  Windows: winget install ffmpeg',
+    );
+  }
+
   onProgress?.('collecting media', 0);
 
   // ── Collect images from container ───────────────────────────────
@@ -143,7 +155,7 @@ export async function renderDocToMp4(
   // Concatenate audio for the MP4's audio track
   let concatenatedAudio: Uint8Array | null = null;
   if (audioBuffers.length > 0) {
-    concatenatedAudio = await concatenateAudioBuffers(audioBuffers);
+    concatenatedAudio = await concatenateAudioBuffers(audioBuffers, ffmpegPath);
   }
 
   onProgress?.('generating render HTML', 10);
@@ -247,18 +259,6 @@ export async function renderDocToMp4(
 
   onProgress?.('encoding video', 80);
 
-  // ── FFmpeg encoding ─────────────────────────────────────────────
-  const ffmpegPath = await detectFfmpeg();
-  if (!ffmpegPath) {
-    throw new Error(
-      'ffmpeg is required but not found in PATH.\n' +
-        'Install it with:\n' +
-        '  macOS:   brew install ffmpeg\n' +
-        '  Ubuntu:  sudo apt install ffmpeg\n' +
-        '  Windows: winget install ffmpeg',
-    );
-  }
-
   // If there's a pre-roll, delay the audio track to match
   let encodingAudio = concatenatedAudio;
   if (coverPreRoll > 0 && concatenatedAudio) {
@@ -294,11 +294,13 @@ export async function renderDocToMp4(
  * Concatenate multiple audio buffers into one.
  * Uses native ffmpeg concat when available, falls back to byte concatenation.
  */
-async function concatenateAudioBuffers(buffers: ArrayBuffer[]): Promise<Uint8Array> {
+async function concatenateAudioBuffers(
+  buffers: ArrayBuffer[],
+  ffmpegPath?: string,
+): Promise<Uint8Array> {
   if (buffers.length === 0) return new Uint8Array(0);
   if (buffers.length === 1) return new Uint8Array(buffers[0]);
 
-  const ffmpegPath = await detectFfmpeg();
   if (ffmpegPath) {
     return concatenateAudioNative(ffmpegPath, buffers);
   }

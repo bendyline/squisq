@@ -13,6 +13,9 @@ import type { Editor as TiptapEditor } from '@tiptap/core';
 import { useEditorContext, type EditorView } from './EditorContext';
 import { getAvailableTemplates } from '@bendyline/squisq/doc';
 
+/** Template names are static — computed once at module load. */
+const TEMPLATE_NAMES = getAvailableTemplates();
+
 const VIEWS: { id: EditorView; label: string; shortcut: string }[] = [
   { id: 'wysiwyg', label: 'Editor', shortcut: '⌘1' },
   { id: 'raw', label: 'Raw', shortcut: '⌘2' },
@@ -368,11 +371,6 @@ export function Toolbar({
           const startPos = model.getPositionAt(
             model.getOffsetAt(range.getStartPosition()) + newCursorOffset,
           );
-          const _placeholderLen =
-            replacement.length -
-            newCursorOffset -
-            (replacement.length -
-              replacement.lastIndexOf(replacement.charAt(replacement.length - 1)));
           // Just place cursor after the prefix
           monacoEditor.setPosition(startPos);
         }
@@ -502,8 +500,6 @@ export function Toolbar({
     }
   };
 
-  const templateNames = getAvailableTemplates();
-
   return (
     <div
       className={`squisq-toolbar ${className || ''}`}
@@ -587,92 +583,35 @@ export function Toolbar({
             </div>
           ))}
 
-          {/* Overflow menu — shown when buttons are clipped */}
-          {overflowIndex !== null && (
-            <div className="squisq-toolbar-overflow" ref={overflowRef}>
-              <button
-                className={`squisq-toolbar-button squisq-toolbar-overflow-trigger${showOverflow ? ' squisq-toolbar-button--active' : ''}`}
-                title="More actions"
-                onClick={() => setShowOverflow((v) => !v)}
-                aria-label="More actions"
-                aria-expanded={showOverflow}
-              >
-                ···
-              </button>
-              {showOverflow && (
-                <div className="squisq-toolbar-overflow-menu">
-                  {BUTTONS.slice(overflowIndex).map((btn) => {
-                    const active = isWysiwyg ? isTiptapActive(tiptapEditor, btn.id) : false;
-                    const disabled = btn.id === 'image' && !mediaProvider;
-                    return (
-                      <button
-                        key={btn.id}
-                        className={`squisq-toolbar-overflow-item${active ? ' squisq-toolbar-overflow-item--active' : ''}`}
-                        title={btn.title}
-                        onClick={() => {
-                          handleAction(btn.id);
-                          setShowOverflow(false);
-                        }}
-                        disabled={disabled}
-                      >
-                        {btn.id === 'table' ? (
-                          <svg
-                            width="14"
-                            height="14"
-                            viewBox="0 0 14 14"
-                            fill="none"
-                            stroke="currentColor"
-                            strokeWidth="1.4"
-                            strokeLinecap="round"
-                          >
-                            <rect x="1" y="1" width="12" height="12" rx="1" />
-                            <line x1="1" y1="5" x2="13" y2="5" />
-                            <line x1="1" y1="9" x2="13" y2="9" />
-                            <line x1="5" y1="1" x2="5" y2="13" />
-                            <line x1="9" y1="1" x2="9" y2="13" />
-                          </svg>
-                        ) : (
-                          <span className="squisq-toolbar-overflow-icon" style={btn.iconStyle}>
-                            {btn.icon}
-                          </span>
-                        )}
-                        <span>{btn.title}</span>
-                      </button>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
+          {/* Template picker — visible when cursor is in a heading (WYSIWYG) */}
+          {currentTemplate !== null && (
+            <>
+              <div className="squisq-toolbar-separator" />
+              <div className="squisq-toolbar-group squisq-template-picker">
+                <label
+                  className="squisq-template-picker-label"
+                  title="Block template for this heading"
+                >
+                  Template:
+                  <select
+                    className="squisq-template-picker-select"
+                    value={currentTemplate}
+                    onChange={(e) => handleTemplatePick(e.target.value)}
+                  >
+                    <option value="">— none —</option>
+                    {TEMPLATE_NAMES.map((name) => (
+                      <option key={name} value={name}>
+                        {name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+            </>
           )}
-        </div>
-      )}
 
-      {/* Template picker — visible when cursor is in a heading (WYSIWYG) */}
-      {currentTemplate !== null && (
-        <>
-          <div className="squisq-toolbar-separator" />
-          <div className="squisq-toolbar-group squisq-template-picker">
-            <label className="squisq-template-picker-label" title="Block template for this heading">
-              Template:
-              <select
-                className="squisq-template-picker-select"
-                value={currentTemplate}
-                onChange={(e) => handleTemplatePick(e.target.value)}
-              >
-                <option value="">— none —</option>
-                {templateNames.map((name) => (
-                  <option key={name} value={name}>
-                    {name}
-                  </option>
-                ))}
-              </select>
-            </label>
-          </div>
-        </>
-      )}
-
-      {/* Table controls — visible when cursor is in a table (WYSIWYG) */}
-      {isInTable && (
+          {/* Table controls — visible when cursor is in a table (WYSIWYG) */}
+          {isInTable && (
         <>
           <div className="squisq-toolbar-separator" />
           <div className="squisq-toolbar-group squisq-table-controls">
@@ -826,6 +765,116 @@ export function Toolbar({
           </div>
         </>
       )}
+        </div>
+      )}
+
+      {/* Overflow menu — outside the overflow:hidden actions container */}
+      {!isPreview && overflowIndex !== null && (
+        <div className="squisq-toolbar-overflow" ref={overflowRef}>
+          <button
+            className={`squisq-toolbar-button squisq-toolbar-overflow-trigger${showOverflow ? ' squisq-toolbar-button--active' : ''}`}
+            title="More actions"
+            onClick={() => setShowOverflow((v) => !v)}
+            aria-label="More actions"
+            aria-expanded={showOverflow}
+          >
+            ···
+          </button>
+          {showOverflow && (
+            <div className="squisq-toolbar-overflow-menu">
+              {BUTTONS.slice(overflowIndex).map((btn) => {
+                const active = isWysiwyg ? isTiptapActive(tiptapEditor, btn.id) : false;
+                const disabled = btn.id === 'image' && !mediaProvider;
+                return (
+                  <button
+                    key={btn.id}
+                    className={`squisq-toolbar-overflow-item${active ? ' squisq-toolbar-overflow-item--active' : ''}`}
+                    title={btn.title}
+                    onClick={() => {
+                      handleAction(btn.id);
+                      setShowOverflow(false);
+                    }}
+                    disabled={disabled}
+                  >
+                    {btn.id === 'table' ? (
+                      <svg
+                        width="14"
+                        height="14"
+                        viewBox="0 0 14 14"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="1.4"
+                        strokeLinecap="round"
+                      >
+                        <rect x="1" y="1" width="12" height="12" rx="1" />
+                        <line x1="1" y1="5" x2="13" y2="5" />
+                        <line x1="1" y1="9" x2="13" y2="9" />
+                        <line x1="5" y1="1" x2="5" y2="13" />
+                        <line x1="9" y1="1" x2="9" y2="13" />
+                      </svg>
+                    ) : (
+                      <span className="squisq-toolbar-overflow-icon" style={btn.iconStyle}>
+                        {btn.icon}
+                      </span>
+                    )}
+                    <span>{btn.title}</span>
+                  </button>
+                );
+              })}
+
+              {/* Contextual: template picker in overflow */}
+              {currentTemplate !== null && (
+                <div className="squisq-toolbar-overflow-item squisq-toolbar-overflow-template">
+                  <span>Template:</span>
+                  <select
+                    className="squisq-template-picker-select"
+                    value={currentTemplate}
+                    onChange={(e) => {
+                      handleTemplatePick(e.target.value);
+                      setShowOverflow(false);
+                    }}
+                  >
+                    <option value="">— none —</option>
+                    {TEMPLATE_NAMES.map((name) => (
+                      <option key={name} value={name}>
+                        {name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
+              {/* Contextual: table controls in overflow */}
+              {isInTable && (
+                <>
+                  <div className="squisq-toolbar-separator" style={{ margin: '4px 0', width: '100%', height: 1 }} />
+                  {[
+                    { label: 'Add column before', action: () => tiptapEditor!.chain().focus().addColumnBefore().run() },
+                    { label: 'Add column after', action: () => tiptapEditor!.chain().focus().addColumnAfter().run() },
+                    { label: 'Delete column', action: () => tiptapEditor!.chain().focus().deleteColumn().run() },
+                    { label: 'Add row above', action: () => tiptapEditor!.chain().focus().addRowBefore().run() },
+                    { label: 'Add row below', action: () => tiptapEditor!.chain().focus().addRowAfter().run() },
+                    { label: 'Delete row', action: () => tiptapEditor!.chain().focus().deleteRow().run() },
+                    { label: 'Delete table', action: () => tiptapEditor!.chain().focus().deleteTable().run() },
+                  ].map((item) => (
+                    <button
+                      key={item.label}
+                      className={`squisq-toolbar-overflow-item${item.label.startsWith('Delete') ? ' squisq-toolbar-overflow-item--danger' : ''}`}
+                      onClick={() => {
+                        item.action();
+                        setShowOverflow(false);
+                      }}
+                    >
+                      <span>{item.label}</span>
+                    </button>
+                  ))}
+                </>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
       {/* After-actions slot — after formatting controls */}
       {slotAfterActions}
       {/* Spacer pushes right-side buttons to the end */}

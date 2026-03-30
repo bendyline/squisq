@@ -605,10 +605,6 @@ function makeRun(text: string, format: InlineFormat): string {
 
 function convertLink(node: MarkdownLink, ctx: ExportContext, format: InlineFormat): string {
   const rId = ctx.addHyperlink(node.url);
-  const _runs = convertInlines(node.children, ctx, { ...format });
-
-  // Wrap each run's rPr with hyperlink styling
-  // For simplicity, emit inline runs with hyperlink color + underline
   const styledRuns = convertInlinesWithHyperlinkStyle(node.children, ctx, format);
 
   return `<w:hyperlink r:id="${rId}">${styledRuns}</w:hyperlink>`;

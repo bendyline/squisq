@@ -305,7 +305,7 @@ export function LinearDocView({
     [activeViewport, totalBlocks, theme],
   );
 
-  const activeTheme = theme ?? DEFAULT_THEME;
+  const activeTheme = renderContext.theme!;
   const bgColor = activeTheme.colors.background;
   const textColor = activeTheme.colors.text;
   const mutedColor = activeTheme.colors.textMuted;
