@@ -105,13 +105,20 @@ async function runConvert(inputPath: string, opts: ConvertOpts): Promise<void> {
   }
 
   console.error(`Reading: ${resolvedInput}`);
-  const { container, markdownDoc } = await readInput(resolvedInput);
+  const result = await readInput(resolvedInput);
+  const { container } = result;
+
+  if (!result.markdownDoc) {
+    throw new Error(
+      'Convert command requires a markdown document. JSON Doc input is not supported for convert — use the video command instead.',
+    );
+  }
 
   // Apply transform if requested
-  let exportMarkdownDoc = markdownDoc;
+  let exportMarkdownDoc = result.markdownDoc;
   if (opts.transform) {
     exportMarkdownDoc = await applyTransformToMarkdown(
-      markdownDoc,
+      result.markdownDoc,
       container,
       opts.transform,
       opts.theme,

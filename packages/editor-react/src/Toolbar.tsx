@@ -8,10 +8,13 @@
  */
 
 import type { ReactNode } from 'react';
-import { useCallback, useEffect, useReducer } from 'react';
+import { useCallback, useEffect, useReducer, useRef, useState } from 'react';
 import type { Editor as TiptapEditor } from '@tiptap/core';
 import { useEditorContext, type EditorView } from './EditorContext';
 import { getAvailableTemplates } from '@bendyline/squisq/doc';
+
+/** Template names are static — computed once at module load. */
+const TEMPLATE_NAMES = getAvailableTemplates();
 
 const VIEWS: { id: EditorView; label: string; shortcut: string }[] = [
   { id: 'wysiwyg', label: 'Editor', shortcut: '⌘1' },
@@ -84,6 +87,8 @@ const BUTTONS: ToolbarButton[] = [
   { id: 'codeblock', label: '{ }', icon: '{ }', title: 'Code block', group: 'insert' },
   { id: 'hr', label: '—', icon: '—', title: 'Horizontal rule', group: 'insert' },
   { id: 'link', label: '🔗', icon: '🔗', title: 'Insert link', group: 'insert' },
+  { id: 'table', label: 'table', icon: '', title: 'Insert table', group: 'insert' },
+  { id: 'image', label: '🖼', icon: '🖼', title: 'Insert image', group: 'insert' },
 ];
 
 // ─── Tiptap active-state map ────────────────────────────
@@ -139,7 +144,56 @@ export function Toolbar({
     setMarkdownSource,
     tiptapEditor,
     monacoEditor,
+    mediaProvider,
   } = useEditorContext();
+
+  // Hidden file input for image picker
+  const imageInputRef = useRef<HTMLInputElement>(null);
+
+  // ── Overflow detection ────────────────────────────────
+  const actionsRef = useRef<HTMLDivElement>(null);
+  const [overflowIndex, setOverflowIndex] = useState<number | null>(null);
+  const [showOverflow, setShowOverflow] = useState(false);
+  const overflowRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const container = actionsRef.current;
+    if (!container) return;
+
+    const measure = () => {
+      const containerRight = container.getBoundingClientRect().right;
+      const children = container.querySelectorAll<HTMLElement>(
+        ':scope > .squisq-toolbar-group > .squisq-toolbar-button',
+      );
+      let firstHidden: number | null = null;
+      children.forEach((child, i) => {
+        if (firstHidden !== null) return;
+        const rect = child.getBoundingClientRect();
+        // A button is hidden if its right edge extends past the container
+        if (rect.right > containerRight + 2) {
+          firstHidden = i;
+        }
+      });
+      setOverflowIndex(firstHidden);
+    };
+
+    const ro = new ResizeObserver(measure);
+    ro.observe(container);
+    measure();
+    return () => ro.disconnect();
+  }, [activeView]);
+
+  // Close overflow menu on outside click
+  useEffect(() => {
+    if (!showOverflow) return;
+    const handleClick = (e: MouseEvent) => {
+      if (overflowRef.current && !overflowRef.current.contains(e.target as Node)) {
+        setShowOverflow(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, [showOverflow]);
 
   // Force re-render when Tiptap selection or formatting state changes
   const [, forceUpdate] = useReducer((c: number) => c + 1, 0);
@@ -202,6 +256,9 @@ export function Toolbar({
           }
           break;
         }
+        case 'table':
+          tiptapEditor.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run();
+          break;
       }
     },
     [tiptapEditor],
@@ -296,6 +353,13 @@ export function Toolbar({
             }
             break;
           }
+          case 'table': {
+            const tpl =
+              '| Header 1 | Header 2 | Header 3 |\n| --- | --- | --- |\n| Cell | Cell | Cell |\n| Cell | Cell | Cell |';
+            replacement = '\n' + tpl + '\n';
+            newCursorOffset = 3; // after \n|
+            break;
+          }
         }
 
         // Apply the edit via Monaco's executeEdits for proper undo support
@@ -307,11 +371,6 @@ export function Toolbar({
           const startPos = model.getPositionAt(
             model.getOffsetAt(range.getStartPosition()) + newCursorOffset,
           );
-          const _placeholderLen =
-            replacement.length -
-            newCursorOffset -
-            (replacement.length -
-              replacement.lastIndexOf(replacement.charAt(replacement.length - 1)));
           // Just place cursor after the prefix
           monacoEditor.setPosition(startPos);
         }
@@ -360,6 +419,10 @@ export function Toolbar({
           case 'link':
             insertion = '[link text](url)';
             break;
+          case 'table':
+            insertion =
+              '\n| Header 1 | Header 2 | Header 3 |\n| --- | --- | --- |\n| Cell | Cell | Cell |\n| Cell | Cell | Cell |\n';
+            break;
         }
         if (insertion) {
           setMarkdownSource(markdownSource + insertion);
@@ -369,8 +432,37 @@ export function Toolbar({
     [monacoEditor, markdownSource, setMarkdownSource],
   );
 
+  // ── Image upload handler ───────────────────────────────
+  const handleImageFile = useCallback(
+    async (file: File) => {
+      if (!mediaProvider) return;
+      const buffer = await file.arrayBuffer();
+      const relativePath = await mediaProvider.addMedia(file.name, buffer, file.type);
+      const altText = file.name.replace(/\.[^.]+$/, '').replace(/[-_]/g, ' ');
+
+      if (activeView === 'wysiwyg' && tiptapEditor) {
+        tiptapEditor.chain().focus().setImage({ src: relativePath, alt: altText }).run();
+      } else if (monacoEditor) {
+        const selection = monacoEditor.getSelection();
+        const model = monacoEditor.getModel();
+        if (selection && model) {
+          const md = `![${altText}](${relativePath})`;
+          monacoEditor.executeEdits('toolbar', [{ range: selection, text: md }]);
+          monacoEditor.focus();
+        }
+      } else {
+        setMarkdownSource(markdownSource + `\n![${altText}](${relativePath})\n`);
+      }
+    },
+    [mediaProvider, activeView, tiptapEditor, monacoEditor, markdownSource, setMarkdownSource],
+  );
+
   const handleAction = useCallback(
     (id: string) => {
+      if (id === 'image') {
+        imageInputRef.current?.click();
+        return;
+      }
       if (activeView === 'wysiwyg' && tiptapEditor) {
         handleTiptap(id);
       } else {
@@ -383,6 +475,9 @@ export function Toolbar({
   const groups = ['format', 'structure', 'insert'] as const;
   const isWysiwyg = activeView === 'wysiwyg' && tiptapEditor;
   const isPreview = activeView === 'preview';
+
+  // Detect whether cursor is inside a table (WYSIWYG mode only)
+  const isInTable = isWysiwyg ? tiptapEditor.isActive('table') : false;
 
   // Detect current heading template (WYSIWYG mode only)
   const currentTemplate = isWysiwyg
@@ -405,14 +500,25 @@ export function Toolbar({
     }
   };
 
-  const templateNames = getAvailableTemplates();
-
   return (
     <div
       className={`squisq-toolbar ${className || ''}`}
       role="toolbar"
       aria-label="Formatting toolbar"
     >
+      {/* Hidden file input for image picker */}
+      <input
+        ref={imageInputRef}
+        type="file"
+        accept="image/*"
+        style={{ display: 'none' }}
+        onChange={(e) => {
+          const file = e.target.files?.[0];
+          if (file) handleImageFile(file);
+          // Reset so the same file can be re-selected
+          e.target.value = '';
+        }}
+      />
       {/* Left slot — before view tabs */}
       {slotLeft}
       {/* View tabs */}
@@ -422,6 +528,7 @@ export function Toolbar({
             key={view.id}
             role="tab"
             data-view={view.id}
+            data-label={view.label}
             aria-selected={activeView === view.id}
             className={`squisq-toolbar-view-tab${activeView === view.id ? ' squisq-toolbar-view-tab--active' : ''}`}
             onClick={() => setActiveView(view.id)}
@@ -433,23 +540,43 @@ export function Toolbar({
       </div>
       {/* Formatting buttons — hidden in preview mode */}
       {!isPreview && (
-        <div className="squisq-toolbar-actions">
+        <div className="squisq-toolbar-actions" ref={actionsRef}>
           {groups.map((group, gi) => (
             <div key={group} className="squisq-toolbar-group">
               {gi > 0 && <div className="squisq-toolbar-separator" />}
               {BUTTONS.filter((b) => b.group === group).map((btn) => {
                 const active = isWysiwyg ? isTiptapActive(tiptapEditor, btn.id) : false;
+                const disabled = btn.id === 'image' && !mediaProvider;
                 return (
                   <button
                     key={btn.id}
                     className={`squisq-toolbar-button${active ? ' squisq-toolbar-button--active' : ''}`}
-                    title={btn.title}
+                    title={disabled ? 'Insert image (requires media provider)' : btn.title}
                     onClick={() => handleAction(btn.id)}
                     aria-label={btn.title}
                     aria-pressed={active}
+                    disabled={disabled}
                     style={btn.iconStyle}
                   >
-                    {btn.icon}
+                    {btn.id === 'table' ? (
+                      <svg
+                        width="14"
+                        height="14"
+                        viewBox="0 0 14 14"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="1.4"
+                        strokeLinecap="round"
+                      >
+                        <rect x="1" y="1" width="12" height="12" rx="1" />
+                        <line x1="1" y1="5" x2="13" y2="5" />
+                        <line x1="1" y1="9" x2="13" y2="9" />
+                        <line x1="5" y1="1" x2="5" y2="13" />
+                        <line x1="9" y1="1" x2="9" y2="13" />
+                      </svg>
+                    ) : (
+                      btn.icon
+                    )}
                   </button>
                 );
               })}
@@ -472,7 +599,7 @@ export function Toolbar({
                     onChange={(e) => handleTemplatePick(e.target.value)}
                   >
                     <option value="">— none —</option>
-                    {templateNames.map((name) => (
+                    {TEMPLATE_NAMES.map((name) => (
                       <option key={name} value={name}>
                         {name}
                       </option>
@@ -482,8 +609,296 @@ export function Toolbar({
               </div>
             </>
           )}
+
+          {/* Table controls — visible when cursor is in a table (WYSIWYG) */}
+          {isInTable && (
+            <>
+              <div className="squisq-toolbar-separator" />
+              <div className="squisq-toolbar-group squisq-table-controls">
+                <span className="squisq-table-controls-label">Table:</span>
+                <button
+                  className="squisq-toolbar-button"
+                  title="Add column before"
+                  onClick={() => tiptapEditor!.chain().focus().addColumnBefore().run()}
+                  aria-label="Add column before"
+                >
+                  <svg
+                    width="16"
+                    height="16"
+                    viewBox="0 0 16 16"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="1.5"
+                    strokeLinecap="round"
+                  >
+                    <rect x="7" y="2" width="8" height="12" rx="1" />
+                    <line x1="11" y1="2" x2="11" y2="14" />
+                    <line x1="1" y1="8" x2="4.5" y2="8" />
+                    <line x1="2.75" y1="6.25" x2="2.75" y2="9.75" />
+                  </svg>
+                </button>
+                <button
+                  className="squisq-toolbar-button"
+                  title="Add column after"
+                  onClick={() => tiptapEditor!.chain().focus().addColumnAfter().run()}
+                  aria-label="Add column after"
+                >
+                  <svg
+                    width="16"
+                    height="16"
+                    viewBox="0 0 16 16"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="1.5"
+                    strokeLinecap="round"
+                  >
+                    <rect x="1" y="2" width="8" height="12" rx="1" />
+                    <line x1="5" y1="2" x2="5" y2="14" />
+                    <line x1="11.5" y1="8" x2="15" y2="8" />
+                    <line x1="13.25" y1="6.25" x2="13.25" y2="9.75" />
+                  </svg>
+                </button>
+                <button
+                  className="squisq-toolbar-button"
+                  title="Delete column"
+                  onClick={() => tiptapEditor!.chain().focus().deleteColumn().run()}
+                  aria-label="Delete column"
+                >
+                  <svg
+                    width="16"
+                    height="16"
+                    viewBox="0 0 16 16"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="1.5"
+                    strokeLinecap="round"
+                  >
+                    <rect x="4" y="1" width="8" height="14" rx="1" />
+                    <line x1="6" y1="5.5" x2="10" y2="10.5" />
+                    <line x1="10" y1="5.5" x2="6" y2="10.5" />
+                  </svg>
+                </button>
+                <button
+                  className="squisq-toolbar-button"
+                  title="Add row above"
+                  onClick={() => tiptapEditor!.chain().focus().addRowBefore().run()}
+                  aria-label="Add row above"
+                >
+                  <svg
+                    width="16"
+                    height="16"
+                    viewBox="0 0 16 16"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="1.5"
+                    strokeLinecap="round"
+                  >
+                    <rect x="2" y="6" width="12" height="9" rx="1" />
+                    <line x1="2" y1="10.5" x2="14" y2="10.5" />
+                    <line x1="8" y1="1" x2="8" y2="4.5" />
+                    <line x1="6.25" y1="2.75" x2="9.75" y2="2.75" />
+                  </svg>
+                </button>
+                <button
+                  className="squisq-toolbar-button"
+                  title="Add row below"
+                  onClick={() => tiptapEditor!.chain().focus().addRowAfter().run()}
+                  aria-label="Add row below"
+                >
+                  <svg
+                    width="16"
+                    height="16"
+                    viewBox="0 0 16 16"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="1.5"
+                    strokeLinecap="round"
+                  >
+                    <rect x="2" y="1" width="12" height="9" rx="1" />
+                    <line x1="2" y1="5.5" x2="14" y2="5.5" />
+                    <line x1="8" y1="11.5" x2="8" y2="15" />
+                    <line x1="6.25" y1="13.25" x2="9.75" y2="13.25" />
+                  </svg>
+                </button>
+                <button
+                  className="squisq-toolbar-button"
+                  title="Delete row"
+                  onClick={() => tiptapEditor!.chain().focus().deleteRow().run()}
+                  aria-label="Delete row"
+                >
+                  <svg
+                    width="16"
+                    height="16"
+                    viewBox="0 0 16 16"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="1.5"
+                    strokeLinecap="round"
+                  >
+                    <rect x="1" y="4" width="14" height="8" rx="1" />
+                    <line x1="5.5" y1="6" x2="10.5" y2="10" />
+                    <line x1="10.5" y1="6" x2="5.5" y2="10" />
+                  </svg>
+                </button>
+                <button
+                  className="squisq-toolbar-button squisq-toolbar-button--danger"
+                  title="Delete table"
+                  onClick={() => tiptapEditor!.chain().focus().deleteTable().run()}
+                  aria-label="Delete table"
+                >
+                  <svg
+                    width="16"
+                    height="16"
+                    viewBox="0 0 16 16"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="1.5"
+                    strokeLinecap="round"
+                  >
+                    <rect x="1" y="1" width="14" height="14" rx="1" />
+                    <line x1="1" y1="5.5" x2="15" y2="5.5" />
+                    <line x1="5.5" y1="1" x2="5.5" y2="15" />
+                    <line x1="4.5" y1="4.5" x2="11.5" y2="11.5" strokeWidth="2" />
+                    <line x1="11.5" y1="4.5" x2="4.5" y2="11.5" strokeWidth="2" />
+                  </svg>
+                </button>
+              </div>
+            </>
+          )}
         </div>
       )}
+
+      {/* Overflow menu — outside the overflow:hidden actions container */}
+      {!isPreview && overflowIndex !== null && (
+        <div className="squisq-toolbar-overflow" ref={overflowRef}>
+          <button
+            className={`squisq-toolbar-button squisq-toolbar-overflow-trigger${showOverflow ? ' squisq-toolbar-button--active' : ''}`}
+            title="More actions"
+            onClick={() => setShowOverflow((v) => !v)}
+            aria-label="More actions"
+            aria-expanded={showOverflow}
+          >
+            ···
+          </button>
+          {showOverflow && (
+            <div className="squisq-toolbar-overflow-menu">
+              {BUTTONS.slice(overflowIndex).map((btn) => {
+                const active = isWysiwyg ? isTiptapActive(tiptapEditor, btn.id) : false;
+                const disabled = btn.id === 'image' && !mediaProvider;
+                return (
+                  <button
+                    key={btn.id}
+                    className={`squisq-toolbar-overflow-item${active ? ' squisq-toolbar-overflow-item--active' : ''}`}
+                    title={btn.title}
+                    onClick={() => {
+                      handleAction(btn.id);
+                      setShowOverflow(false);
+                    }}
+                    disabled={disabled}
+                  >
+                    {btn.id === 'table' ? (
+                      <svg
+                        width="14"
+                        height="14"
+                        viewBox="0 0 14 14"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="1.4"
+                        strokeLinecap="round"
+                      >
+                        <rect x="1" y="1" width="12" height="12" rx="1" />
+                        <line x1="1" y1="5" x2="13" y2="5" />
+                        <line x1="1" y1="9" x2="13" y2="9" />
+                        <line x1="5" y1="1" x2="5" y2="13" />
+                        <line x1="9" y1="1" x2="9" y2="13" />
+                      </svg>
+                    ) : (
+                      <span className="squisq-toolbar-overflow-icon" style={btn.iconStyle}>
+                        {btn.icon}
+                      </span>
+                    )}
+                    <span>{btn.title}</span>
+                  </button>
+                );
+              })}
+
+              {/* Contextual: template picker in overflow */}
+              {currentTemplate !== null && (
+                <div className="squisq-toolbar-overflow-item squisq-toolbar-overflow-template">
+                  <span>Template:</span>
+                  <select
+                    className="squisq-template-picker-select"
+                    value={currentTemplate}
+                    onChange={(e) => {
+                      handleTemplatePick(e.target.value);
+                      setShowOverflow(false);
+                    }}
+                  >
+                    <option value="">— none —</option>
+                    {TEMPLATE_NAMES.map((name) => (
+                      <option key={name} value={name}>
+                        {name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
+              {/* Contextual: table controls in overflow */}
+              {isInTable && (
+                <>
+                  <div
+                    className="squisq-toolbar-separator"
+                    style={{ margin: '4px 0', width: '100%', height: 1 }}
+                  />
+                  {[
+                    {
+                      label: 'Add column before',
+                      action: () => tiptapEditor!.chain().focus().addColumnBefore().run(),
+                    },
+                    {
+                      label: 'Add column after',
+                      action: () => tiptapEditor!.chain().focus().addColumnAfter().run(),
+                    },
+                    {
+                      label: 'Delete column',
+                      action: () => tiptapEditor!.chain().focus().deleteColumn().run(),
+                    },
+                    {
+                      label: 'Add row above',
+                      action: () => tiptapEditor!.chain().focus().addRowBefore().run(),
+                    },
+                    {
+                      label: 'Add row below',
+                      action: () => tiptapEditor!.chain().focus().addRowAfter().run(),
+                    },
+                    {
+                      label: 'Delete row',
+                      action: () => tiptapEditor!.chain().focus().deleteRow().run(),
+                    },
+                    {
+                      label: 'Delete table',
+                      action: () => tiptapEditor!.chain().focus().deleteTable().run(),
+                    },
+                  ].map((item) => (
+                    <button
+                      key={item.label}
+                      className={`squisq-toolbar-overflow-item${item.label.startsWith('Delete') ? ' squisq-toolbar-overflow-item--danger' : ''}`}
+                      onClick={() => {
+                        item.action();
+                        setShowOverflow(false);
+                      }}
+                    >
+                      <span>{item.label}</span>
+                    </button>
+                  ))}
+                </>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
       {/* After-actions slot — after formatting controls */}
       {slotAfterActions}
       {/* Spacer pushes right-side buttons to the end */}

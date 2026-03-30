@@ -247,7 +247,7 @@ export function PreviewToolbarControls() {
         alignItems: 'center',
         gap: '6px',
         flexWrap: 'wrap',
-        padding: '2px 0',
+        padding: '2px 0 2px 9px',
       }}
     >
       <label style={labelStyle}>Format:</label>

@@ -22,5 +22,5 @@ export { markdownDocToDocx, docToDocx } from './export.js';
 export type { DocxExportOptions } from './export.js';
 
 // Import
-export { docxToMarkdownDoc, docxToDoc } from './import.js';
+export { docxToMarkdownDoc, docxToDoc, docxToContainer } from './import.js';
 export type { DocxImportOptions } from './import.js';

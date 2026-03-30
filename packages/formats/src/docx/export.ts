@@ -53,6 +53,7 @@ import {
   REL_SETTINGS,
   REL_FONT_TABLE,
   REL_HYPERLINK,
+  REL_IMAGE,
   REL_FOOTNOTES,
   CONTENT_TYPE_DOCX_DOCUMENT,
   CONTENT_TYPE_DOCX_STYLES,
@@ -97,6 +98,12 @@ export interface DocxExportOptions {
    * the theme's primary color to headings.
    */
   themeId?: string;
+  /**
+   * Pre-resolved image data keyed by image URL/path as it appears in the
+   * markdown source. When provided, images are embedded in the .docx file
+   * as binary parts instead of emitting placeholder text.
+   */
+  images?: Map<string, { data: ArrayBuffer | Uint8Array; contentType: string }>;
 }
 
 /**
@@ -179,6 +186,11 @@ class ExportContext {
   /** Heading text color (hex without #), or undefined for default */
   readonly headingColor: string | undefined;
 
+  /** Pre-resolved image data keyed by markdown image URL */
+  readonly resolvedImages: Map<string, { data: ArrayBuffer | Uint8Array; contentType: string }>;
+
+  private nextDocPrId = 1;
+
   constructor(options: DocxExportOptions) {
     let themeFont: string | undefined;
     let themeTitleFont: string | undefined;
@@ -200,6 +212,7 @@ class ExportContext {
       ? options.defaultFontSize * 2
       : DEFAULT_FONT_SIZE_HALF_POINTS;
     this.headingColor = themeHeadingColor;
+    this.resolvedImages = options.images ?? new Map();
   }
 
   /** Allocate a new relationship ID */
@@ -217,6 +230,26 @@ class ExportContext {
       targetMode: 'External',
     });
     return id;
+  }
+
+  /** Add an embedded image and return the rId and docPrId */
+  addImage(
+    data: ArrayBuffer | Uint8Array,
+    contentType: string,
+    filename: string,
+  ): { relId: string; docPrId: number } {
+    const relId = this.allocRelId();
+    const docPrId = this.nextDocPrId++;
+    const path = `word/media/${filename}`;
+
+    this.images.push({ relId, path, data, contentType });
+    this.relationships.push({
+      id: relId,
+      type: REL_IMAGE,
+      target: `media/${filename}`,
+    });
+
+    return { relId, docPrId };
   }
 
   /** Allocate a numbering definition for a list */
@@ -535,7 +568,7 @@ function convertInline(node: MarkdownInlineNode, ctx: ExportContext, format: Inl
     case 'link':
       return convertLink(node, ctx, format);
     case 'image':
-      return convertImage(node);
+      return convertImage(node, ctx);
     case 'break':
       return `<w:r><w:br/></w:r>`;
     case 'htmlInline':
@@ -572,10 +605,6 @@ function makeRun(text: string, format: InlineFormat): string {
 
 function convertLink(node: MarkdownLink, ctx: ExportContext, format: InlineFormat): string {
   const rId = ctx.addHyperlink(node.url);
-  const _runs = convertInlines(node.children, ctx, { ...format });
-
-  // Wrap each run's rPr with hyperlink styling
-  // For simplicity, emit inline runs with hyperlink color + underline
   const styledRuns = convertInlinesWithHyperlinkStyle(node.children, ctx, format);
 
   return `<w:hyperlink r:id="${rId}">${styledRuns}</w:hyperlink>`;
@@ -615,13 +644,119 @@ function makeHyperlinkRun(text: string, format: InlineFormat): string {
   );
 }
 
-function convertImage(_node: MarkdownImage): string {
-  // Image embedding requires fetching the image data and packing it as
-  // a binary part. For now, emit a placeholder text run.
-  // Full image support can be added by fetching the URL and creating
-  // a DrawingML inline + binary media part.
-  const alt = _node.alt || _node.url;
-  return makeRun(`[Image: ${alt}]`, { italic: true });
+function convertImage(node: MarkdownImage, ctx: ExportContext): string {
+  const imageEntry = ctx.resolvedImages.get(node.url);
+  if (!imageEntry) {
+    // No resolved data — emit placeholder text
+    const alt = node.alt || node.url;
+    return makeRun(`[Image: ${alt}]`, { italic: true });
+  }
+
+  const { data, contentType } = imageEntry;
+  const ext = contentType.split('/')[1]?.replace('jpeg', 'jpg') || 'png';
+  const filename = `image${ctx.images.length + 1}.${ext}`;
+  const { relId, docPrId } = ctx.addImage(data, contentType, filename);
+
+  // Read dimensions from binary header; fall back to 5×3 inches
+  const dims = readImageDimensions(data);
+  const EMU_PER_INCH = 914400;
+  const MAX_WIDTH_EMU = 6 * EMU_PER_INCH; // 6 inch content width
+  let cx: number;
+  let cy: number;
+
+  if (dims) {
+    // Scale to fit within max width, assuming 96 DPI for pixel → inch
+    const widthEmu = (dims.width / 96) * EMU_PER_INCH;
+    const heightEmu = (dims.height / 96) * EMU_PER_INCH;
+    if (widthEmu > MAX_WIDTH_EMU) {
+      const scale = MAX_WIDTH_EMU / widthEmu;
+      cx = MAX_WIDTH_EMU;
+      cy = Math.round(heightEmu * scale);
+    } else {
+      cx = Math.round(widthEmu);
+      cy = Math.round(heightEmu);
+    }
+  } else {
+    cx = 5 * EMU_PER_INCH;
+    cy = 3 * EMU_PER_INCH;
+  }
+
+  const name = escapeXml(node.alt || filename);
+  const NS_A = 'http://schemas.openxmlformats.org/drawingml/2006/main';
+  const NS_PIC = 'http://schemas.openxmlformats.org/drawingml/2006/picture';
+
+  return (
+    `<w:r><w:drawing>` +
+    `<wp:inline distT="0" distB="0" distL="0" distR="0">` +
+    `<wp:extent cx="${cx}" cy="${cy}"/>` +
+    `<wp:docPr id="${docPrId}" name="${name}"/>` +
+    `<wp:cNvGraphicFramePr>` +
+    `<a:graphicFrameLocks xmlns:a="${NS_A}" noChangeAspect="1"/>` +
+    `</wp:cNvGraphicFramePr>` +
+    `<a:graphic xmlns:a="${NS_A}">` +
+    `<a:graphicData uri="${NS_PIC}">` +
+    `<pic:pic xmlns:pic="${NS_PIC}">` +
+    `<pic:nvPicPr>` +
+    `<pic:cNvPr id="0" name="${name}"/>` +
+    `<pic:cNvPicPr/>` +
+    `</pic:nvPicPr>` +
+    `<pic:blipFill>` +
+    `<a:blip r:embed="${relId}"/>` +
+    `<a:stretch><a:fillRect/></a:stretch>` +
+    `</pic:blipFill>` +
+    `<pic:spPr>` +
+    `<a:xfrm>` +
+    `<a:off x="0" y="0"/>` +
+    `<a:ext cx="${cx}" cy="${cy}"/>` +
+    `</a:xfrm>` +
+    `<a:prstGeom prst="rect"><a:avLst/></a:prstGeom>` +
+    `</pic:spPr>` +
+    `</pic:pic>` +
+    `</a:graphicData>` +
+    `</a:graphic>` +
+    `</wp:inline>` +
+    `</w:drawing></w:r>`
+  );
+}
+
+/** Read width/height from PNG or JPEG binary headers. */
+function readImageDimensions(
+  data: ArrayBuffer | Uint8Array,
+): { width: number; height: number } | null {
+  const bytes = data instanceof Uint8Array ? data : new Uint8Array(data);
+  if (bytes.length < 24) return null;
+
+  // PNG: signature 0x89504E47, IHDR chunk at byte 16
+  if (bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4e && bytes[3] === 0x47) {
+    const width = (bytes[16] << 24) | (bytes[17] << 16) | (bytes[18] << 8) | bytes[19];
+    const height = (bytes[20] << 24) | (bytes[21] << 16) | (bytes[22] << 8) | bytes[23];
+    return { width, height };
+  }
+
+  // JPEG: search for SOF0 (0xFFC0) or SOF2 (0xFFC2) marker
+  if (bytes[0] === 0xff && bytes[1] === 0xd8) {
+    let offset = 2;
+    while (offset < bytes.length - 9) {
+      if (bytes[offset] !== 0xff) break;
+      const marker = bytes[offset + 1];
+      if (marker === 0xc0 || marker === 0xc2) {
+        const height = (bytes[offset + 5] << 8) | bytes[offset + 6];
+        const width = (bytes[offset + 7] << 8) | bytes[offset + 8];
+        return { width, height };
+      }
+      const segLen = (bytes[offset + 2] << 8) | bytes[offset + 3];
+      offset += 2 + segLen;
+    }
+  }
+
+  // GIF: width at bytes 6-7, height at bytes 8-9 (little-endian)
+  if (bytes[0] === 0x47 && bytes[1] === 0x49 && bytes[2] === 0x46) {
+    const width = bytes[6] | (bytes[7] << 8);
+    const height = bytes[8] | (bytes[9] << 8);
+    return { width, height };
+  }
+
+  return null;
 }
 
 function convertFootnoteRef(node: MarkdownFootnoteReference, ctx: ExportContext): string {

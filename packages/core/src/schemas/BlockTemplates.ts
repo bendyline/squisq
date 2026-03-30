@@ -430,6 +430,24 @@ export interface VideoPullQuoteInput extends BaseTemplateBlock {
 }
 
 /**
+ * Data table - renders a themed table with headers and rows.
+ * Ideal for structured data, comparisons, and reference information.
+ */
+export interface DataTableInput extends BaseTemplateBlock {
+  template: 'dataTable';
+  /** Optional title displayed above the table */
+  title?: string;
+  /** Header cell values */
+  headers: string[];
+  /** Data rows (array of cell value arrays) */
+  rows: string[][];
+  /** Per-column alignment */
+  align?: (('left' | 'right' | 'center') | null)[];
+  /** Color scheme for the table header */
+  colorScheme?: ColorScheme;
+}
+
+/**
  * Union of all template block types.
  */
 export type TemplateBlock =
@@ -449,7 +467,8 @@ export type TemplateBlock =
   | ComparisonBarInput
   | PullQuoteInput
   | VideoWithCaptionInput
-  | VideoPullQuoteInput;
+  | VideoPullQuoteInput
+  | DataTableInput;
 
 /**
  * A block can be either a raw Block or a TemplateBlock.
