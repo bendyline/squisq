@@ -217,9 +217,7 @@ function extractListItems(contents?: MarkdownBlockNode[]): string[] {
 }
 
 /** Extract table data (headers, rows, alignment) from block contents. */
-function extractTableData(
-  contents?: MarkdownBlockNode[],
-): {
+function extractTableData(contents?: MarkdownBlockNode[]): {
   headers: string[];
   rows: string[][];
   align?: (('left' | 'right' | 'center') | null)[];

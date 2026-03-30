@@ -17,12 +17,12 @@ Open-source monorepo providing reusable libraries for document/block rendering, 
 
 ## Packages
 
-| Package                                                   | Description                                                              |
-| --------------------------------------------------------- | ------------------------------------------------------------------------ |
-| [`@bendyline/squisq`](packages/core)                      | Headless utilities — schemas, templates, spatial math, Markdown, storage |
-| [`@bendyline/squisq-react`](packages/react)               | React components — DocPlayer, BlockRenderer, layers, hooks               |
-| [`@bendyline/squisq-formats`](packages/formats)           | Format converters — DOCX, PDF, OOXML import/export                       |
-| [`@bendyline/squisq-editor-react`](packages/editor-react) | React editor shell — raw/WYSIWYG/preview modes                           |
+| Package                                                   | Description                                                               |
+| --------------------------------------------------------- | ------------------------------------------------------------------------- |
+| [`@bendyline/squisq`](packages/core)                      | Headless utilities — schemas, templates, spatial math, Markdown, storage  |
+| [`@bendyline/squisq-react`](packages/react)               | React components — DocPlayer, BlockRenderer, layers, hooks                |
+| [`@bendyline/squisq-formats`](packages/formats)           | Format converters — DOCX, PDF, OOXML import/export                        |
+| [`@bendyline/squisq-editor-react`](packages/editor-react) | React editor shell — raw/WYSIWYG/preview modes                            |
 | [`@bendyline/squisq-video-react`](packages/video-react)   | React components for browser-based video export (WebCodecs + ffmpeg.wasm) |
 | [`@bendyline/squisq-cli`](packages/cli)                   | CLI tool — document conversion and MP4 video rendering                    |
 

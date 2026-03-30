@@ -249,28 +249,28 @@ interface TemplateContext {
 
 ##### Built-in Template Block Inputs
 
-| Template            | Key Input Fields                                                |
-| ------------------- | --------------------------------------------------------------- |
-| `titleBlock`        | `title`, `subtitle?`, `backgroundImage?`, `backgroundGradient?` |
-| `textBlock`         | `heading?`, `body`, `backgroundImage?`                          |
-| `imageBlock`        | `src`, `alt?`, `caption?`, `objectFit?`                         |
-| `twoColumnBlock`    | `leftContent`, `rightContent`, `heading?`                       |
-| `quoteBlock`        | `quote`, `attribution?`, `backgroundImage?`                     |
-| `statHighlight`     | `value`, `label`, `description?`, `trend?`, `trendDirection?`   |
-| `timelineBlock`     | `events[]` (each: `date`, `title`, `description?`)              |
-| `comparisonBlock`   | `items[]` (each: `title`, `features[]`), `heading?`             |
-| `mapBlock`          | `center`, `zoom?`, `markers?`, `tileUrl?`, `heading?`           |
-| `videoBlock`        | `src`, `poster?`, `caption?`, `autoplay?`, `loop?`              |
-| `codeBlock`         | `code`, `language?`, `heading?`, `theme?`                       |
-| `chartBlock`        | `chartType`, `data`, `heading?`, `description?`                 |
-| `bulletListBlock`   | `heading?`, `items[]`, `icon?`, `backgroundImage?`              |
-| `numberedListBlock` | `heading?`, `items[]`, `startNumber?`                           |
-| `tableBlock`        | `heading?`, `headers[]`, `rows[][]`                             |
-| `calloutBlock`      | `type` (`info`/`warning`/`success`/`error`), `heading?`, `body` |
-| `dividerBlock`      | `style?` (`solid`/`dashed`/`dotted`/`gradient`), `color?`       |
+| Template            | Key Input Fields                                                                             |
+| ------------------- | -------------------------------------------------------------------------------------------- |
+| `titleBlock`        | `title`, `subtitle?`, `backgroundImage?`, `backgroundGradient?`                              |
+| `textBlock`         | `heading?`, `body`, `backgroundImage?`                                                       |
+| `imageBlock`        | `src`, `alt?`, `caption?`, `objectFit?`                                                      |
+| `twoColumnBlock`    | `leftContent`, `rightContent`, `heading?`                                                    |
+| `quoteBlock`        | `quote`, `attribution?`, `backgroundImage?`                                                  |
+| `statHighlight`     | `value`, `label`, `description?`, `trend?`, `trendDirection?`                                |
+| `timelineBlock`     | `events[]` (each: `date`, `title`, `description?`)                                           |
+| `comparisonBlock`   | `items[]` (each: `title`, `features[]`), `heading?`                                          |
+| `mapBlock`          | `center`, `zoom?`, `markers?`, `tileUrl?`, `heading?`                                        |
+| `videoBlock`        | `src`, `poster?`, `caption?`, `autoplay?`, `loop?`                                           |
+| `codeBlock`         | `code`, `language?`, `heading?`, `theme?`                                                    |
+| `chartBlock`        | `chartType`, `data`, `heading?`, `description?`                                              |
+| `bulletListBlock`   | `heading?`, `items[]`, `icon?`, `backgroundImage?`                                           |
+| `numberedListBlock` | `heading?`, `items[]`, `startNumber?`                                                        |
+| `tableBlock`        | `heading?`, `headers[]`, `rows[][]`                                                          |
+| `calloutBlock`      | `type` (`info`/`warning`/`success`/`error`), `heading?`, `body`                              |
+| `dividerBlock`      | `style?` (`solid`/`dashed`/`dotted`/`gradient`), `color?`                                    |
 | `videoWithCaption`  | `videoSrc`, `videoAlt`, `clipStart`, `clipEnd`, `caption?`, `captionPosition?`, `posterSrc?` |
-| `videoPullQuote`    | `text`, `attribution?`, `backgroundVideo` (with `src`, `clipStart`, `clipEnd`) |
-| `dataTable`         | `title?`, `headers[]`, `rows[][]`, `align?`, `colorScheme?`    |
+| `videoPullQuote`    | `text`, `attribution?`, `backgroundVideo` (with `src`, `clipStart`, `clipEnd`)               |
+| `dataTable`         | `title?`, `headers[]`, `rows[][]`, `align?`, `colorScheme?`                                  |
 
 > All template inputs extend a common `TemplateBlockInput` base with optional `backgroundGradient`, `backgroundImage`, and `backgroundColor`.
 
@@ -714,13 +714,13 @@ interface MarkdownRendererProps {
 
 Layer components used internally by `BlockRenderer`. Can be used standalone for custom rendering.
 
-| Component    | Props Summary                                                |
-| ------------ | ------------------------------------------------------------ |
-| `ImageLayer` | `layer: Layer`, `viewport: ViewportConfig`, `mediaProvider?` |
-| `TextLayer`  | `layer: Layer`, `viewport: ViewportConfig`                   |
-| `ShapeLayer` | `layer: Layer`, `viewport: ViewportConfig`                   |
-| `VideoLayer` | `layer: Layer`, `viewport: ViewportConfig`, `mediaProvider?` |
-| `MapLayer`   | `layer: Layer`, `viewport: ViewportConfig`                   |
+| Component    | Props Summary                                                        |
+| ------------ | -------------------------------------------------------------------- |
+| `ImageLayer` | `layer: Layer`, `viewport: ViewportConfig`, `mediaProvider?`         |
+| `TextLayer`  | `layer: Layer`, `viewport: ViewportConfig`                           |
+| `ShapeLayer` | `layer: Layer`, `viewport: ViewportConfig`                           |
+| `VideoLayer` | `layer: Layer`, `viewport: ViewportConfig`, `mediaProvider?`         |
+| `MapLayer`   | `layer: Layer`, `viewport: ViewportConfig`                           |
 | `TableLayer` | `layer: TableLayer`, `viewport: ViewportConfig`, `blockTime: number` |
 
 ### React Hooks
