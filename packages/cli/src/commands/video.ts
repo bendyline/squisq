@@ -148,7 +148,9 @@ async function runVideo(inputPath: string, opts: VideoCommandOptions): Promise<v
   });
 
   clearProgress();
-  console.error(`  ✓ ${outputPath} (${result2.duration.toFixed(1)}s, ${result2.frameCount} frames)`);
+  console.error(
+    `  ✓ ${outputPath} (${result2.duration.toFixed(1)}s, ${result2.frameCount} frames)`,
+  );
   console.error('Done.');
 }
 

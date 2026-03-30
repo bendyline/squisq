@@ -66,9 +66,7 @@ describe('dataTable template', () => {
     const textLayers = layers.filter((l) => l.type === 'text');
 
     expect(textLayers.length).toBeGreaterThanOrEqual(1);
-    const titleLayer = textLayers.find(
-      (l) => l.type === 'text' && l.content.text === 'My Table',
-    );
+    const titleLayer = textLayers.find((l) => l.type === 'text' && l.content.text === 'My Table');
     expect(titleLayer).toBeDefined();
   });
 
@@ -87,10 +85,7 @@ describe('dataTable template', () => {
   });
 
   it('passes column alignment to the table layer', () => {
-    const layers = getLayers(
-      makeDataTableBlock({ align: ['left', 'right'] }),
-      defaultContext,
-    );
+    const layers = getLayers(makeDataTableBlock({ align: ['left', 'right'] }), defaultContext);
     const tableLayer = layers.find((l) => l.type === 'table') as TableLayer;
 
     expect(tableLayer.content.align).toEqual(['left', 'right']);
@@ -133,10 +128,7 @@ describe('dataTable template', () => {
   });
 
   it('handles empty rows gracefully', () => {
-    const layers = getLayers(
-      makeDataTableBlock({ headers: ['A', 'B'], rows: [] }),
-      defaultContext,
-    );
+    const layers = getLayers(makeDataTableBlock({ headers: ['A', 'B'], rows: [] }), defaultContext);
     const tableLayer = layers.find((l) => l.type === 'table') as TableLayer;
     expect(tableLayer.content.rows).toEqual([]);
   });
