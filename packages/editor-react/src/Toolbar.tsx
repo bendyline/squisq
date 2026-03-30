@@ -159,7 +159,9 @@ export function Toolbar({
 
     const measure = () => {
       const containerRight = container.getBoundingClientRect().right;
-      const children = container.querySelectorAll<HTMLElement>(':scope > .squisq-toolbar-group > .squisq-toolbar-button');
+      const children = container.querySelectorAll<HTMLElement>(
+        ':scope > .squisq-toolbar-group > .squisq-toolbar-button',
+      );
       let firstHidden: number | null = null;
       children.forEach((child, i) => {
         if (firstHidden !== null) return;
@@ -252,11 +254,7 @@ export function Toolbar({
           break;
         }
         case 'table':
-          tiptapEditor
-            .chain()
-            .focus()
-            .insertTable({ rows: 3, cols: 3, withHeaderRow: true })
-            .run();
+          tiptapEditor.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run();
           break;
       }
     },
@@ -445,11 +443,7 @@ export function Toolbar({
       const altText = file.name.replace(/\.[^.]+$/, '').replace(/[-_]/g, ' ');
 
       if (activeView === 'wysiwyg' && tiptapEditor) {
-        tiptapEditor
-          .chain()
-          .focus()
-          .setImage({ src: relativePath, alt: altText })
-          .run();
+        tiptapEditor.chain().focus().setImage({ src: relativePath, alt: altText }).run();
       } else if (monacoEditor) {
         const selection = monacoEditor.getSelection();
         const model = monacoEditor.getModel();
@@ -569,7 +563,15 @@ export function Toolbar({
                     style={btn.iconStyle}
                   >
                     {btn.id === 'table' ? (
-                      <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round">
+                      <svg
+                        width="14"
+                        height="14"
+                        viewBox="0 0 14 14"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="1.4"
+                        strokeLinecap="round"
+                      >
                         <rect x="1" y="1" width="12" height="12" rx="1" />
                         <line x1="1" y1="5" x2="13" y2="5" />
                         <line x1="1" y1="9" x2="13" y2="9" />
@@ -614,7 +616,15 @@ export function Toolbar({
                         disabled={disabled}
                       >
                         {btn.id === 'table' ? (
-                          <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round">
+                          <svg
+                            width="14"
+                            height="14"
+                            viewBox="0 0 14 14"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="1.4"
+                            strokeLinecap="round"
+                          >
                             <rect x="1" y="1" width="12" height="12" rx="1" />
                             <line x1="1" y1="5" x2="13" y2="5" />
                             <line x1="1" y1="9" x2="13" y2="9" />
@@ -638,131 +648,184 @@ export function Toolbar({
       )}
 
       {/* Template picker — visible when cursor is in a heading (WYSIWYG) */}
-        {currentTemplate !== null && (
-          <>
-            <div className="squisq-toolbar-separator" />
-            <div className="squisq-toolbar-group squisq-template-picker">
-              <label
-                className="squisq-template-picker-label"
-                title="Block template for this heading"
+      {currentTemplate !== null && (
+        <>
+          <div className="squisq-toolbar-separator" />
+          <div className="squisq-toolbar-group squisq-template-picker">
+            <label className="squisq-template-picker-label" title="Block template for this heading">
+              Template:
+              <select
+                className="squisq-template-picker-select"
+                value={currentTemplate}
+                onChange={(e) => handleTemplatePick(e.target.value)}
               >
-                Template:
-                <select
-                  className="squisq-template-picker-select"
-                  value={currentTemplate}
-                  onChange={(e) => handleTemplatePick(e.target.value)}
-                >
-                  <option value="">— none —</option>
-                  {templateNames.map((name) => (
-                    <option key={name} value={name}>
-                      {name}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            </div>
-          </>
-        )}
+                <option value="">— none —</option>
+                {templateNames.map((name) => (
+                  <option key={name} value={name}>
+                    {name}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
+        </>
+      )}
 
-        {/* Table controls — visible when cursor is in a table (WYSIWYG) */}
-        {isInTable && (
-          <>
-            <div className="squisq-toolbar-separator" />
-            <div className="squisq-toolbar-group squisq-table-controls">
-              <span className="squisq-table-controls-label">Table:</span>
-              <button
-                className="squisq-toolbar-button"
-                title="Add column before"
-                onClick={() => tiptapEditor!.chain().focus().addColumnBefore().run()}
-                aria-label="Add column before"
+      {/* Table controls — visible when cursor is in a table (WYSIWYG) */}
+      {isInTable && (
+        <>
+          <div className="squisq-toolbar-separator" />
+          <div className="squisq-toolbar-group squisq-table-controls">
+            <span className="squisq-table-controls-label">Table:</span>
+            <button
+              className="squisq-toolbar-button"
+              title="Add column before"
+              onClick={() => tiptapEditor!.chain().focus().addColumnBefore().run()}
+              aria-label="Add column before"
+            >
+              <svg
+                width="16"
+                height="16"
+                viewBox="0 0 16 16"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.5"
+                strokeLinecap="round"
               >
-                <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
-                  <rect x="7" y="2" width="8" height="12" rx="1" />
-                  <line x1="11" y1="2" x2="11" y2="14" />
-                  <line x1="1" y1="8" x2="4.5" y2="8" />
-                  <line x1="2.75" y1="6.25" x2="2.75" y2="9.75" />
-                </svg>
-              </button>
-              <button
-                className="squisq-toolbar-button"
-                title="Add column after"
-                onClick={() => tiptapEditor!.chain().focus().addColumnAfter().run()}
-                aria-label="Add column after"
+                <rect x="7" y="2" width="8" height="12" rx="1" />
+                <line x1="11" y1="2" x2="11" y2="14" />
+                <line x1="1" y1="8" x2="4.5" y2="8" />
+                <line x1="2.75" y1="6.25" x2="2.75" y2="9.75" />
+              </svg>
+            </button>
+            <button
+              className="squisq-toolbar-button"
+              title="Add column after"
+              onClick={() => tiptapEditor!.chain().focus().addColumnAfter().run()}
+              aria-label="Add column after"
+            >
+              <svg
+                width="16"
+                height="16"
+                viewBox="0 0 16 16"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.5"
+                strokeLinecap="round"
               >
-                <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
-                  <rect x="1" y="2" width="8" height="12" rx="1" />
-                  <line x1="5" y1="2" x2="5" y2="14" />
-                  <line x1="11.5" y1="8" x2="15" y2="8" />
-                  <line x1="13.25" y1="6.25" x2="13.25" y2="9.75" />
-                </svg>
-              </button>
-              <button
-                className="squisq-toolbar-button"
-                title="Delete column"
-                onClick={() => tiptapEditor!.chain().focus().deleteColumn().run()}
-                aria-label="Delete column"
+                <rect x="1" y="2" width="8" height="12" rx="1" />
+                <line x1="5" y1="2" x2="5" y2="14" />
+                <line x1="11.5" y1="8" x2="15" y2="8" />
+                <line x1="13.25" y1="6.25" x2="13.25" y2="9.75" />
+              </svg>
+            </button>
+            <button
+              className="squisq-toolbar-button"
+              title="Delete column"
+              onClick={() => tiptapEditor!.chain().focus().deleteColumn().run()}
+              aria-label="Delete column"
+            >
+              <svg
+                width="16"
+                height="16"
+                viewBox="0 0 16 16"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.5"
+                strokeLinecap="round"
               >
-                <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
-                  <rect x="4" y="1" width="8" height="14" rx="1" />
-                  <line x1="6" y1="5.5" x2="10" y2="10.5" />
-                  <line x1="10" y1="5.5" x2="6" y2="10.5" />
-                </svg>
-              </button>
-              <button
-                className="squisq-toolbar-button"
-                title="Add row above"
-                onClick={() => tiptapEditor!.chain().focus().addRowBefore().run()}
-                aria-label="Add row above"
+                <rect x="4" y="1" width="8" height="14" rx="1" />
+                <line x1="6" y1="5.5" x2="10" y2="10.5" />
+                <line x1="10" y1="5.5" x2="6" y2="10.5" />
+              </svg>
+            </button>
+            <button
+              className="squisq-toolbar-button"
+              title="Add row above"
+              onClick={() => tiptapEditor!.chain().focus().addRowBefore().run()}
+              aria-label="Add row above"
+            >
+              <svg
+                width="16"
+                height="16"
+                viewBox="0 0 16 16"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.5"
+                strokeLinecap="round"
               >
-                <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
-                  <rect x="2" y="6" width="12" height="9" rx="1" />
-                  <line x1="2" y1="10.5" x2="14" y2="10.5" />
-                  <line x1="8" y1="1" x2="8" y2="4.5" />
-                  <line x1="6.25" y1="2.75" x2="9.75" y2="2.75" />
-                </svg>
-              </button>
-              <button
-                className="squisq-toolbar-button"
-                title="Add row below"
-                onClick={() => tiptapEditor!.chain().focus().addRowAfter().run()}
-                aria-label="Add row below"
+                <rect x="2" y="6" width="12" height="9" rx="1" />
+                <line x1="2" y1="10.5" x2="14" y2="10.5" />
+                <line x1="8" y1="1" x2="8" y2="4.5" />
+                <line x1="6.25" y1="2.75" x2="9.75" y2="2.75" />
+              </svg>
+            </button>
+            <button
+              className="squisq-toolbar-button"
+              title="Add row below"
+              onClick={() => tiptapEditor!.chain().focus().addRowAfter().run()}
+              aria-label="Add row below"
+            >
+              <svg
+                width="16"
+                height="16"
+                viewBox="0 0 16 16"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.5"
+                strokeLinecap="round"
               >
-                <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
-                  <rect x="2" y="1" width="12" height="9" rx="1" />
-                  <line x1="2" y1="5.5" x2="14" y2="5.5" />
-                  <line x1="8" y1="11.5" x2="8" y2="15" />
-                  <line x1="6.25" y1="13.25" x2="9.75" y2="13.25" />
-                </svg>
-              </button>
-              <button
-                className="squisq-toolbar-button"
-                title="Delete row"
-                onClick={() => tiptapEditor!.chain().focus().deleteRow().run()}
-                aria-label="Delete row"
+                <rect x="2" y="1" width="12" height="9" rx="1" />
+                <line x1="2" y1="5.5" x2="14" y2="5.5" />
+                <line x1="8" y1="11.5" x2="8" y2="15" />
+                <line x1="6.25" y1="13.25" x2="9.75" y2="13.25" />
+              </svg>
+            </button>
+            <button
+              className="squisq-toolbar-button"
+              title="Delete row"
+              onClick={() => tiptapEditor!.chain().focus().deleteRow().run()}
+              aria-label="Delete row"
+            >
+              <svg
+                width="16"
+                height="16"
+                viewBox="0 0 16 16"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.5"
+                strokeLinecap="round"
               >
-                <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
-                  <rect x="1" y="4" width="14" height="8" rx="1" />
-                  <line x1="5.5" y1="6" x2="10.5" y2="10" />
-                  <line x1="10.5" y1="6" x2="5.5" y2="10" />
-                </svg>
-              </button>
-              <button
-                className="squisq-toolbar-button squisq-toolbar-button--danger"
-                title="Delete table"
-                onClick={() => tiptapEditor!.chain().focus().deleteTable().run()}
-                aria-label="Delete table"
+                <rect x="1" y="4" width="14" height="8" rx="1" />
+                <line x1="5.5" y1="6" x2="10.5" y2="10" />
+                <line x1="10.5" y1="6" x2="5.5" y2="10" />
+              </svg>
+            </button>
+            <button
+              className="squisq-toolbar-button squisq-toolbar-button--danger"
+              title="Delete table"
+              onClick={() => tiptapEditor!.chain().focus().deleteTable().run()}
+              aria-label="Delete table"
+            >
+              <svg
+                width="16"
+                height="16"
+                viewBox="0 0 16 16"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.5"
+                strokeLinecap="round"
               >
-                <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
-                  <rect x="1" y="1" width="14" height="14" rx="1" />
-                  <line x1="1" y1="5.5" x2="15" y2="5.5" />
-                  <line x1="5.5" y1="1" x2="5.5" y2="15" />
-                  <line x1="4.5" y1="4.5" x2="11.5" y2="11.5" strokeWidth="2" />
-                  <line x1="11.5" y1="4.5" x2="4.5" y2="11.5" strokeWidth="2" />
-                </svg>
-              </button>
-            </div>
-          </>
-        )}
+                <rect x="1" y="1" width="14" height="14" rx="1" />
+                <line x1="1" y1="5.5" x2="15" y2="5.5" />
+                <line x1="5.5" y1="1" x2="5.5" y2="15" />
+                <line x1="4.5" y1="4.5" x2="11.5" y2="11.5" strokeWidth="2" />
+                <line x1="11.5" y1="4.5" x2="4.5" y2="11.5" strokeWidth="2" />
+              </svg>
+            </button>
+          </div>
+        </>
+      )}
       {/* After-actions slot — after formatting controls */}
       {slotAfterActions}
       {/* Spacer pushes right-side buttons to the end */}

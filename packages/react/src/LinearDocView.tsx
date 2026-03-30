@@ -219,7 +219,11 @@ function extractListItems(contents?: MarkdownBlockNode[]): string[] {
 /** Extract table data (headers, rows, alignment) from block contents. */
 function extractTableData(
   contents?: MarkdownBlockNode[],
-): { headers: string[]; rows: string[][]; align?: (('left' | 'right' | 'center') | null)[] } | null {
+): {
+  headers: string[];
+  rows: string[][];
+  align?: (('left' | 'right' | 'center') | null)[];
+} | null {
   if (!contents) return null;
   for (const node of contents) {
     if (node.type === 'table') {
@@ -227,9 +231,7 @@ function extractTableData(
       const [headerRow, ...bodyRows] = table.children;
       if (!headerRow) return null;
       const headers = headerRow.children.map((cell) => extractPlainText(cell).trim());
-      const rows = bodyRows.map((row) =>
-        row.children.map((cell) => extractPlainText(cell).trim()),
-      );
+      const rows = bodyRows.map((row) => row.children.map((cell) => extractPlainText(cell).trim()));
       return { headers, rows, align: table.align };
     }
   }

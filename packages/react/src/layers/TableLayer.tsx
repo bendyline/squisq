@@ -28,9 +28,7 @@ export function TableLayer({ layer, viewport, blockTime }: TableLayerProps) {
   const x = resolveValue(position.x, viewport.width);
   const y = resolveValue(position.y, viewport.height);
   const width = position.width ? resolveValue(position.width, viewport.width) : viewport.width;
-  const height = position.height
-    ? resolveValue(position.height, viewport.height)
-    : viewport.height;
+  const height = position.height ? resolveValue(position.height, viewport.height) : viewport.height;
 
   // Apply anchor offset
   const offset = getAnchorOffset(position.anchor, width, height);
@@ -48,13 +46,7 @@ export function TableLayer({ layer, viewport, blockTime }: TableLayerProps) {
   const borderRadius = style.borderRadius ?? 8;
 
   return (
-    <foreignObject
-      x={finalX}
-      y={finalY}
-      width={width}
-      height={height}
-      style={animStyle}
-    >
+    <foreignObject x={finalX} y={finalY} width={width} height={height} style={animStyle}>
       <div
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         {...({ xmlns: 'http://www.w3.org/1999/xhtml' } as any)}
@@ -89,11 +81,13 @@ export function TableLayer({ layer, viewport, blockTime }: TableLayerProps) {
                     style={{
                       background: style.headerBackground,
                       color: style.headerColor,
-                      fontFamily: style.headerFontFamily ?? style.fontFamily ?? 'system-ui, sans-serif',
+                      fontFamily:
+                        style.headerFontFamily ?? style.fontFamily ?? 'system-ui, sans-serif',
                       fontWeight: 600,
                       padding: '12px 16px',
                       borderBottom: `2px solid ${style.borderColor}`,
-                      borderRight: ci < headers.length - 1 ? `1px solid ${style.borderColor}` : undefined,
+                      borderRight:
+                        ci < headers.length - 1 ? `1px solid ${style.borderColor}` : undefined,
                       ...cellAlign(ci),
                     }}
                   >
@@ -114,8 +108,10 @@ export function TableLayer({ layer, viewport, blockTime }: TableLayerProps) {
                         background: style.cellBackground,
                         color: style.cellColor,
                         padding: '10px 16px',
-                        borderBottom: ri < rows.length - 1 ? `1px solid ${style.borderColor}` : undefined,
-                        borderRight: ci < row.length - 1 ? `1px solid ${style.borderColor}` : undefined,
+                        borderBottom:
+                          ri < rows.length - 1 ? `1px solid ${style.borderColor}` : undefined,
+                        borderRight:
+                          ci < row.length - 1 ? `1px solid ${style.borderColor}` : undefined,
                         ...cellAlign(ci),
                       }}
                     >

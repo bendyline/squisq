@@ -72,11 +72,9 @@ export function markdownToTiptap(markdown: string): string {
     }
 
     // Validate: need at least 2 lines and second must be a separator
-    const separatorCells =
-      tableLines.length >= 2 ? parseTableCells(tableLines[1]) : [];
+    const separatorCells = tableLines.length >= 2 ? parseTableCells(tableLines[1]) : [];
     const isSeparator =
-      separatorCells.length > 0 &&
-      separatorCells.every((cell) => /^:?-+:?$/.test(cell.trim()));
+      separatorCells.length > 0 && separatorCells.every((cell) => /^:?-+:?$/.test(cell.trim()));
 
     if (tableLines.length < 2 || !isSeparator) {
       // Not a valid table — render accumulated lines as paragraphs
@@ -116,9 +114,7 @@ export function markdownToTiptap(markdown: string): string {
       })
       .join('');
 
-    outputBlocks.push(
-      `<table><thead><tr>${thHtml}</tr></thead><tbody>${bodyHtml}</tbody></table>`,
-    );
+    outputBlocks.push(`<table><thead><tr>${thHtml}</tr></thead><tbody>${bodyHtml}</tbody></table>`);
 
     inTable = false;
     tableLines = [];

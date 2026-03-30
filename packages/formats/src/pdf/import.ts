@@ -200,9 +200,13 @@ async function extractImages(data: Uint8Array): Promise<ExtractedImage[]> {
 
   let pdfjsLib: PdfjsLib & { OPS?: Record<string, number> };
   try {
-    pdfjsLib = (await import('pdfjs-dist/legacy/build/pdf.mjs')) as any;
+    pdfjsLib = (await import('pdfjs-dist/legacy/build/pdf.mjs')) as unknown as PdfjsLib & {
+      OPS?: Record<string, number>;
+    };
   } catch {
-    pdfjsLib = (await import('pdfjs-dist')) as any;
+    pdfjsLib = (await import('pdfjs-dist')) as unknown as PdfjsLib & {
+      OPS?: Record<string, number>;
+    };
   }
 
   await applyWorkerConfig(pdfjsLib);
@@ -220,7 +224,7 @@ async function extractImages(data: Uint8Array): Promise<ExtractedImage[]> {
   let counter = 0;
 
   for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
-    const page = await pdf.getPage(pageNum) as PdfjsPageFull;
+    const page = (await pdf.getPage(pageNum)) as PdfjsPageFull;
     if (!page.getOperatorList) continue;
 
     const opList = await page.getOperatorList();
@@ -230,7 +234,7 @@ async function extractImages(data: Uint8Array): Promise<ExtractedImage[]> {
       if (opList.fnArray[i] !== OPS_paintImageXObject) continue;
 
       const imgName = opList.argsArray[i]?.[0];
-      if (!imgName || seen.has(imgName)) continue;
+      if (!imgName || typeof imgName !== 'string' || seen.has(imgName)) continue;
       seen.add(imgName);
 
       try {
@@ -266,8 +270,8 @@ interface PdfjsImageData {
 
 /** Extended PdfjsPage with operator list and objs access. */
 interface PdfjsPageFull extends PdfjsPage {
-  getOperatorList(): Promise<{ fnArray: number[]; argsArray: any[][] }>;
-  objs?: { get(name: string): any; has?(name: string): boolean };
+  getOperatorList(): Promise<{ fnArray: number[]; argsArray: unknown[][] }>;
+  objs?: { get(name: string): unknown; has?(name: string): boolean };
 }
 
 /** Encode pdfjs image data to PNG using a canvas element. */
