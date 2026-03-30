@@ -31,6 +31,8 @@
 
 .squisq-view-tab {
   padding: 6px 16px;
+  min-width: 72px;
+  text-align: center;
   border: none;
   background: transparent;
   color: #6b7280;
@@ -60,6 +62,7 @@
   flex-wrap: nowrap;
   padding: 0 12px 0 0;
   gap: 2px;
+  background: rgba(0, 0, 0, 0.07);
 }
 
 /* ─── View Tabs (inside toolbar) ─────────────────────── */
@@ -67,9 +70,9 @@
 .squisq-toolbar-view-tabs {
   display: flex;
   gap: 0;
-  margin-right: 12px;
+  margin-right: 0;
   padding: 0 16px 0 12px;
-  background: rgba(0, 0, 0, 0.07);
+  background: #ffffff;
   border-right: 1px solid rgba(0, 0, 0, 0.12);
   align-self: stretch;
   align-items: center;
@@ -96,6 +99,15 @@
   transition:
     color 0.15s,
     border-color 0.15s;
+}
+
+.squisq-toolbar-view-tab::after {
+  content: attr(data-label);
+  display: block;
+  font-weight: 600;
+  height: 0;
+  overflow: hidden;
+  visibility: hidden;
 }
 
 .squisq-toolbar-view-tab:hover {
@@ -589,11 +601,11 @@
 
 /* Toolbar */
 .squisq-editor-shell[data-theme='dark'] .squisq-toolbar {
-  /* no border-top — sits directly in header */
+  background: rgba(255, 255, 255, 0.08);
 }
 
 .squisq-editor-shell[data-theme='dark'] .squisq-toolbar-view-tabs {
-  background: rgba(255, 255, 255, 0.08);
+  background: #111827;
   border-right-color: rgba(255, 255, 255, 0.15);
 }
 

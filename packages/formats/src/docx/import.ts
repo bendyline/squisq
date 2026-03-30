@@ -46,9 +46,11 @@ import type {
   MarkdownFootnoteDefinition,
 } from '@bendyline/squisq/markdown';
 
-import { openPackage, getPartXml, getPartRelationships } from '../ooxml/reader.js';
+import { openPackage, getPartXml, getPartBinary, getPartRelationships } from '../ooxml/reader.js';
 import type { OoxmlPackage, Relationship } from '../ooxml/types.js';
 import { NS_WML, NS_R } from '../ooxml/namespaces.js';
+import { MemoryContentContainer } from '@bendyline/squisq/storage';
+import type { ContentContainer } from '@bendyline/squisq/storage';
 import {
   HEADING_STYLE_MAP,
   QUOTE_STYLE_IDS,
@@ -119,6 +121,56 @@ export async function docxToDoc(
   return markdownToDoc(markdownDoc);
 }
 
+/**
+ * Convert a .docx file to a ContentContainer with markdown + extracted images.
+ *
+ * The container will contain:
+ * - The primary markdown document (index.md)
+ * - Any embedded images under images/ (e.g., images/image1.png)
+ *
+ * @param data - The raw .docx file as ArrayBuffer or Blob
+ * @param options - Import options
+ * @returns A ContentContainer with the document and its media
+ */
+export async function docxToContainer(
+  data: ArrayBuffer | Blob,
+  options: DocxImportOptions = {},
+): Promise<ContentContainer> {
+  const pkg = await openPackage(data);
+  const ctx = await buildImportContext(pkg, { ...options, extractImages: true });
+
+  const documentXml = await getPartXml(pkg, 'word/document.xml');
+  if (!documentXml) {
+    const container = new MemoryContentContainer();
+    await container.writeDocument('');
+    return container;
+  }
+
+  const body = getFirstElement(documentXml, 'body');
+  if (!body) {
+    const container = new MemoryContentContainer();
+    await container.writeDocument('');
+    return container;
+  }
+
+  const blocks = await convertBody(body, ctx);
+  const markdownDoc: MarkdownDocument = { type: 'document', children: blocks };
+
+  // Serialize to markdown
+  const { stringifyMarkdown } = await import('@bendyline/squisq/markdown');
+  const markdown = stringifyMarkdown(markdownDoc);
+
+  // Build container with markdown + images
+  const container = new MemoryContentContainer();
+  await container.writeDocument(markdown);
+
+  for (const [path, { data: imageData, mimeType }] of ctx.extractedImages) {
+    await container.writeFile(path, new Uint8Array(imageData), mimeType);
+  }
+
+  return container;
+}
+
 // ============================================
 // Import Context
 // ============================================
@@ -142,6 +194,10 @@ interface ImportContext {
   pkg: OoxmlPackage;
   /** Import options */
   options: DocxImportOptions;
+  /** Collected image files: relative path → { data, mimeType } */
+  extractedImages: Map<string, { data: ArrayBuffer; mimeType: string }>;
+  /** Counter for generating unique image filenames */
+  imageCounter: number;
 }
 
 interface NumberingInfo {
@@ -162,6 +218,8 @@ async function buildImportContext(
     footnotes: new Map(),
     pkg,
     options,
+    extractedImages: new Map(),
+    imageCounter: 0,
   };
 
   // Initialize with built-in defaults
@@ -544,18 +602,77 @@ async function convertHyperlink(el: Element, ctx: ImportContext): Promise<Markdo
 // Image Extraction
 // ============================================
 
-async function extractImage(_el: Element, _ctx: ImportContext): Promise<MarkdownImage | null> {
-  // Image extraction is complex (DrawingML with blip references).
-  // For v1, emit a placeholder. Full implementation requires:
-  // 1. Find <a:blip r:embed="rId_"/> in the drawing tree
-  // 2. Resolve the rId to a media path
-  // 3. Extract the binary data and encode as data URI
-  // This is planned for a future enhancement.
+async function extractImage(el: Element, ctx: ImportContext): Promise<MarkdownImage | null> {
+  // Find <a:blip r:embed="rIdX"/> anywhere in the drawing tree
+  const blip = findDescendant(el, 'blip');
+  if (!blip) {
+    return { type: 'image', url: '', alt: 'Image' };
+  }
+
+  const rId = blip.getAttributeNS(NS_R, 'embed') ?? blip.getAttribute('r:embed');
+  if (!rId) {
+    return { type: 'image', url: '', alt: 'Image' };
+  }
+
+  const rel = ctx.documentRels.get(rId);
+  if (!rel) {
+    return { type: 'image', url: '', alt: 'Image' };
+  }
+
+  // Resolve the target path relative to word/
+  const target = rel.target.startsWith('/') ? rel.target.slice(1) : `word/${rel.target}`;
+
+  // Extract binary data from the zip
+  const data = await getPartBinary(ctx.pkg, target);
+  if (!data) {
+    return { type: 'image', url: '', alt: 'Image' };
+  }
+
+  // Determine extension and MIME type
+  const dot = target.lastIndexOf('.');
+  const ext = dot !== -1 ? target.slice(dot).toLowerCase() : '.png';
+  const mimeType = IMAGE_MIME_MAP[ext] ?? 'application/octet-stream';
+
+  // Generate a unique image path
+  ctx.imageCounter++;
+  const imagePath = `images/image${ctx.imageCounter}${ext}`;
+
+  // Store the extracted image data
+  ctx.extractedImages.set(imagePath, { data, mimeType });
+
+  // Try to extract alt text from the drawing's docPr element
+  const docPr = findDescendant(el, 'docPr');
+  const alt = docPr?.getAttribute('descr') || docPr?.getAttribute('title') || 'Image';
+
   return {
     type: 'image',
-    url: '',
-    alt: 'Image',
+    url: imagePath,
+    alt,
   };
+}
+
+const IMAGE_MIME_MAP: Record<string, string> = {
+  '.png': 'image/png',
+  '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.gif': 'image/gif',
+  '.bmp': 'image/bmp',
+  '.tiff': 'image/tiff',
+  '.tif': 'image/tiff',
+  '.svg': 'image/svg+xml',
+  '.webp': 'image/webp',
+  '.emf': 'image/emf',
+  '.wmf': 'image/wmf',
+};
+
+/** Recursively find the first descendant element with the given local name. */
+function findDescendant(el: Element, localName: string): Element | null {
+  for (const child of Array.from(el.children)) {
+    if (child.localName === localName) return child;
+    const found = findDescendant(child, localName);
+    if (found) return found;
+  }
+  return null;
 }
 
 // ============================================
