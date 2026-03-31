@@ -40,7 +40,11 @@ import type {
   MarkdownStrong,
   MarkdownInlineCode,
   MarkdownLink,
+  MarkdownImage,
 } from '@bendyline/squisq/markdown';
+
+import { MemoryContentContainer } from '@bendyline/squisq/storage';
+import type { ContentContainer } from '@bendyline/squisq/storage';
 
 import {
   DEFAULT_FONT_SIZE,
@@ -125,6 +129,230 @@ export async function pdfToDoc(
 ): Promise<Doc> {
   const markdownDoc = await pdfToMarkdownDoc(data, options);
   return markdownToDoc(markdownDoc);
+}
+
+/**
+ * Convert a PDF file to a ContentContainer with markdown + extracted images.
+ *
+ * The container will contain:
+ * - The primary markdown document (index.md)
+ * - Any embedded images under images/ (e.g., images/image1.png)
+ *
+ * Image extraction uses pdfjs-dist's operator list API and requires a browser
+ * environment (canvas is used to encode pixel data to PNG).
+ *
+ * @param data - The raw PDF file as ArrayBuffer, Uint8Array, or Blob
+ * @param options - Import options
+ * @returns A ContentContainer with the document and its media
+ */
+export async function pdfToContainer(
+  data: ArrayBuffer | Uint8Array | Blob,
+  options: PdfImportOptions = {},
+): Promise<ContentContainer> {
+  const bytes =
+    data instanceof Blob
+      ? new Uint8Array(await data.arrayBuffer())
+      : data instanceof ArrayBuffer
+        ? new Uint8Array(data)
+        : data;
+
+  const textLines = await extractTextLines(bytes);
+  const images = await extractImages(bytes);
+
+  const bodySize = options.bodyFontSize ?? detectBodyFontSize(textLines);
+
+  // If we have images, insert image references into the block list
+  let blocks = classifyLines(textLines, bodySize, options);
+  if (images.length > 0) {
+    blocks = insertImageBlocks(blocks, images);
+  }
+
+  const markdownDoc: MarkdownDocument = { type: 'document', children: blocks };
+
+  const { stringifyMarkdown } = await import('@bendyline/squisq/markdown');
+  const markdown = stringifyMarkdown(markdownDoc);
+
+  const container = new MemoryContentContainer();
+  await container.writeDocument(markdown);
+
+  for (const img of images) {
+    await container.writeFile(img.path, new Uint8Array(img.data), 'image/png');
+  }
+
+  return container;
+}
+
+/** Extracted image with position info for placement. */
+interface ExtractedImage {
+  path: string;
+  data: ArrayBuffer;
+  page: number;
+  y: number;
+}
+
+/**
+ * Extract embedded images from a PDF using pdfjs-dist operator list API.
+ * Requires browser canvas for PNG encoding.
+ */
+async function extractImages(data: Uint8Array): Promise<ExtractedImage[]> {
+  // Canvas is required for PNG encoding — skip in non-browser environments
+  if (typeof document === 'undefined') return [];
+
+  let pdfjsLib: PdfjsLib & { OPS?: Record<string, number> };
+  try {
+    pdfjsLib = (await import('pdfjs-dist/legacy/build/pdf.mjs')) as unknown as PdfjsLib & {
+      OPS?: Record<string, number>;
+    };
+  } catch {
+    pdfjsLib = (await import('pdfjs-dist')) as unknown as PdfjsLib & {
+      OPS?: Record<string, number>;
+    };
+  }
+
+  await applyWorkerConfig(pdfjsLib);
+
+  const OPS_paintImageXObject = pdfjsLib.OPS?.paintImageXObject ?? 85;
+
+  const loadingTask = pdfjsLib.getDocument({
+    data,
+    isEvalSupported: false,
+    useSystemFonts: true,
+  });
+
+  const pdf = await loadingTask.promise;
+  const images: ExtractedImage[] = [];
+  let counter = 0;
+
+  for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
+    const page = (await pdf.getPage(pageNum)) as PdfjsPageFull;
+    if (!page.getOperatorList) continue;
+
+    const opList = await page.getOperatorList();
+    const seen = new Set<string>();
+
+    for (let i = 0; i < opList.fnArray.length; i++) {
+      if (opList.fnArray[i] !== OPS_paintImageXObject) continue;
+
+      const imgName = opList.argsArray[i]?.[0];
+      if (!imgName || typeof imgName !== 'string' || seen.has(imgName)) continue;
+      seen.add(imgName);
+
+      try {
+        const imgData = page.objs?.get(imgName) as PdfjsImageData | null;
+        if (!imgData?.data || !imgData.width || !imgData.height) continue;
+
+        const pngData = imageDataToPng(imgData);
+        if (!pngData) continue;
+
+        counter++;
+        images.push({
+          path: `images/image${counter}.png`,
+          data: pngData,
+          page: pageNum - 1,
+          y: 0,
+        });
+      } catch {
+        // Skip images that fail to extract
+      }
+    }
+  }
+
+  return images;
+}
+
+/** Minimal pdfjs image data shape. */
+interface PdfjsImageData {
+  width: number;
+  height: number;
+  data: Uint8ClampedArray;
+  kind?: number;
+}
+
+/** Extended PdfjsPage with operator list and objs access. */
+interface PdfjsPageFull extends PdfjsPage {
+  getOperatorList(): Promise<{ fnArray: number[]; argsArray: unknown[][] }>;
+  objs?: { get(name: string): unknown; has?(name: string): boolean };
+}
+
+/** Encode pdfjs image data to PNG using a canvas element. */
+function imageDataToPng(img: PdfjsImageData): ArrayBuffer | null {
+  try {
+    const canvas = document.createElement('canvas');
+    canvas.width = img.width;
+    canvas.height = img.height;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return null;
+
+    // pdfjs kind=1 is GRAYSCALE, kind=2 is RGB, kind=3 is RGBA
+    let imageData: ImageData;
+    if (img.kind === 3 || img.data.length === img.width * img.height * 4) {
+      // RGBA — use directly
+      imageData = new ImageData(new Uint8ClampedArray(img.data), img.width, img.height);
+    } else if (img.kind === 2 || img.data.length === img.width * img.height * 3) {
+      // RGB — expand to RGBA
+      const rgba = new Uint8ClampedArray(img.width * img.height * 4);
+      for (let j = 0, k = 0; j < img.data.length; j += 3, k += 4) {
+        rgba[k] = img.data[j];
+        rgba[k + 1] = img.data[j + 1];
+        rgba[k + 2] = img.data[j + 2];
+        rgba[k + 3] = 255;
+      }
+      imageData = new ImageData(rgba, img.width, img.height);
+    } else if (img.kind === 1 || img.data.length === img.width * img.height) {
+      // Grayscale — expand to RGBA
+      const rgba = new Uint8ClampedArray(img.width * img.height * 4);
+      for (let j = 0, k = 0; j < img.data.length; j++, k += 4) {
+        rgba[k] = img.data[j];
+        rgba[k + 1] = img.data[j];
+        rgba[k + 2] = img.data[j];
+        rgba[k + 3] = 255;
+      }
+      imageData = new ImageData(rgba, img.width, img.height);
+    } else {
+      return null;
+    }
+
+    ctx.putImageData(imageData, 0, 0);
+
+    // Convert canvas to PNG ArrayBuffer
+    const dataUrl = canvas.toDataURL('image/png');
+    const base64 = dataUrl.split(',')[1];
+    const binaryStr = atob(base64);
+    const bytes = new Uint8Array(binaryStr.length);
+    for (let i = 0; i < binaryStr.length; i++) {
+      bytes[i] = binaryStr.charCodeAt(i);
+    }
+    return bytes.buffer;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Insert image reference blocks between text blocks.
+ * Places each image after the last text block on the same page (or at the end).
+ */
+function insertImageBlocks(
+  blocks: MarkdownBlockNode[],
+  images: ExtractedImage[],
+): MarkdownBlockNode[] {
+  if (images.length === 0) return blocks;
+
+  // Simple strategy: append all images at the end as paragraphs
+  const result = [...blocks];
+  for (const img of images) {
+    const imgNode: MarkdownImage = {
+      type: 'image',
+      url: img.path,
+      alt: `Image ${img.path.replace('images/image', '').replace('.png', '')}`,
+    };
+    const para: MarkdownParagraph = {
+      type: 'paragraph',
+      children: [imgNode],
+    };
+    result.push(para);
+  }
+  return result;
 }
 
 // ============================================

@@ -25,5 +25,5 @@ export { markdownDocToPdf, docToPdf } from './export.js';
 export type { PdfExportOptions } from './export.js';
 
 // Import
-export { pdfToMarkdownDoc, pdfToDoc, configurePdfWorker } from './import.js';
+export { pdfToMarkdownDoc, pdfToDoc, pdfToContainer, configurePdfWorker } from './import.js';
 export type { PdfImportOptions } from './import.js';

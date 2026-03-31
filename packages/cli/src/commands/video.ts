@@ -1,11 +1,8 @@
 /**
  * video command
  *
- * Renders a squisq document to MP4 video by:
- * 1. Parsing the input (markdown, container, or folder)
- * 2. Generating a self-contained render HTML
- * 3. Capturing frames via Playwright headless browser
- * 4. Encoding to MP4 using native ffmpeg (fast) or ffmpeg.wasm (fallback)
+ * Renders a squisq document to MP4 video by delegating to the
+ * programmatic renderDocToMp4 API.
  *
  * Usage:
  *   squisq video <input> [-o output.mp4] [--fps 30] [--quality normal] [--orientation landscape]
@@ -16,7 +13,7 @@ import { dirname, basename, extname, resolve } from 'node:path';
 import type { Command } from 'commander';
 import type { Doc } from '@bendyline/squisq/schemas';
 import { readInput } from '../util/readInput.js';
-import { detectFfmpeg } from '../util/detectFfmpeg.js';
+import { renderDocToMp4 } from '../api.js';
 
 import type { VideoQuality, VideoOrientation } from '@bendyline/squisq-video';
 
@@ -116,197 +113,44 @@ async function runVideo(inputPath: string, opts: VideoCommandOptions): Promise<v
 
   // ── Step 1: Read input ──────────────────────────────────────────
   console.error(`Reading: ${resolvedInput}`);
-  const { container, markdownDoc } = await readInput(resolvedInput);
+  const result = await readInput(resolvedInput);
+  const { container } = result;
 
-  // ── Step 2: Parse to Doc ────────────────────────────────────────
-  const { markdownToDoc } = await import('@bendyline/squisq/doc');
-  const doc: Doc = markdownToDoc(markdownDoc);
-
-  // ── Step 3: Collect media from container ────────────────────────
-  const { collectImagePaths } = await import('@bendyline/squisq-formats/html');
-  const imagePaths = collectImagePaths(doc);
-  const images = new Map<string, ArrayBuffer>();
-  for (const imgPath of imagePaths) {
-    const data = await container.readFile(imgPath);
-    if (data) {
-      images.set(imgPath, data);
-    }
+  // ── Step 2: Get or parse Doc ────────────────────────────────────
+  let doc: Doc;
+  if (result.doc) {
+    console.error('Using pre-built Doc JSON');
+    doc = result.doc;
+  } else if (result.markdownDoc) {
+    const { markdownToDoc } = await import('@bendyline/squisq/doc');
+    doc = markdownToDoc(result.markdownDoc);
+  } else {
+    throw new Error('No document found in input');
   }
-
-  // Collect audio segments
-  const audio = new Map<string, ArrayBuffer>();
-  let concatenatedAudio: Uint8Array | null = null;
-  if (doc.audio?.segments?.length) {
-    for (const seg of doc.audio.segments) {
-      const data = await container.readFile(seg.src);
-      if (data) {
-        audio.set(seg.src, data);
-        // Also map by name for the audio URL rewriting in the player
-        audio.set(seg.name, data);
-      }
-    }
-    // For encoding, concatenate audio segments into one file
-    // The player handles segment playback internally, but the encoder
-    // needs a single audio track. We'll use the first segment as a
-    // representative — full audio concatenation would need ffmpeg.
-    // For now, pass audio map to the render HTML so the player handles it.
-    if (audio.size > 0) {
-      // Use the first segment's raw bytes — the encoder will handle it
-      const firstSeg = doc.audio.segments[0];
-      const firstData = await container.readFile(firstSeg.src);
-      if (firstData) {
-        concatenatedAudio = new Uint8Array(firstData);
-      }
-    }
-  }
-
-  // ── Step 4: Generate render HTML ────────────────────────────────
-  const { generateRenderHtml } = await import('@bendyline/squisq-video');
-  const { PLAYER_BUNDLE } = await import('@bendyline/squisq-react/standalone-source');
-  const { resolveDimensions } = await import('@bendyline/squisq-video');
-
-  const dimensions = resolveDimensions({
-    orientation,
-    width: opts.width ? parseInt(opts.width, 10) : undefined,
-    height: opts.height ? parseInt(opts.height, 10) : undefined,
-  });
-
-  const renderHtml = generateRenderHtml(doc, {
-    playerScript: PLAYER_BUNDLE,
-    images,
-    audio: audio.size > 0 ? audio : undefined,
-    width: dimensions.width,
-    height: dimensions.height,
-    captionStyle,
-  });
 
   console.error(
-    `Viewport: ${dimensions.width}x${dimensions.height}, ${fps} fps, quality: ${quality}, captions: ${captions}`,
+    `Rendering: ${fps} fps, quality: ${quality}, orientation: ${orientation}, captions: ${captions}`,
   );
 
-  // ── Step 5: Capture frames via Playwright ───────────────────────
-  const { chromium } = await import('playwright-core');
-  const browser = await chromium.launch({ headless: true });
-  const page = await browser.newPage({
-    viewport: { width: dimensions.width, height: dimensions.height },
-  });
-
-  // Capture page errors so they don't vanish silently
-  const pageErrors: string[] = [];
-  page.on('pageerror', (err) => pageErrors.push(err.message));
-  page.on('console', (msg) => {
-    if (msg.type() === 'error') pageErrors.push(msg.text());
-  });
-
-  // Load the render HTML — use 'load' since everything is inline (no network)
-  await page.setContent(renderHtml, { waitUntil: 'load' });
-
-  // Give React one frame to mount and run useEffect
-  await page.waitForTimeout(500);
-
-  // Wait for the render API to be available
-  try {
-    await page.waitForFunction(
-      () => typeof (window as unknown as Record<string, unknown>).getDuration === 'function',
-      { timeout: 15000 },
-    );
-  } catch {
-    await browser.close();
-    const errorDetail = pageErrors.length
-      ? `\nPage errors:\n  ${pageErrors.join('\n  ')}`
-      : '\nNo page errors captured — the player may have failed to mount.';
-    throw new Error(`Render API did not initialize within 15 seconds.${errorDetail}`);
-  }
-
-  // Get duration from the player
-  const duration: number = await page.evaluate(() => {
-    return (window as unknown as { getDuration: () => number }).getDuration();
-  });
-
-  if (duration <= 0) {
-    await browser.close();
-    throw new Error('Document has zero duration — nothing to render');
-  }
-
-  const totalFrames = Math.ceil(duration * fps);
-  console.error(`Duration: ${duration.toFixed(1)}s, ${totalFrames} frames to capture`);
-
-  const frames: Uint8Array[] = [];
-  const frameInterval = 1 / fps;
-
-  // Optional: render cover frame (time 0)
-  const hasCover: boolean = await page.evaluate(() => {
-    const w = window as unknown as { hasCoverBlock?: () => boolean };
-    return typeof w.hasCoverBlock === 'function' ? w.hasCoverBlock() : false;
-  });
-
-  if (hasCover) {
-    const coverFrameCount = 2 * fps;
-    await page.evaluate(() => {
-      (window as unknown as { showCover: () => void }).showCover();
-    });
-    await page.waitForTimeout(100);
-    const coverScreenshot = await page.screenshot({ type: 'png' });
-    const coverFrame = new Uint8Array(coverScreenshot);
-    for (let i = 0; i < coverFrameCount; i++) {
-      frames.push(coverFrame);
-    }
-    await page.evaluate(() => {
-      (window as unknown as { hideCover: () => void }).hideCover();
-    });
-    writeProgress('Capturing', coverFrameCount, totalFrames + coverFrameCount);
-  }
-
-  // Capture animation frames
-  const totalWithCover = totalFrames + frames.length;
-  for (let i = 0; i < totalFrames; i++) {
-    const time = i * frameInterval;
-
-    await page.evaluate((t: number) => {
-      return (window as unknown as { seekTo: (t: number) => Promise<void> }).seekTo(t);
-    }, time);
-
-    const screenshot = await page.screenshot({ type: 'png' });
-    frames.push(new Uint8Array(screenshot));
-
-    if (i % Math.max(1, Math.floor(fps / 2)) === 0 || i === totalFrames - 1) {
-      writeProgress('Capturing', frames.length, totalWithCover);
-    }
-  }
-
-  clearProgress();
-  await browser.close();
-
-  // ── Step 6: Encode to MP4 ───────────────────────────────────────
-  const ffmpegPath = await detectFfmpeg();
-
-  const exportOptions = {
+  // ── Step 3: Render via programmatic API ─────────────────────────
+  const result2 = await renderDocToMp4(doc, container, {
+    outputPath,
     fps,
     quality: quality as VideoQuality,
     orientation: orientation as VideoOrientation,
-    width: dimensions.width,
-    height: dimensions.height,
-    onProgress: (percent: number, phase: string) => {
-      writeProgress('Encoding', percent, 100, phase);
+    width: opts.width ? parseInt(opts.width, 10) : undefined,
+    height: opts.height ? parseInt(opts.height, 10) : undefined,
+    captionStyle,
+    coverPreRoll: 2,
+    onProgress: (phase, percent) => {
+      writeProgress(phase, percent, 100);
     },
-  };
-
-  if (ffmpegPath) {
-    console.error(`Using native ffmpeg: ${ffmpegPath}`);
-    const { framesToMp4Native } = await import('../util/nativeEncoder.js');
-    await framesToMp4Native(ffmpegPath, frames, concatenatedAudio, outputPath, exportOptions);
-  } else {
-    throw new Error(
-      'ffmpeg is required but not found in PATH.\n' +
-        'Install it with:\n' +
-        '  macOS:   brew install ffmpeg\n' +
-        '  Ubuntu:  sudo apt install ffmpeg\n' +
-        '  Windows: winget install ffmpeg',
-    );
-  }
+  });
 
   clearProgress();
-  console.error(`  ✓ ${outputPath}`);
+  console.error(
+    `  ✓ ${outputPath} (${result2.duration.toFixed(1)}s, ${result2.frameCount} frames)`,
+  );
   console.error('Done.');
 }
 

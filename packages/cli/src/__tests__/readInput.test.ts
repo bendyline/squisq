@@ -28,9 +28,10 @@ describe('readInput', () => {
   it('reads a .md file into a container and MarkdownDocument', async () => {
     const result = await readInput(FIXTURE_MD);
 
+    expect(result.markdownDoc).to.not.equal(null);
     expect(result.markdownDoc).to.have.property('type', 'document');
-    expect(result.markdownDoc.children).to.be.an('array');
-    expect(result.markdownDoc.children.length).to.be.greaterThan(0);
+    expect(result.markdownDoc!.children).to.be.an('array');
+    expect(result.markdownDoc!.children.length).to.be.greaterThan(0);
 
     const docContent = await result.container.readDocument();
     expect(docContent).to.be.a('string').that.includes('# Test Document');
@@ -47,7 +48,8 @@ describe('readInput', () => {
     await writeFile(zipPath, buf);
 
     const result = await readInput(zipPath);
-    expect(result.markdownDoc.type).to.equal('document');
+    expect(result.markdownDoc).to.not.equal(null);
+    expect(result.markdownDoc!.type).to.equal('document');
     const doc = await result.container.readDocument();
     expect(doc).to.include('# From ZIP');
   });
@@ -62,7 +64,8 @@ describe('readInput', () => {
     await writeFile(dbkPath, buf);
 
     const result = await readInput(dbkPath);
-    expect(result.markdownDoc.type).to.equal('document');
+    expect(result.markdownDoc).to.not.equal(null);
+    expect(result.markdownDoc!.type).to.equal('document');
     const doc = await result.container.readDocument();
     expect(doc).to.include('# From DBK');
   });
@@ -74,7 +77,8 @@ describe('readInput', () => {
     await writeFile(join(folderPath, 'image.txt'), 'placeholder');
 
     const result = await readInput(folderPath);
-    expect(result.markdownDoc.type).to.equal('document');
+    expect(result.markdownDoc).to.not.equal(null);
+    expect(result.markdownDoc!.type).to.equal('document');
 
     const doc = await result.container.readDocument();
     expect(doc).to.include('# Folder Doc');
@@ -95,7 +99,45 @@ describe('readInput', () => {
       expect.fail('Expected an error');
     } catch (err: unknown) {
       expect(err).to.be.instanceOf(Error);
-      expect((err as Error).message).to.include('No markdown document found');
+      expect((err as Error).message).to.include('No markdown document');
     }
+  });
+
+  it('reads a .json file as Doc JSON', async () => {
+    const doc = {
+      articleId: 'test-article',
+      duration: 30,
+      blocks: [{ id: 'b1', startTime: 0, duration: 30, audioSegment: 0 }],
+      audio: { segments: [] },
+    };
+    const jsonPath = join(tempDir, 'doc.json');
+    await writeFile(jsonPath, JSON.stringify(doc));
+
+    const result = await readInput(jsonPath);
+    expect(result.markdownDoc).to.equal(null);
+    expect(result.doc).to.deep.include({ articleId: 'test-article', duration: 30 });
+    expect(result.doc!.blocks).to.have.length(1);
+  });
+
+  it('reads a folder with doc.json instead of markdown', async () => {
+    const folderPath = join(tempDir, 'jsondoc');
+    await mkdir(folderPath, { recursive: true });
+    const doc = {
+      articleId: 'folder-doc',
+      duration: 20,
+      blocks: [],
+      audio: { segments: [] },
+    };
+    await writeFile(join(folderPath, 'doc.json'), JSON.stringify(doc));
+    await writeFile(join(folderPath, 'image.txt'), 'placeholder');
+
+    const result = await readInput(folderPath);
+    expect(result.markdownDoc).to.equal(null);
+    expect(result.doc).to.deep.include({ articleId: 'folder-doc' });
+
+    // Media files are still in the container
+    const files = await result.container.listFiles();
+    const paths = files.map((f) => f.path);
+    expect(paths).to.include('image.txt');
   });
 });

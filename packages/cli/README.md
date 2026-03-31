@@ -54,6 +54,49 @@ squisq video ./my-folder --orientation portrait --captions social
 
 **Requires:** [ffmpeg](https://ffmpeg.org/) installed and available on your PATH.
 
+## Programmatic API
+
+Use the CLI as a library from Node.js — no shell-out required:
+
+```ts
+import { renderDocToMp4, MemoryContentContainer, readInput } from '@bendyline/squisq-cli/api';
+
+// Load a document from disk
+const { doc, container } = await readInput('./my-article.md');
+
+// Render to MP4
+const result = await renderDocToMp4(doc, container, {
+  outputPath: './output.mp4',
+  fps: 30,
+  quality: 'high',
+  orientation: 'landscape',
+  captionStyle: 'social',
+  onProgress: (phase, pct) => console.log(`${phase}: ${pct}%`),
+});
+
+console.log(`Rendered ${result.frameCount} frames (${result.duration}s)`);
+```
+
+### `extractThumbnails`
+
+Extract JPEG thumbnails from the first frame of a rendered video:
+
+```ts
+import { extractThumbnails } from '@bendyline/squisq-cli/api';
+
+await extractThumbnails({
+  videoPath: './output.mp4',
+  outputDir: './thumbs',
+  slug: 'my-article',
+  sizes: [
+    { name: 'og', width: 1200, height: 630, filter: 'scale=1200:630' },
+    { name: 'thumb', width: 480, height: 270, filter: 'scale=480:270' },
+  ],
+});
+```
+
+See the full [API Reference](../../docs/API.md#bendylinesquisq-cli) for all types and options.
+
 ## Input Formats
 
 The CLI accepts three types of input:

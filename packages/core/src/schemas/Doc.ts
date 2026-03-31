@@ -177,7 +177,7 @@ export interface Block {
  * A visual element within a block.
  * Layers are composited back-to-front (first layer is background).
  */
-export type Layer = ImageLayer | TextLayer | ShapeLayer | MapLayer | VideoLayer;
+export type Layer = ImageLayer | TextLayer | ShapeLayer | MapLayer | VideoLayer | TableLayer;
 
 interface BaseLayer {
   /** Unique identifier for this layer */
@@ -298,6 +298,48 @@ export interface VideoLayer extends BaseLayer {
     /** License identifier (e.g., 'CC BY-SA 4.0') */
     license?: string;
   };
+}
+
+/**
+ * Table layer - renders a data table with themed styling.
+ * Uses foreignObject inside SVG for HTML-based table layout.
+ */
+export interface TableLayer extends BaseLayer {
+  type: 'table';
+  content: {
+    /** Header cell values */
+    headers: string[];
+    /** Data rows (array of cell value arrays) */
+    rows: string[][];
+    /** Per-column alignment */
+    align?: (('left' | 'right' | 'center') | null)[];
+    /** Visual styling */
+    style: TableLayerStyle;
+  };
+}
+
+/**
+ * Styling options for a TableLayer.
+ */
+export interface TableLayerStyle {
+  /** Header row background color */
+  headerBackground: string;
+  /** Header row text color */
+  headerColor: string;
+  /** Body cell background color */
+  cellBackground: string;
+  /** Body cell text color */
+  cellColor: string;
+  /** Border/divider color */
+  borderColor: string;
+  /** Font size in pixels */
+  fontSize: number;
+  /** Font family */
+  fontFamily?: string;
+  /** Header font family (falls back to fontFamily) */
+  headerFontFamily?: string;
+  /** Corner radius for the table container */
+  borderRadius?: number;
 }
 
 /**

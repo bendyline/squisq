@@ -17,6 +17,7 @@ export { ImageLayer } from './layers/ImageLayer.js';
 export { TextLayer } from './layers/TextLayer.js';
 export { ShapeLayer } from './layers/ShapeLayer.js';
 export { VideoLayer } from './layers/VideoLayer.js';
+export { TableLayer } from './layers/TableLayer.js';
 export { MapLayer } from './layers/MapLayer.js';
 
 // Hooks

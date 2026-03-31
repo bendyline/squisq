@@ -51,6 +51,8 @@ export function markdownToTiptap(markdown: string): string {
   let inList = false;
   let listItems: string[] = [];
   let listType: 'ul' | 'ol' | 'task' = 'ul';
+  let inTable = false;
+  let tableLines: string[] = [];
 
   const flushList = () => {
     if (inList && listItems.length > 0) {
@@ -60,6 +62,62 @@ export function markdownToTiptap(markdown: string): string {
       listItems = [];
       inList = false;
     }
+  };
+
+  const flushTable = () => {
+    if (!inTable || tableLines.length === 0) {
+      inTable = false;
+      tableLines = [];
+      return;
+    }
+
+    // Validate: need at least 2 lines and second must be a separator
+    const separatorCells = tableLines.length >= 2 ? parseTableCells(tableLines[1]) : [];
+    const isSeparator =
+      separatorCells.length > 0 && separatorCells.every((cell) => /^:?-+:?$/.test(cell.trim()));
+
+    if (tableLines.length < 2 || !isSeparator) {
+      // Not a valid table — render accumulated lines as paragraphs
+      for (const tl of tableLines) {
+        outputBlocks.push(`<p>${inlineToHtml(tl)}</p>`);
+      }
+      inTable = false;
+      tableLines = [];
+      return;
+    }
+
+    const alignments = parseAlignments(tableLines[1]);
+    const headerCells = parseTableCells(tableLines[0]);
+
+    // Build header row
+    const thHtml = headerCells
+      .map((cell, i) => {
+        const align = alignments[i];
+        const style = align ? ` style="text-align: ${align}"` : '';
+        return `<th${style}>${inlineToHtml(cell)}</th>`;
+      })
+      .join('');
+
+    // Build body rows
+    const bodyHtml = tableLines
+      .slice(2)
+      .map((rowLine) => {
+        const cells = parseTableCells(rowLine);
+        const tdHtml = cells
+          .map((cell, i) => {
+            const align = alignments[i];
+            const style = align ? ` style="text-align: ${align}"` : '';
+            return `<td${style}>${inlineToHtml(cell)}</td>`;
+          })
+          .join('');
+        return `<tr>${tdHtml}</tr>`;
+      })
+      .join('');
+
+    outputBlocks.push(`<table><thead><tr>${thHtml}</tr></thead><tbody>${bodyHtml}</tbody></table>`);
+
+    inTable = false;
+    tableLines = [];
   };
 
   for (let i = 0; i < lines.length; i++) {
@@ -88,6 +146,11 @@ export function markdownToTiptap(markdown: string): string {
     if (inCodeBlock) {
       codeBlockLines.push(line);
       continue;
+    }
+
+    // If in table and current line is not a table row, flush
+    if (inTable && !/^\|.*\|$/.test(line.trim())) {
+      flushTable();
     }
 
     // Blank line flushes list
@@ -173,6 +236,17 @@ export function markdownToTiptap(markdown: string): string {
       continue;
     }
 
+    // Table row
+    if (/^\|.*\|$/.test(line.trim())) {
+      if (!inTable) {
+        flushList();
+        inTable = true;
+        tableLines = [];
+      }
+      tableLines.push(line);
+      continue;
+    }
+
     // Regular paragraph
     flushList();
     outputBlocks.push(`<p>${inlineToHtml(line)}</p>`);
@@ -186,6 +260,7 @@ export function markdownToTiptap(markdown: string): string {
     );
   }
   flushList();
+  flushTable();
 
   return outputBlocks.join('') || '<p></p>';
 }
@@ -263,6 +338,69 @@ export function tiptapToMarkdown(html: string): string {
       lines.push('---');
       lines.push('');
       remaining = remaining.slice(hrMatch![0].length);
+      continue;
+    }
+
+    // Table (with optional Tiptap tableWrapper div; table tag may have style attrs)
+    const tableMatch =
+      remaining.match(
+        /^<div[^>]*class="[^"]*tableWrapper[^"]*"[^>]*><table[^>]*>(.*?)<\/table>\s*<\/div>/s,
+      ) || remaining.match(/^<table[^>]*>(.*?)<\/table>/s);
+    if (tableMatch) {
+      const tableContent = tableMatch[1];
+
+      // Extract all rows with their cells
+      const rows: { content: string; align: string | null; isHeader: boolean }[][] = [];
+      const rowRegex = /<tr[^>]*>(.*?)<\/tr>/gs;
+      let rowExec;
+      while ((rowExec = rowRegex.exec(tableContent)) !== null) {
+        const rowHtml = rowExec[1];
+        const cells: { content: string; align: string | null; isHeader: boolean }[] = [];
+        const cellRegex = /<(th|td)([^>]*)>(.*?)<\/\1>/gs;
+        let cellExec;
+        while ((cellExec = cellRegex.exec(rowHtml)) !== null) {
+          const tag = cellExec[1];
+          const attrs = cellExec[2];
+          const content = htmlToInline(cellExec[3].replace(/<\/?p>/g, ''));
+          const alignExec = attrs.match(/text-align:\s*(left|center|right)/);
+          cells.push({
+            content,
+            align: alignExec ? alignExec[1] : null,
+            isHeader: tag === 'th',
+          });
+        }
+        if (cells.length > 0) {
+          rows.push(cells);
+        }
+      }
+
+      if (rows.length > 0) {
+        // Header row = first row with th cells, or just the first row
+        const headerIdx = rows.findIndex((r) => r.some((c) => c.isHeader));
+        const hIdx = headerIdx >= 0 ? headerIdx : 0;
+        const headerRow = rows[hIdx];
+        const dataRows = rows.filter((_, i) => i !== hIdx);
+
+        const aligns = headerRow.map((c) => c.align);
+        lines.push('| ' + headerRow.map((c) => c.content || ' ').join(' | ') + ' |');
+        lines.push(
+          '| ' +
+            aligns
+              .map((a) => {
+                if (a === 'center') return ':---:';
+                if (a === 'right') return '---:';
+                return '---';
+              })
+              .join(' | ') +
+            ' |',
+        );
+        for (const row of dataRows) {
+          lines.push('| ' + row.map((c) => c.content || ' ').join(' | ') + ' |');
+        }
+        lines.push('');
+      }
+
+      remaining = remaining.slice(tableMatch[0].length);
       continue;
     }
 
@@ -345,6 +483,27 @@ export function tiptapToMarkdown(html: string): string {
       .replace(/\n{3,}/g, '\n\n')
       .trim() + '\n'
   );
+}
+
+// ─── Table helpers ───────────────────────────────────────
+
+/** Split a GFM table row into trimmed cell strings (strips outer pipes). */
+function parseTableCells(line: string): string[] {
+  let inner = line.trim();
+  if (inner.startsWith('|')) inner = inner.slice(1);
+  if (inner.endsWith('|')) inner = inner.slice(0, -1);
+  return inner.split('|').map((cell) => cell.trim());
+}
+
+/** Parse a GFM separator line into column alignments. */
+function parseAlignments(separatorLine: string): (string | null)[] {
+  return parseTableCells(separatorLine).map((cell) => {
+    const s = cell.replace(/\s/g, '');
+    if (s.startsWith(':') && s.endsWith(':')) return 'center';
+    if (s.endsWith(':')) return 'right';
+    if (s.startsWith(':')) return 'left';
+    return null;
+  });
 }
 
 // ─── Helpers ─────────────────────────────────────────────

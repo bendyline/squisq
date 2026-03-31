@@ -1,6 +1,6 @@
 # Squisq API Reference
 
-> Auto-generated reference for the four published packages and their subpath exports.
+> Auto-generated reference for the published packages and their subpath exports.
 
 ---
 
@@ -23,12 +23,15 @@
   - [DOCX](#subpath-docx)
   - [PDF](#subpath-pdf)
   - [OOXML](#subpath-ooxml)
-  - [PPTX (stub)](#subpath-pptx-stub)
+  - [PPTX](#subpath-pptx)
   - [XLSX (stub)](#subpath-xlsx-stub)
 - [`@bendyline/squisq-editor-react`](#bendylinesquisq-editor-react)
   - [Components](#editor-components)
   - [Context](#editor-context)
   - [Bridge Utilities](#editor-bridge-utilities)
+- [`@bendyline/squisq-cli`](#bendylinesquisq-cli)
+  - [Programmatic API](#cli-programmatic-api)
+  - [CLI Commands](#cli-commands)
 
 ---
 
@@ -104,45 +107,80 @@ interface AudioSyncPoint {
 #### Layer Types
 
 ```ts
-interface Layer {
-  type: 'text' | 'image' | 'shape' | 'video' | 'map';
+/** Discriminated union of all layer types */
+type Layer = ImageLayer | TextLayer | ShapeLayer | MapLayer | VideoLayer | TableLayer;
+
+/** Common fields shared by all layers */
+interface BaseLayer {
   position: Position;
   animation?: Animation;
   opacity?: number;
   visible?: boolean;
   zIndex?: number;
+}
 
-  // Text
-  content?: string;
-  textStyle?: TextStyle;
-
-  // Image
-  src?: string;
+interface ImageLayer extends BaseLayer {
+  type: 'image';
+  src: string;
   alt?: string;
   objectFit?: 'cover' | 'contain' | 'fill' | 'none';
+}
 
-  // Shape
-  shape?: 'rectangle' | 'circle' | 'ellipse' | 'line' | 'polygon';
+interface TextLayer extends BaseLayer {
+  type: 'text';
+  content: string;
+  textStyle?: TextStyle;
+}
+
+interface ShapeLayer extends BaseLayer {
+  type: 'shape';
+  shape: 'rectangle' | 'circle' | 'ellipse' | 'line' | 'polygon';
   fill?: string;
   stroke?: string;
   strokeWidth?: number;
   points?: Array<{ x: number; y: number }>;
   cornerRadius?: number;
+}
 
-  // Video
-  videoSrc?: string;
+interface VideoLayer extends BaseLayer {
+  type: 'video';
+  videoSrc: string;
   autoplay?: boolean;
   loop?: boolean;
   muted?: boolean;
   poster?: string;
+}
 
-  // Map
-  center?: Coordinates;
+interface MapLayer extends BaseLayer {
+  type: 'map';
+  center: Coordinates;
   zoom?: number;
   markers?: MapMarker[];
   mapStyle?: string;
   tileUrl?: string;
   bounds?: BoundingBox;
+}
+
+interface TableLayer extends BaseLayer {
+  type: 'table';
+  content: {
+    headers: string[];
+    rows: string[][];
+    align?: (('left' | 'right' | 'center') | null)[];
+    style: TableLayerStyle;
+  };
+}
+
+interface TableLayerStyle {
+  headerBackground: string;
+  headerColor: string;
+  cellBackground: string;
+  cellColor: string;
+  borderColor: string;
+  fontSize: number;
+  fontFamily?: string;
+  headerFontFamily?: string;
+  borderRadius?: number;
 }
 
 interface Position {
@@ -211,25 +249,28 @@ interface TemplateContext {
 
 ##### Built-in Template Block Inputs
 
-| Template            | Key Input Fields                                                |
-| ------------------- | --------------------------------------------------------------- |
-| `titleBlock`        | `title`, `subtitle?`, `backgroundImage?`, `backgroundGradient?` |
-| `textBlock`         | `heading?`, `body`, `backgroundImage?`                          |
-| `imageBlock`        | `src`, `alt?`, `caption?`, `objectFit?`                         |
-| `twoColumnBlock`    | `leftContent`, `rightContent`, `heading?`                       |
-| `quoteBlock`        | `quote`, `attribution?`, `backgroundImage?`                     |
-| `statHighlight`     | `value`, `label`, `description?`, `trend?`, `trendDirection?`   |
-| `timelineBlock`     | `events[]` (each: `date`, `title`, `description?`)              |
-| `comparisonBlock`   | `items[]` (each: `title`, `features[]`), `heading?`             |
-| `mapBlock`          | `center`, `zoom?`, `markers?`, `tileUrl?`, `heading?`           |
-| `videoBlock`        | `src`, `poster?`, `caption?`, `autoplay?`, `loop?`              |
-| `codeBlock`         | `code`, `language?`, `heading?`, `theme?`                       |
-| `chartBlock`        | `chartType`, `data`, `heading?`, `description?`                 |
-| `bulletListBlock`   | `heading?`, `items[]`, `icon?`, `backgroundImage?`              |
-| `numberedListBlock` | `heading?`, `items[]`, `startNumber?`                           |
-| `tableBlock`        | `heading?`, `headers[]`, `rows[][]`                             |
-| `calloutBlock`      | `type` (`info`/`warning`/`success`/`error`), `heading?`, `body` |
-| `dividerBlock`      | `style?` (`solid`/`dashed`/`dotted`/`gradient`), `color?`       |
+| Template            | Key Input Fields                                                                             |
+| ------------------- | -------------------------------------------------------------------------------------------- |
+| `titleBlock`        | `title`, `subtitle?`, `backgroundImage?`, `backgroundGradient?`                              |
+| `textBlock`         | `heading?`, `body`, `backgroundImage?`                                                       |
+| `imageBlock`        | `src`, `alt?`, `caption?`, `objectFit?`                                                      |
+| `twoColumnBlock`    | `leftContent`, `rightContent`, `heading?`                                                    |
+| `quoteBlock`        | `quote`, `attribution?`, `backgroundImage?`                                                  |
+| `statHighlight`     | `value`, `label`, `description?`, `trend?`, `trendDirection?`                                |
+| `timelineBlock`     | `events[]` (each: `date`, `title`, `description?`)                                           |
+| `comparisonBlock`   | `items[]` (each: `title`, `features[]`), `heading?`                                          |
+| `mapBlock`          | `center`, `zoom?`, `markers?`, `tileUrl?`, `heading?`                                        |
+| `videoBlock`        | `src`, `poster?`, `caption?`, `autoplay?`, `loop?`                                           |
+| `codeBlock`         | `code`, `language?`, `heading?`, `theme?`                                                    |
+| `chartBlock`        | `chartType`, `data`, `heading?`, `description?`                                              |
+| `bulletListBlock`   | `heading?`, `items[]`, `icon?`, `backgroundImage?`                                           |
+| `numberedListBlock` | `heading?`, `items[]`, `startNumber?`                                                        |
+| `tableBlock`        | `heading?`, `headers[]`, `rows[][]`                                                          |
+| `calloutBlock`      | `type` (`info`/`warning`/`success`/`error`), `heading?`, `body`                              |
+| `dividerBlock`      | `style?` (`solid`/`dashed`/`dotted`/`gradient`), `color?`                                    |
+| `videoWithCaption`  | `videoSrc`, `videoAlt`, `clipStart`, `clipEnd`, `caption?`, `captionPosition?`, `posterSrc?` |
+| `videoPullQuote`    | `text`, `attribution?`, `backgroundVideo` (with `src`, `clipStart`, `clipEnd`)               |
+| `dataTable`         | `title?`, `headers[]`, `rows[][]`, `align?`, `colorScheme?`                                  |
 
 > All template inputs extend a common `TemplateBlockInput` base with optional `backgroundGradient`, `backgroundImage`, and `backgroundColor`.
 
@@ -648,10 +689,14 @@ Renders all doc blocks vertically in a scrollable layout.
 ```ts
 interface LinearDocViewProps {
   doc: Doc;
+  basePath?: string;
+  viewport?: ViewportConfig;
   className?: string;
-  mediaProvider?: MediaProvider;
+  theme?: Theme;
 }
 ```
+
+Renders template-annotated blocks as SVG cards using `getLayers()`, preserving heading hierarchy in a scrollable layout.
 
 #### `MarkdownRenderer`
 
@@ -669,13 +714,14 @@ interface MarkdownRendererProps {
 
 Layer components used internally by `BlockRenderer`. Can be used standalone for custom rendering.
 
-| Component    | Props Summary                                                |
-| ------------ | ------------------------------------------------------------ |
-| `ImageLayer` | `layer: Layer`, `viewport: ViewportConfig`, `mediaProvider?` |
-| `TextLayer`  | `layer: Layer`, `viewport: ViewportConfig`                   |
-| `ShapeLayer` | `layer: Layer`, `viewport: ViewportConfig`                   |
-| `VideoLayer` | `layer: Layer`, `viewport: ViewportConfig`, `mediaProvider?` |
-| `MapLayer`   | `layer: Layer`, `viewport: ViewportConfig`                   |
+| Component    | Props Summary                                                        |
+| ------------ | -------------------------------------------------------------------- |
+| `ImageLayer` | `layer: Layer`, `viewport: ViewportConfig`, `mediaProvider?`         |
+| `TextLayer`  | `layer: Layer`, `viewport: ViewportConfig`                           |
+| `ShapeLayer` | `layer: Layer`, `viewport: ViewportConfig`                           |
+| `VideoLayer` | `layer: Layer`, `viewport: ViewportConfig`, `mediaProvider?`         |
+| `MapLayer`   | `layer: Layer`, `viewport: ViewportConfig`                           |
+| `TableLayer` | `layer: TableLayer`, `viewport: ViewportConfig`, `blockTime: number` |
 
 ### React Hooks
 
@@ -785,11 +831,21 @@ async function docxToMarkdownDoc(
 async function docToDocx(doc: Doc, options?: DocxExportOptions): Promise<Blob>;
 async function docxToDoc(data: ArrayBuffer | Blob, options?: DocxImportOptions): Promise<Doc>;
 
+// Import to a ContentContainer with markdown + extracted images
+async function docxToContainer(
+  data: ArrayBuffer | Blob,
+  options?: DocxImportOptions,
+): Promise<ContentContainer>;
+
 interface DocxExportOptions {
   title?: string;
   author?: string;
   description?: string;
   styles?: DocxStyleOverrides;
+  /** Apply a Squisq theme (colors + typography) to headings. */
+  themeId?: string;
+  /** Pre-resolved images keyed by markdown image URL — embedded as binary parts in the .docx. */
+  images?: Map<string, { data: ArrayBuffer | Uint8Array; contentType: string }>;
 }
 
 interface DocxImportOptions {
@@ -816,6 +872,12 @@ async function pdfToMarkdownDoc(
 async function docToPdf(doc: Doc, options?: PdfExportOptions): Promise<Uint8Array>;
 async function pdfToDoc(data: ArrayBuffer | Uint8Array, options?: PdfImportOptions): Promise<Doc>;
 
+// Import to a ContentContainer with markdown + extracted images
+async function pdfToContainer(
+  data: ArrayBuffer | Uint8Array | Blob,
+  options?: PdfImportOptions,
+): Promise<ContentContainer>;
+
 function configurePdfWorker(workerSrc: string): void;
 
 interface PdfExportOptions {
@@ -827,7 +889,16 @@ interface PdfExportOptions {
 }
 
 interface PdfImportOptions {
-  extractImages?: boolean;
+  /** Hint for body font size (points). Text larger than this is treated as a heading. */
+  bodyFontSize?: number;
+  /** Detect tables from column-aligned text. Default: true. */
+  detectTables?: boolean;
+  /** Detect code blocks from monospace fonts. Default: true. */
+  detectCodeBlocks?: boolean;
+  /** Detect blockquotes from indentation. Default: true. */
+  detectBlockquotes?: boolean;
+  /** Detect URLs in text and convert to links. Default: true. */
+  detectLinks?: boolean;
 }
 ```
 
@@ -1156,3 +1227,125 @@ function tiptapToMarkdown(html: string): string;
 ### Tiptap Extension
 
 **`HeadingWithTemplate`** — Custom Tiptap extension that recognises template annotation syntax (`{[templateName key=value]}`) inside headings and preserves it across editing round-trips.
+
+---
+
+## `@bendyline/squisq-cli`
+
+Command-line tool and programmatic API for converting Squisq documents and rendering them to MP4 video.
+
+**Install:** `npm install -g @bendyline/squisq-cli`
+
+### CLI Programmatic API
+
+**Import:** `@bendyline/squisq-cli/api`
+
+Library-style entry point for rendering Squisq docs to MP4 from Node.js — avoids shelling out to the CLI.
+
+#### `renderDocToMp4`
+
+```ts
+async function renderDocToMp4(
+  doc: Doc,
+  container: MemoryContentContainer,
+  options: RenderDocToMp4Options,
+): Promise<RenderDocToMp4Result>;
+
+interface RenderDocToMp4Options {
+  /** Output file path for the MP4. */
+  outputPath: string;
+  /** Frames per second (default: 30). */
+  fps?: number;
+  /** Encoding quality preset (default: 'normal'). */
+  quality?: 'draft' | 'normal' | 'high';
+  /** Video orientation (default: 'landscape'). */
+  orientation?: 'landscape' | 'portrait';
+  /** Override video width in pixels. */
+  width?: number;
+  /** Override video height in pixels. */
+  height?: number;
+  /** Caption style to bake into the video. */
+  captionStyle?: 'standard' | 'social';
+  /** Seconds of cover-slide pre-roll before the story starts (default: 0). */
+  coverPreRoll?: number;
+  /** Progress callback — called with a phase name and 0-100 percentage. */
+  onProgress?: (phase: string, percent: number) => void;
+}
+
+interface RenderDocToMp4Result {
+  /** Duration of the rendered video in seconds. */
+  duration: number;
+  /** Number of frames captured. */
+  frameCount: number;
+  /** Output file path. */
+  outputPath: string;
+}
+```
+
+#### `extractThumbnails`
+
+Extract JPEG thumbnails from the first frame of an MP4 video.
+
+```ts
+async function extractThumbnails(options: ExtractThumbnailsOptions): Promise<void>;
+
+interface ExtractThumbnailsOptions {
+  /** Path to the source MP4 video. */
+  videoPath: string;
+  /** Directory to write thumbnails into. */
+  outputDir: string;
+  /** Base slug for filenames (produces `{slug}-{width}x{height}.jpg`). */
+  slug: string;
+  /** Thumbnail sizes to generate. */
+  sizes: ThumbnailSpec[];
+  /** Overwrite existing thumbnails (default: false). */
+  force?: boolean;
+}
+
+interface ThumbnailSpec {
+  name: string;
+  width: number;
+  height: number;
+  /** FFmpeg video filter string (e.g., 'scale=1280:720'). */
+  filter: string;
+}
+```
+
+#### Re-exports
+
+The API entry point re-exports several utilities for convenience:
+
+```ts
+export type { VideoQuality, VideoOrientation } from '@bendyline/squisq-video';
+export { MemoryContentContainer } from '@bendyline/squisq/storage';
+export { readInput } from './util/readInput.js';
+export type { ReadInputResult } from './util/readInput.js';
+```
+
+### CLI Commands
+
+#### `squisq convert`
+
+Convert a document to DOCX, PPTX, PDF, HTML, or DBK:
+
+| Option         | Description                                      | Default     |
+| -------------- | ------------------------------------------------ | ----------- |
+| `--output-dir` | Output directory                                 | current dir |
+| `--formats`    | Comma-separated list: docx, pptx, pdf, html, dbk | all         |
+| `--theme`      | Squisq theme ID (e.g., documentary, cinematic)   | none        |
+| `--transform`  | Transform style (e.g., documentary, magazine)    | none        |
+
+#### `squisq video`
+
+Render a document to MP4 video:
+
+| Option          | Description               | Default   |
+| --------------- | ------------------------- | --------- |
+| `--fps`         | Frames per second (1–120) | 30        |
+| `--quality`     | draft, normal, or high    | normal    |
+| `--orientation` | landscape or portrait     | landscape |
+| `--captions`    | off, standard, or social  | off       |
+| `--width`       | Override width in pixels  | auto      |
+| `--height`      | Override height in pixels | auto      |
+
+**Requires:** [ffmpeg](https://ffmpeg.org/) on PATH and Playwright (chromium) for frame capture.
