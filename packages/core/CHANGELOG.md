@@ -1,3 +1,9 @@
+## @bendyline/squisq [1.2.0](https://github.com/bendyline/squisq/compare/@bendyline/squisq@1.1.1...@bendyline/squisq@1.2.0) (2026-03-31)
+
+### Features
+
+* Video updates, doc import ([#12](https://github.com/bendyline/squisq/issues/12)) ([b512a9f](https://github.com/bendyline/squisq/commit/b512a9f342911b683c61bbeebb525037975e0b1f))
+
 ## @bendyline/squisq [1.1.1](https://github.com/bendyline/squisq/compare/@bendyline/squisq@1.1.0...@bendyline/squisq@1.1.1) (2026-03-27)
 
 ### Bug Fixes
