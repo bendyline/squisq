@@ -148,14 +148,15 @@ test.describe('WYSIWYG editing', () => {
 
   test('Ctrl+B applies bold formatting to new text', async ({ page }) => {
     const editor = page.locator('.tiptap.ProseMirror');
+    const modifier = process.platform === 'darwin' ? 'Meta' : 'Control';
 
     // Click at end of content and type new bold text
     await editor.click();
     await page.keyboard.press('End');
     await page.keyboard.press('Enter');
-    await page.keyboard.press('Meta+b');
+    await page.keyboard.press(`${modifier}+b`);
     await page.keyboard.type('uniqueboldtext');
-    await page.keyboard.press('Meta+b');
+    await page.keyboard.press(`${modifier}+b`);
 
     // The typed text should appear inside a <strong> element
     const boldEl = editor.locator('strong', { hasText: 'uniqueboldtext' });
