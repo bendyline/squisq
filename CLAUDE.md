@@ -122,6 +122,7 @@ npm run format             # Prettier format
 - `@bendyline/squisq-formats/docx` — DOCX import/export (markdownDocToDocx, docxToMarkdownDoc, docToDocx, docxToDoc)
 - `@bendyline/squisq-formats/ooxml` — Shared OOXML package reader/writer, XML utilities, namespace constants
 - `@bendyline/squisq-formats/pdf` — PDF import/export (markdownDocToPdf, pdfToMarkdownDoc, configurePdfWorker)
+- `@bendyline/squisq-formats/epub` — EPUB 3 e-book export (markdownDocToEpub, docToEpub)
 - `@bendyline/squisq-formats/pptx` — PPTX export (markdownDocToPptx, docToPptx) + import stubs
 - `@bendyline/squisq-formats/xlsx` — XLSX stubs (not yet implemented)
 - `@bendyline/squisq-formats/container` — ContentContainer ZIP serialization (containerToZip, zipToContainer)

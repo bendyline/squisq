@@ -20,6 +20,7 @@ npm install @bendyline/squisq-formats @bendyline/squisq
 | **DOCX** (Word)       | ✅      | ✅      | ✅    | `@bendyline/squisq-formats/docx` |
 | **PDF**               | ✅      | ✅      | ✅    | `@bendyline/squisq-formats/pdf`  |
 | **HTML**              | —       | ✅      | ✅    | `@bendyline/squisq-formats/html` |
+| **EPUB** (e-book)     | —       | ✅      | ✅    | `@bendyline/squisq-formats/epub` |
 | **PPTX** (PowerPoint) | planned | ✅      | ✅    | `@bendyline/squisq-formats/pptx` |
 | **XLSX** (Excel)      | planned | planned | —     | `@bendyline/squisq-formats/xlsx` |
 
@@ -70,6 +71,18 @@ const html = docToHtml(doc);
 const zipBytes = await docToHtmlZip(doc);
 ```
 
+### EPUB
+
+```ts
+import { markdownDocToEpub } from '@bendyline/squisq-formats/epub';
+
+// Export: MarkdownDocument → EPUB (ArrayBuffer)
+const epubBytes = await markdownDocToEpub(markdownDoc, {
+  title: 'My Book',
+  author: 'Jane Doe',
+});
+```
+
 ### PPTX
 
 ```ts
@@ -97,6 +110,7 @@ import { docToPptx } from '@bendyline/squisq-formats/pptx';
 | `@bendyline/squisq-formats/docx`  | DOCX import/export                                             |
 | `@bendyline/squisq-formats/pdf`   | PDF import/export + worker config                              |
 | `@bendyline/squisq-formats/html`  | HTML export                                                    |
+| `@bendyline/squisq-formats/epub`  | EPUB 3 e-book export                                           |
 | `@bendyline/squisq-formats/ooxml` | Shared OOXML infrastructure (ZIP reader/writer, XML utilities) |
 | `@bendyline/squisq-formats/pptx`  | PPTX export (import planned)                                   |
 | `@bendyline/squisq-formats/xlsx`  | XLSX stubs (not yet implemented)                               |

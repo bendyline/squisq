@@ -55,14 +55,14 @@
     "@bendyline/squisq": "1.2.0"
   },
   "devDependencies": {
-    "@types/react": "^18.0.0",
-    "preact": "^10.25.0",
-    "react": "^18.0.0",
-    "react-dom": "^18.0.0",
-    "@testing-library/react": "^16.0.0",
-    "@testing-library/jest-dom": "^6.0.0",
-    "jsdom": "^25.0.0",
-    "tsup": "^8.0.0",
-    "typescript": "^5.3.0"
+    "@types/react": "18.3.28",
+    "preact": "10.29.0",
+    "react": "18.3.1",
+    "react-dom": "18.3.1",
+    "@testing-library/react": "16.3.2",
+    "@testing-library/jest-dom": "6.9.1",
+    "jsdom": "25.0.1",
+    "tsup": "8.5.1",
+    "typescript": "5.9.3"
   }
 }

@@ -49,3 +49,7 @@ export type { PdfExportOptions, PdfImportOptions } from './pdf/index.js';
 // HTML (fully implemented)
 export { docToHtml, docToHtmlZip, collectImagePaths } from './html/index.js';
 export type { HtmlExportOptions, HtmlZipExportOptions } from './html/index.js';
+
+// EPUB (export)
+export { markdownDocToEpub, docToEpub } from './epub/index.js';
+export type { EpubExportOptions } from './epub/index.js';

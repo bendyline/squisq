@@ -10,7 +10,7 @@
  * - PreviewPanel (the actual player, which reads the selected values)
  */
 
-import { createContext, useContext, useState, useMemo, useEffect } from 'react';
+import { createContext, useContext, useState, useMemo, useEffect, useRef } from 'react';
 import type { ReactNode } from 'react';
 import type { DisplayMode, CaptionStyle } from '@bendyline/squisq-react';
 import type { ViewportPreset, ViewportConfig } from '@bendyline/squisq/schemas';
@@ -233,108 +233,137 @@ const selectStyle: React.CSSProperties = {
 
 // ── Toolbar Controls Component ───────────────────────────────────
 
+/** Hook to track whether the viewport is narrow. */
+function useIsNarrow(breakpoint = 600): boolean {
+  const [narrow, setNarrow] = useState(
+    () => typeof window !== 'undefined' && window.innerWidth <= breakpoint,
+  );
+  useEffect(() => {
+    const mq = window.matchMedia(`(max-width: ${breakpoint}px)`);
+    const handler = (e: MediaQueryListEvent) => setNarrow(e.matches);
+    mq.addEventListener('change', handler);
+    return () => mq.removeEventListener('change', handler);
+  }, [breakpoint]);
+  return narrow;
+}
+
 /**
  * Inline preview controls rendered in the main toolbar row.
- * Reads from PreviewSettingsContext.
+ * On narrow viewports, collapses into a single settings button with a dropdown.
  */
 export function PreviewToolbarControls() {
   const s = usePreviewSettings();
+  const isNarrow = useIsNarrow(768);
+  const [popoverOpen, setPopoverOpen] = useState(false);
+  const popoverRef = useRef<HTMLDivElement>(null);
 
-  return (
-    <div
-      style={{
-        display: 'flex',
-        alignItems: 'center',
-        gap: '6px',
-        flexWrap: 'wrap',
-        padding: '2px 0 2px 9px',
-      }}
-    >
-      <label style={labelStyle}>Format:</label>
-      <select
+  // Close popover on outside click
+  useEffect(() => {
+    if (!popoverOpen) return;
+    const handler = (e: MouseEvent) => {
+      if (popoverRef.current && !popoverRef.current.contains(e.target as Node)) {
+        setPopoverOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [popoverOpen]);
+
+  const controls = (
+    <>
+      <PreviewSelect
+        label="Format"
         value={s.activePreset}
-        onChange={(e) => s.setSelectedPreset(e.target.value as ViewportPreset)}
-        style={selectStyle}
-      >
-        {VIEWPORT_OPTIONS.map((o) => (
-          <option key={o.key} value={o.key}>
-            {o.label}
-          </option>
-        ))}
-      </select>
-
-      <Divider />
-
-      <label style={labelStyle}>Mode:</label>
-      <select
+        options={VIEWPORT_OPTIONS}
+        onChange={(v) => s.setSelectedPreset(v as ViewportPreset)}
+        compact={isNarrow}
+      />
+      <PreviewSelect
+        label="Mode"
         value={s.activeDisplayMode}
-        onChange={(e) => s.setSelectedDisplayMode(e.target.value as DisplayMode)}
-        style={selectStyle}
-      >
-        {DISPLAY_MODE_OPTIONS.map((o) => (
-          <option key={o.key} value={o.key}>
-            {o.label}
-          </option>
-        ))}
-      </select>
-
-      <Divider />
-
-      <label style={labelStyle}>Theme:</label>
-      <select
+        options={DISPLAY_MODE_OPTIONS}
+        onChange={(v) => s.setSelectedDisplayMode(v as DisplayMode)}
+        compact={isNarrow}
+      />
+      <PreviewSelect
+        label="Theme"
         value={s.activeThemeId}
-        onChange={(e) => s.setSelectedThemeId(e.target.value)}
-        style={selectStyle}
-      >
-        {THEME_OPTIONS.map((o) => (
-          <option key={o.key} value={o.key}>
-            {o.label}
-          </option>
-        ))}
-      </select>
-
-      <Divider />
-
-      <label style={labelStyle}>Transform:</label>
-      <select
+        options={THEME_OPTIONS}
+        onChange={(v) => s.setSelectedThemeId(v)}
+        compact={isNarrow}
+      />
+      <PreviewSelect
+        label="Transform"
         value={s.activeTransformStyle}
-        onChange={(e) => s.setSelectedTransformStyle(e.target.value)}
-        style={selectStyle}
-      >
-        {TRANSFORM_STYLE_OPTIONS.map((o) => (
-          <option key={o.key} value={o.key}>
-            {o.label}
-          </option>
-        ))}
-      </select>
-
-      <Divider />
-
-      <label style={labelStyle}>Captions:</label>
-      <select
+        options={TRANSFORM_STYLE_OPTIONS}
+        onChange={(v) => s.setSelectedTransformStyle(v)}
+        compact={isNarrow}
+      />
+      <PreviewSelect
+        label="Captions"
         value={s.activeCaptionStyle}
-        onChange={(e) => s.setSelectedCaptionStyle(e.target.value as CaptionStyle)}
-        style={selectStyle}
-      >
-        {CAPTION_STYLE_OPTIONS.map((o) => (
+        options={CAPTION_STYLE_OPTIONS}
+        onChange={(v) => s.setSelectedCaptionStyle(v as CaptionStyle)}
+        compact={isNarrow}
+      />
+    </>
+  );
+
+  if (isNarrow) {
+    return (
+      <div className="squisq-preview-controls-compact" ref={popoverRef}>
+        <button
+          className="squisq-toolbar-button"
+          onClick={() => setPopoverOpen((v) => !v)}
+          aria-label="Preview settings"
+          title="Preview settings"
+          aria-expanded={popoverOpen}
+        >
+          <svg
+            width="16"
+            height="16"
+            viewBox="0 0 16 16"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.5"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
+            <circle cx="8" cy="8" r="2.5" />
+            <path d="M13.5 8a5.5 5.5 0 01-.4 1.8l1.2 1.2-1.6 1.6-1.2-1.2A5.5 5.5 0 018 13.5a5.5 5.5 0 01-3.5-1.3L3.3 13.4 1.7 11.8l1.2-1.2A5.5 5.5 0 012.5 8c0-.6.1-1.2.4-1.8L1.7 5 3.3 3.4l1.2 1.2A5.5 5.5 0 018 2.5c1.3 0 2.5.5 3.5 1.3l1.2-1.2 1.6 1.6-1.2 1.2c.3.6.4 1.2.4 1.6z" />
+          </svg>
+        </button>
+        {popoverOpen && <div className="squisq-preview-controls-popover">{controls}</div>}
+      </div>
+    );
+  }
+
+  return <div className="squisq-preview-controls-inline">{controls}</div>;
+}
+
+function PreviewSelect({
+  label,
+  value,
+  options,
+  onChange,
+  compact,
+}: {
+  label: string;
+  value: string;
+  options: { key: string; label: string }[];
+  onChange: (value: string) => void;
+  compact?: boolean;
+}) {
+  return (
+    <div className={`squisq-preview-control${compact ? ' squisq-preview-control--compact' : ''}`}>
+      <label style={labelStyle}>{label}:</label>
+      <select value={value} onChange={(e) => onChange(e.target.value)} style={selectStyle}>
+        {options.map((o) => (
           <option key={o.key} value={o.key}>
             {o.label}
           </option>
         ))}
       </select>
     </div>
-  );
-}
-
-function Divider() {
-  return (
-    <span
-      style={{
-        width: '1px',
-        height: '16px',
-        background: 'var(--squisq-border, #d1d5db)',
-        margin: '0 2px',
-      }}
-    />
   );
 }
