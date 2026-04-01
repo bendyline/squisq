@@ -23,6 +23,7 @@
 
 import JSZip from 'jszip';
 import type { Doc, AudioSegment } from '@bendyline/squisq/schemas';
+import { resolveTheme } from '@bendyline/squisq/schemas';
 import type {
   MarkdownDocument,
   MarkdownBlockNode,
@@ -82,31 +83,44 @@ export async function markdownDocToEpub(
   doc: MarkdownDocument,
   options: EpubExportOptions = {},
 ): Promise<ArrayBuffer> {
-  const title = options.title ?? (doc.frontmatter?.title as string) ?? 'Untitled';
-  const author = options.author ?? (doc.frontmatter?.author as string) ?? '';
+  const fmTitle = doc.frontmatter?.title;
+  const fmAuthor = doc.frontmatter?.author;
+  const title = options.title ?? (typeof fmTitle === 'string' ? fmTitle : 'Untitled');
+  const author = options.author ?? (typeof fmAuthor === 'string' ? fmAuthor : '');
   const language = options.language ?? 'en';
   const description = options.description ?? '';
   const publisher = options.publisher ?? '';
-  const uuid = generateUuid();
+  const uuid = crypto.randomUUID();
 
   // Split document into chapters
   const chapters = splitIntoChapters(doc.children);
 
-  // Collect images referenced in the document
+  // Collect images referenced in the document, deduplicating filenames
   const imageEntries = collectDocImages(doc.children);
   const resolvedImages = new Map<string, { data: ArrayBuffer; mime: string; filename: string }>();
   if (options.images) {
+    const usedNames = new Set<string>();
     for (const src of imageEntries) {
       const data = options.images.get(src);
       if (data) {
-        const filename = extractFilename(src);
+        let filename = extractFilename(src);
+        // Deduplicate: if two paths share a basename (e.g. a/hero.png and b/hero.png)
+        if (usedNames.has(filename)) {
+          const dot = filename.lastIndexOf('.');
+          const base = dot > 0 ? filename.slice(0, dot) : filename;
+          const ext = dot > 0 ? filename.slice(dot) : '';
+          let counter = 2;
+          while (usedNames.has(`${base}-${counter}${ext}`)) counter++;
+          filename = `${base}-${counter}${ext}`;
+        }
+        usedNames.add(filename);
         resolvedImages.set(src, { data, mime: inferMimeType(filename), filename });
       }
     }
   }
 
   // Generate theme CSS
-  const css = await generateStylesheet(options.themeId);
+  const css = generateStylesheet(options.themeId);
 
   // Build the ZIP
   const zip = new JSZip();
@@ -125,39 +139,57 @@ export async function markdownDocToEpub(
     zip.file(`OEBPS/images/${img.filename}`, img.data);
   }
 
-  // Cover image
+  // Cover image — detect PNG vs JPEG from magic bytes
   let coverFilename: string | undefined;
   if (options.coverImage) {
-    coverFilename = 'cover.jpg';
+    const bytes = new Uint8Array(options.coverImage);
+    const isPng =
+      bytes.length >= 4 &&
+      bytes[0] === 0x89 &&
+      bytes[1] === 0x50 &&
+      bytes[2] === 0x4e &&
+      bytes[3] === 0x47;
+    coverFilename = isPng ? 'cover.png' : 'cover.jpg';
     zip.file(`OEBPS/images/${coverFilename}`, options.coverImage);
   }
 
   // ── Audio narration ──────────────────────────────────────────────
-  const hasAudio = options.audio && options.audioSegments && options.audioSegments.length > 0;
-  const audioFiles: { filename: string; mime: string }[] = [];
+  const audioMap = options.audio;
+  const audioSegments = options.audioSegments;
+  const hasAudio = audioMap && audioSegments && audioSegments.length > 0;
+  // Per-segment audio file info, indexed by segment index (null if data missing)
+  const segmentAudioFiles: ({ filename: string; mime: string } | null)[] = [];
+  const allAudioFiles: { filename: string; mime: string }[] = [];
 
   if (hasAudio) {
-    for (const seg of options.audioSegments!) {
-      const data = options.audio!.get(seg.src) ?? options.audio!.get(seg.name);
+    for (const seg of audioSegments) {
+      const data = audioMap.get(seg.src) ?? audioMap.get(seg.name);
       if (data) {
         const filename = extractFilename(seg.src);
         const finalName = filename.includes('.') ? filename : `${filename}.mp3`;
         zip.file(`OEBPS/audio/${finalName}`, data);
-        audioFiles.push({ filename: finalName, mime: inferMimeType(finalName) });
+        const info = { filename: finalName, mime: inferMimeType(finalName) };
+        segmentAudioFiles.push(info);
+        allAudioFiles.push(info);
+      } else {
+        segmentAudioFiles.push(null);
       }
     }
   }
 
   // Build chapter-to-audio mapping for SMIL overlays
-  // Each chapter maps to one audio segment (chapters split at H1/H2, segments are sequential)
   const chapterAudio: (ChapterAudioInfo | null)[] = [];
-  if (hasAudio && audioFiles.length > 0) {
-    const segments = options.audioSegments!;
+  if (hasAudio && allAudioFiles.length > 0) {
+    if (chapters.length !== audioSegments.length) {
+      console.warn(
+        `EPUB: ${chapters.length} chapters but ${audioSegments.length} audio segments — ` +
+          `extra chapters will reuse the last segment's audio`,
+      );
+    }
     for (let i = 0; i < chapters.length; i++) {
-      // Map chapter index to audio segment index (1:1 when both split at section boundaries)
-      const segIdx = Math.min(i, segments.length - 1);
-      const seg = segments[segIdx];
-      const audioFile = audioFiles[Math.min(segIdx, audioFiles.length - 1)];
+      const segIdx = Math.min(i, audioSegments.length - 1);
+      const seg = audioSegments[segIdx];
+      const audioFile = segmentAudioFiles[segIdx];
       if (audioFile) {
         chapterAudio.push({
           audioFilename: audioFile.filename,
@@ -216,7 +248,7 @@ export async function markdownDocToEpub(
       chapters: chapterFiles,
       images: resolvedImages,
       coverFilename,
-      audioFiles,
+      audioFiles: allAudioFiles,
       totalDuration: options.totalDuration,
     }),
   );
@@ -429,21 +461,21 @@ function blockToXhtml(node: MarkdownBlockNode, images: ImageMap, nextId?: () => 
 
     case 'code': {
       const langAttr = node.lang ? ` class="language-${escapeXml(node.lang)}"` : '';
-      return `<pre><code${langAttr}>${escapeXml(node.value)}</code></pre>`;
+      return `<pre${idAttr}><code${langAttr}>${escapeXml(node.value)}</code></pre>`;
     }
 
     case 'thematicBreak':
-      return '<hr/>';
+      return `<hr${idAttr}/>`;
 
     case 'table':
-      return tableToXhtml(node as MarkdownTable, images);
+      return tableToXhtml(node as MarkdownTable, images, idAttr);
 
     case 'htmlBlock':
-      // Pass through raw HTML (best effort for XHTML compatibility)
-      return node.rawHtml;
+      // Strip HTML tags for XHTML safety — raw HTML may not be well-formed XML
+      return `<p${idAttr}>${escapeXml(node.rawHtml.replace(/<[^>]+>/g, ''))}</p>`;
 
     case 'math':
-      return `<p class="math">${escapeXml(node.value)}</p>`;
+      return `<p${idAttr} class="math">${escapeXml(node.value)}</p>`;
 
     default:
       return '';
@@ -460,9 +492,9 @@ function listItemToXhtml(item: MarkdownListItem, images: ImageMap): string {
   return `<li>${unwrapped}</li>`;
 }
 
-function tableToXhtml(table: MarkdownTable, images: ImageMap): string {
+function tableToXhtml(table: MarkdownTable, images: ImageMap, idAttr = ''): string {
   const rows = table.children;
-  if (rows.length === 0) return '<table></table>';
+  if (rows.length === 0) return `<table${idAttr}></table>`;
 
   const headerRow = rows[0];
   const bodyRows = rows.slice(1);
@@ -480,7 +512,7 @@ function tableToXhtml(table: MarkdownTable, images: ImageMap): string {
       ? `<tbody>${bodyRows.map((row: MarkdownTableRow) => `<tr>${row.children.map((c, i) => cellToXhtml(c, 'td', i)).join('')}</tr>`).join('')}</tbody>`
       : '';
 
-  return `<table>${thead}${tbody}</table>`;
+  return `<table${idAttr}>${thead}${tbody}</table>`;
 }
 
 function inlinesToXhtml(nodes: MarkdownInlineNode[], images: ImageMap): string {
@@ -523,7 +555,8 @@ function inlineToXhtml(node: MarkdownInlineNode, images: ImageMap): string {
       return `<span class="math">${escapeXml(node.value)}</span>`;
 
     case 'htmlInline':
-      return node.rawHtml;
+      // Strip tags for XHTML safety
+      return escapeXml(node.rawHtml.replace(/<[^>]+>/g, ''));
 
     default:
       return '';
@@ -541,7 +574,9 @@ function generateSmil(
   audioInfo: ChapterAudioInfo,
   nodes: MarkdownBlockNode[],
 ): string {
-  // Count block elements to generate matching IDs (p1, p2, ...)
+  // Count block elements to match the IDs generated by blockToXhtml.
+  // Must mirror blockToXhtml's recursion: each block gets an ID,
+  // blockquote children recurse (they pass nextId), but list items do not.
   let elementCount = 0;
   function countBlocks(node: MarkdownBlockNode): void {
     elementCount++;
@@ -556,8 +591,8 @@ function generateSmil(
   const pars: string[] = [];
 
   for (let i = 0; i < elementCount; i++) {
-    const clipStart = formatSmilTime(audioInfo.clipStart + i * clipDuration);
-    const clipEnd = formatSmilTime(audioInfo.clipStart + (i + 1) * clipDuration);
+    const clipStart = formatTime(audioInfo.clipStart + i * clipDuration, true);
+    const clipEnd = formatTime(audioInfo.clipStart + (i + 1) * clipDuration, true);
     pars.push(
       `    <par id="par-${i + 1}">` +
         `\n      <text src="${chapterFilename}#p${i + 1}"/>` +
@@ -576,18 +611,12 @@ ${pars.join('\n')}
 </smil>`;
 }
 
-function formatSmilTime(seconds: number): string {
+function formatTime(seconds: number, fractional = false): string {
   const h = Math.floor(seconds / 3600);
   const m = Math.floor((seconds % 3600) / 60);
   const s = seconds % 60;
-  return `${h}:${String(m).padStart(2, '0')}:${s.toFixed(3).padStart(6, '0')}`;
-}
-
-function formatDuration(seconds: number): string {
-  const h = Math.floor(seconds / 3600);
-  const m = Math.floor((seconds % 3600) / 60);
-  const s = Math.floor(seconds % 60);
-  return `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+  const sPart = fractional ? s.toFixed(3).padStart(6, '0') : String(Math.floor(s)).padStart(2, '0');
+  return `${h}:${String(m).padStart(2, '0')}:${sPart}`;
 }
 
 // ── Package Documents ─────────────────────────────────────────────
@@ -683,7 +712,7 @@ function generateContentOpf(params: OpfParams): string {
 
   // Metadata
   const metaParts = [
-    `    <dc:identifier>urn:uuid:${uuid}</dc:identifier>`,
+    `    <dc:identifier id="uid">urn:uuid:${uuid}</dc:identifier>`,
     `    <dc:title>${escapeXml(title)}</dc:title>`,
     `    <dc:language>${escapeXml(language)}</dc:language>`,
     `    <meta property="dcterms:modified">${modified}</meta>`,
@@ -694,7 +723,7 @@ function generateContentOpf(params: OpfParams): string {
 
   // Media Overlay metadata
   if (hasOverlays && totalDuration) {
-    metaParts.push(`    <meta property="media:duration">${formatDuration(totalDuration)}</meta>`);
+    metaParts.push(`    <meta property="media:duration">${formatTime(totalDuration)}</meta>`);
     metaParts.push('    <meta property="media:active-class">epub-media-overlay-active</meta>');
   }
 
@@ -741,21 +770,16 @@ ${navItems}
 
 // ── Stylesheet ────────────────────────────────────────────────────
 
-async function generateStylesheet(themeId?: string): Promise<string> {
+function generateStylesheet(themeId?: string): string {
   let themeVars = '';
   if (themeId) {
-    try {
-      const { resolveTheme } = await import('@bendyline/squisq/schemas');
-      const theme = resolveTheme(themeId);
-      themeVars = `
+    const theme = resolveTheme(themeId);
+    themeVars = `
   --epub-bg: ${theme.colors.background};
   --epub-text: ${theme.colors.text};
   --epub-primary: ${theme.colors.primary};
   --epub-heading-font: ${theme.typography.titleFontFamily};
   --epub-body-font: ${theme.typography.bodyFontFamily};`;
-    } catch {
-      // Theme resolution failed — use defaults
-    }
   }
 
   return `/* Squisq EPUB Stylesheet */
@@ -864,24 +888,4 @@ li {
   background-color: rgba(37, 99, 235, 0.12);
 }
 `;
-}
-
-// ── Utilities ─────────────────────────────────────────────────────
-
-function generateUuid(): string {
-  // Simple UUID v4 generation (no crypto dependency needed for book IDs)
-  const hex = '0123456789abcdef';
-  let uuid = '';
-  for (let i = 0; i < 36; i++) {
-    if (i === 8 || i === 13 || i === 18 || i === 23) {
-      uuid += '-';
-    } else if (i === 14) {
-      uuid += '4';
-    } else if (i === 19) {
-      uuid += hex[(Math.random() * 4) | 8];
-    } else {
-      uuid += hex[(Math.random() * 16) | 0];
-    }
-  }
-  return uuid;
 }

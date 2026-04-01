@@ -197,13 +197,14 @@ async function runConvert(inputPath: string, opts: ConvertOpts): Promise<void> {
           }
         }
 
+        const hasNarration = epubAudio.size > 0;
         const buf = await markdownDocToEpub(exportMarkdownDoc, {
           title: baseName,
           themeId,
           images,
-          audio: epubAudio.size > 0 ? epubAudio : undefined,
-          audioSegments: epubAudio.size > 0 ? audioSegments : undefined,
-          totalDuration: epubAudio.size > 0 ? result.doc?.duration : undefined,
+          audio: hasNarration ? epubAudio : undefined,
+          audioSegments: hasNarration ? audioSegments : undefined,
+          totalDuration: hasNarration ? result.doc?.duration : undefined,
         });
         await writeFile(outPath, Buffer.from(buf));
         break;

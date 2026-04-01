@@ -1045,7 +1045,13 @@ interface EpubExportOptions {
   publisher?: string;
   themeId?: string; // Squisq theme for CSS styling
   images?: Map<string, ArrayBuffer>;
-  coverImage?: ArrayBuffer; // Cover image (JPEG or PNG)
+  coverImage?: ArrayBuffer; // Cover image (JPEG or PNG, auto-detected)
+  /** Audio narration data keyed by segment src/name. Enables Media Overlays. */
+  audio?: Map<string, ArrayBuffer>;
+  /** Audio segment metadata (from Doc.audio.segments). Required with audio. */
+  audioSegments?: AudioSegment[];
+  /** Total document duration in seconds (for Media Overlay metadata). */
+  totalDuration?: number;
 }
 ```
 
