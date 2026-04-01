@@ -1,6 +1,6 @@
 {
   "name": "@bendyline/squisq-editor-react",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "description": "React editor shell with raw/WYSIWYG/preview modes for Squisq documents",
   "license": "MIT",
   "author": "Bendyline",
@@ -46,9 +46,9 @@
     "react-dom": "^18.0.0 || ^19.0.0"
   },
   "dependencies": {
-    "@bendyline/squisq": "1.2.0",
-    "@bendyline/squisq-formats": "1.2.0",
-    "@bendyline/squisq-react": "1.1.0",
+    "@bendyline/squisq": "1.2.1",
+    "@bendyline/squisq-formats": "1.2.1",
+    "@bendyline/squisq-react": "1.1.1",
     "@monaco-editor/react": "4.7.0",
     "@tiptap/extension-image": "2.27.2",
     "@tiptap/extension-placeholder": "2.27.2",
