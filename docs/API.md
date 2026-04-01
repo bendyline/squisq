@@ -23,6 +23,7 @@
   - [DOCX](#subpath-docx)
   - [PDF](#subpath-pdf)
   - [OOXML](#subpath-ooxml)
+  - [EPUB](#subpath-epub)
   - [PPTX](#subpath-pptx)
   - [XLSX (stub)](#subpath-xlsx-stub)
 - [`@bendyline/squisq-editor-react`](#bendylinesquisq-editor-react)
@@ -1020,6 +1021,39 @@ function textElement(
 | `CONTENT_TYPE_XLSX_WORKBOOK`     | XLSX main workbook content type              |
 
 </details>
+
+### Subpath: EPUB
+
+**Import:** `@bendyline/squisq-formats/epub`
+
+EPUB 3 e-book export. Chapters are split at H1/H2 heading boundaries. Images are embedded in the archive when provided.
+
+```ts
+async function markdownDocToEpub(
+  doc: MarkdownDocument,
+  options?: EpubExportOptions,
+): Promise<ArrayBuffer>;
+
+// Convenience wrapper: Doc → MarkdownDocument → EPUB
+async function docToEpub(doc: Doc, options?: EpubExportOptions): Promise<ArrayBuffer>;
+
+interface EpubExportOptions {
+  title?: string;
+  author?: string;
+  description?: string;
+  language?: string; // BCP-47, default: 'en'
+  publisher?: string;
+  themeId?: string; // Squisq theme for CSS styling
+  images?: Map<string, ArrayBuffer>;
+  coverImage?: ArrayBuffer; // Cover image (JPEG or PNG, auto-detected)
+  /** Audio narration data keyed by segment src/name. Enables Media Overlays. */
+  audio?: Map<string, ArrayBuffer>;
+  /** Audio segment metadata (from Doc.audio.segments). Required with audio. */
+  audioSegments?: AudioSegment[];
+  /** Total document duration in seconds (for Media Overlay metadata). */
+  totalDuration?: number;
+}
+```
 
 ### Subpath: PPTX (stub)
 

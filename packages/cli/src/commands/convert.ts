@@ -18,7 +18,7 @@ import type { MarkdownDocument } from '@bendyline/squisq/markdown';
 import type { ContentContainer } from '@bendyline/squisq/storage';
 import { readInput } from '../util/readInput.js';
 
-const ALL_FORMATS = ['docx', 'pptx', 'pdf', 'html', 'dbk'] as const;
+const ALL_FORMATS = ['docx', 'pptx', 'pdf', 'html', 'epub', 'dbk'] as const;
 type Format = (typeof ALL_FORMATS)[number];
 
 function parseFormats(value: string): Format[] {
@@ -180,6 +180,33 @@ async function runConvert(inputPath: string, opts: ConvertOpts): Promise<void> {
           themeId,
         });
         await writeFile(outPath, html, 'utf-8');
+        break;
+      }
+
+      case 'epub': {
+        const { markdownDocToEpub } = await import('@bendyline/squisq-formats/epub');
+        const images = await collectContainerImages(container);
+
+        // Collect audio narration from container if Doc has audio segments
+        const epubAudio = new Map<string, ArrayBuffer>();
+        const audioSegments = result.doc?.audio?.segments;
+        if (audioSegments?.length) {
+          for (const seg of audioSegments) {
+            const data = await container.readFile(seg.src);
+            if (data) epubAudio.set(seg.src, data);
+          }
+        }
+
+        const hasNarration = epubAudio.size > 0;
+        const buf = await markdownDocToEpub(exportMarkdownDoc, {
+          title: baseName,
+          themeId,
+          images,
+          audio: hasNarration ? epubAudio : undefined,
+          audioSegments: hasNarration ? audioSegments : undefined,
+          totalDuration: hasNarration ? result.doc?.duration : undefined,
+        });
+        await writeFile(outPath, Buffer.from(buf));
         break;
       }
 

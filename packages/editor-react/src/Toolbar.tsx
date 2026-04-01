@@ -150,13 +150,28 @@ export function Toolbar({
   // Hidden file input for image picker
   const imageInputRef = useRef<HTMLInputElement>(null);
 
+  // ── Narrow-screen detection ──────────────────────────
+  const [isNarrow, setIsNarrow] = useState(
+    () => typeof window !== 'undefined' && window.matchMedia('(max-width: 768px)').matches,
+  );
+  useEffect(() => {
+    const mq = window.matchMedia('(max-width: 768px)');
+    const handler = (e: MediaQueryListEvent) => setIsNarrow(e.matches);
+    mq.addEventListener('change', handler);
+    return () => mq.removeEventListener('change', handler);
+  }, []);
+
   // ── Overflow detection ────────────────────────────────
   const actionsRef = useRef<HTMLDivElement>(null);
-  const [overflowIndex, setOverflowIndex] = useState<number | null>(null);
+  const [measuredOverflowIndex, setMeasuredOverflowIndex] = useState<number | null>(null);
   const [showOverflow, setShowOverflow] = useState(false);
   const overflowRef = useRef<HTMLDivElement>(null);
 
+  // On narrow screens, force all buttons into the overflow menu
+  const overflowIndex = isNarrow ? 0 : measuredOverflowIndex;
+
   useEffect(() => {
+    if (isNarrow) return; // Skip measurement on narrow — everything overflows
     const container = actionsRef.current;
     if (!container) return;
 
@@ -174,14 +189,14 @@ export function Toolbar({
           firstHidden = i;
         }
       });
-      setOverflowIndex(firstHidden);
+      setMeasuredOverflowIndex(firstHidden);
     };
 
     const ro = new ResizeObserver(measure);
     ro.observe(container);
     measure();
     return () => ro.disconnect();
-  }, [activeView]);
+  }, [activeView, isNarrow]);
 
   // Close overflow menu on outside click
   useEffect(() => {
@@ -538,8 +553,8 @@ export function Toolbar({
           </button>
         ))}
       </div>
-      {/* Formatting buttons — hidden in preview mode */}
-      {!isPreview && (
+      {/* Formatting buttons — hidden in preview mode and on narrow screens */}
+      {!isPreview && !isNarrow && (
         <div className="squisq-toolbar-actions" ref={actionsRef}>
           {groups.map((group, gi) => (
             <div key={group} className="squisq-toolbar-group">

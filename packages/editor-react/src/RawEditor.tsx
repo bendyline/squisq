@@ -12,7 +12,16 @@ import * as monaco from 'monaco-editor';
 import { useEditorContext } from './EditorContext';
 import { getAvailableTemplates } from '@bendyline/squisq/doc';
 
-// Use locally installed monaco-editor instead of CDN
+// Use locally installed monaco-editor instead of CDN.
+//
+// NOTE: By default this imports the full monaco-editor with all 80+ languages
+// and workers (~9MB). Consumers can dramatically reduce bundle size by aliasing
+// 'monaco-editor' to a slim entry in their bundler config. For example with Vite:
+//
+//   resolve: { alias: [{ find: /^monaco-editor$/, replacement: './monaco-slim.ts' }] }
+//
+// Where monaco-slim.ts re-exports 'monaco-editor/esm/vs/editor/editor.api' plus
+// only the language contributions needed (e.g. markdown, javascript, etc.).
 loader.config({ monaco });
 
 export interface RawEditorProps {

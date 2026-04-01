@@ -9,6 +9,7 @@ export default defineConfig({
     'ooxml/index': 'src/ooxml/index.ts',
     'pdf/index': 'src/pdf/index.ts',
     'html/index': 'src/html/index.ts',
+    'epub/index': 'src/epub/index.ts',
     'container/index': 'src/container/index.ts',
   },
   format: ['esm'],

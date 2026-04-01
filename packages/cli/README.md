@@ -17,7 +17,7 @@ npm install -g @bendyline/squisq-cli
 
 ### `squisq convert`
 
-Convert a Squisq document to DOCX, PPTX, PDF, HTML, or DBK (container ZIP):
+Convert a Squisq document to DOCX, PPTX, PDF, HTML, EPUB, or DBK (container ZIP):
 
 ```bash
 squisq convert input.md --formats docx,pptx,pdf
@@ -26,12 +26,12 @@ squisq convert ./my-folder --formats pdf --theme documentary
 squisq convert input.md --theme cinematic --transform magazine --formats pptx
 ```
 
-| Option         | Description                                      | Default     |
-| -------------- | ------------------------------------------------ | ----------- |
-| `--output-dir` | Output directory                                 | current dir |
-| `--formats`    | Comma-separated list: docx, pptx, pdf, html, dbk | all         |
-| `--theme`      | Squisq theme ID (e.g., documentary, cinematic)   | none        |
-| `--transform`  | Transform style (e.g., documentary, magazine)    | none        |
+| Option         | Description                                            | Default     |
+| -------------- | ------------------------------------------------------ | ----------- |
+| `--output-dir` | Output directory                                       | current dir |
+| `--formats`    | Comma-separated list: docx, pptx, pdf, html, epub, dbk | all         |
+| `--theme`      | Squisq theme ID (e.g., documentary, cinematic)         | none        |
+| `--transform`  | Transform style (e.g., documentary, magazine)          | none        |
 
 ### `squisq video`
 

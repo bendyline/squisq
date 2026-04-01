@@ -170,6 +170,14 @@
   color: #1d4ed8;
 }
 
+/* ─── Toolbar: narrow screen adjustments ───────────────── */
+
+@media (max-width: 768px) {
+  .squisq-toolbar-view-tabs {
+    padding: 0 8px;
+  }
+}
+
 /* ─── Toolbar Overflow Menu ──────────────────────────── */
 
 .squisq-toolbar-overflow {
@@ -523,6 +531,55 @@
 .squisq-toolbar-button--danger:hover {
   background: #fef2f2;
   color: #b91c1c;
+}
+
+/* ─── Preview Controls ──────────────────────────────── */
+
+.squisq-preview-controls-inline {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  padding: 2px 0 2px 9px;
+}
+
+.squisq-preview-controls-inline .squisq-preview-control {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.squisq-preview-controls-compact {
+  position: relative;
+}
+
+.squisq-preview-controls-popover {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  z-index: 80;
+  background: var(--squisq-bg, #fff);
+  border: 1px solid var(--squisq-border, #d1d5db);
+  border-radius: 6px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
+  padding: 8px 12px;
+  margin-top: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 180px;
+}
+
+.squisq-preview-control--compact {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.squisq-preview-control--compact select {
+  flex: 1;
+  min-width: 0;
 }
 
 .squisq-wysiwyg-editor a {
