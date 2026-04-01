@@ -1,6 +1,6 @@
 {
   "name": "@bendyline/squisq-formats",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "description": "Document format converters — DOCX, PDF, OOXML import/export",
   "license": "MIT",
   "author": "Bendyline",
@@ -83,7 +83,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@bendyline/squisq": "1.2.0",
+    "@bendyline/squisq": "1.2.1",
     "jszip": "3.10.1",
     "pdf-lib": "1.17.1",
     "pdfjs-dist": "4.10.38"
