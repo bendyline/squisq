@@ -42,6 +42,7 @@ with their licenses. All licenses are permissive and compatible with MIT.
 | Package                        | Version   | License | Repository                                   |
 | ------------------------------ | --------- | ------- | -------------------------------------------- |
 | @bendyline/squisq              | workspace | MIT     | (internal)                                   |
+| @bendyline/squisq-formats      | workspace | MIT     | (internal)                                   |
 | @bendyline/squisq-react        | workspace | MIT     | (internal)                                   |
 | @monaco-editor/react           | 4.7.0     | MIT     | https://github.com/suren-atoyan/monaco-react |
 | @tiptap/extension-image        | 2.27.2    | MIT     | https://tiptap.dev                           |
@@ -68,6 +69,18 @@ with their licenses. All licenses are permissive and compatible with MIT.
 | @ffmpeg/ffmpeg          | 0.12.15   | MIT     | https://github.com/ffmpegwasm/ffmpeg.wasm |
 | @ffmpeg/util            | 0.12.2    | MIT     | https://github.com/ffmpegwasm/ffmpeg.wasm |
 
+## @bendyline/squisq-video-react
+
+| Package                 | Version   | License | Repository                               |
+| ----------------------- | --------- | ------- | ---------------------------------------- |
+| @bendyline/squisq       | workspace | MIT     | (internal)                               |
+| @bendyline/squisq-video | workspace | MIT     | (internal)                               |
+| @bendyline/squisq-react | workspace | MIT     | (internal)                               |
+| html2canvas             | 1.4.1     | MIT     | https://github.com/nicbarker/html2canvas |
+| mp4-muxer               | 5.2.2     | MIT     | https://github.com/nicbarker/mp4-muxer   |
+| react _(peer)_          | ^18 / ^19 | MIT     | https://reactjs.org                      |
+| react-dom _(peer)_      | ^18 / ^19 | MIT     | https://reactjs.org                      |
+
 ## @bendyline/squisq-cli
 
 | Package                   | Version   | License    | Repository                              |
@@ -78,6 +91,37 @@ with their licenses. All licenses are permissive and compatible with MIT.
 | @bendyline/squisq-video   | workspace | MIT        | (internal)                              |
 | commander                 | 12.1.0    | MIT        | https://github.com/tj/commander.js      |
 | playwright-core           | 1.58.2    | Apache-2.0 | https://github.com/microsoft/playwright |
+
+---
+
+## Self-Hosted Google Fonts
+
+The site package (`packages/site/public/fonts/`) includes self-hosted WOFF2
+subsets for the 15 typefaces used by the built-in theme system. All fonts are
+sourced from [Google Fonts](https://fonts.google.com) and distributed under
+permissive licenses.
+
+| Font               | License    | Author / Source                                                          |
+| ------------------ | ---------- | ------------------------------------------------------------------------ |
+| Cormorant Garamond | OFL-1.1    | Christian Talmash — https://github.com/CatharsisFonts                    |
+| Crimson Text       | OFL-1.1    | Sebastian Kosch                                                          |
+| DM Sans            | OFL-1.1    | Colophon Foundry — https://github.com/googlefonts/dm-fonts               |
+| DM Serif Display   | OFL-1.1    | Colophon Foundry — https://github.com/googlefonts/dm-fonts               |
+| Hanken Grotesk     | OFL-1.1    | Alfredo Marco Pradil — https://github.com/nicbarker/hanken-grotesk       |
+| IBM Plex Sans      | OFL-1.1    | IBM Corp — https://github.com/IBM/plex                                   |
+| Inter              | OFL-1.1    | Rasmus Andersson — https://github.com/rsms/inter                         |
+| JetBrains Mono     | OFL-1.1    | JetBrains — https://github.com/JetBrains/JetBrainsMono                   |
+| Lora               | OFL-1.1    | Cyreal — https://github.com/cyrealtype/Lora-Cyrillic                     |
+| Merriweather       | OFL-1.1    | Sorkin Type — https://github.com/SorkinType/Merriweather                 |
+| Oswald             | OFL-1.1    | Vernon Adams — https://github.com/googlefonts/OswaldFont                 |
+| Playfair Display   | OFL-1.1    | Claus Eggers Sorensen — https://github.com/clauseggers/Playfair          |
+| PT Serif           | OFL-1.1    | ParaType — https://company.paratype.com                                  |
+| Roboto             | Apache-2.0 | Google — https://github.com/googlefonts/roboto                           |
+| Source Serif 4     | OFL-1.1    | Frank Griesshammer / Adobe — https://github.com/adobe-fonts/source-serif |
+
+OFL-1.1 = SIL Open Font License 1.1 — permits use, modification, and
+redistribution with attribution. Full license text:
+https://openfontlicense.org/open-font-license-official-text/
 
 ---
 
@@ -94,15 +138,16 @@ with their licenses. All licenses are permissive and compatible with MIT.
 
 ## License Summary
 
-| License                 | Packages                                 |
-| ----------------------- | ---------------------------------------- |
-| MIT                     | majority of dependencies                 |
-| Apache-2.0              | localforage, pdfjs-dist, playwright-core |
-| MIT OR GPL-3.0-or-later | jszip (dual-licensed; MIT option used)   |
-| MIT AND Zlib            | pako (both permissive)                   |
-| 0BSD                    | tslib (maximally permissive)             |
+| License                 | Packages                                         |
+| ----------------------- | ------------------------------------------------ |
+| MIT                     | majority of dependencies                         |
+| Apache-2.0              | localforage, pdfjs-dist, playwright-core, Roboto |
+| OFL-1.1                 | 14 self-hosted Google Fonts (see table above)    |
+| MIT OR GPL-3.0-or-later | jszip (dual-licensed; MIT option used)           |
+| MIT AND Zlib            | pako (both permissive)                           |
+| 0BSD                    | tslib (maximally permissive)                     |
 
 All dependencies use permissive licenses compatible with MIT. The jszip
 dual-license allows choosing MIT. Apache-2.0 dependencies (localforage,
-pdfjs-dist) require preserving their copyright notice and license text, which
-are included in their respective packages distributed via npm.
+pdfjs-dist, Roboto font) require preserving their copyright notice and license
+text. OFL-1.1 fonts require attribution and permit redistribution.
