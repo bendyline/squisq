@@ -395,8 +395,7 @@ function collectDocImages(nodes: MarkdownBlockNode[]): Set<string> {
     if (
       node.type === 'image' &&
       node.url &&
-      !node.url.startsWith('data:') &&
-      !node.url.startsWith('http')
+      !node.url.startsWith('data:')
     ) {
       images.add(node.url);
     }
