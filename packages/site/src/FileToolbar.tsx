@@ -21,7 +21,8 @@ import {
   configurePdfWorker,
 } from '@bendyline/squisq-formats/pdf';
 import { containerToZip, zipToContainer } from '@bendyline/squisq-formats/container';
-import { docToHtml, docToHtmlZip, collectImagePaths } from '@bendyline/squisq-formats/html';
+import { docToHtml, docToHtmlZip } from '@bendyline/squisq-formats/html';
+import { collectImagesForHtmlExport } from './exportHelpers';
 import { MemoryContentContainer } from '@bendyline/squisq/storage';
 import type { ContentContainer } from '@bendyline/squisq/storage';
 import type { MediaProvider } from '@bendyline/squisq/schemas';
@@ -122,7 +123,8 @@ function downloadBlob(blob: Blob, filename: string) {
 
 function filenameForFormat(format: DownloadFormat): string {
   const ts = new Date().toISOString().slice(0, 10);
-  return `document-${ts}.${format}`;
+  const ext = format === 'htmlzip' ? 'html.zip' : format;
+  return `document-${ts}.${ext}`;
 }
 
 // ============================================
@@ -221,61 +223,30 @@ export function FileToolbar({
           const blob = await containerToZip(container);
           downloadBlob(blob, filename);
         } else if (format === 'html' || format === 'htmlzip') {
-          // Lazy-load the player bundle on first use
           if (!playerScriptRef.current) {
             const { PLAYER_BUNDLE } = await import('@bendyline/squisq-react/standalone-source');
             playerScriptRef.current = PLAYER_BUNDLE;
           }
           const mdDoc = parseMarkdown(currentSource);
           const doc = markdownToDoc(mdDoc);
-          // Collect images keyed by both mediaProvider name AND doc-referenced paths.
-          // The standalone player resolves by exact key first, then by filename fallback,
-          // so we need images keyed both ways to handle path mismatches.
-          const images = new Map<string, ArrayBuffer>();
-          if (mediaProvider) {
-            const entries = await mediaProvider.listMedia();
-            const buffersByName = new Map<string, ArrayBuffer>();
-            for (const entry of entries) {
-              const url = await mediaProvider.resolveUrl(entry.name);
-              const res = await fetch(url);
-              if (res.ok) {
-                const data = await res.arrayBuffer();
-                images.set(entry.name, data);
-                buffersByName.set(entry.name, data);
-              }
-            }
-            // Also key by doc-referenced paths so exact-match resolution works
-            const docPaths = collectImagePaths(doc);
-            for (const docPath of docPaths) {
-              if (images.has(docPath)) continue;
-              // Try to match by filename
-              const filename = docPath.split('/').pop()!;
-              const data = buffersByName.get(filename);
-              if (data) images.set(docPath, data);
-            }
-          }
+          const images = await collectImagesForHtmlExport(doc, mediaProvider);
           const themeId =
             (mdDoc.frontmatter?.themeId as string | undefined) ??
             (mdDoc.frontmatter?.theme as string | undefined);
+          const title = doc.frontmatter?.title as string | undefined;
+          const options = {
+            playerScript: playerScriptRef.current,
+            images,
+            mode: 'static' as const,
+            title,
+            themeId,
+          };
           if (format === 'html') {
-            const html = docToHtml(doc, {
-              playerScript: playerScriptRef.current,
-              images,
-              mode: 'static',
-              title: doc.frontmatter?.title as string | undefined,
-              themeId,
-            });
-            const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
-            downloadBlob(blob, filename.replace('.htmlzip', '.html'));
+            const html = docToHtml(doc, options);
+            downloadBlob(new Blob([html], { type: 'text/html;charset=utf-8' }), filename);
           } else {
-            const blob = await docToHtmlZip(doc, {
-              playerScript: playerScriptRef.current,
-              images,
-              mode: 'static',
-              title: doc.frontmatter?.title as string | undefined,
-              themeId,
-            });
-            downloadBlob(blob, filename.replace('.htmlzip', '.zip'));
+            const blob = await docToHtmlZip(doc, options);
+            downloadBlob(blob, filename);
           }
         }
       } catch (err: unknown) {

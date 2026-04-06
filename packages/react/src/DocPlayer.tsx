@@ -323,10 +323,16 @@ export function DocPlayer({
     if (isPlaying && coverWasShowing.current && coverBlock && !renderMode) {
       coverWasShowing.current = false;
       setCoverGraceActive(true);
+      // Intentionally no cleanup: if coverBlock's memoized reference changes
+      // mid-grace (e.g., due to a preview re-render), clearing the timer would
+      // leave coverGraceActive stuck at true because the effect body won't
+      // re-run (coverWasShowing.current is now false).
       coverGraceTimer.current = setTimeout(() => setCoverGraceActive(false), 3000);
-      return () => clearTimeout(coverGraceTimer.current);
     }
   }, [isPlaying, coverBlock, renderMode]);
+
+  // Always clear the grace timer on unmount
+  useEffect(() => () => clearTimeout(coverGraceTimer.current), []);
 
   // Determine if we should show the cover block
   // Show cover when: has cover block, not playing, at time 0, not in render mode

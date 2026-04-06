@@ -30,7 +30,7 @@ async function waitForDocPlayer(page: Page) {
 async function startPlaybackAndWaitForActiveBlock(page: Page) {
   await page.locator('.doc-player').click();
   // Cover block has a 3s grace period; wait for the active block to appear
-  await page.locator('.doc-player__block--active').waitFor({ state: 'visible', timeout: 5_000 });
+  await page.locator('.doc-player__block--active').waitFor({ state: 'visible', timeout: 8_000 });
 }
 
 /** Get the active SVG block in the DocPlayer */

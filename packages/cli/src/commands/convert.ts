@@ -267,39 +267,49 @@ async function applyTransformToMarkdown(
 }
 
 /**
- * Collect images for HTML export. Uses both collectImagePaths (exact doc references)
- * and a filename-based fallback from all container images, so that images are found
- * even when the Doc references paths that differ from container paths
- * (e.g., Doc has "hero.jpg" but container stores "images/hero.jpg", or vice versa).
+ * Collect images for HTML export, keying each by both its container path and
+ * its filename. The standalone player resolves by exact key first then by
+ * filename, so both keyings handle path mismatches between how the Doc
+ * references images and how they're stored in the container.
+ *
+ * Only images referenced by the Doc are included — unreferenced container
+ * images would bloat the HTML output unnecessarily.
  */
 async function collectImagesForHtml(
   doc: import('@bendyline/squisq/schemas').Doc,
   container: ContentContainer,
 ): Promise<Map<string, ArrayBuffer>> {
-  const { collectImagePaths } = await import('@bendyline/squisq-formats/html');
+  const { collectImagePaths, extractFilename } = await import('@bendyline/squisq-formats/html');
 
   const images = new Map<string, ArrayBuffer>();
-
-  // 1. Try exact paths from the doc
   const docPaths = collectImagePaths(doc);
+
+  // Try exact paths first
+  const needByFilename = new Set<string>();
   for (const imgPath of docPaths) {
     const data = await container.readFile(imgPath);
     if (data) {
       images.set(imgPath, data);
+      const filename = extractFilename(imgPath);
+      if (filename !== imgPath) images.set(filename, data);
+    } else {
+      needByFilename.add(extractFilename(imgPath));
     }
   }
 
-  // 2. Supplement with all container images (keyed by both full path and filename)
-  // This ensures the standalone player's filename-fallback resolver can find them.
-  const allContainerImages = await collectContainerImages(container);
-  for (const [path, data] of allContainerImages) {
-    if (!images.has(path)) {
-      images.set(path, data);
-    }
-    // Also add by filename if different from path
-    const filename = path.split('/').pop()!;
-    if (filename !== path && !images.has(filename)) {
-      images.set(filename, data);
+  // For any doc paths that didn't resolve, scan the container for a file
+  // with the same basename (handles "images/hero.jpg" vs "hero.jpg" mismatches).
+  if (needByFilename.size > 0) {
+    const files = await container.listFiles();
+    for (const file of files) {
+      const filename = extractFilename(file.path);
+      if (needByFilename.has(filename)) {
+        const data = await container.readFile(file.path);
+        if (data) {
+          images.set(filename, data);
+          images.set(file.path, data);
+        }
+      }
     }
   }
 

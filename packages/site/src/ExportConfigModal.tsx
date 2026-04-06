@@ -19,6 +19,7 @@ import type { MediaProvider } from '@bendyline/squisq/schemas';
 import type { MarkdownDocument } from '@bendyline/squisq/markdown';
 import { VideoExportModal } from '@bendyline/squisq-video-react';
 import { buildPreviewDoc } from '@bendyline/squisq-editor-react';
+import { collectImagesForHtmlExport } from './exportHelpers';
 
 // ── Types ──────────────────────────────────────────────────────────
 
@@ -30,7 +31,6 @@ export interface ExportConfigModalProps {
 
 type ExportFormat = 'docx' | 'pptx' | 'pdf' | 'html' | 'htmlzip' | 'zip' | 'video';
 type RenderMode = 'document' | 'slideshow';
-type AspectRatio = '16:9' | '9:16' | '1:1' | '4:3';
 
 // ── Styles ─────────────────────────────────────────────────────────
 
@@ -137,11 +137,8 @@ const FORMAT_LABELS: Record<ExportFormat, string> = {
   video: 'Video (.mp4)',
 };
 
-/** Formats that support render mode selection */
-const VISUAL_FORMATS: ExportFormat[] = ['html', 'htmlzip', 'video'];
-
-/** Formats that support aspect ratio selection */
-const ASPECT_FORMATS: ExportFormat[] = ['video'];
+/** Formats that support render mode (document vs slideshow) selection */
+const VISUAL_FORMATS: ExportFormat[] = ['html', 'htmlzip'];
 
 // ── Component ──────────────────────────────────────────────────────
 
@@ -152,7 +149,6 @@ export function ExportConfigModal({
 }: ExportConfigModalProps) {
   const [format, setFormat] = useState<ExportFormat>('html');
   const [renderMode, setRenderMode] = useState<RenderMode>('document');
-  const [aspectRatio, setAspectRatio] = useState<AspectRatio>('16:9');
   const [themeId, setThemeId] = useState<string>('');
   const [transformStyle, setTransformStyle] = useState<string>('');
   const [busy, setBusy] = useState(false);
@@ -165,19 +161,22 @@ export function ExportConfigModal({
   const transforms = getTransformStyleSummaries();
 
   const showModeSelector = VISUAL_FORMATS.includes(format);
-  const showAspectRatio = ASPECT_FORMATS.includes(format);
 
-  /** Collect images from mediaProvider */
-  const collectImages = useCallback(async () => {
+  /** Collect raw images by mediaProvider name (for pptx and other formats). */
+  const collectImagesByName = useCallback(async () => {
     const images = new Map<string, ArrayBuffer>();
     if (!mediaProvider) return images;
     const entries = await mediaProvider.listMedia();
-    for (const entry of entries) {
-      const url = await mediaProvider.resolveUrl(entry.name);
-      const res = await fetch(url);
-      if (res.ok) {
-        images.set(entry.name, await res.arrayBuffer());
-      }
+    const fetched = await Promise.all(
+      entries.map(async (entry) => {
+        const url = await mediaProvider.resolveUrl(entry.name);
+        const res = await fetch(url);
+        if (!res.ok) return null;
+        return { name: entry.name, data: await res.arrayBuffer() };
+      }),
+    );
+    for (const f of fetched) {
+      if (f) images.set(f.name, f.data);
     }
     return images;
   }, [mediaProvider]);
@@ -231,7 +230,7 @@ export function ExportConfigModal({
         }
         case 'pptx': {
           const { markdownDocToPptx } = await import('@bendyline/squisq-formats/pptx');
-          const images = await collectImages();
+          const images = await collectImagesByName();
           const buf = await markdownDocToPptx(mdDoc, { themeId: exportThemeId, images });
           downloadBlob(
             new Blob([buf], {
@@ -247,60 +246,29 @@ export function ExportConfigModal({
           downloadBlob(new Blob([buf], { type: 'application/pdf' }), `document-${ts}.pdf`);
           break;
         }
-        case 'html': {
-          const { docToHtml, collectImagePaths } = await import('@bendyline/squisq-formats/html');
-          const { PLAYER_BUNDLE } = await import('@bendyline/squisq-react/standalone-source');
-          const rawDoc = markdownToDoc(mdDoc);
-          // For slideshow mode, build proper template blocks with interleaved images
-          const doc = renderMode === 'slideshow' ? buildPreviewDoc(rawDoc) : rawDoc;
-          const images = await collectImages();
-          // Also key by doc-referenced paths
-          const docPaths = collectImagePaths(doc);
-          const byName = new Map(images);
-          for (const p of docPaths) {
-            if (!images.has(p)) {
-              const fn = p.split('/').pop()!;
-              const data = byName.get(fn);
-              if (data) images.set(p, data);
-            }
-          }
-          const mode = renderMode === 'slideshow' ? 'slideshow' : 'static';
-          const html = docToHtml(doc, {
-            playerScript: PLAYER_BUNDLE,
-            images,
-            mode,
-            themeId: exportThemeId,
-          });
-          downloadBlob(
-            new Blob([html], { type: 'text/html;charset=utf-8' }),
-            `document-${ts}.html`,
-          );
-          break;
-        }
+        case 'html':
         case 'htmlzip': {
-          const { docToHtmlZip, collectImagePaths } =
-            await import('@bendyline/squisq-formats/html');
+          const { docToHtml, docToHtmlZip } = await import('@bendyline/squisq-formats/html');
           const { PLAYER_BUNDLE } = await import('@bendyline/squisq-react/standalone-source');
           const rawDoc = markdownToDoc(mdDoc);
           const doc = renderMode === 'slideshow' ? buildPreviewDoc(rawDoc) : rawDoc;
-          const images = await collectImages();
-          const docPaths = collectImagePaths(doc);
-          const byName = new Map(images);
-          for (const p of docPaths) {
-            if (!images.has(p)) {
-              const fn = p.split('/').pop()!;
-              const data = byName.get(fn);
-              if (data) images.set(p, data);
-            }
-          }
-          const mode = renderMode === 'slideshow' ? 'slideshow' : 'static';
-          const blob = await docToHtmlZip(doc, {
+          const images = await collectImagesForHtmlExport(doc, mediaProvider);
+          const options = {
             playerScript: PLAYER_BUNDLE,
             images,
-            mode,
+            mode: renderMode === 'slideshow' ? ('slideshow' as const) : ('static' as const),
             themeId: exportThemeId,
-          });
-          downloadBlob(blob, `document-${ts}.html.zip`);
+          };
+          if (format === 'html') {
+            const html = docToHtml(doc, options);
+            downloadBlob(
+              new Blob([html], { type: 'text/html;charset=utf-8' }),
+              `document-${ts}.html`,
+            );
+          } else {
+            const blob = await docToHtmlZip(doc, options);
+            downloadBlob(blob, `document-${ts}.html.zip`);
+          }
           break;
         }
         case 'zip': {
@@ -332,17 +300,7 @@ export function ExportConfigModal({
     } finally {
       setBusy(false);
     }
-  }, [
-    currentSource,
-    format,
-    renderMode,
-    themeId,
-    transformStyle,
-    mediaProvider,
-    onClose,
-    collectImages,
-    prepareMarkdown,
-  ]);
+  }, [format, renderMode, themeId, mediaProvider, onClose, collectImagesByName, prepareMarkdown]);
 
   return (
     <>
@@ -388,24 +346,6 @@ export function ExportConfigModal({
                   ? 'Renders as a readable flowing document with embedded images.'
                   : 'Renders as an interactive slideshow with animated block transitions.'}
               </div>
-            </>
-          )}
-
-          {/* Aspect Ratio — for Video */}
-          {showAspectRatio && (
-            <>
-              <label style={labelStyle}>Aspect Ratio</label>
-              <select
-                style={selectStyle}
-                value={aspectRatio}
-                onChange={(e) => setAspectRatio(e.target.value as AspectRatio)}
-                disabled={busy}
-              >
-                <option value="16:9">Landscape (16:9)</option>
-                <option value="9:16">Portrait (9:16)</option>
-                <option value="1:1">Square (1:1)</option>
-                <option value="4:3">Classic (4:3)</option>
-              </select>
             </>
           )}
 

@@ -106,8 +106,10 @@ function getTemplateDefaults(
       return { fact: headingText, explanation: body || headingText };
     case 'comparisonBar':
       return { leftLabel: 'A', leftValue: 60, rightLabel: 'B', rightValue: 40 };
-    case 'listBlock':
-      return { items: extractListItems(block.contents) || ['Item 1', 'Item 2', 'Item 3'] };
+    case 'listBlock': {
+      const items = extractListItems(block.contents);
+      return { items: items.length > 0 ? items : ['Item 1', 'Item 2', 'Item 3'] };
+    }
     case 'definitionCard':
       return { term: headingText, definition: body || headingText };
     case 'dateEvent':
