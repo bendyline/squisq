@@ -258,6 +258,37 @@ test.describe('DocPlayer controls', () => {
   });
 });
 
+// ── Cover Block (startBlock) ────────────────────────────────────────
+
+test.describe('Cover block display', () => {
+  test.beforeEach(async ({ page }) => {
+    await page.goto('/');
+    await page.waitForLoadState('networkidle');
+    await selectSample(page, 'hello-world');
+    await switchView(page, 'Play');
+    await waitForDocPlayer(page);
+  });
+
+  test('cover block is visible at rest before playback', async ({ page }) => {
+    const cover = page.locator('.doc-player__block--cover');
+    await expect(cover).toBeVisible({ timeout: 5_000 });
+  });
+
+  test('cover block shows the document title', async ({ page }) => {
+    const cover = page.locator('.doc-player__block--cover');
+    await expect(cover).toContainText('Hello World', { timeout: 5_000 });
+  });
+
+  test('cover block is dismissed after playback starts', async ({ page }) => {
+    const cover = page.locator('.doc-player__block--cover');
+    await expect(cover).toBeVisible({ timeout: 5_000 });
+
+    // Start playback and wait for active block to replace the cover
+    await startPlaybackAndWaitForActiveBlock(page);
+    await expect(cover).not.toBeVisible({ timeout: 8_000 });
+  });
+});
+
 // ── Sample Switching ─────────────────────────────────────────────────
 
 test.describe('Sample switching', () => {

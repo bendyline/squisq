@@ -412,11 +412,7 @@ function collectDocImages(nodes: MarkdownBlockNode[]): Set<string> {
   }
 
   function walkInline(node: MarkdownInlineNode): void {
-    if (
-      node.type === 'image' &&
-      node.url &&
-      !node.url.startsWith('data:')
-    ) {
+    if (node.type === 'image' && node.url && !node.url.startsWith('data:')) {
       images.add(node.url);
     }
     if ('children' in node && Array.isArray(node.children)) {

@@ -86,10 +86,26 @@ function createInlineMediaProvider(
   images: Record<string, string>,
   basePath: string,
 ): MediaProvider {
+  // Build a filename-only lookup for fallback matching.
+  // Image paths in the Doc may differ from imageMap keys
+  // (e.g., Doc has "images/hero.jpg" but key is "hero.jpg", or vice versa).
+  const byFilename: Record<string, string> = {};
+  for (const key of Object.keys(images)) {
+    const filename = key.split('/').pop()!;
+    byFilename[filename] = images[key];
+  }
+
   return {
     async resolveUrl(relativePath: string): Promise<string> {
+      // 1. Exact match
       if (relativePath in images) return images[relativePath];
-      // Fallback to basePath
+      // 2. Strip leading ./ and retry
+      const stripped = relativePath.replace(/^\.\//, '');
+      if (stripped !== relativePath && stripped in images) return images[stripped];
+      // 3. Filename-only fallback
+      const filename = relativePath.split('/').pop()!;
+      if (filename in byFilename) return byFilename[filename];
+      // 4. Absolute/data/blob URLs pass through
       if (
         relativePath.startsWith('http') ||
         relativePath.startsWith('data:') ||

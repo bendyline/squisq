@@ -22,8 +22,8 @@
  * Configuration for the Start/resting block shown before playback begins.
  */
 export interface StartBlockConfig {
-  /** Hero image path (relative to article media) */
-  heroSrc: string;
+  /** Hero image path (relative to article media). When omitted, a theme-driven background is used. */
+  heroSrc?: string;
   /** Alt text for the hero image */
   heroAlt?: string;
   /** Title to display over the hero */

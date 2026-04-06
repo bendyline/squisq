@@ -22,8 +22,14 @@
  * ```
  */
 
-import type { Doc, Block, CaptionTrack, CaptionPhrase } from '../schemas/Doc.js';
-import type { MarkdownDocument, MarkdownBlockNode, MarkdownHeading } from '../markdown/types.js';
+import type { Doc, Block, CaptionTrack, CaptionPhrase, StartBlockConfig } from '../schemas/Doc.js';
+import type {
+  MarkdownDocument,
+  MarkdownBlockNode,
+  MarkdownHeading,
+  MarkdownNode,
+  MarkdownImage,
+} from '../markdown/types.js';
 import { extractPlainText } from '../markdown/utils.js';
 import { estimateReadingTime } from '../timing/readingTime.js';
 
@@ -46,6 +52,14 @@ export interface MarkdownToDocOptions {
 
   /** Custom ID generator. Receives the heading node and its index. */
   generateId?: (heading: MarkdownHeading, index: number) => string;
+
+  /**
+   * Whether to auto-generate a cover startBlock from the first H1 heading.
+   * When true (default), a StartBlockConfig is created using the first H1's
+   * text as the title. If the document contains an image, the first image
+   * is used as the hero. Set to false to suppress automatic cover generation.
+   */
+  generateCoverBlock?: boolean;
 }
 
 // ============================================
@@ -267,7 +281,7 @@ export function markdownToDoc(markdownDoc: MarkdownDocument, options?: MarkdownT
   const captions: CaptionTrack | undefined =
     phrases.length > 0 ? { phrases, generatedAt: new Date().toISOString(), version: 1 } : undefined;
 
-  return {
+  const doc: Doc = {
     articleId,
     duration: currentTime,
     blocks: rootBlocks,
@@ -277,6 +291,16 @@ export function markdownToDoc(markdownDoc: MarkdownDocument, options?: MarkdownT
     ...(captions ? { captions } : {}),
     ...(markdownDoc.frontmatter ? { frontmatter: markdownDoc.frontmatter } : {}),
   };
+
+  // Auto-generate cover startBlock from the first H1 heading
+  if (options?.generateCoverBlock ?? true) {
+    const coverConfig = buildStartBlock(markdownDoc, rootBlocks);
+    if (coverConfig) {
+      doc.startBlock = coverConfig;
+    }
+  }
+
+  return doc;
 }
 
 // ============================================
@@ -408,4 +432,51 @@ function splitIntoSentences(text: string): string[] {
     }
   }
   return merged;
+}
+
+/**
+ * Walk a MarkdownNode tree depth-first to find the first image node.
+ * Returns the MarkdownImage or undefined if none found.
+ */
+function findFirstImage(node: MarkdownNode): MarkdownImage | undefined {
+  if (node.type === 'image') return node as MarkdownImage;
+  if ('children' in node && Array.isArray((node as { children?: unknown[] }).children)) {
+    for (const child of (node as { children: MarkdownNode[] }).children) {
+      const found = findFirstImage(child);
+      if (found) return found;
+    }
+  }
+  return undefined;
+}
+
+/**
+ * Build a StartBlockConfig from the document's first H1 heading and optional
+ * first image. Returns undefined if the document has no H1 heading.
+ */
+function buildStartBlock(
+  markdownDoc: MarkdownDocument,
+  rootBlocks: Block[],
+): StartBlockConfig | undefined {
+  // Find the first H1 block — it provides the cover title
+  const firstH1 = rootBlocks.find((b) => b.sourceHeading?.depth === 1);
+  if (!firstH1) return undefined;
+
+  const title = firstH1.title ?? extractPlainText(firstH1.sourceHeading!);
+  if (!title) return undefined;
+
+  // Look for the first paragraph immediately after the H1 to use as subtitle
+  const subtitle =
+    firstH1.contents?.[0]?.type === 'paragraph' ? extractPlainText(firstH1.contents[0]) : undefined;
+
+  // Scan the whole document for the first image to use as the hero
+  const firstImage = findFirstImage(markdownDoc);
+
+  const config: StartBlockConfig = {
+    title,
+    ...(subtitle ? { subtitle } : {}),
+    ...(firstImage ? { heroSrc: firstImage.url, heroAlt: firstImage.alt ?? title } : {}),
+    ambientMotion: 'zoomIn',
+  };
+
+  return config;
 }

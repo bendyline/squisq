@@ -406,6 +406,12 @@ export function LinearDocView({
             border-top: 1px solid var(--squisq-linear-muted);
             margin: 1.5em 0;
           }
+          .squisq-linear-content img {
+            max-width: 100%;
+            height: auto;
+            border-radius: 6px;
+            margin: 0.5em 0;
+          }
           .squisq-linear-content strong {
             font-weight: 700;
           }

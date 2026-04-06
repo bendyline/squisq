@@ -21,6 +21,7 @@ import {
   configurePdfWorker,
 } from '@bendyline/squisq-formats/pdf';
 import { containerToZip, zipToContainer } from '@bendyline/squisq-formats/container';
+import { docToHtml, docToHtmlZip, collectImagePaths } from '@bendyline/squisq-formats/html';
 import { MemoryContentContainer } from '@bendyline/squisq/storage';
 import type { ContentContainer } from '@bendyline/squisq/storage';
 import type { MediaProvider } from '@bendyline/squisq/schemas';
@@ -50,7 +51,7 @@ interface FileToolbarProps {
   activeSlot: number | null;
 }
 
-type DownloadFormat = 'md' | 'docx' | 'pptx' | 'pdf' | 'txt' | 'zip';
+type DownloadFormat = 'md' | 'docx' | 'pptx' | 'pdf' | 'txt' | 'zip' | 'html' | 'htmlzip';
 
 /** File extensions treated as images (stored in slot media, not imported as docs) */
 const IMAGE_EXTENSIONS = new Set(['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg']);
@@ -219,6 +220,63 @@ export function FileToolbar({
           }
           const blob = await containerToZip(container);
           downloadBlob(blob, filename);
+        } else if (format === 'html' || format === 'htmlzip') {
+          // Lazy-load the player bundle on first use
+          if (!playerScriptRef.current) {
+            const { PLAYER_BUNDLE } = await import('@bendyline/squisq-react/standalone-source');
+            playerScriptRef.current = PLAYER_BUNDLE;
+          }
+          const mdDoc = parseMarkdown(currentSource);
+          const doc = markdownToDoc(mdDoc);
+          // Collect images keyed by both mediaProvider name AND doc-referenced paths.
+          // The standalone player resolves by exact key first, then by filename fallback,
+          // so we need images keyed both ways to handle path mismatches.
+          const images = new Map<string, ArrayBuffer>();
+          if (mediaProvider) {
+            const entries = await mediaProvider.listMedia();
+            const buffersByName = new Map<string, ArrayBuffer>();
+            for (const entry of entries) {
+              const url = await mediaProvider.resolveUrl(entry.name);
+              const res = await fetch(url);
+              if (res.ok) {
+                const data = await res.arrayBuffer();
+                images.set(entry.name, data);
+                buffersByName.set(entry.name, data);
+              }
+            }
+            // Also key by doc-referenced paths so exact-match resolution works
+            const docPaths = collectImagePaths(doc);
+            for (const docPath of docPaths) {
+              if (images.has(docPath)) continue;
+              // Try to match by filename
+              const filename = docPath.split('/').pop()!;
+              const data = buffersByName.get(filename);
+              if (data) images.set(docPath, data);
+            }
+          }
+          const themeId =
+            (mdDoc.frontmatter?.themeId as string | undefined) ??
+            (mdDoc.frontmatter?.theme as string | undefined);
+          if (format === 'html') {
+            const html = docToHtml(doc, {
+              playerScript: playerScriptRef.current,
+              images,
+              mode: 'static',
+              title: doc.frontmatter?.title as string | undefined,
+              themeId,
+            });
+            const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
+            downloadBlob(blob, filename.replace('.htmlzip', '.html'));
+          } else {
+            const blob = await docToHtmlZip(doc, {
+              playerScript: playerScriptRef.current,
+              images,
+              mode: 'static',
+              title: doc.frontmatter?.title as string | undefined,
+              themeId,
+            });
+            downloadBlob(blob, filename.replace('.htmlzip', '.zip'));
+          }
         }
       } catch (err: unknown) {
         console.error('Download failed:', err);
@@ -364,6 +422,23 @@ export function FileToolbar({
               onClick={() => handleDownload('zip')}
             >
               Content Zip (.zip)
+            </button>
+            <div style={{ height: 1, background: '#c9b98a', margin: '4px 0' }} />
+            <button
+              style={dropdownItemStyle(isDark)}
+              onMouseEnter={(e) => (e.currentTarget.style.background = '#F3EBD6')}
+              onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
+              onClick={() => handleDownload('html')}
+            >
+              Standalone HTML (.html)
+            </button>
+            <button
+              style={dropdownItemStyle(isDark)}
+              onMouseEnter={(e) => (e.currentTarget.style.background = '#F3EBD6')}
+              onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
+              onClick={() => handleDownload('htmlzip')}
+            >
+              HTML Zip (.zip)
             </button>
             <div style={{ height: 1, background: '#c9b98a', margin: '4px 0' }} />
             <button

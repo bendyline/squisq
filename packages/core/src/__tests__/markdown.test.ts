@@ -591,6 +591,28 @@ describe('Tree utilities', () => {
     expect(extractPlainText(doc)).toBe('TitleHello world');
   });
 
+  it('extractPlainText preserves list item boundaries', () => {
+    const list: MarkdownList = {
+      type: 'list',
+      ordered: false,
+      children: [
+        {
+          type: 'listItem',
+          children: [{ type: 'paragraph', children: [{ type: 'text', value: 'Apple' }] }],
+        },
+        {
+          type: 'listItem',
+          children: [{ type: 'paragraph', children: [{ type: 'text', value: 'Banana' }] }],
+        },
+        {
+          type: 'listItem',
+          children: [{ type: 'paragraph', children: [{ type: 'text', value: 'Cherry' }] }],
+        },
+      ],
+    };
+    expect(extractPlainText(list)).toBe('Apple\nBanana\nCherry');
+  });
+
   it('countNodes counts all nodes', () => {
     expect(countNodes(doc)).toBe(7); // document + heading + text + paragraph + text + link + text
   });

@@ -44,7 +44,6 @@ const DM_SANS = '"DM Sans", "Segoe UI", Roboto, sans-serif';
 const CORMORANT = '"Cormorant Garamond", Garamond, Georgia, serif';
 const CRIMSON = '"Crimson Text", Georgia, serif';
 const PT_SERIF = '"PT Serif", Georgia, serif';
-const HANKEN_GROTESK = '"Hanken Grotesk", system-ui, sans-serif';
 
 /** Standard 6-scheme set used by the documentary theme (migrated from old COLOR_SCHEMES). */
 const CLASSIC_COLOR_SCHEMES: Record<string, ThemeColorScheme> = {
@@ -473,7 +472,7 @@ const warmEarth: Theme = {
     warning: '#e53e3e',
   },
   typography: {
-    bodyFontFamily: HANKEN_GROTESK,
+    bodyFontFamily: PT_SERIF,
     titleFontFamily: PT_SERIF,
     titleWeight: 'bold',
     lineHeight: 1.6,

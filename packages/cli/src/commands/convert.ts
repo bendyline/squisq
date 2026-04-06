@@ -18,7 +18,7 @@ import type { MarkdownDocument } from '@bendyline/squisq/markdown';
 import type { ContentContainer } from '@bendyline/squisq/storage';
 import { readInput } from '../util/readInput.js';
 
-const ALL_FORMATS = ['docx', 'pptx', 'pdf', 'html', 'epub', 'dbk'] as const;
+const ALL_FORMATS = ['docx', 'pptx', 'pdf', 'html', 'htmlzip', 'epub', 'dbk'] as const;
 type Format = (typeof ALL_FORMATS)[number];
 
 function parseFormats(value: string): Format[] {
@@ -157,20 +157,11 @@ async function runConvert(inputPath: string, opts: ConvertOpts): Promise<void> {
 
       case 'html': {
         const { markdownToDoc } = await import('@bendyline/squisq/doc');
-        const { docToHtml, collectImagePaths } = await import('@bendyline/squisq-formats/html');
+        const { docToHtml } = await import('@bendyline/squisq-formats/html');
         const { PLAYER_BUNDLE } = await import('@bendyline/squisq-react/standalone-source');
 
         const doc = markdownToDoc(exportMarkdownDoc);
-
-        // Gather images referenced by the doc from the container
-        const imagePaths = collectImagePaths(doc);
-        const images = new Map<string, ArrayBuffer>();
-        for (const imgPath of imagePaths) {
-          const data = await container.readFile(imgPath);
-          if (data) {
-            images.set(imgPath, data);
-          }
-        }
+        const images = await collectImagesForHtml(doc, container);
 
         const html = docToHtml(doc, {
           playerScript: PLAYER_BUNDLE,
@@ -180,6 +171,26 @@ async function runConvert(inputPath: string, opts: ConvertOpts): Promise<void> {
           themeId,
         });
         await writeFile(outPath, html, 'utf-8');
+        break;
+      }
+
+      case 'htmlzip': {
+        const { markdownToDoc } = await import('@bendyline/squisq/doc');
+        const { docToHtmlZip } = await import('@bendyline/squisq-formats/html');
+        const { PLAYER_BUNDLE } = await import('@bendyline/squisq-react/standalone-source');
+
+        const doc = markdownToDoc(exportMarkdownDoc);
+        const images = await collectImagesForHtml(doc, container);
+
+        const blob = await docToHtmlZip(doc, {
+          playerScript: PLAYER_BUNDLE,
+          images,
+          title: baseName,
+          mode: 'static',
+          themeId,
+        });
+        const buf = Buffer.from(await blob.arrayBuffer());
+        await writeFile(outPath.replace(/\.htmlzip$/, '.html.zip'), buf);
         break;
       }
 
@@ -253,6 +264,46 @@ async function applyTransformToMarkdown(
   });
 
   return docToMarkdown(result.doc);
+}
+
+/**
+ * Collect images for HTML export. Uses both collectImagePaths (exact doc references)
+ * and a filename-based fallback from all container images, so that images are found
+ * even when the Doc references paths that differ from container paths
+ * (e.g., Doc has "hero.jpg" but container stores "images/hero.jpg", or vice versa).
+ */
+async function collectImagesForHtml(
+  doc: import('@bendyline/squisq/schemas').Doc,
+  container: ContentContainer,
+): Promise<Map<string, ArrayBuffer>> {
+  const { collectImagePaths } = await import('@bendyline/squisq-formats/html');
+
+  const images = new Map<string, ArrayBuffer>();
+
+  // 1. Try exact paths from the doc
+  const docPaths = collectImagePaths(doc);
+  for (const imgPath of docPaths) {
+    const data = await container.readFile(imgPath);
+    if (data) {
+      images.set(imgPath, data);
+    }
+  }
+
+  // 2. Supplement with all container images (keyed by both full path and filename)
+  // This ensures the standalone player's filename-fallback resolver can find them.
+  const allContainerImages = await collectContainerImages(container);
+  for (const [path, data] of allContainerImages) {
+    if (!images.has(path)) {
+      images.set(path, data);
+    }
+    // Also add by filename if different from path
+    const filename = path.split('/').pop()!;
+    if (filename !== path && !images.has(filename)) {
+      images.set(filename, data);
+    }
+  }
+
+  return images;
 }
 
 /**
