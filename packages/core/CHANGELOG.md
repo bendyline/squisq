@@ -1,3 +1,9 @@
+## @bendyline/squisq [1.2.2](https://github.com/bendyline/squisq/compare/@bendyline/squisq@1.2.1...@bendyline/squisq@1.2.2) (2026-04-07)
+
+### Bug Fixes
+
+* Render improvements, export html standalone ([#14](https://github.com/bendyline/squisq/issues/14)) ([cdcb37c](https://github.com/bendyline/squisq/commit/cdcb37c4f3b921385e147e886a91dbc651f61bd0))
+
 ## @bendyline/squisq [1.2.1](https://github.com/bendyline/squisq/compare/@bendyline/squisq@1.2.0...@bendyline/squisq@1.2.1) (2026-04-01)
 
 ### Bug Fixes
