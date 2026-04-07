@@ -83,7 +83,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@bendyline/squisq": "1.2.1",
+    "@bendyline/squisq": "1.2.2",
     "jszip": "3.10.1",
     "pdf-lib": "1.17.1",
     "pdfjs-dist": "4.10.38"
