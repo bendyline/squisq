@@ -83,5 +83,8 @@ export {
 // Bridge utilities
 export { markdownToTiptap, tiptapToMarkdown } from './tiptapBridge.js';
 
+// Slideshow builder (shared between PreviewPanel and export flows)
+export { buildPreviewDoc } from './buildPreviewDoc.js';
+
 // Tiptap extension: Heading with template annotation support
 export { HeadingWithTemplate } from './TemplateAnnotation.js';

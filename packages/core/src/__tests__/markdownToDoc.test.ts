@@ -468,3 +468,83 @@ describe('caption generation', () => {
     }
   });
 });
+
+// ============================================
+// Auto cover block (startBlock) generation
+// ============================================
+
+describe('auto cover block generation', () => {
+  it('creates startBlock from H1 title', () => {
+    const md = parseMarkdown('# My Great Article\n\nSome introduction text.');
+    const doc = markdownToDoc(md);
+
+    expect(doc.startBlock).toBeDefined();
+    expect(doc.startBlock!.title).toBe('My Great Article');
+  });
+
+  it('uses first paragraph after H1 as subtitle', () => {
+    const md = parseMarkdown('# Title\n\nThis is a subtitle paragraph.\n\n## Section\n\nBody');
+    const doc = markdownToDoc(md);
+
+    expect(doc.startBlock).toBeDefined();
+    expect(doc.startBlock!.subtitle).toBe('This is a subtitle paragraph.');
+  });
+
+  it('picks first image as heroSrc', () => {
+    const md = parseMarkdown('# Title\n\n![photo](hero.jpg)\n\nSome text.');
+    const doc = markdownToDoc(md);
+
+    expect(doc.startBlock).toBeDefined();
+    expect(doc.startBlock!.heroSrc).toBe('hero.jpg');
+    expect(doc.startBlock!.heroAlt).toBe('photo');
+  });
+
+  it('picks image from deeper in document', () => {
+    const md = parseMarkdown(
+      '# Title\n\nIntro text.\n\n## Section\n\nBody text.\n\n![deep pic](deep.png)',
+    );
+    const doc = markdownToDoc(md);
+
+    expect(doc.startBlock).toBeDefined();
+    expect(doc.startBlock!.heroSrc).toBe('deep.png');
+  });
+
+  it('works without images (no heroSrc)', () => {
+    const md = parseMarkdown('# Title\n\nPlain text, no images.');
+    const doc = markdownToDoc(md);
+
+    expect(doc.startBlock).toBeDefined();
+    expect(doc.startBlock!.title).toBe('Title');
+    expect(doc.startBlock!.heroSrc).toBeUndefined();
+  });
+
+  it('sets ambientMotion to zoomIn by default', () => {
+    const md = parseMarkdown('# Title\n\nContent.');
+    const doc = markdownToDoc(md);
+
+    expect(doc.startBlock!.ambientMotion).toBe('zoomIn');
+  });
+
+  it('does not create startBlock when no H1 exists', () => {
+    const md = parseMarkdown('## Section A\n\nText A\n\n## Section B\n\nText B');
+    const doc = markdownToDoc(md);
+
+    expect(doc.startBlock).toBeUndefined();
+  });
+
+  it('does not create startBlock when generateCoverBlock is false', () => {
+    const md = parseMarkdown('# Title\n\nContent.');
+    const doc = markdownToDoc(md, { generateCoverBlock: false });
+
+    expect(doc.startBlock).toBeUndefined();
+  });
+
+  it('does not create startBlock for heading-only document with no content', () => {
+    const md = parseMarkdown('# Title');
+    const doc = markdownToDoc(md);
+
+    expect(doc.startBlock).toBeDefined();
+    expect(doc.startBlock!.title).toBe('Title');
+    expect(doc.startBlock!.subtitle).toBeUndefined();
+  });
+});

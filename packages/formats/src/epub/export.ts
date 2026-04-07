@@ -139,7 +139,9 @@ export async function markdownDocToEpub(
     zip.file(`OEBPS/images/${img.filename}`, img.data);
   }
 
-  // Cover image — detect PNG vs JPEG from magic bytes
+  // Cover image — detect PNG vs JPEG from magic bytes.
+  // When provided, generates a cover.xhtml page in the spine so e-readers
+  // (especially Kindle) display the cover as both thumbnail and first page.
   let coverFilename: string | undefined;
   if (options.coverImage) {
     const bytes = new Uint8Array(options.coverImage);
@@ -151,6 +153,24 @@ export async function markdownDocToEpub(
       bytes[3] === 0x47;
     coverFilename = isPng ? 'cover.png' : 'cover.jpg';
     zip.file(`OEBPS/images/${coverFilename}`, options.coverImage);
+
+    // Generate cover XHTML page — full-bleed image, no margins
+    const coverXhtml = `<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops">
+<head>
+  <meta charset="UTF-8"/>
+  <title>Cover</title>
+  <style>
+    body { margin: 0; padding: 0; text-align: center; }
+    img { max-width: 100%; max-height: 100%; }
+  </style>
+</head>
+<body>
+  <img src="../images/${escapeXml(coverFilename)}" alt="Cover"/>
+</body>
+</html>`;
+    zip.file('OEBPS/chapters/cover.xhtml', coverXhtml);
   }
 
   // ── Audio narration ──────────────────────────────────────────────
@@ -392,12 +412,7 @@ function collectDocImages(nodes: MarkdownBlockNode[]): Set<string> {
   }
 
   function walkInline(node: MarkdownInlineNode): void {
-    if (
-      node.type === 'image' &&
-      node.url &&
-      !node.url.startsWith('data:') &&
-      !node.url.startsWith('http')
-    ) {
+    if (node.type === 'image' && node.url && !node.url.startsWith('data:')) {
       images.add(node.url);
     }
     if ('children' in node && Array.isArray(node.children)) {
@@ -670,6 +685,9 @@ function generateContentOpf(params: OpfParams): string {
     manifestItems.push(
       `    <item id="cover-image" href="images/${escapeXml(coverFilename)}" media-type="${mime}" properties="cover-image"/>`,
     );
+    manifestItems.push(
+      '    <item id="cover-page" href="chapters/cover.xhtml" media-type="application/xhtml+xml"/>',
+    );
   }
 
   for (const chap of chapters) {
@@ -707,8 +725,15 @@ function generateContentOpf(params: OpfParams): string {
     );
   }
 
-  // Spine
-  const spineItems = chapters.map((chap) => `    <itemref idref="${chap.id}"/>`).join('\n');
+  // Spine — cover page first (if present), then chapters
+  const spineEntries: string[] = [];
+  if (coverFilename) {
+    spineEntries.push('    <itemref idref="cover-page"/>');
+  }
+  for (const chap of chapters) {
+    spineEntries.push(`    <itemref idref="${chap.id}"/>`);
+  }
+  const spineItems = spineEntries.join('\n');
 
   // Metadata
   const metaParts = [

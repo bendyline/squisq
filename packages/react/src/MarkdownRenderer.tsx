@@ -22,6 +22,7 @@ import type {
   MarkdownTableRow,
   MarkdownTableCell,
 } from '@bendyline/squisq/markdown';
+import { useMediaUrl } from './hooks/MediaContext';
 
 // ── Props ──────────────────────────────────────────────────────────
 
@@ -86,13 +87,7 @@ function renderInline(nodes: MarkdownInlineNode[], keyPrefix = ''): React.ReactN
 
       case 'image':
         return (
-          <img
-            key={key}
-            className="squisq-md-image"
-            src={node.url}
-            alt={node.alt ?? ''}
-            title={node.title ?? undefined}
-          />
+          <MdImage key={key} src={node.url} alt={node.alt ?? ''} title={node.title ?? undefined} />
         );
 
       case 'break':
@@ -341,6 +336,14 @@ function renderTable(
 /** Render an array of block-level nodes. */
 function renderBlocks(nodes: MarkdownBlockNode[], keyPrefix = ''): React.ReactNode[] {
   return nodes.map((node, i) => renderBlock(node, `${keyPrefix}b${i}`));
+}
+
+// ── Image with MediaProvider resolution ───────────────────────────
+
+/** Renders an <img> that resolves its src through the MediaProvider when available. */
+function MdImage({ src, alt, title }: { src: string; alt: string; title?: string }) {
+  const resolved = useMediaUrl(src, '.');
+  return <img className="squisq-md-image" src={resolved} alt={alt} title={title} />;
 }
 
 // ── Main Component ─────────────────────────────────────────────────

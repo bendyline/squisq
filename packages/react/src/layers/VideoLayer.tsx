@@ -134,8 +134,8 @@ export function VideoLayer({
           data-clip-start={content.clipStart}
           data-clip-end={content.clipEnd}
           style={{
-            width: '100%',
-            height: '100%',
+            width: `${width}px`,
+            height: `${height}px`,
             objectFit: content.fit || 'cover',
             objectPosition: 'center',
             display: 'block',

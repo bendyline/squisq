@@ -30,7 +30,7 @@ async function waitForDocPlayer(page: Page) {
 async function startPlaybackAndWaitForActiveBlock(page: Page) {
   await page.locator('.doc-player').click();
   // Cover block has a 3s grace period; wait for the active block to appear
-  await page.locator('.doc-player__block--active').waitFor({ state: 'visible', timeout: 5_000 });
+  await page.locator('.doc-player__block--active').waitFor({ state: 'visible', timeout: 8_000 });
 }
 
 /** Get the active SVG block in the DocPlayer */
@@ -255,6 +255,37 @@ test.describe('DocPlayer controls', () => {
     // DocPlayer renders controls (containing the progress bar) via DocControlsOverlay
     const controls = page.locator('.doc-player__controls');
     await expect(controls).toBeVisible({ timeout: 5_000 });
+  });
+});
+
+// ── Cover Block (startBlock) ────────────────────────────────────────
+
+test.describe('Cover block display', () => {
+  test.beforeEach(async ({ page }) => {
+    await page.goto('/');
+    await page.waitForLoadState('networkidle');
+    await selectSample(page, 'hello-world');
+    await switchView(page, 'Play');
+    await waitForDocPlayer(page);
+  });
+
+  test('cover block is visible at rest before playback', async ({ page }) => {
+    const cover = page.locator('.doc-player__block--cover');
+    await expect(cover).toBeVisible({ timeout: 5_000 });
+  });
+
+  test('cover block shows the document title', async ({ page }) => {
+    const cover = page.locator('.doc-player__block--cover');
+    await expect(cover).toContainText('Hello World', { timeout: 5_000 });
+  });
+
+  test('cover block is dismissed after playback starts', async ({ page }) => {
+    const cover = page.locator('.doc-player__block--cover');
+    await expect(cover).toBeVisible({ timeout: 5_000 });
+
+    // Start playback and wait for active block to replace the cover
+    await startPlaybackAndWaitForActiveBlock(page);
+    await expect(cover).not.toBeVisible({ timeout: 8_000 });
   });
 });
 

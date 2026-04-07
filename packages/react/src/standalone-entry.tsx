@@ -86,10 +86,22 @@ function createInlineMediaProvider(
   images: Record<string, string>,
   basePath: string,
 ): MediaProvider {
+  // Doc image references may not exactly match image map keys
+  // (e.g., "images/hero.jpg" vs "hero.jpg"). Build a filename-keyed
+  // lookup so resolution can fall back to basename matching.
+  const byFilename: Record<string, string> = {};
+  for (const key of Object.keys(images)) {
+    const filename = key.split('/').pop()!;
+    byFilename[filename] = images[key];
+  }
+
   return {
     async resolveUrl(relativePath: string): Promise<string> {
       if (relativePath in images) return images[relativePath];
-      // Fallback to basePath
+      const stripped = relativePath.replace(/^\.\//, '');
+      if (stripped !== relativePath && stripped in images) return images[stripped];
+      const filename = relativePath.split('/').pop()!;
+      if (filename in byFilename) return byFilename[filename];
       if (
         relativePath.startsWith('http') ||
         relativePath.startsWith('data:') ||

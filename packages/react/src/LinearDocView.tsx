@@ -257,8 +257,10 @@ function getTemplateDefaults(
       return { fact: headingText, explanation: bodyText || headingText };
     case 'comparisonBar':
       return { leftLabel: 'A', leftValue: 60, rightLabel: 'B', rightValue: 40 };
-    case 'listBlock':
-      return { items: extractListItems(contents) || ['Item 1', 'Item 2', 'Item 3'] };
+    case 'listBlock': {
+      const items = extractListItems(contents);
+      return { items: items.length > 0 ? items : ['Item 1', 'Item 2', 'Item 3'] };
+    }
     case 'definitionCard':
       return { term: headingText, definition: bodyText || headingText };
     case 'dateEvent':
@@ -405,6 +407,12 @@ export function LinearDocView({
             border: none;
             border-top: 1px solid var(--squisq-linear-muted);
             margin: 1.5em 0;
+          }
+          .squisq-linear-content img {
+            max-width: 100%;
+            height: auto;
+            border-radius: 6px;
+            margin: 0.5em 0;
           }
           .squisq-linear-content strong {
             font-weight: 700;

@@ -61,8 +61,8 @@ export function ImageLayer({ layer, basePath, viewport, blockTime }: ImageLayerP
         <foreignObject x={finalX} y={finalY} width={width} height={height}>
           <div
             style={{
-              width: '100%',
-              height: '100%',
+              width: `${width}px`,
+              height: `${height}px`,
               overflow: 'hidden',
             }}
           >
@@ -71,8 +71,8 @@ export function ImageLayer({ layer, basePath, viewport, blockTime }: ImageLayerP
               alt={content.alt || ''}
               className={kbStyle.className}
               style={{
-                width: '100%',
-                height: '100%',
+                width: `${width}px`,
+                height: `${height}px`,
                 objectFit: 'cover',
                 objectPosition: 'center',
                 display: 'block',
@@ -101,8 +101,8 @@ export function ImageLayer({ layer, basePath, viewport, blockTime }: ImageLayerP
             src={src}
             alt={content.alt || ''}
             style={{
-              width: '100%',
-              height: '100%',
+              width: `${width}px`,
+              height: `${height}px`,
               objectFit: 'cover',
               objectPosition: 'center',
               display: 'block',

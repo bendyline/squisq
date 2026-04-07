@@ -25,8 +25,8 @@ import { mapAmbientMotion } from './accentImage.js';
  * Input for coverBlock template - matches StartBlockConfig
  */
 export interface CoverBlockInput {
-  /** Path to hero image */
-  heroSrc: string;
+  /** Path to hero image (omit for theme-driven background) */
+  heroSrc?: string;
   /** Alt text for the hero image */
   heroAlt?: string;
   /** Title to display over the hero */
@@ -48,63 +48,93 @@ export function coverBlock(input: CoverBlockInput, context: TemplateContext): La
   const { heroSrc, heroAlt, title, subtitle, ambientMotion, heroCredit, heroLicense } = input;
   const { theme, layout } = context;
 
-  // Scale font sizes for viewport - use larger sizes for the cover
-  const titleFontSize = scaledFontSize(96, context, true);
-  const subtitleFontSize = scaledFontSize(36, context, false);
+  // Scale font sizes for viewport - cover titles are larger than regular title blocks
+  const titleFontSize = scaledFontSize(120, context, true);
+  const subtitleFontSize = scaledFontSize(40, context, false);
 
-  // Determine Ken Burns animation
-  const imageAnimation = mapAmbientMotion(ambientMotion);
+  const layers: Layer[] = [];
 
-  const layers: Layer[] = [
-    // Full-screen hero image
-    {
-      type: 'image',
-      id: 'cover-hero',
-      content: {
-        src: heroSrc,
-        alt: heroAlt || title,
-        fit: 'cover',
-        credit: heroCredit,
-        license: heroLicense,
+  if (heroSrc) {
+    // Hero image path: full-screen image with gradient overlay for text readability
+    const imageAnimation = mapAmbientMotion(ambientMotion);
+
+    layers.push(
+      {
+        type: 'image',
+        id: 'cover-hero',
+        content: {
+          src: heroSrc,
+          alt: heroAlt || title,
+          fit: 'cover',
+          credit: heroCredit,
+          license: heroLicense,
+        },
+        position: { x: 0, y: 0, width: '100%', height: '100%' },
+        animation: imageAnimation,
       },
-      position: { x: 0, y: 0, width: '100%', height: '100%' },
-      animation: imageAnimation,
-    },
-    // Gradient overlay for text readability - from bottom
-    {
+      {
+        type: 'shape',
+        id: 'cover-gradient',
+        content: {
+          shape: 'rect',
+          fill: 'linear-gradient(0deg, rgba(0,0,0,0.8) 0%, rgba(0,0,0,0.4) 40%, rgba(0,0,0,0.1) 70%, transparent 100%)',
+        },
+        position: { x: 0, y: 0, width: '100%', height: '100%' },
+      },
+    );
+  } else {
+    // No hero image: use a rich theme-driven background with radial gradient
+    layers.push({
       type: 'shape',
-      id: 'cover-gradient',
+      id: 'cover-bg',
       content: {
         shape: 'rect',
-        fill: 'linear-gradient(0deg, rgba(0,0,0,0.8) 0%, rgba(0,0,0,0.4) 40%, rgba(0,0,0,0.1) 70%, transparent 100%)',
+        fill: `radial-gradient(ellipse at 50% 40%, ${theme.colors.primary} 0%, ${theme.colors.background} 100%)`,
       },
       position: { x: 0, y: 0, width: '100%', height: '100%' },
-    },
-    // Title - positioned lower in the frame to work with hero composition
-    {
-      type: 'text',
-      id: 'cover-title',
+    });
+
+    // Subtle decorative accent line below title
+    layers.push({
+      type: 'shape',
+      id: 'cover-accent',
       content: {
-        text: title,
-        style: {
-          fontSize: titleFontSize,
-          fontFamily: getThemeFont(context, 'title'),
-          fontWeight: 'bold',
-          color: theme.colors.text,
-          textAlign: 'center',
-          shadow: true,
-        },
+        shape: 'rect',
+        fill: 'rgba(255, 255, 255, 0.2)',
       },
       position: {
-        x: '50%',
-        y: subtitle ? '70%' : '75%',
-        anchor: 'center',
-        width: layout.maxTextWidth,
+        x: '35%',
+        y: subtitle ? '42%' : '58%',
+        width: '30%',
+        height: '2px',
       },
-      // No animation delay - shown immediately at rest
-      animation: { type: 'fadeIn', duration: 0.8 },
+    });
+  }
+
+  // Title - positioned lower when over hero, centered when over solid background
+  layers.push({
+    type: 'text',
+    id: 'cover-title',
+    content: {
+      text: title,
+      style: {
+        fontSize: titleFontSize,
+        fontFamily: getThemeFont(context, 'title'),
+        fontWeight: 'bold',
+        color: theme.colors.text,
+        textAlign: 'center',
+        shadow: true,
+      },
     },
-  ];
+    position: {
+      x: '50%',
+      y: heroSrc ? (subtitle ? '70%' : '75%') : subtitle ? layout.primaryY : '50%',
+      anchor: 'center',
+      width: layout.maxTextWidth,
+    },
+    // No animation delay - shown immediately at rest
+    animation: { type: 'fadeIn', duration: 0.8 },
+  });
 
   // Add subtitle if provided
   if (subtitle) {
@@ -123,7 +153,7 @@ export function coverBlock(input: CoverBlockInput, context: TemplateContext): La
       },
       position: {
         x: '50%',
-        y: '82%',
+        y: heroSrc ? '82%' : layout.secondaryY,
         anchor: 'center',
         width: layout.maxTextWidth,
       },

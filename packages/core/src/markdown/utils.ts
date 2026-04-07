@@ -87,7 +87,11 @@ export function extractPlainText(node: MarkdownNode): string {
   }
 
   const children = getChildren(node);
-  return children.map(extractPlainText).join('');
+  // Preserve boundaries between block-level elements (list items, paragraphs
+  // inside list items, blockquotes) so downstream consumers like caption
+  // splitting can treat each item as a separate phrase.
+  const separator = node.type === 'list' || node.type === 'listItem' ? '\n' : '';
+  return children.map(extractPlainText).join(separator);
 }
 
 /**

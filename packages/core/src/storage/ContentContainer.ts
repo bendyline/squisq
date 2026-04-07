@@ -120,7 +120,15 @@ export class MemoryContentContainer implements ContentContainer {
   }
 
   async writeFile(path: string, data: ArrayBuffer | Uint8Array, mimeType?: string): Promise<void> {
-    const buffer = data instanceof ArrayBuffer ? data : data.slice().buffer;
+    // Copy to a standalone ArrayBuffer. Uint8Array/Buffer may share a larger
+    // backing buffer (e.g., Node's buffer pool), so we must slice to the
+    // exact byte range to avoid storing stale pool data.
+    let buffer: ArrayBuffer;
+    if (data instanceof ArrayBuffer) {
+      buffer = data;
+    } else {
+      buffer = data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength) as ArrayBuffer;
+    }
     this.files.set(path, {
       data: buffer,
       mimeType: mimeType ?? guessMimeType(path),

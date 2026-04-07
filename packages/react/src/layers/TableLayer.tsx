@@ -51,8 +51,8 @@ export function TableLayer({ layer, viewport, blockTime }: TableLayerProps) {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         {...({ xmlns: 'http://www.w3.org/1999/xhtml' } as any)}
         style={{
-          width: '100%',
-          height: '100%',
+          width: `${width}px`,
+          height: `${height}px`,
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',

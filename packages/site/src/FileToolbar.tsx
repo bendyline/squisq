@@ -21,6 +21,8 @@ import {
   configurePdfWorker,
 } from '@bendyline/squisq-formats/pdf';
 import { containerToZip, zipToContainer } from '@bendyline/squisq-formats/container';
+import { docToHtml, docToHtmlZip } from '@bendyline/squisq-formats/html';
+import { collectImagesForHtmlExport } from './exportHelpers';
 import { MemoryContentContainer } from '@bendyline/squisq/storage';
 import type { ContentContainer } from '@bendyline/squisq/storage';
 import type { MediaProvider } from '@bendyline/squisq/schemas';
@@ -50,7 +52,7 @@ interface FileToolbarProps {
   activeSlot: number | null;
 }
 
-type DownloadFormat = 'md' | 'docx' | 'pptx' | 'pdf' | 'txt' | 'zip';
+type DownloadFormat = 'md' | 'docx' | 'pptx' | 'pdf' | 'txt' | 'zip' | 'html' | 'htmlzip';
 
 /** File extensions treated as images (stored in slot media, not imported as docs) */
 const IMAGE_EXTENSIONS = new Set(['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg']);
@@ -121,7 +123,8 @@ function downloadBlob(blob: Blob, filename: string) {
 
 function filenameForFormat(format: DownloadFormat): string {
   const ts = new Date().toISOString().slice(0, 10);
-  return `document-${ts}.${format}`;
+  const ext = format === 'htmlzip' ? 'html.zip' : format;
+  return `document-${ts}.${ext}`;
 }
 
 // ============================================
@@ -219,6 +222,32 @@ export function FileToolbar({
           }
           const blob = await containerToZip(container);
           downloadBlob(blob, filename);
+        } else if (format === 'html' || format === 'htmlzip') {
+          if (!playerScriptRef.current) {
+            const { PLAYER_BUNDLE } = await import('@bendyline/squisq-react/standalone-source');
+            playerScriptRef.current = PLAYER_BUNDLE;
+          }
+          const mdDoc = parseMarkdown(currentSource);
+          const doc = markdownToDoc(mdDoc);
+          const images = await collectImagesForHtmlExport(doc, mediaProvider);
+          const themeId =
+            (mdDoc.frontmatter?.themeId as string | undefined) ??
+            (mdDoc.frontmatter?.theme as string | undefined);
+          const title = doc.frontmatter?.title as string | undefined;
+          const options = {
+            playerScript: playerScriptRef.current,
+            images,
+            mode: 'static' as const,
+            title,
+            themeId,
+          };
+          if (format === 'html') {
+            const html = docToHtml(doc, options);
+            downloadBlob(new Blob([html], { type: 'text/html;charset=utf-8' }), filename);
+          } else {
+            const blob = await docToHtmlZip(doc, options);
+            downloadBlob(blob, filename);
+          }
         }
       } catch (err: unknown) {
         console.error('Download failed:', err);
@@ -364,6 +393,23 @@ export function FileToolbar({
               onClick={() => handleDownload('zip')}
             >
               Content Zip (.zip)
+            </button>
+            <div style={{ height: 1, background: '#c9b98a', margin: '4px 0' }} />
+            <button
+              style={dropdownItemStyle(isDark)}
+              onMouseEnter={(e) => (e.currentTarget.style.background = '#F3EBD6')}
+              onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
+              onClick={() => handleDownload('html')}
+            >
+              Standalone HTML (.html)
+            </button>
+            <button
+              style={dropdownItemStyle(isDark)}
+              onMouseEnter={(e) => (e.currentTarget.style.background = '#F3EBD6')}
+              onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
+              onClick={() => handleDownload('htmlzip')}
+            >
+              HTML Zip (.zip)
             </button>
             <div style={{ height: 1, background: '#c9b98a', margin: '4px 0' }} />
             <button

@@ -49,8 +49,8 @@ export function ShapeLayer({ layer, viewport, blockTime }: ShapeLayerProps) {
         <foreignObject x={x} y={y} width={width} height={height}>
           <div
             style={{
-              width: '100%',
-              height: '100%',
+              width: `${width}px`,
+              height: `${height}px`,
               background: fill,
               borderRadius: content.borderRadius ? `${content.borderRadius}px` : undefined,
               pointerEvents: 'none',

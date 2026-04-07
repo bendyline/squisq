@@ -18,7 +18,7 @@ import type { MarkdownDocument } from '@bendyline/squisq/markdown';
 import type { ContentContainer } from '@bendyline/squisq/storage';
 import { readInput } from '../util/readInput.js';
 
-const ALL_FORMATS = ['docx', 'pptx', 'pdf', 'html', 'epub', 'dbk'] as const;
+const ALL_FORMATS = ['docx', 'pptx', 'pdf', 'html', 'htmlzip', 'epub', 'dbk'] as const;
 type Format = (typeof ALL_FORMATS)[number];
 
 function parseFormats(value: string): Format[] {
@@ -157,20 +157,11 @@ async function runConvert(inputPath: string, opts: ConvertOpts): Promise<void> {
 
       case 'html': {
         const { markdownToDoc } = await import('@bendyline/squisq/doc');
-        const { docToHtml, collectImagePaths } = await import('@bendyline/squisq-formats/html');
+        const { docToHtml } = await import('@bendyline/squisq-formats/html');
         const { PLAYER_BUNDLE } = await import('@bendyline/squisq-react/standalone-source');
 
         const doc = markdownToDoc(exportMarkdownDoc);
-
-        // Gather images referenced by the doc from the container
-        const imagePaths = collectImagePaths(doc);
-        const images = new Map<string, ArrayBuffer>();
-        for (const imgPath of imagePaths) {
-          const data = await container.readFile(imgPath);
-          if (data) {
-            images.set(imgPath, data);
-          }
-        }
+        const images = await collectImagesForHtml(doc, container);
 
         const html = docToHtml(doc, {
           playerScript: PLAYER_BUNDLE,
@@ -180,6 +171,26 @@ async function runConvert(inputPath: string, opts: ConvertOpts): Promise<void> {
           themeId,
         });
         await writeFile(outPath, html, 'utf-8');
+        break;
+      }
+
+      case 'htmlzip': {
+        const { markdownToDoc } = await import('@bendyline/squisq/doc');
+        const { docToHtmlZip } = await import('@bendyline/squisq-formats/html');
+        const { PLAYER_BUNDLE } = await import('@bendyline/squisq-react/standalone-source');
+
+        const doc = markdownToDoc(exportMarkdownDoc);
+        const images = await collectImagesForHtml(doc, container);
+
+        const blob = await docToHtmlZip(doc, {
+          playerScript: PLAYER_BUNDLE,
+          images,
+          title: baseName,
+          mode: 'static',
+          themeId,
+        });
+        const buf = Buffer.from(await blob.arrayBuffer());
+        await writeFile(outPath.replace(/\.htmlzip$/, '.html.zip'), buf);
         break;
       }
 
@@ -253,6 +264,56 @@ async function applyTransformToMarkdown(
   });
 
   return docToMarkdown(result.doc);
+}
+
+/**
+ * Collect images for HTML export, keying each by both its container path and
+ * its filename. The standalone player resolves by exact key first then by
+ * filename, so both keyings handle path mismatches between how the Doc
+ * references images and how they're stored in the container.
+ *
+ * Only images referenced by the Doc are included — unreferenced container
+ * images would bloat the HTML output unnecessarily.
+ */
+async function collectImagesForHtml(
+  doc: import('@bendyline/squisq/schemas').Doc,
+  container: ContentContainer,
+): Promise<Map<string, ArrayBuffer>> {
+  const { collectImagePaths, extractFilename } = await import('@bendyline/squisq-formats/html');
+
+  const images = new Map<string, ArrayBuffer>();
+  const docPaths = collectImagePaths(doc);
+
+  // Try exact paths first
+  const needByFilename = new Set<string>();
+  for (const imgPath of docPaths) {
+    const data = await container.readFile(imgPath);
+    if (data) {
+      images.set(imgPath, data);
+      const filename = extractFilename(imgPath);
+      if (filename !== imgPath) images.set(filename, data);
+    } else {
+      needByFilename.add(extractFilename(imgPath));
+    }
+  }
+
+  // For any doc paths that didn't resolve, scan the container for a file
+  // with the same basename (handles "images/hero.jpg" vs "hero.jpg" mismatches).
+  if (needByFilename.size > 0) {
+    const files = await container.listFiles();
+    for (const file of files) {
+      const filename = extractFilename(file.path);
+      if (needByFilename.has(filename)) {
+        const data = await container.readFile(file.path);
+        if (data) {
+          images.set(filename, data);
+          images.set(file.path, data);
+        }
+      }
+    }
+  }
+
+  return images;
 }
 
 /**
