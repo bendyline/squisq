@@ -426,7 +426,7 @@ export function tiptapToMarkdown(html: string): string {
     if (ulMatch) {
       const items = ulMatch[1].matchAll(/<li>(.*?)<\/li>/gs);
       for (const item of items) {
-        lines.push('- ' + htmlToInline(item[1].replace(/<\/?p>/g, '')));
+        lines.push(...renderListItem('- ', item[1]));
       }
       lines.push('');
       remaining = remaining.slice(ulMatch[0].length);
@@ -438,7 +438,7 @@ export function tiptapToMarkdown(html: string): string {
     if (olMatch) {
       const items = [...olMatch[1].matchAll(/<li>(.*?)<\/li>/gs)];
       items.forEach((item, idx) => {
-        lines.push(`${idx + 1}. ` + htmlToInline(item[1].replace(/<\/?p>/g, '')));
+        lines.push(...renderListItem(`${idx + 1}. `, item[1]));
       });
       lines.push('');
       remaining = remaining.slice(olMatch[0].length);
@@ -483,6 +483,41 @@ export function tiptapToMarkdown(html: string): string {
       .replace(/\n{3,}/g, '\n\n')
       .trim() + '\n'
   );
+}
+
+/**
+ * Render a list item's HTML content as one or more markdown lines.
+ * Handles `<p>` paragraph breaks (blank line) and `<br>` hard breaks
+ * (two trailing spaces). Continuation lines are indented to keep them
+ * inside the list item.
+ */
+function renderListItem(prefix: string, html: string): string[] {
+  const indent = ' '.repeat(prefix.length);
+
+  // Split on </p><p> to detect paragraph breaks within the item
+  const paragraphs = html
+    .split(/<\/p>\s*<p[^>]*>/i)
+    .map((p) => p.replace(/^<p[^>]*>/i, '').replace(/<\/p>\s*$/i, ''));
+
+  const result: string[] = [];
+  paragraphs.forEach((paragraph, pIdx) => {
+    const inline = htmlToInline(paragraph).trim();
+    if (!inline) return;
+
+    // Each <br> already became "  \n" in htmlToInline; split on it now.
+    const subLines = inline.split('\n');
+    subLines.forEach((sub, sIdx) => {
+      if (pIdx === 0 && sIdx === 0) {
+        result.push(prefix + sub);
+      } else {
+        // Blank line separator between paragraphs (sIdx === 0 means new paragraph)
+        if (sIdx === 0) result.push('');
+        result.push(indent + sub);
+      }
+    });
+  });
+
+  return result.length > 0 ? result : [prefix];
 }
 
 // ─── Table helpers ───────────────────────────────────────
@@ -554,6 +589,10 @@ function inlineToHtml(text: string): string {
 /** Convert inline HTML back to markdown */
 function htmlToInline(html: string): string {
   let result = html;
+
+  // Soft line breaks — convert <br> to GFM hard-break syntax (two trailing
+  // spaces + newline) before stripping tags so the newline survives.
+  result = result.replace(/<br\s*\/?>/gi, '  \n');
 
   // Strong
   result = result.replace(RE_STRONG_TAG, '**$1**');

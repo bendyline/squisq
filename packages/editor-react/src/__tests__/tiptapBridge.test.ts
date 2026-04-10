@@ -230,6 +230,25 @@ describe('tiptapToMarkdown', () => {
     expect(md).toContain('&');
     expect(md).toContain('"test"');
   });
+
+  it('converts <br> to a hard line break (two trailing spaces)', () => {
+    const md = tiptapToMarkdown('<p>line one<br>line two</p>');
+    expect(md).toContain('line one  \nline two');
+  });
+
+  it('preserves paragraph break inside list items', () => {
+    const md = tiptapToMarkdown(
+      '<ul><li><p><strong>Title</strong></p><p>Description text</p></li></ul>',
+    );
+    expect(md).toContain('- **Title**');
+    expect(md).toContain('  Description text');
+  });
+
+  it('preserves <br> hard break inside list items', () => {
+    const md = tiptapToMarkdown('<ul><li><p>First line<br>Second line</p></li></ul>');
+    expect(md).toContain('- First line  ');
+    expect(md).toContain('  Second line');
+  });
 });
 
 // ---------------------------------------------------------------------------

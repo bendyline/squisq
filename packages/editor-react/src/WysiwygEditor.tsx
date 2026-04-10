@@ -24,6 +24,7 @@ import { HeadingWithTemplate } from './TemplateAnnotation';
 import { ImageWithMediaProvider } from './ImageNodeView';
 import { useEditorContext } from './EditorContext';
 import { markdownToTiptap, tiptapToMarkdown } from './tiptapBridge';
+import { looksLikeMarkdown } from './detectMarkdown';
 
 // ── Frontmatter helpers ────────────────────────────────────────────
 
@@ -52,9 +53,15 @@ export function WysiwygEditor({
   placeholder = 'Start typing your markdown…',
   className,
 }: WysiwygEditorProps) {
-  const { markdownSource, setMarkdownSource, setTiptapEditor } = useEditorContext();
+  const { markdownSource, setMarkdownSource, setTiptapEditor, mediaProvider } = useEditorContext();
   const isExternalUpdate = useRef(false);
   const lastSourceRef = useRef(markdownSource);
+  // Keep a ref so the editor's drop/paste handlers (created once) always
+  // see the current MediaProvider without needing to recreate the editor.
+  const mediaProviderRef = useRef(mediaProvider);
+  useEffect(() => {
+    mediaProviderRef.current = mediaProvider;
+  }, [mediaProvider]);
   // Preserve frontmatter across edits — hidden from WYSIWYG but prepended on save
   const frontmatterRef = useRef(stripFrontmatter(markdownSource).frontmatter);
 
@@ -91,6 +98,55 @@ export function WysiwygEditor({
         class: 'squisq-wysiwyg-editor',
         'data-testid': 'wysiwyg-editor',
       },
+      // When the clipboard's plain-text payload looks like markdown source,
+      // convert it via tiptapBridge before pasting. This applies even when
+      // the clipboard also contains HTML (most rich-text sources do), since
+      // the markdown-looking text is usually what the user actually wants.
+      // Without this, pasted markdown shows up as literal "# Heading" text
+      // instead of becoming a real heading.
+      handlePaste: (view, event) => {
+        const clipboard = event.clipboardData;
+        if (!clipboard) return false;
+
+        // Image files in the clipboard → upload via MediaProvider and insert
+        const imageFiles = filesFromClipboard(clipboard);
+        if (imageFiles.length > 0 && mediaProviderRef.current) {
+          event.preventDefault();
+          uploadAndInsertImages(view, imageFiles, mediaProviderRef.current);
+          return true;
+        }
+
+        const text = clipboard.getData('text/plain');
+        if (!text || !looksLikeMarkdown(text)) return false;
+        const html = markdownToTiptap(text);
+        if (!html) return false;
+        event.preventDefault();
+        view.pasteHTML(html);
+        return true;
+      },
+      // When image files are dropped onto the editor, upload them via the
+      // MediaProvider and insert <img> nodes referencing the relative paths.
+      // Falls through to default handling for non-image drops or when no
+      // MediaProvider is available.
+      handleDrop: (view, event, _slice, _moved) => {
+        const dt = event.dataTransfer;
+        if (!dt) return false;
+        const imageFiles = filesFromDataTransfer(dt);
+        if (imageFiles.length === 0 || !mediaProviderRef.current) return false;
+
+        event.preventDefault();
+        // Position the cursor at the drop location before inserting
+        const coords = view.posAtCoords({ left: event.clientX, top: event.clientY });
+        if (coords) {
+          const tr = view.state.tr.setSelection(
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            (view.state.selection.constructor as any).near(view.state.doc.resolve(coords.pos)),
+          );
+          view.dispatch(tr);
+        }
+        uploadAndInsertImages(view, imageFiles, mediaProviderRef.current);
+        return true;
+      },
     },
   });
 
@@ -126,6 +182,79 @@ export function WysiwygEditor({
       <EditorContent editor={editor} style={{ height: '100%' }} />
     </div>
   );
+}
+
+// ── Image drop / paste helpers ─────────────────────────────────────
+
+/** Extract image File objects from a DataTransfer (drop event). */
+function filesFromDataTransfer(dt: DataTransfer): File[] {
+  const files: File[] = [];
+  for (let i = 0; i < dt.files.length; i++) {
+    const file = dt.files[i];
+    if (file.type.startsWith('image/')) files.push(file);
+  }
+  return files;
+}
+
+/** Extract image File objects from a clipboard's items (paste event). */
+function filesFromClipboard(clipboard: DataTransfer): File[] {
+  const files: File[] = [];
+  // clipboardData.items is the most reliable source for pasted images
+  if (clipboard.items) {
+    for (let i = 0; i < clipboard.items.length; i++) {
+      const item = clipboard.items[i];
+      if (item.kind === 'file' && item.type.startsWith('image/')) {
+        const file = item.getAsFile();
+        if (file) files.push(file);
+      }
+    }
+  }
+  return files;
+}
+
+/**
+ * Upload image files to the MediaProvider and insert <img> nodes at the
+ * current selection. Inserts a placeholder name when files lack one
+ * (e.g., screenshots from the system clipboard).
+ */
+async function uploadAndInsertImages(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  view: any,
+  files: File[],
+  mediaProvider: import('@bendyline/squisq/schemas').MediaProvider,
+): Promise<void> {
+  for (const file of files) {
+    try {
+      const buffer = await file.arrayBuffer();
+      const mimeType = file.type || 'image/png';
+      const name = file.name && file.name !== 'image.png' ? file.name : `pasted-${Date.now()}.${extFromMime(mimeType)}`;
+      const relativePath = await mediaProvider.addMedia(name, buffer, mimeType);
+      const altText = name.replace(/\.[^.]+$/, '').replace(/[-_]/g, ' ');
+
+      // Insert <img> via the schema's image node type
+      const { schema } = view.state;
+      const imageType = schema.nodes.image;
+      if (!imageType) continue;
+      const node = imageType.create({ src: relativePath, alt: altText });
+      const tr = view.state.tr.replaceSelectionWith(node);
+      view.dispatch(tr);
+    } catch (err) {
+      console.error('Failed to upload dropped image:', err);
+    }
+  }
+}
+
+function extFromMime(mime: string): string {
+  const map: Record<string, string> = {
+    'image/png': 'png',
+    'image/jpeg': 'jpg',
+    'image/jpg': 'jpg',
+    'image/gif': 'gif',
+    'image/webp': 'webp',
+    'image/svg+xml': 'svg',
+    'image/avif': 'avif',
+  };
+  return map[mime.toLowerCase()] ?? 'png';
 }
 
 /**
