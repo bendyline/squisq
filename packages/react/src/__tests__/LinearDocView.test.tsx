@@ -2,6 +2,11 @@ import { describe, it, expect } from 'vitest';
 import { render } from '@testing-library/react';
 import { LinearDocView } from '../LinearDocView';
 import type { Doc, Block } from '@bendyline/squisq/schemas';
+import {
+  DARK_SURFACE,
+  DEFAULT_THEME,
+  LIGHT_SURFACE,
+} from '@bendyline/squisq/schemas';
 import type {
   MarkdownBlockNode,
   MarkdownInlineNode,
@@ -176,5 +181,39 @@ describe('LinearDocView', () => {
     const { container } = render(<LinearDocView doc={doc} />);
     expect(container.querySelector('[data-block-id="alpha"]')).toBeTruthy();
     expect(container.querySelector('[data-block-id="beta"]')).toBeTruthy();
+  });
+
+  it('uses the theme background by default', () => {
+    const doc = mkDoc([mkBlock({ id: 'b', contents: [paragraph(text('hi'))] })]);
+    const { container } = render(<LinearDocView doc={doc} />);
+    const el = container.querySelector('.squisq-linear') as HTMLElement;
+    expect(el.style.background).toBeTruthy();
+    // DEFAULT_THEME has a specific background; applying LIGHT_SURFACE below
+    // must produce a different value to prove override is working.
+    expect(el.style.background).not.toBe(LIGHT_SURFACE.background);
+  });
+
+  it('light surface overlays the theme background', () => {
+    const doc = mkDoc([mkBlock({ id: 'b', contents: [paragraph(text('hi'))] })]);
+    const { container } = render(
+      <LinearDocView doc={doc} theme={DEFAULT_THEME} surface={LIGHT_SURFACE} />,
+    );
+    const el = container.querySelector('.squisq-linear') as HTMLElement;
+    // React inline style background may round-trip as hex or rgb; compare the
+    // colour-normalized value by mounting a plain div with the expected.
+    const probe = document.createElement('div');
+    probe.style.background = LIGHT_SURFACE.background;
+    expect(el.style.background).toBe(probe.style.background);
+  });
+
+  it('dark surface overlays the theme background', () => {
+    const doc = mkDoc([mkBlock({ id: 'b', contents: [paragraph(text('hi'))] })]);
+    const { container } = render(
+      <LinearDocView doc={doc} theme={DEFAULT_THEME} surface={DARK_SURFACE} />,
+    );
+    const el = container.querySelector('.squisq-linear') as HTMLElement;
+    const probe = document.createElement('div');
+    probe.style.background = DARK_SURFACE.background;
+    expect(el.style.background).toBe(probe.style.background);
   });
 });

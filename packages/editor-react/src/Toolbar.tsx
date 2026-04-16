@@ -35,6 +35,12 @@ export interface ToolbarProps {
   slotAfterActions?: ReactNode;
   /** Content rendered at the rightmost end of the toolbar, after all other elements. */
   slotRight?: ReactNode;
+  /**
+   * Whether to include the "Play" (preview) tab in the view switcher.
+   * Defaults to true. Hosts that don't want the slideshow preview — e.g.
+   * editing free-form prompts — can pass false to suppress it.
+   */
+  showPlayTab?: boolean;
 }
 
 interface ToolbarButton {
@@ -136,7 +142,9 @@ export function Toolbar({
   slotLeft,
   slotAfterActions,
   slotRight,
+  showPlayTab = true,
 }: ToolbarProps) {
+  const visibleViews = showPlayTab ? VIEWS : VIEWS.filter((v) => v.id !== 'preview');
   const {
     activeView,
     setActiveView,
@@ -538,7 +546,7 @@ export function Toolbar({
       {slotLeft}
       {/* View tabs */}
       <div className="squisq-toolbar-view-tabs" role="tablist" aria-label="Editor view">
-        {VIEWS.map((view) => (
+        {visibleViews.map((view) => (
           <button
             key={view.id}
             role="tab"

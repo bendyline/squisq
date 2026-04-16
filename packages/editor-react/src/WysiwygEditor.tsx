@@ -25,6 +25,7 @@ import { ImageWithMediaProvider } from './ImageNodeView';
 import { useEditorContext } from './EditorContext';
 import { markdownToTiptap, tiptapToMarkdown } from './tiptapBridge';
 import { looksLikeMarkdown } from './detectMarkdown';
+import { SQUISQ_MEDIA_MIME, parseSquisqMediaPayload } from './mediaDragMime';
 
 // ── Frontmatter helpers ────────────────────────────────────────────
 
@@ -43,6 +44,11 @@ export interface WysiwygEditorProps {
   placeholder?: string;
   /** Additional class name for the container */
   className?: string;
+  /**
+   * If set, a plain Enter keypress fires this callback instead of inserting
+   * a newline, and Cmd/Ctrl+Enter inserts a soft break. Chat-composer UX.
+   */
+  submitOnEnter?: () => void;
 }
 
 /**
@@ -52,6 +58,7 @@ export interface WysiwygEditorProps {
 export function WysiwygEditor({
   placeholder = 'Start typing your markdown…',
   className,
+  submitOnEnter,
 }: WysiwygEditorProps) {
   const { markdownSource, setMarkdownSource, setTiptapEditor, mediaProvider } = useEditorContext();
   const isExternalUpdate = useRef(false);
@@ -64,6 +71,12 @@ export function WysiwygEditor({
   }, [mediaProvider]);
   // Preserve frontmatter across edits — hidden from WYSIWYG but prepended on save
   const frontmatterRef = useRef(stripFrontmatter(markdownSource).frontmatter);
+  // Stash the latest submit callback so the editor's handleKeyDown (bound
+  // once at creation) always sees the current value.
+  const submitOnEnterRef = useRef(submitOnEnter);
+  useEffect(() => {
+    submitOnEnterRef.current = submitOnEnter;
+  }, [submitOnEnter]);
 
   const editor = useEditor({
     extensions: [
@@ -98,6 +111,31 @@ export function WysiwygEditor({
         class: 'squisq-wysiwyg-editor',
         'data-testid': 'wysiwyg-editor',
       },
+      // Chat-composer mode: Enter commits via submitOnEnter(), Cmd/Ctrl+Enter
+      // inserts a soft break. When no callback is set, fall through to Tiptap's
+      // normal behavior (Enter = paragraph break, Shift+Enter = soft break).
+      handleKeyDown: (view, event) => {
+        if (event.key !== 'Enter' || !submitOnEnterRef.current) return false;
+        if (event.metaKey || event.ctrlKey) {
+          // User wants a newline. Insert a hard-break and stop propagation so
+          // we don't also create a new paragraph.
+          event.preventDefault();
+          view.dispatch(
+            view.state.tr.replaceSelectionWith(
+              view.state.schema.nodes.hardBreak.create(),
+            ),
+          );
+          return true;
+        }
+        if (event.shiftKey) {
+          // Preserve the conventional Shift+Enter soft break.
+          return false;
+        }
+        // Plain Enter — submit.
+        event.preventDefault();
+        submitOnEnterRef.current();
+        return true;
+      },
       // When the clipboard's plain-text payload looks like markdown source,
       // convert it via tiptapBridge before pasting. This applies even when
       // the clipboard also contains HTML (most rich-text sources do), since
@@ -126,24 +164,31 @@ export function WysiwygEditor({
       },
       // When image files are dropped onto the editor, upload them via the
       // MediaProvider and insert <img> nodes referencing the relative paths.
+      // Also handles drags from the MediaBin, which reference existing
+      // entries via a custom MIME type and skip the upload step.
       // Falls through to default handling for non-image drops or when no
       // MediaProvider is available.
       handleDrop: (view, event, _slice, _moved) => {
         const dt = event.dataTransfer;
         if (!dt) return false;
+
+        // In-app drag from the MediaBin — insert without uploading
+        const squisqRaw = dt.getData(SQUISQ_MEDIA_MIME);
+        if (squisqRaw) {
+          const payload = parseSquisqMediaPayload(squisqRaw);
+          if (payload && payload.mimeType.startsWith('image/')) {
+            event.preventDefault();
+            moveSelectionToDropPoint(view, event);
+            insertImageNode(view, payload.name, payload.alt);
+            return true;
+          }
+        }
+
         const imageFiles = filesFromDataTransfer(dt);
         if (imageFiles.length === 0 || !mediaProviderRef.current) return false;
 
         event.preventDefault();
-        // Position the cursor at the drop location before inserting
-        const coords = view.posAtCoords({ left: event.clientX, top: event.clientY });
-        if (coords) {
-          const tr = view.state.tr.setSelection(
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            (view.state.selection.constructor as any).near(view.state.doc.resolve(coords.pos)),
-          );
-          view.dispatch(tr);
-        }
+        moveSelectionToDropPoint(view, event);
         uploadAndInsertImages(view, imageFiles, mediaProviderRef.current);
         return true;
       },
@@ -227,21 +272,47 @@ async function uploadAndInsertImages(
     try {
       const buffer = await file.arrayBuffer();
       const mimeType = file.type || 'image/png';
-      const name = file.name && file.name !== 'image.png' ? file.name : `pasted-${Date.now()}.${extFromMime(mimeType)}`;
+      const name =
+        file.name && file.name !== 'image.png'
+          ? file.name
+          : `pasted-${Date.now()}.${extFromMime(mimeType)}`;
       const relativePath = await mediaProvider.addMedia(name, buffer, mimeType);
       const altText = name.replace(/\.[^.]+$/, '').replace(/[-_]/g, ' ');
-
-      // Insert <img> via the schema's image node type
-      const { schema } = view.state;
-      const imageType = schema.nodes.image;
-      if (!imageType) continue;
-      const node = imageType.create({ src: relativePath, alt: altText });
-      const tr = view.state.tr.replaceSelectionWith(node);
-      view.dispatch(tr);
+      insertImageNode(view, relativePath, altText);
     } catch (err) {
       console.error('Failed to upload dropped image:', err);
     }
   }
+}
+
+/** Insert an image node at the current selection using the schema image type. */
+function insertImageNode(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  view: any,
+  src: string,
+  alt: string,
+): void {
+  const { schema } = view.state;
+  const imageType = schema.nodes.image;
+  if (!imageType) return;
+  const node = imageType.create({ src, alt });
+  const tr = view.state.tr.replaceSelectionWith(node);
+  view.dispatch(tr);
+}
+
+/** Move the selection to the document position under the drop event's coordinates. */
+function moveSelectionToDropPoint(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  view: any,
+  event: DragEvent,
+): void {
+  const coords = view.posAtCoords({ left: event.clientX, top: event.clientY });
+  if (!coords) return;
+  const tr = view.state.tr.setSelection(
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (view.state.selection.constructor as any).near(view.state.doc.resolve(coords.pos)),
+  );
+  view.dispatch(tr);
 }
 
 function extFromMime(mime: string): string {

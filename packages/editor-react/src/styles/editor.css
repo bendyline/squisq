@@ -1229,3 +1229,22 @@
     min-height: 120px;
   }
 }
+
+/* ─── Full-width mode (opt-in via <EditorShell fullWidth />) ─────────
+ *
+ * Drops the centered 800px "page" column so the WYSIWYG surface fills
+ * the host container. Used by hosts where the page metaphor doesn't fit
+ * — chat composers, narrow side panels, dialog embeds. */
+.squisq-editor-shell[data-full-width='true'] .squisq-wysiwyg-editor {
+  max-width: none;
+  margin: 0;
+  box-shadow: none;
+}
+
+.squisq-editor-shell[data-full-width='true'] .squisq-wysiwyg-container {
+  background: transparent;
+}
+
+.squisq-editor-shell[data-theme='dark'][data-full-width='true'] .squisq-wysiwyg-container {
+  background: transparent;
+}

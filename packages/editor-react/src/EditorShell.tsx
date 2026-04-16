@@ -59,6 +59,27 @@ export interface EditorShellProps {
   toolbarSlotAfterActions?: ReactNode;
   /** Content rendered at the rightmost end of the toolbar, after all other elements. */
   toolbarSlotRight?: ReactNode;
+  /**
+   * Whether to show the "Play" (preview) tab in the toolbar. When false, the
+   * tab and its preview panel are hidden, and ⌘3 becomes a no-op. Use this
+   * when embedding the editor somewhere the slideshow preview doesn't make
+   * sense (e.g. editing free-form prompt documents). Defaults to true.
+   */
+  showPlayTab?: boolean;
+  /**
+   * Optional "submit on Enter" callback. When provided, a plain Enter
+   * keypress fires this callback instead of inserting a newline, and
+   * Cmd/Ctrl+Enter inserts a newline instead. Matches chat-composer UX
+   * (Slack, Discord). When omitted, the editor behaves normally.
+   */
+  submitOnEnter?: () => void;
+  /**
+   * Let the WYSIWYG editing surface fill its container instead of rendering
+   * as a centered 800px "page" column. Useful when embedding in chat
+   * composers, side panels, or any layout where the page metaphor doesn't
+   * fit. Defaults to false (page mode).
+   */
+  fullWidth?: boolean;
 }
 
 /**
@@ -80,14 +101,22 @@ export function EditorShell({
   toolbarSlotLeft,
   toolbarSlotAfterActions,
   toolbarSlotRight,
+  showPlayTab = true,
+  submitOnEnter,
+  fullWidth = false,
 }: EditorShellProps) {
   // Show the toggle when explicitly opted in, or when mediaProvider prop was passed at all
   const filesToggleEnabled = showFilesToggle ?? mediaProvider !== undefined;
 
+  // If the host hides the Play tab but asked for it as the initial view,
+  // fall back to wysiwyg so we don't boot into a tab the user can't leave.
+  const effectiveInitialView: EditorView =
+    !showPlayTab && initialView === 'preview' ? 'wysiwyg' : initialView;
+
   return (
     <EditorProvider
       initialMarkdown={initialMarkdown}
-      initialView={initialView}
+      initialView={effectiveInitialView}
       articleId={articleId}
       theme={theme}
       mediaProvider={mediaProvider}
@@ -103,6 +132,9 @@ export function EditorShell({
         toolbarSlotLeft={toolbarSlotLeft}
         toolbarSlotAfterActions={toolbarSlotAfterActions}
         toolbarSlotRight={toolbarSlotRight}
+        showPlayTab={showPlayTab}
+        submitOnEnter={submitOnEnter}
+        fullWidth={fullWidth}
       />
     </EditorProvider>
   );
@@ -119,6 +151,9 @@ interface EditorShellInnerProps {
   toolbarSlotLeft?: ReactNode;
   toolbarSlotAfterActions?: ReactNode;
   toolbarSlotRight?: ReactNode;
+  showPlayTab: boolean;
+  submitOnEnter?: () => void;
+  fullWidth: boolean;
 }
 
 function EditorShellInner({
@@ -132,6 +167,9 @@ function EditorShellInner({
   toolbarSlotLeft,
   toolbarSlotAfterActions,
   toolbarSlotRight,
+  showPlayTab,
+  submitOnEnter,
+  fullWidth,
 }: EditorShellInnerProps) {
   const { activeView, markdownSource, doc, theme, insertAtCursor, replaceAll } = useEditorContext();
   const isPreview = activeView === 'preview';
@@ -200,6 +238,7 @@ function EditorShellInner({
             document.querySelector<HTMLButtonElement>('[data-view="raw"]')?.click();
             break;
           case '3':
+            if (!showPlayTab) return;
             e.preventDefault();
             document.querySelector<HTMLButtonElement>('[data-view="preview"]')?.click();
             break;
@@ -208,12 +247,13 @@ function EditorShellInner({
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
-  }, []);
+  }, [showPlayTab]);
 
   return (
     <div
       className={`squisq-editor-shell ${className || ''}`}
       data-theme={theme}
+      data-full-width={fullWidth ? 'true' : undefined}
       style={{
         display: 'flex',
         flexDirection: 'column',
@@ -236,6 +276,7 @@ function EditorShellInner({
               </>
             }
             slotRight={toolbarSlotRight}
+            showPlayTab={showPlayTab}
           />
         </div>
 
@@ -245,8 +286,13 @@ function EditorShellInner({
           style={{ flex: 1, overflow: 'hidden', position: 'relative', display: 'flex' }}
         >
           <div style={{ flex: 1, overflow: 'hidden', position: 'relative' }}>
-            {activeView === 'raw' && <RawEditor theme={theme === 'dark' ? 'vs-dark' : 'vs'} />}
-            {activeView === 'wysiwyg' && <WysiwygEditor />}
+            {activeView === 'raw' && (
+              <RawEditor
+                theme={theme === 'dark' ? 'vs-dark' : 'vs'}
+                submitOnEnter={submitOnEnter}
+              />
+            )}
+            {activeView === 'wysiwyg' && <WysiwygEditor submitOnEnter={submitOnEnter} />}
             {isPreview && <PreviewPanel basePath={basePath} container={container} />}
           </div>
 

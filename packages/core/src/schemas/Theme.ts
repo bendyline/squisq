@@ -233,3 +233,65 @@ export function createTheme(base: Theme, overrides: DeepPartial<Theme>): Theme {
   }
   return merged;
 }
+
+// ============================================
+// Surface Schemes — orthogonal to Theme
+// ============================================
+
+/**
+ * A Surface Scheme is the light/dark axis, orthogonal to the editorial
+ * identity of a Theme. A Theme chooses voice (serif vs sans, muted vs
+ * bold, documentary vs magazine); a SurfaceScheme chooses what the paper
+ * looks like. Any theme can render on either surface.
+ *
+ * When a SurfaceScheme is applied to a Theme (via `applySurface`), these
+ * fields override the corresponding entries in `ThemeColorPalette` —
+ * everything else (primary, highlight, warning, etc.) stays as the theme
+ * defined it.
+ */
+export interface SurfaceScheme {
+  /** Identifier — 'light', 'dark', or a custom id. */
+  id: string;
+  background: string;
+  backgroundLight: string;
+  text: string;
+  textMuted: string;
+}
+
+/** Near-white paper with dark text — standard light mode. */
+export const LIGHT_SURFACE: SurfaceScheme = {
+  id: 'light',
+  background: '#ffffff',
+  backgroundLight: '#f5f5f5',
+  text: '#1a1a1a',
+  textMuted: '#666666',
+};
+
+/** Dark charcoal paper with light text — standard dark mode. */
+export const DARK_SURFACE: SurfaceScheme = {
+  id: 'dark',
+  background: '#1a202c',
+  backgroundLight: '#2d3748',
+  text: '#f0f0f0',
+  textMuted: '#a0aec0',
+};
+
+/**
+ * Overlay a SurfaceScheme's surface colors onto a Theme's palette,
+ * leaving everything else (primary, highlight, warning, typography,
+ * style, renderStyle, colorSchemes) untouched. Returns a new Theme;
+ * callers that want to preserve the original's id should set it
+ * explicitly in the overrides.
+ */
+export function applySurface(theme: Theme, surface: SurfaceScheme): Theme {
+  return {
+    ...theme,
+    colors: {
+      ...theme.colors,
+      background: surface.background,
+      backgroundLight: surface.backgroundLight,
+      text: surface.text,
+      textMuted: surface.textMuted,
+    },
+  };
+}

@@ -11,6 +11,7 @@ import Editor, { loader, type OnMount, type OnChange } from '@monaco-editor/reac
 import * as monaco from 'monaco-editor';
 import { useEditorContext } from './EditorContext';
 import { getAvailableTemplates } from '@bendyline/squisq/doc';
+import { SQUISQ_MEDIA_MIME, parseSquisqMediaPayload } from './mediaDragMime';
 
 // Use locally installed monaco-editor instead of CDN.
 //
@@ -35,6 +36,11 @@ export interface RawEditorProps {
   wordWrap?: 'on' | 'off' | 'wordWrapColumn' | 'bounded';
   /** Additional class name for the container */
   className?: string;
+  /**
+   * Chat-composer mode: Enter fires this callback (submit) and Cmd/Ctrl+Enter
+   * inserts a newline. When undefined, behaves normally.
+   */
+  submitOnEnter?: () => void;
 }
 
 /**
@@ -47,11 +53,19 @@ export function RawEditor({
   fontSize = 14,
   wordWrap = 'on',
   className,
+  submitOnEnter,
 }: RawEditorProps) {
   const { markdownSource, setMarkdownSource, setMonacoEditor } = useEditorContext();
   const editorRef = useRef<monaco.editor.IStandaloneCodeEditor | null>(null);
   const isExternalUpdate = useRef(false);
   const completionDisposable = useRef<monaco.IDisposable | null>(null);
+  const dropCleanupRef = useRef<(() => void) | null>(null);
+  const keyDisposable = useRef<monaco.IDisposable | null>(null);
+  // Ref so the keydown handler always sees the latest callback.
+  const submitOnEnterRef = useRef(submitOnEnter);
+  useEffect(() => {
+    submitOnEnterRef.current = submitOnEnter;
+  }, [submitOnEnter]);
 
   const handleMount: OnMount = useCallback(
     (editor, monaco) => {
@@ -97,6 +111,68 @@ export function RawEditor({
           return { suggestions };
         },
       });
+
+      // Chat-composer mode: intercept Enter before Monaco inserts a newline.
+      // Cmd/Ctrl+Enter falls through so the native newline still works.
+      keyDisposable.current?.dispose();
+      keyDisposable.current = editor.onKeyDown((e) => {
+        if (e.keyCode !== monaco.KeyCode.Enter) return;
+        if (!submitOnEnterRef.current) return;
+        if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+        e.preventDefault();
+        e.stopPropagation();
+        submitOnEnterRef.current();
+      });
+
+      // Attach native drop listeners for in-app MediaBin drags. Monaco's own
+      // drop handling doesn't know about our custom MIME type, so we insert
+      // markdown image syntax explicitly in the capture phase.
+      dropCleanupRef.current?.();
+      const domNode = editor.getDomNode();
+      if (domNode) {
+        const onDragOver = (e: DragEvent) => {
+          if (e.dataTransfer?.types.includes(SQUISQ_MEDIA_MIME)) {
+            e.preventDefault();
+            e.dataTransfer.dropEffect = 'copy';
+          }
+        };
+        const onDrop = (e: DragEvent) => {
+          const dt = e.dataTransfer;
+          if (!dt) return;
+          const raw = dt.getData(SQUISQ_MEDIA_MIME);
+          if (!raw) return;
+          const payload = parseSquisqMediaPayload(raw);
+          if (!payload || !payload.mimeType.startsWith('image/')) return;
+
+          e.preventDefault();
+          e.stopPropagation();
+
+          const target = editor.getTargetAtClientPoint(e.clientX, e.clientY);
+          const position = target?.position ?? editor.getPosition();
+          if (!position) return;
+
+          const markdown = `![${payload.alt}](${payload.name})`;
+          editor.executeEdits('squisq-media-drop', [
+            {
+              range: new monaco.Range(
+                position.lineNumber,
+                position.column,
+                position.lineNumber,
+                position.column,
+              ),
+              text: markdown,
+              forceMoveMarkers: true,
+            },
+          ]);
+          editor.focus();
+        };
+        domNode.addEventListener('dragover', onDragOver, true);
+        domNode.addEventListener('drop', onDrop, true);
+        dropCleanupRef.current = () => {
+          domNode.removeEventListener('dragover', onDragOver, true);
+          domNode.removeEventListener('drop', onDrop, true);
+        };
+      }
     },
     [setMonacoEditor],
   );
@@ -107,6 +183,10 @@ export function RawEditor({
       setMonacoEditor(null);
       completionDisposable.current?.dispose();
       completionDisposable.current = null;
+      dropCleanupRef.current?.();
+      dropCleanupRef.current = null;
+      keyDisposable.current?.dispose();
+      keyDisposable.current = null;
     };
   }, [setMonacoEditor]);
 

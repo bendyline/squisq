@@ -10,9 +10,9 @@ describe('looksLikeMarkdown', () => {
 
   it('returns false for plain prose', () => {
     expect(looksLikeMarkdown('Hello world. This is just a sentence.')).toBe(false);
-    expect(
-      looksLikeMarkdown('Multiple\nlines of\nplain text without any markdown syntax.'),
-    ).toBe(false);
+    expect(looksLikeMarkdown('Multiple\nlines of\nplain text without any markdown syntax.')).toBe(
+      false,
+    );
   });
 
   it('detects ATX headings', () => {

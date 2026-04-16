@@ -128,9 +128,7 @@ interface Mp3Info {
  * Parse a consolidated timing.json (version 2) which contains all section
  * timing data in a single file.
  */
-function parseConsolidatedTiming(
-  data: ArrayBuffer,
-): Record<string, AudioTimingData> | null {
+function parseConsolidatedTiming(data: ArrayBuffer): Record<string, AudioTimingData> | null {
   try {
     const text = new TextDecoder().decode(data);
     const parsed = JSON.parse(text);

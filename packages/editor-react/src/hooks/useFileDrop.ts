@@ -137,17 +137,21 @@ export function useFileDrop({ onDrop, enabled = true }: UseFileDropOptions): Use
   const handleDragEnter = useCallback(
     (e: React.DragEvent) => {
       if (!enabled) return;
+
+      // Only react to OS file drags. In-app drags (e.g. dragging a thumbnail
+      // out of the MediaBin) don't carry file-kind items and must pass
+      // through to the editors without showing the drop overlay.
+      const classification = e.dataTransfer.items
+        ? classifyDataTransferItems(e.dataTransfer.items)
+        : 'mixed';
+      if (!classification) return;
+
       e.preventDefault();
       dragCounterRef.current++;
 
       if (dragCounterRef.current === 1) {
         setIsDragging(true);
-        if (e.dataTransfer.items) {
-          setDragContentType(classifyDataTransferItems(e.dataTransfer.items));
-        } else {
-          // Fallback: can't classify, show all zones
-          setDragContentType('mixed');
-        }
+        setDragContentType(classification);
       }
     },
     [enabled],

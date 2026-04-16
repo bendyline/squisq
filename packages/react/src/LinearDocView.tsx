@@ -18,9 +18,14 @@
  */
 
 import { useMemo } from 'react';
+import { useAutoSurface } from './hooks/useAutoSurface';
 import type { Doc, Block, DocBlock } from '@bendyline/squisq/schemas';
 import type { ViewportConfig } from '@bendyline/squisq/schemas';
-import type { Theme } from '@bendyline/squisq/schemas';
+import {
+  applySurface,
+  type SurfaceScheme,
+  type Theme,
+} from '@bendyline/squisq/schemas';
 import { VIEWPORT_PRESETS } from '@bendyline/squisq/schemas';
 import { getLayers, hasTemplate, DEFAULT_THEME } from '@bendyline/squisq/doc';
 import type { RenderContext } from '@bendyline/squisq/doc';
@@ -42,7 +47,16 @@ export interface LinearDocViewProps {
   className?: string;
   /** Theme to use for rendering (default: DEFAULT_THEME from the theme library) */
   theme?: Theme;
+  /**
+   * Optional surface scheme (light / dark paper) overlaid on top of the
+   * theme's colors. Orthogonal to `theme` — a theme picks editorial
+   * identity, a surface picks the paper. Pass `'auto'` to follow the
+   * user's OS `prefers-color-scheme`, a `SurfaceScheme` object to force a
+   * specific surface, or omit to use the theme's built-in colors.
+   */
+  surface?: SurfaceScheme | 'auto';
 }
+
 
 // ── Helpers ────────────────────────────────────────────────────────
 
@@ -294,18 +308,22 @@ export function LinearDocView({
   viewport,
   className,
   theme,
+  surface,
 }: LinearDocViewProps) {
   const activeViewport = viewport ?? VIEWPORT_PRESETS.landscape;
   const totalBlocks = useMemo(() => countAll(doc.blocks), [doc.blocks]);
+  const autoSurface = useAutoSurface(surface === 'auto');
+  const resolvedSurface: SurfaceScheme | undefined =
+    surface === 'auto' ? autoSurface : surface;
 
-  const renderContext: RenderContext = useMemo(
-    () => ({
-      theme: theme ?? DEFAULT_THEME,
+  const renderContext: RenderContext = useMemo(() => {
+    const baseTheme = theme ?? DEFAULT_THEME;
+    return {
+      theme: resolvedSurface ? applySurface(baseTheme, resolvedSurface) : baseTheme,
       viewport: activeViewport,
       totalBlocks,
-    }),
-    [activeViewport, totalBlocks, theme],
-  );
+    };
+  }, [activeViewport, totalBlocks, theme, resolvedSurface]);
 
   const activeTheme = renderContext.theme!;
   const bgColor = activeTheme.colors.background;
