@@ -6,8 +6,8 @@
 
 import { useEditorContext, type EditorView } from './EditorContext';
 
-const VIEWS: { id: EditorView; label: string; shortcut: string }[] = [
-  { id: 'raw', label: 'Raw', shortcut: '⌘1' },
+const VIEWS: { id: EditorView; label: string; shortLabel?: string; shortcut: string }[] = [
+  { id: 'raw', label: 'Markdown', shortLabel: 'MD', shortcut: '⌘1' },
   { id: 'wysiwyg', label: 'Editor', shortcut: '⌘2' },
   { id: 'preview', label: 'Preview', shortcut: '⌘3' },
 ];
@@ -38,7 +38,10 @@ export function ViewSwitcher({ className }: ViewSwitcherProps) {
           onClick={() => setActiveView(view.id)}
           title={`${view.label} (${view.shortcut})`}
         >
-          {view.label}
+          <span className="squisq-view-tab-label squisq-view-tab-label--long">{view.label}</span>
+          <span className="squisq-view-tab-label squisq-view-tab-label--short">
+            {view.shortLabel ?? view.label}
+          </span>
         </button>
       ))}
     </div>

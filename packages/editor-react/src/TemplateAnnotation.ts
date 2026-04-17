@@ -48,7 +48,10 @@ export const HeadingWithTemplate = Heading.extend({
     const templateName = HTMLAttributes['data-template'];
 
     if (templateName) {
-      // Render heading with a trailing badge span
+      // Render heading with a trailing badge span. The badge has no text
+      // content — its label is painted via CSS `content: attr(data-template)`
+      // so the template name never becomes part of the serialized heading
+      // text (which would leak into markdown on round-trip).
       return [
         tag,
         HTMLAttributes,
@@ -60,7 +63,6 @@ export const HeadingWithTemplate = Heading.extend({
             contenteditable: 'false',
             'data-template': templateName,
           },
-          templateName,
         ],
       ];
     }

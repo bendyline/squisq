@@ -16,6 +16,7 @@ import { PreviewPanel } from './PreviewPanel';
 import { PreviewSettingsProvider, PreviewToolbarControls } from './PreviewControls';
 import { MediaBin } from './MediaBin';
 import { DropZoneOverlay } from './DropZoneOverlay';
+import { TooltipLayer } from './Tooltip';
 import { useFileDrop, type DropTarget } from './hooks/useFileDrop';
 import {
   partitionFiles,
@@ -361,6 +362,7 @@ function EditorShellInner({
             composers where the stats are noise. */}
         {showStatusBar && <StatusBar />}
       </PreviewSettingsProvider>
+      <TooltipLayer />
     </div>
   );
 }

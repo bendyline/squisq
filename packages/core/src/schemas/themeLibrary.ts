@@ -536,7 +536,8 @@ const GEZELLIG_SERIF =
 const gezellig: Theme = {
   id: 'gezellig',
   name: 'Gezellig',
-  description: 'Warm sage + terracotta palette inspired by the Gezel desktop app. Subtle orange-tinted dark background, cream text, sage and terracotta accents.',
+  description:
+    'Warm sage + terracotta palette inspired by the Gezel desktop app. Subtle orange-tinted dark background, cream text, sage and terracotta accents.',
   colors: {
     primary: '#b0724c',
     secondary: '#667f62',

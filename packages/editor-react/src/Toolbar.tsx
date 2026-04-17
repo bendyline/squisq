@@ -16,9 +16,9 @@ import { getAvailableTemplates } from '@bendyline/squisq/doc';
 /** Template names are static — computed once at module load. */
 const TEMPLATE_NAMES = getAvailableTemplates();
 
-const VIEWS: { id: EditorView; label: string; shortcut: string }[] = [
+const VIEWS: { id: EditorView; label: string; shortLabel?: string; shortcut: string }[] = [
   { id: 'wysiwyg', label: 'Editor', shortcut: '⌘1' },
-  { id: 'raw', label: 'Raw', shortcut: '⌘2' },
+  { id: 'raw', label: 'Markdown', shortLabel: 'MD', shortcut: '⌘2' },
   { id: 'preview', label: 'Play', shortcut: '⌘3' },
 ];
 
@@ -48,13 +48,13 @@ interface ToolbarButton {
   label: string;
   icon: string;
   title: string;
-  group: 'format' | 'structure' | 'insert';
+  group: 'format' | 'lists' | 'structure' | 'insert' | 'media';
   /** CSS font style for the icon (e.g. italic for the I button) */
   iconStyle?: React.CSSProperties;
 }
 
 const BUTTONS: ToolbarButton[] = [
-  // Format group
+  // Format group — B/I/S trio.
   {
     id: 'bold',
     label: 'B',
@@ -79,22 +79,27 @@ const BUTTONS: ToolbarButton[] = [
     group: 'format',
     iconStyle: { textDecoration: 'line-through' },
   },
-  { id: 'code', label: '<>', icon: '`', title: 'Inline code', group: 'format' },
+
+  // Lists group — sits between format and structure so bullets/numbers
+  // are adjacent to the inline formatters people reach for together.
+  { id: 'ul', label: '•', icon: '•', title: 'Bullet list', group: 'lists' },
+  { id: 'ol', label: '1.', icon: '1.', title: 'Numbered list', group: 'lists' },
 
   // Structure group
   { id: 'h1', label: 'H1', icon: 'H1', title: 'Heading 1', group: 'structure' },
   { id: 'h2', label: 'H2', icon: 'H2', title: 'Heading 2', group: 'structure' },
   { id: 'h3', label: 'H3', icon: 'H3', title: 'Heading 3', group: 'structure' },
-  { id: 'quote', label: '❝', icon: '❝', title: 'Blockquote', group: 'structure' },
 
-  // Insert group
-  { id: 'ul', label: '•', icon: '•', title: 'Bullet list', group: 'insert' },
-  { id: 'ol', label: '1.', icon: '1.', title: 'Numbered list', group: 'insert' },
+  // Insert group — block-level inserts (quote, code blocks, rules)
+  { id: 'quote', label: '❝', icon: '❝', title: 'Blockquote', group: 'insert' },
   { id: 'codeblock', label: '{ }', icon: '{ }', title: 'Code block', group: 'insert' },
+  { id: 'code', label: '</>', icon: '</>', title: 'Inline code', group: 'insert' },
   { id: 'hr', label: '—', icon: '—', title: 'Horizontal rule', group: 'insert' },
-  { id: 'link', label: '🔗', icon: '🔗', title: 'Insert link', group: 'insert' },
-  { id: 'table', label: 'table', icon: '', title: 'Insert table', group: 'insert' },
-  { id: 'image', label: '🖼', icon: '🖼', title: 'Insert image', group: 'insert' },
+
+  // Media group — links, tables, images
+  { id: 'link', label: '🔗', icon: '🔗', title: 'Insert link', group: 'media' },
+  { id: 'table', label: 'table', icon: '', title: 'Insert table', group: 'media' },
+  { id: 'image', label: '🖼', icon: '🖼', title: 'Insert image', group: 'media' },
 ];
 
 // ─── Tiptap active-state map ────────────────────────────
@@ -216,6 +221,31 @@ export function Toolbar({
     };
     document.addEventListener('mousedown', handleClick);
     return () => document.removeEventListener('mousedown', handleClick);
+  }, [showOverflow]);
+
+  // Open-up vs open-down: the overflow menu is anchored to its trigger with
+  // `top: 100%` by default. When the toolbar lives near the bottom of a
+  // small container (e.g. a chat composer), a downward menu gets clipped.
+  // Measure on open and flip the anchor to `bottom: 100%` if the space
+  // above the trigger is larger than the space below.
+  const [overflowPlacement, setOverflowPlacement] = useState<'down' | 'up'>('down');
+  useEffect(() => {
+    if (!showOverflow || !overflowRef.current) return;
+    const trigger = overflowRef.current.querySelector<HTMLElement>(
+      '.squisq-toolbar-overflow-trigger',
+    );
+    if (!trigger) return;
+    const rect = trigger.getBoundingClientRect();
+    const spaceBelow = window.innerHeight - rect.bottom;
+    const spaceAbove = rect.top;
+    // Assume a typical menu height; exact measurement is unreliable on first
+    // open because the menu hasn't rendered yet when this runs.
+    const ESTIMATED_MENU_HEIGHT = 260;
+    if (spaceBelow < ESTIMATED_MENU_HEIGHT && spaceAbove > spaceBelow) {
+      setOverflowPlacement('up');
+    } else {
+      setOverflowPlacement('down');
+    }
   }, [showOverflow]);
 
   // Force re-render when Tiptap selection or formatting state changes
@@ -495,7 +525,7 @@ export function Toolbar({
     [activeView, tiptapEditor, handleTiptap, handleRaw],
   );
 
-  const groups = ['format', 'structure', 'insert'] as const;
+  const groups = ['format', 'lists', 'structure', 'insert', 'media'] as const;
   const isWysiwyg = activeView === 'wysiwyg' && tiptapEditor;
   const isPreview = activeView === 'preview';
 
@@ -551,13 +581,23 @@ export function Toolbar({
             key={view.id}
             role="tab"
             data-view={view.id}
-            data-label={view.label}
             aria-selected={activeView === view.id}
             className={`squisq-toolbar-view-tab${activeView === view.id ? ' squisq-toolbar-view-tab--active' : ''}`}
             onClick={() => setActiveView(view.id)}
-            title={`${view.label} (${view.shortcut})`}
+            data-tooltip={`${view.label} (${view.shortcut})`}
           >
-            {view.label}
+            <span
+              className="squisq-toolbar-view-tab-label squisq-toolbar-view-tab-label--long"
+              data-label={view.label}
+            >
+              {view.label}
+            </span>
+            <span
+              className="squisq-toolbar-view-tab-label squisq-toolbar-view-tab-label--short"
+              data-label={view.shortLabel ?? view.label}
+            >
+              {view.shortLabel ?? view.label}
+            </span>
           </button>
         ))}
       </div>
@@ -574,7 +614,7 @@ export function Toolbar({
                   <button
                     key={btn.id}
                     className={`squisq-toolbar-button${active ? ' squisq-toolbar-button--active' : ''}`}
-                    title={disabled ? 'Insert image (requires media provider)' : btn.title}
+                    data-tooltip={disabled ? 'Insert image (requires media provider)' : btn.title}
                     onClick={() => handleAction(btn.id)}
                     aria-label={btn.title}
                     aria-pressed={active}
@@ -613,7 +653,7 @@ export function Toolbar({
               <div className="squisq-toolbar-group squisq-template-picker">
                 <label
                   className="squisq-template-picker-label"
-                  title="Block template for this heading"
+                  data-tooltip="Block template for this heading"
                 >
                   Template:
                   <select
@@ -641,7 +681,7 @@ export function Toolbar({
                 <span className="squisq-table-controls-label">Table:</span>
                 <button
                   className="squisq-toolbar-button"
-                  title="Add column before"
+                  data-tooltip="Add column before"
                   onClick={() => tiptapEditor!.chain().focus().addColumnBefore().run()}
                   aria-label="Add column before"
                 >
@@ -662,7 +702,7 @@ export function Toolbar({
                 </button>
                 <button
                   className="squisq-toolbar-button"
-                  title="Add column after"
+                  data-tooltip="Add column after"
                   onClick={() => tiptapEditor!.chain().focus().addColumnAfter().run()}
                   aria-label="Add column after"
                 >
@@ -683,7 +723,7 @@ export function Toolbar({
                 </button>
                 <button
                   className="squisq-toolbar-button"
-                  title="Delete column"
+                  data-tooltip="Delete column"
                   onClick={() => tiptapEditor!.chain().focus().deleteColumn().run()}
                   aria-label="Delete column"
                 >
@@ -703,7 +743,7 @@ export function Toolbar({
                 </button>
                 <button
                   className="squisq-toolbar-button"
-                  title="Add row above"
+                  data-tooltip="Add row above"
                   onClick={() => tiptapEditor!.chain().focus().addRowBefore().run()}
                   aria-label="Add row above"
                 >
@@ -724,7 +764,7 @@ export function Toolbar({
                 </button>
                 <button
                   className="squisq-toolbar-button"
-                  title="Add row below"
+                  data-tooltip="Add row below"
                   onClick={() => tiptapEditor!.chain().focus().addRowAfter().run()}
                   aria-label="Add row below"
                 >
@@ -745,7 +785,7 @@ export function Toolbar({
                 </button>
                 <button
                   className="squisq-toolbar-button"
-                  title="Delete row"
+                  data-tooltip="Delete row"
                   onClick={() => tiptapEditor!.chain().focus().deleteRow().run()}
                   aria-label="Delete row"
                 >
@@ -765,7 +805,7 @@ export function Toolbar({
                 </button>
                 <button
                   className="squisq-toolbar-button squisq-toolbar-button--danger"
-                  title="Delete table"
+                  data-tooltip="Delete table"
                   onClick={() => tiptapEditor!.chain().focus().deleteTable().run()}
                   aria-label="Delete table"
                 >
@@ -796,7 +836,7 @@ export function Toolbar({
         <div className="squisq-toolbar-overflow" ref={overflowRef}>
           <button
             className={`squisq-toolbar-button squisq-toolbar-overflow-trigger${showOverflow ? ' squisq-toolbar-button--active' : ''}`}
-            title="More actions"
+            data-tooltip="More actions"
             onClick={() => setShowOverflow((v) => !v)}
             aria-label="More actions"
             aria-expanded={showOverflow}
@@ -804,7 +844,9 @@ export function Toolbar({
             ···
           </button>
           {showOverflow && (
-            <div className="squisq-toolbar-overflow-menu">
+            <div
+              className={`squisq-toolbar-overflow-menu squisq-toolbar-overflow-menu--${overflowPlacement}`}
+            >
               {BUTTONS.slice(overflowIndex).map((btn) => {
                 const active = isWysiwyg ? isTiptapActive(tiptapEditor, btn.id) : false;
                 const disabled = btn.id === 'image' && !mediaProvider;
@@ -812,7 +854,6 @@ export function Toolbar({
                   <button
                     key={btn.id}
                     className={`squisq-toolbar-overflow-item${active ? ' squisq-toolbar-overflow-item--active' : ''}`}
-                    title={btn.title}
                     onClick={() => {
                       handleAction(btn.id);
                       setShowOverflow(false);
@@ -924,14 +965,15 @@ export function Toolbar({
 
       {/* After-actions slot — after formatting controls */}
       {slotAfterActions}
-      {/* Spacer pushes right-side buttons to the end */}
-      <div style={{ flex: 1 }} />
+      {/* Spacer — only needed when the actions container (which has flex:1
+          and already pushes right-side items to the end) isn't rendered. */}
+      {(isPreview || isNarrow) && <div style={{ flex: 1 }} />}
       {/* Files toggle — visible when callback is provided */}
       {onToggleFiles && (
         <button
           className={`squisq-toolbar-button squisq-toolbar-files-toggle${showFiles ? ' squisq-toolbar-button--active' : ''}`}
           onClick={onToggleFiles}
-          title={showFiles ? 'Hide Files panel' : 'Show Files panel'}
+          data-tooltip={showFiles ? 'Hide Files panel' : 'Show Files panel'}
           aria-pressed={showFiles}
           aria-label="Toggle Files panel"
         >

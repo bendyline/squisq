@@ -92,8 +92,18 @@ export default defineConfig({
     },
   },
   // Optimise monaco-editor: tell Vite to pre-bundle it so workers are served
-  // from the local dev server instead of CDN.
+  // from the local dev server instead of CDN. Exclude the workspace packages
+  // so Vite serves their `dist/` straight — otherwise pre-bundling caches
+  // a snapshot at `node_modules/.vite/` and rebuilds of editor-react et al.
+  // don't show up until the dev server is restarted or the cache is cleared.
   optimizeDeps: {
     include: ['monaco-editor'],
+    exclude: [
+      '@bendyline/squisq',
+      '@bendyline/squisq-core',
+      '@bendyline/squisq-editor-react',
+      '@bendyline/squisq-react',
+      '@bendyline/squisq-formats',
+    ],
   },
 });

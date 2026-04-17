@@ -60,6 +60,8 @@ export type { MediaBinProps } from './MediaBin.js';
 export { StatusBar } from './StatusBar.js';
 export type { StatusBarProps } from './StatusBar.js';
 
+export { TooltipLayer } from './Tooltip.js';
+
 // Drag-and-drop
 export { DropZoneOverlay } from './DropZoneOverlay.js';
 export type { DropZoneOverlayProps } from './DropZoneOverlay.js';
