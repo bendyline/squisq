@@ -10,7 +10,7 @@
  * and code blocks.
  */
 
-import { useEffect, useRef } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import Table from '@tiptap/extension-table';
@@ -39,8 +39,34 @@ function stripFrontmatter(md: string): { body: string; frontmatter: string } {
   return { body: md.slice(m[0].length), frontmatter: m[0] };
 }
 
+/**
+ * Rotating placeholder prompts shown when the editor is empty. One is
+ * picked at random per editor mount. Hosts can override by passing the
+ * `placeholder` prop with a fixed string.
+ */
+const EMPTY_PROMPTS = [
+  'Start typing your content, or drop images on top of me…',
+  'Write anything — paste markdown, drag in images, or just start typing…',
+  'Type away. Markdown syntax works too…',
+  'Chapter 1 begins here…',
+  'Once upon a time…',
+  'A blank page. Exciting, isn\u2019t it?',
+  'The first word is always the hardest…',
+  'Plot twist: this is where it all starts…',
+  'Write something the future you will thank you for…',
+  'Begin at the beginning…',
+];
+
+function pickEmptyPrompt(): string {
+  return EMPTY_PROMPTS[Math.floor(Math.random() * EMPTY_PROMPTS.length)];
+}
+
 export interface WysiwygEditorProps {
-  /** Placeholder text when editor is empty */
+  /**
+   * Placeholder text when the editor is empty. If omitted, one of several
+   * rotating prompts is picked at random on mount. Pass a fixed string to
+   * override with a host-specific call to action.
+   */
   placeholder?: string;
   /** Additional class name for the container */
   className?: string;
@@ -55,12 +81,11 @@ export interface WysiwygEditorProps {
  * Rich WYSIWYG markdown editor built on Tiptap (ProseMirror).
  * Binds to the shared EditorContext for source synchronization.
  */
-export function WysiwygEditor({
-  placeholder = 'Start typing your markdown…',
-  className,
-  submitOnEnter,
-}: WysiwygEditorProps) {
+export function WysiwygEditor({ placeholder, className, submitOnEnter }: WysiwygEditorProps) {
   const { markdownSource, setMarkdownSource, setTiptapEditor, mediaProvider } = useEditorContext();
+  // Stable per mount: either the host-supplied string, or a random pick
+  // from EMPTY_PROMPTS. Re-renders don't reshuffle.
+  const resolvedPlaceholder = useMemo(() => placeholder ?? pickEmptyPrompt(), [placeholder]);
   const isExternalUpdate = useRef(false);
   const lastSourceRef = useRef(markdownSource);
   // Keep a ref so the editor's drop/paste handlers (created once) always
@@ -95,7 +120,7 @@ export function WysiwygEditor({
       TaskList,
       TaskItem.configure({ nested: true }),
       ImageWithMediaProvider.configure({ inline: false }),
-      Placeholder.configure({ placeholder }),
+      Placeholder.configure({ placeholder: resolvedPlaceholder }),
     ],
     content: markdownToTiptap(stripFrontmatter(markdownSource).body),
     onUpdate: ({ editor: ed }) => {

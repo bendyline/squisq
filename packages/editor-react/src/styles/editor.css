@@ -52,7 +52,7 @@
 }
 
 @container squisq-view-switcher (max-width: 280px) {
-  .squisq-view-tab-label--long {
+  .squisq-view-tab:has(.squisq-view-tab-label--short) .squisq-view-tab-label--long {
     display: none;
   }
   .squisq-view-tab-label--short {
@@ -152,7 +152,8 @@
 }
 
 @container squisq-toolbar (max-width: 900px) {
-  .squisq-toolbar-view-tab-label--long {
+  .squisq-toolbar-view-tab:has(.squisq-toolbar-view-tab-label--short)
+    .squisq-toolbar-view-tab-label--long {
     display: none;
   }
   .squisq-toolbar-view-tab-label--short {

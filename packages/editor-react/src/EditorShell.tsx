@@ -123,6 +123,23 @@ export interface EditorShellProps {
    * layout. Storage bytes are unchanged either way.
    */
   imageDisplayMode?: ImageDisplayMode;
+  /**
+   * File name (e.g. `foo.ts`) or bare extension that the content
+   * represents. When set to a non-markdown/text extension, the shell
+   * enters **code mode**: Monaco picks the right language based on the
+   * extension, the WYSIWYG and Preview tabs disappear, and the toolbar
+   * drops its markdown-specific formatting buttons. Markdown-ish
+   * extensions (`.md`, `.markdown`, `.mdown`, `.txt`) keep the full
+   * experience. Omit to get today's markdown behavior unchanged.
+   */
+  fileName?: string;
+  /**
+   * Explicit Monaco language ID override (e.g. `'typescript'`,
+   * `'python'`, `'json'`). Wins over the language derived from
+   * `fileName`. Anything other than `'markdown'` or `'plaintext'`
+   * switches the shell into code mode.
+   */
+  language?: string;
 }
 
 /**
@@ -151,6 +168,8 @@ export function EditorShell({
   thinMargins = false,
   showStatusBar = true,
   imageDisplayMode = 'inline',
+  fileName,
+  language,
 }: EditorShellProps) {
   // Show the toggle when explicitly opted in, or when mediaProvider prop was passed at all
   const filesToggleEnabled = showFilesToggle ?? mediaProvider !== undefined;
@@ -168,6 +187,8 @@ export function EditorShell({
       theme={theme}
       mediaProvider={mediaProvider}
       imageDisplayMode={imageDisplayMode}
+      fileName={fileName}
+      language={language}
     >
       <EditorShellInner
         basePath={basePath}
@@ -228,8 +249,10 @@ function EditorShellInner({
   thinMargins,
   showStatusBar,
 }: EditorShellInnerProps) {
-  const { activeView, markdownSource, doc, theme, insertAtCursor, replaceAll } = useEditorContext();
+  const { activeView, markdownSource, doc, theme, editorMode, insertAtCursor, replaceAll } =
+    useEditorContext();
   const isPreview = activeView === 'preview';
+  const isCodeMode = editorMode === 'code';
   const [showFiles, setShowFiles] = useState(false);
   const [mediaRefreshKey, setMediaRefreshKey] = useState(0);
   const isDark = theme === 'dark';
@@ -330,12 +353,12 @@ function EditorShellInner({
         <div className="squisq-editor-header">
           <Toolbar
             showFiles={showFiles}
-            onToggleFiles={filesToggleEnabled ? handleToggleFiles : undefined}
+            onToggleFiles={!isCodeMode && filesToggleEnabled ? handleToggleFiles : undefined}
             slotLeft={toolbarSlotLeft}
             slotAfterActions={
               <>
                 {toolbarSlotAfterActions}
-                {isPreview && <PreviewToolbarControls />}
+                {!isCodeMode && isPreview && <PreviewToolbarControls />}
               </>
             }
             slotRight={toolbarSlotRight}
@@ -355,16 +378,21 @@ function EditorShellInner({
                 submitOnEnter={submitOnEnter}
               />
             )}
-            {activeView === 'wysiwyg' && <WysiwygEditor submitOnEnter={submitOnEnter} />}
-            {isPreview && <PreviewPanel basePath={basePath} container={container} />}
+            {/* WYSIWYG + Preview are markdown-only surfaces — skip them
+                entirely in code mode so Tiptap never initializes and the
+                preview pipeline stays idle. */}
+            {!isCodeMode && activeView === 'wysiwyg' && (
+              <WysiwygEditor submitOnEnter={submitOnEnter} />
+            )}
+            {!isCodeMode && isPreview && <PreviewPanel basePath={basePath} container={container} />}
           </div>
 
-          {showFiles && (
+          {!isCodeMode && showFiles && (
             <MediaBin mediaProvider={mediaProvider} isDark={isDark} refreshKey={mediaRefreshKey} />
           )}
 
-          {/* Drop zone overlay */}
-          {isDragging && (
+          {/* Drop zone overlay — image / text drop UX is markdown-specific. */}
+          {!isCodeMode && isDragging && (
             <DropZoneOverlay
               dragContentType={dragContentType}
               zoneProps={zoneProps}

@@ -149,7 +149,6 @@ export function Toolbar({
   slotRight,
   showPlayTab = true,
 }: ToolbarProps) {
-  const visibleViews = showPlayTab ? VIEWS : VIEWS.filter((v) => v.id !== 'preview');
   const {
     activeView,
     setActiveView,
@@ -158,7 +157,17 @@ export function Toolbar({
     tiptapEditor,
     monacoEditor,
     mediaProvider,
+    editorMode,
   } = useEditorContext();
+  const isCodeMode = editorMode === 'code';
+  // In code mode only the raw view is meaningful; the WYSIWYG and Preview
+  // surfaces aren't mounted, so hide their tabs.
+  const visibleViews = VIEWS.filter((v) => {
+    if (isCodeMode) return v.id === 'raw';
+    if (v.id === 'preview' && !showPlayTab) return false;
+    return true;
+  });
+  const showViewTabs = visibleViews.length > 1;
 
   // Hidden file input for image picker
   const imageInputRef = useRef<HTMLInputElement>(null);
@@ -574,35 +583,39 @@ export function Toolbar({
       />
       {/* Left slot — before view tabs */}
       {slotLeft}
-      {/* View tabs */}
-      <div className="squisq-toolbar-view-tabs" role="tablist" aria-label="Editor view">
-        {visibleViews.map((view) => (
-          <button
-            key={view.id}
-            role="tab"
-            data-view={view.id}
-            aria-selected={activeView === view.id}
-            className={`squisq-toolbar-view-tab${activeView === view.id ? ' squisq-toolbar-view-tab--active' : ''}`}
-            onClick={() => setActiveView(view.id)}
-            data-tooltip={`${view.label} (${view.shortcut})`}
-          >
-            <span
-              className="squisq-toolbar-view-tab-label squisq-toolbar-view-tab-label--long"
-              data-label={view.label}
+      {/* View tabs — hidden when only one view is available (e.g. code mode). */}
+      {showViewTabs && (
+        <div className="squisq-toolbar-view-tabs" role="tablist" aria-label="Editor view">
+          {visibleViews.map((view) => (
+            <button
+              key={view.id}
+              role="tab"
+              data-view={view.id}
+              aria-selected={activeView === view.id}
+              className={`squisq-toolbar-view-tab${activeView === view.id ? ' squisq-toolbar-view-tab--active' : ''}`}
+              onClick={() => setActiveView(view.id)}
+              data-tooltip={`${view.label} (${view.shortcut})`}
             >
-              {view.label}
-            </span>
-            <span
-              className="squisq-toolbar-view-tab-label squisq-toolbar-view-tab-label--short"
-              data-label={view.shortLabel ?? view.label}
-            >
-              {view.shortLabel ?? view.label}
-            </span>
-          </button>
-        ))}
-      </div>
-      {/* Formatting buttons — hidden in preview mode and on narrow screens */}
-      {!isPreview && !isNarrow && (
+              <span
+                className="squisq-toolbar-view-tab-label squisq-toolbar-view-tab-label--long"
+                data-label={view.label}
+              >
+                {view.label}
+              </span>
+              {view.shortLabel && view.shortLabel !== view.label && (
+                <span
+                  className="squisq-toolbar-view-tab-label squisq-toolbar-view-tab-label--short"
+                  data-label={view.shortLabel}
+                >
+                  {view.shortLabel}
+                </span>
+              )}
+            </button>
+          ))}
+        </div>
+      )}
+      {/* Formatting buttons — hidden in preview mode, narrow screens, and code mode */}
+      {!isPreview && !isNarrow && !isCodeMode && (
         <div className="squisq-toolbar-actions" ref={actionsRef}>
           {groups.map((group, gi) => (
             <div key={group} className="squisq-toolbar-group">
@@ -832,7 +845,7 @@ export function Toolbar({
       )}
 
       {/* Overflow menu — outside the overflow:hidden actions container */}
-      {!isPreview && overflowIndex !== null && (
+      {!isPreview && !isCodeMode && overflowIndex !== null && (
         <div className="squisq-toolbar-overflow" ref={overflowRef}>
           <button
             className={`squisq-toolbar-button squisq-toolbar-overflow-trigger${showOverflow ? ' squisq-toolbar-button--active' : ''}`}
@@ -967,7 +980,7 @@ export function Toolbar({
       {slotAfterActions}
       {/* Spacer — only needed when the actions container (which has flex:1
           and already pushes right-side items to the end) isn't rendered. */}
-      {(isPreview || isNarrow) && <div style={{ flex: 1 }} />}
+      {(isPreview || isNarrow || isCodeMode) && <div style={{ flex: 1 }} />}
       {/* Files toggle — visible when callback is provided */}
       {onToggleFiles && (
         <button

@@ -55,7 +55,7 @@ export function RawEditor({
   className,
   submitOnEnter,
 }: RawEditorProps) {
-  const { markdownSource, setMarkdownSource, setMonacoEditor } = useEditorContext();
+  const { markdownSource, setMarkdownSource, setMonacoEditor, language } = useEditorContext();
   const editorRef = useRef<monaco.editor.IStandaloneCodeEditor | null>(null);
   const isExternalUpdate = useRef(false);
   const completionDisposable = useRef<monaco.IDisposable | null>(null);
@@ -75,42 +75,46 @@ export function RawEditor({
 
       // Dispose any previous completion provider (from a prior mount)
       completionDisposable.current?.dispose();
+      completionDisposable.current = null;
 
-      // Register template annotation completion provider for {[ trigger
-      const templates = getAvailableTemplates();
-      completionDisposable.current = monaco.languages.registerCompletionItemProvider('markdown', {
-        triggerCharacters: ['['],
-        provideCompletionItems(model: monaco.editor.ITextModel, position: monaco.Position) {
-          const lineContent = model.getLineContent(position.lineNumber);
+      // Register the `{[template]}` completion provider only for markdown
+      // files — it's meaningless for TypeScript, JSON, Python, etc.
+      if (language === 'markdown') {
+        const templates = getAvailableTemplates();
+        completionDisposable.current = monaco.languages.registerCompletionItemProvider('markdown', {
+          triggerCharacters: ['['],
+          provideCompletionItems(model: monaco.editor.ITextModel, position: monaco.Position) {
+            const lineContent = model.getLineContent(position.lineNumber);
 
-          // Only trigger inside a heading line that has {[ before the cursor
-          if (!/^#{1,6}\s/.test(lineContent)) return { suggestions: [] };
+            // Only trigger inside a heading line that has {[ before the cursor
+            if (!/^#{1,6}\s/.test(lineContent)) return { suggestions: [] };
 
-          const textBeforeCursor = lineContent.substring(0, position.column - 1);
-          const bracketIdx = textBeforeCursor.lastIndexOf('{[');
-          if (bracketIdx === -1) return { suggestions: [] };
+            const textBeforeCursor = lineContent.substring(0, position.column - 1);
+            const bracketIdx = textBeforeCursor.lastIndexOf('{[');
+            if (bracketIdx === -1) return { suggestions: [] };
 
-          // The range to replace: from after {[ to the cursor
-          const startCol = bracketIdx + 3; // after {[
-          const range = new monaco.Range(
-            position.lineNumber,
-            startCol,
-            position.lineNumber,
-            position.column,
-          );
+            // The range to replace: from after {[ to the cursor
+            const startCol = bracketIdx + 3; // after {[
+            const range = new monaco.Range(
+              position.lineNumber,
+              startCol,
+              position.lineNumber,
+              position.column,
+            );
 
-          const suggestions = templates.map((name) => ({
-            label: name,
-            kind: monaco.languages.CompletionItemKind.Value,
-            insertText: name + ']}',
-            range,
-            detail: 'Block template',
-            sortText: name,
-          }));
+            const suggestions = templates.map((name) => ({
+              label: name,
+              kind: monaco.languages.CompletionItemKind.Value,
+              insertText: name + ']}',
+              range,
+              detail: 'Block template',
+              sortText: name,
+            }));
 
-          return { suggestions };
-        },
-      });
+            return { suggestions };
+          },
+        });
+      }
 
       // Chat-composer mode: intercept Enter before Monaco inserts a newline.
       // Cmd/Ctrl+Enter falls through so the native newline still works.
@@ -174,7 +178,7 @@ export function RawEditor({
         };
       }
     },
-    [setMonacoEditor],
+    [setMonacoEditor, language],
   );
 
   // Unregister on unmount
@@ -216,7 +220,7 @@ export function RawEditor({
   return (
     <div className={className} style={{ width: '100%', height: '100%' }} data-testid="raw-editor">
       <Editor
-        defaultLanguage="markdown"
+        defaultLanguage={language}
         value={markdownSource}
         theme={theme}
         onMount={handleMount}
