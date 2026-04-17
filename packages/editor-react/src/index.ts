@@ -29,6 +29,7 @@ export type {
   EditorActions,
   EditorContextValue,
   EditorProviderProps,
+  ImageDisplayMode,
 } from './EditorContext.js';
 
 // Individual editors (for custom layouts)

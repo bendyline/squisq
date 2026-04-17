@@ -11,6 +11,7 @@ export { DocPlayerWithSidebar } from './DocPlayerWithSidebar.js';
 export { DocProgressBar } from './DocProgressBar.js';
 export { MarkdownRenderer } from './MarkdownRenderer.js';
 export { LinearDocView } from './LinearDocView.js';
+export type { LinearDocViewProps, ImageDisplayMode } from './LinearDocView.js';
 
 // Layer components
 export { ImageLayer } from './layers/ImageLayer.js';

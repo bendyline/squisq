@@ -11,8 +11,8 @@ async function selectSample(page: Page, key: string) {
   await page.locator('select').first().selectOption(key);
 }
 
-async function switchView(page: Page, label: 'Raw' | 'Editor' | 'Play' | 'Preview') {
-  await page.getByRole('tab', { name: label }).click();
+async function switchView(page: Page, label: 'Markdown' | 'Editor' | 'Play' | 'Preview') {
+  await page.getByRole('tab', { name: label, exact: true }).click();
 }
 
 async function waitForDocPlayer(page: Page) {

@@ -76,7 +76,18 @@ export interface EditorContextValue extends EditorState, EditorActions {
   monacoEditor: MonacoEditor | null;
   /** MediaProvider for resolving image URLs in the WYSIWYG editor */
   mediaProvider: MediaProvider | null;
+  /**
+   * How pasted/inserted images should be displayed in the WYSIWYG view.
+   * `'inline'` (default) lets them flow at natural size up to the editor
+   * width; `'thumbnail'` constrains them to a 100×100 box so chat
+   * composers and other dense surfaces don't get dominated by a single
+   * pasted screenshot. The stored image bytes are unchanged — this is a
+   * pure render-time decision.
+   */
+  imageDisplayMode: ImageDisplayMode;
 }
+
+export type ImageDisplayMode = 'inline' | 'thumbnail';
 
 // ─── Context ─────────────────────────────────────────────
 
@@ -107,6 +118,8 @@ export interface EditorProviderProps {
   theme?: EditorTheme;
   /** MediaProvider for resolving image URLs */
   mediaProvider?: MediaProvider | null;
+  /** Display mode for images in the WYSIWYG view. Defaults to `'inline'`. */
+  imageDisplayMode?: ImageDisplayMode;
   children: ReactNode;
 }
 
@@ -120,6 +133,7 @@ export function EditorProvider({
   articleId = 'untitled',
   theme: initialTheme = 'light',
   mediaProvider = null,
+  imageDisplayMode = 'inline',
   children,
 }: EditorProviderProps) {
   const [markdownSource, setMarkdownSourceRaw] = useState(initialMarkdown);
@@ -279,6 +293,7 @@ export function EditorProvider({
       tiptapEditor,
       monacoEditor,
       mediaProvider,
+      imageDisplayMode,
       setMarkdownSource,
       setMarkdownDoc,
       setActiveView,
@@ -299,6 +314,7 @@ export function EditorProvider({
       tiptapEditor,
       monacoEditor,
       mediaProvider,
+      imageDisplayMode,
       setMarkdownSource,
       setMarkdownDoc,
       setActiveView,

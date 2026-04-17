@@ -7,7 +7,12 @@
  */
 
 import { useEffect, useState, useCallback } from 'react';
-import { EditorProvider, useEditorContext, type EditorView } from './EditorContext';
+import {
+  EditorProvider,
+  useEditorContext,
+  type EditorView,
+  type ImageDisplayMode,
+} from './EditorContext';
 import { Toolbar } from './Toolbar';
 import { StatusBar } from './StatusBar';
 import { RawEditor } from './RawEditor';
@@ -109,6 +114,15 @@ export interface EditorShellProps {
    * where the stats are noise.
    */
   showStatusBar?: boolean;
+  /**
+   * How images should be displayed in the WYSIWYG view. `'inline'`
+   * (default) flows them at natural size up to the container width;
+   * `'thumbnail'` constrains each image to a 100×100 box with
+   * aspect-preserving containment — useful for chat composers and other
+   * dense surfaces where a full-resolution paste would dominate the
+   * layout. Storage bytes are unchanged either way.
+   */
+  imageDisplayMode?: ImageDisplayMode;
 }
 
 /**
@@ -136,6 +150,7 @@ export function EditorShell({
   uxFont,
   thinMargins = false,
   showStatusBar = true,
+  imageDisplayMode = 'inline',
 }: EditorShellProps) {
   // Show the toggle when explicitly opted in, or when mediaProvider prop was passed at all
   const filesToggleEnabled = showFilesToggle ?? mediaProvider !== undefined;
@@ -152,6 +167,7 @@ export function EditorShell({
       articleId={articleId}
       theme={theme}
       mediaProvider={mediaProvider}
+      imageDisplayMode={imageDisplayMode}
     >
       <EditorShellInner
         basePath={basePath}

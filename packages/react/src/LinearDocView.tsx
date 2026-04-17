@@ -60,7 +60,17 @@ export interface LinearDocViewProps {
    * container.
    */
   thinMargins?: boolean;
+  /**
+   * How images inside the doc should be sized. `'inline'` (default)
+   * flows them at natural size up to the column width; `'thumbnail'`
+   * constrains each image to a 100×100 box with aspect-preserving
+   * containment — use for chat history and other dense surfaces where
+   * full-size images would dominate the layout.
+   */
+  imageDisplayMode?: ImageDisplayMode;
 }
+
+export type ImageDisplayMode = 'inline' | 'thumbnail';
 
 // ── Helpers ────────────────────────────────────────────────────────
 
@@ -314,6 +324,7 @@ export function LinearDocView({
   theme,
   surface,
   thinMargins = false,
+  imageDisplayMode = 'inline',
 }: LinearDocViewProps) {
   const activeViewport = viewport ?? VIEWPORT_PRESETS.landscape;
   const totalBlocks = useMemo(() => countAll(doc.blocks), [doc.blocks]);
@@ -355,7 +366,7 @@ export function LinearDocView({
       }}
     >
       <div
-        className={`squisq-linear-content squisq-md${thinMargins ? ' squisq-linear-content--thin' : ''}`}
+        className={`squisq-linear-content squisq-md${thinMargins ? ' squisq-linear-content--thin' : ''}${imageDisplayMode === 'thumbnail' ? ' squisq-linear-content--thumbnail-images' : ''}`}
         style={
           {
             // Thin-margins mode drops the 720px reading column + generous
@@ -444,6 +455,14 @@ export function LinearDocView({
             height: auto;
             border-radius: 6px;
             margin: 0.5em 0;
+          }
+          .squisq-linear-content--thumbnail-images img {
+            max-width: 100px;
+            max-height: 100px;
+            width: auto;
+            height: auto;
+            object-fit: contain;
+            display: block;
           }
           .squisq-linear-content strong {
             font-weight: 700;
