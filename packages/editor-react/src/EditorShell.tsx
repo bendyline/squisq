@@ -25,7 +25,7 @@ import {
 } from './utils/dropUtils';
 import type { MediaProvider } from '@bendyline/squisq/schemas';
 import type { ContentContainer } from '@bendyline/squisq/storage';
-import type { ReactNode } from 'react';
+import type { CSSProperties, ReactNode } from 'react';
 
 export type { EditorTheme } from './EditorContext';
 
@@ -80,6 +80,34 @@ export interface EditorShellProps {
    * fit. Defaults to false (page mode).
    */
   fullWidth?: boolean;
+  /**
+   * Font-family stack applied to the editor **chrome** — toolbar buttons,
+   * tabs, status bar, and control surfaces. The actual editing areas
+   * (Tiptap / Monaco) keep their own fonts so document editing isn't
+   * affected. Use this when the editor is embedded in a larger product
+   * that has its own UX type system and you want the controls to blend in.
+   *
+   * @example
+   * ```tsx
+   * <EditorShell uxFont="'Hanken Grotesk', system-ui, sans-serif" ... />
+   * ```
+   */
+  uxFont?: string;
+  /**
+   * Drop the editor's generous page-style padding in favor of a tight
+   * layout that hugs its container. The default WYSIWYG surface uses
+   * 16×24px padding suitable for editing long-form documents; chat
+   * composers want much less. Applies to the editing area only — the
+   * toolbar, tabs, and status bar keep their normal sizing.
+   */
+  thinMargins?: boolean;
+  /**
+   * Render the bottom status bar (word / character / line / block counts
+   * and parse-state indicator). Defaults to `true`. Set to `false` in
+   * embedded surfaces — chat composers and other short-form inputs —
+   * where the stats are noise.
+   */
+  showStatusBar?: boolean;
 }
 
 /**
@@ -104,6 +132,9 @@ export function EditorShell({
   showPlayTab = true,
   submitOnEnter,
   fullWidth = false,
+  uxFont,
+  thinMargins = false,
+  showStatusBar = true,
 }: EditorShellProps) {
   // Show the toggle when explicitly opted in, or when mediaProvider prop was passed at all
   const filesToggleEnabled = showFilesToggle ?? mediaProvider !== undefined;
@@ -135,6 +166,9 @@ export function EditorShell({
         showPlayTab={showPlayTab}
         submitOnEnter={submitOnEnter}
         fullWidth={fullWidth}
+        uxFont={uxFont}
+        thinMargins={thinMargins}
+        showStatusBar={showStatusBar}
       />
     </EditorProvider>
   );
@@ -154,6 +188,9 @@ interface EditorShellInnerProps {
   showPlayTab: boolean;
   submitOnEnter?: () => void;
   fullWidth: boolean;
+  uxFont?: string;
+  thinMargins: boolean;
+  showStatusBar: boolean;
 }
 
 function EditorShellInner({
@@ -170,6 +207,9 @@ function EditorShellInner({
   showPlayTab,
   submitOnEnter,
   fullWidth,
+  uxFont,
+  thinMargins,
+  showStatusBar,
 }: EditorShellInnerProps) {
   const { activeView, markdownSource, doc, theme, insertAtCursor, replaceAll } = useEditorContext();
   const isPreview = activeView === 'preview';
@@ -254,11 +294,17 @@ function EditorShellInner({
       className={`squisq-editor-shell ${className || ''}`}
       data-theme={theme}
       data-full-width={fullWidth ? 'true' : undefined}
+      data-thin-margins={thinMargins ? 'true' : undefined}
       style={{
         display: 'flex',
         flexDirection: 'column',
         height,
         overflow: 'hidden',
+        // When a consumer supplies a UX font stack, expose it to the
+        // editor CSS via this custom property. Chrome elements (toolbar,
+        // tabs, status bar) consume `--squisq-ux-font` as their
+        // `font-family`, falling back to the system stack when unset.
+        ...(uxFont ? ({ '--squisq-ux-font': uxFont } as CSSProperties) : {}),
       }}
       {...containerProps}
     >
@@ -310,8 +356,10 @@ function EditorShellInner({
           )}
         </div>
 
-        {/* Status bar */}
-        <StatusBar />
+        {/* Status bar — word / char / line / block counts. Host can
+            suppress via `showStatusBar={false}` for embedded chat-style
+            composers where the stats are noise. */}
+        {showStatusBar && <StatusBar />}
       </PreviewSettingsProvider>
     </div>
   );

@@ -338,7 +338,14 @@ export function DocPlayer({
   const hasPlayedOnce = useRef(false);
 
   // Track when cover is showing at rest (before play)
-  const atRest = !!(coverBlock && !isPlaying && currentTime === 0 && !hasPlayedOnce.current && !renderMode && !autoPlay);
+  const atRest = !!(
+    coverBlock &&
+    !isPlaying &&
+    currentTime === 0 &&
+    !hasPlayedOnce.current &&
+    !renderMode &&
+    !autoPlay
+  );
   if (atRest) coverWasShowing.current = true;
 
   useEffect(() => {

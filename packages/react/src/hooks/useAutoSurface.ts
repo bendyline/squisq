@@ -1,9 +1,5 @@
 import { useSyncExternalStore } from 'react';
-import {
-  DARK_SURFACE,
-  LIGHT_SURFACE,
-  type SurfaceScheme,
-} from '@bendyline/squisq/schemas';
+import { DARK_SURFACE, LIGHT_SURFACE, type SurfaceScheme } from '@bendyline/squisq/schemas';
 
 /**
  * Live-track `prefers-color-scheme` and return a stable SurfaceScheme.
@@ -20,9 +16,7 @@ export function useAutoSurface(enabled: boolean): SurfaceScheme {
   };
   const getSnapshot = () => {
     if (!enabled || typeof window === 'undefined') return LIGHT_SURFACE;
-    return window.matchMedia('(prefers-color-scheme: dark)').matches
-      ? DARK_SURFACE
-      : LIGHT_SURFACE;
+    return window.matchMedia('(prefers-color-scheme: dark)').matches ? DARK_SURFACE : LIGHT_SURFACE;
   };
   return useSyncExternalStore(subscribe, getSnapshot, () => LIGHT_SURFACE);
 }

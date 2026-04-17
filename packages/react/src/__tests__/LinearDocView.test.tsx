@@ -2,11 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { render } from '@testing-library/react';
 import { LinearDocView } from '../LinearDocView';
 import type { Doc, Block } from '@bendyline/squisq/schemas';
-import {
-  DARK_SURFACE,
-  DEFAULT_THEME,
-  LIGHT_SURFACE,
-} from '@bendyline/squisq/schemas';
+import { DARK_SURFACE, DEFAULT_THEME, LIGHT_SURFACE } from '@bendyline/squisq/schemas';
 import type {
   MarkdownBlockNode,
   MarkdownInlineNode,

@@ -121,9 +121,7 @@ export function WysiwygEditor({
           // we don't also create a new paragraph.
           event.preventDefault();
           view.dispatch(
-            view.state.tr.replaceSelectionWith(
-              view.state.schema.nodes.hardBreak.create(),
-            ),
+            view.state.tr.replaceSelectionWith(view.state.schema.nodes.hardBreak.create()),
           );
           return true;
         }

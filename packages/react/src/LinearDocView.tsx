@@ -21,11 +21,7 @@ import { useMemo } from 'react';
 import { useAutoSurface } from './hooks/useAutoSurface';
 import type { Doc, Block, DocBlock } from '@bendyline/squisq/schemas';
 import type { ViewportConfig } from '@bendyline/squisq/schemas';
-import {
-  applySurface,
-  type SurfaceScheme,
-  type Theme,
-} from '@bendyline/squisq/schemas';
+import { applySurface, type SurfaceScheme, type Theme } from '@bendyline/squisq/schemas';
 import { VIEWPORT_PRESETS } from '@bendyline/squisq/schemas';
 import { getLayers, hasTemplate, DEFAULT_THEME } from '@bendyline/squisq/doc';
 import type { RenderContext } from '@bendyline/squisq/doc';
@@ -55,8 +51,16 @@ export interface LinearDocViewProps {
    * specific surface, or omit to use the theme's built-in colors.
    */
   surface?: SurfaceScheme | 'auto';
+  /**
+   * Use tight padding + a wider content column. The default layout is
+   * designed for a reading surface with breathing room (720px column,
+   * 24×16px padding). Short conversational snippets like chat replies
+   * benefit from a much tighter layout. Set to `true` to render with
+   * minimal padding and no max-width cap so the content hugs its
+   * container.
+   */
+  thinMargins?: boolean;
 }
-
 
 // ── Helpers ────────────────────────────────────────────────────────
 
@@ -309,12 +313,12 @@ export function LinearDocView({
   className,
   theme,
   surface,
+  thinMargins = false,
 }: LinearDocViewProps) {
   const activeViewport = viewport ?? VIEWPORT_PRESETS.landscape;
   const totalBlocks = useMemo(() => countAll(doc.blocks), [doc.blocks]);
   const autoSurface = useAutoSurface(surface === 'auto');
-  const resolvedSurface: SurfaceScheme | undefined =
-    surface === 'auto' ? autoSurface : surface;
+  const resolvedSurface: SurfaceScheme | undefined = surface === 'auto' ? autoSurface : surface;
 
   const renderContext: RenderContext = useMemo(() => {
     const baseTheme = theme ?? DEFAULT_THEME;
@@ -339,19 +343,28 @@ export function LinearDocView({
       className={`squisq-linear ${className || ''}`}
       style={{
         width: '100%',
-        height: '100%',
-        overflowY: 'auto',
+        // Thin-margins mode is the "embedded in someone else's container"
+        // signal (chat bubble, sidebar preview). Fit to content there so
+        // the host's bubble doesn't render a tall empty box when the doc
+        // is short. Standalone mode keeps height:100% for full-viewport
+        // scrolling.
+        height: thinMargins ? 'auto' : '100%',
+        overflowY: thinMargins ? 'visible' : 'auto',
         overflowX: 'hidden',
         background: bgColor,
       }}
     >
       <div
-        className="squisq-linear-content squisq-md"
+        className={`squisq-linear-content squisq-md${thinMargins ? ' squisq-linear-content--thin' : ''}`}
         style={
           {
-            maxWidth: '720px',
-            margin: '0 auto',
-            padding: '24px 16px',
+            // Thin-margins mode drops the 720px reading column + generous
+            // page padding (right for standalone docs) in favor of a tight
+            // layout that hugs its container (right for chat bubbles and
+            // sidebar previews).
+            maxWidth: thinMargins ? 'none' : '720px',
+            margin: thinMargins ? '0' : '0 auto',
+            padding: thinMargins ? '0' : '24px 16px',
             lineHeight: lineHt,
             fontSize: '16px',
             fontFamily: bodyFont,

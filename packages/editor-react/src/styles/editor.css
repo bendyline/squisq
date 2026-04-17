@@ -5,8 +5,14 @@
 /* ─── Shell ──────────────────────────────────────────── */
 
 .squisq-editor-shell {
-  font-family:
-    -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans', Helvetica, Arial, sans-serif;
+  /* UX font applies to editor *chrome* — toolbar, tabs, buttons, status
+     bar. The actual editing surfaces (Tiptap, Monaco) keep their own
+     fonts. `--squisq-ux-font` is set when a consumer passes the `uxFont`
+     prop on EditorShell; unset, we fall back to the system stack. */
+  font-family: var(
+    --squisq-ux-font,
+    -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans', Helvetica, Arial, sans-serif
+  );
   color: #1f2937;
   background: #fff;
 }
@@ -1247,4 +1253,10 @@
 
 .squisq-editor-shell[data-theme='dark'][data-full-width='true'] .squisq-wysiwyg-container {
   background: transparent;
+}
+
+/* Thin-margins mode — drops the 16×24px page padding on the editing
+   surface so the composer hugs its container (chat composers etc.). */
+.squisq-editor-shell[data-thin-margins='true'] .squisq-wysiwyg-editor {
+  padding: 6px 10px;
 }
