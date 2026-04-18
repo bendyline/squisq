@@ -29,6 +29,26 @@ import { resolveFileKind } from './fileKind';
 /** Monaco standalone code editor instance type */
 type MonacoEditor = MonacoEditorNs.IStandaloneCodeEditor;
 
+/**
+ * One candidate returned by a {@link MentionProvider}. Shown in the editor's
+ * `@` popover. `id` is the stable identifier (serialized into the mention
+ * wire format); `label` is what the reader sees; `description` and `group`
+ * are optional hints for richer suggestion UIs.
+ */
+export interface MentionCandidate {
+  id: string;
+  label: string;
+  description?: string;
+  group?: string;
+}
+
+/**
+ * Looks up mention candidates matching a query. Called as the user types
+ * after `@`. The provider is free to do server-side or client-side filtering;
+ * the editor only cares that candidates come back in relevance order.
+ */
+export type MentionProvider = (query: string) => Promise<MentionCandidate[]>;
+
 // ─── Types ───────────────────────────────────────────────
 
 export type EditorView = 'raw' | 'wysiwyg' | 'preview';
@@ -96,6 +116,12 @@ export interface EditorContextValue extends EditorState, EditorActions {
    * pure render-time decision.
    */
   imageDisplayMode: ImageDisplayMode;
+  /**
+   * Optional provider for `@`-mention suggestions. When set, both the
+   * WYSIWYG (Tiptap) and Raw (Monaco) editors show a mention popover as
+   * the user types `@<query>`. When unset, `@` is just a literal character.
+   */
+  mentionProvider: MentionProvider | null;
 }
 
 export type ImageDisplayMode = 'inline' | 'thumbnail';
@@ -132,6 +158,11 @@ export interface EditorProviderProps {
   /** Display mode for images in the WYSIWYG view. Defaults to `'inline'`. */
   imageDisplayMode?: ImageDisplayMode;
   /**
+   * Async provider for `@`-mention suggestions. Omit to disable mentions
+   * entirely — typing `@` becomes just a literal character again.
+   */
+  mentionProvider?: MentionProvider | null;
+  /**
    * File name (e.g. `foo.ts`) or bare extension — used to pick a Monaco
    * language and decide between markdown vs. code mode.
    */
@@ -152,6 +183,7 @@ export function EditorProvider({
   theme: initialTheme = 'light',
   mediaProvider = null,
   imageDisplayMode = 'inline',
+  mentionProvider = null,
   fileName,
   language,
   children,
@@ -339,6 +371,7 @@ export function EditorProvider({
       monacoEditor,
       mediaProvider,
       imageDisplayMode,
+      mentionProvider,
       setMarkdownSource,
       setMarkdownDoc,
       setActiveView,
@@ -362,6 +395,7 @@ export function EditorProvider({
       monacoEditor,
       mediaProvider,
       imageDisplayMode,
+      mentionProvider,
       setMarkdownSource,
       setMarkdownDoc,
       setActiveView,

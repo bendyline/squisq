@@ -31,6 +31,8 @@ export type {
   EditorContextValue,
   EditorProviderProps,
   ImageDisplayMode,
+  MentionCandidate,
+  MentionProvider,
 } from './EditorContext.js';
 
 // File-kind detection — useful for hosts that want to pre-decide chrome

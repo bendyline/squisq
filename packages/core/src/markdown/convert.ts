@@ -253,7 +253,64 @@ function convertInlineChildren(children: MdastNode[], parseHtml: boolean): Markd
     const node = convertInlineNode(child, parseHtml);
     if (node) result.push(node);
   }
-  return result;
+  return coalesceMentions(result);
+}
+
+/**
+ * Post-process an inline-children list to collapse `text('@') + link(scheme:id)`
+ * pairs into a single `mention` node. The wire format `@[Display](scheme:id)`
+ * comes back from remark as two adjacent nodes — we merge them so consumers
+ * see a single atomic mention. A plain link whose URL doesn't have `scheme:id`
+ * shape, or that isn't immediately preceded by `@`, is left alone so ordinary
+ * links keep working.
+ */
+function coalesceMentions(inlines: MarkdownInlineNode[]): MarkdownInlineNode[] {
+  const out: MarkdownInlineNode[] = [];
+  for (const cur of inlines) {
+    const prev = out[out.length - 1];
+    if (
+      cur.type === 'link' &&
+      typeof cur.url === 'string' &&
+      prev &&
+      prev.type === 'text' &&
+      prev.value.endsWith('@')
+    ) {
+      const schemeMatch = cur.url.match(/^([a-z][a-z0-9+.-]*):(.+)$/i);
+      if (schemeMatch && schemeMatch[1] && schemeMatch[2]) {
+        const targetKind = schemeMatch[1];
+        const targetId = schemeMatch[2];
+        const displayName = extractInlineText(cur.children);
+        if (prev.value === '@') {
+          out.pop();
+        } else {
+          prev.value = prev.value.slice(0, -1);
+        }
+        out.push({
+          type: 'mention',
+          targetKind,
+          targetId,
+          displayName,
+          ...(cur.position ? { position: cur.position } : {}),
+        });
+        continue;
+      }
+    }
+    out.push(cur);
+  }
+  return out;
+}
+
+/** Plain-text of an inline children list — used to pull the display name
+ * out of a mention link's children. */
+function extractInlineText(nodes: MarkdownInlineNode[]): string {
+  let out = '';
+  for (const n of nodes) {
+    if (n.type === 'text' || n.type === 'inlineCode') out += n.value;
+    else if ('children' in n && Array.isArray(n.children)) {
+      out += extractInlineText(n.children as MarkdownInlineNode[]);
+    }
+  }
+  return out;
 }
 
 function convertBlockNode(node: MdastNode, parseHtml: boolean): MarkdownBlockNode | null {
@@ -590,7 +647,7 @@ export function toMdast(doc: MarkdownDocument): MdastNode {
 function blockToMdast(node: MarkdownBlockNode): MdastNode {
   switch (node.type) {
     case 'heading': {
-      const mdastChildren = node.children.map(inlineToMdast);
+      const mdastChildren = inlineChildrenToMdast(node.children);
       if (node.templateAnnotation) {
         const suffix = serializeTemplateAnnotation(node.templateAnnotation);
         // Append to last text node, or create a new one
@@ -612,7 +669,7 @@ function blockToMdast(node: MarkdownBlockNode): MdastNode {
     case 'paragraph':
       return {
         type: 'paragraph',
-        children: node.children.map(inlineToMdast),
+        children: inlineChildrenToMdast(node.children),
         ...mdastPosField(node.position),
       };
 
@@ -718,7 +775,7 @@ function blockToMdast(node: MarkdownBlockNode): MdastNode {
         type: 'leafDirective',
         name: node.name,
         ...(node.attributes ? { attributes: node.attributes } : {}),
-        children: node.children.map(inlineToMdast),
+        children: inlineChildrenToMdast(node.children),
         ...mdastPosField(node.position),
       };
 
@@ -757,9 +814,32 @@ function tableRowToMdast(row: MarkdownTableRow): MdastNode {
 function tableCellToMdast(cell: MarkdownTableCell): MdastNode {
   return {
     type: 'tableCell',
-    children: cell.children.map(inlineToMdast),
+    children: inlineChildrenToMdast(cell.children),
     ...mdastPosField(cell.position),
   };
+}
+
+/**
+ * Serialize an array of inline nodes to mdast, flat-mapping the result so
+ * a single `mention` expands to two mdast nodes (`text('@')` + `link`).
+ * Use in place of `.map(inlineToMdast)` wherever we walk a children array.
+ */
+function inlineChildrenToMdast(nodes: MarkdownInlineNode[]): MdastNode[] {
+  const out: MdastNode[] = [];
+  for (const n of nodes) {
+    if (n.type === 'mention') {
+      out.push({ type: 'text', value: '@' });
+      out.push({
+        type: 'link',
+        url: `${n.targetKind}:${n.targetId}`,
+        children: [{ type: 'text', value: n.displayName }],
+        ...mdastPosField(n.position),
+      });
+    } else {
+      out.push(inlineToMdast(n));
+    }
+  }
+  return out;
 }
 
 function inlineToMdast(node: MarkdownInlineNode): MdastNode {
@@ -774,21 +854,21 @@ function inlineToMdast(node: MarkdownInlineNode): MdastNode {
     case 'emphasis':
       return {
         type: 'emphasis',
-        children: node.children.map(inlineToMdast),
+        children: inlineChildrenToMdast(node.children),
         ...mdastPosField(node.position),
       };
 
     case 'strong':
       return {
         type: 'strong',
-        children: node.children.map(inlineToMdast),
+        children: inlineChildrenToMdast(node.children),
         ...mdastPosField(node.position),
       };
 
     case 'delete':
       return {
         type: 'delete',
-        children: node.children.map(inlineToMdast),
+        children: inlineChildrenToMdast(node.children),
         ...mdastPosField(node.position),
       };
 
@@ -804,7 +884,7 @@ function inlineToMdast(node: MarkdownInlineNode): MdastNode {
         type: 'link',
         url: node.url,
         ...(node.title != null ? { title: node.title } : {}),
-        children: node.children.map(inlineToMdast),
+        children: inlineChildrenToMdast(node.children),
         ...mdastPosField(node.position),
       };
 
@@ -851,7 +931,7 @@ function inlineToMdast(node: MarkdownInlineNode): MdastNode {
         identifier: node.identifier,
         ...(node.label != null ? { label: node.label } : {}),
         referenceType: node.referenceType,
-        children: node.children.map(inlineToMdast),
+        children: inlineChildrenToMdast(node.children),
         ...mdastPosField(node.position),
       };
 
@@ -870,7 +950,20 @@ function inlineToMdast(node: MarkdownInlineNode): MdastNode {
         type: 'textDirective',
         name: node.name,
         ...(node.attributes ? { attributes: node.attributes } : {}),
-        children: node.children.map(inlineToMdast),
+        children: inlineChildrenToMdast(node.children),
+        ...mdastPosField(node.position),
+      };
+
+    case 'mention':
+      // Fallback: when `inlineToMdast` is called directly (not via
+      // `inlineChildrenToMdast`), collapse the mention to just the link
+      // form. The `@` prefix is lost, but the id+name still round-trip.
+      // Normal call sites go through `inlineChildrenToMdast` and get
+      // the proper text('@') + link pair.
+      return {
+        type: 'link',
+        url: `${node.targetKind}:${node.targetId}`,
+        children: [{ type: 'text', value: node.displayName }],
         ...mdastPosField(node.position),
       };
 

@@ -55,10 +55,12 @@ export function RawEditor({
   className,
   submitOnEnter,
 }: RawEditorProps) {
-  const { markdownSource, setMarkdownSource, setMonacoEditor, language } = useEditorContext();
+  const { markdownSource, setMarkdownSource, setMonacoEditor, language, mentionProvider } =
+    useEditorContext();
   const editorRef = useRef<monaco.editor.IStandaloneCodeEditor | null>(null);
   const isExternalUpdate = useRef(false);
   const completionDisposable = useRef<monaco.IDisposable | null>(null);
+  const mentionCompletionDisposable = useRef<monaco.IDisposable | null>(null);
   const dropCleanupRef = useRef<(() => void) | null>(null);
   const keyDisposable = useRef<monaco.IDisposable | null>(null);
   // Ref so the keydown handler always sees the latest callback.
@@ -66,6 +68,12 @@ export function RawEditor({
   useEffect(() => {
     submitOnEnterRef.current = submitOnEnter;
   }, [submitOnEnter]);
+  // Ref so the completion provider — registered once at mount — always
+  // sees the latest mentionProvider without needing to unregister.
+  const mentionProviderRef = useRef(mentionProvider);
+  useEffect(() => {
+    mentionProviderRef.current = mentionProvider;
+  }, [mentionProvider]);
 
   const handleMount: OnMount = useCallback(
     (editor, monaco) => {
@@ -76,6 +84,8 @@ export function RawEditor({
       // Dispose any previous completion provider (from a prior mount)
       completionDisposable.current?.dispose();
       completionDisposable.current = null;
+      mentionCompletionDisposable.current?.dispose();
+      mentionCompletionDisposable.current = null;
 
       // Register the `{[template]}` completion provider only for markdown
       // files — it's meaningless for TypeScript, JSON, Python, etc.
@@ -114,6 +124,61 @@ export function RawEditor({
             return { suggestions };
           },
         });
+
+        // `@mention` completion — queries the shared MentionProvider. Keep
+        // this in its own registration so we can dispose it independently
+        // of the template provider, and so the trigger character is just
+        // `@` (not `[`).
+        mentionCompletionDisposable.current = monaco.languages.registerCompletionItemProvider(
+          'markdown',
+          {
+            triggerCharacters: ['@'],
+            async provideCompletionItems(model, position) {
+              const provider = mentionProviderRef.current;
+              if (!provider) return { suggestions: [] };
+              const lineContent = model.getLineContent(position.lineNumber);
+              const textBeforeCursor = lineContent.substring(0, position.column - 1);
+              const atIdx = textBeforeCursor.lastIndexOf('@');
+              if (atIdx === -1) return { suggestions: [] };
+              // `@` must be at line start or preceded by whitespace/punct —
+              // skip e.g. email addresses like `foo@bar`.
+              if (atIdx > 0) {
+                const prevChar = textBeforeCursor[atIdx - 1];
+                if (!/[\s\p{P}]/u.test(prevChar)) return { suggestions: [] };
+              }
+              const query = textBeforeCursor.slice(atIdx + 1);
+              // Only fire for short queries — once the user has typed
+              // a full word, the popover gets noisy.
+              if (query.length > 40) return { suggestions: [] };
+              if (/\s/.test(query)) return { suggestions: [] };
+
+              let candidates;
+              try {
+                candidates = await provider(query);
+              } catch {
+                return { suggestions: [] };
+              }
+
+              const range = new monaco.Range(
+                position.lineNumber,
+                atIdx + 1,
+                position.lineNumber,
+                position.column,
+              );
+
+              return {
+                suggestions: candidates.map((c) => ({
+                  label: `@${c.label}`,
+                  kind: monaco.languages.CompletionItemKind.User,
+                  insertText: `@[${c.label}](gezel:${c.id}) `,
+                  range,
+                  ...(c.description ? { detail: c.description } : {}),
+                  sortText: c.label,
+                })),
+              };
+            },
+          },
+        );
       }
 
       // Chat-composer mode: intercept Enter before Monaco inserts a newline.
@@ -187,6 +252,8 @@ export function RawEditor({
       setMonacoEditor(null);
       completionDisposable.current?.dispose();
       completionDisposable.current = null;
+      mentionCompletionDisposable.current?.dispose();
+      mentionCompletionDisposable.current = null;
       dropCleanupRef.current?.();
       dropCleanupRef.current = null;
       keyDisposable.current?.dispose();

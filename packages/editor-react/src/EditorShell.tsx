@@ -12,6 +12,7 @@ import {
   useEditorContext,
   type EditorView,
   type ImageDisplayMode,
+  type MentionProvider,
 } from './EditorContext';
 import { Toolbar } from './Toolbar';
 import { StatusBar } from './StatusBar';
@@ -140,6 +141,14 @@ export interface EditorShellProps {
    * switches the shell into code mode.
    */
   language?: string;
+  /**
+   * Optional async provider for `@`-mention suggestions. When supplied,
+   * typing `@` inside the editor opens a popover of candidates; selecting
+   * one inserts a `@[Label](scheme:id)` mention token. Used by chat
+   * composers and any other surface that wants to address named entities
+   * inline. Omit to disable mentions entirely.
+   */
+  mentionProvider?: MentionProvider | null;
 }
 
 /**
@@ -170,6 +179,7 @@ export function EditorShell({
   imageDisplayMode = 'inline',
   fileName,
   language,
+  mentionProvider,
 }: EditorShellProps) {
   // Show the toggle when explicitly opted in, or when mediaProvider prop was passed at all
   const filesToggleEnabled = showFilesToggle ?? mediaProvider !== undefined;
@@ -187,6 +197,7 @@ export function EditorShell({
       theme={theme}
       mediaProvider={mediaProvider}
       imageDisplayMode={imageDisplayMode}
+      mentionProvider={mentionProvider}
       fileName={fileName}
       language={language}
     >

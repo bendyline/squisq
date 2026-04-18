@@ -507,6 +507,25 @@ export interface MarkdownTextDirective extends MarkdownNodeBase {
   children: MarkdownInlineNode[];
 }
 
+/**
+ * An @-mention of a named entity such as a user or agent.
+ *
+ * Wire format: `@[Display Name](scheme:id)` — a regular Markdown link
+ * preceded by `@`, with a namespaced URL scheme that identifies what
+ * kind of entity is being mentioned. Parsers that don't know about
+ * mentions still render it as a link with text "Display Name" pointing
+ * at "scheme:id" — graceful fallback.
+ */
+export interface MarkdownMention extends MarkdownNodeBase {
+  type: 'mention';
+  /** Namespace for the mentioned entity (e.g. `"gezel"`, `"user"`). */
+  targetKind: string;
+  /** Stable identifier within the namespace. */
+  targetId: string;
+  /** Text shown to the reader. */
+  displayName: string;
+}
+
 // ============================================
 // Union Types
 // ============================================
@@ -543,7 +562,8 @@ export type MarkdownInlineNode =
   | MarkdownFootnoteReference
   | MarkdownLinkReference
   | MarkdownImageReference
-  | MarkdownTextDirective;
+  | MarkdownTextDirective
+  | MarkdownMention;
 
 /**
  * Any node in the markdown tree. Includes structural nodes (listItem,

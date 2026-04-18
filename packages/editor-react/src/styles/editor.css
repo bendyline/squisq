@@ -1349,3 +1349,85 @@
 .squisq-editor-shell[data-thin-margins='true'] .squisq-wysiwyg-editor {
   padding: 6px 10px;
 }
+
+/* ── @-mention chip + suggestion popover ─────────────────────────── */
+
+/* Chip rendered in both WYSIWYG (Tiptap Node) and bridge-HTML surfaces. */
+.squisq-wysiwyg-editor .mention,
+.squisq-wysiwyg-editor span[data-mention] {
+  display: inline-block;
+  padding: 0 6px;
+  border-radius: 10px;
+  font-weight: 500;
+  background: rgba(88, 101, 242, 0.18);
+  color: #1a2a8a;
+  line-height: 1.4;
+  white-space: nowrap;
+  cursor: default;
+}
+
+.squisq-editor-shell[data-theme='dark'] .squisq-wysiwyg-editor .mention,
+.squisq-editor-shell[data-theme='dark'] .squisq-wysiwyg-editor span[data-mention] {
+  background: rgba(128, 140, 255, 0.22);
+  color: #c8d0ff;
+}
+
+/* Suggestion popover appended to <body> so it escapes overflow clipping. */
+.squisq-mention-popover {
+  min-width: 220px;
+  max-width: 320px;
+  max-height: 240px;
+  overflow-y: auto;
+  background: #fff;
+  border: 1px solid rgba(0, 0, 0, 0.12);
+  border-radius: 6px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+  padding: 4px;
+  font-family: var(--squisq-ux-font, system-ui, sans-serif);
+  font-size: 13px;
+}
+
+.squisq-mention-popover .squisq-mention-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  align-items: flex-start;
+  width: 100%;
+  padding: 6px 8px;
+  border: none;
+  background: transparent;
+  border-radius: 4px;
+  cursor: pointer;
+  text-align: left;
+  color: inherit;
+}
+
+.squisq-mention-popover .squisq-mention-item.is-selected,
+.squisq-mention-popover .squisq-mention-item:hover {
+  background: rgba(88, 101, 242, 0.12);
+}
+
+.squisq-mention-popover .squisq-mention-label {
+  font-weight: 500;
+}
+
+.squisq-mention-popover .squisq-mention-desc {
+  font-size: 11px;
+  color: rgba(0, 0, 0, 0.55);
+}
+
+@media (prefers-color-scheme: dark) {
+  .squisq-mention-popover {
+    background: #1f2230;
+    border-color: rgba(255, 255, 255, 0.14);
+    color: #e5e7eb;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45);
+  }
+  .squisq-mention-popover .squisq-mention-item.is-selected,
+  .squisq-mention-popover .squisq-mention-item:hover {
+    background: rgba(128, 140, 255, 0.18);
+  }
+  .squisq-mention-popover .squisq-mention-desc {
+    color: rgba(255, 255, 255, 0.6);
+  }
+}

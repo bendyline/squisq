@@ -23,6 +23,7 @@ import Placeholder from '@tiptap/extension-placeholder';
 import { HeadingWithTemplate } from './TemplateAnnotation';
 import { ImageWithMediaProvider } from './ImageNodeView';
 import { useEditorContext } from './EditorContext';
+import { buildMentionExtension } from './MentionExtension';
 import { markdownToTiptap, tiptapToMarkdown } from './tiptapBridge';
 import { looksLikeMarkdown } from './detectMarkdown';
 import { SQUISQ_MEDIA_MIME, parseSquisqMediaPayload } from './mediaDragMime';
@@ -82,7 +83,15 @@ export interface WysiwygEditorProps {
  * Binds to the shared EditorContext for source synchronization.
  */
 export function WysiwygEditor({ placeholder, className, submitOnEnter }: WysiwygEditorProps) {
-  const { markdownSource, setMarkdownSource, setTiptapEditor, mediaProvider } = useEditorContext();
+  const { markdownSource, setMarkdownSource, setTiptapEditor, mediaProvider, mentionProvider } =
+    useEditorContext();
+  // Keep a ref so the mention extension — created once at editor mount —
+  // always sees the latest provider. Swapping projects or gezels changes
+  // the provider without remounting the editor.
+  const mentionProviderRef = useRef(mentionProvider);
+  useEffect(() => {
+    mentionProviderRef.current = mentionProvider;
+  }, [mentionProvider]);
   // Stable per mount: either the host-supplied string, or a random pick
   // from EMPTY_PROMPTS. Re-renders don't reshuffle.
   const resolvedPlaceholder = useMemo(() => placeholder ?? pickEmptyPrompt(), [placeholder]);
@@ -121,6 +130,7 @@ export function WysiwygEditor({ placeholder, className, submitOnEnter }: Wysiwyg
       TaskItem.configure({ nested: true }),
       ImageWithMediaProvider.configure({ inline: false }),
       Placeholder.configure({ placeholder: resolvedPlaceholder }),
+      buildMentionExtension(() => mentionProviderRef.current),
     ],
     content: markdownToTiptap(stripFrontmatter(markdownSource).body),
     onUpdate: ({ editor: ed }) => {

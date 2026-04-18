@@ -155,6 +155,20 @@ function renderInline(nodes: MarkdownInlineNode[], keyPrefix = ''): React.ReactN
           </span>
         );
 
+      case 'mention':
+        return (
+          <span
+            key={key}
+            className="squisq-md-mention mention"
+            data-mention="true"
+            data-kind={node.targetKind}
+            data-id={node.targetId}
+            data-label={node.displayName}
+          >
+            @{node.displayName}
+          </span>
+        );
+
       default:
         return null;
     }
