@@ -24,8 +24,7 @@ const RE_IMAGE = /!\[(.+?)\]\((.+?)\)/g;
 // so plain `$100` or price-style parentheticals don't accidentally match.
 // remark-stringify may round-trip the colon as `\:` — tolerate either.
 const RE_MENTION = /@\[([^\]]+?)\]\(([a-z][a-z0-9+.-]*)\\?:([^)\s]+)\)/gi;
-const RE_MENTION_TAG =
-  /<span\b[^>]*?\bdata-mention\b[^>]*?>(?:<[^>]+>)*([^<]*)<\/span>/gi;
+const RE_MENTION_TAG = /<span\b[^>]*?\bdata-mention\b[^>]*?>(?:<[^>]+>)*([^<]*)<\/span>/gi;
 const RE_STRONG_TAG = /<strong>(.*?)<\/strong>/g;
 const RE_B_TAG = /<b>(.*?)<\/b>/g;
 const RE_EM_TAG = /<em>(.*?)<\/em>/g;

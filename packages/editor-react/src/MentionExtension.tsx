@@ -39,9 +39,7 @@ export function buildMentionExtension(getProvider: () => MentionProvider | null)
     },
     renderHTML({ options, node }) {
       const label =
-        (node.attrs.label as string | undefined) ??
-        (node.attrs.id as string | undefined) ??
-        '';
+        (node.attrs.label as string | undefined) ?? (node.attrs.id as string | undefined) ?? '';
       const id = (node.attrs.id as string | undefined) ?? '';
       const kind = (node.attrs.kind as string | undefined) ?? 'gezel';
       return [
@@ -57,9 +55,7 @@ export function buildMentionExtension(getProvider: () => MentionProvider | null)
     },
     renderText({ node }) {
       const label =
-        (node.attrs.label as string | undefined) ??
-        (node.attrs.id as string | undefined) ??
-        '';
+        (node.attrs.label as string | undefined) ?? (node.attrs.id as string | undefined) ?? '';
       const id = (node.attrs.id as string | undefined) ?? '';
       const kind = (node.attrs.kind as string | undefined) ?? 'gezel';
       return `@[${label}](${kind}:${id})`;
@@ -149,8 +145,7 @@ function renderSuggestionFactory() {
         const item = state.items[i];
         const btn = document.createElement('button');
         btn.type = 'button';
-        btn.className =
-          'squisq-mention-item' + (i === state.selected ? ' is-selected' : '');
+        btn.className = 'squisq-mention-item' + (i === state.selected ? ' is-selected' : '');
         btn.dataset.index = String(i);
         btn.innerHTML = '';
         const label = document.createElement('span');
@@ -211,8 +206,7 @@ function renderSuggestionFactory() {
           return true;
         }
         if (event.key === 'ArrowUp') {
-          state.selected =
-            (state.selected - 1 + state.items.length) % state.items.length;
+          state.selected = (state.selected - 1 + state.items.length) % state.items.length;
           update();
           return true;
         }
