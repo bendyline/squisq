@@ -76,13 +76,20 @@ export interface WysiwygEditorProps {
    * a newline, and Cmd/Ctrl+Enter inserts a soft break. Chat-composer UX.
    */
   submitOnEnter?: () => void;
+  /** Disable Tiptap editing — renders content but blocks input. */
+  readOnly?: boolean;
 }
 
 /**
  * Rich WYSIWYG markdown editor built on Tiptap (ProseMirror).
  * Binds to the shared EditorContext for source synchronization.
  */
-export function WysiwygEditor({ placeholder, className, submitOnEnter }: WysiwygEditorProps) {
+export function WysiwygEditor({
+  placeholder,
+  className,
+  submitOnEnter,
+  readOnly = false,
+}: WysiwygEditorProps) {
   const { markdownSource, setMarkdownSource, setTiptapEditor, mediaProvider, mentionProvider } =
     useEditorContext();
   // Keep a ref so the mention extension — created once at editor mount —
@@ -113,6 +120,7 @@ export function WysiwygEditor({ placeholder, className, submitOnEnter }: Wysiwyg
   }, [submitOnEnter]);
 
   const editor = useEditor({
+    editable: !readOnly,
     extensions: [
       StarterKit.configure({
         // Disable built-in heading; we use HeadingWithTemplate instead
@@ -235,6 +243,13 @@ export function WysiwygEditor({ placeholder, className, submitOnEnter }: Wysiwyg
     }
     return () => setTiptapEditor(null);
   }, [editor, setTiptapEditor]);
+
+  // Tiptap reads `editable` only at creation; mirror later changes via
+  // setEditable so flipping readOnly from the host takes effect without
+  // remounting the editor.
+  useEffect(() => {
+    if (editor) editor.setEditable(!readOnly);
+  }, [editor, readOnly]);
 
   // Sync external changes into Tiptap
   useEffect(() => {

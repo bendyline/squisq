@@ -41,6 +41,8 @@ export interface RawEditorProps {
    * inserts a newline. When undefined, behaves normally.
    */
   submitOnEnter?: () => void;
+  /** Make Monaco read-only (no edits, no cursor blink). */
+  readOnly?: boolean;
 }
 
 /**
@@ -54,6 +56,7 @@ export function RawEditor({
   wordWrap = 'on',
   className,
   submitOnEnter,
+  readOnly = false,
 }: RawEditorProps) {
   const { markdownSource, setMarkdownSource, setMonacoEditor, language, mentionProvider } =
     useEditorContext();
@@ -304,6 +307,8 @@ export function RawEditor({
           bracketPairColorization: { enabled: true },
           guides: { indentation: true },
           padding: { top: 12, bottom: 12 },
+          readOnly,
+          domReadOnly: readOnly,
         }}
       />
     </div>

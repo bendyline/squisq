@@ -149,6 +149,22 @@ export interface EditorShellProps {
    * inline. Omit to disable mentions entirely.
    */
   mentionProvider?: MentionProvider | null;
+  /**
+   * Placeholder text shown in the WYSIWYG editor while the document is
+   * empty. When omitted, the editor rotates through its own generic
+   * "start typing…" prompts; pass a value here to override with copy
+   * that fits the embedding surface (e.g. a chat composer knows who
+   * the message is going to and can say so).
+   */
+  placeholder?: string;
+  /**
+   * When true, both editing surfaces become non-editable: Monaco runs in
+   * `readOnly` mode and Tiptap is set to `editable: false`. The toolbar
+   * still renders — hide it from the host side if you want a pure preview.
+   * Useful for reference panels that show file content without inviting
+   * accidental edits.
+   */
+  readOnly?: boolean;
 }
 
 /**
@@ -180,6 +196,8 @@ export function EditorShell({
   fileName,
   language,
   mentionProvider,
+  placeholder,
+  readOnly = false,
 }: EditorShellProps) {
   // Show the toggle when explicitly opted in, or when mediaProvider prop was passed at all
   const filesToggleEnabled = showFilesToggle ?? mediaProvider !== undefined;
@@ -206,6 +224,7 @@ export function EditorShell({
         onChange={onChange}
         className={className}
         height={height}
+        placeholder={placeholder}
         mediaProvider={mediaProvider ?? null}
         container={container}
         filesToggleEnabled={filesToggleEnabled}
@@ -218,6 +237,7 @@ export function EditorShell({
         uxFont={uxFont}
         thinMargins={thinMargins}
         showStatusBar={showStatusBar}
+        readOnly={readOnly}
       />
     </EditorProvider>
   );
@@ -228,6 +248,7 @@ interface EditorShellInnerProps {
   onChange?: (source: string) => void;
   className?: string;
   height: string;
+  placeholder?: string;
   mediaProvider: MediaProvider | null;
   container?: ContentContainer | null;
   filesToggleEnabled: boolean;
@@ -240,6 +261,7 @@ interface EditorShellInnerProps {
   uxFont?: string;
   thinMargins: boolean;
   showStatusBar: boolean;
+  readOnly: boolean;
 }
 
 function EditorShellInner({
@@ -247,6 +269,7 @@ function EditorShellInner({
   onChange,
   className,
   height,
+  placeholder,
   mediaProvider,
   container,
   filesToggleEnabled,
@@ -259,6 +282,7 @@ function EditorShellInner({
   uxFont,
   thinMargins,
   showStatusBar,
+  readOnly,
 }: EditorShellInnerProps) {
   const { activeView, markdownSource, doc, theme, editorMode, insertAtCursor, replaceAll } =
     useEditorContext();
@@ -387,13 +411,18 @@ function EditorShellInner({
               <RawEditor
                 theme={theme === 'dark' ? 'vs-dark' : 'vs'}
                 submitOnEnter={submitOnEnter}
+                readOnly={readOnly}
               />
             )}
             {/* WYSIWYG + Preview are markdown-only surfaces — skip them
                 entirely in code mode so Tiptap never initializes and the
                 preview pipeline stays idle. */}
             {!isCodeMode && activeView === 'wysiwyg' && (
-              <WysiwygEditor submitOnEnter={submitOnEnter} />
+              <WysiwygEditor
+                submitOnEnter={submitOnEnter}
+                placeholder={placeholder}
+                readOnly={readOnly}
+              />
             )}
             {!isCodeMode && isPreview && <PreviewPanel basePath={basePath} container={container} />}
           </div>
