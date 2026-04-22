@@ -173,7 +173,7 @@ export function RawEditor({
                 suggestions: candidates.map((c) => ({
                   label: `@${c.label}`,
                   kind: monaco.languages.CompletionItemKind.User,
-                  insertText: `@[${c.label}](gezel:${c.id}) `,
+                  insertText: `@[${c.label}](${c.scheme}:${c.id}) `,
                   range,
                   ...(c.description ? { detail: c.description } : {}),
                   sortText: c.label,

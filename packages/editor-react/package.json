@@ -62,8 +62,7 @@
     "@tiptap/pm": "2.27.2",
     "@tiptap/react": "2.27.2",
     "@tiptap/starter-kit": "2.27.2",
-    "@tiptap/suggestion": "2.27.2",
-    "tippy.js": "6.3.7"
+    "@tiptap/suggestion": "2.27.2"
   },
   "devDependencies": {
     "@types/react": "18.3.28",

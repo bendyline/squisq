@@ -20,6 +20,14 @@ import type { MentionCandidate, MentionProvider } from './EditorContext';
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type SuggestionProps = any;
 
+/**
+ * Fallback namespace for defensive code paths — used when a mention node
+ * somehow lacks a `kind` attribute (e.g. legacy HTML parsed without one).
+ * Inserts from the suggestion popover always carry the candidate's own
+ * `scheme`, so this only surfaces for malformed/legacy content.
+ */
+const FALLBACK_KIND = 'mention';
+
 type SuggestionState = {
   items: MentionCandidate[];
   selected: number;
@@ -41,7 +49,7 @@ export function buildMentionExtension(getProvider: () => MentionProvider | null)
       const label =
         (node.attrs.label as string | undefined) ?? (node.attrs.id as string | undefined) ?? '';
       const id = (node.attrs.id as string | undefined) ?? '';
-      const kind = (node.attrs.kind as string | undefined) ?? 'gezel';
+      const kind = (node.attrs.kind as string | undefined) ?? FALLBACK_KIND;
       return [
         'span',
         {
@@ -57,7 +65,7 @@ export function buildMentionExtension(getProvider: () => MentionProvider | null)
       const label =
         (node.attrs.label as string | undefined) ?? (node.attrs.id as string | undefined) ?? '';
       const id = (node.attrs.id as string | undefined) ?? '';
-      const kind = (node.attrs.kind as string | undefined) ?? 'gezel';
+      const kind = (node.attrs.kind as string | undefined) ?? FALLBACK_KIND;
       return `@[${label}](${kind}:${id})`;
     },
   }).extend({
@@ -74,9 +82,9 @@ export function buildMentionExtension(getProvider: () => MentionProvider | null)
           renderHTML: (attrs) => (attrs.label ? { 'data-label': attrs.label } : {}),
         },
         kind: {
-          default: 'gezel',
-          parseHTML: (el) => el.getAttribute('data-kind') ?? 'gezel',
-          renderHTML: (attrs) => ({ 'data-kind': attrs.kind ?? 'gezel' }),
+          default: FALLBACK_KIND,
+          parseHTML: (el) => el.getAttribute('data-kind') ?? FALLBACK_KIND,
+          renderHTML: (attrs) => ({ 'data-kind': attrs.kind ?? FALLBACK_KIND }),
         },
       };
     },
@@ -92,7 +100,7 @@ export function buildMentionExtension(getProvider: () => MentionProvider | null)
           command: ({ editor, range, props }: { editor: Editor; range: Range; props: any }) => {
             const id = (props?.id as string | null) ?? '';
             const label = (props?.label as string | null) ?? id;
-            const kind = (props?.kind as string | undefined) ?? 'gezel';
+            const kind = (props?.kind as string | undefined) ?? FALLBACK_KIND;
             editor
               .chain()
               .focus()
@@ -174,7 +182,7 @@ function renderSuggestionFactory() {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const command = (currentProps as any).command;
       if (typeof command === 'function') {
-        command({ id: item.id, label: item.label, kind: 'gezel' });
+        command({ id: item.id, label: item.label, kind: item.scheme });
       }
     };
 

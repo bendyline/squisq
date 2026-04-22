@@ -22,6 +22,10 @@ export function TooltipLayer() {
   const [state, setState] = useState<TooltipState | null>(null);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const currentTargetRef = useRef<HTMLElement | null>(null);
+  // Visibility tracked in a ref so `handleOver` can decide whether to swap
+  // the label immediately vs. re-delay — reading it from state would force
+  // the effect to re-run (and re-register all listeners) on every change.
+  const visibleRef = useRef(false);
 
   useEffect(() => {
     const clearTimer = () => {
@@ -34,11 +38,13 @@ export function TooltipLayer() {
     const hide = () => {
       clearTimer();
       currentTargetRef.current = null;
+      visibleRef.current = false;
       setState(null);
     };
 
     const show = (el: HTMLElement, label: string) => {
       const rect = el.getBoundingClientRect();
+      visibleRef.current = true;
       setState({
         label,
         top: rect.bottom + 6,
@@ -55,7 +61,7 @@ export function TooltipLayer() {
 
       // Switching from one tooltip target to another: if a tooltip is
       // already visible, swap the label immediately (no re-delay).
-      const wasVisible = state !== null;
+      const wasVisible = visibleRef.current;
       currentTargetRef.current = el;
       clearTimer();
 
@@ -97,7 +103,7 @@ export function TooltipLayer() {
       document.removeEventListener('scroll', handleScroll, true);
       window.removeEventListener('blur', handleBlur);
     };
-  }, [state]);
+  }, []);
 
   if (!state) return null;
 

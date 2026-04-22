@@ -323,7 +323,7 @@ async function uploadAndInsertImages(
       const name =
         file.name && file.name !== 'image.png'
           ? file.name
-          : `pasted-${Date.now()}.${extFromMime(mimeType)}`;
+          : `pasted-${uniquePasteToken()}.${extFromMime(mimeType)}`;
       const relativePath = await mediaProvider.addMedia(name, buffer, mimeType);
       const altText = name.replace(/\.[^.]+$/, '').replace(/[-_]/g, ' ');
       insertImageNode(view, relativePath, altText);
@@ -361,6 +361,23 @@ function moveSelectionToDropPoint(
     (view.state.selection.constructor as any).near(view.state.doc.resolve(coords.pos)),
   );
   view.dispatch(tr);
+}
+
+/**
+ * Produce a unique token for a pasted-file name. `Date.now()` alone can
+ * collide when a user pastes several clipboard images in the same tick
+ * (multi-image paste from a screenshot grid, for example), which would make
+ * `MediaProvider.addMedia` overwrite or reject later entries. Prefer
+ * `crypto.randomUUID()` when available and fall back to a counter so the
+ * helper stays pure-JS-everywhere.
+ */
+let pasteCounter = 0;
+function uniquePasteToken(): string {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID();
+  }
+  pasteCounter = (pasteCounter + 1) % 1_000_000;
+  return `${Date.now()}-${pasteCounter.toString(36)}`;
 }
 
 function extFromMime(mime: string): string {

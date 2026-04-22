@@ -32,12 +32,18 @@ type MonacoEditor = MonacoEditorNs.IStandaloneCodeEditor;
 /**
  * One candidate returned by a {@link MentionProvider}. Shown in the editor's
  * `@` popover. `id` is the stable identifier (serialized into the mention
- * wire format); `label` is what the reader sees; `description` and `group`
- * are optional hints for richer suggestion UIs.
+ * wire format); `label` is what the reader sees; `scheme` is the namespace
+ * (e.g. `'user'`, `'issue'`) written into the markdown as `@[label](scheme:id)`;
+ * `description` and `group` are optional hints for richer suggestion UIs.
+ *
+ * Different candidates in the same result set may carry different schemes —
+ * a provider that returns both users and issues, for example, tags each
+ * candidate with its own namespace and the editor emits mentions accordingly.
  */
 export interface MentionCandidate {
   id: string;
   label: string;
+  scheme: string;
   description?: string;
   group?: string;
 }
