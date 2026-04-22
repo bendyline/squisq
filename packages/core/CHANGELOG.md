@@ -1,3 +1,9 @@
+## @bendyline/squisq [1.3.0](https://github.com/bendyline/squisq/compare/@bendyline/squisq@1.2.2...@bendyline/squisq@1.3.0) (2026-04-22)
+
+### Features
+
+* More configurability of the component experience ([#15](https://github.com/bendyline/squisq/issues/15)) ([bb3d0f5](https://github.com/bendyline/squisq/commit/bb3d0f54355713670be54755ccaa66fd59cdb6d2))
+
 ## @bendyline/squisq [1.2.2](https://github.com/bendyline/squisq/compare/@bendyline/squisq@1.2.1...@bendyline/squisq@1.2.2) (2026-04-07)
 
 ### Bug Fixes
