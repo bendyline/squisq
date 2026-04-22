@@ -508,6 +508,78 @@ const warmEarth: Theme = {
 };
 
 // ============================================
+// 9. Gezellig
+// ============================================
+
+/**
+ * Warm sage + terracotta palette that matches the Gezel desktop app.
+ * Background is a subtly orange-tinted near-black — a much warmer surface
+ * than the standard `#1a202c`-family dark themes. Primary is Gezel's
+ * accent orange (`#b0724c`); secondary is the titlebar sage (`#667f62`).
+ *
+ * Typography uses system fonts with emoji fallbacks at the tail of each
+ * stack — `OpenMoji Color` first (picked up when the host app has loaded
+ * its WOFF with `unicode-range` scoped to emoji codepoints), then the
+ * platform emoji fonts. Hosts that haven't registered OpenMoji fall
+ * through to the platform emoji font transparently.
+ *
+ * "Gezellig" — Dutch, roughly "cozy / companionable", which is the brand
+ * direction of the Gezel app (an ensemble of AI gezels that feel like a
+ * crew, not a robot). Works as a general-purpose warm dark theme outside
+ * the app too.
+ */
+const GEZELLIG_SANS =
+  'system-ui, -apple-system, "Segoe UI", Roboto, "OpenMoji Color", "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif';
+const GEZELLIG_SERIF =
+  'Georgia, "Times New Roman", "OpenMoji Color", "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", serif';
+
+const gezellig: Theme = {
+  id: 'gezellig',
+  name: 'Gezellig',
+  description:
+    'Warm sage + terracotta palette inspired by the Gezel desktop app. Subtle orange-tinted dark background, cream text, sage and terracotta accents.',
+  colors: {
+    primary: '#b0724c',
+    secondary: '#667f62',
+    background: '#1f1a17',
+    backgroundLight: '#2b2420',
+    text: '#f3ede0',
+    textMuted: '#a89b85',
+    highlight: '#c0875d',
+    warning: '#e07a6b',
+  },
+  typography: {
+    bodyFontFamily: GEZELLIG_SANS,
+    titleFontFamily: GEZELLIG_SERIF,
+    monoFontFamily: SYSTEM_MONO,
+    titleWeight: 'bold',
+    lineHeight: 1.55,
+  },
+  style: {
+    textShadow: false,
+    overlayOpacity: 0.4,
+    animationSpeed: 1.0,
+    borderRadius: 6,
+  },
+  renderStyle: {
+    name: 'gezellig',
+    defaultTextAnimation: 'fadeIn',
+    defaultImageAnimation: 'slowZoom',
+    ambientMotion: false,
+    defaultTransition: { type: 'fade', duration: 0.6 },
+  },
+  colorSchemes: {
+    // Warm, earthen palette with a sage-green outlier for contrast.
+    terracotta: { bg: '#3d2620', text: '#f3ede0', accent: '#c0875d' },
+    sage: { bg: '#28332a', text: '#e3ead9', accent: '#8aa589' },
+    amber: { bg: '#3d2e17', text: '#fbe3a8', accent: '#d4a149' },
+    plum: { bg: '#2e1f2a', text: '#e8d4e0', accent: '#b088a5' },
+    ink: { bg: '#1a1f26', text: '#d5dde8', accent: '#7b8fa8' },
+    cream: { bg: '#f3ede0', text: '#2b2420', accent: '#b0724c' },
+  },
+};
+
+// ============================================
 // Theme Library
 // ============================================
 
@@ -524,6 +596,7 @@ export const THEMES: Record<string, Theme> = {
   magazine,
   cinematic,
   'warm-earth': warmEarth,
+  gezellig,
 };
 
 /** The default theme id. */

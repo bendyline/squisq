@@ -17,8 +17,8 @@ async function selectSample(page: Page, key: string) {
 }
 
 /** Switch to a view tab by label text */
-async function switchView(page: Page, label: 'Raw' | 'Editor' | 'Play' | 'Preview') {
-  await page.getByRole('tab', { name: label }).click();
+async function switchView(page: Page, label: 'Markdown' | 'Editor' | 'Play' | 'Preview') {
+  await page.getByRole('tab', { name: label, exact: true }).click();
 }
 
 /** Wait for the DocPlayer to be present inside the preview panel */
@@ -59,14 +59,14 @@ test.describe('Site navigation', () => {
     expect(values).toContain('all-templates');
   });
 
-  test('view switcher has Raw, Editor, Play tabs', async ({ page }) => {
-    for (const label of ['Raw', 'Editor', 'Play']) {
-      await expect(page.getByRole('tab', { name: label })).toBeVisible();
+  test('view switcher has Markdown, Editor, Play tabs', async ({ page }) => {
+    for (const label of ['Markdown', 'Editor', 'Play']) {
+      await expect(page.getByRole('tab', { name: label, exact: true })).toBeVisible();
     }
   });
 
-  test('switching to Raw view shows the Monaco editor', async ({ page }) => {
-    await switchView(page, 'Raw');
+  test('switching to Markdown view shows the Monaco editor', async ({ page }) => {
+    await switchView(page, 'Markdown');
     await expect(page.locator('[data-testid="raw-editor"]')).toBeVisible();
   });
 
@@ -316,11 +316,11 @@ test.describe('Sample switching', () => {
   test('switching sample in raw view updates editor content', async ({ page }) => {
     await page.goto('/');
     await page.waitForLoadState('networkidle');
-    await switchView(page, 'Raw');
+    await switchView(page, 'Markdown');
 
     await selectSample(page, 'features-demo');
     // EditorShell remounts when sample changes, resetting to default view
-    await switchView(page, 'Raw');
+    await switchView(page, 'Markdown');
 
     // The raw editor should contain the features-demo content
     // Monaco uses a textarea or contenteditable, check the editor container

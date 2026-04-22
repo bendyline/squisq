@@ -20,6 +20,11 @@ const RE_STRIKETHROUGH = /~~(.+?)~~/g;
 const RE_INLINE_CODE = /`(.+?)`/g;
 const RE_LINK = /\[(.+?)\]\((.+?)\)/g;
 const RE_IMAGE = /!\[(.+?)\]\((.+?)\)/g;
+// Mentions: `@[Display](scheme:id)` — scheme-part must start with a letter
+// so plain `$100` or price-style parentheticals don't accidentally match.
+// remark-stringify may round-trip the colon as `\:` — tolerate either.
+const RE_MENTION = /@\[([^\]]+?)\]\(([a-z][a-z0-9+.-]*)\\?:([^)\s]+)\)/gi;
+const RE_MENTION_TAG = /<span\b[^>]*?\bdata-mention\b[^>]*?>(?:<[^>]+>)*([^<]*)<\/span>/gi;
 const RE_STRONG_TAG = /<strong>(.*?)<\/strong>/g;
 const RE_B_TAG = /<b>(.*?)<\/b>/g;
 const RE_EM_TAG = /<em>(.*?)<\/em>/g;
@@ -426,7 +431,7 @@ export function tiptapToMarkdown(html: string): string {
     if (ulMatch) {
       const items = ulMatch[1].matchAll(/<li>(.*?)<\/li>/gs);
       for (const item of items) {
-        lines.push('- ' + htmlToInline(item[1].replace(/<\/?p>/g, '')));
+        lines.push(...renderListItem('- ', item[1]));
       }
       lines.push('');
       remaining = remaining.slice(ulMatch[0].length);
@@ -438,7 +443,7 @@ export function tiptapToMarkdown(html: string): string {
     if (olMatch) {
       const items = [...olMatch[1].matchAll(/<li>(.*?)<\/li>/gs)];
       items.forEach((item, idx) => {
-        lines.push(`${idx + 1}. ` + htmlToInline(item[1].replace(/<\/?p>/g, '')));
+        lines.push(...renderListItem(`${idx + 1}. `, item[1]));
       });
       lines.push('');
       remaining = remaining.slice(olMatch[0].length);
@@ -483,6 +488,41 @@ export function tiptapToMarkdown(html: string): string {
       .replace(/\n{3,}/g, '\n\n')
       .trim() + '\n'
   );
+}
+
+/**
+ * Render a list item's HTML content as one or more markdown lines.
+ * Handles `<p>` paragraph breaks (blank line) and `<br>` hard breaks
+ * (two trailing spaces). Continuation lines are indented to keep them
+ * inside the list item.
+ */
+function renderListItem(prefix: string, html: string): string[] {
+  const indent = ' '.repeat(prefix.length);
+
+  // Split on </p><p> to detect paragraph breaks within the item
+  const paragraphs = html
+    .split(/<\/p>\s*<p[^>]*>/i)
+    .map((p) => p.replace(/^<p[^>]*>/i, '').replace(/<\/p>\s*$/i, ''));
+
+  const result: string[] = [];
+  paragraphs.forEach((paragraph, pIdx) => {
+    const inline = htmlToInline(paragraph).trim();
+    if (!inline) return;
+
+    // Each <br> already became "  \n" in htmlToInline; split on it now.
+    const subLines = inline.split('\n');
+    subLines.forEach((sub, sIdx) => {
+      if (pIdx === 0 && sIdx === 0) {
+        result.push(prefix + sub);
+      } else {
+        // Blank line separator between paragraphs (sIdx === 0 means new paragraph)
+        if (sIdx === 0) result.push('');
+        result.push(indent + sub);
+      }
+    });
+  });
+
+  return result.length > 0 ? result : [prefix];
 }
 
 // ─── Table helpers ───────────────────────────────────────
@@ -545,6 +585,16 @@ function inlineToHtml(text: string): string {
   // Images first: ![alt](src) — must be before links so the `!` prefix is consumed
   result = result.replace(RE_IMAGE, '<img alt="$1" src="$2">');
 
+  // Mentions: @[Display](scheme:id) — must run before links so the
+  // bracket+paren isn't consumed as a regular link. The input here has
+  // already been run through escapeHtml at the top of this function, so
+  // the captured groups are safe to interpolate directly.
+  result = result.replace(
+    RE_MENTION,
+    (_match, label, kind, id) =>
+      `<span data-mention="true" data-kind="${kind}" data-id="${id}" data-label="${label}" class="mention">@${label}</span>`,
+  );
+
   // Links: [text](url)
   result = result.replace(RE_LINK, '<a href="$2">$1</a>');
 
@@ -554,6 +604,10 @@ function inlineToHtml(text: string): string {
 /** Convert inline HTML back to markdown */
 function htmlToInline(html: string): string {
   let result = html;
+
+  // Soft line breaks — convert <br> to GFM hard-break syntax (two trailing
+  // spaces + newline) before stripping tags so the newline survives.
+  result = result.replace(/<br\s*\/?>/gi, '  \n');
 
   // Strong
   result = result.replace(RE_STRONG_TAG, '**$1**');
@@ -569,6 +623,16 @@ function htmlToInline(html: string): string {
 
   // Code
   result = result.replace(RE_CODE_TAG, '`$1`');
+
+  // Mentions — match before the link handler so the span isn't stripped
+  // out as an unknown tag. Pull kind + id out of the data attributes.
+  result = result.replace(RE_MENTION_TAG, (match, _inner) => {
+    const kind = /data-kind="([^"]*)"/i.exec(match)?.[1] ?? '';
+    const id = /data-id="([^"]*)"/i.exec(match)?.[1] ?? '';
+    const label = /data-label="([^"]*)"/i.exec(match)?.[1] ?? '';
+    if (!kind || !id || !label) return match;
+    return `@[${label}](${kind}:${id})`;
+  });
 
   // Links
   result = result.replace(RE_A_TAG, '[$2]($1)');

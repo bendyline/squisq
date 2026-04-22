@@ -25,9 +25,11 @@
 import { Fragment, useRef, useState, useEffect, useCallback, useMemo } from 'react';
 import type { Doc, Block, TextLayer, StartBlockConfig, DocBlock } from '@bendyline/squisq/schemas';
 import { isTemplateBlock, getCaptionAtTime } from '@bendyline/squisq/schemas';
-import type { Theme } from '@bendyline/squisq/schemas';
+import type { SurfaceScheme, Theme } from '@bendyline/squisq/schemas';
+import { applySurface } from '@bendyline/squisq/schemas';
 import { BlockRenderer } from './BlockRenderer';
 import { CaptionOverlay } from './CaptionOverlay';
+import { useAutoSurface } from './hooks/useAutoSurface';
 import { useAudioSync } from './hooks/useAudioSync';
 import { useDocPlayback } from './hooks/useDocPlayback';
 import { useViewportOrientation } from './hooks/useViewportOrientation';
@@ -163,6 +165,13 @@ interface DocPlayerProps {
   /** Theme to use for rendering (default: DEFAULT_THEME from the theme library) */
   theme?: Theme;
   /**
+   * Optional surface scheme (light / dark paper) overlaid on top of the
+   * theme's colors. Passed through to the underlying LinearDocView when
+   * `displayMode === 'linear'`; otherwise overlaid onto the theme that
+   * renders the player's SVG blocks.
+   */
+  surface?: SurfaceScheme | 'auto';
+  /**
    * Display mode for the player.
    * - `'video'` (default) — Traditional video playback with play/pause, scrub bar, auto-advance.
    * - `'slideshow'` — PowerPoint-style with prev/next buttons. Blocks are static slides
@@ -197,6 +206,7 @@ export function DocPlayer({
   forceViewport,
   displayMode = 'video',
   theme,
+  surface,
   captionStyle = 'standard',
 }: DocPlayerProps) {
   const isSlideshowMode = displayMode === 'slideshow';
@@ -275,6 +285,15 @@ export function DocPlayer({
     [renderMode, toggle, isPlaying, isSlideshowMode, isLinearMode],
   );
 
+  // Resolve surface (light/dark paper) and apply it to the theme before
+  // handing off to downstream renderers. Orthogonal to the editorial theme.
+  const autoSurface = useAutoSurface(surface === 'auto');
+  const resolvedSurface = surface === 'auto' ? autoSurface : surface;
+  const effectiveTheme = useMemo(() => {
+    const base = theme ?? DEFAULT_THEME;
+    return resolvedSurface ? applySurface(base, resolvedSurface) : base;
+  }, [theme, resolvedSurface]);
+
   // Doc playback hook - pass viewport for responsive template expansion
   const {
     currentBlock,
@@ -288,14 +307,14 @@ export function DocPlayer({
     nextBlock: _nextBlock,
     prevBlock: _prevBlock,
     blocks: expandedBlocks,
-  } = useDocPlayback(script, currentTime, activeViewport, renderMode, theme);
+  } = useDocPlayback(script, currentTime, activeViewport, renderMode, effectiveTheme);
 
   // Expand cover block (startBlock) if present - uses active viewport
   const coverBlock = useMemo((): Block | null => {
     const startBlockConfig = script.startBlock as StartBlockConfig | undefined;
     if (!startBlockConfig) return null;
 
-    const context = createTemplateContext(theme ?? DEFAULT_THEME, 0, 1, activeViewport);
+    const context = createTemplateContext(effectiveTheme, 0, 1, activeViewport);
     const layers = expandCoverBlock(startBlockConfig, context);
 
     return {
@@ -305,7 +324,7 @@ export function DocPlayer({
       audioSegment: -1,
       layers,
     };
-  }, [script.startBlock, activeViewport, theme]);
+  }, [script.startBlock, activeViewport, effectiveTheme]);
 
   // Render-mode cover block control: allows Playwright to force-show the cover block
   const [coverForced, setCoverForced] = useState(false);
@@ -314,14 +333,25 @@ export function DocPlayer({
   const [coverGraceActive, setCoverGraceActive] = useState(false);
   const coverGraceTimer = useRef<ReturnType<typeof setTimeout>>();
   const coverWasShowing = useRef(false);
+  // Track whether playback has ever been initiated — prevents the cover block
+  // from re-appearing when paused at currentTime === 0 (e.g., no audio source).
+  const hasPlayedOnce = useRef(false);
 
   // Track when cover is showing at rest (before play)
-  const atRest = !!(coverBlock && !isPlaying && currentTime === 0 && !renderMode && !autoPlay);
+  const atRest = !!(
+    coverBlock &&
+    !isPlaying &&
+    currentTime === 0 &&
+    !hasPlayedOnce.current &&
+    !renderMode &&
+    !autoPlay
+  );
   if (atRest) coverWasShowing.current = true;
 
   useEffect(() => {
     if (isPlaying && coverWasShowing.current && coverBlock && !renderMode) {
       coverWasShowing.current = false;
+      hasPlayedOnce.current = true;
       setCoverGraceActive(true);
       // Intentionally no cleanup: if coverBlock's memoized reference changes
       // mid-grace (e.g., due to a preview re-render), clearing the timer would
@@ -344,7 +374,7 @@ export function DocPlayer({
     coverBlock &&
     (coverForced ||
       coverGraceActive ||
-      (!isPlaying && currentTime === 0 && !renderMode && !autoPlay));
+      (!isPlaying && currentTime === 0 && !hasPlayedOnce.current && !renderMode && !autoPlay));
 
   // Auto-play if enabled (wait for audio to be ready)
   // Use a ref to track if we've already auto-played to avoid repeating on every render
@@ -785,7 +815,13 @@ export function DocPlayer({
           overflow: 'hidden',
         }}
       >
-        <LinearDocView doc={script} basePath={basePath} viewport={activeViewport} />
+        <LinearDocView
+          doc={script}
+          basePath={basePath}
+          viewport={activeViewport}
+          theme={theme}
+          surface={surface}
+        />
       </div>
     );
   }
@@ -857,7 +893,7 @@ export function DocPlayer({
             enabled={captionsEnabled && (renderMode || isPlaying || currentTime > 0)}
             fontSize={16}
             captionStyle={activeCaptionStyle}
-            theme={theme}
+            theme={effectiveTheme}
             viewport={activeViewport}
           />
         )}

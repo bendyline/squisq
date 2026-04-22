@@ -8,6 +8,7 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react';
 import type { MediaProvider, MediaEntry } from '@bendyline/squisq/schemas';
+import { SQUISQ_MEDIA_MIME } from './mediaDragMime';
 
 // ============================================
 // Types
@@ -186,16 +187,37 @@ export function MediaBin({ mediaProvider, isDark, refreshKey }: MediaBinProps) {
         {entries.map((entry) => {
           const thumb = thumbUrls[entry.name];
           const basename = entry.name.includes('/') ? entry.name.split('/').pop()! : entry.name;
+          const isImage = isImageMime(entry.mimeType);
+          const altText = basename.replace(/\.[^.]+$/, '').replace(/[-_]/g, ' ');
+
+          const handleDragStart = (e: React.DragEvent<HTMLDivElement>) => {
+            if (!isImage) return;
+            const payload = JSON.stringify({
+              name: entry.name,
+              mimeType: entry.mimeType,
+              alt: altText,
+            });
+            e.dataTransfer.setData(SQUISQ_MEDIA_MIME, payload);
+            e.dataTransfer.setData('text/plain', `![${altText}](${entry.name})`);
+            e.dataTransfer.effectAllowed = 'copy';
+          };
 
           return (
             <div
               key={entry.name}
               className="squisq-media-bin-item"
               title={`${entry.name}\n${entry.mimeType}\n${formatSize(entry.size)}`}
+              draggable={isImage}
+              onDragStart={handleDragStart}
             >
               {/* Thumbnail or icon */}
               {thumb ? (
-                <img src={thumb} alt={basename} className="squisq-media-bin-thumb" />
+                <img
+                  src={thumb}
+                  alt={basename}
+                  className="squisq-media-bin-thumb"
+                  draggable={false}
+                />
               ) : (
                 <span className="squisq-media-bin-icon">{iconForMime(entry.mimeType)}</span>
               )}

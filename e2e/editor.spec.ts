@@ -10,8 +10,8 @@ import { test, expect, type Page } from '@playwright/test';
 // ── Helpers ──────────────────────────────────────────────────────────
 
 /** Switch to a view tab by its data-label */
-async function switchView(page: Page, label: 'Raw' | 'Editor' | 'Play') {
-  await page.getByRole('tab', { name: label }).click();
+async function switchView(page: Page, label: 'Markdown' | 'Editor' | 'Play') {
+  await page.getByRole('tab', { name: label, exact: true }).click();
 }
 
 /** Wait for the WYSIWYG editor to be ready */
@@ -34,17 +34,17 @@ test.describe('Editor view switching', () => {
 
   test('starts in Editor (WYSIWYG) view by default', async ({ page }) => {
     const activeTab = page.locator('.squisq-toolbar-view-tab--active');
-    await expect(activeTab).toHaveText('Editor');
+    await expect(activeTab).toHaveAttribute('data-view', 'wysiwyg');
   });
 
-  test('switching to Raw view shows Monaco editor', async ({ page }) => {
-    await switchView(page, 'Raw');
+  test('switching to Markdown view shows Monaco editor', async ({ page }) => {
+    await switchView(page, 'Markdown');
     await waitForMonaco(page);
     await expect(page.locator('[data-testid="raw-editor"]')).toBeVisible();
   });
 
   test('switching to Editor view shows WYSIWYG editor', async ({ page }) => {
-    await switchView(page, 'Raw');
+    await switchView(page, 'Markdown');
     await switchView(page, 'Editor');
     await waitForWysiwyg(page);
     await expect(page.locator('.tiptap.ProseMirror')).toBeVisible();
@@ -56,8 +56,8 @@ test.describe('Editor view switching', () => {
   });
 
   test('all three tabs are visible in the toolbar', async ({ page }) => {
-    for (const label of ['Editor', 'Raw', 'Play']) {
-      await expect(page.getByRole('tab', { name: label })).toBeVisible();
+    for (const label of ['Editor', 'Markdown', 'Play']) {
+      await expect(page.getByRole('tab', { name: label, exact: true })).toBeVisible();
     }
   });
 
@@ -172,23 +172,23 @@ test.describe('Markdown sync between views', () => {
     await page.waitForLoadState('networkidle');
   });
 
-  test('Raw view shows markdown source', async ({ page }) => {
-    await switchView(page, 'Raw');
+  test('Markdown view shows markdown source', async ({ page }) => {
+    await switchView(page, 'Markdown');
     await waitForMonaco(page);
     // Monaco editor should contain markdown with the heading
     const monacoContent = page.locator('.monaco-editor');
     await expect(monacoContent).toContainText('Hello World');
   });
 
-  test('switching from Editor to Raw preserves content', async ({ page }) => {
+  test('switching from Editor to Markdown preserves content', async ({ page }) => {
     await switchView(page, 'Editor');
     await waitForWysiwyg(page);
 
     // Verify content exists in editor
     await expect(page.locator('.tiptap.ProseMirror')).toContainText('Hello World');
 
-    // Switch to Raw and verify the same content is there
-    await switchView(page, 'Raw');
+    // Switch to Markdown and verify the same content is there
+    await switchView(page, 'Markdown');
     await waitForMonaco(page);
     await expect(page.locator('.monaco-editor')).toContainText('Hello World');
   });

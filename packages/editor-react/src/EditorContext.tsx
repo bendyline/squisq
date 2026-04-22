@@ -24,14 +24,47 @@ import { markdownToDoc } from '@bendyline/squisq/doc';
 import type { Editor as TiptapEditor } from '@tiptap/core';
 import type { editor as MonacoEditorNs } from 'monaco-editor';
 import { markdownToTiptap } from './tiptapBridge';
+import { resolveFileKind } from './fileKind';
 
 /** Monaco standalone code editor instance type */
 type MonacoEditor = MonacoEditorNs.IStandaloneCodeEditor;
+
+/**
+ * One candidate returned by a {@link MentionProvider}. Shown in the editor's
+ * `@` popover. `id` is the stable identifier (serialized into the mention
+ * wire format); `label` is what the reader sees; `scheme` is the namespace
+ * (e.g. `'user'`, `'issue'`) written into the markdown as `@[label](scheme:id)`;
+ * `description` and `group` are optional hints for richer suggestion UIs.
+ *
+ * Different candidates in the same result set may carry different schemes —
+ * a provider that returns both users and issues, for example, tags each
+ * candidate with its own namespace and the editor emits mentions accordingly.
+ */
+export interface MentionCandidate {
+  id: string;
+  label: string;
+  scheme: string;
+  description?: string;
+  group?: string;
+}
+
+/**
+ * Looks up mention candidates matching a query. Called as the user types
+ * after `@`. The provider is free to do server-side or client-side filtering;
+ * the editor only cares that candidates come back in relevance order.
+ */
+export type MentionProvider = (query: string) => Promise<MentionCandidate[]>;
 
 // ─── Types ───────────────────────────────────────────────
 
 export type EditorView = 'raw' | 'wysiwyg' | 'preview';
 export type EditorTheme = 'light' | 'dark';
+/**
+ * Editor operating mode. `markdown` is the full experience (WYSIWYG +
+ * Preview tabs, formatting toolbar). `code` is a Monaco-only view used
+ * when the content represents a non-markdown file like `foo.ts`.
+ */
+export type EditorMode = 'markdown' | 'code';
 
 export interface EditorState {
   /** Raw markdown source string */
@@ -48,6 +81,10 @@ export interface EditorState {
   isParsing: boolean;
   /** Current color theme */
   theme: EditorTheme;
+  /** Operating mode — 'markdown' for the full shell, 'code' for Monaco-only. */
+  editorMode: EditorMode;
+  /** Monaco language ID for the Raw editor. */
+  language: string;
 }
 
 export interface EditorActions {
@@ -76,7 +113,24 @@ export interface EditorContextValue extends EditorState, EditorActions {
   monacoEditor: MonacoEditor | null;
   /** MediaProvider for resolving image URLs in the WYSIWYG editor */
   mediaProvider: MediaProvider | null;
+  /**
+   * How pasted/inserted images should be displayed in the WYSIWYG view.
+   * `'inline'` (default) lets them flow at natural size up to the editor
+   * width; `'thumbnail'` constrains them to a 100×100 box so chat
+   * composers and other dense surfaces don't get dominated by a single
+   * pasted screenshot. The stored image bytes are unchanged — this is a
+   * pure render-time decision.
+   */
+  imageDisplayMode: ImageDisplayMode;
+  /**
+   * Optional provider for `@`-mention suggestions. When set, both the
+   * WYSIWYG (Tiptap) and Raw (Monaco) editors show a mention popover as
+   * the user types `@<query>`. When unset, `@` is just a literal character.
+   */
+  mentionProvider: MentionProvider | null;
 }
+
+export type ImageDisplayMode = 'inline' | 'thumbnail';
 
 // ─── Context ─────────────────────────────────────────────
 
@@ -107,6 +161,20 @@ export interface EditorProviderProps {
   theme?: EditorTheme;
   /** MediaProvider for resolving image URLs */
   mediaProvider?: MediaProvider | null;
+  /** Display mode for images in the WYSIWYG view. Defaults to `'inline'`. */
+  imageDisplayMode?: ImageDisplayMode;
+  /**
+   * Async provider for `@`-mention suggestions. Omit to disable mentions
+   * entirely — typing `@` becomes just a literal character again.
+   */
+  mentionProvider?: MentionProvider | null;
+  /**
+   * File name (e.g. `foo.ts`) or bare extension — used to pick a Monaco
+   * language and decide between markdown vs. code mode.
+   */
+  fileName?: string;
+  /** Explicit Monaco language ID — wins over the fileName-derived one. */
+  language?: string;
   children: ReactNode;
 }
 
@@ -120,12 +188,34 @@ export function EditorProvider({
   articleId = 'untitled',
   theme: initialTheme = 'light',
   mediaProvider = null,
+  imageDisplayMode = 'inline',
+  mentionProvider = null,
+  fileName,
+  language,
   children,
 }: EditorProviderProps) {
+  // Resolve once per provider mount. Changing fileName/language after mount
+  // would require recreating the Monaco model anyway, so treat it as static.
+  const { mode: editorMode, language: resolvedLanguage } = useMemo(
+    () => resolveFileKind(fileName, language),
+    [fileName, language],
+  );
+  // In code mode, WYSIWYG and Preview aren't rendered — force the starting
+  // view to 'raw' so we don't boot into an unmounted surface.
   const [markdownSource, setMarkdownSourceRaw] = useState(initialMarkdown);
   const [markdownDoc, setMarkdownDocState] = useState<MarkdownDocument | null>(null);
   const [doc, setDoc] = useState<Doc | null>(null);
-  const [activeView, setActiveView] = useState<EditorView>(initialView);
+  const [activeView, setActiveViewRaw] = useState<EditorView>(
+    editorMode === 'code' ? 'raw' : initialView,
+  );
+  const setActiveView = useCallback(
+    (view: EditorView) => {
+      // In code mode only the raw view is valid; ignore any other requests.
+      if (editorMode === 'code' && view !== 'raw') return;
+      setActiveViewRaw(view);
+    },
+    [editorMode],
+  );
   const [parseError, setParseError] = useState<string | null>(null);
   const [isParsing, setIsParsing] = useState(false);
   const [theme, setTheme] = useState<EditorTheme>(initialTheme);
@@ -170,8 +260,12 @@ export function EditorProvider({
     }
   }, []);
 
-  // Parse on source changes with debounce
+  // Parse on source changes with debounce. Skipped in code mode — the
+  // WYSIWYG/Preview surfaces that consume markdownDoc/doc aren't mounted,
+  // so there's nothing to feed and no reason to run the markdown parser on
+  // TypeScript / JSON / etc.
   useEffect(() => {
+    if (editorMode === 'code') return;
     if (parseTimeoutRef.current) {
       clearTimeout(parseTimeoutRef.current);
     }
@@ -183,10 +277,11 @@ export function EditorProvider({
         clearTimeout(parseTimeoutRef.current);
       }
     };
-  }, [markdownSource, doParse]);
+  }, [markdownSource, doParse, editorMode]);
 
   // Initial parse
   useEffect(() => {
+    if (editorMode === 'code') return;
     if (initialMarkdown) {
       doParse(initialMarkdown);
     }
@@ -276,9 +371,13 @@ export function EditorProvider({
       parseError,
       isParsing,
       theme,
+      editorMode,
+      language: resolvedLanguage,
       tiptapEditor,
       monacoEditor,
       mediaProvider,
+      imageDisplayMode,
+      mentionProvider,
       setMarkdownSource,
       setMarkdownDoc,
       setActiveView,
@@ -296,9 +395,13 @@ export function EditorProvider({
       parseError,
       isParsing,
       theme,
+      editorMode,
+      resolvedLanguage,
       tiptapEditor,
       monacoEditor,
       mediaProvider,
+      imageDisplayMode,
+      mentionProvider,
       setMarkdownSource,
       setMarkdownDoc,
       setActiveView,

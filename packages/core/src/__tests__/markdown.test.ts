@@ -33,6 +33,7 @@ import type {
   MarkdownLinkReference,
   MarkdownImageReference,
   MarkdownText,
+  MarkdownMention,
 } from '../markdown/index';
 
 // ============================================
@@ -149,6 +150,49 @@ describe('parseMarkdown / stringifyMarkdown', () => {
       expect(link.url).toBe('https://example.com');
       expect(link.title).toBe('Title');
       expect(link.children[0]).toEqual({ type: 'text', value: 'Click here' });
+    });
+
+    it('parses mentions from @[Name](scheme:id)', () => {
+      const doc = parse('Hey @[Leo](gezel:leo), take a look.');
+      const p = doc.children[0] as MarkdownParagraph;
+      const text0 = p.children[0] as MarkdownText;
+      expect(text0).toEqual({ type: 'text', value: 'Hey ' });
+      const mention = p.children[1] as MarkdownMention;
+      expect(mention).toEqual({
+        type: 'mention',
+        targetKind: 'gezel',
+        targetId: 'leo',
+        displayName: 'Leo',
+      });
+      const text2 = p.children[2] as MarkdownText;
+      expect(text2.value).toBe(', take a look.');
+    });
+
+    it('round-trips a mention back to markdown', () => {
+      // remark-stringify escapes `:` in link URLs that follow an `@` (to
+      // disambiguate from autolink syntax). The escape is idempotent —
+      // re-parsing `\:` produces the unescaped url, so the round-trip
+      // preserves the mention semantically even if the raw text changes
+      // on the first pass.
+      const input = 'Hey @[Leo](gezel:leo), ping @[Tess](gezel:tess) too.\n';
+      const once = stringifyMarkdown(parseMarkdown(input));
+      const twice = stringifyMarkdown(parseMarkdown(once));
+      expect(twice).toBe(once);
+      // Semantics are preserved: re-parsing yields mentions.
+      const doc = parseMarkdown(once) as MarkdownDocument;
+      const p = doc.children[0] as MarkdownParagraph;
+      const m1 = p.children.find((c) => c.type === 'mention') as MarkdownMention;
+      expect(m1.targetKind).toBe('gezel');
+      expect(m1.targetId).toBe('leo');
+      expect(m1.displayName).toBe('Leo');
+    });
+
+    it('does not collapse @ + link when the url has no scheme', () => {
+      const doc = parse('Cost @[100]($100)');
+      const p = doc.children[0] as MarkdownParagraph;
+      // "$100" doesn't match scheme:id because $ isn't a scheme character
+      // → stays as text("Cost @") + link
+      expect((p.children[1] as MarkdownLink).type).toBe('link');
     });
 
     it('parses images', () => {

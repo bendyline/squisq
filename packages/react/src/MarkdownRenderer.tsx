@@ -40,8 +40,25 @@ function renderInline(nodes: MarkdownInlineNode[], keyPrefix = ''): React.ReactN
   return nodes.map((node, i) => {
     const key = `${keyPrefix}i${i}`;
     switch (node.type) {
-      case 'text':
-        return <Fragment key={key}>{node.value}</Fragment>;
+      case 'text': {
+        // Soft breaks (newlines without two trailing spaces) become \n in
+        // text nodes. HTML collapses \n to whitespace, which loses the visual
+        // line break the author wanted, so render <br> for each newline.
+        if (!node.value.includes('\n')) {
+          return <Fragment key={key}>{node.value}</Fragment>;
+        }
+        const parts = node.value.split('\n');
+        return (
+          <Fragment key={key}>
+            {parts.map((part, j) => (
+              <Fragment key={j}>
+                {j > 0 && <br />}
+                {part}
+              </Fragment>
+            ))}
+          </Fragment>
+        );
+      }
 
       case 'emphasis':
         return (
@@ -135,6 +152,20 @@ function renderInline(nodes: MarkdownInlineNode[], keyPrefix = ''): React.ReactN
         return (
           <span key={key} className="squisq-md-text-directive" data-directive={node.name}>
             {renderInline(node.children, key)}
+          </span>
+        );
+
+      case 'mention':
+        return (
+          <span
+            key={key}
+            className="squisq-md-mention mention"
+            data-mention="true"
+            data-kind={node.targetKind}
+            data-id={node.targetId}
+            data-label={node.displayName}
+          >
+            @{node.displayName}
           </span>
         );
 

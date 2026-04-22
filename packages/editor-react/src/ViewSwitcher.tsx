@@ -6,8 +6,8 @@
 
 import { useEditorContext, type EditorView } from './EditorContext';
 
-const VIEWS: { id: EditorView; label: string; shortcut: string }[] = [
-  { id: 'raw', label: 'Raw', shortcut: '⌘1' },
+const VIEWS: { id: EditorView; label: string; shortLabel?: string; shortcut: string }[] = [
+  { id: 'raw', label: 'Markdown', shortLabel: 'MD', shortcut: '⌘1' },
   { id: 'wysiwyg', label: 'Editor', shortcut: '⌘2' },
   { id: 'preview', label: 'Preview', shortcut: '⌘3' },
 ];
@@ -21,7 +21,12 @@ export interface ViewSwitcherProps {
  * Tab-style view switcher for the three editor modes.
  */
 export function ViewSwitcher({ className }: ViewSwitcherProps) {
-  const { activeView, setActiveView } = useEditorContext();
+  const { activeView, setActiveView, editorMode } = useEditorContext();
+  // In code mode, only the raw view is meaningful. With just one entry in
+  // the tab list there's nothing to switch between, so suppress the whole
+  // switcher rather than render a single lonely tab.
+  const visibleViews = editorMode === 'code' ? VIEWS.filter((v) => v.id === 'raw') : VIEWS;
+  if (visibleViews.length <= 1) return null;
 
   return (
     <div
@@ -29,7 +34,7 @@ export function ViewSwitcher({ className }: ViewSwitcherProps) {
       role="tablist"
       aria-label="Editor view"
     >
-      {VIEWS.map((view) => (
+      {visibleViews.map((view) => (
         <button
           key={view.id}
           role="tab"
@@ -38,7 +43,12 @@ export function ViewSwitcher({ className }: ViewSwitcherProps) {
           onClick={() => setActiveView(view.id)}
           title={`${view.label} (${view.shortcut})`}
         >
-          {view.label}
+          <span className="squisq-view-tab-label squisq-view-tab-label--long">{view.label}</span>
+          {view.shortLabel && view.shortLabel !== view.label && (
+            <span className="squisq-view-tab-label squisq-view-tab-label--short">
+              {view.shortLabel}
+            </span>
+          )}
         </button>
       ))}
     </div>

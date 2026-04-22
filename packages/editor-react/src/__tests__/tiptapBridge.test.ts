@@ -49,6 +49,31 @@ describe('markdownToTiptap', () => {
     expect(html).toContain('Example');
   });
 
+  it('converts mentions to chip spans', () => {
+    const html = markdownToTiptap('Hey @[Leo](gezel:leo), take a look.');
+    expect(html).toContain('data-mention="true"');
+    expect(html).toContain('data-kind="gezel"');
+    expect(html).toContain('data-id="leo"');
+    expect(html).toContain('data-label="Leo"');
+    // "@Leo" appears inside the chip — NOT as a broken link
+    expect(html).not.toContain('href="gezel:leo"');
+  });
+
+  it('tolerates the backslash-escaped colon remark emits', () => {
+    // remark-stringify sometimes emits `gezel\:leo` to disambiguate
+    // from autolink syntax. The bridge should still recognize it.
+    const html = markdownToTiptap('Hey @[Leo](gezel\\:leo).');
+    expect(html).toContain('data-kind="gezel"');
+    expect(html).toContain('data-id="leo"');
+  });
+
+  it('round-trips mentions back to markdown', () => {
+    const md = 'Hey @[Leo](gezel:leo), ping @[Tess](gezel:tess) too.';
+    const html = markdownToTiptap(md);
+    const back = tiptapToMarkdown(html);
+    expect(back.trim()).toBe(md);
+  });
+
   it('converts images', () => {
     const html = markdownToTiptap('![Logo](logo.png)');
     expect(html).toContain('alt="Logo"');
@@ -229,6 +254,25 @@ describe('tiptapToMarkdown', () => {
     expect(md).toContain('<div>');
     expect(md).toContain('&');
     expect(md).toContain('"test"');
+  });
+
+  it('converts <br> to a hard line break (two trailing spaces)', () => {
+    const md = tiptapToMarkdown('<p>line one<br>line two</p>');
+    expect(md).toContain('line one  \nline two');
+  });
+
+  it('preserves paragraph break inside list items', () => {
+    const md = tiptapToMarkdown(
+      '<ul><li><p><strong>Title</strong></p><p>Description text</p></li></ul>',
+    );
+    expect(md).toContain('- **Title**');
+    expect(md).toContain('  Description text');
+  });
+
+  it('preserves <br> hard break inside list items', () => {
+    const md = tiptapToMarkdown('<ul><li><p>First line<br>Second line</p></li></ul>');
+    expect(md).toContain('- First line  ');
+    expect(md).toContain('  Second line');
   });
 });
 

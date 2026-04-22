@@ -25,11 +25,20 @@ export type { EditorShellProps, EditorTheme } from './EditorShell.js';
 export { EditorProvider, useEditorContext } from './EditorContext.js';
 export type {
   EditorView,
+  EditorMode,
   EditorState,
   EditorActions,
   EditorContextValue,
   EditorProviderProps,
+  ImageDisplayMode,
+  MentionCandidate,
+  MentionProvider,
 } from './EditorContext.js';
+
+// File-kind detection — useful for hosts that want to pre-decide chrome
+// around the editor based on whether a file is markdown or code.
+export { resolveFileKind, detectLanguageFromFileName } from './fileKind.js';
+export type { FileKind } from './fileKind.js';
 
 // Individual editors (for custom layouts)
 export { RawEditor } from './RawEditor.js';
@@ -59,6 +68,8 @@ export type { MediaBinProps } from './MediaBin.js';
 
 export { StatusBar } from './StatusBar.js';
 export type { StatusBarProps } from './StatusBar.js';
+
+export { TooltipLayer } from './Tooltip.js';
 
 // Drag-and-drop
 export { DropZoneOverlay } from './DropZoneOverlay.js';

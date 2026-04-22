@@ -16,8 +16,9 @@ import { useEditorContext } from './EditorContext';
 
 function ImageComponent({ node }: NodeViewProps) {
   const { src, alt, title } = node.attrs as { src: string; alt: string; title: string };
-  const { mediaProvider } = useEditorContext();
+  const { mediaProvider, imageDisplayMode } = useEditorContext();
   const [resolvedSrc, setResolvedSrc] = useState(src);
+  const isThumbnail = imageDisplayMode === 'thumbnail';
 
   const isRelative =
     src &&
@@ -53,7 +54,19 @@ function ImageComponent({ node }: NodeViewProps) {
         src={resolvedSrc}
         alt={alt || ''}
         title={title || undefined}
-        style={{ maxWidth: '100%', height: 'auto', display: 'block' }}
+        className={isThumbnail ? 'squisq-image squisq-image--thumbnail' : 'squisq-image'}
+        style={
+          isThumbnail
+            ? {
+                maxWidth: '100px',
+                maxHeight: '100px',
+                width: 'auto',
+                height: 'auto',
+                objectFit: 'contain',
+                display: 'block',
+              }
+            : { maxWidth: '100%', height: 'auto', display: 'block' }
+        }
       />
     </NodeViewWrapper>
   );

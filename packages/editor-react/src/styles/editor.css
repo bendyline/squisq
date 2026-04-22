@@ -5,8 +5,20 @@
 /* ─── Shell ──────────────────────────────────────────── */
 
 .squisq-editor-shell {
-  font-family:
-    -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans', Helvetica, Arial, sans-serif;
+  /* UX font applies to editor *chrome* — toolbar, tabs, buttons, status
+     bar. The actual editing surfaces (Tiptap, Monaco) keep their own
+     fonts. `--squisq-ux-font` is set when a consumer passes the `uxFont`
+     prop on EditorShell; unset, we fall back to the system stack. */
+  font-family: var(
+    --squisq-ux-font,
+    -apple-system,
+    BlinkMacSystemFont,
+    'Segoe UI',
+    'Noto Sans',
+    Helvetica,
+    Arial,
+    sans-serif
+  );
   color: #1f2937;
   background: #fff;
 }
@@ -27,6 +39,25 @@
 .squisq-view-switcher {
   display: flex;
   gap: 0;
+  container-type: inline-size;
+  container-name: squisq-view-switcher;
+}
+
+.squisq-view-tab-label {
+  display: inline-block;
+}
+
+.squisq-view-tab-label--short {
+  display: none;
+}
+
+@container squisq-view-switcher (max-width: 280px) {
+  .squisq-view-tab:has(.squisq-view-tab-label--short) .squisq-view-tab-label--long {
+    display: none;
+  }
+  .squisq-view-tab-label--short {
+    display: inline-block;
+  }
 }
 
 .squisq-view-tab {
@@ -63,6 +94,8 @@
   padding: 0 12px 0 0;
   gap: 2px;
   background: rgba(0, 0, 0, 0.07);
+  container-type: inline-size;
+  container-name: squisq-toolbar;
 }
 
 /* ─── View Tabs (inside toolbar) ─────────────────────── */
@@ -101,13 +134,31 @@
     border-color 0.15s;
 }
 
-.squisq-toolbar-view-tab::after {
+.squisq-toolbar-view-tab-label {
+  display: inline-block;
+}
+
+.squisq-toolbar-view-tab-label--short {
+  display: none;
+}
+
+.squisq-toolbar-view-tab-label::after {
   content: attr(data-label);
   display: block;
   font-weight: 600;
   height: 0;
   overflow: hidden;
   visibility: hidden;
+}
+
+@container squisq-toolbar (max-width: 900px) {
+  .squisq-toolbar-view-tab:has(.squisq-toolbar-view-tab-label--short)
+    .squisq-toolbar-view-tab-label--long {
+    display: none;
+  }
+  .squisq-toolbar-view-tab-label--short {
+    display: inline-block;
+  }
 }
 
 .squisq-toolbar-view-tab:hover {
@@ -146,6 +197,7 @@
   cursor: pointer;
   font-size: 13px;
   font-weight: 600;
+  white-space: nowrap;
   transition:
     background 0.12s,
     color 0.12s;
@@ -193,16 +245,30 @@
 
 .squisq-toolbar-overflow-menu {
   position: absolute;
-  top: 100%;
   right: 0;
   z-index: 100;
-  min-width: 180px;
+  min-width: 220px;
+  max-width: 280px;
   padding: 4px 0;
-  margin-top: 4px;
   background: #fff;
   border: 1px solid #e5e7eb;
   border-radius: 6px;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
+}
+
+/* Downward-opening (default): menu sits below the trigger. */
+.squisq-toolbar-overflow-menu--down {
+  top: 100%;
+  margin-top: 4px;
+}
+
+/* Upward-opening: when the host clips the bottom of the toolbar (e.g. a
+   chat composer near the bottom of the viewport), the menu flips above
+   the trigger so the items stay visible. */
+.squisq-toolbar-overflow-menu--up {
+  bottom: 100%;
+  margin-bottom: 4px;
+  box-shadow: 0 -4px 12px rgba(0, 0, 0, 0.12);
 }
 
 .squisq-toolbar-overflow-item {
@@ -255,11 +321,14 @@
 .squisq-toolbar-overflow-template {
   gap: 6px;
   padding: 6px 12px;
+  box-sizing: border-box;
+  max-width: 100%;
 }
 
 .squisq-toolbar-overflow-template select {
   flex: 1;
   min-width: 0;
+  max-width: 100%;
 }
 
 /* ─── Template Picker (toolbar) ──────────────────────── */
@@ -295,6 +364,32 @@
   outline-offset: -1px;
 }
 
+/* ─── Tooltip (portal) ────────────────────────────────── */
+
+.squisq-tooltip {
+  transform: translateX(-50%);
+  padding: 4px 8px;
+  font-size: 12px;
+  font-weight: 500;
+  color: #f9fafb;
+  background: #1f2937;
+  border-radius: 4px;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.18);
+  white-space: nowrap;
+  pointer-events: none;
+  z-index: 2000;
+  animation: squisq-tooltip-fade 0.1s ease-out;
+}
+
+@keyframes squisq-tooltip-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
 /* ─── Template Badge (WYSIWYG heading) ───────────────── */
 
 .squisq-template-badge {
@@ -312,6 +407,10 @@
   vertical-align: middle;
   user-select: none;
   line-height: 1.6;
+}
+
+.squisq-template-badge::after {
+  content: attr(data-template);
 }
 
 /* ─── Status Bar ─────────────────────────────────────── */
@@ -351,7 +450,7 @@
 /* ─── WYSIWYG Editor ─────────────────────────────────── */
 
 .squisq-wysiwyg-container {
-  background: #eeecea;
+  background: #dcd8d0;
 }
 
 .squisq-wysiwyg-editor {
@@ -361,7 +460,7 @@
   outline: none;
   min-height: 100%;
   background: #fff;
-  box-shadow: 0 0 8px rgba(0, 0, 0, 0.06);
+  box-shadow: 0 2px 14px rgba(0, 0, 0, 0.12);
 }
 
 .squisq-wysiwyg-editor h1 {
@@ -1227,5 +1326,112 @@
     width: 100%;
     max-width: 240px;
     min-height: 120px;
+  }
+}
+
+/* ─── Full-width mode (opt-in via <EditorShell fullWidth />) ─────────
+ *
+ * Drops the centered 800px "page" column so the WYSIWYG surface fills
+ * the host container. Used by hosts where the page metaphor doesn't fit
+ * — chat composers, narrow side panels, dialog embeds. */
+.squisq-editor-shell[data-full-width='true'] .squisq-wysiwyg-editor {
+  max-width: none;
+  margin: 0;
+  box-shadow: none;
+}
+
+.squisq-editor-shell[data-full-width='true'] .squisq-wysiwyg-container {
+  background: transparent;
+}
+
+.squisq-editor-shell[data-theme='dark'][data-full-width='true'] .squisq-wysiwyg-container {
+  background: transparent;
+}
+
+/* Thin-margins mode — drops the 16×24px page padding on the editing
+   surface so the composer hugs its container (chat composers etc.). */
+.squisq-editor-shell[data-thin-margins='true'] .squisq-wysiwyg-editor {
+  padding: 6px 10px;
+}
+
+/* ── @-mention chip + suggestion popover ─────────────────────────── */
+
+/* Chip rendered in both WYSIWYG (Tiptap Node) and bridge-HTML surfaces. */
+.squisq-wysiwyg-editor .mention,
+.squisq-wysiwyg-editor span[data-mention] {
+  display: inline-block;
+  padding: 0 6px;
+  border-radius: 10px;
+  font-weight: 500;
+  background: rgba(88, 101, 242, 0.18);
+  color: #1a2a8a;
+  line-height: 1.4;
+  white-space: nowrap;
+  cursor: default;
+}
+
+.squisq-editor-shell[data-theme='dark'] .squisq-wysiwyg-editor .mention,
+.squisq-editor-shell[data-theme='dark'] .squisq-wysiwyg-editor span[data-mention] {
+  background: rgba(128, 140, 255, 0.22);
+  color: #c8d0ff;
+}
+
+/* Suggestion popover appended to <body> so it escapes overflow clipping. */
+.squisq-mention-popover {
+  min-width: 220px;
+  max-width: 320px;
+  max-height: 240px;
+  overflow-y: auto;
+  background: #fff;
+  border: 1px solid rgba(0, 0, 0, 0.12);
+  border-radius: 6px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+  padding: 4px;
+  font-family: var(--squisq-ux-font, system-ui, sans-serif);
+  font-size: 13px;
+}
+
+.squisq-mention-popover .squisq-mention-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  align-items: flex-start;
+  width: 100%;
+  padding: 6px 8px;
+  border: none;
+  background: transparent;
+  border-radius: 4px;
+  cursor: pointer;
+  text-align: left;
+  color: inherit;
+}
+
+.squisq-mention-popover .squisq-mention-item.is-selected,
+.squisq-mention-popover .squisq-mention-item:hover {
+  background: rgba(88, 101, 242, 0.12);
+}
+
+.squisq-mention-popover .squisq-mention-label {
+  font-weight: 500;
+}
+
+.squisq-mention-popover .squisq-mention-desc {
+  font-size: 11px;
+  color: rgba(0, 0, 0, 0.55);
+}
+
+@media (prefers-color-scheme: dark) {
+  .squisq-mention-popover {
+    background: #1f2230;
+    border-color: rgba(255, 255, 255, 0.14);
+    color: #e5e7eb;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45);
+  }
+  .squisq-mention-popover .squisq-mention-item.is-selected,
+  .squisq-mention-popover .squisq-mention-item:hover {
+    background: rgba(128, 140, 255, 0.18);
+  }
+  .squisq-mention-popover .squisq-mention-desc {
+    color: rgba(255, 255, 255, 0.6);
   }
 }

@@ -125,22 +125,60 @@ interface Mp3Info {
 // ── Core Functions ───────────────────────────────────────────────────
 
 /**
+ * Parse a consolidated timing.json (version 2) which contains all section
+ * timing data in a single file.
+ */
+function parseConsolidatedTiming(data: ArrayBuffer): Record<string, AudioTimingData> | null {
+  try {
+    const text = new TextDecoder().decode(data);
+    const parsed = JSON.parse(text);
+    if (parsed && parsed.version === 2 && parsed.sections) {
+      return parsed.sections as Record<string, AudioTimingData>;
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Discover all MP3 files in a container and load their timing data.
+ * Checks for a consolidated timing.json first, then falls back to per-file .timing.json.
  */
 async function discoverMp3s(container: ContentContainer): Promise<Mp3Info[]> {
   const files = await container.listFiles();
   const mp3Files = files.filter((f) => f.path.endsWith('.mp3'));
   const results: Mp3Info[] = [];
 
+  // Try to load consolidated timing.json
+  let consolidatedSections: Record<string, AudioTimingData> | null = null;
+  const consolidatedData = await container.readFile('timing.json');
+  if (consolidatedData) {
+    consolidatedSections = parseConsolidatedTiming(consolidatedData);
+  }
+
   for (const file of mp3Files) {
     const filename = file.path.split('/').pop() ?? file.path;
     let timing: AudioTimingData | null = null;
 
-    // Try to load timing.json
-    const timingPath = `${file.path}.timing.json`;
-    const timingData = await container.readFile(timingPath);
-    if (timingData) {
-      timing = parseTimingJson(timingData);
+    // Try consolidated timing first: match section name from filename
+    if (consolidatedSections) {
+      const mp3Base = filename.replace(/\.mp3$/, '');
+      for (const [sectionName, sectionTiming] of Object.entries(consolidatedSections)) {
+        if (mp3Base.endsWith(`-${sectionName}`)) {
+          timing = sectionTiming;
+          break;
+        }
+      }
+    }
+
+    // Fall back to per-file .timing.json
+    if (!timing) {
+      const timingPath = `${file.path}.timing.json`;
+      const timingData = await container.readFile(timingPath);
+      if (timingData) {
+        timing = parseTimingJson(timingData);
+      }
     }
 
     results.push({ path: file.path, filename, timing });

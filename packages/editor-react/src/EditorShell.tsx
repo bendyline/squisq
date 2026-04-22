@@ -7,7 +7,13 @@
  */
 
 import { useEffect, useState, useCallback } from 'react';
-import { EditorProvider, useEditorContext, type EditorView } from './EditorContext';
+import {
+  EditorProvider,
+  useEditorContext,
+  type EditorView,
+  type ImageDisplayMode,
+  type MentionProvider,
+} from './EditorContext';
 import { Toolbar } from './Toolbar';
 import { StatusBar } from './StatusBar';
 import { RawEditor } from './RawEditor';
@@ -16,6 +22,7 @@ import { PreviewPanel } from './PreviewPanel';
 import { PreviewSettingsProvider, PreviewToolbarControls } from './PreviewControls';
 import { MediaBin } from './MediaBin';
 import { DropZoneOverlay } from './DropZoneOverlay';
+import { TooltipLayer } from './Tooltip';
 import { useFileDrop, type DropTarget } from './hooks/useFileDrop';
 import {
   partitionFiles,
@@ -25,7 +32,7 @@ import {
 } from './utils/dropUtils';
 import type { MediaProvider } from '@bendyline/squisq/schemas';
 import type { ContentContainer } from '@bendyline/squisq/storage';
-import type { ReactNode } from 'react';
+import type { CSSProperties, ReactNode } from 'react';
 
 export type { EditorTheme } from './EditorContext';
 
@@ -59,6 +66,105 @@ export interface EditorShellProps {
   toolbarSlotAfterActions?: ReactNode;
   /** Content rendered at the rightmost end of the toolbar, after all other elements. */
   toolbarSlotRight?: ReactNode;
+  /**
+   * Whether to show the "Play" (preview) tab in the toolbar. When false, the
+   * tab and its preview panel are hidden, and ⌘3 becomes a no-op. Use this
+   * when embedding the editor somewhere the slideshow preview doesn't make
+   * sense (e.g. editing free-form prompt documents). Defaults to true.
+   */
+  showPlayTab?: boolean;
+  /**
+   * Optional "submit on Enter" callback. When provided, a plain Enter
+   * keypress fires this callback instead of inserting a newline, and
+   * Cmd/Ctrl+Enter inserts a newline instead. Matches chat-composer UX
+   * (Slack, Discord). When omitted, the editor behaves normally.
+   */
+  submitOnEnter?: () => void;
+  /**
+   * Let the WYSIWYG editing surface fill its container instead of rendering
+   * as a centered 800px "page" column. Useful when embedding in chat
+   * composers, side panels, or any layout where the page metaphor doesn't
+   * fit. Defaults to false (page mode).
+   */
+  fullWidth?: boolean;
+  /**
+   * Font-family stack applied to the editor **chrome** — toolbar buttons,
+   * tabs, status bar, and control surfaces. The actual editing areas
+   * (Tiptap / Monaco) keep their own fonts so document editing isn't
+   * affected. Use this when the editor is embedded in a larger product
+   * that has its own UX type system and you want the controls to blend in.
+   *
+   * @example
+   * ```tsx
+   * <EditorShell uxFont="'Hanken Grotesk', system-ui, sans-serif" ... />
+   * ```
+   */
+  uxFont?: string;
+  /**
+   * Drop the editor's generous page-style padding in favor of a tight
+   * layout that hugs its container. The default WYSIWYG surface uses
+   * 16×24px padding suitable for editing long-form documents; chat
+   * composers want much less. Applies to the editing area only — the
+   * toolbar, tabs, and status bar keep their normal sizing.
+   */
+  thinMargins?: boolean;
+  /**
+   * Render the bottom status bar (word / character / line / block counts
+   * and parse-state indicator). Defaults to `true`. Set to `false` in
+   * embedded surfaces — chat composers and other short-form inputs —
+   * where the stats are noise.
+   */
+  showStatusBar?: boolean;
+  /**
+   * How images should be displayed in the WYSIWYG view. `'inline'`
+   * (default) flows them at natural size up to the container width;
+   * `'thumbnail'` constrains each image to a 100×100 box with
+   * aspect-preserving containment — useful for chat composers and other
+   * dense surfaces where a full-resolution paste would dominate the
+   * layout. Storage bytes are unchanged either way.
+   */
+  imageDisplayMode?: ImageDisplayMode;
+  /**
+   * File name (e.g. `foo.ts`) or bare extension that the content
+   * represents. When set to a non-markdown/text extension, the shell
+   * enters **code mode**: Monaco picks the right language based on the
+   * extension, the WYSIWYG and Preview tabs disappear, and the toolbar
+   * drops its markdown-specific formatting buttons. Markdown-ish
+   * extensions (`.md`, `.markdown`, `.mdown`, `.txt`) keep the full
+   * experience. Omit to get today's markdown behavior unchanged.
+   */
+  fileName?: string;
+  /**
+   * Explicit Monaco language ID override (e.g. `'typescript'`,
+   * `'python'`, `'json'`). Wins over the language derived from
+   * `fileName`. Anything other than `'markdown'` or `'plaintext'`
+   * switches the shell into code mode.
+   */
+  language?: string;
+  /**
+   * Optional async provider for `@`-mention suggestions. When supplied,
+   * typing `@` inside the editor opens a popover of candidates; selecting
+   * one inserts a `@[Label](scheme:id)` mention token. Used by chat
+   * composers and any other surface that wants to address named entities
+   * inline. Omit to disable mentions entirely.
+   */
+  mentionProvider?: MentionProvider | null;
+  /**
+   * Placeholder text shown in the WYSIWYG editor while the document is
+   * empty. When omitted, the editor rotates through its own generic
+   * "start typing…" prompts; pass a value here to override with copy
+   * that fits the embedding surface (e.g. a chat composer knows who
+   * the message is going to and can say so).
+   */
+  placeholder?: string;
+  /**
+   * When true, both editing surfaces become non-editable: Monaco runs in
+   * `readOnly` mode and Tiptap is set to `editable: false`. The toolbar
+   * still renders — hide it from the host side if you want a pure preview.
+   * Useful for reference panels that show file content without inviting
+   * accidental edits.
+   */
+  readOnly?: boolean;
 }
 
 /**
@@ -80,29 +186,58 @@ export function EditorShell({
   toolbarSlotLeft,
   toolbarSlotAfterActions,
   toolbarSlotRight,
+  showPlayTab = true,
+  submitOnEnter,
+  fullWidth = false,
+  uxFont,
+  thinMargins = false,
+  showStatusBar = true,
+  imageDisplayMode = 'inline',
+  fileName,
+  language,
+  mentionProvider,
+  placeholder,
+  readOnly = false,
 }: EditorShellProps) {
   // Show the toggle when explicitly opted in, or when mediaProvider prop was passed at all
   const filesToggleEnabled = showFilesToggle ?? mediaProvider !== undefined;
 
+  // If the host hides the Play tab but asked for it as the initial view,
+  // fall back to wysiwyg so we don't boot into a tab the user can't leave.
+  const effectiveInitialView: EditorView =
+    !showPlayTab && initialView === 'preview' ? 'wysiwyg' : initialView;
+
   return (
     <EditorProvider
       initialMarkdown={initialMarkdown}
-      initialView={initialView}
+      initialView={effectiveInitialView}
       articleId={articleId}
       theme={theme}
       mediaProvider={mediaProvider}
+      imageDisplayMode={imageDisplayMode}
+      mentionProvider={mentionProvider}
+      fileName={fileName}
+      language={language}
     >
       <EditorShellInner
         basePath={basePath}
         onChange={onChange}
         className={className}
         height={height}
+        placeholder={placeholder}
         mediaProvider={mediaProvider ?? null}
         container={container}
         filesToggleEnabled={filesToggleEnabled}
         toolbarSlotLeft={toolbarSlotLeft}
         toolbarSlotAfterActions={toolbarSlotAfterActions}
         toolbarSlotRight={toolbarSlotRight}
+        showPlayTab={showPlayTab}
+        submitOnEnter={submitOnEnter}
+        fullWidth={fullWidth}
+        uxFont={uxFont}
+        thinMargins={thinMargins}
+        showStatusBar={showStatusBar}
+        readOnly={readOnly}
       />
     </EditorProvider>
   );
@@ -113,12 +248,20 @@ interface EditorShellInnerProps {
   onChange?: (source: string) => void;
   className?: string;
   height: string;
+  placeholder?: string;
   mediaProvider: MediaProvider | null;
   container?: ContentContainer | null;
   filesToggleEnabled: boolean;
   toolbarSlotLeft?: ReactNode;
   toolbarSlotAfterActions?: ReactNode;
   toolbarSlotRight?: ReactNode;
+  showPlayTab: boolean;
+  submitOnEnter?: () => void;
+  fullWidth: boolean;
+  uxFont?: string;
+  thinMargins: boolean;
+  showStatusBar: boolean;
+  readOnly: boolean;
 }
 
 function EditorShellInner({
@@ -126,15 +269,25 @@ function EditorShellInner({
   onChange,
   className,
   height,
+  placeholder,
   mediaProvider,
   container,
   filesToggleEnabled,
   toolbarSlotLeft,
   toolbarSlotAfterActions,
   toolbarSlotRight,
+  showPlayTab,
+  submitOnEnter,
+  fullWidth,
+  uxFont,
+  thinMargins,
+  showStatusBar,
+  readOnly,
 }: EditorShellInnerProps) {
-  const { activeView, markdownSource, doc, theme, insertAtCursor, replaceAll } = useEditorContext();
+  const { activeView, markdownSource, doc, theme, editorMode, insertAtCursor, replaceAll } =
+    useEditorContext();
   const isPreview = activeView === 'preview';
+  const isCodeMode = editorMode === 'code';
   const [showFiles, setShowFiles] = useState(false);
   const [mediaRefreshKey, setMediaRefreshKey] = useState(0);
   const isDark = theme === 'dark';
@@ -200,6 +353,7 @@ function EditorShellInner({
             document.querySelector<HTMLButtonElement>('[data-view="raw"]')?.click();
             break;
           case '3':
+            if (!showPlayTab) return;
             e.preventDefault();
             document.querySelector<HTMLButtonElement>('[data-view="preview"]')?.click();
             break;
@@ -208,17 +362,24 @@ function EditorShellInner({
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
-  }, []);
+  }, [showPlayTab]);
 
   return (
     <div
       className={`squisq-editor-shell ${className || ''}`}
       data-theme={theme}
+      data-full-width={fullWidth ? 'true' : undefined}
+      data-thin-margins={thinMargins ? 'true' : undefined}
       style={{
         display: 'flex',
         flexDirection: 'column',
         height,
         overflow: 'hidden',
+        // When a consumer supplies a UX font stack, expose it to the
+        // editor CSS via this custom property. Chrome elements (toolbar,
+        // tabs, status bar) consume `--squisq-ux-font` as their
+        // `font-family`, falling back to the system stack when unset.
+        ...(uxFont ? ({ '--squisq-ux-font': uxFont } as CSSProperties) : {}),
       }}
       {...containerProps}
     >
@@ -227,15 +388,16 @@ function EditorShellInner({
         <div className="squisq-editor-header">
           <Toolbar
             showFiles={showFiles}
-            onToggleFiles={filesToggleEnabled ? handleToggleFiles : undefined}
+            onToggleFiles={!isCodeMode && filesToggleEnabled ? handleToggleFiles : undefined}
             slotLeft={toolbarSlotLeft}
             slotAfterActions={
               <>
                 {toolbarSlotAfterActions}
-                {isPreview && <PreviewToolbarControls />}
+                {!isCodeMode && isPreview && <PreviewToolbarControls />}
               </>
             }
             slotRight={toolbarSlotRight}
+            showPlayTab={showPlayTab}
           />
         </div>
 
@@ -245,17 +407,32 @@ function EditorShellInner({
           style={{ flex: 1, overflow: 'hidden', position: 'relative', display: 'flex' }}
         >
           <div style={{ flex: 1, overflow: 'hidden', position: 'relative' }}>
-            {activeView === 'raw' && <RawEditor theme={theme === 'dark' ? 'vs-dark' : 'vs'} />}
-            {activeView === 'wysiwyg' && <WysiwygEditor />}
-            {isPreview && <PreviewPanel basePath={basePath} container={container} />}
+            {activeView === 'raw' && (
+              <RawEditor
+                theme={theme === 'dark' ? 'vs-dark' : 'vs'}
+                submitOnEnter={submitOnEnter}
+                readOnly={readOnly}
+              />
+            )}
+            {/* WYSIWYG + Preview are markdown-only surfaces — skip them
+                entirely in code mode so Tiptap never initializes and the
+                preview pipeline stays idle. */}
+            {!isCodeMode && activeView === 'wysiwyg' && (
+              <WysiwygEditor
+                submitOnEnter={submitOnEnter}
+                placeholder={placeholder}
+                readOnly={readOnly}
+              />
+            )}
+            {!isCodeMode && isPreview && <PreviewPanel basePath={basePath} container={container} />}
           </div>
 
-          {showFiles && (
+          {!isCodeMode && showFiles && (
             <MediaBin mediaProvider={mediaProvider} isDark={isDark} refreshKey={mediaRefreshKey} />
           )}
 
-          {/* Drop zone overlay */}
-          {isDragging && (
+          {/* Drop zone overlay — image / text drop UX is markdown-specific. */}
+          {!isCodeMode && isDragging && (
             <DropZoneOverlay
               dragContentType={dragContentType}
               zoneProps={zoneProps}
@@ -264,9 +441,12 @@ function EditorShellInner({
           )}
         </div>
 
-        {/* Status bar */}
-        <StatusBar />
+        {/* Status bar — word / char / line / block counts. Host can
+            suppress via `showStatusBar={false}` for embedded chat-style
+            composers where the stats are noise. */}
+        {showStatusBar && <StatusBar />}
       </PreviewSettingsProvider>
+      <TooltipLayer />
     </div>
   );
 }
