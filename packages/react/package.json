@@ -31,14 +31,14 @@
   ],
   "exports": {
     ".": {
-      "import": "./dist/index.js",
-      "types": "./dist/index.d.ts"
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
     },
     "./styles": "./src/styles/doc-animations.css",
     "./standalone": "./dist/squisq-player.global.js",
     "./standalone-source": {
-      "import": "./dist/standalone-source.js",
-      "types": "./dist/standalone-source.d.ts"
+      "types": "./dist/standalone-source.d.ts",
+      "import": "./dist/standalone-source.js"
     }
   },
   "scripts": {

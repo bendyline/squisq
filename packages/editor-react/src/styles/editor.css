@@ -247,7 +247,8 @@
   position: absolute;
   right: 0;
   z-index: 100;
-  min-width: 180px;
+  min-width: 220px;
+  max-width: 280px;
   padding: 4px 0;
   background: #fff;
   border: 1px solid #e5e7eb;
@@ -320,11 +321,14 @@
 .squisq-toolbar-overflow-template {
   gap: 6px;
   padding: 6px 12px;
+  box-sizing: border-box;
+  max-width: 100%;
 }
 
 .squisq-toolbar-overflow-template select {
   flex: 1;
   min-width: 0;
+  max-width: 100%;
 }
 
 /* ─── Template Picker (toolbar) ──────────────────────── */
