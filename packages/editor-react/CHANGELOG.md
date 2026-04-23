@@ -1,3 +1,9 @@
+## @bendyline/squisq-editor-react [1.4.0](https://github.com/bendyline/squisq/compare/@bendyline/squisq-editor-react@1.3.0...@bendyline/squisq-editor-react@1.4.0) (2026-04-23)
+
+### Features
+
+* Auto sizing, small UX fixes to attachments and bins ([#16](https://github.com/bendyline/squisq/issues/16)) ([0d08ea6](https://github.com/bendyline/squisq/commit/0d08ea68faef56c12ee1427b76d34f0c7f1ee3e8))
+
 ## @bendyline/squisq-editor-react [1.3.0](https://github.com/bendyline/squisq/compare/@bendyline/squisq-editor-react@1.2.2...@bendyline/squisq-editor-react@1.3.0) (2026-04-22)
 
 ### Features
