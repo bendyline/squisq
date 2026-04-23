@@ -54,6 +54,17 @@ export interface EditorShellProps {
   className?: string;
   /** CSS height for the shell container (default: '100vh') */
   height?: string;
+  /**
+   * Minimum CSS height for the shell. When either `minHeight` or
+   * `maxHeight` is set, the shell switches to **auto-grow mode**:
+   * `height` is ignored, the root becomes `height: auto` between the
+   * bounds, and the content area scrolls internally when content
+   * exceeds `maxHeight`. Useful for chat composers that should grow
+   * with content up to some cap.
+   */
+  minHeight?: string;
+  /** See `minHeight`. Upper bound of the auto-grow range. */
+  maxHeight?: string;
   /** Optional MediaProvider for the Files panel. When set (even to null), a Files toggle appears in the toolbar. */
   mediaProvider?: MediaProvider | null;
   /** Optional ContentContainer for audio mapping (MP3 discovery + timing.json reading). */
@@ -180,6 +191,8 @@ export function EditorShell({
   theme = 'light',
   className,
   height = '100vh',
+  minHeight,
+  maxHeight,
   mediaProvider,
   container,
   showFilesToggle,
@@ -224,6 +237,8 @@ export function EditorShell({
         onChange={onChange}
         className={className}
         height={height}
+        minHeight={minHeight}
+        maxHeight={maxHeight}
         placeholder={placeholder}
         mediaProvider={mediaProvider ?? null}
         container={container}
@@ -248,6 +263,8 @@ interface EditorShellInnerProps {
   onChange?: (source: string) => void;
   className?: string;
   height: string;
+  minHeight?: string;
+  maxHeight?: string;
   placeholder?: string;
   mediaProvider: MediaProvider | null;
   container?: ContentContainer | null;
@@ -269,6 +286,8 @@ function EditorShellInner({
   onChange,
   className,
   height,
+  minHeight,
+  maxHeight,
   placeholder,
   mediaProvider,
   container,
@@ -284,8 +303,18 @@ function EditorShellInner({
   showStatusBar,
   readOnly,
 }: EditorShellInnerProps) {
-  const { activeView, markdownSource, doc, theme, editorMode, insertAtCursor, replaceAll } =
-    useEditorContext();
+  const {
+    activeView,
+    markdownSource,
+    doc,
+    theme,
+    editorMode,
+    insertAtCursor,
+    replaceAll,
+    tiptapEditor,
+    monacoEditor,
+    setMarkdownSource,
+  } = useEditorContext();
   const isPreview = activeView === 'preview';
   const isCodeMode = editorMode === 'code';
   const [showFiles, setShowFiles] = useState(false);
@@ -298,6 +327,57 @@ function EditorShellInner({
 
   // ── Drag-and-drop file handling ──
 
+  /**
+   * Insert an uploaded media file at the editor's current cursor.
+   *
+   * - In **WYSIWYG** mode, insert an actual tiptap image node via
+   *   `setImage({src, alt})` (images) or a link mark (non-images).
+   *   Going through `setImage` directly mirrors the Toolbar's image
+   *   button and avoids the round-trip through `markdownToTiptap`
+   *   that historically lost `<img>` tags to tag-strip passes.
+   * - In **raw (Monaco)** or **preview** mode, fall back to
+   *   `insertAtCursor` which emits the markdown snippet.
+   *
+   * Without this, upload-via-MediaBin and upload-via-drop both
+   * added the file to the bin and nowhere else — the composer sent
+   * an empty body and the downstream gezel reported "nothing came
+   * through."
+   */
+  const insertMediaRef = useCallback(
+    (relativePath: string, name: string, mimeType: string) => {
+      const alt = name.replace(/\.[^.]+$/, '').replace(/[-_]/g, ' ');
+      const isImage = mimeType.startsWith('image/');
+      const snippet = isImage ? `![${alt}](${relativePath})` : `[${alt}](${relativePath})`;
+
+      if (activeView === 'wysiwyg' && tiptapEditor) {
+        if (isImage) {
+          tiptapEditor.chain().focus().setImage({ src: relativePath, alt }).run();
+        } else {
+          tiptapEditor
+            .chain()
+            .focus()
+            .insertContent([
+              {
+                type: 'text',
+                marks: [{ type: 'link', attrs: { href: relativePath } }],
+                text: alt,
+              },
+            ])
+            .run();
+        }
+        return;
+      }
+      if (activeView === 'raw' && monacoEditor) {
+        insertAtCursor(snippet);
+        return;
+      }
+      // Preview mode — no interactive editor to insert into. Append
+      // to markdown source so the ref is still in the buffer.
+      setMarkdownSource(markdownSource ? `${markdownSource}\n\n${snippet}` : snippet);
+    },
+    [activeView, tiptapEditor, monacoEditor, insertAtCursor, markdownSource, setMarkdownSource],
+  );
+
   const handleFileDrop = useCallback(
     async (files: File[], target: DropTarget) => {
       try {
@@ -305,10 +385,21 @@ function EditorShellInner({
 
         // Process media files
         if (media.length > 0 && mediaProvider) {
-          await processMediaFiles(media, mediaProvider);
+          const paths = await processMediaFiles(media, mediaProvider);
           setMediaRefreshKey((k) => k + 1);
           // Auto-open the media bin so the user sees the new files
           if (!showFiles) setShowFiles(true);
+          // Insert each uploaded file as a markdown ref at the cursor so
+          // the body actually contains the attachment. Without this the
+          // bin holds the file but the serialized markdown stays empty,
+          // and anything downstream (chat send, document save) sees no
+          // reference to the upload.
+          for (let i = 0; i < media.length; i++) {
+            const file = media[i];
+            const path = paths[i];
+            if (!file || !path) continue;
+            insertMediaRef(path, file.name, file.type || 'application/octet-stream');
+          }
         }
 
         // Process text files
@@ -327,7 +418,7 @@ function EditorShellInner({
         console.error('Failed to process dropped files:', err instanceof Error ? err.message : err);
       }
     },
-    [mediaProvider, showFiles, replaceAll, insertAtCursor],
+    [mediaProvider, showFiles, replaceAll, insertAtCursor, insertMediaRef],
   );
 
   const { isDragging, dragContentType, containerProps, zoneProps } = useFileDrop({
@@ -364,6 +455,8 @@ function EditorShellInner({
     return () => window.removeEventListener('keydown', handler);
   }, [showPlayTab]);
 
+  const autoGrow = minHeight !== undefined || maxHeight !== undefined;
+
   return (
     <div
       className={`squisq-editor-shell ${className || ''}`}
@@ -373,8 +466,8 @@ function EditorShellInner({
       style={{
         display: 'flex',
         flexDirection: 'column',
-        height,
         overflow: 'hidden',
+        ...(autoGrow ? { minHeight, maxHeight } : { height }),
         // When a consumer supplies a UX font stack, expose it to the
         // editor CSS via this custom property. Chrome elements (toolbar,
         // tabs, status bar) consume `--squisq-ux-font` as their
@@ -404,9 +497,23 @@ function EditorShellInner({
         {/* Main content area */}
         <div
           className="squisq-editor-content"
-          style={{ flex: 1, overflow: 'hidden', position: 'relative', display: 'flex' }}
+          style={{
+            flex: autoGrow ? '1 1 auto' : 1,
+            overflowY: autoGrow ? 'auto' : 'hidden',
+            overflowX: 'hidden',
+            minHeight: 0,
+            position: 'relative',
+            display: 'flex',
+          }}
         >
-          <div style={{ flex: 1, overflow: 'hidden', position: 'relative' }}>
+          <div
+            style={{
+              flex: autoGrow ? '1 1 auto' : 1,
+              overflow: autoGrow ? 'visible' : 'hidden',
+              minHeight: 0,
+              position: 'relative',
+            }}
+          >
             {activeView === 'raw' && (
               <RawEditor
                 theme={theme === 'dark' ? 'vs-dark' : 'vs'}
@@ -428,7 +535,12 @@ function EditorShellInner({
           </div>
 
           {!isCodeMode && showFiles && (
-            <MediaBin mediaProvider={mediaProvider} isDark={isDark} refreshKey={mediaRefreshKey} />
+            <MediaBin
+              mediaProvider={mediaProvider}
+              isDark={isDark}
+              refreshKey={mediaRefreshKey}
+              onMediaUploaded={insertMediaRef}
+            />
           )}
 
           {/* Drop zone overlay — image / text drop UX is markdown-specific. */}

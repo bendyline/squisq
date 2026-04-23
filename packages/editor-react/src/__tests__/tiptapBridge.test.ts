@@ -190,6 +190,20 @@ describe('tiptapToMarkdown', () => {
     expect(md).toContain('`foo`');
   });
 
+  it('converts images regardless of attribute order', () => {
+    // TipTap's default Image extension renders `src` before `alt`. The
+    // tiptapToMarkdown parser previously required `alt` first and
+    // silently dropped every src-first image, so a pasted/toolbar
+    // image attached in the WYSIWYG editor never made it back into
+    // the outgoing markdown.
+    const altFirst = tiptapToMarkdown('<p><img alt="Logo" src="logo.png"></p>');
+    expect(altFirst).toContain('![Logo](logo.png)');
+    const srcFirst = tiptapToMarkdown('<p><img src="attachments/xyz.png" alt="xyz"></p>');
+    expect(srcFirst).toContain('![xyz](attachments/xyz.png)');
+    const srcOnly = tiptapToMarkdown('<p><img src="attachments/nm.png"></p>');
+    expect(srcOnly).toContain('![](attachments/nm.png)');
+  });
+
   it('converts links', () => {
     const md = tiptapToMarkdown('<p><a href="https://example.com">Example</a></p>');
     expect(md).toContain('[Example](https://example.com)');

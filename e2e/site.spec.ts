@@ -103,10 +103,10 @@ test.describe('DocPlayer preview', () => {
     const svg = activeBlock(page).locator('svg');
     // Each layer is wrapped in a <g class="block-layer ..."> inside the SVG.
     // We target .block-layer to avoid matching the <rect> inside <clipPath>.
-    const layers = svg.locator('.block-layer');
-    await expect(layers.first()).toBeAttached({ timeout: 10_000 });
-    const count = await layers.count();
-    expect(count).toBeGreaterThan(0);
+    // Use a single polling assertion so we don't race a block transition —
+    // the prior `toBeAttached().first() + .count()` pattern could see zero
+    // if React swapped blocks between the two queries.
+    await expect(svg.locator('.block-layer')).not.toHaveCount(0, { timeout: 10_000 });
   });
 
   test('first block displays the title "All Squisq Templates"', async ({ page }) => {

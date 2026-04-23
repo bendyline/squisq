@@ -19,7 +19,11 @@ const RE_ITALIC_UNDER = /_(.+?)_/g;
 const RE_STRIKETHROUGH = /~~(.+?)~~/g;
 const RE_INLINE_CODE = /`(.+?)`/g;
 const RE_LINK = /\[(.+?)\]\((.+?)\)/g;
-const RE_IMAGE = /!\[(.+?)\]\((.+?)\)/g;
+// `*?` on the alt — an empty alt (`![](foo.png)`) is valid markdown and
+// the most common shape for pasted/uploaded images that don't yet have
+// a human-picked caption. Previously required at least one alt char,
+// which dropped those images on the floor during markdown→HTML.
+const RE_IMAGE = /!\[(.*?)\]\((.+?)\)/g;
 // Mentions: `@[Display](scheme:id)` — scheme-part must start with a letter
 // so plain `$100` or price-style parentheticals don't accidentally match.
 // remark-stringify may round-trip the colon as `\:` — tolerate either.
@@ -33,7 +37,14 @@ const RE_S_TAG = /<s>(.*?)<\/s>/g;
 const RE_DEL_TAG = /<del>(.*?)<\/del>/g;
 const RE_CODE_TAG = /<code>(.*?)<\/code>/g;
 const RE_A_TAG = /<a[^>]+href="([^"]*)"[^>]*>(.*?)<\/a>/g;
-const RE_IMG_TAG = /<img[^>]+alt="([^"]*)"[^>]+src="([^"]*)"[^>]*>/g;
+// Matches any `<img>` tag and captures its `src` + `alt` regardless of
+// attribute order. TipTap's Image extension renders `<img src="..."
+// alt="...">` (src first), while some other producers — including our
+// own `markdownToTiptap` conversion — emit alt-first. The previous
+// regex required alt-before-src and silently dropped every src-first
+// image; `RE_STRIP_TAGS` below would then delete the unmatched tag,
+// so the outgoing markdown had no image reference at all.
+const RE_IMG_TAG = /<img\b([^>]*)>/g;
 const RE_STRIP_TAGS = /<[^>]+>/g;
 
 /**
@@ -462,6 +473,26 @@ export function tiptapToMarkdown(html: string): string {
       continue;
     }
 
+    // Block-level image. TipTap's Image extension with `inline: false`
+    // emits `<img src alt>` as a bare top-level element (no wrapping
+    // `<p>`). Without this handler the skip-unknown-tags catch-all
+    // below silently drops the image from the outgoing markdown —
+    // the bug that made the chat composer ship image-less messages
+    // even though the editor showed the picture. Handled here,
+    // before the inline walker ever sees it.
+    const imgMatch = remaining.match(/^<img\b([^>]*)>/);
+    if (imgMatch) {
+      const attrs = imgMatch[1] ?? '';
+      const src = /\bsrc="([^"]*)"/i.exec(attrs)?.[1];
+      if (src) {
+        const alt = /\balt="([^"]*)"/i.exec(attrs)?.[1] ?? '';
+        lines.push(`![${alt}](${src})`);
+        lines.push('');
+      }
+      remaining = remaining.slice(imgMatch[0].length);
+      continue;
+    }
+
     // Skip unknown tags or whitespace
     const skipMatch = remaining.match(/^(<[^>]+>|\s+)/);
     if (skipMatch) {
@@ -637,8 +668,14 @@ function htmlToInline(html: string): string {
   // Links
   result = result.replace(RE_A_TAG, '[$2]($1)');
 
-  // Images
-  result = result.replace(RE_IMG_TAG, '![$1]($2)');
+  // Images — order-agnostic attribute parsing (tiptap emits src-first,
+  // our markdown-to-html emits alt-first; either must serialize back).
+  result = result.replace(RE_IMG_TAG, (match, attrs: string) => {
+    const src = /\bsrc="([^"]*)"/i.exec(attrs)?.[1];
+    if (!src) return match;
+    const alt = /\balt="([^"]*)"/i.exec(attrs)?.[1] ?? '';
+    return `![${alt}](${src})`;
+  });
 
   // Strip remaining tags
   result = result.replace(RE_STRIP_TAGS, '');
