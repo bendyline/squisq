@@ -21,6 +21,17 @@ export interface MediaBinProps {
   isDark: boolean;
   /** Incremented externally to signal a re-scan of the media list */
   refreshKey?: number;
+  /**
+   * Fired after a successful upload via the MediaBin's own "+ Upload"
+   * button. `relativePath` is what the provider returned (the same
+   * value embedded in markdown refs, e.g. `attachments/xyz.png`);
+   * `name` is the uploader-chosen filename before storage renamed
+   * it. Consumers typically use this to insert a markdown image ref
+   * at the editor's cursor so the file actually participates in the
+   * outgoing message — previously files went to the bin and nowhere
+   * else, leaving the message body empty when the user hit Send.
+   */
+  onMediaUploaded?: (relativePath: string, name: string, mimeType: string) => void | Promise<void>;
 }
 
 // ============================================
@@ -50,7 +61,7 @@ function isImageMime(mimeType: string): boolean {
 // Component
 // ============================================
 
-export function MediaBin({ mediaProvider, isDark, refreshKey }: MediaBinProps) {
+export function MediaBin({ mediaProvider, isDark, refreshKey, onMediaUploaded }: MediaBinProps) {
   const [entries, setEntries] = useState<MediaEntry[]>([]);
   const [thumbUrls, setThumbUrls] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(false);
@@ -117,9 +128,17 @@ export function MediaBin({ mediaProvider, isDark, refreshKey }: MediaBinProps) {
       try {
         for (let i = 0; i < files.length; i++) {
           const file = files[i];
+          if (!file) continue;
           const buffer = await file.arrayBuffer();
           const mimeType = file.type || 'application/octet-stream';
-          await mediaProvider.addMedia(file.name, buffer, mimeType);
+          const relativePath = await mediaProvider.addMedia(file.name, buffer, mimeType);
+          if (onMediaUploaded) {
+            try {
+              await onMediaUploaded(relativePath, file.name, mimeType);
+            } catch {
+              /* callback is a nice-to-have; don't abort the upload batch */
+            }
+          }
         }
         // Re-scan
         const list = await mediaProvider.listMedia();
@@ -147,7 +166,7 @@ export function MediaBin({ mediaProvider, isDark, refreshKey }: MediaBinProps) {
         if (fileInputRef.current) fileInputRef.current.value = '';
       }
     },
-    [mediaProvider],
+    [mediaProvider, onMediaUploaded],
   );
 
   return (
