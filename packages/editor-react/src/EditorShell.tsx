@@ -19,6 +19,7 @@ import { StatusBar } from './StatusBar';
 import { RawEditor } from './RawEditor';
 import { WysiwygEditor } from './WysiwygEditor';
 import { PreviewPanel } from './PreviewPanel';
+import { ImageViewer } from './ImageViewer';
 import { PreviewSettingsProvider, PreviewToolbarControls } from './PreviewControls';
 import { MediaBin } from './MediaBin';
 import { DropZoneOverlay } from './DropZoneOverlay';
@@ -176,6 +177,18 @@ export interface EditorShellProps {
    * accidental edits.
    */
   readOnly?: boolean;
+  /**
+   * Image source URL used when the resolved file mode is `image` (PNG,
+   * JPEG, GIF, WebP, BMP, ICO, AVIF). When this prop is set, the shell
+   * replaces its text-editing surfaces with a dedicated `ImageViewer`.
+   *
+   * Lifecycle of the URL is the caller's responsibility — when fed a
+   * `blob:` URL, the host should `URL.revokeObjectURL` on unmount or
+   * src change.
+   */
+  imageSrc?: string;
+  /** Alt text passed through to the underlying ImageViewer. */
+  imageAlt?: string;
 }
 
 /**
@@ -211,6 +224,8 @@ export function EditorShell({
   mentionProvider,
   placeholder,
   readOnly = false,
+  imageSrc,
+  imageAlt,
 }: EditorShellProps) {
   // Show the toggle when explicitly opted in, or when mediaProvider prop was passed at all
   const filesToggleEnabled = showFilesToggle ?? mediaProvider !== undefined;
@@ -253,6 +268,8 @@ export function EditorShell({
         thinMargins={thinMargins}
         showStatusBar={showStatusBar}
         readOnly={readOnly}
+        imageSrc={imageSrc}
+        imageAlt={imageAlt}
       />
     </EditorProvider>
   );
@@ -279,6 +296,8 @@ interface EditorShellInnerProps {
   thinMargins: boolean;
   showStatusBar: boolean;
   readOnly: boolean;
+  imageSrc?: string;
+  imageAlt?: string;
 }
 
 function EditorShellInner({
@@ -302,6 +321,8 @@ function EditorShellInner({
   thinMargins,
   showStatusBar,
   readOnly,
+  imageSrc,
+  imageAlt,
 }: EditorShellInnerProps) {
   const {
     activeView,
@@ -317,6 +338,8 @@ function EditorShellInner({
   } = useEditorContext();
   const isPreview = activeView === 'preview';
   const isCodeMode = editorMode === 'code';
+  const isImageMode = editorMode === 'image';
+  const isMarkdownMode = editorMode === 'markdown';
   const [showFiles, setShowFiles] = useState(false);
   const [mediaRefreshKey, setMediaRefreshKey] = useState(0);
   const isDark = theme === 'dark';
@@ -477,22 +500,34 @@ function EditorShellInner({
       {...containerProps}
     >
       <PreviewSettingsProvider doc={doc}>
-        {/* Header: Toolbar (includes view tabs + preview controls) */}
-        <div className="squisq-editor-header">
-          <Toolbar
-            showFiles={showFiles}
-            onToggleFiles={!isCodeMode && filesToggleEnabled ? handleToggleFiles : undefined}
-            slotLeft={toolbarSlotLeft}
-            slotAfterActions={
-              <>
-                {toolbarSlotAfterActions}
-                {!isCodeMode && isPreview && <PreviewToolbarControls />}
-              </>
-            }
-            slotRight={toolbarSlotRight}
-            showPlayTab={showPlayTab}
-          />
-        </div>
+        {/* Header. In image mode the full markdown/code Toolbar is replaced
+            with a minimal slot bar — view tabs, formatting, and preview
+            controls don't apply to a binary asset. */}
+        {isImageMode ? (
+          (toolbarSlotLeft || toolbarSlotRight) && (
+            <div className="squisq-editor-header squisq-editor-header--image">
+              {toolbarSlotLeft}
+              <div style={{ flex: 1 }} />
+              {toolbarSlotRight}
+            </div>
+          )
+        ) : (
+          <div className="squisq-editor-header">
+            <Toolbar
+              showFiles={showFiles}
+              onToggleFiles={!isCodeMode && filesToggleEnabled ? handleToggleFiles : undefined}
+              slotLeft={toolbarSlotLeft}
+              slotAfterActions={
+                <>
+                  {toolbarSlotAfterActions}
+                  {!isCodeMode && isPreview && <PreviewToolbarControls />}
+                </>
+              }
+              slotRight={toolbarSlotRight}
+              showPlayTab={showPlayTab}
+            />
+          </div>
+        )}
 
         {/* Main content area */}
         <div
@@ -514,7 +549,10 @@ function EditorShellInner({
               position: 'relative',
             }}
           >
-            {activeView === 'raw' && (
+            {isImageMode && imageSrc && (
+              <ImageViewer src={imageSrc} alt={imageAlt} theme={theme} />
+            )}
+            {!isImageMode && activeView === 'raw' && (
               <RawEditor
                 theme={theme === 'dark' ? 'vs-dark' : 'vs'}
                 submitOnEnter={submitOnEnter}
@@ -522,19 +560,21 @@ function EditorShellInner({
               />
             )}
             {/* WYSIWYG + Preview are markdown-only surfaces — skip them
-                entirely in code mode so Tiptap never initializes and the
-                preview pipeline stays idle. */}
-            {!isCodeMode && activeView === 'wysiwyg' && (
+                entirely in code or image mode so Tiptap never initializes
+                and the preview pipeline stays idle. */}
+            {isMarkdownMode && activeView === 'wysiwyg' && (
               <WysiwygEditor
                 submitOnEnter={submitOnEnter}
                 placeholder={placeholder}
                 readOnly={readOnly}
               />
             )}
-            {!isCodeMode && isPreview && <PreviewPanel basePath={basePath} container={container} />}
+            {isMarkdownMode && isPreview && (
+              <PreviewPanel basePath={basePath} container={container} />
+            )}
           </div>
 
-          {!isCodeMode && showFiles && (
+          {isMarkdownMode && showFiles && (
             <MediaBin
               mediaProvider={mediaProvider}
               isDark={isDark}
@@ -544,7 +584,7 @@ function EditorShellInner({
           )}
 
           {/* Drop zone overlay — image / text drop UX is markdown-specific. */}
-          {!isCodeMode && isDragging && (
+          {isMarkdownMode && isDragging && (
             <DropZoneOverlay
               dragContentType={dragContentType}
               zoneProps={zoneProps}
@@ -555,8 +595,9 @@ function EditorShellInner({
 
         {/* Status bar — word / char / line / block counts. Host can
             suppress via `showStatusBar={false}` for embedded chat-style
-            composers where the stats are noise. */}
-        {showStatusBar && <StatusBar />}
+            composers where the stats are noise. The image viewer has its
+            own dimension/zoom status row, so suppress here too. */}
+        {showStatusBar && !isImageMode && <StatusBar />}
       </PreviewSettingsProvider>
       <TooltipLayer />
     </div>

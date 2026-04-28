@@ -518,7 +518,7 @@ export interface MarkdownTextDirective extends MarkdownNodeBase {
  */
 export interface MarkdownMention extends MarkdownNodeBase {
   type: 'mention';
-  /** Namespace for the mentioned entity (e.g. `"gezel"`, `"user"`). */
+  /** Namespace for the mentioned entity (e.g. `"user"`). */
   targetKind: string;
   /** Stable identifier within the namespace. */
   targetId: string;

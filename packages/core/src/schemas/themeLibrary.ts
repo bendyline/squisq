@@ -512,9 +512,9 @@ const warmEarth: Theme = {
 // ============================================
 
 /**
- * Warm sage + terracotta palette that matches the Gezel desktop app.
+ * Warm sage + terracotta palette.
  * Background is a subtly orange-tinted near-black — a much warmer surface
- * than the standard `#1a202c`-family dark themes. Primary is Gezel's
+ * than the standard `#1a202c`-family dark themes. Primary is 
  * accent orange (`#b0724c`); secondary is the titlebar sage (`#667f62`).
  *
  * Typography uses system fonts with emoji fallbacks at the tail of each
@@ -522,11 +522,6 @@ const warmEarth: Theme = {
  * its WOFF with `unicode-range` scoped to emoji codepoints), then the
  * platform emoji fonts. Hosts that haven't registered OpenMoji fall
  * through to the platform emoji font transparently.
- *
- * "Gezellig" — Dutch, roughly "cozy / companionable", which is the brand
- * direction of the Gezel app (an ensemble of AI gezels that feel like a
- * crew, not a robot). Works as a general-purpose warm dark theme outside
- * the app too.
  */
 const GEZELLIG_SANS =
   'system-ui, -apple-system, "Segoe UI", Roboto, "OpenMoji Color", "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif';

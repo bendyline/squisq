@@ -40,6 +40,11 @@ export type {
 export { resolveFileKind, detectLanguageFromFileName } from './fileKind.js';
 export type { FileKind } from './fileKind.js';
 
+// Image viewer — exported standalone so hosts can use it without the
+// full EditorShell when they already have their own chrome.
+export { ImageViewer } from './ImageViewer.js';
+export type { ImageViewerProps } from './ImageViewer.js';
+
 // Individual editors (for custom layouts)
 export { RawEditor } from './RawEditor.js';
 export type { RawEditorProps } from './RawEditor.js';

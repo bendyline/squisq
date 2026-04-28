@@ -93,4 +93,20 @@ describe('resolveFileKind', () => {
   it('accepts a language with no fileName', () => {
     expect(resolveFileKind(undefined, 'rust')).toEqual({ mode: 'code', language: 'rust' });
   });
+
+  it('returns image mode for raster image extensions', () => {
+    expect(resolveFileKind('foo.png')).toEqual({ mode: 'image', language: 'image' });
+    expect(resolveFileKind('photo.JPEG')).toEqual({ mode: 'image', language: 'image' });
+    expect(resolveFileKind('anim.gif')).toEqual({ mode: 'image', language: 'image' });
+    expect(resolveFileKind('hero.webp')).toEqual({ mode: 'image', language: 'image' });
+    expect(resolveFileKind('icon.avif')).toEqual({ mode: 'image', language: 'image' });
+  });
+
+  it('keeps SVG as code mode (xml) so the source stays editable', () => {
+    expect(resolveFileKind('logo.svg')).toEqual({ mode: 'code', language: 'xml' });
+  });
+
+  it('respects an explicit language=image override', () => {
+    expect(resolveFileKind(undefined, 'image')).toEqual({ mode: 'image', language: 'image' });
+  });
 });

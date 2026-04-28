@@ -64,7 +64,7 @@ export type EditorTheme = 'light' | 'dark';
  * Preview tabs, formatting toolbar). `code` is a Monaco-only view used
  * when the content represents a non-markdown file like `foo.ts`.
  */
-export type EditorMode = 'markdown' | 'code';
+export type EditorMode = 'markdown' | 'code' | 'image';
 
 export interface EditorState {
   /** Raw markdown source string */
@@ -201,17 +201,21 @@ export function EditorProvider({
     [fileName, language],
   );
   // In code mode, WYSIWYG and Preview aren't rendered — force the starting
-  // view to 'raw' so we don't boot into an unmounted surface.
+  // view to 'raw' so we don't boot into an unmounted surface. Image mode
+  // has no text-editing surface at all; keep the same fallback so that any
+  // host that switches into image mode doesn't end up in a stale view id.
   const [markdownSource, setMarkdownSourceRaw] = useState(initialMarkdown);
   const [markdownDoc, setMarkdownDocState] = useState<MarkdownDocument | null>(null);
   const [doc, setDoc] = useState<Doc | null>(null);
   const [activeView, setActiveViewRaw] = useState<EditorView>(
-    editorMode === 'code' ? 'raw' : initialView,
+    editorMode === 'markdown' ? initialView : 'raw',
   );
   const setActiveView = useCallback(
     (view: EditorView) => {
-      // In code mode only the raw view is valid; ignore any other requests.
+      // In code mode only the raw view is valid. In image mode no text view
+      // is valid at all — ignore any switch attempt.
       if (editorMode === 'code' && view !== 'raw') return;
+      if (editorMode === 'image') return;
       setActiveViewRaw(view);
     },
     [editorMode],
@@ -260,12 +264,12 @@ export function EditorProvider({
     }
   }, []);
 
-  // Parse on source changes with debounce. Skipped in code mode — the
-  // WYSIWYG/Preview surfaces that consume markdownDoc/doc aren't mounted,
-  // so there's nothing to feed and no reason to run the markdown parser on
-  // TypeScript / JSON / etc.
+  // Parse on source changes with debounce. Skipped in code/image mode —
+  // the WYSIWYG/Preview surfaces that consume markdownDoc/doc aren't
+  // mounted, so there's nothing to feed and no reason to run the markdown
+  // parser on TypeScript / JSON / a binary image asset.
   useEffect(() => {
-    if (editorMode === 'code') return;
+    if (editorMode !== 'markdown') return;
     if (parseTimeoutRef.current) {
       clearTimeout(parseTimeoutRef.current);
     }
@@ -281,7 +285,7 @@ export function EditorProvider({
 
   // Initial parse
   useEffect(() => {
-    if (editorMode === 'code') return;
+    if (editorMode !== 'markdown') return;
     if (initialMarkdown) {
       doParse(initialMarkdown);
     }

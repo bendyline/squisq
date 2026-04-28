@@ -93,7 +93,7 @@ export function WysiwygEditor({
   const { markdownSource, setMarkdownSource, setTiptapEditor, mediaProvider, mentionProvider } =
     useEditorContext();
   // Keep a ref so the mention extension — created once at editor mount —
-  // always sees the latest provider. Swapping projects or gezels changes
+  // always sees the latest provider. Swapping projects changes
   // the provider without remounting the editor.
   const mentionProviderRef = useRef(mentionProvider);
   useEffect(() => {
