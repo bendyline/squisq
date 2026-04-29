@@ -159,6 +159,18 @@ export function WysiwygEditor({
       // normal behavior (Enter = paragraph break, Shift+Enter = soft break).
       handleKeyDown: (view, event) => {
         if (event.key !== 'Enter' || !submitOnEnterRef.current) return false;
+        // Defer Enter to an open mention/suggestion popover so the user
+        // can pick the highlighted candidate. ProseMirror plugins fire
+        // AFTER editorProps.handleKeyDown, so without this short-circuit
+        // plain Enter submits the message and the popover closes
+        // without inserting the mention. The MentionExtension marks
+        // its container with `display: block` while items are showing
+        // and `display: none` when empty — only short-circuit when
+        // there's actually a candidate to pick.
+        const popover = document.querySelector<HTMLElement>('.squisq-mention-popover');
+        if (popover && popover.style.display !== 'none') {
+          return false;
+        }
         if (event.metaKey || event.ctrlKey) {
           // User wants a newline. Insert a hard-break and stop propagation so
           // we don't also create a new paragraph.

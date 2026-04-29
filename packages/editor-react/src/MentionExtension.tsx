@@ -244,15 +244,18 @@ function positionTo(
 ): void {
   const rect = clientRect?.();
   if (!rect) return;
-  // Anchor just below the caret; fall back to above when there's no room.
+  // Anchor above the caret first — chat composers live near the
+  // bottom of the viewport, where a "below" popover gets clipped or
+  // covers the just-typed text. Fall back to below only when there's
+  // no room above (top of a long document, etc.).
   const viewportH = window.innerHeight;
-  const below = rect.bottom + 4;
-  const estH = Math.min(240, el.offsetHeight || 200);
-  const fitsBelow = below + estH < viewportH;
+  const estH = Math.min(el.offsetHeight || 240, viewportH - 16);
+  const above = rect.top - estH - 4;
+  const fitsAbove = above >= 0;
   el.style.left = `${rect.left + window.scrollX}px`;
-  if (fitsBelow) {
-    el.style.top = `${below + window.scrollY}px`;
+  if (fitsAbove) {
+    el.style.top = `${above + window.scrollY}px`;
   } else {
-    el.style.top = `${rect.top + window.scrollY - estH - 4}px`;
+    el.style.top = `${rect.bottom + 4 + window.scrollY}px`;
   }
 }
