@@ -13,6 +13,7 @@ export default defineConfig({
     'random/index': 'src/random/index.ts',
     'generate/index': 'src/generate/index.ts',
     'transform/index': 'src/transform/index.ts',
+    'versions/index': 'src/versions/index.ts',
   },
   format: ['esm'],
   dts: true,

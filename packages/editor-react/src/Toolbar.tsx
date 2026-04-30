@@ -11,10 +11,8 @@ import type { ReactNode } from 'react';
 import { useCallback, useEffect, useReducer, useRef, useState } from 'react';
 import type { Editor as TiptapEditor } from '@tiptap/core';
 import { useEditorContext, type EditorView } from './EditorContext';
-import { getAvailableTemplates } from '@bendyline/squisq/doc';
-
-/** Template names are static — computed once at module load. */
-const TEMPLATE_NAMES = getAvailableTemplates();
+import { VersionHistoryPanel } from './VersionHistoryPanel';
+import { TemplatePicker } from './TemplatePicker';
 
 const VIEWS: { id: EditorView; label: string; shortLabel?: string; shortcut: string }[] = [
   { id: 'wysiwyg', label: 'Editor', shortcut: '⌘1' },
@@ -158,6 +156,7 @@ export function Toolbar({
     monacoEditor,
     mediaProvider,
     editorMode,
+    versioning,
   } = useEditorContext();
   const isCodeMode = editorMode === 'code';
   // In code mode only the raw view is meaningful; the WYSIWYG and Preview
@@ -664,24 +663,7 @@ export function Toolbar({
             <>
               <div className="squisq-toolbar-separator" />
               <div className="squisq-toolbar-group squisq-template-picker">
-                <label
-                  className="squisq-template-picker-label"
-                  data-tooltip="Block template for this heading"
-                >
-                  Template:
-                  <select
-                    className="squisq-template-picker-select"
-                    value={currentTemplate}
-                    onChange={(e) => handleTemplatePick(e.target.value)}
-                  >
-                    <option value="">— none —</option>
-                    {TEMPLATE_NAMES.map((name) => (
-                      <option key={name} value={name}>
-                        {name}
-                      </option>
-                    ))}
-                  </select>
-                </label>
+                <TemplatePicker value={currentTemplate} onChange={handleTemplatePick} />
               </div>
             </>
           )}
@@ -903,21 +885,14 @@ export function Toolbar({
               {currentTemplate !== null && (
                 <div className="squisq-toolbar-overflow-item squisq-toolbar-overflow-template">
                   <span>Template:</span>
-                  <select
-                    className="squisq-template-picker-select"
+                  <TemplatePicker
                     value={currentTemplate}
-                    onChange={(e) => {
-                      handleTemplatePick(e.target.value);
+                    onChange={(v) => {
+                      handleTemplatePick(v);
                       setShowOverflow(false);
                     }}
-                  >
-                    <option value="">— none —</option>
-                    {TEMPLATE_NAMES.map((name) => (
-                      <option key={name} value={name}>
-                        {name}
-                      </option>
-                    ))}
-                  </select>
+                    compact
+                  />
                 </div>
               )}
 
@@ -981,6 +956,10 @@ export function Toolbar({
       {/* Spacer — only needed when the actions container (which has flex:1
           and already pushes right-side items to the end) isn't rendered. */}
       {(isPreview || isNarrow || isCodeMode) && <div style={{ flex: 1 }} />}
+      {/* Version history — renders only when the host enabled versioning
+          and a container is wired up. The component owns its own button
+          and popover; we just give it a slot in the toolbar. */}
+      {versioning && !isCodeMode && <VersionHistoryPanel />}
       {/* Files toggle — visible when callback is provided */}
       {onToggleFiles && (
         <button

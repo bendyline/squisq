@@ -308,6 +308,7 @@ export function App() {
               theme={theme}
               height="100%"
               mediaProvider={mediaProvider}
+              inlinePreview
             />
           </div>
 

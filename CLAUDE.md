@@ -31,6 +31,7 @@ squisq/
         timing/             # Narration/reading time estimation
         random/             # SeededRandom (Mulberry32 PRNG)
         generate/           # Content extraction + slideshow generator
+        versions/           # Document version history (snapshots in .versions/, prune/coalesce, DocumentVersionManager)
     react/                  # @bendyline/squisq-react
       src/
         layers/             # ImageLayer, TextLayer, ShapeLayer, VideoLayer, MapLayer
@@ -59,6 +60,8 @@ squisq/
         WysiwygEditor.tsx   # Tiptap rich text editor
         PreviewPanel.tsx    # Rendered block preview via DocPlayer
         Toolbar.tsx         # Formatting toolbar (bold, italic, headings, lists, etc.)
+        VersionHistoryPanel.tsx # Toolbar popover listing snapshots + revert
+        InlinePreviewGutter.tsx # Side gutter showing one mini SVG card per templated block (Edit mode)
         tiptapBridge.ts     # Bidirectional markdown ↔ Tiptap conversion
         TemplateAnnotation.ts # Tiptap extension for heading template annotations
     video-react/            # @bendyline/squisq-video-react
@@ -109,6 +112,7 @@ npm run format             # Prettier format
 - `@bendyline/squisq/timing` — Narration/reading time estimation (estimateNarrationTime, estimateReadingTime, countSpokenWords)
 - `@bendyline/squisq/random` — SeededRandom PRNG, hashString
 - `@bendyline/squisq/generate` — Content extraction (extractContent, stripMarkdown) + slideshow generator (generateSlideshow)
+- `@bendyline/squisq/versions` — Document version history: `DocumentVersionManager` plus `saveVersion` / `listVersions` / `readVersion` / `revertToVersion` / `pruneVersions` / `coalesceVersions`, `PrunePolicy`, `Version` types, sortable-timestamp + path helpers. Snapshots live inside the same `ContentContainer` as the doc at `.versions/<basename>.<timestamp>.md`, so they ride along through ZIP serialization.
 
 `@bendyline/squisq-react` exports everything from the root:
 
@@ -129,8 +133,10 @@ npm run format             # Prettier format
 
 `@bendyline/squisq-editor-react` exports everything from the root:
 
-- Components: EditorShell, RawEditor, WysiwygEditor, PreviewPanel, Toolbar, StatusBar, ViewSwitcher
+- Components: EditorShell, RawEditor, WysiwygEditor, PreviewPanel, Toolbar, StatusBar, ViewSwitcher, VersionHistoryPanel, InlinePreviewGutter
 - Context: EditorProvider, useEditor
+- Versioning: pass `allowVersioning` + `container` to `EditorShell` to enable; the toolbar surfaces a `VersionHistoryPanel` and the editor auto-saves snapshots on idle (configurable via `versioningAutoSaveIdleMs`, default 5s; `versioningPrunePolicy` defaults to keep-last-50). Hosts can also call `useEditorContext().versioning.saveVersion()` from their own save pipeline.
+- Inline preview gutter: pass `inlinePreview` (and optional `inlinePreviewWidth`, default 320px) to `EditorShell` to render an `InlinePreviewGutter` next to the WYSIWYG surface. The gutter shows one small SVG card per template-annotated block in the document, auto-hides via container query below ~720px, and reuses the same template-resolution path as `LinearDocView`.
 - Styles: `@bendyline/squisq-editor-react/styles` for CSS
 
 `@bendyline/squisq-video-react` exports everything from the root:

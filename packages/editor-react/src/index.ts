@@ -68,6 +68,11 @@ export type { ViewSwitcherProps } from './ViewSwitcher.js';
 export { Toolbar } from './Toolbar.js';
 export type { ToolbarProps } from './Toolbar.js';
 
+export { VersionHistoryPanel } from './VersionHistoryPanel.js';
+export { TemplatePicker, templateLabel } from './TemplatePicker.js';
+export { InlinePreviewGutter } from './InlinePreviewGutter.js';
+export type { InlinePreviewGutterProps } from './InlinePreviewGutter.js';
+
 export { MediaBin } from './MediaBin.js';
 export type { MediaBinProps } from './MediaBin.js';
 

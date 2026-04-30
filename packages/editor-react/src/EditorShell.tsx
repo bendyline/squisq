@@ -18,6 +18,7 @@ import { Toolbar } from './Toolbar';
 import { StatusBar } from './StatusBar';
 import { RawEditor } from './RawEditor';
 import { WysiwygEditor } from './WysiwygEditor';
+import { InlinePreviewGutter } from './InlinePreviewGutter';
 import { PreviewPanel } from './PreviewPanel';
 import { ImageViewer } from './ImageViewer';
 import { PreviewSettingsProvider, PreviewToolbarControls } from './PreviewControls';
@@ -33,6 +34,7 @@ import {
 } from './utils/dropUtils';
 import type { MediaProvider } from '@bendyline/squisq/schemas';
 import type { ContentContainer } from '@bendyline/squisq/storage';
+import type { PrunePolicy, SaveVersionResult } from '@bendyline/squisq/versions';
 import type { CSSProperties, ReactNode } from 'react';
 
 export type { EditorTheme } from './EditorContext';
@@ -70,6 +72,39 @@ export interface EditorShellProps {
   mediaProvider?: MediaProvider | null;
   /** Optional ContentContainer for audio mapping (MP3 discovery + timing.json reading). */
   container?: ContentContainer | null;
+  /**
+   * Enable version history. Snapshots are stored at
+   * `.versions/<basename>.<timestamp>.md` inside the same `container`,
+   * so they ride along with the document when the host serializes.
+   *
+   * Snapshots fire on idle (controlled by `versioningAutoSaveIdleMs`)
+   * and can also be triggered host-side via the manager exposed in the
+   * context (`useEditorContext().versioning`). Has no effect without a
+   * `container` — a `console.warn` flags the misconfiguration in dev.
+   */
+  allowVersioning?: boolean;
+  /**
+   * Override the document basename used in version filenames. Defaults
+   * to the basename of the container's primary document path.
+   */
+  versionBasename?: string;
+  /**
+   * Prune policy applied after each successful save. Defaults to
+   * `{ type: 'keep-last-n', n: 50 }` so the snapshot count stays bounded.
+   */
+  versioningPrunePolicy?: PrunePolicy;
+  /**
+   * Idle delay (ms) before the editor auto-saves a version. `0` disables
+   * auto-save entirely (snapshots are then only saved when the host
+   * calls `versioning.saveVersion()` from the context). Default: 5000.
+   */
+  versioningAutoSaveIdleMs?: number;
+  /**
+   * Notified after each `saveVersion` attempt. Fires for both successful
+   * saves (`reason: 'saved'`) and skips (`'unchanged'`, `'no-document'`,
+   * `'empty'`). Useful for hosts that want a "Last saved" indicator.
+   */
+  onSaveVersion?: (result: SaveVersionResult) => void;
   /** Show the Files toggle in the toolbar. Defaults to true when mediaProvider is passed. */
   showFilesToggle?: boolean;
   /** Content rendered at the left edge of the toolbar, before the view tabs. */
@@ -189,6 +224,19 @@ export interface EditorShellProps {
   imageSrc?: string;
   /** Alt text passed through to the underlying ImageViewer. */
   imageAlt?: string;
+  /**
+   * Show an inline preview gutter to the right of the WYSIWYG editor.
+   * The gutter renders one small SVG card per template-annotated block in
+   * the document, letting authors see their rendered output without
+   * leaving Edit mode. Auto-hidden via container query when the editor
+   * body is narrower than ~720px. Defaults to `false`.
+   */
+  inlinePreview?: boolean;
+  /**
+   * Width in pixels for the inline preview gutter. Defaults to 320.
+   * Only takes effect when {@link EditorShellProps.inlinePreview} is true.
+   */
+  inlinePreviewWidth?: number;
 }
 
 /**
@@ -208,6 +256,11 @@ export function EditorShell({
   maxHeight,
   mediaProvider,
   container,
+  allowVersioning = false,
+  versionBasename,
+  versioningPrunePolicy,
+  versioningAutoSaveIdleMs,
+  onSaveVersion,
   showFilesToggle,
   toolbarSlotLeft,
   toolbarSlotAfterActions,
@@ -226,6 +279,8 @@ export function EditorShell({
   readOnly = false,
   imageSrc,
   imageAlt,
+  inlinePreview = false,
+  inlinePreviewWidth = 320,
 }: EditorShellProps) {
   // Show the toggle when explicitly opted in, or when mediaProvider prop was passed at all
   const filesToggleEnabled = showFilesToggle ?? mediaProvider !== undefined;
@@ -241,6 +296,12 @@ export function EditorShell({
       initialView={effectiveInitialView}
       articleId={articleId}
       theme={theme}
+      container={container ?? null}
+      allowVersioning={allowVersioning}
+      versionBasename={versionBasename}
+      versioningPrunePolicy={versioningPrunePolicy}
+      versioningAutoSaveIdleMs={versioningAutoSaveIdleMs}
+      onSaveVersion={onSaveVersion}
       mediaProvider={mediaProvider}
       imageDisplayMode={imageDisplayMode}
       mentionProvider={mentionProvider}
@@ -270,6 +331,8 @@ export function EditorShell({
         readOnly={readOnly}
         imageSrc={imageSrc}
         imageAlt={imageAlt}
+        inlinePreview={inlinePreview}
+        inlinePreviewWidth={inlinePreviewWidth}
       />
     </EditorProvider>
   );
@@ -298,6 +361,8 @@ interface EditorShellInnerProps {
   readOnly: boolean;
   imageSrc?: string;
   imageAlt?: string;
+  inlinePreview: boolean;
+  inlinePreviewWidth: number;
 }
 
 function EditorShellInner({
@@ -323,6 +388,8 @@ function EditorShellInner({
   readOnly,
   imageSrc,
   imageAlt,
+  inlinePreview,
+  inlinePreviewWidth,
 }: EditorShellInnerProps) {
   const {
     activeView,
@@ -549,9 +616,7 @@ function EditorShellInner({
               position: 'relative',
             }}
           >
-            {isImageMode && imageSrc && (
-              <ImageViewer src={imageSrc} alt={imageAlt} theme={theme} />
-            )}
+            {isImageMode && imageSrc && <ImageViewer src={imageSrc} alt={imageAlt} theme={theme} />}
             {!isImageMode && activeView === 'raw' && (
               <RawEditor
                 theme={theme === 'dark' ? 'vs-dark' : 'vs'}
@@ -563,11 +628,25 @@ function EditorShellInner({
                 entirely in code or image mode so Tiptap never initializes
                 and the preview pipeline stays idle. */}
             {isMarkdownMode && activeView === 'wysiwyg' && (
-              <WysiwygEditor
-                submitOnEnter={submitOnEnter}
-                placeholder={placeholder}
-                readOnly={readOnly}
-              />
+              inlinePreview ? (
+                <div className="squisq-wysiwyg-with-gutter">
+                  <WysiwygEditor
+                    submitOnEnter={submitOnEnter}
+                    placeholder={placeholder}
+                    readOnly={readOnly}
+                  />
+                  <InlinePreviewGutter
+                    width={inlinePreviewWidth}
+                    basePath={basePath}
+                  />
+                </div>
+              ) : (
+                <WysiwygEditor
+                  submitOnEnter={submitOnEnter}
+                  placeholder={placeholder}
+                  readOnly={readOnly}
+                />
+              )
             )}
             {isMarkdownMode && isPreview && (
               <PreviewPanel basePath={basePath} container={container} />

@@ -21,6 +21,13 @@ import type { Doc, MediaProvider } from '@bendyline/squisq/schemas';
 import type { MarkdownDocument } from '@bendyline/squisq/markdown';
 import { parseMarkdown, stringifyMarkdown } from '@bendyline/squisq/markdown';
 import { markdownToDoc } from '@bendyline/squisq/doc';
+import type { ContentContainer } from '@bendyline/squisq/storage';
+import {
+  DocumentVersionManager,
+  type PrunePolicy,
+  type SaveVersionOptions,
+  type SaveVersionResult,
+} from '@bendyline/squisq/versions';
 import type { Editor as TiptapEditor } from '@tiptap/core';
 import type { editor as MonacoEditorNs } from 'monaco-editor';
 import { markdownToTiptap } from './tiptapBridge';
@@ -111,6 +118,21 @@ export interface EditorContextValue extends EditorState, EditorActions {
   tiptapEditor: TiptapEditor | null;
   /** The live Monaco editor instance (null when Raw is not mounted) */
   monacoEditor: MonacoEditor | null;
+  /** ContentContainer the editor reads/writes accessory files through. */
+  container: ContentContainer | null;
+  /**
+   * Version manager — non-null only when the host opted into versioning
+   * (`allowVersioning` + a `container`). Components can call `saveVersion`
+   * directly, or render the version-history panel which reads it from here.
+   */
+  versioning: DocumentVersionManager | null;
+  /**
+   * Stamp a new snapshot of the current document. No-op (returns
+   * `unchanged`) when content matches the latest version. Always safe
+   * to call — when versioning is disabled, returns `no-document`
+   * without writing.
+   */
+  saveVersion: (options?: SaveVersionOptions) => Promise<SaveVersionResult>;
   /** MediaProvider for resolving image URLs in the WYSIWYG editor */
   mediaProvider: MediaProvider | null;
   /**
@@ -159,6 +181,39 @@ export interface EditorProviderProps {
   articleId?: string;
   /** Color theme */
   theme?: EditorTheme;
+  /**
+   * ContentContainer the editor reads/writes accessory files through.
+   * Required for `allowVersioning` to take effect.
+   */
+  container?: ContentContainer | null;
+  /**
+   * Enable version history. Snapshots are stored at
+   * `.versions/<basename>.<timestamp>.md` inside `container`. Auto-save
+   * fires after `versioningAutoSaveIdleMs` of idle; hosts can also call
+   * `saveVersion()` from the context. Without a `container`, this prop
+   * is ignored (and a `console.warn` is emitted).
+   */
+  allowVersioning?: boolean;
+  /** Override the basename used in version filenames. Defaults to the
+   * basename of the container's primary document path. */
+  versionBasename?: string;
+  /**
+   * Prune policy applied after each successful auto-save. Defaults to
+   * keeping the last 50 snapshots so the count doesn't grow unbounded.
+   */
+  versioningPrunePolicy?: PrunePolicy;
+  /**
+   * Idle delay (ms) before auto-saving a version. `0` disables auto-save
+   * entirely (versions are saved only via host-driven `saveVersion`
+   * calls). Default: 5000.
+   */
+  versioningAutoSaveIdleMs?: number;
+  /**
+   * Notified after each `saveVersion` attempt — both successful saves
+   * (`reason: 'saved'`) and skips (`'unchanged'`, `'no-document'`,
+   * `'empty'`). Useful for hosts that want a "Last saved" indicator.
+   */
+  onSaveVersion?: (result: SaveVersionResult) => void;
   /** MediaProvider for resolving image URLs */
   mediaProvider?: MediaProvider | null;
   /** Display mode for images in the WYSIWYG view. Defaults to `'inline'`. */
@@ -182,11 +237,20 @@ export interface EditorProviderProps {
  * Provides shared editor state to all child components.
  * Automatically parses markdown and generates a Doc whenever the source changes.
  */
+const DEFAULT_PRUNE_POLICY: PrunePolicy = { type: 'keep-last-n', n: 50 };
+const DEFAULT_AUTOSAVE_IDLE_MS = 5_000;
+
 export function EditorProvider({
   initialMarkdown = '',
   initialView = 'raw',
   articleId = 'untitled',
   theme: initialTheme = 'light',
+  container = null,
+  allowVersioning = false,
+  versionBasename,
+  versioningPrunePolicy = DEFAULT_PRUNE_POLICY,
+  versioningAutoSaveIdleMs = DEFAULT_AUTOSAVE_IDLE_MS,
+  onSaveVersion,
   mediaProvider = null,
   imageDisplayMode = 'inline',
   mentionProvider = null,
@@ -343,6 +407,71 @@ export function EditorProvider({
     [tiptapEditor, monacoEditor],
   );
 
+  // ── Versioning ─────────────────────────────────────────
+  // Build a manager only when versioning is opted in *and* a container
+  // exists. A versioning request without a container is a misconfiguration
+  // — warn once so it surfaces in dev without breaking the editor.
+  const versioningWarnedRef = useRef(false);
+  useEffect(() => {
+    if (allowVersioning && !container && !versioningWarnedRef.current) {
+      console.warn(
+        '[squisq-editor] allowVersioning requires a `container` prop; versioning is disabled.',
+      );
+      versioningWarnedRef.current = true;
+    }
+  }, [allowVersioning, container]);
+
+  const versioning = useMemo<DocumentVersionManager | null>(() => {
+    if (!allowVersioning || !container) return null;
+    return new DocumentVersionManager(container, { basename: versionBasename });
+  }, [allowVersioning, container, versionBasename]);
+
+  const onSaveVersionRef = useRef(onSaveVersion);
+  onSaveVersionRef.current = onSaveVersion;
+  const prunePolicyRef = useRef(versioningPrunePolicy);
+  prunePolicyRef.current = versioningPrunePolicy;
+
+  const saveVersion = useCallback(
+    async (options?: SaveVersionOptions): Promise<SaveVersionResult> => {
+      if (!versioning) {
+        const skipped: SaveVersionResult = { saved: false, version: null, reason: 'no-document' };
+        onSaveVersionRef.current?.(skipped);
+        return skipped;
+      }
+      const result = await versioning.saveVersion(options);
+      onSaveVersionRef.current?.(result);
+      if (result.saved) {
+        // Fire-and-forget prune. Failures here shouldn't block the save.
+        versioning.pruneVersions(prunePolicyRef.current).catch((err: unknown) => {
+          console.warn(
+            '[squisq-editor] pruneVersions failed:',
+            err instanceof Error ? err.message : err,
+          );
+        });
+      }
+      return result;
+    },
+    [versioning],
+  );
+
+  // Auto-save: stamp a new snapshot after `versioningAutoSaveIdleMs` of
+  // idle. The "only save if different" check inside `saveVersion` makes
+  // most ticks no-ops, so this is cheap. Disabled when the idle delay is
+  // 0 or versioning isn't active.
+  useEffect(() => {
+    if (!versioning) return;
+    if (versioningAutoSaveIdleMs <= 0) return;
+    const timer = setTimeout(() => {
+      saveVersion().catch((err: unknown) => {
+        console.warn(
+          '[squisq-editor] auto-save version failed:',
+          err instanceof Error ? err.message : err,
+        );
+      });
+    }, versioningAutoSaveIdleMs);
+    return () => clearTimeout(timer);
+  }, [markdownSource, versioning, versioningAutoSaveIdleMs, saveVersion]);
+
   const setMarkdownDoc = useCallback((newDoc: MarkdownDocument) => {
     setMarkdownDocState(newDoc);
     // Stringify to update the raw source
@@ -379,6 +508,9 @@ export function EditorProvider({
       language: resolvedLanguage,
       tiptapEditor,
       monacoEditor,
+      container,
+      versioning,
+      saveVersion,
       mediaProvider,
       imageDisplayMode,
       mentionProvider,
@@ -403,6 +535,9 @@ export function EditorProvider({
       resolvedLanguage,
       tiptapEditor,
       monacoEditor,
+      container,
+      versioning,
+      saveVersion,
       mediaProvider,
       imageDisplayMode,
       mentionProvider,

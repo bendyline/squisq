@@ -14,6 +14,7 @@
  */
 
 import Heading from '@tiptap/extension-heading';
+import { templateLabel } from './TemplatePicker';
 
 /**
  * HeadingWithTemplate — drop-in replacement for Tiptap's Heading that
@@ -62,6 +63,7 @@ export const HeadingWithTemplate = Heading.extend({
             class: 'squisq-template-badge',
             contenteditable: 'false',
             'data-template': templateName,
+            'data-template-label': templateLabel(templateName),
           },
         ],
       ];

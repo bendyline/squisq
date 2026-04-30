@@ -81,13 +81,10 @@ export function ImageViewer({ src, alt = '', className, theme = 'light' }: Image
 
   const effectiveZoom = state.mode === 'fit' ? fitZoom : state.zoom;
 
-  const setZoom = useCallback(
-    (next: number) => {
-      const clamped = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, next));
-      setState({ mode: 'manual', zoom: clamped });
-    },
-    [],
-  );
+  const setZoom = useCallback((next: number) => {
+    const clamped = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, next));
+    setState({ mode: 'manual', zoom: clamped });
+  }, []);
 
   const onFit = useCallback(() => {
     setState({ mode: 'fit' });
@@ -116,7 +113,10 @@ export function ImageViewer({ src, alt = '', className, theme = 'light' }: Image
     const onMove = (e: MouseEvent) => {
       const drag = dragRef.current;
       if (!drag) return;
-      setPan({ x: drag.panX + (e.clientX - drag.startX), y: drag.panY + (e.clientY - drag.startY) });
+      setPan({
+        x: drag.panX + (e.clientX - drag.startX),
+        y: drag.panY + (e.clientY - drag.startY),
+      });
     };
     const onUp = () => {
       dragRef.current = null;

@@ -355,6 +355,8 @@ function buildPreviewDoc(doc: Doc): Doc {
       segments: t > 0 ? [{ src: '', name: 'preview', duration: t, startTime: 0 }] : [],
     },
     ...(doc.captions ? { captions: doc.captions } : {}),
+    ...(doc.startBlock ? { startBlock: doc.startBlock } : {}),
+    ...(doc.themeId ? { themeId: doc.themeId } : {}),
   };
 }
 

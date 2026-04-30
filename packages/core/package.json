@@ -85,6 +85,11 @@
       "types": "./dist/transform/index.d.ts",
       "import": "./dist/transform/index.js",
       "default": "./dist/transform/index.js"
+    },
+    "./versions": {
+      "types": "./dist/versions/index.d.ts",
+      "import": "./dist/versions/index.js",
+      "default": "./dist/versions/index.js"
     }
   },
   "scripts": {

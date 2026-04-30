@@ -514,7 +514,7 @@ const warmEarth: Theme = {
 /**
  * Warm sage + terracotta palette.
  * Background is a subtly orange-tinted near-black — a much warmer surface
- * than the standard `#1a202c`-family dark themes. Primary is 
+ * than the standard `#1a202c`-family dark themes. Primary is
  * accent orange (`#b0724c`); secondary is the titlebar sage (`#667f62`).
  *
  * Typography uses system fonts with emoji fallbacks at the tail of each
