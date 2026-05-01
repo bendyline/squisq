@@ -235,11 +235,14 @@ test.describe('Template picker', () => {
       // Give time for the toolbar to update
       await page.waitForTimeout(300);
 
-      // Template picker should appear
+      // Template picker should appear. The default TemplatePicker is a
+      // <button> trigger that opens a gallery in a React portal — the
+      // older <select>-based shape only survives in the compact (overflow
+      // menu) variant. Asserting on the trigger here keeps the test
+      // honest about what's actually rendered in the toolbar.
       const picker = page.locator('.squisq-template-picker');
       await expect(picker).toBeVisible();
-      // Should have a select element
-      await expect(picker.locator('select')).toBeVisible();
+      await expect(picker.locator('.squisq-template-picker-trigger')).toBeVisible();
     }
   });
 

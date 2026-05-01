@@ -1,10 +1,7 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryContentContainer } from '@bendyline/squisq/storage';
-import {
-  DocumentVersionManager,
-  VERSIONS_PREFIX,
-} from '@bendyline/squisq/versions';
+import { DocumentVersionManager, VERSIONS_PREFIX } from '@bendyline/squisq/versions';
 import type { SaveVersionResult } from '@bendyline/squisq/versions';
 import { EditorProvider, useEditorContext } from '../EditorContext';
 import { VersionHistoryPanel } from '../VersionHistoryPanel';
@@ -192,10 +189,7 @@ describe('versioning wiring + VersionHistoryPanel', () => {
  * have to thread the timestamp through, which the public API doesn't
  * expose to the host (only to the internal manager).
  */
-async function onSaveVersionDirect(
-  container: MemoryContentContainer,
-  now: Date,
-): Promise<void> {
+async function onSaveVersionDirect(container: MemoryContentContainer, now: Date): Promise<void> {
   const manager = new DocumentVersionManager(container);
   await manager.saveVersion({ now });
 }

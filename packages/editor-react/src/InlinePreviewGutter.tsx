@@ -25,13 +25,7 @@
  *   elements within the WYSIWYG container — this matches markdown order.
  */
 
-import {
-  useLayoutEffect,
-  useMemo,
-  useRef,
-  useState,
-  type CSSProperties,
-} from 'react';
+import { useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import type { Block, DocBlock, ViewportConfig } from '@bendyline/squisq/schemas';
 import { VIEWPORT_PRESETS } from '@bendyline/squisq/schemas';
 import {
@@ -42,11 +36,7 @@ import {
   type RenderContext,
 } from '@bendyline/squisq/doc';
 import { extractPlainText } from '@bendyline/squisq/markdown';
-import type {
-  MarkdownBlockNode,
-  MarkdownList,
-  MarkdownTable,
-} from '@bendyline/squisq/markdown';
+import type { MarkdownBlockNode, MarkdownList, MarkdownTable } from '@bendyline/squisq/markdown';
 import { BlockRenderer } from '@bendyline/squisq-react';
 import { useEditorContext } from './EditorContext';
 
@@ -93,9 +83,7 @@ function extractTableData(contents?: MarkdownBlockNode[]): {
       const [headerRow, ...bodyRows] = table.children;
       if (!headerRow) return null;
       const headers = headerRow.children.map((cell) => extractPlainText(cell).trim());
-      const rows = bodyRows.map((row) =>
-        row.children.map((cell) => extractPlainText(cell).trim()),
-      );
+      const rows = bodyRows.map((row) => row.children.map((cell) => extractPlainText(cell).trim()));
       return { headers, rows, align: table.align };
     }
   }
@@ -188,9 +176,7 @@ export function InlinePreviewGutter({
       if (!isAnnotated(block)) return;
       const annotation = block.sourceHeading!.templateAnnotation!;
       const template = annotation.template!;
-      const headingText = block.sourceHeading
-        ? extractPlainText(block.sourceHeading)
-        : '';
+      const headingText = block.sourceHeading ? extractPlainText(block.sourceHeading) : '';
       const bodyText = extractBodyPlainText(block.contents);
 
       const templateBlock: Record<string, unknown> = {
@@ -230,9 +216,7 @@ export function InlinePreviewGutter({
         // when authors are mid-edit and a template's required field
         // is temporarily missing.
         const message = err instanceof Error ? err.message : String(err);
-        console.warn(
-          `[InlinePreviewGutter] Skipped block "${block.id}" (${template}): ${message}`,
-        );
+        console.warn(`[InlinePreviewGutter] Skipped block "${block.id}" (${template}): ${message}`);
       }
     });
 
@@ -292,25 +276,19 @@ export function InlinePreviewGutter({
 
         // Track the editor page's right edge so the gutter can hug it
         // instead of floating at the far end of the container.
-        const page = wysiwygContainer.querySelector(
-          '.squisq-wysiwyg-editor',
-        ) as HTMLElement | null;
+        const page = wysiwygContainer.querySelector('.squisq-wysiwyg-editor') as HTMLElement | null;
         const wrapperEl = wrapper.getBoundingClientRect();
         if (page) {
           const pageRect = page.getBoundingClientRect();
           const offset = pageRect.right - wrapperEl.left;
-          setPageRight((prev) =>
-            prev != null && Math.abs(prev - offset) < 0.5 ? prev : offset,
-          );
+          setPageRight((prev) => (prev != null && Math.abs(prev - offset) < 0.5 ? prev : offset));
         }
       });
     };
 
     recompute();
 
-    const editorSurface = wysiwygContainer.querySelector(
-      '.squisq-wysiwyg-editor',
-    );
+    const editorSurface = wysiwygContainer.querySelector('.squisq-wysiwyg-editor');
     const ro = new ResizeObserver(recompute);
     ro.observe(wysiwygContainer);
     if (editorSurface) ro.observe(editorSurface);
@@ -422,13 +400,9 @@ export function InlinePreviewGutter({
                 }}
               >
                 <div className="squisq-inline-preview-card-label">
-                  <span className="squisq-inline-preview-card-template">
-                    {item.template}
-                  </span>
+                  <span className="squisq-inline-preview-card-template">{item.template}</span>
                   {item.headingText && (
-                    <span className="squisq-inline-preview-card-title">
-                      {item.headingText}
-                    </span>
+                    <span className="squisq-inline-preview-card-title">{item.headingText}</span>
                   )}
                 </div>
                 <div

@@ -36,14 +36,7 @@ export function parseVersionTimestamp(stamp: string): Date | null {
   const m = TIMESTAMP_RE.exec(stamp);
   if (!m) return null;
   const [, y, mo, d, h, mi, s] = m;
-  const ms = Date.UTC(
-    Number(y),
-    Number(mo) - 1,
-    Number(d),
-    Number(h),
-    Number(mi),
-    Number(s),
-  );
+  const ms = Date.UTC(Number(y), Number(mo) - 1, Number(d), Number(h), Number(mi), Number(s));
   if (Number.isNaN(ms)) return null;
   return new Date(ms);
 }

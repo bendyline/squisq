@@ -175,8 +175,7 @@ export function VersionHistoryPanel() {
           ) : (
             <ul className="squisq-version-history-list">
               {visibleVersions.map((v) => {
-                const pending =
-                  state.pendingRevert !== null && state.pendingRevert.path === v.path;
+                const pending = state.pendingRevert !== null && state.pendingRevert.path === v.path;
                 return (
                   <li key={v.path} className="squisq-version-history-row">
                     <span className="squisq-version-history-row__time">
@@ -202,16 +201,14 @@ export function VersionHistoryPanel() {
                     {pending && (
                       <div className="squisq-version-history-confirm">
                         <span>
-                          Revert to this version? Your current draft will be saved as a new
-                          snapshot first. Reverting will reset your editor undo state.
+                          Revert to this version? Your current draft will be saved as a new snapshot
+                          first. Reverting will reset your editor undo state.
                         </span>
                         <span className="squisq-version-history-confirm-actions">
                           <button
                             type="button"
                             className="squisq-version-history-link"
-                            onClick={() =>
-                              setState((s) => ({ ...s, pendingRevert: null }))
-                            }
+                            onClick={() => setState((s) => ({ ...s, pendingRevert: null }))}
                           >
                             Cancel
                           </button>

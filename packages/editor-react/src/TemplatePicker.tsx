@@ -48,7 +48,17 @@ const NONE_ENTRY: TemplateEntry = {
   description: 'Plain heading block with no visual template.',
   icon: (
     <TemplateIcon>
-      <rect x={4} y={4} width={48} height={32} rx={2} fill="none" stroke={F1} strokeWidth={1.5} strokeDasharray="3 2" />
+      <rect
+        x={4}
+        y={4}
+        width={48}
+        height={32}
+        rx={2}
+        fill="none"
+        stroke={F1}
+        strokeWidth={1.5}
+        strokeDasharray="3 2"
+      />
       <rect x={12} y={15} width={32} height={4} rx={1} fill={F1} />
       <rect x={16} y={22} width={24} height={3} rx={1} fill={F1} opacity={0.6} />
     </TemplateIcon>
@@ -100,7 +110,17 @@ const TEMPLATE_ENTRIES: TemplateEntry[] = [
     description: 'Displays a stylized pull quote with decorative marks and attribution.',
     icon: (
       <TemplateIcon>
-        <text x={5} y={18} fontSize={18} fill={FA} fontFamily="serif" fontWeight="bold" opacity={0.7}>"</text>
+        <text
+          x={5}
+          y={18}
+          fontSize={18}
+          fill={FA}
+          fontFamily="serif"
+          fontWeight="bold"
+          opacity={0.7}
+        >
+          "
+        </text>
         <rect x={16} y={8} width={36} height={4} rx={1} fill={F2} />
         <rect x={16} y={15} width={32} height={4} rx={1} fill={F2} />
         <rect x={16} y={22} width={24} height={4} rx={1} fill={F2} />
@@ -191,7 +211,17 @@ const TEMPLATE_ENTRIES: TemplateEntry[] = [
     icon: (
       <TemplateIcon>
         <rect x={4} y={4} width={48} height={32} rx={2} fill={F2} opacity={0.2} />
-        <text x={5} y={15} fontSize={16} fill={FA} fontFamily="serif" fontWeight="bold" opacity={0.8}>"</text>
+        <text
+          x={5}
+          y={15}
+          fontSize={16}
+          fill={FA}
+          fontFamily="serif"
+          fontWeight="bold"
+          opacity={0.8}
+        >
+          "
+        </text>
         <rect x={4} y={14} width={48} height={5} rx={1} fill={F2} />
         <rect x={4} y={22} width={44} height={5} rx={1} fill={F2} />
         <rect x={4} y={30} width={30} height={4} rx={1} fill={F2} opacity={0.7} />
@@ -260,12 +290,16 @@ const TEMPLATE_ENTRIES: TemplateEntry[] = [
     description: 'A stylized pull quote with large decorative marks and centered text.',
     icon: (
       <TemplateIcon>
-        <text x={3} y={20} fontSize={26} fill={FA} fontFamily="serif" opacity={0.5}>"</text>
+        <text x={3} y={20} fontSize={26} fill={FA} fontFamily="serif" opacity={0.5}>
+          "
+        </text>
         <rect x={16} y={7} width={36} height={4.5} rx={1} fill={F2} />
         <rect x={16} y={15} width={34} height={4.5} rx={1} fill={F2} />
         <rect x={16} y={23} width={28} height={4.5} rx={1} fill={F2} />
         <rect x={32} y={31} width={20} height={3} rx={1} fill={F1} />
-        <text x={44} y={42} fontSize={26} fill={FA} fontFamily="serif" opacity={0.3}>"</text>
+        <text x={44} y={42} fontSize={26} fill={FA} fontFamily="serif" opacity={0.3}>
+          "
+        </text>
       </TemplateIcon>
     ),
   },
@@ -293,7 +327,9 @@ const TEMPLATE_ENTRIES: TemplateEntry[] = [
         <circle cx={14.5} cy={20} r={6} fill={FA} opacity={0.65} />
         <polygon points="12,17 12,23 18,20" fill="white" />
         <rect x={30} y={4} width={23} height={32} rx={2} fill={F1} opacity={0.3} />
-        <text x={32} y={16} fontSize={12} fill={FA} fontFamily="serif" opacity={0.6}>"</text>
+        <text x={32} y={16} fontSize={12} fill={FA} fontFamily="serif" opacity={0.6}>
+          "
+        </text>
         <rect x={30} y={17} width={20} height={3.5} rx={1} fill={F2} />
         <rect x={30} y={23} width={18} height={3} rx={1} fill={F1} />
         <rect x={30} y={29} width={14} height={2.5} rx={1} fill={F1} opacity={0.7} />
@@ -487,7 +523,13 @@ export function TemplatePicker({ value, onChange, compact }: TemplatePickerProps
           fill="currentColor"
           aria-hidden="true"
         >
-          <path d="M2 3.5l3 3 3-3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" fill="none" />
+          <path
+            d="M2 3.5l3 3 3-3"
+            stroke="currentColor"
+            strokeWidth="1.5"
+            strokeLinecap="round"
+            fill="none"
+          />
         </svg>
       </button>
       {gallery}

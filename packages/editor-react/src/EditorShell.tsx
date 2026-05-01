@@ -627,18 +627,16 @@ function EditorShellInner({
             {/* WYSIWYG + Preview are markdown-only surfaces — skip them
                 entirely in code or image mode so Tiptap never initializes
                 and the preview pipeline stays idle. */}
-            {isMarkdownMode && activeView === 'wysiwyg' && (
-              inlinePreview ? (
+            {isMarkdownMode &&
+              activeView === 'wysiwyg' &&
+              (inlinePreview ? (
                 <div className="squisq-wysiwyg-with-gutter">
                   <WysiwygEditor
                     submitOnEnter={submitOnEnter}
                     placeholder={placeholder}
                     readOnly={readOnly}
                   />
-                  <InlinePreviewGutter
-                    width={inlinePreviewWidth}
-                    basePath={basePath}
-                  />
+                  <InlinePreviewGutter width={inlinePreviewWidth} basePath={basePath} />
                 </div>
               ) : (
                 <WysiwygEditor
@@ -646,8 +644,7 @@ function EditorShellInner({
                   placeholder={placeholder}
                   readOnly={readOnly}
                 />
-              )
-            )}
+              ))}
             {isMarkdownMode && isPreview && (
               <PreviewPanel basePath={basePath} container={container} />
             )}

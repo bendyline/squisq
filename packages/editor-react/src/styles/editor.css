@@ -391,7 +391,9 @@
   border-radius: 5px;
   cursor: pointer;
   white-space: nowrap;
-  transition: background 0.1s, border-color 0.1s;
+  transition:
+    background 0.1s,
+    border-color 0.1s;
 }
 
 .squisq-template-picker-trigger:hover {
@@ -432,7 +434,9 @@
   background: #fff;
   border: 1px solid #e5e7eb;
   border-radius: 10px;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12), 0 2px 6px rgba(0, 0, 0, 0.06);
+  box-shadow:
+    0 8px 24px rgba(0, 0, 0, 0.12),
+    0 2px 6px rgba(0, 0, 0, 0.06);
   padding: 8px;
   animation: squisq-gallery-appear 0.12s ease-out;
 }
@@ -514,7 +518,10 @@
   background: none;
   cursor: pointer;
   text-align: left;
-  transition: background 0.1s, border-color 0.1s, box-shadow 0.1s;
+  transition:
+    background 0.1s,
+    border-color 0.1s,
+    box-shadow 0.1s;
 }
 
 .squisq-template-gallery-card:hover {
@@ -1091,14 +1098,17 @@
 .squisq-editor-shell[data-theme='dark'] .squisq-template-gallery {
   background: #1f2937;
   border-color: #374151;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4), 0 2px 6px rgba(0, 0, 0, 0.2);
+  box-shadow:
+    0 8px 24px rgba(0, 0, 0, 0.4),
+    0 2px 6px rgba(0, 0, 0, 0.2);
 }
 
 .squisq-editor-shell[data-theme='dark'] .squisq-template-gallery-none:hover {
   background: #374151;
 }
 
-.squisq-editor-shell[data-theme='dark'] .squisq-template-gallery-none.squisq-template-gallery-card--selected {
+.squisq-editor-shell[data-theme='dark']
+  .squisq-template-gallery-none.squisq-template-gallery-card--selected {
   background: #1e1b4b;
   border-color: #4338ca;
 }
@@ -2201,4 +2211,3 @@
   background: #818cf8;
   box-shadow: 0 0 0 2px #0f172a;
 }
-
