@@ -1,0 +1,54 @@
+{
+  "schemaVersion": "1",
+  "id": "cinematic",
+  "name": "Cinematic",
+  "description": "Ultra-dark with moody gradients, gold accents, and slow dissolve transitions.",
+  "colors": {
+    "primary": "#d69e2e",
+    "secondary": "#b7791f",
+    "background": "#0a0f1a",
+    "backgroundLight": "#1a202c",
+    "text": "#f7fafc",
+    "textMuted": "#a0aec0",
+    "highlight": "#ecc94b",
+    "warning": "#fc8181"
+  },
+  "typography": {
+    "bodyFont": { "stackId": "crimson" },
+    "titleFont": { "stackId": "cormorant" },
+    "titleWeight": "bold",
+    "lineHeight": 1.5,
+    "titleLineHeight": 1.2
+  },
+  "style": {
+    "textShadow": true,
+    "overlayOpacity": 0.55,
+    "animationSpeed": 1.2
+  },
+  "renderStyle": {
+    "name": "cinematic",
+    "defaultTextAnimation": "fadeIn",
+    "defaultImageAnimation": "slowZoom",
+    "ambientMotion": true,
+    "defaultTransition": { "type": "dissolve", "duration": 1.2 },
+    "templateHints": {
+      "titleBlock": { "showAccentLine": true }
+    }
+  },
+  "colorSchemes": {
+    "blue":   { "bg": "#0d1b2a", "text": "#90cdf4", "accent": "#63b3ed" },
+    "green":  { "bg": "#0d1b14", "text": "#9ae6b4", "accent": "#68d391" },
+    "purple": { "bg": "#1a0d2e", "text": "#d6bcfa", "accent": "#b794f4" },
+    "red":    { "bg": "#2a0d0d", "text": "#fc8181", "accent": "#feb2b2" },
+    "orange": { "bg": "#2a1a0d", "text": "#fbd38d", "accent": "#f6ad55" },
+    "teal":   { "bg": "#0d2a2a", "text": "#81e6d9", "accent": "#4fd1c5" }
+  },
+  "persistentLayers": {
+    "bottomLayers": [
+      {
+        "template": "gradientBackground",
+        "config": { "type": "gradientBackground", "preset": "radial-dark" }
+      }
+    ]
+  }
+}

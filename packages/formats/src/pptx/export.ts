@@ -28,7 +28,7 @@
  */
 
 import type { Doc } from '@bendyline/squisq/schemas';
-import { resolveTheme } from '@bendyline/squisq/schemas';
+import { resolveTheme, resolveFontFamily } from '@bendyline/squisq/schemas';
 import type { Theme } from '@bendyline/squisq/schemas';
 import { docToMarkdown } from '@bendyline/squisq/doc';
 import type {
@@ -218,9 +218,9 @@ function resolveSlideStyle(themeId: string | undefined, options: PptxExportOptio
     text: stripHash(c.text),
     titleColor: stripHash(c.highlight || c.secondary || c.text),
     mutedColor: stripHash(c.textMuted || c.text),
-    titleFont: theme.typography?.titleFontFamily || DEFAULT_TITLE_FONT,
-    bodyFont: theme.typography?.bodyFontFamily || options.defaultFont || DEFAULT_FONT,
-    codeFont: theme.typography?.monoFontFamily || DEFAULT_CODE_FONT,
+    titleFont: resolveFontFamily(theme.typography?.titleFont, DEFAULT_TITLE_FONT),
+    bodyFont: resolveFontFamily(theme.typography?.bodyFont, options.defaultFont || DEFAULT_FONT),
+    codeFont: resolveFontFamily(theme.typography?.monoFont, DEFAULT_CODE_FONT),
     codeColor: stripHash(c.textMuted || c.text),
     hasTheme: true,
   };

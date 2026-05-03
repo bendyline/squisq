@@ -1,0 +1,49 @@
+{
+  "schemaVersion": "1",
+  "id": "documentary",
+  "name": "Documentary",
+  "description": "Classic dark cinematic look with elegant serif typography.",
+  "colors": {
+    "primary": "#3d5a80",
+    "secondary": "#63b3ed",
+    "background": "#1a202c",
+    "backgroundLight": "#2d3748",
+    "text": "#ffffff",
+    "textMuted": "#a0aec0",
+    "highlight": "#63b3ed",
+    "warning": "#fc8181"
+  },
+  "typography": {
+    "bodyFont": { "stackId": "source-serif" },
+    "titleFont": { "stackId": "playfair" },
+    "titleWeight": "bold"
+  },
+  "style": {
+    "textShadow": true,
+    "overlayOpacity": 0.5,
+    "animationSpeed": 1.0
+  },
+  "renderStyle": {
+    "name": "documentary",
+    "defaultTextAnimation": "fadeIn",
+    "defaultImageAnimation": "slowZoom",
+    "ambientMotion": true,
+    "defaultTransition": { "type": "fade", "duration": 0.8 }
+  },
+  "colorSchemes": {
+    "blue":   { "bg": "#1a365d", "text": "#63b3ed", "accent": "#90cdf4" },
+    "green":  { "bg": "#22543d", "text": "#9ae6b4", "accent": "#68d391" },
+    "purple": { "bg": "#44337a", "text": "#d6bcfa", "accent": "#b794f4" },
+    "red":    { "bg": "#742a2a", "text": "#fc8181", "accent": "#feb2b2" },
+    "orange": { "bg": "#744210", "text": "#fbd38d", "accent": "#f6ad55" },
+    "teal":   { "bg": "#234e52", "text": "#81e6d9", "accent": "#4fd1c5" }
+  },
+  "persistentLayers": {
+    "bottomLayers": [
+      {
+        "template": "gradientBackground",
+        "config": { "type": "gradientBackground", "preset": "dark-vignette" }
+      }
+    ]
+  }
+}

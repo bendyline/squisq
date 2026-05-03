@@ -13,6 +13,15 @@ import type { TitleBlockInput, TemplateContext } from '../../schemas/BlockTempla
 import { scaledFontSize } from '../../schemas/BlockTemplates.js';
 import { getThemeFont } from '../utils/themeUtils.js';
 
+/**
+ * Hint schema published for the theme validator + future customizer hint UI.
+ * Themes may set `templateHints.titleBlock` entries matching these keys.
+ */
+export const titleBlockHintSchema = {
+  /** Whether to render a thin accent line above the title. Default: theme-dependent. */
+  showAccentLine: { type: 'boolean' as const, default: true },
+} as const;
+
 export function titleBlock(input: TitleBlockInput, context: TemplateContext): Layer[] {
   const { title, subtitle, backgroundColor } = input;
   const { theme, layout } = context;

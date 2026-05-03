@@ -6,7 +6,7 @@
  */
 
 import { useState, useCallback, useEffect, useRef } from 'react';
-import { EditorShell } from '@bendyline/squisq-editor-react';
+import { EditorShell, ThemeCustomizerPanel } from '@bendyline/squisq-editor-react';
 import type { EditorTheme } from '@bendyline/squisq-editor-react';
 import '@bendyline/squisq-editor-react/styles';
 import { MediaContext } from '@bendyline/squisq-react';
@@ -21,13 +21,56 @@ import { DebugPanel } from './DebugPanel';
 import { FileToolbar } from './FileToolbar';
 import { StorageToolbar } from './StorageToolbar';
 import { createSlotMediaProvider } from './slotStorage';
-import type { MediaProvider } from '@bendyline/squisq/schemas';
+import type { MediaProvider, Theme } from '@bendyline/squisq/schemas';
+import { parseTheme, registerTheme, unregisterTheme } from '@bendyline/squisq/schemas';
+
+const CUSTOM_THEME_STORAGE_KEY = 'squisq-site:customTheme';
+
+/** Load a previously-saved custom theme from localStorage. Returns null on miss / parse failure. */
+function loadStoredCustomTheme(): Theme | null {
+  if (typeof localStorage === 'undefined') return null;
+  const json = localStorage.getItem(CUSTOM_THEME_STORAGE_KEY);
+  if (!json) return null;
+  try {
+    return parseTheme(json);
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.warn('Discarding stored custom theme — failed validation:', msg);
+    localStorage.removeItem(CUSTOM_THEME_STORAGE_KEY);
+    return null;
+  }
+}
 
 export function App() {
   const [selectedSample, setSelectedSample] = useState('hello-world');
   const [showDebug, setShowDebug] = useState(false);
   const [currentSource, setCurrentSource] = useState(SAMPLES['hello-world']);
   const [theme, setTheme] = useState<EditorTheme>('light');
+  const [customTheme, setCustomThemeState] = useState<Theme | null>(() => loadStoredCustomTheme());
+  // Re-register the loaded theme on mount so `Doc.themeId` lookups resolve to it.
+  // Subsequent edits go through handleCustomThemeChange which also registers.
+  useEffect(() => {
+    if (customTheme) registerTheme(customTheme);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  const handleCustomThemeChange = useCallback((next: Theme) => {
+    registerTheme(next);
+    setCustomThemeState(next);
+  }, []);
+  const handleCustomThemeSave = useCallback((next: Theme, json: string) => {
+    if (typeof localStorage !== 'undefined') {
+      localStorage.setItem(CUSTOM_THEME_STORAGE_KEY, json);
+    }
+    registerTheme(next);
+    setCustomThemeState(next);
+  }, []);
+  const handleCustomThemeReset = useCallback(() => {
+    if (customTheme) unregisterTheme(customTheme.id);
+    if (typeof localStorage !== 'undefined') {
+      localStorage.removeItem(CUSTOM_THEME_STORAGE_KEY);
+    }
+    setCustomThemeState(null);
+  }, [customTheme]);
   // Key to force EditorShell remount on upload
   const [editorKey, setEditorKey] = useState(0);
   // Storage slot state
@@ -260,6 +303,16 @@ export function App() {
           {showDebug ? 'Hide' : 'Show'} Debug
         </button>
 
+        {/* Theme customizer — wrapped in editor-shell to inherit BEM dark-theme styles. */}
+        <div className="squisq-editor-shell" data-theme={theme} style={{ position: 'relative' }}>
+          <ThemeCustomizerPanel
+            value={customTheme}
+            onChange={handleCustomThemeChange}
+            onSave={handleCustomThemeSave}
+            onReset={handleCustomThemeReset}
+          />
+        </div>
+
         {/* Spacer */}
         <div style={{ flex: 1 }} />
 
@@ -309,6 +362,7 @@ export function App() {
               height="100%"
               mediaProvider={mediaProvider}
               inlinePreview
+              themeOverride={customTheme}
             />
           </div>
 

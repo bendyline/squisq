@@ -1,0 +1,44 @@
+{
+  "schemaVersion": "1",
+  "id": "gezellig",
+  "name": "Gezellig",
+  "description": "Warm sage + terracotta palette inspired by the Gezel desktop app. Subtle orange-tinted dark background, cream text, sage and terracotta accents.",
+  "colors": {
+    "primary": "#b0724c",
+    "secondary": "#667f62",
+    "background": "#1f1a17",
+    "backgroundLight": "#2b2420",
+    "text": "#f3ede0",
+    "textMuted": "#a89b85",
+    "highlight": "#c0875d",
+    "warning": "#e07a6b"
+  },
+  "typography": {
+    "bodyFont": { "stackId": "system-sans-emoji" },
+    "titleFont": { "stackId": "system-serif-emoji" },
+    "monoFont": { "stackId": "system-mono" },
+    "titleWeight": "bold",
+    "lineHeight": 1.55
+  },
+  "style": {
+    "textShadow": false,
+    "overlayOpacity": 0.4,
+    "animationSpeed": 1.0,
+    "borderRadius": 6
+  },
+  "renderStyle": {
+    "name": "gezellig",
+    "defaultTextAnimation": "fadeIn",
+    "defaultImageAnimation": "slowZoom",
+    "ambientMotion": false,
+    "defaultTransition": { "type": "fade", "duration": 0.6 }
+  },
+  "colorSchemes": {
+    "terracotta": { "bg": "#3d2620", "text": "#f3ede0", "accent": "#c0875d" },
+    "sage":       { "bg": "#28332a", "text": "#e3ead9", "accent": "#8aa589" },
+    "amber":      { "bg": "#3d2e17", "text": "#fbe3a8", "accent": "#d4a149" },
+    "plum":       { "bg": "#2e1f2a", "text": "#e8d4e0", "accent": "#b088a5" },
+    "ink":        { "bg": "#1a1f26", "text": "#d5dde8", "accent": "#7b8fa8" },
+    "cream":      { "bg": "#f3ede0", "text": "#2b2420", "accent": "#b0724c" }
+  }
+}

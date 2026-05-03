@@ -32,7 +32,7 @@ import {
   processTextFile,
   processTextFiles,
 } from './utils/dropUtils';
-import type { MediaProvider } from '@bendyline/squisq/schemas';
+import type { MediaProvider, Theme } from '@bendyline/squisq/schemas';
 import type { ContentContainer } from '@bendyline/squisq/storage';
 import type { PrunePolicy, SaveVersionResult } from '@bendyline/squisq/versions';
 import type { CSSProperties, ReactNode } from 'react';
@@ -237,6 +237,13 @@ export interface EditorShellProps {
    * Only takes effect when {@link EditorShellProps.inlinePreview} is true.
    */
   inlinePreviewWidth?: number;
+  /**
+   * Override the preview theme with an explicit `Theme` object. When set,
+   * `Doc.themeId` and the user's theme dropdown selection are ignored for
+   * the preview surface. Used by the theme customizer to live-preview an
+   * in-progress theme without mutating the document.
+   */
+  themeOverride?: Theme | null;
 }
 
 /**
@@ -281,6 +288,7 @@ export function EditorShell({
   imageAlt,
   inlinePreview = false,
   inlinePreviewWidth = 320,
+  themeOverride = null,
 }: EditorShellProps) {
   // Show the toggle when explicitly opted in, or when mediaProvider prop was passed at all
   const filesToggleEnabled = showFilesToggle ?? mediaProvider !== undefined;
@@ -333,6 +341,7 @@ export function EditorShell({
         imageAlt={imageAlt}
         inlinePreview={inlinePreview}
         inlinePreviewWidth={inlinePreviewWidth}
+        themeOverride={themeOverride}
       />
     </EditorProvider>
   );
@@ -363,6 +372,7 @@ interface EditorShellInnerProps {
   imageAlt?: string;
   inlinePreview: boolean;
   inlinePreviewWidth: number;
+  themeOverride: Theme | null;
 }
 
 function EditorShellInner({
@@ -390,6 +400,7 @@ function EditorShellInner({
   imageAlt,
   inlinePreview,
   inlinePreviewWidth,
+  themeOverride,
 }: EditorShellInnerProps) {
   const {
     activeView,
@@ -566,7 +577,7 @@ function EditorShellInner({
       }}
       {...containerProps}
     >
-      <PreviewSettingsProvider doc={doc}>
+      <PreviewSettingsProvider doc={doc} themeOverride={themeOverride}>
         {/* Header. In image mode the full markdown/code Toolbar is replaced
             with a minimal slot bar — view tabs, formatting, and preview
             controls don't apply to a binary asset. */}

@@ -21,7 +21,7 @@ import { useMemo } from 'react';
 import { useAutoSurface } from './hooks/useAutoSurface';
 import type { Doc, Block, DocBlock } from '@bendyline/squisq/schemas';
 import type { ViewportConfig } from '@bendyline/squisq/schemas';
-import { applySurface, type SurfaceScheme, type Theme } from '@bendyline/squisq/schemas';
+import { applySurface, resolveFontFamily, type SurfaceScheme, type Theme } from '@bendyline/squisq/schemas';
 import { VIEWPORT_PRESETS } from '@bendyline/squisq/schemas';
 import { getLayers, hasTemplate, DEFAULT_THEME } from '@bendyline/squisq/doc';
 import type { RenderContext } from '@bendyline/squisq/doc';
@@ -345,8 +345,8 @@ export function LinearDocView({
   const textColor = activeTheme.colors.text;
   const mutedColor = activeTheme.colors.textMuted;
   const primaryColor = activeTheme.colors.primary;
-  const bodyFont = activeTheme.typography.bodyFontFamily;
-  const titleFont = activeTheme.typography.titleFontFamily;
+  const bodyFont = resolveFontFamily(activeTheme.typography.bodyFont, 'system-ui, sans-serif');
+  const titleFont = resolveFontFamily(activeTheme.typography.titleFont, 'Georgia, serif');
   const lineHt = activeTheme.typography.lineHeight ?? 1.7;
 
   return (

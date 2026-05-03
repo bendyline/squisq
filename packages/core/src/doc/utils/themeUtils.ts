@@ -9,6 +9,7 @@
 import type { TemplateContext } from '../../schemas/BlockTemplates.js';
 import type { ThemeColorScheme, RenderStyle } from '../../schemas/Theme.js';
 import type { AnimationType } from '../../schemas/Doc.js';
+import { resolveFontFamily } from '../../schemas/fontStacks.js';
 
 // ============================================
 // Color Scheme Resolution
@@ -47,22 +48,22 @@ const FALLBACK_TITLE = 'Georgia, "Times New Roman", serif';
 const FALLBACK_MONO = 'Consolas, "Courier New", monospace';
 
 /**
- * Get the theme font family for a given role.
+ * Get the theme font family for a given role, resolved to a CSS string.
  * Templates call this to set `fontFamily` on text layers.
  *
- * @param context Template context (includes theme with typography settings)
- * @param role    'title' for headings, 'body' for descriptions, 'mono' for code
- * @returns A CSS font-family string with the theme's font and safe fallbacks
+ * Theme fields are structured `FontFamily` references (`{ stackId }` or
+ * `{ custom: { name, fallback } }`); this helper resolves them to a
+ * CSS font-family string with safe fallbacks.
  */
 export function getThemeFont(context: TemplateContext, role: 'title' | 'body' | 'mono'): string {
   const { typography } = context.theme;
   switch (role) {
     case 'title':
-      return typography.titleFontFamily || FALLBACK_TITLE;
+      return resolveFontFamily(typography.titleFont, FALLBACK_TITLE);
     case 'body':
-      return typography.bodyFontFamily || FALLBACK_BODY;
+      return resolveFontFamily(typography.bodyFont, FALLBACK_BODY);
     case 'mono':
-      return typography.monoFontFamily || FALLBACK_MONO;
+      return resolveFontFamily(typography.monoFont, FALLBACK_MONO);
   }
 }
 

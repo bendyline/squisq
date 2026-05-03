@@ -1,0 +1,45 @@
+{
+  "schemaVersion": "1",
+  "id": "minimalist",
+  "name": "Minimalist",
+  "description": "Clean near-white background with sans-serif type and minimal animation.",
+  "colors": {
+    "primary": "#2d3748",
+    "secondary": "#4a5568",
+    "background": "#f7fafc",
+    "backgroundLight": "#edf2f7",
+    "text": "#1a202c",
+    "textMuted": "#718096",
+    "highlight": "#3182ce",
+    "warning": "#e53e3e"
+  },
+  "typography": {
+    "bodyFont": { "stackId": "inter" },
+    "titleFont": { "stackId": "inter" },
+    "titleWeight": "bold",
+    "lineHeight": 1.6
+  },
+  "style": {
+    "textShadow": false,
+    "overlayOpacity": 0.3,
+    "animationSpeed": 1.2,
+    "borderRadius": 8
+  },
+  "renderStyle": {
+    "name": "minimalist",
+    "defaultTextAnimation": "fadeIn",
+    "ambientMotion": false,
+    "defaultTransition": { "type": "fade", "duration": 0.6 },
+    "templateHints": {
+      "titleBlock": { "showAccentLine": false }
+    }
+  },
+  "colorSchemes": {
+    "blue":   { "bg": "#ebf8ff", "text": "#2b6cb0", "accent": "#3182ce" },
+    "green":  { "bg": "#f0fff4", "text": "#276749", "accent": "#38a169" },
+    "purple": { "bg": "#faf5ff", "text": "#553c9a", "accent": "#805ad5" },
+    "red":    { "bg": "#fff5f5", "text": "#c53030", "accent": "#e53e3e" },
+    "orange": { "bg": "#fffaf0", "text": "#c05621", "accent": "#dd6b20" },
+    "teal":   { "bg": "#e6fffa", "text": "#285e61", "accent": "#319795" }
+  }
+}

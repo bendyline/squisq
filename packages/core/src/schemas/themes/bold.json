@@ -1,0 +1,48 @@
+{
+  "schemaVersion": "1",
+  "id": "bold",
+  "name": "Bold",
+  "description": "High-contrast black with vivid accents and dramatic animations.",
+  "colors": {
+    "primary": "#e53e3e",
+    "secondary": "#ed8936",
+    "background": "#000000",
+    "backgroundLight": "#1a1a1a",
+    "text": "#ffffff",
+    "textMuted": "#cbd5e0",
+    "highlight": "#f6e05e",
+    "warning": "#fc8181"
+  },
+  "typography": {
+    "bodyFont": { "stackId": "roboto" },
+    "titleFont": { "stackId": "oswald" },
+    "titleWeight": "bold",
+    "titleScale": 1.15,
+    "bodyScale": 1.0,
+    "titleLineHeight": 1.1
+  },
+  "style": {
+    "textShadow": true,
+    "overlayOpacity": 0.6,
+    "animationSpeed": 0.8
+  },
+  "renderStyle": {
+    "name": "bold",
+    "defaultTextAnimation": "zoomIn",
+    "defaultImageAnimation": "slowZoom",
+    "ambientMotion": true,
+    "defaultTransition": { "type": "dissolve", "duration": 0.5 },
+    "templateHints": {
+      "statHighlight": { "entrance": "dramatic" },
+      "fullBleedQuote": { "entrance": "dramatic" }
+    }
+  },
+  "colorSchemes": {
+    "blue":   { "bg": "#1a202c", "text": "#63b3ed", "accent": "#90cdf4" },
+    "green":  { "bg": "#1a202c", "text": "#48bb78", "accent": "#68d391" },
+    "purple": { "bg": "#1a202c", "text": "#b794f4", "accent": "#d6bcfa" },
+    "red":    { "bg": "#1a202c", "text": "#fc8181", "accent": "#feb2b2" },
+    "orange": { "bg": "#1a202c", "text": "#f6ad55", "accent": "#fbd38d" },
+    "teal":   { "bg": "#1a202c", "text": "#4fd1c5", "accent": "#81e6d9" }
+  }
+}

@@ -17,6 +17,15 @@ import { resolveColorScheme, getThemeFont } from '../utils/themeUtils.js';
 import { createAccentLayers, getAccentLayout, adjustY, DEFAULT_LAYOUT } from './accentImage.js';
 import { createBackgroundLayer } from './captionUtils.js';
 
+/**
+ * Hint schema published for the theme validator + future customizer hint UI.
+ * Themes may set `templateHints.statHighlight` entries matching these keys.
+ */
+export const statHighlightHintSchema = {
+  /** Entrance style for the stat number. 'subtle' or 'dramatic'. */
+  entrance: { type: 'string' as const, options: ['subtle', 'dramatic'] as const, default: 'subtle' },
+} as const;
+
 export function statHighlight(input: StatHighlightInput, context: TemplateContext): Layer[] {
   const { stat, description, detail, colorScheme = 'blue', accentImage } = input;
   const { theme } = context;

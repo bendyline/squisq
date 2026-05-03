@@ -18,7 +18,7 @@
  */
 
 import type { Doc, Theme } from '@bendyline/squisq/schemas';
-import { resolveTheme } from '@bendyline/squisq/schemas';
+import { resolveTheme, resolveFontFamily } from '@bendyline/squisq/schemas';
 import { docToMarkdown } from '@bendyline/squisq/doc';
 import type {
   MarkdownDocument,
@@ -198,8 +198,8 @@ class ExportContext {
 
     if (options.themeId) {
       const theme: Theme = resolveTheme(options.themeId);
-      themeFont = theme.typography?.bodyFontFamily;
-      themeTitleFont = theme.typography?.titleFontFamily;
+      themeFont = resolveFontFamily(theme.typography?.bodyFont, '');
+      themeTitleFont = resolveFontFamily(theme.typography?.titleFont, '');
       if (theme.colors?.primary) {
         const c = theme.colors.primary;
         themeHeadingColor = c.startsWith('#') ? c.slice(1) : c;

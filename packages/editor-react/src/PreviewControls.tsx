@@ -109,9 +109,16 @@ function resolveFrontmatterCaptionStyle(value: unknown): CaptionStyle | null {
 export interface PreviewSettingsProviderProps {
   doc: Doc | null;
   children: ReactNode;
+  /**
+   * Optional Theme to use for the preview, regardless of `Doc.themeId` or
+   * the user's theme dropdown selection. Used by the theme customizer to
+   * preview an in-progress theme without mutating the document. When
+   * present, `activeTheme` is this value and `activeThemeId` is its `id`.
+   */
+  themeOverride?: Theme | null;
 }
 
-export function PreviewSettingsProvider({ doc, children }: PreviewSettingsProviderProps) {
+export function PreviewSettingsProvider({ doc, children, themeOverride }: PreviewSettingsProviderProps) {
   const frontmatter = doc?.frontmatter;
 
   // Viewport
@@ -134,8 +141,11 @@ export function PreviewSettingsProvider({ doc, children }: PreviewSettingsProvid
   const fmTheme = useMemo(() => resolveFrontmatterTheme(frontmatter?.['theme']), [frontmatter]);
   const [selectedThemeId, setSelectedThemeId] = useState<string | null>(null);
   useEffect(() => setSelectedThemeId(null), [fmTheme]);
-  const activeThemeId = selectedThemeId ?? fmTheme ?? 'standard';
-  const activeTheme = useMemo(() => resolveTheme(activeThemeId), [activeThemeId]);
+  const resolvedThemeId = selectedThemeId ?? fmTheme ?? 'standard';
+  const resolvedTheme = useMemo(() => resolveTheme(resolvedThemeId), [resolvedThemeId]);
+  // themeOverride wins over both dropdown selection and frontmatter
+  const activeThemeId = themeOverride?.id ?? resolvedThemeId;
+  const activeTheme = themeOverride ?? resolvedTheme;
 
   // Transform
   const fmTransform = useMemo(
