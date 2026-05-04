@@ -61,8 +61,11 @@ describe('oklchSetChroma', () => {
     const vivid = '#ff3366';
     const muted = oklchSetChroma(vivid, 0.1);
     // Muted version's R/G/B channels should be much closer to each other than vivid.
-    const parse = (h: string) =>
-      [parseInt(h.slice(1, 3), 16), parseInt(h.slice(3, 5), 16), parseInt(h.slice(5, 7), 16)];
+    const parse = (h: string) => [
+      parseInt(h.slice(1, 3), 16),
+      parseInt(h.slice(3, 5), 16),
+      parseInt(h.slice(5, 7), 16),
+    ];
     const [vr, vg, vb] = parse(vivid);
     const [mr, mg, mb] = parse(muted);
     const vSpread = Math.max(vr, vg, vb) - Math.min(vr, vg, vb);

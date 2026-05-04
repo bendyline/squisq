@@ -35,10 +35,10 @@
   },
   "colorSchemes": {
     "terracotta": { "bg": "#3d2620", "text": "#f3ede0", "accent": "#c0875d" },
-    "sage":       { "bg": "#28332a", "text": "#e3ead9", "accent": "#8aa589" },
-    "amber":      { "bg": "#3d2e17", "text": "#fbe3a8", "accent": "#d4a149" },
-    "plum":       { "bg": "#2e1f2a", "text": "#e8d4e0", "accent": "#b088a5" },
-    "ink":        { "bg": "#1a1f26", "text": "#d5dde8", "accent": "#7b8fa8" },
-    "cream":      { "bg": "#f3ede0", "text": "#2b2420", "accent": "#b0724c" }
+    "sage": { "bg": "#28332a", "text": "#e3ead9", "accent": "#8aa589" },
+    "amber": { "bg": "#3d2e17", "text": "#fbe3a8", "accent": "#d4a149" },
+    "plum": { "bg": "#2e1f2a", "text": "#e8d4e0", "accent": "#b088a5" },
+    "ink": { "bg": "#1a1f26", "text": "#d5dde8", "accent": "#7b8fa8" },
+    "cream": { "bg": "#f3ede0", "text": "#2b2420", "accent": "#b0724c" }
   }
 }

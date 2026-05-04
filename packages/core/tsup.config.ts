@@ -14,10 +14,11 @@ export default defineConfig({
     'generate/index': 'src/generate/index.ts',
     'transform/index': 'src/transform/index.ts',
     'versions/index': 'src/versions/index.ts',
+    'jsonForm/index': 'src/jsonForm/index.ts',
   },
   format: ['esm'],
   dts: true,
   sourcemap: true,
   clean: true,
-  external: ['ngeohash', 'localforage'],
+  external: ['ngeohash', 'localforage', 'genson-js'],
 });

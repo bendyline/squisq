@@ -19,11 +19,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type {
-  Theme,
-  FontFamily,
-  ThemeSeedColors,
-} from '@bendyline/squisq/schemas';
+import type { Theme, FontFamily, ThemeSeedColors } from '@bendyline/squisq/schemas';
 import {
   AVAILABLE_FONT_STACKS,
   compileTheme,
@@ -116,14 +112,16 @@ function findAnimationPreset(value: number | undefined): AnimationSpeedPreset {
   if (value === undefined || value === 0) return value === 0 ? 'static' : 'normal';
   let best: AnimationSpeedPreset = 'normal';
   let bestDist = Infinity;
-  (Object.entries(ANIMATION_SPEED_PRESETS) as [AnimationSpeedPreset, number][]).forEach(([k, v]) => {
-    if (v === 0) return; // 'static' handled above
-    const d = Math.abs(v - value);
-    if (d < bestDist) {
-      best = k;
-      bestDist = d;
-    }
-  });
+  (Object.entries(ANIMATION_SPEED_PRESETS) as [AnimationSpeedPreset, number][]).forEach(
+    ([k, v]) => {
+      if (v === 0) return; // 'static' handled above
+      const d = Math.abs(v - value);
+      if (d < bestDist) {
+        best = k;
+        bestDist = d;
+      }
+    },
+  );
   return best;
 }
 
@@ -299,7 +297,10 @@ export function ThemeCustomizerPanel({
   const previewSwatches = useMemo(() => {
     const seed = draft.seeds.primary;
     if (!isHex(seed)) return null;
-    return deriveScale(seed, draft.contrast === 'high' ? 0.22 : draft.contrast === 'subtle' ? 0.08 : 0.15);
+    return deriveScale(
+      seed,
+      draft.contrast === 'high' ? 0.22 : draft.contrast === 'subtle' ? 0.08 : 0.15,
+    );
   }, [draft.seeds.primary, draft.contrast]);
 
   return (
@@ -427,11 +428,7 @@ export function ThemeCustomizerPanel({
           </div>
 
           <div className="squisq-theme-customizer-footer">
-            <button
-              type="button"
-              className="squisq-theme-customizer-button"
-              onClick={handleReset}
-            >
+            <button type="button" className="squisq-theme-customizer-button" onClick={handleReset}>
               Reset
             </button>
             {onSave && (

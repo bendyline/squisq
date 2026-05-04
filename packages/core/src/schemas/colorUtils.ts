@@ -20,7 +20,11 @@ export function isHex(value: string): boolean {
 function parseHex(hex: string): [number, number, number] | null {
   if (!HEX_RE.test(hex)) return null;
   let body = hex.slice(1);
-  if (body.length === 3) body = body.split('').map((c) => c + c).join('');
+  if (body.length === 3)
+    body = body
+      .split('')
+      .map((c) => c + c)
+      .join('');
   return [
     parseInt(body.slice(0, 2), 16) / 255,
     parseInt(body.slice(2, 4), 16) / 255,
@@ -162,7 +166,10 @@ export function pickContrastingText(bg: string, light = '#f7fafc', dark = '#1a20
  * Stops are evenly spaced in OKLCh L space around the seed.
  * `spread` controls amplitude (0.05 = subtle, 0.15 = balanced, 0.22 = high).
  */
-export function deriveScale(seedHex: string, spread = 0.15): {
+export function deriveScale(
+  seedHex: string,
+  spread = 0.15,
+): {
   lighter2: string;
   lighter1: string;
   base: string;

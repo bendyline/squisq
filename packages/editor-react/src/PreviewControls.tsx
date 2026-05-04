@@ -118,7 +118,11 @@ export interface PreviewSettingsProviderProps {
   themeOverride?: Theme | null;
 }
 
-export function PreviewSettingsProvider({ doc, children, themeOverride }: PreviewSettingsProviderProps) {
+export function PreviewSettingsProvider({
+  doc,
+  children,
+  themeOverride,
+}: PreviewSettingsProviderProps) {
   const frontmatter = doc?.frontmatter;
 
   // Viewport

@@ -13,16 +13,16 @@
 import type { Theme } from '../Theme.js';
 import { assertTheme } from '../themeValidator.js';
 
-import standardJson from './standard.json';
-import documentaryJson from './documentary.json';
-import minimalistJson from './minimalist.json';
-import boldJson from './bold.json';
-import morningLightJson from './morning-light.json';
-import techDarkJson from './tech-dark.json';
-import magazineJson from './magazine.json';
-import cinematicJson from './cinematic.json';
-import warmEarthJson from './warm-earth.json';
-import gezelligJson from './gezellig.json';
+import standardJson from './standard.json' with { type: 'json' };
+import documentaryJson from './documentary.json' with { type: 'json' };
+import minimalistJson from './minimalist.json' with { type: 'json' };
+import boldJson from './bold.json' with { type: 'json' };
+import morningLightJson from './morning-light.json' with { type: 'json' };
+import techDarkJson from './tech-dark.json' with { type: 'json' };
+import magazineJson from './magazine.json' with { type: 'json' };
+import cinematicJson from './cinematic.json' with { type: 'json' };
+import warmEarthJson from './warm-earth.json' with { type: 'json' };
+import gezelligJson from './gezellig.json' with { type: 'json' };
 
 export const standard: Theme = assertTheme(standardJson, 'standard.json');
 export const documentary: Theme = assertTheme(documentaryJson, 'documentary.json');

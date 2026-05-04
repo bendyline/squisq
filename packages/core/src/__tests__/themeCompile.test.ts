@@ -6,11 +6,7 @@ import {
   STARTER_THEME,
   deriveColorPalette,
 } from '../schemas/themeCompile.js';
-import {
-  registerTheme,
-  unregisterTheme,
-  getRegisteredThemes,
-} from '../schemas/Theme.js';
+import { registerTheme, unregisterTheme, getRegisteredThemes } from '../schemas/Theme.js';
 import { resolveTheme, DEFAULT_THEME, THEMES } from '../schemas/themeLibrary.js';
 import { resolveFontFamily } from '../schemas/fontStacks.js';
 
@@ -24,10 +20,7 @@ describe('deriveColorPalette', () => {
   });
 
   it('lets explicit partial colors win over derived values', () => {
-    const palette = deriveColorPalette(
-      { primary: '#3182ce' },
-      { warning: '#ff00ff' },
-    );
+    const palette = deriveColorPalette({ primary: '#3182ce' }, { warning: '#ff00ff' });
     expect(palette.warning).toBe('#ff00ff');
   });
 

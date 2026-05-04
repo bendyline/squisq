@@ -49,3 +49,7 @@ export { formatTime } from './types.js';
 
 // Utilities
 export { getAnimationStyle, getTransitionClass } from './utils/animationUtils.js';
+
+// JSON Form — read-only viewer
+export { JsonView } from './jsonView/index.js';
+export type { JsonViewProps } from './jsonView/index.js';

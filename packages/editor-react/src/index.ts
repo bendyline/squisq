@@ -111,3 +111,7 @@ export { buildPreviewDoc } from './buildPreviewDoc.js';
 
 // Tiptap extension: Heading with template annotation support
 export { HeadingWithTemplate } from './TemplateAnnotation.js';
+
+// JSON Form — editable component
+export { JsonEditor } from './jsonEditor/index.js';
+export type { JsonEditorProps } from './jsonEditor/index.js';

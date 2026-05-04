@@ -1,0 +1,440 @@
+/**
+ * <JsonEditor> — editable form styles.
+ *
+ * Theme tokens are injected as scoped `--squisq-jsonform-*` CSS custom
+ * properties on the root, mirroring the JsonView pattern. Editor-only
+ * tokens use a separate prefix from the read-only viewer so the two
+ * components can compose on the same page without bleeding styles.
+ */
+
+.squisq-jsonform {
+  font-family: var(--squisq-jsonform-body-font, var(--squisq-ux-font, system-ui, sans-serif));
+  color: var(--squisq-jsonform-text);
+  background: var(--squisq-jsonform-bg);
+  border-radius: var(--squisq-jsonform-radius, 8px);
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  container-type: inline-size;
+}
+
+.squisq-jsonform--compact {
+  padding: 8px;
+  gap: 8px;
+}
+
+.squisq-jf-group {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  background: color-mix(in srgb, var(--squisq-jsonform-bg) 92%, var(--squisq-jsonform-text) 8%);
+  border: 1px solid var(--squisq-jsonform-border);
+  border-radius: var(--squisq-jsonform-radius, 8px);
+  padding: 14px 16px;
+}
+
+.squisq-jf-group__title {
+  font-family: var(--squisq-jsonform-title-font, inherit);
+  font-size: 1.05em;
+  font-weight: 600;
+  color: var(--squisq-jsonform-text);
+  margin: 0;
+}
+
+.squisq-jf-group__help {
+  font-size: 0.85em;
+  color: var(--squisq-jsonform-muted);
+  margin: -6px 0 0 0;
+}
+
+.squisq-jf-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.squisq-jf-field__label {
+  font-size: 0.85em;
+  font-weight: 500;
+  color: var(--squisq-jsonform-muted);
+}
+
+.squisq-jf-field__help {
+  font-size: 0.8em;
+  color: var(--squisq-jsonform-muted);
+}
+
+.squisq-jf-field__error {
+  font-size: 0.8em;
+  color: var(--squisq-jsonform-warning, #d4351c);
+}
+
+.squisq-jf-field--disabled {
+  opacity: 0.55;
+  pointer-events: none;
+}
+
+/* Inputs share a base look so the form feels cohesive. */
+.squisq-jf-input,
+.squisq-jf-textarea,
+.squisq-jf-select {
+  font: inherit;
+  color: var(--squisq-jsonform-text);
+  background: var(--squisq-jsonform-input-bg, var(--squisq-jsonform-bg));
+  border: 1px solid var(--squisq-jsonform-border);
+  border-radius: 6px;
+  padding: 8px 10px;
+  outline: none;
+  transition: border-color 120ms ease, box-shadow 120ms ease;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.squisq-jf-input:focus,
+.squisq-jf-textarea:focus,
+.squisq-jf-select:focus {
+  border-color: var(--squisq-jsonform-primary);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--squisq-jsonform-primary) 25%, transparent);
+}
+
+.squisq-jf-textarea {
+  min-height: 70px;
+  resize: vertical;
+  line-height: 1.45;
+}
+
+/* Number stepper: tight inline group. */
+.squisq-jf-stepper {
+  display: inline-flex;
+  align-items: stretch;
+  border: 1px solid var(--squisq-jsonform-border);
+  border-radius: 6px;
+  overflow: hidden;
+  background: var(--squisq-jsonform-input-bg, var(--squisq-jsonform-bg));
+}
+
+.squisq-jf-stepper__input {
+  width: 80px;
+  padding: 6px 8px;
+  border: none;
+  background: transparent;
+  color: var(--squisq-jsonform-text);
+  font: inherit;
+  text-align: center;
+  outline: none;
+}
+
+.squisq-jf-stepper__btn {
+  background: transparent;
+  border: none;
+  color: var(--squisq-jsonform-muted);
+  padding: 0 10px;
+  cursor: pointer;
+  font: inherit;
+}
+
+.squisq-jf-stepper__btn:hover {
+  color: var(--squisq-jsonform-primary);
+}
+
+/* Slider */
+.squisq-jf-slider-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.squisq-jf-slider {
+  flex: 1;
+  accent-color: var(--squisq-jsonform-primary);
+}
+
+.squisq-jf-slider-readout {
+  font-family: var(--squisq-jsonform-mono-font, ui-monospace, Consolas, monospace);
+  min-width: 4ch;
+  text-align: right;
+  color: var(--squisq-jsonform-muted);
+}
+
+/* Toggle switch */
+.squisq-jf-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.squisq-jf-toggle__track {
+  width: 36px;
+  height: 20px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--squisq-jsonform-muted) 35%, transparent);
+  position: relative;
+  transition: background 150ms ease;
+}
+
+.squisq-jf-toggle__thumb {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 16px;
+  height: 16px;
+  background: #fff;
+  border-radius: 50%;
+  transition: transform 150ms ease;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+}
+
+.squisq-jf-toggle--on .squisq-jf-toggle__track {
+  background: var(--squisq-jsonform-primary);
+}
+
+.squisq-jf-toggle--on .squisq-jf-toggle__thumb {
+  transform: translateX(16px);
+}
+
+.squisq-jf-toggle__label {
+  font-size: 0.9em;
+}
+
+/* Segmented */
+.squisq-jf-segmented {
+  display: inline-flex;
+  border: 1px solid var(--squisq-jsonform-border);
+  border-radius: 999px;
+  overflow: hidden;
+  background: var(--squisq-jsonform-input-bg, var(--squisq-jsonform-bg));
+}
+
+.squisq-jf-segmented__btn {
+  border: none;
+  background: transparent;
+  color: var(--squisq-jsonform-text);
+  font: inherit;
+  padding: 6px 14px;
+  cursor: pointer;
+  transition: background 100ms ease, color 100ms ease;
+}
+
+.squisq-jf-segmented__btn--active {
+  background: var(--squisq-jsonform-primary);
+  color: #fff;
+}
+
+.squisq-jf-radio {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.squisq-jf-radio__option {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+  cursor: pointer;
+}
+
+/* Color picker */
+.squisq-jf-color {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.squisq-jf-color__input {
+  width: 36px;
+  height: 28px;
+  border: 1px solid var(--squisq-jsonform-border);
+  border-radius: 6px;
+  padding: 0;
+  background: none;
+  cursor: pointer;
+}
+
+.squisq-jf-color__hex {
+  font-family: var(--squisq-jsonform-mono-font, ui-monospace, Consolas, monospace);
+  font-size: 0.9em;
+  width: 8ch;
+}
+
+/* Chip bin */
+.squisq-jf-chip-bin {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+
+.squisq-jf-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 4px 3px 10px;
+  font-size: 0.85em;
+  background: color-mix(in srgb, var(--squisq-jsonform-primary) 16%, transparent);
+  color: var(--squisq-jsonform-text);
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--squisq-jsonform-primary) 30%, transparent);
+}
+
+.squisq-jf-chip__remove {
+  border: none;
+  background: transparent;
+  color: var(--squisq-jsonform-muted);
+  font-size: 1em;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0 4px;
+  border-radius: 50%;
+}
+
+.squisq-jf-chip__remove:hover {
+  color: var(--squisq-jsonform-warning, #d4351c);
+}
+
+.squisq-jf-chip-bin__add-input {
+  flex: 1;
+  min-width: 100px;
+  border: none;
+  background: transparent;
+  color: var(--squisq-jsonform-text);
+  font: inherit;
+  outline: none;
+  padding: 4px;
+}
+
+/* Card stack */
+.squisq-jf-card-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.squisq-jf-card {
+  background: color-mix(in srgb, var(--squisq-jsonform-bg) 95%, var(--squisq-jsonform-text) 5%);
+  border: 1px solid var(--squisq-jsonform-border);
+  border-radius: var(--squisq-jsonform-radius, 6px);
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.squisq-jf-card__header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.squisq-jf-card__title {
+  font-family: var(--squisq-jsonform-title-font, inherit);
+  font-weight: 600;
+  font-size: 0.95em;
+  color: var(--squisq-jsonform-text);
+  margin: 0;
+  flex: 1;
+}
+
+.squisq-jf-card__actions {
+  display: flex;
+  gap: 4px;
+}
+
+.squisq-jf-icon-btn {
+  border: none;
+  background: transparent;
+  color: var(--squisq-jsonform-muted);
+  width: 28px;
+  height: 28px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 1em;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.squisq-jf-icon-btn:hover {
+  background: color-mix(in srgb, var(--squisq-jsonform-text) 8%, transparent);
+}
+
+.squisq-jf-icon-btn--danger:hover {
+  color: var(--squisq-jsonform-warning, #d4351c);
+}
+
+.squisq-jf-add-btn {
+  align-self: flex-start;
+  padding: 6px 12px;
+  border: 1px dashed var(--squisq-jsonform-border);
+  background: transparent;
+  color: var(--squisq-jsonform-muted);
+  border-radius: 6px;
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.9em;
+}
+
+.squisq-jf-add-btn:hover {
+  color: var(--squisq-jsonform-primary);
+  border-color: var(--squisq-jsonform-primary);
+}
+
+.squisq-jf-tabs__strip {
+  display: flex;
+  gap: 4px;
+  border-bottom: 1px solid var(--squisq-jsonform-border);
+  margin-bottom: 8px;
+}
+
+.squisq-jf-tabs__tab {
+  padding: 6px 12px;
+  border: none;
+  background: transparent;
+  color: var(--squisq-jsonform-muted);
+  font: inherit;
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+}
+
+.squisq-jf-tabs__tab--active {
+  color: var(--squisq-jsonform-text);
+  border-bottom-color: var(--squisq-jsonform-primary);
+}
+
+/* Embedded rich text editor */
+.squisq-jf-richtext {
+  border: 1px solid var(--squisq-jsonform-border);
+  border-radius: 6px;
+  padding: 8px 12px;
+  background: var(--squisq-jsonform-input-bg, var(--squisq-jsonform-bg));
+  min-height: 110px;
+}
+
+.squisq-jf-richtext .ProseMirror {
+  outline: none;
+  min-height: 90px;
+  font-family: var(--squisq-jsonform-body-font, inherit);
+  color: var(--squisq-jsonform-text);
+  line-height: 1.5;
+}
+
+.squisq-jf-richtext .ProseMirror p {
+  margin: 0.4em 0;
+}
+
+.squisq-jf-richtext .ProseMirror h1,
+.squisq-jf-richtext .ProseMirror h2,
+.squisq-jf-richtext .ProseMirror h3 {
+  font-family: var(--squisq-jsonform-title-font, inherit);
+  margin: 0.5em 0 0.3em;
+  font-weight: 600;
+}
+
+.squisq-jf-richtext .ProseMirror code {
+  font-family: var(--squisq-jsonform-mono-font, ui-monospace, Consolas, monospace);
+  background: color-mix(in srgb, var(--squisq-jsonform-text) 10%, transparent);
+  padding: 1px 4px;
+  border-radius: 3px;
+}

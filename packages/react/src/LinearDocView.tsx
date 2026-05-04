@@ -21,7 +21,12 @@ import { useMemo } from 'react';
 import { useAutoSurface } from './hooks/useAutoSurface';
 import type { Doc, Block, DocBlock } from '@bendyline/squisq/schemas';
 import type { ViewportConfig } from '@bendyline/squisq/schemas';
-import { applySurface, resolveFontFamily, type SurfaceScheme, type Theme } from '@bendyline/squisq/schemas';
+import {
+  applySurface,
+  resolveFontFamily,
+  type SurfaceScheme,
+  type Theme,
+} from '@bendyline/squisq/schemas';
 import { VIEWPORT_PRESETS } from '@bendyline/squisq/schemas';
 import { getLayers, hasTemplate, DEFAULT_THEME } from '@bendyline/squisq/doc';
 import type { RenderContext } from '@bendyline/squisq/doc';

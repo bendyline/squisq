@@ -35,11 +35,11 @@
     }
   },
   "colorSchemes": {
-    "blue":   { "bg": "#ebf8ff", "text": "#2b6cb0", "accent": "#3182ce" },
-    "green":  { "bg": "#f0fff4", "text": "#276749", "accent": "#38a169" },
+    "blue": { "bg": "#ebf8ff", "text": "#2b6cb0", "accent": "#3182ce" },
+    "green": { "bg": "#f0fff4", "text": "#276749", "accent": "#38a169" },
     "purple": { "bg": "#faf5ff", "text": "#553c9a", "accent": "#805ad5" },
-    "red":    { "bg": "#fff5f5", "text": "#c53030", "accent": "#e53e3e" },
+    "red": { "bg": "#fff5f5", "text": "#c53030", "accent": "#e53e3e" },
     "orange": { "bg": "#fffaf0", "text": "#c05621", "accent": "#dd6b20" },
-    "teal":   { "bg": "#e6fffa", "text": "#285e61", "accent": "#319795" }
+    "teal": { "bg": "#e6fffa", "text": "#285e61", "accent": "#319795" }
   }
 }

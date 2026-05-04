@@ -20,6 +20,7 @@ import { SAMPLES, CONTENT_SAMPLES } from './samples';
 import { DebugPanel } from './DebugPanel';
 import { FileToolbar } from './FileToolbar';
 import { StorageToolbar } from './StorageToolbar';
+import { JsonEditorDemo } from './JsonEditorDemo';
 import { createSlotMediaProvider } from './slotStorage';
 import type { MediaProvider, Theme } from '@bendyline/squisq/schemas';
 import { parseTheme, registerTheme, unregisterTheme } from '@bendyline/squisq/schemas';
@@ -44,6 +45,7 @@ function loadStoredCustomTheme(): Theme | null {
 export function App() {
   const [selectedSample, setSelectedSample] = useState('hello-world');
   const [showDebug, setShowDebug] = useState(false);
+  const [showJsonDemo, setShowJsonDemo] = useState(false);
   const [currentSource, setCurrentSource] = useState(SAMPLES['hello-world']);
   const [theme, setTheme] = useState<EditorTheme>('light');
   const [customTheme, setCustomThemeState] = useState<Theme | null>(() => loadStoredCustomTheme());
@@ -303,6 +305,22 @@ export function App() {
           {showDebug ? 'Hide' : 'Show'} Debug
         </button>
 
+        <button
+          onClick={() => setShowJsonDemo((prev) => !prev)}
+          style={{
+            fontSize: 13,
+            fontFamily: 'system-ui, -apple-system, sans-serif',
+            padding: '4px 12px',
+            cursor: 'pointer',
+            background: showJsonDemo ? '#8B6914' : '#E8DFC6',
+            color: showJsonDemo ? '#fff' : '#4a3c1f',
+            border: `1px solid ${showJsonDemo ? '#7a5c10' : '#c9b98a'}`,
+            borderRadius: 0,
+          }}
+        >
+          {showJsonDemo ? 'Close JSON Editor' : 'JSON Editor'}
+        </button>
+
         {/* Theme customizer — wrapped in editor-shell to inherit BEM dark-theme styles. */}
         <div className="squisq-editor-shell" data-theme={theme} style={{ position: 'relative' }}>
           <ThemeCustomizerPanel
@@ -350,36 +368,42 @@ export function App() {
       </div>
 
       {/* Main area */}
-      <MediaContext.Provider value={mediaProvider}>
-        <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
-          <div style={{ flex: 1, overflow: 'hidden' }}>
-            <EditorShell
-              key={`${selectedSample}-${editorKey}`}
-              initialMarkdown={currentSource}
-              articleId={selectedSample || 'uploaded'}
-              onChange={handleChange}
-              theme={theme}
-              height="100%"
-              mediaProvider={mediaProvider}
-              inlinePreview
-              themeOverride={customTheme}
-            />
-          </div>
-
-          {showDebug && (
-            <div
-              style={{
-                width: 420,
-                borderLeft: `1px solid ${isDark ? '#374151' : '#e5e7eb'}`,
-                overflow: 'auto',
-                flexShrink: 0,
-              }}
-            >
-              <DebugPanel source={currentSource} theme={theme} />
-            </div>
-          )}
+      {showJsonDemo ? (
+        <div style={{ flex: 1, overflow: 'hidden' }}>
+          <JsonEditorDemo />
         </div>
-      </MediaContext.Provider>
+      ) : (
+        <MediaContext.Provider value={mediaProvider}>
+          <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
+            <div style={{ flex: 1, overflow: 'hidden' }}>
+              <EditorShell
+                key={`${selectedSample}-${editorKey}`}
+                initialMarkdown={currentSource}
+                articleId={selectedSample || 'uploaded'}
+                onChange={handleChange}
+                theme={theme}
+                height="100%"
+                mediaProvider={mediaProvider}
+                inlinePreview
+                themeOverride={customTheme}
+              />
+            </div>
+
+            {showDebug && (
+              <div
+                style={{
+                  width: 420,
+                  borderLeft: `1px solid ${isDark ? '#374151' : '#e5e7eb'}`,
+                  overflow: 'auto',
+                  flexShrink: 0,
+                }}
+              >
+                <DebugPanel source={currentSource} theme={theme} />
+              </div>
+            )}
+          </div>
+        </MediaContext.Provider>
+      )}
     </div>
   );
 }

@@ -36,12 +36,12 @@
     }
   },
   "colorSchemes": {
-    "blue":   { "bg": "#0d1b2a", "text": "#90cdf4", "accent": "#63b3ed" },
-    "green":  { "bg": "#0d1b14", "text": "#9ae6b4", "accent": "#68d391" },
+    "blue": { "bg": "#0d1b2a", "text": "#90cdf4", "accent": "#63b3ed" },
+    "green": { "bg": "#0d1b14", "text": "#9ae6b4", "accent": "#68d391" },
     "purple": { "bg": "#1a0d2e", "text": "#d6bcfa", "accent": "#b794f4" },
-    "red":    { "bg": "#2a0d0d", "text": "#fc8181", "accent": "#feb2b2" },
+    "red": { "bg": "#2a0d0d", "text": "#fc8181", "accent": "#feb2b2" },
     "orange": { "bg": "#2a1a0d", "text": "#fbd38d", "accent": "#f6ad55" },
-    "teal":   { "bg": "#0d2a2a", "text": "#81e6d9", "accent": "#4fd1c5" }
+    "teal": { "bg": "#0d2a2a", "text": "#81e6d9", "accent": "#4fd1c5" }
   },
   "persistentLayers": {
     "bottomLayers": [

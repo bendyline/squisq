@@ -2217,7 +2217,9 @@
   border-color: #374151;
 }
 
-.squisq-editor-shell[data-theme='dark'] .squisq-theme-customizer-section + .squisq-theme-customizer-section {
+.squisq-editor-shell[data-theme='dark']
+  .squisq-theme-customizer-section
+  + .squisq-theme-customizer-section {
   border-color: #374151;
 }
 

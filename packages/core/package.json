@@ -90,6 +90,11 @@
       "types": "./dist/versions/index.d.ts",
       "import": "./dist/versions/index.js",
       "default": "./dist/versions/index.js"
+    },
+    "./jsonForm": {
+      "types": "./dist/jsonForm/index.d.ts",
+      "import": "./dist/jsonForm/index.js",
+      "default": "./dist/jsonForm/index.js"
     }
   },
   "scripts": {
@@ -97,6 +102,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "genson-js": "0.0.8",
     "hast-util-from-html": "2.0.3",
     "localforage": "1.10.0",
     "ngeohash": "0.6.3",

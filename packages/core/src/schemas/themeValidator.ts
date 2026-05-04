@@ -314,7 +314,10 @@ export function validateTheme(input: unknown): ValidationResult {
   }
 
   if (input.schemaVersion !== THEME_SCHEMA_VERSION) {
-    v.err('schemaVersion', `expected "${THEME_SCHEMA_VERSION}", got "${String(input.schemaVersion)}"`);
+    v.err(
+      'schemaVersion',
+      `expected "${THEME_SCHEMA_VERSION}", got "${String(input.schemaVersion)}"`,
+    );
   }
   if (!v.isString(input.id) || input.id.length === 0) {
     v.err('id', 'expected non-empty string');

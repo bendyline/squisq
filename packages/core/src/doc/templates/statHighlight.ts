@@ -23,7 +23,11 @@ import { createBackgroundLayer } from './captionUtils.js';
  */
 export const statHighlightHintSchema = {
   /** Entrance style for the stat number. 'subtle' or 'dramatic'. */
-  entrance: { type: 'string' as const, options: ['subtle', 'dramatic'] as const, default: 'subtle' },
+  entrance: {
+    type: 'string' as const,
+    options: ['subtle', 'dramatic'] as const,
+    default: 'subtle',
+  },
 } as const;
 
 export function statHighlight(input: StatHighlightInput, context: TemplateContext): Layer[] {

@@ -1,0 +1,206 @@
+/**
+ * <JsonView> — read-only viewer styles.
+ *
+ * All colors flow through scoped CSS custom properties on the root
+ * element so the same component re-themes cleanly without re-render.
+ */
+
+.squisq-json-view {
+  font-family: var(--squisq-json-body-font, system-ui, sans-serif);
+  color: var(--squisq-json-text);
+  background: var(--squisq-json-bg);
+  border-radius: var(--squisq-json-radius, 8px);
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  container-type: inline-size;
+}
+
+.squisq-json-view--compact {
+  padding: 8px;
+  gap: 8px;
+}
+
+.squisq-jv-group {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  background: color-mix(in srgb, var(--squisq-json-bg) 92%, var(--squisq-json-text) 8%);
+  border: 1px solid var(--squisq-json-border);
+  border-radius: var(--squisq-json-radius, 8px);
+  padding: 14px 16px;
+}
+
+.squisq-jv-group__title {
+  font-family: var(--squisq-json-title-font, inherit);
+  font-size: 1.05em;
+  font-weight: 600;
+  color: var(--squisq-json-text);
+  margin: 0;
+}
+
+.squisq-jv-group__help {
+  font-size: 0.85em;
+  color: var(--squisq-json-muted);
+  margin: -6px 0 0 0;
+}
+
+.squisq-jv-row {
+  display: grid;
+  grid-template-columns: minmax(110px, 0.4fr) minmax(0, 1fr);
+  gap: 12px;
+  align-items: baseline;
+}
+
+.squisq-json-view--compact .squisq-jv-row {
+  gap: 8px;
+}
+
+@container (max-width: 480px) {
+  .squisq-jv-row {
+    grid-template-columns: 1fr;
+    gap: 2px;
+  }
+}
+
+.squisq-jv-label {
+  color: var(--squisq-json-muted);
+  font-size: 0.85em;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-weight: 500;
+}
+
+.squisq-jv-value {
+  color: var(--squisq-json-text);
+  word-break: break-word;
+}
+
+.squisq-jv-value--multiline {
+  white-space: pre-wrap;
+}
+
+.squisq-jv-empty {
+  color: var(--squisq-json-muted);
+  font-style: italic;
+}
+
+.squisq-jv-chip-bin {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.squisq-jv-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 10px;
+  font-size: 0.85em;
+  background: color-mix(in srgb, var(--squisq-json-primary) 16%, transparent);
+  color: var(--squisq-json-text);
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--squisq-json-primary) 30%, transparent);
+}
+
+.squisq-jv-card-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.squisq-jv-card {
+  background: color-mix(in srgb, var(--squisq-json-bg) 95%, var(--squisq-json-text) 5%);
+  border: 1px solid var(--squisq-json-border);
+  border-radius: var(--squisq-json-radius, 6px);
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.squisq-jv-card__title {
+  font-family: var(--squisq-json-title-font, inherit);
+  font-weight: 600;
+  font-size: 0.95em;
+  color: var(--squisq-json-text);
+  margin: 0;
+}
+
+.squisq-jv-color {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.squisq-jv-color__swatch {
+  width: 18px;
+  height: 18px;
+  border-radius: 4px;
+  border: 1px solid var(--squisq-json-border);
+  display: inline-block;
+}
+
+.squisq-jv-color__hex {
+  font-family: var(--squisq-json-mono-font, ui-monospace, Consolas, monospace);
+  font-size: 0.9em;
+  color: var(--squisq-json-muted);
+}
+
+.squisq-jv-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 10px;
+  border-radius: 999px;
+  font-size: 0.8em;
+  font-weight: 500;
+}
+
+.squisq-jv-toggle--on {
+  background: color-mix(in srgb, var(--squisq-json-primary) 18%, transparent);
+  color: var(--squisq-json-primary);
+}
+
+.squisq-jv-toggle--off {
+  background: color-mix(in srgb, var(--squisq-json-muted) 14%, transparent);
+  color: var(--squisq-json-muted);
+}
+
+.squisq-jv-tabs {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.squisq-jv-tabs__discriminator {
+  font-size: 0.8em;
+  color: var(--squisq-json-muted);
+}
+
+.squisq-jv-richtext {
+  color: var(--squisq-json-text);
+  font-family: var(--squisq-json-body-font, inherit);
+  line-height: 1.55;
+}
+
+.squisq-jv-richtext h1,
+.squisq-jv-richtext h2,
+.squisq-jv-richtext h3,
+.squisq-jv-richtext h4 {
+  font-family: var(--squisq-json-title-font, inherit);
+  margin: 0.6em 0 0.3em;
+  font-weight: 600;
+}
+
+.squisq-jv-richtext p {
+  margin: 0.4em 0;
+}
+
+.squisq-jv-richtext code {
+  font-family: var(--squisq-json-mono-font, ui-monospace, Consolas, monospace);
+  background: color-mix(in srgb, var(--squisq-json-text) 10%, transparent);
+  padding: 1px 4px;
+  border-radius: 3px;
+  font-size: 0.92em;
+}

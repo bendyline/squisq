@@ -19,7 +19,11 @@ import { resolveColorScheme, getThemeFont } from '../utils/themeUtils.js';
  */
 export const fullBleedQuoteHintSchema = {
   /** Entrance style for the quote text. 'subtle' or 'dramatic'. */
-  entrance: { type: 'string' as const, options: ['subtle', 'dramatic'] as const, default: 'subtle' },
+  entrance: {
+    type: 'string' as const,
+    options: ['subtle', 'dramatic'] as const,
+    default: 'subtle',
+  },
 } as const;
 
 export function fullBleedQuote(input: FullBleedQuoteInput, context: TemplateContext): Layer[] {

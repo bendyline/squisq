@@ -1,0 +1,7 @@
+/**
+ * @bendyline/squisq-editor-react — bundled stylesheet entry.
+ * Aggregates all CSS shipped with this package.
+ */
+
+@import './editor.css';
+@import '../jsonEditor/json-editor.css';

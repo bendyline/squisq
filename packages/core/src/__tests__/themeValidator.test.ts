@@ -63,9 +63,7 @@ describe('validateTheme', () => {
     const result = validateTheme(bad);
     expect(result.valid).toBe(false);
     expect(
-      result.errors.some(
-        (e) => e.path.endsWith('config.gradient') && /raw CSS/i.test(e.message),
-      ),
+      result.errors.some((e) => e.path.endsWith('config.gradient') && /raw CSS/i.test(e.message)),
     ).toBe(true);
   });
 
