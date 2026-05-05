@@ -178,8 +178,12 @@ export function ToggleEditor({ value, schema, pointer, disabled }: EditorProps) 
       </span>
       <span className="squisq-jf-toggle__label">
         {on
-          ? (schema.squisq?.label ? `${schema.squisq.label}: On` : 'On')
-          : (schema.squisq?.label ? `${schema.squisq.label}: Off` : 'Off')}
+          ? schema.squisq?.label
+            ? `${schema.squisq.label}: On`
+            : 'On'
+          : schema.squisq?.label
+            ? `${schema.squisq.label}: Off`
+            : 'Off'}
       </span>
     </button>
   );
@@ -328,9 +332,7 @@ export function DateEditor({ value, schema, pointer, disabled }: EditorProps) {
 
 // ── Composite editors ────────────────────────────────────────────
 
-export function GroupEditor(
-  props: EditorProps & { suppressTitle?: boolean },
-) {
+export function GroupEditor(props: EditorProps & { suppressTitle?: boolean }) {
   const { value, schema, pointer, disabled, suppressTitle } = props;
   const title = !suppressTitle ? (schema.squisq?.label ?? schema.title) : undefined;
   const help = schema.squisq?.help ?? schema.description;
@@ -357,7 +359,9 @@ export function GroupEditor(
 export function ChipBinEditor({ value, schema, pointer, disabled }: EditorProps) {
   const { setAtPath } = useJsonEditor();
   const items: unknown[] = Array.isArray(value) ? value : [];
-  const itemSchema = (Array.isArray(schema.items) ? schema.items[0] : schema.items) ?? { type: 'string' };
+  const itemSchema = (Array.isArray(schema.items) ? schema.items[0] : schema.items) ?? {
+    type: 'string',
+  };
   const labels = itemSchema.squisq?.enumLabels;
   const enumOpts = itemSchema.enum;
   const [draft, setDraft] = useState('');
@@ -377,7 +381,8 @@ export function ChipBinEditor({ value, schema, pointer, disabled }: EditorProps)
   return (
     <div className="squisq-jf-chip-bin">
       {items.map((item, i) => {
-        const display = labels && typeof item === 'string' ? (labels[item] ?? String(item)) : String(item);
+        const display =
+          labels && typeof item === 'string' ? (labels[item] ?? String(item)) : String(item);
         return (
           <span key={i} className="squisq-jf-chip">
             {display}
@@ -447,7 +452,9 @@ function coerceToSchema(raw: string, schema: SquisqAnnotatedSchema): unknown {
 export function CardStackEditor({ value, schema, pointer, disabled }: EditorProps) {
   const { setAtPath } = useJsonEditor();
   const items: unknown[] = Array.isArray(value) ? value : [];
-  const itemSchema = (Array.isArray(schema.items) ? schema.items[0] : schema.items) ?? { type: 'object' };
+  const itemSchema = (Array.isArray(schema.items) ? schema.items[0] : schema.items) ?? {
+    type: 'object',
+  };
   const itemLabel = itemSchema.squisq?.itemLabel;
   const addLabel = schema.squisq?.addLabel ?? '+ Add';
 
@@ -521,7 +528,12 @@ export function CardStackEditor({ value, schema, pointer, disabled }: EditorProp
         })}
       </div>
       {!disabled ? (
-        <button type="button" className="squisq-jf-add-btn" onClick={addItem} style={{ marginTop: 8 }}>
+        <button
+          type="button"
+          className="squisq-jf-add-btn"
+          onClick={addItem}
+          style={{ marginTop: 8 }}
+        >
           {addLabel}
         </button>
       ) : null}

@@ -36,14 +36,8 @@ export function useJsonEditorTokens(
         : (surface ?? undefined);
     const finalTheme = resolvedSurface ? applySurface(baseTheme, resolvedSurface) : baseTheme;
 
-    const titleFont = resolveFontFamily(
-      finalTheme.typography.titleFont,
-      'system-ui, sans-serif',
-    );
-    const bodyFont = resolveFontFamily(
-      finalTheme.typography.bodyFont,
-      'system-ui, sans-serif',
-    );
+    const titleFont = resolveFontFamily(finalTheme.typography.titleFont, 'system-ui, sans-serif');
+    const bodyFont = resolveFontFamily(finalTheme.typography.bodyFont, 'system-ui, sans-serif');
     const monoFont = resolveFontFamily(
       finalTheme.typography.monoFont,
       'ui-monospace, Consolas, monospace',
@@ -56,8 +50,7 @@ export function useJsonEditorTokens(
       ['--squisq-jsonform-primary' as string]: finalTheme.colors.primary,
       ['--squisq-jsonform-accent' as string]: finalTheme.colors.secondary,
       ['--squisq-jsonform-warning' as string]: finalTheme.colors.warning,
-      ['--squisq-jsonform-border' as string]:
-        `color-mix(in srgb, ${finalTheme.colors.textMuted} 35%, transparent)`,
+      ['--squisq-jsonform-border' as string]: `color-mix(in srgb, ${finalTheme.colors.textMuted} 35%, transparent)`,
       ['--squisq-jsonform-input-bg' as string]: finalTheme.colors.backgroundLight,
       ['--squisq-jsonform-title-font' as string]: titleFont,
       ['--squisq-jsonform-body-font' as string]: bodyFont,

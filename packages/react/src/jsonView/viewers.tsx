@@ -128,7 +128,8 @@ export function ChipBinViewer({ value, schema }: ViewerProps) {
   return (
     <div className="squisq-jv-chip-bin">
       {value.map((item, i) => {
-        const label = labels && typeof item === 'string' ? (labels[item] ?? String(item)) : String(item);
+        const label =
+          labels && typeof item === 'string' ? (labels[item] ?? String(item)) : String(item);
         return (
           <span key={i} className="squisq-jv-chip">
             {label}

@@ -28,7 +28,8 @@ export function RenderNode(props: RenderNodeProps): React.ReactElement | null {
 
   if (resolveFlag(resolved.squisq?.hidden, rootData)) return null;
 
-  const disabled = (props.parentDisabled ?? false) || resolveFlag(resolved.squisq?.disabled, rootData);
+  const disabled =
+    (props.parentDisabled ?? false) || resolveFlag(resolved.squisq?.disabled, rootData);
   const kind = chooseControl(resolved);
   const Editor = EDITORS[kind];
   const label = resolved.squisq?.label ?? resolved.title;

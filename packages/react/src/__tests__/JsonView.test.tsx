@@ -80,18 +80,12 @@ describe('JsonView', () => {
       },
     };
     const visible = render(
-      <JsonView
-        schema={schema}
-        value={{ showAuthor: true, authorName: 'Alex' }}
-      />,
+      <JsonView schema={schema} value={{ showAuthor: true, authorName: 'Alex' }} />,
     );
     expect(visible.container.textContent).toContain('Alex');
 
     const hidden = render(
-      <JsonView
-        schema={schema}
-        value={{ showAuthor: false, authorName: 'Alex' }}
-      />,
+      <JsonView schema={schema} value={{ showAuthor: false, authorName: 'Alex' }} />,
     );
     expect(hidden.container.textContent).not.toContain('Alex');
   });

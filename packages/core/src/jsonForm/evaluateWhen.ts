@@ -34,10 +34,7 @@ export function evaluateWhen(when: SquisqWhen, rootData: unknown): boolean {
  * Resolve a `boolean | SquisqWhen` flag (used by `hidden`/`disabled`)
  * to a final boolean. Literal booleans pass through.
  */
-export function resolveFlag(
-  flag: boolean | SquisqWhen | undefined,
-  rootData: unknown,
-): boolean {
+export function resolveFlag(flag: boolean | SquisqWhen | undefined, rootData: unknown): boolean {
   if (flag === undefined) return false;
   if (typeof flag === 'boolean') return flag;
   return evaluateWhen(flag, rootData);

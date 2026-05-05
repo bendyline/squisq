@@ -20,8 +20,6 @@ export function inferSchema(
   if (!options.additionalSamples || options.additionalSamples.length === 0) {
     return base;
   }
-  const extras = options.additionalSamples.map(
-    (s) => createSchema(s) as SquisqAnnotatedSchema,
-  );
+  const extras = options.additionalSamples.map((s) => createSchema(s) as SquisqAnnotatedSchema);
   return mergeSchemas([base, ...extras] as never[]) as SquisqAnnotatedSchema;
 }

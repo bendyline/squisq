@@ -28,8 +28,7 @@ export function JsonEditorDemo() {
 
   const theme: Theme = useMemo(() => resolveTheme(themeId), [themeId]);
   const themeSummaries = useMemo(() => getThemeSummaries(), []);
-  const surfaceProp: SurfaceScheme | 'auto' | undefined =
-    surface === 'auto' ? 'auto' : surface;
+  const surfaceProp: SurfaceScheme | 'auto' | undefined = surface === 'auto' ? 'auto' : surface;
 
   const handleSampleChange = (key: string) => {
     setSampleKey(key);

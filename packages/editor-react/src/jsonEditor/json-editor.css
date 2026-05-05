@@ -86,7 +86,9 @@
   border-radius: 6px;
   padding: 8px 10px;
   outline: none;
-  transition: border-color 120ms ease, box-shadow 120ms ease;
+  transition:
+    border-color 120ms ease,
+    box-shadow 120ms ease;
   width: 100%;
   box-sizing: border-box;
 }
@@ -215,7 +217,9 @@
   font: inherit;
   padding: 6px 14px;
   cursor: pointer;
-  transition: background 100ms ease, color 100ms ease;
+  transition:
+    background 100ms ease,
+    color 100ms ease;
 }
 
 .squisq-jf-segmented__btn--active {

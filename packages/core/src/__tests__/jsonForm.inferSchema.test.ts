@@ -18,10 +18,7 @@ describe('inferSchema', () => {
   });
 
   it('merges multiple samples', () => {
-    const schema = inferSchema(
-      { name: 'Alex' },
-      { additionalSamples: [{ name: 'Bo', age: 5 }] },
-    );
+    const schema = inferSchema({ name: 'Alex' }, { additionalSamples: [{ name: 'Bo', age: 5 }] });
     expect(schema.properties?.name?.type).toBe('string');
     expect(schema.properties?.age?.type).toBe('integer');
   });

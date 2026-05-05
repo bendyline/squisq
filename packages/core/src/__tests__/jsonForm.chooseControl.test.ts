@@ -18,23 +18,17 @@ describe('chooseControl', () => {
   });
 
   it('uses segmented for short enums (≤4)', () => {
-    expect(
-      chooseControl({ type: 'string', enum: ['a', 'b', 'c'] }),
-    ).toBe('segmented');
-    expect(
-      chooseControl({ type: 'string', enum: ['a', 'b', 'c', 'd'] }),
-    ).toBe('segmented');
+    expect(chooseControl({ type: 'string', enum: ['a', 'b', 'c'] })).toBe('segmented');
+    expect(chooseControl({ type: 'string', enum: ['a', 'b', 'c', 'd'] })).toBe('segmented');
   });
   it('uses combobox for long enums (>4)', () => {
-    expect(
-      chooseControl({ type: 'string', enum: ['a', 'b', 'c', 'd', 'e'] }),
-    ).toBe('combobox');
+    expect(chooseControl({ type: 'string', enum: ['a', 'b', 'c', 'd', 'e'] })).toBe('combobox');
   });
 
   it('arrays of objects → card-stack', () => {
-    expect(
-      chooseControl({ type: 'array', items: { type: 'object', properties: {} } }),
-    ).toBe('card-stack');
+    expect(chooseControl({ type: 'array', items: { type: 'object', properties: {} } })).toBe(
+      'card-stack',
+    );
   });
   it('arrays of primitives → chip-bin', () => {
     expect(chooseControl({ type: 'array', items: { type: 'string' } })).toBe('chip-bin');

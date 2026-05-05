@@ -224,6 +224,7 @@ Squisq ships a friendly editor + viewer for arbitrary JSON values bound to a JSO
 **Control kinds:** `text`, `multiline`, `richtext`, `color`, `date`, `time`, `datetime`, `slider`, `stepper`, `segmented`, `radio`, `combobox`, `toggle`, `checkbox`, `card`, `card-stack`, `chip-bin`, `tabs`, `group`.
 
 **Auto-default mapping** (no hints supplied):
+
 - array of object → `card-stack`; array of primitive → `chip-bin`
 - string + `format: color|date|time|date-time|markdown|textarea` → matching control
 - string + `enum` ≤4 → `segmented`; >4 → `combobox`

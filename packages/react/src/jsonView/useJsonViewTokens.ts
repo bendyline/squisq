@@ -32,14 +32,8 @@ export function useJsonViewTokens(
     const baseTheme = theme ?? DEFAULT_THEME;
     const finalTheme = effectiveSurface ? applySurface(baseTheme, effectiveSurface) : baseTheme;
 
-    const titleFont = resolveFontFamily(
-      finalTheme.typography.titleFont,
-      'system-ui, sans-serif',
-    );
-    const bodyFont = resolveFontFamily(
-      finalTheme.typography.bodyFont,
-      'system-ui, sans-serif',
-    );
+    const titleFont = resolveFontFamily(finalTheme.typography.titleFont, 'system-ui, sans-serif');
+    const bodyFont = resolveFontFamily(finalTheme.typography.bodyFont, 'system-ui, sans-serif');
     const monoFont = resolveFontFamily(
       finalTheme.typography.monoFont,
       'ui-monospace, Consolas, monospace',
@@ -51,8 +45,7 @@ export function useJsonViewTokens(
       ['--squisq-json-muted' as string]: finalTheme.colors.textMuted,
       ['--squisq-json-primary' as string]: finalTheme.colors.primary,
       ['--squisq-json-accent' as string]: finalTheme.colors.secondary,
-      ['--squisq-json-border' as string]:
-        `color-mix(in srgb, ${finalTheme.colors.textMuted} 35%, transparent)`,
+      ['--squisq-json-border' as string]: `color-mix(in srgb, ${finalTheme.colors.textMuted} 35%, transparent)`,
       ['--squisq-json-title-font' as string]: titleFont,
       ['--squisq-json-body-font' as string]: bodyFont,
       ['--squisq-json-mono-font' as string]: monoFont,

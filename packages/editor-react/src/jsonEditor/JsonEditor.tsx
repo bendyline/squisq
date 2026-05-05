@@ -74,12 +74,7 @@ export function JsonEditor(props: JsonEditorProps) {
         validate={validate}
         onValidate={onValidate}
       >
-        <RenderNode
-          value={value}
-          schema={schema}
-          pointer=""
-          parentDisabled={!onChange}
-        />
+        <RenderNode value={value} schema={schema} pointer="" parentDisabled={!onChange} />
       </JsonEditorProvider>
     </div>
   );
