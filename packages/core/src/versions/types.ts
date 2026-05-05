@@ -20,6 +20,12 @@ export interface Version {
   timestamp: Date;
   /** Snapshot size in bytes. */
   size: number;
+  /**
+   * Collision suffix index. `0` for a path with no `-N` suffix, `1` for `-2`,
+   * `2` for `-3`, and so on. Used as the tie-break for ordering snapshots
+   * that share the same UTC second.
+   */
+  collision: number;
 }
 
 /**

@@ -218,6 +218,39 @@ describe('listVersions', () => {
     );
     expect((await listVersions(container, 'foo')).map((v) => v.basename)).toEqual(['foo']);
   });
+
+  it('orders collision-suffix snapshots newest-first within the same UTC second', async () => {
+    // Three saves at the same UTC second produce paths with collisions 0, 1, 2.
+    // The lex order of the suffix bytes (`-` < `.`) does not match the write
+    // order, so the comparator must use the parsed collision number.
+    await container.writeDocument('a', 'index.md');
+    const now = new Date(Date.UTC(2026, 3, 30, 15, 20, 30));
+    await saveVersion(container, { now });
+    await container.writeDocument('b', 'index.md');
+    await saveVersion(container, { now });
+    await container.writeDocument('c', 'index.md');
+    await saveVersion(container, { now });
+
+    const versions = await listVersions(container);
+    expect(versions.map((v) => v.collision)).toEqual([2, 1, 0]);
+    expect(versions[0]!.path).toBe(`${VERSIONS_PREFIX}index.20260430T152030Z-3.md`);
+    expect(versions[2]!.path).toBe(`${VERSIONS_PREFIX}index.20260430T152030Z.md`);
+  });
+
+  it('saveVersion dedup compares against the actual newest snapshot after a collision', async () => {
+    // Regression: when a collision suffix exists, dedup must read the
+    // collision file (the real "latest"), not the earlier no-suffix file.
+    await container.writeDocument('first', 'index.md');
+    const now = new Date(Date.UTC(2026, 3, 30, 15, 20, 30));
+    await saveVersion(container, { now });
+    await container.writeDocument('second', 'index.md');
+    await saveVersion(container, { now });
+
+    // Latest content on disk is "second"; saving it again should be a no-op.
+    const r = await saveVersion(container, { now: new Date(Date.UTC(2026, 3, 30, 15, 20, 31)) });
+    expect(r.saved).toBe(false);
+    expect(r.reason).toBe('unchanged');
+  });
 });
 
 describe('readVersion', () => {
@@ -339,6 +372,29 @@ describe('coalesceVersions', () => {
     // The (10:02:00, 10:00:30) pair is 90s apart, so 10:00:30 survives.
     expect(deleted).toHaveLength(1);
     expect(deleted[0]!.timestamp.getTime()).toBe(Date.UTC(2026, 3, 30, 10, 0, 0));
+  });
+
+  it('anchors to the last kept snapshot instead of chaining adjacent pairs', async () => {
+    // Regression: four snapshots 30s apart with windowMs: 60_000 should keep
+    // the newest plus anything beyond 60s of the anchor (here, t=0). Chaining
+    // through deleted entries would erase everything but the newest.
+    const container = new MemoryContentContainer();
+    const base = Date.UTC(2026, 3, 30, 10, 0, 0);
+    await container.writeDocument('a', 'index.md');
+    await saveVersion(container, { now: new Date(base) });
+    await container.writeDocument('b', 'index.md');
+    await saveVersion(container, { now: new Date(base + 30_000) });
+    await container.writeDocument('c', 'index.md');
+    await saveVersion(container, { now: new Date(base + 60_000) });
+    await container.writeDocument('d', 'index.md');
+    await saveVersion(container, { now: new Date(base + 90_000) });
+
+    const deleted = await coalesceVersions(container, { windowMs: 60_000 });
+    // Anchor=t+90 keeps t+30 dropped (60s ≤ window), keeps t=0 (90s > window
+    // from anchor → new anchor). t+60 is also within 60s of t+90 → dropped.
+    expect(deleted).toHaveLength(2);
+    const remaining = await listVersions(container);
+    expect(remaining.map((v) => v.timestamp.getTime() - base)).toEqual([90_000, 0]);
   });
 });
 

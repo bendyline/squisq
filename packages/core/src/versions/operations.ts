@@ -57,13 +57,17 @@ export async function listVersions(
       basename: parsed.basename,
       timestamp: parsed.timestamp,
       size: entry.size,
+      collision: parsed.collision,
     });
   }
-  // Newest first. Tie-break on collision (higher = newer).
+  // Newest first. Tie-break on collision (higher = newer). Compare the
+  // numeric collision rather than the path string: lexicographically a path
+  // with no suffix sorts *after* one with `-N`, because `.` (0x2E) is
+  // greater than `-` (0x2D), which would invert the order.
   versions.sort((a, b) => {
     const dt = b.timestamp.getTime() - a.timestamp.getTime();
     if (dt !== 0) return dt;
-    return b.path.localeCompare(a.path);
+    return b.collision - a.collision;
   });
   return versions;
 }
@@ -128,6 +132,7 @@ export async function saveVersion(
     basename,
     timestamp: now,
     size: data.byteLength,
+    collision,
   };
   return { saved: true, version, reason: 'saved' };
 }
@@ -201,14 +206,21 @@ export async function coalesceVersions(
   const windowMs = options.windowMs ?? 60_000;
   const versions = await listVersions(container, basename);
   const toDelete: Version[] = [];
-  // Walk newest -> oldest. If the next-older is within the window of the
-  // current "kept" version, drop the older one. Reset the window to the
-  // newer of any retained pair.
-  for (let i = 0; i < versions.length - 1; i++) {
-    const newer = versions[i]!;
-    const older = versions[i + 1]!;
-    if (newer.timestamp.getTime() - older.timestamp.getTime() <= windowMs) {
-      toDelete.push(older);
+  // Walk newest -> oldest, anchored to the last *kept* snapshot. Any
+  // candidate within `windowMs` of the anchor is dropped; the first one
+  // outside the window becomes the new anchor. Comparing each pair against
+  // its previous neighbor instead would chain through deleted snapshots
+  // and over-prune any tightly-clustered run (e.g. 30s apart with a 60s
+  // window collapses to a single survivor).
+  if (versions.length > 0) {
+    let anchor = versions[0]!;
+    for (let i = 1; i < versions.length; i++) {
+      const candidate = versions[i]!;
+      if (anchor.timestamp.getTime() - candidate.timestamp.getTime() <= windowMs) {
+        toDelete.push(candidate);
+      } else {
+        anchor = candidate;
+      }
     }
   }
   for (const v of toDelete) {
