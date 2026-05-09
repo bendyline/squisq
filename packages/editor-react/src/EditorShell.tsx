@@ -648,37 +648,55 @@ function EditorShellInner({
             }}
           >
             {isImageMode && imageSrc && <ImageViewer src={imageSrc} alt={imageAlt} theme={theme} />}
+            {/* Raw (Monaco) view. Always wrapped in `.squisq-editor-with-gutter`
+                so toggling a pane on/off doesn't change the editor's tree
+                position — Monaco stays mounted and `monacoEditor` in
+                context stays stable, which is what `useHeadingLayout` needs
+                to compute positions. */}
             {!isImageMode && activeView === 'raw' && (
-              <RawEditor
-                theme={theme === 'dark' ? 'vs-dark' : 'vs'}
-                submitOnEnter={submitOnEnter}
-                readOnly={readOnly}
-              />
+              <div className="squisq-editor-with-gutter" key="raw-shell">
+                {isMarkdownMode && outlineVisible && (
+                  <OutlinePanel key="outline" width={outlineWidth} />
+                )}
+                <div key="raw-editor" className="squisq-raw-editor-container">
+                  <RawEditor
+                    theme={theme === 'dark' ? 'vs-dark' : 'vs'}
+                    submitOnEnter={submitOnEnter}
+                    readOnly={readOnly}
+                  />
+                </div>
+                {isMarkdownMode && inlinePreviewVisible && (
+                  <InlinePreviewGutter
+                    key="inline"
+                    width={inlinePreviewWidth}
+                    basePath={basePath}
+                  />
+                )}
+              </div>
             )}
             {/* WYSIWYG + Preview are markdown-only surfaces — skip them
                 entirely in code or image mode so Tiptap never initializes
-                and the preview pipeline stays idle. */}
-            {isMarkdownMode &&
-              activeView === 'wysiwyg' &&
-              (inlinePreviewVisible || outlineVisible ? (
-                <div className="squisq-wysiwyg-with-gutter">
-                  {outlineVisible && <OutlinePanel width={outlineWidth} />}
-                  <WysiwygEditor
-                    submitOnEnter={submitOnEnter}
-                    placeholder={placeholder}
-                    readOnly={readOnly}
-                  />
-                  {inlinePreviewVisible && (
-                    <InlinePreviewGutter width={inlinePreviewWidth} basePath={basePath} />
-                  )}
-                </div>
-              ) : (
+                and the preview pipeline stays idle. Same always-wrapped
+                pattern as the Raw branch above so pane toggles don't
+                remount Tiptap. */}
+            {isMarkdownMode && activeView === 'wysiwyg' && (
+              <div className="squisq-editor-with-gutter" key="wysiwyg-shell">
+                {outlineVisible && <OutlinePanel key="outline" width={outlineWidth} />}
                 <WysiwygEditor
+                  key="wysiwyg-editor"
                   submitOnEnter={submitOnEnter}
                   placeholder={placeholder}
                   readOnly={readOnly}
                 />
-              ))}
+                {inlinePreviewVisible && (
+                  <InlinePreviewGutter
+                    key="inline"
+                    width={inlinePreviewWidth}
+                    basePath={basePath}
+                  />
+                )}
+              </div>
+            )}
             {isMarkdownMode && isPreview && (
               <PreviewPanel basePath={basePath} container={container} />
             )}

@@ -2297,10 +2297,13 @@
 
 /* ─── Inline Preview Gutter ─────────────────────────────────────── */
 
-/* Wrapper around WYSIWYG + gutter — a flex row inside the editor body.
-   `position: relative` lets the connector strip overlay the gap between
-   the editor and the gutter. */
-.squisq-wysiwyg-with-gutter {
+/* Wrapper around the active editor + gutters — a flex row inside the
+   editor body. Used by both WYSIWYG and Markdown views. Panes (outline
+   on the left, card-preview gutter on the right) are flex children with
+   fixed widths so the editor naturally shrinks to fit the remaining
+   space; nothing overlaps even when the editor (Monaco or Tiptap) fills
+   the wrapper edge-to-edge by default. */
+.squisq-editor-with-gutter {
   display: flex;
   flex-direction: row;
   align-items: stretch;
@@ -2312,10 +2315,19 @@
   container-name: squisq-editor-body;
 }
 
-.squisq-wysiwyg-with-gutter > .squisq-wysiwyg-container,
-.squisq-wysiwyg-with-gutter > .squisq-wysiwyg-pane {
+.squisq-editor-with-gutter > .squisq-wysiwyg-container,
+.squisq-editor-with-gutter > .squisq-wysiwyg-pane,
+.squisq-editor-with-gutter > .squisq-raw-editor-container {
   flex: 1 1 auto;
   min-width: 0;
+  min-height: 0;
+}
+
+/* The outline pane and the inline-preview gutter are flex children too —
+   each holds a fixed width and the editor takes the remainder. */
+.squisq-editor-with-gutter > .squisq-outline,
+.squisq-editor-with-gutter > .squisq-inline-preview-gutter {
+  flex: 0 0 auto;
   min-height: 0;
 }
 
@@ -2448,8 +2460,8 @@
 
 /* ─── Outline pane ─────────────────────────────────────────────────
    Left-side companion to the inline preview gutter — a hierarchical
-   tree of the document's headings. Anchored to the editor page's left
-   edge via the JSX-side `pageLeft` measurement. */
+   tree of the document's headings. Sits as a flex child inside
+   `.squisq-editor-with-gutter`; the editor takes whatever space remains. */
 
 .squisq-outline {
   padding: 12px 8px;
@@ -2458,6 +2470,7 @@
   font-size: 13px;
   color: #1f2937;
   box-sizing: border-box;
+  overflow-y: auto;
 }
 
 .squisq-outline-empty {

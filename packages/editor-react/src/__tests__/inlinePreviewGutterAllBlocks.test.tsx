@@ -3,9 +3,8 @@ import { render, screen, waitFor } from '@testing-library/react';
 import { EditorProvider } from '../EditorContext';
 import { InlinePreviewGutter } from '../InlinePreviewGutter';
 
-// jsdom lacks ResizeObserver — the gutter wires one up to recompute on
-// editor resizes. Stub a no-op for the tests that don't need real
-// observations.
+// jsdom lacks ResizeObserver — the gutter's heading-layout hook wires one
+// up to recompute on editor resizes. Stub a no-op for these tests.
 beforeAll(() => {
   if (typeof globalThis.ResizeObserver === 'undefined') {
     globalThis.ResizeObserver = class {
@@ -17,21 +16,25 @@ beforeAll(() => {
 });
 
 /**
- * The all-blocks vertical-line rendering needs a sibling `.squisq-wysiwyg-container`
- * with real heading elements for the layout effect's MutationObserver +
- * `getBoundingClientRect()` reads to find anything. In the production app
- * this is provided by `<WysiwygEditor>`. Here we hand-roll a stub that
- * mounts the heading DOM the gutter expects to query.
+ * The gutter pulls heading data from the parsed Doc (via `useHeadingLayout`)
+ * and pairs it to DOM headings inside the `.squisq-wysiwyg-container`.
+ * To exercise the all-blocks bracket logic we provide both: real markdown
+ * (so the parser populates `doc.blocks`) AND a sibling stub container with
+ * matching `<h*>` elements (so the DOM-pairing path finds something to
+ * measure).
  */
-function renderWithStubEditor(html: string) {
+function renderWithMatchingDom(markdown: string, headingHtml: string) {
   return render(
-    <EditorProvider initialMarkdown="" initialView="wysiwyg" articleId="test">
-      <div className="squisq-wysiwyg-with-gutter" style={{ position: 'relative', height: 600 }}>
+    <EditorProvider initialMarkdown={markdown} initialView="wysiwyg" articleId="test">
+      <div className="squisq-editor-with-gutter" style={{ position: 'relative', height: 600 }}>
         <div
           className="squisq-wysiwyg-container"
           style={{ position: 'relative', width: 800, height: 600 }}
         >
-          <div className="squisq-wysiwyg-editor" dangerouslySetInnerHTML={{ __html: html }} />
+          <div
+            className="squisq-wysiwyg-editor"
+            dangerouslySetInnerHTML={{ __html: headingHtml }}
+          />
         </div>
         <InlinePreviewGutter />
       </div>
@@ -41,7 +44,9 @@ function renderWithStubEditor(html: string) {
 
 describe('InlinePreviewGutter — all-block bracket lines', () => {
   it('renders a vertical-extent bar per heading even when none are annotated', async () => {
-    const { container } = renderWithStubEditor(
+    const md = '# Hello World\n\nBody\n\n## Getting Started\n\nBody\n\n## Tips\n\nBody\n';
+    const { container } = renderWithMatchingDom(
+      md,
       '<h1>Hello World</h1>' +
         '<p>Body</p>' +
         '<h2>Getting Started</h2>' +
@@ -66,7 +71,9 @@ describe('InlinePreviewGutter — all-block bracket lines', () => {
   });
 
   it('renders a strong tagged bar for annotated headings + lighter bars for the rest', async () => {
-    const { container } = renderWithStubEditor(
+    const md = '# Welcome\n\n## Getting Started {[sectionHeader]}\n\n## Tips\n';
+    const { container } = renderWithMatchingDom(
+      md,
       '<h1>Welcome</h1>' +
         '<h2 data-template="sectionHeader">Getting Started</h2>' +
         '<h2>Tips</h2>',
@@ -92,6 +99,5 @@ describe('InlinePreviewGutter — all-block bracket lines', () => {
   });
 });
 
-// Suppress ResolvePackageJsonExportsLogic pollution in the JSDOM globals — noop.
-// The screen import is unused but kept to mirror the sibling test file's style.
+// `screen` import unused but kept to mirror the sibling test file's style.
 void screen;
