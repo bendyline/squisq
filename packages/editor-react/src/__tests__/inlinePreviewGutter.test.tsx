@@ -55,7 +55,8 @@ describe('InlinePreviewGutter', () => {
     const labels = Array.from(
       container.querySelectorAll('.squisq-inline-preview-card-template'),
     ).map((el) => el.textContent);
-    expect(labels).toContain('titleBlock');
-    expect(labels).toContain('statHighlight');
+    // Templates render their human-readable label (via `templateLabel`).
+    expect(labels).toContain('Title Block');
+    expect(labels).toContain('Stat Highlight');
   });
 });

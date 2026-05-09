@@ -315,6 +315,8 @@ export function EditorShell({
       mentionProvider={mentionProvider}
       fileName={fileName}
       language={language}
+      inlinePreview={inlinePreview}
+      showStatusBar={showStatusBar}
     >
       <EditorShellInner
         basePath={basePath}
@@ -335,11 +337,9 @@ export function EditorShell({
         fullWidth={fullWidth}
         uxFont={uxFont}
         thinMargins={thinMargins}
-        showStatusBar={showStatusBar}
         readOnly={readOnly}
         imageSrc={imageSrc}
         imageAlt={imageAlt}
-        inlinePreview={inlinePreview}
         inlinePreviewWidth={inlinePreviewWidth}
         themeOverride={themeOverride}
       />
@@ -366,11 +366,9 @@ interface EditorShellInnerProps {
   fullWidth: boolean;
   uxFont?: string;
   thinMargins: boolean;
-  showStatusBar: boolean;
   readOnly: boolean;
   imageSrc?: string;
   imageAlt?: string;
-  inlinePreview: boolean;
   inlinePreviewWidth: number;
   themeOverride: Theme | null;
 }
@@ -394,11 +392,9 @@ function EditorShellInner({
   fullWidth,
   uxFont,
   thinMargins,
-  showStatusBar,
   readOnly,
   imageSrc,
   imageAlt,
-  inlinePreview,
   inlinePreviewWidth,
   themeOverride,
 }: EditorShellInnerProps) {
@@ -413,6 +409,8 @@ function EditorShellInner({
     tiptapEditor,
     monacoEditor,
     setMarkdownSource,
+    inlinePreviewVisible,
+    statusBarVisible,
   } = useEditorContext();
   const isPreview = activeView === 'preview';
   const isCodeMode = editorMode === 'code';
@@ -640,7 +638,7 @@ function EditorShellInner({
                 and the preview pipeline stays idle. */}
             {isMarkdownMode &&
               activeView === 'wysiwyg' &&
-              (inlinePreview ? (
+              (inlinePreviewVisible ? (
                 <div className="squisq-wysiwyg-with-gutter">
                   <WysiwygEditor
                     submitOnEnter={submitOnEnter}
@@ -684,7 +682,7 @@ function EditorShellInner({
             suppress via `showStatusBar={false}` for embedded chat-style
             composers where the stats are noise. The image viewer has its
             own dimension/zoom status row, so suppress here too. */}
-        {showStatusBar && !isImageMode && <StatusBar />}
+        {statusBarVisible && !isImageMode && <StatusBar />}
       </PreviewSettingsProvider>
       <TooltipLayer />
     </div>

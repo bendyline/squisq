@@ -183,8 +183,11 @@ export function markdownToTiptap(markdown: string): string {
       let text = headingMatch[2];
       let attrs = '';
 
-      // Extract {[template key=value …]} annotation
-      const annotMatch = text.match(/\s*\{\[([^\]]+)\]\}\s*$/);
+      // Extract {[template key=value …]} annotation. Trailing `[\s\]\}]*`
+      // tolerates accidental doubled `]}` that users type while learning
+      // the syntax — must stay in sync with TEMPLATE_ANNOTATION_RE in
+      // packages/core/src/markdown/convert.ts.
+      const annotMatch = text.match(/\s*\{\[([^\]]+)\]\}[\s\]\}]*$/);
       if (annotMatch) {
         text = text.slice(0, annotMatch.index!).trimEnd();
         const tokens = annotMatch[1].trim().split(/\s+/);

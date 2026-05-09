@@ -12,6 +12,7 @@ import { useCallback, useEffect, useReducer, useRef, useState } from 'react';
 import type { Editor as TiptapEditor } from '@tiptap/core';
 import { useEditorContext, type EditorView } from './EditorContext';
 import { VersionHistoryPanel } from './VersionHistoryPanel';
+import { ViewMenuPanel } from './ViewMenuPanel';
 import { TemplatePicker } from './TemplatePicker';
 
 const VIEWS: { id: EditorView; label: string; shortLabel?: string; shortcut: string }[] = [
@@ -99,6 +100,89 @@ const BUTTONS: ToolbarButton[] = [
   { id: 'table', label: 'table', icon: '', title: 'Insert table', group: 'media' },
   { id: 'image', label: '🖼', icon: '🖼', title: 'Insert image', group: 'media' },
 ];
+
+// ─── Inline SVG icons (line-art, currentColor) ──────────
+
+const TABLE_ICON = (
+  <svg
+    width="14"
+    height="14"
+    viewBox="0 0 14 14"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="1.4"
+    strokeLinecap="round"
+  >
+    <rect x="1" y="1" width="12" height="12" rx="1" />
+    <line x1="1" y1="5" x2="13" y2="5" />
+    <line x1="1" y1="9" x2="13" y2="9" />
+    <line x1="5" y1="1" x2="5" y2="13" />
+    <line x1="9" y1="1" x2="9" y2="13" />
+  </svg>
+);
+
+const LINK_ICON = (
+  <svg
+    width="14"
+    height="14"
+    viewBox="0 0 14 14"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="1.4"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+  >
+    <path d="M5.75 8.25 L8.25 5.75" />
+    <path d="M6.5 3.75 L8 2.25 a2.5 2.5 0 0 1 3.54 3.54 L10 7.25" />
+    <path d="M7.5 10.25 L6 11.75 a2.5 2.5 0 0 1 -3.54 -3.54 L4 6.75" />
+  </svg>
+);
+
+const IMAGE_ICON = (
+  <svg
+    width="14"
+    height="14"
+    viewBox="0 0 14 14"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="1.4"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+  >
+    <rect x="1.5" y="2.5" width="11" height="9" rx="1" />
+    <circle cx="5" cy="5.5" r="0.9" />
+    <path d="M2 10 L5.5 7 L8 9 L10 7.5 L12.5 10" />
+  </svg>
+);
+
+const PAPERCLIP_ICON = (
+  <svg
+    width="14"
+    height="14"
+    viewBox="0 0 14 14"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="1.4"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+  >
+    <path d="M11 4 L5.5 9.5 a1.75 1.75 0 0 0 2.5 2.5 L12.5 7.5 a3 3 0 0 0 -4.25 -4.25 L3 8.5 a4.25 4.25 0 0 0 6 6 L13 10.5" />
+  </svg>
+);
+
+/** Returns an SVG element when the button id maps to one, otherwise null. */
+function buttonIconSvg(id: string): React.ReactNode | null {
+  switch (id) {
+    case 'table':
+      return TABLE_ICON;
+    case 'link':
+      return LINK_ICON;
+    case 'image':
+      return IMAGE_ICON;
+    default:
+      return null;
+  }
+}
 
 // ─── Tiptap active-state map ────────────────────────────
 
@@ -541,16 +625,87 @@ export function Toolbar({
   const isInTable = isWysiwyg ? tiptapEditor.isActive('table') : false;
 
   // Detect current heading template (WYSIWYG mode only)
-  const currentTemplate = isWysiwyg
+  const wysiwygTemplate = isWysiwyg
     ? tiptapEditor.isActive('heading')
       ? (tiptapEditor.getAttributes('heading')?.dataTemplate ?? '')
       : null
     : null;
 
+  // ── Monaco heading detection (Markdown view) ─────────────────────
+  // Watch the Monaco cursor and surface the template picker whenever the
+  // cursor is on a heading line. `null` hides the picker; '' shows it
+  // with no template selected; any other string is the current template.
+  const isRawView = activeView === 'raw';
+  const [rawTemplate, setRawTemplate] = useState<string | null>(null);
+  useEffect(() => {
+    if (!isRawView || !monacoEditor) {
+      setRawTemplate(null);
+      return;
+    }
+    const recompute = () => {
+      const model = monacoEditor.getModel();
+      const pos = monacoEditor.getPosition();
+      if (!model || !pos) {
+        setRawTemplate(null);
+        return;
+      }
+      const line = model.getLineContent(pos.lineNumber);
+      const headingMatch = line.match(/^#{1,6}\s+(.+)$/);
+      if (!headingMatch) {
+        setRawTemplate(null);
+        return;
+      }
+      const annotMatch = headingMatch[1].match(/\s*\{\[([^\]]+)\]\}[\s\]\}]*$/);
+      if (annotMatch) {
+        // First whitespace-delimited token is the template name; the rest are params.
+        const name = annotMatch[1].trim().split(/\s+/)[0];
+        setRawTemplate(name);
+      } else {
+        setRawTemplate('');
+      }
+    };
+    recompute();
+    const cursorSub = monacoEditor.onDidChangeCursorPosition(recompute);
+    const contentSub = monacoEditor.onDidChangeModelContent(recompute);
+    return () => {
+      cursorSub.dispose();
+      contentSub.dispose();
+    };
+  }, [isRawView, monacoEditor]);
+
+  const currentTemplate = isWysiwyg ? wysiwygTemplate : isRawView ? rawTemplate : null;
+
   const handleTemplatePick = (value: string) => {
+    // Raw (Monaco) — rewrite the heading line's annotation suffix in place.
+    if (isRawView && monacoEditor) {
+      const model = monacoEditor.getModel();
+      const pos = monacoEditor.getPosition();
+      if (!model || !pos) return;
+      const lineNumber = pos.lineNumber;
+      const lineText = model.getLineContent(lineNumber);
+      const headingMatch = lineText.match(/^(#{1,6}\s+)(.+)$/);
+      if (!headingMatch) return;
+      const prefix = headingMatch[1];
+      // Strip any existing trailing annotation
+      const bareText = headingMatch[2].replace(/\s*\{\[[^\]]+\]\}[\s\]\}]*$/, '').trimEnd();
+      const newLine = value === '' ? `${prefix}${bareText}` : `${prefix}${bareText} {[${value}]}`;
+      monacoEditor.executeEdits('toolbar-template-pick', [
+        {
+          range: {
+            startLineNumber: lineNumber,
+            startColumn: 1,
+            endLineNumber: lineNumber,
+            endColumn: lineText.length + 1,
+          },
+          text: newLine,
+        },
+      ]);
+      monacoEditor.focus();
+      return;
+    }
+    // WYSIWYG — update the heading node attributes.
     if (!tiptapEditor) return;
     if (value === '') {
-      // Clear template
       tiptapEditor
         .chain()
         .focus()
@@ -633,32 +788,16 @@ export function Toolbar({
                     disabled={disabled}
                     style={btn.iconStyle}
                   >
-                    {btn.id === 'table' ? (
-                      <svg
-                        width="14"
-                        height="14"
-                        viewBox="0 0 14 14"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="1.4"
-                        strokeLinecap="round"
-                      >
-                        <rect x="1" y="1" width="12" height="12" rx="1" />
-                        <line x1="1" y1="5" x2="13" y2="5" />
-                        <line x1="1" y1="9" x2="13" y2="9" />
-                        <line x1="5" y1="1" x2="5" y2="13" />
-                        <line x1="9" y1="1" x2="9" y2="13" />
-                      </svg>
-                    ) : (
-                      btn.icon
-                    )}
+                    {buttonIconSvg(btn.id) ?? btn.icon}
                   </button>
                 );
               })}
             </div>
           ))}
 
-          {/* Template picker — visible when cursor is in a heading (WYSIWYG) */}
+          {/* Template picker — visible when the cursor is in a heading.
+              In WYSIWYG, reads from the heading node's `dataTemplate`; in
+              Markdown view, parses the `{[...]}` suffix on the cursor's line. */}
           {currentTemplate !== null && (
             <>
               <div className="squisq-toolbar-separator" />
@@ -855,23 +994,7 @@ export function Toolbar({
                     }}
                     disabled={disabled}
                   >
-                    {btn.id === 'table' ? (
-                      <svg
-                        width="14"
-                        height="14"
-                        viewBox="0 0 14 14"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="1.4"
-                        strokeLinecap="round"
-                      >
-                        <rect x="1" y="1" width="12" height="12" rx="1" />
-                        <line x1="1" y1="5" x2="13" y2="5" />
-                        <line x1="1" y1="9" x2="13" y2="9" />
-                        <line x1="5" y1="1" x2="5" y2="13" />
-                        <line x1="9" y1="1" x2="9" y2="13" />
-                      </svg>
-                    ) : (
+                    {buttonIconSvg(btn.id) ?? (
                       <span className="squisq-toolbar-overflow-icon" style={btn.iconStyle}>
                         {btn.icon}
                       </span>
@@ -960,6 +1083,7 @@ export function Toolbar({
           and a container is wired up. The component owns its own button
           and popover; we just give it a slot in the toolbar. */}
       {versioning && !isCodeMode && <VersionHistoryPanel />}
+      {!isCodeMode && <ViewMenuPanel />}
       {/* Files toggle — visible when callback is provided */}
       {onToggleFiles && (
         <button
@@ -969,7 +1093,7 @@ export function Toolbar({
           aria-pressed={showFiles}
           aria-label="Toggle Files panel"
         >
-          {'\u{1F4CE}'}
+          {PAPERCLIP_ICON}
         </button>
       )}
       {/* Right slot — rightmost end of toolbar */}

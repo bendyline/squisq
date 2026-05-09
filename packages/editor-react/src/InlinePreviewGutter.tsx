@@ -39,6 +39,7 @@ import { extractPlainText } from '@bendyline/squisq/markdown';
 import type { MarkdownBlockNode, MarkdownList, MarkdownTable } from '@bendyline/squisq/markdown';
 import { BlockRenderer } from '@bendyline/squisq-react';
 import { useEditorContext } from './EditorContext';
+import { templateLabel } from './TemplatePicker';
 
 // ── Helpers (mirrored from LinearDocView; kept local to avoid cross-package
 // churn — extract to a shared module if a fourth copy appears) ────────────
@@ -160,7 +161,18 @@ export function InlinePreviewGutter({
 }: InlinePreviewGutterProps) {
   const { doc } = useEditorContext();
   const gutterRef = useRef<HTMLElement | null>(null);
+  // Card tops, after the de-overlap stacking pass.
   const [positions, setPositions] = useState<Map<string, number>>(new Map());
+  // Connector tops, kept aligned to each heading's row so the dots stay
+  // anchored even when their card has been pushed down to clear the
+  // previous card.
+  const [connectorTops, setConnectorTops] = useState<Map<string, number>>(new Map());
+  // Vertical extents for every heading (annotated or not). Drives the
+  // vertical bracket lines in the connector strip — annotated blocks get
+  // a stronger color and pair with a horizontal connector to their card.
+  const [allBlockExtents, setAllBlockExtents] = useState<
+    Array<{ key: string; top: number; bottom: number; annotated: boolean }>
+  >([]);
   // Where the editor's centered "page" ends, in pixels relative to the
   // wrapper. The gutter sits at this offset so it tracks the page edge
   // rather than the (much wider) container edge.
@@ -248,18 +260,75 @@ export function InlinePreviewGutter({
         const headings = wysiwygContainer.querySelectorAll<HTMLElement>(
           'h1[data-template], h2[data-template], h3[data-template], h4[data-template], h5[data-template], h6[data-template]',
         );
+        // All headings (annotated or not) drive each block's vertical
+        // extent — a block reaches from its heading down to the next
+        // heading (any level) or the editor bottom.
+        const allHeadings = Array.from(
+          wysiwygContainer.querySelectorAll<HTMLElement>('h1, h2, h3, h4, h5, h6'),
+        );
+        const editorRect = wysiwygContainer.getBoundingClientRect();
         const gutterRect = gutter.getBoundingClientRect();
+        // Existing card elements are queried so we can use their measured
+        // heights for the stacking pass below. On the very first run the
+        // cards are already in the DOM at top:0 with visibility:hidden,
+        // so their heights are valid. Cards rendered after items change
+        // get measured on the next observer-triggered recompute.
+        const cardEls = gutter.querySelectorAll<HTMLElement>('.squisq-inline-preview-card');
         const next = new Map<string, number>();
+        const nextConnectors = new Map<string, number>();
+        const nextAllExtents: Array<{
+          key: string;
+          top: number;
+          bottom: number;
+          annotated: boolean;
+        }> = [];
+
+        // Compute extent for every heading (annotated or not). The extent
+        // runs from this heading's top to the next heading's top, or to
+        // the editor bottom for the last one.
+        allHeadings.forEach((h, i) => {
+          const top = h.getBoundingClientRect().top - gutterRect.top;
+          const nextH = i < allHeadings.length - 1 ? allHeadings[i + 1] : null;
+          const bottom = nextH
+            ? nextH.getBoundingClientRect().top - gutterRect.top
+            : editorRect.bottom - gutterRect.top;
+          nextAllExtents.push({
+            key: `h-${i}`,
+            top,
+            bottom,
+            annotated: !!h.getAttribute('data-template'),
+          });
+        });
+        // Minimum vertical gap between adjacent cards.
+        const STACK_GAP = 12;
+        // Used until a real card height is measured (covers the brief
+        // window after a new template is added but before its card has
+        // mounted). Picked to roughly match a landscape-aspect preview
+        // card with one-line label.
+        const FALLBACK_CARD_HEIGHT = 220;
+        let lastBottom = -Infinity;
         items.forEach((item, i) => {
           const h = headings[i];
           if (!h) return;
-          const top = h.getBoundingClientRect().top - gutterRect.top;
+          const hRect = h.getBoundingClientRect();
+          const headingTop = hRect.top - gutterRect.top;
+          // Connector dot tracks the heading row, regardless of whether
+          // the card had to slide down to clear the previous one.
+          nextConnectors.set(item.id, headingTop);
+          // Stack: push the card down if its heading-aligned top would
+          // overlap the previous card.
+          const top = Math.max(headingTop, lastBottom + STACK_GAP);
           next.set(item.id, top);
+          const cardEl = cardEls[i];
+          const cardHeight = cardEl
+            ? cardEl.getBoundingClientRect().height
+            : FALLBACK_CARD_HEIGHT;
+          lastBottom = top + cardHeight;
         });
-        setPositions((prev) => {
-          if (prev.size === next.size) {
+        const dedupMap = (prev: Map<string, number>, n: Map<string, number>) => {
+          if (prev.size === n.size) {
             let same = true;
-            for (const [k, v] of next) {
+            for (const [k, v] of n) {
               const prevV = prev.get(k);
               // Treat a missing key as a real change — block ids shift
               // when heading text is edited, and the dedup must catch
@@ -271,7 +340,28 @@ export function InlinePreviewGutter({
             }
             if (same) return prev;
           }
-          return next;
+          return n;
+        };
+        setPositions((prev) => dedupMap(prev, next));
+        setConnectorTops((prev) => dedupMap(prev, nextConnectors));
+        setAllBlockExtents((prev) => {
+          if (prev.length === nextAllExtents.length) {
+            let same = true;
+            for (let i = 0; i < prev.length; i++) {
+              const a = prev[i];
+              const b = nextAllExtents[i];
+              if (
+                a.annotated !== b.annotated ||
+                Math.abs(a.top - b.top) > 0.5 ||
+                Math.abs(a.bottom - b.bottom) > 0.5
+              ) {
+                same = false;
+                break;
+              }
+            }
+            if (same) return prev;
+          }
+          return nextAllExtents;
         });
 
         // Track the editor page's right edge so the gutter can hug it
@@ -337,7 +427,7 @@ export function InlinePreviewGutter({
       {/* Connector strip — sits in the wrapper just to the left of the
           gutter so each line can bridge the gap between the editor's
           right edge and the card's left edge without being clipped. */}
-      {!isEmpty && pageRight != null && (
+      {pageRight != null && allBlockExtents.length > 0 && (
         <div
           className="squisq-inline-preview-connectors"
           aria-hidden="true"
@@ -351,8 +441,33 @@ export function InlinePreviewGutter({
             pointerEvents: 'none',
           }}
         >
+          {/* Vertical bracket line per heading (annotated or not). Tagged
+              blocks get a stronger color since they're paired with a card.
+              A small bottom gap visually separates adjacent bars so the
+              eye can pick out individual blocks even when several
+              same-colored untagged bars stack next to each other. */}
+          {allBlockExtents.map((ex) => {
+            const EXTENT_GAP = 6;
+            const height = Math.max(2, ex.bottom - ex.top - EXTENT_GAP);
+            return (
+              <div
+                key={ex.key}
+                className={`squisq-inline-preview-extent${
+                  ex.annotated ? '' : ' squisq-inline-preview-extent--untagged'
+                }`}
+                style={{
+                  position: 'absolute',
+                  top: `${ex.top}px`,
+                  height: `${height}px`,
+                  right: 0,
+                }}
+              />
+            );
+          })}
+          {/* Short horizontal connector at each annotated heading row,
+              bridging the vertical line to the card. */}
           {items.map((item) => {
-            const top = positions.get(item.id);
+            const top = connectorTops.get(item.id);
             if (top == null) return null;
             return (
               <div
@@ -400,9 +515,14 @@ export function InlinePreviewGutter({
                 }}
               >
                 <div className="squisq-inline-preview-card-label">
-                  <span className="squisq-inline-preview-card-template">{item.template}</span>
+                  <span className="squisq-inline-preview-card-template">
+                    {templateLabel(item.template)}
+                  </span>
                   {item.headingText && (
-                    <span className="squisq-inline-preview-card-title">{item.headingText}</span>
+                    <>
+                      <span className="squisq-inline-preview-card-sep">—</span>
+                      <span className="squisq-inline-preview-card-title">{item.headingText}</span>
+                    </>
                   )}
                 </div>
                 <div

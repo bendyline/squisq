@@ -132,8 +132,13 @@ function extractText(node: MdastNode): string {
 /**
  * Regex matching a trailing `{[templateName key=value …]}` annotation.
  * Captures the content between `{[` and `]}`.
+ *
+ * The trailing `[\s\]\}]*` tolerates accidental doubled `]}` that users
+ * sometimes type when learning the syntax (e.g. `{[foo]}]}`). It does
+ * not allow trailing word characters, so a non-trailing annotation like
+ * `## The {[chart]} section` still doesn't match.
  */
-const TEMPLATE_ANNOTATION_RE = /\s*\{\[([^\]]+)\]\}\s*$/;
+const TEMPLATE_ANNOTATION_RE = /\s*\{\[([^\]]+)\]\}[\s\]\}]*$/;
 
 /**
  * Extract a `{[templateName key=value …]}` annotation from a heading's

@@ -92,6 +92,19 @@ export interface EditorState {
   editorMode: EditorMode;
   /** Monaco language ID for the Raw editor. */
   language: string;
+  /**
+   * Whether the inline preview gutter (per-block card previews next to the
+   * WYSIWYG surface) is currently visible. Initialized from the EditorShell
+   * `inlinePreview` prop; the View menu in the toolbar can toggle it at
+   * runtime.
+   */
+  inlinePreviewVisible: boolean;
+  /**
+   * Whether the bottom status bar is currently visible. Initialized from
+   * the EditorShell `showStatusBar` prop (default true); the View menu in
+   * the toolbar can toggle it at runtime.
+   */
+  statusBarVisible: boolean;
 }
 
 export interface EditorActions {
@@ -107,6 +120,10 @@ export interface EditorActions {
   setMonacoEditor: (editor: MonacoEditor | null) => void;
   /** Set the color theme */
   setTheme: (theme: EditorTheme) => void;
+  /** Show or hide the inline preview gutter at runtime (driven by the View menu). */
+  setInlinePreviewVisible: (visible: boolean) => void;
+  /** Show or hide the bottom status bar at runtime (driven by the View menu). */
+  setStatusBarVisible: (visible: boolean) => void;
   /** Insert text at the current cursor position in the active editor */
   insertAtCursor: (text: string) => void;
   /** Replace all editor content with the given text */
@@ -230,6 +247,16 @@ export interface EditorProviderProps {
   fileName?: string;
   /** Explicit Monaco language ID — wins over the fileName-derived one. */
   language?: string;
+  /**
+   * Initial visibility of the inline preview gutter. Defaults to false.
+   * The toolbar's View menu can toggle it at runtime.
+   */
+  inlinePreview?: boolean;
+  /**
+   * Initial visibility of the bottom status bar. Defaults to true.
+   * The toolbar's View menu can toggle it at runtime.
+   */
+  showStatusBar?: boolean;
   children: ReactNode;
 }
 
@@ -256,6 +283,8 @@ export function EditorProvider({
   mentionProvider = null,
   fileName,
   language,
+  inlinePreview = false,
+  showStatusBar = true,
   children,
 }: EditorProviderProps) {
   // Resolve once per provider mount. Changing fileName/language after mount
@@ -287,6 +316,15 @@ export function EditorProvider({
   const [parseError, setParseError] = useState<string | null>(null);
   const [isParsing, setIsParsing] = useState(false);
   const [theme, setTheme] = useState<EditorTheme>(initialTheme);
+  const [inlinePreviewVisible, setInlinePreviewVisible] = useState<boolean>(inlinePreview);
+  // Sync visibility when the host changes the prop (e.g., toggle from outside).
+  useEffect(() => {
+    setInlinePreviewVisible(inlinePreview);
+  }, [inlinePreview]);
+  const [statusBarVisible, setStatusBarVisible] = useState<boolean>(showStatusBar);
+  useEffect(() => {
+    setStatusBarVisible(showStatusBar);
+  }, [showStatusBar]);
   const [tiptapEditor, setTiptapEditor] = useState<TiptapEditor | null>(null);
   const [monacoEditor, setMonacoEditor] = useState<MonacoEditor | null>(null);
 
@@ -506,6 +544,8 @@ export function EditorProvider({
       theme,
       editorMode,
       language: resolvedLanguage,
+      inlinePreviewVisible,
+      statusBarVisible,
       tiptapEditor,
       monacoEditor,
       container,
@@ -520,6 +560,8 @@ export function EditorProvider({
       setTiptapEditor,
       setMonacoEditor,
       setTheme,
+      setInlinePreviewVisible,
+      setStatusBarVisible,
       insertAtCursor,
       replaceAll,
     }),
@@ -533,6 +575,8 @@ export function EditorProvider({
       theme,
       editorMode,
       resolvedLanguage,
+      inlinePreviewVisible,
+      statusBarVisible,
       tiptapEditor,
       monacoEditor,
       container,

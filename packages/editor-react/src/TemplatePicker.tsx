@@ -513,8 +513,9 @@ export function TemplatePicker({ value, onChange, compact }: TemplatePickerProps
         aria-expanded={open}
         title="Choose block template"
       >
-        <span className="squisq-template-picker-trigger-label">Template:</span>
-        <span className="squisq-template-picker-trigger-value">{currentLabel}</span>
+        <span className="squisq-template-picker-trigger-value">
+          {value ? currentLabel : '(No visual)'}
+        </span>
         <svg
           className="squisq-template-picker-trigger-caret"
           width="10"
