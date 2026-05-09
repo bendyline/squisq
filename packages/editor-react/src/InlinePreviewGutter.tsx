@@ -150,6 +150,22 @@ interface PreviewItem {
   block: Block;
 }
 
+// ── Connector layout constants ─────────────────────────────────────
+
+/** Distance from the strip's right edge to the bar's right edge (px). */
+const BAR_RIGHT_OFFSET = 14;
+/** Vertical offset within a card to the center of the caption row. Card
+ *  padding (8) + half line-height of the 12px label (~8) ≈ 16. */
+const CARD_LABEL_OFFSET = 16;
+/** Vertical offset from heading top to the left connector dot. Matches
+ *  CARD_LABEL_OFFSET so the line is horizontal when the card sits at its
+ *  natural (heading-aligned) position. When stacking pushes the card
+ *  down, the right end drops and the line slopes downward. */
+const EXTENT_TOP_PAD = CARD_LABEL_OFFSET;
+/** Card's `left: 12px` inside the gutter — used to land the right circle on
+ *  the card's left edge for the diagonal connector line. */
+const CARD_LEFT_INSET = 12;
+
 // ── Component ──────────────────────────────────────────────────────
 
 export function InlinePreviewGutter({
@@ -424,9 +440,11 @@ export function InlinePreviewGutter({
 
   return (
     <>
-      {/* Connector strip — sits in the wrapper just to the left of the
-          gutter so each line can bridge the gap between the editor's
-          right edge and the card's left edge without being clipped. */}
+      {/* Connector strip — clips the vertical bracket bars to its bounds.
+          Sits in the wrapper just to the left of the gutter. The bars
+          live on the LEFT side of the strip so the diagonal SVG layer
+          below has room to draw a line from each bar across to the
+          corresponding card's caption row. */}
       {pageRight != null && allBlockExtents.length > 0 && (
         <div
           className="squisq-inline-preview-connectors"
@@ -443,9 +461,7 @@ export function InlinePreviewGutter({
         >
           {/* Vertical bracket line per heading (annotated or not). Tagged
               blocks get a stronger color since they're paired with a card.
-              A small bottom gap visually separates adjacent bars so the
-              eye can pick out individual blocks even when several
-              same-colored untagged bars stack next to each other. */}
+              A small bottom gap visually separates adjacent bars. */}
           {allBlockExtents.map((ex) => {
             const EXTENT_GAP = 6;
             const height = Math.max(2, ex.bottom - ex.top - EXTENT_GAP);
@@ -459,30 +475,76 @@ export function InlinePreviewGutter({
                   position: 'absolute',
                   top: `${ex.top}px`,
                   height: `${height}px`,
-                  right: 0,
-                }}
-              />
-            );
-          })}
-          {/* Short horizontal connector at each annotated heading row,
-              bridging the vertical line to the card. */}
-          {items.map((item) => {
-            const top = connectorTops.get(item.id);
-            if (top == null) return null;
-            return (
-              <div
-                key={item.id}
-                className="squisq-inline-preview-connector"
-                style={{
-                  position: 'absolute',
-                  top: `${top + 12}px`,
-                  left: 0,
-                  right: 0,
+                  right: `${BAR_RIGHT_OFFSET}px`,
                 }}
               />
             );
           })}
         </div>
+      )}
+      {/* Diagonal connector SVG — overlays the strip and the gap between
+          strip and card. Each line goes from its block's bar (at heading
+          row) to the card's caption row. When the card has been pushed
+          down by stacking, the line slopes downward instead of running
+          flat — visually telling the user "this card is showing this
+          block, even though it can't sit at the heading row." */}
+      {pageRight != null && items.length > 0 && (
+        <svg
+          className="squisq-inline-preview-connector-svg"
+          aria-hidden="true"
+          style={{
+            position: 'absolute',
+            top: 0,
+            left: pageRight,
+            width: connectorWidth + CARD_LEFT_INSET,
+            height: '100%',
+            pointerEvents: 'none',
+            overflow: 'visible',
+          }}
+        >
+          {items.map((item) => {
+            const headingTop = connectorTops.get(item.id);
+            const cardTop = positions.get(item.id);
+            if (headingTop == null || cardTop == null) return null;
+            // Bar center sits at `connectorWidth - BAR_RIGHT_OFFSET - barWidth/2`.
+            // Tagged bars are 4px → center at width-16. Use that as the line origin.
+            const x1 = connectorWidth - BAR_RIGHT_OFFSET - 2;
+            const y1 = headingTop + EXTENT_TOP_PAD;
+            // Right endpoint sits at the card's left edge, vertically aligned
+            // with the caption row (card padding + half label height).
+            const x2 = connectorWidth + CARD_LEFT_INSET;
+            const y2 = cardTop + CARD_LABEL_OFFSET;
+            return (
+              <g key={item.id}>
+                <line
+                  x1={x1}
+                  y1={y1}
+                  x2={x2}
+                  y2={y2}
+                  stroke="#6366f1"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                />
+                <circle
+                  cx={x1}
+                  cy={y1}
+                  r="4"
+                  fill="#6366f1"
+                  stroke="#ffffff"
+                  strokeWidth="2"
+                />
+                <circle
+                  cx={x2}
+                  cy={y2}
+                  r="4"
+                  fill="#6366f1"
+                  stroke="#ffffff"
+                  strokeWidth="2"
+                />
+              </g>
+            );
+          })}
+        </svg>
       )}
 
       <aside

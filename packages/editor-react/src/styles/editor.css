@@ -2422,41 +2422,165 @@
   border-radius: 1.5px;
 }
 
-.squisq-inline-preview-connector {
-  height: 2px;
-  background: #6366f1;
-  border-radius: 1px;
-  box-shadow: 0 0 0 1px rgba(99, 102, 241, 0.15);
-  transition: top 120ms ease-out;
-}
-
-.squisq-inline-preview-connector::before,
-.squisq-inline-preview-connector::after {
-  content: '';
-  position: absolute;
-  top: -3px;
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: #6366f1;
-  box-shadow: 0 0 0 2px #fff;
-}
-
-.squisq-inline-preview-connector::before {
-  left: -2px;
-}
-
-.squisq-inline-preview-connector::after {
-  right: -2px;
+/* Diagonal connector SVG — drawn directly via <line>/<circle> elements
+   in InlinePreviewGutter; CSS is intentionally minimal so the JSX
+   coordinates remain the source of truth. */
+.squisq-inline-preview-connector-svg line,
+.squisq-inline-preview-connector-svg circle {
+  transition:
+    cx 120ms ease-out,
+    cy 120ms ease-out,
+    x1 120ms ease-out,
+    y1 120ms ease-out,
+    x2 120ms ease-out,
+    y2 120ms ease-out;
 }
 
 /* Auto-hide the gutter (and its connector strip) when the editor body is
    too narrow to host both surfaces comfortably. */
 @container squisq-editor-body (max-width: 720px) {
   .squisq-inline-preview-gutter,
-  .squisq-inline-preview-connectors {
+  .squisq-inline-preview-connectors,
+  .squisq-outline {
     display: none;
   }
+}
+
+/* ─── Outline pane ─────────────────────────────────────────────────
+   Left-side companion to the inline preview gutter — a hierarchical
+   tree of the document's headings. Anchored to the editor page's left
+   edge via the JSX-side `pageLeft` measurement. */
+
+.squisq-outline {
+  padding: 12px 8px;
+  border-right: 1px solid #e5e7eb;
+  background: transparent;
+  font-size: 13px;
+  color: #1f2937;
+  box-sizing: border-box;
+}
+
+.squisq-outline-empty {
+  padding: 16px 12px;
+  font-size: 12px;
+  color: #6b7280;
+  text-align: center;
+}
+
+.squisq-outline-tree {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.squisq-outline-item {
+  margin: 0;
+}
+
+.squisq-outline-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 4px 6px;
+  border: none;
+  background: transparent;
+  text-align: left;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+  border-radius: 4px;
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+.squisq-outline-row:hover {
+  background: #f3f4f6;
+}
+
+.squisq-outline-row-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex: 1;
+  min-width: 0;
+}
+
+/* Depth-based indent. The outermost level still pays a small base
+   inset so all rows visually align inside the pane. */
+.squisq-outline-row--depth-1 {
+  padding-left: 6px;
+  font-weight: 600;
+}
+.squisq-outline-row--depth-2 {
+  padding-left: 18px;
+  font-weight: 500;
+}
+.squisq-outline-row--depth-3 {
+  padding-left: 30px;
+}
+.squisq-outline-row--depth-4 {
+  padding-left: 42px;
+  color: #475569;
+}
+.squisq-outline-row--depth-5 {
+  padding-left: 54px;
+  font-size: 12px;
+  color: #475569;
+}
+.squisq-outline-row--depth-6 {
+  padding-left: 66px;
+  font-size: 12px;
+  color: #64748b;
+}
+
+.squisq-outline-template-chip {
+  flex-shrink: 0;
+  padding: 1px 6px;
+  font-size: 10px;
+  font-weight: 600;
+  color: #6d28d9;
+  background: #ede9fe;
+  border: 1px solid #c4b5fd;
+  border-radius: 8px;
+  line-height: 1.4;
+}
+
+.squisq-outline-row--current {
+  background: #ede9fe;
+  color: #4338ca;
+}
+
+.squisq-editor-shell[data-theme='dark'] .squisq-outline {
+  border-right-color: #374151;
+  color: #d1d5db;
+}
+
+.squisq-editor-shell[data-theme='dark'] .squisq-outline-empty {
+  color: #94a3b8;
+}
+
+.squisq-editor-shell[data-theme='dark'] .squisq-outline-row:hover {
+  background: #1f2937;
+}
+
+.squisq-editor-shell[data-theme='dark'] .squisq-outline-row--depth-4,
+.squisq-editor-shell[data-theme='dark'] .squisq-outline-row--depth-5 {
+  color: #94a3b8;
+}
+
+.squisq-editor-shell[data-theme='dark'] .squisq-outline-row--depth-6 {
+  color: #6b7280;
+}
+
+.squisq-editor-shell[data-theme='dark'] .squisq-outline-template-chip {
+  color: #c4b5fd;
+  background: #312e81;
+  border-color: #4c1d95;
+}
+
+.squisq-editor-shell[data-theme='dark'] .squisq-outline-row--current {
+  background: #312e81;
+  color: #ddd6fe;
 }
 
 .squisq-editor-shell[data-theme='dark'] .squisq-inline-preview-extent {

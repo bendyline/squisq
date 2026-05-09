@@ -19,6 +19,7 @@ import { StatusBar } from './StatusBar';
 import { RawEditor } from './RawEditor';
 import { WysiwygEditor } from './WysiwygEditor';
 import { InlinePreviewGutter } from './InlinePreviewGutter';
+import { OutlinePanel } from './OutlinePanel';
 import { PreviewPanel } from './PreviewPanel';
 import { ImageViewer } from './ImageViewer';
 import { PreviewSettingsProvider, PreviewToolbarControls } from './PreviewControls';
@@ -238,6 +239,20 @@ export interface EditorShellProps {
    */
   inlinePreviewWidth?: number;
   /**
+   * Show an outline pane on the left of the WYSIWYG editor — a
+   * hierarchical tree of the document's headings (h1 → h2 → h3) with
+   * click-to-scroll. Auto-hidden via container query on narrow editors.
+   * Defaults to `false`. The toolbar's View menu can toggle this at
+   * runtime regardless of the initial value.
+   */
+  outline?: boolean;
+  /**
+   * Width in pixels for the outline pane. Defaults to 240. Only takes
+   * effect when {@link EditorShellProps.outline} is true (or the View
+   * menu has toggled it on).
+   */
+  outlineWidth?: number;
+  /**
    * Override the preview theme with an explicit `Theme` object. When set,
    * `Doc.themeId` and the user's theme dropdown selection are ignored for
    * the preview surface. Used by the theme customizer to live-preview an
@@ -288,6 +303,8 @@ export function EditorShell({
   imageAlt,
   inlinePreview = false,
   inlinePreviewWidth = 320,
+  outline = false,
+  outlineWidth = 240,
   themeOverride = null,
 }: EditorShellProps) {
   // Show the toggle when explicitly opted in, or when mediaProvider prop was passed at all
@@ -317,6 +334,7 @@ export function EditorShell({
       language={language}
       inlinePreview={inlinePreview}
       showStatusBar={showStatusBar}
+      outline={outline}
     >
       <EditorShellInner
         basePath={basePath}
@@ -341,6 +359,7 @@ export function EditorShell({
         imageSrc={imageSrc}
         imageAlt={imageAlt}
         inlinePreviewWidth={inlinePreviewWidth}
+        outlineWidth={outlineWidth}
         themeOverride={themeOverride}
       />
     </EditorProvider>
@@ -370,6 +389,7 @@ interface EditorShellInnerProps {
   imageSrc?: string;
   imageAlt?: string;
   inlinePreviewWidth: number;
+  outlineWidth: number;
   themeOverride: Theme | null;
 }
 
@@ -396,6 +416,7 @@ function EditorShellInner({
   imageSrc,
   imageAlt,
   inlinePreviewWidth,
+  outlineWidth,
   themeOverride,
 }: EditorShellInnerProps) {
   const {
@@ -411,6 +432,7 @@ function EditorShellInner({
     setMarkdownSource,
     inlinePreviewVisible,
     statusBarVisible,
+    outlineVisible,
   } = useEditorContext();
   const isPreview = activeView === 'preview';
   const isCodeMode = editorMode === 'code';
@@ -638,14 +660,17 @@ function EditorShellInner({
                 and the preview pipeline stays idle. */}
             {isMarkdownMode &&
               activeView === 'wysiwyg' &&
-              (inlinePreviewVisible ? (
+              (inlinePreviewVisible || outlineVisible ? (
                 <div className="squisq-wysiwyg-with-gutter">
+                  {outlineVisible && <OutlinePanel width={outlineWidth} />}
                   <WysiwygEditor
                     submitOnEnter={submitOnEnter}
                     placeholder={placeholder}
                     readOnly={readOnly}
                   />
-                  <InlinePreviewGutter width={inlinePreviewWidth} basePath={basePath} />
+                  {inlinePreviewVisible && (
+                    <InlinePreviewGutter width={inlinePreviewWidth} basePath={basePath} />
+                  )}
                 </div>
               ) : (
                 <WysiwygEditor

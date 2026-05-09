@@ -70,6 +70,8 @@ export type { ToolbarProps } from './Toolbar.js';
 
 export { VersionHistoryPanel } from './VersionHistoryPanel.js';
 export { ViewMenuPanel } from './ViewMenuPanel.js';
+export { OutlinePanel } from './OutlinePanel.js';
+export type { OutlinePanelProps } from './OutlinePanel.js';
 export { ThemeCustomizerPanel } from './ThemeCustomizerPanel.js';
 export type { ThemeCustomizerPanelProps } from './ThemeCustomizerPanel.js';
 export { TemplatePicker, templateLabel } from './TemplatePicker.js';

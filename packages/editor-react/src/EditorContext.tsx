@@ -105,6 +105,12 @@ export interface EditorState {
    * the toolbar can toggle it at runtime.
    */
   statusBarVisible: boolean;
+  /**
+   * Whether the left-side outline pane is currently visible. Initialized
+   * from the EditorShell `outline` prop (default false); the View menu in
+   * the toolbar can toggle it at runtime.
+   */
+  outlineVisible: boolean;
 }
 
 export interface EditorActions {
@@ -124,6 +130,8 @@ export interface EditorActions {
   setInlinePreviewVisible: (visible: boolean) => void;
   /** Show or hide the bottom status bar at runtime (driven by the View menu). */
   setStatusBarVisible: (visible: boolean) => void;
+  /** Show or hide the left-side outline pane at runtime (driven by the View menu). */
+  setOutlineVisible: (visible: boolean) => void;
   /** Insert text at the current cursor position in the active editor */
   insertAtCursor: (text: string) => void;
   /** Replace all editor content with the given text */
@@ -257,6 +265,11 @@ export interface EditorProviderProps {
    * The toolbar's View menu can toggle it at runtime.
    */
   showStatusBar?: boolean;
+  /**
+   * Initial visibility of the left-side outline pane. Defaults to false.
+   * The toolbar's View menu can toggle it at runtime.
+   */
+  outline?: boolean;
   children: ReactNode;
 }
 
@@ -285,6 +298,7 @@ export function EditorProvider({
   language,
   inlinePreview = false,
   showStatusBar = true,
+  outline = false,
   children,
 }: EditorProviderProps) {
   // Resolve once per provider mount. Changing fileName/language after mount
@@ -325,6 +339,10 @@ export function EditorProvider({
   useEffect(() => {
     setStatusBarVisible(showStatusBar);
   }, [showStatusBar]);
+  const [outlineVisible, setOutlineVisible] = useState<boolean>(outline);
+  useEffect(() => {
+    setOutlineVisible(outline);
+  }, [outline]);
   const [tiptapEditor, setTiptapEditor] = useState<TiptapEditor | null>(null);
   const [monacoEditor, setMonacoEditor] = useState<MonacoEditor | null>(null);
 
@@ -546,6 +564,7 @@ export function EditorProvider({
       language: resolvedLanguage,
       inlinePreviewVisible,
       statusBarVisible,
+      outlineVisible,
       tiptapEditor,
       monacoEditor,
       container,
@@ -562,6 +581,7 @@ export function EditorProvider({
       setTheme,
       setInlinePreviewVisible,
       setStatusBarVisible,
+      setOutlineVisible,
       insertAtCursor,
       replaceAll,
     }),
@@ -577,6 +597,7 @@ export function EditorProvider({
       resolvedLanguage,
       inlinePreviewVisible,
       statusBarVisible,
+      outlineVisible,
       tiptapEditor,
       monacoEditor,
       container,
