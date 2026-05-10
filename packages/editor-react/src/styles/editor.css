@@ -2357,10 +2357,7 @@
   padding-left: 12px;
 }
 
-.squisq-editor-shell[data-theme='dark']
-  .squisq-raw-editor-container
-  .monaco-editor
-  .margin::after {
+.squisq-editor-shell[data-theme='dark'] .squisq-raw-editor-container .monaco-editor .margin::after {
   background: #2a3144;
 }
 
@@ -2372,12 +2369,32 @@
   min-height: 0;
 }
 
+/* All gutter chrome is parameterized through CSS custom properties so
+   hosts can re-theme without overriding individual rules. Defaults
+   below match the original light-mode values; the dark-mode block
+   further down rebinds them. Hosts override at any selector level
+   (e.g. `.db-shell[data-theme='dark'] .squisq-editor-shell { ... }`). */
+.squisq-editor-shell {
+  --squisq-preview-accent: #6366f1;
+  --squisq-preview-accent-muted: #94a3b8;
+  --squisq-preview-gutter-bg: #dcd8d0;
+  --squisq-preview-card-bg: #ffffff;
+  --squisq-preview-card-border: #e5e7eb;
+  --squisq-preview-card-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+  --squisq-preview-card-title: #111827;
+  --squisq-preview-card-svg-bg: #f1f5f9;
+  --squisq-preview-dot-halo: #ffffff;
+  --squisq-preview-empty-bg: #ffffff;
+  --squisq-preview-empty-border: #d1d5db;
+  --squisq-preview-empty-text: #6b7280;
+}
+
 .squisq-inline-preview-gutter {
   /* Tinted to match the WYSIWYG container's "desk" color so this pane
      reads as part of the same surrounding chrome the Monaco gutter
      blends into on the other side of the canvas. */
   padding: 0;
-  background: #dcd8d0;
+  background: var(--squisq-preview-gutter-bg);
   border: none;
   box-sizing: border-box;
   font-family: inherit;
@@ -2388,14 +2405,14 @@
   top: 12px;
   left: 12px;
   right: 12px;
-  color: #6b7280;
+  color: var(--squisq-preview-empty-text);
   font-size: 12px;
   line-height: 1.4;
   padding: 12px;
   text-align: center;
-  border: 1px dashed #d1d5db;
+  border: 1px dashed var(--squisq-preview-empty-border);
   border-radius: 8px;
-  background: #ffffff;
+  background: var(--squisq-preview-empty-bg);
 }
 
 .squisq-inline-preview-empty p {
@@ -2407,10 +2424,10 @@
   flex-direction: column;
   gap: 6px;
   padding: 8px;
-  background: #ffffff;
-  border: 1px solid #e5e7eb;
+  background: var(--squisq-preview-card-bg);
+  border: 1px solid var(--squisq-preview-card-border);
   border-radius: 8px;
-  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+  box-shadow: var(--squisq-preview-card-shadow);
   transition: top 120ms ease-out;
 }
 
@@ -2427,17 +2444,17 @@
 
 .squisq-inline-preview-card-template {
   font-weight: 600;
-  color: #6366f1;
+  color: var(--squisq-preview-accent);
   flex-shrink: 0;
 }
 
 .squisq-inline-preview-card-sep {
-  color: #94a3b8;
+  color: var(--squisq-preview-accent-muted);
   flex-shrink: 0;
 }
 
 .squisq-inline-preview-card-title {
-  color: #111827;
+  color: var(--squisq-preview-card-title);
   font-weight: 500;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -2447,20 +2464,16 @@
   width: 100%;
   overflow: hidden;
   border-radius: 4px;
-  background: #f1f5f9;
+  background: var(--squisq-preview-card-svg-bg);
 }
 
-/* Connector line — a horizontal stripe that bridges each heading to
-   the top of its preview card. Sits inside the connector strip overlay
-   rendered as a sibling of the gutter. A small dot anchors each end so
-   the relationship reads at a glance. */
 /* Vertical bracket line showing each block's editor extent. Lives in the
    connector strip, anchored to its right edge so the cards sit
-   immediately to its right. The horizontal connector bridges from the
+   immediately to its right. The diagonal connector bridges from the
    vertical line to its card at the heading row. */
 .squisq-inline-preview-extent {
   width: 4px;
-  background: #4f46e5;
+  background: var(--squisq-preview-accent);
   border-radius: 2px;
   transition:
     top 120ms ease-out,
@@ -2468,12 +2481,24 @@
 }
 
 /* Untagged blocks get a thinner, lower-contrast bar — they still surface
-   the block's structural reach but recede behind the strong indigo bars
+   the block's structural reach but recede behind the strong accent bars
    that pair with cards. */
 .squisq-inline-preview-extent--untagged {
   width: 3px;
-  background: #94a3b8;
+  background: var(--squisq-preview-accent-muted);
   border-radius: 1.5px;
+}
+
+/* Diagonal connector SVG colors — the JSX uses inline `stroke`/`fill`
+   presentation attributes so the geometry stays self-contained, but
+   those attributes are weaker than CSS rules and are overridden here
+   so all preview accents flow through the same custom property. */
+.squisq-inline-preview-connector-svg line {
+  stroke: var(--squisq-preview-accent);
+}
+.squisq-inline-preview-connector-svg circle {
+  fill: var(--squisq-preview-accent);
+  stroke: var(--squisq-preview-dot-halo);
 }
 
 /* Diagonal connector SVG — drawn directly via <line>/<circle> elements
@@ -2609,8 +2634,27 @@
   color: #d1d5db;
 }
 
+/* Dark-mode rebind for all preview-gutter custom properties. Individual
+   rules below remain as no-ops kept for back-compat with any host CSS
+   that may still target them — the variable redefinition is the single
+   source of truth going forward. */
+.squisq-editor-shell[data-theme='dark'] {
+  --squisq-preview-accent: #818cf8;
+  --squisq-preview-accent-muted: #475569;
+  --squisq-preview-gutter-bg: #0f1219;
+  --squisq-preview-card-bg: #111827;
+  --squisq-preview-card-border: #1f2937;
+  --squisq-preview-card-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --squisq-preview-card-title: #e5e7eb;
+  --squisq-preview-card-svg-bg: #1e293b;
+  --squisq-preview-dot-halo: #0f172a;
+  --squisq-preview-empty-bg: #111827;
+  --squisq-preview-empty-border: #374151;
+  --squisq-preview-empty-text: #94a3b8;
+}
+
 .squisq-editor-shell[data-theme='dark'] .squisq-inline-preview-gutter {
-  background: #0f1219;
+  background: var(--squisq-preview-gutter-bg);
 }
 
 .squisq-editor-shell[data-theme='dark'] .squisq-outline-empty {
@@ -2641,46 +2685,7 @@
   color: #ddd6fe;
 }
 
-.squisq-editor-shell[data-theme='dark'] .squisq-inline-preview-extent {
-  background: #818cf8;
-}
-
-.squisq-editor-shell[data-theme='dark'] .squisq-inline-preview-extent--untagged {
-  background: #475569;
-}
-
-/* Dark theme overrides */
-.squisq-editor-shell[data-theme='dark'] .squisq-inline-preview-empty {
-  background: #111827;
-  border-color: #374151;
-  color: #94a3b8;
-}
-
-.squisq-editor-shell[data-theme='dark'] .squisq-inline-preview-card {
-  background: #111827;
-  border-color: #1f2937;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
-}
-
-.squisq-editor-shell[data-theme='dark'] .squisq-inline-preview-card-template {
-  color: #818cf8;
-}
-
-.squisq-editor-shell[data-theme='dark'] .squisq-inline-preview-card-title {
-  color: #e5e7eb;
-}
-
-.squisq-editor-shell[data-theme='dark'] .squisq-inline-preview-card-svg {
-  background: #1e293b;
-}
-
-.squisq-editor-shell[data-theme='dark'] .squisq-inline-preview-connector {
-  background: #818cf8;
-  box-shadow: 0 0 0 1px rgba(129, 140, 248, 0.2);
-}
-
-.squisq-editor-shell[data-theme='dark'] .squisq-inline-preview-connector::before,
-.squisq-editor-shell[data-theme='dark'] .squisq-inline-preview-connector::after {
-  background: #818cf8;
-  box-shadow: 0 0 0 2px #0f172a;
-}
+/* (Dark-mode preview-gutter chrome flows through the custom-property
+   redefinition above. Individual color rules removed — the base
+   .squisq-inline-preview-* selectors already pull from the same vars
+   that the dark block rebinds.) */

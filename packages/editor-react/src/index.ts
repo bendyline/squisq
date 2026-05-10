@@ -33,6 +33,7 @@ export type {
   ImageDisplayMode,
   MentionCandidate,
   MentionProvider,
+  ViewPreferences,
 } from './EditorContext.js';
 
 // File-kind detection — useful for hosts that want to pre-decide chrome

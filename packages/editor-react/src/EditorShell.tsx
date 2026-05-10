@@ -13,6 +13,7 @@ import {
   type EditorView,
   type ImageDisplayMode,
   type MentionProvider,
+  type ViewPreferences,
 } from './EditorContext';
 import { Toolbar } from './Toolbar';
 import { StatusBar } from './StatusBar';
@@ -253,6 +254,22 @@ export interface EditorShellProps {
    */
   outlineWidth?: number;
   /**
+   * Bundled view preferences — a serializable JSON blob covering the
+   * runtime-toggleable view options surfaced in the View menu. When
+   * provided, fields here override the corresponding individual props
+   * (`outline`, `inlinePreview`, `showStatusBar`). Pair with
+   * {@link onViewPreferencesChange} to externalize storage of these
+   * preferences in the host.
+   */
+  viewPreferences?: ViewPreferences;
+  /**
+   * Notified after each user-driven toggle in the View menu. The
+   * argument is a full snapshot of all view preferences — hosts can
+   * persist it as-is. Not called when {@link viewPreferences} is
+   * changed externally.
+   */
+  onViewPreferencesChange?: (prefs: ViewPreferences) => void;
+  /**
    * Override the preview theme with an explicit `Theme` object. When set,
    * `Doc.themeId` and the user's theme dropdown selection are ignored for
    * the preview surface. Used by the theme customizer to live-preview an
@@ -305,6 +322,8 @@ export function EditorShell({
   inlinePreviewWidth = 320,
   outline = false,
   outlineWidth = 240,
+  viewPreferences,
+  onViewPreferencesChange,
   themeOverride = null,
 }: EditorShellProps) {
   // Show the toggle when explicitly opted in, or when mediaProvider prop was passed at all
@@ -335,6 +354,8 @@ export function EditorShell({
       inlinePreview={inlinePreview}
       showStatusBar={showStatusBar}
       outline={outline}
+      viewPreferences={viewPreferences}
+      onViewPreferencesChange={onViewPreferencesChange}
     >
       <EditorShellInner
         basePath={basePath}

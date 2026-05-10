@@ -270,7 +270,38 @@ export interface EditorProviderProps {
    * The toolbar's View menu can toggle it at runtime.
    */
   outline?: boolean;
+  /**
+   * Bundled view preferences — a serializable JSON blob covering all
+   * runtime-toggleable view options. When provided, individual values
+   * here override the matching individual props (`inlinePreview`,
+   * `showStatusBar`, `outline`). Hosts wiring this up typically load
+   * the blob from their own preferences storage and pair it with
+   * {@link onViewPreferencesChange}.
+   */
+  viewPreferences?: ViewPreferences;
+  /**
+   * Notified after each user-driven toggle in the View menu (or any
+   * programmatic call to the corresponding context setters). The
+   * argument is a full snapshot — hosts can persist it as-is.
+   * Not called when {@link viewPreferences} is changed externally.
+   */
+  onViewPreferencesChange?: (prefs: ViewPreferences) => void;
   children: ReactNode;
+}
+
+/**
+ * Serializable bundle of all runtime-toggleable view preferences for
+ * the editor shell. Hosts can persist this verbatim (e.g. to
+ * localStorage) and pass it back via {@link EditorProviderProps.viewPreferences}
+ * to restore the user's last view configuration.
+ */
+export interface ViewPreferences {
+  /** Whether the left-side outline pane is visible. */
+  outline?: boolean;
+  /** Whether the inline preview gutter (per-block cards) is visible. */
+  inlinePreview?: boolean;
+  /** Whether the bottom status bar is visible. */
+  showStatusBar?: boolean;
 }
 
 /**
@@ -299,8 +330,16 @@ export function EditorProvider({
   inlinePreview = false,
   showStatusBar = true,
   outline = false,
+  viewPreferences,
+  onViewPreferencesChange,
   children,
 }: EditorProviderProps) {
+  // Resolve effective initial values: bundled `viewPreferences` wins over
+  // individual props when both are passed. Individual props remain valid
+  // for hosts that haven't migrated to the bundled API.
+  const effectiveInlinePreview = viewPreferences?.inlinePreview ?? inlinePreview;
+  const effectiveShowStatusBar = viewPreferences?.showStatusBar ?? showStatusBar;
+  const effectiveOutline = viewPreferences?.outline ?? outline;
   // Resolve once per provider mount. Changing fileName/language after mount
   // would require recreating the Monaco model anyway, so treat it as static.
   const { mode: editorMode, language: resolvedLanguage } = useMemo(
@@ -330,19 +369,74 @@ export function EditorProvider({
   const [parseError, setParseError] = useState<string | null>(null);
   const [isParsing, setIsParsing] = useState(false);
   const [theme, setTheme] = useState<EditorTheme>(initialTheme);
-  const [inlinePreviewVisible, setInlinePreviewVisible] = useState<boolean>(inlinePreview);
+  const [inlinePreviewVisible, setInlinePreviewVisibleRaw] =
+    useState<boolean>(effectiveInlinePreview);
   // Sync visibility when the host changes the prop (e.g., toggle from outside).
   useEffect(() => {
-    setInlinePreviewVisible(inlinePreview);
+    setInlinePreviewVisibleRaw(inlinePreview);
   }, [inlinePreview]);
-  const [statusBarVisible, setStatusBarVisible] = useState<boolean>(showStatusBar);
+  const [statusBarVisible, setStatusBarVisibleRaw] = useState<boolean>(effectiveShowStatusBar);
   useEffect(() => {
-    setStatusBarVisible(showStatusBar);
+    setStatusBarVisibleRaw(showStatusBar);
   }, [showStatusBar]);
-  const [outlineVisible, setOutlineVisible] = useState<boolean>(outline);
+  const [outlineVisible, setOutlineVisibleRaw] = useState<boolean>(effectiveOutline);
   useEffect(() => {
-    setOutlineVisible(outline);
+    setOutlineVisibleRaw(outline);
   }, [outline]);
+
+  // Sync from the bundled `viewPreferences` prop. Runs in addition to the
+  // individual prop syncs above. When both APIs are present, the bundled
+  // values are applied here last, keeping `viewPreferences` authoritative.
+  useEffect(() => {
+    if (!viewPreferences) return;
+    if (viewPreferences.inlinePreview !== undefined) {
+      setInlinePreviewVisibleRaw(viewPreferences.inlinePreview);
+    }
+    if (viewPreferences.showStatusBar !== undefined) {
+      setStatusBarVisibleRaw(viewPreferences.showStatusBar);
+    }
+    if (viewPreferences.outline !== undefined) {
+      setOutlineVisibleRaw(viewPreferences.outline);
+    }
+  }, [viewPreferences]);
+
+  // Wrap the three setters so user-driven toggles emit a snapshot via
+  // `onViewPreferencesChange`. Refs hold the latest values + callback so
+  // each wrapper can build a current snapshot without re-creating itself
+  // on every state change (the setters are kept referentially stable for
+  // the context value's memoization).
+  const onViewPreferencesChangeRef = useRef(onViewPreferencesChange);
+  onViewPreferencesChangeRef.current = onViewPreferencesChange;
+  const inlinePreviewRef = useRef(inlinePreviewVisible);
+  inlinePreviewRef.current = inlinePreviewVisible;
+  const statusBarRef = useRef(statusBarVisible);
+  statusBarRef.current = statusBarVisible;
+  const outlineRef = useRef(outlineVisible);
+  outlineRef.current = outlineVisible;
+  const setInlinePreviewVisible = useCallback((visible: boolean) => {
+    setInlinePreviewVisibleRaw(visible);
+    onViewPreferencesChangeRef.current?.({
+      inlinePreview: visible,
+      showStatusBar: statusBarRef.current,
+      outline: outlineRef.current,
+    });
+  }, []);
+  const setStatusBarVisible = useCallback((visible: boolean) => {
+    setStatusBarVisibleRaw(visible);
+    onViewPreferencesChangeRef.current?.({
+      inlinePreview: inlinePreviewRef.current,
+      showStatusBar: visible,
+      outline: outlineRef.current,
+    });
+  }, []);
+  const setOutlineVisible = useCallback((visible: boolean) => {
+    setOutlineVisibleRaw(visible);
+    onViewPreferencesChangeRef.current?.({
+      inlinePreview: inlinePreviewRef.current,
+      showStatusBar: statusBarRef.current,
+      outline: visible,
+    });
+  }, []);
   const [tiptapEditor, setTiptapEditor] = useState<TiptapEditor | null>(null);
   const [monacoEditor, setMonacoEditor] = useState<MonacoEditor | null>(null);
 
