@@ -608,11 +608,20 @@ export function EditorProvider({
   // idle. The "only save if different" check inside `saveVersion` makes
   // most ticks no-ops, so this is cheap. Disabled when the idle delay is
   // 0 or versioning isn't active.
+  //
+  // We pass the live `markdownSource` explicitly so saveVersion never has
+  // to fall back to `container.readDocument()`. That fallback would fail
+  // in setups where the markdown file lives outside the versioning
+  // container's scope (e.g. DocBlocks, where the container points at
+  // `<basename>_files/` while the doc itself lives in the parent
+  // directory). Using the editor's live state also ensures the snapshot
+  // captures the most recent edit even if the host's autosave to the
+  // container hasn't flushed yet.
   useEffect(() => {
     if (!versioning) return;
     if (versioningAutoSaveIdleMs <= 0) return;
     const timer = setTimeout(() => {
-      saveVersion().catch((err: unknown) => {
+      saveVersion({ content: markdownSource }).catch((err: unknown) => {
         console.warn(
           '[squisq-editor] auto-save version failed:',
           err instanceof Error ? err.message : err,

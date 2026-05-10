@@ -11,6 +11,7 @@
  */
 
 import { useEffect, useMemo, useRef } from 'react';
+import type { CSSProperties } from 'react';
 import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import Table from '@tiptap/extension-table';
@@ -19,7 +20,9 @@ import TableCell from '@tiptap/extension-table-cell';
 import TableHeader from '@tiptap/extension-table-header';
 import TaskList from '@tiptap/extension-task-list';
 import TaskItem from '@tiptap/extension-task-item';
+import Link from '@tiptap/extension-link';
 import Placeholder from '@tiptap/extension-placeholder';
+import { resolveFontFamily, FONT_FALLBACKS } from '@bendyline/squisq/schemas';
 import { HeadingWithTemplate } from './TemplateAnnotation';
 import { ImageWithMediaProvider } from './ImageNodeView';
 import { useEditorContext } from './EditorContext';
@@ -27,6 +30,7 @@ import { buildMentionExtension } from './MentionExtension';
 import { markdownToTiptap, tiptapToMarkdown } from './tiptapBridge';
 import { looksLikeMarkdown } from './detectMarkdown';
 import { SQUISQ_MEDIA_MIME, parseSquisqMediaPayload } from './mediaDragMime';
+import { usePreviewSettingsOptional } from './PreviewControls';
 
 // ── Frontmatter helpers ────────────────────────────────────────────
 
@@ -136,6 +140,11 @@ export function WysiwygEditor({
       TableHeader,
       TaskList,
       TaskItem.configure({ nested: true }),
+      Link.configure({
+        openOnClick: false,
+        autolink: true,
+        HTMLAttributes: { rel: 'noopener noreferrer', target: '_blank' },
+      }),
       ImageWithMediaProvider.configure({ inline: false }),
       Placeholder.configure({ placeholder: resolvedPlaceholder }),
       buildMentionExtension(() => mentionProviderRef.current),
@@ -278,10 +287,31 @@ export function WysiwygEditor({
     }
   }, [markdownSource, editor]);
 
+  // Match the WYSIWYG editor's body / heading fonts to the active theme
+  // when one is set in frontmatter or picked in the preview dropdown.
+  // Pushed as CSS custom properties on the container so the stylesheet
+  // can pick them up (with sensible fallbacks for hosts that don't have
+  // a PreviewSettingsProvider in scope).
+  const previewSettings = usePreviewSettingsOptional();
+  const themeTypography = previewSettings?.activeTheme?.typography;
+  const themeFontStyle = useMemo<CSSProperties>(() => {
+    if (!themeTypography) return {};
+    return {
+      ['--squisq-theme-body-font' as string]: resolveFontFamily(
+        themeTypography.bodyFont,
+        FONT_FALLBACKS.sans,
+      ),
+      ['--squisq-theme-title-font' as string]: resolveFontFamily(
+        themeTypography.titleFont,
+        FONT_FALLBACKS.sans,
+      ),
+    };
+  }, [themeTypography]);
+
   return (
     <div
       className={`squisq-wysiwyg-container${className ? ` ${className}` : ''}`}
-      style={{ width: '100%', height: '100%', overflow: 'auto' }}
+      style={{ width: '100%', height: '100%', overflow: 'auto', ...themeFontStyle }}
       data-testid="wysiwyg-container"
     >
       <EditorContent editor={editor} style={{ height: '100%' }} />

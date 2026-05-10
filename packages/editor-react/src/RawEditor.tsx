@@ -357,6 +357,15 @@ export function RawEditor({
           bracketPairColorization: { enabled: true },
           guides: { indentation: true },
           padding: { top: 12, bottom: 12 },
+          // Breathing room between the gutter and the first character.
+          // Done via Monaco's own option so cursor + hit-testing stay in
+          // sync — CSS-padding `.view-lines` shifts the text but not the
+          // cursors layer, which causes the cursor to drift left of the
+          // model column. Monaco's default is 10. We set 22 (12 extra),
+          // and CSS paints the rightmost 12px of the gutter as canvas
+          // color so the breathing room looks like it sits *inside* the
+          // canvas rather than widening the gutter.
+          lineDecorationsWidth: 22,
           readOnly,
           domReadOnly: readOnly,
         }}

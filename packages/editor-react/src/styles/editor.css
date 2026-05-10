@@ -664,8 +664,39 @@
   margin: 0 auto;
   outline: none;
   min-height: 100%;
+  color: #1f2937;
   background: #fff;
   box-shadow: 0 2px 14px rgba(0, 0, 0, 0.12);
+  /* Body font follows the active squisq theme when one is selected; the
+     fallback inherits from the host page when it isn't. */
+  font-family: var(--squisq-theme-body-font, inherit);
+  /* Explicit caret color so the blinking insertion point stays visible
+     even when an ancestor (e.g. a DocBlocks shell with the OS in dark
+     mode) inherits a near-white color into the editor. Without this
+     `caret-color: auto` follows the inherited `color`, which can end up
+     white-on-white in the WYSIWYG surface. */
+  caret-color: #1f2937;
+  /* Custom I-beam mouse cursor so the pointer stays visible on the
+     editor's white surface even when the OS is configured to render
+     cursors in white (Windows lets users do this). The SVG draws a
+     dark I-beam with a thin white halo so it reads on both light and
+     dark editor backgrounds. Hotspot is the centerline (8,11). The
+     final `text` keyword is the fallback when the URL fails to load. */
+  cursor:
+    url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='16' height='22' viewBox='0 0 16 22'><g fill='none' stroke-linecap='round'><path d='M5 3 L11 3 M5 19 L11 19 M8 3 L8 19' stroke='white' stroke-width='3.2'/><path d='M5 3 L11 3 M5 19 L11 19 M8 3 L8 19' stroke='%231f2937' stroke-width='1.4'/></g></svg>")
+      8 11,
+    text;
+}
+
+.squisq-wysiwyg-editor h1,
+.squisq-wysiwyg-editor h2,
+.squisq-wysiwyg-editor h3,
+.squisq-wysiwyg-editor h4,
+.squisq-wysiwyg-editor h5,
+.squisq-wysiwyg-editor h6 {
+  /* Headings pick up the theme's titleFont; fall through to body when
+     no theme is active. */
+  font-family: var(--squisq-theme-title-font, var(--squisq-theme-body-font, inherit));
 }
 
 .squisq-wysiwyg-editor h1 {
@@ -1184,6 +1215,13 @@
   color: #e5e7eb;
   background: #111827;
   box-shadow: 0 0 8px rgba(0, 0, 0, 0.3);
+  caret-color: #e5e7eb;
+  /* Light-stroked I-beam for the dark editor surface — same shape as
+     the light-mode cursor but inverted colors so it contrasts on dark. */
+  cursor:
+    url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='16' height='22' viewBox='0 0 16 22'><g fill='none' stroke-linecap='round'><path d='M5 3 L11 3 M5 19 L11 19 M8 3 L8 19' stroke='%23111827' stroke-width='3.2'/><path d='M5 3 L11 3 M5 19 L11 19 M8 3 L8 19' stroke='%23e5e7eb' stroke-width='1.4'/></g></svg>")
+      8 11,
+    text;
 }
 
 .squisq-editor-shell[data-theme='dark'] .squisq-wysiwyg-editor blockquote {
@@ -1873,6 +1911,61 @@
   color: var(--squisq-text, #1f2937);
 }
 
+/* When a snapshot is selected, the popover expands and lays out the diff
+   to the left of the version list. The diff column flexes; the list
+   column stays a fixed width so the times/sizes don't reflow. */
+.squisq-version-history-popover--with-diff {
+  display: flex;
+  flex-direction: row;
+  align-items: stretch;
+  width: min(960px, 90vw);
+  min-width: 720px;
+  max-width: none;
+  padding: 0;
+}
+
+.squisq-version-history-popover--with-diff .squisq-version-history-list-pane {
+  width: 280px;
+  flex-shrink: 0;
+  border-left: 1px solid var(--squisq-border, #e5e7eb);
+  padding: 8px 0;
+  overflow-y: auto;
+  max-height: 480px;
+}
+
+.squisq-version-history-diff {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.squisq-version-history-diff-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--squisq-border, #e5e7eb);
+  font-size: 11px;
+  color: var(--squisq-text-muted, #6b7280);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.squisq-version-history-diff-label strong {
+  color: var(--squisq-text, #1f2937);
+  font-weight: 600;
+  margin-right: 6px;
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+.squisq-version-history-diff-body {
+  flex: 1 1 auto;
+  height: 480px;
+  min-height: 0;
+}
+
 .squisq-version-history-header {
   display: flex;
   align-items: center;
@@ -1910,15 +2003,51 @@
 
 .squisq-version-history-row {
   display: grid;
-  grid-template-columns: 1fr auto auto;
+  grid-template-columns: 1fr auto;
   align-items: center;
   gap: 8px;
-  padding: 6px 12px;
+  padding: 0 12px;
   font-size: 12px;
 }
 
 .squisq-version-history-row:hover {
   background: var(--squisq-row-hover, #f3f4f6);
+}
+
+.squisq-version-history-row--selected {
+  background: var(--squisq-row-hover, #e5edff);
+}
+
+.squisq-editor-shell[data-theme='dark'] .squisq-version-history-row--selected {
+  background: #2a3a52;
+}
+
+/* The synthetic "Current" row at the top represents the live editor
+   draft. It's clickable (selecting it deselects any snapshot, hiding the
+   diff) and gets a subtle separator below it so it reads apart from the
+   list of saved snapshots. */
+.squisq-version-history-row--current {
+  border-bottom: 1px solid var(--squisq-border, #e5e7eb);
+  margin-bottom: 4px;
+  padding-bottom: 2px;
+}
+
+.squisq-editor-shell[data-theme='dark'] .squisq-version-history-row--current {
+  border-color: #374151;
+}
+
+.squisq-version-history-row-select {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: none;
+  border: none;
+  padding: 6px 0;
+  margin: 0;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
 }
 
 .squisq-version-history-row__time {
@@ -1933,6 +2062,7 @@
 .squisq-version-history-row__actions {
   display: flex;
   gap: 8px;
+  padding: 6px 0;
 }
 
 .squisq-version-history-link {
@@ -1971,37 +2101,23 @@
   gap: 12px;
 }
 
-.squisq-version-history-preview-wrap {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  padding: 8px 12px;
-}
-
-.squisq-version-history-preview-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  font-size: 12px;
-  color: var(--squisq-text-muted, #6b7280);
-}
-
-.squisq-version-history-preview {
-  margin: 0;
-  padding: 8px;
-  max-height: 280px;
-  overflow: auto;
-  background: var(--squisq-input-bg, #f9fafb);
-  border: 1px solid var(--squisq-border, #e5e7eb);
-  border-radius: 4px;
-  font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
-  font-size: 12px;
-  white-space: pre-wrap;
-}
-
 .squisq-editor-shell[data-theme='dark'] .squisq-version-history-popover {
   background: #1f2937;
   border-color: #374151;
+  color: #d1d5db;
+}
+
+.squisq-editor-shell[data-theme='dark']
+  .squisq-version-history-popover--with-diff
+  .squisq-version-history-list-pane {
+  border-color: #374151;
+}
+
+.squisq-editor-shell[data-theme='dark'] .squisq-version-history-diff-header {
+  border-color: #374151;
+}
+
+.squisq-editor-shell[data-theme='dark'] .squisq-version-history-diff-label strong {
   color: #d1d5db;
 }
 
@@ -2325,20 +2441,43 @@
 
 /* Frame the white code area inside Monaco. The outline + inline-preview
    panes and Monaco's gutter / overview ruler all share the same beige
-   "desk" color; the left seam uses a pseudo-element on `.margin` because
-   Monaco's `.margin-view-overlays` child paints over inset box-shadows
-   on the parent. Pseudo-element with absolute positioning sits above
-   and stays visible. The right seam is drawn by Monaco itself via the
-   `editorOverviewRuler.border` theme color (set in `RawEditor.tsx`). */
+   "desk" color.
+
+   The breathing room between the seam and the first character is faked
+   in two layers:
+
+   1. RawEditor.tsx sets `lineDecorationsWidth: 22` — 12 more than
+      Monaco's default (10) — which widens the gutter on the right.
+      Monaco's own coordinate math accounts for it, so cursor /
+      hit-testing / selections all stay aligned with the rendered text.
+
+   2. The right 12px of `.margin` is painted with the canvas background
+      via `.margin::before`, and the seam (`.margin::after`) is moved
+      inward to `right: 12px` so it sits between the real gutter and the
+      fake-canvas strip. From the outside the gutter looks the same
+      width it always did and the breathing room appears to live inside
+      the canvas. */
 .squisq-raw-editor-container .monaco-editor .margin {
   position: relative;
+}
+
+.squisq-raw-editor-container .monaco-editor .margin::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 12px;
+  height: 100%;
+  background: #ffffff;
+  pointer-events: none;
+  z-index: 5;
 }
 
 .squisq-raw-editor-container .monaco-editor .margin::after {
   content: '';
   position: absolute;
   top: 0;
-  right: 0;
+  right: 12px;
   width: 1px;
   height: 100%;
   background: #b0a99a;
@@ -2346,15 +2485,8 @@
   z-index: 10;
 }
 
-/* White breathing room between the gutter/canvas border and the start
-   of the code. Padding both `.view-lines` (the text) and `.view-overlays`
-   (cursor, selection, current-line highlight) keeps decorations aligned
-   with the shifted text — they're sibling absolutely-positioned children
-   of `.lines-content`, so `padding-left` shifts each child's `left: 0`
-   origin to the padding edge. */
-.squisq-raw-editor-container .monaco-editor .view-lines,
-.squisq-raw-editor-container .monaco-editor .view-overlays {
-  padding-left: 12px;
+.squisq-editor-shell[data-theme='dark'] .squisq-raw-editor-container .monaco-editor .margin::before {
+  background: #1e1e1e;
 }
 
 .squisq-editor-shell[data-theme='dark'] .squisq-raw-editor-container .monaco-editor .margin::after {
@@ -2689,3 +2821,131 @@
    redefinition above. Individual color rules removed — the base
    .squisq-inline-preview-* selectors already pull from the same vars
    that the dark block rebinds.) */
+
+/* ── Link Dialog ─────────────────────────────────────────────── */
+
+.squisq-link-dialog-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.45);
+  padding: 16px;
+}
+
+.squisq-link-dialog {
+  width: 100%;
+  max-width: 440px;
+  background: var(--squisq-bg, #fff);
+  color: var(--squisq-text, #1f2937);
+  border: 1px solid var(--squisq-border, #e5e7eb);
+  border-radius: 8px;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.25);
+  display: flex;
+  flex-direction: column;
+}
+
+.squisq-link-dialog-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--squisq-border, #e5e7eb);
+}
+
+.squisq-link-dialog-title {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.squisq-link-dialog-close {
+  background: none;
+  border: none;
+  font-size: 20px;
+  line-height: 1;
+  cursor: pointer;
+  color: var(--squisq-text-muted, #6b7280);
+  padding: 0 4px;
+}
+
+.squisq-link-dialog-close:hover {
+  color: var(--squisq-text, #1f2937);
+}
+
+.squisq-link-dialog-body {
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.squisq-link-dialog-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.squisq-link-dialog-label {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--squisq-text-muted, #6b7280);
+}
+
+.squisq-link-dialog-input {
+  width: 100%;
+  padding: 6px 10px;
+  font: inherit;
+  font-size: 13px;
+  background: var(--squisq-bg, #fff);
+  color: var(--squisq-text, #1f2937);
+  border: 1px solid var(--squisq-border, #d1d5db);
+  border-radius: 4px;
+  outline: none;
+  box-sizing: border-box;
+}
+
+.squisq-link-dialog-input:focus {
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2);
+}
+
+.squisq-link-dialog-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 12px 16px;
+  border-top: 1px solid var(--squisq-border, #e5e7eb);
+}
+
+.squisq-link-dialog-btn {
+  padding: 6px 14px;
+  font: inherit;
+  font-size: 13px;
+  border-radius: 4px;
+  border: 1px solid transparent;
+  cursor: pointer;
+}
+
+.squisq-link-dialog-btn--secondary {
+  background: transparent;
+  color: var(--squisq-text, #1f2937);
+  border-color: var(--squisq-border, #d1d5db);
+}
+
+.squisq-link-dialog-btn--secondary:hover {
+  background: var(--squisq-bg, #f3f4f6);
+}
+
+.squisq-link-dialog-btn--primary {
+  background: #3b82f6;
+  color: #fff;
+  border-color: #3b82f6;
+}
+
+.squisq-link-dialog-btn--primary:hover {
+  background: #2563eb;
+  border-color: #2563eb;
+}

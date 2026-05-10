@@ -10,10 +10,12 @@
 import type { ReactNode } from 'react';
 import { useCallback, useEffect, useReducer, useRef, useState } from 'react';
 import type { Editor as TiptapEditor } from '@tiptap/core';
+import type { IRange } from 'monaco-editor';
 import { useEditorContext, type EditorView } from './EditorContext';
 import { VersionHistoryPanel } from './VersionHistoryPanel';
 import { ViewMenuPanel } from './ViewMenuPanel';
 import { TemplatePicker } from './TemplatePicker';
+import { LinkDialog } from './LinkDialog';
 
 const VIEWS: { id: EditorView; label: string; shortLabel?: string; shortcut: string }[] = [
   { id: 'wysiwyg', label: 'Editor', shortcut: '⌘1' },
@@ -255,6 +257,18 @@ export function Toolbar({
   // Hidden file input for image picker
   const imageInputRef = useRef<HTMLInputElement>(null);
 
+  // Link dialog — shared by WYSIWYG and Raw views.
+  const [linkDialog, setLinkDialog] = useState<{
+    mode: 'insert' | 'update';
+    target: 'wysiwyg' | 'raw';
+    initialText: string;
+    initialUrl: string;
+    /** For target='raw': the range to replace when editing an existing
+     *  [text](url) under the cursor. Null means use the current Monaco
+     *  selection (insert at cursor / wrap selection). */
+    rawRange: IRange | null;
+  } | null>(null);
+
   // ── Narrow-screen detection ──────────────────────────
   const [isNarrow, setIsNarrow] = useState(
     () => typeof window !== 'undefined' && window.matchMedia('(max-width: 768px)').matches,
@@ -393,12 +407,30 @@ export function Toolbar({
           chain.setHorizontalRule().run();
           break;
         case 'link': {
-          const url = window.prompt('URL:');
-          if (url) {
-            (chain as unknown as Record<string, (opts: { href: string }) => typeof chain>)
-              .setLink?.({ href: url })
-              .run();
+          const isActive = tiptapEditor.isActive('link');
+          let initialText = '';
+          let initialUrl = '';
+          if (isActive) {
+            // Snap selection to the full link mark so editing replaces
+            // the entire `[text](url)` rather than just the cursor word.
+            tiptapEditor.chain().focus().extendMarkRange('link').run();
+            const sel = tiptapEditor.state.selection;
+            initialText = tiptapEditor.state.doc.textBetween(sel.from, sel.to, ' ');
+            initialUrl =
+              (tiptapEditor.getAttributes('link') as { href?: string }).href ?? '';
+          } else {
+            const { from, to, empty } = tiptapEditor.state.selection;
+            if (!empty) {
+              initialText = tiptapEditor.state.doc.textBetween(from, to, ' ');
+            }
           }
+          setLinkDialog({
+            mode: isActive ? 'update' : 'insert',
+            target: 'wysiwyg',
+            initialText,
+            initialUrl,
+            rawRange: null,
+          });
           break;
         }
         case 'table':
@@ -490,13 +522,42 @@ export function Toolbar({
             break;
           }
           case 'link': {
-            if (hasSelection) {
-              replacement = '[' + selectedText + '](url)';
-            } else {
-              replacement = '[link text](url)';
-              newCursorOffset = 1; // inside the []
+            // Open the LinkDialog instead of inserting literal text. If the
+            // cursor sits inside an existing `[text](url)` on this line,
+            // prefill from it and replace the whole match on confirm.
+            const lineNumber = selection.startLineNumber;
+            const lineText = model.getLineContent(lineNumber);
+            const cursorCol = selection.startColumn;
+            const linkRe = /\[([^\]]*)\]\(([^)]*)\)/g;
+            let match: RegExpExecArray | null;
+            let existing: { text: string; url: string; range: IRange } | null = null;
+            while ((match = linkRe.exec(lineText)) !== null) {
+              const startCol = match.index + 1; // 1-based
+              const endCol = startCol + match[0].length;
+              if (cursorCol >= startCol && cursorCol <= endCol) {
+                existing = {
+                  text: match[1],
+                  url: match[2],
+                  range: {
+                    startLineNumber: lineNumber,
+                    startColumn: startCol,
+                    endLineNumber: lineNumber,
+                    endColumn: endCol,
+                  },
+                };
+                break;
+              }
             }
-            break;
+            setLinkDialog({
+              mode: existing ? 'update' : 'insert',
+              target: 'raw',
+              initialText: existing ? existing.text : hasSelection ? selectedText : '',
+              initialUrl: existing ? existing.url : '',
+              rawRange: existing ? existing.range : null,
+            });
+            // Skip the executeEdits/setPosition tail below — the dialog will
+            // apply its own edit on confirm.
+            return;
           }
           case 'table': {
             const tpl =
@@ -615,6 +676,75 @@ export function Toolbar({
       }
     },
     [activeView, tiptapEditor, handleTiptap, handleRaw],
+  );
+
+  // ── Link dialog confirm ──────────────────────────────
+  const handleLinkConfirm = useCallback(
+    (text: string, url: string) => {
+      if (!linkDialog) return;
+      const trimmedUrl = url.trim();
+      const trimmedText = text.trim();
+
+      if (linkDialog.target === 'wysiwyg' && tiptapEditor) {
+        if (!trimmedUrl) {
+          // Empty URL on update = unlink. On insert with no URL, do nothing.
+          if (linkDialog.mode === 'update') {
+            tiptapEditor.chain().focus().unsetLink().run();
+          }
+          setLinkDialog(null);
+          return;
+        }
+        const visibleText = trimmedText || trimmedUrl;
+        const chain = tiptapEditor.chain().focus();
+        // Insert (or replace selection) with text carrying a link mark. When
+        // updating an existing link, the selection was extended to the full
+        // mark range earlier, so this replaces the entire `[text](url)`.
+        chain
+          .insertContent({
+            type: 'text',
+            text: visibleText,
+            marks: [{ type: 'link', attrs: { href: trimmedUrl } }],
+          })
+          .run();
+        setLinkDialog(null);
+        return;
+      }
+
+      if (linkDialog.target === 'raw' && monacoEditor) {
+        const model = monacoEditor.getModel();
+        if (!model) {
+          setLinkDialog(null);
+          return;
+        }
+        if (!trimmedUrl && linkDialog.mode === 'update' && linkDialog.rawRange) {
+          // Empty URL on update = strip the markdown link, keep the text.
+          monacoEditor.executeEdits('toolbar-link-edit', [
+            { range: linkDialog.rawRange, text: trimmedText || linkDialog.initialText },
+          ]);
+          monacoEditor.focus();
+          setLinkDialog(null);
+          return;
+        }
+        if (!trimmedUrl) {
+          setLinkDialog(null);
+          return;
+        }
+        const visibleText = trimmedText || trimmedUrl;
+        const replacement = `[${visibleText}](${trimmedUrl})`;
+        const range = linkDialog.rawRange ?? monacoEditor.getSelection();
+        if (!range) {
+          setLinkDialog(null);
+          return;
+        }
+        monacoEditor.executeEdits('toolbar-link-edit', [{ range, text: replacement }]);
+        monacoEditor.focus();
+        setLinkDialog(null);
+        return;
+      }
+
+      setLinkDialog(null);
+    },
+    [linkDialog, tiptapEditor, monacoEditor],
   );
 
   const groups = ['format', 'lists', 'structure', 'insert', 'media'] as const;
@@ -1098,6 +1228,17 @@ export function Toolbar({
       )}
       {/* Right slot — rightmost end of toolbar */}
       {slotRight}
+
+      {/* Link insert/edit dialog — shared by WYSIWYG and Raw views. */}
+      {linkDialog && (
+        <LinkDialog
+          mode={linkDialog.mode}
+          initialText={linkDialog.initialText}
+          initialUrl={linkDialog.initialUrl}
+          onConfirm={handleLinkConfirm}
+          onClose={() => setLinkDialog(null)}
+        />
+      )}
     </div>
   );
 }
