@@ -319,6 +319,7 @@ function matchesShape(schema: SquisqAnnotatedSchema, value: unknown): boolean {
 
 // ── Registry ──────────────────────────────────────────────────────
 
+// eslint-disable-next-line react-refresh/only-export-components
 export const VIEWERS: Record<ControlKind, React.ComponentType<ViewerProps>> = {
   text: TextViewer,
   multiline: MultilineViewer,

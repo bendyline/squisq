@@ -645,6 +645,7 @@ function matchesShape(schema: SquisqAnnotatedSchema, value: unknown): boolean {
 
 // ── Registry ──────────────────────────────────────────────────────
 
+// eslint-disable-next-line react-refresh/only-export-components
 export const EDITORS: Record<ControlKind, React.ComponentType<EditorProps>> = {
   text: TextEditor,
   multiline: MultilineEditor,
@@ -668,6 +669,7 @@ export const EDITORS: Record<ControlKind, React.ComponentType<EditorProps>> = {
 };
 
 /** True when this control kind handles its own grouping/heading. */
+// eslint-disable-next-line react-refresh/only-export-components
 export function isCompositeControl(kind: ControlKind, schema: SquisqAnnotatedSchema): boolean {
   if (kind === 'group' || kind === 'card' || kind === 'tabs' || kind === 'card-stack') return true;
   if (kind === 'richtext') return true;

@@ -354,6 +354,7 @@ const TEMPLATE_ENTRIES: TemplateEntry[] = [
 ];
 
 /** Convert a camelCase template name to a human-readable label. */
+// eslint-disable-next-line react-refresh/only-export-components
 export function templateLabel(name: string): string {
   if (!name) return '— none —';
   const entry = TEMPLATE_ENTRIES.find((e) => e.name === name);

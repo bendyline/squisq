@@ -7,7 +7,12 @@
  */
 
 import { useRef, useCallback, useEffect } from 'react';
-import Editor, { loader, type OnMount, type OnChange } from '@monaco-editor/react';
+import Editor, {
+  loader,
+  type OnMount,
+  type OnChange,
+  type BeforeMount,
+} from '@monaco-editor/react';
 import * as monaco from 'monaco-editor';
 import { useEditorContext } from './EditorContext';
 import { getAvailableTemplates } from '@bendyline/squisq/doc';
@@ -24,6 +29,23 @@ import { SQUISQ_MEDIA_MIME, parseSquisqMediaPayload } from './mediaDragMime';
 // Where monaco-slim.ts re-exports 'monaco-editor/esm/vs/editor/editor.api' plus
 // only the language contributions needed (e.g. markdown, javascript, etc.).
 loader.config({ monaco });
+
+// Squisq Monaco themes: same syntax highlighting as vs / vs-dark, but with
+// Monaco's internal gutter (line numbers + folding margin) and overview
+// ruler tinted to match the side-pane "desk" colors so the canvas's
+// internal furniture blends with its surroundings. The seam color is the
+// 1px line Monaco draws between the white canvas and the overview ruler;
+// matches the `::after` border on `.margin` so both sides of the canvas
+// frame look the same.
+const SQUISQ_LIGHT_GUTTER = '#dcd8d0';
+const SQUISQ_DARK_GUTTER = '#0f1219';
+const SQUISQ_LIGHT_SEAM = '#b0a99a';
+const SQUISQ_DARK_SEAM = '#2a3144';
+
+const SQUISQ_THEMES: Record<string, string> = {
+  vs: 'squisq-light',
+  'vs-dark': 'squisq-dark',
+};
 
 export interface RawEditorProps {
   /** Monaco editor theme (default: 'vs-dark') */
@@ -77,6 +99,31 @@ export function RawEditor({
   useEffect(() => {
     mentionProviderRef.current = mentionProvider;
   }, [mentionProvider]);
+
+  const handleBeforeMount: BeforeMount = useCallback((monaco) => {
+    monaco.editor.defineTheme('squisq-light', {
+      base: 'vs',
+      inherit: true,
+      rules: [],
+      colors: {
+        'editorGutter.background': SQUISQ_LIGHT_GUTTER,
+        'editorOverviewRuler.background': SQUISQ_LIGHT_GUTTER,
+        'editorOverviewRuler.border': SQUISQ_LIGHT_SEAM,
+        'minimap.background': SQUISQ_LIGHT_GUTTER,
+      },
+    });
+    monaco.editor.defineTheme('squisq-dark', {
+      base: 'vs-dark',
+      inherit: true,
+      rules: [],
+      colors: {
+        'editorGutter.background': SQUISQ_DARK_GUTTER,
+        'editorOverviewRuler.background': SQUISQ_DARK_GUTTER,
+        'editorOverviewRuler.border': SQUISQ_DARK_SEAM,
+        'minimap.background': SQUISQ_DARK_GUTTER,
+      },
+    });
+  }, []);
 
   const handleMount: OnMount = useCallback(
     (editor, monaco) => {
@@ -287,12 +334,15 @@ export function RawEditor({
     }
   }, [markdownSource]);
 
+  const effectiveTheme = SQUISQ_THEMES[theme] ?? theme;
+
   return (
     <div className={className} style={{ width: '100%', height: '100%' }} data-testid="raw-editor">
       <Editor
         defaultLanguage={language}
         value={markdownSource}
-        theme={theme}
+        theme={effectiveTheme}
+        beforeMount={handleBeforeMount}
         onMount={handleMount}
         onChange={handleChange}
         options={{

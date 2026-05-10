@@ -78,11 +78,7 @@ export function ViewMenuPanel() {
       </button>
       {open && (
         <div className="squisq-view-menu-popover" role="menu" aria-label="View options">
-          <MenuToggle
-            label="Show outline"
-            checked={outlineVisible}
-            onChange={toggleOutline}
-          />
+          <MenuToggle label="Show outline" checked={outlineVisible} onChange={toggleOutline} />
           <MenuToggle
             label="Show card previews"
             checked={inlinePreviewVisible}

@@ -655,7 +655,7 @@ export function Toolbar({
         setRawTemplate(null);
         return;
       }
-      const annotMatch = headingMatch[1].match(/\s*\{\[([^\]]+)\]\}[\s\]\}]*$/);
+      const annotMatch = headingMatch[1].match(/\s*\{\[([^\]]+)\]\}[\s\]}]*$/);
       if (annotMatch) {
         // First whitespace-delimited token is the template name; the rest are params.
         const name = annotMatch[1].trim().split(/\s+/)[0];
@@ -687,7 +687,7 @@ export function Toolbar({
       if (!headingMatch) return;
       const prefix = headingMatch[1];
       // Strip any existing trailing annotation
-      const bareText = headingMatch[2].replace(/\s*\{\[[^\]]+\]\}[\s\]\}]*$/, '').trimEnd();
+      const bareText = headingMatch[2].replace(/\s*\{\[[^\]]+\]\}[\s\]}]*$/, '').trimEnd();
       const newLine = value === '' ? `${prefix}${bareText}` : `${prefix}${bareText} {[${value}]}`;
       monacoEditor.executeEdits('toolbar-template-pick', [
         {

@@ -138,7 +138,7 @@ function extractText(node: MdastNode): string {
  * not allow trailing word characters, so a non-trailing annotation like
  * `## The {[chart]} section` still doesn't match.
  */
-const TEMPLATE_ANNOTATION_RE = /\s*\{\[([^\]]+)\]\}[\s\]\}]*$/;
+const TEMPLATE_ANNOTATION_RE = /\s*\{\[([^\]]+)\]\}[\s\]}]*$/;
 
 /**
  * Extract a `{[templateName key=value …]}` annotation from a heading's

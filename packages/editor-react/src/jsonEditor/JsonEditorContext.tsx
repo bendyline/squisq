@@ -67,6 +67,7 @@ export function JsonEditorProvider(props: JsonEditorProviderProps) {
   return <JsonEditorContext.Provider value={value}>{children}</JsonEditorContext.Provider>;
 }
 
+// eslint-disable-next-line react-refresh/only-export-components
 export function useJsonEditor(): JsonEditorContextValue {
   const ctx = useContext(JsonEditorContext);
   if (!ctx) throw new Error('useJsonEditor must be used inside <JsonEditor>');

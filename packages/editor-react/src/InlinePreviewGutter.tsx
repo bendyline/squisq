@@ -29,7 +29,13 @@
 import { useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import type { Block, DocBlock, ViewportConfig } from '@bendyline/squisq/schemas';
 import { VIEWPORT_PRESETS } from '@bendyline/squisq/schemas';
-import { flattenBlocks, getLayers, hasTemplate, DEFAULT_THEME, type RenderContext } from '@bendyline/squisq/doc';
+import {
+  flattenBlocks,
+  getLayers,
+  hasTemplate,
+  DEFAULT_THEME,
+  type RenderContext,
+} from '@bendyline/squisq/doc';
 import { extractPlainText } from '@bendyline/squisq/markdown';
 import type { MarkdownBlockNode, MarkdownList, MarkdownTable } from '@bendyline/squisq/markdown';
 import { BlockRenderer } from '@bendyline/squisq-react';

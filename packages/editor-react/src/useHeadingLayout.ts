@@ -22,7 +22,7 @@
  * extent bars, outline rows — don't care which editor is active.
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { RefObject } from 'react';
 import type { Block } from '@bendyline/squisq/schemas';
 import { flattenBlocks, hasTemplate } from '@bendyline/squisq/doc';
@@ -54,9 +54,7 @@ export interface HeadingLayout {
  * @param refInsideWrapper — any DOM ref under `.squisq-editor-with-gutter`.
  *        The hook walks up to find the wrapper.
  */
-export function useHeadingLayout(
-  refInsideWrapper: RefObject<HTMLElement | null>,
-): HeadingLayout {
+export function useHeadingLayout(refInsideWrapper: RefObject<HTMLElement | null>): HeadingLayout {
   const { doc, activeView, monacoEditor, tiptapEditor } = useEditorContext();
 
   const flatBlocks = useMemo(() => (doc ? flattenBlocks(doc.blocks) : []), [doc]);
