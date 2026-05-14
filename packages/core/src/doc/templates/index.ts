@@ -35,6 +35,7 @@ import { factCard } from './factCard.js';
 import { twoColumn } from './twoColumn.js';
 import { dateEvent } from './dateEvent.js';
 import { imageWithCaption } from './imageWithCaption.js';
+import { leftFeature, rightFeature } from './featureBlock.js';
 import { mapBlock } from './mapBlock.js';
 import { fullBleedQuote } from './fullBleedQuote.js';
 import { listBlock } from './listBlock.js';
@@ -47,22 +48,33 @@ import { videoPullQuote } from './videoPullQuote.js';
 import { dataTable } from './dataTable.js';
 
 /**
- * Registry mapping template names to their implementation functions.
- * Note: coverBlock is not in the registry as it's used directly for start blocks,
- * not as a regular template in the block sequence.
+ * Registry mapping template ids (the strings that appear in
+ * `{[name]}` markdown annotations) to their implementation functions.
+ *
+ * Some implementation functions keep historical "Block" suffixes
+ * (`titleBlock`, `quoteBlock`, `mapBlock`, `listBlock`) for source
+ * readability — the registry surfaces them under the cleaner short
+ * ids (`title`, `quote`, `map`, `list`). {@link TEMPLATE_ALIASES} keeps
+ * the legacy long ids resolvable for documents written before the
+ * rename.
+ *
+ * Note: coverBlock is not in the registry as it's used directly for
+ * start blocks, not as a regular template in the block sequence.
  */
 export const templateRegistry: TemplateRegistry = {
-  titleBlock,
+  title: titleBlock,
   sectionHeader,
   statHighlight,
-  quoteBlock,
+  quote: quoteBlock,
   factCard,
   twoColumn,
   dateEvent,
   imageWithCaption,
-  mapBlock,
+  leftFeature,
+  rightFeature,
+  map: mapBlock,
   fullBleedQuote,
-  listBlock,
+  list: listBlock,
   photoGrid,
   definitionCard,
   comparisonBar,
@@ -73,10 +85,34 @@ export const templateRegistry: TemplateRegistry = {
 };
 
 /**
+ * Back-compat: maps legacy template ids (kept around for documents
+ * authored before the "Block" suffix was dropped) to the canonical
+ * short ids. Resolved by {@link resolveTemplateName} so both the
+ * registry lookup and `hasTemplate()` accept either form.
+ */
+export const TEMPLATE_ALIASES: Readonly<Record<string, string>> = {
+  titleBlock: 'title',
+  quoteBlock: 'quote',
+  mapBlock: 'map',
+  listBlock: 'list',
+};
+
+/**
+ * Resolve a template id through {@link TEMPLATE_ALIASES}. Returns the
+ * input unchanged when no alias is registered.
+ */
+export function resolveTemplateName(name: string): string {
+  return TEMPLATE_ALIASES[name] ?? name;
+}
+
+/**
  * Expand a template block into a full Block with layers.
  */
 export function expandTemplateBlock(templateBlock: TemplateBlock, context: TemplateContext): Block {
-  const templateFn = templateRegistry[templateBlock.template];
+  const resolved = resolveTemplateName(templateBlock.template);
+  const templateFn = (templateRegistry as Record<string, unknown>)[resolved] as
+    | ((input: TemplateBlock, ctx: TemplateContext) => Layer[])
+    | undefined;
 
   if (!templateFn) {
     console.warn(`Unknown template: ${templateBlock.template}`);
@@ -94,12 +130,7 @@ export function expandTemplateBlock(templateBlock: TemplateBlock, context: Templ
   // Generate layers from template with error handling
   let layers: Layer[];
   try {
-    // Each registry entry accepts its specific TemplateBlock variant; the
-    // discriminated union guarantees the shapes match at runtime.
-    layers = (templateFn as (input: TemplateBlock, ctx: TemplateContext) => Layer[])(
-      templateBlock,
-      context,
-    );
+    layers = templateFn(templateBlock, context);
     if (!Array.isArray(layers)) {
       console.error(
         `Template ${templateBlock.template} did not return an array, got:`,
@@ -503,10 +534,12 @@ export function getAvailableTemplates(): string[] {
 }
 
 /**
- * Check if a template exists.
+ * Check if a template exists. Accepts both the canonical short id
+ * (`title`, `quote`, `map`, `list`) and legacy aliases
+ * (`titleBlock`, `quoteBlock`, `mapBlock`, `listBlock`).
  */
 export function hasTemplate(name: string): boolean {
-  return name in templateRegistry;
+  return resolveTemplateName(name) in templateRegistry;
 }
 
 // Re-export types and utilities from schemas
@@ -556,6 +589,7 @@ export { factCard } from './factCard.js';
 export { twoColumn } from './twoColumn.js';
 export { dateEvent } from './dateEvent.js';
 export { imageWithCaption } from './imageWithCaption.js';
+export { leftFeature, rightFeature } from './featureBlock.js';
 export { mapBlock } from './mapBlock.js';
 export { coverBlock, expandCoverBlock } from './coverBlock.js';
 export type { CoverBlockInput } from './coverBlock.js';

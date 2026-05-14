@@ -109,7 +109,7 @@ function mapDate(data: DateData, base: Base, opts: MapOptions): DateEventInput {
 function mapQuote(data: QuoteData, base: Base, opts: MapOptions): QuoteBlockInput {
   return {
     ...base,
-    template: 'quoteBlock',
+    template: 'quote',
     quote: data.quote,
     attribution: data.attribution,
     accentImage: opts.accentImage,
@@ -149,7 +149,7 @@ function mapImpactLine(data: ImpactLineData, base: Base, opts: MapOptions): Full
 function mapList(data: ListData, base: Base, opts: MapOptions): ListBlockInput {
   return {
     ...base,
-    template: 'listBlock',
+    template: 'list',
     items: data.items,
     title: data.title,
     colorScheme: opts.colorScheme,

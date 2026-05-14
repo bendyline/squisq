@@ -3,5 +3,8 @@
  * Aggregates all CSS shipped with this package.
  */
 
+@import '@fortawesome/fontawesome-free/css/all.min.css';
 @import './editor.css';
 @import '../jsonEditor/json-editor.css';
+@import '../imageEditor/image-editor.css';
+@import './image-edit-affordance.css';

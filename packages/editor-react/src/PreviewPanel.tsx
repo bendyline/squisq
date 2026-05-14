@@ -9,7 +9,7 @@
  */
 
 import { useState, useEffect } from 'react';
-import { DocPlayer, LinearDocView } from '@bendyline/squisq-react';
+import { DocPlayer, LinearDocView, useMediaProvider } from '@bendyline/squisq-react';
 import type { Doc } from '@bendyline/squisq/schemas';
 import { applyTransform } from '@bendyline/squisq/transform';
 import { resolveAudioMapping } from '@bendyline/squisq/doc';
@@ -17,6 +17,7 @@ import type { ContentContainer } from '@bendyline/squisq/storage';
 import { useEditorContext } from './EditorContext';
 import { usePreviewSettings } from './PreviewControls';
 import { buildPreviewDoc } from './buildPreviewDoc';
+import { PlainHtmlPreview } from './PlainHtmlPreview';
 
 export interface PreviewPanelProps {
   /** Base path for resolving media URLs in DocPlayer */
@@ -35,7 +36,8 @@ export interface PreviewPanelProps {
  * are rendered in the main toolbar via PreviewToolbarControls.
  */
 export function PreviewPanel({ basePath = '/', className, container }: PreviewPanelProps) {
-  const { doc, parseError, isParsing } = useEditorContext();
+  const { doc, parseError, isParsing, markdownSource, mediaRevision } = useEditorContext();
+  const mediaProvider = useMediaProvider();
   const {
     activeViewport,
     activeDisplayMode,
@@ -102,13 +104,19 @@ export function PreviewPanel({ basePath = '/', className, container }: PreviewPa
     );
   }
 
-  if (!previewDoc) {
+  // Page mode renders directly from markdown — it doesn't depend on the
+  // parsed Doc tree or the player preview build, so let it fall through
+  // even when those aren't ready yet.
+  if (!previewDoc && activeDisplayMode !== 'page') {
     return (
       <div className={`squisq-preview-status ${className || ''}`} data-testid="preview-panel">
         <p>No content to preview. Start typing in the editor.</p>
       </div>
     );
   }
+
+  const fillsContainer =
+    activeDisplayMode === 'linear' || activeDisplayMode === 'page' ? 'stretch' : 'center';
 
   return (
     <div
@@ -123,19 +131,27 @@ export function PreviewPanel({ basePath = '/', className, container }: PreviewPa
         background: 'var(--squisq-bg, #f5f5f5)',
       }}
     >
-      {/* Player / Document view */}
+      {/* Player / Document / Page view */}
       <div
         className="squisq-preview-player"
         style={{
           flex: 1,
           display: 'flex',
-          alignItems: activeDisplayMode === 'linear' ? 'stretch' : 'center',
+          alignItems: fillsContainer,
           justifyContent: 'center',
           overflow: 'hidden',
           minHeight: 0,
         }}
       >
-        {activeDisplayMode === 'linear' ? (
+        {activeDisplayMode === 'page' ? (
+          <PlainHtmlPreview
+            markdown={markdownSource}
+            title={(doc?.frontmatter?.title as string | undefined) ?? undefined}
+            mediaProvider={mediaProvider}
+            mediaRevision={mediaRevision}
+            theme={activeTheme}
+          />
+        ) : activeDisplayMode === 'linear' ? (
           <LinearDocView
             doc={doc!}
             basePath={basePath}
@@ -144,7 +160,7 @@ export function PreviewPanel({ basePath = '/', className, container }: PreviewPa
           />
         ) : (
           <DocPlayer
-            script={previewDoc}
+            script={previewDoc!}
             basePath={basePath}
             showControls
             muted

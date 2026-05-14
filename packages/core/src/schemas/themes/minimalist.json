@@ -31,7 +31,7 @@
     "ambientMotion": false,
     "defaultTransition": { "type": "fade", "duration": 0.6 },
     "templateHints": {
-      "titleBlock": { "showAccentLine": false }
+      "title": { "showAccentLine": false }
     }
   },
   "colorSchemes": {

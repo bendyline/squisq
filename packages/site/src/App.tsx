@@ -21,6 +21,7 @@ import { DebugPanel } from './DebugPanel';
 import { FileToolbar } from './FileToolbar';
 import { StorageToolbar } from './StorageToolbar';
 import { JsonEditorDemo } from './JsonEditorDemo';
+import { ImageEditorDemo } from './ImageEditorDemo';
 import { createSlotMediaProvider } from './slotStorage';
 import type { MediaProvider, Theme } from '@bendyline/squisq/schemas';
 import { parseTheme, registerTheme, unregisterTheme } from '@bendyline/squisq/schemas';
@@ -46,6 +47,7 @@ export function App() {
   const [selectedSample, setSelectedSample] = useState('hello-world');
   const [showDebug, setShowDebug] = useState(false);
   const [showJsonDemo, setShowJsonDemo] = useState(false);
+  const [showImageEditorDemo, setShowImageEditorDemo] = useState(false);
   const [currentSource, setCurrentSource] = useState(SAMPLES['hello-world']);
   const [theme, setTheme] = useState<EditorTheme>('light');
   const [customTheme, setCustomThemeState] = useState<Theme | null>(() => loadStoredCustomTheme());
@@ -321,6 +323,22 @@ export function App() {
           {showJsonDemo ? 'Close JSON Editor' : 'JSON Editor'}
         </button>
 
+        <button
+          onClick={() => setShowImageEditorDemo((prev) => !prev)}
+          style={{
+            fontSize: 13,
+            fontFamily: 'system-ui, -apple-system, sans-serif',
+            padding: '4px 12px',
+            cursor: 'pointer',
+            background: showImageEditorDemo ? '#8B6914' : '#E8DFC6',
+            color: showImageEditorDemo ? '#fff' : '#4a3c1f',
+            border: `1px solid ${showImageEditorDemo ? '#7a5c10' : '#c9b98a'}`,
+            borderRadius: 0,
+          }}
+        >
+          {showImageEditorDemo ? 'Close Image Editor' : 'Image Editor'}
+        </button>
+
         {/* Theme customizer — wrapped in editor-shell to inherit BEM dark-theme styles. */}
         <div className="squisq-editor-shell" data-theme={theme} style={{ position: 'relative' }}>
           <ThemeCustomizerPanel
@@ -368,7 +386,11 @@ export function App() {
       </div>
 
       {/* Main area */}
-      {showJsonDemo ? (
+      {showImageEditorDemo ? (
+        <div style={{ flex: 1, overflow: 'hidden' }}>
+          <ImageEditorDemo />
+        </div>
+      ) : showJsonDemo ? (
         <div style={{ flex: 1, overflow: 'hidden' }}>
           <JsonEditorDemo />
         </div>

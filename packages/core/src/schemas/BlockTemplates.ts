@@ -3,17 +3,17 @@
  *
  * Defines a template system for AI-generated doc blocks. Instead of
  * specifying low-level layers, positions, and animations, AI can use
- * high-level templates like "titleBlock" or "statHighlight" with simple
+ * high-level templates like "title" or "statHighlight" with simple
  * content parameters.
  *
  * Templates are expanded into full Block structures at render time,
  * ensuring consistent styling and reducing AI generation errors.
  *
  * Template Types:
- * - titleBlock: Doc intro with title + subtitle
+ * - title: Doc intro with title + subtitle
  * - sectionHeader: Colored section divider
  * - statHighlight: Big number/stat with description
- * - quoteBlock: Large centered quote
+ * - quote: Large centered quote
  * - factCard: Key fact with explanation
  * - twoColumn: Side-by-side comparison
  * - dateEvent: Timeline-style date + description
@@ -116,7 +116,7 @@ interface BaseTemplateBlock {
  * Title block - doc intro with large title and subtitle.
  */
 export interface TitleBlockInput extends BaseTemplateBlock {
-  template: 'titleBlock';
+  template: 'title';
   /** Main title text */
   title: string;
   /** Subtitle or tagline (supports \n for line breaks) */
@@ -164,7 +164,7 @@ export interface StatHighlightInput extends BaseTemplateBlock {
  * Quote block - large centered quote text.
  */
 export interface QuoteBlockInput extends BaseTemplateBlock {
-  template: 'quoteBlock';
+  template: 'quote';
   /** The quote text (supports \n for line breaks) */
   quote: string;
   /** Attribution (author, source) */
@@ -253,6 +253,47 @@ export interface ImageWithCaptionInput extends BaseTemplateBlock {
 }
 
 /**
+ * Shared fields for left/right feature blocks. A "feature" pairs an
+ * image on one side of the block with a title and body paragraph on
+ * the other — a common editorial layout for product highlights,
+ * profile callouts, or section intros.
+ */
+interface FeatureInputBase extends BaseTemplateBlock {
+  /** Path to the feature image. */
+  imageSrc: string;
+  /** Alt text for accessibility. */
+  imageAlt?: string;
+  /**
+   * Explicit display width of the image, in pixels (typically pulled
+   * from a `<img width>` attribute when the WYSIWYG editor resized it).
+   * When set, the renderer treats the image as a sized asset and
+   * centers it inside its half with padding instead of stretching it
+   * to fill the cell.
+   */
+  imageWidth?: number;
+  /** Explicit display height of the image, in pixels. */
+  imageHeight?: number;
+  /** Heading / title text shown next to the image. */
+  title?: string;
+  /** Body text shown below the title. */
+  body?: string;
+}
+
+/**
+ * Left feature — image on the left, title + body stacked on the right.
+ */
+export interface LeftFeatureInput extends FeatureInputBase {
+  template: 'leftFeature';
+}
+
+/**
+ * Right feature — image on the right, title + body stacked on the left.
+ */
+export interface RightFeatureInput extends FeatureInputBase {
+  template: 'rightFeature';
+}
+
+/**
  * Map block - geographic map showing article location.
  *
  * Displays a map centered on given coordinates with optional title,
@@ -260,7 +301,7 @@ export interface ImageWithCaptionInput extends BaseTemplateBlock {
  * See docs/MAP_TILES.md for available tile styles and attribution.
  */
 export interface MapBlockInput extends BaseTemplateBlock {
-  template: 'mapBlock';
+  template: 'map';
   /** Map center coordinates */
   center: {
     lat: number;
@@ -299,7 +340,7 @@ export interface FullBleedQuoteInput extends BaseTemplateBlock {
  * Good for enumerations like "things to see" or "key features".
  */
 export interface ListBlockInput extends BaseTemplateBlock {
-  template: 'listBlock';
+  template: 'list';
   /** List items (3-5 recommended) */
   items: string[];
   /** Optional header above the list */
@@ -459,6 +500,8 @@ export type TemplateBlock =
   | TwoColumnInput
   | DateEventInput
   | ImageWithCaptionInput
+  | LeftFeatureInput
+  | RightFeatureInput
   | MapBlockInput
   | FullBleedQuoteInput
   | ListBlockInput

@@ -28,11 +28,44 @@ function extractBodyText(contents: MarkdownBlockNode[] | undefined): string {
   return parts.join('\n').trim();
 }
 
-function extractBlockImages(
-  contents: MarkdownBlockNode[] | undefined,
-): Array<{ src: string; alt: string }> {
+interface ExtractedImage {
+  src: string;
+  alt: string;
+  /** Explicit width from `<img width>` (markdown shorthand has none). */
+  width?: number;
+  /** Explicit height from `<img height>`. */
+  height?: number;
+}
+
+function parseDim(raw: string | undefined): number | undefined {
+  if (raw === undefined) return undefined;
+  const n = parseFloat(raw);
+  return Number.isFinite(n) && n > 0 ? n : undefined;
+}
+
+function extractBlockImages(contents: MarkdownBlockNode[] | undefined): ExtractedImage[] {
   if (!contents || contents.length === 0) return [];
-  const images: Array<{ src: string; alt: string }> = [];
+  const images: ExtractedImage[] = [];
+
+  function walkHtml(node: unknown): void {
+    if (!node || typeof node !== 'object') return;
+    const n = node as Record<string, unknown>;
+    if (n.type === 'htmlElement' && (n.tagName as string).toLowerCase() === 'img') {
+      const attrs = n.attributes as Record<string, string> | undefined;
+      const src = attrs?.src;
+      if (typeof src === 'string' && src) {
+        images.push({
+          src,
+          alt: typeof attrs?.alt === 'string' ? attrs.alt : '',
+          width: parseDim(attrs?.width),
+          height: parseDim(attrs?.height),
+        });
+      }
+    }
+    if (Array.isArray(n.children)) {
+      for (const child of n.children) walkHtml(child);
+    }
+  }
 
   function walk(node: MarkdownNode): void {
     if ('type' in node && node.type === 'image' && 'url' in node) {
@@ -40,6 +73,13 @@ function extractBlockImages(
       if (img.url) {
         images.push({ src: img.url, alt: img.alt ?? '' });
       }
+    }
+    // Resized images round-trip as raw HTML. Pick them up so feature
+    // and slideshow previews show the actual image rather than a blank
+    // placeholder.
+    if ('type' in node && (node.type === 'htmlBlock' || node.type === 'htmlInline')) {
+      const html = node as unknown as { htmlChildren?: unknown[] };
+      for (const child of html.htmlChildren ?? []) walkHtml(child);
     }
     for (const child of getChildren(node)) {
       walk(child);
@@ -98,7 +138,7 @@ function getTemplateDefaults(
   switch (templateName) {
     case 'statHighlight':
       return { stat: headingText, description: body || headingText };
-    case 'quoteBlock':
+    case 'quote':
     case 'fullBleedQuote':
     case 'pullQuote':
       return { quote: body || headingText };
@@ -106,7 +146,7 @@ function getTemplateDefaults(
       return { fact: headingText, explanation: body || headingText };
     case 'comparisonBar':
       return { leftLabel: 'A', leftValue: 60, rightLabel: 'B', rightValue: 40 };
-    case 'listBlock': {
+    case 'list': {
       const items = extractListItems(block.contents);
       return { items: items.length > 0 ? items : ['Item 1', 'Item 2', 'Item 3'] };
     }
@@ -114,6 +154,21 @@ function getTemplateDefaults(
       return { term: headingText, definition: body || headingText };
     case 'dateEvent':
       return { date: headingText, description: body || headingText };
+    case 'leftFeature':
+    case 'rightFeature': {
+      // Feature blocks need imageSrc from body content and use the
+      // heading text as the visible title alongside the body paragraph.
+      const images = extractBlockImages(block.contents);
+      const img = images[0];
+      return {
+        imageSrc: img?.src ?? '',
+        imageAlt: img?.alt || headingText,
+        imageWidth: img?.width,
+        imageHeight: img?.height,
+        title: headingText,
+        body: body || headingText,
+      };
+    }
     default:
       return {};
   }

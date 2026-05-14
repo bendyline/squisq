@@ -15,7 +15,7 @@ import { getThemeFont } from '../utils/themeUtils.js';
 
 /**
  * Hint schema published for the theme validator + future customizer hint UI.
- * Themes may set `templateHints.titleBlock` entries matching these keys.
+ * Themes may set `templateHints.title` entries matching these keys.
  */
 export const titleBlockHintSchema = {
   /** Whether to render a thin accent line above the title. Default: theme-dependent. */

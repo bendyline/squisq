@@ -21,6 +21,8 @@ export function ViewMenuPanel() {
     setStatusBarVisible,
     outlineVisible,
     setOutlineVisible,
+    blockTagsVisible,
+    setBlockTagsVisible,
   } = useEditorContext();
   const [open, setOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -48,6 +50,10 @@ export function ViewMenuPanel() {
   const toggleOutline = useCallback(() => {
     setOutlineVisible(!outlineVisible);
   }, [outlineVisible, setOutlineVisible]);
+
+  const toggleBlockTags = useCallback(() => {
+    setBlockTagsVisible(!blockTagsVisible);
+  }, [blockTagsVisible, setBlockTagsVisible]);
 
   return (
     <div className="squisq-view-menu" ref={containerRef}>
@@ -83,6 +89,11 @@ export function ViewMenuPanel() {
             label="Show card previews"
             checked={inlinePreviewVisible}
             onChange={toggleInlinePreview}
+          />
+          <MenuToggle
+            label="Show block tags"
+            checked={blockTagsVisible}
+            onChange={toggleBlockTags}
           />
           <MenuToggle
             label="Show status bar"

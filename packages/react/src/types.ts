@@ -29,8 +29,12 @@ export type ControlsLayout = 'overlay' | 'sidebar' | 'bottom';
  * - `'linear'` — Long-scrolling document view. Renders the full markdown as
  *   readable HTML with template-annotated sections shown as inline SVG cards.
  *   No audio, no timeline, no controls — just a scrollable page.
+ * - `'page'` — Plain semantic HTML preview matching what the
+ *   `markdownDocToPlainHtml` export produces. No SquisqPlayer, no SVG
+ *   cards — just `<h1>`/`<p>`/`<ul>` etc. inside a sandboxed iframe.
+ *   Use when you want a WYSIWYG view of the simple HTML export.
  */
-export type DisplayMode = 'video' | 'slideshow' | 'linear';
+export type DisplayMode = 'video' | 'slideshow' | 'linear' | 'page';
 
 /**
  * Caption display style.

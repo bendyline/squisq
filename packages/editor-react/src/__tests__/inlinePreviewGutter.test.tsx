@@ -6,7 +6,7 @@ import { InlinePreviewGutter } from '../InlinePreviewGutter';
 /**
  * The gutter pulls its data from the EditorContext's parsed Doc. We mount
  * it against a real provider seeded with markdown that contains both an
- * annotated heading (`{[titleBlock]}`) and a plain heading. The first
+ * annotated heading (`{[title]}`) and a plain heading. The first
  * should produce a card; the second should be ignored.
  *
  * We deliberately don't snapshot the SVG — the BlockRenderer covers that
@@ -31,7 +31,7 @@ describe('InlinePreviewGutter', () => {
 
   it('renders one card per template-annotated block', async () => {
     const md = [
-      '# Welcome {[titleBlock]}',
+      '# Welcome {[title]}',
       '',
       'Subtitle goes here.',
       '',
@@ -56,7 +56,7 @@ describe('InlinePreviewGutter', () => {
       container.querySelectorAll('.squisq-inline-preview-card-template'),
     ).map((el) => el.textContent);
     // Templates render their human-readable label (via `templateLabel`).
-    expect(labels).toContain('Title Block');
+    expect(labels).toContain('Title');
     expect(labels).toContain('Stat Highlight');
   });
 });

@@ -6,7 +6,7 @@
  * in an EditorProvider for shared state.
  */
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import {
   EditorProvider,
   useEditorContext,
@@ -23,6 +23,7 @@ import { InlinePreviewGutter } from './InlinePreviewGutter';
 import { OutlinePanel } from './OutlinePanel';
 import { PreviewPanel } from './PreviewPanel';
 import { ImageViewer } from './ImageViewer';
+import { ImageEditor } from './ImageEditor';
 import { PreviewSettingsProvider, PreviewToolbarControls } from './PreviewControls';
 import { MediaBin } from './MediaBin';
 import { DropZoneOverlay } from './DropZoneOverlay';
@@ -35,7 +36,13 @@ import {
   processTextFiles,
 } from './utils/dropUtils';
 import type { MediaProvider, Theme } from '@bendyline/squisq/schemas';
+import { DARK_SURFACE, LIGHT_SURFACE } from '@bendyline/squisq/schemas';
 import type { ContentContainer } from '@bendyline/squisq/storage';
+import {
+  MemoryContentContainer,
+  scopeContainer,
+  createMediaProviderFromContainer,
+} from '@bendyline/squisq/storage';
 import type { PrunePolicy, SaveVersionResult } from '@bendyline/squisq/versions';
 import type { CSSProperties, ReactNode } from 'react';
 
@@ -227,6 +234,27 @@ export interface EditorShellProps {
   /** Alt text passed through to the underlying ImageViewer. */
   imageAlt?: string;
   /**
+   * Whether the image surface should render as a read-only viewer
+   * (`'view'`, default) or as the editable {@link ImageEditor}
+   * (`'edit'`). Editing requires {@link EditorShellProps.imageEditorContainer}
+   * — without it the shell falls back to view mode and logs a warning.
+   */
+  imageMode?: 'view' | 'edit';
+  /**
+   * Sidecar `ContentContainer` for the image being edited. Conventionally
+   * scoped to `<basename>_files/` via
+   * `scopeContainer(parentContainer, basename + '_files')`. The image
+   * editor persists `state.json`, layer assets in `assets/`, and (when
+   * `allowVersioning` is true) snapshots in `.versions/` inside it.
+   */
+  imageEditorContainer?: ContentContainer;
+  /**
+   * Called after the user clicks Export in the image editor and the
+   * raster blob is produced. When omitted, the editor triggers a
+   * default browser download.
+   */
+  onImageExport?: (blob: Blob, format: 'png' | 'jpeg' | 'webp') => void;
+  /**
    * Show an inline preview gutter to the right of the WYSIWYG editor.
    * The gutter renders one small SVG card per template-annotated block in
    * the document, letting authors see their rendered output without
@@ -253,6 +281,13 @@ export interface EditorShellProps {
    * menu has toggled it on).
    */
   outlineWidth?: number;
+  /**
+   * Initial visibility of inline block-template tags on headings — the
+   * chip rendered next to each heading in the WYSIWYG view that opens
+   * the block-template picker. Defaults to true; the View menu can
+   * toggle it at runtime regardless of the initial value.
+   */
+  blockTags?: boolean;
   /**
    * Bundled view preferences — a serializable JSON blob covering the
    * runtime-toggleable view options surfaced in the View menu. When
@@ -318,16 +353,30 @@ export function EditorShell({
   readOnly = false,
   imageSrc,
   imageAlt,
+  imageMode = 'view',
+  imageEditorContainer,
+  onImageExport,
   inlinePreview = false,
   inlinePreviewWidth = 320,
   outline = false,
   outlineWidth = 240,
+  blockTags = true,
   viewPreferences,
   onViewPreferencesChange,
   themeOverride = null,
 }: EditorShellProps) {
+  // If the host gave us a `container` but no explicit `mediaProvider`,
+  // derive one automatically. Without this, drag-and-drop of an image
+  // into the editor silently failed (no provider \u2192 nothing to upload to)
+  // even though we had a perfectly good ContentContainer to write into.
+  const effectiveMediaProvider = useMemo<MediaProvider | null | undefined>(() => {
+    if (mediaProvider !== undefined) return mediaProvider;
+    if (container) return createMediaProviderFromContainer(container);
+    return undefined;
+  }, [mediaProvider, container]);
+
   // Show the toggle when explicitly opted in, or when mediaProvider prop was passed at all
-  const filesToggleEnabled = showFilesToggle ?? mediaProvider !== undefined;
+  const filesToggleEnabled = showFilesToggle ?? effectiveMediaProvider !== undefined;
 
   // If the host hides the Play tab but asked for it as the initial view,
   // fall back to wysiwyg so we don't boot into a tab the user can't leave.
@@ -346,7 +395,7 @@ export function EditorShell({
       versioningPrunePolicy={versioningPrunePolicy}
       versioningAutoSaveIdleMs={versioningAutoSaveIdleMs}
       onSaveVersion={onSaveVersion}
-      mediaProvider={mediaProvider}
+      mediaProvider={effectiveMediaProvider}
       imageDisplayMode={imageDisplayMode}
       mentionProvider={mentionProvider}
       fileName={fileName}
@@ -354,6 +403,7 @@ export function EditorShell({
       inlinePreview={inlinePreview}
       showStatusBar={showStatusBar}
       outline={outline}
+      blockTags={blockTags}
       viewPreferences={viewPreferences}
       onViewPreferencesChange={onViewPreferencesChange}
     >
@@ -365,7 +415,7 @@ export function EditorShell({
         minHeight={minHeight}
         maxHeight={maxHeight}
         placeholder={placeholder}
-        mediaProvider={mediaProvider ?? null}
+        mediaProvider={effectiveMediaProvider ?? null}
         container={container}
         filesToggleEnabled={filesToggleEnabled}
         toolbarSlotLeft={toolbarSlotLeft}
@@ -379,6 +429,11 @@ export function EditorShell({
         readOnly={readOnly}
         imageSrc={imageSrc}
         imageAlt={imageAlt}
+        imageMode={imageMode}
+        imageEditorContainer={imageEditorContainer}
+        onImageExport={onImageExport}
+        allowVersioning={allowVersioning}
+        versioningAutoSaveIdleMs={versioningAutoSaveIdleMs}
         inlinePreviewWidth={inlinePreviewWidth}
         outlineWidth={outlineWidth}
         themeOverride={themeOverride}
@@ -409,6 +464,11 @@ interface EditorShellInnerProps {
   readOnly: boolean;
   imageSrc?: string;
   imageAlt?: string;
+  imageMode: 'view' | 'edit';
+  imageEditorContainer?: ContentContainer;
+  onImageExport?: (blob: Blob, format: 'png' | 'jpeg' | 'webp') => void;
+  allowVersioning: boolean;
+  versioningAutoSaveIdleMs?: number;
   inlinePreviewWidth: number;
   outlineWidth: number;
   themeOverride: Theme | null;
@@ -436,6 +496,11 @@ function EditorShellInner({
   readOnly,
   imageSrc,
   imageAlt,
+  imageMode,
+  imageEditorContainer,
+  onImageExport,
+  allowVersioning,
+  versioningAutoSaveIdleMs,
   inlinePreviewWidth,
   outlineWidth,
   themeOverride,
@@ -454,6 +519,9 @@ function EditorShellInner({
     inlinePreviewVisible,
     statusBarVisible,
     outlineVisible,
+    imageEditTarget,
+    closeImageEdit,
+    bumpMediaRevision,
   } = useEditorContext();
   const isPreview = activeView === 'preview';
   const isCodeMode = editorMode === 'code';
@@ -461,6 +529,16 @@ function EditorShellInner({
   const isMarkdownMode = editorMode === 'markdown';
   const [showFiles, setShowFiles] = useState(false);
   const [mediaRefreshKey, setMediaRefreshKey] = useState(0);
+  // Persistent fallback container for image-edit sidecars when the host
+  // didn't supply one. Lifted to shell scope so opening the same image
+  // multiple times sees the same `.imageEdits/<sanitized>/.versions/...`
+  // snapshots — otherwise each modal mount would start from an empty
+  // in-memory container and history would vanish on close.
+  const imageEditFallbackContainerRef = useRef<MemoryContentContainer | null>(null);
+  if (imageEditFallbackContainerRef.current === null) {
+    imageEditFallbackContainerRef.current = new MemoryContentContainer();
+  }
+  const imageEditFallbackContainer = imageEditFallbackContainerRef.current;
   const isDark = theme === 'dark';
 
   const handleToggleFiles = useCallback(() => {
@@ -605,6 +683,7 @@ function EditorShellInner({
       data-theme={theme}
       data-full-width={fullWidth ? 'true' : undefined}
       data-thin-margins={thinMargins ? 'true' : undefined}
+      data-outline-visible={isMarkdownMode && outlineVisible ? 'true' : undefined}
       style={{
         display: 'flex',
         flexDirection: 'column',
@@ -615,6 +694,13 @@ function EditorShellInner({
         // tabs, status bar) consume `--squisq-ux-font` as their
         // `font-family`, falling back to the system stack when unset.
         ...(uxFont ? ({ '--squisq-ux-font': uxFont } as CSSProperties) : {}),
+        // Exposed so the toolbar's view-tabs section can match the outline
+        // pane's width, lining up its right-edge separator with the
+        // outline's right edge. The variable is set unconditionally so the
+        // outline pane itself can also read it if needed; the
+        // `data-outline-visible` gate above keeps the toolbar override
+        // scoped to the case where alignment matters.
+        ...({ '--squisq-outline-width': `${outlineWidth}px` } as CSSProperties),
       }}
       {...containerProps}
     >
@@ -668,7 +754,19 @@ function EditorShellInner({
               position: 'relative',
             }}
           >
-            {isImageMode && imageSrc && <ImageViewer src={imageSrc} alt={imageAlt} theme={theme} />}
+            {isImageMode &&
+              imageSrc &&
+              (imageMode === 'edit' && imageEditorContainer ? (
+                <ImageEditor
+                  filesContainer={imageEditorContainer}
+                  initialSrc={imageSrc}
+                  allowVersioning={allowVersioning}
+                  versioningAutoSaveIdleMs={versioningAutoSaveIdleMs}
+                  onExport={onImageExport}
+                />
+              ) : (
+                <ImageViewer src={imageSrc} alt={imageAlt} theme={theme} />
+              ))}
             {/* Raw (Monaco) view. Always wrapped in `.squisq-editor-with-gutter`
                 so toggling a pane on/off doesn't change the editor's tree
                 position — Monaco stays mounted and `monacoEditor` in
@@ -691,6 +789,7 @@ function EditorShellInner({
                     key="inline"
                     width={inlinePreviewWidth}
                     basePath={basePath}
+                    mediaProvider={mediaProvider}
                   />
                 )}
               </div>
@@ -714,6 +813,7 @@ function EditorShellInner({
                     key="inline"
                     width={inlinePreviewWidth}
                     basePath={basePath}
+                    mediaProvider={mediaProvider}
                   />
                 )}
               </div>
@@ -732,14 +832,23 @@ function EditorShellInner({
             />
           )}
 
-          {/* Drop zone overlay — image / text drop UX is markdown-specific. */}
-          {isMarkdownMode && isDragging && (
-            <DropZoneOverlay
-              dragContentType={dragContentType}
-              zoneProps={zoneProps}
-              hasMediaProvider={mediaProvider !== null}
-            />
-          )}
+          {/* Drop zone overlay — image / text drop UX is markdown-specific.
+              In WYSIWYG, image drops are handled directly by Tiptap's
+              `handleDrop` (uploads to the MediaProvider and inserts an
+              image node at the mouse position). The overlay would sit on
+              top with z-index: 50 and intercept the drop, so we skip it
+              when the dragged content is media-only on the WYSIWYG view —
+              the user gets a one-step "drop where you want it" flow
+              instead of a two-step "drop in bin, then insert" flow. */}
+          {isMarkdownMode &&
+            isDragging &&
+            !(activeView === 'wysiwyg' && dragContentType === 'media') && (
+              <DropZoneOverlay
+                dragContentType={dragContentType}
+                zoneProps={zoneProps}
+                hasMediaProvider={mediaProvider !== null}
+              />
+            )}
         </div>
 
         {/* Status bar — word / char / line / block counts. Host can
@@ -749,6 +858,167 @@ function EditorShellInner({
         {statusBarVisible && !isImageMode && <StatusBar />}
       </PreviewSettingsProvider>
       <TooltipLayer />
+      {imageEditTarget !== null && mediaProvider && (
+        <ImageEditModal
+          relativePath={imageEditTarget}
+          container={container ?? imageEditFallbackContainer}
+          mediaProvider={mediaProvider}
+          onClose={closeImageEdit}
+          onSaved={() => {
+            bumpMediaRevision();
+            closeImageEdit();
+          }}
+          allowVersioning={allowVersioning}
+          versioningAutoSaveIdleMs={versioningAutoSaveIdleMs}
+          shellTheme={theme}
+        />
+      )}
+    </div>
+  );
+}
+
+// ─── ImageEditModal ────────────────────────────────────────
+
+interface ImageEditModalProps {
+  relativePath: string;
+  /**
+   * Host's `ContentContainer`. When non-null the editor's per-image
+   * sidecar is scoped underneath it as `.imageEdits/<sanitized>/` so
+   * version snapshots travel with the doc. When null (host wired only a
+   * `mediaProvider`) the modal creates a fresh in-memory container for
+   * the edit session — export still writes the result back through
+   * `mediaProvider`.
+   */
+  container: ContentContainer | null;
+  mediaProvider: MediaProvider;
+  onClose: () => void;
+  onSaved: () => void;
+  allowVersioning: boolean;
+  versioningAutoSaveIdleMs?: number;
+  /** EditorShell's `theme` prop — 'light' or 'dark'. Threaded through so
+   *  the image editor chrome matches the host shell. */
+  shellTheme?: 'light' | 'dark';
+}
+
+/**
+ * Modal overlay that mounts a full `<ImageEditor>` against a sidecar
+ * container scoped under `.imageEdits/<sanitized-path>/` of the document's
+ * `ContentContainer`. Opens when a user clicks the "Edit" affordance on an
+ * image in the WYSIWYG view; on Export, rewrites the original image bytes
+ * via `mediaProvider.addMedia(relativePath, blob, mime)` and bumps
+ * `mediaRevision` so live `<img>` nodes pick up the new content.
+ */
+function ImageEditModal({
+  relativePath,
+  container,
+  mediaProvider,
+  onClose,
+  onSaved,
+  allowVersioning,
+  versioningAutoSaveIdleMs,
+  shellTheme,
+}: ImageEditModalProps) {
+  // Each unique image path gets its own sidecar so multiple images in the
+  // same doc can be edited independently without colliding state. When the
+  // host didn't supply a `container`, fall back to a fresh in-memory one
+  // — the edit session is transient anyway and the final raster is what
+  // gets written back through `mediaProvider`.
+  const sidecar = useMemo(() => {
+    const sanitized = relativePath.replace(/[^a-zA-Z0-9._-]+/g, '_');
+    const parent: ContentContainer = container ?? new MemoryContentContainer();
+    return scopeContainer(parent, `.imageEdits/${sanitized}`);
+  }, [container, relativePath]);
+
+  const [initialSrc, setInitialSrc] = useState<string | null>(null);
+  const [resolveError, setResolveError] = useState<string | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    mediaProvider.resolveUrl(relativePath).then(
+      (url) => {
+        if (!cancelled) setInitialSrc(url);
+      },
+      (err: unknown) => {
+        if (!cancelled) {
+          setResolveError(err instanceof Error ? err.message : String(err));
+        }
+      },
+    );
+    return () => {
+      cancelled = true;
+    };
+  }, [mediaProvider, relativePath]);
+
+  const handleExport = useCallback(
+    (blob: Blob, format: 'png' | 'jpeg' | 'webp') => {
+      const mime = `image/${format}`;
+      mediaProvider.addMedia(relativePath, blob, mime).then(
+        () => onSaved(),
+        (err: unknown) => {
+          console.error('Failed to write image back:', err instanceof Error ? err.message : err);
+        },
+      );
+    },
+    [mediaProvider, relativePath, onSaved],
+  );
+
+  // Close on Escape — global listener so it works regardless of focus.
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [onClose]);
+
+  return (
+    <div
+      className="squisq-image-edit-modal"
+      data-testid="image-edit-modal"
+      role="dialog"
+      aria-modal="true"
+      aria-label={`Edit ${relativePath}`}
+      onClick={(e) => {
+        // Click on the dim backdrop (but not on the surface) → close.
+        if (e.target === e.currentTarget) onClose();
+      }}
+    >
+      <div className="squisq-image-edit-modal__surface">
+        <header className="squisq-image-edit-modal__header">
+          <span className="squisq-image-edit-modal__title">Edit image</span>
+          <span className="squisq-image-edit-modal__path">{relativePath}</span>
+          <button
+            type="button"
+            className="squisq-image-edit-modal__close"
+            data-testid="image-edit-modal-close"
+            onClick={onClose}
+            aria-label="Close image editor"
+          >
+            ×
+          </button>
+        </header>
+        <div className="squisq-image-edit-modal__body">
+          {resolveError ? (
+            <div className="squisq-image-edit-modal__error">
+              Failed to load image: {resolveError}
+            </div>
+          ) : !initialSrc ? (
+            <div className="squisq-image-edit-modal__loading">Loading image…</div>
+          ) : (
+            <ImageEditor
+              filesContainer={sidecar}
+              initialSrc={initialSrc}
+              allowVersioning={allowVersioning}
+              versioningAutoSaveIdleMs={versioningAutoSaveIdleMs}
+              onExport={handleExport}
+              saveBehavior="export"
+              saveFormat="png"
+              saveLabel="Save and close"
+              saveTitle="Save changes back to the image and close"
+              surface={shellTheme === 'dark' ? DARK_SURFACE : LIGHT_SURFACE}
+            />
+          )}
+        </div>
+      </div>
     </div>
   );
 }

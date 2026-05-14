@@ -95,6 +95,16 @@
       "types": "./dist/jsonForm/index.d.ts",
       "import": "./dist/jsonForm/index.js",
       "default": "./dist/jsonForm/index.js"
+    },
+    "./imageEdit": {
+      "types": "./dist/imageEdit/index.d.ts",
+      "import": "./dist/imageEdit/index.js",
+      "default": "./dist/imageEdit/index.js"
+    },
+    "./icons": {
+      "types": "./dist/icons/index.d.ts",
+      "import": "./dist/icons/index.js",
+      "default": "./dist/icons/index.js"
     }
   },
   "scripts": {

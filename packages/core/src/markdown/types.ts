@@ -454,6 +454,22 @@ export interface MarkdownInlineMath extends MarkdownNodeBase {
 }
 
 /**
+ * Inline FontAwesome icon. Authored as `{[name]}` (bare) or
+ * `{[fa-<family>:name]}` (qualified) in markdown source. The parser
+ * resolves the token against the FA Free catalog and emits this node;
+ * unknown / ambiguous tokens stay as literal text.
+ */
+export interface MarkdownInlineIcon extends MarkdownNodeBase {
+  type: 'inlineIcon';
+  /** Token exactly as authored — e.g. `github` or `fa-solid:user`. */
+  token: string;
+  /** Resolved icon family. */
+  family: 'brands' | 'solid' | 'regular';
+  /** Resolved icon name (without the `fa-` prefix). */
+  name: string;
+}
+
+/**
  * A footnote reference [^id]. GFM extension.
  */
 export interface MarkdownFootnoteReference extends MarkdownNodeBase {
@@ -563,7 +579,8 @@ export type MarkdownInlineNode =
   | MarkdownLinkReference
   | MarkdownImageReference
   | MarkdownTextDirective
-  | MarkdownMention;
+  | MarkdownMention
+  | MarkdownInlineIcon;
 
 /**
  * Any node in the markdown tree. Includes structural nodes (listItem,

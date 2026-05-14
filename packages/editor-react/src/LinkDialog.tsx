@@ -30,13 +30,7 @@ export interface LinkDialogProps {
  * on Escape or backdrop click. Auto-focuses URL when the text field is
  * already populated; otherwise focuses Text.
  */
-export function LinkDialog({
-  mode,
-  initialText,
-  initialUrl,
-  onConfirm,
-  onClose,
-}: LinkDialogProps) {
+export function LinkDialog({ mode, initialText, initialUrl, onConfirm, onClose }: LinkDialogProps) {
   const [text, setText] = useState(initialText);
   const [url, setUrl] = useState(initialUrl);
   const textRef = useRef<HTMLInputElement>(null);
@@ -128,10 +122,7 @@ export function LinkDialog({
           >
             Cancel
           </button>
-          <button
-            type="submit"
-            className="squisq-link-dialog-btn squisq-link-dialog-btn--primary"
-          >
+          <button type="submit" className="squisq-link-dialog-btn squisq-link-dialog-btn--primary">
             {submitLabel}
           </button>
         </div>

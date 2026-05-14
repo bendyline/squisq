@@ -9,16 +9,16 @@ import { useState, useCallback, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { parseMarkdown, stringifyMarkdown } from '@bendyline/squisq/markdown';
 import { markdownToDoc, docToMarkdown } from '@bendyline/squisq/doc';
-import { getThemeSummaries } from '@bendyline/squisq/schemas';
+import { getThemeSummaries, resolveTheme } from '@bendyline/squisq/schemas';
 import {
   getTransformStyleSummaries,
   applyTransform,
   extractDocImages,
 } from '@bendyline/squisq/transform';
-import type { MediaProvider } from '@bendyline/squisq/schemas';
+import type { MediaProvider, Theme } from '@bendyline/squisq/schemas';
 import type { MarkdownDocument } from '@bendyline/squisq/markdown';
 import { VideoExportModal } from '@bendyline/squisq-video-react';
-import { buildPreviewDoc } from '@bendyline/squisq-editor-react';
+import { buildPreviewDoc, PlainHtmlPreview } from '@bendyline/squisq-editor-react';
 import { collectImagesForHtmlExport } from './exportHelpers';
 
 // ── Types ──────────────────────────────────────────────────────────
@@ -31,6 +31,9 @@ export interface ExportConfigModalProps {
 
 type ExportFormat = 'docx' | 'pptx' | 'pdf' | 'html' | 'htmlzip' | 'zip' | 'video';
 type RenderMode = 'document' | 'slideshow';
+/** HTML output flavor: 'rendered' uses SquisqPlayer + SVG cards; 'plain'
+ *  produces semantic HTML matching the "Page" preview. */
+type HtmlStyle = 'rendered' | 'plain';
 
 // ── Styles ─────────────────────────────────────────────────────────
 
@@ -54,6 +57,13 @@ const modalStyle: React.CSSProperties = {
   boxShadow: '0 8px 32px rgba(0,0,0,0.18)',
   fontFamily: 'system-ui, -apple-system, sans-serif',
   color: '#4a3c1f',
+};
+
+/** Wider variant used when the plain-HTML preview pane is on. */
+const modalStyleWide: React.CSSProperties = {
+  ...modalStyle,
+  maxWidth: 960,
+  minWidth: 720,
 };
 
 const titleStyle: React.CSSProperties = {
@@ -127,6 +137,156 @@ function downloadBlob(blob: Blob, filename: string) {
   URL.revokeObjectURL(url);
 }
 
+/**
+ * Collect images referenced from a parsed markdown document and return a
+ * map of `original-url → data-URI`. Used by the single-file plain HTML
+ * export so the .html is self-contained. Both markdown `![]()` images
+ * and raw `<img src>` (from resized WYSIWYG images) are picked up.
+ */
+async function collectInlineImages(
+  mdDoc: MarkdownDocument,
+  mediaProvider: MediaProvider | null,
+): Promise<Map<string, string> | undefined> {
+  if (!mediaProvider) return undefined;
+  const refs = collectMarkdownImageRefs(mdDoc);
+  if (refs.size === 0) return undefined;
+  const map = new Map<string, string>();
+  await Promise.all(
+    Array.from(refs).map(async (ref) => {
+      if (isExternalRef(ref)) return;
+      try {
+        const url = await mediaProvider.resolveUrl(ref);
+        const res = await fetch(url);
+        if (!res.ok) return;
+        const buf = await res.arrayBuffer();
+        const mime = res.headers.get('content-type') || guessMimeFromPath(ref);
+        map.set(ref, arrayBufferToDataUri(buf, mime));
+      } catch {
+        // Best-effort — leave the ref unresolved and the <img> will 404.
+      }
+    }),
+  );
+  return map.size > 0 ? map : undefined;
+}
+
+/**
+ * Build a zip with `index.html` + image assets at their original
+ * relative paths, mirroring the `<img src>` references in the source.
+ * Mirrors what `docToHtmlZip` does for the rendered path, but produces
+ * a plain semantic page.
+ */
+async function downloadPlainHtmlZip(
+  mdDoc: MarkdownDocument,
+  title: string,
+  mediaProvider: MediaProvider | null,
+  filename: string,
+  theme?: Theme,
+): Promise<void> {
+  const [{ markdownDocToPlainHtml }, JSZip] = await Promise.all([
+    import('@bendyline/squisq-formats/html'),
+    import('jszip').then((m) => m.default),
+  ]);
+  const html = markdownDocToPlainHtml(mdDoc, { title, theme });
+  const zip = new JSZip();
+  zip.file('index.html', html);
+  if (mediaProvider) {
+    const refs = collectMarkdownImageRefs(mdDoc);
+    await Promise.all(
+      Array.from(refs).map(async (ref) => {
+        if (isExternalRef(ref)) return;
+        try {
+          const url = await mediaProvider.resolveUrl(ref);
+          const res = await fetch(url);
+          if (!res.ok) return;
+          const data = new Uint8Array(await res.arrayBuffer());
+          const cleanPath = ref.replace(/^\/+/, '').replace(/\\/g, '/');
+          if (cleanPath.split('/').some((seg) => seg === '..')) return;
+          zip.file(cleanPath, data);
+        } catch {
+          // skip
+        }
+      }),
+    );
+  }
+  const blob = await zip.generateAsync({
+    type: 'blob',
+    compression: 'DEFLATE',
+    compressionOptions: { level: 6 },
+  });
+  downloadBlob(blob, filename);
+}
+
+function isExternalRef(url: string): boolean {
+  return (
+    !url ||
+    url.startsWith('data:') ||
+    url.startsWith('blob:') ||
+    url.startsWith('http://') ||
+    url.startsWith('https://') ||
+    url.startsWith('//')
+  );
+}
+
+const MIME_BY_EXT: Record<string, string> = {
+  png: 'image/png',
+  jpg: 'image/jpeg',
+  jpeg: 'image/jpeg',
+  gif: 'image/gif',
+  webp: 'image/webp',
+  avif: 'image/avif',
+  svg: 'image/svg+xml',
+};
+
+function guessMimeFromPath(path: string): string {
+  const ext = path.slice(path.lastIndexOf('.') + 1).toLowerCase();
+  return MIME_BY_EXT[ext] ?? 'application/octet-stream';
+}
+
+function arrayBufferToDataUri(buf: ArrayBuffer, mime: string): string {
+  const bytes = new Uint8Array(buf);
+  let binary = '';
+  const CHUNK = 0x8000;
+  for (let i = 0; i < bytes.length; i += CHUNK) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + CHUNK));
+  }
+  return `data:${mime};base64,${btoa(binary)}`;
+}
+
+/**
+ * Walk a markdown document for every image reference — both `![]()`
+ * (type `image`, `url` field) and raw HTML `<img src>` (parsed into
+ * `htmlChildren`). The WYSIWYG editor serializes resized images via
+ * the HTML form, so missing it would silently drop them from the
+ * export.
+ */
+function collectMarkdownImageRefs(doc: MarkdownDocument): Set<string> {
+  const refs = new Set<string>();
+  function visitHtml(nodes: unknown[]): void {
+    for (const n of nodes) {
+      if (!n || typeof n !== 'object') continue;
+      const node = n as Record<string, unknown>;
+      if (node.type !== 'htmlElement') continue;
+      if ((node.tagName as string).toLowerCase() === 'img') {
+        const attrs = node.attributes as Record<string, string> | undefined;
+        const src = attrs?.src;
+        if (typeof src === 'string' && src) refs.add(src);
+      }
+      if (Array.isArray(node.children)) visitHtml(node.children);
+    }
+  }
+  function visit(node: unknown): void {
+    if (!node || typeof node !== 'object') return;
+    const n = node as Record<string, unknown>;
+    if (n.type === 'image' && typeof n.url === 'string' && n.url) refs.add(n.url);
+    if ((n.type === 'htmlBlock' || n.type === 'htmlInline') && Array.isArray(n.htmlChildren)) {
+      visitHtml(n.htmlChildren);
+    }
+    if (Array.isArray(n.children)) for (const c of n.children) visit(c);
+  }
+  for (const child of doc.children) visit(child);
+  return refs;
+}
+
 const FORMAT_LABELS: Record<ExportFormat, string> = {
   docx: 'Word (.docx)',
   pptx: 'PowerPoint (.pptx)',
@@ -149,6 +309,7 @@ export function ExportConfigModal({
 }: ExportConfigModalProps) {
   const [format, setFormat] = useState<ExportFormat>('html');
   const [renderMode, setRenderMode] = useState<RenderMode>('document');
+  const [htmlStyle, setHtmlStyle] = useState<HtmlStyle>('rendered');
   const [themeId, setThemeId] = useState<string>('');
   const [transformStyle, setTransformStyle] = useState<string>('');
   const [busy, setBusy] = useState(false);
@@ -160,7 +321,13 @@ export function ExportConfigModal({
   const themes = getThemeSummaries();
   const transforms = getTransformStyleSummaries();
 
-  const showModeSelector = VISUAL_FORMATS.includes(format);
+  const isHtmlFormat = VISUAL_FORMATS.includes(format);
+  // Plain HTML doesn't need the rendered-vs-slideshow Mode selector
+  // (it's always a flowing document). Hiding it when style=plain keeps
+  // the dialog from offering settings that won't apply.
+  const showModeSelector = isHtmlFormat && htmlStyle !== 'plain';
+  const showStyleSelector = isHtmlFormat;
+  const showPreview = isHtmlFormat && htmlStyle === 'plain';
 
   /** Collect raw images by mediaProvider name (for pptx and other formats). */
   const collectImagesByName = useCallback(async () => {
@@ -248,6 +415,39 @@ export function ExportConfigModal({
         }
         case 'html':
         case 'htmlzip': {
+          if (htmlStyle === 'plain') {
+            // Plain semantic HTML — no SquisqPlayer, no SVG cards. The
+            // shared `markdownDocToPlainHtml` is also what the Page
+            // preview renders, so the downloaded file matches the
+            // preview byte-for-byte.
+            const { markdownDocToPlainHtml } = await import(
+              '@bendyline/squisq-formats/html'
+            );
+            const docTitle = (mdDoc.frontmatter?.title as string | undefined) ?? 'Document';
+            const themeForExport = exportThemeId ? resolveTheme(exportThemeId) : undefined;
+            if (format === 'html') {
+              const inlineImages = await collectInlineImages(mdDoc, mediaProvider);
+              const html = markdownDocToPlainHtml(mdDoc, {
+                title: docTitle,
+                images: inlineImages,
+                theme: themeForExport,
+              });
+              downloadBlob(
+                new Blob([html], { type: 'text/html;charset=utf-8' }),
+                `document-${ts}.html`,
+              );
+            } else {
+              await downloadPlainHtmlZip(
+                mdDoc,
+                docTitle,
+                mediaProvider,
+                `document-${ts}.html.zip`,
+                themeForExport,
+              );
+            }
+            break;
+          }
+
           const { docToHtml, docToHtmlZip } = await import('@bendyline/squisq-formats/html');
           const { PLAYER_BUNDLE } = await import('@bendyline/squisq-react/standalone-source');
           const rawDoc = markdownToDoc(mdDoc);
@@ -300,7 +500,16 @@ export function ExportConfigModal({
     } finally {
       setBusy(false);
     }
-  }, [format, renderMode, themeId, mediaProvider, onClose, collectImagesByName, prepareMarkdown]);
+  }, [
+    format,
+    renderMode,
+    htmlStyle,
+    themeId,
+    mediaProvider,
+    onClose,
+    collectImagesByName,
+    prepareMarkdown,
+  ]);
 
   return (
     <>
@@ -310,92 +519,179 @@ export function ExportConfigModal({
           if (e.target === e.currentTarget) onClose();
         }}
       >
-        <div style={modalStyle}>
+        <div style={showPreview ? modalStyleWide : modalStyle}>
           <h2 style={titleStyle}>Export with Options</h2>
 
-          {/* Format */}
-          <label style={labelStyle}>Format</label>
-          <select
-            style={selectStyle}
-            value={format}
-            onChange={(e) => setFormat(e.target.value as ExportFormat)}
-            disabled={busy}
+          <div
+            style={{
+              display: 'flex',
+              gap: 20,
+              alignItems: 'stretch',
+            }}
           >
-            {(Object.keys(FORMAT_LABELS) as ExportFormat[]).map((f) => (
-              <option key={f} value={f}>
-                {FORMAT_LABELS[f]}
-              </option>
-            ))}
-          </select>
-
-          {/* Render Mode — for HTML and Video formats */}
-          {showModeSelector && (
-            <>
-              <label style={labelStyle}>Mode</label>
+            <div style={{ flex: showPreview ? '0 0 320px' : '1 1 auto', minWidth: 0 }}>
+              {/* Format */}
+              <label style={labelStyle}>Format</label>
               <select
                 style={selectStyle}
-                value={renderMode}
-                onChange={(e) => setRenderMode(e.target.value as RenderMode)}
+                value={format}
+                onChange={(e) => setFormat(e.target.value as ExportFormat)}
                 disabled={busy}
               >
-                <option value="document">Document (scrollable page)</option>
-                <option value="slideshow">Slideshow (interactive player)</option>
+                {(Object.keys(FORMAT_LABELS) as ExportFormat[]).map((f) => (
+                  <option key={f} value={f}>
+                    {FORMAT_LABELS[f]}
+                  </option>
+                ))}
               </select>
-              <div style={hintStyle}>
-                {renderMode === 'document'
-                  ? 'Renders as a readable flowing document with embedded images.'
-                  : 'Renders as an interactive slideshow with animated block transitions.'}
+
+              {/* HTML style — Plain vs Rendered */}
+              {showStyleSelector && (
+                <>
+                  <label style={labelStyle}>Style</label>
+                  <div style={{ display: 'flex', gap: 6, marginBottom: 12 }}>
+                    {(['rendered', 'plain'] as const).map((s) => {
+                      const active = htmlStyle === s;
+                      return (
+                        <button
+                          key={s}
+                          type="button"
+                          onClick={() => setHtmlStyle(s)}
+                          disabled={busy}
+                          style={{
+                            flex: 1,
+                            padding: '6px 10px',
+                            fontSize: 13,
+                            fontFamily: 'inherit',
+                            cursor: busy ? 'default' : 'pointer',
+                            background: active ? '#8B6914' : '#E8DFC6',
+                            color: active ? '#fff' : '#4a3c1f',
+                            border: `1px solid ${active ? '#7a5c10' : '#c9b98a'}`,
+                            borderRadius: 0,
+                          }}
+                        >
+                          {s === 'rendered' ? 'Rendered' : 'Plain'}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <div style={hintStyle}>
+                    {htmlStyle === 'rendered'
+                      ? 'Uses SquisqPlayer with SVG block cards, themes, and animations.'
+                      : 'Plain semantic HTML — no JS, no SVG cards. Matches the Page preview.'}
+                  </div>
+                </>
+              )}
+
+              {/* Render Mode — for HTML and Video formats (rendered only) */}
+              {showModeSelector && (
+                <>
+                  <label style={labelStyle}>Mode</label>
+                  <select
+                    style={selectStyle}
+                    value={renderMode}
+                    onChange={(e) => setRenderMode(e.target.value as RenderMode)}
+                    disabled={busy}
+                  >
+                    <option value="document">Document (scrollable page)</option>
+                    <option value="slideshow">Slideshow (interactive player)</option>
+                  </select>
+                  <div style={hintStyle}>
+                    {renderMode === 'document'
+                      ? 'Renders as a readable flowing document with embedded images.'
+                      : 'Renders as an interactive slideshow with animated block transitions.'}
+                  </div>
+                </>
+              )}
+
+              {/* Theme — applied to both rendered and plain HTML output */}
+              <label style={labelStyle}>Theme</label>
+              <select
+                style={selectStyle}
+                value={themeId}
+                onChange={(e) => setThemeId(e.target.value)}
+                disabled={busy}
+              >
+                <option value="">Default (no theme)</option>
+                {themes.map((t) => (
+                  <option key={t.id} value={t.id}>
+                    {t.name}
+                  </option>
+                ))}
+              </select>
+
+              {/* Transform — plain HTML preserves markdown as-is, no transform */}
+              {htmlStyle !== 'plain' || !isHtmlFormat ? (
+                <>
+                  <label style={labelStyle}>Transform</label>
+                  <select
+                    style={selectStyle}
+                    value={transformStyle}
+                    onChange={(e) => setTransformStyle(e.target.value)}
+                    disabled={busy}
+                  >
+                    <option value="">None</option>
+                    {transforms.map((t) => (
+                      <option key={t.id} value={t.id}>
+                        {t.name}
+                      </option>
+                    ))}
+                  </select>
+                </>
+              ) : null}
+
+              {/* Error */}
+              {error && (
+                <div style={{ color: '#c53030', fontSize: 13, marginBottom: 12 }}>
+                  Export failed: {error}
+                </div>
+              )}
+
+              {/* Buttons */}
+              <div
+                style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 8 }}
+              >
+                <button style={btnSecondary} onClick={onClose} disabled={busy}>
+                  Cancel
+                </button>
+                <button style={btnPrimary} onClick={handleExport} disabled={busy}>
+                  {busy ? 'Exporting...' : 'Export'}
+                </button>
               </div>
-            </>
-          )}
-
-          {/* Theme */}
-          <label style={labelStyle}>Theme</label>
-          <select
-            style={selectStyle}
-            value={themeId}
-            onChange={(e) => setThemeId(e.target.value)}
-            disabled={busy}
-          >
-            <option value="">Default (no theme)</option>
-            {themes.map((t) => (
-              <option key={t.id} value={t.id}>
-                {t.name}
-              </option>
-            ))}
-          </select>
-
-          {/* Transform */}
-          <label style={labelStyle}>Transform</label>
-          <select
-            style={selectStyle}
-            value={transformStyle}
-            onChange={(e) => setTransformStyle(e.target.value)}
-            disabled={busy}
-          >
-            <option value="">None</option>
-            {transforms.map((t) => (
-              <option key={t.id} value={t.id}>
-                {t.name}
-              </option>
-            ))}
-          </select>
-
-          {/* Error */}
-          {error && (
-            <div style={{ color: '#c53030', fontSize: 13, marginBottom: 12 }}>
-              Export failed: {error}
             </div>
-          )}
 
-          {/* Buttons */}
-          <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 8 }}>
-            <button style={btnSecondary} onClick={onClose} disabled={busy}>
-              Cancel
-            </button>
-            <button style={btnPrimary} onClick={handleExport} disabled={busy}>
-              {busy ? 'Exporting...' : 'Export'}
-            </button>
+            {showPreview && (
+              <div
+                style={{
+                  flex: '1 1 auto',
+                  minWidth: 0,
+                  border: '1px solid #c9b98a',
+                  background: '#fff',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  minHeight: 480,
+                }}
+              >
+                <div
+                  style={{
+                    padding: '6px 10px',
+                    borderBottom: '1px solid #c9b98a',
+                    fontSize: 12,
+                    color: '#8a7a5a',
+                    background: '#FFFDF7',
+                  }}
+                >
+                  Preview
+                </div>
+                <div style={{ flex: 1, minHeight: 0 }}>
+                  <PlainHtmlPreview
+                    markdown={currentSource}
+                    mediaProvider={mediaProvider}
+                    theme={themeId ? resolveTheme(themeId) : undefined}
+                  />
+                </div>
+              </div>
+            )}
           </div>
         </div>
       </div>

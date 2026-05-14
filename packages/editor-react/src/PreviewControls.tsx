@@ -10,7 +10,15 @@
  * - PreviewPanel (the actual player, which reads the selected values)
  */
 
-import { createContext, useCallback, useContext, useState, useMemo, useEffect, useRef } from 'react';
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useState,
+  useMemo,
+  useEffect,
+  useRef,
+} from 'react';
 import type { ReactNode } from 'react';
 import type { DisplayMode, CaptionStyle } from '@bendyline/squisq-react';
 import type { ViewportPreset, ViewportConfig } from '@bendyline/squisq/schemas';
@@ -80,9 +88,10 @@ function resolveRenderAs(value: unknown): ViewportPreset | null {
 function resolveDisplayMode(value: unknown): DisplayMode | null {
   if (typeof value !== 'string') return null;
   const v = value.trim().toLowerCase();
-  if (v === 'video' || v === 'slideshow' || v === 'linear') return v;
+  if (v === 'video' || v === 'slideshow' || v === 'linear' || v === 'page') return v;
   if (v === 'slides' || v === 'presentation' || v === 'deck') return 'slideshow';
-  if (v === 'document' || v === 'scroll' || v === 'page') return 'linear';
+  if (v === 'document' || v === 'scroll') return 'linear';
+  if (v === 'html' || v === 'plain' || v === 'reader') return 'page';
   return null;
 }
 
@@ -293,6 +302,7 @@ const DISPLAY_MODE_OPTIONS: { key: DisplayMode; label: string }[] = [
   { key: 'video', label: 'Video' },
   { key: 'slideshow', label: 'Slideshow' },
   { key: 'linear', label: 'Document' },
+  { key: 'page', label: 'Page' },
 ];
 
 const THEME_OPTIONS = getThemeSummaries().map((s) => ({ key: s.id, label: s.name }));

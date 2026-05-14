@@ -28,10 +28,11 @@ import type {
   MarkdownBlockNode,
   MarkdownHeading,
   MarkdownNode,
-  MarkdownImage,
+  HtmlNode,
 } from '../markdown/types.js';
 import { extractPlainText } from '../markdown/utils.js';
 import { estimateReadingTime } from '../timing/readingTime.js';
+import { resolveTemplateName } from './templates/index.js';
 
 // ============================================
 // Options
@@ -152,9 +153,13 @@ export function markdownToDoc(markdownDoc: MarkdownDocument, options?: MarkdownT
   function makeBlock(heading: MarkdownHeading | null): Block {
     const id = heading ? generateId(heading, headingIndex++) : 'preamble';
 
-    // Use template from annotation if present, otherwise fall back to default
+    // Use template from annotation if present, otherwise fall back to default.
+    // Legacy template ids (e.g. `titleBlock`) are normalized to their canonical
+    // short form (`title`) so downstream comparisons can rely on the new names
+    // without sprinkling alias resolution everywhere.
     const annotation = heading?.templateAnnotation;
-    const template = annotation?.template ?? (heading ? defaultTemplate : undefined);
+    const rawTemplate = annotation?.template ?? (heading ? defaultTemplate : undefined);
+    const template = rawTemplate != null ? resolveTemplateName(rawTemplate) : undefined;
 
     // Extract heading text so templates (e.g. sectionHeader) that expect a
     // `title` property receive it without having to reach into sourceHeading.
@@ -434,12 +439,45 @@ function splitIntoSentences(text: string): string[] {
   return merged;
 }
 
+interface ImageRef {
+  url: string;
+  alt?: string;
+}
+
 /**
- * Walk a MarkdownNode tree depth-first to find the first image node.
- * Returns the MarkdownImage or undefined if none found.
+ * Walk a parsed HTML sub-tree depth-first for an `<img>` with a `src`.
+ * Used to surface images that the WYSIWYG editor serialized as raw HTML
+ * (e.g. when an image was resized — markdown's `![alt](url)` shorthand
+ * has no width syntax, so resized images round-trip as `<img src width>`).
  */
-function findFirstImage(node: MarkdownNode): MarkdownImage | undefined {
-  if (node.type === 'image') return node as MarkdownImage;
+function findFirstHtmlImage(nodes: HtmlNode[]): ImageRef | undefined {
+  for (const node of nodes) {
+    if (node.type !== 'htmlElement') continue;
+    if (node.tagName === 'img' && node.attributes.src) {
+      return { url: node.attributes.src, alt: node.attributes.alt };
+    }
+    const nested = findFirstHtmlImage(node.children);
+    if (nested) return nested;
+  }
+  return undefined;
+}
+
+/**
+ * Walk a MarkdownNode tree depth-first to find the first image reference,
+ * whether expressed as a markdown image node or a raw HTML `<img>` tag.
+ */
+function findFirstImage(node: MarkdownNode): ImageRef | undefined {
+  if (node.type === 'image') {
+    const img = node as { url: string; alt?: string };
+    return { url: img.url, alt: img.alt };
+  }
+  if (node.type === 'htmlBlock' || node.type === 'htmlInline') {
+    const html = node as { htmlChildren?: HtmlNode[] };
+    if (html.htmlChildren) {
+      const found = findFirstHtmlImage(html.htmlChildren);
+      if (found) return found;
+    }
+  }
   if ('children' in node && Array.isArray((node as { children?: unknown[] }).children)) {
     for (const child of (node as { children: MarkdownNode[] }).children) {
       const found = findFirstImage(child);

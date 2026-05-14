@@ -69,11 +69,11 @@ describe('OutlinePanel', () => {
   });
 
   it('shows a template chip on annotated headings', async () => {
-    const md = '# Welcome {[titleBlock]}\n\nIntro.\n';
+    const md = '# Welcome {[title]}\n\nIntro.\n';
     const { container } = renderOutline(md);
     await screen.findByTestId('outline-panel');
     const chip = container.querySelector('.squisq-outline-template-chip');
     expect(chip).not.toBeNull();
-    expect(chip!.textContent).toContain('Title Block');
+    expect(chip!.textContent).toContain('Title');
   });
 });

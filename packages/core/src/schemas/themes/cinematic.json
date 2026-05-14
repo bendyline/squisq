@@ -32,7 +32,7 @@
     "ambientMotion": true,
     "defaultTransition": { "type": "dissolve", "duration": 1.2 },
     "templateHints": {
-      "titleBlock": { "showAccentLine": true }
+      "title": { "showAccentLine": true }
     }
   },
   "colorSchemes": {

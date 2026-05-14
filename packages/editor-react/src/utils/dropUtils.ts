@@ -33,19 +33,67 @@ export function partitionFiles(files: File[]): { media: File[]; text: File[] } {
 
 /**
  * Add media files to a MediaProvider. Returns the relative paths
- * assigned by the provider.
+ * assigned by the provider, with `null` slots where a file could not
+ * be processed — keeping the result aligned with the input array so
+ * callers can correlate indices.
+ *
+ * Two failure modes are handled defensively:
+ *
+ * 1. `file.arrayBuffer()` throws (`InvalidStateError` — "An operation
+ *    that depends on state cached in an interface object was made but
+ *    the state had changed since it was read from disk"). This happens
+ *    with virtual drag sources whose File reference goes stale before
+ *    the async read completes — Phone Link / iOS continuity / certain
+ *    screenshot tools / etc.
+ *
+ * 2. `file.arrayBuffer()` returns a 0-byte buffer. Some virtual
+ *    sources resolve the read successfully but with no payload,
+ *    leaving an empty file in the media bin. We skip those so the
+ *    bin doesn't accumulate placeholders.
+ *
+ * In both cases we warn via console rather than throwing, so a single
+ * problematic file doesn't abort a multi-file drop.
  */
 export async function processMediaFiles(
   files: File[],
   mediaProvider: MediaProvider,
-): Promise<string[]> {
-  const paths: string[] = [];
+): Promise<(string | null)[]> {
+  const paths: (string | null)[] = [];
 
   for (const file of files) {
-    const buffer = await file.arrayBuffer();
+    let buffer: ArrayBuffer;
+    try {
+      buffer = await file.arrayBuffer();
+    } catch (err: unknown) {
+      console.warn(
+        `[squisq-editor] Skipped dropped file "${file.name}" — could not read its contents.`,
+        'This is typical for drags from virtual sources (Phone Link, screenshot tools, cross-tab drags) whose File reference goes stale before the async read completes.',
+        err instanceof Error ? err.message : err,
+      );
+      paths.push(null);
+      continue;
+    }
+
+    if (buffer.byteLength === 0) {
+      console.warn(
+        `[squisq-editor] Skipped dropped file "${file.name}" — its contents read as 0 bytes. ` +
+          'The drag source likely never materialized the file (try saving it to disk first, then dragging from there).',
+      );
+      paths.push(null);
+      continue;
+    }
+
     const mimeType = file.type || 'application/octet-stream';
-    const path = await mediaProvider.addMedia(file.name, buffer, mimeType);
-    paths.push(path);
+    try {
+      const path = await mediaProvider.addMedia(file.name, buffer, mimeType);
+      paths.push(path);
+    } catch (err: unknown) {
+      console.warn(
+        `[squisq-editor] Failed to save "${file.name}" via mediaProvider:`,
+        err instanceof Error ? err.message : err,
+      );
+      paths.push(null);
+    }
   }
 
   return paths;

@@ -199,8 +199,7 @@ export function VersionHistoryPanel() {
             <div className="squisq-version-history-diff">
               <div className="squisq-version-history-diff-header">
                 <span className="squisq-version-history-diff-label">
-                  <strong>Snapshot</strong>{' '}
-                  {dateFormatter.format(state.selected.version.timestamp)}
+                  <strong>Snapshot</strong> {dateFormatter.format(state.selected.version.timestamp)}
                 </span>
                 <span className="squisq-version-history-diff-label">
                   <strong>Current</strong>
@@ -254,8 +253,7 @@ export function VersionHistoryPanel() {
                     onClick={() => setState((s) => ({ ...s, selected: null }))}
                   >
                     <span className="squisq-version-history-row__time">
-                      <strong>Current</strong> &middot;{' '}
-                      {dateFormatter.format(state.currentStamp)}
+                      <strong>Current</strong> &middot; {dateFormatter.format(state.currentStamp)}
                     </span>
                     <span className="squisq-version-history-row__size">
                       {formatBytes(currentSize)}
@@ -263,7 +261,8 @@ export function VersionHistoryPanel() {
                   </button>
                 </li>
                 {visibleVersions.map((v) => {
-                  const pending = state.pendingRevert !== null && state.pendingRevert.path === v.path;
+                  const pending =
+                    state.pendingRevert !== null && state.pendingRevert.path === v.path;
                   const selected = state.selected?.version.path === v.path;
                   return (
                     <li
@@ -280,7 +279,9 @@ export function VersionHistoryPanel() {
                         <span className="squisq-version-history-row__time">
                           {dateFormatter.format(v.timestamp)}
                         </span>
-                        <span className="squisq-version-history-row__size">{formatBytes(v.size)}</span>
+                        <span className="squisq-version-history-row__size">
+                          {formatBytes(v.size)}
+                        </span>
                       </button>
                       <span className="squisq-version-history-row__actions">
                         <button
@@ -294,8 +295,8 @@ export function VersionHistoryPanel() {
                       {pending && (
                         <div className="squisq-version-history-confirm">
                           <span>
-                            Revert to this version? Your current draft will be saved as a new snapshot
-                            first. Reverting will reset your editor undo state.
+                            Revert to this version? Your current draft will be saved as a new
+                            snapshot first. Reverting will reset your editor undo state.
                           </span>
                           <span className="squisq-version-history-confirm-actions">
                             <button

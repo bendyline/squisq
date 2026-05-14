@@ -15,6 +15,8 @@ export default defineConfig({
     'transform/index': 'src/transform/index.ts',
     'versions/index': 'src/versions/index.ts',
     'jsonForm/index': 'src/jsonForm/index.ts',
+    'imageEdit/index': 'src/imageEdit/index.ts',
+    'icons/index': 'src/icons/index.ts',
   },
   format: ['esm'],
   dts: true,

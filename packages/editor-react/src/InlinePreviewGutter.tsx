@@ -36,9 +36,15 @@ import {
   DEFAULT_THEME,
   type RenderContext,
 } from '@bendyline/squisq/doc';
-import { extractPlainText } from '@bendyline/squisq/markdown';
-import type { MarkdownBlockNode, MarkdownList, MarkdownTable } from '@bendyline/squisq/markdown';
-import { BlockRenderer } from '@bendyline/squisq-react';
+import { extractPlainText, getChildren } from '@bendyline/squisq/markdown';
+import type {
+  MarkdownBlockNode,
+  MarkdownList,
+  MarkdownNode,
+  MarkdownTable,
+} from '@bendyline/squisq/markdown';
+import { BlockRenderer, MediaContext } from '@bendyline/squisq-react';
+import type { MediaProvider } from '@bendyline/squisq/schemas';
 import { useEditorContext } from './EditorContext';
 import { templateLabel } from './TemplatePicker';
 import { useHeadingLayout } from './useHeadingLayout';
@@ -74,6 +80,85 @@ function extractListItems(contents?: MarkdownBlockNode[]): string[] {
   return items;
 }
 
+interface PreviewImage {
+  src: string;
+  alt: string;
+  width?: number;
+  height?: number;
+}
+
+function parseDim(raw: string | undefined): number | undefined {
+  if (raw === undefined) return undefined;
+  const n = parseFloat(raw);
+  return Number.isFinite(n) && n > 0 ? n : undefined;
+}
+
+function extractBlockImages(contents?: MarkdownBlockNode[]): PreviewImage[] {
+  if (!contents || contents.length === 0) return [];
+  const images: PreviewImage[] = [];
+
+  // Walk an HTML sub-DOM looking for <img src="..."> elements that the
+  // markdown parser produced for HTML-block / inline-HTML image tags.
+  // (When WYSIWYG persists an explicit width/height the image round-trips
+  // as <img …> rather than the ![](src) shorthand.)
+  function walkHtml(node: {
+    type: string;
+    tagName?: string;
+    attributes?: Record<string, string>;
+    children?: unknown[];
+  }): void {
+    if (node.type === 'htmlElement' && node.tagName === 'img') {
+      const src = node.attributes?.src;
+      if (src) {
+        images.push({
+          src,
+          alt: node.attributes?.alt ?? '',
+          width: parseDim(node.attributes?.width),
+          height: parseDim(node.attributes?.height),
+        });
+      }
+    }
+    if (Array.isArray(node.children)) {
+      for (const child of node.children) {
+        walkHtml(child as { type: string });
+      }
+    }
+  }
+
+  function walk(node: MarkdownNode): void {
+    if ('type' in node && node.type === 'image' && 'url' in node) {
+      const img = node as { url: string; alt?: string };
+      if (img.url) images.push({ src: img.url, alt: img.alt ?? '' });
+    }
+    if ('type' in node && node.type === 'htmlBlock') {
+      const block = node as unknown as { htmlChildren?: unknown[] };
+      for (const child of block.htmlChildren ?? []) {
+        walkHtml(child as { type: string });
+      }
+    }
+    for (const child of getChildren(node)) walk(child);
+  }
+  for (const node of contents) walk(node);
+  return images;
+}
+
+/** Like extractBlockImages, but also descends into the block's child blocks
+ *  so an annotated parent block can pick up media defined in a sub-section. */
+function collectImagesDeep(block: Block): PreviewImage[] {
+  const images: PreviewImage[] = [];
+  const seen = new Set<string>();
+  function visit(b: Block): void {
+    for (const img of extractBlockImages(b.contents)) {
+      if (seen.has(img.src)) continue;
+      seen.add(img.src);
+      images.push(img);
+    }
+    for (const child of b.children ?? []) visit(child);
+  }
+  visit(block);
+  return images;
+}
+
 function extractTableData(contents?: MarkdownBlockNode[]): {
   headers: string[];
   rows: string[][];
@@ -98,11 +183,12 @@ function getTemplateDefaults(
   headingText: string,
   bodyText: string,
   contents?: MarkdownBlockNode[],
+  images: PreviewImage[] = [],
 ): Record<string, unknown> {
   switch (templateName) {
     case 'statHighlight':
       return { stat: headingText, description: bodyText || headingText };
-    case 'quoteBlock':
+    case 'quote':
     case 'fullBleedQuote':
     case 'pullQuote':
       return { quote: bodyText || headingText };
@@ -110,7 +196,7 @@ function getTemplateDefaults(
       return { fact: headingText, explanation: bodyText || headingText };
     case 'comparisonBar':
       return { leftLabel: 'A', leftValue: 60, rightLabel: 'B', rightValue: 40 };
-    case 'listBlock': {
+    case 'list': {
       const items = extractListItems(contents);
       return { items: items.length > 0 ? items : ['Item 1', 'Item 2', 'Item 3'] };
     }
@@ -121,6 +207,37 @@ function getTemplateDefaults(
     case 'dataTable': {
       const tableData = extractTableData(contents);
       return tableData ?? { headers: ['Column'], rows: [['Data']] };
+    }
+    case 'imageWithCaption': {
+      const first = images[0];
+      return {
+        imageSrc: first?.src ?? '',
+        imageAlt: first?.alt ?? headingText,
+        caption: bodyText || headingText,
+        captionPosition: 'bottom',
+      };
+    }
+    case 'leftFeature':
+    case 'rightFeature': {
+      // Mirror the LinearDocView / buildPreviewDoc defaults so the
+      // mini gutter card shows the same content as the main preview.
+      const first = images[0];
+      return {
+        imageSrc: first?.src ?? '',
+        imageAlt: first?.alt ?? headingText,
+        imageWidth: first?.width,
+        imageHeight: first?.height,
+        title: headingText,
+        body: bodyText,
+      };
+    }
+    case 'videoWithCaption': {
+      const first = images[0];
+      return {
+        videoSrc: first?.src ?? '',
+        caption: bodyText || headingText,
+        captionPosition: 'bottom',
+      };
     }
     default:
       return {};
@@ -143,6 +260,12 @@ export interface InlinePreviewGutterProps {
    * the gutter. Defaults to 24.
    */
   connectorWidth?: number;
+  /**
+   * Optional MediaProvider used to resolve relative image src values inside
+   * preview cards. When omitted, images with relative paths fall back to
+   * `basePath`-prefixed URLs (which usually 404 in container-backed editors).
+   */
+  mediaProvider?: MediaProvider | null;
 }
 
 interface PreviewItem {
@@ -175,6 +298,7 @@ export function InlinePreviewGutter({
   viewport = VIEWPORT_PRESETS.landscape,
   className,
   connectorWidth = 24,
+  mediaProvider = null,
 }: InlinePreviewGutterProps) {
   const { doc } = useEditorContext();
   const gutterRef = useRef<HTMLElement | null>(null);
@@ -201,7 +325,13 @@ export function InlinePreviewGutter({
         duration: 1,
         audioSegment: 0,
         title: headingText,
-        ...getTemplateDefaults(template, headingText, bodyText, block.contents),
+        ...getTemplateDefaults(
+          template,
+          headingText,
+          bodyText,
+          block.contents,
+          collectImagesDeep(block),
+        ),
         ...annotation.params,
         ...block.templateOverrides,
       };
@@ -391,50 +521,52 @@ export function InlinePreviewGutter({
           <p>Tag a heading with a template to see a preview here.</p>
         </div>
       ) : (
-        items.map((item) => {
-          const top = positions.get(item.id);
-          const hidden = top == null;
-          return (
-            <div
-              key={item.id}
-              className="squisq-inline-preview-card"
-              data-template={item.template}
-              style={{
-                position: 'absolute',
-                top: `${top ?? 0}px`,
-                left: connectorWidth + CARD_LEFT_INSET,
-                right: 12,
-                visibility: hidden ? 'hidden' : 'visible',
-              }}
-              onClick={() => scrollToBlock(item.block)}
-            >
-              <div className="squisq-inline-preview-card-label">
-                <span className="squisq-inline-preview-card-template">
-                  {templateLabel(item.template)}
-                </span>
-                {item.headingText && (
-                  <>
-                    <span className="squisq-inline-preview-card-sep">—</span>
-                    <span className="squisq-inline-preview-card-title">{item.headingText}</span>
-                  </>
-                )}
-              </div>
+        <MediaContext.Provider value={mediaProvider ?? null}>
+          {items.map((item) => {
+            const top = positions.get(item.id);
+            const hidden = top == null;
+            return (
               <div
-                className="squisq-inline-preview-card-svg"
+                key={item.id}
+                className="squisq-inline-preview-card"
+                data-template={item.template}
                 style={{
-                  aspectRatio: `${viewport.width} / ${viewport.height}`,
+                  position: 'absolute',
+                  top: `${top ?? 0}px`,
+                  left: connectorWidth + CARD_LEFT_INSET,
+                  right: 12,
+                  visibility: hidden ? 'hidden' : 'visible',
                 }}
+                onClick={() => scrollToBlock(item.block)}
               >
-                <BlockRenderer
-                  block={item.block}
-                  blockTime={0}
-                  basePath={basePath}
-                  viewport={viewport}
-                />
+                <div className="squisq-inline-preview-card-label">
+                  <span className="squisq-inline-preview-card-template">
+                    {templateLabel(item.template)}
+                  </span>
+                  {item.headingText && (
+                    <>
+                      <span className="squisq-inline-preview-card-sep">—</span>
+                      <span className="squisq-inline-preview-card-title">{item.headingText}</span>
+                    </>
+                  )}
+                </div>
+                <div
+                  className="squisq-inline-preview-card-svg"
+                  style={{
+                    aspectRatio: `${viewport.width} / ${viewport.height}`,
+                  }}
+                >
+                  <BlockRenderer
+                    block={item.block}
+                    blockTime={0}
+                    basePath={basePath}
+                    viewport={viewport}
+                  />
+                </div>
               </div>
-            </div>
-          );
-        })
+            );
+          })}
+        </MediaContext.Provider>
       )}
     </aside>
   );

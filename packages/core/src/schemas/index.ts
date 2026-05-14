@@ -16,3 +16,11 @@ export {
 } from './LayoutStrategy.js';
 export type { LayoutHints } from './LayoutStrategy.js';
 export type { MediaProvider, MediaEntry } from './MediaProvider.js';
+export type {
+  ImageEditDoc,
+  ImageEditLayer,
+  ImageEditLayerKind,
+  ImageEditCanvas,
+  ImageEditMeta,
+  EditorLayerMeta,
+} from './ImageEditDoc.js';

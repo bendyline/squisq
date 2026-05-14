@@ -36,7 +36,7 @@ Examples
 - Full-line template with surrounding content:
 
 ```markdown
-{[titleBlock title="Welcome" subtitle="Intro to Squisq"]}
+{[title title="Welcome" subtitle="Intro to Squisq"]}
 
 Some body text here.
 ```
@@ -61,7 +61,7 @@ Built-in template types
 
 Below is a concise reference of built-in templates (names match the `template` property used in annotations). For each template we list the most common input keys — all inputs are optional unless otherwise stated.
 
-- `titleBlock`
+- `title`
   - Inputs: `title`, `subtitle`, `backgroundImage`, `backgroundGradient`
   - Usage: hero/title slide
 
@@ -73,7 +73,7 @@ Below is a concise reference of built-in templates (names match the `template` p
   - Inputs: `stat`, `description`, `trend`, `trendDirection`
   - Usage: numeric callouts (e.g., "89% — up 5%")
 
-- `quoteBlock`
+- `quote`
   - Inputs: `quote`, `attribution`, `backgroundImage`
   - Usage: standard quotes
 
@@ -93,7 +93,7 @@ Below is a concise reference of built-in templates (names match the `template` p
   - Inputs: `src` or `imageSrc`, `caption`, `alt`, `objectFit`
   - Usage: image + caption (inline or full-bleed)
 
-- `mapBlock`
+- `map`
   - Inputs: `center` (as `lat,lng`), `zoom`, `markers` (string that templates can parse), `tileUrl`
   - Usage: small map embeds
 
@@ -101,7 +101,7 @@ Below is a concise reference of built-in templates (names match the `template` p
   - Inputs: `quote`, `attribution`, `backgroundImage`
   - Usage: prominent quote over full bleed background
 
-- `listBlock`
+- `list`
   - Inputs: `heading`, `items` (comma-separated), `icon`
   - Usage: bulleted/numbered lists authored as a single template
 
@@ -197,7 +197,7 @@ Authoring tips
 - Prefer using annotations as standalone lines inside lists to author slide decks quickly:
 
 ```markdown
-- {[titleBlock title="Welcome" subtitle="Intro to Squisq"]}
+- {[title title="Welcome" subtitle="Intro to Squisq"]}
 - {[imageWithCaption src="photo.jpg" caption="Our product"]}
 ```
 

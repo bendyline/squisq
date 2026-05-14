@@ -111,6 +111,27 @@ export interface EditorState {
    * the toolbar can toggle it at runtime.
    */
   outlineVisible: boolean;
+  /**
+   * Whether inline block-template tags (the chip next to each templated
+   * heading in the WYSIWYG view, plus the subtle affordance chip on plain
+   * headings) are currently visible. Initialized from the EditorShell
+   * `blockTags` prop (default true); the View menu in the toolbar can
+   * toggle it at runtime.
+   */
+  blockTagsVisible: boolean;
+  /**
+   * Relative path of an image the user requested to edit, or `null` when
+   * no editor is open. Surfaced by `<ImageNodeView>`'s hover affordance
+   * and consumed by `<EditorShell>` to render the modal `<ImageEditor>`.
+   */
+  imageEditTarget: string | null;
+  /**
+   * Monotonic counter bumped whenever a managed media asset is rewritten
+   * (e.g. after the image-editor modal saves back). Image render paths
+   * that cache resolved blob URLs should include this in their effect
+   * deps so the new bytes get picked up.
+   */
+  mediaRevision: number;
 }
 
 export interface EditorActions {
@@ -132,10 +153,27 @@ export interface EditorActions {
   setStatusBarVisible: (visible: boolean) => void;
   /** Show or hide the left-side outline pane at runtime (driven by the View menu). */
   setOutlineVisible: (visible: boolean) => void;
+  /** Show or hide inline block-template tags at runtime (driven by the View menu). */
+  setBlockTagsVisible: (visible: boolean) => void;
   /** Insert text at the current cursor position in the active editor */
   insertAtCursor: (text: string) => void;
   /** Replace all editor content with the given text */
   replaceAll: (text: string) => void;
+  /**
+   * Request the modal image editor open on the given relative media path.
+   * The path must resolve through the active `mediaProvider`. No-op when
+   * no provider is wired — callers should hide the affordance in that
+   * case.
+   */
+  openImageEdit: (relativePath: string) => void;
+  /** Close the image editor modal without saving. */
+  closeImageEdit: () => void;
+  /**
+   * Bump `mediaRevision`. Called after the image editor writes back to
+   * the original media path so dependent `<img>` nodes re-resolve their
+   * blob URL.
+   */
+  bumpMediaRevision: () => void;
 }
 
 export interface EditorContextValue extends EditorState, EditorActions {
@@ -271,6 +309,11 @@ export interface EditorProviderProps {
    */
   outline?: boolean;
   /**
+   * Initial visibility of inline block-template tags on headings.
+   * Defaults to true. The toolbar's View menu can toggle it at runtime.
+   */
+  blockTags?: boolean;
+  /**
    * Bundled view preferences — a serializable JSON blob covering all
    * runtime-toggleable view options. When provided, individual values
    * here override the matching individual props (`inlinePreview`,
@@ -302,6 +345,8 @@ export interface ViewPreferences {
   inlinePreview?: boolean;
   /** Whether the bottom status bar is visible. */
   showStatusBar?: boolean;
+  /** Whether inline block-template tags on headings are visible. */
+  blockTags?: boolean;
 }
 
 /**
@@ -330,6 +375,7 @@ export function EditorProvider({
   inlinePreview = false,
   showStatusBar = true,
   outline = false,
+  blockTags = true,
   viewPreferences,
   onViewPreferencesChange,
   children,
@@ -340,6 +386,7 @@ export function EditorProvider({
   const effectiveInlinePreview = viewPreferences?.inlinePreview ?? inlinePreview;
   const effectiveShowStatusBar = viewPreferences?.showStatusBar ?? showStatusBar;
   const effectiveOutline = viewPreferences?.outline ?? outline;
+  const effectiveBlockTags = viewPreferences?.blockTags ?? blockTags;
   // Resolve once per provider mount. Changing fileName/language after mount
   // would require recreating the Monaco model anyway, so treat it as static.
   const { mode: editorMode, language: resolvedLanguage } = useMemo(
@@ -383,6 +430,21 @@ export function EditorProvider({
   useEffect(() => {
     setOutlineVisibleRaw(outline);
   }, [outline]);
+  const [blockTagsVisible, setBlockTagsVisibleRaw] = useState<boolean>(effectiveBlockTags);
+  useEffect(() => {
+    setBlockTagsVisibleRaw(blockTags);
+  }, [blockTags]);
+  const [imageEditTarget, setImageEditTarget] = useState<string | null>(null);
+  const [mediaRevision, setMediaRevision] = useState(0);
+  const openImageEdit = useCallback((relativePath: string) => {
+    setImageEditTarget(relativePath);
+  }, []);
+  const closeImageEdit = useCallback(() => {
+    setImageEditTarget(null);
+  }, []);
+  const bumpMediaRevision = useCallback(() => {
+    setMediaRevision((n) => n + 1);
+  }, []);
 
   // Sync from the bundled `viewPreferences` prop. Runs in addition to the
   // individual prop syncs above. When both APIs are present, the bundled
@@ -397,6 +459,9 @@ export function EditorProvider({
     }
     if (viewPreferences.outline !== undefined) {
       setOutlineVisibleRaw(viewPreferences.outline);
+    }
+    if (viewPreferences.blockTags !== undefined) {
+      setBlockTagsVisibleRaw(viewPreferences.blockTags);
     }
   }, [viewPreferences]);
 
@@ -413,12 +478,15 @@ export function EditorProvider({
   statusBarRef.current = statusBarVisible;
   const outlineRef = useRef(outlineVisible);
   outlineRef.current = outlineVisible;
+  const blockTagsRef = useRef(blockTagsVisible);
+  blockTagsRef.current = blockTagsVisible;
   const setInlinePreviewVisible = useCallback((visible: boolean) => {
     setInlinePreviewVisibleRaw(visible);
     onViewPreferencesChangeRef.current?.({
       inlinePreview: visible,
       showStatusBar: statusBarRef.current,
       outline: outlineRef.current,
+      blockTags: blockTagsRef.current,
     });
   }, []);
   const setStatusBarVisible = useCallback((visible: boolean) => {
@@ -427,6 +495,7 @@ export function EditorProvider({
       inlinePreview: inlinePreviewRef.current,
       showStatusBar: visible,
       outline: outlineRef.current,
+      blockTags: blockTagsRef.current,
     });
   }, []);
   const setOutlineVisible = useCallback((visible: boolean) => {
@@ -435,6 +504,16 @@ export function EditorProvider({
       inlinePreview: inlinePreviewRef.current,
       showStatusBar: statusBarRef.current,
       outline: visible,
+      blockTags: blockTagsRef.current,
+    });
+  }, []);
+  const setBlockTagsVisible = useCallback((visible: boolean) => {
+    setBlockTagsVisibleRaw(visible);
+    onViewPreferencesChangeRef.current?.({
+      inlinePreview: inlinePreviewRef.current,
+      showStatusBar: statusBarRef.current,
+      outline: outlineRef.current,
+      blockTags: visible,
     });
   }, []);
   const [tiptapEditor, setTiptapEditor] = useState<TiptapEditor | null>(null);
@@ -668,6 +747,9 @@ export function EditorProvider({
       inlinePreviewVisible,
       statusBarVisible,
       outlineVisible,
+      blockTagsVisible,
+      imageEditTarget,
+      mediaRevision,
       tiptapEditor,
       monacoEditor,
       container,
@@ -685,8 +767,12 @@ export function EditorProvider({
       setInlinePreviewVisible,
       setStatusBarVisible,
       setOutlineVisible,
+      setBlockTagsVisible,
       insertAtCursor,
       replaceAll,
+      openImageEdit,
+      closeImageEdit,
+      bumpMediaRevision,
     }),
     [
       markdownSource,
@@ -701,6 +787,7 @@ export function EditorProvider({
       inlinePreviewVisible,
       statusBarVisible,
       outlineVisible,
+      blockTagsVisible,
       tiptapEditor,
       monacoEditor,
       container,
@@ -715,8 +802,17 @@ export function EditorProvider({
       setTiptapEditor,
       setMonacoEditor,
       setTheme,
+      setInlinePreviewVisible,
+      setStatusBarVisible,
+      setOutlineVisible,
+      setBlockTagsVisible,
       insertAtCursor,
       replaceAll,
+      imageEditTarget,
+      mediaRevision,
+      openImageEdit,
+      closeImageEdit,
+      bumpMediaRevision,
     ],
   );
 

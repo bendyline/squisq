@@ -24,7 +24,7 @@ squisq/
       src/
         schemas/            # Doc, BlockTemplates, Viewport, LayoutStrategy, Theme, themeLibrary
         doc/
-          templates/        # 17 block templates (titleBlock, statHighlight, etc.)
+          templates/        # 17 block templates (title, statHighlight, etc.)
           utils/            # animationUtils, themeUtils
         spatial/            # Haversine distance, Geohash encode/decode
         storage/            # StorageAdapter interface, Memory + LocalStorage adapters, ContentContainer

@@ -1,0 +1,201 @@
+/**
+ * Image edit affordance + modal overlay.
+ *
+ * The affordance is the small floating "Edit" button that appears on
+ * hovered/selected images inside the WYSIWYG view. The modal hosts a
+ * full <ImageEditor> on top of the editor surface.
+ */
+
+.squisq-image-edit-affordance {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  font: 500 12px/1.2 var(--squisq-ux-font, system-ui, -apple-system, sans-serif);
+  /* Theme-tied colors. The shell sets `--squisq-editor-*` tokens (or
+     equivalents via [data-theme]) on the WYSIWYG root; we fall back to
+     a neutral light surface so the button is legible on photographic
+     content even when no theme variables are set. The dark-theme block
+     below overrides for [data-theme='dark']. */
+  color: var(--squisq-editor-text, #1f2937);
+  background: var(--squisq-editor-control-bg, rgba(255, 255, 255, 0.92));
+  border: 1px solid var(--squisq-editor-control-border, rgba(0, 0, 0, 0.18));
+  border-radius: 4px;
+  cursor: pointer;
+  z-index: 4;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
+  user-select: none;
+  backdrop-filter: blur(4px);
+}
+
+.squisq-image-edit-affordance:hover {
+  background: var(--squisq-editor-control-bg-hover, rgba(245, 245, 247, 0.98));
+}
+
+.squisq-image-edit-affordance:focus-visible {
+  outline: 2px solid var(--squisq-editor-accent, #4a9eff);
+  outline-offset: 2px;
+}
+
+[data-theme='dark'] .squisq-image-edit-affordance,
+.squisq-editor-shell[data-theme='dark'] .squisq-image-edit-affordance {
+  color: var(--squisq-editor-text, #f3f4f6);
+  background: var(--squisq-editor-control-bg, rgba(20, 20, 20, 0.85));
+  border-color: var(--squisq-editor-control-border, rgba(255, 255, 255, 0.2));
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.35);
+}
+
+[data-theme='dark'] .squisq-image-edit-affordance:hover,
+.squisq-editor-shell[data-theme='dark'] .squisq-image-edit-affordance:hover {
+  background: var(--squisq-editor-control-bg-hover, rgba(45, 45, 45, 0.95));
+}
+
+/* ── Resize handle ──────────────────────────────────────────────
+   Small grip at the bottom-right corner of a hovered/selected image.
+   Mousedown starts an aspect-locked resize; double-click clears the
+   width/height attrs (returns image to natural rendered size). */
+.squisq-image-resize-handle {
+  position: absolute;
+  right: -4px;
+  bottom: -4px;
+  width: 14px;
+  height: 14px;
+  border: 1.5px solid var(--squisq-editor-accent, #4a9eff);
+  background: var(--squisq-editor-control-bg, rgba(255, 255, 255, 0.95));
+  border-radius: 2px;
+  cursor: nwse-resize;
+  z-index: 5;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
+  user-select: none;
+  touch-action: none;
+}
+
+.squisq-image-resize-handle:hover {
+  background: var(--squisq-editor-accent, #4a9eff);
+}
+
+[data-theme='dark'] .squisq-image-resize-handle,
+.squisq-editor-shell[data-theme='dark'] .squisq-image-resize-handle {
+  background: var(--squisq-editor-control-bg, rgba(20, 20, 20, 0.9));
+}
+
+.squisq-image-resize-readout {
+  position: absolute;
+  left: 8px;
+  bottom: 8px;
+  padding: 2px 6px;
+  font: 500 11px/1.2 var(--squisq-ux-font, system-ui, -apple-system, sans-serif);
+  color: var(--squisq-editor-text, #fff);
+  background: rgba(0, 0, 0, 0.7);
+  border-radius: 3px;
+  pointer-events: none;
+  z-index: 5;
+}
+
+.squisq-image-edit-modal {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.55);
+  z-index: 1000;
+  padding: 24px;
+}
+
+.squisq-image-edit-modal__surface {
+  display: flex;
+  flex-direction: column;
+  width: min(1200px, 100%);
+  height: min(800px, 100%);
+  background: #fff;
+  border-radius: 6px;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.4);
+  overflow: hidden;
+}
+
+[data-theme='dark'] .squisq-image-edit-modal__surface,
+.squisq-editor-shell[data-theme='dark'] .squisq-image-edit-modal__surface {
+  background: #1e1e1e;
+  color: #e4e4e4;
+}
+
+.squisq-image-edit-modal__header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 12px;
+  border-bottom: 1px solid #d4d4d4;
+  font: 500 13px/1.2 var(--squisq-ux-font, system-ui, -apple-system, sans-serif);
+  background: #f5f5f5;
+}
+
+[data-theme='dark'] .squisq-image-edit-modal__header {
+  background: #2a2a2a;
+  border-bottom-color: #3a3a3a;
+}
+
+.squisq-image-edit-modal__title {
+  font-weight: 600;
+}
+
+.squisq-image-edit-modal__path {
+  flex: 1;
+  color: #666;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+[data-theme='dark'] .squisq-image-edit-modal__path {
+  color: #aaa;
+}
+
+.squisq-image-edit-modal__close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  font-size: 22px;
+  line-height: 1;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  cursor: pointer;
+  color: inherit;
+}
+
+.squisq-image-edit-modal__close:hover {
+  background: rgba(0, 0, 0, 0.07);
+}
+
+[data-theme='dark'] .squisq-image-edit-modal__close:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.squisq-image-edit-modal__body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+}
+
+.squisq-image-edit-modal__loading,
+.squisq-image-edit-modal__error {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font: 500 13px var(--squisq-ux-font, system-ui, -apple-system, sans-serif);
+  color: #666;
+}
+
+.squisq-image-edit-modal__error {
+  color: #c0392b;
+}

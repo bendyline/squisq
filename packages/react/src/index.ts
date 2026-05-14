@@ -26,6 +26,7 @@ export { useAudioSync } from './hooks/useAudioSync.js';
 export { useDocPlayback } from './hooks/useDocPlayback.js';
 export { useViewportOrientation } from './hooks/useViewportOrientation.js';
 export { MediaContext, useMediaProvider, useMediaUrl } from './hooks/MediaContext.js';
+export { useAutoSurface } from './hooks/useAutoSurface.js';
 
 // Types
 export type { AudioProvider, AudioState, AudioActions } from './hooks/AudioProvider.js';

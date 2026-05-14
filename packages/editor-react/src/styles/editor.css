@@ -116,6 +116,16 @@
   border-right: 1px solid rgba(0, 0, 0, 0.12);
   align-self: stretch;
   align-items: center;
+  box-sizing: border-box;
+}
+
+/* When the outline pane is visible, anchor the toolbar's view-tabs section
+ * to the outline pane's width so their right-edge dividers line up
+ * vertically — otherwise the view-tabs border and the outline's right edge
+ * sit at different X positions and the chrome looks misaligned. */
+.squisq-editor-shell[data-outline-visible='true'] .squisq-toolbar-view-tabs {
+  flex-shrink: 0;
+  min-width: var(--squisq-outline-width, 240px);
 }
 
 .squisq-toolbar-actions {
@@ -412,9 +422,38 @@
   color: #6b7280;
 }
 
+/* Mini thumbnail of the current template's wireframe inside the trigger.
+   The underlying SVGs are 56×40; we shrink them via width/height so the
+   trigger button stays compact next to other toolbar controls. */
+.squisq-template-picker-trigger-thumb {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  border: 1px solid #e5e7eb;
+  border-radius: 3px;
+  background: #fff;
+  padding: 1px;
+  line-height: 0;
+}
+.squisq-template-picker-trigger-thumb svg {
+  width: 24px;
+  height: 17px;
+  display: block;
+}
+
+/* When the toolbar is width-constrained, drop the "Block:" label so the
+   thumbnail + name + caret can fit. The toolbar root sets
+   container-type: inline-size + container-name: squisq-toolbar. */
+@container squisq-toolbar (max-width: 900px) {
+  .squisq-template-picker-trigger-label {
+    display: none;
+  }
+}
+
 .squisq-template-picker-trigger-value {
   color: #111827;
-  font-weight: 600;
+  font-weight: 400;
   max-width: 120px;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -600,8 +639,9 @@
 .squisq-template-badge {
   display: inline-flex;
   align-items: center;
+  gap: 4px;
   margin-left: 8px;
-  padding: 1px 8px;
+  padding: 1px 6px 1px 8px;
   font-size: 11px;
   font-weight: 600;
   font-family: inherit;
@@ -612,10 +652,64 @@
   vertical-align: middle;
   user-select: none;
   line-height: 1.6;
+  cursor: pointer;
+  transition:
+    background 0.15s ease,
+    border-color 0.15s ease;
+}
+
+.squisq-template-badge:hover,
+.squisq-template-badge:focus-visible {
+  background: #ddd6fe;
+  border-color: #a78bfa;
+  outline: none;
+}
+
+.squisq-template-badge::before {
+  content: attr(data-template-label);
 }
 
 .squisq-template-badge::after {
-  content: attr(data-template-label);
+  content: '▾';
+  font-size: 9px;
+  line-height: 1;
+  opacity: 0.7;
+}
+
+/* Empty variant — subtle affordance on plain headings that opens the
+ * template picker. Quiet by default, brightens when the heading is
+ * hovered, fully styled on direct hover/focus. */
+.squisq-template-badge.squisq-template-badge--empty {
+  color: #94a3b8;
+  background: transparent;
+  border-color: #d1d5db;
+  border-style: dashed;
+  opacity: 0.5;
+}
+
+.squisq-template-badge.squisq-template-badge--empty::before {
+  content: 'Block';
+  font-weight: 500;
+}
+
+:is(h1, h2, h3, h4, h5, h6):hover > .squisq-template-badge--empty {
+  opacity: 0.9;
+}
+
+.squisq-template-badge.squisq-template-badge--empty:hover,
+.squisq-template-badge.squisq-template-badge--empty:focus-visible {
+  opacity: 1;
+  color: #6d28d9;
+  background: #ede9fe;
+  border-color: #c4b5fd;
+  border-style: solid;
+}
+
+/* Hide block-template chips when the View menu toggles them off. The
+ * underlying `data-template` heading attribute is untouched — only the
+ * inline visual affordance disappears. */
+.squisq-wysiwyg-container[data-block-tags='hidden'] .squisq-template-badge {
+  display: none;
 }
 
 /* ─── Status Bar ─────────────────────────────────────── */
@@ -686,6 +780,24 @@
     url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='16' height='22' viewBox='0 0 16 22'><g fill='none' stroke-linecap='round'><path d='M5 3 L11 3 M5 19 L11 19 M8 3 L8 19' stroke='white' stroke-width='3.2'/><path d='M5 3 L11 3 M5 19 L11 19 M8 3 L8 19' stroke='%231f2937' stroke-width='1.4'/></g></svg>")
       8 11,
     text;
+}
+
+/* ── Drop cursor (I-beam) ─────────────────────────────────────
+   ProseMirror's Dropcursor extension (bundled with StarterKit) renders
+   a horizontal bar at the prospective drop position when an image or
+   any other node is being dragged inside the document. The default
+   styling is a 1px black line that's easy to miss against body text,
+   so we beef it up to a 3px accent-coloured bar with rounded ends. */
+.squisq-wysiwyg-editor .prosemirror-dropcursor-block,
+.squisq-wysiwyg-editor .prosemirror-dropcursor-inline {
+  background: var(--squisq-editor-accent, #4a9eff) !important;
+  border-radius: 2px;
+}
+.squisq-wysiwyg-editor .prosemirror-dropcursor-block {
+  height: 3px !important;
+}
+.squisq-wysiwyg-editor .prosemirror-dropcursor-inline {
+  width: 3px !important;
 }
 
 .squisq-wysiwyg-editor h1,
@@ -1185,6 +1297,22 @@
   color: #a78bfa;
   background: #2e1065;
   border-color: #6d28d9;
+}
+
+.squisq-editor-shell[data-theme='dark'] .squisq-template-badge.squisq-template-badge--empty {
+  color: #64748b;
+  background: transparent;
+  border-color: #374151;
+  border-style: dashed;
+}
+
+.squisq-editor-shell[data-theme='dark'] .squisq-template-badge.squisq-template-badge--empty:hover,
+.squisq-editor-shell[data-theme='dark']
+  .squisq-template-badge.squisq-template-badge--empty:focus-visible {
+  color: #c4b5fd;
+  background: #2e1065;
+  border-color: #6d28d9;
+  border-style: solid;
 }
 
 /* Status Bar */
@@ -2485,7 +2613,10 @@
   z-index: 10;
 }
 
-.squisq-editor-shell[data-theme='dark'] .squisq-raw-editor-container .monaco-editor .margin::before {
+.squisq-editor-shell[data-theme='dark']
+  .squisq-raw-editor-container
+  .monaco-editor
+  .margin::before {
   background: #1e1e1e;
 }
 
@@ -2744,21 +2875,134 @@
   color: #64748b;
 }
 
+/* Template-name chip + current-row highlight inherit the active document
+ * theme's accent via `--squisq-outline-accent` (injected by OutlinePanel
+ * from `previewSettings.activeTheme.colors.primary`). Without a theme
+ * mounted the fallback purple matches the original styling. Soft bg /
+ * border tints are derived from the accent via `color-mix` so any
+ * theme color produces a balanced, low-contrast surface. */
 .squisq-outline-template-chip {
   flex-shrink: 0;
   padding: 1px 6px;
   font-size: 10px;
   font-weight: 600;
-  color: #6d28d9;
-  background: #ede9fe;
-  border: 1px solid #c4b5fd;
+  color: var(--squisq-outline-accent, #6d28d9);
+  background: color-mix(in oklch, var(--squisq-outline-accent, #6d28d9) 12%, transparent);
+  border: 1px solid color-mix(in oklch, var(--squisq-outline-accent, #6d28d9) 35%, transparent);
   border-radius: 8px;
   line-height: 1.4;
 }
 
 .squisq-outline-row--current {
-  background: #ede9fe;
-  color: #4338ca;
+  background: color-mix(in oklch, var(--squisq-outline-accent, #4338ca) 14%, transparent);
+  color: var(--squisq-outline-accent, #4338ca);
+}
+
+/* ── Hover-revealed promote / demote arrows ─────────────────────
+ * The wrap is the row-level flex container. Arrows sit absolutely on
+ * the right edge so they overlay the template chip without causing
+ * layout shift on hover. Their background fills the row's hover tint
+ * so the chip behind them isn't visible while the buttons are active. */
+.squisq-outline-row-wrap {
+  position: relative;
+  display: flex;
+  align-items: stretch;
+}
+
+.squisq-outline-row-wrap .squisq-outline-row {
+  flex: 1;
+  min-width: 0;
+}
+
+.squisq-outline-row-actions {
+  position: absolute;
+  top: 50%;
+  right: 2px;
+  transform: translateY(-50%);
+  display: flex;
+  gap: 1px;
+  padding: 1px 2px;
+  border-radius: 4px;
+  opacity: 0;
+  pointer-events: none;
+  background: #f3f4f6;
+  transition: opacity 0.1s ease;
+}
+
+.squisq-outline-row-wrap:hover .squisq-outline-row-actions,
+.squisq-outline-row-wrap:focus-within .squisq-outline-row-actions {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+/* When the row is the active one, the actions tint matches the
+ * accent-tinted row background so they blend into the highlight. */
+.squisq-outline-row-wrap:has(.squisq-outline-row--current) .squisq-outline-row-actions {
+  background: color-mix(in oklch, var(--squisq-outline-accent, #4338ca) 14%, #f3f4f6);
+}
+
+/* Keep the row's hover fill while the cursor is on the arrows, since
+ * `:hover` on `.squisq-outline-row` won't match when the pointer leaves
+ * the button onto a sibling. */
+.squisq-outline-row-wrap:hover .squisq-outline-row:not(.squisq-outline-row--current) {
+  background: #f3f4f6;
+}
+
+.squisq-outline-row-arrow {
+  width: 18px;
+  height: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  border-radius: 3px;
+  padding: 0;
+  cursor: pointer;
+  color: #6b7280;
+  transition:
+    background 0.1s ease,
+    color 0.1s ease;
+}
+
+.squisq-outline-row-arrow:hover:not(:disabled) {
+  background: rgba(0, 0, 0, 0.08);
+  color: #111827;
+}
+
+.squisq-outline-row-arrow:focus-visible {
+  outline: 2px solid var(--squisq-outline-accent, #4338ca);
+  outline-offset: 1px;
+}
+
+.squisq-outline-row-arrow:disabled {
+  opacity: 0.3;
+  cursor: default;
+}
+
+.squisq-editor-shell[data-theme='dark'] .squisq-outline-row-actions {
+  background: #1f2937;
+}
+
+.squisq-editor-shell[data-theme='dark']
+  .squisq-outline-row-wrap:has(.squisq-outline-row--current)
+  .squisq-outline-row-actions {
+  background: color-mix(in oklch, var(--squisq-outline-accent, #4338ca) 32%, #1f2937);
+}
+
+.squisq-editor-shell[data-theme='dark']
+  .squisq-outline-row-wrap:hover
+  .squisq-outline-row:not(.squisq-outline-row--current) {
+  background: #1f2937;
+}
+
+.squisq-editor-shell[data-theme='dark'] .squisq-outline-row-arrow {
+  color: #9ca3af;
+}
+
+.squisq-editor-shell[data-theme='dark'] .squisq-outline-row-arrow:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.08);
+  color: #f9fafb;
 }
 
 .squisq-editor-shell[data-theme='dark'] .squisq-outline {
@@ -2806,15 +3050,19 @@
   color: #6b7280;
 }
 
+/* Dark mode keeps the same accent inheritance — but mixes the tint
+ * toward a higher saturation since transparent overlays on a dark
+ * surface read as much weaker than on light. Text color is lifted
+ * toward white so the accent stays legible against dark chrome. */
 .squisq-editor-shell[data-theme='dark'] .squisq-outline-template-chip {
-  color: #c4b5fd;
-  background: #312e81;
-  border-color: #4c1d95;
+  color: color-mix(in oklch, var(--squisq-outline-accent, #6d28d9) 55%, #ffffff);
+  background: color-mix(in oklch, var(--squisq-outline-accent, #6d28d9) 30%, transparent);
+  border-color: color-mix(in oklch, var(--squisq-outline-accent, #6d28d9) 55%, transparent);
 }
 
 .squisq-editor-shell[data-theme='dark'] .squisq-outline-row--current {
-  background: #312e81;
-  color: #ddd6fe;
+  background: color-mix(in oklch, var(--squisq-outline-accent, #4338ca) 32%, transparent);
+  color: color-mix(in oklch, var(--squisq-outline-accent, #4338ca) 55%, #ffffff);
 }
 
 /* (Dark-mode preview-gutter chrome flows through the custom-property
@@ -2948,4 +3196,66 @@
 .squisq-link-dialog-btn--primary:hover {
   background: #2563eb;
   border-color: #2563eb;
+}
+
+/* ─── FontAwesome glyph decorations (Monaco) ─────────────
+   Used by RawEditor to render the actual FA glyph as a Monaco
+   `before:` content decoration adjacent to each `{[icon]}` source
+   span. Per-family font-weight/font-family is necessary because the
+   Free tier ships three distinct fonts (Brands, Solid, Regular). */
+
+/* `inlineClassName` on Monaco's `before:` content decoration is
+   applied to the wrapper around the injected glyph character. We
+   render the codepoint via the appropriate FontAwesome font for the
+   icon's family. */
+.fa-glyph-decoration-brands {
+  font-family: 'Font Awesome 6 Brands' !important;
+  font-weight: 400 !important;
+  color: var(--squisq-fg, inherit);
+  padding-right: 2px;
+  font-style: normal !important;
+}
+
+.fa-glyph-decoration-solid {
+  font-family: 'Font Awesome 6 Free' !important;
+  font-weight: 900 !important;
+  color: var(--squisq-fg, inherit);
+  padding-right: 2px;
+  font-style: normal !important;
+}
+
+.fa-glyph-decoration-regular {
+  font-family: 'Font Awesome 6 Free' !important;
+  font-weight: 400 !important;
+  color: var(--squisq-fg, inherit);
+  padding-right: 2px;
+  font-style: normal !important;
+}
+
+/* Monaco's suggest widget — when a completion item's `label.label`
+   starts with a FontAwesome codepoint (we set this in RawEditor for
+   icon suggestions), use FA fonts as fallbacks so the glyph renders
+   instead of the empty ``-style placeholder square. Brand and
+   Free fonts are listed in order; the browser picks whichever has
+   the codepoint. font-weight 900 covers solid icons; brand icons
+   shipping under their own font don't care about weight. Regular FA
+   icons (weight 400) will fall through to the default and render
+   as a placeholder — an acceptable trade since regular is the
+   smallest tier in the Free catalog. */
+.monaco-editor .suggest-widget .monaco-list-row .label-name {
+  /* Real fonts first (used for the icon-name characters), then FA
+     fonts as fallbacks (used for the leading codepoint character).
+     `inherit` is illegal inside a comma-separated font-family list
+     — the browser drops the whole declaration if it appears there —
+     so we spell out the system stack explicitly. */
+  font-family:
+    -apple-system,
+    BlinkMacSystemFont,
+    'Segoe UI',
+    'Helvetica Neue',
+    Arial,
+    system-ui,
+    'Font Awesome 6 Brands',
+    'Font Awesome 6 Free',
+    sans-serif;
 }

@@ -11,6 +11,9 @@
  * using squisq's own parser.
  */
 
+import { templateLabel } from './TemplatePicker';
+import { resolveIcon } from '@bendyline/squisq/icons';
+
 // Hoisted regex patterns for inline markdown ↔ HTML conversion
 const RE_BOLD_STAR = /\*\*(.+?)\*\*/g;
 const RE_BOLD_UNDER = /__(.+?)__/g;
@@ -29,6 +32,14 @@ const RE_IMAGE = /!\[(.*?)\]\((.+?)\)/g;
 // remark-stringify may round-trip the colon as `\:` — tolerate either.
 const RE_MENTION = /@\[([^\]]+?)\]\(([a-z][a-z0-9+.-]*)\\?:([^)\s]+)\)/gi;
 const RE_MENTION_TAG = /<span\b[^>]*?\bdata-mention\b[^>]*?>(?:<[^>]+>)*([^<]*)<\/span>/gi;
+
+// Inline FontAwesome icon. Markdown form: `{[github]}` (bare) or
+// `{[fa-solid:user]}` (qualified). HTML form (produced by the
+// `InlineIcon` Tiptap node and consumed back by `htmlToInline`):
+// `<i data-icon="github" data-family="brands" data-name="github"
+//     class="fa-brands fa-github" contenteditable="false"></i>`.
+const RE_ICON_MD = /\{\[([a-zA-Z0-9_:-]+)\]\}/g;
+const RE_ICON_TAG = /<i\b[^>]*?\bdata-icon="([^"]*)"[^>]*?><\/i>/gi;
 const RE_STRONG_TAG = /<strong>(.*?)<\/strong>/g;
 const RE_B_TAG = /<b>(.*?)<\/b>/g;
 const RE_EM_TAG = /<em>(.*?)<\/em>/g;
@@ -266,6 +277,33 @@ export function markdownToTiptap(markdown: string): string {
       continue;
     }
 
+    // Standalone image — emit as a top-level block `<img>` instead of
+    // wrapping in `<p>`. The Tiptap Image extension is configured with
+    // `inline: false`, so `<p><img></p>` parses to an empty paragraph
+    // (the block image can't live inside the paragraph). That bug
+    // manifested as a broken-image glyph after a markdown → WYSIWYG
+    // round-trip for any dropped/pasted image.
+    const standaloneImageMatch = line.trim().match(/^!\[(.*?)\]\((.+?)\)$/);
+    if (standaloneImageMatch) {
+      flushList();
+      const alt = escapeHtml(standaloneImageMatch[1] ?? '');
+      const src = escapeHtml(standaloneImageMatch[2] ?? '');
+      outputBlocks.push(`<img alt="${alt}" src="${src}">`);
+      continue;
+    }
+
+    // Standalone raw HTML `<img>` line — emitted by `tiptapToMarkdown`
+    // when the user has resized an image (width/height attrs are
+    // serialized as HTML rather than markdown shorthand so the
+    // dimensions survive round-trip). Pass the tag through unchanged
+    // so Tiptap's Image extension parses width/height attributes.
+    const trimmed = line.trim();
+    if (/^<img\b[^>]*>$/i.test(trimmed)) {
+      flushList();
+      outputBlocks.push(trimmed);
+      continue;
+    }
+
     // Regular paragraph
     flushList();
     outputBlocks.push(`<p>${inlineToHtml(line)}</p>`);
@@ -309,6 +347,15 @@ export function tiptapToMarkdown(html: string): string {
       const tmplMatch = attrs.match(/data-template="([^"]+)"/);
       if (tmplMatch) {
         let annotation = tmplMatch[1];
+        // Defensive: an earlier broken build briefly rendered the
+        // template label as a real text node inside the badge, which
+        // bled the label into the heading's textContent. Strip a
+        // trailing copy of the template's label so existing documents
+        // self-heal on save.
+        const label = templateLabel(annotation);
+        if (label && text.endsWith(label)) {
+          text = text.slice(0, -label.length).trimEnd();
+        }
         const paramsMatch = attrs.match(/data-template-params="([^"]+)"/);
         if (paramsMatch) {
           annotation += ' ' + unescapeHtml(paramsMatch[1]);
@@ -489,7 +536,7 @@ export function tiptapToMarkdown(html: string): string {
       const src = /\bsrc="([^"]*)"/i.exec(attrs)?.[1];
       if (src) {
         const alt = /\balt="([^"]*)"/i.exec(attrs)?.[1] ?? '';
-        lines.push(`![${alt}](${src})`);
+        lines.push(serializeImage(src, alt, attrs));
         lines.push('');
       }
       remaining = remaining.slice(imgMatch[0].length);
@@ -582,6 +629,29 @@ function parseAlignments(separatorLine: string): (string | null)[] {
 
 // ─── Helpers ─────────────────────────────────────────────
 
+/**
+ * Serialize a parsed `<img>` tag back to markdown. When the tag carries
+ * an explicit `width` and/or `height` we emit a raw HTML `<img>` (the
+ * markdown shorthand `![alt](src)` has no syntax for dimensions);
+ * otherwise the friendlier shorthand is used. Markdown allows inline
+ * HTML, so the HTML form parses and renders identically in any
+ * CommonMark/GFM viewer.
+ */
+function serializeImage(src: string, alt: string, attrs: string): string {
+  const width = /\bwidth="([^"]*)"/i.exec(attrs)?.[1];
+  const height = /\bheight="([^"]*)"/i.exec(attrs)?.[1];
+  const title = /\btitle="([^"]*)"/i.exec(attrs)?.[1];
+  if (!width && !height) {
+    return `![${alt}](${src})`;
+  }
+  const parts = [`<img alt="${alt}" src="${src}"`];
+  if (width) parts.push(` width="${width}"`);
+  if (height) parts.push(` height="${height}"`);
+  if (title) parts.push(` title="${title}"`);
+  parts.push('>');
+  return parts.join('');
+}
+
 function escapeHtml(text: string): string {
   return text
     .replace(/&/g, '&amp;')
@@ -600,7 +670,56 @@ function unescapeHtml(text: string): string {
 
 /** Convert inline markdown to HTML for Tiptap consumption */
 function inlineToHtml(text: string): string {
-  let result = escapeHtml(text);
+  // Extract images/mentions/links to opaque placeholders BEFORE running
+  // any inline-formatting regexes. Otherwise `_` characters inside a URL
+  // (e.g. `mikehome_files/IMG_6829.JPEG`) get turned into `<em>` tags by
+  // the underscore-italic rule, mangling the src so the image renders
+  // broken after a markdown ↔ WYSIWYG round-trip.
+  const placeholders: string[] = [];
+  const stash = (html: string): string => {
+    const token = `\u0000PH${placeholders.length}\u0000`;
+    placeholders.push(html);
+    return token;
+  };
+
+  // We run extraction on the RAW text (before escapeHtml) so the
+  // captured groups are the literal markdown contents; then we
+  // selectively escape the parts of each placeholder that need it.
+
+  // Images first: ![alt](src) — must be before links so the `!` prefix is consumed
+  let staged = text.replace(RE_IMAGE, (_m, alt, src) =>
+    stash(`<img alt="${escapeHtml(alt)}" src="${escapeHtml(src)}">`),
+  );
+
+  // Mentions: @[Display](scheme:id) — must run before links so the
+  // bracket+paren isn't consumed as a regular link.
+  staged = staged.replace(RE_MENTION, (_m, label, kind, id) =>
+    stash(
+      `<span data-mention="true" data-kind="${escapeHtml(kind)}" data-id="${escapeHtml(id)}" data-label="${escapeHtml(label)}" class="mention">@${escapeHtml(label)}</span>`,
+    ),
+  );
+
+  // FontAwesome inline icons: {[github]} / {[fa-solid:user]} — resolve
+  // against the FA catalog so unknown / ambiguous tokens stay as
+  // literal text (preserved through escapeHtml later). Stashing here
+  // alongside images/mentions keeps the `_` and other punctuation in
+  // the class attribute from being mangled by the underscore-italic
+  // regex below.
+  staged = staged.replace(RE_ICON_MD, (full, token) => {
+    const icon = resolveIcon(token);
+    if (!icon) return full; // leave literal text — author may have meant it
+    return stash(
+      `<i class="fa-${icon.family} fa-${icon.name}" data-icon="${escapeHtml(token)}" data-family="${icon.family}" data-name="${icon.name}" contenteditable="false"></i>`,
+    );
+  });
+
+  // Links: [text](url) — stash but keep the link text available to
+  // inline formatting by recursing.
+  staged = staged.replace(RE_LINK, (_m, linkText, href) =>
+    stash(`<a href="${escapeHtml(href)}">${inlineToHtml(linkText)}</a>`),
+  );
+
+  let result = escapeHtml(staged);
 
   // Bold: **text** or __text__
   result = result.replace(RE_BOLD_STAR, '<strong>$1</strong>');
@@ -616,21 +735,11 @@ function inlineToHtml(text: string): string {
   // Inline code: `text`
   result = result.replace(RE_INLINE_CODE, '<code>$1</code>');
 
-  // Images first: ![alt](src) — must be before links so the `!` prefix is consumed
-  result = result.replace(RE_IMAGE, '<img alt="$1" src="$2">');
-
-  // Mentions: @[Display](scheme:id) — must run before links so the
-  // bracket+paren isn't consumed as a regular link. The input here has
-  // already been run through escapeHtml at the top of this function, so
-  // the captured groups are safe to interpolate directly.
-  result = result.replace(
-    RE_MENTION,
-    (_match, label, kind, id) =>
-      `<span data-mention="true" data-kind="${kind}" data-id="${id}" data-label="${label}" class="mention">@${label}</span>`,
-  );
-
-  // Links: [text](url)
-  result = result.replace(RE_LINK, '<a href="$2">$1</a>');
+  // Restore placeholders. escapeHtml turned each `\u0000PHn\u0000` into
+  // the same string (the NULs and digits are escape-safe), so the
+  // restoration regex still matches.
+  // eslint-disable-next-line no-control-regex
+  result = result.replace(/\u0000PH(\d+)\u0000/g, (_m, idx) => placeholders[Number(idx)] ?? '');
 
   return result;
 }
@@ -642,6 +751,12 @@ function htmlToInline(html: string): string {
   // Soft line breaks — convert <br> to GFM hard-break syntax (two trailing
   // spaces + newline) before stripping tags so the newline survives.
   result = result.replace(/<br\s*\/?>/gi, '  \n');
+
+  // FontAwesome inline icons — emit the original token. Must run before
+  // RE_I_TAG (which matches a bare `<i>` and would otherwise eat icon
+  // tags too). The token captured via data-icon already carries the
+  // qualified form when needed, so source round-trips exactly.
+  result = result.replace(RE_ICON_TAG, (_m, token) => `{[${token}]}`);
 
   // Strong
   result = result.replace(RE_STRONG_TAG, '**$1**');
@@ -673,11 +788,14 @@ function htmlToInline(html: string): string {
 
   // Images — order-agnostic attribute parsing (tiptap emits src-first,
   // our markdown-to-html emits alt-first; either must serialize back).
+  // When a width/height is present we serialize as raw HTML `<img>` so
+  // the dimensions survive the round-trip; otherwise the markdown
+  // shorthand `![alt](src)` is used.
   result = result.replace(RE_IMG_TAG, (match, attrs: string) => {
     const src = /\bsrc="([^"]*)"/i.exec(attrs)?.[1];
     if (!src) return match;
     const alt = /\balt="([^"]*)"/i.exec(attrs)?.[1] ?? '';
-    return `![${alt}](${src})`;
+    return serializeImage(src, alt, attrs);
   });
 
   // Strip remaining tags

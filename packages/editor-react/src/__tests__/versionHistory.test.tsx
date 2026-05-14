@@ -125,8 +125,10 @@ describe('versioning wiring + VersionHistoryPanel', () => {
     expect(last.reason).toBe('saved');
 
     fireEvent.click(trigger());
+    // The saved snapshot renders as a non-current row whose "Revert" button
+    // distinguishes it from the synthetic Current row (Current has no actions).
     await waitFor(() => {
-      expect(screen.getAllByText('Preview').length).toBeGreaterThan(0);
+      expect(screen.getByRole('button', { name: 'Revert' })).toBeTruthy();
     });
   });
 

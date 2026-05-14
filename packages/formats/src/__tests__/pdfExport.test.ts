@@ -311,7 +311,7 @@ describe('docToPdf', () => {
           startTime: 0,
           duration: 3,
           audioSegment: 0,
-          template: 'titleBlock',
+          template: 'title',
         },
       ],
     };

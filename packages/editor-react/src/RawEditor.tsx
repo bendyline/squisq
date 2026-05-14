@@ -16,6 +16,7 @@ import Editor, {
 import * as monaco from 'monaco-editor';
 import { useEditorContext } from './EditorContext';
 import { getAvailableTemplates } from '@bendyline/squisq/doc';
+import { suggestIcons, resolveIcon, iconGlyph } from '@bendyline/squisq/icons';
 import { SQUISQ_MEDIA_MIME, parseSquisqMediaPayload } from './mediaDragMime';
 
 // Use locally installed monaco-editor instead of CDN.
@@ -86,6 +87,8 @@ export function RawEditor({
   const isExternalUpdate = useRef(false);
   const completionDisposable = useRef<monaco.IDisposable | null>(null);
   const mentionCompletionDisposable = useRef<monaco.IDisposable | null>(null);
+  const iconCompletionDisposable = useRef<monaco.IDisposable | null>(null);
+  const iconGlyphDecorations = useRef<monaco.editor.IEditorDecorationsCollection | null>(null);
   const dropCleanupRef = useRef<(() => void) | null>(null);
   const keyDisposable = useRef<monaco.IDisposable | null>(null);
   // Ref so the keydown handler always sees the latest callback.
@@ -136,6 +139,8 @@ export function RawEditor({
       completionDisposable.current = null;
       mentionCompletionDisposable.current?.dispose();
       mentionCompletionDisposable.current = null;
+      iconCompletionDisposable.current?.dispose();
+      iconCompletionDisposable.current = null;
 
       // Register the `{[template]}` completion provider only for markdown
       // files — it's meaningless for TypeScript, JSON, Python, etc.
@@ -150,10 +155,17 @@ export function RawEditor({
             if (!/^#{1,6}\s/.test(lineContent)) return { suggestions: [] };
 
             const textBeforeCursor = lineContent.substring(0, position.column - 1);
+            const textAfterCursor = lineContent.substring(position.column - 1);
             const bracketIdx = textBeforeCursor.lastIndexOf('{[');
             if (bracketIdx === -1) return { suggestions: [] };
 
-            // The range to replace: from after {[ to the cursor
+            // When Monaco's bracket auto-pair has already produced the
+            // closing `]}` we just leave it in place and skip the
+            // suffix — otherwise accepting `sectionHeader` on
+            // `{[gi]}` would yield `{[sectionHeader]}]}`.
+            const closingMatch = textAfterCursor.match(/^\]\}/);
+            const suffix = closingMatch ? '' : ']}';
+
             const startCol = bracketIdx + 3; // after {[
             const range = new monaco.Range(
               position.lineNumber,
@@ -164,8 +176,9 @@ export function RawEditor({
 
             const suggestions = templates.map((name) => ({
               label: name,
+              filterText: name,
               kind: monaco.languages.CompletionItemKind.Value,
-              insertText: name + ']}',
+              insertText: name + suffix,
               range,
               detail: 'Block template',
               sortText: name,
@@ -224,6 +237,86 @@ export function RawEditor({
                   range,
                   ...(c.description ? { detail: c.description } : {}),
                   sortText: c.label,
+                })),
+              };
+            },
+          },
+        );
+
+        // FontAwesome icon completion. Fires inside any `{[…]}` opener
+        // anywhere in the doc (not just headings — icons are inline).
+        // Suggestions cover the whole FA Free catalog filtered by the
+        // partial token; we cap at 50 to keep the popup readable. The
+        // template provider above still handles heading lines, so on
+        // a `## Title {[…]}` the user sees both template names AND
+        // icons interleaved by the regular Monaco filter.
+        iconCompletionDisposable.current = monaco.languages.registerCompletionItemProvider(
+          'markdown',
+          {
+            triggerCharacters: ['['],
+            provideCompletionItems(model, position) {
+              const lineContent = model.getLineContent(position.lineNumber);
+              const textBeforeCursor = lineContent.substring(0, position.column - 1);
+              const textAfterCursor = lineContent.substring(position.column - 1);
+              const bracketIdx = textBeforeCursor.lastIndexOf('{[');
+              if (bracketIdx === -1) return { suggestions: [] };
+              // Bail if any `]` already closes this annotation between
+              // `{[` and the cursor — we'd be past the token, not in it.
+              const between = textBeforeCursor.slice(bracketIdx + 2);
+              if (between.includes(']')) return { suggestions: [] };
+              // Tokens are alphanumeric + `-_:`; anything else means
+              // we're not inside an icon (probably a code/link bracket).
+              if (between && !/^[a-zA-Z0-9_:-]*$/.test(between)) {
+                return { suggestions: [] };
+              }
+              const query = between.toLowerCase();
+
+              // When Monaco's bracket auto-pair has already produced a
+              // closing `]}` we don't want to insert another — but we
+              // also don't want to consume the existing one, since
+              // then we'd have to re-emit it and the round-trip is
+              // brittle. Leave the closing in place and just insert
+              // the bare token; if no closing exists yet, append it.
+              const closingMatch = textAfterCursor.match(/^\]\}/);
+              const suffix = closingMatch ? '' : ']}';
+
+              const range = new monaco.Range(
+                position.lineNumber,
+                bracketIdx + 3, // after `{[`
+                position.lineNumber,
+                position.column,
+              );
+
+              const top = suggestIcons(query, 50);
+              return {
+                suggestions: top.map((m, i) => ({
+                  // Embed the FA codepoint as the first character of
+                  // the label. CSS targets the suggest widget with
+                  // FontAwesome as a font fallback, so the codepoint
+                  // renders as the glyph and the name renders in the
+                  // editor's normal font.
+                  label: {
+                    label: `${iconGlyph(m.entry)}  ${m.token}`,
+                    description: `fa-${m.entry.family}`,
+                  },
+                  // `filterText` excludes the glyph + spacing so Monaco
+                  // filters against the actual icon name only.
+                  filterText: m.token,
+                  kind: monaco.languages.CompletionItemKind.Constant,
+                  insertText: `${m.token}${suffix}`,
+                  range,
+                  detail: m.entry.label,
+                  // Documentation pane (rendered when Monaco's
+                  // suggestion preview is expanded) shows a large
+                  // version of the glyph alongside the canonical token.
+                  documentation: {
+                    value: `<i class="fa-${m.entry.family} fa-${m.entry.name}" style="font-size: 2em; display: inline-block; margin-right: 8px; vertical-align: middle"></i> **${m.token}** *(${m.entry.label})*`,
+                    isTrusted: true,
+                    supportHtml: true,
+                  },
+                  // Sort key: 1-digit score prefix keeps "starts with"
+                  // matches above "contains" / keyword matches.
+                  sortText: `${m.score}${String(i).padStart(4, '0')}`,
                 })),
               };
             },
@@ -304,6 +397,10 @@ export function RawEditor({
       completionDisposable.current = null;
       mentionCompletionDisposable.current?.dispose();
       mentionCompletionDisposable.current = null;
+      iconCompletionDisposable.current?.dispose();
+      iconCompletionDisposable.current = null;
+      iconGlyphDecorations.current?.clear();
+      iconGlyphDecorations.current = null;
       dropCleanupRef.current?.();
       dropCleanupRef.current = null;
       keyDisposable.current?.dispose();
@@ -334,6 +431,54 @@ export function RawEditor({
     }
   }, [markdownSource]);
 
+  // ── Inline FontAwesome glyph decorations ────────────
+  // Walk the markdown source on every change, find each resolvable
+  // `{[icon-name]}` span, and overlay the actual glyph (via Monaco's
+  // `before:` content decoration) just before the brackets. The CSS
+  // classes `.fa-glyph-decoration-<family>` set the per-family font
+  // and weight; the codepoint character is the decoration's content.
+  useEffect(() => {
+    const editor = editorRef.current;
+    if (!editor) return;
+    if (language !== 'markdown') return;
+    const model = editor.getModel();
+    if (!model) return;
+
+    const decorations: monaco.editor.IModelDeltaDecoration[] = [];
+    const lines = model.getLineCount();
+    const re = /\{\[([a-zA-Z0-9_:-]+)\]\}/g;
+    for (let line = 1; line <= lines; line++) {
+      const text = model.getLineContent(line);
+      re.lastIndex = 0;
+      let match: RegExpExecArray | null;
+      while ((match = re.exec(text)) !== null) {
+        const icon = resolveIcon(match[1]);
+        if (!icon) continue;
+        const glyph = iconGlyph(icon);
+        if (!glyph) continue;
+        // Position the decoration as a zero-width range at the `{`
+        // of the matched token. `before.contentText` renders the
+        // glyph as content prepended visually to that position.
+        const col = match.index + 1; // Monaco columns are 1-based
+        decorations.push({
+          range: new monaco.Range(line, col, line, col),
+          options: {
+            before: {
+              content: glyph,
+              inlineClassName: `fa-glyph-decoration-${icon.family}`,
+            },
+          },
+        });
+      }
+    }
+
+    if (!iconGlyphDecorations.current) {
+      iconGlyphDecorations.current = editor.createDecorationsCollection(decorations);
+    } else {
+      iconGlyphDecorations.current.set(decorations);
+    }
+  }, [markdownSource, language]);
+
   const effectiveTheme = SQUISQ_THEMES[theme] ?? theme;
 
   return (
@@ -357,6 +502,13 @@ export function RawEditor({
           bracketPairColorization: { enabled: true },
           guides: { indentation: true },
           padding: { top: 12, bottom: 12 },
+          // Markdown's tokenizer classifies most body text as "string"
+          // or "comment" context, which suppresses `quickSuggestions`
+          // by default. Enable in all three so our `{[icon]}` and
+          // `@mention` typeaheads keep firing as the user types past
+          // the trigger character.
+          quickSuggestions: { other: true, comments: true, strings: true },
+          suggestOnTriggerCharacters: true,
           // Breathing room between the gutter and the first character.
           // Done via Monaco's own option so cursor + hit-testing stay in
           // sync — CSS-padding `.view-lines` shifts the text but not the

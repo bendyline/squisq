@@ -7,7 +7,7 @@
  * drop events to callers.
  */
 
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 // ─── File classification ────────────────────────────────
 
@@ -134,13 +134,49 @@ export function useFileDrop({ onDrop, enabled = true }: UseFileDropOptions): Use
   // so we track a count rather than a boolean.
   const dragCounterRef = useRef(0);
 
+  // True while a drag that originated *inside* this page is in flight.
+  // Browsers expose draggable `<img>` elements as virtual files in
+  // `dataTransfer.types` (so they can be dropped onto the desktop), so
+  // checking for `'Files'` alone can't tell an OS file drop apart from
+  // an in-app image reorder. We watch the document-level `dragstart`
+  // event — only OS drags from outside the page lack a `dragstart` —
+  // and bail out of the overlay logic when this flag is set.
+  const inPageDragRef = useRef(false);
+  useEffect(() => {
+    if (!enabled) return;
+    const onStart = () => {
+      inPageDragRef.current = true;
+    };
+    const onEnd = () => {
+      inPageDragRef.current = false;
+    };
+    document.addEventListener('dragstart', onStart, true);
+    document.addEventListener('dragend', onEnd, true);
+    document.addEventListener('drop', onEnd, true);
+    return () => {
+      document.removeEventListener('dragstart', onStart, true);
+      document.removeEventListener('dragend', onEnd, true);
+      document.removeEventListener('drop', onEnd, true);
+    };
+  }, [enabled]);
+
   const handleDragEnter = useCallback(
     (e: React.DragEvent) => {
       if (!enabled) return;
 
-      // Only react to OS file drags. In-app drags (e.g. dragging a thumbnail
-      // out of the MediaBin) don't carry file-kind items and must pass
-      // through to the editors without showing the drop overlay.
+      // Drag started inside the page (e.g. repositioning an `<img>`
+      // already in the WYSIWYG document, or dragging a thumbnail out of
+      // the MediaBin). Do NOT show the file-drop overlay — let
+      // ProseMirror handle the in-document move with its dropcursor.
+      if (inPageDragRef.current) return;
+
+      // For OS-level drags, the browser sets the special `'Files'`
+      // type. Bail out for anything else (text drags between apps,
+      // etc.) so we don't flash the overlay on irrelevant gestures.
+      const types = e.dataTransfer.types;
+      const hasFiles = types && Array.from(types).includes('Files');
+      if (!hasFiles) return;
+
       const classification = e.dataTransfer.items
         ? classifyDataTransferItems(e.dataTransfer.items)
         : 'mixed';

@@ -86,6 +86,7 @@ export function collectImagePaths(doc: Doc): Set<string> {
 
   function scanBlock(block: Block) {
     scanLayers(block.layers);
+    if (block.contents) scanMarkdownNodes(block.contents, addIfRelative);
     if (block.children) block.children.forEach(scanBlock);
   }
 
@@ -111,6 +112,45 @@ export function collectImagePaths(doc: Doc): Set<string> {
   }
 
   return paths;
+}
+
+/**
+ * Walk markdown body nodes for image references. Catches both shorthand
+ * `![alt](url)` (type `image`, `url` field) and raw HTML `<img src>` tags
+ * (type `htmlBlock`/`htmlInline`, `htmlChildren` sub-tree) — the latter is
+ * how the WYSIWYG editor round-trips resized images, since markdown
+ * shorthand has no width syntax.
+ */
+function scanMarkdownNodes(nodes: unknown[], visit: (src: string | undefined) => void): void {
+  for (const node of nodes) {
+    if (!node || typeof node !== 'object') continue;
+    const n = node as Record<string, unknown>;
+    if (n.type === 'image' && typeof n.url === 'string') {
+      visit(n.url);
+    }
+    if ((n.type === 'htmlBlock' || n.type === 'htmlInline') && Array.isArray(n.htmlChildren)) {
+      scanHtmlNodes(n.htmlChildren, visit);
+    }
+    if (Array.isArray(n.children)) {
+      scanMarkdownNodes(n.children, visit);
+    }
+  }
+}
+
+/** Walk a parsed HTML sub-tree for `<img>` src attributes. */
+function scanHtmlNodes(nodes: unknown[], visit: (src: string | undefined) => void): void {
+  for (const node of nodes) {
+    if (!node || typeof node !== 'object') continue;
+    const n = node as Record<string, unknown>;
+    if (n.type !== 'htmlElement') continue;
+    if (n.tagName === 'img') {
+      const attrs = n.attributes as Record<string, string> | undefined;
+      if (attrs && typeof attrs.src === 'string') visit(attrs.src);
+    }
+    if (Array.isArray(n.children)) {
+      scanHtmlNodes(n.children, visit);
+    }
+  }
 }
 
 /**
