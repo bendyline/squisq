@@ -36,6 +36,28 @@ export function supportsWebCodecs(): boolean {
   return typeof VideoEncoder !== 'undefined' && typeof VideoFrame !== 'undefined';
 }
 
+/**
+ * Probe whether the WebCodecs encoder actually supports the H.264 profile
+ * we use. The `VideoEncoder` global can exist while the specific codec is
+ * unavailable — this is the case on Linux Chromium, which ships without
+ * the proprietary H.264 encoder.
+ */
+export async function supportsWebCodecsH264(config: EncoderConfig): Promise<boolean> {
+  if (!supportsWebCodecs()) return false;
+  try {
+    const support = await VideoEncoder.isConfigSupported({
+      codec: 'avc1.640028',
+      width: config.width,
+      height: config.height,
+      bitrate: bitrateForQuality(config.quality, config.width, config.height),
+      framerate: config.fps,
+    });
+    return support.supported === true;
+  } catch {
+    return false;
+  }
+}
+
 function bitrateForQuality(quality: string, width: number, height: number): number {
   const pixels = width * height;
   const baseBitrate = pixels * 4; // ~4 bits per pixel baseline
