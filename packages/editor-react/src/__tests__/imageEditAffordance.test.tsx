@@ -174,7 +174,7 @@ describe('<EditorShell> image-edit modal wiring', () => {
     render(
       <EditorShell
         initialMarkdown="# hi"
-        container={container}
+        workspaceContainer={container}
         mediaProvider={mediaProvider}
         toolbarSlotRight={<TriggerButton path="hero.png" />}
       />,
@@ -238,7 +238,7 @@ describe('<EditorShell> image-edit modal wiring', () => {
     render(
       <EditorShell
         initialMarkdown="# hi"
-        container={container}
+        workspaceContainer={container}
         mediaProvider={mediaProvider}
         toolbarSlotRight={<TriggerButton path="hero.png" />}
       />,

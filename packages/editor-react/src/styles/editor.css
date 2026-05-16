@@ -3198,6 +3198,129 @@
   border-color: #2563eb;
 }
 
+/* ─── Document-link picker (LinkDialog) ──────────────────
+   Surfaced when EditorShell receives a `documentLinkProvider` —
+   the dialog grows a "Browse documents" tab that lists workspace
+   neighbors so authors can pick a link target without typing the
+   relative path by hand. */
+
+.squisq-link-dialog-tabs {
+  display: flex;
+  gap: 2px;
+  margin-bottom: 12px;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.squisq-link-dialog-tab {
+  flex: 1;
+  padding: 8px 12px;
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  font-size: 13px;
+  font-weight: 500;
+  color: #6b7280;
+  cursor: pointer;
+}
+
+.squisq-link-dialog-tab:hover {
+  color: #1f2937;
+}
+
+.squisq-link-dialog-tab--active {
+  color: #1f2937;
+  border-bottom-color: #3b82f6;
+}
+
+.squisq-link-dialog-doc-picker {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-height: 0;
+}
+
+.squisq-link-dialog-doc-list {
+  max-height: 240px;
+  overflow-y: auto;
+  border: 1px solid #e5e7eb;
+  border-radius: 4px;
+  background: #fff;
+}
+
+.squisq-link-dialog-doc-empty {
+  padding: 16px 12px;
+  text-align: center;
+  color: #9ca3af;
+  font-size: 13px;
+}
+
+.squisq-link-dialog-doc-item {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  grid-template-areas:
+    'label path'
+    'desc desc';
+  gap: 2px 12px;
+  width: 100%;
+  padding: 8px 12px;
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid #f3f4f6;
+  text-align: left;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.squisq-link-dialog-doc-item:last-child {
+  border-bottom: none;
+}
+
+.squisq-link-dialog-doc-item:hover {
+  background: #f3f4f6;
+}
+
+.squisq-link-dialog-doc-item--selected {
+  background: #eff6ff;
+}
+
+.squisq-link-dialog-doc-item-label {
+  grid-area: label;
+  font-size: 13px;
+  font-weight: 500;
+  color: #1f2937;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.squisq-link-dialog-doc-item-path {
+  grid-area: path;
+  font-size: 11px;
+  color: #6b7280;
+  font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+}
+
+.squisq-link-dialog-doc-item-desc {
+  grid-area: desc;
+  font-size: 11px;
+  color: #9ca3af;
+}
+
+.squisq-link-dialog-doc-current {
+  font-size: 11px;
+  color: #6b7280;
+  padding: 4px 6px;
+}
+
+.squisq-link-dialog-doc-current code {
+  font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+  font-size: 11px;
+  color: #1f2937;
+  background: #f3f4f6;
+  padding: 1px 4px;
+  border-radius: 3px;
+}
+
 /* ─── FontAwesome glyph decorations (Monaco) ─────────────
    Used by RawEditor to render the actual FA glyph as a Monaco
    `before:` content decoration adjacent to each `{[icon]}` source
@@ -3249,13 +3372,6 @@
      — the browser drops the whole declaration if it appears there —
      so we spell out the system stack explicitly. */
   font-family:
-    -apple-system,
-    BlinkMacSystemFont,
-    'Segoe UI',
-    'Helvetica Neue',
-    Arial,
-    system-ui,
-    'Font Awesome 6 Brands',
-    'Font Awesome 6 Free',
-    sans-serif;
+    -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Helvetica Neue', Arial, system-ui,
+    'Font Awesome 6 Brands', 'Font Awesome 6 Free', sans-serif;
 }

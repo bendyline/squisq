@@ -52,9 +52,7 @@ describe('emojiData — unified picker entries', () => {
   it('FA categories carry icon-kind entries', () => {
     const brands = PICKER_CATEGORIES.find((c) => c.id === 'fa-brands')!;
     expect(brands.entries.length).toBeGreaterThan(0);
-    const github = brands.entries.find(
-      (e) => e.kind === 'icon' && e.name === 'github',
-    );
+    const github = brands.entries.find((e) => e.kind === 'icon' && e.name === 'github');
     expect(github).toBeDefined();
     expect(github!.kind).toBe('icon');
   });
@@ -92,9 +90,7 @@ describe('EmojiPicker', () => {
     const onSelect = vi.fn();
     render(<EmojiPicker open onSelect={onSelect} onClose={() => {}} />);
     fireEvent.click(screen.getByRole('button', { name: 'grinning' }));
-    expect(onSelect).toHaveBeenCalledWith(
-      expect.objectContaining({ kind: 'emoji', char: '😀' }),
-    );
+    expect(onSelect).toHaveBeenCalledWith(expect.objectContaining({ kind: 'emoji', char: '😀' }));
   });
 
   it('fires onSelect with an icon PickerEntry when an FA tile is clicked', () => {

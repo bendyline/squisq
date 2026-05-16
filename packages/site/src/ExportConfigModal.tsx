@@ -17,6 +17,7 @@ import {
 } from '@bendyline/squisq/transform';
 import type { MediaProvider, Theme } from '@bendyline/squisq/schemas';
 import type { MarkdownDocument } from '@bendyline/squisq/markdown';
+import type { ContentContainer } from '@bendyline/squisq/storage';
 import { VideoExportModal } from '@bendyline/squisq-video-react';
 import { buildPreviewDoc, PlainHtmlPreview } from '@bendyline/squisq-editor-react';
 import { collectImagesForHtmlExport } from './exportHelpers';
@@ -26,6 +27,14 @@ import { collectImagesForHtmlExport } from './exportHelpers';
 export interface ExportConfigModalProps {
   currentSource: string;
   mediaProvider: MediaProvider | null;
+  /**
+   * Optional workspace-scoped ContentContainer — when supplied, unlocks
+   * the "Export linked documents" toggle for the plain-HTML+zip path.
+   * The bundle exporter uses `workspaceContainer.readFile()` to load
+   * sibling `.md` files and their image assets. Without it the toggle
+   * stays hidden so authors don't see broken settings.
+   */
+  workspaceContainer?: ContentContainer | null;
   onClose: () => void;
 }
 
@@ -175,6 +184,38 @@ async function collectInlineImages(
  * Mirrors what `docToHtmlZip` does for the rendered path, but produces
  * a plain semantic page.
  */
+/**
+ * Recursive plain-HTML bundle export. Delegates to the formats package's
+ * `markdownDocsToPlainHtmlBundle`, supplying it with `ContentContainer.readFile`
+ * as both the document and binary loader. The container abstracts the
+ * storage layer (FileSystem in docblocks, in-memory in the site's
+ * sample picker), so the bundler can't know the difference.
+ *
+ * The container's "primary document" (whatever `getDocumentPath()`
+ * resolves to, falling back to `index.md`) is the entry point.
+ */
+async function downloadLinkedHtmlBundle(
+  container: ContentContainer,
+  title: string,
+  filename: string,
+  theme?: Theme,
+): Promise<void> {
+  const { markdownDocsToPlainHtmlBundle } = await import('@bendyline/squisq-formats/html');
+  const entryPath = (await container.getDocumentPath()) ?? 'index.md';
+  const decoder = new TextDecoder();
+  const blob = await markdownDocsToPlainHtmlBundle({
+    entryPath,
+    readDocument: async (p) => {
+      const data = await container.readFile(p);
+      return data ? decoder.decode(data) : null;
+    },
+    readBinary: (p) => container.readFile(p),
+    title,
+    theme,
+  });
+  downloadBlob(blob, filename);
+}
+
 async function downloadPlainHtmlZip(
   mdDoc: MarkdownDocument,
   title: string,
@@ -305,11 +346,13 @@ const VISUAL_FORMATS: ExportFormat[] = ['html', 'htmlzip'];
 export function ExportConfigModal({
   currentSource,
   mediaProvider,
+  workspaceContainer,
   onClose,
 }: ExportConfigModalProps) {
   const [format, setFormat] = useState<ExportFormat>('html');
   const [renderMode, setRenderMode] = useState<RenderMode>('document');
   const [htmlStyle, setHtmlStyle] = useState<HtmlStyle>('rendered');
+  const [followLinks, setFollowLinks] = useState<boolean>(false);
   const [themeId, setThemeId] = useState<string>('');
   const [transformStyle, setTransformStyle] = useState<string>('');
   const [busy, setBusy] = useState(false);
@@ -420,9 +463,7 @@ export function ExportConfigModal({
             // shared `markdownDocToPlainHtml` is also what the Page
             // preview renders, so the downloaded file matches the
             // preview byte-for-byte.
-            const { markdownDocToPlainHtml } = await import(
-              '@bendyline/squisq-formats/html'
-            );
+            const { markdownDocToPlainHtml } = await import('@bendyline/squisq-formats/html');
             const docTitle = (mdDoc.frontmatter?.title as string | undefined) ?? 'Document';
             const themeForExport = exportThemeId ? resolveTheme(exportThemeId) : undefined;
             if (format === 'html') {
@@ -435,6 +476,16 @@ export function ExportConfigModal({
               downloadBlob(
                 new Blob([html], { type: 'text/html;charset=utf-8' }),
                 `document-${ts}.html`,
+              );
+            } else if (followLinks && workspaceContainer) {
+              // Recursive multi-doc export: pull every linked sibling
+              // / child .md file via the workspace container, render
+              // them all, rewrite `.md` → `.html` cross-doc references.
+              await downloadLinkedHtmlBundle(
+                workspaceContainer,
+                docTitle,
+                `document-${ts}.html.zip`,
+                themeForExport,
               );
             } else {
               await downloadPlainHtmlZip(
@@ -504,6 +555,8 @@ export function ExportConfigModal({
     format,
     renderMode,
     htmlStyle,
+    followLinks,
+    workspaceContainer,
     themeId,
     mediaProvider,
     onClose,
@@ -583,6 +636,39 @@ export function ExportConfigModal({
                 </>
               )}
 
+              {/* Export linked documents — only meaningful for plain
+                  HTML+zip when a workspace container is available. We
+                  hide the toggle entirely otherwise so authors don't
+                  see a setting that can't do anything. */}
+              {format === 'htmlzip' && htmlStyle === 'plain' && workspaceContainer && (
+                <>
+                  <label
+                    style={{
+                      ...labelStyle,
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 6,
+                      marginTop: 4,
+                      marginBottom: 4,
+                      cursor: busy ? 'default' : 'pointer',
+                    }}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={followLinks}
+                      onChange={(e) => setFollowLinks(e.target.checked)}
+                      disabled={busy}
+                    />
+                    <span>Export linked documents</span>
+                  </label>
+                  <div style={hintStyle}>
+                    Recursively bundles every `.md` file the entry document links to (within its
+                    folder or any subfolder). Cross-doc links are rewritten from `.md` to `.html` so
+                    the result browses as a static site.
+                  </div>
+                </>
+              )}
+
               {/* Render Mode — for HTML and Video formats (rendered only) */}
               {showModeSelector && (
                 <>
@@ -648,9 +734,7 @@ export function ExportConfigModal({
               )}
 
               {/* Buttons */}
-              <div
-                style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 8 }}
-              >
+              <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 8 }}>
                 <button style={btnSecondary} onClick={onClose} disabled={busy}>
                   Cancel
                 </button>

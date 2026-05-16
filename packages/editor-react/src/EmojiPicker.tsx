@@ -38,27 +38,71 @@ export interface EmojiPickerProps {
   className?: string;
   /** Optional inline style for the popover root (e.g. positioning). */
   style?: CSSProperties;
+  /**
+   * Editor theme — `'light'` or `'dark'`. Drives the picker's color
+   * palette. Required for the picker to render correctly when portaled
+   * outside the editor shell, since CSS custom properties defined on
+   * the shell don't cascade to portal targets. Defaults to `'light'`.
+   */
+  theme?: 'light' | 'dark';
 }
+
+interface PickerPalette {
+  bg: string;
+  border: string;
+  inputBg: string;
+  text: string;
+  textMuted: string;
+  accent: string;
+  accentSoft: string;
+}
+
+const LIGHT_PALETTE: PickerPalette = {
+  bg: '#fff',
+  border: '#d4cdb5',
+  inputBg: '#fff',
+  text: '#1f2937',
+  textMuted: '#8a7a5a',
+  accent: '#8B6914',
+  accentSoft: '#f3eedb',
+};
+
+const DARK_PALETTE: PickerPalette = {
+  bg: '#1f2937',
+  border: '#4b5563',
+  inputBg: '#374151',
+  text: '#e5e7eb',
+  textMuted: '#9ca3af',
+  accent: '#fbbf24',
+  accentSoft: '#374151',
+};
 
 /** Default popover dimensions. The Toolbar reads these to position the
  *  popover with viewport-aware clamping so it never gets clipped. */
 export const EMOJI_PICKER_WIDTH = 480;
 export const EMOJI_PICKER_MAX_HEIGHT = 560;
 
-const POPOVER_STYLE: CSSProperties = {
-  position: 'absolute',
-  zIndex: 100,
-  background: 'var(--squisq-toolbar-bg, #fff)',
-  border: '1px solid var(--squisq-toolbar-border, #d4cdb5)',
-  borderRadius: 6,
-  boxShadow: '0 6px 24px rgba(0, 0, 0, 0.15)',
-  width: EMOJI_PICKER_WIDTH,
-  maxWidth: '95vw',
-  maxHeight: EMOJI_PICKER_MAX_HEIGHT,
-  display: 'flex',
-  flexDirection: 'column',
-  overflow: 'hidden',
-};
+function buildPopoverStyle(palette: PickerPalette): CSSProperties {
+  return {
+    position: 'absolute',
+    zIndex: 100,
+    background: palette.bg,
+    border: `1px solid ${palette.border}`,
+    borderRadius: 6,
+    // Dark mode needs a deeper shadow than the light palette uses,
+    // because the popover sits on a dark surface where a soft 15%
+    // shadow effectively disappears.
+    boxShadow:
+      palette === DARK_PALETTE ? '0 8px 32px rgba(0, 0, 0, 0.5)' : '0 6px 24px rgba(0, 0, 0, 0.15)',
+    color: palette.text,
+    width: EMOJI_PICKER_WIDTH,
+    maxWidth: '95vw',
+    maxHeight: EMOJI_PICKER_MAX_HEIGHT,
+    display: 'flex',
+    flexDirection: 'column',
+    overflow: 'hidden',
+  };
+}
 
 export function EmojiPicker({
   open,
@@ -67,7 +111,9 @@ export function EmojiPicker({
   anchorRef,
   className,
   style,
+  theme = 'light',
 }: EmojiPickerProps) {
+  const palette = theme === 'dark' ? DARK_PALETTE : LIGHT_PALETTE;
   const [activeCategory, setActiveCategory] = useState<string>(PICKER_CATEGORIES[0].id);
   const [query, setQuery] = useState('');
   const popoverRef = useRef<HTMLDivElement>(null);
@@ -119,7 +165,8 @@ export function EmojiPicker({
     <div
       ref={popoverRef}
       className={`squisq-emoji-picker ${className ?? ''}`}
-      style={{ ...POPOVER_STYLE, ...style }}
+      data-theme={theme}
+      style={{ ...buildPopoverStyle(palette), ...style }}
       role="dialog"
       aria-label="Insert emoji"
       data-testid="emoji-picker"
@@ -128,7 +175,7 @@ export function EmojiPicker({
       <div
         style={{
           padding: '8px 10px',
-          borderBottom: '1px solid var(--squisq-toolbar-border, #e5e0cc)',
+          borderBottom: `1px solid ${palette.border}`,
         }}
       >
         <input
@@ -143,32 +190,33 @@ export function EmojiPicker({
             padding: '6px 8px',
             fontSize: 13,
             fontFamily: 'inherit',
-            border: '1px solid var(--squisq-toolbar-border, #d4cdb5)',
+            border: `1px solid ${palette.border}`,
             borderRadius: 4,
-            background: 'var(--squisq-bg, #fff)',
-            color: 'inherit',
+            background: palette.inputBg,
+            color: palette.text,
             boxSizing: 'border-box',
           }}
         />
       </div>
 
       {/* Category tabs — hidden when a search is active because the grid
-          collapses across categories. */}
+          collapses across categories.
+
+          Two-row grid layout: with 9 emoji buckets + 3 FA families we'd
+          otherwise need a horizontal scrollbar to fit them all in the
+          480px-wide picker, and the scrollbar visually obscures the
+          tabs themselves. A 6-column grid gives exactly two even rows
+          that always fit without scrolling. */}
       {!query.trim() && (
         <div
           role="tablist"
-          aria-label="Emoji categories"
+          aria-label="Emoji & icon categories"
           style={{
-            display: 'flex',
+            display: 'grid',
+            gridTemplateColumns: 'repeat(6, 1fr)',
             gap: 2,
             padding: '4px 6px',
-            borderBottom: '1px solid var(--squisq-toolbar-border, #e5e0cc)',
-            // Scroll horizontally when there are more tabs than fit;
-            // explicit `overflowY: hidden` keeps the row a single line
-            // (a bare `overflow-x: auto` lets some engines show a
-            // vertical scrollbar too).
-            overflowX: 'auto',
-            overflowY: 'hidden',
+            borderBottom: `1px solid ${palette.border}`,
           }}
         >
           {PICKER_CATEGORIES.map((cat) => {
@@ -183,26 +231,24 @@ export function EmojiPicker({
                 title={cat.label}
                 onClick={() => setActiveCategory(cat.id)}
                 style={{
-                  flex: '0 0 auto',
                   fontSize: 18,
                   lineHeight: 1,
-                  padding: '4px 8px',
+                  padding: '6px 0',
                   cursor: 'pointer',
-                  background: active ? 'var(--squisq-accent-soft, #f3eedb)' : 'transparent',
+                  background: active ? palette.accentSoft : 'transparent',
                   border: '1px solid transparent',
-                  borderBottom: active
-                    ? '2px solid var(--squisq-accent, #8B6914)'
-                    : '2px solid transparent',
+                  borderBottom: active ? `2px solid ${palette.accent}` : '2px solid transparent',
                   borderRadius: 4,
+                  color: palette.text,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
                 }}
               >
                 {cat.tab.kind === 'emoji' ? (
                   cat.tab.char
                 ) : (
-                  <i
-                    className={`fa-${cat.tab.family} fa-${cat.tab.name}`}
-                    aria-hidden="true"
-                  />
+                  <i className={`fa-${cat.tab.family} fa-${cat.tab.name}`} aria-hidden="true" />
                 )}
               </button>
             );
@@ -232,7 +278,7 @@ export function EmojiPicker({
               gridColumn: '1 / -1',
               padding: '20px 8px',
               textAlign: 'center',
-              color: 'var(--squisq-text-muted, #8a7a5a)',
+              color: palette.textMuted,
               fontSize: 13,
             }}
           >
@@ -259,12 +305,13 @@ export function EmojiPicker({
                   border: '1px solid transparent',
                   borderRadius: 4,
                   cursor: 'pointer',
+                  color: palette.text,
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
                 }}
                 onMouseEnter={(e) => {
-                  e.currentTarget.style.background = 'var(--squisq-accent-soft, #f3eedb)';
+                  e.currentTarget.style.background = palette.accentSoft;
                 }}
                 onMouseLeave={(e) => {
                   e.currentTarget.style.background = 'transparent';

@@ -15,7 +15,13 @@ import { getThemeFont } from '../utils/themeUtils.js';
 import { createAccentLayers, getAccentLayout, adjustY, DEFAULT_LAYOUT } from './accentImage.js';
 
 export function listBlock(input: ListBlockInput, context: TemplateContext): Layer[] {
-  const { items, title, accentImage } = input;
+  const { title, accentImage } = input;
+  // `items` is required by the schema, but malformed / partially-authored
+  // blocks (e.g. someone wrote `template: list` with no items yet) reach
+  // this code path during live preview. Treat missing/non-array as empty
+  // so we render the title-and-background frame instead of blowing up
+  // every keystroke with a TypeError.
+  const items: string[] = Array.isArray(input.items) ? input.items : [];
   const { theme } = context;
 
   // Get layout adjustments if accent image is present
@@ -68,7 +74,20 @@ export function listBlock(input: ListBlockInput, context: TemplateContext): Laye
     });
   }
 
-  // Calculate vertical spacing for items
+  // Left edge of the text column — derived from the center+width pair so
+  // items sit flush with the column's left margin instead of being
+  // centered. Falls back to a safe 8% if the layout strings ever turn
+  // out unparseable (they're authored, but defensive against future
+  // edits to the accent-layout types).
+  const centerX = parseFloat(accentLayout.textCenterX);
+  const widthPct = parseFloat(accentLayout.textWidth);
+  const leftX =
+    Number.isFinite(centerX) && Number.isFinite(widthPct) ? `${centerX - widthPct / 2}%` : '8%';
+
+  // Calculate vertical spacing for items. We keep the available band
+  // (startY → endY) but use a tighter line-height (1.2) so wrapped
+  // items don't bleed into the next entry as aggressively as the old
+  // 1.4 value did.
   const endY = 80;
   const spacing = items.length > 1 ? (endY - startY) / (items.length - 1) : 0;
 
@@ -86,14 +105,14 @@ export function listBlock(input: ListBlockInput, context: TemplateContext): Laye
           fontSize: itemFontSize,
           fontFamily: getThemeFont(context, 'body'),
           color: theme.colors.text,
-          lineHeight: 1.4,
+          textAlign: 'left',
+          lineHeight: 1.2,
           shadow: !!accentImage,
         },
       },
       position: {
-        x: accentLayout.textCenterX,
+        x: leftX,
         y: adjustY(`${y}%`, accentLayout),
-        anchor: 'center',
         width: accentLayout.textWidth,
       },
       animation: { type: 'fadeIn', duration: 0.8, delay: 0.3 + 0.3 * i },

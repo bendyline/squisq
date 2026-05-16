@@ -60,11 +60,7 @@ for (const [name, entry] of Object.entries(meta)) {
 
 // Stable sort: family first, then name. Stable order keeps diffs minimal
 // when FA bumps add/remove icons.
-entries.sort(
-  (a, b) =>
-    a.family.localeCompare(b.family) ||
-    a.name.localeCompare(b.name),
-);
+entries.sort((a, b) => a.family.localeCompare(b.family) || a.name.localeCompare(b.name));
 
 const banner = `/**
  * iconData.ts — GENERATED FILE

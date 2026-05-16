@@ -16,11 +16,7 @@ import { VersionHistoryPanel } from './VersionHistoryPanel';
 import { ViewMenuPanel } from './ViewMenuPanel';
 import { TemplatePicker } from './TemplatePicker';
 import { LinkDialog } from './LinkDialog';
-import {
-  EmojiPicker,
-  EMOJI_PICKER_WIDTH,
-  EMOJI_PICKER_MAX_HEIGHT,
-} from './EmojiPicker';
+import { EmojiPicker, EMOJI_PICKER_WIDTH, EMOJI_PICKER_MAX_HEIGHT } from './EmojiPicker';
 import type { PickerEntry } from './emojiData';
 import { createPortal } from 'react-dom';
 
@@ -280,6 +276,8 @@ export function Toolbar({
     mediaProvider,
     editorMode,
     versioning,
+    documentLinkProvider,
+    theme,
   } = useEditorContext();
   const isCodeMode = editorMode === 'code';
   // In code mode only the raw view is meaningful; the WYSIWYG and Preview
@@ -1459,6 +1457,7 @@ export function Toolbar({
           initialUrl={linkDialog.initialUrl}
           onConfirm={handleLinkConfirm}
           onClose={() => setLinkDialog(null)}
+          documentLinkProvider={documentLinkProvider}
         />
       )}
 
@@ -1472,6 +1471,7 @@ export function Toolbar({
             onSelect={handleEmojiSelect}
             onClose={closeEmojiPicker}
             anchorRef={emojiButtonRef as React.RefObject<HTMLElement>}
+            theme={theme === 'dark' ? 'dark' : 'light'}
             style={{
               position: 'fixed',
               top: emojiPickerAnchor.top,

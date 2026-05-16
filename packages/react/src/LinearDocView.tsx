@@ -169,23 +169,21 @@ function BlockSection({ block, basePath, viewport, renderContext, blockIndex }: 
       {/* Render the heading (if present — preamble has no sourceHeading) */}
       {block.sourceHeading && !isAnnotated && <MarkdownRenderer nodes={[block.sourceHeading]} />}
 
-      {/* Annotated block: render SVG card */}
+      {/* Annotated block: render SVG card.
+          The heading is intentionally *not* duplicated above the card —
+          every template card renders its own title layer internally, so
+          a separate `squisq-linear-card-label` only made the heading
+          appear twice in the linear view. The card also drops its
+          rounded border + drop shadow so it reads as a continuation of
+          the surrounding page rather than a chrome'd preview. */}
       {isAnnotated && visualBlock && (
         <div className="squisq-linear-card">
-          {/* Optional heading label above the card */}
-          {block.sourceHeading && (
-            <div className="squisq-linear-card-label squisq-md">
-              <MarkdownRenderer nodes={[block.sourceHeading]} />
-            </div>
-          )}
           <div
             className="squisq-linear-card-svg"
             style={{
               width: '100%',
               aspectRatio: `${viewport.width} / ${viewport.height}`,
               overflow: 'hidden',
-              borderRadius: '8px',
-              boxShadow: '0 2px 8px rgba(0, 0, 0, 0.12)',
               marginBottom: '1em',
             }}
           >

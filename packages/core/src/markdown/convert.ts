@@ -339,10 +339,7 @@ function recombineDirectiveTokens(nodes: MarkdownInlineNode[]): MarkdownInlineNo
 
 const ICON_TOKEN_RE = /\{\[([a-zA-Z0-9_:-]+)\]\}/g;
 
-function splitTextOnIcons(
-  value: string,
-  position?: MarkdownSourcePosition,
-): MarkdownInlineNode[] {
+function splitTextOnIcons(value: string, position?: MarkdownSourcePosition): MarkdownInlineNode[] {
   if (!value) return [];
   ICON_TOKEN_RE.lastIndex = 0;
   let lastIndex = 0;

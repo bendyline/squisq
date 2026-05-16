@@ -131,9 +131,7 @@ export function suggestIcons(query: string, limit = 50): IconSuggestion[] {
   }
   matches.sort(
     (a, b) =>
-      a.score - b.score ||
-      a.token.length - b.token.length ||
-      a.token.localeCompare(b.token),
+      a.score - b.score || a.token.length - b.token.length || a.token.localeCompare(b.token),
   );
   return matches.slice(0, limit);
 }

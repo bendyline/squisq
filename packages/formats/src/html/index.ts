@@ -191,3 +191,7 @@ export { collectImagePaths } from './htmlTemplate.js';
 export { inferMimeType, arrayBufferToBase64DataUrl, extractFilename } from './imageUtils.js';
 export { markdownDocToPlainHtml } from './plainHtml.js';
 export type { PlainHtmlExportOptions } from './plainHtml.js';
+export { markdownDocsToPlainHtmlBundle, collectLinkRefs } from './plainHtmlBundle.js';
+export type { PlainHtmlBundleOptions } from './plainHtmlBundle.js';
+export { markdownDocsToHtmlBundle } from './docsHtmlBundle.js';
+export type { HtmlBundleOptions } from './docsHtmlBundle.js';

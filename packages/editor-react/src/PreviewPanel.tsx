@@ -24,8 +24,12 @@ export interface PreviewPanelProps {
   basePath?: string;
   /** Additional class name for the container */
   className?: string;
-  /** Optional ContentContainer for audio mapping (MP3 discovery + timing.json) */
-  container?: ContentContainer | null;
+  /**
+   * Workspace-scoped `ContentContainer` (the folder holding the doc and
+   * its siblings). Used here for audio mapping — MP3 discovery and
+   * `timing.json` reading.
+   */
+  workspaceContainer?: ContentContainer | null;
 }
 
 // ── Component ──────────────────────────────────────────────────────
@@ -35,7 +39,7 @@ export interface PreviewPanelProps {
  * or document view. Controls (viewport, mode, theme, transform, captions)
  * are rendered in the main toolbar via PreviewToolbarControls.
  */
-export function PreviewPanel({ basePath = '/', className, container }: PreviewPanelProps) {
+export function PreviewPanel({ basePath = '/', className, workspaceContainer }: PreviewPanelProps) {
   const { doc, parseError, isParsing, markdownSource, mediaRevision } = useEditorContext();
   const mediaProvider = useMediaProvider();
   const {
@@ -68,10 +72,10 @@ export function PreviewPanel({ basePath = '/', className, container }: PreviewPa
       sourceDoc = result.doc;
     }
 
-    // If we have a container, try to resolve audio mapping before building preview
-    if (container) {
+    // If we have a workspace container, try to resolve audio mapping before building preview
+    if (workspaceContainer) {
       let cancelled = false;
-      resolveAudioMapping(sourceDoc, container).then((audioDoc) => {
+      resolveAudioMapping(sourceDoc, workspaceContainer).then((audioDoc) => {
         if (!cancelled) {
           setPreviewDoc(buildPreviewDoc(audioDoc));
         }
@@ -84,7 +88,7 @@ export function PreviewPanel({ basePath = '/', className, container }: PreviewPa
     }
 
     setPreviewDoc(buildPreviewDoc(sourceDoc));
-  }, [doc, activeTransformStyle, container]);
+  }, [doc, activeTransformStyle, workspaceContainer]);
 
   // Status overlays for non-ready states
   if (isParsing) {

@@ -56,7 +56,7 @@ describe('versioning wiring + VersionHistoryPanel', () => {
     await container.writeDocument('# hi', 'index.md');
 
     render(
-      <EditorProvider container={container} allowVersioning>
+      <EditorProvider workspaceContainer={container} allowVersioning>
         <Harness />
       </EditorProvider>,
     );
@@ -69,7 +69,7 @@ describe('versioning wiring + VersionHistoryPanel', () => {
   it('omits the toolbar trigger when versioning is off', () => {
     const container = new MemoryContentContainer();
     render(
-      <EditorProvider container={container}>
+      <EditorProvider workspaceContainer={container}>
         <Harness />
       </EditorProvider>,
     );
@@ -94,7 +94,7 @@ describe('versioning wiring + VersionHistoryPanel', () => {
 
     render(
       <EditorProvider
-        container={container}
+        workspaceContainer={container}
         allowVersioning
         versioningAutoSaveIdleMs={0}
         onSaveVersion={onSaveVersion}
@@ -153,7 +153,7 @@ describe('versioning wiring + VersionHistoryPanel', () => {
 
     render(
       <EditorProvider
-        container={container}
+        workspaceContainer={container}
         allowVersioning
         versioningAutoSaveIdleMs={0}
         versioningPrunePolicy={{ type: 'keep-last-n', n: 2 }}

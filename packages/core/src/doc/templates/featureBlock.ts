@@ -111,16 +111,19 @@ function buildFeatureLayers(
   const textAnchor = side === 'right' && !stack ? 'top-right' : 'top-left';
   const textAlign: 'left' | 'right' = side === 'right' && !stack ? 'right' : 'left';
 
-  const layers: Layer[] = [
-    // Background fill — keeps the text side legible on themes whose
-    // page background blends into the image edge.
-    {
-      type: 'shape',
-      id: 'feature-bg',
-      content: { shape: 'rect', fill: theme.colors.background },
-      position: { x: 0, y: 0, width: '100%', height: '100%' },
-    },
-  ];
+  // Feature blocks render in two very different surfaces: a full-bleed
+  // slide in the slideshow player, and a small SVG card inline in the
+  // document/page views. Filling the SVG canvas with `theme.colors.background`
+  // works for the slideshow (dark theme → dark slide on the dark
+  // backdrop is fine) but in the inline gutter it paints a dark
+  // rectangle over the otherwise-cream document page, which looks
+  // jarring. The card wrapper around the SVG already supplies its own
+  // surface treatment (rounded corners, soft shadow); leaving the SVG
+  // background transparent lets that show through. Text color still
+  // comes from `theme.colors.text`, which the theme designer has paired
+  // for legibility against `theme.colors.background` — typically a mid
+  // grey that reads well on either light page surfaces or dark slides.
+  const layers: Layer[] = [];
 
   if (imageSrc) {
     layers.push({

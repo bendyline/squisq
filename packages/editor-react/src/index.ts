@@ -33,6 +33,8 @@ export type {
   ImageDisplayMode,
   MentionCandidate,
   MentionProvider,
+  DocumentLinkCandidate,
+  DocumentLinkProvider,
   ViewPreferences,
 } from './EditorContext.js';
 

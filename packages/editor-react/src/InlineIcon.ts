@@ -35,8 +35,7 @@ export const InlineIcon = Node.create({
       token: {
         default: '',
         parseHTML: (el: HTMLElement) => el.getAttribute('data-icon') ?? '',
-        renderHTML: (attrs: InlineIconAttrs) =>
-          attrs.token ? { 'data-icon': attrs.token } : {},
+        renderHTML: (attrs: InlineIconAttrs) => (attrs.token ? { 'data-icon': attrs.token } : {}),
       },
       family: {
         default: 'solid',
@@ -47,16 +46,21 @@ export const InlineIcon = Node.create({
       name: {
         default: '',
         parseHTML: (el: HTMLElement) => el.getAttribute('data-name') ?? '',
-        renderHTML: (attrs: InlineIconAttrs) =>
-          attrs.name ? { 'data-name': attrs.name } : {},
+        renderHTML: (attrs: InlineIconAttrs) => (attrs.name ? { 'data-name': attrs.name } : {}),
       },
     };
   },
 
   parseHTML() {
+    // Tiptap's built-in Italic mark also claims `<i>` tags. We need a
+    // higher priority than the default (50) so ProseMirror picks
+    // InlineIcon over Italic for `<i data-icon=…>` markup — otherwise
+    // the markdown → WYSIWYG round-trip silently drops the icon and
+    // produces an empty italic mark instead.
     return [
       {
         tag: 'i[data-icon]',
+        priority: 100,
       },
     ];
   },

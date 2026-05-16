@@ -38,7 +38,9 @@ describe('markdownDocToPlainHtml', () => {
 
   it('renders paragraphs, emphasis, strong, and links', () => {
     const html = render('A *b* **c** [link](https://example.com).');
-    expect(html).toContain('<p>A <em>b</em> <strong>c</strong> <a href="https://example.com">link</a>.</p>');
+    expect(html).toContain(
+      '<p>A <em>b</em> <strong>c</strong> <a href="https://example.com">link</a>.</p>',
+    );
   });
 
   it('renders ordered and unordered lists', () => {
@@ -175,7 +177,8 @@ describe('markdownDocToPlainHtml', () => {
     });
 
     it('forwards explicit width/height on the feature image so CSS can center it', () => {
-      const md = '# Mike {[leftFeature]}\n\n<img alt="m" src="m.jpg" width="194" height="220">\n\nBody.';
+      const md =
+        '# Mike {[leftFeature]}\n\n<img alt="m" src="m.jpg" width="194" height="220">\n\nBody.';
       const html = render(md);
       // The media wrapper gets a "sized" modifier class that the CSS
       // uses to switch from stretch-to-fill to center-with-padding.
@@ -230,6 +233,28 @@ describe('markdownDocToPlainHtml', () => {
       const sectionClose = html.indexOf('</section>');
       const subHeading = html.indexOf('<h3>Sub');
       expect(sectionClose).toBeLessThan(subHeading);
+    });
+  });
+
+  describe('link rewriting via `links` option', () => {
+    it('rewrites <a href> through the supplied map', () => {
+      const html = render('See [my CV](resume.md) for details.', {
+        links: new Map([['resume.md', 'resume.html']]),
+      });
+      expect(html).toContain('href="resume.html"');
+      expect(html).not.toContain('href="resume.md"');
+    });
+
+    it('leaves URLs not in the map unchanged', () => {
+      const html = render('[external](https://example.com)', {
+        links: new Map([['resume.md', 'resume.html']]),
+      });
+      expect(html).toContain('href="https://example.com"');
+    });
+
+    it('preserves the original behavior when no map is supplied', () => {
+      const html = render('[my CV](resume.md)');
+      expect(html).toContain('href="resume.md"');
     });
   });
 
@@ -296,6 +321,52 @@ describe('markdownDocToPlainHtml', () => {
       expect(html).not.toContain('--plain-bg');
       expect(html).not.toContain('fonts.googleapis.com');
       expect(html).toContain('system-ui');
+    });
+
+    it('auto-resolves theme from frontmatter when no explicit theme is passed', () => {
+      // Without a theme option, the doc's themeId in frontmatter should
+      // pick up the theme automatically — callers like docblocks that
+      // render plain HTML straight from a parsed doc get themed output
+      // without having to wire theme resolution themselves.
+      const html = render('---\ntitle: x\nthemeId: warm-earth\n---\n\n# Hello');
+      const warm = resolveTheme('warm-earth');
+      expect(html).toContain(`--plain-bg: ${warm.colors.background};`);
+      expect(html).toContain(`--plain-text: ${warm.colors.text};`);
+    });
+
+    it('explicit theme option still wins over frontmatter themeId', () => {
+      // The site's export dialog lets the user override the doc's theme
+      // at export time — the option must take precedence over what the
+      // frontmatter encodes.
+      const cinematic = resolveTheme('cinematic');
+      const html = render('---\nthemeId: warm-earth\n---\n\n# Hello', { theme: cinematic });
+      expect(html).toContain(`--plain-bg: ${cinematic.colors.background};`);
+    });
+  });
+
+  describe('image sizing', () => {
+    it('lets explicit width/height attributes survive without CSS overriding them', () => {
+      // The WYSIWYG editor writes width/height after a resize. The CSS
+      // must not force `width: auto` or `height: auto` on imgs that
+      // carry explicit dims — otherwise the user's sizing is silently
+      // discarded.
+      const html = render('<img src="x.png" width="300" height="200">');
+      // No rule forcing height:auto unconditionally — the constrained
+      // variant only kicks in when neither attribute is present.
+      expect(html).toContain('img:not([width]):not([height])');
+      expect(html).not.toMatch(/^\s*img\s*\{[^}]*height:\s*auto/m);
+    });
+
+    it('feature media keeps width/height attrs untouched on resized images', () => {
+      const md = '# Hi {[leftFeature]}\n\n<img src="m.jpg" width="300" height="200">\n\nBody.';
+      const html = render(md);
+      // The image still carries its dimensions in the markup…
+      expect(html).toContain('width="300"');
+      expect(html).toContain('height="200"');
+      // …and the sized-media CSS rule no longer forces width:auto /
+      // height:auto, which would have overridden them.
+      expect(html).not.toMatch(/\.squisq-feature__media--sized\s+img\s*\{[^}]*width:\s*auto/);
+      expect(html).not.toMatch(/\.squisq-feature__media--sized\s+img\s*\{[^}]*height:\s*auto/);
     });
   });
 });

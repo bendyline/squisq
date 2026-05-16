@@ -62,6 +62,30 @@ export interface MentionCandidate {
  */
 export type MentionProvider = (query: string) => Promise<MentionCandidate[]>;
 
+/**
+ * A document that the link dialog's "Browse documents" picker can offer.
+ * `path` is what lands in the markdown URL (typically relative to the
+ * current document so `home.md → resume.md` round-trips through file-
+ * system serializers). `label` is the human name shown in the list.
+ * `description` is an optional secondary line (e.g. workspace folder,
+ * last-modified date).
+ */
+export interface DocumentLinkCandidate {
+  path: string;
+  label: string;
+  description?: string;
+}
+
+/**
+ * Resolves sibling / workspace document candidates for the link dialog.
+ * The editor itself has no notion of "neighbors" — hosts that organize
+ * docs in a workspace (e.g. docblocks) implement this to power the
+ * dialog's document picker. Pass `''` as the query for an initial list
+ * (the dialog calls it once on open); subsequent calls narrow by user
+ * input.
+ */
+export type DocumentLinkProvider = (query: string) => Promise<DocumentLinkCandidate[]>;
+
 // ─── Types ───────────────────────────────────────────────
 
 export type EditorView = 'raw' | 'wysiwyg' | 'preview';
@@ -181,12 +205,18 @@ export interface EditorContextValue extends EditorState, EditorActions {
   tiptapEditor: TiptapEditor | null;
   /** The live Monaco editor instance (null when Raw is not mounted) */
   monacoEditor: MonacoEditor | null;
-  /** ContentContainer the editor reads/writes accessory files through. */
-  container: ContentContainer | null;
+  /**
+   * Workspace-scoped `ContentContainer` for this document — the folder
+   * holding the doc, its `_files/` sidecar, sibling documents, and any
+   * version snapshots. Drives audio mapping, version history, and
+   * sibling-doc reads for the recursive HTML export.
+   */
+  workspaceContainer: ContentContainer | null;
   /**
    * Version manager — non-null only when the host opted into versioning
-   * (`allowVersioning` + a `container`). Components can call `saveVersion`
-   * directly, or render the version-history panel which reads it from here.
+   * (`allowVersioning` + a `workspaceContainer`). Components can call
+   * `saveVersion` directly, or render the version-history panel which
+   * reads it from here.
    */
   versioning: DocumentVersionManager | null;
   /**
@@ -213,6 +243,13 @@ export interface EditorContextValue extends EditorState, EditorActions {
    * the user types `@<query>`. When unset, `@` is just a literal character.
    */
   mentionProvider: MentionProvider | null;
+  /**
+   * Optional provider for sibling-document suggestions in the link
+   * dialog. When set, the dialog shows a "Browse documents" picker that
+   * lets authors search neighbor docs by name and insert a relative-
+   * path link. When unset, the dialog falls back to URL-only.
+   */
+  documentLinkProvider: DocumentLinkProvider | null;
 }
 
 export type ImageDisplayMode = 'inline' | 'thumbnail';
@@ -245,16 +282,18 @@ export interface EditorProviderProps {
   /** Color theme */
   theme?: EditorTheme;
   /**
-   * ContentContainer the editor reads/writes accessory files through.
-   * Required for `allowVersioning` to take effect.
+   * Workspace-scoped `ContentContainer` for this document — the folder
+   * holding the doc, its `_files/` sidecar, sibling documents, and any
+   * version snapshots. Required for `allowVersioning` to take effect.
    */
-  container?: ContentContainer | null;
+  workspaceContainer?: ContentContainer | null;
   /**
    * Enable version history. Snapshots are stored at
-   * `.versions/<basename>.<timestamp>.md` inside `container`. Auto-save
-   * fires after `versioningAutoSaveIdleMs` of idle; hosts can also call
-   * `saveVersion()` from the context. Without a `container`, this prop
-   * is ignored (and a `console.warn` is emitted).
+   * `.versions/<basename>.<timestamp>.md` inside `workspaceContainer`.
+   * Auto-save fires after `versioningAutoSaveIdleMs` of idle; hosts can
+   * also call `saveVersion()` from the context. Without a
+   * `workspaceContainer`, this prop is ignored (and a `console.warn` is
+   * emitted).
    */
   allowVersioning?: boolean;
   /** Override the basename used in version filenames. Defaults to the
@@ -286,6 +325,11 @@ export interface EditorProviderProps {
    * entirely — typing `@` becomes just a literal character again.
    */
   mentionProvider?: MentionProvider | null;
+  /**
+   * Async provider for sibling-document suggestions in the link dialog.
+   * Omit to fall back to URL-only link insertion.
+   */
+  documentLinkProvider?: DocumentLinkProvider | null;
   /**
    * File name (e.g. `foo.ts`) or bare extension — used to pick a Monaco
    * language and decide between markdown vs. code mode.
@@ -361,7 +405,7 @@ export function EditorProvider({
   initialView = 'raw',
   articleId = 'untitled',
   theme: initialTheme = 'light',
-  container = null,
+  workspaceContainer = null,
   allowVersioning = false,
   versionBasename,
   versioningPrunePolicy = DEFAULT_PRUNE_POLICY,
@@ -370,6 +414,7 @@ export function EditorProvider({
   mediaProvider = null,
   imageDisplayMode = 'inline',
   mentionProvider = null,
+  documentLinkProvider = null,
   fileName,
   language,
   inlinePreview = false,
@@ -637,23 +682,23 @@ export function EditorProvider({
   );
 
   // ── Versioning ─────────────────────────────────────────
-  // Build a manager only when versioning is opted in *and* a container
-  // exists. A versioning request without a container is a misconfiguration
+  // Build a manager only when versioning is opted in *and* a workspace
+  // container exists. A versioning request without one is a misconfiguration
   // — warn once so it surfaces in dev without breaking the editor.
   const versioningWarnedRef = useRef(false);
   useEffect(() => {
-    if (allowVersioning && !container && !versioningWarnedRef.current) {
+    if (allowVersioning && !workspaceContainer && !versioningWarnedRef.current) {
       console.warn(
-        '[squisq-editor] allowVersioning requires a `container` prop; versioning is disabled.',
+        '[squisq-editor] allowVersioning requires a `workspaceContainer` prop; versioning is disabled.',
       );
       versioningWarnedRef.current = true;
     }
-  }, [allowVersioning, container]);
+  }, [allowVersioning, workspaceContainer]);
 
   const versioning = useMemo<DocumentVersionManager | null>(() => {
-    if (!allowVersioning || !container) return null;
-    return new DocumentVersionManager(container, { basename: versionBasename });
-  }, [allowVersioning, container, versionBasename]);
+    if (!allowVersioning || !workspaceContainer) return null;
+    return new DocumentVersionManager(workspaceContainer, { basename: versionBasename });
+  }, [allowVersioning, workspaceContainer, versionBasename]);
 
   const onSaveVersionRef = useRef(onSaveVersion);
   onSaveVersionRef.current = onSaveVersion;
@@ -752,12 +797,13 @@ export function EditorProvider({
       mediaRevision,
       tiptapEditor,
       monacoEditor,
-      container,
+      workspaceContainer,
       versioning,
       saveVersion,
       mediaProvider,
       imageDisplayMode,
       mentionProvider,
+      documentLinkProvider,
       setMarkdownSource,
       setMarkdownDoc,
       setActiveView,
@@ -790,12 +836,13 @@ export function EditorProvider({
       blockTagsVisible,
       tiptapEditor,
       monacoEditor,
-      container,
+      workspaceContainer,
       versioning,
       saveVersion,
       mediaProvider,
       imageDisplayMode,
       mentionProvider,
+      documentLinkProvider,
       setMarkdownSource,
       setMarkdownDoc,
       setActiveView,

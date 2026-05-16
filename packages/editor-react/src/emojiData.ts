@@ -1263,9 +1263,7 @@ export interface PickerCategory {
   id: string;
   label: string;
   /** What to render on the category tab. Emoji glyph or FA class. */
-  tab:
-    | { kind: 'emoji'; char: string }
-    | { kind: 'icon'; family: IconFamily; name: string };
+  tab: { kind: 'emoji'; char: string } | { kind: 'icon'; family: IconFamily; name: string };
   entries: PickerEntry[];
 }
 
@@ -1273,12 +1271,12 @@ function buildIconCategory(family: IconFamily, label: string): PickerCategory {
   // Pick a representative icon for the tab — `github` for brands, `house` for solid,
   // `face-smile` for regular. We fall back to the family's first entry if the
   // representative is missing in a future FA version.
-  const repName =
-    family === 'brands' ? 'github' : family === 'solid' ? 'house' : 'face-smile';
+  const repName = family === 'brands' ? 'github' : family === 'solid' ? 'house' : 'face-smile';
   const familyIcons = ICONS.filter((i) => i.family === family);
-  const rep =
-    familyIcons.find((i) => i.name === repName) ?? familyIcons[0];
-  const tabIcon = rep ? { kind: 'icon' as const, family, name: rep.name } : { kind: 'emoji' as const, char: '◆' };
+  const rep = familyIcons.find((i) => i.name === repName) ?? familyIcons[0];
+  const tabIcon = rep
+    ? { kind: 'icon' as const, family, name: rep.name }
+    : { kind: 'emoji' as const, char: '◆' };
   return {
     id: `fa-${family}`,
     label,
@@ -1322,9 +1320,7 @@ export const PICKER_CATEGORIES: PickerCategory[] = [
 ];
 
 /** Flat corpus for the picker search index. */
-export const ALL_PICKER_ENTRIES: PickerEntry[] = PICKER_CATEGORIES.flatMap(
-  (c) => c.entries,
-);
+export const ALL_PICKER_ENTRIES: PickerEntry[] = PICKER_CATEGORIES.flatMap((c) => c.entries);
 
 /** Lowercase substring search across emoji + icon entries. */
 export function searchPickerEntries(query: string, limit = 80): PickerEntry[] {

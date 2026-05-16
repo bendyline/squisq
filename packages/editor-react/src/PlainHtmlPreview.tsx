@@ -22,6 +22,8 @@ import { parseMarkdown } from '@bendyline/squisq/markdown';
 import type { MarkdownDocument, HtmlNode } from '@bendyline/squisq/markdown';
 import type { MediaProvider, Theme } from '@bendyline/squisq/schemas';
 import { markdownDocToPlainHtml } from '@bendyline/squisq-formats/html';
+import { normalizeMalformedAssetUrl } from './utils/normalizeMalformedAssetUrl';
+import { collectInlineFontAwesomeCss } from './utils/collectInlineFontAwesomeCss';
 
 export interface PlainHtmlPreviewProps {
   /** Raw markdown source. */
@@ -87,9 +89,14 @@ export function PlainHtmlPreview({
     const refs = Array.from(collectImageRefs(mdDoc));
     Promise.all(
       refs.map(async (ref) => {
-        if (isExternal(ref)) return [ref, ref] as const;
+        // Word-style imports may have `http://<doc>_files/foo.png` —
+        // recover the relative path so the workspace provider resolves
+        // it, otherwise the iframe tries to fetch a nonsense hostname.
+        const recovered = normalizeMalformedAssetUrl(ref);
+        if (!recovered && isExternal(ref)) return [ref, ref] as const;
+        const lookup = recovered ?? ref;
         try {
-          const url = await mediaProvider.resolveUrl(ref);
+          const url = await mediaProvider.resolveUrl(lookup);
           return [ref, url] as const;
         } catch {
           return [ref, ref] as const;
@@ -113,9 +120,18 @@ export function PlainHtmlPreview({
     return merged;
   }, [resolvedImages, images]);
 
+  // Gather FontAwesome @font-face + utility rules from the host page's
+  // own stylesheets so the iframe doesn't have to depend on a cross-
+  // origin CDN fetch (which sandbox / tracking-prevention can silently
+  // drop, leaving the icons invisible). The host (editor-react) already
+  // bundles FA, so the rules are guaranteed to be present and the font
+  // URLs inside them resolve to same-origin assets the iframe can
+  // fetch under `allow-same-origin`.
+  const iconsCss = useMemo(() => collectInlineFontAwesomeCss(), []);
+
   const html = useMemo(
-    () => markdownDocToPlainHtml(mdDoc, { title, images: mergedImages, theme }),
-    [mdDoc, title, mergedImages, theme],
+    () => markdownDocToPlainHtml(mdDoc, { title, images: mergedImages, theme, iconsCss }),
+    [mdDoc, title, mergedImages, theme, iconsCss],
   );
 
   return (

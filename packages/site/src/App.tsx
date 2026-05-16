@@ -89,6 +89,12 @@ export function App() {
     createEmptyProvider(),
   );
   const mediaProviderRef = useRef<MediaProvider | null>(mediaProvider);
+  // The active workspace-scoped ContentContainer (when the user loaded
+  // a zip sample or uploaded a zip). Surfaced to FileToolbar so the
+  // export dialog can offer the recursive "Export linked documents"
+  // toggle. Null when the editor is running off a slot or a standalone
+  // markdown source.
+  const [workspaceContainer, setWorkspaceContainer] = useState<ContentContainer | null>(null);
   // Loading state for content zip samples
   const [loadingContent, setLoadingContent] = useState(false);
 
@@ -101,10 +107,14 @@ export function App() {
     setMediaProvider(provider);
   }, []);
 
-  // Create/dispose MediaProvider when active slot changes
+  // Create/dispose MediaProvider when active slot changes. A slot is
+  // backed by IndexedDB media storage, not a markdown container, so we
+  // also clear any container that may have been left over from a prior
+  // zip-sample load.
   useEffect(() => {
     if (activeSlot !== null) {
       replaceMediaProvider(createSlotMediaProvider(activeSlot));
+      setWorkspaceContainer(null);
     } else {
       replaceMediaProvider(createEmptyProvider());
     }
@@ -135,10 +145,11 @@ export function App() {
             return res.arrayBuffer();
           })
           .then((buf) => zipToContainer(buf))
-          .then(async (container) => {
-            const markdown = (await container.readDocument()) ?? '';
+          .then(async (loaded) => {
+            const markdown = (await loaded.readDocument()) ?? '';
             setCurrentSource(markdown);
-            replaceMediaProvider(createMediaProviderFromContainer(container));
+            replaceMediaProvider(createMediaProviderFromContainer(loaded));
+            setWorkspaceContainer(loaded);
             setEditorKey((k) => k + 1);
           })
           .catch((err: unknown) => {
@@ -155,6 +166,7 @@ export function App() {
       // Inline markdown sample
       setCurrentSource(SAMPLES[key] || '');
       replaceMediaProvider(createEmptyProvider());
+      setWorkspaceContainer(null);
       setActiveSlot(null);
     },
     [replaceMediaProvider, createEmptyProvider],
@@ -171,15 +183,20 @@ export function App() {
   const handleImport = useCallback((markdown: string) => {
     setCurrentSource(markdown);
     setSelectedSample(''); // deselect sample dropdown
+    // A bare markdown import has no associated container — drop any
+    // container that was previously active so the export dialog stops
+    // offering "Export linked documents" (which can't work without one).
+    setWorkspaceContainer(null);
     setEditorKey((k) => k + 1); // remount editor with new content
   }, []);
 
   const handleZipImport = useCallback(
-    (markdown: string, container: ContentContainer) => {
+    (markdown: string, imported: ContentContainer) => {
       setCurrentSource(markdown);
       setSelectedSample('');
       setActiveSlot(null);
-      replaceMediaProvider(createMediaProviderFromContainer(container));
+      replaceMediaProvider(createMediaProviderFromContainer(imported));
+      setWorkspaceContainer(imported);
       setEditorKey((k) => k + 1);
     },
     [replaceMediaProvider],
@@ -357,6 +374,7 @@ export function App() {
           onImport={handleImport}
           onZipImport={handleZipImport}
           mediaProvider={mediaProvider}
+          workspaceContainer={workspaceContainer}
           isDark={isDark}
           activeSlot={activeSlot}
         />

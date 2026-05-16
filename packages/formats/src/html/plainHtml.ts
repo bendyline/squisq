@@ -14,13 +14,9 @@
  * blob URLs (live preview) or data URIs (single-file export).
  */
 
-import type {
-  MarkdownDocument,
-  MarkdownNode,
-  HtmlNode,
-} from '@bendyline/squisq/markdown';
+import type { MarkdownDocument, MarkdownNode, HtmlNode } from '@bendyline/squisq/markdown';
 import type { Theme } from '@bendyline/squisq/schemas';
-import { resolveFontFamily, buildGoogleFontsUrl } from '@bendyline/squisq/schemas';
+import { resolveFontFamily, buildGoogleFontsUrl, resolveTheme } from '@bendyline/squisq/schemas';
 
 // ── Public Types ───────────────────────────────────────────────────
 
@@ -35,12 +31,56 @@ export interface PlainHtmlExportOptions {
    */
   images?: Map<string, string>;
   /**
+   * Substitution map for anchor `href` URLs. Keys are the URL exactly
+   * as it appears in the markdown source (e.g. `'resume.md'`,
+   * `'resume.md#experience'`); values are the URL to emit. URLs not in
+   * the map pass through unchanged. Used by the recursive bundle
+   * exporter to rewrite `.md` references to `.html` so a static export
+   * of a linked document tree is internally browsable.
+   */
+  links?: Map<string, string>;
+  /**
    * Optional Squisq theme. When provided, the rendered page uses the
    * theme's colors and typography, and any Google-hosted fonts the
    * theme references are loaded via a `<link>` to fonts.googleapis.com
    * so the face renders correctly without host preloads.
+   *
+   * When omitted, the function falls back (in order) to {@link themeId}
+   * and then to `doc.frontmatter.themeId` — so an authored
+   * `themeId: warm-earth` in the doc's frontmatter styles the export
+   * automatically, without the caller having to wire theme resolution
+   * themselves.
    */
   theme?: Theme;
+  /**
+   * Optional theme id (e.g. `'warm-earth'`, `'gezellig'`). Convenient
+   * for hosts whose export dialog tracks themes by id — they can pass
+   * the id straight through instead of resolving to a `Theme` object.
+   * When both `theme` and `themeId` are provided, `theme` wins.
+   */
+  themeId?: string;
+  /**
+   * Optional FontAwesome CSS text to inline into the rendered page,
+   * replacing the default cross-origin `<link>` to cdnjs. Required for
+   * sandboxed iframe previews where tracking prevention or stricter
+   * origin policies can silently drop cross-origin font fetches —
+   * inlining keeps the icons resolvable purely from same-origin
+   * resources. Hosts typically gather this string by scraping
+   * `document.styleSheets` for `@font-face` rules whose family starts
+   * with `"Font Awesome"`. The CDN `<link>` is only emitted when this
+   * option is not provided.
+   */
+  iconsCss?: string;
+}
+
+/**
+ * Internal render context — bundles the substitution maps so adding a
+ * new one (e.g. `links`) doesn't require threading another parameter
+ * through every node renderer.
+ */
+interface RenderCtx {
+  images?: Map<string, string>;
+  links?: Map<string, string>;
 }
 
 // ── Public API ─────────────────────────────────────────────────────
@@ -57,13 +97,31 @@ export function markdownDocToPlainHtml(
   doc: MarkdownDocument,
   options: PlainHtmlExportOptions = {},
 ): string {
-  const { title = 'Document', images, theme } = options;
-  const body = renderTopLevel(doc.children, images);
+  const { title = 'Document', images, links, themeId, iconsCss } = options;
+  // Fall back chain for theme: explicit `theme` → explicit `themeId`
+  // option → doc frontmatter `themeId`. Hosts whose export dialog
+  // tracks themes by id can pass `themeId` straight through; authored
+  // docs with `themeId: warm-earth` in frontmatter get styled
+  // automatically when neither is supplied.
+  const theme =
+    options.theme ??
+    (themeId ? resolveTheme(themeId) : undefined) ??
+    (typeof doc.frontmatter?.themeId === 'string'
+      ? resolveTheme(doc.frontmatter.themeId)
+      : undefined);
+  const ctx: RenderCtx = { images, links };
+  const body = renderTopLevel(doc.children, ctx);
   const fontsLink = theme ? renderFontsLink(theme) : '';
-  // Auto-link FontAwesome only when at least one inline icon is in the
-  // doc. Keeps non-icon exports clean (no extra CSS fetch, no unused
-  // CDN dependency).
-  const iconsLink = docUsesIcons(doc) ? FONT_AWESOME_LINK : '';
+  // Resolve how to load FontAwesome — only when the doc actually uses
+  // icons. When the host supplies `iconsCss` (typical for sandboxed
+  // iframe previews where cross-origin font fetches get blocked), we
+  // inline it as a `<style>` block; otherwise we fall back to the
+  // public cdnjs `<link>` which works for standalone HTML files.
+  const usesIcons = docUsesIcons(doc);
+  let iconsLink = '';
+  if (usesIcons) {
+    iconsLink = iconsCss ? `<style data-fa-inline>\n${iconsCss}\n</style>\n` : FONT_AWESOME_LINK;
+  }
   const themedCss = theme ? renderThemedCss(theme) : DEFAULT_CSS;
   return `<!DOCTYPE html>
 <html lang="en">
@@ -115,10 +173,7 @@ function docUsesIcons(doc: MarkdownDocument): boolean {
  * with a media column and a text column — the plain-HTML analogue of
  * the SVG layer layout produced by `getLayers` for the same templates.
  */
-function renderTopLevel(
-  children: MarkdownNode[],
-  images: Map<string, string> | undefined,
-): string {
+function renderTopLevel(children: MarkdownNode[], ctx: RenderCtx | undefined): string {
   const out: string[] = [];
   for (let i = 0; i < children.length; i++) {
     const node = children[i] as { type?: string };
@@ -128,12 +183,12 @@ function renderTopLevel(
       if (tpl === 'leftFeature' || tpl === 'rightFeature') {
         const end = findSectionEnd(children, i);
         const sectionBody = children.slice(i + 1, end);
-        out.push(renderFeatureSection(heading, sectionBody, tpl, images));
+        out.push(renderFeatureSection(heading, sectionBody, tpl, ctx));
         i = end - 1;
         continue;
       }
     }
-    out.push(nodeToHtml(node as MarkdownNode, images));
+    out.push(nodeToHtml(node as MarkdownNode, ctx));
   }
   return out.join('\n');
 }
@@ -170,23 +225,21 @@ function renderFeatureSection(
   heading: MarkdownHeadingLike,
   bodyNodes: MarkdownNode[],
   side: 'leftFeature' | 'rightFeature',
-  images: Map<string, string> | undefined,
+  ctx: RenderCtx | undefined,
 ): string {
   const headingTag = `h${Math.min(Math.max(heading.depth ?? 2, 1), 6)}`;
-  const headingHtml = `<${headingTag}>${childrenToHtml({ children: heading.children }, images)}</${headingTag}>`;
+  const headingHtml = `<${headingTag}>${childrenToHtml({ children: heading.children }, ctx)}</${headingTag}>`;
 
   const featured = takeFirstImage(bodyNodes);
   const media = featured.image
-    ? renderFeatureImage(featured.image, images)
+    ? renderFeatureImage(featured.image, ctx)
     : '<div class="squisq-feature__media squisq-feature__media--empty"></div>';
 
-  const textHtml =
-    [headingHtml, ...featured.remaining.map((n) => nodeToHtml(n, images))]
-      .filter((s) => s.length > 0)
-      .join('\n');
+  const textHtml = [headingHtml, ...featured.remaining.map((n) => nodeToHtml(n, ctx))]
+    .filter((s) => s.length > 0)
+    .join('\n');
 
-  const sideClass =
-    side === 'leftFeature' ? 'squisq-feature--left' : 'squisq-feature--right';
+  const sideClass = side === 'leftFeature' ? 'squisq-feature--left' : 'squisq-feature--right';
 
   return `<section class="squisq-feature ${sideClass}">
 ${media}
@@ -203,8 +256,8 @@ interface FeaturedImage {
   height?: number;
 }
 
-function renderFeatureImage(img: FeaturedImage, images: Map<string, string> | undefined): string {
-  const resolved = images?.get(img.src) ?? img.src;
+function renderFeatureImage(img: FeaturedImage, ctx: RenderCtx | undefined): string {
+  const resolved = ctx?.images?.get(img.src) ?? img.src;
   const attrs = [`src="${escapeAttr(resolved)}"`, `alt="${escapeAttr(img.alt)}"`];
   // Emit `width` / `height` attributes only when the source HTML had
   // them. The CSS rules then know to honor those values rather than
@@ -258,7 +311,9 @@ function extractFirstImageFromBlock(
   if (b.type === 'paragraph' && Array.isArray(b.children)) {
     const kids = b.children as MarkdownNode[];
     const imgIdx = kids.findIndex(
-      (k) => (k as { type?: string }).type === 'image' && typeof (k as { url?: unknown }).url === 'string',
+      (k) =>
+        (k as { type?: string }).type === 'image' &&
+        typeof (k as { url?: unknown }).url === 'string',
     );
     if (imgIdx >= 0) {
       const img = kids[imgIdx] as { url: string; alt?: string };
@@ -344,10 +399,13 @@ const FEATURE_CSS = `  .squisq-feature {
     padding: 1em;
     box-sizing: border-box;
   }
+  /* Leave width and height untouched here -- the HTML attributes set
+     the intrinsic dimensions, and CSS overrides would silently discard
+     the author's sizing. max-width: 100% still keeps the image from
+     overflowing the column on narrow viewports; HTML5 derives the
+     aspect ratio from the width/height pair so the scale stays right. */
   .squisq-feature__media--sized img {
-    width: auto;
     max-width: 100%;
-    height: auto;
     display: block;
     border-radius: 6px;
   }
@@ -370,7 +428,13 @@ const DEFAULT_CSS = `  body { font-family: system-ui, -apple-system, sans-serif;
   code { background: #f3f4f6; padding: 0.15em 0.3em; border-radius: 3px; font-size: 0.9em; }
   pre code { background: none; padding: 0; }
   blockquote { border-left: 3px solid #d1d5db; margin-left: 0; padding-left: 1em; color: #6b7280; }
-  img { max-width: 100%; height: auto; }
+  /* Images: cap at the container width so nothing overflows, but only
+     force aspect-ratio height when the author didn't set explicit
+     dimensions on the <img> tag. The WYSIWYG editor writes width/height
+     attributes after a resize — overriding them here would silently
+     ignore the user's sizing. */
+  img { max-width: 100%; }
+  img:not([width]):not([height]) { height: auto; }
   a { color: #3b82f6; }
   table { border-collapse: collapse; width: 100%; margin: 1em 0; }
   th, td { border: 1px solid #d1d5db; padding: 6px 10px; text-align: left; }
@@ -446,7 +510,10 @@ function renderThemedCss(theme: Theme): string {
     padding-left: 1em;
     color: var(--plain-muted);
   }
-  img { max-width: 100%; height: auto; }
+  /* See DEFAULT_CSS comment: only auto-scale height when the author
+     didn't set explicit width/height attributes. */
+  img { max-width: 100%; }
+  img:not([width]):not([height]) { height: auto; }
   a { color: var(--plain-primary); }
   a:hover { color: var(--plain-accent); }
   table { border-collapse: collapse; width: 100%; margin: 1em 0; }
@@ -489,23 +556,23 @@ function renderFontsLink(theme: Theme): string {
 
 // ── Node → HTML ────────────────────────────────────────────────────
 
-function nodeToHtml(node: MarkdownNode | undefined | null, images?: Map<string, string>): string {
+function nodeToHtml(node: MarkdownNode | undefined | null, ctx?: RenderCtx): string {
   if (!node) return '';
   switch (node.type) {
     case 'heading': {
       const depth = Math.min(Math.max(node.depth ?? 1, 1), 6);
-      return `<h${depth}>${childrenToHtml(node, images)}</h${depth}>`;
+      return `<h${depth}>${childrenToHtml(node, ctx)}</h${depth}>`;
     }
     case 'paragraph':
-      return `<p>${childrenToHtml(node, images)}</p>`;
+      return `<p>${childrenToHtml(node, ctx)}</p>`;
     case 'text':
       return escapeHtml(node.value ?? '');
     case 'strong':
-      return `<strong>${childrenToHtml(node, images)}</strong>`;
+      return `<strong>${childrenToHtml(node, ctx)}</strong>`;
     case 'emphasis':
-      return `<em>${childrenToHtml(node, images)}</em>`;
+      return `<em>${childrenToHtml(node, ctx)}</em>`;
     case 'delete':
-      return `<del>${childrenToHtml(node, images)}</del>`;
+      return `<del>${childrenToHtml(node, ctx)}</del>`;
     case 'inlineCode':
       return `<code>${escapeHtml(node.value ?? '')}</code>`;
     case 'code': {
@@ -513,28 +580,31 @@ function nodeToHtml(node: MarkdownNode | undefined | null, images?: Map<string, 
       return `<pre><code${lang}>${escapeHtml(node.value ?? '')}</code></pre>`;
     }
     case 'blockquote':
-      return `<blockquote>${childrenToHtml(node, images)}</blockquote>`;
+      return `<blockquote>${childrenToHtml(node, ctx)}</blockquote>`;
     case 'list': {
       const tag = node.ordered ? 'ol' : 'ul';
       const start =
         node.ordered && typeof node.start === 'number' && node.start !== 1
           ? ` start="${node.start}"`
           : '';
-      return `<${tag}${start}>${childrenToHtml(node, images)}</${tag}>`;
+      return `<${tag}${start}>${childrenToHtml(node, ctx)}</${tag}>`;
     }
     case 'listItem':
-      return `<li>${childrenToHtml(node, images)}</li>`;
-    case 'link':
-      return `<a href="${escapeAttr(node.url ?? '')}">${childrenToHtml(node, images)}</a>`;
+      return `<li>${childrenToHtml(node, ctx)}</li>`;
+    case 'link': {
+      const original = node.url ?? '';
+      const rewritten = ctx?.links?.get(original) ?? original;
+      return `<a href="${escapeAttr(rewritten)}">${childrenToHtml(node, ctx)}</a>`;
+    }
     case 'image': {
       const original = node.url ?? '';
-      const resolved = images?.get(original) ?? original;
+      const resolved = ctx?.images?.get(original) ?? original;
       return `<img src="${escapeAttr(resolved)}" alt="${escapeAttr(node.alt ?? '')}" />`;
     }
     case 'thematicBreak':
       return '<hr />';
     case 'table':
-      return tableToHtml(node, images);
+      return tableToHtml(node, ctx);
     case 'inlineIcon': {
       // Render via FontAwesome's `fa-<family> fa-<name>` class pair.
       // The `<link>` to the FA CSS is injected into <head> by
@@ -550,13 +620,13 @@ function nodeToHtml(node: MarkdownNode | undefined | null, images?: Map<string, 
       // as parsed `htmlChildren` — rewriting `<img src>` through the
       // image map keeps the preview consistent with the markdown-image
       // path. Other tags pass through unmodified.
-      return htmlChildrenToHtml(node.htmlChildren, images);
+      return htmlChildrenToHtml(node.htmlChildren, ctx);
     default: {
       // Unknown / unhandled node — recurse into children if any so we
       // don't drop content (e.g. directives, footnotes).
       const withChildren = node as { children?: unknown; value?: unknown };
       if (Array.isArray(withChildren.children)) {
-        return childrenToHtml(node as { children: MarkdownNode[] }, images);
+        return childrenToHtml(node as { children: MarkdownNode[] }, ctx);
       }
       if (typeof withChildren.value === 'string') {
         return escapeHtml(withChildren.value);
@@ -568,22 +638,22 @@ function nodeToHtml(node: MarkdownNode | undefined | null, images?: Map<string, 
 
 function childrenToHtml(
   node: { children?: MarkdownNode[]; value?: string },
-  images?: Map<string, string>,
+  ctx?: RenderCtx,
 ): string {
   if (!node.children) return node.value ? escapeHtml(node.value) : '';
-  return node.children.map((child) => nodeToHtml(child, images)).join('');
+  return node.children.map((child) => nodeToHtml(child, ctx)).join('');
 }
 
 function tableToHtml(
   node: { children: { children: { children: MarkdownNode[]; isHeader?: boolean }[] }[] },
-  images?: Map<string, string>,
+  ctx?: RenderCtx,
 ): string {
   const [headerRow, ...bodyRows] = node.children;
   const parts: string[] = ['<table>'];
   if (headerRow) {
     parts.push('<thead><tr>');
     for (const cell of headerRow.children) {
-      parts.push(`<th>${childrenToHtml(cell, images)}</th>`);
+      parts.push(`<th>${childrenToHtml(cell, ctx)}</th>`);
     }
     parts.push('</tr></thead>');
   }
@@ -592,7 +662,7 @@ function tableToHtml(
     for (const row of bodyRows) {
       parts.push('<tr>');
       for (const cell of row.children) {
-        parts.push(`<td>${childrenToHtml(cell, images)}</td>`);
+        parts.push(`<td>${childrenToHtml(cell, ctx)}</td>`);
       }
       parts.push('</tr>');
     }
@@ -602,7 +672,7 @@ function tableToHtml(
   return parts.join('');
 }
 
-function htmlChildrenToHtml(nodes: HtmlNode[] | undefined, images?: Map<string, string>): string {
+function htmlChildrenToHtml(nodes: HtmlNode[] | undefined, ctx?: RenderCtx): string {
   if (!nodes || nodes.length === 0) return '';
   const out: string[] = [];
   for (const node of nodes) {
@@ -620,7 +690,7 @@ function htmlChildrenToHtml(nodes: HtmlNode[] | undefined, images?: Map<string, 
     const tag = node.tagName.toLowerCase();
     const attrs = { ...node.attributes };
     if (tag === 'img' && typeof attrs.src === 'string') {
-      attrs.src = images?.get(attrs.src) ?? attrs.src;
+      attrs.src = ctx?.images?.get(attrs.src) ?? attrs.src;
     }
     const attrStr = Object.entries(attrs)
       .map(([k, v]) => ` ${k}="${escapeAttr(v)}"`)
@@ -628,7 +698,7 @@ function htmlChildrenToHtml(nodes: HtmlNode[] | undefined, images?: Map<string, 
     if (node.selfClosing) {
       out.push(`<${tag}${attrStr} />`);
     } else {
-      out.push(`<${tag}${attrStr}>${htmlChildrenToHtml(node.children, images)}</${tag}>`);
+      out.push(`<${tag}${attrStr}>${htmlChildrenToHtml(node.children, ctx)}</${tag}>`);
     }
   }
   return out.join('');

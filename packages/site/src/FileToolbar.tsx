@@ -46,6 +46,13 @@ interface FileToolbarProps {
   onZipImport: (markdown: string, container: ContentContainer) => void;
   /** Active MediaProvider (used to include media when downloading as zip) */
   mediaProvider: MediaProvider | null;
+  /**
+   * Active workspace-scoped ContentContainer — the folder holding the
+   * doc, its sibling docs, and asset sidecars. When supplied, the
+   * export dialog unlocks the recursive "Export linked documents"
+   * option. Without it, only single-doc plain-HTML export is offered.
+   */
+  workspaceContainer?: ContentContainer | null;
   /** Whether the site is in dark mode */
   isDark: boolean;
   /** Currently active storage slot (null = none). Images require a slot. */
@@ -136,6 +143,7 @@ export function FileToolbar({
   onImport,
   onZipImport,
   mediaProvider,
+  workspaceContainer,
   isDark,
   activeSlot,
 }: FileToolbarProps) {
@@ -471,6 +479,7 @@ export function FileToolbar({
           <ExportConfigModal
             currentSource={currentSource}
             mediaProvider={mediaProvider}
+            workspaceContainer={workspaceContainer}
             onClose={() => setShowExportModal(false)}
           />,
           document.body,

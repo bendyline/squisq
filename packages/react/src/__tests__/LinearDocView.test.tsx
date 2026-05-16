@@ -98,9 +98,7 @@ describe('LinearDocView', () => {
           children: [text('Mike Ammerlaan')],
           templateAnnotation: { template: 'imageWithCaption' },
         },
-        contents: [
-          paragraph({ type: 'image', url: 'mikehome_files/profile.png', alt: 'Mike' }),
-        ],
+        contents: [paragraph({ type: 'image', url: 'mikehome_files/profile.png', alt: 'Mike' })],
       }),
     ]);
     const { container } = render(<LinearDocView doc={doc} />);
@@ -108,7 +106,8 @@ describe('LinearDocView', () => {
     expect(card).toBeTruthy();
     const img = card!.querySelector('image, img') as Element | null;
     expect(img).toBeTruthy();
-    const href = img!.getAttribute('href') ?? img!.getAttribute('xlink:href') ?? img!.getAttribute('src');
+    const href =
+      img!.getAttribute('href') ?? img!.getAttribute('xlink:href') ?? img!.getAttribute('src');
     expect(href).toContain('mikehome_files/profile.png');
   });
 
@@ -147,7 +146,8 @@ describe('LinearDocView', () => {
     const card = container.querySelector('.squisq-linear-card');
     expect(card).toBeTruthy();
     const img = card!.querySelector('image, img') as Element | null;
-    const href = img?.getAttribute('href') ?? img?.getAttribute('xlink:href') ?? img?.getAttribute('src');
+    const href =
+      img?.getAttribute('href') ?? img?.getAttribute('xlink:href') ?? img?.getAttribute('src');
     expect(href).toContain('resized.png');
   });
 

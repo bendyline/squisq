@@ -13,6 +13,7 @@ import {
   type EditorView,
   type ImageDisplayMode,
   type MentionProvider,
+  type DocumentLinkProvider,
   type ViewPreferences,
 } from './EditorContext';
 import { Toolbar } from './Toolbar';
@@ -79,17 +80,37 @@ export interface EditorShellProps {
   maxHeight?: string;
   /** Optional MediaProvider for the Files panel. When set (even to null), a Files toggle appears in the toolbar. */
   mediaProvider?: MediaProvider | null;
-  /** Optional ContentContainer for audio mapping (MP3 discovery + timing.json reading). */
+  /**
+   * The workspace-scoped `ContentContainer` for this document — the
+   * folder that contains the doc, its `_files/` sidecar, sibling
+   * documents, and any version snapshots. Used for:
+   *  - audio mapping (MP3 discovery + timing.json reading);
+   *  - version history snapshots (when `allowVersioning` is true);
+   *  - reading sibling `.md` files for the recursive HTML export;
+   *  - resolving per-document scoped views (e.g. the image-edit
+   *    sidecar derived via `scopeContainer`).
+   * Doc-scoped concerns (per-doc media URLs, per-doc asset writes)
+   * flow through `mediaProvider` instead — typically derived from
+   * this container via `createMediaProviderFromContainer`.
+   */
+  workspaceContainer?: ContentContainer | null;
+  /**
+   * @deprecated Renamed to `workspaceContainer` to make the workspace-
+   * vs. doc-scoped distinction explicit. Still accepted as a fallback
+   * for now; remove in the next breaking release.
+   */
   container?: ContentContainer | null;
   /**
    * Enable version history. Snapshots are stored at
-   * `.versions/<basename>.<timestamp>.md` inside the same `container`,
-   * so they ride along with the document when the host serializes.
+   * `.versions/<basename>.<timestamp>.md` inside the same
+   * `workspaceContainer`, so they ride along with the document when
+   * the host serializes.
    *
    * Snapshots fire on idle (controlled by `versioningAutoSaveIdleMs`)
    * and can also be triggered host-side via the manager exposed in the
    * context (`useEditorContext().versioning`). Has no effect without a
-   * `container` — a `console.warn` flags the misconfiguration in dev.
+   * `workspaceContainer` — a `console.warn` flags the misconfiguration
+   * in dev.
    */
   allowVersioning?: boolean;
   /**
@@ -205,6 +226,15 @@ export interface EditorShellProps {
    * inline. Omit to disable mentions entirely.
    */
   mentionProvider?: MentionProvider | null;
+  /**
+   * Optional async provider for sibling-document suggestions in the
+   * link insert dialog. When supplied, the dialog gains a "Browse
+   * documents" picker so authors can pick a neighbor `.md` by name and
+   * insert a relative-path link without typing the URL by hand. Hosts
+   * that organize docs in a workspace (file-system, IndexedDB slot,
+   * remote API, …) implement this; the editor stays agnostic.
+   */
+  documentLinkProvider?: DocumentLinkProvider | null;
   /**
    * Placeholder text shown in the WYSIWYG editor while the document is
    * empty. When omitted, the editor rotates through its own generic
@@ -329,6 +359,7 @@ export function EditorShell({
   minHeight,
   maxHeight,
   mediaProvider,
+  workspaceContainer,
   container,
   allowVersioning = false,
   versionBasename,
@@ -349,6 +380,7 @@ export function EditorShell({
   fileName,
   language,
   mentionProvider,
+  documentLinkProvider,
   placeholder,
   readOnly = false,
   imageSrc,
@@ -365,15 +397,17 @@ export function EditorShell({
   onViewPreferencesChange,
   themeOverride = null,
 }: EditorShellProps) {
-  // If the host gave us a `container` but no explicit `mediaProvider`,
+  const effectiveContainer = workspaceContainer ?? container ?? null;
+
+  // If the host gave us a `workspaceContainer` but no explicit `mediaProvider`,
   // derive one automatically. Without this, drag-and-drop of an image
   // into the editor silently failed (no provider \u2192 nothing to upload to)
   // even though we had a perfectly good ContentContainer to write into.
   const effectiveMediaProvider = useMemo<MediaProvider | null | undefined>(() => {
     if (mediaProvider !== undefined) return mediaProvider;
-    if (container) return createMediaProviderFromContainer(container);
+    if (effectiveContainer) return createMediaProviderFromContainer(effectiveContainer);
     return undefined;
-  }, [mediaProvider, container]);
+  }, [mediaProvider, effectiveContainer]);
 
   // Show the toggle when explicitly opted in, or when mediaProvider prop was passed at all
   const filesToggleEnabled = showFilesToggle ?? effectiveMediaProvider !== undefined;
@@ -389,7 +423,7 @@ export function EditorShell({
       initialView={effectiveInitialView}
       articleId={articleId}
       theme={theme}
-      container={container ?? null}
+      workspaceContainer={effectiveContainer}
       allowVersioning={allowVersioning}
       versionBasename={versionBasename}
       versioningPrunePolicy={versioningPrunePolicy}
@@ -398,6 +432,7 @@ export function EditorShell({
       mediaProvider={effectiveMediaProvider}
       imageDisplayMode={imageDisplayMode}
       mentionProvider={mentionProvider}
+      documentLinkProvider={documentLinkProvider}
       fileName={fileName}
       language={language}
       inlinePreview={inlinePreview}
@@ -416,7 +451,7 @@ export function EditorShell({
         maxHeight={maxHeight}
         placeholder={placeholder}
         mediaProvider={effectiveMediaProvider ?? null}
-        container={container}
+        workspaceContainer={effectiveContainer}
         filesToggleEnabled={filesToggleEnabled}
         toolbarSlotLeft={toolbarSlotLeft}
         toolbarSlotAfterActions={toolbarSlotAfterActions}
@@ -451,7 +486,7 @@ interface EditorShellInnerProps {
   maxHeight?: string;
   placeholder?: string;
   mediaProvider: MediaProvider | null;
-  container?: ContentContainer | null;
+  workspaceContainer?: ContentContainer | null;
   filesToggleEnabled: boolean;
   toolbarSlotLeft?: ReactNode;
   toolbarSlotAfterActions?: ReactNode;
@@ -483,7 +518,7 @@ function EditorShellInner({
   maxHeight,
   placeholder,
   mediaProvider,
-  container,
+  workspaceContainer,
   filesToggleEnabled,
   toolbarSlotLeft,
   toolbarSlotAfterActions,
@@ -819,7 +854,7 @@ function EditorShellInner({
               </div>
             )}
             {isMarkdownMode && isPreview && (
-              <PreviewPanel basePath={basePath} container={container} />
+              <PreviewPanel basePath={basePath} workspaceContainer={workspaceContainer} />
             )}
           </div>
 
@@ -861,7 +896,7 @@ function EditorShellInner({
       {imageEditTarget !== null && mediaProvider && (
         <ImageEditModal
           relativePath={imageEditTarget}
-          container={container ?? imageEditFallbackContainer}
+          container={workspaceContainer ?? imageEditFallbackContainer}
           mediaProvider={mediaProvider}
           onClose={closeImageEdit}
           onSaved={() => {

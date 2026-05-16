@@ -73,7 +73,9 @@ describe('suggestIcons', () => {
     // `github` (brands) starts with "git" → score 0; `digital-tachograph`
     // contains "git" → score 1. The first must outrank the latter.
     const githubIdx = results.findIndex((r) => r.entry.name === 'github');
-    const containsIdx = results.findIndex((r) => r.entry.name.includes('git') && !r.entry.name.startsWith('git'));
+    const containsIdx = results.findIndex(
+      (r) => r.entry.name.includes('git') && !r.entry.name.startsWith('git'),
+    );
     expect(githubIdx).toBeGreaterThanOrEqual(0);
     if (containsIdx >= 0) {
       expect(githubIdx).toBeLessThan(containsIdx);

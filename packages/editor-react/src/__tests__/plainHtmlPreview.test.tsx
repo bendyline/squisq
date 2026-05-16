@@ -60,10 +60,7 @@ describe('PlainHtmlPreview', () => {
       dispose: vi.fn(() => {}),
     };
     render(
-      <PlainHtmlPreview
-        markdown={'![ext](https://example.com/x.jpg)'}
-        mediaProvider={provider}
-      />,
+      <PlainHtmlPreview markdown={'![ext](https://example.com/x.jpg)'} mediaProvider={provider} />,
     );
     await waitFor(() => {
       expect(getIframeSrcDoc()).toContain('src="https://example.com/x.jpg"');

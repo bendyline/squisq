@@ -19,6 +19,7 @@ import { NodeViewWrapper, ReactNodeViewRenderer } from '@tiptap/react';
 import type { NodeViewProps } from '@tiptap/react';
 import Image from '@tiptap/extension-image';
 import { useEditorContext } from './EditorContext';
+import { normalizeMalformedAssetUrl } from './utils/normalizeMalformedAssetUrl';
 
 function ImageComponent({ node, selected, editor, updateAttributes }: NodeViewProps) {
   const { src, alt, title, width } = node.attrs as {
@@ -38,21 +39,29 @@ function ImageComponent({ node, selected, editor, updateAttributes }: NodeViewPr
   const isThumbnail = imageDisplayMode === 'thumbnail';
   const isEditable = editor?.isEditable ?? true;
 
+  // MS "Save Page As Web Page" / pandoc-style imports sometimes leave
+  // image srcs in the shape `http://<doc>_files/<asset>` — the asset
+  // folder got URL-parsed as a hostname because no scheme separator was
+  // ever there. Detect that shape (bare hostname, no dots/ports, ending
+  // in `_files`) and recover the original relative path so the media
+  // provider can resolve it from the workspace.
+  const normalizedRelativePath = normalizeMalformedAssetUrl(src);
   const isRelative =
     src &&
     !src.startsWith('blob:') &&
     !src.startsWith('http') &&
     !src.startsWith('data:') &&
     !src.startsWith('/');
+  const resolveAs = normalizedRelativePath ?? (isRelative ? src : null);
 
   useEffect(() => {
-    if (!mediaProvider || !isRelative) {
+    if (!mediaProvider || !resolveAs) {
       setResolvedSrc(src);
       return;
     }
 
     let cancelled = false;
-    mediaProvider.resolveUrl(src).then(
+    mediaProvider.resolveUrl(resolveAs).then(
       (resolved) => {
         if (!cancelled) setResolvedSrc(resolved);
       },
@@ -66,7 +75,7 @@ function ImageComponent({ node, selected, editor, updateAttributes }: NodeViewPr
     };
     // `mediaRevision` is bumped after the image editor writes back to the
     // same path — re-resolve so we pick up the fresh blob URL.
-  }, [src, mediaProvider, isRelative, mediaRevision]);
+  }, [src, resolveAs, mediaProvider, mediaRevision]);
 
   // The Edit affordance is only meaningful when:
   //  - the editor is editable (read-only previews skip it),
