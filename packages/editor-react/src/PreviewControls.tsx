@@ -24,6 +24,7 @@ import type { DisplayMode, CaptionStyle } from '@bendyline/squisq-react';
 import type { ViewportPreset, ViewportConfig } from '@bendyline/squisq/schemas';
 import { VIEWPORT_PRESETS, getThemeSummaries, resolveTheme } from '@bendyline/squisq/schemas';
 import type { Theme } from '@bendyline/squisq/schemas';
+import { ThemePicker } from './ThemePicker';
 import { getTransformStyleSummaries } from '@bendyline/squisq/transform';
 import type { Doc } from '@bendyline/squisq/schemas';
 import { setFrontmatterValues } from '@bendyline/squisq/markdown';
@@ -305,8 +306,6 @@ const DISPLAY_MODE_OPTIONS: { key: DisplayMode; label: string }[] = [
   { key: 'page', label: 'Page' },
 ];
 
-const THEME_OPTIONS = getThemeSummaries().map((s) => ({ key: s.id, label: s.name }));
-
 const TRANSFORM_STYLE_OPTIONS = [
   { key: '', label: 'None' },
   ...getTransformStyleSummaries().map((s) => ({ key: s.id, label: s.name })),
@@ -389,13 +388,16 @@ export function PreviewToolbarControls() {
         onChange={(v) => s.setSelectedDisplayMode(v as DisplayMode)}
         compact={isNarrow}
       />
-      <PreviewSelect
-        label="Theme"
-        value={s.activeThemeId}
-        options={THEME_OPTIONS}
-        onChange={(v) => s.setSelectedThemeId(v)}
-        compact={isNarrow}
-      />
+      <div
+        className={`squisq-preview-control${isNarrow ? ' squisq-preview-control--compact' : ''}`}
+      >
+        <label style={labelStyle}>Theme:</label>
+        <ThemePicker
+          value={s.activeThemeId}
+          onChange={(v) => s.setSelectedThemeId(v)}
+          ariaLabel="Theme"
+        />
+      </div>
       <PreviewSelect
         label="Transform"
         value={s.activeTransformStyle}

@@ -105,6 +105,11 @@
       "types": "./dist/icons/index.d.ts",
       "import": "./dist/icons/index.js",
       "default": "./dist/icons/index.js"
+    },
+    "./recommend": {
+      "types": "./dist/recommend/index.d.ts",
+      "import": "./dist/recommend/index.js",
+      "default": "./dist/recommend/index.js"
     }
   },
   "scripts": {

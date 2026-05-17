@@ -109,4 +109,5 @@ export {
   createDocument,
   parseFrontmatter,
   setFrontmatterValues,
+  inferDocumentTitle,
 } from './utils.js';

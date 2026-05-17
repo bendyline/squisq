@@ -12,6 +12,7 @@ rendering and spatial utilities. It is designed to be framework-agnostic at the 
 - `@bendyline/squisq-formats` — Document format converters (DOCX, PDF, OOXML infrastructure)
 - `@bendyline/squisq-editor-react` — React editor shell (Monaco raw, Tiptap WYSIWYG, block preview)
 - `@bendyline/squisq-video-react` — React components for browser-based video export (WebCodecs, ffmpeg.wasm)
+- `@bendyline/squisq-recorder-react` — React components for browser-based audio, camera, and screen recording into a `ContentContainer` (MediaRecorder + getUserMedia + getDisplayMedia)
 
 ## Repository Structure
 
@@ -74,6 +75,15 @@ squisq/
         hooks/              # useVideoExport, useFrameCapture
         workers/            # Web Worker for encoding (WebCodecs + ffmpeg.wasm fallback)
         mp4Mux.ts           # mp4-muxer wrapper for WebCodecs path
+    recorder-react/         # @bendyline/squisq-recorder-react
+      src/
+        RecorderModal.tsx     # Configure + capture dialog (narration/camera/screen/screen+mic tabs)
+        RecorderButton.tsx    # Drop-in button that opens the modal in a portal
+        RecorderPanel.tsx     # Toolbar-anchored mic icon + popover (used by editor-react)
+        hooks/              # useMediaRecorder, useStreamPreview
+        sources/            # getUserMedia/getDisplayMedia wrappers (mic, camera, screen + mic mix)
+        formats.ts          # MediaRecorder MIME probing, filename builder
+        timingJson.ts       # Narration `.timing.json` sidecar (paired with resolveAudioMapping)
     site/                   # squisq-site (dev/demo, not published)
       src/
         App.tsx             # Sample picker + view switching
@@ -87,12 +97,13 @@ squisq/
 - **Output:** `packages/*/dist/`
 
 ```bash
-npm run build              # Build all packages (core → formats → react → video → video-react → editor)
+npm run build              # Build all packages (core → formats → react → video → video-react → recorder-react → editor)
 npm run build:core         # Build core only
 npm run build:react        # Build react only
 npm run build:formats      # Build formats only
 npm run build:editor       # Build editor-react only
 npm run build:video-react  # Build video-react only
+npm run build:recorder-react # Build recorder-react only
 npm test                   # Run vitest unit tests
 npm run test:e2e           # Run Playwright E2E tests
 npm run typecheck          # Type-check all packages (no emit)
@@ -149,6 +160,16 @@ npm run format             # Prettier format
 - Hooks: useVideoExport, useFrameCapture
 - Worker: `@bendyline/squisq-video-react/worker` for the encoding Web Worker
 - Encoding backends: WebCodecs (preferred, streaming H.264) with ffmpeg.wasm fallback (batched)
+
+`@bendyline/squisq-recorder-react` exports everything from the root:
+
+- Components: `RecorderModal`, `RecorderButton`, `RecorderPanel` — configure-and-capture dialog plus two trigger affordances (drop-in button and toolbar-shaped popover trigger). Recording is captured via `MediaRecorder` and written to a `MediaProvider`; narration mode also emits a `.timing.json` sidecar so `resolveAudioMapping()` auto-links the recording to a block.
+- Hooks: `useMediaRecorder` (state machine wrapping `MediaRecorder`), `useStreamPreview` (`MediaStream` → `<video>.srcObject`).
+- Source helpers: `requestMicStream`, `requestCameraStream`, `requestScreenStream` (the last one optionally mixes a mic track into the screen capture via `AudioContext`).
+- Format probe: `resolveFormat`, `supportsMediaRecorder` / `supportsUserMedia` / `supportsDisplayMedia`, `buildFilename`.
+- Sidecar builder: `buildTimingJson`, `encodeTimingJson`, `timingPathFor`.
+- Output strategy: browser-native. Chromium/Firefox produce WebM (VP9/Opus or VP8/Opus); Safari produces MP4 (H.264/AAC). No transcoding pass. `audioMapping.ts` was extended so `.webm`/`.mp4` audio under `audio/*` participates in the same auto-mapping pipeline `.mp3` files always did.
+- Editor wiring: `@bendyline/squisq-editor-react` mounts `RecorderEntry` (which renders the `RecorderPanel`) into the toolbar next to `VersionHistoryPanel`. Reads `useEditorContext()` for `mediaProvider`, `workspaceContainer`, and the markdown insertion helpers. The shell's `allowRecording` prop (default true) gates visibility.
 
 ## Code Style
 

@@ -159,13 +159,32 @@
   color: var(--squisq-jsonform-muted);
 }
 
-/* Toggle switch */
+/* Toggle switch. Selector matches both `<button>` (ToggleEditor) and
+   `<label>` (CheckboxEditor) — buttons need explicit chrome resets or
+   the user agent paints them as opaque pills (the bright white shape
+   that doesn't match the surrounding theme). */
 .squisq-jf-toggle {
   display: inline-flex;
   align-items: center;
   gap: 8px;
   cursor: pointer;
   user-select: none;
+  background: transparent;
+  border: none;
+  padding: 0;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+}
+
+.squisq-jf-toggle:disabled {
+  cursor: not-allowed;
+}
+
+.squisq-jf-toggle:focus-visible {
+  outline: 2px solid var(--squisq-jsonform-primary);
+  outline-offset: 2px;
+  border-radius: 4px;
 }
 
 .squisq-jf-toggle__track {

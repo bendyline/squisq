@@ -270,3 +270,34 @@ export function createDocument(...children: MarkdownDocument['children']): Markd
     children,
   };
 }
+
+/**
+ * Infer a human-readable title for a markdown document.
+ *
+ * Resolution order:
+ *   1. `title:` value in YAML frontmatter (when present and non-empty)
+ *   2. Text of the first heading found, walking top-level depth (H1, then
+ *      H2, etc.) — the shallowest heading wins regardless of source order
+ *
+ * Returns `undefined` when no usable title is found.
+ */
+export function inferDocumentTitle(doc: MarkdownDocument): string | undefined {
+  const fmTitle = doc.frontmatter?.title;
+  if (typeof fmTitle === 'string') {
+    const trimmed = fmTitle.trim();
+    if (trimmed) return trimmed;
+  }
+
+  let best: { depth: number; text: string } | null = null;
+  for (const node of doc.children) {
+    if (node.type !== 'heading') continue;
+    const text = extractPlainText(node).trim();
+    if (!text) continue;
+    if (best === null || node.depth < best.depth) {
+      best = { depth: node.depth, text };
+      if (best.depth === 1) break;
+    }
+  }
+
+  return best?.text;
+}

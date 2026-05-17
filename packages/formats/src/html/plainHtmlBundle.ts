@@ -16,7 +16,7 @@
  */
 
 import JSZip from 'jszip';
-import { parseMarkdown } from '@bendyline/squisq/markdown';
+import { parseMarkdown, inferDocumentTitle } from '@bendyline/squisq/markdown';
 import type { MarkdownDocument, HtmlNode } from '@bendyline/squisq/markdown';
 import type { Theme } from '@bendyline/squisq/schemas';
 import { resolveTheme } from '@bendyline/squisq/schemas';
@@ -377,11 +377,12 @@ function sanitizeZipPath(path: string): string | null {
 
 /**
  * Derive a default page title for a non-entry doc: prefer frontmatter
- * `title` when present, otherwise the filename without extension.
+ * `title`, fall back to the shallowest heading text, then the filename
+ * without extension.
  */
 function titleForFilename(path: string, mdDoc: MarkdownDocument): string {
-  const fmTitle = mdDoc.frontmatter?.title;
-  if (typeof fmTitle === 'string' && fmTitle.trim()) return fmTitle.trim();
+  const inferred = inferDocumentTitle(mdDoc);
+  if (inferred) return inferred;
   const base = path.split('/').pop() ?? path;
   return base.replace(/\.md$/i, '');
 }

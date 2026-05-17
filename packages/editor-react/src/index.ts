@@ -36,6 +36,7 @@ export type {
   DocumentLinkCandidate,
   DocumentLinkProvider,
   ViewPreferences,
+  ThemeInheritance,
 } from './EditorContext.js';
 
 // File-kind detection — useful for hosts that want to pre-decide chrome
@@ -61,6 +62,10 @@ export { PlainHtmlPreview } from './PlainHtmlPreview.js';
 export type { PlainHtmlPreviewProps } from './PlainHtmlPreview.js';
 export { EmojiPicker } from './EmojiPicker.js';
 export type { EmojiPickerProps } from './EmojiPicker.js';
+export { DocumentSettingsDialog } from './DocumentSettingsDialog.js';
+export type { DocumentSettingsDialogProps } from './DocumentSettingsDialog.js';
+export { ThemePicker } from './ThemePicker.js';
+export type { ThemePickerProps } from './ThemePicker.js';
 export { EMOJI_CATEGORIES, ALL_EMOJIS, searchEmojis } from './emojiData.js';
 export type { EmojiEntry, EmojiCategory } from './emojiData.js';
 export {

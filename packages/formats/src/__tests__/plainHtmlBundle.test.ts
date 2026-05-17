@@ -183,10 +183,11 @@ describe('markdownDocsToPlainHtmlBundle', () => {
     expect(one).toContain('src="../home_files/hero.png"');
   });
 
-  it('passes the entry title through; sibling docs derive title from filename', async () => {
+  it('passes the entry title through; sibling docs derive title from the shallowest heading', async () => {
     const c = makeContainer({
-      'home.md': '# Home\n\n[resume](resume.md)',
+      'home.md': '# Home\n\n[resume](resume.md)\n\n[notes](notes.md)',
       'resume.md': '# Resume',
+      'notes.md': 'Just a paragraph.',
     });
     const blob = await markdownDocsToPlainHtmlBundle({
       entryPath: 'home.md',
@@ -195,8 +196,12 @@ describe('markdownDocsToPlainHtmlBundle', () => {
     });
     const home = await readZipPath(blob, 'home.html');
     expect(home).toContain('<title>My Home Page</title>');
+    // Heading-bearing sibling uses its heading text, not the filename.
     const resume = await readZipPath(blob, 'resume.html');
-    expect(resume).toContain('<title>resume</title>');
+    expect(resume).toContain('<title>Resume</title>');
+    // Heading-less sibling falls back to the filename.
+    const notes = await readZipPath(blob, 'notes.html');
+    expect(notes).toContain('<title>notes</title>');
   });
 
   it('respects maxDepth — depth 0 means entry only, no link following', async () => {

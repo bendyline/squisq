@@ -17,7 +17,7 @@
  */
 
 import JSZip from 'jszip';
-import { parseMarkdown } from '@bendyline/squisq/markdown';
+import { parseMarkdown, inferDocumentTitle } from '@bendyline/squisq/markdown';
 import type {
   MarkdownDocument,
   MarkdownBlockNode,
@@ -342,8 +342,8 @@ function sanitizeZipPath(path: string): string | null {
 }
 
 function titleForDoc(path: string, mdDoc: MarkdownDocument): string {
-  const fmTitle = mdDoc.frontmatter?.title;
-  if (typeof fmTitle === 'string' && fmTitle.trim()) return fmTitle.trim();
+  const inferred = inferDocumentTitle(mdDoc);
+  if (inferred) return inferred;
   const base = path.split('/').pop() ?? path;
   return base.replace(/\.md$/i, '');
 }

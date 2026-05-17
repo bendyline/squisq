@@ -11,7 +11,7 @@
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { useEditorContext } from './EditorContext';
+import { useEditorContext, type ThemeInheritance } from './EditorContext';
 
 export function ViewMenuPanel() {
   const {
@@ -23,6 +23,8 @@ export function ViewMenuPanel() {
     setOutlineVisible,
     blockTagsVisible,
     setBlockTagsVisible,
+    themeInheritance,
+    setThemeInheritance,
   } = useEditorContext();
   const [open, setOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -100,6 +102,17 @@ export function ViewMenuPanel() {
             checked={statusBarVisible}
             onChange={toggleStatusBar}
           />
+          <div className="squisq-view-menu-separator" role="separator" />
+          <MenuSelect
+            label="Editor styling from theme"
+            value={themeInheritance}
+            onChange={(v) => setThemeInheritance(v as ThemeInheritance)}
+            options={[
+              { value: 'none', label: "Don't inherit" },
+              { value: 'fonts', label: 'Fonts only' },
+              { value: 'fonts-colors', label: 'Fonts & colors' },
+            ]}
+          />
         </div>
       )}
     </div>
@@ -124,6 +137,35 @@ function MenuToggle({
         onChange={onChange}
       />
       <span className="squisq-view-menu-label">{label}</span>
+    </label>
+  );
+}
+
+function MenuSelect({
+  label,
+  value,
+  onChange,
+  options,
+}: {
+  label: string;
+  value: string;
+  onChange: (next: string) => void;
+  options: readonly { value: string; label: string }[];
+}) {
+  return (
+    <label className="squisq-view-menu-row squisq-view-menu-row--select">
+      <span className="squisq-view-menu-label">{label}</span>
+      <select
+        className="squisq-view-menu-select"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+      >
+        {options.map((o) => (
+          <option key={o.value} value={o.value}>
+            {o.label}
+          </option>
+        ))}
+      </select>
     </label>
   );
 }

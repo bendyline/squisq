@@ -17,6 +17,7 @@ export default defineConfig({
     'jsonForm/index': 'src/jsonForm/index.ts',
     'imageEdit/index': 'src/imageEdit/index.ts',
     'icons/index': 'src/icons/index.ts',
+    'recommend/index': 'src/recommend/index.ts',
   },
   format: ['esm'],
   dts: true,

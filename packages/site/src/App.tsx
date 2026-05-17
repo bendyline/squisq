@@ -172,9 +172,6 @@ export function App() {
     [replaceMediaProvider, createEmptyProvider],
   );
 
-  const handleThemeChange = useCallback((e: React.ChangeEvent<HTMLSelectElement>) => {
-    setTheme(e.target.value as EditorTheme);
-  }, []);
 
   const handleChange = useCallback((source: string) => {
     setCurrentSource(source);
@@ -276,35 +273,6 @@ export function App() {
                 {sample.label}
               </option>
             ))}
-          </select>
-        </label>
-
-        <label
-          style={{
-            fontSize: 13,
-            fontFamily: 'system-ui, -apple-system, sans-serif',
-            color: '#4a3c1f',
-            display: 'flex',
-            alignItems: 'center',
-            gap: 6,
-          }}
-        >
-          Theme:
-          <select
-            value={theme}
-            onChange={handleThemeChange}
-            style={{
-              fontSize: 13,
-              fontFamily: 'system-ui, -apple-system, sans-serif',
-              padding: '4px 8px',
-              background: '#FFFDF7',
-              color: '#4a3c1f',
-              border: '1px solid #c9b98a',
-              borderRadius: 0,
-            }}
-          >
-            <option value="light">Light</option>
-            <option value="dark">Dark</option>
           </select>
         </label>
 

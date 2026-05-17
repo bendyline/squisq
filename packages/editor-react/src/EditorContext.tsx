@@ -91,6 +91,13 @@ export type DocumentLinkProvider = (query: string) => Promise<DocumentLinkCandid
 export type EditorView = 'raw' | 'wysiwyg' | 'preview';
 export type EditorTheme = 'light' | 'dark';
 /**
+ * How much of the active Squisq theme the WYSIWYG editing surface
+ * mirrors. `'fonts'` is the historical default — body and heading
+ * fonts only. `'fonts-colors'` also borrows the theme canvas / text
+ * colors. `'none'` opts out completely.
+ */
+export type ThemeInheritance = 'none' | 'fonts' | 'fonts-colors';
+/**
  * Editor operating mode. `markdown` is the full experience (WYSIWYG +
  * Preview tabs, formatting toolbar). `code` is a Monaco-only view used
  * when the content represents a non-markdown file like `foo.ts`.
@@ -144,6 +151,14 @@ export interface EditorState {
    */
   blockTagsVisible: boolean;
   /**
+   * How much of the active Squisq theme the WYSIWYG editing surface should
+   * inherit. `'none'` shows the default editor styling, `'fonts'` (the
+   * default) matches body and heading fonts only, and `'fonts-colors'`
+   * also borrows the theme's canvas / text colors so authors get a
+   * closer preview while editing.
+   */
+  themeInheritance: ThemeInheritance;
+  /**
    * Relative path of an image the user requested to edit, or `null` when
    * no editor is open. Surfaced by `<ImageNodeView>`'s hover affordance
    * and consumed by `<EditorShell>` to render the modal `<ImageEditor>`.
@@ -156,6 +171,14 @@ export interface EditorState {
    * deps so the new bytes get picked up.
    */
   mediaRevision: number;
+  /**
+   * Whether the in-editor media recorder should be available. Defaults
+   * to true when a `mediaProvider` is wired; hosts that explicitly
+   * don't want the affordance (e.g. read-only embeds, surfaces where
+   * camera/screen prompts would be jarring) can pass `false` on the
+   * shell.
+   */
+  allowRecording: boolean;
 }
 
 export interface EditorActions {
@@ -179,6 +202,8 @@ export interface EditorActions {
   setOutlineVisible: (visible: boolean) => void;
   /** Show or hide inline block-template tags at runtime (driven by the View menu). */
   setBlockTagsVisible: (visible: boolean) => void;
+  /** Change how much of the active Squisq theme the WYSIWYG surface mirrors. */
+  setThemeInheritance: (mode: ThemeInheritance) => void;
   /** Insert text at the current cursor position in the active editor */
   insertAtCursor: (text: string) => void;
   /** Replace all editor content with the given text */
@@ -331,6 +356,13 @@ export interface EditorProviderProps {
    */
   documentLinkProvider?: DocumentLinkProvider | null;
   /**
+   * Whether the in-editor media recorder is available in the toolbar.
+   * Defaults to true. Set to false to suppress the recorder affordance
+   * even when a `mediaProvider` is wired (e.g. read-only embeds,
+   * surfaces where camera/screen prompts would be jarring).
+   */
+  allowRecording?: boolean;
+  /**
    * File name (e.g. `foo.ts`) or bare extension — used to pick a Monaco
    * language and decide between markdown vs. code mode.
    */
@@ -357,6 +389,13 @@ export interface EditorProviderProps {
    * Defaults to true. The toolbar's View menu can toggle it at runtime.
    */
   blockTags?: boolean;
+  /**
+   * Initial value for how much of the active Squisq theme the WYSIWYG
+   * editing surface should mirror. Defaults to `'fonts'` — the
+   * historical behavior of inheriting body / heading fonts only. The
+   * toolbar's View menu can change it at runtime.
+   */
+  themeInheritance?: ThemeInheritance;
   /**
    * Bundled view preferences — a serializable JSON blob covering all
    * runtime-toggleable view options. When provided, individual values
@@ -391,6 +430,8 @@ export interface ViewPreferences {
   showStatusBar?: boolean;
   /** Whether inline block-template tags on headings are visible. */
   blockTags?: boolean;
+  /** How much of the active Squisq theme the WYSIWYG surface mirrors. */
+  themeInheritance?: ThemeInheritance;
 }
 
 /**
@@ -415,12 +456,14 @@ export function EditorProvider({
   imageDisplayMode = 'inline',
   mentionProvider = null,
   documentLinkProvider = null,
+  allowRecording = true,
   fileName,
   language,
   inlinePreview = false,
   showStatusBar = true,
   outline = false,
   blockTags = true,
+  themeInheritance = 'fonts',
   viewPreferences,
   onViewPreferencesChange,
   children,
@@ -432,6 +475,7 @@ export function EditorProvider({
   const effectiveShowStatusBar = viewPreferences?.showStatusBar ?? showStatusBar;
   const effectiveOutline = viewPreferences?.outline ?? outline;
   const effectiveBlockTags = viewPreferences?.blockTags ?? blockTags;
+  const effectiveThemeInheritance = viewPreferences?.themeInheritance ?? themeInheritance;
   // Resolve once per provider mount. Changing fileName/language after mount
   // would require recreating the Monaco model anyway, so treat it as static.
   const { mode: editorMode, language: resolvedLanguage } = useMemo(
@@ -479,6 +523,12 @@ export function EditorProvider({
   useEffect(() => {
     setBlockTagsVisibleRaw(blockTags);
   }, [blockTags]);
+  const [themeInheritanceState, setThemeInheritanceRaw] = useState<ThemeInheritance>(
+    effectiveThemeInheritance,
+  );
+  useEffect(() => {
+    setThemeInheritanceRaw(themeInheritance);
+  }, [themeInheritance]);
   const [imageEditTarget, setImageEditTarget] = useState<string | null>(null);
   const [mediaRevision, setMediaRevision] = useState(0);
   const openImageEdit = useCallback((relativePath: string) => {
@@ -508,6 +558,9 @@ export function EditorProvider({
     if (viewPreferences.blockTags !== undefined) {
       setBlockTagsVisibleRaw(viewPreferences.blockTags);
     }
+    if (viewPreferences.themeInheritance !== undefined) {
+      setThemeInheritanceRaw(viewPreferences.themeInheritance);
+    }
   }, [viewPreferences]);
 
   // Wrap the three setters so user-driven toggles emit a snapshot via
@@ -525,6 +578,8 @@ export function EditorProvider({
   outlineRef.current = outlineVisible;
   const blockTagsRef = useRef(blockTagsVisible);
   blockTagsRef.current = blockTagsVisible;
+  const themeInheritanceRef = useRef(themeInheritanceState);
+  themeInheritanceRef.current = themeInheritanceState;
   const setInlinePreviewVisible = useCallback((visible: boolean) => {
     setInlinePreviewVisibleRaw(visible);
     onViewPreferencesChangeRef.current?.({
@@ -532,6 +587,7 @@ export function EditorProvider({
       showStatusBar: statusBarRef.current,
       outline: outlineRef.current,
       blockTags: blockTagsRef.current,
+      themeInheritance: themeInheritanceRef.current,
     });
   }, []);
   const setStatusBarVisible = useCallback((visible: boolean) => {
@@ -541,6 +597,7 @@ export function EditorProvider({
       showStatusBar: visible,
       outline: outlineRef.current,
       blockTags: blockTagsRef.current,
+      themeInheritance: themeInheritanceRef.current,
     });
   }, []);
   const setOutlineVisible = useCallback((visible: boolean) => {
@@ -550,6 +607,7 @@ export function EditorProvider({
       showStatusBar: statusBarRef.current,
       outline: visible,
       blockTags: blockTagsRef.current,
+      themeInheritance: themeInheritanceRef.current,
     });
   }, []);
   const setBlockTagsVisible = useCallback((visible: boolean) => {
@@ -559,6 +617,17 @@ export function EditorProvider({
       showStatusBar: statusBarRef.current,
       outline: outlineRef.current,
       blockTags: visible,
+      themeInheritance: themeInheritanceRef.current,
+    });
+  }, []);
+  const setThemeInheritance = useCallback((mode: ThemeInheritance) => {
+    setThemeInheritanceRaw(mode);
+    onViewPreferencesChangeRef.current?.({
+      inlinePreview: inlinePreviewRef.current,
+      showStatusBar: statusBarRef.current,
+      outline: outlineRef.current,
+      blockTags: blockTagsRef.current,
+      themeInheritance: mode,
     });
   }, []);
   const [tiptapEditor, setTiptapEditor] = useState<TiptapEditor | null>(null);
@@ -793,8 +862,10 @@ export function EditorProvider({
       statusBarVisible,
       outlineVisible,
       blockTagsVisible,
+      themeInheritance: themeInheritanceState,
       imageEditTarget,
       mediaRevision,
+      allowRecording,
       tiptapEditor,
       monacoEditor,
       workspaceContainer,
@@ -814,6 +885,7 @@ export function EditorProvider({
       setStatusBarVisible,
       setOutlineVisible,
       setBlockTagsVisible,
+      setThemeInheritance,
       insertAtCursor,
       replaceAll,
       openImageEdit,
@@ -834,6 +906,7 @@ export function EditorProvider({
       statusBarVisible,
       outlineVisible,
       blockTagsVisible,
+      themeInheritanceState,
       tiptapEditor,
       monacoEditor,
       workspaceContainer,
@@ -853,10 +926,12 @@ export function EditorProvider({
       setStatusBarVisible,
       setOutlineVisible,
       setBlockTagsVisible,
+      setThemeInheritance,
       insertAtCursor,
       replaceAll,
       imageEditTarget,
       mediaRevision,
+      allowRecording,
       openImageEdit,
       closeImageEdit,
       bumpMediaRevision,

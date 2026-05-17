@@ -7,7 +7,11 @@
 
 import { useState, useCallback, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import { parseMarkdown, stringifyMarkdown } from '@bendyline/squisq/markdown';
+import {
+  parseMarkdown,
+  stringifyMarkdown,
+  inferDocumentTitle,
+} from '@bendyline/squisq/markdown';
 import { markdownToDoc, docToMarkdown } from '@bendyline/squisq/doc';
 import { getThemeSummaries, resolveTheme } from '@bendyline/squisq/schemas';
 import {
@@ -464,7 +468,7 @@ export function ExportConfigModal({
             // preview renders, so the downloaded file matches the
             // preview byte-for-byte.
             const { markdownDocToPlainHtml } = await import('@bendyline/squisq-formats/html');
-            const docTitle = (mdDoc.frontmatter?.title as string | undefined) ?? 'Document';
+            const docTitle = inferDocumentTitle(mdDoc) ?? 'Document';
             const themeForExport = exportThemeId ? resolveTheme(exportThemeId) : undefined;
             if (format === 'html') {
               const inlineImages = await collectInlineImages(mdDoc, mediaProvider);
@@ -509,6 +513,7 @@ export function ExportConfigModal({
             images,
             mode: renderMode === 'slideshow' ? ('slideshow' as const) : ('static' as const),
             themeId: exportThemeId,
+            title: inferDocumentTitle(mdDoc),
           };
           if (format === 'html') {
             const html = docToHtml(doc, options);

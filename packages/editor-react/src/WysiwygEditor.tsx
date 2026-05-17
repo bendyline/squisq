@@ -26,7 +26,12 @@ import { resolveFontFamily, FONT_FALLBACKS } from '@bendyline/squisq/schemas';
 import { HeadingWithTemplate } from './TemplateAnnotation';
 import { InlineIcon } from './InlineIcon';
 import { ImageWithMediaProvider } from './ImageNodeView';
-import { TemplateBadgePopover } from './TemplatePicker';
+import { TemplateBadgePopover, TEMPLATE_NAMES } from './TemplatePicker';
+import {
+  profileBlockContents,
+  recommendTemplatesForBlock,
+} from '@bendyline/squisq/recommend';
+import { findBlockSliceByHeadingIndex } from './blockSlice';
 import { useEditorContext } from './EditorContext';
 import { buildMentionExtension } from './MentionExtension';
 import { markdownToTiptap, tiptapToMarkdown } from './tiptapBridge';
@@ -103,6 +108,7 @@ export function WysiwygEditor({
     mediaProvider,
     mentionProvider,
     blockTagsVisible,
+    themeInheritance,
   } = useEditorContext();
   // Keep a ref so the mention extension — created once at editor mount —
   // always sees the latest provider. Swapping projects changes
@@ -321,6 +327,7 @@ export function WysiwygEditor({
     rect: DOMRect;
     template: string;
     headingPos: number;
+    headingIndex: number;
   } | null>(null);
 
   useEffect(() => {
@@ -349,10 +356,23 @@ export function WysiwygEditor({
       const headingPos = Math.max(0, pos - 1);
       const node = editor.state.doc.nodeAt(headingPos);
       if (!node || node.type.name !== 'heading') return;
+      // Count how many headings precede this one so the markdown-source
+      // slice helper can locate the matching heading by index.
+      let headingIndex = 0;
+      let count = 0;
+      editor.state.doc.descendants((n, p) => {
+        if (n.type.name !== 'heading') return;
+        if (p === headingPos) {
+          headingIndex = count;
+          return false;
+        }
+        count++;
+      });
       setBadgeMenu({
         rect: badge.getBoundingClientRect(),
         template: (node.attrs.dataTemplate as string | null) ?? '',
         headingPos,
+        headingIndex,
       });
     };
     root.addEventListener('mousedown', onClick);
@@ -374,33 +394,49 @@ export function WysiwygEditor({
     }
   }, [markdownSource, editor]);
 
-  // Match the WYSIWYG editor's body / heading fonts to the active theme
+  // Match the WYSIWYG editor's appearance to the active Squisq theme
   // when one is set in frontmatter or picked in the preview dropdown.
+  // Driven by the View menu's "Theme inheritance" setting:
+  //   - 'none'         → don't inherit anything
+  //   - 'fonts'        → body + heading fonts only (historical default)
+  //   - 'fonts-colors' → fonts plus the theme's canvas / text colors
   // Pushed as CSS custom properties on the container so the stylesheet
   // can pick them up (with sensible fallbacks for hosts that don't have
   // a PreviewSettingsProvider in scope).
   const previewSettings = usePreviewSettingsOptional();
-  const themeTypography = previewSettings?.activeTheme?.typography;
-  const themeFontStyle = useMemo<CSSProperties>(() => {
-    if (!themeTypography) return {};
-    return {
-      ['--squisq-theme-body-font' as string]: resolveFontFamily(
-        themeTypography.bodyFont,
+  const activeTheme = previewSettings?.activeTheme;
+  const themeStyle = useMemo<CSSProperties>(() => {
+    if (themeInheritance === 'none' || !activeTheme) return {};
+    const out: Record<string, string> = {
+      '--squisq-theme-body-font': resolveFontFamily(
+        activeTheme.typography.bodyFont,
         FONT_FALLBACKS.sans,
       ),
-      ['--squisq-theme-title-font' as string]: resolveFontFamily(
-        themeTypography.titleFont,
+      '--squisq-theme-title-font': resolveFontFamily(
+        activeTheme.typography.titleFont,
         FONT_FALLBACKS.sans,
       ),
     };
-  }, [themeTypography]);
+    if (themeInheritance === 'fonts-colors') {
+      const colors = activeTheme.colors;
+      out['--squisq-theme-bg'] = colors.background;
+      // backgroundLight gives a subtle on-canvas surface for inline emphasis
+      // (inline `code`, code blocks). Themes always define it.
+      out['--squisq-theme-bg-muted'] = colors.backgroundLight;
+      out['--squisq-theme-text'] = colors.text;
+      out['--squisq-theme-text-muted'] = colors.textMuted;
+      out['--squisq-theme-primary'] = colors.primary;
+    }
+    return out as CSSProperties;
+  }, [activeTheme, themeInheritance]);
 
   return (
     <div
       className={`squisq-wysiwyg-container${className ? ` ${className}` : ''}`}
-      style={{ width: '100%', height: '100%', overflow: 'auto', ...themeFontStyle }}
+      style={{ width: '100%', height: '100%', overflow: 'auto', ...themeStyle }}
       data-testid="wysiwyg-container"
       data-block-tags={blockTagsVisible ? 'visible' : 'hidden'}
+      data-theme-inheritance={themeInheritance}
       ref={containerRef}
     >
       <EditorContent editor={editor} style={{ height: '100%' }} />
@@ -408,6 +444,12 @@ export function WysiwygEditor({
         <TemplateBadgePopover
           anchorRect={badgeMenu.rect}
           value={badgeMenu.template}
+          recommended={(() => {
+            const slice = findBlockSliceByHeadingIndex(markdownSource, badgeMenu.headingIndex);
+            if (!slice) return undefined;
+            const profile = profileBlockContents(slice);
+            return recommendTemplatesForBlock(profile, TEMPLATE_NAMES).recommended;
+          })()}
           onChange={(name) => {
             if (!editor) return;
             const tr = editor.state.tr.setNodeMarkup(badgeMenu.headingPos, undefined, {

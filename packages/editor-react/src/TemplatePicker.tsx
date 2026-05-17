@@ -384,6 +384,15 @@ const TEMPLATE_ENTRIES: TemplateEntry[] = [
 ];
 
 /**
+ * Canonical template names known to the picker, in the order they
+ * appear in the gallery. Exported so callers can hand the same list to
+ * `recommendTemplatesForBlock()` and stay in sync with the visual
+ * order.
+ */
+// eslint-disable-next-line react-refresh/only-export-components
+export const TEMPLATE_NAMES: readonly string[] = TEMPLATE_ENTRIES.map((e) => e.name);
+
+/**
  * Convert a camelCase template id to a human-readable label. Accepts both
  * the canonical short ids (`title`, `quote`, `map`, `list`) and the
  * legacy long ones (`titleBlock`, `quoteBlock`, `mapBlock`, `listBlock`)
@@ -419,9 +428,15 @@ export interface TemplatePickerProps {
   onChange: (name: string) => void;
   /** When true, shows only the trigger button (no popover) — used in the overflow menu. */
   compact?: boolean;
+  /**
+   * Template names to surface in a "Recommended for this block" section
+   * above the full list. When omitted or empty, the gallery renders as a
+   * single ungrouped grid (legacy behavior).
+   */
+  recommended?: readonly string[];
 }
 
-export function TemplatePicker({ value, onChange, compact }: TemplatePickerProps) {
+export function TemplatePicker({ value, onChange, compact, recommended }: TemplatePickerProps) {
   const [open, setOpen] = useState(false);
   const [popoverStyle, setPopoverStyle] = useState<React.CSSProperties>({});
   const containerRef = useRef<HTMLDivElement>(null);
@@ -527,7 +542,12 @@ export function TemplatePicker({ value, onChange, compact }: TemplatePickerProps
 
   const gallery = open
     ? createPortal(
-        <TemplateGalleryBody value={value} onSelect={handleSelect} style={popoverStyle} />,
+        <TemplateGalleryBody
+          value={value}
+          onSelect={handleSelect}
+          style={popoverStyle}
+          recommended={recommended}
+        />,
         document.body,
       )
     : null;
@@ -580,19 +600,58 @@ export function TemplatePicker({ value, onChange, compact }: TemplatePickerProps
  * "(none)" option; no positioning logic — callers supply `style` (typically
  * a `position: fixed` rect from `getBoundingClientRect()`).
  */
+function TemplateCard({
+  entry,
+  value,
+  onSelect,
+}: {
+  entry: TemplateEntry;
+  value: string;
+  onSelect: (name: string) => void;
+}) {
+  return (
+    <button
+      type="button"
+      role="option"
+      aria-selected={value === entry.name}
+      className={`squisq-template-gallery-card${value === entry.name ? ' squisq-template-gallery-card--selected' : ''}`}
+      onClick={() => onSelect(entry.name)}
+      title={entry.description}
+    >
+      <div className="squisq-template-gallery-card-icon">{entry.icon}</div>
+      <div className="squisq-template-gallery-card-body">
+        <span className="squisq-template-gallery-card-name">{entry.label}</span>
+        <span className="squisq-template-gallery-card-desc">{entry.description}</span>
+      </div>
+    </button>
+  );
+}
+
 function TemplateGalleryBody({
   value,
   onSelect,
   style,
+  recommended,
 }: {
   value: string;
   onSelect: (name: string) => void;
   style: React.CSSProperties;
+  recommended?: readonly string[];
 }) {
+  const recommendedSet =
+    recommended && recommended.length > 0 ? new Set(recommended) : null;
+  const recommendedEntries = recommendedSet
+    ? TEMPLATE_ENTRIES.filter((e) => recommendedSet.has(e.name))
+    : [];
+  const restEntries = recommendedSet
+    ? TEMPLATE_ENTRIES.filter((e) => !recommendedSet.has(e.name))
+    : TEMPLATE_ENTRIES;
+  const segmented = recommendedEntries.length > 0;
+
   return (
     <div
       id="squisq-template-gallery-portal"
-      className="squisq-template-gallery"
+      className={`squisq-template-gallery${segmented ? ' squisq-template-gallery--segmented' : ''}`}
       role="listbox"
       aria-label="Block templates"
       style={style}
@@ -609,25 +668,33 @@ function TemplateGalleryBody({
         <span className="squisq-template-gallery-none-desc">{NONE_ENTRY.description}</span>
       </button>
 
-      <div className="squisq-template-gallery-grid">
-        {TEMPLATE_ENTRIES.map((entry) => (
-          <button
-            key={entry.name}
-            type="button"
-            role="option"
-            aria-selected={value === entry.name}
-            className={`squisq-template-gallery-card${value === entry.name ? ' squisq-template-gallery-card--selected' : ''}`}
-            onClick={() => onSelect(entry.name)}
-            title={entry.description}
-          >
-            <div className="squisq-template-gallery-card-icon">{entry.icon}</div>
-            <div className="squisq-template-gallery-card-body">
-              <span className="squisq-template-gallery-card-name">{entry.label}</span>
-              <span className="squisq-template-gallery-card-desc">{entry.description}</span>
-            </div>
-          </button>
-        ))}
-      </div>
+      {segmented && (
+        <div className="squisq-template-gallery-section">
+          <h3 className="squisq-template-gallery-section-title">Recommended for this block</h3>
+          <div className="squisq-template-gallery-grid">
+            {recommendedEntries.map((entry) => (
+              <TemplateCard key={entry.name} entry={entry} value={value} onSelect={onSelect} />
+            ))}
+          </div>
+        </div>
+      )}
+
+      {segmented ? (
+        <div className="squisq-template-gallery-section">
+          <h3 className="squisq-template-gallery-section-title">All templates</h3>
+          <div className="squisq-template-gallery-grid">
+            {restEntries.map((entry) => (
+              <TemplateCard key={entry.name} entry={entry} value={value} onSelect={onSelect} />
+            ))}
+          </div>
+        </div>
+      ) : (
+        <div className="squisq-template-gallery-grid">
+          {restEntries.map((entry) => (
+            <TemplateCard key={entry.name} entry={entry} value={value} onSelect={onSelect} />
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -641,6 +708,8 @@ export interface TemplateBadgePopoverProps {
   value: string;
   onChange: (name: string) => void;
   onClose: () => void;
+  /** Optional list of template names to surface as "Recommended for this block". */
+  recommended?: readonly string[];
 }
 
 /**
@@ -654,6 +723,7 @@ export function TemplateBadgePopover({
   value,
   onChange,
   onClose,
+  recommended,
 }: TemplateBadgePopoverProps) {
   const [style, setStyle] = useState<React.CSSProperties>(() => computePopoverStyle(anchorRect));
 
@@ -691,7 +761,12 @@ export function TemplateBadgePopover({
   };
 
   return createPortal(
-    <TemplateGalleryBody value={value} onSelect={handleSelect} style={style} />,
+    <TemplateGalleryBody
+      value={value}
+      onSelect={handleSelect}
+      style={style}
+      recommended={recommended}
+    />,
     document.body,
   );
 }

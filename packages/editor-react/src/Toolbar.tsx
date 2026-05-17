@@ -13,9 +13,16 @@ import type { Editor as TiptapEditor } from '@tiptap/core';
 import type { IRange } from 'monaco-editor';
 import { useEditorContext, type EditorView } from './EditorContext';
 import { VersionHistoryPanel } from './VersionHistoryPanel';
+import { RecorderEntry } from './RecorderEntry';
 import { ViewMenuPanel } from './ViewMenuPanel';
-import { TemplatePicker } from './TemplatePicker';
+import { TemplatePicker, TEMPLATE_NAMES } from './TemplatePicker';
+import {
+  profileBlockContents,
+  recommendTemplatesForBlock,
+} from '@bendyline/squisq/recommend';
+import { findBlockSliceAtLine, findBlockSliceByHeadingIndex } from './blockSlice';
 import { LinkDialog } from './LinkDialog';
+import { DocumentSettingsDialog } from './DocumentSettingsDialog';
 import { EmojiPicker, EMOJI_PICKER_WIDTH, EMOJI_PICKER_MAX_HEIGHT } from './EmojiPicker';
 import type { PickerEntry } from './emojiData';
 import { createPortal } from 'react-dom';
@@ -276,6 +283,7 @@ export function Toolbar({
     mediaProvider,
     editorMode,
     versioning,
+    allowRecording,
     documentLinkProvider,
     theme,
   } = useEditorContext();
@@ -358,6 +366,9 @@ export function Toolbar({
   const [measuredOverflowIndex, setMeasuredOverflowIndex] = useState<number | null>(null);
   const [showOverflow, setShowOverflow] = useState(false);
   const overflowRef = useRef<HTMLDivElement>(null);
+
+  // Document settings (frontmatter) dialog
+  const [showDocSettings, setShowDocSettings] = useState(false);
 
   // On narrow screens, force all buttons into the overflow menu
   const overflowIndex = isNarrow ? 0 : measuredOverflowIndex;
@@ -971,9 +982,11 @@ export function Toolbar({
   // with no template selected; any other string is the current template.
   const isRawView = activeView === 'raw';
   const [rawTemplate, setRawTemplate] = useState<string | null>(null);
+  const [rawHeadingLine, setRawHeadingLine] = useState<number | null>(null);
   useEffect(() => {
     if (!isRawView || !monacoEditor) {
       setRawTemplate(null);
+      setRawHeadingLine(null);
       return;
     }
     const recompute = () => {
@@ -981,14 +994,17 @@ export function Toolbar({
       const pos = monacoEditor.getPosition();
       if (!model || !pos) {
         setRawTemplate(null);
+        setRawHeadingLine(null);
         return;
       }
       const line = model.getLineContent(pos.lineNumber);
       const headingMatch = line.match(/^#{1,6}\s+(.+)$/);
       if (!headingMatch) {
         setRawTemplate(null);
+        setRawHeadingLine(null);
         return;
       }
+      setRawHeadingLine(pos.lineNumber);
       const annotMatch = headingMatch[1].match(/\s*\{\[([^\]]+)\]\}[\s\]}]*$/);
       if (annotMatch) {
         // First whitespace-delimited token is the template name; the rest are params.
@@ -1007,7 +1023,66 @@ export function Toolbar({
     };
   }, [isRawView, monacoEditor]);
 
+  // Track the index of the heading the WYSIWYG cursor is in among all
+  // top-level headings. Used to locate the same heading in the markdown
+  // source for content-based template recommendations.
+  const [wysiwygHeadingIndex, setWysiwygHeadingIndex] = useState<number | null>(null);
+  useEffect(() => {
+    if (!isWysiwyg || !tiptapEditor) {
+      setWysiwygHeadingIndex(null);
+      return;
+    }
+    const recompute = () => {
+      if (!tiptapEditor.isActive('heading')) {
+        setWysiwygHeadingIndex(null);
+        return;
+      }
+      const cursor = tiptapEditor.state.selection.from;
+      let index = -1;
+      let count = 0;
+      tiptapEditor.state.doc.descendants((node, pos) => {
+        if (node.type.name !== 'heading') return;
+        if (pos <= cursor && pos + node.nodeSize > cursor) {
+          index = count;
+          return false;
+        }
+        count++;
+      });
+      setWysiwygHeadingIndex(index >= 0 ? index : null);
+    };
+    recompute();
+    tiptapEditor.on('selectionUpdate', recompute);
+    tiptapEditor.on('update', recompute);
+    return () => {
+      tiptapEditor.off('selectionUpdate', recompute);
+      tiptapEditor.off('update', recompute);
+    };
+  }, [isWysiwyg, tiptapEditor]);
+
   const currentTemplate = isWysiwyg ? wysiwygTemplate : isRawView ? rawTemplate : null;
+
+  // Compute recommended templates for the active block. Heading slice
+  // comes from markdownSource — raw view supplies the cursor line,
+  // WYSIWYG supplies the heading index.
+  const recommendedTemplates = useMemo(() => {
+    if (currentTemplate === null) return undefined;
+    let slice = null;
+    if (isRawView && rawHeadingLine !== null) {
+      slice = findBlockSliceAtLine(markdownSource, rawHeadingLine);
+    } else if (isWysiwyg && wysiwygHeadingIndex !== null) {
+      slice = findBlockSliceByHeadingIndex(markdownSource, wysiwygHeadingIndex);
+    }
+    if (slice === null) return undefined;
+    const profile = profileBlockContents(slice);
+    return recommendTemplatesForBlock(profile, TEMPLATE_NAMES).recommended;
+  }, [
+    currentTemplate,
+    isRawView,
+    isWysiwyg,
+    rawHeadingLine,
+    wysiwygHeadingIndex,
+    markdownSource,
+  ]);
 
   const handleTemplatePick = (value: string) => {
     // Raw (Monaco) — rewrite the heading line's annotation suffix in place.
@@ -1142,7 +1217,11 @@ export function Toolbar({
             <>
               <div className="squisq-toolbar-separator" />
               <div className="squisq-toolbar-group squisq-template-picker">
-                <TemplatePicker value={currentTemplate} onChange={handleTemplatePick} />
+                <TemplatePicker
+                  value={currentTemplate}
+                  onChange={handleTemplatePick}
+                  recommended={recommendedTemplates}
+                />
               </div>
             </>
           )}
@@ -1365,6 +1444,7 @@ export function Toolbar({
                       handleTemplatePick(v);
                       setShowOverflow(false);
                     }}
+                    recommended={recommendedTemplates}
                   />
                 </div>
               )}
@@ -1433,6 +1513,36 @@ export function Toolbar({
           and a container is wired up. The component owns its own button
           and popover; we just give it a slot in the toolbar. */}
       {versioning && !isCodeMode && <VersionHistoryPanel />}
+      {/* Media recorder — surfaces when the host has a mediaProvider
+          and hasn't opted out. RecorderEntry returns null when no
+          provider is wired, so this stays a no-op for hosts that
+          haven't enabled media at all. */}
+      {allowRecording && !isCodeMode && mediaProvider && <RecorderEntry />}
+      {!isCodeMode && (
+        <button
+          type="button"
+          className="squisq-toolbar-button"
+          onClick={() => setShowDocSettings(true)}
+          data-tooltip="Document settings"
+          aria-label="Document settings"
+        >
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+            <path
+              d="M3 2.5h7l3 3v8a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1v-10a1 1 0 0 1 1-1Z"
+              stroke="currentColor"
+              strokeWidth="1.3"
+              strokeLinejoin="round"
+            />
+            <path d="M10 2.5v3h3" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round" />
+            <path
+              d="M5 8.5h6M5 11h4"
+              stroke="currentColor"
+              strokeWidth="1.3"
+              strokeLinecap="round"
+            />
+          </svg>
+        </button>
+      )}
       {!isCodeMode && <ViewMenuPanel />}
       {/* Files toggle — visible when callback is provided */}
       {onToggleFiles && (
@@ -1448,6 +1558,18 @@ export function Toolbar({
       )}
       {/* Right slot — rightmost end of toolbar */}
       {slotRight}
+
+      {/* Document settings (frontmatter) dialog */}
+      {showDocSettings && (
+        <DocumentSettingsDialog
+          markdownSource={markdownSource}
+          onSave={(next) => {
+            setMarkdownSource(next);
+            setShowDocSettings(false);
+          }}
+          onClose={() => setShowDocSettings(false)}
+        />
+      )}
 
       {/* Link insert/edit dialog — shared by WYSIWYG and Raw views. */}
       {linkDialog && (

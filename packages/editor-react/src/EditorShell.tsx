@@ -15,6 +15,7 @@ import {
   type MentionProvider,
   type DocumentLinkProvider,
   type ViewPreferences,
+  type ThemeInheritance,
 } from './EditorContext';
 import { Toolbar } from './Toolbar';
 import { StatusBar } from './StatusBar';
@@ -236,6 +237,15 @@ export interface EditorShellProps {
    */
   documentLinkProvider?: DocumentLinkProvider | null;
   /**
+   * Whether the in-editor media recorder is surfaced in the toolbar.
+   * Defaults to true — when a `mediaProvider` is wired, a record
+   * button appears next to the version history. Pass `false` to
+   * suppress it (read-only embeds, surfaces where camera/screen
+   * permission prompts would be jarring). Without a `mediaProvider`,
+   * the button is hidden regardless of this prop.
+   */
+  allowRecording?: boolean;
+  /**
    * Placeholder text shown in the WYSIWYG editor while the document is
    * empty. When omitted, the editor rotates through its own generic
    * "start typing…" prompts; pass a value here to override with copy
@@ -319,6 +329,13 @@ export interface EditorShellProps {
    */
   blockTags?: boolean;
   /**
+   * How much of the active Squisq theme the WYSIWYG editing surface
+   * mirrors. Defaults to `'fonts'` — the historical behavior of
+   * inheriting body / heading fonts only. The View menu can change it
+   * at runtime.
+   */
+  themeInheritance?: ThemeInheritance;
+  /**
    * Bundled view preferences — a serializable JSON blob covering the
    * runtime-toggleable view options surfaced in the View menu. When
    * provided, fields here override the corresponding individual props
@@ -381,6 +398,7 @@ export function EditorShell({
   language,
   mentionProvider,
   documentLinkProvider,
+  allowRecording = true,
   placeholder,
   readOnly = false,
   imageSrc,
@@ -393,6 +411,7 @@ export function EditorShell({
   outline = false,
   outlineWidth = 240,
   blockTags = true,
+  themeInheritance = 'fonts',
   viewPreferences,
   onViewPreferencesChange,
   themeOverride = null,
@@ -433,12 +452,14 @@ export function EditorShell({
       imageDisplayMode={imageDisplayMode}
       mentionProvider={mentionProvider}
       documentLinkProvider={documentLinkProvider}
+      allowRecording={allowRecording}
       fileName={fileName}
       language={language}
       inlinePreview={inlinePreview}
       showStatusBar={showStatusBar}
       outline={outline}
       blockTags={blockTags}
+      themeInheritance={themeInheritance}
       viewPreferences={viewPreferences}
       onViewPreferencesChange={onViewPreferencesChange}
     >
