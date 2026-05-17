@@ -27,10 +27,7 @@ import { HeadingWithTemplate } from './TemplateAnnotation';
 import { InlineIcon } from './InlineIcon';
 import { ImageWithMediaProvider } from './ImageNodeView';
 import { TemplateBadgePopover, TEMPLATE_NAMES } from './TemplatePicker';
-import {
-  profileBlockContents,
-  recommendTemplatesForBlock,
-} from '@bendyline/squisq/recommend';
+import { profileBlockContents, recommendTemplatesForBlock } from '@bendyline/squisq/recommend';
 import { findBlockSliceByHeadingIndex } from './blockSlice';
 import { useEditorContext } from './EditorContext';
 import { buildMentionExtension } from './MentionExtension';

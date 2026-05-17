@@ -16,10 +16,7 @@ import { VersionHistoryPanel } from './VersionHistoryPanel';
 import { RecorderEntry } from './RecorderEntry';
 import { ViewMenuPanel } from './ViewMenuPanel';
 import { TemplatePicker, TEMPLATE_NAMES } from './TemplatePicker';
-import {
-  profileBlockContents,
-  recommendTemplatesForBlock,
-} from '@bendyline/squisq/recommend';
+import { profileBlockContents, recommendTemplatesForBlock } from '@bendyline/squisq/recommend';
 import { findBlockSliceAtLine, findBlockSliceByHeadingIndex } from './blockSlice';
 import { LinkDialog } from './LinkDialog';
 import { DocumentSettingsDialog } from './DocumentSettingsDialog';
@@ -1075,14 +1072,7 @@ export function Toolbar({
     if (slice === null) return undefined;
     const profile = profileBlockContents(slice);
     return recommendTemplatesForBlock(profile, TEMPLATE_NAMES).recommended;
-  }, [
-    currentTemplate,
-    isRawView,
-    isWysiwyg,
-    rawHeadingLine,
-    wysiwygHeadingIndex,
-    markdownSource,
-  ]);
+  }, [currentTemplate, isRawView, isWysiwyg, rawHeadingLine, wysiwygHeadingIndex, markdownSource]);
 
   const handleTemplatePick = (value: string) => {
     // Raw (Monaco) — rewrite the heading line's annotation suffix in place.

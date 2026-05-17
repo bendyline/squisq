@@ -8,11 +8,7 @@
  * "Recommended for this block" section above the full template list.
  */
 
-import {
-  extractPlainText,
-  findNodesByType,
-  walkMarkdownTree,
-} from '../markdown/utils.js';
+import { extractPlainText, findNodesByType, walkMarkdownTree } from '../markdown/utils.js';
 import type {
   HtmlElement,
   HtmlNode,

@@ -49,7 +49,7 @@ export function App() {
   const [showJsonDemo, setShowJsonDemo] = useState(false);
   const [showImageEditorDemo, setShowImageEditorDemo] = useState(false);
   const [currentSource, setCurrentSource] = useState(SAMPLES['hello-world']);
-  const [theme, setTheme] = useState<EditorTheme>('light');
+  const [theme] = useState<EditorTheme>('light');
   const [customTheme, setCustomThemeState] = useState<Theme | null>(() => loadStoredCustomTheme());
   // Re-register the loaded theme on mount so `Doc.themeId` lookups resolve to it.
   // Subsequent edits go through handleCustomThemeChange which also registers.
@@ -171,7 +171,6 @@ export function App() {
     },
     [replaceMediaProvider, createEmptyProvider],
   );
-
 
   const handleChange = useCallback((source: string) => {
     setCurrentSource(source);

@@ -14,9 +14,7 @@ import { supportsUserMedia } from '../formats.js';
  * @throws When `mediaDevices` is unavailable, or when the user denies
  *   permission (the underlying `getUserMedia` rejection propagates).
  */
-export async function requestMicStream(
-  constraints?: MediaTrackConstraints,
-): Promise<MediaStream> {
+export async function requestMicStream(constraints?: MediaTrackConstraints): Promise<MediaStream> {
   if (!supportsUserMedia()) {
     throw new Error('navigator.mediaDevices.getUserMedia is not available in this environment.');
   }

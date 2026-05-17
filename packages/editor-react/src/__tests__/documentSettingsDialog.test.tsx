@@ -6,11 +6,7 @@ afterEach(() => cleanup());
 
 function open(source: string, onSave: (next: string) => void) {
   return render(
-    <DocumentSettingsDialog
-      markdownSource={source}
-      onSave={onSave}
-      onClose={() => {}}
-    />,
+    <DocumentSettingsDialog markdownSource={source} onSave={onSave} onClose={() => {}} />,
   );
 }
 
@@ -137,13 +133,7 @@ describe('DocumentSettingsDialog', () => {
 
   it('closes when the Cancel button is clicked', () => {
     const onClose = vi.fn();
-    render(
-      <DocumentSettingsDialog
-        markdownSource="# Doc"
-        onSave={() => {}}
-        onClose={onClose}
-      />,
-    );
+    render(<DocumentSettingsDialog markdownSource="# Doc" onSave={() => {}} onClose={onClose} />);
     fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
     expect(onClose).toHaveBeenCalled();
   });

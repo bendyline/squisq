@@ -34,7 +34,11 @@ const FM = {
   captions: { canonical: 'squisq-captions', legacy: 'caption-style' },
 } as const;
 
-function readFm(fm: Record<string, unknown> | undefined, canonical: string, legacy: string): string {
+function readFm(
+  fm: Record<string, unknown> | undefined,
+  canonical: string,
+  legacy: string,
+): string {
   if (!fm) return '';
   const v = Object.prototype.hasOwnProperty.call(fm, canonical) ? fm[canonical] : fm[legacy];
   return typeof v === 'string' ? v : '';
@@ -70,8 +74,7 @@ export function DocumentSettingsDialog({
   const frontmatter = parsed.frontmatter;
   const inferredTitle = useMemo(() => inferDocumentTitle(parsed), [parsed]);
 
-  const currentTitle =
-    typeof frontmatter?.title === 'string' ? (frontmatter.title as string) : '';
+  const currentTitle = typeof frontmatter?.title === 'string' ? (frontmatter.title as string) : '';
   const currentTheme = readFm(frontmatter, FM.theme.canonical, FM.theme.legacy);
   const currentTransform = readFm(frontmatter, FM.transform.canonical, FM.transform.legacy);
   const currentCaptions = readFm(frontmatter, FM.captions.canonical, FM.captions.legacy);
@@ -133,9 +136,7 @@ export function DocumentSettingsDialog({
           ? { [FM.transform.legacy]: null }
           : {}),
         [FM.captions.canonical]: captions || null,
-        ...(currentCaptions && captions !== currentCaptions
-          ? { [FM.captions.legacy]: null }
-          : {}),
+        ...(currentCaptions && captions !== currentCaptions ? { [FM.captions.legacy]: null } : {}),
       };
 
       const nextSource = setFrontmatterValues(markdownSource, updates);

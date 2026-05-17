@@ -22,9 +22,7 @@ export interface CameraStreamOptions {
  * @throws When `mediaDevices` is unavailable, or when the user denies
  *   permission.
  */
-export async function requestCameraStream(
-  options?: CameraStreamOptions,
-): Promise<MediaStream> {
+export async function requestCameraStream(options?: CameraStreamOptions): Promise<MediaStream> {
   if (!supportsUserMedia()) {
     throw new Error('navigator.mediaDevices.getUserMedia is not available in this environment.');
   }

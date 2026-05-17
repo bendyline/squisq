@@ -389,7 +389,6 @@ const TEMPLATE_ENTRIES: TemplateEntry[] = [
  * `recommendTemplatesForBlock()` and stay in sync with the visual
  * order.
  */
-// eslint-disable-next-line react-refresh/only-export-components
 export const TEMPLATE_NAMES: readonly string[] = TEMPLATE_ENTRIES.map((e) => e.name);
 
 /**
@@ -638,8 +637,7 @@ function TemplateGalleryBody({
   style: React.CSSProperties;
   recommended?: readonly string[];
 }) {
-  const recommendedSet =
-    recommended && recommended.length > 0 ? new Set(recommended) : null;
+  const recommendedSet = recommended && recommended.length > 0 ? new Set(recommended) : null;
   const recommendedEntries = recommendedSet
     ? TEMPLATE_ENTRIES.filter((e) => recommendedSet.has(e.name))
     : [];

@@ -17,10 +17,7 @@
  */
 
 import { useCallback } from 'react';
-import {
-  RecorderPanel,
-  type RecorderSaveResult,
-} from '@bendyline/squisq-recorder-react';
+import { RecorderPanel, type RecorderSaveResult } from '@bendyline/squisq-recorder-react';
 import { useEditorContext } from './EditorContext';
 
 /**
@@ -99,9 +96,7 @@ export function RecorderEntry() {
         if (activeView === 'wysiwyg' && tiptapEditor) {
           tiptapEditor.chain().focus().insertContent(`<p>${fallback}</p>`).run();
         } else {
-          setMarkdownSource(
-            markdownSource ? `${markdownSource}\n\n${fallback}` : fallback,
-          );
+          setMarkdownSource(markdownSource ? `${markdownSource}\n\n${fallback}` : fallback);
         }
         return;
       }

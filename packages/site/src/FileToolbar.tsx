@@ -9,11 +9,7 @@
 
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import {
-  parseMarkdown,
-  stringifyMarkdown,
-  inferDocumentTitle,
-} from '@bendyline/squisq/markdown';
+import { parseMarkdown, stringifyMarkdown, inferDocumentTitle } from '@bendyline/squisq/markdown';
 import { markdownToDoc } from '@bendyline/squisq/doc';
 import { VideoExportModal } from '@bendyline/squisq-video-react';
 import { ExportConfigModal } from './ExportConfigModal';

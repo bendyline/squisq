@@ -523,9 +523,8 @@ export function EditorProvider({
   useEffect(() => {
     setBlockTagsVisibleRaw(blockTags);
   }, [blockTags]);
-  const [themeInheritanceState, setThemeInheritanceRaw] = useState<ThemeInheritance>(
-    effectiveThemeInheritance,
-  );
+  const [themeInheritanceState, setThemeInheritanceRaw] =
+    useState<ThemeInheritance>(effectiveThemeInheritance);
   useEffect(() => {
     setThemeInheritanceRaw(themeInheritance);
   }, [themeInheritance]);

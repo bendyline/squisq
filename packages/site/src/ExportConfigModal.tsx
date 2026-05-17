@@ -7,11 +7,7 @@
 
 import { useState, useCallback, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import {
-  parseMarkdown,
-  stringifyMarkdown,
-  inferDocumentTitle,
-} from '@bendyline/squisq/markdown';
+import { parseMarkdown, stringifyMarkdown, inferDocumentTitle } from '@bendyline/squisq/markdown';
 import { markdownToDoc, docToMarkdown } from '@bendyline/squisq/doc';
 import { getThemeSummaries, resolveTheme } from '@bendyline/squisq/schemas';
 import {

@@ -61,6 +61,11 @@ class FakeMediaRecorder implements FakeRecorderHandle {
   constructor(stream: FakeMediaStream, options?: { mimeType?: string }) {
     this.stream = stream;
     this.mimeType = options?.mimeType ?? 'audio/webm';
+    // Expose the most recent instance to the test body so assertions can
+    // poke at its state/event handlers. Not a `const self = this` alias
+    // pattern — `lastRecorder` is a module-level slot, not a workaround
+    // for arrow-function-vs-method `this` confusion.
+    // eslint-disable-next-line @typescript-eslint/no-this-alias
     lastRecorder = this;
   }
   static isTypeSupported(mime: string): boolean {

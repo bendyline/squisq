@@ -1,9 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { parseMarkdown } from '../markdown/parse.js';
-import {
-  profileBlockContents,
-  recommendTemplatesForBlock,
-} from '../recommend/templates.js';
+import { profileBlockContents, recommendTemplatesForBlock } from '../recommend/templates.js';
 
 const ALL_TEMPLATES = [
   'title',
@@ -94,9 +91,7 @@ describe('profileBlockContents', () => {
   });
 
   it('counts multiple images', () => {
-    const p = profileOf(
-      '![a](a.png)\n\n![b](b.png)\n\n![c](c.png)',
-    );
+    const p = profileOf('![a](a.png)\n\n![b](b.png)\n\n![c](c.png)');
     expect(p.imageCount).toBe(3);
   });
 });
@@ -170,9 +165,7 @@ describe('recommendTemplatesForBlock', () => {
   });
 
   it('combines multiple signals additively', () => {
-    const profile = profileOf(
-      '![a](a.png)\n\n> a great line\n\n- alpha\n- beta',
-    );
+    const profile = profileOf('![a](a.png)\n\n> a great line\n\n- alpha\n- beta');
     const { recommended } = recommendTemplatesForBlock(profile, ALL_TEMPLATES);
     expect(recommended).toContain('imageWithCaption');
     expect(recommended).toContain('quote');

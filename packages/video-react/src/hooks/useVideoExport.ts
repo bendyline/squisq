@@ -260,7 +260,9 @@ export function useVideoExport(): VideoExportResult {
           const selectedBackend = await workerEncoder.ready;
           setBackend(selectedBackend);
           setPhase(
-            selectedBackend === 'ffmpeg-wasm' ? 'Starting encoder (ffmpeg.wasm)…' : 'Starting encoder…',
+            selectedBackend === 'ffmpeg-wasm'
+              ? 'Starting encoder (ffmpeg.wasm)…'
+              : 'Starting encoder…',
           );
         } else {
           throw new Error(

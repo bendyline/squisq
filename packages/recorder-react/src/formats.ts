@@ -93,8 +93,7 @@ function probeMimeType(candidates: readonly string[]): string | null {
  */
 export function resolveFormat(kind: CaptureKind, preferred?: string): ResolvedFormat {
   const candidates = kind === 'audio' ? AUDIO_CANDIDATES : VIDEO_CANDIDATES;
-  const probed =
-    (preferred && probeMimeType([preferred])) ?? probeMimeType(candidates) ?? '';
+  const probed = (preferred && probeMimeType([preferred])) ?? probeMimeType(candidates) ?? '';
   const directory = kind === 'audio' ? 'audio' : 'video';
   const extension = probed ? extensionForMime(probed) : '.webm';
   return { mimeType: probed, extension, directory };
@@ -138,13 +137,12 @@ export function supportsDisplayMedia(): boolean {
  * (e.g. user-typed name); when omitted, a sortable timestamp is used so
  * concurrent recordings don't collide.
  */
-export function buildFilename(
-  kind: CaptureKind,
-  extension: string,
-  basename?: string,
-): string {
+export function buildFilename(kind: CaptureKind, extension: string, basename?: string): string {
   const safe = basename
-    ? basename.trim().replace(/[\\/:*?"<>|]+/g, '-').replace(/\s+/g, '-')
+    ? basename
+        .trim()
+        .replace(/[\\/:*?"<>|]+/g, '-')
+        .replace(/\s+/g, '-')
     : '';
   if (safe) return `${safe}${extension}`;
   const now = new Date();

@@ -234,7 +234,11 @@ function formatDurationMs(ms: number): string {
 }
 
 const TABS: Array<{ id: RecorderSource; label: string; description: string }> = [
-  { id: 'mic', label: 'Narration', description: 'Voice-only audio. Pairs with a written script for auto-mapping to blocks.' },
+  {
+    id: 'mic',
+    label: 'Narration',
+    description: 'Voice-only audio. Pairs with a written script for auto-mapping to blocks.',
+  },
   { id: 'camera', label: 'Camera', description: 'Camera + microphone. Saved as a video clip.' },
   { id: 'screen', label: 'Screen', description: 'Screen capture. System audio when available.' },
   { id: 'screen+mic', label: 'Screen + Mic', description: 'Screen with your microphone mixed in.' },
@@ -354,11 +358,7 @@ export function RecorderModal({
           await container.writeFile(sidecarPath, encoded, 'application/json');
           hasTimingSidecar = true;
         } else {
-          const written = await mediaProvider.addMedia(
-            sidecarPath,
-            encoded,
-            'application/json',
-          );
+          const written = await mediaProvider.addMedia(sidecarPath, encoded, 'application/json');
           hasTimingSidecar = written === sidecarPath;
           if (!hasTimingSidecar) {
             console.warn(
@@ -503,7 +503,13 @@ export function RecorderModal({
         )}
         {(source === 'screen' || source === 'screen+mic') && (
           <label
-            style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 12, fontSize: 13 }}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 6,
+              marginBottom: 12,
+              fontSize: 13,
+            }}
           >
             <input
               type="checkbox"

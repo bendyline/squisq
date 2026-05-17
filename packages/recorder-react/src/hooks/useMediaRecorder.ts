@@ -11,7 +11,12 @@
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { resolveFormat, supportsMediaRecorder, type CaptureKind, type ResolvedFormat } from '../formats.js';
+import {
+  resolveFormat,
+  supportsMediaRecorder,
+  type CaptureKind,
+  type ResolvedFormat,
+} from '../formats.js';
 import { requestMicStream } from '../sources/micStream.js';
 import { requestCameraStream } from '../sources/cameraStream.js';
 import { requestScreenStream, type ScreenStreamHandle } from '../sources/screenStream.js';
@@ -107,8 +112,7 @@ async function acquireStream(
 ): Promise<{ stream: MediaStream; dispose: () => void }> {
   switch (opts.source) {
     case 'mic': {
-      const audio =
-        typeof opts.audioConstraints === 'object' ? opts.audioConstraints : undefined;
+      const audio = typeof opts.audioConstraints === 'object' ? opts.audioConstraints : undefined;
       const stream = await requestMicStream(audio);
       return { stream, dispose: () => {} };
     }

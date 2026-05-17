@@ -98,18 +98,9 @@ function ThemeNameChip({
 function Swatches({ theme }: { theme: Theme }) {
   return (
     <span className="squisq-theme-picker-swatches" aria-hidden="true">
-      <span
-        className="squisq-theme-picker-swatch"
-        style={{ background: theme.colors.primary }}
-      />
-      <span
-        className="squisq-theme-picker-swatch"
-        style={{ background: theme.colors.secondary }}
-      />
-      <span
-        className="squisq-theme-picker-swatch"
-        style={{ background: theme.colors.highlight }}
-      />
+      <span className="squisq-theme-picker-swatch" style={{ background: theme.colors.primary }} />
+      <span className="squisq-theme-picker-swatch" style={{ background: theme.colors.secondary }} />
+      <span className="squisq-theme-picker-swatch" style={{ background: theme.colors.highlight }} />
     </span>
   );
 }
