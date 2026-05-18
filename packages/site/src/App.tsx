@@ -6,7 +6,7 @@
  */
 
 import { useState, useCallback, useEffect, useRef } from 'react';
-import { EditorShell } from '@bendyline/squisq-editor-react';
+import { EditorShell, ThemeCustomizerPanel } from '@bendyline/squisq-editor-react';
 import type { EditorTheme } from '@bendyline/squisq-editor-react';
 import '@bendyline/squisq-editor-react/styles';
 import { MediaContext } from '@bendyline/squisq-react';
@@ -20,14 +20,61 @@ import { SAMPLES, CONTENT_SAMPLES } from './samples';
 import { DebugPanel } from './DebugPanel';
 import { FileToolbar } from './FileToolbar';
 import { StorageToolbar } from './StorageToolbar';
+import { JsonEditorDemo } from './JsonEditorDemo';
+import { ImageEditorDemo } from './ImageEditorDemo';
 import { createSlotMediaProvider } from './slotStorage';
-import type { MediaProvider } from '@bendyline/squisq/schemas';
+import type { MediaProvider, Theme } from '@bendyline/squisq/schemas';
+import { parseTheme, registerTheme, unregisterTheme } from '@bendyline/squisq/schemas';
+
+const CUSTOM_THEME_STORAGE_KEY = 'squisq-site:customTheme';
+
+/** Load a previously-saved custom theme from localStorage. Returns null on miss / parse failure. */
+function loadStoredCustomTheme(): Theme | null {
+  if (typeof localStorage === 'undefined') return null;
+  const json = localStorage.getItem(CUSTOM_THEME_STORAGE_KEY);
+  if (!json) return null;
+  try {
+    return parseTheme(json);
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.warn('Discarding stored custom theme — failed validation:', msg);
+    localStorage.removeItem(CUSTOM_THEME_STORAGE_KEY);
+    return null;
+  }
+}
 
 export function App() {
   const [selectedSample, setSelectedSample] = useState('hello-world');
   const [showDebug, setShowDebug] = useState(false);
+  const [showJsonDemo, setShowJsonDemo] = useState(false);
+  const [showImageEditorDemo, setShowImageEditorDemo] = useState(false);
   const [currentSource, setCurrentSource] = useState(SAMPLES['hello-world']);
-  const [theme, setTheme] = useState<EditorTheme>('light');
+  const [theme] = useState<EditorTheme>('light');
+  const [customTheme, setCustomThemeState] = useState<Theme | null>(() => loadStoredCustomTheme());
+  // Re-register the loaded theme on mount so `Doc.themeId` lookups resolve to it.
+  // Subsequent edits go through handleCustomThemeChange which also registers.
+  useEffect(() => {
+    if (customTheme) registerTheme(customTheme);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  const handleCustomThemeChange = useCallback((next: Theme) => {
+    registerTheme(next);
+    setCustomThemeState(next);
+  }, []);
+  const handleCustomThemeSave = useCallback((next: Theme, json: string) => {
+    if (typeof localStorage !== 'undefined') {
+      localStorage.setItem(CUSTOM_THEME_STORAGE_KEY, json);
+    }
+    registerTheme(next);
+    setCustomThemeState(next);
+  }, []);
+  const handleCustomThemeReset = useCallback(() => {
+    if (customTheme) unregisterTheme(customTheme.id);
+    if (typeof localStorage !== 'undefined') {
+      localStorage.removeItem(CUSTOM_THEME_STORAGE_KEY);
+    }
+    setCustomThemeState(null);
+  }, [customTheme]);
   // Key to force EditorShell remount on upload
   const [editorKey, setEditorKey] = useState(0);
   // Storage slot state
@@ -42,6 +89,12 @@ export function App() {
     createEmptyProvider(),
   );
   const mediaProviderRef = useRef<MediaProvider | null>(mediaProvider);
+  // The active workspace-scoped ContentContainer (when the user loaded
+  // a zip sample or uploaded a zip). Surfaced to FileToolbar so the
+  // export dialog can offer the recursive "Export linked documents"
+  // toggle. Null when the editor is running off a slot or a standalone
+  // markdown source.
+  const [workspaceContainer, setWorkspaceContainer] = useState<ContentContainer | null>(null);
   // Loading state for content zip samples
   const [loadingContent, setLoadingContent] = useState(false);
 
@@ -54,10 +107,14 @@ export function App() {
     setMediaProvider(provider);
   }, []);
 
-  // Create/dispose MediaProvider when active slot changes
+  // Create/dispose MediaProvider when active slot changes. A slot is
+  // backed by IndexedDB media storage, not a markdown container, so we
+  // also clear any container that may have been left over from a prior
+  // zip-sample load.
   useEffect(() => {
     if (activeSlot !== null) {
       replaceMediaProvider(createSlotMediaProvider(activeSlot));
+      setWorkspaceContainer(null);
     } else {
       replaceMediaProvider(createEmptyProvider());
     }
@@ -88,10 +145,11 @@ export function App() {
             return res.arrayBuffer();
           })
           .then((buf) => zipToContainer(buf))
-          .then(async (container) => {
-            const markdown = (await container.readDocument()) ?? '';
+          .then(async (loaded) => {
+            const markdown = (await loaded.readDocument()) ?? '';
             setCurrentSource(markdown);
-            replaceMediaProvider(createMediaProviderFromContainer(container));
+            replaceMediaProvider(createMediaProviderFromContainer(loaded));
+            setWorkspaceContainer(loaded);
             setEditorKey((k) => k + 1);
           })
           .catch((err: unknown) => {
@@ -108,14 +166,11 @@ export function App() {
       // Inline markdown sample
       setCurrentSource(SAMPLES[key] || '');
       replaceMediaProvider(createEmptyProvider());
+      setWorkspaceContainer(null);
       setActiveSlot(null);
     },
     [replaceMediaProvider, createEmptyProvider],
   );
-
-  const handleThemeChange = useCallback((e: React.ChangeEvent<HTMLSelectElement>) => {
-    setTheme(e.target.value as EditorTheme);
-  }, []);
 
   const handleChange = useCallback((source: string) => {
     setCurrentSource(source);
@@ -124,15 +179,20 @@ export function App() {
   const handleImport = useCallback((markdown: string) => {
     setCurrentSource(markdown);
     setSelectedSample(''); // deselect sample dropdown
+    // A bare markdown import has no associated container — drop any
+    // container that was previously active so the export dialog stops
+    // offering "Export linked documents" (which can't work without one).
+    setWorkspaceContainer(null);
     setEditorKey((k) => k + 1); // remount editor with new content
   }, []);
 
   const handleZipImport = useCallback(
-    (markdown: string, container: ContentContainer) => {
+    (markdown: string, imported: ContentContainer) => {
       setCurrentSource(markdown);
       setSelectedSample('');
       setActiveSlot(null);
-      replaceMediaProvider(createMediaProviderFromContainer(container));
+      replaceMediaProvider(createMediaProviderFromContainer(imported));
+      setWorkspaceContainer(imported);
       setEditorKey((k) => k + 1);
     },
     [replaceMediaProvider],
@@ -215,35 +275,6 @@ export function App() {
           </select>
         </label>
 
-        <label
-          style={{
-            fontSize: 13,
-            fontFamily: 'system-ui, -apple-system, sans-serif',
-            color: '#4a3c1f',
-            display: 'flex',
-            alignItems: 'center',
-            gap: 6,
-          }}
-        >
-          Theme:
-          <select
-            value={theme}
-            onChange={handleThemeChange}
-            style={{
-              fontSize: 13,
-              fontFamily: 'system-ui, -apple-system, sans-serif',
-              padding: '4px 8px',
-              background: '#FFFDF7',
-              color: '#4a3c1f',
-              border: '1px solid #c9b98a',
-              borderRadius: 0,
-            }}
-          >
-            <option value="light">Light</option>
-            <option value="dark">Dark</option>
-          </select>
-        </label>
-
         <button
           onClick={() => setShowDebug((prev) => !prev)}
           style={{
@@ -260,6 +291,48 @@ export function App() {
           {showDebug ? 'Hide' : 'Show'} Debug
         </button>
 
+        <button
+          onClick={() => setShowJsonDemo((prev) => !prev)}
+          style={{
+            fontSize: 13,
+            fontFamily: 'system-ui, -apple-system, sans-serif',
+            padding: '4px 12px',
+            cursor: 'pointer',
+            background: showJsonDemo ? '#8B6914' : '#E8DFC6',
+            color: showJsonDemo ? '#fff' : '#4a3c1f',
+            border: `1px solid ${showJsonDemo ? '#7a5c10' : '#c9b98a'}`,
+            borderRadius: 0,
+          }}
+        >
+          {showJsonDemo ? 'Close JSON Editor' : 'JSON Editor'}
+        </button>
+
+        <button
+          onClick={() => setShowImageEditorDemo((prev) => !prev)}
+          style={{
+            fontSize: 13,
+            fontFamily: 'system-ui, -apple-system, sans-serif',
+            padding: '4px 12px',
+            cursor: 'pointer',
+            background: showImageEditorDemo ? '#8B6914' : '#E8DFC6',
+            color: showImageEditorDemo ? '#fff' : '#4a3c1f',
+            border: `1px solid ${showImageEditorDemo ? '#7a5c10' : '#c9b98a'}`,
+            borderRadius: 0,
+          }}
+        >
+          {showImageEditorDemo ? 'Close Image Editor' : 'Image Editor'}
+        </button>
+
+        {/* Theme customizer — wrapped in editor-shell to inherit BEM dark-theme styles. */}
+        <div className="squisq-editor-shell" data-theme={theme} style={{ position: 'relative' }}>
+          <ThemeCustomizerPanel
+            value={customTheme}
+            onChange={handleCustomThemeChange}
+            onSave={handleCustomThemeSave}
+            onReset={handleCustomThemeReset}
+          />
+        </div>
+
         {/* Spacer */}
         <div style={{ flex: 1 }} />
 
@@ -268,6 +341,7 @@ export function App() {
           onImport={handleImport}
           onZipImport={handleZipImport}
           mediaProvider={mediaProvider}
+          workspaceContainer={workspaceContainer}
           isDark={isDark}
           activeSlot={activeSlot}
         />
@@ -297,34 +371,45 @@ export function App() {
       </div>
 
       {/* Main area */}
-      <MediaContext.Provider value={mediaProvider}>
-        <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
-          <div style={{ flex: 1, overflow: 'hidden' }}>
-            <EditorShell
-              key={`${selectedSample}-${editorKey}`}
-              initialMarkdown={currentSource}
-              articleId={selectedSample || 'uploaded'}
-              onChange={handleChange}
-              theme={theme}
-              height="100%"
-              mediaProvider={mediaProvider}
-            />
-          </div>
-
-          {showDebug && (
-            <div
-              style={{
-                width: 420,
-                borderLeft: `1px solid ${isDark ? '#374151' : '#e5e7eb'}`,
-                overflow: 'auto',
-                flexShrink: 0,
-              }}
-            >
-              <DebugPanel source={currentSource} theme={theme} />
-            </div>
-          )}
+      {showImageEditorDemo ? (
+        <div style={{ flex: 1, overflow: 'hidden' }}>
+          <ImageEditorDemo />
         </div>
-      </MediaContext.Provider>
+      ) : showJsonDemo ? (
+        <div style={{ flex: 1, overflow: 'hidden' }}>
+          <JsonEditorDemo />
+        </div>
+      ) : (
+        <MediaContext.Provider value={mediaProvider}>
+          <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
+            <div style={{ flex: 1, overflow: 'hidden' }}>
+              <EditorShell
+                key={`${selectedSample}-${editorKey}`}
+                initialMarkdown={currentSource}
+                articleId={selectedSample || 'uploaded'}
+                onChange={handleChange}
+                theme={theme}
+                height="100%"
+                mediaProvider={mediaProvider}
+                themeOverride={customTheme}
+              />
+            </div>
+
+            {showDebug && (
+              <div
+                style={{
+                  width: 420,
+                  borderLeft: `1px solid ${isDark ? '#374151' : '#e5e7eb'}`,
+                  overflow: 'auto',
+                  flexShrink: 0,
+                }}
+              >
+                <DebugPanel source={currentSource} theme={theme} />
+              </div>
+            )}
+          </div>
+        </MediaContext.Provider>
+      )}
     </div>
   );
 }

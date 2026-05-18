@@ -6,3 +6,7 @@ export * from './markdown/index.js';
 export * from './timing/index.js';
 export * from './random/index.js';
 export * from './generate/index.js';
+export * from './versions/index.js';
+export * from './jsonForm/index.js';
+export * from './imageEdit/index.js';
+export * from './recommend/index.js';

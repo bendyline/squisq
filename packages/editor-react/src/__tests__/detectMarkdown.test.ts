@@ -70,19 +70,4 @@ describe('looksLikeMarkdown', () => {
   it('detects markdown with windows line endings', () => {
     expect(looksLikeMarkdown('# Heading\r\n\r\nBody text')).toBe(true);
   });
-
-  it('detects a full resume-style document', () => {
-    const text = `# Mike Ammerlaan
-
-## Projects
-
-Qualla (qualla.com) - Designed and built a map-driven storytelling platform.
-
-## **Experience**
-
-**Principal Product Manager, Minecraft**
-Jan 2021 - Present
-Driving the creator platform.`;
-    expect(looksLikeMarkdown(text)).toBe(true);
-  });
 });

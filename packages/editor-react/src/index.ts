@@ -33,12 +33,21 @@ export type {
   ImageDisplayMode,
   MentionCandidate,
   MentionProvider,
+  DocumentLinkCandidate,
+  DocumentLinkProvider,
+  ViewPreferences,
+  ThemeInheritance,
 } from './EditorContext.js';
 
 // File-kind detection — useful for hosts that want to pre-decide chrome
 // around the editor based on whether a file is markdown or code.
 export { resolveFileKind, detectLanguageFromFileName } from './fileKind.js';
 export type { FileKind } from './fileKind.js';
+
+// Image viewer — exported standalone so hosts can use it without the
+// full EditorShell when they already have their own chrome.
+export { ImageViewer } from './ImageViewer.js';
+export type { ImageViewerProps } from './ImageViewer.js';
 
 // Individual editors (for custom layouts)
 export { RawEditor } from './RawEditor.js';
@@ -49,6 +58,16 @@ export type { WysiwygEditorProps } from './WysiwygEditor.js';
 
 export { PreviewPanel } from './PreviewPanel.js';
 export type { PreviewPanelProps } from './PreviewPanel.js';
+export { PlainHtmlPreview } from './PlainHtmlPreview.js';
+export type { PlainHtmlPreviewProps } from './PlainHtmlPreview.js';
+export { EmojiPicker } from './EmojiPicker.js';
+export type { EmojiPickerProps } from './EmojiPicker.js';
+export { DocumentSettingsDialog } from './DocumentSettingsDialog.js';
+export type { DocumentSettingsDialogProps } from './DocumentSettingsDialog.js';
+export { ThemePicker } from './ThemePicker.js';
+export type { ThemePickerProps } from './ThemePicker.js';
+export { EMOJI_CATEGORIES, ALL_EMOJIS, searchEmojis } from './emojiData.js';
+export type { EmojiEntry, EmojiCategory } from './emojiData.js';
 export {
   PreviewSettingsProvider,
   PreviewToolbarControls,
@@ -62,6 +81,16 @@ export type { ViewSwitcherProps } from './ViewSwitcher.js';
 
 export { Toolbar } from './Toolbar.js';
 export type { ToolbarProps } from './Toolbar.js';
+
+export { VersionHistoryPanel } from './VersionHistoryPanel.js';
+export { ViewMenuPanel } from './ViewMenuPanel.js';
+export { OutlinePanel } from './OutlinePanel.js';
+export type { OutlinePanelProps } from './OutlinePanel.js';
+export { ThemeCustomizerPanel } from './ThemeCustomizerPanel.js';
+export type { ThemeCustomizerPanelProps } from './ThemeCustomizerPanel.js';
+export { TemplatePicker, templateLabel } from './TemplatePicker.js';
+export { InlinePreviewGutter } from './InlinePreviewGutter.js';
+export type { InlinePreviewGutterProps } from './InlinePreviewGutter.js';
 
 export { MediaBin } from './MediaBin.js';
 export type { MediaBinProps } from './MediaBin.js';
@@ -99,3 +128,21 @@ export { buildPreviewDoc } from './buildPreviewDoc.js';
 
 // Tiptap extension: Heading with template annotation support
 export { HeadingWithTemplate } from './TemplateAnnotation.js';
+
+// JSON Form — editable component
+export { JsonEditor } from './jsonEditor/index.js';
+export type { JsonEditorProps } from './jsonEditor/index.js';
+
+// Image editor — layered, sidecar-persisted raster authoring surface.
+// Pairs with `ImageViewer` and the `<basename>_files/` sidecar convention.
+export { ImageEditor } from './ImageEditor.js';
+export type { ImageEditorProps } from './ImageEditor.js';
+export { useImageEditor } from './imageEditor/useImageEditor.js';
+export type { UseImageEditorOptions, UseImageEditorReturn } from './imageEditor/useImageEditor.js';
+export { imageEditorReducer, initialImageEditorState } from './imageEditor/state.js';
+export type {
+  ImageEditorState,
+  ImageEditorAction,
+  ImageEditorTool,
+  CanvasRect,
+} from './imageEditor/state.js';

@@ -21,7 +21,12 @@ import { useMemo } from 'react';
 import { useAutoSurface } from './hooks/useAutoSurface';
 import type { Doc, Block, DocBlock } from '@bendyline/squisq/schemas';
 import type { ViewportConfig } from '@bendyline/squisq/schemas';
-import { applySurface, type SurfaceScheme, type Theme } from '@bendyline/squisq/schemas';
+import {
+  applySurface,
+  resolveFontFamily,
+  type SurfaceScheme,
+  type Theme,
+} from '@bendyline/squisq/schemas';
 import { VIEWPORT_PRESETS } from '@bendyline/squisq/schemas';
 import { getLayers, hasTemplate, DEFAULT_THEME } from '@bendyline/squisq/doc';
 import type { RenderContext } from '@bendyline/squisq/doc';
@@ -164,23 +169,21 @@ function BlockSection({ block, basePath, viewport, renderContext, blockIndex }: 
       {/* Render the heading (if present — preamble has no sourceHeading) */}
       {block.sourceHeading && !isAnnotated && <MarkdownRenderer nodes={[block.sourceHeading]} />}
 
-      {/* Annotated block: render SVG card */}
+      {/* Annotated block: render SVG card.
+          The heading is intentionally *not* duplicated above the card —
+          every template card renders its own title layer internally, so
+          a separate `squisq-linear-card-label` only made the heading
+          appear twice in the linear view. The card also drops its
+          rounded border + drop shadow so it reads as a continuation of
+          the surrounding page rather than a chrome'd preview. */}
       {isAnnotated && visualBlock && (
         <div className="squisq-linear-card">
-          {/* Optional heading label above the card */}
-          {block.sourceHeading && (
-            <div className="squisq-linear-card-label squisq-md">
-              <MarkdownRenderer nodes={[block.sourceHeading]} />
-            </div>
-          )}
           <div
             className="squisq-linear-card-svg"
             style={{
               width: '100%',
               aspectRatio: `${viewport.width} / ${viewport.height}`,
               overflow: 'hidden',
-              borderRadius: '8px',
-              boxShadow: '0 2px 8px rgba(0, 0, 0, 0.12)',
               marginBottom: '1em',
             }}
           >
@@ -244,6 +247,83 @@ function extractListItems(contents?: MarkdownBlockNode[]): string[] {
   return items;
 }
 
+/** First image discovered in a block's body, with any explicit
+ *  dimensions captured (set by `<img width>` / `<img height>` in raw
+ *  HTML — markdown shorthand has no syntax for dimensions). */
+interface FirstImage {
+  src: string;
+  alt: string;
+  width?: number;
+  height?: number;
+}
+
+/**
+ * Find the first image referenced anywhere in block contents — both
+ * markdown shorthand `![alt](url)` (type `image`) and raw HTML `<img>`
+ * tags (type `htmlBlock`/`htmlInline`). The WYSIWYG editor emits the
+ * HTML form whenever a user resizes an image (markdown shorthand has no
+ * width syntax), so missing that path silently breaks every resized
+ * image in the linear view.
+ */
+function extractFirstImage(contents: MarkdownBlockNode[] | undefined): FirstImage | null {
+  if (!contents || contents.length === 0) return null;
+
+  function fromHtml(nodes: unknown[]): FirstImage | null {
+    for (const node of nodes) {
+      if (!node || typeof node !== 'object') continue;
+      const n = node as Record<string, unknown>;
+      if (n.type === 'htmlElement' && n.tagName === 'img') {
+        const attrs = n.attributes as Record<string, string> | undefined;
+        if (attrs && typeof attrs.src === 'string' && attrs.src) {
+          return {
+            src: attrs.src,
+            alt: typeof attrs.alt === 'string' ? attrs.alt : '',
+            width: parseDim(attrs.width),
+            height: parseDim(attrs.height),
+          };
+        }
+      }
+      if (Array.isArray(n.children)) {
+        const found = fromHtml(n.children);
+        if (found) return found;
+      }
+    }
+    return null;
+  }
+
+  function walk(node: unknown): FirstImage | null {
+    if (!node || typeof node !== 'object') return null;
+    const n = node as Record<string, unknown>;
+    if (n.type === 'image' && typeof n.url === 'string' && n.url) {
+      return { src: n.url, alt: typeof n.alt === 'string' ? n.alt : '' };
+    }
+    if ((n.type === 'htmlBlock' || n.type === 'htmlInline') && Array.isArray(n.htmlChildren)) {
+      const found = fromHtml(n.htmlChildren);
+      if (found) return found;
+    }
+    if (Array.isArray(n.children)) {
+      for (const child of n.children) {
+        const found = walk(child);
+        if (found) return found;
+      }
+    }
+    return null;
+  }
+
+  for (const node of contents) {
+    const found = walk(node);
+    if (found) return found;
+  }
+  return null;
+}
+
+/** Parse a `width`/`height` HTML attribute to a positive number. */
+function parseDim(raw: string | undefined): number | undefined {
+  if (raw === undefined) return undefined;
+  const n = parseFloat(raw);
+  return Number.isFinite(n) && n > 0 ? n : undefined;
+}
+
 /** Extract table data (headers, rows, alignment) from block contents. */
 function extractTableData(contents?: MarkdownBlockNode[]): {
   headers: string[];
@@ -277,7 +357,7 @@ function getTemplateDefaults(
   switch (templateName) {
     case 'statHighlight':
       return { stat: headingText, description: bodyText || headingText };
-    case 'quoteBlock':
+    case 'quote':
     case 'fullBleedQuote':
     case 'pullQuote':
       return { quote: bodyText || headingText };
@@ -285,7 +365,7 @@ function getTemplateDefaults(
       return { fact: headingText, explanation: bodyText || headingText };
     case 'comparisonBar':
       return { leftLabel: 'A', leftValue: 60, rightLabel: 'B', rightValue: 40 };
-    case 'listBlock': {
+    case 'list': {
       const items = extractListItems(contents);
       return { items: items.length > 0 ? items : ['Item 1', 'Item 2', 'Item 3'] };
     }
@@ -296,6 +376,37 @@ function getTemplateDefaults(
     case 'dataTable': {
       const tableData = extractTableData(contents);
       return tableData ?? { headers: ['Column'], rows: [['Data']] };
+    }
+    case 'imageWithCaption': {
+      // The template requires `imageSrc` — without it the image layer
+      // renders a broken `<img src=undefined>`. Pull the first image
+      // out of the block's body (markdown shorthand or HTML <img>) and
+      // use the heading as a caption fallback so a bare `# Title
+      // [Image with Caption]` block renders something sensible.
+      const img = extractFirstImage(contents);
+      if (!img) return { caption: headingText };
+      return {
+        imageSrc: img.src,
+        imageAlt: img.alt || headingText,
+        caption: headingText,
+      };
+    }
+    case 'leftFeature':
+    case 'rightFeature': {
+      // Feature blocks pair an image with the heading + the first
+      // paragraph of body text. Both inputs come from the section's
+      // contents — the image via the same scan used by imageWithCaption,
+      // the body text via the plain-text extractor that's already in
+      // scope here.
+      const img = extractFirstImage(contents);
+      return {
+        imageSrc: img?.src ?? '',
+        imageAlt: img?.alt || headingText,
+        imageWidth: img?.width,
+        imageHeight: img?.height,
+        title: headingText,
+        body: bodyText,
+      };
     }
     default:
       return {};
@@ -345,8 +456,8 @@ export function LinearDocView({
   const textColor = activeTheme.colors.text;
   const mutedColor = activeTheme.colors.textMuted;
   const primaryColor = activeTheme.colors.primary;
-  const bodyFont = activeTheme.typography.bodyFontFamily;
-  const titleFont = activeTheme.typography.titleFontFamily;
+  const bodyFont = resolveFontFamily(activeTheme.typography.bodyFont, 'system-ui, sans-serif');
+  const titleFont = resolveFontFamily(activeTheme.typography.titleFont, 'Georgia, serif');
   const lineHt = activeTheme.typography.lineHeight ?? 1.7;
 
   return (
@@ -418,6 +529,17 @@ export function LinearDocView({
             margin-bottom: 0.3em;
           }
           .squisq-linear-content a {
+            /* Blend the theme's primary toward the body text color so
+               links stay theme-flavored but always have enough contrast
+               against the background. Some themes (e.g. Gezellig) pick a
+               mid-tone primary that's nearly invisible on a dark page
+               without this lift. */
+            color: color-mix(in srgb, var(--squisq-linear-primary) 65%, var(--squisq-linear-text));
+            text-decoration: underline;
+            text-decoration-thickness: 1px;
+            text-underline-offset: 2px;
+          }
+          .squisq-linear-content a:hover {
             color: var(--squisq-linear-primary);
           }
           .squisq-linear-content code {

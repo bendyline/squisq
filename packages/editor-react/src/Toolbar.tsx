@@ -8,13 +8,21 @@
  */
 
 import type { ReactNode } from 'react';
-import { useCallback, useEffect, useReducer, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react';
 import type { Editor as TiptapEditor } from '@tiptap/core';
+import type { IRange } from 'monaco-editor';
 import { useEditorContext, type EditorView } from './EditorContext';
-import { getAvailableTemplates } from '@bendyline/squisq/doc';
-
-/** Template names are static — computed once at module load. */
-const TEMPLATE_NAMES = getAvailableTemplates();
+import { VersionHistoryPanel } from './VersionHistoryPanel';
+import { RecorderEntry } from './RecorderEntry';
+import { ViewMenuPanel } from './ViewMenuPanel';
+import { TemplatePicker, TEMPLATE_NAMES } from './TemplatePicker';
+import { profileBlockContents, recommendTemplatesForBlock } from '@bendyline/squisq/recommend';
+import { findBlockSliceAtLine, findBlockSliceByHeadingIndex } from './blockSlice';
+import { LinkDialog } from './LinkDialog';
+import { DocumentSettingsDialog } from './DocumentSettingsDialog';
+import { EmojiPicker, EMOJI_PICKER_WIDTH, EMOJI_PICKER_MAX_HEIGHT } from './EmojiPicker';
+import type { PickerEntry } from './emojiData';
+import { createPortal } from 'react-dom';
 
 const VIEWS: { id: EditorView; label: string; shortLabel?: string; shortcut: string }[] = [
   { id: 'wysiwyg', label: 'Editor', shortcut: '⌘1' },
@@ -89,6 +97,9 @@ const BUTTONS: ToolbarButton[] = [
   { id: 'h1', label: 'H1', icon: 'H1', title: 'Heading 1', group: 'structure' },
   { id: 'h2', label: 'H2', icon: 'H2', title: 'Heading 2', group: 'structure' },
   { id: 'h3', label: 'H3', icon: 'H3', title: 'Heading 3', group: 'structure' },
+  { id: 'h4', label: 'H4', icon: 'H4', title: 'Heading 4', group: 'structure' },
+  { id: 'h5', label: 'H5', icon: 'H5', title: 'Heading 5', group: 'structure' },
+  { id: 'h6', label: 'H6', icon: 'H6', title: 'Heading 6', group: 'structure' },
 
   // Insert group — block-level inserts (quote, code blocks, rules)
   { id: 'quote', label: '❝', icon: '❝', title: 'Blockquote', group: 'insert' },
@@ -96,11 +107,115 @@ const BUTTONS: ToolbarButton[] = [
   { id: 'code', label: '</>', icon: '</>', title: 'Inline code', group: 'insert' },
   { id: 'hr', label: '—', icon: '—', title: 'Horizontal rule', group: 'insert' },
 
-  // Media group — links, tables, images
+  // Media group — links, tables, images, emoji
   { id: 'link', label: '🔗', icon: '🔗', title: 'Insert link', group: 'media' },
   { id: 'table', label: 'table', icon: '', title: 'Insert table', group: 'media' },
   { id: 'image', label: '🖼', icon: '🖼', title: 'Insert image', group: 'media' },
+  { id: 'emoji', label: '😊', icon: '😊', title: 'Insert emoji', group: 'media' },
 ];
+
+// ─── Inline SVG icons (line-art, currentColor) ──────────
+
+const TABLE_ICON = (
+  <svg
+    width="14"
+    height="14"
+    viewBox="0 0 14 14"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="1.4"
+    strokeLinecap="round"
+  >
+    <rect x="1" y="1" width="12" height="12" rx="1" />
+    <line x1="1" y1="5" x2="13" y2="5" />
+    <line x1="1" y1="9" x2="13" y2="9" />
+    <line x1="5" y1="1" x2="5" y2="13" />
+    <line x1="9" y1="1" x2="9" y2="13" />
+  </svg>
+);
+
+const LINK_ICON = (
+  <svg
+    width="14"
+    height="14"
+    viewBox="0 0 14 14"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="1.4"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+  >
+    <path d="M5.75 8.25 L8.25 5.75" />
+    <path d="M6.5 3.75 L8 2.25 a2.5 2.5 0 0 1 3.54 3.54 L10 7.25" />
+    <path d="M7.5 10.25 L6 11.75 a2.5 2.5 0 0 1 -3.54 -3.54 L4 6.75" />
+  </svg>
+);
+
+const IMAGE_ICON = (
+  <svg
+    width="14"
+    height="14"
+    viewBox="0 0 14 14"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="1.4"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+  >
+    <rect x="1.5" y="2.5" width="11" height="9" rx="1" />
+    <circle cx="5" cy="5.5" r="0.9" />
+    <path d="M2 10 L5.5 7 L8 9 L10 7.5 L12.5 10" />
+  </svg>
+);
+
+const PAPERCLIP_ICON = (
+  <svg
+    width="14"
+    height="14"
+    viewBox="0 0 14 14"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="1.4"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+  >
+    <path d="M11 4 L5.5 9.5 a1.75 1.75 0 0 0 2.5 2.5 L12.5 7.5 a3 3 0 0 0 -4.25 -4.25 L3 8.5 a4.25 4.25 0 0 0 6 6 L13 10.5" />
+  </svg>
+);
+
+const EMOJI_ICON = (
+  <svg
+    width="14"
+    height="14"
+    viewBox="0 0 14 14"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="1.4"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+  >
+    <circle cx="7" cy="7" r="5.25" />
+    <circle cx="5.25" cy="5.75" r="0.6" fill="currentColor" stroke="none" />
+    <circle cx="8.75" cy="5.75" r="0.6" fill="currentColor" stroke="none" />
+    <path d="M4.75 8.5 a2.5 2.5 0 0 0 4.5 0" />
+  </svg>
+);
+
+/** Returns an SVG element when the button id maps to one, otherwise null. */
+function buttonIconSvg(id: string): React.ReactNode | null {
+  switch (id) {
+    case 'table':
+      return TABLE_ICON;
+    case 'link':
+      return LINK_ICON;
+    case 'image':
+      return IMAGE_ICON;
+    case 'emoji':
+      return EMOJI_ICON;
+    default:
+      return null;
+  }
+}
 
 // ─── Tiptap active-state map ────────────────────────────
 
@@ -122,6 +237,12 @@ function isTiptapActive(editor: TiptapEditor, id: string): boolean {
       return editor.isActive('heading', { level: 2 });
     case 'h3':
       return editor.isActive('heading', { level: 3 });
+    case 'h4':
+      return editor.isActive('heading', { level: 4 });
+    case 'h5':
+      return editor.isActive('heading', { level: 5 });
+    case 'h6':
+      return editor.isActive('heading', { level: 6 });
     case 'quote':
       return editor.isActive('blockquote');
     case 'ul':
@@ -158,6 +279,10 @@ export function Toolbar({
     monacoEditor,
     mediaProvider,
     editorMode,
+    versioning,
+    allowRecording,
+    documentLinkProvider,
+    theme,
   } = useEditorContext();
   const isCodeMode = editorMode === 'code';
   // In code mode only the raw view is meaningful; the WYSIWYG and Preview
@@ -171,6 +296,56 @@ export function Toolbar({
 
   // Hidden file input for image picker
   const imageInputRef = useRef<HTMLInputElement>(null);
+
+  // Link dialog — shared by WYSIWYG and Raw views.
+  const [linkDialog, setLinkDialog] = useState<{
+    mode: 'insert' | 'update';
+    target: 'wysiwyg' | 'raw';
+    initialText: string;
+    initialUrl: string;
+    /** For target='raw': the range to replace when editing an existing
+     *  [text](url) under the cursor. Null means use the current Monaco
+     *  selection (insert at cursor / wrap selection). */
+    rawRange: IRange | null;
+  } | null>(null);
+
+  // Emoji picker — toolbar-anchored popover. We track the trigger
+  // button's screen rect so the picker can position itself just below
+  // it via createPortal (the toolbar's overflow:hidden actions row
+  // would otherwise clip the popover).
+  const emojiButtonRef = useRef<HTMLButtonElement | null>(null);
+  const [emojiPickerAnchor, setEmojiPickerAnchor] = useState<{
+    top: number;
+    left: number;
+  } | null>(null);
+
+  const openEmojiPicker = useCallback(() => {
+    const btn = emojiButtonRef.current;
+    if (!btn) return;
+    const rect = btn.getBoundingClientRect();
+    // Position just below the trigger by default, then clamp into the
+    // visible viewport so the picker is never clipped on the right or
+    // bottom — flips above the trigger when there isn't room below.
+    const gap = 6;
+    const margin = 8;
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
+    let left = rect.left;
+    if (left + EMOJI_PICKER_WIDTH + margin > vw) {
+      left = Math.max(margin, vw - EMOJI_PICKER_WIDTH - margin);
+    }
+    let top = rect.bottom + gap;
+    if (top + EMOJI_PICKER_MAX_HEIGHT + margin > vh) {
+      const flipped = rect.top - EMOJI_PICKER_MAX_HEIGHT - gap;
+      // Prefer flipping above when there's more room there; otherwise
+      // pin to the top edge with margin and let the picker's own
+      // maxHeight clip it.
+      top = flipped >= margin ? flipped : margin;
+    }
+    setEmojiPickerAnchor({ top, left });
+  }, []);
+
+  const closeEmojiPicker = useCallback(() => setEmojiPickerAnchor(null), []);
 
   // ── Narrow-screen detection ──────────────────────────
   const [isNarrow, setIsNarrow] = useState(
@@ -188,6 +363,9 @@ export function Toolbar({
   const [measuredOverflowIndex, setMeasuredOverflowIndex] = useState<number | null>(null);
   const [showOverflow, setShowOverflow] = useState(false);
   const overflowRef = useRef<HTMLDivElement>(null);
+
+  // Document settings (frontmatter) dialog
+  const [showDocSettings, setShowDocSettings] = useState(false);
 
   // On narrow screens, force all buttons into the overflow menu
   const overflowIndex = isNarrow ? 0 : measuredOverflowIndex;
@@ -294,6 +472,15 @@ export function Toolbar({
         case 'h3':
           chain.toggleHeading({ level: 3 }).run();
           break;
+        case 'h4':
+          chain.toggleHeading({ level: 4 }).run();
+          break;
+        case 'h5':
+          chain.toggleHeading({ level: 5 }).run();
+          break;
+        case 'h6':
+          chain.toggleHeading({ level: 6 }).run();
+          break;
         case 'quote':
           chain.toggleBlockquote().run();
           break;
@@ -310,12 +497,29 @@ export function Toolbar({
           chain.setHorizontalRule().run();
           break;
         case 'link': {
-          const url = window.prompt('URL:');
-          if (url) {
-            (chain as unknown as Record<string, (opts: { href: string }) => typeof chain>)
-              .setLink?.({ href: url })
-              .run();
+          const isActive = tiptapEditor.isActive('link');
+          let initialText = '';
+          let initialUrl = '';
+          if (isActive) {
+            // Snap selection to the full link mark so editing replaces
+            // the entire `[text](url)` rather than just the cursor word.
+            tiptapEditor.chain().focus().extendMarkRange('link').run();
+            const sel = tiptapEditor.state.selection;
+            initialText = tiptapEditor.state.doc.textBetween(sel.from, sel.to, ' ');
+            initialUrl = (tiptapEditor.getAttributes('link') as { href?: string }).href ?? '';
+          } else {
+            const { from, to, empty } = tiptapEditor.state.selection;
+            if (!empty) {
+              initialText = tiptapEditor.state.doc.textBetween(from, to, ' ');
+            }
           }
+          setLinkDialog({
+            mode: isActive ? 'update' : 'insert',
+            target: 'wysiwyg',
+            initialText,
+            initialUrl,
+            rawRange: null,
+          });
           break;
         }
         case 'table':
@@ -387,6 +591,15 @@ export function Toolbar({
           case 'h3':
             prefixLines('### ', 'Heading 3');
             break;
+          case 'h4':
+            prefixLines('#### ', 'Heading 4');
+            break;
+          case 'h5':
+            prefixLines('##### ', 'Heading 5');
+            break;
+          case 'h6':
+            prefixLines('###### ', 'Heading 6');
+            break;
           case 'quote':
             prefixLines('> ', 'Quote');
             break;
@@ -407,13 +620,42 @@ export function Toolbar({
             break;
           }
           case 'link': {
-            if (hasSelection) {
-              replacement = '[' + selectedText + '](url)';
-            } else {
-              replacement = '[link text](url)';
-              newCursorOffset = 1; // inside the []
+            // Open the LinkDialog instead of inserting literal text. If the
+            // cursor sits inside an existing `[text](url)` on this line,
+            // prefill from it and replace the whole match on confirm.
+            const lineNumber = selection.startLineNumber;
+            const lineText = model.getLineContent(lineNumber);
+            const cursorCol = selection.startColumn;
+            const linkRe = /\[([^\]]*)\]\(([^)]*)\)/g;
+            let match: RegExpExecArray | null;
+            let existing: { text: string; url: string; range: IRange } | null = null;
+            while ((match = linkRe.exec(lineText)) !== null) {
+              const startCol = match.index + 1; // 1-based
+              const endCol = startCol + match[0].length;
+              if (cursorCol >= startCol && cursorCol <= endCol) {
+                existing = {
+                  text: match[1],
+                  url: match[2],
+                  range: {
+                    startLineNumber: lineNumber,
+                    startColumn: startCol,
+                    endLineNumber: lineNumber,
+                    endColumn: endCol,
+                  },
+                };
+                break;
+              }
             }
-            break;
+            setLinkDialog({
+              mode: existing ? 'update' : 'insert',
+              target: 'raw',
+              initialText: existing ? existing.text : hasSelection ? selectedText : '',
+              initialUrl: existing ? existing.url : '',
+              rawRange: existing ? existing.range : null,
+            });
+            // Skip the executeEdits/setPosition tail below — the dialog will
+            // apply its own edit on confirm.
+            return;
           }
           case 'table': {
             const tpl =
@@ -525,33 +767,344 @@ export function Toolbar({
         imageInputRef.current?.click();
         return;
       }
+      if (id === 'emoji') {
+        // Toggle the popover: clicking the button again closes it.
+        if (emojiPickerAnchor) closeEmojiPicker();
+        else openEmojiPicker();
+        return;
+      }
       if (activeView === 'wysiwyg' && tiptapEditor) {
         handleTiptap(id);
       } else {
         handleRaw(id);
       }
     },
-    [activeView, tiptapEditor, handleTiptap, handleRaw],
+    [
+      activeView,
+      tiptapEditor,
+      handleTiptap,
+      handleRaw,
+      emojiPickerAnchor,
+      openEmojiPicker,
+      closeEmojiPicker,
+    ],
+  );
+
+  // ── Picker insert (emoji or FontAwesome icon) ──────
+  // Inserts a chosen picker entry at the cursor. We bypass
+  // `insertAtCursor` (which routes through markdown→Tiptap conversion
+  // and wraps the input in a paragraph) so entries land inline at the
+  // caret rather than starting a new block. Emoji insert as a plain
+  // character; FontAwesome icons insert as the `InlineIcon` Tiptap
+  // node so the editor renders them inline immediately.
+  const handleEmojiSelect = useCallback(
+    (entry: PickerEntry) => {
+      if (activeView === 'wysiwyg' && tiptapEditor) {
+        if (entry.kind === 'emoji') {
+          tiptapEditor.chain().focus().insertContent(entry.char).run();
+        } else {
+          tiptapEditor
+            .chain()
+            .focus()
+            .insertContent({
+              type: 'inlineIcon',
+              attrs: { token: entry.token, family: entry.family, name: entry.name },
+            })
+            .run();
+        }
+      } else if (activeView === 'raw' && monacoEditor) {
+        const insertion = entry.kind === 'emoji' ? entry.char : `{[${entry.token}]}`;
+        const position = monacoEditor.getPosition();
+        if (position) {
+          const range = {
+            startLineNumber: position.lineNumber,
+            startColumn: position.column,
+            endLineNumber: position.lineNumber,
+            endColumn: position.column,
+          };
+          monacoEditor.executeEdits('picker-insert', [{ range, text: insertion }]);
+          monacoEditor.focus();
+        } else {
+          setMarkdownSource(markdownSource + insertion);
+        }
+      } else {
+        const insertion = entry.kind === 'emoji' ? entry.char : `{[${entry.token}]}`;
+        setMarkdownSource(markdownSource + insertion);
+      }
+      closeEmojiPicker();
+    },
+    [activeView, tiptapEditor, monacoEditor, markdownSource, setMarkdownSource, closeEmojiPicker],
+  );
+
+  // ── Ctrl+K / Cmd+K → open the link dialog ────────────
+  // Mirrors the behaviour of common editors (Word, Google Docs, VS Code's
+  // Markdown preview): if the cursor is in a Squisq editor surface, the
+  // shortcut routes through the same handler the toolbar Link button uses,
+  // which prefills the dialog from the current selection (or the link
+  // under the cursor) before opening.
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (!(e.ctrlKey || e.metaKey) || e.altKey || e.shiftKey) return;
+      if (e.key.toLowerCase() !== 'k') return;
+      const target = e.target as HTMLElement | null;
+      if (!target) return;
+      // Only intercept when focus is inside one of our editor surfaces.
+      const inEditor = !!target.closest(
+        '.squisq-wysiwyg-editor, .ProseMirror, .squisq-raw-editor-container, .monaco-editor',
+      );
+      if (!inEditor) return;
+      e.preventDefault();
+      e.stopPropagation();
+      handleAction('link');
+    };
+    window.addEventListener('keydown', onKeyDown, true);
+    return () => window.removeEventListener('keydown', onKeyDown, true);
+  }, [handleAction]);
+
+  // ── Link dialog confirm ──────────────────────────────
+  const handleLinkConfirm = useCallback(
+    (text: string, url: string) => {
+      if (!linkDialog) return;
+      const trimmedUrl = url.trim();
+      const trimmedText = text.trim();
+
+      if (linkDialog.target === 'wysiwyg' && tiptapEditor) {
+        if (!trimmedUrl) {
+          // Empty URL on update = unlink. On insert with no URL, do nothing.
+          if (linkDialog.mode === 'update') {
+            tiptapEditor.chain().focus().unsetLink().run();
+          }
+          setLinkDialog(null);
+          return;
+        }
+        const visibleText = trimmedText || trimmedUrl;
+        const chain = tiptapEditor.chain().focus();
+        // Insert (or replace selection) with text carrying a link mark. When
+        // updating an existing link, the selection was extended to the full
+        // mark range earlier, so this replaces the entire `[text](url)`.
+        chain
+          .insertContent({
+            type: 'text',
+            text: visibleText,
+            marks: [{ type: 'link', attrs: { href: trimmedUrl } }],
+          })
+          .run();
+        setLinkDialog(null);
+        return;
+      }
+
+      if (linkDialog.target === 'raw' && monacoEditor) {
+        const model = monacoEditor.getModel();
+        if (!model) {
+          setLinkDialog(null);
+          return;
+        }
+        if (!trimmedUrl && linkDialog.mode === 'update' && linkDialog.rawRange) {
+          // Empty URL on update = strip the markdown link, keep the text.
+          monacoEditor.executeEdits('toolbar-link-edit', [
+            { range: linkDialog.rawRange, text: trimmedText || linkDialog.initialText },
+          ]);
+          monacoEditor.focus();
+          setLinkDialog(null);
+          return;
+        }
+        if (!trimmedUrl) {
+          setLinkDialog(null);
+          return;
+        }
+        const visibleText = trimmedText || trimmedUrl;
+        const replacement = `[${visibleText}](${trimmedUrl})`;
+        const range = linkDialog.rawRange ?? monacoEditor.getSelection();
+        if (!range) {
+          setLinkDialog(null);
+          return;
+        }
+        monacoEditor.executeEdits('toolbar-link-edit', [{ range, text: replacement }]);
+        monacoEditor.focus();
+        setLinkDialog(null);
+        return;
+      }
+
+      setLinkDialog(null);
+    },
+    [linkDialog, tiptapEditor, monacoEditor],
   );
 
   const groups = ['format', 'lists', 'structure', 'insert', 'media'] as const;
   const isWysiwyg = activeView === 'wysiwyg' && tiptapEditor;
   const isPreview = activeView === 'preview';
 
+  // ── Progressive heading disclosure ───────────────────
+  // H1\u2013H3 are always visible. H4 appears once the document already
+  // contains an H3, H5 once it contains an H4, and H6 once it contains
+  // an H5. This keeps the toolbar compact for typical short documents
+  // while letting deeply nested documents reach every level.
+  const maxHeadingLevelInDoc = useMemo(() => {
+    if (!markdownSource) return 0;
+    let max = 0;
+    let inFence = false;
+    for (const rawLine of markdownSource.split('\n')) {
+      const line = rawLine.trimEnd();
+      if (/^\s*```/.test(line)) {
+        inFence = !inFence;
+        continue;
+      }
+      if (inFence) continue;
+      const m = /^(#{1,6})\s+\S/.exec(line);
+      if (m && m[1].length > max) max = m[1].length;
+    }
+    return max;
+  }, [markdownSource]);
+  // Show H(n+1) when the document already contains H(n), starting from H3.
+  const visibleHeadingMax = Math.min(6, Math.max(3, maxHeadingLevelInDoc + 1));
+  const isButtonVisible = (id: string): boolean => {
+    const m = /^h([1-6])$/.exec(id);
+    if (!m) return true;
+    return Number(m[1]) <= visibleHeadingMax;
+  };
+
   // Detect whether cursor is inside a table (WYSIWYG mode only)
   const isInTable = isWysiwyg ? tiptapEditor.isActive('table') : false;
 
   // Detect current heading template (WYSIWYG mode only)
-  const currentTemplate = isWysiwyg
+  const wysiwygTemplate = isWysiwyg
     ? tiptapEditor.isActive('heading')
       ? (tiptapEditor.getAttributes('heading')?.dataTemplate ?? '')
       : null
     : null;
 
+  // ── Monaco heading detection (Markdown view) ─────────────────────
+  // Watch the Monaco cursor and surface the template picker whenever the
+  // cursor is on a heading line. `null` hides the picker; '' shows it
+  // with no template selected; any other string is the current template.
+  const isRawView = activeView === 'raw';
+  const [rawTemplate, setRawTemplate] = useState<string | null>(null);
+  const [rawHeadingLine, setRawHeadingLine] = useState<number | null>(null);
+  useEffect(() => {
+    if (!isRawView || !monacoEditor) {
+      setRawTemplate(null);
+      setRawHeadingLine(null);
+      return;
+    }
+    const recompute = () => {
+      const model = monacoEditor.getModel();
+      const pos = monacoEditor.getPosition();
+      if (!model || !pos) {
+        setRawTemplate(null);
+        setRawHeadingLine(null);
+        return;
+      }
+      const line = model.getLineContent(pos.lineNumber);
+      const headingMatch = line.match(/^#{1,6}\s+(.+)$/);
+      if (!headingMatch) {
+        setRawTemplate(null);
+        setRawHeadingLine(null);
+        return;
+      }
+      setRawHeadingLine(pos.lineNumber);
+      const annotMatch = headingMatch[1].match(/\s*\{\[([^\]]+)\]\}[\s\]}]*$/);
+      if (annotMatch) {
+        // First whitespace-delimited token is the template name; the rest are params.
+        const name = annotMatch[1].trim().split(/\s+/)[0];
+        setRawTemplate(name);
+      } else {
+        setRawTemplate('');
+      }
+    };
+    recompute();
+    const cursorSub = monacoEditor.onDidChangeCursorPosition(recompute);
+    const contentSub = monacoEditor.onDidChangeModelContent(recompute);
+    return () => {
+      cursorSub.dispose();
+      contentSub.dispose();
+    };
+  }, [isRawView, monacoEditor]);
+
+  // Track the index of the heading the WYSIWYG cursor is in among all
+  // top-level headings. Used to locate the same heading in the markdown
+  // source for content-based template recommendations.
+  const [wysiwygHeadingIndex, setWysiwygHeadingIndex] = useState<number | null>(null);
+  useEffect(() => {
+    if (!isWysiwyg || !tiptapEditor) {
+      setWysiwygHeadingIndex(null);
+      return;
+    }
+    const recompute = () => {
+      if (!tiptapEditor.isActive('heading')) {
+        setWysiwygHeadingIndex(null);
+        return;
+      }
+      const cursor = tiptapEditor.state.selection.from;
+      let index = -1;
+      let count = 0;
+      tiptapEditor.state.doc.descendants((node, pos) => {
+        if (node.type.name !== 'heading') return;
+        if (pos <= cursor && pos + node.nodeSize > cursor) {
+          index = count;
+          return false;
+        }
+        count++;
+      });
+      setWysiwygHeadingIndex(index >= 0 ? index : null);
+    };
+    recompute();
+    tiptapEditor.on('selectionUpdate', recompute);
+    tiptapEditor.on('update', recompute);
+    return () => {
+      tiptapEditor.off('selectionUpdate', recompute);
+      tiptapEditor.off('update', recompute);
+    };
+  }, [isWysiwyg, tiptapEditor]);
+
+  const currentTemplate = isWysiwyg ? wysiwygTemplate : isRawView ? rawTemplate : null;
+
+  // Compute recommended templates for the active block. Heading slice
+  // comes from markdownSource — raw view supplies the cursor line,
+  // WYSIWYG supplies the heading index.
+  const recommendedTemplates = useMemo(() => {
+    if (currentTemplate === null) return undefined;
+    let slice = null;
+    if (isRawView && rawHeadingLine !== null) {
+      slice = findBlockSliceAtLine(markdownSource, rawHeadingLine);
+    } else if (isWysiwyg && wysiwygHeadingIndex !== null) {
+      slice = findBlockSliceByHeadingIndex(markdownSource, wysiwygHeadingIndex);
+    }
+    if (slice === null) return undefined;
+    const profile = profileBlockContents(slice);
+    return recommendTemplatesForBlock(profile, TEMPLATE_NAMES).recommended;
+  }, [currentTemplate, isRawView, isWysiwyg, rawHeadingLine, wysiwygHeadingIndex, markdownSource]);
+
   const handleTemplatePick = (value: string) => {
+    // Raw (Monaco) — rewrite the heading line's annotation suffix in place.
+    if (isRawView && monacoEditor) {
+      const model = monacoEditor.getModel();
+      const pos = monacoEditor.getPosition();
+      if (!model || !pos) return;
+      const lineNumber = pos.lineNumber;
+      const lineText = model.getLineContent(lineNumber);
+      const headingMatch = lineText.match(/^(#{1,6}\s+)(.+)$/);
+      if (!headingMatch) return;
+      const prefix = headingMatch[1];
+      // Strip any existing trailing annotation
+      const bareText = headingMatch[2].replace(/\s*\{\[[^\]]+\]\}[\s\]}]*$/, '').trimEnd();
+      const newLine = value === '' ? `${prefix}${bareText}` : `${prefix}${bareText} {[${value}]}`;
+      monacoEditor.executeEdits('toolbar-template-pick', [
+        {
+          range: {
+            startLineNumber: lineNumber,
+            startColumn: 1,
+            endLineNumber: lineNumber,
+            endColumn: lineText.length + 1,
+          },
+          text: newLine,
+        },
+      ]);
+      monacoEditor.focus();
+      return;
+    }
+    // WYSIWYG — update the heading node attributes.
     if (!tiptapEditor) return;
     if (value === '') {
-      // Clear template
       tiptapEditor
         .chain()
         .focus()
@@ -620,12 +1173,18 @@ export function Toolbar({
           {groups.map((group, gi) => (
             <div key={group} className="squisq-toolbar-group">
               {gi > 0 && <div className="squisq-toolbar-separator" />}
-              {BUTTONS.filter((b) => b.group === group).map((btn) => {
-                const active = isWysiwyg ? isTiptapActive(tiptapEditor, btn.id) : false;
+              {BUTTONS.filter((b) => b.group === group && isButtonVisible(b.id)).map((btn) => {
+                const active =
+                  btn.id === 'emoji'
+                    ? emojiPickerAnchor !== null
+                    : isWysiwyg
+                      ? isTiptapActive(tiptapEditor, btn.id)
+                      : false;
                 const disabled = btn.id === 'image' && !mediaProvider;
                 return (
                   <button
                     key={btn.id}
+                    ref={btn.id === 'emoji' ? emojiButtonRef : undefined}
                     className={`squisq-toolbar-button${active ? ' squisq-toolbar-button--active' : ''}`}
                     data-tooltip={disabled ? 'Insert image (requires media provider)' : btn.title}
                     onClick={() => handleAction(btn.id)}
@@ -634,54 +1193,25 @@ export function Toolbar({
                     disabled={disabled}
                     style={btn.iconStyle}
                   >
-                    {btn.id === 'table' ? (
-                      <svg
-                        width="14"
-                        height="14"
-                        viewBox="0 0 14 14"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="1.4"
-                        strokeLinecap="round"
-                      >
-                        <rect x="1" y="1" width="12" height="12" rx="1" />
-                        <line x1="1" y1="5" x2="13" y2="5" />
-                        <line x1="1" y1="9" x2="13" y2="9" />
-                        <line x1="5" y1="1" x2="5" y2="13" />
-                        <line x1="9" y1="1" x2="9" y2="13" />
-                      </svg>
-                    ) : (
-                      btn.icon
-                    )}
+                    {buttonIconSvg(btn.id) ?? btn.icon}
                   </button>
                 );
               })}
             </div>
           ))}
 
-          {/* Template picker — visible when cursor is in a heading (WYSIWYG) */}
+          {/* Template picker — visible when the cursor is in a heading.
+              In WYSIWYG, reads from the heading node's `dataTemplate`; in
+              Markdown view, parses the `{[...]}` suffix on the cursor's line. */}
           {currentTemplate !== null && (
             <>
               <div className="squisq-toolbar-separator" />
               <div className="squisq-toolbar-group squisq-template-picker">
-                <label
-                  className="squisq-template-picker-label"
-                  data-tooltip="Block template for this heading"
-                >
-                  Template:
-                  <select
-                    className="squisq-template-picker-select"
-                    value={currentTemplate}
-                    onChange={(e) => handleTemplatePick(e.target.value)}
-                  >
-                    <option value="">— none —</option>
-                    {TEMPLATE_NAMES.map((name) => (
-                      <option key={name} value={name}>
-                        {name}
-                      </option>
-                    ))}
-                  </select>
-                </label>
+                <TemplatePicker
+                  value={currentTemplate}
+                  onChange={handleTemplatePick}
+                  recommended={recommendedTemplates}
+                />
               </div>
             </>
           )}
@@ -860,64 +1390,52 @@ export function Toolbar({
             <div
               className={`squisq-toolbar-overflow-menu squisq-toolbar-overflow-menu--${overflowPlacement}`}
             >
-              {BUTTONS.slice(overflowIndex).map((btn) => {
-                const active = isWysiwyg ? isTiptapActive(tiptapEditor, btn.id) : false;
-                const disabled = btn.id === 'image' && !mediaProvider;
-                return (
-                  <button
-                    key={btn.id}
-                    className={`squisq-toolbar-overflow-item${active ? ' squisq-toolbar-overflow-item--active' : ''}`}
-                    onClick={() => {
-                      handleAction(btn.id);
-                      setShowOverflow(false);
-                    }}
-                    disabled={disabled}
-                  >
-                    {btn.id === 'table' ? (
-                      <svg
-                        width="14"
-                        height="14"
-                        viewBox="0 0 14 14"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="1.4"
-                        strokeLinecap="round"
-                      >
-                        <rect x="1" y="1" width="12" height="12" rx="1" />
-                        <line x1="1" y1="5" x2="13" y2="5" />
-                        <line x1="1" y1="9" x2="13" y2="9" />
-                        <line x1="5" y1="1" x2="5" y2="13" />
-                        <line x1="9" y1="1" x2="9" y2="13" />
-                      </svg>
-                    ) : (
-                      <span className="squisq-toolbar-overflow-icon" style={btn.iconStyle}>
-                        {btn.icon}
-                      </span>
-                    )}
-                    <span>{btn.title}</span>
-                  </button>
-                );
-              })}
+              {BUTTONS.slice(overflowIndex)
+                .filter((b) => isButtonVisible(b.id))
+                .map((btn) => {
+                  const active =
+                    btn.id === 'emoji'
+                      ? emojiPickerAnchor !== null
+                      : isWysiwyg
+                        ? isTiptapActive(tiptapEditor, btn.id)
+                        : false;
+                  const disabled = btn.id === 'image' && !mediaProvider;
+                  return (
+                    <button
+                      key={btn.id}
+                      ref={btn.id === 'emoji' ? emojiButtonRef : undefined}
+                      className={`squisq-toolbar-overflow-item${active ? ' squisq-toolbar-overflow-item--active' : ''}`}
+                      onClick={() => {
+                        handleAction(btn.id);
+                        // Keep the overflow open when opening the emoji
+                        // picker — otherwise its anchor (the overflow
+                        // item) unmounts and the popover loses its ref.
+                        if (btn.id !== 'emoji') setShowOverflow(false);
+                      }}
+                      disabled={disabled}
+                    >
+                      {buttonIconSvg(btn.id) ?? (
+                        <span className="squisq-toolbar-overflow-icon" style={btn.iconStyle}>
+                          {btn.icon}
+                        </span>
+                      )}
+                      <span>{btn.title}</span>
+                    </button>
+                  );
+                })}
 
               {/* Contextual: template picker in overflow */}
               {currentTemplate !== null && (
                 <div className="squisq-toolbar-overflow-item squisq-toolbar-overflow-template">
                   <span>Template:</span>
-                  <select
-                    className="squisq-template-picker-select"
+                  <TemplatePicker
                     value={currentTemplate}
-                    onChange={(e) => {
-                      handleTemplatePick(e.target.value);
+                    onChange={(v) => {
+                      handleTemplatePick(v);
                       setShowOverflow(false);
                     }}
-                  >
-                    <option value="">— none —</option>
-                    {TEMPLATE_NAMES.map((name) => (
-                      <option key={name} value={name}>
-                        {name}
-                      </option>
-                    ))}
-                  </select>
+                    recommended={recommendedTemplates}
+                  />
                 </div>
               )}
 
@@ -981,6 +1499,41 @@ export function Toolbar({
       {/* Spacer — only needed when the actions container (which has flex:1
           and already pushes right-side items to the end) isn't rendered. */}
       {(isPreview || isNarrow || isCodeMode) && <div style={{ flex: 1 }} />}
+      {/* Version history — renders only when the host enabled versioning
+          and a container is wired up. The component owns its own button
+          and popover; we just give it a slot in the toolbar. */}
+      {versioning && !isCodeMode && <VersionHistoryPanel />}
+      {/* Media recorder — surfaces when the host has a mediaProvider
+          and hasn't opted out. RecorderEntry returns null when no
+          provider is wired, so this stays a no-op for hosts that
+          haven't enabled media at all. */}
+      {allowRecording && !isCodeMode && mediaProvider && <RecorderEntry />}
+      {!isCodeMode && (
+        <button
+          type="button"
+          className="squisq-toolbar-button"
+          onClick={() => setShowDocSettings(true)}
+          data-tooltip="Document settings"
+          aria-label="Document settings"
+        >
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+            <path
+              d="M3 2.5h7l3 3v8a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1v-10a1 1 0 0 1 1-1Z"
+              stroke="currentColor"
+              strokeWidth="1.3"
+              strokeLinejoin="round"
+            />
+            <path d="M10 2.5v3h3" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round" />
+            <path
+              d="M5 8.5h6M5 11h4"
+              stroke="currentColor"
+              strokeWidth="1.3"
+              strokeLinecap="round"
+            />
+          </svg>
+        </button>
+      )}
+      {!isCodeMode && <ViewMenuPanel />}
       {/* Files toggle — visible when callback is provided */}
       {onToggleFiles && (
         <button
@@ -990,11 +1543,55 @@ export function Toolbar({
           aria-pressed={showFiles}
           aria-label="Toggle Files panel"
         >
-          {'\u{1F4CE}'}
+          {PAPERCLIP_ICON}
         </button>
       )}
       {/* Right slot — rightmost end of toolbar */}
       {slotRight}
+
+      {/* Document settings (frontmatter) dialog */}
+      {showDocSettings && (
+        <DocumentSettingsDialog
+          markdownSource={markdownSource}
+          onSave={(next) => {
+            setMarkdownSource(next);
+            setShowDocSettings(false);
+          }}
+          onClose={() => setShowDocSettings(false)}
+        />
+      )}
+
+      {/* Link insert/edit dialog — shared by WYSIWYG and Raw views. */}
+      {linkDialog && (
+        <LinkDialog
+          mode={linkDialog.mode}
+          initialText={linkDialog.initialText}
+          initialUrl={linkDialog.initialUrl}
+          onConfirm={handleLinkConfirm}
+          onClose={() => setLinkDialog(null)}
+          documentLinkProvider={documentLinkProvider}
+        />
+      )}
+
+      {/* Emoji picker — portaled to the document body so the toolbar's
+          overflow:hidden actions row doesn't clip the popover. Position
+          is computed from the trigger button's screen rect at open. */}
+      {emojiPickerAnchor &&
+        createPortal(
+          <EmojiPicker
+            open
+            onSelect={handleEmojiSelect}
+            onClose={closeEmojiPicker}
+            anchorRef={emojiButtonRef as React.RefObject<HTMLElement>}
+            theme={theme === 'dark' ? 'dark' : 'light'}
+            style={{
+              position: 'fixed',
+              top: emojiPickerAnchor.top,
+              left: emojiPickerAnchor.left,
+            }}
+          />,
+          document.body,
+        )}
     </div>
   );
 }

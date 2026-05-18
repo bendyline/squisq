@@ -142,12 +142,12 @@ describe('markdownToDoc', () => {
     const md = parseMarkdown('# Test');
     const doc = markdownToDoc(md, {
       articleId: 'custom-article',
-      defaultTemplate: 'titleBlock',
+      defaultTemplate: 'title',
       defaultDuration: 10,
     });
 
     expect(doc.articleId).toBe('custom-article');
-    expect(doc.blocks[0].template).toBe('titleBlock');
+    expect(doc.blocks[0].template).toBe('title');
     expect(doc.blocks[0].duration).toBe(10);
   });
 
@@ -363,11 +363,11 @@ describe('template annotation in markdownToDoc', () => {
   });
 
   it('nested headings preserve their own annotations', () => {
-    const input = '# Chapter {[titleBlock]}\n\nIntro\n\n## Section {[chart]}\n\nData';
+    const input = '# Chapter {[title]}\n\nIntro\n\n## Section {[chart]}\n\nData';
     const md = parseMarkdown(input);
     const doc = markdownToDoc(md);
 
-    expect(doc.blocks[0].template).toBe('titleBlock');
+    expect(doc.blocks[0].template).toBe('title');
     expect(doc.blocks[0].children).toHaveLength(1);
     expect(doc.blocks[0].children![0].template).toBe('chart');
   });
@@ -507,6 +507,21 @@ describe('auto cover block generation', () => {
 
     expect(doc.startBlock).toBeDefined();
     expect(doc.startBlock!.heroSrc).toBe('deep.png');
+  });
+
+  it('picks raw HTML <img> as heroSrc (WYSIWYG resize case)', () => {
+    // The WYSIWYG editor serializes resized images as raw `<img src width>`
+    // because markdown shorthand has no width syntax. The cover scanner
+    // must see through that, or every resized image silently drops out
+    // of exports.
+    const md = parseMarkdown(
+      '# Title\n\n<img alt="resized" src="resized.jpg" width="194">\n\nText.',
+    );
+    const doc = markdownToDoc(md);
+
+    expect(doc.startBlock).toBeDefined();
+    expect(doc.startBlock!.heroSrc).toBe('resized.jpg');
+    expect(doc.startBlock!.heroAlt).toBe('resized');
   });
 
   it('works without images (no heroSrc)', () => {

@@ -80,6 +80,7 @@
   },
   "scripts": {
     "build": "tsup",
+    "dev": "concurrently -n js,dts -c blue,gray -r \"tsup --watch --no-dts --no-clean\" \"tsup --watch --dts-only --no-clean\"",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

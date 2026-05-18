@@ -108,4 +108,7 @@ export {
   countNodes,
   createDocument,
   parseFrontmatter,
+  setFrontmatterValues,
+  inferDocumentTitle,
+  readFrontmatterThemeId,
 } from './utils.js';

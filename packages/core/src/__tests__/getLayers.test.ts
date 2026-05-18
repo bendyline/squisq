@@ -11,7 +11,7 @@ import type { Block, Layer, TextLayer, ShapeLayer } from '../schemas/Doc.js';
 
 function makeTemplateBlock(overrides: Partial<TemplateBlock> = {}): TemplateBlock {
   return {
-    template: 'titleBlock',
+    template: 'title',
     id: 'test-title-1',
     duration: 5,
     audioSegment: 0,
@@ -43,7 +43,7 @@ const defaultContext: RenderContext = {
 
 describe('getLayers', () => {
   it('generates layers for a known template block', () => {
-    const block = makeTemplateBlock({ template: 'titleBlock', title: 'Test Title' });
+    const block = makeTemplateBlock({ template: 'title', title: 'Test Title' });
     const layers = getLayers(block, defaultContext);
 
     expect(Array.isArray(layers)).toBe(true);
@@ -83,6 +83,31 @@ describe('getLayers', () => {
     expect(layers).toEqual(existingLayers);
   });
 
+  it('resolves legacy template aliases through TEMPLATE_ALIASES', () => {
+    // Regression: `getLayers` previously did `block.template in templateRegistry`
+    // without alias resolution, so docs authored with the legacy long ids
+    // (`titleBlock`, `quoteBlock`, `mapBlock`, `listBlock`) rendered as
+    // empty SVG cards in the linear/document view — `hasTemplate()` accepts
+    // the alias, so `isAnnotatedBlock` returns true and the card wrapper
+    // renders, but the registry lookup below would miss the alias and the
+    // layer array came back empty.
+    const aliasedToCanonical: Array<[string, string]> = [
+      ['titleBlock', 'title'],
+      ['quoteBlock', 'quote'],
+      ['listBlock', 'list'],
+    ];
+    for (const [alias] of aliasedToCanonical) {
+      const block = makeTemplateBlock({
+        template: alias as TemplateBlock['template'],
+        title: 'Aliased',
+        items: ['a', 'b', 'c'],
+        quote: 'q',
+      } as Partial<TemplateBlock>);
+      const layers = getLayers(block, defaultContext);
+      expect(layers.length).toBeGreaterThan(0);
+    }
+  });
+
   it('returns empty array for unknown template', () => {
     const block = {
       template: 'totally_nonexistent',
@@ -103,7 +128,7 @@ describe('getLayers', () => {
   });
 
   it('uses default context values when context is omitted', () => {
-    const block = makeTemplateBlock({ template: 'titleBlock', title: 'Defaults' });
+    const block = makeTemplateBlock({ template: 'title', title: 'Defaults' });
     const layers = getLayers(block);
 
     expect(Array.isArray(layers)).toBe(true);
@@ -147,7 +172,7 @@ describe('getLayers', () => {
     };
 
     it('injects persistent bottom and top layers around block layers', () => {
-      const block = makeTemplateBlock({ template: 'titleBlock', title: 'With Persistent' });
+      const block = makeTemplateBlock({ template: 'title', title: 'With Persistent' });
       const layers = getLayers(block, { ...defaultContext, persistentLayers: persistentConfig });
 
       // First layer should be the bottom persistent layer
@@ -160,7 +185,7 @@ describe('getLayers', () => {
 
     it('respects useBottomLayer: false opt-out', () => {
       const block = makeTemplateBlock({
-        template: 'titleBlock',
+        template: 'title',
         title: 'No Bottom',
         useBottomLayer: false,
       });
@@ -174,7 +199,7 @@ describe('getLayers', () => {
 
     it('respects useTopLayer: false opt-out', () => {
       const block = makeTemplateBlock({
-        template: 'titleBlock',
+        template: 'title',
         title: 'No Top',
         useTopLayer: false,
       });
@@ -187,7 +212,7 @@ describe('getLayers', () => {
     });
 
     it('skips injection when no persistent layers are configured', () => {
-      const block = makeTemplateBlock({ template: 'titleBlock', title: 'No Persistent' });
+      const block = makeTemplateBlock({ template: 'title', title: 'No Persistent' });
       const withoutPersistent = getLayers(block, defaultContext);
       const withEmptyPersistent = getLayers(block, {
         ...defaultContext,

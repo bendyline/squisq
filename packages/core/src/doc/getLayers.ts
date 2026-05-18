@@ -34,7 +34,7 @@ import type { ViewportConfig } from '../schemas/Viewport.js';
 import { VIEWPORT_PRESETS } from '../schemas/Viewport.js';
 import { createTemplateContext, isTemplateBlock } from '../schemas/BlockTemplates.js';
 import { DEFAULT_THEME } from '../schemas/themeLibrary.js';
-import { templateRegistry } from './templates/index.js';
+import { templateRegistry, resolveTemplateName } from './templates/index.js';
 import { expandPersistentLayers } from './templates/persistentLayers.js';
 
 // ============================================
@@ -98,29 +98,40 @@ export function getLayers(block: DocBlock, context: RenderContext = {}): Layer[]
     return injectPersistentLayers(existingLayers, block, context);
   }
 
-  // 2. Template path: look up and call the template function
-  if (isTemplateBlock(block) && block.template in templateRegistry) {
-    const templateName = block.template as keyof typeof templateRegistry;
-    const templateCtx = createTemplateContext(theme, blockIndex, totalBlocks, viewport);
-    let layers: Layer[];
-    try {
-      // Each registry entry accepts its specific TemplateBlock variant; the
-      // discriminated union guarantees the shapes match at runtime.
-      const templateFn = templateRegistry[templateName] as (
-        input: TemplateBlock,
-        ctx: TemplateContext,
-      ) => Layer[];
-      layers = templateFn(block, templateCtx);
-      if (!Array.isArray(layers)) {
-        console.error(`Template ${templateName} did not return an array, got:`, typeof layers);
+  // 2. Template path: look up and call the template function.
+  //
+  // Resolve through TEMPLATE_ALIASES so legacy ids (`titleBlock`,
+  // `quoteBlock`, `mapBlock`, `listBlock`) hit the registry by their
+  // canonical short names. Without this the block-section path renders
+  // an empty SVG card: `hasTemplate()` accepts the alias (so
+  // `isAnnotatedBlock` returns true and the card wrapper renders), but
+  // a raw `block.template in templateRegistry` check below misses it
+  // and the layer list comes back empty.
+  if (isTemplateBlock(block)) {
+    const resolved = resolveTemplateName(block.template);
+    if (resolved in templateRegistry) {
+      const templateName = resolved as keyof typeof templateRegistry;
+      const templateCtx = createTemplateContext(theme, blockIndex, totalBlocks, viewport);
+      let layers: Layer[];
+      try {
+        // Each registry entry accepts its specific TemplateBlock variant; the
+        // discriminated union guarantees the shapes match at runtime.
+        const templateFn = templateRegistry[templateName] as (
+          input: TemplateBlock,
+          ctx: TemplateContext,
+        ) => Layer[];
+        layers = templateFn(block, templateCtx);
+        if (!Array.isArray(layers)) {
+          console.error(`Template ${templateName} did not return an array, got:`, typeof layers);
+          layers = [];
+        }
+      } catch (err: unknown) {
+        console.error(`Error expanding template ${templateName}:`, err);
         layers = [];
       }
-    } catch (err: unknown) {
-      console.error(`Error expanding template ${templateName}:`, err);
-      layers = [];
-    }
 
-    return injectPersistentLayers(layers, block, context);
+      return injectPersistentLayers(layers, block, context);
+    }
   }
 
   // 3. Fallback: no layers and no known template

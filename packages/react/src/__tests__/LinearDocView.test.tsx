@@ -85,6 +85,72 @@ describe('LinearDocView', () => {
     expect(container.textContent).toContain('Section body text');
   });
 
+  it('feeds imageWithCaption blocks the first body image as imageSrc', () => {
+    // Regression: without auto-extracting imageSrc from contents, the
+    // template renders a layer with `src=undefined` and the SVG card
+    // shows a broken image in document (linear) mode.
+    const doc = mkDoc([
+      mkBlock({
+        id: 'img-1',
+        sourceHeading: {
+          type: 'heading',
+          depth: 1,
+          children: [text('Mike Ammerlaan')],
+          templateAnnotation: { template: 'imageWithCaption' },
+        },
+        contents: [paragraph({ type: 'image', url: 'mikehome_files/profile.png', alt: 'Mike' })],
+      }),
+    ]);
+    const { container } = render(<LinearDocView doc={doc} />);
+    const card = container.querySelector('.squisq-linear-card');
+    expect(card).toBeTruthy();
+    const img = card!.querySelector('image, img') as Element | null;
+    expect(img).toBeTruthy();
+    const href =
+      img!.getAttribute('href') ?? img!.getAttribute('xlink:href') ?? img!.getAttribute('src');
+    expect(href).toContain('mikehome_files/profile.png');
+  });
+
+  it('extracts imageSrc from raw HTML <img> (resized image)', () => {
+    // The WYSIWYG editor emits `<img src width>` for resized images
+    // because markdown shorthand has no width syntax. The linear view
+    // must read that form too, or every resized imageWithCaption block
+    // renders as a broken card.
+    const doc = mkDoc([
+      mkBlock({
+        id: 'img-2',
+        sourceHeading: {
+          type: 'heading',
+          depth: 1,
+          children: [text('Resized')],
+          templateAnnotation: { template: 'imageWithCaption' },
+        },
+        contents: [
+          {
+            type: 'htmlBlock',
+            rawHtml: '<img alt="resized" src="resized.png" width="194">',
+            htmlChildren: [
+              {
+                type: 'htmlElement',
+                tagName: 'img',
+                attributes: { src: 'resized.png', alt: 'resized', width: '194' },
+                children: [],
+                selfClosing: true,
+              },
+            ],
+          } as unknown as MarkdownBlockNode,
+        ],
+      }),
+    ]);
+    const { container } = render(<LinearDocView doc={doc} />);
+    const card = container.querySelector('.squisq-linear-card');
+    expect(card).toBeTruthy();
+    const img = card!.querySelector('image, img') as Element | null;
+    const href =
+      img?.getAttribute('href') ?? img?.getAttribute('xlink:href') ?? img?.getAttribute('src');
+    expect(href).toContain('resized.png');
+  });
+
   it('renders annotated block as SVG card', () => {
     const doc = mkDoc([
       mkBlock({

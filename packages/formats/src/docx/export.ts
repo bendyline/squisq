@@ -18,7 +18,7 @@
  */
 
 import type { Doc, Theme } from '@bendyline/squisq/schemas';
-import { resolveTheme } from '@bendyline/squisq/schemas';
+import { resolveTheme, resolveFontFamily } from '@bendyline/squisq/schemas';
 import { docToMarkdown } from '@bendyline/squisq/doc';
 import type {
   MarkdownDocument,
@@ -40,6 +40,7 @@ import type {
   MarkdownImage,
   MarkdownFootnoteReference,
 } from '@bendyline/squisq/markdown';
+import { readFrontmatterThemeId } from '@bendyline/squisq/markdown';
 
 import { createPackage } from '../ooxml/writer.js';
 import { xmlDeclaration, escapeXml } from '../ooxml/xmlUtils.js';
@@ -117,9 +118,17 @@ export async function markdownDocToDocx(
   doc: MarkdownDocument,
   options: DocxExportOptions = {},
 ): Promise<ArrayBuffer> {
-  const ctx = new ExportContext(options);
+  // Mirror the PPTX export: fall back to the doc's frontmatter themeId
+  // when the caller didn't pass one explicitly. Lets the editor's
+  // `squisq-theme: …` frontmatter flow straight through without each
+  // host wiring its own resolution.
+  const resolvedOptions: DocxExportOptions =
+    options.themeId !== undefined
+      ? options
+      : { ...options, themeId: readFrontmatterThemeId(doc.frontmatter) };
+  const ctx = new ExportContext(resolvedOptions);
   const bodyXml = convertBlocks(doc.children, ctx);
-  return buildDocxPackage(bodyXml, ctx, options);
+  return buildDocxPackage(bodyXml, ctx, resolvedOptions);
 }
 
 /**
@@ -185,6 +194,12 @@ class ExportContext {
   readonly fontSize: number;
   /** Heading text color (hex without #), or undefined for default */
   readonly headingColor: string | undefined;
+  /** Body text color (hex without #), or undefined for default */
+  readonly bodyColor: string | undefined;
+  /** Muted text color (hex without #), used by Quote style. Undefined for default. */
+  readonly mutedColor: string | undefined;
+  /** Page background color (hex without #), or undefined for default white. */
+  readonly backgroundColor: string | undefined;
 
   /** Pre-resolved image data keyed by markdown image URL */
   readonly resolvedImages: Map<string, { data: ArrayBuffer | Uint8Array; contentType: string }>;
@@ -195,15 +210,26 @@ class ExportContext {
     let themeFont: string | undefined;
     let themeTitleFont: string | undefined;
     let themeHeadingColor: string | undefined;
+    let themeBodyColor: string | undefined;
+    let themeMutedColor: string | undefined;
+    let themeBackgroundColor: string | undefined;
 
     if (options.themeId) {
       const theme: Theme = resolveTheme(options.themeId);
-      themeFont = theme.typography?.bodyFontFamily;
-      themeTitleFont = theme.typography?.titleFontFamily;
-      if (theme.colors?.primary) {
-        const c = theme.colors.primary;
-        themeHeadingColor = c.startsWith('#') ? c.slice(1) : c;
-      }
+      // Theme fonts arrive as CSS stacks (e.g. `"Oswald", Impact,
+      // "Arial Black", sans-serif`). Word's `w:ascii` attribute is a
+      // single font name — passing the whole stack is treated as a
+      // bogus literal name and Word falls through to Calibri. Take the
+      // first concrete name from the stack so Word can resolve it (or
+      // gracefully fall back to its own default if the font isn't
+      // installed on the reader's machine).
+      themeFont = firstFontFromStack(resolveFontFamily(theme.typography?.bodyFont, ''));
+      themeTitleFont = firstFontFromStack(resolveFontFamily(theme.typography?.titleFont, ''));
+      const stripHash = (c: string) => (c.startsWith('#') ? c.slice(1) : c);
+      if (theme.colors?.primary) themeHeadingColor = stripHash(theme.colors.primary);
+      if (theme.colors?.text) themeBodyColor = stripHash(theme.colors.text);
+      if (theme.colors?.textMuted) themeMutedColor = stripHash(theme.colors.textMuted);
+      if (theme.colors?.background) themeBackgroundColor = stripHash(theme.colors.background);
     }
 
     this.font = options.defaultFont ?? themeFont ?? DEFAULT_FONT;
@@ -212,6 +238,9 @@ class ExportContext {
       ? options.defaultFontSize * 2
       : DEFAULT_FONT_SIZE_HALF_POINTS;
     this.headingColor = themeHeadingColor;
+    this.bodyColor = themeBodyColor;
+    this.mutedColor = themeMutedColor;
+    this.backgroundColor = themeBackgroundColor;
     this.resolvedImages = options.images ?? new Map();
   }
 
@@ -277,6 +306,42 @@ interface NumberingDef {
   ordered: boolean;
 }
 
+/**
+ * Pull the first concrete font name out of a CSS-style stack.
+ *
+ * `resolveFontFamily` returns CSS values like `"Oswald", Impact,
+ * "Arial Black", sans-serif`. Word's `w:ascii` / `w:hAnsi` attributes
+ * expect a single font name — feeding the whole stack causes Word to
+ * fall back to its default font instead of any of the named faces.
+ * We pick the first non-generic name (skipping `sans-serif`, `serif`,
+ * `monospace`, etc.) and strip the surrounding quotes that CSS lets
+ * you wrap multi-word family names in.
+ */
+function firstFontFromStack(stack: string): string {
+  if (!stack) return '';
+  const generics = new Set([
+    'sans-serif',
+    'serif',
+    'monospace',
+    'system-ui',
+    'cursive',
+    'fantasy',
+    'ui-serif',
+    'ui-sans-serif',
+    'ui-monospace',
+    'ui-rounded',
+    'inherit',
+    'initial',
+  ]);
+  for (const raw of stack.split(',')) {
+    const name = raw.trim().replace(/^["']|["']$/g, '');
+    if (!name) continue;
+    if (generics.has(name.toLowerCase())) continue;
+    return name;
+  }
+  return '';
+}
+
 // ============================================
 // Block Conversion
 // ============================================
@@ -324,8 +389,19 @@ function convertHeading(node: MarkdownHeading, ctx: ExportContext): string {
 }
 
 function convertParagraph(node: MarkdownParagraph, ctx: ExportContext): string {
-  const runs = convertInlines(node.children, ctx);
+  // Force body color on every run rather than relying on `Normal` /
+  // `rPrDefault` style inheritance — see InlineFormat.color comment.
+  // Headings render via `convertHeading` and skip this path so the
+  // heading style's own color wins.
+  const runs = convertInlines(node.children, ctx, bodyFormat(ctx));
   return `<w:p>${runs}</w:p>`;
+}
+
+/** Default inline format for body-text contexts (paragraphs, list items,
+ *  blockquote bodies, table cells). Carries the theme body color so runs
+ *  render in the right color regardless of style-resolution quirks. */
+function bodyFormat(ctx: ExportContext): InlineFormat {
+  return ctx.bodyColor ? { color: ctx.bodyColor } : {};
 }
 
 function convertBlockquote(node: MarkdownBlockquote, ctx: ExportContext): string {
@@ -333,7 +409,13 @@ function convertBlockquote(node: MarkdownBlockquote, ctx: ExportContext): string
   const parts: string[] = [];
   for (const child of node.children) {
     if (child.type === 'paragraph') {
-      const runs = convertInlines(child.children, ctx);
+      // Use the theme's muted color when set (Quote style already
+      // declares it but explicit run-level color survives Word's
+      // style overrides — see InlineFormat.color comment).
+      const quoteFormat: InlineFormat = ctx.mutedColor
+        ? { color: ctx.mutedColor }
+        : bodyFormat(ctx);
+      const runs = convertInlines(child.children, ctx, quoteFormat);
       parts.push(
         `<w:p>` +
           `<w:pPr><w:pStyle w:val="Quote"/>` +
@@ -369,7 +451,7 @@ function convertListItem(
   const parts: string[] = [];
   for (const child of item.children) {
     if (child.type === 'paragraph') {
-      const runs = convertInlines(child.children, ctx);
+      const runs = convertInlines(child.children, ctx, bodyFormat(ctx));
       parts.push(
         `<w:p>` +
           `<w:pPr>` +
@@ -466,7 +548,7 @@ function convertTableCell(
   isHeader: boolean,
   align: 'left' | 'right' | 'center' | null,
 ): string {
-  const runs = convertInlines(cell.children, ctx);
+  const runs = convertInlines(cell.children, ctx, bodyFormat(ctx));
   const rPr = isHeader ? '<w:rPr><w:b/></w:rPr>' : '';
   const jcMap = { left: 'left', center: 'center', right: 'right' };
   const jc = align ? `<w:jc w:val="${jcMap[align]}"/>` : '';
@@ -511,7 +593,7 @@ function convertFootnoteDefinition(node: MarkdownFootnoteDefinition, ctx: Export
   const bodyParts: string[] = [];
   for (const child of node.children) {
     if (child.type === 'paragraph') {
-      const runs = convertInlines(child.children, ctx);
+      const runs = convertInlines(child.children, ctx, bodyFormat(ctx));
       bodyParts.push(`<w:p>${runs}</w:p>`);
     }
   }
@@ -539,6 +621,14 @@ interface InlineFormat {
   italic?: boolean;
   strike?: boolean;
   code?: boolean;
+  /**
+   * Explicit run color (hex without `#`). When set, every emitted run
+   * gets `<w:color>` directly in its `<w:rPr>` — bypassing Word's style
+   * inheritance, which some Word configurations silently override.
+   * Body paragraphs pass `ctx.bodyColor` here; headings leave it unset
+   * so the heading style's own color wins.
+   */
+  color?: string;
 }
 
 function convertInlines(
@@ -590,6 +680,7 @@ function makeRun(text: string, format: InlineFormat): string {
   if (format.bold) rPrParts.push('<w:b/>');
   if (format.italic) rPrParts.push('<w:i/>');
   if (format.strike) rPrParts.push('<w:strike/>');
+  if (format.color) rPrParts.push(`<w:color w:val="${format.color}"/>`);
   if (format.code) {
     rPrParts.push(
       `<w:rFonts w:ascii="${DEFAULT_CODE_FONT}" w:hAnsi="${DEFAULT_CODE_FONT}"/>`,
@@ -789,7 +880,7 @@ async function buildDocxPackage(
   const footnotesRelId = `rId${relCounter++}`;
 
   // --- word/document.xml ---
-  const documentXml = buildDocumentXml(bodyXml);
+  const documentXml = buildDocumentXml(bodyXml, ctx.backgroundColor);
   pkg.addPart('word/document.xml', documentXml, CONTENT_TYPE_DOCX_DOCUMENT);
 
   // --- word/styles.xml ---
@@ -797,7 +888,10 @@ async function buildDocxPackage(
   pkg.addPart('word/styles.xml', stylesXml, CONTENT_TYPE_DOCX_STYLES);
 
   // --- word/settings.xml ---
-  const settingsXml = buildSettingsXml();
+  // `displayBackgroundShape` is what makes Word actually paint the
+  // `<w:background>` element from document.xml on screen + print.
+  // Without it the bg color is in the file but invisible.
+  const settingsXml = buildSettingsXml(ctx.backgroundColor !== undefined);
   pkg.addPart('word/settings.xml', settingsXml, CONTENT_TYPE_DOCX_SETTINGS);
 
   // --- word/fontTable.xml ---
@@ -889,7 +983,11 @@ async function buildDocxPackage(
 // XML Part Generators
 // ============================================
 
-function buildDocumentXml(bodyXml: string): string {
+function buildDocumentXml(bodyXml: string, backgroundColor?: string): string {
+  // `<w:background>` must be the FIRST child of `<w:document>` per the
+  // WordprocessingML schema. Word also requires `<w:displayBackgroundShape/>`
+  // in settings.xml before the bg actually paints (see buildSettingsXml).
+  const backgroundEl = backgroundColor ? `<w:background w:color="${backgroundColor}"/>` : '';
   return (
     xmlDeclaration() +
     `<w:document` +
@@ -903,6 +1001,7 @@ function buildDocumentXml(bodyXml: string): string {
     ` xmlns:w10="urn:schemas-microsoft-com:office:word"` +
     ` xmlns:w="${NS_WML}"` +
     ` xmlns:wne="http://schemas.microsoft.com/office/word/2006/wordml">` +
+    backgroundEl +
     `<w:body>` +
     bodyXml +
     `<w:sectPr>` +
@@ -918,6 +1017,16 @@ function buildDocumentXml(bodyXml: string): string {
 function buildStylesXml(options: DocxExportOptions, ctx: ExportContext): string {
   const font = ctx.font;
   const headingFont = ctx.headingFont;
+  // Body color from the theme's `text`. We set it on BOTH the
+  // `<w:rPrDefault>` (for any rogue run that doesn't inherit Normal) and
+  // on the `Normal` style itself. Setting it only on rPrDefault was
+  // experimentally insufficient — Word's resolved formatting in Print
+  // Layout view ignored the docDefault color for direct-typed body
+  // paragraphs even though headings (with explicit rPr) honored their
+  // own color. Setting it on Normal puts the color one level higher in
+  // the precedence chain (paragraph-style > docDefaults) so it sticks.
+  const bodyColorXml = ctx.bodyColor ? `<w:color w:val="${ctx.bodyColor}"/>` : '';
+  const quoteColor = ctx.mutedColor ?? '404040';
 
   return (
     xmlDeclaration() +
@@ -926,24 +1035,29 @@ function buildStylesXml(options: DocxExportOptions, ctx: ExportContext): string 
     `<w:docDefaults>` +
     `<w:rPrDefault><w:rPr>` +
     `<w:rFonts w:ascii="${escapeXml(font)}" w:hAnsi="${escapeXml(font)}" w:eastAsia="${escapeXml(font)}" w:cs="${escapeXml(font)}"/>` +
+    bodyColorXml +
     `<w:sz w:val="${DEFAULT_FONT_SIZE_HALF_POINTS}"/>` +
     `<w:szCs w:val="${DEFAULT_FONT_SIZE_HALF_POINTS}"/>` +
     `</w:rPr></w:rPrDefault>` +
     `<w:pPrDefault/>` +
     `</w:docDefaults>` +
-    // Normal style
+    // Normal style — carries the body color explicitly so direct-typed
+    // body paragraphs render in the theme's text color in every Word
+    // view (not just Web Layout).
     `<w:style w:type="paragraph" w:default="1" w:styleId="Normal">` +
     `<w:name w:val="Normal"/>` +
     `<w:qFormat/>` +
+    (bodyColorXml ? `<w:rPr>${bodyColorXml}</w:rPr>` : '') +
     `</w:style>` +
     // Heading styles
     buildHeadingStyles(headingFont, ctx.headingColor) +
-    // Quote style
+    // Quote style — muted text color from theme.textMuted (falls back
+    // to a neutral grey when no theme is supplied).
     `<w:style w:type="paragraph" w:styleId="Quote">` +
     `<w:name w:val="Quote"/>` +
     `<w:basedOn w:val="Normal"/>` +
     `<w:pPr><w:ind w:left="720"/></w:pPr>` +
-    `<w:rPr><w:i/><w:color w:val="404040"/></w:rPr>` +
+    `<w:rPr><w:i/><w:color w:val="${quoteColor}"/></w:rPr>` +
     `</w:style>` +
     // Code style
     `<w:style w:type="paragraph" w:styleId="Code">` +
@@ -1013,12 +1127,33 @@ function buildHeadingStyles(headingFont: string, headingColor?: string): string 
   return result;
 }
 
-function buildSettingsXml(): string {
+function buildSettingsXml(displayBackground: boolean): string {
+  // `<w:compat>` with `compatibilityMode=15` is what tells Word "this
+  // is a Word 2016+ .docx, render with modern features." Without it,
+  // Word opens the file in Compatibility Mode and silently disables
+  // newer behaviors — including page-background rendering in Print
+  // Layout view and several default style precedence rules. The other
+  // compatSetting flags match what Word 2016+ writes by default.
+  const compatXml =
+    `<w:compat>` +
+    `<w:compatSetting w:name="compatibilityMode" w:uri="http://schemas.microsoft.com/office/word" w:val="15"/>` +
+    `<w:compatSetting w:name="overrideTableStyleFontSizeAndJustification" w:uri="http://schemas.microsoft.com/office/word" w:val="1"/>` +
+    `<w:compatSetting w:name="enableOpenTypeFeatures" w:uri="http://schemas.microsoft.com/office/word" w:val="1"/>` +
+    `<w:compatSetting w:name="doNotFlipMirrorIndents" w:uri="http://schemas.microsoft.com/office/word" w:val="1"/>` +
+    `<w:compatSetting w:name="differentiateMultirowTableHeaders" w:uri="http://schemas.microsoft.com/office/word" w:val="1"/>` +
+    `</w:compat>`;
+  // Element order inside `<w:settings>` matters — ECMA-376 defines a
+  // strict sequence (`displayBackgroundShape` → `defaultTabStop` →
+  // `characterSpacingControl` → … → `compat`). Word silently drops
+  // out-of-order children, which is why `<w:background>` looks correct
+  // in the file but doesn't paint when opened.
   return (
     xmlDeclaration() +
     `<w:settings xmlns:w="${NS_WML}">` +
+    (displayBackground ? `<w:displayBackgroundShape/>` : '') +
     `<w:defaultTabStop w:val="720"/>` +
     `<w:characterSpacingControl w:val="doNotCompress"/>` +
+    compatXml +
     `</w:settings>`
   );
 }
@@ -1078,7 +1213,13 @@ function buildNumberingXml(ctx: ExportContext): string {
             `<w:lvlText w:val="${bullet}"/>` +
             `<w:lvlJc w:val="left"/>` +
             `<w:pPr><w:ind w:left="${720 * (lvl + 1)}" w:hanging="360"/></w:pPr>` +
-            `<w:rPr><w:rFonts w:ascii="Symbol" w:hAnsi="Symbol"/></w:rPr>` +
+            // Bullet glyph renders in the document's body font, not
+            // Word's legacy `Symbol` font. `Symbol` only maps codes
+            // 0x20-0xFF to Greek/math glyphs, so the Unicode bullets
+            // we use (U+2022, U+25E6, U+25AA) come out as "tofu"
+            // empty boxes when forced into Symbol. Every modern OS
+            // font has these codepoints, so omitting the font
+            // override gets a real bullet.
             `</w:lvl>`,
         );
       }

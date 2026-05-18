@@ -1,0 +1,450 @@
+/**
+ * Image editor — layout and chrome for the `<ImageEditor>` component.
+ *
+ * Color tokens follow the same scoped-CSS-vars approach as the rest of
+ * the editor; defaults are tuned for the dark host the editor typically
+ * lives in but can be overridden by setting the listed `--squisq-image-editor-*`
+ * custom properties on the `.squisq-image-editor` root.
+ */
+
+.squisq-image-editor {
+  --squisq-image-editor-bg: #14141a;
+  --squisq-image-editor-panel-bg: #1d1d23;
+  --squisq-image-editor-panel-border: #2a2a32;
+  --squisq-image-editor-text: #e6e6ea;
+  --squisq-image-editor-text-muted: #9999a3;
+  --squisq-image-editor-accent: #3399ff;
+  --squisq-image-editor-control-bg: #2a2a32;
+  --squisq-image-editor-control-border: #3a3a42;
+  --squisq-image-editor-workspace-bg: #1f1f24;
+
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  min-height: 400px;
+  background: var(--squisq-image-editor-bg);
+  color: var(--squisq-image-editor-text);
+  font-family: var(--squisq-image-editor-body-font, system-ui, -apple-system, sans-serif);
+  font-size: 13px;
+}
+
+.squisq-image-editor-loading,
+.squisq-image-editor-error {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 1 1 auto;
+  padding: 2rem;
+  color: var(--squisq-image-editor-text-muted);
+}
+.squisq-image-editor-error {
+  color: #ff6b6b;
+}
+
+/* ── Toolbar ───────────────────────────────────────────────────────── */
+.squisq-image-editor-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.4rem 0.75rem;
+  background: var(--squisq-image-editor-panel-bg);
+  border-bottom: 1px solid var(--squisq-image-editor-panel-border);
+  flex: 0 0 auto;
+}
+.squisq-image-editor-tool-group {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+.squisq-image-editor-tool-group--right {
+  margin-left: auto;
+}
+.squisq-image-editor-tool-button {
+  background: var(--squisq-image-editor-control-bg);
+  color: inherit;
+  border: 1px solid var(--squisq-image-editor-control-border);
+  border-radius: 4px;
+  padding: 0.3rem 0.55rem;
+  font: inherit;
+  /* Unified text size for every button on the toolbar. Icon-only
+     buttons get a slightly larger glyph via the SVG rule below so the
+     icons remain legible without disrupting the text rhythm of
+     adjacent labeled buttons. */
+  font-size: 13px;
+  cursor: pointer;
+  line-height: 1;
+  min-width: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+}
+.squisq-image-editor-tool-button svg {
+  font-size: 15px;
+}
+.squisq-image-editor-tool-button--with-label {
+  font-size: 13px;
+}
+.squisq-image-editor-tool-button--menu {
+  width: 100%;
+  justify-content: flex-start;
+  border: none;
+  background: transparent;
+  padding: 0.35rem 0.5rem;
+}
+.squisq-image-editor-tool-button--menu:hover {
+  background: color-mix(in srgb, var(--squisq-image-editor-control-bg) 70%, transparent);
+}
+.squisq-image-editor-tool-button:hover {
+  background: var(--squisq-image-editor-control-border);
+}
+.squisq-image-editor-tool-button.is-active,
+.squisq-image-editor-tool-button[aria-checked='true'] {
+  background: var(--squisq-image-editor-accent);
+  border-color: var(--squisq-image-editor-accent);
+  color: #fff;
+}
+.squisq-image-editor-tool-button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* ── Body / layout ─────────────────────────────────────────────────── */
+.squisq-image-editor-body {
+  display: flex;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+.squisq-image-editor-center {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+}
+.squisq-image-editor-side {
+  flex: 0 0 280px;
+  display: flex;
+  flex-direction: column;
+  border-left: 1px solid var(--squisq-image-editor-panel-border);
+  background: var(--squisq-image-editor-panel-bg);
+  overflow: auto;
+}
+
+/* ── Canvas surface ────────────────────────────────────────────────── */
+.squisq-image-editor-surface {
+  flex: 1 1 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  overflow: auto;
+  background: var(--squisq-image-editor-workspace-bg);
+}
+.squisq-image-editor-canvas {
+  display: block;
+  max-width: 100%;
+  max-height: 100%;
+  background: transparent;
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.4);
+  user-select: none;
+  touch-action: none;
+}
+.squisq-image-editor-canvas--tool-text,
+.squisq-image-editor-canvas--tool-shape {
+  cursor: crosshair;
+}
+.squisq-image-editor-canvas--tool-crop {
+  cursor: crosshair;
+}
+
+/* ── Layers panel ──────────────────────────────────────────────────── */
+.squisq-image-editor-panel-header {
+  padding: 0.5rem 0.75rem;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--squisq-image-editor-text-muted);
+  border-bottom: 1px solid var(--squisq-image-editor-panel-border);
+}
+.squisq-image-editor-layers {
+  border-bottom: 1px solid var(--squisq-image-editor-panel-border);
+}
+.squisq-image-editor-layer-list {
+  list-style: none;
+  margin: 0;
+  padding: 0.25rem 0;
+  max-height: 240px;
+  overflow: auto;
+}
+.squisq-image-editor-layer-empty {
+  padding: 0.5rem 0.75rem;
+  color: var(--squisq-image-editor-text-muted);
+  font-style: italic;
+}
+.squisq-image-editor-layer-item {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.2rem 0.5rem;
+}
+.squisq-image-editor-layer-item.is-selected {
+  background: rgba(51, 153, 255, 0.18);
+}
+.squisq-image-editor-layer-item.is-hidden {
+  opacity: 0.5;
+}
+.squisq-image-editor-layer-toggle {
+  background: transparent;
+  border: 1px solid transparent;
+  color: inherit;
+  padding: 2px 5px;
+  border-radius: 3px;
+  font: inherit;
+  font-size: 15px;
+  cursor: pointer;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.squisq-image-editor-layer-toggle:hover:not(:disabled) {
+  background: var(--squisq-image-editor-control-bg);
+}
+.squisq-image-editor-layer-toggle:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+.squisq-image-editor-layer-name {
+  flex: 1 1 auto;
+  text-align: left;
+  background: transparent;
+  border: none;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  padding: 2px 4px;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.squisq-image-editor-layer-kind {
+  margin-left: auto;
+  font-size: 10px;
+  color: var(--squisq-image-editor-text-muted);
+  text-transform: uppercase;
+}
+
+/* ── Properties panel ──────────────────────────────────────────────── */
+.squisq-image-editor-properties {
+  flex: 1 1 auto;
+}
+.squisq-image-editor-properties-empty {
+  padding: 0.75rem;
+  color: var(--squisq-image-editor-text-muted);
+  font-style: italic;
+}
+.squisq-image-editor-fieldset {
+  border: none;
+  border-bottom: 1px solid var(--squisq-image-editor-panel-border);
+  margin: 0;
+  padding: 0.5rem 0.75rem 0.6rem;
+}
+.squisq-image-editor-fieldset legend {
+  padding: 0;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--squisq-image-editor-text-muted);
+  margin-bottom: 0.4rem;
+}
+.squisq-image-editor-field {
+  display: grid;
+  grid-template-columns: 80px 1fr;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.3rem;
+  font-size: 12px;
+}
+.squisq-image-editor-field--multiline {
+  grid-template-columns: 80px 1fr;
+  align-items: start;
+}
+.squisq-image-editor-field > span {
+  color: var(--squisq-image-editor-text-muted);
+}
+.squisq-image-editor-field input[type='number'],
+.squisq-image-editor-field input[type='text'],
+.squisq-image-editor-field select,
+.squisq-image-editor-field textarea {
+  width: 100%;
+  background: var(--squisq-image-editor-control-bg);
+  border: 1px solid var(--squisq-image-editor-control-border);
+  color: inherit;
+  border-radius: 3px;
+  padding: 3px 5px;
+  font: inherit;
+  box-sizing: border-box;
+}
+.squisq-image-editor-field textarea {
+  resize: vertical;
+  min-height: 56px;
+}
+.squisq-image-editor-color-row {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+.squisq-image-editor-color-row input[type='color'] {
+  width: 28px;
+  height: 24px;
+  padding: 0;
+  border: 1px solid var(--squisq-image-editor-control-border);
+  border-radius: 3px;
+  background: transparent;
+  cursor: pointer;
+  flex: 0 0 auto;
+}
+.squisq-image-editor-color-row input[type='text'] {
+  flex: 1 1 auto;
+  font-family: ui-monospace, monospace;
+  font-size: 11px;
+}
+.squisq-image-editor-color-clear {
+  background: var(--squisq-image-editor-control-bg);
+  border: 1px solid var(--squisq-image-editor-control-border);
+  color: inherit;
+  border-radius: 3px;
+  padding: 2px 5px;
+  cursor: pointer;
+  font: inherit;
+  font-size: 14px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* -- Version history dropdown --------------------------------------- */
+.squisq-image-editor-version-dropdown {
+  position: relative;
+  display: inline-flex;
+}
+.squisq-image-editor-version-popover {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  z-index: 10;
+  min-width: 420px;
+  max-width: 560px;
+  background: var(--squisq-image-editor-panel-bg);
+  border: 1px solid var(--squisq-image-editor-panel-border);
+  border-radius: 6px;
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.35);
+  padding: 6px;
+  color: var(--squisq-image-editor-text);
+}
+.squisq-image-editor-version-popover__title {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--squisq-image-editor-text-muted);
+  padding: 4px 6px 6px;
+}
+.squisq-image-editor-version-popover__empty {
+  font-size: 12px;
+  color: var(--squisq-image-editor-text-muted);
+  padding: 8px 6px 10px;
+}
+.squisq-image-editor-version-popover__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-height: 280px;
+  overflow-y: auto;
+}
+.squisq-image-editor-version-popover__row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 4px;
+  border-radius: 4px;
+  min-width: 0;
+}
+.squisq-image-editor-version-popover__row:hover {
+  background: color-mix(in srgb, var(--squisq-image-editor-control-bg) 70%, transparent);
+}
+.squisq-image-editor-version-popover__thumb {
+  flex: 0 0 auto;
+  width: 56px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: color-mix(in srgb, var(--squisq-image-editor-bg) 50%, transparent);
+  border: 1px solid var(--squisq-image-editor-panel-border);
+  border-radius: 3px;
+  overflow: hidden;
+}
+.squisq-image-editor-version-popover__thumb-img {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  display: block;
+}
+.squisq-image-editor-version-popover__thumb-placeholder {
+  width: 100%;
+  height: 100%;
+  background: repeating-linear-gradient(
+    45deg,
+    transparent 0 4px,
+    color-mix(in srgb, var(--squisq-image-editor-text-muted) 25%, transparent) 4px 8px
+  );
+}
+.squisq-image-editor-version-popover__info {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.squisq-image-editor-version-popover__when {
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  color: var(--squisq-image-editor-text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: flex;
+  align-items: center;
+}
+.squisq-image-editor-version-popover__summary {
+  font-size: 11px;
+  color: var(--squisq-image-editor-text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.squisq-image-editor-version-popover__row--current {
+  background: color-mix(in srgb, var(--squisq-image-editor-accent) 12%, transparent);
+}
+.squisq-image-editor-version-popover__row--current:hover {
+  background: color-mix(in srgb, var(--squisq-image-editor-accent) 18%, transparent);
+}
+.squisq-image-editor-version-popover__badge {
+  display: inline-block;
+  margin-right: 6px;
+  padding: 1px 6px;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--squisq-image-editor-accent);
+  background: color-mix(in srgb, var(--squisq-image-editor-accent) 18%, transparent);
+  border: 1px solid color-mix(in srgb, var(--squisq-image-editor-accent) 40%, transparent);
+  border-radius: 3px;
+  vertical-align: 1px;
+}

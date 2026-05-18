@@ -10,7 +10,8 @@
  * and code blocks.
  */
 
-import { useEffect, useMemo, useRef } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import type { CSSProperties } from 'react';
 import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import Table from '@tiptap/extension-table';
@@ -19,14 +20,23 @@ import TableCell from '@tiptap/extension-table-cell';
 import TableHeader from '@tiptap/extension-table-header';
 import TaskList from '@tiptap/extension-task-list';
 import TaskItem from '@tiptap/extension-task-item';
+import Link from '@tiptap/extension-link';
 import Placeholder from '@tiptap/extension-placeholder';
+import { resolveFontFamily, FONT_FALLBACKS } from '@bendyline/squisq/schemas';
 import { HeadingWithTemplate } from './TemplateAnnotation';
+import { InlineIcon } from './InlineIcon';
 import { ImageWithMediaProvider } from './ImageNodeView';
+import { TiptapVideo } from './tiptap/TiptapVideo';
+import { TiptapAudio } from './tiptap/TiptapAudio';
+import { TemplateBadgePopover, TEMPLATE_NAMES } from './TemplatePicker';
+import { profileBlockContents, recommendTemplatesForBlock } from '@bendyline/squisq/recommend';
+import { findBlockSliceByHeadingIndex } from './blockSlice';
 import { useEditorContext } from './EditorContext';
 import { buildMentionExtension } from './MentionExtension';
 import { markdownToTiptap, tiptapToMarkdown } from './tiptapBridge';
 import { looksLikeMarkdown } from './detectMarkdown';
 import { SQUISQ_MEDIA_MIME, parseSquisqMediaPayload } from './mediaDragMime';
+import { usePreviewSettingsOptional } from './PreviewControls';
 
 // ── Frontmatter helpers ────────────────────────────────────────────
 
@@ -90,10 +100,17 @@ export function WysiwygEditor({
   submitOnEnter,
   readOnly = false,
 }: WysiwygEditorProps) {
-  const { markdownSource, setMarkdownSource, setTiptapEditor, mediaProvider, mentionProvider } =
-    useEditorContext();
+  const {
+    markdownSource,
+    setMarkdownSource,
+    setTiptapEditor,
+    mediaProvider,
+    mentionProvider,
+    blockTagsVisible,
+    themeInheritance,
+  } = useEditorContext();
   // Keep a ref so the mention extension — created once at editor mount —
-  // always sees the latest provider. Swapping projects or gezels changes
+  // always sees the latest provider. Swapping projects changes
   // the provider without remounting the editor.
   const mentionProviderRef = useRef(mentionProvider);
   useEffect(() => {
@@ -136,9 +153,17 @@ export function WysiwygEditor({
       TableHeader,
       TaskList,
       TaskItem.configure({ nested: true }),
+      Link.configure({
+        openOnClick: false,
+        autolink: true,
+        HTMLAttributes: { rel: 'noopener noreferrer', target: '_blank' },
+      }),
       ImageWithMediaProvider.configure({ inline: false }),
+      TiptapVideo,
+      TiptapAudio,
       Placeholder.configure({ placeholder: resolvedPlaceholder }),
       buildMentionExtension(() => mentionProviderRef.current),
+      InlineIcon,
     ],
     content: markdownToTiptap(stripFrontmatter(markdownSource).body),
     onUpdate: ({ editor: ed }) => {
@@ -159,6 +184,18 @@ export function WysiwygEditor({
       // normal behavior (Enter = paragraph break, Shift+Enter = soft break).
       handleKeyDown: (view, event) => {
         if (event.key !== 'Enter' || !submitOnEnterRef.current) return false;
+        // Defer Enter to an open mention/suggestion popover so the user
+        // can pick the highlighted candidate. ProseMirror plugins fire
+        // AFTER editorProps.handleKeyDown, so without this short-circuit
+        // plain Enter submits the message and the popover closes
+        // without inserting the mention. The MentionExtension marks
+        // its container with `display: block` while items are showing
+        // and `display: none` when empty — only short-circuit when
+        // there's actually a candidate to pick.
+        const popover = document.querySelector<HTMLElement>('.squisq-mention-popover');
+        if (popover && popover.style.display !== 'none') {
+          return false;
+        }
         if (event.metaKey || event.ctrlKey) {
           // User wants a newline. Insert a hard-break and stop propagation so
           // we don't also create a new paragraph.
@@ -209,9 +246,19 @@ export function WysiwygEditor({
       // entries via a custom MIME type and skip the upload step.
       // Falls through to default handling for non-image drops or when no
       // MediaProvider is available.
-      handleDrop: (view, event, _slice, _moved) => {
+      handleDrop: (view, event, _slice, moved) => {
         const dt = event.dataTransfer;
         if (!dt) return false;
+
+        // Internal node move (the user dragged an existing node within
+        // the document). ProseMirror's `moved` flag is true in this
+        // case; let it handle the reposition natively so width/height
+        // attributes are preserved and the source node is removed.
+        // Without this short-circuit, the browser also exposes the
+        // dragged `<img>` as a virtual file in `dataTransfer`, so the
+        // upload-and-insert path below would fire — producing a
+        // dimension-less duplicate next to the original.
+        if (moved) return false;
 
         // In-app drag from the MediaBin — insert without uploading
         const squisqRaw = dt.getData(SQUISQ_MEDIA_MIME);
@@ -226,7 +273,27 @@ export function WysiwygEditor({
         }
 
         const imageFiles = filesFromDataTransfer(dt);
-        if (imageFiles.length === 0 || !mediaProviderRef.current) return false;
+        if (imageFiles.length === 0) {
+          // Nothing image-like in the drop. Let the browser / ProseMirror
+          // handle it (links, text, etc.). Log enough to debug if the user
+          // expected this to be an image drop — Windows/browser combos
+          // sometimes deliver image drags without a usable File payload.
+          if (dt.files.length > 0 || dt.items.length > 0) {
+            console.warn(
+              '[squisq-editor] Drop received with no recognizable image File. Types:',
+              Array.from(dt.types ?? []),
+              'files:',
+              Array.from(dt.files).map((f) => `${f.name} (${f.type || 'no-type'})`),
+            );
+          }
+          return false;
+        }
+        if (!mediaProviderRef.current) {
+          console.warn(
+            '[squisq-editor] Image drop received but no MediaProvider is wired up; cannot persist the image. Pass `mediaProvider` to EditorShell / EditorProvider.',
+          );
+          return false;
+        }
 
         event.preventDefault();
         moveSelectionToDropPoint(view, event);
@@ -251,6 +318,68 @@ export function WysiwygEditor({
     if (editor) editor.setEditable(!readOnly);
   }, [editor, readOnly]);
 
+  // ── Template badge → popover ─────────────────────────────────────
+  // The HeadingWithTemplate extension renders an inert `.squisq-template-badge`
+  // span inside templated headings. We delegate clicks at the container
+  // level so we can locate the heading position and open the gallery
+  // anchored at that badge.
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const [badgeMenu, setBadgeMenu] = useState<{
+    rect: DOMRect;
+    template: string;
+    headingPos: number;
+    headingIndex: number;
+  } | null>(null);
+
+  useEffect(() => {
+    if (!editor) return;
+    const root = containerRef.current;
+    if (!root) return;
+    const onClick = (e: MouseEvent) => {
+      const target = e.target as HTMLElement | null;
+      if (!target) return;
+      const badge = target.closest('.squisq-template-badge') as HTMLElement | null;
+      if (!badge || !root.contains(badge)) return;
+      e.preventDefault();
+      e.stopPropagation();
+      // Find the parent heading element and resolve its document position.
+      const headingEl = badge.closest('h1,h2,h3,h4,h5,h6') as HTMLElement | null;
+      if (!headingEl) return;
+      let pos: number | null = null;
+      try {
+        pos = editor.view.posAtDOM(headingEl, 0);
+      } catch {
+        pos = null;
+      }
+      if (pos == null) return;
+      // posAtDOM returns the position *inside* the heading; subtract 1
+      // to land on the heading node itself so setNodeMarkup targets it.
+      const headingPos = Math.max(0, pos - 1);
+      const node = editor.state.doc.nodeAt(headingPos);
+      if (!node || node.type.name !== 'heading') return;
+      // Count how many headings precede this one so the markdown-source
+      // slice helper can locate the matching heading by index.
+      let headingIndex = 0;
+      let count = 0;
+      editor.state.doc.descendants((n, p) => {
+        if (n.type.name !== 'heading') return;
+        if (p === headingPos) {
+          headingIndex = count;
+          return false;
+        }
+        count++;
+      });
+      setBadgeMenu({
+        rect: badge.getBoundingClientRect(),
+        template: (node.attrs.dataTemplate as string | null) ?? '',
+        headingPos,
+        headingIndex,
+      });
+    };
+    root.addEventListener('mousedown', onClick);
+    return () => root.removeEventListener('mousedown', onClick);
+  }, [editor]);
+
   // Sync external changes into Tiptap
   useEffect(() => {
     if (!editor) return;
@@ -266,26 +395,117 @@ export function WysiwygEditor({
     }
   }, [markdownSource, editor]);
 
+  // Match the WYSIWYG editor's appearance to the active Squisq theme
+  // when one is set in frontmatter or picked in the preview dropdown.
+  // Driven by the View menu's "Theme inheritance" setting:
+  //   - 'none'         → don't inherit anything
+  //   - 'fonts'        → body + heading fonts only (historical default)
+  //   - 'fonts-colors' → fonts plus the theme's canvas / text colors
+  // Pushed as CSS custom properties on the container so the stylesheet
+  // can pick them up (with sensible fallbacks for hosts that don't have
+  // a PreviewSettingsProvider in scope).
+  const previewSettings = usePreviewSettingsOptional();
+  const activeTheme = previewSettings?.activeTheme;
+  const themeStyle = useMemo<CSSProperties>(() => {
+    if (themeInheritance === 'none' || !activeTheme) return {};
+    const out: Record<string, string> = {
+      '--squisq-theme-body-font': resolveFontFamily(
+        activeTheme.typography.bodyFont,
+        FONT_FALLBACKS.sans,
+      ),
+      '--squisq-theme-title-font': resolveFontFamily(
+        activeTheme.typography.titleFont,
+        FONT_FALLBACKS.sans,
+      ),
+    };
+    if (themeInheritance === 'fonts-colors') {
+      const colors = activeTheme.colors;
+      out['--squisq-theme-bg'] = colors.background;
+      // backgroundLight gives a subtle on-canvas surface for inline emphasis
+      // (inline `code`, code blocks). Themes always define it.
+      out['--squisq-theme-bg-muted'] = colors.backgroundLight;
+      out['--squisq-theme-text'] = colors.text;
+      out['--squisq-theme-text-muted'] = colors.textMuted;
+      out['--squisq-theme-primary'] = colors.primary;
+    }
+    return out as CSSProperties;
+  }, [activeTheme, themeInheritance]);
+
   return (
     <div
       className={`squisq-wysiwyg-container${className ? ` ${className}` : ''}`}
-      style={{ width: '100%', height: '100%', overflow: 'auto' }}
+      style={{ width: '100%', height: '100%', overflow: 'auto', ...themeStyle }}
       data-testid="wysiwyg-container"
+      data-block-tags={blockTagsVisible ? 'visible' : 'hidden'}
+      data-theme-inheritance={themeInheritance}
+      ref={containerRef}
     >
       <EditorContent editor={editor} style={{ height: '100%' }} />
+      {badgeMenu && (
+        <TemplateBadgePopover
+          anchorRect={badgeMenu.rect}
+          value={badgeMenu.template}
+          recommended={(() => {
+            const slice = findBlockSliceByHeadingIndex(markdownSource, badgeMenu.headingIndex);
+            if (!slice) return undefined;
+            const profile = profileBlockContents(slice);
+            return recommendTemplatesForBlock(profile, TEMPLATE_NAMES).recommended;
+          })()}
+          onChange={(name) => {
+            if (!editor) return;
+            const tr = editor.state.tr.setNodeMarkup(badgeMenu.headingPos, undefined, {
+              ...editor.state.doc.nodeAt(badgeMenu.headingPos)?.attrs,
+              dataTemplate: name === '' ? null : name,
+            });
+            editor.view.dispatch(tr);
+          }}
+          onClose={() => setBadgeMenu(null)}
+        />
+      )}
     </div>
   );
 }
 
 // ── Image drop / paste helpers ─────────────────────────────────────
 
-/** Extract image File objects from a DataTransfer (drop event). */
+/** Extension-based fallback when a dragged file has no `type` set (rare
+ *  but happens when sources omit the MIME — e.g. some screenshot tools). */
+const IMAGE_EXT_RE = /\.(png|jpe?g|gif|webp|bmp|svg|avif|ico)$/i;
+
+function looksLikeImageFile(file: File): boolean {
+  if (file.type.startsWith('image/')) return true;
+  return IMAGE_EXT_RE.test(file.name);
+}
+
+/** Extract image File objects from a DataTransfer (drop event). Reads
+ *  from both `dt.files` and `dt.items`; some drag sources (cross-tab
+ *  drags, certain native apps) populate only one of the two. */
 function filesFromDataTransfer(dt: DataTransfer): File[] {
   const files: File[] = [];
+  const seen = new Set<string>();
+
   for (let i = 0; i < dt.files.length; i++) {
     const file = dt.files[i];
-    if (file.type.startsWith('image/')) files.push(file);
+    if (looksLikeImageFile(file)) {
+      files.push(file);
+      seen.add(`${file.name}|${file.size}`);
+    }
   }
+
+  if (dt.items) {
+    for (let i = 0; i < dt.items.length; i++) {
+      const item = dt.items[i];
+      if (item.kind !== 'file') continue;
+      const file = item.getAsFile();
+      if (!file) continue;
+      if (!looksLikeImageFile(file)) continue;
+      const key = `${file.name}|${file.size}`;
+      if (seen.has(key)) continue;
+      files.push(file);
+      seen.add(key);
+    }
+  }
+
   return files;
 }
 

@@ -20,8 +20,10 @@ import type {
   MarkdownSourcePosition,
   HeadingTemplateAnnotation,
   MarkdownHeading,
+  MarkdownInlineIcon,
 } from './types.js';
 import { parseHtmlToNodes } from './htmlParse.js';
+import { resolveIcon } from '../icons/resolve.js';
 
 // ============================================
 // Generic mdast node shape
@@ -132,8 +134,13 @@ function extractText(node: MdastNode): string {
 /**
  * Regex matching a trailing `{[templateName key=value …]}` annotation.
  * Captures the content between `{[` and `]}`.
+ *
+ * The trailing `[\s\]\}]*` tolerates accidental doubled `]}` that users
+ * sometimes type when learning the syntax (e.g. `{[foo]}]}`). It does
+ * not allow trailing word characters, so a non-trailing annotation like
+ * `## The {[chart]} section` still doesn't match.
  */
-const TEMPLATE_ANNOTATION_RE = /\s*\{\[([^\]]+)\]\}\s*$/;
+const TEMPLATE_ANNOTATION_RE = /\s*\{\[([^\]]+)\]\}[\s\]}]*$/;
 
 /**
  * Extract a `{[templateName key=value …]}` annotation from a heading's
@@ -247,13 +254,130 @@ function convertBlockChildren(children: MdastNode[], parseHtml: boolean): Markdo
   return result;
 }
 
-function convertInlineChildren(children: MdastNode[], parseHtml: boolean): MarkdownInlineNode[] {
+function convertInlineChildren(
+  children: MdastNode[],
+  parseHtml: boolean,
+  /** When false, skip the inline-icon split. Headings opt out so the
+   *  `extractTemplateAnnotation` pass still sees the trailing
+   *  `{[…]}` in raw text form; the caller runs `splitInlineIcons`
+   *  itself afterward on the remaining children. */
+  applyIconSplit: boolean = true,
+): MarkdownInlineNode[] {
   const result: MarkdownInlineNode[] = [];
   for (const child of children) {
     const node = convertInlineNode(child, parseHtml);
     if (node) result.push(node);
   }
-  return coalesceMentions(result);
+  const mentioned = coalesceMentions(result);
+  return applyIconSplit ? splitInlineIcons(mentioned) : mentioned;
+}
+
+/**
+ * Walk an inline-children list and split each text node on `{[token]}`
+ * occurrences whose tokens resolve to known FontAwesome icons. Returns
+ * a new array — unresolved tokens are left as literal text so authors
+ * can write `{[notathing]}` verbatim if they really mean to.
+ *
+ * Exposed for the heading code path, which first strips the trailing
+ * template annotation and then runs this on what remains.
+ */
+export function splitInlineIcons(nodes: MarkdownInlineNode[]): MarkdownInlineNode[] {
+  // First pass: reassemble `text + textDirective + text` patterns
+  // formed when a qualified token like `{[fa-solid:user]}` was split
+  // by remark-directive's colon recognition. We collapse those triples
+  // back into a single text node containing the original token so the
+  // regex below can match.
+  const recombined = recombineDirectiveTokens(nodes);
+
+  const out: MarkdownInlineNode[] = [];
+  for (const node of recombined) {
+    if (node.type !== 'text') {
+      out.push(node);
+      continue;
+    }
+    out.push(...splitTextOnIcons(node.value, node.position));
+  }
+  return out;
+}
+
+/**
+ * When the user types `{[fa-solid:user]}`, remark's directive plugin
+ * sees `:user` and emits a `textDirective` node. The result is a
+ * three-node sequence `text("…{[fa-solid") + textDirective("user") +
+ * text("]}…")`. This helper detects that shape and stitches the three
+ * back into one text node so downstream icon detection works on the
+ * authored token.
+ */
+function recombineDirectiveTokens(nodes: MarkdownInlineNode[]): MarkdownInlineNode[] {
+  const out: MarkdownInlineNode[] = [];
+  for (let i = 0; i < nodes.length; i++) {
+    const cur = nodes[i];
+    const next = nodes[i + 1];
+    const after = nodes[i + 2];
+    if (
+      cur?.type === 'text' &&
+      next?.type === 'textDirective' &&
+      after?.type === 'text' &&
+      /\{\[[a-zA-Z0-9_-]+$/.test(cur.value) &&
+      /^\]\}/.test(after.value)
+    ) {
+      const directive = next as unknown as { name?: string };
+      const directiveName = directive.name ?? '';
+      const merged: MarkdownInlineNode = {
+        type: 'text',
+        value: cur.value + ':' + directiveName + after.value,
+        ...(cur.position ? { position: cur.position } : {}),
+      };
+      out.push(merged);
+      i += 2;
+      continue;
+    }
+    out.push(cur);
+  }
+  return out;
+}
+
+const ICON_TOKEN_RE = /\{\[([a-zA-Z0-9_:-]+)\]\}/g;
+
+function splitTextOnIcons(value: string, position?: MarkdownSourcePosition): MarkdownInlineNode[] {
+  if (!value) return [];
+  ICON_TOKEN_RE.lastIndex = 0;
+  let lastIndex = 0;
+  let match: RegExpExecArray | null;
+  const out: MarkdownInlineNode[] = [];
+  while ((match = ICON_TOKEN_RE.exec(value)) !== null) {
+    const token = match[1];
+    const icon = resolveIcon(token);
+    if (!icon) continue; // leave the literal `{[…]}` in place
+    if (match.index > lastIndex) {
+      out.push({
+        type: 'text',
+        value: value.slice(lastIndex, match.index),
+        ...(position ? { position } : {}),
+      });
+    }
+    const iconNode: MarkdownInlineIcon = {
+      type: 'inlineIcon',
+      token,
+      family: icon.family,
+      name: icon.name,
+      ...(position ? { position } : {}),
+    };
+    out.push(iconNode);
+    lastIndex = match.index + match[0].length;
+  }
+  if (lastIndex === 0) {
+    // No matches — return the original text node unchanged.
+    return [{ type: 'text', value, ...(position ? { position } : {}) }];
+  }
+  if (lastIndex < value.length) {
+    out.push({
+      type: 'text',
+      value: value.slice(lastIndex),
+      ...(position ? { position } : {}),
+    });
+  }
+  return out;
 }
 
 /**
@@ -318,12 +442,18 @@ function convertBlockNode(node: MdastNode, parseHtml: boolean): MarkdownBlockNod
 
   switch (node.type) {
     case 'heading': {
-      const headingChildren = convertInlineChildren(node.children ?? [], parseHtml);
+      // Defer icon splitting so `extractTemplateAnnotation` sees the
+      // trailing `{[name]}` as plain text and can decide whether it's
+      // a template annotation. Anything that's NOT the template still
+      // needs to become an icon node, so we run `splitInlineIcons` on
+      // what's left after the template extraction.
+      const headingChildren = convertInlineChildren(node.children ?? [], parseHtml, false);
       const annotation = extractTemplateAnnotation(headingChildren);
+      const finalChildren = splitInlineIcons(headingChildren);
       const result: MarkdownHeading = {
         type: 'heading',
         depth: (node.depth ?? 1) as 1 | 2 | 3 | 4 | 5 | 6,
-        children: headingChildren,
+        children: finalChildren,
         ...posField(pos),
       };
       if (annotation) {
@@ -964,6 +1094,16 @@ function inlineToMdast(node: MarkdownInlineNode): MdastNode {
         type: 'link',
         url: `${node.targetKind}:${node.targetId}`,
         children: [{ type: 'text', value: node.displayName }],
+        ...mdastPosField(node.position),
+      };
+
+    case 'inlineIcon':
+      // Serialize back to the authored token so source round-trips
+      // byte-stable. The token already carries the qualified form when
+      // required (the parser preserved it verbatim).
+      return {
+        type: 'text',
+        value: `{[${node.token}]}`,
         ...mdastPosField(node.position),
       };
 

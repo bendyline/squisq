@@ -34,7 +34,7 @@ describe('generateSlideshow', () => {
     expect(doc.articleId).toBe('Mount Rainier');
     const first = doc.blocks[0];
     if (isTemplateBlock(first)) {
-      expect(first.template).toBe('titleBlock');
+      expect(first.template).toBe('title');
     }
   });
 

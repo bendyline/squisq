@@ -14,17 +14,19 @@ import type { TemplateBlock } from '../schemas/BlockTemplates';
 describe('templateRegistry', () => {
   it('contains all expected templates', () => {
     const expected = [
-      'titleBlock',
+      'title',
       'sectionHeader',
       'statHighlight',
-      'quoteBlock',
+      'quote',
       'factCard',
       'twoColumn',
       'dateEvent',
       'imageWithCaption',
-      'mapBlock',
+      'leftFeature',
+      'rightFeature',
+      'map',
       'fullBleedQuote',
-      'listBlock',
+      'list',
       'photoGrid',
       'definitionCard',
       'comparisonBar',
@@ -43,7 +45,7 @@ describe('templateRegistry', () => {
 describe('getAvailableTemplates', () => {
   it('returns array of template names', () => {
     const templates = getAvailableTemplates();
-    expect(templates).toContain('titleBlock');
+    expect(templates).toContain('title');
     expect(templates).toContain('sectionHeader');
     expect(templates.length).toBeGreaterThanOrEqual(15);
   });
@@ -51,7 +53,7 @@ describe('getAvailableTemplates', () => {
 
 describe('hasTemplate', () => {
   it('returns true for existing templates', () => {
-    expect(hasTemplate('titleBlock')).toBe(true);
+    expect(hasTemplate('title')).toBe(true);
     expect(hasTemplate('statHighlight')).toBe(true);
   });
 
@@ -63,7 +65,7 @@ describe('hasTemplate', () => {
 describe('expandTemplateBlock', () => {
   it('expands titleSlide template into layers', () => {
     const block: TemplateBlock = {
-      template: 'titleBlock',
+      template: 'title',
       id: 'title-1',
       duration: 10,
       audioSegment: 0,
@@ -77,6 +79,88 @@ describe('expandTemplateBlock', () => {
     expect(result.duration).toBe(10);
     expect(result.layers ?? []).toBeInstanceOf(Array);
     expect((result.layers ?? []).length).toBeGreaterThan(0);
+  });
+
+  it('expands leftFeature template with image on the left half and left-aligned text right', () => {
+    const block: TemplateBlock = {
+      template: 'leftFeature',
+      id: 'lf-1',
+      duration: 6,
+      audioSegment: 0,
+      imageSrc: 'hero.jpg',
+      imageAlt: 'hero',
+      title: 'Product Builder',
+      body: 'I love building software platforms.',
+    };
+    const context = createTemplateContext(DEFAULT_THEME, 0, 1, VIEWPORT_PRESETS.landscape);
+    const result = expandTemplateBlock(block, context);
+    const layers = result.layers ?? [];
+    const imageLayer = layers.find((l) => l.type === 'image');
+    expect(imageLayer).toBeDefined();
+    expect(imageLayer!.position.x).toBe('0');
+    expect(imageLayer!.position.width).toBe('50%');
+    // Text column sits just past the 50% divider, top-left anchored,
+    // so the title and body share a left edge with comfortable padding.
+    const textLayers = layers.filter((l) => l.type === 'text');
+    expect(textLayers.length).toBeGreaterThanOrEqual(1);
+    for (const t of textLayers) {
+      expect(t.position.x).toBe('54%');
+      expect(t.position.anchor).toBe('top-left');
+      expect((t.content as { style: { textAlign?: string } }).style.textAlign).toBe('left');
+    }
+  });
+
+  it('respects explicit image dimensions: contained + padded inside the half', () => {
+    // When the user resizes an image in the WYSIWYG editor it round-
+    // trips as `<img width …>`. Feature blocks should treat that as a
+    // hint to NOT stretch the image — render it centered with padding
+    // around it.
+    const block: TemplateBlock = {
+      template: 'leftFeature',
+      id: 'lf-sized',
+      duration: 6,
+      audioSegment: 0,
+      imageSrc: 'hero.jpg',
+      imageAlt: 'hero',
+      imageWidth: 194,
+      title: 'Sized',
+    };
+    const context = createTemplateContext(DEFAULT_THEME, 0, 1, VIEWPORT_PRESETS.landscape);
+    const result = expandTemplateBlock(block, context);
+    const imageLayer = (result.layers ?? []).find((l) => l.type === 'image');
+    expect(imageLayer).toBeDefined();
+    expect((imageLayer!.content as { fit?: string }).fit).toBe('contain');
+    // Image is inset from the half's edges rather than filling them.
+    expect(imageLayer!.position.x).toBe('5%');
+    expect(imageLayer!.position.width).toBe('40%');
+    expect(imageLayer!.position.y).toBe('5%');
+    expect(imageLayer!.position.height).toBe('90%');
+  });
+
+  it('expands rightFeature template with image on the right half and right-aligned text left', () => {
+    const block: TemplateBlock = {
+      template: 'rightFeature',
+      id: 'rf-1',
+      duration: 6,
+      audioSegment: 0,
+      imageSrc: 'hero.jpg',
+      imageAlt: 'hero',
+      title: 'Projects',
+      body: 'A list of things.',
+    };
+    const context = createTemplateContext(DEFAULT_THEME, 0, 1, VIEWPORT_PRESETS.landscape);
+    const result = expandTemplateBlock(block, context);
+    const layers = result.layers ?? [];
+    const imageLayer = layers.find((l) => l.type === 'image');
+    expect(imageLayer).toBeDefined();
+    expect(imageLayer!.position.x).toBe('50%');
+    expect(imageLayer!.position.width).toBe('50%');
+    const textLayers = layers.filter((l) => l.type === 'text');
+    for (const t of textLayers) {
+      expect(t.position.x).toBe('46%');
+      expect(t.position.anchor).toBe('top-right');
+      expect((t.content as { style: { textAlign?: string } }).style.textAlign).toBe('right');
+    }
   });
 
   it('expands statHighlight template', () => {
@@ -163,7 +247,7 @@ describe('expandTemplateBlock', () => {
 describe('expandDocBlocks', () => {
   it('expands array of template blocks with cumulative timing', () => {
     const blocks: TemplateBlock[] = [
-      { template: 'titleBlock', id: 'slide-1', duration: 5, audioSegment: 0, title: 'Hello' },
+      { template: 'title', id: 'slide-1', duration: 5, audioSegment: 0, title: 'Hello' },
       {
         template: 'factCard',
         id: 'slide-2',
@@ -213,7 +297,7 @@ describe('expandDocBlocks', () => {
 
   it('supports landscape and portrait viewports', () => {
     const blocks: TemplateBlock[] = [
-      { template: 'titleBlock', id: 'title-1', duration: 5, audioSegment: 0, title: 'Test' },
+      { template: 'title', id: 'title-1', duration: 5, audioSegment: 0, title: 'Test' },
     ];
 
     const landscape = expandDocBlocks(blocks, { viewport: VIEWPORT_PRESETS.landscape });

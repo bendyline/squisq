@@ -14,6 +14,7 @@
  */
 
 import Heading from '@tiptap/extension-heading';
+import { templateLabel } from './TemplatePicker';
 
 /**
  * HeadingWithTemplate — drop-in replacement for Tiptap's Heading that
@@ -47,11 +48,17 @@ export const HeadingWithTemplate = Heading.extend({
     const tag = `h${level}`;
     const templateName = HTMLAttributes['data-template'];
 
+    // Render heading with a trailing badge span. The badge has no text
+    // content — its label is painted via CSS `content: attr(data-template-label)`
+    // so the template name never becomes part of the serialized heading
+    // text (which would leak into markdown on round-trip).
+    //
+    // When no template is set we still render a subtle "empty" badge so
+    // authors have a visible affordance for opening the template picker
+    // straight from the heading (matches the clicky chip shown for
+    // templated headings). The empty variant has no `data-template`
+    // attribute, so the bridge treats the heading as plain on save.
     if (templateName) {
-      // Render heading with a trailing badge span. The badge has no text
-      // content — its label is painted via CSS `content: attr(data-template)`
-      // so the template name never becomes part of the serialized heading
-      // text (which would leak into markdown on round-trip).
       return [
         tag,
         HTMLAttributes,
@@ -61,13 +68,32 @@ export const HeadingWithTemplate = Heading.extend({
           {
             class: 'squisq-template-badge',
             contenteditable: 'false',
+            role: 'button',
+            tabindex: '0',
+            'aria-haspopup': 'listbox',
+            title: 'Change block template',
             'data-template': templateName,
+            'data-template-label': templateLabel(templateName),
           },
         ],
       ];
     }
 
-    // No template — render as normal heading
-    return [tag, HTMLAttributes, 0];
+    return [
+      tag,
+      HTMLAttributes,
+      ['span', { class: 'squisq-heading-content' }, 0],
+      [
+        'span',
+        {
+          class: 'squisq-template-badge squisq-template-badge--empty',
+          contenteditable: 'false',
+          role: 'button',
+          tabindex: '0',
+          'aria-haspopup': 'listbox',
+          title: 'Choose block template',
+        },
+      ],
+    ];
   },
 });

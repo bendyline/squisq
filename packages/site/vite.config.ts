@@ -104,6 +104,10 @@ export default defineConfig({
       '@bendyline/squisq-editor-react',
       '@bendyline/squisq-react',
       '@bendyline/squisq-formats',
+      // squisq-video-react ships a separate `dist/workers/encode.worker.js`
+      // that the runtime spawns via `new URL(...)`. Pre-bundling collapses
+      // the worker into the dep cache and breaks the URL resolution.
+      '@bendyline/squisq-video-react',
     ],
   },
 });

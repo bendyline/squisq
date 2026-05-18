@@ -1,0 +1,7 @@
+/**
+ * @bendyline/squisq-react — bundled stylesheet entry.
+ * Aggregates all CSS shipped with this package.
+ */
+
+@import './doc-animations.css';
+@import '../jsonView/json-view.css';

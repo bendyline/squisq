@@ -85,13 +85,40 @@
       "types": "./dist/transform/index.d.ts",
       "import": "./dist/transform/index.js",
       "default": "./dist/transform/index.js"
+    },
+    "./versions": {
+      "types": "./dist/versions/index.d.ts",
+      "import": "./dist/versions/index.js",
+      "default": "./dist/versions/index.js"
+    },
+    "./jsonForm": {
+      "types": "./dist/jsonForm/index.d.ts",
+      "import": "./dist/jsonForm/index.js",
+      "default": "./dist/jsonForm/index.js"
+    },
+    "./imageEdit": {
+      "types": "./dist/imageEdit/index.d.ts",
+      "import": "./dist/imageEdit/index.js",
+      "default": "./dist/imageEdit/index.js"
+    },
+    "./icons": {
+      "types": "./dist/icons/index.d.ts",
+      "import": "./dist/icons/index.js",
+      "default": "./dist/icons/index.js"
+    },
+    "./recommend": {
+      "types": "./dist/recommend/index.d.ts",
+      "import": "./dist/recommend/index.js",
+      "default": "./dist/recommend/index.js"
     }
   },
   "scripts": {
     "build": "tsup",
+    "dev": "concurrently -n js,dts -c blue,gray -r \"tsup --watch --no-dts --no-clean\" \"tsup --watch --dts-only --no-clean\"",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "genson-js": "0.0.8",
     "hast-util-from-html": "2.0.3",
     "localforage": "1.10.0",
     "ngeohash": "0.6.3",

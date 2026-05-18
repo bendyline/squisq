@@ -212,7 +212,7 @@ Final top-level section with a simple paragraph.
 document-render-as: landscape
 ---
 
-# All Squisq Templates {[titleBlock]}
+# All Squisq Templates {[title]}
 
 A showcase of every built-in template.
 
@@ -224,7 +224,7 @@ This is a section header — great for dividing a document into chapters.
 
 **42%** — The percentage of developers who prefer visual block editors over raw markup.
 
-## A Famous Quote {[quoteBlock]}
+## A Famous Quote {[quote]}
 
 > "The best way to predict the future is to invent it."
 > — Alan Kay
@@ -245,7 +245,7 @@ This is a section header — great for dividing a document into chapters.
 
 A captioned image block for featuring photography.
 
-## Map View {[mapBlock center="48.8566,2.3522" zoom=12 title="Paris, France"]}
+## Map View {[map center="48.8566,2.3522" zoom=12 title="Paris, France"]}
 
 An interactive map tile centered on a point of interest.
 
@@ -253,7 +253,7 @@ An interactive map tile centered on a point of interest.
 
 Sometimes you just need one sentence that fills the entire screen.
 
-## Key Steps {[listBlock colorScheme=teal]}
+## Key Steps {[list colorScheme=teal]}
 
 - Design the content structure
 - Write compelling copy

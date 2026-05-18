@@ -3,13 +3,21 @@
  *
  * A Theme bundles color palette, typography, visual style, render-style
  * algorithm, and per-block color schemes into one JSON-serializable object.
- * Builders choose a theme from the built-in library or create a custom one
- * via `createTheme(base, overrides)`.
+ *
+ * Built-in themes and customizer-authored themes share this exact schema.
+ * Customizer-authored themes additionally specify `seedColors` so the few
+ * fields the user picked can be re-edited later; built-ins typically omit
+ * `seedColors` and ship with explicit `colors` already filled in.
  *
  * Design principles:
- * - Fully JSON-serializable (no functions) — storable in config / APIs.
- * - Doc carries an optional `themeId` pointer; resolution happens at render time.
- * - `createTheme` deep-merges a base theme with partial overrides.
+ * - Fully JSON-serializable. No functions; no raw CSS font strings.
+ * - Font families are structured `FontFamily` references resolved by
+ *   `resolveFontFamily()` at render time.
+ * - Doc carries an optional `themeId`; resolution happens at render time
+ *   via `resolveTheme(id)`.
+ * - `createTheme` deep-merges a base theme with partial overrides;
+ *   `compileTheme` fills in defaults and derives missing color slots from
+ *   `seedColors`; both produce a complete `Theme`.
  */
 
 import type { LayoutHints } from './LayoutStrategy.js';
@@ -17,11 +25,19 @@ import type { AnimationType, TransitionType } from './Doc.js';
 import type { PersistentLayerConfig } from './BlockTemplates.js';
 
 // ============================================
+// Schema version
+// ============================================
+
+/** Current Theme schema version. Bump on breaking changes; loader migrates. */
+export const THEME_SCHEMA_VERSION = '1' as const;
+export type ThemeSchemaVersion = typeof THEME_SCHEMA_VERSION;
+
+// ============================================
 // Color Palette
 // ============================================
 
 /**
- * Core color palette for a theme. Every color is a CSS color string.
+ * Core color palette for a theme. Every color is a `#rrggbb` hex string.
  */
 export interface ThemeColorPalette {
   /** Primary accent color */
@@ -55,20 +71,51 @@ export interface ThemeColorScheme {
   accent: string;
 }
 
+/**
+ * Optional authoring metadata. When present and `colors` is partial,
+ * `compileTheme` derives missing color slots from these seeds via OKLCh
+ * lightening / darkening. Round-trips a customizer-authored theme back
+ * into editable form.
+ */
+export interface ThemeSeedColors {
+  primary: string;
+  secondary?: string;
+  accent?: string;
+  background?: string;
+  text?: string;
+}
+
 // ============================================
 // Typography
 // ============================================
+
+/** Categorical bucket for a font family — drives default fallback. */
+export type FontFamilyKind = 'sans' | 'serif' | 'mono' | 'display';
+
+/**
+ * Structured reference to a font family. Either a curated stack id (looked
+ * up in `AVAILABLE_FONT_STACKS`) or a custom user-supplied name with a
+ * structured fallback bucket. Themes never carry raw CSS family strings.
+ */
+export type FontFamily =
+  | { stackId: string }
+  | {
+      custom: {
+        name: string;
+        fallback: 'serif' | 'sans-serif' | 'monospace' | 'system-ui';
+      };
+    };
 
 /**
  * Typography settings for a theme.
  */
 export interface ThemeTypography {
   /** Font family for body / description text */
-  bodyFontFamily: string;
+  bodyFont: FontFamily;
   /** Font family for titles and headings */
-  titleFontFamily: string;
+  titleFont: FontFamily;
   /** Font family for code / monospaced text (optional) */
-  monoFontFamily?: string;
+  monoFont?: FontFamily;
   /** Multiplier applied to LayoutHints.titleScale (default 1.0) */
   titleScale?: number;
   /** Multiplier applied to LayoutHints.bodyScale (default 1.0) */
@@ -125,11 +172,8 @@ export interface RenderStyle {
   /**
    * Per-template behavioral hints. Keys are template names, values are
    * string/number/boolean maps that templates can read to vary their output.
-   *
-   * @example
-   * ```
-   * { statHighlight: { entrance: 'dramatic' }, titleBlock: { showAccentLine: false } }
-   * ```
+   * Templates that consume hints publish a `hintSchema` export documenting
+   * the keys they recognise.
    */
   templateHints?: Record<string, Record<string, string | number | boolean>>;
 }
@@ -139,15 +183,20 @@ export interface RenderStyle {
 // ============================================
 
 /**
- * A complete, JSON-serializable theme definition.
+ * A complete, JSON-serializable theme definition. Built-in and customizer-
+ * authored themes share this exact shape.
  */
 export interface Theme {
+  /** Schema version. Always '1' for now. */
+  schemaVersion: ThemeSchemaVersion;
   /** Unique identifier (e.g. "documentary") */
   id: string;
   /** Human-readable display name */
   name: string;
   /** Short description for theme pickers */
   description?: string;
+  /** Optional authoring seeds (customizer fills these; built-ins typically omit) */
+  seedColors?: ThemeSeedColors;
   /** Color palette */
   colors: ThemeColorPalette;
   /** Typography settings */
@@ -214,14 +263,6 @@ function deepMerge<T extends Record<string, unknown>>(target: T, source: DeepPar
  * Create a new theme by deep-merging overrides onto a base theme.
  * The returned theme gets its own `id` if one is provided in overrides,
  * otherwise keeps the base theme's `id` suffixed with "-custom".
- *
- * @example
- * ```ts
- * const myTheme = createTheme(THEMES.documentary, {
- *   colors: { primary: '#ff0000' },
- *   typography: { bodyFontFamily: '"Inter", sans-serif' },
- * });
- * ```
  */
 export function createTheme(base: Theme, overrides: DeepPartial<Theme>): Theme {
   const merged = deepMerge(
@@ -231,6 +272,7 @@ export function createTheme(base: Theme, overrides: DeepPartial<Theme>): Theme {
   if (!overrides.id && merged.id === base.id) {
     merged.id = `${base.id}-custom`;
   }
+  if (!merged.schemaVersion) merged.schemaVersion = THEME_SCHEMA_VERSION;
   return merged;
 }
 
@@ -243,11 +285,6 @@ export function createTheme(base: Theme, overrides: DeepPartial<Theme>): Theme {
  * identity of a Theme. A Theme chooses voice (serif vs sans, muted vs
  * bold, documentary vs magazine); a SurfaceScheme chooses what the paper
  * looks like. Any theme can render on either surface.
- *
- * When a SurfaceScheme is applied to a Theme (via `applySurface`), these
- * fields override the corresponding entries in `ThemeColorPalette` —
- * everything else (primary, highlight, warning, etc.) stays as the theme
- * defined it.
  */
 export interface SurfaceScheme {
   /** Identifier — 'light', 'dark', or a custom id. */
@@ -279,9 +316,7 @@ export const DARK_SURFACE: SurfaceScheme = {
 /**
  * Overlay a SurfaceScheme's surface colors onto a Theme's palette,
  * leaving everything else (primary, highlight, warning, typography,
- * style, renderStyle, colorSchemes) untouched. Returns a new Theme;
- * callers that want to preserve the original's id should set it
- * explicitly in the overrides.
+ * style, renderStyle, colorSchemes) untouched.
  */
 export function applySurface(theme: Theme, surface: SurfaceScheme): Theme {
   return {
@@ -294,4 +329,36 @@ export function applySurface(theme: Theme, surface: SurfaceScheme): Theme {
       textMuted: surface.textMuted,
     },
   };
+}
+
+// ============================================
+// Runtime registry — for custom themes
+// ============================================
+
+const CUSTOM_THEME_REGISTRY = new Map<string, Theme>();
+
+/**
+ * Register a Theme so it can be looked up by id via `resolveTheme(id)`.
+ * Lets `Doc.themeId` round-trip through Doc serialization for custom themes.
+ *
+ * Registered themes take precedence over built-ins with the same id.
+ */
+export function registerTheme(theme: Theme): void {
+  CUSTOM_THEME_REGISTRY.set(theme.id, theme);
+}
+
+/** Remove a previously registered theme. */
+export function unregisterTheme(id: string): void {
+  CUSTOM_THEME_REGISTRY.delete(id);
+}
+
+/** Snapshot of all currently registered (non-built-in) themes. */
+export function getRegisteredThemes(): Theme[] {
+  return Array.from(CUSTOM_THEME_REGISTRY.values());
+}
+
+/** @internal — used by themeLibrary's `resolveTheme` to check the registry first. */
+export function lookupRegisteredTheme(id: string | undefined): Theme | undefined {
+  if (!id) return undefined;
+  return CUSTOM_THEME_REGISTRY.get(id);
 }

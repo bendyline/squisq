@@ -12,6 +12,7 @@ rendering and spatial utilities. It is designed to be framework-agnostic at the 
 - `@bendyline/squisq-formats` — Document format converters (DOCX, PDF, OOXML infrastructure)
 - `@bendyline/squisq-editor-react` — React editor shell (Monaco raw, Tiptap WYSIWYG, block preview)
 - `@bendyline/squisq-video-react` — React components for browser-based video export (WebCodecs, ffmpeg.wasm)
+- `@bendyline/squisq-recorder-react` — React components for browser-based audio, camera, and screen recording into a `ContentContainer` (MediaRecorder + getUserMedia + getDisplayMedia)
 
 ## Repository Structure
 
@@ -24,13 +25,15 @@ squisq/
       src/
         schemas/            # Doc, BlockTemplates, Viewport, LayoutStrategy, Theme, themeLibrary
         doc/
-          templates/        # 17 block templates (titleBlock, statHighlight, etc.)
+          templates/        # 17 block templates (title, statHighlight, etc.)
           utils/            # animationUtils, themeUtils
         spatial/            # Haversine distance, Geohash encode/decode
         storage/            # StorageAdapter interface, Memory + LocalStorage adapters, ContentContainer
         timing/             # Narration/reading time estimation
         random/             # SeededRandom (Mulberry32 PRNG)
         generate/           # Content extraction + slideshow generator
+        versions/           # Document version history (snapshots in .versions/, prune/coalesce, DocumentVersionManager)
+        jsonForm/           # JSON Form headless logic (hint vocabulary, control picker, conditional rules, schema inference)
     react/                  # @bendyline/squisq-react
       src/
         layers/             # ImageLayer, TextLayer, ShapeLayer, VideoLayer, MapLayer
@@ -43,6 +46,7 @@ squisq/
         DocProgressBar.tsx
         DocControls*.tsx    # Overlay, Bottom, Sidebar variants
         DocPlayerWithSidebar.tsx
+        jsonView/           # <JsonView> read-only renderer for JSON values bound to a schema
     formats/                # @bendyline/squisq-formats
       src/
         ooxml/              # Shared OOXML infrastructure (reader, writer, XML utils)
@@ -59,8 +63,11 @@ squisq/
         WysiwygEditor.tsx   # Tiptap rich text editor
         PreviewPanel.tsx    # Rendered block preview via DocPlayer
         Toolbar.tsx         # Formatting toolbar (bold, italic, headings, lists, etc.)
+        VersionHistoryPanel.tsx # Toolbar popover listing snapshots + revert
+        InlinePreviewGutter.tsx # Side gutter showing one mini SVG card per templated block (Edit mode)
         tiptapBridge.ts     # Bidirectional markdown ↔ Tiptap conversion
         TemplateAnnotation.ts # Tiptap extension for heading template annotations
+        jsonEditor/         # <JsonEditor> editable form (text/multiline/richtext, color, slider, toggle, chip-bin, card-stack, tabs, …)
     video-react/            # @bendyline/squisq-video-react
       src/
         VideoExportModal.tsx  # Modal dialog for export config + progress
@@ -68,6 +75,15 @@ squisq/
         hooks/              # useVideoExport, useFrameCapture
         workers/            # Web Worker for encoding (WebCodecs + ffmpeg.wasm fallback)
         mp4Mux.ts           # mp4-muxer wrapper for WebCodecs path
+    recorder-react/         # @bendyline/squisq-recorder-react
+      src/
+        RecorderModal.tsx     # Configure + capture dialog (narration/camera/screen/screen+mic tabs)
+        RecorderButton.tsx    # Drop-in button that opens the modal in a portal
+        RecorderPanel.tsx     # Toolbar-anchored mic icon + popover (used by editor-react)
+        hooks/              # useMediaRecorder, useStreamPreview
+        sources/            # getUserMedia/getDisplayMedia wrappers (mic, camera, screen + mic mix)
+        formats.ts          # MediaRecorder MIME probing, filename builder
+        timingJson.ts       # Narration `.timing.json` sidecar (paired with resolveAudioMapping)
     site/                   # squisq-site (dev/demo, not published)
       src/
         App.tsx             # Sample picker + view switching
@@ -81,12 +97,13 @@ squisq/
 - **Output:** `packages/*/dist/`
 
 ```bash
-npm run build              # Build all packages (core → formats → react → video → video-react → editor)
+npm run build              # Build all packages (core → formats → react → video → video-react → recorder-react → editor)
 npm run build:core         # Build core only
 npm run build:react        # Build react only
 npm run build:formats      # Build formats only
 npm run build:editor       # Build editor-react only
 npm run build:video-react  # Build video-react only
+npm run build:recorder-react # Build recorder-react only
 npm test                   # Run vitest unit tests
 npm run test:e2e           # Run Playwright E2E tests
 npm run typecheck          # Type-check all packages (no emit)
@@ -109,13 +126,15 @@ npm run format             # Prettier format
 - `@bendyline/squisq/timing` — Narration/reading time estimation (estimateNarrationTime, estimateReadingTime, countSpokenWords)
 - `@bendyline/squisq/random` — SeededRandom PRNG, hashString
 - `@bendyline/squisq/generate` — Content extraction (extractContent, stripMarkdown) + slideshow generator (generateSlideshow)
+- `@bendyline/squisq/versions` — Document version history: `DocumentVersionManager` plus `saveVersion` / `listVersions` / `readVersion` / `revertToVersion` / `pruneVersions` / `coalesceVersions`, `PrunePolicy`, `Version` types, sortable-timestamp + path helpers. Snapshots live inside the same `ContentContainer` as the doc at `.versions/<basename>.<timestamp>.md`, so they ride along through ZIP serialization.
+- `@bendyline/squisq/jsonForm` — JSON Form headless logic. Exports the `SquisqAnnotatedSchema` / `SquisqHints` / `SquisqWhen` / `ControlKind` types, `chooseControl()` (the dispatcher both `<JsonView>` and `<JsonEditor>` use), `evaluateWhen()` / `resolveFlag()` (conditional visibility / disabled rules), `inferSchema()` (sample → JSON Schema via genson-js), and JSON Pointer helpers (`getByPointer`, `setByPointer`, `resolveRef`).
 
 `@bendyline/squisq-react` exports everything from the root:
 
-- Components: DocPlayer, BlockRenderer, CaptionOverlay, DocProgressBar, etc.
+- Components: DocPlayer, BlockRenderer, CaptionOverlay, DocProgressBar, JsonView (read-only viewer for JSON values bound to a Squisq-annotated schema), etc.
 - Hooks: useAudioSync, useDocPlayback, useViewportOrientation
 - Layers: ImageLayer, TextLayer, ShapeLayer, VideoLayer, MapLayer
-- Styles: `@bendyline/squisq-react/styles` for CSS
+- Styles: `@bendyline/squisq-react/styles` for CSS (covers DocPlayer animations + `<JsonView>`)
 
 `@bendyline/squisq-formats` exposes subpath entries:
 
@@ -129,8 +148,10 @@ npm run format             # Prettier format
 
 `@bendyline/squisq-editor-react` exports everything from the root:
 
-- Components: EditorShell, RawEditor, WysiwygEditor, PreviewPanel, Toolbar, StatusBar, ViewSwitcher
+- Components: EditorShell, RawEditor, WysiwygEditor, PreviewPanel, Toolbar, StatusBar, ViewSwitcher, VersionHistoryPanel, InlinePreviewGutter, JsonEditor (editable form for JSON values bound to a Squisq-annotated schema; embeds `WysiwygEditor` for `richtext` controls)
 - Context: EditorProvider, useEditor
+- Versioning: pass `allowVersioning` + `container` to `EditorShell` to enable; the toolbar surfaces a `VersionHistoryPanel` and the editor auto-saves snapshots on idle (configurable via `versioningAutoSaveIdleMs`, default 5s; `versioningPrunePolicy` defaults to keep-last-50). Hosts can also call `useEditorContext().versioning.saveVersion()` from their own save pipeline.
+- Inline preview gutter: pass `inlinePreview` (and optional `inlinePreviewWidth`, default 320px) to `EditorShell` to render an `InlinePreviewGutter` next to the WYSIWYG surface. The gutter shows one small SVG card per template-annotated block in the document, auto-hides via container query below ~720px, and reuses the same template-resolution path as `LinearDocView`.
 - Styles: `@bendyline/squisq-editor-react/styles` for CSS
 
 `@bendyline/squisq-video-react` exports everything from the root:
@@ -139,6 +160,16 @@ npm run format             # Prettier format
 - Hooks: useVideoExport, useFrameCapture
 - Worker: `@bendyline/squisq-video-react/worker` for the encoding Web Worker
 - Encoding backends: WebCodecs (preferred, streaming H.264) with ffmpeg.wasm fallback (batched)
+
+`@bendyline/squisq-recorder-react` exports everything from the root:
+
+- Components: `RecorderModal`, `RecorderButton`, `RecorderPanel` — configure-and-capture dialog plus two trigger affordances (drop-in button and toolbar-shaped popover trigger). Recording is captured via `MediaRecorder` and written to a `MediaProvider`; narration mode also emits a `.timing.json` sidecar so `resolveAudioMapping()` auto-links the recording to a block.
+- Hooks: `useMediaRecorder` (state machine wrapping `MediaRecorder`), `useStreamPreview` (`MediaStream` → `<video>.srcObject`).
+- Source helpers: `requestMicStream`, `requestCameraStream`, `requestScreenStream` (the last one optionally mixes a mic track into the screen capture via `AudioContext`).
+- Format probe: `resolveFormat`, `supportsMediaRecorder` / `supportsUserMedia` / `supportsDisplayMedia`, `buildFilename`.
+- Sidecar builder: `buildTimingJson`, `encodeTimingJson`, `timingPathFor`.
+- Output strategy: browser-native. Chromium/Firefox produce WebM (VP9/Opus or VP8/Opus); Safari produces MP4 (H.264/AAC). No transcoding pass. `audioMapping.ts` was extended so `.webm`/`.mp4` audio under `audio/*` participates in the same auto-mapping pipeline `.mp3` files always did.
+- Editor wiring: `@bendyline/squisq-editor-react` mounts `RecorderEntry` (which renders the `RecorderPanel`) into the toolbar next to `VersionHistoryPanel`. Reads `useEditorContext()` for `mediaProvider`, `workspaceContainer`, and the markdown insertion helpers. The shell's `allowRecording` prop (default true) gates visibility.
 
 ## Code Style
 
@@ -191,6 +222,42 @@ The Theme system provides unified visual styling for rendered docs. A `Theme` bu
 - Color scheme names are strings; each theme defines its own set via `theme.colorSchemes`
 - `DEFAULT_THEME` is the documentary theme and ships as the fallback
 - `RenderStyle` controls layout overrides, default animations, ambient motion, and per-template hints
+
+## JSON Form System
+
+Squisq ships a friendly editor + viewer for arbitrary JSON values bound to a JSON Schema. The schema author drops a `squisq` key on any node to add UI hints; without hints, sensible defaults pick a control from type/format/enum cardinality. The same dispatcher (`chooseControl()` in core) drives both the read-only `<JsonView>` (in `react`) and the editable `<JsonEditor>` (in `editor-react`), so view and edit modes always agree on what each field _is_.
+
+**Architecture:**
+
+- `core/src/jsonForm/` — types, `chooseControl()`, `evaluateWhen()`, `inferSchema()` (via `genson-js`), JSON Pointer helpers. Zero React deps. Subpath: `@bendyline/squisq/jsonForm`.
+- `react/src/jsonView/` — `<JsonView>` read-only viewer; presents data like a polished settings summary.
+- `editor-react/src/jsonEditor/` — `<JsonEditor>` editable form; embeds `WysiwygEditor` for `richtext` controls.
+
+**Hint vocabulary** (squisq-native, deliberately not tied to JSON Forms / RJSF):
+
+```ts
+{ control?, label?, help?, placeholder?, width?,
+  hidden?, disabled?,        // boolean | { field, equals|oneOf|matches|truthy }
+  required?, itemLabel?,     // string | { fromField }
+  addLabel?, removeLabel?, step?, enumLabels? }
+```
+
+**Control kinds:** `text`, `multiline`, `richtext`, `color`, `date`, `time`, `datetime`, `slider`, `stepper`, `segmented`, `radio`, `combobox`, `toggle`, `checkbox`, `card`, `card-stack`, `chip-bin`, `tabs`, `group`.
+
+**Auto-default mapping** (no hints supplied):
+
+- array of object → `card-stack`; array of primitive → `chip-bin`
+- string + `format: color|date|time|date-time|markdown|textarea` → matching control
+- string + `enum` ≤4 → `segmented`; >4 → `combobox`
+- string with `maxLength > 200` → `multiline`; otherwise `text`
+- number/integer with both `minimum` and `maximum` → `slider`; otherwise `stepper`
+- boolean → `toggle`; object → `group`; oneOf/anyOf → `tabs`
+
+**Theming:** Both components accept `theme?: Theme` + `surface?: SurfaceScheme | 'auto'` and inject scoped `--squisq-json-*` (viewer) / `--squisq-jsonform-*` (editor) CSS custom properties on their root, mirroring the `LinearDocView` pattern. All built-in renderers consume only those tokens — never hard-code colors.
+
+**Validation:** Opt-in via the `validate?: (value, schema) => ValidationError[]` prop on `<JsonEditor>`. No bundled validator — consumers wire their own (recommended: `ajv` + `ajv-formats`).
+
+**Schema inference:** `inferSchema(sample, { additionalSamples? })` from `@bendyline/squisq/jsonForm` produces a JSON Schema from one or more example values via `genson-js`.
 
 ## Type Safety Conventions
 

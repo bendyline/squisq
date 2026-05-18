@@ -60,6 +60,28 @@ function hasSharedArrayBuffer(): boolean {
   return typeof SharedArrayBuffer !== 'undefined';
 }
 
+/**
+ * Check whether the browser's WebCodecs implementation actually supports
+ * the H.264 Baseline profile we use. Linux Chromium ships without the
+ * proprietary H.264 encoder, so `VideoEncoder` exists but `configure()`
+ * for `avc1.*` fails asynchronously.
+ */
+async function supportsWebCodecsH264(config: InitMessage): Promise<boolean> {
+  if (!hasWebCodecs()) return false;
+  try {
+    const support = await VideoEncoder.isConfigSupported({
+      codec: 'avc1.42001f',
+      width: config.width,
+      height: config.height,
+      bitrate: bitrateForQuality(config.quality, config.width, config.height),
+      framerate: config.fps,
+    });
+    return support.supported === true;
+  } catch {
+    return false;
+  }
+}
+
 // ── WebCodecs Backend ──────────────────────────────────────────────
 
 function initWebCodecs(config: InitMessage) {
@@ -326,7 +348,7 @@ self.onmessage = async (event: MessageEvent<MainToWorkerMessage>) => {
         totalFramesReceived = 0;
         _totalFramesEncoded = 0;
 
-        if (hasWebCodecs()) {
+        if (await supportsWebCodecsH264(msg)) {
           backend = 'webcodecs';
           initWebCodecs(msg);
         } else if (hasSharedArrayBuffer()) {
@@ -335,8 +357,8 @@ self.onmessage = async (event: MessageEvent<MainToWorkerMessage>) => {
         } else {
           postError(
             'No video encoding support available. ' +
-              'WebCodecs requires Chrome 94+ or Edge 94+. ' +
-              'ffmpeg.wasm requires SharedArrayBuffer (Cross-Origin-Isolation headers).',
+              'WebCodecs H.264 is unavailable (typical on Linux Chromium without proprietary codecs) ' +
+              'and ffmpeg.wasm requires SharedArrayBuffer (Cross-Origin-Isolation headers).',
           );
           return;
         }

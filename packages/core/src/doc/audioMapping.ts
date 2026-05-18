@@ -112,14 +112,53 @@ function flattenForAudio(blocks: Block[]): Block[] {
   return result;
 }
 
-/** Info about an MP3 file found in the container. */
+/**
+ * Info about a narration audio file found in the container.
+ *
+ * Originally limited to MP3, this now also covers WebM/MP4/Ogg/M4A
+ * audio files that the browser recorder writes into `audio/`. The type
+ * name is retained for backwards compatibility with the surrounding
+ * matching logic; the data shape is identical regardless of codec.
+ */
 interface Mp3Info {
-  /** Path in the container (e.g., "images/c23n-issaquah-highlands-intro.mp3") */
+  /** Path in the container (e.g., "audio/narration-2026.webm"). */
   path: string;
-  /** Filename without path (e.g., "c23n-issaquah-highlands-intro.mp3") */
+  /** Filename without path (e.g., "narration-2026.webm"). */
   filename: string;
-  /** Parsed timing data (if .timing.json exists) */
+  /** Parsed timing data (if .timing.json exists). */
   timing: AudioTimingData | null;
+}
+
+/**
+ * File extensions that unambiguously denote audio anywhere in the
+ * container. These predate the recorder feature.
+ */
+const AUDIO_ONLY_EXTENSIONS = ['.mp3', '.wav', '.ogg', '.m4a'];
+
+/**
+ * Extensions that could be audio or video — `.webm` and `.mp4` are the
+ * containers `MediaRecorder` produces for browser-side narration, but
+ * they're also used for video clips. Only treat them as narration when
+ * they live under the `audio/` directory the recorder writes to.
+ */
+const AMBIGUOUS_EXTENSIONS = ['.webm', '.mp4'];
+
+function isNarrationAudioPath(path: string): boolean {
+  const lower = path.toLowerCase();
+  if (AUDIO_ONLY_EXTENSIONS.some((ext) => lower.endsWith(ext))) return true;
+  if (AMBIGUOUS_EXTENSIONS.some((ext) => lower.endsWith(ext))) {
+    return lower.startsWith('audio/');
+  }
+  return false;
+}
+
+/** Strip a known narration audio extension from a filename. */
+function stripAudioExtension(filename: string): string {
+  const lower = filename.toLowerCase();
+  for (const ext of [...AUDIO_ONLY_EXTENSIONS, ...AMBIGUOUS_EXTENSIONS]) {
+    if (lower.endsWith(ext)) return filename.slice(0, -ext.length);
+  }
+  return filename;
 }
 
 // ── Core Functions ───────────────────────────────────────────────────
@@ -142,12 +181,17 @@ function parseConsolidatedTiming(data: ArrayBuffer): Record<string, AudioTimingD
 }
 
 /**
- * Discover all MP3 files in a container and load their timing data.
- * Checks for a consolidated timing.json first, then falls back to per-file .timing.json.
+ * Discover all narration audio files in a container and load their
+ * timing data. Covers historical `.mp3`/`.wav`/`.ogg`/`.m4a` files
+ * anywhere in the container plus `.webm`/`.mp4` files under `audio/`
+ * (the destination the browser recorder writes to).
+ *
+ * Checks for a consolidated timing.json first, then falls back to
+ * per-file `.timing.json` sidecars.
  */
 async function discoverMp3s(container: ContentContainer): Promise<Mp3Info[]> {
   const files = await container.listFiles();
-  const mp3Files = files.filter((f) => f.path.endsWith('.mp3'));
+  const audioFiles = files.filter((f) => isNarrationAudioPath(f.path));
   const results: Mp3Info[] = [];
 
   // Try to load consolidated timing.json
@@ -157,15 +201,15 @@ async function discoverMp3s(container: ContentContainer): Promise<Mp3Info[]> {
     consolidatedSections = parseConsolidatedTiming(consolidatedData);
   }
 
-  for (const file of mp3Files) {
+  for (const file of audioFiles) {
     const filename = file.path.split('/').pop() ?? file.path;
     let timing: AudioTimingData | null = null;
 
     // Try consolidated timing first: match section name from filename
     if (consolidatedSections) {
-      const mp3Base = filename.replace(/\.mp3$/, '');
+      const audioBase = stripAudioExtension(filename);
       for (const [sectionName, sectionTiming] of Object.entries(consolidatedSections)) {
-        if (mp3Base.endsWith(`-${sectionName}`)) {
+        if (audioBase.endsWith(`-${sectionName}`)) {
           timing = sectionTiming;
           break;
         }
@@ -259,7 +303,7 @@ function autoMatchBlocks(
       // Fallback: filename-based matching
       if (score < MIN_CONTENT_SIMILARITY && block.title) {
         const titleSlug = slugify(block.title);
-        const fileSlug = slugify(mp3.filename.replace(/\.mp3$/, ''));
+        const fileSlug = slugify(stripAudioExtension(mp3.filename));
         // Check if the title slug appears in the filename slug
         if (fileSlug.includes(titleSlug) && titleSlug.length >= 3) {
           score = Math.max(score, MIN_FILENAME_SIMILARITY + 0.1);

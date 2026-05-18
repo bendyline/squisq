@@ -74,6 +74,21 @@ describe('markdownToTiptap', () => {
     expect(back.trim()).toBe(md);
   });
 
+  it('converts FontAwesome inline icons to <i data-icon> tags', () => {
+    const html = markdownToTiptap('{[angellist]}');
+    expect(html).toContain('data-icon="angellist"');
+    expect(html).toContain('data-family="brands"');
+    expect(html).toContain('data-name="angellist"');
+    expect(html).toContain('class="fa-brands fa-angellist"');
+  });
+
+  it('round-trips FA inline icons through markdown↔HTML', () => {
+    const md = 'Repo {[github]} and {[angellist]}.';
+    const html = markdownToTiptap(md);
+    const back = tiptapToMarkdown(html);
+    expect(back.trim()).toBe(md);
+  });
+
   it('converts images', () => {
     const html = markdownToTiptap('![Logo](logo.png)');
     expect(html).toContain('alt="Logo"');

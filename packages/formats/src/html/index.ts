@@ -42,6 +42,21 @@ import { extractFilename } from './imageUtils.js';
 
 export type { HtmlExportOptions };
 
+/**
+ * Normalize a doc-referenced path for use as a zip entry name. Strips
+ * leading slashes and rejects any path that tries to escape the archive
+ * root via `..` segments (a malicious or malformed doc shouldn't be able
+ * to write outside the zip when extracted). Backslashes are folded to
+ * forward slashes so Windows-authored paths still produce a consistent
+ * tree across extractors.
+ */
+function sanitizeZipPath(path: string): string | null {
+  const normalized = path.replace(/\\/g, '/').replace(/^\/+/, '');
+  if (!normalized) return null;
+  if (normalized.split('/').some((seg) => seg === '..')) return null;
+  return normalized;
+}
+
 export interface HtmlZipExportOptions extends HtmlExportOptions {
   /**
    * Map of audio segment identifiers to binary audio data.
@@ -119,12 +134,20 @@ export async function docToHtmlZip(doc: Doc, options: HtmlZipExportOptions): Pro
   // 1. Add player JS as a separate file
   zip.file('squisq-player.js', playerScript);
 
-  // 2. Add images to images/ folder and build path mapping
+  // 2. Add images preserving their original relative paths.
+  //
+  // We used to flatten everything into `images/<basename>`, but that
+  // requires the player to rewrite every `<img src>` at render time using
+  // the path map — and the static (non-slideshow) renderer doesn't do
+  // that, so its emitted `<img>` tags 404'd against the renamed assets.
+  // Keeping the original layout means direct `src="folder/file.png"`
+  // references just work, and the exported zip mirrors how the source
+  // folder is organized (e.g. pandoc-style `notes_files/` sidecars).
   const imagePathMap: Record<string, string> = {};
   if (images) {
     for (const [originalPath, buffer] of images.entries()) {
-      const filename = extractFilename(originalPath);
-      const zipPath = `images/${filename}`;
+      const zipPath = sanitizeZipPath(originalPath);
+      if (!zipPath) continue;
       zip.file(zipPath, buffer);
       imagePathMap[originalPath] = zipPath;
     }
@@ -166,3 +189,9 @@ export async function docToHtmlZip(doc: Doc, options: HtmlZipExportOptions): Pro
 
 export { collectImagePaths } from './htmlTemplate.js';
 export { inferMimeType, arrayBufferToBase64DataUrl, extractFilename } from './imageUtils.js';
+export { markdownDocToPlainHtml } from './plainHtml.js';
+export type { PlainHtmlExportOptions } from './plainHtml.js';
+export { markdownDocsToPlainHtmlBundle, collectLinkRefs } from './plainHtmlBundle.js';
+export type { PlainHtmlBundleOptions } from './plainHtmlBundle.js';
+export { markdownDocsToHtmlBundle } from './docsHtmlBundle.js';
+export type { HtmlBundleOptions } from './docsHtmlBundle.js';

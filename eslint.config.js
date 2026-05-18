@@ -14,6 +14,7 @@ export default tseslint.config(
       '**/*.config.ts',
       '**/*.config.js',
       '**/vitest.setup.ts',
+      'scripts/**',
     ],
   },
 

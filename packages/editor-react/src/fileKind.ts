@@ -12,8 +12,12 @@
  */
 
 export interface FileKind {
-  /** 'markdown' keeps the full editor (WYSIWYG + Preview tabs); 'code' is Monaco-only. */
-  mode: 'markdown' | 'code';
+  /**
+   * 'markdown' keeps the full editor (WYSIWYG + Preview tabs); 'code' is
+   * Monaco-only; 'image' renders a dedicated image viewer with no text
+   * editing surface.
+   */
+  mode: 'markdown' | 'code' | 'image';
   /** Monaco language ID — passed to `<Editor defaultLanguage={...} />`. */
   language: string;
 }
@@ -67,13 +71,28 @@ const EXT_TO_LANGUAGE: Record<string, string> = {
   kt: 'kotlin',
   kts: 'kotlin',
   dockerfile: 'dockerfile',
+  png: 'image',
+  jpg: 'image',
+  jpeg: 'image',
+  gif: 'image',
+  webp: 'image',
+  bmp: 'image',
+  ico: 'image',
+  avif: 'image',
 };
 
 /**
  * Languages that keep the full markdown shell (WYSIWYG + Preview). Anything
- * outside this set is treated as code.
+ * outside this set is treated as code, except for languages in
+ * `IMAGE_MODE_LANGUAGES`.
  */
 const MARKDOWN_MODE_LANGUAGES = new Set(['markdown', 'plaintext']);
+
+/**
+ * Languages that switch the shell into image-viewer mode — no text editing
+ * surface, no markdown chrome.
+ */
+const IMAGE_MODE_LANGUAGES = new Set(['image']);
 
 /**
  * Pull the lowercase extension (no leading dot) from a file name or bare
@@ -127,8 +146,13 @@ export function resolveFileKind(fileName?: string, language?: string): FileKind 
     return { mode: 'markdown', language: 'markdown' };
   }
 
-  const mode: FileKind['mode'] = MARKDOWN_MODE_LANGUAGES.has(resolvedLanguage)
-    ? 'markdown'
-    : 'code';
+  let mode: FileKind['mode'];
+  if (IMAGE_MODE_LANGUAGES.has(resolvedLanguage)) {
+    mode = 'image';
+  } else if (MARKDOWN_MODE_LANGUAGES.has(resolvedLanguage)) {
+    mode = 'markdown';
+  } else {
+    mode = 'code';
+  }
   return { mode, language: resolvedLanguage };
 }

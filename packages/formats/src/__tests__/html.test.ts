@@ -138,6 +138,61 @@ describe('collectImagePaths', () => {
     const paths = collectImagePaths(doc);
     expect(paths.has('cover.jpg')).toBe(true);
   });
+
+  it('collects markdown image refs from block contents', () => {
+    const doc = makeDoc({
+      blocks: [
+        {
+          id: 'b1',
+          startTime: 0,
+          duration: 5,
+          audioSegment: 0,
+          contents: [
+            {
+              type: 'paragraph',
+              children: [{ type: 'image', url: 'body.jpg', alt: '' }],
+            },
+          ] as unknown as Block['contents'],
+        },
+      ],
+    });
+    const paths = collectImagePaths(doc);
+    expect(paths.has('body.jpg')).toBe(true);
+  });
+
+  it('collects raw HTML <img> refs from block contents (WYSIWYG resize case)', () => {
+    // When the WYSIWYG editor serializes a resized image, it emits a raw
+    // `<img src width>` tag because markdown shorthand has no width syntax.
+    // The parser produces an htmlBlock node with htmlChildren rather than
+    // an image node — earlier this was invisible to the export pipeline.
+    const doc = makeDoc({
+      blocks: [
+        {
+          id: 'b1',
+          startTime: 0,
+          duration: 5,
+          audioSegment: 0,
+          contents: [
+            {
+              type: 'htmlBlock',
+              rawHtml: '<img alt="resized" src="resized.jpg" width="194">',
+              htmlChildren: [
+                {
+                  type: 'htmlElement',
+                  tagName: 'img',
+                  attributes: { src: 'resized.jpg', alt: 'resized', width: '194' },
+                  children: [],
+                  selfClosing: true,
+                },
+              ],
+            },
+          ] as unknown as Block['contents'],
+        },
+      ],
+    });
+    const paths = collectImagePaths(doc);
+    expect(paths.has('resized.jpg')).toBe(true);
+  });
 });
 
 // ============================================
@@ -255,13 +310,36 @@ describe('docToHtmlZip', () => {
     expect(html).not.toContain(MOCK_PLAYER_SCRIPT);
   });
 
-  it('includes images in images/ folder', async () => {
-    const doc = makeDoc({ blocks: [makeImageBlock('hero.png')] });
-    const images = new Map([['hero.png', makeImageBuffer()]]);
+  it('preserves the original image path inside the zip', async () => {
+    // Direct `<img src="folder/file.png">` references in the rendered HTML
+    // resolve only if the zip mirrors the doc's path layout — flattening
+    // to `images/<basename>` would 404 in the static renderer (which does
+    // not rewrite paths through imagePathMap).
+    const doc = makeDoc({ blocks: [makeImageBlock('mikehome_files/hero.png')] });
+    const images = new Map([['mikehome_files/hero.png', makeImageBuffer()]]);
     const blob = await docToHtmlZip(doc, { playerScript: MOCK_PLAYER_SCRIPT, images });
 
     const zip = await JSZip.loadAsync(await blobToUint8Array(blob));
-    expect(zip.file('images/hero.png')).not.toBeNull();
+    expect(zip.file('mikehome_files/hero.png')).not.toBeNull();
+    expect(zip.file('images/hero.png')).toBeNull();
+  });
+
+  it('strips leading slashes and rejects parent-traversal paths', async () => {
+    const doc = makeDoc();
+    const buffer = makeImageBuffer();
+    const images = new Map([
+      ['/leading/slash.png', buffer],
+      ['../escape.png', buffer],
+      ['nested/../sneaky.png', buffer],
+      ['ok/path.png', buffer],
+    ]);
+    const blob = await docToHtmlZip(doc, { playerScript: MOCK_PLAYER_SCRIPT, images });
+
+    const zip = await JSZip.loadAsync(await blobToUint8Array(blob));
+    expect(zip.file('leading/slash.png')).not.toBeNull();
+    expect(zip.file('ok/path.png')).not.toBeNull();
+    expect(zip.file('../escape.png')).toBeNull();
+    expect(zip.file('nested/../sneaky.png')).toBeNull();
   });
 
   it('includes audio in audio/ folder when provided', async () => {

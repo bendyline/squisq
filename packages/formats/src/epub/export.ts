@@ -23,7 +23,7 @@
 
 import JSZip from 'jszip';
 import type { Doc, AudioSegment } from '@bendyline/squisq/schemas';
-import { resolveTheme } from '@bendyline/squisq/schemas';
+import { resolveTheme, resolveFontFamily } from '@bendyline/squisq/schemas';
 import type {
   MarkdownDocument,
   MarkdownBlockNode,
@@ -803,8 +803,8 @@ function generateStylesheet(themeId?: string): string {
   --epub-bg: ${theme.colors.background};
   --epub-text: ${theme.colors.text};
   --epub-primary: ${theme.colors.primary};
-  --epub-heading-font: ${theme.typography.titleFontFamily};
-  --epub-body-font: ${theme.typography.bodyFontFamily};`;
+  --epub-heading-font: ${resolveFontFamily(theme.typography.titleFont, 'serif')};
+  --epub-body-font: ${resolveFontFamily(theme.typography.bodyFont, 'sans-serif')};`;
   }
 
   return `/* Squisq EPUB Stylesheet */

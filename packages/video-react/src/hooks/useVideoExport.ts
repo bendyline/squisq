@@ -21,7 +21,13 @@ import type { MediaProvider } from '@bendyline/squisq/schemas';
 import type { VideoQuality, VideoOrientation } from '@bendyline/squisq-video';
 import { resolveDimensions } from '@bendyline/squisq-video';
 import type { CaptionMode } from '@bendyline/squisq-react';
-import { createEncoder, supportsWebCodecs, type MainThreadEncoder } from '../mainThreadEncoder.js';
+import {
+  createEncoder,
+  supportsWebCodecs,
+  supportsWebCodecsH264,
+  type MainThreadEncoder,
+} from '../mainThreadEncoder.js';
+import { createWorkerEncoder } from '../workerEncoder.js';
 import { useFrameCapture } from './useFrameCapture.js';
 
 // ── Types ──────────────────────────────────────────────────────────
@@ -68,8 +74,8 @@ export interface VideoExportResult {
   phase: string;
   /** Video duration detected from the doc (seconds) */
   duration: number;
-  /** Encoder backend ('webcodecs' when active, null when idle) */
-  backend: 'webcodecs' | null;
+  /** Encoder backend ('webcodecs' when WebCodecs H.264 active, 'ffmpeg-wasm' when worker fallback active, null when idle) */
+  backend: 'webcodecs' | 'ffmpeg-wasm' | null;
   /** Blob download URL (populated when state === 'complete') */
   downloadUrl: string | null;
   /** File size in bytes (populated when state === 'complete') */
@@ -95,7 +101,7 @@ export function useVideoExport(): VideoExportResult {
   const [progress, setProgress] = useState(0);
   const [phase, setPhase] = useState('');
   const [duration, setDuration] = useState(0);
-  const [backend, setBackend] = useState<'webcodecs' | null>(null);
+  const [backend, setBackend] = useState<'webcodecs' | 'ffmpeg-wasm' | null>(null);
   const [downloadUrl, setDownloadUrl] = useState<string | null>(null);
   const [fileSize, setFileSize] = useState(0);
   const [error, setError] = useState<string | null>(null);
@@ -181,10 +187,13 @@ export function useVideoExport(): VideoExportResult {
 
       try {
         // ── Check browser support ─────────────────────────────────
-        if (!supportsWebCodecs()) {
+        const webCodecsAvailable = supportsWebCodecs();
+        const sharedArrayBufferAvailable = typeof SharedArrayBuffer !== 'undefined';
+        if (!webCodecsAvailable && !sharedArrayBufferAvailable) {
           throw new Error(
-            'WebCodecs is not available in this browser. ' +
-              'Video export requires Chrome 94+, Edge 94+, or another Chromium-based browser.',
+            'No video encoder available. WebCodecs requires Chrome 94+ / Edge 94+, ' +
+              'and the ffmpeg.wasm fallback requires SharedArrayBuffer ' +
+              '(Cross-Origin-Isolation headers).',
           );
         }
 
@@ -234,9 +243,34 @@ export function useVideoExport(): VideoExportResult {
         setPhase('Starting encoder…');
         setProgress(5);
 
-        const encoder = createEncoder({ width, height, fps, quality });
+        // Prefer main-thread WebCodecs (fast), but probe whether H.264
+        // is actually supported. Linux Chromium has VideoEncoder but
+        // no proprietary H.264 codec — fall back to the worker, which
+        // loads ffmpeg.wasm in that case.
+        const canUseWebCodecs =
+          webCodecsAvailable && (await supportsWebCodecsH264({ width, height, fps, quality }));
+
+        let encoder: MainThreadEncoder;
+        if (canUseWebCodecs) {
+          encoder = createEncoder({ width, height, fps, quality });
+          setBackend('webcodecs');
+        } else if (sharedArrayBufferAvailable) {
+          const workerEncoder = createWorkerEncoder({ width, height, fps, quality });
+          encoder = workerEncoder;
+          const selectedBackend = await workerEncoder.ready;
+          setBackend(selectedBackend);
+          setPhase(
+            selectedBackend === 'ffmpeg-wasm'
+              ? 'Starting encoder (ffmpeg.wasm)…'
+              : 'Starting encoder…',
+          );
+        } else {
+          throw new Error(
+            'WebCodecs H.264 is unavailable in this browser and the ffmpeg.wasm ' +
+              'fallback requires SharedArrayBuffer (Cross-Origin-Isolation headers).',
+          );
+        }
         encoderRef.current = encoder;
-        setBackend('webcodecs');
 
         if (cancelledRef.current) return;
 

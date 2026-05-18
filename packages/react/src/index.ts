@@ -12,6 +12,10 @@ export { DocProgressBar } from './DocProgressBar.js';
 export { MarkdownRenderer } from './MarkdownRenderer.js';
 export { LinearDocView } from './LinearDocView.js';
 export type { LinearDocViewProps, ImageDisplayMode } from './LinearDocView.js';
+export { InlineVideoPlayer } from './InlineVideoPlayer.js';
+export type { InlineVideoPlayerProps } from './InlineVideoPlayer.js';
+export { InlineAudioPlayer } from './InlineAudioPlayer.js';
+export type { InlineAudioPlayerProps } from './InlineAudioPlayer.js';
 
 // Layer components
 export { ImageLayer } from './layers/ImageLayer.js';
@@ -26,6 +30,7 @@ export { useAudioSync } from './hooks/useAudioSync.js';
 export { useDocPlayback } from './hooks/useDocPlayback.js';
 export { useViewportOrientation } from './hooks/useViewportOrientation.js';
 export { MediaContext, useMediaProvider, useMediaUrl } from './hooks/MediaContext.js';
+export { useAutoSurface } from './hooks/useAutoSurface.js';
 
 // Types
 export type { AudioProvider, AudioState, AudioActions } from './hooks/AudioProvider.js';
@@ -49,3 +54,7 @@ export { formatTime } from './types.js';
 
 // Utilities
 export { getAnimationStyle, getTransitionClass } from './utils/animationUtils.js';
+
+// JSON Form — read-only viewer
+export { JsonView } from './jsonView/index.js';
+export type { JsonViewProps } from './jsonView/index.js';

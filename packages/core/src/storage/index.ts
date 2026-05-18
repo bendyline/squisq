@@ -5,4 +5,5 @@ export { LocalForageAdapter } from './LocalForageAdapter.js';
 export type { LocalForageAdapterOptions } from './LocalForageAdapter.js';
 export type { ContentContainer, ContentEntry } from './ContentContainer.js';
 export { MemoryContentContainer, findDocumentPath } from './ContentContainer.js';
+export { ScopedContentContainer, scopeContainer } from './ScopedContentContainer.js';
 export { createMediaProviderFromContainer } from './MediaProviderFromContainer.js';

@@ -10,14 +10,25 @@
  * - PreviewPanel (the actual player, which reads the selected values)
  */
 
-import { createContext, useContext, useState, useMemo, useEffect, useRef } from 'react';
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useState,
+  useMemo,
+  useEffect,
+  useRef,
+} from 'react';
 import type { ReactNode } from 'react';
 import type { DisplayMode, CaptionStyle } from '@bendyline/squisq-react';
 import type { ViewportPreset, ViewportConfig } from '@bendyline/squisq/schemas';
 import { VIEWPORT_PRESETS, getThemeSummaries, resolveTheme } from '@bendyline/squisq/schemas';
 import type { Theme } from '@bendyline/squisq/schemas';
+import { ThemePicker } from './ThemePicker';
 import { getTransformStyleSummaries } from '@bendyline/squisq/transform';
 import type { Doc } from '@bendyline/squisq/schemas';
+import { setFrontmatterValues } from '@bendyline/squisq/markdown';
+import { useEditorContext } from './EditorContext';
 
 // ── Context ──────────────────────────────────────────────────────
 
@@ -44,6 +55,16 @@ export function usePreviewSettings(): PreviewSettings {
   return ctx;
 }
 
+/**
+ * Like {@link usePreviewSettings} but returns `null` when no provider is
+ * mounted. For consumers (e.g. WysiwygEditor) that want to react to the
+ * active theme when available without forcing every test harness to
+ * wrap them in a PreviewSettingsProvider.
+ */
+export function usePreviewSettingsOptional(): PreviewSettings | null {
+  return useContext(PreviewSettingsContext);
+}
+
 // ── Frontmatter resolvers ────────────────────────────────────────
 
 function resolveRenderAs(value: unknown): ViewportPreset | null {
@@ -68,9 +89,10 @@ function resolveRenderAs(value: unknown): ViewportPreset | null {
 function resolveDisplayMode(value: unknown): DisplayMode | null {
   if (typeof value !== 'string') return null;
   const v = value.trim().toLowerCase();
-  if (v === 'video' || v === 'slideshow' || v === 'linear') return v;
+  if (v === 'video' || v === 'slideshow' || v === 'linear' || v === 'page') return v;
   if (v === 'slides' || v === 'presentation' || v === 'deck') return 'slideshow';
-  if (v === 'document' || v === 'scroll' || v === 'page') return 'linear';
+  if (v === 'document' || v === 'scroll') return 'linear';
+  if (v === 'html' || v === 'plain' || v === 'reader') return 'page';
   return null;
 }
 
@@ -109,10 +131,50 @@ function resolveFrontmatterCaptionStyle(value: unknown): CaptionStyle | null {
 export interface PreviewSettingsProviderProps {
   doc: Doc | null;
   children: ReactNode;
+  /**
+   * Optional Theme to use for the preview, regardless of `Doc.themeId` or
+   * the user's theme dropdown selection. Used by the theme customizer to
+   * preview an in-progress theme without mutating the document. When
+   * present, `activeTheme` is this value and `activeThemeId` is its `id`.
+   */
+  themeOverride?: Theme | null;
 }
 
-export function PreviewSettingsProvider({ doc, children }: PreviewSettingsProviderProps) {
+/** Frontmatter keys we read/write for preview settings. The squisq-prefixed
+ *  keys are the canonical names; the legacy keys are still read so existing
+ *  documents keep working. Persistence (writes) uses only the squisq names. */
+const FM_KEYS = {
+  theme: { canonical: 'squisq-theme', legacy: 'theme' as const },
+  transform: { canonical: 'squisq-transform', legacy: 'transform-style' as const },
+  captions: { canonical: 'squisq-captions', legacy: 'caption-style' as const },
+} as const;
+
+function readFrontmatterKey(
+  fm: Record<string, unknown> | undefined,
+  canonical: string,
+  legacy: string,
+): unknown {
+  if (!fm) return undefined;
+  return Object.prototype.hasOwnProperty.call(fm, canonical) ? fm[canonical] : fm[legacy];
+}
+
+export function PreviewSettingsProvider({
+  doc,
+  children,
+  themeOverride,
+}: PreviewSettingsProviderProps) {
   const frontmatter = doc?.frontmatter;
+  const { markdownSource, setMarkdownSource } = useEditorContext();
+
+  const persistFrontmatter = useCallback(
+    (updates: Record<string, string | null>) => {
+      const next = setFrontmatterValues(markdownSource, updates);
+      if (next !== markdownSource) {
+        setMarkdownSource(next);
+      }
+    },
+    [markdownSource, setMarkdownSource],
+  );
 
   // Viewport
   const fmPreset = useMemo(
@@ -130,30 +192,69 @@ export function PreviewSettingsProvider({ doc, children }: PreviewSettingsProvid
   useEffect(() => setSelectedDisplayMode(null), [fmMode]);
   const activeDisplayMode = selectedDisplayMode ?? fmMode ?? 'video';
 
-  // Theme
-  const fmTheme = useMemo(() => resolveFrontmatterTheme(frontmatter?.['theme']), [frontmatter]);
+  // Theme — persisted to `squisq-theme` (legacy `theme` still read for compat)
+  const fmTheme = useMemo(
+    () =>
+      resolveFrontmatterTheme(
+        readFrontmatterKey(frontmatter, FM_KEYS.theme.canonical, FM_KEYS.theme.legacy),
+      ),
+    [frontmatter],
+  );
   const [selectedThemeId, setSelectedThemeId] = useState<string | null>(null);
   useEffect(() => setSelectedThemeId(null), [fmTheme]);
-  const activeThemeId = selectedThemeId ?? fmTheme ?? 'standard';
-  const activeTheme = useMemo(() => resolveTheme(activeThemeId), [activeThemeId]);
+  const resolvedThemeId = selectedThemeId ?? fmTheme ?? 'standard';
+  const resolvedTheme = useMemo(() => resolveTheme(resolvedThemeId), [resolvedThemeId]);
+  // themeOverride wins over both dropdown selection and frontmatter
+  const activeThemeId = themeOverride?.id ?? resolvedThemeId;
+  const activeTheme = themeOverride ?? resolvedTheme;
+  const handleSetThemeId = useCallback(
+    (id: string | null) => {
+      setSelectedThemeId(id);
+      if (id !== null) persistFrontmatter({ [FM_KEYS.theme.canonical]: id });
+    },
+    [persistFrontmatter],
+  );
 
-  // Transform
+  // Transform — persisted to `squisq-transform` (legacy `transform-style` read for compat)
   const fmTransform = useMemo(
-    () => resolveFrontmatterTransform(frontmatter?.['transform-style']),
+    () =>
+      resolveFrontmatterTransform(
+        readFrontmatterKey(frontmatter, FM_KEYS.transform.canonical, FM_KEYS.transform.legacy),
+      ),
     [frontmatter],
   );
   const [selectedTransformStyle, setSelectedTransformStyle] = useState<string | null>(null);
   useEffect(() => setSelectedTransformStyle(null), [fmTransform]);
   const activeTransformStyle = selectedTransformStyle ?? fmTransform ?? '';
+  const handleSetTransformStyle = useCallback(
+    (id: string | null) => {
+      setSelectedTransformStyle(id);
+      if (id !== null) {
+        // Empty string = "None" — remove the key rather than writing a blank value.
+        persistFrontmatter({ [FM_KEYS.transform.canonical]: id === '' ? null : id });
+      }
+    },
+    [persistFrontmatter],
+  );
 
-  // Caption style
+  // Caption style — persisted to `squisq-captions` (legacy `caption-style` read for compat)
   const fmCaption = useMemo(
-    () => resolveFrontmatterCaptionStyle(frontmatter?.['caption-style']),
+    () =>
+      resolveFrontmatterCaptionStyle(
+        readFrontmatterKey(frontmatter, FM_KEYS.captions.canonical, FM_KEYS.captions.legacy),
+      ),
     [frontmatter],
   );
   const [selectedCaptionStyle, setSelectedCaptionStyle] = useState<CaptionStyle | null>(null);
   useEffect(() => setSelectedCaptionStyle(null), [fmCaption]);
   const activeCaptionStyle = selectedCaptionStyle ?? fmCaption ?? 'standard';
+  const handleSetCaptionStyle = useCallback(
+    (style: CaptionStyle | null) => {
+      setSelectedCaptionStyle(style);
+      if (style !== null) persistFrontmatter({ [FM_KEYS.captions.canonical]: style });
+    },
+    [persistFrontmatter],
+  );
 
   const value = useMemo<PreviewSettings>(
     () => ({
@@ -163,12 +264,12 @@ export function PreviewSettingsProvider({ doc, children }: PreviewSettingsProvid
       activeDisplayMode,
       setSelectedDisplayMode,
       activeThemeId,
-      setSelectedThemeId,
+      setSelectedThemeId: handleSetThemeId,
       activeTheme,
       activeTransformStyle,
-      setSelectedTransformStyle,
+      setSelectedTransformStyle: handleSetTransformStyle,
       activeCaptionStyle,
-      setSelectedCaptionStyle,
+      setSelectedCaptionStyle: handleSetCaptionStyle,
     }),
     [
       activePreset,
@@ -178,6 +279,9 @@ export function PreviewSettingsProvider({ doc, children }: PreviewSettingsProvid
       activeTheme,
       activeTransformStyle,
       activeCaptionStyle,
+      handleSetThemeId,
+      handleSetTransformStyle,
+      handleSetCaptionStyle,
     ],
   );
 
@@ -199,9 +303,8 @@ const DISPLAY_MODE_OPTIONS: { key: DisplayMode; label: string }[] = [
   { key: 'video', label: 'Video' },
   { key: 'slideshow', label: 'Slideshow' },
   { key: 'linear', label: 'Document' },
+  { key: 'page', label: 'Page' },
 ];
-
-const THEME_OPTIONS = getThemeSummaries().map((s) => ({ key: s.id, label: s.name }));
 
 const TRANSFORM_STYLE_OPTIONS = [
   { key: '', label: 'None' },
@@ -285,13 +388,16 @@ export function PreviewToolbarControls() {
         onChange={(v) => s.setSelectedDisplayMode(v as DisplayMode)}
         compact={isNarrow}
       />
-      <PreviewSelect
-        label="Theme"
-        value={s.activeThemeId}
-        options={THEME_OPTIONS}
-        onChange={(v) => s.setSelectedThemeId(v)}
-        compact={isNarrow}
-      />
+      <div
+        className={`squisq-preview-control${isNarrow ? ' squisq-preview-control--compact' : ''}`}
+      >
+        <label style={labelStyle}>Theme:</label>
+        <ThemePicker
+          value={s.activeThemeId}
+          onChange={(v) => s.setSelectedThemeId(v)}
+          ariaLabel="Theme"
+        />
+      </div>
       <PreviewSelect
         label="Transform"
         value={s.activeTransformStyle}

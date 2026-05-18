@@ -1,0 +1,42 @@
+{
+  "schemaVersion": "1",
+  "id": "standard",
+  "name": "Standard Light",
+  "description": "Clean and safe — black-on-white, system fonts only, no external font dependencies. Default theme.",
+  "colors": {
+    "primary": "#2563eb",
+    "secondary": "#475569",
+    "background": "#ffffff",
+    "backgroundLight": "#f1f5f9",
+    "text": "#0f172a",
+    "textMuted": "#475569",
+    "highlight": "#1d4ed8",
+    "warning": "#dc2626"
+  },
+  "typography": {
+    "bodyFont": { "stackId": "system-sans" },
+    "titleFont": { "stackId": "system-serif" },
+    "monoFont": { "stackId": "system-mono" },
+    "titleWeight": "bold"
+  },
+  "style": {
+    "textShadow": false,
+    "overlayOpacity": 0.35,
+    "animationSpeed": 1.0
+  },
+  "renderStyle": {
+    "name": "standard",
+    "defaultTextAnimation": "fadeIn",
+    "defaultImageAnimation": "slowZoom",
+    "ambientMotion": true,
+    "defaultTransition": { "type": "fade", "duration": 0.7 }
+  },
+  "colorSchemes": {
+    "blue": { "bg": "#dbeafe", "text": "#1d4ed8", "accent": "#2563eb" },
+    "green": { "bg": "#dcfce7", "text": "#166534", "accent": "#16a34a" },
+    "purple": { "bg": "#ede9fe", "text": "#5b21b6", "accent": "#7c3aed" },
+    "red": { "bg": "#fee2e2", "text": "#991b1b", "accent": "#dc2626" },
+    "orange": { "bg": "#ffedd5", "text": "#9a3412", "accent": "#ea580c" },
+    "teal": { "bg": "#ccfbf1", "text": "#115e59", "accent": "#0d9488" }
+  }
+}

@@ -252,15 +252,15 @@ interface TemplateContext {
 
 | Template            | Key Input Fields                                                                             |
 | ------------------- | -------------------------------------------------------------------------------------------- |
-| `titleBlock`        | `title`, `subtitle?`, `backgroundImage?`, `backgroundGradient?`                              |
+| `title`             | `title`, `subtitle?`, `backgroundImage?`, `backgroundGradient?`                              |
 | `textBlock`         | `heading?`, `body`, `backgroundImage?`                                                       |
 | `imageBlock`        | `src`, `alt?`, `caption?`, `objectFit?`                                                      |
 | `twoColumnBlock`    | `leftContent`, `rightContent`, `heading?`                                                    |
-| `quoteBlock`        | `quote`, `attribution?`, `backgroundImage?`                                                  |
+| `quote`             | `quote`, `attribution?`, `backgroundImage?`                                                  |
 | `statHighlight`     | `value`, `label`, `description?`, `trend?`, `trendDirection?`                                |
 | `timelineBlock`     | `events[]` (each: `date`, `title`, `description?`)                                           |
 | `comparisonBlock`   | `items[]` (each: `title`, `features[]`), `heading?`                                          |
-| `mapBlock`          | `center`, `zoom?`, `markers?`, `tileUrl?`, `heading?`                                        |
+| `map`               | `center`, `zoom?`, `markers?`, `tileUrl?`, `heading?`                                        |
 | `videoBlock`        | `src`, `poster?`, `caption?`, `autoplay?`, `loop?`                                           |
 | `codeBlock`         | `code`, `language?`, `heading?`, `theme?`                                                    |
 | `chartBlock`        | `chartType`, `data`, `heading?`, `description?`                                              |

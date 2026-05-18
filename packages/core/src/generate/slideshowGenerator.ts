@@ -158,7 +158,7 @@ export function generateSlideshow(
   if (title) {
     const titleBlock: TitleBlockInput = {
       id: `slide-${slideIndex++}`,
-      template: 'titleBlock',
+      template: 'title',
       title,
       subtitle,
       duration: Math.min(perSlide, 6),

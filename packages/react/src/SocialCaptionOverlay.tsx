@@ -17,6 +17,7 @@
 import { useMemo } from 'react';
 import type { CaptionTrack, CaptionPhrase, ViewportConfig } from '@bendyline/squisq/schemas';
 import type { Theme } from '@bendyline/squisq/schemas';
+import { resolveFontFamily } from '@bendyline/squisq/schemas';
 
 /** Target words per visible chunk. */
 const TARGET_CHUNK_SIZE = 4;
@@ -196,8 +197,8 @@ export function SocialCaptionOverlay({
 
   // Theme-derived styling
   const primaryColor = theme?.colors?.primary ?? '#5b9bd5';
-  const fontFamily = theme?.typography?.titleFontFamily
-    ? `"${theme.typography.titleFontFamily}", system-ui, sans-serif`
+  const fontFamily = theme?.typography?.titleFont
+    ? resolveFontFamily(theme.typography.titleFont, '"PT Serif", Georgia, serif')
     : '"PT Serif", Georgia, serif';
 
   // Scale font to viewport — aim for ~5.5% of viewport height

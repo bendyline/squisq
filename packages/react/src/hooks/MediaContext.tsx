@@ -41,17 +41,24 @@ export function useMediaProvider(): MediaProvider | null {
 export function useMediaUrl(relativePath: string, basePath: string): string {
   const provider = useMediaProvider();
 
+  // Defensive: callers (esp. preview surfaces like InlinePreviewGutter)
+  // sometimes feed in template-generated layers whose `content.src` is
+  // undefined while the user is still authoring the block. Treat that
+  // as an empty string rather than crashing the whole React tree.
+  const safePath = typeof relativePath === 'string' ? relativePath : '';
+
   // For absolute/http URLs, skip resolution entirely
   const isAbsolute =
-    relativePath.startsWith('http') ||
-    relativePath.startsWith('/') ||
-    relativePath.startsWith('data:') ||
-    relativePath.startsWith('blob:');
+    !safePath ||
+    safePath.startsWith('http') ||
+    safePath.startsWith('/') ||
+    safePath.startsWith('data:') ||
+    safePath.startsWith('blob:');
 
   // Memoize fallback to avoid recalculating on every render
   const fallback = useMemo(
-    () => (isAbsolute ? relativePath : `${basePath}/${relativePath}`),
-    [isAbsolute, relativePath, basePath],
+    () => (isAbsolute ? safePath : `${basePath}/${safePath}`),
+    [isAbsolute, safePath, basePath],
   );
 
   // Fast path: no provider or absolute URL — return synchronously, skip effect entirely
@@ -66,14 +73,14 @@ export function useMediaUrl(relativePath: string, basePath: string): string {
     }
 
     let cancelled = false;
-    provider!.resolveUrl(relativePath).then((resolved) => {
+    provider!.resolveUrl(safePath).then((resolved) => {
       if (!cancelled) setUrl(resolved);
     });
 
     return () => {
       cancelled = true;
     };
-  }, [needsProvider, provider, relativePath, fallback]);
+  }, [needsProvider, provider, safePath, fallback]);
 
   // When provider is not needed, return fallback directly to avoid
   // the one-frame delay from the initial useState → useEffect cycle

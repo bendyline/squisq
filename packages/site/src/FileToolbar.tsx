@@ -9,7 +9,12 @@
 
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { parseMarkdown, stringifyMarkdown } from '@bendyline/squisq/markdown';
+import {
+  parseMarkdown,
+  stringifyMarkdown,
+  inferDocumentTitle,
+  readFrontmatterThemeId,
+} from '@bendyline/squisq/markdown';
 import { markdownToDoc } from '@bendyline/squisq/doc';
 import { VideoExportModal } from '@bendyline/squisq-video-react';
 import { ExportConfigModal } from './ExportConfigModal';
@@ -27,6 +32,7 @@ import { MemoryContentContainer } from '@bendyline/squisq/storage';
 import type { ContentContainer } from '@bendyline/squisq/storage';
 import type { MediaProvider } from '@bendyline/squisq/schemas';
 import { addSlotMedia } from './slotStorage';
+import { buildExportFilename } from './exportFilename';
 
 // Configure pdfjs-dist worker for the browser.
 // Vite's ?url suffix returns a resolved asset URL at build time.
@@ -46,6 +52,13 @@ interface FileToolbarProps {
   onZipImport: (markdown: string, container: ContentContainer) => void;
   /** Active MediaProvider (used to include media when downloading as zip) */
   mediaProvider: MediaProvider | null;
+  /**
+   * Active workspace-scoped ContentContainer — the folder holding the
+   * doc, its sibling docs, and asset sidecars. When supplied, the
+   * export dialog unlocks the recursive "Export linked documents"
+   * option. Without it, only single-doc plain-HTML export is offered.
+   */
+  workspaceContainer?: ContentContainer | null;
   /** Whether the site is in dark mode */
   isDark: boolean;
   /** Currently active storage slot (null = none). Images require a slot. */
@@ -121,10 +134,9 @@ function downloadBlob(blob: Blob, filename: string) {
   URL.revokeObjectURL(url);
 }
 
-function filenameForFormat(format: DownloadFormat): string {
-  const ts = new Date().toISOString().slice(0, 10);
+function filenameForFormat(format: DownloadFormat, currentSource: string): string {
   const ext = format === 'htmlzip' ? 'html.zip' : format;
-  return `document-${ts}.${ext}`;
+  return buildExportFilename(currentSource, ext);
 }
 
 // ============================================
@@ -136,6 +148,7 @@ export function FileToolbar({
   onImport,
   onZipImport,
   mediaProvider,
+  workspaceContainer,
   isDark,
   activeSlot,
 }: FileToolbarProps) {
@@ -166,14 +179,32 @@ export function FileToolbar({
       setShowDownload(false);
       setBusy(true);
       try {
-        const filename = filenameForFormat(format);
+        const filename = filenameForFormat(format, currentSource);
 
         if (format === 'md' || format === 'txt') {
           const blob = new Blob([currentSource], { type: 'text/plain;charset=utf-8' });
           downloadBlob(blob, filename);
         } else if (format === 'docx') {
           const mdDoc = parseMarkdown(currentSource);
-          const buffer = await markdownDocToDocx(mdDoc);
+          // Collect images from mediaProvider so the docx export embeds
+          // them as binary parts instead of falling back to the
+          // `[Image: alt]` placeholder text. Each entry gets its
+          // resolved bytes + content-type keyed by the markdown URL.
+          const images = new Map<string, { data: ArrayBuffer; contentType: string }>();
+          if (mediaProvider) {
+            const entries = await mediaProvider.listMedia();
+            for (const entry of entries) {
+              const url = await mediaProvider.resolveUrl(entry.name);
+              const res = await fetch(url);
+              if (res.ok) {
+                images.set(entry.name, {
+                  data: await res.arrayBuffer(),
+                  contentType: entry.mimeType || res.headers.get('content-type') || 'image/png',
+                });
+              }
+            }
+          }
+          const buffer = await markdownDocToDocx(mdDoc, { images });
           const blob = new Blob([buffer], {
             type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
           });
@@ -192,11 +223,9 @@ export function FileToolbar({
               }
             }
           }
-          // Extract themeId from frontmatter if present
-          const themeId =
-            (mdDoc.frontmatter?.themeId as string | undefined) ??
-            (mdDoc.frontmatter?.theme as string | undefined);
-          const buffer = await markdownDocToPptx(mdDoc, { themeId, images });
+          // themeId is auto-resolved from the doc's frontmatter inside
+          // `markdownDocToPptx` — no need to extract it here.
+          const buffer = await markdownDocToPptx(mdDoc, { images });
           const blob = new Blob([buffer], {
             type: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
           });
@@ -230,10 +259,10 @@ export function FileToolbar({
           const mdDoc = parseMarkdown(currentSource);
           const doc = markdownToDoc(mdDoc);
           const images = await collectImagesForHtmlExport(doc, mediaProvider);
-          const themeId =
-            (mdDoc.frontmatter?.themeId as string | undefined) ??
-            (mdDoc.frontmatter?.theme as string | undefined);
-          const title = doc.frontmatter?.title as string | undefined;
+          // `docToHtml` / `docToHtmlZip` take a Doc (not a MarkdownDocument)
+          // and have no frontmatter access, so we resolve the theme here.
+          const themeId = readFrontmatterThemeId(mdDoc.frontmatter);
+          const title = inferDocumentTitle(mdDoc);
           const options = {
             playerScript: playerScriptRef.current,
             images,
@@ -471,6 +500,7 @@ export function FileToolbar({
           <ExportConfigModal
             currentSource={currentSource}
             mediaProvider={mediaProvider}
+            workspaceContainer={workspaceContainer}
             onClose={() => setShowExportModal(false)}
           />,
           document.body,

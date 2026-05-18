@@ -28,7 +28,7 @@
  */
 
 import type { Doc } from '@bendyline/squisq/schemas';
-import { resolveTheme } from '@bendyline/squisq/schemas';
+import { resolveTheme, resolveFontFamily } from '@bendyline/squisq/schemas';
 import type { Theme } from '@bendyline/squisq/schemas';
 import { docToMarkdown } from '@bendyline/squisq/doc';
 import type {
@@ -48,6 +48,7 @@ import type {
   MarkdownLink,
   MarkdownImage,
 } from '@bendyline/squisq/markdown';
+import { readFrontmatterThemeId } from '@bendyline/squisq/markdown';
 
 import { createPackage } from '../ooxml/writer.js';
 import { xmlDeclaration, escapeXml } from '../ooxml/xmlUtils.js';
@@ -137,11 +138,11 @@ export async function markdownDocToPptx(
   doc: MarkdownDocument,
   options: PptxExportOptions = {},
 ): Promise<ArrayBuffer> {
-  // Resolve theme from options or frontmatter
-  const themeId =
-    options.themeId ??
-    (doc.frontmatter?.themeId as string | undefined) ??
-    (doc.frontmatter?.theme as string | undefined);
+  // Resolve theme from options or frontmatter. The frontmatter lookup
+  // accepts the editor's canonical `squisq-theme` key as well as the
+  // shorter legacy `themeId` / `theme` aliases — see
+  // `readFrontmatterThemeId` for the precedence.
+  const themeId = options.themeId ?? readFrontmatterThemeId(doc.frontmatter);
   const style = resolveSlideStyle(themeId, options);
 
   const slides = segmentIntoSlides(doc.children, options.slideBreak ?? 'h2');
@@ -218,9 +219,9 @@ function resolveSlideStyle(themeId: string | undefined, options: PptxExportOptio
     text: stripHash(c.text),
     titleColor: stripHash(c.highlight || c.secondary || c.text),
     mutedColor: stripHash(c.textMuted || c.text),
-    titleFont: theme.typography?.titleFontFamily || DEFAULT_TITLE_FONT,
-    bodyFont: theme.typography?.bodyFontFamily || options.defaultFont || DEFAULT_FONT,
-    codeFont: theme.typography?.monoFontFamily || DEFAULT_CODE_FONT,
+    titleFont: resolveFontFamily(theme.typography?.titleFont, DEFAULT_TITLE_FONT),
+    bodyFont: resolveFontFamily(theme.typography?.bodyFont, options.defaultFont || DEFAULT_FONT),
+    codeFont: resolveFontFamily(theme.typography?.monoFont, DEFAULT_CODE_FONT),
     codeColor: stripHash(c.textMuted || c.text),
     hasTheme: true,
   };
