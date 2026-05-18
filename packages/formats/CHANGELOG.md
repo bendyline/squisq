@@ -1,3 +1,14 @@
+## @bendyline/squisq-formats [1.3.0](https://github.com/bendyline/squisq/compare/@bendyline/squisq-formats@1.2.3...@bendyline/squisq-formats@1.3.0) (2026-05-18)
+
+### Features
+
+* Basic media, doc properties, many bug fixes ([#17](https://github.com/bendyline/squisq/issues/17)) ([46efcdc](https://github.com/bendyline/squisq/commit/46efcdc91e855213b3904d34867e33fe519b8b30))
+
+
+### Dependencies
+
+* **@bendyline/squisq:** upgraded to 1.4.0
+
 ## @bendyline/squisq-formats [1.2.3](https://github.com/bendyline/squisq/compare/@bendyline/squisq-formats@1.2.2...@bendyline/squisq-formats@1.2.3) (2026-04-22)
 
 
