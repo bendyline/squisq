@@ -1,6 +1,6 @@
 import { act, renderHook } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { useMediaRecorder } from '../hooks/useMediaRecorder.js';
+import { useMediaRecorder } from '../recorder/hooks/useMediaRecorder.js';
 
 /**
  * Lifecycle test for the recorder hook with stubbed browser APIs.

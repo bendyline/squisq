@@ -22,7 +22,8 @@
  */
 
 import { useCallback } from 'react';
-import { RecorderPanel, type RecorderSaveResult } from '@bendyline/squisq-recorder-react';
+import { RecorderPanel } from './recorder/RecorderPanel.js';
+import type { RecorderSaveResult } from './recorder/RecorderModal.js';
 import { useEditorContext } from './EditorContext';
 
 /**

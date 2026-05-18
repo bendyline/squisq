@@ -133,6 +133,41 @@ export { HeadingWithTemplate } from './TemplateAnnotation.js';
 export { JsonEditor } from './jsonEditor/index.js';
 export type { JsonEditorProps } from './jsonEditor/index.js';
 
+// Recorder — browser-based audio/camera/screen capture. Components and
+// hooks for capturing media via `MediaRecorder` and persisting the
+// resulting blob into a `ContentContainer` through the host's
+// `MediaProvider`. Previously published as `@bendyline/squisq-recorder-react`;
+// folded into editor-react so it ships with the editor it's wired into.
+export { RecorderModal } from './recorder/RecorderModal.js';
+export type { RecorderModalProps, RecorderSaveResult } from './recorder/RecorderModal.js';
+export { RecorderButton } from './recorder/RecorderButton.js';
+export type { RecorderButtonProps } from './recorder/RecorderButton.js';
+export { RecorderPanel } from './recorder/RecorderPanel.js';
+export type { RecorderPanelProps } from './recorder/RecorderPanel.js';
+export { useMediaRecorder, getCaptureKind } from './recorder/hooks/useMediaRecorder.js';
+export type {
+  UseMediaRecorderOptions,
+  UseMediaRecorderResult,
+  RecorderSource,
+  RecorderState,
+} from './recorder/hooks/useMediaRecorder.js';
+export { useStreamPreview } from './recorder/hooks/useStreamPreview.js';
+export { requestMicStream } from './recorder/sources/micStream.js';
+export { requestCameraStream } from './recorder/sources/cameraStream.js';
+export type { CameraStreamOptions } from './recorder/sources/cameraStream.js';
+export { requestScreenStream } from './recorder/sources/screenStream.js';
+export type { ScreenStreamOptions, ScreenStreamHandle } from './recorder/sources/screenStream.js';
+export {
+  resolveFormat,
+  supportsMediaRecorder,
+  supportsUserMedia,
+  supportsDisplayMedia,
+  buildFilename,
+} from './recorder/formats.js';
+export type { CaptureKind, ResolvedFormat } from './recorder/formats.js';
+export { buildTimingJson, encodeTimingJson, timingPathFor } from './recorder/timingJson.js';
+export type { TimingJson, RecordedBookmark } from './recorder/timingJson.js';
+
 // Image editor — layered, sidecar-persisted raster authoring surface.
 // Pairs with `ImageViewer` and the `<basename>_files/` sidecar convention.
 export { ImageEditor } from './ImageEditor.js';

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildTimingJson, encodeTimingJson, timingPathFor } from '../timingJson.js';
+import { buildTimingJson, encodeTimingJson, timingPathFor } from '../recorder/timingJson.js';
 
 describe('buildTimingJson', () => {
   it('returns a payload matching what resolveAudioMapping() expects', () => {

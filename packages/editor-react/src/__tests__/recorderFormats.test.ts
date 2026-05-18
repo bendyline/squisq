@@ -5,7 +5,7 @@ import {
   supportsDisplayMedia,
   supportsMediaRecorder,
   supportsUserMedia,
-} from '../formats.js';
+} from '../recorder/formats.js';
 
 /**
  * Most of these probes touch global APIs that jsdom doesn't implement.
