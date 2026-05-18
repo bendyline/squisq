@@ -529,6 +529,17 @@ export function LinearDocView({
             margin-bottom: 0.3em;
           }
           .squisq-linear-content a {
+            /* Blend the theme's primary toward the body text color so
+               links stay theme-flavored but always have enough contrast
+               against the background. Some themes (e.g. Gezellig) pick a
+               mid-tone primary that's nearly invisible on a dark page
+               without this lift. */
+            color: color-mix(in srgb, var(--squisq-linear-primary) 65%, var(--squisq-linear-text));
+            text-decoration: underline;
+            text-decoration-thickness: 1px;
+            text-underline-offset: 2px;
+          }
+          .squisq-linear-content a:hover {
             color: var(--squisq-linear-primary);
           }
           .squisq-linear-content code {

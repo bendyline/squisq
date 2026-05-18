@@ -304,6 +304,17 @@ export function markdownToTiptap(markdown: string): string {
       continue;
     }
 
+    // Standalone `<video>` / `<audio>` line — emitted by the recorder
+    // (RecorderEntry) when it saves a clip, and by `tiptapToMarkdown`
+    // when the WYSIWYG editor's TiptapVideo/TiptapAudio nodes serialize
+    // back to markdown. Pass through unchanged so the editor's parseHTML
+    // picks up the tag attributes (`src`, `controls`, …).
+    if (/^<(?:video|audio)\b[^>]*>(?:[\s\S]*?<\/(?:video|audio)>)?$/i.test(trimmed)) {
+      flushList();
+      outputBlocks.push(trimmed);
+      continue;
+    }
+
     // Regular paragraph
     flushList();
     outputBlocks.push(`<p>${inlineToHtml(line)}</p>`);
@@ -543,6 +554,20 @@ export function tiptapToMarkdown(html: string): string {
       continue;
     }
 
+    // Block-level `<video>` / `<audio>` — emitted by our TiptapVideo /
+    // TiptapAudio atom nodes (block group). Serialize the whole tag
+    // (opening + closing) back to markdown unchanged; CommonMark allows
+    // inline HTML, and our renderer plus the InlinePreviewGutter both
+    // know how to parse the htmlElement back out.
+    const mediaMatch = remaining.match(/^<(video|audio)\b([^>]*)>(?:[\s\S]*?<\/\1>)?/);
+    if (mediaMatch) {
+      const tag = mediaMatch[1] === 'video' ? 'video' : 'audio';
+      lines.push(serializeMediaTag(tag, mediaMatch[2] ?? ''));
+      lines.push('');
+      remaining = remaining.slice(mediaMatch[0].length);
+      continue;
+    }
+
     // Skip unknown tags or whitespace
     const skipMatch = remaining.match(/^(<[^>]+>|\s+)/);
     if (skipMatch) {
@@ -637,6 +662,28 @@ function parseAlignments(separatorLine: string): (string | null)[] {
  * HTML, so the HTML form parses and renders identically in any
  * CommonMark/GFM viewer.
  */
+/**
+ * Serialize a `<video>` or `<audio>` tag (from the Tiptap atom node's
+ * `renderHTML`) back to markdown. We re-emit only the attributes the
+ * recorder + the renderer care about, in a stable order, so the
+ * round-tripped markdown stays deterministic regardless of how Tiptap
+ * decided to order them on its output.
+ */
+function serializeMediaTag(tag: 'video' | 'audio', attrs: string): string {
+  const src = /\bsrc="([^"]*)"/i.exec(attrs)?.[1] ?? '';
+  const controls = /\bcontrols\b/i.test(attrs);
+  const width = /\bwidth="([^"]*)"/i.exec(attrs)?.[1];
+  const height = /\bheight="([^"]*)"/i.exec(attrs)?.[1];
+  const poster = tag === 'video' ? /\bposter="([^"]*)"/i.exec(attrs)?.[1] : undefined;
+  const parts = [`<${tag} src="${src}"`];
+  if (controls) parts.push(' controls');
+  if (width) parts.push(` width="${width}"`);
+  if (height) parts.push(` height="${height}"`);
+  if (poster) parts.push(` poster="${poster}"`);
+  parts.push(`></${tag}>`);
+  return parts.join('');
+}
+
 function serializeImage(src: string, alt: string, attrs: string): string {
   const width = /\bwidth="([^"]*)"/i.exec(attrs)?.[1];
   const height = /\bheight="([^"]*)"/i.exec(attrs)?.[1];

@@ -110,4 +110,5 @@ export {
   parseFrontmatter,
   setFrontmatterValues,
   inferDocumentTitle,
+  readFrontmatterThemeId,
 } from './utils.js';

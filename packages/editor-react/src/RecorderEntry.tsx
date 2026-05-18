@@ -5,9 +5,14 @@
  * Reads `mediaProvider`, `workspaceContainer`, `activeView`,
  * `tiptapEditor`, and the markdown editing helpers from
  * `useEditorContext()`. On a successful save it:
- *   - inserts a markdown reference at the cursor — annotated
- *     `{[audio=…]}` on the current block for narration, a media link
- *     `![alt](path)` for camera / screen recordings;
+ *   - inserts an HTML5 media element at the cursor — `<video>` for
+ *     camera / screen recordings, `<audio>` for narration / mic
+ *     recordings — which the markdown renderer turns into an inline
+ *     `<InlineVideoPlayer>` / `<InlineAudioPlayer>` with native
+ *     controls;
+ *   - for narration, also annotates the nearest heading with
+ *     `{[audio=filename]}` so `resolveAudioMapping()` continues to tie
+ *     the recording to that block during slideshow playback;
  *   - bumps `mediaRevision` so any blob URLs the media bin cached for
  *     the previous file list are invalidated.
  *
@@ -80,50 +85,59 @@ export function RecorderEntry() {
     (result: RecorderSaveResult) => {
       bumpMediaRevision();
 
-      const alt = result.filename.replace(/\.[^.]+$/, '').replace(/[-_]/g, ' ');
-
       if (result.source === 'mic') {
-        // Narration — annotate the current block heading so
-        // resolveAudioMapping() ties this MP3/WebM to that block.
+        // Narration — annotate the nearest heading (drives the
+        // slideshow narration pipeline at `core/src/doc/audioMapping.ts`)
+        // *and* insert an inline `<audio controls>` so the user can
+        // audition the recording inside the editor. The two roles are
+        // orthogonal: the annotation is metadata for playback timing,
+        // the HTML tag is an in-editor preview control.
         if (activeView === 'raw' && monacoEditor) {
-          const annotated = annotateMonacoHeading(monacoEditor, result.filename);
-          if (annotated) return;
+          annotateMonacoHeading(monacoEditor, result.filename);
         }
-        // Fallbacks: append the annotation as its own block so the
-        // recording at least lands in the source. The user can move it
-        // to the right heading afterwards.
-        const fallback = `<!-- recorded narration: ${result.relativePath} -->\n\n## {[audio=${result.filename}]}`;
+        const audioTag = `<audio src="${result.relativePath}" controls></audio>`;
         if (activeView === 'wysiwyg' && tiptapEditor) {
-          tiptapEditor.chain().focus().insertContent(`<p>${fallback}</p>`).run();
-        } else {
-          setMarkdownSource(markdownSource ? `${markdownSource}\n\n${fallback}` : fallback);
+          tiptapEditor
+            .chain()
+            .focus()
+            .insertContent({
+              type: 'audio',
+              attrs: { src: result.relativePath, controls: true },
+            })
+            .run();
+          return;
         }
+        if (activeView === 'raw' && monacoEditor) {
+          // The annotation went onto the heading line; drop the player
+          // on a fresh line at the cursor.
+          insertAtCursor(`\n\n${audioTag}\n`);
+          return;
+        }
+        setMarkdownSource(markdownSource ? `${markdownSource}\n\n${audioTag}` : audioTag);
         return;
       }
 
-      // Camera / screen — insert a media link at the cursor.
-      const snippet = `![${alt}](${result.relativePath})`;
+      // Camera / screen / screen+mic — inline video player. We pin
+      // width=480 so the editor preview doesn't blow up to natural
+      // resolution on big monitors; the height is intrinsic, so the
+      // aspect ratio is preserved regardless of source dimensions.
+      const videoTag = `<video src="${result.relativePath}" controls width="480"></video>`;
       if (activeView === 'wysiwyg' && tiptapEditor) {
-        // No <video> Tiptap node in the default schema — fall back to a
-        // plain link so the markdown round-trips cleanly.
         tiptapEditor
           .chain()
           .focus()
-          .insertContent([
-            {
-              type: 'text',
-              marks: [{ type: 'link', attrs: { href: result.relativePath } }],
-              text: alt,
-            },
-          ])
+          .insertContent({
+            type: 'video',
+            attrs: { src: result.relativePath, controls: true, width: 480 },
+          })
           .run();
         return;
       }
       if (activeView === 'raw' && monacoEditor) {
-        insertAtCursor(snippet);
+        insertAtCursor(videoTag);
         return;
       }
-      setMarkdownSource(markdownSource ? `${markdownSource}\n\n${snippet}` : snippet);
+      setMarkdownSource(markdownSource ? `${markdownSource}\n\n${videoTag}` : videoTag);
     },
     [
       activeView,

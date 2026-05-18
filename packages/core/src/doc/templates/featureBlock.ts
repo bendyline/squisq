@@ -111,19 +111,22 @@ function buildFeatureLayers(
   const textAnchor = side === 'right' && !stack ? 'top-right' : 'top-left';
   const textAlign: 'left' | 'right' = side === 'right' && !stack ? 'right' : 'left';
 
-  // Feature blocks render in two very different surfaces: a full-bleed
-  // slide in the slideshow player, and a small SVG card inline in the
-  // document/page views. Filling the SVG canvas with `theme.colors.background`
-  // works for the slideshow (dark theme → dark slide on the dark
-  // backdrop is fine) but in the inline gutter it paints a dark
-  // rectangle over the otherwise-cream document page, which looks
-  // jarring. The card wrapper around the SVG already supplies its own
-  // surface treatment (rounded corners, soft shadow); leaving the SVG
-  // background transparent lets that show through. Text color still
-  // comes from `theme.colors.text`, which the theme designer has paired
-  // for legibility against `theme.colors.background` — typically a mid
-  // grey that reads well on either light page surfaces or dark slides.
-  const layers: Layer[] = [];
+  // Paint our own background so the text column has a theme-paired
+  // surface to sit on. The host wrapper's surface isn't always theme-
+  // aware (e.g. the InlinePreviewGutter card uses a fixed light SVG
+  // background), and `theme.colors.text` is only guaranteed legible
+  // against `theme.colors.background` — themes like Gezellig pair
+  // cream text with a dark warm-brown background, which would
+  // disappear on a light wrapper. Matching the convention every other
+  // text-bearing template uses (see twoColumn / listBlock).
+  const layers: Layer[] = [
+    {
+      type: 'shape',
+      id: 'feature-bg',
+      content: { shape: 'rect', fill: theme.colors.background },
+      position: { x: 0, y: 0, width: '100%', height: '100%' },
+    },
+  ];
 
   if (imageSrc) {
     layers.push({

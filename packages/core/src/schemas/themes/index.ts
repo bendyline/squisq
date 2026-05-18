@@ -14,6 +14,7 @@ import type { Theme } from '../Theme.js';
 import { assertTheme } from '../themeValidator.js';
 
 import standardJson from './standard.json' with { type: 'json' };
+import standardDarkJson from './standard-dark.json' with { type: 'json' };
 import documentaryJson from './documentary.json' with { type: 'json' };
 import minimalistJson from './minimalist.json' with { type: 'json' };
 import boldJson from './bold.json' with { type: 'json' };
@@ -25,6 +26,7 @@ import warmEarthJson from './warm-earth.json' with { type: 'json' };
 import gezelligJson from './gezellig.json' with { type: 'json' };
 
 export const standard: Theme = assertTheme(standardJson, 'standard.json');
+export const standardDark: Theme = assertTheme(standardDarkJson, 'standard-dark.json');
 export const documentary: Theme = assertTheme(documentaryJson, 'documentary.json');
 export const minimalist: Theme = assertTheme(minimalistJson, 'minimalist.json');
 export const bold: Theme = assertTheme(boldJson, 'bold.json');
@@ -38,6 +40,7 @@ export const gezellig: Theme = assertTheme(gezelligJson, 'gezellig.json');
 /** All built-in themes, keyed by id. */
 export const BUILTIN_THEMES: Record<string, Theme> = {
   standard,
+  'standard-dark': standardDark,
   documentary,
   minimalist,
   bold,

@@ -68,7 +68,11 @@
 }
 
 .squisq-view-tab {
-  padding: 6px 16px;
+  /* Asymmetric vertical padding pushes the label down toward the
+     underline so it reads as a tab indicator rather than a label
+     floating above a separate line. Underline (`border-bottom: 2px`)
+     stays at the very bottom of the tab; text shifts ~3px lower. */
+  padding: 11px 16px 3px;
   min-width: 72px;
   text-align: center;
   border: none;
@@ -115,7 +119,10 @@
   background: #ffffff;
   border-right: 1px solid rgba(0, 0, 0, 0.12);
   align-self: stretch;
-  align-items: center;
+  /* Bottom-align so the active-tab underline lands flush with the
+     toolbar's lower edge — the underline-as-tab-indicator pattern
+     reads as "tab", not "floating button in the middle of a bar". */
+  align-items: flex-end;
   box-sizing: border-box;
 }
 
@@ -138,7 +145,12 @@
 }
 
 .squisq-toolbar-view-tab {
-  padding: 4px 14px;
+  /* Top padding is asymmetric — bumped 4px above the bottom — so the
+     label sits more vertically centered alongside the neighboring
+     toolbar buttons rather than floating up against the toolbar's
+     top edge. The 2px `border-bottom` remains the active-tab
+     underline at the tab's lower edge. */
+  padding: 8px 14px 4px;
   border: none;
   background: transparent;
   color: #4b5563;
@@ -1066,9 +1078,22 @@
   min-width: 0;
 }
 
+/* Link color follows the active theme's primary when "Theme styling →
+   Fonts & colors" is on, otherwise falls back to the historical blue.
+   In both cases we blend toward the surface text color so the link
+   reads cleanly against the background — some themes (Gezellig) pick a
+   mid-tone primary that's nearly invisible on a dark page when used
+   neat. The fallback `--squisq-theme-text: #1f2937` matches the
+   default editor chrome. */
 .squisq-wysiwyg-editor a {
-  color: #2563eb;
+  color: color-mix(
+    in srgb,
+    var(--squisq-theme-primary, #2563eb) 65%,
+    var(--squisq-theme-text, #1f2937)
+  );
   text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 2px;
 }
 
 /* Tiptap placeholder */
@@ -1443,7 +1468,16 @@
 }
 
 .squisq-editor-shell[data-theme='dark'] .squisq-wysiwyg-editor a {
-  color: #60a5fa;
+  /* Dark-chrome fallback: when no theme is providing
+     --squisq-theme-primary, blend the dark-chrome blue with the dark-
+     chrome text color so the link still has enough lift. Themed
+     surfaces (Fonts & colors) override this via the rule above using
+     their own primary, so we don't need a separate dark-themed mix. */
+  color: color-mix(
+    in srgb,
+    var(--squisq-theme-primary, #60a5fa) 65%,
+    var(--squisq-theme-text, #e5e7eb)
+  );
 }
 
 .squisq-editor-shell[data-theme='dark']
@@ -2396,6 +2430,51 @@
   cursor: pointer;
 }
 
+/* Radio-group variant of --select: same uppercase caption header, but the
+   options render as stacked radio rows instead of a native <select>. */
+.squisq-view-menu-row--radios {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 2px;
+  cursor: default;
+}
+
+.squisq-view-menu-row--radios:hover {
+  background: transparent;
+}
+
+.squisq-view-menu-row--radios > .squisq-view-menu-label {
+  font-size: 11px;
+  color: var(--squisq-text-muted, #6b7280);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-bottom: 2px;
+}
+
+.squisq-view-menu-radio-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 4px;
+  font-size: 13px;
+  cursor: pointer;
+  border-radius: 4px;
+  user-select: none;
+}
+
+.squisq-view-menu-radio-row:hover {
+  background: var(--squisq-row-hover, #f3f4f6);
+}
+
+.squisq-view-menu-radio {
+  margin: 0;
+  cursor: pointer;
+}
+
+.squisq-view-menu-radio-label {
+  flex: 1;
+}
+
 .squisq-view-menu-separator {
   height: 1px;
   background: var(--squisq-border, #e5e7eb);
@@ -2414,6 +2493,14 @@
 
 .squisq-editor-shell[data-theme='dark'] .squisq-view-menu-row--select:hover {
   background: transparent;
+}
+
+.squisq-editor-shell[data-theme='dark'] .squisq-view-menu-row--radios:hover {
+  background: transparent;
+}
+
+.squisq-editor-shell[data-theme='dark'] .squisq-view-menu-radio-row:hover {
+  background: #374151;
 }
 
 .squisq-editor-shell[data-theme='dark'] .squisq-view-menu-select {

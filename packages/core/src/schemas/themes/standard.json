@@ -1,17 +1,17 @@
 {
   "schemaVersion": "1",
   "id": "standard",
-  "name": "Standard",
-  "description": "Clean and safe. System fonts only — no external font dependencies.",
+  "name": "Standard Light",
+  "description": "Clean and safe — black-on-white, system fonts only, no external font dependencies. Default theme.",
   "colors": {
-    "primary": "#3182ce",
-    "secondary": "#4a5568",
-    "background": "#1a202c",
-    "backgroundLight": "#2d3748",
-    "text": "#f7fafc",
-    "textMuted": "#a0aec0",
-    "highlight": "#4299e1",
-    "warning": "#fc8181"
+    "primary": "#2563eb",
+    "secondary": "#475569",
+    "background": "#ffffff",
+    "backgroundLight": "#f1f5f9",
+    "text": "#0f172a",
+    "textMuted": "#475569",
+    "highlight": "#1d4ed8",
+    "warning": "#dc2626"
   },
   "typography": {
     "bodyFont": { "stackId": "system-sans" },
@@ -20,8 +20,8 @@
     "titleWeight": "bold"
   },
   "style": {
-    "textShadow": true,
-    "overlayOpacity": 0.45,
+    "textShadow": false,
+    "overlayOpacity": 0.35,
     "animationSpeed": 1.0
   },
   "renderStyle": {
@@ -32,19 +32,11 @@
     "defaultTransition": { "type": "fade", "duration": 0.7 }
   },
   "colorSchemes": {
-    "blue": { "bg": "#1a365d", "text": "#63b3ed", "accent": "#90cdf4" },
-    "green": { "bg": "#22543d", "text": "#9ae6b4", "accent": "#68d391" },
-    "purple": { "bg": "#44337a", "text": "#d6bcfa", "accent": "#b794f4" },
-    "red": { "bg": "#742a2a", "text": "#fc8181", "accent": "#feb2b2" },
-    "orange": { "bg": "#744210", "text": "#fbd38d", "accent": "#f6ad55" },
-    "teal": { "bg": "#234e52", "text": "#81e6d9", "accent": "#4fd1c5" }
-  },
-  "persistentLayers": {
-    "bottomLayers": [
-      {
-        "template": "gradientBackground",
-        "config": { "type": "gradientBackground", "preset": "dark-vignette" }
-      }
-    ]
+    "blue": { "bg": "#dbeafe", "text": "#1d4ed8", "accent": "#2563eb" },
+    "green": { "bg": "#dcfce7", "text": "#166534", "accent": "#16a34a" },
+    "purple": { "bg": "#ede9fe", "text": "#5b21b6", "accent": "#7c3aed" },
+    "red": { "bg": "#fee2e2", "text": "#991b1b", "accent": "#dc2626" },
+    "orange": { "bg": "#ffedd5", "text": "#9a3412", "accent": "#ea580c" },
+    "teal": { "bg": "#ccfbf1", "text": "#115e59", "accent": "#0d9488" }
   }
 }

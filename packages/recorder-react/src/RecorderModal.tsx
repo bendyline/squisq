@@ -177,7 +177,11 @@ const tabActive: CSSProperties = {
   ...tabBase,
   color: '#2d2310',
   fontWeight: 600,
-  borderBottomColor: '#8B6914',
+  // Use the `borderBottom` shorthand (not `borderBottomColor` longhand)
+  // so React's style diff cleanly resets the underline when this tab
+  // goes inactive — mixing shorthand + longhand can leave the old
+  // color stuck on a previously-active tab between renders.
+  borderBottom: '2px solid #8B6914',
 };
 
 const previewBoxStyle: CSSProperties = {
@@ -443,7 +447,7 @@ export function RecorderModal({
           */}
         {!showPreview && (
           <div style={previewBoxStyle}>
-            <span>Pick a source and start the preview to begin.</span>
+            <span>Click Start Preview to start a recording.</span>
           </div>
         )}
         {showPreview && recorder.state !== 'stopped' && !isAudioOnly && (

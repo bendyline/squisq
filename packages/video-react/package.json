@@ -37,7 +37,7 @@
   ],
   "scripts": {
     "build": "tsup",
-    "dev": "tsup --watch --no-dts",
+    "dev": "concurrently -n js,dts -c blue,gray -r \"tsup --watch --no-dts --no-clean\" \"tsup --watch --dts-only --no-clean\"",
     "typecheck": "tsc --noEmit"
   },
   "peerDependencies": {

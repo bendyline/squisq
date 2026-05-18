@@ -106,7 +106,7 @@ describe('registerTheme / resolveTheme', () => {
       unregisterTheme('standard');
     }
     // After cleanup, built-in is restored
-    expect(resolveTheme('standard').name).toBe('Standard');
+    expect(resolveTheme('standard').name).toBe('Standard Light');
   });
 
   it('registered custom-id theme is resolvable via Doc.themeId', () => {

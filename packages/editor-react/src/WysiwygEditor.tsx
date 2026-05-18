@@ -26,6 +26,8 @@ import { resolveFontFamily, FONT_FALLBACKS } from '@bendyline/squisq/schemas';
 import { HeadingWithTemplate } from './TemplateAnnotation';
 import { InlineIcon } from './InlineIcon';
 import { ImageWithMediaProvider } from './ImageNodeView';
+import { TiptapVideo } from './tiptap/TiptapVideo';
+import { TiptapAudio } from './tiptap/TiptapAudio';
 import { TemplateBadgePopover, TEMPLATE_NAMES } from './TemplatePicker';
 import { profileBlockContents, recommendTemplatesForBlock } from '@bendyline/squisq/recommend';
 import { findBlockSliceByHeadingIndex } from './blockSlice';
@@ -157,6 +159,8 @@ export function WysiwygEditor({
         HTMLAttributes: { rel: 'noopener noreferrer', target: '_blank' },
       }),
       ImageWithMediaProvider.configure({ inline: false }),
+      TiptapVideo,
+      TiptapAudio,
       Placeholder.configure({ placeholder: resolvedPlaceholder }),
       buildMentionExtension(() => mentionProviderRef.current),
       InlineIcon,

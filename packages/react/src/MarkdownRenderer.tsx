@@ -21,8 +21,12 @@ import type {
   MarkdownListItem,
   MarkdownTableRow,
   MarkdownTableCell,
+  HtmlNode,
+  HtmlElement,
 } from '@bendyline/squisq/markdown';
 import { useMediaUrl } from './hooks/MediaContext';
+import { InlineVideoPlayer } from './InlineVideoPlayer.js';
+import { InlineAudioPlayer } from './InlineAudioPlayer.js';
 
 // ── Props ──────────────────────────────────────────────────────────
 
@@ -118,12 +122,23 @@ function renderInline(nodes: MarkdownInlineNode[], keyPrefix = ''): React.ReactN
         );
 
       case 'htmlInline':
+        // Fast path: no <video>/<audio> in the subtree → use the original
+        // rawHtml passthrough (preserves arbitrary HTML for custom embeds).
+        if (!containsMediaTag(node.htmlChildren)) {
+          return (
+            <span
+              key={key}
+              className="squisq-md-html-inline"
+              dangerouslySetInnerHTML={{ __html: node.rawHtml }}
+            />
+          );
+        }
+        // Otherwise reconstruct the subtree as React so <video>/<audio>
+        // go through MediaContext-aware player components.
         return (
-          <span
-            key={key}
-            className="squisq-md-html-inline"
-            dangerouslySetInnerHTML={{ __html: node.rawHtml }}
-          />
+          <span key={key} className="squisq-md-html-inline">
+            {renderHtmlNodes(node.htmlChildren, `${key}h`)}
+          </span>
         );
 
       case 'footnoteReference':
@@ -231,12 +246,23 @@ function renderBlock(node: MarkdownBlockNode, key: string): React.ReactNode {
       return renderTable(node.children, node.align, key);
 
     case 'htmlBlock':
+      // Fast path: no <video>/<audio> → preserve the existing rawHtml
+      // passthrough so arbitrary HTML embeds still survive verbatim.
+      if (!containsMediaTag(node.htmlChildren)) {
+        return (
+          <div
+            key={key}
+            className="squisq-md-html-block"
+            dangerouslySetInnerHTML={{ __html: node.rawHtml }}
+          />
+        );
+      }
+      // Otherwise reconstruct subtree as React so <video>/<audio>
+      // route through the player components and resolve via MediaContext.
       return (
-        <div
-          key={key}
-          className="squisq-md-html-block"
-          dangerouslySetInnerHTML={{ __html: node.rawHtml }}
-        />
+        <div key={key} className="squisq-md-html-block">
+          {renderHtmlNodes(node.htmlChildren, `${key}h`)}
+        </div>
       );
 
     case 'math':
@@ -375,6 +401,126 @@ function renderBlocks(nodes: MarkdownBlockNode[], keyPrefix = ''): React.ReactNo
 function MdImage({ src, alt, title }: { src: string; alt: string; title?: string }) {
   const resolved = useMediaUrl(src, '.');
   return <img className="squisq-md-image" src={resolved} alt={alt} title={title} />;
+}
+
+// ── Raw-HTML walker (intercepts <video>/<audio>) ─────────────────
+
+/** True when the htmlElement subtree contains a tag we want to swap
+ *  for a React component. Cheap recursive scan — lets us keep the
+ *  `dangerouslySetInnerHTML` fast path for everything else. */
+function containsMediaTag(nodes: HtmlNode[]): boolean {
+  for (const node of nodes) {
+    if (node.type !== 'htmlElement') continue;
+    if (node.tagName === 'video' || node.tagName === 'audio') return true;
+    if (containsMediaTag(node.children)) return true;
+  }
+  return false;
+}
+
+/** A pragmatic shortlist of HTML attributes the raw-HTML walker
+ *  passes through to React when reconstructing a non-media element.
+ *  Anything outside this list is silently dropped — the media-tag
+ *  fast path means most authors will never hit this code, so we
+ *  keep the surface narrow to avoid React warnings about unknown
+ *  attributes. */
+const PASSTHROUGH_ATTRS: Record<string, string> = {
+  // common
+  class: 'className',
+  id: 'id',
+  title: 'title',
+  style: 'style',
+  // media-adjacent (used when video/audio appear inside other wrappers)
+  width: 'width',
+  height: 'height',
+  // anchor
+  href: 'href',
+  target: 'target',
+  rel: 'rel',
+};
+
+function reactPropsFromAttrs(attrs: Record<string, string>): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  for (const [name, value] of Object.entries(attrs)) {
+    const propName = PASSTHROUGH_ATTRS[name];
+    if (!propName) continue;
+    if (propName === 'style') {
+      // We can't safely parse arbitrary `style="..."` strings without
+      // an HTML parser; preserve as a data attribute so authors can
+      // see it survived round-trip without crashing React.
+      out['data-style'] = value;
+      continue;
+    }
+    out[propName] = value;
+  }
+  return out;
+}
+
+function renderHtmlElement(el: HtmlElement, key: string): React.ReactNode {
+  if (el.tagName === 'video') {
+    return (
+      <InlineVideoPlayer
+        key={key}
+        src={el.attributes.src ?? ''}
+        width={el.attributes.width}
+        height={el.attributes.height}
+        poster={el.attributes.poster}
+        // The `controls` attribute is a boolean — present means true,
+        // even if its value is an empty string.
+        controls={'controls' in el.attributes}
+        preload={
+          el.attributes.preload === 'none' ||
+          el.attributes.preload === 'metadata' ||
+          el.attributes.preload === 'auto'
+            ? el.attributes.preload
+            : undefined
+        }
+      />
+    );
+  }
+  if (el.tagName === 'audio') {
+    return (
+      <InlineAudioPlayer
+        key={key}
+        src={el.attributes.src ?? ''}
+        controls={'controls' in el.attributes}
+        preload={
+          el.attributes.preload === 'none' ||
+          el.attributes.preload === 'metadata' ||
+          el.attributes.preload === 'auto'
+            ? el.attributes.preload
+            : undefined
+        }
+      />
+    );
+  }
+
+  const Tag = el.tagName as keyof JSX.IntrinsicElements;
+  const props = reactPropsFromAttrs(el.attributes);
+  if (el.selfClosing) {
+    return <Tag key={key} {...props} />;
+  }
+  return (
+    <Tag key={key} {...props}>
+      {renderHtmlNodes(el.children, `${key}c`)}
+    </Tag>
+  );
+}
+
+function renderHtmlNodes(nodes: HtmlNode[], keyPrefix: string): React.ReactNode[] {
+  return nodes.map((node, i) => {
+    const key = `${keyPrefix}${i}`;
+    switch (node.type) {
+      case 'htmlElement':
+        return renderHtmlElement(node, key);
+      case 'htmlText':
+        return <Fragment key={key}>{node.value}</Fragment>;
+      case 'htmlComment':
+        // Comments don't render in React; ignore.
+        return null;
+      default:
+        return null;
+    }
+  });
 }
 
 // ── Main Component ─────────────────────────────────────────────────

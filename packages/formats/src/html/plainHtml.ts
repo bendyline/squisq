@@ -514,7 +514,17 @@ function renderThemedCss(theme: Theme): string {
      didn't set explicit width/height attributes. */
   img { max-width: 100%; }
   img:not([width]):not([height]) { height: auto; }
-  a { color: var(--plain-primary); }
+  /* Blend the theme primary toward the body text color so links stay
+     theme-flavored but read clearly on every theme's background — some
+     themes (e.g. Gezellig) pick a mid-tone primary that's almost
+     invisible on a dark page when used neat. Underline makes the link
+     unambiguous independent of the color contrast. */
+  a {
+    color: color-mix(in srgb, var(--plain-primary) 65%, var(--plain-text));
+    text-decoration: underline;
+    text-decoration-thickness: 1px;
+    text-underline-offset: 2px;
+  }
   a:hover { color: var(--plain-accent); }
   table { border-collapse: collapse; width: 100%; margin: 1em 0; }
   th, td {
@@ -689,8 +699,19 @@ function htmlChildrenToHtml(nodes: HtmlNode[] | undefined, ctx?: RenderCtx): str
     // htmlElement
     const tag = node.tagName.toLowerCase();
     const attrs = { ...node.attributes };
-    if (tag === 'img' && typeof attrs.src === 'string') {
+    // Route media `src` attrs through the export's `ctx.images` URL
+    // map (which is actually a generic media map — see header comment).
+    // Without this, raw <video>/<audio> tags inserted by the recorder
+    // ship as relative paths that resolve against the export host, not
+    // the original ContentContainer.
+    if (
+      (tag === 'img' || tag === 'video' || tag === 'audio' || tag === 'source') &&
+      typeof attrs.src === 'string'
+    ) {
       attrs.src = ctx?.images?.get(attrs.src) ?? attrs.src;
+    }
+    if ((tag === 'video' || tag === 'audio') && typeof attrs.poster === 'string') {
+      attrs.poster = ctx?.images?.get(attrs.poster) ?? attrs.poster;
     }
     const attrStr = Object.entries(attrs)
       .map(([k, v]) => ` ${k}="${escapeAttr(v)}"`)

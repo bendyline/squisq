@@ -12,6 +12,10 @@ export { DocProgressBar } from './DocProgressBar.js';
 export { MarkdownRenderer } from './MarkdownRenderer.js';
 export { LinearDocView } from './LinearDocView.js';
 export type { LinearDocViewProps, ImageDisplayMode } from './LinearDocView.js';
+export { InlineVideoPlayer } from './InlineVideoPlayer.js';
+export type { InlineVideoPlayerProps } from './InlineVideoPlayer.js';
+export { InlineAudioPlayer } from './InlineAudioPlayer.js';
+export type { InlineAudioPlayerProps } from './InlineAudioPlayer.js';
 
 // Layer components
 export { ImageLayer } from './layers/ImageLayer.js';

@@ -301,3 +301,28 @@ export function inferDocumentTitle(doc: MarkdownDocument): string | undefined {
 
   return best?.text;
 }
+
+/**
+ * Read a theme id from a markdown document's frontmatter.
+ *
+ * Checks the editor's canonical `squisq-theme` key first, then the
+ * shorter legacy aliases (`themeId`, `theme`). Returns `undefined`
+ * when none of them carry a non-empty string. Centralizing the lookup
+ * keeps the export pipelines (DOCX, PPTX, HTML, plain-HTML bundle) in
+ * sync with whatever the editor writes — adding a new frontmatter
+ * spelling later is a one-file change.
+ */
+export function readFrontmatterThemeId(
+  frontmatter: Record<string, unknown> | undefined,
+): string | undefined {
+  if (!frontmatter) return undefined;
+  const keys = ['squisq-theme', 'themeId', 'theme'] as const;
+  for (const key of keys) {
+    const raw = frontmatter[key];
+    if (typeof raw === 'string') {
+      const trimmed = raw.trim();
+      if (trimmed) return trimmed;
+    }
+  }
+  return undefined;
+}

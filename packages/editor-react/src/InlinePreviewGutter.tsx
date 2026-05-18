@@ -37,6 +37,7 @@ import {
   type RenderContext,
 } from '@bendyline/squisq/doc';
 import { extractPlainText, getChildren } from '@bendyline/squisq/markdown';
+import { usePreviewSettingsOptional } from './PreviewControls';
 import type {
   MarkdownBlockNode,
   MarkdownList,
@@ -303,6 +304,14 @@ export function InlinePreviewGutter({
   const { doc } = useEditorContext();
   const gutterRef = useRef<HTMLElement | null>(null);
   const { entries: headingEntries, scrollToBlock } = useHeadingLayout(gutterRef);
+  // Follow the document's active theme so the mini cards reflect the
+  // same palette as the main preview surface. PreviewSettingsProvider
+  // resolves this from frontmatter (`squisq-theme` / legacy `theme`)
+  // and theme overrides, so we never duplicate that logic here. Falls
+  // back to DEFAULT_THEME when the gutter is mounted outside the
+  // provider (defensive — EditorShell always wraps with it).
+  const previewSettings = usePreviewSettingsOptional();
+  const activeTheme = previewSettings?.activeTheme ?? DEFAULT_THEME;
 
   // Build the renderable PreviewItem list (just for annotated blocks).
   const items = useMemo<PreviewItem[]>(() => {
@@ -339,7 +348,7 @@ export function InlinePreviewGutter({
       const ctx: RenderContext = {
         blockIndex: index,
         totalBlocks,
-        theme: DEFAULT_THEME,
+        theme: activeTheme,
         viewport,
       };
 
@@ -363,7 +372,7 @@ export function InlinePreviewGutter({
     });
 
     return result;
-  }, [doc, viewport]);
+  }, [doc, viewport, activeTheme]);
 
   // Heading top per item id — derived from the layout hook. The connector
   // dot tracks this even when stacking pushes the card below.

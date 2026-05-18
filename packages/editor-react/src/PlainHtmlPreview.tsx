@@ -175,9 +175,18 @@ function collectImageRefs(doc: MarkdownDocument): Set<string> {
   function visitHtml(nodes: HtmlNode[]): void {
     for (const n of nodes) {
       if (n.type !== 'htmlElement') continue;
-      if (n.tagName.toLowerCase() === 'img') {
+      const tag = n.tagName.toLowerCase();
+      // <img>, <video>, and <audio> all reference media via `src`.
+      // The export pipeline rewrites whichever map entries exist, so
+      // collecting them under the same set is enough — `ctx.images`
+      // is generic media despite the historical name.
+      if (tag === 'img' || tag === 'video' || tag === 'audio' || tag === 'source') {
         const src = n.attributes.src;
         if (typeof src === 'string' && src) refs.add(src);
+      }
+      if (tag === 'video' || tag === 'audio') {
+        const poster = n.attributes.poster;
+        if (typeof poster === 'string' && poster) refs.add(poster);
       }
       visitHtml(n.children);
     }

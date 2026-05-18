@@ -45,6 +45,15 @@ export interface PlainHtmlBundleOptions {
   themeId?: string;
   /** Maximum recursion depth (default: unlimited; cycles always handled). */
   maxDepth?: number;
+  /**
+   * Emit the entry doc as `index.html` (preserving its parent directory)
+   * instead of `<basename>.html`. Cross-doc links pointing at the entry
+   * also rewrite to `index.html`, so a sibling `resume.md → home.md`
+   * link doesn't 404 after the rename. Convenient for static-site
+   * deploys where the landing page must be named `index.html`.
+   * Default: false.
+   */
+  entryAsIndex?: boolean;
 }
 
 // ── Public API ─────────────────────────────────────────────────────
@@ -66,6 +75,7 @@ export async function markdownDocsToPlainHtmlBundle(
     theme,
     themeId,
     maxDepth = Infinity,
+    entryAsIndex = false,
   } = options;
   const resolvedTheme = theme ?? (themeId ? resolveTheme(themeId) : undefined);
   const entry = normalizePath(entryPath);
@@ -73,6 +83,16 @@ export async function markdownDocsToPlainHtmlBundle(
     throw new Error('markdownDocsToPlainHtmlBundle: entryPath is required');
   }
   const scopeRoot = posixDirname(entry); // '' for root-level files
+  // When `entryAsIndex`, the entry doc writes to `<entryDir>/index.html`
+  // and every cross-doc link pointing at it rewrites to that path too.
+  // Other docs keep the `<basename>.html` convention.
+  const entryHtmlPath = entryAsIndex
+    ? scopeRoot
+      ? `${scopeRoot}/index.html`
+      : 'index.html'
+    : entry.slice(0, -3) + '.html';
+  const htmlPathFor = (mdPath: string): string =>
+    mdPath === entry ? entryHtmlPath : mdPath.slice(0, -3) + '.html';
 
   const zip = new JSZip();
   const visited = new Set<string>();
@@ -106,8 +126,10 @@ export async function markdownDocsToPlainHtmlBundle(
 
       // Compute the .html replacement relative to the current doc so
       // the rewritten href stays local (e.g. `subdir/notes.html`, not
-      // an absolute container path).
-      const htmlTarget = resolved.slice(0, -3) + '.html';
+      // an absolute container path). `htmlPathFor` also handles the
+      // entry-as-index case so a sibling linking to the entry lands
+      // on `index.html` after rename.
+      const htmlTarget = htmlPathFor(resolved);
       const relHref = relativeFrom(docDir, htmlTarget) + parsed.fragment;
       linkMap.set(raw, relHref);
 
@@ -146,7 +168,7 @@ export async function markdownDocsToPlainHtmlBundle(
       theme: resolvedTheme,
     });
 
-    const htmlPath = path.slice(0, -3) + '.html';
+    const htmlPath = htmlPathFor(path);
     zip.file(htmlPath, html);
   }
 
@@ -202,9 +224,18 @@ function collectImageRefs(doc: MarkdownDocument): Set<string> {
   function visitHtml(nodes: HtmlNode[]): void {
     for (const n of nodes) {
       if (n.type !== 'htmlElement') continue;
-      if (n.tagName.toLowerCase() === 'img') {
+      const tag = n.tagName.toLowerCase();
+      // <img>/<video>/<audio>/<source> all reference media via `src`;
+      // we feed them into the same `images` map (effectively a generic
+      // media map — see header comment) so the export pipeline rewrites
+      // and bundles each one the same way.
+      if (tag === 'img' || tag === 'video' || tag === 'audio' || tag === 'source') {
         const src = n.attributes.src;
         if (typeof src === 'string' && src) refs.add(src);
+      }
+      if (tag === 'video' || tag === 'audio') {
+        const poster = n.attributes.poster;
+        if (typeof poster === 'string' && poster) refs.add(poster);
       }
       visitHtml(n.children);
     }

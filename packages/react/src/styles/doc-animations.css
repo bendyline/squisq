@@ -456,3 +456,39 @@
   background: rgba(255, 255, 255, 0.9);
   color: #1a1a1a;
 }
+
+/* ── Inline media players ────────────────────────────────────────── */
+/* Used by <InlineVideoPlayer> / <InlineAudioPlayer>, which the
+ * MarkdownRenderer swaps in for raw <video>/<audio> htmlElements so
+ * their src goes through MediaContext. The wrapper is a <span> with
+ * `display: inline-block` so the player flows inline with surrounding
+ * text but still respects its own intrinsic dimensions. */
+
+.squisq-inline-video-player {
+  display: inline-block;
+  max-width: 480px;
+  width: 100%;
+  margin: 0.5em 0;
+}
+
+.squisq-inline-video-player video {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  height: auto;
+  border-radius: 4px;
+  background: #000;
+}
+
+.squisq-inline-audio-player {
+  display: inline-block;
+  max-width: 360px;
+  width: 100%;
+  margin: 0.25em 0;
+  vertical-align: middle;
+}
+
+.squisq-inline-audio-player audio {
+  display: block;
+  width: 100%;
+}

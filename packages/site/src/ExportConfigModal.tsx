@@ -21,6 +21,7 @@ import type { ContentContainer } from '@bendyline/squisq/storage';
 import { VideoExportModal } from '@bendyline/squisq-video-react';
 import { buildPreviewDoc, PlainHtmlPreview } from '@bendyline/squisq-editor-react';
 import { collectImagesForHtmlExport } from './exportHelpers';
+import { slugifyTitle } from './exportFilename';
 
 // ── Types ──────────────────────────────────────────────────────────
 
@@ -424,6 +425,11 @@ export function ExportConfigModal({
     try {
       const mdDoc = prepareMarkdown();
       const ts = new Date().toISOString().slice(0, 10);
+      // Filename stem: title slug + ISO date. Falls back to "document"
+      // when no title can be inferred, preserving the historical
+      // download name for untitled drafts. The per-format ext is
+      // appended at each downloadBlob call below.
+      const filenameStem = `${slugifyTitle(inferDocumentTitle(mdDoc) ?? 'document')}-${ts}`;
       const exportThemeId = themeId || undefined;
 
       switch (format) {
@@ -434,7 +440,7 @@ export function ExportConfigModal({
             new Blob([buf], {
               type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
             }),
-            `document-${ts}.docx`,
+            `${filenameStem}.docx`,
           );
           break;
         }
@@ -446,14 +452,14 @@ export function ExportConfigModal({
             new Blob([buf], {
               type: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
             }),
-            `document-${ts}.pptx`,
+            `${filenameStem}.pptx`,
           );
           break;
         }
         case 'pdf': {
           const { markdownDocToPdf } = await import('@bendyline/squisq-formats/pdf');
           const buf = await markdownDocToPdf(mdDoc, { themeId: exportThemeId });
-          downloadBlob(new Blob([buf], { type: 'application/pdf' }), `document-${ts}.pdf`);
+          downloadBlob(new Blob([buf], { type: 'application/pdf' }), `${filenameStem}.pdf`);
           break;
         }
         case 'html':
@@ -475,7 +481,7 @@ export function ExportConfigModal({
               });
               downloadBlob(
                 new Blob([html], { type: 'text/html;charset=utf-8' }),
-                `document-${ts}.html`,
+                `${filenameStem}.html`,
               );
             } else if (followLinks && workspaceContainer) {
               // Recursive multi-doc export: pull every linked sibling
@@ -484,7 +490,7 @@ export function ExportConfigModal({
               await downloadLinkedHtmlBundle(
                 workspaceContainer,
                 docTitle,
-                `document-${ts}.html.zip`,
+                `${filenameStem}.html.zip`,
                 themeForExport,
               );
             } else {
@@ -492,7 +498,7 @@ export function ExportConfigModal({
                 mdDoc,
                 docTitle,
                 mediaProvider,
-                `document-${ts}.html.zip`,
+                `${filenameStem}.html.zip`,
                 themeForExport,
               );
             }
@@ -515,11 +521,11 @@ export function ExportConfigModal({
             const html = docToHtml(doc, options);
             downloadBlob(
               new Blob([html], { type: 'text/html;charset=utf-8' }),
-              `document-${ts}.html`,
+              `${filenameStem}.html`,
             );
           } else {
             const blob = await docToHtmlZip(doc, options);
-            downloadBlob(blob, `document-${ts}.html.zip`);
+            downloadBlob(blob, `${filenameStem}.html.zip`);
           }
           break;
         }
@@ -540,7 +546,7 @@ export function ExportConfigModal({
             }
           }
           const blob = await containerToZip(container);
-          downloadBlob(blob, `document-${ts}.zip`);
+          downloadBlob(blob, `${filenameStem}.zip`);
           break;
         }
       }

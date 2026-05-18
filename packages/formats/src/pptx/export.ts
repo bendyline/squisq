@@ -48,6 +48,7 @@ import type {
   MarkdownLink,
   MarkdownImage,
 } from '@bendyline/squisq/markdown';
+import { readFrontmatterThemeId } from '@bendyline/squisq/markdown';
 
 import { createPackage } from '../ooxml/writer.js';
 import { xmlDeclaration, escapeXml } from '../ooxml/xmlUtils.js';
@@ -137,11 +138,11 @@ export async function markdownDocToPptx(
   doc: MarkdownDocument,
   options: PptxExportOptions = {},
 ): Promise<ArrayBuffer> {
-  // Resolve theme from options or frontmatter
-  const themeId =
-    options.themeId ??
-    (doc.frontmatter?.themeId as string | undefined) ??
-    (doc.frontmatter?.theme as string | undefined);
+  // Resolve theme from options or frontmatter. The frontmatter lookup
+  // accepts the editor's canonical `squisq-theme` key as well as the
+  // shorter legacy `themeId` / `theme` aliases — see
+  // `readFrontmatterThemeId` for the precedence.
+  const themeId = options.themeId ?? readFrontmatterThemeId(doc.frontmatter);
   const style = resolveSlideStyle(themeId, options);
 
   const slides = segmentIntoSlides(doc.children, options.slideBreak ?? 'h2');

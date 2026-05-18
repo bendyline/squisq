@@ -55,6 +55,15 @@ export interface HtmlBundleOptions {
   mode?: 'slideshow' | 'static';
   /** Maximum recursion depth (default: unlimited; cycles always handled). */
   maxDepth?: number;
+  /**
+   * Emit the entry doc as `index.html` (preserving its parent directory)
+   * instead of `<basename>.html`. Cross-doc links pointing at the entry
+   * also rewrite to `index.html`, so a sibling `resume.md → home.md`
+   * link doesn't 404 after the rename. Convenient for static-site
+   * deploys where the landing page must be named `index.html`.
+   * Default: false.
+   */
+  entryAsIndex?: boolean;
 }
 
 // ── Public API ─────────────────────────────────────────────────────
@@ -76,6 +85,7 @@ export async function markdownDocsToHtmlBundle(options: HtmlBundleOptions): Prom
     themeId,
     mode = 'static',
     maxDepth = Infinity,
+    entryAsIndex = false,
   } = options;
 
   const entry = normalizePath(entryPath);
@@ -83,6 +93,16 @@ export async function markdownDocsToHtmlBundle(options: HtmlBundleOptions): Prom
     throw new Error('markdownDocsToHtmlBundle: entryPath is required');
   }
   const scopeRoot = posixDirname(entry);
+  // When `entryAsIndex`, the entry doc writes to `<entryDir>/index.html`
+  // and every cross-doc link pointing at it rewrites to that path too.
+  // Other docs keep the `<basename>.html` convention.
+  const entryHtmlPath = entryAsIndex
+    ? scopeRoot
+      ? `${scopeRoot}/index.html`
+      : 'index.html'
+    : entry.slice(0, -3) + '.html';
+  const htmlPathFor = (mdPath: string): string =>
+    mdPath === entry ? entryHtmlPath : mdPath.slice(0, -3) + '.html';
 
   const zip = new JSZip();
   zip.file('squisq-player.js', playerScript);
@@ -111,7 +131,7 @@ export async function markdownDocsToHtmlBundle(options: HtmlBundleOptions): Prom
       if (!isInScope(resolved, scopeRoot)) continue;
       if (!resolved.toLowerCase().endsWith('.md')) continue;
 
-      const htmlTarget = resolved.slice(0, -3) + '.html';
+      const htmlTarget = htmlPathFor(resolved);
       const relHref = relativeFrom(docDir, htmlTarget) + parsed.fragment;
       linkMap.set(raw, relHref);
 
@@ -147,7 +167,7 @@ export async function markdownDocsToHtmlBundle(options: HtmlBundleOptions): Prom
     }
 
     const pageTitle = depth === 0 ? (title ?? titleForDoc(path, mdDoc)) : titleForDoc(path, mdDoc);
-    const htmlPath = path.slice(0, -3) + '.html';
+    const htmlPath = htmlPathFor(path);
     const playerScriptPath = relativeFrom(docDir, 'squisq-player.js');
 
     const html = generateExternalHtml(doc, {

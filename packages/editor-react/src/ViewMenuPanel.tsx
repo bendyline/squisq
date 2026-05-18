@@ -103,8 +103,9 @@ export function ViewMenuPanel() {
             onChange={toggleStatusBar}
           />
           <div className="squisq-view-menu-separator" role="separator" />
-          <MenuSelect
+          <MenuRadioGroup
             label="Editor styling from theme"
+            name="theme-inheritance"
             value={themeInheritance}
             onChange={(v) => setThemeInheritance(v as ThemeInheritance)}
             options={[
@@ -141,31 +142,47 @@ function MenuToggle({
   );
 }
 
-function MenuSelect({
+function MenuRadioGroup({
   label,
+  name,
   value,
   onChange,
   options,
 }: {
   label: string;
+  name: string;
   value: string;
   onChange: (next: string) => void;
   options: readonly { value: string; label: string }[];
 }) {
   return (
-    <label className="squisq-view-menu-row squisq-view-menu-row--select">
+    <div
+      className="squisq-view-menu-row squisq-view-menu-row--radios"
+      role="radiogroup"
+      aria-label={label}
+    >
       <span className="squisq-view-menu-label">{label}</span>
-      <select
-        className="squisq-view-menu-select"
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-      >
-        {options.map((o) => (
-          <option key={o.value} value={o.value}>
-            {o.label}
-          </option>
-        ))}
-      </select>
-    </label>
+      {options.map((o) => {
+        const checked = o.value === value;
+        return (
+          <label
+            key={o.value}
+            className="squisq-view-menu-radio-row"
+            role="menuitemradio"
+            aria-checked={checked}
+          >
+            <input
+              type="radio"
+              className="squisq-view-menu-radio"
+              name={name}
+              value={o.value}
+              checked={checked}
+              onChange={() => onChange(o.value)}
+            />
+            <span className="squisq-view-menu-radio-label">{o.label}</span>
+          </label>
+        );
+      })}
+    </div>
   );
 }
