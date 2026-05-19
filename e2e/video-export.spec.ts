@@ -14,6 +14,19 @@ test.describe('Video export', () => {
   test.setTimeout(240_000);
 
   test('full export produces a downloadable MP4', async ({ page }) => {
+    // Opt-in: the capture loop runs `hello-world` through html2canvas at
+    // 15 fps and then encodes via WebCodecs. Runtime varies from ~45 s
+    // to ~200 s depending on the machine, and the wait below has almost
+    // no margin on slower CI runners. The sibling
+    // `export modal opens from download menu` test already covers the
+    // UI integration cheaply; this one is here as a pre-release smoke
+    // test of the full encode pipeline. Run it locally before cutting a
+    // release with: `RUN_FULL_VIDEO_EXPORT=1 npm run test:e2e`.
+    test.skip(
+      !process.env.RUN_FULL_VIDEO_EXPORT,
+      'Slow full-pipeline encode; set RUN_FULL_VIDEO_EXPORT=1 to run.',
+    );
+
     const consoleLogs: string[] = [];
     page.on('console', (msg) => consoleLogs.push(`[${msg.type()}] ${msg.text()}`));
     page.on('pageerror', (err) => consoleLogs.push(`[pageerror] ${err.message}`));

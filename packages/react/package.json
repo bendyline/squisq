@@ -37,7 +37,7 @@
     "./styles": "./src/styles/index.css",
     "./standalone": "./dist/squisq-player.global.js",
     "./standalone-source": {
-      "types": "./dist/standalone-source.d.ts",
+      "types": "./src/standalone-source.d.ts",
       "import": "./dist/standalone-source.js"
     }
   },

@@ -10,6 +10,8 @@ import { JsonEditor } from '@bendyline/squisq-editor-react';
 import {
   resolveTheme,
   getThemeSummaries,
+  LIGHT_SURFACE,
+  DARK_SURFACE,
   type Theme,
   type SurfaceScheme,
 } from '@bendyline/squisq/schemas';
@@ -28,7 +30,8 @@ export function JsonEditorDemo() {
 
   const theme: Theme = useMemo(() => resolveTheme(themeId), [themeId]);
   const themeSummaries = useMemo(() => getThemeSummaries(), []);
-  const surfaceProp: SurfaceScheme | 'auto' | undefined = surface === 'auto' ? 'auto' : surface;
+  const surfaceProp: SurfaceScheme | 'auto' =
+    surface === 'auto' ? 'auto' : surface === 'light' ? LIGHT_SURFACE : DARK_SURFACE;
 
   const handleSampleChange = (key: string) => {
     setSampleKey(key);

@@ -17,22 +17,17 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const distDir = resolve(__dirname, '..', 'dist');
 const iifeFile = resolve(distDir, 'squisq-player.global.js');
 const outJs = resolve(distDir, 'standalone-source.js');
-const outDts = resolve(distDir, 'standalone-source.d.ts');
 
 // Read the IIFE bundle
 const source = readFileSync(iifeFile, 'utf-8');
 
-// Write ESM module that exports the source as a string
+// Write ESM module that exports the source as a string. The matching
+// .d.ts lives at `src/standalone-source.d.ts` and is committed —
+// keeping it out of `dist/` lets consumers typecheck against this
+// subpath export without having to build this package first.
 writeFileSync(
   outJs,
   `/** Auto-generated — do not edit. Contains the squisq-player IIFE bundle as a string. */\nexport const PLAYER_BUNDLE = ${JSON.stringify(source)};\n`,
-  'utf-8',
-);
-
-// Write TypeScript declaration
-writeFileSync(
-  outDts,
-  `/** The squisq-player IIFE bundle source code as a string constant. */\nexport declare const PLAYER_BUNDLE: string;\n`,
   'utf-8',
 );
 

@@ -110,4 +110,12 @@ export default defineConfig({
       '@bendyline/squisq-video-react',
     ],
   },
+  // The squisq-video-react encode worker uses `await import('@ffmpeg/ffmpeg')`
+  // for the ffmpeg.wasm fallback path. That dynamic import forces
+  // code-splitting, which Vite's default `iife` worker output cannot
+  // emit. Switch to ESM workers so the build can produce the extra
+  // chunks the worker needs.
+  worker: {
+    format: 'es',
+  },
 });

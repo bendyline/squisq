@@ -45,6 +45,9 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      # `npm run build` builds every workspace package *including the
+      # site*, so a broken consumer like `squisq-site` fails this step
+      # before semantic-release can publish a broken npm version.
       - name: Build packages
         run: npm run build
 
@@ -61,7 +64,7 @@ jobs:
       - name: Pack tarballs
         if: inputs.publish_release
         run: |
-          npm pack -w @bendyline/squisq -w @bendyline/squisq-react -w @bendyline/squisq-formats -w @bendyline/squisq-editor-react
+          npm pack -w @bendyline/squisq -w @bendyline/squisq-cli -w @bendyline/squisq-react -w @bendyline/squisq-formats -w @bendyline/squisq-editor-react -w @bendyline/squisq-video -w @bendyline/squisq-video-react
           mkdir -p release-assets
           mv *.tgz release-assets/
 
@@ -72,10 +75,9 @@ jobs:
         run: npx multi-semantic-release --ignore-packages=packages/site --sequential-prepare
 
       # ── Pages ────────────────────────────────────────────────────
-      - name: Build site
-        if: inputs.deploy_pages
-        run: npm run build -w squisq-site
-
+      # The site `dist/` was already produced by the earlier
+      # `npm run build`; we just upload it here when the run is
+      # deploying Pages.
       - name: Upload pages artifact
         if: inputs.deploy_pages
         uses: actions/upload-pages-artifact@v3
