@@ -19,6 +19,13 @@ export const CONTENT_SAMPLES: Record<string, ContentSample> = {
 };
 
 export const SAMPLES: Record<string, string> = {
+  // Single-block fixture for E2E tests that drive the full export
+  // pipeline. Kept intentionally tiny — one block hits the 3-second
+  // `minDuration` floor in markdownToDoc, which at 15 fps is ~45
+  // frames, so the encode finishes well inside the default Playwright
+  // timeout. Don't add anything that would inflate this — it exists
+  // purely to keep `e2e/video-export.spec.ts` fast.
+  'e2e-tiny': `# Tiny\n`,
   'hello-world': `# Hello World
 
 Welcome to the **Squisq Editor**. This is a simple markdown document.

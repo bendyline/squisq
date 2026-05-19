@@ -11,27 +11,22 @@ import { test, expect } from '@playwright/test';
 // ── Tests ────────────────────────────────────────────────────────────
 
 test.describe('Video export', () => {
-  test.setTimeout(240_000);
+  // 60 s leaves comfortable margin for the tiny fixture: 3 s of video
+  // at 15 fps = 45 frames, dominated by html2canvas (~5–15 s on CI
+  // hardware). The remaining headroom covers page load and modal setup.
+  test.setTimeout(60_000);
 
   test('full export produces a downloadable MP4', async ({ page }) => {
-    // Opt-in: the capture loop runs `hello-world` through html2canvas at
-    // 15 fps and then encodes via WebCodecs. Runtime varies from ~45 s
-    // to ~200 s depending on the machine, and the wait below has almost
-    // no margin on slower CI runners. The sibling
-    // `export modal opens from download menu` test already covers the
-    // UI integration cheaply; this one is here as a pre-release smoke
-    // test of the full encode pipeline. Run it locally before cutting a
-    // release with: `RUN_FULL_VIDEO_EXPORT=1 npm run test:e2e`.
-    test.skip(
-      !process.env.RUN_FULL_VIDEO_EXPORT,
-      'Slow full-pipeline encode; set RUN_FULL_VIDEO_EXPORT=1 to run.',
-    );
-
     const consoleLogs: string[] = [];
     page.on('console', (msg) => consoleLogs.push(`[${msg.type()}] ${msg.text()}`));
     page.on('pageerror', (err) => consoleLogs.push(`[pageerror] ${err.message}`));
 
-    await page.goto('/');
+    // `e2e-tiny` is a one-block fixture: it hits the 3-second
+    // minDuration floor in markdownToDoc, producing ~45 frames at
+    // 15 fps. The site reads `?sample=...` on mount via
+    // `getInitialSampleKey()`, so the export runs against the fixture
+    // without anyone having to interact with the sample picker.
+    await page.goto('/?sample=e2e-tiny');
     await page.waitForLoadState('networkidle');
 
     // This test exercises the WebCodecs path end-to-end. Linux Chromium ships
@@ -88,7 +83,10 @@ test.describe('Video export', () => {
 
     // The download <a> is created and removed inside the click handler, so we can't
     // race against it — only the "Export complete" / "Export failed" terminal text.
-    const SUCCESS_TIMEOUT = 180_000;
+    // The tiny fixture finishes the capture+encode loop in ~5–15 s on
+    // typical CI hardware; 45 s is plenty of margin without the
+    // multi-minute waits the `hello-world` sample used to require.
+    const SUCCESS_TIMEOUT = 45_000;
     const result = await Promise.race([
       page
         .locator('text=Export complete')

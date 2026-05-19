@@ -28,6 +28,22 @@ import { parseTheme, registerTheme, unregisterTheme } from '@bendyline/squisq/sc
 
 const CUSTOM_THEME_STORAGE_KEY = 'squisq-site:customTheme';
 
+/**
+ * Resolve the initial sample from a `?sample=<key>` URL param when one
+ * is present and points at an inline `SAMPLES` entry. Used by the E2E
+ * suite to load a tiny single-block fixture for the video export test
+ * without having to drive the sample picker. Anything outside the
+ * inline map (content zip samples, garbage values) falls back to the
+ * default, since this path is sync — content zips need their own
+ * fetch/unpack pipeline that runs from `handleSampleChange`.
+ */
+function getInitialSampleKey(): string {
+  if (typeof window === 'undefined') return 'hello-world';
+  const param = new URLSearchParams(window.location.search).get('sample');
+  if (param && Object.prototype.hasOwnProperty.call(SAMPLES, param)) return param;
+  return 'hello-world';
+}
+
 /** Load a previously-saved custom theme from localStorage. Returns null on miss / parse failure. */
 function loadStoredCustomTheme(): Theme | null {
   if (typeof localStorage === 'undefined') return null;
@@ -44,11 +60,12 @@ function loadStoredCustomTheme(): Theme | null {
 }
 
 export function App() {
-  const [selectedSample, setSelectedSample] = useState('hello-world');
+  const initialSampleKey = getInitialSampleKey();
+  const [selectedSample, setSelectedSample] = useState(initialSampleKey);
   const [showDebug, setShowDebug] = useState(false);
   const [showJsonDemo, setShowJsonDemo] = useState(false);
   const [showImageEditorDemo, setShowImageEditorDemo] = useState(false);
-  const [currentSource, setCurrentSource] = useState(SAMPLES['hello-world']);
+  const [currentSource, setCurrentSource] = useState(SAMPLES[initialSampleKey]);
   const [theme] = useState<EditorTheme>('light');
   const [customTheme, setCustomThemeState] = useState<Theme | null>(() => loadStoredCustomTheme());
   // Re-register the loaded theme on mount so `Doc.themeId` lookups resolve to it.
