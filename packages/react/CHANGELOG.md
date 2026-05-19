@@ -1,3 +1,9 @@
+## @bendyline/squisq-react [1.3.1](https://github.com/bendyline/squisq/compare/@bendyline/squisq-react@1.3.0...@bendyline/squisq-react@1.3.1) (2026-05-19)
+
+### Bug Fixes
+
+* demo build issue ([1eb957d](https://github.com/bendyline/squisq/commit/1eb957d9f46f95e3c6608f99f1650aec35abc6fe))
+
 ## @bendyline/squisq-react [1.3.0](https://github.com/bendyline/squisq/compare/@bendyline/squisq-react@1.2.0...@bendyline/squisq-react@1.3.0) (2026-05-18)
 
 ### Features
