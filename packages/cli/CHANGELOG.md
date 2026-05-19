@@ -1,3 +1,17 @@
+## @bendyline/squisq-cli [1.1.6](https://github.com/bendyline/squisq/compare/@bendyline/squisq-cli@1.1.5...@bendyline/squisq-cli@1.1.6) (2026-05-19)
+
+### Bug Fixes
+
+* Add noEmit to ensure there are not multiple exports ([f4d374e](https://github.com/bendyline/squisq/commit/f4d374ec93784727e7810002ff330532447c3053))
+
+
+### Dependencies
+
+* **@bendyline/squisq:** upgraded to 1.4.1
+* **@bendyline/squisq-formats:** upgraded to 1.3.1
+* **@bendyline/squisq-react:** upgraded to 1.3.2
+* **@bendyline/squisq-video:** upgraded to 1.1.2
+
 ## @bendyline/squisq-cli [1.1.5](https://github.com/bendyline/squisq/compare/@bendyline/squisq-cli@1.1.4...@bendyline/squisq-cli@1.1.5) (2026-05-19)
 
 
