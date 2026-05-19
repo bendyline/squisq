@@ -1,3 +1,14 @@
+## @bendyline/squisq-react [1.3.2](https://github.com/bendyline/squisq/compare/@bendyline/squisq-react@1.3.1...@bendyline/squisq-react@1.3.2) (2026-05-19)
+
+### Bug Fixes
+
+* Add noEmit to ensure there are not multiple exports ([f4d374e](https://github.com/bendyline/squisq/commit/f4d374ec93784727e7810002ff330532447c3053))
+
+
+### Dependencies
+
+* **@bendyline/squisq:** upgraded to 1.4.1
+
 ## @bendyline/squisq-react [1.3.1](https://github.com/bendyline/squisq/compare/@bendyline/squisq-react@1.3.0...@bendyline/squisq-react@1.3.1) (2026-05-19)
 
 ### Bug Fixes
