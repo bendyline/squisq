@@ -344,7 +344,15 @@ export function useMediaRecorder(options: UseMediaRecorderOptions): UseMediaReco
 
   // Final unmount cleanup — make sure we don't leak the camera light /
   // screen-capture indicator if the component disappears mid-recording.
+  //
+  // `stopResolversRef.current` is captured at effect-run time into a
+  // local. That ref is initialized once at construction and never
+  // reassigned, so the local handle stays a live view onto the same
+  // mutable array — entries pushed by later `stop()` calls still
+  // appear here on cleanup. Capturing keeps `react-hooks/exhaustive-deps`
+  // satisfied without changing the runtime behavior.
   useEffect(() => {
+    const pendingResolvers = stopResolversRef.current;
     return () => {
       const rec = recorderRef.current;
       if (rec && rec.state !== 'inactive') {
@@ -356,7 +364,7 @@ export function useMediaRecorder(options: UseMediaRecorderOptions): UseMediaReco
       }
       releaseStream();
       clearTicker();
-      stopResolversRef.current.splice(0).forEach((resolve) => resolve(null));
+      pendingResolvers.splice(0).forEach((resolve) => resolve(null));
     };
   }, [releaseStream, clearTicker]);
 

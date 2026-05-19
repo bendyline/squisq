@@ -7,29 +7,30 @@
  */
 
 import { useRef, useCallback, useEffect } from 'react';
-import Editor, {
-  loader,
-  type OnMount,
-  type OnChange,
-  type BeforeMount,
-} from '@monaco-editor/react';
-import * as monaco from 'monaco-editor';
+import Editor, { type OnMount, type OnChange, type BeforeMount } from '@monaco-editor/react';
+import type * as monaco from 'monaco-editor';
 import { useEditorContext } from './EditorContext';
 import { getAvailableTemplates } from '@bendyline/squisq/doc';
 import { suggestIcons, resolveIcon, iconGlyph } from '@bendyline/squisq/icons';
 import { SQUISQ_MEDIA_MIME, parseSquisqMediaPayload } from './mediaDragMime';
+import { useMonacoLoader } from './useMonacoLoader';
 
-// Use locally installed monaco-editor instead of CDN.
+// Monaco is loaded lazily through `useMonacoLoader` (see the hook for the
+// rationale). The type-only `import type * as monaco from 'monaco-editor'`
+// above gives us `monaco.editor.IStandaloneCodeEditor`, `monaco.Range`,
+// etc. for typing without pulling the package into the static module
+// graph — which is the whole point: a consumer importing `JsonEditor` or
+// a type from the package barrel no longer drags ~9MB of language
+// services into the resolver.
 //
-// NOTE: By default this imports the full monaco-editor with all 80+ languages
-// and workers (~9MB). Consumers can dramatically reduce bundle size by aliasing
-// 'monaco-editor' to a slim entry in their bundler config. For example with Vite:
+// Consumers that *do* want the raw editor can still slim the bundle by
+// aliasing `monaco-editor` to a custom entry in their bundler config.
+// For example with Vite:
 //
 //   resolve: { alias: [{ find: /^monaco-editor$/, replacement: './monaco-slim.ts' }] }
 //
-// Where monaco-slim.ts re-exports 'monaco-editor/esm/vs/editor/editor.api' plus
-// only the language contributions needed (e.g. markdown, javascript, etc.).
-loader.config({ monaco });
+// Where monaco-slim.ts re-exports 'monaco-editor/esm/vs/editor/editor.api'
+// plus only the language contributions needed (e.g. markdown, javascript).
 
 // Squisq Monaco themes: same syntax highlighting as vs / vs-dark, but with
 // Monaco's internal gutter (line numbers + folding margin) and overview
@@ -83,6 +84,7 @@ export function RawEditor({
 }: RawEditorProps) {
   const { markdownSource, setMarkdownSource, setMonacoEditor, language, mentionProvider } =
     useEditorContext();
+  const { monaco: monacoNs, ready: monacoReady } = useMonacoLoader();
   const editorRef = useRef<monaco.editor.IStandaloneCodeEditor | null>(null);
   const isExternalUpdate = useRef(false);
   const completionDisposable = useRef<monaco.IDisposable | null>(null);
@@ -439,7 +441,10 @@ export function RawEditor({
   // and weight; the codepoint character is the decoration's content.
   useEffect(() => {
     const editor = editorRef.current;
-    if (!editor) return;
+    // `monacoNs` is read from the lazy loader's state rather than a
+    // top-level import. Re-run when it transitions from null → loaded
+    // so decorations show up the moment monaco is in hand.
+    if (!editor || !monacoNs) return;
     if (language !== 'markdown') return;
     const model = editor.getModel();
     if (!model) return;
@@ -461,7 +466,7 @@ export function RawEditor({
         // glyph as content prepended visually to that position.
         const col = match.index + 1; // Monaco columns are 1-based
         decorations.push({
-          range: new monaco.Range(line, col, line, col),
+          range: new monacoNs.Range(line, col, line, col),
           options: {
             before: {
               content: glyph,
@@ -477,9 +482,35 @@ export function RawEditor({
     } else {
       iconGlyphDecorations.current.set(decorations);
     }
-  }, [markdownSource, language]);
+  }, [markdownSource, language, monacoNs]);
 
   const effectiveTheme = SQUISQ_THEMES[theme] ?? theme;
+
+  // Wait for the lazy monaco namespace + `loader.config()` to settle
+  // before mounting `<Editor>`. Without this gate, the @monaco-editor/
+  // react singleton loader would fall back to its built-in CDN fetch
+  // for any consumer that hasn't aliased monaco-editor — which is the
+  // exact regression the lazy-loading move is meant to avoid.
+  if (!monacoReady) {
+    return (
+      <div
+        className={className}
+        style={{
+          width: '100%',
+          height: '100%',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          color: 'var(--squisq-editor-muted-foreground, #6a6258)',
+          fontSize: 13,
+        }}
+        data-testid="raw-editor"
+        data-monaco-loading
+      >
+        Loading editor…
+      </div>
+    );
+  }
 
   return (
     <div className={className} style={{ width: '100%', height: '100%' }} data-testid="raw-editor">

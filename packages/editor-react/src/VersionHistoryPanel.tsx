@@ -11,10 +11,67 @@
  * a provider that has `allowVersioning` and a `container`.
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { DiffEditor } from '@monaco-editor/react';
 import type { Version } from '@bendyline/squisq/versions';
 import { useEditorContext } from './EditorContext';
+import { useMonacoLoader } from './useMonacoLoader';
+
+interface LazyDiffEditorProps {
+  original: string;
+  modified: string;
+  theme: 'vs' | 'vs-dark';
+}
+
+const lazyLoadingStyle: CSSProperties = {
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  width: '100%',
+  height: '100%',
+  color: 'var(--squisq-editor-muted-foreground, #6a6258)',
+  fontSize: 12,
+};
+
+/**
+ * Defers the `<DiffEditor>` mount until the lazy monaco namespace +
+ * `loader.config()` are in place. Without the gate, the
+ * `@monaco-editor/react` singleton loader would fall back to its CDN
+ * default for any consumer that hasn't already mounted `<RawEditor>`.
+ *
+ * This wrapper is what makes `useMonacoLoader` worth using here —
+ * VersionHistoryPanel itself is always present in the toolbar, so
+ * subscribing at its level would defeat the lazy-load. The hook only
+ * fires when a snapshot is actually selected.
+ */
+function LazyDiffEditor({ original, modified, theme }: LazyDiffEditorProps) {
+  const { ready } = useMonacoLoader();
+  if (!ready) {
+    return <div style={lazyLoadingStyle}>Loading diff…</div>;
+  }
+  return (
+    <DiffEditor
+      original={original}
+      modified={modified}
+      language="markdown"
+      theme={theme}
+      options={{
+        readOnly: true,
+        renderSideBySide: true,
+        minimap: { enabled: false },
+        scrollBeyondLastLine: false,
+        wordWrap: 'on',
+        automaticLayout: true,
+        fontSize: 12,
+        lineNumbers: 'off',
+        glyphMargin: false,
+        folding: false,
+        overviewRulerLanes: 0,
+        renderOverviewRuler: false,
+      }}
+    />
+  );
+}
 
 interface PanelState {
   loading: boolean;
@@ -206,25 +263,10 @@ export function VersionHistoryPanel() {
                 </span>
               </div>
               <div className="squisq-version-history-diff-body">
-                <DiffEditor
+                <LazyDiffEditor
                   original={state.selected.content}
                   modified={markdownSource}
-                  language="markdown"
                   theme={diffTheme}
-                  options={{
-                    readOnly: true,
-                    renderSideBySide: true,
-                    minimap: { enabled: false },
-                    scrollBeyondLastLine: false,
-                    wordWrap: 'on',
-                    automaticLayout: true,
-                    fontSize: 12,
-                    lineNumbers: 'off',
-                    glyphMargin: false,
-                    folding: false,
-                    overviewRulerLanes: 0,
-                    renderOverviewRuler: false,
-                  }}
                 />
               </div>
             </div>
