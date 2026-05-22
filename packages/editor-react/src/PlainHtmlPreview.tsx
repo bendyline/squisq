@@ -21,9 +21,24 @@ import type { CSSProperties } from 'react';
 import { parseMarkdown } from '@bendyline/squisq/markdown';
 import type { MarkdownDocument, HtmlNode } from '@bendyline/squisq/markdown';
 import type { MediaProvider, Theme } from '@bendyline/squisq/schemas';
-import { markdownDocToPlainHtml } from '@bendyline/squisq-formats/html';
 import { normalizeMalformedAssetUrl } from './utils/normalizeMalformedAssetUrl';
 import { collectInlineFontAwesomeCss } from './utils/collectInlineFontAwesomeCss';
+
+// formats/html is ~50 KB and only needed for the plain-HTML preview pane.
+// Lazy-load on first render so it doesn't sit in the editor's main chunk.
+type RenderFn = typeof import('@bendyline/squisq-formats/html').markdownDocToPlainHtml;
+let cachedRender: RenderFn | null = null;
+let cachedRenderPromise: Promise<RenderFn> | null = null;
+function loadRenderFn(): Promise<RenderFn> {
+  if (cachedRender) return Promise.resolve(cachedRender);
+  if (!cachedRenderPromise) {
+    cachedRenderPromise = import('@bendyline/squisq-formats/html').then((m) => {
+      cachedRender = m.markdownDocToPlainHtml;
+      return cachedRender;
+    });
+  }
+  return cachedRenderPromise;
+}
 
 export interface PlainHtmlPreviewProps {
   /** Raw markdown source. */
@@ -129,9 +144,22 @@ export function PlainHtmlPreview({
   // fetch under `allow-same-origin`.
   const iconsCss = useMemo(() => collectInlineFontAwesomeCss(), []);
 
+  const [renderFn, setRenderFn] = useState<RenderFn | null>(() => cachedRender);
+  useEffect(() => {
+    if (renderFn) return;
+    let cancelled = false;
+    loadRenderFn().then((fn) => {
+      if (!cancelled) setRenderFn(() => fn);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [renderFn]);
+
   const html = useMemo(
-    () => markdownDocToPlainHtml(mdDoc, { title, images: mergedImages, theme, iconsCss }),
-    [mdDoc, title, mergedImages, theme, iconsCss],
+    () =>
+      renderFn ? renderFn(mdDoc, { title, images: mergedImages, theme, iconsCss }) : '',
+    [renderFn, mdDoc, title, mergedImages, theme, iconsCss],
   );
 
   return (

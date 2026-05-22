@@ -3,7 +3,6 @@
  */
 
 import type { Doc, MediaProvider } from '@bendyline/squisq/schemas';
-import { collectImagePaths, extractFilename } from '@bendyline/squisq-formats/html';
 
 /**
  * Collect images from a MediaProvider keyed by both the storage name and
@@ -18,7 +17,8 @@ export async function collectImagesForHtmlExport(
   const images = new Map<string, ArrayBuffer>();
   if (!mediaProvider) return images;
 
-  // Fetch all provider media in parallel
+  const { collectImagePaths, extractFilename } = await import('@bendyline/squisq-formats/html');
+
   const entries = await mediaProvider.listMedia();
   const fetched = await Promise.all(
     entries.map(async (entry) => {
@@ -36,7 +36,6 @@ export async function collectImagesForHtmlExport(
     byFilename.set(extractFilename(f.name), f.data);
   }
 
-  // Add entries keyed by doc-referenced paths when the filename matches
   for (const docPath of collectImagePaths(doc)) {
     if (images.has(docPath)) continue;
     const data = byFilename.get(extractFilename(docPath));

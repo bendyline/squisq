@@ -15,7 +15,6 @@ import {
   MemoryContentContainer,
 } from '@bendyline/squisq/storage';
 import type { ContentContainer } from '@bendyline/squisq/storage';
-import { zipToContainer } from '@bendyline/squisq-formats/container';
 import { SAMPLES, CONTENT_SAMPLES } from './samples';
 import { DebugPanel } from './DebugPanel';
 import { FileToolbar } from './FileToolbar';
@@ -161,7 +160,10 @@ export function App() {
             if (!res.ok) throw new Error(`Failed to fetch ${contentSample.url}: ${res.status}`);
             return res.arrayBuffer();
           })
-          .then((buf) => zipToContainer(buf))
+          .then(async (buf) => {
+            const { zipToContainer } = await import('@bendyline/squisq-formats/container');
+            return zipToContainer(buf);
+          })
           .then(async (loaded) => {
             const markdown = (await loaded.readDocument()) ?? '';
             setCurrentSource(markdown);

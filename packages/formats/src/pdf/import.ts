@@ -22,6 +22,7 @@
 
 import type { Doc } from '@bendyline/squisq/schemas';
 import { markdownToDoc } from '@bendyline/squisq/doc';
+import { stringifyMarkdown } from '@bendyline/squisq/markdown';
 import type {
   MarkdownDocument,
   MarkdownBlockNode,
@@ -169,7 +170,6 @@ export async function pdfToContainer(
 
   const markdownDoc: MarkdownDocument = { type: 'document', children: blocks };
 
-  const { stringifyMarkdown } = await import('@bendyline/squisq/markdown');
   const markdown = stringifyMarkdown(markdownDoc);
 
   const container = new MemoryContentContainer();

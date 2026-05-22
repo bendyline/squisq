@@ -18,15 +18,6 @@ import {
 import { markdownToDoc } from '@bendyline/squisq/doc';
 import { VideoExportModal } from '@bendyline/squisq-video-react';
 import { ExportConfigModal } from './ExportConfigModal';
-import { markdownDocToDocx, docxToMarkdownDoc } from '@bendyline/squisq-formats/docx';
-import { markdownDocToPptx } from '@bendyline/squisq-formats/pptx';
-import {
-  markdownDocToPdf,
-  pdfToMarkdownDoc,
-  configurePdfWorker,
-} from '@bendyline/squisq-formats/pdf';
-import { containerToZip, zipToContainer } from '@bendyline/squisq-formats/container';
-import { docToHtml, docToHtmlZip } from '@bendyline/squisq-formats/html';
 import { collectImagesForHtmlExport } from './exportHelpers';
 import { MemoryContentContainer } from '@bendyline/squisq/storage';
 import type { ContentContainer } from '@bendyline/squisq/storage';
@@ -34,10 +25,18 @@ import type { MediaProvider } from '@bendyline/squisq/schemas';
 import { addSlotMedia } from './slotStorage';
 import { buildExportFilename } from './exportFilename';
 
-// Configure pdfjs-dist worker for the browser.
-// Vite's ?url suffix returns a resolved asset URL at build time.
+// Vite's ?url suffix returns a resolved asset URL at build time. The URL
+// string is tiny and doesn't pull pdfjs-dist code into the main chunk;
+// the format package itself is dynamic-imported in the pdf handlers
+// below, and `configurePdfWorker` is called once on first pdf use.
 import pdfjsWorkerUrl from 'pdfjs-dist/legacy/build/pdf.worker.mjs?url';
-configurePdfWorker(pdfjsWorkerUrl);
+let pdfWorkerConfigured = false;
+async function ensurePdfWorker() {
+  if (pdfWorkerConfigured) return;
+  const { configurePdfWorker } = await import('@bendyline/squisq-formats/pdf');
+  configurePdfWorker(pdfjsWorkerUrl);
+  pdfWorkerConfigured = true;
+}
 
 // ============================================
 // Types
@@ -186,10 +185,6 @@ export function FileToolbar({
           downloadBlob(blob, filename);
         } else if (format === 'docx') {
           const mdDoc = parseMarkdown(currentSource);
-          // Collect images from mediaProvider so the docx export embeds
-          // them as binary parts instead of falling back to the
-          // `[Image: alt]` placeholder text. Each entry gets its
-          // resolved bytes + content-type keyed by the markdown URL.
           const images = new Map<string, { data: ArrayBuffer; contentType: string }>();
           if (mediaProvider) {
             const entries = await mediaProvider.listMedia();
@@ -204,6 +199,7 @@ export function FileToolbar({
               }
             }
           }
+          const { markdownDocToDocx } = await import('@bendyline/squisq-formats/docx');
           const buffer = await markdownDocToDocx(mdDoc, { images });
           const blob = new Blob([buffer], {
             type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
@@ -211,7 +207,6 @@ export function FileToolbar({
           downloadBlob(blob, filename);
         } else if (format === 'pptx') {
           const mdDoc = parseMarkdown(currentSource);
-          // Collect images from mediaProvider for embedding
           const images = new Map<string, ArrayBuffer>();
           if (mediaProvider) {
             const entries = await mediaProvider.listMedia();
@@ -223,8 +218,7 @@ export function FileToolbar({
               }
             }
           }
-          // themeId is auto-resolved from the doc's frontmatter inside
-          // `markdownDocToPptx` — no need to extract it here.
+          const { markdownDocToPptx } = await import('@bendyline/squisq-formats/pptx');
           const buffer = await markdownDocToPptx(mdDoc, { images });
           const blob = new Blob([buffer], {
             type: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
@@ -232,10 +226,13 @@ export function FileToolbar({
           downloadBlob(blob, filename);
         } else if (format === 'pdf') {
           const mdDoc = parseMarkdown(currentSource);
+          await ensurePdfWorker();
+          const { markdownDocToPdf } = await import('@bendyline/squisq-formats/pdf');
           const buffer = await markdownDocToPdf(mdDoc);
           const blob = new Blob([buffer], { type: 'application/pdf' });
           downloadBlob(blob, filename);
         } else if (format === 'zip') {
+          const { containerToZip } = await import('@bendyline/squisq-formats/container');
           const container = new MemoryContentContainer();
           await container.writeDocument(currentSource);
           if (mediaProvider) {
@@ -259,8 +256,6 @@ export function FileToolbar({
           const mdDoc = parseMarkdown(currentSource);
           const doc = markdownToDoc(mdDoc);
           const images = await collectImagesForHtmlExport(doc, mediaProvider);
-          // `docToHtml` / `docToHtmlZip` take a Doc (not a MarkdownDocument)
-          // and have no frontmatter access, so we resolve the theme here.
           const themeId = readFrontmatterThemeId(mdDoc.frontmatter);
           const title = inferDocumentTitle(mdDoc);
           const options = {
@@ -270,6 +265,7 @@ export function FileToolbar({
             title,
             themeId,
           };
+          const { docToHtml, docToHtmlZip } = await import('@bendyline/squisq-formats/html');
           if (format === 'html') {
             const html = docToHtml(doc, options);
             downloadBlob(new Blob([html], { type: 'text/html;charset=utf-8' }), filename);
@@ -308,16 +304,20 @@ export function FileToolbar({
           onImport(text);
         } else if (ext === 'docx') {
           const buffer = await file.arrayBuffer();
+          const { docxToMarkdownDoc } = await import('@bendyline/squisq-formats/docx');
           const mdDoc = await docxToMarkdownDoc(buffer);
           const markdown = stringifyMarkdown(mdDoc);
           onImport(markdown);
         } else if (ext === 'pdf') {
           const buffer = await file.arrayBuffer();
+          await ensurePdfWorker();
+          const { pdfToMarkdownDoc } = await import('@bendyline/squisq-formats/pdf');
           const mdDoc = await pdfToMarkdownDoc(buffer);
           const markdown = stringifyMarkdown(mdDoc);
           onImport(markdown);
         } else if (ext === 'zip') {
           const buffer = await file.arrayBuffer();
+          const { zipToContainer } = await import('@bendyline/squisq-formats/container');
           const container = await zipToContainer(buffer);
           const markdown = (await container.readDocument()) ?? '';
           onZipImport(markdown, container);

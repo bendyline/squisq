@@ -84,12 +84,21 @@ export function listBlock(input: ListBlockInput, context: TemplateContext): Laye
   const leftX =
     Number.isFinite(centerX) && Number.isFinite(widthPct) ? `${centerX - widthPct / 2}%` : '8%';
 
-  // Calculate vertical spacing for items. We keep the available band
-  // (startY → endY) but use a tighter line-height (1.2) so wrapped
-  // items don't bleed into the next entry as aggressively as the old
-  // 1.4 value did.
-  const endY = 80;
-  const spacing = items.length > 1 ? (endY - startY) / (items.length - 1) : 0;
+  // Stack items with a fixed compact gap rather than stretching them
+  // across the available band. Previously we distributed items across
+  // (startY → 80%) which left big vertical gaps for short lists and
+  // made the slide read as a sparse menu instead of a tight enumeration.
+  //
+  // Spacing = item line-height (34px base × 1.2) + 7px gap, expressed
+  // as % of the 1080px design canvas (~4.4%). Wrapped items push the
+  // next entry down via their own line-height, so this sets the
+  // minimum baseline-to-baseline distance for unwrapped items.
+  const LIST_ITEM_BASE_PX = 34;
+  const LIST_ITEM_LINE_HEIGHT = 1.2;
+  const LIST_ITEM_GAP_PX = 7;
+  const DESIGN_HEIGHT_PX = 1080;
+  const spacing =
+    ((LIST_ITEM_BASE_PX * LIST_ITEM_LINE_HEIGHT + LIST_ITEM_GAP_PX) / DESIGN_HEIGHT_PX) * 100;
 
   // List items with staggered animation
   for (let i = 0; i < items.length; i++) {

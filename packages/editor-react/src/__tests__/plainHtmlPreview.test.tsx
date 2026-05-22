@@ -10,10 +10,10 @@ function getIframeSrcDoc(): string {
 }
 
 describe('PlainHtmlPreview', () => {
-  it('renders the markdown into the iframe srcDoc', () => {
+  it('renders the markdown into the iframe srcDoc', async () => {
     render(<PlainHtmlPreview markdown={'# Hello\n\nWorld'} />);
+    await waitFor(() => expect(getIframeSrcDoc()).toContain('<!DOCTYPE html>'));
     const srcdoc = getIframeSrcDoc();
-    expect(srcdoc).toContain('<!DOCTYPE html>');
     expect(srcdoc).toContain('<h1>Hello</h1>');
     expect(srcdoc).toContain('<p>World</p>');
   });
@@ -26,14 +26,16 @@ describe('PlainHtmlPreview', () => {
     expect(sandbox).not.toContain('allow-scripts');
   });
 
-  it('applies pre-resolved images via the images prop', () => {
+  it('applies pre-resolved images via the images prop', async () => {
     render(
       <PlainHtmlPreview
         markdown={'![a](a.jpg)'}
         images={new Map([['a.jpg', 'data:image/png;base64,AAA']])}
       />,
     );
-    expect(getIframeSrcDoc()).toContain('src="data:image/png;base64,AAA"');
+    await waitFor(() =>
+      expect(getIframeSrcDoc()).toContain('src="data:image/png;base64,AAA"'),
+    );
   });
 
   it('resolves image URLs through the supplied mediaProvider', async () => {
@@ -68,19 +70,23 @@ describe('PlainHtmlPreview', () => {
     expect(provider.resolveUrl).not.toHaveBeenCalled();
   });
 
-  it('applies the supplied theme to the iframe document', () => {
+  it('applies the supplied theme to the iframe document', async () => {
     const theme = resolveTheme('warm-earth');
     render(<PlainHtmlPreview markdown={'# Hi'} theme={theme} />);
+    await waitFor(() =>
+      expect(getIframeSrcDoc()).toContain(`--plain-bg: ${theme.colors.background};`),
+    );
     const srcdoc = getIframeSrcDoc();
-    expect(srcdoc).toContain(`--plain-bg: ${theme.colors.background};`);
     expect(srcdoc).toContain(`--plain-primary: ${theme.colors.primary};`);
     expect(srcdoc).toContain('--plain-body-font:');
   });
 
-  it('loads Google Fonts for themes that reference google-hosted faces', () => {
+  it('loads Google Fonts for themes that reference google-hosted faces', async () => {
     const theme = resolveTheme('documentary');
     render(<PlainHtmlPreview markdown={'# Hi'} theme={theme} />);
-    expect(getIframeSrcDoc()).toContain('https://fonts.googleapis.com/css2?');
+    await waitFor(() =>
+      expect(getIframeSrcDoc()).toContain('https://fonts.googleapis.com/css2?'),
+    );
   });
 
   it('resolves raw HTML <img> tags too (resized image case)', async () => {

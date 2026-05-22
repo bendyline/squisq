@@ -17,9 +17,11 @@ import {
 } from '@bendyline/squisq/transform';
 import type { MediaProvider, Theme } from '@bendyline/squisq/schemas';
 import type { MarkdownDocument } from '@bendyline/squisq/markdown';
+import { MemoryContentContainer } from '@bendyline/squisq/storage';
 import type { ContentContainer } from '@bendyline/squisq/storage';
 import { VideoExportModal } from '@bendyline/squisq-video-react';
 import { buildPreviewDoc, PlainHtmlPreview } from '@bendyline/squisq-editor-react';
+import JSZip from 'jszip';
 import { collectImagesForHtmlExport } from './exportHelpers';
 import { slugifyTitle } from './exportFilename';
 
@@ -224,10 +226,7 @@ async function downloadPlainHtmlZip(
   filename: string,
   theme?: Theme,
 ): Promise<void> {
-  const [{ markdownDocToPlainHtml }, JSZip] = await Promise.all([
-    import('@bendyline/squisq-formats/html'),
-    import('jszip').then((m) => m.default),
-  ]);
+  const { markdownDocToPlainHtml } = await import('@bendyline/squisq-formats/html');
   const html = markdownDocToPlainHtml(mdDoc, { title, theme });
   const zip = new JSZip();
   zip.file('index.html', html);
@@ -530,7 +529,6 @@ export function ExportConfigModal({
           break;
         }
         case 'zip': {
-          const { MemoryContentContainer } = await import('@bendyline/squisq/storage');
           const { containerToZip } = await import('@bendyline/squisq-formats/container');
           const container = new MemoryContentContainer();
           await container.writeDocument(stringifyMarkdown(mdDoc));

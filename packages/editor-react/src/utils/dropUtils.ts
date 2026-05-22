@@ -8,7 +8,6 @@
 
 import type { MediaProvider } from '@bendyline/squisq/schemas';
 import { stringifyMarkdown } from '@bendyline/squisq/markdown';
-import { docxToMarkdownDoc } from '@bendyline/squisq-formats/docx';
 import { classifyFile, type FileCategory } from '../hooks/useFileDrop';
 
 export type { FileCategory };
@@ -114,6 +113,7 @@ export async function processTextFile(file: File): Promise<string> {
 
   if (ext === 'docx') {
     const buffer = await file.arrayBuffer();
+    const { docxToMarkdownDoc } = await import('@bendyline/squisq-formats/docx');
     const markdownDoc = await docxToMarkdownDoc(buffer);
     return stringifyMarkdown(markdownDoc);
   }
