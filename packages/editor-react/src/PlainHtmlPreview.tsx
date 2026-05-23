@@ -157,8 +157,7 @@ export function PlainHtmlPreview({
   }, [renderFn]);
 
   const html = useMemo(
-    () =>
-      renderFn ? renderFn(mdDoc, { title, images: mergedImages, theme, iconsCss }) : '',
+    () => (renderFn ? renderFn(mdDoc, { title, images: mergedImages, theme, iconsCss }) : ''),
     [renderFn, mdDoc, title, mergedImages, theme, iconsCss],
   );
 

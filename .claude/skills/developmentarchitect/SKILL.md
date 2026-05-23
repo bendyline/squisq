@@ -41,69 +41,94 @@ Run this skill:
 ## Squisq Architecture Map
 
 Before reviewing, internalize the full system. Squisq is an open-source monorepo of
-**five packages** built with npm workspaces and tsup:
+**7 published packages + 1 dev-only site** built with npm workspaces and tsup. The
+canonical, kept-fresh architecture summary lives in **`CLAUDE.md`** at the repo root
+— treat that file as authoritative whenever it disagrees with this skill.
 
 ```
 squisq/
   package.json              # npm workspaces root
-  tsconfig.base.json        # Shared TS settings (strict mode, ES2020)
+  tsconfig.base.json        # Shared TS settings (strict mode, ES2020, ESNext modules)
   packages/
-    core/                   # @bendyline/squisq — headless, zero-framework-dependency
+    core/                   # @bendyline/squisq — headless, zero-framework-dependency, no Node deps
     react/                  # @bendyline/squisq-react — React component library
     formats/                # @bendyline/squisq-formats — document format converters
     editor-react/           # @bendyline/squisq-editor-react — markdown/doc editor
+    video/                  # @bendyline/squisq-video — browser-pure MP4 foundation (renderHtml + ffmpeg.wasm)
+    video-react/            # @bendyline/squisq-video-react — WebCodecs + ffmpeg.wasm fallback UI
+    cli/                    # @bendyline/squisq-cli — `squisq` bin for convert + video
     site/                   # Dev site (not published)
 ```
 
 ### Package Inventory
 
-| Package          | npm Name                         | Purpose                                             | Key Dependencies                   |
-| ---------------- | -------------------------------- | --------------------------------------------------- | ---------------------------------- |
-| **core**         | `@bendyline/squisq`              | Schemas, templates, spatial math, storage, markdown | unified/remark ecosystem           |
-| **react**        | `@bendyline/squisq-react`        | DocPlayer, BlockRenderer, layers, hooks             | react, core                        |
-| **formats**      | `@bendyline/squisq-formats`      | DOCX/PDF import+export, OOXML infrastructure        | jszip, core                        |
-| **editor-react** | `@bendyline/squisq-editor-react` | Rich text + raw markdown editor                     | tiptap, monaco-editor, react, core |
-| **site**         | _(not published)_                | Dev/demo site for testing components                | vite, react, all packages          |
+| Package          | npm Name                         | Purpose                                                                                                            | Key Dependencies                                                      |
+| ---------------- | -------------------------------- | ------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------- |
+| **core**         | `@bendyline/squisq`              | Schemas, themes, templates, markdown, spatial, storage, versions, jsonForm, icons, imageEdit, transform, recommend | unified/remark, ngeohash, localforage, genson-js, hast-util-from-html |
+| **react**        | `@bendyline/squisq-react`        | DocPlayer, BlockRenderer, layers, hooks, LinearDocView, MarkdownRenderer, JsonView, standalone IIFE                | react, core                                                           |
+| **formats**      | `@bendyline/squisq-formats`      | DOCX/PDF/HTML/EPUB/PPTX export + import where supported, OOXML infrastructure                                      | jszip, pdf-lib, pdfjs-dist, core                                      |
+| **editor-react** | `@bendyline/squisq-editor-react` | Rich text + raw markdown editor + image editor + recorder + JsonEditor + theme/template pickers                    | tiptap, monaco-editor, fontawesome, react, core, formats, react       |
+| **video**        | `@bendyline/squisq-video`        | Browser-pure foundation: renderHtml generator + ffmpeg.wasm encoder + presets                                      | ffmpeg.wasm, core, react                                              |
+| **video-react**  | `@bendyline/squisq-video-react`  | React UI for video export (WebCodecs primary, ffmpeg.wasm fallback)                                                | mp4-muxer, html2canvas, ffmpeg.wasm, video, react                     |
+| **cli**          | `@bendyline/squisq-cli`          | `squisq` bin command for convert + video                                                                           | commander, playwright-core, vite, core, formats, react, video         |
+| **site**         | _(not published)_                | Dev/demo site for testing components                                                                               | vite, react, all packages                                             |
 
 ### Dependency Graph
 
+Squisq is a strict tree: `core` is the root, and every other package depends on
+some subset of the layers below it. **Reverse dependencies are not allowed** —
+`core` never imports from another squisq package.
+
 ```
-                    ┌──────────────┐
-                    │   schemas/   │
-                    │  (core pkg)  │
-                    └──────┬───────┘
-                           │
-              ┌────────────┼────────────┐
-              │            │            │
-    ┌─────────▼──────┐  ┌──▼──────┐  ┌──▼───────────┐
-    │  doc/templates  │  │ spatial │  │   markdown   │
-    │  doc/utils      │  │         │  │              │
-    │  storage        │  │         │  │              │
-    └─────────┬──────┘  └──┬──────┘  └──┬───────────┘
-              │            │            │
-              └────────────┼────────────┘
-                    core package
-                           │
-         ┌─────────────────┼─────────────────┐
-         │                 │                 │
-   ┌─────▼──────┐   ┌─────▼──────┐   ┌──────▼────────┐
-   │   react     │   │  formats   │   │ editor-react  │
-   │  (DocPlayer │   │  (DOCX,    │   │ (Tiptap,      │
-   │  Renderer,  │   │   PDF,     │   │  Monaco,      │
-   │  Layers,    │   │   OOXML)   │   │  Preview)     │
-   │  Hooks)     │   │            │   │               │
-   └─────────────┘   └────────────┘   └───────────────┘
+core
+├── react           (depends on: core)
+├── formats         (depends on: core)
+├── video           (depends on: core, react)
+├── editor-react    (depends on: core, react, formats)
+├── video-react     (depends on: core, react, video)
+└── cli             (depends on: core, react, formats, video)
+
+site                (dev-only, depends on all of the above)
 ```
 
-### Subpath Exports (core)
+When evaluating a proposed change, any cross-package import that would violate
+this tree (e.g. `core` importing from `react`, or `formats` importing from
+`editor-react`) is a structural bug — flag it.
 
-| Subpath                      | Content                                                             |
-| ---------------------------- | ------------------------------------------------------------------- |
-| `@bendyline/squisq/schemas`  | Doc, Block, TemplateBlock, BlockTemplates, Viewport, LayoutStrategy |
-| `@bendyline/squisq/doc`      | Template registry, 17 templates, expandDocBlocks, animationUtils    |
-| `@bendyline/squisq/spatial`  | Haversine distance, Geohash encode/decode                           |
-| `@bendyline/squisq/storage`  | StorageAdapter interface, Memory + LocalStorage adapters            |
-| `@bendyline/squisq/markdown` | Markdown parse/stringify, MarkdownDocument types                    |
+### Subpath Exports (core) — 16 entries
+
+| Subpath                       | Content                                                                                                                                                      |
+| ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `@bendyline/squisq` (root)    | Re-exports everything below for ergonomic single-import                                                                                                      |
+| `@bendyline/squisq/schemas`   | Doc, Block, TemplateBlock, Viewport, LayoutStrategy, Theme + library/compile/validator, colorUtils, fontStacks, Types, MediaProvider, ImageEditDoc           |
+| `@bendyline/squisq/doc`       | 20 templates + registry + animationUtils + themeUtils + getLayers + markdownToDoc + docToMarkdown + audioMapping                                             |
+| `@bendyline/squisq/story`     | Alias for `/doc` (legacy)                                                                                                                                    |
+| `@bendyline/squisq/spatial`   | Haversine distance, Geohash encode/decode                                                                                                                    |
+| `@bendyline/squisq/storage`   | StorageAdapter, Memory/LocalStorage/LocalForage adapters, ContentContainer, MemoryContentContainer, ScopedContentContainer, createMediaProviderFromContainer |
+| `@bendyline/squisq/markdown`  | parseMarkdown, stringifyMarkdown, 30+ AST node types, tree utilities, frontmatter helpers, HTML sub-DOM                                                      |
+| `@bendyline/squisq/timing`    | Narration/reading time estimation                                                                                                                            |
+| `@bendyline/squisq/random`    | SeededRandom (Mulberry32 PRNG), hashString                                                                                                                   |
+| `@bendyline/squisq/generate`  | extractContent, stripMarkdown, generateSlideshow                                                                                                             |
+| `@bendyline/squisq/transform` | applyTransform + 5 transform styles (dataDriven, documentary, magazine, minimal, narrative) + block analyzer + doc-image extractor                           |
+| `@bendyline/squisq/versions`  | DocumentVersionManager + saveVersion/listVersions/readVersion/revertToVersion/pruneVersions/coalesceVersions + Version/PrunePolicy/CoalesceOptions types     |
+| `@bendyline/squisq/jsonForm`  | chooseControl, evaluateWhen, resolveFlag, inferSchema, JSON Pointer helpers; types: SquisqAnnotatedSchema, ControlKind                                       |
+| `@bendyline/squisq/imageEdit` | ImageEditDoc state helpers + persistence + version operations + ImageEditVersionManager + SVG → raster export                                                |
+| `@bendyline/squisq/icons`     | FontAwesome catalog (ICONS) + resolveIcon, canonicalIconToken, looksLikeIconToken, suggestIcons, iconGlyph                                                   |
+| `@bendyline/squisq/recommend` | profileBlockContents, recommendTemplatesForBlock                                                                                                             |
+
+### Subpath Exports (formats) — 9 entries
+
+| Subpath                               | Content                                                                                                                                                      |
+| ------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `@bendyline/squisq-formats` (root)    | Re-exports all converters                                                                                                                                    |
+| `@bendyline/squisq-formats/docx`      | markdownDocToDocx, docxToMarkdownDoc, docToDocx, docxToDoc                                                                                                   |
+| `@bendyline/squisq-formats/pdf`       | markdownDocToPdf, pdfToMarkdownDoc, configurePdfWorker                                                                                                       |
+| `@bendyline/squisq-formats/html`      | docToHtml (single-file with inlined player), docToHtmlZip (external assets), markdownDocToPlainHtml, markdownDocsToPlainHtmlBundle, markdownDocsToHtmlBundle |
+| `@bendyline/squisq-formats/epub`      | markdownDocToEpub, docToEpub                                                                                                                                 |
+| `@bendyline/squisq-formats/pptx`      | markdownDocToPptx, docToPptx (+ import stubs)                                                                                                                |
+| `@bendyline/squisq-formats/xlsx`      | Stubs (not implemented)                                                                                                                                      |
+| `@bendyline/squisq-formats/ooxml`     | Shared OOXML reader/writer/namespaces/xmlUtils                                                                                                               |
+| `@bendyline/squisq-formats/container` | containerToZip, zipToContainer (ContentContainer ↔ ZIP)                                                                                                      |
 
 ### Key Design Principles
 
@@ -156,51 +181,97 @@ to catch recent changes. Code drifts between reviews.
 
 ### Essential Files to Read
 
-Read these files at minimum for any review:
+Read these files at minimum for any review. **Always read CLAUDE.md first** — it is the
+authoritative summary and is kept in sync with the codebase.
 
 ```bash
 # Architecture & conventions
 CLAUDE.md
 package.json
 tsconfig.base.json
+reports/architecture-review-*.md   # Read the most recent prior review
 
 # Core package structure
 packages/core/package.json
 packages/core/tsup.config.ts
+packages/core/src/index.ts
+packages/core/src/schemas/index.ts
 packages/core/src/schemas/Doc.ts
 packages/core/src/schemas/BlockTemplates.ts
+packages/core/src/schemas/Theme.ts
+packages/core/src/schemas/themeLibrary.ts
 packages/core/src/schemas/Viewport.ts
+packages/core/src/schemas/LayoutStrategy.ts
+packages/core/src/schemas/ImageEditDoc.ts
 packages/core/src/doc/templates/index.ts
 packages/core/src/doc/getLayers.ts
-packages/core/src/doc/expandDocBlocks.ts
+packages/core/src/doc/markdownToDoc.ts
+packages/core/src/doc/audioMapping.ts
 packages/core/src/spatial/index.ts
-packages/core/src/storage/StorageAdapter.ts
+packages/core/src/storage/Storage.ts
+packages/core/src/storage/ContentContainer.ts
+packages/core/src/storage/index.ts
 packages/core/src/markdown/types.ts
 packages/core/src/markdown/parse.ts
 packages/core/src/markdown/stringify.ts
+packages/core/src/markdown/convert.ts
+packages/core/src/versions/index.ts
+packages/core/src/versions/operations.ts
+packages/core/src/imageEdit/index.ts
+packages/core/src/imageEdit/versions.ts
+packages/core/src/transform/index.ts
+packages/core/src/jsonForm/chooseControl.ts
+packages/core/src/icons/index.ts
+packages/core/src/recommend/index.ts
 
 # React package
 packages/react/package.json
+packages/react/tsup.config.ts
 packages/react/src/index.ts
 packages/react/src/types.ts
 packages/react/src/DocPlayer.tsx
 packages/react/src/BlockRenderer.tsx
+packages/react/src/LinearDocView.tsx
+packages/react/src/MarkdownRenderer.tsx
 packages/react/src/hooks/useDocPlayback.ts
 packages/react/src/hooks/useAudioSync.ts
+packages/react/src/hooks/useAutoSurface.ts
+packages/react/src/layers/TableLayer.tsx
+packages/react/src/jsonView/index.ts
 
 # Formats package
 packages/formats/package.json
+packages/formats/tsup.config.ts
+packages/formats/src/index.ts
 packages/formats/src/docx/import.ts
 packages/formats/src/docx/export.ts
 packages/formats/src/ooxml/reader.ts
+packages/formats/src/html/index.ts
+packages/formats/src/html/plainHtml.ts
+packages/formats/src/epub/export.ts
+packages/formats/src/pptx/export.ts
 
 # Editor package
 packages/editor-react/package.json
 packages/editor-react/src/index.ts
+packages/editor-react/src/EditorShell.tsx
 packages/editor-react/src/EditorContext.tsx
 packages/editor-react/src/RawEditor.tsx
 packages/editor-react/src/Toolbar.tsx
 packages/editor-react/src/PreviewPanel.tsx
+packages/editor-react/src/buildPreviewDoc.ts
+packages/editor-react/src/tiptapBridge.ts
+packages/editor-react/src/jsonEditor/index.ts
+packages/editor-react/src/imageEditor/useImageEditor.ts
+packages/editor-react/src/recorder/RecorderPanel.tsx
+
+# Video / Video-React / CLI
+packages/video/src/index.ts
+packages/video/src/renderHtml.ts
+packages/video-react/src/index.ts
+packages/video-react/src/workers/encode.worker.ts
+packages/cli/src/index.ts
+packages/cli/src/api.ts
 ```
 
 ### Exploration Techniques
@@ -252,27 +323,35 @@ what needs attention.
 
 **Known architecture decisions to respect:**
 
-- `core/` must have zero framework dependencies — it's consumed by React, Preact, and
-  potentially other frameworks
+- `core/` must have zero framework dependencies AND zero Node-specific dependencies —
+  it's consumed by React, Preact, and CLI environments. Browser + Node both.
 - `react/` targets standard React; Qualla aliases via `preact/compat`
-- `editor-react/` depends on Tiptap and Monaco — these are heavy dependencies that are
-  intentionally isolated from the main `react/` package
-- `site/` is a dev-only package, not published to npm
-- The unified/remark processor requires `any` for its chained `.use()` calls — this is
-  an intentional exception documented with eslint-disable comments
+- `editor-react/` depends on Tiptap and Monaco — heavy dependencies intentionally
+  isolated from the lighter `react/` package
+- `video/` is browser-pure (ffmpeg.wasm). `video-react/` adds the WebCodecs UI on top.
+- `cli/` uses playwright-core + vite to spin up a dev-server-as-renderer for the
+  video subcommand. This is an intentional dev-time dependency, not a runtime one.
+- `site/` is dev-only, not published to npm
+- Accepted `any` exceptions are enumerated in `CLAUDE.md` → "Code Style" → "Accepted
+  `any` exceptions". Any new `any` outside those sites should be flagged.
 
 ### 3.2 Code Duplication
 
 **Potential duplication hotspots:**
 
-| Concern                   | Likely Locations                                      | What to Check                   |
-| ------------------------- | ----------------------------------------------------- | ------------------------------- |
-| Animation utilities       | `core/src/doc/utils/`, `react/src/utils/`             | Re-export or duplication?       |
-| Type re-exports           | Each package's `index.ts`                             | Are types properly re-exported? |
-| Template input validation | Individual template files                             | Repeated patterns?              |
-| Viewport calculations     | `scaledFontSize`, layout logic                        | Centralized in core?            |
-| Markdown node handling    | `convert.ts`, `PreviewPanel.tsx`, `LinearDocView.tsx` | Same traversal patterns?        |
-| Caption cleaning          | `captionUtils.ts`                                     | Used everywhere it should be?   |
+| Concern                     | Likely Locations                                                                                                       | What to Check                                                                                                |
+| --------------------------- | ---------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| Animation utilities         | `core/src/doc/utils/`, `react/src/utils/`                                                                              | Re-export or duplication?                                                                                    |
+| Type re-exports             | Each package's `index.ts`                                                                                              | Are types properly re-exported?                                                                              |
+| Template input validation   | Individual template files                                                                                              | Repeated patterns?                                                                                           |
+| Viewport calculations       | `scaledFontSize`, layout logic                                                                                         | Centralized in core?                                                                                         |
+| Markdown node handling      | `core/markdown/convert.ts`, `editor-react/buildPreviewDoc.ts`, `react/LinearDocView.tsx`, `react/MarkdownRenderer.tsx` | Same traversal patterns?                                                                                     |
+| Caption cleaning            | `captionUtils.ts`                                                                                                      | Used everywhere it should be?                                                                                |
+| **Version operations**      | `core/versions/operations.ts` vs `core/imageEdit/versions.ts`                                                          | Known intentional mirror. Candidate for generic helper.                                                      |
+| **Version manager classes** | `core/versions/DocumentVersionManager.ts` vs `core/imageEdit/ImageEditVersionManager.ts`                               | Same shape, different payload — see above.                                                                   |
+| **JsonView / JsonEditor**   | `react/jsonView/` vs `editor-react/jsonEditor/`                                                                        | Intentional read-vs-edit split; both consume `chooseControl()` from core. Verify no drift in field handling. |
+| **File classification**     | `editor-react/hooks/useFileDrop.ts` vs `editor-react/fileKind.ts`                                                      | Both classify files by extension/MIME. Worth checking for overlap.                                           |
+| **HTML export paths**       | `formats/html/htmlTemplate.ts` (player-bundled) vs `formats/html/plainHtml.ts` (static)                                | Different purpose (interactive vs print). Verify image-path handling stays in sync.                          |
 
 **How to evaluate:**
 
@@ -380,12 +459,27 @@ Read each skill in `.claude/skills/*/SKILL.md` and evaluate:
 
 ### 4.3 Missing Skills
 
-Consider whether new skills are needed:
+As of 2026-05, this repo has exactly one squisq-specific skill (`developmentarchitect`).
+Consider whether the following skills should be added — they all map to recurring
+mechanical changes that agents are likely to be asked to perform:
 
-- **Template Creation** — Adding a new block template with proper types, registry entry, tests
-- **Package Creation** — Adding a new package to the monorepo with proper config
-- **Format Converter** — Adding a new document format (PPTX, XLSX) to the formats package
-- **Release** — Version bumping, changelog, npm publish, tarball rebuild for Qualla
+- **`add-template`** — Adding a new block template. Steps documented in CLAUDE.md's
+  "Adding a New Block Template" section. This is the highest-leverage missing skill
+  because it touches three coordinated files (`BlockTemplates.ts`, the template impl,
+  the registry) plus tests and CLAUDE.md.
+- **`add-subpath`** — Adding a new subpath export to any package. Steps documented in
+  the "New Subpath Test" section below. Failing to update all three of (tsup config,
+  package.json exports, CLAUDE.md) produces confusing failure modes that agents tend
+  to debug instead of just doing the third step.
+- **`add-format-converter`** — Adding a new document-format converter. Steps documented
+  in the "New Format Test" section below. The `MarkdownDocument` pivot rule is the
+  load-bearing convention.
+- **`release`** — Multi-package release via `multi-semantic-release`, verifying that
+  consumer tarball-builds (Qualla) work with the new versions. The mechanics work
+  today, but the human workflow around "did the right thing get published" isn't
+  captured.
+- **`add-package`** — Adding a whole new package to the workspace. Less frequent than
+  the others (last additions: `cli`, `video`); skipped until it becomes recurrent.
 
 ---
 
@@ -587,24 +681,47 @@ For each area of the codebase, ask:
 
 Imagine adding a new block template (e.g., `comparisonSlide`). Trace the path:
 
-1. Define input type in `core/src/schemas/BlockTemplates.ts`
-2. Add to `TemplateBlock` discriminated union in `core/src/schemas/Doc.ts`
-3. Create template function in `core/src/doc/templates/comparisonSlide.ts`
-4. Register in `core/src/doc/templates/index.ts`
+1. Define `ComparisonSlideInput extends BaseTemplateBlock` in `core/src/schemas/BlockTemplates.ts`
+2. Add to the `TemplateBlock` discriminated union — also in `core/src/schemas/BlockTemplates.ts` (not in `Doc.ts`)
+3. Create the template function in `core/src/doc/templates/comparisonSlide.ts` — pure `(input, context) => Layer[]`
+4. Import + register in `core/src/doc/templates/index.ts` under the canonical short id
 5. Verify `expandDocBlocks` and `getLayers` handle it automatically
-6. Add tests in `core/src/__tests__/`
+6. Add tests in `core/src/__tests__/templates.test.ts`
+7. Update the template count in `CLAUDE.md`'s `@bendyline/squisq/doc` subpath line
 
 If any step is unclear or requires touching unexpected files, that's a process gap.
+**Confirm the steps in CLAUDE.md's "Adding a New Block Template" section are still accurate** —
+that section is the canonical instruction.
 
 ### The "New Format" Test
 
-Imagine adding PPTX export. Trace the path:
+Imagine adding a new format (e.g., RTF export). Trace the path:
 
-1. Implement converter in `formats/src/pptx/export.ts`
-2. Use `MarkdownDocument` as pivot format (from core's markdown types)
-3. Export from `formats/src/pptx/index.ts`
-4. Verify subpath export `@bendyline/squisq-formats/pptx` works
-5. Add tests in `formats/src/__tests__/`
+1. Create directory `packages/formats/src/rtf/` with `export.ts` and `index.ts`
+2. Use `MarkdownDocument` as pivot format (from `@bendyline/squisq/markdown`) — this is non-negotiable; every format must round-trip through markdown
+3. Export from `formats/src/index.ts` (root re-export) and `formats/src/rtf/index.ts`
+4. Add a new entry to `formats/tsup.config.ts` `entry` map: `'rtf/index': 'src/rtf/index.ts'`
+5. Add a new entry to `formats/package.json` `exports`: `"./rtf": { types, import, default }`
+6. Add tests in `formats/src/__tests__/rtf.test.ts` (round-trip preferred — see `roundTrip.test.ts`)
+7. Update CLAUDE.md `@bendyline/squisq-formats` subpath list and the formats section
+
+### The "New Subpath" Test (core)
+
+Imagine adding a new core subpath (e.g., `@bendyline/squisq/audio`). Trace the path:
+
+1. Create `core/src/audio/` with the implementation + `index.ts` barrel
+2. Add `'audio/index': 'src/audio/index.ts'` to `core/tsup.config.ts` entry map
+3. Add `"./audio": { types, import, default }` to `core/package.json` exports
+4. Re-export from `core/src/index.ts` if it should appear in the root bundle
+5. Add tests in `core/src/__tests__/`
+6. Update CLAUDE.md "Subpath Exports" section + the repository structure tree
+
+Every new subpath touches **three coordinated files** (tsup entry, package.json export,
+CLAUDE.md). Forgetting any one of them produces a confusing failure mode:
+
+- Missing tsup entry → consumer imports throw `Cannot find module`
+- Missing package.json export → consumer imports throw `Package subpath not exported`
+- Missing CLAUDE.md update → future agents don't know the subpath exists
 
 ---
 

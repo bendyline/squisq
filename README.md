@@ -59,8 +59,12 @@ import { markdownDocToDocx } from '@bendyline/squisq-formats/docx';
 ## Development
 
 ```bash
-# Install dependencies
-npm install
+# Install dependencies (runs `npm install` plus an explicit allowlist of trusted
+# install scripts — see CLAUDE.md "Installing Dependencies"). Use this instead
+# of a bare `npm install`: the .npmrc disables third-party install scripts as
+# a supply-chain hardening measure, and esbuild needs its postinstall to fetch
+# the native binary tsup depends on.
+npm run install:safe
 
 # Build all packages (sequential, respects dependency order)
 npm run build

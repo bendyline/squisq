@@ -33,9 +33,7 @@ describe('PlainHtmlPreview', () => {
         images={new Map([['a.jpg', 'data:image/png;base64,AAA']])}
       />,
     );
-    await waitFor(() =>
-      expect(getIframeSrcDoc()).toContain('src="data:image/png;base64,AAA"'),
-    );
+    await waitFor(() => expect(getIframeSrcDoc()).toContain('src="data:image/png;base64,AAA"'));
   });
 
   it('resolves image URLs through the supplied mediaProvider', async () => {
@@ -84,9 +82,7 @@ describe('PlainHtmlPreview', () => {
   it('loads Google Fonts for themes that reference google-hosted faces', async () => {
     const theme = resolveTheme('documentary');
     render(<PlainHtmlPreview markdown={'# Hi'} theme={theme} />);
-    await waitFor(() =>
-      expect(getIframeSrcDoc()).toContain('https://fonts.googleapis.com/css2?'),
-    );
+    await waitFor(() => expect(getIframeSrcDoc()).toContain('https://fonts.googleapis.com/css2?'));
   });
 
   it('resolves raw HTML <img> tags too (resized image case)', async () => {
