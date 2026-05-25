@@ -471,6 +471,27 @@ export interface VideoPullQuoteInput extends BaseTemplateBlock {
 }
 
 /**
+ * Diagram block - renders child headings as a node-and-edge diagram.
+ *
+ * Unlike other templates, the diagram template reads its content from
+ * the parent block's `children` (passed via `context.children`) — each
+ * child heading becomes a node, positioned by its `x`/`y` and connected
+ * by its `connectsTo`. Per-diagram options on this input control overall
+ * appearance; per-node data lives on the child blocks themselves.
+ */
+export interface DiagramBlockInput extends BaseTemplateBlock {
+  template: 'diagram';
+  /** Optional diagram title displayed above the canvas. */
+  title?: string;
+  /** Color scheme for nodes and edges. */
+  colorScheme?: ColorScheme;
+  /** Node shape style (default: 'rounded'). */
+  nodeShape?: 'rounded' | 'rect' | 'pill';
+  /** Edge style (default: 'curved'). */
+  edgeStyle?: 'curved' | 'straight' | 'orthogonal';
+}
+
+/**
  * Data table - renders a themed table with headers and rows.
  * Ideal for structured data, comparisons, and reference information.
  */
@@ -511,7 +532,8 @@ export type TemplateBlock =
   | PullQuoteInput
   | VideoWithCaptionInput
   | VideoPullQuoteInput
-  | DataTableInput;
+  | DataTableInput
+  | DiagramBlockInput;
 
 /**
  * A block can be either a raw Block or a TemplateBlock.
@@ -548,6 +570,12 @@ export interface TemplateContext {
   orientation: ViewportOrientation;
   /** Layout hints for this orientation */
   layout: LayoutHints;
+  /**
+   * The block's direct children (set by `getLayers` when the block has
+   * `children`). Most templates ignore this; aggregate templates like
+   * `diagram` consume it to render each child as part of their output.
+   */
+  children?: Block[];
 }
 
 /**

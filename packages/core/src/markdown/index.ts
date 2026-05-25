@@ -32,6 +32,9 @@ export type {
   // Heading template annotation
   HeadingTemplateAnnotation,
 
+  // Pandoc-style heading attributes
+  HeadingAttributes,
+
   // HTML sub-DOM
   HtmlElement,
   HtmlText,
@@ -95,6 +98,10 @@ export { stringifyMarkdown } from './stringify.js';
 
 // Conversion layer (for advanced use: working with remark plugins directly)
 export { fromMdast, toMdast } from './convert.js';
+
+// Pandoc-style heading attribute helpers — exposed so editor-react can
+// mutate `data-block-attrs` strings without reimplementing the tokenizer.
+export { parsePandocAttrTokens, serializePandocAttributes } from './convert.js';
 
 // HTML sub-DOM utilities
 export { parseHtmlToNodes, stringifyHtmlNodes } from './htmlParse.js';

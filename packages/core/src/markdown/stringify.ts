@@ -108,7 +108,14 @@ export function stringifyMarkdown(doc: MarkdownDocument, options?: StringifyOpti
 
   // remark-stringify escapes `[` in text nodes (to prevent link syntax),
   // which turns `{[template]}` into `{\[template]}`. Unescape our annotation syntax.
-  const cleaned = result.replace(/\{\\\[([^\]]+)\]\}/g, '{[$1]}');
+  let cleaned = result.replace(/\{\\\[([^\]]+)\]\}/g, '{[$1]}');
+
+  // remark-directive escapes `:` in heading text (since `:name` would
+  // round-trip as a text directive). Inside our Pandoc-style `{…}` attribute
+  // block, `:` is purely a value separator (e.g. `connectsTo=foo:flow`),
+  // so unescape it to keep round-trips lossless. The negative lookahead
+  // skips `{[…]}` template annotations — those are handled separately.
+  cleaned = cleaned.replace(/\{(?!\\?\[)[^}]*\}/g, (match) => match.replace(/\\:/g, ':'));
 
   // Prepend YAML frontmatter if present
   if (doc.frontmatter && Object.keys(doc.frontmatter).length > 0) {

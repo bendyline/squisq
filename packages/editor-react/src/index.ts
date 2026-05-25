@@ -129,6 +129,25 @@ export { buildPreviewDoc } from './buildPreviewDoc.js';
 // Tiptap extension: Heading with template annotation support
 export { HeadingWithTemplate } from './TemplateAnnotation.js';
 
+// Diagram editor — Tiptap extension that mounts a React-Flow canvas
+// below any `### Title {[diagram]}` heading and hides the section's
+// child headings (they're rendered as nodes in the canvas).
+export { DiagramExtension } from './diagram/DiagramExtension.js';
+export { DiagramCanvas } from './diagram/DiagramCanvas.js';
+export type { DiagramCommand } from './diagram/DiagramCanvas.js';
+export { DiagramWidget } from './diagram/DiagramWidget.js';
+export { useDiagramData } from './diagram/useDiagramData.js';
+export type { DiagramData, DiagramRFNode, DiagramRFEdge } from './diagram/useDiagramData.js';
+export {
+  moveNode,
+  addConnection,
+  removeConnection,
+  renameNode,
+  addNode,
+  removeNode,
+  listDiagramChildren,
+} from './diagram/diagramCommands.js';
+
 // JSON Form — editable component
 export { JsonEditor } from './jsonEditor/index.js';
 export type { JsonEditorProps } from './jsonEditor/index.js';

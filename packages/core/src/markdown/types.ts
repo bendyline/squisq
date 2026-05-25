@@ -127,6 +127,64 @@ export interface HeadingTemplateAnnotation {
 }
 
 /**
+ * A directed connection from one block to another, parsed from a heading
+ * attribute `connectsTo=target1,target2:type,target3`. Mirrors the schema
+ * `BlockConnection` type — duplicated here so this module stays
+ * dependency-free from the doc schema.
+ */
+export interface BlockConnection {
+  /** Target block id. */
+  target: string;
+  /** Optional connection type/label (e.g., "flow", "requires"). */
+  type?: string;
+}
+
+/**
+ * Pandoc-style heading attribute block, parsed from `{#id .class key=value}`
+ * appearing at the end of a heading line (alongside, or instead of, the
+ * squisq-native `{[templateName …]}` block).
+ *
+ * @example
+ * ```markdown
+ * ## Architecture {#arch x=600 y=300 connectsTo=foo:flow,bar:requires}
+ * ```
+ * →
+ * ```ts
+ * {
+ *   id: 'arch',
+ *   params: { x: '600', y: '300', connectsTo: 'foo:flow,bar:requires' },
+ *   blockMeta: {
+ *     x: 600,
+ *     y: 300,
+ *     connectsTo: [{ target: 'foo', type: 'flow' }, { target: 'bar', type: 'requires' }],
+ *   },
+ * }
+ * ```
+ *
+ * `params` carries the raw pre-coercion strings (lossless for round-tripping),
+ * while `blockMeta` carries the typed values for known keys. Unknown keys flow
+ * to `metadata`.
+ */
+export interface HeadingAttributes {
+  /** Block id from `#identifier` (overrides slug-from-heading). */
+  id?: string;
+  /** Class tokens from `.classname` (reserved for downstream use). */
+  classes?: string[];
+  /** All key=value attributes as raw strings (lossless source for serialization). */
+  params?: Record<string, string>;
+  /** Typed values for known block-meta keys (coerced from `params`). */
+  blockMeta?: {
+    x?: number;
+    y?: number;
+    startTime?: number;
+    duration?: number;
+    connectsTo?: BlockConnection[];
+  };
+  /** Subset of `params` whose keys are NOT in the known-key registry. */
+  metadata?: Record<string, string>;
+}
+
+/**
  * ATX or setext heading (# Heading).
  */
 export interface MarkdownHeading extends MarkdownNodeBase {
@@ -142,6 +200,13 @@ export interface MarkdownHeading extends MarkdownNodeBase {
    * stringification, so it round-trips transparently.
    */
   templateAnnotation?: HeadingTemplateAnnotation;
+  /**
+   * Pandoc-style heading attributes parsed from trailing `{#id .class key=value}`
+   * syntax. Independent from `templateAnnotation` — both may appear on the
+   * same heading in either order. Stripped from `children` during parsing
+   * and re-injected during stringification.
+   */
+  attributes?: HeadingAttributes;
 }
 
 /**

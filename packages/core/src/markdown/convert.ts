@@ -19,11 +19,13 @@ import type {
   MarkdownTableCell,
   MarkdownSourcePosition,
   HeadingTemplateAnnotation,
+  HeadingAttributes,
   MarkdownHeading,
   MarkdownInlineIcon,
 } from './types.js';
 import { parseHtmlToNodes } from './htmlParse.js';
 import { resolveIcon } from '../icons/resolve.js';
+import { coerceAnnotationValues } from './annotationCoercion.js';
 
 // ============================================
 // Generic mdast node shape
@@ -211,6 +213,228 @@ function parseAnnotationTokens(inner: string): HeadingTemplateAnnotation {
     result.params = params;
   }
   return result;
+}
+
+// ============================================
+// Pandoc-style heading attribute helpers
+// ============================================
+
+/**
+ * Regex matching a trailing Pandoc-style `{#id .class key=value}` block.
+ * The negative lookahead `(?!\[)` ensures we don't collide with the
+ * squisq-native `{[…]}` template annotation, which always has `[` as
+ * the first character inside the braces. The inner content cannot itself
+ * contain `}` (Pandoc attributes don't support that).
+ */
+const PANDOC_ATTR_RE = /\s*\{(?!\[)([^}]*)\}\s*$/;
+
+/**
+ * Extract a trailing Pandoc-style `{…}` attribute block from a heading's
+ * inline children.
+ *
+ * Unlike `extractTemplateAnnotation()`, this walks backward through both
+ * text nodes AND bare `textDirective` nodes. remark-directive may have
+ * fragmented a `{key=val:type,…}` attribute block at colon-prefixed
+ * segments like `:type` that look like text directives but are really
+ * attribute-value fragments. We virtually re-stitch the trailing run as a
+ * single string, match against it, and only physically modify the children
+ * array if a match is found — so a heading that legitimately contains a
+ * non-bare `:directive` is left alone.
+ *
+ * Returns the parsed `HeadingAttributes`, or null if no match.
+ */
+function extractPandocAttributes(children: MarkdownInlineNode[]): HeadingAttributes | null {
+  // Collect the trailing run of [text | bare textDirective] children.
+  const trail: { val: string; idx: number; len: number }[] = [];
+  for (let i = children.length - 1; i >= 0; i--) {
+    const c = children[i];
+    if (c.type === 'text') {
+      trail.unshift({ val: c.value, idx: i, len: c.value.length });
+    } else if (c.type === 'textDirective') {
+      const td = c as {
+        name?: string;
+        children?: unknown[];
+        attributes?: Record<string, string>;
+      };
+      const isBare =
+        (!td.children || td.children.length === 0) &&
+        (!td.attributes || Object.keys(td.attributes).length === 0);
+      if (!isBare) break;
+      const synthesized = ':' + (td.name ?? '');
+      trail.unshift({ val: synthesized, idx: i, len: synthesized.length });
+    } else {
+      break;
+    }
+  }
+  if (trail.length === 0) return null;
+
+  const joined = trail.map((t) => t.val).join('');
+  const match = joined.match(PANDOC_ATTR_RE);
+  if (!match) return null;
+
+  const inner = match[1].trim();
+  const attrs = parsePandocAttrTokens(inner);
+
+  // Strip the matched portion. `match.index` is an offset into `joined`.
+  // Walk forward through `trail` until we find the child that straddles
+  // the match boundary; trim that child (if text) or drop it (if directive),
+  // and remove everything after it from `children`.
+  const matchStart = match.index!;
+  let scannedLen = 0;
+  for (let ti = 0; ti < trail.length; ti++) {
+    const t = trail[ti];
+    if (scannedLen + t.len <= matchStart) {
+      scannedLen += t.len;
+      continue;
+    }
+    const firstNode = children[t.idx];
+    const keepLen = matchStart - scannedLen;
+    if (firstNode.type === 'text') {
+      const trimmed = firstNode.value.slice(0, keepLen).replace(/\s+$/, '');
+      if (trimmed) {
+        (firstNode as { value: string }).value = trimmed;
+        children.splice(t.idx + 1);
+      } else {
+        children.splice(t.idx);
+      }
+    } else {
+      // Match boundary fell inside a textDirective's synthesized ":name"
+      // string — drop the directive and everything after.
+      children.splice(t.idx);
+    }
+    return attrs;
+  }
+  // Match consumes the entire trail.
+  children.splice(trail[0].idx);
+  return attrs;
+}
+
+/**
+ * Parse the inner content of a Pandoc-style `{…}` block. Tokens are
+ * whitespace-separated, with double-quoted runs treated as single tokens.
+ *
+ * - `#id` → `attributes.id`
+ * - `.class` → push onto `attributes.classes`
+ * - `key=value` or `key="quoted value"` → `attributes.params[key] = value`
+ *
+ * Empty `{}` yields `{}` (preserved as an annotation marker for round-tripping).
+ * Duplicate ids and keys: last wins, silent.
+ */
+export function parsePandocAttrTokens(inner: string): HeadingAttributes {
+  const tokens = tokenizePandocAttr(inner);
+  const attrs: HeadingAttributes = {};
+  const params: Record<string, string> = {};
+  const classes: string[] = [];
+
+  for (const token of tokens) {
+    if (token.startsWith('#') && !token.includes('=')) {
+      attrs.id = token.slice(1);
+    } else if (token.startsWith('.') && !token.includes('=')) {
+      const cls = token.slice(1);
+      if (cls) classes.push(cls);
+    } else {
+      const eqIdx = token.indexOf('=');
+      if (eqIdx > 0) {
+        const key = token.slice(0, eqIdx);
+        let value = token.slice(eqIdx + 1);
+        // Strip surrounding quotes if present (set by the tokenizer when
+        // the value was originally quoted).
+        if (value.length >= 2 && value.startsWith('"') && value.endsWith('"')) {
+          value = value.slice(1, -1).replace(/\\"/g, '"');
+        }
+        params[key] = value;
+      }
+    }
+  }
+
+  if (classes.length > 0) attrs.classes = classes;
+  if (Object.keys(params).length > 0) {
+    attrs.params = params;
+    const { blockMeta, metadata } = coerceAnnotationValues(params);
+    if (Object.keys(blockMeta).length > 0) attrs.blockMeta = blockMeta;
+    if (Object.keys(metadata).length > 0) attrs.metadata = metadata;
+  }
+  return attrs;
+}
+
+/**
+ * Quote-aware whitespace tokenizer for the Pandoc attr block interior.
+ *
+ * Tokens with `key="…"` form keep the quoted run as part of the same token
+ * (the quotes are preserved in the output and stripped by the caller after
+ * the `key=value` split). Bare `"…"` quoted tokens with no `key=` prefix are
+ * stored verbatim including quotes — they won't match the `#`/`.`/`key=`
+ * shape and will be ignored, which is consistent with Pandoc behavior.
+ *
+ * Unbalanced quotes are tolerated: the opening quote is treated as literal,
+ * the run continues to end of input.
+ */
+function tokenizePandocAttr(input: string): string[] {
+  const tokens: string[] = [];
+  let i = 0;
+  const n = input.length;
+  while (i < n) {
+    // Skip whitespace
+    while (i < n && /\s/.test(input[i])) i++;
+    if (i >= n) break;
+
+    let token = '';
+    while (i < n && !/\s/.test(input[i])) {
+      const ch = input[i];
+      if (ch === '"') {
+        token += '"';
+        i++;
+        while (i < n && input[i] !== '"') {
+          if (input[i] === '\\' && i + 1 < n && input[i + 1] === '"') {
+            token += '\\"';
+            i += 2;
+          } else {
+            token += input[i];
+            i++;
+          }
+        }
+        if (i < n && input[i] === '"') {
+          token += '"';
+          i++;
+        }
+      } else {
+        token += ch;
+        i++;
+      }
+    }
+    if (token) tokens.push(token);
+  }
+  return tokens;
+}
+
+/**
+ * Serialize a HeadingAttributes object back to a Pandoc `{#id .class key=value}` string.
+ * Returns null when the attributes object is entirely empty (nothing to emit).
+ *
+ * Canonical key order: `#id`, then `.classes` (in original order), then
+ * params in their original insertion order.
+ */
+export function serializePandocAttributes(attrs: HeadingAttributes): string | null {
+  const parts: string[] = [];
+  if (attrs.id) parts.push(`#${attrs.id}`);
+  if (attrs.classes) {
+    for (const cls of attrs.classes) parts.push(`.${cls}`);
+  }
+  if (attrs.params) {
+    for (const [key, value] of Object.entries(attrs.params)) {
+      parts.push(
+        needsQuoting(value) ? `${key}="${value.replace(/"/g, '\\"')}"` : `${key}=${value}`,
+      );
+    }
+  }
+  // Preserve an empty `{}` annotation marker if it was authored deliberately
+  // (e.g., reserved for downstream tooling). Caller decides whether to emit.
+  if (parts.length === 0) return '{}';
+  return `{${parts.join(' ')}}`;
+}
+
+function needsQuoting(value: string): boolean {
+  return /\s/.test(value);
 }
 
 /**
@@ -447,8 +671,33 @@ function convertBlockNode(node: MdastNode, parseHtml: boolean): MarkdownBlockNod
       // a template annotation. Anything that's NOT the template still
       // needs to become an icon node, so we run `splitInlineIcons` on
       // what's left after the template extraction.
+      //
+      // Both annotation forms ({[…]} and Pandoc {#…}) may appear at the
+      // end of the heading in either order. Extract them in a loop so
+      // we catch the second-from-last one too. A small bounded retry
+      // (max 4) is plenty — authors don't stack more than two trailing
+      // brace-blocks in practice.
       const headingChildren = convertInlineChildren(node.children ?? [], parseHtml, false);
-      const annotation = extractTemplateAnnotation(headingChildren);
+      let annotation: HeadingTemplateAnnotation | null = null;
+      let attrs: HeadingAttributes | null = null;
+      for (let pass = 0; pass < 4; pass++) {
+        let matched = false;
+        if (!annotation) {
+          const t = extractTemplateAnnotation(headingChildren);
+          if (t) {
+            annotation = t;
+            matched = true;
+          }
+        }
+        if (!attrs) {
+          const a = extractPandocAttributes(headingChildren);
+          if (a) {
+            attrs = a;
+            matched = true;
+          }
+        }
+        if (!matched) break;
+      }
       const finalChildren = splitInlineIcons(headingChildren);
       const result: MarkdownHeading = {
         type: 'heading',
@@ -458,6 +707,9 @@ function convertBlockNode(node: MdastNode, parseHtml: boolean): MarkdownBlockNod
       };
       if (annotation) {
         result.templateAnnotation = annotation;
+      }
+      if (attrs) {
+        result.attributes = attrs;
       }
       return result;
     }
@@ -778,9 +1030,19 @@ function blockToMdast(node: MarkdownBlockNode): MdastNode {
   switch (node.type) {
     case 'heading': {
       const mdastChildren = inlineChildrenToMdast(node.children);
+      // Canonical trailing order: Pandoc attrs first, then template annotation.
+      // Author-supplied order is not preserved across round-trips by design —
+      // canonicalization gives stable diffs.
+      const suffixes: string[] = [];
+      if (node.attributes) {
+        const pandoc = serializePandocAttributes(node.attributes);
+        if (pandoc != null) suffixes.push(pandoc);
+      }
       if (node.templateAnnotation) {
-        const suffix = serializeTemplateAnnotation(node.templateAnnotation);
-        // Append to last text node, or create a new one
+        suffixes.push(serializeTemplateAnnotation(node.templateAnnotation));
+      }
+      if (suffixes.length > 0) {
+        const suffix = suffixes.join(' ');
         const lastChild = mdastChildren[mdastChildren.length - 1];
         if (lastChild && lastChild.type === 'text') {
           lastChild.value = (lastChild.value ?? '') + ' ' + suffix;

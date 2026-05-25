@@ -151,7 +151,14 @@ export function markdownToDoc(markdownDoc: MarkdownDocument, options?: MarkdownT
   }
 
   function makeBlock(heading: MarkdownHeading | null): Block {
-    const id = heading ? generateId(heading, headingIndex++) : 'preamble';
+    // Pandoc `{#id}` overrides slug-from-heading when present.
+    const pandocId = heading?.attributes?.id;
+    const id = pandocId ? pandocId : heading ? generateId(heading, headingIndex++) : 'preamble';
+    // Keep the slug counter in sync when the author pinned an id, so a later
+    // un-pinned heading with the same slugified text doesn't collide.
+    if (pandocId && heading) {
+      headingIndex++;
+    }
 
     // Use template from annotation if present, otherwise fall back to default.
     // Legacy template ids (e.g. `titleBlock`) are normalized to their canonical
@@ -175,9 +182,31 @@ export function markdownToDoc(markdownDoc: MarkdownDocument, options?: MarkdownT
       ...(title ? { title } : {}),
     };
 
-    // Propagate key-value params from annotation to templateOverrides
+    // {[…]} template params → templateOverrides (template-specific overrides).
     if (annotation?.params) {
       block.templateOverrides = annotation.params;
+    }
+
+    // Pandoc {#id .class key=value} attributes → block-level fields.
+    // The two annotation forms are intentionally kept distinct: template
+    // params customize the template, block-level metadata describes the
+    // block as an abstract entity (position, connections, classes, free-form).
+    const attrs = heading?.attributes;
+    if (attrs) {
+      if (attrs.blockMeta) {
+        const m = attrs.blockMeta;
+        if (m.x != null) block.x = m.x;
+        if (m.y != null) block.y = m.y;
+        if (m.startTime != null) block.startTime = m.startTime;
+        if (m.duration != null) block.duration = m.duration;
+        if (m.connectsTo) block.connectsTo = m.connectsTo;
+      }
+      if (attrs.classes && attrs.classes.length > 0) {
+        block.classes = attrs.classes;
+      }
+      if (attrs.metadata && Object.keys(attrs.metadata).length > 0) {
+        block.metadata = attrs.metadata;
+      }
     }
 
     return block;
@@ -247,8 +276,11 @@ export function markdownToDoc(markdownDoc: MarkdownDocument, options?: MarkdownT
   const minDuration = 3; // seconds — minimum for blocks with little/no text
   const phrases: CaptionPhrase[] = [];
 
-  // First pass: compute duration from body-content reading time
+  // First pass: compute duration from body-content reading time.
+  // Skip blocks that pinned an explicit duration via a heading attribute —
+  // author intent wins over reading-time heuristics.
   for (const block of allBlocks) {
+    if (block.sourceHeading?.attributes?.blockMeta?.duration != null) continue;
     const bodyText = getBlockBodyText(block);
     if (bodyText.length > 0) {
       const estimate = estimateReadingTime(bodyText);
@@ -258,10 +290,16 @@ export function markdownToDoc(markdownDoc: MarkdownDocument, options?: MarkdownT
     }
   }
 
-  // Second pass: assign start times sequentially and build caption phrases
+  // Second pass: assign start times sequentially and build caption phrases.
+  // Blocks with an explicit `startTime` attribute keep their pinned value;
+  // the running cursor still advances by their duration so following blocks
+  // sequence after them.
   let currentTime = 0;
   for (const block of allBlocks) {
-    block.startTime = currentTime;
+    const explicitStart = block.sourceHeading?.attributes?.blockMeta?.startTime;
+    if (explicitStart == null) {
+      block.startTime = currentTime;
+    }
 
     // Generate caption phrases from the block's body content
     const bodyText = getBlockBodyText(block);

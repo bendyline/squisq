@@ -19,6 +19,21 @@
 // ============================================
 
 /**
+ * A directed connection from one block to another.
+ *
+ * Populated from a heading's Pandoc-style `{connectsTo=…}` attribute
+ * (e.g. `## Step 1 {#step1 connectsTo=foo:flow,bar}`). Each item is
+ * `target` or `target:type`. Used by diagram-style layouts that draw
+ * edges between blocks.
+ */
+export interface BlockConnection {
+  /** Target block id (matches another block's `id`). */
+  target: string;
+  /** Optional connection type/label (e.g., "flow", "requires"). */
+  type?: string;
+}
+
+/**
  * Configuration for the Start/resting block shown before playback begins.
  */
 export interface StartBlockConfig {
@@ -100,13 +115,17 @@ export interface Doc {
  * - `children` holds sub-heading blocks (e.g., H2s under an H1)
  */
 export interface Block {
-  /** Unique identifier for this block */
+  /** Unique identifier for this block.
+   *  Defaults to a slug derived from the heading text. May be overridden by
+   *  a Pandoc-style `{#custom-id}` attribute on the heading. */
   id: string;
 
-  /** When this block appears (seconds from start) */
+  /** When this block appears (seconds from start).
+   *  Overridden by a heading attribute `startTime=…` when present. */
   startTime: number;
 
-  /** How long this block is visible (seconds) */
+  /** How long this block is visible (seconds).
+   *  Overridden by a heading attribute `duration=…` when present. */
   duration: number;
 
   /** Which audio segment this block belongs to (0-indexed) */
@@ -161,12 +180,45 @@ export interface Block {
   sourceHeading?: import('../markdown/types.js').MarkdownHeading;
 
   /**
-   * Template overrides extracted from markdown directives.
-   * For example, `### Data Section {template=chart colorScheme=blue}`
-   * would produce `{ template: 'chart', colorScheme: 'blue' }`.
-   * Allows per-block customization of template selection and parameters.
+   * Template overrides extracted from a heading's `{[templateName key=value]}`
+   * annotation. Only carries template-specific params (e.g. `colorScheme=blue`).
+   * Block-level metadata lives in `x` / `y` / `connectsTo` / `metadata` and is
+   * sourced from the Pandoc-style `{#id .class key=value}` attribute block instead.
    */
   templateOverrides?: Record<string, string>;
+
+  // ── Block-level metadata from Pandoc-style `{#id .class key=value}` ──
+
+  /**
+   * X coordinate for diagram-style positioning (in author-defined units).
+   * Sourced from a heading attribute `x=…`.
+   */
+  x?: number;
+
+  /**
+   * Y coordinate for diagram-style positioning (in author-defined units).
+   * Sourced from a heading attribute `y=…`.
+   */
+  y?: number;
+
+  /**
+   * Outgoing connections to other blocks, by id. Sourced from a heading
+   * attribute `connectsTo=target1,target2:type,target3`.
+   */
+  connectsTo?: BlockConnection[];
+
+  /**
+   * CSS-style class tokens from a heading's Pandoc attribute (e.g. `{.important .v2}`).
+   * Parsed and stored; downstream consumers may use them for styling or filtering.
+   */
+  classes?: string[];
+
+  /**
+   * Free-form metadata for heading attribute keys outside the typed registry
+   * (anything that isn't `x` / `y` / `connectsTo` / `startTime` / `duration`).
+   * Values are raw strings exactly as authored.
+   */
+  metadata?: Record<string, string>;
 }
 
 // ============================================
@@ -177,7 +229,14 @@ export interface Block {
  * A visual element within a block.
  * Layers are composited back-to-front (first layer is background).
  */
-export type Layer = ImageLayer | TextLayer | ShapeLayer | MapLayer | VideoLayer | TableLayer;
+export type Layer =
+  | ImageLayer
+  | TextLayer
+  | ShapeLayer
+  | PathLayer
+  | MapLayer
+  | VideoLayer
+  | TableLayer;
 
 interface BaseLayer {
   /** Unique identifier for this layer */
@@ -238,6 +297,35 @@ export interface ShapeLayer extends BaseLayer {
     strokeWidth?: number;
     /** Corner radius for rect */
     borderRadius?: number;
+  };
+}
+
+/**
+ * Path layer - renders an SVG `<path>` for arbitrary curves, connectors,
+ * arrows, or filled regions. Used by the diagram template for edges
+ * between nodes, but available to any template that needs a non-rect/
+ * circle/line shape.
+ *
+ * The `position` field carries the layer's bounding box (so animations
+ * and clipping work the same as for other layers), but the actual
+ * geometry is encoded in the `d` attribute using absolute SVG path
+ * coordinates relative to the block viewport.
+ */
+export interface PathLayer extends BaseLayer {
+  type: 'path';
+  content: {
+    /** SVG path `d` attribute (e.g. "M 10 10 L 90 90"). Absolute viewBox coords. */
+    d: string;
+    /** Stroke color (default: theme text color). */
+    stroke?: string;
+    /** Stroke width in pixels (default: 2). */
+    strokeWidth?: number;
+    /** Optional fill color (default: 'none' — pure connectors). */
+    fill?: string;
+    /** Optional stroke dash pattern (SVG `stroke-dasharray` syntax). */
+    dasharray?: string;
+    /** Where to render an arrowhead, if any. Default: 'none'. */
+    arrow?: 'none' | 'end' | 'start' | 'both';
   };
 }
 

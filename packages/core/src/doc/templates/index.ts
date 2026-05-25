@@ -46,6 +46,7 @@ import { pullQuote } from './pullQuote.js';
 import { videoWithCaption } from './videoWithCaption.js';
 import { videoPullQuote } from './videoPullQuote.js';
 import { dataTable } from './dataTable.js';
+import { diagramBlock } from './diagramBlock.js';
 
 /**
  * Registry mapping template ids (the strings that appear in
@@ -82,6 +83,7 @@ export const templateRegistry: TemplateRegistry = {
   videoWithCaption,
   videoPullQuote,
   dataTable,
+  diagram: diagramBlock,
 };
 
 /**
@@ -95,6 +97,8 @@ export const TEMPLATE_ALIASES: Readonly<Record<string, string>> = {
   quoteBlock: 'quote',
   mapBlock: 'map',
   listBlock: 'list',
+  diagramBlock: 'diagram',
+  diagramNode: 'diagram',
 };
 
 /**
@@ -602,6 +606,14 @@ export { pullQuote } from './pullQuote.js';
 export { videoWithCaption } from './videoWithCaption.js';
 export { videoPullQuote } from './videoPullQuote.js';
 export { dataTable } from './dataTable.js';
+export { diagramBlock } from './diagramBlock.js';
+export { computeDiagramLayout } from './diagramLayout.js';
+export type {
+  DiagramLayout,
+  DiagramNodePosition,
+  DiagramEdge,
+  DiagramLayoutOptions,
+} from './diagramLayout.js';
 
 // Re-export accent image utilities
 export { getAccentLayout, createAccentLayers, adjustY, DEFAULT_LAYOUT } from './accentImage.js';

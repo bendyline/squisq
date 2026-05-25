@@ -293,4 +293,44 @@ A captioned video block for embedding media clips.
 
 A dramatic quote overlaid on a background video.
 `,
+  'diagram-family-tree': `# Family Tree Demo
+
+A small genealogy diagram. Each child heading under the \`{[diagram]}\` parent becomes a node; \`connectsTo\` links them.
+
+## Family Tree {[diagram]}
+
+### Grandparent {#grandparent x=400 y=80}
+
+The eldest known ancestor.
+
+### Parent A {#parent-a x=240 y=260 connectsTo=grandparent}
+
+### Parent B {#parent-b x=560 y=260 connectsTo=grandparent}
+
+### Child 1 {#child-1 x=120 y=440 connectsTo=parent-a:born}
+
+### Child 2 {#child-2 x=360 y=440 connectsTo=parent-a:born}
+
+### Child 3 {#child-3 x=600 y=440 connectsTo=parent-b:born}
+
+## After the diagram
+
+Regular body content continues here.
+`,
+  'diagram-architecture': `# Architecture Sketch
+
+A node diagram with typed connections.
+
+## System Overview {[diagram]}
+
+### API Server {#api x=300 y=120 connectsTo=db:reads,cache:reads,queue:publishes}
+
+### Database {#db x=80 y=320}
+
+### Cache {#cache x=300 y=320}
+
+### Job Queue {#queue x=520 y=320 connectsTo=worker:dispatches}
+
+### Worker {#worker x=520 y=520 connectsTo=db:writes}
+`,
 };

@@ -40,6 +40,14 @@ export const HeadingWithTemplate = Heading.extend({
           return { 'data-template-params': attributes.dataTemplateParams };
         },
       },
+      dataBlockAttrs: {
+        default: null,
+        parseHTML: (element: HTMLElement) => element.getAttribute('data-block-attrs') || null,
+        renderHTML: (attributes: Record<string, unknown>) => {
+          if (!attributes.dataBlockAttrs) return {};
+          return { 'data-block-attrs': attributes.dataBlockAttrs };
+        },
+      },
     };
   },
 

@@ -112,6 +112,11 @@ export function getLayers(block: DocBlock, context: RenderContext = {}): Layer[]
     if (resolved in templateRegistry) {
       const templateName = resolved as keyof typeof templateRegistry;
       const templateCtx = createTemplateContext(theme, blockIndex, totalBlocks, viewport);
+      // Aggregate templates (e.g. `diagram`) consume the block's children.
+      const maybeChildren = (block as Block).children;
+      if (maybeChildren && maybeChildren.length > 0) {
+        templateCtx.children = maybeChildren;
+      }
       let layers: Layer[];
       try {
         // Each registry entry accepts its specific TemplateBlock variant; the

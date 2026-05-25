@@ -563,3 +563,91 @@ describe('auto cover block generation', () => {
     expect(doc.startBlock!.subtitle).toBeUndefined();
   });
 });
+
+describe('markdownToDoc with Pandoc attributes', () => {
+  function firstHeadingBlock(md: string) {
+    const parsed = parseMarkdown(md);
+    const doc = markdownToDoc(parsed, { articleId: 'test', generateCoverBlock: false });
+    return doc.blocks[0];
+  }
+
+  it('overrides block id from {#id}', () => {
+    const block = firstHeadingBlock('## Section title {#intro}');
+    expect(block.id).toBe('intro');
+  });
+
+  it('applies x / y to typed Block fields', () => {
+    // `diagramNode` is a legacy alias for the canonical `diagram` template;
+    // the alias resolves at template-resolution time.
+    const block = firstHeadingBlock('## Step 1 {#step1 x=400 y=200} {[diagramNode]}');
+    expect(block.id).toBe('step1');
+    expect(block.x).toBe(400);
+    expect(block.y).toBe(200);
+    expect(block.template).toBe('diagram');
+  });
+
+  it('applies multiple connectsTo entries with mixed types', () => {
+    const block = firstHeadingBlock(
+      '## Architecture {#arch x=600 y=300 connectsTo=foo:veryImportant,bar:requires,baz:requires} {[diagramNode]}',
+    );
+    expect(block.connectsTo).toEqual([
+      { target: 'foo', type: 'veryImportant' },
+      { target: 'bar', type: 'requires' },
+      { target: 'baz', type: 'requires' },
+    ]);
+  });
+
+  it('parses connections without types', () => {
+    const block = firstHeadingBlock('## Summary {#summary connectsTo=intro,middle,end}');
+    expect(block.connectsTo).toEqual([
+      { target: 'intro' },
+      { target: 'middle' },
+      { target: 'end' },
+    ]);
+  });
+
+  it('parses mix of typed and untyped connections in one list', () => {
+    const block = firstHeadingBlock(
+      '## Decision {#decision connectsTo=alt1,alt2:rejected,alt3:chosen}',
+    );
+    expect(block.connectsTo).toEqual([
+      { target: 'alt1' },
+      { target: 'alt2', type: 'rejected' },
+      { target: 'alt3', type: 'chosen' },
+    ]);
+  });
+
+  it('overrides startTime / duration with attribute values (seconds)', () => {
+    const block = firstHeadingBlock('## Closing {#closing startTime=02:30 duration=00:45}');
+    expect(block.startTime).toBe(150);
+    expect(block.duration).toBe(45);
+  });
+
+  it('puts unknown keys into block.metadata', () => {
+    const block = firstHeadingBlock('## X {#x priority=high status=draft}');
+    expect(block.metadata).toEqual({ priority: 'high', status: 'draft' });
+  });
+
+  it('routes template params separately from block-level metadata', () => {
+    const block = firstHeadingBlock(
+      '## X {#big x=400 priority=high} {[diagramNode colorScheme=blue]}',
+    );
+    expect(block.templateOverrides).toEqual({ colorScheme: 'blue' });
+    expect(block.metadata).toEqual({ priority: 'high' });
+    expect(block.x).toBe(400);
+  });
+
+  it('stores Pandoc classes on block.classes', () => {
+    const block = firstHeadingBlock('## X {#x .alpha .beta}');
+    expect(block.classes).toEqual(['alpha', 'beta']);
+  });
+
+  it('backward compat: plain {[…]}-only heading is unchanged', () => {
+    const block = firstHeadingBlock('## X {[chart colorScheme=blue]}');
+    expect(block.template).toBe('chart');
+    expect(block.templateOverrides).toEqual({ colorScheme: 'blue' });
+    expect(block.x).toBeUndefined();
+    expect(block.metadata).toBeUndefined();
+    expect(block.classes).toBeUndefined();
+  });
+});

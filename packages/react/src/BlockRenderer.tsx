@@ -10,6 +10,7 @@ import type { Block, Layer } from '@bendyline/squisq/schemas';
 import { ImageLayer } from './layers/ImageLayer';
 import { TextLayer } from './layers/TextLayer';
 import { ShapeLayer } from './layers/ShapeLayer';
+import { PathLayer } from './layers/PathLayer';
 import { MapLayer } from './layers/MapLayer';
 import { VideoLayer } from './layers/VideoLayer';
 import { TableLayer } from './layers/TableLayer';
@@ -124,6 +125,8 @@ function LayerRenderer({ layer, basePath, viewport, blockTime, isPlaying }: Laye
       return <TextLayer layer={layer} viewport={viewport} blockTime={blockTime} />;
     case 'shape':
       return <ShapeLayer layer={layer} viewport={viewport} blockTime={blockTime} />;
+    case 'path':
+      return <PathLayer layer={layer} viewport={viewport} blockTime={blockTime} />;
     case 'map':
       return (
         <MapLayer layer={layer} basePath={basePath} viewport={viewport} blockTime={blockTime} />

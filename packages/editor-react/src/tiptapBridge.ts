@@ -194,19 +194,44 @@ export function markdownToTiptap(markdown: string): string {
       let text = headingMatch[2];
       let attrs = '';
 
-      // Extract {[template key=value …]} annotation. Trailing `[\s\]\}]*`
-      // tolerates accidental doubled `]}` that users type while learning
-      // the syntax — must stay in sync with TEMPLATE_ANNOTATION_RE in
+      // Peel off trailing brace-blocks in any order: the squisq-native
+      // `{[template …]}` annotation and the Pandoc `{#id .class key=value}`
+      // attribute block may both appear at the end of the heading line.
+      // Loop until neither matches. Must stay in sync with the parsers in
       // packages/core/src/markdown/convert.ts.
-      const annotMatch = text.match(/\s*\{\[([^\]]+)\]\}[\s\]}]*$/);
-      if (annotMatch) {
-        text = text.slice(0, annotMatch.index!).trimEnd();
-        const tokens = annotMatch[1].trim().split(/\s+/);
-        attrs = ` data-template="${escapeHtml(tokens[0])}"`;
+      let templateInner: string | null = null;
+      let pandocInner: string | null = null;
+      for (let pass = 0; pass < 4; pass++) {
+        let matched = false;
+        if (templateInner == null) {
+          const m = text.match(/\s*\{\[([^\]]+)\]\}[\s\]}]*$/);
+          if (m) {
+            templateInner = m[1].trim();
+            text = text.slice(0, m.index!).trimEnd();
+            matched = true;
+          }
+        }
+        if (pandocInner == null) {
+          const m = text.match(/\s*\{(?!\[)([^}]*)\}\s*$/);
+          if (m) {
+            pandocInner = m[1].trim();
+            text = text.slice(0, m.index!).trimEnd();
+            matched = true;
+          }
+        }
+        if (!matched) break;
+      }
+
+      if (templateInner != null) {
+        const tokens = templateInner.split(/\s+/);
+        attrs += ` data-template="${escapeHtml(tokens[0])}"`;
         const params = tokens.slice(1).filter((t) => t.includes('='));
         if (params.length > 0) {
           attrs += ` data-template-params="${escapeHtml(params.join(' '))}"`;
         }
+      }
+      if (pandocInner != null) {
+        attrs += ` data-block-attrs="${escapeHtml(pandocInner)}"`;
       }
 
       outputBlocks.push(`<h${level}${attrs}>${inlineToHtml(text)}</h${level}>`);
@@ -354,19 +379,26 @@ export function tiptapToMarkdown(html: string): string {
       const attrs = headingMatch[2];
       let text = htmlToInline(headingMatch[3]);
 
-      // Re-inject template annotation from data attributes
+      // Re-inject heading annotations from data attributes. Canonical
+      // emit order: Pandoc `{#…}` first, then squisq `{[…]}` template
+      // annotation (matches blockToMdast in core/markdown/convert.ts).
+      const blockAttrsMatch = attrs.match(/data-block-attrs="([^"]*)"/);
       const tmplMatch = attrs.match(/data-template="([^"]+)"/);
       if (tmplMatch) {
-        let annotation = tmplMatch[1];
-        // Defensive: an earlier broken build briefly rendered the
-        // template label as a real text node inside the badge, which
-        // bled the label into the heading's textContent. Strip a
-        // trailing copy of the template's label so existing documents
-        // self-heal on save.
-        const label = templateLabel(annotation);
+        // Strip an accidental trailing copy of the template label that an
+        // earlier broken build briefly rendered as real text inside the
+        // badge. Existing documents self-heal on save.
+        const label = templateLabel(tmplMatch[1]);
         if (label && text.endsWith(label)) {
           text = text.slice(0, -label.length).trimEnd();
         }
+      }
+      if (blockAttrsMatch) {
+        const inner = unescapeHtml(blockAttrsMatch[1]);
+        text += ` {${inner}}`;
+      }
+      if (tmplMatch) {
+        let annotation = tmplMatch[1];
         const paramsMatch = attrs.match(/data-template-params="([^"]+)"/);
         if (paramsMatch) {
           annotation += ' ' + unescapeHtml(paramsMatch[1]);

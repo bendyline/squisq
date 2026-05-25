@@ -30,7 +30,12 @@ import { useMonacoLoader } from './useMonacoLoader';
 //   resolve: { alias: [{ find: /^monaco-editor$/, replacement: './monaco-slim.ts' }] }
 //
 // Where monaco-slim.ts re-exports 'monaco-editor/esm/vs/editor/editor.api'
-// plus only the language contributions needed (e.g. markdown, javascript).
+// plus only the language contributions actually needed
+// (`basic-languages/monaco.contribution` for the broad TM grammars,
+// and any of `language/{css,html,json,typescript}/monaco.contribution`
+// for the rich language services). Skipping the language contributions
+// entirely means `defaultLanguage` becomes inert — no tokenizer
+// registered, so every file renders as plain foreground text.
 
 // Squisq Monaco themes: same syntax highlighting as vs / vs-dark, but with
 // Monaco's internal gutter (line numbers + folding margin) and overview
