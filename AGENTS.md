@@ -1,4 +1,4 @@
-# Codex Guidelines for Squisq
+# Agent Guidelines for Squisq
 
 ## Project Overview
 
@@ -29,7 +29,11 @@ squisq/
                             #   themeCompile, themeValidator, colorUtils, fontStacks, Types,
                             #   MediaProvider, ImageEditDoc
         doc/
-          templates/        # 20 block templates (title, statHighlight, etc.) + coverBlock (start
+          templates/        # 21 block templates (title, sectionHeader, statHighlight, quote,
+                            #   factCard, twoColumn, dateEvent, imageWithCaption, leftFeature,
+                            #   rightFeature, map, fullBleedQuote, list, photoGrid,
+                            #   definitionCard, comparisonBar, pullQuote, videoWithCaption,
+                            #   videoPullQuote, dataTable, diagram) + coverBlock (start
                             #   block, not in registry) + accentImage / persistentLayers / captionUtils
                             #   shared utilities
           utils/            # animationUtils, themeUtils
@@ -131,6 +135,7 @@ squisq/
                             #   toggle, chip-bin, card-stack, tabs, …) — uses chooseControl from core
         recorder/           # MediaRecorder UI + helpers (RecorderModal, RecorderButton,
                             #   RecorderPanel, hooks, sources, formats, timingJson)
+        diagram/            # React Flow-backed diagram editor extension and command helpers
         tiptap/             # TiptapAudio, TiptapVideo, useResolvedMediaSrc — media node views
         utils/              # collectInlineFontAwesomeCss, dropUtils, normalizeMalformedAssetUrl
     video/                  # @bendyline/squisq-video
@@ -225,7 +230,7 @@ For CI / clean reproducible installs, run `npm ci && node scripts/run-install-al
 build entry and a `package.json` export):
 
 - `@bendyline/squisq/schemas` — Type definitions (Doc, BlockTemplates, Viewport, LayoutStrategy, Theme, themeLibrary, themeCompile, themeValidator, colorUtils, fontStacks, Types, MediaProvider, ImageEditDoc)
-- `@bendyline/squisq/doc` — Template registry + all 20 templates + animationUtils + themeUtils + markdownToDoc + docToMarkdown + getLayers + resolveAudioMapping
+- `@bendyline/squisq/doc` — Template registry + all 21 templates (`title`, `sectionHeader`, `statHighlight`, `quote`, `factCard`, `twoColumn`, `dateEvent`, `imageWithCaption`, `leftFeature`, `rightFeature`, `map`, `fullBleedQuote`, `list`, `photoGrid`, `definitionCard`, `comparisonBar`, `pullQuote`, `videoWithCaption`, `videoPullQuote`, `dataTable`, `diagram`) + animationUtils + themeUtils + markdownToDoc + docToMarkdown + getLayers + resolveAudioMapping
 - `@bendyline/squisq/spatial` — Haversine, Geohash utilities
 - `@bendyline/squisq/storage` — StorageAdapter, MemoryStorageAdapter, LocalStorageAdapter, LocalForageAdapter, ContentContainer, MemoryContentContainer, ScopedContentContainer, createMediaProviderFromContainer
 - `@bendyline/squisq/markdown` — Markdown parsing, stringifying, AST types (MarkdownDocument), tree utilities, frontmatter helpers, HTML sub-DOM
@@ -267,6 +272,7 @@ build entry and a `package.json` export):
 - Drag-and-drop: `useFileDrop` (HTML5 drop classification), `classifyFile`, `partitionFiles`, `processMediaFiles`, `processTextFile`, `processTextFiles`
 - Bridge: `markdownToTiptap`, `tiptapToMarkdown` (bidirectional conversion in `tiptapBridge.ts`)
 - Tiptap extension: `HeadingWithTemplate` (heading-template annotation)
+- Diagram editor: `DiagramExtension`, `DiagramCanvas`, `DiagramWidget`, `useDiagramData`, `DiagramCommand`, `DiagramData`, `DiagramRFNode`, `DiagramRFEdge`, and command helpers (`moveNode`, `addConnection`, `removeConnection`, `renameNode`, `addNode`, `removeNode`, `listDiagramChildren`)
 - Mention provider: `MentionCandidate`, `MentionProvider` (host wires its directory through `EditorContext`)
 - Versioning: pass `allowVersioning` + `container` to `EditorShell` to enable; the toolbar surfaces a `VersionHistoryPanel` and the editor auto-saves snapshots on idle (configurable via `versioningAutoSaveIdleMs`, default 5s; `versioningPrunePolicy` defaults to keep-last-50). Hosts can also call `useEditorContext().versioning.saveVersion()` from their own save pipeline.
 - Inline preview gutter: pass `inlinePreview` (and optional `inlinePreviewWidth`, default 320px) to `EditorShell` to render an `InlinePreviewGutter` next to the WYSIWYG surface. The gutter shows one small SVG card per template-annotated block in the document, auto-hides via container query below ~720px, and reuses the same template-resolution path as `LinearDocView`.
@@ -284,7 +290,7 @@ build entry and a `package.json` export):
 
 - Components: VideoExportModal, VideoExportButton
 - Hooks: useVideoExport, useFrameCapture
-- Worker: `@bendyline/squisq-video-react/worker` for the encoding Web Worker
+- Worker: the encoding worker is built from `src/workers/encode.worker.ts` for internal use by the exported hooks/components; there is no public `/worker` subpath today
 - Encoding backends: WebCodecs (preferred, streaming H.264) with ffmpeg.wasm fallback (batched)
 - Depends on `@bendyline/squisq-video` for shared types/encoder + `@bendyline/squisq-react` + `mp4-muxer` + `html2canvas`
 

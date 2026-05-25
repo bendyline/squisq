@@ -170,7 +170,7 @@ The user may ask to review a specific area. Common focuses:
 | "Editor architecture"   | Tiptap/Monaco integration, context patterns, preview sync      |
 | "Testing"               | Test coverage, test patterns, edge cases                       |
 | "Performance"           | Bundle sizes, tree-shaking, unnecessary dependencies           |
-| "Codex skills"         | Skill quality, coverage gaps, AGENTS.md accuracy               |
+| "Codex skills"          | Skill quality, coverage gaps, AGENTS.md accuracy               |
 
 ---
 

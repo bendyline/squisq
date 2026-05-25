@@ -93,6 +93,14 @@ Below is a concise reference of built-in templates (names match the `template` p
   - Inputs: `src` or `imageSrc`, `caption`, `alt`, `objectFit`
   - Usage: image + caption (inline or full-bleed)
 
+- `leftFeature`
+  - Inputs: `imageSrc`, `imageAlt`, `imageWidth`, `imageHeight`, `title`, `body`
+  - Usage: editorial feature block with media on the left and text on the right
+
+- `rightFeature`
+  - Inputs: `imageSrc`, `imageAlt`, `imageWidth`, `imageHeight`, `title`, `body`
+  - Usage: editorial feature block with text on the left and media on the right
+
 - `map`
   - Inputs: `center` (as `lat,lng`), `zoom`, `markers` (string that templates can parse), `tileUrl`
   - Usage: small map embeds
@@ -116,6 +124,14 @@ Below is a concise reference of built-in templates (names match the `template` p
 - `comparisonBar`
   - Inputs: `leftLabel`, `leftValue`, `rightLabel`, `rightValue`, `heading`
   - Usage: side-by-side comparison visualization
+
+- `dataTable`
+  - Inputs: `title`, `headers`, `rows`, `align`, `colorScheme`
+  - Usage: themed tabular data for structured comparisons or reference sections
+
+- `diagram`
+  - Inputs: `title`, `colorScheme`, `nodeShape`, `edgeStyle`; child headings provide nodes and `connectsTo` edges
+  - Usage: node-and-edge diagrams authored from nested section headings
 
 - `pullQuote`
   - Inputs: `quote`, `attribution`

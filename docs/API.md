@@ -242,38 +242,43 @@ type TemplateFunction = (input: TemplateBlockInput, context: TemplateContext) =>
 
 interface TemplateContext {
   viewport: ViewportConfig;
-  theme: ThemeColors;
+  theme: Theme;
   blockIndex: number;
   totalBlocks: number;
+  fontScale: number;
+  orientation: ViewportOrientation;
+  layout: LayoutHints;
+  children?: Block[]; // Used by aggregate templates such as diagram
 }
 ```
 
 ##### Built-in Template Block Inputs
 
-| Template            | Key Input Fields                                                                             |
-| ------------------- | -------------------------------------------------------------------------------------------- |
-| `title`             | `title`, `subtitle?`, `backgroundImage?`, `backgroundGradient?`                              |
-| `textBlock`         | `heading?`, `body`, `backgroundImage?`                                                       |
-| `imageBlock`        | `src`, `alt?`, `caption?`, `objectFit?`                                                      |
-| `twoColumnBlock`    | `leftContent`, `rightContent`, `heading?`                                                    |
-| `quote`             | `quote`, `attribution?`, `backgroundImage?`                                                  |
-| `statHighlight`     | `value`, `label`, `description?`, `trend?`, `trendDirection?`                                |
-| `timelineBlock`     | `events[]` (each: `date`, `title`, `description?`)                                           |
-| `comparisonBlock`   | `items[]` (each: `title`, `features[]`), `heading?`                                          |
-| `map`               | `center`, `zoom?`, `markers?`, `tileUrl?`, `heading?`                                        |
-| `videoBlock`        | `src`, `poster?`, `caption?`, `autoplay?`, `loop?`                                           |
-| `codeBlock`         | `code`, `language?`, `heading?`, `theme?`                                                    |
-| `chartBlock`        | `chartType`, `data`, `heading?`, `description?`                                              |
-| `bulletListBlock`   | `heading?`, `items[]`, `icon?`, `backgroundImage?`                                           |
-| `numberedListBlock` | `heading?`, `items[]`, `startNumber?`                                                        |
-| `tableBlock`        | `heading?`, `headers[]`, `rows[][]`                                                          |
-| `calloutBlock`      | `type` (`info`/`warning`/`success`/`error`), `heading?`, `body`                              |
-| `dividerBlock`      | `style?` (`solid`/`dashed`/`dotted`/`gradient`), `color?`                                    |
-| `videoWithCaption`  | `videoSrc`, `videoAlt`, `clipStart`, `clipEnd`, `caption?`, `captionPosition?`, `posterSrc?` |
-| `videoPullQuote`    | `text`, `attribution?`, `backgroundVideo` (with `src`, `clipStart`, `clipEnd`)               |
-| `dataTable`         | `title?`, `headers[]`, `rows[][]`, `align?`, `colorScheme?`                                  |
+| Template           | Key Input Fields                                                                                   |
+| ------------------ | -------------------------------------------------------------------------------------------------- |
+| `title`            | `title`, `subtitle?`, `backgroundColor?`                                                           |
+| `sectionHeader`    | `title`, `colorScheme?`, `imageSrc?`, `imageAlt?`, `ambientMotion?`                                |
+| `statHighlight`    | `stat`, `description`, `detail?`, `colorScheme?`, `accentImage?`                                   |
+| `quote`            | `quote`, `attribution?`, `accentImage?`                                                            |
+| `factCard`         | `fact`, `explanation`, `source?`, `accentImage?`                                                   |
+| `twoColumn`        | `left`, `right`, `header?`, `leftColor?`, `rightColor?`                                            |
+| `dateEvent`        | `date`, `description`, `footer?`, `mood?`, `accentImage?`                                          |
+| `imageWithCaption` | `imageSrc`, `imageAlt`, `caption?`, `captionPosition?`, `ambientMotion?`, `isTitle?`, `subtitle?`  |
+| `leftFeature`      | `imageSrc`, `imageAlt?`, `imageWidth?`, `imageHeight?`, `title?`, `body?`                          |
+| `rightFeature`     | `imageSrc`, `imageAlt?`, `imageWidth?`, `imageHeight?`, `title?`, `body?`                          |
+| `map`              | `center`, `zoom`, `mapStyle?`, `title?`, `caption?`, `markers?`, `ambientMotion?`, `staticSrc?`    |
+| `fullBleedQuote`   | `text`, `colorScheme?`                                                                             |
+| `list`             | `items[]`, `title?`, `colorScheme?`, `accentImage?`                                                |
+| `photoGrid`        | `images[]`, `caption?`, `ambientMotion?`                                                           |
+| `definitionCard`   | `term`, `definition`, `origin?`, `colorScheme?`, `accentImage?`                                    |
+| `comparisonBar`    | `leftLabel`, `leftValue`, `rightLabel`, `rightValue`, `unit?`, `colorScheme?`                      |
+| `pullQuote`        | `text`, `attribution?`, `backgroundImage`, `ambientMotion?`                                        |
+| `videoWithCaption` | `videoSrc`, `posterSrc?`, `videoAlt`, `clipStart`, `clipEnd`, `caption?`, `captionPosition?`       |
+| `videoPullQuote`   | `text`, `attribution?`, `backgroundVideo` (with `src`, `clipStart`, `clipEnd`)                     |
+| `dataTable`        | `title?`, `headers[]`, `rows[][]`, `align?`, `colorScheme?`                                        |
+| `diagram`          | `title?`, `colorScheme?`, `nodeShape?`, `edgeStyle?`; reads child headings from `context.children` |
 
-> All template inputs extend a common `TemplateBlockInput` base with optional `backgroundGradient`, `backgroundImage`, and `backgroundColor`.
+> All template inputs share the base block fields `id`, `duration`, `audioSegment`, optional `transition`, layer visibility flags, and optional source timing fields. Visual inputs such as images, colors, and captions are defined by each template.
 
 #### Viewport & Theme
 
@@ -360,21 +365,25 @@ function docToMarkdown(doc: Doc): string;
 
 ```ts
 function getLayers(block: DocBlock, context: TemplateContext): Layer[];
-function expandDocBlocks(doc: Doc): Block[];
+function expandTemplateBlock(templateBlock: TemplateBlock, context: TemplateContext): Block;
+function expandDocBlocks(blocks: DocBlock[], options?: ExpandDocBlocksOptions): Block[];
 ```
 
 > `getLayers` resolves a `TemplateBlock` through its template function, or returns a plain `Block`'s layers directly.
-> `expandDocBlocks` converts every block in a doc to a plain `Block` by evaluating templates against the doc's viewport/theme.
+> `expandDocBlocks` converts template blocks to plain blocks by evaluating templates against the supplied viewport/theme options.
 
 #### Template Registry
 
 ```ts
-function registerTemplate(name: string, fn: TemplateFunction): void;
-function getTemplate(name: string): TemplateFunction | undefined;
-function getTemplateNames(): string[];
+const templateRegistry: TemplateRegistry;
+const TEMPLATE_ALIASES: Readonly<Record<string, string>>;
+
+function resolveTemplateName(name: string): string;
+function getAvailableTemplates(): string[];
+function hasTemplate(name: string): boolean;
 ```
 
-All 17 built-in templates are registered at import time. Custom templates can be added via `registerTemplate`.
+All 21 built-in templates are registered at import time. Legacy aliases such as `titleBlock`, `quoteBlock`, `mapBlock`, `listBlock`, `diagramBlock`, and `diagramNode` resolve to their canonical short IDs.
 
 #### Animation Utilities
 
@@ -1055,15 +1064,18 @@ interface EpubExportOptions {
 }
 ```
 
-### Subpath: PPTX (stub)
+### Subpath: PPTX
 
 **Import:** `@bendyline/squisq-formats/pptx`
 
-> Not yet implemented. All functions throw `"PPTX export is not yet implemented"`.
+PPTX export is implemented for `MarkdownDocument` and `Doc` inputs. PPTX import functions are still stubs and throw `"PPTX import is not yet implemented"`.
 
 ```ts
-async function markdownDocToPptx(doc: MarkdownDocument, options?: PptxExportOptions): Promise<Blob>;
-async function docToPptx(doc: Doc, options?: PptxExportOptions): Promise<Blob>;
+async function markdownDocToPptx(
+  doc: MarkdownDocument,
+  options?: PptxExportOptions,
+): Promise<ArrayBuffer>;
+async function docToPptx(doc: Doc, options?: PptxExportOptions): Promise<ArrayBuffer>;
 async function pptxToMarkdownDoc(
   data: ArrayBuffer | Blob,
   options?: PptxImportOptions,
@@ -1073,6 +1085,12 @@ async function pptxToDoc(data: ArrayBuffer | Blob, options?: PptxImportOptions):
 interface PptxExportOptions {
   title?: string;
   author?: string;
+  description?: string;
+  slideBreak?: 'h1' | 'h2' | 'heading';
+  defaultFont?: string;
+  defaultFontSize?: number;
+  themeId?: string;
+  images?: Map<string, ArrayBuffer>;
 }
 interface PptxImportOptions {
   extractImages?: boolean;

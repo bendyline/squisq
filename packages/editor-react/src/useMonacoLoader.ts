@@ -75,13 +75,13 @@ export function useMonacoLoader(): UseMonacoLoaderResult {
       // it stays out of the resolver graph for consumers that only
       // import types or `JsonEditor` from this package.
       // `editor.main.js` ships without a sibling `.d.ts` (only
-      // `editor.api.d.ts` is published), so the subpath import doesn't
-      // resolve to a declaration file. Suppress the TS7016 and rely on
-      // the `as unknown as` cast below — at runtime the namespace shape
-      // is a superset of `editor.api`'s, since main re-exports the
-      // entire api surface alongside the language contributions.
+      // `editor.api.d.ts` is published), so the subpath import has no
+      // resolvable declaration. The `declare module` shim in
+      // `src/types/monaco-shims.d.ts` makes it import as `any`; the
+      // `as unknown as` cast below pins the surface to the full namespace.
+      // At runtime `main` re-exports the entire `editor.api` surface
+      // alongside the language contributions, so the cast is sound.
       monacoPromise = (
-        // @ts-expect-error — no .d.ts for editor.main.js subpath
         import('monaco-editor/esm/vs/editor/editor.main.js') as unknown as Promise<
           typeof import('monaco-editor')
         >

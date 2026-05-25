@@ -105,6 +105,8 @@ export { parsePandocAttrTokens, serializePandocAttributes } from './convert.js';
 
 // HTML sub-DOM utilities
 export { parseHtmlToNodes, stringifyHtmlNodes } from './htmlParse.js';
+export { sanitizeHtmlNodes, sanitizeUrl } from './sanitize.js';
+export type { HtmlPolicy, UrlKind } from './sanitize.js';
 
 // Tree utilities
 export {

@@ -14,7 +14,14 @@
  * blob URLs (live preview) or data URIs (single-file export).
  */
 
-import type { MarkdownDocument, MarkdownNode, HtmlNode } from '@bendyline/squisq/markdown';
+import {
+  sanitizeHtmlNodes,
+  sanitizeUrl,
+  type HtmlPolicy,
+  type MarkdownDocument,
+  type MarkdownNode,
+  type HtmlNode,
+} from '@bendyline/squisq/markdown';
 import type { Theme } from '@bendyline/squisq/schemas';
 import { resolveFontFamily, buildGoogleFontsUrl, resolveTheme } from '@bendyline/squisq/schemas';
 
@@ -71,6 +78,11 @@ export interface PlainHtmlExportOptions {
    * option is not provided.
    */
   iconsCss?: string;
+  /**
+   * Raw HTML policy. Defaults to `sanitize`, which removes unsafe tags,
+   * event handlers, and executable URL schemes before emitting HTML.
+   */
+  htmlPolicy?: HtmlPolicy;
 }
 
 /**
@@ -81,6 +93,7 @@ export interface PlainHtmlExportOptions {
 interface RenderCtx {
   images?: Map<string, string>;
   links?: Map<string, string>;
+  htmlPolicy: HtmlPolicy;
 }
 
 // ── Public API ─────────────────────────────────────────────────────
@@ -97,7 +110,7 @@ export function markdownDocToPlainHtml(
   doc: MarkdownDocument,
   options: PlainHtmlExportOptions = {},
 ): string {
-  const { title = 'Document', images, links, themeId, iconsCss } = options;
+  const { title = 'Document', images, links, themeId, iconsCss, htmlPolicy = 'sanitize' } = options;
   // Fall back chain for theme: explicit `theme` → explicit `themeId`
   // option → doc frontmatter `themeId`. Hosts whose export dialog
   // tracks themes by id can pass `themeId` straight through; authored
@@ -109,7 +122,7 @@ export function markdownDocToPlainHtml(
     (typeof doc.frontmatter?.themeId === 'string'
       ? resolveTheme(doc.frontmatter.themeId)
       : undefined);
-  const ctx: RenderCtx = { images, links };
+  const ctx: RenderCtx = { images, links, htmlPolicy };
   const body = renderTopLevel(doc.children, ctx);
   const fontsLink = theme ? renderFontsLink(theme) : '';
   // Resolve how to load FontAwesome — only when the doc actually uses
@@ -258,7 +271,9 @@ interface FeaturedImage {
 
 function renderFeatureImage(img: FeaturedImage, ctx: RenderCtx | undefined): string {
   const resolved = ctx?.images?.get(img.src) ?? img.src;
-  const attrs = [`src="${escapeAttr(resolved)}"`, `alt="${escapeAttr(img.alt)}"`];
+  const safeSrc = sanitizeUrl(resolved, 'media');
+  if (!safeSrc) return '<div class="squisq-feature__media squisq-feature__media--empty"></div>';
+  const attrs = [`src="${escapeAttr(safeSrc)}"`, `alt="${escapeAttr(img.alt)}"`];
   // Emit `width` / `height` attributes only when the source HTML had
   // them. The CSS rules then know to honor those values rather than
   // stretching the image to fill the column.
@@ -604,12 +619,16 @@ function nodeToHtml(node: MarkdownNode | undefined | null, ctx?: RenderCtx): str
     case 'link': {
       const original = node.url ?? '';
       const rewritten = ctx?.links?.get(original) ?? original;
-      return `<a href="${escapeAttr(rewritten)}">${childrenToHtml(node, ctx)}</a>`;
+      const safeHref = sanitizeUrl(rewritten, 'link');
+      if (!safeHref) return childrenToHtml(node, ctx);
+      return `<a href="${escapeAttr(safeHref)}">${childrenToHtml(node, ctx)}</a>`;
     }
     case 'image': {
       const original = node.url ?? '';
       const resolved = ctx?.images?.get(original) ?? original;
-      return `<img src="${escapeAttr(resolved)}" alt="${escapeAttr(node.alt ?? '')}" />`;
+      const safeSrc = sanitizeUrl(resolved, 'media');
+      if (!safeSrc) return escapeHtml(node.alt ?? '');
+      return `<img src="${escapeAttr(safeSrc)}" alt="${escapeAttr(node.alt ?? '')}" />`;
     }
     case 'thematicBreak':
       return '<hr />';
@@ -626,11 +645,12 @@ function nodeToHtml(node: MarkdownNode | undefined | null, ctx?: RenderCtx): str
     }
     case 'htmlBlock':
     case 'htmlInline':
+      if (resolveHtmlPolicy(ctx) === 'strip') return '';
       // Resized images and other authored HTML survive the round-trip
       // as parsed `htmlChildren` — rewriting `<img src>` through the
       // image map keeps the preview consistent with the markdown-image
       // path. Other tags pass through unmodified.
-      return htmlChildrenToHtml(node.htmlChildren, ctx);
+      return htmlChildrenToHtml(resolveHtmlNodes(node.htmlChildren, ctx), ctx);
     default: {
       // Unknown / unhandled node — recurse into children if any so we
       // don't drop content (e.g. directives, footnotes).
@@ -682,18 +702,28 @@ function tableToHtml(
   return parts.join('');
 }
 
+function resolveHtmlPolicy(ctx: RenderCtx | undefined): HtmlPolicy {
+  return ctx?.htmlPolicy ?? 'sanitize';
+}
+
+function resolveHtmlNodes(nodes: HtmlNode[] | undefined, ctx: RenderCtx | undefined): HtmlNode[] {
+  if (!nodes || nodes.length === 0) return [];
+  return resolveHtmlPolicy(ctx) === 'trusted' ? nodes : sanitizeHtmlNodes(nodes);
+}
+
 function htmlChildrenToHtml(nodes: HtmlNode[] | undefined, ctx?: RenderCtx): string {
   if (!nodes || nodes.length === 0) return '';
+  const trusted = resolveHtmlPolicy(ctx) === 'trusted';
   const out: string[] = [];
   for (const node of nodes) {
     if (node.type === 'htmlText') {
       // HtmlText already represents authored HTML — emit verbatim so
       // entity references the user wrote (e.g. `&amp;`) survive.
-      out.push(node.value);
+      out.push(trusted ? node.value : escapeHtml(node.value));
       continue;
     }
     if (node.type === 'htmlComment') {
-      out.push(`<!--${node.value}-->`);
+      if (trusted) out.push(`<!--${node.value}-->`);
       continue;
     }
     // htmlElement
@@ -712,6 +742,23 @@ function htmlChildrenToHtml(nodes: HtmlNode[] | undefined, ctx?: RenderCtx): str
     }
     if ((tag === 'video' || tag === 'audio') && typeof attrs.poster === 'string') {
       attrs.poster = ctx?.images?.get(attrs.poster) ?? attrs.poster;
+    }
+    if (!trusted) {
+      if (typeof attrs.src === 'string') {
+        const safeSrc = sanitizeUrl(attrs.src, 'media');
+        if (!safeSrc) delete attrs.src;
+        else attrs.src = safeSrc;
+      }
+      if (typeof attrs.poster === 'string') {
+        const safePoster = sanitizeUrl(attrs.poster, 'media');
+        if (!safePoster) delete attrs.poster;
+        else attrs.poster = safePoster;
+      }
+      if (typeof attrs.href === 'string') {
+        const safeHref = sanitizeUrl(attrs.href, 'link');
+        if (!safeHref) delete attrs.href;
+        else attrs.href = safeHref;
+      }
     }
     const attrStr = Object.entries(attrs)
       .map(([k, v]) => ` ${k}="${escapeAttr(v)}"`)

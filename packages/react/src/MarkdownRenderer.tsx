@@ -15,14 +15,17 @@
  */
 
 import { Fragment } from 'react';
-import type {
+import {
+  sanitizeHtmlNodes,
+  sanitizeUrl,
+  type HtmlPolicy,
+  type HtmlElement,
+  type HtmlNode,
   MarkdownBlockNode,
   MarkdownInlineNode,
   MarkdownListItem,
   MarkdownTableRow,
   MarkdownTableCell,
-  HtmlNode,
-  HtmlElement,
 } from '@bendyline/squisq/markdown';
 import { useMediaUrl } from './hooks/MediaContext';
 import { InlineVideoPlayer } from './InlineVideoPlayer.js';
@@ -35,12 +38,21 @@ export interface MarkdownRendererProps {
   nodes: MarkdownBlockNode[];
   /** Optional CSS class for the wrapper element */
   className?: string;
+  /**
+   * Raw HTML policy. Defaults to `sanitize`, which removes unsafe tags,
+   * event handlers, and executable URL schemes before rendering.
+   */
+  htmlPolicy?: HtmlPolicy;
 }
 
 // ── Inline Renderer ────────────────────────────────────────────────
 
 /** Render an array of inline nodes into React elements. */
-function renderInline(nodes: MarkdownInlineNode[], keyPrefix = ''): React.ReactNode[] {
+function renderInline(
+  nodes: MarkdownInlineNode[],
+  keyPrefix = '',
+  htmlPolicy: HtmlPolicy = 'sanitize',
+): React.ReactNode[] {
   return nodes.map((node, i) => {
     const key = `${keyPrefix}i${i}`;
     switch (node.type) {
@@ -67,21 +79,21 @@ function renderInline(nodes: MarkdownInlineNode[], keyPrefix = ''): React.ReactN
       case 'emphasis':
         return (
           <em key={key} className="squisq-md-em">
-            {renderInline(node.children, key)}
+            {renderInline(node.children, key, htmlPolicy)}
           </em>
         );
 
       case 'strong':
         return (
           <strong key={key} className="squisq-md-strong">
-            {renderInline(node.children, key)}
+            {renderInline(node.children, key, htmlPolicy)}
           </strong>
         );
 
       case 'delete':
         return (
           <del key={key} className="squisq-md-del">
-            {renderInline(node.children, key)}
+            {renderInline(node.children, key, htmlPolicy)}
           </del>
         );
 
@@ -92,19 +104,28 @@ function renderInline(nodes: MarkdownInlineNode[], keyPrefix = ''): React.ReactN
           </code>
         );
 
-      case 'link':
+      case 'link': {
+        const href = sanitizeUrl(node.url, 'link');
+        if (!href) {
+          return (
+            <span key={key} className="squisq-md-link squisq-md-link--blocked">
+              {renderInline(node.children, key, htmlPolicy)}
+            </span>
+          );
+        }
         return (
           <a
             key={key}
             className="squisq-md-link"
-            href={node.url}
+            href={href}
             title={node.title ?? undefined}
             target="_blank"
             rel="noopener noreferrer"
           >
-            {renderInline(node.children, key)}
+            {renderInline(node.children, key, htmlPolicy)}
           </a>
         );
+      }
 
       case 'image':
         return (
@@ -122,9 +143,10 @@ function renderInline(nodes: MarkdownInlineNode[], keyPrefix = ''): React.ReactN
         );
 
       case 'htmlInline':
+        if (htmlPolicy === 'strip') return null;
         // Fast path: no <video>/<audio> in the subtree → use the original
         // rawHtml passthrough (preserves arbitrary HTML for custom embeds).
-        if (!containsMediaTag(node.htmlChildren)) {
+        if (htmlPolicy === 'trusted' && !containsMediaTag(node.htmlChildren)) {
           return (
             <span
               key={key}
@@ -137,7 +159,7 @@ function renderInline(nodes: MarkdownInlineNode[], keyPrefix = ''): React.ReactN
         // go through MediaContext-aware player components.
         return (
           <span key={key} className="squisq-md-html-inline">
-            {renderHtmlNodes(node.htmlChildren, `${key}h`)}
+            {renderHtmlNodes(resolveHtmlNodes(node.htmlChildren, htmlPolicy), `${key}h`)}
           </span>
         );
 
@@ -152,7 +174,7 @@ function renderInline(nodes: MarkdownInlineNode[], keyPrefix = ''): React.ReactN
         // Render as plain text (definition targets not available at render time)
         return (
           <span key={key} className="squisq-md-link-ref">
-            {renderInline(node.children, key)}
+            {renderInline(node.children, key, htmlPolicy)}
           </span>
         );
 
@@ -166,7 +188,7 @@ function renderInline(nodes: MarkdownInlineNode[], keyPrefix = ''): React.ReactN
       case 'textDirective':
         return (
           <span key={key} className="squisq-md-text-directive" data-directive={node.name}>
-            {renderInline(node.children, key)}
+            {renderInline(node.children, key, htmlPolicy)}
           </span>
         );
 
@@ -193,12 +215,16 @@ function renderInline(nodes: MarkdownInlineNode[], keyPrefix = ''): React.ReactN
 // ── Block Renderer ─────────────────────────────────────────────────
 
 /** Render a single block-level node into a React element. */
-function renderBlock(node: MarkdownBlockNode, key: string): React.ReactNode {
+function renderBlock(
+  node: MarkdownBlockNode,
+  key: string,
+  htmlPolicy: HtmlPolicy = 'sanitize',
+): React.ReactNode {
   switch (node.type) {
     case 'paragraph':
       return (
         <p key={key} className="squisq-md-p">
-          {renderInline(node.children, key)}
+          {renderInline(node.children, key, htmlPolicy)}
         </p>
       );
 
@@ -206,7 +232,7 @@ function renderBlock(node: MarkdownBlockNode, key: string): React.ReactNode {
       const Tag = `h${node.depth}` as 'h1' | 'h2' | 'h3' | 'h4' | 'h5' | 'h6';
       return (
         <Tag key={key} className={`squisq-md-heading squisq-md-h${node.depth}`}>
-          {renderInline(node.children, key)}
+          {renderInline(node.children, key, htmlPolicy)}
         </Tag>
       );
     }
@@ -214,7 +240,7 @@ function renderBlock(node: MarkdownBlockNode, key: string): React.ReactNode {
     case 'blockquote':
       return (
         <blockquote key={key} className="squisq-md-blockquote">
-          {renderBlocks(node.children, key)}
+          {renderBlocks(node.children, key, htmlPolicy)}
         </blockquote>
       );
 
@@ -222,13 +248,13 @@ function renderBlock(node: MarkdownBlockNode, key: string): React.ReactNode {
       if (node.ordered) {
         return (
           <ol key={key} className="squisq-md-list squisq-md-ol" start={node.start ?? undefined}>
-            {node.children.map((item, i) => renderListItem(item, `${key}li${i}`))}
+            {node.children.map((item, i) => renderListItem(item, `${key}li${i}`, htmlPolicy))}
           </ol>
         );
       }
       return (
         <ul key={key} className="squisq-md-list squisq-md-ul">
-          {node.children.map((item, i) => renderListItem(item, `${key}li${i}`))}
+          {node.children.map((item, i) => renderListItem(item, `${key}li${i}`, htmlPolicy))}
         </ul>
       );
 
@@ -243,12 +269,13 @@ function renderBlock(node: MarkdownBlockNode, key: string): React.ReactNode {
       return <hr key={key} className="squisq-md-hr" />;
 
     case 'table':
-      return renderTable(node.children, node.align, key);
+      return renderTable(node.children, node.align, key, htmlPolicy);
 
     case 'htmlBlock':
+      if (htmlPolicy === 'strip') return null;
       // Fast path: no <video>/<audio> → preserve the existing rawHtml
       // passthrough so arbitrary HTML embeds still survive verbatim.
-      if (!containsMediaTag(node.htmlChildren)) {
+      if (htmlPolicy === 'trusted' && !containsMediaTag(node.htmlChildren)) {
         return (
           <div
             key={key}
@@ -261,7 +288,7 @@ function renderBlock(node: MarkdownBlockNode, key: string): React.ReactNode {
       // route through the player components and resolve via MediaContext.
       return (
         <div key={key} className="squisq-md-html-block">
-          {renderHtmlNodes(node.htmlChildren, `${key}h`)}
+          {renderHtmlNodes(resolveHtmlNodes(node.htmlChildren, htmlPolicy), `${key}h`)}
         </div>
       );
 
@@ -280,7 +307,7 @@ function renderBlock(node: MarkdownBlockNode, key: string): React.ReactNode {
       return (
         <div key={key} className="squisq-md-footnote-def" id={`fn-${node.identifier}`}>
           <sup>{node.label ?? node.identifier}</sup>
-          {renderBlocks(node.children, key)}
+          {renderBlocks(node.children, key, htmlPolicy)}
         </div>
       );
 
@@ -292,7 +319,7 @@ function renderBlock(node: MarkdownBlockNode, key: string): React.ReactNode {
           data-directive={node.name}
         >
           {node.label && <div className="squisq-md-directive-label">{node.label}</div>}
-          {renderBlocks(node.children, key)}
+          {renderBlocks(node.children, key, htmlPolicy)}
         </div>
       );
 
@@ -303,7 +330,7 @@ function renderBlock(node: MarkdownBlockNode, key: string): React.ReactNode {
           className={`squisq-md-directive squisq-md-directive-${node.name}`}
           data-directive={node.name}
         >
-          {renderInline(node.children, key)}
+          {renderInline(node.children, key, htmlPolicy)}
         </div>
       );
 
@@ -314,13 +341,13 @@ function renderBlock(node: MarkdownBlockNode, key: string): React.ReactNode {
             if (child.type === 'definitionTerm') {
               return (
                 <dt key={`${key}dt${i}`} className="squisq-md-dt">
-                  {renderInline(child.children, `${key}dt${i}`)}
+                  {renderInline(child.children, `${key}dt${i}`, htmlPolicy)}
                 </dt>
               );
             }
             return (
               <dd key={`${key}dd${i}`} className="squisq-md-dd">
-                {renderBlocks(child.children, `${key}dd${i}`)}
+                {renderBlocks(child.children, `${key}dd${i}`, htmlPolicy)}
               </dd>
             );
           })}
@@ -333,14 +360,18 @@ function renderBlock(node: MarkdownBlockNode, key: string): React.ReactNode {
 }
 
 /** Render a list item, including task-list checkbox support. */
-function renderListItem(item: MarkdownListItem, key: string): React.ReactNode {
+function renderListItem(
+  item: MarkdownListItem,
+  key: string,
+  htmlPolicy: HtmlPolicy = 'sanitize',
+): React.ReactNode {
   const isTask = item.checked !== null && item.checked !== undefined;
   return (
     <li key={key} className={`squisq-md-li${isTask ? ' squisq-md-task' : ''}`}>
       {isTask && (
         <input type="checkbox" checked={!!item.checked} readOnly className="squisq-md-checkbox" />
       )}
-      {renderBlocks(item.children, key)}
+      {renderBlocks(item.children, key, htmlPolicy)}
     </li>
   );
 }
@@ -350,6 +381,7 @@ function renderTable(
   rows: MarkdownTableRow[],
   align: (('left' | 'right' | 'center') | null)[] | undefined,
   key: string,
+  htmlPolicy: HtmlPolicy = 'sanitize',
 ): React.ReactNode {
   const [headerRow, ...bodyRows] = rows;
   return (
@@ -363,7 +395,7 @@ function renderTable(
                 className="squisq-md-th"
                 style={align?.[ci] ? { textAlign: align[ci]! } : undefined}
               >
-                {renderInline(cell.children, `${key}th${ci}`)}
+                {renderInline(cell.children, `${key}th${ci}`, htmlPolicy)}
               </th>
             ))}
           </tr>
@@ -379,7 +411,7 @@ function renderTable(
                   className="squisq-md-td"
                   style={align?.[ci] ? { textAlign: align[ci]! } : undefined}
                 >
-                  {renderInline(cell.children, `${key}td${ri}-${ci}`)}
+                  {renderInline(cell.children, `${key}td${ri}-${ci}`, htmlPolicy)}
                 </td>
               ))}
             </tr>
@@ -391,15 +423,21 @@ function renderTable(
 }
 
 /** Render an array of block-level nodes. */
-function renderBlocks(nodes: MarkdownBlockNode[], keyPrefix = ''): React.ReactNode[] {
-  return nodes.map((node, i) => renderBlock(node, `${keyPrefix}b${i}`));
+function renderBlocks(
+  nodes: MarkdownBlockNode[],
+  keyPrefix = '',
+  htmlPolicy: HtmlPolicy = 'sanitize',
+): React.ReactNode[] {
+  return nodes.map((node, i) => renderBlock(node, `${keyPrefix}b${i}`, htmlPolicy));
 }
 
 // ── Image with MediaProvider resolution ───────────────────────────
 
 /** Renders an <img> that resolves its src through the MediaProvider when available. */
 function MdImage({ src, alt, title }: { src: string; alt: string; title?: string }) {
-  const resolved = useMediaUrl(src, '.');
+  const safeSrc = sanitizeUrl(src, 'media');
+  const resolved = useMediaUrl(safeSrc ?? '', '.');
+  if (!safeSrc) return null;
   return <img className="squisq-md-image" src={resolved} alt={alt} title={title} />;
 }
 
@@ -408,10 +446,17 @@ function MdImage({ src, alt, title }: { src: string; alt: string; title?: string
 /** True when the htmlElement subtree contains a tag we want to swap
  *  for a React component. Cheap recursive scan — lets us keep the
  *  `dangerouslySetInnerHTML` fast path for everything else. */
+function resolveHtmlNodes(nodes: HtmlNode[], htmlPolicy: HtmlPolicy): HtmlNode[] {
+  if (htmlPolicy === 'strip') return [];
+  if (htmlPolicy === 'trusted') return nodes;
+  return sanitizeHtmlNodes(nodes);
+}
+
 function containsMediaTag(nodes: HtmlNode[]): boolean {
   for (const node of nodes) {
     if (node.type !== 'htmlElement') continue;
-    if (node.tagName === 'video' || node.tagName === 'audio') return true;
+    const tagName = node.tagName.toLowerCase();
+    if (tagName === 'video' || tagName === 'audio') return true;
     if (containsMediaTag(node.children)) return true;
   }
   return false;
@@ -432,6 +477,10 @@ const PASSTHROUGH_ATTRS: Record<string, string> = {
   // media-adjacent (used when video/audio appear inside other wrappers)
   width: 'width',
   height: 'height',
+  src: 'src',
+  alt: 'alt',
+  loading: 'loading',
+  decoding: 'decoding',
   // anchor
   href: 'href',
   target: 'target',
@@ -456,7 +505,8 @@ function reactPropsFromAttrs(attrs: Record<string, string>): Record<string, unkn
 }
 
 function renderHtmlElement(el: HtmlElement, key: string): React.ReactNode {
-  if (el.tagName === 'video') {
+  const tagName = el.tagName.toLowerCase();
+  if (tagName === 'video') {
     return (
       <InlineVideoPlayer
         key={key}
@@ -477,7 +527,7 @@ function renderHtmlElement(el: HtmlElement, key: string): React.ReactNode {
       />
     );
   }
-  if (el.tagName === 'audio') {
+  if (tagName === 'audio') {
     return (
       <InlineAudioPlayer
         key={key}
@@ -494,7 +544,7 @@ function renderHtmlElement(el: HtmlElement, key: string): React.ReactNode {
     );
   }
 
-  const Tag = el.tagName as keyof JSX.IntrinsicElements;
+  const Tag = tagName as keyof JSX.IntrinsicElements;
   const props = reactPropsFromAttrs(el.attributes);
   if (el.selfClosing) {
     return <Tag key={key} {...props} />;
@@ -533,8 +583,14 @@ function renderHtmlNodes(nodes: HtmlNode[], keyPrefix: string): React.ReactNode[
  * <MarkdownRenderer nodes={block.contents} />
  * ```
  */
-export function MarkdownRenderer({ nodes, className }: MarkdownRendererProps) {
+export function MarkdownRenderer({
+  nodes,
+  className,
+  htmlPolicy = 'sanitize',
+}: MarkdownRendererProps) {
   if (!nodes || nodes.length === 0) return null;
 
-  return <div className={`squisq-md ${className || ''}`}>{renderBlocks(nodes)}</div>;
+  return (
+    <div className={`squisq-md ${className || ''}`}>{renderBlocks(nodes, '', htmlPolicy)}</div>
+  );
 }
