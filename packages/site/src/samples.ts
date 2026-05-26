@@ -333,4 +333,89 @@ A node diagram with typed connections.
 
 ### Worker {#worker x=520 y=520 connectsTo=db:writes}
 `,
+  'custom-template-demo': buildCustomTemplateDemo(),
 };
+
+// ── Custom template demo ──────────────────────────────────────
+
+/**
+ * Build a markdown doc that pre-defines a `hero` custom template in
+ * frontmatter and uses it on a block. Computed at module init so the
+ * base64-encoded definition is always in sync with the underlying
+ * Layer array.
+ */
+function buildCustomTemplateDemo(): string {
+  const heroLayers = [
+    {
+      id: 'hero-title',
+      type: 'text',
+      position: { x: '6%', y: '20%', width: '88%' },
+      content: {
+        text: '{title}',
+        style: {
+          fontSize: 96,
+          fontWeight: 'bold',
+          color: '#0f172a',
+          textAlign: 'left',
+        },
+      },
+    },
+    {
+      id: 'hero-body',
+      type: 'text',
+      position: { x: '6%', y: '52%', width: '88%' },
+      content: {
+        text: '{content}',
+        style: { fontSize: 36, color: '#475569', textAlign: 'left' },
+      },
+    },
+    {
+      id: 'hero-accent',
+      type: 'shape',
+      position: { x: '6%', y: '14%', width: '6%', height: '2%' },
+      content: { shape: 'rect', fill: '#6366f1' },
+    },
+  ];
+  const heroDef = {
+    name: 'hero',
+    label: 'Hero Section',
+    description: 'Large title with body below — uses {title} and {content}.',
+    viewport: { width: 1920, height: 1080 },
+    layers: heroLayers,
+  };
+  const payload = encodeForFrontmatter([heroDef]);
+  return `---
+title: Custom Template Demo
+squisq-custom-templates: "${payload}"
+---
+
+# Custom Templates Demo
+
+This sample demonstrates a user-authored \`hero\` template defined in
+frontmatter. Blocks tagged with \`{[hero]}\` render via that template;
+\`{title}\` and \`{content}\` placeholders substitute each block's data.
+
+## Welcome to Squisq {[hero]}
+
+A small editor for big ideas. Author once, render everywhere.
+
+## Why custom templates? {[hero]}
+
+Templates capture brand voice and layout once, then every block in
+your doc can use them. No more copy-pasting positions across slides.
+`;
+}
+
+function encodeForFrontmatter(value: unknown): string {
+  // UTF-8 safe: `btoa` only accepts Latin1 so we route through
+  // TextEncoder first. Mirror of `utf8ToBase64` in
+  // packages/core/src/doc/customTemplatesFrontmatter.ts so the
+  // round-trip stays bit-identical to the canonical encoder.
+  const bytes = new TextEncoder().encode(JSON.stringify(value));
+  if (typeof globalThis.btoa === 'function') {
+    let binary = '';
+    for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
+    return globalThis.btoa(binary);
+  }
+  return Buffer.from(bytes).toString('base64');
+}

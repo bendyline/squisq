@@ -1,0 +1,284 @@
+/*
+ * TemplateDesigner — full-viewport modal overlay with a Scene-backed
+ * canvas in the middle, a token palette on the left, name/label inputs
+ * at the top, and save/cancel actions at the bottom.
+ */
+
+.squisq-template-designer-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  background: rgba(15, 23, 42, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+
+.squisq-template-designer-panel {
+  display: flex;
+  flex-direction: column;
+  width: min(1200px, 100%);
+  height: min(800px, 100%);
+  background: #ffffff;
+  border-radius: 12px;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.3);
+  overflow: hidden;
+}
+
+.squisq-template-designer-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 20px;
+  border-bottom: 1px solid #e5e7eb;
+  background: #f9fafb;
+}
+
+.squisq-template-designer-title {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: #111827;
+}
+
+.squisq-template-designer-close {
+  width: 32px;
+  height: 32px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 24px;
+  line-height: 1;
+  color: #6b7280;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.squisq-template-designer-close:hover {
+  color: #111827;
+  background: #f1f5f9;
+  border-color: #cbd5e1;
+}
+
+.squisq-template-designer-meta {
+  display: grid;
+  grid-template-columns: minmax(160px, 1fr) minmax(160px, 1fr) minmax(240px, 2fr);
+  gap: 12px;
+  padding: 12px 20px;
+  border-bottom: 1px solid #e5e7eb;
+  background: #fdfdfd;
+}
+
+.squisq-template-designer-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.squisq-template-designer-field span {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #6b7280;
+}
+
+.squisq-template-designer-field input {
+  padding: 6px 10px;
+  font-size: 13px;
+  color: #111827;
+  background: #ffffff;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  outline: none;
+}
+
+.squisq-template-designer-field input:focus {
+  border-color: #6366f1;
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.15);
+}
+
+.squisq-template-designer-body {
+  flex: 1;
+  display: flex;
+  min-height: 0;
+}
+
+.squisq-template-designer-palette {
+  width: 220px;
+  flex-shrink: 0;
+  padding: 16px;
+  border-right: 1px solid #e5e7eb;
+  background: #fafafa;
+  overflow-y: auto;
+}
+
+.squisq-template-designer-palette-title {
+  margin: 0 0 4px;
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #4338ca;
+}
+
+.squisq-template-designer-palette-hint {
+  margin: 0 0 12px;
+  font-size: 11px;
+  color: #6b7280;
+  line-height: 1.4;
+}
+
+.squisq-template-designer-palette-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.squisq-template-designer-palette-item {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  padding: 8px 10px;
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  cursor: pointer;
+  text-align: left;
+  transition:
+    background 0.1s,
+    border-color 0.1s;
+}
+
+.squisq-template-designer-palette-item:hover {
+  background: #eef2ff;
+  border-color: #c7d2fe;
+}
+
+.squisq-template-designer-palette-item--active {
+  background: #eef2ff;
+  border-color: #6366f1;
+}
+
+.squisq-template-designer-palette-item-preview {
+  font-family: 'JetBrains Mono', 'SF Mono', 'Menlo', monospace;
+  font-size: 12px;
+  color: #4338ca;
+}
+
+.squisq-template-designer-palette-item-label {
+  font-size: 11px;
+  color: #6b7280;
+}
+
+.squisq-template-designer-stage {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  padding: 12px;
+  gap: 8px;
+  background: #f3f4f6;
+}
+
+.squisq-template-designer-viewport-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  align-self: flex-start;
+}
+
+.squisq-template-designer-viewport-label {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #6b7280;
+  margin-right: 4px;
+}
+
+.squisq-template-designer-viewport-btn {
+  padding: 4px 10px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #1f2937;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.squisq-template-designer-viewport-btn:hover {
+  background: #f1f5f9;
+}
+
+.squisq-template-designer-viewport-btn--active {
+  background: #eef2ff;
+  border-color: #6366f1;
+  color: #4338ca;
+}
+
+.squisq-template-designer-scene {
+  flex: 1;
+  min-height: 0;
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.squisq-template-designer-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 20px;
+  border-top: 1px solid #e5e7eb;
+  background: #f9fafb;
+  gap: 12px;
+}
+
+.squisq-template-designer-footer-hint {
+  font-size: 11px;
+  color: #6b7280;
+  flex: 1;
+  min-width: 0;
+}
+
+.squisq-template-designer-footer-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.squisq-template-designer-btn {
+  padding: 6px 14px;
+  font-size: 13px;
+  font-weight: 500;
+  color: #1f2937;
+  background: #ffffff;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.1s;
+}
+
+.squisq-template-designer-btn:hover {
+  background: #f1f5f9;
+}
+
+.squisq-template-designer-btn--primary {
+  color: #ffffff;
+  background: #4f46e5;
+  border-color: #4338ca;
+}
+
+.squisq-template-designer-btn--primary:hover {
+  background: #4338ca;
+}

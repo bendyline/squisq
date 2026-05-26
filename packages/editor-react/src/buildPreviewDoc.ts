@@ -174,13 +174,23 @@ function getTemplateDefaults(
   }
 }
 
-function blockToSlide(block: Block, index: number): Record<string, unknown> {
+function blockToSlide(
+  block: Block,
+  index: number,
+  knownTemplates?: ReadonlySet<string>,
+): Record<string, unknown> {
   const headingText = block.sourceHeading
     ? extractPlainText(block.sourceHeading)
     : block.title || block.id || `Slide ${index + 1}`;
 
   const requestedTemplate = block.template || 'sectionHeader';
-  const template = hasTemplate(requestedTemplate) ? requestedTemplate : 'sectionHeader';
+  // A template is recognized if it's a built-in OR a user-defined
+  // template carried in the doc's `customTemplates` set. Without this,
+  // an annotated `{[hero]}` heading would silently fall back to
+  // `sectionHeader` because `hasTemplate` only knows built-ins.
+  const isCustomTemplate = knownTemplates?.has(requestedTemplate) ?? false;
+  const recognized = hasTemplate(requestedTemplate) || isCustomTemplate;
+  const template = recognized ? requestedTemplate : 'sectionHeader';
   const defaults = getTemplateDefaults(template, headingText, block);
 
   const {
@@ -206,6 +216,14 @@ function blockToSlide(block: Block, index: number): Record<string, unknown> {
     audioSegment: 0,
     transition: index > 0 ? { type: 'fade', duration: 0.5 } : undefined,
     title: headingText,
+    // Custom templates need access to the source block's body content
+    // + children so their token resolver (`{content}`, `{children}`,
+    // `{image:N}`) substitutes against the user's prose, not just the
+    // heading. Built-in templates don't read these fields and risk
+    // surprising overlap with their typed inputs, so we only attach
+    // them when the slide actually maps to a custom template.
+    ...(isCustomTemplate && block.contents ? { contents: block.contents } : {}),
+    ...(isCustomTemplate && block.children ? { children: block.children } : {}),
     ...defaults,
     ...extraFields,
     ...block.templateOverrides,
@@ -232,6 +250,13 @@ export function buildPreviewDoc(doc: Doc): Doc {
   const flat = flattenBlocks(doc.blocks);
   const allImages = collectAllDocImages(doc.blocks);
   const usedImageSrcs = new Set<string>();
+  // Names of user-defined templates carried by the doc — passed into
+  // `blockToSlide` so heading annotations like `{[hero]}` aren't
+  // silently downgraded to `sectionHeader` when the template doesn't
+  // exist in the built-in registry.
+  const knownTemplates = doc.customTemplates
+    ? new Set(doc.customTemplates.map((d) => d.name))
+    : undefined;
 
   const slides: Record<string, unknown>[] = [];
   let motionIndex = 0;
@@ -239,7 +264,7 @@ export function buildPreviewDoc(doc: Doc): Doc {
   for (let i = 0; i < flat.length; i++) {
     const block = flat[i];
     const blockImages = extractBlockImages(block.contents);
-    const slide = blockToSlide(block, i);
+    const slide = blockToSlide(block, i, knownTemplates);
 
     if (blockImages.length > 0 && slide.template === 'sectionHeader') {
       const img = blockImages[0];
@@ -305,5 +330,8 @@ export function buildPreviewDoc(doc: Doc): Doc {
     ...(doc.captions ? { captions: doc.captions } : {}),
     ...(doc.startBlock ? { startBlock: doc.startBlock } : {}),
     ...(doc.themeId ? { themeId: doc.themeId } : {}),
+    // Custom templates ride along so `useDocPlayback` can merge them
+    // onto the registry before expanding slides.
+    ...(doc.customTemplates ? { customTemplates: doc.customTemplates } : {}),
   };
 }

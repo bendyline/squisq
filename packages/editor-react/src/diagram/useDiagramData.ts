@@ -22,6 +22,10 @@ export interface DiagramRFNode {
   position: { x: number; y: number };
   data: { label: string };
   type?: string;
+  /** Per-node width override (from the heading's `w=` Pandoc param). */
+  width?: number;
+  /** Per-node height override (from the heading's `h=` Pandoc param). */
+  height?: number;
 }
 
 export interface DiagramRFEdge {
@@ -52,6 +56,9 @@ export function useDiagramData(editor: Editor, parentPos: number): DiagramData {
 
   return useMemo(() => {
     const children = listDiagramChildren(editor, parentPos);
+    // Per-node size overrides keyed by id, so the post-layout pass can
+    // re-attach them without polluting the Block schema used by SSR.
+    const sizeOverrides = new Map<string, { width?: number; height?: number }>();
     // Build synthetic Blocks for the layout helper.
     const syntheticBlocks: Block[] = children.map((c) => {
       const params = c.attrs.params ?? {};
@@ -59,6 +66,16 @@ export function useDiagramData(editor: Editor, parentPos: number): DiagramData {
       const yRaw = params.y;
       const x = xRaw != null ? Number(xRaw) : undefined;
       const y = yRaw != null ? Number(yRaw) : undefined;
+      const wRaw = params.w;
+      const hRaw = params.h;
+      const w = wRaw != null ? Number(wRaw) : undefined;
+      const h = hRaw != null ? Number(hRaw) : undefined;
+      if (Number.isFinite(w) || Number.isFinite(h)) {
+        sizeOverrides.set(c.id, {
+          ...(Number.isFinite(w) ? { width: w as number } : {}),
+          ...(Number.isFinite(h) ? { height: h as number } : {}),
+        });
+      }
       const blockMeta = c.attrs.blockMeta;
       const text = getHeadingText(c.node);
       return {
@@ -76,11 +93,16 @@ export function useDiagramData(editor: Editor, parentPos: number): DiagramData {
 
     const layout = computeDiagramLayout(syntheticBlocks);
 
-    const nodes: DiagramRFNode[] = layout.nodes.map((n) => ({
-      id: n.id,
-      position: { x: n.x, y: n.y },
-      data: { label: n.label },
-    }));
+    const nodes: DiagramRFNode[] = layout.nodes.map((n) => {
+      const size = sizeOverrides.get(n.id);
+      return {
+        id: n.id,
+        position: { x: n.x, y: n.y },
+        data: { label: n.label },
+        ...(size?.width != null ? { width: size.width } : {}),
+        ...(size?.height != null ? { height: size.height } : {}),
+      };
+    });
     const edges: DiagramRFEdge[] = layout.edges.map((e) => ({
       id: e.id,
       source: e.source,

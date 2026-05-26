@@ -503,6 +503,55 @@
   }
 }
 
+/* Search input at the top of the gallery — sticky so it stays visible while
+   the user scrolls a long template list. */
+.squisq-template-gallery-search {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  margin: -4px -4px 8px;
+  background: #fff;
+  border-bottom: 1px solid #f3f4f6;
+}
+
+.squisq-template-gallery-search-icon {
+  color: #9ca3af;
+  flex-shrink: 0;
+}
+
+.squisq-template-gallery-search-input {
+  flex: 1;
+  min-width: 0;
+  padding: 6px 4px;
+  border: none;
+  outline: none;
+  font: inherit;
+  font-size: 13px;
+  color: #111827;
+  background: transparent;
+}
+
+.squisq-template-gallery-search-input::placeholder {
+  color: #9ca3af;
+}
+
+/* Hide the native clear button on type="search" — the popover handles
+   clearing implicitly when it closes. */
+.squisq-template-gallery-search-input::-webkit-search-cancel-button {
+  appearance: none;
+}
+
+.squisq-template-gallery-empty {
+  padding: 24px 12px;
+  text-align: center;
+  font-size: 12px;
+  color: #6b7280;
+}
+
 /* "— none —" row at the top */
 .squisq-template-gallery-none {
   display: flex;
@@ -615,6 +664,65 @@
 }
 
 .squisq-template-gallery-card-desc {
+  font-size: 11px;
+  color: #6b7280;
+  line-height: 1.4;
+}
+
+/* "+ New custom template" card pinned at the top of the gallery */
+.squisq-template-gallery-new {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 8px 12px;
+  margin-bottom: 6px;
+  border: 1px dashed #a5b4fc;
+  border-radius: 7px;
+  background: #f5f3ff;
+  cursor: pointer;
+  text-align: left;
+  transition:
+    background 0.1s,
+    border-color 0.1s;
+}
+
+.squisq-template-gallery-new:hover {
+  background: #ede9fe;
+  border-color: #818cf8;
+  border-style: solid;
+}
+
+.squisq-template-gallery-new-plus {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  flex-shrink: 0;
+  font-size: 20px;
+  font-weight: 600;
+  line-height: 1;
+  color: #6366f1;
+  background: #ffffff;
+  border: 1px solid #c4b5fd;
+  border-radius: 6px;
+}
+
+.squisq-template-gallery-new-body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.squisq-template-gallery-new-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: #4338ca;
+}
+
+.squisq-template-gallery-new-desc {
   font-size: 11px;
   color: #6b7280;
   line-height: 1.4;
@@ -1306,6 +1414,23 @@
   box-shadow:
     0 8px 24px rgba(0, 0, 0, 0.4),
     0 2px 6px rgba(0, 0, 0, 0.2);
+}
+
+.squisq-editor-shell[data-theme='dark'] .squisq-template-gallery-search {
+  background: #1f2937;
+  border-bottom-color: #374151;
+}
+
+.squisq-editor-shell[data-theme='dark'] .squisq-template-gallery-search-input {
+  color: #f9fafb;
+}
+
+.squisq-editor-shell[data-theme='dark'] .squisq-template-gallery-search-input::placeholder {
+  color: #6b7280;
+}
+
+.squisq-editor-shell[data-theme='dark'] .squisq-template-gallery-empty {
+  color: #9ca3af;
 }
 
 .squisq-editor-shell[data-theme='dark'] .squisq-template-gallery-none:hover {

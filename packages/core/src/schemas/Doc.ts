@@ -103,6 +103,22 @@ export interface Doc {
    * Carries rendering hints like `document-render-as` and custom metadata.
    */
   frontmatter?: Record<string, unknown>;
+
+  /**
+   * User-defined block templates inlined into this doc.
+   *
+   * Populated from the markdown frontmatter key
+   * `squisq-custom-templates`. The template-expansion pipeline
+   * (`expandDocBlocks`) merges these into the registry before walking
+   * blocks, so a heading annotated `{[myhero]}` resolves against a
+   * doc-defined template named `myhero`.
+   *
+   * Library templates (stored in localStorage on the editor side) are
+   * NOT auto-loaded here — applying a library template to a block
+   * copies its definition into this list so the doc remains
+   * self-sufficient for SSR and export.
+   */
+  customTemplates?: import('./CustomTemplates.js').CustomTemplateDefinition[];
 }
 
 /**

@@ -10,7 +10,7 @@
  * and code blocks.
  */
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { CSSProperties } from 'react';
 import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
@@ -25,11 +25,24 @@ import Placeholder from '@tiptap/extension-placeholder';
 import { resolveFontFamily, FONT_FALLBACKS } from '@bendyline/squisq/schemas';
 import { HeadingWithTemplate } from './TemplateAnnotation';
 import { DiagramExtension } from './diagram/DiagramExtension';
+import { SceneBlockExtension } from './scene/SceneBlockExtension';
 import { InlineIcon } from './InlineIcon';
 import { ImageWithMediaProvider } from './ImageNodeView';
 import { TiptapVideo } from './tiptap/TiptapVideo';
 import { TiptapAudio } from './tiptap/TiptapAudio';
 import { TemplateBadgePopover, TEMPLATE_NAMES } from './TemplatePicker';
+import {
+  CustomTemplateProvider,
+  TemplateDesigner,
+  type DesignerSaveTarget,
+} from './customTemplates';
+import { saveLibraryTemplate } from './customTemplates/library';
+import type { CustomTemplateDefinition } from '@bendyline/squisq/schemas';
+import {
+  FRONTMATTER_CUSTOM_TEMPLATES_KEY,
+  writeCustomTemplatesToFrontmatter,
+} from '@bendyline/squisq/doc';
+import { setFrontmatterValues } from '@bendyline/squisq/markdown';
 import { profileBlockContents, recommendTemplatesForBlock } from '@bendyline/squisq/recommend';
 import { findBlockSliceByHeadingIndex } from './blockSlice';
 import { useEditorContext } from './EditorContext';
@@ -109,7 +122,50 @@ export function WysiwygEditor({
     mentionProvider,
     blockTagsVisible,
     themeInheritance,
+    doc,
   } = useEditorContext();
+  // Custom templates inlined in the active doc's frontmatter. Memoized
+  // so identity is stable across renders that don't touch frontmatter.
+  const docTemplates = useMemo<CustomTemplateDefinition[]>(
+    () => doc?.customTemplates ?? [],
+    [doc?.customTemplates],
+  );
+  // Persist a new custom-templates list back into the markdown source's
+  // frontmatter so the doc round-trips through save/load. We encode the
+  // whole list as a single base64-JSON string per the flat YAML
+  // frontmatter parser's constraint.
+  const onDocTemplatesChange = useCallback(
+    (next: CustomTemplateDefinition[]) => {
+      const payload = writeCustomTemplatesToFrontmatter(next);
+      const updated = setFrontmatterValues(markdownSource, {
+        [FRONTMATTER_CUSTOM_TEMPLATES_KEY]: payload ?? null,
+      });
+      if (updated !== markdownSource) setMarkdownSource(updated);
+    },
+    [markdownSource, setMarkdownSource],
+  );
+  // Designer modal visibility. `null` when closed; `{ initial }` when
+  // open. `initial` is undefined for a "+ New" flow or set to an
+  // existing template to edit it.
+  const [designerState, setDesignerState] = useState<
+    | { initial?: CustomTemplateDefinition }
+    | null
+  >(null);
+  const handleDesignerSave = useCallback(
+    (def: CustomTemplateDefinition, target: DesignerSaveTarget) => {
+      if (target === 'doc') {
+        const existingIdx = docTemplates.findIndex((t) => t.name === def.name);
+        const next =
+          existingIdx >= 0
+            ? docTemplates.map((t, i) => (i === existingIdx ? def : t))
+            : [...docTemplates, def];
+        onDocTemplatesChange(next);
+      } else {
+        saveLibraryTemplate(def);
+      }
+    },
+    [docTemplates, onDocTemplatesChange],
+  );
   // Keep a ref so the mention extension — created once at editor mount —
   // always sees the latest provider. Swapping projects changes
   // the provider without remounting the editor.
@@ -149,6 +205,7 @@ export function WysiwygEditor({
       }),
       HeadingWithTemplate.configure({ levels: [1, 2, 3, 4, 5, 6] }),
       DiagramExtension,
+      SceneBlockExtension,
       Table.configure({ resizable: true }),
       TableRow,
       TableCell,
@@ -434,37 +491,53 @@ export function WysiwygEditor({
   }, [activeTheme, themeInheritance]);
 
   return (
-    <div
-      className={`squisq-wysiwyg-container${className ? ` ${className}` : ''}`}
-      style={{ width: '100%', height: '100%', overflow: 'auto', ...themeStyle }}
-      data-testid="wysiwyg-container"
-      data-block-tags={blockTagsVisible ? 'visible' : 'hidden'}
-      data-theme-inheritance={themeInheritance}
-      ref={containerRef}
+    <CustomTemplateProvider
+      docTemplates={docTemplates}
+      onDocTemplatesChange={onDocTemplatesChange}
     >
-      <EditorContent editor={editor} style={{ height: '100%' }} />
-      {badgeMenu && (
-        <TemplateBadgePopover
-          anchorRect={badgeMenu.rect}
-          value={badgeMenu.template}
-          recommended={(() => {
-            const slice = findBlockSliceByHeadingIndex(markdownSource, badgeMenu.headingIndex);
-            if (!slice) return undefined;
-            const profile = profileBlockContents(slice);
-            return recommendTemplatesForBlock(profile, TEMPLATE_NAMES).recommended;
-          })()}
-          onChange={(name) => {
-            if (!editor) return;
-            const tr = editor.state.tr.setNodeMarkup(badgeMenu.headingPos, undefined, {
-              ...editor.state.doc.nodeAt(badgeMenu.headingPos)?.attrs,
-              dataTemplate: name === '' ? null : name,
-            });
-            editor.view.dispatch(tr);
-          }}
-          onClose={() => setBadgeMenu(null)}
-        />
-      )}
-    </div>
+      <div
+        className={`squisq-wysiwyg-container${className ? ` ${className}` : ''}`}
+        style={{ width: '100%', height: '100%', overflow: 'auto', ...themeStyle }}
+        data-testid="wysiwyg-container"
+        data-block-tags={blockTagsVisible ? 'visible' : 'hidden'}
+        data-theme-inheritance={themeInheritance}
+        ref={containerRef}
+      >
+        <EditorContent editor={editor} style={{ height: '100%' }} />
+        {badgeMenu && (
+          <TemplateBadgePopover
+            anchorRect={badgeMenu.rect}
+            value={badgeMenu.template}
+            recommended={(() => {
+              const slice = findBlockSliceByHeadingIndex(markdownSource, badgeMenu.headingIndex);
+              if (!slice) return undefined;
+              const profile = profileBlockContents(slice);
+              return recommendTemplatesForBlock(profile, TEMPLATE_NAMES).recommended;
+            })()}
+            onOpenDesigner={() => {
+              setBadgeMenu(null);
+              setDesignerState({});
+            }}
+            onChange={(name) => {
+              if (!editor) return;
+              const tr = editor.state.tr.setNodeMarkup(badgeMenu.headingPos, undefined, {
+                ...editor.state.doc.nodeAt(badgeMenu.headingPos)?.attrs,
+                dataTemplate: name === '' ? null : name,
+              });
+              editor.view.dispatch(tr);
+            }}
+            onClose={() => setBadgeMenu(null)}
+          />
+        )}
+        {designerState && (
+          <TemplateDesigner
+            initial={designerState.initial}
+            onSave={handleDesignerSave}
+            onClose={() => setDesignerState(null)}
+          />
+        )}
+      </div>
+    </CustomTemplateProvider>
   );
 }
 

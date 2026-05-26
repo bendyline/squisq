@@ -29,12 +29,13 @@ squisq/
                             #   themeCompile, themeValidator, colorUtils, fontStacks, Types,
                             #   MediaProvider, ImageEditDoc
         doc/
-          templates/        # 21 block templates (title, sectionHeader, statHighlight, quote,
+          templates/        # 23 block templates (title, sectionHeader, statHighlight, quote,
                             #   factCard, twoColumn, dateEvent, imageWithCaption, leftFeature,
                             #   rightFeature, map, fullBleedQuote, list, photoGrid,
                             #   definitionCard, comparisonBar, pullQuote, videoWithCaption,
-                            #   videoPullQuote, dataTable, diagram) + coverBlock (start
-                            #   block, not in registry) + accentImage / persistentLayers / captionUtils
+                            #   videoPullQuote, dataTable, diagram, layout, drawing) +
+                            #   coverBlock (start block, not in registry) + accentImage /
+                            #   persistentLayers / captionUtils
                             #   shared utilities
           utils/            # animationUtils, themeUtils
           getLayers.ts      # Layer dispatch with persistent layer injection
@@ -230,7 +231,7 @@ For CI / clean reproducible installs, run `npm ci && node scripts/run-install-al
 build entry and a `package.json` export):
 
 - `@bendyline/squisq/schemas` — Type definitions (Doc, BlockTemplates, Viewport, LayoutStrategy, Theme, themeLibrary, themeCompile, themeValidator, colorUtils, fontStacks, Types, MediaProvider, ImageEditDoc)
-- `@bendyline/squisq/doc` — Template registry + all 21 templates (`title`, `sectionHeader`, `statHighlight`, `quote`, `factCard`, `twoColumn`, `dateEvent`, `imageWithCaption`, `leftFeature`, `rightFeature`, `map`, `fullBleedQuote`, `list`, `photoGrid`, `definitionCard`, `comparisonBar`, `pullQuote`, `videoWithCaption`, `videoPullQuote`, `dataTable`, `diagram`) + animationUtils + themeUtils + markdownToDoc + docToMarkdown + getLayers + resolveAudioMapping
+- `@bendyline/squisq/doc` — Template registry + all 23 templates (`title`, `sectionHeader`, `statHighlight`, `quote`, `factCard`, `twoColumn`, `dateEvent`, `imageWithCaption`, `leftFeature`, `rightFeature`, `map`, `fullBleedQuote`, `list`, `photoGrid`, `definitionCard`, `comparisonBar`, `pullQuote`, `videoWithCaption`, `videoPullQuote`, `dataTable`, `diagram`, `layout`, `drawing`) + animationUtils + themeUtils + markdownToDoc + docToMarkdown + getLayers + resolveAudioMapping
 - `@bendyline/squisq/spatial` — Haversine, Geohash utilities
 - `@bendyline/squisq/storage` — StorageAdapter, MemoryStorageAdapter, LocalStorageAdapter, LocalForageAdapter, ContentContainer, MemoryContentContainer, ScopedContentContainer, createMediaProviderFromContainer
 - `@bendyline/squisq/markdown` — Markdown parsing, stringifying, AST types (MarkdownDocument), tree utilities, frontmatter helpers, HTML sub-DOM

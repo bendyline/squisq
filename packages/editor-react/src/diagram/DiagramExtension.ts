@@ -20,7 +20,58 @@ import type { EditorState } from '@tiptap/pm/state';
 import type { Editor } from '@tiptap/react';
 import { createRoot, type Root } from 'react-dom/client';
 import { createElement } from 'react';
+import type { Node as PMNode } from '@tiptap/pm/model';
+import { parsePandocAttrTokens } from '@bendyline/squisq/markdown';
 import { DiagramWidget } from './DiagramWidget';
+
+/**
+ * Stable identifier for a diagram heading — prefers the persisted
+ * Pandoc `#id`, falls back to a slugified version of the heading's
+ * text. Used as part of the widget decoration's `key` so the widget
+ * survives attribute-only doc changes (drag/resize commits).
+ */
+export function getHeadingKey(node: PMNode): string {
+  const raw = (node.attrs as Record<string, unknown>).dataBlockAttrs;
+  if (typeof raw === 'string' && raw.length > 0) {
+    const attrs = parsePandocAttrTokens(raw);
+    if (attrs.id) return attrs.id;
+  }
+  let text = '';
+  node.content.forEach((child) => {
+    if (child.isText) text += child.text ?? '';
+  });
+  return text
+    .toLowerCase()
+    .replace(/[^\w\s-]/g, '')
+    .replace(/[\s_]+/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^-|-$/g, '') || 'block';
+}
+
+/**
+ * Find the current document position of a diagram heading by its
+ * stable key. Returns `null` if the heading no longer exists (e.g. the
+ * user removed it). Used by the widget to re-resolve its parent
+ * position on every read, since the kept-alive widget's captured
+ * `parentPos` would otherwise go stale when content above shifts.
+ */
+export function findDiagramHeadingPos(
+  editor: Editor,
+  headingKey: string,
+): number | null {
+  let found: number | null = null;
+  editor.state.doc.descendants((node, pos) => {
+    if (found != null) return false;
+    if (node.type.name !== 'heading') return;
+    const attrs = node.attrs as { dataTemplate?: string };
+    if (attrs.dataTemplate !== 'diagram') return;
+    if (getHeadingKey(node) === headingKey) {
+      found = pos;
+      return false;
+    }
+  });
+  return found;
+}
 
 const KEY = new PluginKey('squisq-diagram');
 
@@ -39,6 +90,15 @@ function buildDecorations(state: EditorState, editor: Editor): DecorationSet {
       const parentDepth = attrs.level;
       const widgetPos = pos + node.nodeSize;
       const parentPos = pos;
+      // Stable widget key derived from the heading's persisted id (or its
+      // text-derived slug). ProseMirror treats decorations with matching
+      // keys as equal, so it keeps the existing widget DOM (and the
+      // mounted React root) across attribute-only doc changes — which
+      // happen on every drag commit when we write `x=`/`y=` back to the
+      // heading. Without this, every drop would destroy and recreate the
+      // canvas, blowing away pan/zoom and making the cards appear to snap
+      // back to their pre-fit position.
+      const headingKey = getHeadingKey(node);
       decos.push(
         Decoration.widget(
           widgetPos,
@@ -55,7 +115,8 @@ function buildDecorations(state: EditorState, editor: Editor): DecorationSet {
             root.render(
               createElement(DiagramWidget, {
                 editor,
-                parentPos,
+                headingKey,
+                fallbackParentPos: parentPos,
                 host: view.dom.parentElement ?? view.dom,
               }),
             );
@@ -80,6 +141,7 @@ function buildDecorations(state: EditorState, editor: Editor): DecorationSet {
             // Cluster the widget tightly after the heading; don't side-bias.
             side: 1,
             ignoreSelection: true,
+            key: `squisq-diagram-${headingKey}`,
           },
         ),
       );

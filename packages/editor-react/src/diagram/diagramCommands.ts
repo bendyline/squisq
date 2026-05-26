@@ -15,7 +15,8 @@ import {
   serializePandocAttributes,
   type HeadingAttributes,
 } from '@bendyline/squisq/markdown';
-import type { BlockConnection } from '@bendyline/squisq/schemas';
+import type { Block, BlockConnection } from '@bendyline/squisq/schemas';
+import { computeDiagramLayout } from '@bendyline/squisq/doc';
 
 export interface HeadingLocation {
   /** Node start position in the doc (absolute). */
@@ -65,18 +66,45 @@ function computeId(node: PMNode): string {
 
 /**
  * Find the diagram section that starts at `parentPos` (the position of the
- * parent heading with `dataTemplate === 'diagram'`). Returns every direct
- * sub-heading until the next equal-or-shallower heading. Body content
- * between sub-headings is included but not returned — only headings are
- * iterated.
+ * parent heading with `dataTemplate === 'diagram'`). Returns the headings
+ * that should appear as diagram nodes — defined as every heading at the
+ * **shallowest** depth greater than the parent within the section, until
+ * the next equal-or-shallower heading.
+ *
+ * Using the shallowest deeper depth (rather than a strict parentDepth + 1)
+ * mirrors `markdownToDoc`'s stack behavior: when authors skip a level
+ * (e.g. `# parent` + `### child`), those `###` headings are still treated
+ * as direct children of the `#` parent. Any headings deeper than the
+ * detected child depth are sub-sections of a node and are not surfaced as
+ * separate diagram nodes.
  */
 export function listDiagramChildren(editor: Editor, parentPos: number): HeadingLocation[] {
   const { state } = editor;
   const parent = state.doc.nodeAt(parentPos);
   if (!parent || parent.type.name !== 'heading') return [];
   const parentDepth = (parent.attrs as { level: number }).level;
-  const targetChildDepth = parentDepth + 1;
 
+  // First pass: find the shallowest heading depth that appears below the
+  // parent (and before the next ≤parent heading). That's the diagram's
+  // child level.
+  let childDepth: number | undefined;
+  {
+    let cursor = parentPos + parent.nodeSize;
+    const docSize = state.doc.content.size;
+    while (cursor < docSize) {
+      const node = state.doc.nodeAt(cursor);
+      if (!node) break;
+      if (node.type.name === 'heading') {
+        const level = (node.attrs as { level: number }).level;
+        if (level <= parentDepth) break;
+        if (childDepth === undefined || level < childDepth) childDepth = level;
+      }
+      cursor += node.nodeSize;
+    }
+  }
+  if (childDepth === undefined) return [];
+
+  // Second pass: emit headings at exactly that child depth.
   const results: HeadingLocation[] = [];
   let cursor = parentPos + parent.nodeSize;
   const docSize = state.doc.content.size;
@@ -86,7 +114,7 @@ export function listDiagramChildren(editor: Editor, parentPos: number): HeadingL
     if (node.type.name === 'heading') {
       const level = (node.attrs as { level: number }).level;
       if (level <= parentDepth) break;
-      if (level === targetChildDepth) {
+      if (level === childDepth) {
         results.push({
           pos: cursor,
           node,
@@ -126,20 +154,43 @@ export function getDiagramSectionEnd(editor: Editor, parentPos: number): number 
 }
 
 function applyAttrs(editor: Editor, pos: number, attrs: HeadingAttributes): boolean {
+  // `serializePandocAttributes` returns the full `{…}` block, but
+  // `data-block-attrs` stores the INSIDE of those braces (matching the
+  // parser in tiptapBridge.ts that captures the inner text only). Strip
+  // them here so we round-trip cleanly — otherwise the next save would
+  // wrap the value in a second pair of braces.
   const raw = serializePandocAttributes(attrs);
+  const inner = stripBraces(raw);
   return editor
     .chain()
     .command(({ tr }) => {
       const node = tr.doc.nodeAt(pos);
       if (!node) return false;
-      tr.setNodeAttribute(pos, 'dataBlockAttrs', raw ?? null);
+      tr.setNodeAttribute(pos, 'dataBlockAttrs', inner ?? null);
       return true;
     })
     .run();
 }
 
+function stripBraces(s: string | null): string | null {
+  if (s == null) return null;
+  // Empty Pandoc marker `{}` collapses to null (no attribute to persist).
+  if (s === '{}') return null;
+  if (s.startsWith('{') && s.endsWith('}')) return s.slice(1, -1);
+  return s;
+}
+
 /**
  * Update a node's `x` / `y` attributes from a drag.
+ *
+ * Before writing the moved node, this also "freezes" any siblings that
+ * lack an explicit position by snapshotting their currently-displayed
+ * (auto-laid) coordinates. Without that, `computeDiagramLayout`'s grid
+ * auto-placement is relative to the bounding box of pinned nodes — so
+ * dragging one node would pull every unpinned sibling along behind it.
+ * Freezing converts the implicit layout into explicit per-node
+ * positions on the first interaction, after which each node moves
+ * independently.
  */
 export function moveNode(
   editor: Editor,
@@ -148,13 +199,107 @@ export function moveNode(
   x: number,
   y: number,
 ): boolean {
+  const children = listDiagramChildren(editor, parentPos);
+  const target = children.find((c) => c.id === nodeId);
+  if (!target) return false;
+  const positions = computeCurrentPositions(children);
+  return editor
+    .chain()
+    .command(({ tr }) => {
+      for (const child of children) {
+        const pos = positions.get(child.id);
+        if (!pos) continue;
+        const isMoved = child.id === nodeId;
+        // Skip siblings that already have an explicit position — they
+        // weren't moving anyway, and writing the same value back would
+        // be a noisy no-op.
+        if (!isMoved && pos.pinned) continue;
+        const newX = isMoved ? x : pos.x;
+        const newY = isMoved ? y : pos.y;
+        writeChildPosition(tr, child, nodeId === child.id ? nodeId : child.id, newX, newY);
+      }
+      return true;
+    })
+    .run();
+}
+
+/**
+ * Compute each child's currently-rendered position by running the
+ * shared `computeDiagramLayout` on a set of synthetic blocks. Returns
+ * a map of `nodeId → {x, y, pinned}`. `pinned` reflects whether the
+ * child already had an authored position (so callers can decide
+ * whether a write is necessary).
+ */
+function computeCurrentPositions(
+  children: readonly HeadingLocation[],
+): Map<string, { x: number; y: number; pinned: boolean }> {
+  const blocks: Block[] = children.map((c) => {
+    const params = c.attrs.params ?? {};
+    const xRaw = params.x;
+    const yRaw = params.y;
+    const xN = xRaw != null ? Number(xRaw) : NaN;
+    const yN = yRaw != null ? Number(yRaw) : NaN;
+    return {
+      id: c.id,
+      startTime: 0,
+      duration: 0,
+      audioSegment: 0,
+      title: getHeadingText(c.node) || c.id,
+      ...(Number.isFinite(xN) ? { x: xN } : {}),
+      ...(Number.isFinite(yN) ? { y: yN } : {}),
+    } as Block;
+  });
+  const layout = computeDiagramLayout(blocks);
+  const out = new Map<string, { x: number; y: number; pinned: boolean }>();
+  for (const node of layout.nodes) {
+    out.set(node.id, { x: node.x, y: node.y, pinned: node.pinned });
+  }
+  return out;
+}
+
+/**
+ * Set a child heading's `data-block-attrs` to the given position. The
+ * heading's existing attrs (id, classes, other params) are preserved.
+ * Used by {@link moveNode} when batch-writing the snapshot.
+ */
+function writeChildPosition(
+  tr: import('@tiptap/pm/state').Transaction,
+  child: HeadingLocation,
+  ensureId: string,
+  x: number,
+  y: number,
+): void {
+  const attrs: HeadingAttributes = { ...child.attrs };
+  if (!attrs.id) attrs.id = ensureId;
+  const params = { ...(attrs.params ?? {}) };
+  params.x = String(Math.round(x));
+  params.y = String(Math.round(y));
+  attrs.params = params;
+  const raw = serializePandocAttributes(attrs);
+  const inner = stripBraces(raw);
+  tr.setNodeAttribute(child.pos, 'dataBlockAttrs', inner ?? null);
+}
+
+/**
+ * Update a node's per-node `w` / `h` attributes from a corner-handle
+ * drag. Nodes without these params fall back to the default card size
+ * (`NODE_WIDTH` / `NODE_HEIGHT`) at render time, so most authors never
+ * see them in markdown.
+ */
+export function resizeNode(
+  editor: Editor,
+  parentPos: number,
+  nodeId: string,
+  width: number,
+  height: number,
+): boolean {
   const target = listDiagramChildren(editor, parentPos).find((c) => c.id === nodeId);
   if (!target) return false;
   const attrs = { ...target.attrs };
   if (!attrs.id) attrs.id = nodeId;
   const params = { ...(attrs.params ?? {}) };
-  params.x = String(Math.round(x));
-  params.y = String(Math.round(y));
+  params.w = String(Math.round(width));
+  params.h = String(Math.round(height));
   attrs.params = params;
   return applyAttrs(editor, target.pos, attrs);
 }
@@ -262,17 +407,31 @@ export function addNode(
   const parent = state.doc.nodeAt(parentPos);
   if (!parent || parent.type.name !== 'heading') return false;
   const parentDepth = (parent.attrs as { level: number }).level;
-  const childDepth = Math.min(6, parentDepth + 1);
+  // Inherit the depth of existing diagram children so a new node is a
+  // sibling, not an accidental new shallower parent. Falls back to
+  // parent+1 when the section is empty.
+  const existing = listDiagramChildren(editor, parentPos);
+  const inheritedDepth = existing[0]?.node.attrs.level as number | undefined;
+  const childDepth = Math.min(6, inheritedDepth ?? parentDepth + 1);
 
   const insertPos = getDiagramSectionEnd(editor, parentPos);
   const dataBlockAttrs = serializePandocAttributes({
     id,
     params: { x: String(Math.round(x)), y: String(Math.round(y)) },
   });
+  // Freeze any unpinned siblings before inserting — see `moveNode` for
+  // the rationale. Without this, adding a node would shift other
+  // unpinned siblings as the auto-layout's bounding box grows.
+  const freezePositions = computeCurrentPositions(existing);
 
   return editor
     .chain()
     .command(({ tr, state: s }) => {
+      for (const child of existing) {
+        const pos = freezePositions.get(child.id);
+        if (!pos || pos.pinned) continue;
+        writeChildPosition(tr, child, child.id, pos.x, pos.y);
+      }
       const headingType = s.schema.nodes.heading;
       if (!headingType) return false;
       const newHeading = headingType.create(
@@ -280,7 +439,7 @@ export function addNode(
           level: childDepth,
           dataTemplate: null,
           dataTemplateParams: null,
-          dataBlockAttrs: dataBlockAttrs ?? null,
+          dataBlockAttrs: stripBraces(dataBlockAttrs) ?? null,
         },
         s.schema.text(label),
       );

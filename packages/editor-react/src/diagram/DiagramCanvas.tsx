@@ -1,36 +1,33 @@
 /**
- * DiagramCanvas — React Flow surface for editing a diagram section.
+ * DiagramCanvas — thin wrapper around the Squisq Scene engine.
  *
- * Owns the local React Flow node/edge state (initialised from the
- * markdown-derived data passed in by the NodeView). Surfaces user
- * interactions back to the parent via the `onCommand` callback, which
- * the NodeView turns into Tiptap commands.
+ * Translates between the diagram's command vocabulary (which the host
+ * `DiagramWidget` translates into Tiptap mutations) and the Scene's
+ * generic SceneCommand vocabulary. The Scene itself owns viewport
+ * pan/zoom, selection, hit-testing, and tool dispatch.
  *
- * Local state lets React Flow handle drag interactions smoothly without
- * committing each frame back to the document. We only call `onCommand`
- * on commit-points (drag stop, connect, edge/node delete, double-click).
+ * Diagram nodes are rendered as synthetic card+label Layer pairs
+ * (`nodeCard.tsx`) so what you see in the editor is the same Layer
+ * schema the SSR `diagramBlock.ts` template emits. Edges are drawn by
+ * `<DiagramEdges>` as a separate background layer.
  */
 
-import { useEffect } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import {
-  ReactFlow,
-  Background,
-  Controls,
-  MiniMap,
-  useNodesState,
-  useEdgesState,
-  type Connection,
-  type Edge,
-  type Node,
-  type NodeChange,
-  type EdgeChange,
-  type OnNodesDelete,
-  type OnEdgesDelete,
-} from '@xyflow/react';
-import '@xyflow/react/dist/style.css';
+  Scene,
+  buildDiagramScene,
+  nodeIdFromCardLayerId,
+  diagramLayerFollows,
+  DiagramEdges,
+  SelectTool,
+  ConnectTool,
+  type SceneCommand,
+} from '../scene';
+import type { DiagramRFNode, DiagramRFEdge } from './useDiagramData';
 
 export type DiagramCommand =
   | { kind: 'moveNode'; nodeId: string; x: number; y: number }
+  | { kind: 'resizeNode'; nodeId: string; width: number; height: number }
   | { kind: 'addConnection'; source: string; target: string; type?: string }
   | { kind: 'removeConnection'; source: string; target: string; type?: string }
   | { kind: 'renameNode'; nodeId: string; newLabel: string }
@@ -38,8 +35,8 @@ export type DiagramCommand =
   | { kind: 'removeNode'; nodeId: string };
 
 interface DiagramCanvasProps {
-  nodes: Node[];
-  edges: Edge[];
+  nodes: DiagramRFNode[];
+  edges: DiagramRFEdge[];
   onCommand: (cmd: DiagramCommand) => void;
   /** When true, render the maximize button. Click toggles `onToggleMaximize`. */
   showMaximize?: boolean;
@@ -49,6 +46,13 @@ interface DiagramCanvasProps {
   onToggleMaximize?: () => void;
 }
 
+// Viewport size for the diagram canvas — a wide-ish surface in author
+// units. The Scene's fit-on-mount centers the diagram inside whatever
+// container the canvas is rendered into.
+const DIAGRAM_VIEWPORT = { width: 1600, height: 900 };
+
+const TOOLS = [SelectTool, ConnectTool];
+
 export function DiagramCanvas({
   nodes: incomingNodes,
   edges: incomingEdges,
@@ -57,107 +61,129 @@ export function DiagramCanvas({
   maximized = false,
   onToggleMaximize,
 }: DiagramCanvasProps) {
-  const [nodes, setNodes, onNodesChange] = useNodesState(incomingNodes);
-  const [edges, setEdges, onEdgesChange] = useEdgesState(incomingEdges);
+  const scene = useMemo(
+    () => buildDiagramScene(incomingNodes, incomingEdges),
+    [incomingNodes, incomingEdges],
+  );
+  // Track the active tool so we can keep selection when the user toggles
+  // back to Select after using Connect.
+  const [activeToolId, setActiveToolId] = useState<string>('select');
 
-  // Sync incoming props → local state when the markdown changes externally
-  // (e.g. raw-editor edits while the canvas is open). Skip when the only
-  // diff is something React Flow is mid-handling (drag in progress is
-  // local-only anyway, so this is safe for our commit-on-stop model).
-  useEffect(() => {
-    setNodes(incomingNodes);
-  }, [incomingNodes, setNodes]);
-  useEffect(() => {
-    setEdges(incomingEdges);
-  }, [incomingEdges, setEdges]);
-
-  const handleNodesChange = (changes: NodeChange[]) => {
-    onNodesChange(changes);
-    for (const c of changes) {
-      if (c.type === 'position' && c.dragging === false && c.position) {
-        onCommand({ kind: 'moveNode', nodeId: c.id, x: c.position.x, y: c.position.y });
+  // Translate generic SceneCommand → diagram-specific DiagramCommand,
+  // then hand off to the host (DiagramWidget) which writes to Tiptap.
+  const handleSceneCommand = useCallback(
+    (cmd: SceneCommand) => {
+      switch (cmd.kind) {
+        case 'moveLayer': {
+          // Only the node-card layer carries the position; ignore drag
+          // commits on the label layer (it'd duplicate the write).
+          if (!cmd.id.startsWith('node-card-')) return;
+          const nodeId = nodeIdFromCardLayerId(cmd.id);
+          if (!nodeId) return;
+          onCommand({ kind: 'moveNode', nodeId, x: cmd.x, y: cmd.y });
+          return;
+        }
+        case 'addEdge':
+          onCommand({ kind: 'addConnection', source: cmd.source, target: cmd.target, type: cmd.type });
+          return;
+        case 'removeEdge':
+          onCommand({
+            kind: 'removeConnection',
+            source: cmd.source,
+            target: cmd.target,
+            type: cmd.type,
+          });
+          return;
+        case 'removeLayer': {
+          const nodeId = nodeIdFromCardLayerId(cmd.id);
+          if (nodeId) onCommand({ kind: 'removeNode', nodeId });
+          return;
+        }
+        case 'renameLayer': {
+          const nodeId = nodeIdFromCardLayerId(cmd.id);
+          if (nodeId) onCommand({ kind: 'renameNode', nodeId, newLabel: cmd.label });
+          return;
+        }
+        case 'addLayer': {
+          // Diagram mode interprets addLayer as "add a node at the layer's
+          // position". The Scene's empty-state "add" button and any future
+          // double-click handler dispatch this.
+          const pos = cmd.layer.position;
+          const x = typeof pos.x === 'number' ? pos.x : 0;
+          const y = typeof pos.y === 'number' ? pos.y : 0;
+          onCommand({ kind: 'addNode', x, y });
+          return;
+        }
+        case 'resizeLayer': {
+          if (!cmd.id.startsWith('node-card-')) return;
+          const nodeId = nodeIdFromCardLayerId(cmd.id);
+          if (!nodeId) return;
+          onCommand({ kind: 'resizeNode', nodeId, width: cmd.width, height: cmd.height });
+          return;
+        }
+        case 'setLayerAttr':
+          // Diagram nodes don't expose generic attr writes; renames go
+          // through `renameLayer` and positions through move/resize.
+          return;
       }
-    }
-  };
+      const _exhaustive: never = cmd;
+      void _exhaustive;
+    },
+    [onCommand],
+  );
 
-  const handleEdgesChange = (changes: EdgeChange[]) => {
-    onEdgesChange(changes);
-  };
-
-  const handleConnect = (params: Connection) => {
-    if (!params.source || !params.target) return;
-    onCommand({ kind: 'addConnection', source: params.source, target: params.target });
-  };
-
-  const handleEdgesDelete: OnEdgesDelete = (removed) => {
-    for (const e of removed) {
-      onCommand({
-        kind: 'removeConnection',
-        source: e.source,
-        target: e.target,
-        type: typeof e.label === 'string' ? e.label : undefined,
-      });
-    }
-  };
-
-  const handleNodesDelete: OnNodesDelete = (removed) => {
-    for (const n of removed) {
-      onCommand({ kind: 'removeNode', nodeId: n.id });
-    }
-  };
-
-  const handleNodeDoubleClick = (_e: React.MouseEvent, node: Node) => {
-    const current = typeof node.data.label === 'string' ? node.data.label : '';
-    const next = window.prompt('Rename node', current);
-    if (next != null && next !== current) {
-      onCommand({ kind: 'renameNode', nodeId: node.id, newLabel: next });
-    }
-  };
-
-  const handlePaneDoubleClick = (e: React.MouseEvent) => {
-    // Translate click coordinates into canvas-space. React Flow's
-    // `screenToFlowPosition` requires the instance — we rely on the
-    // wrapper's coordinate system being close enough for v1 by using
-    // the event's offset relative to the pane element.
-    const target = e.currentTarget as HTMLDivElement;
-    const rect = target.getBoundingClientRect();
-    onCommand({
-      kind: 'addNode',
-      x: e.clientX - rect.left,
-      y: e.clientY - rect.top,
-    });
-  };
+  // Edges render in the renderExtras callback so they sit behind the
+  // node cards (which the Scene renders itself).
+  const nodesForExtras = scene.nodes;
+  const edgesForExtras = scene.edges;
+  const renderExtras = useCallback(
+    () => <DiagramEdges nodes={nodesForExtras} edges={edgesForExtras} />,
+    [nodesForExtras, edgesForExtras],
+  );
 
   return (
     <div className="squisq-diagram-canvas">
-      <ReactFlow
-        nodes={nodes}
-        edges={edges}
-        onNodesChange={handleNodesChange}
-        onEdgesChange={handleEdgesChange}
-        onConnect={handleConnect}
-        onEdgesDelete={handleEdgesDelete}
-        onNodesDelete={handleNodesDelete}
-        onNodeDoubleClick={handleNodeDoubleClick}
-        onPaneClick={undefined}
-        onDoubleClickCapture={handlePaneDoubleClick}
-        deleteKeyCode={['Backspace', 'Delete']}
-        fitView
-      >
-        <Background />
-        <Controls />
-        <MiniMap pannable zoomable />
-      </ReactFlow>
-      {showMaximize && onToggleMaximize && (
-        <button
-          type="button"
-          className="squisq-diagram-maximize-btn"
-          onClick={onToggleMaximize}
-          title={maximized ? 'Exit fullscreen (Esc)' : 'Maximize diagram'}
-        >
-          {maximized ? '✕' : '⛶'}
-        </button>
+      <Scene
+        viewport={DIAGRAM_VIEWPORT}
+        layers={scene.layers}
+        edges={scene.edges}
+        tools={TOOLS}
+        activeToolId={activeToolId}
+        onActiveToolIdChange={setActiveToolId}
+        onCommand={handleSceneCommand}
+        renderExtras={renderExtras}
+        layerFollows={diagramLayerFollows}
+        showMaximize={showMaximize}
+        maximized={maximized}
+        onToggleMaximize={onToggleMaximize}
+      />
+      {scene.nodes.length === 0 && (
+        <DiagramEmptyState
+          onAdd={() => {
+            // Place the first node at the center of the viewport's
+            // logical surface; the Scene's fit-on-mount keeps it visible.
+            onCommand({
+              kind: 'addNode',
+              x: DIAGRAM_VIEWPORT.width / 2 - 90,
+              y: DIAGRAM_VIEWPORT.height / 2 - 32,
+            });
+          }}
+        />
       )}
+    </div>
+  );
+}
+
+function DiagramEmptyState({ onAdd }: { onAdd: () => void }) {
+  return (
+    <div className="squisq-diagram-empty">
+      <div className="squisq-diagram-empty-title">No diagram nodes yet</div>
+      <div className="squisq-diagram-empty-hint">
+        Click "+ Add first node" below, or add sub-headings under this block.
+      </div>
+      <button type="button" className="squisq-diagram-empty-btn" onClick={onAdd}>
+        + Add first node
+      </button>
     </div>
   );
 }

@@ -492,6 +492,20 @@ export interface DiagramBlockInput extends BaseTemplateBlock {
 }
 
 /**
+ * Free-form 2D canvas block. Backs both `layout` and `drawing` modes —
+ * authors arrange a Layer array directly via the Scene engine in the
+ * editor. The layers are persisted alongside the heading in the Pandoc
+ * `data-block-attrs` payload (base64-JSON, key `layers`), so the
+ * template body itself takes no per-block input.
+ *
+ * `layout` and `drawing` share the same SSR template (`rawLayersBlock`);
+ * the discriminator only changes which toolset the editor exposes.
+ */
+export interface RawLayersInput extends BaseTemplateBlock {
+  template: 'layout' | 'drawing';
+}
+
+/**
  * Data table - renders a themed table with headers and rows.
  * Ideal for structured data, comparisons, and reference information.
  */
@@ -533,7 +547,8 @@ export type TemplateBlock =
   | VideoWithCaptionInput
   | VideoPullQuoteInput
   | DataTableInput
-  | DiagramBlockInput;
+  | DiagramBlockInput
+  | RawLayersInput;
 
 /**
  * A block can be either a raw Block or a TemplateBlock.
@@ -576,6 +591,14 @@ export interface TemplateContext {
    * `diagram` consume it to render each child as part of their output.
    */
   children?: Block[];
+  /**
+   * The source block being expanded. Used by user-defined custom
+   * templates so the token resolver can substitute `{title}`,
+   * `{content}`, `{children}`, and `{image:N}` against the block's
+   * data at render time. Built-in templates ignore this and rely on
+   * their typed `input` parameters instead.
+   */
+  block?: Block;
 }
 
 /**

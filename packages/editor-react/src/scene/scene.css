@@ -1,0 +1,340 @@
+/*
+ * Squisq Scene engine — visual styles for the 2D editing surface.
+ *
+ * The Scene is a position:relative root with three children:
+ *   1. Optional toolbar (top-left)
+ *   2. SVG viewport (fills the root)
+ *   3. Optional maximize button (top-right)
+ *
+ * Colors lean on existing `--squisq-*` CSS variables so light/dark
+ * themes apply automatically.
+ */
+
+.squisq-scene-root {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  background: var(--squisq-surface, #ffffff);
+  border: 1px solid var(--squisq-border, #e2e8f0);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.squisq-scene-viewport {
+  display: block;
+  width: 100%;
+  height: 100%;
+  touch-action: none;
+  background: transparent;
+  user-select: none;
+  outline: none;
+}
+
+.squisq-scene-viewport:focus,
+.squisq-scene-viewport:focus-visible {
+  outline: none;
+}
+
+/* Custom URL-based cursors with a white halo around a dark stroke, so
+   the pointer stays visible regardless of canvas background or the
+   user's OS cursor scheme (Windows lets users render system cursors
+   in pure white, which makes the OS-stock keywords invisible on the
+   editor's light surface — mirrors the I-beam workaround in
+   editor.css). Each tool sets `data-cursor` on the SVG; the matching
+   selector picks the right URL with a keyword fallback when the URL
+   fails to load. */
+
+/* Default arrow — used by SelectTool. Hotspot at the tip (3, 3). */
+.squisq-scene-viewport[data-cursor='default'] {
+  cursor:
+    url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='20' height='22' viewBox='0 0 20 22'><path d='M3 3 L3 17 L7 13 L10 19 L12 18 L9 12 L15 12 Z' fill='%231f2937' stroke='white' stroke-width='1.5' stroke-linejoin='round'/></svg>")
+      3 3,
+    default;
+}
+
+/* Crosshair — used by ConnectTool / PathTool / ShapeTool. Hotspot is
+   the cross center (11, 11). */
+.squisq-scene-viewport[data-cursor='crosshair'] {
+  cursor:
+    url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='23' height='23' viewBox='0 0 23 23'><g fill='none' stroke-linecap='round'><path d='M11 1 L11 21 M1 11 L21 11' stroke='white' stroke-width='3.2'/><path d='M11 1 L11 21 M1 11 L21 11' stroke='%231f2937' stroke-width='1.4'/><circle cx='11' cy='11' r='2' fill='white' stroke='%231f2937' stroke-width='1'/></g></svg>")
+      11 11,
+    crosshair;
+}
+
+/* Text I-beam — used by TextTool. Re-uses the same shape as
+   `.squisq-wysiwyg-editor` in editor.css so the look is consistent. */
+.squisq-scene-viewport[data-cursor='text'] {
+  cursor:
+    url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='16' height='22' viewBox='0 0 16 22'><g fill='none' stroke-linecap='round'><path d='M5 3 L11 3 M5 19 L11 19 M8 3 L8 19' stroke='white' stroke-width='3.2'/><path d='M5 3 L11 3 M5 19 L11 19 M8 3 L8 19' stroke='%231f2937' stroke-width='1.4'/></g></svg>")
+      8 11,
+    text;
+}
+
+
+.squisq-scene-dot {
+  fill: var(--squisq-text-muted, #94a3b8);
+  fill-opacity: 0.35;
+}
+
+/* ── Selection ─────────────────────────────────────────────── */
+
+.squisq-scene-selection-outline {
+  fill: none;
+  stroke: #6366f1;
+  stroke-width: 1.5;
+  stroke-dasharray: 4 3;
+  vector-effect: non-scaling-stroke;
+}
+
+.squisq-scene-selection-handle {
+  fill: #ffffff;
+  stroke: #6366f1;
+  stroke-width: 1.5;
+  vector-effect: non-scaling-stroke;
+}
+
+/* ── Tool overlays ────────────────────────────────────────── */
+
+.squisq-scene-marquee {
+  fill: rgba(99, 102, 241, 0.08);
+  stroke: #6366f1;
+  stroke-width: 1;
+  stroke-dasharray: 4 3;
+  vector-effect: non-scaling-stroke;
+}
+
+.squisq-scene-connect-preview {
+  fill: none;
+  stroke: #6366f1;
+  stroke-width: 2;
+  stroke-dasharray: 6 4;
+  vector-effect: non-scaling-stroke;
+  pointer-events: none;
+}
+
+/* ── Toolbar ──────────────────────────────────────────────── */
+
+.squisq-scene-toolbar {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  z-index: 10;
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding: 4px;
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.12);
+  max-width: calc(100% - 16px);
+}
+
+.squisq-scene-tool {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 28px;
+  height: 28px;
+  padding: 0 8px;
+  background: #ffffff;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  color: #1e293b;
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.squisq-scene-tool:hover {
+  background: #f1f5f9;
+  border-color: #cbd5e1;
+  color: #1e293b;
+}
+
+.squisq-scene-tool:focus-visible {
+  outline: 2px solid #6366f1;
+  outline-offset: 1px;
+}
+
+.squisq-scene-tool--active {
+  background: #eef2ff;
+  border-color: #6366f1;
+  color: #4338ca;
+}
+
+.squisq-scene-tool--active:hover {
+  background: #e0e7ff;
+  border-color: #4f46e5;
+  color: #4338ca;
+}
+
+.squisq-scene-tool-label {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: inherit;
+}
+
+/* ── Maximize button ──────────────────────────────────────── */
+
+.squisq-scene-maximize-btn {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  z-index: 10;
+  width: 32px;
+  height: 32px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 16px;
+  line-height: 1;
+  color: #1e293b;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
+}
+
+.squisq-scene-maximize-btn:hover {
+  background: #f1f5f9;
+  border-color: #94a3b8;
+  color: #0f172a;
+}
+
+/* ── Diagram node card (used by nodeCard.tsx) ─────────────── */
+
+.squisq-scene-node-card {
+  fill: var(--squisq-surface, #ffffff);
+  stroke: var(--squisq-text, #1e293b);
+  stroke-width: 2;
+  vector-effect: non-scaling-stroke;
+}
+
+.squisq-scene-node-label {
+  fill: var(--squisq-text, #1e293b);
+  font-weight: 600;
+  font-size: 22px;
+  font-family:
+    -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans', Helvetica, Arial, sans-serif;
+  user-select: none;
+  pointer-events: none;
+}
+
+.squisq-scene-node-handle {
+  fill: var(--squisq-text, #1e293b);
+  cursor: crosshair;
+  pointer-events: all;
+}
+
+.squisq-scene-node-handle:hover {
+  fill: #6366f1;
+}
+
+.squisq-scene-edge-path {
+  fill: none;
+  stroke: var(--squisq-text, #1e293b);
+  stroke-width: 2;
+  vector-effect: non-scaling-stroke;
+}
+
+.squisq-scene-edge-arrow {
+  fill: var(--squisq-text, #1e293b);
+}
+
+.squisq-scene-edge-label {
+  fill: var(--squisq-text-muted, #64748b);
+  font-size: 14px;
+  font-family:
+    -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans', Helvetica, Arial, sans-serif;
+  pointer-events: none;
+  user-select: none;
+}
+
+/* ── Inline widget host (mirrors squisq-diagram-inline) ──── */
+
+.squisq-scene-widget-host {
+  margin: 0.75rem 0 1.25rem;
+}
+
+.squisq-scene-inline {
+  position: relative;
+  width: 100%;
+  height: 420px;
+  border: 1px solid var(--squisq-border, #e2e8f0);
+  border-radius: 8px;
+  overflow: hidden;
+  background: var(--squisq-surface, #ffffff);
+}
+
+.squisq-scene-inline-placeholder {
+  height: 420px;
+  border: 1px dashed var(--squisq-border, #e2e8f0);
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--squisq-text-muted, #64748b);
+  font-size: 14px;
+}
+
+.squisq-scene-inline-placeholder::before {
+  content: 'Canvas open in full screen — press Esc to return';
+}
+
+/* Hide sub-headings that belong to a layout/drawing block — the canvas
+   owns their visual representation. */
+[data-squisq-scene-child='true'] {
+  display: none;
+}
+
+/* ── Empty state ──────────────────────────────────────────── */
+
+.squisq-scene-empty {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  pointer-events: none;
+  text-align: center;
+  padding: 24px;
+}
+
+.squisq-scene-empty-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--squisq-text, #1e293b);
+}
+
+.squisq-scene-empty-hint {
+  font-size: 12px;
+  color: var(--squisq-text-muted, #64748b);
+  max-width: 320px;
+  line-height: 1.45;
+}
+
+.squisq-scene-empty-btn {
+  pointer-events: auto;
+  margin-top: 4px;
+  padding: 6px 12px;
+  font-size: 12px;
+  font-weight: 500;
+  color: #ffffff;
+  background: #6366f1;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.squisq-scene-empty-btn:hover {
+  background: #4f46e5;
+}

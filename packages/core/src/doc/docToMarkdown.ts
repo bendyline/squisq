@@ -24,6 +24,10 @@
 
 import type { Doc, Block } from '../schemas/Doc.js';
 import type { MarkdownDocument, MarkdownBlockNode, MarkdownHeading } from '../markdown/types.js';
+import {
+  FRONTMATTER_CUSTOM_TEMPLATES_KEY,
+  writeCustomTemplatesToFrontmatter,
+} from './customTemplatesFrontmatter.js';
 
 /**
  * Convert a Doc with heading-driven blocks back to a MarkdownDocument.
@@ -66,9 +70,26 @@ export function docToMarkdown(doc: Doc): MarkdownDocument {
     emitBlock(block);
   }
 
+  // Merge `Doc.customTemplates` into the outgoing frontmatter so the
+  // markdown remains the source-of-truth: edits made via the editor's
+  // TemplateDesigner round-trip through `docToMarkdown` →
+  // `stringifyMarkdown` and are visible to anyone reading the file.
+  const customPayload = writeCustomTemplatesToFrontmatter(doc.customTemplates);
+  let frontmatter = doc.frontmatter;
+  if (customPayload) {
+    frontmatter = { ...(frontmatter ?? {}), [FRONTMATTER_CUSTOM_TEMPLATES_KEY]: customPayload };
+  } else if (frontmatter && FRONTMATTER_CUSTOM_TEMPLATES_KEY in frontmatter) {
+    // The doc has no custom templates anymore — drop the stale
+    // frontmatter key so the markdown reflects the current state.
+    const { [FRONTMATTER_CUSTOM_TEMPLATES_KEY]: _drop, ...rest } = frontmatter;
+    void _drop;
+    frontmatter = rest;
+  }
+
   return {
     type: 'document',
     children,
+    ...(frontmatter && Object.keys(frontmatter).length > 0 ? { frontmatter } : {}),
   };
 }
 

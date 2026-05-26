@@ -133,6 +133,14 @@ Below is a concise reference of built-in templates (names match the `template` p
   - Inputs: `title`, `colorScheme`, `nodeShape`, `edgeStyle`; child headings provide nodes and `connectsTo` edges
   - Usage: node-and-edge diagrams authored from nested section headings
 
+- `layout`
+  - Inputs: none — `Layer[]` is authored visually via the Scene engine and persisted in `data-block-attrs` as a base64-JSON `layers="..."` param
+  - Usage: one-off block layouts that don't fit a template (drag layers into place)
+
+- `drawing`
+  - Inputs: same as `layout`
+  - Usage: free-form sketches; the editor pre-bundles shape / path / text tools for authoring new layers from scratch
+
 - `pullQuote`
   - Inputs: `quote`, `attribution`
   - Usage: smaller inline quote treatment

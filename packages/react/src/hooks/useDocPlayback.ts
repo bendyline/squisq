@@ -97,13 +97,25 @@ export function useDocPlayback(
         viewport,
         persistentLayers: script.persistentLayers,
         theme,
+        // Custom (user-defined) templates inlined into the doc's
+        // frontmatter — see CustomTemplates.ts. Merged onto the
+        // built-in registry so blocks annotated with `{[myhero]}`
+        // resolve through the user's design.
+        customTemplates: script.customTemplates,
       });
       return expanded;
     }
 
     // All raw blocks, use as-is
     return flatBlocks;
-  }, [script?.blocks, script?.audio?.segments, script?.persistentLayers, viewport, theme]);
+  }, [
+    script?.blocks,
+    script?.audio?.segments,
+    script?.persistentLayers,
+    script?.customTemplates,
+    viewport,
+    theme,
+  ]);
 
   // Find current block based on time
   const currentBlock = useMemo(() => getBlockAtTime(blocks, currentTime), [blocks, currentTime]);

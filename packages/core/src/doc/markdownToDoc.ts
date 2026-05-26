@@ -23,6 +23,7 @@
  */
 
 import type { Doc, Block, CaptionTrack, CaptionPhrase, StartBlockConfig } from '../schemas/Doc.js';
+import { readCustomTemplatesFromFrontmatter } from './customTemplatesFrontmatter.js';
 import type {
   MarkdownDocument,
   MarkdownBlockNode,
@@ -324,6 +325,7 @@ export function markdownToDoc(markdownDoc: MarkdownDocument, options?: MarkdownT
   const captions: CaptionTrack | undefined =
     phrases.length > 0 ? { phrases, generatedAt: new Date().toISOString(), version: 1 } : undefined;
 
+  const customTemplates = readCustomTemplatesFromFrontmatter(markdownDoc.frontmatter);
   const doc: Doc = {
     articleId,
     duration: currentTime,
@@ -333,6 +335,7 @@ export function markdownToDoc(markdownDoc: MarkdownDocument, options?: MarkdownT
     },
     ...(captions ? { captions } : {}),
     ...(markdownDoc.frontmatter ? { frontmatter: markdownDoc.frontmatter } : {}),
+    ...(customTemplates ? { customTemplates } : {}),
   };
 
   // Auto-generate cover startBlock from the first H1 heading

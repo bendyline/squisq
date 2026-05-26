@@ -277,6 +277,8 @@ interface TemplateContext {
 | `videoPullQuote`   | `text`, `attribution?`, `backgroundVideo` (with `src`, `clipStart`, `clipEnd`)                     |
 | `dataTable`        | `title?`, `headers[]`, `rows[][]`, `align?`, `colorScheme?`                                        |
 | `diagram`          | `title?`, `colorScheme?`, `nodeShape?`, `edgeStyle?`; reads child headings from `context.children` |
+| `layout`           | Passthrough for editor-authored `Layer[]` (positioned via the Scene engine). Layers persist in `data-block-attrs` as a base64-JSON `layers="..."` param. |
+| `drawing`          | Same passthrough as `layout`; the editor exposes a richer toolset (shape / path / text). Same `layers="..."` storage. |
 
 > All template inputs share the base block fields `id`, `duration`, `audioSegment`, optional `transition`, layer visibility flags, and optional source timing fields. Visual inputs such as images, colors, and captions are defined by each template.
 
@@ -383,7 +385,7 @@ function getAvailableTemplates(): string[];
 function hasTemplate(name: string): boolean;
 ```
 
-All 21 built-in templates are registered at import time. Legacy aliases such as `titleBlock`, `quoteBlock`, `mapBlock`, `listBlock`, `diagramBlock`, and `diagramNode` resolve to their canonical short IDs.
+All 23 built-in templates are registered at import time. Legacy aliases such as `titleBlock`, `quoteBlock`, `mapBlock`, `listBlock`, `diagramBlock`, and `diagramNode` resolve to their canonical short IDs.
 
 #### Animation Utilities
 

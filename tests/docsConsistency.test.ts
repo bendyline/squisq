@@ -42,7 +42,7 @@ describe('documentation consistency', () => {
     const templateIds = registryTemplateIds();
     const docsToCheck: DocKey[] = ['agents', 'api', 'squigglySquare'];
 
-    expect(templateIds).toHaveLength(21);
+    expect(templateIds).toHaveLength(23);
 
     for (const key of docsToCheck) {
       const text = readDoc(key);
