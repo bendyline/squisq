@@ -423,10 +423,20 @@ const TEMPLATE_ENTRIES: TemplateEntry[] = [
     name: 'layout',
     label: 'Layout',
     description:
-      'Free-form 2D canvas — drag layers into place. Use for one-off block layouts that don\'t fit a template.',
+      "Free-form 2D canvas — drag layers into place. Use for one-off block layouts that don't fit a template.",
     icon: (
       <TemplateIcon>
-        <rect x={3} y={3} width={50} height={34} rx={2} fill="none" stroke={F1} strokeWidth={1} strokeDasharray="3 2" />
+        <rect
+          x={3}
+          y={3}
+          width={50}
+          height={34}
+          rx={2}
+          fill="none"
+          stroke={F1}
+          strokeWidth={1}
+          strokeDasharray="3 2"
+        />
         <rect x={7} y={7} width={20} height={12} rx={1.5} fill={FA} opacity={0.85} />
         <rect x={30} y={7} width={20} height={26} rx={1.5} fill={F2} opacity={0.7} />
         <rect x={7} y={22} width={20} height={11} rx={1.5} fill={F1} opacity={0.7} />
@@ -436,8 +446,7 @@ const TEMPLATE_ENTRIES: TemplateEntry[] = [
   {
     name: 'drawing',
     label: 'Drawing',
-    description:
-      'Free-form sketches — draw shapes, paths, and text directly on a 2D surface.',
+    description: 'Free-form sketches — draw shapes, paths, and text directly on a 2D surface.',
     icon: (
       <TemplateIcon>
         <rect x={3} y={3} width={50} height={34} rx={2} fill="none" stroke={F1} strokeWidth={1} />
@@ -738,7 +747,7 @@ function TemplateGalleryBody({
   // we silently degrade to "no custom templates", which preserves the
   // legacy behaviour for any caller that hasn't opted in.
   const customCtx = useCustomTemplates();
-  const customTemplates = customCtx?.allTemplates ?? [];
+  const customTemplates = useMemo(() => customCtx?.allTemplates ?? [], [customCtx]);
 
   // Auto-focus the search input when the gallery mounts so the user can
   // start typing immediately to filter templates.
@@ -796,12 +805,7 @@ function TemplateGalleryBody({
           aria-hidden="true"
         >
           <circle cx="7" cy="7" r="5" stroke="currentColor" strokeWidth="1.5" />
-          <path
-            d="M11 11l3 3"
-            stroke="currentColor"
-            strokeWidth="1.5"
-            strokeLinecap="round"
-          />
+          <path d="M11 11l3 3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
         </svg>
         <input
           ref={searchRef}
@@ -862,11 +866,7 @@ function TemplateGalleryBody({
           {/* "+ New custom template" card pinned at the top — only shown
               when the host has wired up `onOpenDesigner`. */}
           {onOpenDesigner && (
-            <button
-              type="button"
-              className="squisq-template-gallery-new"
-              onClick={onOpenDesigner}
-            >
+            <button type="button" className="squisq-template-gallery-new" onClick={onOpenDesigner}>
               <span className="squisq-template-gallery-new-plus" aria-hidden="true">
                 +
               </span>
@@ -884,12 +884,7 @@ function TemplateGalleryBody({
               <h3 className="squisq-template-gallery-section-title">Custom</h3>
               <div className="squisq-template-gallery-grid">
                 {customTemplates.map((def) => (
-                  <CustomTemplateCard
-                    key={def.name}
-                    def={def}
-                    value={value}
-                    onSelect={onSelect}
-                  />
+                  <CustomTemplateCard key={def.name} def={def} value={value} onSelect={onSelect} />
                 ))}
               </div>
             </div>

@@ -119,7 +119,8 @@ function polylineToD(pts: { x: number; y: number }[]): string {
  */
 function smoothPolyline(pts: { x: number; y: number }[]): ParsedPath {
   if (pts.length === 0) return { points: [], closed: false };
-  if (pts.length === 1) return { points: [{ kind: 'move', x: pts[0].x, y: pts[0].y }], closed: false };
+  if (pts.length === 1)
+    return { points: [{ kind: 'move', x: pts[0].x, y: pts[0].y }], closed: false };
   const points: PathPoint[] = [{ kind: 'move', x: pts[0].x, y: pts[0].y }];
   for (let i = 0; i < pts.length - 1; i++) {
     const p0 = pts[i - 1] ?? pts[i];

@@ -91,7 +91,6 @@ export const ConnectTool: SceneTool = {
     if (!state) return null;
     const { sourceCenter: a, current: b } = state;
     const dx = b.x - a.x;
-    const dy = b.y - a.y;
     const cp = Math.max(40, Math.abs(dx) / 2);
     // Cubic bezier matching diagramBlock.ts's `curved` edge style so the
     // preview previews exactly what will render after commit.

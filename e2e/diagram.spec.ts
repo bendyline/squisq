@@ -1,4 +1,4 @@
-import { test, expect, type Page, type Locator } from '@playwright/test';
+import { test, expect, type Page } from '@playwright/test';
 
 /**
  * E2E tests for the Squisq diagram editor — the Scene-engine-driven
@@ -41,7 +41,10 @@ async function loadDiagramSample(page: Page) {
 }
 
 /** Get the on-screen bounding rect of a node card layer. */
-async function cardRect(page: Page, nodeId: string): Promise<{ x: number; y: number; w: number; h: number }> {
+async function cardRect(
+  page: Page,
+  nodeId: string,
+): Promise<{ x: number; y: number; w: number; h: number }> {
   const card = page.locator(`[data-layer-id="node-card-${nodeId}"]`).first();
   await card.waitFor({ state: 'visible' });
   const box = await card.boundingBox();
@@ -320,7 +323,10 @@ test.describe('Diagram editor (Scene engine)', () => {
       const after = await cardCenter(page, id);
       const dx = after.x - beforeOthers[id].x;
       const dy = after.y - beforeOthers[id].y;
-      expect(Math.hypot(dx, dy), `${id} should not have moved when child-3 was dragged`).toBeLessThan(4);
+      expect(
+        Math.hypot(dx, dy),
+        `${id} should not have moved when child-3 was dragged`,
+      ).toBeLessThan(4);
     }
   });
 

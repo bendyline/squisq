@@ -59,7 +59,9 @@ export interface UseScenePanZoomResult {
   viewportToScreen: (vx: number, vy: number) => { x: number; y: number };
 }
 
-export function useScenePanZoom(initial: SceneTransform = IDENTITY_TRANSFORM): UseScenePanZoomResult {
+export function useScenePanZoom(
+  initial: SceneTransform = IDENTITY_TRANSFORM,
+): UseScenePanZoomResult {
   const [transform, setTransformState] = useState<SceneTransform>(initial);
   // Keep a ref so commands batching multiple updates in the same tick see
   // the latest state without waiting for a render cycle.

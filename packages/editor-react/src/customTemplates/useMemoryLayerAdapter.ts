@@ -42,12 +42,9 @@ export function useMemoryLayerAdapter(
 ): MemoryLayerAdapterResult {
   const [layers, setLayers] = useState<Layer[]>(() => options.initial ?? []);
 
-  const dispatch = useCallback(
-    (cmd: SceneCommand) => {
-      setLayers((current) => applyCommand(current, cmd));
-    },
-    [],
-  );
+  const dispatch = useCallback((cmd: SceneCommand) => {
+    setLayers((current) => applyCommand(current, cmd));
+  }, []);
 
   return {
     layers,

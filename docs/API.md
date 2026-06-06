@@ -254,31 +254,31 @@ interface TemplateContext {
 
 ##### Built-in Template Block Inputs
 
-| Template           | Key Input Fields                                                                                   |
-| ------------------ | -------------------------------------------------------------------------------------------------- |
-| `title`            | `title`, `subtitle?`, `backgroundColor?`                                                           |
-| `sectionHeader`    | `title`, `colorScheme?`, `imageSrc?`, `imageAlt?`, `ambientMotion?`                                |
-| `statHighlight`    | `stat`, `description`, `detail?`, `colorScheme?`, `accentImage?`                                   |
-| `quote`            | `quote`, `attribution?`, `accentImage?`                                                            |
-| `factCard`         | `fact`, `explanation`, `source?`, `accentImage?`                                                   |
-| `twoColumn`        | `left`, `right`, `header?`, `leftColor?`, `rightColor?`                                            |
-| `dateEvent`        | `date`, `description`, `footer?`, `mood?`, `accentImage?`                                          |
-| `imageWithCaption` | `imageSrc`, `imageAlt`, `caption?`, `captionPosition?`, `ambientMotion?`, `isTitle?`, `subtitle?`  |
-| `leftFeature`      | `imageSrc`, `imageAlt?`, `imageWidth?`, `imageHeight?`, `title?`, `body?`                          |
-| `rightFeature`     | `imageSrc`, `imageAlt?`, `imageWidth?`, `imageHeight?`, `title?`, `body?`                          |
-| `map`              | `center`, `zoom`, `mapStyle?`, `title?`, `caption?`, `markers?`, `ambientMotion?`, `staticSrc?`    |
-| `fullBleedQuote`   | `text`, `colorScheme?`                                                                             |
-| `list`             | `items[]`, `title?`, `colorScheme?`, `accentImage?`                                                |
-| `photoGrid`        | `images[]`, `caption?`, `ambientMotion?`                                                           |
-| `definitionCard`   | `term`, `definition`, `origin?`, `colorScheme?`, `accentImage?`                                    |
-| `comparisonBar`    | `leftLabel`, `leftValue`, `rightLabel`, `rightValue`, `unit?`, `colorScheme?`                      |
-| `pullQuote`        | `text`, `attribution?`, `backgroundImage`, `ambientMotion?`                                        |
-| `videoWithCaption` | `videoSrc`, `posterSrc?`, `videoAlt`, `clipStart`, `clipEnd`, `caption?`, `captionPosition?`       |
-| `videoPullQuote`   | `text`, `attribution?`, `backgroundVideo` (with `src`, `clipStart`, `clipEnd`)                     |
-| `dataTable`        | `title?`, `headers[]`, `rows[][]`, `align?`, `colorScheme?`                                        |
-| `diagram`          | `title?`, `colorScheme?`, `nodeShape?`, `edgeStyle?`; reads child headings from `context.children` |
+| Template           | Key Input Fields                                                                                                                                         |
+| ------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `title`            | `title`, `subtitle?`, `backgroundColor?`                                                                                                                 |
+| `sectionHeader`    | `title`, `colorScheme?`, `imageSrc?`, `imageAlt?`, `ambientMotion?`                                                                                      |
+| `statHighlight`    | `stat`, `description`, `detail?`, `colorScheme?`, `accentImage?`                                                                                         |
+| `quote`            | `quote`, `attribution?`, `accentImage?`                                                                                                                  |
+| `factCard`         | `fact`, `explanation`, `source?`, `accentImage?`                                                                                                         |
+| `twoColumn`        | `left`, `right`, `header?`, `leftColor?`, `rightColor?`                                                                                                  |
+| `dateEvent`        | `date`, `description`, `footer?`, `mood?`, `accentImage?`                                                                                                |
+| `imageWithCaption` | `imageSrc`, `imageAlt`, `caption?`, `captionPosition?`, `ambientMotion?`, `isTitle?`, `subtitle?`                                                        |
+| `leftFeature`      | `imageSrc`, `imageAlt?`, `imageWidth?`, `imageHeight?`, `title?`, `body?`                                                                                |
+| `rightFeature`     | `imageSrc`, `imageAlt?`, `imageWidth?`, `imageHeight?`, `title?`, `body?`                                                                                |
+| `map`              | `center`, `zoom`, `mapStyle?`, `title?`, `caption?`, `markers?`, `ambientMotion?`, `staticSrc?`                                                          |
+| `fullBleedQuote`   | `text`, `colorScheme?`                                                                                                                                   |
+| `list`             | `items[]`, `title?`, `colorScheme?`, `accentImage?`                                                                                                      |
+| `photoGrid`        | `images[]`, `caption?`, `ambientMotion?`                                                                                                                 |
+| `definitionCard`   | `term`, `definition`, `origin?`, `colorScheme?`, `accentImage?`                                                                                          |
+| `comparisonBar`    | `leftLabel`, `leftValue`, `rightLabel`, `rightValue`, `unit?`, `colorScheme?`                                                                            |
+| `pullQuote`        | `text`, `attribution?`, `backgroundImage`, `ambientMotion?`                                                                                              |
+| `videoWithCaption` | `videoSrc`, `posterSrc?`, `videoAlt`, `clipStart`, `clipEnd`, `caption?`, `captionPosition?`                                                             |
+| `videoPullQuote`   | `text`, `attribution?`, `backgroundVideo` (with `src`, `clipStart`, `clipEnd`)                                                                           |
+| `dataTable`        | `title?`, `headers[]`, `rows[][]`, `align?`, `colorScheme?`                                                                                              |
+| `diagram`          | `title?`, `colorScheme?`, `nodeShape?`, `edgeStyle?`; reads child headings from `context.children`                                                       |
 | `layout`           | Passthrough for editor-authored `Layer[]` (positioned via the Scene engine). Layers persist in `data-block-attrs` as a base64-JSON `layers="..."` param. |
-| `drawing`          | Same passthrough as `layout`; the editor exposes a richer toolset (shape / path / text). Same `layers="..."` storage. |
+| `drawing`          | Same passthrough as `layout`; the editor exposes a richer toolset (shape / path / text). Same `layers="..."` storage.                                    |
 
 > All template inputs share the base block fields `id`, `duration`, `audioSegment`, optional `transition`, layer visibility flags, and optional source timing fields. Visual inputs such as images, colors, and captions are defined by each template.
 

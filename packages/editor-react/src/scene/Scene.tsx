@@ -328,12 +328,11 @@ export function Scene(props: SceneProps) {
   // OR if it follows a directly-selected layer via `layerFollows`.
   const wrapperFor = (layer: Layer): { transform?: string } => {
     const followsId = layerFollows?.(layer.id) ?? null;
-    const ownerId =
-      selection.selection.has(layer.id)
-        ? layer.id
-        : followsId && selection.selection.has(followsId)
-          ? followsId
-          : null;
+    const ownerId = selection.selection.has(layer.id)
+      ? layer.id
+      : followsId && selection.selection.has(followsId)
+        ? followsId
+        : null;
     if (!ownerId) return {};
     if (liveResize && liveResize.layerId === ownerId) {
       const bounds = hitItems.find((it) => it.id === ownerId)?.bounds;
@@ -348,10 +347,7 @@ export function Scene(props: SceneProps) {
     return {};
   };
 
-  const handleHandlePointerDown = (
-    e: React.PointerEvent<SVGElement>,
-    corner: ResizeCorner,
-  ) => {
+  const handleHandlePointerDown = (e: React.PointerEvent<SVGElement>, corner: ResizeCorner) => {
     const id = selection.selection.values().next().value as string | undefined;
     if (!id) return;
     const bounds = hitItems.find((it) => it.id === id)?.bounds;
@@ -373,9 +369,7 @@ export function Scene(props: SceneProps) {
 
   return (
     <div className="squisq-scene-root">
-      {showToolbar && (
-        <SceneToolbar tools={tools} activeId={activeId} onSelect={setActiveTool} />
-      )}
+      {showToolbar && <SceneToolbar tools={tools} activeId={activeId} onSelect={setActiveTool} />}
       <SceneViewport
         ref={containerRef}
         width={containerSize?.width ?? viewport.width}
@@ -422,10 +416,7 @@ export function Scene(props: SceneProps) {
   );
 }
 
-function defaultRenderLayer(
-  layer: Layer,
-  viewport: { width: number; height: number },
-): ReactNode {
+function defaultRenderLayer(layer: Layer, viewport: { width: number; height: number }): ReactNode {
   return <RenderLayer layer={layer} viewport={viewport} />;
 }
 

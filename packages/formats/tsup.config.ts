@@ -6,6 +6,7 @@ export default defineConfig({
     'docx/index': 'src/docx/index.ts',
     'pptx/index': 'src/pptx/index.ts',
     'xlsx/index': 'src/xlsx/index.ts',
+    'csv/index': 'src/csv/index.ts',
     'ooxml/index': 'src/ooxml/index.ts',
     'pdf/index': 'src/pdf/index.ts',
     'html/index': 'src/html/index.ts',

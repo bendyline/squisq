@@ -176,16 +176,18 @@ export const SelectTool: SceneTool = {
 
     if (dragState.kind === 'marquee') {
       const box = boxFromCorners(dragState.startV, v);
-      const inside = ctx.hitItems
-        .filter((it) => rectIntersects(it.bounds, box))
-        .map((it) => it.id);
+      const inside = ctx.hitItems.filter((it) => rectIntersects(it.bounds, box)).map((it) => it.id);
       ctx.setSelection(inside);
     }
   },
 
   onPointerUp(e, ctx) {
     if (!dragState) return;
-    if (dragState.kind === 'move' && dragState.movedPastThreshold && dragState.layerStarts.size > 0) {
+    if (
+      dragState.kind === 'move' &&
+      dragState.movedPastThreshold &&
+      dragState.layerStarts.size > 0
+    ) {
       const dx = dragState.currentV.x - dragState.startV.x;
       const dy = dragState.currentV.y - dragState.startV.y;
       for (const [id, origin] of dragState.layerStarts) {
@@ -245,9 +247,10 @@ export function getActiveMoveOffset(): { dx: number; dy: number } | null {
 }
 
 /** Return the live bounds for the layer currently being resized. */
-export function getActiveResize():
-  | { layerId: string; bounds: { x: number; y: number; width: number; height: number } }
-  | null {
+export function getActiveResize(): {
+  layerId: string;
+  bounds: { x: number; y: number; width: number; height: number };
+} | null {
   if (!dragState || dragState.kind !== 'resize') return null;
   return { layerId: dragState.layerId, bounds: dragState.currentBounds };
 }

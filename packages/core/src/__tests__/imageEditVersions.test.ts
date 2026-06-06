@@ -48,10 +48,7 @@ describe('imageEdit/persistence', () => {
   });
 
   async function writeRaw(sidecar: ReturnType<typeof scopeContainer>, payload: unknown) {
-    await sidecar.writeFile(
-      'state.json',
-      new TextEncoder().encode(JSON.stringify(payload)),
-    );
+    await sidecar.writeFile('state.json', new TextEncoder().encode(JSON.stringify(payload)));
   }
 
   it('rejects layer that is not an object', async () => {
@@ -77,7 +74,9 @@ describe('imageEdit/persistence', () => {
       canvas: { width: 1, height: 1 },
       layers: [{ id: 'x', type: 'video', position: { x: 0, y: 0 }, content: {} }],
     });
-    await expect(readImageEditDoc(sidecar)).rejects.toThrow(/type must be one of image\|text\|shape/);
+    await expect(readImageEditDoc(sidecar)).rejects.toThrow(
+      /type must be one of image\|text\|shape/,
+    );
   });
 
   it('rejects image layer with missing content.src', async () => {

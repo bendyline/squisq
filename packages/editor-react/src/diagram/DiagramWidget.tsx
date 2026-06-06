@@ -38,12 +38,7 @@ interface DiagramWidgetProps {
   host?: HTMLElement | null;
 }
 
-export function DiagramWidget({
-  editor,
-  headingKey,
-  fallbackParentPos,
-  host,
-}: DiagramWidgetProps) {
+export function DiagramWidget({ editor, headingKey, fallbackParentPos, host }: DiagramWidgetProps) {
   // Re-resolve parentPos on every editor transaction so writes target
   // the current heading position even after content above shifts.
   const [parentPos, setParentPos] = useState<number>(

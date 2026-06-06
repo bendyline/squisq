@@ -42,7 +42,11 @@ interface TemplateDesignerProps {
 
 const DESIGN_CANVAS = { width: 1920, height: 1080 };
 
-const VIEWPORT_OPTIONS: { id: 'landscape' | 'portrait' | 'square'; label: string; viewport: ViewportConfig }[] = [
+const VIEWPORT_OPTIONS: {
+  id: 'landscape' | 'portrait' | 'square';
+  label: string;
+  viewport: ViewportConfig;
+}[] = [
   { id: 'landscape', label: '16:9', viewport: { width: 1920, height: 1080, name: 'Landscape' } },
   { id: 'portrait', label: '9:16', viewport: { width: 1080, height: 1920, name: 'Portrait' } },
   { id: 'square', label: '1:1', viewport: { width: 1080, height: 1080, name: 'Square' } },

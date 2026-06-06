@@ -84,7 +84,12 @@ export function DiagramCanvas({
           return;
         }
         case 'addEdge':
-          onCommand({ kind: 'addConnection', source: cmd.source, target: cmd.target, type: cmd.type });
+          onCommand({
+            kind: 'addConnection',
+            source: cmd.source,
+            target: cmd.target,
+            type: cmd.type,
+          });
           return;
         case 'removeEdge':
           onCommand({

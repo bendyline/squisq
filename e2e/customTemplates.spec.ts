@@ -15,10 +15,6 @@ import { test, expect, type Page } from '@playwright/test';
  *   4. The same template renders correctly across viewport presets.
  */
 
-async function switchView(page: Page, label: 'Markdown' | 'Editor' | 'Play') {
-  await page.getByRole('tab', { name: label, exact: true }).click();
-}
-
 async function loadCustomTemplateSample(page: Page) {
   await page.goto('/');
   await page.waitForLoadState('networkidle');
@@ -35,28 +31,6 @@ async function openTemplatePickerForFirstHeading(page: Page): Promise<void> {
   await firstBadge.waitFor({ state: 'visible' });
   await firstBadge.click();
   await page.locator('#squisq-template-gallery-portal').waitFor({ state: 'visible' });
-}
-
-async function readMarkdown(page: Page): Promise<string> {
-  // Monaco's `.view-lines` (and its hidden accessibility textarea)
-  // both only carry the visible viewport, not the full document. The
-  // full source lives in Monaco's model — accessible via
-  // `window.monaco.editor.getModels()`. We pull from there for an
-  // authoritative read.
-  await switchView(page, 'Markdown');
-  await page.locator('[data-testid="raw-editor"]').waitFor({ state: 'visible' });
-  // Settle one frame so the model is mounted with the latest state.
-  await page.waitForTimeout(100);
-  const value = await page.evaluate(() => {
-    const monaco = (window as unknown as { monaco?: { editor: { getModels(): { getValue(): string }[] } } }).monaco;
-    if (!monaco) return null;
-    const models = monaco.editor.getModels();
-    if (models.length === 0) return null;
-    return models[0].getValue();
-  });
-  if (typeof value === 'string') return value;
-  // Fallback: visible lines (only useful for very short docs).
-  return page.locator('.monaco-editor .view-lines').first().innerText();
 }
 
 test.describe('Custom template designer', () => {

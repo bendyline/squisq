@@ -71,9 +71,7 @@ export function listLibraryTemplates(): CustomTemplateDefinition[] {
  * the persisted list so callers can update their state without
  * re-reading.
  */
-export function saveLibraryTemplate(
-  def: CustomTemplateDefinition,
-): CustomTemplateDefinition[] {
+export function saveLibraryTemplate(def: CustomTemplateDefinition): CustomTemplateDefinition[] {
   const payload = readPayload();
   const idx = payload.templates.findIndex((t) => t.name === def.name);
   if (idx >= 0) {

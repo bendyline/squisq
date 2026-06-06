@@ -37,12 +37,14 @@ export function getHeadingKey(node: PMNode): string {
   node.content.forEach((child) => {
     if (child.isText) text += child.text ?? '';
   });
-  return text
-    .toLowerCase()
-    .replace(/[^\w\s-]/g, '')
-    .replace(/[\s_]+/g, '-')
-    .replace(/-+/g, '-')
-    .replace(/^-|-$/g, '') || 'block';
+  return (
+    text
+      .toLowerCase()
+      .replace(/[^\w\s-]/g, '')
+      .replace(/[\s_]+/g, '-')
+      .replace(/-+/g, '-')
+      .replace(/^-|-$/g, '') || 'block'
+  );
 }
 
 /**
@@ -121,8 +123,7 @@ function buildDecorations(state: EditorState, editor: Editor): DecorationSet {
         },
         {
           destroy: (dom) => {
-            const ref = (dom as HTMLElement & { __squisqSceneRoot?: SceneRoot })
-              .__squisqSceneRoot;
+            const ref = (dom as HTMLElement & { __squisqSceneRoot?: SceneRoot }).__squisqSceneRoot;
             if (ref) setTimeout(() => ref.root.unmount(), 0);
           },
           side: 1,

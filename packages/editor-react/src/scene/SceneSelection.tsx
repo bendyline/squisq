@@ -22,7 +22,10 @@ interface SceneSelectionProps {
   /** Live offset during a move-drag (applied to outline + handles). */
   liveOffset?: { dx: number; dy: number } | null;
   /** Live resize bounds, applied to the matching layer's outline. */
-  liveResize?: { layerId: string; bounds: { x: number; y: number; width: number; height: number } } | null;
+  liveResize?: {
+    layerId: string;
+    bounds: { x: number; y: number; width: number; height: number };
+  } | null;
   /** Fired when the user presses a corner/edge handle. */
   onHandlePointerDown?: (e: React.PointerEvent<SVGElement>, corner: ResizeCorner) => void;
 }

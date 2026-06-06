@@ -9,7 +9,7 @@
 
 import { createElement, type JSX } from 'react';
 import type { ShapeLayer } from '@bendyline/squisq/schemas';
-import type { SceneTool, SceneToolContext } from './SceneTool';
+import type { SceneTool } from './SceneTool';
 
 interface ShapeToolOptions {
   /** Shape kind. Default 'rect'. */

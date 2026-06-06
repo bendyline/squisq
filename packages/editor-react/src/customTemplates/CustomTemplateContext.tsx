@@ -89,8 +89,8 @@ export function CustomTemplateProvider({
   onDocTemplatesChange,
   children,
 }: CustomTemplateProviderProps) {
-  const [libraryTemplates, setLibraryTemplates] = useState<CustomTemplateDefinition[]>(
-    () => listLibraryTemplates(),
+  const [libraryTemplates, setLibraryTemplates] = useState<CustomTemplateDefinition[]>(() =>
+    listLibraryTemplates(),
   );
 
   // Re-read the library when this provider mounts so cross-tab edits
@@ -168,9 +168,7 @@ export function CustomTemplateProvider({
     ],
   );
 
-  return (
-    <CustomTemplateContext.Provider value={value}>{children}</CustomTemplateContext.Provider>
-  );
+  return <CustomTemplateContext.Provider value={value}>{children}</CustomTemplateContext.Provider>;
 }
 
 /**
@@ -178,6 +176,7 @@ export function CustomTemplateProvider({
  * mounted — callers can degrade to "no custom templates" rather than
  * throwing, since the feature is optional.
  */
+// eslint-disable-next-line react-refresh/only-export-components -- hook is co-located with its provider by design; splitting it into its own module would fragment the context API for no runtime benefit
 export function useCustomTemplates(): CustomTemplateContextValue | null {
   return useContext(CustomTemplateContext);
 }

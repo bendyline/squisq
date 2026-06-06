@@ -29,10 +29,7 @@ export interface Canvas {
  * converted to a `%`-string relative to `canvas`. Pure function;
  * doesn't mutate the input.
  */
-export function normalizePositions(
-  layers: readonly Layer[],
-  canvas: Canvas,
-): Layer[] {
+export function normalizePositions(layers: readonly Layer[], canvas: Canvas): Layer[] {
   return layers.map((layer) => normalizeLayer(layer, canvas));
 }
 

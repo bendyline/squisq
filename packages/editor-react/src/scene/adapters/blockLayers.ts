@@ -62,22 +62,35 @@ export function writeLayersToHeading(
     .run();
 }
 
-/** Base64-encode a Layer array as JSON. Stable across runs (deterministic). */
+function utf8ToBase64(str: string): string {
+  const bytes = new TextEncoder().encode(str);
+  if (typeof globalThis.btoa === 'function') {
+    let binary = '';
+    for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
+    return globalThis.btoa(binary);
+  }
+  return Buffer.from(bytes).toString('base64');
+}
+
+function base64ToUtf8(b64: string): string {
+  if (typeof globalThis.atob === 'function') {
+    const binary = globalThis.atob(b64);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+    return new TextDecoder().decode(bytes);
+  }
+  return Buffer.from(b64, 'base64').toString('utf-8');
+}
+
+/** Base64-encode a Layer array as JSON. UTF-8 safe — handles Unicode layer content. */
 export function encodeLayers(layers: readonly Layer[]): string {
-  const json = JSON.stringify(layers);
-  if (typeof globalThis.btoa === 'function') return globalThis.btoa(json);
-  // Node fallback for tests / SSR.
-  return Buffer.from(json, 'utf-8').toString('base64');
+  return utf8ToBase64(JSON.stringify(layers));
 }
 
 /** Inverse of {@link encodeLayers}. Returns [] when the string isn't valid. */
 export function decodeLayers(encoded: string): Layer[] {
   try {
-    const json =
-      typeof globalThis.atob === 'function'
-        ? globalThis.atob(encoded)
-        : Buffer.from(encoded, 'base64').toString('utf-8');
-    const parsed = JSON.parse(json);
+    const parsed = JSON.parse(base64ToUtf8(encoded));
     if (!Array.isArray(parsed)) return [];
     return parsed as Layer[];
   } catch {

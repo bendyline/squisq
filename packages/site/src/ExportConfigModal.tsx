@@ -504,8 +504,10 @@ export function ExportConfigModal({
             break;
           }
 
-          const { docToHtml, docToHtmlZip } = await import('@bendyline/squisq-formats/html');
-          const { PLAYER_BUNDLE } = await import('@bendyline/squisq-react/standalone-source');
+          const [{ docToHtml, docToHtmlZip }, { PLAYER_BUNDLE }] = await Promise.all([
+            import('@bendyline/squisq-formats/html'),
+            import('@bendyline/squisq-react/standalone-source'),
+          ]);
           const rawDoc = markdownToDoc(mdDoc);
           const doc = renderMode === 'slideshow' ? buildPreviewDoc(rawDoc) : rawDoc;
           const images = await collectImagesForHtmlExport(doc, mediaProvider);

@@ -268,12 +268,20 @@ export function expandDocBlocks(blocks: DocBlock[], options: ExpandDocBlocksOpti
     let currentTime = 0;
     return blocks.map((block, index) => {
       const context = createTemplateContext(theme, index, totalBlocks, viewport);
+      const maybeChildren = (block as Block).children;
+      if (maybeChildren && maybeChildren.length > 0) {
+        context.children = maybeChildren;
+      }
       // Expose the source block so custom templates' token resolver can
       // see the block's title / contents / children. Only set for
       // custom-templated blocks — built-ins ignore context.block but
       // exposing it changes object identity which we want to avoid for
       // the perf-sensitive built-in path.
-      if (isTemplateBlock(block) && customTemplates && customTemplates.some((c) => c.name === block.template)) {
+      if (
+        isTemplateBlock(block) &&
+        customTemplates &&
+        customTemplates.some((c) => c.name === block.template)
+      ) {
         context.block = block as Block;
       }
       const expandedBlock = isTemplateBlock(block)
@@ -318,6 +326,10 @@ export function expandDocBlocks(blocks: DocBlock[], options: ExpandDocBlocksOpti
       let offsetTime = 0;
       for (const { block, originalIndex } of segmentBlocks) {
         const context = createTemplateContext(theme, originalIndex, totalBlocks, viewport);
+        const maybeChildren = (block as Block).children;
+        if (maybeChildren && maybeChildren.length > 0) {
+          context.children = maybeChildren;
+        }
         if (
           isTemplateBlock(block) &&
           customTemplates &&
@@ -391,6 +403,10 @@ export function expandDocBlocks(blocks: DocBlock[], options: ExpandDocBlocksOpti
 
     for (const { block, originalIndex } of segmentBlocks) {
       const context = createTemplateContext(theme, originalIndex, totalBlocks, viewport);
+      const maybeChildren = (block as Block).children;
+      if (maybeChildren && maybeChildren.length > 0) {
+        context.children = maybeChildren;
+      }
       if (
         isTemplateBlock(block) &&
         customTemplates &&

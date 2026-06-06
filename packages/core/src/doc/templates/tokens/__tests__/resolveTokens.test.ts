@@ -41,19 +41,13 @@ function block(overrides: Partial<Block> = {}): Block {
 
 describe('resolveTokens — TextLayer', () => {
   it('substitutes {title} with block.title', () => {
-    const layers = resolveTokens(
-      [textLayer('a', 'Hello, {title}!')],
-      block({ title: 'World' }),
-    );
+    const layers = resolveTokens([textLayer('a', 'Hello, {title}!')], block({ title: 'World' }));
     const out = layers[0] as TextLayer;
     expect(out.content.text).toBe('Hello, World!');
   });
 
   it('collapses {title} to empty when block has no title', () => {
-    const layers = resolveTokens(
-      [textLayer('a', '[{title}]')],
-      block({ title: undefined }),
-    );
+    const layers = resolveTokens([textLayer('a', '[{title}]')], block({ title: undefined }));
     expect((layers[0] as TextLayer).content.text).toBe('[]');
   });
 
@@ -66,7 +60,7 @@ describe('resolveTokens — TextLayer', () => {
             type: 'paragraph',
             children: [{ type: 'text', value: 'Hello there' }],
           },
-        ] as any,
+        ],
       }),
     );
     expect((layers[0] as TextLayer).content.text).toBe('Body: Hello there');
@@ -79,7 +73,7 @@ describe('resolveTokens — TextLayer', () => {
         contents: [
           { type: 'paragraph', children: [{ type: 'text', value: 'First.' }] },
           { type: 'paragraph', children: [{ type: 'text', value: 'Second.' }] },
-        ] as any,
+        ],
       }),
     );
     expect((layers[0] as TextLayer).content.text).toBe('First. Second.');
@@ -106,11 +100,9 @@ describe('resolveTokens — TextLayer', () => {
         contents: [
           {
             type: 'paragraph',
-            children: [
-              { type: 'image', url: '/a.png', alt: 'Alpha image' },
-            ],
+            children: [{ type: 'image', url: '/a.png', alt: 'Alpha image' }],
           },
-        ] as any,
+        ],
       }),
     );
     expect((layers[0] as TextLayer).content.text).toBe('Caption: Alpha image');
@@ -127,10 +119,7 @@ describe('resolveTokens — TextLayer', () => {
   });
 
   it('leaves unknown tokens literal', () => {
-    const layers = resolveTokens(
-      [textLayer('a', 'Hello {nope} world')],
-      block(),
-    );
+    const layers = resolveTokens([textLayer('a', 'Hello {nope} world')], block());
     expect((layers[0] as TextLayer).content.text).toBe('Hello {nope} world');
   });
 
@@ -139,9 +128,7 @@ describe('resolveTokens — TextLayer', () => {
       [textLayer('a', '{title} — {content}')],
       block({
         title: 'Doc',
-        contents: [
-          { type: 'paragraph', children: [{ type: 'text', value: 'body' }] },
-        ] as any,
+        contents: [{ type: 'paragraph', children: [{ type: 'text', value: 'body' }] }],
       }),
     );
     expect((layers[0] as TextLayer).content.text).toBe('Doc — body');
@@ -156,11 +143,9 @@ describe('resolveTokens — ImageLayer', () => {
         contents: [
           {
             type: 'paragraph',
-            children: [
-              { type: 'image', url: '/hero.png', alt: 'hero' },
-            ],
+            children: [{ type: 'image', url: '/hero.png', alt: 'hero' }],
           },
-        ] as any,
+        ],
       }),
     );
     expect(layers).toHaveLength(1);
@@ -176,7 +161,7 @@ describe('resolveTokens — ImageLayer', () => {
             type: 'paragraph',
             children: [{ type: 'image', url: '/one.png', alt: '' }],
           },
-        ] as any,
+        ],
       }),
     );
     expect(layers).toHaveLength(1);
@@ -193,7 +178,7 @@ describe('resolveTokens — ImageLayer', () => {
             type: 'paragraph',
             children: [{ type: 'image', url: '/x.png', alt: '' }],
           },
-        ] as any,
+        ],
       }),
     );
     const img = layers[0] as ImageLayer;
@@ -202,10 +187,7 @@ describe('resolveTokens — ImageLayer', () => {
   });
 
   it('passes through ImageLayer with no token in src', () => {
-    const layers = resolveTokens(
-      [imageLayer('a', '/static.png')],
-      block(),
-    );
+    const layers = resolveTokens([imageLayer('a', '/static.png')], block());
     expect((layers[0] as ImageLayer).content.src).toBe('/static.png');
   });
 });

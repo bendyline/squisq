@@ -148,3 +148,6 @@ test-results/
 reports/
 .DS_Store
 .claude/settings.json
+
+# Gezel
+.gezel/

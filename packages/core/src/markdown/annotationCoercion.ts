@@ -102,8 +102,8 @@ function parseNumber(raw: string): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
-const TIME_BARE_RE = /^-?\d+(?:\.\d+)?$/;
-const TIME_MS_RE = /^(-?\d+(?:\.\d+)?)ms$/;
+const TIME_BARE_RE = /^\d+(?:\.\d+)?$/;
+const TIME_MS_RE = /^(\d+(?:\.\d+)?)ms$/;
 const TIME_MMSS_RE = /^(\d+):(\d{1,2})(?:\.(\d+))?$/;
 
 /**

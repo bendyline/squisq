@@ -52,6 +52,11 @@
       "import": "./dist/xlsx/index.js",
       "default": "./dist/xlsx/index.js"
     },
+    "./csv": {
+      "types": "./dist/csv/index.d.ts",
+      "import": "./dist/csv/index.js",
+      "default": "./dist/csv/index.js"
+    },
     "./ooxml": {
       "types": "./dist/ooxml/index.d.ts",
       "import": "./dist/ooxml/index.js",

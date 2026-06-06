@@ -30,10 +30,7 @@ import { getThemeFont } from '../utils/themeUtils.js';
  * support only; until `markdownToDoc` decodes the param, this template
  * emits a single placeholder TextLayer so previews don't appear empty.
  */
-export function rawLayersBlock(
-  input: TemplateBlock,
-  context: TemplateContext,
-): Layer[] {
+export function rawLayersBlock(input: TemplateBlock, context: TemplateContext): Layer[] {
   const { theme, viewport } = context;
   const title = (input as { title?: string }).title ?? 'Open in editor to view';
   const placeholder: TextLayer = {

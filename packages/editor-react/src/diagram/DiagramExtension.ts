@@ -40,12 +40,14 @@ export function getHeadingKey(node: PMNode): string {
   node.content.forEach((child) => {
     if (child.isText) text += child.text ?? '';
   });
-  return text
-    .toLowerCase()
-    .replace(/[^\w\s-]/g, '')
-    .replace(/[\s_]+/g, '-')
-    .replace(/-+/g, '-')
-    .replace(/^-|-$/g, '') || 'block';
+  return (
+    text
+      .toLowerCase()
+      .replace(/[^\w\s-]/g, '')
+      .replace(/[\s_]+/g, '-')
+      .replace(/-+/g, '-')
+      .replace(/^-|-$/g, '') || 'block'
+  );
 }
 
 /**
@@ -55,10 +57,7 @@ export function getHeadingKey(node: PMNode): string {
  * position on every read, since the kept-alive widget's captured
  * `parentPos` would otherwise go stale when content above shifts.
  */
-export function findDiagramHeadingPos(
-  editor: Editor,
-  headingKey: string,
-): number | null {
+export function findDiagramHeadingPos(editor: Editor, headingKey: string): number | null {
   let found: number | null = null;
   editor.state.doc.descendants((node, pos) => {
     if (found != null) return false;

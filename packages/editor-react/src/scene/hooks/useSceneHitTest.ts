@@ -26,14 +26,17 @@ export interface UseSceneHitTestResult {
 }
 
 export function useSceneHitTest(): UseSceneHitTestResult {
-  const hit = useCallback((point: { x: number; y: number }, items: HitTestable[]): string | null => {
-    // Walk from last (topmost) to first so the visually-on-top layer wins.
-    for (let i = items.length - 1; i >= 0; i--) {
-      const it = items[i];
-      if (pointInRect(point, it.bounds)) return it.id;
-    }
-    return null;
-  }, []);
+  const hit = useCallback(
+    (point: { x: number; y: number }, items: HitTestable[]): string | null => {
+      // Walk from last (topmost) to first so the visually-on-top layer wins.
+      for (let i = items.length - 1; i >= 0; i--) {
+        const it = items[i];
+        if (pointInRect(point, it.bounds)) return it.id;
+      }
+      return null;
+    },
+    [],
+  );
   return { hit };
 }
 

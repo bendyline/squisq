@@ -147,10 +147,9 @@ export function WysiwygEditor({
   // Designer modal visibility. `null` when closed; `{ initial }` when
   // open. `initial` is undefined for a "+ New" flow or set to an
   // existing template to edit it.
-  const [designerState, setDesignerState] = useState<
-    | { initial?: CustomTemplateDefinition }
-    | null
-  >(null);
+  const [designerState, setDesignerState] = useState<{ initial?: CustomTemplateDefinition } | null>(
+    null,
+  );
   const handleDesignerSave = useCallback(
     (def: CustomTemplateDefinition, target: DesignerSaveTarget) => {
       if (target === 'doc') {
@@ -491,10 +490,7 @@ export function WysiwygEditor({
   }, [activeTheme, themeInheritance]);
 
   return (
-    <CustomTemplateProvider
-      docTemplates={docTemplates}
-      onDocTemplatesChange={onDocTemplatesChange}
-    >
+    <CustomTemplateProvider docTemplates={docTemplates} onDocTemplatesChange={onDocTemplatesChange}>
       <div
         className={`squisq-wysiwyg-container${className ? ` ${className}` : ''}`}
         style={{ width: '100%', height: '100%', overflow: 'auto', ...themeStyle }}

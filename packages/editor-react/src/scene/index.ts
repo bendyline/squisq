@@ -68,11 +68,7 @@ export {
   type LayoutAdapterOptions,
 } from './adapters/LayoutAdapter';
 export { useDrawingAdapter, type DrawingAdapterOptions } from './adapters/DrawingAdapter';
-export {
-  encodeLayers,
-  decodeLayers,
-  updateLayer,
-} from './adapters/blockLayers';
+export { encodeLayers, decodeLayers, updateLayer } from './adapters/blockLayers';
 
 export {
   useScenePanZoom,
@@ -80,10 +76,7 @@ export {
   type SceneTransform,
   type UseScenePanZoomResult,
 } from './hooks/useScenePanZoom';
-export {
-  useSceneSelection,
-  type UseSceneSelectionResult,
-} from './hooks/useSceneSelection';
+export { useSceneSelection, type UseSceneSelectionResult } from './hooks/useSceneSelection';
 export {
   useSceneHitTest,
   layerBounds,

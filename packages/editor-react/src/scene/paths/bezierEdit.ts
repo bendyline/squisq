@@ -91,8 +91,7 @@ export function parsePath(d: string): ParsedPath {
           const y2 = takeNum(tokens, i++);
           const x = takeNum(tokens, i++);
           const y = takeNum(tokens, i++);
-          if (x1 == null || y1 == null || x2 == null || y2 == null || x == null || y == null)
-            break;
+          if (x1 == null || y1 == null || x2 == null || y2 == null || x == null || y == null) break;
           // The previous point gets an outgoing control handle.
           const prev = points[points.length - 1];
           if (prev) prev.cpOut = { x: x1, y: y1 };
@@ -134,7 +133,9 @@ export function serializePath(path: ParsedPath): string {
         const prev = path.points[i - 1];
         const out = prev?.cpOut ?? { x: prev?.x ?? p.x, y: prev?.y ?? p.y };
         const inc = p.cpIn ?? { x: p.x, y: p.y };
-        parts.push(`C ${fmt(out.x)} ${fmt(out.y)} ${fmt(inc.x)} ${fmt(inc.y)} ${fmt(p.x)} ${fmt(p.y)}`);
+        parts.push(
+          `C ${fmt(out.x)} ${fmt(out.y)} ${fmt(inc.x)} ${fmt(inc.y)} ${fmt(p.x)} ${fmt(p.y)}`,
+        );
         break;
       }
       case 'close':
@@ -151,12 +152,7 @@ export function serializePath(path: ParsedPath): string {
  * and outgoing control handles by the same delta so the curve shape is
  * preserved. Returns a new ParsedPath; doesn't mutate the input.
  */
-export function moveAnchor(
-  path: ParsedPath,
-  index: number,
-  dx: number,
-  dy: number,
-): ParsedPath {
+export function moveAnchor(path: ParsedPath, index: number, dx: number, dy: number): ParsedPath {
   if (index < 0 || index >= path.points.length) return path;
   const next: PathPoint[] = path.points.map((p, i) => {
     if (i !== index) return p;

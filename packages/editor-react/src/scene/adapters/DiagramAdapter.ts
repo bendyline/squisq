@@ -22,7 +22,6 @@ import {
 } from '../layers/nodeCard';
 import {
   moveNode,
-  resizeNode,
   addConnection,
   removeConnection,
   renameNode,
@@ -84,15 +83,12 @@ export function nodeCenter(node: DiagramNodeDescriptor): { x: number; y: number 
 /**
  * Build a SceneCommand dispatcher that writes back to Tiptap using the
  * existing diagram commands. The returned function is stable for a
- * given (editor, parentPos, prompt) tuple.
+ * given (editor, parentPos) tuple.
  */
 export function makeDiagramDispatch(
   editor: Editor,
   parentPos: number,
-  options: { prompt?: (current: string) => string | null } = {},
 ): (cmd: SceneCommand) => void {
-  const prompt = options.prompt ?? ((current) => window.prompt('Rename node', current));
-
   return (cmd: SceneCommand) => {
     switch (cmd.kind) {
       case 'moveLayer': {

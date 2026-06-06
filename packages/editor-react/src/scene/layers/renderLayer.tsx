@@ -41,12 +41,7 @@ interface RenderLayerProps {
   basePath?: string;
 }
 
-export function RenderLayer({
-  layer,
-  viewport,
-  blockTime = 0,
-  basePath = '',
-}: RenderLayerProps) {
+export function RenderLayer({ layer, viewport, blockTime = 0, basePath = '' }: RenderLayerProps) {
   switch (layer.type) {
     case 'image':
       return (

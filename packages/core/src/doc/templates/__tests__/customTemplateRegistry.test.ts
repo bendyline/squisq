@@ -64,7 +64,7 @@ describe('expandDocBlocks with customTemplates', () => {
           type: 'paragraph',
           children: [{ type: 'text', value: 'A small editor for big ideas.' }],
         },
-      ] as any,
+      ],
     };
 
     const expanded = expandDocBlocks([block], { customTemplates: [heroDef] });
