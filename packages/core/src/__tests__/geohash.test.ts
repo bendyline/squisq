@@ -51,9 +51,9 @@ describe('getGeohash4Neighbors', () => {
     expect(result[0]).toBe('c23n');
   });
 
-  it('throws for non-4-char input', () => {
-    expect(() => getGeohash4Neighbors('c2')).toThrow();
-    expect(() => getGeohash4Neighbors('c23nn')).toThrow();
+  it('returns empty array for non-4-char input', () => {
+    expect(getGeohash4Neighbors('c2')).toEqual([]);
+    expect(getGeohash4Neighbors('c23nn')).toEqual([]);
   });
 });
 
@@ -70,8 +70,9 @@ describe('geohashToHierarchicalPath', () => {
     expect(geohashToHierarchicalPath('9q8y')).toBe('9/q/8/y');
   });
 
-  it('throws for non-4-char input', () => {
-    expect(() => geohashToHierarchicalPath('c2')).toThrow();
+  it('returns empty string for non-4-char input', () => {
+    expect(geohashToHierarchicalPath('c2')).toBe('');
+    expect(geohashToHierarchicalPath('c23nn')).toBe('');
   });
 });
 

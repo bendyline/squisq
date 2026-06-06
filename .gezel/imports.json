@@ -1,0 +1,20 @@
+{
+  "version": 1,
+  "gezel": {
+    "hash": "1ee5aac8311d070d99b903529a19e2cde65a8a730aa7e0ea76ccd7ff983bd6c3",
+    "sourceFile": "AGENTS.md",
+    "mergeMode": "primary",
+    "gezelId": "proj__squisq__project"
+  },
+  "about": {
+    "hash": "1ee5aac8311d070d99b903529a19e2cde65a8a730aa7e0ea76ccd7ff983bd6c3",
+    "sourceFile": "AGENTS.md"
+  },
+  "craftbooks": {
+    ".claude\\skills\\developmentarchitect\\SKILL.md": {
+      "hash": "d594a5489215586ff86ec89a45a5708f94b9c27f029eca87e3594e1dbb7df7c9",
+      "craftbookId": "proj-skill-developmentarchitect",
+      "scriptNames": []
+    }
+  }
+}
