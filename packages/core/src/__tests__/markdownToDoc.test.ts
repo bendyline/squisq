@@ -448,12 +448,16 @@ describe('caption generation', () => {
     expect(doc.captions).toBeUndefined();
   });
 
-  it('generates captions version and timestamp', () => {
+  it('generates captions version; timestamp only when supplied (deterministic default)', () => {
     const md = parseMarkdown('# Title\n\nHello world and more text.');
     const doc = markdownToDoc(md);
 
     expect(doc.captions!.version).toBe(1);
-    expect(doc.captions!.generatedAt).toBeTruthy();
+    // No clock reads during conversion — generatedAt is opt-in.
+    expect(doc.captions!.generatedAt).toBeUndefined();
+
+    const stamped = markdownToDoc(md, { captionsGeneratedAt: '2026-01-01T00:00:00.000Z' });
+    expect(stamped.captions!.generatedAt).toBe('2026-01-01T00:00:00.000Z');
   });
 
   it('caption phrases have sequential non-overlapping times', () => {

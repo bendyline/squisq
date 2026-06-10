@@ -108,7 +108,7 @@ describe('getLayers', () => {
     }
   });
 
-  it('returns empty array for unknown template', () => {
+  it('renders a visible fallback card for unknown templates (never blank)', () => {
     const block = {
       template: 'totally_nonexistent',
       id: 'unknown-1',
@@ -117,7 +117,11 @@ describe('getLayers', () => {
     } as unknown as TemplateBlock;
     const layers = getLayers(block, defaultContext);
 
-    expect(layers).toEqual([]);
+    expect(layers.length).toBeGreaterThan(0);
+    const noticeText = layers
+      .map((l) => (l.type === 'text' ? ((l.content as { text?: string }).text ?? '') : ''))
+      .join('\n');
+    expect(noticeText).toContain('Unknown template "totally_nonexistent"');
   });
 
   it('returns empty array for block with no template and no layers', () => {

@@ -1,4 +1,4 @@
-/**
+﻿/**
  * validate command integration tests
  *
  * Exercises `squisq validate` against clean documents, documents with
@@ -60,15 +60,15 @@ describe('validate command', () => {
     const mdPath = await writeDoc('# Title\n\nBody.\n\n## Section {[quote]}\n\nA quote.\n');
     const result = await runCli('validate', mdPath);
     expect(result.exitCode).to.equal(0);
-    expect(result.stdout).to.contain('No problems found');
+    expect(result.stderr).to.contain('No problems found');
   });
 
   it('reports unknown templates with a suggestion and exits 0 (warning only)', async () => {
     const mdPath = await writeDoc('## Gallery {[photGrid]}\n');
     const result = await runCli('validate', mdPath);
     expect(result.exitCode).to.equal(0);
-    expect(result.stdout).to.contain('unknown-template');
-    expect(result.stdout).to.contain('photoGrid');
+    expect(result.stderr).to.contain('unknown-template');
+    expect(result.stderr).to.contain('photoGrid');
   });
 
   it('--strict exits 1 on warnings', async () => {
@@ -81,19 +81,19 @@ describe('validate command', () => {
     const mdPath = await writeDoc('## T {[dataTable]}\n\n```json data\nnot json\n```\n');
     const result = await runCli('validate', mdPath);
     expect(result.exitCode).to.equal(1);
-    expect(result.stdout).to.contain('data-fence-parse');
+    expect(result.stderr).to.contain('data-fence-parse');
   });
 
   it('flags images missing next to a bare markdown file', async () => {
     const mdPath = await writeDoc('## X\n\n![hero](images/hero.jpg)\n');
     const result = await runCli('validate', mdPath);
-    expect(result.stdout).to.contain('missing-asset');
+    expect(result.stderr).to.contain('missing-asset');
 
     // Create the asset and re-validate: clean.
     await mkdir(join(tempDir, 'images'), { recursive: true });
     await writeFile(join(tempDir, 'images', 'hero.jpg'), Buffer.from([0xff, 0xd8]));
     const clean = await runCli('validate', mdPath);
-    expect(clean.stdout).to.contain('No problems found');
+    expect(clean.stderr).to.contain('No problems found');
   });
 
   it('--json emits machine-readable diagnostics', async () => {

@@ -78,17 +78,21 @@ function report(diagnostics: DocDiagnostic[], opts: ValidateOpts, note?: string)
   const warningCount = diagnostics.length - errorCount;
 
   if (opts.json) {
-    console.log(JSON.stringify({ errorCount, warningCount, diagnostics }, null, 2));
+    // Machine-readable output goes to stdout so it can be piped/parsed;
+    // everything human-facing follows the CLI convention of stderr.
+    process.stdout.write(`${JSON.stringify({ errorCount, warningCount, diagnostics }, null, 2)}\n`);
   } else {
     if (note) console.error(note);
     for (const d of diagnostics) {
       const location = d.line != null ? `line ${d.line}` : (d.blockId ?? '—');
-      console.log(`${d.severity === 'error' ? 'ERROR  ' : 'warning'}  ${location}  [${d.code}] ${d.message}`);
+      console.error(
+        `${d.severity === 'error' ? 'ERROR  ' : 'warning'}  ${location}  [${d.code}] ${d.message}`,
+      );
     }
     if (diagnostics.length === 0) {
-      console.log('✓ No problems found');
+      console.error('✓ No problems found');
     } else {
-      console.log(`\n${errorCount} error(s), ${warningCount} warning(s)`);
+      console.error(`\n${errorCount} error(s), ${warningCount} warning(s)`);
     }
   }
 
