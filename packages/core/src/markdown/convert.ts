@@ -26,6 +26,13 @@ import type {
 import { parseHtmlToNodes } from './htmlParse.js';
 import { resolveIcon } from '../icons/resolve.js';
 import { coerceAnnotationValues } from './annotationCoercion.js';
+import {
+  matchTrailingTemplateAnnotation,
+  matchTrailingPandocAttr,
+  tokenizeAttrTokens,
+  splitKeyValueToken,
+  quoteAttrValue,
+} from './attrTokens.js';
 
 // ============================================
 // Generic mdast node shape
@@ -134,20 +141,14 @@ function extractText(node: MdastNode): string {
 // ============================================
 
 /**
- * Regex matching a trailing `{[templateName key=value …]}` annotation.
- * Captures the content between `{[` and `]}`.
- *
- * The trailing `[\s\]\}]*` tolerates accidental doubled `]}` that users
- * sometimes type when learning the syntax (e.g. `{[foo]}]}`). It does
- * not allow trailing word characters, so a non-trailing annotation like
- * `## The {[chart]} section` still doesn't match.
- */
-const TEMPLATE_ANNOTATION_RE = /\s*\{\[([^\]]+)\]\}[\s\]}]*$/;
-
-/**
  * Extract a `{[templateName key=value …]}` annotation from a heading's
  * inline children. Mutates the children array in-place: strips the
  * annotation text from the last text node (or removes the node entirely).
+ *
+ * Matching is delegated to {@link matchTrailingTemplateAnnotation}: a
+ * quote-aware grammar (values may contain `]` when quoted) with a legacy
+ * fallback, plus tolerance for an accidental doubled trailing `]}`. A
+ * non-trailing annotation like `## The {[chart]} section` doesn't match.
  *
  * @returns The parsed annotation, or null if none found.
  */
@@ -158,13 +159,13 @@ function extractTemplateAnnotation(
   for (let i = children.length - 1; i >= 0; i--) {
     const child = children[i];
     if (child.type === 'text') {
-      const match = child.value.match(TEMPLATE_ANNOTATION_RE);
+      const match = matchTrailingTemplateAnnotation(child.value);
       if (match) {
-        const inner = match[1].trim();
+        const inner = match.inner.trim();
         const annotation = parseAnnotationTokens(inner);
 
         // Strip the matched portion from the text
-        const stripped = child.value.slice(0, match.index!).replace(/\s+$/, '');
+        const stripped = child.value.slice(0, match.index).replace(/\s+$/, '');
         if (stripped) {
           (child as { value: string }).value = stripped;
         } else {
@@ -185,23 +186,27 @@ function extractTemplateAnnotation(
 /**
  * Parse the inner content of a `{[…]}` annotation into template + params.
  *
- * Input: `"chart colorScheme=blue size=large"`
- * Output: `{ template: 'chart', params: { colorScheme: 'blue', size: 'large' } }`
+ * Input: `"chart colorScheme=blue caption=\"Sales by region\""`
+ * Output: `{ template: 'chart', params: { colorScheme: 'blue', caption: 'Sales by region' } }`
+ *
+ * Tokenization is shared with the Pandoc attribute parser
+ * ({@link tokenizeAttrTokens}), so quoting and escaping behave
+ * identically in both annotation forms.
  */
 function parseAnnotationTokens(inner: string): HeadingTemplateAnnotation {
-  const tokens = inner.split(/\s+/);
+  const tokens = tokenizeAttrTokens(inner);
   const params: Record<string, string> = {};
 
   // If the first token contains '=', there's no template name —
   // the annotation is purely key-value (e.g., `{[audio=intro.mp3]}`).
-  const firstIsParam = tokens[0].indexOf('=') > 0;
-  const template = firstIsParam ? undefined : tokens[0];
+  const firstIsParam = tokens.length > 0 && tokens[0].indexOf('=') > 0;
+  const template = firstIsParam || tokens.length === 0 ? undefined : tokens[0];
   const startIdx = firstIsParam ? 0 : 1;
 
   for (let i = startIdx; i < tokens.length; i++) {
-    const eqIdx = tokens[i].indexOf('=');
-    if (eqIdx > 0) {
-      params[tokens[i].slice(0, eqIdx)] = tokens[i].slice(eqIdx + 1);
+    const kv = splitKeyValueToken(tokens[i]);
+    if (kv) {
+      params[kv.key] = kv.value;
     }
   }
 
@@ -220,17 +225,11 @@ function parseAnnotationTokens(inner: string): HeadingTemplateAnnotation {
 // ============================================
 
 /**
- * Regex matching a trailing Pandoc-style `{#id .class key=value}` block.
- * The negative lookahead `(?!\[)` ensures we don't collide with the
- * squisq-native `{[…]}` template annotation, which always has `[` as
- * the first character inside the braces. The inner content cannot itself
- * contain `}` (Pandoc attributes don't support that).
- */
-const PANDOC_ATTR_RE = /\s*\{(?!\[)([^}]*)\}\s*$/;
-
-/**
  * Extract a trailing Pandoc-style `{…}` attribute block from a heading's
- * inline children.
+ * inline children. Matching is delegated to {@link matchTrailingPandocAttr}
+ * (quote-aware — values may contain `}` when quoted — with a legacy
+ * fallback; a `(?!\[)` lookahead keeps it from colliding with the
+ * squisq-native `{[…]}` template annotation).
  *
  * Unlike `extractTemplateAnnotation()`, this walks backward through both
  * text nodes AND bare `textDirective` nodes. remark-directive may have
@@ -269,17 +268,17 @@ function extractPandocAttributes(children: MarkdownInlineNode[]): HeadingAttribu
   if (trail.length === 0) return null;
 
   const joined = trail.map((t) => t.val).join('');
-  const match = joined.match(PANDOC_ATTR_RE);
+  const match = matchTrailingPandocAttr(joined);
   if (!match) return null;
 
-  const inner = match[1].trim();
+  const inner = match.inner.trim();
   const attrs = parsePandocAttrTokens(inner);
 
   // Strip the matched portion. `match.index` is an offset into `joined`.
   // Walk forward through `trail` until we find the child that straddles
   // the match boundary; trim that child (if text) or drop it (if directive),
   // and remove everything after it from `children`.
-  const matchStart = match.index!;
+  const matchStart = match.index;
   let scannedLen = 0;
   for (let ti = 0; ti < trail.length; ti++) {
     const t = trail[ti];
@@ -311,7 +310,9 @@ function extractPandocAttributes(children: MarkdownInlineNode[]): HeadingAttribu
 
 /**
  * Parse the inner content of a Pandoc-style `{…}` block. Tokens are
- * whitespace-separated, with double-quoted runs treated as single tokens.
+ * whitespace-separated, with quoted runs (single or double) treated as
+ * single tokens — tokenization is shared with the `{[…]}` template
+ * annotation parser via {@link tokenizeAttrTokens}.
  *
  * - `#id` → `attributes.id`
  * - `.class` → push onto `attributes.classes`
@@ -321,7 +322,7 @@ function extractPandocAttributes(children: MarkdownInlineNode[]): HeadingAttribu
  * Duplicate ids and keys: last wins, silent.
  */
 export function parsePandocAttrTokens(inner: string): HeadingAttributes {
-  const tokens = tokenizePandocAttr(inner);
+  const tokens = tokenizeAttrTokens(inner);
   const attrs: HeadingAttributes = {};
   const params: Record<string, string> = {};
   const classes: string[] = [];
@@ -333,16 +334,9 @@ export function parsePandocAttrTokens(inner: string): HeadingAttributes {
       const cls = token.slice(1);
       if (cls) classes.push(cls);
     } else {
-      const eqIdx = token.indexOf('=');
-      if (eqIdx > 0) {
-        const key = token.slice(0, eqIdx);
-        let value = token.slice(eqIdx + 1);
-        // Strip surrounding quotes if present (set by the tokenizer when
-        // the value was originally quoted).
-        if (value.length >= 2 && value.startsWith('"') && value.endsWith('"')) {
-          value = value.slice(1, -1).replace(/\\"/g, '"');
-        }
-        params[key] = value;
+      const kv = splitKeyValueToken(token);
+      if (kv) {
+        params[kv.key] = kv.value;
       }
     }
   }
@@ -358,61 +352,12 @@ export function parsePandocAttrTokens(inner: string): HeadingAttributes {
 }
 
 /**
- * Quote-aware whitespace tokenizer for the Pandoc attr block interior.
- *
- * Tokens with `key="…"` form keep the quoted run as part of the same token
- * (the quotes are preserved in the output and stripped by the caller after
- * the `key=value` split). Bare `"…"` quoted tokens with no `key=` prefix are
- * stored verbatim including quotes — they won't match the `#`/`.`/`key=`
- * shape and will be ignored, which is consistent with Pandoc behavior.
- *
- * Unbalanced quotes are tolerated: the opening quote is treated as literal,
- * the run continues to end of input.
- */
-function tokenizePandocAttr(input: string): string[] {
-  const tokens: string[] = [];
-  let i = 0;
-  const n = input.length;
-  while (i < n) {
-    // Skip whitespace
-    while (i < n && /\s/.test(input[i])) i++;
-    if (i >= n) break;
-
-    let token = '';
-    while (i < n && !/\s/.test(input[i])) {
-      const ch = input[i];
-      if (ch === '"') {
-        token += '"';
-        i++;
-        while (i < n && input[i] !== '"') {
-          if (input[i] === '\\' && i + 1 < n && input[i + 1] === '"') {
-            token += '\\"';
-            i += 2;
-          } else {
-            token += input[i];
-            i++;
-          }
-        }
-        if (i < n && input[i] === '"') {
-          token += '"';
-          i++;
-        }
-      } else {
-        token += ch;
-        i++;
-      }
-    }
-    if (token) tokens.push(token);
-  }
-  return tokens;
-}
-
-/**
  * Serialize a HeadingAttributes object back to a Pandoc `{#id .class key=value}` string.
  * Returns null when the attributes object is entirely empty (nothing to emit).
  *
  * Canonical key order: `#id`, then `.classes` (in original order), then
- * params in their original insertion order.
+ * params in their original insertion order. Values are quoted via the
+ * shared {@link quoteAttrValue} rule (same as `{[…]}` serialization).
  */
 export function serializePandocAttributes(attrs: HeadingAttributes): string | null {
   const parts: string[] = [];
@@ -422,9 +367,7 @@ export function serializePandocAttributes(attrs: HeadingAttributes): string | nu
   }
   if (attrs.params) {
     for (const [key, value] of Object.entries(attrs.params)) {
-      parts.push(
-        needsQuoting(value) ? `${key}="${value.replace(/"/g, '\\"')}"` : `${key}=${value}`,
-      );
+      parts.push(`${key}=${quoteAttrValue(value)}`);
     }
   }
   // Preserve an empty `{}` annotation marker if it was authored deliberately
@@ -433,12 +376,10 @@ export function serializePandocAttributes(attrs: HeadingAttributes): string | nu
   return `{${parts.join(' ')}}`;
 }
 
-function needsQuoting(value: string): boolean {
-  return /\s/.test(value);
-}
-
 /**
  * Serialize a HeadingTemplateAnnotation back to `{[templateName key=value …]}` text.
+ * Values are quoted via the shared {@link quoteAttrValue} rule (same as
+ * Pandoc attribute serialization).
  */
 function serializeTemplateAnnotation(annotation: HeadingTemplateAnnotation): string {
   const parts: string[] = [];
@@ -447,7 +388,7 @@ function serializeTemplateAnnotation(annotation: HeadingTemplateAnnotation): str
   }
   if (annotation.params) {
     for (const [key, value] of Object.entries(annotation.params)) {
-      parts.push(`${key}=${value}`);
+      parts.push(`${key}=${quoteAttrValue(value)}`);
     }
   }
   return `{[${parts.join(' ')}]}`;

@@ -54,6 +54,30 @@ export interface StartBlockConfig {
 }
 
 /**
+ * A structural problem detected while converting or validating a document.
+ *
+ * Diagnostics ride on `Doc.diagnostics` so any consumer — the editor, the
+ * CLI `validate` command, or an agent re-parsing its own output — gets the
+ * same feedback without watching the console. Conversion never throws for
+ * content problems; it degrades gracefully and records a diagnostic.
+ */
+export interface DocDiagnostic {
+  /** `error` = the author's intent could not be honored (e.g. unparseable
+   *  data fence); `warning` = something looks wrong but rendering proceeds
+   *  with a fallback (e.g. unknown template name). */
+  severity: 'error' | 'warning';
+  /** Stable machine-readable code (e.g. `unknown-template`, `duplicate-id`,
+   *  `unresolved-connection`, `data-fence-parse`, `missing-asset`). */
+  code: string;
+  /** Human-readable description, including a suggestion when one exists. */
+  message: string;
+  /** Id of the block the problem belongs to, when attributable. */
+  blockId?: string;
+  /** 1-based line number in the markdown source, when known. */
+  line?: number;
+}
+
+/**
  * A complete visual doc for an article.
  */
 export interface Doc {
@@ -119,6 +143,14 @@ export interface Doc {
    * self-sufficient for SSR and export.
    */
   customTemplates?: import('./CustomTemplates.js').CustomTemplateDefinition[];
+
+  /**
+   * Structural problems found while building this doc (unknown templates,
+   * unparseable data fences, duplicate ids, unresolved connections, …).
+   * Populated by `markdownToDoc()`; extended by `validateMarkdownDoc()`.
+   * Absent when the document is clean.
+   */
+  diagnostics?: DocDiagnostic[];
 }
 
 /**
@@ -202,6 +234,16 @@ export interface Block {
    * sourced from the Pandoc-style `{#id .class key=value}` attribute block instead.
    */
   templateOverrides?: Record<string, string>;
+
+  /**
+   * Structured template inputs sourced from the block's body content:
+   * a ```json data / ```yaml data fence under the heading, or — for the
+   * `dataTable` template — the first GFM table in the section. Unlike
+   * `templateOverrides` (always strings), values here keep their parsed
+   * types (arrays, numbers, nested objects). Merge order at render time:
+   * template defaults → `templateData` → `templateOverrides`.
+   */
+  templateData?: Record<string, unknown>;
 
   // ── Block-level metadata from Pandoc-style `{#id .class key=value}` ──
 
@@ -629,8 +671,10 @@ export interface CaptionPhrase {
 export interface CaptionTrack {
   /** Caption phrases in chronological order */
   phrases: CaptionPhrase[];
-  /** When the captions were generated */
-  generatedAt: string;
+  /** When the captions were generated. Optional so that conversion stays
+   *  deterministic — `markdownToDoc()` only sets it when the caller
+   *  supplies a timestamp via `captionsGeneratedAt`. */
+  generatedAt?: string;
   /** Algorithm version for regeneration detection */
   version: number;
 }

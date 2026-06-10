@@ -206,6 +206,7 @@ function blockToSlide(
     contents: _co,
     sourceHeading: _sh,
     templateOverrides: _to,
+    templateData: _td,
     ...extraFields
   } = block as unknown as Record<string, unknown>;
 
@@ -226,6 +227,10 @@ function blockToSlide(
     ...(isCustomTemplate && block.children ? { children: block.children } : {}),
     ...defaults,
     ...extraFields,
+    // Structured body data (```json data fences, GFM tables for dataTable)
+    // carries typed values; `{[…]}` string overrides win last so an explicit
+    // annotation param can still pin any field.
+    ...block.templateData,
     ...block.templateOverrides,
   };
 }

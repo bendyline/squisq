@@ -360,4 +360,25 @@ describe('round-trip: markdownToTiptap → tiptapToMarkdown', () => {
     expect(result).toContain('1. First');
     expect(result).toContain('2. Second');
   });
+
+  it('preserves quoted template params with spaces', () => {
+    const result = roundTrip('## Gallery {[imageWithCaption src=photo.jpg caption="Beach at sunset"]}');
+    expect(result).toContain('{[imageWithCaption src=photo.jpg caption="Beach at sunset"]}');
+  });
+
+  it('preserves single-quoted template params', () => {
+    const result = roundTrip("## X {[quote text='A long caption']}");
+    expect(result).toContain("text='A long caption'");
+  });
+
+  it('preserves quoted Pandoc attribute values with spaces', () => {
+    const result = roundTrip('## X {#intro caption="hello world"}');
+    expect(result).toContain('{#intro caption="hello world"}');
+  });
+
+  it('preserves both annotation forms with quoted values on one heading', () => {
+    const result = roundTrip('## X {#a label="big plan"} {[quote text="She left"]}');
+    expect(result).toContain('{#a label="big plan"}');
+    expect(result).toContain('{[quote text="She left"]}');
+  });
 });

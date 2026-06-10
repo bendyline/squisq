@@ -14,3 +14,14 @@ export {
 export { getLayers } from './getLayers.js';
 export type { RenderContext } from './getLayers.js';
 export { resolveAudioMapping, scoreTextSimilarity } from './audioMapping.js';
+export {
+  isDataFence,
+  parseDataFence,
+  parseYamlSubset,
+  findFirstTable,
+  extractTableData,
+} from './structuredData.js';
+export type { DataFenceParseResult, ExtractedTableData } from './structuredData.js';
+export { validateMarkdownSource, validateMarkdownDoc } from './validate.js';
+export type { ValidateOptions, MarkdownValidationResult } from './validate.js';
+export { fallbackBlockLayers } from './templates/fallbackBlock.js';

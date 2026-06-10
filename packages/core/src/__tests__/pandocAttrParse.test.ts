@@ -65,6 +65,22 @@ describe('Pandoc heading attribute parse', () => {
     expect(h.attributes?.metadata?.label).toBe('he said "hi"');
   });
 
+  it('handles single-quoted values with spaces', () => {
+    const h = getHeading("## X {caption='hello world'}");
+    expect(h.attributes?.params).toEqual({ caption: 'hello world' });
+  });
+
+  it('allows } inside a quoted value', () => {
+    const h = getHeading('## X {caption="a } b"}');
+    expect(h.attributes?.params).toEqual({ caption: 'a } b' });
+  });
+
+  it('treats an apostrophe inside an unquoted value as literal', () => {
+    const h = getHeading("## X {name=O'Brien x=4}");
+    expect(h.attributes?.metadata).toEqual({ name: "O'Brien" });
+    expect(h.attributes?.blockMeta?.x).toBe(4);
+  });
+
   it('duplicate id: last wins', () => {
     const h = getHeading('## X {#a #b}');
     expect(h.attributes?.id).toBe('b');
@@ -150,5 +166,22 @@ describe('Markdown round-trip with attributes', () => {
     const md = parseMarkdown(src);
     const out = stringifyMarkdown(md).trim();
     expect(out).toBe(src.trim());
+  });
+
+  it('single-quoted values canonicalize to double quotes', () => {
+    const md = parseMarkdown("## X {caption='hello world'}");
+    expect(stringifyMarkdown(md).trim()).toBe('## X {caption="hello world"}');
+  });
+
+  it('a value containing a double quote round-trips via single quotes', () => {
+    const src = '## X {label=\'say "hi"\'}';
+    const md = parseMarkdown(src);
+    expect(stringifyMarkdown(md).trim()).toBe(src);
+  });
+
+  it('a quoted } round-trips', () => {
+    const src = '## X {caption="a } b"}';
+    const md = parseMarkdown(src);
+    expect(stringifyMarkdown(md).trim()).toBe(src);
   });
 });

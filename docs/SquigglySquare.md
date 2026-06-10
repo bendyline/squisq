@@ -43,9 +43,13 @@ Some body text here.
 
 Attribute value rules & escaping
 
-- Unquoted values: no spaces, e.g. `columns=3` or `autoplay=true`.
-- Quoted values: use double or single quotes for values with spaces, e.g. `caption="A long caption"` or `caption='A long caption'`.
-- To include a quote inside a quoted value, escape it with a backslash, e.g. `caption="She said \"hello\""`.
+The same value grammar applies to both annotation forms — `{[templateName key=value]}` and the Pandoc-style `{#id .class key=value}` block share one tokenizer.
+
+- Unquoted values: no spaces, quotes, or `[` `]` `{` `}`, e.g. `columns=3` or `autoplay=true`. An apostrophe inside an unquoted value is literal (`attribution=O'Brien` works).
+- Quoted values: use double or single quotes for values with spaces, e.g. `caption="A long caption"` or `caption='A long caption'`. Quoted values may contain commas, `]`, and `}` (e.g. `caption="rows 1, 2]"`).
+- To include a double quote inside a value, wrap the value in single quotes (or vice versa): `caption='She said "hello"'`. Backslash escaping (`caption="She said \"hello\""`) is also accepted, but values containing both quote characters are best avoided in markdown source.
+- Headings are still markdown text, so markdown-significant characters inside values (`*`, `_`, `` ` ``, `~`) must be backslash-escaped when authoring by hand: `text="a \*starred\* word"`. The serializer emits these escapes automatically; they resolve back to bare characters on parse.
+- On save, values are canonicalized: double quotes preferred, single quotes used when the value itself contains a double quote, quotes omitted when not needed.
 
 How the annotation is handled
 
@@ -128,6 +132,7 @@ Below is a concise reference of built-in templates (names match the `template` p
 - `dataTable`
   - Inputs: `title`, `headers`, `rows`, `align`, `colorScheme`
   - Usage: themed tabular data for structured comparisons or reference sections
+  - Sourcing: when `headers`/`rows` aren't provided explicitly, the first GFM table in the section body supplies them (including column alignment) — write a normal markdown table under the heading and it renders as the themed table
 
 - `diagram`
   - Inputs: `title`, `colorScheme`, `nodeShape`, `edgeStyle`; child headings provide nodes and `connectsTo` edges
@@ -215,6 +220,63 @@ Notes on arrays and complex attributes
 
 - For multi-value inputs (e.g. `images`, `items`, `markers`), use a comma-separated string and let the template parse it. Example: `images="a.jpg,b.jpg,c.jpg"`.
 - For geographic inputs, `center` may be provided as `"lat,lng"` (e.g. `center="37.78,-122.42"`) or as two attributes (`centerLat`, `centerLng`) depending on the template implementation.
+- For anything tabular or nested, prefer a structured data fence (below) over packing values into attribute strings.
+
+## Structured data fences
+
+Tabular or nested template inputs don't pack well into a single attribute line. Instead, place a fenced code block whose info string is `json data` or `yaml data` in the section body — the parsed object feeds the block's template directly:
+
+````markdown
+## Quarterly numbers {[dataTable]}
+
+```json data
+{ "headers": ["Q", "Revenue"], "rows": [["Q1", "1.2M"], ["Q2", "1.4M"]] }
+```
+````
+
+Rules:
+
+- The `data` marker is required (` ```json data `). A plain ` ```json ` fence is ordinary code and renders as code — it never feeds the template.
+- Values keep their parsed types (arrays, numbers, booleans), unlike `{[…]}` params which are always strings.
+- Merge order at render time: template defaults → data fence values → `{[…]}` params. An explicit annotation param always wins.
+- Multiple data fences in one section merge in order (later keys override earlier ones).
+- An unparseable fence never breaks the document: the block renders without that data and the problem is recorded as a diagnostic (see Validation).
+
+YAML fences support a deliberate subset (squisq carries no YAML dependency): top-level `key: scalar`, inline arrays (`headers: [Name, Age]`), and block sequences of scalars or inline arrays:
+
+````markdown
+```yaml data
+zoom: 12
+markers:
+  - "47.61,-122.33"
+  - "47.62,-122.35"
+rows:
+  - [Alice, 30]
+  - [Bob, 25]
+```
+````
+
+Nested mappings are rejected with a clear error — use a `json data` fence for deeply nested input.
+
+## Validation
+
+`squisq validate <input>` (from `@bendyline/squisq-cli`) checks a `.md` file, `.dbk`/`.zip` container, or folder and reports structural problems with line numbers:
+
+- `unknown-template` — annotation names no built-in, alias, or doc-defined template (includes a did-you-mean suggestion)
+- `unparsed-annotation` — literal `{[…]}` text that wasn't recognized (broken quoting, body placement — annotations are heading-only, or an unknown inline icon)
+- `invalid-attribute` — malformed heading-attribute values (`x=abc`, bad `startTime`/`duration`)
+- `duplicate-id` — two blocks share an id (pinned `{#id}` clashes)
+- `unresolved-connection` — a `connectsTo` target that matches no block id
+- `data-fence-parse` — a `json data` / `yaml data` fence that failed to parse
+- `missing-asset` — a relative image/video reference not found in the bundle (or next to the `.md` file)
+
+`--json` emits the diagnostics as machine-readable JSON; `--strict` makes warnings fail the exit code. Agents should run validate after writing a document and iterate until the diagnostics list is empty.
+
+The same checks are available programmatically via `validateMarkdownSource(source, options)` from `@bendyline/squisq/doc`. Conversion itself (`markdownToDoc`) also records its findings on `doc.diagnostics` — it never throws for content problems and is fully deterministic (the same markdown always produces the same Doc).
+
+## Graceful degradation
+
+A block whose template can't render never produces a blank slide. If the template name is unknown, or the template function throws, the block renders as a plain card showing the heading title and body text, with a small notice naming the problem (e.g. `⚠ Unknown template "photGrid"`). Content is never lost to a typo — the document stays readable, and the notice (plus the matching `validate` diagnostic) points at the fix.
 
 Authoring tips
 

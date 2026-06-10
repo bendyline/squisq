@@ -103,6 +103,21 @@ export { fromMdast, toMdast } from './convert.js';
 // mutate `data-block-attrs` strings without reimplementing the tokenizer.
 export { parsePandocAttrTokens, serializePandocAttributes } from './convert.js';
 
+// Shared key=value attribute machinery for both annotation forms
+// (`{[templateName key=value]}` and Pandoc `{#id .class key=value}`) —
+// exposed so editor-react's tiptap bridge tokenizes and matches headings
+// with the exact same grammar as the parser, by import rather than by copy.
+export {
+  tokenizeAttrTokens,
+  splitKeyValueToken,
+  unquoteAttrValue,
+  needsQuoting,
+  quoteAttrValue,
+  matchTrailingTemplateAnnotation,
+  matchTrailingPandocAttr,
+} from './attrTokens.js';
+export type { TrailingAnnotationMatch } from './attrTokens.js';
+
 // HTML sub-DOM utilities
 export { parseHtmlToNodes, stringifyHtmlNodes } from './htmlParse.js';
 export { sanitizeHtmlNodes, sanitizeUrl } from './sanitize.js';

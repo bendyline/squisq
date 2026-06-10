@@ -13,6 +13,11 @@
 
 import { templateLabel } from './TemplatePicker';
 import { resolveIcon } from '@bendyline/squisq/icons';
+import {
+  matchTrailingTemplateAnnotation,
+  matchTrailingPandocAttr,
+  tokenizeAttrTokens,
+} from '@bendyline/squisq/markdown';
 
 // Hoisted regex patterns for inline markdown ↔ HTML conversion
 const RE_BOLD_STAR = /\*\*(.+?)\*\*/g;
@@ -197,25 +202,25 @@ export function markdownToTiptap(markdown: string): string {
       // Peel off trailing brace-blocks in any order: the squisq-native
       // `{[template …]}` annotation and the Pandoc `{#id .class key=value}`
       // attribute block may both appear at the end of the heading line.
-      // Loop until neither matches. Must stay in sync with the parsers in
-      // packages/core/src/markdown/convert.ts.
+      // Loop until neither matches. The matchers are imported from core so
+      // this stays in sync with packages/core/src/markdown/convert.ts.
       let templateInner: string | null = null;
       let pandocInner: string | null = null;
       for (let pass = 0; pass < 4; pass++) {
         let matched = false;
         if (templateInner == null) {
-          const m = text.match(/\s*\{\[([^\]]+)\]\}[\s\]}]*$/);
+          const m = matchTrailingTemplateAnnotation(text);
           if (m) {
-            templateInner = m[1].trim();
-            text = text.slice(0, m.index!).trimEnd();
+            templateInner = m.inner.trim();
+            text = text.slice(0, m.index).trimEnd();
             matched = true;
           }
         }
         if (pandocInner == null) {
-          const m = text.match(/\s*\{(?!\[)([^}]*)\}\s*$/);
+          const m = matchTrailingPandocAttr(text);
           if (m) {
-            pandocInner = m[1].trim();
-            text = text.slice(0, m.index!).trimEnd();
+            pandocInner = m.inner.trim();
+            text = text.slice(0, m.index).trimEnd();
             matched = true;
           }
         }
@@ -223,8 +228,12 @@ export function markdownToTiptap(markdown: string): string {
       }
 
       if (templateInner != null) {
-        const tokens = templateInner.split(/\s+/);
-        attrs += ` data-template="${escapeHtml(tokens[0])}"`;
+        // Quote-aware tokenization (shared with the core parser) keeps a
+        // quoted value like caption="Beach at sunset" as one token. The
+        // tokens are stored raw — quotes included — so tiptapToMarkdown
+        // can re-join them into the annotation verbatim.
+        const tokens = tokenizeAttrTokens(templateInner);
+        attrs += ` data-template="${escapeHtml(tokens[0] ?? '')}"`;
         const params = tokens.slice(1).filter((t) => t.includes('='));
         if (params.length > 0) {
           attrs += ` data-template-params="${escapeHtml(params.join(' '))}"`;
