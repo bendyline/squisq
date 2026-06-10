@@ -1070,7 +1070,7 @@ interface EpubExportOptions {
 
 **Import:** `@bendyline/squisq-formats/pptx`
 
-PPTX export is implemented for `MarkdownDocument` and `Doc` inputs. PPTX import functions are still stubs and throw `"PPTX import is not yet implemented"`.
+PPTX export and import are both implemented for `MarkdownDocument` and `Doc` inputs. Import reads slide order from `ppt/presentation.xml`, converting each slide's title, body text (as a bullet list), and tables (`<a:tbl>`) into the markdown model via the shared `ooxml/` reader. (Embedded-image extraction during import is not yet wired up — `PptxImportOptions.extractImages` is reserved for future use.)
 
 ```ts
 async function markdownDocToPptx(

@@ -52,6 +52,13 @@ import { readFrontmatterThemeId } from '@bendyline/squisq/markdown';
 
 import { createPackage } from '../ooxml/writer.js';
 import { xmlDeclaration, escapeXml } from '../ooxml/xmlUtils.js';
+import { inferMimeType } from '../html/imageUtils.js';
+import { stripHtmlTags, extractPlainText } from '../shared/text.js';
+import {
+  inlineNodesToRuns,
+  inlineNodeToRuns,
+  type InlineRunHandlers,
+} from '../shared/inlineRuns.js';
 import {
   NS_PML,
   NS_DRAWINGML,
@@ -267,37 +274,6 @@ function segmentIntoSlides(
 
   if (current) slides.push(current);
   return slides;
-}
-
-function extractPlainText(nodes: MarkdownInlineNode[]): string {
-  const parts: string[] = [];
-  for (const node of nodes) {
-    switch (node.type) {
-      case 'text':
-        parts.push(node.value);
-        break;
-      case 'inlineCode':
-        parts.push(node.value);
-        break;
-      case 'strong':
-      case 'emphasis':
-      case 'delete':
-        parts.push(extractPlainText(node.children));
-        break;
-      case 'link':
-        parts.push(extractPlainText(node.children));
-        break;
-      case 'image':
-        parts.push(node.alt ?? '');
-        break;
-      case 'inlineMath':
-        parts.push(node.value);
-        break;
-      default:
-        break;
-    }
-  }
-  return parts.join('');
 }
 
 // ============================================
@@ -768,43 +744,29 @@ interface InlineFormat {
   code?: boolean;
 }
 
+/**
+ * PPTX leaf handlers for the shared run-based inline walker. The traversal
+ * (format threading) lives in `shared/inlineRuns.ts`; these emit DrawingML.
+ */
+function pptxRunHandlers(ctx: SlideContext): InlineRunHandlers {
+  return {
+    run: (text, format) => makeRun(text, format, ctx.style),
+    link: (node, format) => convertLink(node, ctx, format),
+    image: (node, format) => convertImage(node, format, ctx),
+    lineBreak: () => `<a:br/>`,
+  };
+}
+
 function convertInlines(
   nodes: MarkdownInlineNode[],
   ctx: SlideContext,
   format: InlineFormat = {},
 ): string {
-  const parts: string[] = [];
-  for (const node of nodes) {
-    parts.push(convertInline(node, ctx, format));
-  }
-  return parts.join('');
+  return inlineNodesToRuns(nodes, pptxRunHandlers(ctx), format);
 }
 
 function convertInline(node: MarkdownInlineNode, ctx: SlideContext, format: InlineFormat): string {
-  switch (node.type) {
-    case 'text':
-      return makeRun(node.value, format, ctx.style);
-    case 'strong':
-      return convertInlines(node.children, ctx, { ...format, bold: true });
-    case 'emphasis':
-      return convertInlines(node.children, ctx, { ...format, italic: true });
-    case 'delete':
-      return convertInlines(node.children, ctx, { ...format, strike: true });
-    case 'inlineCode':
-      return makeRun(node.value, { ...format, code: true }, ctx.style);
-    case 'link':
-      return convertLink(node, ctx, format);
-    case 'image':
-      return convertImage(node, format, ctx);
-    case 'break':
-      return `<a:br/>`;
-    case 'htmlInline':
-      return makeRun(stripHtmlTags(node.rawHtml), format, ctx.style);
-    case 'inlineMath':
-      return makeRun(node.value, { ...format, code: true }, ctx.style);
-    default:
-      return '';
-  }
+  return inlineNodeToRuns(node, pptxRunHandlers(ctx), format);
 }
 
 function makeRun(text: string, format: InlineFormat, style: SlideStyle): string {
@@ -1013,10 +975,6 @@ async function buildPptxPackage(
 // Helpers
 // ============================================
 
-function stripHtmlTags(html: string): string {
-  return html.replace(/<[^>]*>/g, '');
-}
-
 function inferExtension(path: string): string {
   const dot = path.lastIndexOf('.');
   if (dot === -1) return 'png';
@@ -1025,18 +983,4 @@ function inferExtension(path: string): string {
     .toLowerCase()
     .split('?')[0];
   return ext || 'png';
-}
-
-function inferMimeType(ext: string): string {
-  const mimeTypes: Record<string, string> = {
-    jpg: 'image/jpeg',
-    jpeg: 'image/jpeg',
-    png: 'image/png',
-    gif: 'image/gif',
-    webp: 'image/webp',
-    svg: 'image/svg+xml',
-    bmp: 'image/bmp',
-    avif: 'image/avif',
-  };
-  return mimeTypes[ext] || 'image/png';
 }

@@ -28,6 +28,9 @@ import { makeCustomTemplateFn } from './customTemplate.js';
 import type { ViewportConfig } from '../../schemas/Viewport.js';
 import { VIEWPORT_PRESETS } from '../../schemas/Viewport.js';
 
+export { TEMPLATE_METADATA } from './metadata.js';
+export type { TemplateMetadata } from './metadata.js';
+
 // Import all template functions
 import { titleBlock } from './titleBlock.js';
 import { sectionHeader } from './sectionHeader.js';

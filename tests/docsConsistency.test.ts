@@ -75,11 +75,11 @@ describe('documentation consistency', () => {
     expect(agents).not.toContain('@bendyline/squisq-video-react/worker');
   });
 
-  it('describes PPTX export as implemented and import as stubbed', () => {
+  it('describes PPTX export and import as implemented', () => {
     const api = readDoc('api');
 
-    expect(api).toContain('PPTX export is implemented');
-    expect(api).toContain('PPTX import functions are still stubs');
+    expect(api).toContain('PPTX export and import are both implemented');
     expect(api).not.toContain('PPTX export is not yet implemented');
+    expect(api).not.toContain('PPTX import is not yet implemented');
   });
 });

@@ -44,6 +44,12 @@ import { readFrontmatterThemeId } from '@bendyline/squisq/markdown';
 
 import { createPackage } from '../ooxml/writer.js';
 import { xmlDeclaration, escapeXml } from '../ooxml/xmlUtils.js';
+import { stripHtmlTags } from '../shared/text.js';
+import {
+  inlineNodesToRuns,
+  inlineNodeToRuns,
+  type InlineRunHandlers,
+} from '../shared/inlineRuns.js';
 import {
   NS_WML,
   NS_R,
@@ -631,46 +637,30 @@ interface InlineFormat {
   color?: string;
 }
 
+/**
+ * DOCX leaf handlers for the shared run-based inline walker. The traversal
+ * (format threading) lives in `shared/inlineRuns.ts`; these emit WordprocessingML.
+ */
+function docxRunHandlers(ctx: ExportContext): InlineRunHandlers {
+  return {
+    run: (text, format) => makeRun(text, format),
+    link: (node, format) => convertLink(node, ctx, format),
+    image: (node) => convertImage(node, ctx),
+    lineBreak: () => `<w:r><w:br/></w:r>`,
+    footnoteRef: (node) => convertFootnoteRef(node, ctx),
+  };
+}
+
 function convertInlines(
   nodes: MarkdownInlineNode[],
   ctx: ExportContext,
   format: InlineFormat = {},
 ): string {
-  const parts: string[] = [];
-  for (const node of nodes) {
-    parts.push(convertInline(node, ctx, format));
-  }
-  return parts.join('');
+  return inlineNodesToRuns(nodes, docxRunHandlers(ctx), format);
 }
 
 function convertInline(node: MarkdownInlineNode, ctx: ExportContext, format: InlineFormat): string {
-  switch (node.type) {
-    case 'text':
-      return makeRun(node.value, format);
-    case 'strong':
-      return convertInlines(node.children, ctx, { ...format, bold: true });
-    case 'emphasis':
-      return convertInlines(node.children, ctx, { ...format, italic: true });
-    case 'delete':
-      return convertInlines(node.children, ctx, { ...format, strike: true });
-    case 'inlineCode':
-      return makeRun(node.value, { ...format, code: true });
-    case 'link':
-      return convertLink(node, ctx, format);
-    case 'image':
-      return convertImage(node, ctx);
-    case 'break':
-      return `<w:r><w:br/></w:r>`;
-    case 'htmlInline':
-      return makeRun(stripHtmlTags(node.rawHtml), format);
-    case 'inlineMath':
-      return makeRun(node.value, { ...format, code: true });
-    case 'footnoteReference':
-      return convertFootnoteRef(node, ctx);
-    default:
-      // linkReference, imageReference, textDirective — skip or emit plain
-      return '';
-  }
+  return inlineNodeToRuns(node, docxRunHandlers(ctx), format);
 }
 
 function makeRun(text: string, format: InlineFormat): string {
@@ -1273,10 +1263,3 @@ function buildFootnotesXml(ctx: ExportContext): string {
 // ============================================
 // Helpers
 // ============================================
-
-/**
- * Strip HTML tags from a string, keeping only text content.
- */
-function stripHtmlTags(html: string): string {
-  return html.replace(/<[^>]*>/g, '');
-}

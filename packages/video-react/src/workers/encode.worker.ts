@@ -17,6 +17,7 @@ import type {
   FrameMessage,
 } from './workerTypes.js';
 import { createMp4Muxer, type Mp4MuxerHandle } from '../mp4Mux.js';
+import { bitrateForQuality } from './encodeParams.js';
 
 // ── State ──────────────────────────────────────────────────────────
 
@@ -110,19 +111,6 @@ function initWebCodecs(config: InitMessage) {
     bitrate: bitrateForQuality(config.quality, config.width, config.height),
     framerate: config.fps,
   });
-}
-
-function bitrateForQuality(quality: string, width: number, height: number): number {
-  const pixels = width * height;
-  const baseBitrate = pixels * 4; // ~4 bits per pixel baseline
-  switch (quality) {
-    case 'draft':
-      return Math.round(baseBitrate * 0.5);
-    case 'high':
-      return Math.round(baseBitrate * 2);
-    default: // normal
-      return baseBitrate;
-  }
 }
 
 async function encodeFrameWebCodecs(msg: FrameMessage) {

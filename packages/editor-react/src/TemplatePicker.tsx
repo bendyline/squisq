@@ -9,10 +9,19 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import type { CustomTemplateDefinition } from '@bendyline/squisq/schemas';
+import { TEMPLATE_METADATA, resolveTemplateName } from '@bendyline/squisq/doc';
 import { useCustomTemplates } from './customTemplates/CustomTemplateContext';
 import { TemplateThumbnail } from './customTemplates/thumbnail';
 
 // ── Template metadata ─────────────────────────────────────────────
+//
+// The canonical list of built-in templates (which ids exist, their labels,
+// and their descriptions) lives in core's `TEMPLATE_METADATA`. The entries
+// below add the one thing core can't hold — a React/SVG preview icon per id —
+// and MUST stay 1:1 with `TEMPLATE_METADATA` (same ids, same order, same
+// label/description). `templatePickerMetadata.test.ts` enforces this, so a
+// template added to the core registry without a picker icon (or vice versa)
+// fails the build instead of silently disappearing from the gallery.
 
 interface TemplateEntry {
   name: string;
@@ -68,7 +77,8 @@ const NONE_ENTRY: TemplateEntry = {
   ),
 };
 
-const TEMPLATE_ENTRIES: TemplateEntry[] = [
+// eslint-disable-next-line react-refresh/only-export-components
+export const TEMPLATE_ENTRIES: TemplateEntry[] = [
   {
     name: 'title',
     label: 'Title',
@@ -486,26 +496,17 @@ export function templateLabel(
   customTemplates?: readonly CustomTemplateDefinition[],
 ): string {
   if (!name) return '— none —';
-  const resolved = TEMPLATE_NAME_ALIASES[name] ?? name;
-  const entry = TEMPLATE_ENTRIES.find((e) => e.name === resolved);
-  if (entry) return entry.label;
+  // `resolveTemplateName` + `TEMPLATE_METADATA` are the canonical source of
+  // truth in core; both legacy long ids (`titleBlock`) and short ids resolve
+  // through it, so the picker never has to maintain its own alias/label table.
+  const resolved = resolveTemplateName(name);
+  const meta = TEMPLATE_METADATA[resolved];
+  if (meta) return meta.label;
   const custom = customTemplates?.find((t) => t.name === resolved);
   if (custom) return custom.label;
   // Fallback: split camelCase
   return resolved.replace(/([A-Z])/g, ' $1').replace(/^./, (s) => s.toUpperCase());
 }
-
-/**
- * Legacy template id → canonical short id. Kept inline to avoid pulling
- * the core package's runtime registry into the picker's bundle — the
- * picker only needs this for label resolution.
- */
-const TEMPLATE_NAME_ALIASES: Readonly<Record<string, string>> = {
-  titleBlock: 'title',
-  quoteBlock: 'quote',
-  mapBlock: 'map',
-  listBlock: 'list',
-};
 
 // ── Component ─────────────────────────────────────────────────────
 

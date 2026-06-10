@@ -42,7 +42,7 @@ Run this skill:
 
 Before reviewing, internalize the full system. Squisq is an open-source monorepo of
 **7 published packages + 1 dev-only site** built with npm workspaces and tsup. The
-canonical, kept-fresh architecture summary lives in **`CLAUDE.md`** at the repo root
+canonical, kept-fresh architecture summary lives in **`AGENTS.md`** at the repo root
 — treat that file as authoritative whenever it disagrees with this skill.
 
 ```
@@ -101,7 +101,7 @@ this tree (e.g. `core` importing from `react`, or `formats` importing from
 | ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `@bendyline/squisq` (root)    | Re-exports everything below for ergonomic single-import                                                                                                      |
 | `@bendyline/squisq/schemas`   | Doc, Block, TemplateBlock, Viewport, LayoutStrategy, Theme + library/compile/validator, colorUtils, fontStacks, Types, MediaProvider, ImageEditDoc           |
-| `@bendyline/squisq/doc`       | 20 templates + registry + animationUtils + themeUtils + getLayers + markdownToDoc + docToMarkdown + audioMapping                                             |
+| `@bendyline/squisq/doc`       | 23 templates + registry + animationUtils + themeUtils + getLayers + markdownToDoc + docToMarkdown + audioMapping                                             |
 | `@bendyline/squisq/story`     | Alias for `/doc` (legacy)                                                                                                                                    |
 | `@bendyline/squisq/spatial`   | Haversine distance, Geohash encode/decode                                                                                                                    |
 | `@bendyline/squisq/storage`   | StorageAdapter, Memory/LocalStorage/LocalForage adapters, ContentContainer, MemoryContentContainer, ScopedContentContainer, createMediaProviderFromContainer |
@@ -170,7 +170,7 @@ The user may ask to review a specific area. Common focuses:
 | "Editor architecture"   | Tiptap/Monaco integration, context patterns, preview sync      |
 | "Testing"               | Test coverage, test patterns, edge cases                       |
 | "Performance"           | Bundle sizes, tree-shaking, unnecessary dependencies           |
-| "Claude skills"         | Skill quality, coverage gaps, CLAUDE.md accuracy               |
+| "Claude skills"         | Skill quality, coverage gaps, AGENTS.md accuracy               |
 
 ---
 
@@ -181,12 +181,12 @@ to catch recent changes. Code drifts between reviews.
 
 ### Essential Files to Read
 
-Read these files at minimum for any review. **Always read CLAUDE.md first** — it is the
+Read these files at minimum for any review. **Always read AGENTS.md first** — it is the
 authoritative summary and is kept in sync with the codebase.
 
 ```bash
 # Architecture & conventions
-CLAUDE.md
+AGENTS.md
 package.json
 tsconfig.base.json
 reports/architecture-review-*.md   # Read the most recent prior review
@@ -332,7 +332,7 @@ what needs attention.
 - `cli/` uses playwright-core + vite to spin up a dev-server-as-renderer for the
   video subcommand. This is an intentional dev-time dependency, not a runtime one.
 - `site/` is dev-only, not published to npm
-- Accepted `any` exceptions are enumerated in `CLAUDE.md` → "Code Style" → "Accepted
+- Accepted `any` exceptions are enumerated in `AGENTS.md` → "Code Style" → "Accepted
   `any` exceptions". Any new `any` outside those sites should be flagged.
 
 ### 3.2 Code Duplication
@@ -432,9 +432,9 @@ what needs attention.
 This is unique to the development architect role. You review not just the code, but
 the AI-assisted development infrastructure itself.
 
-### 4.1 CLAUDE.md Review
+### 4.1 AGENTS.md Review
 
-Read `CLAUDE.md` and evaluate:
+Read `AGENTS.md` and evaluate:
 
 - **Accuracy:** Does the documentation match the current codebase? Are file paths correct?
   Are commands still valid? Are all packages listed?
@@ -463,13 +463,13 @@ As of 2026-05, this repo has exactly one squisq-specific skill (`developmentarch
 Consider whether the following skills should be added — they all map to recurring
 mechanical changes that agents are likely to be asked to perform:
 
-- **`add-template`** — Adding a new block template. Steps documented in CLAUDE.md's
+- **`add-template`** — Adding a new block template. Steps documented in AGENTS.md's
   "Adding a New Block Template" section. This is the highest-leverage missing skill
   because it touches three coordinated files (`BlockTemplates.ts`, the template impl,
-  the registry) plus tests and CLAUDE.md.
+  the registry) plus tests and AGENTS.md.
 - **`add-subpath`** — Adding a new subpath export to any package. Steps documented in
   the "New Subpath Test" section below. Failing to update all three of (tsup config,
-  package.json exports, CLAUDE.md) produces confusing failure modes that agents tend
+  package.json exports, AGENTS.md) produces confusing failure modes that agents tend
   to debug instead of just doing the third step.
 - **`add-format-converter`** — Adding a new document-format converter. Steps documented
   in the "New Format Test" section below. The `MarkdownDocument` pivot rule is the
@@ -579,7 +579,7 @@ you observed.]
 
 ## Claude Skills & Instructions Review
 
-### CLAUDE.md Health
+### AGENTS.md Health
 
 - **Accuracy:** [Current / Stale / Mixed]
 - **Specific issues found:** [List]
@@ -596,7 +596,7 @@ you observed.]
 
 [List any new skills that would improve developer productivity or code quality]
 
-### Recommended CLAUDE.md Changes
+### Recommended AGENTS.md Changes
 
 [Specific additions, corrections, or restructuring suggestions]
 
@@ -632,7 +632,7 @@ After writing the report:
 2. **Highlight the single most important finding** — What should be addressed first?
 3. **Link to the full report** for details
 4. **Offer to implement** the top 1-3 quick wins immediately
-5. **Flag any skills or CLAUDE.md updates** that should happen right away
+5. **Flag any skills or AGENTS.md updates** that should happen right away
 
 ---
 
@@ -687,10 +687,10 @@ Imagine adding a new block template (e.g., `comparisonSlide`). Trace the path:
 4. Import + register in `core/src/doc/templates/index.ts` under the canonical short id
 5. Verify `expandDocBlocks` and `getLayers` handle it automatically
 6. Add tests in `core/src/__tests__/templates.test.ts`
-7. Update the template count in `CLAUDE.md`'s `@bendyline/squisq/doc` subpath line
+7. Update the template count in `AGENTS.md`'s `@bendyline/squisq/doc` subpath line
 
 If any step is unclear or requires touching unexpected files, that's a process gap.
-**Confirm the steps in CLAUDE.md's "Adding a New Block Template" section are still accurate** —
+**Confirm the steps in AGENTS.md's "Adding a New Block Template" section are still accurate** —
 that section is the canonical instruction.
 
 ### The "New Format" Test
@@ -703,7 +703,7 @@ Imagine adding a new format (e.g., RTF export). Trace the path:
 4. Add a new entry to `formats/tsup.config.ts` `entry` map: `'rtf/index': 'src/rtf/index.ts'`
 5. Add a new entry to `formats/package.json` `exports`: `"./rtf": { types, import, default }`
 6. Add tests in `formats/src/__tests__/rtf.test.ts` (round-trip preferred — see `roundTrip.test.ts`)
-7. Update CLAUDE.md `@bendyline/squisq-formats` subpath list and the formats section
+7. Update AGENTS.md `@bendyline/squisq-formats` subpath list and the formats section
 
 ### The "New Subpath" Test (core)
 
@@ -714,14 +714,14 @@ Imagine adding a new core subpath (e.g., `@bendyline/squisq/audio`). Trace the p
 3. Add `"./audio": { types, import, default }` to `core/package.json` exports
 4. Re-export from `core/src/index.ts` if it should appear in the root bundle
 5. Add tests in `core/src/__tests__/`
-6. Update CLAUDE.md "Subpath Exports" section + the repository structure tree
+6. Update AGENTS.md "Subpath Exports" section + the repository structure tree
 
 Every new subpath touches **three coordinated files** (tsup entry, package.json export,
-CLAUDE.md). Forgetting any one of them produces a confusing failure mode:
+AGENTS.md). Forgetting any one of them produces a confusing failure mode:
 
 - Missing tsup entry → consumer imports throw `Cannot find module`
 - Missing package.json export → consumer imports throw `Package subpath not exported`
-- Missing CLAUDE.md update → future agents don't know the subpath exists
+- Missing AGENTS.md update → future agents don't know the subpath exists
 
 ---
 
@@ -768,9 +768,9 @@ When the user asks for a specific type of review, use these checklists:
 
 - [ ] Read every SKILL.md in `.claude/skills/`
 - [ ] Verify commands and file paths are current
-- [ ] Check that CLAUDE.md reflects current architecture
+- [ ] Check that AGENTS.md reflects current architecture
 - [ ] Identify gaps in skill coverage
-- [ ] Propose CLAUDE.md patches for any inaccuracies found
+- [ ] Propose AGENTS.md patches for any inaccuracies found
 - [ ] Ensure no Qualla-specific references remain in squisq skills
 
 ---
@@ -786,10 +786,10 @@ When the user asks for a specific type of review, use these checklists:
 5. At least one critical issue (or explicit statement that none exist)
 6. Specific, actionable recommendations with file paths and effort estimates
 7. A prioritized action plan (this week / this month / this quarter)
-8. Claude skills and CLAUDE.md assessment with specific update recommendations
+8. Claude skills and AGENTS.md assessment with specific update recommendations
 
 **If implementing fixes:**
 
 9. Each fix committed separately with clear commit messages
 10. Build run after each fix to verify no regressions (`npm run build`)
-11. Updated CLAUDE.md or SKILL.md files if documentation was stale
+11. Updated AGENTS.md or SKILL.md files if documentation was stale

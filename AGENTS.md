@@ -89,7 +89,7 @@ squisq/
         html/               # HTML export — single-file (data URIs) and ZIP (external assets);
                             #   plus plainHtml / plainHtmlBundle / docsHtmlBundle modes
         epub/               # EPUB 3 e-book export
-        pptx/               # PPTX export (PresentationML) + import stubs
+        pptx/               # PPTX export + import (PresentationML; import covers text/lists/tables)
         xlsx/               # XLSX stubs (SpreadsheetML, not yet implemented)
         container/          # ContentContainer ZIP serialization (containerToZip, zipToContainer)
     editor-react/           # @bendyline/squisq-editor-react
@@ -261,7 +261,7 @@ build entry and a `package.json` export):
 - `@bendyline/squisq-formats/pdf` — PDF import/export (markdownDocToPdf, pdfToMarkdownDoc, configurePdfWorker)
 - `@bendyline/squisq-formats/html` — HTML export: `docToHtml` (single self-contained file with inlined player + data-URI images), `docToHtmlZip` (multi-file ZIP with external assets + optional audio), `collectImagePaths`, `inferMimeType`, plus the `markdownDocToPlainHtml` / `markdownDocsToPlainHtmlBundle` / `markdownDocsToHtmlBundle` static-rendering paths. Needs `PLAYER_BUNDLE` from `@bendyline/squisq-react/standalone-source`.
 - `@bendyline/squisq-formats/epub` — EPUB 3 e-book export (markdownDocToEpub, docToEpub)
-- `@bendyline/squisq-formats/pptx` — PPTX export (markdownDocToPptx, docToPptx) + import stubs
+- `@bendyline/squisq-formats/pptx` — PPTX export (markdownDocToPptx, docToPptx) + import (pptxToMarkdownDoc, pptxToDoc; covers slide text/lists/tables — embedded-image extraction not yet wired)
 - `@bendyline/squisq-formats/xlsx` — XLSX stubs (not yet implemented)
 - `@bendyline/squisq-formats/container` — ContentContainer ZIP serialization (containerToZip, zipToContainer)
 
@@ -350,13 +350,15 @@ If you need an `any` outside these boundaries, find a different solution. Use `a
 
 ## Adding a New Block Template
 
-This is the single most error-prone mechanical change in the codebase. **All five steps are required** — skipping any one breaks the build or the runtime:
+This is the single most error-prone mechanical change in the codebase. **All seven steps are required** — skipping any one breaks the build, the runtime, or makes the template silently invisible in the editor:
 
 1. Add the input interface `XxxInput extends BaseTemplateBlock` in `core/src/schemas/BlockTemplates.ts`.
 2. Add it to the `TemplateBlock` discriminated union in the same file.
 3. Create the template function in `core/src/doc/templates/xxxBlock.ts` — a pure `(input, context) => Layer[]`.
 4. Import + register in `core/src/doc/templates/index.ts` under its canonical short id (e.g. `xxx: xxxBlock`).
-5. Add tests in `core/src/__tests__/templates.test.ts` covering representative inputs.
+5. Add a `TEMPLATE_METADATA` entry (label + description) in `core/src/doc/templates/metadata.ts` — this is the canonical UI metadata that drives the editor's template picker. **Skipping this fails `templateMetadata.test.ts`** (metadata must stay 1:1 with the registry).
+6. Add a matching preview icon to `TEMPLATE_ENTRIES` in `editor-react/src/TemplatePicker.tsx` (same id/order; label + description must equal the core metadata). **Skipping this fails `templatePickerMetadata.test.ts`** — without it the template never shows up in the gallery.
+7. Add tests in `core/src/__tests__/templates.test.ts` covering representative inputs.
 
 If the template replaces an older name, add it to `TEMPLATE_ALIASES` in `templates/index.ts` so legacy documents still resolve. After adding, update the template count in this file's "Subpath Exports" → `@bendyline/squisq/doc` line.
 
