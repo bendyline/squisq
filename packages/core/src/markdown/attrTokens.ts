@@ -57,9 +57,7 @@ const TEMPLATE_LEGACY_RE = /\s*\{\[([^\]]+)\]\}[\s\]}]*$/;
  * lookahead `(?!\[)` keeps it from colliding with the `{[…]}` template
  * form. Quoted values may contain `}`.
  */
-const PANDOC_STRICT_RE = new RegExp(
-  `\\s*\\{(?!\\[)((?:[^}"']|${DQ_RUN}|${SQ_RUN})*)\\}\\s*$`,
-);
+const PANDOC_STRICT_RE = new RegExp(`\\s*\\{(?!\\[)((?:[^}"']|${DQ_RUN}|${SQ_RUN})*)\\}\\s*$`);
 
 /** Legacy fallback for the Pandoc block (`[^}]*` interior). */
 const PANDOC_LEGACY_RE = /\s*\{(?!\[)([^}]*)\}\s*$/;

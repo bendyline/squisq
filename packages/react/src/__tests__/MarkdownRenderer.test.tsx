@@ -281,4 +281,48 @@ describe('MarkdownRenderer', () => {
     const span = container.querySelector('span.trusted');
     expect(span?.getAttribute('onclick')).toBe('alert(1)');
   });
+
+  // Host-affecting tags (style/script/…) must never reach the document.
+  // A bare <style> applies page-wide (CSS isn't scoped outside shadow DOM
+  // / iframes), so an embedded game's <style> in a chat message used to
+  // restyle the whole app chrome. Guard it across every policy.
+  it('drops a raw <style> by default so it cannot leak onto the host', () => {
+    const { container } = render(
+      <MarkdownRenderer
+        nodes={parseNodes('<div><style>body{font-family:monospace}</style><p>hi</p></div>')}
+      />,
+    );
+    expect(container.querySelector('style')).toBeNull();
+    expect(container.textContent).toContain('hi');
+    expect(container.textContent).not.toContain('font-family');
+  });
+
+  it('drops <style>/<script> even under the trusted policy, keeping safe content', () => {
+    const { container } = render(
+      <MarkdownRenderer
+        nodes={parseNodes(
+          '<div class="game"><style>body{font-family:monospace}</style><script>alert(1)</script><p>play</p></div>',
+        )}
+        htmlPolicy="trusted"
+      />,
+    );
+    expect(container.querySelector('style')).toBeNull();
+    expect(container.querySelector('script')).toBeNull();
+    expect(container.querySelector('div.game')).toBeTruthy();
+    expect(container.textContent).toContain('play');
+    expect(container.textContent).not.toContain('font-family');
+  });
+
+  it('drops a raw <style> on the verbatim path when htmlChildren was not parsed', () => {
+    // parseHtml:false leaves htmlChildren empty while rawHtml keeps the
+    // markup — the raw-string backstop must still refuse the fast path.
+    const node = {
+      type: 'htmlBlock',
+      rawHtml: '<style>body{font-family:monospace}</style><p>play</p>',
+      htmlChildren: [],
+    } as unknown as MarkdownBlockNode;
+    const { container } = render(<MarkdownRenderer nodes={[node]} htmlPolicy="trusted" />);
+    expect(container.querySelector('style')).toBeNull();
+    expect(container.textContent).not.toContain('font-family');
+  });
 });

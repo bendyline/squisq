@@ -61,7 +61,8 @@ async function runValidate(inputPath: string, opts: ValidateOpts): Promise<numbe
   const entries = await container.listFiles();
   const containerPaths = new Set(entries.map((e) => e.path));
   const isBareMarkdown =
-    statSync(resolvedInput).isFile() && !['.zip', '.dbk'].includes(extname(resolvedInput).toLowerCase());
+    statSync(resolvedInput).isFile() &&
+    !['.zip', '.dbk'].includes(extname(resolvedInput).toLowerCase());
   const baseDir = dirname(resolvedInput);
   const hasAsset = (path: string): boolean => {
     if (containerPaths.has(path) || containerPaths.has(path.replace(/^\.\//, ''))) return true;

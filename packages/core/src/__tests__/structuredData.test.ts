@@ -22,7 +22,9 @@ describe('parseYamlSubset', () => {
   });
 
   it('parses block sequences of scalars and inline arrays', () => {
-    expect(parseYamlSubset('rows:\n  - [Alice, 30]\n  - [Bob, 25]\nmarkers:\n  - "47.6,-122.3"')).toEqual({
+    expect(
+      parseYamlSubset('rows:\n  - [Alice, 30]\n  - [Bob, 25]\nmarkers:\n  - "47.6,-122.3"'),
+    ).toEqual({
       rows: [
         ['Alice', 30],
         ['Bob', 25],

@@ -146,7 +146,12 @@ function renderInline(
         if (htmlPolicy === 'strip') return null;
         // Fast path: no <video>/<audio> in the subtree → use the original
         // rawHtml passthrough (preserves arbitrary HTML for custom embeds).
-        if (htmlPolicy === 'trusted' && !containsMediaTag(node.htmlChildren)) {
+        if (
+          htmlPolicy === 'trusted' &&
+          !containsMediaTag(node.htmlChildren) &&
+          !containsDangerousTag(node.htmlChildren) &&
+          !hasDangerousRawHtml(node.rawHtml)
+        ) {
           return (
             <span
               key={key}
@@ -275,7 +280,12 @@ function renderBlock(
       if (htmlPolicy === 'strip') return null;
       // Fast path: no <video>/<audio> → preserve the existing rawHtml
       // passthrough so arbitrary HTML embeds still survive verbatim.
-      if (htmlPolicy === 'trusted' && !containsMediaTag(node.htmlChildren)) {
+      if (
+        htmlPolicy === 'trusted' &&
+        !containsMediaTag(node.htmlChildren) &&
+        !containsDangerousTag(node.htmlChildren) &&
+        !hasDangerousRawHtml(node.rawHtml)
+      ) {
         return (
           <div
             key={key}
@@ -462,6 +472,59 @@ function containsMediaTag(nodes: HtmlNode[]): boolean {
   return false;
 }
 
+/**
+ * Tags that can escape their container and affect the whole host
+ * document — global styling, script execution, external/resource loads,
+ * or framing. Markdown content is frequently untrusted (LLM output,
+ * pasted snippets), and these tags have no business mutating the page
+ * they're embedded in, so they are *always* dropped — even under the
+ * `'trusted'` policy. "Trusted" means "render this HTML's structure
+ * verbatim," not "let it restyle or script the host." A stray `<style>`
+ * applies document-wide (CSS has no per-element scoping outside shadow
+ * DOM / iframes), which is exactly how an embedded game's `<style>`
+ * leaked onto the surrounding app chrome.
+ */
+const DANGEROUS_HTML_TAGS = new Set([
+  'base',
+  'embed',
+  'iframe',
+  'link',
+  'meta',
+  'object',
+  'script',
+  'style',
+  'title',
+]);
+
+/** True when the subtree contains any host-affecting tag (see
+ *  {@link DANGEROUS_HTML_TAGS}). Mirrors {@link containsMediaTag}: keeps
+ *  such content off the verbatim `dangerouslySetInnerHTML` fast path so
+ *  it routes through the React reconstruction, which drops the tag. */
+function containsDangerousTag(nodes: HtmlNode[]): boolean {
+  for (const node of nodes) {
+    if (node.type !== 'htmlElement') continue;
+    if (DANGEROUS_HTML_TAGS.has(node.tagName.toLowerCase())) return true;
+    if (containsDangerousTag(node.children)) return true;
+  }
+  return false;
+}
+
+/**
+ * Raw-string backstop for {@link DANGEROUS_HTML_TAGS}. The structural
+ * {@link containsDangerousTag} check covers the normal case, but a block
+ * parsed with `parseHtml: false` carries an empty `htmlChildren` while
+ * `rawHtml` still holds the markup — so the verbatim fast path scans the
+ * raw string too, guaranteeing a `<style>`/`<script>` can never be
+ * injected into the host document by that path no matter how the node
+ * was produced. The `\b` keeps `<styled-thing>` from matching `<style>`.
+ */
+const DANGEROUS_RAW_HTML_RE =
+  /<\s*\/?\s*(?:base|embed|iframe|link|meta|object|script|style|title)\b/i;
+
+function hasDangerousRawHtml(rawHtml: string): boolean {
+  return DANGEROUS_RAW_HTML_RE.test(rawHtml);
+}
+
 /** A pragmatic shortlist of HTML attributes the raw-HTML walker
  *  passes through to React when reconstructing a non-media element.
  *  Anything outside this list is silently dropped — the media-tag
@@ -506,6 +569,11 @@ function reactPropsFromAttrs(attrs: Record<string, string>): Record<string, unkn
 
 function renderHtmlElement(el: HtmlElement, key: string): React.ReactNode {
   const tagName = el.tagName.toLowerCase();
+  // Final safety net: never reconstruct a host-affecting element (e.g. a
+  // <style> that would leak globally), whatever the policy. The fast path
+  // is gated by containsDangerousTag, so trusted content carrying these
+  // tags lands here — drop the tag and keep the rest of the subtree.
+  if (DANGEROUS_HTML_TAGS.has(tagName)) return null;
   if (tagName === 'video') {
     return (
       <InlineVideoPlayer

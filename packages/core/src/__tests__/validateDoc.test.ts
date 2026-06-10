@@ -7,9 +7,7 @@ function codes(md: string, options?: Parameters<typeof validateMarkdownSource>[1
 
 describe('validateMarkdownSource — templates', () => {
   it('passes a clean document', () => {
-    const result = validateMarkdownSource(
-      '# Title\n\nBody.\n\n## Section {[quote]}\n\nA quote.\n',
-    );
+    const result = validateMarkdownSource('# Title\n\nBody.\n\n## Section {[quote]}\n\nA quote.\n');
     expect(result.diagnostics).toEqual([]);
     expect(result.errorCount).toBe(0);
     expect(result.warningCount).toBe(0);

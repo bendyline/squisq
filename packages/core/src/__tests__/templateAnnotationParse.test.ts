@@ -51,7 +51,9 @@ describe('Template annotation in Heading parse path', () => {
 
 describe('Quoted values in {[…]} annotations', () => {
   it('parses double-quoted values with spaces (the documented syntax)', () => {
-    const h = getHeading('## Gallery {[imageWithCaption src="photo.jpg" caption="Beach at sunset"]}');
+    const h = getHeading(
+      '## Gallery {[imageWithCaption src="photo.jpg" caption="Beach at sunset"]}',
+    );
     expect(h.templateAnnotation).toEqual({
       template: 'imageWithCaption',
       params: { src: 'photo.jpg', caption: 'Beach at sunset' },

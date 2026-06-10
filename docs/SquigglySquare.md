@@ -230,7 +230,13 @@ Tabular or nested template inputs don't pack well into a single attribute line. 
 ## Quarterly numbers {[dataTable]}
 
 ```json data
-{ "headers": ["Q", "Revenue"], "rows": [["Q1", "1.2M"], ["Q2", "1.4M"]] }
+{
+  "headers": ["Q", "Revenue"],
+  "rows": [
+    ["Q1", "1.2M"],
+    ["Q2", "1.4M"]
+  ]
+}
 ```
 ````
 
@@ -248,8 +254,8 @@ YAML fences support a deliberate subset (squisq carries no YAML dependency): top
 ```yaml data
 zoom: 12
 markers:
-  - "47.61,-122.33"
-  - "47.62,-122.35"
+  - '47.61,-122.33'
+  - '47.62,-122.35'
 rows:
   - [Alice, 30]
   - [Bob, 25]

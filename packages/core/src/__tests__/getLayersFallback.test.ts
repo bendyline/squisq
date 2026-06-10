@@ -61,7 +61,9 @@ describe('getLayers — structured data feeds templates', () => {
 
   it('merges templateData and templateOverrides into the template input', () => {
     let received: Record<string, unknown> | null = null;
-    (templateRegistry as Record<string, unknown>)['__capture'] = (input: Record<string, unknown>) => {
+    (templateRegistry as Record<string, unknown>)['__capture'] = (
+      input: Record<string, unknown>,
+    ) => {
       received = input;
       return [];
     };
@@ -82,9 +84,13 @@ describe('getLayers — structured data feeds templates', () => {
   });
 
   it('renders a dataTable from a GFM table in the markdown body', () => {
-    const md = ['## People {[dataTable]}', '', '| Name | Age |', '| --- | --- |', '| Alice | 30 |'].join(
-      '\n',
-    );
+    const md = [
+      '## People {[dataTable]}',
+      '',
+      '| Name | Age |',
+      '| --- | --- |',
+      '| Alice | 30 |',
+    ].join('\n');
     const block = firstBlock(md);
     const layers = getLayers(block);
     expect(layers.length).toBeGreaterThan(0);

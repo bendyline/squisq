@@ -362,7 +362,9 @@ describe('round-trip: markdownToTiptap → tiptapToMarkdown', () => {
   });
 
   it('preserves quoted template params with spaces', () => {
-    const result = roundTrip('## Gallery {[imageWithCaption src=photo.jpg caption="Beach at sunset"]}');
+    const result = roundTrip(
+      '## Gallery {[imageWithCaption src=photo.jpg caption="Beach at sunset"]}',
+    );
     expect(result).toContain('{[imageWithCaption src=photo.jpg caption="Beach at sunset"]}');
   });
 
