@@ -50,7 +50,7 @@ describe('diagramBlock template', () => {
     const layers = diagramBlock(makeInput(), ctx);
     const paths = layers.filter((l) => l.type === 'path') as PathLayer[];
     expect(paths.length).toBe(1);
-    expect(paths[0].content.arrow).toBe('end');
+    expect(paths[0].content.endMarker).toBe('arrow');
     expect(paths[0].content.d.startsWith('M ')).toBe(true);
   });
 

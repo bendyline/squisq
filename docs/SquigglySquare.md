@@ -143,8 +143,9 @@ Below is a concise reference of built-in templates (names match the `template` p
   - Usage: one-off block layouts that don't fit a template (drag layers into place)
 
 - `drawing`
-  - Inputs: same as `layout`
-  - Usage: free-form sketches; the editor pre-bundles shape / path / text tools for authoring new layers from scratch
+  - Inputs: `title`, `colorScheme`, `fill`, `stroke`; child headings provide the shapes (see **Drawings** below)
+  - Usage: free-form shape canvases (org charts, sketches, annotated layouts) authored as nested section headings — each child heading is one shape, positioned by `x`/`y`/`width`/`height` and optionally joined by `from`/`to` connectors
+  - Legacy: drawings authored visually in the editor persist their `Layer[]` as a base64 `layers="…"` param (like `layout`) and have no children; those still render unchanged
 
 - `pullQuote`
   - Inputs: `quote`, `attribution`
@@ -264,15 +265,86 @@ rows:
 
 Nested mappings are rejected with a clear error — use a `json data` fence for deeply nested input.
 
+## Drawings
+
+A `{[drawing]}` block is a container: each direct child heading is one shape on a
+free-form canvas. The shape primitive is the child's `{[…]}` annotation name; its
+geometry and style ride in the annotation params; a `{#id}` makes it referenceable;
+the heading text is the shape's label and the body text an optional sublabel. This
+mirrors how `diagram` reads its children — drawings just add a richer shape
+vocabulary and free geometry.
+
+```markdown
+## Org chart {[drawing]}
+
+### CEO {#ceo} {[rectangle x=21 y=25 width=100 height=100]}
+
+The CEO is the chief executive.
+
+### reports to {[line from=ceo to=dev1]}
+
+### Developer {#dev1} {[rectangle x=21 y=190 width=100 height=100]}
+```
+
+Shape primitives (the `{[…]}` name on a drawing's child):
+
+- `rectangle` / `rect` — a box. `borderRadius` rounds the corners.
+- `circle` / `ellipse` — an oval filling the box.
+- `line` — a straight stroke. With `from`/`to` it becomes a connector (below).
+- `arrow` — like `line`, but draws an arrowhead at the `to` end.
+- `path` — an opaque SVG path; pass the geometry in `d="M … L …"` (for freehand strokes).
+- `text` — a free text label; the content is `text=`, else the heading text, else the body.
+- Polygons & glyphs — `triangle`, `right-triangle`, `diamond`, `pentagon`, `hexagon`,
+  `octagon`, `star` (`star4`/`star6`), `parallelogram`, `trapezoid`, `plus` (`cross`),
+  `chevron`, `arrow-right`/`-left`/`-up`/`-down`, `double-arrow`, `callout`, `cylinder`,
+  `cloud`, `heart`, `lightning`. Each is inscribed in the shape's bounding box and filled
+  per `fill` (default `none` → outline only).
+
+Geometry & style params (all optional; coordinates are author-defined units that the
+template fits to the viewport, so you don't think in absolute pixels):
+
+- Position/size: `x`, `y`, `width` (or `w`), `height` (or `h`).
+- Style: `fill`, `stroke`, `strokeWidth`, `borderRadius`, `dasharray`.
+- Connectors: `from` and `to` reference sibling shape ids; a `line`/`arrow` with either
+  becomes a connector clipped to the two shapes it joins (its heading text is the
+  midpoint label). A shape's Pandoc `connectsTo=` also draws an arrow, exactly as in
+  `diagram`.
+- Connector end-styles & routing:
+  - `startStyle` / `endStyle` — the marker at each end: `none`, `arrow` (filled triangle),
+    `open` (stroked V), `diamond`, `circle`, `square`. Default: `arrow` connectors end with
+    an arrow, plain `line`s have none.
+  - `lineStyle` — `solid` (default), `dashed`, or `dotted` (sets the dash pattern; an
+    explicit `dasharray` still wins).
+  - `routing` — `straight` (default), `orthogonal` (elbow), or `curved` (bezier).
+
+  Example: `### owns {[arrow from=a to=b endStyle=diamond startStyle=circle lineStyle=dashed routing=orthogonal]}`.
+
+The `diagram` template's edges accept the same `startStyle` / `endStyle` / `lineStyle` on
+the `{[diagram]}` parent (applied to all edges; `edgeStyle` is the diagram's routing).
+
+Notes:
+
+- Params are space-separated, like every other annotation. A trailing comma is tolerated
+  (`x=21, y=25` works) but the canonical form omits it.
+- Shape annotations are only recognized on a drawing's children. A `{[rectangle]}`
+  elsewhere is flagged `shape-outside-drawing`; an unknown shape inside a drawing is
+  flagged `unknown-shape` (with a did-you-mean).
+- Authoring is markdown-first: shapes render in previews and exports and git-diff cleanly.
+  The visual Scene editor still authors drawings as a base64 `layers="…"` blob; those
+  legacy drawings keep rendering (the template decodes them when a drawing has no child
+  shapes).
+
 ## Validation
 
 `squisq validate <input>` (from `@bendyline/squisq-cli`) checks a `.md` file, `.dbk`/`.zip` container, or folder and reports structural problems with line numbers:
 
 - `unknown-template` — annotation names no built-in, alias, or doc-defined template (includes a did-you-mean suggestion)
+- `unknown-shape` — a `{[drawing]}` child's annotation names no known shape (includes a did-you-mean among the shape primitives)
+- `shape-outside-drawing` — a shape annotation (`{[rectangle]}`, `{[line]}`, …) on a heading that isn't a drawing's child
 - `unparsed-annotation` — literal `{[…]}` text that wasn't recognized (broken quoting, body placement — annotations are heading-only, or an unknown inline icon)
-- `invalid-attribute` — malformed heading-attribute values (`x=abc`, bad `startTime`/`duration`)
+- `invalid-attribute` — malformed heading-attribute values (`x=abc`, bad `startTime`/`duration`) or non-numeric drawing-shape geometry
 - `duplicate-id` — two blocks share an id (pinned `{#id}` clashes)
-- `unresolved-connection` — a `connectsTo` target that matches no block id
+- `unresolved-connection` — a `connectsTo` target, or a drawing connector's `from`/`to`, that matches no block/shape id
 - `data-fence-parse` — a `json data` / `yaml data` fence that failed to parse
 - `missing-asset` — a relative image/video reference not found in the bundle (or next to the `.md` file)
 

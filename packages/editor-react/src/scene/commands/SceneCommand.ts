@@ -53,4 +53,11 @@ export interface SceneEdge {
   target: string;
   /** Optional label, rendered at the midpoint. */
   label?: string;
+  /** End-of-line markers. Drawing connectors set these; diagrams default end→arrow. */
+  startMarker?: import('@bendyline/squisq/schemas').MarkerStyle;
+  endMarker?: import('@bendyline/squisq/schemas').MarkerStyle;
+  /** SVG stroke-dasharray for dashed/dotted lines. */
+  dasharray?: string;
+  /** Per-edge routing override (else the renderer's variant default). */
+  routing?: import('@bendyline/squisq/doc').ConnectorRouting;
 }

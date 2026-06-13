@@ -11,7 +11,7 @@
  * 4. Synthesize a dummy audio segment for timer-based playback
  */
 
-import { flattenBlocks, hasTemplate } from '@bendyline/squisq/doc';
+import { flattenRenderableBlocks, hasTemplate } from '@bendyline/squisq/doc';
 import { extractPlainText } from '@bendyline/squisq/markdown';
 import { getChildren } from '@bendyline/squisq/markdown';
 import type { Block, Doc } from '@bendyline/squisq/schemas';
@@ -252,7 +252,9 @@ const IMAGE_MOTIONS: Array<'zoomIn' | 'zoomOut' | 'panLeft' | 'panRight'> = [
  * audio segment.
  */
 export function buildPreviewDoc(doc: Doc): Doc {
-  const flat = flattenBlocks(doc.blocks);
+  // Container templates (`diagram`, `drawing`) render their children as
+  // nodes/shapes, so those children must not also become preview slides.
+  const flat = flattenRenderableBlocks(doc.blocks);
   const allImages = collectAllDocImages(doc.blocks);
   const usedImageSrcs = new Set<string>();
   // Names of user-defined templates carried by the doc — passed into

@@ -52,6 +52,7 @@ import { videoWithCaption } from './videoWithCaption.js';
 import { videoPullQuote } from './videoPullQuote.js';
 import { dataTable } from './dataTable.js';
 import { diagramBlock } from './diagramBlock.js';
+import { drawingBlock } from './drawingBlock.js';
 import { rawLayersBlock } from './rawLayers.js';
 
 /**
@@ -91,7 +92,7 @@ export const templateRegistry: TemplateRegistry = {
   dataTable,
   diagram: diagramBlock,
   layout: rawLayersBlock,
-  drawing: rawLayersBlock,
+  drawing: drawingBlock,
 };
 
 /**
@@ -115,6 +116,21 @@ export const TEMPLATE_ALIASES: Readonly<Record<string, string>> = {
  */
 export function resolveTemplateName(name: string): string {
   return TEMPLATE_ALIASES[name] ?? name;
+}
+
+/**
+ * Container templates render their parent block by consuming the block's
+ * child headings (via `context.children`) — `diagram` draws them as nodes,
+ * `drawing` as shapes. Those children are therefore NOT independently
+ * renderable slides/sections; render paths use {@link isContainerTemplate}
+ * to skip descending into them (see `flattenRenderableBlocks`).
+ */
+export const CONTAINER_TEMPLATES: ReadonlySet<string> = new Set(['diagram', 'drawing']);
+
+/** True when `name` (or its alias) is a children-consuming container template. */
+export function isContainerTemplate(name: string | undefined): boolean {
+  if (!name) return false;
+  return CONTAINER_TEMPLATES.has(resolveTemplateName(name));
 }
 
 /**
@@ -709,6 +725,20 @@ export type {
   DiagramEdge,
   DiagramLayoutOptions,
 } from './diagramLayout.js';
+export { drawingBlock } from './drawingBlock.js';
+export {
+  computeDrawingLayout,
+  normalizeShapeKind,
+  isShapeName,
+  SHAPE_NAMES,
+} from './drawingLayout.js';
+export type {
+  DrawingLayout,
+  DrawingShape,
+  DrawingShapeKind,
+  DrawingConnector,
+  DrawingLayoutOptions,
+} from './drawingLayout.js';
 
 // Re-export accent image utilities
 export { getAccentLayout, createAccentLayers, adjustY, DEFAULT_LAYOUT } from './accentImage.js';

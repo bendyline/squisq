@@ -18,7 +18,7 @@ import type { Theme } from '@bendyline/squisq/schemas';
 import { getBlockAtTime } from '@bendyline/squisq/schemas';
 import {
   expandDocBlocks,
-  flattenBlocks,
+  flattenRenderableBlocks,
   isTemplateBlock,
   VIEWPORT_PRESETS,
   type ViewportConfig,
@@ -77,9 +77,12 @@ export function useDocPlayback(
       return [];
     }
 
-    // Flatten nested block hierarchy (markdown-derived docs have children)
+    // Flatten nested block hierarchy (markdown-derived docs have children).
+    // `flattenRenderableBlocks` skips the children of container templates
+    // (`diagram`, `drawing`) — those are consumed by the parent's render as
+    // nodes/shapes, so they must not also appear as their own slides.
     const hasChildren = script.blocks.some((b) => b.children && b.children.length > 0);
-    const flatBlocks = hasChildren ? flattenBlocks(script.blocks) : script.blocks;
+    const flatBlocks = hasChildren ? flattenRenderableBlocks(script.blocks) : script.blocks;
 
     // Check if any blocks are templates
     const hasTemplates = flatBlocks.some(isTemplateBlock);

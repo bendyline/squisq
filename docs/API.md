@@ -278,7 +278,7 @@ interface TemplateContext {
 | `dataTable`        | `title?`, `headers[]`, `rows[][]`, `align?`, `colorScheme?`                                                                                              |
 | `diagram`          | `title?`, `colorScheme?`, `nodeShape?`, `edgeStyle?`; reads child headings from `context.children`                                                       |
 | `layout`           | Passthrough for editor-authored `Layer[]` (positioned via the Scene engine). Layers persist in `data-block-attrs` as a base64-JSON `layers="..."` param. |
-| `drawing`          | Same passthrough as `layout`; the editor exposes a richer toolset (shape / path / text). Same `layers="..."` storage.                                    |
+| `drawing`          | `title?`, `colorScheme?`, `fill?`, `stroke?`; reads child headings as shapes from `context.children` (each `{[rectangle\|circle\|line\|arrow\|path\|text]}` child is one shape; `from`/`to` join shapes). Legacy editor-authored drawings still decode from a base64 `layers="..."` param. See `docs/SquigglySquare.md` → Drawings. |
 
 > All template inputs share the base block fields `id`, `duration`, `audioSegment`, optional `transition`, layer visibility flags, and optional source timing fields. Visual inputs such as images, colors, and captions are defined by each template.
 

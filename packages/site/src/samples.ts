@@ -333,6 +333,26 @@ A node diagram with typed connections.
 
 ### Worker {#worker x=520 y=520 connectsTo=db:writes}
 `,
+  'drawing-org-chart': `# Org Chart Demo
+
+A free-form drawing. Each child heading under the \`{[drawing]}\` parent is a shape; \`from\`/\`to\` connectors join them.
+
+## Org chart {[drawing]}
+
+### CEO {#ceo} {[rectangle x=360 y=80 width=200 height=100]}
+
+### CTO {#cto} {[rectangle x=160 y=320 width=200 height=100]}
+
+### COO {#coo} {[rectangle x=560 y=320 width=200 height=100]}
+
+### reports to {[arrow from=cto to=ceo]}
+
+### also reports {[arrow from=coo to=ceo]}
+
+## After the drawing
+
+Regular body content continues here.
+`,
   'custom-template-demo': buildCustomTemplateDemo(),
 };
 

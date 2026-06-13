@@ -13,10 +13,11 @@
  */
 
 import type { Editor } from '@tiptap/react';
+import type { ReactNode } from 'react';
 import type { Layer } from '@bendyline/squisq/schemas';
 import { useEffect, useState } from 'react';
-import type { SceneCommand } from '../commands/SceneCommand';
-import type { SceneTool } from '../tools/SceneTool';
+import type { SceneCommand, SceneEdge } from '../commands/SceneCommand';
+import type { SceneTool, SceneToolContext } from '../tools/SceneTool';
 import { SelectTool } from '../tools/SelectTool';
 import { readLayersFromHeading, updateLayer, writeLayersToHeading } from './blockLayers';
 
@@ -27,6 +28,13 @@ export interface LayoutAdapterResult {
   tools: SceneTool[];
   /** Command dispatch for `<Scene onCommand={...} />`. */
   dispatch: (cmd: SceneCommand) => void;
+  // ── Connector-capable adapters (drawing) set these; layout omits them ──
+  /** Connector edges to pass to `<Scene edges={...} />`. */
+  edges?: SceneEdge[];
+  /** `<Scene layerFollows={...} />` — a label layer follows its shape. */
+  layerFollows?: (layerId: string) => string | null;
+  /** `<Scene renderExtras={...} />` — draws the connector pass behind layers. */
+  renderExtras?: (ctx: SceneToolContext) => ReactNode;
 }
 
 export interface LayoutAdapterOptions {

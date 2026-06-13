@@ -6,11 +6,13 @@
  * applies, surfaced as diagnostics instead of degraded slides:
  *
  * - unknown template names (with a did-you-mean suggestion)
+ * - unknown drawing shapes, and shape annotations used outside a `{[drawing]}`
  * - `{[…]}` text that was not recognized as an annotation (bad quoting,
  *   non-heading placement, unknown inline icon)
- * - malformed heading-attribute values (`x=abc`, bad `startTime`)
- * - `connectsTo` targets that don't resolve, duplicate block ids,
- *   unparseable data fences (reported by `markdownToDoc`)
+ * - malformed heading-attribute values (`x=abc`, bad `startTime`) and
+ *   non-numeric drawing-shape geometry
+ * - `connectsTo` / drawing `from`/`to` targets that don't resolve,
+ *   duplicate block ids, unparseable data fences (reported by `markdownToDoc`)
  * - image references missing from the provided asset set (.dbk contents)
  *
  * The CLI exposes this as `squisq validate <input>`; agents can also call
@@ -28,7 +30,14 @@ import { parseMarkdown } from '../markdown/parse.js';
 import { getChildren, extractPlainText } from '../markdown/utils.js';
 import { coerceAnnotationValues } from '../markdown/annotationCoercion.js';
 import { markdownToDoc, flattenBlocks } from './markdownToDoc.js';
-import { templateRegistry, TEMPLATE_ALIASES, resolveTemplateName } from './templates/index.js';
+import {
+  templateRegistry,
+  TEMPLATE_ALIASES,
+  resolveTemplateName,
+  isShapeName,
+  normalizeShapeKind,
+  SHAPE_NAMES,
+} from './templates/index.js';
 
 // ============================================
 // Options & result
@@ -87,10 +96,16 @@ export function validateMarkdownDoc(
 
   const knownTemplates = collectKnownTemplates(doc, options);
 
-  for (const block of blocks) {
-    checkTemplate(block, knownTemplates, diagnostics);
-    checkAttributeCoercion(block, diagnostics);
-  }
+  // Parent-aware walk: a `{[shape]}` annotation is only meaningful on the
+  // direct child of a `{[drawing]}` block, so the template check needs each
+  // block's parent. Drawing connectors are validated against their siblings.
+  const visit = (block: Block, parent: Block | undefined): void => {
+    checkTemplate(block, parent, knownTemplates, diagnostics);
+    checkAttributeCoercion(block, parent, diagnostics);
+    if (isDrawingBlock(block)) checkDrawingConnectors(block, diagnostics);
+    for (const child of block.children ?? []) visit(child, block);
+  };
+  for (const block of doc.blocks) visit(block, undefined);
 
   checkUnrecognizedAnnotations(markdownDoc, diagnostics);
 
@@ -124,9 +139,48 @@ function collectKnownTemplates(doc: Doc, options?: ValidateOptions): Set<string>
   ]);
 }
 
-function checkTemplate(block: Block, known: Set<string>, diagnostics: DocDiagnostic[]): void {
+/** True when `block` is a `{[drawing]}` container (after alias resolution). */
+function isDrawingBlock(block: Block): boolean {
+  return resolveTemplateName(block.template ?? '') === 'drawing';
+}
+
+function checkTemplate(
+  block: Block,
+  parent: Block | undefined,
+  known: Set<string>,
+  diagnostics: DocDiagnostic[],
+): void {
   const requested = block.sourceHeading?.templateAnnotation?.template;
   if (!requested) return;
+
+  // Inside a drawing, the annotation names a shape primitive, not a template.
+  if (parent && isDrawingBlock(parent)) {
+    if (isShapeName(requested)) return;
+    const suggestion = nearestName(requested, new Set(SHAPE_NAMES));
+    diagnostics.push({
+      severity: 'warning',
+      code: 'unknown-shape',
+      message:
+        `Unknown shape "${requested}" in drawing — the child will be skipped` +
+        (suggestion ? `. Did you mean "${suggestion}"?` : ''),
+      blockId: block.id,
+      ...lineOf(block),
+    });
+    return;
+  }
+
+  // A shape annotation outside a drawing has no parent to interpret it.
+  if (isShapeName(requested)) {
+    diagnostics.push({
+      severity: 'warning',
+      code: 'shape-outside-drawing',
+      message: `Shape "${requested}" is only recognized on a child heading of a {[drawing]} block`,
+      blockId: block.id,
+      ...lineOf(block),
+    });
+    return;
+  }
+
   if (known.has(requested) || known.has(resolveTemplateName(requested))) return;
 
   const suggestion = nearestName(requested, known);
@@ -141,19 +195,77 @@ function checkTemplate(block: Block, known: Set<string>, diagnostics: DocDiagnos
   });
 }
 
+/** Numeric geometry keys carried in a shape's `{[…]}` params. */
+const NUMERIC_SHAPE_KEYS = ['x', 'y', 'width', 'height', 'w', 'h', 'strokeWidth', 'borderRadius'];
+
 /** Re-run heading-attribute coercion to surface its warnings with context. */
-function checkAttributeCoercion(block: Block, diagnostics: DocDiagnostic[]): void {
+function checkAttributeCoercion(
+  block: Block,
+  parent: Block | undefined,
+  diagnostics: DocDiagnostic[],
+): void {
+  // Pandoc `{#id key=value}` params (x/y/connectsTo/startTime/duration).
   const params = block.sourceHeading?.attributes?.params;
-  if (!params) return;
-  const { warnings } = coerceAnnotationValues(params);
-  for (const warning of warnings) {
-    diagnostics.push({
-      severity: 'warning',
-      code: 'invalid-attribute',
-      message: `Block "${block.id}": ${warning}`,
-      blockId: block.id,
-      ...lineOf(block),
-    });
+  if (params) {
+    const { warnings } = coerceAnnotationValues(params);
+    for (const warning of warnings) {
+      diagnostics.push({
+        severity: 'warning',
+        code: 'invalid-attribute',
+        message: `Block "${block.id}": ${warning}`,
+        blockId: block.id,
+        ...lineOf(block),
+      });
+    }
+  }
+
+  // A drawing shape's geometry lives in its `{[shape …]}` params
+  // (templateOverrides), not the Pandoc block — validate those numerics too.
+  if (parent && isDrawingBlock(parent) && isShapeName(block.template)) {
+    const overrides = block.templateOverrides ?? {};
+    for (const key of NUMERIC_SHAPE_KEYS) {
+      const raw = overrides[key];
+      if (raw == null) continue;
+      const value = raw.replace(/,\s*$/, '').trim();
+      if (value !== '' && !Number.isFinite(Number(value))) {
+        diagnostics.push({
+          severity: 'warning',
+          code: 'invalid-attribute',
+          message: `Drawing shape "${block.id}": "${key}" is not a number (${JSON.stringify(raw)})`,
+          blockId: block.id,
+          ...lineOf(block),
+        });
+      }
+    }
+  }
+}
+
+/**
+ * A drawing's `line`/`arrow` connectors reference sibling shapes by id via
+ * `from`/`to`; flag any that don't resolve (mirrors the `connectsTo`
+ * unresolved-connection check, but for the `{[…]}` param form).
+ */
+function checkDrawingConnectors(block: Block, diagnostics: DocDiagnostic[]): void {
+  const children = block.children ?? [];
+  const ids = new Set(children.map((c) => c.id));
+  for (const child of children) {
+    const kind = normalizeShapeKind(child.sourceHeading?.templateAnnotation?.template);
+    if (kind !== 'line' && kind !== 'arrow') continue;
+    const overrides = child.templateOverrides ?? {};
+    for (const key of ['from', 'to'] as const) {
+      const raw = overrides[key];
+      if (raw == null) continue;
+      const ref = raw.replace(/,\s*$/, '').trim();
+      if (ref && !ids.has(ref)) {
+        diagnostics.push({
+          severity: 'warning',
+          code: 'unresolved-connection',
+          message: `Drawing connector "${child.id}" references unknown ${key} "${ref}"`,
+          blockId: child.id,
+          ...lineOf(child),
+        });
+      }
+    }
   }
 }
 

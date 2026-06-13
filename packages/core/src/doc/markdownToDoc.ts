@@ -40,7 +40,7 @@ import type {
 } from '../markdown/types.js';
 import { extractPlainText } from '../markdown/utils.js';
 import { estimateReadingTime } from '../timing/readingTime.js';
-import { resolveTemplateName } from './templates/index.js';
+import { resolveTemplateName, isContainerTemplate } from './templates/index.js';
 import { isDataFence, parseDataFence, findFirstTable, extractTableData } from './structuredData.js';
 
 // ============================================
@@ -441,6 +441,29 @@ export function flattenBlocks(blocks: Block[]): Block[] {
     result.push(block);
     if (block.children) {
       result.push(...flattenBlocks(block.children));
+    }
+  }
+  return result;
+}
+
+/**
+ * Flatten the block tree into the list of *independently renderable*
+ * blocks — like {@link flattenBlocks}, but it does NOT descend into the
+ * children of a container template (`diagram`, `drawing`; see
+ * `isContainerTemplate`). Those children are consumed by the parent's
+ * render (as nodes / shapes), so they must not also surface as their own
+ * slides or sections.
+ *
+ * Use this anywhere a doc is flattened for rendering (slideshow, video,
+ * static pages). Use {@link flattenBlocks} when you genuinely need every
+ * block regardless of role — validation, timing, duplicate-id checks.
+ */
+export function flattenRenderableBlocks(blocks: Block[]): Block[] {
+  const result: Block[] = [];
+  for (const block of blocks) {
+    result.push(block);
+    if (block.children && !isContainerTemplate(block.template)) {
+      result.push(...flattenRenderableBlocks(block.children));
     }
   }
   return result;

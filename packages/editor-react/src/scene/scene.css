@@ -247,6 +247,12 @@
   fill: var(--squisq-text, #1e293b);
 }
 
+.squisq-scene-edge-marker-open {
+  fill: none;
+  stroke: var(--squisq-text, #1e293b);
+  stroke-width: 1.5;
+}
+
 .squisq-scene-edge-label {
   fill: var(--squisq-text-muted, #64748b);
   font-size: 14px;
@@ -254,6 +260,159 @@
     -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans', Helvetica, Arial, sans-serif;
   pointer-events: none;
   user-select: none;
+}
+
+/* ── Drawing shape palette + properties panel ──── */
+
+.squisq-scene-stage {
+  position: relative;
+}
+
+.squisq-scene-shapes {
+  position: absolute;
+  bottom: 8px;
+  left: 8px;
+  z-index: 11;
+}
+
+.squisq-scene-shapes-btn {
+  font-size: 12px;
+  padding: 4px 10px;
+  border-radius: 6px;
+  background: var(--squisq-surface, #1e293b);
+  color: var(--squisq-text, #e2e8f0);
+  border: 1px solid var(--squisq-border, #334155);
+  cursor: pointer;
+}
+
+.squisq-shape-palette {
+  position: absolute;
+  bottom: 34px;
+  left: 0;
+  width: 320px;
+  max-height: 420px;
+  display: flex;
+  flex-direction: column;
+  background: var(--squisq-surface, #0f172a);
+  color: var(--squisq-text, #e2e8f0);
+  border: 1px solid var(--squisq-border, #334155);
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+  z-index: 10;
+  padding: 8px;
+}
+
+.squisq-shape-palette-search {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 6px 8px;
+  margin-bottom: 6px;
+  background: var(--squisq-bg, #1e293b);
+  color: inherit;
+  border: 1px solid var(--squisq-border, #334155);
+  border-radius: 6px;
+}
+
+.squisq-shape-palette-scroll {
+  overflow-y: auto;
+}
+
+.squisq-shape-palette-heading {
+  font-size: 11px;
+  font-weight: 600;
+  opacity: 0.7;
+  margin: 8px 2px 4px;
+  text-transform: uppercase;
+}
+
+.squisq-shape-palette-grid {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 2px;
+}
+
+.squisq-shape-palette-item {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px;
+  background: none;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.squisq-shape-palette-item:hover {
+  background: var(--squisq-bg, #1e293b);
+  border-color: var(--squisq-border, #334155);
+}
+
+.squisq-shape-thumb {
+  fill: none;
+  stroke: var(--squisq-text, #e2e8f0);
+  stroke-width: 1.5;
+}
+
+.squisq-shape-thumb-line {
+  stroke: var(--squisq-text, #e2e8f0);
+  stroke-width: 1.5;
+}
+
+.squisq-shape-thumb-text {
+  fill: var(--squisq-text, #e2e8f0);
+  font-size: 22px;
+  font-weight: 700;
+}
+
+.squisq-shape-properties {
+  position: absolute;
+  top: 40px;
+  right: 8px;
+  z-index: 6;
+  width: 184px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 10px;
+  background: var(--squisq-surface, #0f172a);
+  color: var(--squisq-text, #e2e8f0);
+  border: 1px solid var(--squisq-border, #334155);
+  border-radius: 8px;
+  font-size: 12px;
+}
+
+.squisq-shape-properties-title {
+  font-weight: 600;
+  margin-bottom: 2px;
+}
+
+.squisq-shape-properties-field {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+}
+
+.squisq-shape-properties-label {
+  opacity: 0.8;
+}
+
+.squisq-shape-properties-field select,
+.squisq-shape-properties-field input {
+  background: var(--squisq-bg, #1e293b);
+  color: inherit;
+  border: 1px solid var(--squisq-border, #334155);
+  border-radius: 4px;
+  padding: 2px 4px;
+}
+
+.squisq-shape-properties-clear {
+  font-size: 11px;
+  background: none;
+  border: 1px solid var(--squisq-border, #334155);
+  color: inherit;
+  border-radius: 4px;
+  cursor: pointer;
 }
 
 /* ── Inline widget host (mirrors squisq-diagram-inline) ──── */

@@ -1,16 +1,22 @@
 /**
  * PathLayer Component
  *
- * Renders an SVG `<path>` for arbitrary curves, connectors, and arrows.
- * Used by the diagram template for edges between nodes; usable by any
- * template that needs a non-rect/circle/line shape.
+ * Renders an SVG `<path>` for arbitrary curves, connectors, arrows, and the
+ * drawing template's computed shapes. Used by the diagram template for edges
+ * between nodes; usable by any template that needs a non-rect/circle/line
+ * shape.
  *
  * The path's `d` attribute uses absolute SVG coordinates relative to the
  * block viewport (independent of the layer's `position` box, which is
  * present only so animations and clipping match the other layer types).
+ *
+ * End markers are configured via `startMarker`/`endMarker` (with the legacy
+ * `arrow` flag mapping to a filled triangle). Marker geometry comes from
+ * `markerPath` in core so the SSR renderer and the editor agree.
  */
 
-import type { PathLayer as PathLayerType } from '@bendyline/squisq/schemas';
+import type { PathLayer as PathLayerType, MarkerStyle } from '@bendyline/squisq/schemas';
+import { markerPath } from '@bendyline/squisq/doc';
 import { getAnimationStyle } from '../utils/animationUtils';
 
 interface PathLayerProps {
@@ -21,6 +27,17 @@ interface PathLayerProps {
   blockTime: number;
 }
 
+/** Resolve the effective marker for an endpoint (explicit field, else `arrow`). */
+function effectiveMarker(
+  explicit: MarkerStyle | undefined,
+  arrow: PathLayerType['content']['arrow'],
+  end: 'start' | 'end',
+): MarkerStyle {
+  if (explicit) return explicit;
+  const wants = arrow === 'both' || arrow === end;
+  return wants ? 'arrow' : 'none';
+}
+
 export function PathLayer({ layer, blockTime }: PathLayerProps) {
   const { content, animation, id } = layer;
   const stroke = content.stroke ?? '#1e293b';
@@ -28,12 +45,10 @@ export function PathLayer({ layer, blockTime }: PathLayerProps) {
   const fill = content.fill ?? 'none';
   const animStyle = getAnimationStyle(animation, blockTime);
 
-  // Arrow marker IDs are derived from the layer id + color so multiple
-  // paths with different stroke colors don't share a single marker.
-  const arrowEndId = `arrow-end-${id}`;
-  const arrowStartId = `arrow-start-${id}`;
-  const wantStart = content.arrow === 'start' || content.arrow === 'both';
-  const wantEnd = content.arrow === 'end' || content.arrow === 'both';
+  const startId = `marker-start-${id}`;
+  const endId = `marker-end-${id}`;
+  const start = markerPath(effectiveMarker(content.startMarker, content.arrow, 'start'), 'start');
+  const end = markerPath(effectiveMarker(content.endMarker, content.arrow, 'end'), 'end');
 
   return (
     <g
@@ -42,33 +57,9 @@ export function PathLayer({ layer, blockTime }: PathLayerProps) {
       data-layer-id={id}
     >
       <defs>
-        {wantEnd && (
-          <marker
-            id={arrowEndId}
-            viewBox="0 0 10 10"
-            refX="9"
-            refY="5"
-            markerWidth="8"
-            markerHeight="8"
-            orient="auto-start-reverse"
-            markerUnits="userSpaceOnUse"
-          >
-            <path d="M 0 0 L 10 5 L 0 10 z" fill={stroke} />
-          </marker>
-        )}
-        {wantStart && (
-          <marker
-            id={arrowStartId}
-            viewBox="0 0 10 10"
-            refX="1"
-            refY="5"
-            markerWidth="8"
-            markerHeight="8"
-            orient="auto-start-reverse"
-            markerUnits="userSpaceOnUse"
-          >
-            <path d="M 10 0 L 0 5 L 10 10 z" fill={stroke} />
-          </marker>
+        {end && <MarkerDef id={endId} dir="end" d={end.d} filled={end.filled} stroke={stroke} />}
+        {start && (
+          <MarkerDef id={startId} dir="start" d={start.d} filled={start.filled} stroke={stroke} />
         )}
       </defs>
       <path
@@ -77,10 +68,44 @@ export function PathLayer({ layer, blockTime }: PathLayerProps) {
         strokeWidth={strokeWidth}
         fill={fill}
         strokeDasharray={content.dasharray}
-        markerStart={wantStart ? `url(#${arrowStartId})` : undefined}
-        markerEnd={wantEnd ? `url(#${arrowEndId})` : undefined}
+        markerStart={start ? `url(#${startId})` : undefined}
+        markerEnd={end ? `url(#${endId})` : undefined}
       />
     </g>
+  );
+}
+
+function MarkerDef({
+  id,
+  dir,
+  d,
+  filled,
+  stroke,
+}: {
+  id: string;
+  dir: 'start' | 'end';
+  d: string;
+  filled: boolean;
+  stroke: string;
+}) {
+  return (
+    <marker
+      id={id}
+      viewBox="0 0 10 10"
+      refX={dir === 'end' ? 9 : 1}
+      refY={5}
+      markerWidth={8}
+      markerHeight={8}
+      orient="auto-start-reverse"
+      markerUnits="userSpaceOnUse"
+    >
+      <path
+        d={d}
+        fill={filled ? stroke : 'none'}
+        stroke={filled ? 'none' : stroke}
+        strokeWidth={filled ? undefined : 1.5}
+      />
+    </marker>
   );
 }
 

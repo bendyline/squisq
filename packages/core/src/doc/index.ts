@@ -1,7 +1,14 @@
 export * from './templates/index.js';
 export * from './utils/animationUtils.js';
 export * from './utils/themeUtils.js';
-export { markdownToDoc, flattenBlocks, countBlocks, getBlockDepth } from './markdownToDoc.js';
+export * from './utils/shapeGeometry.js';
+export {
+  markdownToDoc,
+  flattenBlocks,
+  flattenRenderableBlocks,
+  countBlocks,
+  getBlockDepth,
+} from './markdownToDoc.js';
 export type { MarkdownToDocOptions } from './markdownToDoc.js';
 export { docToMarkdown } from './docToMarkdown.js';
 export {

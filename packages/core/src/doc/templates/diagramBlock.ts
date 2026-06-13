@@ -14,10 +14,11 @@
  * absolute pixel ranges.
  */
 
-import type { Layer, ShapeLayer, TextLayer, PathLayer } from '../../schemas/Doc.js';
+import type { Layer, ShapeLayer, TextLayer, PathLayer, MarkerStyle } from '../../schemas/Doc.js';
 import type { DiagramBlockInput, TemplateContext } from '../../schemas/BlockTemplates.js';
 import { scaledFontSize } from '../../schemas/BlockTemplates.js';
 import { resolveColorScheme, getThemeFont } from '../utils/themeUtils.js';
+import { clipEndpoints, connectorPath, lineStyleDasharray } from '../utils/shapeGeometry.js';
 import { computeDiagramLayout, type DiagramNodePosition } from './diagramLayout.js';
 
 const NODE_WIDTH = 180;
@@ -107,21 +108,28 @@ export function diagramBlock(input: DiagramBlockInput, context: TemplateContext)
     positions.set(node.id, { cx: t.x + t.w / 2, cy: t.y + t.h / 2, rx: t.w / 2, ry: t.h / 2 });
   }
 
+  // Edge styling (applies to all edges; per-edge styling lives on the nodes).
+  const startMarker: MarkerStyle = input.startStyle ?? 'none';
+  const endMarker: MarkerStyle = input.endStyle ?? 'arrow';
+  const edgeDash = lineStyleDasharray(input.lineStyle);
+
   // Edges first so they sit behind nodes.
   for (const edge of layout.edges) {
     const a = positions.get(edge.source);
     const b = positions.get(edge.target);
     if (!a || !b) continue;
-    const path = buildEdgePath(a, b, input.edgeStyle ?? 'curved');
+    const { start, end } = clipEndpoints(a, b);
     const pathLayer: PathLayer = {
       type: 'path',
       id: `edge-${edge.id}`,
       content: {
-        d: path,
+        d: connectorPath(input.edgeStyle ?? 'curved', start, end),
         stroke: colors.text ?? theme.colors.primary,
         strokeWidth: 2,
         fill: 'none',
-        arrow: 'end',
+        ...(edgeDash ? { dasharray: edgeDash } : {}),
+        ...(startMarker !== 'none' ? { startMarker } : {}),
+        ...(endMarker !== 'none' ? { endMarker } : {}),
       },
       position: { x: 0, y: 0, width: '100%', height: '100%' },
     };
@@ -189,52 +197,3 @@ export function diagramBlock(input: DiagramBlockInput, context: TemplateContext)
   return layers;
 }
 
-interface NodeBox {
-  cx: number;
-  cy: number;
-  rx: number;
-  ry: number;
-}
-
-/**
- * Build an SVG `d` string between two node centers. The endpoints are
- * clipped to the nodes' bounding edges so the arrowhead doesn't disappear
- * inside the target card.
- */
-function buildEdgePath(
-  a: NodeBox,
-  b: NodeBox,
-  style: 'curved' | 'straight' | 'orthogonal',
-): string {
-  const start = edgePoint(a, b);
-  const end = edgePoint(b, a);
-  if (style === 'straight') {
-    return `M ${start.x} ${start.y} L ${end.x} ${end.y}`;
-  }
-  if (style === 'orthogonal') {
-    const midX = (start.x + end.x) / 2;
-    return `M ${start.x} ${start.y} L ${midX} ${start.y} L ${midX} ${end.y} L ${end.x} ${end.y}`;
-  }
-  // curved (default): cubic bezier with horizontal-ish control points.
-  const dx = Math.abs(end.x - start.x);
-  const cp = Math.max(40, dx / 2);
-  return `M ${start.x} ${start.y} C ${start.x + cp} ${start.y}, ${end.x - cp} ${end.y}, ${end.x} ${end.y}`;
-}
-
-/**
- * Find the intersection of the line between two node centers with the
- * source node's bounding rectangle, so the edge endpoint sits on the
- * card's edge rather than inside it.
- */
-function edgePoint(from: NodeBox, to: NodeBox): { x: number; y: number } {
-  const dx = to.cx - from.cx;
-  const dy = to.cy - from.cy;
-  if (dx === 0 && dy === 0) return { x: from.cx, y: from.cy };
-  const adx = Math.abs(dx);
-  const ady = Math.abs(dy);
-  // Scale factor that lands on the bounding rectangle.
-  const sx = adx > 0 ? from.rx / adx : Infinity;
-  const sy = ady > 0 ? from.ry / ady : Infinity;
-  const s = Math.min(sx, sy);
-  return { x: from.cx + dx * s, y: from.cy + dy * s };
-}

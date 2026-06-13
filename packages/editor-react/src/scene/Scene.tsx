@@ -47,6 +47,8 @@ export interface SceneProps {
   onActiveToolIdChange?: (id: string) => void;
   /** Called when a tool issues a command. */
   onCommand: (cmd: SceneCommand) => void;
+  /** Called when the layer selection changes (lets a host drive a properties panel). */
+  onSelectionChange?: (selectedIds: ReadonlySet<string>) => void;
   /**
    * Optional renderer for non-Layer content (e.g. diagram edges, in-flight
    * connection preview). Receives the same SceneToolContext the tools do.
@@ -86,6 +88,7 @@ export function Scene(props: SceneProps) {
     activeToolId: controlledActiveId,
     onActiveToolIdChange,
     onCommand,
+    onSelectionChange,
     renderExtras,
     renderLayer,
     layerFollows,
@@ -116,6 +119,11 @@ export function Scene(props: SceneProps) {
   const panZoom = useScenePanZoom();
   const selection = useSceneSelection();
   const { hit } = useSceneHitTest();
+
+  // Surface selection upward so a host can drive a properties panel.
+  useEffect(() => {
+    onSelectionChange?.(selection.selection);
+  }, [selection.selection, onSelectionChange]);
 
   // ── Hit-test cache ──────────────────────────────────────────
   const hitItems: HitTestable[] = useMemo(() => {

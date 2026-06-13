@@ -6,6 +6,10 @@
  * Resolves the heading's position dynamically each render via
  * `headingKey`, so the widget survives attribute-only doc changes
  * without going stale when content above shifts.
+ *
+ * In `drawing` mode it also hosts the shape palette (gallery of shape
+ * kinds) and the properties panel for the current selection — surfaced
+ * from the drawing adapter + the Scene's `onSelectionChange`.
  */
 
 import { useEffect, useState } from 'react';
@@ -14,6 +18,9 @@ import { Scene } from './Scene';
 import { useLayoutAdapter } from './adapters/LayoutAdapter';
 import { useDrawingAdapter } from './adapters/DrawingAdapter';
 import { findSceneHeadingPos } from './SceneBlockExtension';
+import { shapeIdFromLayerId } from './layers/shapeLayers';
+import { ShapePalette } from './ShapePalette';
+import { ShapeProperties } from './ShapeProperties';
 import { DiagramMaximizedOverlay } from '../diagram/DiagramMaximizedOverlay';
 
 export type SceneBlockMode = 'layout' | 'drawing';
@@ -54,30 +61,83 @@ export function SceneBlockWidget({
 
   const layout = useLayoutAdapter(editor, parentPos);
   const drawing = useDrawingAdapter(editor, parentPos);
-  const adapter = mode === 'drawing' ? drawing : layout;
+  const isDrawing = mode === 'drawing';
+  const adapter = isDrawing ? drawing : layout;
+
   const [maximized, setMaximized] = useState(false);
+  const [activeToolId, setActiveToolId] = useState<string>('select');
+  const [paletteOpen, setPaletteOpen] = useState(false);
+  const [selectedLayerId, setSelectedLayerId] = useState<string | null>(null);
+
+  const selectedShapeId = isDrawing && selectedLayerId ? shapeIdFromLayerId(selectedLayerId) : null;
 
   const canvas = (
     <Scene
       viewport={SCENE_VIEWPORT}
       layers={adapter.layers}
+      edges={adapter.edges}
       tools={adapter.tools}
       onCommand={adapter.dispatch}
+      onSelectionChange={
+        isDrawing ? (ids) => setSelectedLayerId(ids.values().next().value ?? null) : undefined
+      }
+      activeToolId={isDrawing ? activeToolId : undefined}
+      onActiveToolIdChange={isDrawing ? setActiveToolId : undefined}
+      layerFollows={adapter.layerFollows}
+      renderExtras={adapter.renderExtras}
       showMaximize
       maximized={maximized}
       onToggleMaximize={() => setMaximized((m) => !m)}
     />
   );
 
+  const drawingUI = isDrawing ? (
+    <>
+      <div className="squisq-scene-shapes">
+        <button
+          type="button"
+          className="squisq-scene-shapes-btn"
+          aria-expanded={paletteOpen}
+          onClick={() => setPaletteOpen((o) => !o)}
+        >
+          Shapes ▾
+        </button>
+        {paletteOpen && (
+          <ShapePalette
+            onPick={(kind) => {
+              drawing.setPendingKind(kind);
+              setActiveToolId('draw');
+              setPaletteOpen(false);
+            }}
+            onClose={() => setPaletteOpen(false)}
+          />
+        )}
+      </div>
+      <ShapeProperties
+        selectedEdge={drawing.selectedEdge}
+        selectedShapeId={selectedShapeId}
+        onConnectorStyle={drawing.setConnectorStyle}
+        onShapeParam={drawing.setShapeParam}
+      />
+    </>
+  ) : null;
+
+  const body = (
+    <div className="squisq-scene-stage">
+      {drawingUI}
+      {canvas}
+    </div>
+  );
+
   if (maximized) {
     return (
       <div className="squisq-scene-inline-placeholder">
         <DiagramMaximizedOverlay host={host ?? null} onClose={() => setMaximized(false)}>
-          {canvas}
+          {body}
         </DiagramMaximizedOverlay>
       </div>
     );
   }
 
-  return <div className="squisq-scene-inline">{canvas}</div>;
+  return <div className="squisq-scene-inline">{body}</div>;
 }

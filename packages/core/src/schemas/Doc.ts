@@ -359,10 +359,17 @@ export interface ShapeLayer extends BaseLayer {
 }
 
 /**
+ * End-of-line marker style for a path/connector endpoint.
+ * `arrow` is a filled triangle (the classic arrowhead); `open` is a stroked
+ * V; `diamond`/`circle`/`square` are filled glyphs; `none` draws nothing.
+ */
+export type MarkerStyle = 'none' | 'arrow' | 'open' | 'diamond' | 'circle' | 'square';
+
+/**
  * Path layer - renders an SVG `<path>` for arbitrary curves, connectors,
  * arrows, or filled regions. Used by the diagram template for edges
- * between nodes, but available to any template that needs a non-rect/
- * circle/line shape.
+ * between nodes, the drawing template for non-rect/circle/line shapes, and
+ * available to any template that needs a custom geometry.
  *
  * The `position` field carries the layer's bounding box (so animations
  * and clipping work the same as for other layers), but the actual
@@ -382,8 +389,15 @@ export interface PathLayer extends BaseLayer {
     fill?: string;
     /** Optional stroke dash pattern (SVG `stroke-dasharray` syntax). */
     dasharray?: string;
-    /** Where to render an arrowhead, if any. Default: 'none'. */
+    /**
+     * Legacy arrowhead flag. Prefer `startMarker`/`endMarker`. When those are
+     * unset, `'end'`/`'start'`/`'both'` render a filled-triangle arrowhead.
+     */
     arrow?: 'none' | 'end' | 'start' | 'both';
+    /** Marker at the path start (overrides `arrow`). Default: derived from `arrow`. */
+    startMarker?: MarkerStyle;
+    /** Marker at the path end (overrides `arrow`). Default: derived from `arrow`. */
+    endMarker?: MarkerStyle;
   };
 }
 

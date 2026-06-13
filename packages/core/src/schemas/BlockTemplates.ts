@@ -20,7 +20,7 @@
  * - imageWithCaption: Image with text overlay
  */
 
-import type { Layer, Block, Transition, MapTileStyle, MapMarker } from './Doc.js';
+import type { Layer, Block, Transition, MapTileStyle, MapMarker, MarkerStyle } from './Doc.js';
 import type { ViewportConfig, ViewportOrientation } from './Viewport.js';
 import type { LayoutHints } from './LayoutStrategy.js';
 import type { Theme } from './Theme.js';
@@ -487,22 +487,59 @@ export interface DiagramBlockInput extends BaseTemplateBlock {
   colorScheme?: ColorScheme;
   /** Node shape style (default: 'rounded'). */
   nodeShape?: 'rounded' | 'rect' | 'pill';
-  /** Edge style (default: 'curved'). */
+  /** Edge routing (default: 'curved'). */
   edgeStyle?: 'curved' | 'straight' | 'orthogonal';
+  /** Marker at each edge's start (default: 'none'). */
+  startStyle?: MarkerStyle;
+  /** Marker at each edge's end (default: 'arrow'). */
+  endStyle?: MarkerStyle;
+  /** Edge line style (default: 'solid'). */
+  lineStyle?: 'solid' | 'dashed' | 'dotted';
 }
 
 /**
- * Free-form 2D canvas block. Backs both `layout` and `drawing` modes —
- * authors arrange a Layer array directly via the Scene engine in the
- * editor. The layers are persisted alongside the heading in the Pandoc
- * `data-block-attrs` payload (base64-JSON, key `layers`), so the
- * template body itself takes no per-block input.
+ * Free-form 2D canvas block (`layout`). Authors arrange a Layer array
+ * directly via the Scene engine in the editor; the layers persist
+ * alongside the heading in the Pandoc `data-block-attrs` payload
+ * (base64-JSON, key `layers`), so the template body takes no per-block
+ * input. Backed by the `rawLayersBlock` template.
  *
- * `layout` and `drawing` share the same SSR template (`rawLayersBlock`);
- * the discriminator only changes which toolset the editor exposes.
+ * (`drawing` used to share this input/template but is now a
+ * children-driven container — see {@link DrawingBlockInput}.)
  */
 export interface RawLayersInput extends BaseTemplateBlock {
-  template: 'layout' | 'drawing';
+  template: 'layout';
+}
+
+/**
+ * Drawing block — renders child headings as free-form shapes on a canvas.
+ *
+ * Like `diagram`, the drawing template reads its content from the parent
+ * block's `children` (passed via `context.children`). Each child heading
+ * is a shape: its `{[shape …]}` annotation names the primitive
+ * (`rectangle`/`rect`, `circle`, `line`, `arrow`, `path`, `text`) and
+ * carries geometry/style as params; its `{#id}` makes it referenceable;
+ * its heading text is the shape label and its body text an optional
+ * sublabel. Connectors (`line`/`arrow` with `from`/`to`) join shapes by id.
+ *
+ * Coordinates are author-defined units; the template fits the bounding box
+ * of all shapes to the viewport (same scaling as `diagram`), so authors
+ * don't have to think in absolute pixels.
+ *
+ * Legacy drawings authored visually persist their `Layer[]` as a base64
+ * `layers="…"` Pandoc param instead of children; the template decodes and
+ * returns those directly when no children are present (see `drawingBlock`).
+ */
+export interface DrawingBlockInput extends BaseTemplateBlock {
+  template: 'drawing';
+  /** Optional title displayed above the canvas. */
+  title?: string;
+  /** Color scheme for shapes that don't pin their own fill/stroke. */
+  colorScheme?: ColorScheme;
+  /** Default fill for shapes that don't specify one (default: 'none'). */
+  fill?: string;
+  /** Default stroke for shapes that don't specify one (default: theme text). */
+  stroke?: string;
 }
 
 /**
@@ -548,6 +585,7 @@ export type TemplateBlock =
   | VideoPullQuoteInput
   | DataTableInput
   | DiagramBlockInput
+  | DrawingBlockInput
   | RawLayersInput;
 
 /**
