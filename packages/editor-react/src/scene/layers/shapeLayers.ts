@@ -142,7 +142,12 @@ export function shapeToLayers(shape: DrawingShape): Layer[] {
       position: { x: x + width / 2, y: y + height / 2, width, anchor: 'center' },
       content: {
         text: shape.label,
-        style: { fontSize: labelFontSize(height), fontWeight: 'bold', color: stroke, textAlign: 'center' },
+        style: {
+          fontSize: labelFontSize(height),
+          fontWeight: 'bold',
+          color: stroke,
+          textAlign: 'center',
+        },
       },
     } satisfies TextLayer);
   }

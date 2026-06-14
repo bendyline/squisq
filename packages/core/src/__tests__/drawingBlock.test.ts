@@ -38,8 +38,18 @@ describe('drawingBlock template', () => {
     const layers = drawingBlock(
       makeInput(),
       ctxWith([
-        shape('ceo', 'rectangle', { x: '20', y: '20', width: '120', height: '80' }, { title: 'CEO' }),
-        shape('dev', 'circle', { x: '20', y: '200', width: '100', height: '100' }, { title: 'Dev' }),
+        shape(
+          'ceo',
+          'rectangle',
+          { x: '20', y: '20', width: '120', height: '80' },
+          { title: 'CEO' },
+        ),
+        shape(
+          'dev',
+          'circle',
+          { x: '20', y: '200', width: '100', height: '100' },
+          { title: 'Dev' },
+        ),
       ]),
     );
     const shapes = layers.filter((l): l is ShapeLayer => l.type === 'shape');
@@ -62,9 +72,7 @@ describe('drawingBlock template', () => {
     expect(paths[0].content.endMarker).toBe('arrow');
     expect(paths[0].content.d.startsWith('M ')).toBe(true);
     // Connector emitted before the shapes (so it sits behind them).
-    expect(layers.indexOf(paths[0])).toBeLessThan(
-      layers.findIndex((l) => l.type === 'shape'),
-    );
+    expect(layers.indexOf(paths[0])).toBeLessThan(layers.findIndex((l) => l.type === 'shape'));
   });
 
   it('emits a title layer when input.title is set', () => {
@@ -93,8 +101,18 @@ describe('drawingBlock integration with getLayers', () => {
       template: 'drawing',
       title: 'Org chart',
       children: [
-        shape('ceo', 'rectangle', { x: '20', y: '20', width: '120', height: '80' }, { title: 'CEO' }),
-        shape('dev', 'rectangle', { x: '20', y: '220', width: '120', height: '80' }, { title: 'Dev' }),
+        shape(
+          'ceo',
+          'rectangle',
+          { x: '20', y: '20', width: '120', height: '80' },
+          { title: 'CEO' },
+        ),
+        shape(
+          'dev',
+          'rectangle',
+          { x: '20', y: '220', width: '120', height: '80' },
+          { title: 'Dev' },
+        ),
         shape('l', 'arrow', { from: 'ceo', to: 'dev' }, { title: 'manages' }),
       ],
     };

@@ -64,7 +64,9 @@ describe('shapeLayers read transform', () => {
   });
 
   it('does not emit a label layer for a text shape', () => {
-    const layout = computeDrawingLayout([shapeBlock('t', 'text', { x: '0', y: '0', text: 'Note' })]);
+    const layout = computeDrawingLayout([
+      shapeBlock('t', 'text', { x: '0', y: '0', text: 'Note' }),
+    ]);
     expect(shapesToSceneLayers(layout.shapes).map((l) => l.id)).toEqual(['dshape-t']);
   });
 
@@ -94,6 +96,11 @@ describe('shapeLayers read transform', () => {
     ]);
     expect(shapesToSceneLayers(layout.shapes).map((l) => l.id)).toEqual(['dshape-a', 'dshape-b']);
     expect(layout.connectors).toHaveLength(1);
-    expect(layout.connectors[0]).toMatchObject({ id: 'e', from: 'a', to: 'b', label: 'reports to' });
+    expect(layout.connectors[0]).toMatchObject({
+      id: 'e',
+      from: 'a',
+      to: 'b',
+      label: 'reports to',
+    });
   });
 });

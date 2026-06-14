@@ -125,9 +125,14 @@ describe('computeDrawingLayout', () => {
 
   it('also derives arrow connectors from a shape connectsTo', () => {
     const layout = computeDrawingLayout([
-      shape('a', 'rect', { x: '0', y: '0', width: '50', height: '50' }, {
-        connectsTo: [{ target: 'b' }],
-      }),
+      shape(
+        'a',
+        'rect',
+        { x: '0', y: '0', width: '50', height: '50' },
+        {
+          connectsTo: [{ target: 'b' }],
+        },
+      ),
       shape('b', 'rect', { x: '200', y: '0', width: '50', height: '50' }),
     ]);
     expect(layout.connectors).toHaveLength(1);
@@ -144,9 +149,7 @@ describe('computeDrawingLayout', () => {
   });
 
   it('reads text content for text shapes (text= param, else title)', () => {
-    const fromParam = computeDrawingLayout([
-      shape('t', 'text', { x: '0', y: '0', text: 'Hello' }),
-    ]);
+    const fromParam = computeDrawingLayout([shape('t', 'text', { x: '0', y: '0', text: 'Hello' })]);
     expect(fromParam.shapes[0].text).toBe('Hello');
     const fromTitle = computeDrawingLayout([
       shape('t', 'text', { x: '0', y: '0' }, { title: 'Heading text' }),

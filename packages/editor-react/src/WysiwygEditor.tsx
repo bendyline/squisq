@@ -45,24 +45,13 @@ import {
 import { setFrontmatterValues } from '@bendyline/squisq/markdown';
 import { profileBlockContents, recommendTemplatesForBlock } from '@bendyline/squisq/recommend';
 import { findBlockSliceByHeadingIndex } from './blockSlice';
+import { stripFrontmatter } from './frontmatter';
 import { useEditorContext } from './EditorContext';
 import { buildMentionExtension } from './MentionExtension';
 import { markdownToTiptap, tiptapToMarkdown } from './tiptapBridge';
 import { looksLikeMarkdown } from './detectMarkdown';
 import { SQUISQ_MEDIA_MIME, parseSquisqMediaPayload } from './mediaDragMime';
 import { usePreviewSettingsOptional } from './PreviewControls';
-
-// ── Frontmatter helpers ────────────────────────────────────────────
-
-/** Regex matching a YAML frontmatter block at the start of the document. */
-const FRONTMATTER_RE = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?/;
-
-/** Strip YAML frontmatter from markdown, returning both parts. */
-function stripFrontmatter(md: string): { body: string; frontmatter: string } {
-  const m = md.match(FRONTMATTER_RE);
-  if (!m) return { body: md, frontmatter: '' };
-  return { body: md.slice(m[0].length), frontmatter: m[0] };
-}
 
 /**
  * Rotating placeholder prompts shown when the editor is empty. One is
@@ -117,6 +106,8 @@ export function WysiwygEditor({
   const {
     markdownSource,
     setMarkdownSource,
+    editorSource,
+    setEditorSource,
     setTiptapEditor,
     mediaProvider,
     mentionProvider,
@@ -176,15 +167,18 @@ export function WysiwygEditor({
   // from EMPTY_PROMPTS. Re-renders don't reshuffle.
   const resolvedPlaceholder = useMemo(() => placeholder ?? pickEmptyPrompt(), [placeholder]);
   const isExternalUpdate = useRef(false);
-  const lastSourceRef = useRef(markdownSource);
+  const lastSourceRef = useRef(editorSource);
   // Keep a ref so the editor's drop/paste handlers (created once) always
   // see the current MediaProvider without needing to recreate the editor.
   const mediaProviderRef = useRef(mediaProvider);
   useEffect(() => {
     mediaProviderRef.current = mediaProvider;
   }, [mediaProvider]);
-  // Preserve frontmatter across edits — hidden from WYSIWYG but prepended on save
-  const frontmatterRef = useRef(stripFrontmatter(markdownSource).frontmatter);
+  // Preserve frontmatter across edits — hidden from WYSIWYG but prepended on
+  // save. In block mode the bound slice carries no frontmatter, so this is an
+  // empty string and the splice in `setEditorSource` keeps the doc's real
+  // frontmatter intact.
+  const frontmatterRef = useRef(stripFrontmatter(editorSource).frontmatter);
   // Stash the latest submit callback so the editor's handleKeyDown (bound
   // once at creation) always sees the current value.
   const submitOnEnterRef = useRef(submitOnEnter);
@@ -223,14 +217,14 @@ export function WysiwygEditor({
       buildMentionExtension(() => mentionProviderRef.current),
       InlineIcon,
     ],
-    content: markdownToTiptap(stripFrontmatter(markdownSource).body),
+    content: markdownToTiptap(stripFrontmatter(editorSource).body),
     onUpdate: ({ editor: ed }) => {
       if (isExternalUpdate.current) return;
       const html = ed.getHTML();
       const bodyMd = tiptapToMarkdown(html);
       const newSource = frontmatterRef.current + bodyMd;
       lastSourceRef.current = newSource;
-      setMarkdownSource(newSource);
+      setEditorSource(newSource);
     },
     editorProps: {
       attributes: {
@@ -438,20 +432,22 @@ export function WysiwygEditor({
     return () => root.removeEventListener('mousedown', onClick);
   }, [editor]);
 
-  // Sync external changes into Tiptap
+  // Sync external changes into Tiptap. `editorSource` also changes when the
+  // user navigates to a different block in block-at-a-time mode, so this same
+  // path reloads the card with the newly selected block's slice.
   useEffect(() => {
     if (!editor) return;
     // Only update if the source changed externally (not from our own onUpdate)
-    if (markdownSource !== lastSourceRef.current) {
+    if (editorSource !== lastSourceRef.current) {
       isExternalUpdate.current = true;
-      const { body, frontmatter } = stripFrontmatter(markdownSource);
+      const { body, frontmatter } = stripFrontmatter(editorSource);
       frontmatterRef.current = frontmatter;
       const content = markdownToTiptap(body);
       editor.commands.setContent(content);
-      lastSourceRef.current = markdownSource;
+      lastSourceRef.current = editorSource;
       isExternalUpdate.current = false;
     }
-  }, [markdownSource, editor]);
+  }, [editorSource, editor]);
 
   // Match the WYSIWYG editor's appearance to the active Squisq theme
   // when one is set in frontmatter or picked in the preview dropdown.
@@ -505,7 +501,10 @@ export function WysiwygEditor({
             anchorRect={badgeMenu.rect}
             value={badgeMenu.template}
             recommended={(() => {
-              const slice = findBlockSliceByHeadingIndex(markdownSource, badgeMenu.headingIndex);
+              // `headingIndex` is counted within the mounted Tiptap doc, which
+              // reflects `editorSource` — the active block's slice in block
+              // mode, the full document otherwise.
+              const slice = findBlockSliceByHeadingIndex(editorSource, badgeMenu.headingIndex);
               if (!slice) return undefined;
               const profile = profileBlockContents(slice);
               return recommendTemplatesForBlock(profile, TEMPLATE_NAMES).recommended;

@@ -19,7 +19,11 @@ import {
   serializePandocAttributes,
   quoteAttrValue,
 } from '@bendyline/squisq/markdown';
-import { listDiagramChildren, getDiagramSectionEnd, renameNode } from '../../diagram/diagramCommands';
+import {
+  listDiagramChildren,
+  getDiagramSectionEnd,
+  renameNode,
+} from '../../diagram/diagramCommands';
 
 /** Renaming a shape = replacing its heading text (same op as a diagram node). */
 export { renameNode as renameShape };
@@ -47,7 +51,9 @@ export function listDrawingChildren(editor: Editor, parentPos: number): DrawingC
       node: c.node,
       id: c.id,
       kind: a.dataTemplate ?? null,
-      params: a.dataTemplateParams ? (parsePandocAttrTokens(a.dataTemplateParams).params ?? {}) : {},
+      params: a.dataTemplateParams
+        ? (parsePandocAttrTokens(a.dataTemplateParams).params ?? {})
+        : {},
       text: headingText(c.node),
     };
   });
@@ -95,7 +101,13 @@ export function addShape(
 }
 
 /** Update a shape's `x`/`y` from a drag. */
-export function moveShape(editor: Editor, parentPos: number, id: string, x: number, y: number): boolean {
+export function moveShape(
+  editor: Editor,
+  parentPos: number,
+  id: string,
+  x: number,
+  y: number,
+): boolean {
   return updateChildParams(editor, parentPos, id, (p) => {
     p.x = String(Math.round(x));
     p.y = String(Math.round(y));
@@ -175,7 +187,12 @@ export function retargetConnector(
 }
 
 /** Delete the connector heading joining `from`→`to`, if present. */
-export function removeConnector(editor: Editor, parentPos: number, from: string, to: string): boolean {
+export function removeConnector(
+  editor: Editor,
+  parentPos: number,
+  from: string,
+  to: string,
+): boolean {
   const target = listDrawingChildren(editor, parentPos).find(
     (c) => isConnector(c) && c.params.from === from && c.params.to === to,
   );

@@ -11,7 +11,7 @@
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { useEditorContext, type ThemeInheritance } from './EditorContext';
+import { useEditorContext, type ThemeInheritance, type LayoutMode } from './EditorContext';
 
 export function ViewMenuPanel() {
   const {
@@ -25,6 +25,8 @@ export function ViewMenuPanel() {
     setBlockTagsVisible,
     themeInheritance,
     setThemeInheritance,
+    layoutMode,
+    setLayoutMode,
   } = useEditorContext();
   const [open, setOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -86,6 +88,17 @@ export function ViewMenuPanel() {
       </button>
       {open && (
         <div className="squisq-view-menu-popover" role="menu" aria-label="View options">
+          <MenuRadioGroup
+            label="View"
+            name="layout-mode"
+            value={layoutMode}
+            onChange={(v) => setLayoutMode(v as LayoutMode)}
+            options={[
+              { value: 'document', label: 'Document' },
+              { value: 'block', label: 'Block-at-a-time' },
+            ]}
+          />
+          <div className="squisq-view-menu-separator" role="separator" />
           <MenuToggle label="Show outline" checked={outlineVisible} onChange={toggleOutline} />
           <MenuToggle
             label="Show block previews"

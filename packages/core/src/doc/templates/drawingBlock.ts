@@ -18,11 +18,7 @@ import type { Layer, ShapeLayer, TextLayer, PathLayer } from '../../schemas/Doc.
 import type { DrawingBlockInput, TemplateContext } from '../../schemas/BlockTemplates.js';
 import { scaledFontSize } from '../../schemas/BlockTemplates.js';
 import { resolveColorScheme, getThemeFont } from '../utils/themeUtils.js';
-import {
-  computeDrawingLayout,
-  type DrawingShape,
-  type DrawingConnector,
-} from './drawingLayout.js';
+import { computeDrawingLayout, type DrawingShape, type DrawingConnector } from './drawingLayout.js';
 import { shapePath, connectorPath, clipEndpoints } from '../utils/shapeGeometry.js';
 
 const PADDING = 80;
@@ -90,7 +86,12 @@ export function drawingBlock(input: DrawingBlockInput, context: TemplateContext)
     const y = ty(s.y);
     const w = s.width * scale;
     const h = s.height * scale;
-    boxes.set(s.id, { cx: x + w / 2, cy: y + h / 2, rx: Math.max(1, w / 2), ry: Math.max(1, h / 2) });
+    boxes.set(s.id, {
+      cx: x + w / 2,
+      cy: y + h / 2,
+      rx: Math.max(1, w / 2),
+      ry: Math.max(1, h / 2),
+    });
   }
 
   // Connectors first so they sit behind shapes.
@@ -148,7 +149,18 @@ function shapeLayers(
   const fill = s.fill ?? defaultFill;
 
   if (s.kind === 'text') {
-    out.push(textLayer(`shape-${s.id}`, s.text ?? s.label ?? '', x + w / 2, y + h / 2, w, context, s.stroke ?? context.theme.colors.text, true));
+    out.push(
+      textLayer(
+        `shape-${s.id}`,
+        s.text ?? s.label ?? '',
+        x + w / 2,
+        y + h / 2,
+        w,
+        context,
+        s.stroke ?? context.theme.colors.text,
+        true,
+      ),
+    );
     return out;
   }
 
@@ -200,11 +212,31 @@ function shapeLayers(
 
   // Label (heading text) centered on the shape; sublabel (body) below it.
   if (s.label) {
-    out.push(textLayer(`shape-label-${s.id}`, s.label, x + w / 2, y + h / 2, w, context, s.stroke ?? context.theme.colors.text, true));
+    out.push(
+      textLayer(
+        `shape-label-${s.id}`,
+        s.label,
+        x + w / 2,
+        y + h / 2,
+        w,
+        context,
+        s.stroke ?? context.theme.colors.text,
+        true,
+      ),
+    );
   }
   if (s.sublabel) {
     out.push(
-      textLayer(`shape-sublabel-${s.id}`, s.sublabel, x + w / 2, y + h + 14, w, context, context.theme.colors.textMuted, false),
+      textLayer(
+        `shape-sublabel-${s.id}`,
+        s.sublabel,
+        x + w / 2,
+        y + h + 14,
+        w,
+        context,
+        context.theme.colors.textMuted,
+        false,
+      ),
     );
   }
   return out;

@@ -254,30 +254,30 @@ interface TemplateContext {
 
 ##### Built-in Template Block Inputs
 
-| Template           | Key Input Fields                                                                                                                                         |
-| ------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `title`            | `title`, `subtitle?`, `backgroundColor?`                                                                                                                 |
-| `sectionHeader`    | `title`, `colorScheme?`, `imageSrc?`, `imageAlt?`, `ambientMotion?`                                                                                      |
-| `statHighlight`    | `stat`, `description`, `detail?`, `colorScheme?`, `accentImage?`                                                                                         |
-| `quote`            | `quote`, `attribution?`, `accentImage?`                                                                                                                  |
-| `factCard`         | `fact`, `explanation`, `source?`, `accentImage?`                                                                                                         |
-| `twoColumn`        | `left`, `right`, `header?`, `leftColor?`, `rightColor?`                                                                                                  |
-| `dateEvent`        | `date`, `description`, `footer?`, `mood?`, `accentImage?`                                                                                                |
-| `imageWithCaption` | `imageSrc`, `imageAlt`, `caption?`, `captionPosition?`, `ambientMotion?`, `isTitle?`, `subtitle?`                                                        |
-| `leftFeature`      | `imageSrc`, `imageAlt?`, `imageWidth?`, `imageHeight?`, `title?`, `body?`                                                                                |
-| `rightFeature`     | `imageSrc`, `imageAlt?`, `imageWidth?`, `imageHeight?`, `title?`, `body?`                                                                                |
-| `map`              | `center`, `zoom`, `mapStyle?`, `title?`, `caption?`, `markers?`, `ambientMotion?`, `staticSrc?`                                                          |
-| `fullBleedQuote`   | `text`, `colorScheme?`                                                                                                                                   |
-| `list`             | `items[]`, `title?`, `colorScheme?`, `accentImage?`                                                                                                      |
-| `photoGrid`        | `images[]`, `caption?`, `ambientMotion?`                                                                                                                 |
-| `definitionCard`   | `term`, `definition`, `origin?`, `colorScheme?`, `accentImage?`                                                                                          |
-| `comparisonBar`    | `leftLabel`, `leftValue`, `rightLabel`, `rightValue`, `unit?`, `colorScheme?`                                                                            |
-| `pullQuote`        | `text`, `attribution?`, `backgroundImage`, `ambientMotion?`                                                                                              |
-| `videoWithCaption` | `videoSrc`, `posterSrc?`, `videoAlt`, `clipStart`, `clipEnd`, `caption?`, `captionPosition?`                                                             |
-| `videoPullQuote`   | `text`, `attribution?`, `backgroundVideo` (with `src`, `clipStart`, `clipEnd`)                                                                           |
-| `dataTable`        | `title?`, `headers[]`, `rows[][]`, `align?`, `colorScheme?`                                                                                              |
-| `diagram`          | `title?`, `colorScheme?`, `nodeShape?`, `edgeStyle?`; reads child headings from `context.children`                                                       |
-| `layout`           | Passthrough for editor-authored `Layer[]` (positioned via the Scene engine). Layers persist in `data-block-attrs` as a base64-JSON `layers="..."` param. |
+| Template           | Key Input Fields                                                                                                                                                                                                                                                                                                                    |
+| ------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `title`            | `title`, `subtitle?`, `backgroundColor?`                                                                                                                                                                                                                                                                                            |
+| `sectionHeader`    | `title`, `colorScheme?`, `imageSrc?`, `imageAlt?`, `ambientMotion?`                                                                                                                                                                                                                                                                 |
+| `statHighlight`    | `stat`, `description`, `detail?`, `colorScheme?`, `accentImage?`                                                                                                                                                                                                                                                                    |
+| `quote`            | `quote`, `attribution?`, `accentImage?`                                                                                                                                                                                                                                                                                             |
+| `factCard`         | `fact`, `explanation`, `source?`, `accentImage?`                                                                                                                                                                                                                                                                                    |
+| `twoColumn`        | `left`, `right`, `header?`, `leftColor?`, `rightColor?`                                                                                                                                                                                                                                                                             |
+| `dateEvent`        | `date`, `description`, `footer?`, `mood?`, `accentImage?`                                                                                                                                                                                                                                                                           |
+| `imageWithCaption` | `imageSrc`, `imageAlt`, `caption?`, `captionPosition?`, `ambientMotion?`, `isTitle?`, `subtitle?`                                                                                                                                                                                                                                   |
+| `leftFeature`      | `imageSrc`, `imageAlt?`, `imageWidth?`, `imageHeight?`, `title?`, `body?`                                                                                                                                                                                                                                                           |
+| `rightFeature`     | `imageSrc`, `imageAlt?`, `imageWidth?`, `imageHeight?`, `title?`, `body?`                                                                                                                                                                                                                                                           |
+| `map`              | `center`, `zoom`, `mapStyle?`, `title?`, `caption?`, `markers?`, `ambientMotion?`, `staticSrc?`                                                                                                                                                                                                                                     |
+| `fullBleedQuote`   | `text`, `colorScheme?`                                                                                                                                                                                                                                                                                                              |
+| `list`             | `items[]`, `title?`, `colorScheme?`, `accentImage?`                                                                                                                                                                                                                                                                                 |
+| `photoGrid`        | `images[]`, `caption?`, `ambientMotion?`                                                                                                                                                                                                                                                                                            |
+| `definitionCard`   | `term`, `definition`, `origin?`, `colorScheme?`, `accentImage?`                                                                                                                                                                                                                                                                     |
+| `comparisonBar`    | `leftLabel`, `leftValue`, `rightLabel`, `rightValue`, `unit?`, `colorScheme?`                                                                                                                                                                                                                                                       |
+| `pullQuote`        | `text`, `attribution?`, `backgroundImage`, `ambientMotion?`                                                                                                                                                                                                                                                                         |
+| `videoWithCaption` | `videoSrc`, `posterSrc?`, `videoAlt`, `clipStart`, `clipEnd`, `caption?`, `captionPosition?`                                                                                                                                                                                                                                        |
+| `videoPullQuote`   | `text`, `attribution?`, `backgroundVideo` (with `src`, `clipStart`, `clipEnd`)                                                                                                                                                                                                                                                      |
+| `dataTable`        | `title?`, `headers[]`, `rows[][]`, `align?`, `colorScheme?`                                                                                                                                                                                                                                                                         |
+| `diagram`          | `title?`, `colorScheme?`, `nodeShape?`, `edgeStyle?`; reads child headings from `context.children`                                                                                                                                                                                                                                  |
+| `layout`           | Passthrough for editor-authored `Layer[]` (positioned via the Scene engine). Layers persist in `data-block-attrs` as a base64-JSON `layers="..."` param.                                                                                                                                                                            |
 | `drawing`          | `title?`, `colorScheme?`, `fill?`, `stroke?`; reads child headings as shapes from `context.children` (each `{[rectangle\|circle\|line\|arrow\|path\|text]}` child is one shape; `from`/`to` join shapes). Legacy editor-authored drawings still decode from a base64 `layers="..."` param. See `docs/SquigglySquare.md` → Drawings. |
 
 > All template inputs share the base block fields `id`, `duration`, `audioSegment`, optional `transition`, layer visibility flags, and optional source timing fields. Visual inputs such as images, colors, and captions are defined by each template.
@@ -1186,6 +1186,46 @@ interface PreviewPanelProps {
   basePath?: string;
   className?: string;
 }
+```
+
+#### Block-at-a-time view
+
+An alternate layout that edits one block at a time on a card, like a slide
+sorter. The View menu toggles between `'document'` (whole document) and
+`'block'` layouts; in block mode the Raw and WYSIWYG editors are scoped to a
+single heading-defined block (its child sub-headings are separate cards) and
+edits splice back into the parent document. Drive it via the View menu, the
+`layoutMode` prop / `ViewPreferences.layoutMode`, or the reusable primitives
+below (which take any `(source, setSource)` pair and have no `EditorShell`
+dependency):
+
+```ts
+// Standalone hook: a scoped editing channel + navigation over a markdown string.
+function useBlockNavigator(
+  source: string,
+  setSource: (s: string) => void,
+  opts?: { enabled?: boolean }, // enabled=false → identity passthrough
+): BlockNavigator;
+
+interface BlockNavigator {
+  editorSource: string; // active block's slice (block mode) or full source
+  setEditorSource: (s: string) => void; // splices the edit back into the source
+  blockCount: number;
+  activeBlockKey: number;
+  activeBlockStartLine: number | null;
+  goToBlock: (key: number) => void;
+  goToBlockByLine: (line: number) => void;
+  prevBlock: () => void;
+  nextBlock: () => void;
+  addBlock: () => void;
+}
+
+// Presentational card chrome (Prev / Next / Add + "Block N of M").
+function BlockCardView(props: BlockCardViewProps): JSX.Element;
+
+// Pure source-slicing utilities.
+function getBlockSlices(fullSource: string): BlockSlice[];
+function spliceBlock(fullSource: string, range: BlockRange, newText: string): string;
 ```
 
 #### `Toolbar`

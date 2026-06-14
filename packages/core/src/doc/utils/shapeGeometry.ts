@@ -303,7 +303,13 @@ export function shapePath(kind: string, x: number, y: number, w: number, h: numb
 }
 
 /** Block arrow (body rectangle + triangular head) pointing in `dir`. */
-function blockArrow(x: number, y: number, w: number, h: number, dir: 'right' | 'left' | 'up' | 'down'): string {
+function blockArrow(
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+  dir: 'right' | 'left' | 'up' | 'down',
+): string {
   const right = x + w;
   const bottom = y + h;
   const cx = x + w / 2;
@@ -376,8 +382,7 @@ export function markerPath(
 ): { d: string; filled: boolean } | null {
   const mirror = dir === 'start';
   const mx = (n: number) => (mirror ? 10 - n : n);
-  const tri = (closed: boolean) =>
-    `M ${mx(0)} 0 L ${mx(10)} 5 L ${mx(0)} 10${closed ? ' z' : ''}`;
+  const tri = (closed: boolean) => `M ${mx(0)} 0 L ${mx(10)} 5 L ${mx(0)} 10${closed ? ' z' : ''}`;
   switch (style) {
     case 'arrow':
       return { d: tri(true), filled: true };

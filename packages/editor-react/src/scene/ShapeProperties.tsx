@@ -83,7 +83,11 @@ export function ShapeProperties({
             aria-label="Fill color"
             onChange={(ev) => onShapeParam(id, 'fill', ev.target.value)}
           />
-          <button type="button" className="squisq-shape-properties-clear" onClick={() => onShapeParam(id, 'fill', 'none')}>
+          <button
+            type="button"
+            className="squisq-shape-properties-clear"
+            onClick={() => onShapeParam(id, 'fill', 'none')}
+          >
             none
           </button>
         </Field>

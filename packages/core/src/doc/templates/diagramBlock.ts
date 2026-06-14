@@ -196,4 +196,3 @@ export function diagramBlock(input: DiagramBlockInput, context: TemplateContext)
 
   return layers;
 }
-

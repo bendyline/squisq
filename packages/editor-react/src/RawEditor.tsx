@@ -87,7 +87,7 @@ export function RawEditor({
   submitOnEnter,
   readOnly = false,
 }: RawEditorProps) {
-  const { markdownSource, setMarkdownSource, setMonacoEditor, language, mentionProvider } =
+  const { editorSource, setEditorSource, setMonacoEditor, language, mentionProvider } =
     useEditorContext();
   const { monaco: monacoNs, ready: monacoReady } = useMonacoLoader();
   const editorRef = useRef<monaco.editor.IStandaloneCodeEditor | null>(null);
@@ -419,24 +419,26 @@ export function RawEditor({
     (value) => {
       if (isExternalUpdate.current) return;
       if (value !== undefined) {
-        setMarkdownSource(value);
+        setEditorSource(value);
       }
     },
-    [setMarkdownSource],
+    [setEditorSource],
   );
 
-  // When external changes happen (e.g. from WYSIWYG), update Monaco
+  // When external changes happen (e.g. from WYSIWYG, or navigating to another
+  // block in block-at-a-time mode), update Monaco. In block mode `editorSource`
+  // is the active block's slice, so this swaps Monaco's content on navigation.
   useEffect(() => {
     const editor = editorRef.current;
     if (editor) {
       const currentValue = editor.getValue();
-      if (currentValue !== markdownSource) {
+      if (currentValue !== editorSource) {
         isExternalUpdate.current = true;
-        editor.setValue(markdownSource);
+        editor.setValue(editorSource);
         isExternalUpdate.current = false;
       }
     }
-  }, [markdownSource]);
+  }, [editorSource]);
 
   // ── Inline FontAwesome glyph decorations ────────────
   // Walk the markdown source on every change, find each resolvable
@@ -487,7 +489,7 @@ export function RawEditor({
     } else {
       iconGlyphDecorations.current.set(decorations);
     }
-  }, [markdownSource, language, monacoNs]);
+  }, [editorSource, language, monacoNs]);
 
   const effectiveTheme = SQUISQ_THEMES[theme] ?? theme;
 
@@ -521,7 +523,7 @@ export function RawEditor({
     <div className={className} style={{ width: '100%', height: '100%' }} data-testid="raw-editor">
       <Editor
         defaultLanguage={language}
-        value={markdownSource}
+        value={editorSource}
         theme={effectiveTheme}
         beforeMount={handleBeforeMount}
         onMount={handleMount}

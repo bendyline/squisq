@@ -37,7 +37,25 @@ export type {
   DocumentLinkProvider,
   ViewPreferences,
   ThemeInheritance,
+  LayoutMode,
 } from './EditorContext.js';
+
+// Block-at-a-time primitives — reusable outside EditorShell. `useBlockNavigator`
+// drives a one-block-at-a-time editing channel from any `(source, setSource)`
+// pair; `BlockCardView` is the matching card chrome; the `blockRange` utilities
+// are pure source-slicing helpers.
+export { useBlockNavigator } from './useBlockNavigator.js';
+export type { BlockNavigator, UseBlockNavigatorOptions } from './useBlockNavigator.js';
+export { BlockCardView } from './BlockCardView.js';
+export type { BlockCardViewProps } from './BlockCardView.js';
+export {
+  getBlockSlices,
+  spliceBlock,
+  lineToOffset,
+  offsetToLine,
+  sliceIndexAtOffset,
+} from './blockRange.js';
+export type { BlockRange, BlockSlice } from './blockRange.js';
 
 // File-kind detection — useful for hosts that want to pre-decide chrome
 // around the editor based on whether a file is markdown or code.

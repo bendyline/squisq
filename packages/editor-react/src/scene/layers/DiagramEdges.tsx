@@ -68,7 +68,9 @@ export function DiagramEdges({
               >
                 <path
                   d={mp.d}
-                  className={mp.filled ? 'squisq-scene-edge-arrow' : 'squisq-scene-edge-marker-open'}
+                  className={
+                    mp.filled ? 'squisq-scene-edge-arrow' : 'squisq-scene-edge-marker-open'
+                  }
                 />
               </marker>
             );
@@ -95,7 +97,9 @@ export function DiagramEdges({
               d={d}
               className="squisq-scene-edge-path"
               strokeDasharray={edge.dasharray}
-              markerStart={startMarker !== 'none' ? `url(#${markerId(startMarker, 'start')})` : undefined}
+              markerStart={
+                startMarker !== 'none' ? `url(#${markerId(startMarker, 'start')})` : undefined
+              }
               markerEnd={endMarker !== 'none' ? `url(#${markerId(endMarker, 'end')})` : undefined}
             />
             {edge.label ? (

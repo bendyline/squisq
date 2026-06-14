@@ -1,11 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { parseMarkdown } from '../markdown/parse.js';
 import { stringifyMarkdown } from '../markdown/stringify.js';
-import {
-  markdownToDoc,
-  flattenBlocks,
-  flattenRenderableBlocks,
-} from '../doc/markdownToDoc.js';
+import { markdownToDoc, flattenBlocks, flattenRenderableBlocks } from '../doc/markdownToDoc.js';
 import { validateMarkdownSource } from '../doc/validate.js';
 import { isContainerTemplate } from '../doc/templates/index.js';
 

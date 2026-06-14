@@ -38,9 +38,10 @@ describe('drawing shape vocabulary', () => {
   });
 
   it('renders a polygon kind as a PathLayer in the block', () => {
-    const layers = drawingBlock({ template: 'drawing', id: 'd', duration: 0, audioSegment: 0 }, ctx([
-      shape('s', 'star', { x: '10', y: '10', width: '100', height: '100' }),
-    ]));
+    const layers = drawingBlock(
+      { template: 'drawing', id: 'd', duration: 0, audioSegment: 0 },
+      ctx([shape('s', 'star', { x: '10', y: '10', width: '100', height: '100' })]),
+    );
     const star = layers.find((l) => l.id === 'shape-s');
     expect(star?.type).toBe('path');
   });
@@ -56,13 +57,27 @@ describe('drawing connector semantics', () => {
   }
 
   it('parses end/start markers, line style, and routing', () => {
-    expect(conn({ endStyle: 'diamond', startStyle: 'circle', lineStyle: 'dashed', routing: 'orthogonal' })).toMatchObject(
-      { endMarker: 'diamond', startMarker: 'circle', dasharray: '8 6', routing: 'orthogonal' },
-    );
+    expect(
+      conn({
+        endStyle: 'diamond',
+        startStyle: 'circle',
+        lineStyle: 'dashed',
+        routing: 'orthogonal',
+      }),
+    ).toMatchObject({
+      endMarker: 'diamond',
+      startMarker: 'circle',
+      dasharray: '8 6',
+      routing: 'orthogonal',
+    });
   });
 
   it('defaults arrow → end arrow, line → no marker, straight routing', () => {
-    expect(conn({})).toMatchObject({ endMarker: 'arrow', startMarker: 'none', routing: 'straight' });
+    expect(conn({})).toMatchObject({
+      endMarker: 'arrow',
+      startMarker: 'none',
+      routing: 'straight',
+    });
     const line = computeDrawingLayout([
       shape('a', 'rect', { x: '0', y: '0', width: '50', height: '50' }),
       shape('b', 'rect', { x: '0', y: '200', width: '50', height: '50' }),
@@ -72,11 +87,14 @@ describe('drawing connector semantics', () => {
   });
 
   it('emits the marker + dash on the rendered connector PathLayer', () => {
-    const layers = drawingBlock({ template: 'drawing', id: 'd', duration: 0, audioSegment: 0 }, ctx([
-      shape('a', 'rect', { x: '0', y: '0', width: '50', height: '50' }),
-      shape('b', 'rect', { x: '0', y: '200', width: '50', height: '50' }),
-      shape('c', 'arrow', { from: 'a', to: 'b', endStyle: 'diamond', lineStyle: 'dashed' }),
-    ]));
+    const layers = drawingBlock(
+      { template: 'drawing', id: 'd', duration: 0, audioSegment: 0 },
+      ctx([
+        shape('a', 'rect', { x: '0', y: '0', width: '50', height: '50' }),
+        shape('b', 'rect', { x: '0', y: '200', width: '50', height: '50' }),
+        shape('c', 'arrow', { from: 'a', to: 'b', endStyle: 'diamond', lineStyle: 'dashed' }),
+      ]),
+    );
     const connector = layers.find((l) => l.id === 'connector-c') as PathLayer | undefined;
     expect(connector?.content.endMarker).toBe('diamond');
     expect(connector?.content.dasharray).toBe('8 6');

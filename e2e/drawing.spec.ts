@@ -39,7 +39,11 @@ async function shapeCenter(page: Page, id: string) {
   return { x: r.x + r.w / 2, y: r.y + r.h / 2 };
 }
 
-async function dragPointer(page: Page, from: { x: number; y: number }, to: { x: number; y: number }) {
+async function dragPointer(
+  page: Page,
+  from: { x: number; y: number },
+  to: { x: number; y: number },
+) {
   await page.mouse.move(from.x, from.y);
   await page.mouse.down();
   await page.mouse.move((from.x + to.x) / 2, (from.y + to.y) / 2, { steps: 4 });

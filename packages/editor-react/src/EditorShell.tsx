@@ -23,6 +23,7 @@ import { RawEditor } from './RawEditor';
 import { WysiwygEditor } from './WysiwygEditor';
 import { InlinePreviewGutter } from './InlinePreviewGutter';
 import { OutlinePanel } from './OutlinePanel';
+import { BlockCardView } from './BlockCardView';
 import { PreviewPanel } from './PreviewPanel';
 import { ImageViewer } from './ImageViewer';
 import { ImageEditor } from './ImageEditor';
@@ -575,6 +576,12 @@ function EditorShellInner({
     inlinePreviewVisible,
     statusBarVisible,
     outlineVisible,
+    layoutMode,
+    blockCount,
+    activeBlockKey,
+    prevBlock,
+    nextBlock,
+    addBlock,
     imageEditTarget,
     closeImageEdit,
     bumpMediaRevision,
@@ -583,6 +590,9 @@ function EditorShellInner({
   const isCodeMode = editorMode === 'code';
   const isImageMode = editorMode === 'image';
   const isMarkdownMode = editorMode === 'markdown';
+  // Block-at-a-time card view applies only to the editing surfaces (raw /
+  // wysiwyg) in markdown mode — never to preview, code, or image.
+  const isBlockMode = isMarkdownMode && layoutMode === 'block' && !isPreview;
   const [showFiles, setShowFiles] = useState(false);
   const [mediaRefreshKey, setMediaRefreshKey] = useState(0);
   // Persistent fallback container for image-edit sidecars when the host
@@ -833,14 +843,33 @@ function EditorShellInner({
                 {isMarkdownMode && outlineVisible && (
                   <OutlinePanel key="outline" width={outlineWidth} />
                 )}
-                <div key="raw-editor" className="squisq-raw-editor-container">
-                  <RawEditor
-                    theme={theme === 'dark' ? 'vs-dark' : 'vs'}
-                    submitOnEnter={submitOnEnter}
-                    readOnly={readOnly}
-                  />
-                </div>
-                {isMarkdownMode && inlinePreviewVisible && (
+                {isBlockMode ? (
+                  <BlockCardView
+                    key="raw-card"
+                    blockCount={blockCount}
+                    activeBlockKey={activeBlockKey}
+                    onPrev={prevBlock}
+                    onNext={nextBlock}
+                    onAdd={addBlock}
+                  >
+                    <div key="raw-editor" className="squisq-raw-editor-container">
+                      <RawEditor
+                        theme={theme === 'dark' ? 'vs-dark' : 'vs'}
+                        submitOnEnter={submitOnEnter}
+                        readOnly={readOnly}
+                      />
+                    </div>
+                  </BlockCardView>
+                ) : (
+                  <div key="raw-editor" className="squisq-raw-editor-container">
+                    <RawEditor
+                      theme={theme === 'dark' ? 'vs-dark' : 'vs'}
+                      submitOnEnter={submitOnEnter}
+                      readOnly={readOnly}
+                    />
+                  </div>
+                )}
+                {isMarkdownMode && !isBlockMode && inlinePreviewVisible && (
                   <InlinePreviewGutter
                     key="inline"
                     width={inlinePreviewWidth}
@@ -858,13 +887,31 @@ function EditorShellInner({
             {isMarkdownMode && activeView === 'wysiwyg' && (
               <div className="squisq-editor-with-gutter" key="wysiwyg-shell">
                 {outlineVisible && <OutlinePanel key="outline" width={outlineWidth} />}
-                <WysiwygEditor
-                  key="wysiwyg-editor"
-                  submitOnEnter={submitOnEnter}
-                  placeholder={placeholder}
-                  readOnly={readOnly}
-                />
-                {inlinePreviewVisible && (
+                {isBlockMode ? (
+                  <BlockCardView
+                    key="wysiwyg-card"
+                    blockCount={blockCount}
+                    activeBlockKey={activeBlockKey}
+                    onPrev={prevBlock}
+                    onNext={nextBlock}
+                    onAdd={addBlock}
+                  >
+                    <WysiwygEditor
+                      key="wysiwyg-editor"
+                      submitOnEnter={submitOnEnter}
+                      placeholder={placeholder}
+                      readOnly={readOnly}
+                    />
+                  </BlockCardView>
+                ) : (
+                  <WysiwygEditor
+                    key="wysiwyg-editor"
+                    submitOnEnter={submitOnEnter}
+                    placeholder={placeholder}
+                    readOnly={readOnly}
+                  />
+                )}
+                {!isBlockMode && inlinePreviewVisible && (
                   <InlinePreviewGutter
                     key="inline"
                     width={inlinePreviewWidth}

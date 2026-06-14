@@ -103,7 +103,13 @@ export function createDrawingConnectTool(options: DrawingConnectOptions = {}): S
       // Otherwise start a new connection from the shape under the pointer.
       const src = shapeAt(ctx, v);
       if (!src) return;
-      drag = { mode: 'new', sourceId: src, anchor: shapeCenter(ctx, src) ?? v, current: v, hovered: null };
+      drag = {
+        mode: 'new',
+        sourceId: src,
+        anchor: shapeCenter(ctx, src) ?? v,
+        current: v,
+        hovered: null,
+      };
       (e.currentTarget as Element).setPointerCapture?.(e.pointerId);
       e.stopPropagation();
     },

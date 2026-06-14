@@ -173,8 +173,10 @@ export function useDrawingAdapter(
     if (!edge) return null;
     const ep = edgeEndpoints(liveBoxes, edge.source, edge.target);
     if (!ep) return null;
-    if (within(ep.start, point)) return { connectorId: edge.id, end: 'from' as const, fixedShapeId: edge.target };
-    if (within(ep.end, point)) return { connectorId: edge.id, end: 'to' as const, fixedShapeId: edge.source };
+    if (within(ep.start, point))
+      return { connectorId: edge.id, end: 'from' as const, fixedShapeId: edge.target };
+    if (within(ep.end, point))
+      return { connectorId: edge.id, end: 'to' as const, fixedShapeId: edge.source };
     return null;
   }, []);
 
@@ -213,19 +215,16 @@ export function useDrawingAdapter(
     [options.stroke, endpointAt, onRetarget, onDrawShape],
   );
 
-  const renderExtras = useCallback(
-    (_ctx: SceneToolContext): ReactNode => {
-      const { edges: liveEdges, boxes: liveBoxes, selectedEdgeId: sel } = dataRef.current;
-      return createElement(DiagramEdges, {
-        nodes: liveBoxes,
-        edges: liveEdges,
-        variant: 'straight',
-        selectedId: sel,
-        onEdgeClick: (edge: SceneEdge) => setSelectedEdgeId(edge.id),
-      });
-    },
-    [],
-  );
+  const renderExtras = useCallback((_ctx: SceneToolContext): ReactNode => {
+    const { edges: liveEdges, boxes: liveBoxes, selectedEdgeId: sel } = dataRef.current;
+    return createElement(DiagramEdges, {
+      nodes: liveBoxes,
+      edges: liveEdges,
+      variant: 'straight',
+      selectedId: sel,
+      onEdgeClick: (edge: SceneEdge) => setSelectedEdgeId(edge.id),
+    });
+  }, []);
 
   // ── Write: SceneCommand → drawing heading commands ─────────────
   const dispatch = (cmd: SceneCommand) => {
