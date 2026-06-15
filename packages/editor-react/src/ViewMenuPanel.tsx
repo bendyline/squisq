@@ -96,6 +96,7 @@ export function ViewMenuPanel() {
             options={[
               { value: 'document', label: 'Document' },
               { value: 'block', label: 'Block-at-a-time' },
+              { value: 'timeline', label: 'Timeline' },
             ]}
           />
           <div className="squisq-view-menu-separator" role="separator" />

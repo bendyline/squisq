@@ -1228,6 +1228,26 @@ function getBlockSlices(fullSource: string): BlockSlice[];
 function spliceBlock(fullSource: string, range: BlockRange, newText: string): string;
 ```
 
+#### Timeline view
+
+The View menu's **Timeline** layout is block-at-a-time plus a horizontal
+`TimelineTrack` of block + media bars. Click a block to select it; drag a
+block's right edge to change its `duration` (left edge changes the previous
+block's, since `startTime` is derived); drag a media clip to change its
+`startAt`, its right edge for length, and double-click to toggle `spillover`.
+Edits are written back to the markdown source via line-level helpers:
+
+```ts
+function setBlockDurationInSource(source: string, line: number, seconds: number): string | null;
+function setMediaClipInSource(source: string, line: number, patch: MediaClipPatch): string | null;
+```
+
+The underlying media-timing model lives in core: `MediaClip` (`block.media` /
+`doc.documentMedia`), `resolveMediaSchedule(doc)` → `ScheduledClip[]`, and
+`getDocPlaybackDuration(doc)`. Playback consumes them via
+`@bendyline/squisq-react`'s `MediaClipLayer` / `useMediaSchedule`. See the
+SquigglySquare doc for the `{[audio …]}` / `{[video …]}` authoring syntax.
+
 #### `Toolbar`
 
 Formatting toolbar (bold, italic, headings, lists, etc.).

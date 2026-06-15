@@ -24,7 +24,13 @@
 
 import { Fragment, useRef, useState, useEffect, useCallback, useMemo } from 'react';
 import type { Doc, Block, TextLayer, StartBlockConfig, DocBlock } from '@bendyline/squisq/schemas';
-import { isTemplateBlock, getCaptionAtTime } from '@bendyline/squisq/schemas';
+import {
+  isTemplateBlock,
+  getCaptionAtTime,
+  resolveMediaSchedule,
+  getDocPlaybackDuration,
+} from '@bendyline/squisq/schemas';
+import { MediaClipLayer } from './MediaClipLayer';
 import type { SurfaceScheme, Theme } from '@bendyline/squisq/schemas';
 import { applySurface } from '@bendyline/squisq/schemas';
 import { BlockRenderer } from './BlockRenderer';
@@ -255,6 +261,11 @@ export function DocPlayer({
     restart,
   } = audio;
 
+  // Timed media clips (block.media + doc.documentMedia) resolved to absolute
+  // doc-timeline coordinates. Empty for documents without the media model, so
+  // <MediaClipLayer> renders nothing and the legacy audio path is unaffected.
+  const mediaSchedule = useMemo(() => resolveMediaSchedule(script), [script]);
+
   // Refs for frequently-changing values used in the keyboard handler,
   // so the handler callback doesn't need to be recreated every frame.
   const currentTimeRef = useRef(currentTime);
@@ -450,7 +461,13 @@ export function DocPlayer({
                 const video = el as HTMLVideoElement;
                 const clipStart = parseFloat(video.dataset.clipStart || '0');
                 const clipEnd = parseFloat(video.dataset.clipEnd || '0');
-                const targetTime = Math.min(clipStart + Math.max(0, blockElapsed), clipEnd);
+                // Honor the per-clip startAt offset: before it, hold at the
+                // in-point; after, advance by (blockElapsed - startAt).
+                const startAt = parseFloat(video.dataset.startAt || '0');
+                const targetTime = Math.min(
+                  clipStart + Math.max(0, blockElapsed - startAt),
+                  clipEnd,
+                );
 
                 video.pause();
                 video.currentTime = targetTime;
@@ -468,6 +485,30 @@ export function DocPlayer({
               });
             }
 
+            // Seek player-level scheduled videos (document-spanning clips
+            // rendered by MediaClipLayer, outside any single block). Each
+            // carries data-abs-start/data-abs-end/data-source-in.
+            document.querySelectorAll('video[data-clip-id]').forEach((el) => {
+              const video = el as HTMLVideoElement;
+              const absStart = parseFloat(video.dataset.absStart || '0');
+              const absEnd = parseFloat(video.dataset.absEnd || '0');
+              const sourceIn = parseFloat(video.dataset.sourceIn || '0');
+              video.pause();
+              if (time < absStart || time >= absEnd) return;
+              const targetTime = sourceIn + (time - absStart);
+              video.currentTime = targetTime;
+              videoSeekPromises.push(
+                new Promise<void>((r) => {
+                  if (Math.abs(video.currentTime - targetTime) < 0.1) {
+                    r();
+                  } else {
+                    video.addEventListener('seeked', () => r(), { once: true });
+                    setTimeout(r, 200);
+                  }
+                }),
+              );
+            });
+
             // Wait for video seeks + one more frame for the browser to render
             Promise.all(videoSeekPromises).then(() => {
               requestAnimationFrame(() => resolve());
@@ -476,14 +517,12 @@ export function DocPlayer({
         });
       };
       w.getDuration = () => {
-        // When audio is present totalDuration comes from audio segments.
-        // For audio-less docs, compute from block timings instead.
-        if (totalDuration > 0) return totalDuration;
-        if (expandedBlocks.length > 0) {
-          const last = expandedBlocks[expandedBlocks.length - 1];
-          return last.startTime + last.duration;
-        }
-        return 0;
+        // The larger of the audio/block timeline and any media that spills
+        // past the last block (block-clip spillover or document-spanning
+        // media), so frame capture covers the full tail.
+        const mediaDuration = getDocPlaybackDuration(script);
+        if (totalDuration > 0) return Math.max(totalDuration, mediaDuration);
+        return mediaDuration;
       };
       // Expose block metadata for testing -- allows tests to find specific templates
       w.getBlocks = () =>
@@ -842,6 +881,15 @@ export function DocPlayer({
     >
       {/* Hidden audio element */}
       <audio ref={audioRef} preload="auto" muted={muted} />
+
+      {/* Timed media clips (per-block + document-spanning audio/video). */}
+      <MediaClipLayer
+        schedule={mediaSchedule}
+        currentTime={currentTime}
+        isPlaying={isPlaying}
+        basePath={basePath}
+        renderMode={renderMode}
+      />
 
       {/* Block viewport */}
       <div className="doc-player__viewport">

@@ -24,6 +24,7 @@ import { WysiwygEditor } from './WysiwygEditor';
 import { InlinePreviewGutter } from './InlinePreviewGutter';
 import { OutlinePanel } from './OutlinePanel';
 import { BlockCardView } from './BlockCardView';
+import { TimelineTrack } from './TimelineTrack';
 import { PreviewPanel } from './PreviewPanel';
 import { ImageViewer } from './ImageViewer';
 import { ImageEditor } from './ImageEditor';
@@ -590,9 +591,13 @@ function EditorShellInner({
   const isCodeMode = editorMode === 'code';
   const isImageMode = editorMode === 'image';
   const isMarkdownMode = editorMode === 'markdown';
-  // Block-at-a-time card view applies only to the editing surfaces (raw /
-  // wysiwyg) in markdown mode — never to preview, code, or image.
-  const isBlockMode = isMarkdownMode && layoutMode === 'block' && !isPreview;
+  // The block card (one block at a time) applies to the editing surfaces (raw /
+  // wysiwyg) in markdown mode — never to preview, code, or image. Both the
+  // block-at-a-time and timeline layouts scope the editor to a single block.
+  const isCardMode =
+    isMarkdownMode && (layoutMode === 'block' || layoutMode === 'timeline') && !isPreview;
+  // Timeline mode additionally shows the horizontal timeline track below.
+  const isTimelineMode = isMarkdownMode && layoutMode === 'timeline' && !isPreview;
   const [showFiles, setShowFiles] = useState(false);
   const [mediaRefreshKey, setMediaRefreshKey] = useState(0);
   // Persistent fallback container for image-edit sidecars when the host
@@ -843,7 +848,7 @@ function EditorShellInner({
                 {isMarkdownMode && outlineVisible && (
                   <OutlinePanel key="outline" width={outlineWidth} />
                 )}
-                {isBlockMode ? (
+                {isCardMode ? (
                   <BlockCardView
                     key="raw-card"
                     blockCount={blockCount}
@@ -869,7 +874,7 @@ function EditorShellInner({
                     />
                   </div>
                 )}
-                {isMarkdownMode && !isBlockMode && inlinePreviewVisible && (
+                {isMarkdownMode && !isCardMode && inlinePreviewVisible && (
                   <InlinePreviewGutter
                     key="inline"
                     width={inlinePreviewWidth}
@@ -887,7 +892,7 @@ function EditorShellInner({
             {isMarkdownMode && activeView === 'wysiwyg' && (
               <div className="squisq-editor-with-gutter" key="wysiwyg-shell">
                 {outlineVisible && <OutlinePanel key="outline" width={outlineWidth} />}
-                {isBlockMode ? (
+                {isCardMode ? (
                   <BlockCardView
                     key="wysiwyg-card"
                     blockCount={blockCount}
@@ -911,7 +916,7 @@ function EditorShellInner({
                     readOnly={readOnly}
                   />
                 )}
-                {!isBlockMode && inlinePreviewVisible && (
+                {!isCardMode && inlinePreviewVisible && (
                   <InlinePreviewGutter
                     key="inline"
                     width={inlinePreviewWidth}
@@ -953,6 +958,11 @@ function EditorShellInner({
               />
             )}
         </div>
+
+        {/* Timeline track — horizontal strip of block + media bars shown
+            below the editor in Timeline view. The card editor above (driven by
+            the block navigator) shows whichever block is selected here. */}
+        {isTimelineMode && <TimelineTrack />}
 
         {/* Status bar — word / char / line / block counts. Host can
             suppress via `showStatusBar={false}` for embedded chat-style

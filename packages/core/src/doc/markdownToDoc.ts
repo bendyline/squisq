@@ -42,6 +42,8 @@ import { extractPlainText } from '../markdown/utils.js';
 import { estimateReadingTime } from '../timing/readingTime.js';
 import { resolveTemplateName, isContainerTemplate } from './templates/index.js';
 import { isDataFence, parseDataFence, findFirstTable, extractTableData } from './structuredData.js';
+import { extractMediaFromContents } from './mediaAnnotations.js';
+import type { MediaClip } from '../schemas/Media.js';
 
 // ============================================
 // Options
@@ -298,6 +300,39 @@ export function markdownToDoc(markdownDoc: MarkdownDocument, options?: MarkdownT
     rootBlocks.push(currentBlock);
   }
 
+  // Lift standalone body-level media annotations (`{[audio …]}` / `{[video …]}`)
+  // into typed clips: block-anchored clips ride on `block.media`; clips flagged
+  // `anchor=document` collect into the doc-level `documentMedia`. Done before
+  // the reading-time pass so annotation text doesn't inflate block durations.
+  const documentMedia: MediaClip[] = [];
+  for (const block of flattenBlocks(rootBlocks)) {
+    const {
+      media,
+      documentMedia: docMedia,
+      remaining,
+    } = extractMediaFromContents(
+      block.contents,
+      (src, i) => `${block.id}-media-${i}-${src.replace(/[^a-zA-Z0-9]+/g, '-')}`,
+    );
+    if (media.length > 0) block.media = media;
+    if (docMedia.length > 0) documentMedia.push(...docMedia);
+    if (block.contents) block.contents = remaining;
+  }
+
+  // A preamble block that held only document-media annotations is now empty —
+  // drop it so a doc-spanning narration doesn't leave a phantom 5s block at the
+  // top of the timeline. Only the heading-less preamble (rootBlocks[0]) can be
+  // emptied this way.
+  if (
+    rootBlocks.length > 0 &&
+    !rootBlocks[0].sourceHeading &&
+    (rootBlocks[0].contents?.length ?? 0) === 0 &&
+    (rootBlocks[0].children?.length ?? 0) === 0 &&
+    !rootBlocks[0].media
+  ) {
+    rootBlocks.shift();
+  }
+
   const allBlocks = flattenBlocks(rootBlocks);
 
   // Structured template data: ```json data / ```yaml data fences in a
@@ -414,6 +449,7 @@ export function markdownToDoc(markdownDoc: MarkdownDocument, options?: MarkdownT
     ...(markdownDoc.frontmatter ? { frontmatter: markdownDoc.frontmatter } : {}),
     ...(customTemplates ? { customTemplates } : {}),
     ...(diagnostics.length > 0 ? { diagnostics } : {}),
+    ...(documentMedia.length > 0 ? { documentMedia } : {}),
   };
 
   // Auto-generate cover startBlock from the first H1 heading

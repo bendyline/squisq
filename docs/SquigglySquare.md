@@ -265,6 +265,61 @@ rows:
 
 Nested mappings are rejected with a clear error — use a `json data` fence for deeply nested input.
 
+## Timeline & timed media
+
+Every block has a position on the playback timeline: `startTime` (when it
+appears) and `duration` (how long it shows). Both are heading attributes and
+accept seconds, `mm:ss`, `mm:ss.ms`, or `1500ms`:
+
+```markdown
+## Pinned section {#intro startTime=02:15 duration=8}
+```
+
+`duration` defaults to the block's reading time (min 3s); `startTime` defaults
+to the running sum of prior durations. The editor's **Timeline** view edits
+these by dragging block edges — see the editor docs.
+
+### Timed media clips
+
+A standalone `{[audio …]}` / `{[video …]}` annotation on its own line in a
+block's body attaches a timed media clip to that block. Its timing is relative
+to the block:
+
+```markdown
+## Narrated section {duration=20}
+
+Body text shown while the narration plays.
+
+{[audio src=narration.mp3 startAt=5 spillover=true]}
+```
+
+| Key         | Meaning                                                                  |
+| ----------- | ------------------------------------------------------------------------ |
+| `src`       | Media file (required), relative to the article media dir                 |
+| `startAt`   | Seconds into the block before the clip begins (default 0)                |
+| `clipStart` | Source in-point within the file (default 0)                              |
+| `clipEnd`   | Source out-point within the file (default: block / file end)             |
+| `spillover` | `true` keeps the clip playing past the block's end (default stops at it) |
+| `anchor`    | `document` makes the clip span the whole document (see below)            |
+
+So a clip with `startAt=5` inside a block that begins at 3:30 plays at 3:35.
+A `{[video …]}` annotation behaves the same but is rendered as a video.
+
+### Document-spanning media
+
+A media annotation flagged `anchor=document` (typically in the preamble, before
+the first heading) plays across the entire document — e.g. a full-length
+narration MP3 or a background MP4:
+
+```markdown
+{[audio src=voice.mp3 anchor=document]}
+
+# First section
+```
+
+Its `startAt` is relative to the document start. The annotation does not create
+a visible block.
+
 ## Drawings
 
 A `{[drawing]}` block is a container: each direct child heading is one shape on a

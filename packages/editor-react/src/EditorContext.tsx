@@ -95,9 +95,11 @@ export type EditorTheme = 'light' | 'dark';
  * Document layout mode. `'document'` shows the whole markdown document in
  * the active view (the historical behavior). `'block'` is the
  * block-at-a-time view — one heading-defined block on a card at a time,
- * with the editor scoped to just that block. See {@link useBlockNavigator}.
+ * with the editor scoped to just that block. `'timeline'` is block mode plus
+ * a horizontal timeline track for editing block durations and media slices.
+ * See {@link useBlockNavigator}.
  */
-export type LayoutMode = 'document' | 'block';
+export type LayoutMode = 'document' | 'block' | 'timeline';
 /**
  * How much of the active Squisq theme the WYSIWYG editing surface
  * mirrors. `'fonts'` is the historical default — body and heading
@@ -787,7 +789,9 @@ export function EditorProvider({
   // block's slice and `setEditorSource` splices edits back in. Gated to
   // markdown mode — code/image surfaces always edit the whole file.
   const blockNav = useBlockNavigator(markdownSource, setMarkdownSource, {
-    enabled: layoutModeState === 'block' && editorMode === 'markdown',
+    enabled:
+      (layoutModeState === 'block' || layoutModeState === 'timeline') &&
+      editorMode === 'markdown',
   });
   const {
     editorSource,

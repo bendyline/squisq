@@ -151,6 +151,14 @@ export interface Doc {
    * Absent when the document is clean.
    */
   diagnostics?: DocDiagnostic[];
+
+  /**
+   * Document-spanning timed media (e.g. a full-length narration MP3/MP4),
+   * authored as a media annotation in the preamble (before the first
+   * heading) with `anchor=document`. Each clip is timed from the document
+   * start and may play across every block. See `resolveMediaSchedule`.
+   */
+  documentMedia?: import('./Media.js').MediaClip[];
 }
 
 /**
@@ -277,6 +285,14 @@ export interface Block {
    * Values are raw strings exactly as authored.
    */
   metadata?: Record<string, string>;
+
+  /**
+   * Timed media clips attached to this block, authored as body-level
+   * `{[audio …]}` / `{[video …]}` annotations. Each clip is timed relative
+   * to this block's `startTime` (via `startAt`) and optionally spills past
+   * the block's end. See `MediaClip` / `resolveMediaSchedule`.
+   */
+  media?: import('./Media.js').MediaClip[];
 }
 
 // ============================================
@@ -453,6 +469,16 @@ export interface VideoLayer extends BaseLayer {
     clipEnd: number;
     /** Total source video duration (for validation) */
     sourceDuration?: number;
+    /**
+     * Seconds into the owning block before this video begins playing
+     * (the block-relative `startAt`). Default 0 — plays from block start.
+     */
+    startAt?: number;
+    /**
+     * When true, the video keeps playing past the block's end (the
+     * playback scheduler re-homes it to the player level). Default false.
+     */
+    spillover?: boolean;
     /** Video credit / artist name */
     credit?: string;
     /** License identifier (e.g., 'CC BY-SA 4.0') */

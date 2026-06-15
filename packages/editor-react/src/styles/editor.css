@@ -3057,6 +3057,230 @@
   background: #1f2937;
 }
 
+/* ─── Timeline track ─────────────────────────────────────
+   Horizontal strip of block + media bars shown below the editor in Timeline
+   view. Scrolls horizontally; bars are absolutely positioned by time. */
+.squisq-timeline {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: row;
+  background: #efece6;
+  border-top: 1px solid #b0a99a;
+  user-select: none;
+}
+
+.squisq-timeline-controls {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 6px;
+  flex-shrink: 0;
+  border-right: 1px solid #b0a99a;
+}
+
+.squisq-timeline-zoom-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  background: #ffffff;
+  color: #374151;
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.squisq-timeline-zoom-button:hover:not(:disabled) {
+  background: #f3f4f6;
+}
+
+.squisq-timeline-zoom-button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.squisq-timeline-scroll {
+  flex: 1;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 8px 0 0;
+  min-width: 0;
+  min-height: 0;
+}
+
+.squisq-timeline-inner {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-width: 100%;
+  min-height: 100%;
+}
+
+.squisq-timeline-row {
+  position: relative;
+  height: 40px;
+  margin: 0 0 6px;
+}
+
+.squisq-timeline-row--media {
+  height: 26px;
+  margin-bottom: 0;
+}
+
+.squisq-timeline-block {
+  position: absolute;
+  top: 0;
+  height: 100%;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  padding: 0 8px;
+  border: 1px solid #b0a99a;
+  border-radius: 5px;
+  background: #ffffff;
+  color: #374151;
+  font-size: 12px;
+  cursor: pointer;
+  overflow: hidden;
+}
+
+.squisq-timeline-block--active {
+  border-color: var(--squisq-outline-accent, #6c5ce7);
+  box-shadow: 0 0 0 1px var(--squisq-outline-accent, #6c5ce7) inset;
+}
+
+.squisq-timeline-block-label {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  pointer-events: none;
+}
+
+.squisq-timeline-clip {
+  position: absolute;
+  top: 0;
+  height: 100%;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  padding: 0 6px;
+  border-radius: 4px;
+  font-size: 11px;
+  color: #ffffff;
+  cursor: grab;
+  overflow: hidden;
+}
+
+.squisq-timeline-clip--audio {
+  background: #2f855a;
+}
+
+.squisq-timeline-clip--video {
+  background: #2b6cb0;
+}
+
+/* Body-embedded media (recordings, dropped files): snapped to its block,
+   outlined to distinguish from authored `{[…]}` clips. Dragging re-times it
+   (and converts it to a clip annotation). */
+.squisq-timeline-clip--embedded {
+  opacity: 0.8;
+  border: 1px dashed rgba(255, 255, 255, 0.7);
+}
+
+.squisq-timeline-clip--document {
+  opacity: 0.85;
+  background-image: repeating-linear-gradient(
+    45deg,
+    rgba(255, 255, 255, 0.12) 0,
+    rgba(255, 255, 255, 0.12) 6px,
+    transparent 6px,
+    transparent 12px
+  );
+}
+
+.squisq-timeline-clip-label {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  pointer-events: none;
+}
+
+/* Drag handles on a bar's edges. */
+.squisq-timeline-edge {
+  position: absolute;
+  top: 0;
+  width: 7px;
+  height: 100%;
+  cursor: ew-resize;
+}
+
+.squisq-timeline-edge--left {
+  left: -1px;
+}
+
+.squisq-timeline-edge--right {
+  right: -1px;
+}
+
+/* Time ruler pinned to the bottom of the track — spans the full width. */
+.squisq-timeline-row--ruler {
+  height: 18px;
+  margin-top: auto;
+  flex-shrink: 0;
+  overflow: hidden;
+  border-top: 1px solid #c9c2b4;
+}
+
+.squisq-timeline-tick {
+  position: absolute;
+  top: 0;
+  height: 100%;
+  border-left: 1px solid #c9c2b4;
+  padding-left: 3px;
+}
+
+.squisq-timeline-tick-label {
+  font-size: 10px;
+  color: #6b7280;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.squisq-editor-shell[data-theme='dark'] .squisq-timeline {
+  background: #0b0e14;
+  border-top-color: #2a3144;
+}
+
+.squisq-editor-shell[data-theme='dark'] .squisq-timeline-block {
+  background: #111827;
+  border-color: #2a3144;
+  color: #d1d5db;
+}
+
+.squisq-editor-shell[data-theme='dark'] .squisq-timeline-zoom-button {
+  border-color: #374151;
+  background: #111827;
+  color: #d1d5db;
+}
+
+.squisq-editor-shell[data-theme='dark'] .squisq-timeline-zoom-button:hover:not(:disabled) {
+  background: #1f2937;
+}
+
+.squisq-editor-shell[data-theme='dark'] .squisq-timeline-row--ruler,
+.squisq-editor-shell[data-theme='dark'] .squisq-timeline-tick {
+  border-color: #2a3144;
+}
+
+.squisq-editor-shell[data-theme='dark'] .squisq-timeline-tick-label {
+  color: #9ca3af;
+}
+
 /* All gutter chrome is parameterized through CSS custom properties so
    hosts can re-theme without overriding individual rules. Defaults
    below match the original light-mode values; the dark-mode block

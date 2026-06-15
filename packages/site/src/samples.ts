@@ -26,6 +26,22 @@ export const SAMPLES: Record<string, string> = {
   // timeout. Don't add anything that would inflate this — it exists
   // purely to keep `e2e/video-export.spec.ts` fast.
   'e2e-tiny': `# Tiny\n`,
+  // Used by the timeline e2e: a block with an embedded <video> the timeline
+  // should surface and let the author re-time / move between blocks.
+  'timeline-media': `# One {duration=10}
+
+Intro text.
+
+<video src="video/clip.webm" controls></video>
+
+# Two {duration=10}
+
+More text.
+
+# Three {duration=10}
+
+End.
+`,
   'hello-world': `# Hello World
 
 Welcome to the **Squisq Editor**. This is a simple markdown document.
