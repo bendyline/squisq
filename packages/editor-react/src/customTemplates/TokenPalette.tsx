@@ -1,9 +1,16 @@
 /**
- * Token palette — sidebar of click-to-place placeholder tokens shown
- * inside the TemplateDesigner. Each entry switches the Scene's
- * active tool to a corresponding TokenTool factory instance so the
- * next click on the canvas drops a pre-filled placeholder layer.
+ * Token palette — sidebar of placeholder tokens shown inside the
+ * TemplateDesigner. Each entry can be placed two ways:
+ *
+ *   - drag it onto the canvas and drop where it should go, or
+ *   - click it to arm the matching TokenTool, then click the canvas.
+ *
+ * Both paths end up adding the same placeholder layer (see
+ * `buildTokenLayer`); the drag carries the token id on `dataTransfer`
+ * under {@link TOKEN_DRAG_MIME}.
  */
+
+import { TOKEN_DEFS, TOKEN_DRAG_MIME } from './tokenDefs';
 
 interface TokenPaletteProps {
   /**
@@ -15,59 +22,33 @@ interface TokenPaletteProps {
   onActivate: (toolId: string) => void;
 }
 
-interface TokenEntry {
-  id: string;
-  label: string;
-  desc: string;
-  preview: string;
-}
-
-const TOKENS: TokenEntry[] = [
-  {
-    id: 'token-title',
-    label: 'Title',
-    desc: "Substitutes the block's heading text.",
-    preview: '{title}',
-  },
-  {
-    id: 'token-content',
-    label: 'Content',
-    desc: "Substitutes the block's body text.",
-    preview: '{content}',
-  },
-  {
-    id: 'token-children',
-    label: 'Children',
-    desc: 'Comma-joined list of child heading titles.',
-    preview: '{children}',
-  },
-  {
-    id: 'token-image',
-    label: 'Image',
-    desc: "The first image found in the block's body.",
-    preview: '{image:0}',
-  },
-];
-
 export function TokenPalette({ activeToolId, onActivate }: TokenPaletteProps) {
   return (
     <aside className="squisq-template-designer-palette" aria-label="Placeholder tokens">
       <h3 className="squisq-template-designer-palette-title">Placeholders</h3>
       <p className="squisq-template-designer-palette-hint">
-        Click a placeholder, then click on the canvas to drop it.
+        Drag a placeholder onto the canvas — or click it, then click the canvas.
       </p>
       <div className="squisq-template-designer-palette-list">
-        {TOKENS.map((t) => (
+        {TOKEN_DEFS.map((t) => (
           <button
             key={t.id}
             type="button"
+            draggable
             className={`squisq-template-designer-palette-item${
               activeToolId === t.id ? ' squisq-template-designer-palette-item--active' : ''
             }`}
+            onDragStart={(e) => {
+              e.dataTransfer.setData(TOKEN_DRAG_MIME, t.id);
+              // Some browsers require text/plain to be set for the drag to
+              // start reliably; mirror the id there too.
+              e.dataTransfer.setData('text/plain', t.token);
+              e.dataTransfer.effectAllowed = 'copy';
+            }}
             onClick={() => onActivate(t.id)}
             title={t.desc}
           >
-            <span className="squisq-template-designer-palette-item-preview">{t.preview}</span>
+            <span className="squisq-template-designer-palette-item-preview">{t.token}</span>
             <span className="squisq-template-designer-palette-item-label">{t.label}</span>
           </button>
         ))}

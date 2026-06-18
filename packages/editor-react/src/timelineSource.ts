@@ -27,9 +27,13 @@ export function formatSeconds(seconds: number): string {
 }
 
 /**
- * Set/insert `duration=<seconds>` on the heading at 1-based `line`, preserving
- * any `{[template]}` annotation, `{#id}`, classes, and other params. Returns
- * the new full source, or null when the line isn't an ATX heading.
+ * Set/insert a `duration` on the heading at 1-based `line`, written in the
+ * squisq-native squiggly form — `{[duration=<seconds>]}` on its own, or
+ * folded into an existing `{[template …]}` annotation. Preserves any `{#id}`,
+ * classes, and other Pandoc params, and migrates a legacy Pandoc
+ * `{duration=…}` to the squiggly form (dropping the stale Pandoc key so the
+ * two can't disagree). Returns the new full source, or null when the line
+ * isn't an ATX heading.
  */
 export function setBlockDurationInSource(
   source: string,
@@ -43,19 +47,66 @@ export function setBlockDurationInSource(
   if (!/^#{1,6}\s/.test(original)) return null;
 
   const value = formatSeconds(seconds);
-  const m = matchTrailingPandocAttr(original);
-  let updated: string;
-  if (m) {
-    const attrs = parsePandocAttrTokens(m.inner.trim());
-    attrs.params = { ...(attrs.params ?? {}), duration: value };
-    const serialized = serializePandocAttributes(attrs) ?? `{duration=${value}}`;
-    const prefix = original.slice(0, m.index).replace(/\s+$/, '');
-    updated = `${prefix} ${serialized}`;
-  } else {
-    updated = `${original.replace(/\s+$/, '')} {duration=${value}}`;
+
+  // Peel the trailing `{[…]}` annotation (if any) off the line; we'll fold
+  // `duration` into it. Canonical heading order is `{#pandoc} {[squiggly]}`,
+  // so the squiggly annotation is the last `{…}` on the line.
+  let rest = original;
+  let annotationInner: string | null = null;
+  const tpl = matchTrailingTemplateAnnotation(rest);
+  if (tpl) {
+    annotationInner = tpl.inner.trim();
+    rest = rest.slice(0, tpl.index).replace(/\s+$/, '');
   }
-  lines[idx] = updated;
+
+  // Then peel a trailing Pandoc `{…}` block; drop its `duration` so a legacy
+  // value can't shadow the squiggly one we're writing. Keep the rest (id,
+  // classes, other params).
+  let pandocSerialized: string | null = null;
+  const pa = matchTrailingPandocAttr(rest);
+  if (pa) {
+    const attrs = parsePandocAttrTokens(pa.inner.trim());
+    if (attrs.params) {
+      delete attrs.params.duration;
+      if (Object.keys(attrs.params).length === 0) delete attrs.params;
+    }
+    pandocSerialized = serializePandocAttributes(attrs);
+    rest = rest.slice(0, pa.index).replace(/\s+$/, '');
+  }
+
+  const annotation = setTemplateParam(annotationInner, 'duration', value);
+  const parts = [rest];
+  if (pandocSerialized) parts.push(pandocSerialized);
+  parts.push(annotation);
+  lines[idx] = parts.join(' ');
   return lines.join('\n');
+}
+
+/**
+ * Build a `{[…]}` annotation from an existing inner string (or null for a
+ * fresh one), setting `key=value` and preserving the template name plus any
+ * other params in their original order.
+ */
+function setTemplateParam(inner: string | null, key: string, value: string): string {
+  const tokens = inner ? tokenizeAttrTokens(inner) : [];
+  const firstIsParam = tokens.length > 0 && tokens[0].indexOf('=') > 0;
+  const template = firstIsParam || tokens.length === 0 ? undefined : tokens[0];
+
+  const params: Record<string, string> = {};
+  const order: string[] = [];
+  for (let i = template ? 1 : 0; i < tokens.length; i++) {
+    const kv = splitKeyValueToken(tokens[i]);
+    if (kv) {
+      if (!(kv.key in params)) order.push(kv.key);
+      params[kv.key] = kv.value;
+    }
+  }
+  if (!(key in params)) order.push(key);
+  params[key] = value;
+
+  const parts = template ? [template] : [];
+  for (const k of order) parts.push(`${k}=${quoteAttrValue(params[k])}`);
+  return `{[${parts.join(' ')}]}`;
 }
 
 /** A patch to a media clip; numeric values are seconds, `null` removes the key. */

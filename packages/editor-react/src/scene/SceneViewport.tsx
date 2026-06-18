@@ -25,6 +25,9 @@ interface SceneViewportProps {
   onPointerMove?: (e: React.PointerEvent<SVGSVGElement>) => void;
   onPointerUp?: (e: React.PointerEvent<SVGSVGElement>) => void;
   onDoubleClick?: (e: React.MouseEvent<SVGSVGElement>) => void;
+  /** HTML5 drag-and-drop handlers — used for palette drag-to-place. */
+  onDragOver?: (e: React.DragEvent<SVGSVGElement>) => void;
+  onDrop?: (e: React.DragEvent<SVGSVGElement>) => void;
   /** Optional CSS cursor (set by the active tool). */
   cursor?: string;
   /** Layers + overlay are children of the transformed group. */
@@ -41,6 +44,8 @@ export const SceneViewport = forwardRef<SVGSVGElement, SceneViewportProps>(funct
     onPointerMove,
     onPointerUp,
     onDoubleClick,
+    onDragOver,
+    onDrop,
     cursor,
     children,
   },
@@ -66,6 +71,8 @@ export const SceneViewport = forwardRef<SVGSVGElement, SceneViewportProps>(funct
       onPointerMove={onPointerMove}
       onPointerUp={onPointerUp}
       onDoubleClick={onDoubleClick}
+      onDragOver={onDragOver}
+      onDrop={onDrop}
       role="application"
       // Focusable so the SVG can receive keyboard events directly. The
       // Scene focuses it on pointer-down so Delete/Escape/tool-shortcut

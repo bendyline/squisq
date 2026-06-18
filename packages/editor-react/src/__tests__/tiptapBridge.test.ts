@@ -303,6 +303,30 @@ describe('tiptapToMarkdown', () => {
     expect(md).toContain('- First line  ');
     expect(md).toContain('  Second line');
   });
+
+  it('keeps a <video> nested in a list item (no silent drop)', () => {
+    const md = tiptapToMarkdown(
+      '<ol><li><p>Step</p><video src="video/clip.webm" width="480" controls=""></video></li></ol>',
+    );
+    expect(md).toContain('1. Step');
+    // The media survives, indented as a continuation of the list item.
+    expect(md).toContain('   <video src="video/clip.webm" controls width="480"></video>');
+  });
+
+  it('keeps an <audio> nested in a list item', () => {
+    const md = tiptapToMarkdown(
+      '<ul><li><p>Note</p><audio src="audio/take.webm" controls=""></audio></li></ul>',
+    );
+    expect(md).toContain('- Note');
+    expect(md).toContain('  <audio src="audio/take.webm" controls></audio>');
+  });
+
+  it('keeps a media-only list item (first tag takes the bullet)', () => {
+    const md = tiptapToMarkdown(
+      '<ul><li><video src="video/only.webm" controls=""></video></li></ul>',
+    );
+    expect(md).toContain('- <video src="video/only.webm" controls></video>');
+  });
 });
 
 // ---------------------------------------------------------------------------

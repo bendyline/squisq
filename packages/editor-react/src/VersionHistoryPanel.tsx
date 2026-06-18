@@ -16,6 +16,7 @@ import { DiffEditor } from '@monaco-editor/react';
 import type { Version } from '@bendyline/squisq/versions';
 import { useEditorContext } from './EditorContext';
 import { useMonacoLoader } from './useMonacoLoader';
+import { Icon } from './Icon';
 
 interface LazyDiffEditorProps {
   original: string;
@@ -229,20 +230,7 @@ export function VersionHistoryPanel() {
         aria-expanded={open}
         onClick={() => setOpen((v) => !v)}
       >
-        <svg
-          width="16"
-          height="16"
-          viewBox="0 0 16 16"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="1.5"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        >
-          <path d="M2.5 8a5.5 5.5 0 1 0 1.6-3.9" />
-          <polyline points="2.5,2.5 2.5,4.5 4.5,4.5" />
-          <polyline points="8,4.5 8,8 11,9.5" />
-        </svg>
+        <Icon icon="fa-solid fa-clock-rotate-left" />
       </button>
       {open && (
         <div

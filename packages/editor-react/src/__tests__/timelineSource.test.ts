@@ -25,27 +25,37 @@ describe('formatSeconds', () => {
 });
 
 describe('setBlockDurationInSource', () => {
-  it('inserts a duration attribute on a bare heading', () => {
+  it('inserts the duration on a bare heading in the squiggly form', () => {
     const src = '# Intro\n\nBody.\n';
     const next = setBlockDurationInSource(src, 1, 12)!;
-    expect(next).toContain('# Intro {duration=12}');
+    expect(next).toContain('# Intro {[duration=12]}');
     expect(durationOf(next, 0)).toBe(12);
   });
 
-  it('updates an existing duration, preserving other attributes', () => {
+  it('folds the duration into an existing template annotation', () => {
+    const src = '# Title {[sectionHeader]}\n\nBody.\n';
+    const next = setBlockDurationInSource(src, 1, 7)!;
+    expect(next).toContain('{[sectionHeader duration=7]}');
+    expect(durationOf(next, 0)).toBe(7);
+  });
+
+  it('updates an existing squiggly duration in place', () => {
+    const src = '# Intro {[duration=5]}\n\nBody.\n';
+    const next = setBlockDurationInSource(src, 1, 9)!;
+    expect(next).toContain('{[duration=9]}');
+    expect(next).not.toContain('duration=5');
+    expect(durationOf(next, 0)).toBe(9);
+  });
+
+  it('migrates a legacy Pandoc duration to squiggly, preserving id/classes', () => {
     const src = '# Intro {#intro .hero duration=5}\n\nBody.\n';
     const next = setBlockDurationInSource(src, 1, 9)!;
     expect(next).toContain('#intro');
     expect(next).toContain('.hero');
-    expect(next).toContain('duration=9');
-    expect(next).not.toContain('duration=5');
-  });
-
-  it('preserves a template annotation alongside the duration', () => {
-    const src = '# Title {[sectionHeader]}\n\nBody.\n';
-    const next = setBlockDurationInSource(src, 1, 7)!;
-    expect(next).toContain('{[sectionHeader]}');
-    expect(next).toContain('duration=7');
+    expect(next).toContain('{[duration=9]}');
+    // The stale Pandoc duration is gone so the two forms can't disagree.
+    expect(next).not.toMatch(/\{[^[]*duration=/);
+    expect(durationOf(next, 0)).toBe(9);
   });
 
   it('returns null for a non-heading line', () => {

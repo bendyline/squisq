@@ -24,6 +24,7 @@
 import { useCallback } from 'react';
 import { RecorderPanel } from './recorder/RecorderPanel.js';
 import type { RecorderSaveResult } from './recorder/RecorderModal.js';
+import { insertMediaBlock } from './recorder/insertMediaBlock.js';
 import { useEditorContext } from './EditorContext';
 
 /**
@@ -98,14 +99,10 @@ export function RecorderEntry() {
         }
         const audioTag = `<audio src="${result.relativePath}" controls></audio>`;
         if (activeView === 'wysiwyg' && tiptapEditor) {
-          tiptapEditor
-            .chain()
-            .focus()
-            .insertContent({
-              type: 'audio',
-              attrs: { src: result.relativePath, controls: true },
-            })
-            .run();
+          insertMediaBlock(tiptapEditor, {
+            type: 'audio',
+            attrs: { src: result.relativePath, controls: true },
+          });
           return;
         }
         if (activeView === 'raw' && monacoEditor) {
@@ -124,14 +121,10 @@ export function RecorderEntry() {
       // aspect ratio is preserved regardless of source dimensions.
       const videoTag = `<video src="${result.relativePath}" controls width="480"></video>`;
       if (activeView === 'wysiwyg' && tiptapEditor) {
-        tiptapEditor
-          .chain()
-          .focus()
-          .insertContent({
-            type: 'video',
-            attrs: { src: result.relativePath, controls: true, width: 480 },
-          })
-          .run();
+        insertMediaBlock(tiptapEditor, {
+          type: 'video',
+          attrs: { src: result.relativePath, controls: true, width: 480 },
+        });
         return;
       }
       if (activeView === 'raw' && monacoEditor) {

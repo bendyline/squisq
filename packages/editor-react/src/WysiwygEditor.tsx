@@ -437,16 +437,23 @@ export function WysiwygEditor({
   // path reloads the card with the newly selected block's slice.
   useEffect(() => {
     if (!editor) return;
-    // Only update if the source changed externally (not from our own onUpdate)
-    if (editorSource !== lastSourceRef.current) {
-      isExternalUpdate.current = true;
-      const { body, frontmatter } = stripFrontmatter(editorSource);
-      frontmatterRef.current = frontmatter;
-      const content = markdownToTiptap(body);
-      editor.commands.setContent(content);
+    if (editorSource === lastSourceRef.current) return;
+    // In block/timeline mode `setEditorSource` normalizes the slice's trailing
+    // whitespace (a `\n\n` before the next block) before splicing, so the
+    // re-extracted `editorSource` differs from what we just emitted by trailing
+    // whitespace only. Re-setting content for that would reset the caret to the
+    // end on every keystroke — so only reload when the body actually changed.
+    if (editorSource.replace(/\s+$/, '') === lastSourceRef.current.replace(/\s+$/, '')) {
       lastSourceRef.current = editorSource;
-      isExternalUpdate.current = false;
+      return;
     }
+    isExternalUpdate.current = true;
+    const { body, frontmatter } = stripFrontmatter(editorSource);
+    frontmatterRef.current = frontmatter;
+    const content = markdownToTiptap(body);
+    editor.commands.setContent(content);
+    lastSourceRef.current = editorSource;
+    isExternalUpdate.current = false;
   }, [editorSource, editor]);
 
   // Match the WYSIWYG editor's appearance to the active Squisq theme

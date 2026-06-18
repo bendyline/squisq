@@ -22,6 +22,7 @@ import { StatusBar } from './StatusBar';
 import { RawEditor } from './RawEditor';
 import { WysiwygEditor } from './WysiwygEditor';
 import { InlinePreviewGutter } from './InlinePreviewGutter';
+import { BlockPreviewPanel } from './BlockPreviewPanel';
 import { OutlinePanel } from './OutlinePanel';
 import { BlockCardView } from './BlockCardView';
 import { TimelineTrack } from './TimelineTrack';
@@ -874,6 +875,9 @@ function EditorShellInner({
                     />
                   </div>
                 )}
+                {isMarkdownMode && isCardMode && inlinePreviewVisible && (
+                  <BlockPreviewPanel key="block-preview" basePath={basePath} />
+                )}
                 {isMarkdownMode && !isCardMode && inlinePreviewVisible && (
                   <InlinePreviewGutter
                     key="inline"
@@ -915,6 +919,9 @@ function EditorShellInner({
                     placeholder={placeholder}
                     readOnly={readOnly}
                   />
+                )}
+                {isCardMode && inlinePreviewVisible && (
+                  <BlockPreviewPanel key="block-preview" basePath={basePath} />
                 )}
                 {!isCardMode && inlinePreviewVisible && (
                   <InlinePreviewGutter

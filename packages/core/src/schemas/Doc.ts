@@ -587,8 +587,14 @@ export interface TextStyle {
   fontWeight?: 'normal' | 'bold';
   /** Text color (CSS color) */
   color: string;
-  /** Text alignment */
+  /** Horizontal text alignment within the layer's position box. */
   textAlign?: 'left' | 'center' | 'right';
+  /**
+   * Vertical alignment of the text within the layer's position box.
+   * Requires a `position.height` to have an effect. When omitted, the
+   * vertical baseline is derived from `position.anchor` (legacy behavior).
+   */
+  verticalAlign?: 'top' | 'middle' | 'bottom';
   /** Line height multiplier */
   lineHeight?: number;
   /** Add drop shadow for readability over images */

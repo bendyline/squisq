@@ -108,10 +108,14 @@ test.describe('Custom template designer', () => {
     await page.locator('.squisq-template-gallery-new').click();
     await page.locator('.squisq-template-designer-panel').waitFor({ state: 'visible' });
 
-    // Fill in name + label. The save button alerts and bails out when
-    // these are blank, so we set them before clicking through.
-    await page.locator('.squisq-template-designer-field input').first().fill('greeting');
-    await page.locator('.squisq-template-designer-field input').nth(1).fill('Greeting');
+    // Fill in the label (now the first field). The name field auto-
+    // derives its slug from the label, so we only need the label — the
+    // save button alerts and bails out when label/name are blank.
+    await page.locator('.squisq-template-designer-field input').first().fill('Greeting');
+    // Name auto-derives to the lowercased slug of the label.
+    await expect(page.locator('.squisq-template-designer-field input').nth(1)).toHaveValue(
+      'greeting',
+    );
 
     // Activate the title token tool and click on the canvas to drop a
     // {title} placeholder so the template has at least one layer
@@ -146,5 +150,83 @@ test.describe('Custom template designer', () => {
       .first();
     await expect(customSection).toContainText('Greeting');
     await expect(customSection).toContainText('Hero Section');
+  });
+
+  test('dragging a placeholder from the palette onto the canvas adds a layer', async ({ page }) => {
+    await openTemplatePickerForFirstHeading(page);
+    await page.locator('.squisq-template-gallery-new').click();
+    await page.locator('.squisq-template-designer-panel').waitFor({ state: 'visible' });
+
+    await page.locator('.squisq-template-designer-field input').first().fill('dragged');
+    await page.locator('.squisq-template-designer-field input').nth(1).fill('Dragged');
+
+    // Drag the {content} placeholder onto the canvas (instead of the
+    // click-to-arm-then-click path the test above exercises).
+    const item = page
+      .locator('.squisq-template-designer-palette-item')
+      .filter({ hasText: '{content}' })
+      .first();
+    const canvas = page.locator('.squisq-template-designer-scene .squisq-scene-viewport');
+    await canvas.waitFor({ state: 'visible' });
+    await item.dragTo(canvas);
+
+    // The dropped placeholder renders as a layer on the canvas.
+    await expect(canvas.getByText('{content}')).toBeVisible();
+
+    // And it satisfies the "at least one layer" save validation.
+    await page
+      .locator('.squisq-template-designer-btn--primary')
+      .filter({ hasText: /save to this doc/i })
+      .click();
+    await expect(page.locator('.squisq-template-designer-panel')).toHaveCount(0);
+  });
+
+  test('selecting a text layer reveals a styling toolbar that edits it', async ({ page }) => {
+    await openTemplatePickerForFirstHeading(page);
+    await page.locator('.squisq-template-gallery-new').click();
+    await page.locator('.squisq-template-designer-panel').waitFor({ state: 'visible' });
+
+    const canvas = page.locator('.squisq-template-designer-scene .squisq-scene-viewport');
+    await canvas.waitFor({ state: 'visible' });
+    await page
+      .locator('.squisq-template-designer-palette-item')
+      .filter({ hasText: '{title}' })
+      .first()
+      .dragTo(canvas);
+
+    // No toolbar until something is selected; clicking the layer selects it.
+    await expect(page.locator('.squisq-layer-toolbar')).toHaveCount(0);
+    await canvas.getByText('{title}').click();
+
+    const toolbar = page.locator('.squisq-layer-toolbar');
+    await expect(toolbar).toBeVisible();
+
+    // Exercise representative controls across the toolbar's groups.
+    await toolbar.getByRole('button', { name: 'Align center' }).click();
+    await toolbar.getByRole('button', { name: 'Align middle' }).click();
+    await toolbar.getByRole('button', { name: 'Bold' }).click();
+    await toolbar
+      .getByRole('combobox', { name: 'Font', exact: true })
+      .selectOption({ label: 'Playfair Display' });
+    await toolbar.getByRole('combobox', { name: 'Font size' }).selectOption({ label: 'Huge' });
+
+    // Active states reflect the edits.
+    await expect(toolbar.getByRole('button', { name: 'Align center' })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
+    await expect(toolbar.getByRole('button', { name: 'Bold' })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
+
+    // The styled layer still saves.
+    await page.locator('.squisq-template-designer-field input').first().fill('styled');
+    await page.locator('.squisq-template-designer-field input').nth(1).fill('Styled');
+    await page
+      .locator('.squisq-template-designer-btn--primary')
+      .filter({ hasText: /save to this doc/i })
+      .click();
+    await expect(page.locator('.squisq-template-designer-panel')).toHaveCount(0);
   });
 });

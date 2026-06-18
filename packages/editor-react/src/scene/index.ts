@@ -29,7 +29,12 @@ export { ConnectTool } from './tools/ConnectTool';
 export { createShapeTool } from './tools/ShapeTool';
 export { createPathTool } from './tools/PathTool';
 export { createTextTool } from './tools/TextTool';
-export { createTokenTool, type TokenKind } from './tools/TokenTool';
+export {
+  createTokenTool,
+  buildTokenLayer,
+  type TokenKind,
+  type TokenToolOptions,
+} from './tools/TokenTool';
 export {
   parsePath,
   serializePath,

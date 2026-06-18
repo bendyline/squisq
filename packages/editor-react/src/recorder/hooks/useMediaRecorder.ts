@@ -59,6 +59,13 @@ export interface UseMediaRecorderOptions {
    * only); when unsupported the resulting stream simply omits it.
    */
   systemAudio?: boolean;
+  /**
+   * For `source === 'camera'`, whether to include the microphone track.
+   * Defaults to `true` (camera + mic). Set `false` to capture silent
+   * video. Ignored for other sources, whose mic handling is encoded in
+   * the source itself (`'mic'`, `'screen+mic'`).
+   */
+  includeMicrophone?: boolean;
 }
 
 export interface UseMediaRecorderResult {
@@ -119,7 +126,7 @@ async function acquireStream(
     case 'camera': {
       const stream = await requestCameraStream({
         video: opts.videoConstraints ?? true,
-        audio: opts.audioConstraints ?? true,
+        audio: opts.includeMicrophone === false ? false : (opts.audioConstraints ?? true),
       });
       return { stream, dispose: () => {} };
     }

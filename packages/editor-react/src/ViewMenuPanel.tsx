@@ -12,6 +12,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useEditorContext, type ThemeInheritance, type LayoutMode } from './EditorContext';
+import { Icon } from './Icon';
 
 export function ViewMenuPanel() {
   const {
@@ -72,19 +73,7 @@ export function ViewMenuPanel() {
         aria-haspopup="menu"
         onClick={() => setOpen((v) => !v)}
       >
-        <svg
-          width="16"
-          height="16"
-          viewBox="0 0 16 16"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="1.4"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        >
-          <path d="M1.5 8 C 3 4.5 5.5 3 8 3 S 13 4.5 14.5 8 C 13 11.5 10.5 13 8 13 S 3 11.5 1.5 8 Z" />
-          <circle cx="8" cy="8" r="2.2" />
-        </svg>
+        <Icon icon="fa-solid fa-eye" />
       </button>
       {open && (
         <div className="squisq-view-menu-popover" role="menu" aria-label="View options">

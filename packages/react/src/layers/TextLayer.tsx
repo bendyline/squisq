@@ -25,14 +25,28 @@ export function TextLayer({ layer, viewport, blockTime }: TextLayerProps) {
   const { content, position, animation } = layer;
   const { text, style } = content;
 
-  // Resolve position values to pixels
-  const x = resolveValue(position.x, viewport.width);
-  const y = resolveValue(position.y, viewport.height);
-  const maxWidth = position.width ? resolveValue(position.width, viewport.width) : undefined;
+  // Resolve position values to pixels. `position.x/y` is the layer's
+  // anchor *point*; `position.anchor` says where on the box that point
+  // sits (matching `layerBounds` in the editor).
+  const rawX = resolveValue(position.x, viewport.width);
+  const rawY = resolveValue(position.y, viewport.height);
+  const boxWidth = position.width != null ? resolveValue(position.width, viewport.width) : undefined;
+  const boxHeight =
+    position.height != null ? resolveValue(position.height, viewport.height) : undefined;
+  const maxWidth = boxWidth;
 
-  // Apply anchor offset for text alignment
   const textAnchor = getTextAnchor(style.textAlign, position.anchor);
-  const dominantBaseline = getDominantBaseline(position.anchor);
+  const dominantBaseline = getDominantBaseline(style.verticalAlign, position.anchor);
+
+  // Place the text's pivot at the box edge/centre matching the chosen
+  // alignment. This is algebraically identical to the legacy point-anchor
+  // behavior for existing content (where x/y were already the desired
+  // pivot — e.g. templates using x:'50%' + anchor:'center'), and makes
+  // box-relative H/V alignment work for layers anchored at their
+  // top-left (as the template designer creates them).
+  const anchor = position.anchor ?? 'top-left';
+  const x = pivotX(rawX, boxWidth, anchor, textAnchor);
+  const y = pivotY(rawY, boxHeight, anchor, dominantBaseline);
 
   // Get animation styles
   const animStyle = getAnimationStyle(animation, blockTime);
@@ -127,12 +141,56 @@ function getTextAnchor(align?: 'left' | 'center' | 'right', anchor?: string): st
 }
 
 /**
- * Map position anchor to SVG dominant-baseline.
+ * Map vertical alignment (or, when unset, the position anchor) to SVG
+ * dominant-baseline. Explicit `verticalAlign` wins so the editor can set
+ * top/middle/bottom independently of the box-placement anchor.
  */
-function getDominantBaseline(anchor?: string): string {
+function getDominantBaseline(verticalAlign?: 'top' | 'middle' | 'bottom', anchor?: string): string {
+  if (verticalAlign === 'top') return 'text-before-edge';
+  if (verticalAlign === 'middle') return 'middle';
+  if (verticalAlign === 'bottom') return 'text-after-edge';
+
   if (anchor?.includes('bottom')) return 'text-after-edge';
   if (anchor === 'center') return 'middle';
   return 'text-before-edge';
+}
+
+/**
+ * Horizontal pivot for the text. Derives the box's left edge from the
+ * anchor point (`rawX`) and the box width, then offsets to the edge/centre
+ * matching `textAnchor`. Falls back to the raw point when no width is set.
+ */
+function pivotX(rawX: number, width: number | undefined, anchor: string, textAnchor: string): number {
+  if (width == null) return rawX;
+  const boxLeft = rawX - anchorAxis(anchor, width, 'x');
+  if (textAnchor === 'middle') return boxLeft + width / 2;
+  if (textAnchor === 'end') return boxLeft + width;
+  return boxLeft;
+}
+
+/**
+ * Vertical pivot for the text. Mirror of {@link pivotX} for the box's top
+ * edge and the resolved dominant-baseline. Falls back to the raw point
+ * when no height is set.
+ */
+function pivotY(
+  rawY: number,
+  height: number | undefined,
+  anchor: string,
+  dominantBaseline: string,
+): number {
+  if (height == null) return rawY;
+  const boxTop = rawY - anchorAxis(anchor, height, 'y');
+  if (dominantBaseline === 'middle') return boxTop + height / 2;
+  if (dominantBaseline === 'text-after-edge') return boxTop + height;
+  return boxTop;
+}
+
+/** Anchor-point offset along one axis, matching `layerBounds` in the editor. */
+function anchorAxis(anchor: string, size: number, axis: 'x' | 'y'): number {
+  if (anchor === 'center') return size / 2;
+  if (axis === 'x') return anchor.includes('right') ? size : 0;
+  return anchor.includes('bottom') ? size : 0;
 }
 
 /**

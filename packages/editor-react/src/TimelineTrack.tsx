@@ -16,10 +16,13 @@ import type { Block, MediaClip } from '@bendyline/squisq/schemas';
 import {
   resolveMediaSchedule,
   getDocPlaybackDuration,
+  VIEWPORT_PRESETS,
   type ScheduledClip,
 } from '@bendyline/squisq/schemas';
-import { flattenBlocks } from '@bendyline/squisq/doc';
+import { flattenBlocks, DEFAULT_THEME } from '@bendyline/squisq/doc';
+import { MediaClipLayer, MediaContext } from '@bendyline/squisq-react';
 import { useEditorContext } from './EditorContext';
+import { usePreviewSettingsOptional } from './PreviewControls';
 import {
   setBlockDurationInSource,
   setMediaClipInSource,
@@ -27,6 +30,11 @@ import {
   type ClipSpec,
 } from './timelineSource';
 import { collectEmbeddedMedia } from './embeddedMedia';
+import { BlockThumbnail, resolveBlockVisual } from './TimelineBlockPreview';
+import { useTimelineClock } from './useTimelineClock';
+
+/** Viewport the per-bar thumbnails render at. */
+const PREVIEW_VIEWPORT = VIEWPORT_PRESETS.landscape;
 
 const DEFAULT_PX_PER_SECOND = 18;
 const ZOOM_MIN = 4;
@@ -81,15 +89,67 @@ export interface TimelineTrackProps {
 }
 
 export function TimelineTrack({ height = 160 }: TimelineTrackProps) {
-  const { doc, markdownSource, setMarkdownSource, goToBlockByLine, activeBlockStartLine } =
-    useEditorContext();
+  const {
+    doc,
+    markdownSource,
+    setMarkdownSource,
+    goToBlockByLine,
+    activeBlockStartLine,
+    mediaProvider,
+  } = useEditorContext();
   const [drag, setDrag] = useState<DragState | null>(null);
   const [pxPerSecond, setPxPerSecond] = useState(DEFAULT_PX_PER_SECOND);
+  const scrollRef = useRef<HTMLDivElement>(null);
 
   const blocks = useMemo(() => (doc ? flattenBlocks(doc.blocks) : []), [doc]);
+
+  // Tiny slideshow thumbnail for every block, filling its bar. Resolved once
+  // per doc/theme so dragging (which re-renders bar geometry each frame)
+  // doesn't re-render the SVGs.
+  const previewSettings = usePreviewSettingsOptional();
+  const previewTheme = previewSettings?.activeTheme ?? DEFAULT_THEME;
+  const visualByBlock = useMemo(() => {
+    const map = new Map<string, Block>();
+    if (doc) {
+      for (const b of blocks) {
+        const visual = resolveBlockVisual(doc, b, previewTheme, PREVIEW_VIEWPORT);
+        if (visual) map.set(b.id, visual);
+      }
+    }
+    return map;
+  }, [doc, blocks, previewTheme]);
   const clips = useMemo<ScheduledClip[]>(() => (doc ? resolveMediaSchedule(doc) : []), [doc]);
   const total = useMemo(() => (doc ? getDocPlaybackDuration(doc) : 0), [doc]);
   const width = Math.max(total * pxPerSecond, 200);
+
+  // Real-time playback clock for the playhead + media. Starting playback also
+  // drops any in-progress edit so the playhead drives.
+  const { currentTime, isPlaying, play, pause, seek } = useTimelineClock(total);
+  const startPlay = useCallback(() => {
+    setDrag(null);
+    play();
+  }, [play]);
+
+  // Scrubbing the playhead: drag the red bar to seek. Pauses playback while
+  // dragging; seeks continuously from the pointer position.
+  const [scrubbing, setScrubbing] = useState(false);
+  useEffect(() => {
+    if (!scrubbing) return;
+    const onMove = (e: PointerEvent) => {
+      const scroll = scrollRef.current;
+      if (!scroll) return;
+      const rect = scroll.getBoundingClientRect();
+      const x = e.clientX - rect.left + scroll.scrollLeft;
+      seek(x / pxPerSecond);
+    };
+    const onUp = () => setScrubbing(false);
+    window.addEventListener('pointermove', onMove);
+    window.addEventListener('pointerup', onUp);
+    return () => {
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerup', onUp);
+    };
+  }, [scrubbing, pxPerSecond, seek]);
 
   // Raw clip lookup (keeps clipStart/clipEnd/spillover that the schedule drops)
   // so a clip can be rebuilt verbatim when relocated to another block.
@@ -117,6 +177,35 @@ export function TimelineTrack({ height = 160 }: TimelineTrackProps) {
     },
     [blocks],
   );
+
+  // While playing, follow the playhead: when it crosses into a new block,
+  // select that block so the card editor + bar highlight track playback. Guarded
+  // by a ref so we only fire on block boundaries, not every animation frame.
+  const followedBlockRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!isPlaying) {
+      followedBlockRef.current = null;
+      return;
+    }
+    const block = blockAtTime(currentTime);
+    if (!block || block.id === followedBlockRef.current) return;
+    followedBlockRef.current = block.id;
+    const line = headingLine(block);
+    if (line != null) goToBlockByLine(line);
+  }, [isPlaying, currentTime, blockAtTime, goToBlockByLine]);
+
+  // Auto-scroll so the playhead stays visible while playing.
+  useEffect(() => {
+    if (!isPlaying) return;
+    const scroll = scrollRef.current;
+    if (!scroll) return;
+    const x = currentTime * pxPerSecond;
+    const left = scroll.scrollLeft;
+    const right = left + scroll.clientWidth;
+    if (x < left || x > right - 80) {
+      scroll.scrollLeft = Math.max(0, x - scroll.clientWidth / 2);
+    }
+  }, [isPlaying, currentTime, pxPerSecond]);
 
   // Move a clip's start to an absolute timeline position. If the new start
   // lands in a different block, the clip's annotation relocates to that block
@@ -174,7 +263,6 @@ export function TimelineTrack({ height = 160 }: TimelineTrackProps) {
 
   // Track the visible width so the ruler can draw ticks across the whole
   // viewport, not just up to where the content ends.
-  const scrollRef = useRef<HTMLDivElement>(null);
   const [viewportWidth, setViewportWidth] = useState(0);
   useEffect(() => {
     const el = scrollRef.current;
@@ -288,6 +376,19 @@ export function TimelineTrack({ height = 160 }: TimelineTrackProps) {
       <div className="squisq-timeline-controls">
         <button
           type="button"
+          className="squisq-timeline-zoom-button squisq-timeline-play-button"
+          onClick={isPlaying ? pause : startPlay}
+          aria-label={isPlaying ? 'Pause' : 'Play'}
+          data-tooltip={isPlaying ? 'Pause' : 'Play'}
+          data-testid="timeline-play"
+        >
+          {isPlaying ? '❚❚' : '▶'}
+        </button>
+        <span className="squisq-timeline-time" data-testid="timeline-time">
+          {formatClock(currentTime)} / {formatClock(total)}
+        </span>
+        <button
+          type="button"
           className="squisq-timeline-zoom-button"
           onClick={zoomOut}
           disabled={pxPerSecond <= ZOOM_MIN}
@@ -322,8 +423,20 @@ export function TimelineTrack({ height = 160 }: TimelineTrackProps) {
                   className={`squisq-timeline-block${isActive ? ' squisq-timeline-block--active' : ''}`}
                   style={{ left, width: barWidth }}
                   title={`${b.title ?? b.id} — ${formatDur(b.duration)}`}
-                  onClick={() => line != null && goToBlockByLine(line)}
+                  onClick={() => {
+                    seek(b.startTime);
+                    if (line != null) goToBlockByLine(line);
+                  }}
                 >
+                  {visualByBlock.has(b.id) && (
+                    <div className="squisq-timeline-block-thumb" aria-hidden>
+                      <BlockThumbnail
+                        visual={visualByBlock.get(b.id)!}
+                        viewport={PREVIEW_VIEWPORT}
+                        mediaProvider={mediaProvider}
+                      />
+                    </div>
+                  )}
                   {prev && headingLine(prev) != null && (
                     <span
                       className="squisq-timeline-edge squisq-timeline-edge--left"
@@ -490,17 +603,57 @@ export function TimelineTrack({ height = 160 }: TimelineTrackProps) {
             )}
           </div>
 
-          <div className="squisq-timeline-row squisq-timeline-row--ruler">
+          <div
+            className="squisq-timeline-row squisq-timeline-row--ruler"
+            onClick={(e) => {
+              const rect = e.currentTarget.getBoundingClientRect();
+              seek((e.clientX - rect.left) / pxPerSecond);
+            }}
+          >
             {ticks.map((t) => (
               <div key={t} className="squisq-timeline-tick" style={{ left: t * pxPerSecond }}>
                 <span className="squisq-timeline-tick-label">{formatDur(t)}</span>
               </div>
             ))}
           </div>
+
+          {/* Playhead — vertical line at the current time, over all rows.
+              Drag the bar (or its knob) to scrub. */}
+          <div
+            className="squisq-timeline-playhead"
+            style={{ left: currentTime * pxPerSecond }}
+            data-testid="timeline-playhead"
+            onPointerDown={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              pause();
+              setScrubbing(true);
+            }}
+          >
+            <div className="squisq-timeline-playhead-knob" />
+          </div>
         </div>
+      </div>
+
+      {/* Off-screen host: plays the timed audio clips in sync with the clock. */}
+      <div className="squisq-timeline-media-host" aria-hidden>
+        <MediaContext.Provider value={mediaProvider ?? null}>
+          <MediaClipLayer
+            schedule={clips}
+            currentTime={currentTime}
+            isPlaying={isPlaying}
+            basePath="/"
+          />
+        </MediaContext.Provider>
       </div>
     </div>
   );
+}
+
+function formatClock(seconds: number): string {
+  const s = Math.max(0, Math.floor(seconds));
+  const m = Math.floor(s / 60);
+  return `${m}:${String(s % 60).padStart(2, '0')}`;
 }
 
 function formatDur(seconds: number): string {

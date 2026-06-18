@@ -87,7 +87,7 @@ export function RawEditor({
   submitOnEnter,
   readOnly = false,
 }: RawEditorProps) {
-  const { editorSource, setEditorSource, setMonacoEditor, language, mentionProvider } =
+  const { editorSource, setEditorSource, setMonacoEditor, language, mentionProvider, doc } =
     useEditorContext();
   const { monaco: monacoNs, ready: monacoReady } = useMonacoLoader();
   const editorRef = useRef<monaco.editor.IStandaloneCodeEditor | null>(null);
@@ -109,6 +109,35 @@ export function RawEditor({
   useEffect(() => {
     mentionProviderRef.current = mentionProvider;
   }, [mentionProvider]);
+
+  // Template completion list: built-in registry names plus any custom
+  // templates inlined in the active doc's frontmatter (`doc.customTemplates`
+  // — the same set that actually renders via `{[name]}`). Held in a ref
+  // (like mentionProvider above) so the once-registered provider always
+  // reads the latest set — custom templates created after mount must show
+  // up without re-mounting Monaco.
+  const docCustomTemplates = doc?.customTemplates;
+  const templateEntriesRef = useRef<{ name: string; detail: string }[] | null>(null);
+  if (templateEntriesRef.current === null) {
+    templateEntriesRef.current = getAvailableTemplates().map((name) => ({
+      name,
+      detail: 'Block template',
+    }));
+  }
+  useEffect(() => {
+    const builtIns = getAvailableTemplates().map((name) => ({
+      name,
+      detail: 'Block template',
+    }));
+    const seen = new Set(builtIns.map((b) => b.name));
+    const custom = (docCustomTemplates ?? [])
+      .filter((t) => !seen.has(t.name))
+      .map((t) => ({
+        name: t.name,
+        detail: t.label ? `Custom — ${t.label}` : 'Custom template',
+      }));
+    templateEntriesRef.current = [...builtIns, ...custom];
+  }, [docCustomTemplates]);
 
   const handleBeforeMount: BeforeMount = useCallback((monaco) => {
     monaco.editor.defineTheme('squisq-light', {
@@ -152,7 +181,6 @@ export function RawEditor({
       // Register the `{[template]}` completion provider only for markdown
       // files — it's meaningless for TypeScript, JSON, Python, etc.
       if (language === 'markdown') {
-        const templates = getAvailableTemplates();
         completionDisposable.current = monaco.languages.registerCompletionItemProvider('markdown', {
           triggerCharacters: ['['],
           provideCompletionItems(model: monaco.editor.ITextModel, position: monaco.Position) {
@@ -181,13 +209,13 @@ export function RawEditor({
               position.column,
             );
 
-            const suggestions = templates.map((name) => ({
+            const suggestions = (templateEntriesRef.current ?? []).map(({ name, detail }) => ({
               label: name,
               filterText: name,
               kind: monaco.languages.CompletionItemKind.Value,
               insertText: name + suffix,
               range,
-              detail: 'Block template',
+              detail,
               sortText: name,
             }));
 
@@ -432,7 +460,12 @@ export function RawEditor({
     const editor = editorRef.current;
     if (editor) {
       const currentValue = editor.getValue();
-      if (currentValue !== editorSource) {
+      // Ignore trailing-whitespace-only differences from block-mode splice
+      // normalization — calling setValue for those resets the Monaco cursor.
+      if (
+        currentValue !== editorSource &&
+        currentValue.replace(/\s+$/, '') !== editorSource.replace(/\s+$/, '')
+      ) {
         isExternalUpdate.current = true;
         editor.setValue(editorSource);
         isExternalUpdate.current = false;

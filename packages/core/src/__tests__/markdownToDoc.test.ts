@@ -4,6 +4,13 @@ import type { MarkdownText } from '../markdown/types';
 import { markdownToDoc, flattenBlocks, countBlocks, getBlockDepth } from '../doc/markdownToDoc';
 import { docToMarkdown } from '../doc/docToMarkdown';
 
+// Helper: parse markdown and return the first top-level block.
+function firstHeadingBlock(md: string) {
+  const parsed = parseMarkdown(md);
+  const doc = markdownToDoc(parsed, { articleId: 'test', generateCoverBlock: false });
+  return doc.blocks[0];
+}
+
 // Helper: strip positions from markdown nodes for cleaner assertions
 function stripPositions(obj: unknown): unknown {
   if (obj === null || obj === undefined) return obj;
@@ -569,12 +576,6 @@ describe('auto cover block generation', () => {
 });
 
 describe('markdownToDoc with Pandoc attributes', () => {
-  function firstHeadingBlock(md: string) {
-    const parsed = parseMarkdown(md);
-    const doc = markdownToDoc(parsed, { articleId: 'test', generateCoverBlock: false });
-    return doc.blocks[0];
-  }
-
   it('overrides block id from {#id}', () => {
     const block = firstHeadingBlock('## Section title {#intro}');
     expect(block.id).toBe('intro');
@@ -653,5 +654,36 @@ describe('markdownToDoc with Pandoc attributes', () => {
     expect(block.x).toBeUndefined();
     expect(block.metadata).toBeUndefined();
     expect(block.classes).toBeUndefined();
+  });
+});
+
+describe('markdownToDoc block-meta in the squiggly {[…]} form', () => {
+  it('reads duration from a pure key-value {[duration=N]} annotation', () => {
+    const block = firstHeadingBlock('## Closing {[duration=8]}\n\nSome body text here.\n');
+    expect(block.duration).toBe(8);
+  });
+
+  it('does not let reading-time overwrite a squiggly-pinned duration', () => {
+    // Body long enough that the reading-time estimate would exceed 8s if it ran.
+    const body = Array(80).fill('word').join(' ');
+    const block = firstHeadingBlock(`## Closing {[duration=8]}\n\n${body}\n`);
+    expect(block.duration).toBe(8);
+  });
+
+  it('folds duration alongside a template name', () => {
+    const block = firstHeadingBlock('## Hero {[sectionHeader duration=6]}');
+    expect(block.template).toBe('sectionHeader');
+    expect(block.duration).toBe(6);
+  });
+
+  it('accepts startTime in the squiggly form too', () => {
+    const block = firstHeadingBlock('## Closing {[startTime=02:30 duration=45]}');
+    expect(block.startTime).toBe(150);
+    expect(block.duration).toBe(45);
+  });
+
+  it('Pandoc attrs win when a key appears in both forms', () => {
+    const block = firstHeadingBlock('## X {duration=3} {[duration=9]}');
+    expect(block.duration).toBe(3);
   });
 });

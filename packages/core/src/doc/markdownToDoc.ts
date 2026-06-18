@@ -39,6 +39,7 @@ import type {
   HtmlNode,
 } from '../markdown/types.js';
 import { extractPlainText } from '../markdown/utils.js';
+import { coerceAnnotationValues, type CoercedBlockMeta } from '../markdown/annotationCoercion.js';
 import { estimateReadingTime } from '../timing/readingTime.js';
 import { resolveTemplateName, isContainerTemplate } from './templates/index.js';
 import { isDataFence, parseDataFence, findFirstTable, extractTableData } from './structuredData.js';
@@ -152,6 +153,34 @@ function createIdGenerator() {
  * @param options - Conversion options
  * @returns A Doc whose blocks mirror the markdown heading structure
  */
+/**
+ * Apply coerced block-meta values onto a block's typed fields. Only keys
+ * actually present are written, so a later caller (the Pandoc attribute
+ * block) can override values supplied by the squiggly `{[…]}` annotation.
+ */
+function applyBlockMeta(block: Block, m: CoercedBlockMeta): void {
+  if (m.x != null) block.x = m.x;
+  if (m.y != null) block.y = m.y;
+  if (m.startTime != null) block.startTime = m.startTime;
+  if (m.duration != null) block.duration = m.duration;
+  if (m.connectsTo) block.connectsTo = m.connectsTo;
+}
+
+/**
+ * The block-meta an author pinned on a heading, drawn from either the
+ * Pandoc `{key=value}` block or the squiggly `{[key=value]}` annotation
+ * (Pandoc wins on conflict — same precedence as {@link makeBlock}). Used by
+ * the timing passes to tell "author pinned this" from "derive it".
+ */
+function pinnedHeadingMeta(heading: MarkdownHeading | undefined): CoercedBlockMeta {
+  if (!heading) return {};
+  const fromAnnotation = heading.templateAnnotation?.params
+    ? coerceAnnotationValues(heading.templateAnnotation.params).blockMeta
+    : {};
+  const fromPandoc = heading.attributes?.blockMeta ?? {};
+  return { ...fromAnnotation, ...fromPandoc };
+}
+
 export function markdownToDoc(markdownDoc: MarkdownDocument, options?: MarkdownToDocOptions): Doc {
   const articleId = options?.articleId ?? 'markdown-doc';
   const defaultTemplate = options?.defaultTemplate ?? 'sectionHeader';
@@ -212,23 +241,21 @@ export function markdownToDoc(markdownDoc: MarkdownDocument, options?: MarkdownT
     };
 
     // {[…]} template params → templateOverrides (template-specific overrides).
+    // Known block-meta keys (duration, startTime, x, y, connectsTo) are *also*
+    // honored in the squiggly form, so an author — or the timeline editor —
+    // can write `{[duration=8]}` instead of the Pandoc `{duration=8}` block.
+    // The raw params still flow to `templateOverrides` for round-tripping; the
+    // Pandoc attribute block applied below wins when a key appears in both.
     if (annotation?.params) {
       block.templateOverrides = annotation.params;
+      applyBlockMeta(block, coerceAnnotationValues(annotation.params).blockMeta);
     }
 
     // Pandoc {#id .class key=value} attributes → block-level fields.
-    // The two annotation forms are intentionally kept distinct: template
-    // params customize the template, block-level metadata describes the
-    // block as an abstract entity (position, connections, classes, free-form).
     const attrs = heading?.attributes;
     if (attrs) {
       if (attrs.blockMeta) {
-        const m = attrs.blockMeta;
-        if (m.x != null) block.x = m.x;
-        if (m.y != null) block.y = m.y;
-        if (m.startTime != null) block.startTime = m.startTime;
-        if (m.duration != null) block.duration = m.duration;
-        if (m.connectsTo) block.connectsTo = m.connectsTo;
+        applyBlockMeta(block, attrs.blockMeta);
       }
       if (attrs.classes && attrs.classes.length > 0) {
         block.classes = attrs.classes;
@@ -384,7 +411,7 @@ export function markdownToDoc(markdownDoc: MarkdownDocument, options?: MarkdownT
   // Skip blocks that pinned an explicit duration via a heading attribute —
   // author intent wins over reading-time heuristics.
   for (const block of allBlocks) {
-    if (block.sourceHeading?.attributes?.blockMeta?.duration != null) continue;
+    if (pinnedHeadingMeta(block.sourceHeading).duration != null) continue;
     const bodyText = getBlockBodyText(block);
     if (bodyText.length > 0) {
       const estimate = estimateReadingTime(bodyText);
@@ -400,7 +427,7 @@ export function markdownToDoc(markdownDoc: MarkdownDocument, options?: MarkdownT
   // sequence after them.
   let currentTime = 0;
   for (const block of allBlocks) {
-    const explicitStart = block.sourceHeading?.attributes?.blockMeta?.startTime;
+    const explicitStart = pinnedHeadingMeta(block.sourceHeading).startTime;
     if (explicitStart == null) {
       block.startTime = currentTime;
     }

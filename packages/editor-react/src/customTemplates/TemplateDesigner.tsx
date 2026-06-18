@@ -17,13 +17,15 @@
  * persist to the doc, the library, or both.
  */
 
-import { useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
 import type { CustomTemplateDefinition, Layer, ViewportConfig } from '@bendyline/squisq/schemas';
-import { Scene, SelectTool, createTokenTool, type SceneTool } from '../scene';
+import { Scene, SelectTool, createTokenTool, buildTokenLayer, type SceneTool } from '../scene';
 import { useMemoryLayerAdapter } from './useMemoryLayerAdapter';
 import { normalizePositions } from './normalizePositions';
 import { TokenPalette } from './TokenPalette';
+import { TOKEN_DEFS, TOKEN_DRAG_MIME } from './tokenDefs';
+import { LayerToolbar } from './LayerToolbar';
 
 export type DesignerSaveTarget = 'doc' | 'library';
 
@@ -42,6 +44,20 @@ interface TemplateDesignerProps {
 
 const DESIGN_CANVAS = { width: 1920, height: 1080 };
 
+/**
+ * Derive a technical name slug from a human label: lowercase, collapse
+ * runs of non-alphanumerics to single hyphens, trim leading/trailing
+ * hyphens, and drop any leading non-letter chars so the result matches
+ * the `^[a-z][a-z0-9-]*$` rule enforced by `validate()`.
+ */
+function slugifyLabel(label: string): string {
+  return label
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^[^a-z]+/, '')
+    .replace(/^-+|-+$/g, '');
+}
+
 const VIEWPORT_OPTIONS: {
   id: 'landscape' | 'portrait' | 'square';
   label: string;
@@ -56,31 +72,41 @@ export function TemplateDesigner({ initial, onSave, onClose }: TemplateDesignerP
   const [name, setName] = useState(initial?.name ?? '');
   const [label, setLabel] = useState(initial?.label ?? '');
   const [description, setDescription] = useState(initial?.description ?? '');
+  // While true, the name auto-tracks the label (the 90% case). Editing
+  // the name field manually pins it; clearing the name resumes tracking.
+  const [nameAutoDerived, setNameAutoDerived] = useState(!initial?.name);
+
+  const handleLabelChange = useCallback(
+    (value: string) => {
+      setLabel(value);
+      if (nameAutoDerived) setName(slugifyLabel(value));
+    },
+    [nameAutoDerived],
+  );
+
+  const handleNameChange = useCallback(
+    (value: string) => {
+      // An empty name re-enables auto-derivation and re-syncs to the
+      // current label; any text pins the name to what the user typed.
+      if (value.trim() === '') {
+        setNameAutoDerived(true);
+        setName(slugifyLabel(label));
+      } else {
+        setNameAutoDerived(false);
+        setName(value);
+      }
+    },
+    [label],
+  );
   const [previewViewportId, setPreviewViewportId] = useState<'landscape' | 'portrait' | 'square'>(
     'landscape',
   );
 
-  // Build the toolset once. Token tools are factories so each one has
-  // its own state-free closure; SelectTool is the singleton from
-  // scene/tools/SelectTool.ts.
+  // Build the toolset once from the shared token definitions. Token
+  // tools are factories so each one has its own state-free closure;
+  // SelectTool is the singleton from scene/tools/SelectTool.ts.
   const tools: SceneTool[] = useMemo(
-    () => [
-      SelectTool,
-      createTokenTool({ id: 'token-title', label: 'Title', token: '{title}', kind: 'text' }),
-      createTokenTool({
-        id: 'token-content',
-        label: 'Content',
-        token: '{content}',
-        kind: 'text',
-      }),
-      createTokenTool({
-        id: 'token-children',
-        label: 'Children',
-        token: '{children}',
-        kind: 'text',
-      }),
-      createTokenTool({ id: 'token-image', label: 'Image', token: '{image:0}', kind: 'image' }),
-    ],
+    () => [SelectTool, ...TOKEN_DEFS.map((d) => createTokenTool(d))],
     [],
   );
 
@@ -88,6 +114,33 @@ export function TemplateDesigner({ initial, onSave, onClose }: TemplateDesignerP
     initial: initial?.layers ?? [],
     tools,
   });
+
+  // Drag-and-drop: a placeholder dragged from the palette and dropped on
+  // the canvas adds the same layer the click-to-place TokenTool would,
+  // at the drop point (`point` is already in viewport coordinates).
+  const handleCanvasDrop = useCallback(
+    (e: React.DragEvent, point: { x: number; y: number }) => {
+      const id = e.dataTransfer.getData(TOKEN_DRAG_MIME);
+      const def = TOKEN_DEFS.find((d) => d.id === id);
+      if (!def) return;
+      adapter.dispatch({ kind: 'addLayer', layer: buildTokenLayer(def, point) });
+    },
+    [adapter],
+  );
+
+  // Track the selected layer so the contextual styling toolbar can edit
+  // it. The Scene reports a set of ids; the designer is single-select for
+  // styling purposes, so we take the first.
+  const [selectedLayerId, setSelectedLayerId] = useState<string | null>(null);
+  const selectedLayer = adapter.layers.find((l) => l.id === selectedLayerId) ?? null;
+
+  const handleLayerAttr = useCallback(
+    (path: string, value: unknown) => {
+      if (!selectedLayerId) return;
+      adapter.dispatch({ kind: 'setLayerAttr', id: selectedLayerId, path, value });
+    },
+    [adapter, selectedLayerId],
+  );
 
   const [activeToolId, setActiveToolId] = useState<string>('select');
 
@@ -154,23 +207,26 @@ export function TemplateDesigner({ initial, onSave, onClose }: TemplateDesignerP
 
         <div className="squisq-template-designer-meta">
           <label className="squisq-template-designer-field">
-            <span>Name</span>
-            <input
-              type="text"
-              value={name}
-              placeholder="e.g. hero"
-              onChange={(e) => setName(e.target.value)}
-              spellCheck={false}
-            />
-          </label>
-          <label className="squisq-template-designer-field">
             <span>Label</span>
             <input
               type="text"
               value={label}
               placeholder="Hero Section"
-              onChange={(e) => setLabel(e.target.value)}
+              onChange={(e) => handleLabelChange(e.target.value)}
             />
+          </label>
+          <label className="squisq-template-designer-field">
+            <span>Name</span>
+            <input
+              type="text"
+              value={name}
+              placeholder="auto from label"
+              onChange={(e) => handleNameChange(e.target.value)}
+              spellCheck={false}
+            />
+            <span className="squisq-template-designer-field-hint">
+              Auto-derived from the label — edit to override.
+            </span>
           </label>
           <label className="squisq-template-designer-field">
             <span>Description</span>
@@ -204,6 +260,10 @@ export function TemplateDesigner({ initial, onSave, onClose }: TemplateDesignerP
                 </button>
               ))}
             </div>
+            {/* Contextual styling toolbar — appears when a layer is selected. */}
+            {selectedLayer && (
+              <LayerToolbar layer={selectedLayer} onAttr={handleLayerAttr} />
+            )}
             <div className="squisq-template-designer-scene">
               <Scene
                 viewport={currentViewport}
@@ -212,6 +272,8 @@ export function TemplateDesigner({ initial, onSave, onClose }: TemplateDesignerP
                 activeToolId={activeToolId}
                 onActiveToolIdChange={setActiveToolId}
                 onCommand={adapter.dispatch}
+                onSelectionChange={(ids) => setSelectedLayerId(ids.values().next().value ?? null)}
+                onDrop={handleCanvasDrop}
                 showToolbar={false}
               />
             </div>

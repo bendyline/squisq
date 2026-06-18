@@ -77,6 +77,14 @@ export interface SceneProps {
   onToggleMaximize?: () => void;
   /** Render the built-in toolbar (Select / Connect / etc.). Default true. */
   showToolbar?: boolean;
+  /**
+   * Called when content is dropped onto the canvas via HTML5 drag-and-drop
+   * (e.g. a placeholder dragged from the template designer's palette).
+   * `point` is in viewport coordinates — already through the pan/zoom
+   * transform — so callers can build a layer at the drop location. When
+   * omitted, the canvas accepts no drops.
+   */
+  onDrop?: (e: React.DragEvent<SVGSVGElement>, point: { x: number; y: number }) => void;
 }
 
 export function Scene(props: SceneProps) {
@@ -96,6 +104,7 @@ export function Scene(props: SceneProps) {
     maximized,
     onToggleMaximize,
     showToolbar = true,
+    onDrop,
   } = props;
 
   const layerRenderer = renderLayer ?? defaultRenderLayer;
@@ -257,6 +266,33 @@ export function Scene(props: SceneProps) {
     [activeTool],
   );
 
+  // ── Drag-and-drop (palette → canvas) ────────────────────────
+  // HTML5 DnD is independent of the pointer-event tool pipeline; the
+  // browser suppresses pointer events during a drag, so there's no
+  // conflict with the active tool. We only enable it when a host wires
+  // `onDrop`, and we translate the drop point into viewport coordinates
+  // (through the live pan/zoom transform) before handing it back.
+  const handleDragOver = useCallback(
+    (e: React.DragEvent<SVGSVGElement>) => {
+      if (!onDrop) return;
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'copy';
+    },
+    [onDrop],
+  );
+
+  const handleDrop = useCallback(
+    (e: React.DragEvent<SVGSVGElement>) => {
+      if (!onDrop) return;
+      e.preventDefault();
+      const rect = (e.currentTarget as SVGSVGElement).getBoundingClientRect();
+      const sx = e.clientX - rect.left;
+      const sy = e.clientY - rect.top;
+      onDrop(e, panZoom.screenToViewport(sx, sy));
+    },
+    [onDrop, panZoom],
+  );
+
   // ── Keyboard handling ──────────────────────────────────────
   // We make the SVG focusable (tabIndex=-1, set in SceneViewport) and
   // focus it on pointer-down. Keydown listeners on the SVG only fire
@@ -389,6 +425,8 @@ export function Scene(props: SceneProps) {
         onPointerMove={handlePointerMove}
         onPointerUp={handlePointerUp}
         onDoubleClick={handleDoubleClick}
+        onDragOver={onDrop ? handleDragOver : undefined}
+        onDrop={onDrop ? handleDrop : undefined}
       >
         {/* Extras (e.g. diagram edges) render behind the layers so the
             cards visually clip edge endpoints. */}

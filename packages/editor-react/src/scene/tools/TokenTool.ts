@@ -15,7 +15,7 @@ import type { SceneTool } from './SceneTool';
 
 export type TokenKind = 'text' | 'image';
 
-interface TokenToolOptions {
+export interface TokenToolOptions {
   /** Stable tool id (e.g. `'token-title'`). */
   id: string;
   /** Label shown in the toolbar / palette button. */
@@ -44,12 +44,41 @@ interface TokenToolOptions {
   height?: number;
 }
 
-export function createTokenTool(options: TokenToolOptions): SceneTool {
+/**
+ * Build a placeholder layer for `options` with its top-left corner at
+ * the given viewport point. Shared by the click-to-place TokenTool and
+ * the template designer's drag-and-drop drop handler so both produce
+ * identical layers.
+ */
+export function buildTokenLayer(
+  options: TokenToolOptions,
+  point: { x: number; y: number },
+): TextLayer | ImageLayer {
   const width = options.width ?? 480;
   const height = options.height ?? (options.kind === 'image' ? 320 : 72);
   const fontSize = options.fontSize ?? 36;
   const color = options.color ?? '#0f172a';
+  const id = nextLayerId(options.kind);
+  if (options.kind === 'text') {
+    return {
+      id,
+      type: 'text',
+      position: { x: point.x, y: point.y, width, height },
+      content: {
+        text: options.token,
+        style: { fontSize, color, textAlign: 'left' },
+      },
+    };
+  }
+  return {
+    id,
+    type: 'image',
+    position: { x: point.x, y: point.y, width, height },
+    content: { src: options.token, alt: 'Placeholder image', fit: 'cover' },
+  };
+}
 
+export function createTokenTool(options: TokenToolOptions): SceneTool {
   return {
     id: options.id,
     label: options.label,
@@ -62,27 +91,7 @@ export function createTokenTool(options: TokenToolOptions): SceneTool {
       const sx = e.clientX - rect.left;
       const sy = e.clientY - rect.top;
       const v = ctx.screenToViewport(sx, sy);
-      const id = nextLayerId(options.kind);
-      if (options.kind === 'text') {
-        const layer: TextLayer = {
-          id,
-          type: 'text',
-          position: { x: v.x, y: v.y, width, height },
-          content: {
-            text: options.token,
-            style: { fontSize, color, textAlign: 'left' },
-          },
-        };
-        ctx.dispatch({ kind: 'addLayer', layer });
-      } else {
-        const layer: ImageLayer = {
-          id,
-          type: 'image',
-          position: { x: v.x, y: v.y, width, height },
-          content: { src: options.token, alt: 'Placeholder image', fit: 'cover' },
-        };
-        ctx.dispatch({ kind: 'addLayer', layer });
-      }
+      ctx.dispatch({ kind: 'addLayer', layer: buildTokenLayer(options, v) });
       // Hand control back to Select so the user can immediately
       // reposition the newly-added placeholder.
       ctx.setActiveTool?.('select');

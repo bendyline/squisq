@@ -107,6 +107,11 @@
   background: rgba(0, 0, 0, 0.07);
   container-type: inline-size;
   container-name: squisq-toolbar;
+  /* Icon glyphs render a touch lighter than the dark text labels (#374151)
+     so the solid Font Awesome icons read less heavy. Hosts can override.
+     Only the Free solid family ships these glyphs (no light/thin in Free),
+     so we soften the color rather than the stroke weight. */
+  --squisq-toolbar-icon: #6b7280;
 }
 
 /* ─── View Tabs (inside toolbar) ─────────────────────── */
@@ -249,6 +254,22 @@
 .squisq-toolbar-button--active:hover {
   background: #bfdbfe;
   color: #1d4ed8;
+}
+
+/* Font Awesome glyphs sit a touch larger than the 13px text labels so
+   icon buttons read at a comfortable weight against H1–H6 etc. They
+   render in a lighter color than the text labels by default. */
+.squisq-toolbar-button > i {
+  font-size: 15px;
+  line-height: 1;
+  color: var(--squisq-toolbar-icon);
+}
+
+/* On hover / active, glyphs follow the button's color so the existing
+   hover and toggled-on feedback still applies. */
+.squisq-toolbar-button:hover > i,
+.squisq-toolbar-button--active > i {
+  color: inherit;
 }
 
 /* ─── Toolbar: narrow screen adjustments ───────────────── */
@@ -1298,6 +1319,8 @@
 /* Toolbar */
 .squisq-editor-shell[data-theme='dark'] .squisq-toolbar {
   background: rgba(255, 255, 255, 0.08);
+  /* Muted, but lighter than the dark-theme label color (#d1d5db). */
+  --squisq-toolbar-icon: #9ca3af;
 }
 
 .squisq-editor-shell[data-theme='dark'] .squisq-toolbar-view-tabs {
@@ -2945,6 +2968,54 @@
   min-height: 0;
 }
 
+/* ─── Block preview panel ─────────────────────────────────
+   A large live preview of the active block, beside the card in
+   block / timeline mode when "Show block previews" is on. Shares the
+   editing area roughly 50/50 with the card; the framed slide inside
+   fills the panel width at the active viewport's aspect ratio. */
+.squisq-editor-with-gutter > .squisq-block-preview-panel {
+  flex: 1 1 0;
+  min-width: 260px;
+  min-height: 0;
+}
+
+.squisq-block-preview-panel {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 12px 16px;
+  /* Same beige "desk" as the block card so the framed slide sits on it. */
+  background: #dcd8d0;
+  border-left: 1px solid #b0a99a;
+  overflow: auto;
+}
+
+.squisq-block-preview-frame {
+  width: 100%;
+  max-width: 760px;
+  max-height: 100%;
+  overflow: hidden;
+  background: var(--squisq-preview-card-svg-bg, #f1f5f9);
+  border: 1px solid #b0a99a;
+  border-radius: 6px;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.1);
+}
+
+.squisq-block-preview-frame svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.squisq-editor-shell[data-theme='dark'] .squisq-block-preview-panel {
+  background: #0f1219;
+  border-left-color: #2a3144;
+}
+
+.squisq-editor-shell[data-theme='dark'] .squisq-block-preview-frame {
+  border-color: #2a3144;
+}
+
 .squisq-block-card {
   display: flex;
   flex-direction: column;
@@ -3061,6 +3132,7 @@
    Horizontal strip of block + media bars shown below the editor in Timeline
    view. Scrolls horizontally; bars are absolutely positioned by time. */
 .squisq-timeline {
+  position: relative;
   flex-shrink: 0;
   display: flex;
   flex-direction: row;
@@ -3104,6 +3176,27 @@
   cursor: default;
 }
 
+.squisq-timeline-play-button {
+  font-size: 12px;
+  color: #2563eb;
+}
+
+.squisq-timeline-time {
+  font-size: 10px;
+  color: #6b7280;
+  text-align: center;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Off-screen host for the timed-media playback elements. */
+.squisq-timeline-media-host {
+  position: absolute;
+  width: 0;
+  height: 0;
+  overflow: hidden;
+}
+
 .squisq-timeline-scroll {
   flex: 1;
   overflow-x: auto;
@@ -3119,6 +3212,51 @@
   flex-direction: column;
   min-width: 100%;
   min-height: 100%;
+  box-sizing: border-box;
+  /* Leave room at the top for the playhead's knob/notch, which is anchored
+     to the padding-box top (absolute `top: 0`) and so stays above the rows
+     while this padding pushes the track down — the notch reads as a handle
+     sitting above the timeline rather than overlapping the first block. */
+  padding-top: 14px;
+}
+
+/* Playhead — draggable scrubber. A wide transparent column is the hit area;
+   the 2px red line is drawn down its center via ::before. */
+.squisq-timeline-playhead {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 14px;
+  margin-left: -7px;
+  z-index: 20;
+  cursor: ew-resize;
+  touch-action: none;
+}
+
+.squisq-timeline-playhead::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 6px;
+  width: 2px;
+  background: #ef4444;
+  pointer-events: none;
+}
+
+.squisq-timeline-playhead-knob {
+  position: absolute;
+  top: 0;
+  left: 2px;
+  width: 10px;
+  height: 9px;
+  border-radius: 2px;
+  background: #ef4444;
+  pointer-events: none;
+}
+
+.squisq-timeline-row--ruler {
+  cursor: pointer;
 }
 
 .squisq-timeline-row {
@@ -3154,11 +3292,39 @@
   box-shadow: 0 0 0 1px var(--squisq-outline-accent, #6c5ce7) inset;
 }
 
+/* Per-bar slideshow thumbnail — right-aligned and inset with a small margin
+   so it reads as a card tucked into the track. Width follows the 16:9 viewport
+   from the fixed (margin-inset) height. */
+.squisq-timeline-block-thumb {
+  position: absolute;
+  top: 4px;
+  bottom: 4px;
+  right: 4px;
+  aspect-ratio: 16 / 9;
+  z-index: 0;
+  overflow: hidden;
+  border-radius: 3px;
+  border: 1px solid rgba(0, 0, 0, 0.12);
+  pointer-events: none;
+}
+
+.squisq-timeline-block-thumb svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
 .squisq-timeline-block-label {
+  position: relative;
+  z-index: 1;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
   pointer-events: none;
+  /* Legible over the thumbnail. */
+  background: rgba(255, 255, 255, 0.82);
+  border-radius: 3px;
+  padding: 0 4px;
 }
 
 .squisq-timeline-clip {
@@ -3262,10 +3428,22 @@
   color: #d1d5db;
 }
 
+.squisq-editor-shell[data-theme='dark'] .squisq-timeline-block-label {
+  background: rgba(17, 24, 39, 0.82);
+}
+
 .squisq-editor-shell[data-theme='dark'] .squisq-timeline-zoom-button {
   border-color: #374151;
   background: #111827;
   color: #d1d5db;
+}
+
+.squisq-editor-shell[data-theme='dark'] .squisq-timeline-time {
+  color: #9ca3af;
+}
+
+.squisq-editor-shell[data-theme='dark'] .squisq-timeline-play-button {
+  color: #60a5fa;
 }
 
 .squisq-editor-shell[data-theme='dark'] .squisq-timeline-zoom-button:hover:not(:disabled) {

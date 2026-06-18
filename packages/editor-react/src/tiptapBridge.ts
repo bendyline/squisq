@@ -646,12 +646,28 @@ export function tiptapToMarkdown(html: string): string {
 function renderListItem(prefix: string, html: string): string[] {
   const indent = ' '.repeat(prefix.length);
 
+  // Pull out any block-level media nested in the item (e.g. a recording
+  // dropped onto a list bullet, or a clip dragged into one). The inline
+  // paragraph walk below ignores `<video>` / `<audio>` tags, so without
+  // this they'd be silently dropped on serialize and lost from the
+  // markdown source. We collect them and re-emit each as an indented
+  // continuation line so they stay inside the list item and round-trip
+  // through the markdown parser's block-media handler.
+  const media: string[] = [];
+  const htmlWithoutMedia = html.replace(
+    /<(video|audio)\b([^>]*)>(?:[\s\S]*?<\/\1>)?/gi,
+    (_full, tag: string, attrs: string) => {
+      media.push(serializeMediaTag(tag.toLowerCase() === 'video' ? 'video' : 'audio', attrs ?? ''));
+      return '';
+    },
+  );
+
   // Split on </p><p> to detect paragraph breaks within the item
-  const paragraphs = html
+  const paragraphs = htmlWithoutMedia
     .split(/<\/p>\s*<p[^>]*>/i)
     .map((p) => p.replace(/^<p[^>]*>/i, '').replace(/<\/p>\s*$/i, ''));
 
-  const result: string[] = [];
+  const textLines: string[] = [];
   paragraphs.forEach((paragraph, pIdx) => {
     const inline = htmlToInline(paragraph).trim();
     if (!inline) return;
@@ -660,16 +676,35 @@ function renderListItem(prefix: string, html: string): string[] {
     const subLines = inline.split('\n');
     subLines.forEach((sub, sIdx) => {
       if (pIdx === 0 && sIdx === 0) {
-        result.push(prefix + sub);
+        textLines.push(prefix + sub);
       } else {
         // Blank line separator between paragraphs (sIdx === 0 means new paragraph)
-        if (sIdx === 0) result.push('');
-        result.push(indent + sub);
+        if (sIdx === 0) textLines.push('');
+        textLines.push(indent + sub);
       }
     });
   });
 
-  return result.length > 0 ? result : [prefix];
+  if (textLines.length === 0 && media.length === 0) return [prefix];
+
+  // Text first (its first line carries the bullet marker), then each media
+  // tag as its own indented continuation block. If the item is media-only,
+  // the first tag takes the bullet so the item isn't emitted empty.
+  const result: string[] = [];
+  if (textLines.length > 0) {
+    result.push(...textLines);
+    for (const tag of media) {
+      result.push('');
+      result.push(indent + tag);
+    }
+  } else {
+    result.push(prefix + media[0]);
+    for (const tag of media.slice(1)) {
+      result.push('');
+      result.push(indent + tag);
+    }
+  }
+  return result;
 }
 
 // ─── Table helpers ───────────────────────────────────────

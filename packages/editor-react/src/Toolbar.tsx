@@ -21,6 +21,7 @@ import { findBlockSliceAtLine, findBlockSliceByHeadingIndex } from './blockSlice
 import { LinkDialog } from './LinkDialog';
 import { DocumentSettingsDialog } from './DocumentSettingsDialog';
 import { EmojiPicker, EMOJI_PICKER_WIDTH, EMOJI_PICKER_MAX_HEIGHT } from './EmojiPicker';
+import { Icon } from './Icon';
 import type { PickerEntry } from './emojiData';
 import { createPortal } from 'react-dom';
 
@@ -54,46 +55,27 @@ export interface ToolbarProps {
 interface ToolbarButton {
   id: string;
   label: string;
+  /** Text glyph shown when the button has no Font Awesome icon (headings). */
   icon: string;
   title: string;
   group: 'format' | 'lists' | 'structure' | 'insert' | 'media';
-  /** CSS font style for the icon (e.g. italic for the I button) */
-  iconStyle?: React.CSSProperties;
+  /** Font Awesome class string (e.g. `"fa-solid fa-bold"`); omitted for text buttons. */
+  faIcon?: string;
 }
 
 const BUTTONS: ToolbarButton[] = [
   // Format group — B/I/S trio.
-  {
-    id: 'bold',
-    label: 'B',
-    icon: 'B',
-    title: 'Bold (Ctrl+B)',
-    group: 'format',
-    iconStyle: { fontWeight: 700 },
-  },
-  {
-    id: 'italic',
-    label: 'I',
-    icon: 'I',
-    title: 'Italic (Ctrl+I)',
-    group: 'format',
-    iconStyle: { fontStyle: 'italic' },
-  },
-  {
-    id: 'strikethrough',
-    label: 'S',
-    icon: 'S',
-    title: 'Strikethrough',
-    group: 'format',
-    iconStyle: { textDecoration: 'line-through' },
-  },
+  { id: 'bold', label: 'B', icon: 'B', title: 'Bold (Ctrl+B)', group: 'format', faIcon: 'fa-solid fa-bold' },
+  { id: 'italic', label: 'I', icon: 'I', title: 'Italic (Ctrl+I)', group: 'format', faIcon: 'fa-solid fa-italic' },
+  { id: 'strikethrough', label: 'S', icon: 'S', title: 'Strikethrough', group: 'format', faIcon: 'fa-solid fa-strikethrough' },
 
   // Lists group — sits between format and structure so bullets/numbers
   // are adjacent to the inline formatters people reach for together.
-  { id: 'ul', label: '•', icon: '•', title: 'Bullet list', group: 'lists' },
-  { id: 'ol', label: '1.', icon: '1.', title: 'Numbered list', group: 'lists' },
+  { id: 'ul', label: '•', icon: '•', title: 'Bullet list', group: 'lists', faIcon: 'fa-solid fa-list-ul' },
+  { id: 'ol', label: '1.', icon: '1.', title: 'Numbered list', group: 'lists', faIcon: 'fa-solid fa-list-ol' },
 
-  // Structure group
+  // Structure group — headings keep their text labels; Font Awesome Free
+  // has no numbered (H1–H6) heading glyphs, and the numerals are clearer.
   { id: 'h1', label: 'H1', icon: 'H1', title: 'Heading 1', group: 'structure' },
   { id: 'h2', label: 'H2', icon: 'H2', title: 'Heading 2', group: 'structure' },
   { id: 'h3', label: 'H3', icon: 'H3', title: 'Heading 3', group: 'structure' },
@@ -102,119 +84,21 @@ const BUTTONS: ToolbarButton[] = [
   { id: 'h6', label: 'H6', icon: 'H6', title: 'Heading 6', group: 'structure' },
 
   // Insert group — block-level inserts (quote, code blocks, rules)
-  { id: 'quote', label: '❝', icon: '❝', title: 'Blockquote', group: 'insert' },
-  { id: 'codeblock', label: '{ }', icon: '{ }', title: 'Code block', group: 'insert' },
-  { id: 'code', label: '</>', icon: '</>', title: 'Inline code', group: 'insert' },
-  { id: 'hr', label: '—', icon: '—', title: 'Horizontal rule', group: 'insert' },
+  { id: 'quote', label: '❝', icon: '❝', title: 'Blockquote', group: 'insert', faIcon: 'fa-solid fa-quote-left' },
+  { id: 'codeblock', label: '{ }', icon: '{ }', title: 'Code block', group: 'insert', faIcon: 'fa-solid fa-file-code' },
+  { id: 'code', label: '</>', icon: '</>', title: 'Inline code', group: 'insert', faIcon: 'fa-solid fa-code' },
+  { id: 'hr', label: '—', icon: '—', title: 'Horizontal rule', group: 'insert', faIcon: 'fa-solid fa-minus' },
 
   // Media group — links, tables, images, emoji
-  { id: 'link', label: '🔗', icon: '🔗', title: 'Insert link', group: 'media' },
-  { id: 'table', label: 'table', icon: '', title: 'Insert table', group: 'media' },
-  { id: 'image', label: '🖼', icon: '🖼', title: 'Insert image', group: 'media' },
-  { id: 'emoji', label: '😊', icon: '😊', title: 'Insert emoji', group: 'media' },
+  { id: 'link', label: '🔗', icon: '🔗', title: 'Insert link', group: 'media', faIcon: 'fa-solid fa-link' },
+  { id: 'table', label: 'table', icon: '', title: 'Insert table', group: 'media', faIcon: 'fa-solid fa-table' },
+  { id: 'image', label: '🖼', icon: '🖼', title: 'Insert image', group: 'media', faIcon: 'fa-solid fa-image' },
+  { id: 'emoji', label: '😊', icon: '😊', title: 'Insert emoji', group: 'media', faIcon: 'fa-solid fa-face-smile' },
 ];
 
-// ─── Inline SVG icons (line-art, currentColor) ──────────
-
-const TABLE_ICON = (
-  <svg
-    width="14"
-    height="14"
-    viewBox="0 0 14 14"
-    fill="none"
-    stroke="currentColor"
-    strokeWidth="1.4"
-    strokeLinecap="round"
-  >
-    <rect x="1" y="1" width="12" height="12" rx="1" />
-    <line x1="1" y1="5" x2="13" y2="5" />
-    <line x1="1" y1="9" x2="13" y2="9" />
-    <line x1="5" y1="1" x2="5" y2="13" />
-    <line x1="9" y1="1" x2="9" y2="13" />
-  </svg>
-);
-
-const LINK_ICON = (
-  <svg
-    width="14"
-    height="14"
-    viewBox="0 0 14 14"
-    fill="none"
-    stroke="currentColor"
-    strokeWidth="1.4"
-    strokeLinecap="round"
-    strokeLinejoin="round"
-  >
-    <path d="M5.75 8.25 L8.25 5.75" />
-    <path d="M6.5 3.75 L8 2.25 a2.5 2.5 0 0 1 3.54 3.54 L10 7.25" />
-    <path d="M7.5 10.25 L6 11.75 a2.5 2.5 0 0 1 -3.54 -3.54 L4 6.75" />
-  </svg>
-);
-
-const IMAGE_ICON = (
-  <svg
-    width="14"
-    height="14"
-    viewBox="0 0 14 14"
-    fill="none"
-    stroke="currentColor"
-    strokeWidth="1.4"
-    strokeLinecap="round"
-    strokeLinejoin="round"
-  >
-    <rect x="1.5" y="2.5" width="11" height="9" rx="1" />
-    <circle cx="5" cy="5.5" r="0.9" />
-    <path d="M2 10 L5.5 7 L8 9 L10 7.5 L12.5 10" />
-  </svg>
-);
-
-const PAPERCLIP_ICON = (
-  <svg
-    width="14"
-    height="14"
-    viewBox="0 0 14 14"
-    fill="none"
-    stroke="currentColor"
-    strokeWidth="1.4"
-    strokeLinecap="round"
-    strokeLinejoin="round"
-  >
-    <path d="M11 4 L5.5 9.5 a1.75 1.75 0 0 0 2.5 2.5 L12.5 7.5 a3 3 0 0 0 -4.25 -4.25 L3 8.5 a4.25 4.25 0 0 0 6 6 L13 10.5" />
-  </svg>
-);
-
-const EMOJI_ICON = (
-  <svg
-    width="14"
-    height="14"
-    viewBox="0 0 14 14"
-    fill="none"
-    stroke="currentColor"
-    strokeWidth="1.4"
-    strokeLinecap="round"
-    strokeLinejoin="round"
-  >
-    <circle cx="7" cy="7" r="5.25" />
-    <circle cx="5.25" cy="5.75" r="0.6" fill="currentColor" stroke="none" />
-    <circle cx="8.75" cy="5.75" r="0.6" fill="currentColor" stroke="none" />
-    <path d="M4.75 8.5 a2.5 2.5 0 0 0 4.5 0" />
-  </svg>
-);
-
-/** Returns an SVG element when the button id maps to one, otherwise null. */
-function buttonIconSvg(id: string): React.ReactNode | null {
-  switch (id) {
-    case 'table':
-      return TABLE_ICON;
-    case 'link':
-      return LINK_ICON;
-    case 'image':
-      return IMAGE_ICON;
-    case 'emoji':
-      return EMOJI_ICON;
-    default:
-      return null;
-  }
+/** Renders a button's icon: a Font Awesome glyph when set, else the text label. */
+function buttonIcon(btn: ToolbarButton): ReactNode {
+  return btn.faIcon ? <Icon icon={btn.faIcon} /> : btn.icon;
 }
 
 // ─── Tiptap active-state map ────────────────────────────
@@ -1191,9 +1075,8 @@ export function Toolbar({
                     aria-label={btn.title}
                     aria-pressed={active}
                     disabled={disabled}
-                    style={btn.iconStyle}
                   >
-                    {buttonIconSvg(btn.id) ?? btn.icon}
+                    {buttonIcon(btn)}
                   </button>
                 );
               })}
@@ -1414,11 +1297,7 @@ export function Toolbar({
                       }}
                       disabled={disabled}
                     >
-                      {buttonIconSvg(btn.id) ?? (
-                        <span className="squisq-toolbar-overflow-icon" style={btn.iconStyle}>
-                          {btn.icon}
-                        </span>
-                      )}
+                      <span className="squisq-toolbar-overflow-icon">{buttonIcon(btn)}</span>
                       <span>{btn.title}</span>
                     </button>
                   );
@@ -1516,21 +1395,7 @@ export function Toolbar({
           data-tooltip="Document settings"
           aria-label="Document settings"
         >
-          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-            <path
-              d="M3 2.5h7l3 3v8a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1v-10a1 1 0 0 1 1-1Z"
-              stroke="currentColor"
-              strokeWidth="1.3"
-              strokeLinejoin="round"
-            />
-            <path d="M10 2.5v3h3" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round" />
-            <path
-              d="M5 8.5h6M5 11h4"
-              stroke="currentColor"
-              strokeWidth="1.3"
-              strokeLinecap="round"
-            />
-          </svg>
+          <Icon icon="fa-solid fa-file-lines" />
         </button>
       )}
       {!isCodeMode && <ViewMenuPanel />}
@@ -1543,7 +1408,7 @@ export function Toolbar({
           aria-pressed={showFiles}
           aria-label="Toggle Files panel"
         >
-          {PAPERCLIP_ICON}
+          <Icon icon="fa-solid fa-paperclip" />
         </button>
       )}
       {/* Right slot — rightmost end of toolbar */}
