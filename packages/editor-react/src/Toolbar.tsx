@@ -21,6 +21,7 @@ import { findBlockSliceAtLine, findBlockSliceByHeadingIndex } from './blockSlice
 import { LinkDialog } from './LinkDialog';
 import { DocumentSettingsDialog } from './DocumentSettingsDialog';
 import { EmojiPicker, EMOJI_PICKER_WIDTH, EMOJI_PICKER_MAX_HEIGHT } from './EmojiPicker';
+import { CustomLayoutManager } from './customTemplates/CustomLayoutManager';
 import { Icon } from './Icon';
 import type { PickerEntry } from './emojiData';
 import { createPortal } from 'react-dom';
@@ -65,14 +66,49 @@ interface ToolbarButton {
 
 const BUTTONS: ToolbarButton[] = [
   // Format group — B/I/S trio.
-  { id: 'bold', label: 'B', icon: 'B', title: 'Bold (Ctrl+B)', group: 'format', faIcon: 'fa-solid fa-bold' },
-  { id: 'italic', label: 'I', icon: 'I', title: 'Italic (Ctrl+I)', group: 'format', faIcon: 'fa-solid fa-italic' },
-  { id: 'strikethrough', label: 'S', icon: 'S', title: 'Strikethrough', group: 'format', faIcon: 'fa-solid fa-strikethrough' },
+  {
+    id: 'bold',
+    label: 'B',
+    icon: 'B',
+    title: 'Bold (Ctrl+B)',
+    group: 'format',
+    faIcon: 'fa-solid fa-bold',
+  },
+  {
+    id: 'italic',
+    label: 'I',
+    icon: 'I',
+    title: 'Italic (Ctrl+I)',
+    group: 'format',
+    faIcon: 'fa-solid fa-italic',
+  },
+  {
+    id: 'strikethrough',
+    label: 'S',
+    icon: 'S',
+    title: 'Strikethrough',
+    group: 'format',
+    faIcon: 'fa-solid fa-strikethrough',
+  },
 
   // Lists group — sits between format and structure so bullets/numbers
   // are adjacent to the inline formatters people reach for together.
-  { id: 'ul', label: '•', icon: '•', title: 'Bullet list', group: 'lists', faIcon: 'fa-solid fa-list-ul' },
-  { id: 'ol', label: '1.', icon: '1.', title: 'Numbered list', group: 'lists', faIcon: 'fa-solid fa-list-ol' },
+  {
+    id: 'ul',
+    label: '•',
+    icon: '•',
+    title: 'Bullet list',
+    group: 'lists',
+    faIcon: 'fa-solid fa-list-ul',
+  },
+  {
+    id: 'ol',
+    label: '1.',
+    icon: '1.',
+    title: 'Numbered list',
+    group: 'lists',
+    faIcon: 'fa-solid fa-list-ol',
+  },
 
   // Structure group — headings keep their text labels; Font Awesome Free
   // has no numbered (H1–H6) heading glyphs, and the numerals are clearer.
@@ -84,16 +120,72 @@ const BUTTONS: ToolbarButton[] = [
   { id: 'h6', label: 'H6', icon: 'H6', title: 'Heading 6', group: 'structure' },
 
   // Insert group — block-level inserts (quote, code blocks, rules)
-  { id: 'quote', label: '❝', icon: '❝', title: 'Blockquote', group: 'insert', faIcon: 'fa-solid fa-quote-left' },
-  { id: 'codeblock', label: '{ }', icon: '{ }', title: 'Code block', group: 'insert', faIcon: 'fa-solid fa-file-code' },
-  { id: 'code', label: '</>', icon: '</>', title: 'Inline code', group: 'insert', faIcon: 'fa-solid fa-code' },
-  { id: 'hr', label: '—', icon: '—', title: 'Horizontal rule', group: 'insert', faIcon: 'fa-solid fa-minus' },
+  {
+    id: 'quote',
+    label: '❝',
+    icon: '❝',
+    title: 'Blockquote',
+    group: 'insert',
+    faIcon: 'fa-solid fa-quote-left',
+  },
+  {
+    id: 'codeblock',
+    label: '{ }',
+    icon: '{ }',
+    title: 'Code block',
+    group: 'insert',
+    faIcon: 'fa-solid fa-file-code',
+  },
+  {
+    id: 'code',
+    label: '</>',
+    icon: '</>',
+    title: 'Inline code',
+    group: 'insert',
+    faIcon: 'fa-solid fa-code',
+  },
+  {
+    id: 'hr',
+    label: '—',
+    icon: '—',
+    title: 'Horizontal rule',
+    group: 'insert',
+    faIcon: 'fa-solid fa-minus',
+  },
 
   // Media group — links, tables, images, emoji
-  { id: 'link', label: '🔗', icon: '🔗', title: 'Insert link', group: 'media', faIcon: 'fa-solid fa-link' },
-  { id: 'table', label: 'table', icon: '', title: 'Insert table', group: 'media', faIcon: 'fa-solid fa-table' },
-  { id: 'image', label: '🖼', icon: '🖼', title: 'Insert image', group: 'media', faIcon: 'fa-solid fa-image' },
-  { id: 'emoji', label: '😊', icon: '😊', title: 'Insert emoji', group: 'media', faIcon: 'fa-solid fa-face-smile' },
+  {
+    id: 'link',
+    label: '🔗',
+    icon: '🔗',
+    title: 'Insert link',
+    group: 'media',
+    faIcon: 'fa-solid fa-link',
+  },
+  {
+    id: 'table',
+    label: 'table',
+    icon: '',
+    title: 'Insert table',
+    group: 'media',
+    faIcon: 'fa-solid fa-table',
+  },
+  {
+    id: 'image',
+    label: '🖼',
+    icon: '🖼',
+    title: 'Insert image',
+    group: 'media',
+    faIcon: 'fa-solid fa-image',
+  },
+  {
+    id: 'emoji',
+    label: '😊',
+    icon: '😊',
+    title: 'Insert emoji',
+    group: 'media',
+    faIcon: 'fa-solid fa-face-smile',
+  },
 ];
 
 /** Renders a button's icon: a Font Awesome glyph when set, else the text label. */
@@ -250,6 +342,9 @@ export function Toolbar({
 
   // Document settings (frontmatter) dialog
   const [showDocSettings, setShowDocSettings] = useState(false);
+
+  // Custom layout manager dialog (list of doc/library layouts + designer)
+  const [showLayoutManager, setShowLayoutManager] = useState(false);
 
   // On narrow screens, force all buttons into the overflow menu
   const overflowIndex = isNarrow ? 0 : measuredOverflowIndex;
@@ -1398,6 +1493,17 @@ export function Toolbar({
           <Icon icon="fa-solid fa-file-lines" />
         </button>
       )}
+      {!isCodeMode && (
+        <button
+          type="button"
+          className={`squisq-toolbar-button${showLayoutManager ? ' squisq-toolbar-button--active' : ''}`}
+          onClick={() => setShowLayoutManager(true)}
+          data-tooltip="Custom layouts"
+          aria-label="Custom layouts"
+        >
+          <Icon icon="fa-solid fa-shapes" />
+        </button>
+      )}
       {!isCodeMode && <ViewMenuPanel />}
       {/* Files toggle — visible when callback is provided */}
       {onToggleFiles && (
@@ -1425,6 +1531,9 @@ export function Toolbar({
           onClose={() => setShowDocSettings(false)}
         />
       )}
+
+      {/* Custom layout manager — full-window list + designer dialog. */}
+      {showLayoutManager && <CustomLayoutManager onClose={() => setShowLayoutManager(false)} />}
 
       {/* Link insert/edit dialog — shared by WYSIWYG and Raw views. */}
       {linkDialog && (

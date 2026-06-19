@@ -872,7 +872,7 @@ function TemplateGalleryBody({
                 +
               </span>
               <span className="squisq-template-gallery-new-body">
-                <span className="squisq-template-gallery-new-label">New custom template</span>
+                <span className="squisq-template-gallery-new-label">New layout</span>
                 <span className="squisq-template-gallery-new-desc">
                   Design a reusable layout with placeholders for {'{title}'} and {'{content}'}.
                 </span>

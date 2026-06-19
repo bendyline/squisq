@@ -12,6 +12,7 @@ import type { TextLayer as TextLayerType } from '@bendyline/squisq/schemas';
 import { DEFAULT_DOC_FONT } from '@bendyline/squisq/schemas';
 import { getAnimationStyle } from '../utils/animationUtils';
 import { resolveValue } from '../utils/layerUtils';
+import { resolveFill, borderDashArray } from '../utils/fillStyle';
 
 interface TextLayerProps {
   layer: TextLayerType;
@@ -30,7 +31,8 @@ export function TextLayer({ layer, viewport, blockTime }: TextLayerProps) {
   // sits (matching `layerBounds` in the editor).
   const rawX = resolveValue(position.x, viewport.width);
   const rawY = resolveValue(position.y, viewport.height);
-  const boxWidth = position.width != null ? resolveValue(position.width, viewport.width) : undefined;
+  const boxWidth =
+    position.width != null ? resolveValue(position.width, viewport.width) : undefined;
   const boxHeight =
     position.height != null ? resolveValue(position.height, viewport.height) : undefined;
   const maxWidth = boxWidth;
@@ -93,18 +95,30 @@ export function TextLayer({ layer, viewport, blockTime }: TextLayerProps) {
         </defs>
       )}
 
-      {/* Background box if specified */}
-      {style.background && (
-        <rect
-          x={x - (style.padding || 16)}
-          y={y - style.fontSize - (style.padding || 16)}
-          width={getTextBoxWidth(lines, style) + (style.padding || 16) * 2}
-          height={lines.length * lineHeightPx + (style.padding || 16) * 2}
-          fill={style.background}
-          rx={4}
-          ry={4}
-        />
-      )}
+      {/* Background / border box. When the layer has an explicit box
+          (width + height — as the template designer always creates), the
+          fill and border cover that rectangle: text is, after all, a
+          rectangle. Without a box we fall back to a snug rect hugging the
+          text (legacy behavior for point-anchored text). */}
+      <TextBox
+        layerId={layer.id}
+        style={style}
+        box={
+          boxWidth != null && boxHeight != null
+            ? {
+                x: rawX - anchorAxis(anchor, boxWidth, 'x'),
+                y: rawY - anchorAxis(anchor, boxHeight, 'y'),
+                width: boxWidth,
+                height: boxHeight,
+              }
+            : {
+                x: x - (style.padding || 16),
+                y: y - style.fontSize - (style.padding || 16),
+                width: getTextBoxWidth(lines, style) + (style.padding || 16) * 2,
+                height: lines.length * lineHeightPx + (style.padding || 16) * 2,
+              }
+        }
+      />
 
       {/* Text element with tspans for each line */}
       <text
@@ -122,6 +136,45 @@ export function TextLayer({ layer, viewport, blockTime }: TextLayerProps) {
         ))}
       </text>
     </g>
+  );
+}
+
+/**
+ * The text layer's background + border rect. Renders nothing unless a
+ * fill (solid or gradient) or a visible border is configured.
+ */
+function TextBox({
+  layerId,
+  style,
+  box,
+}: {
+  layerId: string;
+  style: import('@bendyline/squisq/schemas').TextStyle;
+  box: { x: number; y: number; width: number; height: number };
+}) {
+  const hasFill = !!(style.background || style.backgroundGradient);
+  const hasBorder = !!(style.borderColor && (style.borderWidth ?? 0) > 0);
+  if (!hasFill && !hasBorder) return null;
+
+  const { fill, def } = resolveFill(layerId, style.background, style.backgroundGradient);
+  const dash = borderDashArray(style.borderStyle, style.borderWidth);
+  return (
+    <>
+      {def && <defs>{def}</defs>}
+      <rect
+        x={box.x}
+        y={box.y}
+        width={box.width}
+        height={box.height}
+        fill={hasFill ? fill : 'none'}
+        fillOpacity={hasFill ? style.backgroundOpacity : undefined}
+        stroke={hasBorder ? style.borderColor : undefined}
+        strokeWidth={hasBorder ? style.borderWidth : undefined}
+        strokeDasharray={hasBorder ? dash : undefined}
+        rx={4}
+        ry={4}
+      />
+    </>
   );
 }
 
@@ -160,7 +213,12 @@ function getDominantBaseline(verticalAlign?: 'top' | 'middle' | 'bottom', anchor
  * anchor point (`rawX`) and the box width, then offsets to the edge/centre
  * matching `textAnchor`. Falls back to the raw point when no width is set.
  */
-function pivotX(rawX: number, width: number | undefined, anchor: string, textAnchor: string): number {
+function pivotX(
+  rawX: number,
+  width: number | undefined,
+  anchor: string,
+  textAnchor: string,
+): number {
   if (width == null) return rawX;
   const boxLeft = rawX - anchorAxis(anchor, width, 'x');
   if (textAnchor === 'middle') return boxLeft + width / 2;

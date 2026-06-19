@@ -162,6 +162,12 @@ const FRONTMATTER_BLOCK_RE = /^---\r?\n([\s\S]*?)\r?\n---(\r?\n)?/;
 /** Quote a frontmatter scalar so it round-trips cleanly through `parseFrontmatter`. */
 function formatFrontmatterValue(value: string | number | boolean): string {
   if (typeof value === 'boolean' || typeof value === 'number') return String(value);
+  // A single-line JSON object/array literal round-trips verbatim through
+  // the line-based `parseFrontmatter` (no leading quote to strip, no
+  // newline to split on), so write it unquoted to keep it human-readable
+  // — matching how `stringifyMarkdown` emits string values. Used by the
+  // compact custom-layouts payload.
+  if (/^[{[]/.test(value) && !/[\r\n]/.test(value)) return value;
   // Quote when needed: leading/trailing whitespace, leading punctuation that
   // could trigger YAML modes, or values that look like reserved literals.
   const needsQuote =

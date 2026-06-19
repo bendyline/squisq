@@ -38,11 +38,11 @@ test.describe('Custom template designer', () => {
     await loadCustomTemplateSample(page);
   });
 
-  test('picker shows a "+ New custom template" card', async ({ page }) => {
+  test('picker shows a "+ New layout" card', async ({ page }) => {
     await openTemplatePickerForFirstHeading(page);
     const newCard = page.locator('.squisq-template-gallery-new');
     await expect(newCard).toBeVisible();
-    await expect(newCard).toContainText(/new custom template/i);
+    await expect(newCard).toContainText(/new layout/i);
   });
 
   test('picker shows existing doc-defined custom templates in a Custom section', async ({
@@ -94,11 +94,10 @@ test.describe('Custom template designer', () => {
     for (const token of ['{title}', '{content}', '{children}', '{image:0}']) {
       await expect(palette).toContainText(token);
     }
-    // Viewport toggle exposes 16:9 / 9:16 / 1:1.
-    const toggle = page.locator('.squisq-template-designer-viewport-toggle');
-    for (const label of ['16:9', '9:16', '1:1']) {
-      await expect(toggle.getByRole('button', { name: label })).toBeVisible();
-    }
+    // Aspect-ratio dropdown exposes 16:9 / 9:16 / 1:1.
+    const ratio = page.getByRole('combobox', { name: 'Preview aspect ratio' });
+    await expect(ratio).toBeVisible();
+    await expect(ratio.locator('option')).toHaveText(['16:9', '9:16', '1:1']);
   });
 
   test('saving a new template makes it appear in the picker and persists to the doc', async ({
@@ -157,8 +156,8 @@ test.describe('Custom template designer', () => {
     await page.locator('.squisq-template-gallery-new').click();
     await page.locator('.squisq-template-designer-panel').waitFor({ state: 'visible' });
 
-    await page.locator('.squisq-template-designer-field input').first().fill('dragged');
-    await page.locator('.squisq-template-designer-field input').nth(1).fill('Dragged');
+    // Label is the first field; Name auto-derives from it.
+    await page.locator('.squisq-template-designer-field input').first().fill('Dragged');
 
     // Drag the {content} placeholder onto the canvas (instead of the
     // click-to-arm-then-click path the test above exercises).
@@ -221,12 +220,145 @@ test.describe('Custom template designer', () => {
     );
 
     // The styled layer still saves.
-    await page.locator('.squisq-template-designer-field input').first().fill('styled');
-    await page.locator('.squisq-template-designer-field input').nth(1).fill('Styled');
+    // Label is the first field; Name auto-derives from it.
+    await page.locator('.squisq-template-designer-field input').first().fill('Styled');
     await page
       .locator('.squisq-template-designer-btn--primary')
       .filter({ hasText: /save to this doc/i })
       .click();
     await expect(page.locator('.squisq-template-designer-panel')).toHaveCount(0);
+  });
+
+  test('the Custom layouts toolbar button opens the manager listing doc layouts beside the designer', async ({
+    page,
+  }) => {
+    // The toolbar button opens the full-window manager.
+    await page.getByRole('button', { name: 'Custom layouts' }).click();
+    const panel = page.locator('.squisq-layout-manager-panel');
+    await expect(panel).toBeVisible({ timeout: 5_000 });
+
+    // The doc's pre-defined "hero" template (label "Hero Section") shows
+    // in the sidebar under "This document".
+    const sidebar = panel.locator('.squisq-layout-manager-sidebar');
+    await expect(sidebar).toContainText('This document');
+    await expect(sidebar).toContainText('Hero Section');
+
+    // The existing designer is embedded on the right (its placeholder
+    // palette is present).
+    const designer = panel.locator('.squisq-template-designer-panel--embedded');
+    await expect(designer).toBeVisible();
+    await expect(designer).toContainText('{title}');
+
+    // "+ New layout" switches the right pane to the blank-slate designer
+    // (the Label field clears).
+    await sidebar.getByRole('button', { name: '+ New layout' }).click();
+    await expect(designer.locator('.squisq-template-designer-field input').first()).toHaveValue('');
+  });
+
+  test('creating a layout in the manager persists it into the doc and selects it', async ({
+    page,
+  }) => {
+    await page.getByRole('button', { name: 'Custom layouts' }).click();
+    const panel = page.locator('.squisq-layout-manager-panel');
+    await expect(panel).toBeVisible({ timeout: 5_000 });
+
+    // Start a new layout, name it via the label (Name auto-derives).
+    await panel
+      .locator('.squisq-layout-manager-sidebar')
+      .getByRole('button', {
+        name: '+ New layout',
+      })
+      .click();
+    await panel.locator('.squisq-template-designer-field input').first().fill('Managed Layout');
+
+    // Add a {title} placeholder so save validation passes.
+    await panel
+      .locator('.squisq-template-designer-palette-item')
+      .filter({ hasText: '{title}' })
+      .first()
+      .click();
+    const canvas = panel.locator('.squisq-template-designer-scene .squisq-scene-viewport');
+    await canvas.waitFor({ state: 'visible' });
+    const box = await canvas.boundingBox();
+    if (!box) throw new Error('no canvas box');
+    await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
+
+    // Save to the doc — the manager stays open and the new layout joins
+    // the sidebar's "This document" list.
+    await panel
+      .locator('.squisq-template-designer-btn--primary')
+      .filter({ hasText: /save to this doc/i })
+      .click();
+    await expect(panel.locator('.squisq-layout-manager-sidebar')).toContainText('Managed Layout');
+    await expect(panel).toBeVisible();
+  });
+
+  test('saving a doc layout to the library adds a separate Library entry', async ({ page }) => {
+    await page.getByRole('button', { name: 'Custom layouts' }).click();
+    const panel = page.locator('.squisq-layout-manager-panel');
+    await expect(panel).toBeVisible({ timeout: 5_000 });
+    const sidebar = panel.locator('.squisq-layout-manager-sidebar');
+
+    // The doc's "hero" layout is selected by default. There is no Library
+    // section yet.
+    await expect(sidebar).toContainText('This document');
+    await expect(sidebar).not.toContainText('Library');
+
+    // Copy it to the browser library — a distinct "Library" section now
+    // lists it alongside the doc copy (two entries, both "Hero Section").
+    await panel
+      .locator('.squisq-template-designer-btn')
+      .filter({ hasText: /save to library/i })
+      .click();
+    await expect(sidebar).toContainText('Library');
+    await expect(sidebar.getByText('Hero Section')).toHaveCount(2);
+  });
+
+  test('the Add bin places a standard shape on the canvas', async ({ page }) => {
+    await page.getByRole('button', { name: 'Custom layouts' }).click();
+    const panel = page.locator('.squisq-layout-manager-panel');
+    await expect(panel).toBeVisible({ timeout: 5_000 });
+    await panel
+      .locator('.squisq-layout-manager-sidebar')
+      .getByRole('button', { name: '+ New layout' })
+      .click();
+
+    // The bin now offers Placeholders, Shapes, and Media sections.
+    const bin = panel.locator('.squisq-template-designer-palette');
+    await expect(bin).toContainText('Placeholders');
+    await expect(bin).toContainText('Shapes');
+    await expect(bin).toContainText('Media');
+
+    // Arm the Diamond shape, then click the canvas to drop it.
+    await bin.locator('.squisq-template-designer-shape-item[aria-label="Diamond"]').click();
+    const canvas = panel.locator('.squisq-template-designer-scene .squisq-scene-viewport');
+    await canvas.waitFor({ state: 'visible' });
+    const box = await canvas.boundingBox();
+    if (!box) throw new Error('no canvas box');
+    await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
+
+    // The diamond is a computed path shape, so it renders as a path layer.
+    const shapePath = panel.locator('.squisq-template-designer-scene .block-layer--path path');
+    await expect(shapePath).toHaveCount(1);
+
+    // Dragging the shape must move the geometry, not just the selection box:
+    // the path's `d` is re-derived from the (moved) position. Drag from the
+    // box centre to a new spot and assert `d` changed.
+    const before = await shapePath.getAttribute('d');
+    const cx = box.x + box.width / 2 + 110; // box top-left was at the click point
+    const cy = box.y + box.height / 2 + 90;
+    await page.mouse.move(cx, cy);
+    await page.mouse.down();
+    await page.mouse.move(cx + 160, cy + 120, { steps: 8 });
+    await page.mouse.up();
+    await expect(shapePath).not.toHaveAttribute('d', before ?? '');
+
+    // Selecting the path shape reveals the styling toolbar with fill +
+    // border controls (path shapes are stylable like native shapes).
+    const toolbar = panel.locator('.squisq-layer-toolbar');
+    await expect(toolbar).toBeVisible();
+    await expect(toolbar.getByRole('combobox', { name: 'Fill style' })).toBeVisible();
+    await expect(toolbar.getByRole('spinbutton', { name: 'Border thickness' })).toBeVisible();
+    await expect(toolbar.getByRole('combobox', { name: 'Border style' })).toBeVisible();
   });
 });

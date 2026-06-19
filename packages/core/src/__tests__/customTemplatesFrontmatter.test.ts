@@ -57,13 +57,63 @@ describe('encodeLayersForFrontmatter ↔ decodeLayersFromFrontmatter', () => {
 });
 
 describe('writeCustomTemplatesToFrontmatter → readCustomTemplatesFromFrontmatter', () => {
-  it('round-trips a single definition through the base64-JSON wire format', () => {
+  it('round-trips a single definition through the compact JSON wire format', () => {
     const payload = writeCustomTemplatesToFrontmatter([heroDef]);
     expect(typeof payload).toBe('string');
+    // Compact form: a readable JSON object keyed by name, short keys, no
+    // base64, and the default 1920×1080 viewport omitted.
+    expect(payload!.startsWith('{"hero":')).toBe(true);
+    expect(payload).toContain('"lb":"Hero"');
+    expect(payload).not.toContain('"viewport"');
     const fm = { [FRONTMATTER_CUSTOM_TEMPLATES_KEY]: payload };
     const out = readCustomTemplatesFromFrontmatter(fm);
     expect(out).toHaveLength(1);
     expect(out![0]).toEqual(heroDef);
+  });
+
+  it('is markedly smaller than the legacy base64 form', () => {
+    const compact = writeCustomTemplatesToFrontmatter([heroDef])!;
+    const legacyBase64 = btoa(unescape(encodeURIComponent(JSON.stringify([{ ...heroDef }]))));
+    expect(compact.length).toBeLessThan(legacyBase64.length);
+  });
+
+  it('still reads the legacy base64-JSON payload (back-compat)', () => {
+    // What older documents have on disk: base64 of the full-keyed array.
+    const legacy = btoa(unescape(encodeURIComponent(JSON.stringify([heroDef]))));
+    const out = readCustomTemplatesFromFrontmatter({
+      [FRONTMATTER_CUSTOM_TEMPLATES_KEY]: legacy,
+    });
+    expect(out).toHaveLength(1);
+    expect(out![0]).toEqual(heroDef);
+  });
+
+  it('round-trips layers carrying the full styling field set without loss', () => {
+    const rich: CustomTemplateDefinition = {
+      name: 'rich',
+      label: 'Rich',
+      viewport: { width: 1080, height: 1080 },
+      layers: [
+        {
+          id: 'p',
+          type: 'path',
+          position: { x: '1%', y: '2%', width: '3%', height: '4%', anchor: 'center' },
+          content: {
+            d: 'M0 0',
+            shapeKind: 'star',
+            fill: '#fff',
+            fillOpacity: 0.5,
+            gradient: { from: '#000', to: '#fff', angle: 90 },
+            stroke: '#111',
+            strokeWidth: 3,
+            borderStyle: 'dashed',
+            dasharray: '4 2',
+          },
+        } as Layer,
+      ],
+    };
+    const payload = writeCustomTemplatesToFrontmatter([rich])!;
+    const out = readCustomTemplatesFromFrontmatter({ [FRONTMATTER_CUSTOM_TEMPLATES_KEY]: payload });
+    expect(out![0]).toEqual(rich);
   });
 
   it('round-trips multiple definitions in declaration order', () => {
@@ -104,9 +154,11 @@ describe('writeCustomTemplatesToFrontmatter → readCustomTemplatesFromFrontmatt
 describe('Doc.customTemplates round-trip via markdownToDoc + docToMarkdown', () => {
   it('survives a markdownToDoc → docToMarkdown cycle', () => {
     const encoded = writeCustomTemplatesToFrontmatter([heroDef])!;
+    // Compact JSON is stored unquoted — it round-trips verbatim through
+    // the line-based frontmatter parser.
     const sourceMd = `---
 title: My Doc
-squisq-custom-templates: "${encoded}"
+squisq-custom-templates: ${encoded}
 ---
 
 # Welcome {[hero]}

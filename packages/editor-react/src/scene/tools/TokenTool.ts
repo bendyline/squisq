@@ -1,7 +1,7 @@
 /**
  * TokenTool — pointer-down on the canvas drops a pre-filled
  * placeholder layer at the click position. Used by the template
- * designer's TokenPalette so the user can place `{title}`,
+ * designer's Add bin so the user can place `{title}`,
  * `{content}`, `{children}`, or `{image:N}` in a single click instead
  * of typing the placeholder string into a generic TextTool.
  *
@@ -12,6 +12,7 @@
 
 import type { ImageLayer, TextLayer } from '@bendyline/squisq/schemas';
 import type { SceneTool } from './SceneTool';
+import { createPlaceTool } from './PlaceTool';
 
 export type TokenKind = 'text' | 'image';
 
@@ -79,24 +80,12 @@ export function buildTokenLayer(
 }
 
 export function createTokenTool(options: TokenToolOptions): SceneTool {
-  return {
+  return createPlaceTool({
     id: options.id,
     label: options.label,
-    cursor: 'crosshair',
     shortcut: options.shortcut,
-
-    onPointerDown(e, ctx) {
-      if (e.button !== 0) return;
-      const rect = (e.currentTarget as Element).getBoundingClientRect();
-      const sx = e.clientX - rect.left;
-      const sy = e.clientY - rect.top;
-      const v = ctx.screenToViewport(sx, sy);
-      ctx.dispatch({ kind: 'addLayer', layer: buildTokenLayer(options, v) });
-      // Hand control back to Select so the user can immediately
-      // reposition the newly-added placeholder.
-      ctx.setActiveTool?.('select');
-    },
-  };
+    build: (point) => buildTokenLayer(options, point),
+  });
 }
 
 let counter = 0;

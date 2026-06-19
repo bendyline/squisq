@@ -19,12 +19,28 @@
 
 import { useCallback, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
-import type { CustomTemplateDefinition, Layer, ViewportConfig } from '@bendyline/squisq/schemas';
-import { Scene, SelectTool, createTokenTool, buildTokenLayer, type SceneTool } from '../scene';
+import { MediaContext } from '@bendyline/squisq-react';
+import type {
+  CustomTemplateDefinition,
+  ImageLayer,
+  Layer,
+  MediaProvider,
+  ViewportConfig,
+} from '@bendyline/squisq/schemas';
+import {
+  Scene,
+  SelectTool,
+  createTokenTool,
+  createPlaceTool,
+  buildTokenLayer,
+  type SceneTool,
+} from '../scene';
 import { useMemoryLayerAdapter } from './useMemoryLayerAdapter';
 import { normalizePositions } from './normalizePositions';
-import { TokenPalette } from './TokenPalette';
+import { AddBin } from './AddBin';
 import { TOKEN_DEFS, TOKEN_DRAG_MIME } from './tokenDefs';
+import { SHAPE_DEFS, SHAPE_DRAG_MIME, buildShapeLayer } from './shapeDefs';
+import { partitionFiles, processMediaFiles } from '../utils/dropUtils';
 import { LayerToolbar } from './LayerToolbar';
 
 export type DesignerSaveTarget = 'doc' | 'library';
@@ -40,6 +56,27 @@ interface TemplateDesignerProps {
   onSave: (def: CustomTemplateDefinition, target: DesignerSaveTarget) => void;
   /** Called when the user dismisses the modal without saving. */
   onClose: () => void;
+  /**
+   * Embedded mode: render the designer inline (no full-screen portal /
+   * backdrop, no close button, no Cancel) so a host frame — e.g. the
+   * Custom Layout Manager — can place it inside its own panel. The
+   * designer fills its container and does NOT call `onClose` after a
+   * save, so the host stays in control of selection.
+   */
+  embedded?: boolean;
+  /**
+   * Label for the primary (save-to-doc) button. Defaults to
+   * "Save to this doc"; the Custom Layout Manager passes a plain "Save"
+   * when the open layout already lives in the doc.
+   */
+  primarySaveLabel?: string;
+  /**
+   * Media storage. When provided, images dropped on the canvas (or
+   * picked via the Add bin's Media section) are uploaded and pinned as a
+   * full-bleed background layer, and the canvas resolves their URLs for
+   * preview. Omit to disable media in the bin.
+   */
+  mediaProvider?: MediaProvider | null;
 }
 
 const DESIGN_CANVAS = { width: 1920, height: 1080 };
@@ -68,7 +105,14 @@ const VIEWPORT_OPTIONS: {
   { id: 'square', label: '1:1', viewport: { width: 1080, height: 1080, name: 'Square' } },
 ];
 
-export function TemplateDesigner({ initial, onSave, onClose }: TemplateDesignerProps) {
+export function TemplateDesigner({
+  initial,
+  onSave,
+  onClose,
+  embedded = false,
+  primarySaveLabel = 'Save to this doc',
+  mediaProvider = null,
+}: TemplateDesignerProps) {
   const [name, setName] = useState(initial?.name ?? '');
   const [label, setLabel] = useState(initial?.label ?? '');
   const [description, setDescription] = useState(initial?.description ?? '');
@@ -102,11 +146,18 @@ export function TemplateDesigner({ initial, onSave, onClose }: TemplateDesignerP
     'landscape',
   );
 
-  // Build the toolset once from the shared token definitions. Token
-  // tools are factories so each one has its own state-free closure;
-  // SelectTool is the singleton from scene/tools/SelectTool.ts.
+  // Build the toolset once. Each bin entry — placeholder token or shape —
+  // gets a click-to-place tool; SelectTool is the singleton from
+  // scene/tools/SelectTool.ts. Tools are factories so each has its own
+  // state-free closure.
   const tools: SceneTool[] = useMemo(
-    () => [SelectTool, ...TOKEN_DEFS.map((d) => createTokenTool(d))],
+    () => [
+      SelectTool,
+      ...TOKEN_DEFS.map((d) => createTokenTool(d)),
+      ...SHAPE_DEFS.map((s) =>
+        createPlaceTool({ id: s.id, label: s.label, build: (p) => buildShapeLayer(s, p) }),
+      ),
+    ],
     [],
   );
 
@@ -115,17 +166,48 @@ export function TemplateDesigner({ initial, onSave, onClose }: TemplateDesignerP
     tools,
   });
 
-  // Drag-and-drop: a placeholder dragged from the palette and dropped on
-  // the canvas adds the same layer the click-to-place TokenTool would,
-  // at the drop point (`point` is already in viewport coordinates).
+  // Upload image files and pin each as a full-bleed background layer,
+  // prepended so it sits behind everything (layers composite back-to-front).
+  const addMediaBackgrounds = useCallback(
+    async (files: File[]) => {
+      if (!mediaProvider) return;
+      const { media } = partitionFiles(files);
+      if (media.length === 0) return;
+      const paths = await processMediaFiles(media, mediaProvider);
+      const backgrounds: ImageLayer[] = paths
+        .filter((p): p is string => !!p)
+        .map((src, i) => ({
+          id: `bg-${Date.now().toString(36)}-${i}`,
+          type: 'image',
+          position: { x: 0, y: 0, width: DESIGN_CANVAS.width, height: DESIGN_CANVAS.height },
+          content: { src, alt: '', fit: 'cover' },
+        }));
+      if (backgrounds.length === 0) return;
+      adapter.setLayers([...backgrounds, ...adapter.layers]);
+    },
+    [adapter, mediaProvider],
+  );
+
+  // Drag-and-drop onto the canvas. A dragged placeholder or shape adds the
+  // same layer its click-to-place tool would, at the drop point (`point`
+  // is already in viewport coordinates). Dropped image files become
+  // full-bleed background layers.
   const handleCanvasDrop = useCallback(
     (e: React.DragEvent, point: { x: number; y: number }) => {
-      const id = e.dataTransfer.getData(TOKEN_DRAG_MIME);
-      const def = TOKEN_DEFS.find((d) => d.id === id);
-      if (!def) return;
-      adapter.dispatch({ kind: 'addLayer', layer: buildTokenLayer(def, point) });
+      const tokenDef = TOKEN_DEFS.find((d) => d.id === e.dataTransfer.getData(TOKEN_DRAG_MIME));
+      if (tokenDef) {
+        adapter.dispatch({ kind: 'addLayer', layer: buildTokenLayer(tokenDef, point) });
+        return;
+      }
+      const shapeDef = SHAPE_DEFS.find((s) => s.id === e.dataTransfer.getData(SHAPE_DRAG_MIME));
+      if (shapeDef) {
+        adapter.dispatch({ kind: 'addLayer', layer: buildShapeLayer(shapeDef, point) });
+        return;
+      }
+      const files = Array.from(e.dataTransfer.files ?? []);
+      if (files.length > 0) void addMediaBackgrounds(files);
     },
-    [adapter],
+    [adapter, addMediaBackgrounds],
   );
 
   // Track the selected layer so the contextual styling toolbar can edit
@@ -175,24 +257,24 @@ export function TemplateDesigner({ initial, onSave, onClose }: TemplateDesignerP
       ...(description.trim() ? { description: description.trim() } : {}),
     };
     onSave(def, target);
-    onClose();
+    // Embedded hosts (the Custom Layout Manager) own selection state, so
+    // staying mounted after a save lets the user keep editing.
+    if (!embedded) onClose();
   };
 
-  return createPortal(
+  const panel = (
     <div
-      className="squisq-template-designer-overlay"
-      role="dialog"
-      aria-modal="true"
-      aria-label="Custom template designer"
-      onClick={(e) => {
-        // Click on the backdrop (not the panel) closes the modal.
-        if (e.target === e.currentTarget) onClose();
-      }}
+      className={`squisq-template-designer-panel${
+        embedded ? ' squisq-template-designer-panel--embedded' : ''
+      }`}
     >
-      <div className="squisq-template-designer-panel">
+      {/* Standalone modal owns its title + close button. Embedded in the
+          Custom Layout Manager, the host frame provides both, so the
+          designer drops its header entirely. */}
+      {!embedded && (
         <header className="squisq-template-designer-header">
           <h2 className="squisq-template-designer-title">
-            {initial ? 'Edit custom template' : 'New custom template'}
+            {initial ? 'Edit layout' : 'New layout'}
           </h2>
           <button
             type="button"
@@ -204,67 +286,82 @@ export function TemplateDesigner({ initial, onSave, onClose }: TemplateDesignerP
             ×
           </button>
         </header>
+      )}
 
-        <div className="squisq-template-designer-meta">
-          <label className="squisq-template-designer-field">
-            <span>Label</span>
-            <input
-              type="text"
-              value={label}
-              placeholder="Hero Section"
-              onChange={(e) => handleLabelChange(e.target.value)}
-            />
-          </label>
-          <label className="squisq-template-designer-field">
-            <span>Name</span>
-            <input
-              type="text"
-              value={name}
-              placeholder="auto from label"
-              onChange={(e) => handleNameChange(e.target.value)}
-              spellCheck={false}
-            />
-            <span className="squisq-template-designer-field-hint">
-              Auto-derived from the label — edit to override.
-            </span>
-          </label>
-          <label className="squisq-template-designer-field">
-            <span>Description</span>
-            <input
-              type="text"
-              value={description}
-              placeholder="One-sentence description (optional)"
-              onChange={(e) => setDescription(e.target.value)}
-            />
-          </label>
-        </div>
+      <div className="squisq-template-designer-meta">
+        <label className="squisq-template-designer-field">
+          <span>Label</span>
+          <input
+            type="text"
+            value={label}
+            placeholder="Hero Section"
+            onChange={(e) => handleLabelChange(e.target.value)}
+          />
+        </label>
+        <label className="squisq-template-designer-field">
+          <span>Name</span>
+          <input
+            type="text"
+            value={name}
+            placeholder="auto from label"
+            onChange={(e) => handleNameChange(e.target.value)}
+            spellCheck={false}
+          />
+          <span className="squisq-template-designer-field-hint">
+            Auto-derived from the label — edit to override.
+          </span>
+        </label>
+        <label className="squisq-template-designer-field">
+          <span>Description</span>
+          <input
+            type="text"
+            value={description}
+            placeholder="One-sentence description (optional)"
+            onChange={(e) => setDescription(e.target.value)}
+          />
+        </label>
+      </div>
 
-        <div className="squisq-template-designer-body">
-          <TokenPalette activeToolId={activeToolId} onActivate={setActiveToolId} />
-          <div className="squisq-template-designer-stage">
-            <div className="squisq-template-designer-viewport-toggle">
-              <span className="squisq-template-designer-viewport-label">Preview as</span>
+      <div className="squisq-template-designer-body">
+        <AddBin
+          activeToolId={activeToolId}
+          onActivate={setActiveToolId}
+          canAddMedia={!!mediaProvider}
+          onAddMediaFiles={(files) => void addMediaBackgrounds(files)}
+        />
+        <div className="squisq-template-designer-stage">
+          {/* One controls row: the compact aspect-ratio dropdown plus the
+              contextual layer styling controls (when a layer is selected),
+              so the two share a row instead of stacking. */}
+          <div className="squisq-template-designer-stage-bar">
+            <span className="squisq-template-designer-viewport-label">Preview</span>
+            <select
+              className="squisq-layer-toolbar-select"
+              aria-label="Preview aspect ratio"
+              title="Preview aspect ratio"
+              value={previewViewportId}
+              onChange={(e) =>
+                setPreviewViewportId(e.target.value as 'landscape' | 'portrait' | 'square')
+              }
+            >
               {VIEWPORT_OPTIONS.map((v) => (
-                <button
-                  key={v.id}
-                  type="button"
-                  className={`squisq-template-designer-viewport-btn${
-                    previewViewportId === v.id
-                      ? ' squisq-template-designer-viewport-btn--active'
-                      : ''
-                  }`}
-                  onClick={() => setPreviewViewportId(v.id)}
-                  title={`Preview at ${v.label}`}
-                >
+                <option key={v.id} value={v.id}>
                   {v.label}
-                </button>
+                </option>
               ))}
-            </div>
-            {/* Contextual styling toolbar — appears when a layer is selected. */}
+            </select>
+            {/* Contextual styling controls — appear when a layer is selected. */}
             {selectedLayer && (
-              <LayerToolbar layer={selectedLayer} onAttr={handleLayerAttr} />
+              <>
+                <div className="squisq-layer-toolbar-sep" aria-hidden="true" />
+                <LayerToolbar layer={selectedLayer} onAttr={handleLayerAttr} />
+              </>
             )}
-            <div className="squisq-template-designer-scene">
+          </div>
+          <div className="squisq-template-designer-scene">
+            {/* MediaContext lets image layers resolve uploaded media to
+                  displayable (blob) URLs in the canvas, matching preview. */}
+            <MediaContext.Provider value={mediaProvider}>
               <Scene
                 viewport={currentViewport}
                 layers={adapter.layers}
@@ -276,36 +373,57 @@ export function TemplateDesigner({ initial, onSave, onClose }: TemplateDesignerP
                 onDrop={handleCanvasDrop}
                 showToolbar={false}
               />
-            </div>
+            </MediaContext.Provider>
           </div>
         </div>
+      </div>
 
-        <footer className="squisq-template-designer-footer">
-          <span className="squisq-template-designer-footer-hint">
-            Layers are saved as % of a 1920×1080 canvas so the template adapts to any viewport.
-          </span>
-          <div className="squisq-template-designer-footer-actions">
+      <footer className="squisq-template-designer-footer">
+        <span className="squisq-template-designer-footer-hint">
+          Layers are saved as % of a 1920×1080 canvas so the layout adapts to any viewport.
+        </span>
+        <div className="squisq-template-designer-footer-actions">
+          {!embedded && (
             <button type="button" className="squisq-template-designer-btn" onClick={onClose}>
               Cancel
             </button>
-            <button
-              type="button"
-              className="squisq-template-designer-btn"
-              onClick={() => handleSave('library')}
-              title="Save to your browser-local library so other docs can use it"
-            >
-              Save to library
-            </button>
-            <button
-              type="button"
-              className="squisq-template-designer-btn squisq-template-designer-btn--primary"
-              onClick={() => handleSave('doc')}
-            >
-              Save to this doc
-            </button>
-          </div>
-        </footer>
-      </div>
+          )}
+          <button
+            type="button"
+            className="squisq-template-designer-btn"
+            onClick={() => handleSave('library')}
+            title="Save to your browser-local library so other docs can use it"
+          >
+            Save to library
+          </button>
+          <button
+            type="button"
+            className="squisq-template-designer-btn squisq-template-designer-btn--primary"
+            onClick={() => handleSave('doc')}
+          >
+            {primarySaveLabel}
+          </button>
+        </div>
+      </footer>
+    </div>
+  );
+
+  // Embedded: hand the bare panel back so a host frame can place it.
+  if (embedded) return panel;
+
+  // Standalone: full-screen modal over a click-to-dismiss backdrop.
+  return createPortal(
+    <div
+      className="squisq-template-designer-overlay"
+      role="dialog"
+      aria-modal="true"
+      aria-label="Custom layout designer"
+      onClick={(e) => {
+        // Click on the backdrop (not the panel) closes the modal.
+        if (e.target === e.currentTarget) onClose();
+      }}
+    >
+      {panel}
     </div>,
     document.body,
   );

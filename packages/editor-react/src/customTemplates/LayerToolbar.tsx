@@ -3,10 +3,16 @@
  * selected in the TemplateDesigner. Renders a compact toolbar whose
  * controls depend on the layer type:
  *
- *   - text  → horizontal + vertical alignment, font size, bold, font
- *             family (the per-layer "Font" override), and color.
- *   - shape → shape kind, fill color, and border (stroke) color.
+ *   - text  → alignment, font size/weight/family, text color, plus a
+ *             background fill (color · opacity · gradient) and border
+ *             (color · thickness · style) — text is a rectangle too.
+ *   - shape → shape kind, fill (color · opacity · gradient), and border
+ *             (color · thickness · style).
  *   - image → object-fit.
+ *
+ * Fill and border editors are shared between text and shapes via
+ * {@link FillEditor} / {@link BorderEditor}, parameterized by the dotted
+ * attribute paths each layer type uses.
  *
  * Every control dispatches a single `setLayerAttr` via `onAttr(path,
  * value)`, where `path` is a dotted path into the layer (e.g.
@@ -15,7 +21,7 @@
  * current layer.
  */
 
-import type { Layer } from '@bendyline/squisq/schemas';
+import type { Layer, LinearGradient, BorderStyle } from '@bendyline/squisq/schemas';
 import { AVAILABLE_FONT_STACKS } from '@bendyline/squisq/schemas';
 import { Icon } from '../Icon';
 
@@ -30,6 +36,7 @@ export function LayerToolbar({ layer, onAttr }: LayerToolbarProps) {
     <div className="squisq-layer-toolbar" role="toolbar" aria-label="Layer styling">
       {layer.type === 'text' && <TextControls layer={layer} onAttr={onAttr} />}
       {layer.type === 'shape' && <ShapeControls layer={layer} onAttr={onAttr} />}
+      {layer.type === 'path' && <PathControls layer={layer} onAttr={onAttr} />}
       {layer.type === 'image' && <ImageControls layer={layer} onAttr={onAttr} />}
     </div>
   );
@@ -107,7 +114,7 @@ function TextControls({
         <Icon icon="fa-solid fa-font" />
       </span>
       <select
-        className="squisq-layer-toolbar-select"
+        className="squisq-layer-toolbar-select squisq-layer-toolbar-select--font"
         aria-label="Font"
         title="Font"
         value={style.fontFamily ?? ''}
@@ -120,7 +127,42 @@ function TextControls({
           </option>
         ))}
       </select>
-      <Color label="Text color" value={style.color} onChange={(v) => onAttr('content.style.color', v)} />
+      <Color
+        label="Text color"
+        value={style.color}
+        onChange={(v) => onAttr('content.style.color', v)}
+      />
+      <Sep />
+      <span className="squisq-layer-toolbar-label" title="Background fill">
+        <Icon icon="fa-solid fa-fill-drip" />
+      </span>
+      <FillEditor
+        label="Background"
+        color={style.background}
+        opacity={style.backgroundOpacity}
+        gradient={style.backgroundGradient}
+        defaultColor="#1f2937"
+        noFillValue={undefined}
+        colorPath="content.style.background"
+        opacityPath="content.style.backgroundOpacity"
+        gradientPath="content.style.backgroundGradient"
+        onAttr={onAttr}
+      />
+      <Sep />
+      <span className="squisq-layer-toolbar-label" title="Border">
+        <Icon icon="fa-solid fa-border-top-left" />
+      </span>
+      <BorderEditor
+        color={style.borderColor}
+        width={style.borderWidth}
+        style={style.borderStyle}
+        defaultColor="#1e293b"
+        noBorderValue={undefined}
+        colorPath="content.style.borderColor"
+        widthPath="content.style.borderWidth"
+        stylePath="content.style.borderStyle"
+        onAttr={onAttr}
+      />
     </>
   );
 }
@@ -134,7 +176,62 @@ function nearestSize(size: number): number {
   return best;
 }
 
-// ─── Shape ──────────────────────────────────────────────────────
+// ─── Shape (native) + Path (computed shape) ─────────────────────
+
+/**
+ * Fill + border controls shared by native `ShapeLayer`s and computed
+ * `PathLayer` shapes — both keep fill/stroke under the same
+ * `content.*` paths, so the editor is identical.
+ */
+function FillBorderControls({
+  content,
+  onAttr,
+}: {
+  content: {
+    fill?: string;
+    fillOpacity?: number;
+    gradient?: LinearGradient;
+    stroke?: string;
+    strokeWidth?: number;
+    borderStyle?: BorderStyle;
+  };
+  onAttr: LayerToolbarProps['onAttr'];
+}) {
+  return (
+    <>
+      <span className="squisq-layer-toolbar-label" title="Fill">
+        <Icon icon="fa-solid fa-fill-drip" />
+      </span>
+      <FillEditor
+        label="Fill"
+        color={content.fill}
+        opacity={content.fillOpacity}
+        gradient={content.gradient}
+        defaultColor="#3b82f6"
+        noFillValue="none"
+        colorPath="content.fill"
+        opacityPath="content.fillOpacity"
+        gradientPath="content.gradient"
+        onAttr={onAttr}
+      />
+      <Sep />
+      <span className="squisq-layer-toolbar-label" title="Border">
+        <Icon icon="fa-solid fa-border-top-left" />
+      </span>
+      <BorderEditor
+        color={content.stroke}
+        width={content.strokeWidth}
+        style={content.borderStyle}
+        defaultColor="#1e293b"
+        noBorderValue="none"
+        colorPath="content.stroke"
+        widthPath="content.strokeWidth"
+        stylePath="content.borderStyle"
+        onAttr={onAttr}
+      />
+    </>
+  );
+}
 
 function ShapeControls({
   layer,
@@ -143,14 +240,13 @@ function ShapeControls({
   layer: Layer & { type: 'shape' };
   onAttr: LayerToolbarProps['onAttr'];
 }) {
-  const c = layer.content;
   return (
     <>
       <select
         className="squisq-layer-toolbar-select"
         aria-label="Shape"
         title="Shape"
-        value={c.shape}
+        value={layer.content.shape}
         onChange={(e) => onAttr('content.shape', e.target.value)}
       >
         <option value="rect">Rectangle</option>
@@ -158,24 +254,22 @@ function ShapeControls({
         <option value="line">Line</option>
       </select>
       <Sep />
-      <Color
-        label="Fill color"
-        value={c.fill && c.fill !== 'none' ? c.fill : '#3b82f6'}
-        onChange={(v) => onAttr('content.fill', v)}
-        clearLabel="No fill"
-        onClear={() => onAttr('content.fill', 'none')}
-        cleared={!c.fill || c.fill === 'none'}
-      />
-      <Color
-        label="Border color"
-        value={c.stroke && c.stroke !== 'none' ? c.stroke : '#1e293b'}
-        onChange={(v) => onAttr('content.stroke', v)}
-        clearLabel="No border"
-        onClear={() => onAttr('content.stroke', 'none')}
-        cleared={!c.stroke || c.stroke === 'none'}
-      />
+      <FillBorderControls content={layer.content} onAttr={onAttr} />
     </>
   );
+}
+
+function PathControls({
+  layer,
+  onAttr,
+}: {
+  layer: Layer & { type: 'path' };
+  onAttr: LayerToolbarProps['onAttr'];
+}) {
+  // Computed shapes (diamond, star, arrows…) carry the same fill/stroke
+  // fields as native shapes — no shape-kind select since the geometry is
+  // fixed by the placed shape.
+  return <FillBorderControls content={layer.content} onAttr={onAttr} />;
 }
 
 // ─── Image ──────────────────────────────────────────────────────
@@ -281,6 +375,190 @@ function Color({
   );
 }
 
+// ─── Fill editor (color · opacity · gradient) ───────────────────
+
+const GRADIENT_DIRECTIONS: Array<[string, number, string]> = [
+  ['↓', 0, 'Top to bottom'],
+  ['→', 90, 'Left to right'],
+  ['↘', 45, 'Diagonal ↘'],
+  ['↙', 135, 'Diagonal ↙'],
+];
+
+function FillEditor({
+  label,
+  color,
+  opacity,
+  gradient,
+  defaultColor,
+  noFillValue,
+  colorPath,
+  opacityPath,
+  gradientPath,
+  onAttr,
+}: {
+  label: string;
+  color: string | undefined;
+  opacity: number | undefined;
+  gradient: LinearGradient | undefined;
+  /** Solid swatch shown when no color is set yet. */
+  defaultColor: string;
+  /** Value written when the user clears the fill (`'none'` for shapes,
+   *  `undefined` for text backgrounds). */
+  noFillValue: 'none' | undefined;
+  colorPath: string;
+  opacityPath: string;
+  gradientPath: string;
+  onAttr: LayerToolbarProps['onAttr'];
+}) {
+  const isGradient = !!gradient;
+  const swatch = color && color !== 'none' ? color : defaultColor;
+  return (
+    <>
+      <select
+        className="squisq-layer-toolbar-select"
+        aria-label={`${label} style`}
+        title={`${label} style`}
+        value={isGradient ? 'gradient' : 'solid'}
+        onChange={(e) => {
+          if (e.target.value === 'gradient') {
+            onAttr(gradientPath, { from: swatch, to: '#ffffff', angle: 0 });
+          } else {
+            onAttr(gradientPath, undefined);
+          }
+        }}
+      >
+        <option value="solid">Solid</option>
+        <option value="gradient">Gradient</option>
+      </select>
+      {isGradient ? (
+        <>
+          <Color
+            label={`${label} start color`}
+            value={gradient!.from}
+            onChange={(v) => onAttr(gradientPath, { ...gradient, from: v })}
+          />
+          <Color
+            label={`${label} end color`}
+            value={gradient!.to}
+            onChange={(v) => onAttr(gradientPath, { ...gradient, to: v })}
+          />
+          <select
+            className="squisq-layer-toolbar-select"
+            aria-label={`${label} direction`}
+            title={`${label} direction`}
+            value={String(gradient!.angle ?? 0)}
+            onChange={(e) => onAttr(gradientPath, { ...gradient, angle: Number(e.target.value) })}
+          >
+            {GRADIENT_DIRECTIONS.map(([glyph, deg, title]) => (
+              <option key={deg} value={deg} title={title}>
+                {glyph}
+              </option>
+            ))}
+          </select>
+        </>
+      ) : (
+        <Color
+          label={`${label} color`}
+          value={swatch}
+          onChange={(v) => onAttr(colorPath, v)}
+          clearLabel="No fill"
+          onClear={() => onAttr(colorPath, noFillValue)}
+          cleared={!color || color === 'none'}
+        />
+      )}
+      <Opacity
+        label={`${label} opacity`}
+        value={opacity}
+        onChange={(v) => onAttr(opacityPath, v)}
+      />
+    </>
+  );
+}
+
+// ─── Border editor (color · thickness · style) ──────────────────
+
+function BorderEditor({
+  color,
+  width,
+  style,
+  defaultColor,
+  noBorderValue,
+  colorPath,
+  widthPath,
+  stylePath,
+  onAttr,
+}: {
+  color: string | undefined;
+  width: number | undefined;
+  style: BorderStyle | undefined;
+  defaultColor: string;
+  noBorderValue: 'none' | undefined;
+  colorPath: string;
+  widthPath: string;
+  stylePath: string;
+  onAttr: LayerToolbarProps['onAttr'];
+}) {
+  return (
+    <>
+      <Color
+        label="Border color"
+        value={color && color !== 'none' ? color : defaultColor}
+        onChange={(v) => onAttr(colorPath, v)}
+        clearLabel="No border"
+        onClear={() => onAttr(colorPath, noBorderValue)}
+        cleared={!color || color === 'none'}
+      />
+      <input
+        type="number"
+        className="squisq-layer-toolbar-number"
+        aria-label="Border thickness"
+        title="Border thickness"
+        min={0}
+        max={80}
+        step={1}
+        value={width ?? 0}
+        onChange={(e) => onAttr(widthPath, Number(e.target.value))}
+      />
+      <select
+        className="squisq-layer-toolbar-select"
+        aria-label="Border style"
+        title="Border style"
+        value={style ?? 'solid'}
+        onChange={(e) => onAttr(stylePath, e.target.value)}
+      >
+        <option value="solid">Solid</option>
+        <option value="dashed">Dashed</option>
+        <option value="dotted">Dotted</option>
+      </select>
+    </>
+  );
+}
+
+function Opacity({
+  label,
+  value,
+  onChange,
+}: {
+  label: string;
+  value: number | undefined;
+  onChange: (v: number) => void;
+}) {
+  const pct = Math.round((value ?? 1) * 100);
+  return (
+    <label className="squisq-layer-toolbar-opacity" title={`${label} (${pct}%)`}>
+      <input
+        type="range"
+        aria-label={label}
+        min={0}
+        max={100}
+        step={5}
+        value={pct}
+        onChange={(e) => onChange(Number(e.target.value) / 100)}
+      />
+    </label>
+  );
+}
+
 function Sep() {
   return <div className="squisq-layer-toolbar-sep" aria-hidden="true" />;
 }
@@ -289,7 +567,14 @@ function Sep() {
 function normalizeColor(v: string): string {
   if (/^#[0-9a-f]{6}$/i.test(v)) return v;
   if (/^#[0-9a-f]{3}$/i.test(v)) {
-    return '#' + v.slice(1).split('').map((c) => c + c).join('');
+    return (
+      '#' +
+      v
+        .slice(1)
+        .split('')
+        .map((c) => c + c)
+        .join('')
+    );
   }
   return '#000000';
 }

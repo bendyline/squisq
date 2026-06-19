@@ -25,5 +25,7 @@ export {
   LIBRARY_STORAGE_KEY,
 } from './library';
 export { TemplateDesigner, type DesignerSaveTarget } from './TemplateDesigner';
+export { CustomLayoutManager, type CustomLayoutManagerProps } from './CustomLayoutManager';
+export { useDocCustomTemplates, type DocCustomTemplates } from './useDocCustomTemplates';
 export { useMemoryLayerAdapter, applyCommand } from './useMemoryLayerAdapter';
 export { normalizePositions } from './normalizePositions';

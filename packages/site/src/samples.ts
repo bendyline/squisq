@@ -2,6 +2,9 @@
  * Sample markdown documents for the dev site.
  */
 
+import { writeCustomTemplatesToFrontmatter } from '@bendyline/squisq/doc';
+import type { CustomTemplateDefinition, Layer } from '@bendyline/squisq/schemas';
+
 /**
  * Content zip samples — fetched at runtime, unpacked into a ContentContainer.
  * Each entry maps a sample key to its URL under `/samples/` (served from repo-root samplecontent/).
@@ -381,7 +384,7 @@ Regular body content continues here.
  * Layer array.
  */
 function buildCustomTemplateDemo(): string {
-  const heroLayers = [
+  const heroLayers: Layer[] = [
     {
       id: 'hero-title',
       type: 'text',
@@ -412,17 +415,19 @@ function buildCustomTemplateDemo(): string {
       content: { shape: 'rect', fill: '#6366f1' },
     },
   ];
-  const heroDef = {
+  const heroDef: CustomTemplateDefinition = {
     name: 'hero',
     label: 'Hero Section',
     description: 'Large title with body below — uses {title} and {content}.',
     viewport: { width: 1920, height: 1080 },
     layers: heroLayers,
   };
-  const payload = encodeForFrontmatter([heroDef]);
+  // Compact JSON, stored unquoted so it round-trips through the
+  // line-based frontmatter parser and stays human-readable.
+  const payload = writeCustomTemplatesToFrontmatter([heroDef]);
   return `---
 title: Custom Template Demo
-squisq-custom-templates: "${payload}"
+squisq-custom-templates: ${payload}
 ---
 
 # Custom Templates Demo
@@ -440,18 +445,4 @@ A small editor for big ideas. Author once, render everywhere.
 Templates capture brand voice and layout once, then every block in
 your doc can use them. No more copy-pasting positions across slides.
 `;
-}
-
-function encodeForFrontmatter(value: unknown): string {
-  // UTF-8 safe: `btoa` only accepts Latin1 so we route through
-  // TextEncoder first. Mirror of `utf8ToBase64` in
-  // packages/core/src/doc/customTemplatesFrontmatter.ts so the
-  // round-trip stays bit-identical to the canonical encoder.
-  const bytes = new TextEncoder().encode(JSON.stringify(value));
-  if (typeof globalThis.btoa === 'function') {
-    let binary = '';
-    for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
-    return globalThis.btoa(binary);
-  }
-  return Buffer.from(bytes).toString('base64');
 }

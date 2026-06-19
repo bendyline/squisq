@@ -2,7 +2,7 @@
  * Placeholder token definitions for the template designer — the single
  * source of truth shared by:
  *
- *   - `TokenPalette`        (renders the draggable/clickable buttons),
+ *   - `AddBin`              (renders the draggable/clickable buttons),
  *   - `TemplateDesigner`    (builds one `createTokenTool` per entry, and
  *                            looks an entry up by id on drop).
  *

@@ -37,12 +37,8 @@ import {
   type DesignerSaveTarget,
 } from './customTemplates';
 import { saveLibraryTemplate } from './customTemplates/library';
+import { useDocCustomTemplates } from './customTemplates/useDocCustomTemplates';
 import type { CustomTemplateDefinition } from '@bendyline/squisq/schemas';
-import {
-  FRONTMATTER_CUSTOM_TEMPLATES_KEY,
-  writeCustomTemplatesToFrontmatter,
-} from '@bendyline/squisq/doc';
-import { setFrontmatterValues } from '@bendyline/squisq/markdown';
 import { profileBlockContents, recommendTemplatesForBlock } from '@bendyline/squisq/recommend';
 import { findBlockSliceByHeadingIndex } from './blockSlice';
 import { stripFrontmatter } from './frontmatter';
@@ -104,8 +100,6 @@ export function WysiwygEditor({
   readOnly = false,
 }: WysiwygEditorProps) {
   const {
-    markdownSource,
-    setMarkdownSource,
     editorSource,
     setEditorSource,
     setTiptapEditor,
@@ -113,28 +107,10 @@ export function WysiwygEditor({
     mentionProvider,
     blockTagsVisible,
     themeInheritance,
-    doc,
   } = useEditorContext();
-  // Custom templates inlined in the active doc's frontmatter. Memoized
-  // so identity is stable across renders that don't touch frontmatter.
-  const docTemplates = useMemo<CustomTemplateDefinition[]>(
-    () => doc?.customTemplates ?? [],
-    [doc?.customTemplates],
-  );
-  // Persist a new custom-templates list back into the markdown source's
-  // frontmatter so the doc round-trips through save/load. We encode the
-  // whole list as a single base64-JSON string per the flat YAML
-  // frontmatter parser's constraint.
-  const onDocTemplatesChange = useCallback(
-    (next: CustomTemplateDefinition[]) => {
-      const payload = writeCustomTemplatesToFrontmatter(next);
-      const updated = setFrontmatterValues(markdownSource, {
-        [FRONTMATTER_CUSTOM_TEMPLATES_KEY]: payload ?? null,
-      });
-      if (updated !== markdownSource) setMarkdownSource(updated);
-    },
-    [markdownSource, setMarkdownSource],
-  );
+  // Custom templates inlined in the active doc's frontmatter + the
+  // persist callback that writes a new list back into the source.
+  const { docTemplates, onDocTemplatesChange } = useDocCustomTemplates();
   // Designer modal visibility. `null` when closed; `{ initial }` when
   // open. `initial` is undefined for a "+ New" flow or set to an
   // existing template to edit it.
@@ -536,6 +512,7 @@ export function WysiwygEditor({
             initial={designerState.initial}
             onSave={handleDesignerSave}
             onClose={() => setDesignerState(null)}
+            mediaProvider={mediaProvider}
           />
         )}
       </div>

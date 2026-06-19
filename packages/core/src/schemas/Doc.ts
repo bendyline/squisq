@@ -356,6 +356,23 @@ export interface TextLayer extends BaseLayer {
 }
 
 /**
+ * A two-stop linear gradient fill, shared by shape/path fills and text
+ * backgrounds. When present it overrides the solid `fill` color.
+ *
+ * `angle` is in degrees: 0 = top→bottom, 90 = left→right, increasing
+ * clockwise. Defaults to 0. Rendered as an SVG `<linearGradient>` in
+ * objectBoundingBox units so it scales with the layer's box.
+ */
+export interface LinearGradient {
+  from: string;
+  to: string;
+  angle?: number;
+}
+
+/** Border line style, mapped to an SVG stroke-dasharray by the renderer. */
+export type BorderStyle = 'solid' | 'dashed' | 'dotted';
+
+/**
  * Shape layer - simple geometric shapes for visual accents.
  */
 export interface ShapeLayer extends BaseLayer {
@@ -365,10 +382,16 @@ export interface ShapeLayer extends BaseLayer {
     shape: 'rect' | 'circle' | 'line';
     /** Fill color (CSS color or 'none') */
     fill?: string;
+    /** Fill opacity 0–1 (applies to solid and gradient fills). */
+    fillOpacity?: number;
+    /** Gradient fill; overrides `fill` when set. */
+    gradient?: LinearGradient;
     /** Stroke color */
     stroke?: string;
     /** Stroke width in pixels */
     strokeWidth?: number;
+    /** Border line style (solid/dashed/dotted). Default solid. */
+    borderStyle?: BorderStyle;
     /** Corner radius for rect */
     borderRadius?: number;
   };
@@ -397,12 +420,32 @@ export interface PathLayer extends BaseLayer {
   content: {
     /** SVG path `d` attribute (e.g. "M 10 10 L 90 90"). Absolute viewBox coords. */
     d: string;
+    /**
+     * Named shape kind (e.g. `'diamond'`, `'star'`, `'arrow-right'`) for
+     * path layers that represent one of Squisq's standard shapes. When
+     * set, the renderer re-derives `d` from the layer's `position` box
+     * (resolved against the viewport) instead of using the stored `d` —
+     * so the shape moves, resizes, and adapts to any aspect ratio like
+     * the native rect/circle/line layers do. Plain paths (connectors,
+     * freehand) leave this unset and keep their absolute `d`.
+     */
+    shapeKind?: string;
     /** Stroke color (default: theme text color). */
     stroke?: string;
     /** Stroke width in pixels (default: 2). */
     strokeWidth?: number;
     /** Optional fill color (default: 'none' — pure connectors). */
     fill?: string;
+    /** Fill opacity 0–1 (applies to solid and gradient fills). */
+    fillOpacity?: number;
+    /** Gradient fill; overrides `fill` when set. */
+    gradient?: LinearGradient;
+    /**
+     * Border line style (solid/dashed/dotted). A convenience over
+     * `dasharray` for named shapes; when set the renderer derives the
+     * dash pattern from it (scaled by stroke width).
+     */
+    borderStyle?: BorderStyle;
     /** Optional stroke dash pattern (SVG `stroke-dasharray` syntax). */
     dasharray?: string;
     /**
@@ -601,6 +644,16 @@ export interface TextStyle {
   shadow?: boolean;
   /** Background color for text box */
   background?: string;
+  /** Background opacity 0–1 (applies to solid and gradient backgrounds). */
+  backgroundOpacity?: number;
+  /** Gradient background; overrides `background` when set. */
+  backgroundGradient?: LinearGradient;
+  /** Border (stroke) color for the text box. */
+  borderColor?: string;
+  /** Border width in pixels. A border renders when > 0 and a color is set. */
+  borderWidth?: number;
+  /** Border line style (solid/dashed/dotted). Default solid. */
+  borderStyle?: BorderStyle;
   /** Padding around text (pixels) */
   padding?: number;
   /** Maximum number of lines before truncation (adds "..." to last line) */

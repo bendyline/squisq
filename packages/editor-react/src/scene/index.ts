@@ -27,6 +27,7 @@ export type { SceneTool, SceneToolContext } from './tools/SceneTool';
 export { SelectTool, getActiveMoveOffset } from './tools/SelectTool';
 export { ConnectTool } from './tools/ConnectTool';
 export { createShapeTool } from './tools/ShapeTool';
+export { createPlaceTool, type PlaceToolOptions } from './tools/PlaceTool';
 export { createPathTool } from './tools/PathTool';
 export { createTextTool } from './tools/TextTool';
 export {

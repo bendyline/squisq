@@ -1,28 +1,38 @@
 /**
- * Frontmatter serialization for user-defined custom templates.
+ * Frontmatter serialization for user-defined custom templates (layouts).
  *
  * Custom template definitions live in the document's YAML frontmatter
- * under the key `squisq-custom-templates`. The entire array is encoded
- * as a single base64-JSON string — Squisq's frontmatter parser is
- * intentionally flat (key: value only, no nested YAML), so encoding the
- * whole structure into one opaque string is the simplest way to carry
- * arbitrary nested data through that parser.
- *
- * Shape on disk:
+ * under the key `squisq-custom-templates`. They're stored as a single
+ * **compact JSON** object keyed by template name:
  *
  * ```yaml
- * squisq-custom-templates: "<base64-JSON of CustomTemplateDefinition[]>"
+ * squisq-custom-templates: {"hero":{"lb":"Hero Section","ly":[{"ty":"text",…}]}}
  * ```
  *
- * Parser is forgiving: malformed payloads return undefined rather than
- * failing the whole doc load. This matches Squisq's broader "lossy is
- * better than fatal" approach to frontmatter.
+ * Squisq's frontmatter parser is line-based; a JSON object literal
+ * round-trips through it verbatim (no leading quote to strip, single
+ * line), so the value is written **unquoted** and stays human-readable
+ * and diffable — important for a codebase edited by people and agents.
  *
- * The exported `encodeLayersForFrontmatter` / `decodeLayersFromFrontmatter`
- * pair handles a single Layer array (used by the editor's
- * `dataLayers="..."` Pandoc param path and re-exported here for
- * consistency). The `read*` / `write*FromFrontmatter` pair handles the
- * whole array of definitions.
+ * The JSON is kept small by:
+ *   - keying definitions by `name` (drops the `name` field + array wrapper),
+ *   - omitting the viewport when it's the 1920×1080 default,
+ *   - renaming well-known property names to two-letter codes via
+ *     {@link LONG_TO_SHORT} (e.g. `fontSize` → `fz`).
+ *
+ * The rename is a generic, recursive, bijective pass: **any property not
+ * in the map passes through unchanged**, so the format is lossless even
+ * as the Layer schema grows — new fields are simply stored under their
+ * full name until (optionally) added to the map.
+ *
+ * Back-compat: the reader still accepts the historical base64-of-JSON
+ * payload and a structured array, so older documents load unchanged.
+ * The first save migrates them to the compact form.
+ *
+ * The `encodeLayersForFrontmatter` / `decodeLayersFromFrontmatter` pair
+ * handles a single Layer array for the editor's `dataLayers="…"` Pandoc
+ * param path; that path stays base64 (it's a different, per-block
+ * mechanism) and is re-exported here for locality.
  */
 
 import type { Layer } from '../schemas/Doc.js';
@@ -34,17 +44,106 @@ const DEFAULT_VIEWPORT = { width: 1920, height: 1080 };
 /** Re-export for callers that need the canonical key spelling. */
 export { FRONTMATTER_CUSTOM_TEMPLATES_KEY };
 
+// ─── Compact key codec ──────────────────────────────────────────────
+
 /**
- * Base64-encode a Layer array as JSON, UTF-8 safe.
+ * Long → short property-name map. Values must be unique and must not
+ * collide with any real key that passes through unmapped (those are
+ * 1-char — `x`/`y`/`d`/`id`/`to` — or full words; the codes here are
+ * 2-letter combos, so they never clash). A field literally named like a
+ * code (e.g. a real `fz` key) would be the one corruption case — none
+ * exist in the schema, and the round-trip test guards against it.
+ */
+const LONG_TO_SHORT: Readonly<Record<string, string>> = {
+  // definition
+  label: 'lb',
+  description: 'ds',
+  viewport: 'vp',
+  layers: 'ly',
+  name: 'nm',
+  // layer
+  type: 'ty',
+  position: 'po',
+  content: 'ct',
+  animation: 'am',
+  // position
+  width: 'wd',
+  height: 'hg',
+  anchor: 'an',
+  // text
+  text: 'tx',
+  style: 'sy',
+  fontSize: 'fz',
+  fontFamily: 'ff',
+  fontWeight: 'fw',
+  color: 'cl',
+  textAlign: 'al',
+  verticalAlign: 'vl',
+  lineHeight: 'lh',
+  shadow: 'sd',
+  background: 'bg',
+  backgroundOpacity: 'bo',
+  backgroundGradient: 'bj',
+  borderColor: 'bc',
+  borderWidth: 'bw',
+  borderStyle: 'bs',
+  padding: 'pd',
+  maxLines: 'mx',
+  // shape / path
+  shape: 'sp',
+  fill: 'fl',
+  fillOpacity: 'fo',
+  gradient: 'gr',
+  stroke: 'sk',
+  strokeWidth: 'sw',
+  borderRadius: 'br',
+  shapeKind: 'kd',
+  dasharray: 'da',
+  arrow: 'ar',
+  startMarker: 'st',
+  endMarker: 'em',
+  // image
+  src: 'sc',
+  alt: 'at',
+  fit: 'ft',
+  credit: 'cr',
+  license: 'lc',
+  // gradient
+  from: 'fr',
+  angle: 'ag',
+};
+
+const SHORT_TO_LONG: Readonly<Record<string, string>> = Object.fromEntries(
+  Object.entries(LONG_TO_SHORT).map(([long, short]) => [short, long]),
+);
+
+/** Recursively rename an object's keys via `map`, leaving unmapped keys. */
+function renameKeys(value: unknown, map: Readonly<Record<string, string>>): unknown {
+  if (Array.isArray(value)) return value.map((v) => renameKeys(v, map));
+  if (value && typeof value === 'object') {
+    const out: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
+      out[map[k] ?? k] = renameKeys(v, map);
+    }
+    return out;
+  }
+  return value;
+}
+
+function isDefaultViewport(v: { width: number; height: number } | undefined): boolean {
+  return !v || (v.width === DEFAULT_VIEWPORT.width && v.height === DEFAULT_VIEWPORT.height);
+}
+
+// ─── Single-Layer base64 codec (legacy `dataLayers` path) ───────────
+
+/**
+ * Base64-encode a Layer array as JSON, UTF-8 safe. Used by the editor's
+ * per-block `dataLayers="…"` Pandoc param (not the doc-level template
+ * list, which uses the compact JSON above).
  *
- * `btoa` only accepts Latin1 strings — any character outside the
- * Latin1 range (e.g. an em-dash in a description) throws. We round
- * through `TextEncoder` so the wire format handles arbitrary Unicode
- * (which the user is almost certain to type into a template label or
- * preview text).
- *
- * Works in both Node ≥18 and browsers (both have TextEncoder + btoa
- * on `globalThis`).
+ * `btoa` only accepts Latin1 strings — any character outside that range
+ * (e.g. an em-dash in a description) throws — so we round through
+ * `TextEncoder`. Works in Node ≥18 and browsers.
  */
 export function encodeLayersForFrontmatter(layers: readonly Layer[]): string {
   return utf8ToBase64(JSON.stringify(layers));
@@ -83,23 +182,23 @@ function base64ToUtf8(b64: string): string {
   return Buffer.from(b64, 'base64').toString('utf-8');
 }
 
+// ─── Definition list read / write ───────────────────────────────────
+
 /**
- * Read the `squisq-custom-templates` frontmatter key and decode it
- * into an array of CustomTemplateDefinitions. Returns undefined when
- * the key is absent so callers can omit the field from the Doc.
+ * Read the `squisq-custom-templates` frontmatter key and decode it into
+ * an array of CustomTemplateDefinitions. Returns undefined when the key
+ * is absent or unparseable so callers can omit the field from the Doc.
  *
- * Two payload shapes are accepted for forward compatibility:
- *   1. A base64-encoded JSON string of `CustomTemplateDefinition[]`
- *      (the canonical v1 shape, produced by `writeCustomTemplatesToFrontmatter`).
- *   2. A plain array of definition objects (in case a future richer
- *      YAML parser delivers structured arrays directly).
+ * Accepts, in order: the compact JSON object (current), a base64-JSON
+ * string (legacy), and an already-structured array/object (in case a
+ * richer YAML parser delivers it). Malformed payloads return undefined
+ * rather than failing the whole doc load.
  */
 export function readCustomTemplatesFromFrontmatter(
   frontmatter: Record<string, unknown> | undefined,
 ): CustomTemplateDefinition[] | undefined {
   if (!frontmatter) return undefined;
-  const raw = frontmatter[FRONTMATTER_CUSTOM_TEMPLATES_KEY];
-  const candidates = normalizeCandidates(raw);
+  const candidates = normalizeCandidates(frontmatter[FRONTMATTER_CUSTOM_TEMPLATES_KEY]);
   if (!candidates) return undefined;
   const out: CustomTemplateDefinition[] = [];
   for (const entry of candidates) {
@@ -120,23 +219,23 @@ export function readCustomTemplatesFromFrontmatter(
 }
 
 /**
- * Encode a list of custom template definitions into a single base64-
- * JSON string suitable for the flat frontmatter parser. Returns
- * undefined when the input list is empty so callers can leave the key
- * off the output.
+ * Encode a list of custom template definitions into the compact JSON
+ * object described in the module header. Returns undefined when the
+ * input list is empty so callers can leave the key off the output.
  */
 export function writeCustomTemplatesToFrontmatter(
   templates: readonly CustomTemplateDefinition[] | undefined,
 ): string | undefined {
   if (!templates || templates.length === 0) return undefined;
-  const payload = templates.map((def) => ({
-    name: def.name,
-    label: def.label,
-    ...(def.description ? { description: def.description } : {}),
-    viewport: def.viewport,
-    layers: def.layers,
-  }));
-  return encodeAsBase64Json(payload);
+  const map: Record<string, Record<string, unknown>> = {};
+  for (const def of templates) {
+    const entry: Record<string, unknown> = { lb: def.label };
+    if (def.description) entry.ds = def.description;
+    if (!isDefaultViewport(def.viewport)) entry.vp = def.viewport;
+    entry.ly = renameKeys(def.layers, LONG_TO_SHORT);
+    map[def.name] = entry;
+  }
+  return JSON.stringify(map);
 }
 
 function readViewport(raw: unknown): { width: number; height: number } {
@@ -150,23 +249,60 @@ function readViewport(raw: unknown): { width: number; height: number } {
 }
 
 /**
- * Accept either a base64-JSON string or a structured array (already
- * decoded by a richer YAML parser). Returns null when the value is
- * neither shape.
+ * Expand the compact, name-keyed map into full-keyed definition objects
+ * that {@link readCustomTemplatesFromFrontmatter}'s validation loop
+ * understands. The `name` comes from the map key.
  */
-function normalizeCandidates(raw: unknown): unknown[] | null {
-  if (Array.isArray(raw)) return raw;
-  if (typeof raw === 'string') {
-    try {
-      const parsed = JSON.parse(base64ToUtf8(raw));
-      return Array.isArray(parsed) ? parsed : null;
-    } catch {
-      return null;
-    }
-  }
+function expandCompactMap(map: Record<string, unknown>): unknown[] {
+  return Object.entries(map).map(([name, raw]) => {
+    const e = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>;
+    const def: Record<string, unknown> = {
+      name,
+      label: e.lb,
+      viewport: e.vp ?? { ...DEFAULT_VIEWPORT },
+      layers: renameKeys(e.ly ?? [], SHORT_TO_LONG),
+    };
+    if (typeof e.ds === 'string') def.description = e.ds;
+    return def;
+  });
+}
+
+/** Turn a parsed value into a list of full-keyed definition objects. */
+function fromParsed(parsed: unknown): unknown[] | null {
+  if (Array.isArray(parsed)) return parsed; // legacy structured array
+  if (parsed && typeof parsed === 'object')
+    return expandCompactMap(parsed as Record<string, unknown>);
   return null;
 }
 
-function encodeAsBase64Json(value: unknown): string {
-  return utf8ToBase64(JSON.stringify(value));
+function tryJson(s: string): unknown | undefined {
+  try {
+    return JSON.parse(s);
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Normalize any supported payload shape into a list of full-keyed
+ * definition objects. Returns null when the value is none of them.
+ */
+function normalizeCandidates(raw: unknown): unknown[] | null {
+  if (raw == null) return null;
+  if (Array.isArray(raw)) return raw;
+  if (typeof raw === 'object') return expandCompactMap(raw as Record<string, unknown>);
+  if (typeof raw !== 'string') return null;
+
+  // Current format: a JSON object/array literal stored verbatim.
+  const direct = tryJson(raw.trim());
+  if (direct !== undefined) return fromParsed(direct);
+
+  // Legacy format: base64-encoded JSON.
+  try {
+    const decoded = tryJson(base64ToUtf8(raw));
+    if (decoded !== undefined) return fromParsed(decoded);
+  } catch {
+    // not valid base64 either
+  }
+  return null;
 }
