@@ -18,7 +18,8 @@ import { VIEWPORT_PRESETS } from '@bendyline/squisq/schemas';
 import { flattenBlocks, DEFAULT_THEME } from '@bendyline/squisq/doc';
 import { useEditorContext } from './EditorContext';
 import { usePreviewSettingsOptional } from './PreviewControls';
-import { BlockThumbnail, resolveBlockVisual } from './TimelineBlockPreview';
+import { BlockThumbnail } from './TimelineBlockPreview';
+import { resolveBlockVisual } from './resolveBlockVisual';
 
 export interface BlockPreviewPanelProps {
   basePath?: string;

@@ -171,7 +171,9 @@ describe('useMediaRecorder lifecycle', () => {
       await result.current.request();
     });
     const getUserMedia = navigator.mediaDevices.getUserMedia as ReturnType<typeof vi.fn>;
-    expect(getUserMedia).toHaveBeenCalledWith(expect.objectContaining({ video: true, audio: true }));
+    expect(getUserMedia).toHaveBeenCalledWith(
+      expect.objectContaining({ video: true, audio: true }),
+    );
   });
 
   it('camera omits the mic when includeMicrophone is false', async () => {

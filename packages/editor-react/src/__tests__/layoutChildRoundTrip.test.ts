@@ -53,8 +53,12 @@ describe('Layout child sub-block round-trip', () => {
     // Child sub-blocks keep their id + annotation (empty-text headings get an
     // extra space after `###`, which re-parses identically — assert spacing-free).
     expect(back).toContain('{#text-1} {[text x=360 y=380 width=1200 height=320 align=center]}');
-    expect(back).toContain('{#box-1} {[rectangle x=760 y=390 width=400 height=300 fill="#e0e7ff"]}');
-    expect(back).toContain('{#pic-1} {[image x=40 y=40 width=320 height=240 src=cover.png alt="Cover"]}');
+    expect(back).toContain(
+      '{#box-1} {[rectangle x=760 y=390 width=400 height=300 fill="#e0e7ff"]}',
+    );
+    expect(back).toContain(
+      '{#pic-1} {[image x=40 y=40 width=320 height=240 src=cover.png alt="Cover"]}',
+    );
     // The text layer's body markdown survives as readable content.
     expect(back).toContain('Welcome to the **bold** layout');
     expect(back).toContain('- first point');

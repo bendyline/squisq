@@ -30,7 +30,8 @@ import {
   type ClipSpec,
 } from './timelineSource';
 import { collectEmbeddedMedia } from './embeddedMedia';
-import { BlockThumbnail, resolveBlockVisual } from './TimelineBlockPreview';
+import { BlockThumbnail } from './TimelineBlockPreview';
+import { resolveBlockVisual } from './resolveBlockVisual';
 import { useTimelineClock } from './useTimelineClock';
 
 /** Viewport the per-bar thumbnails render at. */

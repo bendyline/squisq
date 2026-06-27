@@ -210,7 +210,11 @@ export function setDiagramHeight(
     .chain()
     .command(({ tr }) => {
       if (!tr.doc.nodeAt(parentPos)) return false;
-      tr.setNodeAttribute(parentPos, 'dataTemplateParams', serialized.length > 0 ? serialized : null);
+      tr.setNodeAttribute(
+        parentPos,
+        'dataTemplateParams',
+        serialized.length > 0 ? serialized : null,
+      );
       return true;
     })
     .run();

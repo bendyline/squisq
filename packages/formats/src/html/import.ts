@@ -245,7 +245,10 @@ function tableFromElement(node: HtmlElement): MarkdownBlockNode | null {
       if (t === 'tr') {
         const cells: MarkdownTableCell[] = [];
         for (const cell of child.children) {
-          if (isElement(cell) && (cell.tagName.toLowerCase() === 'td' || cell.tagName.toLowerCase() === 'th')) {
+          if (
+            isElement(cell) &&
+            (cell.tagName.toLowerCase() === 'td' || cell.tagName.toLowerCase() === 'th')
+          ) {
             cells.push({ type: 'tableCell', children: inlinesFromNodes(cell.children) });
           }
         }

@@ -63,7 +63,8 @@ export function SceneTextOverlay({
         }
         // Inline labels: Enter commits (Shift+Enter = hard break). Rich
         // textboxes: Enter is a paragraph; commit on Cmd/Ctrl+Enter.
-        const enterCommits = config.level === 'inline' ? !event.shiftKey : event.metaKey || event.ctrlKey;
+        const enterCommits =
+          config.level === 'inline' ? !event.shiftKey : event.metaKey || event.ctrlKey;
         if (event.key === 'Enter' && enterCommits) {
           event.preventDefault();
           commitRef.current();
@@ -98,14 +99,11 @@ export function SceneTextOverlay({
 
   // Commit when focus leaves the editor — unless it went to the toolbar
   // (the user clicking Bold) or stayed within the overlay.
-  const onBlur = useCallback(
-    (e: React.FocusEvent) => {
-      const next = e.relatedTarget as HTMLElement | null;
-      if (next && next.closest('.squisq-toolbar, .squisq-scene-text-overlay')) return;
-      commitRef.current();
-    },
-    [],
-  );
+  const onBlur = useCallback((e: React.FocusEvent) => {
+    const next = e.relatedTarget as HTMLElement | null;
+    if (next && next.closest('.squisq-toolbar, .squisq-scene-text-overlay')) return;
+    commitRef.current();
+  }, []);
 
   const bounds = layerBounds(layer, viewport);
   if (!bounds) return null;

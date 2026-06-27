@@ -75,7 +75,15 @@ function VAlignIcon({ pos }: { pos: VAlign }) {
   return (
     <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true">
       <rect x="2.5" y="1.5" width="11" height="13" rx="1" stroke="currentColor" strokeWidth="1.3" />
-      <line x1="5" y1={y} x2="11" y2={y} stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+      <line
+        x1="5"
+        y1={y}
+        x2="11"
+        y2={y}
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+      />
     </svg>
   );
 }

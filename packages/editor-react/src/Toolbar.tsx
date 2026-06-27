@@ -326,7 +326,10 @@ function insertLayoutBlock(editor: TiptapEditor): void {
       const headingType = state.schema.nodes.heading;
       const paragraphType = state.schema.nodes.paragraph;
       if (!headingType || !paragraphType) return false;
-      const parent = headingType.create({ level: 2, dataTemplate: 'layout' }, state.schema.text('Layout'));
+      const parent = headingType.create(
+        { level: 2, dataTemplate: 'layout' },
+        state.schema.text('Layout'),
+      );
       const child = headingType.create({
         level: 3,
         dataTemplate: 'text',
@@ -1351,8 +1354,7 @@ export function Toolbar({
                     : formatActive && formattingEditor
                       ? isTiptapActive(formattingEditor, btn.id)
                       : false;
-                const disabled =
-                  (btn.id === 'image' && !mediaProvider) || !buttonAllowed(btn.id);
+                const disabled = (btn.id === 'image' && !mediaProvider) || !buttonAllowed(btn.id);
                 return (
                   <button
                     key={btn.id}
@@ -1570,8 +1572,7 @@ export function Toolbar({
                       : formatActive && formattingEditor
                         ? isTiptapActive(formattingEditor, btn.id)
                         : false;
-                  const disabled =
-                    (btn.id === 'image' && !mediaProvider) || !buttonAllowed(btn.id);
+                  const disabled = (btn.id === 'image' && !mediaProvider) || !buttonAllowed(btn.id);
                   return (
                     <button
                       key={btn.id}

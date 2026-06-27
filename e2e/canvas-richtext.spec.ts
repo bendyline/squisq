@@ -11,6 +11,11 @@ import { test, expect, type Page } from '@playwright/test';
 
 test.use({ viewport: { width: 1500, height: 950 } });
 
+// ProseMirror binds select-all to `Mod-a` — Cmd on macOS, Ctrl elsewhere.
+// Use the platform-correct modifier so select-all works locally (Mac) and
+// in CI (Linux). Matches the convention in editor.spec.ts / timeline.spec.ts.
+const SELECT_ALL = process.platform === 'darwin' ? 'Meta+a' : 'Control+a';
+
 async function insertLayout(page: Page) {
   await page.goto('/');
   await page.waitForLoadState('networkidle');
@@ -39,14 +44,18 @@ test('double-click opens an inline editor and the toolbar bolds the selection', 
 
   // Replace the text, select all, and click Bold in the top toolbar.
   await overlay.click();
-  await page.keyboard.press('Control+a');
+  await page.keyboard.press(SELECT_ALL);
   await page.keyboard.type('Hello bold');
-  await page.keyboard.press('Control+a');
+  await page.keyboard.press(SELECT_ALL);
   await page.locator('.squisq-toolbar button[aria-label^="Bold"]').click();
 
   // The overlay now carries a <strong> run.
   await expect(page.locator('.squisq-scene-text-overlay strong')).toHaveText('Hello bold');
 
+  // Clicking Bold re-focuses the editor asynchronously (Tiptap's
+  // `chain().focus()`); a real click on the overlay restores focus
+  // synchronously so the next outside-click reliably blurs → commits.
+  await overlay.click();
   // Commit by clicking a neutral spot on the canvas OUTSIDE the textbox
   // overlay (clicking inside it wouldn't blur → wouldn't commit).
   await page.mouse.click(box.x + box.width / 2, box.y - 60);
@@ -84,14 +93,8 @@ test('alignment controls appear for a selected textbox and apply', async ({ page
   // Single-click selects the textbox → alignment controls appear. The seed
   // starts center/middle.
   await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
-  await expect(page.locator('[aria-label="Align center"]')).toHaveAttribute(
-    'aria-pressed',
-    'true',
-  );
-  await expect(page.locator('[aria-label="Align middle"]')).toHaveAttribute(
-    'aria-pressed',
-    'true',
-  );
+  await expect(page.locator('[aria-label="Align center"]')).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.locator('[aria-label="Align middle"]')).toHaveAttribute('aria-pressed', 'true');
 
   // Re-align left + top; the controls reflect the new state (and persist).
   await page.locator('[aria-label="Align left"]').click();
@@ -110,12 +113,17 @@ test('a bulleted list renders inside the textbox', async ({ page }) => {
   const overlay = page.locator('.squisq-scene-text-overlay .ProseMirror');
   await expect(overlay).toBeVisible({ timeout: 3_000 });
   await overlay.click();
-  await page.keyboard.press('Control+a');
+  await page.keyboard.press(SELECT_ALL);
   await page.keyboard.type('Apple');
   await page.keyboard.press('Enter');
   await page.keyboard.type('Banana');
-  await page.keyboard.press('Control+a');
+  await page.keyboard.press(SELECT_ALL);
   await page.locator('.squisq-toolbar button[aria-label="Bullet list"]').click();
+  // The toolbar click re-focuses the editor asynchronously; a real click
+  // on the overlay restores focus synchronously so the outside-click below
+  // reliably blurs → commits (otherwise the assertion would match the
+  // still-open overlay's list rather than the committed render).
+  await overlay.click();
   // Commit outside the overlay so the list persists and re-renders rich.
   await page.mouse.click(box.x + box.width / 2, box.y - 60);
 
@@ -136,7 +144,7 @@ test('Escape cancels the edit without changing the text', async ({ page }) => {
   const overlay = page.locator('.squisq-scene-text-overlay .ProseMirror');
   await expect(overlay).toBeVisible({ timeout: 3_000 });
   await overlay.click();
-  await page.keyboard.press('Control+a');
+  await page.keyboard.press(SELECT_ALL);
   await page.keyboard.type('discarded');
   await page.keyboard.press('Escape');
 
@@ -190,7 +198,7 @@ test('diagram node label is editable inline (plain text)', async ({ page }) => {
   const overlay = page.locator('.squisq-scene-text-overlay .ProseMirror');
   await expect(overlay).toBeVisible({ timeout: 3_000 });
   await overlay.click();
-  await page.keyboard.press('Control+a');
+  await page.keyboard.press(SELECT_ALL);
   await page.keyboard.type('Renamed');
   await page.mouse.click(box.x + box.width / 2, box.y - 120);
   await page.waitForTimeout(400);

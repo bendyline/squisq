@@ -12,7 +12,8 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { Editor } from '@tiptap/react';
-import { DiagramCanvas, DIAGRAM_TOOLS, DIAGRAM_VIEWPORT, type DiagramCommand } from './DiagramCanvas';
+import { DiagramCanvas, type DiagramCommand } from './DiagramCanvas';
+import { DIAGRAM_TOOLS, DIAGRAM_VIEWPORT } from './diagramConstants';
 import { DiagramMaximizedOverlay } from './DiagramMaximizedOverlay';
 import { useDiagramData } from './useDiagramData';
 import { findDiagramHeadingPos } from './DiagramExtension';

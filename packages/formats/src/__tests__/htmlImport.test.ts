@@ -9,7 +9,9 @@ describe('htmlToMarkdown', () => {
   });
 
   it('converts links and inline code', () => {
-    const md = htmlToMarkdown('<p>See <a href="https://x.test">site</a> and <code>npm i</code></p>');
+    const md = htmlToMarkdown(
+      '<p>See <a href="https://x.test">site</a> and <code>npm i</code></p>',
+    );
     expect(md).toContain('[site](https://x.test)');
     expect(md).toContain('`npm i`');
   });
@@ -31,9 +33,7 @@ describe('htmlToMarkdown', () => {
   });
 
   it('drops scripts and styles (sanitized by default)', () => {
-    const md = htmlToMarkdown(
-      '<p>safe</p><script>alert(1)</script><style>.x{color:red}</style>',
-    );
+    const md = htmlToMarkdown('<p>safe</p><script>alert(1)</script><style>.x{color:red}</style>');
     expect(md).toContain('safe');
     expect(md).not.toContain('alert(1)');
     expect(md).not.toContain('color:red');

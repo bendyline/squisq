@@ -345,7 +345,19 @@ export function readFrontmatterThemeId(
  * more correct than a regex tag-stripper.
  */
 export function plainTextFromInlineHtml(html: string): string {
-  const BLOCK = new Set(['p', 'div', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'li', 'blockquote', 'pre']);
+  const BLOCK = new Set([
+    'p',
+    'div',
+    'h1',
+    'h2',
+    'h3',
+    'h4',
+    'h5',
+    'h6',
+    'li',
+    'blockquote',
+    'pre',
+  ]);
   const walk = (nodes: HtmlNode[]): string =>
     nodes
       .map((n) => {
@@ -358,7 +370,7 @@ export function plainTextFromInlineHtml(html: string): string {
       })
       .join('');
   return walk(parseHtmlToNodes(html))
-    .replace(/ /g, ' ')
+    .replace(/\u00A0/g, ' ')
     .replace(/\n{3,}/g, '\n\n')
     .trim();
 }

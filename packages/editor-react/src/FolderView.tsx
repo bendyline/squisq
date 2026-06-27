@@ -67,7 +67,10 @@ export function FolderView({
   return (
     <div className="squisq-folder-view" data-theme={theme} style={{ height }}>
       <div className="squisq-folder-view-header">
-        <i className="fa-regular fa-folder-open squisq-folder-view-header-icon" aria-hidden="true" />
+        <i
+          className="fa-regular fa-folder-open squisq-folder-view-header-icon"
+          aria-hidden="true"
+        />
         <span className="squisq-folder-view-title">{name}</span>
         <span className="squisq-folder-view-count">
           {entries.length} {entries.length === 1 ? 'item' : 'items'}
@@ -106,11 +109,7 @@ export function FolderView({
           <i className="fa-solid fa-plus" aria-hidden="true" /> New document
         </button>
         {onNewFolder && (
-          <button
-            type="button"
-            className="squisq-folder-view-new-folder"
-            onClick={onNewFolder}
-          >
+          <button type="button" className="squisq-folder-view-new-folder" onClick={onNewFolder}>
             <i className="fa-regular fa-folder" aria-hidden="true" /> New folder
           </button>
         )}

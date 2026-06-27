@@ -65,11 +65,7 @@ export type { BlockRange, BlockSlice } from './blockRange.js';
 // markdown write-back helpers it commits edits through.
 export { TimelineTrack } from './TimelineTrack.js';
 export type { TimelineTrackProps } from './TimelineTrack.js';
-export {
-  formatSeconds,
-  setBlockDurationInSource,
-  setMediaClipInSource,
-} from './timelineSource.js';
+export { formatSeconds, setBlockDurationInSource, setMediaClipInSource } from './timelineSource.js';
 export type { MediaClipPatch } from './timelineSource.js';
 
 // File-kind detection — useful for hosts that want to pre-decide chrome

@@ -335,7 +335,7 @@ export function Scene(props: SceneProps) {
     };
     root.addEventListener('keydown', onKey);
     return () => root.removeEventListener('keydown', onKey);
-  }, [tools, activeTool, setActiveTool]);
+  }, [tools, activeTool, setActiveTool, textEdit.activeRef]);
 
   // ── Initial fit ─────────────────────────────────────────────
   const didFitRef = useRef(false);

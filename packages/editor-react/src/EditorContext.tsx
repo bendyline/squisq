@@ -804,8 +804,7 @@ export function EditorProvider({
   // markdown mode — code/image surfaces always edit the whole file.
   const blockNav = useBlockNavigator(markdownSource, setMarkdownSource, {
     enabled:
-      (layoutModeState === 'block' || layoutModeState === 'timeline') &&
-      editorMode === 'markdown',
+      (layoutModeState === 'block' || layoutModeState === 'timeline') && editorMode === 'markdown',
   });
   const {
     editorSource,

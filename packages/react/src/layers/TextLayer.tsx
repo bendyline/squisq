@@ -258,7 +258,10 @@ function RichTextLayer({ layer, viewport, blockTime }: TextLayerProps) {
     <g className={`block-layer block-layer--text ${animStyle.className}`} data-layer-id={layer.id}>
       <foreignObject x={boxX} y={boxY} width={boxWidth} height={boxHeight}>
         {/* xmlns is required for HTML inside SVG foreignObject (see TableLayer) */}
-        <div {...({ xmlns: 'http://www.w3.org/1999/xhtml' } as Record<string, string>)} style={boxStyle}>
+        <div
+          {...({ xmlns: 'http://www.w3.org/1999/xhtml' } as Record<string, string>)}
+          style={boxStyle}
+        >
           <style>{scopedCss}</style>
           <div
             className={cls}

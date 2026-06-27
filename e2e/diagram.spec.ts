@@ -84,6 +84,13 @@ async function readMarkdown(page: Page): Promise<string> {
 // ── Tests ────────────────────────────────────────────────────────────
 
 test.describe('Diagram editor (Scene engine)', () => {
+  // The diagram canvas is ~420px tall and sits below the editor chrome; at
+  // the default 720px viewport its bottom row of nodes (child-1/2/3) falls
+  // behind the pinned status bar, so pointer interactions there hit the
+  // status bar instead of the card. A taller viewport keeps every node
+  // clickable.
+  test.use({ viewport: { width: 1280, height: 1000 } });
+
   test.beforeEach(async ({ page }) => {
     await loadDiagramSample(page);
   });

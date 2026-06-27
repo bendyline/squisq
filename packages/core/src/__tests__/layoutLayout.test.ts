@@ -5,12 +5,7 @@ import type { ShapeLayer, TextLayer, ImageLayer, PathLayer } from '../schemas/Do
 
 const VP = { width: 1920, height: 1080 };
 
-function child(
-  id: string,
-  template: string,
-  params: Record<string, string> = {},
-  bodyMd = '',
-) {
+function child(id: string, template: string, params: Record<string, string> = {}, bodyMd = '') {
   return {
     id,
     template,
@@ -112,7 +107,9 @@ describe('computeLayoutLayers', () => {
   });
 
   it('uses absolute positions (no fit-scaling) regardless of viewport', () => {
-    const children = [child('text-1', 'text', { x: '100', y: '100', width: '200', height: '50' }, 'x')];
+    const children = [
+      child('text-1', 'text', { x: '100', y: '100', width: '200', height: '50' }, 'x'),
+    ];
     const small = computeLayoutLayers(children, { width: 200, height: 200 }).layers[0];
     const large = computeLayoutLayers(children, { width: 4000, height: 4000 }).layers[0];
     expect(small.position.x).toBe(100);
@@ -128,7 +125,10 @@ describe('computeLayoutLayers', () => {
   });
 
   it('warns and skips a child whose annotation is not a layer kind', () => {
-    const { layers, warnings } = computeLayoutLayers([child('weird', 'banana', { x: '0', y: '0' })], VP);
+    const { layers, warnings } = computeLayoutLayers(
+      [child('weird', 'banana', { x: '0', y: '0' })],
+      VP,
+    );
     expect(layers).toHaveLength(0);
     expect(warnings.some((w) => w.includes('weird'))).toBe(true);
   });

@@ -19,13 +19,12 @@ import {
   nodeIdFromCardLayerId,
   diagramLayerFollows,
   DiagramEdges,
-  SelectTool,
-  ConnectTool,
   type SceneCommand,
 } from '../scene';
 import type { SceneTextEditConfig } from '../scene/text/sceneTextConfig';
 import { markdownToTiptap } from '../tiptapBridge';
 import type { DiagramRFNode, DiagramRFEdge } from './useDiagramData';
+import { DIAGRAM_VIEWPORT, DIAGRAM_TOOLS } from './diagramConstants';
 
 export type DiagramCommand =
   | { kind: 'moveNode'; nodeId: string; x: number; y: number }
@@ -57,16 +56,6 @@ interface DiagramCanvasProps {
   onSelectionChange?: (ids: ReadonlySet<string>) => void;
 }
 
-/**
- * Viewport size for the diagram canvas — a wide-ish surface in author
- * units. The Scene's fit-on-mount centers the diagram inside whatever
- * container the canvas is rendered into. Exported so the host can place
- * new nodes at the viewport center.
- */
-export const DIAGRAM_VIEWPORT = { width: 1600, height: 900 };
-
-/** The diagram's tool vocabulary — surfaced in the shared block toolbar. */
-export const DIAGRAM_TOOLS = [SelectTool, ConnectTool];
 const TOOLS = DIAGRAM_TOOLS;
 
 export function DiagramCanvas({

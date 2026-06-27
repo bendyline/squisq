@@ -75,7 +75,9 @@ export function computeLayoutLayers(
         content: {
           src,
           alt: strParam(params, 'alt') ?? '',
-          ...(strParam(params, 'fit') ? { fit: strParam(params, 'fit') as 'cover' | 'contain' | 'fill' } : {}),
+          ...(strParam(params, 'fit')
+            ? { fit: strParam(params, 'fit') as 'cover' | 'contain' | 'fill' }
+            : {}),
         },
       };
       layers.push(layer);
