@@ -12,7 +12,7 @@
  * `<DiagramEdges>` as a separate background layer.
  */
 
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import {
   Scene,
   buildDiagramScene,
@@ -23,6 +23,8 @@ import {
   ConnectTool,
   type SceneCommand,
 } from '../scene';
+import type { SceneTextEditConfig } from '../scene/text/sceneTextConfig';
+import { markdownToTiptap } from '../tiptapBridge';
 import type { DiagramRFNode, DiagramRFEdge } from './useDiagramData';
 
 export type DiagramCommand =
@@ -44,14 +46,28 @@ interface DiagramCanvasProps {
   maximized?: boolean;
   /** Callback when the maximize button is clicked. */
   onToggleMaximize?: () => void;
+  /**
+   * Active tool id, controlled by the host (DiagramWidget) so the tool
+   * buttons can live in the shared toolbar above the canvas. Falls back
+   * to internal state when omitted.
+   */
+  activeToolId?: string;
+  onActiveToolIdChange?: (id: string) => void;
+  /** Forwarded to the Scene so the host can drive a Delete action. */
+  onSelectionChange?: (ids: ReadonlySet<string>) => void;
 }
 
-// Viewport size for the diagram canvas — a wide-ish surface in author
-// units. The Scene's fit-on-mount centers the diagram inside whatever
-// container the canvas is rendered into.
-const DIAGRAM_VIEWPORT = { width: 1600, height: 900 };
+/**
+ * Viewport size for the diagram canvas — a wide-ish surface in author
+ * units. The Scene's fit-on-mount centers the diagram inside whatever
+ * container the canvas is rendered into. Exported so the host can place
+ * new nodes at the viewport center.
+ */
+export const DIAGRAM_VIEWPORT = { width: 1600, height: 900 };
 
-const TOOLS = [SelectTool, ConnectTool];
+/** The diagram's tool vocabulary — surfaced in the shared block toolbar. */
+export const DIAGRAM_TOOLS = [SelectTool, ConnectTool];
+const TOOLS = DIAGRAM_TOOLS;
 
 export function DiagramCanvas({
   nodes: incomingNodes,
@@ -60,14 +76,20 @@ export function DiagramCanvas({
   showMaximize = true,
   maximized = false,
   onToggleMaximize,
+  activeToolId: controlledToolId,
+  onActiveToolIdChange,
+  onSelectionChange,
 }: DiagramCanvasProps) {
   const scene = useMemo(
     () => buildDiagramScene(incomingNodes, incomingEdges),
     [incomingNodes, incomingEdges],
   );
   // Track the active tool so we can keep selection when the user toggles
-  // back to Select after using Connect.
-  const [activeToolId, setActiveToolId] = useState<string>('select');
+  // back to Select after using Connect. Controlled by the host when it
+  // owns the shared toolbar; falls back to internal state otherwise.
+  const [internalToolId, setInternalToolId] = useState<string>('select');
+  const activeToolId = controlledToolId ?? internalToolId;
+  const setActiveToolId = onActiveToolIdChange ?? setInternalToolId;
 
   // Translate generic SceneCommand → diagram-specific DiagramCommand,
   // then hand off to the host (DiagramWidget) which writes to Tiptap.
@@ -109,6 +131,13 @@ export function DiagramCanvas({
           if (nodeId) onCommand({ kind: 'renameNode', nodeId, newLabel: cmd.label });
           return;
         }
+        case 'setLayerText': {
+          // Diagram node labels persist as heading text (markdown inline
+          // marks); the rich `html` is not stored separately.
+          const nodeId = nodeIdFromCardLayerId(cmd.id);
+          if (nodeId) onCommand({ kind: 'renameNode', nodeId, newLabel: cmd.text });
+          return;
+        }
         case 'addLayer': {
           // Diagram mode interprets addLayer as "add a node at the layer's
           // position". The Scene's empty-state "add" button and any future
@@ -146,6 +175,29 @@ export function DiagramCanvas({
     [nodesForExtras, edgesForExtras],
   );
 
+  // Inline label editing: double-click a node card to edit its label.
+  // Labels persist as the node's heading text (inline markdown marks), so
+  // the editor is `inline` level. Refs keep the config stable.
+  const incomingNodesRef = useRef(incomingNodes);
+  incomingNodesRef.current = incomingNodes;
+  const textConfig = useMemo<SceneTextEditConfig>(
+    () => ({
+      resolveEditableId: (id) => (nodeIdFromCardLayerId(id) ? id : null),
+      getHtml: (id) => {
+        const nodeId = nodeIdFromCardLayerId(id);
+        const node = incomingNodesRef.current.find((n) => n.id === nodeId);
+        return markdownToTiptap(node?.data.label ?? '');
+      },
+      commit: (id, { text }) => {
+        // Node labels persist as plain heading text for now (rich marks on
+        // labels are a follow-up — the rendering foundation is in place).
+        handleSceneCommand({ kind: 'renameLayer', id, label: text });
+      },
+      level: 'inline',
+    }),
+    [handleSceneCommand],
+  );
+
   return (
     <div className="squisq-diagram-canvas">
       <Scene
@@ -155,12 +207,15 @@ export function DiagramCanvas({
         tools={TOOLS}
         activeToolId={activeToolId}
         onActiveToolIdChange={setActiveToolId}
+        onSelectionChange={onSelectionChange}
         onCommand={handleSceneCommand}
         renderExtras={renderExtras}
         layerFollows={diagramLayerFollows}
         showMaximize={showMaximize}
         maximized={maximized}
         onToggleMaximize={onToggleMaximize}
+        showToolbar={false}
+        textEditing={textConfig}
       />
       {scene.nodes.length === 0 && (
         <DiagramEmptyState

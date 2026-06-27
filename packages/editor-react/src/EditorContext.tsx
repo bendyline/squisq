@@ -33,6 +33,7 @@ import type { editor as MonacoEditorNs } from 'monaco-editor';
 import { markdownToTiptap } from './tiptapBridge';
 import { resolveFileKind } from './fileKind';
 import { useBlockNavigator } from './useBlockNavigator';
+import { sceneTextChannel, type SceneTextHandle } from './scene/text/sceneTextChannel';
 
 /** Monaco standalone code editor instance type */
 type MonacoEditor = MonacoEditorNs.IStandaloneCodeEditor;
@@ -277,6 +278,14 @@ export interface EditorContextValue extends EditorState, EditorActions {
   tiptapEditor: TiptapEditor | null;
   /** The live Monaco editor instance (null when Raw is not mounted) */
   monacoEditor: MonacoEditor | null;
+  /**
+   * The focused canvas textbox editor, if any — a small Tiptap instance for
+   * a diagram/drawing/layout textbox being edited inline. Published via
+   * `sceneTextChannel` (the canvas renders in a detached React root). The
+   * top formatting toolbar retargets to this when set. `level` gates which
+   * buttons apply (`inline` = marks only; `rich` = headings/lists too).
+   */
+  activeSceneText: SceneTextHandle | null;
   /**
    * Workspace-scoped `ContentContainer` for this document — the folder
    * holding the doc, its `_files/` sidecar, sibling documents, and any
@@ -713,6 +722,11 @@ export function EditorProvider({
   }, []);
   const [tiptapEditor, setTiptapEditor] = useState<TiptapEditor | null>(null);
   const [monacoEditor, setMonacoEditor] = useState<MonacoEditor | null>(null);
+  // Mirror the focused canvas textbox editor (published by the inline
+  // SceneTextOverlay through a module channel, since the canvas renders in
+  // a detached React root outside this provider) so the toolbar can target it.
+  const [activeSceneText, setActiveSceneText] = useState<SceneTextHandle | null>(null);
+  useEffect(() => sceneTextChannel.subscribe(setActiveSceneText), []);
 
   const articleIdRef = useRef(articleId);
   articleIdRef.current = articleId;
@@ -976,6 +990,7 @@ export function EditorProvider({
       allowRecording,
       tiptapEditor,
       monacoEditor,
+      activeSceneText,
       workspaceContainer,
       versioning,
       saveVersion,
@@ -1029,6 +1044,7 @@ export function EditorProvider({
       activeBlockStartLine,
       tiptapEditor,
       monacoEditor,
+      activeSceneText,
       workspaceContainer,
       versioning,
       saveVersion,

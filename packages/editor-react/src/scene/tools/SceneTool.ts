@@ -39,6 +39,11 @@ export interface SceneToolContext {
   dispatch: (cmd: SceneCommand) => void;
   /** Optional setter for the active tool id (e.g. ConnectTool fall-through to SelectTool). */
   setActiveTool?: (id: string) => void;
+  /**
+   * Open the shared inline text editor for the given hit layer id (the host
+   * must supply a `textEditing` config). Used by SelectTool's double-click.
+   */
+  beginTextEdit?: (hitLayerId: string) => void;
 }
 
 export interface SceneTool {

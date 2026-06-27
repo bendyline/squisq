@@ -139,6 +139,11 @@ export function makeDiagramDispatch(
       case 'resizeLayer':
         // v1: diagram nodes are fixed-size. Ignore resize.
         return;
+      case 'setLayerText': {
+        const nodeId = nodeIdFromCardLayerId(cmd.id);
+        if (nodeId) renameNode(editor, parentPos, nodeId, cmd.text);
+        return;
+      }
     }
     // Exhaustiveness check — TS will flag unhandled command kinds.
     const _exhaustive: never = cmd;

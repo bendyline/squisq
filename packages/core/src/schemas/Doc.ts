@@ -348,8 +348,21 @@ export interface ImageLayer extends BaseLayer {
 export interface TextLayer extends BaseLayer {
   type: 'text';
   content: {
-    /** Text to display (supports \n for line breaks) */
+    /**
+     * Plain text (supports \n for line breaks). Source of truth for plain
+     * consumers — PDF/markdown export, search, accessibility — and the SVG
+     * `<text>` fallback. When `html` is set, this is its plain-text
+     * projection and must be kept in sync.
+     */
     text: string;
+    /**
+     * Optional sanitized **inline** HTML for rich formatting (bold/italic/
+     * links, and — for layout textboxes — headings/lists). When present the
+     * renderer draws it via `<foreignObject>` instead of SVG `<text>`. Treated
+     * as untrusted and re-sanitized at render time. See `RichTextLayer` in
+     * `@bendyline/squisq-react`.
+     */
+    html?: string;
     /** Text styling */
     style: TextStyle;
   };
@@ -628,6 +641,8 @@ export interface TextStyle {
   fontFamily?: string;
   /** Font weight */
   fontWeight?: 'normal' | 'bold';
+  /** Font style. Also the inherited baseline for rich `content.html`. */
+  fontStyle?: 'normal' | 'italic';
   /** Text color (CSS color) */
   color: string;
   /** Horizontal text alignment within the layer's position box. */

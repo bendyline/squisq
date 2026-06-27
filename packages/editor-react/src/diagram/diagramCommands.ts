@@ -13,6 +13,7 @@ import type { Node as PMNode } from '@tiptap/pm/model';
 import {
   parsePandocAttrTokens,
   serializePandocAttributes,
+  quoteAttrValue,
   type HeadingAttributes,
 } from '@bendyline/squisq/markdown';
 import type { Block, BlockConnection } from '@bendyline/squisq/schemas';
@@ -151,6 +152,68 @@ export function getDiagramSectionEnd(editor: Editor, parentPos: number): number 
     cursor += node.nodeSize;
   }
   return cursor;
+}
+
+/**
+ * Read the diagram parent heading's `{[diagram …]}` template params
+ * (stored in `dataTemplateParams`). Returns an empty object when the
+ * heading carries no params. Mirrors the per-shape reader in
+ * `drawingCommands.listDrawingChildren`, but for the parent heading.
+ */
+export function getDiagramParams(editor: Editor, parentPos: number): Record<string, string> {
+  const node = editor.state.doc.nodeAt(parentPos);
+  if (!node || node.type.name !== 'heading') return {};
+  const raw = (node.attrs as { dataTemplateParams?: string | null }).dataTemplateParams;
+  if (typeof raw === 'string' && raw.length > 0) {
+    return parsePandocAttrTokens(raw).params ?? {};
+  }
+  return {};
+}
+
+/**
+ * The diagram's pinned canvas height in pixels (the `height=` template
+ * param), or `null` when unset / invalid. This is an editor-only display
+ * hint: the SSR `diagramBlock` template scales to its block viewport and
+ * ignores it, but it round-trips in markdown via the annotation so the
+ * chosen height is remembered.
+ */
+export function getDiagramHeight(editor: Editor, parentPos: number): number | null {
+  const raw = getDiagramParams(editor, parentPos).height;
+  if (raw == null) return null;
+  const n = Number(raw);
+  return Number.isFinite(n) && n > 0 ? n : null;
+}
+
+/**
+ * Pin (or clear) the diagram's canvas height, persisted as a `height=<px>`
+ * token in the parent heading's `{[diagram …]}` annotation. Pass `null`
+ * to drop the override and revert to the default height. Other params on
+ * the heading are preserved.
+ */
+export function setDiagramHeight(
+  editor: Editor,
+  parentPos: number,
+  height: number | null,
+): boolean {
+  const node = editor.state.doc.nodeAt(parentPos);
+  if (!node || node.type.name !== 'heading') return false;
+  const params = getDiagramParams(editor, parentPos);
+  if (height == null) {
+    delete params.height;
+  } else {
+    params.height = String(Math.round(height));
+  }
+  const serialized = Object.entries(params)
+    .map(([k, v]) => `${k}=${quoteAttrValue(v)}`)
+    .join(' ');
+  return editor
+    .chain()
+    .command(({ tr }) => {
+      if (!tr.doc.nodeAt(parentPos)) return false;
+      tr.setNodeAttribute(parentPos, 'dataTemplateParams', serialized.length > 0 ? serialized : null);
+      return true;
+    })
+    .run();
 }
 
 function applyAttrs(editor: Editor, pos: number, attrs: HeadingAttributes): boolean {

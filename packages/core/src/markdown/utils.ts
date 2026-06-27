@@ -5,7 +5,8 @@
  * All functions are pure and operate on the JSON node interfaces.
  */
 
-import type { MarkdownNode, MarkdownDocument } from './types.js';
+import type { MarkdownNode, MarkdownDocument, HtmlNode } from './types.js';
+import { parseHtmlToNodes } from './htmlParse.js';
 
 /**
  * Get the children of any markdown node, if it has children.
@@ -331,4 +332,33 @@ export function readFrontmatterThemeId(
     }
   }
   return undefined;
+}
+
+/**
+ * Project an inline-HTML string (as stored on `TextLayer.content.html`) down
+ * to plain text — the value mirrored into `content.text` for plain consumers
+ * (PDF/markdown export, search, accessibility) and the SVG `<text>` fallback.
+ *
+ * `<br>` and block-level tags (`p`, `div`, `h1`–`h6`, `li`, `blockquote`,
+ * `pre`) become line breaks so multi-line rich content reads sensibly. Entity
+ * decoding is handled by {@link parseHtmlToNodes} (parse5-backed), so this is
+ * more correct than a regex tag-stripper.
+ */
+export function plainTextFromInlineHtml(html: string): string {
+  const BLOCK = new Set(['p', 'div', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'li', 'blockquote', 'pre']);
+  const walk = (nodes: HtmlNode[]): string =>
+    nodes
+      .map((n) => {
+        if (n.type === 'htmlText') return n.value;
+        if (n.type !== 'htmlElement') return '';
+        const tag = n.tagName.toLowerCase();
+        if (tag === 'br') return '\n';
+        const inner = walk(n.children);
+        return BLOCK.has(tag) ? `${inner}\n` : inner;
+      })
+      .join('');
+  return walk(parseHtmlToNodes(html))
+    .replace(/ /g, ' ')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
 }

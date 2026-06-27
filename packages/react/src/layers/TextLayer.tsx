@@ -5,11 +5,25 @@
  * styling options (font, color, shadow), and animations like fadeIn
  * and typewriter effects.
  *
- * Text is rendered using SVG <text> elements with <tspan> for line breaks.
+ * Two rendering paths:
+ *  - Plain text (`PlainTextLayer`) — SVG `<text>` + `<tspan>` per line, one
+ *    style for the whole layer. Used for the common case and for
+ *    backward-compat with content authored before rich text.
+ *  - Rich text (`RichTextLayer`) — when `content.html` is set, the sanitized
+ *    inline/block HTML renders inside a `<foreignObject>` so bold/italic/
+ *    links (and, for layout textboxes, headings/lists) format individual
+ *    runs. `<foreignObject>` is export-safe (video rasterizes via Chromium,
+ *    PDF bypasses SVG) and already used by Video/Table layers.
  */
 
+import { useMemo, type CSSProperties } from 'react';
 import type { TextLayer as TextLayerType } from '@bendyline/squisq/schemas';
 import { DEFAULT_DOC_FONT } from '@bendyline/squisq/schemas';
+import {
+  parseHtmlToNodes,
+  sanitizeHtmlNodes,
+  stringifyHtmlNodes,
+} from '@bendyline/squisq/markdown';
 import { getAnimationStyle } from '../utils/animationUtils';
 import { resolveValue } from '../utils/layerUtils';
 import { resolveFill, borderDashArray } from '../utils/fillStyle';
@@ -22,7 +36,19 @@ interface TextLayerProps {
   blockTime: number;
 }
 
-export function TextLayer({ layer, viewport, blockTime }: TextLayerProps) {
+/**
+ * Dispatch between the plain SVG-text renderer and the rich HTML renderer
+ * based on whether the layer carries `content.html`.
+ */
+export function TextLayer(props: TextLayerProps) {
+  return props.layer.content.html?.trim() ? (
+    <RichTextLayer {...props} />
+  ) : (
+    <PlainTextLayer {...props} />
+  );
+}
+
+function PlainTextLayer({ layer, viewport, blockTime }: TextLayerProps) {
   const { content, position, animation } = layer;
   const { text, style } = content;
 
@@ -77,6 +103,7 @@ export function TextLayer({ layer, viewport, blockTime }: TextLayerProps) {
     fontSize: `${style.fontSize}px`,
     fontFamily: style.fontFamily || DEFAULT_DOC_FONT,
     fontWeight: style.fontWeight || 'normal',
+    fontStyle: style.fontStyle || 'normal',
     fill: style.color,
     ...animStyle.style,
   };
@@ -137,6 +164,117 @@ export function TextLayer({ layer, viewport, blockTime }: TextLayerProps) {
       </text>
     </g>
   );
+}
+
+/**
+ * Rich-text path: render `content.html` as sanitized HTML inside a
+ * `<foreignObject>` so individual runs can carry their own formatting
+ * (bold/italic/links, and headings/lists for layout textboxes). The box
+ * geometry matches `PlainTextLayer`/`layerBounds`, so selection and
+ * drag/resize stay aligned. `content.text` remains the plain projection
+ * used by export/search.
+ */
+function RichTextLayer({ layer, viewport, blockTime }: TextLayerProps) {
+  const { content, position, animation } = layer;
+  const { html, style } = content;
+
+  const rawX = resolveValue(position.x, viewport.width);
+  const rawY = resolveValue(position.y, viewport.height);
+  const boxWidth =
+    position.width != null ? resolveValue(position.width, viewport.width) : viewport.width;
+  const boxHeight =
+    position.height != null
+      ? resolveValue(position.height, viewport.height)
+      : style.fontSize * (style.lineHeight || 1.4) * 2;
+  const anchor = position.anchor ?? 'top-left';
+  const boxX = rawX - anchorAxis(anchor, boxWidth, 'x');
+  const boxY = rawY - anchorAxis(anchor, boxHeight, 'y');
+
+  // Re-sanitize at render time — `html` is untrusted. Memoized so the
+  // per-frame `blockTime` updates don't re-parse the HTML each frame.
+  const safeHtml = useMemo(
+    () => stringifyHtmlNodes(sanitizeHtmlNodes(parseHtmlToNodes(html ?? ''))),
+    [html],
+  );
+
+  const animStyle = getAnimationStyle(animation, blockTime);
+
+  const verticalJustify =
+    style.verticalAlign === 'middle'
+      ? 'center'
+      : style.verticalAlign === 'bottom'
+        ? 'flex-end'
+        : 'flex-start';
+
+  const hasBorder = !!(style.borderColor && (style.borderWidth ?? 0) > 0);
+  // Box decoration uses CSS (foreignObject is HTML); gradients/backgroundOpacity
+  // are deferred to the SVG path — solid background covers the common case.
+  const boxStyle: CSSProperties = {
+    boxSizing: 'border-box',
+    width: '100%',
+    height: '100%',
+    display: 'flex',
+    flexDirection: 'column',
+    justifyContent: verticalJustify,
+    padding: style.padding ?? 0,
+    color: style.color,
+    fontSize: `${style.fontSize}px`,
+    fontFamily: style.fontFamily || DEFAULT_DOC_FONT,
+    fontWeight: style.fontWeight || 'normal',
+    fontStyle: style.fontStyle || 'normal',
+    lineHeight: style.lineHeight || 1.4,
+    textAlign: style.textAlign ?? 'left',
+    overflow: 'hidden',
+    ...(style.background ? { background: style.background } : {}),
+    ...(hasBorder
+      ? {
+          border: `${style.borderWidth}px ${style.borderStyle ?? 'solid'} ${style.borderColor}`,
+          borderRadius: 4,
+        }
+      : {}),
+    ...(style.shadow ? { textShadow: '0 2px 3px rgba(0,0,0,0.7)' } : {}),
+    ...animStyle.style,
+  };
+
+  // Scoped reset so authored block elements (headings, lists, paragraphs)
+  // render tightly inside the box rather than with the UA's large margins.
+  const cls = `squisq-rich-text-${cssId(layer.id)}`;
+  const scopedCss =
+    `.${cls}{margin:0}` +
+    `.${cls} p{margin:0 0 .4em}` +
+    `.${cls} h1,.${cls} h2,.${cls} h3,.${cls} h4,.${cls} h5,.${cls} h6{margin:0 0 .3em;line-height:1.2}` +
+    // `list-style-position: inside` keeps the bullet/number next to its text
+    // — with `outside` (the default) a centered or middle-aligned list leaves
+    // the marker stranded at the box's left padding, far from the text. The
+    // editor wraps each item's text in a `<p>`, so flatten that to inline or
+    // the block paragraph drops below the (inline) marker.
+    `.${cls} ul,.${cls} ol{margin:0 0 .4em;padding-left:1.2em;list-style-position:inside}` +
+    `.${cls} li{margin:0}` +
+    `.${cls} li>p{display:inline;margin:0}` +
+    `.${cls} *:first-child{margin-top:0}.${cls} *:last-child{margin-bottom:0}` +
+    `.${cls} a{color:inherit;text-decoration:underline}`;
+
+  return (
+    <g className={`block-layer block-layer--text ${animStyle.className}`} data-layer-id={layer.id}>
+      <foreignObject x={boxX} y={boxY} width={boxWidth} height={boxHeight}>
+        {/* xmlns is required for HTML inside SVG foreignObject (see TableLayer) */}
+        <div {...({ xmlns: 'http://www.w3.org/1999/xhtml' } as Record<string, string>)} style={boxStyle}>
+          <style>{scopedCss}</style>
+          <div
+            className={cls}
+            aria-label={content.text}
+            style={{ width: '100%', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}
+            dangerouslySetInnerHTML={{ __html: safeHtml }}
+          />
+        </div>
+      </foreignObject>
+    </g>
+  );
+}
+
+/** Sanitize a layer id into a CSS-class-safe suffix. */
+function cssId(id: string): string {
+  return id.replace(/[^a-zA-Z0-9_-]/g, '-');
 }
 
 /**

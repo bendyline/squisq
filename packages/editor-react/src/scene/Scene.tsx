@@ -31,6 +31,9 @@ import { SceneViewport } from './SceneViewport';
 import { SceneSelection, type ResizeCorner } from './SceneSelection';
 import { getActiveMoveOffset, getActiveResize, beginHandleDrag } from './tools/SelectTool';
 import { RenderLayer } from './layers/renderLayer';
+import { useSceneTextEditing } from './text/useSceneTextEditing';
+import { SceneTextOverlay } from './text/SceneTextOverlay';
+import type { SceneTextEditConfig } from './text/sceneTextConfig';
 
 export interface SceneProps {
   /** Viewport size in viewport units. Layers render in this coordinate space. */
@@ -78,6 +81,12 @@ export interface SceneProps {
   /** Render the built-in toolbar (Select / Connect / etc.). Default true. */
   showToolbar?: boolean;
   /**
+   * Enables the shared inline text editor. When provided, double-clicking a
+   * (resolvable) layer opens a Tiptap overlay over it. The host supplies
+   * read/commit per its persistence model. Omit to disable text editing.
+   */
+  textEditing?: SceneTextEditConfig;
+  /**
    * Called when content is dropped onto the canvas via HTML5 drag-and-drop
    * (e.g. a placeholder dragged from the template designer's palette).
    * `point` is in viewport coordinates — already through the pan/zoom
@@ -104,10 +113,14 @@ export function Scene(props: SceneProps) {
     maximized,
     onToggleMaximize,
     showToolbar = true,
+    textEditing,
     onDrop,
   } = props;
 
   const layerRenderer = renderLayer ?? defaultRenderLayer;
+
+  // Inline text editing (double-click a layer → Tiptap overlay).
+  const textEdit = useSceneTextEditing(textEditing);
 
   // ── Tool state ──────────────────────────────────────────────
   const [internalActiveId, setInternalActiveId] = useState<string>(tools[0]?.id ?? 'select');
@@ -160,6 +173,7 @@ export function Scene(props: SceneProps) {
       setSelection: selection.setSelection,
       dispatch: onCommand,
       setActiveTool,
+      beginTextEdit: textEdit.begin,
     }),
     [
       viewport,
@@ -174,6 +188,7 @@ export function Scene(props: SceneProps) {
       hit,
       onCommand,
       setActiveTool,
+      textEdit.begin,
     ],
   );
   // Mirror ctx in a ref so keyboard handlers attached to window read the
@@ -302,6 +317,9 @@ export function Scene(props: SceneProps) {
     const root = containerRef.current;
     if (!root) return;
     const onKey = (e: KeyboardEvent) => {
+      // While a text overlay is open it owns the keyboard — don't let tool
+      // shortcuts / Delete fire against the canvas.
+      if (textEdit.activeRef.current) return;
       // Tool shortcuts (single-letter, no modifier).
       if (!e.ctrlKey && !e.metaKey && !e.altKey && e.key.length === 1) {
         const shortcut = e.key.toLowerCase();
@@ -458,6 +476,25 @@ export function Scene(props: SceneProps) {
           {maximized ? '✕' : '⛶'}
         </button>
       )}
+      {/* Inline text editor overlay (HTML over the SVG). Renders only once
+          the edited layer exists in `layers` (tolerates new-text timing). */}
+      {textEditing &&
+        textEdit.editingId &&
+        (() => {
+          const layer = layers.find((l) => l.id === textEdit.editingId);
+          if (!layer) return null;
+          return (
+            <SceneTextOverlay
+              config={textEditing}
+              layer={layer}
+              editableId={textEdit.editingId}
+              viewport={viewport}
+              transform={panZoom.transform}
+              viewportToScreen={panZoom.viewportToScreen}
+              onClose={textEdit.close}
+            />
+          );
+        })()}
     </div>
   );
 }

@@ -85,6 +85,14 @@ export function applyCommand(layers: readonly Layer[], cmd: SceneCommand): Layer
         if (l.type !== 'text') return l;
         return { ...l, content: { ...l.content, text: cmd.label } };
       });
+    case 'setLayerText':
+      return layers.map((l) => {
+        if (l.id !== cmd.id || l.type !== 'text') return l;
+        const content = { ...l.content, text: cmd.text };
+        if (cmd.html && cmd.html.trim()) content.html = cmd.html;
+        else delete content.html;
+        return { ...l, content };
+      });
     case 'addEdge':
     case 'removeEdge':
       // No edge model in memory adapter; ignored.

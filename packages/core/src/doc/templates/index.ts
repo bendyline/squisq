@@ -53,7 +53,7 @@ import { videoPullQuote } from './videoPullQuote.js';
 import { dataTable } from './dataTable.js';
 import { diagramBlock } from './diagramBlock.js';
 import { drawingBlock } from './drawingBlock.js';
-import { rawLayersBlock } from './rawLayers.js';
+import { layoutBlock } from './layoutBlock.js';
 
 /**
  * Registry mapping template ids (the strings that appear in
@@ -91,7 +91,7 @@ export const templateRegistry: TemplateRegistry = {
   videoPullQuote,
   dataTable,
   diagram: diagramBlock,
-  layout: rawLayersBlock,
+  layout: layoutBlock,
   drawing: drawingBlock,
 };
 
@@ -121,11 +121,12 @@ export function resolveTemplateName(name: string): string {
 /**
  * Container templates render their parent block by consuming the block's
  * child headings (via `context.children`) — `diagram` draws them as nodes,
- * `drawing` as shapes. Those children are therefore NOT independently
- * renderable slides/sections; render paths use {@link isContainerTemplate}
- * to skip descending into them (see `flattenRenderableBlocks`).
+ * `drawing` as shapes, `layout` as absolutely-positioned layers. Those
+ * children are therefore NOT independently renderable slides/sections;
+ * render paths use {@link isContainerTemplate} to skip descending into
+ * them (see `flattenRenderableBlocks`).
  */
-export const CONTAINER_TEMPLATES: ReadonlySet<string> = new Set(['diagram', 'drawing']);
+export const CONTAINER_TEMPLATES: ReadonlySet<string> = new Set(['diagram', 'drawing', 'layout']);
 
 /** True when `name` (or its alias) is a children-consuming container template. */
 export function isContainerTemplate(name: string | undefined): boolean {
@@ -739,6 +740,9 @@ export type {
   DrawingConnector,
   DrawingLayoutOptions,
 } from './drawingLayout.js';
+export { layoutBlock } from './layoutBlock.js';
+export { computeLayoutLayers } from './layoutLayout.js';
+export type { LayoutLayersResult } from './layoutLayout.js';
 
 // Re-export accent image utilities
 export { getAccentLayout, createAccentLayers, adjustY, DEFAULT_LAYOUT } from './accentImage.js';

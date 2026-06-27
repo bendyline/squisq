@@ -21,6 +21,10 @@
 export { EditorShell } from './EditorShell.js';
 export type { EditorShellProps, EditorTheme } from './EditorShell.js';
 
+// FolderView — standalone folder browser surface (companion to the shell)
+export { FolderView } from './FolderView.js';
+export type { FolderViewProps, FolderEntry } from './FolderView.js';
+
 // Context
 export { EditorProvider, useEditorContext } from './EditorContext.js';
 export type {

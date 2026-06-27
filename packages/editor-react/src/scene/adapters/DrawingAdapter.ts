@@ -257,6 +257,13 @@ export function useDrawingAdapter(
         if (id) renameShape(editor, headingPos, id, cmd.label);
         return;
       }
+      case 'setLayerText': {
+        // Drawing labels persist as heading text (markdown inline marks);
+        // the rich `html` is not stored separately.
+        const id = shapeIdFromLayerId(cmd.id);
+        if (id) renameShape(editor, headingPos, id, cmd.text);
+        return;
+      }
       case 'setLayerAttr': {
         const id = shapeIdFromLayerId(cmd.id);
         if (!id) return;

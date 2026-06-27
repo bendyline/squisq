@@ -68,13 +68,17 @@ export {
 
 export {
   useLayoutAdapter,
-  readLayersFromHeading,
-  writeLayersToHeading,
   type LayoutAdapterResult,
   type LayoutAdapterOptions,
 } from './adapters/LayoutAdapter';
 export { useDrawingAdapter, type DrawingAdapterOptions } from './adapters/DrawingAdapter';
-export { encodeLayers, decodeLayers, updateLayer } from './adapters/blockLayers';
+export {
+  encodeLayers,
+  decodeLayers,
+  updateLayer,
+  readLayersFromHeading,
+  writeLayersToHeading,
+} from './adapters/blockLayers';
 
 export {
   useScenePanZoom,

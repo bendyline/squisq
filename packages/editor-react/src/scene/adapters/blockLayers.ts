@@ -1,12 +1,18 @@
 /**
- * blockLayers — read / write a block's free-form Layer[] override.
+ * blockLayers — read / decode a block's legacy base64 Layer[] blob.
  *
- * Layouts and drawings need a way to persist arbitrary Layer arrays per
- * block. Rather than add a new heading attribute, we piggy-back on the
- * existing `data-block-attrs` round-trip path by encoding the layers as
- * a base64-JSON Pandoc param named `layers="<...>"`. The bridge already
- * handles `{#id key="value"}` round-tripping verbatim, so the markdown
- * surface picks this up for free.
+ * **Legacy / migration only.** Layouts (and drawings) now persist every
+ * layer as a readable child sub-block heading (see `layoutCommands.ts` /
+ * `drawingCommands.ts`); nothing new is written here. These helpers remain
+ * so the editor can *read* documents authored before that change and
+ * migrate them to child sub-blocks on first edit (see `LayoutAdapter`'s
+ * migration effect). `updateLayer` is still used by the in-memory image
+ * editor designer.
+ *
+ * The legacy encoding piggy-backed on the `data-block-attrs` round-trip
+ * path by storing the layers as a base64-JSON Pandoc param named
+ * `layers="<...>"`. The bridge round-trips `{#id key="value"}` verbatim,
+ * so the markdown surface picked this up for free.
  *
  * Encoding choice — base64 keeps the JSON's commas, quotes, and braces
  * from clashing with the Pandoc attribute tokenizer. Authors who want
@@ -55,8 +61,13 @@ export function writeLayersToHeading(
       }
       const nextAttrs: HeadingAttributes = { ...attrs };
       nextAttrs.params = Object.keys(params).length > 0 ? params : undefined;
+      // `serializePandocAttributes` returns the full `{…}` block, but
+      // `data-block-attrs` stores the INSIDE of those braces (matching the
+      // reader `parsePandocAttrTokens` and `tiptapBridge`). Strip them so
+      // the value round-trips — otherwise the next read sees `{layers=…}`
+      // as a malformed token and drops every layer.
       const raw = serializePandocAttributes(nextAttrs);
-      tr.setNodeAttribute(headingPos, 'dataBlockAttrs', raw ?? null);
+      tr.setNodeAttribute(headingPos, 'dataBlockAttrs', stripBraces(raw));
       return true;
     })
     .run();
@@ -102,6 +113,18 @@ function getHeadingAttrs(node: PMNode): HeadingAttributes {
   const raw = (node.attrs as Record<string, unknown>).dataBlockAttrs;
   if (typeof raw === 'string' && raw.length > 0) return parsePandocAttrTokens(raw);
   return {};
+}
+
+/**
+ * Strip the wrapping `{…}` from a serialized Pandoc attribute block so it
+ * matches the inner form stored in `data-block-attrs`. An empty `{}`
+ * marker collapses to `null` (nothing to persist).
+ */
+function stripBraces(s: string | null): string | null {
+  if (s == null) return null;
+  if (s === '{}') return null;
+  if (s.startsWith('{') && s.endsWith('}')) return s.slice(1, -1);
+  return s;
 }
 
 /**

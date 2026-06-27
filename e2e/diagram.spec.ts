@@ -96,10 +96,28 @@ test.describe('Diagram editor (Scene engine)', () => {
   });
 
   test('renders the toolbar with Select and Connect tools', async ({ page }) => {
-    const toolbar = page.locator('.squisq-scene-toolbar').first();
+    const toolbar = page.locator('.squisq-scene-block-toolbar').first();
     await expect(toolbar).toBeVisible();
     await expect(toolbar.locator('button', { hasText: 'Select' })).toBeVisible();
     await expect(toolbar.locator('button', { hasText: 'Connect' })).toBeVisible();
+  });
+
+  test('the toolbar Node button adds a node', async ({ page }) => {
+    await page.locator('.squisq-scene-block-toolbar button', { hasText: 'Node' }).click();
+    // A fresh `### Node N {#node-N …}` child heading lands in the markdown.
+    await expect(async () => {
+      const md = await readMarkdown(page);
+      expect(md).toMatch(/\{#node-\d+/);
+    }).toPass({ timeout: 3_000 });
+  });
+
+  test('the toolbar Delete button removes the selected node', async ({ page }) => {
+    const center = await cardCenter(page, 'child-3');
+    await page.mouse.move(center.x, center.y);
+    await page.mouse.down();
+    await page.mouse.up();
+    await page.locator('.squisq-scene-block-toolbar button', { hasText: 'Delete' }).click();
+    await expect(page.locator('[data-layer-id="node-card-child-3"]')).toHaveCount(0);
   });
 
   test('clicking a node selects it (shows resize handles)', async ({ page }) => {
@@ -162,7 +180,7 @@ test.describe('Diagram editor (Scene engine)', () => {
 
   test('Connect tool creates a new edge between two nodes', async ({ page }) => {
     // Switch to the Connect tool.
-    await page.locator('.squisq-scene-toolbar button', { hasText: 'Connect' }).click();
+    await page.locator('.squisq-scene-block-toolbar button', { hasText: 'Connect' }).click();
     // child-2 has no connectsTo in the sample; drag from it to child-3.
     const source = await cardCenter(page, 'child-2');
     const target = await cardCenter(page, 'child-3');
@@ -247,7 +265,7 @@ test.describe('Diagram editor (Scene engine)', () => {
   });
 
   test('shows a live connection preview while the Connect tool is dragging', async ({ page }) => {
-    await page.locator('.squisq-scene-toolbar button', { hasText: 'Connect' }).click();
+    await page.locator('.squisq-scene-block-toolbar button', { hasText: 'Connect' }).click();
     const source = await cardCenter(page, 'child-2');
     const target = await cardCenter(page, 'child-3');
 
@@ -349,6 +367,216 @@ test.describe('Diagram editor (Scene engine)', () => {
       if (!labelAfter) throw new Error('no label bounding box after drag');
       expect(Math.abs(labelAfter.x - cardAfter.x - offsetX)).toBeLessThan(8);
       expect(Math.abs(labelAfter.y - cardAfter.y - offsetY)).toBeLessThan(8);
+    }).toPass({ timeout: 3_000 });
+  });
+});
+
+/**
+ * The bottom drag bar pins the diagram canvas to a fixed pixel height,
+ * persisted as a `height=` token on the `{[diagram …]}` heading. Uses the
+ * family-tree sample so the canvas is already mounted.
+ */
+test.describe('Diagram canvas height handle', () => {
+  test.beforeEach(async ({ page }) => {
+    await loadDiagramSample(page);
+  });
+
+  test('dragging the bottom handle grows the canvas and persists height=', async ({ page }) => {
+    const inline = page.locator('.squisq-diagram-inline');
+    await expect(inline).toBeVisible();
+
+    // Scroll the handle clear of the sticky status bar before grabbing it.
+    const handle = page.locator('.squisq-diagram-resize-handle');
+    await handle.scrollIntoViewIfNeeded();
+    const before = await inline.boundingBox();
+    const hb = await handle.boundingBox();
+    if (!before || !hb) throw new Error('no box');
+    const from = { x: hb.x + hb.width / 2, y: hb.y + hb.height / 2 };
+    await dragPointer(page, from, { x: from.x, y: from.y + 140 });
+
+    // The canvas grew on screen by roughly the drag distance.
+    await expect(async () => {
+      const after = await inline.boundingBox();
+      expect(after!.height).toBeGreaterThan(before.height + 80);
+    }).toPass({ timeout: 2_000 });
+
+    // …and the height is pinned on the {[diagram …]} heading.
+    await expect(async () => {
+      const md = await readMarkdown(page);
+      expect(md).toMatch(/\{\[diagram[^\]]*height=\d+/);
+    }).toPass({ timeout: 3_000 });
+  });
+
+  test('double-clicking the handle resets to the default height', async ({ page }) => {
+    const handle = page.locator('.squisq-diagram-resize-handle');
+    await handle.scrollIntoViewIfNeeded();
+    const hb = await handle.boundingBox();
+    if (!hb) throw new Error('no handle box');
+    const from = { x: hb.x + hb.width / 2, y: hb.y + hb.height / 2 };
+
+    // Pin a custom height first.
+    await dragPointer(page, from, { x: from.x, y: from.y + 140 });
+    await expect(async () => {
+      const md = await readMarkdown(page);
+      expect(md).toMatch(/height=\d+/);
+    }).toPass({ timeout: 3_000 });
+
+    // Reading markdown switched to Monaco and unmounted the canvas — go
+    // back to the editor, then double-click the handle to clear the pin.
+    await switchView(page, 'Editor');
+    const handle2 = page.locator('.squisq-diagram-resize-handle');
+    await handle2.scrollIntoViewIfNeeded();
+    const hb2 = await handle2.boundingBox();
+    if (!hb2) throw new Error('no handle box after reset');
+    await page.mouse.dblclick(hb2.x + hb2.width / 2, hb2.y + hb2.height / 2);
+
+    await expect(async () => {
+      const md = await readMarkdown(page);
+      expect(md).not.toMatch(/height=\d+/);
+    }).toPass({ timeout: 3_000 });
+  });
+});
+
+/**
+ * The toolbar's "Insert diagram" button drops a `{[diagram]}` heading at
+ * the cursor in either editing view. In WYSIWYG the DiagramExtension then
+ * mounts the editable canvas (with its empty-state affordance) below it.
+ *
+ * Uses a wide viewport so the media-group button never lands in the
+ * overflow menu.
+ */
+test.describe('Insert diagram toolbar button', () => {
+  test.use({ viewport: { width: 1600, height: 900 } });
+
+  test.beforeEach(async ({ page }) => {
+    await page.goto('/');
+    await page.waitForLoadState('networkidle');
+    await page.locator('.tiptap.ProseMirror').waitFor({ state: 'visible', timeout: 5_000 });
+  });
+
+  test('inserts an editable diagram block in WYSIWYG view', async ({ page }) => {
+    // The default "hello world" sample has no diagram yet.
+    await expect(page.locator('.squisq-diagram-widget-host')).toHaveCount(0);
+
+    // Click into the editor so the insert lands at a stable cursor.
+    await page.locator('.tiptap.ProseMirror').click();
+    await page.locator('.squisq-toolbar button[aria-label="Insert diagram"]').click();
+
+    // The canvas mounts below the new heading and shows its empty state.
+    await expect(page.locator('.squisq-diagram-widget-host')).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Add first node' })).toBeVisible();
+
+    // The heading round-trips to markdown carrying the {[diagram]} annotation.
+    // Retry the read — Monaco paints its lines lazily after the view switch.
+    await expect(async () => {
+      const md = await readMarkdown(page);
+      expect(md).toContain('{[diagram]}');
+    }).toPass({ timeout: 3_000 });
+  });
+
+  test('inserts a {[diagram]} heading in Markdown view', async ({ page }) => {
+    await switchView(page, 'Markdown');
+    await page.locator('[data-testid="raw-editor"]').waitFor({ state: 'visible' });
+    // Place the cursor in the Monaco editor.
+    await page.locator('.monaco-editor .view-lines').first().click();
+
+    await page.locator('.squisq-toolbar button[aria-label="Insert diagram"]').click();
+
+    await expect(async () => {
+      const text = await page.locator('.monaco-editor .view-lines').first().innerText();
+      expect(text).toContain('{[diagram]}');
+    }).toPass({ timeout: 3_000 });
+  });
+});
+
+/**
+ * The sibling "Insert drawing" and "Insert layout" buttons drop the other
+ * two Scene-backed container templates. Both mount a `SceneBlockWidget`.
+ * Drawing is usable empty (the "Shapes ▾" palette); layout is seeded with
+ * a starter text layer so its Select-only canvas isn't blank.
+ *
+ * Wide viewport so the media-group buttons stay out of the overflow menu.
+ */
+test.describe('Insert drawing / layout toolbar buttons', () => {
+  test.use({ viewport: { width: 1600, height: 900 } });
+
+  test.beforeEach(async ({ page }) => {
+    await page.goto('/');
+    await page.waitForLoadState('networkidle');
+    await page.locator('.tiptap.ProseMirror').waitFor({ state: 'visible', timeout: 5_000 });
+  });
+
+  test('inserts an editable drawing block in WYSIWYG view', async ({ page }) => {
+    await expect(page.locator('.squisq-scene-widget-host')).toHaveCount(0);
+
+    await page.locator('.tiptap.ProseMirror').click();
+    await page.locator('.squisq-toolbar button[aria-label="Insert drawing"]').click();
+
+    // The Scene canvas mounts with the drawing tools (Shape opens the palette).
+    await expect(page.locator('.squisq-scene-widget-host')).toBeVisible();
+    await expect(
+      page.locator('.squisq-scene-block-toolbar button', { hasText: 'Shape' }),
+    ).toBeVisible();
+
+    await expect(async () => {
+      const md = await readMarkdown(page);
+      expect(md).toContain('{[drawing]}');
+    }).toPass({ timeout: 3_000 });
+  });
+
+  test('inserts a layout block seeded with a starter layer in WYSIWYG view', async ({ page }) => {
+    await expect(page.locator('.squisq-scene-widget-host')).toHaveCount(0);
+
+    await page.locator('.tiptap.ProseMirror').click();
+    await page.locator('.squisq-toolbar button[aria-label="Insert layout"]').click();
+
+    // The canvas mounts and the seeded text layer is rendered (so the
+    // layout isn't a blank, undiscoverable surface).
+    await expect(page.locator('.squisq-scene-widget-host')).toBeVisible();
+    await expect(page.locator('[data-layer-id="text-1"]').first()).toBeVisible();
+
+    // Round-trips as a {[layout]} heading with a readable text child
+    // sub-block — no base64 layers= blob.
+    await expect(async () => {
+      const md = await readMarkdown(page);
+      expect(md).toContain('{[layout]}');
+      expect(md).toContain('{[text');
+      expect(md).not.toContain('layers=');
+    }).toPass({ timeout: 3_000 });
+  });
+
+  test('layout toolbar adds a box and deletes the selection', async ({ page }) => {
+    await page.locator('.tiptap.ProseMirror').click();
+    await page.locator('.squisq-toolbar button[aria-label="Insert layout"]').click();
+    await page.locator('.squisq-scene-widget-host').waitFor({ state: 'visible' });
+    // Seeded with one text layer; the Box action adds a shape layer.
+    await expect(page.locator('[data-layer-id="text-1"]').first()).toBeVisible();
+    await page.locator('.squisq-scene-block-toolbar button', { hasText: 'Box' }).click();
+    const box = page.locator('[data-layer-id="box-1"]').first();
+    await expect(box).toBeVisible();
+
+    // Select the box (mouse at its center) and delete it via the toolbar.
+    const bb = await box.boundingBox();
+    if (!bb) throw new Error('no box bbox');
+    await page.mouse.move(bb.x + bb.width / 2, bb.y + bb.height / 2);
+    await page.mouse.down();
+    await page.mouse.up();
+    await page.locator('.squisq-scene-block-toolbar button', { hasText: 'Delete' }).click();
+    await expect(page.locator('[data-layer-id="box-1"]')).toHaveCount(0);
+  });
+
+  test('inserts {[drawing]} and {[layout]} headings in Markdown view', async ({ page }) => {
+    await switchView(page, 'Markdown');
+    await page.locator('[data-testid="raw-editor"]').waitFor({ state: 'visible' });
+
+    await page.locator('.monaco-editor .view-lines').first().click();
+    await page.locator('.squisq-toolbar button[aria-label="Insert drawing"]').click();
+    await page.locator('.squisq-toolbar button[aria-label="Insert layout"]').click();
+
+    await expect(async () => {
+      const text = await page.locator('.monaco-editor .view-lines').first().innerText();
+      expect(text).toContain('{[drawing]}');
+      expect(text).toContain('{[layout]}');
     }).toPass({ timeout: 3_000 });
   });
 });

@@ -12,8 +12,9 @@
  * from the drawing adapter + the Scene's `onSelectionChange`.
  */
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { Editor } from '@tiptap/react';
+import type { Layer } from '@bendyline/squisq/schemas';
 import { Scene } from './Scene';
 import { useLayoutAdapter } from './adapters/LayoutAdapter';
 import { useDrawingAdapter } from './adapters/DrawingAdapter';
@@ -21,6 +22,10 @@ import { findSceneHeadingPos } from './SceneBlockExtension';
 import { shapeIdFromLayerId } from './layers/shapeLayers';
 import { ShapePalette } from './ShapePalette';
 import { ShapeProperties } from './ShapeProperties';
+import { SceneBlockToolbar, type SceneBlockAction, type SceneAlignment } from './SceneBlockToolbar';
+import type { SceneTextEditConfig } from './text/sceneTextConfig';
+import { markdownToTiptap } from '../tiptapBridge';
+import { Icon } from '../Icon';
 import { DiagramMaximizedOverlay } from '../diagram/DiagramMaximizedOverlay';
 
 export type SceneBlockMode = 'layout' | 'drawing';
@@ -64,6 +69,44 @@ export function SceneBlockWidget({
   const isDrawing = mode === 'drawing';
   const adapter = isDrawing ? drawing : layout;
 
+  // Inline text editing config. Refs keep `getHtml`/`commit` reading the
+  // live layers/dispatch while the config object stays stable (so the
+  // open editor isn't re-seeded mid-edit). Layout stores rich HTML; drawing
+  // stores inline markdown in the shape's heading text.
+  const layersRef = useRef(adapter.layers);
+  layersRef.current = adapter.layers;
+  const dispatchRef = useRef(adapter.dispatch);
+  dispatchRef.current = adapter.dispatch;
+  const textConfig = useMemo<SceneTextEditConfig>(
+    () => ({
+      resolveEditableId: (id) => {
+        const l = layersRef.current.find((x) => x.id === id);
+        return l && l.type === 'text' ? id : null;
+      },
+      getHtml: (id) => {
+        const l = layersRef.current.find((x) => x.id === id);
+        if (!l || l.type !== 'text') return '';
+        if (!isDrawing && l.content.html?.trim()) return l.content.html;
+        return markdownToTiptap(l.content.text ?? '');
+      },
+      commit: (id, { html, text }) => {
+        if (isDrawing) {
+          // Drawing labels persist as plain heading text for now (rich
+          // marks on shape labels are a follow-up — the rendering
+          // foundation is in place via `content.html`). Store plain text so
+          // nothing leaks literal markdown into the label.
+          dispatchRef.current({ kind: 'renameLayer', id, label: text });
+        } else {
+          dispatchRef.current({ kind: 'setLayerText', id, text, html });
+        }
+      },
+      // Layout textboxes use `block` (marks + lists, no headings) because their
+      // content is stored as the child sub-block's markdown body.
+      level: isDrawing ? 'inline' : 'block',
+    }),
+    [isDrawing],
+  );
+
   const [maximized, setMaximized] = useState(false);
   const [activeToolId, setActiveToolId] = useState<string>('select');
   const [paletteOpen, setPaletteOpen] = useState(false);
@@ -78,48 +121,169 @@ export function SceneBlockWidget({
       edges={adapter.edges}
       tools={adapter.tools}
       onCommand={adapter.dispatch}
-      onSelectionChange={
-        isDrawing ? (ids) => setSelectedLayerId(ids.values().next().value ?? null) : undefined
-      }
-      activeToolId={isDrawing ? activeToolId : undefined}
-      onActiveToolIdChange={isDrawing ? setActiveToolId : undefined}
+      onSelectionChange={(ids) => setSelectedLayerId(ids.values().next().value ?? null)}
+      activeToolId={activeToolId}
+      onActiveToolIdChange={setActiveToolId}
       layerFollows={adapter.layerFollows}
       renderExtras={adapter.renderExtras}
       showMaximize
       maximized={maximized}
       onToggleMaximize={() => setMaximized((m) => !m)}
+      showToolbar={false}
+      textEditing={textConfig}
+    />
+  );
+
+  // ── Shared toolbar (above the canvas) ──────────────────
+  // Drawing creates shapes via its mode tools (Shape/Pen/Text/Connect);
+  // layout has only Select, so it gets explicit Add buttons. Both share
+  // a Delete action keyed off the current selection.
+  const canDelete = isDrawing ? !!selectedLayerId || !!drawing.selectedEdgeId : !!selectedLayerId;
+  const deleteSelected = () => {
+    if (selectedLayerId) {
+      adapter.dispatch({ kind: 'removeLayer', id: selectedLayerId });
+      setSelectedLayerId(null);
+      return;
+    }
+    if (isDrawing && drawing.selectedEdge) {
+      adapter.dispatch({
+        kind: 'removeEdge',
+        source: drawing.selectedEdge.source,
+        target: drawing.selectedEdge.target,
+      });
+    }
+  };
+  const freshLayerId = (prefix: string) => {
+    const used = new Set(adapter.layers.map((l) => l.id));
+    let i = 1;
+    while (used.has(`${prefix}-${i}`)) i++;
+    return `${prefix}-${i}`;
+  };
+  const addLayoutLayer = (layer: Layer) => adapter.dispatch({ kind: 'addLayer', layer });
+
+  const deleteAction: SceneBlockAction = {
+    id: 'delete',
+    label: 'Delete',
+    icon: <Icon icon="fa-solid fa-trash" />,
+    title: 'Delete selected',
+    danger: true,
+    disabled: !canDelete,
+    onClick: deleteSelected,
+  };
+  const actions: SceneBlockAction[] = isDrawing
+    ? [deleteAction]
+    : [
+        {
+          id: 'add-text',
+          label: 'Text',
+          icon: <Icon icon="fa-solid fa-font" />,
+          title: 'Add text',
+          onClick: () =>
+            addLayoutLayer({
+              type: 'text',
+              id: freshLayerId('text'),
+              content: {
+                text: 'Text',
+                style: {
+                  fontSize: 48,
+                  color: '#1e293b',
+                  textAlign: 'center',
+                  verticalAlign: 'middle',
+                },
+              },
+              position: { x: 660, y: 440, width: 600, height: 200 },
+            }),
+        },
+        {
+          id: 'add-box',
+          label: 'Box',
+          icon: <Icon icon="fa-solid fa-square" />,
+          title: 'Add box',
+          onClick: () =>
+            addLayoutLayer({
+              type: 'shape',
+              id: freshLayerId('box'),
+              content: {
+                shape: 'rect',
+                fill: '#e0e7ff',
+                stroke: '#6366f1',
+                strokeWidth: 2,
+                borderRadius: 8,
+              },
+              position: { x: 760, y: 390, width: 400, height: 300 },
+            }),
+        },
+        deleteAction,
+      ];
+
+  // Text-alignment controls — shown when a layout textbox is selected. They
+  // set the layer's whole-box `style.textAlign` / `style.verticalAlign`
+  // (the LayoutAdapter persists arbitrary `content.*` paths; drawing/diagram
+  // labels don't yet, so this is layout-only for now).
+  const selectedLayer = selectedLayerId
+    ? adapter.layers.find((l) => l.id === selectedLayerId)
+    : undefined;
+  const alignment: SceneAlignment | undefined =
+    mode === 'layout' && selectedLayer?.type === 'text'
+      ? {
+          textAlign: selectedLayer.content.style.textAlign ?? 'left',
+          verticalAlign: selectedLayer.content.style.verticalAlign ?? 'top',
+          onTextAlign: (v) =>
+            adapter.dispatch({
+              kind: 'setLayerAttr',
+              id: selectedLayer.id,
+              path: 'content.style.textAlign',
+              value: v,
+            }),
+          onVerticalAlign: (v) =>
+            adapter.dispatch({
+              kind: 'setLayerAttr',
+              id: selectedLayer.id,
+              path: 'content.style.verticalAlign',
+              value: v,
+            }),
+        }
+      : undefined;
+
+  const toolbar = (
+    <SceneBlockToolbar
+      tools={adapter.tools}
+      activeToolId={activeToolId}
+      // Clicking the Shape tool opens its palette (dropping down from the
+      // button); other tools just activate.
+      onSelectTool={(id) => {
+        setActiveToolId(id);
+        if (id === 'draw') setPaletteOpen(true);
+      }}
+      actions={actions}
+      alignment={alignment}
+      toolPopover={
+        isDrawing && paletteOpen
+          ? {
+              toolId: 'draw',
+              content: (
+                <ShapePalette
+                  onPick={(kind) => {
+                    drawing.setPendingKind(kind);
+                    setActiveToolId('draw');
+                    setPaletteOpen(false);
+                  }}
+                  onClose={() => setPaletteOpen(false)}
+                />
+              ),
+            }
+          : undefined
+      }
     />
   );
 
   const drawingUI = isDrawing ? (
-    <>
-      <div className="squisq-scene-shapes">
-        <button
-          type="button"
-          className="squisq-scene-shapes-btn"
-          aria-expanded={paletteOpen}
-          onClick={() => setPaletteOpen((o) => !o)}
-        >
-          Shapes ▾
-        </button>
-        {paletteOpen && (
-          <ShapePalette
-            onPick={(kind) => {
-              drawing.setPendingKind(kind);
-              setActiveToolId('draw');
-              setPaletteOpen(false);
-            }}
-            onClose={() => setPaletteOpen(false)}
-          />
-        )}
-      </div>
-      <ShapeProperties
-        selectedEdge={drawing.selectedEdge}
-        selectedShapeId={selectedShapeId}
-        onConnectorStyle={drawing.setConnectorStyle}
-        onShapeParam={drawing.setShapeParam}
-      />
-    </>
+    <ShapeProperties
+      selectedEdge={drawing.selectedEdge}
+      selectedShapeId={selectedShapeId}
+      onConnectorStyle={drawing.setConnectorStyle}
+      onShapeParam={drawing.setShapeParam}
+    />
   ) : null;
 
   const body = (
@@ -133,11 +297,19 @@ export function SceneBlockWidget({
     return (
       <div className="squisq-scene-inline-placeholder">
         <DiagramMaximizedOverlay host={host ?? null} onClose={() => setMaximized(false)}>
-          {body}
+          <div className="squisq-scene-block-max">
+            {toolbar}
+            {body}
+          </div>
         </DiagramMaximizedOverlay>
       </div>
     );
   }
 
-  return <div className="squisq-scene-inline">{body}</div>;
+  return (
+    <>
+      {toolbar}
+      <div className="squisq-scene-inline">{body}</div>
+    </>
+  );
 }

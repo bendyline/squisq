@@ -71,7 +71,7 @@ test.describe('Drawing editor (Scene engine, semantic markdown)', () => {
   });
 
   test('toolbar exposes Select and Connect tools', async ({ page }) => {
-    const toolbar = page.locator('.squisq-scene-toolbar').first();
+    const toolbar = page.locator('.squisq-scene-block-toolbar').first();
     await expect(toolbar).toBeVisible();
     await expect(toolbar.locator('button', { hasText: 'Select' })).toBeVisible();
     await expect(toolbar.locator('button', { hasText: 'Connect' })).toBeVisible();
@@ -93,7 +93,7 @@ test.describe('Drawing editor (Scene engine, semantic markdown)', () => {
   });
 
   test('the Connect tool adds a {[arrow from=.. to=..]} heading', async ({ page }) => {
-    await page.locator('.squisq-scene-toolbar button', { hasText: 'Connect' }).click();
+    await page.locator('.squisq-scene-block-toolbar button', { hasText: 'Connect' }).click();
     // COO and CTO are not connected to each other in the sample.
     const source = await shapeCenter(page, 'coo');
     const target = await shapeCenter(page, 'cto');
@@ -119,7 +119,8 @@ test.describe('Drawing editor (Scene engine, semantic markdown)', () => {
   });
 
   test('the shape palette draws a new {[star …]} shape', async ({ page }) => {
-    await page.locator('.squisq-scene-shapes-btn').click();
+    // The Shape tool opens the palette (a dropdown from the contextual toolbar).
+    await page.locator('.squisq-scene-block-toolbar button', { hasText: 'Shape' }).click();
     await page.locator('.squisq-shape-palette-item[aria-label="5-Point Star"]').click();
     // The draw tool is now active with kind=star; drag anywhere on the canvas.
     const host = await page.locator('.squisq-scene-widget-host').first().boundingBox();

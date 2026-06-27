@@ -38,7 +38,14 @@ export type SceneCommand =
    * adapter decides whether this writes to TextLayer.content.text, a
    * heading's text content, or something else.
    */
-  | { kind: 'renameLayer'; id: string; label: string };
+  | { kind: 'renameLayer'; id: string; label: string }
+  /**
+   * Set a text layer's content from the inline editor. `text` is the plain
+   * projection (always written); `html` is the optional rich representation
+   * (stored by adapters that can persist it — layout). Adapters that only
+   * keep plain text (diagram/drawing headings) ignore `html`.
+   */
+  | { kind: 'setLayerText'; id: string; text: string; html?: string };
 
 /**
  * An edge in diagram mode. Lives outside the Layer schema because edges

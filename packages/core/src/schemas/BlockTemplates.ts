@@ -498,14 +498,14 @@ export interface DiagramBlockInput extends BaseTemplateBlock {
 }
 
 /**
- * Free-form 2D canvas block (`layout`). Authors arrange a Layer array
- * directly via the Scene engine in the editor; the layers persist
- * alongside the heading in the Pandoc `data-block-attrs` payload
- * (base64-JSON, key `layers`), so the template body takes no per-block
- * input. Backed by the `rawLayersBlock` template.
+ * Free-form 2D canvas block (`layout`). Like `drawing`/`diagram`, the
+ * `layout` template is a children-driven container: each child heading is
+ * one absolutely-positioned layer (`{[text …]}` / `{[rectangle …]}` /
+ * `{[image …]}`), read from `context.children`. A text box's content is the
+ * child's body markdown. Backed by the `layoutBlock` template.
  *
- * (`drawing` used to share this input/template but is now a
- * children-driven container — see {@link DrawingBlockInput}.)
+ * (Legacy documents stored layers as a base64-JSON `layers=` param on the
+ * heading; the editor auto-migrates those to child sub-blocks on first edit.)
  */
 export interface RawLayersInput extends BaseTemplateBlock {
   template: 'layout';

@@ -33,6 +33,35 @@
   height: 100%;
 }
 
+/* Drag bar along the bottom edge — pins the canvas to a fixed pixel
+ * height (persisted as `height=` on the `{[diagram …]}` heading). Sits
+ * above the Scene so the gesture is captured by the handle, not the
+ * canvas. Double-click reverts to the default height. */
+.squisq-diagram-resize-handle {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: ns-resize;
+  z-index: 11;
+  touch-action: none;
+}
+.squisq-diagram-resize-handle::before {
+  content: '';
+  width: 44px;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--squisq-border, #cbd5e1);
+  transition: background 0.12s;
+}
+.squisq-diagram-resize-handle:hover::before {
+  background: var(--squisq-text-muted, #94a3b8);
+}
+
 .squisq-diagram-canvas .react-flow {
   width: 100%;
   height: 100%;

@@ -78,6 +78,10 @@ export function ShapePalette({ onPick, onClose }: ShapePaletteProps) {
 
   useEffect(() => {
     const onDocPointer = (e: PointerEvent) => {
+      // Don't treat a click on the toolbar (where the Shape trigger lives)
+      // as "outside" — that button owns opening/closing the palette.
+      const target = e.target as Element | null;
+      if (target?.closest?.('.squisq-scene-block-toolbar')) return;
       if (ref.current && !ref.current.contains(e.target as Node)) onClose();
     };
     const onKey = (e: KeyboardEvent) => {

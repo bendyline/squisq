@@ -211,6 +211,15 @@ export const SelectTool: SceneTool = {
     dragState = null;
   },
 
+  onDoubleClick(e, ctx) {
+    // Double-click a layer to edit its text inline (when the host wired a
+    // text-editing config). Resolve the hit, then hand off to the Scene.
+    const rect = (e.currentTarget as Element).getBoundingClientRect();
+    const v = ctx.screenToViewport(e.clientX - rect.left, e.clientY - rect.top);
+    const hitId = ctx.hit(v);
+    if (hitId) ctx.beginTextEdit?.(hitId);
+  },
+
   onKeyDown(e, ctx) {
     if (e.key === 'Delete' || e.key === 'Backspace') {
       for (const id of ctx.selection) {

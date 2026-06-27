@@ -135,4 +135,5 @@ export {
   setFrontmatterValues,
   inferDocumentTitle,
   readFrontmatterThemeId,
+  plainTextFromInlineHtml,
 } from './utils.js';

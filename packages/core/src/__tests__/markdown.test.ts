@@ -11,6 +11,7 @@ import {
   countNodes,
   createDocument,
   parseFrontmatter,
+  plainTextFromInlineHtml,
 } from '../markdown/index';
 import type {
   MarkdownDocument,
@@ -868,5 +869,27 @@ describe('frontmatter in parseMarkdown', () => {
     const md = '---\ntitle: Disabled\n---\n\n# Hello';
     const doc = parseMarkdown(md, { frontmatter: false });
     expect(doc.frontmatter).toBeUndefined();
+  });
+});
+
+describe('plainTextFromInlineHtml', () => {
+  it('strips inline tags, keeping text', () => {
+    expect(plainTextFromInlineHtml('<strong>bold</strong> and <em>italic</em>')).toBe(
+      'bold and italic',
+    );
+  });
+
+  it('decodes entities', () => {
+    expect(plainTextFromInlineHtml('a &amp; b &lt;c&gt;')).toBe('a & b <c>');
+  });
+
+  it('turns <br> and block tags into line breaks', () => {
+    expect(plainTextFromInlineHtml('one<br>two')).toBe('one\ntwo');
+    expect(plainTextFromInlineHtml('<p>one</p><p>two</p>')).toBe('one\ntwo');
+    expect(plainTextFromInlineHtml('<h2>Title</h2><p>body</p>')).toBe('Title\nbody');
+  });
+
+  it('returns empty string for empty input', () => {
+    expect(plainTextFromInlineHtml('')).toBe('');
   });
 });
