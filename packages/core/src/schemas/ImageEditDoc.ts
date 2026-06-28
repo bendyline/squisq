@@ -7,7 +7,7 @@
  * bytes in `assets/` and version snapshots in `.versions/`.
  *
  * Layers compose the existing core {@link Layer} types (image / text /
- * shape) so renderers can share infrastructure with the doc system.
+ * shape / path) so renderers can share infrastructure with the doc system.
  * Editor-specific metadata (name, visibility, lock, opacity, blendMode)
  * lives in {@link EditorLayerMeta} and is merged onto each layer. The
  * {@link Layer.animation} field is permitted but ignored by the image
@@ -17,7 +17,7 @@
  * relative to the sidecar root, keeping the document portable.
  */
 
-import type { ImageLayer, ShapeLayer, TextLayer } from './Doc.js';
+import type { ImageLayer, PathLayer, ShapeLayer, TextLayer } from './Doc.js';
 
 // ============================================
 // Layer type
@@ -44,8 +44,15 @@ export interface EditorLayerMeta {
   blendMode?: GlobalCompositeOperation;
 }
 
-/** A layer in an {@link ImageEditDoc}. */
-export type ImageEditLayer = (ImageLayer | TextLayer | ShapeLayer) & EditorLayerMeta;
+/**
+ * A layer in an {@link ImageEditDoc}.
+ *
+ * `path` layers carry the full drawing-shape vocabulary: when
+ * `content.shapeKind` is set (e.g. `'diamond'`, `'star'`, `'arrow-right'`),
+ * the renderer re-derives the SVG `d` from the layer's `position` box via
+ * `shapePath`, so the shape moves/resizes like the native rect/circle/line.
+ */
+export type ImageEditLayer = (ImageLayer | TextLayer | ShapeLayer | PathLayer) & EditorLayerMeta;
 
 /** The layer kinds the image editor supports. */
 export type ImageEditLayerKind = ImageEditLayer['type'];

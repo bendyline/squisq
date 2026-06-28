@@ -8,6 +8,7 @@ import { useRef, useState, useEffect } from 'react';
 import type { ImageEditDoc } from '@bendyline/squisq/schemas';
 import type { ImageEditorAction, ImageEditorTool } from './state.js';
 import { CropIcon, CursorIcon, PlusIcon, ShapeIcon, TextIcon } from './icons.js';
+import { ShapePalette } from '../scene/ShapePalette.js';
 
 export interface ToolbarProps {
   doc: ImageEditDoc;
@@ -54,6 +55,7 @@ export function Toolbar({
   extraTools,
 }: ToolbarProps) {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const [shapePaletteOpen, setShapePaletteOpen] = useState(false);
 
   const onFilePicked = async (file: File) => {
     try {
@@ -87,22 +89,54 @@ export function Toolbar({
   return (
     <div className="squisq-image-editor-toolbar" data-testid="image-editor-toolbar">
       <div className="squisq-image-editor-tool-group" role="radiogroup" aria-label="Tools">
-        {TOOLS.map((t) => (
-          <button
-            key={t.id}
-            type="button"
-            role="radio"
-            aria-checked={tool === t.id}
-            className={['squisq-image-editor-tool-button', tool === t.id ? 'is-active' : '']
-              .filter(Boolean)
-              .join(' ')}
-            onClick={() => dispatch({ type: 'set-tool', tool: t.id })}
-            title={t.title}
-            aria-label={t.title}
-          >
-            {t.icon}
-          </button>
-        ))}
+        {TOOLS.map((t) => {
+          const button = (
+            <button
+              key={t.id}
+              type="button"
+              role="radio"
+              aria-checked={tool === t.id}
+              className={['squisq-image-editor-tool-button', tool === t.id ? 'is-active' : '']
+                .filter(Boolean)
+                .join(' ')}
+              onClick={() => {
+                if (t.id === 'shape') {
+                  // The Shape tool owns a palette popover: clicking it both
+                  // arms the shape tool and toggles the palette so the user
+                  // can choose which shape to drop next.
+                  dispatch({ type: 'set-tool', tool: 'shape' });
+                  setShapePaletteOpen((o) => !o);
+                  return;
+                }
+                setShapePaletteOpen(false);
+                dispatch({ type: 'set-tool', tool: t.id });
+              }}
+              title={t.title}
+              aria-label={t.title}
+              aria-haspopup={t.id === 'shape' ? 'dialog' : undefined}
+              aria-expanded={t.id === 'shape' ? shapePaletteOpen : undefined}
+            >
+              {t.icon}
+            </button>
+          );
+          if (t.id !== 'shape') return button;
+          return (
+            <span key={t.id} className="squisq-image-editor-shape-trigger">
+              {button}
+              {shapePaletteOpen && (
+                <ShapePalette
+                  ignoreOutsideSelector=".squisq-image-editor-toolbar"
+                  onPick={(kind) => {
+                    dispatch({ type: 'set-shape-kind', kind });
+                    dispatch({ type: 'set-tool', tool: 'shape' });
+                    setShapePaletteOpen(false);
+                  }}
+                  onClose={() => setShapePaletteOpen(false)}
+                />
+              )}
+            </span>
+          );
+        })}
       </div>
 
       <div className="squisq-image-editor-tool-group">

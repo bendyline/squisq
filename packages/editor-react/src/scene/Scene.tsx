@@ -203,6 +203,12 @@ export function Scene(props: SceneProps) {
 
   const handleWheel = useCallback(
     (e: React.WheelEvent<SVGSVGElement>) => {
+      // A plain mouse wheel must scroll the PAGE — the canvas is embedded in a
+      // scrolling document, so hijacking the wheel to zoom (which makes shapes
+      // appear to grow/shrink under the cursor) is surprising. Only zoom on an
+      // explicit zoom gesture: Ctrl/Cmd + wheel, which is also what a trackpad
+      // pinch emits. Otherwise let the event bubble so the page scrolls.
+      if (!e.ctrlKey && !e.metaKey) return;
       e.preventDefault();
       const rect = (e.currentTarget as SVGSVGElement).getBoundingClientRect();
       const sx = e.clientX - rect.left;

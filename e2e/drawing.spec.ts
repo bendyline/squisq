@@ -132,4 +132,25 @@ test.describe('Drawing editor (Scene engine, semantic markdown)', () => {
       expect(md, `expected a star heading:\n${md}`).toMatch(/\{\[star\b/);
     }).toPass({ timeout: 3_000 });
   });
+
+  test('selecting a shape surfaces Fill/Stroke in the toolbar and applies a fill', async ({
+    page,
+  }) => {
+    // Single-click selects CEO; the per-shape style controls now live inline
+    // in the contextual toolbar (no separate floating panel).
+    const center = await shapeCenter(page, 'ceo');
+    await page.mouse.click(center.x, center.y);
+    const fill = page.locator('.squisq-scene-block-toolbar [aria-label="Fill color"]');
+    await expect(fill).toBeVisible();
+    await expect(
+      page.locator('.squisq-scene-block-toolbar [aria-label="Stroke color"]'),
+    ).toBeVisible();
+
+    // Setting the fill persists to the shape's {[rectangle … fill=…]} annotation.
+    await fill.fill('#ff0000');
+    await expect(async () => {
+      const md = (await readMarkdown(page)).replace(/\s+/g, ' ');
+      expect(md, `expected ceo fill in markdown:\n${md}`).toMatch(/fill="?#ff0000"?/i);
+    }).toPass({ timeout: 3_000 });
+  });
 });

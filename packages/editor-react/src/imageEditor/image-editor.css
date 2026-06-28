@@ -60,6 +60,19 @@
 .squisq-image-editor-tool-group--right {
   margin-left: auto;
 }
+/* Read-only property value (e.g. a path shape's kind). */
+.squisq-image-editor-readonly-value {
+  text-transform: capitalize;
+  opacity: 0.8;
+}
+/* Anchor for the shape palette popover that drops from the Shape tool. */
+.squisq-image-editor-shape-trigger {
+  position: relative;
+  display: inline-flex;
+}
+.squisq-image-editor-shape-trigger .squisq-shape-palette {
+  z-index: 20;
+}
 .squisq-image-editor-tool-button {
   background: var(--squisq-image-editor-control-bg);
   color: inherit;

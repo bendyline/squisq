@@ -54,6 +54,11 @@ export interface SceneBlockToolbarProps {
   /** Text-alignment controls — shown when a textbox is the selection. */
   alignment?: SceneAlignment;
   /**
+   * Per-selection style controls (Fill / Stroke / Color swatches, connector
+   * dropdowns) shown inline next to the tools when something is selected.
+   */
+  properties?: ReactNode;
+  /**
    * A popover anchored *below* a specific tool button (e.g. the shape
    * palette under the Shape tool). Rendered as a dropdown so it pops down
    * from the button in the toolbar.
@@ -100,13 +105,14 @@ export function SceneBlockToolbar({
   onSelectTool,
   actions = [],
   alignment,
+  properties,
   toolPopover,
   leading,
 }: SceneBlockToolbarProps) {
   // A single mode (e.g. layout's Select) isn't worth a button — there's
   // nothing to switch to. Still render the bar for its actions/leading.
   const showTools = tools.length > 1;
-  if (!showTools && actions.length === 0 && !leading && !alignment) return null;
+  if (!showTools && actions.length === 0 && !leading && !alignment && !properties) return null;
 
   return (
     <div className="squisq-scene-block-toolbar" role="toolbar" aria-label="Canvas tools">
@@ -169,6 +175,7 @@ export function SceneBlockToolbar({
           })}
         </div>
       )}
+      {properties}
       {actions.length > 0 && (
         <div className="squisq-scene-block-actions">
           {actions.map((a) => (

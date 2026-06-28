@@ -24,6 +24,7 @@ import { PropertiesPanel } from './imageEditor/PropertiesPanel.js';
 import { Toolbar } from './imageEditor/Toolbar.js';
 import { useImageEditor } from './imageEditor/useImageEditor.js';
 import { useImageEditorTokens } from './imageEditor/useImageEditorTokens.js';
+import { createShapeLayer } from './imageEditor/createShapeLayer.js';
 
 export interface ImageEditorProps {
   /**
@@ -215,31 +216,13 @@ export function ImageEditor(props: ImageEditorProps) {
     [dispatch],
   );
 
+  const shapeKind = state?.shapeKind ?? 'rectangle';
   const handleCreateShapeAt = useCallback(
     (x: number, y: number) => {
-      dispatch({
-        type: 'add-layer',
-        layer: {
-          type: 'shape',
-          name: 'Rectangle',
-          position: {
-            x: Math.round(x - 60),
-            y: Math.round(y - 40),
-            width: 120,
-            height: 80,
-          },
-          content: {
-            shape: 'rect',
-            fill: '#3399ff',
-            stroke: '#1a4d80',
-            strokeWidth: 2,
-            borderRadius: 8,
-          },
-        },
-      });
+      dispatch({ type: 'add-layer', layer: createShapeLayer(shapeKind, x, y) });
       dispatch({ type: 'set-tool', tool: 'select' });
     },
-    [dispatch],
+    [dispatch, shapeKind],
   );
 
   if (error) {

@@ -1062,6 +1062,43 @@
   margin: 0.25em 0;
 }
 
+/* Task lists (GFM checkboxes). TaskItem renders
+   `<li data-type="taskItem"><label><input type="checkbox"><span></span></label><div>…</div></li>`
+   inside `<ul data-type="taskList">`. Drop the bullet/indent and lay each item
+   out as a checkbox + content row. */
+.squisq-wysiwyg-editor ul[data-type='taskList'] {
+  list-style: none;
+  padding-left: 0;
+}
+
+.squisq-wysiwyg-editor ul[data-type='taskList'] li {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5em;
+}
+
+.squisq-wysiwyg-editor ul[data-type='taskList'] li > label {
+  flex: 0 0 auto;
+  margin-top: 0.15em;
+  user-select: none;
+}
+
+.squisq-wysiwyg-editor ul[data-type='taskList'] li > div {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.squisq-wysiwyg-editor ul[data-type='taskList'] li > div > p {
+  margin: 0;
+}
+
+.squisq-wysiwyg-editor ul[data-type='taskList'] input[type='checkbox'] {
+  width: 1em;
+  height: 1em;
+  cursor: pointer;
+  accent-color: #2563eb;
+}
+
 .squisq-wysiwyg-editor hr {
   border: none;
   border-top: 2px solid #e5e7eb;

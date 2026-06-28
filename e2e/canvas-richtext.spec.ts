@@ -103,6 +103,33 @@ test('alignment controls appear for a selected textbox and apply', async ({ page
   await expect(page.locator('[aria-label="Align top"]')).toHaveAttribute('aria-pressed', 'true');
 });
 
+test('a selected layout box exposes Fill/Stroke in the toolbar and applies', async ({ page }) => {
+  await insertLayout(page);
+  await page.locator('.squisq-scene-block-toolbar button', { hasText: 'Box' }).click();
+  const box = page.locator('[data-layer-id="box-1"]').first();
+  await box.scrollIntoViewIfNeeded();
+  const b = await box.boundingBox();
+  if (!b) throw new Error('no box');
+  await page.mouse.click(b.x + b.width / 2, b.y + b.height / 2);
+
+  // Per-box color controls live inline in the contextual toolbar.
+  const fill = page.locator('.squisq-scene-block-toolbar [aria-label="Fill color"]');
+  await expect(fill).toBeVisible();
+  await fill.fill('#00ff00');
+
+  // Persists to the box's {[rectangle … fill=…]} child annotation (no base64).
+  await page.getByRole('tab', { name: 'Markdown', exact: true }).click();
+  await page.locator('[data-testid="raw-editor"]').waitFor({ state: 'visible' });
+  await expect(async () => {
+    const md = (await page.locator('.monaco-editor .view-lines').first().innerText()).replace(
+      /\s+/g,
+      ' ',
+    );
+    expect(md).toMatch(/fill="?#00ff00"?/i);
+    expect(md).not.toContain('layers=');
+  }).toPass({ timeout: 3_000 });
+});
+
 test('a bulleted list renders inside the textbox', async ({ page }) => {
   await insertLayout(page);
   const seed = page.locator('[data-layer-id="text-1"]').first();
@@ -153,7 +180,7 @@ test('Escape cancels the edit without changing the text', async ({ page }) => {
   await expect(page.locator('[data-layer-id="text-1"]').first()).toBeVisible();
 });
 
-test('drawing shape palette drops down from the Shape tool (light)', async ({ page }) => {
+test('drawing shape palette opens from the Shape tool (gutter toolbar, light)', async ({ page }) => {
   await page.goto('/');
   await page.waitForLoadState('networkidle');
   await page.locator('.tiptap.ProseMirror').waitFor({ state: 'visible', timeout: 5_000 });
@@ -162,7 +189,8 @@ test('drawing shape palette drops down from the Shape tool (light)', async ({ pa
   await page.locator('.squisq-scene-widget-host').waitFor({ state: 'visible' });
   await page.waitForTimeout(300);
 
-  // Clicking the Shape tool opens the palette as a dropdown below the toolbar.
+  // Clicking the Shape tool opens the palette. The toolbar now lives in the
+  // right gutter, so the palette opens toward the canvas (to its LEFT).
   await page.locator('.squisq-scene-block-toolbar button', { hasText: 'Shape' }).click();
   const palette = page.locator('.squisq-shape-palette');
   await expect(palette).toBeVisible({ timeout: 3_000 });
@@ -170,8 +198,8 @@ test('drawing shape palette drops down from the Shape tool (light)', async ({ pa
   const toolbarBox = await page.locator('.squisq-scene-block-toolbar').boundingBox();
   const palBox = await palette.boundingBox();
   if (!toolbarBox || !palBox) throw new Error('no box');
-  // It drops DOWN from the toolbar (not the old bottom-left popup).
-  expect(palBox.y).toBeGreaterThan(toolbarBox.y);
+  // It opens to the LEFT of the gutter toolbar (not over empty page to the right).
+  expect(palBox.x).toBeLessThan(toolbarBox.x);
   // …and is light-themed (white surface, dark text).
   const bg = await palette.evaluate((el) => getComputedStyle(el).backgroundColor);
   expect(bg).toBe('rgb(255, 255, 255)');

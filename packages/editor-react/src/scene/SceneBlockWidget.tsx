@@ -13,15 +13,17 @@
  */
 
 import { useEffect, useMemo, useRef, useState } from 'react';
+import type { ReactNode } from 'react';
 import type { Editor } from '@tiptap/react';
 import type { Layer } from '@bendyline/squisq/schemas';
 import { Scene } from './Scene';
 import { useLayoutAdapter } from './adapters/LayoutAdapter';
-import { useDrawingAdapter } from './adapters/DrawingAdapter';
+import { useDrawingAdapter, type ConnectorStyleInput } from './adapters/DrawingAdapter';
+import type { SceneCommand, SceneEdge } from './commands/SceneCommand';
 import { findSceneHeadingPos } from './SceneBlockExtension';
 import { shapeIdFromLayerId } from './layers/shapeLayers';
 import { ShapePalette } from './ShapePalette';
-import { ShapeProperties } from './ShapeProperties';
+import { ScenePropsBar } from './ScenePropsBar';
 import { SceneBlockToolbar, type SceneBlockAction, type SceneAlignment } from './SceneBlockToolbar';
 import type { SceneTextEditConfig } from './text/sceneTextConfig';
 import { markdownToTiptap } from '../tiptapBridge';
@@ -42,6 +44,13 @@ interface SceneBlockWidgetProps {
 // Default viewport for layout/drawing surfaces. Matches Squisq's 16:9
 // preview so layouts authored here render correctly when previewed.
 const SCENE_VIEWPORT = { width: 1920, height: 1080 };
+
+// Connector style vocabularies for the inline properties (drawing edges).
+const MARKERS = ['none', 'arrow', 'open', 'diamond', 'circle', 'square'];
+const ROUTINGS = ['straight', 'orthogonal', 'curved'];
+const LINE_STYLES = ['solid', 'dashed', 'dotted'];
+const lineStyleOf = (dasharray: string | undefined): string =>
+  dasharray === '8 6' ? 'dashed' : dasharray === '2 6' ? 'dotted' : 'solid';
 
 export function SceneBlockWidget({
   editor,
@@ -245,6 +254,19 @@ export function SceneBlockWidget({
         }
       : undefined;
 
+  // Per-selection style controls, rendered inline in the contextual toolbar
+  // (Fill/Stroke for shapes & boxes, Color for text, marker/line/routing for
+  // a drawing connector). Replaces the old floating properties panel.
+  const propsBar = buildPropsBar({
+    isDrawing,
+    selectedLayer,
+    selectedShapeId,
+    selectedEdge: isDrawing ? drawing.selectedEdge : null,
+    setShapeParam: drawing.setShapeParam,
+    setConnectorStyle: drawing.setConnectorStyle,
+    dispatch: adapter.dispatch,
+  });
+
   const toolbar = (
     <SceneBlockToolbar
       tools={adapter.tools}
@@ -257,6 +279,7 @@ export function SceneBlockWidget({
       }}
       actions={actions}
       alignment={alignment}
+      properties={propsBar}
       toolPopover={
         isDrawing && paletteOpen
           ? {
@@ -277,29 +300,16 @@ export function SceneBlockWidget({
     />
   );
 
-  const drawingUI = isDrawing ? (
-    <ShapeProperties
-      selectedEdge={drawing.selectedEdge}
-      selectedShapeId={selectedShapeId}
-      onConnectorStyle={drawing.setConnectorStyle}
-      onShapeParam={drawing.setShapeParam}
-    />
-  ) : null;
-
-  const body = (
-    <div className="squisq-scene-stage">
-      {drawingUI}
-      {canvas}
-    </div>
-  );
+  const body = <div className="squisq-scene-stage">{canvas}</div>;
+  const sideToolbar = <div className="squisq-scene-side-toolbar">{toolbar}</div>;
 
   if (maximized) {
     return (
       <div className="squisq-scene-inline-placeholder">
         <DiagramMaximizedOverlay host={host ?? null} onClose={() => setMaximized(false)}>
           <div className="squisq-scene-block-max">
-            {toolbar}
             {body}
+            {sideToolbar}
           </div>
         </DiagramMaximizedOverlay>
       </div>
@@ -307,9 +317,98 @@ export function SceneBlockWidget({
   }
 
   return (
-    <>
-      {toolbar}
+    <div className="squisq-scene-shell">
       <div className="squisq-scene-inline">{body}</div>
-    </>
+      {sideToolbar}
+    </div>
   );
+}
+
+/**
+ * Build the inline per-selection style controls for the contextual toolbar.
+ * - A drawing connector → marker / line / routing dropdowns.
+ * - A text layer → a single Color swatch (drawing text color is the shape's
+ *   `stroke`; layout text color is `content.style.color`).
+ * - A shape / box / path → Fill + Stroke swatches.
+ * Returns null when the selection has nothing styleable.
+ */
+function buildPropsBar(args: {
+  isDrawing: boolean;
+  selectedLayer: Layer | undefined;
+  selectedShapeId: string | null;
+  selectedEdge: SceneEdge | null;
+  setShapeParam: (id: string, key: string, value: string) => void;
+  setConnectorStyle: (id: string, style: ConnectorStyleInput) => void;
+  dispatch: (cmd: SceneCommand) => void;
+}): ReactNode {
+  const {
+    isDrawing,
+    selectedLayer,
+    selectedShapeId,
+    selectedEdge,
+    setShapeParam,
+    setConnectorStyle,
+    dispatch,
+  } = args;
+
+  if (isDrawing && selectedEdge) {
+    const e = selectedEdge;
+    const set = (style: ConnectorStyleInput) => setConnectorStyle(e.id, style);
+    return (
+      <ScenePropsBar
+        selects={[
+          { label: 'End', value: e.endMarker ?? 'arrow', options: MARKERS, onChange: (v) => set({ endStyle: v }) },
+          { label: 'Start', value: e.startMarker ?? 'none', options: MARKERS, onChange: (v) => set({ startStyle: v }) },
+          { label: 'Line', value: lineStyleOf(e.dasharray), options: LINE_STYLES, onChange: (v) => set({ lineStyle: v }) },
+          { label: 'Routing', value: e.routing ?? 'straight', options: ROUTINGS, onChange: (v) => set({ routing: v }) },
+        ]}
+      />
+    );
+  }
+
+  if (!selectedLayer) return null;
+
+  // Drawing maps a shape's params via its heading id; layout writes layer
+  // attribute paths through the adapter's dispatch.
+  const setColor = (param: string, path: string) => (v: string) => {
+    if (isDrawing && selectedShapeId) setShapeParam(selectedShapeId, param, v);
+    else dispatch({ kind: 'setLayerAttr', id: selectedLayer.id, path, value: v });
+  };
+
+  if (selectedLayer.type === 'text') {
+    // Drawing stores a text shape's color in its `stroke` param.
+    return (
+      <ScenePropsBar
+        colors={[
+          {
+            label: 'Color',
+            value: selectedLayer.content.style.color,
+            onChange: setColor('stroke', 'content.style.color'),
+          },
+        ]}
+      />
+    );
+  }
+
+  if (selectedLayer.type === 'shape' || selectedLayer.type === 'path') {
+    return (
+      <ScenePropsBar
+        colors={[
+          {
+            label: 'Fill',
+            value: selectedLayer.content.fill,
+            allowNone: true,
+            onChange: setColor('fill', 'content.fill'),
+          },
+          {
+            label: 'Stroke',
+            value: selectedLayer.content.stroke,
+            onChange: setColor('stroke', 'content.stroke'),
+          },
+        ]}
+      />
+    );
+  }
+
+  return null;
 }

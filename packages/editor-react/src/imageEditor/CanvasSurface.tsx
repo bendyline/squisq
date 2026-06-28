@@ -7,13 +7,16 @@
  * selection / drag / resize gestures (select tool) or as a crop-rect
  * gesture (crop tool).
  *
- * Layer rendering uses small purpose-built renderers in `./layers/`,
- * not the heavier `@bendyline/squisq-react` layer components — the
- * editor doesn't need media-context lookup, animation, or
- * blockTime-driven reflow.
+ * Layer rendering uses small purpose-built renderers in `./layers/` for
+ * image / text / shape, which don't need media-context lookup, animation,
+ * or blockTime-driven reflow. `path` layers (the full drawing-shape
+ * vocabulary) reuse the shared `@bendyline/squisq-react` `PathLayer` so the
+ * image editor draws named shapes with exactly the same code as drawings —
+ * the canvas is the viewport and `blockTime` is 0 (no animation).
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { PathLayer } from '@bendyline/squisq-react';
 import type { ImageEditDoc, ImageEditLayer } from '@bendyline/squisq/schemas';
 import type { CanvasRect, ImageEditorAction, ImageEditorTool } from './state.js';
 import { EditorImageLayer } from './layers/EditorImageLayer.js';
@@ -262,6 +265,9 @@ export function CanvasSurface({
               )}
               {layer.type === 'text' && <EditorTextLayer layer={layer} canvas={doc.canvas} />}
               {layer.type === 'shape' && <EditorShapeLayer layer={layer} canvas={doc.canvas} />}
+              {layer.type === 'path' && (
+                <PathLayer layer={layer} viewport={doc.canvas} blockTime={0} />
+              )}
             </g>
           );
         })}

@@ -226,6 +226,8 @@ export function DiagramWidget({ editor, headingKey, fallbackParentPos, host }: D
     />
   );
 
+  const sideToolbar = <div className="squisq-scene-side-toolbar">{toolbar}</div>;
+
   if (maximized) {
     return (
       <div
@@ -234,8 +236,8 @@ export function DiagramWidget({ editor, headingKey, fallbackParentPos, host }: D
       >
         <DiagramMaximizedOverlay host={host ?? null} onClose={() => setMaximized(false)}>
           <div className="squisq-scene-block-max">
-            {toolbar}
             {canvas}
+            {sideToolbar}
           </div>
         </DiagramMaximizedOverlay>
       </div>
@@ -243,8 +245,7 @@ export function DiagramWidget({ editor, headingKey, fallbackParentPos, host }: D
   }
 
   return (
-    <>
-      {toolbar}
+    <div className="squisq-scene-shell">
       <div
         className="squisq-diagram-inline"
         ref={inlineRef}
@@ -261,7 +262,8 @@ export function DiagramWidget({ editor, headingKey, fallbackParentPos, host }: D
           title="Drag to resize · double-click to reset"
         />
       </div>
-    </>
+      {sideToolbar}
+    </div>
   );
 }
 

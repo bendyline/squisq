@@ -261,17 +261,20 @@ export function markdownToTiptap(markdown: string): string {
       continue;
     }
 
-    // Task list item
-    const taskMatch = line.match(/^[-*+]\s+\[([xX ])\]\s+(.+)$/);
+    // Task list item. Text is optional so freshly-typed, still-empty tasks
+    // survive a round-trip. The checkbox itself is drawn by TaskItem's node
+    // view from the data-checked attribute, so we only emit the text content
+    // (in a paragraph, matching Tiptap's own node structure).
+    const taskMatch = line.match(/^[-*+]\s+\[([xX ])\]\s*(.*)$/);
     if (taskMatch) {
       if (!inList || listType !== 'task') {
         flushList();
         inList = true;
         listType = 'task';
       }
-      const checked = taskMatch[1].toLowerCase() === 'x' ? ' data-checked="true"' : '';
+      const checkedAttr = taskMatch[1].toLowerCase() === 'x' ? ' data-checked="true"' : '';
       listItems.push(
-        `<li data-type="taskItem"${checked}><label><input type="checkbox"${checked ? ' checked' : ''}>${inlineToHtml(taskMatch[2])}</label></li>`,
+        `<li data-type="taskItem"${checkedAttr}><p>${inlineToHtml(taskMatch[2])}</p></li>`,
       );
       continue;
     }
@@ -526,13 +529,17 @@ export function tiptapToMarkdown(html: string): string {
     const taskListMatch = remaining.match(/^<ul[^>]*data-type="taskList"[^>]*>(.*?)<\/ul>/s);
     if (taskListMatch) {
       const items = taskListMatch[1].matchAll(
-        /<li[^>]*data-type="taskItem"[^>]*(data-checked="true")?[^>]*>.*?<\/li>/gs,
+        /<li[^>]*data-type="taskItem"[^>]*>.*?<\/li>/gs,
       );
       for (const item of items) {
-        const checked = item[0].includes('data-checked="true"') || item[0].includes('checked');
-        const textMatch = item[0].match(/<label>.*?<\/label>|<p>(.*?)<\/p>/s);
-        const text = textMatch ? htmlToInline(textMatch[0].replace(/<[^>]+>/g, '')) : '';
-        lines.push(`- [${checked ? 'x' : ' '}] ${text}`);
+        // Read checked state from the attribute value only — a bare
+        // includes('checked') matches the substring in data-checked="false".
+        const checked = /data-checked="true"/.test(item[0]);
+        // Drop the checkbox chrome (<label>…</label>) before reading text;
+        // Tiptap puts the task text in the trailing content node, not the label.
+        const body = item[0].replace(/<label\b[^>]*>.*?<\/label>/s, '');
+        const text = htmlToInline(body.replace(/<[^>]+>/g, '').trim());
+        lines.push(`- [${checked ? 'x' : ' '}] ${text}`.trimEnd());
       }
       lines.push('');
       remaining = remaining.slice(taskListMatch[0].length);

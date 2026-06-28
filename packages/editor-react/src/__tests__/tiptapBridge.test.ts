@@ -121,6 +121,20 @@ describe('markdownToTiptap', () => {
     expect(html).toContain('First');
   });
 
+  it('converts task lists to taskList/taskItem markup', () => {
+    const md = '- [ ] buy milk\n- [x] walk dog';
+    const html = markdownToTiptap(md);
+    expect(html).toContain('data-type="taskList"');
+    // Unchecked item carries no data-checked; checked item is marked true.
+    expect(html).toContain('<li data-type="taskItem"><p>buy milk</p></li>');
+    expect(html).toContain('<li data-type="taskItem" data-checked="true"><p>walk dog</p></li>');
+  });
+
+  it('treats [X] (uppercase) as checked', () => {
+    const html = markdownToTiptap('- [X] done');
+    expect(html).toContain('data-checked="true"');
+  });
+
   it('converts blockquotes', () => {
     const md = '> This is a quote';
     const html = markdownToTiptap(md);
@@ -260,6 +274,30 @@ describe('tiptapToMarkdown', () => {
     expect(md).toContain('2. Second');
   });
 
+  it('converts task lists, preserving checked state and text', () => {
+    // Mirrors the structure Tiptap's getHTML() emits for TaskItem:
+    // a <label> holding the checkbox chrome, then a content <div>.
+    const html =
+      '<ul data-type="taskList">' +
+      '<li data-type="taskItem" data-checked="false"><label><input type="checkbox"><span></span></label><div><p>buy milk</p></div></li>' +
+      '<li data-type="taskItem" data-checked="true"><label><input type="checkbox" checked="checked"><span></span></label><div><p>walk dog</p></div></li>' +
+      '</ul>';
+    const md = tiptapToMarkdown(html);
+    expect(md).toContain('- [ ] buy milk');
+    expect(md).toContain('- [x] walk dog');
+    // The unchecked item must NOT be promoted to checked.
+    expect(md).not.toContain('- [x] buy milk');
+  });
+
+  it('preserves a still-empty task item', () => {
+    const html =
+      '<ul data-type="taskList">' +
+      '<li data-type="taskItem" data-checked="false"><label><input type="checkbox"><span></span></label><div><p></p></div></li>' +
+      '</ul>';
+    const md = tiptapToMarkdown(html);
+    expect(md).toContain('- [ ]');
+  });
+
   it('converts tables', () => {
     const html =
       '<table><thead><tr><th>Name</th><th>Age</th></tr></thead>' +
@@ -383,6 +421,13 @@ describe('round-trip: markdownToTiptap → tiptapToMarkdown', () => {
     const result = roundTrip('1. First\n2. Second');
     expect(result).toContain('1. First');
     expect(result).toContain('2. Second');
+  });
+
+  it('preserves task lists with mixed checked state', () => {
+    const result = roundTrip('- [ ] buy milk\n- [x] walk dog');
+    expect(result).toContain('- [ ] buy milk');
+    expect(result).toContain('- [x] walk dog');
+    expect(result).not.toContain('- [x] buy milk');
   });
 
   it('preserves quoted template params with spaces', () => {

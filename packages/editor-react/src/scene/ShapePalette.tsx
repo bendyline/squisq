@@ -14,6 +14,12 @@ import { shapePath } from '@bendyline/squisq/doc';
 interface ShapePaletteProps {
   onPick: (kind: string) => void;
   onClose: () => void;
+  /**
+   * CSS selector for an ancestor that should NOT count as an "outside"
+   * click — typically the toolbar button that owns opening/closing the
+   * palette. Defaults to the scene block toolbar.
+   */
+  ignoreOutsideSelector?: string;
 }
 
 interface ShapeItem {
@@ -72,7 +78,11 @@ const CATALOG: { category: string; items: ShapeItem[] }[] = [
   },
 ];
 
-export function ShapePalette({ onPick, onClose }: ShapePaletteProps) {
+export function ShapePalette({
+  onPick,
+  onClose,
+  ignoreOutsideSelector = '.squisq-scene-block-toolbar',
+}: ShapePaletteProps) {
   const [query, setQuery] = useState('');
   const ref = useRef<HTMLDivElement>(null);
 
@@ -81,7 +91,7 @@ export function ShapePalette({ onPick, onClose }: ShapePaletteProps) {
       // Don't treat a click on the toolbar (where the Shape trigger lives)
       // as "outside" — that button owns opening/closing the palette.
       const target = e.target as Element | null;
-      if (target?.closest?.('.squisq-scene-block-toolbar')) return;
+      if (ignoreOutsideSelector && target?.closest?.(ignoreOutsideSelector)) return;
       if (ref.current && !ref.current.contains(e.target as Node)) onClose();
     };
     const onKey = (e: KeyboardEvent) => {
@@ -93,7 +103,7 @@ export function ShapePalette({ onPick, onClose }: ShapePaletteProps) {
       document.removeEventListener('pointerdown', onDocPointer);
       document.removeEventListener('keydown', onKey);
     };
-  }, [onClose]);
+  }, [onClose, ignoreOutsideSelector]);
 
   const sections = useMemo(() => {
     const q = query.trim().toLowerCase();
