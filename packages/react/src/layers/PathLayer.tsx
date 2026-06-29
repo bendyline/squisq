@@ -128,10 +128,10 @@ function MarkerDef({
       viewBox="0 0 10 10"
       refX={dir === 'end' ? 9 : 1}
       refY={5}
-      markerWidth={8}
-      markerHeight={8}
+      markerWidth={4}
+      markerHeight={4}
       orient="auto-start-reverse"
-      markerUnits="userSpaceOnUse"
+      markerUnits="strokeWidth"
     >
       <path
         d={d}

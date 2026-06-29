@@ -25,6 +25,11 @@ async function switchView(page: Page, label: 'Markdown' | 'Editor' | 'Play') {
   await page.getByRole('tab', { name: label, exact: true }).click();
 }
 
+async function clickInsert(page: Page, name: string) {
+  await page.locator('.squisq-toolbar button[aria-label="Insert"]').click();
+  await page.getByRole('menuitem', { name }).click();
+}
+
 async function loadDiagramSample(page: Page) {
   await page.goto('/');
   await page.waitForLoadState('networkidle');
@@ -467,7 +472,7 @@ test.describe('Insert diagram toolbar button', () => {
 
     // Click into the editor so the insert lands at a stable cursor.
     await page.locator('.tiptap.ProseMirror').click();
-    await page.locator('.squisq-toolbar button[aria-label="Insert diagram"]').click();
+    await clickInsert(page, 'Diagram');
 
     // The canvas mounts below the new heading and shows its empty state.
     await expect(page.locator('.squisq-diagram-widget-host')).toBeVisible();
@@ -487,7 +492,7 @@ test.describe('Insert diagram toolbar button', () => {
     // Place the cursor in the Monaco editor.
     await page.locator('.monaco-editor .view-lines').first().click();
 
-    await page.locator('.squisq-toolbar button[aria-label="Insert diagram"]').click();
+    await clickInsert(page, 'Diagram');
 
     await expect(async () => {
       const text = await page.locator('.monaco-editor .view-lines').first().innerText();
@@ -517,7 +522,7 @@ test.describe('Insert drawing / layout toolbar buttons', () => {
     await expect(page.locator('.squisq-scene-widget-host')).toHaveCount(0);
 
     await page.locator('.tiptap.ProseMirror').click();
-    await page.locator('.squisq-toolbar button[aria-label="Insert drawing"]').click();
+    await clickInsert(page, 'Drawing');
 
     // The Scene canvas mounts with the drawing tools (Shape opens the palette).
     await expect(page.locator('.squisq-scene-widget-host')).toBeVisible();
@@ -535,7 +540,7 @@ test.describe('Insert drawing / layout toolbar buttons', () => {
     await expect(page.locator('.squisq-scene-widget-host')).toHaveCount(0);
 
     await page.locator('.tiptap.ProseMirror').click();
-    await page.locator('.squisq-toolbar button[aria-label="Insert layout"]').click();
+    await clickInsert(page, 'Layout');
 
     // The canvas mounts and the seeded text layer is rendered (so the
     // layout isn't a blank, undiscoverable surface).
@@ -554,7 +559,7 @@ test.describe('Insert drawing / layout toolbar buttons', () => {
 
   test('layout toolbar adds a box and deletes the selection', async ({ page }) => {
     await page.locator('.tiptap.ProseMirror').click();
-    await page.locator('.squisq-toolbar button[aria-label="Insert layout"]').click();
+    await clickInsert(page, 'Layout');
     await page.locator('.squisq-scene-widget-host').waitFor({ state: 'visible' });
     // Seeded with one text layer; the Box action adds a shape layer.
     await expect(page.locator('[data-layer-id="text-1"]').first()).toBeVisible();
@@ -577,8 +582,8 @@ test.describe('Insert drawing / layout toolbar buttons', () => {
     await page.locator('[data-testid="raw-editor"]').waitFor({ state: 'visible' });
 
     await page.locator('.monaco-editor .view-lines').first().click();
-    await page.locator('.squisq-toolbar button[aria-label="Insert drawing"]').click();
-    await page.locator('.squisq-toolbar button[aria-label="Insert layout"]').click();
+    await clickInsert(page, 'Drawing');
+    await clickInsert(page, 'Layout');
 
     await expect(async () => {
       const text = await page.locator('.monaco-editor .view-lines').first().innerText();

@@ -16,15 +16,18 @@ import {
   touch,
 } from '@bendyline/squisq/imageEdit';
 
+// Distributive Omit: applied per union member so the discriminant (`type`) is preserved.
+type DOmit<T, K extends PropertyKey> = T extends unknown ? Omit<T, K> : never;
+
 /**
  * Layer payload accepted by the `add-layer` action — the `id` field is
  * optional and will be assigned by the underlying `addLayer` helper if
  * the caller doesn't supply one.
  */
-export type ImageEditLayerInput = ImageEditLayer | (Omit<ImageEditLayer, 'id'> & { id?: string });
+export type ImageEditLayerInput = ImageEditLayer | (DOmit<ImageEditLayer, 'id'> & { id?: string });
 
 /** The currently active interaction tool. */
-export type ImageEditorTool = 'select' | 'text' | 'shape' | 'image' | 'crop';
+export type ImageEditorTool = 'select' | 'text' | 'shape' | 'image' | 'crop' | 'zoom-rect';
 
 /** A pixel-space rectangle in canvas coordinates. */
 export interface CanvasRect {

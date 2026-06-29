@@ -528,9 +528,7 @@ export function tiptapToMarkdown(html: string): string {
     // Task list
     const taskListMatch = remaining.match(/^<ul[^>]*data-type="taskList"[^>]*>(.*?)<\/ul>/s);
     if (taskListMatch) {
-      const items = taskListMatch[1].matchAll(
-        /<li[^>]*data-type="taskItem"[^>]*>.*?<\/li>/gs,
-      );
+      const items = taskListMatch[1].matchAll(/<li[^>]*data-type="taskItem"[^>]*>.*?<\/li>/gs);
       for (const item of items) {
         // Read checked state from the attribute value only — a bare
         // includes('checked') matches the substring in data-checked="false".

@@ -62,7 +62,7 @@ function assertImageEditDoc(value: unknown, filename: string): asserts value is 
   v.layers.forEach((layer, i) => assertLayer(layer, i, filename));
 }
 
-const VALID_LAYER_TYPES = new Set(['image', 'text', 'shape']);
+const VALID_LAYER_TYPES = new Set(['image', 'text', 'shape', 'path']);
 
 function assertLayer(value: unknown, index: number, filename: string): void {
   const ctx = `${filename} layers[${index}]`;
@@ -106,5 +106,8 @@ function assertLayer(value: unknown, index: number, filename: string): void {
   }
   if (layer['type'] === 'shape' && typeof c['shape'] !== 'string') {
     throw new Error(`readImageEditDoc: ${ctx} (shape) content.shape must be a string`);
+  }
+  if (layer['type'] === 'path' && typeof c['d'] !== 'string') {
+    throw new Error(`readImageEditDoc: ${ctx} (path) content.d must be a string`);
   }
 }

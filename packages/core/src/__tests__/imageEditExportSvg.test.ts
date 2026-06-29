@@ -13,7 +13,13 @@ describe('buildSvgString — path (drawing shape) layers', () => {
       id: 'p1',
       type: 'path',
       position: { x: 10, y: 20, width: 100, height: 80 },
-      content: { d: 'M 0 0', shapeKind: 'diamond', fill: '#3399ff', stroke: '#1a4d80', strokeWidth: 2 },
+      content: {
+        d: 'M 0 0',
+        shapeKind: 'diamond',
+        fill: '#3399ff',
+        stroke: '#1a4d80',
+        strokeWidth: 2,
+      },
     };
     doc = addLayer(doc, diamond);
 

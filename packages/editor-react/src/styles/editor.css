@@ -381,6 +381,47 @@
   max-width: 100%;
 }
 
+/* ─── Insert Menu Dropdown ──────────────────────────── */
+
+.squisq-insert-menu {
+  z-index: 100;
+  min-width: 200px;
+  padding: 4px 0;
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
+}
+
+.squisq-insert-menu-header {
+  padding: 6px 12px 4px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #9ca3af;
+  user-select: none;
+}
+
+/* Portaled outside squisq-editor-shell, so dark mode is applied via data-theme. */
+.squisq-insert-menu[data-theme='dark'] {
+  background: #1f2937;
+  border-color: #374151;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+}
+
+.squisq-insert-menu[data-theme='dark'] .squisq-toolbar-overflow-item {
+  color: #d1d5db;
+}
+
+.squisq-insert-menu[data-theme='dark'] .squisq-toolbar-overflow-item:hover {
+  background: #374151;
+}
+
+.squisq-insert-menu[data-theme='dark'] .squisq-insert-menu-header {
+  color: #6b7280;
+}
+
 /* ─── Template Picker (toolbar) ──────────────────────── */
 
 .squisq-template-picker {

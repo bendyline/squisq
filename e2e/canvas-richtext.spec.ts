@@ -16,12 +16,17 @@ test.use({ viewport: { width: 1500, height: 950 } });
 // in CI (Linux). Matches the convention in editor.spec.ts / timeline.spec.ts.
 const SELECT_ALL = process.platform === 'darwin' ? 'Meta+a' : 'Control+a';
 
+async function clickInsert(page: Page, name: string) {
+  await page.locator('.squisq-toolbar button[aria-label="Insert"]').click();
+  await page.getByRole('menuitem', { name }).click();
+}
+
 async function insertLayout(page: Page) {
   await page.goto('/');
   await page.waitForLoadState('networkidle');
   await page.locator('.tiptap.ProseMirror').waitFor({ state: 'visible', timeout: 5_000 });
   await page.locator('.tiptap.ProseMirror').click();
-  await page.locator('.squisq-toolbar button[aria-label="Insert layout"]').click();
+  await clickInsert(page, 'Layout');
   await page.locator('.squisq-scene-widget-host').waitFor({ state: 'visible' });
   await page.waitForTimeout(300);
 }
@@ -180,12 +185,14 @@ test('Escape cancels the edit without changing the text', async ({ page }) => {
   await expect(page.locator('[data-layer-id="text-1"]').first()).toBeVisible();
 });
 
-test('drawing shape palette opens from the Shape tool (gutter toolbar, light)', async ({ page }) => {
+test('drawing shape palette opens from the Shape tool (gutter toolbar, light)', async ({
+  page,
+}) => {
   await page.goto('/');
   await page.waitForLoadState('networkidle');
   await page.locator('.tiptap.ProseMirror').waitFor({ state: 'visible', timeout: 5_000 });
   await page.locator('.tiptap.ProseMirror').click();
-  await page.locator('.squisq-toolbar button[aria-label="Insert drawing"]').click();
+  await clickInsert(page, 'Drawing');
   await page.locator('.squisq-scene-widget-host').waitFor({ state: 'visible' });
   await page.waitForTimeout(300);
 

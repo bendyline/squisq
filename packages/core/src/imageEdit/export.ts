@@ -247,7 +247,7 @@ function markerDefSvg(
     : `fill="none" stroke="${escapeAttr(stroke)}" stroke-width="1.5"`;
   return (
     `<marker id="${escapeAttr(id)}" viewBox="0 0 10 10" refX="${refX}" refY="5"` +
-    ` markerWidth="8" markerHeight="8" orient="auto-start-reverse" markerUnits="userSpaceOnUse">` +
+    ` markerWidth="4" markerHeight="4" orient="auto-start-reverse" markerUnits="strokeWidth">` +
     `<path d="${escapeAttr(marker.d)}" ${paint}/></marker>`
   );
 }

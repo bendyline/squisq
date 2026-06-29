@@ -33,7 +33,10 @@ async function startInEmptyEditor(page: Page) {
 async function markdownSource(page: Page): Promise<string> {
   await switchView(page, 'Markdown');
   await page.locator('[data-testid="raw-editor"]').waitFor({ state: 'visible' });
-  return (await page.locator('.monaco-editor .view-lines').first().innerText()).replace(/\s+/g, ' ');
+  return (await page.locator('.monaco-editor .view-lines').first().innerText()).replace(
+    /\s+/g,
+    ' ',
+  );
 }
 
 test('typing "[ ] " converts to an unchecked checkbox and round-trips to markdown', async ({
@@ -89,6 +92,10 @@ test('existing task-list markdown renders as checkboxes in the editor', async ({
   await page.keyboard.type('- [ ] open task');
   await page.keyboard.press('Enter');
   await page.keyboard.type('- [x] closed task');
+  // EditorContext debounces the markdown→Tiptap parse at 150ms; wait long enough
+  // for that debounce to fire before switching views, so the new markdownDoc is
+  // in place when the WYSIWYG editor mounts.
+  await page.waitForTimeout(300);
 
   await switchView(page, 'Editor');
   const editor = page.locator('.tiptap.ProseMirror');

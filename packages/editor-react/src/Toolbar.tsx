@@ -214,6 +214,10 @@ const BUTTONS: ToolbarButton[] = [
   },
 ];
 
+const FIRST_MEDIA_INDEX = BUTTONS.findIndex((b) => b.group === 'media');
+const MEDIA_BUTTONS = BUTTONS.filter((b) => b.group === 'media');
+const INSERT_MENU_WIDTH = 200;
+
 /** Renders a button's icon: a Font Awesome glyph when set, else the text label. */
 function buttonIcon(btn: ToolbarButton): ReactNode {
   return btn.faIcon ? <Icon icon={btn.faIcon} /> : btn.icon;
@@ -445,6 +449,30 @@ export function Toolbar({
 
   const closeEmojiPicker = useCallback(() => setEmojiPickerAnchor(null), []);
 
+  // Insert menu — toolbar-anchored dropdown that replaces the individual media-group
+  // buttons with a single "+" button. Portaled out to avoid overflow:hidden clipping.
+  const insertMenuButtonRef = useRef<HTMLButtonElement | null>(null);
+  const insertMenuRef = useRef<HTMLDivElement | null>(null);
+  const [insertMenuAnchor, setInsertMenuAnchor] = useState<{ top: number; left: number } | null>(
+    null,
+  );
+
+  const openInsertMenu = useCallback(() => {
+    const btn = insertMenuButtonRef.current;
+    if (!btn) return;
+    const rect = btn.getBoundingClientRect();
+    const gap = 4;
+    const margin = 8;
+    const vw = window.innerWidth;
+    let left = rect.left;
+    if (left + INSERT_MENU_WIDTH + margin > vw) {
+      left = Math.max(margin, rect.right - INSERT_MENU_WIDTH);
+    }
+    setInsertMenuAnchor({ top: rect.bottom + gap, left });
+  }, []);
+
+  const closeInsertMenu = useCallback(() => setInsertMenuAnchor(null), []);
+
   // ── Narrow-screen detection ──────────────────────────
   const [isNarrow, setIsNarrow] = useState(
     () => typeof window !== 'undefined' && window.matchMedia('(max-width: 768px)').matches,
@@ -482,13 +510,18 @@ export function Toolbar({
         ':scope > .squisq-toolbar-group > .squisq-toolbar-button',
       );
       let firstHidden: number | null = null;
-      children.forEach((child, i) => {
+      let btnIndex = 0;
+      children.forEach((child) => {
         if (firstHidden !== null) return;
+        // data-btn-count lets a single DOM button represent multiple BUTTONS entries
+        // (e.g. the Insert dropdown button represents the entire media group).
+        const btnCount = Number(child.dataset.btnCount ?? 1);
         const rect = child.getBoundingClientRect();
         // A button is hidden if its right edge extends past the container
         if (rect.right > containerRight + 2) {
-          firstHidden = i;
+          firstHidden = btnIndex;
         }
+        btnIndex += btnCount;
       });
       setMeasuredOverflowIndex(firstHidden);
     };
@@ -510,6 +543,18 @@ export function Toolbar({
     document.addEventListener('mousedown', handleClick);
     return () => document.removeEventListener('mousedown', handleClick);
   }, [showOverflow]);
+
+  // Close insert menu on outside click
+  useEffect(() => {
+    if (!insertMenuAnchor) return;
+    const handleClick = (e: MouseEvent) => {
+      if (insertMenuButtonRef.current?.contains(e.target as Node)) return;
+      if (insertMenuRef.current?.contains(e.target as Node)) return;
+      closeInsertMenu();
+    };
+    document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, [insertMenuAnchor, closeInsertMenu]);
 
   // Open-up vs open-down: the overflow menu is anchored to its trigger with
   // `top: 100%` by default. When the toolbar lives near the bottom of a
@@ -1080,7 +1125,7 @@ export function Toolbar({
     [linkDialog, formattingEditor, monacoEditor],
   );
 
-  const groups = ['format', 'lists', 'structure', 'insert', 'media'] as const;
+  const groups = ['format', 'lists', 'structure', 'insert'] as const;
   const isWysiwyg = activeView === 'wysiwyg' && tiptapEditor;
   const isPreview = activeView === 'preview';
 
@@ -1373,6 +1418,23 @@ export function Toolbar({
             </div>
           ))}
 
+          {/* Insert menu button — collapses all media-group actions into a single dropdown */}
+          <div className="squisq-toolbar-group">
+            <div className="squisq-toolbar-separator" />
+            <button
+              ref={insertMenuButtonRef}
+              className={`squisq-toolbar-button${insertMenuAnchor ? ' squisq-toolbar-button--active' : ''}`}
+              data-btn-count={String(MEDIA_BUTTONS.length)}
+              data-tooltip="Insert..."
+              onClick={() => (insertMenuAnchor ? closeInsertMenu() : openInsertMenu())}
+              aria-label="Insert"
+              aria-expanded={insertMenuAnchor !== null}
+              aria-haspopup="menu"
+            >
+              <Icon icon="fa-solid fa-plus" />
+            </button>
+          </div>
+
           {/* Template picker — visible when the cursor is in a heading.
               In WYSIWYG, reads from the heading node's `dataTemplate`; in
               Markdown view, parses the `{[...]}` suffix on the cursor's line. */}
@@ -1565,6 +1627,15 @@ export function Toolbar({
             >
               {BUTTONS.slice(overflowIndex)
                 .filter((b) => isButtonVisible(b.id))
+                // Media buttons are handled by the Insert dropdown when it's visible.
+                // Show them individually only on narrow screens (dropdown hidden) or
+                // when the Insert button itself has overflowed.
+                .filter(
+                  (b) =>
+                    b.group !== 'media' ||
+                    isNarrow ||
+                    (overflowIndex !== null && overflowIndex >= FIRST_MEDIA_INDEX),
+                )
                 .map((btn) => {
                   const active =
                     btn.id === 'emoji'
@@ -1741,6 +1812,43 @@ export function Toolbar({
           documentLinkProvider={documentLinkProvider}
         />
       )}
+
+      {/* Insert menu — portaled to the document body so the overflow:hidden
+          actions row doesn't clip it. Position computed from trigger rect. */}
+      {insertMenuAnchor &&
+        createPortal(
+          <div
+            ref={insertMenuRef}
+            className="squisq-insert-menu"
+            data-theme={theme}
+            style={{ position: 'fixed', top: insertMenuAnchor.top, left: insertMenuAnchor.left }}
+            role="menu"
+          >
+            <div className="squisq-insert-menu-header">Insert</div>
+            {MEDIA_BUTTONS.filter((b) => isButtonVisible(b.id)).map((btn) => {
+              const disabled = (btn.id === 'image' && !mediaProvider) || !buttonAllowed(btn.id);
+              const stripped = btn.title.replace(/^Insert\s+/i, '');
+              const label = stripped.charAt(0).toUpperCase() + stripped.slice(1);
+              return (
+                <button
+                  key={btn.id}
+                  ref={btn.id === 'emoji' ? emojiButtonRef : undefined}
+                  className="squisq-toolbar-overflow-item"
+                  disabled={disabled}
+                  onClick={() => {
+                    handleAction(btn.id);
+                    if (btn.id !== 'emoji') closeInsertMenu();
+                  }}
+                  role="menuitem"
+                >
+                  <span className="squisq-toolbar-overflow-icon">{buttonIcon(btn)}</span>
+                  <span>{label}</span>
+                </button>
+              );
+            })}
+          </div>,
+          document.body,
+        )}
 
       {/* Emoji picker — portaled to the document body so the toolbar's
           overflow:hidden actions row doesn't clip the popover. Position

@@ -13,7 +13,7 @@
  * `exportImageEditDoc` from `@bendyline/squisq/imageEdit`.
  */
 
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { ContentContainer } from '@bendyline/squisq/storage';
 import { exportImageEditDoc, type ImageEditExportFormat } from '@bendyline/squisq/imageEdit';
 import type { SurfaceScheme, Theme } from '@bendyline/squisq/schemas';
@@ -24,7 +24,13 @@ import { PropertiesPanel } from './imageEditor/PropertiesPanel.js';
 import { Toolbar } from './imageEditor/Toolbar.js';
 import { useImageEditor } from './imageEditor/useImageEditor.js';
 import { useImageEditorTokens } from './imageEditor/useImageEditorTokens.js';
-import { createShapeLayer } from './imageEditor/createShapeLayer.js';
+import {
+  createShapeLayer,
+  createLinearShapeLayer,
+  isLinearShapeKind,
+} from './imageEditor/createShapeLayer.js';
+
+const ZOOM_STEPS = [0.0625, 0.083, 0.125, 0.167, 0.25, 0.333, 0.5, 0.667, 1, 1.5, 2, 3, 4, 8, 16];
 
 export interface ImageEditorProps {
   /**
@@ -107,6 +113,33 @@ export function ImageEditor(props: ImageEditorProps) {
   // Bumped after every save/version write so the history popover
   // re-lists without polling.
   const [historyRefreshKey, setHistoryRefreshKey] = useState(0);
+
+  const surfaceRef = useRef<HTMLDivElement>(null);
+  const [zoom, setZoom] = useState(1.0);
+
+  const handleZoomIn = useCallback(() => {
+    setZoom((z) => ZOOM_STEPS.find((s) => s > z + 0.001) ?? 16);
+  }, []);
+  const handleZoomOut = useCallback(() => {
+    setZoom((z) => [...ZOOM_STEPS].reverse().find((s) => s < z - 0.001) ?? 0.0625);
+  }, []);
+  const handleZoomSet = useCallback((z: number) => {
+    setZoom(Math.max(0.0625, Math.min(16, z)));
+  }, []);
+  const handleZoom1to1 = useCallback(() => setZoom(1), []);
+  const handleZoomFit = useCallback(() => {
+    if (!state || !surfaceRef.current) return;
+    const { clientWidth, clientHeight } = surfaceRef.current;
+    const PADDING = 32;
+    const fitZ = Math.min(
+      (clientWidth - PADDING) / state.doc.canvas.width,
+      (clientHeight - PADDING) / state.doc.canvas.height,
+    );
+    setZoom(Math.max(0.0625, Math.min(16, fitZ)));
+  }, [state]);
+
+  // ID of a newly-created text layer that should immediately enter inline editing.
+  const [requestEditLayerId, setRequestEditLayerId] = useState<string | null>(null);
 
   const handleExport = useCallback(
     async (format: ImageEditExportFormat) => {
@@ -199,9 +232,11 @@ export function ImageEditor(props: ImageEditorProps) {
 
   const handleCreateTextAt = useCallback(
     (x: number, y: number) => {
+      const id = `layer-${Math.random().toString(36).slice(2, 10)}`;
       dispatch({
         type: 'add-layer',
         layer: {
+          id,
           type: 'text',
           name: 'Text',
           position: { x: Math.round(x), y: Math.round(y), width: 240, height: 48 },
@@ -212,14 +247,30 @@ export function ImageEditor(props: ImageEditorProps) {
         },
       });
       dispatch({ type: 'set-tool', tool: 'select' });
+      setRequestEditLayerId(id);
     },
     [dispatch],
   );
 
   const shapeKind = state?.shapeKind ?? 'rectangle';
+  const shapeDragDraw = isLinearShapeKind(shapeKind);
+
   const handleCreateShapeAt = useCallback(
     (x: number, y: number) => {
-      dispatch({ type: 'add-layer', layer: createShapeLayer(shapeKind, x, y) });
+      const layer = createShapeLayer(shapeKind, x, y);
+      const id = `layer-${Math.random().toString(36).slice(2, 10)}`;
+      dispatch({ type: 'add-layer', layer: { ...layer, id } });
+      dispatch({ type: 'set-tool', tool: 'select' });
+      if (layer.type === 'text') {
+        setRequestEditLayerId(id);
+      }
+    },
+    [dispatch, shapeKind],
+  );
+
+  const handleCreateShapeFromPoints = useCallback(
+    (x1: number, y1: number, x2: number, y2: number) => {
+      dispatch({ type: 'add-layer', layer: createLinearShapeLayer(shapeKind, x1, y1, x2, y2) });
       dispatch({ type: 'set-tool', tool: 'select' });
     },
     [dispatch, shapeKind],
@@ -258,6 +309,7 @@ export function ImageEditor(props: ImageEditorProps) {
       <Toolbar
         doc={state.doc}
         tool={state.tool}
+        shapeKind={state.shapeKind}
         dispatch={dispatch}
         uploadAsset={uploadAsset}
         onExport={handleExport}
@@ -279,6 +331,12 @@ export function ImageEditor(props: ImageEditorProps) {
             />
           ) : null
         }
+        zoom={zoom}
+        onZoomIn={handleZoomIn}
+        onZoomOut={handleZoomOut}
+        onZoomSet={handleZoomSet}
+        onZoomFit={handleZoomFit}
+        onZoom1to1={handleZoom1to1}
       />
       <div className="squisq-image-editor-body">
         <div className="squisq-image-editor-center">
@@ -290,6 +348,12 @@ export function ImageEditor(props: ImageEditorProps) {
             dispatch={dispatch}
             onCreateTextAt={handleCreateTextAt}
             onCreateShapeAt={handleCreateShapeAt}
+            onCreateShapeFromPoints={handleCreateShapeFromPoints}
+            shapeDragDraw={shapeDragDraw}
+            zoom={zoom}
+            onSetZoom={handleZoomSet}
+            surfaceRef={surfaceRef}
+            requestEditLayerId={requestEditLayerId}
           />
         </div>
         <div className="squisq-image-editor-side">

@@ -357,10 +357,30 @@ function buildPropsBar(args: {
     return (
       <ScenePropsBar
         selects={[
-          { label: 'End', value: e.endMarker ?? 'arrow', options: MARKERS, onChange: (v) => set({ endStyle: v }) },
-          { label: 'Start', value: e.startMarker ?? 'none', options: MARKERS, onChange: (v) => set({ startStyle: v }) },
-          { label: 'Line', value: lineStyleOf(e.dasharray), options: LINE_STYLES, onChange: (v) => set({ lineStyle: v }) },
-          { label: 'Routing', value: e.routing ?? 'straight', options: ROUTINGS, onChange: (v) => set({ routing: v }) },
+          {
+            label: 'End',
+            value: e.endMarker ?? 'arrow',
+            options: MARKERS,
+            onChange: (v) => set({ endStyle: v }),
+          },
+          {
+            label: 'Start',
+            value: e.startMarker ?? 'none',
+            options: MARKERS,
+            onChange: (v) => set({ startStyle: v }),
+          },
+          {
+            label: 'Line',
+            value: lineStyleOf(e.dasharray),
+            options: LINE_STYLES,
+            onChange: (v) => set({ lineStyle: v }),
+          },
+          {
+            label: 'Routing',
+            value: e.routing ?? 'straight',
+            options: ROUTINGS,
+            onChange: (v) => set({ routing: v }),
+          },
         ]}
       />
     );

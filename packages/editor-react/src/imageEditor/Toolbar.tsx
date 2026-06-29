@@ -13,6 +13,8 @@ import { ShapePalette } from '../scene/ShapePalette.js';
 export interface ToolbarProps {
   doc: ImageEditDoc;
   tool: ImageEditorTool;
+  /** The currently armed shape palette kind. Used to highlight active redline shortcuts. */
+  shapeKind?: string;
   dispatch: (a: ImageEditorAction) => void;
   /** Upload an image asset and return its sidecar-relative path. */
   uploadAsset: (file: Blob, suggestedName?: string) => Promise<string>;
@@ -30,7 +32,65 @@ export interface ToolbarProps {
    * mount the version-history dropdown when versioning is enabled.
    */
   extraTools?: React.ReactNode;
+  /** Current zoom level (1 = 100%). */
+  zoom?: number;
+  onZoomIn?: () => void;
+  onZoomOut?: () => void;
+  onZoomSet?: (zoom: number) => void;
+  onZoomFit?: () => void;
+  onZoom1to1?: () => void;
 }
+
+function RedlineArrowIcon() {
+  return (
+    <svg width="15" height="15" viewBox="0 0 15 15" fill="none" aria-hidden="true">
+      <line x1="3" y1="12" x2="12" y2="3" stroke="#cc0000" strokeWidth="1.8" strokeLinecap="round" />
+      <polyline
+        points="7,3 12,3 12,8"
+        stroke="#cc0000"
+        strokeWidth="1.8"
+        strokeLinejoin="round"
+        strokeLinecap="round"
+        fill="none"
+      />
+    </svg>
+  );
+}
+
+function RedlineRectIcon() {
+  return (
+    <svg width="15" height="15" viewBox="0 0 15 15" fill="none" aria-hidden="true">
+      <rect x="1.5" y="3" width="12" height="9" stroke="#cc0000" strokeWidth="1.8" rx="0.5" />
+    </svg>
+  );
+}
+
+function RedlineTextIcon() {
+  return (
+    <svg width="15" height="15" viewBox="0 0 15 15" aria-hidden="true">
+      <text x="1.5" y="13" fill="#cc0000" fontSize="13" fontFamily="sans-serif" fontWeight="bold">
+        A
+      </text>
+    </svg>
+  );
+}
+
+function ZoomRectIcon() {
+  return (
+    <svg width="15" height="15" viewBox="0 0 15 15" fill="none" aria-hidden="true">
+      <circle cx="6" cy="6" r="4.5" stroke="currentColor" strokeWidth="1.5" />
+      <line x1="9.5" y1="9.5" x2="13.5" y2="13.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+      <line x1="4" y1="6" x2="8" y2="6" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
+      <line x1="6" y1="4" x2="6" y2="8" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+const REDLINE_TOOLS: Array<{ kind: string; icon: React.ReactNode; title: string }> = [
+  { kind: 'redline-arrow', icon: <RedlineArrowIcon />, title: 'Redline arrow' },
+  { kind: 'redline-rect', icon: <RedlineRectIcon />, title: 'Redline rectangle' },
+  { kind: 'redline-text', icon: <RedlineTextIcon />, title: 'Redline text' },
+];
 
 const TOOLS: Array<{
   id: ImageEditorTool;
@@ -41,11 +101,13 @@ const TOOLS: Array<{
   { id: 'text', icon: <TextIcon />, title: 'Add text (T)' },
   { id: 'shape', icon: <ShapeIcon />, title: 'Add shape (S)' },
   { id: 'crop', icon: <CropIcon />, title: 'Crop (C)' },
+  { id: 'zoom-rect', icon: <ZoomRectIcon />, title: 'Zoom to rectangle (Z)' },
 ];
 
 export function Toolbar({
   doc,
   tool,
+  shapeKind,
   dispatch,
   uploadAsset,
   onExport,
@@ -53,6 +115,12 @@ export function Toolbar({
   saveLabel = 'Save',
   saveTitle = 'Save state.json',
   extraTools,
+  zoom,
+  onZoomIn,
+  onZoomOut,
+  onZoomSet,
+  onZoomFit,
+  onZoom1to1,
 }: ToolbarProps) {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [shapePaletteOpen, setShapePaletteOpen] = useState(false);
@@ -139,6 +207,34 @@ export function Toolbar({
         })}
       </div>
 
+      <div className="squisq-image-editor-tool-group" role="group" aria-label="Redline shortcuts">
+        {REDLINE_TOOLS.map((rt) => {
+          const active = tool === 'shape' && shapeKind === rt.kind;
+          return (
+            <button
+              key={rt.kind}
+              type="button"
+              className={[
+                'squisq-image-editor-tool-button',
+                active ? 'is-active' : '',
+              ]
+                .filter(Boolean)
+                .join(' ')}
+              onClick={() => {
+                dispatch({ type: 'set-shape-kind', kind: rt.kind });
+                dispatch({ type: 'set-tool', tool: 'shape' });
+                setShapePaletteOpen(false);
+              }}
+              title={rt.title}
+              aria-label={rt.title}
+              aria-pressed={active}
+            >
+              {rt.icon}
+            </button>
+          );
+        })}
+      </div>
+
       <div className="squisq-image-editor-tool-group">
         <button
           type="button"
@@ -162,6 +258,52 @@ export function Toolbar({
           }}
         />
       </div>
+
+      {(onZoomIn || onZoomOut) && (
+        <div className="squisq-image-editor-tool-group squisq-image-editor-tool-group--zoom">
+          <button
+            type="button"
+            className="squisq-image-editor-tool-button"
+            onClick={onZoomOut}
+            title="Zoom out"
+            aria-label="Zoom out"
+          >−</button>
+          <input
+            type="number"
+            className="squisq-image-editor-zoom-input"
+            value={Math.round((zoom ?? 1) * 100)}
+            min={6}
+            max={1600}
+            step={1}
+            onChange={(e) => {
+              const v = parseInt(e.target.value, 10);
+              if (!isNaN(v) && v > 0) onZoomSet?.(v / 100);
+            }}
+            aria-label="Zoom percentage"
+            title="Zoom %"
+          />
+          <span className="squisq-image-editor-zoom-label">%</span>
+          <button
+            type="button"
+            className="squisq-image-editor-tool-button"
+            onClick={onZoomIn}
+            title="Zoom in"
+            aria-label="Zoom in"
+          >+</button>
+          <button
+            type="button"
+            className="squisq-image-editor-tool-button squisq-image-editor-tool-button--with-label"
+            onClick={onZoom1to1}
+            title="1:1 pixels"
+          >1:1</button>
+          <button
+            type="button"
+            className="squisq-image-editor-tool-button squisq-image-editor-tool-button--with-label"
+            onClick={onZoomFit}
+            title="Fit to window"
+          >Fit</button>
+        </div>
+      )}
 
       <div className="squisq-image-editor-tool-group squisq-image-editor-tool-group--right">
         {extraTools}

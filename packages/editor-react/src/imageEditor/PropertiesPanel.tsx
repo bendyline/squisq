@@ -24,7 +24,7 @@ export function PropertiesPanel({ doc, selectedLayerId, dispatch }: PropertiesPa
       <div className="squisq-image-editor-panel-header">Properties</div>
       <CanvasSection doc={doc} dispatch={dispatch} />
       {selected ? (
-        <LayerSection layer={selected} dispatch={dispatch} />
+        <LayerSection key={selected.id} layer={selected} dispatch={dispatch} />
       ) : (
         <div className="squisq-image-editor-properties-empty">No layer selected</div>
       )}
