@@ -335,7 +335,16 @@ export function CanvasSurface({
       window.removeEventListener('pointermove', onMove);
       window.removeEventListener('pointerup', onUp);
     };
-  }, [toCanvas, dispatch, cropDrag, shapeLineDrag, zoomDrag, onSetZoom, onCreateShapeFromPoints, onCreateShapeAt]);
+  }, [
+    toCanvas,
+    dispatch,
+    cropDrag,
+    shapeLineDrag,
+    zoomDrag,
+    onSetZoom,
+    onCreateShapeFromPoints,
+    onCreateShapeAt,
+  ]);
 
   // ── Render ─────────────────────────────────────────────────────────────
   const selectedLayer = selectedLayerId
@@ -354,7 +363,9 @@ export function CanvasSurface({
     if (!selectionBox || !selectedLayer) return null;
     const sw =
       selectedLayer.type === 'shape' || selectedLayer.type === 'path'
-        ? ((selectedLayer.content as Record<string, unknown>)['strokeWidth'] as number | undefined) ?? 0
+        ? (((selectedLayer.content as Record<string, unknown>)['strokeWidth'] as
+            | number
+            | undefined) ?? 0)
         : 0;
     const strokeHalf = sw / 2;
     const proportional = Math.max(doc.canvas.width, doc.canvas.height) * 0.007;
@@ -455,63 +466,69 @@ export function CanvasSurface({
           )}
 
           {/* Inline text editor — foreignObject overlays the hidden text layer */}
-          {editingLayerId && (() => {
-            const editLayer = doc.layers.find((l) => l.id === editingLayerId);
-            if (!editLayer || editLayer.type !== 'text') return null;
-            const pos = layerBox(editLayer, doc);
-            const s = (editLayer as ImageEditLayer & { type: 'text' }).content;
-            // Give generous height so text can grow without being clipped.
-            const foHeight = Math.max(pos.height * 4, 200);
-            return (
-              <foreignObject
-                key={`inline-edit-${editingLayerId}`}
-                x={pos.x}
-                y={pos.y}
-                width={pos.width}
-                height={foHeight}
-                style={{ overflow: 'visible' }}
-              >
-                <textarea
-                  ref={editTextareaRef}
-                  value={s.text}
-                  onChange={(e) => {
-                    dispatch({
-                      type: 'update-layer',
-                      layerId: editingLayerId,
-                      patch: { content: { ...s, text: e.target.value } } as Partial<ImageEditLayer>,
-                    });
-                  }}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Escape') { e.preventDefault(); setEditingLayerId(null); }
-                  }}
-                  onPointerDown={(e) => e.stopPropagation()}
-                  onClick={(e) => e.stopPropagation()}
-                  style={{
-                    display: 'block',
-                    width: '100%',
-                    padding: 0,
-                    margin: 0,
-                    border: 'none',
-                    outline: '2px dashed rgba(59,130,246,0.8)',
-                    outlineOffset: '2px',
-                    resize: 'none',
-                    background: 'transparent',
-                    fontFamily: s.style.fontFamily ?? 'sans-serif',
-                    // font-size in CSS pixels must be scaled by zoom because foreignObject
-                    // content renders in screen pixels, not SVG user-space pixels.
-                    fontSize: `${s.style.fontSize * zoom}px`,
-                    fontWeight: s.style.fontWeight ?? 'normal',
-                    color: s.style.color,
-                    textAlign: (s.style.textAlign ?? 'left') as 'left' | 'center' | 'right',
-                    lineHeight: s.style.lineHeight ?? 1.4,
-                    caretColor: s.style.color,
-                    overflow: 'hidden',
-                    boxSizing: 'border-box',
-                  }}
-                />
-              </foreignObject>
-            );
-          })()}
+          {editingLayerId &&
+            (() => {
+              const editLayer = doc.layers.find((l) => l.id === editingLayerId);
+              if (!editLayer || editLayer.type !== 'text') return null;
+              const pos = layerBox(editLayer, doc);
+              const s = (editLayer as ImageEditLayer & { type: 'text' }).content;
+              // Give generous height so text can grow without being clipped.
+              const foHeight = Math.max(pos.height * 4, 200);
+              return (
+                <foreignObject
+                  key={`inline-edit-${editingLayerId}`}
+                  x={pos.x}
+                  y={pos.y}
+                  width={pos.width}
+                  height={foHeight}
+                  style={{ overflow: 'visible' }}
+                >
+                  <textarea
+                    ref={editTextareaRef}
+                    value={s.text}
+                    onChange={(e) => {
+                      dispatch({
+                        type: 'update-layer',
+                        layerId: editingLayerId,
+                        patch: {
+                          content: { ...s, text: e.target.value },
+                        } as Partial<ImageEditLayer>,
+                      });
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Escape') {
+                        e.preventDefault();
+                        setEditingLayerId(null);
+                      }
+                    }}
+                    onPointerDown={(e) => e.stopPropagation()}
+                    onClick={(e) => e.stopPropagation()}
+                    style={{
+                      display: 'block',
+                      width: '100%',
+                      padding: 0,
+                      margin: 0,
+                      border: 'none',
+                      outline: '2px dashed rgba(59,130,246,0.8)',
+                      outlineOffset: '2px',
+                      resize: 'none',
+                      background: 'transparent',
+                      fontFamily: s.style.fontFamily ?? 'sans-serif',
+                      // font-size in CSS pixels must be scaled by zoom because foreignObject
+                      // content renders in screen pixels, not SVG user-space pixels.
+                      fontSize: `${s.style.fontSize * zoom}px`,
+                      fontWeight: s.style.fontWeight ?? 'normal',
+                      color: s.style.color,
+                      textAlign: (s.style.textAlign ?? 'left') as 'left' | 'center' | 'right',
+                      lineHeight: s.style.lineHeight ?? 1.4,
+                      caretColor: s.style.color,
+                      overflow: 'hidden',
+                      boxSizing: 'border-box',
+                    }}
+                  />
+                </foreignObject>
+              );
+            })()}
 
           {/* Shape drag-to-draw preview */}
           {shapeLineDrag && (

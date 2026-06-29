@@ -27,9 +27,9 @@ export default defineConfig({
     },
   ],
 
-  /* Start the Vite dev server before running tests */
+  /* Serve the built Vite site before running tests. */
   webServer: {
-    command: 'npm run dev -w squisq-site',
+    command: 'npm run preview:e2e -w squisq-site',
     url: 'http://localhost:5199',
     reuseExistingServer: !process.env.CI,
     timeout: 30_000,

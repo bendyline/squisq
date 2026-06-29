@@ -7,6 +7,17 @@ import type { Plugin } from 'vite';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
+const crossOriginHeaders = {
+  // COOP/COEP were originally set for SharedArrayBuffer (ffmpeg.wasm).
+  // The current video export uses WebCodecs on the main thread, which
+  // doesn't need SharedArrayBuffer. COEP: require-corp blocks blob: URL
+  // iframes used by the frame capture system, so we use 'credentialless'
+  // which allows blob iframes while still enabling SharedArrayBuffer
+  // in browsers that support it.
+  'Cross-Origin-Opener-Policy': 'same-origin',
+  'Cross-Origin-Embedder-Policy': 'credentialless',
+};
+
 /**
  * Vite plugin to serve content sample .zip files from the repo-root
  * `samplecontent/` directory under the `/samples/` URL prefix.
@@ -80,16 +91,13 @@ export default defineConfig({
     port: 5199,
     strictPort: true,
     open: true,
-    headers: {
-      // COOP/COEP were originally set for SharedArrayBuffer (ffmpeg.wasm).
-      // The current video export uses WebCodecs on the main thread, which
-      // doesn't need SharedArrayBuffer. COEP: require-corp blocks blob: URL
-      // iframes used by the frame capture system, so we use 'credentialless'
-      // which allows blob iframes while still enabling SharedArrayBuffer
-      // in browsers that support it.
-      'Cross-Origin-Opener-Policy': 'same-origin',
-      'Cross-Origin-Embedder-Policy': 'credentialless',
-    },
+    headers: crossOriginHeaders,
+  },
+  preview: {
+    host: '127.0.0.1',
+    port: 5199,
+    strictPort: true,
+    headers: crossOriginHeaders,
   },
   // Optimise monaco-editor: tell Vite to pre-bundle it so workers are served
   // from the local dev server instead of CDN. Exclude the workspace packages

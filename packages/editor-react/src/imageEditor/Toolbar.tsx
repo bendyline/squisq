@@ -44,7 +44,15 @@ export interface ToolbarProps {
 function RedlineArrowIcon() {
   return (
     <svg width="15" height="15" viewBox="0 0 15 15" fill="none" aria-hidden="true">
-      <line x1="3" y1="12" x2="12" y2="3" stroke="#cc0000" strokeWidth="1.8" strokeLinecap="round" />
+      <line
+        x1="3"
+        y1="12"
+        x2="12"
+        y2="3"
+        stroke="#cc0000"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+      />
       <polyline
         points="7,3 12,3 12,8"
         stroke="#cc0000"
@@ -79,9 +87,33 @@ function ZoomRectIcon() {
   return (
     <svg width="15" height="15" viewBox="0 0 15 15" fill="none" aria-hidden="true">
       <circle cx="6" cy="6" r="4.5" stroke="currentColor" strokeWidth="1.5" />
-      <line x1="9.5" y1="9.5" x2="13.5" y2="13.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-      <line x1="4" y1="6" x2="8" y2="6" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
-      <line x1="6" y1="4" x2="6" y2="8" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
+      <line
+        x1="9.5"
+        y1="9.5"
+        x2="13.5"
+        y2="13.5"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        strokeLinecap="round"
+      />
+      <line
+        x1="4"
+        y1="6"
+        x2="8"
+        y2="6"
+        stroke="currentColor"
+        strokeWidth="1.2"
+        strokeLinecap="round"
+      />
+      <line
+        x1="6"
+        y1="4"
+        x2="6"
+        y2="8"
+        stroke="currentColor"
+        strokeWidth="1.2"
+        strokeLinecap="round"
+      />
     </svg>
   );
 }
@@ -214,10 +246,7 @@ export function Toolbar({
             <button
               key={rt.kind}
               type="button"
-              className={[
-                'squisq-image-editor-tool-button',
-                active ? 'is-active' : '',
-              ]
+              className={['squisq-image-editor-tool-button', active ? 'is-active' : '']
                 .filter(Boolean)
                 .join(' ')}
               onClick={() => {
@@ -267,7 +296,9 @@ export function Toolbar({
             onClick={onZoomOut}
             title="Zoom out"
             aria-label="Zoom out"
-          >−</button>
+          >
+            −
+          </button>
           <input
             type="number"
             className="squisq-image-editor-zoom-input"
@@ -289,19 +320,25 @@ export function Toolbar({
             onClick={onZoomIn}
             title="Zoom in"
             aria-label="Zoom in"
-          >+</button>
+          >
+            +
+          </button>
           <button
             type="button"
             className="squisq-image-editor-tool-button squisq-image-editor-tool-button--with-label"
             onClick={onZoom1to1}
             title="1:1 pixels"
-          >1:1</button>
+          >
+            1:1
+          </button>
           <button
             type="button"
             className="squisq-image-editor-tool-button squisq-image-editor-tool-button--with-label"
             onClick={onZoomFit}
             title="Fit to window"
-          >Fit</button>
+          >
+            Fit
+          </button>
         </div>
       )}
 

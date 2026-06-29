@@ -212,14 +212,15 @@ npm run build:cli          # Build cli only
 npm test                   # Run vitest unit tests (75 files, 1000+ tests)
 npm run test:cli           # Run cli mocha tests
 npm run test:published     # Run vitest against published-shape outputs
-npm run test:e2e           # Run Playwright E2E tests
+npm run test:e2e           # Build all + run Playwright E2E tests against Vite preview
+npm run test:e2e:built     # Run Playwright E2E tests when dist/ is already current
 npm run typecheck          # tsc -b across all packages (no emit)
 npm run site               # Build all + start dev site
 npm run dev                # Build all + watch all packages + start dev site (Vite, port 5199)
 npm run lint               # ESLint
 npm run format             # Prettier format
 npm run all                # install:safe + build + lint + format:check + typecheck + test +
-                           #   test:published + test:cli + test:e2e (the full pre-release sweep)
+                           #   test:published + test:cli + test:e2e:built (the full pre-release sweep)
 ```
 
 For CI / clean reproducible installs, run `npm ci && node scripts/run-install-allowlist.mjs`

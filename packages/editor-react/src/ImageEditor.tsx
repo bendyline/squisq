@@ -13,7 +13,7 @@
  * `exportImageEditDoc` from `@bendyline/squisq/imageEdit`.
  */
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import type { ContentContainer } from '@bendyline/squisq/storage';
 import { exportImageEditDoc, type ImageEditExportFormat } from '@bendyline/squisq/imageEdit';
 import type { SurfaceScheme, Theme } from '@bendyline/squisq/schemas';
