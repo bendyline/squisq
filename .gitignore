@@ -151,3 +151,4 @@ reports/
 
 # Gezel
 .gezel/
+/.claude/worktrees

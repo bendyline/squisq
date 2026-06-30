@@ -15,6 +15,10 @@ export default tseslint.config(
       '**/*.config.js',
       '**/vitest.setup.ts',
       'scripts/**',
+      // Temporary agent worktrees — these are checkouts under .claude and
+      // must not be linted (their nested paths bypass the path-based
+      // overrides below, producing spurious "rule not found" errors).
+      '.claude/**',
     ],
   },
 

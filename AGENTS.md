@@ -16,6 +16,20 @@ rendering and spatial utilities. It is designed to be framework-agnostic at the 
 - `@bendyline/squisq-cli` — `squisq` bin command for converting markdown documents to DOCX/PDF/HTML/EPUB/PPTX/MP4 from the terminal
 - `squisq-site` — Dev/demo site (not published)
 
+## Git & Version Control (Agent Boundaries)
+
+**All git/version-control management is handled by the user.** Agents must **not**:
+
+- Create pull requests.
+- Create new branches.
+- Create git worktrees.
+
+Stay on whatever branch the user has checked out and make your changes there.
+Do not commit, push, branch, or open PRs unless the user explicitly asks for that
+specific action in the current request — and even then, only the action they named.
+If a task seems to need a new branch, worktree, or PR, surface that to the user and
+let them handle the git operation.
+
 ## Repository Structure
 
 ```
