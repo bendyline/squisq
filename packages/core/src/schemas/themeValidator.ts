@@ -13,6 +13,7 @@
 import type { Theme, ThemeColorPalette } from './Theme.js';
 import { THEME_SCHEMA_VERSION } from './Theme.js';
 import { isHex } from './colorUtils.js';
+import { isTransitionType } from './Transitions.js';
 
 export interface ValidationError {
   path: string;
@@ -28,16 +29,6 @@ export interface ValidationResult {
 
 const VALID_FALLBACK = new Set(['serif', 'sans-serif', 'monospace', 'system-ui']);
 const VALID_TITLE_WEIGHT = new Set(['normal', 'bold']);
-const VALID_TRANSITION_TYPES = new Set([
-  'cut',
-  'fade',
-  'dissolve',
-  'slideLeft',
-  'slideRight',
-  'slideUp',
-  'slideDown',
-  'zoom',
-]);
 const VALID_GRADIENT_PRESETS = new Set([
   'dark-vignette',
   'radial-dark',
@@ -202,7 +193,7 @@ class V {
       if (!this.isObject(t)) {
         this.err(`${path}.defaultTransition`, 'expected object');
       } else {
-        if (!this.isString(t.type) || !VALID_TRANSITION_TYPES.has(t.type)) {
+        if (!this.isString(t.type) || !isTransitionType(t.type)) {
           this.err(`${path}.defaultTransition.type`, 'expected valid transition type');
         }
         if (t.duration !== undefined && !this.isNumber(t.duration)) {

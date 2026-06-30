@@ -6,7 +6,7 @@
  * variety. Ported and generalized from qualla-internal's TemplateSelector.
  */
 
-import type { Block } from '../schemas/Doc.js';
+import type { Block, TransitionType } from '../schemas/Doc.js';
 import type {
   TemplateBlock,
   AccentImage,
@@ -244,13 +244,12 @@ function buildBlockSequence(
 
       // Apply transition based on style
       if (config.transitionStyle !== 'cut') {
-        (
-          templateBlock as TemplateBlock & { transition?: { type: string; duration: number } }
-        ).transition = {
-          type:
-            config.transitionStyle === 'mixed'
-              ? (rng.pick(['fade', 'dissolve']) ?? 'fade')
-              : config.transitionStyle,
+        const transitionType: TransitionType =
+          config.transitionStyle === 'mixed'
+            ? (rng.pick<TransitionType>(['fade', 'dissolve']) ?? 'fade')
+            : config.transitionStyle;
+        templateBlock.transition = {
+          type: transitionType,
           duration: 0.5,
         };
       }

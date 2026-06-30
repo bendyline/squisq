@@ -15,7 +15,7 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import type { Doc, Block, DocBlock } from '@bendyline/squisq/schemas';
 import type { Theme } from '@bendyline/squisq/schemas';
-import { getBlockAtTime } from '@bendyline/squisq/schemas';
+import { getBlockAtTime, resolveTransitionDuration } from '@bendyline/squisq/schemas';
 import {
   expandDocBlocks,
   flattenRenderableBlocks,
@@ -161,7 +161,7 @@ export function useDocPlayback(
     // When block changes, trigger transition (real-time mode only)
     if (transitionState.previousBlock?.id !== currentBlock.id) {
       const transition = currentBlock.transition;
-      const transitionDuration = transition?.duration || 0;
+      const transitionDuration = transition ? resolveTransitionDuration(transition) : 0;
 
       if (transitionDuration > 0) {
         // Start transition
@@ -213,7 +213,9 @@ export function useDocPlayback(
   }, [currentBlock?.id, renderMode]);
 
   // In render mode, derive entering/exiting from blockTime
-  const renderTransitionDuration = currentBlock?.transition?.duration || 0;
+  const renderTransitionDuration = currentBlock?.transition
+    ? resolveTransitionDuration(currentBlock.transition)
+    : 0;
   const renderIsEntering =
     renderMode && renderTransitionDuration > 0 && blockTime < renderTransitionDuration;
   const renderIsExiting = renderIsEntering && renderPrevBlockRef.current !== null;

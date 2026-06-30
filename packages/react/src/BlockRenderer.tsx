@@ -6,7 +6,8 @@
  * Handles positioning, animations, and transitions.
  */
 
-import type { Block, Layer } from '@bendyline/squisq/schemas';
+import type { Block, Layer, Transition } from '@bendyline/squisq/schemas';
+import { resolveTransitionDuration } from '@bendyline/squisq/schemas';
 import { ImageLayer } from './layers/ImageLayer';
 import { TextLayer } from './layers/TextLayer';
 import { ShapeLayer } from './layers/ShapeLayer';
@@ -40,6 +41,8 @@ interface BlockRendererProps {
   isEntering?: boolean;
   /** Whether this block is exiting (for transition) */
   isExiting?: boolean;
+  /** Transition to apply. Defaults to block.transition. */
+  transition?: Transition;
   /** Viewport dimensions (defaults to 1920x1080 landscape) */
   viewport?: ViewportDimensions;
   /** Whether the doc is currently playing (controls video playback) */
@@ -52,18 +55,20 @@ export function BlockRenderer({
   basePath,
   isEntering = false,
   isExiting = false,
+  transition,
   viewport = VIEWPORT,
   isPlaying,
 }: BlockRendererProps) {
   // Build transition class and inline style for dynamic duration
   let transitionClass = '';
   const transitionStyle: Record<string, string> = {};
-  if (block.transition && isEntering) {
-    transitionClass = getTransitionClass(block.transition.type, true);
-    transitionStyle['--transition-duration'] = `${block.transition.duration}s`;
-  } else if (block.transition && isExiting) {
-    transitionClass = getTransitionClass(block.transition.type, false);
-    transitionStyle['--transition-duration'] = `${block.transition.duration}s`;
+  const activeTransition = transition ?? block.transition;
+  if (activeTransition && isEntering) {
+    transitionClass = getTransitionClass(activeTransition.type, true, activeTransition.direction);
+    transitionStyle['--transition-duration'] = `${resolveTransitionDuration(activeTransition)}s`;
+  } else if (activeTransition && isExiting) {
+    transitionClass = getTransitionClass(activeTransition.type, false, activeTransition.direction);
+    transitionStyle['--transition-duration'] = `${resolveTransitionDuration(activeTransition)}s`;
   }
 
   // Unique clip path ID per block to avoid conflicts when multiple blocks render simultaneously

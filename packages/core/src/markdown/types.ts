@@ -179,6 +179,7 @@ export interface HeadingAttributes {
     startTime?: number;
     duration?: number;
     connectsTo?: BlockConnection[];
+    transition?: import('../schemas/Transitions.js').Transition;
   };
   /** Subset of `params` whose keys are NOT in the known-key registry. */
   metadata?: Record<string, string>;

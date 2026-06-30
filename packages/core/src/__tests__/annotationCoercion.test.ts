@@ -156,6 +156,34 @@ describe('coerceAnnotationValues', () => {
     expect(result.warnings).toEqual([]);
   });
 
+  it('coerces transition metadata', () => {
+    const result = coerceAnnotationValues({
+      transition: 'random-bars',
+      transitionDuration: '850ms',
+      transitionDirection: 'left',
+    });
+
+    expect(result.blockMeta.transition).toEqual({
+      type: 'randomBars',
+      duration: 0.85,
+      direction: 'left',
+    });
+    expect(result.metadata).toEqual({});
+    expect(result.warnings).toEqual([]);
+  });
+
+  it('drops malformed transition values with warnings', () => {
+    const result = coerceAnnotationValues({
+      transition: 'sideways-fold',
+      transitionDuration: 'fast',
+      transitionDirection: 'diagonal',
+    });
+
+    expect(result.blockMeta.transition).toBeUndefined();
+    expect(result.metadata).toEqual({});
+    expect(result.warnings).toHaveLength(3);
+  });
+
   it('emits a warning for connectsTo with empty segments', () => {
     const result = coerceAnnotationValues({ connectsTo: 'a,,b' });
     expect(result.blockMeta.connectsTo).toEqual([{ target: 'a' }, { target: 'b' }]);
@@ -177,6 +205,9 @@ describe('KNOWN_BLOCK_META_KEYS', () => {
       'connectsTo',
       'duration',
       'startTime',
+      'transition',
+      'transitionDirection',
+      'transitionDuration',
       'x',
       'y',
     ]);

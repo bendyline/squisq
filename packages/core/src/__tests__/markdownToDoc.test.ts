@@ -369,6 +369,16 @@ describe('template annotation in markdownToDoc', () => {
     expect(output).toContain('{[factCard style=minimal]}');
   });
 
+  it('docToMarkdown injects transition attributes from block metadata', () => {
+    const md = parseMarkdown('## Section\n\nBody');
+    const doc = markdownToDoc(md);
+    doc.blocks[0].transition = { type: 'wipe', duration: 0.8, direction: 'left' };
+
+    const output = stringifyMarkdown(docToMarkdown(doc));
+
+    expect(output).toContain('{transition=wipe transitionDuration=0.8 transitionDirection=left}');
+  });
+
   it('nested headings preserve their own annotations', () => {
     const input = '# Chapter {[title]}\n\nIntro\n\n## Section {[chart]}\n\nData';
     const md = parseMarkdown(input);
@@ -628,6 +638,17 @@ describe('markdownToDoc with Pandoc attributes', () => {
     expect(block.duration).toBe(45);
   });
 
+  it('sets transition metadata from Pandoc attributes', () => {
+    const block = firstHeadingBlock(
+      '## Closing {#closing transition=checkerboard transitionDuration=1.2 transitionDirection=vertical}',
+    );
+    expect(block.transition).toEqual({
+      type: 'checkerboard',
+      duration: 1.2,
+      direction: 'vertical',
+    });
+  });
+
   it('puts unknown keys into block.metadata', () => {
     const block = firstHeadingBlock('## X {#x priority=high status=draft}');
     expect(block.metadata).toEqual({ priority: 'high', status: 'draft' });
@@ -674,6 +695,17 @@ describe('markdownToDoc block-meta in the squiggly {[…]} form', () => {
     const block = firstHeadingBlock('## Hero {[sectionHeader duration=6]}');
     expect(block.template).toBe('sectionHeader');
     expect(block.duration).toBe(6);
+  });
+
+  it('folds transition alongside a template name', () => {
+    const block = firstHeadingBlock(
+      '## Hero {[sectionHeader transition=fly-through transitionDuration=750ms]}',
+    );
+    expect(block.template).toBe('sectionHeader');
+    expect(block.transition).toEqual({
+      type: 'flyThrough',
+      duration: 0.75,
+    });
   });
 
   it('accepts startTime in the squiggly form too', () => {

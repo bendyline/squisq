@@ -164,6 +164,7 @@ function applyBlockMeta(block: Block, m: CoercedBlockMeta): void {
   if (m.startTime != null) block.startTime = m.startTime;
   if (m.duration != null) block.duration = m.duration;
   if (m.connectsTo) block.connectsTo = m.connectsTo;
+  if (m.transition) block.transition = m.transition;
 }
 
 /**

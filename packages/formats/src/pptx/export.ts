@@ -27,7 +27,7 @@
  * ```
  */
 
-import type { Doc } from '@bendyline/squisq/schemas';
+import type { Doc, Transition, TransitionDirection } from '@bendyline/squisq/schemas';
 import { resolveTheme, resolveFontFamily } from '@bendyline/squisq/schemas';
 import type { Theme } from '@bendyline/squisq/schemas';
 import { docToMarkdown } from '@bendyline/squisq/doc';
@@ -61,7 +61,9 @@ import {
 } from '../shared/inlineRuns.js';
 import {
   NS_PML,
+  NS_PML_2010,
   NS_DRAWINGML,
+  NS_MC,
   NS_R,
   REL_OFFICE_DOCUMENT,
   REL_SLIDE,
@@ -245,6 +247,7 @@ function stripHash(color: string): string {
 interface SlideData {
   title?: string;
   titleDepth?: number;
+  transition?: Transition;
   bodyNodes: MarkdownBlockNode[];
 }
 
@@ -262,6 +265,7 @@ function segmentIntoSlides(
       current = {
         title: extractPlainText(node.children),
         titleDepth: node.depth,
+        transition: node.attributes?.blockMeta?.transition,
         bodyNodes: [],
       };
     } else {
@@ -426,18 +430,206 @@ function buildSlideXml(slide: SlideData, ctx: SlideContext): string {
   const bgXml = ctx.style.hasTheme
     ? `<p:bg><p:bgPr><a:solidFill><a:srgbClr val="${ctx.style.background}"/></a:solidFill><a:effectLst/></p:bgPr></p:bg>`
     : '';
+  const transitionXml = buildTransitionXml(slide.transition);
+  const extensionAttrs = transitionXml.includes('p14:')
+    ? ` xmlns:mc="${NS_MC}" xmlns:p14="${NS_PML_2010}" mc:Ignorable="p14"`
+    : '';
 
   return (
     xmlDeclaration() +
-    `<p:sld xmlns:a="${NS_DRAWINGML}" xmlns:r="${NS_R}" xmlns:p="${NS_PML}">` +
+    `<p:sld xmlns:a="${NS_DRAWINGML}" xmlns:r="${NS_R}" xmlns:p="${NS_PML}"${extensionAttrs}>` +
     `<p:cSld>` +
     bgXml +
     `<p:spTree>` +
     shapes.join('') +
     `</p:spTree>` +
     `</p:cSld>` +
+    transitionXml +
     `</p:sld>`
   );
+}
+
+interface TransitionXml {
+  xml: string;
+}
+
+function buildTransitionXml(transition: Transition | undefined): string {
+  if (!transition || transition.type === 'cut') return '';
+
+  const child = buildTransitionChildXml(transition);
+  const spd = pptxSpeedForDuration(transition.duration);
+  return `<p:transition spd="${spd}">${child.xml}</p:transition>`;
+}
+
+function buildTransitionChildXml(transition: Transition): TransitionXml {
+  const type = transition.type;
+  switch (type) {
+    case 'fade':
+    case 'morph':
+      return p('fade');
+    case 'dissolve':
+      return p('dissolve');
+    case 'push':
+      return p('push', ` dir="${sideDir(transition.direction, 'left')}"`);
+    case 'slideLeft':
+      return p('push', ` dir="l"`);
+    case 'slideRight':
+      return p('push', ` dir="r"`);
+    case 'slideUp':
+      return p('push', ` dir="u"`);
+    case 'slideDown':
+      return p('push', ` dir="d"`);
+    case 'wipe':
+      return p('wipe', ` dir="${sideDir(transition.direction, 'left')}"`);
+    case 'split':
+      return p('split', ` orient="${orientation(transition.direction)}" dir="out"`);
+    case 'randomBars':
+    case 'randomBar':
+      return p('randomBar', ` dir="${orientation(transition.direction)}"`);
+    case 'shape':
+    case 'circle':
+      return p('circle');
+    case 'diamond':
+      return p('diamond');
+    case 'plus':
+      return p('plus');
+    case 'uncover':
+    case 'pull':
+      return p('pull', ` dir="${sideDir(transition.direction, 'left')}"`);
+    case 'cover':
+      return p('cover', ` dir="${sideDir(transition.direction, 'left')}"`);
+    case 'checkerboard':
+    case 'checker':
+      return p('checker', ` dir="${orientation(transition.direction)}"`);
+    case 'blinds':
+      return p('blinds', ` dir="${orientation(transition.direction)}"`);
+    case 'comb':
+      return p('comb', ` dir="${orientation(transition.direction)}"`);
+    case 'clock':
+    case 'wheel':
+      return p('wheel', ` spokes="4"`);
+    case 'wheelReverse':
+      return p14('wheelReverse');
+    case 'newsflash':
+      return p('newsflash');
+    case 'random':
+      return p('random');
+    case 'strips':
+      return p('strips', ` dir="${cornerDir(transition.direction)}"`);
+    case 'wedge':
+      return p('wedge');
+    case 'zoom':
+    case 'box':
+      return p('zoom', ` dir="${inOutDir(transition.direction, 'in')}"`);
+    case 'flash':
+      return p14('flash');
+    case 'vortex':
+    case 'orbit':
+    case 'rotate':
+      return p14('vortex');
+    case 'switch':
+    case 'cube':
+      return p14('switch');
+    case 'flip':
+    case 'fallOver':
+      return p14('flip');
+    case 'ripple':
+      return p14('ripple');
+    case 'glitter':
+    case 'prestige':
+      return p14('glitter');
+    case 'honeycomb':
+      return p14('honeycomb');
+    case 'prism':
+      return p14('prism');
+    case 'doors':
+    case 'drape':
+    case 'curtains':
+      return p14('doors');
+    case 'window':
+      return p14('window');
+    case 'shred':
+    case 'fracture':
+    case 'crush':
+      return p14('shred');
+    case 'ferris':
+    case 'ferrisWheel':
+      return p14('ferris');
+    case 'flythrough':
+    case 'flyThrough':
+    case 'airplane':
+    case 'origami':
+      return p14('flythrough');
+    case 'warp':
+    case 'pageCurl':
+    case 'pageCurlDouble':
+    case 'pageCurlSingle':
+    case 'peelOff':
+      return p14('warp');
+    case 'gallery':
+      return p14('gallery');
+    case 'conveyor':
+      return p14('conveyor');
+    case 'pan':
+    case 'wind':
+      return p14('pan');
+    case 'reveal':
+      return p14('reveal');
+    default:
+      return p('fade');
+  }
+}
+
+function p(tag: string, attrs: string = ''): TransitionXml {
+  return { xml: `<p:${tag}${attrs}/>` };
+}
+
+function p14(tag: string, attrs: string = ''): TransitionXml {
+  return { xml: `<p14:${tag}${attrs}/>` };
+}
+
+function pptxSpeedForDuration(duration: number | undefined): 'fast' | 'med' | 'slow' {
+  if (duration != null && duration <= 0.5) return 'fast';
+  if (duration != null && duration >= 1.2) return 'slow';
+  return 'med';
+}
+
+function sideDir(
+  direction: TransitionDirection | undefined,
+  fallback: TransitionDirection,
+): string {
+  switch (direction ?? fallback) {
+    case 'right':
+      return 'r';
+    case 'up':
+      return 'u';
+    case 'down':
+      return 'd';
+    case 'left':
+    default:
+      return 'l';
+  }
+}
+
+function cornerDir(direction: TransitionDirection | undefined): string {
+  switch (direction) {
+    case 'right':
+    case 'down':
+      return 'rd';
+    case 'up':
+      return 'lu';
+    case 'left':
+    default:
+      return 'ld';
+  }
+}
+
+function orientation(direction: TransitionDirection | undefined): string {
+  return direction === 'vertical' || direction === 'up' || direction === 'down' ? 'vert' : 'horz';
+}
+
+function inOutDir(direction: TransitionDirection | undefined, fallback: 'in' | 'out'): string {
+  return direction === 'out' ? 'out' : direction === 'in' ? 'in' : fallback;
 }
 
 function buildTitleShape(title: string, style: SlideStyle): string {

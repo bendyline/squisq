@@ -77,6 +77,9 @@ export const NS_WML = 'http://schemas.openxmlformats.org/wordprocessingml/2006/m
 /** PresentationML main namespace (p:) */
 export const NS_PML = 'http://schemas.openxmlformats.org/presentationml/2006/main';
 
+/** PowerPoint 2010 extension namespace (p14:) */
+export const NS_PML_2010 = 'http://schemas.microsoft.com/office/powerpoint/2010/main';
+
 // ============================================
 // SpreadsheetML (XLSX)
 // ============================================

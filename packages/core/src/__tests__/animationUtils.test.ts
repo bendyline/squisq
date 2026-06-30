@@ -5,6 +5,7 @@ import {
   getTransitionClass,
   getAnimationProgress,
 } from '../doc/utils/animationUtils';
+import { TRANSITION_TYPES } from '../schemas/Transitions';
 
 describe('getAnimationStyle', () => {
   it('returns empty for undefined animation', () => {
@@ -56,6 +57,45 @@ describe('getTransitionClass', () => {
 
   it('returns exit class', () => {
     expect(getTransitionClass('dissolve', false)).toBe('transition-dissolve-exit');
+  });
+
+  it('returns no class for cut', () => {
+    expect(getTransitionClass('cut', true)).toBe('');
+  });
+
+  it('maps PowerPoint-style transitions to supported visual classes', () => {
+    for (const type of TRANSITION_TYPES) {
+      if (type === 'cut') continue;
+      expect(getTransitionClass(type, true), type).toMatch(/^transition-.+-enter$/);
+      expect(getTransitionClass(type, false), type).toMatch(/^transition-.+-exit$/);
+    }
+  });
+
+  it('keeps the PowerPoint transition vocabulary visually expressive', () => {
+    const families = new Set(
+      TRANSITION_TYPES.flatMap((type) => {
+        const className = getTransitionClass(type, true);
+        const match = /^transition-(.+)-enter$/.exec(className);
+        return match ? [match[1]] : [];
+      }),
+    );
+
+    expect(families.size).toBeGreaterThanOrEqual(50);
+  });
+
+  it('maps aliases to stable visual families', () => {
+    expect(getTransitionClass('randomBars', true)).toBe('transition-randomBarsVertical-enter');
+    expect(getTransitionClass('flyThrough', true)).toBe('transition-flyThrough-enter');
+    expect(getTransitionClass('flythrough', true)).toBe('transition-flyThrough-enter');
+    expect(getTransitionClass('cube', true)).toBe('transition-cube-enter');
+    expect(getTransitionClass('ferris', true)).toBe('transition-ferrisWheel-enter');
+  });
+
+  it('honors transition directions for directional families', () => {
+    expect(getTransitionClass('wipe', true, 'right')).toBe('transition-wipeRight-enter');
+    expect(getTransitionClass('push', false, 'up')).toBe('transition-pushUp-exit');
+    expect(getTransitionClass('split', true, 'vertical')).toBe('transition-splitVertical-enter');
+    expect(getTransitionClass('blinds', false, 'vertical')).toBe('transition-blindsVertical-exit');
   });
 });
 

@@ -13,6 +13,8 @@
  */
 
 import type { BlockConnection } from './types.js';
+import type { TransitionDirection, TransitionType } from '../schemas/Transitions.js';
+import { normalizeTransitionDirection, normalizeTransitionType } from '../schemas/Transitions.js';
 
 /**
  * Registry of known block-meta keys and their coercion strategies.
@@ -27,6 +29,9 @@ export const KNOWN_BLOCK_META_KEYS = {
   startTime: 'time',
   duration: 'time',
   connectsTo: 'connectionList',
+  transition: 'transition',
+  transitionDuration: 'time',
+  transitionDirection: 'transitionDirection',
 } as const;
 
 export type KnownBlockMetaKey = keyof typeof KNOWN_BLOCK_META_KEYS;
@@ -41,6 +46,11 @@ export interface CoercedBlockMeta {
   startTime?: number;
   duration?: number;
   connectsTo?: BlockConnection[];
+  transition?: {
+    type: TransitionType;
+    duration?: number;
+    direction?: TransitionDirection;
+  };
 }
 
 export interface CoerceResult {
@@ -60,6 +70,9 @@ export function coerceAnnotationValues(params: Record<string, string>): CoerceRe
   const blockMeta: CoercedBlockMeta = {};
   const metadata: Record<string, string> = {};
   const warnings: string[] = [];
+  let transitionType: TransitionType | null = null;
+  let transitionDuration: number | undefined;
+  let transitionDirection: TransitionDirection | undefined;
 
   for (const [key, raw] of Object.entries(params)) {
     const kind = (KNOWN_BLOCK_META_KEYS as Record<string, string>)[key];
@@ -78,6 +91,8 @@ export function coerceAnnotationValues(params: Record<string, string>): CoerceRe
       const s = parseTimeSeconds(raw);
       if (s == null) {
         warnings.push(`Invalid time for "${key}": ${JSON.stringify(raw)}`);
+      } else if (key === 'transitionDuration') {
+        transitionDuration = s;
       } else {
         (blockMeta as Record<string, unknown>)[key] = s;
       }
@@ -85,7 +100,29 @@ export function coerceAnnotationValues(params: Record<string, string>): CoerceRe
       const { list, warning } = parseConnectionList(raw);
       if (warning) warnings.push(`"${key}": ${warning}`);
       blockMeta.connectsTo = list;
+    } else if (kind === 'transition') {
+      const transition = normalizeTransitionType(raw);
+      if (transition == null) {
+        warnings.push(`Invalid transition for "${key}": ${JSON.stringify(raw)}`);
+      } else {
+        transitionType = transition;
+      }
+    } else if (kind === 'transitionDirection') {
+      const direction = normalizeTransitionDirection(raw);
+      if (direction == null) {
+        warnings.push(`Invalid transition direction for "${key}": ${JSON.stringify(raw)}`);
+      } else {
+        transitionDirection = direction;
+      }
     }
+  }
+
+  if (transitionType) {
+    blockMeta.transition = {
+      type: transitionType,
+      ...(transitionDuration !== undefined ? { duration: transitionDuration } : {}),
+      ...(transitionDirection !== undefined ? { direction: transitionDirection } : {}),
+    };
   }
 
   return { blockMeta, metadata, warnings };

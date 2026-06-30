@@ -105,6 +105,12 @@ describe('validateTheme', () => {
     expect(validateTheme(t).valid).toBe(true);
   });
 
+  it('accepts PowerPoint-style default transitions', () => {
+    const t = clone(DEFAULT_THEME);
+    t.renderStyle.defaultTransition = { type: 'checkerboard', duration: 1 };
+    expect(validateTheme(t).valid).toBe(true);
+  });
+
   it('rejects seedColors without primary', () => {
     const bad = clone(DEFAULT_THEME);
     bad.seedColors = { accent: '#63b3ed' } as never;

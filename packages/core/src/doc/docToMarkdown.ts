@@ -98,22 +98,55 @@ export function docToMarkdown(doc: Doc): MarkdownDocument {
  * template and templateOverrides. Returns a (possibly cloned) heading.
  */
 function ensureAnnotation(block: Block, heading: MarkdownHeading): MarkdownHeading {
-  // If the heading already has an annotation, trust it (it came from parsing)
-  if (heading.templateAnnotation) return heading;
+  const attrs = ensureTransitionAttributes(block, heading);
 
   // If the block has a non-default template or overrides, inject an annotation
   const hasExplicitTemplate = block.template && block.template !== 'sectionHeader';
   const hasOverrides = block.templateOverrides && Object.keys(block.templateOverrides).length > 0;
 
-  if (!hasExplicitTemplate && !hasOverrides) return heading;
+  // If the heading already has an annotation, trust it (it came from parsing).
+  // Transition attrs may still have been injected above if the block changed.
+  if (heading.templateAnnotation) {
+    return attrs === heading.attributes ? heading : { ...heading, attributes: attrs };
+  }
+
+  if (!hasExplicitTemplate && !hasOverrides) {
+    return attrs === heading.attributes ? heading : { ...heading, attributes: attrs };
+  }
 
   // Clone to avoid mutating the original
   return {
     ...heading,
     children: [...heading.children],
+    attributes: attrs,
     templateAnnotation: {
       template: block.template ?? 'sectionHeader',
       ...(hasOverrides ? { params: block.templateOverrides } : {}),
+    },
+  };
+}
+
+function ensureTransitionAttributes(
+  block: Block,
+  heading: MarkdownHeading,
+): MarkdownHeading['attributes'] {
+  const transition = block.transition;
+  if (!transition) return heading.attributes;
+
+  const attrs = heading.attributes ?? {};
+  return {
+    ...attrs,
+    params: {
+      ...(attrs.params ?? {}),
+      transition: transition.type,
+      ...(transition.duration !== undefined
+        ? { transitionDuration: String(transition.duration) }
+        : {}),
+      ...(transition.direction ? { transitionDirection: transition.direction } : {}),
+    },
+    blockMeta: {
+      ...(attrs.blockMeta ?? {}),
+      transition,
     },
   };
 }

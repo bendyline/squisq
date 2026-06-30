@@ -14,6 +14,9 @@
  * has 3-6 MP3 files (intro + sections), and blocks are grouped by segment.
  */
 
+import type { Transition } from './Transitions.js';
+export type { Transition, TransitionType, TransitionDirection } from './Transitions.js';
+
 // ============================================
 // Core Types
 // ============================================
@@ -710,23 +713,6 @@ export type AnimationType =
   | 'panLeft'
   | 'panRight'
   | 'typewriter'; // Text appears letter by letter
-
-/**
- * Transition between blocks.
- */
-export interface Transition {
-  /** Transition type */
-  type: TransitionType;
-  /** Duration in seconds */
-  duration: number;
-}
-
-export type TransitionType =
-  | 'cut' // Instant switch
-  | 'fade' // Cross-fade
-  | 'dissolve' // Soft dissolve
-  | 'slideLeft' // New block enters from right
-  | 'slideRight'; // New block enters from left
 
 // ============================================
 // Audio Configuration

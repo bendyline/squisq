@@ -1,5 +1,6 @@
 export * from './Types.js';
 export * from './Doc.js';
+export * from './Transitions.js';
 export * from './Media.js';
 export * from './BlockTemplates.js';
 export * from './CustomTemplates.js';

@@ -914,6 +914,7 @@ export function DocPlayer({
               blockTime={blockTime}
               basePath={basePath}
               isExiting={true}
+              transition={currentBlock?.transition}
               viewport={activeViewport}
             />
           </div>
