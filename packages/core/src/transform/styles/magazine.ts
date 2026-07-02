@@ -11,6 +11,8 @@ export const magazineStyle: TransformStyleConfig = {
   colorSchemes: ['blue', 'green', 'purple', 'orange', 'red'],
   insertSectionHeaders: true,
   interleaveImages: true,
-  blocksPerSection: { min: 2, max: 5 },
+  blocksPerSection: { max: 5 },
   transitionStyle: 'dissolve',
+  suggestedThemeId: 'magazine',
+  templateMap: { quote: 'pullQuote', impactLine: 'fullBleedQuote' },
 };

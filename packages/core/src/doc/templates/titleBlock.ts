@@ -12,7 +12,13 @@
 
 import type { Layer } from '../../schemas/Doc.js';
 import type { TitleBlockInput, TemplateContext } from '../../schemas/BlockTemplates.js';
-import { getThemeFont, shouldUseShadow, themedFontSize } from '../utils/themeUtils.js';
+import {
+  getTemplateHint,
+  getThemeFont,
+  shouldUseShadow,
+  themedEntrance,
+  themedFontSize,
+} from '../utils/themeUtils.js';
 import { withAlpha } from '../../schemas/colorUtils.js';
 import { estimateTextHeight } from './captionUtils.js';
 
@@ -66,8 +72,13 @@ export function titleBlock(input: TitleBlockInput, context: TemplateContext): La
       },
       position: { x: 0, y: 0, width: '100%', height: '100%' },
     },
-    // Subtle decorative line, clear above the title's ascenders
-    {
+  ];
+
+  // Subtle decorative line, clear above the title's ascenders. Themes can
+  // hide it via `templateHints.title.showAccentLine: false` (the line is
+  // decorative; title/subtitle positions don't depend on it).
+  if (getTemplateHint(context, 'title', 'showAccentLine', true)) {
+    layers.push({
       type: 'shape',
       id: 'accent-line',
       content: {
@@ -80,7 +91,10 @@ export function titleBlock(input: TitleBlockInput, context: TemplateContext): La
         width: '12%',
         height: '3px',
       },
-    },
+    });
+  }
+
+  layers.push(
     // Title
     {
       type: 'text',
@@ -102,9 +116,9 @@ export function titleBlock(input: TitleBlockInput, context: TemplateContext): La
         anchor: 'center',
         width: layout.maxTextWidth,
       },
-      animation: { type: 'fadeIn', duration: 2 },
+      animation: themedEntrance(context, 'text', { type: 'fadeIn', duration: 2 }),
     },
-  ];
+  );
 
   // Add subtitle if provided — hangs from the title's estimated bottom edge
   if (subtitle) {

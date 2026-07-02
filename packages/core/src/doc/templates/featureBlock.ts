@@ -18,7 +18,7 @@ import type {
   RightFeatureInput,
   TemplateContext,
 } from '../../schemas/BlockTemplates.js';
-import { getThemeFont, themedFontSize } from '../utils/themeUtils.js';
+import { getThemeFont, themedEntrance, themedFontSize, themedImageTreatment } from '../utils/themeUtils.js';
 
 type FeatureInput = LeftFeatureInput | RightFeatureInput;
 
@@ -33,6 +33,8 @@ function buildFeatureLayers(
 ): Layer[] {
   const { imageSrc, imageAlt, imageWidth, imageHeight, title, body } = input;
   const { theme, layout } = context;
+
+  const treatment = themedImageTreatment(context, input.imageTreatment);
   // Treat the image as "sized" when the host gave us an explicit width
   // or height — that's our cue that the user resized the image in the
   // editor and we should respect that as a sizing hint instead of
@@ -135,6 +137,7 @@ function buildFeatureLayers(
         src: imageSrc,
         alt: imageAlt ?? title ?? '',
         fit: imageFit,
+        ...(treatment ? { treatment } : {}),
       },
       position: { x: imgX, y: imgY, width: imgW, height: imgH },
     });
@@ -161,7 +164,7 @@ function buildFeatureLayers(
         anchor: textAnchor,
         width: `${textColumnWidth}%`,
       },
-      animation: { type: 'fadeIn', duration: 0.8 },
+      animation: themedEntrance(context, 'text', { type: 'fadeIn', duration: 0.8 }),
     });
   }
 
@@ -185,7 +188,7 @@ function buildFeatureLayers(
         anchor: textAnchor,
         width: `${textColumnWidth}%`,
       },
-      animation: { type: 'fadeIn', duration: 0.8, delay: 0.2 },
+      animation: themedEntrance(context, 'text', { type: 'fadeIn', duration: 0.8, delay: 0.2 }),
     });
   }
 

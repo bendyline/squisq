@@ -35,7 +35,8 @@ import { VIEWPORT_PRESETS } from '../schemas/Viewport.js';
 import { createTemplateContext, isTemplateBlock } from '../schemas/BlockTemplates.js';
 import { DEFAULT_THEME } from '../schemas/themeLibrary.js';
 import { templateRegistry, resolveTemplateName } from './templates/index.js';
-import { expandPersistentLayers } from './templates/persistentLayers.js';
+import { expandPersistentLayers, wrapWithPersistentLayers } from './templates/persistentLayers.js';
+import { applyRenderStyleToLayers } from './utils/applyRenderStyle.js';
 import { fallbackBlockLayers } from './templates/fallbackBlock.js';
 
 // ============================================
@@ -144,6 +145,10 @@ export function getLayers(block: DocBlock, context: RenderContext = {}): Layer[]
         layers = fallbackBlockLayers(block, templateCtx, `Template "${block.template}" failed`);
       }
 
+      // Theme motion defaults apply to template-generated layers only
+      // (mirrors expandDocBlocks — the two paths must agree).
+      layers = applyRenderStyleToLayers(layers, block as Block, theme);
+
       return injectPersistentLayers(layers, block, context);
     }
 
@@ -173,14 +178,9 @@ function injectPersistentLayers(layers: Layer[], block: DocBlock, context: Rende
   const { persistentLayers } = context;
   if (!persistentLayers) return layers;
 
-  const bottomLayers = expandPersistentLayers(persistentLayers.bottomLayers);
-  const topLayers = expandPersistentLayers(persistentLayers.topLayers);
+  const theme = context.theme ?? DEFAULT_THEME;
+  const bottomLayers = expandPersistentLayers(persistentLayers.bottomLayers, theme);
+  const topLayers = expandPersistentLayers(persistentLayers.topLayers, theme);
 
-  if (bottomLayers.length === 0 && topLayers.length === 0) return layers;
-
-  const templateBlock = block as TemplateBlock;
-  const useBottom = templateBlock.useBottomLayer !== false;
-  const useTop = templateBlock.useTopLayer !== false;
-
-  return [...(useBottom ? bottomLayers : []), ...layers, ...(useTop ? topLayers : [])];
+  return wrapWithPersistentLayers(layers, block as TemplateBlock, bottomLayers, topLayers);
 }

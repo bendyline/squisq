@@ -206,6 +206,14 @@ export interface Block {
   template?: string;
 
   /**
+   * True when `template` was chosen by content-aware auto-picking
+   * (`markdownToDoc`'s `autoTemplates`) rather than authored. Ephemeral:
+   * `docToMarkdown` does not materialize auto-picked templates as heading
+   * annotations, keeping the markdown round-trip lossless.
+   */
+  autoTemplate?: boolean;
+
+  /**
    * Display title for template rendering.
    * Extracted from the sourceHeading when the block is created by markdownToDoc().
    * Templates like sectionHeader and titleBlock read this for their title layer.
@@ -327,6 +335,25 @@ interface BaseLayer {
 }
 
 /**
+ * Photographic treatment applied to an image layer — a theme-level "grade"
+ * so the same photo looks native in every theme. Rendered as CSS filter
+ * functions, which behave identically in the browser player and headless
+ * frame capture (video/still export).
+ */
+export interface ImageTreatment {
+  /**
+   * mono: desaturate toward archival black & white.
+   * duotone: single-hue tint (hue taken from `color`).
+   * warm / cool: gentle temperature grade.
+   */
+  type: 'none' | 'mono' | 'duotone' | 'warm' | 'cool';
+  /** Blend strength 0..1. Default 0.6. */
+  strength?: number;
+  /** Duotone tint color (themes default this to their primary). */
+  color?: string;
+}
+
+/**
  * Image layer - displays an image with optional Ken Burns effect.
  */
 export interface ImageLayer extends BaseLayer {
@@ -342,6 +369,10 @@ export interface ImageLayer extends BaseLayer {
     credit?: string;
     /** License identifier (e.g., 'CC BY-SA 4.0') */
     license?: string;
+    /** Theme-derived photographic grade (see ImageTreatment). */
+    treatment?: ImageTreatment;
+    /** Gaussian blur radius in px (background/atmosphere imagery). */
+    blur?: number;
   };
 }
 
@@ -391,6 +422,33 @@ export type BorderStyle = 'solid' | 'dashed' | 'dotted';
 /**
  * Shape layer - simple geometric shapes for visual accents.
  */
+/**
+ * Repeating SVG pattern fill for a shape (dots, grid, diagonal lines).
+ * Rendered as a native `<pattern>` def — fully vector and export-safe.
+ */
+export interface ShapePattern {
+  kind: 'dots' | 'grid' | 'diagonal';
+  /** Pattern ink color. */
+  color: string;
+  /** Tile size in px (default 24). */
+  size?: number;
+  /** Pattern opacity 0–1 (default 1; tint via a translucent color or this). */
+  opacity?: number;
+}
+
+/**
+ * Procedural filter applied to a shape. `noise` renders static film grain
+ * via SVG feTurbulence — deliberately not animated so frame capture and
+ * the live player agree.
+ */
+export interface ShapeFilter {
+  type: 'noise';
+  /** feTurbulence base frequency (default 0.8 — fine grain). */
+  baseFrequency?: number;
+  /** Grain opacity 0–1 (default 0.05). */
+  opacity?: number;
+}
+
 export interface ShapeLayer extends BaseLayer {
   type: 'shape';
   content: {
@@ -402,6 +460,10 @@ export interface ShapeLayer extends BaseLayer {
     fillOpacity?: number;
     /** Gradient fill; overrides `fill` when set. */
     gradient?: LinearGradient;
+    /** Repeating pattern fill; overrides `fill`/`gradient` when set. */
+    pattern?: ShapePattern;
+    /** Procedural filter (film grain). */
+    filter?: ShapeFilter;
     /** Stroke color */
     stroke?: string;
     /** Stroke width in pixels */

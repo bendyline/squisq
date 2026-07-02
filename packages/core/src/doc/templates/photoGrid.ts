@@ -17,7 +17,7 @@
 
 import type { Layer } from '../../schemas/Doc.js';
 import type { PhotoGridInput, TemplateContext } from '../../schemas/BlockTemplates.js';
-import { getThemeFont, shouldUseShadow, themedFontSize } from '../utils/themeUtils.js';
+import { getThemeFont, shouldUseShadow, themedFontSize, themedImageTreatment } from '../utils/themeUtils.js';
 import { withAlpha } from '../../schemas/colorUtils.js';
 import { cleanCaption } from './captionUtils.js';
 
@@ -32,6 +32,8 @@ export function photoGrid(input: PhotoGridInput, context: TemplateContext): Laye
 
   const caption = rawCaption ? cleanCaption(rawCaption) : rawCaption;
   const { theme, layout } = context;
+
+  const treatment = themedImageTreatment(context, input.imageTreatment);
 
   const layers: Layer[] = [
     // Theme surface background (visible in gaps between images)
@@ -93,6 +95,7 @@ export function photoGrid(input: PhotoGridInput, context: TemplateContext): Laye
         fit: 'cover',
         credit: img.credit,
         license: img.license,
+        ...(treatment ? { treatment } : {}),
       },
       position: {
         x: `${pos.x}%`,

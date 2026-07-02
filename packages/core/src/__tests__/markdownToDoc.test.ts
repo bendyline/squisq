@@ -719,3 +719,70 @@ describe('markdownToDoc block-meta in the squiggly {[…]} form', () => {
     expect(block.duration).toBe(3);
   });
 });
+
+describe('auto template picking (autoTemplates, default on)', () => {
+  const toDocFromMd = (md: string, options?: Parameters<typeof markdownToDoc>[1]) =>
+    markdownToDoc(parseMarkdown(md), options);
+
+  it('picks quote for a blockquote-bearing section and derives the quote text', () => {
+    const doc = toDocFromMd('# Wisdom\n\n> The best template feels obvious.\n');
+    const block = doc.blocks[0];
+    expect(block.template).toBe('quote');
+    expect(block.autoTemplate).toBe(true);
+    expect(block.templateData?.quote).toBe('The best template feels obvious.');
+  });
+
+  it('picks dataTable for a table-bearing section with derived headers/rows', () => {
+    const doc = toDocFromMd('# Results\n\n| A | B |\n| - | - |\n| 1 | 2 |\n');
+    const block = doc.blocks[0];
+    expect(block.template).toBe('dataTable');
+    expect(block.templateData?.headers).toEqual(['A', 'B']);
+    expect(block.templateData?.rows).toEqual([['1', '2']]);
+  });
+
+  it('picks list for list-bearing sections and photoGrid for multi-image sections', () => {
+    const doc = toDocFromMd(
+      '# Steps\n\n- one\n- two\n\n# Gallery\n\n![a](a.jpg)\n\n![b](b.jpg)\n',
+    );
+    expect(doc.blocks[0].template).toBe('list');
+    expect(doc.blocks[0].templateData?.items).toEqual(['one', 'two']);
+    expect(doc.blocks[1].template).toBe('photoGrid');
+  });
+
+  it('alternates left/right feature for consecutive single-image sections', () => {
+    const doc = toDocFromMd('# One\n\n![a](a.jpg)\n\n# Two\n\n![b](b.jpg)\n');
+    expect(doc.blocks[0].template).toBe('leftFeature');
+    expect(doc.blocks[1].template).toBe('rightFeature');
+    expect(doc.blocks[0].templateData?.imageSrc).toBe('a.jpg');
+  });
+
+  it('leaves plain prose sections on the structural default', () => {
+    const doc = toDocFromMd('# About\n\nJust a paragraph of prose.\n');
+    expect(doc.blocks[0].template).toBe('sectionHeader');
+    expect(doc.blocks[0].autoTemplate).toBeUndefined();
+  });
+
+  it('never overrides an explicit annotation', () => {
+    const doc = toDocFromMd('# Wisdom {[factCard fact="F"]}\n\n> quoted\n');
+    expect(doc.blocks[0].template).toBe('factCard');
+  });
+
+  it('is disabled by the option and by frontmatter', () => {
+    const md = '# Wisdom\n\n> quoted\n';
+    const viaOption = toDocFromMd(md, { autoTemplates: false });
+    expect(viaOption.blocks[0].template).toBe('sectionHeader');
+
+    const viaFrontmatter = markdownToDoc(
+      parseMarkdown('---\nsquisq-auto-templates: false\n---\n\n' + md),
+    );
+    expect(viaFrontmatter.blocks[0].template).toBe('sectionHeader');
+  });
+
+  it('keeps the round-trip lossless (no materialized annotations)', () => {
+    const md = '# Wisdom\n\n> The best template feels obvious.\n';
+    const doc = toDocFromMd(md);
+    expect(doc.blocks[0].template).toBe('quote');
+    const roundTripped = stringifyMarkdown(docToMarkdown(doc));
+    expect(roundTripped).not.toContain('{[quote');
+  });
+});

@@ -17,8 +17,10 @@ import type { FactCardInput, TemplateContext } from '../../schemas/BlockTemplate
 import {
   getThemeFont,
   shouldUseShadow,
+  themedEntrance,
   themedFontSize,
   themedSurfaceGradient,
+  themedImageTreatment,
 } from '../utils/themeUtils.js';
 import { createAccentLayers, getAccentLayout, adjustY, DEFAULT_LAYOUT } from './accentImage.js';
 import { createBackgroundLayer, estimateTextHeight } from './captionUtils.js';
@@ -39,7 +41,7 @@ export function factCard(input: FactCardInput, context: TemplateContext): Layer[
 
   // Add accent image layers (behind text, after background)
   if (accentImage) {
-    layers.push(...createAccentLayers(accentImage, input.id));
+    layers.push(...createAccentLayers(accentImage, input.id, themedImageTreatment(context, input.imageTreatment)));
   }
 
   // Estimate each element's height so the stack reads as one lockup.
@@ -81,7 +83,7 @@ export function factCard(input: FactCardInput, context: TemplateContext): Layer[
       width: accentLayout.textWidth,
       anchor: 'center',
     },
-    animation: { type: 'fadeIn', duration: 1.5 },
+    animation: themedEntrance(context, 'text', { type: 'fadeIn', duration: 1.5 }),
   });
 
   // Explanation
@@ -105,7 +107,7 @@ export function factCard(input: FactCardInput, context: TemplateContext): Layer[
       width: accentLayout.textWidth,
       anchor: 'center',
     },
-    animation: { type: 'fadeIn', duration: 1, delay: 0.8 },
+    animation: themedEntrance(context, 'text', { type: 'fadeIn', duration: 1, delay: 0.8 }),
   });
 
   // Add source if provided

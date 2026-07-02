@@ -8,7 +8,7 @@
 import type { ShapeLayer as ShapeLayerType } from '@bendyline/squisq/schemas';
 import { getAnimationStyle } from '../utils/animationUtils';
 import { resolveValue, getAnchorOffset } from '../utils/layerUtils';
-import { resolveFill, borderDashArray } from '../utils/fillStyle';
+import { resolveFill, resolveShapeFilter, borderDashArray } from '../utils/fillStyle';
 
 interface ShapeLayerProps {
   layer: ShapeLayerType;
@@ -64,7 +64,13 @@ export function ShapeLayer({ layer, viewport, blockTime }: ShapeLayerProps) {
     );
   }
 
-  const { fill: fillValue, def: fillDef } = resolveFill(layer.id, fill, content.gradient);
+  const { fill: fillValue, def: fillDef } = resolveFill(
+    layer.id,
+    fill,
+    content.gradient,
+    content.pattern,
+  );
+  const { filterAttr, def: filterDef } = resolveShapeFilter(layer.id, content.filter);
   const dash = borderDashArray(content.borderStyle, content.strokeWidth);
 
   // Common style props for native SVG shapes. `line` is stroke-only.
@@ -74,6 +80,7 @@ export function ShapeLayer({ layer, viewport, blockTime }: ShapeLayerProps) {
     stroke: content.stroke,
     strokeWidth: content.strokeWidth,
     strokeDasharray: dash,
+    ...(filterAttr ? { filter: filterAttr } : {}),
   };
 
   return (
@@ -82,7 +89,12 @@ export function ShapeLayer({ layer, viewport, blockTime }: ShapeLayerProps) {
       style={animStyle.style}
       data-layer-id={layer.id}
     >
-      {fillDef && <defs>{fillDef}</defs>}
+      {(fillDef || filterDef) && (
+        <defs>
+          {fillDef}
+          {filterDef}
+        </defs>
+      )}
       {content.shape === 'rect' && (
         <rect
           x={x}

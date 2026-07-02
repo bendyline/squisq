@@ -9,6 +9,7 @@
  */
 
 import type { Doc } from '../schemas/Doc.js';
+import type { DocBlock, TitleBlockInput, SectionHeaderInput } from '../schemas/BlockTemplates.js';
 import type { TransformStyleId, TransformOptions, TransformResult } from './types.js';
 import { resolveTransformStyle } from './registry.js';
 import { analyzeBlocks, extractDocImages } from './blockAnalyzer.js';
@@ -62,14 +63,43 @@ export function applyTransform(
   // 2. Select extractions and build template blocks
   const selection = selectAndBuild(analyzed, config, images, seed);
 
-  // 3. Allocate timing across the new block sequence
-  const timedBlocks = allocateTiming(selection.blocks, doc.duration);
+  // 2b. Pacing bookends: an opening title beat and/or a closing beat.
+  let paced: DocBlock[] = selection.blocks;
+  let pacingInserted = 0;
+  const docTitle = firstTitle(doc);
+  if (config.pacing?.intro && docTitle && !doc.startBlock) {
+    const intro: TitleBlockInput = {
+      template: 'title',
+      id: 'transform-intro',
+      duration: 4,
+      audioSegment: 0,
+      title: docTitle,
+    };
+    paced = [intro, ...paced];
+    pacingInserted++;
+  }
+  if (config.pacing?.outro && docTitle) {
+    const outro: SectionHeaderInput = {
+      template: 'sectionHeader',
+      id: 'transform-outro',
+      duration: 3,
+      audioSegment: 0,
+      title: docTitle,
+      colorScheme: config.colorSchemes[0],
+    };
+    paced = [...paced, outro];
+    pacingInserted++;
+  }
 
-  // 4. Assemble the output Doc
+  // 3. Allocate timing across the new block sequence
+  const timedBlocks = allocateTiming(paced, doc.duration);
+
+  // 4. Assemble the output Doc. A style's suggested theme applies only
+  // when neither the caller nor the doc declares one.
   const transformedDoc: Doc = {
     ...doc,
     blocks: timedBlocks,
-    themeId: options?.themeId ?? doc.themeId,
+    themeId: options?.themeId ?? doc.themeId ?? config.suggestedThemeId,
   };
 
   return {
@@ -77,7 +107,16 @@ export function applyTransform(
     stats: {
       totalInputBlocks: doc.blocks.length,
       transformedBlocks: selection.transformedCount,
-      insertedBlocks: selection.insertedCount,
+      insertedBlocks: selection.insertedCount + pacingInserted,
     },
   };
+}
+
+/** First non-empty block title (the doc's working title). */
+function firstTitle(doc: Doc): string | undefined {
+  if (doc.startBlock?.title) return doc.startBlock.title;
+  for (const block of doc.blocks) {
+    if (block.title) return block.title;
+  }
+  return undefined;
 }

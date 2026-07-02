@@ -20,12 +20,15 @@ import type {
   GradientBackgroundConfig,
   ImageBackgroundConfig,
   PatternBackgroundConfig,
+  VignetteConfig,
+  AmbientGradientConfig,
   TitleCaptionConfig,
   CornerBrandingConfig,
   ProgressIndicatorConfig,
 } from '../../schemas/BlockTemplates.js';
 import type { Theme } from '../../schemas/Theme.js';
 import { isPersistentLayerTemplate } from '../../schemas/BlockTemplates.js';
+import { oklchDarken, withAlpha } from '../../schemas/colorUtils.js';
 
 // ============================================
 // Gradient Presets
@@ -35,9 +38,11 @@ const GRADIENT_PRESETS: Record<string, string> = {
   'dark-vignette':
     'radial-gradient(ellipse at center, rgba(26,32,44,0.8) 0%, rgba(0,0,0,0.95) 100%)',
   'radial-dark': 'radial-gradient(ellipse at center, #1a202c 0%, #000000 100%)',
-  'warm-sunset': 'linear-gradient(135deg, rgba(124,58,48,0.9) 0%, rgba(26,32,44,0.95) 100%)',
+  // Warm presets deepen within their own hue — ending in the shared navy
+  // made warm themes drift cold halfway down the frame.
+  'warm-sunset': 'linear-gradient(135deg, rgba(124,58,48,0.9) 0%, rgba(46,20,16,0.95) 100%)',
   'cool-blue': 'linear-gradient(135deg, rgba(26,54,93,0.9) 0%, rgba(26,32,44,0.95) 100%)',
-  'earth-tones': 'linear-gradient(135deg, rgba(68,51,34,0.9) 0%, rgba(26,32,44,0.95) 100%)',
+  'earth-tones': 'linear-gradient(135deg, rgba(68,51,34,0.9) 0%, rgba(30,22,15,0.95) 100%)',
 };
 
 // ============================================
@@ -84,7 +89,9 @@ function expandImageBackground(config: ImageBackgroundConfig): Layer[] {
   const layers: Layer[] = [];
   const opacity = config.opacity ?? 0.4;
 
-  // Base image layer
+  // Base image layer. `blur` softens the photo into an atmosphere layer
+  // (the ImageLayer renderer over-scans blurred images so soft edges never
+  // reveal the frame).
   const imageLayer: Layer = {
     type: 'image',
     id: 'persistent-bg-image',
@@ -92,6 +99,7 @@ function expandImageBackground(config: ImageBackgroundConfig): Layer[] {
       src: config.src,
       alt: 'Background',
       fit: 'cover',
+      ...(config.blur != null && config.blur > 0 ? { blur: config.blur } : {}),
     },
     position: { x: 0, y: 0, width: '100%', height: '100%' },
     animation: config.ambientMotion
@@ -122,19 +130,76 @@ function expandImageBackground(config: ImageBackgroundConfig): Layer[] {
  * Expand a pattern background config to a Layer.
  */
 function expandPatternBackground(config: PatternBackgroundConfig): Layer {
-  const opacity = config.opacity ?? 0.1;
-  const color = config.color ?? `rgba(255,255,255,${opacity})`;
+  // 'noise' is film grain: a full-bleed rect whose paint is replaced by a
+  // static feTurbulence field clipped to the rect (see ShapeFilter).
+  if (config.pattern === 'noise') {
+    return {
+      type: 'shape',
+      id: 'persistent-grain',
+      content: {
+        shape: 'rect',
+        fill: '#000000',
+        filter: { type: 'noise', opacity: config.opacity ?? 0.05 },
+      },
+      position: { x: 0, y: 0, width: '100%', height: '100%' },
+    };
+  }
 
-  // Pattern as SVG data URI for rect patterns
-  // For simplicity, use a solid subtle color with reduced opacity
+  // dots / grid / diagonal render as native SVG <pattern> fills.
+  const opacity = config.opacity ?? 0.06;
   return {
     type: 'shape',
     id: 'persistent-bg-pattern',
     content: {
       shape: 'rect',
-      fill: color,
+      pattern: {
+        kind: config.pattern,
+        color: config.color ?? '#ffffff',
+        size: Math.round(24 * (config.scale ?? 1)),
+        opacity,
+      },
     },
     position: { x: 0, y: 0, width: '100%', height: '100%' },
+  };
+}
+
+/**
+ * Expand a vignette config: transparent center darkening toward the frame
+ * edges. Rides the CSS-gradient rect path in the renderer.
+ */
+function expandVignette(config: VignetteConfig): Layer {
+  const strength = Math.max(0, Math.min(1, config.strength ?? 0.3));
+  const color = config.color ?? '#000000';
+  const edge = withAlpha(color, strength);
+  const clear = withAlpha(color, 0);
+  return {
+    type: 'shape',
+    id: 'persistent-vignette',
+    content: {
+      shape: 'rect',
+      fill: `radial-gradient(ellipse at center, ${clear} 55%, ${edge} 100%)`,
+    },
+    position: { x: 0, y: 0, width: '100%', height: '100%' },
+  };
+}
+
+/**
+ * Expand an ambient drifting gradient: an oversized surface gradient with
+ * a very slow Ken Burns loop. Deterministic (no randomness).
+ */
+function expandAmbientGradient(config: AmbientGradientConfig, theme?: Theme): Layer {
+  const from = config.from ?? theme?.colors.backgroundLight ?? '#1a202c';
+  const to = config.to ?? (theme ? oklchDarken(theme.colors.background, 0.04) : '#0f141d');
+  return {
+    type: 'shape',
+    id: 'persistent-ambient-gradient',
+    content: {
+      shape: 'rect',
+      fill: `linear-gradient(150deg, ${from} 0%, ${to} 100%)`,
+    },
+    // Oversized so the slow pan never reveals the frame edge.
+    position: { x: '-5%', y: '-5%', width: '110%', height: '110%' },
+    animation: { type: 'slowZoom', panDirection: 'left', duration: config.duration ?? 40 },
   };
 }
 
@@ -349,7 +414,7 @@ function expandProgressIndicator(config: ProgressIndicatorConfig): Layer {
 /**
  * Expand a single persistent layer (template or raw) to raw Layer(s).
  */
-export function expandPersistentLayer(layer: PersistentLayer): Layer[] {
+export function expandPersistentLayer(layer: PersistentLayer, theme?: Theme): Layer[] {
   // If already a raw Layer, return as-is
   if (!isPersistentLayerTemplate(layer)) {
     return [layer as Layer];
@@ -367,6 +432,10 @@ export function expandPersistentLayer(layer: PersistentLayer): Layer[] {
       return expandImageBackground(config);
     case 'patternBackground':
       return [expandPatternBackground(config)];
+    case 'vignette':
+      return [expandVignette(config)];
+    case 'ambientGradient':
+      return [expandAmbientGradient(config, theme)];
     case 'titleCaption':
       return expandTitleCaption(config);
     case 'cornerBranding':
@@ -382,13 +451,16 @@ export function expandPersistentLayer(layer: PersistentLayer): Layer[] {
 /**
  * Expand all persistent layers in a config to raw Layer arrays.
  */
-export function expandPersistentLayers(layers: PersistentLayer[] | undefined): Layer[] {
+export function expandPersistentLayers(
+  layers: PersistentLayer[] | undefined,
+  theme?: Theme,
+): Layer[] {
   if (!layers || layers.length === 0) {
     return [];
   }
 
   // Use reduce+concat instead of flatMap for Coherent GT compatibility (ES2017)
-  return layers.reduce<Layer[]>((acc, layer) => acc.concat(expandPersistentLayer(layer)), []);
+  return layers.reduce<Layer[]>((acc, layer) => acc.concat(expandPersistentLayer(layer, theme)), []);
 }
 
 // ============================================
@@ -519,4 +591,47 @@ export function getDocStyleConfig(
  */
 export function getPersistentLayersFromTheme(theme: Theme): PersistentLayerConfig {
   return theme.persistentLayers ?? {};
+}
+
+/**
+ * Resolve the effective persistent-layer config for a doc: the doc's own
+ * config wins **wholesale** when present; only docs with no persistent
+ * layers inherit the theme's.
+ *
+ * Doc-wins-wholesale (rather than merging) protects pre-baked documents
+ * that carry their own background/branding layers — merging a theme's
+ * atmosphere on top of those would double up backgrounds and stack
+ * overlays the doc author never saw.
+ */
+export function resolvePersistentLayers(
+  doc: { persistentLayers?: PersistentLayerConfig },
+  theme: Theme,
+): PersistentLayerConfig | undefined {
+  const docConfig = doc.persistentLayers;
+  const hasDocLayers =
+    !!docConfig &&
+    ((docConfig.bottomLayers?.length ?? 0) > 0 || (docConfig.topLayers?.length ?? 0) > 0);
+  if (hasDocLayers) return docConfig;
+  const themeConfig = theme.persistentLayers;
+  const hasThemeLayers =
+    !!themeConfig &&
+    ((themeConfig.bottomLayers?.length ?? 0) > 0 || (themeConfig.topLayers?.length ?? 0) > 0);
+  return hasThemeLayers ? themeConfig : docConfig;
+}
+
+/**
+ * Compose a block's layers between pre-expanded persistent bottom/top
+ * layers, honoring the per-block `useBottomLayer` / `useTopLayer` opt-outs.
+ * Single shared implementation for `expandDocBlocks` and `getLayers`.
+ */
+export function wrapWithPersistentLayers(
+  layers: Layer[],
+  block: { useBottomLayer?: boolean; useTopLayer?: boolean },
+  bottomLayers: Layer[],
+  topLayers: Layer[],
+): Layer[] {
+  if (bottomLayers.length === 0 && topLayers.length === 0) return layers;
+  const useBottom = block.useBottomLayer !== false;
+  const useTop = block.useTopLayer !== false;
+  return [...(useBottom ? bottomLayers : []), ...layers, ...(useTop ? topLayers : [])];
 }

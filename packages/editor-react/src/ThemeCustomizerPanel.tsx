@@ -54,6 +54,9 @@ type TextShadowPreset = keyof typeof TEXT_SHADOW_PRESETS;
 const CONTRAST_PRESETS = ['subtle', 'balanced', 'high'] as const;
 type ContrastPreset = (typeof CONTRAST_PRESETS)[number];
 
+const IMAGE_TREATMENT_PRESETS = ['none', 'mono', 'duotone', 'warm', 'cool'] as const;
+type ImageTreatmentPreset = (typeof IMAGE_TREATMENT_PRESETS)[number];
+
 const FALLBACK_OPTIONS = ['sans-serif', 'serif', 'monospace', 'system-ui'] as const;
 type FallbackOption = (typeof FALLBACK_OPTIONS)[number];
 
@@ -75,6 +78,7 @@ interface Draft {
   animationSpeed: AnimationSpeedPreset;
   textShadow: TextShadowPreset;
   contrast: ContrastPreset;
+  imageTreatment: ImageTreatmentPreset;
 }
 
 const DEFAULT_DRAFT: Draft = {
@@ -92,6 +96,7 @@ const DEFAULT_DRAFT: Draft = {
   animationSpeed: 'normal',
   textShadow: 'on',
   contrast: 'balanced',
+  imageTreatment: 'none',
 };
 
 function findRadiusPreset(value: number | undefined): BorderRadiusPreset {
@@ -173,6 +178,7 @@ function themeToDraft(theme: Theme | null): Draft {
     animationSpeed: findAnimationPreset(theme.style.animationSpeed),
     textShadow: theme.style.textShadow === false ? 'off' : 'on',
     contrast: 'balanced',
+    imageTreatment: theme.style.imageTreatment?.type ?? 'none',
   };
 }
 
@@ -200,6 +206,11 @@ function compileDraft(draft: Draft, baseId?: string): Theme {
         borderRadius: BORDER_RADIUS_PRESETS[draft.borderRadius],
         animationSpeed: ANIMATION_SPEED_PRESETS[draft.animationSpeed],
         textShadow: TEXT_SHADOW_PRESETS[draft.textShadow],
+        // Photographic grade for template imagery; duotone tints resolve
+        // to the compiled theme's primary at render time.
+        ...(draft.imageTreatment !== 'none'
+          ? { imageTreatment: { type: draft.imageTreatment, strength: 0.5 } }
+          : {}),
       },
     },
     { contrast: draft.contrast },
@@ -423,6 +434,12 @@ export function ThemeCustomizerPanel({
                 value={draft.contrast}
                 options={CONTRAST_PRESETS as readonly ContrastPreset[]}
                 onChange={(v) => updateDraft({ contrast: v })}
+              />
+              <PresetRow
+                label="Image grade"
+                value={draft.imageTreatment}
+                options={IMAGE_TREATMENT_PRESETS as readonly ImageTreatmentPreset[]}
+                onChange={(v) => updateDraft({ imageTreatment: v })}
               />
             </Section>
           </div>

@@ -42,6 +42,7 @@ interface ConvertOpts {
   formats?: string;
   theme?: string;
   transform?: string;
+  autoTemplates?: boolean;
 }
 
 export function registerConvertCommand(program: Command): void {
@@ -58,6 +59,10 @@ export function registerConvertCommand(program: Command): void {
     .option(
       '--transform <style>',
       'Transform style to apply before export (e.g., documentary, magazine, minimal)',
+    )
+    .option(
+      '--no-auto-templates',
+      'Disable content-aware template auto-picking for unannotated headings',
     )
     .action(async (inputPath: string, opts: ConvertOpts) => {
       try {
@@ -122,6 +127,7 @@ async function runConvert(inputPath: string, opts: ConvertOpts): Promise<void> {
       container,
       opts.transform,
       opts.theme,
+      opts.autoTemplates,
     );
     console.error(`  Applied transform: ${opts.transform}`);
   }
@@ -160,7 +166,7 @@ async function runConvert(inputPath: string, opts: ConvertOpts): Promise<void> {
         const { docToHtml } = await import('@bendyline/squisq-formats/html');
         const { PLAYER_BUNDLE } = await import('@bendyline/squisq-react/standalone-source');
 
-        const doc = markdownToDoc(exportMarkdownDoc);
+        const doc = markdownToDoc(exportMarkdownDoc, { autoTemplates: opts.autoTemplates });
         const images = await collectImagesForHtml(doc, container);
 
         const html = docToHtml(doc, {
@@ -179,7 +185,7 @@ async function runConvert(inputPath: string, opts: ConvertOpts): Promise<void> {
         const { docToHtmlZip } = await import('@bendyline/squisq-formats/html');
         const { PLAYER_BUNDLE } = await import('@bendyline/squisq-react/standalone-source');
 
-        const doc = markdownToDoc(exportMarkdownDoc);
+        const doc = markdownToDoc(exportMarkdownDoc, { autoTemplates: opts.autoTemplates });
         const images = await collectImagesForHtml(doc, container);
 
         const blob = await docToHtmlZip(doc, {
@@ -249,11 +255,12 @@ async function applyTransformToMarkdown(
   container: ContentContainer,
   transformStyle: string,
   themeId?: string,
+  autoTemplates?: boolean,
 ): Promise<MarkdownDocument> {
   const { markdownToDoc, docToMarkdown } = await import('@bendyline/squisq/doc');
   const { applyTransform, extractDocImages } = await import('@bendyline/squisq/transform');
 
-  const doc = markdownToDoc(markdownDoc);
+  const doc = markdownToDoc(markdownDoc, { autoTemplates });
 
   // Extract image metadata from the doc for transform interleaving
   const images = extractDocImages(doc.blocks);

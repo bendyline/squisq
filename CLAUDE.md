@@ -53,7 +53,13 @@ squisq/
                             #   shared utilities
           utils/            # animationUtils, themeUtils
           getLayers.ts      # Layer dispatch with persistent layer injection
-          markdownToDoc.ts  # Markdown AST → Doc
+          markdownToDoc.ts  # Markdown AST → Doc (content-aware auto templates ON by default:
+                            #   unannotated headings with strong signals — table/images/quote/
+                            #   list/stat — get matching templates + derived inputs; ephemeral
+                            #   via block.autoTemplate so round-trips stay lossless; disable
+                            #   with { autoTemplates: false } or frontmatter
+                            #   squisq-auto-templates: false, CLI --no-auto-templates)
+        templateInputs.ts # deriveTemplateInputs + body extractors (images/list/table/quote)
           docToMarkdown.ts  # Doc → Markdown AST
           audioMapping.ts   # resolveAudioMapping, narration linking
         spatial/            # Haversine distance, Geohash encode/decode
@@ -253,8 +259,8 @@ build entry and a `package.json` export):
 - `@bendyline/squisq/story` — Alias for `@bendyline/squisq/doc` (legacy compatibility)
 - `@bendyline/squisq/timing` — Narration/reading time estimation (estimateNarrationTime, estimateReadingTime, countSpokenWords)
 - `@bendyline/squisq/random` — SeededRandom PRNG, hashString
-- `@bendyline/squisq/generate` — Content extraction (extractContent, stripMarkdown) + slideshow generator (generateSlideshow)
-- `@bendyline/squisq/transform` — Slideshow transform pipeline: `applyTransform`, `resolveTransformStyle`, transform-style registry (5 built-in styles: `dataDriven`, `documentary`, `magazine`, `minimal`, `narrative`), block analyzer, doc-image extractor
+- `@bendyline/squisq/generate` — Content extraction (extractContent, stripMarkdown) + slideshow generator (`generateSlideshow` — **deprecated**; prefer `markdownToDoc` + `applyTransform`). `extractContent`/`stripMarkdown` output shapes are a frozen external contract (Qualla's story pipeline calls them directly).
+- `@bendyline/squisq/transform` — Slideshow transform pipeline: `applyTransform`, `resolveTransformStyle`, `registerTransformStyle`/`unregisterTransformStyle`, transform-style registry (5 built-in styles: `data-driven` [alias `dataDriven`], `documentary`, `magazine`, `minimal`, `narrative`), block analyzer, doc-image extractor. Style contract v2: `templateMap` (per-style extraction→template remap, translated via `translateTemplateBlock`), `suggestedThemeId` (applied when neither caller nor doc declares a theme), `pacing` (intro/outro bookends), `budget.slidesPerMinute` (duration-based promotion cap).
 - `@bendyline/squisq/versions` — Document version history: `DocumentVersionManager` plus `saveVersion` / `listVersions` / `readVersion` / `revertToVersion` / `pruneVersions` / `coalesceVersions`, `PrunePolicy`, `Version` types, sortable-timestamp + path helpers. Snapshots live inside the same `ContentContainer` as the doc at `.versions/<basename>.<timestamp>.md`, so they ride along through ZIP serialization.
 - `@bendyline/squisq/jsonForm` — JSON Form headless logic. Exports the `SquisqAnnotatedSchema` / `SquisqHints` / `SquisqWhen` / `ControlKind` types, `chooseControl()` (the dispatcher both `<JsonView>` and `<JsonEditor>` use), `evaluateWhen()` / `resolveFlag()` (conditional visibility / disabled rules), `inferSchema()` (sample → JSON Schema via genson-js), and JSON Pointer helpers (`getByPointer`, `setByPointer`, `resolveRef`).
 - `@bendyline/squisq/imageEdit` — Layered raster authoring: `ImageEditDoc` schema re-exports, state helpers (`addLayer`, `removeLayer`, `reorderLayer`, `updateLayer`, `setCanvas`), persistence (`readImageEditDoc`, `writeImageEditDoc`), version operations (`saveImageEditVersion`, `listImageEditVersions`, etc. — parallels `versions/` over JSON state), `ImageEditVersionManager`, and the SVG → raster export.
@@ -393,15 +399,27 @@ The Theme system provides unified visual styling for rendered docs. A `Theme` bu
 
 - Colors: `theme.colors.background`, `theme.colors.text`, `theme.colors.primary`, etc.
 - Color schemes: `resolveColorScheme(context, 'blue')` (not `COLOR_SCHEMES[name]`)
-- Font scaling: `themedFontSize(basePx, context, isTitle)` respects `theme.typography.fontScale`
-- Render hints: `getTemplateHint(context, 'templateName', 'key', fallback)`
+- Font scaling: `themedFontSize(basePx, context, isTitle)` respects `theme.typography` scales
+- Surfaces/scrims: `themedSurfaceGradient(context)` / `themedScrim(context)` — never hard-code dark gradient endpoints or black scrims (they break light/warm themes)
+- Shadows: `shouldUseShadow(context)` (never hard-code `shadow: true` on plain surfaces)
+- Entrances: `animation: themedEntrance(context, 'text', { type: 'fadeIn', duration: 2 })` lets the theme's `renderStyle.defaultTextAnimation` override the entrance _type_ while keeping template timing
+- Image grades: `themedImageTreatment(context, input.imageTreatment)` → `ImageLayer.content.treatment` (mono/duotone/warm/cool CSS-filter grades; block-level `imageTreatment: 'none'` opts out)
+- Render hints: `getTemplateHint(context, 'templateName', 'key', fallback)` — consumed today by `statHighlight`/`fullBleedQuote` (`entrance: 'dramatic'|'subtle'`) and `title` (`showAccentLine`)
+
+**Theme motion (renderStyle is live at render time):**
+
+- `applyRenderStyleToLayers()` (`doc/utils/applyRenderStyle.ts`) runs on template-generated layers in `expandDocBlocks` and `getLayers`: scales animation durations by `style.animationSpeed`, and — when `renderStyle.ambientMotion` is true — gives full-bleed cover imagery with no authored animation a deterministic gentle Ken Burns (seeded from block+layer id). Explicit animations (including `{ type: 'none' }`) always win; raw authored `block.layers` are never restyled.
+- `resolveBlockTransition(block, theme, blockIndex)` fills `renderStyle.defaultTransition` on blocks with no authored transition (never block 0).
+- `theme.persistentLayers` renders: docs with their own persistent layers win **wholesale** (`resolvePersistentLayers`); docs without any inherit the theme's atmosphere. Atmosphere layer kinds: `patternBackground` (dots/grid/diagonal as SVG patterns; `noise` = static feTurbulence film grain), `vignette`, `ambientGradient` (slow drift), plus the original solid/gradient/image kinds (`imageBackground.blur` now works).
+- `renderStyle.layoutOverrides` merges onto the orientation LayoutHints in `createTemplateContext`.
+- Reduced motion: `doc-animations.css` freezes ambient loops under `prefers-reduced-motion` (player only; exports are unaffected).
 
 **Key rules:**
 
 - Templates access `theme.colors.*` (not `theme.background` directly)
 - Color scheme names are strings; each theme defines its own set via `theme.colorSchemes`
-- `DEFAULT_THEME` is the documentary theme and ships as the fallback
-- `RenderStyle` controls layout overrides, default animations, ambient motion, and per-template hints
+- `DEFAULT_THEME` is the standard theme and ships as the fallback; the two `standard` themes are deliberately motion-conservative (`ambientMotion: false`)
+- `RenderStyle` controls layout overrides, default animations/transitions, ambient motion, and per-template hints — all consumed at render time (see above)
 
 ## JSON Form System
 

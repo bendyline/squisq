@@ -12,6 +12,7 @@ import type { Layer } from '../../schemas/Doc.js';
 import type { FullBleedQuoteInput, TemplateContext } from '../../schemas/BlockTemplates.js';
 import {
   resolveColorScheme,
+  getTemplateHint,
   getThemeFont,
   shouldUseShadow,
   themedFontSize,
@@ -73,7 +74,10 @@ export function fullBleedQuote(input: FullBleedQuoteInput, context: TemplateCont
         anchor: 'center',
         width: '85%',
       },
-      animation: { type: 'fadeIn', duration: 1.5 },
+      animation:
+        getTemplateHint<string>(context, 'fullBleedQuote', 'entrance', 'subtle') === 'dramatic'
+          ? { type: 'zoomIn', duration: 0.8 }
+          : { type: 'fadeIn', duration: 1.5 },
     },
   ];
 }

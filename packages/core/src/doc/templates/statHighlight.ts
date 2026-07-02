@@ -14,10 +14,12 @@ import type { Layer } from '../../schemas/Doc.js';
 import type { StatHighlightInput, TemplateContext } from '../../schemas/BlockTemplates.js';
 import {
   resolveColorScheme,
+  getTemplateHint,
   getThemeFont,
   shouldUseShadow,
   themedFontSize,
   themedSurfaceGradient,
+  themedImageTreatment,
 } from '../utils/themeUtils.js';
 import { createAccentLayers, getAccentLayout, adjustY, DEFAULT_LAYOUT } from './accentImage.js';
 import { createBackgroundLayer } from './captionUtils.js';
@@ -52,7 +54,7 @@ export function statHighlight(input: StatHighlightInput, context: TemplateContex
 
   // Add accent image layers (behind text, after background)
   if (accentImage) {
-    layers.push(...createAccentLayers(accentImage, input.id));
+    layers.push(...createAccentLayers(accentImage, input.id, themedImageTreatment(context, input.imageTreatment)));
   }
 
   // Big stat — hero element, dominates the slide
@@ -74,7 +76,10 @@ export function statHighlight(input: StatHighlightInput, context: TemplateContex
       y: adjustY('36%', accentLayout),
       anchor: 'center',
     },
-    animation: { type: 'zoomIn', duration: 0.6 },
+    animation:
+      getTemplateHint<string>(context, 'statHighlight', 'entrance', 'subtle') === 'dramatic'
+        ? { type: 'zoomIn', duration: 0.4 }
+        : { type: 'zoomIn', duration: 0.6 },
   });
 
   // Description — smaller and understated beneath the stat. Sits close

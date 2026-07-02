@@ -101,7 +101,8 @@ function ensureAnnotation(block: Block, heading: MarkdownHeading): MarkdownHeadi
   const attrs = ensureTransitionAttributes(block, heading);
 
   // If the block has a non-default template or overrides, inject an annotation
-  const hasExplicitTemplate = block.template && block.template !== 'sectionHeader';
+  const hasExplicitTemplate =
+    block.template && block.template !== 'sectionHeader' && block.autoTemplate !== true;
   const hasOverrides = block.templateOverrides && Object.keys(block.templateOverrides).length > 0;
 
   // If the heading already has an annotation, trust it (it came from parsing).

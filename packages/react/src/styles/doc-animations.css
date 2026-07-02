@@ -2329,3 +2329,21 @@
   display: block;
   width: 100%;
 }
+
+/* ============================================
+   Reduced motion
+   Freeze ambient/Ken Burns motion when the user asks for calm. Entrance
+   fades and block transitions are brief and purposeful, so they stay;
+   the long-running spatial loops are the vestibular offenders.
+   Player-only by construction: headless export renders with no
+   reduced-motion preference, so videos are unaffected.
+   ============================================ */
+@media (prefers-reduced-motion: reduce) {
+  .anim-slowZoom-in,
+  .anim-slowZoom-out,
+  .anim-slowZoom-panLeft,
+  .anim-slowZoom-panRight,
+  .anim-drift {
+    animation: none;
+  }
+}

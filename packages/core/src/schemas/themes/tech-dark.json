@@ -14,9 +14,15 @@
     "warning": "#ff5252"
   },
   "typography": {
-    "bodyFont": { "stackId": "ibm-plex-sans" },
-    "titleFont": { "stackId": "jetbrains-mono" },
-    "monoFont": { "stackId": "jetbrains-mono" },
+    "bodyFont": {
+      "stackId": "ibm-plex-sans"
+    },
+    "titleFont": {
+      "stackId": "jetbrains-mono"
+    },
+    "monoFont": {
+      "stackId": "jetbrains-mono"
+    },
     "titleWeight": "bold",
     "titleScale": 0.9,
     "lineHeight": 1.5
@@ -25,24 +31,71 @@
     "textShadow": true,
     "overlayOpacity": 0.55,
     "animationSpeed": 0.9,
-    "borderRadius": 2
+    "borderRadius": 2,
+    "imageTreatment": {
+      "type": "cool",
+      "strength": 0.45
+    }
   },
   "renderStyle": {
     "name": "tech-dark",
     "defaultTextAnimation": "typewriter",
     "defaultImageAnimation": "slowZoom",
     "ambientMotion": true,
-    "defaultTransition": { "type": "dissolve", "duration": 0.4 },
+    "defaultTransition": {
+      "type": "dissolve",
+      "duration": 0.4
+    },
     "templateHints": {
-      "statHighlight": { "entrance": "dramatic" }
+      "statHighlight": {
+        "entrance": "dramatic"
+      }
     }
   },
   "colorSchemes": {
-    "blue": { "bg": "#0d1b2a", "text": "#00b0ff", "accent": "#40c4ff" },
-    "green": { "bg": "#0d1b0d", "text": "#00e676", "accent": "#69f0ae" },
-    "purple": { "bg": "#1a0d2e", "text": "#d500f9", "accent": "#ea80fc" },
-    "red": { "bg": "#2e0d0d", "text": "#ff5252", "accent": "#ff8a80" },
-    "orange": { "bg": "#2e1a0d", "text": "#ff9100", "accent": "#ffab40" },
-    "teal": { "bg": "#0d2e2e", "text": "#1de9b6", "accent": "#64ffda" }
+    "blue": {
+      "bg": "#0d1b2a",
+      "text": "#00b0ff",
+      "accent": "#40c4ff"
+    },
+    "green": {
+      "bg": "#0d1b0d",
+      "text": "#00e676",
+      "accent": "#69f0ae"
+    },
+    "purple": {
+      "bg": "#1a0d2e",
+      "text": "#d500f9",
+      "accent": "#ea80fc"
+    },
+    "red": {
+      "bg": "#2e0d0d",
+      "text": "#ff5252",
+      "accent": "#ff8a80"
+    },
+    "orange": {
+      "bg": "#2e1a0d",
+      "text": "#ff9100",
+      "accent": "#ffab40"
+    },
+    "teal": {
+      "bg": "#0d2e2e",
+      "text": "#1de9b6",
+      "accent": "#64ffda"
+    }
+  },
+  "persistentLayers": {
+    "topLayers": [
+      {
+        "template": "patternBackground",
+        "config": {
+          "type": "patternBackground",
+          "pattern": "grid",
+          "color": "#00e5ff",
+          "opacity": 0.04,
+          "scale": 1.5
+        }
+      }
+    ]
   }
 }

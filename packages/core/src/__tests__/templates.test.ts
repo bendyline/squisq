@@ -311,6 +311,145 @@ describe('expandDocBlocks', () => {
     expect((landscape[0].layers ?? []).length).toBeGreaterThan(0);
     expect((portrait[0].layers ?? []).length).toBeGreaterThan(0);
   });
+
+  describe('theme renderStyle wiring', () => {
+    const blocks = (): TemplateBlock[] => [
+      { template: 'title', id: 't-1', duration: 5, audioSegment: 0, title: 'One' },
+      {
+        template: 'imageWithCaption',
+        id: 't-2',
+        duration: 6,
+        audioSegment: 0,
+        imageSrc: 'photo.jpg',
+        imageAlt: 'photo',
+        caption: 'A caption',
+      },
+    ];
+
+    it('fills the theme default transition on blocks after the first, never block 0', () => {
+      const theme = {
+        ...DEFAULT_THEME,
+        renderStyle: {
+          ...DEFAULT_THEME.renderStyle,
+          defaultTransition: { type: 'dissolve' as const, duration: 1.1 },
+        },
+      };
+      const result = expandDocBlocks(blocks(), { theme });
+      expect(result[0].transition).toBeUndefined();
+      expect(result[1].transition).toEqual({ type: 'dissolve', duration: 1.1 });
+    });
+
+    it('never overrides an authored block transition', () => {
+      const theme = {
+        ...DEFAULT_THEME,
+        renderStyle: {
+          ...DEFAULT_THEME.renderStyle,
+          defaultTransition: { type: 'dissolve' as const },
+        },
+      };
+      const authored = blocks();
+      authored[1].transition = { type: 'cut' };
+      const result = expandDocBlocks(authored, { theme });
+      expect(result[1].transition).toEqual({ type: 'cut' });
+    });
+
+    it('scales template animation durations by theme animationSpeed', () => {
+      const theme = {
+        ...DEFAULT_THEME,
+        style: { ...DEFAULT_THEME.style, animationSpeed: 2.0 },
+      };
+      const base = expandDocBlocks(blocks());
+      const slowed = expandDocBlocks(blocks(), { theme });
+      const baseTitle = base[0].layers?.find((l) => l.id === 'title');
+      const slowedTitle = slowed[0].layers?.find((l) => l.id === 'title');
+      expect(slowedTitle?.animation?.duration).toBe((baseTitle?.animation?.duration ?? 0) * 2);
+    });
+
+    it('gives full-bleed imagery ambient Ken Burns when the theme opts in', () => {
+      const theme = {
+        ...DEFAULT_THEME,
+        renderStyle: { ...DEFAULT_THEME.renderStyle, ambientMotion: true },
+      };
+      const result = expandDocBlocks(blocks(), { theme });
+      const bg = result[1].layers?.find((l) => l.id === 'bg-image');
+      expect(bg?.animation?.type).toBe('slowZoom');
+      // Standard theme (ambientMotion: false) leaves the image static.
+      const plain = expandDocBlocks(blocks());
+      const plainBg = plain[1].layers?.find((l) => l.id === 'bg-image');
+      expect(plainBg?.animation).toBeUndefined();
+    });
+
+    it('themedEntrance: theme default text animation overrides entrance type, keeps timing', () => {
+      const theme = {
+        ...DEFAULT_THEME,
+        renderStyle: { ...DEFAULT_THEME.renderStyle, defaultTextAnimation: 'zoomIn' as const },
+      };
+      const result = expandDocBlocks(blocks(), { theme });
+      const title = result[0].layers?.find((l) => l.id === 'title');
+      expect(title?.animation?.type).toBe('zoomIn');
+      // Duration authored by the template is preserved (title uses 2s)
+      expect(title?.animation?.duration).toBe(2);
+    });
+
+    it('templateHints: dramatic entrance switches statHighlight timing', () => {
+      const statBlock: TemplateBlock[] = [
+        {
+          template: 'statHighlight',
+          id: 's-1',
+          duration: 5,
+          audioSegment: 0,
+          stat: '42%',
+          description: 'described',
+        },
+      ];
+      const theme = {
+        ...DEFAULT_THEME,
+        renderStyle: {
+          ...DEFAULT_THEME.renderStyle,
+          templateHints: { statHighlight: { entrance: 'dramatic' } },
+        },
+      };
+      const hinted = expandDocBlocks(statBlock, { theme });
+      const plain = expandDocBlocks(statBlock);
+      const hintedStat = hinted[0].layers?.find((l) => l.id === 'stat');
+      const plainStat = plain[0].layers?.find((l) => l.id === 'stat');
+      expect(hintedStat?.animation?.duration).toBe(0.4);
+      expect(plainStat?.animation?.duration).toBe(0.6);
+    });
+
+    it('theme persistentLayers render for docs without their own (wholesale precedence)', () => {
+      const theme = {
+        ...DEFAULT_THEME,
+        persistentLayers: {
+          bottomLayers: [
+            {
+              template: 'solidBackground' as const,
+              config: { type: 'solidBackground' as const, color: '#112233' },
+            },
+          ],
+        },
+      };
+      const inherited = expandDocBlocks(blocks(), { theme });
+      expect(inherited[0].layers?.[0]?.id).toContain('solid');
+
+      // Doc's own persistent layers win wholesale
+      const docOwn = expandDocBlocks(blocks(), {
+        theme,
+        persistentLayers: {
+          bottomLayers: [
+            {
+              template: 'solidBackground' as const,
+              config: { type: 'solidBackground' as const, color: '#445566' },
+            },
+          ],
+        },
+      });
+      const first = docOwn[0].layers?.[0];
+      expect(first && 'content' in first && (first.content as { fill?: string }).fill).toBe(
+        '#445566',
+      );
+    });
+  });
 });
 
 describe('DEFAULT_THEME', () => {

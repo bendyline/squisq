@@ -5,7 +5,12 @@
  * all paint fills and borders identically.
  */
 
-import type { LinearGradient, BorderStyle } from '@bendyline/squisq/schemas';
+import type {
+  LinearGradient,
+  BorderStyle,
+  ShapePattern,
+  ShapeFilter,
+} from '@bendyline/squisq/schemas';
 
 /**
  * SVG `stroke-dasharray` for a border style, scaled by stroke width so the
@@ -46,7 +51,12 @@ export function resolveFill(
   layerId: string,
   color: string | undefined,
   gradient: LinearGradient | undefined,
+  pattern?: ShapePattern,
 ): { fill: string | undefined; def: JSX.Element | null } {
+  if (pattern) {
+    const id = `squisq-pattern-${layerId}`;
+    return { fill: `url(#${id})`, def: patternDef(id, pattern) };
+  }
   if (gradient) {
     const id = gradientDefId(layerId);
     const v = gradientVector(gradient.angle);
@@ -61,4 +71,72 @@ export function resolveFill(
     };
   }
   return { fill: color, def: null };
+}
+
+/**
+ * Native SVG `<pattern>` def for a repeating shape fill — fully vector,
+ * identical in the player and headless frame capture.
+ */
+function patternDef(id: string, pattern: ShapePattern): JSX.Element {
+  const size = pattern.size ?? 24;
+  const opacity = pattern.opacity ?? 1;
+  const color = pattern.color;
+  return (
+    <pattern
+      id={id}
+      width={size}
+      height={size}
+      patternUnits="userSpaceOnUse"
+      // Diagonal tiles rotate the whole pattern; dots/grid stay axis-aligned.
+      patternTransform={pattern.kind === 'diagonal' ? 'rotate(45)' : undefined}
+    >
+      {pattern.kind === 'dots' && (
+        <circle cx={size / 2} cy={size / 2} r={Math.max(1, size / 12)} fill={color} opacity={opacity} />
+      )}
+      {pattern.kind === 'grid' && (
+        <path
+          d={`M ${size} 0 L 0 0 0 ${size}`}
+          fill="none"
+          stroke={color}
+          strokeWidth={1}
+          opacity={opacity}
+        />
+      )}
+      {pattern.kind === 'diagonal' && (
+        <line x1={0} y1={0} x2={0} y2={size} stroke={color} strokeWidth={1} opacity={opacity} />
+      )}
+    </pattern>
+  );
+}
+
+/**
+ * SVG filter def for a shape's procedural filter (static film grain via
+ * feTurbulence). Returns the def plus the `filter` attribute value.
+ */
+export function resolveShapeFilter(
+  layerId: string,
+  filter: ShapeFilter | undefined,
+): { filterAttr: string | undefined; def: JSX.Element | null } {
+  if (!filter || filter.type !== 'noise') return { filterAttr: undefined, def: null };
+  const id = `squisq-noise-${layerId}`;
+  const opacity = filter.opacity ?? 0.05;
+  return {
+    filterAttr: `url(#${id})`,
+    def: (
+      <filter id={id} x="0%" y="0%" width="100%" height="100%">
+        <feTurbulence
+          type="fractalNoise"
+          baseFrequency={filter.baseFrequency ?? 0.8}
+          numOctaves={2}
+          stitchTiles="stitch"
+          result="noise"
+        />
+        <feColorMatrix in="noise" type="saturate" values="0" result="mono" />
+        <feComponentTransfer in="mono" result="faded">
+          <feFuncA type="linear" slope={opacity} intercept={0} />
+        </feComponentTransfer>
+        <feComposite in="faded" in2="SourceGraphic" operator="in" />
+      </filter>
+    ),
+  };
 }

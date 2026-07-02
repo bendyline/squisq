@@ -17,7 +17,7 @@
 
 import type { Layer } from '../../schemas/Doc.js';
 import type { VideoPullQuoteInput, TemplateContext } from '../../schemas/BlockTemplates.js';
-import { getThemeFont, themedFontSize } from '../utils/themeUtils.js';
+import { getThemeFont, themedEntrance, themedFontSize } from '../utils/themeUtils.js';
 import { estimateTextHeight } from './captionUtils.js';
 
 export function videoPullQuote(input: VideoPullQuoteInput, context: TemplateContext): Layer[] {
@@ -103,7 +103,7 @@ export function videoPullQuote(input: VideoPullQuoteInput, context: TemplateCont
         anchor: 'center',
         width: '72%',
       },
-      animation: { type: 'fadeIn', duration: 2 },
+      animation: themedEntrance(context, 'text', { type: 'fadeIn', duration: 2 }),
     },
   ];
 

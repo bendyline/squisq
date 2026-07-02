@@ -295,8 +295,6 @@ function connectorLabel(
         fontFamily: getThemeFont(context, 'body'),
         color: context.theme.colors.textMuted,
         textAlign: 'center',
-        background: context.theme.colors.background,
-        padding: 6,
       },
     },
     // Floated just above the connector midpoint so the line never

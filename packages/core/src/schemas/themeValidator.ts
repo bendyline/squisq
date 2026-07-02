@@ -170,6 +170,24 @@ class V {
     if (v.blockPadding !== undefined && !this.isString(v.blockPadding)) {
       this.err(`${path}.blockPadding`, 'expected string (percentage e.g. "5%")');
     }
+    if (v.imageTreatment !== undefined) {
+      this.imageTreatment(`${path}.imageTreatment`, v.imageTreatment);
+    }
+  }
+
+  imageTreatment(path: string, v: unknown): void {
+    if (!this.isObject(v)) {
+      this.err(path, 'expected object');
+      return;
+    }
+    const kinds = ['none', 'mono', 'duotone', 'warm', 'cool'];
+    if (!this.isString(v.type) || !kinds.includes(v.type)) {
+      this.err(`${path}.type`, `expected one of ${kinds.join('|')}`);
+    }
+    if (v.strength !== undefined && !this.isNumber(v.strength)) {
+      this.err(`${path}.strength`, 'expected number (0..1)');
+    }
+    if (v.color !== undefined) this.hex(`${path}.color`, v.color);
   }
 
   renderStyle(path: string, v: unknown): void {
@@ -276,6 +294,32 @@ class V {
           `${path}.config.gradient`,
           'raw CSS gradient strings are not allowed in Theme JSON; use a `preset`',
         );
+      }
+      if (v.template === 'patternBackground') {
+        const patterns = ['dots', 'grid', 'diagonal', 'noise'];
+        if (!this.isString(cfg.pattern) || !patterns.includes(cfg.pattern)) {
+          this.err(`${path}.config.pattern`, `expected one of ${patterns.join('|')}`);
+        }
+        for (const k of ['opacity', 'scale']) {
+          if (cfg[k] !== undefined && !this.isNumber(cfg[k])) {
+            this.err(`${path}.config.${k}`, 'expected number');
+          }
+        }
+        if (cfg.color !== undefined) this.hex(`${path}.config.color`, cfg.color);
+      }
+      if (v.template === 'vignette') {
+        if (cfg.strength !== undefined && !this.isNumber(cfg.strength)) {
+          this.err(`${path}.config.strength`, 'expected number (0..1)');
+        }
+        if (cfg.color !== undefined) this.hex(`${path}.config.color`, cfg.color);
+      }
+      if (v.template === 'ambientGradient') {
+        if (cfg.duration !== undefined && !this.isNumber(cfg.duration)) {
+          this.err(`${path}.config.duration`, 'expected number (seconds)');
+        }
+        for (const k of ['from', 'to']) {
+          if (cfg[k] !== undefined) this.hex(`${path}.config.${k}`, cfg[k]);
+        }
       }
     }
     // Raw Layer form is permissive — no schema check here

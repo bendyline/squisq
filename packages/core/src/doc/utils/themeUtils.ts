@@ -8,7 +8,7 @@
 
 import type { TemplateContext } from '../../schemas/BlockTemplates.js';
 import type { ThemeColorScheme, RenderStyle } from '../../schemas/Theme.js';
-import type { AnimationType } from '../../schemas/Doc.js';
+import type { Animation, AnimationType, ImageTreatment } from '../../schemas/Doc.js';
 import { resolveFontFamily } from '../../schemas/fontStacks.js';
 import { oklchDarken, withAlpha } from '../../schemas/colorUtils.js';
 
@@ -124,6 +124,30 @@ export function getDefaultAnimation(
   return layerType === 'text' ? rs.defaultTextAnimation : rs.defaultImageAnimation;
 }
 
+/**
+ * Theme-aware entrance animation for a template layer.
+ *
+ * The theme's `renderStyle.defaultTextAnimation` / `defaultImageAnimation`
+ * overrides the entrance *type*; the template keeps its authored duration,
+ * delay, and stagger. Templates opt in per layer:
+ *
+ * ```ts
+ * animation: themedEntrance(context, 'text', { type: 'fadeIn', duration: 2 })
+ * ```
+ *
+ * `slowZoom` is excluded — it's an ambient treatment handled by the
+ * `applyRenderStyleToLayers` post-pass, not an entrance.
+ */
+export function themedEntrance(
+  context: TemplateContext,
+  layerType: 'text' | 'image',
+  fallback: Animation,
+): Animation {
+  const type = getDefaultAnimation(context, layerType);
+  if (!type || type === 'slowZoom' || type === fallback.type) return fallback;
+  return { ...fallback, type };
+}
+
 // ============================================
 // Style Helpers
 // ============================================
@@ -141,6 +165,30 @@ export function shouldUseShadow(context: TemplateContext): boolean {
  */
 export function getOverlayOpacity(context: TemplateContext): number {
   return context.theme.style.overlayOpacity ?? 0.5;
+}
+
+/**
+ * Resolve the effective photographic treatment for a block's imagery.
+ *
+ * Precedence: the block's `imageTreatment` override ('none' opts out, a
+ * type forces that grade) → the theme's `style.imageTreatment` → none.
+ * Duotone tints default to the theme primary. Templates pass the result
+ * straight into `ImageLayer.content.treatment`.
+ */
+export function themedImageTreatment(
+  context: TemplateContext,
+  override?: 'none' | 'mono' | 'duotone' | 'warm' | 'cool',
+): ImageTreatment | undefined {
+  if (override === 'none') return undefined;
+  const themeTreatment = context.theme.style.imageTreatment;
+  const base: ImageTreatment | undefined = override
+    ? { type: override, strength: themeTreatment?.strength }
+    : themeTreatment;
+  if (!base || base.type === 'none') return undefined;
+  if (base.type === 'duotone' && !base.color) {
+    return { ...base, color: context.theme.colors.primary };
+  }
+  return base;
 }
 
 /**

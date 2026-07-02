@@ -1,6 +1,9 @@
 export * from './templates/index.js';
 export * from './utils/animationUtils.js';
 export * from './utils/themeUtils.js';
+export * from './utils/applyRenderStyle.js';
+export * from './utils/imageTreatment.js';
+export * from './templateInputs.js';
 export * from './utils/shapeGeometry.js';
 export {
   markdownToDoc,

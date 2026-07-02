@@ -13,6 +13,9 @@ import type {
   AccentPosition,
   ImageWithCaptionInput,
   SectionHeaderInput,
+  QuoteBlockInput,
+  FullBleedQuoteInput,
+  StatHighlightInput,
 } from '../schemas/BlockTemplates.js';
 import type { ExtractedElement } from '../generate/contentExtractor.js';
 import type { TransformStyleConfig, TransformImage } from './types.js';
@@ -73,8 +76,17 @@ export function selectAndBuild(
   // 1. Collect all extractions across all blocks, filtered by config
   const candidates = collectCandidates(analyzed, config);
 
-  // 2. Determine how many blocks to transform
-  const maxTransforms = Math.max(1, Math.floor(analyzed.length * config.transformRatio));
+  // 2. Determine how many blocks to transform. `transformRatio` scales
+  // with block count; an optional duration-based budget (slides per
+  // minute) caps runaway promotion on long dense documents.
+  const ratioCap = Math.max(1, Math.floor(analyzed.length * config.transformRatio));
+  const slidesPerMinute = config.budget?.slidesPerMinute;
+  const totalDurationSeconds = analyzed.reduce((sum, ab) => sum + (ab.block.duration || 0), 0);
+  const budgetCap =
+    slidesPerMinute && totalDurationSeconds > 0
+      ? Math.max(1, Math.round((totalDurationSeconds / 60) * slidesPerMinute))
+      : Infinity;
+  const maxTransforms = Math.min(ratioCap, budgetCap);
   const selected = candidates.slice(0, maxTransforms);
 
   // 3. Build the output block sequence
@@ -233,7 +245,7 @@ function buildBlockSequence(
         accentPositionIndex++;
       }
 
-      const templateBlock = mapElementToBlock(sel.element, {
+      let templateBlock = mapElementToBlock(sel.element, {
         id: `transform-${blockIdCounter++}`,
         duration: ab.block.duration > 0 ? ab.block.duration / extractions.length : 6,
         audioSegment: ab.block.audioSegment,
@@ -241,6 +253,16 @@ function buildBlockSequence(
         accentImage,
         sourceStartTime: sel.element.sourcePosition,
       });
+
+      // Style-level extraction→template remap (v2 contract). Only known
+      // text-compatible pairings translate; image-backed targets consume
+      // the accent image as their background. Unknown pairings keep the
+      // default mapping.
+      const remapTarget = config.templateMap?.[sel.element.data.type];
+      if (remapTarget && remapTarget !== templateBlock.template) {
+        const translated = translateTemplateBlock(templateBlock, remapTarget);
+        if (translated) templateBlock = translated;
+      }
 
       // Apply transition based on style
       if (config.transitionStyle !== 'cut') {
@@ -290,4 +312,62 @@ function buildBlockSequence(
   }
 
   return { blocks, transformedCount, insertedCount };
+}
+
+/**
+ * Translate a mapped template block into a style-requested target
+ * template. Only text-compatible pairings are supported; returns null
+ * (keep the default) for unknown pairs or when a required input —
+ * a background image for `pullQuote` — is unavailable.
+ */
+function translateTemplateBlock(
+  block: TemplateBlock,
+  target: string,
+): TemplateBlock | null {
+  const base = {
+    id: block.id,
+    duration: block.duration,
+    audioSegment: block.audioSegment,
+    sourceStartTime: block.sourceStartTime,
+    sourceDuration: block.sourceDuration,
+  };
+
+  if (block.template === 'quote') {
+    const quote = block as QuoteBlockInput;
+    if (target === 'fullBleedQuote') {
+      return { ...base, template: 'fullBleedQuote', text: quote.quote };
+    }
+    if (target === 'pullQuote') {
+      // pullQuote requires a full-bleed background image — reuse the
+      // accent image the selector already assigned to this block.
+      const bg = quote.accentImage;
+      if (!bg) return null;
+      return {
+        ...base,
+        template: 'pullQuote',
+        text: quote.quote,
+        attribution: quote.attribution,
+        backgroundImage: { src: bg.src, alt: bg.alt, credit: bg.credit, license: bg.license },
+      };
+    }
+    return null;
+  }
+
+  if (block.template === 'fullBleedQuote' && target === 'quote') {
+    const fbq = block as FullBleedQuoteInput;
+    return { ...base, template: 'quote', quote: fbq.text };
+  }
+
+  if (block.template === 'statHighlight' && target === 'factCard') {
+    const stat = block as StatHighlightInput;
+    return {
+      ...base,
+      template: 'factCard',
+      fact: stat.stat,
+      explanation: stat.description,
+      accentImage: stat.accentImage,
+    };
+  }
+
+  return null;
 }

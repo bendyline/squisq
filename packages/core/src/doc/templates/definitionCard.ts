@@ -14,8 +14,10 @@ import {
   resolveColorScheme,
   getThemeFont,
   shouldUseShadow,
+  themedEntrance,
   themedFontSize,
   themedSurfaceGradient,
+  themedImageTreatment,
 } from '../utils/themeUtils.js';
 import { createAccentLayers, getAccentLayout, adjustY, DEFAULT_LAYOUT } from './accentImage.js';
 import { createBackgroundLayer } from './captionUtils.js';
@@ -36,7 +38,7 @@ export function definitionCard(input: DefinitionCardInput, context: TemplateCont
 
   // Add accent image layers
   if (accentImage) {
-    layers.push(...createAccentLayers(accentImage, input.id));
+    layers.push(...createAccentLayers(accentImage, input.id, themedImageTreatment(context, input.imageTreatment)));
   }
 
   // Term — large, accent-colored
@@ -59,7 +61,7 @@ export function definitionCard(input: DefinitionCardInput, context: TemplateCont
       y: adjustY('30%', accentLayout),
       anchor: 'center',
     },
-    animation: { type: 'fadeIn', duration: 1.5 },
+    animation: themedEntrance(context, 'text', { type: 'fadeIn', duration: 1.5 }),
   });
 
   // Horizontal separator line
@@ -101,7 +103,7 @@ export function definitionCard(input: DefinitionCardInput, context: TemplateCont
       width: accentLayout.textWidth,
       anchor: 'center',
     },
-    animation: { type: 'fadeIn', duration: 1, delay: 0.8 },
+    animation: themedEntrance(context, 'text', { type: 'fadeIn', duration: 1, delay: 0.8 }),
   });
 
   // Origin if provided

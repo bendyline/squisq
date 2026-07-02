@@ -15,13 +15,17 @@ import {
   resolveColorScheme,
   getThemeFont,
   shouldUseShadow,
+  themedEntrance,
   themedFontSize,
   themedScrim,
+  themedImageTreatment,
 } from '../utils/themeUtils.js';
 
 export function sectionHeader(input: SectionHeaderInput, context: TemplateContext): Layer[] {
   const { title = '', colorScheme = 'blue', imageSrc, imageAlt, ambientMotion } = input;
   const { theme, layout } = context;
+
+  const treatment = themedImageTreatment(context, input.imageTreatment);
   const colors = resolveColorScheme(context, colorScheme);
 
   // Scale font sizes for viewport. Section dividers are the loudest
@@ -41,6 +45,7 @@ export function sectionHeader(input: SectionHeaderInput, context: TemplateContex
         src: imageSrc,
         alt: imageAlt || title,
         fit: 'cover',
+        ...(treatment ? { treatment } : {}),
       },
       position: { x: 0, y: 0, width: '100%', height: '100%' },
       animation: ambientMotion
@@ -108,7 +113,7 @@ export function sectionHeader(input: SectionHeaderInput, context: TemplateContex
       anchor: 'center',
       width: layout.maxTextWidth,
     },
-    animation: { type: 'fadeIn', duration: 1.5 },
+    animation: themedEntrance(context, 'text', { type: 'fadeIn', duration: 1.5 }),
   });
 
   return layers;

@@ -157,8 +157,6 @@ export function diagramBlock(input: DiagramBlockInput, context: TemplateContext)
             fontFamily: getThemeFont(context, 'body'),
             color: theme.colors.textMuted,
             textAlign: 'center',
-            background: theme.colors.background,
-            padding: 6,
           },
         },
         position: { x: mx, y: my - labelFontSize * 0.9, anchor: 'center' },

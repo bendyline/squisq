@@ -144,6 +144,26 @@ export function relativeLuminance(hex: string): number {
 }
 
 /**
+ * Hue of a hex color in HSL degrees (0..360). Returns 0 for pure grays
+ * and on parse failure. Used by the duotone image treatment to aim its
+ * `hue-rotate()` at the theme's tint color.
+ */
+export function hexHueDegrees(hex: string): number {
+  const rgb = parseHex(hex);
+  if (!rgb) return 0;
+  const [r, g, b] = rgb;
+  const max = Math.max(r, g, b);
+  const min = Math.min(r, g, b);
+  if (max === min) return 0;
+  const d = max - min;
+  let h: number;
+  if (max === r) h = ((g - b) / d) % 6;
+  else if (max === g) h = (b - r) / d + 2;
+  else h = (r - g) / d + 4;
+  return Math.round((h * 60 + 360) % 360);
+}
+
+/**
  * Convert a hex color + alpha (0..1) to an `rgba()` string.
  * Falls back to the input on parse failure (e.g. a value that is
  * already an rgba()/gradient string).

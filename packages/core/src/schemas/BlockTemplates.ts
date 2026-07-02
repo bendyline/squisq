@@ -110,6 +110,12 @@ interface BaseTemplateBlock {
    * Used with sourceStartTime to precisely position the block.
    */
   sourceDuration?: number;
+  /**
+   * Per-block override for the theme's photographic image grade
+   * (`theme.style.imageTreatment`). `'none'` opts this block's imagery out;
+   * a treatment type forces that grade regardless of the theme.
+   */
+  imageTreatment?: 'none' | 'mono' | 'duotone' | 'warm' | 'cool';
 }
 
 /**
@@ -649,6 +655,10 @@ export function createTemplateContext(
   viewport: ViewportConfig = VIEWPORT_PRESETS.landscape,
 ): TemplateContext {
   const orientation = getViewportOrientation(viewport);
+  // Theme renderStyle may override individual layout hints (e.g. a theme
+  // that wants a lower primaryY across every template).
+  const overrides = theme.renderStyle.layoutOverrides;
+  const baseLayout = getLayoutHints(orientation);
   return {
     theme,
     blockIndex,
@@ -656,7 +666,7 @@ export function createTemplateContext(
     viewport,
     fontScale: calculateFontScale(viewport),
     orientation,
-    layout: getLayoutHints(orientation),
+    layout: overrides ? { ...baseLayout, ...overrides } : baseLayout,
   };
 }
 
@@ -736,7 +746,9 @@ export type PersistentLayerTemplateType =
   | 'solidBackground' // Solid color fill
   | 'gradientBackground' // CSS gradient or preset
   | 'imageBackground' // Blurred/faded hero image
-  | 'patternBackground' // Subtle pattern (dots, grid)
+  | 'patternBackground' // Subtle pattern (dots, grid, diagonal, noise/grain)
+  | 'vignette' // Soft radial edge darkening (top layer)
+  | 'ambientGradient' // Slowly drifting surface gradient (bottom layer)
   | 'titleCaption' // Article title in corner
   | 'cornerBranding' // Logo or text badge
   | 'progressIndicator'; // Bar/dots showing position
@@ -749,6 +761,8 @@ export type PersistentLayerTemplateConfig =
   | GradientBackgroundConfig
   | ImageBackgroundConfig
   | PatternBackgroundConfig
+  | VignetteConfig
+  | AmbientGradientConfig
   | TitleCaptionConfig
   | CornerBrandingConfig
   | ProgressIndicatorConfig;
@@ -805,6 +819,32 @@ export interface PatternBackgroundConfig {
   opacity?: number;
   /** Pattern scale multiplier */
   scale?: number;
+}
+
+/**
+ * Soft radial vignette (top layer) — transparent center darkening toward
+ * the frame edges. The classic film-look framing device.
+ */
+export interface VignetteConfig {
+  type: 'vignette';
+  /** Edge darkness 0-1 (default 0.3). */
+  strength?: number;
+  /** Vignette color (default black). */
+  color?: string;
+}
+
+/**
+ * Slowly drifting surface gradient (bottom layer). Colors default to the
+ * theme's surface family at expansion time.
+ */
+export interface AmbientGradientConfig {
+  type: 'ambientGradient';
+  /** Gradient start color. */
+  from?: string;
+  /** Gradient end color. */
+  to?: string;
+  /** Drift loop duration in seconds (default 40). */
+  duration?: number;
 }
 
 // ============================================

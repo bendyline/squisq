@@ -14,8 +14,12 @@
     "warning": "#fc8181"
   },
   "typography": {
-    "bodyFont": { "stackId": "dm-sans" },
-    "titleFont": { "stackId": "dm-serif" },
+    "bodyFont": {
+      "stackId": "dm-sans"
+    },
+    "titleFont": {
+      "stackId": "dm-serif"
+    },
     "titleWeight": "bold",
     "titleScale": 1.05,
     "lineHeight": 1.5
@@ -31,14 +35,55 @@
     "defaultTextAnimation": "fadeIn",
     "defaultImageAnimation": "slowZoom",
     "ambientMotion": true,
-    "defaultTransition": { "type": "slideLeft", "duration": 0.7 }
+    "defaultTransition": {
+      "type": "slideLeft",
+      "duration": 0.7
+    }
   },
   "colorSchemes": {
-    "blue": { "bg": "#1d3a6e", "text": "#a3c9f5", "accent": "#4d9de0" },
-    "green": { "bg": "#14532d", "text": "#86efac", "accent": "#22c55e" },
-    "purple": { "bg": "#3b2a70", "text": "#c4b5fd", "accent": "#a78bfa" },
-    "red": { "bg": "#7f1d1d", "text": "#fca5a5", "accent": "#f87171" },
-    "orange": { "bg": "#7c2d12", "text": "#fdba74", "accent": "#f97316" },
-    "teal": { "bg": "#134e4a", "text": "#5eead4", "accent": "#14b8a6" }
+    "blue": {
+      "bg": "#1d3a6e",
+      "text": "#a3c9f5",
+      "accent": "#4d9de0"
+    },
+    "green": {
+      "bg": "#14532d",
+      "text": "#86efac",
+      "accent": "#22c55e"
+    },
+    "purple": {
+      "bg": "#3b2a70",
+      "text": "#c4b5fd",
+      "accent": "#a78bfa"
+    },
+    "red": {
+      "bg": "#7f1d1d",
+      "text": "#fca5a5",
+      "accent": "#f87171"
+    },
+    "orange": {
+      "bg": "#7c2d12",
+      "text": "#fdba74",
+      "accent": "#f97316"
+    },
+    "teal": {
+      "bg": "#134e4a",
+      "text": "#5eead4",
+      "accent": "#14b8a6"
+    }
+  },
+  "persistentLayers": {
+    "topLayers": [
+      {
+        "template": "patternBackground",
+        "config": {
+          "type": "patternBackground",
+          "pattern": "diagonal",
+          "color": "#f7fafc",
+          "opacity": 0.03,
+          "scale": 1.2
+        }
+      }
+    ]
   }
 }

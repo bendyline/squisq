@@ -11,6 +11,7 @@ export const dataDrivenStyle: TransformStyleConfig = {
   colorSchemes: ['blue', 'orange', 'green', 'purple', 'red'],
   insertSectionHeaders: true,
   interleaveImages: false,
-  blocksPerSection: { min: 2, max: 6 },
+  blocksPerSection: { max: 6 },
   transitionStyle: 'cut',
+  suggestedThemeId: 'tech-dark',
 };

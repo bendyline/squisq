@@ -21,7 +21,7 @@
  */
 
 import type { LayoutHints } from './LayoutStrategy.js';
-import type { AnimationType, TransitionType } from './Doc.js';
+import type { AnimationType, ImageTreatment, TransitionType } from './Doc.js';
 import type { PersistentLayerConfig } from './BlockTemplates.js';
 
 // ============================================
@@ -146,6 +146,13 @@ export interface ThemeStyle {
   animationSpeed?: number;
   /** Default horizontal padding for text (percentage string, e.g. "5%") */
   blockPadding?: string;
+  /**
+   * Photographic grade applied to template imagery (full-bleed photos,
+   * feature halves, accent strips) so photos look native to the theme.
+   * Duotone tints default to the theme primary. Blocks opt out per
+   * template via `imageTreatment: 'none'`.
+   */
+  imageTreatment?: ImageTreatment;
 }
 
 // ============================================

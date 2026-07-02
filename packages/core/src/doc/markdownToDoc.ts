@@ -44,6 +44,8 @@ import { estimateReadingTime } from '../timing/readingTime.js';
 import { resolveTemplateName, isContainerTemplate } from './templates/index.js';
 import { isDataFence, parseDataFence, findFirstTable, extractTableData } from './structuredData.js';
 import { extractMediaFromContents } from './mediaAnnotations.js';
+import { profileBlockContents, pickAutoTemplate } from '../recommend/templates.js';
+import { deriveTemplateInputs } from './templateInputs.js';
 import type { MediaClip } from '../schemas/Media.js';
 
 // ============================================
@@ -77,10 +79,21 @@ export interface MarkdownToDocOptions {
   /**
    * Timestamp recorded as `captions.generatedAt`. When omitted, the field
    * is left unset so that conversion is fully deterministic — the same
-   * markdown always produces the same Doc (important for snapshot tests,
-   * caching, and agents that verify their output by re-converting).
+   * markdown always converts to an identical Doc (important for snapshot
+   * tests, caching, and agents that verify their output by re-converting).
    */
   captionsGeneratedAt?: string;
+
+  /**
+   * Content-aware template auto-picking for unannotated headings
+   * (default: true). When a heading block carries a strong content signal
+   * — a table, images, a blockquote, a list, a stat-looking line — the
+   * matching template is applied (with inputs derived from the body)
+   * instead of the structural `defaultTemplate`. Explicit `{[template]}`
+   * annotations always win. Authors can also disable per document with
+   * frontmatter `squisq-auto-templates: false`.
+   */
+  autoTemplates?: boolean;
 }
 
 // ============================================
@@ -372,6 +385,15 @@ export function markdownToDoc(markdownDoc: MarkdownDocument, options?: MarkdownT
     applyStructuredData(block, diagnostics);
   }
 
+  // Content-aware template auto-pick (default on): unannotated heading
+  // blocks whose body carries a strong signal get the matching template
+  // plus inputs derived from that body. Strict derivation — when the
+  // essential input can't be built (e.g. feature without an image src),
+  // the block keeps the structural default.
+  if ((options?.autoTemplates ?? true) && !frontmatterDisablesAutoTemplates(markdownDoc)) {
+    applyAutoTemplates(rootBlocks, resolveTemplateName(defaultTemplate), { featureIndex: 0 });
+  }
+
   // Duplicate ids make connections and navigation ambiguous. Generated
   // slugs are already deduped; this catches author-pinned `{#id}` clashes.
   const seenIds = new Map<string, Block>();
@@ -604,6 +626,47 @@ function applyStructuredData(block: Block, diagnostics: DocDiagnostic[]): void {
 
   if (data && Object.keys(data).length > 0) {
     block.templateData = data;
+  }
+}
+
+/** Truthiness of the `squisq-auto-templates` frontmatter kill-switch. */
+function frontmatterDisablesAutoTemplates(markdownDoc: MarkdownDocument): boolean {
+  const v = markdownDoc.frontmatter?.['squisq-auto-templates'];
+  return v === false || v === 'false' || v === 'off' || v === 'no' || v === 0;
+}
+
+/**
+ * Walk heading blocks and apply content-aware templates to the ones that
+ * still hold the structural default. Children of container templates
+ * (diagram/drawing/layout) are consumed by their parent and never
+ * re-templated. `state.featureIndex` alternates left/right feature
+ * composition across the document.
+ */
+function applyAutoTemplates(
+  blocks: Block[],
+  resolvedDefault: string,
+  state: { featureIndex: number },
+): void {
+  for (const block of blocks) {
+    const annotated = !!block.sourceHeading?.templateAnnotation?.template;
+    if (block.sourceHeading && !annotated && block.template === resolvedDefault) {
+      const profile = profileBlockContents(block.contents ?? []);
+      const picked = pickAutoTemplate(profile, state.featureIndex);
+      if (picked) {
+        const inputs = deriveTemplateInputs(picked, block.title ?? '', block.contents);
+        if (inputs) {
+          if (picked === 'leftFeature' || picked === 'rightFeature') state.featureIndex += 1;
+          block.template = picked;
+          block.autoTemplate = true;
+          // Author-provided structured data (```json data fences) wins
+          // over derived inputs.
+          block.templateData = { ...inputs, ...block.templateData };
+        }
+      }
+    }
+    if (block.children && block.children.length > 0 && !isContainerTemplate(block.template)) {
+      applyAutoTemplates(block.children, resolvedDefault, state);
+    }
   }
 }
 

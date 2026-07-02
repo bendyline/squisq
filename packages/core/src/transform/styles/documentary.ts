@@ -11,6 +11,7 @@ export const documentaryStyle: TransformStyleConfig = {
   colorSchemes: ['blue', 'green', 'purple'],
   insertSectionHeaders: false,
   interleaveImages: true,
-  blocksPerSection: { min: 1, max: 3 },
+  blocksPerSection: { max: 3 },
   transitionStyle: 'fade',
+  suggestedThemeId: 'documentary',
 };

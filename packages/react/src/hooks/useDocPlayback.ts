@@ -15,11 +15,17 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import type { Doc, Block, DocBlock } from '@bendyline/squisq/schemas';
 import type { Theme } from '@bendyline/squisq/schemas';
-import { getBlockAtTime, resolveTransitionDuration } from '@bendyline/squisq/schemas';
+import {
+  DEFAULT_THEME,
+  getBlockAtTime,
+  resolveBlockTransition,
+  resolveTransitionDuration,
+} from '@bendyline/squisq/schemas';
 import {
   expandDocBlocks,
   flattenRenderableBlocks,
   isTemplateBlock,
+  resolvePersistentLayers,
   VIEWPORT_PRESETS,
   type ViewportConfig,
 } from '@bendyline/squisq/doc';
@@ -87,6 +93,15 @@ export function useDocPlayback(
     // Check if any blocks are templates
     const hasTemplates = flatBlocks.some(isTemplateBlock);
 
+    // Doc persistent layers win wholesale; docs without any inherit the
+    // theme's (see resolvePersistentLayers). Passed as a narrow object so
+    // the memo deps stay field-precise.
+    const resolvedTheme = theme ?? DEFAULT_THEME;
+    const persistentLayers = resolvePersistentLayers(
+      { persistentLayers: script.persistentLayers },
+      resolvedTheme,
+    );
+
     if (hasTemplates) {
       // Extract audio segment timing for proper block synchronization
       const audioSegments = script.audio?.segments?.map((seg) => ({
@@ -98,7 +113,7 @@ export function useDocPlayback(
       const expanded = expandDocBlocks(flatBlocks as DocBlock[], {
         audioSegments,
         viewport,
-        persistentLayers: script.persistentLayers,
+        persistentLayers,
         theme,
         // Custom (user-defined) templates inlined into the doc's
         // frontmatter — see CustomTemplates.ts. Merged onto the
@@ -109,8 +124,12 @@ export function useDocPlayback(
       return expanded;
     }
 
-    // All raw blocks, use as-is
-    return flatBlocks;
+    // All raw blocks — used as-is except for the theme's default transition
+    // fallback (copies, never mutations: these blocks are caller-owned).
+    return flatBlocks.map((block, index) => {
+      const transition = resolveBlockTransition(block, resolvedTheme, index);
+      return transition !== block.transition ? { ...block, transition } : block;
+    });
   }, [
     script?.blocks,
     script?.audio?.segments,

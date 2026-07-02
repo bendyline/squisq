@@ -197,6 +197,28 @@ export function resolveTransitionDuration(
   return duration != null && Number.isFinite(duration) && duration > 0 ? duration : fallback;
 }
 
+/**
+ * Resolve the effective transition for a block: the authored value wins
+ * (markdown frontmatter and transform styles both write `block.transition`
+ * upstream), then the theme's `renderStyle.defaultTransition`, then
+ * `undefined` (the player's built-in default).
+ *
+ * Block 0 never gets a theme default — an entrance transition on the first
+ * block would dim the opening frames of every exported video.
+ *
+ * The theme parameter is structural (not `Theme`) to avoid a schema import
+ * cycle; pass any resolved theme.
+ */
+export function resolveBlockTransition(
+  block: { transition?: Transition },
+  theme: { renderStyle: { defaultTransition?: Transition } },
+  blockIndex: number,
+): Transition | undefined {
+  if (block.transition) return block.transition;
+  if (blockIndex === 0) return undefined;
+  return theme.renderStyle.defaultTransition;
+}
+
 function normalizeToken(value: string): string {
   return value.toLowerCase().replace(/[\s_-]+/g, '');
 }

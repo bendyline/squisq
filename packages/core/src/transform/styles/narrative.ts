@@ -11,6 +11,8 @@ export const narrativeStyle: TransformStyleConfig = {
   colorSchemes: ['blue', 'purple', 'green'],
   insertSectionHeaders: true,
   interleaveImages: true,
-  blocksPerSection: { min: 1, max: 4 },
+  blocksPerSection: { max: 4 },
   transitionStyle: 'fade',
+  suggestedThemeId: 'cinematic',
+  pacing: { intro: true, outro: true },
 };

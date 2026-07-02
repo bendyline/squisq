@@ -17,8 +17,10 @@ import type { QuoteBlockInput, TemplateContext } from '../../schemas/BlockTempla
 import {
   getThemeFont,
   shouldUseShadow,
+  themedEntrance,
   themedFontSize,
   themedSurfaceGradient,
+  themedImageTreatment,
 } from '../utils/themeUtils.js';
 import { withAlpha } from '../../schemas/colorUtils.js';
 import { createAccentLayers, getAccentLayout, adjustY, DEFAULT_LAYOUT } from './accentImage.js';
@@ -43,7 +45,7 @@ export function quoteBlock(input: QuoteBlockInput, context: TemplateContext): La
 
   // Add accent image layers (behind text, after background)
   if (accentImage) {
-    layers.push(...createAccentLayers(accentImage, input.id));
+    layers.push(...createAccentLayers(accentImage, input.id, themedImageTreatment(context, input.imageTreatment)));
   }
 
   // Decorative opening quotation mark — oversized, low-opacity behind the
@@ -92,7 +94,7 @@ export function quoteBlock(input: QuoteBlockInput, context: TemplateContext): La
       anchor: 'center',
       width: accentLayout.textWidth,
     },
-    animation: { type: 'fadeIn', duration: 2 },
+    animation: themedEntrance(context, 'text', { type: 'fadeIn', duration: 2 }),
   });
 
   // Attribution hangs just below the quote's estimated bottom edge, so

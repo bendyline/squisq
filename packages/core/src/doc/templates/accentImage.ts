@@ -13,7 +13,7 @@
  * This is shared code used by both site and efb-app doc renderers.
  */
 
-import type { Layer, ImageLayer, ShapeLayer, Animation } from '../../schemas/Doc.js';
+import type { Layer, ImageLayer, ImageTreatment, ShapeLayer, Animation } from '../../schemas/Doc.js';
 import type { AccentImage, AccentPosition } from '../../schemas/BlockTemplates.js';
 
 const PERCENTAGE_RE = /^(\d+(?:\.\d+)?)\s*%?$/;
@@ -125,28 +125,40 @@ export function getAccentLayout(position: AccentPosition): AccentLayout {
  * Create layers for an accent image.
  * Returns the image layer and any overlay/gradient layers needed.
  */
-export function createAccentLayers(accent: AccentImage, slideId: string): Layer[] {
+export function createAccentLayers(
+  accent: AccentImage,
+  slideId: string,
+  treatment?: ImageTreatment,
+): Layer[] {
   const layers: Layer[] = [];
   const { src, alt, position, ambientMotion, credit, license } = accent;
 
   switch (position) {
     case 'left-strip':
-      layers.push(createStripImage(src, alt, 'left', slideId, ambientMotion, credit, license));
+      layers.push(
+        createStripImage(src, alt, 'left', slideId, ambientMotion, credit, license, treatment),
+      );
       layers.push(createStripGradient('left', slideId));
       break;
 
     case 'right-strip':
-      layers.push(createStripImage(src, alt, 'right', slideId, ambientMotion, credit, license));
+      layers.push(
+        createStripImage(src, alt, 'right', slideId, ambientMotion, credit, license, treatment),
+      );
       layers.push(createStripGradient('right', slideId));
       break;
 
     case 'bottom-strip':
-      layers.push(createBottomStripImage(src, alt, slideId, ambientMotion, credit, license));
+      layers.push(
+        createBottomStripImage(src, alt, slideId, ambientMotion, credit, license, treatment),
+      );
       layers.push(createBottomStripGradient(slideId));
       break;
 
     case 'corner-inset':
-      layers.push(createCornerInsetImage(src, alt, slideId, ambientMotion, credit, license));
+      layers.push(
+        createCornerInsetImage(src, alt, slideId, ambientMotion, credit, license, treatment),
+      );
       layers.push(createCornerVignette(slideId));
       break;
   }
@@ -165,6 +177,7 @@ function createStripImage(
   ambientMotion?: AccentImage['ambientMotion'],
   credit?: string,
   license?: string,
+  treatment?: ImageTreatment,
 ): ImageLayer {
   return {
     type: 'image',
@@ -175,6 +188,7 @@ function createStripImage(
       fit: 'cover',
       credit,
       license,
+      ...(treatment ? { treatment } : {}),
     },
     position: {
       x: side === 'left' ? 0 : `${100 - STRIP_SIZE}%`,
@@ -221,6 +235,7 @@ function createBottomStripImage(
   ambientMotion?: AccentImage['ambientMotion'],
   credit?: string,
   license?: string,
+  treatment?: ImageTreatment,
 ): ImageLayer {
   return {
     type: 'image',
@@ -231,6 +246,7 @@ function createBottomStripImage(
       fit: 'cover',
       credit,
       license,
+      ...(treatment ? { treatment } : {}),
     },
     position: {
       x: 0,
@@ -272,6 +288,7 @@ function createCornerInsetImage(
   ambientMotion?: AccentImage['ambientMotion'],
   credit?: string,
   license?: string,
+  treatment?: ImageTreatment,
 ): ImageLayer {
   return {
     type: 'image',
@@ -282,6 +299,7 @@ function createCornerInsetImage(
       fit: 'cover',
       credit,
       license,
+      ...(treatment ? { treatment } : {}),
     },
     position: {
       x: '70%',

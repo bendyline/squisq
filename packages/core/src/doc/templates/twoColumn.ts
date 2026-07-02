@@ -15,6 +15,7 @@ import type { TwoColumnInput, TemplateContext } from '../../schemas/BlockTemplat
 import {
   resolveColorScheme,
   getThemeFont,
+  themedEntrance,
   themedFontSize,
   themedSurfaceGradient,
 } from '../utils/themeUtils.js';
@@ -109,7 +110,7 @@ export function twoColumn(input: TwoColumnInput, context: TemplateContext): Laye
         },
       },
       position: { x: '50%', y: headerY, anchor: 'center' },
-      animation: { type: 'fadeIn', duration: 0.8 },
+      animation: themedEntrance(context, 'text', { type: 'fadeIn', duration: 0.8 }),
     });
   }
 
@@ -155,7 +156,7 @@ export function twoColumn(input: TwoColumnInput, context: TemplateContext): Laye
       anchor: 'center',
       width: columnWidth,
     },
-    animation: { type: 'fadeIn', duration: 1 },
+    animation: themedEntrance(context, 'text', { type: 'fadeIn', duration: 1 }),
   });
 
   if (left.sublabel) {
@@ -231,7 +232,7 @@ export function twoColumn(input: TwoColumnInput, context: TemplateContext): Laye
       anchor: 'center',
       width: columnWidth,
     },
-    animation: { type: 'fadeIn', duration: 1, delay: 0.5 },
+    animation: themedEntrance(context, 'text', { type: 'fadeIn', duration: 1, delay: 0.5 }),
   });
 
   if (right.sublabel) {

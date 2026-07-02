@@ -10,7 +10,7 @@
 
 import type { Layer } from '../../schemas/Doc.js';
 import type { ImageWithCaptionInput, TemplateContext } from '../../schemas/BlockTemplates.js';
-import { getThemeFont, shouldUseShadow, themedFontSize } from '../utils/themeUtils.js';
+import { getThemeFont, shouldUseShadow, themedFontSize, themedImageTreatment } from '../utils/themeUtils.js';
 import { withAlpha } from '../../schemas/colorUtils.js';
 import { cleanCaption } from './captionUtils.js';
 import { mapAmbientMotion } from './accentImage.js';
@@ -29,6 +29,8 @@ export function imageWithCaption(input: ImageWithCaptionInput, context: Template
   } = input;
   const caption = rawCaption ? cleanCaption(rawCaption) : rawCaption;
   const { theme, layout } = context;
+
+  const treatment = themedImageTreatment(context, input.imageTreatment);
 
   // Scale font sizes for viewport
   const captionFontSize = themedFontSize(36, context, false);
@@ -54,6 +56,7 @@ export function imageWithCaption(input: ImageWithCaptionInput, context: Template
         fit: 'cover',
         credit: imageCredit,
         license: imageLicense,
+        ...(treatment ? { treatment } : {}),
       },
       position: { x: 0, y: 0, width: '100%', height: '100%' },
       animation: imageAnimation,

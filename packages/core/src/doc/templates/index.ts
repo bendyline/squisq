@@ -23,7 +23,9 @@ import type { Theme } from '../../schemas/Theme.js';
 import type { CustomTemplateDefinition } from '../../schemas/CustomTemplates.js';
 import { isTemplateBlock, createTemplateContext } from '../../schemas/BlockTemplates.js';
 import { DEFAULT_THEME as defaultTheme } from '../../schemas/themeLibrary.js';
-import { expandPersistentLayers } from './persistentLayers.js';
+import { expandPersistentLayers, wrapWithPersistentLayers } from './persistentLayers.js';
+import { applyRenderStyleToLayers } from '../utils/applyRenderStyle.js';
+import { resolveBlockTransition } from '../../schemas/Transitions.js';
 import { makeCustomTemplateFn } from './customTemplate.js';
 import type { ViewportConfig } from '../../schemas/Viewport.js';
 import { VIEWPORT_PRESETS } from '../../schemas/Viewport.js';
@@ -193,10 +195,19 @@ export function expandTemplateBlock(
     };
   }
 
+  // Effective template input: the block's own fields, then structured
+  // body data (```json data fences / derived auto-template inputs), then
+  // `{[…]}` string overrides — the same merge order getLayers uses.
+  const { templateData, templateOverrides } = templateBlock as Block;
+  const input =
+    templateData || templateOverrides
+      ? ({ ...templateBlock, ...templateData, ...templateOverrides } as TemplateBlock)
+      : templateBlock;
+
   // Generate layers from template with error handling
   let layers: Layer[];
   try {
-    layers = templateFn(templateBlock, context);
+    layers = templateFn(input, context);
     if (!Array.isArray(layers)) {
       console.error(
         `Template ${templateBlock.template} did not return an array, got:`,
@@ -265,6 +276,41 @@ export interface ExpandDocBlocksOptions {
  * @param blocks - Array of template or raw blocks
  * @param options - Expansion options including theme, viewport, and persistent layers
  */
+/**
+ * Finalize an expanded block in place: apply the theme's motion post-pass
+ * to template-generated layers, wrap with persistent bottom/top layers,
+ * and fill the theme's default transition (never on block 0, never over an
+ * authored transition). Shared by every expansion path in this module.
+ */
+function finalizeExpandedBlock(
+  expandedBlock: Block,
+  sourceBlock: DocBlock,
+  blockIndex: number,
+  theme: Theme,
+  bottomLayers: Layer[],
+  topLayers: Layer[],
+): void {
+  // Theme motion defaults apply only to template-generated layers —
+  // raw authored block.layers are never restyled.
+  if (isTemplateBlock(sourceBlock) && expandedBlock.layers && expandedBlock.layers.length > 0) {
+    expandedBlock.layers = applyRenderStyleToLayers(expandedBlock.layers, expandedBlock, theme);
+  }
+
+  if (bottomLayers.length > 0 || topLayers.length > 0) {
+    expandedBlock.layers = wrapWithPersistentLayers(
+      expandedBlock.layers ?? [],
+      sourceBlock as TemplateBlock,
+      bottomLayers,
+      topLayers,
+    );
+  }
+
+  const transition = resolveBlockTransition(expandedBlock, theme, blockIndex);
+  if (transition !== expandedBlock.transition) {
+    expandedBlock.transition = transition;
+  }
+}
+
 export function expandDocBlocks(blocks: DocBlock[], options: ExpandDocBlocksOptions = {}): Block[] {
   const opts: ExpandDocBlocksOptions = options;
 
@@ -279,9 +325,12 @@ export function expandDocBlocks(blocks: DocBlock[], options: ExpandDocBlocksOpti
       ? buildRegistry(customTemplates)
       : (templateRegistry as unknown as RuntimeTemplateRegistry);
 
-  // Pre-expand persistent layers once
-  const bottomLayers = expandPersistentLayers(persistentLayers?.bottomLayers);
-  const topLayers = expandPersistentLayers(persistentLayers?.topLayers);
+  // Pre-expand persistent layers once. Callers that pass no config inherit
+  // the theme's atmosphere (docs with their own layers pass them in and win
+  // wholesale — see resolvePersistentLayers).
+  const effectivePersistentLayers = persistentLayers ?? theme.persistentLayers;
+  const bottomLayers = expandPersistentLayers(effectivePersistentLayers?.bottomLayers, theme);
+  const topLayers = expandPersistentLayers(effectivePersistentLayers?.topLayers, theme);
 
   // If no audio segments provided, use simple cumulative timing
   if (!audioSegments || audioSegments.length === 0) {
@@ -308,17 +357,7 @@ export function expandDocBlocks(blocks: DocBlock[], options: ExpandDocBlocksOpti
         ? expandTemplateBlock(block, context, registry)
         : (block as Block);
 
-      // Inject persistent layers
-      const templateBlock = block as TemplateBlock;
-      const useBottom = templateBlock.useBottomLayer !== false;
-      const useTop = templateBlock.useTopLayer !== false;
-      if (bottomLayers.length > 0 || topLayers.length > 0) {
-        expandedBlock.layers = [
-          ...(useBottom ? bottomLayers : []),
-          ...(expandedBlock.layers ?? []),
-          ...(useTop ? topLayers : []),
-        ];
-      }
+      finalizeExpandedBlock(expandedBlock, block, index, theme, bottomLayers, topLayers);
 
       expandedBlock.startTime = currentTime;
       currentTime += expandedBlock.duration;
@@ -361,16 +400,7 @@ export function expandDocBlocks(blocks: DocBlock[], options: ExpandDocBlocksOpti
           ? expandTemplateBlock(block, context, registry)
           : (block as Block);
 
-        const templateBlock = block as TemplateBlock;
-        const useBottom = templateBlock.useBottomLayer !== false;
-        const useTop = templateBlock.useTopLayer !== false;
-        if (bottomLayers.length > 0 || topLayers.length > 0) {
-          expandedBlock.layers = [
-            ...(useBottom ? bottomLayers : []),
-            ...(expandedBlock.layers ?? []),
-            ...(useTop ? topLayers : []),
-          ];
-        }
+        finalizeExpandedBlock(expandedBlock, block, originalIndex, theme, bottomLayers, topLayers);
 
         expandedBlock.startTime = offsetTime;
         offsetTime += expandedBlock.duration;
@@ -438,17 +468,9 @@ export function expandDocBlocks(blocks: DocBlock[], options: ExpandDocBlocksOpti
         ? expandTemplateBlock(block, context, registry)
         : (block as Block);
 
-      const templateBlock = block as TemplateBlock;
-      const useBottom = templateBlock.useBottomLayer !== false;
-      const useTop = templateBlock.useTopLayer !== false;
-      if (bottomLayers.length > 0 || topLayers.length > 0) {
-        expandedBlock.layers = [
-          ...(useBottom ? bottomLayers : []),
-          ...(expandedBlock.layers ?? []),
-          ...(useTop ? topLayers : []),
-        ];
-      }
+      finalizeExpandedBlock(expandedBlock, block, originalIndex, theme, bottomLayers, topLayers);
 
+      const templateBlock = block as TemplateBlock;
       expandedInfos.push({
         block: expandedBlock,
         originalIndex,
@@ -694,7 +716,13 @@ export type {
 } from '../../schemas/Viewport.js';
 export { getLayoutHints, getTwoColumnPositions } from '../../schemas/LayoutStrategy.js';
 export type { LayoutHints } from '../../schemas/LayoutStrategy.js';
-export { expandPersistentLayers, getDocStyleConfig } from './persistentLayers.js';
+export {
+  expandPersistentLayers,
+  getDocStyleConfig,
+  getPersistentLayersFromTheme,
+  resolvePersistentLayers,
+  wrapWithPersistentLayers,
+} from './persistentLayers.js';
 
 // Re-export individual templates for direct access
 export { titleBlock } from './titleBlock.js';

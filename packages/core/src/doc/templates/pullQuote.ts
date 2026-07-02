@@ -10,12 +10,14 @@
 
 import type { Layer } from '../../schemas/Doc.js';
 import type { PullQuoteInput, TemplateContext } from '../../schemas/BlockTemplates.js';
-import { getThemeFont, themedFontSize } from '../utils/themeUtils.js';
+import { getThemeFont, themedEntrance, themedFontSize, themedImageTreatment } from '../utils/themeUtils.js';
 import { estimateTextHeight } from './captionUtils.js';
 
 export function pullQuote(input: PullQuoteInput, context: TemplateContext): Layer[] {
   const { text, attribution, backgroundImage, ambientMotion } = input;
   const { viewport } = context;
+
+  const treatment = themedImageTreatment(context, input.imageTreatment);
 
   // Guard: backgroundImage is required
   if (!backgroundImage?.src) return [];
@@ -37,6 +39,7 @@ export function pullQuote(input: PullQuoteInput, context: TemplateContext): Laye
         fit: 'cover',
         credit: backgroundImage.credit,
         license: backgroundImage.license,
+        ...(treatment ? { treatment } : {}),
       },
       position: { x: 0, y: 0, width: '100%', height: '100%' },
       animation: ambientMotion ? { type: ambientMotion, duration: 15 } : undefined,
@@ -94,7 +97,7 @@ export function pullQuote(input: PullQuoteInput, context: TemplateContext): Laye
         anchor: 'center',
         width: '72%',
       },
-      animation: { type: 'fadeIn', duration: 2 },
+      animation: themedEntrance(context, 'text', { type: 'fadeIn', duration: 2 }),
     },
   ];
 
