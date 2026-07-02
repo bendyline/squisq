@@ -148,6 +148,20 @@ export interface Doc {
   customTemplates?: import('./CustomTemplates.js').CustomTemplateDefinition[];
 
   /**
+   * User-defined themes inlined into this doc.
+   *
+   * The theme analog of {@link Doc.customTemplates}. Populated from the
+   * markdown frontmatter key `squisq-custom-themes`. Exactly one is active
+   * at a time — selected by id via `squisq-theme` / {@link Doc.themeId},
+   * the doc-level counterpart of a block's `{[name]}` template annotation —
+   * but the payload is a list so a doc can carry a small catalog and stay
+   * self-sufficient for SSR / export. `resolveThemeForDoc(doc, id)` resolves
+   * against this list first (pure, doc-scoped) before built-ins, mirroring
+   * how `buildRegistry` resolves custom templates.
+   */
+  customThemes?: import('./Theme.js').Theme[];
+
+  /**
    * Structural problems found while building this doc (unknown templates,
    * unparseable data fences, duplicate ids, unresolved connections, …).
    * Populated by `markdownToDoc()`; extended by `validateMarkdownDoc()`.

@@ -18,8 +18,8 @@
  */
 
 import type { Doc, Theme } from '@bendyline/squisq/schemas';
-import { resolveTheme, resolveFontFamily } from '@bendyline/squisq/schemas';
-import { docToMarkdown } from '@bendyline/squisq/doc';
+import { resolveFontFamily } from '@bendyline/squisq/schemas';
+import { docToMarkdown, resolveThemeForDoc } from '@bendyline/squisq/doc';
 import type {
   MarkdownDocument,
   MarkdownBlockNode,
@@ -132,7 +132,7 @@ export async function markdownDocToDocx(
     options.themeId !== undefined
       ? options
       : { ...options, themeId: readFrontmatterThemeId(doc.frontmatter) };
-  const ctx = new ExportContext(resolvedOptions);
+  const ctx = new ExportContext(resolvedOptions, doc);
   const bodyXml = convertBlocks(doc.children, ctx);
   return buildDocxPackage(bodyXml, ctx, resolvedOptions);
 }
@@ -212,7 +212,7 @@ class ExportContext {
 
   private nextDocPrId = 1;
 
-  constructor(options: DocxExportOptions) {
+  constructor(options: DocxExportOptions, doc?: MarkdownDocument) {
     let themeFont: string | undefined;
     let themeTitleFont: string | undefined;
     let themeHeadingColor: string | undefined;
@@ -221,7 +221,7 @@ class ExportContext {
     let themeBackgroundColor: string | undefined;
 
     if (options.themeId) {
-      const theme: Theme = resolveTheme(options.themeId);
+      const theme: Theme = resolveThemeForDoc(doc, options.themeId);
       // Theme fonts arrive as CSS stacks (e.g. `"Oswald", Impact,
       // "Arial Black", sans-serif`). Word's `w:ascii` attribute is a
       // single font name — passing the whole stack is treated as a

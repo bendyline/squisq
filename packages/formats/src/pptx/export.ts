@@ -28,9 +28,9 @@
  */
 
 import type { Doc, Transition, TransitionDirection } from '@bendyline/squisq/schemas';
-import { resolveTheme, resolveFontFamily } from '@bendyline/squisq/schemas';
+import { resolveFontFamily } from '@bendyline/squisq/schemas';
 import type { Theme } from '@bendyline/squisq/schemas';
-import { docToMarkdown } from '@bendyline/squisq/doc';
+import { docToMarkdown, resolveThemeForDoc } from '@bendyline/squisq/doc';
 import type {
   MarkdownDocument,
   MarkdownBlockNode,
@@ -152,7 +152,7 @@ export async function markdownDocToPptx(
   // shorter legacy `themeId` / `theme` aliases — see
   // `readFrontmatterThemeId` for the precedence.
   const themeId = options.themeId ?? readFrontmatterThemeId(doc.frontmatter);
-  const style = resolveSlideStyle(themeId, options);
+  const style = resolveSlideStyle(themeId, options, doc);
 
   const slides = segmentIntoSlides(doc.children, options.slideBreak ?? 'h2');
 
@@ -205,7 +205,11 @@ interface SlideStyle {
   hasTheme: boolean;
 }
 
-function resolveSlideStyle(themeId: string | undefined, options: PptxExportOptions): SlideStyle {
+function resolveSlideStyle(
+  themeId: string | undefined,
+  options: PptxExportOptions,
+  doc: MarkdownDocument,
+): SlideStyle {
   if (!themeId) {
     return {
       background: 'FFFFFF',
@@ -220,7 +224,7 @@ function resolveSlideStyle(themeId: string | undefined, options: PptxExportOptio
     };
   }
 
-  const theme: Theme = resolveTheme(themeId);
+  const theme: Theme = resolveThemeForDoc(doc, themeId);
   const c = theme.colors;
 
   return {

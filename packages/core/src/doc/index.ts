@@ -21,6 +21,12 @@ export {
   writeCustomTemplatesToFrontmatter,
   FRONTMATTER_CUSTOM_TEMPLATES_KEY,
 } from './customTemplatesFrontmatter.js';
+export {
+  readCustomThemesFromFrontmatter,
+  writeCustomThemesToFrontmatter,
+  FRONTMATTER_CUSTOM_THEMES_KEY,
+} from './customThemesFrontmatter.js';
+export { resolveThemeForDoc } from './resolveDocTheme.js';
 export { getLayers } from './getLayers.js';
 export type { RenderContext } from './getLayers.js';
 export { resolveAudioMapping, scoreTextSimilarity } from './audioMapping.js';

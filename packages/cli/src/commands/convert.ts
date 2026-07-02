@@ -90,15 +90,9 @@ async function runConvert(inputPath: string, opts: ConvertOpts): Promise<void> {
   // Ensure output directory exists
   await mkdir(outputDir, { recursive: true });
 
-  // Validate theme and transform IDs
-  if (opts.theme) {
-    const { getAvailableThemes } = await import('@bendyline/squisq/schemas');
-    const themes = getAvailableThemes();
-    if (!themes.includes(opts.theme)) {
-      throw new Error(`Unknown theme "${opts.theme}". Available: ${themes.join(', ')}`);
-    }
-  }
-
+  // Validate the transform ID up front. The theme id is validated after the
+  // doc is read (below), so a custom theme inlined in the doc's frontmatter
+  // is admitted rather than rejected as "unknown".
   if (opts.transform) {
     const { getTransformStyleIds } = await import('@bendyline/squisq/transform');
     const styles = getTransformStyleIds();
@@ -117,6 +111,22 @@ async function runConvert(inputPath: string, opts: ConvertOpts): Promise<void> {
     throw new Error(
       'Convert command requires a markdown document. JSON Doc input is not supported for convert — use the video command instead.',
     );
+  }
+
+  // Validate the theme id now that we have the doc: accept built-ins AND any
+  // custom themes inlined in the doc's `squisq-custom-themes` frontmatter.
+  if (opts.theme) {
+    const { getAvailableThemes } = await import('@bendyline/squisq/schemas');
+    const { readCustomThemesFromFrontmatter } = await import('@bendyline/squisq/doc');
+    const builtins = getAvailableThemes();
+    const customIds = (readCustomThemesFromFrontmatter(result.markdownDoc.frontmatter) ?? []).map(
+      (t) => t.id,
+    );
+    if (!builtins.includes(opts.theme) && !customIds.includes(opts.theme)) {
+      throw new Error(
+        `Unknown theme "${opts.theme}". Available: ${[...builtins, ...customIds].join(', ')}`,
+      );
+    }
   }
 
   // Apply transform if requested

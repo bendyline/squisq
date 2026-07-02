@@ -41,6 +41,18 @@ export interface ThemePickerProps {
   variant?: 'compact' | 'full';
   /** Accessible label, e.g. "Theme". */
   ariaLabel?: string;
+  /**
+   * User-authored themes to list in a "Custom" group (doc + library, from
+   * `useCustomThemes().allThemes`). When omitted, only built-ins show — so
+   * the base-theme picker and other embeds stay built-ins only.
+   */
+  customThemes?: Theme[];
+  /** When provided, renders a "+ Create custom theme" row that calls this. */
+  onCreateCustom?: () => void;
+  /** Per-custom-card edit affordance (opens the designer for that theme). */
+  onEditCustom?: (id: string) => void;
+  /** Per-custom-card delete affordance. */
+  onDeleteCustom?: (id: string) => void;
 }
 
 // ── Helpers ───────────────────────────────────────────────────────
@@ -113,15 +125,37 @@ export function ThemePicker({
   includeDefault,
   variant = 'compact',
   ariaLabel = 'Theme',
+  customThemes,
+  onCreateCustom,
+  onEditCustom,
+  onDeleteCustom,
 }: ThemePickerProps) {
   const [open, setOpen] = useState(false);
   const [popoverStyle, setPopoverStyle] = useState<React.CSSProperties>({});
   const triggerRef = useRef<HTMLButtonElement>(null);
 
+  // Custom entries are computed per-render (built-ins stay static at module
+  // load). A custom theme is already a full Theme, so it becomes an entry
+  // directly — no `resolveTheme` needed.
+  const customEntries = useMemo<ThemeEntry[]>(
+    () =>
+      (customThemes ?? []).map((t) => ({
+        id: t.id,
+        name: t.name,
+        description: t.description,
+        theme: t,
+      })),
+    [customThemes],
+  );
+  const findEntry = useCallback(
+    (id: string): ThemeEntry | undefined => entryById(id) ?? customEntries.find((e) => e.id === id),
+    [customEntries],
+  );
+
   const selectedEntry = useMemo<ThemeEntry | null>(() => {
     if (!value) return null;
-    return entryById(value) ?? null;
-  }, [value]);
+    return findEntry(value) ?? null;
+  }, [value, findEntry]);
 
   // The trigger always wants *something* to preview. When `includeDefault`
   // is on and the value is empty, we treat the selection as the implicit
@@ -142,7 +176,12 @@ export function ThemePicker({
     const gap = 4;
     const vw = window.innerWidth;
     const vh = window.innerHeight;
-    const popoverWidth = Math.max(280, rect.width);
+    // Aim for a multi-column popover, but never wider than the viewport.
+    // The CSS grid packs as many theme cards per row as this width allows,
+    // so clamping to the available width makes a narrow window collapse to
+    // fewer columns (down to one) instead of overrunning the edge.
+    const available = vw - margin * 2;
+    const popoverWidth = Math.min(available, Math.max(560, rect.width));
     const maxLeft = Math.max(margin, vw - popoverWidth - margin);
     const left = Math.min(Math.max(margin, rect.left), maxLeft);
 
@@ -267,6 +306,76 @@ export function ThemePicker({
               </span>
             </button>
           ))}
+          {customEntries.length > 0 && (
+            <div className="squisq-theme-picker-group-label">Custom</div>
+          )}
+          {customEntries.map((entry) => (
+            <div key={entry.id} className="squisq-theme-picker-custom-wrap">
+              <button
+                type="button"
+                role="option"
+                aria-selected={value === entry.id}
+                aria-label={entry.name}
+                className={`squisq-theme-picker-row${value === entry.id ? ' squisq-theme-picker-row--selected' : ''}`}
+                onClick={() => handleSelect(entry.id)}
+                title={entry.description ?? entry.name}
+              >
+                <ThemeNameChip theme={entry.theme} label={entry.name} />
+                <span className="squisq-theme-picker-row-meta">
+                  <Swatches theme={entry.theme} />
+                  {entry.description && (
+                    <span className="squisq-theme-picker-row-desc">{entry.description}</span>
+                  )}
+                </span>
+              </button>
+              {(onEditCustom || onDeleteCustom) && (
+                <span className="squisq-theme-picker-card-actions">
+                  {onEditCustom && (
+                    <button
+                      type="button"
+                      className="squisq-theme-picker-card-action"
+                      onClick={() => onEditCustom(entry.id)}
+                      aria-label={`Edit ${entry.name}`}
+                      title="Edit theme"
+                    >
+                      ✎
+                    </button>
+                  )}
+                  {onDeleteCustom && (
+                    <button
+                      type="button"
+                      className="squisq-theme-picker-card-action"
+                      onClick={() => onDeleteCustom(entry.id)}
+                      aria-label={`Delete ${entry.name}`}
+                      title="Delete theme"
+                    >
+                      ×
+                    </button>
+                  )}
+                </span>
+              )}
+            </div>
+          ))}
+          {onCreateCustom && (
+            <button
+              type="button"
+              className="squisq-theme-picker-row squisq-theme-picker-create"
+              onClick={() => {
+                setOpen(false);
+                onCreateCustom();
+              }}
+            >
+              <span className="squisq-theme-picker-create-plus" aria-hidden="true">
+                +
+              </span>
+              <span className="squisq-theme-picker-row-meta">
+                <span className="squisq-theme-picker-row-name">Create custom theme…</span>
+                <span className="squisq-theme-picker-row-desc">
+                  Design your own colors, accents, and fonts.
+                </span>
+              </span>
+            </button>
+          )}
         </div>,
         document.body,
       )

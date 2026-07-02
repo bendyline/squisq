@@ -4531,15 +4531,19 @@
 .squisq-theme-picker-popover {
   max-height: min(70vh, 520px);
   overflow-y: auto;
+  box-sizing: border-box;
   background: var(--squisq-bg, #fff);
   color: var(--squisq-text, #1f2937);
   border: 1px solid var(--squisq-border, #e5e7eb);
   border-radius: 8px;
   box-shadow: 0 8px 28px rgba(0, 0, 0, 0.18);
   padding: 6px;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
+  /* Card grid: each theme is a compact card, packed into as many columns
+     as the (viewport-clamped) popover width allows. Collapses to a single
+     column on narrow windows so the popover never overruns the viewport. */
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 4px;
   animation: squisq-theme-picker-appear 0.12s ease-out;
 }
 
@@ -4556,8 +4560,9 @@
 
 .squisq-theme-picker-row {
   display: flex;
-  align-items: center;
-  gap: 10px;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 6px;
   padding: 8px;
   border-radius: 6px;
   background: transparent;
@@ -4587,8 +4592,9 @@
 }
 
 .squisq-theme-picker-row .squisq-theme-picker-name-chip {
-  flex-shrink: 0;
-  min-width: 110px;
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
   text-align: center;
   padding: 6px 10px;
   font-size: 13px;
@@ -4629,6 +4635,188 @@
   background: #1f2937;
   border-color: #374151;
   color: #e5e7eb;
+}
+
+/* ─── Theme "edit" pencil (beside the toolbar theme dropdown) ────── */
+
+.squisq-theme-edit-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  flex-shrink: 0;
+  border: 1px solid var(--squisq-border, #d1d5db);
+  border-radius: 4px;
+  background: var(--squisq-input-bg, #fff);
+  color: var(--squisq-text-muted, #6b7280);
+  cursor: pointer;
+}
+.squisq-theme-edit-btn:hover {
+  color: var(--squisq-text, #1f2937);
+  border-color: var(--squisq-text-muted, #9ca3af);
+}
+.squisq-editor-shell[data-theme='dark'] .squisq-theme-edit-btn {
+  background: #111827;
+  border-color: #374151;
+  color: #9ca3af;
+}
+.squisq-editor-shell[data-theme='dark'] .squisq-theme-edit-btn:hover {
+  color: #e5e7eb;
+  border-color: #4b5563;
+}
+
+/* ─── Theme picker: custom-theme group, cards, create row ───────── */
+
+/* Group label + create row span the full grid width. */
+.squisq-theme-picker-group-label {
+  grid-column: 1 / -1;
+  padding: 8px 8px 2px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--squisq-text-muted, #6b7280);
+}
+
+/* A custom card is wrapped so its edit/delete actions can overlay the corner
+   without nesting interactive elements inside the selectable button. */
+.squisq-theme-picker-custom-wrap {
+  position: relative;
+  display: flex;
+}
+.squisq-theme-picker-custom-wrap .squisq-theme-picker-row {
+  flex: 1;
+}
+.squisq-theme-picker-card-actions {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  display: flex;
+  gap: 2px;
+  opacity: 0;
+  transition: opacity 0.1s ease;
+}
+.squisq-theme-picker-custom-wrap:hover .squisq-theme-picker-card-actions {
+  opacity: 1;
+}
+.squisq-theme-picker-card-action {
+  width: 20px;
+  height: 20px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--squisq-border, #e5e7eb);
+  border-radius: 4px;
+  background: var(--squisq-bg, #fff);
+  color: var(--squisq-text-muted, #6b7280);
+  font-size: 12px;
+  cursor: pointer;
+  padding: 0;
+}
+.squisq-theme-picker-card-action:hover {
+  color: var(--squisq-text, #1f2937);
+  border-color: var(--squisq-text-muted, #9ca3af);
+}
+
+.squisq-theme-picker-create {
+  grid-column: 1 / -1;
+  justify-content: flex-start;
+  gap: 10px;
+  border-style: dashed;
+  border-color: var(--squisq-border, #d1d5db);
+  color: var(--squisq-text, #1f2937);
+}
+.squisq-theme-picker-create-plus {
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  background: var(--squisq-row-hover, #f3f4f6);
+  font-size: 18px;
+  line-height: 1;
+}
+
+/* ─── Custom theme designer: right-docked pane + accents ────────── */
+
+/* Docked into the editor's content row as a fixed-width, full-height flex item
+   (mirrors `.squisq-media-bin`), so the preview flexes narrower beside it — no
+   overlay, no covering the toolbars. The WYSIWYG preview stays fully visible
+   and interactive while the user edits the theme. */
+.squisq-custom-theme-pane {
+  width: 380px;
+  max-width: 100%;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--squisq-bg, #fff);
+  color: var(--squisq-text, #1f2937);
+  border-left: 1px solid var(--squisq-border, #e5e7eb);
+  overflow: hidden;
+}
+
+.squisq-custom-theme-pane .squisq-doc-settings-header,
+.squisq-custom-theme-pane .squisq-doc-settings-footer {
+  flex-shrink: 0;
+}
+
+/* Body flex-grows and scrolls; footer/header stay pinned. */
+.squisq-custom-theme-pane-body {
+  flex: 1;
+  overflow-y: auto;
+  max-height: none;
+}
+
+/* Three buttons in a narrow pane — wrap and right-align rather than overflow. */
+.squisq-custom-theme-pane-footer {
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.squisq-editor-shell[data-theme='dark'] .squisq-custom-theme-pane {
+  background: #1f2937;
+  border-color: #374151;
+  color: #e5e7eb;
+}
+
+.squisq-theme-customizer-accents {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.squisq-theme-customizer-row--accent {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.squisq-theme-customizer-accent-remove {
+  width: 24px;
+  height: 24px;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--squisq-border, #e5e7eb);
+  border-radius: 4px;
+  background: transparent;
+  color: var(--squisq-text-muted, #6b7280);
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0;
+}
+.squisq-theme-customizer-accent-remove:hover {
+  color: #dc2626;
+  border-color: #fca5a5;
+}
+.squisq-theme-customizer-accent-add {
+  align-self: flex-start;
+  margin-top: 2px;
 }
 
 /* ─── Document settings dialog ───────────────────────── */

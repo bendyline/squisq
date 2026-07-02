@@ -21,9 +21,11 @@ import {
   type MarkdownDocument,
   type MarkdownNode,
   type HtmlNode,
+  readFrontmatterThemeId,
 } from '@bendyline/squisq/markdown';
 import type { Theme } from '@bendyline/squisq/schemas';
-import { resolveFontFamily, buildGoogleFontsUrl, resolveTheme } from '@bendyline/squisq/schemas';
+import { resolveFontFamily, buildGoogleFontsUrl } from '@bendyline/squisq/schemas';
+import { resolveThemeForDoc } from '@bendyline/squisq/doc';
 
 // ── Public Types ───────────────────────────────────────────────────
 
@@ -116,12 +118,13 @@ export function markdownDocToPlainHtml(
   // tracks themes by id can pass `themeId` straight through; authored
   // docs with `themeId: warm-earth` in frontmatter get styled
   // automatically when neither is supplied.
-  const theme =
-    options.theme ??
-    (themeId ? resolveTheme(themeId) : undefined) ??
-    (typeof doc.frontmatter?.themeId === 'string'
-      ? resolveTheme(doc.frontmatter.themeId)
-      : undefined);
+  // Resolution is doc-scoped via `resolveThemeForDoc`, so an inline
+  // `squisq-custom-themes` id resolves here with no global registration —
+  // and `readFrontmatterThemeId` picks up the editor's canonical
+  // `squisq-theme` key. Stays undefined when nothing selects a theme so
+  // un-themed exports render unstyled (unchanged behavior).
+  const resolveId = themeId ?? readFrontmatterThemeId(doc.frontmatter);
+  const theme = options.theme ?? (resolveId ? resolveThemeForDoc(doc, resolveId) : undefined);
   const ctx: RenderCtx = { images, links, htmlPolicy };
   const body = renderTopLevel(doc.children, ctx);
   const fontsLink = theme ? renderFontsLink(theme) : '';

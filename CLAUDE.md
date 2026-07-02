@@ -252,7 +252,7 @@ For CI / clean reproducible installs, run `npm ci && node scripts/run-install-al
 build entry and a `package.json` export):
 
 - `@bendyline/squisq/schemas` — Type definitions (Doc, BlockTemplates, Viewport, LayoutStrategy, Theme, themeLibrary, themeCompile, themeValidator, colorUtils, fontStacks, Types, MediaProvider, ImageEditDoc)
-- `@bendyline/squisq/doc` — Template registry + all 23 templates (`title`, `sectionHeader`, `statHighlight`, `quote`, `factCard`, `twoColumn`, `dateEvent`, `imageWithCaption`, `leftFeature`, `rightFeature`, `map`, `fullBleedQuote`, `list`, `photoGrid`, `definitionCard`, `comparisonBar`, `pullQuote`, `videoWithCaption`, `videoPullQuote`, `dataTable`, `diagram`, `layout`, `drawing`) + animationUtils + themeUtils + markdownToDoc + docToMarkdown + getLayers + resolveAudioMapping
+- `@bendyline/squisq/doc` — Template registry + all 23 templates (`title`, `sectionHeader`, `statHighlight`, `quote`, `factCard`, `twoColumn`, `dateEvent`, `imageWithCaption`, `leftFeature`, `rightFeature`, `map`, `fullBleedQuote`, `list`, `photoGrid`, `definitionCard`, `comparisonBar`, `pullQuote`, `videoWithCaption`, `videoPullQuote`, `dataTable`, `diagram`, `layout`, `drawing`) + animationUtils + themeUtils + markdownToDoc + docToMarkdown + getLayers + resolveAudioMapping + custom-templates frontmatter codec + custom-themes frontmatter codec (`readCustomThemesFromFrontmatter` / `writeCustomThemesToFrontmatter`) + `resolveThemeForDoc` (pure doc-scoped theme resolution)
 - `@bendyline/squisq/spatial` — Haversine, Geohash utilities
 - `@bendyline/squisq/storage` — StorageAdapter, MemoryStorageAdapter, LocalStorageAdapter, LocalForageAdapter, ContentContainer, MemoryContentContainer, ScopedContentContainer, createMediaProviderFromContainer
 - `@bendyline/squisq/markdown` — Markdown parsing, stringifying, AST types (MarkdownDocument), tree utilities, frontmatter helpers, HTML sub-DOM
@@ -394,6 +394,8 @@ The Theme system provides unified visual styling for rendered docs. A `Theme` bu
 - `themeUtils.ts` — template-facing helpers: `resolveColorScheme()`, `themedFontSize()`, `getTemplateHint()`, etc.
 - `Doc.themeId` — optional pointer to a theme; resolved at render time via `resolveTheme()`
 - `createTheme(base, overrides)` — deep-merge utility for customizing a built-in theme
+- `compileTheme(partial, { base?, contrast? })` — fills a partial/seed theme into a full validated Theme, inheriting from a chosen `base` built-in (render style / color schemes / typography / persistentLayers) when given, else the neutral `STARTER_THEME`; records `basedOn`. `colorSchemes` is replaced wholesale when the partial supplies it.
+- `resolveThemeForDoc(doc, id?)` (`doc/resolveDocTheme.ts`) — **pure, doc-scoped** theme resolution: resolves an id against the doc's own `customThemes` first, then built-ins. The theme analog of `buildRegistry` for custom templates; used by the editor preview and every export path so inline custom themes resolve without any global `registerTheme`.
 
 **How templates use themes:**
 
@@ -420,6 +422,10 @@ The Theme system provides unified visual styling for rendered docs. A `Theme` bu
 - Color scheme names are strings; each theme defines its own set via `theme.colorSchemes`
 - `DEFAULT_THEME` is the standard theme and ships as the fallback; the two `standard` themes are deliberately motion-conservative (`ambientMotion: false`)
 - `RenderStyle` controls layout overrides, default animations/transitions, ambient motion, and per-template hints — all consumed at render time (see above)
+
+**Custom themes (in-document, parallel to custom layouts):**
+
+Users author their own themes in the editor (ThemePicker → "＋ Create custom theme"). A custom theme is a full `Theme` stored **in the document's frontmatter** under `squisq-custom-themes` (codec: `doc/customThemesFrontmatter.ts`) and surfaced as `Doc.customThemes: Theme[]` — the exact theme analog of `squisq-custom-templates` / `Doc.customTemplates`. Exactly one is active at a time via the `squisq-theme` selector (the doc-level counterpart of a block's `{[name]}` annotation). The editor mirrors the custom-templates lifecycle file-for-file in `editor-react/src/customThemes/`: a browser-local library (`customThemeLibrary.ts`, key `squisq:custom-theme-library`), a dual-catalog `CustomThemeContext` (doc + library, `applyTheme` copies library→doc for self-sufficiency), a `useDocCustomThemes` hook, and the `CustomThemeDialog` designer (base-theme picker + seed colors + N accents→`colorSchemes` + fonts + style presets, `saveTarget: 'doc' | 'library'`). The shared draft model + form rows live in `customThemes/themeDraft.ts` + `themeControls.tsx` (also used by the lighter `ThemeCustomizerPanel` popover). Resolution stays doc-scoped via `resolveThemeForDoc` — no global registry on the critical path.
 
 ## JSON Form System
 

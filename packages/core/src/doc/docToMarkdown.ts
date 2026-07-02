@@ -28,6 +28,10 @@ import {
   FRONTMATTER_CUSTOM_TEMPLATES_KEY,
   writeCustomTemplatesToFrontmatter,
 } from './customTemplatesFrontmatter.js';
+import {
+  FRONTMATTER_CUSTOM_THEMES_KEY,
+  writeCustomThemesToFrontmatter,
+} from './customThemesFrontmatter.js';
 
 /**
  * Convert a Doc with heading-driven blocks back to a MarkdownDocument.
@@ -83,6 +87,16 @@ export function docToMarkdown(doc: Doc): MarkdownDocument {
     // frontmatter key so the markdown reflects the current state.
     const { [FRONTMATTER_CUSTOM_TEMPLATES_KEY]: _drop, ...rest } = frontmatter;
     void _drop;
+    frontmatter = rest;
+  }
+
+  // Mirror the same round-trip for `Doc.customThemes` (the theme analog).
+  const customThemesPayload = writeCustomThemesToFrontmatter(doc.customThemes);
+  if (customThemesPayload) {
+    frontmatter = { ...(frontmatter ?? {}), [FRONTMATTER_CUSTOM_THEMES_KEY]: customThemesPayload };
+  } else if (frontmatter && FRONTMATTER_CUSTOM_THEMES_KEY in frontmatter) {
+    const { [FRONTMATTER_CUSTOM_THEMES_KEY]: _dropTheme, ...rest } = frontmatter;
+    void _dropTheme;
     frontmatter = rest;
   }
 

@@ -363,6 +363,9 @@ export function validateTheme(input: unknown): ValidationResult {
   if (input.description !== undefined && !v.isString(input.description)) {
     v.err('description', 'expected string');
   }
+  if (input.basedOn !== undefined && !v.isString(input.basedOn)) {
+    v.err('basedOn', 'expected string');
+  }
 
   if (input.seedColors !== undefined) v.seedColors('seedColors', input.seedColors);
 

@@ -71,6 +71,48 @@ describe('compileTheme', () => {
   });
 });
 
+describe('compileTheme base inheritance', () => {
+  it('inherits renderStyle and colorSchemes from a chosen base', () => {
+    const base = resolveTheme('cinematic');
+    const theme = compileTheme(
+      { id: 'brand', name: 'Brand', seedColors: { primary: '#3182ce' } },
+      { base },
+    );
+    expect(theme.basedOn).toBe('cinematic');
+    // renderStyle inherited from the base (not the starter's 'standard')
+    expect(theme.renderStyle.name).toBe(base.renderStyle.name);
+    // colorSchemes inherited wholesale from the base
+    expect(theme.colorSchemes).toEqual(base.colorSchemes);
+    // ...but colors are still derived from the user's seed
+    expect(theme.colors.primary).toBe('#3182ce');
+  });
+
+  it('replaces colorSchemes wholesale when the partial supplies them (removal sticks)', () => {
+    const base = resolveTheme('cinematic');
+    const theme = compileTheme(
+      {
+        id: 'brand',
+        name: 'Brand',
+        seedColors: { primary: '#3182ce' },
+        colorSchemes: { onlyOne: { bg: '#111111', text: '#eeeeee', accent: '#3182ce' } },
+      },
+      { base },
+    );
+    // Only the scheme the user kept — the base's blue/green/… are gone.
+    expect(Object.keys(theme.colorSchemes)).toEqual(['onlyOne']);
+  });
+
+  it('defaults to the neutral starter when no base is given (basedOn unset)', () => {
+    const theme = compileTheme({
+      id: 'brand',
+      name: 'Brand',
+      seedColors: { primary: '#3182ce' },
+    });
+    expect(theme.basedOn).toBeUndefined();
+    expect(theme.renderStyle.name).toBe('standard');
+  });
+});
+
 describe('parseTheme / serializeTheme round-trip', () => {
   it('serialize → parse is lossless for built-ins', () => {
     for (const [id, theme] of Object.entries(THEMES)) {

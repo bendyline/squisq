@@ -22,13 +22,19 @@ import {
 import type { ReactNode } from 'react';
 import type { DisplayMode, CaptionStyle } from '@bendyline/squisq-react';
 import type { ViewportPreset, ViewportConfig } from '@bendyline/squisq/schemas';
-import { VIEWPORT_PRESETS, getThemeSummaries, resolveTheme } from '@bendyline/squisq/schemas';
+import { VIEWPORT_PRESETS, getThemeSummaries } from '@bendyline/squisq/schemas';
 import type { Theme } from '@bendyline/squisq/schemas';
 import { ThemePicker } from './ThemePicker';
 import { getTransformStyleSummaries } from '@bendyline/squisq/transform';
 import type { Doc } from '@bendyline/squisq/schemas';
 import { setFrontmatterValues } from '@bendyline/squisq/markdown';
+import {
+  resolveThemeForDoc,
+  writeCustomThemesToFrontmatter,
+  FRONTMATTER_CUSTOM_THEMES_KEY,
+} from '@bendyline/squisq/doc';
 import { useEditorContext } from './EditorContext';
+import { useCustomThemes, CustomThemeDialog, type ThemeSaveTarget } from './customThemes';
 
 // ── Context ──────────────────────────────────────────────────────
 
@@ -45,6 +51,23 @@ export interface PreviewSettings {
   setSelectedTransformStyle: (id: string | null) => void;
   activeCaptionStyle: CaptionStyle;
   setSelectedCaptionStyle: (style: CaptionStyle | null) => void;
+  /** User-authored themes (doc + browser library) for the picker's "Custom" group. */
+  customThemes: Theme[];
+  /** Open the custom-theme designer for a theme (or null to create a new one). */
+  openThemeDesigner: (theme: Theme | null) => void;
+  /** Remove a custom theme from the doc and the library. */
+  deleteCustomTheme: (id: string) => void;
+  /** Config for the docked theme designer, or null when closed. Rendered by
+   *  `<ThemeDesignerDock>` in the editor's content row. */
+  themeDesigner: ThemeDesignerConfig | null;
+}
+
+/** Everything `<ThemeDesignerDock>` needs to render the designer pane. */
+export interface ThemeDesignerConfig {
+  value: Theme | null;
+  onChange: (theme: Theme) => void;
+  onSave: (theme: Theme, target: ThemeSaveTarget) => void;
+  onClose: () => void;
 }
 
 const PreviewSettingsContext = createContext<PreviewSettings | null>(null);
@@ -98,12 +121,17 @@ function resolveDisplayMode(value: unknown): DisplayMode | null {
 
 const VALID_THEME_IDS = new Set(getThemeSummaries().map((s) => s.id));
 
-function resolveFrontmatterTheme(value: unknown): string | null {
+function resolveFrontmatterTheme(value: unknown, customIds?: Set<string>): string | null {
   if (typeof value !== 'string') return null;
-  const v = value.trim().toLowerCase();
+  const raw = value.trim();
+  const v = raw.toLowerCase();
   if (VALID_THEME_IDS.has(v)) return v;
   const normalized = v.replace(/\s+/g, '-');
   if (VALID_THEME_IDS.has(normalized)) return normalized;
+  // Custom theme ids are doc-defined slugs (lowercase from the customizer).
+  // Admit them so an inline theme selection isn't rejected back to 'standard'.
+  if (customIds?.has(raw)) return raw;
+  if (customIds?.has(v)) return v;
   return null;
 }
 
@@ -192,27 +220,88 @@ export function PreviewSettingsProvider({
   useEffect(() => setSelectedDisplayMode(null), [fmMode]);
   const activeDisplayMode = selectedDisplayMode ?? fmMode ?? 'video';
 
+  // Custom themes (doc + browser library). `useCustomThemes` returns null when
+  // no provider is mounted; the picker then just shows built-ins.
+  const custom = useCustomThemes();
+  const customThemes = useMemo(() => custom?.allThemes ?? [], [custom]);
+  const customIds = useMemo(() => new Set(customThemes.map((t) => t.id)), [customThemes]);
+
   // Theme — persisted to `squisq-theme` (legacy `theme` still read for compat)
   const fmTheme = useMemo(
     () =>
       resolveFrontmatterTheme(
         readFrontmatterKey(frontmatter, FM_KEYS.theme.canonical, FM_KEYS.theme.legacy),
+        customIds,
       ),
-    [frontmatter],
+    [frontmatter, customIds],
   );
   const [selectedThemeId, setSelectedThemeId] = useState<string | null>(null);
   useEffect(() => setSelectedThemeId(null), [fmTheme]);
   const resolvedThemeId = selectedThemeId ?? fmTheme ?? 'standard';
-  const resolvedTheme = useMemo(() => resolveTheme(resolvedThemeId), [resolvedThemeId]);
-  // themeOverride wins over both dropdown selection and frontmatter
-  const activeThemeId = themeOverride?.id ?? resolvedThemeId;
-  const activeTheme = themeOverride ?? resolvedTheme;
+  // Doc-scoped resolution: an inline custom theme id resolves from the doc's
+  // own `customThemes` before built-ins — no global registration needed.
+  const resolvedTheme = useMemo(
+    () => resolveThemeForDoc(doc, resolvedThemeId),
+    [doc, resolvedThemeId],
+  );
+
+  // In-progress theme from the designer dialog; previews live without mutating
+  // the doc until the user saves.
+  const [previewTheme, setPreviewTheme] = useState<Theme | null>(null);
+  const [designer, setDesigner] = useState<{ open: boolean; editing: Theme | null }>({
+    open: false,
+    editing: null,
+  });
+
+  // Precedence: an active designer preview > external themeOverride > the
+  // dropdown/frontmatter selection.
+  const activeThemeId = previewTheme?.id ?? themeOverride?.id ?? resolvedThemeId;
+  const activeTheme = previewTheme ?? themeOverride ?? resolvedTheme;
   const handleSetThemeId = useCallback(
     (id: string | null) => {
       setSelectedThemeId(id);
       if (id !== null) persistFrontmatter({ [FM_KEYS.theme.canonical]: id });
     },
     [persistFrontmatter],
+  );
+
+  const openThemeDesigner = useCallback((theme: Theme | null) => {
+    setDesigner({ open: true, editing: theme });
+    setPreviewTheme(theme);
+  }, []);
+  const closeThemeDesigner = useCallback(() => {
+    setDesigner({ open: false, editing: null });
+    setPreviewTheme(null);
+  }, []);
+  const handleDesignerSave = useCallback(
+    (theme: Theme, target: ThemeSaveTarget) => {
+      if (target === 'library') {
+        custom?.upsertLibraryTheme(theme);
+      } else {
+        // Write the theme payload AND select it in a SINGLE frontmatter update.
+        // Two separate `setMarkdownSource` calls (upsertDocTheme + a squisq-theme
+        // write) would each derive from the same stale source, so the second
+        // would clobber the first and drop the custom-themes payload.
+        const docThemes = custom?.docThemes ?? [];
+        const idx = docThemes.findIndex((t) => t.id === theme.id);
+        const nextThemes =
+          idx >= 0 ? docThemes.map((t, i) => (i === idx ? theme : t)) : [...docThemes, theme];
+        persistFrontmatter({
+          [FRONTMATTER_CUSTOM_THEMES_KEY]: writeCustomThemesToFrontmatter(nextThemes) ?? null,
+          [FM_KEYS.theme.canonical]: theme.id,
+        });
+        setSelectedThemeId(theme.id);
+      }
+      closeThemeDesigner();
+    },
+    [custom, persistFrontmatter, closeThemeDesigner],
+  );
+  const deleteCustomTheme = useCallback(
+    (id: string) => {
+      custom?.removeDocTheme(id);
+      custom?.removeLibraryTheme(id);
+    },
+    [custom],
   );
 
   // Transform — persisted to `squisq-transform` (legacy `transform-style` read for compat)
@@ -256,6 +345,21 @@ export function PreviewSettingsProvider({
     [persistFrontmatter],
   );
 
+  // Config for the docked designer (rendered by `<ThemeDesignerDock>` in the
+  // editor content row). Null when closed. setPreviewTheme is a stable setter.
+  const themeDesigner = useMemo<ThemeDesignerConfig | null>(
+    () =>
+      designer.open
+        ? {
+            value: designer.editing,
+            onChange: setPreviewTheme,
+            onSave: handleDesignerSave,
+            onClose: closeThemeDesigner,
+          }
+        : null,
+    [designer.open, designer.editing, handleDesignerSave, closeThemeDesigner],
+  );
+
   const value = useMemo<PreviewSettings>(
     () => ({
       activePreset,
@@ -270,6 +374,10 @@ export function PreviewSettingsProvider({
       setSelectedTransformStyle: handleSetTransformStyle,
       activeCaptionStyle,
       setSelectedCaptionStyle: handleSetCaptionStyle,
+      customThemes,
+      openThemeDesigner,
+      deleteCustomTheme,
+      themeDesigner,
     }),
     [
       activePreset,
@@ -282,11 +390,34 @@ export function PreviewSettingsProvider({
       handleSetThemeId,
       handleSetTransformStyle,
       handleSetCaptionStyle,
+      customThemes,
+      openThemeDesigner,
+      deleteCustomTheme,
+      themeDesigner,
     ],
   );
 
   return (
     <PreviewSettingsContext.Provider value={value}>{children}</PreviewSettingsContext.Provider>
+  );
+}
+
+/**
+ * ThemeDesignerDock — renders the docked custom-theme designer pane when open.
+ * Placed as a flex sibling of the preview in `EditorShell`'s content row so the
+ * preview reflows narrower beside it. Renders nothing when the designer is
+ * closed. Must be mounted inside a `PreviewSettingsProvider`.
+ */
+export function ThemeDesignerDock() {
+  const { themeDesigner } = usePreviewSettings();
+  if (!themeDesigner) return null;
+  return (
+    <CustomThemeDialog
+      value={themeDesigner.value}
+      onChange={themeDesigner.onChange}
+      onSave={themeDesigner.onSave}
+      onClose={themeDesigner.onClose}
+    />
   );
 }
 
@@ -372,6 +503,19 @@ export function PreviewToolbarControls() {
     return () => document.removeEventListener('mousedown', handler);
   }, [popoverOpen]);
 
+  // "Edit theme" pencil next to the dropdown. A custom theme opens directly in
+  // the designer; a built-in seeds a NEW "Modified <name>" custom theme based
+  // on it — Cancel leaves the current theme untouched, Save engages the custom.
+  const handleEditCurrentTheme = useCallback(() => {
+    const existing = s.customThemes.find((t) => t.id === s.activeThemeId);
+    if (existing) {
+      s.openThemeDesigner(existing);
+    } else {
+      const base = s.activeTheme;
+      s.openThemeDesigner({ ...base, name: `Modified ${base.name}`, basedOn: base.id });
+    }
+  }, [s]);
+
   const controls = (
     <>
       <PreviewSelect
@@ -396,7 +540,35 @@ export function PreviewToolbarControls() {
           value={s.activeThemeId}
           onChange={(v) => s.setSelectedThemeId(v)}
           ariaLabel="Theme"
+          customThemes={s.customThemes}
+          onCreateCustom={() => s.openThemeDesigner(null)}
+          onEditCustom={(id) =>
+            s.openThemeDesigner(s.customThemes.find((t) => t.id === id) ?? null)
+          }
+          onDeleteCustom={(id) => s.deleteCustomTheme(id)}
         />
+        <button
+          type="button"
+          className="squisq-theme-edit-btn"
+          onClick={handleEditCurrentTheme}
+          aria-label="Edit theme"
+          title="Edit this theme"
+        >
+          <svg
+            width="14"
+            height="14"
+            viewBox="0 0 16 16"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.4"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            aria-hidden="true"
+          >
+            <path d="M2.5 13.5l1-3 7-7 2 2-7 7-3 1z" />
+            <path d="M9.5 4.5l2 2" />
+          </svg>
+        </button>
       </div>
       <PreviewSelect
         label="Transform"

@@ -31,6 +31,7 @@ import type {
   DocDiagnostic,
 } from '../schemas/Doc.js';
 import { readCustomTemplatesFromFrontmatter } from './customTemplatesFrontmatter.js';
+import { readCustomThemesFromFrontmatter } from './customThemesFrontmatter.js';
 import type {
   MarkdownDocument,
   MarkdownBlockNode,
@@ -488,6 +489,7 @@ export function markdownToDoc(markdownDoc: MarkdownDocument, options?: MarkdownT
       : undefined;
 
   const customTemplates = readCustomTemplatesFromFrontmatter(markdownDoc.frontmatter);
+  const customThemes = readCustomThemesFromFrontmatter(markdownDoc.frontmatter);
   const doc: Doc = {
     articleId,
     duration: currentTime,
@@ -498,6 +500,7 @@ export function markdownToDoc(markdownDoc: MarkdownDocument, options?: MarkdownT
     ...(captions ? { captions } : {}),
     ...(markdownDoc.frontmatter ? { frontmatter: markdownDoc.frontmatter } : {}),
     ...(customTemplates ? { customTemplates } : {}),
+    ...(customThemes ? { customThemes } : {}),
     ...(diagnostics.length > 0 ? { diagnostics } : {}),
     ...(documentMedia.length > 0 ? { documentMedia } : {}),
   };
