@@ -14,8 +14,7 @@
 import type { Layer } from '../../schemas/Doc.js';
 import type { Block } from '../../schemas/Doc.js';
 import type { DocBlock, TemplateContext } from '../../schemas/BlockTemplates.js';
-import { scaledFontSize } from '../../schemas/BlockTemplates.js';
-import { resolveColorScheme, getThemeFont } from '../utils/themeUtils.js';
+import { resolveColorScheme, getThemeFont, themedFontSize } from '../utils/themeUtils.js';
 import { extractPlainText } from '../../markdown/utils.js';
 
 /** Cap body text so a long section doesn't overflow the card. */
@@ -56,7 +55,7 @@ export function fallbackBlockLayers(
       content: {
         text: title,
         style: {
-          fontSize: scaledFontSize(56, context, true),
+          fontSize: themedFontSize(56, context, true),
           fontFamily: getThemeFont(context, 'title'),
           fontWeight: 'bold',
           color: colors.text,
@@ -79,7 +78,7 @@ export function fallbackBlockLayers(
       content: {
         text: body,
         style: {
-          fontSize: scaledFontSize(28, context),
+          fontSize: themedFontSize(28, context),
           fontFamily: getThemeFont(context, 'body'),
           color: colors.text,
           textAlign: 'center',
@@ -100,7 +99,7 @@ export function fallbackBlockLayers(
     content: {
       text: `⚠ ${notice}`,
       style: {
-        fontSize: scaledFontSize(18, context),
+        fontSize: themedFontSize(18, context),
         fontFamily: getThemeFont(context, 'body'),
         color: `${colors.text}99`,
         textAlign: 'center',

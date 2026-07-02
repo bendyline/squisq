@@ -11,24 +11,35 @@
 
 import type { Layer } from '../../schemas/Doc.js';
 import type { DataTableInput, TemplateContext } from '../../schemas/BlockTemplates.js';
-import { scaledFontSize } from '../../schemas/BlockTemplates.js';
-import { getThemeFont, resolveColorScheme } from '../utils/themeUtils.js';
+import {
+  getThemeFont,
+  resolveColorScheme,
+  shouldUseShadow,
+  themedFontSize,
+  themedSurfaceGradient,
+} from '../utils/themeUtils.js';
+import { pickContrastingText, withAlpha } from '../../schemas/colorUtils.js';
 import { createBackgroundLayer } from './captionUtils.js';
 
 export function dataTable(input: DataTableInput, context: TemplateContext): Layer[] {
   const { title, headers, rows, align, colorScheme } = input;
-  const { theme } = context;
+  const { theme, viewport } = context;
 
   const colors = resolveColorScheme(context, colorScheme);
-  const titleFontSize = scaledFontSize(48, context, true);
-  const tableFontSize = scaledFontSize(28, context, false);
+  const titleFontSize = themedFontSize(48, context, true);
+  const tableFontSize = themedFontSize(28, context, false);
 
-  const layers: Layer[] = [
-    createBackgroundLayer(
-      'bg',
-      `linear-gradient(170deg, ${theme.colors.background} 0%, #0f1520 100%)`,
-    ),
-  ];
+  const layers: Layer[] = [createBackgroundLayer('bg', themedSurfaceGradient(context, 170))];
+
+  // Size the table band from its natural content height (header + rows at
+  // ~2.4× line height for cell padding) and center the title+table as one
+  // group — a full-height band left a ~200px orphan gap under the title.
+  // `rows` is required by the schema but may be missing on partially-
+  // authored blocks in live preview; treat it as empty rather than throwing.
+  const rowCount = (Array.isArray(rows) ? rows.length : 0) + 1;
+  const naturalTableHPct = Math.min(74, ((rowCount * tableFontSize * 2.4) / viewport.height) * 100);
+  const titleBandPct = title ? (titleFontSize * 2.2 * 100) / viewport.height : 0;
+  const groupTopPct = Math.max(8, (100 - titleBandPct - naturalTableHPct) / 2);
 
   // Optional title above the table
   if (title) {
@@ -43,15 +54,22 @@ export function dataTable(input: DataTableInput, context: TemplateContext): Laye
           fontWeight: 'bold',
           color: theme.colors.text,
           textAlign: 'center',
-          shadow: true,
+          shadow: shouldUseShadow(context),
         },
       },
-      position: { x: '50%', y: '10%', width: '80%', anchor: 'center' },
+      position: {
+        x: '50%',
+        y: `${groupTopPct + titleBandPct / 2}%`,
+        width: '80%',
+        anchor: 'center',
+      },
       animation: { type: 'fadeIn', duration: 0.8 },
     });
   }
 
-  // Table layer
+  // Table layer. Header text color is picked for contrast against the
+  // header fill — pairing two mid-tones from the same scheme made the
+  // header row read as a smudge in most themes.
   layers.push({
     type: 'table',
     id: 'table',
@@ -61,10 +79,10 @@ export function dataTable(input: DataTableInput, context: TemplateContext): Laye
       align,
       style: {
         headerBackground: colors.accent,
-        headerColor: colors.text,
-        cellBackground: 'rgba(255,255,255,0.05)',
+        headerColor: pickContrastingText(colors.accent),
+        cellBackground: withAlpha(theme.colors.text, 0.04),
         cellColor: theme.colors.text,
-        borderColor: 'rgba(255,255,255,0.12)',
+        borderColor: withAlpha(theme.colors.text, 0.15),
         fontSize: tableFontSize,
         fontFamily: getThemeFont(context, 'body'),
         headerFontFamily: getThemeFont(context, 'title'),
@@ -73,9 +91,9 @@ export function dataTable(input: DataTableInput, context: TemplateContext): Laye
     },
     position: {
       x: '10%',
-      y: title ? '18%' : '8%',
+      y: `${groupTopPct + titleBandPct}%`,
       width: '80%',
-      height: title ? '74%' : '84%',
+      height: `${naturalTableHPct}%`,
     },
     animation: { type: 'fadeIn', duration: 1, delay: title ? 0.4 : 0 },
   });

@@ -16,8 +16,7 @@
 
 import type { Layer, ShapeLayer, TextLayer, PathLayer } from '../../schemas/Doc.js';
 import type { DrawingBlockInput, TemplateContext } from '../../schemas/BlockTemplates.js';
-import { scaledFontSize } from '../../schemas/BlockTemplates.js';
-import { resolveColorScheme, getThemeFont } from '../utils/themeUtils.js';
+import { resolveColorScheme, getThemeFont, themedFontSize } from '../utils/themeUtils.js';
 import { computeDrawingLayout, type DrawingShape, type DrawingConnector } from './drawingLayout.js';
 import { shapePath, connectorPath, clipEndpoints } from '../utils/shapeGeometry.js';
 
@@ -42,22 +41,26 @@ export function drawingBlock(input: DrawingBlockInput, context: TemplateContext)
   const minY = Math.min(...layout.shapes.map((s) => s.y));
   const maxY = Math.max(...layout.shapes.map((s) => s.y + s.height));
 
-  const titleHeight = input.title ? 80 : 0;
+  const titleHeight = input.title ? 120 : 0;
   const availW = Math.max(1, viewport.width - PADDING * 2);
   const availH = Math.max(1, viewport.height - PADDING * 2 - titleHeight);
   const contentW = Math.max(1, maxX - minX);
   const contentH = Math.max(1, maxY - minY);
 
-  // Uniform scale that fits both dimensions; cap at 1 so small drawings
-  // aren't upscaled into blurry lumps.
-  const scale = Math.min(availW / contentW, availH / contentH, 1);
+  // Uniform scale that fits both dimensions. Small drawings may grow
+  // (shapes are vector) up to 1.8× so a three-shape sketch doesn't render
+  // as a tiny off-center cluster; the title and the scaled drawing are
+  // centered together as one group.
+  const scale = Math.min(availW / contentW, availH / contentH, 1.8);
   const scaledW = contentW * scale;
   const scaledH = contentH * scale;
+  const groupTop = Math.max(PADDING / 2, (viewport.height - titleHeight - scaledH) / 2);
   const offsetX = PADDING + (availW - scaledW) / 2;
-  const offsetY = PADDING + titleHeight + (availH - scaledH) / 2;
+  const offsetY = groupTop + titleHeight;
 
   const tx = (x: number) => offsetX + (x - minX) * scale;
   const ty = (y: number) => offsetY + (y - minY) * scale;
+  const fontAdj = Math.min(Math.max(scale, 1), 1.5);
 
   const layers: Layer[] = [];
 
@@ -68,14 +71,14 @@ export function drawingBlock(input: DrawingBlockInput, context: TemplateContext)
       content: {
         text: input.title,
         style: {
-          fontSize: scaledFontSize(40, context, true),
+          fontSize: themedFontSize(40, context, true),
           fontFamily: getThemeFont(context, 'title'),
           fontWeight: 'bold',
           color: theme.colors.text,
           textAlign: 'center',
         },
       },
-      position: { x: '50%', y: PADDING / 2, anchor: 'center' },
+      position: { x: '50%', y: groupTop + titleHeight / 2 - 16, anchor: 'center' },
     });
   }
 
@@ -106,7 +109,7 @@ export function drawingBlock(input: DrawingBlockInput, context: TemplateContext)
       content: {
         d: connectorPath(conn.routing, start, end),
         stroke: conn.stroke ?? defaultStroke,
-        strokeWidth: conn.strokeWidth ?? 2,
+        strokeWidth: conn.strokeWidth ?? Math.round(2 * fontAdj),
         fill: 'none',
         ...(conn.dasharray ? { dasharray: conn.dasharray } : {}),
         ...(conn.startMarker !== 'none' ? { startMarker: conn.startMarker } : {}),
@@ -115,7 +118,7 @@ export function drawingBlock(input: DrawingBlockInput, context: TemplateContext)
       position: { x: 0, y: 0, width: '100%', height: '100%' },
     };
     layers.push(path);
-    if (conn.label) layers.push(connectorLabel(conn, a, b, context));
+    if (conn.label) layers.push(connectorLabel(conn, a, b, context, fontAdj));
   }
 
   // Shapes (and their labels) on top.
@@ -124,7 +127,7 @@ export function drawingBlock(input: DrawingBlockInput, context: TemplateContext)
     const y = ty(s.y);
     const w = s.width * scale;
     const h = s.height * scale;
-    layers.push(...shapeLayers(s, x, y, w, h, context, defaultStroke, defaultFill));
+    layers.push(...shapeLayers(s, x, y, w, h, context, defaultStroke, defaultFill, fontAdj));
   }
 
   return layers;
@@ -143,6 +146,7 @@ function shapeLayers(
   context: TemplateContext,
   defaultStroke: string,
   defaultFill: string,
+  fontAdj: number,
 ): Layer[] {
   const out: Layer[] = [];
   const stroke = s.stroke ?? defaultStroke;
@@ -159,6 +163,7 @@ function shapeLayers(
         context,
         s.stroke ?? context.theme.colors.text,
         true,
+        fontAdj,
       ),
     );
     return out;
@@ -172,7 +177,7 @@ function shapeLayers(
         shape: s.kind,
         fill,
         stroke,
-        strokeWidth: s.strokeWidth ?? 2,
+        strokeWidth: s.strokeWidth ?? Math.round(2 * fontAdj),
         ...(s.kind === 'rect' && s.borderRadius != null ? { borderRadius: s.borderRadius } : {}),
       },
       position: { x, y, width: w, height: h },
@@ -200,7 +205,7 @@ function shapeLayers(
       content: {
         d,
         stroke,
-        strokeWidth: s.strokeWidth ?? 2,
+        strokeWidth: s.strokeWidth ?? Math.round(2 * fontAdj),
         fill: pathFill,
         ...(s.dasharray ? { dasharray: s.dasharray } : {}),
         ...(endMarker !== 'none' ? { endMarker } : {}),
@@ -222,6 +227,7 @@ function shapeLayers(
         context,
         s.stroke ?? context.theme.colors.text,
         true,
+        fontAdj,
       ),
     );
   }
@@ -231,11 +237,12 @@ function shapeLayers(
         `shape-sublabel-${s.id}`,
         s.sublabel,
         x + w / 2,
-        y + h + 14,
+        y + h + 14 * fontAdj,
         w,
         context,
         context.theme.colors.textMuted,
         false,
+        fontAdj,
       ),
     );
   }
@@ -251,6 +258,7 @@ function textLayer(
   context: TemplateContext,
   color: string,
   bold: boolean,
+  fontAdj: number,
 ): TextLayer {
   return {
     type: 'text',
@@ -258,7 +266,7 @@ function textLayer(
     content: {
       text,
       style: {
-        fontSize: scaledFontSize(bold ? 22 : 18, context, false),
+        fontSize: themedFontSize(Math.round((bold ? 22 : 18) * fontAdj), context, false),
         fontFamily: getThemeFont(context, 'body'),
         ...(bold ? { fontWeight: 'bold' as const } : {}),
         color,
@@ -274,22 +282,26 @@ function connectorLabel(
   a: { cx: number; cy: number },
   b: { cx: number; cy: number },
   context: TemplateContext,
+  fontAdj: number,
 ): TextLayer {
+  const fontSize = themedFontSize(Math.round(18 * fontAdj), context, false);
   return {
     type: 'text',
     id: `connector-label-${conn.id}`,
     content: {
       text: conn.label ?? '',
       style: {
-        fontSize: scaledFontSize(18, context, false),
+        fontSize,
         fontFamily: getThemeFont(context, 'body'),
         color: context.theme.colors.textMuted,
         textAlign: 'center',
         background: context.theme.colors.background,
-        padding: 4,
+        padding: 6,
       },
     },
-    position: { x: (a.cx + b.cx) / 2, y: (a.cy + b.cy) / 2, anchor: 'center' },
+    // Floated just above the connector midpoint so the line never
+    // strikes through the label text.
+    position: { x: (a.cx + b.cx) / 2, y: (a.cy + b.cy) / 2 - fontSize * 0.9, anchor: 'center' },
   };
 }
 
@@ -300,7 +312,7 @@ function emptyHint(input: DrawingBlockInput, context: TemplateContext): TextLaye
     content: {
       text: input.title ?? 'Empty drawing',
       style: {
-        fontSize: scaledFontSize(36, context, true),
+        fontSize: themedFontSize(36, context, true),
         fontFamily: getThemeFont(context, 'title'),
         color: context.theme.colors.textMuted,
         textAlign: 'center',

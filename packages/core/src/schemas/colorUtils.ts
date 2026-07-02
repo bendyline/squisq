@@ -144,6 +144,19 @@ export function relativeLuminance(hex: string): number {
 }
 
 /**
+ * Convert a hex color + alpha (0..1) to an `rgba()` string.
+ * Falls back to the input on parse failure (e.g. a value that is
+ * already an rgba()/gradient string).
+ */
+export function withAlpha(hex: string, alpha: number): string {
+  const rgb = parseHex(hex);
+  if (!rgb) return hex;
+  const a = Math.max(0, Math.min(1, alpha));
+  const ch = (v: number) => Math.round(v * 255);
+  return `rgba(${ch(rgb[0])}, ${ch(rgb[1])}, ${ch(rgb[2])}, ${a})`;
+}
+
+/**
  * WCAG contrast ratio between two hex colors. Returns 1..21.
  */
 export function contrastRatio(a: string, b: string): number {

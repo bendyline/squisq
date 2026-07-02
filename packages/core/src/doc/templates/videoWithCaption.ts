@@ -17,8 +17,8 @@
 
 import type { Layer } from '../../schemas/Doc.js';
 import type { VideoWithCaptionInput, TemplateContext } from '../../schemas/BlockTemplates.js';
-import { scaledFontSize } from '../../schemas/BlockTemplates.js';
-import { getThemeFont } from '../utils/themeUtils.js';
+import { getThemeFont, shouldUseShadow, themedFontSize } from '../utils/themeUtils.js';
+import { withAlpha } from '../../schemas/colorUtils.js';
 import { cleanCaption } from './captionUtils.js';
 
 export function videoWithCaption(input: VideoWithCaptionInput, context: TemplateContext): Layer[] {
@@ -37,8 +37,8 @@ export function videoWithCaption(input: VideoWithCaptionInput, context: Template
   const caption = rawCaption ? cleanCaption(rawCaption) : rawCaption;
   const { theme, layout } = context;
 
-  const captionFontSize = scaledFontSize(36, context, false);
-  const creditFontSize = scaledFontSize(16, context, false);
+  const captionFontSize = themedFontSize(36, context, false);
+  const creditFontSize = themedFontSize(16, context, false);
 
   const layers: Layer[] = [
     // Background video clip
@@ -60,14 +60,19 @@ export function videoWithCaption(input: VideoWithCaptionInput, context: Template
     },
   ];
 
-  // Caption text at bottom with gradient for readability
+  // Caption text at bottom with gradient for readability. The scrim is
+  // tinted from the theme background so the theme text color on top of it
+  // stays readable in light and dark themes alike; it fades toward the
+  // frame edge the caption sits on.
   if (caption) {
+    const bg = theme.colors.background;
+    const scrimAngle = captionPosition === 'top' ? 180 : 0;
     layers.push({
       type: 'shape',
       id: 'caption-gradient',
       content: {
         shape: 'rect',
-        fill: 'linear-gradient(0deg, rgba(0,0,0,0.7) 0%, rgba(0,0,0,0.3) 60%, transparent 100%)',
+        fill: `linear-gradient(${scrimAngle}deg, ${withAlpha(bg, 0.8)} 0%, ${withAlpha(bg, 0.35)} 60%, ${withAlpha(bg, 0)} 100%)`,
       },
       position: {
         x: 0,
@@ -90,7 +95,7 @@ export function videoWithCaption(input: VideoWithCaptionInput, context: Template
           fontFamily: getThemeFont(context, 'body'),
           color: theme.colors.text,
           textAlign: 'center',
-          shadow: true,
+          shadow: shouldUseShadow(context),
         },
       },
       position: {
@@ -113,7 +118,7 @@ export function videoWithCaption(input: VideoWithCaptionInput, context: Template
         style: {
           fontSize: creditFontSize,
           fontFamily: getThemeFont(context, 'body'),
-          color: 'rgba(255, 255, 255, 0.5)',
+          color: withAlpha(theme.colors.text, 0.65),
           textAlign: 'right',
         },
       },

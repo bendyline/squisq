@@ -7,25 +7,41 @@
  * immediate. Mount once near the root of the editor shell.
  */
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
+import { clampTooltipLeft } from './tooltipPlacement';
 
 const SHOW_DELAY_MS = 180;
 
 interface TooltipState {
   label: string;
   top: number;
-  left: number;
+  anchorX: number;
 }
 
 export function TooltipLayer() {
   const [state, setState] = useState<TooltipState | null>(null);
+  const tooltipRef = useRef<HTMLDivElement | null>(null);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const currentTargetRef = useRef<HTMLElement | null>(null);
   // Visibility tracked in a ref so `handleOver` can decide whether to swap
   // the label immediately vs. re-delay — reading it from state would force
   // the effect to re-run (and re-register all listeners) on every change.
   const visibleRef = useRef(false);
+
+  useLayoutEffect(() => {
+    if (!state) return;
+    const node = tooltipRef.current;
+    if (!node) return;
+
+    const rect = node.getBoundingClientRect();
+    const tooltipWidth = rect.width || node.offsetWidth;
+    const viewportWidth = window.innerWidth || document.documentElement.clientWidth;
+    const left = clampTooltipLeft(state.anchorX, tooltipWidth, viewportWidth);
+
+    node.style.left = `${left}px`;
+    node.style.visibility = 'visible';
+  }, [state]);
 
   useEffect(() => {
     const clearTimer = () => {
@@ -48,7 +64,7 @@ export function TooltipLayer() {
       setState({
         label,
         top: rect.bottom + 6,
-        left: rect.left + rect.width / 2,
+        anchorX: rect.left + rect.width / 2,
       });
     };
 
@@ -111,10 +127,12 @@ export function TooltipLayer() {
     <div
       role="tooltip"
       className="squisq-tooltip"
+      ref={tooltipRef}
       style={{
         position: 'fixed',
         top: state.top,
-        left: state.left,
+        left: state.anchorX,
+        visibility: 'hidden',
       }}
     >
       {state.label}

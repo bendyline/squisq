@@ -16,8 +16,7 @@
 
 import type { Layer, ShapeLayer, TextLayer, PathLayer, MarkerStyle } from '../../schemas/Doc.js';
 import type { DiagramBlockInput, TemplateContext } from '../../schemas/BlockTemplates.js';
-import { scaledFontSize } from '../../schemas/BlockTemplates.js';
-import { resolveColorScheme, getThemeFont } from '../utils/themeUtils.js';
+import { resolveColorScheme, getThemeFont, themedFontSize } from '../utils/themeUtils.js';
 import { clipEndpoints, connectorPath, lineStyleDasharray } from '../utils/shapeGeometry.js';
 import { computeDiagramLayout, type DiagramNodePosition } from './diagramLayout.js';
 
@@ -39,7 +38,7 @@ export function diagramBlock(input: DiagramBlockInput, context: TemplateContext)
         content: {
           text: input.title ?? 'Empty diagram',
           style: {
-            fontSize: scaledFontSize(36, context, true),
+            fontSize: themedFontSize(36, context, true),
             fontFamily: getThemeFont(context, 'title'),
             color: theme.colors.textMuted,
             textAlign: 'center',
@@ -57,22 +56,29 @@ export function diagramBlock(input: DiagramBlockInput, context: TemplateContext)
   const maxY = Math.max(...layout.nodes.map((n) => n.y + NODE_HEIGHT));
 
   // Available area in viewport pixels (after reserving space for the title, if any).
-  const titleHeight = input.title ? 80 : 0;
+  const titleHeight = input.title ? 120 : 0;
   const availW = Math.max(1, viewport.width - PADDING * 2);
   const availH = Math.max(1, viewport.height - PADDING * 2 - titleHeight);
   const contentW = Math.max(1, maxX - minX);
   const contentH = Math.max(1, maxY - minY);
 
-  // Uniform scale so the diagram fits both dimensions. Cap at 1 so we don't
-  // upscale tiny diagrams into pixelated lumps.
-  const scale = Math.min(availW / contentW, availH / contentH, 1);
+  // Uniform scale so the diagram fits both dimensions. Small diagrams are
+  // allowed to grow (everything here is vector) up to 1.8× so a three-node
+  // flow doesn't render as a tiny cluster in an empty canvas; label fonts
+  // and strokes scale with the nodes, clamped so text never balloons.
+  const scale = Math.min(availW / contentW, availH / contentH, 1.8);
+  const fontAdj = Math.min(Math.max(scale, 1), 1.5);
+  const strokeW = Math.round(2 * fontAdj);
 
   // Compute viewport-pixel coordinates of each node's top-left corner.
-  // Center the (possibly smaller) scaled diagram inside the available area.
+  // The title and the scaled diagram are centered together as one group —
+  // a top-pinned title over a center-floated diagram split the block into
+  // two stranded pieces.
   const scaledW = contentW * scale;
   const scaledH = contentH * scale;
+  const groupTop = Math.max(PADDING / 2, (viewport.height - titleHeight - scaledH) / 2);
   const offsetX = PADDING + (availW - scaledW) / 2;
-  const offsetY = PADDING + titleHeight + (availH - scaledH) / 2;
+  const offsetY = groupTop + titleHeight;
   const transform = (n: DiagramNodePosition): { x: number; y: number; w: number; h: number } => ({
     x: offsetX + (n.x - minX) * scale,
     y: offsetY + (n.y - minY) * scale,
@@ -90,14 +96,14 @@ export function diagramBlock(input: DiagramBlockInput, context: TemplateContext)
       content: {
         text: input.title,
         style: {
-          fontSize: scaledFontSize(40, context, true),
+          fontSize: themedFontSize(40, context, true),
           fontFamily: getThemeFont(context, 'title'),
           fontWeight: 'bold',
           color: theme.colors.text,
           textAlign: 'center',
         },
       },
-      position: { x: '50%', y: PADDING / 2, anchor: 'center' },
+      position: { x: '50%', y: groupTop + titleHeight / 2 - 16, anchor: 'center' },
     });
   }
 
@@ -125,7 +131,7 @@ export function diagramBlock(input: DiagramBlockInput, context: TemplateContext)
       content: {
         d: connectorPath(input.edgeStyle ?? 'curved', start, end),
         stroke: colors.text ?? theme.colors.primary,
-        strokeWidth: 2,
+        strokeWidth: strokeW,
         fill: 'none',
         ...(edgeDash ? { dasharray: edgeDash } : {}),
         ...(startMarker !== 'none' ? { startMarker } : {}),
@@ -136,24 +142,26 @@ export function diagramBlock(input: DiagramBlockInput, context: TemplateContext)
     layers.push(pathLayer);
 
     if (edge.type) {
-      // Midpoint label for the connection type.
+      // Connection-type label, floated just above the edge midpoint so the
+      // line never strikes through the text.
       const mx = (a.cx + b.cx) / 2;
       const my = (a.cy + b.cy) / 2;
+      const labelFontSize = themedFontSize(Math.round(18 * fontAdj), context, false);
       const labelLayer: TextLayer = {
         type: 'text',
         id: `edge-label-${edge.id}`,
         content: {
           text: edge.type,
           style: {
-            fontSize: scaledFontSize(18, context, false),
+            fontSize: labelFontSize,
             fontFamily: getThemeFont(context, 'body'),
             color: theme.colors.textMuted,
             textAlign: 'center',
             background: theme.colors.background,
-            padding: 4,
+            padding: 6,
           },
         },
-        position: { x: mx, y: my, anchor: 'center' },
+        position: { x: mx, y: my - labelFontSize * 0.9, anchor: 'center' },
       };
       layers.push(labelLayer);
     }
@@ -169,7 +177,7 @@ export function diagramBlock(input: DiagramBlockInput, context: TemplateContext)
         shape: 'rect',
         fill: colors.bg ?? theme.colors.backgroundLight,
         stroke: colors.text ?? theme.colors.primary,
-        strokeWidth: 2,
+        strokeWidth: strokeW,
         borderRadius: input.nodeShape === 'pill' ? t.h / 2 : 10,
       },
       position: { x: t.x, y: t.y, width: t.w, height: t.h },
@@ -182,7 +190,7 @@ export function diagramBlock(input: DiagramBlockInput, context: TemplateContext)
       content: {
         text: node.label,
         style: {
-          fontSize: scaledFontSize(22, context, false),
+          fontSize: themedFontSize(Math.round(22 * fontAdj), context, false),
           fontFamily: getThemeFont(context, 'body'),
           fontWeight: 'bold',
           color: colors.text ?? theme.colors.text,

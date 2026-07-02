@@ -18,8 +18,7 @@ import type {
   RightFeatureInput,
   TemplateContext,
 } from '../../schemas/BlockTemplates.js';
-import { scaledFontSize } from '../../schemas/BlockTemplates.js';
-import { getThemeFont } from '../utils/themeUtils.js';
+import { getThemeFont, themedFontSize } from '../utils/themeUtils.js';
 
 type FeatureInput = LeftFeatureInput | RightFeatureInput;
 
@@ -44,8 +43,8 @@ function buildFeatureLayers(
   // behave consistently on narrow viewports.
   const stack = layout.stackColumns;
 
-  const titleFontSize = scaledFontSize(48, context, true);
-  const bodyFontSize = scaledFontSize(24, context, false);
+  const titleFontSize = themedFontSize(48, context, true);
+  const bodyFontSize = themedFontSize(24, context, false);
 
   // Image takes the full left or right half. The text column gets the
   // opposite half, with a comfortable inset so the text doesn't kiss
@@ -90,17 +89,17 @@ function buildFeatureLayers(
   }
 
   // Text-column geometry. `textX` is the LEFT edge of the column when
-  // the side is "left" (image left, text right), and the RIGHT edge of
-  // the column when the side is "right" — we use top-left / top-right
-  // anchors below so text reads left-aligned in both cases without
-  // having to flip the column origin manually.
+  // the side is "left" (image left, text right); when the side is
+  // "right" the column occupies the left half, inset from the card edge.
+  // The mirror lives in the layout only — fully right-aligned
+  // (ragged-left) running text on rightFeature was genuinely hard to read.
   const COLUMN_INSET = 4; // % of block width — padding from card edge / divider
   const textColumnWidth = stack ? 90 : 42;
   const textX = stack
     ? `${(100 - textColumnWidth) / 2}%`
     : side === 'left'
       ? `${50 + COLUMN_INSET}%` // text column starts just past the divider
-      : `${50 - COLUMN_INSET}%`; // right edge of left-half text column
+      : `${COLUMN_INSET + 2}%`; // left edge of the left-half text column
 
   // Stack the title above the body, with the pair vertically centered
   // in the text column. The title sits 8% above center; body sits 2%
@@ -108,8 +107,8 @@ function buildFeatureLayers(
   // sizes used by the inline preview gutter without overflowing.
   const titleY = stack ? '60%' : body ? '42%' : '50%';
   const bodyY = stack ? '78%' : title ? '55%' : '50%';
-  const textAnchor = side === 'right' && !stack ? 'top-right' : 'top-left';
-  const textAlign: 'left' | 'right' = side === 'right' && !stack ? 'right' : 'left';
+  const textAnchor = 'top-left';
+  const textAlign = 'left' as const;
 
   // Paint our own background so the text column has a theme-paired
   // surface to sit on. The host wrapper's surface isn't always theme-

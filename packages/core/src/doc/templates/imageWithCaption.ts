@@ -10,8 +10,8 @@
 
 import type { Layer } from '../../schemas/Doc.js';
 import type { ImageWithCaptionInput, TemplateContext } from '../../schemas/BlockTemplates.js';
-import { scaledFontSize } from '../../schemas/BlockTemplates.js';
-import { getThemeFont } from '../utils/themeUtils.js';
+import { getThemeFont, shouldUseShadow, themedFontSize } from '../utils/themeUtils.js';
+import { withAlpha } from '../../schemas/colorUtils.js';
 import { cleanCaption } from './captionUtils.js';
 import { mapAmbientMotion } from './accentImage.js';
 
@@ -31,9 +31,9 @@ export function imageWithCaption(input: ImageWithCaptionInput, context: Template
   const { theme, layout } = context;
 
   // Scale font sizes for viewport
-  const captionFontSize = scaledFontSize(36, context, false);
-  const titleFontSize = scaledFontSize(96, context, true);
-  const subtitleFontSize = scaledFontSize(36, context, false);
+  const captionFontSize = themedFontSize(36, context, false);
+  const titleFontSize = themedFontSize(96, context, true);
+  const subtitleFontSize = themedFontSize(36, context, false);
 
   // Determine animation based on ambientMotion setting
   // Support both new 'ambientMotion' and legacy 'kenBurns' property
@@ -60,6 +60,11 @@ export function imageWithCaption(input: ImageWithCaptionInput, context: Template
     },
   ];
 
+  // Scrim gradients are tinted from the theme background so the theme
+  // text color painted on top stays readable by construction — a fixed
+  // black scrim put dark theme text on a dark band in light themes.
+  const bg = theme.colors.background;
+
   // TITLE MODE: Large centered title over hero image (like cover slide)
   if (isTitle && caption) {
     // Full gradient overlay for title readability (similar to cover slide)
@@ -68,7 +73,7 @@ export function imageWithCaption(input: ImageWithCaptionInput, context: Template
       id: 'title-gradient',
       content: {
         shape: 'rect',
-        fill: 'linear-gradient(0deg, rgba(0,0,0,0.8) 0%, rgba(0,0,0,0.4) 40%, rgba(0,0,0,0.1) 70%, transparent 100%)',
+        fill: `linear-gradient(0deg, ${withAlpha(bg, 0.85)} 0%, ${withAlpha(bg, 0.45)} 40%, ${withAlpha(bg, 0.1)} 70%, ${withAlpha(bg, 0)} 100%)`,
       },
       position: { x: 0, y: 0, width: '100%', height: '100%' },
     });
@@ -85,7 +90,7 @@ export function imageWithCaption(input: ImageWithCaptionInput, context: Template
           fontWeight: 'bold',
           color: theme.colors.text,
           textAlign: 'center',
-          shadow: true,
+          shadow: shouldUseShadow(context),
         },
       },
       position: {
@@ -133,7 +138,7 @@ export function imageWithCaption(input: ImageWithCaptionInput, context: Template
       id: 'caption-gradient',
       content: {
         shape: 'rect',
-        fill: 'linear-gradient(0deg, rgba(0,0,0,0.7) 0%, rgba(0,0,0,0.3) 60%, transparent 100%)',
+        fill: `linear-gradient(0deg, ${withAlpha(bg, 0.8)} 0%, ${withAlpha(bg, 0.35)} 60%, ${withAlpha(bg, 0)} 100%)`,
       },
       position: {
         x: 0,
@@ -154,7 +159,7 @@ export function imageWithCaption(input: ImageWithCaptionInput, context: Template
           fontFamily: getThemeFont(context, 'body'),
           color: theme.colors.text,
           textAlign: 'center',
-          shadow: true,
+          shadow: shouldUseShadow(context),
         },
       },
       position: {

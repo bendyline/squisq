@@ -27,6 +27,20 @@ export interface LayoutLayersResult {
   warnings: string[];
 }
 
+export interface LayoutLayerDefaults {
+  /**
+   * Default ink — text color and path/line stroke — used when the author
+   * omits `color=`/`stroke=`. `layoutBlock` passes the theme text color so
+   * un-styled text stays legible on dark themes; the editor's scene canvas
+   * omits it and gets the dark-slate default that suits its fixed light
+   * surface.
+   */
+  ink?: string;
+}
+
+/** Fallback ink for callers that don't supply defaults (editor scene canvas). */
+const DEFAULT_INK = '#1e293b';
+
 /** Minimal Block shape this derivation reads (subset of `Block`). */
 interface LayoutChildBlock {
   id: string;
@@ -47,7 +61,9 @@ const DEFAULT_IMAGE = { w: 320, h: 240 };
 export function computeLayoutLayers(
   children: readonly LayoutChildBlock[],
   _viewport: { width: number; height: number },
+  defaults: LayoutLayerDefaults = {},
 ): LayoutLayersResult {
+  const ink = defaults.ink ?? DEFAULT_INK;
   const layers: Layer[] = [];
   const warnings: string[] = [];
 
@@ -103,7 +119,7 @@ export function computeLayoutLayers(
           width: numParam(params, 'width') ?? DEFAULT_TEXT.w,
           height: numParam(params, 'height') ?? DEFAULT_TEXT.h,
         },
-        content: { text, style: textStyleFromParams(params) },
+        content: { text, style: textStyleFromParams(params, ink) },
       };
       layers.push(layer);
       continue;
@@ -156,7 +172,7 @@ export function computeLayoutLayers(
       position: { x: 0, y: 0, width: '100%', height: '100%' },
       content: {
         d,
-        stroke: strParam(params, 'stroke') ?? '#1e293b',
+        stroke: strParam(params, 'stroke') ?? ink,
         strokeWidth: numParam(params, 'strokeWidth') ?? 2,
         fill: pathFill,
         ...(strParam(params, 'dasharray') ? { dasharray: strParam(params, 'dasharray') } : {}),
@@ -170,10 +186,13 @@ export function computeLayoutLayers(
 }
 
 /** Build a TextStyle from a text layer's annotation params. */
-function textStyleFromParams(params: Record<string, string>): TextLayer['content']['style'] {
+function textStyleFromParams(
+  params: Record<string, string>,
+  ink: string,
+): TextLayer['content']['style'] {
   const style: TextLayer['content']['style'] = {
     fontSize: numParam(params, 'fontSize') ?? 32,
-    color: strParam(params, 'color') ?? '#1e293b',
+    color: strParam(params, 'color') ?? ink,
   };
   const fontFamily = strParam(params, 'fontFamily');
   if (fontFamily) style.fontFamily = fontFamily;

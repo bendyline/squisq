@@ -17,12 +17,12 @@
 
 import type { Layer } from '../../schemas/Doc.js';
 import type { PhotoGridInput, TemplateContext } from '../../schemas/BlockTemplates.js';
-import { scaledFontSize } from '../../schemas/BlockTemplates.js';
-import { getThemeFont } from '../utils/themeUtils.js';
+import { getThemeFont, shouldUseShadow, themedFontSize } from '../utils/themeUtils.js';
+import { withAlpha } from '../../schemas/colorUtils.js';
 import { cleanCaption } from './captionUtils.js';
 
 /** Gap between images as percentage */
-const GAP = 0.5;
+const GAP = 1.2;
 
 export function photoGrid(input: PhotoGridInput, context: TemplateContext): Layer[] {
   const { images, caption: rawCaption, ambientMotion } = input;
@@ -34,23 +34,24 @@ export function photoGrid(input: PhotoGridInput, context: TemplateContext): Laye
   const { theme, layout } = context;
 
   const layers: Layer[] = [
-    // Black background (visible in gaps between images)
+    // Theme surface background (visible in gaps between images)
     {
       type: 'shape',
       id: 'bg',
-      content: { shape: 'rect', fill: '#000000' },
+      content: { shape: 'rect', fill: theme.colors.background },
       position: { x: 0, y: 0, width: '100%', height: '100%' },
     },
   ];
 
-  // Reserve bottom space for caption — more room in landscape for larger text
-  const captionHeight = caption ? (layout.stackColumns ? 18 : 22) : 0;
+  // Reserve bottom space for caption — sized to the caption's one-to-two
+  // lines rather than a fixed fifth of the block (which left a dead band).
+  const captionHeight = caption ? (layout.stackColumns ? 16 : 14) : 0;
   const gridHeight = 100 - captionHeight;
 
   // Generate image positions based on count; stack vertically in portrait
   const positions = getGridPositions(images.length, gridHeight, layout.stackColumns);
 
-  const altFontSize = scaledFontSize(24, context, false);
+  const altFontSize = themedFontSize(24, context, false);
 
   for (let i = 0; i < Math.min(images.length, 4); i++) {
     const img = images[i];
@@ -109,14 +110,16 @@ export function photoGrid(input: PhotoGridInput, context: TemplateContext): Laye
 
   // Caption with gradient overlay
   if (caption) {
-    const captionFontSize = scaledFontSize(layout.stackColumns ? 28 : 40, context, false);
+    const captionFontSize = themedFontSize(layout.stackColumns ? 28 : 32, context, false);
 
+    // Caption band fades from the theme surface so the theme text color
+    // on it always reads (a fixed black band hid dark text in light themes).
     layers.push({
       type: 'shape',
       id: 'caption-bg',
       content: {
         shape: 'rect',
-        fill: 'linear-gradient(transparent, rgba(0,0,0,0.8))',
+        fill: `linear-gradient(${withAlpha(theme.colors.background, 0)}, ${withAlpha(theme.colors.background, 0.85)})`,
       },
       position: { x: 0, y: `${gridHeight - 4}%`, width: '100%', height: `${captionHeight + 4}%` },
     });
@@ -131,12 +134,12 @@ export function photoGrid(input: PhotoGridInput, context: TemplateContext): Laye
           fontFamily: getThemeFont(context, 'body'),
           color: theme.colors.text,
           textAlign: 'center',
-          shadow: true,
+          shadow: shouldUseShadow(context),
         },
       },
       position: {
         x: '50%',
-        y: `${gridHeight + (layout.stackColumns ? captionHeight / 2 : captionHeight * 0.3)}%`,
+        y: `${gridHeight + captionHeight / 2}%`,
         anchor: 'center',
         width: '90%',
       },

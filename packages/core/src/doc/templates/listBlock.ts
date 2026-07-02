@@ -10,8 +10,7 @@
 
 import type { Layer } from '../../schemas/Doc.js';
 import type { ListBlockInput, TemplateContext } from '../../schemas/BlockTemplates.js';
-import { scaledFontSize } from '../../schemas/BlockTemplates.js';
-import { getThemeFont } from '../utils/themeUtils.js';
+import { getThemeFont, shouldUseShadow, themedFontSize } from '../utils/themeUtils.js';
 import { createAccentLayers, getAccentLayout, adjustY, DEFAULT_LAYOUT } from './accentImage.js';
 
 export function listBlock(input: ListBlockInput, context: TemplateContext): Layer[] {
@@ -27,8 +26,8 @@ export function listBlock(input: ListBlockInput, context: TemplateContext): Laye
   // Get layout adjustments if accent image is present
   const accentLayout = accentImage ? getAccentLayout(accentImage.position) : DEFAULT_LAYOUT;
 
-  const titleFontSize = scaledFontSize(44, context, true);
-  const itemFontSize = scaledFontSize(34, context, false);
+  const titleFontSize = themedFontSize(44, context, true);
+  const itemFontSize = themedFontSize(34, context, false);
 
   const layers: Layer[] = [
     // Background — gradient
@@ -48,8 +47,18 @@ export function listBlock(input: ListBlockInput, context: TemplateContext): Laye
     layers.push(...createAccentLayers(accentImage, input.id));
   }
 
+  // Left edge of the text column — derived from the center+width pair so
+  // the title and items share one left axis instead of a centered title
+  // floating over a left-aligned column. Falls back to a safe 8% if the
+  // layout strings ever turn out unparseable (they're authored, but
+  // defensive against future edits to the accent-layout types).
+  const centerX = parseFloat(accentLayout.textCenterX);
+  const widthPct = parseFloat(accentLayout.textWidth);
+  const leftX =
+    Number.isFinite(centerX) && Number.isFinite(widthPct) ? `${centerX - widthPct / 2}%` : '8%';
+
   // Title if provided
-  const startY = title ? 30 : 22;
+  const startY = title ? 34 : 26;
   if (title) {
     layers.push({
       type: 'text',
@@ -61,41 +70,33 @@ export function listBlock(input: ListBlockInput, context: TemplateContext): Laye
           fontFamily: getThemeFont(context, 'title'),
           fontWeight: 'bold',
           color: theme.colors.text,
-          textAlign: 'center',
-          shadow: !!accentImage,
+          textAlign: 'left',
+          shadow: shouldUseShadow(context),
         },
       },
       position: {
-        x: accentLayout.textCenterX,
-        y: adjustY('16%', accentLayout),
-        anchor: 'center',
+        x: leftX,
+        y: adjustY('20%', accentLayout),
+        width: accentLayout.textWidth,
       },
       animation: { type: 'fadeIn', duration: 1 },
     });
   }
 
-  // Left edge of the text column — derived from the center+width pair so
-  // items sit flush with the column's left margin instead of being
-  // centered. Falls back to a safe 8% if the layout strings ever turn
-  // out unparseable (they're authored, but defensive against future
-  // edits to the accent-layout types).
-  const centerX = parseFloat(accentLayout.textCenterX);
-  const widthPct = parseFloat(accentLayout.textWidth);
-  const leftX =
-    Number.isFinite(centerX) && Number.isFinite(widthPct) ? `${centerX - widthPct / 2}%` : '8%';
-
   // Stack items with a fixed compact gap rather than stretching them
-  // across the available band. Previously we distributed items across
-  // (startY → 80%) which left big vertical gaps for short lists and
-  // made the slide read as a sparse menu instead of a tight enumeration.
+  // across the available band. Distributing items across (startY → 80%)
+  // left big vertical gaps for short lists and made the slide read as a
+  // sparse menu instead of a tight enumeration; conversely a bare
+  // line-height gap read as a cramped paragraph — 18px of air keeps each
+  // entry its own line without breaking the group.
   //
-  // Spacing = item line-height (34px base × 1.2) + 7px gap, expressed
-  // as % of the 1080px design canvas (~4.4%). Wrapped items push the
+  // Spacing = item line-height (34px base × 1.2) + 18px gap, expressed
+  // as % of the 1080px design canvas (~5.4%). Wrapped items push the
   // next entry down via their own line-height, so this sets the
   // minimum baseline-to-baseline distance for unwrapped items.
   const LIST_ITEM_BASE_PX = 34;
   const LIST_ITEM_LINE_HEIGHT = 1.2;
-  const LIST_ITEM_GAP_PX = 7;
+  const LIST_ITEM_GAP_PX = 18;
   const DESIGN_HEIGHT_PX = 1080;
   const spacing =
     ((LIST_ITEM_BASE_PX * LIST_ITEM_LINE_HEIGHT + LIST_ITEM_GAP_PX) / DESIGN_HEIGHT_PX) * 100;
@@ -116,7 +117,7 @@ export function listBlock(input: ListBlockInput, context: TemplateContext): Laye
           color: theme.colors.text,
           textAlign: 'left',
           lineHeight: 1.2,
-          shadow: !!accentImage,
+          shadow: shouldUseShadow(context),
         },
       },
       position: {

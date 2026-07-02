@@ -466,8 +466,8 @@ export function Toolbar({
     null,
   );
 
-  const openInsertMenu = useCallback(() => {
-    const btn = insertMenuButtonRef.current;
+  const openInsertMenu = useCallback((trigger?: HTMLElement | null) => {
+    const btn = trigger ?? insertMenuButtonRef.current;
     if (!btn) return;
     const rect = btn.getBoundingClientRect();
     const gap = 4;
@@ -482,17 +482,6 @@ export function Toolbar({
 
   const closeInsertMenu = useCallback(() => setInsertMenuAnchor(null), []);
 
-  // ── Narrow-screen detection ──────────────────────────
-  const [isNarrow, setIsNarrow] = useState(
-    () => typeof window !== 'undefined' && window.matchMedia('(max-width: 768px)').matches,
-  );
-  useEffect(() => {
-    const mq = window.matchMedia('(max-width: 768px)');
-    const handler = (e: MediaQueryListEvent) => setIsNarrow(e.matches);
-    mq.addEventListener('change', handler);
-    return () => mq.removeEventListener('change', handler);
-  }, []);
-
   // ── Overflow detection ────────────────────────────────
   const actionsRef = useRef<HTMLDivElement>(null);
   const [measuredOverflowIndex, setMeasuredOverflowIndex] = useState<number | null>(null);
@@ -505,11 +494,9 @@ export function Toolbar({
   // Custom layout manager dialog (list of doc/library layouts + designer)
   const [showLayoutManager, setShowLayoutManager] = useState(false);
 
-  // On narrow screens, force all buttons into the overflow menu
-  const overflowIndex = isNarrow ? 0 : measuredOverflowIndex;
+  const overflowIndex = measuredOverflowIndex;
 
   useEffect(() => {
-    if (isNarrow) return; // Skip measurement on narrow — everything overflows
     const container = actionsRef.current;
     if (!container) return;
 
@@ -539,7 +526,7 @@ export function Toolbar({
     ro.observe(container);
     measure();
     return () => ro.disconnect();
-  }, [activeView, isNarrow]);
+  }, [activeView]);
 
   // Close overflow menu on outside click
   useEffect(() => {
@@ -1190,6 +1177,9 @@ export function Toolbar({
     if (!m) return true;
     return Number(m[1]) <= visibleHeadingMax;
   };
+  const hasVisibleMediaButtons = MEDIA_BUTTONS.some((b) => isButtonVisible(b.id));
+  const showInsertInOverflow =
+    overflowIndex !== null && overflowIndex <= FIRST_MEDIA_INDEX && hasVisibleMediaButtons;
 
   // Detect whether cursor is inside a table (WYSIWYG mode only)
   const isInTable = isWysiwyg ? tiptapEditor.isActive('table') : false;
@@ -1446,8 +1436,8 @@ export function Toolbar({
           ))}
         </div>
       )}
-      {/* Formatting buttons — hidden in preview mode, narrow screens, and code mode */}
-      {!isPreview && !isNarrow && !isCodeMode && (
+      {/* Formatting buttons — hidden in preview mode and code mode */}
+      {!isPreview && !isCodeMode && (
         <div className="squisq-toolbar-actions" ref={actionsRef}>
           {groups.map((group, gi) => (
             <div key={group} className="squisq-toolbar-group">
@@ -1699,15 +1689,9 @@ export function Toolbar({
             >
               {BUTTONS.slice(overflowIndex)
                 .filter((b) => isButtonVisible(b.id))
-                // Media buttons are handled by the Insert dropdown when it's visible.
-                // Show them individually only on narrow screens (dropdown hidden) or
-                // when the Insert button itself has overflowed.
-                .filter(
-                  (b) =>
-                    b.group !== 'media' ||
-                    isNarrow ||
-                    (overflowIndex !== null && overflowIndex >= FIRST_MEDIA_INDEX),
-                )
+                // Media buttons are represented by the synthetic Insert dropdown
+                // in both the visible toolbar and the overflow menu.
+                .filter((b) => b.group !== 'media')
                 .map((btn) => {
                   const active =
                     btn.id === 'emoji'
@@ -1735,6 +1719,27 @@ export function Toolbar({
                     </button>
                   );
                 })}
+
+              {showInsertInOverflow && (
+                <button
+                  className={`squisq-toolbar-overflow-item${insertMenuAnchor ? ' squisq-toolbar-overflow-item--active' : ''}`}
+                  onClick={(event) => {
+                    if (insertMenuAnchor) {
+                      closeInsertMenu();
+                    } else {
+                      openInsertMenu(event.currentTarget);
+                    }
+                    setShowOverflow(false);
+                  }}
+                  aria-haspopup="menu"
+                  aria-expanded={insertMenuAnchor !== null}
+                >
+                  <span className="squisq-toolbar-overflow-icon">
+                    <Icon icon="fa-solid fa-plus" />
+                  </span>
+                  <span>Insert...</span>
+                </button>
+              )}
 
               {/* Contextual: template picker in overflow */}
               {currentTemplate !== null && (
@@ -1810,7 +1815,7 @@ export function Toolbar({
       {slotAfterActions}
       {/* Spacer — only needed when the actions container (which has flex:1
           and already pushes right-side items to the end) isn't rendered. */}
-      {(isPreview || isNarrow || isCodeMode) && <div style={{ flex: 1 }} />}
+      {(isPreview || isCodeMode) && <div style={{ flex: 1 }} />}
       {/* Version history — renders only when the host enabled versioning
           and a container is wired up. The component owns its own button
           and popover; we just give it a slot in the toolbar. */}

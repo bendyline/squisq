@@ -340,8 +340,11 @@ export function computeDrawingLayout(
     }
 
     const size = defaultSize(kind);
-    const x = numParam(params, 'x');
-    const y = numParam(params, 'y');
+    // Prefer annotation params; fall back to Block.x/Block.y so children
+    // authored the diagram way (coordinates on the block itself) place
+    // identically here instead of silently dropping into the auto-grid.
+    const x = numParam(params, 'x') ?? (typeof child.x === 'number' ? child.x : undefined);
+    const y = numParam(params, 'y') ?? (typeof child.y === 'number' ? child.y : undefined);
     const shape: DrawingShape = {
       id: child.id,
       kind,
@@ -370,9 +373,15 @@ export function computeDrawingLayout(
   }
 
   // Second pass: auto-place shapes missing a coordinate in a grid below
-  // the pinned bounding box (mirrors diagramLayout).
+  // the pinned bounding box (mirrors diagramLayout). Grid pitch accounts
+  // for the largest unpositioned shape so wide/tall shapes never overlap
+  // their grid neighbors.
   if (unpositioned.length > 0) {
     const cols = Math.max(1, Math.ceil(Math.sqrt(unpositioned.length)));
+    const maxW = Math.max(...unpositioned.map((i) => entries[i].shape.width));
+    const maxH = Math.max(...unpositioned.map((i) => entries[i].shape.height));
+    const pitchX = Math.max(opts.gapX, maxW + 60);
+    const pitchY = Math.max(opts.gapY, maxH + 50);
     let baseX = opts.gridOriginX;
     let baseY = opts.gridOriginY;
     const pinned = entries.filter((e) => e.shape.pinned);
@@ -383,8 +392,8 @@ export function computeDrawingLayout(
     unpositioned.forEach((entryIdx, k) => {
       const col = k % cols;
       const row = Math.floor(k / cols);
-      entries[entryIdx].shape.x = baseX + col * opts.gapX;
-      entries[entryIdx].shape.y = baseY + row * opts.gapY;
+      entries[entryIdx].shape.x = baseX + col * pitchX;
+      entries[entryIdx].shape.y = baseY + row * pitchY;
     });
   }
 

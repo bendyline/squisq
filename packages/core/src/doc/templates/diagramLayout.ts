@@ -49,9 +49,9 @@ export interface DiagramLayout {
 }
 
 export interface DiagramLayoutOptions {
-  /** Horizontal spacing between auto-laid-out nodes. Default: 200. */
+  /** Horizontal grid pitch between auto-laid-out nodes. Default: 260 (node width 180 + 80 air). */
   gapX?: number;
-  /** Vertical spacing between auto-laid-out nodes. Default: 140. */
+  /** Vertical grid pitch between auto-laid-out nodes. Default: 140. */
   gapY?: number;
   /** Padding around the explicit-positions bounding box before the grid starts. Default: 80. */
   gridPad?: number;
@@ -62,7 +62,7 @@ export interface DiagramLayoutOptions {
 }
 
 const DEFAULT_OPTS: Required<DiagramLayoutOptions> = {
-  gapX: 200,
+  gapX: 260,
   gapY: 140,
   gridPad: 80,
   gridOriginX: 80,

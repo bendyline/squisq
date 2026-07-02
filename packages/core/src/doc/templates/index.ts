@@ -742,7 +742,7 @@ export type {
 } from './drawingLayout.js';
 export { layoutBlock } from './layoutBlock.js';
 export { computeLayoutLayers } from './layoutLayout.js';
-export type { LayoutLayersResult } from './layoutLayout.js';
+export type { LayoutLayersResult, LayoutLayerDefaults } from './layoutLayout.js';
 
 // Re-export accent image utilities
 export { getAccentLayout, createAccentLayers, adjustY, DEFAULT_LAYOUT } from './accentImage.js';

@@ -16,9 +16,8 @@
 
 import type { Layer } from '../../schemas/Doc.js';
 import type { TemplateContext } from '../../schemas/BlockTemplates.js';
-import { scaledFontSize } from '../../schemas/BlockTemplates.js';
 import type { StartBlockConfig } from '../../schemas/Doc.js';
-import { getThemeFont } from '../utils/themeUtils.js';
+import { getThemeFont, themedFontSize } from '../utils/themeUtils.js';
 import { mapAmbientMotion } from './accentImage.js';
 
 /**
@@ -49,8 +48,8 @@ export function coverBlock(input: CoverBlockInput, context: TemplateContext): La
   const { theme, layout } = context;
 
   // Scale font sizes for viewport - cover titles are larger than regular title blocks
-  const titleFontSize = scaledFontSize(120, context, true);
-  const subtitleFontSize = scaledFontSize(40, context, false);
+  const titleFontSize = themedFontSize(120, context, true);
+  const subtitleFontSize = themedFontSize(40, context, false);
 
   const layers: Layer[] = [];
 

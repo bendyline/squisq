@@ -1,8 +1,10 @@
 /**
  * Quote Block Template
  *
- * Large centered quote with optional attribution.
- * Good for impactful statements or descriptions.
+ * Large centered quote with optional attribution, composed as one
+ * vertically-centered lockup: the attribution hangs a fixed distance
+ * below the quote's estimated bottom edge instead of being pinned to a
+ * far-away layout slot.
  * Adapts font sizes and positioning for different viewports.
  *
  * Supports optional accent images that appear as tasteful side/bottom strips.
@@ -12,59 +14,64 @@
 
 import type { Layer } from '../../schemas/Doc.js';
 import type { QuoteBlockInput, TemplateContext } from '../../schemas/BlockTemplates.js';
-import { scaledFontSize } from '../../schemas/BlockTemplates.js';
-import { getThemeFont } from '../utils/themeUtils.js';
+import {
+  getThemeFont,
+  shouldUseShadow,
+  themedFontSize,
+  themedSurfaceGradient,
+} from '../utils/themeUtils.js';
+import { withAlpha } from '../../schemas/colorUtils.js';
 import { createAccentLayers, getAccentLayout, adjustY, DEFAULT_LAYOUT } from './accentImage.js';
-import { createBackgroundLayer } from './captionUtils.js';
+import { createBackgroundLayer, estimateTextHeight } from './captionUtils.js';
 
 export function quoteBlock(input: QuoteBlockInput, context: TemplateContext): Layer[] {
   const { quote, attribution, accentImage } = input;
-  const { theme, layout } = context;
+  const { theme, viewport } = context;
 
   // Get layout adjustments if accent image is present
   const accentLayout = accentImage ? getAccentLayout(accentImage.position) : DEFAULT_LAYOUT;
 
   // Scale font sizes for viewport
-  const quoteFontSize = scaledFontSize(48, context, true);
-  const attrFontSize = scaledFontSize(24, context, false);
+  const quoteFontSize = themedFontSize(48, context, true);
+  const attrFontSize = themedFontSize(26, context, false);
+  const quoteLineHeight = Math.max(theme.typography.titleLineHeight ?? 1.4, 1.25);
 
   // Decorative quotation mark font size
-  const decorativeQuoteFontSize = scaledFontSize(280, context, true);
+  const decorativeQuoteFontSize = themedFontSize(280, context, true);
 
-  const layers: Layer[] = [
-    createBackgroundLayer(
-      'bg',
-      `linear-gradient(160deg, ${theme.colors.backgroundLight} 0%, #1e2636 100%)`,
-    ),
-  ];
+  const layers: Layer[] = [createBackgroundLayer('bg', themedSurfaceGradient(context, 160))];
 
   // Add accent image layers (behind text, after background)
   if (accentImage) {
     layers.push(...createAccentLayers(accentImage, input.id));
   }
 
-  // Decorative opening quotation mark — oversized, low-opacity behind quote
+  // Decorative opening quotation mark — oversized, low-opacity behind the
+  // quote. Derived from the theme text color so it stays a subtle ornament
+  // on light and dark surfaces alike (a hard-coded white glyph was
+  // invisible on both).
   layers.push({
     type: 'text',
     id: 'deco-quote',
     content: {
-      text: '\u201C',
+      text: '“',
       style: {
         fontSize: decorativeQuoteFontSize,
         fontFamily: getThemeFont(context, 'title'),
-        color: 'rgba(255, 255, 255, 0.06)',
+        color: withAlpha(theme.colors.text, 0.09),
         textAlign: 'center',
       },
     },
     position: {
       x: accentLayout.textCenterX,
-      y: adjustY('18%', accentLayout),
+      y: adjustY('26%', accentLayout),
       anchor: 'center',
     },
   });
 
-  // Quote text - positioned based on accent layout
-  const quoteY = attribution ? layout.primaryY : '50%';
+  // Quote text — optically centered, nudged up slightly when an
+  // attribution hangs below it.
+  const quoteYPct = attribution ? 45 : 50;
   layers.push({
     type: 'text',
     id: 'quote',
@@ -75,21 +82,28 @@ export function quoteBlock(input: QuoteBlockInput, context: TemplateContext): La
         fontFamily: getThemeFont(context, 'title'),
         color: theme.colors.text,
         textAlign: 'center',
-        lineHeight: 1.6,
-        shadow: true,
+        lineHeight: quoteLineHeight,
+        shadow: shouldUseShadow(context),
       },
     },
     position: {
       x: accentLayout.textCenterX,
-      y: adjustY(quoteY, accentLayout),
+      y: adjustY(`${quoteYPct}%`, accentLayout),
       anchor: 'center',
       width: accentLayout.textWidth,
     },
     animation: { type: 'fadeIn', duration: 2 },
   });
 
-  // Add attribution if provided
+  // Attribution hangs just below the quote's estimated bottom edge, so
+  // the two read as one lockup instead of the attribution stranding near
+  // the bottom of the block.
   if (attribution) {
+    const quoteWidthPx = (parseFloat(accentLayout.textWidth) / 100) * viewport.width;
+    const quoteHeightPx = estimateTextHeight(quote, quoteFontSize, quoteWidthPx, quoteLineHeight);
+    const gapPx = quoteFontSize * 1.7;
+    const attrYPct = Math.min(82, quoteYPct + ((quoteHeightPx / 2 + gapPx) / viewport.height) * 100);
+
     layers.push({
       type: 'text',
       id: 'attribution',
@@ -100,12 +114,12 @@ export function quoteBlock(input: QuoteBlockInput, context: TemplateContext): La
           fontFamily: getThemeFont(context, 'body'),
           color: theme.colors.textMuted,
           textAlign: 'center',
-          shadow: !!accentImage,
+          shadow: shouldUseShadow(context),
         },
       },
       position: {
         x: accentLayout.textCenterX,
-        y: adjustY(layout.captionY, accentLayout),
+        y: adjustY(`${attrYPct}%`, accentLayout),
         anchor: 'center',
       },
       animation: { type: 'fadeIn', duration: 1, delay: 1.5 },

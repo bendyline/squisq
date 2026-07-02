@@ -12,8 +12,13 @@
 
 import type { Layer } from '../../schemas/Doc.js';
 import type { StatHighlightInput, TemplateContext } from '../../schemas/BlockTemplates.js';
-import { scaledFontSize } from '../../schemas/BlockTemplates.js';
-import { resolveColorScheme, getThemeFont } from '../utils/themeUtils.js';
+import {
+  resolveColorScheme,
+  getThemeFont,
+  shouldUseShadow,
+  themedFontSize,
+  themedSurfaceGradient,
+} from '../utils/themeUtils.js';
 import { createAccentLayers, getAccentLayout, adjustY, DEFAULT_LAYOUT } from './accentImage.js';
 import { createBackgroundLayer } from './captionUtils.js';
 
@@ -39,16 +44,11 @@ export function statHighlight(input: StatHighlightInput, context: TemplateContex
   const accentLayout = accentImage ? getAccentLayout(accentImage.position) : DEFAULT_LAYOUT;
 
   // Scale font sizes — stat is dramatically large, description is understated
-  const statFontSize = scaledFontSize(148, context, true);
-  const descFontSize = scaledFontSize(32, context, false);
-  const detailFontSize = scaledFontSize(26, context, false);
+  const statFontSize = themedFontSize(148, context, true);
+  const descFontSize = themedFontSize(32, context, false);
+  const detailFontSize = themedFontSize(26, context, false);
 
-  const layers: Layer[] = [
-    createBackgroundLayer(
-      'bg',
-      `linear-gradient(180deg, ${theme.colors.background} 0%, #0f1520 100%)`,
-    ),
-  ];
+  const layers: Layer[] = [createBackgroundLayer('bg', themedSurfaceGradient(context, 180))];
 
   // Add accent image layers (behind text, after background)
   if (accentImage) {
@@ -66,18 +66,20 @@ export function statHighlight(input: StatHighlightInput, context: TemplateContex
         fontFamily: getThemeFont(context, 'title'),
         fontWeight: 'bold',
         color: colors.text,
-        shadow: !!accentImage,
+        shadow: shouldUseShadow(context),
       },
     },
     position: {
       x: accentLayout.textCenterX,
-      y: adjustY('32%', accentLayout),
+      y: adjustY('36%', accentLayout),
       anchor: 'center',
     },
     animation: { type: 'zoomIn', duration: 0.6 },
   });
 
-  // Description — smaller and understated beneath the stat
+  // Description — smaller and understated beneath the stat. Sits close
+  // under the stat (the ~26% fixed gap it used to get read as two
+  // unrelated elements floating in the panel).
   layers.push({
     type: 'text',
     id: 'description',
@@ -88,13 +90,13 @@ export function statHighlight(input: StatHighlightInput, context: TemplateContex
         fontFamily: getThemeFont(context, 'body'),
         color: theme.colors.textMuted,
         textAlign: 'center',
-        lineHeight: 1.6,
-        shadow: !!accentImage,
+        lineHeight: 1.5,
+        shadow: shouldUseShadow(context),
       },
     },
     position: {
       x: accentLayout.textCenterX,
-      y: adjustY('58%', accentLayout),
+      y: adjustY('54%', accentLayout),
       width: accentLayout.textWidth,
       anchor: 'center',
     },
@@ -111,14 +113,18 @@ export function statHighlight(input: StatHighlightInput, context: TemplateContex
         style: {
           fontSize: detailFontSize,
           fontFamily: getThemeFont(context, 'body'),
-          color: colors.accent,
+          // Scheme *text* rather than *accent*: accents in the built-in
+          // schemes are tuned as chart/fill colors and drop below legible
+          // contrast as body copy on light surfaces.
+          color: colors.text,
           textAlign: 'center',
-          shadow: !!accentImage,
+          shadow: shouldUseShadow(context),
         },
       },
       position: {
         x: accentLayout.textCenterX,
-        y: adjustY('75%', accentLayout),
+        y: adjustY('66%', accentLayout),
+        width: accentLayout.textWidth,
         anchor: 'center',
       },
       animation: { type: 'fadeIn', duration: 1, delay: 1 },

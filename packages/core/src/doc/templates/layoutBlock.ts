@@ -18,8 +18,10 @@ import { getThemeFont } from '../utils/themeUtils.js';
 import { computeLayoutLayers } from './layoutLayout.js';
 
 export function layoutBlock(input: TemplateBlock, context: TemplateContext): Layer[] {
-  const { viewport, children = [] } = context;
-  const { layers } = computeLayoutLayers(children, viewport);
+  const { theme, viewport, children = [] } = context;
+  // Theme ink for un-styled text and strokes — the fixed dark-slate
+  // default disappeared on dark themes.
+  const { layers } = computeLayoutLayers(children, viewport, { ink: theme.colors.text });
   return layers.length > 0 ? layers : [emptyHint(input, context)];
 }
 

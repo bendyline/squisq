@@ -10,8 +10,13 @@
 
 import type { Layer } from '../../schemas/Doc.js';
 import type { FullBleedQuoteInput, TemplateContext } from '../../schemas/BlockTemplates.js';
-import { scaledFontSize } from '../../schemas/BlockTemplates.js';
-import { resolveColorScheme, getThemeFont } from '../utils/themeUtils.js';
+import {
+  resolveColorScheme,
+  getThemeFont,
+  shouldUseShadow,
+  themedFontSize,
+} from '../utils/themeUtils.js';
+import { oklchDarken } from '../../schemas/colorUtils.js';
 
 /**
  * Hint schema published for the theme validator + future customizer hint UI.
@@ -28,20 +33,21 @@ export const fullBleedQuoteHintSchema = {
 
 export function fullBleedQuote(input: FullBleedQuoteInput, context: TemplateContext): Layer[] {
   const { text, colorScheme = 'blue' } = input;
-  const { theme } = context;
   const colors = resolveColorScheme(context, colorScheme);
 
   // Massive font for dramatic impact
-  const textFontSize = scaledFontSize(120, context, true);
+  const textFontSize = themedFontSize(120, context, true);
 
   return [
-    // Background — dark radial vignette for cinematic feel
+    // Background — radial vignette built from the color scheme's own
+    // surface, so the card takes on the scheme (and the theme behind it)
+    // instead of vignetting every theme into hard black.
     {
       type: 'shape',
       id: 'bg',
       content: {
         shape: 'rect',
-        fill: `radial-gradient(ellipse at 50% 50%, ${theme.colors.backgroundLight} 0%, #000000 100%)`,
+        fill: `radial-gradient(ellipse at 50% 50%, ${colors.bg} 0%, ${oklchDarken(colors.bg, 0.12)} 100%)`,
       },
       position: { x: 0, y: 0, width: '100%', height: '100%' },
     },
@@ -58,7 +64,7 @@ export function fullBleedQuote(input: FullBleedQuoteInput, context: TemplateCont
           color: colors.text,
           textAlign: 'center',
           lineHeight: 1.2,
-          shadow: true,
+          shadow: shouldUseShadow(context),
         },
       },
       position: {

@@ -132,4 +132,38 @@ describe('computeLayoutLayers', () => {
     expect(layers).toHaveLength(0);
     expect(warnings.some((w) => w.includes('weird'))).toBe(true);
   });
+
+  it('uses the supplied ink default for un-styled text and strokes', () => {
+    const { layers } = computeLayoutLayers(
+      [
+        child('t', 'text', { x: '0', y: '0' }, 'plain'),
+        child('l', 'line', { x: '0', y: '0', width: '100', height: '0' }),
+      ],
+      VP,
+      { ink: '#e0e0e0' },
+    );
+    const t = layers[0] as TextLayer;
+    const l = layers[1] as PathLayer;
+    expect(t.content.style.color).toBe('#e0e0e0');
+    expect(l.content.stroke).toBe('#e0e0e0');
+  });
+
+  it('keeps the dark-slate ink default when no defaults are supplied (editor scene canvas)', () => {
+    const { layers } = computeLayoutLayers([child('t', 'text', { x: '0', y: '0' }, 'plain')], VP);
+    const t = layers[0] as TextLayer;
+    expect(t.content.style.color).toBe('#1e293b');
+  });
+
+  it('never overrides author-specified color/stroke with the ink default', () => {
+    const { layers } = computeLayoutLayers(
+      [
+        child('t', 'text', { x: '0', y: '0', color: '#112233' }, 'styled'),
+        child('l', 'line', { x: '0', y: '0', width: '100', height: '0', stroke: '#445566' }),
+      ],
+      VP,
+      { ink: '#e0e0e0' },
+    );
+    expect((layers[0] as TextLayer).content.style.color).toBe('#112233');
+    expect((layers[1] as PathLayer).content.stroke).toBe('#445566');
+  });
 });

@@ -25,6 +25,7 @@
     "test:e2e": "npm run build && playwright test",
     "test:e2e:built": "playwright test",
     "test:published": "vitest run --config vitest.published.config.ts",
+    "screenshots:templates": "node scripts/generate-template-screenshots.mjs",
     "site": "npm run build && npm run dev:site",
     "dev": "npm run build && concurrently -n core,formats,react,video,video-react,editor,site -c blue,cyan,magenta,yellow,green,red,white \"npm:dev:packages:core\" \"npm:dev:packages:formats\" \"npm:dev:packages:react\" \"npm:dev:packages:video\" \"npm:dev:packages:video-react\" \"npm:dev:packages:editor\" \"npm:dev:site\"",
     "dev:site": "npm run dev -w squisq-site",

@@ -10,6 +10,7 @@ import type { TemplateContext } from '../../schemas/BlockTemplates.js';
 import type { ThemeColorScheme, RenderStyle } from '../../schemas/Theme.js';
 import type { AnimationType } from '../../schemas/Doc.js';
 import { resolveFontFamily } from '../../schemas/fontStacks.js';
+import { oklchDarken, withAlpha } from '../../schemas/colorUtils.js';
 
 // ============================================
 // Color Scheme Resolution
@@ -140,6 +141,31 @@ export function shouldUseShadow(context: TemplateContext): boolean {
  */
 export function getOverlayOpacity(context: TemplateContext): number {
   return context.theme.style.overlayOpacity ?? 0.5;
+}
+
+/**
+ * Theme-derived surface gradient for text-first templates.
+ *
+ * Runs from the theme's alternate surface into a slightly deepened
+ * background, staying inside the theme's own hue. Templates must use
+ * this instead of hard-coding a dark endpoint (`#0f1520`, `#1e2030`, …):
+ * hard-coded navy endpoints made light themes render dark panels and
+ * warm themes drift cold halfway down the block.
+ */
+export function themedSurfaceGradient(context: TemplateContext, angleDeg = 160): string {
+  const { background, backgroundLight } = context.theme.colors;
+  return `linear-gradient(${angleDeg}deg, ${backgroundLight} 0%, ${oklchDarken(background, 0.04)} 100%)`;
+}
+
+/**
+ * Translucent overlay tint derived from the theme background, for text
+ * bands/scrims painted over imagery. Light themes get a light scrim with
+ * dark theme text on top; dark themes get the familiar dark scrim —
+ * `theme.colors.text` stays legible on it by construction.
+ */
+export function themedScrim(context: TemplateContext, alpha?: number): string {
+  const a = alpha ?? Math.max(0.55, getOverlayOpacity(context));
+  return withAlpha(context.theme.colors.background, a);
 }
 
 // ============================================

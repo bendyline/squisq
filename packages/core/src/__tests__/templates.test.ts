@@ -137,7 +137,7 @@ describe('expandTemplateBlock', () => {
     expect(imageLayer!.position.height).toBe('90%');
   });
 
-  it('expands rightFeature template with image on the right half and right-aligned text left', () => {
+  it('expands rightFeature template with image on the right half and left-aligned text on the left', () => {
     const block: TemplateBlock = {
       template: 'rightFeature',
       id: 'rf-1',
@@ -157,9 +157,11 @@ describe('expandTemplateBlock', () => {
     expect(imageLayer!.position.width).toBe('50%');
     const textLayers = layers.filter((l) => l.type === 'text');
     for (const t of textLayers) {
-      expect(t.position.x).toBe('46%');
-      expect(t.position.anchor).toBe('top-right');
-      expect((t.content as { style: { textAlign?: string } }).style.textAlign).toBe('right');
+      // The mirror lives in the layout only: the text column occupies the
+      // left half, but the running text stays left-aligned for readability.
+      expect(t.position.x).toBe('6%');
+      expect(t.position.anchor).toBe('top-left');
+      expect((t.content as { style: { textAlign?: string } }).style.textAlign).toBe('left');
     }
   });
 
