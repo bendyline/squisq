@@ -87,15 +87,18 @@ export const TRANSITION_TYPES = [
 
 export type TransitionType = (typeof TRANSITION_TYPES)[number];
 
-export type TransitionDirection =
-  | 'left'
-  | 'right'
-  | 'up'
-  | 'down'
-  | 'in'
-  | 'out'
-  | 'horizontal'
-  | 'vertical';
+export const TRANSITION_DIRECTIONS = [
+  'left',
+  'right',
+  'up',
+  'down',
+  'in',
+  'out',
+  'horizontal',
+  'vertical',
+] as const;
+
+export type TransitionDirection = (typeof TRANSITION_DIRECTIONS)[number];
 
 /**
  * Transition between blocks.
@@ -118,11 +121,12 @@ const TRANSITION_TYPE_ALIASES: Record<string, TransitionType> = {
   none: 'cut',
   randombars: 'randomBars',
   randombar: 'randomBar',
-  checkerboard: 'checkerboard',
+  // Self-referential spellings (`checkerboard`, `shape`, `uncover`) are
+  // intentionally absent: an exact valid type returns early from
+  // `normalizeTransitionType`, and any case variant resolves through
+  // `NORMALIZED_TRANSITION_TYPES`. Only the *plural* aliases need an entry.
   checkerboards: 'checkerboard',
-  shape: 'shape',
   shapes: 'shape',
-  uncover: 'uncover',
   ferris: 'ferrisWheel',
   ferriswheel: 'ferrisWheel',
   flythrough: 'flyThrough',

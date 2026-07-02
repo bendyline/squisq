@@ -14,7 +14,12 @@
 
 import type { BlockConnection } from './types.js';
 import type { TransitionDirection, TransitionType } from '../schemas/Transitions.js';
-import { normalizeTransitionDirection, normalizeTransitionType } from '../schemas/Transitions.js';
+import {
+  normalizeTransitionDirection,
+  normalizeTransitionType,
+  TRANSITION_TYPES,
+  TRANSITION_DIRECTIONS,
+} from '../schemas/Transitions.js';
 
 /**
  * Registry of known block-meta keys and their coercion strategies.
@@ -35,6 +40,73 @@ export const KNOWN_BLOCK_META_KEYS = {
 } as const;
 
 export type KnownBlockMetaKey = keyof typeof KNOWN_BLOCK_META_KEYS;
+
+/**
+ * Editor-facing description of a known block-meta key: what it does, and
+ * either its closed set of valid values or a free-form format hint. This is
+ * the single source the markdown editor's `{[name key=value]}` attribute
+ * autocomplete reads from, so the suggestion list stays in lockstep with
+ * `KNOWN_BLOCK_META_KEYS` and the transition vocabulary rather than drifting
+ * in a hand-maintained copy. `values`/`valueHint` are mutually exclusive: a
+ * key has a closed enum (`values`) or a format hint (`valueHint`), not both.
+ */
+export interface BlockMetaKeyDescriptor {
+  key: KnownBlockMetaKey;
+  /** One-line description, shown as the completion item's detail. */
+  description: string;
+  /** Closed set of valid values, for keys backed by an enum. */
+  values?: readonly string[];
+  /** Format hint shown when the value is free-form (no closed set). */
+  valueHint?: string;
+}
+
+/**
+ * Ordered descriptors for every key in `KNOWN_BLOCK_META_KEYS`. Order is the
+ * suggestion display order: the transition family first (the most common
+ * authoring case), then timeline timing, then diagram geometry/links.
+ */
+export const BLOCK_META_KEY_DESCRIPTORS: readonly BlockMetaKeyDescriptor[] = [
+  {
+    key: 'transition',
+    description: 'Block-to-block transition effect',
+    values: TRANSITION_TYPES,
+  },
+  {
+    key: 'transitionDuration',
+    description: 'How long the transition lasts',
+    valueHint: 'seconds — e.g. 0.7, 700ms',
+  },
+  {
+    key: 'transitionDirection',
+    description: 'Directional variant for the transition',
+    values: TRANSITION_DIRECTIONS,
+  },
+  {
+    key: 'startTime',
+    description: 'Timeline start time of this block',
+    valueHint: 'mm:ss or seconds — e.g. 01:30, 5, 1500ms',
+  },
+  {
+    key: 'duration',
+    description: 'How long this block lasts',
+    valueHint: 'mm:ss or seconds — e.g. 45, 1500ms',
+  },
+  {
+    key: 'x',
+    description: 'Horizontal position on the diagram canvas',
+    valueHint: 'number — e.g. 600',
+  },
+  {
+    key: 'y',
+    description: 'Vertical position on the diagram canvas',
+    valueHint: 'number — e.g. 300',
+  },
+  {
+    key: 'connectsTo',
+    description: 'Diagram connections to other blocks',
+    valueHint: 'comma-separated target or target:type — e.g. foo,bar:flow',
+  },
+];
 
 /**
  * The shape of the typed values produced by coercion. Mirrors

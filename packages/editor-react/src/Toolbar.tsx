@@ -18,6 +18,15 @@ import { VersionHistoryPanel } from './VersionHistoryPanel';
 import { RecorderEntry } from './RecorderEntry';
 import { ViewMenuPanel } from './ViewMenuPanel';
 import { TemplatePicker, TEMPLATE_NAMES } from './TemplatePicker';
+import { TransitionPicker } from './TransitionPicker';
+import {
+  readHeadingLineTransition,
+  setHeadingLineTransition,
+  readBlockAttrsTransition,
+  setBlockAttrsTransition,
+  EMPTY_TRANSITION,
+  type TransitionFields,
+} from './headingTransition';
 import { profileBlockContents, recommendTemplatesForBlock } from '@bendyline/squisq/recommend';
 import { findBlockSliceAtLine, findBlockSliceByHeadingIndex } from './blockSlice';
 import { LinkDialog } from './LinkDialog';
@@ -1199,10 +1208,12 @@ export function Toolbar({
   const isRawView = activeView === 'raw';
   const [rawTemplate, setRawTemplate] = useState<string | null>(null);
   const [rawHeadingLine, setRawHeadingLine] = useState<number | null>(null);
+  const [rawTransition, setRawTransition] = useState<TransitionFields>(EMPTY_TRANSITION);
   useEffect(() => {
     if (!isRawView || !monacoEditor) {
       setRawTemplate(null);
       setRawHeadingLine(null);
+      setRawTransition(EMPTY_TRANSITION);
       return;
     }
     const recompute = () => {
@@ -1211,6 +1222,7 @@ export function Toolbar({
       if (!model || !pos) {
         setRawTemplate(null);
         setRawHeadingLine(null);
+        setRawTransition(EMPTY_TRANSITION);
         return;
       }
       const line = model.getLineContent(pos.lineNumber);
@@ -1218,9 +1230,11 @@ export function Toolbar({
       if (!headingMatch) {
         setRawTemplate(null);
         setRawHeadingLine(null);
+        setRawTransition(EMPTY_TRANSITION);
         return;
       }
       setRawHeadingLine(pos.lineNumber);
+      setRawTransition(readHeadingLineTransition(line));
       const annotMatch = headingMatch[1].match(/\s*\{\[([^\]]+)\]\}[\s\]}]*$/);
       if (annotMatch) {
         // First whitespace-delimited token is the template name; the rest are params.
@@ -1332,6 +1346,52 @@ export function Toolbar({
     } else {
       tiptapEditor.chain().focus().updateAttributes('heading', { dataTemplate: value }).run();
     }
+  };
+
+  // ── Current block transition ──────────────────────────
+  // Non-null exactly when a block (heading) is active — same condition as
+  // the template picker. Read from the Pandoc `{…}` block (canonical), with
+  // the `{[…]}` params as a fallback for hand-typed transitions.
+  let currentTransition: TransitionFields | null = null;
+  if (isWysiwyg && wysiwygTemplate !== null) {
+    const attrs = tiptapEditor.getAttributes('heading') as {
+      dataBlockAttrs?: string | null;
+      dataTemplateParams?: string | null;
+    };
+    currentTransition = readBlockAttrsTransition(attrs.dataBlockAttrs, attrs.dataTemplateParams);
+  } else if (isRawView && rawTemplate !== null) {
+    currentTransition = rawTransition;
+  }
+
+  const handleTransitionPick = (next: TransitionFields) => {
+    // Raw (Monaco) — rewrite the heading line, writing into the `{…}` block.
+    if (isRawView && monacoEditor) {
+      const model = monacoEditor.getModel();
+      const pos = monacoEditor.getPosition();
+      if (!model || !pos) return;
+      const lineNumber = pos.lineNumber;
+      const lineText = model.getLineContent(lineNumber);
+      const newLine = setHeadingLineTransition(lineText, next);
+      if (newLine === lineText) return;
+      monacoEditor.executeEdits('toolbar-transition-pick', [
+        {
+          range: {
+            startLineNumber: lineNumber,
+            startColumn: 1,
+            endLineNumber: lineNumber,
+            endColumn: lineText.length + 1,
+          },
+          text: newLine,
+        },
+      ]);
+      monacoEditor.focus();
+      return;
+    }
+    // WYSIWYG — rewrite the heading node's `dataBlockAttrs` (Pandoc inner).
+    if (!tiptapEditor) return;
+    const attrs = tiptapEditor.getAttributes('heading') as { dataBlockAttrs?: string | null };
+    const inner = setBlockAttrsTransition(attrs.dataBlockAttrs, next);
+    tiptapEditor.chain().focus().updateAttributes('heading', { dataBlockAttrs: inner }).run();
   };
 
   return (
@@ -1447,6 +1507,18 @@ export function Toolbar({
                   onChange={handleTemplatePick}
                   recommended={recommendedTemplates}
                 />
+              </div>
+            </>
+          )}
+
+          {/* Transition picker — visible alongside the template picker when a
+              block (heading) is active. Writes `transition=` into the block's
+              Pandoc `{…}` attribute block (the canonical home for transitions). */}
+          {currentTransition !== null && (
+            <>
+              <div className="squisq-toolbar-separator" />
+              <div className="squisq-toolbar-group squisq-transition-picker-group">
+                <TransitionPicker value={currentTransition} onChange={handleTransitionPick} />
               </div>
             </>
           )}

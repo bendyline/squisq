@@ -15,7 +15,7 @@ import {
   MemoryContentContainer,
 } from '@bendyline/squisq/storage';
 import type { ContentContainer } from '@bendyline/squisq/storage';
-import { SAMPLES, CONTENT_SAMPLES } from './samples';
+import { SAMPLES, SAMPLE_LABELS, CONTENT_SAMPLES } from './samples';
 import { DebugPanel } from './DebugPanel';
 import { FileToolbar } from './FileToolbar';
 import { StorageToolbar } from './StorageToolbar';
@@ -37,10 +37,10 @@ const CUSTOM_THEME_STORAGE_KEY = 'squisq-site:customTheme';
  * fetch/unpack pipeline that runs from `handleSampleChange`.
  */
 function getInitialSampleKey(): string {
-  if (typeof window === 'undefined') return 'hello-world';
+  if (typeof window === 'undefined') return 'about-squisq';
   const param = new URLSearchParams(window.location.search).get('sample');
   if (param && Object.prototype.hasOwnProperty.call(SAMPLES, param)) return param;
-  return 'hello-world';
+  return 'about-squisq';
 }
 
 /** Load a previously-saved custom theme from localStorage. Returns null on miss / parse failure. */
@@ -282,7 +282,7 @@ export function App() {
           >
             {Object.keys(SAMPLES).map((key) => (
               <option key={key} value={key}>
-                {key.replace(/-/g, ' ')}
+                {SAMPLE_LABELS[key] ?? key.replace(/-/g, ' ')}
               </option>
             ))}
             <option disabled>{'\u2500'.repeat(16)}</option>

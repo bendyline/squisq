@@ -118,6 +118,35 @@ export type { OutlinePanelProps } from './OutlinePanel.js';
 export { ThemeCustomizerPanel } from './ThemeCustomizerPanel.js';
 export type { ThemeCustomizerPanelProps } from './ThemeCustomizerPanel.js';
 export { TemplatePicker, templateLabel } from './TemplatePicker.js';
+export { TransitionPicker } from './TransitionPicker.js';
+export type { TransitionPickerProps } from './TransitionPicker.js';
+export {
+  TRANSITION_GROUPS,
+  TRANSITION_ENTRIES,
+  transitionLabel,
+  findTransitionEntry,
+} from './transitionCatalog.js';
+export type {
+  TransitionGroup,
+  TransitionCatalogEntry,
+  DirectionModel,
+} from './transitionCatalog.js';
+export {
+  readHeadingLineTransition,
+  setHeadingLineTransition,
+  readBlockAttrsTransition,
+  setBlockAttrsTransition,
+  EMPTY_TRANSITION,
+} from './headingTransition.js';
+export type { TransitionFields } from './headingTransition.js';
+export {
+  readBlockAttrsParams,
+  readBlockAttrsValue,
+  setBlockAttrsValue,
+  summarizeBlockProps,
+} from './blockProperties.js';
+export { BlockPropertiesPopover } from './BlockPropertiesPopover.js';
+export type { BlockPropertiesPopoverProps } from './BlockPropertiesPopover.js';
 export { InlinePreviewGutter } from './InlinePreviewGutter.js';
 export type { InlinePreviewGutterProps } from './InlinePreviewGutter.js';
 

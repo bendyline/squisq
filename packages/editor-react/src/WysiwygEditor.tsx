@@ -31,6 +31,7 @@ import { ImageWithMediaProvider } from './ImageNodeView';
 import { TiptapVideo } from './tiptap/TiptapVideo';
 import { TiptapAudio } from './tiptap/TiptapAudio';
 import { TemplateBadgePopover, TEMPLATE_NAMES } from './TemplatePicker';
+import { BlockPropertiesPopover } from './BlockPropertiesPopover';
 import {
   CustomTemplateProvider,
   TemplateDesigner,
@@ -358,6 +359,12 @@ export function WysiwygEditor({
     headingPos: number;
     headingIndex: number;
   } | null>(null);
+  const [propsMenu, setPropsMenu] = useState<{
+    rect: DOMRect;
+    headingPos: number;
+    blockAttrs: string | null;
+    templateParams: string | null;
+  } | null>(null);
 
   useEffect(() => {
     if (!editor) return;
@@ -366,7 +373,9 @@ export function WysiwygEditor({
     const onClick = (e: MouseEvent) => {
       const target = e.target as HTMLElement | null;
       if (!target) return;
-      const badge = target.closest('.squisq-template-badge') as HTMLElement | null;
+      const propsBadge = target.closest('.squisq-props-badge') as HTMLElement | null;
+      const templateBadge = target.closest('.squisq-template-badge') as HTMLElement | null;
+      const badge = propsBadge ?? templateBadge;
       if (!badge || !root.contains(badge)) return;
       e.preventDefault();
       e.stopPropagation();
@@ -385,8 +394,22 @@ export function WysiwygEditor({
       const headingPos = Math.max(0, pos - 1);
       const node = editor.state.doc.nodeAt(headingPos);
       if (!node || node.type.name !== 'heading') return;
-      // Count how many headings precede this one so the markdown-source
-      // slice helper can locate the matching heading by index.
+
+      // Block-properties badge → open the properties palette.
+      if (propsBadge) {
+        setBadgeMenu(null);
+        setPropsMenu({
+          rect: badge.getBoundingClientRect(),
+          headingPos,
+          blockAttrs: (node.attrs.dataBlockAttrs as string | null) ?? null,
+          templateParams: (node.attrs.dataTemplateParams as string | null) ?? null,
+        });
+        return;
+      }
+
+      // Template badge → open the template gallery. Count how many headings
+      // precede this one so the markdown-source slice helper can locate the
+      // matching heading by index.
       let headingIndex = 0;
       let count = 0;
       editor.state.doc.descendants((n, p) => {
@@ -397,6 +420,7 @@ export function WysiwygEditor({
         }
         count++;
       });
+      setPropsMenu(null);
       setBadgeMenu({
         rect: badge.getBoundingClientRect(),
         template: (node.attrs.dataTemplate as string | null) ?? '',
@@ -505,6 +529,24 @@ export function WysiwygEditor({
               editor.view.dispatch(tr);
             }}
             onClose={() => setBadgeMenu(null)}
+          />
+        )}
+        {propsMenu && (
+          <BlockPropertiesPopover
+            anchorRect={propsMenu.rect}
+            blockAttrs={propsMenu.blockAttrs}
+            templateParams={propsMenu.templateParams}
+            onChange={(nextInner) => {
+              if (!editor) return;
+              const current = editor.state.doc.nodeAt(propsMenu.headingPos);
+              if (!current || current.type.name !== 'heading') return;
+              const tr = editor.state.tr.setNodeMarkup(propsMenu.headingPos, undefined, {
+                ...current.attrs,
+                dataBlockAttrs: nextInner,
+              });
+              editor.view.dispatch(tr);
+            }}
+            onClose={() => setPropsMenu(null)}
           />
         )}
         {designerState && (

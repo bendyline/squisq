@@ -4,7 +4,9 @@ import {
   parseTimeSeconds,
   parseConnectionList,
   KNOWN_BLOCK_META_KEYS,
+  BLOCK_META_KEY_DESCRIPTORS,
 } from '../markdown/annotationCoercion.js';
+import { TRANSITION_TYPES, TRANSITION_DIRECTIONS } from '../schemas/Transitions.js';
 
 describe('parseTimeSeconds', () => {
   it('accepts bare seconds (integer)', () => {
@@ -211,5 +213,31 @@ describe('KNOWN_BLOCK_META_KEYS', () => {
       'x',
       'y',
     ]);
+  });
+});
+
+describe('BLOCK_META_KEY_DESCRIPTORS', () => {
+  it('describes exactly the keys in KNOWN_BLOCK_META_KEYS', () => {
+    const described = BLOCK_META_KEY_DESCRIPTORS.map((d) => d.key).sort();
+    expect(described).toEqual(Object.keys(KNOWN_BLOCK_META_KEYS).sort());
+  });
+
+  it('has no duplicate keys', () => {
+    const keys = BLOCK_META_KEY_DESCRIPTORS.map((d) => d.key);
+    expect(new Set(keys).size).toBe(keys.length);
+  });
+
+  it('gives each key either a closed value set or a format hint, never both', () => {
+    for (const d of BLOCK_META_KEY_DESCRIPTORS) {
+      expect(Boolean(d.values) !== Boolean(d.valueHint)).toBe(true);
+      expect(d.description.length).toBeGreaterThan(0);
+    }
+  });
+
+  it('sources transition value sets from the canonical vocabulary', () => {
+    const transition = BLOCK_META_KEY_DESCRIPTORS.find((d) => d.key === 'transition');
+    const direction = BLOCK_META_KEY_DESCRIPTORS.find((d) => d.key === 'transitionDirection');
+    expect(transition?.values).toBe(TRANSITION_TYPES);
+    expect(direction?.values).toBe(TRANSITION_DIRECTIONS);
   });
 });

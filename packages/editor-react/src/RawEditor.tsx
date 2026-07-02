@@ -12,6 +12,7 @@ import type * as monaco from 'monaco-editor';
 import { useEditorContext } from './EditorContext';
 import { getAvailableTemplates } from '@bendyline/squisq/doc';
 import { suggestIcons, resolveIcon, iconGlyph } from '@bendyline/squisq/icons';
+import { BLOCK_META_KEY_DESCRIPTORS, tokenizeAttrTokens } from '@bendyline/squisq/markdown';
 import { SQUISQ_MEDIA_MIME, parseSquisqMediaPayload } from './mediaDragMime';
 import { useMonacoLoader } from './useMonacoLoader';
 
@@ -95,6 +96,7 @@ export function RawEditor({
   const completionDisposable = useRef<monaco.IDisposable | null>(null);
   const mentionCompletionDisposable = useRef<monaco.IDisposable | null>(null);
   const iconCompletionDisposable = useRef<monaco.IDisposable | null>(null);
+  const attrCompletionDisposable = useRef<monaco.IDisposable | null>(null);
   const iconGlyphDecorations = useRef<monaco.editor.IEditorDecorationsCollection | null>(null);
   const dropCleanupRef = useRef<(() => void) | null>(null);
   const keyDisposable = useRef<monaco.IDisposable | null>(null);
@@ -177,6 +179,8 @@ export function RawEditor({
       mentionCompletionDisposable.current = null;
       iconCompletionDisposable.current?.dispose();
       iconCompletionDisposable.current = null;
+      attrCompletionDisposable.current?.dispose();
+      attrCompletionDisposable.current = null;
 
       // Register the `{[template]}` completion provider only for markdown
       // files — it's meaningless for TypeScript, JSON, Python, etc.
@@ -193,6 +197,12 @@ export function RawEditor({
             const textAfterCursor = lineContent.substring(position.column - 1);
             const bracketIdx = textBeforeCursor.lastIndexOf('{[');
             if (bracketIdx === -1) return { suggestions: [] };
+
+            // Template names are the FIRST token after `{[`. Once a space
+            // follows the name we're in the `key=value` attribute region —
+            // the attribute provider handles that, so bail here to avoid
+            // offering template names mid-attribute.
+            if (/\s/.test(textBeforeCursor.slice(bracketIdx + 2))) return { suggestions: [] };
 
             // When Monaco's bracket auto-pair has already produced the
             // closing `]}` we just leave it in place and skip the
@@ -357,6 +367,110 @@ export function RawEditor({
             },
           },
         );
+
+        // `{[name key=value]}` block-meta attribute completion. Fires on
+        // heading lines once the cursor is past the template name (the
+        // first token), where attributes like `transition=` apply to the
+        // block. Two modes:
+        //   - bare token   → suggest attribute KEYS (insert `key=`)
+        //   - after `key=` → suggest that key's VALUES, when it has a
+        //     closed set (e.g. transition / transitionDirection)
+        // The descriptor list comes from core so keys and value enums stay
+        // in lockstep with what `coerceAnnotationValues` actually accepts.
+        attrCompletionDisposable.current = monaco.languages.registerCompletionItemProvider(
+          'markdown',
+          {
+            triggerCharacters: ['=', ' '],
+            provideCompletionItems(model, position) {
+              const lineContent = model.getLineContent(position.lineNumber);
+              // Block-meta attributes only mean something on a heading's
+              // template annotation — same gate as the template provider.
+              if (!/^#{1,6}\s/.test(lineContent)) return { suggestions: [] };
+
+              const textBeforeCursor = lineContent.substring(0, position.column - 1);
+              const bracketIdx = textBeforeCursor.lastIndexOf('{[');
+              if (bracketIdx === -1) return { suggestions: [] };
+
+              // Bail if a `]` already closed the annotation before the
+              // cursor — we'd be past it, not inside the attribute list.
+              const innerBefore = textBeforeCursor.slice(bracketIdx + 2);
+              if (innerBefore.includes(']')) return { suggestions: [] };
+              // The first token is the template name; attributes only begin
+              // after a whitespace separator. No space yet → still the name.
+              if (!/\s/.test(innerBefore)) return { suggestions: [] };
+
+              // Current token = run of non-whitespace ending at the cursor.
+              const lastWsMatch = innerBefore.match(/\s(\S*)$/);
+              const currentToken = lastWsMatch ? lastWsMatch[1] : '';
+              const tokenStartCol = position.column - currentToken.length;
+
+              const eqIdx = currentToken.indexOf('=');
+              if (eqIdx >= 0) {
+                // ── Value mode: `key=<partial>` ──
+                const key = currentToken.slice(0, eqIdx);
+                const descriptor = BLOCK_META_KEY_DESCRIPTORS.find((d) => d.key === key);
+                if (!descriptor?.values) return { suggestions: [] };
+                const range = new monaco.Range(
+                  position.lineNumber,
+                  tokenStartCol + eqIdx + 1, // after `=`
+                  position.lineNumber,
+                  position.column,
+                );
+                return {
+                  suggestions: descriptor.values.map((value, i) => ({
+                    label: value,
+                    filterText: value,
+                    kind: monaco.languages.CompletionItemKind.EnumMember,
+                    insertText: value,
+                    range,
+                    detail: descriptor.description,
+                    sortText: String(i).padStart(4, '0'),
+                  })),
+                };
+              }
+
+              // ── Key mode: suggest attribute names not already present ──
+              // Collect keys already set anywhere in the annotation so we
+              // don't re-offer them; keep the key under the cursor eligible
+              // so re-editing an existing `key=` still suggests it.
+              const afterBracket = lineContent.slice(bracketIdx + 2);
+              const closeIdx = afterBracket.indexOf(']}');
+              const fullInner = closeIdx === -1 ? afterBracket : afterBracket.slice(0, closeIdx);
+              const present = new Set(
+                tokenizeAttrTokens(fullInner)
+                  .map((t) => {
+                    const i = t.indexOf('=');
+                    return i > 0 ? t.slice(0, i) : null;
+                  })
+                  .filter((k): k is string => k != null),
+              );
+              present.delete(currentToken);
+
+              const range = new monaco.Range(
+                position.lineNumber,
+                tokenStartCol,
+                position.lineNumber,
+                position.column,
+              );
+              const suggestions = BLOCK_META_KEY_DESCRIPTORS.filter(
+                (d) => !present.has(d.key),
+              ).map((d, i) => ({
+                label: d.key,
+                filterText: d.key,
+                kind: monaco.languages.CompletionItemKind.Property,
+                insertText: `${d.key}=`,
+                range,
+                detail: d.values ? d.description : `${d.description} — ${d.valueHint}`,
+                sortText: String(i).padStart(4, '0'),
+                // Closed-set keys chain straight into their value list.
+                ...(d.values
+                  ? { command: { id: 'editor.action.triggerSuggest', title: '' } }
+                  : {}),
+              }));
+              return { suggestions };
+            },
+          },
+        );
       }
 
       // Chat-composer mode: intercept Enter before Monaco inserts a newline.
@@ -434,6 +548,8 @@ export function RawEditor({
       mentionCompletionDisposable.current = null;
       iconCompletionDisposable.current?.dispose();
       iconCompletionDisposable.current = null;
+      attrCompletionDisposable.current?.dispose();
+      attrCompletionDisposable.current = null;
       iconGlyphDecorations.current?.clear();
       iconGlyphDecorations.current = null;
       dropCleanupRef.current?.();

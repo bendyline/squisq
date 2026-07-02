@@ -12,18 +12,39 @@
  */
 
 import { flattenRenderableBlocks, hasTemplate } from '@bendyline/squisq/doc';
-import { extractPlainText } from '@bendyline/squisq/markdown';
+import { extractPlainText, KNOWN_BLOCK_META_KEYS } from '@bendyline/squisq/markdown';
 import { getChildren } from '@bendyline/squisq/markdown';
+import { iconMarker } from '@bendyline/squisq/icon-marker';
+import type { IconFamily } from '@bendyline/squisq/icons';
 import type { Block, Doc } from '@bendyline/squisq/schemas';
 import type { MarkdownBlockNode, MarkdownList, MarkdownNode } from '@bendyline/squisq/markdown';
 
 // ── Helpers ────────────────────────────────────────────────────────
 
+/**
+ * Like `extractPlainText`, but preserves inline icons as encoded markers so
+ * template text can render them as glyphs downstream (see `iconMarker` and
+ * `TextLayer`). Mirrors `extractPlainText`'s value/child/list handling; the
+ * only addition is the `inlineIcon` interception.
+ */
+function extractRichText(node: MarkdownNode): string {
+  if (node.type === 'inlineIcon') {
+    const icon = node as unknown as { family: IconFamily; name: string };
+    return iconMarker(icon.family, icon.name);
+  }
+  if ('value' in node && typeof (node as { value?: unknown }).value === 'string') {
+    return (node as { value: string }).value;
+  }
+  const children = getChildren(node);
+  const separator = node.type === 'list' || node.type === 'listItem' ? '\n' : '';
+  return children.map(extractRichText).join(separator);
+}
+
 function extractBodyText(contents: MarkdownBlockNode[] | undefined): string {
   if (!contents || contents.length === 0) return '';
   const parts: string[] = [];
   for (const node of contents) {
-    parts.push(extractPlainText(node));
+    parts.push(extractRichText(node));
   }
   return parts.join('\n').trim();
 }
@@ -215,7 +236,11 @@ function blockToSlide(
     template,
     duration: block.duration,
     audioSegment: 0,
-    transition: index > 0 ? { type: 'fade', duration: 0.5 } : undefined,
+    // Respect the block's authored transition (set via the toolbar / on-canvas
+    // properties palette → `{…}` block attrs). Only fall back to a default fade
+    // for blocks past the first when the author hasn't chosen one; the first
+    // block has no previous slide to transition in from.
+    transition: block.transition ?? (index > 0 ? { type: 'fade', duration: 0.5 } : undefined),
     title: headingText,
     // Custom templates need access to the source block's body content
     // + children so their token resolver (`{content}`, `{children}`,
@@ -230,9 +255,38 @@ function blockToSlide(
     // Structured body data (```json data fences, GFM tables for dataTable)
     // carries typed values; `{[…]}` string overrides win last so an explicit
     // annotation param can still pin any field.
-    ...block.templateData,
-    ...block.templateOverrides,
+    //
+    // Block-meta keys (transition, startTime, duration, …) are the exception:
+    // they were already coerced to typed block fields above (e.g.
+    // `block.transition` → `{ type, duration, direction }`). Their raw string
+    // form also rides along in `templateData`/`templateOverrides` because the
+    // author wrote them inside `{[…]}`; left un-stripped, that string would
+    // spread back over the typed value here and clobber it — turning
+    // `transition=vortex` into the string `"vortex"`, which the player can't
+    // animate. Omit them from the content spreads so the typed fields win.
+    ...omitBlockMeta(block.templateData),
+    ...omitBlockMeta(block.templateOverrides),
   };
+}
+
+/** Keys coerced to typed block fields; must not be re-applied as raw strings. */
+const BLOCK_META_KEYS: ReadonlySet<string> = new Set(Object.keys(KNOWN_BLOCK_META_KEYS));
+
+/** Copy of a template-param record with block-meta keys removed. */
+function omitBlockMeta(
+  data: Record<string, unknown> | undefined,
+): Record<string, unknown> | undefined {
+  if (!data) return data;
+  let hit = false;
+  const out: Record<string, unknown> = {};
+  for (const key of Object.keys(data)) {
+    if (BLOCK_META_KEYS.has(key)) {
+      hit = true;
+      continue;
+    }
+    out[key] = data[key];
+  }
+  return hit ? out : data;
 }
 
 const IMAGE_MOTIONS: Array<'zoomIn' | 'zoomOut' | 'panLeft' | 'panRight'> = [

@@ -118,6 +118,17 @@ export {
 } from './attrTokens.js';
 export type { TrailingAnnotationMatch } from './attrTokens.js';
 
+// Known `{[name key=value]}` block-meta keys and their editor-facing
+// descriptors — exposed so the markdown editor's attribute autocomplete
+// suggests keys and (where closed) values from the same registry the parser
+// coerces against, rather than a hand-maintained copy.
+export {
+  KNOWN_BLOCK_META_KEYS,
+  BLOCK_META_KEY_DESCRIPTORS,
+  parseTimeSeconds,
+} from './annotationCoercion.js';
+export type { KnownBlockMetaKey, BlockMetaKeyDescriptor } from './annotationCoercion.js';
+
 // HTML sub-DOM utilities
 export { parseHtmlToNodes, stringifyHtmlNodes } from './htmlParse.js';
 export { sanitizeHtmlNodes, sanitizeUrl } from './sanitize.js';

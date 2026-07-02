@@ -919,8 +919,169 @@
 /* Hide block-template chips when the View menu toggles them off. The
  * underlying `data-template` heading attribute is untouched — only the
  * inline visual affordance disappears. */
-.squisq-wysiwyg-container[data-block-tags='hidden'] .squisq-template-badge {
+.squisq-wysiwyg-container[data-block-tags='hidden'] .squisq-template-badge,
+.squisq-wysiwyg-container[data-block-tags='hidden'] .squisq-props-badge {
   display: none;
+}
+
+/* ─── Block-properties badge (sibling of the template badge) ───────────
+   The on-canvas entry point to the block-properties palette: a small
+   sliders chip just after the template badge. Quiet by default like the
+   empty template badge, brightening on heading hover / direct hover. */
+.squisq-props-badge {
+  display: inline-flex;
+  align-items: center;
+  margin-left: 4px;
+  padding: 1px 8px;
+  min-height: 19px;
+  font-family:
+    ui-sans-serif,
+    system-ui,
+    -apple-system,
+    sans-serif;
+  font-size: 11px;
+  font-weight: 600;
+  color: #94a3b8;
+  background: transparent;
+  border: 1px solid #d1d5db;
+  border-radius: 10px;
+  vertical-align: middle;
+  user-select: none;
+  cursor: pointer;
+  opacity: 0.5;
+  transition:
+    background 0.15s ease,
+    border-color 0.15s ease,
+    opacity 0.15s ease;
+}
+
+/* Sliders glyph painted via CSS so the badge span stays empty in the DOM
+   (see propsBadgeSpec — a real child could leak into serialized markdown).
+   `\f1de` is Font Awesome's "sliders"; the font is already loaded for the
+   editor's inline-icon glyph decorations. */
+.squisq-props-badge::before {
+  content: '\f1de';
+  font-family: 'Font Awesome 6 Free';
+  font-weight: 900;
+  font-size: 10px;
+  line-height: 1;
+}
+
+/* When properties are set, the badge carries a `data-props-summary` and shows
+   it after the glyph — and reads as an active (not just affordance) chip. */
+.squisq-props-badge[data-props-summary] {
+  opacity: 1;
+  color: #6d28d9;
+  background: #f5f3ff;
+  border-color: #c4b5fd;
+}
+
+.squisq-props-badge[data-props-summary]::after {
+  content: attr(data-props-summary);
+  margin-left: 5px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+:is(h1, h2, h3, h4, h5, h6):hover > .squisq-props-badge {
+  opacity: 0.9;
+}
+
+.squisq-props-badge:hover,
+.squisq-props-badge:focus-visible {
+  opacity: 1;
+  color: #6d28d9;
+  background: #ede9fe;
+  border-color: #c4b5fd;
+  outline: none;
+}
+
+/* ─── Block-properties palette popover (portaled to <body>) ──────────── */
+.squisq-block-props-popover {
+  width: 280px;
+  max-width: calc(100vw - 24px);
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  box-shadow:
+    0 8px 24px rgba(0, 0, 0, 0.12),
+    0 2px 6px rgba(0, 0, 0, 0.08);
+}
+
+.squisq-block-props-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.squisq-block-props-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: #6b7280;
+  flex-shrink: 0;
+}
+
+.squisq-block-props-numfield {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.squisq-block-props-input {
+  width: 72px;
+  padding: 4px 6px;
+  font-size: 12px;
+  color: #111827;
+  border: 1px solid #d1d5db;
+  border-radius: 5px;
+  outline: none;
+}
+
+.squisq-block-props-input:focus {
+  border-color: #6366f1;
+}
+
+.squisq-block-props-unit {
+  font-size: 11px;
+  color: #9ca3af;
+}
+
+/* Dark theme */
+.squisq-editor-shell[data-theme='dark'] .squisq-props-badge {
+  border-color: #4b5563;
+  color: #9ca3af;
+}
+
+.squisq-editor-shell[data-theme='dark'] .squisq-props-badge[data-props-summary] {
+  color: #ddd6fe;
+  background: #3730a3;
+  border-color: #6d5fd6;
+}
+
+.squisq-editor-shell[data-theme='dark'] .squisq-props-badge:hover,
+.squisq-editor-shell[data-theme='dark'] .squisq-props-badge:focus-visible {
+  color: #ede9fe;
+  background: #4c1d95;
+  border-color: #7c3aed;
+}
+
+.squisq-editor-shell[data-theme='dark'] .squisq-block-props-popover {
+  background: #1f2937;
+  border-color: #374151;
+  box-shadow:
+    0 8px 24px rgba(0, 0, 0, 0.4),
+    0 2px 6px rgba(0, 0, 0, 0.2);
+}
+
+.squisq-editor-shell[data-theme='dark'] .squisq-block-props-input {
+  background: #111827;
+  color: #f9fafb;
+  border-color: #4b5563;
 }
 
 /* ─── Status Bar ─────────────────────────────────────── */
@@ -4604,4 +4765,322 @@
 .squisq-doc-settings-btn--primary:hover {
   background: #2563eb;
   border-color: #2563eb;
+}
+
+/* ── Transition picker ──────────────────────────────────────────────
+   Toolbar control + portal flyout for choosing a block transition. The
+   trigger reuses the template picker's visual language; the flyout is its
+   own grouped grid with direction + duration sub-controls. */
+.squisq-transition-picker {
+  display: inline-flex;
+}
+
+.squisq-transition-picker-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 8px;
+  font-size: 12px;
+  font-weight: 500;
+  color: #374151;
+  background: #fff;
+  border: 1px solid #d1d5db;
+  border-radius: 5px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition:
+    background 0.1s,
+    border-color 0.1s;
+}
+
+.squisq-transition-picker-trigger:hover {
+  background: #f3f4f6;
+  border-color: #9ca3af;
+}
+
+.squisq-transition-picker-trigger--open {
+  background: #f3f4f6;
+  border-color: #6366f1;
+  outline: 2px solid rgba(99, 102, 241, 0.25);
+  outline-offset: -1px;
+}
+
+.squisq-transition-picker-trigger-label {
+  color: #6b7280;
+}
+
+.squisq-transition-picker-trigger-value {
+  color: #111827;
+  font-weight: 400;
+  max-width: 110px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.squisq-transition-picker-trigger svg {
+  color: #9ca3af;
+  flex-shrink: 0;
+}
+
+@container squisq-toolbar (max-width: 900px) {
+  .squisq-transition-picker-trigger-label {
+    display: none;
+  }
+}
+
+/* Flyout panel — portaled with fixed positioning (component supplies top/left). */
+.squisq-transition-flyout {
+  /* Three columns of options keep the panel short enough to avoid running off
+     the viewport. `max-height` is set inline by the component to the actual
+     space available at its anchored position; the list scrolls within it. */
+  width: 460px;
+  max-width: calc(100vw - 24px);
+  display: flex;
+  flex-direction: column;
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  box-shadow:
+    0 8px 24px rgba(0, 0, 0, 0.12),
+    0 2px 6px rgba(0, 0, 0, 0.08);
+  overflow: hidden;
+}
+
+.squisq-transition-flyout-search {
+  padding: 8px;
+  border-bottom: 1px solid #f0f0f0;
+}
+
+.squisq-transition-flyout-search-input {
+  width: 100%;
+  padding: 6px 8px;
+  font-size: 13px;
+  color: #111827;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  outline: none;
+}
+
+.squisq-transition-flyout-search-input:focus {
+  border-color: #6366f1;
+}
+
+.squisq-transition-flyout-list {
+  /* `min-height: 0` lets this flex child shrink below its content so it scrolls
+     within the panel's capped height instead of overflowing it. The search box
+     above and the direction/duration controls below stay pinned. */
+  min-height: 0;
+  overflow-y: auto;
+  padding: 6px 8px;
+}
+
+.squisq-transition-flyout-group {
+  margin-top: 6px;
+}
+
+.squisq-transition-flyout-group-title {
+  margin: 6px 2px 4px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #9ca3af;
+}
+
+.squisq-transition-flyout-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 4px;
+}
+
+.squisq-transition-option {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 6px 8px;
+  font-size: 12px;
+  color: #374151;
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.squisq-transition-option:hover {
+  background: #f3f4f6;
+  border-color: #d1d5db;
+}
+
+.squisq-transition-option--selected {
+  background: #eef2ff;
+  border-color: #6366f1;
+  color: #4338ca;
+  font-weight: 600;
+}
+
+/* On hover, the label plays the real entering transition (the option button
+   clips it with overflow:hidden; perspective gives the 3D transitions depth).
+   The label is inline-block so transforms apply without disturbing layout, and
+   we override `--transition-duration` to keep previews snappy. */
+.squisq-transition-option {
+  perspective: 220px;
+}
+
+.squisq-transition-option-label {
+  display: inline-block;
+  --transition-duration: 0.55s;
+  transform-origin: center;
+  backface-visibility: hidden;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .squisq-transition-option-label {
+    /* Respect reduced-motion: show the label statically, no entrance preview. */
+    animation: none !important;
+  }
+}
+
+.squisq-transition-flyout-empty {
+  padding: 12px 8px;
+  font-size: 12px;
+  color: #9ca3af;
+  text-align: center;
+}
+
+/* Direction + duration controls, shown below the list once a type is set. */
+.squisq-transition-flyout-controls {
+  border-top: 1px solid #f0f0f0;
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.squisq-transition-flyout-control {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.squisq-transition-flyout-control-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: #6b7280;
+}
+
+.squisq-transition-direction-row {
+  display: inline-flex;
+  gap: 4px;
+}
+
+.squisq-transition-direction-button {
+  padding: 4px 8px;
+  font-size: 11px;
+  color: #374151;
+  background: #fff;
+  border: 1px solid #d1d5db;
+  border-radius: 5px;
+  cursor: pointer;
+}
+
+.squisq-transition-direction-button:hover {
+  background: #f3f4f6;
+}
+
+.squisq-transition-direction-button--selected {
+  background: #eef2ff;
+  border-color: #6366f1;
+  color: #4338ca;
+  font-weight: 600;
+}
+
+.squisq-transition-duration-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.squisq-transition-duration-input {
+  width: 64px;
+  padding: 4px 6px;
+  font-size: 12px;
+  color: #111827;
+  border: 1px solid #d1d5db;
+  border-radius: 5px;
+  outline: none;
+}
+
+.squisq-transition-duration-input:focus {
+  border-color: #6366f1;
+}
+
+.squisq-transition-duration-unit {
+  font-size: 11px;
+  color: #9ca3af;
+}
+
+/* Dark theme */
+.squisq-editor-shell[data-theme='dark'] .squisq-transition-picker-trigger {
+  background: #1f2937;
+  color: #e5e7eb;
+  border-color: #4b5563;
+}
+
+.squisq-editor-shell[data-theme='dark'] .squisq-transition-picker-trigger:hover {
+  background: #374151;
+  border-color: #6b7280;
+}
+
+.squisq-editor-shell[data-theme='dark'] .squisq-transition-picker-trigger--open {
+  background: #374151;
+  border-color: #818cf8;
+}
+
+.squisq-editor-shell[data-theme='dark'] .squisq-transition-picker-trigger-value {
+  color: #f9fafb;
+}
+
+/* Dark styling for the portaled flyout — keyed off the editor shell the same
+   way the template gallery popover is (see `.squisq-template-gallery` above). */
+.squisq-editor-shell[data-theme='dark'] .squisq-transition-flyout {
+  background: #1f2937;
+  border-color: #374151;
+  box-shadow:
+    0 8px 24px rgba(0, 0, 0, 0.4),
+    0 2px 6px rgba(0, 0, 0, 0.2);
+}
+
+.squisq-editor-shell[data-theme='dark'] .squisq-transition-flyout-search,
+.squisq-editor-shell[data-theme='dark'] .squisq-transition-flyout-controls {
+  border-color: #374151;
+}
+
+.squisq-editor-shell[data-theme='dark'] .squisq-transition-flyout-search-input,
+.squisq-editor-shell[data-theme='dark'] .squisq-transition-duration-input {
+  background: #111827;
+  color: #f9fafb;
+  border-color: #4b5563;
+}
+
+.squisq-editor-shell[data-theme='dark'] .squisq-transition-option,
+.squisq-editor-shell[data-theme='dark'] .squisq-transition-direction-button {
+  background: #1f2937;
+  color: #e5e7eb;
+  border-color: #4b5563;
+}
+
+.squisq-editor-shell[data-theme='dark'] .squisq-transition-option:hover,
+.squisq-editor-shell[data-theme='dark'] .squisq-transition-direction-button:hover {
+  background: #374151;
+}
+
+.squisq-editor-shell[data-theme='dark'] .squisq-transition-option--selected,
+.squisq-editor-shell[data-theme='dark'] .squisq-transition-direction-button--selected {
+  background: #3730a3;
+  border-color: #818cf8;
+  color: #e0e7ff;
 }

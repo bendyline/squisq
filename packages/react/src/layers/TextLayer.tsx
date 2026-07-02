@@ -24,6 +24,14 @@ import {
   sanitizeHtmlNodes,
   stringifyHtmlNodes,
 } from '@bendyline/squisq/markdown';
+// Import from the standalone marker module (not the `icons` barrel) so the
+// player bundle doesn't pull in the ~2k-entry FontAwesome catalog.
+import {
+  hasIconMarker,
+  splitIconMarkers,
+  stripIconMarkers,
+  iconClass,
+} from '@bendyline/squisq/icon-marker';
 import { getAnimationStyle } from '../utils/animationUtils';
 import { resolveValue } from '../utils/layerUtils';
 import { resolveFill, borderDashArray } from '../utils/fillStyle';
@@ -41,10 +49,115 @@ interface TextLayerProps {
  * based on whether the layer carries `content.html`.
  */
 export function TextLayer(props: TextLayerProps) {
-  return props.layer.content.html?.trim() ? (
-    <RichTextLayer {...props} />
-  ) : (
-    <PlainTextLayer {...props} />
+  if (props.layer.content.html?.trim()) return <RichTextLayer {...props} />;
+  // Body text carrying inline-icon markers (authored `{[rocket]}` etc.) can't
+  // render in the SVG `<text>` path — an icon is an `<i class="fa-…">` glyph,
+  // not a code point we can place in a tspan. Route it through a foreignObject
+  // instead, sizing the box to the wrapped content so it doesn't clip.
+  if (hasIconMarker(props.layer.content.text ?? '')) return <IconTextLayer {...props} />;
+  return <PlainTextLayer {...props} />;
+}
+
+/** Escape text so it's safe inside the synthesized icon HTML. */
+function escapeHtml(value: string): string {
+  return value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+/** Turn a marker-bearing string into HTML: text runs escaped, icons as `<i>`. */
+function iconRunsToHtml(text: string): string {
+  return splitIconMarkers(text)
+    .map((run) =>
+      run.type === 'icon'
+        ? `<i class="${iconClass(run.family, run.name)}" aria-hidden="true"></i>`
+        : escapeHtml(run.text).replace(/\n/g, '<br>'),
+    )
+    .join('');
+}
+
+/**
+ * Renders template body text that contains inline icons. Geometry mirrors
+ * `PlainTextLayer`/`layerBounds` (same anchor math), but the content lives in
+ * a `<foreignObject>` so `<i class="fa-…">` glyphs render (export-safe: video
+ * rasterizes via Chromium, which has the FA webfont embedded in the render
+ * page). Height is derived from the wrapped, icon-free projection when the
+ * layer has no explicit height, and overflow is visible to guard estimates.
+ */
+function IconTextLayer({ layer, viewport, blockTime }: TextLayerProps) {
+  const { content, position, animation } = layer;
+  const { text, style } = content;
+
+  const rawX = resolveValue(position.x, viewport.width);
+  const rawY = resolveValue(position.y, viewport.height);
+  const boxWidth =
+    position.width != null ? resolveValue(position.width, viewport.width) : viewport.width;
+  const anchor = position.anchor ?? 'top-left';
+  const lineHeight = style.lineHeight || 1.4;
+  const lineHeightPx = style.fontSize * lineHeight;
+  const padding = style.padding ?? 0;
+
+  // Estimate wrapped line count from the icon-free text so the box is tall
+  // enough. Icons roughly occupy one character; the estimate need not be exact
+  // because the foreignObject is `overflow: visible`.
+  const plain = stripIconMarkers(text ?? '');
+  const lines = plain.split('\n').flatMap((line) => wrapText(line, style.fontSize, boxWidth));
+  const boxHeight =
+    position.height != null
+      ? resolveValue(position.height, viewport.height)
+      : Math.max(lineHeightPx, lines.length * lineHeightPx) + padding * 2;
+
+  const boxX = rawX - anchorAxis(anchor, boxWidth, 'x');
+  const boxY = rawY - anchorAxis(anchor, boxHeight, 'y');
+
+  const animStyle = getAnimationStyle(animation, blockTime);
+  const html = useMemo(() => iconRunsToHtml(text ?? ''), [text]);
+
+  const verticalJustify =
+    style.verticalAlign === 'top'
+      ? 'flex-start'
+      : style.verticalAlign === 'bottom'
+        ? 'flex-end'
+        : 'center';
+
+  const boxStyle: CSSProperties = {
+    boxSizing: 'border-box',
+    width: '100%',
+    height: '100%',
+    display: 'flex',
+    flexDirection: 'column',
+    justifyContent: verticalJustify,
+    padding,
+    color: style.color,
+    fontSize: `${style.fontSize}px`,
+    fontFamily: style.fontFamily || DEFAULT_DOC_FONT,
+    fontWeight: style.fontWeight || 'normal',
+    fontStyle: style.fontStyle || 'normal',
+    lineHeight,
+    textAlign: style.textAlign ?? 'left',
+    ...(style.shadow ? { textShadow: '0 2px 3px rgba(0,0,0,0.7)' } : {}),
+    ...animStyle.style,
+  };
+
+  return (
+    <g className={`block-layer block-layer--text ${animStyle.className}`} data-layer-id={layer.id}>
+      <foreignObject
+        x={boxX}
+        y={boxY}
+        width={boxWidth}
+        height={boxHeight}
+        style={{ overflow: 'visible' }}
+      >
+        {/* Outer box owns the flex/vertical-centering; the inner div is a
+            single flex item so the rich content (text + inline `<i>` icons)
+            flows inline instead of each node becoming a stacked flex item. */}
+        <div {...({ xmlns: 'http://www.w3.org/1999/xhtml' } as Record<string, string>)} style={boxStyle}>
+          <div
+            style={{ width: '100%', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}
+            aria-label={plain}
+            dangerouslySetInnerHTML={{ __html: html }}
+          />
+        </div>
+      </foreignObject>
+    </g>
   );
 }
 
