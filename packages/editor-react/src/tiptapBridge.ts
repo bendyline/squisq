@@ -13,6 +13,11 @@
 
 import { templateLabel } from './TemplatePicker';
 import { resolveIcon } from '@bendyline/squisq/icons';
+import {
+  matchTrailingTemplateAnnotation,
+  matchTrailingPandocAttr,
+  tokenizeAttrTokens,
+} from '@bendyline/squisq/markdown';
 
 // Hoisted regex patterns for inline markdown ↔ HTML conversion
 const RE_BOLD_STAR = /\*\*(.+?)\*\*/g;
@@ -194,19 +199,48 @@ export function markdownToTiptap(markdown: string): string {
       let text = headingMatch[2];
       let attrs = '';
 
-      // Extract {[template key=value …]} annotation. Trailing `[\s\]\}]*`
-      // tolerates accidental doubled `]}` that users type while learning
-      // the syntax — must stay in sync with TEMPLATE_ANNOTATION_RE in
-      // packages/core/src/markdown/convert.ts.
-      const annotMatch = text.match(/\s*\{\[([^\]]+)\]\}[\s\]}]*$/);
-      if (annotMatch) {
-        text = text.slice(0, annotMatch.index!).trimEnd();
-        const tokens = annotMatch[1].trim().split(/\s+/);
-        attrs = ` data-template="${escapeHtml(tokens[0])}"`;
+      // Peel off trailing brace-blocks in any order: the squisq-native
+      // `{[template …]}` annotation and the Pandoc `{#id .class key=value}`
+      // attribute block may both appear at the end of the heading line.
+      // Loop until neither matches. The matchers are imported from core so
+      // this stays in sync with packages/core/src/markdown/convert.ts.
+      let templateInner: string | null = null;
+      let pandocInner: string | null = null;
+      for (let pass = 0; pass < 4; pass++) {
+        let matched = false;
+        if (templateInner == null) {
+          const m = matchTrailingTemplateAnnotation(text);
+          if (m) {
+            templateInner = m.inner.trim();
+            text = text.slice(0, m.index).trimEnd();
+            matched = true;
+          }
+        }
+        if (pandocInner == null) {
+          const m = matchTrailingPandocAttr(text);
+          if (m) {
+            pandocInner = m.inner.trim();
+            text = text.slice(0, m.index).trimEnd();
+            matched = true;
+          }
+        }
+        if (!matched) break;
+      }
+
+      if (templateInner != null) {
+        // Quote-aware tokenization (shared with the core parser) keeps a
+        // quoted value like caption="Beach at sunset" as one token. The
+        // tokens are stored raw — quotes included — so tiptapToMarkdown
+        // can re-join them into the annotation verbatim.
+        const tokens = tokenizeAttrTokens(templateInner);
+        attrs += ` data-template="${escapeHtml(tokens[0] ?? '')}"`;
         const params = tokens.slice(1).filter((t) => t.includes('='));
         if (params.length > 0) {
           attrs += ` data-template-params="${escapeHtml(params.join(' '))}"`;
         }
+      }
+      if (pandocInner != null) {
+        attrs += ` data-block-attrs="${escapeHtml(pandocInner)}"`;
       }
 
       outputBlocks.push(`<h${level}${attrs}>${inlineToHtml(text)}</h${level}>`);
@@ -227,17 +261,20 @@ export function markdownToTiptap(markdown: string): string {
       continue;
     }
 
-    // Task list item
-    const taskMatch = line.match(/^[-*+]\s+\[([xX ])\]\s+(.+)$/);
+    // Task list item. Text is optional so freshly-typed, still-empty tasks
+    // survive a round-trip. The checkbox itself is drawn by TaskItem's node
+    // view from the data-checked attribute, so we only emit the text content
+    // (in a paragraph, matching Tiptap's own node structure).
+    const taskMatch = line.match(/^[-*+]\s+\[([xX ])\]\s*(.*)$/);
     if (taskMatch) {
       if (!inList || listType !== 'task') {
         flushList();
         inList = true;
         listType = 'task';
       }
-      const checked = taskMatch[1].toLowerCase() === 'x' ? ' data-checked="true"' : '';
+      const checkedAttr = taskMatch[1].toLowerCase() === 'x' ? ' data-checked="true"' : '';
       listItems.push(
-        `<li data-type="taskItem"${checked}><label><input type="checkbox"${checked ? ' checked' : ''}>${inlineToHtml(taskMatch[2])}</label></li>`,
+        `<li data-type="taskItem"${checkedAttr}><p>${inlineToHtml(taskMatch[2])}</p></li>`,
       );
       continue;
     }
@@ -354,19 +391,26 @@ export function tiptapToMarkdown(html: string): string {
       const attrs = headingMatch[2];
       let text = htmlToInline(headingMatch[3]);
 
-      // Re-inject template annotation from data attributes
+      // Re-inject heading annotations from data attributes. Canonical
+      // emit order: Pandoc `{#…}` first, then squisq `{[…]}` template
+      // annotation (matches blockToMdast in core/markdown/convert.ts).
+      const blockAttrsMatch = attrs.match(/data-block-attrs="([^"]*)"/);
       const tmplMatch = attrs.match(/data-template="([^"]+)"/);
       if (tmplMatch) {
-        let annotation = tmplMatch[1];
-        // Defensive: an earlier broken build briefly rendered the
-        // template label as a real text node inside the badge, which
-        // bled the label into the heading's textContent. Strip a
-        // trailing copy of the template's label so existing documents
-        // self-heal on save.
-        const label = templateLabel(annotation);
+        // Strip an accidental trailing copy of the template label that an
+        // earlier broken build briefly rendered as real text inside the
+        // badge. Existing documents self-heal on save.
+        const label = templateLabel(tmplMatch[1]);
         if (label && text.endsWith(label)) {
           text = text.slice(0, -label.length).trimEnd();
         }
+      }
+      if (blockAttrsMatch) {
+        const inner = unescapeHtml(blockAttrsMatch[1]);
+        text += ` {${inner}}`;
+      }
+      if (tmplMatch) {
+        let annotation = tmplMatch[1];
         const paramsMatch = attrs.match(/data-template-params="([^"]+)"/);
         if (paramsMatch) {
           annotation += ' ' + unescapeHtml(paramsMatch[1]);
@@ -484,14 +528,16 @@ export function tiptapToMarkdown(html: string): string {
     // Task list
     const taskListMatch = remaining.match(/^<ul[^>]*data-type="taskList"[^>]*>(.*?)<\/ul>/s);
     if (taskListMatch) {
-      const items = taskListMatch[1].matchAll(
-        /<li[^>]*data-type="taskItem"[^>]*(data-checked="true")?[^>]*>.*?<\/li>/gs,
-      );
+      const items = taskListMatch[1].matchAll(/<li[^>]*data-type="taskItem"[^>]*>.*?<\/li>/gs);
       for (const item of items) {
-        const checked = item[0].includes('data-checked="true"') || item[0].includes('checked');
-        const textMatch = item[0].match(/<label>.*?<\/label>|<p>(.*?)<\/p>/s);
-        const text = textMatch ? htmlToInline(textMatch[0].replace(/<[^>]+>/g, '')) : '';
-        lines.push(`- [${checked ? 'x' : ' '}] ${text}`);
+        // Read checked state from the attribute value only — a bare
+        // includes('checked') matches the substring in data-checked="false".
+        const checked = /data-checked="true"/.test(item[0]);
+        // Drop the checkbox chrome (<label>…</label>) before reading text;
+        // Tiptap puts the task text in the trailing content node, not the label.
+        const body = item[0].replace(/<label\b[^>]*>.*?<\/label>/s, '');
+        const text = htmlToInline(body.replace(/<[^>]+>/g, '').trim());
+        lines.push(`- [${checked ? 'x' : ' '}] ${text}`.trimEnd());
       }
       lines.push('');
       remaining = remaining.slice(taskListMatch[0].length);
@@ -605,12 +651,28 @@ export function tiptapToMarkdown(html: string): string {
 function renderListItem(prefix: string, html: string): string[] {
   const indent = ' '.repeat(prefix.length);
 
+  // Pull out any block-level media nested in the item (e.g. a recording
+  // dropped onto a list bullet, or a clip dragged into one). The inline
+  // paragraph walk below ignores `<video>` / `<audio>` tags, so without
+  // this they'd be silently dropped on serialize and lost from the
+  // markdown source. We collect them and re-emit each as an indented
+  // continuation line so they stay inside the list item and round-trip
+  // through the markdown parser's block-media handler.
+  const media: string[] = [];
+  const htmlWithoutMedia = html.replace(
+    /<(video|audio)\b([^>]*)>(?:[\s\S]*?<\/\1>)?/gi,
+    (_full, tag: string, attrs: string) => {
+      media.push(serializeMediaTag(tag.toLowerCase() === 'video' ? 'video' : 'audio', attrs ?? ''));
+      return '';
+    },
+  );
+
   // Split on </p><p> to detect paragraph breaks within the item
-  const paragraphs = html
+  const paragraphs = htmlWithoutMedia
     .split(/<\/p>\s*<p[^>]*>/i)
     .map((p) => p.replace(/^<p[^>]*>/i, '').replace(/<\/p>\s*$/i, ''));
 
-  const result: string[] = [];
+  const textLines: string[] = [];
   paragraphs.forEach((paragraph, pIdx) => {
     const inline = htmlToInline(paragraph).trim();
     if (!inline) return;
@@ -619,16 +681,35 @@ function renderListItem(prefix: string, html: string): string[] {
     const subLines = inline.split('\n');
     subLines.forEach((sub, sIdx) => {
       if (pIdx === 0 && sIdx === 0) {
-        result.push(prefix + sub);
+        textLines.push(prefix + sub);
       } else {
         // Blank line separator between paragraphs (sIdx === 0 means new paragraph)
-        if (sIdx === 0) result.push('');
-        result.push(indent + sub);
+        if (sIdx === 0) textLines.push('');
+        textLines.push(indent + sub);
       }
     });
   });
 
-  return result.length > 0 ? result : [prefix];
+  if (textLines.length === 0 && media.length === 0) return [prefix];
+
+  // Text first (its first line carries the bullet marker), then each media
+  // tag as its own indented continuation block. If the item is media-only,
+  // the first tag takes the bullet so the item isn't emitted empty.
+  const result: string[] = [];
+  if (textLines.length > 0) {
+    result.push(...textLines);
+    for (const tag of media) {
+      result.push('');
+      result.push(indent + tag);
+    }
+  } else {
+    result.push(prefix + media[0]);
+    for (const tag of media.slice(1)) {
+      result.push('');
+      result.push(indent + tag);
+    }
+  }
+  return result;
 }
 
 // ─── Table helpers ───────────────────────────────────────

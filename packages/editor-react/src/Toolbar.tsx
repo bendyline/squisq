@@ -10,17 +10,30 @@
 import type { ReactNode } from 'react';
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react';
 import type { Editor as TiptapEditor } from '@tiptap/core';
+import { TextSelection } from '@tiptap/pm/state';
+import { Fragment } from '@tiptap/pm/model';
 import type { IRange } from 'monaco-editor';
 import { useEditorContext, type EditorView } from './EditorContext';
 import { VersionHistoryPanel } from './VersionHistoryPanel';
 import { RecorderEntry } from './RecorderEntry';
 import { ViewMenuPanel } from './ViewMenuPanel';
 import { TemplatePicker, TEMPLATE_NAMES } from './TemplatePicker';
+import { TransitionPicker } from './TransitionPicker';
+import {
+  readHeadingLineTransition,
+  setHeadingLineTransition,
+  readBlockAttrsTransition,
+  setBlockAttrsTransition,
+  EMPTY_TRANSITION,
+  type TransitionFields,
+} from './headingTransition';
 import { profileBlockContents, recommendTemplatesForBlock } from '@bendyline/squisq/recommend';
 import { findBlockSliceAtLine, findBlockSliceByHeadingIndex } from './blockSlice';
 import { LinkDialog } from './LinkDialog';
 import { DocumentSettingsDialog } from './DocumentSettingsDialog';
 import { EmojiPicker, EMOJI_PICKER_WIDTH, EMOJI_PICKER_MAX_HEIGHT } from './EmojiPicker';
+import { CustomLayoutManager } from './customTemplates/CustomLayoutManager';
+import { Icon } from './Icon';
 import type { PickerEntry } from './emojiData';
 import { createPortal } from 'react-dom';
 
@@ -54,11 +67,12 @@ export interface ToolbarProps {
 interface ToolbarButton {
   id: string;
   label: string;
+  /** Text glyph shown when the button has no Font Awesome icon (headings). */
   icon: string;
   title: string;
   group: 'format' | 'lists' | 'structure' | 'insert' | 'media';
-  /** CSS font style for the icon (e.g. italic for the I button) */
-  iconStyle?: React.CSSProperties;
+  /** Font Awesome class string (e.g. `"fa-solid fa-bold"`); omitted for text buttons. */
+  faIcon?: string;
 }
 
 const BUTTONS: ToolbarButton[] = [
@@ -69,7 +83,7 @@ const BUTTONS: ToolbarButton[] = [
     icon: 'B',
     title: 'Bold (Ctrl+B)',
     group: 'format',
-    iconStyle: { fontWeight: 700 },
+    faIcon: 'fa-solid fa-bold',
   },
   {
     id: 'italic',
@@ -77,7 +91,7 @@ const BUTTONS: ToolbarButton[] = [
     icon: 'I',
     title: 'Italic (Ctrl+I)',
     group: 'format',
-    iconStyle: { fontStyle: 'italic' },
+    faIcon: 'fa-solid fa-italic',
   },
   {
     id: 'strikethrough',
@@ -85,15 +99,30 @@ const BUTTONS: ToolbarButton[] = [
     icon: 'S',
     title: 'Strikethrough',
     group: 'format',
-    iconStyle: { textDecoration: 'line-through' },
+    faIcon: 'fa-solid fa-strikethrough',
   },
 
   // Lists group — sits between format and structure so bullets/numbers
   // are adjacent to the inline formatters people reach for together.
-  { id: 'ul', label: '•', icon: '•', title: 'Bullet list', group: 'lists' },
-  { id: 'ol', label: '1.', icon: '1.', title: 'Numbered list', group: 'lists' },
+  {
+    id: 'ul',
+    label: '•',
+    icon: '•',
+    title: 'Bullet list',
+    group: 'lists',
+    faIcon: 'fa-solid fa-list-ul',
+  },
+  {
+    id: 'ol',
+    label: '1.',
+    icon: '1.',
+    title: 'Numbered list',
+    group: 'lists',
+    faIcon: 'fa-solid fa-list-ol',
+  },
 
-  // Structure group
+  // Structure group — headings keep their text labels; Font Awesome Free
+  // has no numbered (H1–H6) heading glyphs, and the numerals are clearer.
   { id: 'h1', label: 'H1', icon: 'H1', title: 'Heading 1', group: 'structure' },
   { id: 'h2', label: 'H2', icon: 'H2', title: 'Heading 2', group: 'structure' },
   { id: 'h3', label: 'H3', icon: 'H3', title: 'Heading 3', group: 'structure' },
@@ -102,119 +131,105 @@ const BUTTONS: ToolbarButton[] = [
   { id: 'h6', label: 'H6', icon: 'H6', title: 'Heading 6', group: 'structure' },
 
   // Insert group — block-level inserts (quote, code blocks, rules)
-  { id: 'quote', label: '❝', icon: '❝', title: 'Blockquote', group: 'insert' },
-  { id: 'codeblock', label: '{ }', icon: '{ }', title: 'Code block', group: 'insert' },
-  { id: 'code', label: '</>', icon: '</>', title: 'Inline code', group: 'insert' },
-  { id: 'hr', label: '—', icon: '—', title: 'Horizontal rule', group: 'insert' },
+  {
+    id: 'quote',
+    label: '❝',
+    icon: '❝',
+    title: 'Blockquote',
+    group: 'insert',
+    faIcon: 'fa-solid fa-quote-left',
+  },
+  {
+    id: 'codeblock',
+    label: '{ }',
+    icon: '{ }',
+    title: 'Code block',
+    group: 'insert',
+    faIcon: 'fa-solid fa-file-code',
+  },
+  {
+    id: 'code',
+    label: '</>',
+    icon: '</>',
+    title: 'Inline code',
+    group: 'insert',
+    faIcon: 'fa-solid fa-code',
+  },
+  {
+    id: 'hr',
+    label: '—',
+    icon: '—',
+    title: 'Horizontal rule',
+    group: 'insert',
+    faIcon: 'fa-solid fa-minus',
+  },
 
   // Media group — links, tables, images, emoji
-  { id: 'link', label: '🔗', icon: '🔗', title: 'Insert link', group: 'media' },
-  { id: 'table', label: 'table', icon: '', title: 'Insert table', group: 'media' },
-  { id: 'image', label: '🖼', icon: '🖼', title: 'Insert image', group: 'media' },
-  { id: 'emoji', label: '😊', icon: '😊', title: 'Insert emoji', group: 'media' },
+  {
+    id: 'link',
+    label: '🔗',
+    icon: '🔗',
+    title: 'Insert link',
+    group: 'media',
+    faIcon: 'fa-solid fa-link',
+  },
+  {
+    id: 'table',
+    label: 'table',
+    icon: '',
+    title: 'Insert table',
+    group: 'media',
+    faIcon: 'fa-solid fa-table',
+  },
+  {
+    id: 'diagram',
+    label: 'diagram',
+    icon: '',
+    title: 'Insert diagram',
+    group: 'media',
+    faIcon: 'fa-solid fa-diagram-project',
+  },
+  {
+    id: 'drawing',
+    label: 'drawing',
+    icon: '',
+    title: 'Insert drawing',
+    group: 'media',
+    faIcon: 'fa-solid fa-pen-nib',
+  },
+  {
+    id: 'layout',
+    label: 'layout',
+    icon: '',
+    title: 'Insert layout',
+    group: 'media',
+    faIcon: 'fa-solid fa-object-group',
+  },
+  {
+    id: 'image',
+    label: '🖼',
+    icon: '🖼',
+    title: 'Insert image',
+    group: 'media',
+    faIcon: 'fa-solid fa-image',
+  },
+  {
+    id: 'emoji',
+    label: '😊',
+    icon: '😊',
+    title: 'Insert emoji',
+    group: 'media',
+    faIcon: 'fa-solid fa-face-smile',
+  },
 ];
 
-// ─── Inline SVG icons (line-art, currentColor) ──────────
+const FIRST_MEDIA_INDEX = BUTTONS.findIndex((b) => b.group === 'media');
+const MEDIA_BUTTONS = BUTTONS.filter((b) => b.group === 'media');
+const INSERT_MENU_WIDTH = 200;
 
-const TABLE_ICON = (
-  <svg
-    width="14"
-    height="14"
-    viewBox="0 0 14 14"
-    fill="none"
-    stroke="currentColor"
-    strokeWidth="1.4"
-    strokeLinecap="round"
-  >
-    <rect x="1" y="1" width="12" height="12" rx="1" />
-    <line x1="1" y1="5" x2="13" y2="5" />
-    <line x1="1" y1="9" x2="13" y2="9" />
-    <line x1="5" y1="1" x2="5" y2="13" />
-    <line x1="9" y1="1" x2="9" y2="13" />
-  </svg>
-);
-
-const LINK_ICON = (
-  <svg
-    width="14"
-    height="14"
-    viewBox="0 0 14 14"
-    fill="none"
-    stroke="currentColor"
-    strokeWidth="1.4"
-    strokeLinecap="round"
-    strokeLinejoin="round"
-  >
-    <path d="M5.75 8.25 L8.25 5.75" />
-    <path d="M6.5 3.75 L8 2.25 a2.5 2.5 0 0 1 3.54 3.54 L10 7.25" />
-    <path d="M7.5 10.25 L6 11.75 a2.5 2.5 0 0 1 -3.54 -3.54 L4 6.75" />
-  </svg>
-);
-
-const IMAGE_ICON = (
-  <svg
-    width="14"
-    height="14"
-    viewBox="0 0 14 14"
-    fill="none"
-    stroke="currentColor"
-    strokeWidth="1.4"
-    strokeLinecap="round"
-    strokeLinejoin="round"
-  >
-    <rect x="1.5" y="2.5" width="11" height="9" rx="1" />
-    <circle cx="5" cy="5.5" r="0.9" />
-    <path d="M2 10 L5.5 7 L8 9 L10 7.5 L12.5 10" />
-  </svg>
-);
-
-const PAPERCLIP_ICON = (
-  <svg
-    width="14"
-    height="14"
-    viewBox="0 0 14 14"
-    fill="none"
-    stroke="currentColor"
-    strokeWidth="1.4"
-    strokeLinecap="round"
-    strokeLinejoin="round"
-  >
-    <path d="M11 4 L5.5 9.5 a1.75 1.75 0 0 0 2.5 2.5 L12.5 7.5 a3 3 0 0 0 -4.25 -4.25 L3 8.5 a4.25 4.25 0 0 0 6 6 L13 10.5" />
-  </svg>
-);
-
-const EMOJI_ICON = (
-  <svg
-    width="14"
-    height="14"
-    viewBox="0 0 14 14"
-    fill="none"
-    stroke="currentColor"
-    strokeWidth="1.4"
-    strokeLinecap="round"
-    strokeLinejoin="round"
-  >
-    <circle cx="7" cy="7" r="5.25" />
-    <circle cx="5.25" cy="5.75" r="0.6" fill="currentColor" stroke="none" />
-    <circle cx="8.75" cy="5.75" r="0.6" fill="currentColor" stroke="none" />
-    <path d="M4.75 8.5 a2.5 2.5 0 0 0 4.5 0" />
-  </svg>
-);
-
-/** Returns an SVG element when the button id maps to one, otherwise null. */
-function buttonIconSvg(id: string): React.ReactNode | null {
-  switch (id) {
-    case 'table':
-      return TABLE_ICON;
-    case 'link':
-      return LINK_ICON;
-    case 'image':
-      return IMAGE_ICON;
-    case 'emoji':
-      return EMOJI_ICON;
-    default:
-      return null;
-  }
+/** Renders a button's icon: a Font Awesome glyph when set, else the text label. */
+function buttonIcon(btn: ToolbarButton): ReactNode {
+  return btn.faIcon ? <Icon icon={btn.faIcon} /> : btn.icon;
 }
 
 // ─── Tiptap active-state map ────────────────────────────
@@ -256,6 +271,96 @@ function isTiptapActive(editor: TiptapEditor, id: string): boolean {
   }
 }
 
+// ─── Scene-block inserts (diagram / drawing / layout) ───
+
+/**
+ * A freshly-inserted layout starts with one centered text layer so the
+ * canvas isn't a blank surface. Each layer is a readable child sub-block
+ * (`### {#id} {[type …]}`); a text layer's content is its markdown body.
+ * Coordinates are absolute within the 1920×1080 scene viewport
+ * (`SceneBlockWidget`). See `scene/commands/layoutCommands.ts`.
+ */
+const LAYOUT_STARTER_TEXT_PARAMS =
+  'x=360 y=380 width=1200 height=320 fontSize=64 fontWeight=bold align=center valign=middle color="#1e293b"';
+/** Multi-line markdown for a new layout (raw / code views). */
+const LAYOUT_STARTER_MARKDOWN = `\n## Layout {[layout]}\n\n### {#text-1} {[text ${LAYOUT_STARTER_TEXT_PARAMS}]}\n\nLayout\n`;
+
+/**
+ * Insert a block-level heading carrying a Scene template (`diagram` /
+ * `drawing` / `layout`) at the top level, after the block the caret sits
+ * in. Going through a command (rather than `insertContent` at the caret)
+ * keeps the heading from being coerced into inline text when the caret is
+ * nested inside a list item or other block. The matching extension
+ * (DiagramExtension / SceneBlockExtension) then mounts the editable canvas
+ * right below it.
+ */
+function insertTemplateHeading(
+  editor: TiptapEditor,
+  opts: { template: string; text: string; level?: number; blockAttrs?: string | null },
+): void {
+  editor
+    .chain()
+    .focus()
+    .command(({ tr, state, dispatch }) => {
+      const headingType = state.schema.nodes.heading;
+      if (!headingType) return false;
+      const heading = headingType.create(
+        {
+          level: opts.level ?? 2,
+          dataTemplate: opts.template,
+          dataBlockAttrs: opts.blockAttrs ?? null,
+        },
+        state.schema.text(opts.text),
+      );
+      const { $from } = state.selection;
+      const insertPos = $from.depth > 0 ? $from.after(1) : state.doc.content.size;
+      if (dispatch) {
+        tr.insert(insertPos, heading);
+        // Drop the caret into the new heading's text so it can be renamed.
+        tr.setSelection(TextSelection.create(tr.doc, insertPos + 1));
+      }
+      return true;
+    })
+    .run();
+}
+
+/**
+ * Insert a `{[layout]}` block seeded with one text layer. The layer is a
+ * child sub-block heading (`### {#text-1} {[text …]}`) whose markdown body
+ * ("Layout") is the text content — the readable counterpart to the old
+ * base64 `layers=` blob. The parent + child + body go in as one fragment so
+ * the layout widget mounts with the seed already present.
+ */
+function insertLayoutBlock(editor: TiptapEditor): void {
+  editor
+    .chain()
+    .focus()
+    .command(({ tr, state, dispatch }) => {
+      const headingType = state.schema.nodes.heading;
+      const paragraphType = state.schema.nodes.paragraph;
+      if (!headingType || !paragraphType) return false;
+      const parent = headingType.create(
+        { level: 2, dataTemplate: 'layout' },
+        state.schema.text('Layout'),
+      );
+      const child = headingType.create({
+        level: 3,
+        dataTemplate: 'text',
+        dataTemplateParams: LAYOUT_STARTER_TEXT_PARAMS,
+        dataBlockAttrs: '#text-1',
+      });
+      const body = paragraphType.create(null, state.schema.text('Layout'));
+      const { $from } = state.selection;
+      const insertPos = $from.depth > 0 ? $from.after(1) : state.doc.content.size;
+      if (dispatch) {
+        tr.insert(insertPos, Fragment.fromArray([parent, child, body]));
+        tr.setSelection(TextSelection.create(tr.doc, insertPos + 1));
+      }
+      return true;
+    })
+    .run();
+}
+
 /**
  * Formatting toolbar.
  * - WYSIWYG: calls Tiptap chain commands (toggleBold, etc.)
@@ -277,6 +382,7 @@ export function Toolbar({
     setMarkdownSource,
     tiptapEditor,
     monacoEditor,
+    activeSceneText,
     mediaProvider,
     editorMode,
     versioning,
@@ -284,6 +390,11 @@ export function Toolbar({
     documentLinkProvider,
     theme,
   } = useEditorContext();
+  // When a canvas textbox is being edited, its Tiptap instance takes over
+  // the formatting buttons; otherwise they drive the document editor. The
+  // `level` gates which buttons apply (inline labels vs. rich textboxes).
+  const formattingEditor = activeSceneText?.editor ?? tiptapEditor;
+  const sceneTextLevel = activeSceneText?.level ?? null;
   const isCodeMode = editorMode === 'code';
   // In code mode only the raw view is meaningful; the WYSIWYG and Preview
   // surfaces aren't mounted, so hide their tabs.
@@ -347,16 +458,29 @@ export function Toolbar({
 
   const closeEmojiPicker = useCallback(() => setEmojiPickerAnchor(null), []);
 
-  // ── Narrow-screen detection ──────────────────────────
-  const [isNarrow, setIsNarrow] = useState(
-    () => typeof window !== 'undefined' && window.matchMedia('(max-width: 768px)').matches,
+  // Insert menu — toolbar-anchored dropdown that replaces the individual media-group
+  // buttons with a single "+" button. Portaled out to avoid overflow:hidden clipping.
+  const insertMenuButtonRef = useRef<HTMLButtonElement | null>(null);
+  const insertMenuRef = useRef<HTMLDivElement | null>(null);
+  const [insertMenuAnchor, setInsertMenuAnchor] = useState<{ top: number; left: number } | null>(
+    null,
   );
-  useEffect(() => {
-    const mq = window.matchMedia('(max-width: 768px)');
-    const handler = (e: MediaQueryListEvent) => setIsNarrow(e.matches);
-    mq.addEventListener('change', handler);
-    return () => mq.removeEventListener('change', handler);
+
+  const openInsertMenu = useCallback((trigger?: HTMLElement | null) => {
+    const btn = trigger ?? insertMenuButtonRef.current;
+    if (!btn) return;
+    const rect = btn.getBoundingClientRect();
+    const gap = 4;
+    const margin = 8;
+    const vw = window.innerWidth;
+    let left = rect.left;
+    if (left + INSERT_MENU_WIDTH + margin > vw) {
+      left = Math.max(margin, rect.right - INSERT_MENU_WIDTH);
+    }
+    setInsertMenuAnchor({ top: rect.bottom + gap, left });
   }, []);
+
+  const closeInsertMenu = useCallback(() => setInsertMenuAnchor(null), []);
 
   // ── Overflow detection ────────────────────────────────
   const actionsRef = useRef<HTMLDivElement>(null);
@@ -367,11 +491,12 @@ export function Toolbar({
   // Document settings (frontmatter) dialog
   const [showDocSettings, setShowDocSettings] = useState(false);
 
-  // On narrow screens, force all buttons into the overflow menu
-  const overflowIndex = isNarrow ? 0 : measuredOverflowIndex;
+  // Custom layout manager dialog (list of doc/library layouts + designer)
+  const [showLayoutManager, setShowLayoutManager] = useState(false);
+
+  const overflowIndex = measuredOverflowIndex;
 
   useEffect(() => {
-    if (isNarrow) return; // Skip measurement on narrow — everything overflows
     const container = actionsRef.current;
     if (!container) return;
 
@@ -381,13 +506,18 @@ export function Toolbar({
         ':scope > .squisq-toolbar-group > .squisq-toolbar-button',
       );
       let firstHidden: number | null = null;
-      children.forEach((child, i) => {
+      let btnIndex = 0;
+      children.forEach((child) => {
         if (firstHidden !== null) return;
+        // data-btn-count lets a single DOM button represent multiple BUTTONS entries
+        // (e.g. the Insert dropdown button represents the entire media group).
+        const btnCount = Number(child.dataset.btnCount ?? 1);
         const rect = child.getBoundingClientRect();
         // A button is hidden if its right edge extends past the container
         if (rect.right > containerRight + 2) {
-          firstHidden = i;
+          firstHidden = btnIndex;
         }
+        btnIndex += btnCount;
       });
       setMeasuredOverflowIndex(firstHidden);
     };
@@ -396,7 +526,7 @@ export function Toolbar({
     ro.observe(container);
     measure();
     return () => ro.disconnect();
-  }, [activeView, isNarrow]);
+  }, [activeView]);
 
   // Close overflow menu on outside click
   useEffect(() => {
@@ -409,6 +539,18 @@ export function Toolbar({
     document.addEventListener('mousedown', handleClick);
     return () => document.removeEventListener('mousedown', handleClick);
   }, [showOverflow]);
+
+  // Close insert menu on outside click
+  useEffect(() => {
+    if (!insertMenuAnchor) return;
+    const handleClick = (e: MouseEvent) => {
+      if (insertMenuButtonRef.current?.contains(e.target as Node)) return;
+      if (insertMenuRef.current?.contains(e.target as Node)) return;
+      closeInsertMenu();
+    };
+    document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, [insertMenuAnchor, closeInsertMenu]);
 
   // Open-up vs open-down: the overflow menu is anchored to its trigger with
   // `top: 100%` by default. When the toolbar lives near the bottom of a
@@ -438,16 +580,17 @@ export function Toolbar({
   // Force re-render when Tiptap selection or formatting state changes
   const [, forceUpdate] = useReducer((c: number) => c + 1, 0);
   useEffect(() => {
-    if (!tiptapEditor) return;
-    tiptapEditor.on('transaction', forceUpdate);
+    if (!formattingEditor) return;
+    formattingEditor.on('transaction', forceUpdate);
     return () => {
-      tiptapEditor.off('transaction', forceUpdate);
+      formattingEditor.off('transaction', forceUpdate);
     };
-  }, [tiptapEditor]);
+  }, [formattingEditor]);
 
   // ── Tiptap handler ─────────────────────────────────────
   const handleTiptap = useCallback(
     (id: string) => {
+      const tiptapEditor = formattingEditor;
       if (!tiptapEditor) return;
       const chain = tiptapEditor.chain().focus();
       switch (id) {
@@ -525,9 +668,24 @@ export function Toolbar({
         case 'table':
           tiptapEditor.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run();
           break;
+        case 'diagram':
+          // Empty diagram is usable via its "+ Add first node" affordance;
+          // sub-headings under this block become nodes.
+          insertTemplateHeading(tiptapEditor, { template: 'diagram', text: 'Diagram' });
+          break;
+        case 'drawing':
+          // Empty drawing is usable via the canvas's "Shapes ▾" palette;
+          // each shape persists as a child heading.
+          insertTemplateHeading(tiptapEditor, { template: 'drawing', text: 'Drawing' });
+          break;
+        case 'layout':
+          // Seed with a starter text layer (a child sub-block) so the canvas
+          // isn't blank; further layers add via the toolbar Text/Box buttons.
+          insertLayoutBlock(tiptapEditor);
+          break;
       }
     },
-    [tiptapEditor],
+    [formattingEditor],
   );
 
   // ── Raw markdown handler ───────────────────────────────
@@ -664,6 +822,24 @@ export function Toolbar({
             newCursorOffset = 3; // after \n|
             break;
           }
+          case 'diagram': {
+            // A diagram is just a heading with the `{[diagram]}` template
+            // annotation; the WYSIWYG view renders its editable canvas.
+            replacement = '\n## Diagram {[diagram]}\n';
+            newCursorOffset = 4; // start of "Diagram" (after \n## )
+            break;
+          }
+          case 'drawing': {
+            replacement = '\n## Drawing {[drawing]}\n';
+            newCursorOffset = 4; // start of "Drawing"
+            break;
+          }
+          case 'layout': {
+            // Seed a starter text layer (a child sub-block) so it isn't blank.
+            replacement = LAYOUT_STARTER_MARKDOWN;
+            newCursorOffset = 4; // start of "Layout" in the parent heading
+            break;
+          }
         }
 
         // Apply the edit via Monaco's executeEdits for proper undo support
@@ -727,6 +903,15 @@ export function Toolbar({
             insertion =
               '\n| Header 1 | Header 2 | Header 3 |\n| --- | --- | --- |\n| Cell | Cell | Cell |\n| Cell | Cell | Cell |\n';
             break;
+          case 'diagram':
+            insertion = '\n## Diagram {[diagram]}\n';
+            break;
+          case 'drawing':
+            insertion = '\n## Drawing {[drawing]}\n';
+            break;
+          case 'layout':
+            insertion = LAYOUT_STARTER_MARKDOWN;
+            break;
         }
         if (insertion) {
           setMarkdownSource(markdownSource + insertion);
@@ -773,7 +958,9 @@ export function Toolbar({
         else openEmojiPicker();
         return;
       }
-      if (activeView === 'wysiwyg' && tiptapEditor) {
+      // A focused canvas textbox takes the formatting (handleTiptap targets
+      // `formattingEditor`); otherwise route to the document editor.
+      if (activeSceneText || (activeView === 'wysiwyg' && tiptapEditor)) {
         handleTiptap(id);
       } else {
         handleRaw(id);
@@ -782,6 +969,7 @@ export function Toolbar({
     [
       activeView,
       tiptapEditor,
+      activeSceneText,
       handleTiptap,
       handleRaw,
       emojiPickerAnchor,
@@ -868,17 +1056,20 @@ export function Toolbar({
       const trimmedUrl = url.trim();
       const trimmedText = text.trim();
 
-      if (linkDialog.target === 'wysiwyg' && tiptapEditor) {
+      // Target the focused canvas textbox editor when one is active, else
+      // the document editor (the dialog was opened from the same target).
+      const wysiwygTarget = formattingEditor;
+      if (linkDialog.target === 'wysiwyg' && wysiwygTarget) {
         if (!trimmedUrl) {
           // Empty URL on update = unlink. On insert with no URL, do nothing.
           if (linkDialog.mode === 'update') {
-            tiptapEditor.chain().focus().unsetLink().run();
+            wysiwygTarget.chain().focus().unsetLink().run();
           }
           setLinkDialog(null);
           return;
         }
         const visibleText = trimmedText || trimmedUrl;
-        const chain = tiptapEditor.chain().focus();
+        const chain = wysiwygTarget.chain().focus();
         // Insert (or replace selection) with text carrying a link mark. When
         // updating an existing link, the selection was extended to the full
         // mark range earlier, so this replaces the entire `[text](url)`.
@@ -927,12 +1118,36 @@ export function Toolbar({
 
       setLinkDialog(null);
     },
-    [linkDialog, tiptapEditor, monacoEditor],
+    [linkDialog, formattingEditor, monacoEditor],
   );
 
-  const groups = ['format', 'lists', 'structure', 'insert', 'media'] as const;
+  const groups = ['format', 'lists', 'structure', 'insert'] as const;
   const isWysiwyg = activeView === 'wysiwyg' && tiptapEditor;
   const isPreview = activeView === 'preview';
+
+  // Formatting buttons reflect/drive the focused canvas textbox when one is
+  // active, else the document's WYSIWYG editor.
+  const formatActive = !!activeSceneText || isWysiwyg;
+  // Inline-level textboxes (diagram/drawing labels) only support inline
+  // marks — grey out block formatters so the toolbar reflects what applies.
+  const INLINE_SCENE_BUTTONS = new Set([
+    'bold',
+    'italic',
+    'strikethrough',
+    'code',
+    'link',
+    'emoji',
+  ]);
+  // `block`-level textboxes (layout) add lists/blockquote/code block on top of
+  // the inline marks — but NOT headings (their content is a sub-block body, so
+  // a heading there would re-parse as a sibling sub-block).
+  const BLOCK_SCENE_BUTTONS = new Set([...INLINE_SCENE_BUTTONS, 'ul', 'ol', 'quote', 'codeblock']);
+  const buttonAllowed = (id: string): boolean => {
+    if (!sceneTextLevel) return true;
+    if (sceneTextLevel === 'rich') return true;
+    if (sceneTextLevel === 'block') return BLOCK_SCENE_BUTTONS.has(id);
+    return INLINE_SCENE_BUTTONS.has(id);
+  };
 
   // ── Progressive heading disclosure ───────────────────
   // H1\u2013H3 are always visible. H4 appears once the document already
@@ -962,6 +1177,9 @@ export function Toolbar({
     if (!m) return true;
     return Number(m[1]) <= visibleHeadingMax;
   };
+  const hasVisibleMediaButtons = MEDIA_BUTTONS.some((b) => isButtonVisible(b.id));
+  const showInsertInOverflow =
+    overflowIndex !== null && overflowIndex <= FIRST_MEDIA_INDEX && hasVisibleMediaButtons;
 
   // Detect whether cursor is inside a table (WYSIWYG mode only)
   const isInTable = isWysiwyg ? tiptapEditor.isActive('table') : false;
@@ -980,10 +1198,12 @@ export function Toolbar({
   const isRawView = activeView === 'raw';
   const [rawTemplate, setRawTemplate] = useState<string | null>(null);
   const [rawHeadingLine, setRawHeadingLine] = useState<number | null>(null);
+  const [rawTransition, setRawTransition] = useState<TransitionFields>(EMPTY_TRANSITION);
   useEffect(() => {
     if (!isRawView || !monacoEditor) {
       setRawTemplate(null);
       setRawHeadingLine(null);
+      setRawTransition(EMPTY_TRANSITION);
       return;
     }
     const recompute = () => {
@@ -992,6 +1212,7 @@ export function Toolbar({
       if (!model || !pos) {
         setRawTemplate(null);
         setRawHeadingLine(null);
+        setRawTransition(EMPTY_TRANSITION);
         return;
       }
       const line = model.getLineContent(pos.lineNumber);
@@ -999,9 +1220,11 @@ export function Toolbar({
       if (!headingMatch) {
         setRawTemplate(null);
         setRawHeadingLine(null);
+        setRawTransition(EMPTY_TRANSITION);
         return;
       }
       setRawHeadingLine(pos.lineNumber);
+      setRawTransition(readHeadingLineTransition(line));
       const annotMatch = headingMatch[1].match(/\s*\{\[([^\]]+)\]\}[\s\]}]*$/);
       if (annotMatch) {
         // First whitespace-delimited token is the template name; the rest are params.
@@ -1115,6 +1338,52 @@ export function Toolbar({
     }
   };
 
+  // ── Current block transition ──────────────────────────
+  // Non-null exactly when a block (heading) is active — same condition as
+  // the template picker. Read from the Pandoc `{…}` block (canonical), with
+  // the `{[…]}` params as a fallback for hand-typed transitions.
+  let currentTransition: TransitionFields | null = null;
+  if (isWysiwyg && wysiwygTemplate !== null) {
+    const attrs = tiptapEditor.getAttributes('heading') as {
+      dataBlockAttrs?: string | null;
+      dataTemplateParams?: string | null;
+    };
+    currentTransition = readBlockAttrsTransition(attrs.dataBlockAttrs, attrs.dataTemplateParams);
+  } else if (isRawView && rawTemplate !== null) {
+    currentTransition = rawTransition;
+  }
+
+  const handleTransitionPick = (next: TransitionFields) => {
+    // Raw (Monaco) — rewrite the heading line, writing into the `{…}` block.
+    if (isRawView && monacoEditor) {
+      const model = monacoEditor.getModel();
+      const pos = monacoEditor.getPosition();
+      if (!model || !pos) return;
+      const lineNumber = pos.lineNumber;
+      const lineText = model.getLineContent(lineNumber);
+      const newLine = setHeadingLineTransition(lineText, next);
+      if (newLine === lineText) return;
+      monacoEditor.executeEdits('toolbar-transition-pick', [
+        {
+          range: {
+            startLineNumber: lineNumber,
+            startColumn: 1,
+            endLineNumber: lineNumber,
+            endColumn: lineText.length + 1,
+          },
+          text: newLine,
+        },
+      ]);
+      monacoEditor.focus();
+      return;
+    }
+    // WYSIWYG — rewrite the heading node's `dataBlockAttrs` (Pandoc inner).
+    if (!tiptapEditor) return;
+    const attrs = tiptapEditor.getAttributes('heading') as { dataBlockAttrs?: string | null };
+    const inner = setBlockAttrsTransition(attrs.dataBlockAttrs, next);
+    tiptapEditor.chain().focus().updateAttributes('heading', { dataBlockAttrs: inner }).run();
+  };
+
   return (
     <div
       className={`squisq-toolbar ${className || ''}`}
@@ -1167,8 +1436,8 @@ export function Toolbar({
           ))}
         </div>
       )}
-      {/* Formatting buttons — hidden in preview mode, narrow screens, and code mode */}
-      {!isPreview && !isNarrow && !isCodeMode && (
+      {/* Formatting buttons — hidden in preview mode and code mode */}
+      {!isPreview && !isCodeMode && (
         <div className="squisq-toolbar-actions" ref={actionsRef}>
           {groups.map((group, gi) => (
             <div key={group} className="squisq-toolbar-group">
@@ -1177,10 +1446,10 @@ export function Toolbar({
                 const active =
                   btn.id === 'emoji'
                     ? emojiPickerAnchor !== null
-                    : isWysiwyg
-                      ? isTiptapActive(tiptapEditor, btn.id)
+                    : formatActive && formattingEditor
+                      ? isTiptapActive(formattingEditor, btn.id)
                       : false;
-                const disabled = btn.id === 'image' && !mediaProvider;
+                const disabled = (btn.id === 'image' && !mediaProvider) || !buttonAllowed(btn.id);
                 return (
                   <button
                     key={btn.id}
@@ -1191,14 +1460,30 @@ export function Toolbar({
                     aria-label={btn.title}
                     aria-pressed={active}
                     disabled={disabled}
-                    style={btn.iconStyle}
                   >
-                    {buttonIconSvg(btn.id) ?? btn.icon}
+                    {buttonIcon(btn)}
                   </button>
                 );
               })}
             </div>
           ))}
+
+          {/* Insert menu button — collapses all media-group actions into a single dropdown */}
+          <div className="squisq-toolbar-group">
+            <div className="squisq-toolbar-separator" />
+            <button
+              ref={insertMenuButtonRef}
+              className={`squisq-toolbar-button${insertMenuAnchor ? ' squisq-toolbar-button--active' : ''}`}
+              data-btn-count={String(MEDIA_BUTTONS.length)}
+              data-tooltip="Insert..."
+              onClick={() => (insertMenuAnchor ? closeInsertMenu() : openInsertMenu())}
+              aria-label="Insert"
+              aria-expanded={insertMenuAnchor !== null}
+              aria-haspopup="menu"
+            >
+              <Icon icon="fa-solid fa-plus" />
+            </button>
+          </div>
 
           {/* Template picker — visible when the cursor is in a heading.
               In WYSIWYG, reads from the heading node's `dataTemplate`; in
@@ -1212,6 +1497,18 @@ export function Toolbar({
                   onChange={handleTemplatePick}
                   recommended={recommendedTemplates}
                 />
+              </div>
+            </>
+          )}
+
+          {/* Transition picker — visible alongside the template picker when a
+              block (heading) is active. Writes `transition=` into the block's
+              Pandoc `{…}` attribute block (the canonical home for transitions). */}
+          {currentTransition !== null && (
+            <>
+              <div className="squisq-toolbar-separator" />
+              <div className="squisq-toolbar-group squisq-transition-picker-group">
+                <TransitionPicker value={currentTransition} onChange={handleTransitionPick} />
               </div>
             </>
           )}
@@ -1392,14 +1689,17 @@ export function Toolbar({
             >
               {BUTTONS.slice(overflowIndex)
                 .filter((b) => isButtonVisible(b.id))
+                // Media buttons are represented by the synthetic Insert dropdown
+                // in both the visible toolbar and the overflow menu.
+                .filter((b) => b.group !== 'media')
                 .map((btn) => {
                   const active =
                     btn.id === 'emoji'
                       ? emojiPickerAnchor !== null
-                      : isWysiwyg
-                        ? isTiptapActive(tiptapEditor, btn.id)
+                      : formatActive && formattingEditor
+                        ? isTiptapActive(formattingEditor, btn.id)
                         : false;
-                  const disabled = btn.id === 'image' && !mediaProvider;
+                  const disabled = (btn.id === 'image' && !mediaProvider) || !buttonAllowed(btn.id);
                   return (
                     <button
                       key={btn.id}
@@ -1414,15 +1714,32 @@ export function Toolbar({
                       }}
                       disabled={disabled}
                     >
-                      {buttonIconSvg(btn.id) ?? (
-                        <span className="squisq-toolbar-overflow-icon" style={btn.iconStyle}>
-                          {btn.icon}
-                        </span>
-                      )}
+                      <span className="squisq-toolbar-overflow-icon">{buttonIcon(btn)}</span>
                       <span>{btn.title}</span>
                     </button>
                   );
                 })}
+
+              {showInsertInOverflow && (
+                <button
+                  className={`squisq-toolbar-overflow-item${insertMenuAnchor ? ' squisq-toolbar-overflow-item--active' : ''}`}
+                  onClick={(event) => {
+                    if (insertMenuAnchor) {
+                      closeInsertMenu();
+                    } else {
+                      openInsertMenu(event.currentTarget);
+                    }
+                    setShowOverflow(false);
+                  }}
+                  aria-haspopup="menu"
+                  aria-expanded={insertMenuAnchor !== null}
+                >
+                  <span className="squisq-toolbar-overflow-icon">
+                    <Icon icon="fa-solid fa-plus" />
+                  </span>
+                  <span>Insert...</span>
+                </button>
+              )}
 
               {/* Contextual: template picker in overflow */}
               {currentTemplate !== null && (
@@ -1498,7 +1815,7 @@ export function Toolbar({
       {slotAfterActions}
       {/* Spacer — only needed when the actions container (which has flex:1
           and already pushes right-side items to the end) isn't rendered. */}
-      {(isPreview || isNarrow || isCodeMode) && <div style={{ flex: 1 }} />}
+      {(isPreview || isCodeMode) && <div style={{ flex: 1 }} />}
       {/* Version history — renders only when the host enabled versioning
           and a container is wired up. The component owns its own button
           and popover; we just give it a slot in the toolbar. */}
@@ -1516,21 +1833,18 @@ export function Toolbar({
           data-tooltip="Document settings"
           aria-label="Document settings"
         >
-          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-            <path
-              d="M3 2.5h7l3 3v8a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1v-10a1 1 0 0 1 1-1Z"
-              stroke="currentColor"
-              strokeWidth="1.3"
-              strokeLinejoin="round"
-            />
-            <path d="M10 2.5v3h3" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round" />
-            <path
-              d="M5 8.5h6M5 11h4"
-              stroke="currentColor"
-              strokeWidth="1.3"
-              strokeLinecap="round"
-            />
-          </svg>
+          <Icon icon="fa-solid fa-file-lines" />
+        </button>
+      )}
+      {!isCodeMode && (
+        <button
+          type="button"
+          className={`squisq-toolbar-button${showLayoutManager ? ' squisq-toolbar-button--active' : ''}`}
+          onClick={() => setShowLayoutManager(true)}
+          data-tooltip="Custom layouts"
+          aria-label="Custom layouts"
+        >
+          <Icon icon="fa-solid fa-shapes" />
         </button>
       )}
       {!isCodeMode && <ViewMenuPanel />}
@@ -1543,7 +1857,7 @@ export function Toolbar({
           aria-pressed={showFiles}
           aria-label="Toggle Files panel"
         >
-          {PAPERCLIP_ICON}
+          <Icon icon="fa-solid fa-paperclip" />
         </button>
       )}
       {/* Right slot — rightmost end of toolbar */}
@@ -1561,6 +1875,9 @@ export function Toolbar({
         />
       )}
 
+      {/* Custom layout manager — full-window list + designer dialog. */}
+      {showLayoutManager && <CustomLayoutManager onClose={() => setShowLayoutManager(false)} />}
+
       {/* Link insert/edit dialog — shared by WYSIWYG and Raw views. */}
       {linkDialog && (
         <LinkDialog
@@ -1572,6 +1889,43 @@ export function Toolbar({
           documentLinkProvider={documentLinkProvider}
         />
       )}
+
+      {/* Insert menu — portaled to the document body so the overflow:hidden
+          actions row doesn't clip it. Position computed from trigger rect. */}
+      {insertMenuAnchor &&
+        createPortal(
+          <div
+            ref={insertMenuRef}
+            className="squisq-insert-menu"
+            data-theme={theme}
+            style={{ position: 'fixed', top: insertMenuAnchor.top, left: insertMenuAnchor.left }}
+            role="menu"
+          >
+            <div className="squisq-insert-menu-header">Insert</div>
+            {MEDIA_BUTTONS.filter((b) => isButtonVisible(b.id)).map((btn) => {
+              const disabled = (btn.id === 'image' && !mediaProvider) || !buttonAllowed(btn.id);
+              const stripped = btn.title.replace(/^Insert\s+/i, '');
+              const label = stripped.charAt(0).toUpperCase() + stripped.slice(1);
+              return (
+                <button
+                  key={btn.id}
+                  ref={btn.id === 'emoji' ? emojiButtonRef : undefined}
+                  className="squisq-toolbar-overflow-item"
+                  disabled={disabled}
+                  onClick={() => {
+                    handleAction(btn.id);
+                    if (btn.id !== 'emoji') closeInsertMenu();
+                  }}
+                  role="menuitem"
+                >
+                  <span className="squisq-toolbar-overflow-icon">{buttonIcon(btn)}</span>
+                  <span>{label}</span>
+                </button>
+              );
+            })}
+          </div>,
+          document.body,
+        )}
 
       {/* Emoji picker — portaled to the document body so the toolbar's
           overflow:hidden actions row doesn't clip the popover. Position

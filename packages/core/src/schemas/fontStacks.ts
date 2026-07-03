@@ -87,7 +87,10 @@ export const AVAILABLE_FONT_STACKS: FontStack[] = [
   {
     id: 'oswald',
     label: 'Oswald',
-    family: '"Oswald", Impact, "Arial Black", sans-serif',
+    // Condensed grotesques make a far better stand-in for Oswald than
+    // Impact/Arial Black, whose extreme weight distorts every layout
+    // tuned for the real face.
+    family: '"Oswald", "Arial Narrow", "Helvetica Neue Condensed", "Roboto Condensed", sans-serif',
     kind: 'display',
     googleFontFamily: 'Oswald',
   },
@@ -185,7 +188,7 @@ const FALLBACK_BY_KIND: Record<FontFamilyKind, string> = {
   sans: 'system-ui, sans-serif',
   serif: 'Georgia, serif',
   mono: 'Consolas, monospace',
-  display: 'Impact, Arial, sans-serif',
+  display: '"Arial Narrow", "Helvetica Neue", Arial, sans-serif',
 };
 
 /**

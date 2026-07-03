@@ -24,7 +24,7 @@ export function PropertiesPanel({ doc, selectedLayerId, dispatch }: PropertiesPa
       <div className="squisq-image-editor-panel-header">Properties</div>
       <CanvasSection doc={doc} dispatch={dispatch} />
       {selected ? (
-        <LayerSection layer={selected} dispatch={dispatch} />
+        <LayerSection key={selected.id} layer={selected} dispatch={dispatch} />
       ) : (
         <div className="squisq-image-editor-properties-empty">No layer selected</div>
       )}
@@ -105,6 +105,7 @@ function LayerSection({
       {layer.type === 'image' && <ImageFields layer={layer} update={update} />}
       {layer.type === 'text' && <TextFields layer={layer} update={update} />}
       {layer.type === 'shape' && <ShapeFields layer={layer} update={update} />}
+      {layer.type === 'path' && <PathFields layer={layer} update={update} />}
     </>
   );
 }
@@ -269,6 +270,51 @@ function ShapeFields({
           onChange={(borderRadius) => setContent({ borderRadius: Math.round(borderRadius) })}
         />
       )}
+    </fieldset>
+  );
+}
+
+function PathFields({
+  layer,
+  update,
+}: {
+  layer: ImageEditLayer & { type: 'path' };
+  update: (patch: Partial<ImageEditLayer>) => void;
+}) {
+  const c = layer.content;
+  const setContent = (patch: Partial<typeof c>) =>
+    update({ content: { ...c, ...patch } } as Partial<ImageEditLayer>);
+  // Named shapes (shapeKind) carry their geometry; plain paths/arrows don't.
+  const kindLabel = c.shapeKind
+    ? c.shapeKind.replace(/-/g, ' ')
+    : c.endMarker || c.startMarker
+      ? 'arrow'
+      : 'path';
+  return (
+    <fieldset className="squisq-image-editor-fieldset">
+      <legend>Shape</legend>
+      <div className="squisq-image-editor-field">
+        <span>Kind</span>
+        <span className="squisq-image-editor-readonly-value">{kindLabel}</span>
+      </div>
+      <ColorField
+        label="Fill"
+        value={c.fill ?? 'none'}
+        allowTransparent
+        onChange={(fill) => setContent({ fill })}
+      />
+      <ColorField
+        label="Stroke"
+        value={c.stroke ?? '#000000'}
+        allowTransparent
+        onChange={(stroke) => setContent({ stroke })}
+      />
+      <NumberField
+        label="Stroke width"
+        value={c.strokeWidth ?? 0}
+        min={0}
+        onChange={(strokeWidth) => setContent({ strokeWidth })}
+      />
     </fieldset>
   );
 }

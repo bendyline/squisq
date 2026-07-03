@@ -165,6 +165,30 @@ describe('useMediaRecorder lifecycle', () => {
     expect(result.current.stream).not.toBeNull();
   });
 
+  it('camera includes the mic by default', async () => {
+    const { result } = renderHook(() => useMediaRecorder({ source: 'camera' }));
+    await act(async () => {
+      await result.current.request();
+    });
+    const getUserMedia = navigator.mediaDevices.getUserMedia as ReturnType<typeof vi.fn>;
+    expect(getUserMedia).toHaveBeenCalledWith(
+      expect.objectContaining({ video: true, audio: true }),
+    );
+  });
+
+  it('camera omits the mic when includeMicrophone is false', async () => {
+    const { result } = renderHook(() =>
+      useMediaRecorder({ source: 'camera', includeMicrophone: false }),
+    );
+    await act(async () => {
+      await result.current.request();
+    });
+    const getUserMedia = navigator.mediaDevices.getUserMedia as ReturnType<typeof vi.fn>;
+    expect(getUserMedia).toHaveBeenCalledWith(
+      expect.objectContaining({ video: true, audio: false }),
+    );
+  });
+
   it('cancel() tears down state and stops the stream tracks', async () => {
     const { result } = renderHook(() => useMediaRecorder({ source: 'mic' }));
 

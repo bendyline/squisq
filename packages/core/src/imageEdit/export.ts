@@ -15,7 +15,8 @@
 
 import type { ContentContainer } from '../storage/ContentContainer.js';
 import type { ImageEditCanvas, ImageEditDoc, ImageEditLayer } from '../schemas/ImageEditDoc.js';
-import type { Position } from '../schemas/Doc.js';
+import type { MarkerStyle, Position } from '../schemas/Doc.js';
+import { markerPath, shapePath } from '../doc/utils/shapeGeometry.js';
 
 /** Supported export formats. */
 export type ImageEditExportFormat = 'png' | 'jpeg' | 'webp';
@@ -78,7 +79,15 @@ export async function exportImageEditDoc(
 // SVG construction
 // ============================================
 
-async function buildSvgString(doc: ImageEditDoc, container: ContentContainer): Promise<string> {
+/**
+ * Build the standalone SVG string that mirrors the canvas + layers. Exposed
+ * for tests (the raster step needs a browser); shape/text/path layers don't
+ * touch `container`, only image layers do (to inline asset bytes).
+ */
+export async function buildSvgString(
+  doc: ImageEditDoc,
+  container: ContentContainer,
+): Promise<string> {
   const { width, height, background } = doc.canvas;
   const bgRect =
     background && background !== 'transparent'
@@ -145,6 +154,10 @@ async function renderLayerInner(
     return `<line x1="${x}" y1="${y}" x2="${x + w}" y2="${y + h}"${stroke}${strokeWidth}/>`;
   }
 
+  if (layer.type === 'path') {
+    return renderPathToSvg(layer, x, y, w, h);
+  }
+
   // text
   const c = layer.content;
   const style = c.style;
@@ -166,6 +179,76 @@ async function renderLayerInner(
     ` fill="${escapeAttr(style.color)}" text-anchor="${textAnchor}">` +
     tspans +
     `</text>`
+  );
+}
+
+/**
+ * Serialize a `path` layer to SVG. Mirrors the runtime
+ * `react/src/layers/PathLayer.tsx`: when `shapeKind` is set, `d` is
+ * re-derived from the position box via `shapePath` (so named shapes scale);
+ * otherwise the stored absolute `d` is used. Start/end markers are emitted
+ * as `<marker>` defs scoped to the layer id, matching `markerPath` geometry.
+ */
+function renderPathToSvg(
+  layer: ImageEditLayer & { type: 'path' },
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+): string {
+  const c = layer.content;
+  const d = c.shapeKind ? (shapePath(c.shapeKind, x, y, w, h) ?? c.d) : c.d;
+  const stroke = c.stroke ?? '#1e293b';
+  const strokeWidth = c.strokeWidth ?? 2;
+  const fill = c.fill ?? 'none';
+  const dash = c.dasharray ? ` stroke-dasharray="${escapeAttr(c.dasharray)}"` : '';
+
+  // Markers: explicit start/end win; otherwise derive from the legacy `arrow` flag.
+  const startStyle = effectiveExportMarker(c.startMarker, c.arrow, 'start');
+  const endStyle = effectiveExportMarker(c.endMarker, c.arrow, 'end');
+  const start = markerPath(startStyle, 'start');
+  const end = markerPath(endStyle, 'end');
+  const startId = `marker-start-${layer.id}`;
+  const endId = `marker-end-${layer.id}`;
+  const defs =
+    start || end
+      ? `<defs>${start ? markerDefSvg(startId, 'start', start, stroke) : ''}${
+          end ? markerDefSvg(endId, 'end', end, stroke) : ''
+        }</defs>`
+      : '';
+  const markerStart = start ? ` marker-start="url(#${startId})"` : '';
+  const markerEnd = end ? ` marker-end="url(#${endId})"` : '';
+
+  return (
+    defs +
+    `<path d="${escapeAttr(d)}" fill="${escapeAttr(fill)}"` +
+    ` stroke="${escapeAttr(stroke)}" stroke-width="${strokeWidth}"${dash}${markerStart}${markerEnd}/>`
+  );
+}
+
+function effectiveExportMarker(
+  explicit: MarkerStyle | undefined,
+  arrow: (ImageEditLayer & { type: 'path' })['content']['arrow'],
+  end: 'start' | 'end',
+): MarkerStyle {
+  if (explicit) return explicit;
+  return arrow === 'both' || arrow === end ? 'arrow' : 'none';
+}
+
+function markerDefSvg(
+  id: string,
+  dir: 'start' | 'end',
+  marker: { d: string; filled: boolean },
+  stroke: string,
+): string {
+  const refX = dir === 'end' ? 9 : 1;
+  const paint = marker.filled
+    ? `fill="${escapeAttr(stroke)}"`
+    : `fill="none" stroke="${escapeAttr(stroke)}" stroke-width="1.5"`;
+  return (
+    `<marker id="${escapeAttr(id)}" viewBox="0 0 10 10" refX="${refX}" refY="5"` +
+    ` markerWidth="4" markerHeight="4" orient="auto-start-reverse" markerUnits="strokeWidth">` +
+    `<path d="${escapeAttr(marker.d)}" ${paint}/></marker>`
   );
 }
 

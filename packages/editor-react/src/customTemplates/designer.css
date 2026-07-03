@@ -1,0 +1,673 @@
+/*
+ * TemplateDesigner — full-viewport modal overlay with a Scene-backed
+ * canvas in the middle, a token palette on the left, name/label inputs
+ * at the top, and save/cancel actions at the bottom.
+ */
+
+.squisq-template-designer-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  background: rgba(15, 23, 42, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+
+.squisq-template-designer-panel {
+  display: flex;
+  flex-direction: column;
+  width: min(1200px, 100%);
+  height: min(800px, 100%);
+  background: #ffffff;
+  border-radius: 12px;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.3);
+  overflow: hidden;
+  /* The designer is a direct-manipulation surface: dragging a layer on
+     the canvas must not start a text selection that bleeds into the
+     toolbar/labels (which the browser then paints as a translucent drag
+     "ghost" of the selected text). Suppress selection on the chrome;
+     re-enable it on the editable fields below. */
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.squisq-template-designer-panel input,
+.squisq-template-designer-panel textarea {
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+/* Embedded variant — the designer rendered inside a host frame (the
+   Custom Layout Manager's right pane) rather than as its own modal.
+   Fills the container and drops the standalone modal's chrome. */
+.squisq-template-designer-panel--embedded {
+  width: 100%;
+  height: 100%;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.squisq-template-designer-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 20px;
+  border-bottom: 1px solid #e5e7eb;
+  background: #f9fafb;
+}
+
+.squisq-template-designer-title {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: #111827;
+}
+
+.squisq-template-designer-close {
+  width: 32px;
+  height: 32px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 24px;
+  line-height: 1;
+  color: #6b7280;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.squisq-template-designer-close:hover {
+  color: #111827;
+  background: #f1f5f9;
+  border-color: #cbd5e1;
+}
+
+.squisq-template-designer-meta {
+  display: grid;
+  grid-template-columns: minmax(160px, 1fr) minmax(160px, 1fr) minmax(240px, 2fr);
+  gap: 12px;
+  padding: 12px 20px;
+  border-bottom: 1px solid #e5e7eb;
+  background: #fdfdfd;
+}
+
+.squisq-template-designer-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.squisq-template-designer-field span {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #6b7280;
+}
+
+.squisq-template-designer-field input {
+  padding: 6px 10px;
+  font-size: 13px;
+  color: #111827;
+  background: #ffffff;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  outline: none;
+}
+
+.squisq-template-designer-field input:focus {
+  border-color: #6366f1;
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.15);
+}
+
+.squisq-template-designer-field span.squisq-template-designer-field-hint {
+  font-size: 11px;
+  font-weight: 400;
+  text-transform: none;
+  letter-spacing: normal;
+  color: #9ca3af;
+}
+
+.squisq-template-designer-body {
+  flex: 1;
+  display: flex;
+  min-height: 0;
+}
+
+.squisq-template-designer-palette {
+  width: 220px;
+  flex-shrink: 0;
+  padding: 16px;
+  border-right: 1px solid #e5e7eb;
+  background: #fafafa;
+  overflow-y: auto;
+}
+
+.squisq-template-designer-palette-title {
+  margin: 0 0 4px;
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #4338ca;
+}
+
+.squisq-template-designer-palette-hint {
+  margin: 0 0 12px;
+  font-size: 11px;
+  color: #6b7280;
+  line-height: 1.4;
+}
+
+.squisq-template-designer-palette-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+/* ─── Add bin: sections ──────────────────────────────────── */
+
+.squisq-template-designer-palette-section {
+  margin-top: 14px;
+}
+
+.squisq-template-designer-palette-section:first-of-type {
+  margin-top: 0;
+}
+
+.squisq-template-designer-palette-section-title {
+  margin-bottom: 6px;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #6b7280;
+}
+
+/* Shapes are compact icon tiles in a grid. */
+.squisq-template-designer-palette-shapes {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 6px;
+}
+
+.squisq-template-designer-shape-item {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  aspect-ratio: 1 / 1;
+  padding: 4px;
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  cursor: grab;
+  color: #475569;
+  transition:
+    background 0.1s,
+    border-color 0.1s;
+}
+
+.squisq-template-designer-shape-item:active {
+  cursor: grabbing;
+}
+
+.squisq-template-designer-shape-item:hover {
+  background: #eef2ff;
+  border-color: #c7d2fe;
+}
+
+.squisq-template-designer-shape-item--active {
+  background: #eef2ff;
+  border-color: #6366f1;
+}
+
+.squisq-template-designer-palette-media-add {
+  width: 100%;
+  margin-top: 4px;
+  padding: 8px 10px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #4338ca;
+  background: #eef2ff;
+  border: 1px dashed #c7d2fe;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.squisq-template-designer-palette-media-add:hover:not(:disabled) {
+  background: #e0e7ff;
+  border-color: #a5b4fc;
+}
+
+.squisq-template-designer-palette-media-add:disabled {
+  color: #9ca3af;
+  background: #f3f4f6;
+  border-color: #e5e7eb;
+  cursor: not-allowed;
+}
+
+.squisq-template-designer-palette-item {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  padding: 8px 10px;
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  /* Draggable onto the canvas — `grab` hints the drag affordance. */
+  cursor: grab;
+  text-align: left;
+  transition:
+    background 0.1s,
+    border-color 0.1s;
+}
+
+.squisq-template-designer-palette-item:active {
+  cursor: grabbing;
+}
+
+.squisq-template-designer-palette-item:hover {
+  background: #eef2ff;
+  border-color: #c7d2fe;
+}
+
+.squisq-template-designer-palette-item--active {
+  background: #eef2ff;
+  border-color: #6366f1;
+}
+
+.squisq-template-designer-palette-item-preview {
+  font-family: 'JetBrains Mono', 'SF Mono', 'Menlo', monospace;
+  font-size: 12px;
+  color: #4338ca;
+}
+
+.squisq-template-designer-palette-item-label {
+  font-size: 11px;
+  color: #6b7280;
+}
+
+.squisq-template-designer-stage {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  padding: 12px;
+  gap: 8px;
+  background: #f3f4f6;
+}
+
+/* Unified controls bar above the canvas: the compact aspect-ratio
+   dropdown sits inline with the contextual layer styling controls, so
+   the two share one row instead of stacking and eating vertical space. */
+.squisq-template-designer-stage-bar {
+  display: flex;
+  /* Single row for vertical efficiency. If the controls outgrow the
+     width (narrow panels, the text layer's full control set), the bar
+     scrolls horizontally rather than wrapping to a second line. */
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 5px;
+  padding: 6px 8px;
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  align-self: stretch;
+  overflow-x: auto;
+  scrollbar-width: thin;
+}
+
+.squisq-template-designer-viewport-label {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #6b7280;
+}
+
+/* ─── Contextual layer styling controls ─────────────────── */
+/* Transparent group — the surrounding stage-bar provides the box, so the
+   layer controls flow inline with the aspect-ratio dropdown on one row.
+   `flex-shrink: 0` keeps each control its natural size; the stage-bar
+   scrolls instead of squashing them. */
+.squisq-layer-toolbar {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 5px;
+}
+
+.squisq-template-designer-stage-bar > *,
+.squisq-layer-toolbar > * {
+  flex-shrink: 0;
+}
+
+/* The font-family select is the widest control; cap it so it doesn't
+   crowd the rest off the row. */
+.squisq-layer-toolbar-select--font {
+  max-width: 104px;
+}
+
+.squisq-layer-toolbar-seg {
+  display: inline-flex;
+  gap: 2px;
+}
+
+.squisq-layer-toolbar-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  font-size: 13px;
+  color: #374151;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.squisq-layer-toolbar-btn:hover {
+  background: #f1f5f9;
+}
+
+.squisq-layer-toolbar-btn--active {
+  background: #eef2ff;
+  border-color: #6366f1;
+  color: #4338ca;
+}
+
+.squisq-layer-toolbar-select {
+  height: 28px;
+  padding: 0 6px;
+  font-size: 12px;
+  color: #1f2937;
+  background: #ffffff;
+  border: 1px solid #d1d5db;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.squisq-layer-toolbar-number {
+  width: 48px;
+  height: 28px;
+  padding: 0 4px 0 6px;
+  font-size: 12px;
+  color: #1f2937;
+  background: #ffffff;
+  border: 1px solid #d1d5db;
+  border-radius: 4px;
+}
+
+.squisq-layer-toolbar-opacity {
+  display: inline-flex;
+  align-items: center;
+}
+
+.squisq-layer-toolbar-opacity input[type='range'] {
+  width: 64px;
+  cursor: pointer;
+}
+
+.squisq-layer-toolbar-label {
+  display: inline-flex;
+  align-items: center;
+  color: #6b7280;
+  font-size: 13px;
+}
+
+.squisq-layer-toolbar-color {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.squisq-layer-toolbar-color input[type='color'] {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 1px solid #d1d5db;
+  border-radius: 4px;
+  background: #ffffff;
+  cursor: pointer;
+}
+
+.squisq-layer-toolbar-sep {
+  width: 1px;
+  align-self: stretch;
+  margin: 2px 2px;
+  background: #e5e7eb;
+}
+
+.squisq-template-designer-scene {
+  flex: 1;
+  min-height: 0;
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.squisq-template-designer-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 20px;
+  border-top: 1px solid #e5e7eb;
+  background: #f9fafb;
+  gap: 12px;
+}
+
+.squisq-template-designer-footer-hint {
+  font-size: 11px;
+  color: #6b7280;
+  flex: 1;
+  min-width: 0;
+}
+
+.squisq-template-designer-footer-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.squisq-template-designer-btn {
+  padding: 6px 14px;
+  font-size: 13px;
+  font-weight: 500;
+  color: #1f2937;
+  background: #ffffff;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.1s;
+}
+
+.squisq-template-designer-btn:hover {
+  background: #f1f5f9;
+}
+
+.squisq-template-designer-btn--primary {
+  color: #ffffff;
+  background: #4f46e5;
+  border-color: #4338ca;
+}
+
+.squisq-template-designer-btn--primary:hover {
+  background: #4338ca;
+}
+
+/* ─── Custom Layout Manager ────────────────────────────────
+   Near-full-window modal: a sidebar list of layouts on the left and an
+   embedded TemplateDesigner on the right. */
+
+.squisq-layout-manager-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  background: rgba(15, 23, 42, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+}
+
+.squisq-layout-manager-panel {
+  display: flex;
+  flex-direction: column;
+  width: min(1600px, 96vw);
+  height: 92vh;
+  background: #ffffff;
+  border-radius: 12px;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.3);
+  overflow: hidden;
+}
+
+.squisq-layout-manager-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 20px;
+  border-bottom: 1px solid #e5e7eb;
+  background: #f9fafb;
+}
+
+.squisq-layout-manager-title {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: #111827;
+}
+
+.squisq-layout-manager-body {
+  flex: 1;
+  display: flex;
+  min-height: 0;
+}
+
+.squisq-layout-manager-sidebar {
+  width: 280px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 16px;
+  border-right: 1px solid #e5e7eb;
+  background: #fafafa;
+  overflow-y: auto;
+}
+
+.squisq-layout-manager-new {
+  padding: 10px 12px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #4338ca;
+  background: #eef2ff;
+  border: 1px dashed #c7d2fe;
+  border-radius: 8px;
+  cursor: pointer;
+  text-align: center;
+}
+
+.squisq-layout-manager-new:hover {
+  background: #e0e7ff;
+  border-color: #a5b4fc;
+}
+
+.squisq-layout-manager-new--active {
+  border-style: solid;
+  border-color: #6366f1;
+}
+
+.squisq-layout-manager-section-title {
+  margin-top: 6px;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #6b7280;
+}
+
+.squisq-layout-manager-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.squisq-layout-manager-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px;
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  cursor: pointer;
+  text-align: left;
+  transition:
+    background 0.1s,
+    border-color 0.1s;
+}
+
+.squisq-layout-manager-item:hover {
+  background: #eef2ff;
+  border-color: #c7d2fe;
+}
+
+.squisq-layout-manager-item--active {
+  background: #eef2ff;
+  border-color: #6366f1;
+}
+
+.squisq-layout-manager-item-thumb {
+  flex-shrink: 0;
+  display: inline-flex;
+  width: 56px;
+  height: 40px;
+  border: 1px solid #e5e7eb;
+  border-radius: 4px;
+  overflow: hidden;
+  background: #f8fafc;
+}
+
+.squisq-layout-manager-item-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.squisq-layout-manager-item-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: #111827;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.squisq-layout-manager-item-name {
+  font-family: 'JetBrains Mono', 'SF Mono', 'Menlo', monospace;
+  font-size: 11px;
+  color: #6b7280;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.squisq-layout-manager-empty-hint {
+  margin: 8px 2px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: #6b7280;
+}
+
+.squisq-layout-manager-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+}

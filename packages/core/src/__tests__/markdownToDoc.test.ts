@@ -4,6 +4,13 @@ import type { MarkdownText } from '../markdown/types';
 import { markdownToDoc, flattenBlocks, countBlocks, getBlockDepth } from '../doc/markdownToDoc';
 import { docToMarkdown } from '../doc/docToMarkdown';
 
+// Helper: parse markdown and return the first top-level block.
+function firstHeadingBlock(md: string) {
+  const parsed = parseMarkdown(md);
+  const doc = markdownToDoc(parsed, { articleId: 'test', generateCoverBlock: false });
+  return doc.blocks[0];
+}
+
 // Helper: strip positions from markdown nodes for cleaner assertions
 function stripPositions(obj: unknown): unknown {
   if (obj === null || obj === undefined) return obj;
@@ -362,6 +369,16 @@ describe('template annotation in markdownToDoc', () => {
     expect(output).toContain('{[factCard style=minimal]}');
   });
 
+  it('docToMarkdown injects transition attributes from block metadata', () => {
+    const md = parseMarkdown('## Section\n\nBody');
+    const doc = markdownToDoc(md);
+    doc.blocks[0].transition = { type: 'wipe', duration: 0.8, direction: 'left' };
+
+    const output = stringifyMarkdown(docToMarkdown(doc));
+
+    expect(output).toContain('{transition=wipe transitionDuration=0.8 transitionDirection=left}');
+  });
+
   it('nested headings preserve their own annotations', () => {
     const input = '# Chapter {[title]}\n\nIntro\n\n## Section {[chart]}\n\nData';
     const md = parseMarkdown(input);
@@ -448,12 +465,16 @@ describe('caption generation', () => {
     expect(doc.captions).toBeUndefined();
   });
 
-  it('generates captions version and timestamp', () => {
+  it('generates captions version; timestamp only when supplied (deterministic default)', () => {
     const md = parseMarkdown('# Title\n\nHello world and more text.');
     const doc = markdownToDoc(md);
 
     expect(doc.captions!.version).toBe(1);
-    expect(doc.captions!.generatedAt).toBeTruthy();
+    // No clock reads during conversion — generatedAt is opt-in.
+    expect(doc.captions!.generatedAt).toBeUndefined();
+
+    const stamped = markdownToDoc(md, { captionsGeneratedAt: '2026-01-01T00:00:00.000Z' });
+    expect(stamped.captions!.generatedAt).toBe('2026-01-01T00:00:00.000Z');
   });
 
   it('caption phrases have sequential non-overlapping times', () => {
@@ -561,5 +582,205 @@ describe('auto cover block generation', () => {
     expect(doc.startBlock).toBeDefined();
     expect(doc.startBlock!.title).toBe('Title');
     expect(doc.startBlock!.subtitle).toBeUndefined();
+  });
+});
+
+describe('markdownToDoc with Pandoc attributes', () => {
+  it('overrides block id from {#id}', () => {
+    const block = firstHeadingBlock('## Section title {#intro}');
+    expect(block.id).toBe('intro');
+  });
+
+  it('applies x / y to typed Block fields', () => {
+    // `diagramNode` is a legacy alias for the canonical `diagram` template;
+    // the alias resolves at template-resolution time.
+    const block = firstHeadingBlock('## Step 1 {#step1 x=400 y=200} {[diagramNode]}');
+    expect(block.id).toBe('step1');
+    expect(block.x).toBe(400);
+    expect(block.y).toBe(200);
+    expect(block.template).toBe('diagram');
+  });
+
+  it('applies multiple connectsTo entries with mixed types', () => {
+    const block = firstHeadingBlock(
+      '## Architecture {#arch x=600 y=300 connectsTo=foo:veryImportant,bar:requires,baz:requires} {[diagramNode]}',
+    );
+    expect(block.connectsTo).toEqual([
+      { target: 'foo', type: 'veryImportant' },
+      { target: 'bar', type: 'requires' },
+      { target: 'baz', type: 'requires' },
+    ]);
+  });
+
+  it('parses connections without types', () => {
+    const block = firstHeadingBlock('## Summary {#summary connectsTo=intro,middle,end}');
+    expect(block.connectsTo).toEqual([
+      { target: 'intro' },
+      { target: 'middle' },
+      { target: 'end' },
+    ]);
+  });
+
+  it('parses mix of typed and untyped connections in one list', () => {
+    const block = firstHeadingBlock(
+      '## Decision {#decision connectsTo=alt1,alt2:rejected,alt3:chosen}',
+    );
+    expect(block.connectsTo).toEqual([
+      { target: 'alt1' },
+      { target: 'alt2', type: 'rejected' },
+      { target: 'alt3', type: 'chosen' },
+    ]);
+  });
+
+  it('overrides startTime / duration with attribute values (seconds)', () => {
+    const block = firstHeadingBlock('## Closing {#closing startTime=02:30 duration=00:45}');
+    expect(block.startTime).toBe(150);
+    expect(block.duration).toBe(45);
+  });
+
+  it('sets transition metadata from Pandoc attributes', () => {
+    const block = firstHeadingBlock(
+      '## Closing {#closing transition=checkerboard transitionDuration=1.2 transitionDirection=vertical}',
+    );
+    expect(block.transition).toEqual({
+      type: 'checkerboard',
+      duration: 1.2,
+      direction: 'vertical',
+    });
+  });
+
+  it('puts unknown keys into block.metadata', () => {
+    const block = firstHeadingBlock('## X {#x priority=high status=draft}');
+    expect(block.metadata).toEqual({ priority: 'high', status: 'draft' });
+  });
+
+  it('routes template params separately from block-level metadata', () => {
+    const block = firstHeadingBlock(
+      '## X {#big x=400 priority=high} {[diagramNode colorScheme=blue]}',
+    );
+    expect(block.templateOverrides).toEqual({ colorScheme: 'blue' });
+    expect(block.metadata).toEqual({ priority: 'high' });
+    expect(block.x).toBe(400);
+  });
+
+  it('stores Pandoc classes on block.classes', () => {
+    const block = firstHeadingBlock('## X {#x .alpha .beta}');
+    expect(block.classes).toEqual(['alpha', 'beta']);
+  });
+
+  it('backward compat: plain {[…]}-only heading is unchanged', () => {
+    const block = firstHeadingBlock('## X {[chart colorScheme=blue]}');
+    expect(block.template).toBe('chart');
+    expect(block.templateOverrides).toEqual({ colorScheme: 'blue' });
+    expect(block.x).toBeUndefined();
+    expect(block.metadata).toBeUndefined();
+    expect(block.classes).toBeUndefined();
+  });
+});
+
+describe('markdownToDoc block-meta in the squiggly {[…]} form', () => {
+  it('reads duration from a pure key-value {[duration=N]} annotation', () => {
+    const block = firstHeadingBlock('## Closing {[duration=8]}\n\nSome body text here.\n');
+    expect(block.duration).toBe(8);
+  });
+
+  it('does not let reading-time overwrite a squiggly-pinned duration', () => {
+    // Body long enough that the reading-time estimate would exceed 8s if it ran.
+    const body = Array(80).fill('word').join(' ');
+    const block = firstHeadingBlock(`## Closing {[duration=8]}\n\n${body}\n`);
+    expect(block.duration).toBe(8);
+  });
+
+  it('folds duration alongside a template name', () => {
+    const block = firstHeadingBlock('## Hero {[sectionHeader duration=6]}');
+    expect(block.template).toBe('sectionHeader');
+    expect(block.duration).toBe(6);
+  });
+
+  it('folds transition alongside a template name', () => {
+    const block = firstHeadingBlock(
+      '## Hero {[sectionHeader transition=fly-through transitionDuration=750ms]}',
+    );
+    expect(block.template).toBe('sectionHeader');
+    expect(block.transition).toEqual({
+      type: 'flyThrough',
+      duration: 0.75,
+    });
+  });
+
+  it('accepts startTime in the squiggly form too', () => {
+    const block = firstHeadingBlock('## Closing {[startTime=02:30 duration=45]}');
+    expect(block.startTime).toBe(150);
+    expect(block.duration).toBe(45);
+  });
+
+  it('Pandoc attrs win when a key appears in both forms', () => {
+    const block = firstHeadingBlock('## X {duration=3} {[duration=9]}');
+    expect(block.duration).toBe(3);
+  });
+});
+
+describe('auto template picking (autoTemplates, default on)', () => {
+  const toDocFromMd = (md: string, options?: Parameters<typeof markdownToDoc>[1]) =>
+    markdownToDoc(parseMarkdown(md), options);
+
+  it('picks quote for a blockquote-bearing section and derives the quote text', () => {
+    const doc = toDocFromMd('# Wisdom\n\n> The best template feels obvious.\n');
+    const block = doc.blocks[0];
+    expect(block.template).toBe('quote');
+    expect(block.autoTemplate).toBe(true);
+    expect(block.templateData?.quote).toBe('The best template feels obvious.');
+  });
+
+  it('picks dataTable for a table-bearing section with derived headers/rows', () => {
+    const doc = toDocFromMd('# Results\n\n| A | B |\n| - | - |\n| 1 | 2 |\n');
+    const block = doc.blocks[0];
+    expect(block.template).toBe('dataTable');
+    expect(block.templateData?.headers).toEqual(['A', 'B']);
+    expect(block.templateData?.rows).toEqual([['1', '2']]);
+  });
+
+  it('picks list for list-bearing sections and photoGrid for multi-image sections', () => {
+    const doc = toDocFromMd('# Steps\n\n- one\n- two\n\n# Gallery\n\n![a](a.jpg)\n\n![b](b.jpg)\n');
+    expect(doc.blocks[0].template).toBe('list');
+    expect(doc.blocks[0].templateData?.items).toEqual(['one', 'two']);
+    expect(doc.blocks[1].template).toBe('photoGrid');
+  });
+
+  it('alternates left/right feature for consecutive single-image sections', () => {
+    const doc = toDocFromMd('# One\n\n![a](a.jpg)\n\n# Two\n\n![b](b.jpg)\n');
+    expect(doc.blocks[0].template).toBe('leftFeature');
+    expect(doc.blocks[1].template).toBe('rightFeature');
+    expect(doc.blocks[0].templateData?.imageSrc).toBe('a.jpg');
+  });
+
+  it('leaves plain prose sections on the structural default', () => {
+    const doc = toDocFromMd('# About\n\nJust a paragraph of prose.\n');
+    expect(doc.blocks[0].template).toBe('sectionHeader');
+    expect(doc.blocks[0].autoTemplate).toBeUndefined();
+  });
+
+  it('never overrides an explicit annotation', () => {
+    const doc = toDocFromMd('# Wisdom {[factCard fact="F"]}\n\n> quoted\n');
+    expect(doc.blocks[0].template).toBe('factCard');
+  });
+
+  it('is disabled by the option and by frontmatter', () => {
+    const md = '# Wisdom\n\n> quoted\n';
+    const viaOption = toDocFromMd(md, { autoTemplates: false });
+    expect(viaOption.blocks[0].template).toBe('sectionHeader');
+
+    const viaFrontmatter = markdownToDoc(
+      parseMarkdown('---\nsquisq-auto-templates: false\n---\n\n' + md),
+    );
+    expect(viaFrontmatter.blocks[0].template).toBe('sectionHeader');
+  });
+
+  it('keeps the round-trip lossless (no materialized annotations)', () => {
+    const md = '# Wisdom\n\n> The best template feels obvious.\n';
+    const doc = toDocFromMd(md);
+    expect(doc.blocks[0].template).toBe('quote');
+    const roundTripped = stringifyMarkdown(docToMarkdown(doc));
+    expect(roundTripped).not.toContain('{[quote');
   });
 });

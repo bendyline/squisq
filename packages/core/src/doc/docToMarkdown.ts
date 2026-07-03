@@ -24,6 +24,14 @@
 
 import type { Doc, Block } from '../schemas/Doc.js';
 import type { MarkdownDocument, MarkdownBlockNode, MarkdownHeading } from '../markdown/types.js';
+import {
+  FRONTMATTER_CUSTOM_TEMPLATES_KEY,
+  writeCustomTemplatesToFrontmatter,
+} from './customTemplatesFrontmatter.js';
+import {
+  FRONTMATTER_CUSTOM_THEMES_KEY,
+  writeCustomThemesToFrontmatter,
+} from './customThemesFrontmatter.js';
 
 /**
  * Convert a Doc with heading-driven blocks back to a MarkdownDocument.
@@ -66,9 +74,36 @@ export function docToMarkdown(doc: Doc): MarkdownDocument {
     emitBlock(block);
   }
 
+  // Merge `Doc.customTemplates` into the outgoing frontmatter so the
+  // markdown remains the source-of-truth: edits made via the editor's
+  // TemplateDesigner round-trip through `docToMarkdown` →
+  // `stringifyMarkdown` and are visible to anyone reading the file.
+  const customPayload = writeCustomTemplatesToFrontmatter(doc.customTemplates);
+  let frontmatter = doc.frontmatter;
+  if (customPayload) {
+    frontmatter = { ...(frontmatter ?? {}), [FRONTMATTER_CUSTOM_TEMPLATES_KEY]: customPayload };
+  } else if (frontmatter && FRONTMATTER_CUSTOM_TEMPLATES_KEY in frontmatter) {
+    // The doc has no custom templates anymore — drop the stale
+    // frontmatter key so the markdown reflects the current state.
+    const { [FRONTMATTER_CUSTOM_TEMPLATES_KEY]: _drop, ...rest } = frontmatter;
+    void _drop;
+    frontmatter = rest;
+  }
+
+  // Mirror the same round-trip for `Doc.customThemes` (the theme analog).
+  const customThemesPayload = writeCustomThemesToFrontmatter(doc.customThemes);
+  if (customThemesPayload) {
+    frontmatter = { ...(frontmatter ?? {}), [FRONTMATTER_CUSTOM_THEMES_KEY]: customThemesPayload };
+  } else if (frontmatter && FRONTMATTER_CUSTOM_THEMES_KEY in frontmatter) {
+    const { [FRONTMATTER_CUSTOM_THEMES_KEY]: _dropTheme, ...rest } = frontmatter;
+    void _dropTheme;
+    frontmatter = rest;
+  }
+
   return {
     type: 'document',
     children,
+    ...(frontmatter && Object.keys(frontmatter).length > 0 ? { frontmatter } : {}),
   };
 }
 
@@ -77,22 +112,56 @@ export function docToMarkdown(doc: Doc): MarkdownDocument {
  * template and templateOverrides. Returns a (possibly cloned) heading.
  */
 function ensureAnnotation(block: Block, heading: MarkdownHeading): MarkdownHeading {
-  // If the heading already has an annotation, trust it (it came from parsing)
-  if (heading.templateAnnotation) return heading;
+  const attrs = ensureTransitionAttributes(block, heading);
 
   // If the block has a non-default template or overrides, inject an annotation
-  const hasExplicitTemplate = block.template && block.template !== 'sectionHeader';
+  const hasExplicitTemplate =
+    block.template && block.template !== 'sectionHeader' && block.autoTemplate !== true;
   const hasOverrides = block.templateOverrides && Object.keys(block.templateOverrides).length > 0;
 
-  if (!hasExplicitTemplate && !hasOverrides) return heading;
+  // If the heading already has an annotation, trust it (it came from parsing).
+  // Transition attrs may still have been injected above if the block changed.
+  if (heading.templateAnnotation) {
+    return attrs === heading.attributes ? heading : { ...heading, attributes: attrs };
+  }
+
+  if (!hasExplicitTemplate && !hasOverrides) {
+    return attrs === heading.attributes ? heading : { ...heading, attributes: attrs };
+  }
 
   // Clone to avoid mutating the original
   return {
     ...heading,
     children: [...heading.children],
+    attributes: attrs,
     templateAnnotation: {
       template: block.template ?? 'sectionHeader',
       ...(hasOverrides ? { params: block.templateOverrides } : {}),
+    },
+  };
+}
+
+function ensureTransitionAttributes(
+  block: Block,
+  heading: MarkdownHeading,
+): MarkdownHeading['attributes'] {
+  const transition = block.transition;
+  if (!transition) return heading.attributes;
+
+  const attrs = heading.attributes ?? {};
+  return {
+    ...attrs,
+    params: {
+      ...(attrs.params ?? {}),
+      transition: transition.type,
+      ...(transition.duration !== undefined
+        ? { transitionDuration: String(transition.duration) }
+        : {}),
+      ...(transition.direction ? { transitionDirection: transition.direction } : {}),
+    },
+    blockMeta: {
+      ...(attrs.blockMeta ?? {}),
+      transition,
     },
   };
 }

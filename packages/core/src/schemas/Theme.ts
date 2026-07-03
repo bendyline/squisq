@@ -21,7 +21,7 @@
  */
 
 import type { LayoutHints } from './LayoutStrategy.js';
-import type { AnimationType, TransitionType } from './Doc.js';
+import type { AnimationType, ImageTreatment, TransitionType } from './Doc.js';
 import type { PersistentLayerConfig } from './BlockTemplates.js';
 
 // ============================================
@@ -31,6 +31,14 @@ import type { PersistentLayerConfig } from './BlockTemplates.js';
 /** Current Theme schema version. Bump on breaking changes; loader migrates. */
 export const THEME_SCHEMA_VERSION = '1' as const;
 export type ThemeSchemaVersion = typeof THEME_SCHEMA_VERSION;
+
+/**
+ * Frontmatter key under which a document inlines its custom Theme
+ * definitions. The theme analog of `FRONTMATTER_CUSTOM_TEMPLATES_KEY`
+ * (custom block templates). See `doc/customThemesFrontmatter.ts` for the
+ * codec and `doc/resolveDocTheme.ts` for doc-scoped resolution.
+ */
+export const FRONTMATTER_CUSTOM_THEMES_KEY = 'squisq-custom-themes';
 
 // ============================================
 // Color Palette
@@ -146,6 +154,13 @@ export interface ThemeStyle {
   animationSpeed?: number;
   /** Default horizontal padding for text (percentage string, e.g. "5%") */
   blockPadding?: string;
+  /**
+   * Photographic grade applied to template imagery (full-bleed photos,
+   * feature halves, accent strips) so photos look native to the theme.
+   * Duotone tints default to the theme primary. Blocks opt out per
+   * template via `imageTreatment: 'none'`.
+   */
+  imageTreatment?: ImageTreatment;
 }
 
 // ============================================
@@ -195,6 +210,13 @@ export interface Theme {
   name: string;
   /** Short description for theme pickers */
   description?: string;
+  /**
+   * Id of the theme this custom theme was derived from, if any. Recorded
+   * by `compileTheme({ base })` so a customizer can re-open the theme and
+   * re-inherit the base's render style / color schemes / typography.
+   * Absent on built-ins.
+   */
+  basedOn?: string;
   /** Optional authoring seeds (customizer fills these; built-ins typically omit) */
   seedColors?: ThemeSeedColors;
   /** Color palette */

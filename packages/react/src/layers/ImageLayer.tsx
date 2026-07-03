@@ -7,6 +7,7 @@
  */
 
 import type { ImageLayer as ImageLayerType, Animation } from '@bendyline/squisq/schemas';
+import { cssFilterForTreatment } from '@bendyline/squisq/doc';
 import { getAnimationStyle } from '../utils/animationUtils';
 import { resolveValue, getAnchorOffset } from '../utils/layerUtils';
 import { useMediaUrl } from '../hooks/MediaContext';
@@ -40,6 +41,10 @@ export function ImageLayer({ layer, basePath, viewport, blockTime }: ImageLayerP
 
   // Get animation styles
   const animStyle = getAnimationStyle(animation, blockTime);
+
+  // Theme-derived photographic grade + optional blur, as a CSS filter
+  // string (identical in the player and in headless frame capture).
+  const filter = cssFilterForTreatment(content.treatment, content.blur);
 
   // SVG preserveAspectRatio based on fit mode
   const preserveAspectRatio = getPreserveAspectRatio(content.fit);
@@ -78,6 +83,7 @@ export function ImageLayer({ layer, basePath, viewport, blockTime }: ImageLayerP
                 display: 'block',
                 pointerEvents: 'none',
                 transformOrigin: 'center center',
+                ...(filter ? { filter } : {}),
                 ...kbStyle.style,
               }}
             />
@@ -107,6 +113,10 @@ export function ImageLayer({ layer, basePath, viewport, blockTime }: ImageLayerP
               objectPosition: 'center',
               display: 'block',
               pointerEvents: 'none',
+              ...(filter ? { filter } : {}),
+              // Over-scan blurred imagery so the soft edges never reveal
+              // the frame behind the layer.
+              ...(content.blur && content.blur > 0 ? { transform: 'scale(1.06)' } : {}),
             }}
           />
         </foreignObject>
@@ -128,7 +138,7 @@ export function ImageLayer({ layer, basePath, viewport, blockTime }: ImageLayerP
         width={width}
         height={height}
         preserveAspectRatio={preserveAspectRatio}
-        style={{ pointerEvents: 'none' }}
+        style={{ pointerEvents: 'none', ...(filter ? { filter } : {}) }}
       />
     </g>
   );

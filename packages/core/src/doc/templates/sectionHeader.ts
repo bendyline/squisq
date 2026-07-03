@@ -11,16 +11,27 @@
 
 import type { Layer, AnimationType } from '../../schemas/Doc.js';
 import type { SectionHeaderInput, TemplateContext } from '../../schemas/BlockTemplates.js';
-import { scaledFontSize } from '../../schemas/BlockTemplates.js';
-import { resolveColorScheme, getThemeFont } from '../utils/themeUtils.js';
+import {
+  resolveColorScheme,
+  getThemeFont,
+  shouldUseShadow,
+  themedEntrance,
+  themedFontSize,
+  themedScrim,
+  themedImageTreatment,
+} from '../utils/themeUtils.js';
 
 export function sectionHeader(input: SectionHeaderInput, context: TemplateContext): Layer[] {
   const { title = '', colorScheme = 'blue', imageSrc, imageAlt, ambientMotion } = input;
-  const { layout } = context;
+  const { theme, layout } = context;
+
+  const treatment = themedImageTreatment(context, input.imageTreatment);
   const colors = resolveColorScheme(context, colorScheme);
 
-  // Scale font sizes for viewport
-  const titleFontSize = scaledFontSize(72, context, true);
+  // Scale font sizes for viewport. Section dividers are the loudest
+  // interstitial in a doc, so the title sits a step above ordinary
+  // content-block headings.
+  const titleFontSize = themedFontSize(84, context, true);
 
   const layers: Layer[] = [];
 
@@ -34,6 +45,7 @@ export function sectionHeader(input: SectionHeaderInput, context: TemplateContex
         src: imageSrc,
         alt: imageAlt || title,
         fit: 'cover',
+        ...(treatment ? { treatment } : {}),
       },
       position: { x: 0, y: 0, width: '100%', height: '100%' },
       animation: ambientMotion
@@ -41,13 +53,14 @@ export function sectionHeader(input: SectionHeaderInput, context: TemplateContex
         : { type: 'slowZoom', duration: 8, direction: 'in' },
     });
 
-    // Dark overlay for text readability
+    // Theme-tinted overlay for text readability — light themes get a
+    // light scrim with dark theme text, dark themes the familiar dark one.
     layers.push({
       type: 'shape',
       id: 'overlay',
       content: {
         shape: 'rect',
-        fill: 'rgba(0, 0, 0, 0.5)',
+        fill: themedScrim(context),
       },
       position: { x: 0, y: 0, width: '100%', height: '100%' },
     });
@@ -78,7 +91,8 @@ export function sectionHeader(input: SectionHeaderInput, context: TemplateContex
     });
   }
 
-  // Section title - white text with shadow for readability over images
+  // Section title — theme text over the theme-tinted scrim (readable by
+  // construction), scheme text on the solid-color fallback
   layers.push({
     type: 'text',
     id: 'title',
@@ -88,9 +102,9 @@ export function sectionHeader(input: SectionHeaderInput, context: TemplateContex
         fontSize: titleFontSize,
         fontFamily: getThemeFont(context, 'title'),
         fontWeight: 'bold',
-        color: imageSrc ? '#ffffff' : colors.text,
+        color: imageSrc ? theme.colors.text : colors.text,
         textAlign: 'center',
-        shadow: true,
+        shadow: shouldUseShadow(context),
       },
     },
     position: {
@@ -99,7 +113,7 @@ export function sectionHeader(input: SectionHeaderInput, context: TemplateContex
       anchor: 'center',
       width: layout.maxTextWidth,
     },
-    animation: { type: 'fadeIn', duration: 1.5 },
+    animation: themedEntrance(context, 'text', { type: 'fadeIn', duration: 1.5 }),
   });
 
   return layers;

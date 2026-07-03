@@ -41,6 +41,15 @@ export function DocProgressBar({
   const progressBarRef = useRef<HTMLDivElement>(null);
   const [hoverPosition, setHoverPosition] = useState<number | null>(null);
 
+  // Fill position tracks the same timeline as the clock readout and the block
+  // marker dots — elapsed playback time over the audio `totalDuration`. (We
+  // deliberately don't use `state.docProgress`, which is keyed to the doc's
+  // estimated `script.duration`; when that diverges from the actual playback
+  // length — e.g. the editor preview's reading-time estimate — the fill would
+  // desync from the clock and the dots.)
+  const playProgress =
+    state.totalDuration > 0 ? Math.max(0, Math.min(1, state.currentTime / state.totalDuration)) : 0;
+
   const handleProgressHover = useCallback((e: React.MouseEvent) => {
     const bar = progressBarRef.current;
     if (!bar) return;
@@ -99,16 +108,25 @@ export function DocProgressBar({
         }}
       />
 
-      {/* Progress fill */}
+      {/* Progress fill.
+          No CSS `width` transition: the fill is driven by frequent JS updates
+          (the synthetic fallback timer runs ~60fps; real audio fires
+          `timeupdate` several times/sec), so it's already smooth. A CSS
+          transition here actively breaks playback — after a discontinuous
+          backward seek, the per-frame inline-width updates on resume keep
+          interrupting the in-flight transition before it advances, so the
+          *rendered* width latches at the seek position even though the inline
+          style (and the clock) keep climbing. The result is a frozen-looking
+          bar while time advances. Update width instantly instead. */}
       <div
+        data-testid="doc-progress-fill"
         style={{
           position: 'absolute',
           left: 0,
-          width: `${state.docProgress * 100}%`,
+          width: `${playProgress * 100}%`,
           height: '6px',
           background: '#5b9bd5',
           borderRadius: '3px',
-          transition: 'width 0.1s',
         }}
       />
 

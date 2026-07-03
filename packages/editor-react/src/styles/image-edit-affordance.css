@@ -109,8 +109,8 @@
 .squisq-image-edit-modal__surface {
   display: flex;
   flex-direction: column;
-  width: min(1200px, 100%);
-  height: min(800px, 100%);
+  width: 100%;
+  height: 100%;
   background: #fff;
   border-radius: 6px;
   box-shadow: 0 12px 40px rgba(0, 0, 0, 0.4);

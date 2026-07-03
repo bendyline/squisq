@@ -14,8 +14,12 @@
     "warning": "#c53030"
   },
   "typography": {
-    "bodyFont": { "stackId": "lora" },
-    "titleFont": { "stackId": "merriweather" },
+    "bodyFont": {
+      "stackId": "lora"
+    },
+    "titleFont": {
+      "stackId": "merriweather"
+    },
     "titleWeight": "bold",
     "lineHeight": 1.7
   },
@@ -29,14 +33,53 @@
     "name": "morning-light",
     "defaultTextAnimation": "fadeIn",
     "ambientMotion": false,
-    "defaultTransition": { "type": "fade", "duration": 1.0 }
+    "defaultTransition": {
+      "type": "fade",
+      "duration": 1.0
+    }
   },
   "colorSchemes": {
-    "blue": { "bg": "#ebf8ff", "text": "#2c5282", "accent": "#4299e1" },
-    "green": { "bg": "#f0fff4", "text": "#22543d", "accent": "#48bb78" },
-    "purple": { "bg": "#faf5ff", "text": "#44337a", "accent": "#9f7aea" },
-    "red": { "bg": "#fff5f5", "text": "#9b2c2c", "accent": "#fc8181" },
-    "orange": { "bg": "#fffaf0", "text": "#744210", "accent": "#ed8936" },
-    "teal": { "bg": "#e6fffa", "text": "#234e52", "accent": "#38b2ac" }
+    "blue": {
+      "bg": "#ebf8ff",
+      "text": "#2c5282",
+      "accent": "#4299e1"
+    },
+    "green": {
+      "bg": "#f0fff4",
+      "text": "#22543d",
+      "accent": "#48bb78"
+    },
+    "purple": {
+      "bg": "#faf5ff",
+      "text": "#44337a",
+      "accent": "#9f7aea"
+    },
+    "red": {
+      "bg": "#fff5f5",
+      "text": "#9b2c2c",
+      "accent": "#fc8181"
+    },
+    "orange": {
+      "bg": "#fffaf0",
+      "text": "#744210",
+      "accent": "#ed8936"
+    },
+    "teal": {
+      "bg": "#e6fffa",
+      "text": "#234e52",
+      "accent": "#38b2ac"
+    }
+  },
+  "persistentLayers": {
+    "topLayers": [
+      {
+        "template": "patternBackground",
+        "config": {
+          "type": "patternBackground",
+          "pattern": "noise",
+          "opacity": 0.03
+        }
+      }
+    ]
   }
 }

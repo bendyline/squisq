@@ -19,11 +19,20 @@ import type {
   MarkdownTableCell,
   MarkdownSourcePosition,
   HeadingTemplateAnnotation,
+  HeadingAttributes,
   MarkdownHeading,
   MarkdownInlineIcon,
 } from './types.js';
 import { parseHtmlToNodes } from './htmlParse.js';
 import { resolveIcon } from '../icons/resolve.js';
+import { coerceAnnotationValues } from './annotationCoercion.js';
+import {
+  matchTrailingTemplateAnnotation,
+  matchTrailingPandocAttr,
+  tokenizeAttrTokens,
+  splitKeyValueToken,
+  quoteAttrValue,
+} from './attrTokens.js';
 
 // ============================================
 // Generic mdast node shape
@@ -132,20 +141,14 @@ function extractText(node: MdastNode): string {
 // ============================================
 
 /**
- * Regex matching a trailing `{[templateName key=value …]}` annotation.
- * Captures the content between `{[` and `]}`.
- *
- * The trailing `[\s\]\}]*` tolerates accidental doubled `]}` that users
- * sometimes type when learning the syntax (e.g. `{[foo]}]}`). It does
- * not allow trailing word characters, so a non-trailing annotation like
- * `## The {[chart]} section` still doesn't match.
- */
-const TEMPLATE_ANNOTATION_RE = /\s*\{\[([^\]]+)\]\}[\s\]}]*$/;
-
-/**
  * Extract a `{[templateName key=value …]}` annotation from a heading's
  * inline children. Mutates the children array in-place: strips the
  * annotation text from the last text node (or removes the node entirely).
+ *
+ * Matching is delegated to {@link matchTrailingTemplateAnnotation}: a
+ * quote-aware grammar (values may contain `]` when quoted) with a legacy
+ * fallback, plus tolerance for an accidental doubled trailing `]}`. A
+ * non-trailing annotation like `## The {[chart]} section` doesn't match.
  *
  * @returns The parsed annotation, or null if none found.
  */
@@ -156,13 +159,13 @@ function extractTemplateAnnotation(
   for (let i = children.length - 1; i >= 0; i--) {
     const child = children[i];
     if (child.type === 'text') {
-      const match = child.value.match(TEMPLATE_ANNOTATION_RE);
+      const match = matchTrailingTemplateAnnotation(child.value);
       if (match) {
-        const inner = match[1].trim();
+        const inner = match.inner.trim();
         const annotation = parseAnnotationTokens(inner);
 
         // Strip the matched portion from the text
-        const stripped = child.value.slice(0, match.index!).replace(/\s+$/, '');
+        const stripped = child.value.slice(0, match.index).replace(/\s+$/, '');
         if (stripped) {
           (child as { value: string }).value = stripped;
         } else {
@@ -183,23 +186,27 @@ function extractTemplateAnnotation(
 /**
  * Parse the inner content of a `{[…]}` annotation into template + params.
  *
- * Input: `"chart colorScheme=blue size=large"`
- * Output: `{ template: 'chart', params: { colorScheme: 'blue', size: 'large' } }`
+ * Input: `"chart colorScheme=blue caption=\"Sales by region\""`
+ * Output: `{ template: 'chart', params: { colorScheme: 'blue', caption: 'Sales by region' } }`
+ *
+ * Tokenization is shared with the Pandoc attribute parser
+ * ({@link tokenizeAttrTokens}), so quoting and escaping behave
+ * identically in both annotation forms.
  */
 function parseAnnotationTokens(inner: string): HeadingTemplateAnnotation {
-  const tokens = inner.split(/\s+/);
+  const tokens = tokenizeAttrTokens(inner);
   const params: Record<string, string> = {};
 
   // If the first token contains '=', there's no template name —
   // the annotation is purely key-value (e.g., `{[audio=intro.mp3]}`).
-  const firstIsParam = tokens[0].indexOf('=') > 0;
-  const template = firstIsParam ? undefined : tokens[0];
+  const firstIsParam = tokens.length > 0 && tokens[0].indexOf('=') > 0;
+  const template = firstIsParam || tokens.length === 0 ? undefined : tokens[0];
   const startIdx = firstIsParam ? 0 : 1;
 
   for (let i = startIdx; i < tokens.length; i++) {
-    const eqIdx = tokens[i].indexOf('=');
-    if (eqIdx > 0) {
-      params[tokens[i].slice(0, eqIdx)] = tokens[i].slice(eqIdx + 1);
+    const kv = splitKeyValueToken(tokens[i]);
+    if (kv) {
+      params[kv.key] = kv.value;
     }
   }
 
@@ -213,8 +220,166 @@ function parseAnnotationTokens(inner: string): HeadingTemplateAnnotation {
   return result;
 }
 
+// ============================================
+// Pandoc-style heading attribute helpers
+// ============================================
+
+/**
+ * Extract a trailing Pandoc-style `{…}` attribute block from a heading's
+ * inline children. Matching is delegated to {@link matchTrailingPandocAttr}
+ * (quote-aware — values may contain `}` when quoted — with a legacy
+ * fallback; a `(?!\[)` lookahead keeps it from colliding with the
+ * squisq-native `{[…]}` template annotation).
+ *
+ * Unlike `extractTemplateAnnotation()`, this walks backward through both
+ * text nodes AND bare `textDirective` nodes. remark-directive may have
+ * fragmented a `{key=val:type,…}` attribute block at colon-prefixed
+ * segments like `:type` that look like text directives but are really
+ * attribute-value fragments. We virtually re-stitch the trailing run as a
+ * single string, match against it, and only physically modify the children
+ * array if a match is found — so a heading that legitimately contains a
+ * non-bare `:directive` is left alone.
+ *
+ * Returns the parsed `HeadingAttributes`, or null if no match.
+ */
+function extractPandocAttributes(children: MarkdownInlineNode[]): HeadingAttributes | null {
+  // Collect the trailing run of [text | bare textDirective] children.
+  const trail: { val: string; idx: number; len: number }[] = [];
+  for (let i = children.length - 1; i >= 0; i--) {
+    const c = children[i];
+    if (c.type === 'text') {
+      trail.unshift({ val: c.value, idx: i, len: c.value.length });
+    } else if (c.type === 'textDirective') {
+      const td = c as {
+        name?: string;
+        children?: unknown[];
+        attributes?: Record<string, string>;
+      };
+      const isBare =
+        (!td.children || td.children.length === 0) &&
+        (!td.attributes || Object.keys(td.attributes).length === 0);
+      if (!isBare) break;
+      const synthesized = ':' + (td.name ?? '');
+      trail.unshift({ val: synthesized, idx: i, len: synthesized.length });
+    } else {
+      break;
+    }
+  }
+  if (trail.length === 0) return null;
+
+  const joined = trail.map((t) => t.val).join('');
+  const match = matchTrailingPandocAttr(joined);
+  if (!match) return null;
+
+  const inner = match.inner.trim();
+  const attrs = parsePandocAttrTokens(inner);
+
+  // Strip the matched portion. `match.index` is an offset into `joined`.
+  // Walk forward through `trail` until we find the child that straddles
+  // the match boundary; trim that child (if text) or drop it (if directive),
+  // and remove everything after it from `children`.
+  const matchStart = match.index;
+  let scannedLen = 0;
+  for (let ti = 0; ti < trail.length; ti++) {
+    const t = trail[ti];
+    if (scannedLen + t.len <= matchStart) {
+      scannedLen += t.len;
+      continue;
+    }
+    const firstNode = children[t.idx];
+    const keepLen = matchStart - scannedLen;
+    if (firstNode.type === 'text') {
+      const trimmed = firstNode.value.slice(0, keepLen).replace(/\s+$/, '');
+      if (trimmed) {
+        (firstNode as { value: string }).value = trimmed;
+        children.splice(t.idx + 1);
+      } else {
+        children.splice(t.idx);
+      }
+    } else {
+      // Match boundary fell inside a textDirective's synthesized ":name"
+      // string — drop the directive and everything after.
+      children.splice(t.idx);
+    }
+    return attrs;
+  }
+  // Match consumes the entire trail.
+  children.splice(trail[0].idx);
+  return attrs;
+}
+
+/**
+ * Parse the inner content of a Pandoc-style `{…}` block. Tokens are
+ * whitespace-separated, with quoted runs (single or double) treated as
+ * single tokens — tokenization is shared with the `{[…]}` template
+ * annotation parser via {@link tokenizeAttrTokens}.
+ *
+ * - `#id` → `attributes.id`
+ * - `.class` → push onto `attributes.classes`
+ * - `key=value` or `key="quoted value"` → `attributes.params[key] = value`
+ *
+ * Empty `{}` yields `{}` (preserved as an annotation marker for round-tripping).
+ * Duplicate ids and keys: last wins, silent.
+ */
+export function parsePandocAttrTokens(inner: string): HeadingAttributes {
+  const tokens = tokenizeAttrTokens(inner);
+  const attrs: HeadingAttributes = {};
+  const params: Record<string, string> = {};
+  const classes: string[] = [];
+
+  for (const token of tokens) {
+    if (token.startsWith('#') && !token.includes('=')) {
+      attrs.id = token.slice(1);
+    } else if (token.startsWith('.') && !token.includes('=')) {
+      const cls = token.slice(1);
+      if (cls) classes.push(cls);
+    } else {
+      const kv = splitKeyValueToken(token);
+      if (kv) {
+        params[kv.key] = kv.value;
+      }
+    }
+  }
+
+  if (classes.length > 0) attrs.classes = classes;
+  if (Object.keys(params).length > 0) {
+    attrs.params = params;
+    const { blockMeta, metadata } = coerceAnnotationValues(params);
+    if (Object.keys(blockMeta).length > 0) attrs.blockMeta = blockMeta;
+    if (Object.keys(metadata).length > 0) attrs.metadata = metadata;
+  }
+  return attrs;
+}
+
+/**
+ * Serialize a HeadingAttributes object back to a Pandoc `{#id .class key=value}` string.
+ * Returns null when the attributes object is entirely empty (nothing to emit).
+ *
+ * Canonical key order: `#id`, then `.classes` (in original order), then
+ * params in their original insertion order. Values are quoted via the
+ * shared {@link quoteAttrValue} rule (same as `{[…]}` serialization).
+ */
+export function serializePandocAttributes(attrs: HeadingAttributes): string | null {
+  const parts: string[] = [];
+  if (attrs.id) parts.push(`#${attrs.id}`);
+  if (attrs.classes) {
+    for (const cls of attrs.classes) parts.push(`.${cls}`);
+  }
+  if (attrs.params) {
+    for (const [key, value] of Object.entries(attrs.params)) {
+      parts.push(`${key}=${quoteAttrValue(value)}`);
+    }
+  }
+  // Preserve an empty `{}` annotation marker if it was authored deliberately
+  // (e.g., reserved for downstream tooling). Caller decides whether to emit.
+  if (parts.length === 0) return '{}';
+  return `{${parts.join(' ')}}`;
+}
+
 /**
  * Serialize a HeadingTemplateAnnotation back to `{[templateName key=value …]}` text.
+ * Values are quoted via the shared {@link quoteAttrValue} rule (same as
+ * Pandoc attribute serialization).
  */
 function serializeTemplateAnnotation(annotation: HeadingTemplateAnnotation): string {
   const parts: string[] = [];
@@ -223,7 +388,7 @@ function serializeTemplateAnnotation(annotation: HeadingTemplateAnnotation): str
   }
   if (annotation.params) {
     for (const [key, value] of Object.entries(annotation.params)) {
-      parts.push(`${key}=${value}`);
+      parts.push(`${key}=${quoteAttrValue(value)}`);
     }
   }
   return `{[${parts.join(' ')}]}`;
@@ -447,8 +612,33 @@ function convertBlockNode(node: MdastNode, parseHtml: boolean): MarkdownBlockNod
       // a template annotation. Anything that's NOT the template still
       // needs to become an icon node, so we run `splitInlineIcons` on
       // what's left after the template extraction.
+      //
+      // Both annotation forms ({[…]} and Pandoc {#…}) may appear at the
+      // end of the heading in either order. Extract them in a loop so
+      // we catch the second-from-last one too. A small bounded retry
+      // (max 4) is plenty — authors don't stack more than two trailing
+      // brace-blocks in practice.
       const headingChildren = convertInlineChildren(node.children ?? [], parseHtml, false);
-      const annotation = extractTemplateAnnotation(headingChildren);
+      let annotation: HeadingTemplateAnnotation | null = null;
+      let attrs: HeadingAttributes | null = null;
+      for (let pass = 0; pass < 4; pass++) {
+        let matched = false;
+        if (!annotation) {
+          const t = extractTemplateAnnotation(headingChildren);
+          if (t) {
+            annotation = t;
+            matched = true;
+          }
+        }
+        if (!attrs) {
+          const a = extractPandocAttributes(headingChildren);
+          if (a) {
+            attrs = a;
+            matched = true;
+          }
+        }
+        if (!matched) break;
+      }
       const finalChildren = splitInlineIcons(headingChildren);
       const result: MarkdownHeading = {
         type: 'heading',
@@ -458,6 +648,9 @@ function convertBlockNode(node: MdastNode, parseHtml: boolean): MarkdownBlockNod
       };
       if (annotation) {
         result.templateAnnotation = annotation;
+      }
+      if (attrs) {
+        result.attributes = attrs;
       }
       return result;
     }
@@ -778,9 +971,19 @@ function blockToMdast(node: MarkdownBlockNode): MdastNode {
   switch (node.type) {
     case 'heading': {
       const mdastChildren = inlineChildrenToMdast(node.children);
+      // Canonical trailing order: Pandoc attrs first, then template annotation.
+      // Author-supplied order is not preserved across round-trips by design —
+      // canonicalization gives stable diffs.
+      const suffixes: string[] = [];
+      if (node.attributes) {
+        const pandoc = serializePandocAttributes(node.attributes);
+        if (pandoc != null) suffixes.push(pandoc);
+      }
       if (node.templateAnnotation) {
-        const suffix = serializeTemplateAnnotation(node.templateAnnotation);
-        // Append to last text node, or create a new one
+        suffixes.push(serializeTemplateAnnotation(node.templateAnnotation));
+      }
+      if (suffixes.length > 0) {
+        const suffix = suffixes.join(' ');
         const lastChild = mdastChildren[mdastChildren.length - 1];
         if (lastChild && lastChild.type === 'text') {
           lastChild.value = (lastChild.value ?? '') + ' ' + suffix;

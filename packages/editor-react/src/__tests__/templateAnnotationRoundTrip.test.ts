@@ -31,4 +31,22 @@ describe('Template annotation round-trip', () => {
     expect(md).not.toContain('squisq-template-badge');
     expect(md).not.toContain('Comparison Bar'); // CSS-rendered label shouldn't bleed
   });
+
+  it('does not leak the block-properties badge into markdown', () => {
+    // The props badge is an empty CSS-painted span rendered alongside the
+    // template badge (and on plain headings, the empty template badge). It
+    // must serialize to nothing — no stray `*`/`**` from an `<i>`, no span.
+    const tiptapRendered =
+      '<h2 data-block-attrs="transition=fade">' +
+      '<span class="squisq-heading-content">Intro</span>' +
+      '<span class="squisq-template-badge squisq-template-badge--empty" contenteditable="false"></span>' +
+      '<span class="squisq-props-badge" contenteditable="false" data-props-summary="Fade · 1:30 start"></span>' +
+      '</h2>';
+    const md = tiptapToMarkdown(tiptapRendered).trim();
+    expect(md).toBe('## Intro {transition=fade}');
+    expect(md).not.toContain('squisq-props-badge');
+    expect(md).not.toContain('*');
+    // The CSS-painted summary lives in a data attribute; it must not bleed.
+    expect(md).not.toContain('start');
+  });
 });

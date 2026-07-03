@@ -8,6 +8,7 @@
 import type { ShapeLayer as ShapeLayerType } from '@bendyline/squisq/schemas';
 import { getAnimationStyle } from '../utils/animationUtils';
 import { resolveValue, getAnchorOffset } from '../utils/layerUtils';
+import { resolveFill, resolveShapeFilter, borderDashArray } from '../utils/fillStyle';
 
 interface ShapeLayerProps {
   layer: ShapeLayerType;
@@ -34,12 +35,14 @@ export function ShapeLayer({ layer, viewport, blockTime }: ShapeLayerProps) {
   // Get animation styles
   const animStyle = getAnimationStyle(animation, blockTime);
 
-  // Check if fill is a CSS gradient (SVG rect doesn't support CSS gradients natively)
   const fill = content.fill || 'none';
+  // Legacy: a CSS gradient string baked into `fill` (e.g. from older docs)
+  // only works as an HTML background, so rect renders it via foreignObject.
+  // The structured `content.gradient` (preferred) is handled below for all
+  // shapes via an SVG <linearGradient>.
   const isCSSGradient = typeof fill === 'string' && fill.includes('gradient(');
 
-  // For CSS gradients on rect, use foreignObject with an HTML div
-  if (content.shape === 'rect' && isCSSGradient) {
+  if (content.shape === 'rect' && isCSSGradient && !content.gradient) {
     return (
       <g
         className={`block-layer block-layer--shape ${animStyle.className}`}
@@ -61,11 +64,23 @@ export function ShapeLayer({ layer, viewport, blockTime }: ShapeLayerProps) {
     );
   }
 
-  // Common style props for native SVG shapes
+  const { fill: fillValue, def: fillDef } = resolveFill(
+    layer.id,
+    fill,
+    content.gradient,
+    content.pattern,
+  );
+  const { filterAttr, def: filterDef } = resolveShapeFilter(layer.id, content.filter);
+  const dash = borderDashArray(content.borderStyle, content.strokeWidth);
+
+  // Common style props for native SVG shapes. `line` is stroke-only.
   const shapeProps = {
-    fill: fill,
+    fill: fillValue,
+    fillOpacity: content.fillOpacity,
     stroke: content.stroke,
     strokeWidth: content.strokeWidth,
+    strokeDasharray: dash,
+    ...(filterAttr ? { filter: filterAttr } : {}),
   };
 
   return (
@@ -74,6 +89,12 @@ export function ShapeLayer({ layer, viewport, blockTime }: ShapeLayerProps) {
       style={animStyle.style}
       data-layer-id={layer.id}
     >
+      {(fillDef || filterDef) && (
+        <defs>
+          {fillDef}
+          {filterDef}
+        </defs>
+      )}
       {content.shape === 'rect' && (
         <rect
           x={x}
@@ -103,6 +124,7 @@ export function ShapeLayer({ layer, viewport, blockTime }: ShapeLayerProps) {
           y2={y + height}
           stroke={content.stroke || '#ffffff'}
           strokeWidth={content.strokeWidth || 2}
+          strokeDasharray={dash}
         />
       )}
     </g>

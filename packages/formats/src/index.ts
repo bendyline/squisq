@@ -7,8 +7,9 @@
  * Supported formats:
  * - **DOCX** — Microsoft Word (import + export) ✅
  * - **PDF**  — Portable Document Format (import + export) ✅
- * - **PPTX** — Microsoft PowerPoint (export ✅, import planned)
- * - **XLSX** — Microsoft Excel (planned)
+ * - **PPTX** — Microsoft PowerPoint (export ✅, import ✅)
+ * - **XLSX** — Microsoft Excel (import ✅, export planned)
+ * - **CSV**  — Comma-separated values (import ✅, export ✅)
  *
  * All converters run in the browser — no server or native binaries required.
  * The shared `ooxml/` subpath export provides reusable OOXML infrastructure.
@@ -32,9 +33,13 @@ export type { DocxExportOptions, DocxImportOptions } from './docx/index.js';
 export { markdownDocToPptx, docToPptx, pptxToMarkdownDoc, pptxToDoc } from './pptx/index.js';
 export type { PptxExportOptions, PptxImportOptions } from './pptx/index.js';
 
-// XLSX (stub)
+// XLSX (import implemented, export stub)
 export { markdownDocToXlsx, docToXlsx, xlsxToMarkdownDoc, xlsxToDoc } from './xlsx/index.js';
 export type { XlsxExportOptions, XlsxImportOptions } from './xlsx/index.js';
+
+// CSV (import + export)
+export { csvToMarkdownDoc, csvToDoc, markdownDocToCsv, parseCsv } from './csv/index.js';
+export type { CsvImportOptions, CsvExportOptions } from './csv/index.js';
 
 // PDF (fully implemented)
 export {
@@ -49,6 +54,8 @@ export type { PdfExportOptions, PdfImportOptions } from './pdf/index.js';
 // HTML (fully implemented)
 export { docToHtml, docToHtmlZip, collectImagePaths } from './html/index.js';
 export type { HtmlExportOptions, HtmlZipExportOptions } from './html/index.js';
+export { htmlToMarkdown, htmlToMarkdownDoc, htmlToMarkdownDocSync } from './html/index.js';
+export type { HtmlImportOptions } from './html/index.js';
 
 // EPUB (export)
 export { markdownDocToEpub, docToEpub } from './epub/index.js';

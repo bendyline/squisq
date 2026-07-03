@@ -15,6 +15,7 @@
  */
 
 import ngeohash from 'ngeohash';
+import { haversineDistance } from './Haversine.js';
 
 /**
  * Encode latitude/longitude to a geohash string.
@@ -64,9 +65,7 @@ export function getNeighbors(hash: string): string[] {
  * // => ['c23n', 'c23p', 'c23q', 'c23j', 'c23m', 'c23k', 'c23h', 'c23e', 'c23s']
  */
 export function getGeohash4Neighbors(geohash4: string): string[] {
-  if (geohash4.length !== 4) {
-    throw new Error(`getGeohash4Neighbors requires 4-char geohash, got: ${geohash4}`);
-  }
+  if (geohash4.length !== 4) return [];
   const neighbors = getNeighbors(geohash4);
   return [geohash4, ...neighbors];
 }
@@ -92,18 +91,20 @@ export function getGeohashPrefix(geohash: string, precision: number): string {
  * performance issues.
  */
 export function geohashToHierarchicalPath(geohash4: string): string {
-  if (geohash4.length !== 4) {
-    throw new Error(`geohashToHierarchicalPath requires 4-char geohash, got: ${geohash4}`);
-  }
+  if (geohash4.length !== 4) return '';
   const [c1, c2, c3, c4] = geohash4.split('');
   return `${c1}/${c2}/${c3}/${c4}`;
 }
 
 /**
- * Compute all geohash cells along the path between two geohash cells.
- * Interpolates lat/lng points between the centers of `from` and `to`,
- * encoding each to a geohash at the given precision, and returns the
- * deduplicated list of intermediate cells (excluding `from` and `to`).
+ * Compute all geohash cells along the great-circle path between two geohash cells.
+ * Samples points along the spherical arc from `from` to `to`, encoding each to a
+ * geohash at the given precision, and returns the deduplicated list of intermediate
+ * cells (excluding `from` and `to`).
+ *
+ * Uses spherical linear interpolation (SLERP) via 3D unit vectors, which correctly
+ * handles antimeridian crossings and polar paths — both of which flat lat/lng
+ * interpolation gets wrong.
  */
 export function getGeohashPath(from: string, to: string, precision = 4): string[] {
   if (from === to) return [];
@@ -111,15 +112,34 @@ export function getGeohashPath(from: string, to: string, precision = 4): string[
   const fromCenter = decodeGeohash(from);
   const toCenter = decodeGeohash(to);
 
-  // Compute approximate distance to determine step count
-  const dLat = Math.abs(toCenter.lat - fromCenter.lat);
-  const dLng = Math.abs(toCenter.lng - fromCenter.lng);
-  // Rough km: 1 degree lat ≈ 111km, 1 degree lng ≈ 111km * cos(midLat)
-  const midLatRad = ((fromCenter.lat + toCenter.lat) / 2) * (Math.PI / 180);
-  const approxKm = Math.sqrt((dLat * 111) ** 2 + (dLng * 111 * Math.cos(midLatRad)) ** 2);
+  // Use haversine for accurate great-circle distance (step sizing)
+  const distKm = haversineDistance(
+    { lat: fromCenter.lat, lng: fromCenter.lng },
+    { lat: toCenter.lat, lng: toCenter.lng },
+  );
 
   // Step every ~15km to avoid skipping any geohash4 cell (~39x19km)
-  const steps = Math.max(2, Math.ceil(approxKm / 15));
+  const steps = Math.max(2, Math.ceil(distKm / 15));
+
+  // Convert endpoints to unit Cartesian vectors for SLERP
+  const φ1 = (fromCenter.lat * Math.PI) / 180;
+  const λ1 = (fromCenter.lng * Math.PI) / 180;
+  const φ2 = (toCenter.lat * Math.PI) / 180;
+  const λ2 = (toCenter.lng * Math.PI) / 180;
+
+  const x1 = Math.cos(φ1) * Math.cos(λ1);
+  const y1 = Math.cos(φ1) * Math.sin(λ1);
+  const z1 = Math.sin(φ1);
+  const x2 = Math.cos(φ2) * Math.cos(λ2);
+  const y2 = Math.cos(φ2) * Math.sin(λ2);
+  const z2 = Math.sin(φ2);
+
+  // Central angle between the two points
+  const dot = Math.max(-1, Math.min(1, x1 * x2 + y1 * y2 + z1 * z2));
+  const d = Math.acos(dot);
+  // Near-antipodal fallback: sin(d)≈0 means the great circle is undefined.
+  // Extremely unlikely for geohash path use; fall back to linear lat/lng.
+  const useLinear = Math.abs(Math.sin(d)) < 1e-10;
 
   const seen = new Set<string>();
   seen.add(from);
@@ -128,8 +148,20 @@ export function getGeohashPath(from: string, to: string, precision = 4): string[
   const path: string[] = [];
   for (let i = 1; i < steps; i++) {
     const t = i / steps;
-    const lat = fromCenter.lat + t * (toCenter.lat - fromCenter.lat);
-    const lng = fromCenter.lng + t * (toCenter.lng - fromCenter.lng);
+    let lat: number;
+    let lng: number;
+    if (useLinear) {
+      lat = fromCenter.lat + t * (toCenter.lat - fromCenter.lat);
+      lng = fromCenter.lng + t * (toCenter.lng - fromCenter.lng);
+    } else {
+      const A = Math.sin((1 - t) * d) / Math.sin(d);
+      const B = Math.sin(t * d) / Math.sin(d);
+      const x = A * x1 + B * x2;
+      const y = A * y1 + B * y2;
+      const z = A * z1 + B * z2;
+      lat = (Math.atan2(z, Math.sqrt(x * x + y * y)) * 180) / Math.PI;
+      lng = (Math.atan2(y, x) * 180) / Math.PI;
+    }
     const hash = encodeGeohash(lat, lng, precision);
     if (!seen.has(hash)) {
       seen.add(hash);
@@ -163,6 +195,5 @@ export function geohashOverlapsBounds(
   );
 }
 
-// haversineDistance is now in shared/spatial/Haversine.ts (canonical location).
 // Re-export for backwards compatibility with existing imports.
-export { haversineDistance } from './Haversine.js';
+export { haversineDistance };

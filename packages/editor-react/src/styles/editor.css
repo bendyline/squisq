@@ -107,6 +107,11 @@
   background: rgba(0, 0, 0, 0.07);
   container-type: inline-size;
   container-name: squisq-toolbar;
+  /* Icon glyphs render a touch lighter than the dark text labels (#374151)
+     so the solid Font Awesome icons read less heavy. Hosts can override.
+     Only the Free solid family ships these glyphs (no light/thin in Free),
+     so we soften the color rather than the stroke weight. */
+  --squisq-toolbar-icon: #6b7280;
 }
 
 /* ─── View Tabs (inside toolbar) ─────────────────────── */
@@ -251,6 +256,22 @@
   color: #1d4ed8;
 }
 
+/* Font Awesome glyphs sit a touch larger than the 13px text labels so
+   icon buttons read at a comfortable weight against H1–H6 etc. They
+   render in a lighter color than the text labels by default. */
+.squisq-toolbar-button > i {
+  font-size: 15px;
+  line-height: 1;
+  color: var(--squisq-toolbar-icon);
+}
+
+/* On hover / active, glyphs follow the button's color so the existing
+   hover and toggled-on feedback still applies. */
+.squisq-toolbar-button:hover > i,
+.squisq-toolbar-button--active > i {
+  color: inherit;
+}
+
 /* ─── Toolbar: narrow screen adjustments ───────────────── */
 
 @media (max-width: 768px) {
@@ -358,6 +379,47 @@
   flex: 1;
   min-width: 0;
   max-width: 100%;
+}
+
+/* ─── Insert Menu Dropdown ──────────────────────────── */
+
+.squisq-insert-menu {
+  z-index: 100;
+  min-width: 200px;
+  padding: 4px 0;
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
+}
+
+.squisq-insert-menu-header {
+  padding: 6px 12px 4px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #9ca3af;
+  user-select: none;
+}
+
+/* Portaled outside squisq-editor-shell, so dark mode is applied via data-theme. */
+.squisq-insert-menu[data-theme='dark'] {
+  background: #1f2937;
+  border-color: #374151;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+}
+
+.squisq-insert-menu[data-theme='dark'] .squisq-toolbar-overflow-item {
+  color: #d1d5db;
+}
+
+.squisq-insert-menu[data-theme='dark'] .squisq-toolbar-overflow-item:hover {
+  background: #374151;
+}
+
+.squisq-insert-menu[data-theme='dark'] .squisq-insert-menu-header {
+  color: #6b7280;
 }
 
 /* ─── Template Picker (toolbar) ──────────────────────── */
@@ -480,7 +542,11 @@
 .squisq-template-gallery {
   width: 420px;
   max-width: calc(100vw - 24px);
-  max-height: 480px;
+  /* Cap to the viewport (less a top+bottom margin) rather than a fixed
+     pixel height, so the panel never grows past the bottom of the page.
+     Its own overflow-y gives it a self-contained scrollbar instead of
+     stretching alongside the page scrollbar. */
+  max-height: calc(100vh - 72px);
   overflow-y: auto;
   background: #fff;
   border: 1px solid #e5e7eb;
@@ -501,6 +567,55 @@
     opacity: 1;
     transform: translateY(0);
   }
+}
+
+/* Search input at the top of the gallery — sticky so it stays visible while
+   the user scrolls a long template list. */
+.squisq-template-gallery-search {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  margin: -4px -4px 8px;
+  background: #fff;
+  border-bottom: 1px solid #f3f4f6;
+}
+
+.squisq-template-gallery-search-icon {
+  color: #9ca3af;
+  flex-shrink: 0;
+}
+
+.squisq-template-gallery-search-input {
+  flex: 1;
+  min-width: 0;
+  padding: 6px 4px;
+  border: none;
+  outline: none;
+  font: inherit;
+  font-size: 13px;
+  color: #111827;
+  background: transparent;
+}
+
+.squisq-template-gallery-search-input::placeholder {
+  color: #9ca3af;
+}
+
+/* Hide the native clear button on type="search" — the popover handles
+   clearing implicitly when it closes. */
+.squisq-template-gallery-search-input::-webkit-search-cancel-button {
+  appearance: none;
+}
+
+.squisq-template-gallery-empty {
+  padding: 24px 12px;
+  text-align: center;
+  font-size: 12px;
+  color: #6b7280;
 }
 
 /* "— none —" row at the top */
@@ -550,7 +665,6 @@
 @media (min-width: 900px) {
   .squisq-template-gallery {
     width: 780px;
-    max-height: 880px;
   }
 
   .squisq-template-gallery-grid {
@@ -620,6 +734,65 @@
   line-height: 1.4;
 }
 
+/* "+ New custom template" card pinned at the top of the gallery */
+.squisq-template-gallery-new {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 8px 12px;
+  margin-bottom: 6px;
+  border: 1px dashed #a5b4fc;
+  border-radius: 7px;
+  background: #f5f3ff;
+  cursor: pointer;
+  text-align: left;
+  transition:
+    background 0.1s,
+    border-color 0.1s;
+}
+
+.squisq-template-gallery-new:hover {
+  background: #ede9fe;
+  border-color: #818cf8;
+  border-style: solid;
+}
+
+.squisq-template-gallery-new-plus {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  flex-shrink: 0;
+  font-size: 20px;
+  font-weight: 600;
+  line-height: 1;
+  color: #6366f1;
+  background: #ffffff;
+  border: 1px solid #c4b5fd;
+  border-radius: 6px;
+}
+
+.squisq-template-gallery-new-body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.squisq-template-gallery-new-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: #4338ca;
+}
+
+.squisq-template-gallery-new-desc {
+  font-size: 11px;
+  color: #6b7280;
+  line-height: 1.4;
+}
+
 /* Recommended / All templates segmentation */
 .squisq-template-gallery-section + .squisq-template-gallery-section {
   margin-top: 14px;
@@ -649,7 +822,8 @@
 /* ─── Tooltip (portal) ────────────────────────────────── */
 
 .squisq-tooltip {
-  transform: translateX(-50%);
+  width: max-content;
+  max-width: calc(100vw - 16px);
   padding: 4px 8px;
   font-size: 12px;
   font-weight: 500;
@@ -657,7 +831,9 @@
   background: #1f2937;
   border-radius: 4px;
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.18);
-  white-space: nowrap;
+  line-height: 1.3;
+  white-space: normal;
+  overflow-wrap: anywhere;
   pointer-events: none;
   z-index: 2000;
   animation: squisq-tooltip-fade 0.1s ease-out;
@@ -746,8 +922,169 @@
 /* Hide block-template chips when the View menu toggles them off. The
  * underlying `data-template` heading attribute is untouched — only the
  * inline visual affordance disappears. */
-.squisq-wysiwyg-container[data-block-tags='hidden'] .squisq-template-badge {
+.squisq-wysiwyg-container[data-block-tags='hidden'] .squisq-template-badge,
+.squisq-wysiwyg-container[data-block-tags='hidden'] .squisq-props-badge {
   display: none;
+}
+
+/* ─── Block-properties badge (sibling of the template badge) ───────────
+   The on-canvas entry point to the block-properties palette: a small
+   sliders chip just after the template badge. Quiet by default like the
+   empty template badge, brightening on heading hover / direct hover. */
+.squisq-props-badge {
+  display: inline-flex;
+  align-items: center;
+  margin-left: 4px;
+  padding: 1px 8px;
+  min-height: 19px;
+  font-family:
+    ui-sans-serif,
+    system-ui,
+    -apple-system,
+    sans-serif;
+  font-size: 11px;
+  font-weight: 600;
+  color: #94a3b8;
+  background: transparent;
+  border: 1px solid #d1d5db;
+  border-radius: 10px;
+  vertical-align: middle;
+  user-select: none;
+  cursor: pointer;
+  opacity: 0.5;
+  transition:
+    background 0.15s ease,
+    border-color 0.15s ease,
+    opacity 0.15s ease;
+}
+
+/* Sliders glyph painted via CSS so the badge span stays empty in the DOM
+   (see propsBadgeSpec — a real child could leak into serialized markdown).
+   `\f1de` is Font Awesome's "sliders"; the font is already loaded for the
+   editor's inline-icon glyph decorations. */
+.squisq-props-badge::before {
+  content: '\f1de';
+  font-family: 'Font Awesome 6 Free';
+  font-weight: 900;
+  font-size: 10px;
+  line-height: 1;
+}
+
+/* When properties are set, the badge carries a `data-props-summary` and shows
+   it after the glyph — and reads as an active (not just affordance) chip. */
+.squisq-props-badge[data-props-summary] {
+  opacity: 1;
+  color: #6d28d9;
+  background: #f5f3ff;
+  border-color: #c4b5fd;
+}
+
+.squisq-props-badge[data-props-summary]::after {
+  content: attr(data-props-summary);
+  margin-left: 5px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+:is(h1, h2, h3, h4, h5, h6):hover > .squisq-props-badge {
+  opacity: 0.9;
+}
+
+.squisq-props-badge:hover,
+.squisq-props-badge:focus-visible {
+  opacity: 1;
+  color: #6d28d9;
+  background: #ede9fe;
+  border-color: #c4b5fd;
+  outline: none;
+}
+
+/* ─── Block-properties palette popover (portaled to <body>) ──────────── */
+.squisq-block-props-popover {
+  width: 280px;
+  max-width: calc(100vw - 24px);
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  box-shadow:
+    0 8px 24px rgba(0, 0, 0, 0.12),
+    0 2px 6px rgba(0, 0, 0, 0.08);
+}
+
+.squisq-block-props-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.squisq-block-props-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: #6b7280;
+  flex-shrink: 0;
+}
+
+.squisq-block-props-numfield {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.squisq-block-props-input {
+  width: 72px;
+  padding: 4px 6px;
+  font-size: 12px;
+  color: #111827;
+  border: 1px solid #d1d5db;
+  border-radius: 5px;
+  outline: none;
+}
+
+.squisq-block-props-input:focus {
+  border-color: #6366f1;
+}
+
+.squisq-block-props-unit {
+  font-size: 11px;
+  color: #9ca3af;
+}
+
+/* Dark theme */
+.squisq-editor-shell[data-theme='dark'] .squisq-props-badge {
+  border-color: #4b5563;
+  color: #9ca3af;
+}
+
+.squisq-editor-shell[data-theme='dark'] .squisq-props-badge[data-props-summary] {
+  color: #ddd6fe;
+  background: #3730a3;
+  border-color: #6d5fd6;
+}
+
+.squisq-editor-shell[data-theme='dark'] .squisq-props-badge:hover,
+.squisq-editor-shell[data-theme='dark'] .squisq-props-badge:focus-visible {
+  color: #ede9fe;
+  background: #4c1d95;
+  border-color: #7c3aed;
+}
+
+.squisq-editor-shell[data-theme='dark'] .squisq-block-props-popover {
+  background: #1f2937;
+  border-color: #374151;
+  box-shadow:
+    0 8px 24px rgba(0, 0, 0, 0.4),
+    0 2px 6px rgba(0, 0, 0, 0.2);
+}
+
+.squisq-editor-shell[data-theme='dark'] .squisq-block-props-input {
+  background: #111827;
+  color: #f9fafb;
+  border-color: #4b5563;
 }
 
 /* ─── Status Bar ─────────────────────────────────────── */
@@ -853,29 +1190,40 @@
   font-family: var(--squisq-theme-title-font, var(--squisq-theme-body-font, inherit));
 }
 
+/* Headings start blocks, so they get generous space ABOVE (a clear break from
+   the previous block) and a tighter margin BELOW so the heading stays visually
+   grouped with the content it introduces. */
 .squisq-wysiwyg-editor h1 {
   font-size: 2em;
-  margin: 0.67em 0;
+  margin: 1em 0 0.4em;
 }
 .squisq-wysiwyg-editor h2 {
   font-size: 1.5em;
-  margin: 0.75em 0;
+  margin: 1.15em 0 0.35em;
 }
 .squisq-wysiwyg-editor h3 {
   font-size: 1.17em;
-  margin: 0.83em 0;
+  margin: 1.3em 0 0.3em;
 }
 .squisq-wysiwyg-editor h4 {
   font-size: 1em;
-  margin: 1em 0;
+  margin: 1.4em 0 0.3em;
 }
 .squisq-wysiwyg-editor h5 {
   font-size: 0.83em;
-  margin: 1.17em 0;
+  margin: 1.5em 0 0.3em;
 }
 .squisq-wysiwyg-editor h6 {
   font-size: 0.67em;
-  margin: 1.33em 0;
+  margin: 1.6em 0 0.3em;
+}
+
+/* The first block in the document has nothing above it — don't push the top of
+   the editor down with the section-break margin. (The editable ProseMirror node
+   itself carries the `squisq-wysiwyg-editor` class, so its blocks are direct
+   children.) */
+.squisq-wysiwyg-editor > :first-child {
+  margin-top: 0;
 }
 
 .squisq-wysiwyg-editor p {
@@ -928,6 +1276,43 @@
 
 .squisq-wysiwyg-editor li {
   margin: 0.25em 0;
+}
+
+/* Task lists (GFM checkboxes). TaskItem renders
+   `<li data-type="taskItem"><label><input type="checkbox"><span></span></label><div>…</div></li>`
+   inside `<ul data-type="taskList">`. Drop the bullet/indent and lay each item
+   out as a checkbox + content row. */
+.squisq-wysiwyg-editor ul[data-type='taskList'] {
+  list-style: none;
+  padding-left: 0;
+}
+
+.squisq-wysiwyg-editor ul[data-type='taskList'] li {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5em;
+}
+
+.squisq-wysiwyg-editor ul[data-type='taskList'] li > label {
+  flex: 0 0 auto;
+  margin-top: 0.15em;
+  user-select: none;
+}
+
+.squisq-wysiwyg-editor ul[data-type='taskList'] li > div {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.squisq-wysiwyg-editor ul[data-type='taskList'] li > div > p {
+  margin: 0;
+}
+
+.squisq-wysiwyg-editor ul[data-type='taskList'] input[type='checkbox'] {
+  width: 1em;
+  height: 1em;
+  cursor: pointer;
+  accent-color: #2563eb;
 }
 
 .squisq-wysiwyg-editor hr {
@@ -1187,6 +1572,8 @@
 /* Toolbar */
 .squisq-editor-shell[data-theme='dark'] .squisq-toolbar {
   background: rgba(255, 255, 255, 0.08);
+  /* Muted, but lighter than the dark-theme label color (#d1d5db). */
+  --squisq-toolbar-icon: #9ca3af;
 }
 
 .squisq-editor-shell[data-theme='dark'] .squisq-toolbar-view-tabs {
@@ -1306,6 +1693,23 @@
   box-shadow:
     0 8px 24px rgba(0, 0, 0, 0.4),
     0 2px 6px rgba(0, 0, 0, 0.2);
+}
+
+.squisq-editor-shell[data-theme='dark'] .squisq-template-gallery-search {
+  background: #1f2937;
+  border-bottom-color: #374151;
+}
+
+.squisq-editor-shell[data-theme='dark'] .squisq-template-gallery-search-input {
+  color: #f9fafb;
+}
+
+.squisq-editor-shell[data-theme='dark'] .squisq-template-gallery-search-input::placeholder {
+  color: #6b7280;
+}
+
+.squisq-editor-shell[data-theme='dark'] .squisq-template-gallery-empty {
+  color: #9ca3af;
 }
 
 .squisq-editor-shell[data-theme='dark'] .squisq-template-gallery-none:hover {
@@ -2806,6 +3210,508 @@
   min-height: 0;
 }
 
+/* ─── Block-at-a-time card ───────────────────────────────
+   Wraps a single block's editor surface with Prev / Next / Add chrome.
+   The card itself is the flex child that takes the remaining width; its
+   body holds the editor (which fills the height) and the nav bar pins to
+   the bottom. */
+.squisq-editor-with-gutter > .squisq-block-card {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+}
+
+/* ─── Block preview panel ─────────────────────────────────
+   A large live preview of the active block, beside the card in
+   block / timeline mode when "Show block previews" is on. Shares the
+   editing area roughly 50/50 with the card; the framed slide inside
+   fills the panel width at the active viewport's aspect ratio. */
+.squisq-editor-with-gutter > .squisq-block-preview-panel {
+  flex: 1 1 0;
+  min-width: 260px;
+  min-height: 0;
+}
+
+.squisq-block-preview-panel {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 12px 16px;
+  /* Same beige "desk" as the block card so the framed slide sits on it. */
+  background: #dcd8d0;
+  border-left: 1px solid #b0a99a;
+  overflow: auto;
+}
+
+.squisq-block-preview-frame {
+  width: 100%;
+  max-width: 760px;
+  max-height: 100%;
+  overflow: hidden;
+  background: var(--squisq-preview-card-svg-bg, #f1f5f9);
+  border: 1px solid #b0a99a;
+  border-radius: 6px;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.1);
+}
+
+.squisq-block-preview-frame svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.squisq-editor-shell[data-theme='dark'] .squisq-block-preview-panel {
+  background: #0f1219;
+  border-left-color: #2a3144;
+}
+
+.squisq-editor-shell[data-theme='dark'] .squisq-block-preview-frame {
+  border-color: #2a3144;
+}
+
+.squisq-block-card {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  /* Matches the editor "desk" so the card body's top/bottom margin reads as
+     the same beige as the left/right sides rather than white. */
+  background: #dcd8d0;
+}
+
+.squisq-block-card-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  position: relative;
+  display: flex;
+  /* A few px of beige "desk" above and below the block, so the framed card
+     sits off the toolbar and nav bar. The body background is transparent, so
+     this reveals the card's desk color. */
+  padding: 6px 0;
+}
+
+.squisq-block-card-body > .squisq-raw-editor-container,
+.squisq-block-card-body > .squisq-wysiwyg-container {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+}
+
+/* Frame just the editable surface — top and bottom — so a single block reads
+   as a discrete card. Scoped to the surface (not the full-width body) so the
+   line tracks the white page rather than stretching across the beige desk.
+   Uses the same seam color as the Monaco frame so it reads against the desk. */
+.squisq-block-card-body .squisq-wysiwyg-editor {
+  border-top: 1px solid #b0a99a;
+  border-bottom: 1px solid #b0a99a;
+}
+
+.squisq-block-card-body > .squisq-raw-editor-container {
+  border-top: 1px solid #b0a99a;
+  border-bottom: 1px solid #b0a99a;
+}
+
+.squisq-block-card-nav {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 12px;
+  background: #f9fafb;
+  flex-shrink: 0;
+}
+
+.squisq-block-card-position {
+  font-size: 12px;
+  color: #6b7280;
+  white-space: nowrap;
+  margin: 0 auto;
+}
+
+.squisq-block-card-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 10px;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  background: #ffffff;
+  color: #374151;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.squisq-block-card-button:hover:not(:disabled) {
+  background: #f3f4f6;
+}
+
+.squisq-block-card-button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.squisq-block-card-add {
+  margin-left: 8px;
+}
+
+.squisq-editor-shell[data-theme='dark'] .squisq-block-card {
+  background: #0f1219;
+}
+
+.squisq-editor-shell[data-theme='dark'] .squisq-block-card-body .squisq-wysiwyg-editor,
+.squisq-editor-shell[data-theme='dark'] .squisq-block-card-body > .squisq-raw-editor-container {
+  border-top-color: #2a3144;
+  border-bottom-color: #2a3144;
+}
+
+.squisq-editor-shell[data-theme='dark'] .squisq-block-card-nav {
+  background: #1f2937;
+}
+
+.squisq-editor-shell[data-theme='dark'] .squisq-block-card-position {
+  color: #9ca3af;
+}
+
+.squisq-editor-shell[data-theme='dark'] .squisq-block-card-button {
+  border-color: #374151;
+  background: #111827;
+  color: #d1d5db;
+}
+
+.squisq-editor-shell[data-theme='dark'] .squisq-block-card-button:hover:not(:disabled) {
+  background: #1f2937;
+}
+
+/* ─── Timeline track ─────────────────────────────────────
+   Horizontal strip of block + media bars shown below the editor in Timeline
+   view. Scrolls horizontally; bars are absolutely positioned by time. */
+.squisq-timeline {
+  position: relative;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: row;
+  background: #efece6;
+  border-top: 1px solid #b0a99a;
+  user-select: none;
+}
+
+.squisq-timeline-controls {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 6px;
+  flex-shrink: 0;
+  border-right: 1px solid #b0a99a;
+}
+
+.squisq-timeline-zoom-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  background: #ffffff;
+  color: #374151;
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.squisq-timeline-zoom-button:hover:not(:disabled) {
+  background: #f3f4f6;
+}
+
+.squisq-timeline-zoom-button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.squisq-timeline-play-button {
+  font-size: 12px;
+  color: #2563eb;
+}
+
+.squisq-timeline-time {
+  font-size: 10px;
+  color: #6b7280;
+  text-align: center;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Off-screen host for the timed-media playback elements. */
+.squisq-timeline-media-host {
+  position: absolute;
+  width: 0;
+  height: 0;
+  overflow: hidden;
+}
+
+.squisq-timeline-scroll {
+  flex: 1;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 8px 0 0;
+  min-width: 0;
+  min-height: 0;
+}
+
+.squisq-timeline-inner {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-width: 100%;
+  min-height: 100%;
+  box-sizing: border-box;
+  /* Leave room at the top for the playhead's knob/notch, which is anchored
+     to the padding-box top (absolute `top: 0`) and so stays above the rows
+     while this padding pushes the track down — the notch reads as a handle
+     sitting above the timeline rather than overlapping the first block. */
+  padding-top: 14px;
+}
+
+/* Playhead — draggable scrubber. A wide transparent column is the hit area;
+   the 2px red line is drawn down its center via ::before. */
+.squisq-timeline-playhead {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 14px;
+  margin-left: -7px;
+  z-index: 20;
+  cursor: ew-resize;
+  touch-action: none;
+}
+
+.squisq-timeline-playhead::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 6px;
+  width: 2px;
+  background: #ef4444;
+  pointer-events: none;
+}
+
+.squisq-timeline-playhead-knob {
+  position: absolute;
+  top: 0;
+  left: 2px;
+  width: 10px;
+  height: 9px;
+  border-radius: 2px;
+  background: #ef4444;
+  pointer-events: none;
+}
+
+.squisq-timeline-row--ruler {
+  cursor: pointer;
+}
+
+.squisq-timeline-row {
+  position: relative;
+  height: 40px;
+  margin: 0 0 6px;
+}
+
+.squisq-timeline-row--media {
+  height: 26px;
+  margin-bottom: 0;
+}
+
+.squisq-timeline-block {
+  position: absolute;
+  top: 0;
+  height: 100%;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  padding: 0 8px;
+  border: 1px solid #b0a99a;
+  border-radius: 5px;
+  background: #ffffff;
+  color: #374151;
+  font-size: 12px;
+  cursor: pointer;
+  overflow: hidden;
+}
+
+.squisq-timeline-block--active {
+  border-color: var(--squisq-outline-accent, #6c5ce7);
+  box-shadow: 0 0 0 1px var(--squisq-outline-accent, #6c5ce7) inset;
+}
+
+/* Per-bar slideshow thumbnail — right-aligned and inset with a small margin
+   so it reads as a card tucked into the track. Width follows the 16:9 viewport
+   from the fixed (margin-inset) height. */
+.squisq-timeline-block-thumb {
+  position: absolute;
+  top: 4px;
+  bottom: 4px;
+  right: 4px;
+  aspect-ratio: 16 / 9;
+  z-index: 0;
+  overflow: hidden;
+  border-radius: 3px;
+  border: 1px solid rgba(0, 0, 0, 0.12);
+  pointer-events: none;
+}
+
+.squisq-timeline-block-thumb svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.squisq-timeline-block-label {
+  position: relative;
+  z-index: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  pointer-events: none;
+  /* Legible over the thumbnail. */
+  background: rgba(255, 255, 255, 0.82);
+  border-radius: 3px;
+  padding: 0 4px;
+}
+
+.squisq-timeline-clip {
+  position: absolute;
+  top: 0;
+  height: 100%;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  padding: 0 6px;
+  border-radius: 4px;
+  font-size: 11px;
+  color: #ffffff;
+  cursor: grab;
+  overflow: hidden;
+}
+
+.squisq-timeline-clip--audio {
+  background: #2f855a;
+}
+
+.squisq-timeline-clip--video {
+  background: #2b6cb0;
+}
+
+/* Body-embedded media (recordings, dropped files): snapped to its block,
+   outlined to distinguish from authored `{[…]}` clips. Dragging re-times it
+   (and converts it to a clip annotation). */
+.squisq-timeline-clip--embedded {
+  opacity: 0.8;
+  border: 1px dashed rgba(255, 255, 255, 0.7);
+}
+
+.squisq-timeline-clip--document {
+  opacity: 0.85;
+  background-image: repeating-linear-gradient(
+    45deg,
+    rgba(255, 255, 255, 0.12) 0,
+    rgba(255, 255, 255, 0.12) 6px,
+    transparent 6px,
+    transparent 12px
+  );
+}
+
+.squisq-timeline-clip-label {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  pointer-events: none;
+}
+
+/* Drag handles on a bar's edges. */
+.squisq-timeline-edge {
+  position: absolute;
+  top: 0;
+  width: 7px;
+  height: 100%;
+  cursor: ew-resize;
+}
+
+.squisq-timeline-edge--left {
+  left: -1px;
+}
+
+.squisq-timeline-edge--right {
+  right: -1px;
+}
+
+/* Time ruler pinned to the bottom of the track — spans the full width. */
+.squisq-timeline-row--ruler {
+  height: 18px;
+  margin-top: auto;
+  flex-shrink: 0;
+  overflow: hidden;
+  border-top: 1px solid #c9c2b4;
+}
+
+.squisq-timeline-tick {
+  position: absolute;
+  top: 0;
+  height: 100%;
+  border-left: 1px solid #c9c2b4;
+  padding-left: 3px;
+}
+
+.squisq-timeline-tick-label {
+  font-size: 10px;
+  color: #6b7280;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.squisq-editor-shell[data-theme='dark'] .squisq-timeline {
+  background: #0b0e14;
+  border-top-color: #2a3144;
+}
+
+.squisq-editor-shell[data-theme='dark'] .squisq-timeline-block {
+  background: #111827;
+  border-color: #2a3144;
+  color: #d1d5db;
+}
+
+.squisq-editor-shell[data-theme='dark'] .squisq-timeline-block-label {
+  background: rgba(17, 24, 39, 0.82);
+}
+
+.squisq-editor-shell[data-theme='dark'] .squisq-timeline-zoom-button {
+  border-color: #374151;
+  background: #111827;
+  color: #d1d5db;
+}
+
+.squisq-editor-shell[data-theme='dark'] .squisq-timeline-time {
+  color: #9ca3af;
+}
+
+.squisq-editor-shell[data-theme='dark'] .squisq-timeline-play-button {
+  color: #60a5fa;
+}
+
+.squisq-editor-shell[data-theme='dark'] .squisq-timeline-zoom-button:hover:not(:disabled) {
+  background: #1f2937;
+}
+
+.squisq-editor-shell[data-theme='dark'] .squisq-timeline-row--ruler,
+.squisq-editor-shell[data-theme='dark'] .squisq-timeline-tick {
+  border-color: #2a3144;
+}
+
+.squisq-editor-shell[data-theme='dark'] .squisq-timeline-tick-label {
+  color: #9ca3af;
+}
+
 /* All gutter chrome is parameterized through CSS custom properties so
    hosts can re-theme without overriding individual rules. Defaults
    below match the original light-mode values; the dark-mode block
@@ -3636,15 +4542,19 @@
 .squisq-theme-picker-popover {
   max-height: min(70vh, 520px);
   overflow-y: auto;
+  box-sizing: border-box;
   background: var(--squisq-bg, #fff);
   color: var(--squisq-text, #1f2937);
   border: 1px solid var(--squisq-border, #e5e7eb);
   border-radius: 8px;
   box-shadow: 0 8px 28px rgba(0, 0, 0, 0.18);
   padding: 6px;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
+  /* Card grid: each theme is a compact card, packed into as many columns
+     as the (viewport-clamped) popover width allows. Collapses to a single
+     column on narrow windows so the popover never overruns the viewport. */
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 4px;
   animation: squisq-theme-picker-appear 0.12s ease-out;
 }
 
@@ -3661,8 +4571,9 @@
 
 .squisq-theme-picker-row {
   display: flex;
-  align-items: center;
-  gap: 10px;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 6px;
   padding: 8px;
   border-radius: 6px;
   background: transparent;
@@ -3692,8 +4603,9 @@
 }
 
 .squisq-theme-picker-row .squisq-theme-picker-name-chip {
-  flex-shrink: 0;
-  min-width: 110px;
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
   text-align: center;
   padding: 6px 10px;
   font-size: 13px;
@@ -3734,6 +4646,188 @@
   background: #1f2937;
   border-color: #374151;
   color: #e5e7eb;
+}
+
+/* ─── Theme "edit" pencil (beside the toolbar theme dropdown) ────── */
+
+.squisq-theme-edit-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  flex-shrink: 0;
+  border: 1px solid var(--squisq-border, #d1d5db);
+  border-radius: 4px;
+  background: var(--squisq-input-bg, #fff);
+  color: var(--squisq-text-muted, #6b7280);
+  cursor: pointer;
+}
+.squisq-theme-edit-btn:hover {
+  color: var(--squisq-text, #1f2937);
+  border-color: var(--squisq-text-muted, #9ca3af);
+}
+.squisq-editor-shell[data-theme='dark'] .squisq-theme-edit-btn {
+  background: #111827;
+  border-color: #374151;
+  color: #9ca3af;
+}
+.squisq-editor-shell[data-theme='dark'] .squisq-theme-edit-btn:hover {
+  color: #e5e7eb;
+  border-color: #4b5563;
+}
+
+/* ─── Theme picker: custom-theme group, cards, create row ───────── */
+
+/* Group label + create row span the full grid width. */
+.squisq-theme-picker-group-label {
+  grid-column: 1 / -1;
+  padding: 8px 8px 2px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--squisq-text-muted, #6b7280);
+}
+
+/* A custom card is wrapped so its edit/delete actions can overlay the corner
+   without nesting interactive elements inside the selectable button. */
+.squisq-theme-picker-custom-wrap {
+  position: relative;
+  display: flex;
+}
+.squisq-theme-picker-custom-wrap .squisq-theme-picker-row {
+  flex: 1;
+}
+.squisq-theme-picker-card-actions {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  display: flex;
+  gap: 2px;
+  opacity: 0;
+  transition: opacity 0.1s ease;
+}
+.squisq-theme-picker-custom-wrap:hover .squisq-theme-picker-card-actions {
+  opacity: 1;
+}
+.squisq-theme-picker-card-action {
+  width: 20px;
+  height: 20px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--squisq-border, #e5e7eb);
+  border-radius: 4px;
+  background: var(--squisq-bg, #fff);
+  color: var(--squisq-text-muted, #6b7280);
+  font-size: 12px;
+  cursor: pointer;
+  padding: 0;
+}
+.squisq-theme-picker-card-action:hover {
+  color: var(--squisq-text, #1f2937);
+  border-color: var(--squisq-text-muted, #9ca3af);
+}
+
+.squisq-theme-picker-create {
+  grid-column: 1 / -1;
+  justify-content: flex-start;
+  gap: 10px;
+  border-style: dashed;
+  border-color: var(--squisq-border, #d1d5db);
+  color: var(--squisq-text, #1f2937);
+}
+.squisq-theme-picker-create-plus {
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  background: var(--squisq-row-hover, #f3f4f6);
+  font-size: 18px;
+  line-height: 1;
+}
+
+/* ─── Custom theme designer: right-docked pane + accents ────────── */
+
+/* Docked into the editor's content row as a fixed-width, full-height flex item
+   (mirrors `.squisq-media-bin`), so the preview flexes narrower beside it — no
+   overlay, no covering the toolbars. The WYSIWYG preview stays fully visible
+   and interactive while the user edits the theme. */
+.squisq-custom-theme-pane {
+  width: 380px;
+  max-width: 100%;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--squisq-bg, #fff);
+  color: var(--squisq-text, #1f2937);
+  border-left: 1px solid var(--squisq-border, #e5e7eb);
+  overflow: hidden;
+}
+
+.squisq-custom-theme-pane .squisq-doc-settings-header,
+.squisq-custom-theme-pane .squisq-doc-settings-footer {
+  flex-shrink: 0;
+}
+
+/* Body flex-grows and scrolls; footer/header stay pinned. */
+.squisq-custom-theme-pane-body {
+  flex: 1;
+  overflow-y: auto;
+  max-height: none;
+}
+
+/* Three buttons in a narrow pane — wrap and right-align rather than overflow. */
+.squisq-custom-theme-pane-footer {
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.squisq-editor-shell[data-theme='dark'] .squisq-custom-theme-pane {
+  background: #1f2937;
+  border-color: #374151;
+  color: #e5e7eb;
+}
+
+.squisq-theme-customizer-accents {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.squisq-theme-customizer-row--accent {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.squisq-theme-customizer-accent-remove {
+  width: 24px;
+  height: 24px;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--squisq-border, #e5e7eb);
+  border-radius: 4px;
+  background: transparent;
+  color: var(--squisq-text-muted, #6b7280);
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0;
+}
+.squisq-theme-customizer-accent-remove:hover {
+  color: #dc2626;
+  border-color: #fca5a5;
+}
+.squisq-theme-customizer-accent-add {
+  align-self: flex-start;
+  margin-top: 2px;
 }
 
 /* ─── Document settings dialog ───────────────────────── */
@@ -3873,4 +4967,322 @@
 .squisq-doc-settings-btn--primary:hover {
   background: #2563eb;
   border-color: #2563eb;
+}
+
+/* ── Transition picker ──────────────────────────────────────────────
+   Toolbar control + portal flyout for choosing a block transition. The
+   trigger reuses the template picker's visual language; the flyout is its
+   own grouped grid with direction + duration sub-controls. */
+.squisq-transition-picker {
+  display: inline-flex;
+}
+
+.squisq-transition-picker-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 8px;
+  font-size: 12px;
+  font-weight: 500;
+  color: #374151;
+  background: #fff;
+  border: 1px solid #d1d5db;
+  border-radius: 5px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition:
+    background 0.1s,
+    border-color 0.1s;
+}
+
+.squisq-transition-picker-trigger:hover {
+  background: #f3f4f6;
+  border-color: #9ca3af;
+}
+
+.squisq-transition-picker-trigger--open {
+  background: #f3f4f6;
+  border-color: #6366f1;
+  outline: 2px solid rgba(99, 102, 241, 0.25);
+  outline-offset: -1px;
+}
+
+.squisq-transition-picker-trigger-label {
+  color: #6b7280;
+}
+
+.squisq-transition-picker-trigger-value {
+  color: #111827;
+  font-weight: 400;
+  max-width: 110px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.squisq-transition-picker-trigger svg {
+  color: #9ca3af;
+  flex-shrink: 0;
+}
+
+@container squisq-toolbar (max-width: 900px) {
+  .squisq-transition-picker-trigger-label {
+    display: none;
+  }
+}
+
+/* Flyout panel — portaled with fixed positioning (component supplies top/left). */
+.squisq-transition-flyout {
+  /* Three columns of options keep the panel short enough to avoid running off
+     the viewport. `max-height` is set inline by the component to the actual
+     space available at its anchored position; the list scrolls within it. */
+  width: 460px;
+  max-width: calc(100vw - 24px);
+  display: flex;
+  flex-direction: column;
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  box-shadow:
+    0 8px 24px rgba(0, 0, 0, 0.12),
+    0 2px 6px rgba(0, 0, 0, 0.08);
+  overflow: hidden;
+}
+
+.squisq-transition-flyout-search {
+  padding: 8px;
+  border-bottom: 1px solid #f0f0f0;
+}
+
+.squisq-transition-flyout-search-input {
+  width: 100%;
+  padding: 6px 8px;
+  font-size: 13px;
+  color: #111827;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  outline: none;
+}
+
+.squisq-transition-flyout-search-input:focus {
+  border-color: #6366f1;
+}
+
+.squisq-transition-flyout-list {
+  /* `min-height: 0` lets this flex child shrink below its content so it scrolls
+     within the panel's capped height instead of overflowing it. The search box
+     above and the direction/duration controls below stay pinned. */
+  min-height: 0;
+  overflow-y: auto;
+  padding: 6px 8px;
+}
+
+.squisq-transition-flyout-group {
+  margin-top: 6px;
+}
+
+.squisq-transition-flyout-group-title {
+  margin: 6px 2px 4px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #9ca3af;
+}
+
+.squisq-transition-flyout-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 4px;
+}
+
+.squisq-transition-option {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 6px 8px;
+  font-size: 12px;
+  color: #374151;
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.squisq-transition-option:hover {
+  background: #f3f4f6;
+  border-color: #d1d5db;
+}
+
+.squisq-transition-option--selected {
+  background: #eef2ff;
+  border-color: #6366f1;
+  color: #4338ca;
+  font-weight: 600;
+}
+
+/* On hover, the label plays the real entering transition (the option button
+   clips it with overflow:hidden; perspective gives the 3D transitions depth).
+   The label is inline-block so transforms apply without disturbing layout, and
+   we override `--transition-duration` to keep previews snappy. */
+.squisq-transition-option {
+  perspective: 220px;
+}
+
+.squisq-transition-option-label {
+  display: inline-block;
+  --transition-duration: 0.55s;
+  transform-origin: center;
+  backface-visibility: hidden;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .squisq-transition-option-label {
+    /* Respect reduced-motion: show the label statically, no entrance preview. */
+    animation: none !important;
+  }
+}
+
+.squisq-transition-flyout-empty {
+  padding: 12px 8px;
+  font-size: 12px;
+  color: #9ca3af;
+  text-align: center;
+}
+
+/* Direction + duration controls, shown below the list once a type is set. */
+.squisq-transition-flyout-controls {
+  border-top: 1px solid #f0f0f0;
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.squisq-transition-flyout-control {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.squisq-transition-flyout-control-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: #6b7280;
+}
+
+.squisq-transition-direction-row {
+  display: inline-flex;
+  gap: 4px;
+}
+
+.squisq-transition-direction-button {
+  padding: 4px 8px;
+  font-size: 11px;
+  color: #374151;
+  background: #fff;
+  border: 1px solid #d1d5db;
+  border-radius: 5px;
+  cursor: pointer;
+}
+
+.squisq-transition-direction-button:hover {
+  background: #f3f4f6;
+}
+
+.squisq-transition-direction-button--selected {
+  background: #eef2ff;
+  border-color: #6366f1;
+  color: #4338ca;
+  font-weight: 600;
+}
+
+.squisq-transition-duration-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.squisq-transition-duration-input {
+  width: 64px;
+  padding: 4px 6px;
+  font-size: 12px;
+  color: #111827;
+  border: 1px solid #d1d5db;
+  border-radius: 5px;
+  outline: none;
+}
+
+.squisq-transition-duration-input:focus {
+  border-color: #6366f1;
+}
+
+.squisq-transition-duration-unit {
+  font-size: 11px;
+  color: #9ca3af;
+}
+
+/* Dark theme */
+.squisq-editor-shell[data-theme='dark'] .squisq-transition-picker-trigger {
+  background: #1f2937;
+  color: #e5e7eb;
+  border-color: #4b5563;
+}
+
+.squisq-editor-shell[data-theme='dark'] .squisq-transition-picker-trigger:hover {
+  background: #374151;
+  border-color: #6b7280;
+}
+
+.squisq-editor-shell[data-theme='dark'] .squisq-transition-picker-trigger--open {
+  background: #374151;
+  border-color: #818cf8;
+}
+
+.squisq-editor-shell[data-theme='dark'] .squisq-transition-picker-trigger-value {
+  color: #f9fafb;
+}
+
+/* Dark styling for the portaled flyout — keyed off the editor shell the same
+   way the template gallery popover is (see `.squisq-template-gallery` above). */
+.squisq-editor-shell[data-theme='dark'] .squisq-transition-flyout {
+  background: #1f2937;
+  border-color: #374151;
+  box-shadow:
+    0 8px 24px rgba(0, 0, 0, 0.4),
+    0 2px 6px rgba(0, 0, 0, 0.2);
+}
+
+.squisq-editor-shell[data-theme='dark'] .squisq-transition-flyout-search,
+.squisq-editor-shell[data-theme='dark'] .squisq-transition-flyout-controls {
+  border-color: #374151;
+}
+
+.squisq-editor-shell[data-theme='dark'] .squisq-transition-flyout-search-input,
+.squisq-editor-shell[data-theme='dark'] .squisq-transition-duration-input {
+  background: #111827;
+  color: #f9fafb;
+  border-color: #4b5563;
+}
+
+.squisq-editor-shell[data-theme='dark'] .squisq-transition-option,
+.squisq-editor-shell[data-theme='dark'] .squisq-transition-direction-button {
+  background: #1f2937;
+  color: #e5e7eb;
+  border-color: #4b5563;
+}
+
+.squisq-editor-shell[data-theme='dark'] .squisq-transition-option:hover,
+.squisq-editor-shell[data-theme='dark'] .squisq-transition-direction-button:hover {
+  background: #374151;
+}
+
+.squisq-editor-shell[data-theme='dark'] .squisq-transition-option--selected,
+.squisq-editor-shell[data-theme='dark'] .squisq-transition-direction-button--selected {
+  background: #3730a3;
+  border-color: #818cf8;
+  color: #e0e7ff;
 }

@@ -10,7 +10,7 @@
  * and code blocks.
  */
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { CSSProperties } from 'react';
 import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
@@ -24,31 +24,31 @@ import Link from '@tiptap/extension-link';
 import Placeholder from '@tiptap/extension-placeholder';
 import { resolveFontFamily, FONT_FALLBACKS } from '@bendyline/squisq/schemas';
 import { HeadingWithTemplate } from './TemplateAnnotation';
+import { DiagramExtension } from './diagram/DiagramExtension';
+import { SceneBlockExtension } from './scene/SceneBlockExtension';
 import { InlineIcon } from './InlineIcon';
 import { ImageWithMediaProvider } from './ImageNodeView';
 import { TiptapVideo } from './tiptap/TiptapVideo';
 import { TiptapAudio } from './tiptap/TiptapAudio';
 import { TemplateBadgePopover, TEMPLATE_NAMES } from './TemplatePicker';
+import { BlockPropertiesPopover } from './BlockPropertiesPopover';
+import {
+  CustomTemplateProvider,
+  TemplateDesigner,
+  type DesignerSaveTarget,
+} from './customTemplates';
+import { saveLibraryTemplate } from './customTemplates/library';
+import { useDocCustomTemplates } from './customTemplates/useDocCustomTemplates';
+import type { CustomTemplateDefinition } from '@bendyline/squisq/schemas';
 import { profileBlockContents, recommendTemplatesForBlock } from '@bendyline/squisq/recommend';
 import { findBlockSliceByHeadingIndex } from './blockSlice';
+import { stripFrontmatter } from './frontmatter';
 import { useEditorContext } from './EditorContext';
 import { buildMentionExtension } from './MentionExtension';
 import { markdownToTiptap, tiptapToMarkdown } from './tiptapBridge';
 import { looksLikeMarkdown } from './detectMarkdown';
 import { SQUISQ_MEDIA_MIME, parseSquisqMediaPayload } from './mediaDragMime';
 import { usePreviewSettingsOptional } from './PreviewControls';
-
-// ── Frontmatter helpers ────────────────────────────────────────────
-
-/** Regex matching a YAML frontmatter block at the start of the document. */
-const FRONTMATTER_RE = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?/;
-
-/** Strip YAML frontmatter from markdown, returning both parts. */
-function stripFrontmatter(md: string): { body: string; frontmatter: string } {
-  const m = md.match(FRONTMATTER_RE);
-  if (!m) return { body: md, frontmatter: '' };
-  return { body: md.slice(m[0].length), frontmatter: m[0] };
-}
 
 /**
  * Rotating placeholder prompts shown when the editor is empty. One is
@@ -101,14 +101,38 @@ export function WysiwygEditor({
   readOnly = false,
 }: WysiwygEditorProps) {
   const {
-    markdownSource,
-    setMarkdownSource,
+    editorSource,
+    setEditorSource,
     setTiptapEditor,
     mediaProvider,
     mentionProvider,
     blockTagsVisible,
     themeInheritance,
   } = useEditorContext();
+  // Custom templates inlined in the active doc's frontmatter + the
+  // persist callback that writes a new list back into the source.
+  const { docTemplates, onDocTemplatesChange } = useDocCustomTemplates();
+  // Designer modal visibility. `null` when closed; `{ initial }` when
+  // open. `initial` is undefined for a "+ New" flow or set to an
+  // existing template to edit it.
+  const [designerState, setDesignerState] = useState<{ initial?: CustomTemplateDefinition } | null>(
+    null,
+  );
+  const handleDesignerSave = useCallback(
+    (def: CustomTemplateDefinition, target: DesignerSaveTarget) => {
+      if (target === 'doc') {
+        const existingIdx = docTemplates.findIndex((t) => t.name === def.name);
+        const next =
+          existingIdx >= 0
+            ? docTemplates.map((t, i) => (i === existingIdx ? def : t))
+            : [...docTemplates, def];
+        onDocTemplatesChange(next);
+      } else {
+        saveLibraryTemplate(def);
+      }
+    },
+    [docTemplates, onDocTemplatesChange],
+  );
   // Keep a ref so the mention extension — created once at editor mount —
   // always sees the latest provider. Swapping projects changes
   // the provider without remounting the editor.
@@ -120,15 +144,18 @@ export function WysiwygEditor({
   // from EMPTY_PROMPTS. Re-renders don't reshuffle.
   const resolvedPlaceholder = useMemo(() => placeholder ?? pickEmptyPrompt(), [placeholder]);
   const isExternalUpdate = useRef(false);
-  const lastSourceRef = useRef(markdownSource);
+  const lastSourceRef = useRef(editorSource);
   // Keep a ref so the editor's drop/paste handlers (created once) always
   // see the current MediaProvider without needing to recreate the editor.
   const mediaProviderRef = useRef(mediaProvider);
   useEffect(() => {
     mediaProviderRef.current = mediaProvider;
   }, [mediaProvider]);
-  // Preserve frontmatter across edits — hidden from WYSIWYG but prepended on save
-  const frontmatterRef = useRef(stripFrontmatter(markdownSource).frontmatter);
+  // Preserve frontmatter across edits — hidden from WYSIWYG but prepended on
+  // save. In block mode the bound slice carries no frontmatter, so this is an
+  // empty string and the splice in `setEditorSource` keeps the doc's real
+  // frontmatter intact.
+  const frontmatterRef = useRef(stripFrontmatter(editorSource).frontmatter);
   // Stash the latest submit callback so the editor's handleKeyDown (bound
   // once at creation) always sees the current value.
   const submitOnEnterRef = useRef(submitOnEnter);
@@ -147,6 +174,8 @@ export function WysiwygEditor({
         },
       }),
       HeadingWithTemplate.configure({ levels: [1, 2, 3, 4, 5, 6] }),
+      DiagramExtension,
+      SceneBlockExtension,
       Table.configure({ resizable: true }),
       TableRow,
       TableCell,
@@ -165,14 +194,14 @@ export function WysiwygEditor({
       buildMentionExtension(() => mentionProviderRef.current),
       InlineIcon,
     ],
-    content: markdownToTiptap(stripFrontmatter(markdownSource).body),
+    content: markdownToTiptap(stripFrontmatter(editorSource).body),
     onUpdate: ({ editor: ed }) => {
       if (isExternalUpdate.current) return;
       const html = ed.getHTML();
       const bodyMd = tiptapToMarkdown(html);
       const newSource = frontmatterRef.current + bodyMd;
       lastSourceRef.current = newSource;
-      setMarkdownSource(newSource);
+      setEditorSource(newSource);
     },
     editorProps: {
       attributes: {
@@ -330,6 +359,12 @@ export function WysiwygEditor({
     headingPos: number;
     headingIndex: number;
   } | null>(null);
+  const [propsMenu, setPropsMenu] = useState<{
+    rect: DOMRect;
+    headingPos: number;
+    blockAttrs: string | null;
+    templateParams: string | null;
+  } | null>(null);
 
   useEffect(() => {
     if (!editor) return;
@@ -338,7 +373,9 @@ export function WysiwygEditor({
     const onClick = (e: MouseEvent) => {
       const target = e.target as HTMLElement | null;
       if (!target) return;
-      const badge = target.closest('.squisq-template-badge') as HTMLElement | null;
+      const propsBadge = target.closest('.squisq-props-badge') as HTMLElement | null;
+      const templateBadge = target.closest('.squisq-template-badge') as HTMLElement | null;
+      const badge = propsBadge ?? templateBadge;
       if (!badge || !root.contains(badge)) return;
       e.preventDefault();
       e.stopPropagation();
@@ -357,8 +394,22 @@ export function WysiwygEditor({
       const headingPos = Math.max(0, pos - 1);
       const node = editor.state.doc.nodeAt(headingPos);
       if (!node || node.type.name !== 'heading') return;
-      // Count how many headings precede this one so the markdown-source
-      // slice helper can locate the matching heading by index.
+
+      // Block-properties badge → open the properties palette.
+      if (propsBadge) {
+        setBadgeMenu(null);
+        setPropsMenu({
+          rect: badge.getBoundingClientRect(),
+          headingPos,
+          blockAttrs: (node.attrs.dataBlockAttrs as string | null) ?? null,
+          templateParams: (node.attrs.dataTemplateParams as string | null) ?? null,
+        });
+        return;
+      }
+
+      // Template badge → open the template gallery. Count how many headings
+      // precede this one so the markdown-source slice helper can locate the
+      // matching heading by index.
       let headingIndex = 0;
       let count = 0;
       editor.state.doc.descendants((n, p) => {
@@ -369,6 +420,7 @@ export function WysiwygEditor({
         }
         count++;
       });
+      setPropsMenu(null);
       setBadgeMenu({
         rect: badge.getBoundingClientRect(),
         template: (node.attrs.dataTemplate as string | null) ?? '',
@@ -380,20 +432,29 @@ export function WysiwygEditor({
     return () => root.removeEventListener('mousedown', onClick);
   }, [editor]);
 
-  // Sync external changes into Tiptap
+  // Sync external changes into Tiptap. `editorSource` also changes when the
+  // user navigates to a different block in block-at-a-time mode, so this same
+  // path reloads the card with the newly selected block's slice.
   useEffect(() => {
     if (!editor) return;
-    // Only update if the source changed externally (not from our own onUpdate)
-    if (markdownSource !== lastSourceRef.current) {
-      isExternalUpdate.current = true;
-      const { body, frontmatter } = stripFrontmatter(markdownSource);
-      frontmatterRef.current = frontmatter;
-      const content = markdownToTiptap(body);
-      editor.commands.setContent(content);
-      lastSourceRef.current = markdownSource;
-      isExternalUpdate.current = false;
+    if (editorSource === lastSourceRef.current) return;
+    // In block/timeline mode `setEditorSource` normalizes the slice's trailing
+    // whitespace (a `\n\n` before the next block) before splicing, so the
+    // re-extracted `editorSource` differs from what we just emitted by trailing
+    // whitespace only. Re-setting content for that would reset the caret to the
+    // end on every keystroke — so only reload when the body actually changed.
+    if (editorSource.replace(/\s+$/, '') === lastSourceRef.current.replace(/\s+$/, '')) {
+      lastSourceRef.current = editorSource;
+      return;
     }
-  }, [markdownSource, editor]);
+    isExternalUpdate.current = true;
+    const { body, frontmatter } = stripFrontmatter(editorSource);
+    frontmatterRef.current = frontmatter;
+    const content = markdownToTiptap(body);
+    editor.commands.setContent(content);
+    lastSourceRef.current = editorSource;
+    isExternalUpdate.current = false;
+  }, [editorSource, editor]);
 
   // Match the WYSIWYG editor's appearance to the active Squisq theme
   // when one is set in frontmatter or picked in the preview dropdown.
@@ -432,37 +493,72 @@ export function WysiwygEditor({
   }, [activeTheme, themeInheritance]);
 
   return (
-    <div
-      className={`squisq-wysiwyg-container${className ? ` ${className}` : ''}`}
-      style={{ width: '100%', height: '100%', overflow: 'auto', ...themeStyle }}
-      data-testid="wysiwyg-container"
-      data-block-tags={blockTagsVisible ? 'visible' : 'hidden'}
-      data-theme-inheritance={themeInheritance}
-      ref={containerRef}
-    >
-      <EditorContent editor={editor} style={{ height: '100%' }} />
-      {badgeMenu && (
-        <TemplateBadgePopover
-          anchorRect={badgeMenu.rect}
-          value={badgeMenu.template}
-          recommended={(() => {
-            const slice = findBlockSliceByHeadingIndex(markdownSource, badgeMenu.headingIndex);
-            if (!slice) return undefined;
-            const profile = profileBlockContents(slice);
-            return recommendTemplatesForBlock(profile, TEMPLATE_NAMES).recommended;
-          })()}
-          onChange={(name) => {
-            if (!editor) return;
-            const tr = editor.state.tr.setNodeMarkup(badgeMenu.headingPos, undefined, {
-              ...editor.state.doc.nodeAt(badgeMenu.headingPos)?.attrs,
-              dataTemplate: name === '' ? null : name,
-            });
-            editor.view.dispatch(tr);
-          }}
-          onClose={() => setBadgeMenu(null)}
-        />
-      )}
-    </div>
+    <CustomTemplateProvider docTemplates={docTemplates} onDocTemplatesChange={onDocTemplatesChange}>
+      <div
+        className={`squisq-wysiwyg-container${className ? ` ${className}` : ''}`}
+        style={{ width: '100%', height: '100%', overflow: 'auto', ...themeStyle }}
+        data-testid="wysiwyg-container"
+        data-block-tags={blockTagsVisible ? 'visible' : 'hidden'}
+        data-theme-inheritance={themeInheritance}
+        ref={containerRef}
+      >
+        <EditorContent editor={editor} style={{ height: '100%' }} />
+        {badgeMenu && (
+          <TemplateBadgePopover
+            anchorRect={badgeMenu.rect}
+            value={badgeMenu.template}
+            recommended={(() => {
+              // `headingIndex` is counted within the mounted Tiptap doc, which
+              // reflects `editorSource` — the active block's slice in block
+              // mode, the full document otherwise.
+              const slice = findBlockSliceByHeadingIndex(editorSource, badgeMenu.headingIndex);
+              if (!slice) return undefined;
+              const profile = profileBlockContents(slice);
+              return recommendTemplatesForBlock(profile, TEMPLATE_NAMES).recommended;
+            })()}
+            onOpenDesigner={() => {
+              setBadgeMenu(null);
+              setDesignerState({});
+            }}
+            onChange={(name) => {
+              if (!editor) return;
+              const tr = editor.state.tr.setNodeMarkup(badgeMenu.headingPos, undefined, {
+                ...editor.state.doc.nodeAt(badgeMenu.headingPos)?.attrs,
+                dataTemplate: name === '' ? null : name,
+              });
+              editor.view.dispatch(tr);
+            }}
+            onClose={() => setBadgeMenu(null)}
+          />
+        )}
+        {propsMenu && (
+          <BlockPropertiesPopover
+            anchorRect={propsMenu.rect}
+            blockAttrs={propsMenu.blockAttrs}
+            templateParams={propsMenu.templateParams}
+            onChange={(nextInner) => {
+              if (!editor) return;
+              const current = editor.state.doc.nodeAt(propsMenu.headingPos);
+              if (!current || current.type.name !== 'heading') return;
+              const tr = editor.state.tr.setNodeMarkup(propsMenu.headingPos, undefined, {
+                ...current.attrs,
+                dataBlockAttrs: nextInner,
+              });
+              editor.view.dispatch(tr);
+            }}
+            onClose={() => setPropsMenu(null)}
+          />
+        )}
+        {designerState && (
+          <TemplateDesigner
+            initial={designerState.initial}
+            onSave={handleDesignerSave}
+            onClose={() => setDesignerState(null)}
+            mediaProvider={mediaProvider}
+          />
+        )}
+      </div>
+    </CustomTemplateProvider>
   );
 }
 

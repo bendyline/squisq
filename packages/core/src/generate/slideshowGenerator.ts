@@ -89,6 +89,13 @@ const DEFAULT_ACCENT_POSITIONS: AccentPosition[] = ['left-strip', 'right-strip',
 /**
  * Generate a slideshow `Doc` from text and optional images.
  *
+ * @deprecated Prefer the transform pipeline: convert content with
+ * `markdownToDoc` (content-aware auto templates are on by default) and
+ * shape it with `applyTransform` from `@bendyline/squisq/transform` —
+ * one engine for text→slides, with styles, theme pairing, pacing, and a
+ * duration budget (`TransformStyleConfig.budget`). This standalone
+ * generator is kept for API stability but no longer gains features.
+ *
  * ```ts
  * const doc = generateSlideshow(articleText, myImages, {
  *   title: 'Mount Rainier',

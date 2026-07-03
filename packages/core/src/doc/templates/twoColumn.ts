@@ -12,8 +12,14 @@
 
 import type { Layer } from '../../schemas/Doc.js';
 import type { TwoColumnInput, TemplateContext } from '../../schemas/BlockTemplates.js';
-import { scaledFontSize } from '../../schemas/BlockTemplates.js';
-import { resolveColorScheme, getThemeFont } from '../utils/themeUtils.js';
+import {
+  resolveColorScheme,
+  getThemeFont,
+  themedEntrance,
+  themedFontSize,
+  themedSurfaceGradient,
+} from '../utils/themeUtils.js';
+import { withAlpha } from '../../schemas/colorUtils.js';
 import { getTwoColumnPositions } from '../../schemas/LayoutStrategy.js';
 
 export function twoColumn(input: TwoColumnInput, context: TemplateContext): Layer[] {
@@ -33,10 +39,17 @@ export function twoColumn(input: TwoColumnInput, context: TemplateContext): Laye
   // Column width ~42% for side-by-side, ~85% for stacked
   const columnWidth = isStacked ? '85%' : '42%';
 
-  // Calculate font sizes based on viewport
-  const headerFontSize = scaledFontSize(32, context, false);
-  const labelFontSize = scaledFontSize(44, context, true);
-  const sublabelFontSize = scaledFontSize(22, context, false);
+  // Calculate font sizes based on viewport. The header is the block's
+  // title, so it sits a step ABOVE the column labels in the hierarchy —
+  // it used to render smaller and dimmer than the labels, which read as
+  // an inverted hierarchy.
+  const headerFontSize = themedFontSize(36, context, true);
+  const labelFontSize = themedFontSize(44, context, true);
+  const sublabelFontSize = themedFontSize(22, context, false);
+
+  // Panels drop below the header band so the title never overlaps them.
+  const panelTop = header && !isStacked ? 22 : 15;
+  const panelHeight = header && !isStacked ? 64 : 70;
 
   const layers: Layer[] = [
     // Background — subtle gradient to add depth
@@ -45,38 +58,41 @@ export function twoColumn(input: TwoColumnInput, context: TemplateContext): Laye
       id: 'bg',
       content: {
         shape: 'rect',
-        fill: `linear-gradient(135deg, ${theme.colors.background} 0%, #16202e 100%)`,
+        fill: themedSurfaceGradient(context, 135),
       },
       position: { x: 0, y: 0, width: '100%', height: '100%' },
     },
   ];
 
   if (!isStacked) {
-    // Left column background panel
+    // Column background panels — tinted from the theme text color so
+    // they stay visible on light and dark surfaces alike.
+    const panelFill = withAlpha(theme.colors.text, 0.05);
     layers.push({
       type: 'shape',
       id: 'left-panel',
       content: {
         shape: 'rect',
-        fill: 'rgba(255, 255, 255, 0.04)',
+        fill: panelFill,
+        borderRadius: 12,
       },
-      position: { x: '3%', y: '15%', width: '44%', height: '70%' },
+      position: { x: '3%', y: `${panelTop}%`, width: '44%', height: `${panelHeight}%` },
     });
 
-    // Right column background panel
     layers.push({
       type: 'shape',
       id: 'right-panel',
       content: {
         shape: 'rect',
-        fill: 'rgba(255, 255, 255, 0.04)',
+        fill: panelFill,
+        borderRadius: 12,
       },
-      position: { x: '53%', y: '15%', width: '44%', height: '70%' },
+      position: { x: '53%', y: `${panelTop}%`, width: '44%', height: `${panelHeight}%` },
     });
   }
 
-  // Header position adjusts based on layout
-  const headerY = isStacked ? '12%' : '22%';
+  // Header position adjusts based on layout — always clear of the panels.
+  const headerY = isStacked ? '8%' : '12%';
 
   // Add header if provided
   if (header) {
@@ -88,12 +104,13 @@ export function twoColumn(input: TwoColumnInput, context: TemplateContext): Laye
         style: {
           fontSize: headerFontSize,
           fontFamily: getThemeFont(context, 'title'),
-          color: theme.colors.textMuted,
+          fontWeight: 'bold',
+          color: theme.colors.text,
           textAlign: 'center',
         },
       },
       position: { x: '50%', y: headerY, anchor: 'center' },
-      animation: { type: 'fadeIn', duration: 0.8 },
+      animation: themedEntrance(context, 'text', { type: 'fadeIn', duration: 0.8 }),
     });
   }
 
@@ -110,13 +127,12 @@ export function twoColumn(input: TwoColumnInput, context: TemplateContext): Laye
     rightY = header ? '60%' : '55%';
     rightSublabelY = header ? '70%' : '65%';
   } else {
-    // Landscape/square: side by side — vertically centered in panels (15%-85%)
-    const baseY = header ? '47%' : '45%';
-    const sublabelOffset = header ? '58%' : '56%';
-    leftY = baseY;
-    leftSublabelY = sublabelOffset;
-    rightY = baseY;
-    rightSublabelY = sublabelOffset;
+    // Landscape/square: side by side — vertically centered in the panels.
+    const panelCenter = panelTop + panelHeight / 2;
+    leftY = `${panelCenter - 4}%`;
+    leftSublabelY = `${panelCenter + 7}%`;
+    rightY = `${panelCenter - 4}%`;
+    rightSublabelY = `${panelCenter + 7}%`;
   }
 
   // Left column (or top in portrait)
@@ -140,7 +156,7 @@ export function twoColumn(input: TwoColumnInput, context: TemplateContext): Laye
       anchor: 'center',
       width: columnWidth,
     },
-    animation: { type: 'fadeIn', duration: 1 },
+    animation: themedEntrance(context, 'text', { type: 'fadeIn', duration: 1 }),
   });
 
   if (left.sublabel) {
@@ -167,9 +183,11 @@ export function twoColumn(input: TwoColumnInput, context: TemplateContext): Laye
     });
   }
 
-  // Visual connector between columns (bold arrow)
-  const connectorFontSize = scaledFontSize(120, context, true);
-  const connectorY = isStacked ? '48%' : '50%'; // Centered in viewport
+  // Visual connector between columns — sized to fit inside the gutter
+  // between the panels (a 120px glyph used to cross both panel edges),
+  // tinted from the theme text color so it shows on any surface.
+  const connectorFontSize = themedFontSize(64, context, true);
+  const connectorY = isStacked ? '48%' : `${panelTop + panelHeight / 2}%`;
   const connectorSymbol = isStacked ? '\u2193' : '\u2192'; // ↓ for stacked, → for side-by-side
 
   layers.push({
@@ -181,7 +199,7 @@ export function twoColumn(input: TwoColumnInput, context: TemplateContext): Laye
         fontSize: connectorFontSize,
         fontFamily: getThemeFont(context, 'title'),
         fontWeight: 'bold',
-        color: 'rgba(255, 255, 255, 0.6)',
+        color: withAlpha(theme.colors.text, 0.45),
         textAlign: 'center',
       },
     },
@@ -214,7 +232,7 @@ export function twoColumn(input: TwoColumnInput, context: TemplateContext): Laye
       anchor: 'center',
       width: columnWidth,
     },
-    animation: { type: 'fadeIn', duration: 1, delay: 0.5 },
+    animation: themedEntrance(context, 'text', { type: 'fadeIn', duration: 1, delay: 0.5 }),
   });
 
   if (right.sublabel) {

@@ -11,6 +11,7 @@ export const minimalStyle: TransformStyleConfig = {
   colorSchemes: ['blue', 'green'],
   insertSectionHeaders: false,
   interleaveImages: false,
-  blocksPerSection: { min: 1, max: 2 },
+  blocksPerSection: { max: 2 },
   transitionStyle: 'fade',
+  suggestedThemeId: 'minimalist',
 };

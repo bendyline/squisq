@@ -252,6 +252,30 @@ function recommendedNamesForProfile(profile: BlockContentProfile): string[] {
 }
 
 /**
+ * Deterministic single-template choice for an unannotated heading block,
+ * from strong content signals only. Returns `undefined` when no signal is
+ * decisive — the caller keeps its structural default (`sectionHeader`).
+ *
+ * Precedence favors the most specific/structured content: a table beats
+ * an image beats a blockquote beats a stat-looking line. `blockIndex`
+ * alternates left/right feature composition for single-image blocks so a
+ * run of image sections doesn't stack the same layout.
+ *
+ * Used by `markdownToDoc`'s auto template picking (see its `autoTemplates`
+ * option); the multi-candidate `recommendTemplatesForBlock` below serves
+ * the editor's template-picker UI instead.
+ */
+export function pickAutoTemplate(profile: BlockContentProfile, blockIndex = 0): string | undefined {
+  if (profile.hasTable) return 'dataTable';
+  if (profile.imageCount >= 2) return 'photoGrid';
+  if (profile.hasImage) return blockIndex % 2 === 0 ? 'leftFeature' : 'rightFeature';
+  if (profile.hasBlockquote) return 'quote';
+  if (profile.hasNumberHighlight) return 'statHighlight';
+  if (profile.hasList) return 'list';
+  return undefined;
+}
+
+/**
  * Split a flat list of template names into a "Recommended" bucket
  * (matches the active block's content profile) and a "rest" bucket
  * (everything else). Both buckets preserve the input ordering of

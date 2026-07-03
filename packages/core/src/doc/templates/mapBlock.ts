@@ -14,8 +14,8 @@
 
 import type { Layer } from '../../schemas/Doc.js';
 import type { MapBlockInput, TemplateContext } from '../../schemas/BlockTemplates.js';
-import { scaledFontSize } from '../../schemas/BlockTemplates.js';
-import { getThemeFont } from '../utils/themeUtils.js';
+import { getThemeFont, shouldUseShadow, themedFontSize } from '../utils/themeUtils.js';
+import { withAlpha } from '../../schemas/colorUtils.js';
 import { mapAmbientMotion } from './accentImage.js';
 
 export function mapBlock(input: MapBlockInput, context: TemplateContext): Layer[] {
@@ -32,8 +32,8 @@ export function mapBlock(input: MapBlockInput, context: TemplateContext): Layer[
   const { theme, layout } = context;
 
   // Scale font sizes for viewport
-  const titleFontSize = scaledFontSize(64, context, true);
-  const captionFontSize = scaledFontSize(32, context, false);
+  const titleFontSize = themedFontSize(64, context, true);
+  const captionFontSize = themedFontSize(32, context, false);
 
   // Determine animation based on ambientMotion setting
   const mapAnimation = mapAmbientMotion(ambientMotion);
@@ -56,17 +56,21 @@ export function mapBlock(input: MapBlockInput, context: TemplateContext): Layer[
     },
   ];
 
+  // Overlay bands are tinted from the theme background so the theme text
+  // color on them stays readable in light and dark themes alike; they
+  // fade out toward the map so the band doesn't read as a hard seam.
+  const bg = theme.colors.background;
+
   // Add title overlay if provided
   if (title) {
-    // Gradient overlay at top for title readability
     layers.push({
       type: 'shape',
       id: 'title-overlay',
       content: {
         shape: 'rect',
-        fill: 'rgba(0,0,0,0.6)',
+        fill: `linear-gradient(180deg, ${withAlpha(bg, 0.85)} 0%, ${withAlpha(bg, 0.6)} 70%, ${withAlpha(bg, 0)} 100%)`,
       },
-      position: { x: 0, y: 0, width: '100%', height: '18%' },
+      position: { x: 0, y: 0, width: '100%', height: '20%' },
     });
 
     // Title text - positioned at top of slide
@@ -81,7 +85,7 @@ export function mapBlock(input: MapBlockInput, context: TemplateContext): Layer[
           fontWeight: 'bold',
           color: theme.colors.text,
           textAlign: 'center',
-          shadow: true,
+          shadow: shouldUseShadow(context),
         },
       },
       position: {
@@ -96,15 +100,14 @@ export function mapBlock(input: MapBlockInput, context: TemplateContext): Layer[
 
   // Add caption if provided
   if (caption) {
-    // Gradient overlay at bottom for caption readability
     layers.push({
       type: 'shape',
       id: 'caption-overlay',
       content: {
         shape: 'rect',
-        fill: 'rgba(0,0,0,0.6)',
+        fill: `linear-gradient(0deg, ${withAlpha(bg, 0.85)} 0%, ${withAlpha(bg, 0.6)} 70%, ${withAlpha(bg, 0)} 100%)`,
       },
-      position: { x: 0, y: '82%', width: '100%', height: '18%' },
+      position: { x: 0, y: '80%', width: '100%', height: '20%' },
     });
 
     // Caption text
@@ -118,7 +121,7 @@ export function mapBlock(input: MapBlockInput, context: TemplateContext): Layer[
           fontFamily: getThemeFont(context, 'body'),
           color: theme.colors.text,
           textAlign: 'center',
-          shadow: true,
+          shadow: shouldUseShadow(context),
         },
       },
       position: {

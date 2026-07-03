@@ -66,6 +66,7 @@ export {
 // Export
 export {
   exportImageEditDoc,
+  buildSvgString,
   type ImageEditExportFormat,
   type ImageEditExportOptions,
 } from './export.js';

@@ -195,3 +195,7 @@ export { markdownDocsToPlainHtmlBundle, collectLinkRefs } from './plainHtmlBundl
 export type { PlainHtmlBundleOptions } from './plainHtmlBundle.js';
 export { markdownDocsToHtmlBundle } from './docsHtmlBundle.js';
 export type { HtmlBundleOptions } from './docsHtmlBundle.js';
+
+// ── Import (HTML → MarkdownDocument) ────────────────────────────────
+export { htmlToMarkdown, htmlToMarkdownDoc, htmlToMarkdownDocSync } from './import.js';
+export type { HtmlImportOptions } from './import.js';

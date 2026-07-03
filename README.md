@@ -11,6 +11,8 @@ Squiggly Square is a core library, set of React components, and format interop e
 [![npm @bendyline/squisq-react](https://img.shields.io/npm/v/@bendyline/squisq-react)](https://www.npmjs.com/package/@bendyline/squisq-react)
 [![npm @bendyline/squisq-formats](https://img.shields.io/npm/v/@bendyline/squisq-formats)](https://www.npmjs.com/package/@bendyline/squisq-formats)
 [![npm @bendyline/squisq-editor-react](https://img.shields.io/npm/v/@bendyline/squisq-editor-react)](https://www.npmjs.com/package/@bendyline/squisq-editor-react)
+[![npm @bendyline/squisq-video](https://img.shields.io/npm/v/@bendyline/squisq-video)](https://www.npmjs.com/package/@bendyline/squisq-video)
+[![npm @bendyline/squisq-video-react](https://img.shields.io/npm/v/@bendyline/squisq-video-react)](https://www.npmjs.com/package/@bendyline/squisq-video-react)
 [![npm @bendyline/squisq-cli](https://img.shields.io/npm/v/@bendyline/squisq-cli)](https://www.npmjs.com/package/@bendyline/squisq-cli)
 
 Open-source monorepo providing reusable libraries for document/block rendering, spatial utilities, and format conversion. Framework-agnostic at the core, with a React component layer on top.
@@ -21,8 +23,9 @@ Open-source monorepo providing reusable libraries for document/block rendering, 
 | --------------------------------------------------------- | ------------------------------------------------------------------------- |
 | [`@bendyline/squisq`](packages/core)                      | Headless utilities — schemas, templates, spatial math, Markdown, storage  |
 | [`@bendyline/squisq-react`](packages/react)               | React components — DocPlayer, BlockRenderer, layers, hooks                |
-| [`@bendyline/squisq-formats`](packages/formats)           | Format converters — DOCX, PDF, OOXML import/export                        |
+| [`@bendyline/squisq-formats`](packages/formats)           | Format converters — DOCX, PDF, HTML, EPUB, PPTX, CSV, shared OOXML        |
 | [`@bendyline/squisq-editor-react`](packages/editor-react) | React editor shell — raw/WYSIWYG/preview modes                            |
+| [`@bendyline/squisq-video`](packages/video)               | Browser-pure MP4 export foundation — render HTML, ffmpeg.wasm, presets    |
 | [`@bendyline/squisq-video-react`](packages/video-react)   | React components for browser-based video export (WebCodecs + ffmpeg.wasm) |
 | [`@bendyline/squisq-cli`](packages/cli)                   | CLI tool — document conversion and MP4 video rendering                    |
 
@@ -50,7 +53,7 @@ function App() {
 Each package exposes targeted subpath entries so you can import only what you need:
 
 ```ts
-import type { Doc, BlockTemplate } from '@bendyline/squisq/schemas';
+import type { Doc, TemplateBlock } from '@bendyline/squisq/schemas';
 import { haversineDistance } from '@bendyline/squisq/spatial';
 import { parseMarkdown, stringifyMarkdown } from '@bendyline/squisq/markdown';
 import { markdownDocToDocx } from '@bendyline/squisq-formats/docx';
@@ -59,8 +62,12 @@ import { markdownDocToDocx } from '@bendyline/squisq-formats/docx';
 ## Development
 
 ```bash
-# Install dependencies
-npm install
+# Install dependencies (runs `npm install` plus an explicit allowlist of trusted
+# install scripts — see AGENTS.md "Installing Dependencies"). Use this instead
+# of a bare `npm install`: the .npmrc disables third-party install scripts as
+# a supply-chain hardening measure, and esbuild needs its postinstall to fetch
+# the native binary tsup depends on.
+npm run install:safe
 
 # Build all packages (sequential, respects dependency order)
 npm run build

@@ -11,8 +11,13 @@
  * ```
  */
 
+import { markdownToDoc } from '@bendyline/squisq/doc';
 import type { MarkdownDocument } from '@bendyline/squisq/markdown';
 import type { Doc } from '@bendyline/squisq/schemas';
+import { type XlsxImportOptions, xlsxToMarkdownDoc } from './import.js';
+
+export type { XlsxImportOptions } from './import.js';
+export { xlsxToMarkdownDoc } from './import.js';
 
 /**
  * Options for XLSX export (placeholder).
@@ -25,17 +30,9 @@ export interface XlsxExportOptions {
 }
 
 /**
- * Options for XLSX import (placeholder).
- */
-export interface XlsxImportOptions {
-  /** Which sheet to import (0-based index or name). Default: 0 */
-  sheet?: number | string;
-}
-
-/**
  * Convert a MarkdownDocument to a .xlsx Blob.
  *
- * @throws Error — XLSX support is not yet implemented
+ * @throws Error — XLSX export is not yet implemented
  */
 export async function markdownDocToXlsx(
   _doc: MarkdownDocument,
@@ -47,32 +44,18 @@ export async function markdownDocToXlsx(
 /**
  * Convert a squisq Doc to a .xlsx Blob.
  *
- * @throws Error — XLSX support is not yet implemented
+ * @throws Error — XLSX export is not yet implemented
  */
 export async function docToXlsx(_doc: Doc, _options?: XlsxExportOptions): Promise<Blob> {
   throw new Error('XLSX export is not yet implemented');
 }
 
 /**
- * Convert a .xlsx file to a MarkdownDocument.
- *
- * @throws Error — XLSX support is not yet implemented
- */
-export async function xlsxToMarkdownDoc(
-  _data: ArrayBuffer | Blob,
-  _options?: XlsxImportOptions,
-): Promise<MarkdownDocument> {
-  throw new Error('XLSX import is not yet implemented');
-}
-
-/**
- * Convert a .xlsx file to a squisq Doc.
- *
- * @throws Error — XLSX support is not yet implemented
+ * Convert a .xlsx file to a squisq Doc (via the markdown table model).
  */
 export async function xlsxToDoc(
-  _data: ArrayBuffer | Blob,
-  _options?: XlsxImportOptions,
+  data: ArrayBuffer | Blob,
+  options?: XlsxImportOptions,
 ): Promise<Doc> {
-  throw new Error('XLSX import is not yet implemented');
+  return markdownToDoc(await xlsxToMarkdownDoc(data, options));
 }

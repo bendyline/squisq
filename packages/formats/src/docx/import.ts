@@ -21,6 +21,7 @@
 
 import type { Doc } from '@bendyline/squisq/schemas';
 import { markdownToDoc } from '@bendyline/squisq/doc';
+import { stringifyMarkdown } from '@bendyline/squisq/markdown';
 import type {
   MarkdownDocument,
   MarkdownBlockNode,
@@ -156,8 +157,6 @@ export async function docxToContainer(
   const blocks = await convertBody(body, ctx);
   const markdownDoc: MarkdownDocument = { type: 'document', children: blocks };
 
-  // Serialize to markdown
-  const { stringifyMarkdown } = await import('@bendyline/squisq/markdown');
   const markdown = stringifyMarkdown(markdownDoc);
 
   // Build container with markdown + images

@@ -35,7 +35,9 @@ import { VIEWPORT_PRESETS } from '../schemas/Viewport.js';
 import { createTemplateContext, isTemplateBlock } from '../schemas/BlockTemplates.js';
 import { DEFAULT_THEME } from '../schemas/themeLibrary.js';
 import { templateRegistry, resolveTemplateName } from './templates/index.js';
-import { expandPersistentLayers } from './templates/persistentLayers.js';
+import { expandPersistentLayers, wrapWithPersistentLayers } from './templates/persistentLayers.js';
+import { applyRenderStyleToLayers } from './utils/applyRenderStyle.js';
+import { fallbackBlockLayers } from './templates/fallbackBlock.js';
 
 // ============================================
 // RenderContext
@@ -109,9 +111,22 @@ export function getLayers(block: DocBlock, context: RenderContext = {}): Layer[]
   // and the layer list comes back empty.
   if (isTemplateBlock(block)) {
     const resolved = resolveTemplateName(block.template);
+    const templateCtx = createTemplateContext(theme, blockIndex, totalBlocks, viewport);
     if (resolved in templateRegistry) {
       const templateName = resolved as keyof typeof templateRegistry;
-      const templateCtx = createTemplateContext(theme, blockIndex, totalBlocks, viewport);
+      // Aggregate templates (e.g. `diagram`) consume the block's children.
+      const maybeChildren = (block as Block).children;
+      if (maybeChildren && maybeChildren.length > 0) {
+        templateCtx.children = maybeChildren;
+      }
+      // Effective template input: the block's own fields, then structured
+      // body data (```json data fences, GFM tables), then `{[…]}` string
+      // overrides — the same merge order buildPreviewDoc uses.
+      const { templateData, templateOverrides } = block as Block;
+      const input =
+        templateData || templateOverrides
+          ? ({ ...block, ...templateData, ...templateOverrides } as TemplateBlock)
+          : block;
       let layers: Layer[];
       try {
         // Each registry entry accepts its specific TemplateBlock variant; the
@@ -120,21 +135,34 @@ export function getLayers(block: DocBlock, context: RenderContext = {}): Layer[]
           input: TemplateBlock,
           ctx: TemplateContext,
         ) => Layer[];
-        layers = templateFn(block, templateCtx);
+        layers = templateFn(input, templateCtx);
         if (!Array.isArray(layers)) {
-          console.error(`Template ${templateName} did not return an array, got:`, typeof layers);
-          layers = [];
+          console.warn(`Template ${templateName} did not return an array, got:`, typeof layers);
+          layers = fallbackBlockLayers(block, templateCtx, `Template "${block.template}" failed`);
         }
       } catch (err: unknown) {
-        console.error(`Error expanding template ${templateName}:`, err);
-        layers = [];
+        console.warn(`Error expanding template ${templateName}:`, err);
+        layers = fallbackBlockLayers(block, templateCtx, `Template "${block.template}" failed`);
       }
+
+      // Theme motion defaults apply to template-generated layers only
+      // (mirrors expandDocBlocks — the two paths must agree).
+      layers = applyRenderStyleToLayers(layers, block as Block, theme);
 
       return injectPersistentLayers(layers, block, context);
     }
+
+    // Unknown template — graceful-degradation guarantee: render the
+    // block's heading + body text as a plain card with a visible notice
+    // instead of a blank slide.
+    return injectPersistentLayers(
+      fallbackBlockLayers(block, templateCtx, `Unknown template "${block.template}"`),
+      block,
+      context,
+    );
   }
 
-  // 3. Fallback: no layers and no known template
+  // 3. Fallback: no layers and no template requested
   return injectPersistentLayers([], block, context);
 }
 
@@ -150,14 +178,9 @@ function injectPersistentLayers(layers: Layer[], block: DocBlock, context: Rende
   const { persistentLayers } = context;
   if (!persistentLayers) return layers;
 
-  const bottomLayers = expandPersistentLayers(persistentLayers.bottomLayers);
-  const topLayers = expandPersistentLayers(persistentLayers.topLayers);
+  const theme = context.theme ?? DEFAULT_THEME;
+  const bottomLayers = expandPersistentLayers(persistentLayers.bottomLayers, theme);
+  const topLayers = expandPersistentLayers(persistentLayers.topLayers, theme);
 
-  if (bottomLayers.length === 0 && topLayers.length === 0) return layers;
-
-  const templateBlock = block as TemplateBlock;
-  const useBottom = templateBlock.useBottomLayer !== false;
-  const useTop = templateBlock.useTopLayer !== false;
-
-  return [...(useBottom ? bottomLayers : []), ...layers, ...(useTop ? topLayers : [])];
+  return wrapWithPersistentLayers(layers, block as TemplateBlock, bottomLayers, topLayers);
 }

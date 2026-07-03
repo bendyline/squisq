@@ -16,3 +16,11 @@ export {
   iconGlyph,
 } from './resolve.js';
 export type { IconSuggestion } from './resolve.js';
+export {
+  iconMarker,
+  hasIconMarker,
+  stripIconMarkers,
+  splitIconMarkers,
+  iconClass,
+} from './inlineIconMarker.js';
+export type { IconTextRun } from './inlineIconMarker.js';

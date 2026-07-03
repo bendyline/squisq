@@ -121,6 +121,20 @@ describe('markdownToTiptap', () => {
     expect(html).toContain('First');
   });
 
+  it('converts task lists to taskList/taskItem markup', () => {
+    const md = '- [ ] buy milk\n- [x] walk dog';
+    const html = markdownToTiptap(md);
+    expect(html).toContain('data-type="taskList"');
+    // Unchecked item carries no data-checked; checked item is marked true.
+    expect(html).toContain('<li data-type="taskItem"><p>buy milk</p></li>');
+    expect(html).toContain('<li data-type="taskItem" data-checked="true"><p>walk dog</p></li>');
+  });
+
+  it('treats [X] (uppercase) as checked', () => {
+    const html = markdownToTiptap('- [X] done');
+    expect(html).toContain('data-checked="true"');
+  });
+
   it('converts blockquotes', () => {
     const md = '> This is a quote';
     const html = markdownToTiptap(md);
@@ -260,6 +274,30 @@ describe('tiptapToMarkdown', () => {
     expect(md).toContain('2. Second');
   });
 
+  it('converts task lists, preserving checked state and text', () => {
+    // Mirrors the structure Tiptap's getHTML() emits for TaskItem:
+    // a <label> holding the checkbox chrome, then a content <div>.
+    const html =
+      '<ul data-type="taskList">' +
+      '<li data-type="taskItem" data-checked="false"><label><input type="checkbox"><span></span></label><div><p>buy milk</p></div></li>' +
+      '<li data-type="taskItem" data-checked="true"><label><input type="checkbox" checked="checked"><span></span></label><div><p>walk dog</p></div></li>' +
+      '</ul>';
+    const md = tiptapToMarkdown(html);
+    expect(md).toContain('- [ ] buy milk');
+    expect(md).toContain('- [x] walk dog');
+    // The unchecked item must NOT be promoted to checked.
+    expect(md).not.toContain('- [x] buy milk');
+  });
+
+  it('preserves a still-empty task item', () => {
+    const html =
+      '<ul data-type="taskList">' +
+      '<li data-type="taskItem" data-checked="false"><label><input type="checkbox"><span></span></label><div><p></p></div></li>' +
+      '</ul>';
+    const md = tiptapToMarkdown(html);
+    expect(md).toContain('- [ ]');
+  });
+
   it('converts tables', () => {
     const html =
       '<table><thead><tr><th>Name</th><th>Age</th></tr></thead>' +
@@ -302,6 +340,30 @@ describe('tiptapToMarkdown', () => {
     const md = tiptapToMarkdown('<ul><li><p>First line<br>Second line</p></li></ul>');
     expect(md).toContain('- First line  ');
     expect(md).toContain('  Second line');
+  });
+
+  it('keeps a <video> nested in a list item (no silent drop)', () => {
+    const md = tiptapToMarkdown(
+      '<ol><li><p>Step</p><video src="video/clip.webm" width="480" controls=""></video></li></ol>',
+    );
+    expect(md).toContain('1. Step');
+    // The media survives, indented as a continuation of the list item.
+    expect(md).toContain('   <video src="video/clip.webm" controls width="480"></video>');
+  });
+
+  it('keeps an <audio> nested in a list item', () => {
+    const md = tiptapToMarkdown(
+      '<ul><li><p>Note</p><audio src="audio/take.webm" controls=""></audio></li></ul>',
+    );
+    expect(md).toContain('- Note');
+    expect(md).toContain('  <audio src="audio/take.webm" controls></audio>');
+  });
+
+  it('keeps a media-only list item (first tag takes the bullet)', () => {
+    const md = tiptapToMarkdown(
+      '<ul><li><video src="video/only.webm" controls=""></video></li></ul>',
+    );
+    expect(md).toContain('- <video src="video/only.webm" controls></video>');
   });
 });
 
@@ -359,5 +421,35 @@ describe('round-trip: markdownToTiptap → tiptapToMarkdown', () => {
     const result = roundTrip('1. First\n2. Second');
     expect(result).toContain('1. First');
     expect(result).toContain('2. Second');
+  });
+
+  it('preserves task lists with mixed checked state', () => {
+    const result = roundTrip('- [ ] buy milk\n- [x] walk dog');
+    expect(result).toContain('- [ ] buy milk');
+    expect(result).toContain('- [x] walk dog');
+    expect(result).not.toContain('- [x] buy milk');
+  });
+
+  it('preserves quoted template params with spaces', () => {
+    const result = roundTrip(
+      '## Gallery {[imageWithCaption src=photo.jpg caption="Beach at sunset"]}',
+    );
+    expect(result).toContain('{[imageWithCaption src=photo.jpg caption="Beach at sunset"]}');
+  });
+
+  it('preserves single-quoted template params', () => {
+    const result = roundTrip("## X {[quote text='A long caption']}");
+    expect(result).toContain("text='A long caption'");
+  });
+
+  it('preserves quoted Pandoc attribute values with spaces', () => {
+    const result = roundTrip('## X {#intro caption="hello world"}');
+    expect(result).toContain('{#intro caption="hello world"}');
+  });
+
+  it('preserves both annotation forms with quoted values on one heading', () => {
+    const result = roundTrip('## X {#a label="big plan"} {[quote text="She left"]}');
+    expect(result).toContain('{#a label="big plan"}');
+    expect(result).toContain('{[quote text="She left"]}');
   });
 });

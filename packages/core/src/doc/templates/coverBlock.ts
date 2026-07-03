@@ -16,9 +16,8 @@
 
 import type { Layer } from '../../schemas/Doc.js';
 import type { TemplateContext } from '../../schemas/BlockTemplates.js';
-import { scaledFontSize } from '../../schemas/BlockTemplates.js';
 import type { StartBlockConfig } from '../../schemas/Doc.js';
-import { getThemeFont } from '../utils/themeUtils.js';
+import { getThemeFont, themedFontSize, themedImageTreatment } from '../utils/themeUtils.js';
 import { mapAmbientMotion } from './accentImage.js';
 
 /**
@@ -39,18 +38,21 @@ export interface CoverBlockInput {
   heroCredit?: string;
   /** License identifier */
   heroLicense?: string;
+  /** Per-block override for the theme's photographic image grade. */
+  imageTreatment?: 'none' | 'mono' | 'duotone' | 'warm' | 'cool';
 }
 
 /**
  * Generate cover block layers from StartBlockConfig.
  */
 export function coverBlock(input: CoverBlockInput, context: TemplateContext): Layer[] {
+  const treatment = themedImageTreatment(context, input.imageTreatment);
   const { heroSrc, heroAlt, title, subtitle, ambientMotion, heroCredit, heroLicense } = input;
   const { theme, layout } = context;
 
   // Scale font sizes for viewport - cover titles are larger than regular title blocks
-  const titleFontSize = scaledFontSize(120, context, true);
-  const subtitleFontSize = scaledFontSize(40, context, false);
+  const titleFontSize = themedFontSize(120, context, true);
+  const subtitleFontSize = themedFontSize(40, context, false);
 
   const layers: Layer[] = [];
 
@@ -68,6 +70,7 @@ export function coverBlock(input: CoverBlockInput, context: TemplateContext): La
           fit: 'cover',
           credit: heroCredit,
           license: heroLicense,
+          ...(treatment ? { treatment } : {}),
         },
         position: { x: 0, y: 0, width: '100%', height: '100%' },
         animation: imageAnimation,

@@ -2,6 +2,9 @@
  * Sample markdown documents for the dev site.
  */
 
+import { writeCustomTemplatesToFrontmatter } from '@bendyline/squisq/doc';
+import type { CustomTemplateDefinition, Layer } from '@bendyline/squisq/schemas';
+
 /**
  * Content zip samples — fetched at runtime, unpacked into a ContentContainer.
  * Each entry maps a sample key to its URL under `/samples/` (served from repo-root samplecontent/).
@@ -18,6 +21,15 @@ export const CONTENT_SAMPLES: Record<string, ContentSample> = {
   },
 };
 
+/**
+ * Optional display labels for inline {@link SAMPLES} entries. When a key is
+ * absent here the dropdown falls back to `key.replace(/-/g, ' ')`. Use this
+ * only when the derived label doesn't read well (e.g. parentheses, casing).
+ */
+export const SAMPLE_LABELS: Record<string, string> = {
+  'about-squisq': 'About SquigglySquare (squisq)',
+};
+
 export const SAMPLES: Record<string, string> = {
   // Single-block fixture for E2E tests that drive the full export
   // pipeline. Kept intentionally tiny — one block hits the 3-second
@@ -26,6 +38,28 @@ export const SAMPLES: Record<string, string> = {
   // timeout. Don't add anything that would inflate this — it exists
   // purely to keep `e2e/video-export.spec.ts` fast.
   'e2e-tiny': `# Tiny\n`,
+  // Task-list fixture for `e2e/task-list.spec.ts`. GFM checkboxes the WYSIWYG
+  // editor must render as `<input type="checkbox">` (one unchecked, one
+  // checked). Loaded as a sample — the deterministic way the app ingests
+  // markdown — rather than typed into Monaco, which races the controlled
+  // editor's value pipeline (see that test for the history).
+  'e2e-tasklist': `# Tasks\n\n- [ ] open task\n- [x] closed task\n`,
+  // Used by the timeline e2e: a block with an embedded <video> the timeline
+  // should surface and let the author re-time / move between blocks.
+  'timeline-media': `# One {duration=10}
+
+Intro text.
+
+<video src="video/clip.webm" controls></video>
+
+# Two {duration=10}
+
+More text.
+
+# Three {duration=10}
+
+End.
+`,
   'hello-world': `# Hello World
 
 Welcome to the **Squisq Editor**. This is a simple markdown document.
@@ -47,6 +81,110 @@ Start editing this document in any of the three views:
 ---
 
 *Happy editing!*
+`,
+
+  'about-squisq': `---
+title: About SquigglySquare
+display-mode: slideshow
+document-render-as: landscape
+---
+
+# About SquigglySquare {[title]}
+
+SquigglySquare — **squisq** for short — turns plain Markdown into designed, animated documents. Write prose the way you always have, annotate a heading with a squiggly-square tag, and get a slide, a video frame, a diagram, or a drawing.
+
+## The Philosophy {[sectionHeader colorScheme=blue]}
+
+Author in the Markdown you already know. Layer on presentation only where it earns its keep. Every tag is optional, reversible, and lossless — delete one and you are left with clean Markdown, never a broken file.
+
+## One Document, Three Views {[list colorScheme=teal]}
+
+- **Raw** — the Markdown source, with autocomplete for every tag and parameter
+- **Editor** — WYSIWYG rich-text editing
+- **Play** — the same content rendered as a slideshow or video
+
+## The Anatomy of a Tag {[sectionHeader colorScheme=purple]}
+
+A squiggly-square tag is a trailing annotation on a heading. It has the shape \`{[<block type> <parameter>=<value> ...]}\`. The heading text and the body beneath it supply the **content**; the tag chooses the **template** and sets **style** and **timing**.
+
+## Content Comes From Markdown {[factCard]}
+
+You almost never type the content *into* the tag. Write it as ordinary Markdown under the heading — the template reads it. The tag is where design lives:
+
+\`\`\`markdown
+## The Big Number {[statHighlight colorScheme=green]}
+
+**42%** of teams prefer visual blocks over raw slides.
+\`\`\`
+
+## A Sampler of Block Types {[sectionHeader colorScheme=orange]}
+
+The blocks below are all live — each heading picks a different template. Keep paging through Play mode to see them render.
+
+### A Famous Quote {[quote]}
+
+> "The best way to predict the future is to invent it."
+> — Alan Kay
+
+### Honey Never Spoils {[factCard]}
+
+Archaeologists have found 3,000-year-old honey in Egyptian tombs still perfectly edible — its low moisture and acidic pH make it inhospitable to bacteria.
+
+### East vs. West {[comparisonBar leftLabel="East" leftValue=58 rightLabel="West" rightValue=42 unit="%"]}
+
+Numeric comparisons render as paired bars — great for A/B data at a glance.
+
+### Squisq, Defined {[definitionCard colorScheme=orange]}
+
+**Squisq** — a family of open-source libraries for turning Markdown into designed, animated documents.
+
+### One Sentence, Full Screen {[fullBleedQuote colorScheme=purple]}
+
+Sometimes a single line deserves the whole canvas.
+
+## Parameters: Style {[sectionHeader colorScheme=green]}
+
+Most templates accept a \`colorScheme\` drawn from the active theme: \`blue\`, \`green\`, \`purple\`, \`red\`, \`orange\`, or \`teal\`. Because the colors come from the theme, your document stays consistent when you switch themes — no hard-coded hex to hunt down.
+
+## Parameters: Motion {[sectionHeader colorScheme=blue]}
+
+Add a \`transition\` to control how one block gives way to the next: \`transition=fade\`. Pair a \`transitionDirection\` with directional effects — \`transition=push transitionDirection=left\` — and tune the pace with \`transitionDuration=0.7\`. There are dozens of types (fade, push, wipe, zoom, doors, cube, vortex, and more) and eight directions (\`left\`, \`right\`, \`up\`, \`down\`, \`in\`, \`out\`, \`horizontal\`, \`vertical\`).
+
+## A Gentle Fade {[quote transition=fade transitionDuration=0.8]}
+
+> "This block was tagged transition=fade — it dissolves into view."
+
+## Pushes In From the Left {[factCard transition=push transitionDirection=left]}
+
+And this one used \`transition=push transitionDirection=left\` — watch the edge as it enters.
+
+## Arrives With a Vortex {[fullBleedQuote colorScheme=teal transition=vortex]}
+
+A dramatic \`transition=vortex\` for a dramatic line.
+
+## Parameters: Timing {[sectionHeader colorScheme=red]}
+
+In video mode every block sits on a clock. \`startTime=1:30\` pins when a block begins and \`duration=5\` sets how long it holds. Times accept plain seconds (\`5\`), milliseconds (\`1500ms\`), or \`mm:ss\` (\`01:30\`).
+
+## Inline Icons {[factCard]}
+
+A FontAwesome name inside a squiggly-square becomes an icon right in your prose: {[rocket]} {[paintbrush]} {[wand-magic-sparkles]} {[github]} {[youtube]}. Qualify a name that lives in two styles — \`{[fa-solid:star]}\` — and unknown or ambiguous names stay as plain text, so writing \`{[notathing]}\` is never swallowed.
+
+## Diagrams From Headings {[factCard]}
+
+A few tags turn **child** headings into parts. Under \`{[diagram]}\`, each \`###\` becomes a node and \`connectsTo=\` draws the edges; under \`{[drawing]}\`, children are shapes such as \`{[rectangle]}\` joined by \`{[arrow from=… to=…]}\`. Load the **diagram family tree**, **diagram architecture**, or **drawing org chart** samples to see them rendered.
+
+## Guidelines {[list colorScheme=teal]}
+
+- Start in Markdown; add tags only where design matters
+- Let the heading and body carry content; let the tag carry style
+- Prefer \`colorScheme\` over hard-coded colors so themes stay in control
+- Use transitions sparingly — motion should guide the eye, not fight for it
+- Keep every tag reversible: strip them all and you still have a clean document
+
+## Author once. Render everywhere. {[fullBleedQuote colorScheme=blue]}
+
+That is the whole idea behind SquigglySquare.
 `,
 
   'features-demo': `# Features Demo
@@ -293,4 +431,137 @@ A captioned video block for embedding media clips.
 
 A dramatic quote overlaid on a background video.
 `,
+  'diagram-family-tree': `# Family Tree Demo
+
+A small genealogy diagram. Each child heading under the \`{[diagram]}\` parent becomes a node; \`connectsTo\` links them.
+
+## Family Tree {[diagram]}
+
+### Grandparent {#grandparent x=400 y=80}
+
+The eldest known ancestor.
+
+### Parent A {#parent-a x=240 y=260 connectsTo=grandparent}
+
+### Parent B {#parent-b x=560 y=260 connectsTo=grandparent}
+
+### Child 1 {#child-1 x=120 y=440 connectsTo=parent-a:born}
+
+### Child 2 {#child-2 x=360 y=440 connectsTo=parent-a:born}
+
+### Child 3 {#child-3 x=600 y=440 connectsTo=parent-b:born}
+
+## After the diagram
+
+Regular body content continues here.
+`,
+  'diagram-architecture': `# Architecture Sketch
+
+A node diagram with typed connections.
+
+## System Overview {[diagram]}
+
+### API Server {#api x=300 y=120 connectsTo=db:reads,cache:reads,queue:publishes}
+
+### Database {#db x=80 y=320}
+
+### Cache {#cache x=300 y=320}
+
+### Job Queue {#queue x=520 y=320 connectsTo=worker:dispatches}
+
+### Worker {#worker x=520 y=520 connectsTo=db:writes}
+`,
+  'drawing-org-chart': `# Org Chart Demo
+
+A free-form drawing. Each child heading under the \`{[drawing]}\` parent is a shape; \`from\`/\`to\` connectors join them.
+
+## Org chart {[drawing]}
+
+### CEO {#ceo} {[rectangle x=360 y=80 width=200 height=100]}
+
+### CTO {#cto} {[rectangle x=160 y=320 width=200 height=100]}
+
+### COO {#coo} {[rectangle x=560 y=320 width=200 height=100]}
+
+### reports to {[arrow from=cto to=ceo]}
+
+### also reports {[arrow from=coo to=ceo]}
+
+## After the drawing
+
+Regular body content continues here.
+`,
+  'custom-template-demo': buildCustomTemplateDemo(),
 };
+
+// ── Custom template demo ──────────────────────────────────────
+
+/**
+ * Build a markdown doc that pre-defines a `hero` custom template in
+ * frontmatter and uses it on a block. Computed at module init so the
+ * base64-encoded definition is always in sync with the underlying
+ * Layer array.
+ */
+function buildCustomTemplateDemo(): string {
+  const heroLayers: Layer[] = [
+    {
+      id: 'hero-title',
+      type: 'text',
+      position: { x: '6%', y: '20%', width: '88%' },
+      content: {
+        text: '{title}',
+        style: {
+          fontSize: 96,
+          fontWeight: 'bold',
+          color: '#0f172a',
+          textAlign: 'left',
+        },
+      },
+    },
+    {
+      id: 'hero-body',
+      type: 'text',
+      position: { x: '6%', y: '52%', width: '88%' },
+      content: {
+        text: '{content}',
+        style: { fontSize: 36, color: '#475569', textAlign: 'left' },
+      },
+    },
+    {
+      id: 'hero-accent',
+      type: 'shape',
+      position: { x: '6%', y: '14%', width: '6%', height: '2%' },
+      content: { shape: 'rect', fill: '#6366f1' },
+    },
+  ];
+  const heroDef: CustomTemplateDefinition = {
+    name: 'hero',
+    label: 'Hero Section',
+    description: 'Large title with body below — uses {title} and {content}.',
+    viewport: { width: 1920, height: 1080 },
+    layers: heroLayers,
+  };
+  // Compact JSON, stored unquoted so it round-trips through the
+  // line-based frontmatter parser and stays human-readable.
+  const payload = writeCustomTemplatesToFrontmatter([heroDef]);
+  return `---
+title: Custom Template Demo
+squisq-custom-templates: ${payload}
+---
+
+# Custom Templates Demo
+
+This sample demonstrates a user-authored \`hero\` template defined in
+frontmatter. Blocks tagged with \`{[hero]}\` render via that template;
+\`{title}\` and \`{content}\` placeholders substitute each block's data.
+
+## Welcome to Squisq {[hero]}
+
+A small editor for big ideas. Author once, render everywhere.
+
+## Why custom templates? {[hero]}
+
+Templates capture brand voice and layout once, then every block in
+your doc can use them. No more copy-pasting positions across slides.
+`;
+}

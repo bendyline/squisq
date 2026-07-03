@@ -32,6 +32,9 @@ export type {
   // Heading template annotation
   HeadingTemplateAnnotation,
 
+  // Pandoc-style heading attributes
+  HeadingAttributes,
+
   // HTML sub-DOM
   HtmlElement,
   HtmlText,
@@ -96,8 +99,40 @@ export { stringifyMarkdown } from './stringify.js';
 // Conversion layer (for advanced use: working with remark plugins directly)
 export { fromMdast, toMdast } from './convert.js';
 
+// Pandoc-style heading attribute helpers — exposed so editor-react can
+// mutate `data-block-attrs` strings without reimplementing the tokenizer.
+export { parsePandocAttrTokens, serializePandocAttributes } from './convert.js';
+
+// Shared key=value attribute machinery for both annotation forms
+// (`{[templateName key=value]}` and Pandoc `{#id .class key=value}`) —
+// exposed so editor-react's tiptap bridge tokenizes and matches headings
+// with the exact same grammar as the parser, by import rather than by copy.
+export {
+  tokenizeAttrTokens,
+  splitKeyValueToken,
+  unquoteAttrValue,
+  needsQuoting,
+  quoteAttrValue,
+  matchTrailingTemplateAnnotation,
+  matchTrailingPandocAttr,
+} from './attrTokens.js';
+export type { TrailingAnnotationMatch } from './attrTokens.js';
+
+// Known `{[name key=value]}` block-meta keys and their editor-facing
+// descriptors — exposed so the markdown editor's attribute autocomplete
+// suggests keys and (where closed) values from the same registry the parser
+// coerces against, rather than a hand-maintained copy.
+export {
+  KNOWN_BLOCK_META_KEYS,
+  BLOCK_META_KEY_DESCRIPTORS,
+  parseTimeSeconds,
+} from './annotationCoercion.js';
+export type { KnownBlockMetaKey, BlockMetaKeyDescriptor } from './annotationCoercion.js';
+
 // HTML sub-DOM utilities
 export { parseHtmlToNodes, stringifyHtmlNodes } from './htmlParse.js';
+export { sanitizeHtmlNodes, sanitizeUrl } from './sanitize.js';
+export type { HtmlPolicy, UrlKind } from './sanitize.js';
 
 // Tree utilities
 export {
@@ -111,4 +146,5 @@ export {
   setFrontmatterValues,
   inferDocumentTitle,
   readFrontmatterThemeId,
+  plainTextFromInlineHtml,
 } from './utils.js';

@@ -134,7 +134,7 @@ test.describe('WYSIWYG editing', () => {
 
   test('editor contains the sample document content', async ({ page }) => {
     const editor = page.locator('.tiptap.ProseMirror');
-    await expect(editor).toContainText('Hello World');
+    await expect(editor).toContainText('About SquigglySquare');
   });
 
   test('typing in the editor updates content', async ({ page }) => {
@@ -177,7 +177,7 @@ test.describe('Markdown sync between views', () => {
     await waitForMonaco(page);
     // Monaco editor should contain markdown with the heading
     const monacoContent = page.locator('.monaco-editor');
-    await expect(monacoContent).toContainText('Hello World');
+    await expect(monacoContent).toContainText('About SquigglySquare');
   });
 
   test('switching from Editor to Markdown preserves content', async ({ page }) => {
@@ -185,12 +185,12 @@ test.describe('Markdown sync between views', () => {
     await waitForWysiwyg(page);
 
     // Verify content exists in editor
-    await expect(page.locator('.tiptap.ProseMirror')).toContainText('Hello World');
+    await expect(page.locator('.tiptap.ProseMirror')).toContainText('About SquigglySquare');
 
     // Switch to Markdown and verify the same content is there
     await switchView(page, 'Markdown');
     await waitForMonaco(page);
-    await expect(page.locator('.monaco-editor')).toContainText('Hello World');
+    await expect(page.locator('.monaco-editor')).toContainText('About SquigglySquare');
   });
 });
 
@@ -226,24 +226,14 @@ test.describe('Template picker', () => {
     await waitForWysiwyg(page);
   });
 
-  test('template picker appears when cursor is in a heading', async ({ page }) => {
+  test('template picker opens from a heading template chip', async ({ page }) => {
     const editor = page.locator('.tiptap.ProseMirror');
-    // Click on a heading in the editor
     const heading = editor.locator('h1, h2, h3').first();
-    if (await heading.isVisible()) {
-      await heading.click();
-      // Give time for the toolbar to update
-      await page.waitForTimeout(300);
+    const chip = heading.locator('.squisq-template-badge').first();
 
-      // Template picker should appear. The default TemplatePicker is a
-      // <button> trigger that opens a gallery in a React portal — the
-      // older <select>-based shape only survives in the compact (overflow
-      // menu) variant. Asserting on the trigger here keeps the test
-      // honest about what's actually rendered in the toolbar.
-      const picker = page.locator('.squisq-template-picker');
-      await expect(picker).toBeVisible();
-      await expect(picker.locator('.squisq-template-picker-trigger')).toBeVisible();
-    }
+    await expect(chip).toBeVisible();
+    await chip.click();
+    await expect(page.locator('#squisq-template-gallery-portal')).toBeVisible();
   });
 
   test('template picker is hidden when cursor is in body text', async ({ page }) => {

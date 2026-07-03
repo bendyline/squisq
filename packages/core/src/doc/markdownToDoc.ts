@@ -22,7 +22,16 @@
  * ```
  */
 
-import type { Doc, Block, CaptionTrack, CaptionPhrase, StartBlockConfig } from '../schemas/Doc.js';
+import type {
+  Doc,
+  Block,
+  CaptionTrack,
+  CaptionPhrase,
+  StartBlockConfig,
+  DocDiagnostic,
+} from '../schemas/Doc.js';
+import { readCustomTemplatesFromFrontmatter } from './customTemplatesFrontmatter.js';
+import { readCustomThemesFromFrontmatter } from './customThemesFrontmatter.js';
 import type {
   MarkdownDocument,
   MarkdownBlockNode,
@@ -31,8 +40,14 @@ import type {
   HtmlNode,
 } from '../markdown/types.js';
 import { extractPlainText } from '../markdown/utils.js';
+import { coerceAnnotationValues, type CoercedBlockMeta } from '../markdown/annotationCoercion.js';
 import { estimateReadingTime } from '../timing/readingTime.js';
-import { resolveTemplateName } from './templates/index.js';
+import { resolveTemplateName, isContainerTemplate } from './templates/index.js';
+import { isDataFence, parseDataFence, findFirstTable, extractTableData } from './structuredData.js';
+import { extractMediaFromContents } from './mediaAnnotations.js';
+import { profileBlockContents, pickAutoTemplate } from '../recommend/templates.js';
+import { deriveTemplateInputs } from './templateInputs.js';
+import type { MediaClip } from '../schemas/Media.js';
 
 // ============================================
 // Options
@@ -61,6 +76,25 @@ export interface MarkdownToDocOptions {
    * is used as the hero. Set to false to suppress automatic cover generation.
    */
   generateCoverBlock?: boolean;
+
+  /**
+   * Timestamp recorded as `captions.generatedAt`. When omitted, the field
+   * is left unset so that conversion is fully deterministic — the same
+   * markdown always converts to an identical Doc (important for snapshot
+   * tests, caching, and agents that verify their output by re-converting).
+   */
+  captionsGeneratedAt?: string;
+
+  /**
+   * Content-aware template auto-picking for unannotated headings
+   * (default: true). When a heading block carries a strong content signal
+   * — a table, images, a blockquote, a list, a stat-looking line — the
+   * matching template is applied (with inputs derived from the body)
+   * instead of the structural `defaultTemplate`. Explicit `{[template]}`
+   * annotations always win. Authors can also disable per document with
+   * frontmatter `squisq-auto-templates: false`.
+   */
+  autoTemplates?: boolean;
 }
 
 // ============================================
@@ -90,12 +124,14 @@ function slugify(text: string): string {
 
 /**
  * Creates an ID generator that produces unique slugified IDs.
- * Appends -2, -3, etc. for duplicate headings.
+ * Appends -2, -3, etc. for duplicate headings. `reserve()` registers an
+ * author-pinned `{#id}` so a later heading whose slug matches doesn't
+ * collide with it.
  */
 function createIdGenerator() {
   const used = new Map<string, number>();
 
-  return (heading: MarkdownHeading, _index: number): string => {
+  const generate = (heading: MarkdownHeading, _index: number): string => {
     const text = extractPlainText(heading);
     const base = slugify(text);
     const count = used.get(base) ?? 0;
@@ -104,6 +140,12 @@ function createIdGenerator() {
     if (count === 0) return base;
     return `${base}-${count + 1}`;
   };
+
+  generate.reserve = (id: string): void => {
+    used.set(id, Math.max(used.get(id) ?? 0, 1));
+  };
+
+  return generate;
 }
 
 // ============================================
@@ -125,13 +167,44 @@ function createIdGenerator() {
  * @param options - Conversion options
  * @returns A Doc whose blocks mirror the markdown heading structure
  */
+/**
+ * Apply coerced block-meta values onto a block's typed fields. Only keys
+ * actually present are written, so a later caller (the Pandoc attribute
+ * block) can override values supplied by the squiggly `{[…]}` annotation.
+ */
+function applyBlockMeta(block: Block, m: CoercedBlockMeta): void {
+  if (m.x != null) block.x = m.x;
+  if (m.y != null) block.y = m.y;
+  if (m.startTime != null) block.startTime = m.startTime;
+  if (m.duration != null) block.duration = m.duration;
+  if (m.connectsTo) block.connectsTo = m.connectsTo;
+  if (m.transition) block.transition = m.transition;
+}
+
+/**
+ * The block-meta an author pinned on a heading, drawn from either the
+ * Pandoc `{key=value}` block or the squiggly `{[key=value]}` annotation
+ * (Pandoc wins on conflict — same precedence as {@link makeBlock}). Used by
+ * the timing passes to tell "author pinned this" from "derive it".
+ */
+function pinnedHeadingMeta(heading: MarkdownHeading | undefined): CoercedBlockMeta {
+  if (!heading) return {};
+  const fromAnnotation = heading.templateAnnotation?.params
+    ? coerceAnnotationValues(heading.templateAnnotation.params).blockMeta
+    : {};
+  const fromPandoc = heading.attributes?.blockMeta ?? {};
+  return { ...fromAnnotation, ...fromPandoc };
+}
+
 export function markdownToDoc(markdownDoc: MarkdownDocument, options?: MarkdownToDocOptions): Doc {
   const articleId = options?.articleId ?? 'markdown-doc';
   const defaultTemplate = options?.defaultTemplate ?? 'sectionHeader';
   const defaultDuration = options?.defaultDuration ?? 5;
-  const generateId = options?.generateId ?? createIdGenerator();
+  const idGenerator = options?.generateId ? null : createIdGenerator();
+  const generateId = options?.generateId ?? idGenerator!;
 
   const rootBlocks: Block[] = [];
+  const diagnostics: DocDiagnostic[] = [];
   let headingIndex = 0;
 
   // Stack tracks the nesting context: each entry is a block and its heading depth.
@@ -151,7 +224,14 @@ export function markdownToDoc(markdownDoc: MarkdownDocument, options?: MarkdownT
   }
 
   function makeBlock(heading: MarkdownHeading | null): Block {
-    const id = heading ? generateId(heading, headingIndex++) : 'preamble';
+    // Pandoc `{#id}` overrides slug-from-heading when present. Pinned ids
+    // are reserved in the slug generator so a later un-pinned heading with
+    // the same slugified text doesn't collide.
+    const pandocId = heading?.attributes?.id;
+    const id = pandocId ? pandocId : heading ? generateId(heading, headingIndex++) : 'preamble';
+    if (pandocId && idGenerator) {
+      idGenerator.reserve(pandocId);
+    }
 
     // Use template from annotation if present, otherwise fall back to default.
     // Legacy template ids (e.g. `titleBlock`) are normalized to their canonical
@@ -175,9 +255,29 @@ export function markdownToDoc(markdownDoc: MarkdownDocument, options?: MarkdownT
       ...(title ? { title } : {}),
     };
 
-    // Propagate key-value params from annotation to templateOverrides
+    // {[…]} template params → templateOverrides (template-specific overrides).
+    // Known block-meta keys (duration, startTime, x, y, connectsTo) are *also*
+    // honored in the squiggly form, so an author — or the timeline editor —
+    // can write `{[duration=8]}` instead of the Pandoc `{duration=8}` block.
+    // The raw params still flow to `templateOverrides` for round-tripping; the
+    // Pandoc attribute block applied below wins when a key appears in both.
     if (annotation?.params) {
       block.templateOverrides = annotation.params;
+      applyBlockMeta(block, coerceAnnotationValues(annotation.params).blockMeta);
+    }
+
+    // Pandoc {#id .class key=value} attributes → block-level fields.
+    const attrs = heading?.attributes;
+    if (attrs) {
+      if (attrs.blockMeta) {
+        applyBlockMeta(block, attrs.blockMeta);
+      }
+      if (attrs.classes && attrs.classes.length > 0) {
+        block.classes = attrs.classes;
+      }
+      if (attrs.metadata && Object.keys(attrs.metadata).length > 0) {
+        block.metadata = attrs.metadata;
+      }
     }
 
     return block;
@@ -242,13 +342,100 @@ export function markdownToDoc(markdownDoc: MarkdownDocument, options?: MarkdownT
     rootBlocks.push(currentBlock);
   }
 
-  // Calculate reading-time-based durations and generate captions
+  // Lift standalone body-level media annotations (`{[audio …]}` / `{[video …]}`)
+  // into typed clips: block-anchored clips ride on `block.media`; clips flagged
+  // `anchor=document` collect into the doc-level `documentMedia`. Done before
+  // the reading-time pass so annotation text doesn't inflate block durations.
+  const documentMedia: MediaClip[] = [];
+  for (const block of flattenBlocks(rootBlocks)) {
+    const {
+      media,
+      documentMedia: docMedia,
+      remaining,
+    } = extractMediaFromContents(
+      block.contents,
+      (src, i) => `${block.id}-media-${i}-${src.replace(/[^a-zA-Z0-9]+/g, '-')}`,
+    );
+    if (media.length > 0) block.media = media;
+    if (docMedia.length > 0) documentMedia.push(...docMedia);
+    if (block.contents) block.contents = remaining;
+  }
+
+  // A preamble block that held only document-media annotations is now empty —
+  // drop it so a doc-spanning narration doesn't leave a phantom 5s block at the
+  // top of the timeline. Only the heading-less preamble (rootBlocks[0]) can be
+  // emptied this way.
+  if (
+    rootBlocks.length > 0 &&
+    !rootBlocks[0].sourceHeading &&
+    (rootBlocks[0].contents?.length ?? 0) === 0 &&
+    (rootBlocks[0].children?.length ?? 0) === 0 &&
+    !rootBlocks[0].media
+  ) {
+    rootBlocks.shift();
+  }
+
   const allBlocks = flattenBlocks(rootBlocks);
+
+  // Structured template data: ```json data / ```yaml data fences in a
+  // block's body parse into `templateData`; for dataTable blocks the first
+  // GFM table supplies headers/rows when not explicitly provided. Parse
+  // failures degrade gracefully (the fence stays visible as code) and are
+  // recorded as diagnostics.
+  for (const block of allBlocks) {
+    applyStructuredData(block, diagnostics);
+  }
+
+  // Content-aware template auto-pick (default on): unannotated heading
+  // blocks whose body carries a strong signal get the matching template
+  // plus inputs derived from that body. Strict derivation — when the
+  // essential input can't be built (e.g. feature without an image src),
+  // the block keeps the structural default.
+  if ((options?.autoTemplates ?? true) && !frontmatterDisablesAutoTemplates(markdownDoc)) {
+    applyAutoTemplates(rootBlocks, resolveTemplateName(defaultTemplate), { featureIndex: 0 });
+  }
+
+  // Duplicate ids make connections and navigation ambiguous. Generated
+  // slugs are already deduped; this catches author-pinned `{#id}` clashes.
+  const seenIds = new Map<string, Block>();
+  for (const block of allBlocks) {
+    if (seenIds.has(block.id)) {
+      diagnostics.push({
+        severity: 'error',
+        code: 'duplicate-id',
+        message: `Duplicate block id "${block.id}" — later connections and links are ambiguous`,
+        blockId: block.id,
+        ...lineOf(block),
+      });
+    } else {
+      seenIds.set(block.id, block);
+    }
+  }
+
+  // connectsTo targets must resolve to a block id in this doc.
+  for (const block of allBlocks) {
+    for (const conn of block.connectsTo ?? []) {
+      if (!seenIds.has(conn.target)) {
+        diagnostics.push({
+          severity: 'warning',
+          code: 'unresolved-connection',
+          message: `Block "${block.id}" connects to unknown target "${conn.target}"`,
+          blockId: block.id,
+          ...lineOf(block),
+        });
+      }
+    }
+  }
+
+  // Calculate reading-time-based durations and generate captions
   const minDuration = 3; // seconds — minimum for blocks with little/no text
   const phrases: CaptionPhrase[] = [];
 
-  // First pass: compute duration from body-content reading time
+  // First pass: compute duration from body-content reading time.
+  // Skip blocks that pinned an explicit duration via a heading attribute —
+  // author intent wins over reading-time heuristics.
   for (const block of allBlocks) {
+    if (pinnedHeadingMeta(block.sourceHeading).duration != null) continue;
     const bodyText = getBlockBodyText(block);
     if (bodyText.length > 0) {
       const estimate = estimateReadingTime(bodyText);
@@ -258,10 +445,16 @@ export function markdownToDoc(markdownDoc: MarkdownDocument, options?: MarkdownT
     }
   }
 
-  // Second pass: assign start times sequentially and build caption phrases
+  // Second pass: assign start times sequentially and build caption phrases.
+  // Blocks with an explicit `startTime` attribute keep their pinned value;
+  // the running cursor still advances by their duration so following blocks
+  // sequence after them.
   let currentTime = 0;
   for (const block of allBlocks) {
-    block.startTime = currentTime;
+    const explicitStart = pinnedHeadingMeta(block.sourceHeading).startTime;
+    if (explicitStart == null) {
+      block.startTime = currentTime;
+    }
 
     // Generate caption phrases from the block's body content
     const bodyText = getBlockBodyText(block);
@@ -283,9 +476,20 @@ export function markdownToDoc(markdownDoc: MarkdownDocument, options?: MarkdownT
     currentTime += block.duration;
   }
 
+  // `generatedAt` is only stamped when the caller provides a timestamp —
+  // conversion itself never reads the clock, so identical markdown always
+  // converts to an identical Doc.
   const captions: CaptionTrack | undefined =
-    phrases.length > 0 ? { phrases, generatedAt: new Date().toISOString(), version: 1 } : undefined;
+    phrases.length > 0
+      ? {
+          phrases,
+          ...(options?.captionsGeneratedAt ? { generatedAt: options.captionsGeneratedAt } : {}),
+          version: 1,
+        }
+      : undefined;
 
+  const customTemplates = readCustomTemplatesFromFrontmatter(markdownDoc.frontmatter);
+  const customThemes = readCustomThemesFromFrontmatter(markdownDoc.frontmatter);
   const doc: Doc = {
     articleId,
     duration: currentTime,
@@ -295,6 +499,10 @@ export function markdownToDoc(markdownDoc: MarkdownDocument, options?: MarkdownT
     },
     ...(captions ? { captions } : {}),
     ...(markdownDoc.frontmatter ? { frontmatter: markdownDoc.frontmatter } : {}),
+    ...(customTemplates ? { customTemplates } : {}),
+    ...(customThemes ? { customThemes } : {}),
+    ...(diagnostics.length > 0 ? { diagnostics } : {}),
+    ...(documentMedia.length > 0 ? { documentMedia } : {}),
   };
 
   // Auto-generate cover startBlock from the first H1 heading
@@ -328,6 +536,29 @@ export function flattenBlocks(blocks: Block[]): Block[] {
 }
 
 /**
+ * Flatten the block tree into the list of *independently renderable*
+ * blocks — like {@link flattenBlocks}, but it does NOT descend into the
+ * children of a container template (`diagram`, `drawing`; see
+ * `isContainerTemplate`). Those children are consumed by the parent's
+ * render (as nodes / shapes), so they must not also surface as their own
+ * slides or sections.
+ *
+ * Use this anywhere a doc is flattened for rendering (slideshow, video,
+ * static pages). Use {@link flattenBlocks} when you genuinely need every
+ * block regardless of role — validation, timing, duplicate-id checks.
+ */
+export function flattenRenderableBlocks(blocks: Block[]): Block[] {
+  const result: Block[] = [];
+  for (const block of blocks) {
+    result.push(block);
+    if (block.children && !isContainerTemplate(block.template)) {
+      result.push(...flattenRenderableBlocks(block.children));
+    }
+  }
+  return result;
+}
+
+/**
  * Count the total number of blocks in a nested tree (including children at all levels).
  */
 export function countBlocks(blocks: Block[]): number {
@@ -351,6 +582,96 @@ export function getBlockDepth(block: Block): number {
 // ============================================
 // Internal helpers
 // ============================================
+
+/** Source line of a block's heading, when position info is available. */
+function lineOf(block: Block): { line: number } | Record<string, never> {
+  const line = block.sourceHeading?.position?.start.line;
+  return line != null ? { line } : {};
+}
+
+/**
+ * Populate `block.templateData` from structured body content:
+ * 1. Every ```json data / ```yaml data fence in the body merges its parsed
+ *    object in (later fences override earlier keys).
+ * 2. For `dataTable` blocks, the first GFM table supplies headers/rows/align
+ *    unless the author already provided them via a fence or `{[…]}` params.
+ * Parse failures are recorded on `diagnostics` and skip the fence.
+ */
+function applyStructuredData(block: Block, diagnostics: DocDiagnostic[]): void {
+  let data: Record<string, unknown> | undefined;
+
+  for (const node of block.contents ?? []) {
+    if (node.type !== 'code' || !isDataFence(node)) continue;
+    const result = parseDataFence(node);
+    if (result.error) {
+      diagnostics.push({
+        severity: 'error',
+        code: 'data-fence-parse',
+        message: `Data fence in block "${block.id}": ${result.error}`,
+        blockId: block.id,
+        ...(node.position ? { line: node.position.start.line } : lineOf(block)),
+      });
+      continue;
+    }
+    data = { ...data, ...result.data };
+  }
+
+  if (block.template === 'dataTable') {
+    const provided = (key: string) =>
+      (data && key in data) || (block.templateOverrides && key in block.templateOverrides);
+    if (!provided('headers') && !provided('rows')) {
+      const table = findFirstTable(block.contents);
+      if (table) {
+        data = { ...extractTableData(table), ...data };
+      }
+    }
+  }
+
+  if (data && Object.keys(data).length > 0) {
+    block.templateData = data;
+  }
+}
+
+/** Truthiness of the `squisq-auto-templates` frontmatter kill-switch. */
+function frontmatterDisablesAutoTemplates(markdownDoc: MarkdownDocument): boolean {
+  const v = markdownDoc.frontmatter?.['squisq-auto-templates'];
+  return v === false || v === 'false' || v === 'off' || v === 'no' || v === 0;
+}
+
+/**
+ * Walk heading blocks and apply content-aware templates to the ones that
+ * still hold the structural default. Children of container templates
+ * (diagram/drawing/layout) are consumed by their parent and never
+ * re-templated. `state.featureIndex` alternates left/right feature
+ * composition across the document.
+ */
+function applyAutoTemplates(
+  blocks: Block[],
+  resolvedDefault: string,
+  state: { featureIndex: number },
+): void {
+  for (const block of blocks) {
+    const annotated = !!block.sourceHeading?.templateAnnotation?.template;
+    if (block.sourceHeading && !annotated && block.template === resolvedDefault) {
+      const profile = profileBlockContents(block.contents ?? []);
+      const picked = pickAutoTemplate(profile, state.featureIndex);
+      if (picked) {
+        const inputs = deriveTemplateInputs(picked, block.title ?? '', block.contents);
+        if (inputs) {
+          if (picked === 'leftFeature' || picked === 'rightFeature') state.featureIndex += 1;
+          block.template = picked;
+          block.autoTemplate = true;
+          // Author-provided structured data (```json data fences) wins
+          // over derived inputs.
+          block.templateData = { ...inputs, ...block.templateData };
+        }
+      }
+    }
+    if (block.children && block.children.length > 0 && !isContainerTemplate(block.template)) {
+      applyAutoTemplates(block.children, resolvedDefault, state);
+    }
+  }
+}
 
 /**
  * Extract the plain text from a block's body contents (excluding heading text).

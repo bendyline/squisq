@@ -60,6 +60,19 @@
 .squisq-image-editor-tool-group--right {
   margin-left: auto;
 }
+/* Read-only property value (e.g. a path shape's kind). */
+.squisq-image-editor-readonly-value {
+  text-transform: capitalize;
+  opacity: 0.8;
+}
+/* Anchor for the shape palette popover that drops from the Shape tool. */
+.squisq-image-editor-shape-trigger {
+  position: relative;
+  display: inline-flex;
+}
+.squisq-image-editor-shape-trigger .squisq-shape-palette {
+  z-index: 20;
+}
 .squisq-image-editor-tool-button {
   background: var(--squisq-image-editor-control-bg);
   color: inherit;
@@ -133,21 +146,28 @@
 /* ── Canvas surface ────────────────────────────────────────────────── */
 .squisq-image-editor-surface {
   flex: 1 1 auto;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 1rem;
+  min-width: 0;
+  min-height: 0;
   overflow: auto;
   background: var(--squisq-image-editor-workspace-bg);
 }
+.squisq-image-editor-canvas-wrap {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 100%;
+  min-height: 100%;
+  padding: 16px;
+  box-sizing: border-box;
+}
 .squisq-image-editor-canvas {
   display: block;
-  max-width: 100%;
-  max-height: 100%;
+  flex: 0 0 auto;
   background: transparent;
   box-shadow: 0 4px 24px rgba(0, 0, 0, 0.4);
   user-select: none;
   touch-action: none;
+  image-rendering: pixelated;
 }
 .squisq-image-editor-canvas--tool-text,
 .squisq-image-editor-canvas--tool-shape {
@@ -155,6 +175,9 @@
 }
 .squisq-image-editor-canvas--tool-crop {
   cursor: crosshair;
+}
+.squisq-image-editor-canvas--tool-zoom-rect {
+  cursor: zoom-in;
 }
 
 /* ── Layers panel ──────────────────────────────────────────────────── */
@@ -326,6 +349,32 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
+}
+
+/* ── Zoom controls ──────────────────────────────────────────────────── */
+.squisq-image-editor-tool-group--zoom {
+  gap: 0.15rem;
+}
+.squisq-image-editor-zoom-input {
+  width: 44px;
+  text-align: center;
+  background: var(--squisq-image-editor-control-bg);
+  border: 1px solid var(--squisq-image-editor-control-border);
+  color: inherit;
+  border-radius: 3px;
+  padding: 3px 2px;
+  font: inherit;
+  font-size: 12px;
+  -moz-appearance: textfield;
+}
+.squisq-image-editor-zoom-input::-webkit-inner-spin-button,
+.squisq-image-editor-zoom-input::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+}
+.squisq-image-editor-zoom-label {
+  font-size: 12px;
+  color: var(--squisq-image-editor-text-muted);
+  padding: 0 1px;
 }
 
 /* -- Version history dropdown --------------------------------------- */

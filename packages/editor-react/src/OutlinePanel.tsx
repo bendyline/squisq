@@ -25,10 +25,45 @@ export interface OutlinePanelProps {
 }
 
 export function OutlinePanel({ width = 240, className }: OutlinePanelProps) {
-  const { doc, markdownSource, setMarkdownSource } = useEditorContext();
+  const {
+    doc,
+    markdownSource,
+    setMarkdownSource,
+    layoutMode,
+    goToBlockByLine,
+    activeBlockStartLine,
+  } = useEditorContext();
   const paneRef = useRef<HTMLElement | null>(null);
   const { scrollToBlock } = useHeadingLayout(paneRef);
-  const activeBlockId = useActiveOutlineBlockId();
+  const cursorActiveId = useActiveOutlineBlockId();
+
+  // In block-at-a-time mode there's no live cursor across the whole document
+  // (only the active block is mounted), so the highlight follows the card:
+  // match the block whose heading begins on the active slice's source line.
+  const blockModeActiveId = useMemo(() => {
+    if (layoutMode !== 'block' || activeBlockStartLine == null || !doc) return null;
+    const match = flattenBlocks(doc.blocks).find(
+      (b) => b.sourceHeading?.position?.start.line === activeBlockStartLine,
+    );
+    return match?.id ?? null;
+  }, [layoutMode, activeBlockStartLine, doc]);
+  const activeBlockId = layoutMode === 'block' ? blockModeActiveId : cursorActiveId;
+
+  // Clicking a row jumps the card to that block in block mode, or scrolls the
+  // editor to it in document mode.
+  const handleSelect = useCallback(
+    (block: Block) => {
+      if (layoutMode === 'block') {
+        const line = block.sourceHeading?.position?.start.line;
+        if (typeof line === 'number') {
+          goToBlockByLine(line);
+          return;
+        }
+      }
+      scrollToBlock(block);
+    },
+    [layoutMode, goToBlockByLine, scrollToBlock],
+  );
 
   // Promote / demote the row's heading by rewriting just the `#` prefix
   // on the heading line. Falls through when the new depth would leave the
@@ -81,7 +116,7 @@ export function OutlinePanel({ width = 240, className }: OutlinePanelProps) {
               key={b.id}
               block={b}
               activeBlockId={activeBlockId}
-              onSelect={scrollToBlock}
+              onSelect={handleSelect}
               onChangeLevel={changeHeadingLevel}
             />
           ))}

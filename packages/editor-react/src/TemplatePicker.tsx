@@ -6,10 +6,22 @@
  * and a one-sentence description so authors can quickly find the right layout.
  */
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
+import type { CustomTemplateDefinition } from '@bendyline/squisq/schemas';
+import { TEMPLATE_METADATA, resolveTemplateName } from '@bendyline/squisq/doc';
+import { useCustomTemplates } from './customTemplates/CustomTemplateContext';
+import { TemplateThumbnail } from './customTemplates/thumbnail';
 
 // ── Template metadata ─────────────────────────────────────────────
+//
+// The canonical list of built-in templates (which ids exist, their labels,
+// and their descriptions) lives in core's `TEMPLATE_METADATA`. The entries
+// below add the one thing core can't hold — a React/SVG preview icon per id —
+// and MUST stay 1:1 with `TEMPLATE_METADATA` (same ids, same order, same
+// label/description). `templatePickerMetadata.test.ts` enforces this, so a
+// template added to the core registry without a picker icon (or vice versa)
+// fails the build instead of silently disappearing from the gallery.
 
 interface TemplateEntry {
   name: string;
@@ -65,7 +77,8 @@ const NONE_ENTRY: TemplateEntry = {
   ),
 };
 
-const TEMPLATE_ENTRIES: TemplateEntry[] = [
+// eslint-disable-next-line react-refresh/only-export-components
+export const TEMPLATE_ENTRIES: TemplateEntry[] = [
   {
     name: 'title',
     label: 'Title',
@@ -381,6 +394,85 @@ const TEMPLATE_ENTRIES: TemplateEntry[] = [
       </TemplateIcon>
     ),
   },
+  {
+    name: 'diagram',
+    label: 'Diagram',
+    description:
+      'Renders sub-headings as connected nodes — edit visually as a node-and-edge diagram.',
+    icon: (
+      <TemplateIcon>
+        <rect x={4} y={6} width={16} height={10} rx={2} fill={FA} opacity={0.85} />
+        <rect x={36} y={6} width={16} height={10} rx={2} fill={F2} opacity={0.8} />
+        <rect x={20} y={24} width={16} height={10} rx={2} fill={F2} opacity={0.8} />
+        <path
+          d="M 20 11 L 36 11"
+          stroke={FA}
+          strokeWidth={1.5}
+          fill="none"
+          opacity={0.7}
+          markerEnd="url(#tp-diagram-arrow)"
+        />
+        <path
+          d="M 12 16 C 12 22, 24 22, 24 24"
+          stroke={FA}
+          strokeWidth={1.5}
+          fill="none"
+          opacity={0.7}
+        />
+        <path
+          d="M 44 16 C 44 22, 32 22, 32 24"
+          stroke={FA}
+          strokeWidth={1.5}
+          fill="none"
+          opacity={0.7}
+        />
+      </TemplateIcon>
+    ),
+  },
+  {
+    name: 'layout',
+    label: 'Layout',
+    description:
+      "Free-form 2D canvas — drag layers into place. Use for one-off block layouts that don't fit a template.",
+    icon: (
+      <TemplateIcon>
+        <rect
+          x={3}
+          y={3}
+          width={50}
+          height={34}
+          rx={2}
+          fill="none"
+          stroke={F1}
+          strokeWidth={1}
+          strokeDasharray="3 2"
+        />
+        <rect x={7} y={7} width={20} height={12} rx={1.5} fill={FA} opacity={0.85} />
+        <rect x={30} y={7} width={20} height={26} rx={1.5} fill={F2} opacity={0.7} />
+        <rect x={7} y={22} width={20} height={11} rx={1.5} fill={F1} opacity={0.7} />
+      </TemplateIcon>
+    ),
+  },
+  {
+    name: 'drawing',
+    label: 'Drawing',
+    description: 'Free-form sketches — draw shapes, paths, and text directly on a 2D surface.',
+    icon: (
+      <TemplateIcon>
+        <rect x={3} y={3} width={50} height={34} rx={2} fill="none" stroke={F1} strokeWidth={1} />
+        <path
+          d="M 8 28 C 14 12, 26 14, 30 22 S 44 32, 50 14"
+          stroke={FA}
+          strokeWidth={2}
+          fill="none"
+          opacity={0.85}
+          strokeLinecap="round"
+        />
+        <circle cx={10} cy={10} r={2.5} fill={F2} />
+        <rect x={40} y={28} width={8} height={6} rx={1} fill={F2} opacity={0.7} />
+      </TemplateIcon>
+    ),
+  },
 ];
 
 /**
@@ -399,26 +491,22 @@ export const TEMPLATE_NAMES: readonly string[] = TEMPLATE_ENTRIES.map((e) => e.n
  * normalizing their annotations.
  */
 // eslint-disable-next-line react-refresh/only-export-components
-export function templateLabel(name: string): string {
+export function templateLabel(
+  name: string,
+  customTemplates?: readonly CustomTemplateDefinition[],
+): string {
   if (!name) return '— none —';
-  const resolved = TEMPLATE_NAME_ALIASES[name] ?? name;
-  const entry = TEMPLATE_ENTRIES.find((e) => e.name === resolved);
-  if (entry) return entry.label;
+  // `resolveTemplateName` + `TEMPLATE_METADATA` are the canonical source of
+  // truth in core; both legacy long ids (`titleBlock`) and short ids resolve
+  // through it, so the picker never has to maintain its own alias/label table.
+  const resolved = resolveTemplateName(name);
+  const meta = TEMPLATE_METADATA[resolved];
+  if (meta) return meta.label;
+  const custom = customTemplates?.find((t) => t.name === resolved);
+  if (custom) return custom.label;
   // Fallback: split camelCase
   return resolved.replace(/([A-Z])/g, ' $1').replace(/^./, (s) => s.toUpperCase());
 }
-
-/**
- * Legacy template id → canonical short id. Kept inline to avoid pulling
- * the core package's runtime registry into the picker's bundle — the
- * picker only needs this for label resolution.
- */
-const TEMPLATE_NAME_ALIASES: Readonly<Record<string, string>> = {
-  titleBlock: 'title',
-  quoteBlock: 'quote',
-  mapBlock: 'map',
-  listBlock: 'list',
-};
 
 // ── Component ─────────────────────────────────────────────────────
 
@@ -433,9 +521,22 @@ export interface TemplatePickerProps {
    * single ungrouped grid (legacy behavior).
    */
   recommended?: readonly string[];
+  /**
+   * Optional callback fired when the user clicks the "+ New custom
+   * template" card pinned at the top of the gallery. The host wires this
+   * to open the modal `TemplateDesigner`. When omitted, the card is
+   * hidden.
+   */
+  onOpenDesigner?: () => void;
 }
 
-export function TemplatePicker({ value, onChange, compact, recommended }: TemplatePickerProps) {
+export function TemplatePicker({
+  value,
+  onChange,
+  compact,
+  recommended,
+  onOpenDesigner,
+}: TemplatePickerProps) {
   const [open, setOpen] = useState(false);
   const [popoverStyle, setPopoverStyle] = useState<React.CSSProperties>({});
   const containerRef = useRef<HTMLDivElement>(null);
@@ -546,6 +647,7 @@ export function TemplatePicker({ value, onChange, compact, recommended }: Templa
           onSelect={handleSelect}
           style={popoverStyle}
           recommended={recommended}
+          onOpenDesigner={onOpenDesigner}
         />,
         document.body,
       )
@@ -631,12 +733,52 @@ function TemplateGalleryBody({
   onSelect,
   style,
   recommended,
+  onOpenDesigner,
 }: {
   value: string;
   onSelect: (name: string) => void;
   style: React.CSSProperties;
   recommended?: readonly string[];
+  onOpenDesigner?: () => void;
 }) {
+  const [query, setQuery] = useState('');
+  const searchRef = useRef<HTMLInputElement>(null);
+  // Pull merged doc + library templates from the surrounding context.
+  // When the host hasn't wrapped the editor in a CustomTemplateProvider
+  // we silently degrade to "no custom templates", which preserves the
+  // legacy behaviour for any caller that hasn't opted in.
+  const customCtx = useCustomTemplates();
+  const customTemplates = useMemo(() => customCtx?.allTemplates ?? [], [customCtx]);
+
+  // Auto-focus the search input when the gallery mounts so the user can
+  // start typing immediately to filter templates.
+  useEffect(() => {
+    searchRef.current?.focus();
+  }, []);
+
+  const trimmedQuery = query.trim().toLowerCase();
+  const hasQuery = trimmedQuery.length > 0;
+
+  // For search results we match both built-in entries and custom
+  // templates by label/name/description so the user can find a custom
+  // template by typing its name.
+  const matches = useMemo(() => {
+    if (!hasQuery) return null;
+    const built = TEMPLATE_ENTRIES.filter(
+      (e) =>
+        e.label.toLowerCase().includes(trimmedQuery) ||
+        e.description.toLowerCase().includes(trimmedQuery) ||
+        e.name.toLowerCase().includes(trimmedQuery),
+    );
+    const custom = customTemplates.filter(
+      (t) =>
+        t.label.toLowerCase().includes(trimmedQuery) ||
+        t.name.toLowerCase().includes(trimmedQuery) ||
+        (t.description ?? '').toLowerCase().includes(trimmedQuery),
+    );
+    return { built, custom };
+  }, [hasQuery, trimmedQuery, customTemplates]);
+
   const recommendedSet = recommended && recommended.length > 0 ? new Set(recommended) : null;
   const recommendedEntries = recommendedSet
     ? TEMPLATE_ENTRIES.filter((e) => recommendedSet.has(e.name))
@@ -644,7 +786,7 @@ function TemplateGalleryBody({
   const restEntries = recommendedSet
     ? TEMPLATE_ENTRIES.filter((e) => !recommendedSet.has(e.name))
     : TEMPLATE_ENTRIES;
-  const segmented = recommendedEntries.length > 0;
+  const segmented = !hasQuery && recommendedEntries.length > 0;
 
   return (
     <div
@@ -654,46 +796,171 @@ function TemplateGalleryBody({
       aria-label="Block templates"
       style={style}
     >
-      <button
-        type="button"
-        role="option"
-        aria-selected={value === ''}
-        className={`squisq-template-gallery-none${value === '' ? ' squisq-template-gallery-card--selected' : ''}`}
-        onClick={() => onSelect('')}
-      >
-        {NONE_ENTRY.icon}
-        <span className="squisq-template-gallery-none-label">{NONE_ENTRY.label}</span>
-        <span className="squisq-template-gallery-none-desc">{NONE_ENTRY.description}</span>
-      </button>
+      <div className="squisq-template-gallery-search">
+        <svg
+          className="squisq-template-gallery-search-icon"
+          width="14"
+          height="14"
+          viewBox="0 0 16 16"
+          fill="none"
+          aria-hidden="true"
+        >
+          <circle cx="7" cy="7" r="5" stroke="currentColor" strokeWidth="1.5" />
+          <path d="M11 11l3 3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+        </svg>
+        <input
+          ref={searchRef}
+          type="search"
+          className="squisq-template-gallery-search-input"
+          placeholder="Search templates…"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          aria-label="Search block templates"
+        />
+      </div>
 
-      {segmented && (
-        <div className="squisq-template-gallery-section">
-          <h3 className="squisq-template-gallery-section-title">Recommended for this block</h3>
-          <div className="squisq-template-gallery-grid">
-            {recommendedEntries.map((entry) => (
-              <TemplateCard key={entry.name} entry={entry} value={value} onSelect={onSelect} />
-            ))}
-          </div>
-        </div>
+      {!hasQuery && (
+        <button
+          type="button"
+          role="option"
+          aria-selected={value === ''}
+          className={`squisq-template-gallery-none${value === '' ? ' squisq-template-gallery-card--selected' : ''}`}
+          onClick={() => onSelect('')}
+        >
+          {NONE_ENTRY.icon}
+          <span className="squisq-template-gallery-none-label">{NONE_ENTRY.label}</span>
+          <span className="squisq-template-gallery-none-desc">{NONE_ENTRY.description}</span>
+        </button>
       )}
 
-      {segmented ? (
-        <div className="squisq-template-gallery-section">
-          <h3 className="squisq-template-gallery-section-title">All templates</h3>
-          <div className="squisq-template-gallery-grid">
-            {restEntries.map((entry) => (
-              <TemplateCard key={entry.name} entry={entry} value={value} onSelect={onSelect} />
-            ))}
-          </div>
-        </div>
+      {hasQuery ? (
+        matches && (matches.built.length > 0 || matches.custom.length > 0) ? (
+          <>
+            {matches.custom.length > 0 && (
+              <div className="squisq-template-gallery-section">
+                <h3 className="squisq-template-gallery-section-title">Custom</h3>
+                <div className="squisq-template-gallery-grid">
+                  {matches.custom.map((def) => (
+                    <CustomTemplateCard
+                      key={def.name}
+                      def={def}
+                      value={value}
+                      onSelect={onSelect}
+                    />
+                  ))}
+                </div>
+              </div>
+            )}
+            {matches.built.length > 0 && (
+              <div className="squisq-template-gallery-grid">
+                {matches.built.map((entry) => (
+                  <TemplateCard key={entry.name} entry={entry} value={value} onSelect={onSelect} />
+                ))}
+              </div>
+            )}
+          </>
+        ) : (
+          <div className="squisq-template-gallery-empty">No templates match "{query}".</div>
+        )
       ) : (
-        <div className="squisq-template-gallery-grid">
-          {restEntries.map((entry) => (
-            <TemplateCard key={entry.name} entry={entry} value={value} onSelect={onSelect} />
-          ))}
-        </div>
+        <>
+          {/* "+ New custom template" card pinned at the top — only shown
+              when the host has wired up `onOpenDesigner`. */}
+          {onOpenDesigner && (
+            <button type="button" className="squisq-template-gallery-new" onClick={onOpenDesigner}>
+              <span className="squisq-template-gallery-new-plus" aria-hidden="true">
+                +
+              </span>
+              <span className="squisq-template-gallery-new-body">
+                <span className="squisq-template-gallery-new-label">New layout</span>
+                <span className="squisq-template-gallery-new-desc">
+                  Design a reusable layout with placeholders for {'{title}'} and {'{content}'}.
+                </span>
+              </span>
+            </button>
+          )}
+
+          {customTemplates.length > 0 && (
+            <div className="squisq-template-gallery-section">
+              <h3 className="squisq-template-gallery-section-title">Custom</h3>
+              <div className="squisq-template-gallery-grid">
+                {customTemplates.map((def) => (
+                  <CustomTemplateCard key={def.name} def={def} value={value} onSelect={onSelect} />
+                ))}
+              </div>
+            </div>
+          )}
+
+          {segmented && (
+            <div className="squisq-template-gallery-section">
+              <h3 className="squisq-template-gallery-section-title">Recommended for this block</h3>
+              <div className="squisq-template-gallery-grid">
+                {recommendedEntries.map((entry) => (
+                  <TemplateCard key={entry.name} entry={entry} value={value} onSelect={onSelect} />
+                ))}
+              </div>
+            </div>
+          )}
+
+          {segmented ? (
+            <div className="squisq-template-gallery-section">
+              <h3 className="squisq-template-gallery-section-title">All templates</h3>
+              <div className="squisq-template-gallery-grid">
+                {restEntries.map((entry) => (
+                  <TemplateCard key={entry.name} entry={entry} value={value} onSelect={onSelect} />
+                ))}
+              </div>
+            </div>
+          ) : (
+            <div className="squisq-template-gallery-grid">
+              {restEntries.map((entry) => (
+                <TemplateCard key={entry.name} entry={entry} value={value} onSelect={onSelect} />
+              ))}
+            </div>
+          )}
+        </>
       )}
     </div>
+  );
+}
+
+/**
+ * Picker card for a user-authored template. Mirrors `TemplateCard`'s
+ * shape so it slots into the gallery grid, but draws the thumbnail by
+ * rendering the template's layers via `<TemplateThumbnail>`. Selecting
+ * it dispatches the template name; the host's `applyTemplate` (called
+ * separately by the badge update flow) inlines the def into the doc.
+ */
+function CustomTemplateCard({
+  def,
+  value,
+  onSelect,
+}: {
+  def: CustomTemplateDefinition;
+  value: string;
+  onSelect: (name: string) => void;
+}) {
+  return (
+    <button
+      type="button"
+      role="option"
+      aria-selected={value === def.name}
+      className={`squisq-template-gallery-card${
+        value === def.name ? ' squisq-template-gallery-card--selected' : ''
+      }`}
+      onClick={() => onSelect(def.name)}
+      title={def.description ?? def.label}
+    >
+      <div className="squisq-template-gallery-card-icon">
+        <TemplateThumbnail def={def} />
+      </div>
+      <div className="squisq-template-gallery-card-body">
+        <span className="squisq-template-gallery-card-name">{def.label}</span>
+        <span className="squisq-template-gallery-card-desc">
+          {def.description ?? 'Custom template'}
+        </span>
+      </div>
+    </button>
   );
 }
 
@@ -708,6 +975,12 @@ export interface TemplateBadgePopoverProps {
   onClose: () => void;
   /** Optional list of template names to surface as "Recommended for this block". */
   recommended?: readonly string[];
+  /**
+   * Optional callback for the "+ New custom template" card. When
+   * supplied, the gallery shows the card pinned at the top; clicking
+   * it closes the popover and opens the designer.
+   */
+  onOpenDesigner?: () => void;
 }
 
 /**
@@ -722,6 +995,7 @@ export function TemplateBadgePopover({
   onChange,
   onClose,
   recommended,
+  onOpenDesigner,
 }: TemplateBadgePopoverProps) {
   const [style, setStyle] = useState<React.CSSProperties>(() => computePopoverStyle(anchorRect));
 
@@ -764,6 +1038,7 @@ export function TemplateBadgePopover({
       onSelect={handleSelect}
       style={style}
       recommended={recommended}
+      onOpenDesigner={onOpenDesigner}
     />,
     document.body,
   );

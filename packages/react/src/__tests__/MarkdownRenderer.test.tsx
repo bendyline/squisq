@@ -1,7 +1,11 @@
 import { describe, it, expect } from 'vitest';
 import { render } from '@testing-library/react';
 import { MarkdownRenderer } from '../MarkdownRenderer';
-import type { MarkdownBlockNode, MarkdownInlineNode } from '@bendyline/squisq/markdown';
+import {
+  parseMarkdown,
+  type MarkdownBlockNode,
+  type MarkdownInlineNode,
+} from '@bendyline/squisq/markdown';
 
 // ── Helpers ────────────────────────────────────────────────────────
 
@@ -18,6 +22,10 @@ function heading(
   ...children: MarkdownInlineNode[]
 ): MarkdownBlockNode {
   return { type: 'heading', depth, children };
+}
+
+function parseNodes(markdown: string): MarkdownBlockNode[] {
+  return parseMarkdown(markdown).children;
 }
 
 // ── Tests ──────────────────────────────────────────────────────────
@@ -83,6 +91,15 @@ describe('MarkdownRenderer', () => {
     expect(a.href).toContain('example.com');
     expect(a.target).toBe('_blank');
     expect(a.textContent).toBe('click');
+  });
+
+  it('renders unsafe links as inert text by default', () => {
+    const { container } = render(
+      <MarkdownRenderer nodes={parseNodes('[x](javascript:alert(1))')} />,
+    );
+    expect(container.querySelector('a.squisq-md-link')).toBeNull();
+    expect(container.querySelector('.squisq-md-link--blocked')?.textContent).toBe('x');
+    expect(container.innerHTML).not.toContain('javascript:');
   });
 
   it('renders an image', () => {
@@ -230,5 +247,82 @@ describe('MarkdownRenderer', () => {
       <MarkdownRenderer nodes={[paragraph(text('test'))]} className="custom" />,
     );
     expect(container.querySelector('.squisq-md.custom')).toBeTruthy();
+  });
+
+  it('sanitizes raw HTML by default', () => {
+    const nodes = parseNodes(
+      '<div><img src="x.jpg" onerror="alert(1)"><script>alert(1)</script><span onclick="alert(1)">ok</span></div>',
+    );
+    const { container } = render(<MarkdownRenderer nodes={nodes} />);
+
+    expect(container.querySelector('script')).toBeNull();
+    expect(container.querySelector('img')?.getAttribute('src')).toBe('x.jpg');
+    expect(container.querySelector('img')?.getAttribute('onerror')).toBeNull();
+    expect(container.querySelector('span')?.getAttribute('onclick')).toBeNull();
+    expect(container.textContent).toContain('ok');
+    expect(container.textContent).not.toContain('alert(1)');
+  });
+
+  it('strips raw HTML when requested', () => {
+    const { container } = render(
+      <MarkdownRenderer nodes={parseNodes('<div><span>hidden</span></div>')} htmlPolicy="strip" />,
+    );
+    expect(container.textContent).not.toContain('hidden');
+    expect(container.querySelector('span')).toBeNull();
+  });
+
+  it('preserves raw HTML only with the trusted opt-in', () => {
+    const { container } = render(
+      <MarkdownRenderer
+        nodes={parseNodes('<div><span class="trusted" onclick="alert(1)">ok</span></div>')}
+        htmlPolicy="trusted"
+      />,
+    );
+    const span = container.querySelector('span.trusted');
+    expect(span?.getAttribute('onclick')).toBe('alert(1)');
+  });
+
+  // Host-affecting tags (style/script/…) must never reach the document.
+  // A bare <style> applies page-wide (CSS isn't scoped outside shadow DOM
+  // / iframes), so an embedded game's <style> in a chat message used to
+  // restyle the whole app chrome. Guard it across every policy.
+  it('drops a raw <style> by default so it cannot leak onto the host', () => {
+    const { container } = render(
+      <MarkdownRenderer
+        nodes={parseNodes('<div><style>body{font-family:monospace}</style><p>hi</p></div>')}
+      />,
+    );
+    expect(container.querySelector('style')).toBeNull();
+    expect(container.textContent).toContain('hi');
+    expect(container.textContent).not.toContain('font-family');
+  });
+
+  it('drops <style>/<script> even under the trusted policy, keeping safe content', () => {
+    const { container } = render(
+      <MarkdownRenderer
+        nodes={parseNodes(
+          '<div class="game"><style>body{font-family:monospace}</style><script>alert(1)</script><p>play</p></div>',
+        )}
+        htmlPolicy="trusted"
+      />,
+    );
+    expect(container.querySelector('style')).toBeNull();
+    expect(container.querySelector('script')).toBeNull();
+    expect(container.querySelector('div.game')).toBeTruthy();
+    expect(container.textContent).toContain('play');
+    expect(container.textContent).not.toContain('font-family');
+  });
+
+  it('drops a raw <style> on the verbatim path when htmlChildren was not parsed', () => {
+    // parseHtml:false leaves htmlChildren empty while rawHtml keeps the
+    // markup — the raw-string backstop must still refuse the fast path.
+    const node = {
+      type: 'htmlBlock',
+      rawHtml: '<style>body{font-family:monospace}</style><p>play</p>',
+      htmlChildren: [],
+    } as unknown as MarkdownBlockNode;
+    const { container } = render(<MarkdownRenderer nodes={[node]} htmlPolicy="trusted" />);
+    expect(container.querySelector('style')).toBeNull();
+    expect(container.textContent).not.toContain('font-family');
   });
 });

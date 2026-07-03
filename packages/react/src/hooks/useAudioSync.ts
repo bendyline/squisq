@@ -120,6 +120,13 @@ export function useAudioSync(
     if (!audio) return;
 
     const handleTimeUpdate = () => {
+      // In fallback mode the <audio> element is NOT the clock — there's no real
+      // source (e.g. the editor preview's synthetic, empty-src track), so the
+      // synthetic timer and `seekTo` own `currentTime`. A `timeupdate` fired as
+      // a side effect of programmatically setting `audio.currentTime` (during a
+      // seek) would otherwise clobber the just-seeked position with the empty
+      // element's unreliable `currentTime`, snapping the scrubber back.
+      if (fallbackMode.current) return;
       // Calculate overall timeline position
       const segmentStart = segmentStarts.current[currentSegment] || 0;
       const overallTime = segmentStart + audio.currentTime;
@@ -127,7 +134,13 @@ export function useAudioSync(
     };
 
     const handlePlay = () => {
-      fallbackMode.current = false;
+      // Don't clear `fallbackMode` here. Whether the <audio> element is really
+      // the clock is decided authoritatively by the play() promise: it only
+      // resolves (clearing fallback, see `play`) when a real source actually
+      // plays. The 'play' event, by contrast, can fire spuriously on the
+      // source-less preview element — and clearing fallback there makes the
+      // synthetic timer's tick guard bail on its next frame, freezing the
+      // clock and the scrubber after a seek/resume.
       setIsPlaying(true);
     };
     const handlePause = () => setIsPlaying(false);

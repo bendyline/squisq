@@ -14,35 +14,82 @@
     "warning": "#fc8181"
   },
   "typography": {
-    "bodyFont": { "stackId": "source-serif" },
-    "titleFont": { "stackId": "playfair" },
+    "bodyFont": {
+      "stackId": "source-serif"
+    },
+    "titleFont": {
+      "stackId": "playfair"
+    },
     "titleWeight": "bold"
   },
   "style": {
     "textShadow": true,
     "overlayOpacity": 0.5,
-    "animationSpeed": 1.0
+    "animationSpeed": 1.0,
+    "imageTreatment": {
+      "type": "mono",
+      "strength": 0.35
+    }
   },
   "renderStyle": {
     "name": "documentary",
     "defaultTextAnimation": "fadeIn",
     "defaultImageAnimation": "slowZoom",
     "ambientMotion": true,
-    "defaultTransition": { "type": "fade", "duration": 0.8 }
+    "defaultTransition": {
+      "type": "fade",
+      "duration": 0.8
+    }
   },
   "colorSchemes": {
-    "blue": { "bg": "#1a365d", "text": "#63b3ed", "accent": "#90cdf4" },
-    "green": { "bg": "#22543d", "text": "#9ae6b4", "accent": "#68d391" },
-    "purple": { "bg": "#44337a", "text": "#d6bcfa", "accent": "#b794f4" },
-    "red": { "bg": "#742a2a", "text": "#fc8181", "accent": "#feb2b2" },
-    "orange": { "bg": "#744210", "text": "#fbd38d", "accent": "#f6ad55" },
-    "teal": { "bg": "#234e52", "text": "#81e6d9", "accent": "#4fd1c5" }
+    "blue": {
+      "bg": "#22354d",
+      "text": "#a8c3e0",
+      "accent": "#7fa3c9"
+    },
+    "green": {
+      "bg": "#26382e",
+      "text": "#a9c6ae",
+      "accent": "#82a88a"
+    },
+    "purple": {
+      "bg": "#35304a",
+      "text": "#beb3d6",
+      "accent": "#9d8fc2"
+    },
+    "red": {
+      "bg": "#45262a",
+      "text": "#d9a2a2",
+      "accent": "#c37f7c"
+    },
+    "orange": {
+      "bg": "#453522",
+      "text": "#d9bb90",
+      "accent": "#c29a64"
+    },
+    "teal": {
+      "bg": "#1f3a3d",
+      "text": "#9cc4c4",
+      "accent": "#6fa5a5"
+    }
   },
   "persistentLayers": {
     "bottomLayers": [
       {
         "template": "gradientBackground",
-        "config": { "type": "gradientBackground", "preset": "dark-vignette" }
+        "config": {
+          "type": "gradientBackground",
+          "preset": "dark-vignette"
+        }
+      }
+    ],
+    "topLayers": [
+      {
+        "template": "vignette",
+        "config": {
+          "type": "vignette",
+          "strength": 0.25
+        }
       }
     ]
   }

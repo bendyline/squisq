@@ -21,12 +21,19 @@ export type { InlineAudioPlayerProps } from './InlineAudioPlayer.js';
 export { ImageLayer } from './layers/ImageLayer.js';
 export { TextLayer } from './layers/TextLayer.js';
 export { ShapeLayer } from './layers/ShapeLayer.js';
+export { PathLayer } from './layers/PathLayer.js';
 export { VideoLayer } from './layers/VideoLayer.js';
 export { TableLayer } from './layers/TableLayer.js';
 export { MapLayer } from './layers/MapLayer.js';
 
+// Timed media clips (block.media + doc.documentMedia playback)
+export { MediaClipLayer } from './MediaClipLayer.js';
+export type { MediaClipLayerProps } from './MediaClipLayer.js';
+
 // Hooks
 export { useAudioSync } from './hooks/useAudioSync.js';
+export { useMediaSchedule } from './hooks/useMediaSchedule.js';
+export type { MediaScheduleController } from './hooks/useMediaSchedule.js';
 export { useDocPlayback } from './hooks/useDocPlayback.js';
 export { useViewportOrientation } from './hooks/useViewportOrientation.js';
 export { MediaContext, useMediaProvider, useMediaUrl } from './hooks/MediaContext.js';

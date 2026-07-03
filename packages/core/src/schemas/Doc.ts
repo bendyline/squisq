@@ -14,9 +14,27 @@
  * has 3-6 MP3 files (intro + sections), and blocks are grouped by segment.
  */
 
+import type { Transition } from './Transitions.js';
+export type { Transition, TransitionType, TransitionDirection } from './Transitions.js';
+
 // ============================================
 // Core Types
 // ============================================
+
+/**
+ * A directed connection from one block to another.
+ *
+ * Populated from a heading's Pandoc-style `{connectsTo=…}` attribute
+ * (e.g. `## Step 1 {#step1 connectsTo=foo:flow,bar}`). Each item is
+ * `target` or `target:type`. Used by diagram-style layouts that draw
+ * edges between blocks.
+ */
+export interface BlockConnection {
+  /** Target block id (matches another block's `id`). */
+  target: string;
+  /** Optional connection type/label (e.g., "flow", "requires"). */
+  type?: string;
+}
 
 /**
  * Configuration for the Start/resting block shown before playback begins.
@@ -36,6 +54,30 @@ export interface StartBlockConfig {
   heroCredit?: string;
   /** License identifier for the hero image */
   heroLicense?: string;
+}
+
+/**
+ * A structural problem detected while converting or validating a document.
+ *
+ * Diagnostics ride on `Doc.diagnostics` so any consumer — the editor, the
+ * CLI `validate` command, or an agent re-parsing its own output — gets the
+ * same feedback without watching the console. Conversion never throws for
+ * content problems; it degrades gracefully and records a diagnostic.
+ */
+export interface DocDiagnostic {
+  /** `error` = the author's intent could not be honored (e.g. unparseable
+   *  data fence); `warning` = something looks wrong but rendering proceeds
+   *  with a fallback (e.g. unknown template name). */
+  severity: 'error' | 'warning';
+  /** Stable machine-readable code (e.g. `unknown-template`, `duplicate-id`,
+   *  `unresolved-connection`, `data-fence-parse`, `missing-asset`). */
+  code: string;
+  /** Human-readable description, including a suggestion when one exists. */
+  message: string;
+  /** Id of the block the problem belongs to, when attributable. */
+  blockId?: string;
+  /** 1-based line number in the markdown source, when known. */
+  line?: number;
 }
 
 /**
@@ -88,6 +130,52 @@ export interface Doc {
    * Carries rendering hints like `document-render-as` and custom metadata.
    */
   frontmatter?: Record<string, unknown>;
+
+  /**
+   * User-defined block templates inlined into this doc.
+   *
+   * Populated from the markdown frontmatter key
+   * `squisq-custom-templates`. The template-expansion pipeline
+   * (`expandDocBlocks`) merges these into the registry before walking
+   * blocks, so a heading annotated `{[myhero]}` resolves against a
+   * doc-defined template named `myhero`.
+   *
+   * Library templates (stored in localStorage on the editor side) are
+   * NOT auto-loaded here — applying a library template to a block
+   * copies its definition into this list so the doc remains
+   * self-sufficient for SSR and export.
+   */
+  customTemplates?: import('./CustomTemplates.js').CustomTemplateDefinition[];
+
+  /**
+   * User-defined themes inlined into this doc.
+   *
+   * The theme analog of {@link Doc.customTemplates}. Populated from the
+   * markdown frontmatter key `squisq-custom-themes`. Exactly one is active
+   * at a time — selected by id via `squisq-theme` / {@link Doc.themeId},
+   * the doc-level counterpart of a block's `{[name]}` template annotation —
+   * but the payload is a list so a doc can carry a small catalog and stay
+   * self-sufficient for SSR / export. `resolveThemeForDoc(doc, id)` resolves
+   * against this list first (pure, doc-scoped) before built-ins, mirroring
+   * how `buildRegistry` resolves custom templates.
+   */
+  customThemes?: import('./Theme.js').Theme[];
+
+  /**
+   * Structural problems found while building this doc (unknown templates,
+   * unparseable data fences, duplicate ids, unresolved connections, …).
+   * Populated by `markdownToDoc()`; extended by `validateMarkdownDoc()`.
+   * Absent when the document is clean.
+   */
+  diagnostics?: DocDiagnostic[];
+
+  /**
+   * Document-spanning timed media (e.g. a full-length narration MP3/MP4),
+   * authored as a media annotation in the preamble (before the first
+   * heading) with `anchor=document`. Each clip is timed from the document
+   * start and may play across every block. See `resolveMediaSchedule`.
+   */
+  documentMedia?: import('./Media.js').MediaClip[];
 }
 
 /**
@@ -100,13 +188,17 @@ export interface Doc {
  * - `children` holds sub-heading blocks (e.g., H2s under an H1)
  */
 export interface Block {
-  /** Unique identifier for this block */
+  /** Unique identifier for this block.
+   *  Defaults to a slug derived from the heading text. May be overridden by
+   *  a Pandoc-style `{#custom-id}` attribute on the heading. */
   id: string;
 
-  /** When this block appears (seconds from start) */
+  /** When this block appears (seconds from start).
+   *  Overridden by a heading attribute `startTime=…` when present. */
   startTime: number;
 
-  /** How long this block is visible (seconds) */
+  /** How long this block is visible (seconds).
+   *  Overridden by a heading attribute `duration=…` when present. */
   duration: number;
 
   /** Which audio segment this block belongs to (0-indexed) */
@@ -126,6 +218,14 @@ export interface Block {
 
   /** Template name that generated this block (for debugging) */
   template?: string;
+
+  /**
+   * True when `template` was chosen by content-aware auto-picking
+   * (`markdownToDoc`'s `autoTemplates`) rather than authored. Ephemeral:
+   * `docToMarkdown` does not materialize auto-picked templates as heading
+   * annotations, keeping the markdown round-trip lossless.
+   */
+  autoTemplate?: boolean;
 
   /**
    * Display title for template rendering.
@@ -161,12 +261,63 @@ export interface Block {
   sourceHeading?: import('../markdown/types.js').MarkdownHeading;
 
   /**
-   * Template overrides extracted from markdown directives.
-   * For example, `### Data Section {template=chart colorScheme=blue}`
-   * would produce `{ template: 'chart', colorScheme: 'blue' }`.
-   * Allows per-block customization of template selection and parameters.
+   * Template overrides extracted from a heading's `{[templateName key=value]}`
+   * annotation. Only carries template-specific params (e.g. `colorScheme=blue`).
+   * Block-level metadata lives in `x` / `y` / `connectsTo` / `metadata` and is
+   * sourced from the Pandoc-style `{#id .class key=value}` attribute block instead.
    */
   templateOverrides?: Record<string, string>;
+
+  /**
+   * Structured template inputs sourced from the block's body content:
+   * a ```json data / ```yaml data fence under the heading, or — for the
+   * `dataTable` template — the first GFM table in the section. Unlike
+   * `templateOverrides` (always strings), values here keep their parsed
+   * types (arrays, numbers, nested objects). Merge order at render time:
+   * template defaults → `templateData` → `templateOverrides`.
+   */
+  templateData?: Record<string, unknown>;
+
+  // ── Block-level metadata from Pandoc-style `{#id .class key=value}` ──
+
+  /**
+   * X coordinate for diagram-style positioning (in author-defined units).
+   * Sourced from a heading attribute `x=…`.
+   */
+  x?: number;
+
+  /**
+   * Y coordinate for diagram-style positioning (in author-defined units).
+   * Sourced from a heading attribute `y=…`.
+   */
+  y?: number;
+
+  /**
+   * Outgoing connections to other blocks, by id. Sourced from a heading
+   * attribute `connectsTo=target1,target2:type,target3`.
+   */
+  connectsTo?: BlockConnection[];
+
+  /**
+   * CSS-style class tokens from a heading's Pandoc attribute (e.g. `{.important .v2}`).
+   * Parsed and stored; downstream consumers may use them for styling or filtering.
+   */
+  classes?: string[];
+
+  /**
+   * Free-form metadata for heading attribute keys outside the typed registry
+   * (anything that isn't `x` / `y` / `connectsTo` / `startTime` / `duration`).
+   * Values are raw strings exactly as authored.
+   */
+  metadata?: Record<string, string>;
+
+  /**
+   * Timed media clips attached to this block, authored as body-level
+   * `{[audio …]}` / `{[video …]}` annotations. Each clip is timed relative
+   * to this block's `startTime` (via `startAt`) and optionally spills past
+   * the block's end. See `MediaClip` / `resolveMediaSchedule`.
+   */
+  media?: import('./Media.js').MediaClip[];
 }
 
 // ============================================
@@ -177,7 +328,14 @@ export interface Block {
  * A visual element within a block.
  * Layers are composited back-to-front (first layer is background).
  */
-export type Layer = ImageLayer | TextLayer | ShapeLayer | MapLayer | VideoLayer | TableLayer;
+export type Layer =
+  | ImageLayer
+  | TextLayer
+  | ShapeLayer
+  | PathLayer
+  | MapLayer
+  | VideoLayer
+  | TableLayer;
 
 interface BaseLayer {
   /** Unique identifier for this layer */
@@ -188,6 +346,25 @@ interface BaseLayer {
 
   /** Animation to apply */
   animation?: Animation;
+}
+
+/**
+ * Photographic treatment applied to an image layer — a theme-level "grade"
+ * so the same photo looks native in every theme. Rendered as CSS filter
+ * functions, which behave identically in the browser player and headless
+ * frame capture (video/still export).
+ */
+export interface ImageTreatment {
+  /**
+   * mono: desaturate toward archival black & white.
+   * duotone: single-hue tint (hue taken from `color`).
+   * warm / cool: gentle temperature grade.
+   */
+  type: 'none' | 'mono' | 'duotone' | 'warm' | 'cool';
+  /** Blend strength 0..1. Default 0.6. */
+  strength?: number;
+  /** Duotone tint color (themes default this to their primary). */
+  color?: string;
 }
 
 /**
@@ -206,6 +383,10 @@ export interface ImageLayer extends BaseLayer {
     credit?: string;
     /** License identifier (e.g., 'CC BY-SA 4.0') */
     license?: string;
+    /** Theme-derived photographic grade (see ImageTreatment). */
+    treatment?: ImageTreatment;
+    /** Gaussian blur radius in px (background/atmosphere imagery). */
+    blur?: number;
   };
 }
 
@@ -215,16 +396,73 @@ export interface ImageLayer extends BaseLayer {
 export interface TextLayer extends BaseLayer {
   type: 'text';
   content: {
-    /** Text to display (supports \n for line breaks) */
+    /**
+     * Plain text (supports \n for line breaks). Source of truth for plain
+     * consumers — PDF/markdown export, search, accessibility — and the SVG
+     * `<text>` fallback. When `html` is set, this is its plain-text
+     * projection and must be kept in sync.
+     */
     text: string;
+    /**
+     * Optional sanitized **inline** HTML for rich formatting (bold/italic/
+     * links, and — for layout textboxes — headings/lists). When present the
+     * renderer draws it via `<foreignObject>` instead of SVG `<text>`. Treated
+     * as untrusted and re-sanitized at render time. See `RichTextLayer` in
+     * `@bendyline/squisq-react`.
+     */
+    html?: string;
     /** Text styling */
     style: TextStyle;
   };
 }
 
 /**
+ * A two-stop linear gradient fill, shared by shape/path fills and text
+ * backgrounds. When present it overrides the solid `fill` color.
+ *
+ * `angle` is in degrees: 0 = top→bottom, 90 = left→right, increasing
+ * clockwise. Defaults to 0. Rendered as an SVG `<linearGradient>` in
+ * objectBoundingBox units so it scales with the layer's box.
+ */
+export interface LinearGradient {
+  from: string;
+  to: string;
+  angle?: number;
+}
+
+/** Border line style, mapped to an SVG stroke-dasharray by the renderer. */
+export type BorderStyle = 'solid' | 'dashed' | 'dotted';
+
+/**
  * Shape layer - simple geometric shapes for visual accents.
  */
+/**
+ * Repeating SVG pattern fill for a shape (dots, grid, diagonal lines).
+ * Rendered as a native `<pattern>` def — fully vector and export-safe.
+ */
+export interface ShapePattern {
+  kind: 'dots' | 'grid' | 'diagonal';
+  /** Pattern ink color. */
+  color: string;
+  /** Tile size in px (default 24). */
+  size?: number;
+  /** Pattern opacity 0–1 (default 1; tint via a translucent color or this). */
+  opacity?: number;
+}
+
+/**
+ * Procedural filter applied to a shape. `noise` renders static film grain
+ * via SVG feTurbulence — deliberately not animated so frame capture and
+ * the live player agree.
+ */
+export interface ShapeFilter {
+  type: 'noise';
+  /** feTurbulence base frequency (default 0.8 — fine grain). */
+  baseFrequency?: number;
+  /** Grain opacity 0–1 (default 0.05). */
+  opacity?: number;
+}
+
 export interface ShapeLayer extends BaseLayer {
   type: 'shape';
   content: {
@@ -232,12 +470,85 @@ export interface ShapeLayer extends BaseLayer {
     shape: 'rect' | 'circle' | 'line';
     /** Fill color (CSS color or 'none') */
     fill?: string;
+    /** Fill opacity 0–1 (applies to solid and gradient fills). */
+    fillOpacity?: number;
+    /** Gradient fill; overrides `fill` when set. */
+    gradient?: LinearGradient;
+    /** Repeating pattern fill; overrides `fill`/`gradient` when set. */
+    pattern?: ShapePattern;
+    /** Procedural filter (film grain). */
+    filter?: ShapeFilter;
     /** Stroke color */
     stroke?: string;
     /** Stroke width in pixels */
     strokeWidth?: number;
+    /** Border line style (solid/dashed/dotted). Default solid. */
+    borderStyle?: BorderStyle;
     /** Corner radius for rect */
     borderRadius?: number;
+  };
+}
+
+/**
+ * End-of-line marker style for a path/connector endpoint.
+ * `arrow` is a filled triangle (the classic arrowhead); `open` is a stroked
+ * V; `diamond`/`circle`/`square` are filled glyphs; `none` draws nothing.
+ */
+export type MarkerStyle = 'none' | 'arrow' | 'open' | 'diamond' | 'circle' | 'square';
+
+/**
+ * Path layer - renders an SVG `<path>` for arbitrary curves, connectors,
+ * arrows, or filled regions. Used by the diagram template for edges
+ * between nodes, the drawing template for non-rect/circle/line shapes, and
+ * available to any template that needs a custom geometry.
+ *
+ * The `position` field carries the layer's bounding box (so animations
+ * and clipping work the same as for other layers), but the actual
+ * geometry is encoded in the `d` attribute using absolute SVG path
+ * coordinates relative to the block viewport.
+ */
+export interface PathLayer extends BaseLayer {
+  type: 'path';
+  content: {
+    /** SVG path `d` attribute (e.g. "M 10 10 L 90 90"). Absolute viewBox coords. */
+    d: string;
+    /**
+     * Named shape kind (e.g. `'diamond'`, `'star'`, `'arrow-right'`) for
+     * path layers that represent one of Squisq's standard shapes. When
+     * set, the renderer re-derives `d` from the layer's `position` box
+     * (resolved against the viewport) instead of using the stored `d` —
+     * so the shape moves, resizes, and adapts to any aspect ratio like
+     * the native rect/circle/line layers do. Plain paths (connectors,
+     * freehand) leave this unset and keep their absolute `d`.
+     */
+    shapeKind?: string;
+    /** Stroke color (default: theme text color). */
+    stroke?: string;
+    /** Stroke width in pixels (default: 2). */
+    strokeWidth?: number;
+    /** Optional fill color (default: 'none' — pure connectors). */
+    fill?: string;
+    /** Fill opacity 0–1 (applies to solid and gradient fills). */
+    fillOpacity?: number;
+    /** Gradient fill; overrides `fill` when set. */
+    gradient?: LinearGradient;
+    /**
+     * Border line style (solid/dashed/dotted). A convenience over
+     * `dasharray` for named shapes; when set the renderer derives the
+     * dash pattern from it (scaled by stroke width).
+     */
+    borderStyle?: BorderStyle;
+    /** Optional stroke dash pattern (SVG `stroke-dasharray` syntax). */
+    dasharray?: string;
+    /**
+     * Legacy arrowhead flag. Prefer `startMarker`/`endMarker`. When those are
+     * unset, `'end'`/`'start'`/`'both'` render a filled-triangle arrowhead.
+     */
+    arrow?: 'none' | 'end' | 'start' | 'both';
+    /** Marker at the path start (overrides `arrow`). Default: derived from `arrow`. */
+    startMarker?: MarkerStyle;
+    /** Marker at the path end (overrides `arrow`). Default: derived from `arrow`. */
+    endMarker?: MarkerStyle;
   };
 }
 
@@ -293,6 +604,16 @@ export interface VideoLayer extends BaseLayer {
     clipEnd: number;
     /** Total source video duration (for validation) */
     sourceDuration?: number;
+    /**
+     * Seconds into the owning block before this video begins playing
+     * (the block-relative `startAt`). Default 0 — plays from block start.
+     */
+    startAt?: number;
+    /**
+     * When true, the video keeps playing past the block's end (the
+     * playback scheduler re-homes it to the player level). Default false.
+     */
+    spillover?: boolean;
     /** Video credit / artist name */
     credit?: string;
     /** License identifier (e.g., 'CC BY-SA 4.0') */
@@ -399,16 +720,34 @@ export interface TextStyle {
   fontFamily?: string;
   /** Font weight */
   fontWeight?: 'normal' | 'bold';
+  /** Font style. Also the inherited baseline for rich `content.html`. */
+  fontStyle?: 'normal' | 'italic';
   /** Text color (CSS color) */
   color: string;
-  /** Text alignment */
+  /** Horizontal text alignment within the layer's position box. */
   textAlign?: 'left' | 'center' | 'right';
+  /**
+   * Vertical alignment of the text within the layer's position box.
+   * Requires a `position.height` to have an effect. When omitted, the
+   * vertical baseline is derived from `position.anchor` (legacy behavior).
+   */
+  verticalAlign?: 'top' | 'middle' | 'bottom';
   /** Line height multiplier */
   lineHeight?: number;
   /** Add drop shadow for readability over images */
   shadow?: boolean;
   /** Background color for text box */
   background?: string;
+  /** Background opacity 0–1 (applies to solid and gradient backgrounds). */
+  backgroundOpacity?: number;
+  /** Gradient background; overrides `background` when set. */
+  backgroundGradient?: LinearGradient;
+  /** Border (stroke) color for the text box. */
+  borderColor?: string;
+  /** Border width in pixels. A border renders when > 0 and a color is set. */
+  borderWidth?: number;
+  /** Border line style (solid/dashed/dotted). Default solid. */
+  borderStyle?: BorderStyle;
   /** Padding around text (pixels) */
   padding?: number;
   /** Maximum number of lines before truncation (adds "..." to last line) */
@@ -450,23 +789,6 @@ export type AnimationType =
   | 'panLeft'
   | 'panRight'
   | 'typewriter'; // Text appears letter by letter
-
-/**
- * Transition between blocks.
- */
-export interface Transition {
-  /** Transition type */
-  type: TransitionType;
-  /** Duration in seconds */
-  duration: number;
-}
-
-export type TransitionType =
-  | 'cut' // Instant switch
-  | 'fade' // Cross-fade
-  | 'dissolve' // Soft dissolve
-  | 'slideLeft' // New block enters from right
-  | 'slideRight'; // New block enters from left
 
 // ============================================
 // Audio Configuration
@@ -525,8 +847,10 @@ export interface CaptionPhrase {
 export interface CaptionTrack {
   /** Caption phrases in chronological order */
   phrases: CaptionPhrase[];
-  /** When the captions were generated */
-  generatedAt: string;
+  /** When the captions were generated. Optional so that conversion stays
+   *  deterministic — `markdownToDoc()` only sets it when the caller
+   *  supplies a timestamp via `captionsGeneratedAt`. */
+  generatedAt?: string;
   /** Algorithm version for regeneration detection */
   version: number;
 }

@@ -12,14 +12,20 @@
  * - Automatic expansion of template blocks
  */
 
-import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import { useMemo, useCallback, useRef } from 'react';
 import type { Doc, Block, DocBlock } from '@bendyline/squisq/schemas';
 import type { Theme } from '@bendyline/squisq/schemas';
-import { getBlockAtTime } from '@bendyline/squisq/schemas';
+import {
+  DEFAULT_THEME,
+  getBlockAtTime,
+  resolveBlockTransition,
+  resolveTransitionDuration,
+} from '@bendyline/squisq/schemas';
 import {
   expandDocBlocks,
-  flattenBlocks,
+  flattenRenderableBlocks,
   isTemplateBlock,
+  resolvePersistentLayers,
   VIEWPORT_PRESETS,
   type ViewportConfig,
 } from '@bendyline/squisq/doc';
@@ -61,28 +67,33 @@ export function useDocPlayback(
   renderMode: boolean = false,
   theme?: Theme,
 ): PlaybackState & PlaybackActions {
-  const [transitionState, setTransitionState] = useState<{
-    entering: boolean;
-    exiting: boolean;
-    previousBlock: Block | null;
-  }>({
-    entering: false,
-    exiting: false,
-    previousBlock: null,
-  });
-
+  // `renderMode` is retained for API/signature compatibility; block transitions
+  // are now computed identically for real-time and render (export) modes.
+  void renderMode;
   // Expand any template blocks into full blocks
   const blocks = useMemo(() => {
     if (!script?.blocks) {
       return [];
     }
 
-    // Flatten nested block hierarchy (markdown-derived docs have children)
+    // Flatten nested block hierarchy (markdown-derived docs have children).
+    // `flattenRenderableBlocks` skips the children of container templates
+    // (`diagram`, `drawing`) — those are consumed by the parent's render as
+    // nodes/shapes, so they must not also appear as their own slides.
     const hasChildren = script.blocks.some((b) => b.children && b.children.length > 0);
-    const flatBlocks = hasChildren ? flattenBlocks(script.blocks) : script.blocks;
+    const flatBlocks = hasChildren ? flattenRenderableBlocks(script.blocks) : script.blocks;
 
     // Check if any blocks are templates
     const hasTemplates = flatBlocks.some(isTemplateBlock);
+
+    // Doc persistent layers win wholesale; docs without any inherit the
+    // theme's (see resolvePersistentLayers). Passed as a narrow object so
+    // the memo deps stay field-precise.
+    const resolvedTheme = theme ?? DEFAULT_THEME;
+    const persistentLayers = resolvePersistentLayers(
+      { persistentLayers: script.persistentLayers },
+      resolvedTheme,
+    );
 
     if (hasTemplates) {
       // Extract audio segment timing for proper block synchronization
@@ -95,15 +106,31 @@ export function useDocPlayback(
       const expanded = expandDocBlocks(flatBlocks as DocBlock[], {
         audioSegments,
         viewport,
-        persistentLayers: script.persistentLayers,
+        persistentLayers,
         theme,
+        // Custom (user-defined) templates inlined into the doc's
+        // frontmatter — see CustomTemplates.ts. Merged onto the
+        // built-in registry so blocks annotated with `{[myhero]}`
+        // resolve through the user's design.
+        customTemplates: script.customTemplates,
       });
       return expanded;
     }
 
-    // All raw blocks, use as-is
-    return flatBlocks;
-  }, [script?.blocks, script?.audio?.segments, script?.persistentLayers, viewport, theme]);
+    // All raw blocks — used as-is except for the theme's default transition
+    // fallback (copies, never mutations: these blocks are caller-owned).
+    return flatBlocks.map((block, index) => {
+      const transition = resolveBlockTransition(block, resolvedTheme, index);
+      return transition !== block.transition ? { ...block, transition } : block;
+    });
+  }, [
+    script?.blocks,
+    script?.audio?.segments,
+    script?.persistentLayers,
+    script?.customTemplates,
+    viewport,
+    theme,
+  ]);
 
   // Find current block based on time
   const currentBlock = useMemo(() => getBlockAtTime(blocks, currentTime), [blocks, currentTime]);
@@ -130,78 +157,38 @@ export function useDocPlayback(
     return Math.min(1, currentTime / script.duration);
   }, [script, currentTime]);
 
-  // Track block transitions.
-  // In render mode, transitions are computed from blockTime so they stay
-  // synchronized with the seekTo timeline. In normal mode, setTimeout drives
-  // transitions at the browser's real-time clock speed.
-  const _prevBlockRef = useMemo(
-    () => currentBlock,
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- intentionally keyed on index, not block reference
-    [currentBlockIndex],
-  );
+  // ─── Transition tracking (synchronous — no effect lag) ──────────────
+  // `isEntering` is simply "we are within the block's entrance window"
+  // (blockTime < the transition's duration). Deriving it during render —
+  // rather than flipping it in an effect a frame AFTER the block changes —
+  // means a newly-active block renders WITH its entrance state on its very
+  // first frame. Otherwise the block paints once fully settled and then, a
+  // frame later, snaps back to the start of its entrance animation: the brief
+  // "flash then re-animate" seen between blocks. This runs identically for
+  // real-time playback and frame-seeked render (export) mode.
+  //
+  // The block we transitioned FROM (for the crossfade) is tracked with refs
+  // updated during render — the standard "previous value" pattern — so the
+  // outgoing block is known on the SAME frame the new block becomes active
+  // (an effect would lag a frame and drop the crossfade's first frames).
+  const outgoingBlockRef = useRef<Block | null>(null);
+  const activeBlockIdRef = useRef<string | null>(null);
+  const lastRenderedBlockRef = useRef<Block | null>(null);
+  if (currentBlock && currentBlock.id !== activeBlockIdRef.current) {
+    outgoingBlockRef.current = lastRenderedBlockRef.current;
+    activeBlockIdRef.current = currentBlock.id;
+  }
+  lastRenderedBlockRef.current = currentBlock;
 
-  useEffect(() => {
-    if (!currentBlock || renderMode) return;
-
-    // When block changes, trigger transition (real-time mode only)
-    if (transitionState.previousBlock?.id !== currentBlock.id) {
-      const transition = currentBlock.transition;
-      const transitionDuration = transition?.duration || 0;
-
-      if (transitionDuration > 0) {
-        // Start transition
-        setTransitionState({
-          entering: true,
-          exiting: true,
-          previousBlock: transitionState.previousBlock,
-        });
-
-        // End transition after duration
-        const timer = setTimeout(() => {
-          setTransitionState({
-            entering: false,
-            exiting: false,
-            previousBlock: currentBlock,
-          });
-        }, transitionDuration * 1000);
-
-        return () => clearTimeout(timer);
-      } else {
-        // Instant cut
-        setTransitionState({
-          entering: false,
-          exiting: false,
-          previousBlock: currentBlock,
-        });
-      }
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- intentionally keyed on currentBlock?.id only; reading transitionState.previousBlock without dep to avoid infinite loop
-  }, [currentBlock?.id, renderMode]);
-
-  // Render mode: track previous block via ref and compute transition from time
-  const renderPrevBlockRef = useRef<Block | null>(null);
-
-  useEffect(() => {
-    if (!renderMode || !currentBlock) return;
-
-    if (transitionState.previousBlock?.id !== currentBlock.id) {
-      // Block changed — remember the old block for crossfade
-      const oldPrev = transitionState.previousBlock;
-      renderPrevBlockRef.current = oldPrev;
-      // Store current block as the "last seen" for next transition
-      setTransitionState((prev) => ({
-        ...prev,
-        previousBlock: currentBlock,
-      }));
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- same pattern: keyed on block identity change
-  }, [currentBlock?.id, renderMode]);
-
-  // In render mode, derive entering/exiting from blockTime
-  const renderTransitionDuration = currentBlock?.transition?.duration || 0;
-  const renderIsEntering =
-    renderMode && renderTransitionDuration > 0 && blockTime < renderTransitionDuration;
-  const renderIsExiting = renderIsEntering && renderPrevBlockRef.current !== null;
+  const transitionDuration = currentBlock?.transition
+    ? resolveTransitionDuration(currentBlock.transition)
+    : 0;
+  const isEntering = !!currentBlock && transitionDuration > 0 && blockTime < transitionDuration;
+  const outgoingBlock = outgoingBlockRef.current;
+  // Only crossfade a genuinely different outgoing block (guards restarts/seeks
+  // where the "previous" resolves to the same block).
+  const isExiting = isEntering && outgoingBlock != null && outgoingBlock.id !== currentBlock?.id;
+  const previousBlock = isExiting ? outgoingBlock : null;
 
   // Manual navigation
   const goToBlock = useCallback(
@@ -233,15 +220,9 @@ export function useDocPlayback(
   return {
     currentBlock,
     currentBlockIndex,
-    previousBlock: renderMode
-      ? renderIsExiting
-        ? renderPrevBlockRef.current
-        : null
-      : transitionState.exiting
-        ? transitionState.previousBlock
-        : null,
-    isEntering: renderMode ? renderIsEntering : transitionState.entering,
-    isExiting: renderMode ? renderIsExiting : transitionState.exiting,
+    previousBlock,
+    isEntering,
+    isExiting,
     blockTime,
     blockProgress,
     docProgress,

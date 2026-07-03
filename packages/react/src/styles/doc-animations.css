@@ -214,6 +214,1243 @@
   }
 }
 
+@keyframes slideInTop {
+  from {
+    transform: translateY(-100%);
+  }
+  to {
+    transform: translateY(0);
+  }
+}
+
+@keyframes slideInBottom {
+  from {
+    transform: translateY(100%);
+  }
+  to {
+    transform: translateY(0);
+  }
+}
+
+@keyframes slideOutTop {
+  from {
+    transform: translateY(0);
+  }
+  to {
+    transform: translateY(-100%);
+  }
+}
+
+@keyframes slideOutBottom {
+  from {
+    transform: translateY(0);
+  }
+  to {
+    transform: translateY(100%);
+  }
+}
+
+@keyframes transitionZoomIn {
+  from {
+    opacity: 0;
+    transform: scale(0.82);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes transitionZoomOut {
+  from {
+    opacity: 1;
+    transform: scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: scale(1.08);
+  }
+}
+
+@keyframes transitionFlipIn {
+  from {
+    opacity: 0;
+    transform: perspective(1400px) rotateY(-72deg) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: perspective(1400px) rotateY(0deg) scale(1);
+  }
+}
+
+@keyframes transitionFlipOut {
+  from {
+    opacity: 1;
+    transform: perspective(1400px) rotateY(0deg) scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: perspective(1400px) rotateY(56deg) scale(0.96);
+  }
+}
+
+@keyframes transitionRotateIn {
+  from {
+    opacity: 0;
+    transform: rotate(-8deg) scale(0.88);
+  }
+  to {
+    opacity: 1;
+    transform: rotate(0deg) scale(1);
+  }
+}
+
+@keyframes transitionRotateOut {
+  from {
+    opacity: 1;
+    transform: rotate(0deg) scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: rotate(8deg) scale(1.04);
+  }
+}
+
+@keyframes transitionDissolveIn {
+  0% {
+    opacity: 0;
+    filter: blur(10px);
+  }
+  60% {
+    opacity: 0.72;
+  }
+  100% {
+    opacity: 1;
+    filter: blur(0);
+  }
+}
+
+@keyframes transitionDissolveOut {
+  0% {
+    opacity: 1;
+    filter: blur(0);
+  }
+  100% {
+    opacity: 0;
+    filter: blur(12px);
+  }
+}
+
+@keyframes transitionMorphIn {
+  from {
+    opacity: 0;
+    filter: blur(16px) saturate(0.8);
+    transform: scale(1.025);
+  }
+  to {
+    opacity: 1;
+    filter: blur(0) saturate(1);
+    transform: scale(1);
+  }
+}
+
+@keyframes transitionMorphOut {
+  from {
+    opacity: 1;
+    filter: blur(0) saturate(1);
+    transform: scale(1);
+  }
+  to {
+    opacity: 0;
+    filter: blur(16px) saturate(0.85);
+    transform: scale(0.985);
+  }
+}
+
+@keyframes transitionHold {
+  from,
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes transitionWipeLeftIn {
+  from {
+    clip-path: inset(0 100% 0 0);
+  }
+  to {
+    clip-path: inset(0);
+  }
+}
+
+@keyframes transitionWipeLeftOut {
+  from {
+    clip-path: inset(0);
+  }
+  to {
+    clip-path: inset(0 0 0 100%);
+  }
+}
+
+@keyframes transitionWipeRightIn {
+  from {
+    clip-path: inset(0 0 0 100%);
+  }
+  to {
+    clip-path: inset(0);
+  }
+}
+
+@keyframes transitionWipeRightOut {
+  from {
+    clip-path: inset(0);
+  }
+  to {
+    clip-path: inset(0 100% 0 0);
+  }
+}
+
+@keyframes transitionWipeUpIn {
+  from {
+    clip-path: inset(100% 0 0 0);
+  }
+  to {
+    clip-path: inset(0);
+  }
+}
+
+@keyframes transitionWipeUpOut {
+  from {
+    clip-path: inset(0);
+  }
+  to {
+    clip-path: inset(0 0 100% 0);
+  }
+}
+
+@keyframes transitionWipeDownIn {
+  from {
+    clip-path: inset(0 0 100% 0);
+  }
+  to {
+    clip-path: inset(0);
+  }
+}
+
+@keyframes transitionWipeDownOut {
+  from {
+    clip-path: inset(0);
+  }
+  to {
+    clip-path: inset(100% 0 0 0);
+  }
+}
+
+@keyframes transitionSplitHorizontalIn {
+  from {
+    clip-path: inset(0 50% 0 50%);
+  }
+  to {
+    clip-path: inset(0);
+  }
+}
+
+@keyframes transitionSplitHorizontalOut {
+  from {
+    clip-path: inset(0);
+  }
+  to {
+    clip-path: inset(0 50% 0 50%);
+  }
+}
+
+@keyframes transitionSplitVerticalIn {
+  from {
+    clip-path: inset(50% 0 50% 0);
+  }
+  to {
+    clip-path: inset(0);
+  }
+}
+
+@keyframes transitionSplitVerticalOut {
+  from {
+    clip-path: inset(0);
+  }
+  to {
+    clip-path: inset(50% 0 50% 0);
+  }
+}
+
+@keyframes transitionCircleIn {
+  from {
+    clip-path: circle(0% at 50% 50%);
+    opacity: 0.4;
+  }
+  to {
+    clip-path: circle(75% at 50% 50%);
+    opacity: 1;
+  }
+}
+
+@keyframes transitionCircleOut {
+  from {
+    clip-path: circle(75% at 50% 50%);
+    opacity: 1;
+  }
+  to {
+    clip-path: circle(0% at 50% 50%);
+    opacity: 0;
+  }
+}
+
+@keyframes transitionDiamondIn {
+  from {
+    clip-path: polygon(50% 50%, 50% 50%, 50% 50%, 50% 50%);
+    opacity: 0.35;
+  }
+  to {
+    clip-path: polygon(50% -30%, 130% 50%, 50% 130%, -30% 50%);
+    opacity: 1;
+  }
+}
+
+@keyframes transitionDiamondOut {
+  from {
+    clip-path: polygon(50% -30%, 130% 50%, 50% 130%, -30% 50%);
+    opacity: 1;
+  }
+  to {
+    clip-path: polygon(50% 50%, 50% 50%, 50% 50%, 50% 50%);
+    opacity: 0;
+  }
+}
+
+@keyframes transitionPlusIn {
+  0% {
+    clip-path: polygon(
+      50% 50%,
+      50% 50%,
+      50% 50%,
+      50% 50%,
+      50% 50%,
+      50% 50%,
+      50% 50%,
+      50% 50%,
+      50% 50%,
+      50% 50%,
+      50% 50%,
+      50% 50%
+    );
+    opacity: 0.45;
+  }
+  70% {
+    clip-path: polygon(
+      43% 0,
+      57% 0,
+      57% 43%,
+      100% 43%,
+      100% 57%,
+      57% 57%,
+      57% 100%,
+      43% 100%,
+      43% 57%,
+      0 57%,
+      0 43%,
+      43% 43%
+    );
+    opacity: 1;
+  }
+  100% {
+    clip-path: inset(0);
+    opacity: 1;
+  }
+}
+
+@keyframes transitionPlusOut {
+  0% {
+    clip-path: inset(0);
+    opacity: 1;
+  }
+  100% {
+    clip-path: polygon(
+      50% 50%,
+      50% 50%,
+      50% 50%,
+      50% 50%,
+      50% 50%,
+      50% 50%,
+      50% 50%,
+      50% 50%,
+      50% 50%,
+      50% 50%,
+      50% 50%,
+      50% 50%
+    );
+    opacity: 0;
+  }
+}
+
+@keyframes transitionFlashIn {
+  0% {
+    opacity: 0;
+    filter: brightness(2.8) contrast(1.5);
+    transform: scale(1.04);
+  }
+  42% {
+    opacity: 1;
+    filter: brightness(3.5) contrast(1.8);
+  }
+  100% {
+    opacity: 1;
+    filter: brightness(1) contrast(1);
+    transform: scale(1);
+  }
+}
+
+@keyframes transitionFlashOut {
+  0% {
+    opacity: 1;
+    filter: brightness(1) contrast(1);
+  }
+  55% {
+    opacity: 0.9;
+    filter: brightness(3) contrast(1.6);
+  }
+  100% {
+    opacity: 0;
+    filter: brightness(0.4) contrast(1);
+  }
+}
+
+@keyframes transitionNewsflashIn {
+  0% {
+    opacity: 0;
+    filter: brightness(3) contrast(1.8);
+    transform: scale(0.72) rotate(-2deg);
+  }
+  45% {
+    opacity: 1;
+    filter: brightness(2.8) contrast(1.6);
+    transform: scale(1.08) rotate(1deg);
+  }
+  100% {
+    opacity: 1;
+    filter: brightness(1) contrast(1);
+    transform: scale(1) rotate(0deg);
+  }
+}
+
+@keyframes transitionNewsflashOut {
+  from {
+    opacity: 1;
+    filter: brightness(1) contrast(1);
+    transform: scale(1);
+  }
+  to {
+    opacity: 0;
+    filter: brightness(2.4) contrast(1.6);
+    transform: scale(1.18) rotate(2deg);
+  }
+}
+
+@keyframes transitionFallOverIn {
+  from {
+    opacity: 0;
+    transform: perspective(1200px) rotateX(-72deg) translateY(-8%);
+    transform-origin: 50% 100%;
+  }
+  to {
+    opacity: 1;
+    transform: perspective(1200px) rotateX(0deg) translateY(0);
+    transform-origin: 50% 100%;
+  }
+}
+
+@keyframes transitionFallOverOut {
+  from {
+    opacity: 1;
+    transform: perspective(1200px) rotateX(0deg) translateY(0);
+    transform-origin: 50% 100%;
+  }
+  to {
+    opacity: 0;
+    transform: perspective(1200px) rotateX(76deg) translateY(8%);
+    transform-origin: 50% 100%;
+  }
+}
+
+@keyframes transitionDrapeIn {
+  from {
+    opacity: 0;
+    transform: perspective(1200px) rotateX(-42deg) skewX(-8deg) scaleY(0.82);
+    transform-origin: 50% 0;
+  }
+  to {
+    opacity: 1;
+    transform: perspective(1200px) rotateX(0deg) skewX(0deg) scaleY(1);
+    transform-origin: 50% 0;
+  }
+}
+
+@keyframes transitionDrapeOut {
+  from {
+    opacity: 1;
+    transform: perspective(1200px) rotateX(0deg) skewX(0deg) scaleY(1);
+    transform-origin: 50% 0;
+  }
+  to {
+    opacity: 0;
+    transform: perspective(1200px) rotateX(48deg) skewX(7deg) scaleY(0.74);
+    transform-origin: 50% 0;
+  }
+}
+
+@keyframes transitionCurtainsIn {
+  from {
+    opacity: 0.4;
+    transform: scaleX(0.04);
+    filter: brightness(0.75);
+  }
+  to {
+    opacity: 1;
+    transform: scaleX(1);
+    filter: brightness(1);
+  }
+}
+
+@keyframes transitionCurtainsOut {
+  from {
+    opacity: 1;
+    transform: scaleX(1);
+    filter: brightness(1);
+  }
+  to {
+    opacity: 0.35;
+    transform: scaleX(0.04);
+    filter: brightness(0.55);
+  }
+}
+
+@keyframes transitionWindIn {
+  from {
+    opacity: 0;
+    filter: blur(14px);
+    transform: translateX(24%) skewX(-14deg);
+  }
+  to {
+    opacity: 1;
+    filter: blur(0);
+    transform: translateX(0) skewX(0);
+  }
+}
+
+@keyframes transitionWindOut {
+  from {
+    opacity: 1;
+    filter: blur(0);
+    transform: translateX(0) skewX(0);
+  }
+  to {
+    opacity: 0;
+    filter: blur(14px);
+    transform: translateX(-24%) skewX(14deg);
+  }
+}
+
+@keyframes transitionPrestigeIn {
+  from {
+    opacity: 0;
+    filter: brightness(1.8) saturate(0.7);
+    transform: perspective(1200px) translateZ(-180px) scale(0.82);
+  }
+  to {
+    opacity: 1;
+    filter: brightness(1) saturate(1);
+    transform: perspective(1200px) translateZ(0) scale(1);
+  }
+}
+
+@keyframes transitionPrestigeOut {
+  from {
+    opacity: 1;
+    filter: brightness(1) saturate(1);
+    transform: perspective(1200px) translateZ(0) scale(1);
+  }
+  to {
+    opacity: 0;
+    filter: brightness(1.6) saturate(0.75);
+    transform: perspective(1200px) translateZ(140px) scale(1.06);
+  }
+}
+
+@keyframes transitionFractureIn {
+  0% {
+    opacity: 0;
+    filter: contrast(1.8) brightness(1.4);
+    clip-path: polygon(0 0, 48% 0, 52% 24%, 100% 0, 100% 100%, 55% 78%, 45% 100%, 0 100%);
+    transform: skewX(-6deg) scale(1.03);
+  }
+  100% {
+    opacity: 1;
+    filter: contrast(1) brightness(1);
+    clip-path: inset(0);
+    transform: skewX(0) scale(1);
+  }
+}
+
+@keyframes transitionFractureOut {
+  from {
+    opacity: 1;
+    filter: contrast(1) brightness(1);
+    clip-path: inset(0);
+    transform: skewX(0) scale(1);
+  }
+  to {
+    opacity: 0;
+    filter: contrast(1.8) brightness(1.2);
+    clip-path: polygon(0 0, 42% 8%, 56% 28%, 100% 0, 100% 100%, 58% 72%, 40% 94%, 0 100%);
+    transform: skewX(8deg) scale(1.05);
+  }
+}
+
+@keyframes transitionCrushIn {
+  from {
+    opacity: 0;
+    transform: scaleX(1.22) scaleY(0.08);
+    filter: contrast(1.4);
+  }
+  to {
+    opacity: 1;
+    transform: scaleX(1) scaleY(1);
+    filter: contrast(1);
+  }
+}
+
+@keyframes transitionCrushOut {
+  from {
+    opacity: 1;
+    transform: scaleX(1) scaleY(1);
+    filter: contrast(1);
+  }
+  to {
+    opacity: 0;
+    transform: scaleX(1.28) scaleY(0.04);
+    filter: contrast(1.5);
+  }
+}
+
+@keyframes transitionPeelIn {
+  from {
+    opacity: 0;
+    transform: perspective(1400px) rotateY(-78deg) skewY(8deg);
+    transform-origin: 0 50%;
+  }
+  to {
+    opacity: 1;
+    transform: perspective(1400px) rotateY(0deg) skewY(0deg);
+    transform-origin: 0 50%;
+  }
+}
+
+@keyframes transitionPeelOut {
+  from {
+    opacity: 1;
+    transform: perspective(1400px) rotateY(0deg) skewY(0deg);
+    transform-origin: 100% 50%;
+  }
+  to {
+    opacity: 0;
+    transform: perspective(1400px) rotateY(82deg) skewY(-8deg);
+    transform-origin: 100% 50%;
+  }
+}
+
+@keyframes transitionPageCurlIn {
+  from {
+    opacity: 0;
+    transform: perspective(1400px) rotateY(-64deg) rotateZ(-2deg);
+    transform-origin: 0 50%;
+    filter: brightness(0.85);
+  }
+  to {
+    opacity: 1;
+    transform: perspective(1400px) rotateY(0deg) rotateZ(0deg);
+    transform-origin: 0 50%;
+    filter: brightness(1);
+  }
+}
+
+@keyframes transitionPageCurlOut {
+  from {
+    opacity: 1;
+    transform: perspective(1400px) rotateY(0deg) rotateZ(0deg);
+    transform-origin: 100% 50%;
+    filter: brightness(1);
+  }
+  to {
+    opacity: 0;
+    transform: perspective(1400px) rotateY(68deg) rotateZ(2deg);
+    transform-origin: 100% 50%;
+    filter: brightness(0.8);
+  }
+}
+
+@keyframes transitionAirplaneIn {
+  from {
+    opacity: 0;
+    transform: translate(-40%, 30%) rotate(-18deg) scale(0.72);
+    filter: blur(2px);
+  }
+  to {
+    opacity: 1;
+    transform: translate(0, 0) rotate(0deg) scale(1);
+    filter: blur(0);
+  }
+}
+
+@keyframes transitionAirplaneOut {
+  from {
+    opacity: 1;
+    transform: translate(0, 0) rotate(0deg) scale(1);
+    filter: blur(0);
+  }
+  to {
+    opacity: 0;
+    transform: translate(42%, -28%) rotate(18deg) scale(0.72);
+    filter: blur(2px);
+  }
+}
+
+@keyframes transitionOrigamiIn {
+  from {
+    opacity: 0;
+    transform: perspective(1400px) rotateX(58deg) rotateY(-42deg) scale(0.86);
+    filter: brightness(0.85);
+  }
+  to {
+    opacity: 1;
+    transform: perspective(1400px) rotateX(0deg) rotateY(0deg) scale(1);
+    filter: brightness(1);
+  }
+}
+
+@keyframes transitionOrigamiOut {
+  from {
+    opacity: 1;
+    transform: perspective(1400px) rotateX(0deg) rotateY(0deg) scale(1);
+    filter: brightness(1);
+  }
+  to {
+    opacity: 0;
+    transform: perspective(1400px) rotateX(-58deg) rotateY(42deg) scale(0.82);
+    filter: brightness(0.82);
+  }
+}
+
+@keyframes transitionRippleIn {
+  0% {
+    opacity: 0;
+    filter: blur(10px);
+    transform: scale(0.86);
+    clip-path: circle(0% at 50% 50%);
+  }
+  60% {
+    opacity: 0.88;
+    filter: blur(3px);
+    transform: scale(1.035);
+    clip-path: circle(65% at 50% 50%);
+  }
+  100% {
+    opacity: 1;
+    filter: blur(0);
+    transform: scale(1);
+    clip-path: circle(75% at 50% 50%);
+  }
+}
+
+@keyframes transitionRippleOut {
+  from {
+    opacity: 1;
+    filter: blur(0);
+    transform: scale(1);
+    clip-path: circle(75% at 50% 50%);
+  }
+  to {
+    opacity: 0;
+    filter: blur(10px);
+    transform: scale(1.08);
+    clip-path: circle(0% at 50% 50%);
+  }
+}
+
+@keyframes transitionTexturedIn {
+  0% {
+    opacity: 0.12;
+    filter: contrast(1.6);
+  }
+  88% {
+    opacity: 1;
+    filter: contrast(1.05);
+  }
+  100% {
+    opacity: 1;
+    filter: contrast(1);
+    -webkit-mask-image: none;
+    mask-image: none;
+  }
+}
+
+@keyframes transitionTexturedOut {
+  from {
+    opacity: 1;
+    filter: contrast(1);
+  }
+  to {
+    opacity: 0;
+    filter: contrast(1.7);
+  }
+}
+
+@keyframes transitionVortexIn {
+  from {
+    opacity: 0;
+    transform: rotate(-110deg) scale(0.28);
+    filter: blur(8px);
+  }
+  to {
+    opacity: 1;
+    transform: rotate(0deg) scale(1);
+    filter: blur(0);
+  }
+}
+
+@keyframes transitionVortexOut {
+  from {
+    opacity: 1;
+    transform: rotate(0deg) scale(1);
+    filter: blur(0);
+  }
+  to {
+    opacity: 0;
+    transform: rotate(120deg) scale(0.2);
+    filter: blur(10px);
+  }
+}
+
+@keyframes transitionShredIn {
+  from {
+    opacity: 0;
+    clip-path: inset(0 42% 0 42%);
+    transform: translateY(-9%) skewX(-8deg);
+    filter: contrast(1.7);
+  }
+  to {
+    opacity: 1;
+    clip-path: inset(0);
+    transform: translateY(0) skewX(0);
+    filter: contrast(1);
+  }
+}
+
+@keyframes transitionShredOut {
+  from {
+    opacity: 1;
+    clip-path: inset(0);
+    transform: translateY(0) skewX(0);
+    filter: contrast(1);
+  }
+  to {
+    opacity: 0;
+    clip-path: inset(0 44% 0 44%);
+    transform: translateY(11%) skewX(8deg);
+    filter: contrast(1.8);
+  }
+}
+
+@keyframes transitionSwitchIn {
+  from {
+    opacity: 0;
+    transform: perspective(1400px) rotateY(-48deg) translateX(18%);
+  }
+  to {
+    opacity: 1;
+    transform: perspective(1400px) rotateY(0deg) translateX(0);
+  }
+}
+
+@keyframes transitionSwitchOut {
+  from {
+    opacity: 1;
+    transform: perspective(1400px) rotateY(0deg) translateX(0);
+  }
+  to {
+    opacity: 0;
+    transform: perspective(1400px) rotateY(48deg) translateX(-18%);
+  }
+}
+
+@keyframes transitionCubeIn {
+  from {
+    opacity: 0;
+    transform: perspective(1200px) rotateY(-86deg) translateX(44%);
+    transform-origin: 0 50%;
+  }
+  to {
+    opacity: 1;
+    transform: perspective(1200px) rotateY(0deg) translateX(0);
+    transform-origin: 0 50%;
+  }
+}
+
+@keyframes transitionCubeOut {
+  from {
+    opacity: 1;
+    transform: perspective(1200px) rotateY(0deg) translateX(0);
+    transform-origin: 100% 50%;
+  }
+  to {
+    opacity: 0;
+    transform: perspective(1200px) rotateY(86deg) translateX(-44%);
+    transform-origin: 100% 50%;
+  }
+}
+
+@keyframes transitionDoorsIn {
+  from {
+    opacity: 0.2;
+    transform: perspective(1200px) scaleX(0.04);
+    filter: brightness(0.7);
+  }
+  to {
+    opacity: 1;
+    transform: perspective(1200px) scaleX(1);
+    filter: brightness(1);
+  }
+}
+
+@keyframes transitionDoorsOut {
+  from {
+    opacity: 1;
+    transform: perspective(1200px) scaleX(1);
+    filter: brightness(1);
+  }
+  to {
+    opacity: 0.2;
+    transform: perspective(1200px) scaleX(0.04);
+    filter: brightness(0.65);
+  }
+}
+
+@keyframes transitionBoxIn {
+  from {
+    opacity: 0.2;
+    transform: scale(0.18);
+    clip-path: inset(38%);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+    clip-path: inset(0);
+  }
+}
+
+@keyframes transitionBoxOut {
+  from {
+    opacity: 1;
+    transform: scale(1);
+    clip-path: inset(0);
+  }
+  to {
+    opacity: 0;
+    transform: scale(0.18);
+    clip-path: inset(38%);
+  }
+}
+
+@keyframes transitionGalleryIn {
+  from {
+    opacity: 0;
+    transform: translateX(28%) scale(0.84);
+    filter: brightness(0.82);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0) scale(1);
+    filter: brightness(1);
+  }
+}
+
+@keyframes transitionGalleryOut {
+  from {
+    opacity: 1;
+    transform: translateX(0) scale(1);
+    filter: brightness(1);
+  }
+  to {
+    opacity: 0;
+    transform: translateX(-28%) scale(0.84);
+    filter: brightness(0.82);
+  }
+}
+
+@keyframes transitionFerrisIn {
+  from {
+    opacity: 0;
+    transform: translateY(42%) rotate(-34deg) scale(0.78);
+    transform-origin: 50% 140%;
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) rotate(0deg) scale(1);
+    transform-origin: 50% 140%;
+  }
+}
+
+@keyframes transitionFerrisOut {
+  from {
+    opacity: 1;
+    transform: translateY(0) rotate(0deg) scale(1);
+    transform-origin: 50% 140%;
+  }
+  to {
+    opacity: 0;
+    transform: translateY(-42%) rotate(34deg) scale(0.78);
+    transform-origin: 50% 140%;
+  }
+}
+
+@keyframes transitionWindowIn {
+  from {
+    opacity: 0.35;
+    clip-path: inset(50% 50% 50% 50%);
+    transform: scale(1.08);
+  }
+  to {
+    opacity: 1;
+    clip-path: inset(0);
+    transform: scale(1);
+  }
+}
+
+@keyframes transitionWindowOut {
+  from {
+    opacity: 1;
+    clip-path: inset(0);
+    transform: scale(1);
+  }
+  to {
+    opacity: 0;
+    clip-path: inset(50% 50% 50% 50%);
+    transform: scale(1.08);
+  }
+}
+
+@keyframes transitionOrbitIn {
+  from {
+    opacity: 0;
+    transform: rotate(-42deg) translateX(18%) scale(0.76);
+    transform-origin: 50% 50%;
+  }
+  to {
+    opacity: 1;
+    transform: rotate(0deg) translateX(0) scale(1);
+    transform-origin: 50% 50%;
+  }
+}
+
+@keyframes transitionOrbitOut {
+  from {
+    opacity: 1;
+    transform: rotate(0deg) translateX(0) scale(1);
+    transform-origin: 50% 50%;
+  }
+  to {
+    opacity: 0;
+    transform: rotate(42deg) translateX(-18%) scale(0.76);
+    transform-origin: 50% 50%;
+  }
+}
+
+@keyframes transitionFlyThroughIn {
+  from {
+    opacity: 0;
+    transform: perspective(1200px) translateZ(-520px) scale(0.56);
+    filter: blur(4px);
+  }
+  to {
+    opacity: 1;
+    transform: perspective(1200px) translateZ(0) scale(1);
+    filter: blur(0);
+  }
+}
+
+@keyframes transitionFlyThroughOut {
+  from {
+    opacity: 1;
+    transform: perspective(1200px) translateZ(0) scale(1);
+    filter: blur(0);
+  }
+  to {
+    opacity: 0;
+    transform: perspective(1200px) translateZ(420px) scale(1.28);
+    filter: blur(5px);
+  }
+}
+
+@keyframes transitionWheelIn {
+  from {
+    opacity: 0;
+    transform: rotate(-58deg) scale(0.7);
+    clip-path: circle(0% at 50% 50%);
+  }
+  to {
+    opacity: 1;
+    transform: rotate(0deg) scale(1);
+    clip-path: circle(75% at 50% 50%);
+  }
+}
+
+@keyframes transitionWheelOut {
+  from {
+    opacity: 1;
+    transform: rotate(0deg) scale(1);
+    clip-path: circle(75% at 50% 50%);
+  }
+  to {
+    opacity: 0;
+    transform: rotate(58deg) scale(0.7);
+    clip-path: circle(0% at 50% 50%);
+  }
+}
+
+@keyframes transitionWheelReverseIn {
+  from {
+    opacity: 0;
+    transform: rotate(58deg) scale(0.7);
+    clip-path: circle(0% at 50% 50%);
+  }
+  to {
+    opacity: 1;
+    transform: rotate(0deg) scale(1);
+    clip-path: circle(75% at 50% 50%);
+  }
+}
+
+@keyframes transitionWheelReverseOut {
+  from {
+    opacity: 1;
+    transform: rotate(0deg) scale(1);
+    clip-path: circle(75% at 50% 50%);
+  }
+  to {
+    opacity: 0;
+    transform: rotate(-58deg) scale(0.7);
+    clip-path: circle(0% at 50% 50%);
+  }
+}
+
+@keyframes transitionWedgeIn {
+  from {
+    opacity: 0.4;
+    clip-path: polygon(50% 50%, 50% 0, 50% 0);
+  }
+  to {
+    opacity: 1;
+    clip-path: polygon(50% 50%, -30% -30%, 130% -30%, 130% 130%, -30% 130%);
+  }
+}
+
+@keyframes transitionWedgeOut {
+  from {
+    opacity: 1;
+    clip-path: polygon(50% 50%, -30% -30%, 130% -30%, 130% 130%, -30% 130%);
+  }
+  to {
+    opacity: 0;
+    clip-path: polygon(50% 50%, 50% 0, 50% 0);
+  }
+}
+
+@keyframes transitionPrismIn {
+  from {
+    opacity: 0;
+    transform: perspective(1200px) rotateY(-28deg) skewX(-12deg) scale(0.9);
+    filter: hue-rotate(24deg) saturate(1.6);
+  }
+  to {
+    opacity: 1;
+    transform: perspective(1200px) rotateY(0deg) skewX(0) scale(1);
+    filter: hue-rotate(0deg) saturate(1);
+  }
+}
+
+@keyframes transitionPrismOut {
+  from {
+    opacity: 1;
+    transform: perspective(1200px) rotateY(0deg) skewX(0) scale(1);
+    filter: hue-rotate(0deg) saturate(1);
+  }
+  to {
+    opacity: 0;
+    transform: perspective(1200px) rotateY(28deg) skewX(12deg) scale(0.9);
+    filter: hue-rotate(-24deg) saturate(1.6);
+  }
+}
+
+@keyframes transitionWarpIn {
+  from {
+    opacity: 0;
+    transform: scaleX(0.72) scaleY(1.18) skewX(-14deg);
+    filter: blur(8px);
+  }
+  to {
+    opacity: 1;
+    transform: scaleX(1) scaleY(1) skewX(0deg);
+    filter: blur(0);
+  }
+}
+
+@keyframes transitionWarpOut {
+  from {
+    opacity: 1;
+    transform: scaleX(1) scaleY(1) skewX(0deg);
+    filter: blur(0);
+  }
+  to {
+    opacity: 0;
+    transform: scaleX(1.2) scaleY(0.72) skewX(14deg);
+    filter: blur(8px);
+  }
+}
+
+@keyframes transitionClockIn {
+  from {
+    opacity: 0.35;
+    transform: rotate(-90deg) scale(0.84);
+    clip-path: circle(0% at 50% 50%);
+  }
+  to {
+    opacity: 1;
+    transform: rotate(0deg) scale(1);
+    clip-path: circle(75% at 50% 50%);
+  }
+}
+
+@keyframes transitionClockOut {
+  from {
+    opacity: 1;
+    transform: rotate(0deg) scale(1);
+    clip-path: circle(75% at 50% 50%);
+  }
+  to {
+    opacity: 0;
+    transform: rotate(90deg) scale(0.84);
+    clip-path: circle(0% at 50% 50%);
+  }
+}
+
 /* ============================================
    Text Animations
    ============================================ */
@@ -253,27 +1490,620 @@
 }
 
 .transition-dissolve-enter {
-  animation: fadeIn var(--transition-duration, 2s) ease-in-out forwards;
+  animation: transitionDissolveIn var(--transition-duration, 0.8s) ease-in-out forwards;
 }
 
 .transition-dissolve-exit {
-  animation: fadeOut var(--transition-duration, 2s) ease-in-out forwards;
+  animation: transitionDissolveOut var(--transition-duration, 0.8s) ease-in-out forwards;
 }
 
+.transition-morph-enter {
+  animation: transitionMorphIn var(--transition-duration, 0.9s) ease-in-out forwards;
+}
+
+.transition-morph-exit {
+  animation: transitionMorphOut var(--transition-duration, 0.9s) ease-in-out forwards;
+}
+
+.transition-pushLeft-enter,
 .transition-slideLeft-enter {
   animation: slideInRight var(--transition-duration, 0.8s) ease-out forwards;
 }
 
+.transition-pushLeft-exit,
 .transition-slideLeft-exit {
   animation: slideOutLeft var(--transition-duration, 0.8s) ease-out forwards;
 }
 
+.transition-pushRight-enter,
 .transition-slideRight-enter {
   animation: slideInLeft var(--transition-duration, 0.8s) ease-out forwards;
 }
 
+.transition-pushRight-exit,
 .transition-slideRight-exit {
   animation: slideOutRight var(--transition-duration, 0.8s) ease-out forwards;
+}
+
+.transition-pushUp-enter,
+.transition-slideUp-enter {
+  animation: slideInBottom var(--transition-duration, 0.8s) ease-out forwards;
+}
+
+.transition-pushUp-exit,
+.transition-slideUp-exit {
+  animation: slideOutTop var(--transition-duration, 0.8s) ease-out forwards;
+}
+
+.transition-pushDown-enter,
+.transition-slideDown-enter {
+  animation: slideInTop var(--transition-duration, 0.8s) ease-out forwards;
+}
+
+.transition-pushDown-exit,
+.transition-slideDown-exit {
+  animation: slideOutBottom var(--transition-duration, 0.8s) ease-out forwards;
+}
+
+.transition-zoom-enter {
+  animation: transitionZoomIn var(--transition-duration, 0.7s) ease-out forwards;
+}
+
+.transition-zoom-exit {
+  animation: transitionZoomOut var(--transition-duration, 0.7s) ease-in forwards;
+}
+
+.transition-flip-enter {
+  animation: transitionFlipIn var(--transition-duration, 0.8s) ease-out forwards;
+}
+
+.transition-flip-exit {
+  animation: transitionFlipOut var(--transition-duration, 0.8s) ease-in forwards;
+}
+
+.transition-rotate-enter {
+  animation: transitionRotateIn var(--transition-duration, 0.8s) ease-out forwards;
+}
+
+.transition-rotate-exit {
+  animation: transitionRotateOut var(--transition-duration, 0.8s) ease-in forwards;
+}
+
+.transition-wipeLeft-enter,
+.transition-revealLeft-enter {
+  animation: transitionWipeLeftIn var(--transition-duration, 0.75s) ease-out forwards;
+}
+
+.transition-wipeLeft-exit {
+  animation: transitionWipeLeftOut var(--transition-duration, 0.75s) ease-in forwards;
+}
+
+.transition-wipeRight-enter,
+.transition-revealRight-enter {
+  animation: transitionWipeRightIn var(--transition-duration, 0.75s) ease-out forwards;
+}
+
+.transition-wipeRight-exit {
+  animation: transitionWipeRightOut var(--transition-duration, 0.75s) ease-in forwards;
+}
+
+.transition-wipeUp-enter,
+.transition-revealUp-enter {
+  animation: transitionWipeUpIn var(--transition-duration, 0.75s) ease-out forwards;
+}
+
+.transition-wipeUp-exit {
+  animation: transitionWipeUpOut var(--transition-duration, 0.75s) ease-in forwards;
+}
+
+.transition-wipeDown-enter,
+.transition-revealDown-enter {
+  animation: transitionWipeDownIn var(--transition-duration, 0.75s) ease-out forwards;
+}
+
+.transition-wipeDown-exit {
+  animation: transitionWipeDownOut var(--transition-duration, 0.75s) ease-in forwards;
+}
+
+.transition-revealLeft-exit,
+.transition-revealRight-exit,
+.transition-revealUp-exit,
+.transition-revealDown-exit {
+  animation: fadeOut var(--transition-duration, 0.75s) ease-in forwards;
+}
+
+.transition-splitHorizontal-enter {
+  animation: transitionSplitHorizontalIn var(--transition-duration, 0.8s) ease-out forwards;
+}
+
+.transition-splitHorizontal-exit {
+  animation: transitionSplitHorizontalOut var(--transition-duration, 0.8s) ease-in forwards;
+}
+
+.transition-splitVertical-enter {
+  animation: transitionSplitVerticalIn var(--transition-duration, 0.8s) ease-out forwards;
+}
+
+.transition-splitVertical-exit {
+  animation: transitionSplitVerticalOut var(--transition-duration, 0.8s) ease-in forwards;
+}
+
+.transition-coverLeft-enter,
+.transition-pullLeft-enter {
+  animation: slideInRight var(--transition-duration, 0.75s) ease-out forwards;
+}
+
+.transition-coverRight-enter,
+.transition-pullRight-enter {
+  animation: slideInLeft var(--transition-duration, 0.75s) ease-out forwards;
+}
+
+.transition-coverUp-enter,
+.transition-pullUp-enter {
+  animation: slideInBottom var(--transition-duration, 0.75s) ease-out forwards;
+}
+
+.transition-coverDown-enter,
+.transition-pullDown-enter {
+  animation: slideInTop var(--transition-duration, 0.75s) ease-out forwards;
+}
+
+.transition-coverLeft-exit,
+.transition-coverRight-exit,
+.transition-coverUp-exit,
+.transition-coverDown-exit,
+.transition-pullLeft-exit,
+.transition-pullRight-exit,
+.transition-pullUp-exit,
+.transition-pullDown-exit {
+  animation: transitionHold var(--transition-duration, 0.75s) linear forwards;
+}
+
+.transition-uncoverLeft-enter,
+.transition-uncoverRight-enter,
+.transition-uncoverUp-enter,
+.transition-uncoverDown-enter {
+  animation: fadeIn var(--transition-duration, 0.75s) ease-out forwards;
+}
+
+.transition-uncoverLeft-exit {
+  animation: slideOutLeft var(--transition-duration, 0.75s) ease-in forwards;
+}
+
+.transition-uncoverRight-exit {
+  animation: slideOutRight var(--transition-duration, 0.75s) ease-in forwards;
+}
+
+.transition-uncoverUp-exit {
+  animation: slideOutTop var(--transition-duration, 0.75s) ease-in forwards;
+}
+
+.transition-uncoverDown-exit {
+  animation: slideOutBottom var(--transition-duration, 0.75s) ease-in forwards;
+}
+
+.transition-shapeCircle-enter {
+  animation: transitionCircleIn var(--transition-duration, 0.75s) ease-out forwards;
+}
+
+.transition-shapeCircle-exit {
+  animation: transitionCircleOut var(--transition-duration, 0.75s) ease-in forwards;
+}
+
+.transition-shapeDiamond-enter {
+  animation: transitionDiamondIn var(--transition-duration, 0.75s) ease-out forwards;
+}
+
+.transition-shapeDiamond-exit {
+  animation: transitionDiamondOut var(--transition-duration, 0.75s) ease-in forwards;
+}
+
+.transition-shapePlus-enter {
+  animation: transitionPlusIn var(--transition-duration, 0.8s) ease-out forwards;
+}
+
+.transition-shapePlus-exit {
+  animation: transitionPlusOut var(--transition-duration, 0.8s) ease-in forwards;
+}
+
+.transition-flash-enter {
+  animation: transitionFlashIn var(--transition-duration, 0.7s) ease-out forwards;
+}
+
+.transition-flash-exit {
+  animation: transitionFlashOut var(--transition-duration, 0.7s) ease-in forwards;
+}
+
+.transition-newsflash-enter {
+  animation: transitionNewsflashIn var(--transition-duration, 0.75s) ease-out forwards;
+}
+
+.transition-newsflash-exit {
+  animation: transitionNewsflashOut var(--transition-duration, 0.75s) ease-in forwards;
+}
+
+.transition-fallOver-enter {
+  animation: transitionFallOverIn var(--transition-duration, 0.85s) ease-out forwards;
+}
+
+.transition-fallOver-exit {
+  animation: transitionFallOverOut var(--transition-duration, 0.85s) ease-in forwards;
+}
+
+.transition-drape-enter {
+  animation: transitionDrapeIn var(--transition-duration, 0.85s) ease-out forwards;
+}
+
+.transition-drape-exit {
+  animation: transitionDrapeOut var(--transition-duration, 0.85s) ease-in forwards;
+}
+
+.transition-curtains-enter {
+  animation: transitionCurtainsIn var(--transition-duration, 0.85s) ease-out forwards;
+}
+
+.transition-curtains-exit {
+  animation: transitionCurtainsOut var(--transition-duration, 0.85s) ease-in forwards;
+}
+
+.transition-wind-enter {
+  animation: transitionWindIn var(--transition-duration, 0.8s) ease-out forwards;
+}
+
+.transition-wind-exit {
+  animation: transitionWindOut var(--transition-duration, 0.8s) ease-in forwards;
+}
+
+.transition-prestige-enter {
+  animation: transitionPrestigeIn var(--transition-duration, 0.85s) ease-out forwards;
+}
+
+.transition-prestige-exit {
+  animation: transitionPrestigeOut var(--transition-duration, 0.85s) ease-in forwards;
+}
+
+.transition-fracture-enter {
+  animation: transitionFractureIn var(--transition-duration, 0.8s) ease-out forwards;
+}
+
+.transition-fracture-exit {
+  animation: transitionFractureOut var(--transition-duration, 0.8s) ease-in forwards;
+}
+
+.transition-crush-enter {
+  animation: transitionCrushIn var(--transition-duration, 0.75s) ease-out forwards;
+}
+
+.transition-crush-exit {
+  animation: transitionCrushOut var(--transition-duration, 0.75s) ease-in forwards;
+}
+
+.transition-peelOff-enter {
+  animation: transitionPeelIn var(--transition-duration, 0.85s) ease-out forwards;
+}
+
+.transition-peelOff-exit {
+  animation: transitionPeelOut var(--transition-duration, 0.85s) ease-in forwards;
+}
+
+.transition-pageCurl-enter,
+.transition-pageCurlDouble-enter,
+.transition-pageCurlSingle-enter {
+  animation: transitionPageCurlIn var(--transition-duration, 0.9s) ease-out forwards;
+}
+
+.transition-pageCurl-exit,
+.transition-pageCurlDouble-exit,
+.transition-pageCurlSingle-exit {
+  animation: transitionPageCurlOut var(--transition-duration, 0.9s) ease-in forwards;
+}
+
+.transition-airplane-enter {
+  animation: transitionAirplaneIn var(--transition-duration, 0.85s) ease-out forwards;
+}
+
+.transition-airplane-exit {
+  animation: transitionAirplaneOut var(--transition-duration, 0.85s) ease-in forwards;
+}
+
+.transition-origami-enter {
+  animation: transitionOrigamiIn var(--transition-duration, 0.85s) ease-out forwards;
+}
+
+.transition-origami-exit {
+  animation: transitionOrigamiOut var(--transition-duration, 0.85s) ease-in forwards;
+}
+
+.transition-ripple-enter {
+  animation: transitionRippleIn var(--transition-duration, 0.85s) ease-out forwards;
+}
+
+.transition-ripple-exit {
+  animation: transitionRippleOut var(--transition-duration, 0.85s) ease-in forwards;
+}
+
+.transition-checkerboard-enter,
+.transition-random-enter {
+  -webkit-mask-image:
+    linear-gradient(45deg, #000 25%, transparent 25%, transparent 75%, #000 75%),
+    linear-gradient(45deg, #000 25%, transparent 25%, transparent 75%, #000 75%);
+  -webkit-mask-size: 12% 12%;
+  -webkit-mask-position:
+    0 0,
+    6% 6%;
+  mask-image:
+    linear-gradient(45deg, #000 25%, transparent 25%, transparent 75%, #000 75%),
+    linear-gradient(45deg, #000 25%, transparent 25%, transparent 75%, #000 75%);
+  mask-size: 12% 12%;
+  mask-position:
+    0 0,
+    6% 6%;
+  animation: transitionTexturedIn var(--transition-duration, 0.85s) steps(8, end) forwards;
+}
+
+.transition-checkerboard-exit,
+.transition-random-exit {
+  -webkit-mask-image:
+    linear-gradient(45deg, #000 25%, transparent 25%, transparent 75%, #000 75%),
+    linear-gradient(45deg, #000 25%, transparent 25%, transparent 75%, #000 75%);
+  -webkit-mask-size: 12% 12%;
+  -webkit-mask-position:
+    0 0,
+    6% 6%;
+  mask-image:
+    linear-gradient(45deg, #000 25%, transparent 25%, transparent 75%, #000 75%),
+    linear-gradient(45deg, #000 25%, transparent 25%, transparent 75%, #000 75%);
+  mask-size: 12% 12%;
+  mask-position:
+    0 0,
+    6% 6%;
+  animation: transitionTexturedOut var(--transition-duration, 0.85s) steps(8, end) forwards;
+}
+
+.transition-randomBarsHorizontal-enter,
+.transition-blindsHorizontal-enter,
+.transition-combHorizontal-enter,
+.transition-stripsLeft-enter,
+.transition-stripsRight-enter {
+  -webkit-mask-image: repeating-linear-gradient(0deg, #000 0 6%, transparent 6% 12%);
+  mask-image: repeating-linear-gradient(0deg, #000 0 6%, transparent 6% 12%);
+  animation: transitionTexturedIn var(--transition-duration, 0.8s) steps(9, end) forwards;
+}
+
+.transition-randomBarsHorizontal-exit,
+.transition-blindsHorizontal-exit,
+.transition-combHorizontal-exit,
+.transition-stripsLeft-exit,
+.transition-stripsRight-exit {
+  -webkit-mask-image: repeating-linear-gradient(0deg, #000 0 6%, transparent 6% 12%);
+  mask-image: repeating-linear-gradient(0deg, #000 0 6%, transparent 6% 12%);
+  animation: transitionTexturedOut var(--transition-duration, 0.8s) steps(9, end) forwards;
+}
+
+.transition-randomBarsVertical-enter,
+.transition-blindsVertical-enter,
+.transition-combVertical-enter,
+.transition-stripsUp-enter,
+.transition-stripsDown-enter {
+  -webkit-mask-image: repeating-linear-gradient(90deg, #000 0 6%, transparent 6% 12%);
+  mask-image: repeating-linear-gradient(90deg, #000 0 6%, transparent 6% 12%);
+  animation: transitionTexturedIn var(--transition-duration, 0.8s) steps(9, end) forwards;
+}
+
+.transition-randomBarsVertical-exit,
+.transition-blindsVertical-exit,
+.transition-combVertical-exit,
+.transition-stripsUp-exit,
+.transition-stripsDown-exit {
+  -webkit-mask-image: repeating-linear-gradient(90deg, #000 0 6%, transparent 6% 12%);
+  mask-image: repeating-linear-gradient(90deg, #000 0 6%, transparent 6% 12%);
+  animation: transitionTexturedOut var(--transition-duration, 0.8s) steps(9, end) forwards;
+}
+
+.transition-honeycomb-enter {
+  -webkit-mask-image: radial-gradient(circle, #000 0 34%, transparent 35% 48%, #000 49%);
+  -webkit-mask-size: 10% 17%;
+  mask-image: radial-gradient(circle, #000 0 34%, transparent 35% 48%, #000 49%);
+  mask-size: 10% 17%;
+  animation: transitionTexturedIn var(--transition-duration, 0.85s) steps(8, end) forwards;
+}
+
+.transition-honeycomb-exit {
+  -webkit-mask-image: radial-gradient(circle, #000 0 34%, transparent 35% 48%, #000 49%);
+  -webkit-mask-size: 10% 17%;
+  mask-image: radial-gradient(circle, #000 0 34%, transparent 35% 48%, #000 49%);
+  mask-size: 10% 17%;
+  animation: transitionTexturedOut var(--transition-duration, 0.85s) steps(8, end) forwards;
+}
+
+.transition-glitter-enter {
+  -webkit-mask-image: radial-gradient(circle, #000 0 18%, transparent 20% 36%, #000 38%);
+  -webkit-mask-size: 7% 7%;
+  mask-image: radial-gradient(circle, #000 0 18%, transparent 20% 36%, #000 38%);
+  mask-size: 7% 7%;
+  animation: transitionFlashIn var(--transition-duration, 0.85s) steps(10, end) forwards;
+}
+
+.transition-glitter-exit {
+  -webkit-mask-image: radial-gradient(circle, #000 0 18%, transparent 20% 36%, #000 38%);
+  -webkit-mask-size: 7% 7%;
+  mask-image: radial-gradient(circle, #000 0 18%, transparent 20% 36%, #000 38%);
+  mask-size: 7% 7%;
+  animation: transitionFlashOut var(--transition-duration, 0.85s) steps(10, end) forwards;
+}
+
+.transition-vortex-enter {
+  animation: transitionVortexIn var(--transition-duration, 0.85s) ease-out forwards;
+}
+
+.transition-vortex-exit {
+  animation: transitionVortexOut var(--transition-duration, 0.85s) ease-in forwards;
+}
+
+.transition-shred-enter {
+  -webkit-mask-image: repeating-linear-gradient(90deg, #000 0 5%, transparent 5% 8%);
+  mask-image: repeating-linear-gradient(90deg, #000 0 5%, transparent 5% 8%);
+  animation: transitionShredIn var(--transition-duration, 0.85s) ease-out forwards;
+}
+
+.transition-shred-exit {
+  -webkit-mask-image: repeating-linear-gradient(90deg, #000 0 5%, transparent 5% 8%);
+  mask-image: repeating-linear-gradient(90deg, #000 0 5%, transparent 5% 8%);
+  animation: transitionShredOut var(--transition-duration, 0.85s) ease-in forwards;
+}
+
+.transition-switch-enter {
+  animation: transitionSwitchIn var(--transition-duration, 0.8s) ease-out forwards;
+}
+
+.transition-switch-exit {
+  animation: transitionSwitchOut var(--transition-duration, 0.8s) ease-in forwards;
+}
+
+.transition-cube-enter {
+  animation: transitionCubeIn var(--transition-duration, 0.85s) ease-out forwards;
+}
+
+.transition-cube-exit {
+  animation: transitionCubeOut var(--transition-duration, 0.85s) ease-in forwards;
+}
+
+.transition-doors-enter {
+  animation: transitionDoorsIn var(--transition-duration, 0.85s) ease-out forwards;
+}
+
+.transition-doors-exit {
+  animation: transitionDoorsOut var(--transition-duration, 0.85s) ease-in forwards;
+}
+
+.transition-box-enter {
+  animation: transitionBoxIn var(--transition-duration, 0.75s) ease-out forwards;
+}
+
+.transition-box-exit {
+  animation: transitionBoxOut var(--transition-duration, 0.75s) ease-in forwards;
+}
+
+.transition-gallery-enter {
+  animation: transitionGalleryIn var(--transition-duration, 0.8s) ease-out forwards;
+}
+
+.transition-gallery-exit {
+  animation: transitionGalleryOut var(--transition-duration, 0.8s) ease-in forwards;
+}
+
+.transition-conveyor-enter,
+.transition-panLeft-enter {
+  animation: slideInRight var(--transition-duration, 0.8s) ease-out forwards;
+}
+
+.transition-conveyor-exit,
+.transition-panLeft-exit {
+  animation: slideOutLeft var(--transition-duration, 0.8s) ease-in forwards;
+}
+
+.transition-panRight-enter {
+  animation: slideInLeft var(--transition-duration, 0.8s) ease-out forwards;
+}
+
+.transition-panRight-exit {
+  animation: slideOutRight var(--transition-duration, 0.8s) ease-in forwards;
+}
+
+.transition-panUp-enter {
+  animation: slideInBottom var(--transition-duration, 0.8s) ease-out forwards;
+}
+
+.transition-panUp-exit {
+  animation: slideOutTop var(--transition-duration, 0.8s) ease-in forwards;
+}
+
+.transition-panDown-enter {
+  animation: slideInTop var(--transition-duration, 0.8s) ease-out forwards;
+}
+
+.transition-panDown-exit {
+  animation: slideOutBottom var(--transition-duration, 0.8s) ease-in forwards;
+}
+
+.transition-ferrisWheel-enter {
+  animation: transitionFerrisIn var(--transition-duration, 0.85s) ease-out forwards;
+}
+
+.transition-ferrisWheel-exit {
+  animation: transitionFerrisOut var(--transition-duration, 0.85s) ease-in forwards;
+}
+
+.transition-window-enter {
+  animation: transitionWindowIn var(--transition-duration, 0.8s) ease-out forwards;
+}
+
+.transition-window-exit {
+  animation: transitionWindowOut var(--transition-duration, 0.8s) ease-in forwards;
+}
+
+.transition-orbit-enter {
+  animation: transitionOrbitIn var(--transition-duration, 0.85s) ease-out forwards;
+}
+
+.transition-orbit-exit {
+  animation: transitionOrbitOut var(--transition-duration, 0.85s) ease-in forwards;
+}
+
+.transition-flyThrough-enter {
+  animation: transitionFlyThroughIn var(--transition-duration, 0.85s) ease-out forwards;
+}
+
+.transition-flyThrough-exit {
+  animation: transitionFlyThroughOut var(--transition-duration, 0.85s) ease-in forwards;
+}
+
+.transition-wheel-enter {
+  animation: transitionWheelIn var(--transition-duration, 0.85s) ease-out forwards;
+}
+
+.transition-wheel-exit {
+  animation: transitionWheelOut var(--transition-duration, 0.85s) ease-in forwards;
+}
+
+.transition-wheelReverse-enter {
+  animation: transitionWheelReverseIn var(--transition-duration, 0.85s) ease-out forwards;
+}
+
+.transition-wheelReverse-exit {
+  animation: transitionWheelReverseOut var(--transition-duration, 0.85s) ease-in forwards;
+}
+
+.transition-wedge-enter {
+  animation: transitionWedgeIn var(--transition-duration, 0.8s) ease-out forwards;
+}
+
+.transition-wedge-exit {
+  animation: transitionWedgeOut var(--transition-duration, 0.8s) ease-in forwards;
+}
+
+.transition-prism-enter {
+  animation: transitionPrismIn var(--transition-duration, 0.85s) ease-out forwards;
+}
+
+.transition-prism-exit {
+  animation: transitionPrismOut var(--transition-duration, 0.85s) ease-in forwards;
+}
+
+.transition-warp-enter {
+  animation: transitionWarpIn var(--transition-duration, 0.85s) ease-out forwards;
+}
+
+.transition-warp-exit {
+  animation: transitionWarpOut var(--transition-duration, 0.85s) ease-in forwards;
+}
+
+.transition-clock-enter {
+  animation: transitionClockIn var(--transition-duration, 0.8s) ease-out forwards;
+}
+
+.transition-clock-exit {
+  animation: transitionClockOut var(--transition-duration, 0.8s) ease-in forwards;
 }
 
 /* ============================================
@@ -419,6 +2249,13 @@
   width: 100%;
   height: 100%;
   display: block;
+  transform-origin: center;
+  transform-box: fill-box;
+}
+
+.block-svg[class*='transition-'] {
+  backface-visibility: hidden;
+  will-change: transform, opacity, filter, clip-path;
 }
 
 /* Layer containers within SVG */
@@ -491,4 +2328,22 @@
 .squisq-inline-audio-player audio {
   display: block;
   width: 100%;
+}
+
+/* ============================================
+   Reduced motion
+   Freeze ambient/Ken Burns motion when the user asks for calm. Entrance
+   fades and block transitions are brief and purposeful, so they stay;
+   the long-running spatial loops are the vestibular offenders.
+   Player-only by construction: headless export renders with no
+   reduced-motion preference, so videos are unaffected.
+   ============================================ */
+@media (prefers-reduced-motion: reduce) {
+  .anim-slowZoom-in,
+  .anim-slowZoom-out,
+  .anim-slowZoom-panLeft,
+  .anim-slowZoom-panRight,
+  .anim-drift {
+    animation: none;
+  }
 }

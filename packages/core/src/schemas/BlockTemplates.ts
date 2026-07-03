@@ -20,7 +20,7 @@
  * - imageWithCaption: Image with text overlay
  */
 
-import type { Layer, Block, Transition, MapTileStyle, MapMarker } from './Doc.js';
+import type { Layer, Block, Transition, MapTileStyle, MapMarker, MarkerStyle } from './Doc.js';
 import type { ViewportConfig, ViewportOrientation } from './Viewport.js';
 import type { LayoutHints } from './LayoutStrategy.js';
 import type { Theme } from './Theme.js';
@@ -110,6 +110,12 @@ interface BaseTemplateBlock {
    * Used with sourceStartTime to precisely position the block.
    */
   sourceDuration?: number;
+  /**
+   * Per-block override for the theme's photographic image grade
+   * (`theme.style.imageTreatment`). `'none'` opts this block's imagery out;
+   * a treatment type forces that grade regardless of the theme.
+   */
+  imageTreatment?: 'none' | 'mono' | 'duotone' | 'warm' | 'cool';
 }
 
 /**
@@ -471,6 +477,78 @@ export interface VideoPullQuoteInput extends BaseTemplateBlock {
 }
 
 /**
+ * Diagram block - renders child headings as a node-and-edge diagram.
+ *
+ * Unlike other templates, the diagram template reads its content from
+ * the parent block's `children` (passed via `context.children`) — each
+ * child heading becomes a node, positioned by its `x`/`y` and connected
+ * by its `connectsTo`. Per-diagram options on this input control overall
+ * appearance; per-node data lives on the child blocks themselves.
+ */
+export interface DiagramBlockInput extends BaseTemplateBlock {
+  template: 'diagram';
+  /** Optional diagram title displayed above the canvas. */
+  title?: string;
+  /** Color scheme for nodes and edges. */
+  colorScheme?: ColorScheme;
+  /** Node shape style (default: 'rounded'). */
+  nodeShape?: 'rounded' | 'rect' | 'pill';
+  /** Edge routing (default: 'curved'). */
+  edgeStyle?: 'curved' | 'straight' | 'orthogonal';
+  /** Marker at each edge's start (default: 'none'). */
+  startStyle?: MarkerStyle;
+  /** Marker at each edge's end (default: 'arrow'). */
+  endStyle?: MarkerStyle;
+  /** Edge line style (default: 'solid'). */
+  lineStyle?: 'solid' | 'dashed' | 'dotted';
+}
+
+/**
+ * Free-form 2D canvas block (`layout`). Like `drawing`/`diagram`, the
+ * `layout` template is a children-driven container: each child heading is
+ * one absolutely-positioned layer (`{[text …]}` / `{[rectangle …]}` /
+ * `{[image …]}`), read from `context.children`. A text box's content is the
+ * child's body markdown. Backed by the `layoutBlock` template.
+ *
+ * (Legacy documents stored layers as a base64-JSON `layers=` param on the
+ * heading; the editor auto-migrates those to child sub-blocks on first edit.)
+ */
+export interface RawLayersInput extends BaseTemplateBlock {
+  template: 'layout';
+}
+
+/**
+ * Drawing block — renders child headings as free-form shapes on a canvas.
+ *
+ * Like `diagram`, the drawing template reads its content from the parent
+ * block's `children` (passed via `context.children`). Each child heading
+ * is a shape: its `{[shape …]}` annotation names the primitive
+ * (`rectangle`/`rect`, `circle`, `line`, `arrow`, `path`, `text`) and
+ * carries geometry/style as params; its `{#id}` makes it referenceable;
+ * its heading text is the shape label and its body text an optional
+ * sublabel. Connectors (`line`/`arrow` with `from`/`to`) join shapes by id.
+ *
+ * Coordinates are author-defined units; the template fits the bounding box
+ * of all shapes to the viewport (same scaling as `diagram`), so authors
+ * don't have to think in absolute pixels.
+ *
+ * Legacy drawings authored visually persist their `Layer[]` as a base64
+ * `layers="…"` Pandoc param instead of children; the template decodes and
+ * returns those directly when no children are present (see `drawingBlock`).
+ */
+export interface DrawingBlockInput extends BaseTemplateBlock {
+  template: 'drawing';
+  /** Optional title displayed above the canvas. */
+  title?: string;
+  /** Color scheme for shapes that don't pin their own fill/stroke. */
+  colorScheme?: ColorScheme;
+  /** Default fill for shapes that don't specify one (default: 'none'). */
+  fill?: string;
+  /** Default stroke for shapes that don't specify one (default: theme text). */
+  stroke?: string;
+}
+
+/**
  * Data table - renders a themed table with headers and rows.
  * Ideal for structured data, comparisons, and reference information.
  */
@@ -511,7 +589,10 @@ export type TemplateBlock =
   | PullQuoteInput
   | VideoWithCaptionInput
   | VideoPullQuoteInput
-  | DataTableInput;
+  | DataTableInput
+  | DiagramBlockInput
+  | DrawingBlockInput
+  | RawLayersInput;
 
 /**
  * A block can be either a raw Block or a TemplateBlock.
@@ -548,6 +629,20 @@ export interface TemplateContext {
   orientation: ViewportOrientation;
   /** Layout hints for this orientation */
   layout: LayoutHints;
+  /**
+   * The block's direct children (set by `getLayers` when the block has
+   * `children`). Most templates ignore this; aggregate templates like
+   * `diagram` consume it to render each child as part of their output.
+   */
+  children?: Block[];
+  /**
+   * The source block being expanded. Used by user-defined custom
+   * templates so the token resolver can substitute `{title}`,
+   * `{content}`, `{children}`, and `{image:N}` against the block's
+   * data at render time. Built-in templates ignore this and rely on
+   * their typed `input` parameters instead.
+   */
+  block?: Block;
 }
 
 /**
@@ -560,6 +655,10 @@ export function createTemplateContext(
   viewport: ViewportConfig = VIEWPORT_PRESETS.landscape,
 ): TemplateContext {
   const orientation = getViewportOrientation(viewport);
+  // Theme renderStyle may override individual layout hints (e.g. a theme
+  // that wants a lower primaryY across every template).
+  const overrides = theme.renderStyle.layoutOverrides;
+  const baseLayout = getLayoutHints(orientation);
   return {
     theme,
     blockIndex,
@@ -567,7 +666,7 @@ export function createTemplateContext(
     viewport,
     fontScale: calculateFontScale(viewport),
     orientation,
-    layout: getLayoutHints(orientation),
+    layout: overrides ? { ...baseLayout, ...overrides } : baseLayout,
   };
 }
 
@@ -647,7 +746,9 @@ export type PersistentLayerTemplateType =
   | 'solidBackground' // Solid color fill
   | 'gradientBackground' // CSS gradient or preset
   | 'imageBackground' // Blurred/faded hero image
-  | 'patternBackground' // Subtle pattern (dots, grid)
+  | 'patternBackground' // Subtle pattern (dots, grid, diagonal, noise/grain)
+  | 'vignette' // Soft radial edge darkening (top layer)
+  | 'ambientGradient' // Slowly drifting surface gradient (bottom layer)
   | 'titleCaption' // Article title in corner
   | 'cornerBranding' // Logo or text badge
   | 'progressIndicator'; // Bar/dots showing position
@@ -660,6 +761,8 @@ export type PersistentLayerTemplateConfig =
   | GradientBackgroundConfig
   | ImageBackgroundConfig
   | PatternBackgroundConfig
+  | VignetteConfig
+  | AmbientGradientConfig
   | TitleCaptionConfig
   | CornerBrandingConfig
   | ProgressIndicatorConfig;
@@ -716,6 +819,32 @@ export interface PatternBackgroundConfig {
   opacity?: number;
   /** Pattern scale multiplier */
   scale?: number;
+}
+
+/**
+ * Soft radial vignette (top layer) — transparent center darkening toward
+ * the frame edges. The classic film-look framing device.
+ */
+export interface VignetteConfig {
+  type: 'vignette';
+  /** Edge darkness 0-1 (default 0.3). */
+  strength?: number;
+  /** Vignette color (default black). */
+  color?: string;
+}
+
+/**
+ * Slowly drifting surface gradient (bottom layer). Colors default to the
+ * theme's surface family at expansion time.
+ */
+export interface AmbientGradientConfig {
+  type: 'ambientGradient';
+  /** Gradient start color. */
+  from?: string;
+  /** Gradient end color. */
+  to?: string;
+  /** Drift loop duration in seconds (default 40). */
+  duration?: number;
 }
 
 // ============================================

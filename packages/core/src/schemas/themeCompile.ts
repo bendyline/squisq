@@ -140,17 +140,28 @@ export type ContrastPreset = 'subtle' | 'balanced' | 'high';
 export interface CompileOptions {
   /** Contrast level for OKLCh derivation (default 'balanced'). */
   contrast?: ContrastPreset;
+  /**
+   * Base theme to inherit from. When provided, the partial is deep-merged
+   * over this theme instead of the neutral `STARTER_THEME`, so the compiled
+   * theme inherits the base's render style, color schemes, typography, and
+   * persistent layers — and only the fields the user changed are overridden.
+   * The base's id is recorded on the result as `basedOn`.
+   */
+  base?: Theme;
 }
 
 /**
  * Compile a partial Theme into a complete one. Fills missing fields from
- * `STARTER_THEME`, derives missing color slots from `seedColors` (when
- * present), and validates the result.
+ * the base (`opts.base` when given, else `STARTER_THEME`), derives missing
+ * color slots from `seedColors` (when present), and validates the result.
  */
 export function compileTheme(partial: DeepPartial<Theme>, opts: CompileOptions = {}): Theme {
-  // Step 1: deep-merge over the starter
-  const merged = createTheme(STARTER_THEME, partial);
+  // Step 1: deep-merge over the base (a chosen theme, or the neutral starter)
+  const base = opts.base ?? STARTER_THEME;
+  const merged = createTheme(base, partial);
   merged.schemaVersion = THEME_SCHEMA_VERSION;
+  // Record which theme this was derived from so a customizer can re-inherit.
+  if (opts.base && !merged.basedOn) merged.basedOn = opts.base.id;
 
   // Step 1b: typography fonts are discriminated unions ({stackId} | {custom}),
   // so deep-merge would leave stale keys from the starter when the partial
@@ -166,6 +177,14 @@ export function compileTheme(partial: DeepPartial<Theme>, opts: CompileOptions =
     if (partialTypography.monoFont !== undefined) {
       merged.typography.monoFont = partialTypography.monoFont as FontFamily;
     }
+  }
+
+  // Step 1c: colorSchemes is a map the user edits wholesale (add / remove
+  // accents). Deep-merge can't delete keys, so replace it outright when the
+  // partial provides it — mirroring the font replacement above. This lets a
+  // removed accent actually disappear rather than lingering from the base.
+  if (partial.colorSchemes !== undefined) {
+    merged.colorSchemes = partial.colorSchemes as Record<string, ThemeColorScheme>;
   }
 
   // Step 2: derive missing color slots from seeds, if present

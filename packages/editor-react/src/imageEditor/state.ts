@@ -16,15 +16,18 @@ import {
   touch,
 } from '@bendyline/squisq/imageEdit';
 
+// Distributive Omit: applied per union member so the discriminant (`type`) is preserved.
+type DOmit<T, K extends PropertyKey> = T extends unknown ? Omit<T, K> : never;
+
 /**
  * Layer payload accepted by the `add-layer` action — the `id` field is
  * optional and will be assigned by the underlying `addLayer` helper if
  * the caller doesn't supply one.
  */
-export type ImageEditLayerInput = ImageEditLayer | (Omit<ImageEditLayer, 'id'> & { id?: string });
+export type ImageEditLayerInput = ImageEditLayer | (DOmit<ImageEditLayer, 'id'> & { id?: string });
 
 /** The currently active interaction tool. */
-export type ImageEditorTool = 'select' | 'text' | 'shape' | 'image' | 'crop';
+export type ImageEditorTool = 'select' | 'text' | 'shape' | 'image' | 'crop' | 'zoom-rect';
 
 /** A pixel-space rectangle in canvas coordinates. */
 export interface CanvasRect {
@@ -42,6 +45,12 @@ export interface ImageEditorState {
   /** Active tool. */
   tool: ImageEditorTool;
   /**
+   * The shape kind the shape tool will drop next (a drawing palette kind,
+   * e.g. `'rectangle'`, `'diamond'`, `'arrow-right'`). Set when the user
+   * picks from the shape palette; defaults to `'rectangle'`.
+   */
+  shapeKind: string;
+  /**
    * Dirty flag — true when the in-memory doc has unsaved changes
    * relative to the last `markClean()` call. The hook uses this to
    * debounce writes back to `state.json`.
@@ -53,6 +62,7 @@ export type ImageEditorAction =
   | { type: 'load'; doc: ImageEditDoc }
   | { type: 'mark-clean' }
   | { type: 'set-tool'; tool: ImageEditorTool }
+  | { type: 'set-shape-kind'; kind: string }
   | { type: 'select'; layerId: string | null }
   | { type: 'set-canvas'; canvas: ImageEditDoc['canvas'] }
   | { type: 'add-layer'; layer: ImageEditLayerInput; select?: boolean }
@@ -67,6 +77,7 @@ export function initialImageEditorState(doc: ImageEditDoc): ImageEditorState {
     doc,
     selectedLayerId: null,
     tool: 'select',
+    shapeKind: 'rectangle',
     dirty: false,
   };
 }
@@ -77,13 +88,22 @@ export function imageEditorReducer(
 ): ImageEditorState {
   switch (action.type) {
     case 'load':
-      return { doc: action.doc, selectedLayerId: null, tool: 'select', dirty: false };
+      return {
+        doc: action.doc,
+        selectedLayerId: null,
+        tool: 'select',
+        shapeKind: state.shapeKind,
+        dirty: false,
+      };
 
     case 'mark-clean':
       return state.dirty ? { ...state, dirty: false } : state;
 
     case 'set-tool':
       return state.tool === action.tool ? state : { ...state, tool: action.tool };
+
+    case 'set-shape-kind':
+      return state.shapeKind === action.kind ? state : { ...state, shapeKind: action.kind };
 
     case 'select':
       return state.selectedLayerId === action.layerId

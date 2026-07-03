@@ -17,18 +17,21 @@
 
 import type { Layer } from '../../schemas/Doc.js';
 import type { VideoPullQuoteInput, TemplateContext } from '../../schemas/BlockTemplates.js';
-import { scaledFontSize } from '../../schemas/BlockTemplates.js';
-import { getThemeFont } from '../utils/themeUtils.js';
+import { getThemeFont, themedEntrance, themedFontSize } from '../utils/themeUtils.js';
+import { estimateTextHeight } from './captionUtils.js';
 
 export function videoPullQuote(input: VideoPullQuoteInput, context: TemplateContext): Layer[] {
   const { text, attribution, backgroundVideo } = input;
+  const { viewport } = context;
 
   // Guard: backgroundVideo is required
   if (!backgroundVideo?.src) return [];
 
-  const quoteFontSize = scaledFontSize(52, context, true);
-  const attrFontSize = scaledFontSize(24, context, false);
-  const decoFontSize = scaledFontSize(200, context, true);
+  const quoteFontSize = themedFontSize(52, context, true);
+  const attrFontSize = themedFontSize(26, context, false);
+  const decoFontSize = themedFontSize(200, context, true);
+  const quoteLineHeight = 1.4;
+  const quoteYPct = attribution ? 45 : 50;
 
   const layers: Layer[] = [
     // Full-bleed background video clip
@@ -90,22 +93,29 @@ export function videoPullQuote(input: VideoPullQuoteInput, context: TemplateCont
           fontFamily: getThemeFont(context, 'title'),
           color: '#ffffff',
           textAlign: 'center',
-          lineHeight: 1.5,
+          lineHeight: quoteLineHeight,
           shadow: true,
         },
       },
       position: {
         x: '50%',
-        y: attribution ? '45%' : '50%',
+        y: `${quoteYPct}%`,
         anchor: 'center',
-        width: '80%',
+        width: '72%',
       },
-      animation: { type: 'fadeIn', duration: 2 },
+      animation: themedEntrance(context, 'text', { type: 'fadeIn', duration: 2 }),
     },
   ];
 
-  // Attribution
+  // Attribution \u2014 hangs just below the quote's estimated bottom edge so
+  // the two read as one lockup instead of stranding near the bottom.
   if (attribution) {
+    const quoteWidthPx = 0.72 * viewport.width;
+    const quoteHeightPx = estimateTextHeight(text, quoteFontSize, quoteWidthPx, quoteLineHeight);
+    const attrYPct = Math.min(
+      82,
+      quoteYPct + ((quoteHeightPx / 2 + quoteFontSize * 1.7) / viewport.height) * 100,
+    );
     layers.push({
       type: 'text',
       id: 'attribution',
@@ -114,14 +124,14 @@ export function videoPullQuote(input: VideoPullQuoteInput, context: TemplateCont
         style: {
           fontSize: attrFontSize,
           fontFamily: getThemeFont(context, 'body'),
-          color: 'rgba(255, 255, 255, 0.7)',
+          color: 'rgba(255, 255, 255, 0.85)',
           textAlign: 'center',
           shadow: true,
         },
       },
       position: {
         x: '50%',
-        y: '72%',
+        y: `${attrYPct}%`,
         anchor: 'center',
       },
       animation: { type: 'fadeIn', duration: 1, delay: 1.5 },

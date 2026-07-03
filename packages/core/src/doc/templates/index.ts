@@ -20,11 +20,18 @@ import type {
   PersistentLayerConfig,
 } from '../../schemas/BlockTemplates.js';
 import type { Theme } from '../../schemas/Theme.js';
+import type { CustomTemplateDefinition } from '../../schemas/CustomTemplates.js';
 import { isTemplateBlock, createTemplateContext } from '../../schemas/BlockTemplates.js';
 import { DEFAULT_THEME as defaultTheme } from '../../schemas/themeLibrary.js';
-import { expandPersistentLayers } from './persistentLayers.js';
+import { expandPersistentLayers, wrapWithPersistentLayers } from './persistentLayers.js';
+import { applyRenderStyleToLayers } from '../utils/applyRenderStyle.js';
+import { resolveBlockTransition } from '../../schemas/Transitions.js';
+import { makeCustomTemplateFn } from './customTemplate.js';
 import type { ViewportConfig } from '../../schemas/Viewport.js';
 import { VIEWPORT_PRESETS } from '../../schemas/Viewport.js';
+
+export { TEMPLATE_METADATA } from './metadata.js';
+export type { TemplateMetadata } from './metadata.js';
 
 // Import all template functions
 import { titleBlock } from './titleBlock.js';
@@ -46,6 +53,9 @@ import { pullQuote } from './pullQuote.js';
 import { videoWithCaption } from './videoWithCaption.js';
 import { videoPullQuote } from './videoPullQuote.js';
 import { dataTable } from './dataTable.js';
+import { diagramBlock } from './diagramBlock.js';
+import { drawingBlock } from './drawingBlock.js';
+import { layoutBlock } from './layoutBlock.js';
 
 /**
  * Registry mapping template ids (the strings that appear in
@@ -82,6 +92,9 @@ export const templateRegistry: TemplateRegistry = {
   videoWithCaption,
   videoPullQuote,
   dataTable,
+  diagram: diagramBlock,
+  layout: layoutBlock,
+  drawing: drawingBlock,
 };
 
 /**
@@ -95,6 +108,8 @@ export const TEMPLATE_ALIASES: Readonly<Record<string, string>> = {
   quoteBlock: 'quote',
   mapBlock: 'map',
   listBlock: 'list',
+  diagramBlock: 'diagram',
+  diagramNode: 'diagram',
 };
 
 /**
@@ -106,13 +121,66 @@ export function resolveTemplateName(name: string): string {
 }
 
 /**
- * Expand a template block into a full Block with layers.
+ * Container templates render their parent block by consuming the block's
+ * child headings (via `context.children`) — `diagram` draws them as nodes,
+ * `drawing` as shapes, `layout` as absolutely-positioned layers. Those
+ * children are therefore NOT independently renderable slides/sections;
+ * render paths use {@link isContainerTemplate} to skip descending into
+ * them (see `flattenRenderableBlocks`).
  */
-export function expandTemplateBlock(templateBlock: TemplateBlock, context: TemplateContext): Block {
+export const CONTAINER_TEMPLATES: ReadonlySet<string> = new Set(['diagram', 'drawing', 'layout']);
+
+/** True when `name` (or its alias) is a children-consuming container template. */
+export function isContainerTemplate(name: string | undefined): boolean {
+  if (!name) return false;
+  return CONTAINER_TEMPLATES.has(resolveTemplateName(name));
+}
+
+/**
+ * Merge user-defined custom templates onto the built-in registry.
+ * Built-in names take precedence on collision — a user can't shadow
+ * `title` or `diagram` from a custom definition. Returns a frozen view
+ * so callers don't accidentally mutate the global registry.
+ */
+export type RuntimeTemplateRegistry = Record<
+  string,
+  (input: TemplateBlock, ctx: TemplateContext) => Layer[]
+>;
+
+export function buildRegistry(
+  custom?: readonly CustomTemplateDefinition[],
+): RuntimeTemplateRegistry {
+  // The exported `templateRegistry` is a discriminated-union mapped type;
+  // we cast through `unknown` because each entry's `input` type is the
+  // template-specific variant, not the broad `TemplateBlock` union.
+  // The runtime contract — "given any TemplateBlock that resolves to a
+  // registered name, the function returns Layer[]" — holds because the
+  // expansion path looks up by `template` string before calling.
+  const merged: RuntimeTemplateRegistry = {
+    ...(templateRegistry as unknown as RuntimeTemplateRegistry),
+  };
+  if (custom) {
+    for (const def of custom) {
+      if (merged[def.name]) continue; // built-in wins
+      merged[def.name] = makeCustomTemplateFn(def) as unknown as RuntimeTemplateRegistry[string];
+    }
+  }
+  return merged;
+}
+
+/**
+ * Expand a template block into a full Block with layers.
+ *
+ * `registry` lets callers swap in a registry that includes user-defined
+ * custom templates. Defaults to the built-in registry when omitted.
+ */
+export function expandTemplateBlock(
+  templateBlock: TemplateBlock,
+  context: TemplateContext,
+  registry: RuntimeTemplateRegistry = templateRegistry as unknown as RuntimeTemplateRegistry,
+): Block {
   const resolved = resolveTemplateName(templateBlock.template);
-  const templateFn = (templateRegistry as Record<string, unknown>)[resolved] as
-    | ((input: TemplateBlock, ctx: TemplateContext) => Layer[])
-    | undefined;
+  const templateFn = registry[resolved];
 
   if (!templateFn) {
     console.warn(`Unknown template: ${templateBlock.template}`);
@@ -127,10 +195,19 @@ export function expandTemplateBlock(templateBlock: TemplateBlock, context: Templ
     };
   }
 
+  // Effective template input: the block's own fields, then structured
+  // body data (```json data fences / derived auto-template inputs), then
+  // `{[…]}` string overrides — the same merge order getLayers uses.
+  const { templateData, templateOverrides } = templateBlock as Block;
+  const input =
+    templateData || templateOverrides
+      ? ({ ...templateBlock, ...templateData, ...templateOverrides } as TemplateBlock)
+      : templateBlock;
+
   // Generate layers from template with error handling
   let layers: Layer[];
   try {
-    layers = templateFn(templateBlock, context);
+    layers = templateFn(input, context);
     if (!Array.isArray(layers)) {
       console.error(
         `Template ${templateBlock.template} did not return an array, got:`,
@@ -180,6 +257,12 @@ export interface ExpandDocBlocksOptions {
    * ensuring proper synchronization with audio playback.
    */
   audioSegments?: AudioSegmentTiming[];
+  /**
+   * User-defined custom templates to merge onto the built-in registry
+   * before expanding blocks. Typically passed straight from
+   * `Doc.customTemplates`. Built-in names take precedence on collision.
+   */
+  customTemplates?: readonly CustomTemplateDefinition[];
 }
 
 /**
@@ -193,38 +276,88 @@ export interface ExpandDocBlocksOptions {
  * @param blocks - Array of template or raw blocks
  * @param options - Expansion options including theme, viewport, and persistent layers
  */
+/**
+ * Finalize an expanded block in place: apply the theme's motion post-pass
+ * to template-generated layers, wrap with persistent bottom/top layers,
+ * and fill the theme's default transition (never on block 0, never over an
+ * authored transition). Shared by every expansion path in this module.
+ */
+function finalizeExpandedBlock(
+  expandedBlock: Block,
+  sourceBlock: DocBlock,
+  blockIndex: number,
+  theme: Theme,
+  bottomLayers: Layer[],
+  topLayers: Layer[],
+): void {
+  // Theme motion defaults apply only to template-generated layers —
+  // raw authored block.layers are never restyled.
+  if (isTemplateBlock(sourceBlock) && expandedBlock.layers && expandedBlock.layers.length > 0) {
+    expandedBlock.layers = applyRenderStyleToLayers(expandedBlock.layers, expandedBlock, theme);
+  }
+
+  if (bottomLayers.length > 0 || topLayers.length > 0) {
+    expandedBlock.layers = wrapWithPersistentLayers(
+      expandedBlock.layers ?? [],
+      sourceBlock as TemplateBlock,
+      bottomLayers,
+      topLayers,
+    );
+  }
+
+  const transition = resolveBlockTransition(expandedBlock, theme, blockIndex);
+  if (transition !== expandedBlock.transition) {
+    expandedBlock.transition = transition;
+  }
+}
+
 export function expandDocBlocks(blocks: DocBlock[], options: ExpandDocBlocksOptions = {}): Block[] {
   const opts: ExpandDocBlocksOptions = options;
 
   const theme = opts.theme ?? defaultTheme;
   const viewport = opts.viewport ?? VIEWPORT_PRESETS.landscape;
-  const { persistentLayers, audioSegments } = opts;
+  const { persistentLayers, audioSegments, customTemplates } = opts;
   const totalBlocks = blocks.length;
+  // Merge user-defined templates onto the built-in registry once per
+  // call; passed into every `expandTemplateBlock` invocation below.
+  const registry: RuntimeTemplateRegistry =
+    customTemplates && customTemplates.length > 0
+      ? buildRegistry(customTemplates)
+      : (templateRegistry as unknown as RuntimeTemplateRegistry);
 
-  // Pre-expand persistent layers once
-  const bottomLayers = expandPersistentLayers(persistentLayers?.bottomLayers);
-  const topLayers = expandPersistentLayers(persistentLayers?.topLayers);
+  // Pre-expand persistent layers once. Callers that pass no config inherit
+  // the theme's atmosphere (docs with their own layers pass them in and win
+  // wholesale — see resolvePersistentLayers).
+  const effectivePersistentLayers = persistentLayers ?? theme.persistentLayers;
+  const bottomLayers = expandPersistentLayers(effectivePersistentLayers?.bottomLayers, theme);
+  const topLayers = expandPersistentLayers(effectivePersistentLayers?.topLayers, theme);
 
   // If no audio segments provided, use simple cumulative timing
   if (!audioSegments || audioSegments.length === 0) {
     let currentTime = 0;
     return blocks.map((block, index) => {
       const context = createTemplateContext(theme, index, totalBlocks, viewport);
+      const maybeChildren = (block as Block).children;
+      if (maybeChildren && maybeChildren.length > 0) {
+        context.children = maybeChildren;
+      }
+      // Expose the source block so custom templates' token resolver can
+      // see the block's title / contents / children. Only set for
+      // custom-templated blocks — built-ins ignore context.block but
+      // exposing it changes object identity which we want to avoid for
+      // the perf-sensitive built-in path.
+      if (
+        isTemplateBlock(block) &&
+        customTemplates &&
+        customTemplates.some((c) => c.name === block.template)
+      ) {
+        context.block = block as Block;
+      }
       const expandedBlock = isTemplateBlock(block)
-        ? expandTemplateBlock(block, context)
+        ? expandTemplateBlock(block, context, registry)
         : (block as Block);
 
-      // Inject persistent layers
-      const templateBlock = block as TemplateBlock;
-      const useBottom = templateBlock.useBottomLayer !== false;
-      const useTop = templateBlock.useTopLayer !== false;
-      if (bottomLayers.length > 0 || topLayers.length > 0) {
-        expandedBlock.layers = [
-          ...(useBottom ? bottomLayers : []),
-          ...(expandedBlock.layers ?? []),
-          ...(useTop ? topLayers : []),
-        ];
-      }
+      finalizeExpandedBlock(expandedBlock, block, index, theme, bottomLayers, topLayers);
 
       expandedBlock.startTime = currentTime;
       currentTime += expandedBlock.duration;
@@ -252,20 +385,22 @@ export function expandDocBlocks(blocks: DocBlock[], options: ExpandDocBlocksOpti
       let offsetTime = 0;
       for (const { block, originalIndex } of segmentBlocks) {
         const context = createTemplateContext(theme, originalIndex, totalBlocks, viewport);
+        const maybeChildren = (block as Block).children;
+        if (maybeChildren && maybeChildren.length > 0) {
+          context.children = maybeChildren;
+        }
+        if (
+          isTemplateBlock(block) &&
+          customTemplates &&
+          customTemplates.some((c) => c.name === block.template)
+        ) {
+          context.block = block as Block;
+        }
         const expandedBlock = isTemplateBlock(block)
-          ? expandTemplateBlock(block, context)
+          ? expandTemplateBlock(block, context, registry)
           : (block as Block);
 
-        const templateBlock = block as TemplateBlock;
-        const useBottom = templateBlock.useBottomLayer !== false;
-        const useTop = templateBlock.useTopLayer !== false;
-        if (bottomLayers.length > 0 || topLayers.length > 0) {
-          expandedBlock.layers = [
-            ...(useBottom ? bottomLayers : []),
-            ...(expandedBlock.layers ?? []),
-            ...(useTop ? topLayers : []),
-          ];
-        }
+        finalizeExpandedBlock(expandedBlock, block, originalIndex, theme, bottomLayers, topLayers);
 
         expandedBlock.startTime = offsetTime;
         offsetTime += expandedBlock.duration;
@@ -318,21 +453,24 @@ export function expandDocBlocks(blocks: DocBlock[], options: ExpandDocBlocksOpti
 
     for (const { block, originalIndex } of segmentBlocks) {
       const context = createTemplateContext(theme, originalIndex, totalBlocks, viewport);
+      const maybeChildren = (block as Block).children;
+      if (maybeChildren && maybeChildren.length > 0) {
+        context.children = maybeChildren;
+      }
+      if (
+        isTemplateBlock(block) &&
+        customTemplates &&
+        customTemplates.some((c) => c.name === block.template)
+      ) {
+        context.block = block as Block;
+      }
       const expandedBlock = isTemplateBlock(block)
-        ? expandTemplateBlock(block, context)
+        ? expandTemplateBlock(block, context, registry)
         : (block as Block);
 
-      const templateBlock = block as TemplateBlock;
-      const useBottom = templateBlock.useBottomLayer !== false;
-      const useTop = templateBlock.useTopLayer !== false;
-      if (bottomLayers.length > 0 || topLayers.length > 0) {
-        expandedBlock.layers = [
-          ...(useBottom ? bottomLayers : []),
-          ...(expandedBlock.layers ?? []),
-          ...(useTop ? topLayers : []),
-        ];
-      }
+      finalizeExpandedBlock(expandedBlock, block, originalIndex, theme, bottomLayers, topLayers);
 
+      const templateBlock = block as TemplateBlock;
       expandedInfos.push({
         block: expandedBlock,
         originalIndex,
@@ -578,7 +716,13 @@ export type {
 } from '../../schemas/Viewport.js';
 export { getLayoutHints, getTwoColumnPositions } from '../../schemas/LayoutStrategy.js';
 export type { LayoutHints } from '../../schemas/LayoutStrategy.js';
-export { expandPersistentLayers, getDocStyleConfig } from './persistentLayers.js';
+export {
+  expandPersistentLayers,
+  getDocStyleConfig,
+  getPersistentLayersFromTheme,
+  resolvePersistentLayers,
+  wrapWithPersistentLayers,
+} from './persistentLayers.js';
 
 // Re-export individual templates for direct access
 export { titleBlock } from './titleBlock.js';
@@ -602,6 +746,31 @@ export { pullQuote } from './pullQuote.js';
 export { videoWithCaption } from './videoWithCaption.js';
 export { videoPullQuote } from './videoPullQuote.js';
 export { dataTable } from './dataTable.js';
+export { diagramBlock } from './diagramBlock.js';
+export { computeDiagramLayout } from './diagramLayout.js';
+export type {
+  DiagramLayout,
+  DiagramNodePosition,
+  DiagramEdge,
+  DiagramLayoutOptions,
+} from './diagramLayout.js';
+export { drawingBlock } from './drawingBlock.js';
+export {
+  computeDrawingLayout,
+  normalizeShapeKind,
+  isShapeName,
+  SHAPE_NAMES,
+} from './drawingLayout.js';
+export type {
+  DrawingLayout,
+  DrawingShape,
+  DrawingShapeKind,
+  DrawingConnector,
+  DrawingLayoutOptions,
+} from './drawingLayout.js';
+export { layoutBlock } from './layoutBlock.js';
+export { computeLayoutLayers } from './layoutLayout.js';
+export type { LayoutLayersResult, LayoutLayerDefaults } from './layoutLayout.js';
 
 // Re-export accent image utilities
 export { getAccentLayout, createAccentLayers, adjustY, DEFAULT_LAYOUT } from './accentImage.js';

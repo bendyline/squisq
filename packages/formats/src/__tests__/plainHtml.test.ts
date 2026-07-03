@@ -43,6 +43,12 @@ describe('markdownDocToPlainHtml', () => {
     );
   });
 
+  it('renders unsafe markdown links as inert text by default', () => {
+    const html = render('[x](javascript:alert(1))');
+    expect(html).toContain('<p>x</p>');
+    expect(html).not.toContain('javascript:');
+  });
+
   it('renders ordered and unordered lists', () => {
     const html = render('- one\n- two\n\n1. first\n2. second');
     expect(html).toContain('<ul>');
@@ -110,6 +116,31 @@ describe('markdownDocToPlainHtml', () => {
     expect(html).toContain('src="blob:http://x/resized"');
     expect(html).toContain('width="194"');
     expect(html).not.toContain('src="resized.png"');
+  });
+
+  it('sanitizes raw HTML by default', () => {
+    const html = render(
+      '<div><img src="x.jpg" onerror="alert(1)"><script>alert(1)</script><span onclick="alert(1)">ok</span></div>',
+    );
+    expect(html).toContain('<img src="x.jpg" />');
+    expect(html).toContain('<span>ok</span>');
+    expect(html).not.toContain('<script>');
+    expect(html).not.toContain('onerror');
+    expect(html).not.toContain('onclick');
+    expect(html).not.toContain('javascript:');
+  });
+
+  it('strips raw HTML when requested', () => {
+    const html = render('<div><span>hidden</span></div>', { htmlPolicy: 'strip' });
+    expect(html).not.toContain('<span>hidden</span>');
+    expect(html).not.toContain('hidden');
+  });
+
+  it('preserves raw HTML only with the trusted opt-in', () => {
+    const html = render('<div><span onclick="alert(1)">ok</span></div>', {
+      htmlPolicy: 'trusted',
+    });
+    expect(html).toContain('<div><span onclick="alert(1)">ok</span></div>');
   });
 
   it('escapes quotes in href and src attributes', () => {

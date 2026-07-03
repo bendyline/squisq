@@ -20,6 +20,7 @@ import type { VideoQuality, VideoOrientation } from '@bendyline/squisq-video';
 type CaptionOption = 'off' | 'standard' | 'social';
 
 interface VideoCommandOptions {
+  autoTemplates?: boolean;
   output?: string;
   fps?: string;
   quality?: VideoQuality;
@@ -55,6 +56,10 @@ export function registerVideoCommand(program: Command): void {
       '--captions <style>',
       `Caption style: ${VALID_CAPTIONS.join(', ')} (default: off)`,
       'off',
+    )
+    .option(
+      '--no-auto-templates',
+      'Disable content-aware template auto-picking for unannotated headings',
     )
     .option('--width <pixels>', 'Override video width')
     .option('--height <pixels>', 'Override video height')
@@ -123,7 +128,7 @@ async function runVideo(inputPath: string, opts: VideoCommandOptions): Promise<v
     doc = result.doc;
   } else if (result.markdownDoc) {
     const { markdownToDoc } = await import('@bendyline/squisq/doc');
-    doc = markdownToDoc(result.markdownDoc);
+    doc = markdownToDoc(result.markdownDoc, { autoTemplates: opts.autoTemplates });
   } else {
     throw new Error('No document found in input');
   }

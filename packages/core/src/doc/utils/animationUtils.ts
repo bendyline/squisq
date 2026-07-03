@@ -8,7 +8,12 @@
  * This is shared code used by both site and efb-app doc renderers.
  */
 
-import type { Animation, AnimationType, TransitionType } from '../../schemas/Doc.js';
+import type {
+  Animation,
+  AnimationType,
+  TransitionDirection,
+  TransitionType,
+} from '../../schemas/Doc.js';
 
 interface AnimationResult {
   /** CSS class name to apply */
@@ -112,9 +117,268 @@ export function getDefaultAnimationDuration(type: AnimationType): number {
 /**
  * Get transition class for slide entry/exit.
  */
-export function getTransitionClass(type: TransitionType, entering: boolean): string {
+export function getTransitionClass(
+  type: TransitionType,
+  entering: boolean,
+  direction?: TransitionDirection,
+): string {
+  if (type === 'cut') return '';
   const mode = entering ? 'enter' : 'exit';
-  return `transition-${type}-${mode}`;
+  return `transition-${getTransitionVisualClass(type, direction)}-${mode}`;
+}
+
+type TransitionVisualClass =
+  | 'cut'
+  | 'fade'
+  | 'dissolve'
+  | 'pushLeft'
+  | 'pushRight'
+  | 'pushUp'
+  | 'pushDown'
+  | 'wipeLeft'
+  | 'wipeRight'
+  | 'wipeUp'
+  | 'wipeDown'
+  | 'splitHorizontal'
+  | 'splitVertical'
+  | 'revealLeft'
+  | 'revealRight'
+  | 'revealUp'
+  | 'revealDown'
+  | 'random'
+  | 'randomBarsHorizontal'
+  | 'randomBarsVertical'
+  | 'shapeCircle'
+  | 'shapeDiamond'
+  | 'shapePlus'
+  | 'uncoverLeft'
+  | 'uncoverRight'
+  | 'uncoverUp'
+  | 'uncoverDown'
+  | 'coverLeft'
+  | 'coverRight'
+  | 'coverUp'
+  | 'coverDown'
+  | 'zoom'
+  | 'panLeft'
+  | 'panRight'
+  | 'panUp'
+  | 'panDown'
+  | 'flash'
+  | 'newsflash'
+  | 'fallOver'
+  | 'drape'
+  | 'curtains'
+  | 'wind'
+  | 'prestige'
+  | 'fracture'
+  | 'crush'
+  | 'peelOff'
+  | 'pageCurl'
+  | 'pageCurlDouble'
+  | 'pageCurlSingle'
+  | 'airplane'
+  | 'origami'
+  | 'checkerboard'
+  | 'blindsHorizontal'
+  | 'blindsVertical'
+  | 'clock'
+  | 'ripple'
+  | 'honeycomb'
+  | 'glitter'
+  | 'vortex'
+  | 'shred'
+  | 'switch'
+  | 'flip'
+  | 'gallery'
+  | 'cube'
+  | 'doors'
+  | 'box'
+  | 'ferrisWheel'
+  | 'conveyor'
+  | 'rotate'
+  | 'window'
+  | 'orbit'
+  | 'flyThrough'
+  | 'morph'
+  | 'combHorizontal'
+  | 'combVertical'
+  | 'pullLeft'
+  | 'pullRight'
+  | 'pullUp'
+  | 'pullDown'
+  | 'stripsLeft'
+  | 'stripsRight'
+  | 'stripsUp'
+  | 'stripsDown'
+  | 'wedge'
+  | 'wheel'
+  | 'wheelReverse'
+  | 'prism'
+  | 'warp'
+  | 'slideLeft'
+  | 'slideRight'
+  | 'slideUp'
+  | 'slideDown';
+
+const TRANSITION_VISUAL_CLASS_BY_TYPE: Record<TransitionType, TransitionVisualClass> = {
+  airplane: 'airplane',
+  blinds: 'blindsHorizontal',
+  box: 'box',
+  checker: 'checkerboard',
+  checkerboard: 'checkerboard',
+  circle: 'shapeCircle',
+  clock: 'clock',
+  comb: 'combHorizontal',
+  conveyor: 'conveyor',
+  cover: 'coverLeft',
+  crush: 'crush',
+  cube: 'cube',
+  curtains: 'curtains',
+  cut: 'cut',
+  diamond: 'shapeDiamond',
+  dissolve: 'dissolve',
+  doors: 'doors',
+  drape: 'drape',
+  fade: 'fade',
+  fallOver: 'fallOver',
+  ferris: 'ferrisWheel',
+  ferrisWheel: 'ferrisWheel',
+  flash: 'flash',
+  flip: 'flip',
+  flyThrough: 'flyThrough',
+  flythrough: 'flyThrough',
+  fracture: 'fracture',
+  gallery: 'gallery',
+  glitter: 'glitter',
+  honeycomb: 'honeycomb',
+  morph: 'morph',
+  newsflash: 'newsflash',
+  orbit: 'orbit',
+  origami: 'origami',
+  pageCurl: 'pageCurl',
+  pageCurlDouble: 'pageCurlDouble',
+  pageCurlSingle: 'pageCurlSingle',
+  pan: 'panLeft',
+  peelOff: 'peelOff',
+  plus: 'shapePlus',
+  prestige: 'prestige',
+  prism: 'prism',
+  pull: 'pullLeft',
+  push: 'pushLeft',
+  random: 'random',
+  randomBar: 'randomBarsHorizontal',
+  randomBars: 'randomBarsVertical',
+  reveal: 'revealLeft',
+  ripple: 'ripple',
+  rotate: 'rotate',
+  shape: 'shapeCircle',
+  shred: 'shred',
+  slideDown: 'slideDown',
+  slideLeft: 'slideLeft',
+  slideRight: 'slideRight',
+  slideUp: 'slideUp',
+  split: 'splitHorizontal',
+  strips: 'stripsLeft',
+  switch: 'switch',
+  uncover: 'uncoverLeft',
+  vortex: 'vortex',
+  warp: 'warp',
+  wedge: 'wedge',
+  wheel: 'wheel',
+  wheelReverse: 'wheelReverse',
+  wind: 'wind',
+  window: 'window',
+  wipe: 'wipeLeft',
+  zoom: 'zoom',
+};
+
+function getTransitionVisualClass(
+  type: TransitionType,
+  direction?: TransitionDirection,
+): TransitionVisualClass {
+  switch (type) {
+    case 'randomBars':
+    case 'randomBar':
+      return axisClass('randomBars', direction, type === 'randomBar' ? 'Horizontal' : 'Vertical');
+    case 'comb':
+      return axisClass('comb', direction, 'Horizontal');
+    case 'blinds':
+      return axisClass('blinds', direction, 'Horizontal');
+    case 'split':
+      return axisClass('split', direction, 'Horizontal');
+    case 'push':
+      return directionalClass('push', direction, 'Left');
+    case 'wipe':
+      return directionalClass('wipe', direction, 'Left');
+    case 'cover':
+      return directionalClass('cover', direction, 'Left');
+    case 'uncover':
+      return directionalClass('uncover', direction, 'Left');
+    case 'pull':
+      return directionalClass('pull', direction, 'Left');
+    case 'reveal':
+      return directionalClass('reveal', direction, 'Left');
+    case 'strips':
+      return directionalClass('strips', direction, 'Left');
+    case 'pan':
+      return directionalClass('pan', direction, 'Left');
+    default:
+      return TRANSITION_VISUAL_CLASS_BY_TYPE[type];
+  }
+}
+
+function directionalClass(
+  prefix: 'cover' | 'pan' | 'pull' | 'push' | 'reveal' | 'strips' | 'uncover' | 'wipe',
+  direction: TransitionDirection | undefined,
+  fallback: 'Left' | 'Right' | 'Up' | 'Down',
+): TransitionVisualClass {
+  const suffix = directionSuffix(direction, fallback);
+  return `${prefix}${suffix}` as TransitionVisualClass;
+}
+
+function axisClass(
+  prefix: 'blinds' | 'comb' | 'randomBars' | 'split',
+  direction: TransitionDirection | undefined,
+  fallback: 'Horizontal' | 'Vertical',
+): TransitionVisualClass {
+  const suffix = axisSuffix(direction, fallback);
+  return `${prefix}${suffix}` as TransitionVisualClass;
+}
+
+function directionSuffix(
+  direction: TransitionDirection | undefined,
+  fallback: 'Left' | 'Right' | 'Up' | 'Down',
+): 'Left' | 'Right' | 'Up' | 'Down' {
+  switch (direction) {
+    case 'right':
+      return 'Right';
+    case 'up':
+      return 'Up';
+    case 'down':
+      return 'Down';
+    case 'left':
+    default:
+      return fallback;
+  }
+}
+
+function axisSuffix(
+  direction: TransitionDirection | undefined,
+  fallback: 'Horizontal' | 'Vertical',
+): 'Horizontal' | 'Vertical' {
+  switch (direction) {
+    case 'vertical':
+    case 'up':
+    case 'down':
+      return 'Vertical';
+    case 'horizontal':
+    case 'left':
+    case 'right':
+      return 'Horizontal';
+    default:
+      return fallback;
+  }
 }
 
 /**

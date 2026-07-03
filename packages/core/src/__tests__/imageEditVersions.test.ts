@@ -46,6 +46,78 @@ describe('imageEdit/persistence', () => {
     );
     await expect(readImageEditDoc(sidecar)).rejects.toThrow(/unsupported schema version/);
   });
+
+  async function writeRaw(sidecar: ReturnType<typeof scopeContainer>, payload: unknown) {
+    await sidecar.writeFile('state.json', new TextEncoder().encode(JSON.stringify(payload)));
+  }
+
+  it('rejects layer that is not an object', async () => {
+    const sidecar = scopeContainer(new MemoryContentContainer(), 'sc');
+    await writeRaw(sidecar, { version: 1, canvas: { width: 1, height: 1 }, layers: [null] });
+    await expect(readImageEditDoc(sidecar)).rejects.toThrow(/layers\[0\] must be an object/);
+  });
+
+  it('rejects layer with missing id', async () => {
+    const sidecar = scopeContainer(new MemoryContentContainer(), 'sc');
+    await writeRaw(sidecar, {
+      version: 1,
+      canvas: { width: 1, height: 1 },
+      layers: [{ type: 'text', position: { x: 0, y: 0 }, content: { text: 'hi', style: {} } }],
+    });
+    await expect(readImageEditDoc(sidecar)).rejects.toThrow(/must have a string id/);
+  });
+
+  it('rejects layer with invalid type', async () => {
+    const sidecar = scopeContainer(new MemoryContentContainer(), 'sc');
+    await writeRaw(sidecar, {
+      version: 1,
+      canvas: { width: 1, height: 1 },
+      layers: [{ id: 'x', type: 'video', position: { x: 0, y: 0 }, content: {} }],
+    });
+    await expect(readImageEditDoc(sidecar)).rejects.toThrow(
+      /type must be one of image\|text\|shape/,
+    );
+  });
+
+  it('rejects image layer with missing content.src', async () => {
+    const sidecar = scopeContainer(new MemoryContentContainer(), 'sc');
+    await writeRaw(sidecar, {
+      version: 1,
+      canvas: { width: 1, height: 1 },
+      layers: [{ id: 'x', type: 'image', position: { x: 0, y: 0 }, content: { alt: 'test' } }],
+    });
+    await expect(readImageEditDoc(sidecar)).rejects.toThrow(/content\.src must be a string/);
+  });
+
+  it('rejects text layer with missing content.text', async () => {
+    const sidecar = scopeContainer(new MemoryContentContainer(), 'sc');
+    await writeRaw(sidecar, {
+      version: 1,
+      canvas: { width: 1, height: 1 },
+      layers: [{ id: 'x', type: 'text', position: { x: 0, y: 0 }, content: { style: {} } }],
+    });
+    await expect(readImageEditDoc(sidecar)).rejects.toThrow(/content\.text must be a string/);
+  });
+
+  it('rejects shape layer with missing content.shape', async () => {
+    const sidecar = scopeContainer(new MemoryContentContainer(), 'sc');
+    await writeRaw(sidecar, {
+      version: 1,
+      canvas: { width: 1, height: 1 },
+      layers: [{ id: 'x', type: 'shape', position: { x: 0, y: 0 }, content: {} }],
+    });
+    await expect(readImageEditDoc(sidecar)).rejects.toThrow(/content\.shape must be a string/);
+  });
+
+  it('rejects layer with missing position', async () => {
+    const sidecar = scopeContainer(new MemoryContentContainer(), 'sc');
+    await writeRaw(sidecar, {
+      version: 1,
+      canvas: { width: 1, height: 1 },
+      layers: [{ id: 'x', type: 'shape', content: { shape: 'rect' } }],
+    });
+    await expect(readImageEditDoc(sidecar)).rejects.toThrow(/position must have/);
+  });
 });
 
 describe('imageEdit/versions', () => {

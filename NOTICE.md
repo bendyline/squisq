@@ -9,6 +9,7 @@ with their licenses. All licenses are permissive and compatible with MIT.
 
 | Package             | Version | License    | Repository                                                             |
 | ------------------- | ------- | ---------- | ---------------------------------------------------------------------- |
+| genson-js           | 0.0.8   | Apache-2.0 | https://github.com/aspecto-io/genson-js                                |
 | hast-util-from-html | 2.0.3   | MIT        | https://github.com/syntax-tree/hast-util-from-html                     |
 | localforage         | 1.10.0  | Apache-2.0 | https://github.com/localForage/localForage                             |
 | ngeohash            | 0.6.3   | MIT        | https://github.com/sunng87/node-geohash                                |
@@ -39,26 +40,36 @@ with their licenses. All licenses are permissive and compatible with MIT.
 
 ## @bendyline/squisq-editor-react
 
-| Package                        | Version   | License | Repository                                   |
-| ------------------------------ | --------- | ------- | -------------------------------------------- |
-| @bendyline/squisq              | workspace | MIT     | (internal)                                   |
-| @bendyline/squisq-formats      | workspace | MIT     | (internal)                                   |
-| @bendyline/squisq-react        | workspace | MIT     | (internal)                                   |
-| @monaco-editor/react           | 4.7.0     | MIT     | https://github.com/suren-atoyan/monaco-react |
-| @tiptap/extension-image        | 2.27.2    | MIT     | https://tiptap.dev                           |
-| @tiptap/extension-placeholder  | 2.27.2    | MIT     | https://tiptap.dev                           |
-| @tiptap/extension-table        | 2.27.2    | MIT     | https://tiptap.dev                           |
-| @tiptap/extension-table-cell   | 2.27.2    | MIT     | https://tiptap.dev                           |
-| @tiptap/extension-table-header | 2.27.2    | MIT     | https://tiptap.dev                           |
-| @tiptap/extension-table-row    | 2.27.2    | MIT     | https://tiptap.dev                           |
-| @tiptap/extension-task-item    | 2.27.2    | MIT     | https://tiptap.dev                           |
-| @tiptap/extension-task-list    | 2.27.2    | MIT     | https://tiptap.dev                           |
-| @tiptap/pm                     | 2.27.2    | MIT     | https://tiptap.dev                           |
-| @tiptap/react                  | 2.27.2    | MIT     | https://tiptap.dev                           |
-| @tiptap/starter-kit            | 2.27.2    | MIT     | https://tiptap.dev                           |
-| monaco-editor                  | 0.55.1    | MIT     | https://github.com/microsoft/monaco-editor   |
-| react _(peer)_                 | ^18 / ^19 | MIT     | https://reactjs.org                          |
-| react-dom _(peer)_             | ^18 / ^19 | MIT     | https://reactjs.org                          |
+| Package                        | Version   | License                       | Repository                                   |
+| ------------------------------ | --------- | ----------------------------- | -------------------------------------------- |
+| @bendyline/squisq              | workspace | MIT                           | (internal)                                   |
+| @bendyline/squisq-formats      | workspace | MIT                           | (internal)                                   |
+| @bendyline/squisq-react        | workspace | MIT                           | (internal)                                   |
+| @fortawesome/fontawesome-free  | 7.2.0     | CC-BY-4.0 AND OFL-1.1 AND MIT | https://github.com/FortAwesome/Font-Awesome  |
+| @monaco-editor/react           | 4.7.0     | MIT                           | https://github.com/suren-atoyan/monaco-react |
+| @tiptap/extension-image        | 2.27.2    | MIT                           | https://tiptap.dev                           |
+| @tiptap/extension-link         | 2.27.2    | MIT                           | https://tiptap.dev                           |
+| @tiptap/extension-mention      | 2.27.2    | MIT                           | https://tiptap.dev                           |
+| @tiptap/extension-placeholder  | 2.27.2    | MIT                           | https://tiptap.dev                           |
+| @tiptap/extension-table        | 2.27.2    | MIT                           | https://tiptap.dev                           |
+| @tiptap/extension-table-cell   | 2.27.2    | MIT                           | https://tiptap.dev                           |
+| @tiptap/extension-table-header | 2.27.2    | MIT                           | https://tiptap.dev                           |
+| @tiptap/extension-table-row    | 2.27.2    | MIT                           | https://tiptap.dev                           |
+| @tiptap/extension-task-item    | 2.27.2    | MIT                           | https://tiptap.dev                           |
+| @tiptap/extension-task-list    | 2.27.2    | MIT                           | https://tiptap.dev                           |
+| @tiptap/pm                     | 2.27.2    | MIT                           | https://tiptap.dev                           |
+| @tiptap/react                  | 2.27.2    | MIT                           | https://tiptap.dev                           |
+| @tiptap/starter-kit            | 2.27.2    | MIT                           | https://tiptap.dev                           |
+| @tiptap/suggestion             | 2.27.2    | MIT                           | https://tiptap.dev                           |
+| monaco-editor _(peer)_         | ^0.50.0   | MIT                           | https://github.com/microsoft/monaco-editor   |
+| react _(peer)_                 | ^18 / ^19 | MIT                           | https://reactjs.org                          |
+| react-dom _(peer)_             | ^18 / ^19 | MIT                           | https://reactjs.org                          |
+
+`@fortawesome/fontawesome-free` ships three license-distinct asset families:
+icon glyph artwork under **CC-BY-4.0** (attribution required when redistributing
+the icons), the FontAwesome font files under **OFL-1.1**, and the CSS/JS
+loader code under **MIT**. Each applies to its respective subset of the
+package — no choose-one election.
 
 ## @bendyline/squisq-video
 
@@ -71,15 +82,17 @@ with their licenses. All licenses are permissive and compatible with MIT.
 
 ## @bendyline/squisq-video-react
 
-| Package                 | Version   | License | Repository                               |
-| ----------------------- | --------- | ------- | ---------------------------------------- |
-| @bendyline/squisq       | workspace | MIT     | (internal)                               |
-| @bendyline/squisq-video | workspace | MIT     | (internal)                               |
-| @bendyline/squisq-react | workspace | MIT     | (internal)                               |
-| html2canvas             | 1.4.1     | MIT     | https://github.com/nicbarker/html2canvas |
-| mp4-muxer               | 5.2.2     | MIT     | https://github.com/nicbarker/mp4-muxer   |
-| react _(peer)_          | ^18 / ^19 | MIT     | https://reactjs.org                      |
-| react-dom _(peer)_      | ^18 / ^19 | MIT     | https://reactjs.org                      |
+| Package                 | Version   | License | Repository                                |
+| ----------------------- | --------- | ------- | ----------------------------------------- |
+| @bendyline/squisq       | workspace | MIT     | (internal)                                |
+| @bendyline/squisq-video | workspace | MIT     | (internal)                                |
+| @bendyline/squisq-react | workspace | MIT     | (internal)                                |
+| @ffmpeg/ffmpeg          | 0.12.15   | MIT     | https://github.com/ffmpegwasm/ffmpeg.wasm |
+| @ffmpeg/util            | 0.12.2    | MIT     | https://github.com/ffmpegwasm/ffmpeg.wasm |
+| html2canvas             | 1.4.1     | MIT     | https://github.com/niklasvh/html2canvas   |
+| mp4-muxer               | 5.2.2     | MIT     | https://github.com/Vanilagy/mp4-muxer     |
+| react _(peer)_          | ^18 / ^19 | MIT     | https://reactjs.org                       |
+| react-dom _(peer)_      | ^18 / ^19 | MIT     | https://reactjs.org                       |
 
 ## @bendyline/squisq-cli
 
@@ -91,6 +104,7 @@ with their licenses. All licenses are permissive and compatible with MIT.
 | @bendyline/squisq-video   | workspace | MIT        | (internal)                              |
 | commander                 | 12.1.0    | MIT        | https://github.com/tj/commander.js      |
 | playwright-core           | 1.58.2    | Apache-2.0 | https://github.com/microsoft/playwright |
+| vite                      | 8.0.14    | MIT        | https://github.com/vitejs/vite          |
 
 ---
 
@@ -138,16 +152,20 @@ https://openfontlicense.org/open-font-license-official-text/
 
 ## License Summary
 
-| License                 | Packages                                         |
-| ----------------------- | ------------------------------------------------ |
-| MIT                     | majority of dependencies                         |
-| Apache-2.0              | localforage, pdfjs-dist, playwright-core, Roboto |
-| OFL-1.1                 | 14 self-hosted Google Fonts (see table above)    |
-| MIT OR GPL-3.0-or-later | jszip (dual-licensed; MIT option used)           |
-| MIT AND Zlib            | pako (both permissive)                           |
-| 0BSD                    | tslib (maximally permissive)                     |
+| License                       | Packages                                                                  |
+| ----------------------------- | ------------------------------------------------------------------------- |
+| MIT                           | majority of dependencies                                                  |
+| Apache-2.0                    | genson-js, localforage, pdfjs-dist, playwright-core, Roboto font          |
+| OFL-1.1                       | 14 self-hosted Google Fonts (see table above) + FontAwesome font files    |
+| CC-BY-4.0                     | FontAwesome icon artwork (attribution required when redistributing icons) |
+| MIT OR GPL-3.0-or-later       | jszip (dual-licensed; MIT option used)                                    |
+| MIT AND Zlib                  | pako (both permissive)                                                    |
+| 0BSD                          | tslib (maximally permissive)                                              |
+| CC-BY-4.0 AND OFL-1.1 AND MIT | @fortawesome/fontawesome-free (composite — see editor-react table note)   |
 
 All dependencies use permissive licenses compatible with MIT. The jszip
-dual-license allows choosing MIT. Apache-2.0 dependencies (localforage,
-pdfjs-dist, Roboto font) require preserving their copyright notice and license
-text. OFL-1.1 fonts require attribution and permit redistribution.
+dual-license allows choosing MIT. Apache-2.0 dependencies (genson-js,
+localforage, pdfjs-dist, playwright-core, Roboto font) require preserving their
+copyright notice and license text. OFL-1.1 fonts require attribution and permit
+redistribution. The FontAwesome Free icon artwork (CC-BY-4.0) requires visible
+attribution to FontAwesome when the icons are redistributed.

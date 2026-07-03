@@ -11,19 +11,40 @@
  * 4. Synthesize a dummy audio segment for timer-based playback
  */
 
-import { flattenBlocks, hasTemplate } from '@bendyline/squisq/doc';
-import { extractPlainText } from '@bendyline/squisq/markdown';
+import { flattenRenderableBlocks, hasTemplate } from '@bendyline/squisq/doc';
+import { extractPlainText, KNOWN_BLOCK_META_KEYS } from '@bendyline/squisq/markdown';
 import { getChildren } from '@bendyline/squisq/markdown';
+import { iconMarker } from '@bendyline/squisq/icon-marker';
+import type { IconFamily } from '@bendyline/squisq/icons';
 import type { Block, Doc } from '@bendyline/squisq/schemas';
 import type { MarkdownBlockNode, MarkdownList, MarkdownNode } from '@bendyline/squisq/markdown';
 
 // ── Helpers ────────────────────────────────────────────────────────
 
+/**
+ * Like `extractPlainText`, but preserves inline icons as encoded markers so
+ * template text can render them as glyphs downstream (see `iconMarker` and
+ * `TextLayer`). Mirrors `extractPlainText`'s value/child/list handling; the
+ * only addition is the `inlineIcon` interception.
+ */
+function extractRichText(node: MarkdownNode): string {
+  if (node.type === 'inlineIcon') {
+    const icon = node as unknown as { family: IconFamily; name: string };
+    return iconMarker(icon.family, icon.name);
+  }
+  if ('value' in node && typeof (node as { value?: unknown }).value === 'string') {
+    return (node as { value: string }).value;
+  }
+  const children = getChildren(node);
+  const separator = node.type === 'list' || node.type === 'listItem' ? '\n' : '';
+  return children.map(extractRichText).join(separator);
+}
+
 function extractBodyText(contents: MarkdownBlockNode[] | undefined): string {
   if (!contents || contents.length === 0) return '';
   const parts: string[] = [];
   for (const node of contents) {
-    parts.push(extractPlainText(node));
+    parts.push(extractRichText(node));
   }
   return parts.join('\n').trim();
 }
@@ -174,13 +195,23 @@ function getTemplateDefaults(
   }
 }
 
-function blockToSlide(block: Block, index: number): Record<string, unknown> {
+function blockToSlide(
+  block: Block,
+  index: number,
+  knownTemplates?: ReadonlySet<string>,
+): Record<string, unknown> {
   const headingText = block.sourceHeading
     ? extractPlainText(block.sourceHeading)
     : block.title || block.id || `Slide ${index + 1}`;
 
   const requestedTemplate = block.template || 'sectionHeader';
-  const template = hasTemplate(requestedTemplate) ? requestedTemplate : 'sectionHeader';
+  // A template is recognized if it's a built-in OR a user-defined
+  // template carried in the doc's `customTemplates` set. Without this,
+  // an annotated `{[hero]}` heading would silently fall back to
+  // `sectionHeader` because `hasTemplate` only knows built-ins.
+  const isCustomTemplate = knownTemplates?.has(requestedTemplate) ?? false;
+  const recognized = hasTemplate(requestedTemplate) || isCustomTemplate;
+  const template = recognized ? requestedTemplate : 'sectionHeader';
   const defaults = getTemplateDefaults(template, headingText, block);
 
   const {
@@ -196,6 +227,7 @@ function blockToSlide(block: Block, index: number): Record<string, unknown> {
     contents: _co,
     sourceHeading: _sh,
     templateOverrides: _to,
+    templateData: _td,
     ...extraFields
   } = block as unknown as Record<string, unknown>;
 
@@ -204,12 +236,57 @@ function blockToSlide(block: Block, index: number): Record<string, unknown> {
     template,
     duration: block.duration,
     audioSegment: 0,
-    transition: index > 0 ? { type: 'fade', duration: 0.5 } : undefined,
+    // Respect the block's authored transition (set via the toolbar / on-canvas
+    // properties palette → `{…}` block attrs). Only fall back to a default fade
+    // for blocks past the first when the author hasn't chosen one; the first
+    // block has no previous slide to transition in from.
+    transition: block.transition ?? (index > 0 ? { type: 'fade', duration: 0.5 } : undefined),
     title: headingText,
+    // Custom templates need access to the source block's body content
+    // + children so their token resolver (`{content}`, `{children}`,
+    // `{image:N}`) substitutes against the user's prose, not just the
+    // heading. Built-in templates don't read these fields and risk
+    // surprising overlap with their typed inputs, so we only attach
+    // them when the slide actually maps to a custom template.
+    ...(isCustomTemplate && block.contents ? { contents: block.contents } : {}),
+    ...(isCustomTemplate && block.children ? { children: block.children } : {}),
     ...defaults,
     ...extraFields,
-    ...block.templateOverrides,
+    // Structured body data (```json data fences, GFM tables for dataTable)
+    // carries typed values; `{[…]}` string overrides win last so an explicit
+    // annotation param can still pin any field.
+    //
+    // Block-meta keys (transition, startTime, duration, …) are the exception:
+    // they were already coerced to typed block fields above (e.g.
+    // `block.transition` → `{ type, duration, direction }`). Their raw string
+    // form also rides along in `templateData`/`templateOverrides` because the
+    // author wrote them inside `{[…]}`; left un-stripped, that string would
+    // spread back over the typed value here and clobber it — turning
+    // `transition=vortex` into the string `"vortex"`, which the player can't
+    // animate. Omit them from the content spreads so the typed fields win.
+    ...omitBlockMeta(block.templateData),
+    ...omitBlockMeta(block.templateOverrides),
   };
+}
+
+/** Keys coerced to typed block fields; must not be re-applied as raw strings. */
+const BLOCK_META_KEYS: ReadonlySet<string> = new Set(Object.keys(KNOWN_BLOCK_META_KEYS));
+
+/** Copy of a template-param record with block-meta keys removed. */
+function omitBlockMeta(
+  data: Record<string, unknown> | undefined,
+): Record<string, unknown> | undefined {
+  if (!data) return data;
+  let hit = false;
+  const out: Record<string, unknown> = {};
+  for (const key of Object.keys(data)) {
+    if (BLOCK_META_KEYS.has(key)) {
+      hit = true;
+      continue;
+    }
+    out[key] = data[key];
+  }
+  return hit ? out : data;
 }
 
 const IMAGE_MOTIONS: Array<'zoomIn' | 'zoomOut' | 'panLeft' | 'panRight'> = [
@@ -229,9 +306,18 @@ const IMAGE_MOTIONS: Array<'zoomIn' | 'zoomOut' | 'panLeft' | 'panRight'> = [
  * audio segment.
  */
 export function buildPreviewDoc(doc: Doc): Doc {
-  const flat = flattenBlocks(doc.blocks);
+  // Container templates (`diagram`, `drawing`) render their children as
+  // nodes/shapes, so those children must not also become preview slides.
+  const flat = flattenRenderableBlocks(doc.blocks);
   const allImages = collectAllDocImages(doc.blocks);
   const usedImageSrcs = new Set<string>();
+  // Names of user-defined templates carried by the doc — passed into
+  // `blockToSlide` so heading annotations like `{[hero]}` aren't
+  // silently downgraded to `sectionHeader` when the template doesn't
+  // exist in the built-in registry.
+  const knownTemplates = doc.customTemplates
+    ? new Set(doc.customTemplates.map((d) => d.name))
+    : undefined;
 
   const slides: Record<string, unknown>[] = [];
   let motionIndex = 0;
@@ -239,7 +325,7 @@ export function buildPreviewDoc(doc: Doc): Doc {
   for (let i = 0; i < flat.length; i++) {
     const block = flat[i];
     const blockImages = extractBlockImages(block.contents);
-    const slide = blockToSlide(block, i);
+    const slide = blockToSlide(block, i, knownTemplates);
 
     if (blockImages.length > 0 && slide.template === 'sectionHeader') {
       const img = blockImages[0];
@@ -305,5 +391,8 @@ export function buildPreviewDoc(doc: Doc): Doc {
     ...(doc.captions ? { captions: doc.captions } : {}),
     ...(doc.startBlock ? { startBlock: doc.startBlock } : {}),
     ...(doc.themeId ? { themeId: doc.themeId } : {}),
+    // Custom templates ride along so `useDocPlayback` can merge them
+    // onto the registry before expanding slides.
+    ...(doc.customTemplates ? { customTemplates: doc.customTemplates } : {}),
   };
 }

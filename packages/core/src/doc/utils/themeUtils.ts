@@ -8,8 +8,9 @@
 
 import type { TemplateContext } from '../../schemas/BlockTemplates.js';
 import type { ThemeColorScheme, RenderStyle } from '../../schemas/Theme.js';
-import type { AnimationType } from '../../schemas/Doc.js';
+import type { Animation, AnimationType, ImageTreatment } from '../../schemas/Doc.js';
 import { resolveFontFamily } from '../../schemas/fontStacks.js';
+import { oklchDarken, withAlpha } from '../../schemas/colorUtils.js';
 
 // ============================================
 // Color Scheme Resolution
@@ -123,6 +124,30 @@ export function getDefaultAnimation(
   return layerType === 'text' ? rs.defaultTextAnimation : rs.defaultImageAnimation;
 }
 
+/**
+ * Theme-aware entrance animation for a template layer.
+ *
+ * The theme's `renderStyle.defaultTextAnimation` / `defaultImageAnimation`
+ * overrides the entrance *type*; the template keeps its authored duration,
+ * delay, and stagger. Templates opt in per layer:
+ *
+ * ```ts
+ * animation: themedEntrance(context, 'text', { type: 'fadeIn', duration: 2 })
+ * ```
+ *
+ * `slowZoom` is excluded — it's an ambient treatment handled by the
+ * `applyRenderStyleToLayers` post-pass, not an entrance.
+ */
+export function themedEntrance(
+  context: TemplateContext,
+  layerType: 'text' | 'image',
+  fallback: Animation,
+): Animation {
+  const type = getDefaultAnimation(context, layerType);
+  if (!type || type === 'slowZoom' || type === fallback.type) return fallback;
+  return { ...fallback, type };
+}
+
 // ============================================
 // Style Helpers
 // ============================================
@@ -140,6 +165,55 @@ export function shouldUseShadow(context: TemplateContext): boolean {
  */
 export function getOverlayOpacity(context: TemplateContext): number {
   return context.theme.style.overlayOpacity ?? 0.5;
+}
+
+/**
+ * Resolve the effective photographic treatment for a block's imagery.
+ *
+ * Precedence: the block's `imageTreatment` override ('none' opts out, a
+ * type forces that grade) → the theme's `style.imageTreatment` → none.
+ * Duotone tints default to the theme primary. Templates pass the result
+ * straight into `ImageLayer.content.treatment`.
+ */
+export function themedImageTreatment(
+  context: TemplateContext,
+  override?: 'none' | 'mono' | 'duotone' | 'warm' | 'cool',
+): ImageTreatment | undefined {
+  if (override === 'none') return undefined;
+  const themeTreatment = context.theme.style.imageTreatment;
+  const base: ImageTreatment | undefined = override
+    ? { type: override, strength: themeTreatment?.strength }
+    : themeTreatment;
+  if (!base || base.type === 'none') return undefined;
+  if (base.type === 'duotone' && !base.color) {
+    return { ...base, color: context.theme.colors.primary };
+  }
+  return base;
+}
+
+/**
+ * Theme-derived surface gradient for text-first templates.
+ *
+ * Runs from the theme's alternate surface into a slightly deepened
+ * background, staying inside the theme's own hue. Templates must use
+ * this instead of hard-coding a dark endpoint (`#0f1520`, `#1e2030`, …):
+ * hard-coded navy endpoints made light themes render dark panels and
+ * warm themes drift cold halfway down the block.
+ */
+export function themedSurfaceGradient(context: TemplateContext, angleDeg = 160): string {
+  const { background, backgroundLight } = context.theme.colors;
+  return `linear-gradient(${angleDeg}deg, ${backgroundLight} 0%, ${oklchDarken(background, 0.04)} 100%)`;
+}
+
+/**
+ * Translucent overlay tint derived from the theme background, for text
+ * bands/scrims painted over imagery. Light themes get a light scrim with
+ * dark theme text on top; dark themes get the familiar dark scrim —
+ * `theme.colors.text` stays legible on it by construction.
+ */
+export function themedScrim(context: TemplateContext, alpha?: number): string {
+  const a = alpha ?? Math.max(0.55, getOverlayOpacity(context));
+  return withAlpha(context.theme.colors.background, a);
 }
 
 // ============================================

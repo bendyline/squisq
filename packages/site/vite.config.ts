@@ -7,6 +7,17 @@ import type { Plugin } from 'vite';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
+const crossOriginHeaders = {
+  // COOP/COEP were originally set for SharedArrayBuffer (ffmpeg.wasm).
+  // The current video export uses WebCodecs on the main thread, which
+  // doesn't need SharedArrayBuffer. COEP: require-corp blocks blob: URL
+  // iframes used by the frame capture system, so we use 'credentialless'
+  // which allows blob iframes while still enabling SharedArrayBuffer
+  // in browsers that support it.
+  'Cross-Origin-Opener-Policy': 'same-origin',
+  'Cross-Origin-Embedder-Policy': 'credentialless',
+};
+
 /**
  * Vite plugin to serve content sample .zip files from the repo-root
  * `samplecontent/` directory under the `/samples/` URL prefix.
@@ -80,16 +91,13 @@ export default defineConfig({
     port: 5199,
     strictPort: true,
     open: true,
-    headers: {
-      // COOP/COEP were originally set for SharedArrayBuffer (ffmpeg.wasm).
-      // The current video export uses WebCodecs on the main thread, which
-      // doesn't need SharedArrayBuffer. COEP: require-corp blocks blob: URL
-      // iframes used by the frame capture system, so we use 'credentialless'
-      // which allows blob iframes while still enabling SharedArrayBuffer
-      // in browsers that support it.
-      'Cross-Origin-Opener-Policy': 'same-origin',
-      'Cross-Origin-Embedder-Policy': 'credentialless',
-    },
+    headers: crossOriginHeaders,
+  },
+  preview: {
+    host: '127.0.0.1',
+    port: 5199,
+    strictPort: true,
+    headers: crossOriginHeaders,
   },
   // Optimise monaco-editor: tell Vite to pre-bundle it so workers are served
   // from the local dev server instead of CDN. Exclude the workspace packages
@@ -117,5 +125,62 @@ export default defineConfig({
   // chunks the worker needs.
   worker: {
     format: 'es',
+  },
+  build: {
+    rolldownOptions: {
+      output: {
+        codeSplitting: {
+          groups: [
+            {
+              name: 'react-vendor',
+              test: /node_modules[\\/](react|react-dom)[\\/]/,
+              priority: 30,
+            },
+            {
+              name: 'monaco-vendor',
+              test: /node_modules[\\/](@monaco-editor|monaco-editor)[\\/]/,
+              priority: 20,
+            },
+            {
+              name: 'tiptap-vendor',
+              test: /node_modules[\\/]@tiptap[\\/]/,
+              priority: 19,
+            },
+            {
+              name: 'fontawesome-vendor',
+              test: /node_modules[\\/]@fortawesome[\\/]/,
+              priority: 18,
+            },
+            {
+              name: 'squisq-standalone-player',
+              test: /packages[\\/]react[\\/](src|dist)[\\/]standalone-source/,
+              priority: 17,
+            },
+            {
+              name: (id) => {
+                if (id.includes('/packages/core/')) return 'squisq-core';
+                if (id.includes('/packages/react/')) return 'squisq-react';
+                if (id.includes('/packages/formats/')) return 'squisq-formats';
+                if (id.includes('/packages/editor-react/')) return 'squisq-editor';
+                if (id.includes('/packages/video-react/')) return 'squisq-video-react';
+                if (id.includes('/packages/video/')) return 'squisq-video';
+                return null;
+              },
+              test: /packages[\\/](core|react|formats|editor-react|video|video-react)[\\/]/,
+              priority: 16,
+            },
+            {
+              name: 'vendor',
+              test: /node_modules[\\/]/,
+              priority: 5,
+            },
+          ],
+        },
+      },
+    },
+    // This dev/demo app intentionally loads the full editor surface. Monaco is
+    // a legitimate large chunk; keep the warning focused on accidental larger
+    // regressions while real app code remains split into smaller chunks.
+    chunkSizeWarningLimit: 4000,
   },
 });

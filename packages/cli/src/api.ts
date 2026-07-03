@@ -20,6 +20,8 @@
  */
 
 import type { Doc } from '@bendyline/squisq/schemas';
+import { resolveMediaSchedule } from '@bendyline/squisq/schemas';
+import { flattenBlocks } from '@bendyline/squisq/doc';
 import type { MemoryContentContainer } from '@bendyline/squisq/storage';
 import type { VideoQuality, VideoOrientation } from '@bendyline/squisq-video';
 import { generateRenderHtml } from '@bendyline/squisq-video';
@@ -158,6 +160,31 @@ export async function renderDocToMp4(
     concatenatedAudio = await concatenateAudioBuffers(audioBuffers, ffmpegPath);
   }
 
+  // ── Collect timed-media clips + block video sources ─────────────
+  // Every scheduled clip (block.media + doc.documentMedia) and every
+  // template-produced VideoLayer needs its bytes embedded so the headless
+  // page can load them with no network. They resolve through the inline
+  // media provider's `images` map (which infers mp4/mp3 MIME by extension).
+  const schedule = resolveMediaSchedule(doc);
+  const mediaSrcs = new Set<string>(schedule.map((c) => c.src));
+  for (const block of flattenBlocks(doc.blocks)) {
+    for (const layer of block.layers ?? []) {
+      if (layer.type === 'video') mediaSrcs.add(layer.content.src);
+    }
+  }
+  // Buffers for the scheduled audio clips, keyed by clip id, for the mux.
+  const clipBuffers = new Map<string, ArrayBuffer>();
+  for (const src of mediaSrcs) {
+    if (images.has(src)) continue;
+    const data = await container.readFile(src);
+    if (data) images.set(src, data);
+  }
+  for (const clip of schedule) {
+    if (clip.kind !== 'audio') continue;
+    const data = images.get(clip.src) ?? (await container.readFile(clip.src));
+    if (data) clipBuffers.set(clip.id, data);
+  }
+
   onProgress?.('generating render HTML', 10);
 
   // ── Generate self-contained render HTML ─────────────────────────
@@ -259,9 +286,25 @@ export async function renderDocToMp4(
 
   onProgress?.('encoding video', 80);
 
-  // If there's a pre-roll, delay the audio track to match
+  // Build the final audio track. With timed media clips, mix the narration
+  // (delayed by the cover pre-roll) and each scheduled audio clip at its
+  // absolute time. Without clips, keep the legacy narration-only path so
+  // existing exports are unchanged.
+  const scheduledAudioClips = schedule.filter((c) => c.kind === 'audio' && clipBuffers.has(c.id));
   let encodingAudio = concatenatedAudio;
-  if (coverPreRoll > 0 && concatenatedAudio) {
+  if (scheduledAudioClips.length > 0 && ffmpegPath) {
+    encodingAudio = await mixScheduledAudio(
+      ffmpegPath,
+      concatenatedAudio,
+      scheduledAudioClips.map((c) => ({
+        buffer: clipBuffers.get(c.id)!,
+        delaySec: c.absoluteStart + coverPreRoll,
+        trimStart: c.sourceIn,
+        trimLen: Math.max(0, c.absoluteEnd - c.absoluteStart),
+      })),
+      coverPreRoll,
+    );
+  } else if (coverPreRoll > 0 && concatenatedAudio) {
     // Use FFmpeg to add silence padding at the start (adelay filter)
     encodingAudio = await addAudioDelay(ffmpegPath, concatenatedAudio, coverPreRoll);
   }
@@ -412,6 +455,100 @@ async function addAudioDelay(
   } finally {
     await rm(inputPath, { force: true });
     await rm(outputPath, { force: true });
+  }
+}
+
+/** One scheduled audio clip to fold into the mix. */
+interface AudioMixClip {
+  buffer: ArrayBuffer;
+  /** Seconds to delay the clip on the final timeline. */
+  delaySec: number;
+  /** Source in-point to trim from (seconds). */
+  trimStart: number;
+  /** Played length (seconds). */
+  trimLen: number;
+}
+
+/**
+ * Mix the sequential narration track (delayed by the cover pre-roll) with any
+ * number of scheduled audio clips, each trimmed to its source window and
+ * delayed to its absolute position. Returns a single MP3.
+ *
+ * Each input is `adelay`'d (per-channel) and `atrim`'d; `amix` sums them with
+ * `normalize=0` so individual levels are preserved. Frame capture stays silent
+ * — this reconstructs the audio offline from the same schedule the renderer
+ * uses, keeping audio and video aligned.
+ */
+async function mixScheduledAudio(
+  ffmpegPath: string,
+  narration: Uint8Array | null,
+  clips: AudioMixClip[],
+  coverPreRoll: number,
+): Promise<Uint8Array | null> {
+  if (!narration && clips.length === 0) return null;
+
+  const { writeFile, readFile, mkdir, rm } = await import('node:fs/promises');
+  const { join } = await import('node:path');
+  const { tmpdir } = await import('node:os');
+  const { randomBytes } = await import('node:crypto');
+  const { execFile } = await import('node:child_process');
+
+  const workDir = join(tmpdir(), `squisq-audio-mix-${randomBytes(8).toString('hex')}`);
+  await mkdir(workDir, { recursive: true });
+
+  try {
+    const inputs: string[] = [];
+    const filters: string[] = [];
+    const labels: string[] = [];
+    const ms = (s: number) => Math.max(0, Math.round(s * 1000));
+
+    if (narration) {
+      const p = join(workDir, 'narration.mp3');
+      await writeFile(p, narration);
+      const i = inputs.push(p) - 1;
+      const d = ms(coverPreRoll);
+      filters.push(`[${i}:a]adelay=${d}|${d}[a${i}]`);
+      labels.push(`[a${i}]`);
+    }
+
+    for (const clip of clips) {
+      const p = join(workDir, `clip-${inputs.length}.mp3`);
+      await writeFile(p, new Uint8Array(clip.buffer));
+      const i = inputs.push(p) - 1;
+      const d = ms(clip.delaySec);
+      const end = clip.trimStart + clip.trimLen;
+      filters.push(
+        `[${i}:a]atrim=start=${clip.trimStart}:end=${end},asetpts=PTS-STARTPTS,adelay=${d}|${d}[a${i}]`,
+      );
+      labels.push(`[a${i}]`);
+    }
+
+    const graph = `${filters.join(';')};${labels.join('')}amix=inputs=${labels.length}:normalize=0:dropout_transition=0[aout]`;
+    const args = ['-y'];
+    for (const p of inputs) args.push('-i', p);
+    args.push(
+      '-filter_complex',
+      graph,
+      '-map',
+      '[aout]',
+      '-c:a',
+      'libmp3lame',
+      '-b:a',
+      '192k',
+      join(workDir, 'mixed.mp3'),
+    );
+
+    await new Promise<void>((resolve, reject) => {
+      execFile(ffmpegPath, args, { timeout: 180_000 }, (err) => {
+        if (err) reject(new Error(`ffmpeg audio mix failed: ${err.message}`));
+        else resolve();
+      });
+    });
+
+    const data = await readFile(join(workDir, 'mixed.mp3'));
+    return new Uint8Array(data.buffer, data.byteOffset, data.byteLength);
+  } finally {
+    await rm(workDir, { recursive: true, force: true });
   }
 }
 

@@ -57,11 +57,44 @@ export interface TransformStyleConfig {
   /** Whether to interleave imageWithCaption blocks when images are available. */
   interleaveImages: boolean;
 
-  /** Target density of template blocks per section. */
-  blocksPerSection: { min: number; max: number };
+  /** Maximum template blocks promoted per source section. */
+  blocksPerSection: { max: number };
 
   /** Transition style preference for transformed blocks. */
   transitionStyle: 'cut' | 'fade' | 'dissolve' | 'mixed';
+
+  /**
+   * Per-style extraction→template remapping. Falls back to the fixed
+   * default map in `generate/templateMapper.ts` for unmapped types.
+   * Only text-compatible targets are honored (see
+   * `translateTemplateBlock`) — an unknown pairing keeps the default.
+   */
+  templateMap?: Partial<Record<ExtractionType, string>>;
+
+  /**
+   * Theme this style pairs best with. Consumers (CLI, editor preview)
+   * apply it only when the doc doesn't already declare a `themeId`.
+   */
+  suggestedThemeId?: string;
+
+  /** Optional opening/closing beats added around the transformed doc. */
+  pacing?: {
+    /** Prepend a `title` block built from the doc's title. */
+    intro?: boolean;
+    /** Append a closing beat (best unused quote/impact line, else a sectionHeader). */
+    outro?: boolean;
+  };
+
+  /**
+   * Duration-based slide budget (folded in from the deprecated
+   * `generateSlideshow`): caps promoted template blocks at roughly
+   * `slidesPerMinute` of doc duration (default: uncapped — only
+   * `transformRatio` applies).
+   */
+  budget?: {
+    /** Target promoted blocks per minute of content (e.g. 5). */
+    slidesPerMinute?: number;
+  };
 }
 
 // ── Transform options ────────────────────────────────────────────

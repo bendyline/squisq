@@ -1,0 +1,183 @@
+/**
+ * Diagram editor styles.
+ *
+ * `.squisq-diagram-widget-host`: the wrapper ProseMirror inserts after a
+ *   `### Foo {[diagram]}` heading. Hosts a React-Flow canvas at a fixed
+ *   inline height; flipping the `maximized` state portals the canvas out
+ *   to an overlay (`.squisq-diagram-maximized-overlay`) instead.
+ *
+ * `[data-squisq-diagram-child]`: ProseMirror marks each direct sub-heading
+ *   of a diagram parent. CSS hides those headings (and the body content
+ *   between them) so the diagram canvas is the only visual representation
+ *   of the section in the WYSIWYG view. Authors can still edit them
+ *   through the canvas, or via the Raw / Linear views.
+ */
+
+.squisq-diagram-widget-host {
+  margin: 0.75rem 0 1.25rem;
+}
+
+.squisq-diagram-inline {
+  position: relative;
+  width: 100%;
+  height: 420px;
+  border: 1px solid var(--squisq-border, #e2e8f0);
+  border-radius: 8px;
+  overflow: hidden;
+  background: var(--squisq-surface, #ffffff);
+}
+
+.squisq-diagram-canvas {
+  position: relative;
+  width: 100%;
+  height: 100%;
+}
+
+/* Drag bar along the bottom edge — pins the canvas to a fixed pixel
+ * height (persisted as `height=` on the `{[diagram …]}` heading). Sits
+ * above the Scene so the gesture is captured by the handle, not the
+ * canvas. Double-click reverts to the default height. */
+.squisq-diagram-resize-handle {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: ns-resize;
+  z-index: 11;
+  touch-action: none;
+}
+.squisq-diagram-resize-handle::before {
+  content: '';
+  width: 44px;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--squisq-border, #cbd5e1);
+  transition: background 0.12s;
+}
+.squisq-diagram-resize-handle:hover::before {
+  background: var(--squisq-text-muted, #94a3b8);
+}
+
+.squisq-diagram-canvas .react-flow {
+  width: 100%;
+  height: 100%;
+}
+
+.squisq-diagram-empty {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  pointer-events: none;
+  text-align: center;
+  padding: 24px;
+}
+
+.squisq-diagram-empty-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--squisq-text, #1e293b);
+}
+
+.squisq-diagram-empty-hint {
+  font-size: 12px;
+  color: var(--squisq-text-muted, #64748b);
+  max-width: 320px;
+  line-height: 1.45;
+}
+
+.squisq-diagram-empty-btn {
+  pointer-events: auto;
+  margin-top: 4px;
+  padding: 6px 12px;
+  font-size: 12px;
+  font-weight: 500;
+  color: #ffffff;
+  background: #6366f1;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.1s;
+}
+
+.squisq-diagram-empty-btn:hover {
+  background: #4f46e5;
+}
+
+.squisq-diagram-maximize-btn {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  z-index: 10;
+  width: 32px;
+  height: 32px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--squisq-surface, #ffffff);
+  border: 1px solid var(--squisq-border, #e2e8f0);
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 16px;
+  line-height: 1;
+  color: var(--squisq-text, #1e293b);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
+}
+.squisq-diagram-maximize-btn:hover {
+  background: var(--squisq-surface-hover, #f8fafc);
+}
+
+.squisq-diagram-maximized-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  background: rgba(15, 23, 42, 0.6);
+  display: flex;
+  align-items: stretch;
+  justify-content: stretch;
+}
+
+.squisq-diagram-maximized-content {
+  position: relative;
+  flex: 1;
+  margin: 24px;
+  background: var(--squisq-surface, #ffffff);
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+}
+
+.squisq-diagram-maximized-content .squisq-diagram-canvas {
+  width: 100%;
+  height: 100%;
+}
+
+/* Child headings owned by a diagram are hidden in the WYSIWYG.
+ * They still exist in the doc (and in markdown) — the diagram canvas
+ * is the editing surface for them. */
+[data-squisq-diagram-child='true'] {
+  display: none;
+}
+
+.squisq-diagram-inline-placeholder {
+  /* Reserved space so the document layout doesn't jump when the canvas
+   * portals into the maximize overlay. */
+  height: 420px;
+  border: 1px dashed var(--squisq-border, #e2e8f0);
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--squisq-text-muted, #64748b);
+  font-size: 14px;
+}
+.squisq-diagram-inline-placeholder::before {
+  content: 'Diagram open in full screen — press Esc to return';
+}

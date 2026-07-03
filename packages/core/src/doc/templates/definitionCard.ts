@@ -10,8 +10,15 @@
 
 import type { Layer } from '../../schemas/Doc.js';
 import type { DefinitionCardInput, TemplateContext } from '../../schemas/BlockTemplates.js';
-import { scaledFontSize } from '../../schemas/BlockTemplates.js';
-import { resolveColorScheme, getThemeFont } from '../utils/themeUtils.js';
+import {
+  resolveColorScheme,
+  getThemeFont,
+  shouldUseShadow,
+  themedEntrance,
+  themedFontSize,
+  themedSurfaceGradient,
+  themedImageTreatment,
+} from '../utils/themeUtils.js';
 import { createAccentLayers, getAccentLayout, adjustY, DEFAULT_LAYOUT } from './accentImage.js';
 import { createBackgroundLayer } from './captionUtils.js';
 
@@ -23,20 +30,21 @@ export function definitionCard(input: DefinitionCardInput, context: TemplateCont
   // Get layout adjustments if accent image is present
   const accentLayout = accentImage ? getAccentLayout(accentImage.position) : DEFAULT_LAYOUT;
 
-  const termFontSize = scaledFontSize(72, context, true);
-  const defFontSize = scaledFontSize(32, context, false);
-  const originFontSize = scaledFontSize(22, context, false);
+  const termFontSize = themedFontSize(72, context, true);
+  const defFontSize = themedFontSize(32, context, false);
+  const originFontSize = themedFontSize(22, context, false);
 
-  const layers: Layer[] = [
-    createBackgroundLayer(
-      'bg',
-      `linear-gradient(145deg, #1e2030 0%, ${theme.colors.background} 100%)`,
-    ),
-  ];
+  const layers: Layer[] = [createBackgroundLayer('bg', themedSurfaceGradient(context, 145))];
 
   // Add accent image layers
   if (accentImage) {
-    layers.push(...createAccentLayers(accentImage, input.id));
+    layers.push(
+      ...createAccentLayers(
+        accentImage,
+        input.id,
+        themedImageTreatment(context, input.imageTreatment),
+      ),
+    );
   }
 
   // Term — large, accent-colored
@@ -51,7 +59,7 @@ export function definitionCard(input: DefinitionCardInput, context: TemplateCont
         fontWeight: 'bold',
         color: colors.text,
         textAlign: 'center',
-        shadow: !!accentImage,
+        shadow: shouldUseShadow(context),
       },
     },
     position: {
@@ -59,7 +67,7 @@ export function definitionCard(input: DefinitionCardInput, context: TemplateCont
       y: adjustY('30%', accentLayout),
       anchor: 'center',
     },
-    animation: { type: 'fadeIn', duration: 1.5 },
+    animation: themedEntrance(context, 'text', { type: 'fadeIn', duration: 1.5 }),
   });
 
   // Horizontal separator line
@@ -92,7 +100,7 @@ export function definitionCard(input: DefinitionCardInput, context: TemplateCont
         textAlign: 'center',
         lineHeight: 1.6,
         maxLines: 4,
-        shadow: !!accentImage,
+        shadow: shouldUseShadow(context),
       },
     },
     position: {
@@ -101,7 +109,7 @@ export function definitionCard(input: DefinitionCardInput, context: TemplateCont
       width: accentLayout.textWidth,
       anchor: 'center',
     },
-    animation: { type: 'fadeIn', duration: 1, delay: 0.8 },
+    animation: themedEntrance(context, 'text', { type: 'fadeIn', duration: 1, delay: 0.8 }),
   });
 
   // Origin if provided
@@ -116,12 +124,12 @@ export function definitionCard(input: DefinitionCardInput, context: TemplateCont
           fontFamily: getThemeFont(context, 'body'),
           color: theme.colors.textMuted,
           textAlign: 'center',
-          shadow: !!accentImage,
+          shadow: shouldUseShadow(context),
         },
       },
       position: {
         x: accentLayout.textCenterX,
-        y: adjustY('78%', accentLayout),
+        y: adjustY('70%', accentLayout),
         anchor: 'center',
       },
       animation: { type: 'fadeIn', duration: 0.8, delay: 1.5 },

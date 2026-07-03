@@ -9,7 +9,8 @@
     "node": ">=22.14.0"
   },
   "scripts": {
-    "all": "npm install && npm run build && npm run lint && npm run format:check && npm run typecheck && npm test && npm run test:published && npm run test:cli && npm run test:e2e",
+    "install:safe": "npm install && node scripts/run-install-allowlist.mjs",
+    "all": "npm run install:safe && npm run build && npm run lint && npm run format:check && npm run typecheck && npm test && npm run test:published && npm run test:cli && npm run test:e2e:built",
     "build": "npm run build:core && npm run build:formats && npm run build:react && npm run build:video && npm run build:video-react && npm run build:editor && npm run build:cli && npm run build:site",
     "build:core": "npm run build -w @bendyline/squisq",
     "build:formats": "npm run build -w @bendyline/squisq-formats",
@@ -21,8 +22,10 @@
     "build:site": "npm run build -w squisq-site",
     "test": "vitest run",
     "test:cli": "npm test -w @bendyline/squisq-cli",
-    "test:e2e": "playwright test",
+    "test:e2e": "npm run build && playwright test",
+    "test:e2e:built": "playwright test",
     "test:published": "vitest run --config vitest.published.config.ts",
+    "screenshots:templates": "node scripts/generate-template-screenshots.mjs",
     "site": "npm run build && npm run dev:site",
     "dev": "npm run build && concurrently -n core,formats,react,video,video-react,editor,site -c blue,cyan,magenta,yellow,green,red,white \"npm:dev:packages:core\" \"npm:dev:packages:formats\" \"npm:dev:packages:react\" \"npm:dev:packages:video\" \"npm:dev:packages:video-react\" \"npm:dev:packages:editor\" \"npm:dev:site\"",
     "dev:site": "npm run dev -w squisq-site",
@@ -49,7 +52,7 @@
     "@playwright/test": "1.58.2",
     "@semantic-release/changelog": "6.0.3",
     "@semantic-release/git": "10.0.1",
-    "concurrently": "9.2.1",
+    "concurrently": "10.0.3",
     "conventional-changelog-conventionalcommits": "8.0.0",
     "eslint": "9.39.4",
     "eslint-config-prettier": "10.1.8",
@@ -64,6 +67,14 @@
     "tsup": "8.5.1",
     "typescript": "5.9.3",
     "typescript-eslint": "8.56.1",
-    "vitest": "2.1.9"
+    "vitest": "4.1.7"
+  },
+  "dependencies": {
+    "mocha": "11.3.0",
+    "vite": "8.0.14"
+  },
+  "overrides": {
+    "serialize-javascript": "7.0.5",
+    "npm": "11.16.0"
   }
 }

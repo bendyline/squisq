@@ -38,16 +38,15 @@ interface VideoLayerProps {
   isPlaying?: boolean;
 }
 
-export function VideoLayer({
-  layer,
-  basePath,
-  viewport,
-  blockTime: _blockTime,
-  isPlaying,
-}: VideoLayerProps) {
+export function VideoLayer({ layer, basePath, viewport, blockTime, isPlaying }: VideoLayerProps) {
   const { content, position } = layer;
   const videoRef = useRef<HTMLVideoElement>(null);
   const hasStartedRef = useRef(false);
+
+  // Seconds into the block before this clip begins. Until then the video is
+  // held (paused) at its in-point so a `startAt` offset reads as a delay.
+  const startAt = content.startAt ?? 0;
+  const gated = blockTime < startAt;
 
   // Resolve position values to pixels
   const x = resolveValue(position.x, viewport.width);
@@ -103,10 +102,17 @@ export function VideoLayer({
     // eslint-disable-next-line react-hooks/exhaustive-deps -- isPlaying is handled by the separate sync effect below
   }, [content.src, content.clipStart, content.clipEnd]);
 
-  // Sync video play/pause with doc playback state
+  // Sync video play/pause with doc playback state, honoring the startAt gate.
   useEffect(() => {
     const video = videoRef.current;
     if (!video || !hasStartedRef.current) return;
+
+    // Before the clip's startAt offset, hold at the in-point.
+    if (gated) {
+      video.pause();
+      video.currentTime = content.clipStart;
+      return;
+    }
 
     // Don't resume if clip has already reached its end
     if (video.currentTime >= content.clipEnd) return;
@@ -119,7 +125,7 @@ export function VideoLayer({
     } else {
       video.pause();
     }
-  }, [isPlaying, content.clipEnd]);
+  }, [isPlaying, gated, content.clipStart, content.clipEnd]);
 
   return (
     <g className="block-layer block-layer--video" data-layer-id={layer.id}>
@@ -133,6 +139,7 @@ export function VideoLayer({
           preload="auto"
           data-clip-start={content.clipStart}
           data-clip-end={content.clipEnd}
+          data-start-at={startAt}
           style={{
             width: `${width}px`,
             height: `${height}px`,

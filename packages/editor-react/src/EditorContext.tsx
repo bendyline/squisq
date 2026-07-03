@@ -32,6 +32,8 @@ import type { Editor as TiptapEditor } from '@tiptap/core';
 import type { editor as MonacoEditorNs } from 'monaco-editor';
 import { markdownToTiptap } from './tiptapBridge';
 import { resolveFileKind } from './fileKind';
+import { useBlockNavigator } from './useBlockNavigator';
+import { sceneTextChannel, type SceneTextHandle } from './scene/text/sceneTextChannel';
 
 /** Monaco standalone code editor instance type */
 type MonacoEditor = MonacoEditorNs.IStandaloneCodeEditor;
@@ -90,6 +92,15 @@ export type DocumentLinkProvider = (query: string) => Promise<DocumentLinkCandid
 
 export type EditorView = 'raw' | 'wysiwyg' | 'preview';
 export type EditorTheme = 'light' | 'dark';
+/**
+ * Document layout mode. `'document'` shows the whole markdown document in
+ * the active view (the historical behavior). `'block'` is the
+ * block-at-a-time view — one heading-defined block on a card at a time,
+ * with the editor scoped to just that block. `'timeline'` is block mode plus
+ * a horizontal timeline track for editing block durations and media slices.
+ * See {@link useBlockNavigator}.
+ */
+export type LayoutMode = 'document' | 'block' | 'timeline';
 /**
  * How much of the active Squisq theme the WYSIWYG editing surface
  * mirrors. `'fonts'` is the historical default — body and heading
@@ -179,11 +190,48 @@ export interface EditorState {
    * shell.
    */
   allowRecording: boolean;
+  /**
+   * Document layout mode. `'document'` (default) edits the whole document;
+   * `'block'` activates the block-at-a-time card view. Initialized from the
+   * EditorShell `layoutMode` prop; the View menu can toggle it at runtime.
+   */
+  layoutMode: LayoutMode;
+  /**
+   * The markdown the active text editor should bind to: the full source in
+   * `'document'` mode, or just the active block's slice in `'block'` mode.
+   * Editors read this instead of `markdownSource` so the same surfaces work
+   * in both layouts.
+   */
+  editorSource: string;
+  /** Number of navigable blocks (cards) in the current document. */
+  blockCount: number;
+  /** Index of the block currently shown on the card (block mode). */
+  activeBlockKey: number;
+  /** 1-based source line where the active block begins, or null. */
+  activeBlockStartLine: number | null;
 }
 
 export interface EditorActions {
   /** Set markdown source and trigger re-parse */
   setMarkdownSource: (source: string) => void;
+  /**
+   * Write through the active editor channel. In `'document'` mode this is
+   * `setMarkdownSource`; in `'block'` mode it splices the edited block back
+   * into the full document. Editors call this instead of `setMarkdownSource`.
+   */
+  setEditorSource: (source: string) => void;
+  /** Switch between Document and Block-at-a-time layouts. */
+  setLayoutMode: (mode: LayoutMode) => void;
+  /** Show a block by index in block mode (clamped to range). */
+  goToBlock: (key: number) => void;
+  /** Show the block that owns a given 1-based source line (used by the outline). */
+  goToBlockByLine: (line: number) => void;
+  /** Move the card to the previous block. */
+  prevBlock: () => void;
+  /** Move the card to the next block. */
+  nextBlock: () => void;
+  /** Insert a new heading block after the active one and move to it. */
+  addBlock: () => void;
   /** Set markdown from a MarkdownDocument (e.g. from WYSIWYG) */
   setMarkdownDoc: (doc: MarkdownDocument) => void;
   /** Switch the active view */
@@ -230,6 +278,14 @@ export interface EditorContextValue extends EditorState, EditorActions {
   tiptapEditor: TiptapEditor | null;
   /** The live Monaco editor instance (null when Raw is not mounted) */
   monacoEditor: MonacoEditor | null;
+  /**
+   * The focused canvas textbox editor, if any — a small Tiptap instance for
+   * a diagram/drawing/layout textbox being edited inline. Published via
+   * `sceneTextChannel` (the canvas renders in a detached React root). The
+   * top formatting toolbar retargets to this when set. `level` gates which
+   * buttons apply (`inline` = marks only; `rich` = headings/lists too).
+   */
+  activeSceneText: SceneTextHandle | null;
   /**
    * Workspace-scoped `ContentContainer` for this document — the folder
    * holding the doc, its `_files/` sidecar, sibling documents, and any
@@ -397,6 +453,12 @@ export interface EditorProviderProps {
    */
   themeInheritance?: ThemeInheritance;
   /**
+   * Initial layout mode. Defaults to `'document'` (whole-document editing).
+   * `'block'` boots into the block-at-a-time card view. The toolbar's View
+   * menu can toggle it at runtime.
+   */
+  layoutMode?: LayoutMode;
+  /**
    * Bundled view preferences — a serializable JSON blob covering all
    * runtime-toggleable view options. When provided, individual values
    * here override the matching individual props (`inlinePreview`,
@@ -432,6 +494,8 @@ export interface ViewPreferences {
   blockTags?: boolean;
   /** How much of the active Squisq theme the WYSIWYG surface mirrors. */
   themeInheritance?: ThemeInheritance;
+  /** Document vs. block-at-a-time layout. */
+  layoutMode?: LayoutMode;
 }
 
 /**
@@ -464,6 +528,7 @@ export function EditorProvider({
   outline = false,
   blockTags = true,
   themeInheritance = 'fonts',
+  layoutMode = 'document',
   viewPreferences,
   onViewPreferencesChange,
   children,
@@ -476,6 +541,7 @@ export function EditorProvider({
   const effectiveOutline = viewPreferences?.outline ?? outline;
   const effectiveBlockTags = viewPreferences?.blockTags ?? blockTags;
   const effectiveThemeInheritance = viewPreferences?.themeInheritance ?? themeInheritance;
+  const effectiveLayoutMode = viewPreferences?.layoutMode ?? layoutMode;
   // Resolve once per provider mount. Changing fileName/language after mount
   // would require recreating the Monaco model anyway, so treat it as static.
   const { mode: editorMode, language: resolvedLanguage } = useMemo(
@@ -528,6 +594,10 @@ export function EditorProvider({
   useEffect(() => {
     setThemeInheritanceRaw(themeInheritance);
   }, [themeInheritance]);
+  const [layoutModeState, setLayoutModeRaw] = useState<LayoutMode>(effectiveLayoutMode);
+  useEffect(() => {
+    setLayoutModeRaw(layoutMode);
+  }, [layoutMode]);
   const [imageEditTarget, setImageEditTarget] = useState<string | null>(null);
   const [mediaRevision, setMediaRevision] = useState(0);
   const openImageEdit = useCallback((relativePath: string) => {
@@ -560,6 +630,9 @@ export function EditorProvider({
     if (viewPreferences.themeInheritance !== undefined) {
       setThemeInheritanceRaw(viewPreferences.themeInheritance);
     }
+    if (viewPreferences.layoutMode !== undefined) {
+      setLayoutModeRaw(viewPreferences.layoutMode);
+    }
   }, [viewPreferences]);
 
   // Wrap the three setters so user-driven toggles emit a snapshot via
@@ -579,6 +652,8 @@ export function EditorProvider({
   blockTagsRef.current = blockTagsVisible;
   const themeInheritanceRef = useRef(themeInheritanceState);
   themeInheritanceRef.current = themeInheritanceState;
+  const layoutModeRef = useRef(layoutModeState);
+  layoutModeRef.current = layoutModeState;
   const setInlinePreviewVisible = useCallback((visible: boolean) => {
     setInlinePreviewVisibleRaw(visible);
     onViewPreferencesChangeRef.current?.({
@@ -587,6 +662,7 @@ export function EditorProvider({
       outline: outlineRef.current,
       blockTags: blockTagsRef.current,
       themeInheritance: themeInheritanceRef.current,
+      layoutMode: layoutModeRef.current,
     });
   }, []);
   const setStatusBarVisible = useCallback((visible: boolean) => {
@@ -597,6 +673,7 @@ export function EditorProvider({
       outline: outlineRef.current,
       blockTags: blockTagsRef.current,
       themeInheritance: themeInheritanceRef.current,
+      layoutMode: layoutModeRef.current,
     });
   }, []);
   const setOutlineVisible = useCallback((visible: boolean) => {
@@ -607,6 +684,7 @@ export function EditorProvider({
       outline: visible,
       blockTags: blockTagsRef.current,
       themeInheritance: themeInheritanceRef.current,
+      layoutMode: layoutModeRef.current,
     });
   }, []);
   const setBlockTagsVisible = useCallback((visible: boolean) => {
@@ -617,6 +695,7 @@ export function EditorProvider({
       outline: outlineRef.current,
       blockTags: visible,
       themeInheritance: themeInheritanceRef.current,
+      layoutMode: layoutModeRef.current,
     });
   }, []);
   const setThemeInheritance = useCallback((mode: ThemeInheritance) => {
@@ -627,10 +706,27 @@ export function EditorProvider({
       outline: outlineRef.current,
       blockTags: blockTagsRef.current,
       themeInheritance: mode,
+      layoutMode: layoutModeRef.current,
+    });
+  }, []);
+  const setLayoutMode = useCallback((mode: LayoutMode) => {
+    setLayoutModeRaw(mode);
+    onViewPreferencesChangeRef.current?.({
+      inlinePreview: inlinePreviewRef.current,
+      showStatusBar: statusBarRef.current,
+      outline: outlineRef.current,
+      blockTags: blockTagsRef.current,
+      themeInheritance: themeInheritanceRef.current,
+      layoutMode: mode,
     });
   }, []);
   const [tiptapEditor, setTiptapEditor] = useState<TiptapEditor | null>(null);
   const [monacoEditor, setMonacoEditor] = useState<MonacoEditor | null>(null);
+  // Mirror the focused canvas textbox editor (published by the inline
+  // SceneTextOverlay through a module channel, since the canvas renders in
+  // a detached React root outside this provider) so the toolbar can target it.
+  const [activeSceneText, setActiveSceneText] = useState<SceneTextHandle | null>(null);
+  useEffect(() => sceneTextChannel.subscribe(setActiveSceneText), []);
 
   const articleIdRef = useRef(articleId);
   articleIdRef.current = articleId;
@@ -701,6 +797,27 @@ export function EditorProvider({
   const setMarkdownSource = useCallback((source: string) => {
     setMarkdownSourceRaw(source);
   }, []);
+
+  // Block-at-a-time navigation. In 'document' mode the channel passes
+  // through to the full source; in 'block' mode `editorSource` is the active
+  // block's slice and `setEditorSource` splices edits back in. Gated to
+  // markdown mode — code/image surfaces always edit the whole file.
+  const blockNav = useBlockNavigator(markdownSource, setMarkdownSource, {
+    enabled:
+      (layoutModeState === 'block' || layoutModeState === 'timeline') && editorMode === 'markdown',
+  });
+  const {
+    editorSource,
+    setEditorSource,
+    blockCount,
+    activeBlockKey,
+    activeBlockStartLine,
+    goToBlock,
+    goToBlockByLine,
+    prevBlock,
+    nextBlock,
+    addBlock,
+  } = blockNav;
 
   const insertAtCursor = useCallback(
     (text: string) => {
@@ -862,11 +979,17 @@ export function EditorProvider({
       outlineVisible,
       blockTagsVisible,
       themeInheritance: themeInheritanceState,
+      layoutMode: layoutModeState,
+      editorSource,
+      blockCount,
+      activeBlockKey,
+      activeBlockStartLine,
       imageEditTarget,
       mediaRevision,
       allowRecording,
       tiptapEditor,
       monacoEditor,
+      activeSceneText,
       workspaceContainer,
       versioning,
       saveVersion,
@@ -875,6 +998,13 @@ export function EditorProvider({
       mentionProvider,
       documentLinkProvider,
       setMarkdownSource,
+      setEditorSource,
+      setLayoutMode,
+      goToBlock,
+      goToBlockByLine,
+      prevBlock,
+      nextBlock,
+      addBlock,
       setMarkdownDoc,
       setActiveView,
       setTiptapEditor,
@@ -906,8 +1036,14 @@ export function EditorProvider({
       outlineVisible,
       blockTagsVisible,
       themeInheritanceState,
+      layoutModeState,
+      editorSource,
+      blockCount,
+      activeBlockKey,
+      activeBlockStartLine,
       tiptapEditor,
       monacoEditor,
+      activeSceneText,
       workspaceContainer,
       versioning,
       saveVersion,
@@ -916,6 +1052,13 @@ export function EditorProvider({
       mentionProvider,
       documentLinkProvider,
       setMarkdownSource,
+      setEditorSource,
+      setLayoutMode,
+      goToBlock,
+      goToBlockByLine,
+      prevBlock,
+      nextBlock,
+      addBlock,
       setMarkdownDoc,
       setActiveView,
       setTiptapEditor,

@@ -22,11 +22,19 @@ import { StatusBar } from './StatusBar';
 import { RawEditor } from './RawEditor';
 import { WysiwygEditor } from './WysiwygEditor';
 import { InlinePreviewGutter } from './InlinePreviewGutter';
+import { BlockPreviewPanel } from './BlockPreviewPanel';
 import { OutlinePanel } from './OutlinePanel';
+import { BlockCardView } from './BlockCardView';
+import { TimelineTrack } from './TimelineTrack';
 import { PreviewPanel } from './PreviewPanel';
 import { ImageViewer } from './ImageViewer';
 import { ImageEditor } from './ImageEditor';
-import { PreviewSettingsProvider, PreviewToolbarControls } from './PreviewControls';
+import {
+  PreviewSettingsProvider,
+  PreviewToolbarControls,
+  ThemeDesignerDock,
+} from './PreviewControls';
+import { CustomThemeProvider, useDocCustomThemes } from './customThemes';
 import { MediaBin } from './MediaBin';
 import { DropZoneOverlay } from './DropZoneOverlay';
 import { TooltipLayer } from './Tooltip';
@@ -575,14 +583,31 @@ function EditorShellInner({
     inlinePreviewVisible,
     statusBarVisible,
     outlineVisible,
+    layoutMode,
+    blockCount,
+    activeBlockKey,
+    prevBlock,
+    nextBlock,
+    addBlock,
     imageEditTarget,
     closeImageEdit,
     bumpMediaRevision,
   } = useEditorContext();
+  // Dual-catalog custom themes (doc + browser library), mirroring how
+  // CustomTemplateProvider is fed. Wraps the preview subtree so the theme
+  // picker + designer can read/write both pools.
+  const { docThemes, onDocThemesChange } = useDocCustomThemes();
   const isPreview = activeView === 'preview';
   const isCodeMode = editorMode === 'code';
   const isImageMode = editorMode === 'image';
   const isMarkdownMode = editorMode === 'markdown';
+  // The block card (one block at a time) applies to the editing surfaces (raw /
+  // wysiwyg) in markdown mode — never to preview, code, or image. Both the
+  // block-at-a-time and timeline layouts scope the editor to a single block.
+  const isCardMode =
+    isMarkdownMode && (layoutMode === 'block' || layoutMode === 'timeline') && !isPreview;
+  // Timeline mode additionally shows the horizontal timeline track below.
+  const isTimelineMode = isMarkdownMode && layoutMode === 'timeline' && !isPreview;
   const [showFiles, setShowFiles] = useState(false);
   const [mediaRefreshKey, setMediaRefreshKey] = useState(0);
   // Persistent fallback container for image-edit sidecars when the host
@@ -760,135 +785,184 @@ function EditorShellInner({
       }}
       {...containerProps}
     >
-      <PreviewSettingsProvider doc={doc} themeOverride={themeOverride}>
-        {/* Header. In image mode the full markdown/code Toolbar is replaced
+      <CustomThemeProvider docThemes={docThemes} onDocThemesChange={onDocThemesChange}>
+        <PreviewSettingsProvider doc={doc} themeOverride={themeOverride}>
+          {/* Header. In image mode the full markdown/code Toolbar is replaced
             with a minimal slot bar — view tabs, formatting, and preview
             controls don't apply to a binary asset. */}
-        {isImageMode ? (
-          (toolbarSlotLeft || toolbarSlotRight) && (
-            <div className="squisq-editor-header squisq-editor-header--image">
-              {toolbarSlotLeft}
-              <div style={{ flex: 1 }} />
-              {toolbarSlotRight}
+          {isImageMode ? (
+            (toolbarSlotLeft || toolbarSlotRight) && (
+              <div className="squisq-editor-header squisq-editor-header--image">
+                {toolbarSlotLeft}
+                <div style={{ flex: 1 }} />
+                {toolbarSlotRight}
+              </div>
+            )
+          ) : (
+            <div className="squisq-editor-header">
+              <Toolbar
+                showFiles={showFiles}
+                onToggleFiles={!isCodeMode && filesToggleEnabled ? handleToggleFiles : undefined}
+                slotLeft={toolbarSlotLeft}
+                slotAfterActions={
+                  <>
+                    {toolbarSlotAfterActions}
+                    {!isCodeMode && isPreview && <PreviewToolbarControls />}
+                  </>
+                }
+                slotRight={toolbarSlotRight}
+                showPlayTab={showPlayTab}
+              />
             </div>
-          )
-        ) : (
-          <div className="squisq-editor-header">
-            <Toolbar
-              showFiles={showFiles}
-              onToggleFiles={!isCodeMode && filesToggleEnabled ? handleToggleFiles : undefined}
-              slotLeft={toolbarSlotLeft}
-              slotAfterActions={
-                <>
-                  {toolbarSlotAfterActions}
-                  {!isCodeMode && isPreview && <PreviewToolbarControls />}
-                </>
-              }
-              slotRight={toolbarSlotRight}
-              showPlayTab={showPlayTab}
-            />
-          </div>
-        )}
+          )}
 
-        {/* Main content area */}
-        <div
-          className="squisq-editor-content"
-          style={{
-            flex: autoGrow ? '1 1 auto' : 1,
-            overflowY: autoGrow ? 'auto' : 'hidden',
-            overflowX: 'hidden',
-            minHeight: 0,
-            position: 'relative',
-            display: 'flex',
-          }}
-        >
+          {/* Main content area */}
           <div
+            className="squisq-editor-content"
             style={{
               flex: autoGrow ? '1 1 auto' : 1,
-              overflow: autoGrow ? 'visible' : 'hidden',
+              overflowY: autoGrow ? 'auto' : 'hidden',
+              overflowX: 'hidden',
               minHeight: 0,
               position: 'relative',
+              display: 'flex',
             }}
           >
-            {isImageMode &&
-              imageSrc &&
-              (imageMode === 'edit' && imageEditorContainer ? (
-                <ImageEditor
-                  filesContainer={imageEditorContainer}
-                  initialSrc={imageSrc}
-                  allowVersioning={allowVersioning}
-                  versioningAutoSaveIdleMs={versioningAutoSaveIdleMs}
-                  onExport={onImageExport}
-                />
-              ) : (
-                <ImageViewer src={imageSrc} alt={imageAlt} theme={theme} />
-              ))}
-            {/* Raw (Monaco) view. Always wrapped in `.squisq-editor-with-gutter`
+            <div
+              style={{
+                flex: autoGrow ? '1 1 auto' : 1,
+                overflow: autoGrow ? 'visible' : 'hidden',
+                minHeight: 0,
+                position: 'relative',
+              }}
+            >
+              {isImageMode &&
+                imageSrc &&
+                (imageMode === 'edit' && imageEditorContainer ? (
+                  <ImageEditor
+                    filesContainer={imageEditorContainer}
+                    initialSrc={imageSrc}
+                    allowVersioning={allowVersioning}
+                    versioningAutoSaveIdleMs={versioningAutoSaveIdleMs}
+                    onExport={onImageExport}
+                  />
+                ) : (
+                  <ImageViewer src={imageSrc} alt={imageAlt} theme={theme} />
+                ))}
+              {/* Raw (Monaco) view. Always wrapped in `.squisq-editor-with-gutter`
                 so toggling a pane on/off doesn't change the editor's tree
                 position — Monaco stays mounted and `monacoEditor` in
                 context stays stable, which is what `useHeadingLayout` needs
                 to compute positions. */}
-            {!isImageMode && activeView === 'raw' && (
-              <div className="squisq-editor-with-gutter" key="raw-shell">
-                {isMarkdownMode && outlineVisible && (
-                  <OutlinePanel key="outline" width={outlineWidth} />
-                )}
-                <div key="raw-editor" className="squisq-raw-editor-container">
-                  <RawEditor
-                    theme={theme === 'dark' ? 'vs-dark' : 'vs'}
-                    submitOnEnter={submitOnEnter}
-                    readOnly={readOnly}
-                  />
+              {!isImageMode && activeView === 'raw' && (
+                <div className="squisq-editor-with-gutter" key="raw-shell">
+                  {isMarkdownMode && outlineVisible && (
+                    <OutlinePanel key="outline" width={outlineWidth} />
+                  )}
+                  {isCardMode ? (
+                    <BlockCardView
+                      key="raw-card"
+                      blockCount={blockCount}
+                      activeBlockKey={activeBlockKey}
+                      onPrev={prevBlock}
+                      onNext={nextBlock}
+                      onAdd={addBlock}
+                    >
+                      <div key="raw-editor" className="squisq-raw-editor-container">
+                        <RawEditor
+                          theme={theme === 'dark' ? 'vs-dark' : 'vs'}
+                          submitOnEnter={submitOnEnter}
+                          readOnly={readOnly}
+                        />
+                      </div>
+                    </BlockCardView>
+                  ) : (
+                    <div key="raw-editor" className="squisq-raw-editor-container">
+                      <RawEditor
+                        theme={theme === 'dark' ? 'vs-dark' : 'vs'}
+                        submitOnEnter={submitOnEnter}
+                        readOnly={readOnly}
+                      />
+                    </div>
+                  )}
+                  {isMarkdownMode && isCardMode && inlinePreviewVisible && (
+                    <BlockPreviewPanel key="block-preview" basePath={basePath} />
+                  )}
+                  {isMarkdownMode && !isCardMode && inlinePreviewVisible && (
+                    <InlinePreviewGutter
+                      key="inline"
+                      width={inlinePreviewWidth}
+                      basePath={basePath}
+                      mediaProvider={mediaProvider}
+                    />
+                  )}
                 </div>
-                {isMarkdownMode && inlinePreviewVisible && (
-                  <InlinePreviewGutter
-                    key="inline"
-                    width={inlinePreviewWidth}
-                    basePath={basePath}
-                    mediaProvider={mediaProvider}
-                  />
-                )}
-              </div>
-            )}
-            {/* WYSIWYG + Preview are markdown-only surfaces — skip them
+              )}
+              {/* WYSIWYG + Preview are markdown-only surfaces — skip them
                 entirely in code or image mode so Tiptap never initializes
                 and the preview pipeline stays idle. Same always-wrapped
                 pattern as the Raw branch above so pane toggles don't
                 remount Tiptap. */}
-            {isMarkdownMode && activeView === 'wysiwyg' && (
-              <div className="squisq-editor-with-gutter" key="wysiwyg-shell">
-                {outlineVisible && <OutlinePanel key="outline" width={outlineWidth} />}
-                <WysiwygEditor
-                  key="wysiwyg-editor"
-                  submitOnEnter={submitOnEnter}
-                  placeholder={placeholder}
-                  readOnly={readOnly}
-                />
-                {inlinePreviewVisible && (
-                  <InlinePreviewGutter
-                    key="inline"
-                    width={inlinePreviewWidth}
-                    basePath={basePath}
-                    mediaProvider={mediaProvider}
-                  />
-                )}
-              </div>
-            )}
-            {isMarkdownMode && isPreview && (
-              <PreviewPanel basePath={basePath} workspaceContainer={workspaceContainer} />
-            )}
-          </div>
+              {isMarkdownMode && activeView === 'wysiwyg' && (
+                <div className="squisq-editor-with-gutter" key="wysiwyg-shell">
+                  {outlineVisible && <OutlinePanel key="outline" width={outlineWidth} />}
+                  {isCardMode ? (
+                    <BlockCardView
+                      key="wysiwyg-card"
+                      blockCount={blockCount}
+                      activeBlockKey={activeBlockKey}
+                      onPrev={prevBlock}
+                      onNext={nextBlock}
+                      onAdd={addBlock}
+                    >
+                      <WysiwygEditor
+                        key="wysiwyg-editor"
+                        submitOnEnter={submitOnEnter}
+                        placeholder={placeholder}
+                        readOnly={readOnly}
+                      />
+                    </BlockCardView>
+                  ) : (
+                    <WysiwygEditor
+                      key="wysiwyg-editor"
+                      submitOnEnter={submitOnEnter}
+                      placeholder={placeholder}
+                      readOnly={readOnly}
+                    />
+                  )}
+                  {isCardMode && inlinePreviewVisible && (
+                    <BlockPreviewPanel key="block-preview" basePath={basePath} />
+                  )}
+                  {!isCardMode && inlinePreviewVisible && (
+                    <InlinePreviewGutter
+                      key="inline"
+                      width={inlinePreviewWidth}
+                      basePath={basePath}
+                      mediaProvider={mediaProvider}
+                    />
+                  )}
+                </div>
+              )}
+              {isMarkdownMode && isPreview && (
+                <PreviewPanel basePath={basePath} workspaceContainer={workspaceContainer} />
+              )}
+            </div>
 
-          {isMarkdownMode && showFiles && (
-            <MediaBin
-              mediaProvider={mediaProvider}
-              isDark={isDark}
-              refreshKey={mediaRefreshKey}
-              onMediaUploaded={insertMediaRef}
-            />
-          )}
+            {isMarkdownMode && showFiles && (
+              <MediaBin
+                mediaProvider={mediaProvider}
+                isDark={isDark}
+                refreshKey={mediaRefreshKey}
+                onMediaUploaded={insertMediaRef}
+              />
+            )}
 
-          {/* Drop zone overlay — image / text drop UX is markdown-specific.
+            {/* Docked custom-theme designer — a flex sibling of the preview, so
+              opening it reflows the preview narrower. Renders nothing when the
+              designer is closed. */}
+            {isMarkdownMode && <ThemeDesignerDock />}
+
+            {/* Drop zone overlay — image / text drop UX is markdown-specific.
               In WYSIWYG, image drops are handled directly by Tiptap's
               `handleDrop` (uploads to the MediaProvider and inserts an
               image node at the mouse position). The overlay would sit on
@@ -896,23 +970,29 @@ function EditorShellInner({
               when the dragged content is media-only on the WYSIWYG view —
               the user gets a one-step "drop where you want it" flow
               instead of a two-step "drop in bin, then insert" flow. */}
-          {isMarkdownMode &&
-            isDragging &&
-            !(activeView === 'wysiwyg' && dragContentType === 'media') && (
-              <DropZoneOverlay
-                dragContentType={dragContentType}
-                zoneProps={zoneProps}
-                hasMediaProvider={mediaProvider !== null}
-              />
-            )}
-        </div>
+            {isMarkdownMode &&
+              isDragging &&
+              !(activeView === 'wysiwyg' && dragContentType === 'media') && (
+                <DropZoneOverlay
+                  dragContentType={dragContentType}
+                  zoneProps={zoneProps}
+                  hasMediaProvider={mediaProvider !== null}
+                />
+              )}
+          </div>
 
-        {/* Status bar — word / char / line / block counts. Host can
+          {/* Timeline track — horizontal strip of block + media bars shown
+            below the editor in Timeline view. The card editor above (driven by
+            the block navigator) shows whichever block is selected here. */}
+          {isTimelineMode && <TimelineTrack />}
+
+          {/* Status bar — word / char / line / block counts. Host can
             suppress via `showStatusBar={false}` for embedded chat-style
             composers where the stats are noise. The image viewer has its
             own dimension/zoom status row, so suppress here too. */}
-        {statusBarVisible && !isImageMode && <StatusBar />}
-      </PreviewSettingsProvider>
+          {statusBarVisible && !isImageMode && <StatusBar />}
+        </PreviewSettingsProvider>
+      </CustomThemeProvider>
       <TooltipLayer />
       {imageEditTarget !== null && mediaProvider && (
         <ImageEditModal

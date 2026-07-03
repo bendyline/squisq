@@ -154,34 +154,29 @@ const btnDanger: CSSProperties = {
   borderColor: '#902929',
 };
 
-const tabRowStyle: CSSProperties = {
+const toggleRowStyle: CSSProperties = {
   display: 'flex',
-  gap: 4,
+  gap: 8,
   marginBottom: 16,
-  borderBottom: '1px solid #c9b98a',
 };
 
-const tabBase: CSSProperties = {
-  padding: '6px 12px',
+const toggleBase: CSSProperties = {
+  padding: '6px 14px',
   fontSize: 13,
   fontFamily: 'inherit',
   cursor: 'pointer',
   background: 'transparent',
   color: '#5a4a2a',
-  border: 'none',
-  borderBottom: '2px solid transparent',
-  marginBottom: -1,
+  border: '1px solid #c9b98a',
+  borderRadius: 999,
 };
 
-const tabActive: CSSProperties = {
-  ...tabBase,
-  color: '#2d2310',
+const toggleActive: CSSProperties = {
+  ...toggleBase,
+  color: '#fffdf5',
   fontWeight: 600,
-  // Use the `borderBottom` shorthand (not `borderBottomColor` longhand)
-  // so React's style diff cleanly resets the underline when this tab
-  // goes inactive — mixing shorthand + longhand can leave the old
-  // color stuck on a previously-active tab between renders.
-  borderBottom: '2px solid #8B6914',
+  background: '#8B6914',
+  borderColor: '#8B6914',
 };
 
 const previewBoxStyle: CSSProperties = {
@@ -237,16 +232,60 @@ function formatDurationMs(ms: number): string {
   return `${m}:${s.toString().padStart(2, '0')}`;
 }
 
-const TABS: Array<{ id: RecorderSource; label: string; description: string }> = [
-  {
-    id: 'mic',
-    label: 'Narration',
-    description: 'Voice-only audio. Pairs with a written script for auto-mapping to blocks.',
-  },
-  { id: 'camera', label: 'Camera', description: 'Camera + microphone. Saved as a video clip.' },
-  { id: 'screen', label: 'Screen', description: 'Screen capture. System audio when available.' },
-  { id: 'screen+mic', label: 'Screen + Mic', description: 'Screen with your microphone mixed in.' },
+/** The two mutually-exclusive video sources, plus "none" (audio-only). */
+type VideoSource = 'none' | 'camera' | 'screen';
+
+/**
+ * Resolve the toggle state (microphone on/off + which video source) to the
+ * recorder's capture mode. Returns null when nothing is selected — there's
+ * nothing to capture, so the controls stay disabled.
+ *
+ * Camera + Screen can't be captured together (no compositing), so the two
+ * are mutually exclusive; the microphone composes with either, or stands
+ * alone as narration.
+ */
+function deriveSource(micOn: boolean, video: VideoSource): RecorderSource | null {
+  if (video === 'camera') return 'camera'; // mic handled via includeMicrophone
+  if (video === 'screen') return micOn ? 'screen+mic' : 'screen';
+  return micOn ? 'mic' : null;
+}
+
+/** Initial toggle state for a given starting capture mode. */
+function toggleStateFromMode(mode: RecorderSource): { micOn: boolean; video: VideoSource } {
+  switch (mode) {
+    case 'mic':
+      return { micOn: true, video: 'none' };
+    case 'camera':
+      return { micOn: true, video: 'camera' };
+    case 'screen':
+      return { micOn: false, video: 'screen' };
+    case 'screen+mic':
+      return { micOn: true, video: 'screen' };
+  }
+}
+
+const TOGGLES: Array<{ key: 'mic' | 'camera' | 'screen'; label: string }> = [
+  { key: 'mic', label: 'Microphone' },
+  { key: 'camera', label: 'Camera' },
+  { key: 'screen', label: 'Screen' },
 ];
+
+/** One-line summary of what the current toggle combination will capture. */
+function captureSummary(micOn: boolean, video: VideoSource): string {
+  if (video === 'camera') {
+    return micOn
+      ? 'Camera video with your microphone. Saved as a video clip.'
+      : 'Camera video only (no microphone). Saved as a video clip.';
+  }
+  if (video === 'screen') {
+    return micOn
+      ? 'Screen capture with your microphone mixed in. System audio when available.'
+      : 'Screen capture (no microphone). System audio when available.';
+  }
+  return micOn
+    ? 'Voice-only audio. Pairs with a written script for auto-mapping to blocks.'
+    : 'Pick at least one source to record.';
+}
 
 // ── Component ──────────────────────────────────────────────────────
 
@@ -257,7 +296,9 @@ export function RecorderModal({
   onClose,
   onSave,
 }: RecorderModalProps) {
-  const [source, setSource] = useState<RecorderSource>(initialMode);
+  const initialToggles = toggleStateFromMode(initialMode);
+  const [micOn, setMicOn] = useState(initialToggles.micOn);
+  const [video, setVideo] = useState<VideoSource>(initialToggles.video);
   const [sourceText, setSourceText] = useState('');
   const [basename, setBasename] = useState('');
   const [includeSystemAudio, setIncludeSystemAudio] = useState(false);
@@ -267,9 +308,17 @@ export function RecorderModal({
 
   const previewRef = useRef<HTMLVideoElement | null>(null);
 
+  // Toggle state → the recorder's capture mode. `source` is null when nothing
+  // is selected; we feed the hook a harmless default and gate the controls on
+  // `canCapture` instead.
+  const derivedSource = deriveSource(micOn, video);
+  const canCapture = derivedSource !== null;
+  const source: RecorderSource = derivedSource ?? 'mic';
+
   const recorder = useMediaRecorder({
     source,
-    systemAudio: source === 'screen' || source === 'screen+mic' ? includeSystemAudio : false,
+    includeMicrophone: video === 'camera' ? micOn : undefined,
+    systemAudio: video === 'screen' ? includeSystemAudio : false,
   });
 
   useStreamPreview(previewRef, recorder.state === 'stopped' ? null : recorder.stream);
@@ -290,17 +339,20 @@ export function RecorderModal({
     };
   }, [recorder.blob]);
 
-  // Switching capture source mid-session: tear down whatever stream/
-  // recorder we had so the new mode acquires a fresh one. The hook
-  // already handles its own internal teardown on unmount; cancel()
-  // here covers in-place source changes.
-  const previousSourceRef = useRef(source);
+  // Switching capture config mid-session: tear down whatever stream/
+  // recorder we had so the new mode acquires a fresh one. We key on a
+  // signature of everything that changes the acquired stream — including
+  // the camera microphone and screen system-audio flags, which don't
+  // change `source` on their own. The hook handles its own teardown on
+  // unmount; cancel() here covers in-place changes.
+  const captureKey = `${source}:${video === 'camera' ? micOn : ''}:${includeSystemAudio}`;
+  const previousKeyRef = useRef(captureKey);
   useEffect(() => {
-    if (previousSourceRef.current !== source) {
-      previousSourceRef.current = source;
+    if (previousKeyRef.current !== captureKey) {
+      previousKeyRef.current = captureKey;
       recorder.cancel();
     }
-  }, [source, recorder]);
+  }, [captureKey, recorder]);
 
   // Make sure tearing down the modal always releases the camera /
   // screen-capture indicator. The hook's own unmount effect handles
@@ -403,37 +455,47 @@ export function RecorderModal({
   const canSave = recorder.state === 'stopped' && recorder.blob !== null;
   const isBusy = recorder.state === 'requesting' || recorder.state === 'stopping' || isSaving;
 
-  const activeTabDescription = TABS.find((t) => t.id === source)?.description;
+  // Toggles lock while a stream is live (acquiring or recording) — changing
+  // the capture config then would tear down the in-progress take.
+  const togglesLocked = recorder.state === 'recording' || recorder.state === 'requesting';
+  const toggleActiveFor = (key: 'mic' | 'camera' | 'screen') =>
+    key === 'mic' ? micOn : video === key;
+  const onToggle = (key: 'mic' | 'camera' | 'screen') => {
+    if (key === 'mic') {
+      setMicOn((on) => !on);
+    } else {
+      // Camera and Screen are mutually exclusive — turning one on clears the
+      // other (no camera+screen compositing).
+      setVideo((v) => (v === key ? 'none' : key));
+    }
+  };
 
   return (
     <div style={overlayStyle} role="dialog" aria-modal="true" aria-label="Record media">
       <div style={modalStyle} onClick={(e) => e.stopPropagation()}>
         <h2 style={titleStyle}>Record media</h2>
 
-        <div style={tabRowStyle} role="tablist">
-          {TABS.map((tab) => {
-            const active = tab.id === source;
+        <div style={toggleRowStyle} role="group" aria-label="Capture sources">
+          {TOGGLES.map((t) => {
+            const active = toggleActiveFor(t.key);
             return (
               <button
-                key={tab.id}
-                role="tab"
-                aria-selected={active}
+                key={t.key}
                 type="button"
-                style={active ? tabActive : tabBase}
-                onClick={() => setSource(tab.id)}
-                disabled={recorder.state === 'recording' || recorder.state === 'requesting'}
+                aria-pressed={active}
+                style={active ? toggleActive : toggleBase}
+                onClick={() => onToggle(t.key)}
+                disabled={togglesLocked}
               >
-                {tab.label}
+                {t.label}
               </button>
             );
           })}
         </div>
 
-        {activeTabDescription && (
-          <p style={{ margin: '0 0 12px 0', fontSize: 12, color: '#5a4a2a' }}>
-            {activeTabDescription}
-          </p>
-        )}
+        <p style={{ margin: '0 0 12px 0', fontSize: 12, color: '#5a4a2a' }}>
+          {captureSummary(micOn, video)}
+        </p>
 
         {recorder.error && <div style={errorStyle}>{recorder.error.message}</div>}
         {saveError && <div style={errorStyle}>{saveError}</div>}
@@ -505,7 +567,7 @@ export function RecorderModal({
             />
           </>
         )}
-        {(source === 'screen' || source === 'screen+mic') && (
+        {video === 'screen' && (
           <label
             style={{
               display: 'flex',
@@ -562,7 +624,12 @@ export function RecorderModal({
           {(recorder.state === 'idle' ||
             recorder.state === 'error' ||
             recorder.state === 'requesting') && (
-            <button type="button" style={btnPrimary} onClick={handleRequest} disabled={isBusy}>
+            <button
+              type="button"
+              style={btnPrimary}
+              onClick={handleRequest}
+              disabled={isBusy || !canCapture}
+            >
               {recorder.state === 'requesting' ? 'Requesting…' : 'Start preview'}
             </button>
           )}

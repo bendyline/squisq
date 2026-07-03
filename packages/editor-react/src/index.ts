@@ -21,6 +21,10 @@
 export { EditorShell } from './EditorShell.js';
 export type { EditorShellProps, EditorTheme } from './EditorShell.js';
 
+// FolderView — standalone folder browser surface (companion to the shell)
+export { FolderView } from './FolderView.js';
+export type { FolderViewProps, FolderEntry } from './FolderView.js';
+
 // Context
 export { EditorProvider, useEditorContext } from './EditorContext.js';
 export type {
@@ -37,7 +41,32 @@ export type {
   DocumentLinkProvider,
   ViewPreferences,
   ThemeInheritance,
+  LayoutMode,
 } from './EditorContext.js';
+
+// Block-at-a-time primitives — reusable outside EditorShell. `useBlockNavigator`
+// drives a one-block-at-a-time editing channel from any `(source, setSource)`
+// pair; `BlockCardView` is the matching card chrome; the `blockRange` utilities
+// are pure source-slicing helpers.
+export { useBlockNavigator } from './useBlockNavigator.js';
+export type { BlockNavigator, UseBlockNavigatorOptions } from './useBlockNavigator.js';
+export { BlockCardView } from './BlockCardView.js';
+export type { BlockCardViewProps } from './BlockCardView.js';
+export {
+  getBlockSlices,
+  spliceBlock,
+  lineToOffset,
+  offsetToLine,
+  sliceIndexAtOffset,
+} from './blockRange.js';
+export type { BlockRange, BlockSlice } from './blockRange.js';
+
+// Timeline view — the horizontal block + media track and the line-level
+// markdown write-back helpers it commits edits through.
+export { TimelineTrack } from './TimelineTrack.js';
+export type { TimelineTrackProps } from './TimelineTrack.js';
+export { formatSeconds, setBlockDurationInSource, setMediaClipInSource } from './timelineSource.js';
+export type { MediaClipPatch } from './timelineSource.js';
 
 // File-kind detection — useful for hosts that want to pre-decide chrome
 // around the editor based on whether a file is markdown or code.
@@ -89,6 +118,35 @@ export type { OutlinePanelProps } from './OutlinePanel.js';
 export { ThemeCustomizerPanel } from './ThemeCustomizerPanel.js';
 export type { ThemeCustomizerPanelProps } from './ThemeCustomizerPanel.js';
 export { TemplatePicker, templateLabel } from './TemplatePicker.js';
+export { TransitionPicker } from './TransitionPicker.js';
+export type { TransitionPickerProps } from './TransitionPicker.js';
+export {
+  TRANSITION_GROUPS,
+  TRANSITION_ENTRIES,
+  transitionLabel,
+  findTransitionEntry,
+} from './transitionCatalog.js';
+export type {
+  TransitionGroup,
+  TransitionCatalogEntry,
+  DirectionModel,
+} from './transitionCatalog.js';
+export {
+  readHeadingLineTransition,
+  setHeadingLineTransition,
+  readBlockAttrsTransition,
+  setBlockAttrsTransition,
+  EMPTY_TRANSITION,
+} from './headingTransition.js';
+export type { TransitionFields } from './headingTransition.js';
+export {
+  readBlockAttrsParams,
+  readBlockAttrsValue,
+  setBlockAttrsValue,
+  summarizeBlockProps,
+} from './blockProperties.js';
+export { BlockPropertiesPopover } from './BlockPropertiesPopover.js';
+export type { BlockPropertiesPopoverProps } from './BlockPropertiesPopover.js';
 export { InlinePreviewGutter } from './InlinePreviewGutter.js';
 export type { InlinePreviewGutterProps } from './InlinePreviewGutter.js';
 
@@ -128,6 +186,25 @@ export { buildPreviewDoc } from './buildPreviewDoc.js';
 
 // Tiptap extension: Heading with template annotation support
 export { HeadingWithTemplate } from './TemplateAnnotation.js';
+
+// Diagram editor — Tiptap extension that mounts a React-Flow canvas
+// below any `### Title {[diagram]}` heading and hides the section's
+// child headings (they're rendered as nodes in the canvas).
+export { DiagramExtension } from './diagram/DiagramExtension.js';
+export { DiagramCanvas } from './diagram/DiagramCanvas.js';
+export type { DiagramCommand } from './diagram/DiagramCanvas.js';
+export { DiagramWidget } from './diagram/DiagramWidget.js';
+export { useDiagramData } from './diagram/useDiagramData.js';
+export type { DiagramData, DiagramRFNode, DiagramRFEdge } from './diagram/useDiagramData.js';
+export {
+  moveNode,
+  addConnection,
+  removeConnection,
+  renameNode,
+  addNode,
+  removeNode,
+  listDiagramChildren,
+} from './diagram/diagramCommands.js';
 
 // JSON Form — editable component
 export { JsonEditor } from './jsonEditor/index.js';

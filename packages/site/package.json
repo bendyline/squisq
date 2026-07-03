@@ -6,23 +6,24 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "preview:e2e": "vite preview --host 127.0.0.1 --port 5199 --strictPort"
   },
   "dependencies": {
     "@bendyline/squisq": "*",
+    "@bendyline/squisq-editor-react": "*",
     "@bendyline/squisq-formats": "*",
     "@bendyline/squisq-react": "*",
     "@bendyline/squisq-video": "*",
     "@bendyline/squisq-video-react": "*",
-    "@bendyline/squisq-editor-react": "*",
     "react": "18.3.1",
     "react-dom": "18.3.1"
   },
   "devDependencies": {
     "@types/react": "18.3.28",
     "@types/react-dom": "18.3.7",
-    "@vitejs/plugin-react": "4.7.0",
+    "@vitejs/plugin-react": "6.0.2",
     "typescript": "5.9.3",
-    "vite": "5.4.21"
+    "vite": "8.0.14"
   }
 }

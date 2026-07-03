@@ -22,8 +22,7 @@
 import { PDFDocument, StandardFonts, rgb, PDFFont, PDFPage } from 'pdf-lib';
 
 import type { Doc } from '@bendyline/squisq/schemas';
-import { resolveTheme } from '@bendyline/squisq/schemas';
-import { docToMarkdown } from '@bendyline/squisq/doc';
+import { docToMarkdown, resolveThemeForDoc } from '@bendyline/squisq/doc';
 import type {
   MarkdownDocument,
   MarkdownBlockNode,
@@ -51,6 +50,7 @@ import type {
   MarkdownInlineMath,
   MarkdownFootnoteReference,
 } from '@bendyline/squisq/markdown';
+import { readFrontmatterThemeId } from '@bendyline/squisq/markdown';
 
 import {
   PAGE_WIDTH_LETTER,
@@ -127,7 +127,7 @@ export async function markdownDocToPdf(
   pdfDoc.setCreationDate(new Date());
   pdfDoc.setModificationDate(new Date());
 
-  const ctx = await createExportContext(pdfDoc, options);
+  const ctx = await createExportContext(pdfDoc, options, doc);
 
   renderBlocks(doc.children, ctx, 0);
 
@@ -190,6 +190,7 @@ interface ExportContext {
 async function createExportContext(
   pdfDoc: PDFDocument,
   options: PdfExportOptions,
+  doc: MarkdownDocument,
 ): Promise<ExportContext> {
   const [regular, bold, italic, boldItalic, mono, monoBold] = await Promise.all([
     pdfDoc.embedFont(StandardFonts.Helvetica),
@@ -213,8 +214,12 @@ async function createExportContext(
   let colorHeading = COLOR_HEADING;
   let colorLink = COLOR_LINK;
 
-  if (options.themeId) {
-    const theme = resolveTheme(options.themeId);
+  // Honor an explicit themeId, else the doc's frontmatter theme (`squisq-theme`
+  // / legacy) — mirroring PPTX/DOCX/HTML so every format themes consistently,
+  // including inline custom themes (resolved doc-scoped).
+  const themeId = options.themeId ?? readFrontmatterThemeId(doc.frontmatter);
+  if (themeId) {
+    const theme = resolveThemeForDoc(doc, themeId);
     if (theme.colors) {
       colorText = hexToRgb(theme.colors.text) ?? COLOR_TEXT;
       colorHeading = hexToRgb(theme.colors.primary) ?? COLOR_HEADING;
