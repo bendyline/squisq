@@ -1501,10 +1501,12 @@ interface EpubExportOptions {
 
 ### Subpath: PPTX
 
-**Import:** `@bendyline/squisq-formats/pptx` — export + import. Import reads
-slide order from `ppt/presentation.xml`, converting each slide's title, body
-(as a bullet list), and tables (`<a:tbl>`). Embedded-image extraction on import
-is not yet wired (`PptxImportOptions.extractImages` is reserved).
+**Import:** `@bendyline/squisq-formats/pptx`
+
+PPTX export and import are both implemented. Import reads slide order from
+`ppt/presentation.xml`, converting each slide's title, body (as a bullet list),
+and tables (`<a:tbl>`). Embedded-image extraction on import is not yet wired
+(`PptxImportOptions.extractImages` is reserved).
 
 ```ts
 function markdownDocToPptx(
