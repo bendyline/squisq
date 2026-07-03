@@ -1,3 +1,14 @@
+## @bendyline/squisq-formats [1.4.0](https://github.com/bendyline/squisq/compare/@bendyline/squisq-formats@1.3.1...@bendyline/squisq-formats@1.4.0) (2026-07-03)
+
+### Features
+
+* Custom layouts and themes ([#18](https://github.com/bendyline/squisq/issues/18)) ([b80d593](https://github.com/bendyline/squisq/commit/b80d5930835d0c4f43cbe965c4bc466e4262ce86))
+
+
+### Dependencies
+
+* **@bendyline/squisq:** upgraded to 1.5.0
+
 ## @bendyline/squisq-formats [1.3.1](https://github.com/bendyline/squisq/compare/@bendyline/squisq-formats@1.3.0...@bendyline/squisq-formats@1.3.1) (2026-05-19)
 
 ### Bug Fixes
