@@ -1,3 +1,9 @@
+## @bendyline/squisq [1.5.0](https://github.com/bendyline/squisq/compare/@bendyline/squisq@1.4.1...@bendyline/squisq@1.5.0) (2026-07-03)
+
+### Features
+
+* Custom layouts and themes ([#18](https://github.com/bendyline/squisq/issues/18)) ([b80d593](https://github.com/bendyline/squisq/commit/b80d5930835d0c4f43cbe965c4bc466e4262ce86))
+
 ## @bendyline/squisq [1.4.1](https://github.com/bendyline/squisq/compare/@bendyline/squisq@1.4.0...@bendyline/squisq@1.4.1) (2026-05-19)
 
 ### Bug Fixes
