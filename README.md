@@ -23,7 +23,7 @@ Open-source monorepo providing reusable libraries for document/block rendering, 
 | --------------------------------------------------------- | ------------------------------------------------------------------------- |
 | [`@bendyline/squisq`](packages/core)                      | Headless utilities — schemas, templates, spatial math, Markdown, storage  |
 | [`@bendyline/squisq-react`](packages/react)               | React components — DocPlayer, BlockRenderer, layers, hooks                |
-| [`@bendyline/squisq-formats`](packages/formats)           | Format converters — DOCX, PDF, HTML, EPUB, PPTX, shared OOXML             |
+| [`@bendyline/squisq-formats`](packages/formats)           | Format converters — DOCX, PDF, HTML, EPUB, PPTX, CSV, shared OOXML        |
 | [`@bendyline/squisq-editor-react`](packages/editor-react) | React editor shell — raw/WYSIWYG/preview modes                            |
 | [`@bendyline/squisq-video`](packages/video)               | Browser-pure MP4 export foundation — render HTML, ffmpeg.wasm, presets    |
 | [`@bendyline/squisq-video-react`](packages/video-react)   | React components for browser-based video export (WebCodecs + ffmpeg.wasm) |
@@ -53,7 +53,7 @@ function App() {
 Each package exposes targeted subpath entries so you can import only what you need:
 
 ```ts
-import type { Doc, BlockTemplate } from '@bendyline/squisq/schemas';
+import type { Doc, TemplateBlock } from '@bendyline/squisq/schemas';
 import { haversineDistance } from '@bendyline/squisq/spatial';
 import { parseMarkdown, stringifyMarkdown } from '@bendyline/squisq/markdown';
 import { markdownDocToDocx } from '@bendyline/squisq-formats/docx';

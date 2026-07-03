@@ -1,6 +1,8 @@
 # Squisq API Reference
 
-> Auto-generated reference for the published packages and their subpath exports.
+> Reference for the seven published packages and their subpath exports. Types
+> and signatures below are transcribed from source; when in doubt, the `.d.ts`
+> files under each package's `dist/` are the ground truth.
 
 ---
 
@@ -8,158 +10,210 @@
 
 - [`@bendyline/squisq` (Core)](#bendylinesquisq-core)
   - [Schemas](#subpath-schemas)
-  - [Doc](#subpath-doc)
+  - [Doc / Story](#subpath-doc)
   - [Spatial](#subpath-spatial)
   - [Storage](#subpath-storage)
   - [Markdown](#subpath-markdown)
+  - [Timing](#subpath-timing)
+  - [Random](#subpath-random)
+  - [Generate](#subpath-generate)
+  - [Transform](#subpath-transform)
+  - [Versions](#subpath-versions)
+  - [JSON Form](#subpath-jsonform)
+  - [Image Edit](#subpath-imageedit)
+  - [Icons](#subpath-icons)
+  - [Recommend](#subpath-recommend)
 - [`@bendyline/squisq-react`](#bendylinesquisq-react)
-  - [Components](#react-components)
-  - [Layers](#react-layers)
-  - [Hooks](#react-hooks)
-  - [Context & Types](#react-context--types)
-  - [Utilities](#react-utilities)
-  - [Styles](#react-styles)
 - [`@bendyline/squisq-formats`](#bendylinesquisq-formats)
-  - [DOCX](#subpath-docx)
-  - [PDF](#subpath-pdf)
-  - [OOXML](#subpath-ooxml)
-  - [EPUB](#subpath-epub)
-  - [PPTX](#subpath-pptx)
-  - [XLSX (stub)](#subpath-xlsx-stub)
 - [`@bendyline/squisq-editor-react`](#bendylinesquisq-editor-react)
-  - [Components](#editor-components)
-  - [Context](#editor-context)
-  - [Bridge Utilities](#editor-bridge-utilities)
+- [`@bendyline/squisq-video`](#bendylinesquisq-video)
+- [`@bendyline/squisq-video-react`](#bendylinesquisq-video-react)
 - [`@bendyline/squisq-cli`](#bendylinesquisq-cli)
-  - [Programmatic API](#cli-programmatic-api)
-  - [CLI Commands](#cli-commands)
 
 ---
 
 ## `@bendyline/squisq` (Core)
 
-Headless utilities — schemas, templates, spatial math, markdown, and storage. Zero framework dependencies.
+Headless utilities — schemas, templates, spatial math, markdown, storage,
+timing, transforms, version history, JSON forms, image-edit, icons, and content
+recommendation. Zero framework dependencies; runs in the browser and Node.
+
+The root entry (`@bendyline/squisq`) re-exports every subpath barrel below
+(except `icon-marker`, whose symbols are also surfaced through `./icons`).
 
 ### Subpath: Schemas
 
 **Import:** `@bendyline/squisq/schemas`
 
-#### Coordinate & Geometry Types
+#### Doc & Block
 
-```ts
-interface Coordinates {
-  latitude: number;
-  longitude: number;
-}
-
-interface BoundingBox {
-  north: number;
-  south: number;
-  east: number;
-  west: number;
-}
-```
-
-#### Doc Types
-
-```ts
+````ts
+/** A complete visual doc for an article. */
 interface Doc {
-  title?: string;
-  blocks: DocBlock[];
-  viewport?: ViewportConfig;
-  theme?: ThemeColors;
-  audio?: AudioConfig;
-  metadata?: DocMetadata;
+  articleId: string;
+  duration: number; // total seconds (sum of audio segments)
+  blocks: Block[];
+  audio: AudioTrack;
+  captions?: CaptionTrack;
+  startBlock?: StartBlockConfig; // resting/cover block shown before playback
+  persistentLayers?: PersistentLayerConfig;
+  themeId?: string; // resolved at render time via resolveTheme()
+  meta?: { generatedAt?: string; generatedBy?: string; version?: number };
+  frontmatter?: Record<string, unknown>; // YAML frontmatter from source markdown
+  customTemplates?: CustomTemplateDefinition[]; // from `squisq-custom-templates`
+  customThemes?: Theme[]; // from `squisq-custom-themes`
+  diagnostics?: DocDiagnostic[]; // structural problems found while building
+  documentMedia?: MediaClip[]; // document-spanning timed media (anchor=document)
 }
 
-type DocBlock = Block | TemplateBlock;
+type DocBlock = Block | TemplateBlock; // use isTemplateBlock() to narrow
 
 interface Block {
-  layers: Layer[];
-  duration?: number;
-  transition?: BlockTransition;
-  notes?: string;
+  id: string;
+  startTime: number; // seconds from start
+  duration: number; // seconds visible
+  audioSegment: number; // 0-indexed
+  layers?: Layer[]; // template-derived blocks omit this and compute on demand
+  transition?: Transition;
+  template?: string; // template that generated this block
+  autoTemplate?: boolean; // true when template was content-auto-picked
+  title?: string;
+  // markdown-driven hierarchy
+  children?: Block[];
+  contents?: MarkdownBlockNode[];
+  sourceHeading?: MarkdownHeading;
+  templateOverrides?: Record<string, string>; // from `{[tpl key=value]}`
+  templateData?: Record<string, unknown>; // from a ```json data / ```yaml data fence
+  // block-level metadata from Pandoc `{#id .class key=value}`
+  x?: number;
+  y?: number;
+  connectsTo?: BlockConnection[];
+  classes?: string[];
+  metadata?: Record<string, string>;
+  media?: MediaClip[]; // body-level `{[audio…]}` / `{[video…]}` clips
 }
 
-interface BlockTransition {
-  type: 'fade' | 'slide' | 'none';
-  duration?: number; // ms
+interface BlockConnection {
+  target: string; // another block's id
+  type?: string; // e.g. "flow", "requires"
 }
 
-interface DocMetadata {
-  author?: string;
-  created?: string; // ISO date
-  modified?: string; // ISO date
-  tags?: string[];
-  description?: string;
+interface DocDiagnostic {
+  severity: 'error' | 'warning';
+  code: string; // e.g. 'unknown-template', 'duplicate-id'
+  message: string;
+  blockId?: string;
+  line?: number; // 1-based line in markdown source
 }
 
-interface AudioConfig {
-  src: string;
-  syncPoints?: AudioSyncPoint[];
+interface StartBlockConfig {
+  title: string;
+  subtitle?: string;
+  heroSrc?: string;
+  heroAlt?: string;
+  ambientMotion?: 'zoomIn' | 'zoomOut' | 'panLeft' | 'panRight';
+  heroCredit?: string;
+  heroLicense?: string;
 }
-
-interface AudioSyncPoint {
-  time: number; // seconds
-  blockIndex: number;
-}
-```
+````
 
 #### Layer Types
 
-```ts
-/** Discriminated union of all layer types */
-type Layer = ImageLayer | TextLayer | ShapeLayer | MapLayer | VideoLayer | TableLayer;
+Layers carry their visual data in a nested `content` object (not flat fields).
+The discriminated union has **seven** members:
 
-/** Common fields shared by all layers */
+```ts
+type Layer = ImageLayer | TextLayer | ShapeLayer | PathLayer | MapLayer | VideoLayer | TableLayer;
+
 interface BaseLayer {
+  id: string;
   position: Position;
   animation?: Animation;
-  opacity?: number;
-  visible?: boolean;
-  zIndex?: number;
 }
 
 interface ImageLayer extends BaseLayer {
   type: 'image';
-  src: string;
-  alt?: string;
-  objectFit?: 'cover' | 'contain' | 'fill' | 'none';
+  content: {
+    src: string;
+    alt: string;
+    fit?: 'cover' | 'contain' | 'fill';
+    credit?: string;
+    license?: string;
+    treatment?: ImageTreatment; // theme-derived photographic grade
+    blur?: number; // gaussian blur radius (px)
+  };
 }
 
 interface TextLayer extends BaseLayer {
   type: 'text';
-  content: string;
-  textStyle?: TextStyle;
+  content: {
+    text: string; // plain-text source of truth (PDF/markdown export, a11y, SVG fallback)
+    html?: string; // optional sanitized inline HTML; rendered via <foreignObject>
+    style: TextStyle;
+  };
 }
 
 interface ShapeLayer extends BaseLayer {
   type: 'shape';
-  shape: 'rectangle' | 'circle' | 'ellipse' | 'line' | 'polygon';
-  fill?: string;
-  stroke?: string;
-  strokeWidth?: number;
-  points?: Array<{ x: number; y: number }>;
-  cornerRadius?: number;
+  content: {
+    shape: 'rect' | 'circle' | 'line';
+    fill?: string;
+    fillOpacity?: number;
+    gradient?: LinearGradient;
+    pattern?: ShapePattern; // dots | grid | diagonal
+    filter?: ShapeFilter; // 'noise' film grain
+    stroke?: string;
+    strokeWidth?: number;
+    borderStyle?: BorderStyle; // 'solid' | 'dashed' | 'dotted'
+    borderRadius?: number;
+  };
 }
 
-interface VideoLayer extends BaseLayer {
-  type: 'video';
-  videoSrc: string;
-  autoplay?: boolean;
-  loop?: boolean;
-  muted?: boolean;
-  poster?: string;
+interface PathLayer extends BaseLayer {
+  type: 'path';
+  content: {
+    d: string; // SVG path `d` (absolute viewBox coords)
+    shapeKind?: string; // named shape (e.g. 'diamond', 'star') re-derived from position box
+    stroke?: string;
+    strokeWidth?: number;
+    fill?: string;
+    fillOpacity?: number;
+    gradient?: LinearGradient;
+    borderStyle?: BorderStyle;
+    dasharray?: string;
+    arrow?: 'none' | 'end' | 'start' | 'both'; // legacy; prefer start/endMarker
+    startMarker?: MarkerStyle;
+    endMarker?: MarkerStyle;
+  };
 }
 
 interface MapLayer extends BaseLayer {
   type: 'map';
-  center: Coordinates;
-  zoom?: number;
-  markers?: MapMarker[];
-  mapStyle?: string;
-  tileUrl?: string;
-  bounds?: BoundingBox;
+  content: {
+    center: { lat: number; lng: number };
+    zoom: number; // 0–18
+    style: MapTileStyle; // 'terrain' | 'satellite' | 'road' | 'toner' | 'watercolor'
+    markers?: MapMarker[];
+    staticSrc?: string; // pre-rendered still (for reliable video export)
+    showAttribution?: boolean; // default true
+  };
+}
+
+interface VideoLayer extends BaseLayer {
+  type: 'video'; // always muted; narration provides audio
+  content: {
+    src: string;
+    posterSrc?: string;
+    alt: string;
+    fit?: 'cover' | 'contain' | 'fill';
+    clipStart: number;
+    clipEnd: number;
+    sourceDuration?: number;
+    startAt?: number; // block-relative start (seconds)
+    spillover?: boolean; // keep playing past the block's end
+    credit?: string;
+    license?: string;
+  };
 }
 
 interface TableLayer extends BaseLayer {
@@ -172,226 +226,409 @@ interface TableLayer extends BaseLayer {
   };
 }
 
-interface TableLayerStyle {
-  headerBackground: string;
-  headerColor: string;
-  cellBackground: string;
-  cellColor: string;
-  borderColor: string;
-  fontSize: number;
-  fontFamily?: string;
-  headerFontFamily?: string;
-  borderRadius?: number;
-}
-
 interface Position {
-  x: number; // 0–100 percentage
-  y: number;
-  width: number;
-  height: number;
-  rotation?: number; // degrees
+  x: number | string; // pixels or percentage string ("50%")
+  y: number | string;
+  width?: number | string;
+  height?: number | string;
+  anchor?: 'center' | 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right';
 }
 
 interface TextStyle {
-  fontSize?: number;
+  fontSize: number;
   fontFamily?: string;
-  fontWeight?: string;
-  color?: string;
-  backgroundColor?: string;
-  textAlign?: 'left' | 'center' | 'right' | 'justify';
+  fontWeight?: 'normal' | 'bold';
+  fontStyle?: 'normal' | 'italic';
+  color: string;
+  textAlign?: 'left' | 'center' | 'right';
   verticalAlign?: 'top' | 'middle' | 'bottom';
   lineHeight?: number;
+  shadow?: boolean;
+  background?: string;
+  backgroundOpacity?: number;
+  backgroundGradient?: LinearGradient;
+  borderColor?: string;
+  borderWidth?: number;
+  borderStyle?: BorderStyle;
   padding?: number;
-  textDecoration?: string;
-  fontStyle?: string;
-  letterSpacing?: number;
-  textTransform?: 'none' | 'uppercase' | 'lowercase' | 'capitalize';
-  whiteSpace?: string;
-  overflow?: 'visible' | 'hidden' | 'ellipsis';
+  maxLines?: number;
 }
 
 interface Animation {
-  type: 'fadeIn' | 'slideIn' | 'zoomIn' | 'typewriter' | 'none';
-  duration?: number; // ms
-  delay?: number; // ms
+  type: AnimationType;
+  duration?: number; // seconds (defaults to block duration)
+  delay?: number; // seconds
   easing?: string;
+  direction?: 'in' | 'out'; // Ken Burns zoom
+  panDirection?: 'left' | 'right' | 'up' | 'down';
 }
 
-interface MapMarker {
-  position: Coordinates;
-  label?: string;
-  color?: string;
+type AnimationType =
+  | 'none'
+  | 'fadeIn'
+  | 'fadeOut'
+  | 'slowZoom'
+  | 'zoomIn'
+  | 'zoomOut'
+  | 'panLeft'
+  | 'panRight'
+  | 'typewriter';
+
+interface LinearGradient {
+  from: string;
+  to: string;
+  angle?: number;
+}
+type BorderStyle = 'solid' | 'dashed' | 'dotted';
+type MarkerStyle = 'none' | 'arrow' | 'open' | 'diamond' | 'circle' | 'square';
+
+interface ImageTreatment {
+  type: 'none' | 'mono' | 'duotone' | 'warm' | 'cool';
+  strength?: number; // 0..1, default 0.6
+  color?: string; // duotone tint
+}
+```
+
+#### Audio & Captions
+
+```ts
+interface AudioTrack {
+  segments: AudioSegment[];
+}
+interface AudioSegment {
+  src: string;
+  name: string;
+  duration: number;
+  startTime: number;
+}
+interface CaptionTrack {
+  phrases: CaptionPhrase[];
+  generatedAt?: string;
+  version: number;
+}
+interface CaptionPhrase {
+  text: string;
+  startTime: number;
+  endTime: number;
+  audioSegment: number;
+  words?: CaptionWord[];
+}
+interface CaptionWord {
+  text: string;
+  startTime: number;
+  endTime: number;
 }
 ```
 
 #### Template Types
 
+Template blocks are a **flat** discriminated union — each input interface
+extends `BaseTemplateBlock` and carries a `template` discriminant plus its own
+fields. There is no nested `input` object.
+
 ```ts
-/** Discriminated union — use isTemplateBlock() to narrow */
-interface TemplateBlock {
-  template: string;
-  input: TemplateBlockInput;
-  duration?: number;
-  transition?: BlockTransition;
-  notes?: string;
+type TemplateBlock =
+  | TitleBlockInput
+  | SectionHeaderInput
+  | StatHighlightInput
+  | QuoteBlockInput
+  | FactCardInput
+  | TwoColumnInput
+  | DateEventInput
+  | ImageWithCaptionInput
+  | LeftFeatureInput
+  | RightFeatureInput
+  | MapBlockInput
+  | FullBleedQuoteInput
+  | ListBlockInput
+  | PhotoGridInput
+  | DefinitionCardInput
+  | ComparisonBarInput
+  | PullQuoteInput
+  | VideoWithCaptionInput
+  | VideoPullQuoteInput
+  | DataTableInput
+  | DiagramBlockInput
+  | RawLayersInput /* layout */
+  | DrawingBlockInput;
+
+// Fields common to every template block:
+interface BaseTemplateBlock {
+  id: string;
+  duration: number;
+  audioSegment: number;
+  transition?: Transition;
+  useBottomLayer?: boolean; // default true
+  useTopLayer?: boolean; // default true
+  sourceStartTime?: number;
+  sourceDuration?: number;
+  imageTreatment?: 'none' | 'mono' | 'duotone' | 'warm' | 'cool';
 }
 
 function isTemplateBlock(block: DocBlock): block is TemplateBlock;
 
-type TemplateFunction = (input: TemplateBlockInput, context: TemplateContext) => Layer[];
+type TemplateFunction = (input: TemplateBlock, context: TemplateContext) => Layer[];
 
 interface TemplateContext {
   viewport: ViewportConfig;
   theme: Theme;
   blockIndex: number;
   totalBlocks: number;
-  fontScale: number;
-  orientation: ViewportOrientation;
   layout: LayoutHints;
-  children?: Block[]; // Used by aggregate templates such as diagram
+  orientation: ViewportOrientation;
+  children?: Block[]; // used by container templates (diagram, drawing, layout)
 }
 ```
 
 ##### Built-in Template Block Inputs
 
-| Template           | Key Input Fields                                                                                                                                                                                                                                                                                                                    |
-| ------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `title`            | `title`, `subtitle?`, `backgroundColor?`                                                                                                                                                                                                                                                                                            |
-| `sectionHeader`    | `title`, `colorScheme?`, `imageSrc?`, `imageAlt?`, `ambientMotion?`                                                                                                                                                                                                                                                                 |
-| `statHighlight`    | `stat`, `description`, `detail?`, `colorScheme?`, `accentImage?`                                                                                                                                                                                                                                                                    |
-| `quote`            | `quote`, `attribution?`, `accentImage?`                                                                                                                                                                                                                                                                                             |
-| `factCard`         | `fact`, `explanation`, `source?`, `accentImage?`                                                                                                                                                                                                                                                                                    |
-| `twoColumn`        | `left`, `right`, `header?`, `leftColor?`, `rightColor?`                                                                                                                                                                                                                                                                             |
-| `dateEvent`        | `date`, `description`, `footer?`, `mood?`, `accentImage?`                                                                                                                                                                                                                                                                           |
-| `imageWithCaption` | `imageSrc`, `imageAlt`, `caption?`, `captionPosition?`, `ambientMotion?`, `isTitle?`, `subtitle?`                                                                                                                                                                                                                                   |
-| `leftFeature`      | `imageSrc`, `imageAlt?`, `imageWidth?`, `imageHeight?`, `title?`, `body?`                                                                                                                                                                                                                                                           |
-| `rightFeature`     | `imageSrc`, `imageAlt?`, `imageWidth?`, `imageHeight?`, `title?`, `body?`                                                                                                                                                                                                                                                           |
-| `map`              | `center`, `zoom`, `mapStyle?`, `title?`, `caption?`, `markers?`, `ambientMotion?`, `staticSrc?`                                                                                                                                                                                                                                     |
-| `fullBleedQuote`   | `text`, `colorScheme?`                                                                                                                                                                                                                                                                                                              |
-| `list`             | `items[]`, `title?`, `colorScheme?`, `accentImage?`                                                                                                                                                                                                                                                                                 |
-| `photoGrid`        | `images[]`, `caption?`, `ambientMotion?`                                                                                                                                                                                                                                                                                            |
-| `definitionCard`   | `term`, `definition`, `origin?`, `colorScheme?`, `accentImage?`                                                                                                                                                                                                                                                                     |
-| `comparisonBar`    | `leftLabel`, `leftValue`, `rightLabel`, `rightValue`, `unit?`, `colorScheme?`                                                                                                                                                                                                                                                       |
-| `pullQuote`        | `text`, `attribution?`, `backgroundImage`, `ambientMotion?`                                                                                                                                                                                                                                                                         |
-| `videoWithCaption` | `videoSrc`, `posterSrc?`, `videoAlt`, `clipStart`, `clipEnd`, `caption?`, `captionPosition?`                                                                                                                                                                                                                                        |
-| `videoPullQuote`   | `text`, `attribution?`, `backgroundVideo` (with `src`, `clipStart`, `clipEnd`)                                                                                                                                                                                                                                                      |
-| `dataTable`        | `title?`, `headers[]`, `rows[][]`, `align?`, `colorScheme?`                                                                                                                                                                                                                                                                         |
-| `diagram`          | `title?`, `colorScheme?`, `nodeShape?`, `edgeStyle?`; reads child headings from `context.children`                                                                                                                                                                                                                                  |
-| `layout`           | Passthrough for editor-authored `Layer[]` (positioned via the Scene engine). Layers persist in `data-block-attrs` as a base64-JSON `layers="..."` param.                                                                                                                                                                            |
-| `drawing`          | `title?`, `colorScheme?`, `fill?`, `stroke?`; reads child headings as shapes from `context.children` (each `{[rectangle\|circle\|line\|arrow\|path\|text]}` child is one shape; `from`/`to` join shapes). Legacy editor-authored drawings still decode from a base64 `layers="..."` param. See `docs/SquigglySquare.md` → Drawings. |
+Required fields are shown without `?`. Every template also inherits the
+`BaseTemplateBlock` fields above. `colorScheme` is a theme colour-scheme name
+(`string`); `ambientMotion` is `'zoomIn' | 'zoomOut' | 'panLeft' | 'panRight'`.
 
-> All template inputs share the base block fields `id`, `duration`, `audioSegment`, optional `transition`, layer visibility flags, and optional source timing fields. Visual inputs such as images, colors, and captions are defined by each template.
+| Template           | Required                                                                | Optional                                                                                                                        |
+| ------------------ | ----------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| `title`            | `title`                                                                 | `subtitle`, `backgroundColor`                                                                                                   |
+| `sectionHeader`    | `title`                                                                 | `colorScheme`, `imageSrc`, `imageAlt`, `ambientMotion`                                                                          |
+| `statHighlight`    | `stat`, `description`                                                   | `detail`, `colorScheme`, `accentImage`                                                                                          |
+| `quote`            | `quote`                                                                 | `attribution`, `accentImage`                                                                                                    |
+| `factCard`         | `fact`, `explanation`                                                   | `source`, `accentImage`                                                                                                         |
+| `twoColumn`        | `left {label, sublabel?}`, `right {label, sublabel?}`                   | `header`, `leftColor`, `rightColor`                                                                                             |
+| `dateEvent`        | `date`, `description`                                                   | `footer`, `mood` (`neutral`\|`somber`\|`celebratory`), `accentImage`                                                            |
+| `imageWithCaption` | `imageSrc`, `imageAlt`                                                  | `caption`, `captionPosition` (`bottom`\|`top`\|`center`), `ambientMotion`, `isTitle`, `subtitle`, `imageCredit`, `imageLicense` |
+| `leftFeature`      | `imageSrc`                                                              | `imageAlt`, `imageWidth`, `imageHeight`, `title`, `body`                                                                        |
+| `rightFeature`     | `imageSrc`                                                              | `imageAlt`, `imageWidth`, `imageHeight`, `title`, `body`                                                                        |
+| `map`              | `center {lat, lng}`, `zoom`                                             | `mapStyle`, `title`, `caption`, `markers`, `ambientMotion`, `staticSrc`                                                         |
+| `fullBleedQuote`   | `text`                                                                  | `colorScheme`                                                                                                                   |
+| `list`             | `items[]`                                                               | `title`, `colorScheme`, `accentImage`                                                                                           |
+| `photoGrid`        | `images[] {src, alt, credit?, license?}`                                | `caption`, `ambientMotion`                                                                                                      |
+| `definitionCard`   | `term`, `definition`                                                    | `origin`, `colorScheme`, `accentImage`                                                                                          |
+| `comparisonBar`    | `leftLabel`, `leftValue`, `rightLabel`, `rightValue`                    | `unit`, `colorScheme`                                                                                                           |
+| `pullQuote`        | `text`, `backgroundImage {src, alt, credit?, license?}`                 | `attribution`, `ambientMotion`                                                                                                  |
+| `videoWithCaption` | `videoSrc`, `videoAlt`, `clipStart`, `clipEnd`                          | `posterSrc`, `sourceDuration`, `caption`, `captionPosition`, `videoCredit`, `videoLicense`                                      |
+| `videoPullQuote`   | `text`, `backgroundVideo {src, posterSrc?, alt, clipStart, clipEnd, …}` | `attribution`                                                                                                                   |
+| `dataTable`        | `headers[]`, `rows[][]`                                                 | `title`, `align`, `colorScheme`                                                                                                 |
+| `diagram`          | — (nodes/edges come from child headings)                                | `title`, `colorScheme`, `nodeShape`, `edgeStyle`, `startStyle`, `endStyle`, `lineStyle`                                         |
+| `layout`           | — (`Layer[]` authored via the Scene engine, children-driven)            | —                                                                                                                               |
+| `drawing`          | — (shapes come from child headings)                                     | `title`, `colorScheme`, `fill`, `stroke`                                                                                        |
+
+`AccentImage = { src, alt, position, ambientMotion?, credit?, license? }` where
+`position` is `'left-strip' | 'right-strip' | 'bottom-strip' | 'corner-inset'`.
 
 #### Viewport & Theme
 
 ```ts
 interface ViewportConfig {
-  width: number; // Default: 1920
-  height: number; // Default: 1080
-  aspectRatio?: string; // e.g. '16:9'
-  responsive?: boolean;
+  width: number;
+  height: number;
+  name: string;
 }
 
-interface ThemeColors {
-  primary?: string;
-  secondary?: string;
-  accent?: string;
-  background?: string;
-  surface?: string;
-  text?: string;
-  textSecondary?: string;
-  border?: string;
-  error?: string;
-  success?: string;
-  warning?: string;
-}
+const VIEWPORT_PRESETS: {
+  landscape: { width: 1920; height: 1080; name: '16:9 Landscape' };
+  portrait: { width: 1080; height: 1920; name: '9:16 Portrait' };
+  square: { width: 1080; height: 1080; name: '1:1 Square' };
+  standard: { width: 1440; height: 1080; name: '4:3 Standard' };
+};
+type ViewportPreset = keyof typeof VIEWPORT_PRESETS;
+type ViewportOrientation = 'landscape' | 'portrait' | 'square';
+
+function getViewport(v: ViewportPreset | ViewportConfig): ViewportConfig;
+function getViewportOrientation(v: ViewportConfig): ViewportOrientation;
+function getAspectRatioString(v: ViewportConfig): string;
+function calculateFontScale(v: ViewportConfig): number;
 ```
 
-#### Layout & Media
+The Theme system is large; the key surface is:
 
 ```ts
+interface Theme {
+  /* colors, typography, style, renderStyle, colorSchemes, persistentLayers, … */
+}
+
+const THEMES: Record<string, Theme>; // 8 built-ins
+const DEFAULT_THEME: Theme;
+const DEFAULT_THEME_ID: string;
+
+function resolveTheme(themeId?: string): Theme; // built-ins only
+function createTheme(base: Theme, overrides: DeepPartial<Theme>): Theme;
+function compileTheme(partial: Partial<Theme>, opts?: CompileOptions): Theme;
+function getAvailableThemes(): string[];
+function getThemeSummaries(): { id: string; name: string; description: string }[];
+function validateTheme(theme: unknown): ValidationResult;
+
+// registry (built-ins + host-registered)
+function registerTheme(theme: Theme): void;
+function unregisterTheme(id: string): void;
+function getRegisteredThemes(): Theme[];
+function lookupRegisteredTheme(id: string): Theme | undefined;
+```
+
+> Built-in theme ids: `documentary`, `minimalist`, `bold`, `morning-light`,
+> `tech-dark`, `magazine`, `cinematic`, `warm-earth`. For pure, doc-scoped
+> resolution that consults a doc's own `customThemes` first, use
+> `resolveThemeForDoc(doc, id?)` from `@bendyline/squisq/doc`.
+
+#### Media & Layout
+
+```ts
+interface MediaProvider {
+  resolveUrl(src: string): string | Promise<string>;
+}
+
+interface MediaClip {
+  id: string;
+  src: string;
+  kind: 'audio' | 'video';
+  startAt: number; // block-relative (or document-relative when anchor='document'); default 0
+  clipStart?: number;
+  clipEnd?: number;
+  spillover?: boolean; // keep playing past the block's end
+  anchor: 'block' | 'document'; // default 'block'
+  sourceLine?: number; // 1-based authoring line, for round-tripping edits
+}
+
+// resolve authored clips into an absolute-timed schedule
+function resolveMediaSchedule(doc: Doc): ScheduledClip[];
+function getDocPlaybackDuration(doc: Doc): number;
+
+type LayoutStrategy = 'absolute' | 'stack-vertical' | 'stack-horizontal' | 'grid' | 'flow';
 interface LayoutHints {
   strategy?: LayoutStrategy;
   columns?: number;
   gap?: number;
   padding?: number;
 }
-
-type LayoutStrategy = 'absolute' | 'stack-vertical' | 'stack-horizontal' | 'grid' | 'flow';
-
-interface MediaProvider {
-  resolveUrl(src: string): string | Promise<string>;
-}
-```
-
-#### Persistent Layer Types
-
-```ts
-interface PersistentLayer extends Layer {
-  scope: 'global' | 'range';
-  startBlock?: number;
-  endBlock?: number;
-}
-```
-
-#### Schema Constants & Helpers
-
-```ts
-const DEFAULT_VIEWPORT: ViewportConfig; // { width: 1920, height: 1080 }
-const DEFAULT_THEME: ThemeColors;
-const DEFAULT_ANIMATION_DURATION: number; // 500
-const DEFAULT_BLOCK_DURATION: number; // 5000
-
-function createDoc(overrides?: Partial<Doc>): Doc;
-function createBlock(overrides?: Partial<Block>): Block;
-function createLayer(type: Layer['type'], overrides?: Partial<Layer>): Layer;
-function createTextLayer(content: string, position: Position, style?: Partial<TextStyle>): Layer;
-function createImageLayer(src: string, position: Position, alt?: string): Layer;
-function createPosition(overrides?: Partial<Position>): Position;
 ```
 
 ---
 
 ### Subpath: Doc
 
-**Import:** `@bendyline/squisq/doc`
+**Import:** `@bendyline/squisq/doc` — the template registry, all 23 templates,
+markdown↔doc conversion, layer resolution, and theme/validation helpers.
+`@bendyline/squisq/story` is a byte-for-byte alias of this subpath (legacy).
 
 #### Doc ↔ Markdown Conversion
 
 ```ts
-function markdownToDoc(markdown: string): Doc;
-function docToMarkdown(doc: Doc): string;
+function markdownToDoc(markdownDoc: MarkdownDocument, options?: MarkdownToDocOptions): Doc;
+function docToMarkdown(doc: Doc): MarkdownDocument;
+
+interface MarkdownToDocOptions {
+  articleId?: string; // default 'markdown-doc'
+  defaultTemplate?: string; // default 'sectionHeader'
+  defaultDuration?: number; // default 5 (seconds)
+  generateId?: (heading: MarkdownHeading, index: number) => string;
+  generateCoverBlock?: boolean; // default true — cover from first H1
+  captionsGeneratedAt?: string; // omit to keep conversion deterministic
+  autoTemplates?: boolean; // default true — content-aware auto template picking
+}
 ```
 
-#### Template Resolution
+> `markdownToDoc` never throws for content problems: it records findings on
+> `doc.diagnostics` and degrades gracefully. It is fully deterministic — the
+> same markdown always produces the same Doc.
+
+#### Layer Resolution
 
 ```ts
-function getLayers(block: DocBlock, context: TemplateContext): Layer[];
+function getLayers(block: DocBlock, context?: RenderContext): Layer[];
 function expandTemplateBlock(templateBlock: TemplateBlock, context: TemplateContext): Block;
 function expandDocBlocks(blocks: DocBlock[], options?: ExpandDocBlocksOptions): Block[];
+function fallbackBlockLayers(block: Block, context: RenderContext): Layer[]; // graceful-degradation card
 ```
 
-> `getLayers` resolves a `TemplateBlock` through its template function, or returns a plain `Block`'s layers directly.
-> `expandDocBlocks` converts template blocks to plain blocks by evaluating templates against the supplied viewport/theme options.
+> `getLayers` resolves a `TemplateBlock` through its template function (with
+> theme render-style applied), or returns a plain `Block`'s layers directly.
 
 #### Template Registry
 
 ```ts
 const templateRegistry: TemplateRegistry;
 const TEMPLATE_ALIASES: Readonly<Record<string, string>>;
+const CONTAINER_TEMPLATES: ReadonlySet<string>; // diagram, drawing, layout
 
 function resolveTemplateName(name: string): string;
 function getAvailableTemplates(): string[];
 function hasTemplate(name: string): boolean;
+function isContainerTemplate(name: string): boolean;
+
+// Merge doc-defined custom templates into a runtime registry (no global mutation)
+function buildRegistry(custom?: readonly CustomTemplateDefinition[]): RuntimeTemplateRegistry;
 ```
 
-All 23 built-in templates are registered at import time. Legacy aliases such as `titleBlock`, `quoteBlock`, `mapBlock`, `listBlock`, `diagramBlock`, and `diagramNode` resolve to their canonical short IDs.
+All 23 built-in templates register at import time under their canonical short
+ids. `TEMPLATE_ALIASES` maps legacy names (`titleBlock→title`, `quoteBlock→quote`,
+`mapBlock→map`, `listBlock→list`, `diagramBlock→diagram`, `diagramNode→diagram`).
 
-#### Animation Utilities
+> There is no global `registerTemplate()`. Custom templates travel with the doc
+> (`Doc.customTemplates`, from the `squisq-custom-templates` frontmatter key) and
+> are merged via `buildRegistry(custom)`.
+
+#### Theme Resolution & Validation
 
 ```ts
-function getAnimationCSS(animation: Animation, index: number): string;
-function getBlockAnimationDelay(blockIndex: number, layerIndex: number): number;
+function resolveThemeForDoc(doc: Doc | null | undefined, explicitId?: string): Theme;
+function validateMarkdownSource(
+  source: string,
+  options?: ValidateOptions,
+): MarkdownValidationResult;
+function validateMarkdownDoc(
+  markdownDoc: MarkdownDocument,
+  options?: ValidateOptions,
+): MarkdownValidationResult;
+
+interface ValidateOptions {
+  assets?: Iterable<string>;
+  extraTemplates?: string[];
+}
+interface MarkdownValidationResult {
+  diagnostics: DocDiagnostic[];
+  errorCount: number;
+  warningCount: number;
+  doc: Doc;
+}
+```
+
+#### Custom-Template & Custom-Theme Frontmatter Codecs
+
+```ts
+function readCustomTemplatesFromFrontmatter(
+  fm: Record<string, unknown>,
+): CustomTemplateDefinition[];
+function writeCustomTemplatesToFrontmatter(
+  fm: Record<string, unknown>,
+  defs: CustomTemplateDefinition[],
+): Record<string, unknown>;
+function readCustomThemesFromFrontmatter(fm: Record<string, unknown>): Theme[];
+function writeCustomThemesToFrontmatter(
+  fm: Record<string, unknown>,
+  themes: Theme[],
+): Record<string, unknown>;
+const FRONTMATTER_CUSTOM_TEMPLATES_KEY: 'squisq-custom-templates';
+const FRONTMATTER_CUSTOM_THEMES_KEY: 'squisq-custom-themes';
+```
+
+#### Data Fences, Audio Mapping & Animation
+
+```ts
+function isDataFence(node: MarkdownNode): boolean;
+function parseDataFence(node: MarkdownNode): DataFenceParseResult;
+function parseYamlSubset(text: string): unknown; // top-level scalars, inline arrays, block sequences
+function findFirstTable(nodes: MarkdownBlockNode[]): TableNode | undefined;
+function extractTableData(table: TableNode): ExtractedTableData;
+function resolveAudioMapping(doc: Doc, container: ContentContainer): Promise<Doc>;
+
+function getAnimationStyle(
+  animation: Animation | undefined,
+  currentTime?: number,
+): { className: string; style: object };
+function getTransitionClass(
+  type: TransitionType,
+  entering: boolean,
+  direction?: TransitionDirection,
+): string;
 ```
 
 ---
@@ -401,17 +638,18 @@ function getBlockAnimationDelay(blockIndex: number, layerIndex: number): number;
 **Import:** `@bendyline/squisq/spatial`
 
 ```ts
-function haversineDistance(
-  point1: Coordinates,
-  point2: Coordinates,
-  unit?: 'km' | 'miles' | 'meters' | 'feet',
-): number;
+// Coordinates comes from @bendyline/squisq/schemas
+function haversineDistance(from: Coordinates, to: Coordinates): number; // kilometres
+function calculateBearing(from: Coordinates, to: Coordinates): number; // degrees (0=north, 90=east)
 
-function geohashEncode(latitude: number, longitude: number, precision?: number): string;
-function geohashDecode(hash: string): { latitude: number; longitude: number };
-function geohashNeighbor(hash: string, direction: [number, number]): string;
-function geohashNeighbors(hash: string): string[];
-function geohashBBox(hash: string): [number, number, number, number];
+function encodeGeohash(lat: number, lng: number, precision?: number): string; // default precision 9
+function decodeGeohash(hash: string): { lat: number; lng: number; latErr: number; lngErr: number };
+function getNeighbors(hash: string): string[]; // 8 surrounding cells
+function getGeohash4Neighbors(geohash4: string): string[];
+function getGeohashPrefix(geohash: string, precision: number): string;
+function geohashToHierarchicalPath(geohash4: string): string;
+function getGeohashPath(from: string, to: string, precision?: number): string[]; // default precision 4
+function geohashOverlapsBounds(hash: string, bounds: BoundingBox): boolean;
 ```
 
 ---
@@ -429,16 +667,35 @@ interface StorageAdapter {
   clear(): Promise<void>;
 }
 
-class MemoryStorageAdapter implements StorageAdapter {
-  /* in-memory Map */
-}
-class LocalStorageAdapter implements StorageAdapter {
-  /* window.localStorage */
-}
+class MemoryStorageAdapter implements StorageAdapter {} // in-memory Map
+class LocalStorageAdapter implements StorageAdapter {} // window.localStorage
 class LocalForageAdapter implements StorageAdapter {
-  /** Wraps a localforage-compatible instance */
-  constructor(store: LocalForageLike);
+  constructor(store: LocalForageLike, options?: LocalForageAdapterOptions);
 }
+```
+
+`ContentContainer` is the file-bundle abstraction that documents, media, and
+`.versions/` snapshots live inside:
+
+```ts
+interface ContentContainer {
+  read(path: string): Promise<string | null>;
+  readBinary(path: string): Promise<ArrayBuffer | null>;
+  write(path: string, content: string): Promise<void>;
+  writeBinary(path: string, data: ArrayBuffer | Uint8Array): Promise<void>;
+  delete(path: string): Promise<void>;
+  list(prefix?: string): Promise<string[]>;
+  // …see ContentEntry for entry metadata
+}
+
+class MemoryContentContainer implements ContentContainer {}
+class ScopedContentContainer implements ContentContainer {} // sub-path view of another container
+function scopeContainer(container: ContentContainer, prefix: string): ScopedContentContainer;
+function findDocumentPath(container: ContentContainer): Promise<string | null>;
+function createMediaProviderFromContainer(
+  container: ContentContainer,
+  basePath?: string,
+): MediaProvider;
 ```
 
 ---
@@ -450,401 +707,687 @@ class LocalForageAdapter implements StorageAdapter {
 #### Parse & Stringify
 
 ```ts
-function parseMarkdown(source: string, options?: MarkdownParseOptions): MarkdownDocument;
-function stringifyMarkdown(doc: MarkdownDocument, options?: MarkdownStringifyOptions): string;
+function parseMarkdown(source: string, options?: ParseOptions): MarkdownDocument;
+function stringifyMarkdown(doc: MarkdownDocument, options?: StringifyOptions): string;
 
-interface MarkdownParseOptions {
-  gfm?: boolean; // Default: true — GitHub Flavored Markdown tables, strikethrough, etc.
+interface ParseOptions {
+  gfm?: boolean; // default true — tables, strikethrough, task lists, autolinks, footnotes
+  math?: boolean; // default true — $…$ and $$…$$
+  directive?: boolean; // default true — :::container, ::leaf, :text
+  parseHtml?: boolean; // default true — raw HTML → HtmlNode sub-DOM
+  frontmatter?: boolean; // default true — YAML --- blocks
 }
 
-interface MarkdownStringifyOptions {
-  bullet?: '-' | '*' | '+'; // Default: '-'
-  listItemIndent?: 'one' | 'tab'; // Default: 'one'
-  emphasis?: '_' | '*'; // Default: '*'
-  strong?: '__' | '**'; // Default: '**'
-  rule?: '-' | '_' | '*'; // Default: '-'
+interface StringifyOptions {
+  gfm?: boolean; // default true
+  math?: boolean; // default true
+  directive?: boolean; // default true
+  bullet?: '-' | '*' | '+'; // default '-'
+  bulletOrdered?: '.' | ')'; // default '.'
+  emphasis?: '*' | '_'; // default '*'
+  strong?: '*' | '_'; // default '*'
+  rule?: '-' | '*' | '_'; // default '-'
+  fence?: '`' | '~'; // default '`'
+  setext?: boolean; // default false
 }
 ```
 
-#### AST Types
+#### AST
+
+`MarkdownDocument` is the root (`{ type: 'root'; children: MarkdownBlockNode[];
+metadata?: Record<string, unknown> }`). The AST has 40+ node interfaces split
+into `MarkdownBlockNode` / `MarkdownInlineNode` unions, plus an HTML sub-DOM
+(`HtmlElement`, `HtmlText`, `HtmlComment`) and a `TemplateAnnotationNode`
+(`{ type: 'templateAnnotation'; template: string; attributes: Record<string,string> }`).
+
+#### Frontmatter, HTML, Tree Utilities
 
 ```ts
-interface MarkdownDocument {
-  type: 'root';
-  children: MarkdownNode[];
-  metadata?: Record<string, unknown>; // YAML frontmatter
-}
+function parseFrontmatter(source: string): { frontmatter: Record<string, unknown>; body: string };
+function setFrontmatterValues(source: string, values: Record<string, unknown>): string;
+function inferDocumentTitle(doc: MarkdownDocument): string | undefined; // prefers frontmatter.title
+function readFrontmatterThemeId(fm: Record<string, unknown>): string | undefined; // squisq-theme → themeId → theme
 
-type MarkdownNode =
-  | HeadingNode
-  | ParagraphNode
-  | TextNode
-  | EmphasisNode
-  | StrongNode
-  | InlineCodeNode
-  | CodeBlockNode
-  | BlockquoteNode
-  | ListNode
-  | ListItemNode
-  | LinkNode
-  | ImageNode
-  | ThematicBreakNode
-  | HtmlNode
-  | TableNode
-  | TableRowNode
-  | TableCellNode
-  | DeleteNode
-  | BreakNode
-  | TemplateAnnotationNode;
+function parseHtmlToNodes(html: string, policy?: HtmlPolicy): HtmlNode[];
+function stringifyHtmlNodes(nodes: HtmlNode[]): string;
+function sanitizeHtmlNodes(nodes: HtmlNode[]): HtmlNode[];
+function sanitizeUrl(url: string): string;
 
-interface HeadingNode {
-  type: 'heading';
-  depth: 1 | 2 | 3 | 4 | 5 | 6;
-  children: MarkdownNode[];
-}
-interface ParagraphNode {
-  type: 'paragraph';
-  children: MarkdownNode[];
-}
-interface TextNode {
-  type: 'text';
-  value: string;
-}
-interface EmphasisNode {
-  type: 'emphasis';
-  children: MarkdownNode[];
-}
-interface StrongNode {
-  type: 'strong';
-  children: MarkdownNode[];
-}
-interface InlineCodeNode {
-  type: 'inlineCode';
-  value: string;
-}
-interface CodeBlockNode {
-  type: 'code';
-  value: string;
-  lang?: string;
-  meta?: string;
-}
-interface BlockquoteNode {
-  type: 'blockquote';
-  children: MarkdownNode[];
-}
-interface ListNode {
-  type: 'list';
-  ordered: boolean;
-  start?: number;
-  children: ListItemNode[];
-}
-interface ListItemNode {
-  type: 'listItem';
-  children: MarkdownNode[];
-  checked?: boolean;
-}
-interface LinkNode {
-  type: 'link';
-  url: string;
-  title?: string;
-  children: MarkdownNode[];
-}
-interface ImageNode {
-  type: 'image';
-  url: string;
-  alt?: string;
-  title?: string;
-}
-interface ThematicBreakNode {
-  type: 'thematicBreak';
-}
-interface HtmlNode {
-  type: 'html';
-  value: string;
-}
-interface TableNode {
-  type: 'table';
-  align?: Array<'left' | 'center' | 'right' | null>;
-  children: TableRowNode[];
-}
-interface TableRowNode {
-  type: 'tableRow';
-  children: TableCellNode[];
-}
-interface TableCellNode {
-  type: 'tableCell';
-  children: MarkdownNode[];
-}
-interface DeleteNode {
-  type: 'delete';
-  children: MarkdownNode[];
-}
-interface BreakNode {
-  type: 'break';
-}
-interface TemplateAnnotationNode {
-  type: 'templateAnnotation';
-  template: string;
-  attributes: Record<string, string>;
-}
-```
-
-#### Tree Utilities
-
-```ts
 function walkMarkdownTree(node: MarkdownNode, visitor: (node: MarkdownNode) => void): void;
-function findNodes(root: MarkdownDocument, type: string): MarkdownNode[];
-function getTextContent(node: MarkdownNode): string;
+function findNodesByType(root: MarkdownDocument, type: string): MarkdownNode[];
+function getChildren(node: MarkdownNode): MarkdownNode[];
+function extractPlainText(node: MarkdownNode): string;
+function countNodes(root: MarkdownNode): number;
+function createDocument(...children: MarkdownBlockNode[]): MarkdownDocument;
+
+// Pandoc/annotation attribute helpers
+function parsePandocAttrTokens(tokens: string[]): HeadingAttributes;
+function serializePandocAttributes(attrs: HeadingAttributes): string;
+function matchTrailingTemplateAnnotation(text: string): TrailingAnnotationMatch | null;
+function parseTimeSeconds(value: string): number | null; // "02:15", "1500ms", "8"
 ```
 
-#### HTML Parsing
+---
+
+### Subpath: Timing
+
+**Import:** `@bendyline/squisq/timing` — narration / reading-time estimation.
 
 ```ts
-function htmlToMarkdownDoc(html: string): MarkdownDocument;
-function markdownDocToHtml(doc: MarkdownDocument): string;
+const DEFAULT_WORDS_PER_SECOND = 2.5;
+
+function estimateReadingTime(text: string, options?: ReadingTimeOptions): ReadingTimeEstimate;
+function estimateNarrationTime(text: string, options?: NarrationTimeOptions): NarrationTimeEstimate;
+function estimateNarrationDuration(text: string, wordsPerSecond?: number): number;
+function calculatePrefixDuration(prefix: string, wordsPerSecond?: number): number;
+function estimateTimeFromText(text: string, charOffset: number, totalDuration: number): number;
+function countSpokenWords(text: string): number;
+function estimateSpokenWordCount(token: string): number;
+
+interface ReadingTimeOptions {
+  wordsPerMinute?: number;
+} // default 200
+interface ReadingTimeEstimate {
+  words: number;
+  minutes: number;
+  seconds: number;
+}
+interface NarrationTimeOptions {
+  wordsPerSecond?: number;
+} // default 2.5
+interface NarrationTimeEstimate {
+  spokenWords: number;
+  minutes: number;
+  seconds: number;
+}
+```
+
+---
+
+### Subpath: Random
+
+**Import:** `@bendyline/squisq/random` — a deterministic Mulberry32 PRNG.
+
+```ts
+class SeededRandom {
+  constructor(seed: number); // seed 0 is remapped to 0xdeadbeef
+  next(): number; // [0, 1)
+  nextInt(max: number): number; // [0, max)
+  nextIntRange(min: number, max: number): number; // [min, max)
+  nextBool(probability?: number): boolean; // default 0.5
+  pick<T>(array: T[]): T | undefined;
+  pickRequired<T>(array: T[]): T; // throws if empty
+  pickMultiple<T>(array: T[], count: number): T[];
+  shuffle<T>(array: T[]): T[]; // in place
+  shuffled<T>(array: readonly T[]): T[]; // new copy
+  pickWeighted<T>(items: { item: T; weight: number }[]): T | undefined;
+  getState(): number;
+  derive(modifier: string | number): SeededRandom;
+}
+
+function hashString(str: string): number; // djb2, unsigned 32-bit
+```
+
+---
+
+### Subpath: Generate
+
+**Import:** `@bendyline/squisq/generate` — content extraction + slideshow
+generation. `extractContent` / `stripMarkdown` output shapes are a frozen
+external contract.
+
+```ts
+function extractContent(text: string, options?: ExtractionOptions): ExtractionResult;
+function stripMarkdown(markdown: string): string;
+function mapElementToBlock(element: ExtractedElement, options: MapOptions): TemplateBlock;
+
+/** @deprecated prefer markdownToDoc + applyTransform */
+function generateSlideshow(
+  text: string,
+  images?: SlideshowImage[],
+  options?: SlideshowOptions,
+): SlideshowDoc;
+
+type ExtractionType =
+  | 'stat'
+  | 'date'
+  | 'quote'
+  | 'comparison'
+  | 'fact'
+  | 'impactLine'
+  | 'list'
+  | 'definition';
+
+interface ExtractionOptions {
+  minConfidence?: number;
+  types?: ExtractionType[];
+  maxPerType?: number;
+}
+interface ExtractedElement {
+  type: ExtractionType;
+  text: string;
+  confidence: number;
+  sourcePosition: number;
+  endPosition: number;
+  data: /* typed per ExtractionType */ unknown;
+}
+interface ExtractionResult {
+  elements: ExtractedElement[];
+  sourceLength: number;
+  stats: Record<string, number>;
+}
+```
+
+---
+
+### Subpath: Transform
+
+**Import:** `@bendyline/squisq/transform` — the slideshow transform pipeline.
+
+```ts
+function applyTransform(
+  doc: Doc,
+  styleId: TransformStyleId,
+  options?: TransformOptions,
+): TransformResult;
+
+const DEFAULT_TRANSFORM_STYLE_ID = 'documentary';
+function resolveTransformStyle(id: string): TransformStyleConfig; // aliases honoured; unknown → default
+function registerTransformStyle(style: TransformStyleConfig): void;
+function unregisterTransformStyle(id: string): void;
+function getTransformStyleIds(): string[];
+function getTransformStyleSummaries(): TransformStyleSummary[];
+
+function analyzeBlocks(blocks: Block[], options?: ExtractionOptions): AnalyzedBlock[];
+function extractDocImages(blocks: Block[]): TransformImage[];
+
+interface TransformOptions {
+  seed?: number;
+  images?: TransformImage[];
+  themeId?: string;
+  overrides?: Partial<TransformStyleConfig>;
+}
+interface TransformResult {
+  doc: Doc;
+  stats: { totalInputBlocks: number; transformedBlocks: number; insertedBlocks: number };
+}
+```
+
+Built-in style ids: `documentary` (default), `magazine`, `data-driven` (alias
+`dataDriven`), `narrative`, `minimal`.
+
+---
+
+### Subpath: Versions
+
+**Import:** `@bendyline/squisq/versions` — document version history. Snapshots
+live inside the doc's `ContentContainer` at `.versions/<basename>.<timestamp>.md`,
+so they ride along through ZIP serialization.
+
+```ts
+class DocumentVersionManager {
+  constructor(container: ContentContainer, options?: { basename?: string });
+  saveVersion(options?: SaveVersionOptions): Promise<SaveVersionResult>;
+  listVersions(): Promise<Version[]>; // newest-first
+  readVersion(version: Version | string): Promise<string | null>;
+  revertToVersion(
+    version: Version | string,
+    options?: RevertOptions,
+  ): Promise<{ reverted: boolean; snapshotted: Version | null }>;
+  pruneVersions(policy: PrunePolicy): Promise<Version[]>;
+  coalesceVersions(options?: CoalesceOptions): Promise<Version[]>;
+}
+
+// Standalone equivalents (each takes the container as first arg):
+function saveVersion(container, options?): Promise<SaveVersionResult>;
+function listVersions(container, basename?): Promise<Version[]>;
+function readVersion(container, version): Promise<string | null>;
+function revertToVersion(
+  container,
+  version,
+  options?,
+): Promise<{ reverted: boolean; snapshotted: Version | null }>;
+function pruneVersions(container, policy, basename?): Promise<Version[]>;
+function coalesceVersions(container, options?, basename?): Promise<Version[]>;
+
+interface Version {
+  path: string;
+  basename: string;
+  timestamp: Date;
+  size: number;
+  collision: number;
+}
+type PrunePolicy =
+  | { type: 'keep-last-n'; n: number }
+  | { type: 'older-than'; date: Date }
+  | { type: 'predicate'; keep: (v: Version, all: Version[]) => boolean };
+interface CoalesceOptions {
+  windowMs?: number;
+} // default 60_000
+```
+
+---
+
+### Subpath: JSON Form
+
+**Import:** `@bendyline/squisq/jsonForm` — headless logic shared by `<JsonView>`
+(react) and `<JsonEditor>` (editor-react). Zero React deps.
+
+```ts
+function chooseControl(schema: SquisqAnnotatedSchema): ControlKind;
+function evaluateWhen(when: SquisqWhen, rootData: unknown): boolean;
+function resolveFlag(flag: boolean | SquisqWhen | undefined, rootData: unknown): boolean;
+function inferSchema(
+  sample: unknown,
+  options?: { additionalSamples?: readonly unknown[] },
+): SquisqAnnotatedSchema;
+
+// JSON Pointer helpers
+function getByPointer(data: unknown, path: string): unknown;
+function setByPointer<T>(data: T, path: string, value: unknown): T;
+function resolveRef(
+  schema: SquisqAnnotatedSchema,
+  root: SquisqAnnotatedSchema,
+): SquisqAnnotatedSchema | undefined;
+
+type ControlKind =
+  | 'text'
+  | 'multiline'
+  | 'richtext'
+  | 'color'
+  | 'date'
+  | 'time'
+  | 'datetime'
+  | 'slider'
+  | 'stepper'
+  | 'segmented'
+  | 'radio'
+  | 'combobox'
+  | 'toggle'
+  | 'checkbox'
+  | 'card'
+  | 'card-stack'
+  | 'chip-bin'
+  | 'tabs'
+  | 'group';
+
+interface SquisqHints {
+  control?: ControlKind;
+  label?: string;
+  help?: string;
+  placeholder?: string;
+  width?: 'full' | 'half' | 'third' | 'auto';
+  hidden?: boolean | SquisqWhen;
+  disabled?: boolean | SquisqWhen;
+  required?: boolean;
+  itemLabel?: string | { fromField: string };
+  addLabel?: string;
+  removeLabel?: string;
+  step?: number;
+  enumLabels?: Record<string, string>;
+}
+interface SquisqWhen {
+  field: string;
+  equals?: unknown;
+  oneOf?: readonly unknown[];
+  matches?: string;
+  truthy?: boolean;
+}
+// SquisqAnnotatedSchema is a structural JSON Schema subset carrying an optional `squisq: SquisqHints`.
+```
+
+---
+
+### Subpath: Image Edit
+
+**Import:** `@bendyline/squisq/imageEdit` — layered raster authoring schema,
+sidecar persistence, and version history (mirrors `versions/` over JSON state).
+
+```ts
+interface ImageEditDoc {
+  version: 1;
+  canvas: ImageEditCanvas;
+  layers: ImageEditLayer[];
+  meta?: ImageEditMeta;
+}
+type ImageEditLayerKind = 'image' | 'text' | 'shape' | 'path';
+
+// immutable state helpers
+function createEmptyImageEditDoc(
+  width: number,
+  height: number,
+  options?: { background?: string; sourcePath?: string; now?: Date },
+): ImageEditDoc;
+function addLayer(doc, layer): ImageEditDoc;
+function removeLayer(doc, layerId): ImageEditDoc;
+function reorderLayer(doc, layerId, toIndex): ImageEditDoc;
+function updateLayer(doc, layerId, patch): ImageEditDoc;
+function setCanvas(doc, canvas): ImageEditDoc;
+
+// persistence + export
+function readImageEditDoc(container, filename?): Promise<ImageEditDoc | null>; // default 'state.json'
+function writeImageEditDoc(container, doc, filename?): Promise<void>;
+function exportImageEditDoc(doc, container, options?: ImageEditExportOptions): Promise<Blob>; // png|jpeg|webp
+function buildSvgString(doc, container): Promise<string>;
+
+// version history (parallels versions/; shares Version / PrunePolicy / CoalesceOptions)
+class ImageEditVersionManager {
+  /* saveVersion / listVersions / readVersion / revertToVersion / pruneVersions / coalesceVersions */
+}
+```
+
+---
+
+### Subpath: Icons
+
+**Import:** `@bendyline/squisq/icons` — FontAwesome Free catalog + resolution.
+
+```ts
+const ICONS: IconEntry[]; // FontAwesome Free catalog
+type IconFamily = 'brands' | 'solid' | 'regular';
+interface IconEntry {
+  name: string;
+  family: IconFamily;
+  label: string;
+  keywords: string;
+  unicode: string;
+}
+
+function looksLikeIconToken(token: string): boolean;
+function resolveIcon(token: string): IconEntry | null;
+function canonicalIconToken(entry: IconEntry): string; // shortest unambiguous token
+function iconGlyph(entry: IconEntry): string; // rendered Unicode char
+function suggestIcons(query: string, limit?: number): IconSuggestion[]; // default limit 50
+
+// inline icon markers (also on the dedicated `@bendyline/squisq/icon-marker` subpath)
+function iconMarker(family: IconFamily, name: string): string;
+function hasIconMarker(value: string): boolean;
+function stripIconMarkers(value: string): string;
+function splitIconMarkers(value: string): IconTextRun[];
+function iconClass(family: IconFamily, name: string): string; // e.g. 'fa-solid fa-rocket'
+```
+
+---
+
+### Subpath: Recommend
+
+**Import:** `@bendyline/squisq/recommend` — block-content profiler + template
+recommendations for the editor's template picker.
+
+```ts
+function profileBlockContents(nodes: MarkdownBlockNode[]): BlockContentProfile;
+function recommendTemplatesForBlock(
+  profile: BlockContentProfile,
+  allNames: readonly string[],
+): RecommendationResult;
+
+interface BlockContentProfile {
+  hasImage: boolean;
+  imageCount: number;
+  hasVideo: boolean;
+  hasBlockquote: boolean;
+  hasList: boolean;
+  hasTable: boolean;
+  hasDate: boolean;
+  hasNumberHighlight: boolean;
+  wordCount: number;
+}
+interface RecommendationResult {
+  recommended: string[];
+  rest: string[];
+}
 ```
 
 ---
 
 ## `@bendyline/squisq-react`
 
-React component library for rendering docs, blocks, and controls. Depends on `@bendyline/squisq` (core).
+React component library for rendering docs, blocks, and controls. Depends on
+`@bendyline/squisq` (core).
 
-**Import:** `@bendyline/squisq-react`  
+**Import:** `@bendyline/squisq-react`
 **Styles:** `@bendyline/squisq-react/styles`
+**Standalone bundle:** `@bendyline/squisq-react/standalone` (IIFE) and
+`@bendyline/squisq-react/standalone-source` (the bundle as a string).
 
-### React Components
+### Components
 
 #### `DocPlayer`
 
-Main document player. Renders a doc as a slideshow or continuous scroll.
+Main document player. Note the prop is `script` (a `Doc`), and `basePath` is
+required for resolving relative media.
 
 ```ts
 interface DocPlayerProps {
-  doc: Doc;
-  width?: number | string;
-  height?: number | string;
-  autoplay?: boolean; // Default: false
-  loop?: boolean; // Default: false
-  showControls?: boolean; // Default: true
-  controlsVariant?: 'overlay' | 'bottom' | 'sidebar' | 'slideshow';
-  className?: string;
-  style?: React.CSSProperties;
-  onBlockChange?: (index: number) => void;
-  onPlayStateChange?: (playing: boolean) => void;
-  mediaProvider?: MediaProvider;
-  initialBlock?: number;
+  script: Doc;
+  basePath: string;
+  renderMode?: boolean; // default false — headless capture mode
+  autoPlay?: boolean; // default false
+  onEnded?: () => void;
+  onTimeUpdate?: (time: number) => void;
+  audioProvider?: AudioProvider;
+  showControls?: boolean; // default true
+  showScrubber?: boolean; // default false (only when showControls=false)
+  muted?: boolean; // default false
+  captionsEnabled?: boolean;
+  onCaptionsToggle?: (enabled: boolean) => void;
+  onPlaybackStateChange?: (state: PlaybackState) => void;
+  onControlsReady?: (controls: PlaybackActions & { play(): void; pause(): void }) => void;
+  isFullscreen?: boolean; // default false
+  onFullscreenToggle?: () => void;
+  onBlockMarkers?: (markers: BlockMarker[]) => void;
+  forceViewport?: ViewportConfig;
+  theme?: Theme; // default DEFAULT_THEME
+  surface?: SurfaceScheme | 'auto';
+  displayMode?: DisplayMode; // default 'video'
+  captionStyle?: CaptionStyle; // default 'standard'
 }
 ```
 
 #### `BlockRenderer`
 
-SVG-based renderer for a single block.
+SVG-based renderer for a single (expanded) block. Also exports the `VIEWPORT`
+constant (`{ width: 1920, height: 1080 }`).
 
 ```ts
 interface BlockRendererProps {
-  block: DocBlock;
-  viewport: ViewportConfig;
-  theme?: ThemeColors;
-  blockIndex?: number;
-  totalBlocks?: number;
-  className?: string;
-  mediaProvider?: MediaProvider;
+  block: Block;
+  blockTime: number;
+  basePath: string;
+  isEntering?: boolean;
+  isExiting?: boolean;
+  transition?: Transition;
+  viewport?: { width: number; height: number };
+  isPlaying?: boolean;
 }
 ```
 
-#### `CaptionOverlay`
+#### Other components
 
-Displays block notes/captions as a translucent overlay.
-
-```ts
-interface CaptionOverlayProps {
-  text: string;
-  position?: 'top' | 'bottom';
-  visible?: boolean;
-  className?: string;
-}
-```
-
-#### `DocProgressBar`
-
-Block progress indicator.
-
-```ts
-interface DocProgressBarProps {
-  current: number;
-  total: number;
-  onSeek?: (index: number) => void;
-  className?: string;
-}
-```
-
-#### Control Components
-
-| Component              | Description                                         |
-| ---------------------- | --------------------------------------------------- |
-| `DocControlsOverlay`   | Floating play/pause, prev/next over the player      |
-| `DocControlsBottom`    | Bottom bar with progress, play/pause, block counter |
-| `DocControlsSidebar`   | Side panel with block thumbnails                    |
-| `DocControlsSlideshow` | Minimal slideshow controls (arrows + counter)       |
-
-All accept `className?: string` and receive playback state via context.
-
-#### `DocPlayerWithSidebar`
-
-Composite component combining `DocPlayer` with `DocControlsSidebar`.
-
-#### `LinearDocView`
-
-Renders all doc blocks vertically in a scrollable layout.
+| Component              | Summary                                                               |
+| ---------------------- | --------------------------------------------------------------------- |
+| `DocPlayerWithSidebar` | `DocPlayer` composed with `DocControlsSidebar`.                       |
+| `LinearDocView`        | Scrollable/printable render of all blocks (`LinearDocViewProps`).     |
+| `MarkdownRenderer`     | Renders `MarkdownBlockNode[]` as React (`MarkdownRendererProps`).     |
+| `CaptionOverlay`       | Standard caption overlay bound to `CaptionTrack` + `currentTime`.     |
+| `SocialCaptionOverlay` | Large centered TikTok/Reels-style word-by-word captions.              |
+| `DocProgressBar`       | Block progress indicator with seek.                                   |
+| `DocControlsOverlay`   | Floating play/pause + prev/next over the player.                      |
+| `DocControlsBottom`    | Bottom bar with progress + counter.                                   |
+| `DocControlsSidebar`   | Side panel with block thumbnails.                                     |
+| `DocControlsSlideshow` | Minimal slideshow controls (arrows + counter).                        |
+| `InlineVideoPlayer`    | Native `<video>` wrapper resolving `src`/`poster` via `MediaContext`. |
+| `InlineAudioPlayer`    | Native `<audio>` wrapper resolving `src` via `MediaContext`.          |
+| `JsonView`             | Read-only viewer for a JSON value bound to a Squisq-annotated schema. |
 
 ```ts
 interface LinearDocViewProps {
   doc: Doc;
   basePath?: string;
   viewport?: ViewportConfig;
+  theme?: Theme; // default DEFAULT_THEME
+  surface?: SurfaceScheme | 'auto';
+  thinMargins?: boolean;
+  imageDisplayMode?: ImageDisplayMode; // 'inline' (default) | 'thumbnail'
   className?: string;
-  theme?: Theme;
 }
-```
 
-Renders template-annotated blocks as SVG cards using `getLayers()`, preserving heading hierarchy in a scrollable layout.
-
-#### `MarkdownRenderer`
-
-Renders a markdown string or `MarkdownDocument` as React elements.
-
-```ts
-interface MarkdownRendererProps {
-  source?: string;
-  doc?: MarkdownDocument;
+interface JsonViewProps {
+  schema: SquisqAnnotatedSchema;
+  value: unknown;
+  theme?: Theme; // default DEFAULT_THEME
+  surface?: SurfaceScheme | 'auto';
+  density?: 'comfortable' | 'compact'; // default 'comfortable'
   className?: string;
 }
 ```
 
-### React Layers
+### Layers
 
-Layer components used internally by `BlockRenderer`. Can be used standalone for custom rendering.
+SVG layer components used internally by `BlockRenderer`, exported for custom
+rendering. There are **seven**: `ImageLayer`, `TextLayer`, `ShapeLayer`,
+`PathLayer`, `VideoLayer`, `TableLayer`, `MapLayer`. Each takes
+`{ layer, viewport, blockTime }` (image/video/map also take `basePath`; video
+also takes `isPlaying`).
 
-| Component    | Props Summary                                                        |
-| ------------ | -------------------------------------------------------------------- |
-| `ImageLayer` | `layer: Layer`, `viewport: ViewportConfig`, `mediaProvider?`         |
-| `TextLayer`  | `layer: Layer`, `viewport: ViewportConfig`                           |
-| `ShapeLayer` | `layer: Layer`, `viewport: ViewportConfig`                           |
-| `VideoLayer` | `layer: Layer`, `viewport: ViewportConfig`, `mediaProvider?`         |
-| `MapLayer`   | `layer: Layer`, `viewport: ViewportConfig`                           |
-| `TableLayer` | `layer: TableLayer`, `viewport: ViewportConfig`, `blockTime: number` |
-
-### React Hooks
-
-#### `useDocPlayback`
-
-Manages block-by-block playback state.
+### Timed-Media
 
 ```ts
-function useDocPlayback(doc: Doc, options?: PlaybackOptions): PlaybackState & PlaybackActions;
-
-interface PlaybackOptions {
-  autoplay?: boolean;
-  loop?: boolean;
-  initialBlock?: number;
+// One hidden <audio>/<video> per scheduled clip; seeks/plays those active at currentTime.
+interface MediaClipLayerProps {
+  schedule: ScheduledClip[];
+  currentTime: number;
+  isPlaying: boolean;
+  basePath: string;
+  renderMode?: boolean; // default false
 }
+function MediaClipLayer(props: MediaClipLayerProps): JSX.Element;
+
+interface MediaScheduleController {
+  renderClips: ScheduledClip[];
+  activeIds: Set<string>;
+}
+function useMediaSchedule(schedule: ScheduledClip[], currentTime: number): MediaScheduleController;
+```
+
+### Hooks
+
+```ts
+function useDocPlayback(
+  script: Doc | null,
+  currentTime: number,
+  viewport?: ViewportConfig,
+  renderMode?: boolean,
+  theme?: Theme,
+): PlaybackState & PlaybackActions;
+function useAudioSync(
+  audioRef: RefObject<HTMLAudioElement>,
+  audioTrack: AudioTrack | undefined,
+  basePath?: string,
+): AudioProvider;
+function useViewportOrientation(): {
+  viewport: ViewportConfig;
+  orientation: ViewportOrientation;
+  windowSize: { width: number; height: number };
+};
+function useAutoSurface(enabled: boolean): SurfaceScheme; // live-tracks prefers-color-scheme
+
+// Media context
+const MediaContext: React.Context<MediaProvider | null>;
+function useMediaProvider(): MediaProvider | null;
+function useMediaUrl(relativePath: string, basePath: string): string;
+```
+
+### Types & Utilities
+
+```ts
+type DisplayMode = 'video' | 'slideshow' | 'linear' | 'page';
+type CaptionStyle = 'standard' | 'social';
+type CaptionMode = 'off' | 'standard' | 'social';
+type ControlsLayout = 'overlay' | 'sidebar' | 'bottom';
+type ImageDisplayMode = 'inline' | 'thumbnail';
 
 interface PlaybackState {
-  currentBlock: number;
   isPlaying: boolean;
-  totalBlocks: number;
-  progress: number; // 0–1 within current block
-}
-
-interface PlaybackActions {
-  play(): void;
-  pause(): void;
-  toggle(): void;
-  next(): void;
-  previous(): void;
-  goToBlock(index: number): void;
-}
-```
-
-#### `useAudioSync`
-
-Synchronises playback with an audio track.
-
-```ts
-function useAudioSync(audioConfig?: AudioConfig): {
-  audioRef: React.RefObject<HTMLAudioElement>;
   currentTime: number;
-  duration: number;
-  isPlaying: boolean;
-  play(): void;
-  pause(): void;
-  seek(time: number): void;
-  getBlockForTime(time: number): number;
-};
+  totalDuration: number;
+  currentBlockIndex: number;
+  totalBlocks: number;
+  docProgress: number;
+  hasCaptions: boolean;
+  captionsEnabled: boolean;
+  captionMode: CaptionMode;
+  currentBlock: Block | null; /* … */
+}
+interface PlaybackActions {
+  toggle(): void;
+  restart(): void;
+  seekTo(time: number): void;
+  setCaptionsEnabled(enabled: boolean): void;
+  cycleCaptionMode(): void;
+  toggleFullscreen?(): void;
+}
+interface BlockMarker {
+  block: Block;
+  index: number;
+  position: number;
+  title: string;
+  isSectionStart: boolean;
+}
+
+interface AudioProvider extends AudioState, AudioActions {}
+// render-mode host API
+type SquisqWindow = Window & typeof globalThis & Partial<SquisqRenderAPI>;
+
+function formatTime(seconds: number): string; // "M:SS"
+function getAnimationStyle(
+  animation: Animation | undefined,
+  currentTime?: number,
+): { className: string; style: object };
+function getTransitionClass(
+  type: TransitionType,
+  entering: boolean,
+  direction?: TransitionDirection,
+): string;
 ```
 
-#### `useViewportOrientation`
+### Styles & Standalone Bundle
 
-Returns `'landscape' | 'portrait'` based on container or window size.
-
-```ts
-function useViewportOrientation(
-  containerRef?: React.RefObject<HTMLElement>,
-): 'landscape' | 'portrait';
-```
-
-### React Context & Types
-
-#### `MediaContext`
-
-```ts
-const MediaContext: React.Context<MediaProvider | null>;
-
-function AudioProvider(props: { config: AudioConfig; children: ReactNode }): JSX.Element;
-```
-
-### React Utilities
-
-```ts
-// Re-exported from @bendyline/squisq/doc
-function getAnimationCSS(animation: Animation, index: number): string;
-function getBlockAnimationDelay(blockIndex: number, layerIndex: number): number;
-
-// Map tile helpers
-function getTileUrl(x: number, y: number, z: number, template?: string): string;
-function latLngToTile(lat: number, lng: number, zoom: number): { x: number; y: number };
-function tileToLatLng(x: number, y: number, zoom: number): { lat: number; lng: number };
-```
-
-### React Styles
-
-Import `@bendyline/squisq-react/styles` to include the default animation stylesheet (`doc-animations.css`).
+Import `@bendyline/squisq-react/styles` for the DocPlayer animation + `<JsonView>`
+stylesheet. `@bendyline/squisq-react/standalone-source` exports a single
+constant, `PLAYER_BUNDLE: string` — an IIFE that boots a complete player into a
+host page (consumed by `formats/html` and `squisq-cli`). The runtime IIFE at
+`@bendyline/squisq-react/standalone` exposes a global `SquisqPlayer` with
+`mount`, `mountStatic`, `unmount`, and `version`.
 
 ---
 
 ## `@bendyline/squisq-formats`
 
-Document format converters. Uses `MarkdownDocument` from core as the pivot representation.
+Document format converters. Uses `MarkdownDocument` from core as the pivot
+representation. Convenience `docToXxx` / `xxxToDoc` wrappers convert through
+`MarkdownDocument`.
+
+> The package root (`@bendyline/squisq-formats`) re-exports the common
+> converters. `./container`, the plain-HTML/bundle functions, `docxToContainer`,
+> `pdfToContainer`, and `PdfPageSize` are **subpath-only**.
 
 ### Subpath: DOCX
 
 **Import:** `@bendyline/squisq-formats/docx`
 
 ```ts
-async function markdownDocToDocx(doc: MarkdownDocument, options?: DocxExportOptions): Promise<Blob>;
-
-async function docxToMarkdownDoc(
+function markdownDocToDocx(
+  doc: MarkdownDocument,
+  options?: DocxExportOptions,
+): Promise<ArrayBuffer>;
+function docToDocx(doc: Doc, options?: DocxExportOptions): Promise<ArrayBuffer>;
+function docxToMarkdownDoc(
   data: ArrayBuffer | Blob,
   options?: DocxImportOptions,
 ): Promise<MarkdownDocument>;
-
-// Convenience wrappers that convert through MarkdownDocument
-async function docToDocx(doc: Doc, options?: DocxExportOptions): Promise<Blob>;
-async function docxToDoc(data: ArrayBuffer | Blob, options?: DocxImportOptions): Promise<Doc>;
-
-// Import to a ContentContainer with markdown + extracted images
-async function docxToContainer(
+function docxToDoc(data: ArrayBuffer | Blob, options?: DocxImportOptions): Promise<Doc>;
+function docxToContainer(
   data: ArrayBuffer | Blob,
   options?: DocxImportOptions,
 ): Promise<ContentContainer>;
@@ -853,16 +1396,14 @@ interface DocxExportOptions {
   title?: string;
   author?: string;
   description?: string;
-  styles?: DocxStyleOverrides;
-  /** Apply a Squisq theme (colors + typography) to headings. */
+  defaultFont?: string; // default 'Calibri'
+  defaultFontSize?: number; // default 11
   themeId?: string;
-  /** Pre-resolved images keyed by markdown image URL — embedded as binary parts in the .docx. */
   images?: Map<string, { data: ArrayBuffer | Uint8Array; contentType: string }>;
 }
-
 interface DocxImportOptions {
-  extractImages?: boolean; // Default: false
-}
+  extractImages?: boolean;
+} // default false
 ```
 
 ### Subpath: PDF
@@ -870,596 +1411,683 @@ interface DocxImportOptions {
 **Import:** `@bendyline/squisq-formats/pdf`
 
 ```ts
-async function markdownDocToPdf(
-  doc: MarkdownDocument,
-  options?: PdfExportOptions,
-): Promise<Uint8Array>;
-
-async function pdfToMarkdownDoc(
-  data: ArrayBuffer | Uint8Array,
+function markdownDocToPdf(doc: MarkdownDocument, options?: PdfExportOptions): Promise<ArrayBuffer>;
+function docToPdf(doc: Doc, options?: PdfExportOptions): Promise<ArrayBuffer>;
+function pdfToMarkdownDoc(
+  data: ArrayBuffer | Uint8Array | Blob,
   options?: PdfImportOptions,
 ): Promise<MarkdownDocument>;
-
-// Convenience wrappers
-async function docToPdf(doc: Doc, options?: PdfExportOptions): Promise<Uint8Array>;
-async function pdfToDoc(data: ArrayBuffer | Uint8Array, options?: PdfImportOptions): Promise<Doc>;
-
-// Import to a ContentContainer with markdown + extracted images
-async function pdfToContainer(
+function pdfToDoc(data: ArrayBuffer | Uint8Array | Blob, options?: PdfImportOptions): Promise<Doc>;
+function pdfToContainer(
   data: ArrayBuffer | Uint8Array | Blob,
   options?: PdfImportOptions,
 ): Promise<ContentContainer>;
-
 function configurePdfWorker(workerSrc: string): void;
 
+type PdfPageSize = 'letter' | 'a4';
 interface PdfExportOptions {
   title?: string;
   author?: string;
-  fontSize?: number; // Default: 12
-  margin?: number; // Default: 72 (points)
-  pageSize?: 'letter' | 'a4'; // Default: 'letter'
+  pageSize?: PdfPageSize; // default 'letter'
+  margin?: number; // default 72 (points)
+  defaultFontSize?: number; // default 11
+  themeId?: string; // colours only (pdf-lib standard fonts)
 }
-
 interface PdfImportOptions {
-  /** Hint for body font size (points). Text larger than this is treated as a heading. */
   bodyFontSize?: number;
-  /** Detect tables from column-aligned text. Default: true. */
-  detectTables?: boolean;
-  /** Detect code blocks from monospace fonts. Default: true. */
-  detectCodeBlocks?: boolean;
-  /** Detect blockquotes from indentation. Default: true. */
-  detectBlockquotes?: boolean;
-  /** Detect URLs in text and convert to links. Default: true. */
-  detectLinks?: boolean;
+  detectTables?: boolean; // default true
+  detectCodeBlocks?: boolean; // default true
+  detectBlockquotes?: boolean; // default true
+  detectLinks?: boolean; // default true
 }
 ```
 
 ### Subpath: OOXML
 
-**Import:** `@bendyline/squisq-formats/ooxml`
-
-Shared infrastructure for all Office Open XML formats (DOCX, PPTX, XLSX).
-
-#### Package Reader
+**Import:** `@bendyline/squisq-formats/ooxml` — shared infrastructure for all
+Office Open XML formats (DOCX, PPTX, XLSX).
 
 ```ts
-async function openPackage(data: ArrayBuffer | Blob): Promise<OoxmlPackage>;
-async function getPartRelationships(pkg: OoxmlPackage, partPath: string): Promise<Relationship[]>;
-async function getPartXml(pkg: OoxmlPackage, partPath: string): Promise<Document | null>;
-async function getPartBinary(pkg: OoxmlPackage, partPath: string): Promise<ArrayBuffer | null>;
-async function getCoreProperties(pkg: OoxmlPackage): Promise<CoreProperties>;
+// package reader
+function openPackage(data: ArrayBuffer | Blob): Promise<OoxmlPackage>;
+function getPartRelationships(pkg: OoxmlPackage, partPath: string): Promise<Relationship[]>;
+function getPartXml(pkg: OoxmlPackage, partPath: string): Promise<Document | null>;
+function getPartBinary(pkg: OoxmlPackage, partPath: string): Promise<ArrayBuffer | null>;
+function getCoreProperties(pkg: OoxmlPackage): Promise<CoreProperties>;
 
-interface OoxmlPackage {
-  parts: Map<string, PackagePart>;
-  relationships: Relationship[];
-  contentTypes: ContentTypeMap;
-}
+// package writer
+function createPackage(): OoxmlPackageBuilder; // addPart / addBinaryPart / addRelationship / setCoreProperties / toBlob / toArrayBuffer
 
-interface Relationship {
-  id: string;
-  type: string;
-  target: string;
-  targetMode?: 'Internal' | 'External';
-}
-
-interface CoreProperties {
-  title?: string;
-  subject?: string;
-  creator?: string;
-  description?: string;
-  keywords?: string;
-  lastModifiedBy?: string;
-  created?: string;
-  modified?: string;
-}
-```
-
-#### Package Writer
-
-```ts
-function createPackage(): OoxmlPackageBuilder;
-
-interface OoxmlPackageBuilder {
-  addPart(path: string, content: string, contentType: string): void;
-  addBinaryPart(path: string, data: ArrayBuffer | Uint8Array, contentType: string): void;
-  addRelationship(sourcePart: string, rel: Relationship): void;
-  setCoreProperties(props: CoreProperties): void;
-  toBlob(): Promise<Blob>;
-  toArrayBuffer(): Promise<ArrayBuffer>;
-}
-```
-
-#### XML Utilities
-
-```ts
+// XML utilities
 function xmlDeclaration(): string;
 function escapeXml(text: string): string;
 function attrString(attrs?: Record<string, string | undefined>): string;
-function selfClosingElement(tag: string, attrs?: Record<string, string | undefined>): string;
-function xmlElement(
-  tag: string,
-  attrs?: Record<string, string | undefined>,
-  ...children: string[]
-): string;
-function textElement(
-  tag: string,
-  attrs?: Record<string, string | undefined>,
-  text?: string,
-): string;
+function selfClosingElement(tag: string, attrs?): string;
+function xmlElement(tag: string, attrs?, ...children: string[]): string;
+function textElement(tag: string, attrs?, text?: string): string;
 ```
 
-#### Namespace Constants
-
-<details>
-<summary>All exported namespace and content-type constants</summary>
-
-| Constant                         | Description                                  |
-| -------------------------------- | -------------------------------------------- |
-| `NS_RELATIONSHIPS`               | Package relationships namespace              |
-| `NS_CONTENT_TYPES`               | Content types namespace                      |
-| `REL_OFFICE_DOCUMENT`            | Office document relationship type            |
-| `REL_CORE_PROPERTIES`            | Core properties relationship type            |
-| `REL_EXTENDED_PROPERTIES`        | Extended properties relationship type        |
-| `REL_STYLES`                     | Styles relationship type                     |
-| `REL_NUMBERING`                  | Numbering relationship type                  |
-| `REL_FONT_TABLE`                 | Font table relationship type                 |
-| `REL_SETTINGS`                   | Settings relationship type                   |
-| `REL_HYPERLINK`                  | Hyperlink relationship type                  |
-| `REL_IMAGE`                      | Image relationship type                      |
-| `REL_FOOTNOTES`                  | Footnotes relationship type                  |
-| `REL_THEME`                      | Theme relationship type                      |
-| `NS_WML`                         | WordprocessingML main namespace              |
-| `NS_PML`                         | PresentationML main namespace                |
-| `NS_SML`                         | SpreadsheetML main namespace                 |
-| `NS_DRAWINGML`                   | DrawingML main namespace                     |
-| `NS_WP_DRAWING`                  | DrawingML WordprocessingML drawing namespace |
-| `NS_PICTURE`                     | DrawingML picture namespace                  |
-| `NS_DC`                          | Dublin Core elements namespace               |
-| `NS_DCTERMS`                     | Dublin Core terms namespace                  |
-| `NS_CORE_PROPERTIES`             | Core properties namespace                    |
-| `NS_XSI`                         | XML Schema Instance namespace                |
-| `NS_MC`                          | Markup Compatibility namespace               |
-| `NS_R`                           | Office relationships namespace               |
-| `CONTENT_TYPE_RELATIONSHIPS`     | OOXML relationships content type             |
-| `CONTENT_TYPE_CORE_PROPERTIES`   | Core properties content type                 |
-| `CONTENT_TYPE_DOCX_DOCUMENT`     | DOCX main document content type              |
-| `CONTENT_TYPE_DOCX_STYLES`       | DOCX styles content type                     |
-| `CONTENT_TYPE_DOCX_NUMBERING`    | DOCX numbering content type                  |
-| `CONTENT_TYPE_DOCX_SETTINGS`     | DOCX settings content type                   |
-| `CONTENT_TYPE_DOCX_FONT_TABLE`   | DOCX font table content type                 |
-| `CONTENT_TYPE_DOCX_FOOTNOTES`    | DOCX footnotes content type                  |
-| `CONTENT_TYPE_PPTX_PRESENTATION` | PPTX main presentation content type          |
-| `CONTENT_TYPE_XLSX_WORKBOOK`     | XLSX main workbook content type              |
-
-</details>
+Plus ~40 namespace / content-type / relationship constants (`NS_WML`, `NS_PML`,
+`NS_SML`, `NS_DRAWINGML`, `REL_IMAGE`, `REL_SLIDE`, `CONTENT_TYPE_DOCX_DOCUMENT`,
+`CONTENT_TYPE_PPTX_SLIDE`, `CONTENT_TYPE_XLSX_WORKBOOK`, …).
 
 ### Subpath: EPUB
 
-**Import:** `@bendyline/squisq-formats/epub`
-
-EPUB 3 e-book export. Chapters are split at H1/H2 heading boundaries. Images are embedded in the archive when provided.
+**Import:** `@bendyline/squisq-formats/epub` — EPUB 3 export (no import).
+Chapters split at H1/H2 boundaries; images embedded when provided; audio +
+`audioSegments` enable EPUB 3 Media Overlays (SMIL).
 
 ```ts
-async function markdownDocToEpub(
+function markdownDocToEpub(
   doc: MarkdownDocument,
   options?: EpubExportOptions,
 ): Promise<ArrayBuffer>;
-
-// Convenience wrapper: Doc → MarkdownDocument → EPUB
-async function docToEpub(doc: Doc, options?: EpubExportOptions): Promise<ArrayBuffer>;
+function docToEpub(doc: Doc, options?: EpubExportOptions): Promise<ArrayBuffer>;
 
 interface EpubExportOptions {
-  title?: string;
+  title?: string; // default 'Untitled'
   author?: string;
   description?: string;
-  language?: string; // BCP-47, default: 'en'
+  language?: string; // BCP-47, default 'en'
   publisher?: string;
-  themeId?: string; // Squisq theme for CSS styling
+  themeId?: string;
   images?: Map<string, ArrayBuffer>;
-  coverImage?: ArrayBuffer; // Cover image (JPEG or PNG, auto-detected)
-  /** Audio narration data keyed by segment src/name. Enables Media Overlays. */
+  coverImage?: ArrayBuffer; // JPEG or PNG
   audio?: Map<string, ArrayBuffer>;
-  /** Audio segment metadata (from Doc.audio.segments). Required with audio. */
   audioSegments?: AudioSegment[];
-  /** Total document duration in seconds (for Media Overlay metadata). */
   totalDuration?: number;
 }
 ```
 
 ### Subpath: PPTX
 
-**Import:** `@bendyline/squisq-formats/pptx`
-
-PPTX export and import are both implemented for `MarkdownDocument` and `Doc` inputs. Import reads slide order from `ppt/presentation.xml`, converting each slide's title, body text (as a bullet list), and tables (`<a:tbl>`) into the markdown model via the shared `ooxml/` reader. (Embedded-image extraction during import is not yet wired up — `PptxImportOptions.extractImages` is reserved for future use.)
+**Import:** `@bendyline/squisq-formats/pptx` — export + import. Import reads
+slide order from `ppt/presentation.xml`, converting each slide's title, body
+(as a bullet list), and tables (`<a:tbl>`). Embedded-image extraction on import
+is not yet wired (`PptxImportOptions.extractImages` is reserved).
 
 ```ts
-async function markdownDocToPptx(
+function markdownDocToPptx(
   doc: MarkdownDocument,
   options?: PptxExportOptions,
 ): Promise<ArrayBuffer>;
-async function docToPptx(doc: Doc, options?: PptxExportOptions): Promise<ArrayBuffer>;
-async function pptxToMarkdownDoc(
+function docToPptx(doc: Doc, options?: PptxExportOptions): Promise<ArrayBuffer>;
+function pptxToMarkdownDoc(
   data: ArrayBuffer | Blob,
   options?: PptxImportOptions,
 ): Promise<MarkdownDocument>;
-async function pptxToDoc(data: ArrayBuffer | Blob, options?: PptxImportOptions): Promise<Doc>;
+function pptxToDoc(data: ArrayBuffer | Blob, options?: PptxImportOptions): Promise<Doc>;
 
 interface PptxExportOptions {
   title?: string;
   author?: string;
   description?: string;
-  slideBreak?: 'h1' | 'h2' | 'heading';
-  defaultFont?: string;
-  defaultFontSize?: number;
+  slideBreak?: 'h1' | 'h2' | 'heading'; // default 'h2'
+  defaultFont?: string; // default 'Calibri'
+  defaultFontSize?: number; // default 18
   themeId?: string;
   images?: Map<string, ArrayBuffer>;
 }
 interface PptxImportOptions {
   extractImages?: boolean;
-}
+} // reserved
 ```
 
-### Subpath: XLSX (stub)
+### Subpath: CSV
 
-**Import:** `@bendyline/squisq-formats/xlsx`
-
-> Not yet implemented. All functions throw `"XLSX export is not yet implemented"`.
+**Import:** `@bendyline/squisq-formats/csv` — a self-contained RFC-4180
+converter (not OOXML). Both directions are implemented. Import produces a
+single-table `MarkdownDocument`; export serializes the first table node.
 
 ```ts
-async function markdownDocToXlsx(doc: MarkdownDocument, options?: XlsxExportOptions): Promise<Blob>;
-async function docToXlsx(doc: Doc, options?: XlsxExportOptions): Promise<Blob>;
-async function xlsxToMarkdownDoc(
+function parseCsv(text: string, delimiter?: string): string[][]; // default ','
+function csvToMarkdownDoc(
+  data: ArrayBuffer | Blob | string,
+  options?: CsvImportOptions,
+): Promise<MarkdownDocument>;
+function csvToDoc(data: ArrayBuffer | Blob | string, options?: CsvImportOptions): Promise<Doc>;
+function markdownDocToCsv(doc: MarkdownDocument, options?: CsvExportOptions): string;
+
+interface CsvImportOptions {
+  delimiter?: string;
+  hasHeader?: boolean;
+} // defaults ',' , true
+interface CsvExportOptions {
+  delimiter?: string;
+} // default ','
+```
+
+### Subpath: XLSX
+
+**Import:** `@bendyline/squisq-formats/xlsx` — import is implemented; **export
+is a stub** (`markdownDocToXlsx` / `docToXlsx` throw
+`"XLSX export is not yet implemented"`).
+
+```ts
+function xlsxToMarkdownDoc(
   data: ArrayBuffer | Blob,
   options?: XlsxImportOptions,
 ): Promise<MarkdownDocument>;
-async function xlsxToDoc(data: ArrayBuffer | Blob, options?: XlsxImportOptions): Promise<Doc>;
+function xlsxToDoc(data: ArrayBuffer | Blob, options?: XlsxImportOptions): Promise<Doc>;
+function markdownDocToXlsx(doc: MarkdownDocument, options?: XlsxExportOptions): Promise<Blob>; // throws
+function docToXlsx(doc: Doc, options?: XlsxExportOptions): Promise<Blob>; // throws
 
+interface XlsxImportOptions {
+  sheet?: number | string;
+} // default: all sheets
 interface XlsxExportOptions {
   title?: string;
   author?: string;
-}
-interface XlsxImportOptions {
-  sheet?: number | string;
-}
+} // placeholder
 ```
+
+### Subpath: HTML
+
+**Import:** `@bendyline/squisq-formats/html` — two families: the interactive
+player export (`docToHtml` / `docToHtmlZip`, which inline `PLAYER_BUNDLE`), and
+the static plain-HTML export (`markdownDocToPlainHtml` and bundle variants).
+Plus HTML import.
+
+```ts
+// Interactive player export
+function docToHtml(doc: Doc, options: HtmlExportOptions): string; // single self-contained file
+function docToHtmlZip(doc: Doc, options: HtmlZipExportOptions): Promise<Blob>; // multi-file ZIP + audio
+function collectImagePaths(doc: Doc): Set<string>;
+function inferMimeType(filename: string): string;
+
+interface HtmlExportOptions {
+  playerScript: string; // PLAYER_BUNDLE from @bendyline/squisq-react/standalone-source
+  images?: Map<string, ArrayBuffer>;
+  audio?: Map<string, ArrayBuffer>; // ZIP only
+  mode?: 'slideshow' | 'static'; // default 'slideshow'
+  title?: string; // default 'Squisq Document'
+  autoPlay?: boolean; // default false
+  themeId?: string;
+}
+interface HtmlZipExportOptions extends HtmlExportOptions {}
+
+// Static plain-HTML export
+function markdownDocToPlainHtml(doc: MarkdownDocument, options?: PlainHtmlExportOptions): string;
+function markdownDocsToPlainHtmlBundle(options: PlainHtmlBundleOptions): Promise<Blob>;
+function markdownDocsToHtmlBundle(options: HtmlBundleOptions): Promise<Blob>; // player-embedded multi-doc bundle
+function collectLinkRefs(doc: MarkdownDocument): Set<string>;
+
+// HTML import
+function htmlToMarkdownDocSync(html: string, options?: HtmlImportOptions): MarkdownDocument;
+function htmlToMarkdownDoc(
+  data: ArrayBuffer | Uint8Array | string,
+  options?: HtmlImportOptions,
+): Promise<MarkdownDocument>;
+function htmlToMarkdown(html: string, options?: HtmlImportOptions): string;
+
+interface PlainHtmlExportOptions {
+  title?: string;
+  images?: Map<string, string>; // src URL → emitted URL
+  links?: Map<string, string>; // href URL → emitted URL (e.g. .md → .html)
+  theme?: Theme; // wins over themeId, then doc frontmatter themeId
+  themeId?: string;
+  iconsCss?: string; // inline FontAwesome CSS instead of a CDN <link>
+  htmlPolicy?: HtmlPolicy; // default 'sanitize'
+}
+interface HtmlImportOptions {
+  sanitize?: boolean;
+} // default true
+```
+
+### Subpath: Container
+
+**Import:** `@bendyline/squisq-formats/container` — `ContentContainer` ↔ ZIP.
+
+```ts
+function containerToZip(container: ContentContainer): Promise<Blob>;
+function zipToContainer(zipData: ArrayBuffer | Uint8Array | Blob): Promise<MemoryContentContainer>;
+```
+
+`zipToContainer` skips directories and rejects path-traversal (absolute paths,
+backslashes, `..` segments).
 
 ---
 
 ## `@bendyline/squisq-editor-react`
 
-Rich markdown editor shell with Raw (Monaco), WYSIWYG (Tiptap), and Preview modes.
+Rich markdown editor shell with Raw (Monaco), WYSIWYG (Tiptap), Preview, and
+block/timeline layouts, plus an image editor and browser recorder.
 
-**Import:** `@bendyline/squisq-editor-react`  
-**Styles:** `@bendyline/squisq-editor-react/styles`  
-**Peer dependencies:** `monaco-editor`, `@tiptap/react`, `@tiptap/starter-kit`
+**Import:** `@bendyline/squisq-editor-react`
+**Styles:** `@bendyline/squisq-editor-react/styles`
+**Peer dependencies:** `monaco-editor`, `react`, `react-dom`
 
-### Editor Components
+### `EditorShell`
 
-#### `EditorShell`
-
-Top-level editor with toolbar, view switcher, and three editing modes.
+The top-level component. Its props interface is large; the notable props:
 
 ```ts
 interface EditorShellProps {
-  initialMarkdown?: string; // Default: ''
-  initialView?: EditorView; // Default: 'raw'
-  articleId?: string; // Default: 'untitled'
-  basePath?: string; // Default: '/'
+  initialMarkdown?: string; // default ''
+  initialView?: EditorView; // default 'wysiwyg'
+  articleId?: string; // default 'untitled'
+  basePath?: string; // default '/'
   onChange?: (source: string) => void;
-  theme?: 'light' | 'dark'; // Default: 'light'
+  theme?: 'light' | 'dark'; // default 'light'
   className?: string;
-  height?: string; // Default: '100vh'
+  height?: string; // default '100vh'
+  minHeight?: string; // set min+max → auto-grow mode
+  maxHeight?: string;
+  // Content container & media
+  mediaProvider?: MediaProvider | null; // enables the Files panel
+  workspaceContainer?: ContentContainer | null; // doc folder: audio map, versions, siblings, sidecars
+  container?: ContentContainer | null; // @deprecated → workspaceContainer
+  // Versioning
+  allowVersioning?: boolean; // default false
+  versionBasename?: string;
+  versioningPrunePolicy?: PrunePolicy; // default keep-last-50
+  versioningAutoSaveIdleMs?: number; // default 5000; 0 disables
+  onSaveVersion?: (result: SaveVersionResult) => void;
+  // Recording, mentions, links
+  allowRecording?: boolean; // default true (needs mediaProvider)
+  mentionProvider?: MentionProvider | null;
+  documentLinkProvider?: DocumentLinkProvider | null;
+  // Panels & layout
+  inlinePreview?: boolean;
+  inlinePreviewWidth?: number; // default 320
+  outline?: boolean;
+  outlineWidth?: number; // default 240
+  showStatusBar?: boolean; // default true
+  showPlayTab?: boolean; // default true
+  blockTags?: boolean; // default true
+  imageDisplayMode?: ImageDisplayMode; // 'inline' (default) | 'thumbnail'
+  thinMargins?: boolean;
+  fullWidth?: boolean;
+  // File-kind / read-only / image mode
+  fileName?: string;
+  language?: string;
+  readOnly?: boolean;
+  imageSrc?: string;
+  imageAlt?: string;
+  imageMode?: 'view' | 'edit';
+  imageEditorContainer?: ContentContainer;
+  onImageExport?: (blob: Blob, format: 'png' | 'jpeg' | 'webp') => void;
+  // Theming & view preferences
+  themeInheritance?: ThemeInheritance; // default 'fonts'
+  themeOverride?: Theme | null;
+  viewPreferences?: ViewPreferences;
+  onViewPreferencesChange?: (prefs: ViewPreferences) => void;
+  // Toolbar slots & chat-composer mode
+  toolbarSlotLeft?: ReactNode;
+  toolbarSlotAfterActions?: ReactNode;
+  toolbarSlotRight?: ReactNode;
+  placeholder?: string;
+  submitOnEnter?: () => void;
 }
 ```
 
-#### `RawEditor`
-
-Monaco-based code editor for raw markdown editing.
+### Context
 
 ```ts
-interface RawEditorProps {
-  theme?: string; // Default: 'vs-dark'
-  minimap?: boolean; // Default: false
-  fontSize?: number; // Default: 14
-  wordWrap?: 'on' | 'off' | 'wordWrapColumn' | 'bounded'; // Default: 'on'
-  className?: string;
-}
+function EditorProvider(props: EditorProviderProps): JSX.Element;
+function useEditorContext(): EditorContextValue; // markdown/doc state, theme, versioning, insertion helpers
+
+type EditorView = 'raw' | 'wysiwyg' | 'preview';
 ```
 
-#### `WysiwygEditor`
+### Individual editors & panels
 
-Tiptap-based WYSIWYG editor.
+`RawEditor` (Monaco), `WysiwygEditor` (Tiptap), `PreviewPanel`,
+`PlainHtmlPreview`, `Toolbar`, `StatusBar`, `ViewSwitcher`, `ViewMenuPanel`,
+`OutlinePanel`, `MediaBin`, `TooltipLayer`, `FolderView`, plus:
 
-```ts
-interface WysiwygEditorProps {
-  placeholder?: string; // Default: 'Start typing your markdown…'
-  className?: string;
-}
-```
+- `PreviewSettingsProvider`, `PreviewToolbarControls`, `usePreviewSettings`
+- `ThemePicker`, `ThemeCustomizerPanel`, `TemplatePicker`, `templateLabel`
+- `TransitionPicker` + catalog (`TRANSITION_GROUPS`, `TRANSITION_ENTRIES`, `transitionLabel`, `findTransitionEntry`)
+- `DocumentSettingsDialog`, `LinkDialog`, `EmojiPicker` (+ `EMOJI_CATEGORIES`, `ALL_EMOJIS`, `searchEmojis`)
+- `VersionHistoryPanel`, `InlinePreviewGutter`, `DropZoneOverlay`, `BlockPropertiesPopover`
+- `JsonEditor` — editable form for JSON bound to a Squisq-annotated schema (embeds `WysiwygEditor` for `richtext`)
 
-#### `PreviewPanel`
+### Block-at-a-time / Timeline primitives
 
-Live block preview via `DocPlayer`.
-
-```ts
-interface PreviewPanelProps {
-  basePath?: string;
-  className?: string;
-}
-```
-
-#### Block-at-a-time view
-
-An alternate layout that edits one block at a time on a card, like a slide
-sorter. The View menu toggles between `'document'` (whole document) and
-`'block'` layouts; in block mode the Raw and WYSIWYG editors are scoped to a
-single heading-defined block (its child sub-headings are separate cards) and
-edits splice back into the parent document. Drive it via the View menu, the
-`layoutMode` prop / `ViewPreferences.layoutMode`, or the reusable primitives
-below (which take any `(source, setSource)` pair and have no `EditorShell`
-dependency):
+Reusable over any `(source, setSource)` pair, no `EditorShell` dependency:
 
 ```ts
-// Standalone hook: a scoped editing channel + navigation over a markdown string.
 function useBlockNavigator(
   source: string,
   setSource: (s: string) => void,
-  opts?: { enabled?: boolean }, // enabled=false → identity passthrough
+  opts?: { enabled?: boolean },
 ): BlockNavigator;
-
-interface BlockNavigator {
-  editorSource: string; // active block's slice (block mode) or full source
-  setEditorSource: (s: string) => void; // splices the edit back into the source
-  blockCount: number;
-  activeBlockKey: number;
-  activeBlockStartLine: number | null;
-  goToBlock: (key: number) => void;
-  goToBlockByLine: (line: number) => void;
-  prevBlock: () => void;
-  nextBlock: () => void;
-  addBlock: () => void;
-}
-
-// Presentational card chrome (Prev / Next / Add + "Block N of M").
 function BlockCardView(props: BlockCardViewProps): JSX.Element;
+function TimelineTrack(props: TimelineTrackProps): JSX.Element;
 
-// Pure source-slicing utilities.
+// pure source-slicing
 function getBlockSlices(fullSource: string): BlockSlice[];
 function spliceBlock(fullSource: string, range: BlockRange, newText: string): string;
-```
+function lineToOffset(source: string, line: number): number;
+function offsetToLine(source: string, offset: number): number;
 
-#### Timeline view
-
-The View menu's **Timeline** layout is block-at-a-time plus a horizontal
-`TimelineTrack` of block + media bars. Click a block to select it; drag a
-block's right edge to change its `duration` (left edge changes the previous
-block's, since `startTime` is derived); drag a media clip to change its
-`startAt`, its right edge for length, and double-click to toggle `spillover`.
-Edits are written back to the markdown source via line-level helpers:
-
-```ts
+// line-level write-back for timeline edits
 function setBlockDurationInSource(source: string, line: number, seconds: number): string | null;
 function setMediaClipInSource(source: string, line: number, patch: MediaClipPatch): string | null;
 ```
 
-The underlying media-timing model lives in core: `MediaClip` (`block.media` /
-`doc.documentMedia`), `resolveMediaSchedule(doc)` → `ScheduledClip[]`, and
-`getDocPlaybackDuration(doc)`. Playback consumes them via
-`@bendyline/squisq-react`'s `MediaClipLayer` / `useMediaSchedule`. See the
-SquigglySquare doc for the `{[audio …]}` / `{[video …]}` authoring syntax.
+Plus block-property (Pandoc-attr) read/write helpers used by
+`BlockPropertiesPopover`: `readBlockAttrsParams`, `readBlockAttrsValue`,
+`setBlockAttrsValue`, and `summarizeBlockProps`.
 
-#### `Toolbar`
-
-Formatting toolbar (bold, italic, headings, lists, etc.).
+### File-kind & drag-and-drop
 
 ```ts
-interface ToolbarProps {
-  className?: string;
-}
+function resolveFileKind(fileName?: string, language?: string): FileKind; // { mode: 'markdown'|'code'|'image'; language }
+function detectLanguageFromFileName(fileName: string): string | null;
+
+function useFileDrop(opts: {
+  onDrop: (files: File[], target: DropTarget) => void;
+  enabled?: boolean;
+}): UseFileDropResult;
+function classifyFile(file: { name: string; type: string }): FileCategory; // 'media'|'text'|'unknown'
+function partitionFiles(files: File[]): { media: File[]; text: File[] };
 ```
 
-#### `StatusBar`
+Plus `processMediaFiles`, `processTextFile`, and `processTextFiles` — upload
+dropped media into a `MediaProvider` / read dropped text files into strings.
 
-Document statistics — word count, character count, line count, block count, parse status.
-
-```ts
-interface StatusBarProps {
-  className?: string;
-}
-```
-
-#### `ViewSwitcher`
-
-Tab bar to switch between Raw, WYSIWYG, and Preview modes.
-
-```ts
-interface ViewSwitcherProps {
-  className?: string;
-}
-```
-
-### Editor Context
-
-#### `EditorProvider`
-
-Provides shared editor state to all child components.
-
-```ts
-interface EditorProviderProps {
-  initialMarkdown?: string;
-  initialView?: EditorView;
-  articleId?: string;
-  theme?: EditorTheme;
-  children: ReactNode;
-}
-```
-
-#### `useEditorContext()`
-
-Hook to access editor state and actions.
-
-```ts
-function useEditorContext(): EditorContextValue;
-
-type EditorView = 'raw' | 'wysiwyg' | 'preview';
-type EditorTheme = 'light' | 'dark';
-
-interface EditorState {
-  markdownSource: string;
-  markdownDoc: MarkdownDocument | null;
-  doc: Doc | null;
-  activeView: EditorView;
-  parseError: string | null;
-  isParsing: boolean;
-  theme: EditorTheme;
-}
-
-interface EditorActions {
-  setMarkdownSource: (source: string) => void;
-  setMarkdownDoc: (doc: MarkdownDocument) => void;
-  setActiveView: (view: EditorView) => void;
-  setTiptapEditor: (editor: TiptapEditor | null) => void;
-  setMonacoEditor: (editor: MonacoEditor | null) => void;
-  setTheme: (theme: EditorTheme) => void;
-}
-
-interface EditorContextValue extends EditorState, EditorActions {
-  tiptapEditor: TiptapEditor | null;
-  monacoEditor: MonacoEditor | null;
-}
-```
-
-### Editor Bridge Utilities
-
-Bidirectional conversion between raw markdown and Tiptap HTML.
+### Bridge & Tiptap extensions
 
 ```ts
 function markdownToTiptap(markdown: string): string;
 function tiptapToMarkdown(html: string): string;
+function buildPreviewDoc(source: string, options?): Doc; // shared block-flattening builder
+
+const HeadingWithTemplate: Extension; // recognises `{[tpl key=value]}` in headings, round-trips
 ```
 
-### Tiptap Extension
+### Diagram editor
 
-**`HeadingWithTemplate`** — Custom Tiptap extension that recognises template annotation syntax (`{[templateName key=value]}`) inside headings and preserves it across editing round-trips.
+`DiagramExtension` (Tiptap), `DiagramCanvas`, `DiagramWidget`, `useDiagramData`,
+plus command helpers `moveNode`, `addConnection`, `removeConnection`,
+`renameNode`, `addNode`, `removeNode`, `listDiagramChildren`.
+
+### Recorder (`src/recorder`)
+
+`RecorderModal`, `RecorderButton`, `RecorderPanel` — configure-and-capture UI
+built on `MediaRecorder` + `getUserMedia`/`getDisplayMedia`.
+
+```ts
+function useMediaRecorder(options?: UseMediaRecorderOptions): UseMediaRecorderResult;
+function useStreamPreview(stream: MediaStream | null): RefObject<HTMLVideoElement>;
+
+function requestMicStream(): Promise<MediaStream>;
+function requestCameraStream(options?: CameraStreamOptions): Promise<MediaStream>;
+function requestScreenStream(options?: ScreenStreamOptions): Promise<ScreenStreamHandle>; // optional mic mix
+
+function resolveFormat(kind: CaptureKind): ResolvedFormat;
+function supportsMediaRecorder(): boolean;
+function supportsUserMedia(): boolean;
+function supportsDisplayMedia(): boolean;
+function buildFilename(kind: CaptureKind, format: ResolvedFormat): string;
+
+// narration timing sidecar (so resolveAudioMapping auto-links the recording)
+function buildTimingJson(sourceText: string, durationSec: number): TimingJson;
+function encodeTimingJson(timing: TimingJson): string;
+function timingPathFor(mediaPath: string): string;
+```
+
+### Image editor
+
+`ImageEditor`, `ImageViewer`, `useImageEditor`, `imageEditorReducer`,
+`initialImageEditorState`, plus state types `ImageEditorState`,
+`ImageEditorAction`, `ImageEditorTool`, `CanvasRect`. Pairs with the
+`<basename>_files/` sidecar convention and `core/imageEdit`.
+
+---
+
+## `@bendyline/squisq-video`
+
+Browser-pure foundation for MP4 export (render-HTML generator + ffmpeg.wasm
+encoder). No Node-specific dependencies; runs in the browser and Node.
+
+**Import:** `@bendyline/squisq-video`
+
+```ts
+// Generate a self-contained HTML page that mounts the standalone player in
+// renderMode (images/audio embedded as base64 data URIs), exposing
+// window.seekTo / window.getDuration for headless frame capture.
+function generateRenderHtml(doc: Doc, options: RenderHtmlOptions): string;
+
+// Encode PNG frame screenshots into an MP4 via ffmpeg.wasm (H.264 + optional AAC).
+function framesToMp4Wasm(
+  frames: Uint8Array[],
+  audio: Uint8Array | null,
+  options?: VideoExportOptions,
+): Promise<EncoderResult>;
+
+function resolveDimensions(options: VideoExportOptions): { width: number; height: number };
+const fetchFile: typeof import('@ffmpeg/util').fetchFile; // re-export
+
+const QUALITY_PRESETS: Record<VideoQuality, QualityPreset>; // draft/normal/high → ffmpeg preset + crf
+const ORIENTATION_DIMENSIONS: Record<VideoOrientation, { width: number; height: number }>;
+
+type VideoQuality = 'draft' | 'normal' | 'high';
+type VideoOrientation = 'landscape' | 'portrait';
+interface QualityPreset {
+  preset: string;
+  crf: number;
+}
+interface EncoderResult {
+  data: Uint8Array;
+  duration: number;
+}
+
+interface VideoExportOptions {
+  fps?: number; // default 30
+  width?: number; // default per orientation
+  height?: number;
+  quality?: VideoQuality; // default 'normal'
+  orientation?: VideoOrientation; // default 'landscape'
+  onProgress?: (percent: number, phase: string) => void;
+}
+
+interface RenderHtmlOptions {
+  playerScript: string; // PLAYER_BUNDLE IIFE source
+  images?: Map<string, ArrayBuffer>;
+  audio?: Map<string, ArrayBuffer>;
+  width?: number; // default 1920
+  height?: number; // default 1080
+  captionStyle?: 'standard' | 'social';
+}
+```
+
+---
+
+## `@bendyline/squisq-video-react`
+
+React components for browser-based video export (WebCodecs primary, ffmpeg.wasm
+worker fallback). Depends on `@bendyline/squisq-video`, `@bendyline/squisq-react`,
+`mp4-muxer`, and `html2canvas`.
+
+**Import:** `@bendyline/squisq-video-react`
+
+### Components
+
+```ts
+interface VideoExportButtonProps {
+  doc: Doc;
+  playerScript: string;
+  mediaProvider?: MediaProvider;
+  images?: Map<string, ArrayBuffer>;
+  audio?: Map<string, ArrayBuffer>;
+  label?: string; // default 'Export Video'
+  style?: React.CSSProperties;
+  disabled?: boolean;
+}
+function VideoExportButton(props: VideoExportButtonProps): JSX.Element;
+
+interface VideoExportModalProps {
+  doc: Doc;
+  playerScript: string;
+  mediaProvider?: MediaProvider;
+  images?: Map<string, ArrayBuffer>;
+  audio?: Map<string, ArrayBuffer>;
+  onClose: () => void;
+}
+function VideoExportModal(props: VideoExportModalProps): JSX.Element;
+```
+
+### Hooks
+
+```ts
+function useVideoExport(): VideoExportResult;
+function useFrameCapture(): FrameCaptureHandle;
+
+type VideoExportState = 'idle' | 'preparing' | 'capturing' | 'encoding' | 'complete' | 'error';
+interface VideoExportConfig {
+  quality?: VideoQuality; // default 'normal'
+  fps?: number; // default 30
+  orientation?: VideoOrientation; // default 'landscape'
+  images?: Map<string, ArrayBuffer>;
+  audio?: Map<string, ArrayBuffer>;
+  mediaProvider?: MediaProvider;
+  captionMode?: CaptionMode; // default 'off'
+  playerScript?: string; // kept for CLI/Playwright path
+}
+interface VideoExportResult {
+  state: VideoExportState;
+  progress: number;
+  phase: string;
+  duration: number;
+  backend: 'webcodecs' | 'ffmpeg-wasm' | null;
+  downloadUrl: string | null;
+  fileSize: number;
+  error: string | null;
+  elapsed: number;
+  estimatedRemaining: number;
+  startExport(doc: Doc, config: VideoExportConfig): Promise<void>;
+  cancel(): void;
+  reset(): void;
+}
+
+interface FrameCaptureHandle {
+  init(
+    doc: Doc,
+    renderOptions: Omit<RenderHtmlOptions, 'playerScript'>,
+    captionMode?: CaptionMode,
+  ): Promise<number>;
+  captureFrame(time: number): Promise<ImageBitmap>;
+  destroy(): void;
+}
+```
+
+### Encoder utilities
+
+```ts
+function supportsWebCodecs(): boolean; // VideoEncoder/VideoFrame present
+function createEncoder(config: EncoderConfig): MainThreadEncoder; // throws if WebCodecs unavailable
+interface MainThreadEncoder {
+  encodeFrame(bitmap: ImageBitmap, frameIndex: number): void;
+  finalize(): Promise<ArrayBuffer>;
+  close(): void;
+}
+```
 
 ---
 
 ## `@bendyline/squisq-cli`
 
-Command-line tool and programmatic API for converting Squisq documents and rendering them to MP4 video.
+Command-line tool and programmatic API for converting Squisq documents and
+rendering them to MP4.
 
 **Install:** `npm install -g @bendyline/squisq-cli`
 
-### CLI Programmatic API
+### CLI Commands
+
+#### `squisq convert <input>`
+
+Convert a markdown doc / ZIP / `.dbk` container / folder to one or more formats.
+
+| Option                | Description                                                  | Default       |
+| --------------------- | ------------------------------------------------------------ | ------------- |
+| `-o, --output-dir`    | Output directory                                             | same as input |
+| `-f, --formats`       | Comma-separated: `docx, pptx, pdf, html, htmlzip, epub, dbk` | all           |
+| `-t, --theme`         | Squisq theme id (built-in or in-doc custom)                  | none          |
+| `--transform`         | Transform style before export (documentary, magazine, …)     | none          |
+| `--no-auto-templates` | Disable content-aware auto template picking                  | (auto on)     |
+
+#### `squisq video <input> [output]`
+
+Render a document to MP4 (headless render + WASM/FFmpeg encode).
+
+| Option                 | Description                | Default       |
+| ---------------------- | -------------------------- | ------------- |
+| `-o, --output`         | Output MP4 path            | `<input>.mp4` |
+| `--fps`                | Frames per second (1–120)  | 30            |
+| `--quality`            | draft, normal, or high     | normal        |
+| `--orientation`        | landscape or portrait      | landscape     |
+| `--captions`           | off, standard, or social   | off           |
+| `--width` / `--height` | Dimension overrides        | auto          |
+| `--no-auto-templates`  | Disable auto template pick | (auto on)     |
+
+**Requires:** [ffmpeg](https://ffmpeg.org/) on PATH and Playwright (chromium).
+
+#### `squisq validate <input>`
+
+Structurally validate a `.md` file, `.zip`/`.dbk` container, or folder. Reports
+unknown templates (with did-you-mean), unparsed `{[…]}`, malformed heading
+attributes, unresolved connections, duplicate ids, bad data fences, and missing
+asset references — with line numbers.
+
+| Option     | Description                               |
+| ---------- | ----------------------------------------- |
+| `--json`   | Emit diagnostics as machine-readable JSON |
+| `--strict` | Exit non-zero on warnings too             |
+
+Exit codes: `0` clean or warnings-only; `1` errors (or any finding with
+`--strict`); `2` input unreadable.
+
+### Programmatic API
 
 **Import:** `@bendyline/squisq-cli/api`
 
-Library-style entry point for rendering Squisq docs to MP4 from Node.js — avoids shelling out to the CLI.
-
-#### `renderDocToMp4`
-
 ```ts
-async function renderDocToMp4(
+function renderDocToMp4(
   doc: Doc,
   container: MemoryContentContainer,
   options: RenderDocToMp4Options,
 ): Promise<RenderDocToMp4Result>;
 
 interface RenderDocToMp4Options {
-  /** Output file path for the MP4. */
   outputPath: string;
-  /** Frames per second (default: 30). */
-  fps?: number;
-  /** Encoding quality preset (default: 'normal'). */
-  quality?: 'draft' | 'normal' | 'high';
-  /** Video orientation (default: 'landscape'). */
-  orientation?: 'landscape' | 'portrait';
-  /** Override video width in pixels. */
+  fps?: number; // default 30
+  quality?: 'draft' | 'normal' | 'high'; // default 'normal'
+  orientation?: 'landscape' | 'portrait'; // default 'landscape'
   width?: number;
-  /** Override video height in pixels. */
   height?: number;
-  /** Caption style to bake into the video. */
   captionStyle?: 'standard' | 'social';
-  /** Seconds of cover-slide pre-roll before the story starts (default: 0). */
-  coverPreRoll?: number;
-  /** Progress callback — called with a phase name and 0-100 percentage. */
+  coverPreRoll?: number; // seconds of cover pre-roll, default 0
   onProgress?: (phase: string, percent: number) => void;
 }
-
 interface RenderDocToMp4Result {
-  /** Duration of the rendered video in seconds. */
   duration: number;
-  /** Number of frames captured. */
   frameCount: number;
-  /** Output file path. */
   outputPath: string;
 }
-```
 
-#### `extractThumbnails`
-
-Extract JPEG thumbnails from the first frame of an MP4 video.
-
-```ts
-async function extractThumbnails(options: ExtractThumbnailsOptions): Promise<void>;
-
+// Extract JPEG thumbnails from the first frame of an MP4.
+function extractThumbnails(options: ExtractThumbnailsOptions): Promise<void>;
 interface ExtractThumbnailsOptions {
-  /** Path to the source MP4 video. */
   videoPath: string;
-  /** Directory to write thumbnails into. */
   outputDir: string;
-  /** Base slug for filenames (produces `{slug}-{width}x{height}.jpg`). */
   slug: string;
-  /** Thumbnail sizes to generate. */
   sizes: ThumbnailSpec[];
-  /** Overwrite existing thumbnails (default: false). */
   force?: boolean;
 }
-
 interface ThumbnailSpec {
   name: string;
   width: number;
   height: number;
-  /** FFmpeg video filter string (e.g., 'scale=1280:720'). */
   filter: string;
 }
-```
 
-#### Re-exports
-
-The API entry point re-exports several utilities for convenience:
-
-```ts
-export type { VideoQuality, VideoOrientation } from '@bendyline/squisq-video';
+// Re-exports
+function readInput(inputPath: string): Promise<ReadInputResult>;
 export { MemoryContentContainer } from '@bendyline/squisq/storage';
-export { readInput } from './util/readInput.js';
-export type { ReadInputResult } from './util/readInput.js';
+export type { VideoQuality, VideoOrientation } from '@bendyline/squisq-video';
 ```
 
-### CLI Commands
-
-#### `squisq convert`
-
-Convert a document to DOCX, PPTX, PDF, HTML, or DBK:
-
-| Option         | Description                                      | Default     |
-| -------------- | ------------------------------------------------ | ----------- |
-| `--output-dir` | Output directory                                 | current dir |
-| `--formats`    | Comma-separated list: docx, pptx, pdf, html, dbk | all         |
-| `--theme`      | Squisq theme ID (e.g., documentary, cinematic)   | none        |
-| `--transform`  | Transform style (e.g., documentary, magazine)    | none        |
-
-#### `squisq video`
-
-Render a document to MP4 video:
-
-| Option          | Description               | Default   |
-| --------------- | ------------------------- | --------- |
-| `--fps`         | Frames per second (1–120) | 30        |
-| `--quality`     | draft, normal, or high    | normal    |
-| `--orientation` | landscape or portrait     | landscape |
-| `--captions`    | off, standard, or social  | off       |
-| `--width`       | Override width in pixels  | auto      |
-| `--height`      | Override height in pixels | auto      |
-
-**Requires:** [ffmpeg](https://ffmpeg.org/) on PATH and Playwright (chromium) for frame capture.
+`renderDocToMp4` requires Playwright chromium and ffmpeg on PATH.

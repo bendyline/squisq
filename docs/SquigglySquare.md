@@ -24,13 +24,18 @@ Examples
 - List item containing a template (common pattern used to author slides):
 
 ```markdown
-- {[imageWithCaption src="photo.jpg" caption="Beach at sunset"]}
+- {[imageWithCaption imageSrc="photo.jpg" caption="Beach at sunset"]}
 ```
 
-- Heading annotated with a template (the editor preserves heading annotations):
+- Heading annotated with a template (the editor preserves heading annotations).
+  `photoGrid` collects its images from the section body:
 
 ```markdown
-## Gallery {[photoGrid images="a.jpg,b.jpg,c.jpg" columns=3]}
+## Gallery {[photoGrid caption="Beach highlights"]}
+
+![Sunrise](a.jpg)
+![Midday](b.jpg)
+![Sunset](c.jpg)
 ```
 
 - Full-line template with surrounding content:
@@ -59,83 +64,91 @@ How the annotation is handled
 
 Registering custom templates
 
-- Use `registerTemplate(name, fn)` from `@bendyline/squisq/doc` to add new templates. The annotation parser will then recognise `name`.
+- Custom templates travel **with the document**, not through a global registry. Author them in the editor (Template picker → create custom template); they are stored in the `squisq-custom-templates` frontmatter key and surfaced as `Doc.customTemplates`. The expansion pipeline merges them via `buildRegistry(doc.customTemplates)` before walking blocks, so a heading annotated `{[myTemplate]}` resolves against a doc-defined template named `myTemplate`. There is no global `registerTemplate()` function.
 
 Built-in template types
 
-Below is a concise reference of built-in templates (names match the `template` property used in annotations). For each template we list the most common input keys — all inputs are optional unless otherwise stated.
+Below is a concise reference of built-in templates (names match the `template`
+property used in annotations, and the attribute keys map 1:1 to the template's
+input fields — there is no attribute renaming at render time). Fields marked
+_(required)_ must be supplied by the annotation, a data fence, or (where noted)
+the block body. Everything else is optional. `colorScheme` is a theme
+colour-scheme name; `ambientMotion` is `zoomIn` | `zoomOut` | `panLeft` |
+`panRight`. `accentImage` is `{ src, alt, position, ambientMotion?, credit?,
+license? }` where `position` is `left-strip` | `right-strip` | `bottom-strip`
+| `corner-inset`.
 
 - `title`
-  - Inputs: `title`, `subtitle`, `backgroundImage`, `backgroundGradient`
+  - Inputs: `title` _(required)_, `subtitle`, `backgroundColor`
   - Usage: hero/title slide
 
 - `sectionHeader`
-  - Inputs: `title`, `subtitle`, `backgroundColor`
+  - Inputs: `title` _(required)_, `colorScheme`, `imageSrc`, `imageAlt`, `ambientMotion`
   - Usage: section separators or small header slides
 
 - `statHighlight`
-  - Inputs: `stat`, `description`, `trend`, `trendDirection`
+  - Inputs: `stat`, `description` _(required)_, `detail`, `colorScheme`, `accentImage`
   - Usage: numeric callouts (e.g., "89% — up 5%")
 
 - `quote`
-  - Inputs: `quote`, `attribution`, `backgroundImage`
+  - Inputs: `quote` _(required)_, `attribution`, `accentImage`
   - Usage: standard quotes
 
 - `factCard`
-  - Inputs: `fact`, `explanation`, `backgroundImage`
+  - Inputs: `fact`, `explanation` _(required)_, `source`, `accentImage`
   - Usage: short fact + context
 
 - `twoColumn`
-  - Inputs: `left`, `right`, `heading`
+  - Inputs: `left`, `right` _(required; each an object `{ label, sublabel? }` — supply via a data fence)_, `header`, `leftColor`, `rightColor`
   - Usage: side-by-side text/content
 
 - `dateEvent`
-  - Inputs: `date`, `title`, `description`
+  - Inputs: `date`, `description` _(required)_, `footer`, `mood` (`neutral` | `somber` | `celebratory`), `accentImage`
   - Usage: timeline or event slides
 
 - `imageWithCaption`
-  - Inputs: `src` or `imageSrc`, `caption`, `alt`, `objectFit`
+  - Inputs: `imageSrc`, `imageAlt` _(required — or an image in the block body)_, `caption`, `captionPosition` (`bottom` | `top` | `center`), `ambientMotion`, `isTitle`, `subtitle`
   - Usage: image + caption (inline or full-bleed)
 
 - `leftFeature`
-  - Inputs: `imageSrc`, `imageAlt`, `imageWidth`, `imageHeight`, `title`, `body`
+  - Inputs: `imageSrc` _(required)_, `imageAlt`, `imageWidth`, `imageHeight`, `title`, `body`
   - Usage: editorial feature block with media on the left and text on the right
 
 - `rightFeature`
-  - Inputs: `imageSrc`, `imageAlt`, `imageWidth`, `imageHeight`, `title`, `body`
+  - Inputs: `imageSrc` _(required)_, `imageAlt`, `imageWidth`, `imageHeight`, `title`, `body`
   - Usage: editorial feature block with text on the left and media on the right
 
 - `map`
-  - Inputs: `center` (as `lat,lng`), `zoom`, `markers` (string that templates can parse), `tileUrl`
+  - Inputs: `center` (as `lat,lng`), `zoom` _(required)_, `mapStyle`, `title`, `caption`, `markers`, `ambientMotion`, `staticSrc`
   - Usage: small map embeds
 
 - `fullBleedQuote`
-  - Inputs: `quote`, `attribution`, `backgroundImage`
+  - Inputs: `text` _(required)_, `colorScheme`
   - Usage: prominent quote over full bleed background
 
 - `list`
-  - Inputs: `heading`, `items` (comma-separated), `icon`
+  - Inputs: `items` _(required — usually the block's markdown list)_, `title`, `colorScheme`, `accentImage`
   - Usage: bulleted/numbered lists authored as a single template
 
 - `photoGrid`
-  - Inputs: `images` (comma-separated), `columns`, `gap`
+  - Inputs: `images` _(required — the images in the block body, each `{ src, alt, credit?, license? }`)_, `caption`, `ambientMotion`
   - Usage: image gallery grid
 
 - `definitionCard`
-  - Inputs: `term`, `definition`, `example`
+  - Inputs: `term`, `definition` _(required)_, `origin`, `colorScheme`, `accentImage`
   - Usage: glossary/definition
 
 - `comparisonBar`
-  - Inputs: `leftLabel`, `leftValue`, `rightLabel`, `rightValue`, `heading`
+  - Inputs: `leftLabel`, `leftValue`, `rightLabel`, `rightValue` _(required)_, `unit`, `colorScheme`
   - Usage: side-by-side comparison visualization
 
 - `dataTable`
-  - Inputs: `title`, `headers`, `rows`, `align`, `colorScheme`
+  - Inputs: `headers`, `rows` _(required)_, `title`, `align`, `colorScheme`
   - Usage: themed tabular data for structured comparisons or reference sections
   - Sourcing: when `headers`/`rows` aren't provided explicitly, the first GFM table in the section body supplies them (including column alignment) — write a normal markdown table under the heading and it renders as the themed table
 
 - `diagram`
-  - Inputs: `title`, `colorScheme`, `nodeShape`, `edgeStyle`; child headings provide nodes and `connectsTo` edges
+  - Inputs: `title`, `colorScheme`, `nodeShape`, `edgeStyle`, `startStyle`, `endStyle`, `lineStyle`; child headings provide nodes and `connectsTo` edges
   - Usage: node-and-edge diagrams authored from nested section headings
 
 - `layout`
@@ -148,20 +161,22 @@ Below is a concise reference of built-in templates (names match the `template` p
   - Legacy: drawings authored visually in the editor persist their `Layer[]` as a base64 `layers="…"` param (like `layout`) and have no children; those still render unchanged
 
 - `pullQuote`
-  - Inputs: `quote`, `attribution`
-  - Usage: smaller inline quote treatment
+  - Inputs: `text`, `backgroundImage` _(required; `backgroundImage` is `{ src, alt, credit?, license? }`)_, `attribution`, `ambientMotion`
+  - Usage: smaller inline quote treatment over a background image
 
 - `videoWithCaption`
-  - Inputs: `src` or `videoSrc`, `poster`, `caption`, `autoplay`, `loop`, `muted`
+  - Inputs: `videoSrc`, `videoAlt`, `clipStart`, `clipEnd` _(required)_, `posterSrc`, `caption`, `captionPosition`
   - Usage: inline video with caption
 
 - `videoPullQuote`
-  - Inputs: `videoSrc`, `quote`, `attribution`
+  - Inputs: `text`, `backgroundVideo` _(required; `backgroundVideo` is `{ src, posterSrc?, alt, clipStart, clipEnd }` — supply via a data fence)_, `attribution`
   - Usage: combination of video + pull-quote
 
 ## YAML Frontmatter
 
-Squisq Markdown documents can include a YAML frontmatter block at the very top (delimited by `---`). Frontmatter properties set document-level rendering hints. The editor's Preview panel reads these values automatically; they can also be overridden via the toolbar dropdowns.
+Squisq Markdown documents can include a YAML frontmatter block at the very top (delimited by `---`). Frontmatter properties set document-level rendering hints.
+
+Two of the keys below — `document-render-as` and `display-mode` — are **editor-preview hints only**: the editor's Preview panel and toolbar read them, but core (`markdownToDoc`) and the exporters/CLI do not. The `theme` key (and the other `squisq-*` keys documented under [Other Squisq frontmatter keys](#other-squisq-frontmatter-keys)) _are_ load-bearing — every render and export path honours them.
 
 ```yaml
 ---
@@ -213,14 +228,35 @@ Sets the visual theme for rendered blocks (colors, typography, style).
 
 Accepts hyphenated ids (`morning-light`) or spaced names (`morning light`). Default when omitted: `documentary`.
 
+The canonical key the editor writes is `squisq-theme`; `theme` and `themeId` are accepted as legacy fallbacks. Resolution order when more than one is present: `squisq-theme` → `themeId` → `theme`.
+
+### Other Squisq frontmatter keys
+
+These are read by core and every export path (not just the editor preview):
+
+| Key                       | Purpose                                                                                                                          |
+| ------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| `squisq-theme`            | Canonical theme selector (see [`theme`](#theme) above). Resolves against the doc's own custom themes first, then built-ins.      |
+| `squisq-custom-themes`    | Inline custom `Theme[]` payload (compact JSON) → `Doc.customThemes`. One is activated via `squisq-theme`.                        |
+| `squisq-custom-templates` | Inline custom template definitions (compact JSON) → `Doc.customTemplates`. A `{[myTemplate]}` annotation resolves against these. |
+| `squisq-auto-templates`   | Kill-switch for content-aware auto-templating in `markdownToDoc`. Disabled when the value is `false`/`off`/`no`/`0`.             |
+| `title`                   | Document title. Preferred over the first heading by `inferDocumentTitle()`.                                                      |
+
+These are read only by the editor's Preview controls (like `document-render-as` / `display-mode`):
+
+| Key                                           | Purpose                                                                         |
+| --------------------------------------------- | ------------------------------------------------------------------------------- |
+| `squisq-transform` (legacy `transform-style`) | Slideshow transform style id applied in preview.                                |
+| `squisq-captions` (legacy `caption-style`)    | Caption style — `standard` or `social` (`instagram`/`tiktok`/`reels` → social). |
+
 ### Custom frontmatter
 
-Any other YAML key-value pairs in the frontmatter block are preserved in `Doc.frontmatter` as a `Record<string, unknown>` and are available to consuming applications. Squisq itself only reads the three properties above.
+Any other YAML key-value pairs in the frontmatter block are preserved in `Doc.frontmatter` as a `Record<string, unknown>` and are available to consuming applications. Squisq only interprets the keys documented above; everything else is passed through untouched.
 
 Notes on arrays and complex attributes
 
-- For multi-value inputs (e.g. `images`, `items`, `markers`), use a comma-separated string and let the template parse it. Example: `images="a.jpg,b.jpg,c.jpg"`.
-- For geographic inputs, `center` may be provided as `"lat,lng"` (e.g. `center="37.78,-122.42"`) or as two attributes (`centerLat`, `centerLng`) depending on the template implementation.
+- The built-in array-valued templates source their arrays from the section **body**, not from attribute strings: `list` reads the block's markdown list, `photoGrid` reads the block's images, and `dataTable` reads the first GFM table. For nested/tabular inputs (e.g. `twoColumn`, `videoPullQuote`, explicit `dataTable` rows), use a structured data fence (below). A custom template may still choose to parse a comma-separated attribute string itself.
+- For geographic inputs, `map` accepts `center` as `"lat,lng"` (e.g. `center="37.78,-122.42"`); `markers` are best supplied via a data fence.
 - For anything tabular or nested, prefer a structured data fence (below) over packing values into attribute strings.
 
 ## Structured data fences
@@ -417,7 +453,7 @@ Authoring tips
 
 ```markdown
 - {[title title="Welcome" subtitle="Intro to Squisq"]}
-- {[imageWithCaption src="photo.jpg" caption="Our product"]}
+- {[imageWithCaption imageSrc="photo.jpg" caption="Our product"]}
 ```
 
 - Use `photoGrid` for compact galleries and `imageWithCaption` for single-image focus.
