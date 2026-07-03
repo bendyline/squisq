@@ -1,3 +1,17 @@
+## @bendyline/squisq-cli [1.2.0](https://github.com/bendyline/squisq/compare/@bendyline/squisq-cli@1.1.6...@bendyline/squisq-cli@1.2.0) (2026-07-03)
+
+### Features
+
+* Custom layouts and themes ([#18](https://github.com/bendyline/squisq/issues/18)) ([b80d593](https://github.com/bendyline/squisq/commit/b80d5930835d0c4f43cbe965c4bc466e4262ce86))
+
+
+### Dependencies
+
+* **@bendyline/squisq:** upgraded to 1.5.0
+* **@bendyline/squisq-formats:** upgraded to 1.4.0
+* **@bendyline/squisq-react:** upgraded to 1.4.0
+* **@bendyline/squisq-video:** upgraded to 1.2.0
+
 ## @bendyline/squisq-cli [1.1.6](https://github.com/bendyline/squisq/compare/@bendyline/squisq-cli@1.1.5...@bendyline/squisq-cli@1.1.6) (2026-05-19)
 
 ### Bug Fixes
