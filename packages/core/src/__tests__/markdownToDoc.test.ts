@@ -741,9 +741,7 @@ describe('auto template picking (autoTemplates, default on)', () => {
   });
 
   it('picks list for list-bearing sections and photoGrid for multi-image sections', () => {
-    const doc = toDocFromMd(
-      '# Steps\n\n- one\n- two\n\n# Gallery\n\n![a](a.jpg)\n\n![b](b.jpg)\n',
-    );
+    const doc = toDocFromMd('# Steps\n\n- one\n- two\n\n# Gallery\n\n![a](a.jpg)\n\n![b](b.jpg)\n');
     expect(doc.blocks[0].template).toBe('list');
     expect(doc.blocks[0].templateData?.items).toEqual(['one', 'two']);
     expect(doc.blocks[1].template).toBe('photoGrid');

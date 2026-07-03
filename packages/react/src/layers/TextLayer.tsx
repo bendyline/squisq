@@ -149,7 +149,10 @@ function IconTextLayer({ layer, viewport, blockTime }: TextLayerProps) {
         {/* Outer box owns the flex/vertical-centering; the inner div is a
             single flex item so the rich content (text + inline `<i>` icons)
             flows inline instead of each node becoming a stacked flex item. */}
-        <div {...({ xmlns: 'http://www.w3.org/1999/xhtml' } as Record<string, string>)} style={boxStyle}>
+        <div
+          {...({ xmlns: 'http://www.w3.org/1999/xhtml' } as Record<string, string>)}
+          style={boxStyle}
+        >
           <div
             style={{ width: '100%', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}
             aria-label={plain}

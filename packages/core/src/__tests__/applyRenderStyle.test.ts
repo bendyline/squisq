@@ -39,9 +39,7 @@ const BLOCK = { id: 'b1', duration: 6 };
 
 describe('applyRenderStyleToLayers', () => {
   it('is a no-op at animationSpeed 1.0 with no ambient motion (returns same objects)', () => {
-    const layers: Layer[] = [
-      { ...fullBleedImage(), animation: { type: 'fadeIn', duration: 2 } },
-    ];
+    const layers: Layer[] = [{ ...fullBleedImage(), animation: { type: 'fadeIn', duration: 2 } }];
     const out = applyRenderStyleToLayers(layers, BLOCK, DEFAULT_THEME);
     expect(out).toBe(layers);
   });

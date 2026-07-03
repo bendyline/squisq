@@ -452,21 +452,21 @@ export function RawEditor({
                 position.lineNumber,
                 position.column,
               );
-              const suggestions = BLOCK_META_KEY_DESCRIPTORS.filter(
-                (d) => !present.has(d.key),
-              ).map((d, i) => ({
-                label: d.key,
-                filterText: d.key,
-                kind: monaco.languages.CompletionItemKind.Property,
-                insertText: `${d.key}=`,
-                range,
-                detail: d.values ? d.description : `${d.description} — ${d.valueHint}`,
-                sortText: String(i).padStart(4, '0'),
-                // Closed-set keys chain straight into their value list.
-                ...(d.values
-                  ? { command: { id: 'editor.action.triggerSuggest', title: '' } }
-                  : {}),
-              }));
+              const suggestions = BLOCK_META_KEY_DESCRIPTORS.filter((d) => !present.has(d.key)).map(
+                (d, i) => ({
+                  label: d.key,
+                  filterText: d.key,
+                  kind: monaco.languages.CompletionItemKind.Property,
+                  insertText: `${d.key}=`,
+                  range,
+                  detail: d.values ? d.description : `${d.description} — ${d.valueHint}`,
+                  sortText: String(i).padStart(4, '0'),
+                  // Closed-set keys chain straight into their value list.
+                  ...(d.values
+                    ? { command: { id: 'editor.action.triggerSuggest', title: '' } }
+                    : {}),
+                }),
+              );
               return { suggestions };
             },
           },

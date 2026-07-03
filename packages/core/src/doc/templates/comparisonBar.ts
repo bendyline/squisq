@@ -45,8 +45,7 @@ export function comparisonBar(input: ComparisonBarInput, context: TemplateContex
   // for its trailing value label inside a 96% safe area — otherwise a
   // long label ("84 clarity score") runs off the right edge of the block.
   const maxValue = Math.max(leftValue, rightValue, 1);
-  const longestLabelPx =
-    Math.max(leftDisplay.length, rightDisplay.length) * valueFontSize * 0.58;
+  const longestLabelPx = Math.max(leftDisplay.length, rightDisplay.length) * valueFontSize * 0.58;
   const labelWidthPct = (longestLabelPx / viewport.width) * 100;
   const maxBarWidth = Math.max(20, Math.min(65, 96 - barStartX - labelWidthPct - 2));
   const leftBarWidth = (leftValue / maxValue) * maxBarWidth;

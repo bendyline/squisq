@@ -65,7 +65,13 @@ export function dateEvent(input: DateEventInput, context: TemplateContext): Laye
 
   // Add accent image layers (behind text, after background)
   if (accentImage) {
-    layers.push(...createAccentLayers(accentImage, input.id, themedImageTreatment(context, input.imageTreatment)));
+    layers.push(
+      ...createAccentLayers(
+        accentImage,
+        input.id,
+        themedImageTreatment(context, input.imageTreatment),
+      ),
+    );
   }
 
   // Date — hero element, much larger

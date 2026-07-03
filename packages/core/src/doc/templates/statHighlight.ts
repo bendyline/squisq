@@ -54,7 +54,13 @@ export function statHighlight(input: StatHighlightInput, context: TemplateContex
 
   // Add accent image layers (behind text, after background)
   if (accentImage) {
-    layers.push(...createAccentLayers(accentImage, input.id, themedImageTreatment(context, input.imageTreatment)));
+    layers.push(
+      ...createAccentLayers(
+        accentImage,
+        input.id,
+        themedImageTreatment(context, input.imageTreatment),
+      ),
+    );
   }
 
   // Big stat — hero element, dominates the slide

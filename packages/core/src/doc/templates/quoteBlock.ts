@@ -45,7 +45,13 @@ export function quoteBlock(input: QuoteBlockInput, context: TemplateContext): La
 
   // Add accent image layers (behind text, after background)
   if (accentImage) {
-    layers.push(...createAccentLayers(accentImage, input.id, themedImageTreatment(context, input.imageTreatment)));
+    layers.push(
+      ...createAccentLayers(
+        accentImage,
+        input.id,
+        themedImageTreatment(context, input.imageTreatment),
+      ),
+    );
   }
 
   // Decorative opening quotation mark — oversized, low-opacity behind the
@@ -104,7 +110,10 @@ export function quoteBlock(input: QuoteBlockInput, context: TemplateContext): La
     const quoteWidthPx = (parseFloat(accentLayout.textWidth) / 100) * viewport.width;
     const quoteHeightPx = estimateTextHeight(quote, quoteFontSize, quoteWidthPx, quoteLineHeight);
     const gapPx = quoteFontSize * 1.7;
-    const attrYPct = Math.min(82, quoteYPct + ((quoteHeightPx / 2 + gapPx) / viewport.height) * 100);
+    const attrYPct = Math.min(
+      82,
+      quoteYPct + ((quoteHeightPx / 2 + gapPx) / viewport.height) * 100,
+    );
 
     layers.push({
       type: 'text',

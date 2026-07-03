@@ -10,7 +10,13 @@
 
 import type { Layer } from '../../schemas/Doc.js';
 import type { ListBlockInput, TemplateContext } from '../../schemas/BlockTemplates.js';
-import { getThemeFont, shouldUseShadow, themedEntrance, themedFontSize, themedImageTreatment } from '../utils/themeUtils.js';
+import {
+  getThemeFont,
+  shouldUseShadow,
+  themedEntrance,
+  themedFontSize,
+  themedImageTreatment,
+} from '../utils/themeUtils.js';
 import { createAccentLayers, getAccentLayout, adjustY, DEFAULT_LAYOUT } from './accentImage.js';
 
 export function listBlock(input: ListBlockInput, context: TemplateContext): Layer[] {
@@ -44,7 +50,13 @@ export function listBlock(input: ListBlockInput, context: TemplateContext): Laye
 
   // Add accent image layers
   if (accentImage) {
-    layers.push(...createAccentLayers(accentImage, input.id, themedImageTreatment(context, input.imageTreatment)));
+    layers.push(
+      ...createAccentLayers(
+        accentImage,
+        input.id,
+        themedImageTreatment(context, input.imageTreatment),
+      ),
+    );
   }
 
   // Left edge of the text column — derived from the center+width pair so
@@ -125,7 +137,11 @@ export function listBlock(input: ListBlockInput, context: TemplateContext): Laye
         y: adjustY(`${y}%`, accentLayout),
         width: accentLayout.textWidth,
       },
-      animation: themedEntrance(context, 'text', { type: 'fadeIn', duration: 0.8, delay: 0.3 + 0.3 * i }),
+      animation: themedEntrance(context, 'text', {
+        type: 'fadeIn',
+        duration: 0.8,
+        delay: 0.3 + 0.3 * i,
+      }),
     });
   }
 

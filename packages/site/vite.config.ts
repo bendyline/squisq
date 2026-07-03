@@ -126,4 +126,61 @@ export default defineConfig({
   worker: {
     format: 'es',
   },
+  build: {
+    rolldownOptions: {
+      output: {
+        codeSplitting: {
+          groups: [
+            {
+              name: 'react-vendor',
+              test: /node_modules[\\/](react|react-dom)[\\/]/,
+              priority: 30,
+            },
+            {
+              name: 'monaco-vendor',
+              test: /node_modules[\\/](@monaco-editor|monaco-editor)[\\/]/,
+              priority: 20,
+            },
+            {
+              name: 'tiptap-vendor',
+              test: /node_modules[\\/]@tiptap[\\/]/,
+              priority: 19,
+            },
+            {
+              name: 'fontawesome-vendor',
+              test: /node_modules[\\/]@fortawesome[\\/]/,
+              priority: 18,
+            },
+            {
+              name: 'squisq-standalone-player',
+              test: /packages[\\/]react[\\/](src|dist)[\\/]standalone-source/,
+              priority: 17,
+            },
+            {
+              name: (id) => {
+                if (id.includes('/packages/core/')) return 'squisq-core';
+                if (id.includes('/packages/react/')) return 'squisq-react';
+                if (id.includes('/packages/formats/')) return 'squisq-formats';
+                if (id.includes('/packages/editor-react/')) return 'squisq-editor';
+                if (id.includes('/packages/video-react/')) return 'squisq-video-react';
+                if (id.includes('/packages/video/')) return 'squisq-video';
+                return null;
+              },
+              test: /packages[\\/](core|react|formats|editor-react|video|video-react)[\\/]/,
+              priority: 16,
+            },
+            {
+              name: 'vendor',
+              test: /node_modules[\\/]/,
+              priority: 5,
+            },
+          ],
+        },
+      },
+    },
+    // This dev/demo app intentionally loads the full editor surface. Monaco is
+    // a legitimate large chunk; keep the warning focused on accidental larger
+    // regressions while real app code remains split into smaller chunks.
+    chunkSizeWarningLimit: 4000,
+  },
 });

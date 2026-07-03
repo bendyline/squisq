@@ -1190,29 +1190,40 @@
   font-family: var(--squisq-theme-title-font, var(--squisq-theme-body-font, inherit));
 }
 
+/* Headings start blocks, so they get generous space ABOVE (a clear break from
+   the previous block) and a tighter margin BELOW so the heading stays visually
+   grouped with the content it introduces. */
 .squisq-wysiwyg-editor h1 {
   font-size: 2em;
-  margin: 0.67em 0;
+  margin: 1em 0 0.4em;
 }
 .squisq-wysiwyg-editor h2 {
   font-size: 1.5em;
-  margin: 0.75em 0;
+  margin: 1.15em 0 0.35em;
 }
 .squisq-wysiwyg-editor h3 {
   font-size: 1.17em;
-  margin: 0.83em 0;
+  margin: 1.3em 0 0.3em;
 }
 .squisq-wysiwyg-editor h4 {
   font-size: 1em;
-  margin: 1em 0;
+  margin: 1.4em 0 0.3em;
 }
 .squisq-wysiwyg-editor h5 {
   font-size: 0.83em;
-  margin: 1.17em 0;
+  margin: 1.5em 0 0.3em;
 }
 .squisq-wysiwyg-editor h6 {
   font-size: 0.67em;
-  margin: 1.33em 0;
+  margin: 1.6em 0 0.3em;
+}
+
+/* The first block in the document has nothing above it — don't push the top of
+   the editor down with the section-break margin. (The editable ProseMirror node
+   itself carries the `squisq-wysiwyg-editor` class, so its blocks are direct
+   children.) */
+.squisq-wysiwyg-editor > :first-child {
+  margin-top: 0;
 }
 
 .squisq-wysiwyg-editor p {

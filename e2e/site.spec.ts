@@ -46,9 +46,9 @@ test.describe('Site navigation', () => {
     await page.waitForLoadState('networkidle');
   });
 
-  test('loads with the default hello-world sample', async ({ page }) => {
+  test('loads with the default about-squisq sample', async ({ page }) => {
     const select = page.locator('select').first();
-    await expect(select).toHaveValue('hello-world');
+    await expect(select).toHaveValue('about-squisq');
   });
 
   test('sample picker contains all-templates', async ({ page }) => {

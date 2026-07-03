@@ -38,6 +38,12 @@ export const SAMPLES: Record<string, string> = {
   // timeout. Don't add anything that would inflate this — it exists
   // purely to keep `e2e/video-export.spec.ts` fast.
   'e2e-tiny': `# Tiny\n`,
+  // Task-list fixture for `e2e/task-list.spec.ts`. GFM checkboxes the WYSIWYG
+  // editor must render as `<input type="checkbox">` (one unchecked, one
+  // checked). Loaded as a sample — the deterministic way the app ingests
+  // markdown — rather than typed into Monaco, which races the controlled
+  // editor's value pipeline (see that test for the history).
+  'e2e-tasklist': `# Tasks\n\n- [ ] open task\n- [x] closed task\n`,
   // Used by the timeline e2e: a block with an embedded <video> the timeline
   // should surface and let the author re-time / move between blocks.
   'timeline-media': `# One {duration=10}

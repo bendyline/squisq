@@ -265,10 +265,7 @@ function recommendedNamesForProfile(profile: BlockContentProfile): string[] {
  * option); the multi-candidate `recommendTemplatesForBlock` below serves
  * the editor's template-picker UI instead.
  */
-export function pickAutoTemplate(
-  profile: BlockContentProfile,
-  blockIndex = 0,
-): string | undefined {
+export function pickAutoTemplate(profile: BlockContentProfile, blockIndex = 0): string | undefined {
   if (profile.hasTable) return 'dataTable';
   if (profile.imageCount >= 2) return 'photoGrid';
   if (profile.hasImage) return blockIndex % 2 === 0 ? 'leftFeature' : 'rightFeature';

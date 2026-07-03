@@ -18,7 +18,12 @@ import type {
   RightFeatureInput,
   TemplateContext,
 } from '../../schemas/BlockTemplates.js';
-import { getThemeFont, themedEntrance, themedFontSize, themedImageTreatment } from '../utils/themeUtils.js';
+import {
+  getThemeFont,
+  themedEntrance,
+  themedFontSize,
+  themedImageTreatment,
+} from '../utils/themeUtils.js';
 
 type FeatureInput = LeftFeatureInput | RightFeatureInput;
 

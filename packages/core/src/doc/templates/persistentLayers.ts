@@ -460,7 +460,10 @@ export function expandPersistentLayers(
   }
 
   // Use reduce+concat instead of flatMap for Coherent GT compatibility (ES2017)
-  return layers.reduce<Layer[]>((acc, layer) => acc.concat(expandPersistentLayer(layer, theme)), []);
+  return layers.reduce<Layer[]>(
+    (acc, layer) => acc.concat(expandPersistentLayer(layer, theme)),
+    [],
+  );
 }
 
 // ============================================

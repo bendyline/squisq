@@ -78,24 +78,15 @@ test('typing "[x] " converts to a checked checkbox and round-trips to markdown',
 });
 
 test('existing task-list markdown renders as checkboxes in the editor', async ({ page }) => {
-  await page.goto('/');
+  // Load a sample whose markdown already contains a GFM task list, rather than
+  // clearing + retyping in Monaco. Monaco here is a *controlled* editor
+  // (`value={editorSource}`) with a bidirectional markdown↔state sync; driving
+  // it with select-all/backspace/type races the controlled-value round-trip and
+  // leaves partial residue (`Tin`, `#`). Loading a sample is the deterministic
+  // path the app uses to ingest markdown, so the WYSIWYG mounts on the exact
+  // source we want to verify.
+  await page.goto('/?sample=e2e-tasklist');
   await page.waitForLoadState('networkidle');
-
-  // Author task-list markdown in the raw view, then switch to WYSIWYG.
-  await switchView(page, 'Markdown');
-  await page.locator('[data-testid="raw-editor"]').waitFor({ state: 'visible' });
-  // Focus Monaco's text area (clicking the wrapper alone doesn't focus it).
-  await page.locator('.monaco-editor .view-lines').first().click();
-  await page.locator('.monaco-editor textarea').first().focus();
-  await page.keyboard.press(`${MOD}+a`);
-  await page.keyboard.press('Delete');
-  await page.keyboard.type('- [ ] open task');
-  await page.keyboard.press('Enter');
-  await page.keyboard.type('- [x] closed task');
-  // EditorContext debounces the markdown→Tiptap parse at 150ms; wait long enough
-  // for that debounce to fire before switching views, so the new markdownDoc is
-  // in place when the WYSIWYG editor mounts.
-  await page.waitForTimeout(300);
 
   await switchView(page, 'Editor');
   const editor = page.locator('.tiptap.ProseMirror');
@@ -103,6 +94,8 @@ test('existing task-list markdown renders as checkboxes in the editor', async ({
 
   const open = editor.locator('li:has(input[type="checkbox"])', { hasText: 'open task' });
   const closed = editor.locator('li:has(input[type="checkbox"])', { hasText: 'closed task' });
+  await expect(open).toBeVisible();
+  await expect(closed).toBeVisible();
   await expect(open.locator('input[type="checkbox"]')).not.toBeChecked();
   await expect(closed.locator('input[type="checkbox"]')).toBeChecked();
 });

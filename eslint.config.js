@@ -15,6 +15,13 @@ export default tseslint.config(
       '**/*.config.js',
       '**/vitest.setup.ts',
       'scripts/**',
+      // Ad-hoc browser inspection probes. They are intentionally run by hand
+      // against a dev server and use Playwright page.evaluate browser globals.
+      'debug_icons.mjs',
+      'verify_playicons.mjs',
+      'test_h2c.mjs',
+      'packages/site/debug_icons.mjs',
+      'packages/site/verify_playicons.mjs',
       // Temporary agent worktrees — these are checkouts under .claude and
       // must not be linted (their nested paths bypass the path-based
       // overrides below, producing spurious "rule not found" errors).

@@ -38,7 +38,13 @@ export function definitionCard(input: DefinitionCardInput, context: TemplateCont
 
   // Add accent image layers
   if (accentImage) {
-    layers.push(...createAccentLayers(accentImage, input.id, themedImageTreatment(context, input.imageTreatment)));
+    layers.push(
+      ...createAccentLayers(
+        accentImage,
+        input.id,
+        themedImageTreatment(context, input.imageTreatment),
+      ),
+    );
   }
 
   // Term — large, accent-colored

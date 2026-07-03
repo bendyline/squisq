@@ -13,7 +13,13 @@
  * This is shared code used by both site and efb-app doc renderers.
  */
 
-import type { Layer, ImageLayer, ImageTreatment, ShapeLayer, Animation } from '../../schemas/Doc.js';
+import type {
+  Layer,
+  ImageLayer,
+  ImageTreatment,
+  ShapeLayer,
+  Animation,
+} from '../../schemas/Doc.js';
 import type { AccentImage, AccentPosition } from '../../schemas/BlockTemplates.js';
 
 const PERCENTAGE_RE = /^(\d+(?:\.\d+)?)\s*%?$/;

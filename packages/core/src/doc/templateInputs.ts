@@ -191,7 +191,9 @@ export function deriveTemplateInputs(
     case 'factCard':
       return { fact: headingText, explanation: bodyText || headingText };
     case 'comparisonBar':
-      return placeholders ? { leftLabel: 'A', leftValue: 60, rightLabel: 'B', rightValue: 40 } : null;
+      return placeholders
+        ? { leftLabel: 'A', leftValue: 60, rightLabel: 'B', rightValue: 40 }
+        : null;
     case 'list': {
       const items = extractListItems(contents);
       if (items.length > 0) return { items };

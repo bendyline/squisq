@@ -28,12 +28,7 @@ import {
   type Theme,
 } from '@bendyline/squisq/schemas';
 import { VIEWPORT_PRESETS } from '@bendyline/squisq/schemas';
-import {
-  getLayers,
-  hasTemplate,
-  DEFAULT_THEME,
-  deriveTemplateInputs,
-} from '@bendyline/squisq/doc';
+import { getLayers, hasTemplate, DEFAULT_THEME, deriveTemplateInputs } from '@bendyline/squisq/doc';
 import type { RenderContext } from '@bendyline/squisq/doc';
 import { extractPlainText } from '@bendyline/squisq/markdown';
 import { BlockRenderer } from './BlockRenderer';
@@ -139,9 +134,14 @@ function BlockSection({ block, basePath, viewport, renderContext, blockIndex }: 
       duration: 1,
       audioSegment: 0,
       title: headingText,
-      ...(deriveTemplateInputs(annotation.template ?? 'sectionHeader', headingText, block.contents, {
-        placeholders: true,
-      }) ?? {}),
+      ...(deriveTemplateInputs(
+        annotation.template ?? 'sectionHeader',
+        headingText,
+        block.contents,
+        {
+          placeholders: true,
+        },
+      ) ?? {}),
       ...annotation.params,
       ...block.templateOverrides,
     };
@@ -222,7 +222,6 @@ function BlockSection({ block, basePath, viewport, renderContext, blockIndex }: 
 }
 
 // ── Template Defaults (mirrored from PreviewPanel) ─────────────────
-
 
 // ── Main Component ─────────────────────────────────────────────────
 

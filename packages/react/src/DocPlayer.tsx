@@ -908,7 +908,11 @@ export function DocPlayer({
 
         {/* Previous block (during transition) */}
         {!showCoverBlock && previousBlock && isExiting && (
-          <div className="doc-player__block doc-player__block--previous">
+          // Keyed by block id so each block is its own DOM subtree: React never
+          // reconciles one block's layers onto another's (templates reuse layer
+          // ids like `title`/`background`), which would otherwise reuse stale
+          // DOM / skip entrance animations mid-transition.
+          <div key={previousBlock.id} className="doc-player__block doc-player__block--previous">
             <BlockRenderer
               block={previousBlock}
               blockTime={blockTime}
@@ -922,7 +926,7 @@ export function DocPlayer({
 
         {/* Current block */}
         {!showCoverBlock && currentBlock && (
-          <div className="doc-player__block doc-player__block--active">
+          <div key={currentBlock.id} className="doc-player__block doc-player__block--active">
             <BlockRenderer
               block={currentBlock}
               blockTime={blockTime}

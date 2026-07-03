@@ -12,7 +12,7 @@
  * - Automatic expansion of template blocks
  */
 
-import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import { useMemo, useCallback, useRef } from 'react';
 import type { Doc, Block, DocBlock } from '@bendyline/squisq/schemas';
 import type { Theme } from '@bendyline/squisq/schemas';
 import {
@@ -67,16 +67,9 @@ export function useDocPlayback(
   renderMode: boolean = false,
   theme?: Theme,
 ): PlaybackState & PlaybackActions {
-  const [transitionState, setTransitionState] = useState<{
-    entering: boolean;
-    exiting: boolean;
-    previousBlock: Block | null;
-  }>({
-    entering: false,
-    exiting: false,
-    previousBlock: null,
-  });
-
+  // `renderMode` is retained for API/signature compatibility; block transitions
+  // are now computed identically for real-time and render (export) modes.
+  void renderMode;
   // Expand any template blocks into full blocks
   const blocks = useMemo(() => {
     if (!script?.blocks) {
@@ -164,80 +157,38 @@ export function useDocPlayback(
     return Math.min(1, currentTime / script.duration);
   }, [script, currentTime]);
 
-  // Track block transitions.
-  // In render mode, transitions are computed from blockTime so they stay
-  // synchronized with the seekTo timeline. In normal mode, setTimeout drives
-  // transitions at the browser's real-time clock speed.
-  const _prevBlockRef = useMemo(
-    () => currentBlock,
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- intentionally keyed on index, not block reference
-    [currentBlockIndex],
-  );
+  // ─── Transition tracking (synchronous — no effect lag) ──────────────
+  // `isEntering` is simply "we are within the block's entrance window"
+  // (blockTime < the transition's duration). Deriving it during render —
+  // rather than flipping it in an effect a frame AFTER the block changes —
+  // means a newly-active block renders WITH its entrance state on its very
+  // first frame. Otherwise the block paints once fully settled and then, a
+  // frame later, snaps back to the start of its entrance animation: the brief
+  // "flash then re-animate" seen between blocks. This runs identically for
+  // real-time playback and frame-seeked render (export) mode.
+  //
+  // The block we transitioned FROM (for the crossfade) is tracked with refs
+  // updated during render — the standard "previous value" pattern — so the
+  // outgoing block is known on the SAME frame the new block becomes active
+  // (an effect would lag a frame and drop the crossfade's first frames).
+  const outgoingBlockRef = useRef<Block | null>(null);
+  const activeBlockIdRef = useRef<string | null>(null);
+  const lastRenderedBlockRef = useRef<Block | null>(null);
+  if (currentBlock && currentBlock.id !== activeBlockIdRef.current) {
+    outgoingBlockRef.current = lastRenderedBlockRef.current;
+    activeBlockIdRef.current = currentBlock.id;
+  }
+  lastRenderedBlockRef.current = currentBlock;
 
-  useEffect(() => {
-    if (!currentBlock || renderMode) return;
-
-    // When block changes, trigger transition (real-time mode only)
-    if (transitionState.previousBlock?.id !== currentBlock.id) {
-      const transition = currentBlock.transition;
-      const transitionDuration = transition ? resolveTransitionDuration(transition) : 0;
-
-      if (transitionDuration > 0) {
-        // Start transition
-        setTransitionState({
-          entering: true,
-          exiting: true,
-          previousBlock: transitionState.previousBlock,
-        });
-
-        // End transition after duration
-        const timer = setTimeout(() => {
-          setTransitionState({
-            entering: false,
-            exiting: false,
-            previousBlock: currentBlock,
-          });
-        }, transitionDuration * 1000);
-
-        return () => clearTimeout(timer);
-      } else {
-        // Instant cut
-        setTransitionState({
-          entering: false,
-          exiting: false,
-          previousBlock: currentBlock,
-        });
-      }
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- intentionally keyed on currentBlock?.id only; reading transitionState.previousBlock without dep to avoid infinite loop
-  }, [currentBlock?.id, renderMode]);
-
-  // Render mode: track previous block via ref and compute transition from time
-  const renderPrevBlockRef = useRef<Block | null>(null);
-
-  useEffect(() => {
-    if (!renderMode || !currentBlock) return;
-
-    if (transitionState.previousBlock?.id !== currentBlock.id) {
-      // Block changed — remember the old block for crossfade
-      const oldPrev = transitionState.previousBlock;
-      renderPrevBlockRef.current = oldPrev;
-      // Store current block as the "last seen" for next transition
-      setTransitionState((prev) => ({
-        ...prev,
-        previousBlock: currentBlock,
-      }));
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- same pattern: keyed on block identity change
-  }, [currentBlock?.id, renderMode]);
-
-  // In render mode, derive entering/exiting from blockTime
-  const renderTransitionDuration = currentBlock?.transition
+  const transitionDuration = currentBlock?.transition
     ? resolveTransitionDuration(currentBlock.transition)
     : 0;
-  const renderIsEntering =
-    renderMode && renderTransitionDuration > 0 && blockTime < renderTransitionDuration;
-  const renderIsExiting = renderIsEntering && renderPrevBlockRef.current !== null;
+  const isEntering = !!currentBlock && transitionDuration > 0 && blockTime < transitionDuration;
+  const outgoingBlock = outgoingBlockRef.current;
+  // Only crossfade a genuinely different outgoing block (guards restarts/seeks
+  // where the "previous" resolves to the same block).
+  const isExiting = isEntering && outgoingBlock != null && outgoingBlock.id !== currentBlock?.id;
+  const previousBlock = isExiting ? outgoingBlock : null;
 
   // Manual navigation
   const goToBlock = useCallback(
@@ -269,15 +220,9 @@ export function useDocPlayback(
   return {
     currentBlock,
     currentBlockIndex,
-    previousBlock: renderMode
-      ? renderIsExiting
-        ? renderPrevBlockRef.current
-        : null
-      : transitionState.exiting
-        ? transitionState.previousBlock
-        : null,
-    isEntering: renderMode ? renderIsEntering : transitionState.entering,
-    isExiting: renderMode ? renderIsExiting : transitionState.exiting,
+    previousBlock,
+    isEntering,
+    isExiting,
     blockTime,
     blockProgress,
     docProgress,

@@ -320,10 +320,7 @@ function buildBlockSequence(
  * (keep the default) for unknown pairs or when a required input —
  * a background image for `pullQuote` — is unavailable.
  */
-function translateTemplateBlock(
-  block: TemplateBlock,
-  target: string,
-): TemplateBlock | null {
+function translateTemplateBlock(block: TemplateBlock, target: string): TemplateBlock | null {
   const base = {
     id: block.id,
     duration: block.duration,

@@ -1,5 +1,7 @@
 import { defineConfig, devices } from '@playwright/test';
 
+const e2eBaseUrl = 'http://127.0.0.1:5199';
+
 /**
  * Playwright configuration for squisq E2E tests.
  *
@@ -16,7 +18,7 @@ export default defineConfig({
   timeout: 30_000,
 
   use: {
-    baseURL: 'http://localhost:5199',
+    baseURL: e2eBaseUrl,
     trace: 'on-first-retry',
   },
 
@@ -30,8 +32,11 @@ export default defineConfig({
   /* Serve the built Vite site before running tests. */
   webServer: {
     command: 'npm run preview:e2e -w squisq-site',
-    url: 'http://localhost:5199',
-    reuseExistingServer: !process.env.CI,
+    url: e2eBaseUrl,
+    // Always run against the built preview server for this suite. Reusing an
+    // already-open Vite dev server can hit stale optimized deps and leave the
+    // app shell empty, which makes every UI selector time out.
+    reuseExistingServer: false,
     timeout: 30_000,
   },
 });

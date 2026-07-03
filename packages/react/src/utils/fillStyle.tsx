@@ -91,7 +91,13 @@ function patternDef(id: string, pattern: ShapePattern): JSX.Element {
       patternTransform={pattern.kind === 'diagonal' ? 'rotate(45)' : undefined}
     >
       {pattern.kind === 'dots' && (
-        <circle cx={size / 2} cy={size / 2} r={Math.max(1, size / 12)} fill={color} opacity={opacity} />
+        <circle
+          cx={size / 2}
+          cy={size / 2}
+          r={Math.max(1, size / 12)}
+          fill={color}
+          opacity={opacity}
+        />
       )}
       {pattern.kind === 'grid' && (
         <path

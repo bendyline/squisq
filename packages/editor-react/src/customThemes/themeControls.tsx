@@ -4,8 +4,7 @@
  * `squisq-theme-customizer-*` classes so both surfaces style identically.
  */
 
-import { useEffect } from 'react';
-import { AVAILABLE_FONT_STACKS, isHex, buildGoogleFontsUrl } from '@bendyline/squisq/schemas';
+import { AVAILABLE_FONT_STACKS, isHex } from '@bendyline/squisq/schemas';
 import {
   type CustomFontInput,
   type FallbackOption,
@@ -13,25 +12,6 @@ import {
   FALLBACK_OPTIONS,
   nextAccent,
 } from './themeDraft';
-
-const FONT_PREVIEW_LINK_ID = 'squisq-font-preview-fonts';
-
-/**
- * Load every curated web font once so the font pickers can preview each option
- * in its own face (system stacks already render). Idempotent; a no-op in SSR
- * or when nothing in the registry needs Google hosting.
- */
-function ensureFontPreviewFonts(): void {
-  if (typeof document === 'undefined') return;
-  if (document.getElementById(FONT_PREVIEW_LINK_ID)) return;
-  const href = buildGoogleFontsUrl(AVAILABLE_FONT_STACKS.map((s) => ({ stackId: s.id })));
-  if (!href) return;
-  const link = document.createElement('link');
-  link.id = FONT_PREVIEW_LINK_ID;
-  link.rel = 'stylesheet';
-  link.href = href;
-  document.head.appendChild(link);
-}
 
 export function Section({
   title,
@@ -91,13 +71,10 @@ export function FontPicker({
   value: CustomFontInput;
   onChange: (next: CustomFontInput) => void;
 }) {
-  // Load the curated web fonts so each option previews in its own face.
-  useEffect(() => {
-    ensureFontPreviewFonts();
-  }, []);
-
   // Render the closed <select> (and each option) in the font it names, so the
-  // dropdown doubles as a live font preview.
+  // dropdown doubles as a live font preview. Faces are provided by the host
+  // (the site links `/fonts/fonts.css`; the same fonts the player renders
+  // with) — no external font fetch here. Unloaded faces fall back gracefully.
   const selectedFamily =
     value.kind === 'curated'
       ? AVAILABLE_FONT_STACKS.find((s) => s.id === value.stackId)?.family

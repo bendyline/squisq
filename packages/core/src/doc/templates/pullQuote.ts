@@ -10,7 +10,12 @@
 
 import type { Layer } from '../../schemas/Doc.js';
 import type { PullQuoteInput, TemplateContext } from '../../schemas/BlockTemplates.js';
-import { getThemeFont, themedEntrance, themedFontSize, themedImageTreatment } from '../utils/themeUtils.js';
+import {
+  getThemeFont,
+  themedEntrance,
+  themedFontSize,
+  themedImageTreatment,
+} from '../utils/themeUtils.js';
 import { estimateTextHeight } from './captionUtils.js';
 
 export function pullQuote(input: PullQuoteInput, context: TemplateContext): Layer[] {

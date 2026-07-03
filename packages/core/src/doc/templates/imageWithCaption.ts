@@ -10,7 +10,12 @@
 
 import type { Layer } from '../../schemas/Doc.js';
 import type { ImageWithCaptionInput, TemplateContext } from '../../schemas/BlockTemplates.js';
-import { getThemeFont, shouldUseShadow, themedFontSize, themedImageTreatment } from '../utils/themeUtils.js';
+import {
+  getThemeFont,
+  shouldUseShadow,
+  themedFontSize,
+  themedImageTreatment,
+} from '../utils/themeUtils.js';
 import { withAlpha } from '../../schemas/colorUtils.js';
 import { cleanCaption } from './captionUtils.js';
 import { mapAmbientMotion } from './accentImage.js';
