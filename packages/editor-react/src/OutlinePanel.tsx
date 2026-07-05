@@ -17,14 +17,30 @@ import { templateLabel } from './TemplatePicker';
 import { useHeadingLayout } from './useHeadingLayout';
 import { usePreviewSettingsOptional } from './PreviewControls';
 
+/**
+ * Responsive default width for the outline pane, used when no fixed `width`
+ * (or `--squisq-outline-width`) is supplied: never narrower than 260px, grows
+ * with the viewport so it stretches out to fill horizontal space when there's
+ * room, and caps at 460px so it never dominates the editor. A viewport unit
+ * (rather than
+ * a container unit) keeps the pane and the toolbar's view-tabs — which read the
+ * same value — resolving to an identical width, so their right edges stay
+ * aligned.
+ */
+export const OUTLINE_RESPONSIVE_WIDTH = 'clamp(260px, 30vw, 460px)';
+
 export interface OutlinePanelProps {
-  /** Width of the pane in pixels (default: 240). */
+  /**
+   * Fixed width of the pane in pixels. When omitted, the pane sizes
+   * responsively from `--squisq-outline-width` (falling back to
+   * {@link OUTLINE_RESPONSIVE_WIDTH}) so it stretches on wider screens.
+   */
   width?: number;
   /** Optional CSS class for the outer container. */
   className?: string;
 }
 
-export function OutlinePanel({ width = 240, className }: OutlinePanelProps) {
+export function OutlinePanel({ width, className }: OutlinePanelProps) {
   const {
     doc,
     markdownSource,
@@ -88,9 +104,15 @@ export function OutlinePanel({ width = 240, className }: OutlinePanelProps) {
   const accentColor = previewSettings?.activeTheme?.colors?.primary;
 
   const isEmpty = !doc || doc.blocks.length === 0 || !hasAnyHeading(doc.blocks);
+  // Fixed px when a width is supplied; otherwise size from the shared
+  // `--squisq-outline-width` variable (the shell sets it, and the toolbar's
+  // view-tabs read the same value so their right edges stay aligned). The
+  // clamp fallback lets a standalone OutlinePanel stretch on wide screens too.
+  const basis =
+    width != null ? `${width}px` : `var(--squisq-outline-width, ${OUTLINE_RESPONSIVE_WIDTH})`;
   const paneStyle: CSSProperties = {
-    width: `${width}px`,
-    flex: `0 0 ${width}px`,
+    width: basis,
+    flex: `0 0 ${basis}`,
     overflow: 'auto',
     ...(accentColor
       ? ({ ['--squisq-outline-accent' as string]: accentColor } as CSSProperties)

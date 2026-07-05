@@ -39,6 +39,7 @@ import { useAutoSurface } from './hooks/useAutoSurface';
 import { useAudioSync } from './hooks/useAudioSync';
 import { useDocPlayback } from './hooks/useDocPlayback';
 import { useViewportOrientation } from './hooks/useViewportOrientation';
+import { useSlideSwipe } from './hooks/useSlideSwipe';
 import type { AudioProvider } from './hooks/AudioProvider';
 import {
   expandCoverBlock,
@@ -189,6 +190,13 @@ interface DocPlayerProps {
   /** Caption display style (default: 'standard').
    *  'social' shows large centered words with the active word highlighted. */
   captionStyle?: CaptionStyle;
+  /**
+   * Enable drag-to-swipe slide navigation in slideshow mode (default: true).
+   * When enabled, press-and-drag on a slide advances/rewinds on release past a
+   * threshold (or a quick flick), and snaps back otherwise. Only applies when
+   * `displayMode === 'slideshow'` and not in render/headless mode.
+   */
+  enableSwipe?: boolean;
 }
 
 export function DocPlayer({
@@ -214,6 +222,7 @@ export function DocPlayer({
   theme,
   surface,
   captionStyle = 'standard',
+  enableSwipe = true,
 }: DocPlayerProps) {
   const isSlideshowMode = displayMode === 'slideshow';
   const isLinearMode = displayMode === 'linear';
@@ -703,6 +712,18 @@ export function DocPlayer({
     [currentBlockIndex, expandedBlocks, seekTo, pause],
   );
 
+  // Drag-to-swipe navigation for slideshow mode. Inert unless in slideshow mode,
+  // interactive (not headless), and not overridden off via `enableSwipe`.
+  const swipeEnabled = isSlideshowMode && !isLinearMode && !renderMode && enableSwipe;
+  const swipe = useSlideSwipe({
+    enabled: swipeEnabled,
+    containerRef,
+    canGoNext: currentBlockIndex < expandedBlocks.length - 1,
+    canGoPrev: currentBlockIndex > 0,
+    onNext: slideNavActions.nextSlide,
+    onPrev: slideNavActions.prevSlide,
+  });
+
   // Callback for playback state changes (for external controls)
   useEffect(() => {
     onPlaybackStateChange?.(playbackState);
@@ -868,15 +889,21 @@ export function DocPlayer({
   return (
     <div
       ref={containerRef}
-      className="doc-player"
+      className={`doc-player${swipeEnabled ? ' doc-player--swipe' : ''}${
+        swipe.phase === 'dragging' ? ' doc-player--grabbing' : ''
+      }`}
       onClick={handleContainerClick}
+      onPointerDown={swipe.onPointerDown}
       style={{
         position: 'relative',
         width: '100%',
         aspectRatio: `${activeViewport.width} / ${activeViewport.height}`,
         margin: '0 auto',
         overflow: 'hidden',
-        cursor: renderMode ? undefined : 'pointer',
+        // Swipe uses the grab/grabbing cursor via CSS classes; let vertical page
+        // scroll through on touch while we own horizontal drags.
+        cursor: renderMode || swipeEnabled ? undefined : 'pointer',
+        touchAction: swipeEnabled ? 'pan-y' : undefined,
       }}
     >
       {/* Hidden audio element */}
@@ -926,7 +953,17 @@ export function DocPlayer({
 
         {/* Current block */}
         {!showCoverBlock && currentBlock && (
-          <div key={currentBlock.id} className="doc-player__block doc-player__block--active">
+          <div
+            key={currentBlock.id}
+            className={`doc-player__block doc-player__block--active${
+              swipe.phase !== 'idle' ? ` doc-player__block--${swipe.phase}` : ''
+            }`}
+            style={
+              swipe.phase !== 'idle'
+                ? { transform: `translateX(${swipe.offsetPx}px)` }
+                : undefined
+            }
+          >
             <BlockRenderer
               block={currentBlock}
               blockTime={blockTime}

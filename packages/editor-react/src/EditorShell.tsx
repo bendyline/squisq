@@ -23,7 +23,7 @@ import { RawEditor } from './RawEditor';
 import { WysiwygEditor } from './WysiwygEditor';
 import { InlinePreviewGutter } from './InlinePreviewGutter';
 import { BlockPreviewPanel } from './BlockPreviewPanel';
-import { OutlinePanel } from './OutlinePanel';
+import { OutlinePanel, OUTLINE_RESPONSIVE_WIDTH } from './OutlinePanel';
 import { BlockCardView } from './BlockCardView';
 import { TimelineTrack } from './TimelineTrack';
 import { PreviewPanel } from './PreviewPanel';
@@ -324,9 +324,11 @@ export interface EditorShellProps {
    */
   outline?: boolean;
   /**
-   * Width in pixels for the outline pane. Defaults to 240. Only takes
-   * effect when {@link EditorShellProps.outline} is true (or the View
-   * menu has toggled it on).
+   * Fixed width in pixels for the outline pane. When omitted, the pane sizes
+   * responsively — never narrower than 260px, growing with the window and
+   * capped at 460px — so it stretches out when there's horizontal space to
+   * spare. Only takes effect when {@link EditorShellProps.outline} is true (or
+   * the View menu has toggled it on).
    */
   outlineWidth?: number;
   /**
@@ -417,7 +419,7 @@ export function EditorShell({
   inlinePreview = false,
   inlinePreviewWidth = 320,
   outline = false,
-  outlineWidth = 240,
+  outlineWidth,
   blockTags = true,
   themeInheritance = 'fonts',
   viewPreferences,
@@ -534,7 +536,7 @@ interface EditorShellInnerProps {
   allowVersioning: boolean;
   versioningAutoSaveIdleMs?: number;
   inlinePreviewWidth: number;
-  outlineWidth: number;
+  outlineWidth?: number;
   themeOverride: Theme | null;
 }
 
@@ -775,13 +777,16 @@ function EditorShellInner({
         // tabs, status bar) consume `--squisq-ux-font` as their
         // `font-family`, falling back to the system stack when unset.
         ...(uxFont ? ({ '--squisq-ux-font': uxFont } as CSSProperties) : {}),
-        // Exposed so the toolbar's view-tabs section can match the outline
-        // pane's width, lining up its right-edge separator with the
-        // outline's right edge. The variable is set unconditionally so the
-        // outline pane itself can also read it if needed; the
-        // `data-outline-visible` gate above keeps the toolbar override
-        // scoped to the case where alignment matters.
-        ...({ '--squisq-outline-width': `${outlineWidth}px` } as CSSProperties),
+        // Exposed so the toolbar's view-tabs section AND the outline pane read
+        // one shared width, lining up the view-tabs' right-edge separator with
+        // the outline's right edge. A fixed `outlineWidth` pins it to px;
+        // otherwise it's the responsive clamp so the pane stretches when
+        // there's room. The `data-outline-visible` gate above keeps the
+        // toolbar override scoped to the case where alignment matters.
+        ...({
+          '--squisq-outline-width':
+            outlineWidth != null ? `${outlineWidth}px` : OUTLINE_RESPONSIVE_WIDTH,
+        } as CSSProperties),
       }}
       {...containerProps}
     >

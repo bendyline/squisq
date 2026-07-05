@@ -109,17 +109,15 @@ A squiggly-square tag is a trailing annotation on a heading. It has the shape \`
 
 ## Content Comes From Markdown {[factCard]}
 
-You almost never type the content *into* the tag. Write it as ordinary Markdown under the heading — the template reads it. The tag is where design lives:
-
-\`\`\`markdown
-## The Big Number {[statHighlight colorScheme=green]}
-
-**42%** of teams prefer visual blocks over raw slides.
-\`\`\`
+You almost never type the content *into* the tag. Write it as ordinary Markdown under the heading — the template reads it. The tag is where design lives — the sampler below shows several block types in action.
 
 ## A Sampler of Block Types {[sectionHeader colorScheme=orange]}
 
 The blocks below are all live — each heading picks a different template. Keep paging through Play mode to see them render.
+
+### The Big Number {[statHighlight colorScheme=green]}
+
+**42%** of teams prefer visual blocks over raw slides.
 
 ### A Famous Quote {[quote]}
 
