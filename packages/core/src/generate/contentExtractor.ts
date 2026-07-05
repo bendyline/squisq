@@ -147,11 +147,31 @@ const QUOTE_PATTERNS = [
   /(\w+(?:\s+\w+)?)\s+(?:said|stated|wrote|noted|observed|commented),?\s*"([^"]+)"/gi,
 ];
 
+// A single side of a comparison ("X" in "from X to Y"). Deliberately excludes
+// sentence/clause terminators (. ! ? ;) and newlines so a capture group can
+// never swallow text from an adjacent sentence. Without this, greedy `.{2,30}`
+// matches across a period — e.g. "…contradicted from witness to witness.
+// Robertson said…" yields right="witness. Robertson", producing a nonsensical
+// "witness → witness. Robertson" slide. Commas and colons are allowed (ranges
+// like "9:00 to 17:00", ratios); downstream label truncation trims commas.
+const COMPARISON_SIDE = '[^.!?;\\r\\n]{2,30}';
+
 const COMPARISON_PATTERNS = [
-  /from\s+(.{2,30})\s+to\s+(.{2,30})/gi,
-  /(.{2,30})\s+(?:vs\.?|versus)\s+(.{2,30})/gi,
-  /(.{2,30})\s+compared\s+to\s+(.{2,30})/gi,
+  new RegExp(`from\\s+(${COMPARISON_SIDE})\\s+to\\s+(${COMPARISON_SIDE})`, 'gi'),
+  new RegExp(`(${COMPARISON_SIDE})\\s+(?:vs\\.?|versus)\\s+(${COMPARISON_SIDE})`, 'gi'),
+  new RegExp(`(${COMPARISON_SIDE})\\s+compared\\s+to\\s+(${COMPARISON_SIDE})`, 'gi'),
 ];
+
+// Words whose trailing period is an abbreviation, not a sentence end. Used by
+// isSentenceBoundary() so names like "George W. Tibbetts" or "Quong Chong & Co."
+// don't get split into fragments. Matched only when the entire preceding word
+// equals one of these (case-insensitive), so "canal." / "taco." are unaffected.
+const SENTENCE_ABBREVIATIONS = new Set([
+  'mr', 'mrs', 'ms', 'dr', 'prof', 'st', 'mt', 'jr', 'sr', 'gen', 'col', 'capt',
+  'lt', 'sgt', 'rev', 'hon', 'sen', 'rep', 'gov', 'pres', 'vs', 'etc', 'inc',
+  'co', 'ltd', 'corp', 'al', 'fig', 'eg', 'ie', 'approx', 'dept', 'univ',
+  'assn', 'bros', 'ave', 'blvd', 'rd',
+]);
 
 const FACT_INDICATORS = [
   'largest',
@@ -431,6 +451,28 @@ function extractComparisons(text: string): ExtractedElement[] {
       const right = match[2].trim();
       if (left.length < 2 || left.length > 30) continue;
       if (right.length < 2 || right.length > 30) continue;
+      // Reject "from X to X"-style idioms — "from witness to witness",
+      // "from day to day", "from generation to generation". These mean "it
+      // varied", not "A versus B", and render as a pointless "X → X" card.
+      // The signature is a word repeated across the connector: the last word
+      // of the left side equals the first word of the right side. (Greedy
+      // matching may append trailing context to the right side, so a whole-
+      // string equality check is not enough.)
+      const wordsOf = (s: string) =>
+        s
+          .toLowerCase()
+          .split(/\s+/)
+          .map((w) => w.replace(/[^a-z0-9]+/g, ''))
+          .filter(Boolean);
+      const leftWords = wordsOf(left);
+      const rightWords = wordsOf(right);
+      if (
+        leftWords.length > 0 &&
+        rightWords.length > 0 &&
+        leftWords[leftWords.length - 1] === rightWords[0]
+      ) {
+        continue;
+      }
 
       const context = getSentenceContext(text, position, match[0].length);
 
@@ -448,45 +490,76 @@ function extractComparisons(text: string): ExtractedElement[] {
 }
 
 /**
+ * Whether the `. ! ?` at `index` is a real sentence terminator rather than a
+ * period inside an abbreviation ("George W. Tibbetts", "M. DeWitt", "Mr.",
+ * "U.S."), a single-letter initial, a decimal ("3.5"), or an ellipsis. Naive
+ * splitting on every period produces broken fragments — e.g. the standalone
+ * slide "They were met at George W" from "…at George W. Tibbetts' store…".
+ * Returns false for any non-terminator character so callers can scan freely.
+ */
+function isSentenceBoundary(text: string, index: number): boolean {
+  const ch = text[index];
+  if (ch === '!' || ch === '?') return true;
+  if (ch !== '.') return false;
+
+  // Ellipsis: defer the boundary to the final dot in a run of dots.
+  if (text[index + 1] === '.') return false;
+  // Decimal number: digit "." digit → "3.5".
+  if (/[0-9]/.test(text[index - 1] ?? '') && /[0-9]/.test(text[index + 1] ?? '')) return false;
+
+  // The run of letters immediately preceding the period.
+  let w = index - 1;
+  while (w >= 0 && /[A-Za-z]/.test(text[w])) w--;
+  const word = text.slice(w + 1, index);
+  if (word.length === 1) return false; // single-letter initial: "George W."
+  if (word && SENTENCE_ABBREVIATIONS.has(word.toLowerCase())) return false;
+
+  // A genuine sentence starts with an uppercase letter, digit, or opening
+  // quote/bracket. A lowercase continuation means the period was mid-sentence
+  // (an abbreviation we didn't enumerate).
+  let j = index + 1;
+  while (j < text.length && /\s/.test(text[j])) j++;
+  if (j >= text.length) return true; // end of text
+  return !/[a-z]/.test(text[j]);
+}
+
+/**
  * Iterate over sentence-like spans in the text, yielding trimmed text and
  * accurate start/end indices within the original string.
  *
- * Sentences are approximated as runs of non-[.!?] characters optionally
- * followed by [.!?] delimiters. Leading/trailing whitespace is excluded.
+ * Boundaries are detected by isSentenceBoundary() so abbreviations, initials,
+ * decimals, and ellipses do not split a sentence. Leading whitespace and
+ * trailing whitespace/terminators are excluded from each span.
  */
 function forEachSentenceSpan(
   text: string,
   callback: (trimmed: string, start: number, end: number) => void,
 ): void {
-  const sentenceRegex = /[^.!?]+[.!?]*/g;
-  let match: RegExpExecArray | null;
-
-  while ((match = sentenceRegex.exec(text)) !== null) {
-    const raw = match[0];
-    const rawStart = match.index;
-    const rawEnd = rawStart + raw.length;
-
-    // Compute leading whitespace to exclude
-    let leading = 0;
-    while (leading < raw.length && /\s/.test(raw[leading])) {
-      leading++;
-    }
-
-    // Compute trailing whitespace or sentence-ending punctuation to exclude
-    let trailing = 0;
-    while (trailing < raw.length - leading && /[\s.!?]/.test(raw[raw.length - 1 - trailing])) {
-      trailing++;
-    }
-
-    const start = rawStart + leading;
-    const end = rawEnd - trailing;
-    if (end <= start) continue;
-
+  const emit = (rawStart: number, rawEnd: number) => {
+    let start = rawStart;
+    while (start < rawEnd && /\s/.test(text[start])) start++;
+    let end = rawEnd;
+    while (end > start && /[\s.!?]/.test(text[end - 1])) end--;
+    if (end <= start) return;
     const trimmed = text.slice(start, end);
-    if (!trimmed) continue;
+    if (trimmed) callback(trimmed, start, end);
+  };
 
-    callback(trimmed, start, end);
+  let spanStart = 0;
+  let i = 0;
+  while (i < text.length) {
+    if (isSentenceBoundary(text, i)) {
+      // Consume any consecutive terminators ("?!", "…") as one boundary.
+      let end = i + 1;
+      while (end < text.length && /[.!?]/.test(text[end])) end++;
+      emit(spanStart, end);
+      spanStart = end;
+      i = end;
+    } else {
+      i++;
+    }
   }
+  if (spanStart < text.length) emit(spanStart, text.length);
 }
 
 function extractFacts(text: string): ExtractedElement[] {
@@ -621,11 +694,11 @@ function getSentenceContext(
   matchLength: number,
 ): { sentence: string; start: number; end: number } {
   let start = matchStart;
-  while (start > 0 && !/[.!?]/.test(text[start - 1])) start--;
+  while (start > 0 && !isSentenceBoundary(text, start - 1)) start--;
   while (start < matchStart && /\s/.test(text[start])) start++;
 
   let end = matchStart + matchLength;
-  while (end < text.length && !/[.!?]/.test(text[end])) end++;
+  while (end < text.length && !isSentenceBoundary(text, end)) end++;
   if (end < text.length) end++;
 
   return { sentence: text.slice(start, end).trim(), start, end };

@@ -32,9 +32,11 @@ export function factCard(input: FactCardInput, context: TemplateContext): Layer[
   // Get layout adjustments if accent image is present
   const accentLayout = accentImage ? getAccentLayout(accentImage.position) : DEFAULT_LAYOUT;
 
-  // Scale font sizes for viewport
+  // Scale font sizes for viewport. The explanation sits at ~60% of the fact
+  // size — large enough to read comfortably as the secondary line while still
+  // clearly subordinate to the headline fact.
   const factFontSize = themedFontSize(56, context, true);
-  const explainFontSize = themedFontSize(28, context, false);
+  const explainFontSize = themedFontSize(34, context, false);
   const sourceFontSize = themedFontSize(20, context, false);
 
   const layers: Layer[] = [createBackgroundLayer('bg', themedSurfaceGradient(context, 170))];

@@ -21,7 +21,9 @@ async function enterSlideshow(page: Page) {
   const modeSelect = page.locator('select', { has: page.locator('option[value="slideshow"]') });
   await modeSelect.selectOption('slideshow');
   await page.locator('.doc-player').waitFor({ state: 'visible', timeout: 5_000 });
-  await page.locator('[data-testid="slideshow-controls"]').waitFor({ state: 'visible', timeout: 5_000 });
+  await page
+    .locator('[data-testid="slideshow-controls"]')
+    .waitFor({ state: 'visible', timeout: 5_000 });
 }
 
 function counter(page: Page) {

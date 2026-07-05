@@ -959,9 +959,7 @@ export function DocPlayer({
               swipe.phase !== 'idle' ? ` doc-player__block--${swipe.phase}` : ''
             }`}
             style={
-              swipe.phase !== 'idle'
-                ? { transform: `translateX(${swipe.offsetPx}px)` }
-                : undefined
+              swipe.phase !== 'idle' ? { transform: `translateX(${swipe.offsetPx}px)` } : undefined
             }
           >
             <BlockRenderer
