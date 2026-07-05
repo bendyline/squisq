@@ -22,17 +22,73 @@
 import type { Doc } from '@bendyline/squisq/schemas';
 import { resolveMediaSchedule } from '@bendyline/squisq/schemas';
 import { flattenBlocks } from '@bendyline/squisq/doc';
-import type { MemoryContentContainer } from '@bendyline/squisq/storage';
+import type { ContentContainer } from '@bendyline/squisq/storage';
 import type { VideoQuality, VideoOrientation } from '@bendyline/squisq-video';
 import { generateRenderHtml } from '@bendyline/squisq-video';
 import { resolveDimensions } from '@bendyline/squisq-video';
+import { convert as formatsConvert } from '@bendyline/squisq-formats';
+import type {
+  ConvertSource,
+  ConvertOptions,
+  ConversionResult,
+  FormatId,
+} from '@bendyline/squisq-formats';
 import { detectFfmpeg } from './util/detectFfmpeg.js';
+import { createCliRegistry } from './registry.js';
 
 // Re-export utility types and functions callers may need
 export type { VideoQuality, VideoOrientation } from '@bendyline/squisq-video';
 export { MemoryContentContainer } from '@bendyline/squisq/storage';
 export { readInput } from './util/readInput.js';
 export type { ReadInputResult } from './util/readInput.js';
+
+// ── Format registry / convert() surface ───────────────────────────
+// Re-export the CLI's format registry factory plus the registry types and the
+// structured error, so `@bendyline/squisq-cli/api` is a one-stop programmatic
+// front door for both video rendering and document conversion.
+export { createCliRegistry } from './registry.js';
+export { ConversionError } from '@bendyline/squisq-formats';
+export type {
+  ConvertSource,
+  ConvertOptions,
+  ConversionResult,
+  FormatId,
+  FormatRegistry,
+  FormatDefinition,
+  NormalizedInput,
+  ConversionErrorCode,
+  ConversionErrorOptions,
+} from '@bendyline/squisq-formats';
+
+/**
+ * Convert a document to a target format using the CLI's format registry.
+ *
+ * This is a thin, pre-bound wrapper over `convert()` from
+ * `@bendyline/squisq-formats`: it injects the CLI registry (which adds the
+ * `mp4` format on top of every built-in exporter) and a default
+ * `resolvePlayerScript` that lazily loads the standalone player IIFE bundle
+ * (required for HTML/EPUB-style exports). Callers may override either via
+ * `options`.
+ *
+ * @param source - A bytes / markdown / doc {@link ConvertSource}.
+ * @param to - Target format id (`docx`, `pdf`, `pptx`, `html`, `mp4`, …).
+ * @param options - Conversion options; `registry` and `resolvePlayerScript`
+ *   default to the CLI's values but can be overridden.
+ * @returns The encoded bytes plus mime type, suggested filename, and warnings.
+ * @throws {@link ConversionError} on any failure, with a stable `code`.
+ */
+export async function convert(
+  source: ConvertSource,
+  to: FormatId,
+  options: ConvertOptions = {},
+): Promise<ConversionResult> {
+  return formatsConvert(source, to, {
+    registry: createCliRegistry(),
+    resolvePlayerScript: () =>
+      import('@bendyline/squisq-react/standalone-source').then((m) => m.PLAYER_BUNDLE),
+    ...options,
+  });
+}
 
 /** Options for renderDocToMp4. */
 export interface RenderDocToMp4Options {
@@ -57,7 +113,13 @@ export interface RenderDocToMp4Options {
   /** Caption style to bake into the video (default: none). */
   captionStyle?: 'standard' | 'social';
 
-  /** Seconds of cover-slide pre-roll before the story starts (default: 0). */
+  /**
+   * Seconds of cover-slide pre-roll before the story starts (default: 0).
+   *
+   * Note: the `squisq video` CLI defaults its `--cover-preroll` flag to 2
+   * seconds; this programmatic API deliberately defaults to 0 so library
+   * callers get exactly the duration they ask for.
+   */
   coverPreRoll?: number;
 
   /**
@@ -87,7 +149,8 @@ export interface RenderDocToMp4Result {
  *
  * Requires:
  * - Playwright (chromium) — for headless frame capture
- * - FFmpeg — for video encoding (must be on PATH)
+ * - FFmpeg — for video encoding (resolved from SQUISQ_FFMPEG, PATH, or an
+ *   optionally installed `ffmpeg-static` package — see detectFfmpeg)
  *
  * @param doc - The Doc structure to render
  * @param container - MemoryContentContainer with audio/image files
@@ -96,7 +159,7 @@ export interface RenderDocToMp4Result {
  */
 export async function renderDocToMp4(
   doc: Doc,
-  container: MemoryContentContainer,
+  container: ContentContainer,
   options: RenderDocToMp4Options,
 ): Promise<RenderDocToMp4Result> {
   const {
@@ -123,7 +186,8 @@ export async function renderDocToMp4(
         'Install it with:\n' +
         '  macOS:   brew install ffmpeg\n' +
         '  Ubuntu:  sudo apt install ffmpeg\n' +
-        '  Windows: winget install ffmpeg',
+        '  Windows: winget install ffmpeg\n' +
+        'Or: npm install ffmpeg-static, or set SQUISQ_FFMPEG to an ffmpeg binary.',
     );
   }
 
@@ -202,7 +266,16 @@ export async function renderDocToMp4(
 
   // ── Playwright frame capture ────────────────────────────────────
   const { chromium } = await import('playwright-core');
-  const browser = await chromium.launch({ headless: true });
+  let browser: import('playwright-core').Browser;
+  try {
+    browser = await chromium.launch({ headless: true });
+  } catch (err: unknown) {
+    const detail = err instanceof Error ? err.message.split('\n')[0] : String(err);
+    throw new Error(
+      'Playwright Chromium is not installed. Run: npx playwright install chromium\n' +
+        `(launch failed: ${detail})`,
+    );
+  }
   const page = await browser.newPage({
     viewport: { width: dimensions.width, height: dimensions.height },
   });
@@ -223,7 +296,10 @@ export async function renderDocToMp4(
     const errorDetail = pageErrors.length
       ? `\nPage errors:\n  ${pageErrors.join('\n  ')}`
       : '\nNo page errors captured — the player may have failed to mount.';
-    throw new Error(`Render API did not initialize within 15 seconds.${errorDetail}`);
+    throw new Error(
+      `The standalone player failed to boot in headless Chromium. ` +
+        `Render API did not initialize within 15 seconds.${errorDetail}`,
+    );
   }
 
   const docDuration: number = await page.evaluate(() => {

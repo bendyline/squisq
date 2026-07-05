@@ -9,11 +9,11 @@ rendering and spatial utilities. It is designed to be framework-agnostic at the 
 
 - `@bendyline/squisq` — Headless utilities (schemas, themes, templates, spatial math, markdown, storage, versions, jsonForm, icons, image-edit, transform, recommend)
 - `@bendyline/squisq-react` — React component library (DocPlayer, BlockRenderer, layers, hooks, LinearDocView, MarkdownRenderer, JsonView, inline media players, standalone IIFE bundle)
-- `@bendyline/squisq-formats` — Document format converters (DOCX, PDF, HTML, EPUB, PPTX export; shared OOXML infrastructure; ContentContainer ZIP serialization)
+- `@bendyline/squisq-formats` — Document format converters (DOCX, PDF, HTML, EPUB, PPTX, XLSX, CSV import/export; shared OOXML infrastructure; format registry + `convert()`; ContentContainer ZIP serialization)
 - `@bendyline/squisq-editor-react` — React editor shell (Monaco raw, Tiptap WYSIWYG, block preview, toolbar, theme/template pickers, version history, image editor, JsonEditor) + browser-based audio/camera/screen recording (MediaRecorder + getUserMedia + getDisplayMedia, persists into a `ContentContainer`)
 - `@bendyline/squisq-video` — Browser-pure foundation for MP4 export (render-HTML generator, ffmpeg.wasm encoder, quality presets). Runs in both browser and Node.
-- `@bendyline/squisq-video-react` — React components for browser-based video export (WebCodecs primary, ffmpeg.wasm fallback)
-- `@bendyline/squisq-cli` — `squisq` bin command for converting markdown documents to DOCX/PDF/HTML/EPUB/PPTX/MP4 from the terminal
+- `@bendyline/squisq-video-react` — React components for browser-based video export (WebCodecs primary, ffmpeg.wasm fallback; MP4 export now muxes narration audio)
+- `@bendyline/squisq-cli` — `squisq` bin command for converting documents (markdown **or** binary DOCX/PPTX/PDF/XLSX/CSV/HTML inputs) to DOCX/PDF/HTML/EPUB/PPTX/XLSX/CSV/MP4 from the terminal, plus `squisq doctor` (environment readiness) — built on the shared format registry `convert()`
 - `squisq-site` — Dev/demo site (not published)
 
 ## Git & Version Control (Agent Boundaries)
@@ -70,7 +70,7 @@ squisq/
                             #   inferDocumentTitle, parseFrontmatter, hast HTML sub-DOM
         timing/             # Narration/reading time estimation
         random/             # SeededRandom (Mulberry32 PRNG)
-        generate/           # Content extraction + slideshow generator
+        generate/           # Content extraction (slideshow generator removed in v1.5 → use transform/)
         transform/          # Slideshow transform pipeline: block analysis + 5 transform styles
                             #   (dataDriven, documentary, magazine, minimal, narrative)
         versions/           # Document version history (snapshots in .versions/, prune/coalesce,
@@ -106,11 +106,16 @@ squisq/
         ooxml/              # Shared OOXML infrastructure (reader, writer, XML utils, namespaces)
         docx/               # DOCX import + export (WordprocessingML)
         pdf/                # PDF import + export (pdf-lib, pdfjs-dist)
-        html/               # HTML export — single-file (data URIs) and ZIP (external assets);
-                            #   plus plainHtml / plainHtmlBundle / docsHtmlBundle modes
+        html/               # HTML import (htmlToMarkdownDoc) + export — single-file (data URIs)
+                            #   and ZIP (external assets); plus plainHtml / plainHtmlBundle /
+                            #   docsHtmlBundle modes
         epub/               # EPUB 3 e-book export
-        pptx/               # PPTX export + import (PresentationML; import covers text/lists/tables)
-        xlsx/               # XLSX stubs (SpreadsheetML, not yet implemented)
+        pptx/               # PPTX export + import (PresentationML; import covers text/lists/tables +
+                            #   slide-level embedded images via pptxToContainer)
+        xlsx/               # XLSX import + export (SpreadsheetML; export is tables-only → ArrayBuffer)
+        registry/           # Format registry + convert() front door (FormatDefinition per format id,
+                            #   ConversionResult, ConversionError)
+        csv/                # CSV import + export (parseCsv, csvToMarkdownDoc, markdownDocToCsv)
         container/          # ContentContainer ZIP serialization (containerToZip, zipToContainer)
     editor-react/           # @bendyline/squisq-editor-react
       src/
@@ -174,7 +179,9 @@ squisq/
     cli/                    # @bendyline/squisq-cli
       src/
         index.ts            # `squisq` bin entry point (commander-based)
-        commands/           # convert (markdown → DOCX/PDF/HTML/EPUB/PPTX), video (markdown → MP4)
+        commands/           # convert (markdown/binary → DOCX/PDF/HTML/EPUB/PPTX/XLSX/CSV via registry),
+                            #   video (markdown → MP4), doctor (environment readiness), validate
+        registry.ts         # createCliRegistry — wires the formats registry + CLI-only mp4
         api.ts              # Programmatic API surface (exported as `@bendyline/squisq-cli/api`)
     site/                   # squisq-site (dev/demo, not published)
       src/
@@ -252,14 +259,14 @@ For CI / clean reproducible installs, run `npm ci && node scripts/run-install-al
 build entry and a `package.json` export):
 
 - `@bendyline/squisq/schemas` — Type definitions (Doc, BlockTemplates, Viewport, LayoutStrategy, Theme, themeLibrary, themeCompile, themeValidator, colorUtils, fontStacks, Types, MediaProvider, ImageEditDoc)
-- `@bendyline/squisq/doc` — Template registry + all 23 templates (`title`, `sectionHeader`, `statHighlight`, `quote`, `factCard`, `twoColumn`, `dateEvent`, `imageWithCaption`, `leftFeature`, `rightFeature`, `map`, `fullBleedQuote`, `list`, `photoGrid`, `definitionCard`, `comparisonBar`, `pullQuote`, `videoWithCaption`, `videoPullQuote`, `dataTable`, `diagram`, `layout`, `drawing`) + animationUtils + themeUtils + markdownToDoc + docToMarkdown + getLayers + resolveAudioMapping + custom-templates frontmatter codec + custom-themes frontmatter codec (`readCustomThemesFromFrontmatter` / `writeCustomThemesToFrontmatter`) + `resolveThemeForDoc` (pure doc-scoped theme resolution)
+- `@bendyline/squisq/doc` — Template registry + all 23 templates (`title`, `sectionHeader`, `statHighlight`, `quote`, `factCard`, `twoColumn`, `dateEvent`, `imageWithCaption`, `leftFeature`, `rightFeature`, `map`, `fullBleedQuote`, `list`, `photoGrid`, `definitionCard`, `comparisonBar`, `pullQuote`, `videoWithCaption`, `videoPullQuote`, `dataTable`, `diagram`, `layout`, `drawing`) + animationUtils + themeUtils + markdownToDoc + docToMarkdown + getLayers + resolveAudioMapping + custom-templates frontmatter codec + custom-themes frontmatter codec (`readCustomThemesFromFrontmatter` / `writeCustomThemesToFrontmatter`) + `resolveThemeForDoc` (pure doc-scoped theme resolution) + template-param tooling (`TEMPLATE_INPUT_DESCRIPTORS`, `coerceTemplateParams`, `lintTemplateParams`) + `replaceDataFence` (data-fence rewriter)
 - `@bendyline/squisq/spatial` — Haversine, Geohash utilities
 - `@bendyline/squisq/storage` — StorageAdapter, MemoryStorageAdapter, LocalStorageAdapter, LocalForageAdapter, ContentContainer, MemoryContentContainer, ScopedContentContainer, createMediaProviderFromContainer
 - `@bendyline/squisq/markdown` — Markdown parsing, stringifying, AST types (MarkdownDocument), tree utilities, frontmatter helpers, HTML sub-DOM
 - `@bendyline/squisq/story` — Alias for `@bendyline/squisq/doc` (legacy compatibility)
 - `@bendyline/squisq/timing` — Narration/reading time estimation (estimateNarrationTime, estimateReadingTime, countSpokenWords)
 - `@bendyline/squisq/random` — SeededRandom PRNG, hashString
-- `@bendyline/squisq/generate` — Content extraction (extractContent, stripMarkdown) + slideshow generator (`generateSlideshow` — **deprecated**; prefer `markdownToDoc` + `applyTransform`). `extractContent`/`stripMarkdown` output shapes are a frozen external contract (Qualla's story pipeline calls them directly).
+- `@bendyline/squisq/generate` — Content extraction only (`extractContent`, `stripMarkdown`, `mapElementToBlock`). The legacy `generateSlideshow` was **removed** in v1.5 — use `markdownToDoc` + `applyTransform` instead. `extractContent`/`stripMarkdown` output shapes are a frozen external contract (Qualla's story pipeline calls them directly).
 - `@bendyline/squisq/transform` — Slideshow transform pipeline: `applyTransform`, `resolveTransformStyle`, `registerTransformStyle`/`unregisterTransformStyle`, transform-style registry (5 built-in styles: `data-driven` [alias `dataDriven`], `documentary`, `magazine`, `minimal`, `narrative`), block analyzer, doc-image extractor. Style contract v2: `templateMap` (per-style extraction→template remap, translated via `translateTemplateBlock`), `suggestedThemeId` (applied when neither caller nor doc declares a theme), `pacing` (intro/outro bookends), `budget.slidesPerMinute` (duration-based promotion cap).
 - `@bendyline/squisq/versions` — Document version history: `DocumentVersionManager` plus `saveVersion` / `listVersions` / `readVersion` / `revertToVersion` / `pruneVersions` / `coalesceVersions`, `PrunePolicy`, `Version` types, sortable-timestamp + path helpers. Snapshots live inside the same `ContentContainer` as the doc at `.versions/<basename>.<timestamp>.md`, so they ride along through ZIP serialization.
 - `@bendyline/squisq/jsonForm` — JSON Form headless logic. Exports the `SquisqAnnotatedSchema` / `SquisqHints` / `SquisqWhen` / `ControlKind` types, `chooseControl()` (the dispatcher both `<JsonView>` and `<JsonEditor>` use), `evaluateWhen()` / `resolveFlag()` (conditional visibility / disabled rules), `inferSchema()` (sample → JSON Schema via genson-js), and JSON Pointer helpers (`getByPointer`, `setByPointer`, `resolveRef`).
@@ -280,11 +287,13 @@ build entry and a `package.json` export):
 - `@bendyline/squisq-formats/docx` — DOCX import/export (markdownDocToDocx, docxToMarkdownDoc, docToDocx, docxToDoc)
 - `@bendyline/squisq-formats/ooxml` — Shared OOXML package reader/writer, XML utilities, namespace constants
 - `@bendyline/squisq-formats/pdf` — PDF import/export (markdownDocToPdf, pdfToMarkdownDoc, configurePdfWorker)
-- `@bendyline/squisq-formats/html` — HTML export: `docToHtml` (single self-contained file with inlined player + data-URI images), `docToHtmlZip` (multi-file ZIP with external assets + optional audio), `collectImagePaths`, `inferMimeType`, plus the `markdownDocToPlainHtml` / `markdownDocsToPlainHtmlBundle` / `markdownDocsToHtmlBundle` static-rendering paths. Needs `PLAYER_BUNDLE` from `@bendyline/squisq-react/standalone-source`.
+- `@bendyline/squisq-formats/html` — HTML export: `docToHtml` (single self-contained file with inlined player + data-URI images), `docToHtmlZip` (multi-file ZIP with external assets + optional audio), `collectImagePaths`, `inferMimeType`, plus the `markdownDocToPlainHtml` / `markdownDocsToPlainHtmlBundle` / `markdownDocsToHtmlBundle` static-rendering paths and HTML import (`htmlToMarkdown`, `htmlToMarkdownDoc`, `htmlToMarkdownDocSync`). Export needs `PLAYER_BUNDLE` from `@bendyline/squisq-react/standalone-source`.
 - `@bendyline/squisq-formats/epub` — EPUB 3 e-book export (markdownDocToEpub, docToEpub)
-- `@bendyline/squisq-formats/pptx` — PPTX export (markdownDocToPptx, docToPptx) + import (pptxToMarkdownDoc, pptxToDoc; covers slide text/lists/tables — embedded-image extraction not yet wired)
-- `@bendyline/squisq-formats/xlsx` — XLSX stubs (not yet implemented)
+- `@bendyline/squisq-formats/pptx` — PPTX export (markdownDocToPptx, docToPptx) + import (pptxToMarkdownDoc, pptxToDoc; covers slide text/lists/tables + slide-level embedded images via `pptxToContainer`)
+- `@bendyline/squisq-formats/xlsx` — XLSX import (xlsxToMarkdownDoc, xlsxToDoc) + export (markdownDocToXlsx, docToXlsx — tables-only, one worksheet per markdown table; both return `Promise<ArrayBuffer>`)
+- `@bendyline/squisq-formats/csv` — CSV import/export (parseCsv, csvToMarkdownDoc, csvToDoc, markdownDocToCsv)
 - `@bendyline/squisq-formats/container` — ContentContainer ZIP serialization (containerToZip, zipToContainer)
+- `@bendyline/squisq-formats/registry` — Format registry + programmatic `convert()` front door: `convert(source, targetFormatId, opts?)`, `createRegistry` / `defaultRegistry` / `defaultFormats`, `FormatRegistry` / `FormatDefinition` / `ConversionResult` / `ConvertSource` types, `BUILTIN_FORMAT_IDS`, and structured `ConversionError` (+ `ConversionErrorCode`)
 
 `@bendyline/squisq-editor-react` exports everything from the root (single `.` entry, no subpaths beyond `/styles`):
 
@@ -314,6 +323,7 @@ build entry and a `package.json` export):
 - Hooks: useVideoExport, useFrameCapture
 - Worker: the encoding worker is built from `src/workers/encode.worker.ts` for internal use by the exported hooks/components; there is no public `/worker` subpath today
 - Encoding backends: WebCodecs (preferred, streaming H.264) with ffmpeg.wasm fallback (batched)
+- Audio: MP4 export muxes narration audio (WebCodecs path); the result reports `VideoExportResult.audioIncluded` / `audioSkippedReason`. `useVideoExport().startExport(doc, config)` takes the doc first. `playerScript` is optional on `VideoExportButton` / `VideoExportModal` (falls back to the bundled standalone player).
 - Depends on `@bendyline/squisq-video` for shared types/encoder + `@bendyline/squisq-react` + `mp4-muxer` + `html2canvas`
 
 `@bendyline/squisq-video` (browser-pure, no Node deps) is the underlying foundation:
@@ -324,8 +334,9 @@ build entry and a `package.json` export):
 
 `@bendyline/squisq-cli` ships a `squisq` bin command:
 
-- `squisq convert <input> [--format docx|pdf|html|epub|pptx] [options]` — markdown → format conversion
+- `squisq convert <input> [--format docx|pdf|html|epub|pptx|xlsx|csv] [options]` — converts any supported input (markdown/JSON Doc/`.zip`/`.dbk`/folder **or** an importable binary `.docx`/`.pptx`/`.pdf`/`.xlsx`/`.csv`/`.html`) via the shared registry `convert()`. **`-o, --output <file>` is a single output file (format inferred from extension); `-d, --output-dir <dir>` is the multi-file/output-directory flag** (the old `-o`-as-directory behavior moved to `-d`).
 - `squisq video <input> [options]` — markdown → MP4 via headless render + WASM encode
+- `squisq doctor` — reports environment/runtime readiness for the conversion + video pipelines
 - Programmatic API at the `@bendyline/squisq-cli/api` subpath for consumers who want to invoke the same conversion pipeline without spawning a process
 
 ## Code Style
@@ -371,7 +382,7 @@ If you need an `any` outside these boundaries, find a different solution. Use `a
 
 ## Adding a New Block Template
 
-This is the single most error-prone mechanical change in the codebase. **All seven steps are required** — skipping any one breaks the build, the runtime, or makes the template silently invisible in the editor:
+This is the single most error-prone mechanical change in the codebase. **All eight steps are required** — skipping any one breaks the build, the runtime, or makes the template silently invisible in the editor:
 
 1. Add the input interface `XxxInput extends BaseTemplateBlock` in `core/src/schemas/BlockTemplates.ts`.
 2. Add it to the `TemplateBlock` discriminated union in the same file.
@@ -380,6 +391,7 @@ This is the single most error-prone mechanical change in the codebase. **All sev
 5. Add a `TEMPLATE_METADATA` entry (label + description) in `core/src/doc/templates/metadata.ts` — this is the canonical UI metadata that drives the editor's template picker. **Skipping this fails `templateMetadata.test.ts`** (metadata must stay 1:1 with the registry).
 6. Add a matching preview icon to `TEMPLATE_ENTRIES` in `editor-react/src/TemplatePicker.tsx` (same id/order; label + description must equal the core metadata). **Skipping this fails `templatePickerMetadata.test.ts`** — without it the template never shows up in the gallery.
 7. Add tests in `core/src/__tests__/templates.test.ts` covering representative inputs.
+8. Add input descriptors for the template's `{[…]}` params in `core/src/doc/templates/inputDescriptors.ts` — a `TEMPLATE_INPUT_DESCRIPTORS[<id>]` entry listing each param key (with `coerce` kind, closed-enum `values`, and `required` flags). This is what makes inline attribute coercion (`{[xxx key=value]}` → typed input) and param linting (`lintTemplateParams`) cover the new template. Without it the template still renders, but its annotation params stay untyped strings and are exempt from lint.
 
 If the template replaces an older name, add it to `TEMPLATE_ALIASES` in `templates/index.ts` so legacy documents still resolve. After adding, update the template count in this file's "Subpath Exports" → `@bendyline/squisq/doc` line.
 
@@ -390,7 +402,7 @@ The Theme system provides unified visual styling for rendered docs. A `Theme` bu
 **Architecture:**
 
 - `Theme` type in `schemas/Theme.ts` — defines `ThemeColorPalette`, `ThemeTypography`, `ThemeStyle`, `RenderStyle`, and per-theme `colorSchemes`
-- `themeLibrary.ts` — 8 built-in themes: documentary, minimalist, bold, morning-light, tech-dark, magazine, cinematic, warm-earth
+- `themeLibrary.ts` — 11 built-in themes: standard (the default, `DEFAULT_THEME_ID`), standard-dark, documentary, minimalist, bold, morning-light, tech-dark, magazine, cinematic, warm-earth, gezellig (JSON files in `schemas/themes/`)
 - `themeUtils.ts` — template-facing helpers: `resolveColorScheme()`, `themedFontSize()`, `getTemplateHint()`, etc.
 - `Doc.themeId` — optional pointer to a theme; resolved at render time via `resolveTheme()`
 - `createTheme(base, overrides)` — deep-merge utility for customizing a built-in theme

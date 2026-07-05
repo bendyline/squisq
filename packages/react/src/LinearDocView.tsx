@@ -28,17 +28,32 @@ import {
   type Theme,
 } from '@bendyline/squisq/schemas';
 import { VIEWPORT_PRESETS } from '@bendyline/squisq/schemas';
-import { getLayers, hasTemplate, DEFAULT_THEME, deriveTemplateInputs } from '@bendyline/squisq/doc';
+import {
+  getLayers,
+  hasTemplate,
+  markdownToDoc,
+  DEFAULT_THEME,
+  deriveTemplateInputs,
+} from '@bendyline/squisq/doc';
 import type { RenderContext } from '@bendyline/squisq/doc';
-import { extractPlainText } from '@bendyline/squisq/markdown';
+import { extractPlainText, parseMarkdown } from '@bendyline/squisq/markdown';
 import { BlockRenderer } from './BlockRenderer';
 import { MarkdownRenderer } from './MarkdownRenderer';
 
 // ── Props ──────────────────────────────────────────────────────────
 
 export interface LinearDocViewProps {
-  /** The Doc to render */
-  doc: Doc;
+  /**
+   * The Doc to render. Wins over `markdown` when both are provided.
+   * When neither `doc` nor `markdown` is given, an empty container renders.
+   */
+  doc?: Doc;
+  /**
+   * Markdown source to render. When `doc` is absent, the markdown is parsed
+   * and converted to a Doc via `markdownToDoc(parseMarkdown(markdown))`.
+   * Ignored when `doc` is provided.
+   */
+  markdown?: string;
   /** Base path for resolving media URLs (images, etc.) */
   basePath?: string;
   /** Viewport config for SVG card rendering (default: landscape) */
@@ -78,16 +93,33 @@ export type ImageDisplayMode = 'inline' | 'thumbnail';
 
 // ── Helpers ────────────────────────────────────────────────────────
 
+// Unknown template names we've already warned about (module-level so each
+// name warns at most once per page, not once per render).
+const warnedUnknownTemplates = new Set<string>();
+
 /**
  * Determine whether a block has a template annotation that should be
  * rendered as a visual SVG card. A block is "annotated" when:
  * 1. Its sourceHeading has a templateAnnotation, AND
  * 2. The annotated template exists in the registry
+ *
+ * Blocks annotated with a template that is NOT in the registry fall back
+ * to plain markdown rendering, with a one-shot dev-visible warning per
+ * unknown template name.
  */
 function isAnnotatedBlock(block: Block): boolean {
   const annotation = block.sourceHeading?.templateAnnotation;
-  if (!annotation) return false;
-  return !!annotation.template && hasTemplate(annotation.template);
+  if (!annotation?.template) return false;
+  if (!hasTemplate(annotation.template)) {
+    if (!warnedUnknownTemplates.has(annotation.template)) {
+      warnedUnknownTemplates.add(annotation.template);
+      console.warn(
+        `[squisq] Unknown template "${annotation.template}" — rendering the block as plain markdown.`,
+      );
+    }
+    return false;
+  }
+  return true;
 }
 
 /**
@@ -239,6 +271,7 @@ function BlockSection({ block, basePath, viewport, renderContext, blockIndex }: 
  */
 export function LinearDocView({
   doc,
+  markdown,
   basePath = '/',
   viewport,
   className,
@@ -248,7 +281,18 @@ export function LinearDocView({
   imageDisplayMode = 'inline',
 }: LinearDocViewProps) {
   const activeViewport = viewport ?? VIEWPORT_PRESETS.landscape;
-  const totalBlocks = useMemo(() => countAll(doc.blocks), [doc.blocks]);
+
+  // Parse markdown into a Doc only when no explicit doc is supplied.
+  const markdownDoc = useMemo(
+    () => (!doc && markdown !== undefined ? markdownToDoc(parseMarkdown(markdown)) : undefined),
+    [doc, markdown],
+  );
+  const resolvedDoc = doc ?? markdownDoc;
+
+  const totalBlocks = useMemo(
+    () => (resolvedDoc ? countAll(resolvedDoc.blocks) : 0),
+    [resolvedDoc],
+  );
   const autoSurface = useAutoSurface(surface === 'auto');
   const resolvedSurface: SurfaceScheme | undefined = surface === 'auto' ? autoSurface : surface;
 
@@ -266,6 +310,13 @@ export function LinearDocView({
   }, [activeViewport, totalBlocks, theme, resolvedSurface]);
 
   const activeTheme = renderContext.theme!;
+
+  // Nothing to render — keep an empty (but classed) container so hosts can
+  // still target/measure the view.
+  if (!resolvedDoc) {
+    return <div className={`squisq-linear squisq-linear--empty ${className || ''}`} />;
+  }
+
   const bgColor = activeTheme.colors.background;
   const textColor = activeTheme.colors.text;
   const mutedColor = activeTheme.colors.textMuted;
@@ -428,7 +479,7 @@ export function LinearDocView({
             background: color-mix(in srgb, var(--squisq-linear-primary) 8%, transparent);
           }
         `}</style>
-        {doc.blocks.map((block, i) => (
+        {resolvedDoc.blocks.map((block, i) => (
           <BlockSection
             key={block.id}
             block={block}

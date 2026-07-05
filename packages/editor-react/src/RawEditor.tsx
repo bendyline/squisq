@@ -56,8 +56,14 @@ const SQUISQ_THEMES: Record<string, string> = {
 };
 
 export interface RawEditorProps {
-  /** Monaco editor theme (default: 'vs-dark') */
-  theme?: string;
+  /**
+   * Monaco editor theme name (default: `'vs'`). Accepts Monaco's built-in
+   * theme ids (`'vs'`, `'vs-dark'`, `'hc-black'`) — which are transparently
+   * mapped to the Squisq-tinted variants — or any custom theme registered
+   * via `monaco.editor.defineTheme`. This is the *code editor* color
+   * theme, distinct from the shell's light/dark `colorScheme`.
+   */
+  monacoTheme?: string;
   /** Show minimap (default: false) */
   minimap?: boolean;
   /** Font size in pixels (default: 14) */
@@ -80,7 +86,7 @@ export interface RawEditorProps {
  * Binds to the shared EditorContext for source synchronization.
  */
 export function RawEditor({
-  theme = 'vs',
+  monacoTheme = 'vs',
   minimap = false,
   fontSize = 14,
   wordWrap = 'on',
@@ -640,7 +646,7 @@ export function RawEditor({
     }
   }, [editorSource, language, monacoNs]);
 
-  const effectiveTheme = SQUISQ_THEMES[theme] ?? theme;
+  const effectiveTheme = SQUISQ_THEMES[monacoTheme] ?? monacoTheme;
 
   // Wait for the lazy monaco namespace + `loader.config()` to settle
   // before mounting `<Editor>`. Without this gate, the @monaco-editor/

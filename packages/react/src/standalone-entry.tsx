@@ -206,7 +206,7 @@ export function mount(element: Element, doc: Doc, options: MountOptions = {}): v
     });
   } else {
     content = createElement(DocPlayer, {
-      script: finalDoc,
+      doc: finalDoc,
       basePath,
       displayMode: 'slideshow',
       autoPlay: renderMode ? false : autoPlay,

@@ -34,7 +34,7 @@
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
     },
-    "./styles": "./src/styles/index.css",
+    "./styles": "./dist/styles/index.css",
     "./standalone": "./dist/squisq-player.global.js",
     "./standalone-source": {
       "types": "./src/standalone-source.d.ts",
@@ -42,7 +42,7 @@
     }
   },
   "scripts": {
-    "build": "tsup && tsup --config tsup.standalone.config.ts && node scripts/generate-standalone-source.mjs",
+    "build": "tsup && tsup --config tsup.standalone.config.ts && node scripts/generate-standalone-source.mjs && node scripts/build-styles.mjs",
     "build:esm": "tsup",
     "build:standalone": "tsup --config tsup.standalone.config.ts && node scripts/generate-standalone-source.mjs",
     "dev": "npm run build:standalone && concurrently -n js,dts -c blue,gray -r \"tsup --watch --no-dts --no-clean\" \"tsup --watch --dts-only --no-clean\"",
@@ -66,5 +66,8 @@
     "jsdom": "25.0.1",
     "tsup": "8.5.1",
     "typescript": "5.9.3"
-  }
+  },
+  "sideEffects": [
+    "**/*.css"
+  ]
 }

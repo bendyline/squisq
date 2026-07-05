@@ -52,7 +52,7 @@ async function runValidate(inputPath: string, opts: ValidateOpts): Promise<numbe
   if (!markdownDoc) {
     // Doc-JSON input: nothing markdown-level to validate. Surface any
     // diagnostics already recorded on the doc.
-    const diagnostics = doc?.diagnostics ?? [];
+    const diagnostics = doc.diagnostics ?? [];
     return report(diagnostics, opts, 'doc.json input — markdown-level checks skipped');
   }
 
@@ -74,29 +74,44 @@ async function runValidate(inputPath: string, opts: ValidateOpts): Promise<numbe
   return report(result.diagnostics, opts);
 }
 
+/** Fixed-width, severity-aware line label. */
+function severityLabel(severity: DocDiagnostic['severity']): string {
+  switch (severity) {
+    case 'error':
+      return 'ERROR  ';
+    case 'warning':
+      return 'warning';
+    case 'info':
+      return 'ℹ info ';
+  }
+}
+
 function report(diagnostics: DocDiagnostic[], opts: ValidateOpts, note?: string): number {
   const errorCount = diagnostics.filter((d) => d.severity === 'error').length;
-  const warningCount = diagnostics.length - errorCount;
+  const warningCount = diagnostics.filter((d) => d.severity === 'warning').length;
+  const infoCount = diagnostics.filter((d) => d.severity === 'info').length;
 
   if (opts.json) {
     // Machine-readable output goes to stdout so it can be piped/parsed;
     // everything human-facing follows the CLI convention of stderr.
-    process.stdout.write(`${JSON.stringify({ errorCount, warningCount, diagnostics }, null, 2)}\n`);
+    process.stdout.write(
+      `${JSON.stringify({ errorCount, warningCount, infoCount, diagnostics }, null, 2)}\n`,
+    );
   } else {
     if (note) console.error(note);
     for (const d of diagnostics) {
       const location = d.line != null ? `line ${d.line}` : (d.blockId ?? '—');
-      console.error(
-        `${d.severity === 'error' ? 'ERROR  ' : 'warning'}  ${location}  [${d.code}] ${d.message}`,
-      );
+      console.error(`${severityLabel(d.severity)}  ${location}  [${d.code}] ${d.message}`);
     }
     if (diagnostics.length === 0) {
       console.error('✓ No problems found');
     } else {
-      console.error(`\n${errorCount} error(s), ${warningCount} warning(s)`);
+      console.error(`\n${errorCount} error(s), ${warningCount} warning(s), ${infoCount} info`);
     }
   }
 
+  // Exit status is driven by errors only; --strict additionally fails on
+  // warnings. Info diagnostics never affect the exit code.
   if (errorCount > 0) return 1;
   if (opts.strict && warningCount > 0) return 1;
   return 0;

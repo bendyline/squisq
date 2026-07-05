@@ -27,6 +27,10 @@ import { expandPersistentLayers, wrapWithPersistentLayers } from './persistentLa
 import { applyRenderStyleToLayers } from '../utils/applyRenderStyle.js';
 import { resolveBlockTransition } from '../../schemas/Transitions.js';
 import { makeCustomTemplateFn } from './customTemplate.js';
+// Coerces inline `{[…]}` string params into typed template input. inputDescriptors
+// imports `resolveTemplateName` from this module in return; the cycle is benign
+// because every cross-reference lives inside a function body, not module init.
+import { coerceTemplateParams } from './inputDescriptors.js';
 import type { ViewportConfig } from '../../schemas/Viewport.js';
 import { VIEWPORT_PRESETS } from '../../schemas/Viewport.js';
 
@@ -197,11 +201,17 @@ export function expandTemplateBlock(
 
   // Effective template input: the block's own fields, then structured
   // body data (```json data fences / derived auto-template inputs), then
-  // `{[…]}` string overrides — the same merge order getLayers uses.
+  // `{[…]}` string overrides — the same merge order getLayers uses. Inline
+  // overrides are coerced to their typed shape (e.g. `center="47.6,-122.3"` →
+  // `{lat,lng}`); `templateOverrides` itself stays raw for round-tripping.
   const { templateData, templateOverrides } = templateBlock as Block;
   const input =
     templateData || templateOverrides
-      ? ({ ...templateBlock, ...templateData, ...templateOverrides } as TemplateBlock)
+      ? ({
+          ...templateBlock,
+          ...templateData,
+          ...coerceTemplateParams(templateBlock.template, templateOverrides ?? {}).input,
+        } as TemplateBlock)
       : templateBlock;
 
   // Generate layers from template with error handling

@@ -165,6 +165,23 @@ describe('useMediaRecorder lifecycle', () => {
     expect(result.current.stream).not.toBeNull();
   });
 
+  it('defaults to the mic source when called with no options', async () => {
+    const { result } = renderHook(() => useMediaRecorder());
+
+    expect(result.current.state).toBe('idle');
+
+    await act(async () => {
+      await result.current.request();
+    });
+
+    // Mic path: audio-only capture via getUserMedia, lands in `audio/`.
+    expect(result.current.state).toBe('ready');
+    expect(result.current.mimeType).toMatch(/^audio\/webm/);
+    expect(result.current.directory).toBe('audio');
+    const getUserMedia = navigator.mediaDevices.getUserMedia as ReturnType<typeof vi.fn>;
+    expect(getUserMedia).toHaveBeenCalled();
+  });
+
   it('camera includes the mic by default', async () => {
     const { result } = renderHook(() => useMediaRecorder({ source: 'camera' }));
     await act(async () => {

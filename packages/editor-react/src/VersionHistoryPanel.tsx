@@ -115,7 +115,7 @@ function formatBytes(n: number): string {
 }
 
 export function VersionHistoryPanel() {
-  const { versioning, replaceAll, markdownSource, theme } = useEditorContext();
+  const { versioning, replaceAll, markdownSource, colorScheme } = useEditorContext();
   const [open, setOpen] = useState(false);
   const [state, setState] = useState<PanelState>(initialState);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -214,7 +214,7 @@ export function VersionHistoryPanel() {
     [markdownSource],
   );
   const hasDiff = state.selected !== null;
-  const diffTheme = theme === 'dark' ? 'vs-dark' : 'vs';
+  const diffTheme = colorScheme === 'dark' ? 'vs-dark' : 'vs';
 
   if (!versioning) return null;
 

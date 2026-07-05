@@ -67,8 +67,9 @@ export interface StartBlockConfig {
 export interface DocDiagnostic {
   /** `error` = the author's intent could not be honored (e.g. unparseable
    *  data fence); `warning` = something looks wrong but rendering proceeds
-   *  with a fallback (e.g. unknown template name). */
-  severity: 'error' | 'warning';
+   *  with a fallback (e.g. unknown template name); `info` = nothing is
+   *  broken, but the author may want to know (e.g. a redundant annotation). */
+  severity: 'error' | 'warning' | 'info';
   /** Stable machine-readable code (e.g. `unknown-template`, `duplicate-id`,
    *  `unresolved-connection`, `data-fence-parse`, `missing-asset`). */
   code: string;
@@ -226,6 +227,25 @@ export interface Block {
    * annotations, keeping the markdown round-trip lossless.
    */
   autoTemplate?: boolean;
+
+  /**
+   * True when this block was produced from a *standalone* `{[templateName …]}`
+   * annotation paragraph in another block's body (rather than from a heading).
+   * Such blocks have no `sourceHeading`; `docToMarkdown` re-emits their
+   * annotation as a synthesized paragraph before their `contents` so the
+   * markdown round-trips. See `annotationBlocks.ts`.
+   */
+  standaloneAnnotation?: true;
+
+  /**
+   * The annotation a standalone block was built from — the raw (un-resolved)
+   * template name and its params, in author order. Round-tripped by
+   * `docToMarkdown` (via `serializeAnnotation`) and read by validation as the
+   * raw requested template name (symmetric with
+   * `sourceHeading.templateAnnotation`). Present only when
+   * `standaloneAnnotation` is true.
+   */
+  sourceAnnotation?: { template?: string; params?: Record<string, string> };
 
   /**
    * Display title for template rendering.

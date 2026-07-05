@@ -17,6 +17,7 @@ import {
   useState,
   useMemo,
   useEffect,
+  useLayoutEffect,
   useRef,
 } from 'react';
 import type { ReactNode } from 'react';
@@ -35,8 +36,12 @@ import {
 } from '@bendyline/squisq/doc';
 import { useEditorContext } from './EditorContext';
 import { useCustomThemes, CustomThemeDialog, type ThemeSaveTarget } from './customThemes';
+import { Icon } from './Icon';
 
 // ── Context ──────────────────────────────────────────────────────
+
+/** Caption selection: off, or one of the two enabled styles. */
+export type CaptionMode = 'off' | CaptionStyle;
 
 export interface PreviewSettings {
   activePreset: ViewportPreset;
@@ -49,8 +54,14 @@ export interface PreviewSettings {
   activeTheme: Theme;
   activeTransformStyle: string;
   setSelectedTransformStyle: (id: string | null) => void;
+  /** The caption style used when captions are enabled. */
   activeCaptionStyle: CaptionStyle;
-  setSelectedCaptionStyle: (style: CaptionStyle | null) => void;
+  /** Whether captions are shown at all (the 'off' arm of the tri-state). */
+  activeCaptionsEnabled: boolean;
+  /** Set the caption mode: 'off' hides captions, 'standard'/'social' enable
+   *  that style. The single entry point so the toggle buttons persist in one
+   *  frontmatter write. */
+  setCaptionMode: (mode: CaptionMode) => void;
   /** User-authored themes (doc + browser library) for the picker's "Custom" group. */
   customThemes: Theme[];
   /** Open the custom-theme designer for a theme (or null to create a new one). */
@@ -146,11 +157,12 @@ function resolveFrontmatterTransform(value: unknown): string | null {
   return null;
 }
 
-function resolveFrontmatterCaptionStyle(value: unknown): CaptionStyle | null {
+function resolveFrontmatterCaptionMode(value: unknown): CaptionMode | null {
   if (typeof value !== 'string') return null;
   const v = value.trim().toLowerCase();
-  if (v === 'standard' || v === 'social') return v;
-  if (v === 'instagram' || v === 'tiktok' || v === 'reels') return 'social';
+  if (v === 'off' || v === 'none' || v === 'hidden' || v === 'false' || v === 'no') return 'off';
+  if (v === 'standard' || v === 'cc' || v === 'captions') return 'standard';
+  if (v === 'social' || v === 'instagram' || v === 'tiktok' || v === 'reels') return 'social';
   return null;
 }
 
@@ -326,21 +338,25 @@ export function PreviewSettingsProvider({
     [persistFrontmatter],
   );
 
-  // Caption style — persisted to `squisq-captions` (legacy `caption-style` read for compat)
-  const fmCaption = useMemo(
+  // Caption mode — 'off' | 'standard' | 'social'. Persisted to `squisq-captions`
+  // (legacy `caption-style` read for compat). `activeCaptionStyle` is the style
+  // used when enabled; `activeCaptionsEnabled` is the off/on split.
+  const fmCaptionMode = useMemo(
     () =>
-      resolveFrontmatterCaptionStyle(
+      resolveFrontmatterCaptionMode(
         readFrontmatterKey(frontmatter, FM_KEYS.captions.canonical, FM_KEYS.captions.legacy),
       ),
     [frontmatter],
   );
-  const [selectedCaptionStyle, setSelectedCaptionStyle] = useState<CaptionStyle | null>(null);
-  useEffect(() => setSelectedCaptionStyle(null), [fmCaption]);
-  const activeCaptionStyle = selectedCaptionStyle ?? fmCaption ?? 'standard';
-  const handleSetCaptionStyle = useCallback(
-    (style: CaptionStyle | null) => {
-      setSelectedCaptionStyle(style);
-      if (style !== null) persistFrontmatter({ [FM_KEYS.captions.canonical]: style });
+  const [selectedCaptionMode, setSelectedCaptionMode] = useState<CaptionMode | null>(null);
+  useEffect(() => setSelectedCaptionMode(null), [fmCaptionMode]);
+  const activeCaptionMode = selectedCaptionMode ?? fmCaptionMode ?? 'standard';
+  const activeCaptionsEnabled = activeCaptionMode !== 'off';
+  const activeCaptionStyle: CaptionStyle = activeCaptionMode === 'social' ? 'social' : 'standard';
+  const handleSetCaptionMode = useCallback(
+    (mode: CaptionMode) => {
+      setSelectedCaptionMode(mode);
+      persistFrontmatter({ [FM_KEYS.captions.canonical]: mode });
     },
     [persistFrontmatter],
   );
@@ -373,7 +389,8 @@ export function PreviewSettingsProvider({
       activeTransformStyle,
       setSelectedTransformStyle: handleSetTransformStyle,
       activeCaptionStyle,
-      setSelectedCaptionStyle: handleSetCaptionStyle,
+      activeCaptionsEnabled,
+      setCaptionMode: handleSetCaptionMode,
       customThemes,
       openThemeDesigner,
       deleteCustomTheme,
@@ -387,9 +404,10 @@ export function PreviewSettingsProvider({
       activeTheme,
       activeTransformStyle,
       activeCaptionStyle,
+      activeCaptionsEnabled,
       handleSetThemeId,
       handleSetTransformStyle,
-      handleSetCaptionStyle,
+      handleSetCaptionMode,
       customThemes,
       openThemeDesigner,
       deleteCustomTheme,
@@ -423,11 +441,16 @@ export function ThemeDesignerDock() {
 
 // ── Dropdown options ─────────────────────────────────────────────
 
-const VIEWPORT_OPTIONS: { key: ViewportPreset; label: string }[] = [
-  { key: 'landscape', label: '16:9' },
-  { key: 'portrait', label: '9:16' },
-  { key: 'square', label: '1:1' },
-  { key: 'standard', label: '4:3' },
+/**
+ * Aspect-ratio presets surfaced as the segmented {@link PreviewFormatSwitch}
+ * on the left of the toolbar. `w`/`h` are the glyph rectangle dimensions (in a
+ * 16×16 viewBox) drawn by {@link AspectIcon} to depict each ratio.
+ */
+const FORMAT_SWITCH_OPTIONS: { key: ViewportPreset; label: string; w: number; h: number }[] = [
+  { key: 'landscape', label: '16:9', w: 13, h: 7 },
+  { key: 'square', label: '1:1', w: 10, h: 10 },
+  { key: 'portrait', label: '9:16', w: 7, h: 12 },
+  { key: 'standard', label: '4:3', w: 12, h: 9 },
 ];
 
 const DISPLAY_MODE_OPTIONS: { key: DisplayMode; label: string }[] = [
@@ -442,10 +465,18 @@ const TRANSFORM_STYLE_OPTIONS = [
   ...getTransformStyleSummaries().map((s) => ({ key: s.id, label: s.name })),
 ];
 
-const CAPTION_STYLE_OPTIONS: { key: CaptionStyle; label: string }[] = [
-  { key: 'standard', label: 'Standard' },
-  { key: 'social', label: 'Social' },
-];
+/**
+ * Left-to-right priority order for the preview controls. As the toolbar
+ * narrows, controls drop into the overflow menu from the END of this list
+ * first (Captions, then Transform, …), so the higher-priority control (Theme)
+ * stays inline the longest.
+ *
+ * Display mode and aspect ratio are not here — they're surfaced separately as
+ * the segmented {@link PreviewModeSwitch} / {@link PreviewFormatSwitch} on the
+ * left of the toolbar.
+ */
+type ControlKey = 'theme' | 'transform' | 'captions';
+const CONTROL_KEYS: ControlKey[] = ['theme', 'transform', 'captions'];
 
 // ── Shared styles ────────────────────────────────────────────────
 
@@ -467,29 +498,66 @@ const selectStyle: React.CSSProperties = {
 
 // ── Toolbar Controls Component ───────────────────────────────────
 
-/** Hook to track whether the viewport is narrow. */
-function useIsNarrow(breakpoint = 600): boolean {
-  const [narrow, setNarrow] = useState(
-    () => typeof window !== 'undefined' && window.innerWidth <= breakpoint,
-  );
-  useEffect(() => {
-    const mq = window.matchMedia(`(max-width: ${breakpoint}px)`);
-    const handler = (e: MediaQueryListEvent) => setNarrow(e.matches);
-    mq.addEventListener('change', handler);
-    return () => mq.removeEventListener('change', handler);
-  }, [breakpoint]);
-  return narrow;
-}
-
 /**
  * Inline preview controls rendered in the main toolbar row.
- * On narrow viewports, collapses into a single settings button with a dropdown.
+ *
+ * Collapse is *progressive* (a priority-plus pattern): rather than switch the
+ * whole row in and out at a fixed window-width breakpoint, the controls
+ * measure how many of them actually fit in the width the toolbar gives them
+ * and keep that many inline, folding the rest — from the low-priority end of
+ * {@link CONTROL_KEYS} — into a single settings (gear) button's popover. As
+ * the toolbar widens or narrows, controls migrate one at a time between the
+ * inline row and the menu, so the available space is always well used and the
+ * row never wraps onto a second line.
  */
 export function PreviewToolbarControls() {
   const s = usePreviewSettings();
-  const isNarrow = useIsNarrow(768);
+  const [visibleCount, setVisibleCount] = useState(CONTROL_KEYS.length);
   const [popoverOpen, setPopoverOpen] = useState(false);
+  // `rootRef` (flex:1) always spans the toolbar's leftover width, so its
+  // clientWidth is the budget the controls have to lay out in.
+  const rootRef = useRef<HTMLDivElement>(null);
+  // Hidden probe rendering every control at natural width; the split between
+  // inline and overflow is computed from these per-control measurements.
+  const probeRef = useRef<HTMLDivElement>(null);
   const popoverRef = useRef<HTMLDivElement>(null);
+
+  // Fit detection: keep as many controls inline as fit, overflow the rest.
+  useLayoutEffect(() => {
+    const root = rootRef.current;
+    const probe = probeRef.current;
+    if (!root || !probe) return;
+    const GAP = 6; // matches the row's flex `gap`
+    const LEAD_PAD = 9; // root's left padding, eaten before any control
+    const GEAR_RESERVE = 40; // width kept for the overflow gear button (+ its gap)
+    const SAFETY = 2;
+    const measure = () => {
+      const available = root.clientWidth - LEAD_PAD;
+      const widths = Array.from(probe.children).map((el) =>
+        (el as HTMLElement).getBoundingClientRect().width,
+      );
+      // Width of the first `n` controls laid out inline (n-1 inter-control gaps).
+      const rowWidth = (n: number) =>
+        widths.slice(0, n).reduce((sum, w) => sum + w, 0) + GAP * Math.max(0, n - 1);
+      // Everything fits → no overflow button needed.
+      if (rowWidth(widths.length) <= available) {
+        setVisibleCount(widths.length);
+        return;
+      }
+      // Otherwise reserve room for the gear and fit as many as possible.
+      const budget = available - GEAR_RESERVE - GAP - SAFETY;
+      let count = 0;
+      while (count < widths.length && rowWidth(count + 1) <= budget) count++;
+      setVisibleCount(count);
+    };
+    const ro = new ResizeObserver(measure);
+    ro.observe(root);
+    // Observe the probe too: a control's width can change (e.g. a longer theme
+    // name) without the toolbar resizing, and that shifts the split.
+    ro.observe(probe);
+    measure();
+    return () => ro.disconnect();
+  }, []);
 
   // Close popover on outside click
   useEffect(() => {
@@ -516,107 +584,231 @@ export function PreviewToolbarControls() {
     }
   }, [s]);
 
-  const controls = (
-    <>
-      <PreviewSelect
-        label="Format"
-        value={s.activePreset}
-        options={VIEWPORT_OPTIONS}
-        onChange={(v) => s.setSelectedPreset(v as ViewportPreset)}
-        compact={isNarrow}
-      />
-      <PreviewSelect
-        label="Mode"
-        value={s.activeDisplayMode}
-        options={DISPLAY_MODE_OPTIONS}
-        onChange={(v) => s.setSelectedDisplayMode(v as DisplayMode)}
-        compact={isNarrow}
-      />
-      <div
-        className={`squisq-preview-control${isNarrow ? ' squisq-preview-control--compact' : ''}`}
-      >
-        <label style={labelStyle}>Theme:</label>
-        <ThemePicker
-          value={s.activeThemeId}
-          onChange={(v) => s.setSelectedThemeId(v)}
-          ariaLabel="Theme"
-          customThemes={s.customThemes}
-          onCreateCustom={() => s.openThemeDesigner(null)}
-          onEditCustom={(id) =>
-            s.openThemeDesigner(s.customThemes.find((t) => t.id === id) ?? null)
-          }
-          onDeleteCustom={(id) => s.deleteCustomTheme(id)}
-        />
-        <button
-          type="button"
-          className="squisq-theme-edit-btn"
-          onClick={handleEditCurrentTheme}
-          aria-label="Edit theme"
-          title="Edit this theme"
-        >
-          <svg
-            width="14"
-            height="14"
-            viewBox="0 0 16 16"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="1.4"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            aria-hidden="true"
+  // Render a single control by key. `compact` switches to the stacked
+  // label-over-control layout used inside the overflow popover.
+  const renderControl = (key: ControlKey, compact: boolean): ReactNode => {
+    switch (key) {
+      case 'theme':
+        return (
+          <div
+            key="theme"
+            className={`squisq-preview-control${compact ? ' squisq-preview-control--compact' : ''}`}
           >
-            <path d="M2.5 13.5l1-3 7-7 2 2-7 7-3 1z" />
-            <path d="M9.5 4.5l2 2" />
-          </svg>
-        </button>
+            <label style={labelStyle}>Theme:</label>
+            <ThemePicker
+              value={s.activeThemeId}
+              onChange={(v) => s.setSelectedThemeId(v)}
+              ariaLabel="Theme"
+              customThemes={s.customThemes}
+              onCreateCustom={() => s.openThemeDesigner(null)}
+              onEditCustom={(id) =>
+                s.openThemeDesigner(s.customThemes.find((t) => t.id === id) ?? null)
+              }
+              onDeleteCustom={(id) => s.deleteCustomTheme(id)}
+            />
+            <button
+              type="button"
+              className="squisq-theme-edit-btn"
+              onClick={handleEditCurrentTheme}
+              aria-label="Edit theme"
+              title="Edit this theme"
+            >
+              <svg
+                width="14"
+                height="14"
+                viewBox="0 0 16 16"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.4"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                aria-hidden="true"
+              >
+                <path d="M2.5 13.5l1-3 7-7 2 2-7 7-3 1z" />
+                <path d="M9.5 4.5l2 2" />
+              </svg>
+            </button>
+          </div>
+        );
+      case 'transform':
+        return (
+          <PreviewSelect
+            key="transform"
+            label="Transform"
+            value={s.activeTransformStyle}
+            options={TRANSFORM_STYLE_OPTIONS}
+            onChange={(v) => s.setSelectedTransformStyle(v)}
+            compact={compact}
+          />
+        );
+      case 'captions': {
+        // Two independent toggles (either can be off): CC = standard captions,
+        // share icon = social captions. Clicking the active one turns captions
+        // off; clicking the other switches style (and turns captions on).
+        const enabled = s.activeCaptionsEnabled;
+        const ccActive = enabled && s.activeCaptionStyle === 'standard';
+        const socialActive = enabled && s.activeCaptionStyle === 'social';
+        return (
+          <div
+            key="captions"
+            className={`squisq-preview-control${compact ? ' squisq-preview-control--compact' : ''}`}
+          >
+            <label style={labelStyle}>Captions:</label>
+            <div className="squisq-preview-seg" role="group" aria-label="Captions">
+              <button
+                type="button"
+                className={`squisq-preview-seg-btn squisq-preview-seg-btn--icon${ccActive ? ' squisq-preview-seg-btn--active' : ''}`}
+                aria-pressed={ccActive}
+                aria-label="Standard captions"
+                title="Standard captions"
+                onClick={() => s.setCaptionMode(ccActive ? 'off' : 'standard')}
+              >
+                <Icon icon="fa-solid fa-closed-captioning" />
+              </button>
+              <button
+                type="button"
+                className={`squisq-preview-seg-btn squisq-preview-seg-btn--icon${socialActive ? ' squisq-preview-seg-btn--active' : ''}`}
+                aria-pressed={socialActive}
+                aria-label="Social captions"
+                title="Social captions"
+                onClick={() => s.setCaptionMode(socialActive ? 'off' : 'social')}
+              >
+                <Icon icon="fa-solid fa-share-nodes" />
+              </button>
+            </div>
+          </div>
+        );
+      }
+    }
+  };
+
+  const hasOverflow = visibleCount < CONTROL_KEYS.length;
+  const visibleKeys = CONTROL_KEYS.slice(0, visibleCount);
+  const overflowKeys = CONTROL_KEYS.slice(visibleCount);
+
+  // The root is a flex:1 filler so it always spans the toolbar's leftover
+  // width (which is what the fit measurement reads).
+  return (
+    <div className="squisq-preview-controls" ref={rootRef}>
+      {/* Hidden probe — every control at natural width, measured to decide the
+          inline/overflow split. Absolutely positioned so it never affects
+          layout. */}
+      <div className="squisq-preview-controls-probe" ref={probeRef} aria-hidden="true">
+        {CONTROL_KEYS.map((key) => renderControl(key, false))}
       </div>
-      <PreviewSelect
-        label="Transform"
-        value={s.activeTransformStyle}
-        options={TRANSFORM_STYLE_OPTIONS}
-        onChange={(v) => s.setSelectedTransformStyle(v)}
-        compact={isNarrow}
-      />
-      <PreviewSelect
-        label="Captions"
-        value={s.activeCaptionStyle}
-        options={CAPTION_STYLE_OPTIONS}
-        onChange={(v) => s.setSelectedCaptionStyle(v as CaptionStyle)}
-        compact={isNarrow}
-      />
-    </>
+
+      <div className="squisq-preview-controls-inline">
+        {visibleKeys.map((key) => renderControl(key, false))}
+      </div>
+
+      {hasOverflow && (
+        <div className="squisq-preview-controls-compact" ref={popoverRef}>
+          <button
+            className={`squisq-toolbar-button${popoverOpen ? ' squisq-toolbar-button--active' : ''}`}
+            onClick={() => setPopoverOpen((v) => !v)}
+            aria-label="More preview settings"
+            title="More preview settings"
+            aria-expanded={popoverOpen}
+          >
+            <svg
+              width="16"
+              height="16"
+              viewBox="0 0 16 16"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.5"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <circle cx="8" cy="8" r="2.5" />
+              <path d="M13.5 8a5.5 5.5 0 01-.4 1.8l1.2 1.2-1.6 1.6-1.2-1.2A5.5 5.5 0 018 13.5a5.5 5.5 0 01-3.5-1.3L3.3 13.4 1.7 11.8l1.2-1.2A5.5 5.5 0 012.5 8c0-.6.1-1.2.4-1.8L1.7 5 3.3 3.4l1.2 1.2A5.5 5.5 0 018 2.5c1.3 0 2.5.5 3.5 1.3l1.2-1.2 1.6 1.6-1.2 1.2c.3.6.4 1.2.4 1.6z" />
+            </svg>
+          </button>
+          {popoverOpen && (
+            <div className="squisq-preview-controls-popover">
+              {overflowKeys.map((key) => renderControl(key, true))}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
   );
+}
 
-  if (isNarrow) {
-    return (
-      <div className="squisq-preview-controls-compact" ref={popoverRef}>
-        <button
-          className="squisq-toolbar-button"
-          onClick={() => setPopoverOpen((v) => !v)}
-          aria-label="Preview settings"
-          title="Preview settings"
-          aria-expanded={popoverOpen}
-        >
-          <svg
-            width="16"
-            height="16"
-            viewBox="0 0 16 16"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="1.5"
-            strokeLinecap="round"
-            strokeLinejoin="round"
+/**
+ * Segmented display-mode switch (Video / Slideshow / Document / Page) rendered
+ * as four connected buttons on the left of the Play toolbar — the prominent,
+ * one-click counterpart to the old "Mode:" dropdown. Reads and writes the same
+ * `activeDisplayMode` in preview settings.
+ */
+export function PreviewModeSwitch() {
+  const s = usePreviewSettings();
+  return (
+    <div className="squisq-preview-seg" role="group" aria-label="Display mode">
+      {DISPLAY_MODE_OPTIONS.map((opt) => {
+        const active = s.activeDisplayMode === opt.key;
+        return (
+          <button
+            key={opt.key}
+            type="button"
+            className={`squisq-preview-seg-btn${active ? ' squisq-preview-seg-btn--active' : ''}`}
+            aria-pressed={active}
+            onClick={() => s.setSelectedDisplayMode(opt.key)}
           >
-            <circle cx="8" cy="8" r="2.5" />
-            <path d="M13.5 8a5.5 5.5 0 01-.4 1.8l1.2 1.2-1.6 1.6-1.2-1.2A5.5 5.5 0 018 13.5a5.5 5.5 0 01-3.5-1.3L3.3 13.4 1.7 11.8l1.2-1.2A5.5 5.5 0 012.5 8c0-.6.1-1.2.4-1.8L1.7 5 3.3 3.4l1.2 1.2A5.5 5.5 0 018 2.5c1.3 0 2.5.5 3.5 1.3l1.2-1.2 1.6 1.6-1.2 1.2c.3.6.4 1.2.4 1.6z" />
-          </svg>
-        </button>
-        {popoverOpen && <div className="squisq-preview-controls-popover">{controls}</div>}
-      </div>
-    );
-  }
+            {opt.label}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
 
-  return <div className="squisq-preview-controls-inline">{controls}</div>;
+/** A simple aspect-ratio glyph: a centered rounded rectangle of `w`×`h` in a
+ *  16×16 box, so 16:9 reads as a wide box, 1:1 a square, 9:16 a tall box. */
+function AspectIcon({ w, h }: { w: number; h: number }) {
+  return (
+    <svg
+      width="16"
+      height="16"
+      viewBox="0 0 16 16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.4"
+      aria-hidden="true"
+    >
+      <rect x={(16 - w) / 2} y={(16 - h) / 2} width={w} height={h} rx="1.5" />
+    </svg>
+  );
+}
+
+/**
+ * Segmented aspect-ratio switch (16:9 / 1:1 / 9:16 / 4:3) rendered as connected
+ * icon buttons on the left of the Play toolbar, next to the mode switch — the
+ * one-click counterpart to the old "Format:" dropdown. Reads and writes the
+ * same `activePreset` in preview settings.
+ */
+export function PreviewFormatSwitch() {
+  const s = usePreviewSettings();
+  return (
+    <div className="squisq-preview-seg" role="group" aria-label="Aspect ratio">
+      {FORMAT_SWITCH_OPTIONS.map((opt) => {
+        const active = s.activePreset === opt.key;
+        return (
+          <button
+            key={opt.key}
+            type="button"
+            className={`squisq-preview-seg-btn squisq-preview-seg-btn--icon${active ? ' squisq-preview-seg-btn--active' : ''}`}
+            aria-pressed={active}
+            aria-label={opt.label}
+            title={opt.label}
+            onClick={() => s.setSelectedPreset(opt.key)}
+          >
+            <AspectIcon w={opt.w} h={opt.h} />
+          </button>
+        );
+      })}
+    </div>
+  );
 }
 
 function PreviewSelect({

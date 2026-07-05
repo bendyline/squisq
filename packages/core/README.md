@@ -18,10 +18,23 @@ npm install @bendyline/squisq
 | Module       | Description                                                                      |
 | ------------ | -------------------------------------------------------------------------------- |
 | **schemas**  | Type definitions — `Doc`, `BlockTemplate`, `Viewport`, `Theme`, `LayoutStrategy` |
-| **doc**      | Template registry, 17 block templates, animation/theme utilities                 |
+| **doc**      | Template registry, 23 block templates, animation/theme utilities                 |
 | **markdown** | Markdown parsing, stringifying, AST types (`MarkdownDocument`), tree utilities   |
 | **spatial**  | Haversine distance, Geohash encode/decode                                        |
 | **storage**  | `StorageAdapter` interface, Memory + LocalStorage + LocalForage adapters         |
+
+## New in this release
+
+The Squiggly Square markdown standard (see [`docs/SquigglySquare.md`](../../docs/SquigglySquare.md)) gained several authoring capabilities:
+
+- **[Standalone annotations](../../docs/SquigglySquare.md#standalone-annotations)** — a top-level paragraph that is exactly `{[templateName …]}` becomes a heading-less template block; the body that follows it is its contents.
+- **[Inline attribute coercion](../../docs/SquigglySquare.md#inline-attribute-coercion)** — `{[map center="47.6,-122.3" zoom=9]}` and `{[twoColumn left="Espresso|Bold"]}` now render without a data fence (typed via `TEMPLATE_INPUT_DESCRIPTORS`).
+- **[Validation additions](../../docs/SquigglySquare.md#validation)** — new `unknown-input` / `invalid-input-value` / `missing-input` warnings plus `possible-data-fence` / `conflicting-annotation-key` info diagnostics (a new `info` severity).
+- **[YAML data fences](../../docs/SquigglySquare.md#structured-data-fences)** now accept one level of nested mappings (a `map` `center` can be pure YAML).
+- **[Multi-line frontmatter](../../docs/SquigglySquare.md#multi-line-frontmatter)** — `squisq-custom-templates` / `squisq-custom-themes` can be authored as pretty JSON via YAML literal block scalars (`key: |-`).
+- **Custom-template tokens v2** (see [`docs/SquigglySquare.md`](../../docs/SquigglySquare.md), "Registering custom templates") — `{attr:key}`, pipe defaults on every token, and per-layer `repeat` with `{item}` / `{index}` tokens.
+
+New `@bendyline/squisq/doc` exports powering the above: `coerceTemplateParams`, `lintTemplateParams`, `TEMPLATE_INPUT_DESCRIPTORS`, and `replaceDataFence`.
 
 ## Subpath Imports
 

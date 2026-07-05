@@ -1,29 +1,45 @@
 /**
  * readInput
  *
- * Unified input reader for the CLI. Accepts a path to a .md file, .json file
- * (Doc schema), .zip/.dbk container, or a folder and returns a MemoryContentContainer
- * (virtual file system) plus either the parsed MarkdownDocument or a pre-built Doc.
+ * Unified input reader for the CLI. Accepts a path to a markdown file, a JSON
+ * Doc file, a `.zip`/`.dbk` container, a folder, or any importable binary
+ * format (`.docx`/`.pptx`/`.pdf`/`.xlsx`/`.csv`/`.html`/`.htm`) and always
+ * resolves it to a fully-populated {@link ReadInputResult}: a `Doc`, a
+ * `ContentContainer` holding the document + any bundled media, the parsed
+ * `MarkdownDocument` when the source was markdown-shaped, and the detected
+ * `sourceFormat`.
  *
- * When a .json file or a container/folder containing doc.json is provided, the
- * Doc is returned directly and markdownDoc will be null. Callers should check
- * result.doc first; when present, skip markdownToDoc() and use it directly.
+ * Binary formats are dispatched through the shared format registry's importer
+ * (preferring `importContainer`, falling back to `importDoc`); every path
+ * derives the `Doc` via `markdownToDoc()` when the source is markdown-shaped.
  */
 
+import './domPolyfill.js';
 import { readFile, readdir, stat } from 'node:fs/promises';
 import { join, extname } from 'node:path';
-import { parseMarkdown } from '@bendyline/squisq/markdown';
+import { parseMarkdown, stringifyMarkdown } from '@bendyline/squisq/markdown';
 import type { MarkdownDocument } from '@bendyline/squisq/markdown';
+import { markdownToDoc } from '@bendyline/squisq/doc';
 import type { Doc } from '@bendyline/squisq/schemas';
+import type { ContentContainer } from '@bendyline/squisq/storage';
 import { MemoryContentContainer } from '@bendyline/squisq/storage';
 import { zipToContainer } from '@bendyline/squisq-formats/container';
+import { defaultRegistry } from '@bendyline/squisq-formats';
+import type { FormatId } from '@bendyline/squisq-formats';
 
 export interface ReadInputResult {
-  container: MemoryContentContainer;
-  /** Parsed markdown document. Null when input is a Doc JSON file. */
-  markdownDoc: MarkdownDocument | null;
-  /** Pre-built Doc from JSON input. Present when input is .json or contains doc.json. */
-  doc?: Doc;
+  /** The resolved document. Always present. */
+  doc: Doc;
+  /** Virtual file system holding the document plus any bundled media. */
+  container: ContentContainer;
+  /**
+   * The parsed markdown document. Present when the source was markdown-shaped
+   * (`.md`, container/folder markdown, or a binary format imported as
+   * markdown); absent for JSON-Doc input.
+   */
+  markdownDoc?: MarkdownDocument;
+  /** Detected source format id (registry id, or `md`/`json`/`dbk`/`folder`). */
+  sourceFormat: FormatId;
 }
 
 /** MIME type lookup by extension (common content types) */
@@ -43,6 +59,13 @@ const MIME_TYPES: Record<string, string> = {
   '.mp4': 'video/mp4',
   '.webm': 'video/webm',
 };
+
+/**
+ * Binary extensions dispatched through the registry importer. `.md`, `.zip`,
+ * `.dbk`, and `.json` are intentionally excluded — they have dedicated paths
+ * that also detect bundled media / doc.json.
+ */
+const IMPORTER_EXTS = ['.docx', '.pptx', '.pdf', '.xlsx', '.csv', '.html', '.htm'];
 
 function mimeFromExt(filePath: string): string {
   return MIME_TYPES[extname(filePath).toLowerCase()] ?? 'application/octet-stream';
@@ -68,12 +91,9 @@ async function walkDir(root: string, prefix = ''): Promise<string[]> {
 }
 
 /**
- * Read input from a file path (markdown, JSON Doc, ZIP/DBK container, or folder)
- * and return a populated ContentContainer + parsed MarkdownDocument or Doc.
- *
- * When the input is a .json file (or a container/folder containing doc.json),
- * the result will have `doc` populated and `markdownDoc` set to null.
- * Otherwise, `markdownDoc` is populated and `doc` is undefined.
+ * Read input from a file path (markdown, JSON Doc, ZIP/DBK container, folder,
+ * or an importable binary format) and resolve it to a populated
+ * {@link ReadInputResult}.
  */
 export async function readInput(inputPath: string): Promise<ReadInputResult> {
   const info = await stat(inputPath);
@@ -91,8 +111,21 @@ export async function readInput(inputPath: string): Promise<ReadInputResult> {
     return readDocJsonFile(inputPath);
   }
 
+  if (IMPORTER_EXTS.includes(ext)) {
+    const def = defaultRegistry().byExtension(ext);
+    if (def && (def.importContainer || def.importDoc)) {
+      return readViaImporter(inputPath, def);
+    }
+  }
+
   // Default: treat as a markdown file
   return readMarkdownFile(inputPath);
+}
+
+/** Read a file into an ArrayBuffer (a fresh copy, not a Buffer view). */
+async function readArrayBuffer(filePath: string): Promise<ArrayBuffer> {
+  const data = await readFile(filePath);
+  return data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength) as ArrayBuffer;
 }
 
 async function readMarkdownFile(filePath: string): Promise<ReadInputResult> {
@@ -100,7 +133,7 @@ async function readMarkdownFile(filePath: string): Promise<ReadInputResult> {
   const container = new MemoryContentContainer();
   await container.writeDocument(content);
   const markdownDoc = parseMarkdown(content);
-  return { container, markdownDoc };
+  return { doc: markdownToDoc(markdownDoc), container, markdownDoc, sourceFormat: 'md' };
 }
 
 /**
@@ -111,7 +144,35 @@ async function readDocJsonFile(filePath: string): Promise<ReadInputResult> {
   const content = await readFile(filePath, 'utf-8');
   const doc = JSON.parse(content) as Doc;
   const container = new MemoryContentContainer();
-  return { container, markdownDoc: null, doc };
+  return { doc, container, sourceFormat: 'json' };
+}
+
+/**
+ * Dispatch an importable binary format (docx/pptx/pdf/…) through the registry
+ * importer. Prefers `importContainer` (extracts media alongside the markdown),
+ * falling back to `importDoc` wrapped in a fresh container.
+ */
+async function readViaImporter(
+  filePath: string,
+  def: import('@bendyline/squisq-formats').FormatDefinition,
+): Promise<ReadInputResult> {
+  const buffer = await readArrayBuffer(filePath);
+
+  let container: ContentContainer;
+  let markdownDoc: MarkdownDocument;
+  if (def.importContainer) {
+    container = await def.importContainer(buffer, {});
+    const text = await container.readDocument();
+    markdownDoc = text ? parseMarkdown(text) : { type: 'document', children: [] };
+  } else {
+    // importDoc is guaranteed present by the caller's guard.
+    markdownDoc = await def.importDoc!(buffer, {});
+    const mem = new MemoryContentContainer();
+    await mem.writeDocument(stringifyMarkdown(markdownDoc));
+    container = mem;
+  }
+
+  return { doc: markdownToDoc(markdownDoc), container, markdownDoc, sourceFormat: def.id };
 }
 
 /**
@@ -120,29 +181,37 @@ async function readDocJsonFile(filePath: string): Promise<ReadInputResult> {
  */
 const DOC_JSON_NAMES = ['doc.json', 'story.json'];
 
-async function readContainer(filePath: string): Promise<ReadInputResult> {
-  const data = await readFile(filePath);
-  const container = await zipToContainer(
-    data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength) as ArrayBuffer,
-  );
-
-  // Check for Doc JSON inside the container first
+/** Resolve a container that may hold either a doc.json or a markdown document. */
+async function resolveContainer(
+  container: ContentContainer,
+  sourceFormat: FormatId,
+  missingMessage: string,
+): Promise<ReadInputResult> {
+  // Check for Doc JSON first.
   for (const name of DOC_JSON_NAMES) {
     const jsonData = await container.readFile(name);
     if (jsonData) {
-      const decoder = new TextDecoder();
-      const doc = JSON.parse(decoder.decode(jsonData)) as Doc;
-      return { container, markdownDoc: null, doc };
+      const doc = JSON.parse(new TextDecoder().decode(jsonData)) as Doc;
+      return { doc, container, sourceFormat };
     }
   }
 
   const markdown = await container.readDocument();
   if (!markdown) {
-    throw new Error(`No markdown document or doc.json found in container: ${filePath}`);
+    throw new Error(missingMessage);
   }
 
   const markdownDoc = parseMarkdown(markdown);
-  return { container, markdownDoc };
+  return { doc: markdownToDoc(markdownDoc), container, markdownDoc, sourceFormat };
+}
+
+async function readContainer(filePath: string): Promise<ReadInputResult> {
+  const container = await zipToContainer(await readArrayBuffer(filePath));
+  return resolveContainer(
+    container,
+    'dbk',
+    `No markdown document or doc.json found in container: ${filePath}`,
+  );
 }
 
 async function readFolder(dirPath: string): Promise<ReadInputResult> {
@@ -159,21 +228,9 @@ async function readFolder(dirPath: string): Promise<ReadInputResult> {
     );
   }
 
-  // Check for Doc JSON inside the folder first
-  for (const name of DOC_JSON_NAMES) {
-    const jsonData = await container.readFile(name);
-    if (jsonData) {
-      const decoder = new TextDecoder();
-      const doc = JSON.parse(decoder.decode(jsonData)) as Doc;
-      return { container, markdownDoc: null, doc };
-    }
-  }
-
-  const markdown = await container.readDocument();
-  if (!markdown) {
-    throw new Error(`No markdown document or doc.json found in folder: ${dirPath}`);
-  }
-
-  const markdownDoc = parseMarkdown(markdown);
-  return { container, markdownDoc };
+  return resolveContainer(
+    container,
+    'folder',
+    `No markdown document or doc.json found in folder: ${dirPath}`,
+  );
 }

@@ -82,9 +82,14 @@ export function readCustomThemesFromFrontmatter(
  */
 export function writeCustomThemesToFrontmatter(
   themes: readonly Theme[] | undefined,
+  options?: { pretty?: boolean },
 ): string | undefined {
   if (!themes || themes.length === 0) return undefined;
   const map: Record<string, Theme> = {};
   for (const theme of themes) map[theme.id] = theme;
-  return JSON.stringify(map);
+  // Pretty output is multi-line, so it serializes as a YAML literal block
+  // scalar (see the markdown stringify frontmatter path) and reads back via
+  // `JSON.parse`. Default stays compact (single line) so existing docs and
+  // snapshots are byte-unchanged.
+  return JSON.stringify(map, null, options?.pretty ? 2 : undefined);
 }

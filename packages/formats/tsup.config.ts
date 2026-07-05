@@ -12,6 +12,7 @@ export default defineConfig({
     'html/index': 'src/html/index.ts',
     'epub/index': 'src/epub/index.ts',
     'container/index': 'src/container/index.ts',
+    'registry/index': 'src/registry/index.ts',
   },
   format: ['esm'],
   dts: true,

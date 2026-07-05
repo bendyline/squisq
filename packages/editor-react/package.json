@@ -34,10 +34,10 @@
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
     },
-    "./styles": "./src/styles/index.css"
+    "./styles": "./dist/styles/index.css"
   },
   "scripts": {
-    "build": "tsup",
+    "build": "tsup && node scripts/build-styles.mjs",
     "dev": "concurrently -n js,dts -c blue,gray -r \"tsup --watch --no-dts --no-clean\" \"tsup --watch --dts-only --no-clean\"",
     "typecheck": "tsc --noEmit"
   },
@@ -45,6 +45,11 @@
     "monaco-editor": "^0.50.0",
     "react": "^18.0.0 || ^19.0.0",
     "react-dom": "^18.0.0 || ^19.0.0"
+  },
+  "peerDependenciesMeta": {
+    "monaco-editor": {
+      "optional": true
+    }
   },
   "dependencies": {
     "@bendyline/squisq": "1.5.0",
@@ -74,5 +79,8 @@
     "react-dom": "18.3.1",
     "tsup": "8.5.1",
     "typescript": "5.9.3"
-  }
+  },
+  "sideEffects": [
+    "**/*.css"
+  ]
 }

@@ -11,6 +11,7 @@ import {
   countNodes,
   createDocument,
   parseFrontmatter,
+  setFrontmatterValues,
   plainTextFromInlineHtml,
 } from '../markdown/index';
 import type {
@@ -838,6 +839,69 @@ describe('parseFrontmatter', () => {
   it('returns null for empty input', () => {
     expect(parseFrontmatter('')).toBeNull();
     expect(parseFrontmatter('  \n  ')).toBeNull();
+  });
+
+  it('parses a `|-` literal block scalar, dedenting the body', () => {
+    const result = parseFrontmatter('data: |-\n  line one\n  line two\ntitle: After');
+    expect(result).toEqual({ data: 'line one\nline two', title: 'After' });
+  });
+
+  it('parses a `|` literal block scalar (same joined value here)', () => {
+    const result = parseFrontmatter('data: |\n  a\n  b');
+    expect(result).toEqual({ data: 'a\nb' });
+  });
+
+  it('ends the block scalar at a line indented to the key or less', () => {
+    const result = parseFrontmatter('config: |-\n  {\n    "k": 1\n  }\nnext: x');
+    expect(result).toEqual({ config: '{\n  "k": 1\n}', next: 'x' });
+  });
+
+  it('parses multi-line pretty JSON as a block scalar back to a JSON string', () => {
+    const json = JSON.stringify({ hero: { lb: 'Hero' } }, null, 2);
+    const body = json
+      .split('\n')
+      .map((l) => `  ${l}`)
+      .join('\n');
+    const result = parseFrontmatter(`squisq-custom-templates: |-\n${body}`);
+    expect(typeof result!['squisq-custom-templates']).toBe('string');
+    expect(JSON.parse(result!['squisq-custom-templates'] as string)).toEqual({
+      hero: { lb: 'Hero' },
+    });
+  });
+
+  it('leaves single-line values untouched alongside block scalars', () => {
+    const result = parseFrontmatter('title: Plain\ninline: {"a":1}');
+    expect(result).toEqual({ title: 'Plain', inline: '{"a":1}' });
+  });
+});
+
+describe('multi-line frontmatter round-trips', () => {
+  it('round-trips a multi-line string value through stringify → parse', () => {
+    const value = JSON.stringify({ a: 1, b: [2, 3] }, null, 2);
+    const doc = createDocument();
+    doc.frontmatter = { payload: value, title: 'Doc' };
+    const md = stringifyMarkdown(doc);
+    expect(md).toContain('payload: |-');
+    const reparsed = parseMarkdown(md);
+    expect(reparsed.frontmatter!.payload).toBe(value);
+    expect(reparsed.frontmatter!.title).toBe('Doc');
+  });
+
+  it('setFrontmatterValues emits a block scalar for a multi-line value', () => {
+    const value = 'one\ntwo\nthree';
+    const out = setFrontmatterValues('# Body\n', { notes: value });
+    expect(out).toContain('notes: |-');
+    expect(out).toContain('  one');
+    const doc = parseMarkdown(out);
+    expect(doc.frontmatter!.notes).toBe(value);
+  });
+
+  it('keeps single-line frontmatter output unchanged', () => {
+    const doc = createDocument();
+    doc.frontmatter = { 'document-render-as': 'portrait' };
+    const md = stringifyMarkdown(doc);
+    expect(md).toContain('document-render-as: portrait');
+    expect(md).not.toContain('|-');
   });
 });
 

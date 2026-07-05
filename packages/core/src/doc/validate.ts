@@ -28,8 +28,12 @@ import type {
 } from '../markdown/types.js';
 import { parseMarkdown } from '../markdown/parse.js';
 import { getChildren, extractPlainText } from '../markdown/utils.js';
-import { coerceAnnotationValues } from '../markdown/annotationCoercion.js';
+import { coerceAnnotationValues, KNOWN_BLOCK_META_KEYS } from '../markdown/annotationCoercion.js';
 import { markdownToDoc, flattenBlocks } from './markdownToDoc.js';
+import { parseStandaloneAnnotation } from './standaloneAnnotation.js';
+import { isDataFence, parseDataFence } from './structuredData.js';
+import { deriveTemplateInputs } from './templateInputs.js';
+import { lintTemplateParams } from './templates/inputDescriptors.js';
 import {
   templateRegistry,
   TEMPLATE_ALIASES,
@@ -64,6 +68,7 @@ export interface MarkdownValidationResult {
   diagnostics: DocDiagnostic[];
   errorCount: number;
   warningCount: number;
+  infoCount: number;
   /** The converted Doc (conversion diagnostics are included above). */
   doc: Doc;
 }
@@ -95,6 +100,9 @@ export function validateMarkdownDoc(
   const blocks = flattenBlocks(doc.blocks);
 
   const knownTemplates = collectKnownTemplates(doc, options);
+  // Custom template names are skipped by the input linter — they carry
+  // arbitrary author-defined inputs the built-in descriptors can't know about.
+  const customNames = new Set<string>(doc.customTemplates?.map((t) => t.name) ?? []);
 
   // Parent-aware walk: a `{[shape]}` annotation is only meaningful on the
   // direct child of a `{[drawing]}` block, so the template check needs each
@@ -102,6 +110,9 @@ export function validateMarkdownDoc(
   const visit = (block: Block, parent: Block | undefined): void => {
     checkTemplate(block, parent, knownTemplates, diagnostics);
     checkAttributeCoercion(block, parent, diagnostics);
+    checkConflictingAnnotationKeys(block, diagnostics);
+    checkTemplateInputs(block, parent, customNames, diagnostics);
+    checkPossibleDataFences(block, diagnostics);
     if (isDrawingBlock(block)) checkDrawingConnectors(block, diagnostics);
     for (const child of block.children ?? []) visit(child, block);
   };
@@ -122,6 +133,7 @@ export function validateMarkdownDoc(
     diagnostics,
     errorCount: diagnostics.filter((d) => d.severity === 'error').length,
     warningCount: diagnostics.filter((d) => d.severity === 'warning').length,
+    infoCount: diagnostics.filter((d) => d.severity === 'info').length,
     doc,
   };
 }
@@ -150,7 +162,11 @@ function checkTemplate(
   known: Set<string>,
   diagnostics: DocDiagnostic[],
 ): void {
-  const requested = block.sourceHeading?.templateAnnotation?.template;
+  // Heading blocks carry the requested name on the heading annotation;
+  // heading-less standalone blocks carry it on `sourceAnnotation` (raw,
+  // un-resolved) — read whichever is present.
+  const requested =
+    block.sourceHeading?.templateAnnotation?.template ?? block.sourceAnnotation?.template;
   if (!requested) return;
 
   // Inside a drawing, the annotation names a shape primitive, not a template.
@@ -193,6 +209,60 @@ function checkTemplate(
     blockId: block.id,
     ...lineOf(block),
   });
+}
+
+/**
+ * Lint a template block's `{[…]}` inputs against the built-in input
+ * descriptors: unknown keys (with a did-you-mean), values outside a closed
+ * enum / that fail coercion, and missing required inputs. All are warnings.
+ *
+ * Only built-in templates with descriptors are checked — shapes, drawing
+ * children, custom templates, and not-yet-described built-ins are skipped
+ * (`lintTemplateParams` returns `[]` for the latter). A `missing-input`
+ * finding is suppressed when the value is actually satisfiable from the
+ * block's own fields, structured data, or body derivation.
+ */
+function checkTemplateInputs(
+  block: Block,
+  parent: Block | undefined,
+  customNames: ReadonlySet<string>,
+  diagnostics: DocDiagnostic[],
+): void {
+  const requested = block.sourceHeading?.templateAnnotation?.template;
+  if (!requested) return;
+  // Inside a drawing, the annotation names a shape primitive, not a template.
+  if (parent && isDrawingBlock(parent)) return;
+  if (isShapeName(requested)) return;
+
+  const canonical = resolveTemplateName(requested);
+  if (customNames.has(requested) || customNames.has(canonical)) return;
+
+  const params = block.sourceHeading?.templateAnnotation?.params ?? {};
+  for (const finding of lintTemplateParams(canonical, params)) {
+    if (finding.kind === 'missing-input' && isInputSatisfiable(canonical, block, finding.key)) {
+      continue;
+    }
+    diagnostics.push({
+      severity: 'warning',
+      code: finding.kind,
+      message: `Block "${block.id}": ${finding.message}`,
+      blockId: block.id,
+      ...lineOf(block),
+    });
+  }
+}
+
+/**
+ * Whether a required template input is satisfiable even though it's absent
+ * from the `{[…]}` params: present in a structured-data fence, carried as a
+ * block-level field (e.g. `title` from the heading), or derivable from the
+ * heading + body (`deriveTemplateInputs` in strict mode).
+ */
+function isInputSatisfiable(canonical: string, block: Block, key: string): boolean {
+  if (block.templateData && key in block.templateData) return true;
+  if ((block as unknown as Record<string, unknown>)[key] != null) return true;
+  const derived = deriveTemplateInputs(canonical, block.title ?? '', block.contents);
+  return derived != null && key in derived;
 }
 
 /** Numeric geometry keys carried in a shape's `{[…]}` params. */
@@ -241,6 +311,34 @@ function checkAttributeCoercion(
 }
 
 /**
+ * A heading can carry the same block-meta key in both the Pandoc `{k=v}`
+ * block and the squiggly `{[tpl k=v]}` annotation. The Pandoc value wins
+ * (same precedence as `makeBlock` in markdownToDoc), which is easy to miss
+ * when the two disagree — surface an info diagnostic so the author knows
+ * which value is in effect.
+ */
+function checkConflictingAnnotationKeys(block: Block, diagnostics: DocDiagnostic[]): void {
+  const annotationParams = block.sourceHeading?.templateAnnotation?.params;
+  const pandocParams = block.sourceHeading?.attributes?.params;
+  if (!annotationParams || !pandocParams) return;
+
+  for (const key of Object.keys(KNOWN_BLOCK_META_KEYS)) {
+    const fromAnnotation = annotationParams[key];
+    const fromPandoc = pandocParams[key];
+    if (fromAnnotation == null || fromPandoc == null || fromAnnotation === fromPandoc) continue;
+    diagnostics.push({
+      severity: 'info',
+      code: 'conflicting-annotation-key',
+      message:
+        `"${key}" is set in both {[…]} (${fromAnnotation}) and {…} (${fromPandoc}) — ` +
+        `the {…} value wins.`,
+      blockId: block.id,
+      ...lineOf(block),
+    });
+  }
+}
+
+/**
  * A drawing's `line`/`arrow` connectors reference sibling shapes by id via
  * `from`/`to`; flag any that don't resolve (mirrors the `connectsTo`
  * unresolved-connection check, but for the `{[…]}` param form).
@@ -269,6 +367,40 @@ function checkDrawingConnectors(block: Block, diagnostics: DocDiagnostic[]): voi
   }
 }
 
+/**
+ * A plain ```json / ```yaml fence (no `data` marker) inside a template-
+ * annotated block, whose content parses as a top-level object, is almost
+ * certainly meant as template input — surface an info nudge to add the
+ * `data` marker. Deliberately scoped to *annotated* blocks so ordinary code
+ * samples in prose sections never trigger it.
+ */
+function checkPossibleDataFences(block: Block, diagnostics: DocDiagnostic[]): void {
+  const annotated = !!(
+    block.sourceHeading?.templateAnnotation?.template || block.sourceAnnotation?.template
+  );
+  if (!annotated) return;
+
+  for (const node of block.contents ?? []) {
+    if (node.type !== 'code') continue;
+    const lang = node.lang?.toLowerCase();
+    if (lang !== 'json' && lang !== 'yaml' && lang !== 'yml') continue;
+    if (isDataFence(node)) continue; // already a data fence — nothing to nudge
+
+    const result = parseDataFence(node);
+    if (!result.data || Object.keys(result.data).length === 0) continue;
+
+    diagnostics.push({
+      severity: 'info',
+      code: 'possible-data-fence',
+      message:
+        `This ${lang} block renders as code — add "data" to the fence ` +
+        `(\`\`\`${lang} data) if it's meant as template input.`,
+      blockId: block.id,
+      ...(node.position ? { line: node.position.start.line } : lineOf(block)),
+    });
+  }
+}
+
 // ============================================
 // Unrecognized `{[…]}` text
 // ============================================
@@ -285,7 +417,7 @@ function checkUnrecognizedAnnotations(
   markdownDoc: MarkdownDocument,
   diagnostics: DocDiagnostic[],
 ): void {
-  const walk = (node: MarkdownNode, headingLine: number | undefined): void => {
+  const walk = (node: MarkdownNode, headingLine: number | undefined, topLevel: boolean): void => {
     if (node.type === 'heading') {
       const heading = node as MarkdownHeading;
       const text = extractPlainText(heading);
@@ -301,13 +433,22 @@ function checkUnrecognizedAnnotations(
       }
       return; // heading inline children already covered by extractPlainText
     }
+    // A *top-level* paragraph that is exactly a `{[templateName …]}` /
+    // `{[audio …]}` annotation is recognized (it becomes a standalone template
+    // block or a media clip) — don't flag it, and don't descend into its text.
+    // Nested paragraphs (inside a list / blockquote) are NOT extracted, so
+    // they still warn.
+    if (node.type === 'paragraph' && topLevel) {
+      const parsed = parseStandaloneAnnotation(node);
+      if (parsed && parsed.template != null) return;
+    }
     if (node.type === 'text' && ANNOTATION_LIKE_RE.test(node.value)) {
       diagnostics.push({
         severity: 'warning',
         code: 'unparsed-annotation',
         message:
-          `Body text contains "{[…]}" — template annotations are only recognized on ` +
-          `headings (or the token is not a known inline icon)`,
+          `Body text contains "{[…]}" — template annotations are recognized on headings ` +
+          `and as standalone paragraphs (or the token is not a known inline icon)`,
         ...(node.position
           ? { line: node.position.start.line }
           : headingLine != null
@@ -318,12 +459,12 @@ function checkUnrecognizedAnnotations(
     }
     if (node.type === 'code') return; // code blocks legitimately contain {[
     for (const child of getChildren(node)) {
-      walk(child, headingLine);
+      walk(child, headingLine, false);
     }
   };
 
   for (const child of markdownDoc.children) {
-    walk(child, child.position?.start.line);
+    walk(child, child.position?.start.line, true);
   }
 }
 

@@ -10,18 +10,28 @@ import { createPortal } from 'react-dom';
 import type { Doc } from '@bendyline/squisq/schemas';
 import type { MediaProvider } from '@bendyline/squisq/schemas';
 import { VideoExportModal } from './VideoExportModal.js';
+import type { VideoExportConfig } from './hooks/useVideoExport.js';
 
 export interface VideoExportButtonProps {
   /** The document to export */
   doc: Doc;
-  /** Player IIFE bundle source */
-  playerScript: string;
+  /**
+   * Player IIFE bundle source. Unused by the browser export path (frames
+   * are captured from a live in-page DocPlayer); only forwarded for
+   * CLI/Playwright-style pipelines that render standalone HTML.
+   */
+  playerScript?: string;
   /** Optional media provider for resolving images/audio */
   mediaProvider?: MediaProvider;
   /** Pre-collected images map */
   images?: Map<string, ArrayBuffer>;
   /** Pre-collected audio map */
   audio?: Map<string, ArrayBuffer>;
+  /**
+   * Seeds the modal's initial export settings and is merged as a base into the
+   * config passed to the export hook. Forwarded to {@link VideoExportModal}.
+   */
+  defaultConfig?: Partial<VideoExportConfig>;
   /** Button label (default: "Export Video") */
   label?: string;
   /** Additional inline styles for the button */
@@ -36,6 +46,7 @@ export function VideoExportButton({
   mediaProvider,
   images,
   audio,
+  defaultConfig,
   label = 'Export Video',
   style,
   disabled,
@@ -59,6 +70,7 @@ export function VideoExportButton({
             mediaProvider={mediaProvider}
             images={images}
             audio={audio}
+            defaultConfig={defaultConfig}
             onClose={handleClose}
           />,
           document.body,

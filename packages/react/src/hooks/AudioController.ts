@@ -1,5 +1,5 @@
 /**
- * AudioProvider - Abstraction for audio playback in DocPlayer
+ * AudioController - Abstraction for audio playback in DocPlayer
  *
  * This module defines an interface for audio playback operations that can have
  * different implementations depending on the runtime environment:
@@ -47,9 +47,9 @@ export interface AudioActions {
   restart: () => Promise<void>;
 }
 
-export type AudioProvider = AudioState & AudioActions;
+export type AudioController = AudioState & AudioActions;
 
-export interface AudioProviderConfig {
+export interface AudioControllerConfig {
   /** Audio track with segments */
   audioTrack: AudioTrack | undefined;
   /** Base path for resolving audio URLs */

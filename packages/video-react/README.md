@@ -1,6 +1,6 @@
 # @bendyline/squisq-video-react
 
-React components and hooks for exporting Squisq documents to MP4 video directly in the browser. Uses WebCodecs for hardware-accelerated H.264 encoding with html2canvas for frame capture.
+React components and hooks for exporting Squisq documents to MP4 video directly in the browser. Uses WebCodecs for hardware-accelerated H.264 encoding (with an ffmpeg.wasm worker fallback) and html2canvas for frame capture. As of v1.5 the exported MP4 also carries an **audio** track (narration + timed media).
 
 Part of the [Squisq](https://github.com/bendyline/squisq) monorepo.
 
@@ -26,6 +26,11 @@ function App() {
   return <VideoExportButton doc={myDoc} images={imageMap} audio={audioMap} />;
 }
 ```
+
+**v1.5:** `playerScript` is now **optional** — the browser export captures frames
+from a live in-page `DocPlayer`, so the standalone bundle is only needed for
+CLI/Playwright-style pipelines. A new `defaultConfig?: Partial<VideoExportConfig>`
+prop seeds the modal's initial quality/fps/orientation/caption selections.
 
 ### Full Export Modal
 
@@ -85,10 +90,13 @@ function CustomExport({ doc, images, audio }) {
   const {
     state, // 'idle' | 'preparing' | 'capturing' | 'encoding' | 'complete' | 'error'
     progress, // 0–100
+    backend, // 'webcodecs' | 'ffmpeg-wasm' | null
     elapsed,
     estimatedRemaining,
     downloadUrl,
     fileSize,
+    audioIncluded, // whether an audio track was muxed in
+    audioSkippedReason, // null when the doc had no audio; a string explains a shortfall
     error,
     startExport,
     cancel,
@@ -97,7 +105,7 @@ function CustomExport({ doc, images, audio }) {
 
   return (
     <div>
-      <button onClick={() => startExport({ doc, images, audio, quality: 'normal', fps: 30 })}>
+      <button onClick={() => startExport(doc, { images, audio, quality: 'normal', fps: 30 })}>
         Export
       </button>
       {state === 'capturing' && <p>Progress: {progress}%</p>}
@@ -113,15 +121,33 @@ function CustomExport({ doc, images, audio }) {
 
 ## Browser Requirements
 
-WebCodecs H.264 encoding requires Chrome 94+ or Edge 94+. Use `supportsWebCodecs()` to check at runtime:
+WebCodecs H.264 encoding requires Chrome 94+ or Edge 94+. When WebCodecs H.264
+is unavailable, the export automatically falls back to an ffmpeg.wasm worker —
+which requires `SharedArrayBuffer` (i.e. Cross-Origin-Isolation headers on the
+host page). Use `supportsWebCodecs()` to probe at runtime:
 
 ```ts
-import { supportsWebCodecs } from '@bendyline/squisq-video-react';
+import {
+  supportsWebCodecs,
+  supportsWebCodecsH264,
+  supportsWebCodecsAac,
+} from '@bendyline/squisq-video-react';
 
 if (!supportsWebCodecs()) {
-  // Fall back or show unsupported message
+  // ffmpeg.wasm fallback will be used (needs Cross-Origin-Isolation)
 }
 ```
+
+**Audio tiers.** The audio track is muxed via WebCodecs AAC when available
+(`supportsWebCodecsAac()`); otherwise it is skipped and the export reports
+`audioIncluded: false` with an `audioSkippedReason`. Audio problems never fail
+the export — the video always completes. `supportsWebCodecsH264(config)` probes a
+specific encoder configuration; `EncoderConfig` is also exported.
+
+## Full API Reference
+
+See [docs/API.md](https://github.com/bendyline/squisq/blob/main/docs/API.md)
+for complete prop tables, `VideoExportConfig`, and the encoder utilities.
 
 ## Related Packages
 

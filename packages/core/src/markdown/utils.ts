@@ -124,8 +124,10 @@ export function parseFrontmatter(yaml: string): Record<string, unknown> | null {
   if (!yaml || !yaml.trim()) return null;
 
   const result: Record<string, unknown> = {};
+  const lines = yaml.split('\n');
 
-  for (const line of yaml.split('\n')) {
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
     const trimmed = line.trim();
     if (!trimmed || trimmed.startsWith('#')) continue;
 
@@ -134,6 +136,45 @@ export function parseFrontmatter(yaml: string): Record<string, unknown> | null {
 
     const key = trimmed.slice(0, colonIdx).trim();
     let value: string | boolean | number = trimmed.slice(colonIdx + 1).trim();
+
+    // YAML literal block scalar: `key: |` or `key: |-`. Subsequent lines
+    // that are more-indented than the key belong to the scalar; they are
+    // dedented by their common leading indent and joined with `\n`. A line
+    // at the key's indent (or less) ends the scalar. Both `|` and `|-`
+    // yield the joined string here (`|-` without a trailing newline); we do
+    // not model `|`'s trailing-newline / `+`/`-` chomping nuances beyond
+    // stripping trailing blank lines.
+    if (value === '|' || value === '|-') {
+      const keyIndent = line.length - line.trimStart().length;
+      const blockLines: string[] = [];
+      let j = i + 1;
+      for (; j < lines.length; j++) {
+        const bl = lines[j];
+        if (bl.trim() === '') {
+          blockLines.push('');
+          continue;
+        }
+        const indent = bl.length - bl.trimStart().length;
+        if (indent <= keyIndent) break; // dedent ends the scalar
+        blockLines.push(bl);
+      }
+      i = j - 1; // resume the outer walk at the terminating line
+
+      // Drop trailing blank lines captured inside the scalar.
+      while (blockLines.length > 0 && blockLines[blockLines.length - 1] === '') {
+        blockLines.pop();
+      }
+
+      // Dedent by the common leading whitespace of the non-blank lines.
+      let commonIndent = Infinity;
+      for (const bl of blockLines) {
+        if (bl === '') continue;
+        commonIndent = Math.min(commonIndent, bl.length - bl.trimStart().length);
+      }
+      if (!isFinite(commonIndent)) commonIndent = 0;
+      result[key] = blockLines.map((bl) => (bl === '' ? '' : bl.slice(commonIndent))).join('\n');
+      continue;
+    }
 
     // Remove surrounding quotes
     if (
@@ -158,11 +199,31 @@ export function parseFrontmatter(yaml: string): Record<string, unknown> | null {
   return Object.keys(result).length > 0 ? result : null;
 }
 
+/**
+ * Format a multi-line string as a YAML literal block scalar body, i.e.
+ * `|-` followed by each source line indented two spaces. Paired with
+ * {@link parseFrontmatter}'s block-scalar reader so multi-line frontmatter
+ * values (e.g. pretty-printed JSON payloads) round-trip. Blank lines stay
+ * blank (no trailing whitespace) so the output diffs cleanly.
+ */
+export function formatBlockScalar(value: string): string {
+  const body = value
+    .split('\n')
+    .map((line) => (line === '' ? '' : `  ${line}`))
+    .join('\n');
+  return `|-\n${body}`;
+}
+
 const FRONTMATTER_BLOCK_RE = /^---\r?\n([\s\S]*?)\r?\n---(\r?\n)?/;
 
 /** Quote a frontmatter scalar so it round-trips cleanly through `parseFrontmatter`. */
 function formatFrontmatterValue(value: string | number | boolean): string {
   if (typeof value === 'boolean' || typeof value === 'number') return String(value);
+  // Multi-line strings can't live on one line — emit a YAML literal block
+  // scalar (`|-`) that `parseFrontmatter` reads back. This carries pretty-
+  // printed JSON payloads (opt-in custom templates/themes). Single-line
+  // values keep their exact historical output below.
+  if (/[\r\n]/.test(value)) return formatBlockScalar(value.replace(/\r\n?/g, '\n'));
   // A single-line JSON object/array literal round-trips verbatim through
   // the line-based `parseFrontmatter` (no leading quote to strip, no
   // newline to split on), so write it unquoted to keep it human-readable

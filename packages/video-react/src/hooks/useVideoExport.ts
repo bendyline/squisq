@@ -18,8 +18,8 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 import type { Doc } from '@bendyline/squisq/schemas';
 import type { MediaProvider } from '@bendyline/squisq/schemas';
-import type { VideoQuality, VideoOrientation } from '@bendyline/squisq-video';
-import { resolveDimensions } from '@bendyline/squisq-video';
+import type { VideoQuality, VideoOrientation, AudioTimelineClip } from '@bendyline/squisq-video';
+import { resolveDimensions, computeAudioTimeline, QUALITY_PRESETS } from '@bendyline/squisq-video';
 import type { CaptionMode } from '@bendyline/squisq-react';
 import {
   createEncoder,
@@ -28,7 +28,51 @@ import {
   type MainThreadEncoder,
 } from '../mainThreadEncoder.js';
 import { createWorkerEncoder } from '../workerEncoder.js';
+import {
+  supportsWebCodecsAac,
+  selectAudioTier,
+  renderAudioTimeline,
+  encodeAacTrack,
+  audioBufferToWav,
+  muxAudioWithFfmpegWasm,
+  EXPORT_AUDIO_SAMPLE_RATE,
+  EXPORT_AUDIO_CHANNELS,
+} from '../audioTrack.js';
 import { useFrameCapture } from './useFrameCapture.js';
+
+// ── Audio resolution ───────────────────────────────────────────────
+
+/**
+ * Resolve the raw bytes for every unique source in the audio timeline from
+ * (in order) the pre-collected audio map, the images map, then the
+ * MediaProvider. Sources that can't be resolved are simply omitted — the
+ * caller degrades gracefully rather than failing.
+ */
+async function resolveAudioBuffers(
+  clips: AudioTimelineClip[],
+  sources: {
+    audio?: Map<string, ArrayBuffer>;
+    images?: Map<string, ArrayBuffer>;
+    mediaProvider?: MediaProvider;
+  },
+): Promise<Map<string, ArrayBuffer>> {
+  const srcs = new Set(clips.map((c) => c.src));
+  const out = new Map<string, ArrayBuffer>();
+  for (const src of srcs) {
+    let data = sources.audio?.get(src) ?? sources.images?.get(src);
+    if (!data && sources.mediaProvider) {
+      try {
+        const url = await sources.mediaProvider.resolveUrl(src);
+        const res = await fetch(url);
+        if (res.ok) data = await res.arrayBuffer();
+      } catch {
+        // Unresolvable source; skip it.
+      }
+    }
+    if (data) out.set(src, data);
+  }
+  return out;
+}
 
 // ── Types ──────────────────────────────────────────────────────────
 
@@ -80,6 +124,19 @@ export interface VideoExportResult {
   downloadUrl: string | null;
   /** File size in bytes (populated when state === 'complete') */
   fileSize: number;
+  /**
+   * Whether an audio track was muxed into the exported MP4 (populated when
+   * state === 'complete'). False when the doc had no audio or when audio was
+   * skipped/degraded — see {@link audioSkippedReason}.
+   */
+  audioIncluded: boolean;
+  /**
+   * Why audio is absent, when `audioIncluded` is false. `null` means the doc
+   * simply had no audio (not a failure); a non-null string explains a genuine
+   * capability shortfall or runtime failure. Audio problems never fail the
+   * export — the video always completes.
+   */
+  audioSkippedReason: string | null;
   /** Error message (populated when state === 'error') */
   error: string | null;
   /** Seconds elapsed since export started */
@@ -104,6 +161,8 @@ export function useVideoExport(): VideoExportResult {
   const [backend, setBackend] = useState<'webcodecs' | 'ffmpeg-wasm' | null>(null);
   const [downloadUrl, setDownloadUrl] = useState<string | null>(null);
   const [fileSize, setFileSize] = useState(0);
+  const [audioIncluded, setAudioIncluded] = useState(false);
+  const [audioSkippedReason, setAudioSkippedReason] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const [elapsed, setElapsed] = useState(0);
@@ -148,6 +207,8 @@ export function useVideoExport(): VideoExportResult {
     setBackend(null);
     setDownloadUrl(null);
     setFileSize(0);
+    setAudioIncluded(false);
+    setAudioSkippedReason(null);
     setError(null);
     setElapsed(0);
     setEstimatedRemaining(0);
@@ -178,6 +239,8 @@ export function useVideoExport(): VideoExportResult {
       }
       setDownloadUrl(null);
       setFileSize(0);
+      setAudioIncluded(false);
+      setAudioSkippedReason(null);
       setError(null);
 
       const quality = config.quality ?? 'normal';
@@ -250,9 +313,79 @@ export function useVideoExport(): VideoExportResult {
         const canUseWebCodecs =
           webCodecsAvailable && (await supportsWebCodecsH264({ width, height, fps, quality }));
 
+        // ── Audio: tier selection + (best-effort) render ──────────
+        // The browser frame-capture path has no cover pre-roll (Playwright
+        // only), so the timeline is unshifted. Every audio operation below is
+        // wrapped so a failure degrades to a silent video with a reason —
+        // audio never aborts the export.
+        const audioBitrate = (QUALITY_PRESETS[quality] ?? QUALITY_PRESETS.normal).audioBitrate;
+        const timeline = computeAudioTimeline(doc, 0);
+        const aacSupported =
+          timeline.length > 0
+            ? await supportsWebCodecsAac(EXPORT_AUDIO_SAMPLE_RATE, EXPORT_AUDIO_CHANNELS)
+            : false;
+        const tierDecision = selectAudioTier({
+          hasClips: timeline.length > 0,
+          aacSupported,
+          sharedArrayBufferAvailable,
+          canUseMainThreadWebCodecs: canUseWebCodecs,
+        });
+
+        let renderedAudio: AudioBuffer | null = null;
+        let audioIncludedLocal = false;
+        let audioReasonLocal: string | null = tierDecision.reason;
+
+        if (tierDecision.tier === 1 || tierDecision.tier === 2) {
+          setPhase('Preparing audio…');
+          try {
+            const buffers = await resolveAudioBuffers(timeline, {
+              audio: config.audio,
+              images,
+              mediaProvider: config.mediaProvider,
+            });
+            if (buffers.size === 0) {
+              audioReasonLocal = 'Audio files for this document could not be loaded.';
+            } else {
+              const totalAudioDur = timeline.reduce(
+                (max, c) => Math.max(max, c.startSec + c.durationSec),
+                docDuration,
+              );
+              renderedAudio = await renderAudioTimeline(
+                timeline,
+                buffers,
+                totalAudioDur,
+                EXPORT_AUDIO_SAMPLE_RATE,
+              );
+            }
+          } catch (audioErr: unknown) {
+            renderedAudio = null;
+            audioReasonLocal = `Audio could not be prepared: ${
+              audioErr instanceof Error ? audioErr.message : String(audioErr)
+            }`;
+          }
+        }
+
+        const useInlineAudio = renderedAudio !== null && tierDecision.tier === 1;
+        const useFfmpegAudio = renderedAudio !== null && tierDecision.tier === 2;
+
+        if (cancelledRef.current) return;
+
         let encoder: MainThreadEncoder;
         if (canUseWebCodecs) {
-          encoder = createEncoder({ width, height, fps, quality });
+          encoder = createEncoder({
+            width,
+            height,
+            fps,
+            quality,
+            ...(useInlineAudio && renderedAudio
+              ? {
+                  audio: {
+                    numberOfChannels: renderedAudio.numberOfChannels,
+                    sampleRate: renderedAudio.sampleRate,
+                  },
+                }
+              : {}),
+          });
           setBackend('webcodecs');
         } else if (sharedArrayBufferAvailable) {
           const workerEncoder = createWorkerEncoder({ width, height, fps, quality });
@@ -315,23 +448,69 @@ export function useVideoExport(): VideoExportResult {
 
         if (cancelledRef.current) return;
 
+        // ── Step 4a: Inline audio (tier 1) ────────────────────────
+        // Encode the rendered audio into the same muxer before finalizing.
+        if (useInlineAudio && renderedAudio && encoder.addAudioChunk) {
+          setState('encoding');
+          setPhase('Encoding audio…');
+          try {
+            await encodeAacTrack(
+              renderedAudio,
+              { addAudioChunk: encoder.addAudioChunk.bind(encoder) },
+              audioBitrate,
+            );
+            audioIncludedLocal = true;
+          } catch (audioErr: unknown) {
+            audioIncludedLocal = false;
+            audioReasonLocal = `Audio encoding failed: ${
+              audioErr instanceof Error ? audioErr.message : String(audioErr)
+            }`;
+          }
+        }
+
         // ── Step 4: Finalize MP4 ──────────────────────────────────
         setState('encoding');
         setPhase('Finalizing video…');
         setProgress(95);
 
-        const mp4Buffer = await encoder.finalize();
+        let outputBytes: ArrayBuffer | Uint8Array = await encoder.finalize();
         encoderRef.current = null;
 
         if (cancelledRef.current) return;
 
+        // ── Step 4b: ffmpeg.wasm audio mux (tier 2) ───────────────
+        // Video is finalized; add the audio in a single copy-video pass.
+        if (useFfmpegAudio && renderedAudio) {
+          setPhase('Muxing audio…');
+          try {
+            const wav = audioBufferToWav(renderedAudio);
+            const videoOnly =
+              outputBytes instanceof Uint8Array ? outputBytes : new Uint8Array(outputBytes);
+            outputBytes = await muxAudioWithFfmpegWasm(videoOnly, wav, audioBitrate);
+            audioIncludedLocal = true;
+          } catch (audioErr: unknown) {
+            audioIncludedLocal = false;
+            audioReasonLocal = `Audio muxing failed: ${
+              audioErr instanceof Error ? audioErr.message : String(audioErr)
+            }`;
+          }
+        }
+
+        if (cancelledRef.current) return;
+
         // ── Step 5: Create download URL ───────────────────────────
-        const blob = new Blob([mp4Buffer], { type: 'video/mp4' });
+        // Normalize to a plain ArrayBuffer-backed view for Blob (ffmpeg.wasm
+        // output may be typed over SharedArrayBuffer).
+        const finalBytes =
+          outputBytes instanceof Uint8Array ? outputBytes.slice() : new Uint8Array(outputBytes);
+        const blob = new Blob([finalBytes], { type: 'video/mp4' });
         const url = URL.createObjectURL(blob);
         downloadUrlRef.current = url;
 
         setDownloadUrl(url);
-        setFileSize(mp4Buffer.byteLength);
+        setFileSize(finalBytes.byteLength);
+        setAudioIncluded(audioIncludedLocal);
+        setAudioSkippedReason(audioIncludedLocal ? null : audioReasonLocal);
         setState('complete');
         setProgress(100);
         setPhase('Export complete');
@@ -367,6 +546,8 @@ export function useVideoExport(): VideoExportResult {
     backend,
     downloadUrl,
     fileSize,
+    audioIncluded,
+    audioSkippedReason,
     error,
     elapsed,
     estimatedRemaining,

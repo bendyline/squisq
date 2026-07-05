@@ -70,7 +70,7 @@ describe('makeCustomTemplateFn', () => {
     expect((layers[0] as TextLayer).content.text).toBe('Hello, World!');
   });
 
-  it('returns layers unchanged when context.block is missing', () => {
+  it('falls back to the input block when context.block is missing', () => {
     const fn = makeCustomTemplateFn(
       defn([
         {
@@ -82,8 +82,27 @@ describe('makeCustomTemplateFn', () => {
       ]),
     );
     const ctx = createTemplateContext(DEFAULT_THEME, 0, 1, VIEWPORT_PRESETS.landscape);
+    // No ctx.block set; the fn resolves against `input` instead. The
+    // default input carries no title, so {title} collapses to empty.
     const layers = fn(makeInput(), ctx);
-    expect((layers[0] as TextLayer).content.text).toBe('{title}');
+    expect((layers[0] as TextLayer).content.text).toBe('');
+  });
+
+  it('resolves {attr:key} from the input block when context.block is missing', () => {
+    const fn = makeCustomTemplateFn(
+      defn([
+        {
+          id: 't',
+          type: 'text',
+          position: { x: '0%', y: '0%', width: '100%', height: '10%' },
+          content: { text: '{attr:role}', style: { fontSize: 24, color: '#000' } },
+        },
+      ]),
+    );
+    const ctx = createTemplateContext(DEFAULT_THEME, 0, 1, VIEWPORT_PRESETS.landscape);
+    const input = { ...makeInput(), templateOverrides: { role: 'lead' } } as RawLayersInput;
+    const layers = fn(input, ctx);
+    expect((layers[0] as TextLayer).content.text).toBe('lead');
   });
 
   it('preserves %-based positions verbatim — they resolve at SSR render time', () => {

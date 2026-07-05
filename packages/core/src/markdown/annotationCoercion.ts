@@ -205,7 +205,7 @@ export function coerceAnnotationValues(params: Record<string, string>): CoerceRe
 // ============================================
 
 /** Parse a finite number from a string. Returns null on failure. */
-function parseNumber(raw: string): number | null {
+export function parseNumber(raw: string): number | null {
   if (raw.trim() === '') return null;
   const n = Number(raw);
   return Number.isFinite(n) ? n : null;

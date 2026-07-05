@@ -31,5 +31,8 @@ export { useFrameCapture } from './hooks/useFrameCapture.js';
 export type { FrameCaptureHandle } from './hooks/useFrameCapture.js';
 
 // ── Encoder Utilities (for advanced usage) ─────────────────────────
-export { supportsWebCodecs, createEncoder } from './mainThreadEncoder.js';
-export type { MainThreadEncoder } from './mainThreadEncoder.js';
+export { supportsWebCodecs, supportsWebCodecsH264, createEncoder } from './mainThreadEncoder.js';
+export type { MainThreadEncoder, EncoderConfig } from './mainThreadEncoder.js';
+
+// ── Audio (capability probe) ───────────────────────────────────────
+export { supportsWebCodecsAac } from './audioTrack.js';

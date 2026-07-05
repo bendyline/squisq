@@ -16,8 +16,9 @@ import type {
   InitMessage,
   FrameMessage,
 } from './workerTypes.js';
+import { bitrateForQuality } from '@bendyline/squisq-video';
+
 import { createMp4Muxer, type Mp4MuxerHandle } from '../mp4Mux.js';
-import { bitrateForQuality } from './encodeParams.js';
 
 // ── State ──────────────────────────────────────────────────────────
 

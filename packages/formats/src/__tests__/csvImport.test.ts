@@ -3,7 +3,7 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import type { MarkdownTable, MarkdownText } from '@bendyline/squisq/markdown';
+import type { MarkdownDocument, MarkdownTable, MarkdownText } from '@bendyline/squisq/markdown';
 import { csvToMarkdownDoc, markdownDocToCsv, parseCsv } from '../csv/index';
 
 function cellValue(table: MarkdownTable, row: number, col: number): string {
@@ -47,5 +47,38 @@ describe('csvToMarkdownDoc', () => {
     const csv = 'Name,Age\r\nAlice,30\r\n"Bob, Jr.",40';
     const doc = await csvToMarkdownDoc(csv);
     expect(markdownDocToCsv(doc)).toBe(csv);
+  });
+});
+
+describe('markdownDocToCsv tableIndex', () => {
+  async function docWithTwoTables(): Promise<MarkdownDocument> {
+    const first = await csvToMarkdownDoc('a,b\r\n1,2');
+    const second = await csvToMarkdownDoc('c,d\r\n3,4');
+    return { type: 'document', children: [...first.children, ...second.children] };
+  }
+
+  it('exports the first table by default', async () => {
+    const doc = await docWithTwoTables();
+    expect(markdownDocToCsv(doc)).toBe('a,b\r\n1,2');
+  });
+
+  it('picks the Nth table via tableIndex', async () => {
+    const doc = await docWithTwoTables();
+    expect(markdownDocToCsv(doc, { tableIndex: 0 })).toBe('a,b\r\n1,2');
+    expect(markdownDocToCsv(doc, { tableIndex: 1 })).toBe('c,d\r\n3,4');
+  });
+
+  it('throws a clear error for an out-of-range tableIndex', async () => {
+    const doc = await docWithTwoTables();
+    expect(() => markdownDocToCsv(doc, { tableIndex: 2 })).toThrow(
+      'CSV export: tableIndex 2 is out of range — the document contains 2 table(s).',
+    );
+    expect(() => markdownDocToCsv(doc, { tableIndex: -1 })).toThrow('out of range');
+  });
+
+  it('returns an empty string for a table-less document with the implicit default', () => {
+    const doc: MarkdownDocument = { type: 'document', children: [] };
+    expect(markdownDocToCsv(doc)).toBe('');
+    expect(() => markdownDocToCsv(doc, { tableIndex: 0 })).toThrow('out of range');
   });
 });

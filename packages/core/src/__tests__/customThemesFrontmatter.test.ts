@@ -37,6 +37,33 @@ describe('writeCustomThemesToFrontmatter → readCustomThemesFromFrontmatter', (
     expect(out![0]).toEqual(brand);
   });
 
+  it('default output is compact (single line) and byte-unchanged', () => {
+    const payload = writeCustomThemesToFrontmatter([brand])!;
+    expect(payload).not.toContain('\n');
+    expect(writeCustomThemesToFrontmatter([brand], { pretty: false })).toBe(payload);
+  });
+
+  it('pretty:true emits multi-line JSON that still reads back', () => {
+    const payload = writeCustomThemesToFrontmatter([brand], { pretty: true })!;
+    expect(payload).toContain('\n');
+    const out = readCustomThemesFromFrontmatter({ [FRONTMATTER_CUSTOM_THEMES_KEY]: payload });
+    expect(out).toHaveLength(1);
+    expect(out![0]).toEqual(brand);
+  });
+
+  it('a hand-written block-scalar frontmatter parses back into the theme', () => {
+    const payload = writeCustomThemesToFrontmatter([brand], { pretty: true })!;
+    const body = payload
+      .split('\n')
+      .map((l) => `  ${l}`)
+      .join('\n');
+    const md = `---\n${FRONTMATTER_CUSTOM_THEMES_KEY}: |-\n${body}\n---\n\n# Hi\n`;
+    const parsed = parseMarkdown(md);
+    const out = readCustomThemesFromFrontmatter(parsed.frontmatter);
+    expect(out).toHaveLength(1);
+    expect(out![0]).toEqual(brand);
+  });
+
   it('round-trips multiple themes keyed by id', () => {
     const second = compileTheme({
       id: 'second',

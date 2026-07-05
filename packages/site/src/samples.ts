@@ -3,7 +3,11 @@
  */
 
 import { writeCustomTemplatesToFrontmatter } from '@bendyline/squisq/doc';
-import type { CustomTemplateDefinition, Layer } from '@bendyline/squisq/schemas';
+import type {
+  CustomTemplateDefinition,
+  CustomTemplateLayer,
+  Layer,
+} from '@bendyline/squisq/schemas';
 
 /**
  * Content zip samples — fetched at runtime, unpacked into a ContentContainer.
@@ -490,6 +494,41 @@ A free-form drawing. Each child heading under the \`{[drawing]}\` parent is a sh
 Regular body content continues here.
 `,
   'custom-template-demo': buildCustomTemplateDemo(),
+  // v1.5 "inline everything": every `{[…]}` param below is authored as a
+  // plain string and coerced to the template's typed input at parse time
+  // (numbers, `lat,lng` pairs, `label|sublabel` pairs). The map's markers
+  // — an array of objects, which the yaml subset can't express — ride in a
+  // ```json data fence. The statHighlight is a STANDALONE annotation: a
+  // paragraph that is nothing but `{[…]}`, so it becomes its own block with
+  // no heading.
+  'inline-everything': `# Inline Everything
+
+Everything on this page is authored with inline, string-valued annotation
+params — no JSON hand-editing required. The parser coerces each one to the
+template's typed shape.
+
+## Find Us {[map center="47.6,-122.3" zoom=11]}
+
+\`\`\`json data
+{
+  "markers": [
+    { "lat": 47.6062, "lng": -122.3321, "label": "Seattle", "icon": "star" },
+    { "lat": 47.6205, "lng": -122.3493, "label": "Space Needle" }
+  ]
+}
+\`\`\`
+
+## Two Ways to Brew {[twoColumn left="Espresso|Bold & rich" right="Filter|Bright & clean"]}
+
+Same beans, two extractions — the \`left\`/\`right\` params coerce from
+\`label|sublabel\` strings into the column objects the template expects.
+
+{[statHighlight colorScheme=green stat="98%" description="of params need no JSON"]}
+
+A standalone annotation: this paragraph is nothing but the \`{[…]}\`, so it
+renders as its own stat block without a heading above it.
+`,
+  'gallery-template-demo': buildGalleryTemplateDemo(),
 };
 
 // ── Custom template demo ──────────────────────────────────────
@@ -561,5 +600,80 @@ A small editor for big ideas. Author once, render everywhere.
 
 Templates capture brand voice and layout once, then every block in
 your doc can use them. No more copy-pasting positions across slides.
+`;
+}
+
+// ── Gallery custom template (v1.5 attr + repeat tokens) ────────
+
+/**
+ * Build a markdown doc whose \`gallery\` custom template exercises the
+ * v1.5 token additions:
+ *   - \`{attr:key|default}\` — reads a per-block annotation attribute
+ *     (\`{[gallery subtitle="…"]}\`), falling back to the pipe default.
+ *   - a \`repeat\` layer — cloned once per image in the block body, laid
+ *     out in a row, resolving per-item \`{item:src}\` / \`{item}\` tokens.
+ */
+function buildGalleryTemplateDemo(): string {
+  const galleryLayers: CustomTemplateLayer[] = [
+    {
+      id: 'gallery-title',
+      type: 'text',
+      position: { x: '6%', y: '8%', width: '88%' },
+      content: {
+        text: '{title}',
+        style: { fontSize: 72, fontWeight: 'bold', color: '#0f172a', textAlign: 'left' },
+      },
+    },
+    {
+      id: 'gallery-subtitle',
+      type: 'text',
+      position: { x: '6%', y: '22%', width: '88%' },
+      content: {
+        // {attr:subtitle} reads the block's `{[gallery subtitle="…"]}`
+        // annotation; the pipe default renders when it's absent.
+        text: '{attr:subtitle|Featured work}',
+        style: { fontSize: 32, color: '#475569', textAlign: 'left' },
+      },
+    },
+    {
+      id: 'gallery-thumb',
+      type: 'image',
+      position: { x: '6%', y: '38%', width: '26%', height: '46%' },
+      content: { src: '{item:src}', alt: '{item}', fit: 'cover' },
+      // Cloned once per image in the block body, laid out left-to-right.
+      repeat: { source: 'images', direction: 'row', gap: 24, max: 3 },
+    },
+  ];
+  const galleryDef: CustomTemplateDefinition = {
+    name: 'gallery',
+    label: 'Image Gallery',
+    description: 'Title + subtitle over a row of thumbnails — uses {attr:…} and a repeat layer.',
+    viewport: { width: 1920, height: 1080 },
+    layers: galleryLayers,
+  };
+  const payload = writeCustomTemplatesToFrontmatter([galleryDef]);
+  return `---
+title: Gallery Template Demo
+squisq-custom-templates: ${payload}
+---
+
+# Gallery Custom Template
+
+The \`gallery\` template (defined in frontmatter) reads a per-block
+\`subtitle\` attribute via \`{attr:subtitle|Featured work}\` and clones one
+thumbnail per image in the block body via a \`repeat\` layer.
+
+## Northwest Trails {[gallery subtitle="Three favorite hikes"]}
+
+![Rattlesnake Ledge](https://picsum.photos/seed/trail1/600/800)
+![Mount Si](https://picsum.photos/seed/trail2/600/800)
+![Poo Poo Point](https://picsum.photos/seed/trail3/600/800)
+
+## Studio Work {[gallery]}
+
+No \`subtitle\` here — the template falls back to its default label.
+
+![Piece one](https://picsum.photos/seed/art1/600/800)
+![Piece two](https://picsum.photos/seed/art2/600/800)
 `;
 }

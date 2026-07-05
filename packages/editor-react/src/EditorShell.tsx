@@ -32,6 +32,8 @@ import { ImageEditor } from './ImageEditor';
 import {
   PreviewSettingsProvider,
   PreviewToolbarControls,
+  PreviewModeSwitch,
+  PreviewFormatSwitch,
   ThemeDesignerDock,
 } from './PreviewControls';
 import { CustomThemeProvider, useDocCustomThemes } from './customThemes';
@@ -56,7 +58,7 @@ import {
 import type { PrunePolicy, SaveVersionResult } from '@bendyline/squisq/versions';
 import type { CSSProperties, ReactNode } from 'react';
 
-export type { EditorTheme } from './EditorContext';
+export type { EditorColorScheme } from './EditorContext';
 
 export interface EditorShellProps {
   /** Initial markdown content */
@@ -70,8 +72,13 @@ export interface EditorShellProps {
   basePath?: string;
   /** Called when markdown source changes */
   onChange?: (source: string) => void;
-  /** Color theme: 'light' or 'dark' (default: 'light') */
-  theme?: 'light' | 'dark';
+  /**
+   * Light/dark chrome color scheme for the editor shell — toolbar, tabs,
+   * status bar, and side panes (default: `'light'`). This is the editor's
+   * UI mode, **not** a Squisq `Theme` object; the rendered document's
+   * styling is controlled separately via `themeOverride` / `Doc.themeId`.
+   */
+  colorScheme?: 'light' | 'dark';
   /** Additional class name */
   className?: string;
   /** CSS height for the shell container (default: '100vh') */
@@ -380,7 +387,7 @@ export function EditorShell({
   articleId = 'untitled',
   basePath = '/',
   onChange,
-  theme = 'light',
+  colorScheme = 'light',
   className,
   height = '100vh',
   minHeight,
@@ -451,7 +458,7 @@ export function EditorShell({
       initialMarkdown={initialMarkdown}
       initialView={effectiveInitialView}
       articleId={articleId}
-      theme={theme}
+      colorScheme={colorScheme}
       workspaceContainer={effectiveContainer}
       allowVersioning={allowVersioning}
       versionBasename={versionBasename}
@@ -575,7 +582,7 @@ function EditorShellInner({
     activeView,
     markdownSource,
     doc,
-    theme,
+    colorScheme,
     editorMode,
     insertAtCursor,
     replaceAll,
@@ -622,7 +629,7 @@ function EditorShellInner({
     imageEditFallbackContainerRef.current = new MemoryContentContainer();
   }
   const imageEditFallbackContainer = imageEditFallbackContainerRef.current;
-  const isDark = theme === 'dark';
+  const isDark = colorScheme === 'dark';
 
   const handleToggleFiles = useCallback(() => {
     setShowFiles((prev) => !prev);
@@ -763,7 +770,7 @@ function EditorShellInner({
   return (
     <div
       className={`squisq-editor-shell ${className || ''}`}
-      data-theme={theme}
+      data-theme={colorScheme}
       data-full-width={fullWidth ? 'true' : undefined}
       data-thin-margins={thinMargins ? 'true' : undefined}
       data-outline-visible={isMarkdownMode && outlineVisible ? 'true' : undefined}
@@ -809,6 +816,16 @@ function EditorShellInner({
                 showFiles={showFiles}
                 onToggleFiles={!isCodeMode && filesToggleEnabled ? handleToggleFiles : undefined}
                 slotLeft={toolbarSlotLeft}
+                slotAfterTabs={
+                  !isCodeMode &&
+                  isPreview && (
+                    <div className="squisq-preview-left-controls">
+                      <PreviewModeSwitch />
+                      <span className="squisq-preview-seg-divider" aria-hidden="true" />
+                      <PreviewFormatSwitch />
+                    </div>
+                  )
+                }
                 slotAfterActions={
                   <>
                     {toolbarSlotAfterActions}
@@ -852,7 +869,7 @@ function EditorShellInner({
                     onExport={onImageExport}
                   />
                 ) : (
-                  <ImageViewer src={imageSrc} alt={imageAlt} theme={theme} />
+                  <ImageViewer src={imageSrc} alt={imageAlt} theme={colorScheme} />
                 ))}
               {/* Raw (Monaco) view. Always wrapped in `.squisq-editor-with-gutter`
                 so toggling a pane on/off doesn't change the editor's tree
@@ -875,7 +892,7 @@ function EditorShellInner({
                     >
                       <div key="raw-editor" className="squisq-raw-editor-container">
                         <RawEditor
-                          theme={theme === 'dark' ? 'vs-dark' : 'vs'}
+                          monacoTheme={colorScheme === 'dark' ? 'vs-dark' : 'vs'}
                           submitOnEnter={submitOnEnter}
                           readOnly={readOnly}
                         />
@@ -884,7 +901,7 @@ function EditorShellInner({
                   ) : (
                     <div key="raw-editor" className="squisq-raw-editor-container">
                       <RawEditor
-                        theme={theme === 'dark' ? 'vs-dark' : 'vs'}
+                        monacoTheme={colorScheme === 'dark' ? 'vs-dark' : 'vs'}
                         submitOnEnter={submitOnEnter}
                         readOnly={readOnly}
                       />
@@ -1011,7 +1028,7 @@ function EditorShellInner({
           }}
           allowVersioning={allowVersioning}
           versioningAutoSaveIdleMs={versioningAutoSaveIdleMs}
-          shellTheme={theme}
+          shellTheme={colorScheme}
         />
       )}
     </div>
@@ -1036,8 +1053,8 @@ interface ImageEditModalProps {
   onSaved: () => void;
   allowVersioning: boolean;
   versioningAutoSaveIdleMs?: number;
-  /** EditorShell's `theme` prop — 'light' or 'dark'. Threaded through so
-   *  the image editor chrome matches the host shell. */
+  /** EditorShell's `colorScheme` prop — 'light' or 'dark'. Threaded through
+   *  so the image editor chrome matches the host shell. */
   shellTheme?: 'light' | 'dark';
 }
 

@@ -13,6 +13,7 @@ import { Command } from 'commander';
 import { registerConvertCommand } from './commands/convert.js';
 import { registerVideoCommand } from './commands/video.js';
 import { registerValidateCommand } from './commands/validate.js';
+import { registerDoctorCommand } from './commands/doctor.js';
 
 // Colored banner: cyan brackets, bold white text, dim version
 console.error(
@@ -29,5 +30,6 @@ program
 registerConvertCommand(program);
 registerVideoCommand(program);
 registerValidateCommand(program);
+registerDoctorCommand(program);
 
 program.parse();

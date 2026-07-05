@@ -19,7 +19,7 @@
 
 // Shell (top-level component)
 export { EditorShell } from './EditorShell.js';
-export type { EditorShellProps, EditorTheme } from './EditorShell.js';
+export type { EditorShellProps, EditorColorScheme } from './EditorShell.js';
 
 // FolderView — standalone folder browser surface (companion to the shell)
 export { FolderView } from './FolderView.js';
@@ -100,6 +100,8 @@ export type { EmojiEntry, EmojiCategory } from './emojiData.js';
 export {
   PreviewSettingsProvider,
   PreviewToolbarControls,
+  PreviewModeSwitch,
+  PreviewFormatSwitch,
   usePreviewSettings,
 } from './PreviewControls.js';
 export type { PreviewSettings } from './PreviewControls.js';
@@ -177,6 +179,31 @@ export {
   processTextFile,
   processTextFiles,
 } from './utils/dropUtils.js';
+
+// Monaco lazy loader — exported so hosts embedding RawEditor-like surfaces
+// can share the same load-once Monaco bootstrap.
+export { useMonacoLoader } from './useMonacoLoader.js';
+export type { UseMonacoLoaderResult } from './useMonacoLoader.js';
+
+// Custom themes — provider stack (doc frontmatter + browser-local library)
+export { CustomThemeProvider, useCustomThemes, useDocCustomThemes } from './customThemes/index.js';
+export type {
+  CustomThemeContextValue,
+  CustomThemeProviderProps,
+  DocCustomThemes,
+} from './customThemes/index.js';
+
+// Custom templates — provider stack (doc frontmatter + browser-local library)
+export {
+  CustomTemplateProvider,
+  useCustomTemplates,
+  useDocCustomTemplates,
+} from './customTemplates/index.js';
+export type {
+  CustomTemplateContextValue,
+  CustomTemplateProviderProps,
+  DocCustomTemplates,
+} from './customTemplates/index.js';
 
 // Bridge utilities
 export { markdownToTiptap, tiptapToMarkdown } from './tiptapBridge.js';

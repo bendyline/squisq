@@ -81,6 +81,11 @@
       "types": "./dist/container/index.d.ts",
       "import": "./dist/container/index.js",
       "default": "./dist/container/index.js"
+    },
+    "./registry": {
+      "types": "./dist/registry/index.d.ts",
+      "import": "./dist/registry/index.js",
+      "default": "./dist/registry/index.js"
     }
   },
   "scripts": {

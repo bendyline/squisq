@@ -35,6 +35,7 @@ import { VIEWPORT_PRESETS } from '../schemas/Viewport.js';
 import { createTemplateContext, isTemplateBlock } from '../schemas/BlockTemplates.js';
 import { DEFAULT_THEME } from '../schemas/themeLibrary.js';
 import { templateRegistry, resolveTemplateName } from './templates/index.js';
+import { coerceTemplateParams } from './templates/inputDescriptors.js';
 import { expandPersistentLayers, wrapWithPersistentLayers } from './templates/persistentLayers.js';
 import { applyRenderStyleToLayers } from './utils/applyRenderStyle.js';
 import { fallbackBlockLayers } from './templates/fallbackBlock.js';
@@ -121,11 +122,19 @@ export function getLayers(block: DocBlock, context: RenderContext = {}): Layer[]
       }
       // Effective template input: the block's own fields, then structured
       // body data (```json data fences, GFM tables), then `{[…]}` string
-      // overrides — the same merge order buildPreviewDoc uses.
+      // overrides — the same merge order buildPreviewDoc uses. Inline overrides
+      // are coerced to their typed shape (`center="47.6,-122.3"` → `{lat,lng}`,
+      // `zoom=9` → `9`) so pure-inline annotations render without any change to
+      // the template functions. `block.templateOverrides` itself stays raw
+      // strings for lossless round-tripping — only this ephemeral input is coerced.
       const { templateData, templateOverrides } = block as Block;
       const input =
         templateData || templateOverrides
-          ? ({ ...block, ...templateData, ...templateOverrides } as TemplateBlock)
+          ? ({
+              ...block,
+              ...templateData,
+              ...coerceTemplateParams(block.template, templateOverrides ?? {}).input,
+            } as TemplateBlock)
           : block;
       let layers: Layer[];
       try {

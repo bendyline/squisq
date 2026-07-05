@@ -12,7 +12,7 @@
  * UI and the resolver, not here.
  */
 
-import type { Layer } from '../../schemas/Doc.js';
+import type { Block, Layer } from '../../schemas/Doc.js';
 import type {
   RawLayersInput,
   TemplateContext,
@@ -38,8 +38,14 @@ import { resolveTokens } from './tokens/resolveTokens.js';
 export function makeCustomTemplateFn(
   def: CustomTemplateDefinition,
 ): TemplateFunction<RawLayersInput> {
-  return (_input: RawLayersInput, context: TemplateContext): Layer[] => {
-    if (!context.block) return def.layers.slice();
-    return resolveTokens(def.layers, context.block);
+  return (input: RawLayersInput, context: TemplateContext): Layer[] => {
+    // `{attr:…}` reads the source block's `templateOverrides` /
+    // `templateData` / `metadata`. Prefer `context.block` (the raw
+    // block the expander attaches); fall back to `input` (the merged
+    // TemplateBlock, itself a Block superset) so attributes still
+    // resolve if `context.block` is ever absent.
+    const block = context.block ?? (input as unknown as Block | undefined);
+    if (!block) return def.layers.slice() as Layer[];
+    return resolveTokens(def.layers, block);
   };
 }

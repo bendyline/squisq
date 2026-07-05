@@ -4,7 +4,7 @@
 
 # Squiggly Square (squisq)
 
-Squiggly Square is a core library, set of React components, and format interop elements for creating rich multimedia documents from standard Markdown. Authors annotate headings and list items with [Squiggly Square tags](docs/SquigglySquare.md) — a lightweight `{[ ]}` syntax that maps content to visual templates (slides, photo grids, pull quotes, stat highlights, and more). The library parses the Markdown, expands the annotations into a block/layer document model, and renders the result as resolution-independent SVG — all with zero build-time preprocessing.
+Squiggly Square is a core library, set of React components, and format interop elements for creating rich multimedia documents from standard Markdown. Authors annotate headings with [Squiggly Square tags](docs/SquigglySquare.md) — a lightweight `{[ ]}` syntax that maps content to visual templates (slides, photo grids, pull quotes, stat highlights, and more). The library parses the Markdown, expands the annotations into a block/layer document model, and renders the result as resolution-independent SVG — all with zero build-time preprocessing.
 
 [![CI](https://github.com/bendyline/squisq/actions/workflows/ci.yml/badge.svg)](https://github.com/bendyline/squisq/actions/workflows/ci.yml)
 [![npm @bendyline/squisq](https://img.shields.io/npm/v/@bendyline/squisq)](https://www.npmjs.com/package/@bendyline/squisq)
@@ -19,19 +19,22 @@ Open-source monorepo providing reusable libraries for document/block rendering, 
 
 ## Packages
 
-| Package                                                   | Description                                                               |
-| --------------------------------------------------------- | ------------------------------------------------------------------------- |
-| [`@bendyline/squisq`](packages/core)                      | Headless utilities — schemas, templates, spatial math, Markdown, storage  |
-| [`@bendyline/squisq-react`](packages/react)               | React components — DocPlayer, BlockRenderer, layers, hooks                |
-| [`@bendyline/squisq-formats`](packages/formats)           | Format converters — DOCX, PDF, HTML, EPUB, PPTX, CSV, shared OOXML        |
-| [`@bendyline/squisq-editor-react`](packages/editor-react) | React editor shell — raw/WYSIWYG/preview modes                            |
-| [`@bendyline/squisq-video`](packages/video)               | Browser-pure MP4 export foundation — render HTML, ffmpeg.wasm, presets    |
-| [`@bendyline/squisq-video-react`](packages/video-react)   | React components for browser-based video export (WebCodecs + ffmpeg.wasm) |
-| [`@bendyline/squisq-cli`](packages/cli)                   | CLI tool — document conversion and MP4 video rendering                    |
+| Package                                                   | Description                                                                               |
+| --------------------------------------------------------- | ----------------------------------------------------------------------------------------- |
+| [`@bendyline/squisq`](packages/core)                      | Headless utilities — schemas, templates, spatial math, Markdown, storage                  |
+| [`@bendyline/squisq-react`](packages/react)               | React components — DocPlayer, BlockRenderer, layers, hooks                                |
+| [`@bendyline/squisq-formats`](packages/formats)           | Format converters — DOCX, PDF, HTML, EPUB, PPTX, XLSX, CSV + `convert()` registry         |
+| [`@bendyline/squisq-editor-react`](packages/editor-react) | React editor shell — raw/WYSIWYG/preview modes                                            |
+| [`@bendyline/squisq-video`](packages/video)               | Browser-pure MP4 export foundation — render HTML, ffmpeg.wasm, presets                    |
+| [`@bendyline/squisq-video-react`](packages/video-react)   | React components for browser-based video export (WebCodecs + ffmpeg.wasm; MP4 with audio) |
+| [`@bendyline/squisq-cli`](packages/cli)                   | CLI tool — markdown **and** binary-format conversion, MP4 rendering, `squisq doctor`      |
 
 ## Documentation
 
-- **API Reference:** [docs/API.md](docs/API.md)
+- **Squiggly Square standard** — [docs/SquigglySquare.md](docs/SquigglySquare.md): the markdown-extension syntax (template annotations, frontmatter keys, data fences, timed media, drawings, custom templates & themes)
+- **API Reference** — [docs/API.md](docs/API.md): every exported function, component, and type across all seven packages
+- **Package guides** — each package has its own README front door: [core](packages/core), [react](packages/react), [formats](packages/formats), [editor-react](packages/editor-react), [video](packages/video), [video-react](packages/video-react), [cli](packages/cli)
+- **Upgrading to v1.5** — [MIGRATION.md](MIGRATION.md): every API rename/removal (with old → new) plus the additive highlights
 
 ## Quick Start
 

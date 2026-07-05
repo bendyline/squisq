@@ -35,8 +35,8 @@ export type RecorderState =
   | 'error';
 
 export interface UseMediaRecorderOptions {
-  /** Which capture pipeline to use. */
-  source: RecorderSource;
+  /** Which capture pipeline to use (default: `'mic'`). */
+  source?: RecorderSource;
   /**
    * Preferred MIME type override. When the browser supports it, this
    * wins over the default candidate list. When unset (or unsupported),
@@ -115,9 +115,10 @@ export interface UseMediaRecorderResult {
  * resources (e.g. the screen+mic AudioContext mixer).
  */
 async function acquireStream(
+  source: RecorderSource,
   opts: UseMediaRecorderOptions,
 ): Promise<{ stream: MediaStream; dispose: () => void }> {
-  switch (opts.source) {
+  switch (source) {
     case 'mic': {
       const audio = typeof opts.audioConstraints === 'object' ? opts.audioConstraints : undefined;
       const stream = await requestMicStream(audio);
@@ -135,7 +136,7 @@ async function acquireStream(
       const handle: ScreenStreamHandle = await requestScreenStream({
         video: opts.videoConstraints ?? true,
         systemAudio: opts.systemAudio ?? false,
-        includeMicrophone: opts.source === 'screen+mic',
+        includeMicrophone: source === 'screen+mic',
         microphoneConstraints:
           typeof opts.audioConstraints === 'object' ? opts.audioConstraints : undefined,
       });
@@ -158,7 +159,7 @@ export function getCaptureKind(source: RecorderSource): CaptureKind {
   return captureKindFor(source);
 }
 
-export function useMediaRecorder(options: UseMediaRecorderOptions): UseMediaRecorderResult {
+export function useMediaRecorder(options: UseMediaRecorderOptions = {}): UseMediaRecorderResult {
   const [state, setState] = useState<RecorderState>('idle');
   const [stream, setStream] = useState<MediaStream | null>(null);
   const [blob, setBlob] = useState<Blob | null>(null);
@@ -256,11 +257,9 @@ export function useMediaRecorder(options: UseMediaRecorderOptions): UseMediaReco
     setError(null);
     setState('requesting');
     try {
-      const { stream: nextStream, dispose } = await acquireStream(optionsRef.current);
-      const resolved = resolveFormat(
-        captureKindFor(optionsRef.current.source),
-        optionsRef.current.mimeType,
-      );
+      const source = optionsRef.current.source ?? 'mic';
+      const { stream: nextStream, dispose } = await acquireStream(source, optionsRef.current);
+      const resolved = resolveFormat(captureKindFor(source), optionsRef.current.mimeType);
       const recorderOptions: MediaRecorderOptions = {};
       if (resolved.mimeType) recorderOptions.mimeType = resolved.mimeType;
       if (optionsRef.current.bitsPerSecond) {

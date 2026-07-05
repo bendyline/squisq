@@ -40,7 +40,7 @@ export { MediaContext, useMediaProvider, useMediaUrl } from './hooks/MediaContex
 export { useAutoSurface } from './hooks/useAutoSurface.js';
 
 // Types
-export type { AudioProvider, AudioState, AudioActions } from './hooks/AudioProvider.js';
+export type { AudioController, AudioState, AudioActions } from './hooks/AudioController.js';
 export type {
   PlaybackState,
   PlaybackActions,

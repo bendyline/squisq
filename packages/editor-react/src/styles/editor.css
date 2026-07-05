@@ -1416,22 +1416,142 @@
 
 /* ─── Preview Controls ──────────────────────────────── */
 
+/* Left-side preview switches: the segmented mode switch and the aspect-ratio
+   switch, separated by a divider. Natural width; sits just after the view
+   tabs and never shrinks. */
+.squisq-preview-left-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: 8px;
+  flex: 0 0 auto;
+}
+
+.squisq-preview-seg-divider {
+  width: 1px;
+  height: 20px;
+  background: var(--squisq-border, #d1d5db);
+  flex: 0 0 auto;
+}
+
+/* Segmented switch — a row of connected buttons (display mode: Video /
+   Slideshow / Document / Page; aspect ratio: 16:9 / 1:1 / 9:16 / 4:3),
+   replacing the old "Mode:" / "Format:" dropdowns. */
+.squisq-preview-seg {
+  display: inline-flex;
+  align-items: center;
+  flex: 0 0 auto;
+  border: 1px solid var(--squisq-border, #d1d5db);
+  border-radius: 6px;
+  overflow: hidden;
+  background: var(--squisq-input-bg, #fff);
+}
+
+.squisq-preview-seg-btn {
+  appearance: none;
+  border: none;
+  border-left: 1px solid var(--squisq-border, #d1d5db);
+  background: transparent;
+  color: #4b5563;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1;
+  padding: 6px 11px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition:
+    background 0.12s,
+    color 0.12s;
+}
+
+/* Icon segments (aspect ratio) center their glyph and use tighter, square-ish
+   padding so the row of ratio icons reads as a compact cluster. */
+.squisq-preview-seg-btn--icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px 8px;
+}
+
+.squisq-preview-seg-btn--icon svg {
+  display: block;
+}
+
+/* Font Awesome glyph segments (captions: cc / social) — size the webfont
+   glyph to sit level with the SVG aspect-ratio icons. */
+.squisq-preview-seg-btn--icon > i {
+  font-size: 15px;
+  line-height: 1;
+}
+
+.squisq-preview-seg-btn:first-child {
+  border-left: none;
+}
+
+.squisq-preview-seg-btn:hover {
+  background: #f3f4f6;
+  color: #111827;
+}
+
+.squisq-preview-seg-btn--active,
+.squisq-preview-seg-btn--active:hover {
+  background: #2563eb;
+  color: #fff;
+}
+
+/* Flex-filler root: spans the toolbar's leftover width, which is the budget
+   PreviewToolbarControls measures to decide how many controls stay inline vs
+   fold into the overflow menu. It also pushes the right-side toolbar buttons
+   to the far edge (replacing the preview-mode spacer). `position: relative`
+   anchors the hidden measurement probe; the 9px lead offsets the first
+   control from the view-tabs divider. */
+.squisq-preview-controls {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 1 1 auto;
+  min-width: 0;
+  position: relative;
+  padding-left: 9px;
+}
+
+/* Hidden probe: renders every control at natural width so the fit measurement
+   has per-control widths to work from. Absolutely positioned + hidden so it
+   never affects layout or catches pointer events. */
+.squisq-preview-controls-probe {
+  position: absolute;
+  top: 0;
+  left: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: nowrap;
+  white-space: nowrap;
+  visibility: hidden;
+  pointer-events: none;
+}
+
+/* Inline row sits at its natural width (the overflow gear, when present, sits
+   just after it); it never wraps — controls that don't fit move to the menu. */
 .squisq-preview-controls-inline {
   display: flex;
   align-items: center;
   gap: 6px;
-  flex-wrap: wrap;
-  padding: 2px 0 2px 9px;
+  flex-wrap: nowrap;
+  flex: 0 0 auto;
 }
 
-.squisq-preview-controls-inline .squisq-preview-control {
+.squisq-preview-controls-inline .squisq-preview-control,
+.squisq-preview-controls-probe .squisq-preview-control {
   display: flex;
   align-items: center;
   gap: 4px;
+  flex-shrink: 0;
 }
 
 .squisq-preview-controls-compact {
   position: relative;
+  flex: 0 0 auto;
 }
 
 .squisq-preview-controls-popover {
@@ -1620,6 +1740,32 @@
 
 .squisq-editor-shell[data-theme='dark'] .squisq-toolbar-separator {
   background: #4b5563;
+}
+
+/* Segmented switches — mode + aspect ratio (dark) */
+.squisq-editor-shell[data-theme='dark'] .squisq-preview-seg-divider {
+  background: #4b5563;
+}
+
+.squisq-editor-shell[data-theme='dark'] .squisq-preview-seg {
+  border-color: #4b5563;
+  background: #111827;
+}
+
+.squisq-editor-shell[data-theme='dark'] .squisq-preview-seg-btn {
+  color: #d1d5db;
+  border-left-color: #4b5563;
+}
+
+.squisq-editor-shell[data-theme='dark'] .squisq-preview-seg-btn:hover {
+  background: #374151;
+  color: #f9fafb;
+}
+
+.squisq-editor-shell[data-theme='dark'] .squisq-preview-seg-btn--active,
+.squisq-editor-shell[data-theme='dark'] .squisq-preview-seg-btn--active:hover {
+  background: #2563eb;
+  color: #fff;
 }
 
 /* Overflow menu (dark) */

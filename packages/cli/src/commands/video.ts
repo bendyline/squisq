@@ -6,6 +6,7 @@
  *
  * Usage:
  *   squisq video <input> [-o output.mp4] [--fps 30] [--quality normal] [--orientation landscape]
+ *     [--theme <id>] [--transform <style>] [--cover-preroll <seconds>]
  */
 
 import { mkdir } from 'node:fs/promises';
@@ -13,6 +14,11 @@ import { dirname, basename, extname, resolve } from 'node:path';
 import type { Command } from 'commander';
 import type { Doc } from '@bendyline/squisq/schemas';
 import { readInput } from '../util/readInput.js';
+import {
+  applyTransformToDoc,
+  assertValidThemeId,
+  assertValidTransformStyle,
+} from '../util/applyTransformPipeline.js';
 import { renderDocToMp4 } from '../api.js';
 
 import type { VideoQuality, VideoOrientation } from '@bendyline/squisq-video';
@@ -28,6 +34,9 @@ interface VideoCommandOptions {
   captions?: CaptionOption;
   width?: string;
   height?: string;
+  theme?: string;
+  transform?: string;
+  coverPreroll?: string;
 }
 
 const VALID_QUALITIES = ['draft', 'normal', 'high'] as const;
@@ -60,6 +69,16 @@ export function registerVideoCommand(program: Command): void {
     .option(
       '--no-auto-templates',
       'Disable content-aware template auto-picking for unannotated headings',
+    )
+    .option('-t, --theme <id>', 'Squisq theme ID to apply (e.g., documentary, cinematic, bold)')
+    .option(
+      '--transform <style>',
+      'Transform style to apply before rendering (e.g., documentary, magazine, minimal)',
+    )
+    .option(
+      '--cover-preroll <seconds>',
+      'Seconds of cover-slide pre-roll before the story starts (default: 2)',
+      '2',
     )
     .option('--width <pixels>', 'Override video width')
     .option('--height <pixels>', 'Override video height')
@@ -105,6 +124,18 @@ async function runVideo(inputPath: string, opts: VideoCommandOptions): Promise<v
   }
   const captionStyle = captions === 'off' ? undefined : (captions as 'standard' | 'social');
 
+  const coverPreRoll = parseFloat(opts.coverPreroll ?? '2');
+  if (isNaN(coverPreRoll) || coverPreRoll < 0) {
+    throw new Error('Cover pre-roll must be a number of seconds >= 0');
+  }
+
+  // Validate the transform ID up front. The theme id is validated after the
+  // doc is read (below), so a custom theme inlined in the doc is admitted
+  // rather than rejected as "unknown".
+  if (opts.transform) {
+    await assertValidTransformStyle(opts.transform);
+  }
+
   // Determine output path
   const inputBasename = basename(resolvedInput);
   const inputExt = extname(inputBasename);
@@ -121,16 +152,34 @@ async function runVideo(inputPath: string, opts: VideoCommandOptions): Promise<v
   const result = await readInput(resolvedInput);
   const { container } = result;
 
+  // Validate the theme id now that we have the doc: accept built-ins AND any
+  // custom themes declared by the document itself.
+  if (opts.theme) {
+    await assertValidThemeId(opts.theme, result);
+  }
+
   // ── Step 2: Get or parse Doc ────────────────────────────────────
-  let doc: Doc;
-  if (result.doc) {
-    console.error('Using pre-built Doc JSON');
-    doc = result.doc;
-  } else if (result.markdownDoc) {
-    const { markdownToDoc } = await import('@bendyline/squisq/doc');
-    doc = markdownToDoc(result.markdownDoc, { autoTemplates: opts.autoTemplates });
+  // readInput already resolved a Doc (markdown-shaped inputs use the default
+  // auto-templating). Only re-derive when the author explicitly opted out via
+  // --no-auto-templates and a markdown source is available.
+  let doc: Doc = result.doc;
+  if (result.markdownDoc) {
+    if (opts.autoTemplates === false) {
+      const { markdownToDoc } = await import('@bendyline/squisq/doc');
+      doc = markdownToDoc(result.markdownDoc, { autoTemplates: false });
+    }
   } else {
-    throw new Error('No document found in input');
+    console.error('Using pre-built Doc JSON');
+  }
+
+  // Apply transform / theme before rendering, mirroring how convert threads
+  // them to its exporters.
+  if (opts.transform) {
+    doc = await applyTransformToDoc(doc, opts.transform, opts.theme);
+    console.error(`  Applied transform: ${opts.transform}`);
+  }
+  if (opts.theme) {
+    doc = { ...doc, themeId: opts.theme };
   }
 
   console.error(
@@ -146,7 +195,7 @@ async function runVideo(inputPath: string, opts: VideoCommandOptions): Promise<v
     width: opts.width ? parseInt(opts.width, 10) : undefined,
     height: opts.height ? parseInt(opts.height, 10) : undefined,
     captionStyle,
-    coverPreRoll: 2,
+    coverPreRoll,
     onProgress: (phase, percent) => {
       writeProgress(phase, percent, 100);
     },

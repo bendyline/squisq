@@ -7,7 +7,7 @@
 
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { EditorShell, ThemeCustomizerPanel } from '@bendyline/squisq-editor-react';
-import type { EditorTheme } from '@bendyline/squisq-editor-react';
+import type { EditorColorScheme } from '@bendyline/squisq-editor-react';
 import '@bendyline/squisq-editor-react/styles';
 import { MediaContext } from '@bendyline/squisq-react';
 import {
@@ -65,7 +65,7 @@ export function App() {
   const [showJsonDemo, setShowJsonDemo] = useState(false);
   const [showImageEditorDemo, setShowImageEditorDemo] = useState(false);
   const [currentSource, setCurrentSource] = useState(SAMPLES[initialSampleKey]);
-  const [theme] = useState<EditorTheme>('light');
+  const [colorScheme] = useState<EditorColorScheme>('light');
   const [customTheme, setCustomThemeState] = useState<Theme | null>(() => loadStoredCustomTheme());
   // Re-register the loaded theme on mount so `Doc.themeId` lookups resolve to it.
   // Subsequent edits go through handleCustomThemeChange which also registers.
@@ -143,7 +143,7 @@ export function App() {
     };
   }, [activeSlot, replaceMediaProvider, createEmptyProvider]);
 
-  const isDark = theme === 'dark';
+  const isDark = colorScheme === 'dark';
 
   const handleSampleChange = useCallback(
     (e: React.ChangeEvent<HTMLSelectElement>) => {
@@ -343,7 +343,11 @@ export function App() {
         </button>
 
         {/* Theme customizer — wrapped in editor-shell to inherit BEM dark-theme styles. */}
-        <div className="squisq-editor-shell" data-theme={theme} style={{ position: 'relative' }}>
+        <div
+          className="squisq-editor-shell"
+          data-theme={colorScheme}
+          style={{ position: 'relative' }}
+        >
           <ThemeCustomizerPanel
             value={customTheme}
             onChange={handleCustomThemeChange}
@@ -407,7 +411,7 @@ export function App() {
                 initialMarkdown={currentSource}
                 articleId={selectedSample || 'uploaded'}
                 onChange={handleChange}
-                theme={theme}
+                colorScheme={colorScheme}
                 height="100%"
                 mediaProvider={mediaProvider}
                 themeOverride={customTheme}
@@ -423,7 +427,7 @@ export function App() {
                   flexShrink: 0,
                 }}
               >
-                <DebugPanel source={currentSource} theme={theme} />
+                <DebugPanel source={currentSource} theme={colorScheme} />
               </div>
             )}
           </div>

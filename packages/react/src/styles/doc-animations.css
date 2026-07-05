@@ -2373,3 +2373,23 @@
     animation: none;
   }
 }
+
+/* ============================================
+   Empty state
+   Rendered by <DocPlayer> when neither `doc` nor `markdown` is provided.
+   ============================================ */
+.doc-player--empty {
+  min-height: 120px;
+  width: 100%;
+  background: #f0f0f0;
+}
+
+/* ============================================
+   Missing-stylesheet sentinel
+   DocPlayer reads this custom property at mount (dev builds only) and
+   warns when it computes empty — i.e. when the host app forgot to import
+   "@bendyline/squisq-react/styles".
+   ============================================ */
+.doc-player {
+  --squisq-styles-loaded: 1;
+}

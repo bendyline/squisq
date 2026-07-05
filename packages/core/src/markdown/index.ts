@@ -143,6 +143,7 @@ export {
   countNodes,
   createDocument,
   parseFrontmatter,
+  formatBlockScalar,
   setFrontmatterValues,
   inferDocumentTitle,
   readFrontmatterThemeId,

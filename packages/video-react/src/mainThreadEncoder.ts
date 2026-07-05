@@ -11,6 +11,8 @@
  * Requirements: Chrome 94+ / Edge 94+ (WebCodecs support).
  */
 
+import { bitrateForQuality } from '@bendyline/squisq-video';
+
 import { createMp4Muxer, type Mp4MuxerHandle } from './mp4Mux.js';
 
 export interface EncoderConfig {
@@ -18,11 +20,26 @@ export interface EncoderConfig {
   height: number;
   fps: number;
   quality: 'draft' | 'normal' | 'high';
+  /**
+   * When present, the underlying muxer is configured with an AAC audio track
+   * and {@link MainThreadEncoder.addAudioChunk} becomes usable. Absent → the
+   * encoder produces a video-only MP4 exactly as before.
+   */
+  audio?: {
+    numberOfChannels: number;
+    sampleRate: number;
+  };
 }
 
 export interface MainThreadEncoder {
   /** Encode a single frame. The bitmap is closed after encoding. */
   encodeFrame(bitmap: ImageBitmap, frameIndex: number): void;
+  /**
+   * Hand an encoded audio chunk (from a WebCodecs `AudioEncoder`) to the muxer.
+   * Only valid when the encoder was created with an `audio` config; otherwise a
+   * no-op. Must be called before {@link finalize}.
+   */
+  addAudioChunk?(chunk: EncodedAudioChunk, meta?: EncodedAudioChunkMetadata): void;
   /** Flush pending frames and finalize the MP4. Returns the MP4 ArrayBuffer. */
   finalize(): Promise<ArrayBuffer>;
   /** Close the encoder without producing output (e.g., on cancel). */
@@ -58,19 +75,6 @@ export async function supportsWebCodecsH264(config: EncoderConfig): Promise<bool
   }
 }
 
-function bitrateForQuality(quality: string, width: number, height: number): number {
-  const pixels = width * height;
-  const baseBitrate = pixels * 4; // ~4 bits per pixel baseline
-  switch (quality) {
-    case 'draft':
-      return Math.round(baseBitrate * 0.5);
-    case 'high':
-      return Math.round(baseBitrate * 2);
-    default: // normal
-      return baseBitrate;
-  }
-}
-
 /**
  * Create a main-thread WebCodecs encoder.
  *
@@ -94,6 +98,7 @@ export function createEncoder(config: EncoderConfig): MainThreadEncoder {
     width: config.width,
     height: config.height,
     fps: config.fps,
+    ...(config.audio ? { audio: config.audio } : {}),
   });
 
   let closed = false;
@@ -129,6 +134,11 @@ export function createEncoder(config: EncoderConfig): MainThreadEncoder {
       encoder.encode(frame, { keyFrame });
       frame.close();
       bitmap.close();
+    },
+
+    addAudioChunk(chunk: EncodedAudioChunk, meta?: EncodedAudioChunkMetadata) {
+      if (closed || !muxer.hasAudioTrack) return;
+      muxer.addAudioChunk(chunk, meta);
     },
 
     async finalize(): Promise<ArrayBuffer> {

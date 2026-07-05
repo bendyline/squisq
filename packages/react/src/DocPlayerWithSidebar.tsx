@@ -21,18 +21,21 @@
 import { useRef, useState, useCallback, useEffect } from 'react';
 import type { Doc } from '@bendyline/squisq/schemas';
 import type { ViewportConfig } from '@bendyline/squisq/schemas';
-import type { AudioProvider } from './hooks/AudioProvider';
+import type { AudioController } from './hooks/AudioController';
 import { DocPlayer } from './DocPlayer';
 import { DocControlsSidebar } from './DocControlsSidebar';
 import type { PlaybackState, PlaybackActions } from './types';
 
 interface DocPlayerWithSidebarProps {
-  script: Doc;
-  basePath: string;
+  /** The Doc to play */
+  doc: Doc;
+  /** Base path for resolving media URLs (default: `'.'`) */
+  basePath?: string;
   autoPlay?: boolean;
   onEnded?: () => void;
   onTimeUpdate?: (time: number) => void;
-  audioProvider?: AudioProvider;
+  /** Optional audio controller (if not provided, uses default HTML5 audio) */
+  audioController?: AudioController;
   muted?: boolean;
   captionsEnabled?: boolean;
   isFullscreen?: boolean;
@@ -59,12 +62,12 @@ const DEFAULT_STATE: PlaybackState = {
 };
 
 export function DocPlayerWithSidebar({
-  script,
+  doc,
   basePath,
   autoPlay = false,
   onEnded,
   onTimeUpdate,
-  audioProvider,
+  audioController,
   muted,
   captionsEnabled,
   isFullscreen,
@@ -114,12 +117,12 @@ export function DocPlayerWithSidebar({
     <div className="doc-player-sidebar-layout">
       <div className="doc-player-sidebar-layout__video">
         <DocPlayer
-          script={script}
+          doc={doc}
           basePath={basePath}
           autoPlay={autoPlay}
           onEnded={onEnded}
           onTimeUpdate={onTimeUpdate}
-          audioProvider={audioProvider}
+          audioController={audioController}
           muted={muted}
           captionsEnabled={captionsEnabled}
           showControls={isFullscreen}
