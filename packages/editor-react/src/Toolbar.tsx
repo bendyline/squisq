@@ -831,18 +831,18 @@ export function Toolbar({
             // A diagram is just a heading with the `{[diagram]}` template
             // annotation; the WYSIWYG view renders its editable canvas.
             replacement = '\n## Diagram {[diagram]}\n';
-            newCursorOffset = 4; // start of "Diagram" (after \n## )
+            newCursorOffset = replacement.length;
             break;
           }
           case 'drawing': {
             replacement = '\n## Drawing {[drawing]}\n';
-            newCursorOffset = 4; // start of "Drawing"
+            newCursorOffset = replacement.length;
             break;
           }
           case 'layout': {
             // Seed a starter text layer (a child sub-block) so it isn't blank.
             replacement = LAYOUT_STARTER_MARKDOWN;
-            newCursorOffset = 4; // start of "Layout" in the parent heading
+            newCursorOffset = replacement.length;
             break;
           }
         }
@@ -851,13 +851,13 @@ export function Toolbar({
         const range = selection;
         monacoEditor.executeEdits('toolbar', [{ range, text: replacement }]);
 
-        // If no selection, select the placeholder text so user can type over it
+        // If no selection, move the cursor to the command's preferred edit point.
         if (!hasSelection && newCursorOffset > 0) {
           const startPos = model.getPositionAt(
             model.getOffsetAt(range.getStartPosition()) + newCursorOffset,
           );
-          // Just place cursor after the prefix
           monacoEditor.setPosition(startPos);
+          monacoEditor.revealPositionInCenterIfOutsideViewport(startPos);
         }
 
         monacoEditor.focus();

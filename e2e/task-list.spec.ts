@@ -23,7 +23,11 @@ async function startInEmptyEditor(page: Page) {
   const editor = page.locator('.tiptap.ProseMirror');
   await editor.waitFor({ state: 'visible', timeout: 5_000 });
   // Clear the sample doc so the input rule fires on a fresh empty paragraph.
-  await editor.click();
+  await editor
+    .locator('p')
+    .first()
+    .click({ position: { x: 8, y: 8 } });
+  await expect(page.locator('#squisq-template-gallery-portal')).toHaveCount(0);
   await page.keyboard.press(`${MOD}+a`);
   await page.keyboard.press('Delete');
   return editor;
