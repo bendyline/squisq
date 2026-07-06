@@ -4,7 +4,8 @@
  * Verifies the CLI registry registers the mp4 format on top of every built-in,
  * and that the api's `convert()` is pre-bound (injects the registry + a default
  * player-script resolver) so a non-mp4 conversion runs end-to-end. mp4 export
- * itself (Playwright + FFmpeg) is exercised in the e2e wave, not here.
+ * itself (Playwright + FFmpeg) is exercised by the flagship pptx → mp4 test in
+ * `flagship.e2e.test.ts`, which self-skips when that tooling is unavailable.
  */
 
 import { describe, it } from 'mocha';

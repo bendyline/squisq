@@ -8,7 +8,8 @@
  * is currently playing and calculating the overall timeline position.
  *
  * This is the HTML5 Audio implementation of the AudioController interface.
- * For EFB/MSFS environments, use useCompanionAudioSync instead.
+ * Hosts that drive audio through an external player (e.g. a native shell)
+ * can supply their own AudioController to DocPlayer instead of this hook.
  */
 
 import { useState, useEffect, useRef, useCallback } from 'react';

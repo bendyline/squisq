@@ -44,8 +44,8 @@ import type {
   MarkdownImage,
 } from '@bendyline/squisq/markdown';
 
-import { MemoryContentContainer } from '@bendyline/squisq/storage';
 import type { ContentContainer } from '@bendyline/squisq/storage';
+import { buildContainer } from '../shared/container.js';
 
 import {
   DEFAULT_FONT_SIZE,
@@ -161,15 +161,10 @@ export async function pdfToContainer(
   const images = await extractImages(bytes);
 
   // Under Node there is no DOM/canvas, so extractImages() returns [] via its
-  // environment guard and embedded images can't be decoded. Surface a single
-  // warning (not per-image) so callers know images were skipped rather than
-  // silently dropped. (There is no warnings return channel yet — a console
-  // warning is the repo's accepted signal for degraded-but-functional paths.)
-  if (typeof document === 'undefined') {
-    console.warn(
-      '[squisq] PDF embedded images skipped — image decoding requires a browser canvas (running under Node).',
-    );
-  }
+  // environment guard and embedded images can't be decoded. The registry's
+  // `importContainer` wrapper surfaces this (typeof document === 'undefined')
+  // as a ConversionResult warning; direct callers of pdfToContainer get no
+  // signal, which is an accepted trade-off for the degraded Node path.
 
   const bodySize = options.bodyFontSize ?? detectBodyFontSize(textLines);
 
@@ -184,16 +179,12 @@ export async function pdfToContainer(
 
   const markdownDoc: MarkdownDocument = { type: 'document', children: blocks };
 
-  const markdown = stringifyMarkdown(markdownDoc);
-
-  const container = new MemoryContentContainer();
-  await container.writeDocument(markdown);
-
-  for (const img of images) {
-    await container.writeFile(img.path, new Uint8Array(img.data), 'image/png');
-  }
-
-  return container;
+  // pdf image extraction only ever produces PNG (canvas re-encode), so every
+  // entry gets image/png.
+  return buildContainer(
+    stringifyMarkdown(markdownDoc),
+    images.map((img) => [img.path, { data: img.data, mimeType: 'image/png' }] as const),
+  );
 }
 
 /**

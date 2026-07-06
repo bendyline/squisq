@@ -184,3 +184,13 @@ export const REL_SLIDE_MASTER =
 
 export const CONTENT_TYPE_XLSX_WORKBOOK =
   'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml';
+
+export const CONTENT_TYPE_XLSX_WORKSHEET =
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml';
+
+export const CONTENT_TYPE_XLSX_STYLES =
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml';
+
+/** Relationship type: Worksheet */
+export const REL_WORKSHEET =
+  'http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet';

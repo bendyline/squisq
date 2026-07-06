@@ -132,11 +132,20 @@ async function normalizeBytes(
   const { markdownToDoc } = await import('@bendyline/squisq/doc');
   const { parseMarkdown, stringifyMarkdown } = await import('@bendyline/squisq/markdown');
 
+  const warnings: string[] = [];
   let markdownDoc: MarkdownDocument;
   let container: ContentContainer;
 
   if (fromDef.importContainer) {
     container = await fromDef.importContainer(buffer, options);
+    // PDF embedded-image extraction needs a browser canvas; under Node it's
+    // skipped inside pdfToContainer. importContainer has no warnings channel of
+    // its own, so surface that degraded path here where warnings are collected.
+    if (fromDef.id === 'pdf' && typeof document === 'undefined') {
+      warnings.push(
+        'PDF embedded images were skipped — image decoding requires a browser canvas (running under Node).',
+      );
+    }
     const text = await container.readDocument();
     markdownDoc = text ? parseMarkdown(text) : { type: 'document', children: [] };
   } else {
@@ -153,7 +162,7 @@ async function normalizeBytes(
 
   return {
     input: { doc, markdownDoc, container, baseName },
-    warnings: [],
+    warnings,
   };
 }
 
@@ -221,13 +230,28 @@ async function applyTransformStyle(
   input: NormalizedInput,
   transformStyle: string,
   themeId?: string,
-): Promise<void> {
+): Promise<string[]> {
   const { applyTransform, extractDocImages } = await import('@bendyline/squisq/transform');
-  const { docToMarkdown } = await import('@bendyline/squisq/doc');
+  const { docToMarkdown, markdownToDoc } = await import('@bendyline/squisq/doc');
   const images = extractDocImages(input.doc.blocks);
   const result = applyTransform(input.doc, transformStyle, { themeId, images });
   input.doc = result.doc;
-  input.markdownDoc = docToMarkdown(result.doc);
+  const markdownDoc = docToMarkdown(result.doc);
+  input.markdownDoc = markdownDoc;
+
+  // Lossy-path detection: transforms can emit template blocks whose data lives
+  // in template inputs rather than in round-trippable markdown `contents`, so
+  // `docToMarkdown` silently drops them. Re-parse with auto-templating off (so
+  // the comparison stays ~1:1 and isn't confused by content-aware promotion)
+  // and compare block counts. Best-effort — most blocks carry `contents` and
+  // round-trip fine, so this only fires on a genuine collapse.
+  const roundTripped = markdownToDoc(markdownDoc, { autoTemplates: false });
+  if (roundTripped.blocks.length < result.doc.blocks.length) {
+    return [
+      'Transform produced blocks that don’t round-trip to markdown; export may be incomplete.',
+    ];
+  }
+  return [];
 }
 
 // ── convert() ───────────────────────────────────────────────────────
@@ -267,7 +291,13 @@ export async function convert(
   }
 
   if (options.transformStyle) {
-    await applyTransformStyle(input, options.transformStyle, options.themeId ?? input.doc.themeId);
+    warnings.push(
+      ...(await applyTransformStyle(
+        input,
+        options.transformStyle,
+        options.themeId ?? input.doc.themeId,
+      )),
+    );
   }
 
   let result: ConversionResult;

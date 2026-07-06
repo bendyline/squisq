@@ -22,8 +22,9 @@ import { stringifyMarkdown } from '@bendyline/squisq/markdown';
 import { getPartBinary, getPartRelationships, getPartXml, openPackage } from '../ooxml/reader.js';
 import type { OoxmlPackage } from '../ooxml/types.js';
 import { NS_DRAWINGML, NS_PML, NS_R } from '../ooxml/namespaces.js';
-import { MemoryContentContainer } from '@bendyline/squisq/storage';
 import type { ContentContainer } from '@bendyline/squisq/storage';
+import { buildContainer } from '../shared/container.js';
+import { extToMime } from '../shared/images.js';
 
 export interface PptxImportOptions {
   /**
@@ -34,21 +35,6 @@ export interface PptxImportOptions {
    */
   extractImages?: boolean;
 }
-
-/** Maps a media file extension to its MIME type (mirrors docx import). */
-const IMAGE_MIME_MAP: Record<string, string> = {
-  '.png': 'image/png',
-  '.jpg': 'image/jpeg',
-  '.jpeg': 'image/jpeg',
-  '.gif': 'image/gif',
-  '.bmp': 'image/bmp',
-  '.tiff': 'image/tiff',
-  '.tif': 'image/tiff',
-  '.svg': 'image/svg+xml',
-  '.webp': 'image/webp',
-  '.emf': 'image/emf',
-  '.wmf': 'image/wmf',
-};
 
 /**
  * Per-import mutable state used to collect embedded images across slides.
@@ -165,7 +151,7 @@ async function extractSlideImages(
 
     const dot = mediaPath.lastIndexOf('.');
     const ext = dot !== -1 ? mediaPath.slice(dot).toLowerCase() : '.png';
-    const mimeType = IMAGE_MIME_MAP[ext] ?? 'application/octet-stream';
+    const mimeType = extToMime(ext);
 
     ctx.imageCounter++;
     const imagePath = `images/image${ctx.imageCounter}${ext}`;
@@ -283,12 +269,5 @@ export async function pptxToContainer(
   const pkg = await openPackage(data);
   const { doc, ctx } = await importDocument(pkg, { ...options, extractImages: true });
 
-  const container = new MemoryContentContainer();
-  await container.writeDocument(stringifyMarkdown(doc));
-
-  for (const [path, { data: imageData, mimeType }] of ctx.extractedImages) {
-    await container.writeFile(path, new Uint8Array(imageData), mimeType);
-  }
-
-  return container;
+  return buildContainer(stringifyMarkdown(doc), ctx.extractedImages);
 }

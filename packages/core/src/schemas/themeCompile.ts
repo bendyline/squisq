@@ -206,7 +206,7 @@ export function parseTheme(json: string): Theme {
   let parsed: unknown;
   try {
     parsed = JSON.parse(json);
-  } catch (err) {
+  } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);
     throw new Error(`Invalid theme JSON: ${msg}`);
   }

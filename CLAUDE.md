@@ -1,3 +1,10 @@
+<!--
+  AGENTS.md is the canonical agent-guidance file. CLAUDE.md is a byte-for-byte
+  copy of it (Claude Code reads CLAUDE.md; other agents read AGENTS.md). Edit
+  this file, then run `cp AGENTS.md CLAUDE.md`. The `tests/docs-sync.test.ts`
+  check fails if the two drift.
+-->
+
 # Agent Guidelines for Squisq
 
 ## Project Overview

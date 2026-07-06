@@ -16,7 +16,7 @@ import type {
   InitMessage,
   FrameMessage,
 } from './workerTypes.js';
-import { bitrateForQuality } from '@bendyline/squisq-video';
+import { bitrateForQuality, ffmpegVideoQualityArgs } from '@bendyline/squisq-video';
 
 import { createMp4Muxer, type Mp4MuxerHandle } from '../mp4Mux.js';
 
@@ -36,7 +36,6 @@ let ffmpegConfig: InitMessage | null = null;
 
 // Frame tracking
 let totalFramesReceived = 0;
-let _totalFramesEncoded = 0;
 
 // ── Helpers ────────────────────────────────────────────────────────
 
@@ -97,14 +96,15 @@ function initWebCodecs(config: InitMessage) {
     output(chunk, meta) {
       if (cancelled) return;
       muxer!.addVideoChunk(chunk, meta ?? undefined);
-      _totalFramesEncoded++;
     },
     error(err) {
       postError(`WebCodecs encoder error: ${err.message}`);
     },
   });
 
-  // Use H.264 Baseline for maximum compatibility
+  // Deliberate profile split from mainThreadEncoder (avc1.640028, High@4.0):
+  // this worker is the max-compatibility fallback path, so it uses H.264
+  // Baseline (avc1.42001f) — widest decoder support at a small quality cost.
   videoEncoder.configure({
     codec: 'avc1.42001f',
     width: config.width,
@@ -241,10 +241,7 @@ async function encodeFfmpegBatch() {
     'libx264',
     '-pix_fmt',
     'yuv420p',
-    '-preset',
-    config.quality === 'draft' ? 'ultrafast' : config.quality === 'high' ? 'slow' : 'medium',
-    '-crf',
-    config.quality === 'draft' ? '28' : config.quality === 'high' ? '18' : '23',
+    ...ffmpegVideoQualityArgs(config.quality),
     segmentName,
   ]);
 
@@ -335,7 +332,6 @@ self.onmessage = async (event: MessageEvent<MainToWorkerMessage>) => {
       case 'init': {
         cancelled = false;
         totalFramesReceived = 0;
-        _totalFramesEncoded = 0;
 
         if (await supportsWebCodecsH264(msg)) {
           backend = 'webcodecs';

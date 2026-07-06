@@ -34,6 +34,7 @@ import type {
   FormatId,
 } from '@bendyline/squisq-formats';
 import { detectFfmpeg } from './util/detectFfmpeg.js';
+import { buildMixedAudioTrack } from './util/audioMix.js';
 import { createCliRegistry } from './registry.js';
 
 // Re-export utility types and functions callers may need
@@ -204,24 +205,20 @@ export async function renderDocToMp4(
     }
   }
 
-  // ── Collect audio segments ──────────────────────────────────────
+  // ── Collect audio segments for the render HTML ──────────────────
+  // The player page loads narration so the doc's duration/timing resolves; the
+  // captured frames themselves are silent (audio is reconstructed offline from
+  // the timeline below). Keyed by both src and name so the inline provider
+  // resolves either reference.
   const audio = new Map<string, ArrayBuffer>();
-  const audioBuffers: ArrayBuffer[] = [];
   if (doc.audio?.segments?.length) {
     for (const seg of doc.audio.segments) {
       const data = await container.readFile(seg.src);
       if (data) {
         audio.set(seg.src, data);
         audio.set(seg.name, data);
-        audioBuffers.push(data);
       }
     }
-  }
-
-  // Concatenate audio for the MP4's audio track
-  let concatenatedAudio: Uint8Array | null = null;
-  if (audioBuffers.length > 0) {
-    concatenatedAudio = await concatenateAudioBuffers(audioBuffers, ffmpegPath);
   }
 
   // ── Collect timed-media clips + block video sources ─────────────
@@ -229,24 +226,16 @@ export async function renderDocToMp4(
   // template-produced VideoLayer needs its bytes embedded so the headless
   // page can load them with no network. They resolve through the inline
   // media provider's `images` map (which infers mp4/mp3 MIME by extension).
-  const schedule = resolveMediaSchedule(doc);
-  const mediaSrcs = new Set<string>(schedule.map((c) => c.src));
+  const mediaSrcs = new Set<string>(resolveMediaSchedule(doc).map((c) => c.src));
   for (const block of flattenBlocks(doc.blocks)) {
     for (const layer of block.layers ?? []) {
       if (layer.type === 'video') mediaSrcs.add(layer.content.src);
     }
   }
-  // Buffers for the scheduled audio clips, keyed by clip id, for the mux.
-  const clipBuffers = new Map<string, ArrayBuffer>();
   for (const src of mediaSrcs) {
     if (images.has(src)) continue;
     const data = await container.readFile(src);
     if (data) images.set(src, data);
-  }
-  for (const clip of schedule) {
-    if (clip.kind !== 'audio') continue;
-    const data = images.get(clip.src) ?? (await container.readFile(clip.src));
-    if (data) clipBuffers.set(clip.id, data);
   }
 
   onProgress?.('generating render HTML', 10);
@@ -362,28 +351,13 @@ export async function renderDocToMp4(
 
   onProgress?.('encoding video', 80);
 
-  // Build the final audio track. With timed media clips, mix the narration
-  // (delayed by the cover pre-roll) and each scheduled audio clip at its
-  // absolute time. Without clips, keep the legacy narration-only path so
-  // existing exports are unchanged.
-  const scheduledAudioClips = schedule.filter((c) => c.kind === 'audio' && clipBuffers.has(c.id));
-  let encodingAudio = concatenatedAudio;
-  if (scheduledAudioClips.length > 0 && ffmpegPath) {
-    encodingAudio = await mixScheduledAudio(
-      ffmpegPath,
-      concatenatedAudio,
-      scheduledAudioClips.map((c) => ({
-        buffer: clipBuffers.get(c.id)!,
-        delaySec: c.absoluteStart + coverPreRoll,
-        trimStart: c.sourceIn,
-        trimLen: Math.max(0, c.absoluteEnd - c.absoluteStart),
-      })),
-      coverPreRoll,
-    );
-  } else if (coverPreRoll > 0 && concatenatedAudio) {
-    // Use FFmpeg to add silence padding at the start (adelay filter)
-    encodingAudio = await addAudioDelay(ffmpegPath, concatenatedAudio, coverPreRoll);
-  }
+  // Build the final audio track from the single-source-of-truth timeline:
+  // narration segments laid sequentially + timed media clips at their absolute
+  // positions, every start shifted by the cover pre-roll. `buildMixedAudioTrack`
+  // is a pure consumer of `computeAudioTimeline`, so the CLI's placement can no
+  // longer drift from the browser export (zero-duration narration segments are
+  // skipped consistently in both).
+  const encodingAudio = await buildMixedAudioTrack(doc, container, ffmpegPath, coverPreRoll);
 
   const { framesToMp4Native } = await import('./util/nativeEncoder.js');
   await framesToMp4Native(ffmpegPath, frames, encodingAudio, outputPath, {
@@ -405,227 +379,6 @@ export async function renderDocToMp4(
     frameCount: frames.length,
     outputPath,
   };
-}
-
-// ── Audio helpers ─────────────────────────────────────────────────
-
-/**
- * Concatenate multiple audio buffers into one.
- * Uses native ffmpeg concat when available, falls back to byte concatenation.
- */
-async function concatenateAudioBuffers(
-  buffers: ArrayBuffer[],
-  ffmpegPath?: string,
-): Promise<Uint8Array> {
-  if (buffers.length === 0) return new Uint8Array(0);
-  if (buffers.length === 1) return new Uint8Array(buffers[0]);
-
-  if (ffmpegPath) {
-    return concatenateAudioNative(ffmpegPath, buffers);
-  }
-
-  // Fallback: naive byte concatenation (works for MP3)
-  const totalLength = buffers.reduce((sum, b) => sum + b.byteLength, 0);
-  const result = new Uint8Array(totalLength);
-  let offset = 0;
-  for (const buf of buffers) {
-    result.set(new Uint8Array(buf), offset);
-    offset += buf.byteLength;
-  }
-  return result;
-}
-
-async function concatenateAudioNative(
-  ffmpegPath: string,
-  buffers: ArrayBuffer[],
-): Promise<Uint8Array> {
-  const { writeFile, readFile, mkdir, rm } = await import('node:fs/promises');
-  const { join } = await import('node:path');
-  const { tmpdir } = await import('node:os');
-  const { randomBytes } = await import('node:crypto');
-  const { execFile } = await import('node:child_process');
-
-  const tmpId = randomBytes(8).toString('hex');
-  const workDir = join(tmpdir(), `squisq-audio-concat-${tmpId}`);
-  await mkdir(workDir, { recursive: true });
-
-  try {
-    const segmentPaths: string[] = [];
-    for (let i = 0; i < buffers.length; i++) {
-      const segPath = join(workDir, `seg-${i}.mp3`);
-      await writeFile(segPath, new Uint8Array(buffers[i]));
-      segmentPaths.push(segPath);
-    }
-
-    const listPath = join(workDir, 'concat-list.txt');
-    const listContent = segmentPaths.map((p) => `file '${p.replace(/\\/g, '/')}'`).join('\n');
-    await writeFile(listPath, listContent);
-
-    const outputPath = join(workDir, 'combined.mp3');
-    await new Promise<void>((resolve, reject) => {
-      execFile(
-        ffmpegPath,
-        ['-y', '-f', 'concat', '-safe', '0', '-i', listPath, '-c', 'copy', outputPath],
-        { timeout: 120_000 },
-        (err) => {
-          if (err) reject(new Error(`ffmpeg audio concat failed: ${err.message}`));
-          else resolve();
-        },
-      );
-    });
-
-    const data = await readFile(outputPath);
-    return new Uint8Array(data.buffer, data.byteOffset, data.byteLength);
-  } finally {
-    await rm(workDir, { recursive: true, force: true });
-  }
-}
-
-/**
- * Add silence at the start of an audio track by re-encoding with adelay filter.
- */
-async function addAudioDelay(
-  ffmpegPath: string,
-  audioData: Uint8Array,
-  delaySecs: number,
-): Promise<Uint8Array> {
-  const { writeFile, readFile, rm } = await import('node:fs/promises');
-  const { join } = await import('node:path');
-  const { tmpdir } = await import('node:os');
-  const { randomBytes } = await import('node:crypto');
-  const { execFile } = await import('node:child_process');
-
-  const tmpId = randomBytes(8).toString('hex');
-  const inputPath = join(tmpdir(), `squisq-audio-delay-in-${tmpId}.mp3`);
-  const outputPath = join(tmpdir(), `squisq-audio-delay-out-${tmpId}.mp3`);
-
-  try {
-    await writeFile(inputPath, audioData);
-    const delayMs = Math.round(delaySecs * 1000);
-
-    await new Promise<void>((resolve, reject) => {
-      execFile(
-        ffmpegPath,
-        [
-          '-y',
-          '-i',
-          inputPath,
-          '-af',
-          `adelay=${delayMs}|${delayMs}`,
-          '-c:a',
-          'libmp3lame',
-          '-b:a',
-          '128k',
-          outputPath,
-        ],
-        { timeout: 60_000 },
-        (err) => {
-          if (err) reject(new Error(`ffmpeg audio delay failed: ${err.message}`));
-          else resolve();
-        },
-      );
-    });
-
-    const data = await readFile(outputPath);
-    return new Uint8Array(data.buffer, data.byteOffset, data.byteLength);
-  } finally {
-    await rm(inputPath, { force: true });
-    await rm(outputPath, { force: true });
-  }
-}
-
-/** One scheduled audio clip to fold into the mix. */
-interface AudioMixClip {
-  buffer: ArrayBuffer;
-  /** Seconds to delay the clip on the final timeline. */
-  delaySec: number;
-  /** Source in-point to trim from (seconds). */
-  trimStart: number;
-  /** Played length (seconds). */
-  trimLen: number;
-}
-
-/**
- * Mix the sequential narration track (delayed by the cover pre-roll) with any
- * number of scheduled audio clips, each trimmed to its source window and
- * delayed to its absolute position. Returns a single MP3.
- *
- * Each input is `adelay`'d (per-channel) and `atrim`'d; `amix` sums them with
- * `normalize=0` so individual levels are preserved. Frame capture stays silent
- * — this reconstructs the audio offline from the same schedule the renderer
- * uses, keeping audio and video aligned.
- */
-async function mixScheduledAudio(
-  ffmpegPath: string,
-  narration: Uint8Array | null,
-  clips: AudioMixClip[],
-  coverPreRoll: number,
-): Promise<Uint8Array | null> {
-  if (!narration && clips.length === 0) return null;
-
-  const { writeFile, readFile, mkdir, rm } = await import('node:fs/promises');
-  const { join } = await import('node:path');
-  const { tmpdir } = await import('node:os');
-  const { randomBytes } = await import('node:crypto');
-  const { execFile } = await import('node:child_process');
-
-  const workDir = join(tmpdir(), `squisq-audio-mix-${randomBytes(8).toString('hex')}`);
-  await mkdir(workDir, { recursive: true });
-
-  try {
-    const inputs: string[] = [];
-    const filters: string[] = [];
-    const labels: string[] = [];
-    const ms = (s: number) => Math.max(0, Math.round(s * 1000));
-
-    if (narration) {
-      const p = join(workDir, 'narration.mp3');
-      await writeFile(p, narration);
-      const i = inputs.push(p) - 1;
-      const d = ms(coverPreRoll);
-      filters.push(`[${i}:a]adelay=${d}|${d}[a${i}]`);
-      labels.push(`[a${i}]`);
-    }
-
-    for (const clip of clips) {
-      const p = join(workDir, `clip-${inputs.length}.mp3`);
-      await writeFile(p, new Uint8Array(clip.buffer));
-      const i = inputs.push(p) - 1;
-      const d = ms(clip.delaySec);
-      const end = clip.trimStart + clip.trimLen;
-      filters.push(
-        `[${i}:a]atrim=start=${clip.trimStart}:end=${end},asetpts=PTS-STARTPTS,adelay=${d}|${d}[a${i}]`,
-      );
-      labels.push(`[a${i}]`);
-    }
-
-    const graph = `${filters.join(';')};${labels.join('')}amix=inputs=${labels.length}:normalize=0:dropout_transition=0[aout]`;
-    const args = ['-y'];
-    for (const p of inputs) args.push('-i', p);
-    args.push(
-      '-filter_complex',
-      graph,
-      '-map',
-      '[aout]',
-      '-c:a',
-      'libmp3lame',
-      '-b:a',
-      '192k',
-      join(workDir, 'mixed.mp3'),
-    );
-
-    await new Promise<void>((resolve, reject) => {
-      execFile(ffmpegPath, args, { timeout: 180_000 }, (err) => {
-        if (err) reject(new Error(`ffmpeg audio mix failed: ${err.message}`));
-        else resolve();
-      });
-    });
-
-    const data = await readFile(join(workDir, 'mixed.mp3'));
-    return new Uint8Array(data.buffer, data.byteOffset, data.byteLength);
-  } finally {
-    await rm(workDir, { recursive: true, force: true });
-  }
 }
 
 // ── Thumbnail extraction ──────────────────────────────────────────

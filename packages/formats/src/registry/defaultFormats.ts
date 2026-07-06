@@ -170,29 +170,13 @@ export function defaultFormats(): FormatDefinition[] {
     label: 'PowerPoint (PPTX)',
     mimeType: MIME.pptx,
     extensions: ['.pptx'],
+    async importContainer(data): Promise<ContentContainer> {
+      const { pptxToContainer } = await import('../pptx/index.js');
+      return pptxToContainer(data);
+    },
     async importDoc(data): Promise<MarkdownDocument> {
       const { pptxToMarkdownDoc } = await import('../pptx/index.js');
       return pptxToMarkdownDoc(data);
-    },
-    // A container importer is deferred: `pptxToContainer` is being added by a
-    // concurrent agent. When it lands, wire an `importContainer` here that
-    // guards the dynamic import (`if (m.pptxToContainer) …`). Until then,
-    // convert() falls back to importDoc for PPTX input, which is sufficient.
-    async importContainer(data): Promise<ContentContainer> {
-      const m = (await import('../pptx/index.js')) as {
-        pptxToContainer?: (data: ArrayBuffer) => Promise<ContentContainer>;
-        pptxToMarkdownDoc: (data: ArrayBuffer) => Promise<MarkdownDocument>;
-      };
-      if (!m.pptxToContainer) {
-        // Fall back: wrap the imported markdown in a fresh container.
-        const { stringifyMarkdown } = await import('@bendyline/squisq/markdown');
-        const { MemoryContentContainer } = await import('@bendyline/squisq/storage');
-        const markdownDoc = await m.pptxToMarkdownDoc(data);
-        const container = new MemoryContentContainer();
-        await container.writeDocument(stringifyMarkdown(markdownDoc));
-        return container;
-      }
-      return m.pptxToContainer(data);
     },
     async exportDoc(input, options): Promise<ConversionResult> {
       const { markdownDocToPptx } = await import('../pptx/index.js');
@@ -215,11 +199,20 @@ export function defaultFormats(): FormatDefinition[] {
       return xlsxToMarkdownDoc(data);
     },
     async exportDoc(input): Promise<ConversionResult> {
-      // markdownDocToXlsx is being implemented concurrently; it may still throw
-      // 'not yet implemented'. That surfaces to the caller unchanged.
       const { markdownDocToXlsx } = await import('../xlsx/index.js');
-      const blob = await markdownDocToXlsx(await markdownOf(input));
-      return ok(await toBytes(blob), MIME.xlsx);
+      const markdownDoc = await markdownOf(input);
+      // XLSX fidelity is tables-only: `table` nodes become worksheets and
+      // headings name them, but every other top-level block (prose, lists,
+      // images, code, …) is dropped. Count those and warn honestly.
+      const omitted = markdownDoc.children.filter(
+        (n) => n.type !== 'table' && n.type !== 'heading',
+      ).length;
+      const warnings =
+        omitted > 0
+          ? [`XLSX export is tables-only; ${omitted} non-table block(s) were omitted.`]
+          : [];
+      const blob = await markdownDocToXlsx(markdownDoc);
+      return ok(await toBytes(blob), MIME.xlsx, warnings);
     },
   };
 

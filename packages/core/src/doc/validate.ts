@@ -42,6 +42,7 @@ import {
   normalizeShapeKind,
   SHAPE_NAMES,
 } from './templates/index.js';
+import { nearestName } from './utils/nearest.js';
 
 // ============================================
 // Options & result
@@ -172,7 +173,9 @@ function checkTemplate(
   // Inside a drawing, the annotation names a shape primitive, not a template.
   if (parent && isDrawingBlock(parent)) {
     if (isShapeName(requested)) return;
-    const suggestion = nearestName(requested, new Set(SHAPE_NAMES));
+    const suggestion = nearestName(requested, new Set(SHAPE_NAMES), {
+      map: resolveTemplateName,
+    });
     diagnostics.push({
       severity: 'warning',
       code: 'unknown-shape',
@@ -199,7 +202,7 @@ function checkTemplate(
 
   if (known.has(requested) || known.has(resolveTemplateName(requested))) return;
 
-  const suggestion = nearestName(requested, known);
+  const suggestion = nearestName(requested, known, { map: resolveTemplateName });
   diagnostics.push({
     severity: 'warning',
     code: 'unknown-template',
@@ -556,51 +559,6 @@ function walkHtmlImages(nodes: HtmlNode[], report: (src: string) => void): void 
     }
     walkHtmlImages(node.children, report);
   }
-}
-
-// ============================================
-// Did-you-mean
-// ============================================
-
-/**
- * Nearest known name by edit distance. Returns undefined when nothing is
- * plausibly close (distance > 2 and > 40% of the input length).
- */
-function nearestName(input: string, candidates: Set<string>): string | undefined {
-  let best: string | undefined;
-  let bestDist = Infinity;
-  const lower = input.toLowerCase();
-  for (const candidate of candidates) {
-    const dist = levenshtein(lower, candidate.toLowerCase());
-    if (dist < bestDist) {
-      bestDist = dist;
-      best = candidate;
-    }
-  }
-  if (best && (bestDist <= 2 || bestDist <= Math.ceil(input.length * 0.4))) {
-    return resolveTemplateName(best);
-  }
-  return undefined;
-}
-
-function levenshtein(a: string, b: string): number {
-  if (a === b) return 0;
-  const m = a.length;
-  const n = b.length;
-  if (m === 0) return n;
-  if (n === 0) return m;
-  let prev = new Array<number>(n + 1);
-  let curr = new Array<number>(n + 1);
-  for (let j = 0; j <= n; j++) prev[j] = j;
-  for (let i = 1; i <= m; i++) {
-    curr[0] = i;
-    for (let j = 1; j <= n; j++) {
-      const cost = a[i - 1] === b[j - 1] ? 0 : 1;
-      curr[j] = Math.min(prev[j] + 1, curr[j - 1] + 1, prev[j - 1] + cost);
-    }
-    [prev, curr] = [curr, prev];
-  }
-  return prev[n];
 }
 
 // ============================================

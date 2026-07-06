@@ -17,9 +17,11 @@ async function switchView(page: Page, label: 'Markdown' | 'Editor' | 'Play') {
 /** Enter the Play preview and select slideshow mode. */
 async function enterSlideshow(page: Page) {
   await switchView(page, 'Play');
-  // The Mode <select> is the only one carrying a `slideshow` option.
-  const modeSelect = page.locator('select', { has: page.locator('option[value="slideshow"]') });
-  await modeSelect.selectOption('slideshow');
+  // Display mode is a segmented button group (formerly a <select>).
+  await page
+    .getByRole('group', { name: 'Display mode' })
+    .getByRole('button', { name: 'Slideshow', exact: true })
+    .click();
   await page.locator('.doc-player').waitFor({ state: 'visible', timeout: 5_000 });
   await page
     .locator('[data-testid="slideshow-controls"]')

@@ -40,16 +40,11 @@ import {
   NS_R,
   REL_OFFICE_DOCUMENT,
   REL_STYLES,
+  REL_WORKSHEET,
   CONTENT_TYPE_XLSX_WORKBOOK,
+  CONTENT_TYPE_XLSX_WORKSHEET,
+  CONTENT_TYPE_XLSX_STYLES,
 } from '../ooxml/namespaces.js';
-
-// SpreadsheetML-specific constants not exported from the shared namespaces module.
-const CONTENT_TYPE_XLSX_WORKSHEET =
-  'application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml';
-const CONTENT_TYPE_XLSX_STYLES =
-  'application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml';
-const REL_WORKSHEET =
-  'http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet';
 
 /**
  * Options for XLSX export.

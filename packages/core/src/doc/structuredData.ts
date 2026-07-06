@@ -81,13 +81,13 @@ export function parseDataFence(node: MarkdownCodeBlock): DataFenceParseResult {
         return { error: 'JSON data fence must contain a top-level object ({"key": …})' };
       }
       return { data: parsed as Record<string, unknown> };
-    } catch (err) {
+    } catch (err: unknown) {
       return { error: `invalid JSON: ${err instanceof Error ? err.message : String(err)}` };
     }
   }
   try {
     return { data: parseYamlSubset(node.value) };
-  } catch (err) {
+  } catch (err: unknown) {
     return { error: `invalid YAML: ${err instanceof Error ? err.message : String(err)}` };
   }
 }

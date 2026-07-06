@@ -533,8 +533,8 @@ export function PreviewToolbarControls() {
     const SAFETY = 2;
     const measure = () => {
       const available = root.clientWidth - LEAD_PAD;
-      const widths = Array.from(probe.children).map((el) =>
-        (el as HTMLElement).getBoundingClientRect().width,
+      const widths = Array.from(probe.children).map(
+        (el) => (el as HTMLElement).getBoundingClientRect().width,
       );
       // Width of the first `n` controls laid out inline (n-1 inter-control gaps).
       const rowWidth = (n: number) =>

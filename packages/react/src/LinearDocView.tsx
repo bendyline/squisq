@@ -253,8 +253,6 @@ function BlockSection({ block, basePath, viewport, renderContext, blockIndex }: 
   );
 }
 
-// ── Template Defaults (mirrored from PreviewPanel) ─────────────────
-
 // ── Main Component ─────────────────────────────────────────────────
 
 /**

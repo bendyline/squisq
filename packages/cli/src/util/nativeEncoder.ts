@@ -16,7 +16,11 @@ import { tmpdir } from 'node:os';
 import { randomBytes } from 'node:crypto';
 
 import type { VideoExportOptions } from '@bendyline/squisq-video';
-import { QUALITY_PRESETS, resolveDimensions } from '@bendyline/squisq-video';
+import {
+  resolveDimensions,
+  ffmpegVideoQualityArgs,
+  audioBitrateArg,
+} from '@bendyline/squisq-video';
 
 /**
  * Encode frame PNGs to MP4 using native ffmpeg.
@@ -37,7 +41,6 @@ export async function framesToMp4Native(
   const fps = options.fps ?? 30;
   const quality = options.quality ?? 'normal';
   const { width, height } = resolveDimensions(options);
-  const preset = QUALITY_PRESETS[quality];
   const onProgress = options.onProgress;
 
   if (frames.length === 0) {
@@ -83,10 +86,7 @@ export async function framesToMp4Native(
     args.push(
       '-c:v',
       'libx264',
-      '-preset',
-      preset.preset,
-      '-crf',
-      String(preset.crf),
+      ...ffmpegVideoQualityArgs(quality),
       '-pix_fmt',
       'yuv420p',
       '-vf',
@@ -94,24 +94,20 @@ export async function framesToMp4Native(
     );
 
     if (audioPath) {
-      args.push('-c:a', 'aac', '-b:a', '128k', '-shortest');
+      args.push('-c:a', 'aac', '-b:a', audioBitrateArg(quality), '-shortest');
     }
 
     args.push(outputPath);
 
-    // Run ffmpeg
+    // Run ffmpeg. execFile buffers stdout/stderr internally for the callback,
+    // so the child's pipes are already drained — no manual stderr listener needed.
     await new Promise<void>((resolve, reject) => {
-      const proc = execFile(ffmpegPath, args, { timeout: 600_000 }, (err) => {
+      execFile(ffmpegPath, args, { timeout: 600_000 }, (err) => {
         if (err) {
           reject(new Error(`ffmpeg failed: ${err.message}`));
         } else {
           resolve();
         }
-      });
-
-      // ffmpeg writes progress to stderr
-      proc.stderr?.on('data', () => {
-        // Could parse ffmpeg progress output here in the future
       });
     });
 

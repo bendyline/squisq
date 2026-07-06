@@ -137,9 +137,9 @@ export interface Doc {
    *
    * Populated from the markdown frontmatter key
    * `squisq-custom-templates`. The template-expansion pipeline
-   * (`expandDocBlocks`) merges these into the registry before walking
-   * blocks, so a heading annotated `{[myhero]}` resolves against a
-   * doc-defined template named `myhero`.
+   * (`expandDocBlocks` in `doc/templates/index.ts`) merges these into
+   * the registry before walking blocks, so a heading annotated
+   * `{[myhero]}` resolves against a doc-defined template named `myhero`.
    *
    * Library templates (stored in localStorage on the editor side) are
    * NOT auto-loaded here — applying a library template to a block
@@ -187,6 +187,16 @@ export interface Doc {
  * - `sourceHeading` references the original MarkdownHeading node
  * - `contents` holds the body markdown between this heading and the next
  * - `children` holds sub-heading blocks (e.g., H2s under an H1)
+ *
+ * Four adjacent fields carry template information — do not confuse them:
+ * - `template` — the *resolved* template id this block renders with.
+ * - `templateOverrides` — raw `{[…]}` inline params (always strings).
+ * - `templateData` — structured inputs from a data fence / GFM table
+ *   (parsed types, not strings).
+ * - `sourceAnnotation.template` — the raw *requested* template name for a
+ *   standalone-annotation block (before alias resolution).
+ * Merge order at render time: template defaults → `templateData` →
+ * `templateOverrides`.
  */
 export interface Block {
   /** Unique identifier for this block.
@@ -217,7 +227,7 @@ export interface Block {
   /** Entry transition from previous block */
   transition?: Transition;
 
-  /** Template name that generated this block (for debugging) */
+  /** Resolved template id this block renders with (see the quartet note above). */
   template?: string;
 
   /**
@@ -234,6 +244,9 @@ export interface Block {
    * Such blocks have no `sourceHeading`; `docToMarkdown` re-emits their
    * annotation as a synthesized paragraph before their `contents` so the
    * markdown round-trips. See `annotationBlocks.ts`.
+   *
+   * Presence-marker: only ever `true` (never `false`). Test with
+   * `block.standaloneAnnotation` presence, not as a boolean toggle.
    */
   standaloneAnnotation?: true;
 
@@ -973,39 +986,4 @@ export function getCaptionAtTime(
     }
   }
   return null;
-}
-
-/**
- * Validate a Doc for completeness.
- */
-export function validateDoc(script: Doc): string[] {
-  const errors: string[] = [];
-
-  if (!script.articleId) {
-    errors.push('Missing articleId');
-  }
-
-  if (!script.blocks || script.blocks.length === 0) {
-    errors.push('No blocks defined');
-  }
-
-  if (!script.audio || !script.audio.segments || script.audio.segments.length === 0) {
-    errors.push('No audio segments defined');
-  }
-
-  // Check for gaps in block coverage
-  const totalDuration = script.duration;
-  let covered = 0;
-  for (const block of script.blocks) {
-    if (block.startTime > covered + 0.1) {
-      errors.push(`Gap in blocks: ${covered}s to ${block.startTime}s`);
-    }
-    covered = Math.max(covered, block.startTime + block.duration);
-  }
-
-  if (covered < totalDuration - 0.1) {
-    errors.push(`Blocks end at ${covered}s but audio is ${totalDuration}s`);
-  }
-
-  return errors;
 }

@@ -115,6 +115,9 @@ export function createEncoder(config: EncoderConfig): MainThreadEncoder {
   });
 
   encoder.configure({
+    // Deliberate profile split from the fallback worker (avc1.42001f, Baseline):
+    // this primary WebCodecs path targets H.264 High@4.0 for better quality up
+    // to 1080p; the wasm-fallback worker uses Baseline for max decoder compat.
     codec: 'avc1.640028', // H.264 High profile, level 4.0 (supports up to 1080p)
     width: config.width,
     height: config.height,

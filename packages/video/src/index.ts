@@ -34,5 +34,8 @@ export { computeAudioTimeline } from './audioTimeline.js';
 export type { RenderHtmlOptions } from './renderHtml.js';
 export { generateRenderHtml } from './renderHtml.js';
 
+// ── FFmpeg Argument Builders ───────────────────────────────────────
+export { ffmpegVideoQualityArgs, audioBitrateArg } from './ffmpegArgs.js';
+
 // ── WASM Encoder ───────────────────────────────────────────────────
 export { framesToMp4Wasm, fetchFile } from './wasmEncoder.js';

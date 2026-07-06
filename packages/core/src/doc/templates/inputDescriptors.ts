@@ -32,6 +32,7 @@
 
 import { KNOWN_BLOCK_META_KEYS, parseNumber } from '../../markdown/annotationCoercion.js';
 import { resolveTemplateName } from './index.js';
+import { nearestName } from '../utils/nearest.js';
 
 // ============================================
 // Types
@@ -385,7 +386,7 @@ export function lintTemplateParams(
     const descriptor = byKey.get(key);
     if (!descriptor) {
       if (knownKeys.has(key)) continue; // block-meta key — valid, not a template input
-      const suggestion = nearestKey(key, knownKeys);
+      const suggestion = nearestName(key, knownKeys);
       findings.push({
         kind: 'unknown-input',
         key,
@@ -428,46 +429,4 @@ export function lintTemplateParams(
   }
 
   return findings;
-}
-
-// ============================================
-// Did-you-mean (self-contained; mirrors validate.ts's heuristic)
-// ============================================
-
-/** Nearest known key by edit distance, or undefined when nothing is close. */
-function nearestKey(input: string, candidates: Set<string>): string | undefined {
-  let best: string | undefined;
-  let bestDist = Infinity;
-  const lower = input.toLowerCase();
-  for (const candidate of candidates) {
-    const dist = levenshtein(lower, candidate.toLowerCase());
-    if (dist < bestDist) {
-      bestDist = dist;
-      best = candidate;
-    }
-  }
-  if (best && (bestDist <= 2 || bestDist <= Math.ceil(input.length * 0.4))) {
-    return best;
-  }
-  return undefined;
-}
-
-function levenshtein(a: string, b: string): number {
-  if (a === b) return 0;
-  const m = a.length;
-  const n = b.length;
-  if (m === 0) return n;
-  if (n === 0) return m;
-  let prev = new Array<number>(n + 1);
-  let curr = new Array<number>(n + 1);
-  for (let j = 0; j <= n; j++) prev[j] = j;
-  for (let i = 1; i <= m; i++) {
-    curr[0] = i;
-    for (let j = 1; j <= n; j++) {
-      const cost = a[i - 1] === b[j - 1] ? 0 : 1;
-      curr[j] = Math.min(prev[j] + 1, curr[j - 1] + 1, prev[j - 1] + cost);
-    }
-    [prev, curr] = [curr, prev];
-  }
-  return prev[n];
 }
