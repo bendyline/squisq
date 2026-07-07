@@ -102,11 +102,40 @@ describe('validate command', () => {
     const parsed = JSON.parse(result.stdout) as {
       errorCount: number;
       warningCount: number;
+      infoCount: number;
       diagnostics: Array<{ code: string; line?: number }>;
     };
     expect(parsed.errorCount).to.equal(0);
     expect(parsed.warningCount).to.equal(1);
+    expect(parsed.infoCount).to.equal(0);
     expect(parsed.diagnostics[0].code).to.equal('unknown-template');
     expect(parsed.diagnostics[0].line).to.equal(1);
+  });
+
+  it('reports info diagnostics, labels them info, and exits 0', async () => {
+    // A key set in both {[…]} and {…} produces a `conflicting-annotation-key`
+    // info diagnostic (the {…} value wins). Info must not fail the command.
+    const mdPath = await writeDoc('## Timed {[quote duration=5]} {duration=10}\n\nA quote.\n');
+    const result = await runCli('validate', mdPath);
+    expect(result.exitCode).to.equal(0);
+    expect(result.stderr).to.contain('conflicting-annotation-key');
+    expect(result.stderr).to.contain('info');
+    // Info diagnostics are not counted as warnings.
+    expect(result.stderr).to.contain('0 warning(s)');
+  });
+
+  it('--json separates info diagnostics from warnings', async () => {
+    const mdPath = await writeDoc('## Timed {[quote duration=5]} {duration=10}\n\nA quote.\n');
+    const result = await runCli('validate', mdPath, '--json');
+    const parsed = JSON.parse(result.stdout) as {
+      errorCount: number;
+      warningCount: number;
+      infoCount: number;
+      diagnostics: Array<{ severity: string; code: string }>;
+    };
+    expect(parsed.errorCount).to.equal(0);
+    expect(parsed.warningCount).to.equal(0);
+    expect(parsed.infoCount).to.be.greaterThan(0);
+    expect(parsed.diagnostics.some((d) => d.severity === 'info')).to.equal(true);
   });
 });

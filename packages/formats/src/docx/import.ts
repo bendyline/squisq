@@ -50,8 +50,9 @@ import type {
 import { openPackage, getPartXml, getPartBinary, getPartRelationships } from '../ooxml/reader.js';
 import type { OoxmlPackage, Relationship } from '../ooxml/types.js';
 import { NS_WML, NS_R } from '../ooxml/namespaces.js';
-import { MemoryContentContainer } from '@bendyline/squisq/storage';
 import type { ContentContainer } from '@bendyline/squisq/storage';
+import { buildContainer } from '../shared/container.js';
+import { extToMime } from '../shared/images.js';
 import {
   HEADING_STYLE_MAP,
   QUOTE_STYLE_IDS,
@@ -141,33 +142,15 @@ export async function docxToContainer(
   const ctx = await buildImportContext(pkg, { ...options, extractImages: true });
 
   const documentXml = await getPartXml(pkg, 'word/document.xml');
-  if (!documentXml) {
-    const container = new MemoryContentContainer();
-    await container.writeDocument('');
-    return container;
-  }
+  if (!documentXml) return buildContainer('', []);
 
   const body = getFirstElement(documentXml, 'body');
-  if (!body) {
-    const container = new MemoryContentContainer();
-    await container.writeDocument('');
-    return container;
-  }
+  if (!body) return buildContainer('', []);
 
   const blocks = await convertBody(body, ctx);
   const markdownDoc: MarkdownDocument = { type: 'document', children: blocks };
 
-  const markdown = stringifyMarkdown(markdownDoc);
-
-  // Build container with markdown + images
-  const container = new MemoryContentContainer();
-  await container.writeDocument(markdown);
-
-  for (const [path, { data: imageData, mimeType }] of ctx.extractedImages) {
-    await container.writeFile(path, new Uint8Array(imageData), mimeType);
-  }
-
-  return container;
+  return buildContainer(stringifyMarkdown(markdownDoc), ctx.extractedImages);
 }
 
 // ============================================
@@ -630,7 +613,7 @@ async function extractImage(el: Element, ctx: ImportContext): Promise<MarkdownIm
   // Determine extension and MIME type
   const dot = target.lastIndexOf('.');
   const ext = dot !== -1 ? target.slice(dot).toLowerCase() : '.png';
-  const mimeType = IMAGE_MIME_MAP[ext] ?? 'application/octet-stream';
+  const mimeType = extToMime(ext);
 
   // Generate a unique image path
   ctx.imageCounter++;
@@ -649,20 +632,6 @@ async function extractImage(el: Element, ctx: ImportContext): Promise<MarkdownIm
     alt,
   };
 }
-
-const IMAGE_MIME_MAP: Record<string, string> = {
-  '.png': 'image/png',
-  '.jpg': 'image/jpeg',
-  '.jpeg': 'image/jpeg',
-  '.gif': 'image/gif',
-  '.bmp': 'image/bmp',
-  '.tiff': 'image/tiff',
-  '.tif': 'image/tiff',
-  '.svg': 'image/svg+xml',
-  '.webp': 'image/webp',
-  '.emf': 'image/emf',
-  '.wmf': 'image/wmf',
-};
 
 /** Recursively find the first descendant element with the given local name. */
 function findDescendant(el: Element, localName: string): Element | null {

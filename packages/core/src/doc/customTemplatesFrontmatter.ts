@@ -225,6 +225,7 @@ export function readCustomTemplatesFromFrontmatter(
  */
 export function writeCustomTemplatesToFrontmatter(
   templates: readonly CustomTemplateDefinition[] | undefined,
+  options?: { pretty?: boolean },
 ): string | undefined {
   if (!templates || templates.length === 0) return undefined;
   const map: Record<string, Record<string, unknown>> = {};
@@ -235,7 +236,12 @@ export function writeCustomTemplatesToFrontmatter(
     entry.ly = renameKeys(def.layers, LONG_TO_SHORT);
     map[def.name] = entry;
   }
-  return JSON.stringify(map);
+  // Pretty output is multi-line, so it rides out as a YAML literal block
+  // scalar (see `formatBlockScalar` / stringify's frontmatter path) and
+  // parses back via `JSON.parse`. Default stays compact (single line) so
+  // existing docs and snapshots are byte-unchanged. The compact key codec
+  // (LONG_TO_SHORT) is applied in both modes.
+  return JSON.stringify(map, null, options?.pretty ? 2 : undefined);
 }
 
 function readViewport(raw: unknown): { width: number; height: number } {

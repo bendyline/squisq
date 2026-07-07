@@ -88,7 +88,7 @@ describe('HTML export with images', () => {
     const outDir = join(tempDir, 'html-out');
     await mkdir(outDir, { recursive: true });
 
-    const { stderr } = await runCli('convert', containerPath, '-o', outDir, '-f', 'html');
+    const { stderr } = await runCli('convert', containerPath, '-d', outDir, '-f', 'html');
     expect(stderr).to.include('Done.');
 
     const htmlPath = join(outDir, 'test-doc.html');
@@ -112,7 +112,7 @@ describe('HTML export with images', () => {
     const outDir = join(tempDir, 'htmlzip-out');
     await mkdir(outDir, { recursive: true });
 
-    const { stderr } = await runCli('convert', containerPath, '-o', outDir, '-f', 'htmlzip');
+    const { stderr } = await runCli('convert', containerPath, '-d', outDir, '-f', 'htmlzip');
     expect(stderr).to.include('Done.');
 
     const zipPath = join(outDir, 'test-doc.html.zip');
@@ -143,7 +143,7 @@ describe('HTML export with images', () => {
     const outDir = join(tempDir, 'folder-html-out');
     await mkdir(outDir, { recursive: true });
 
-    const { stderr } = await runCli('convert', folderDir, '-o', outDir, '-f', 'html');
+    const { stderr } = await runCli('convert', folderDir, '-d', outDir, '-f', 'html');
     expect(stderr).to.include('Done.');
 
     const htmlPath = join(outDir, `${folderDir.split(/[\\/]/).pop()}.html`);

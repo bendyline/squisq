@@ -45,6 +45,8 @@ import { estimateReadingTime } from '../timing/readingTime.js';
 import { resolveTemplateName, isContainerTemplate } from './templates/index.js';
 import { isDataFence, parseDataFence, findFirstTable, extractTableData } from './structuredData.js';
 import { extractMediaFromContents } from './mediaAnnotations.js';
+import { extractTemplateBlocksFromContents } from './annotationBlocks.js';
+import type { ParsedAnnotation } from './standaloneAnnotation.js';
 import { profileBlockContents, pickAutoTemplate } from '../recommend/templates.js';
 import { deriveTemplateInputs } from './templateInputs.js';
 import type { MediaClip } from '../schemas/Media.js';
@@ -145,6 +147,16 @@ function createIdGenerator() {
     used.set(id, Math.max(used.get(id) ?? 0, 1));
   };
 
+  // Slug + dedupe from arbitrary text (used for heading-less standalone
+  // annotation blocks, which have no MarkdownHeading to slug from). Shares
+  // the same `used` map so a standalone id can't collide with a heading id.
+  generate.fromText = (text: string): string => {
+    const base = slugify(text);
+    const count = used.get(base) ?? 0;
+    used.set(base, count + 1);
+    return count === 0 ? base : `${base}-${count + 1}`;
+  };
+
   return generate;
 }
 
@@ -196,6 +208,47 @@ function pinnedHeadingMeta(heading: MarkdownHeading | undefined): CoercedBlockMe
   return { ...fromAnnotation, ...fromPandoc };
 }
 
+/**
+ * Pinned block-meta for any block: the heading pins ({@link pinnedHeadingMeta})
+ * for heading blocks, or the standalone-annotation params for heading-less
+ * standalone blocks. Lets a standalone `{[quote duration=8]}` pin timing the
+ * same way a heading annotation would.
+ */
+function pinnedMeta(block: Block): CoercedBlockMeta {
+  if (block.sourceHeading) return pinnedHeadingMeta(block.sourceHeading);
+  if (block.sourceAnnotation?.params) {
+    return coerceAnnotationValues(block.sourceAnnotation.params).blockMeta;
+  }
+  return {};
+}
+
+/**
+ * Rebuild a block list, lifting standalone `{[…]}` template annotations out of
+ * each block's body into heading-less sibling blocks (recursing into children
+ * first). See {@link extractTemplateBlocksFromContents}.
+ */
+function expandStandaloneAnnotations(
+  blocks: Block[],
+  makeId: (parsed: ParsedAnnotation) => string,
+  defaultDuration: number,
+): Block[] {
+  const out: Block[] = [];
+  for (const block of blocks) {
+    if (block.children && block.children.length > 0) {
+      block.children = expandStandaloneAnnotations(block.children, makeId, defaultDuration);
+    }
+    const { leading, blocks: produced } = extractTemplateBlocksFromContents(block.contents, {
+      makeId,
+      defaultDuration,
+    });
+    if (produced.length > 0) {
+      block.contents = leading;
+    }
+    out.push(block, ...produced);
+  }
+  return out;
+}
+
 export function markdownToDoc(markdownDoc: MarkdownDocument, options?: MarkdownToDocOptions): Doc {
   const articleId = options?.articleId ?? 'markdown-doc';
   const defaultTemplate = options?.defaultTemplate ?? 'sectionHeader';
@@ -203,7 +256,7 @@ export function markdownToDoc(markdownDoc: MarkdownDocument, options?: MarkdownT
   const idGenerator = options?.generateId ? null : createIdGenerator();
   const generateId = options?.generateId ?? idGenerator!;
 
-  const rootBlocks: Block[] = [];
+  let rootBlocks: Block[] = [];
   const diagnostics: DocDiagnostic[] = [];
   let headingIndex = 0;
 
@@ -375,6 +428,30 @@ export function markdownToDoc(markdownDoc: MarkdownDocument, options?: MarkdownT
     rootBlocks.shift();
   }
 
+  // Standalone `{[templateName …]}` paragraphs (non-media) become heading-less
+  // template blocks; the body after each one, up to the next annotation,
+  // becomes its `contents`. Done after media extraction (so media names keep
+  // their meaning) and before structured-data parsing (so `json data` fences
+  // attach to the produced blocks). Produced blocks are inserted as siblings
+  // following the block whose body held the annotation.
+  const makeStandaloneId = (parsed: ParsedAnnotation): string => {
+    const base = parsed.params.title ?? parsed.template ?? 'block';
+    return idGenerator ? idGenerator.fromText(base) : slugify(base);
+  };
+  rootBlocks = expandStandaloneAnnotations(rootBlocks, makeStandaloneId, defaultDuration);
+  // A leading preamble whose entire body was consumed into standalone blocks
+  // is now empty — drop it so it doesn't leave a phantom slide.
+  if (
+    rootBlocks.length > 0 &&
+    !rootBlocks[0].sourceHeading &&
+    !rootBlocks[0].standaloneAnnotation &&
+    (rootBlocks[0].contents?.length ?? 0) === 0 &&
+    (rootBlocks[0].children?.length ?? 0) === 0 &&
+    !rootBlocks[0].media
+  ) {
+    rootBlocks.shift();
+  }
+
   const allBlocks = flattenBlocks(rootBlocks);
 
   // Structured template data: ```json data / ```yaml data fences in a
@@ -435,7 +512,7 @@ export function markdownToDoc(markdownDoc: MarkdownDocument, options?: MarkdownT
   // Skip blocks that pinned an explicit duration via a heading attribute —
   // author intent wins over reading-time heuristics.
   for (const block of allBlocks) {
-    if (pinnedHeadingMeta(block.sourceHeading).duration != null) continue;
+    if (pinnedMeta(block).duration != null) continue;
     const bodyText = getBlockBodyText(block);
     if (bodyText.length > 0) {
       const estimate = estimateReadingTime(bodyText);
@@ -451,7 +528,7 @@ export function markdownToDoc(markdownDoc: MarkdownDocument, options?: MarkdownT
   // sequence after them.
   let currentTime = 0;
   for (const block of allBlocks) {
-    const explicitStart = pinnedHeadingMeta(block.sourceHeading).startTime;
+    const explicitStart = pinnedMeta(block).startTime;
     if (explicitStart == null) {
       block.startTime = currentTime;
     }

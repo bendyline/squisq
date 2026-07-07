@@ -1154,22 +1154,30 @@ React component library for rendering docs, blocks, and controls. Depends on
 
 #### `DocPlayer`
 
-Main document player. Note the prop is `script` (a `Doc`), and `basePath` is
-required for resolving relative media.
+Main document player. Pass **either** a parsed `doc` **or** raw `markdown`
+(parsed + converted internally); `doc` wins when both are given. When neither is
+supplied the player renders a minimal themed empty state instead of crashing.
+`basePath` is optional and defaults to `'.'`.
+
+> **v1.5 breaking:** the old `script` prop is now `doc`, and the `audioProvider`
+> prop is now `audioController` (its type `AudioProvider` was renamed to
+> `AudioController`). A new `markdown?: string` prop lets you pass source text
+> directly: `<DocPlayer markdown={src} />`.
 
 ```ts
 interface DocPlayerProps {
-  script: Doc;
-  basePath: string;
+  doc?: Doc; // wins over `markdown` when both are given
+  markdown?: string; // parsed via markdownToDoc(parseMarkdown(markdown)) when `doc` is absent
+  basePath?: string; // default '.'
   renderMode?: boolean; // default false — headless capture mode
   autoPlay?: boolean; // default false
   onEnded?: () => void;
   onTimeUpdate?: (time: number) => void;
-  audioProvider?: AudioProvider;
+  audioController?: AudioController;
   showControls?: boolean; // default true
   showScrubber?: boolean; // default false (only when showControls=false)
   muted?: boolean; // default false
-  captionsEnabled?: boolean;
+  captionsEnabled?: boolean; // default true
   onCaptionsToggle?: (enabled: boolean) => void;
   onPlaybackStateChange?: (state: PlaybackState) => void;
   onControlsReady?: (controls: PlaybackActions & { play(): void; pause(): void }) => void;
@@ -1181,6 +1189,7 @@ interface DocPlayerProps {
   surface?: SurfaceScheme | 'auto';
   displayMode?: DisplayMode; // default 'video'
   captionStyle?: CaptionStyle; // default 'standard'
+  enableSwipe?: boolean; // default true — drag-to-swipe navigation in slideshow mode
 }
 ```
 
@@ -1222,7 +1231,8 @@ interface BlockRendererProps {
 
 ```ts
 interface LinearDocViewProps {
-  doc: Doc;
+  doc?: Doc; // wins over `markdown` when both are given
+  markdown?: string; // parsed internally when `doc` is absent (empty container otherwise)
   basePath?: string;
   viewport?: ViewportConfig;
   theme?: Theme; // default DEFAULT_THEME
@@ -1284,7 +1294,7 @@ function useAudioSync(
   audioRef: RefObject<HTMLAudioElement>,
   audioTrack: AudioTrack | undefined,
   basePath?: string,
-): AudioProvider;
+): AudioController;
 function useViewportOrientation(): {
   viewport: ViewportConfig;
   orientation: ViewportOrientation;
@@ -1335,7 +1345,8 @@ interface BlockMarker {
   isSectionStart: boolean;
 }
 
-interface AudioProvider extends AudioState, AudioActions {}
+// v1.5: the audio-controller type was renamed from `AudioProvider` to `AudioController`.
+type AudioController = AudioState & AudioActions;
 // render-mode host API
 type SquisqWindow = Window & typeof globalThis & Partial<SquisqRenderAPI>;
 
@@ -1365,16 +1376,33 @@ host page (consumed by `formats/html` and `squisq-cli`). The runtime IIFE at
 ## `@bendyline/squisq-formats`
 
 Document format converters. Uses `MarkdownDocument` from core as the pivot
-representation. Convenience `docToXxx` / `xxxToDoc` wrappers convert through
-`MarkdownDocument`.
+representation: imports parse a file into a `MarkdownDocument` (plus extracted
+assets via the `xxxToContainer` variants), exports serialize from one.
+Conversions preserve structure and most of the flavor of a document — they are
+**not** lossless round-trips. Convenience `docToXxx` / `xxxToDoc` wrappers
+convert through `MarkdownDocument`.
+
+Every export that accepts `themeId` (DOCX, PDF, EPUB, PPTX, plain HTML) falls
+back to the doc's frontmatter theme (`squisq-theme` / `themeId` / `theme` keys)
+when the option is omitted.
 
 > The package root (`@bendyline/squisq-formats`) re-exports the common
-> converters. `./container`, the plain-HTML/bundle functions, `docxToContainer`,
-> `pdfToContainer`, and `PdfPageSize` are **subpath-only**.
+> converters. `./container`, the plain-HTML/bundle functions (including
+> `collectLinkRefs`), `docxToContainer`, `pdfToContainer`, `PdfPageSize`, and
+> the image utilities (`inferMimeType`, `arrayBufferToBase64DataUrl`,
+> `extractFilename`) are **subpath-only**.
 
 ### Subpath: DOCX
 
 **Import:** `@bendyline/squisq-formats/docx`
+
+Import covers headings (style + outline-level detection), paragraphs, inline
+formatting (bold, italic, strikethrough, inline code), hyperlinks, lists,
+tables, blockquotes, code blocks, footnotes, and — with `extractImages` —
+embedded images as data URIs. `docxToContainer` always extracts images,
+writing them under `images/` in the returned container. On export, images are
+only embedded when provided via `options.images`; otherwise they render as
+placeholder text.
 
 ```ts
 function markdownDocToDocx(
@@ -1409,6 +1437,20 @@ interface DocxImportOptions {
 ### Subpath: PDF
 
 **Import:** `@bendyline/squisq-formats/pdf`
+
+Export uses pdf-lib (standard 14 fonts — `themeId` affects colors only).
+Import uses pdfjs-dist with heuristic structure detection (headings by font
+size relative to `bodyFontSize`, plus the `detect*` flags below) — results are
+best-effort. `pdfToMarkdownDoc` is text-only; `pdfToContainer` additionally
+extracts embedded images to `images/` in the returned container. Extracted
+images are placed **by page** — each image is inserted after the last content
+block that originated from its page (image-only pages fall back to the nearest
+preceding page with content, or the document end). Placement is page-level
+only; vertical ordering within a page is not yet recovered. Image extraction
+needs a browser canvas to encode pixel data to PNG — **under Node it is skipped**
+with a single `console.warn` and no images are emitted. Call
+`configurePdfWorker` before importing in environments that need an explicit
+pdf.js worker URL.
 
 ```ts
 function markdownDocToPdf(doc: MarkdownDocument, options?: PdfExportOptions): Promise<ArrayBuffer>;
@@ -1505,8 +1547,15 @@ interface EpubExportOptions {
 
 PPTX export and import are both implemented. Import reads slide order from
 `ppt/presentation.xml`, converting each slide's title, body (as a bullet list),
-and tables (`<a:tbl>`). Embedded-image extraction on import is not yet wired
-(`PptxImportOptions.extractImages` is reserved).
+and tables (`<a:tbl>`).
+
+**Slide-image extraction (v1.5):** import can now extract slide-level embedded
+images — the bitmaps referenced by a slide's `<p:pic>` shapes — into `images/`
+as image nodes. `pptxToContainer` returns a `ContentContainer` with those files
+and forces `extractImages: true`; `pptxToMarkdownDoc` leaves it off by default
+(so the markdown never carries dangling image references with no backing
+container). Honest limits: only slide-level `<p:pic>` bitmaps are extracted —
+**layout/master images, charts, SmartArt, and picture-fills are not**.
 
 ```ts
 function markdownDocToPptx(
@@ -1519,6 +1568,10 @@ function pptxToMarkdownDoc(
   options?: PptxImportOptions,
 ): Promise<MarkdownDocument>;
 function pptxToDoc(data: ArrayBuffer | Blob, options?: PptxImportOptions): Promise<Doc>;
+function pptxToContainer(
+  data: ArrayBuffer | Blob,
+  options?: PptxImportOptions,
+): Promise<ContentContainer>; // forces extractImages: true
 
 interface PptxExportOptions {
   title?: string;
@@ -1531,15 +1584,18 @@ interface PptxExportOptions {
   images?: Map<string, ArrayBuffer>;
 }
 interface PptxImportOptions {
-  extractImages?: boolean;
-} // reserved
+  extractImages?: boolean; // default false (pptxToMarkdownDoc); forced true in pptxToContainer
+}
 ```
 
 ### Subpath: CSV
 
 **Import:** `@bendyline/squisq-formats/csv` — a self-contained RFC-4180
 converter (not OOXML). Both directions are implemented. Import produces a
-single-table `MarkdownDocument`; export serializes the first table node.
+single-table `MarkdownDocument`; export serializes **one** table node — the
+first by default, or `options.tableIndex` (zero-based) to select another. An
+explicit out-of-range `tableIndex` throws; a table-less document exports to an
+empty string.
 
 ```ts
 function parseCsv(text: string, delimiter?: string): string[][]; // default ','
@@ -1555,15 +1611,25 @@ interface CsvImportOptions {
   hasHeader?: boolean;
 } // defaults ',' , true
 interface CsvExportOptions {
-  delimiter?: string;
-} // default ','
+  delimiter?: string; // default ','
+  tableIndex?: number; // default 0 (first table)
+}
 ```
 
 ### Subpath: XLSX
 
-**Import:** `@bendyline/squisq-formats/xlsx` — import is implemented; **export
-is a stub** (`markdownDocToXlsx` / `docToXlsx` throw
-`"XLSX export is not yet implemented"`).
+**Import:** `@bendyline/squisq-formats/xlsx` — both directions are implemented
+(v1.5). Export is **tables-only fidelity**: every markdown `table` node becomes
+one worksheet, named after the nearest preceding heading (auto-named
+`Sheet1`, `Sheet2`, … otherwise; sheet names are sanitized and capped at 31
+chars). All non-table content is dropped. Cells matching a plain-number pattern
+are written as numeric cells; everything else as inline strings. A document with
+no tables yields a single empty (but valid, openable) sheet — export never
+throws. Import turns each worksheet grid back into a markdown table.
+
+> **v1.5 breaking:** `markdownDocToXlsx` / `docToXlsx` now return
+> `Promise<ArrayBuffer>` (previously `Promise<Blob>`, and previously threw
+> `"XLSX export is not yet implemented"`).
 
 ```ts
 function xlsxToMarkdownDoc(
@@ -1571,16 +1637,20 @@ function xlsxToMarkdownDoc(
   options?: XlsxImportOptions,
 ): Promise<MarkdownDocument>;
 function xlsxToDoc(data: ArrayBuffer | Blob, options?: XlsxImportOptions): Promise<Doc>;
-function markdownDocToXlsx(doc: MarkdownDocument, options?: XlsxExportOptions): Promise<Blob>; // throws
-function docToXlsx(doc: Doc, options?: XlsxExportOptions): Promise<Blob>; // throws
+function markdownDocToXlsx(
+  doc: MarkdownDocument,
+  options?: XlsxExportOptions,
+): Promise<ArrayBuffer>;
+function docToXlsx(doc: Doc, options?: XlsxExportOptions): Promise<ArrayBuffer>;
 
 interface XlsxImportOptions {
-  sheet?: number | string;
-} // default: all sheets
+  sheet?: number | string; // 0-based index or sheet name; default: all sheets
+}
 interface XlsxExportOptions {
-  title?: string;
-  author?: string;
-} // placeholder
+  title?: string; // core properties
+  author?: string; // core properties
+  sheetNamePrefix?: string; // default 'Sheet' — used when no heading precedes a table
+}
 ```
 
 ### Subpath: HTML
@@ -1596,6 +1666,8 @@ function docToHtml(doc: Doc, options: HtmlExportOptions): string; // single self
 function docToHtmlZip(doc: Doc, options: HtmlZipExportOptions): Promise<Blob>; // multi-file ZIP + audio
 function collectImagePaths(doc: Doc): Set<string>;
 function inferMimeType(filename: string): string;
+function arrayBufferToBase64DataUrl(buffer: ArrayBuffer, mimeType: string): string;
+function extractFilename(path: string): string;
 
 interface HtmlExportOptions {
   playerScript: string; // PLAYER_BUNDLE from @bendyline/squisq-react/standalone-source
@@ -1648,6 +1720,129 @@ function zipToContainer(zipData: ArrayBuffer | Uint8Array | Blob): Promise<Memor
 `zipToContainer` skips directories and rejects path-traversal (absolute paths,
 backslashes, `..` segments).
 
+### Subpath: Registry & `convert()`
+
+**Import:** `@bendyline/squisq-formats/registry` (also re-exported from the
+package root). A uniform, format-agnostic front door over every converter.
+
+**Mental model.** Each format is a `FormatDefinition` that knows how to _import_
+raw bytes into core's `MarkdownDocument` (the pivot representation) and/or
+_export_ a normalized input back out. `convert()` ties it together: it
+normalizes any source into a `Doc` (+ `MarkdownDocument` + `ContentContainer`),
+optionally applies a theme/transform, then hands off to the target format's
+exporter. Every result comes back as the same `ConversionResult` shape —
+`bytes` + `mimeType` + `suggestedFilename` + `warnings`. The per-format
+functions (`markdownDocToDocx`, `pptxToMarkdownDoc`, …) still exist for direct
+use; the registry is the layer that makes them interchangeable. Converter
+modules are loaded lazily via `import()`, so pulling in the registry never
+eagerly bundles a heavy converter.
+
+```ts
+async function convert(
+  source: ConvertSource,
+  to: FormatId,
+  options?: ConvertOptions,
+): Promise<ConversionResult>;
+
+type ConvertSource =
+  | { kind: 'bytes'; data: ArrayBuffer | Uint8Array; filename?: string }
+  | {
+      kind: 'markdown';
+      markdown: string | MarkdownDocument;
+      container?: ContentContainer;
+      baseName?: string;
+    }
+  | { kind: 'doc'; doc: Doc; container?: ContentContainer; baseName?: string };
+
+interface ConvertOptions {
+  registry?: FormatRegistry; // defaults to defaultRegistry()
+  from?: FormatId; // explicit source format (skips extension/byte sniffing)
+  themeId?: string; // applied only when the doc has no theme of its own
+  transformStyle?: string; // applied before export
+  autoTemplates?: boolean; // content-aware auto-templating when deriving a Doc from markdown
+  title?: string; // title hint for exporters that support one (epub, html)
+  resolvePlayerScript?: () => Promise<string>; // required for player-embedding HTML export
+  formatOptions?: Record<FormatId, Record<string, unknown>>; // per-format escape hatch
+}
+
+interface ConversionResult {
+  bytes: Uint8Array;
+  mimeType: string;
+  suggestedFilename: string; // `<baseName>.<ext>`
+  warnings: string[]; // non-fatal notes (may be empty)
+}
+
+// Format definitions + registry
+interface FormatDefinition {
+  id: FormatId;
+  label: string;
+  mimeType: string;
+  extensions: readonly string[];
+  importDoc?(data: ArrayBuffer, options: ConvertOptions): Promise<MarkdownDocument>;
+  importContainer?(data: ArrayBuffer, options: ConvertOptions): Promise<ContentContainer>;
+  exportDoc?(input: NormalizedInput, options: ConvertOptions): Promise<ConversionResult>;
+}
+interface FormatRegistry {
+  register(def: FormatDefinition): void;
+  get(id: FormatId): FormatDefinition | undefined;
+  byExtension(ext: string): FormatDefinition | undefined;
+  list(): FormatDefinition[];
+}
+function createRegistry(): FormatRegistry; // empty; register() is last-write-wins by id
+function defaultRegistry(): FormatRegistry; // preloaded with every built-in format
+function defaultFormats(): FormatDefinition[];
+
+type FormatId = string;
+const BUILTIN_FORMAT_IDS: readonly [
+  'md',
+  'docx',
+  'pdf',
+  'pptx',
+  'xlsx',
+  'csv',
+  'html',
+  'htmlzip',
+  'epub',
+  'dbk',
+];
+```
+
+**Errors.** Every failure path throws a structured `ConversionError` with a
+stable machine-readable `code` (never string-matched messages) plus an optional
+human `hint` and the underlying `cause`.
+
+```ts
+type ConversionErrorCode =
+  | 'unknown-format' // no format registered for the id
+  | 'unsupported-input' // source format is export-only
+  | 'unsupported-output' // target format is import-only
+  | 'invalid-input' // bytes were not a readable file of the detected kind
+  | 'missing-dependency' // a required capability wasn't provided (see below)
+  | 'conversion-failed'; // the underlying converter threw
+
+class ConversionError extends Error {
+  readonly code: ConversionErrorCode;
+  readonly format?: FormatId;
+  readonly hint?: string;
+}
+```
+
+**Player-embedding HTML export (`html` / `htmlzip`).** These entries embed the
+standalone player, so they need the player IIFE bundle. Pass `resolvePlayerScript`;
+without it `convert()` throws `ConversionError` with `code:
+'missing-dependency'` and a hint. The bundle lives in `@bendyline/squisq-react`:
+
+```ts
+const result = await convert({ kind: 'markdown', markdown: src }, 'html', {
+  resolvePlayerScript: () =>
+    import('@bendyline/squisq-react/standalone-source').then((m) => m.PLAYER_BUNDLE),
+});
+```
+
+Byte sources are format-sniffed by magic bytes + filename extension (`%PDF`,
+the ZIP magic — with `[Content_Types].xml` disambiguating docx/pptx/xlsx vs a
+`.dbk` container — else assumed UTF-8 markdown); pass `from` to skip sniffing.
+
 ---
 
 ## `@bendyline/squisq-editor-react`
@@ -1657,11 +1852,18 @@ block/timeline layouts, plus an image editor and browser recorder.
 
 **Import:** `@bendyline/squisq-editor-react`
 **Styles:** `@bendyline/squisq-editor-react/styles`
-**Peer dependencies:** `monaco-editor`, `react`, `react-dom`
+**Peer dependencies:** `react`, `react-dom`, and `monaco-editor` (**optional** —
+only needed if you use the Raw/Monaco editor surface; the WYSIWYG and Preview
+views work without it).
 
 ### `EditorShell`
 
 The top-level component. Its props interface is large; the notable props:
+
+> **v1.5 breaking:** the shell's `theme` prop is now `colorScheme` (type
+> `EditorTheme` → `EditorColorScheme`). It picks the editor chrome's light/dark
+> UI, distinct from the document `Theme`. `RawEditor`'s own `theme` prop was
+> likewise renamed to `monacoTheme`.
 
 ```ts
 interface EditorShellProps {
@@ -1670,7 +1872,7 @@ interface EditorShellProps {
   articleId?: string; // default 'untitled'
   basePath?: string; // default '/'
   onChange?: (source: string) => void;
-  theme?: 'light' | 'dark'; // default 'light'
+  colorScheme?: EditorColorScheme; // 'light' | 'dark', default 'light'
   className?: string;
   height?: string; // default '100vh'
   minHeight?: string; // set min+max → auto-grow mode
@@ -1679,6 +1881,7 @@ interface EditorShellProps {
   mediaProvider?: MediaProvider | null; // enables the Files panel
   workspaceContainer?: ContentContainer | null; // doc folder: audio map, versions, siblings, sidecars
   container?: ContentContainer | null; // @deprecated → workspaceContainer
+  showFilesToggle?: boolean; // default: true when mediaProvider was passed
   // Versioning
   allowVersioning?: boolean; // default false
   versionBasename?: string;
@@ -1693,7 +1896,7 @@ interface EditorShellProps {
   inlinePreview?: boolean;
   inlinePreviewWidth?: number; // default 320
   outline?: boolean;
-  outlineWidth?: number; // default 240
+  outlineWidth?: number; // omit → responsive 260–460px
   showStatusBar?: boolean; // default true
   showPlayTab?: boolean; // default true
   blockTags?: boolean; // default true
@@ -1712,6 +1915,7 @@ interface EditorShellProps {
   // Theming & view preferences
   themeInheritance?: ThemeInheritance; // default 'fonts'
   themeOverride?: Theme | null;
+  uxFont?: string; // font stack for the editor chrome (toolbar/tabs/status bar)
   viewPreferences?: ViewPreferences;
   onViewPreferencesChange?: (prefs: ViewPreferences) => void;
   // Toolbar slots & chat-composer mode
@@ -1730,7 +1934,16 @@ function EditorProvider(props: EditorProviderProps): JSX.Element;
 function useEditorContext(): EditorContextValue; // markdown/doc state, theme, versioning, insertion helpers
 
 type EditorView = 'raw' | 'wysiwyg' | 'preview';
+type EditorColorScheme = 'light' | 'dark'; // v1.5: renamed from `EditorTheme`
+type EditorMode = 'markdown' | 'code' | 'image';
+type LayoutMode = 'document' | 'block' | 'timeline';
+type ThemeInheritance = 'none' | 'fonts' | 'fonts-colors';
 ```
+
+`EditorContextValue` is flat — it extends `EditorState` (e.g. `markdownSource`,
+`markdownDoc`, `doc`, `activeView`, `parseError`) and `EditorActions` (e.g.
+`setMarkdownSource`, `setEditorSource`, `setActiveView`, `setLayoutMode`), plus
+the live `tiptapEditor` / `monacoEditor` instances.
 
 ### Individual editors & panels
 
@@ -1744,6 +1957,28 @@ type EditorView = 'raw' | 'wysiwyg' | 'preview';
 - `DocumentSettingsDialog`, `LinkDialog`, `EmojiPicker` (+ `EMOJI_CATEGORIES`, `ALL_EMOJIS`, `searchEmojis`)
 - `VersionHistoryPanel`, `InlinePreviewGutter`, `DropZoneOverlay`, `BlockPropertiesPopover`
 - `JsonEditor` — editable form for JSON bound to a Squisq-annotated schema (embeds `WysiwygEditor` for `richtext`)
+
+`RawEditor` takes a `monacoTheme?: string` prop (default `'vs'`; accepts
+Monaco's built-in ids `'vs'` / `'vs-dark'` / `'hc-black'`, transparently mapped
+to Squisq-tinted variants, or a custom registered theme) — distinct from the
+shell's `colorScheme`.
+
+### Monaco loader & custom theme / template providers
+
+```ts
+// Share the load-once Monaco bootstrap when embedding RawEditor-like surfaces.
+function useMonacoLoader(): UseMonacoLoaderResult;
+
+// Custom themes — provider stack over doc frontmatter + a browser-local library.
+function CustomThemeProvider(props: CustomThemeProviderProps): JSX.Element;
+function useCustomThemes(): CustomThemeContextValue;
+function useDocCustomThemes(): DocCustomThemes;
+
+// Custom templates — the parallel provider stack.
+function CustomTemplateProvider(props: CustomTemplateProviderProps): JSX.Element;
+function useCustomTemplates(): CustomTemplateContextValue;
+function useDocCustomTemplates(): DocCustomTemplates;
+```
 
 ### Block-at-a-time / Timeline primitives
 
@@ -1763,15 +1998,21 @@ function getBlockSlices(fullSource: string): BlockSlice[];
 function spliceBlock(fullSource: string, range: BlockRange, newText: string): string;
 function lineToOffset(source: string, line: number): number;
 function offsetToLine(source: string, offset: number): number;
+function sliceIndexAtOffset(slices: BlockSlice[], offset: number): number;
 
 // line-level write-back for timeline edits
+function formatSeconds(seconds: number): string;
 function setBlockDurationInSource(source: string, line: number, seconds: number): string | null;
 function setMediaClipInSource(source: string, line: number, patch: MediaClipPatch): string | null;
 ```
 
 Plus block-property (Pandoc-attr) read/write helpers used by
 `BlockPropertiesPopover`: `readBlockAttrsParams`, `readBlockAttrsValue`,
-`setBlockAttrsValue`, and `summarizeBlockProps`.
+`setBlockAttrsValue`, and `summarizeBlockProps` — and heading-transition
+read/write helpers used by `TransitionPicker`: `readHeadingLineTransition`,
+`setHeadingLineTransition`, `readBlockAttrsTransition`,
+`setBlockAttrsTransition`, and the `EMPTY_TRANSITION` constant
+(`TransitionFields` type).
 
 ### File-kind & drag-and-drop
 
@@ -1793,9 +2034,9 @@ dropped media into a `MediaProvider` / read dropped text files into strings.
 ### Bridge & Tiptap extensions
 
 ```ts
-function markdownToTiptap(markdown: string): string;
-function tiptapToMarkdown(html: string): string;
-function buildPreviewDoc(source: string, options?): Doc; // shared block-flattening builder
+function markdownToTiptap(markdown: string): string; // markdown → Tiptap HTML
+function tiptapToMarkdown(html: string): string; // Tiptap HTML → markdown
+function buildPreviewDoc(doc: Doc): Doc; // shared block-flattening builder (parsed doc → preview slides)
 
 const HeadingWithTemplate: Extension; // recognises `{[tpl key=value]}` in headings, round-trips
 ```
@@ -1812,8 +2053,9 @@ plus command helpers `moveNode`, `addConnection`, `removeConnection`,
 built on `MediaRecorder` + `getUserMedia`/`getDisplayMedia`.
 
 ```ts
-function useMediaRecorder(options?: UseMediaRecorderOptions): UseMediaRecorderResult;
+function useMediaRecorder(options?: UseMediaRecorderOptions): UseMediaRecorderResult; // source defaults to 'mic'
 function useStreamPreview(stream: MediaStream | null): RefObject<HTMLVideoElement>;
+function getCaptureKind(source: RecorderSource): CaptureKind;
 
 function requestMicStream(): Promise<MediaStream>;
 function requestCameraStream(options?: CameraStreamOptions): Promise<MediaStream>;
@@ -1827,8 +2069,8 @@ function buildFilename(kind: CaptureKind, format: ResolvedFormat): string;
 
 // narration timing sidecar (so resolveAudioMapping auto-links the recording)
 function buildTimingJson(sourceText: string, durationSec: number): TimingJson;
-function encodeTimingJson(timing: TimingJson): string;
-function timingPathFor(mediaPath: string): string;
+function encodeTimingJson(timing: TimingJson): Uint8Array;
+function timingPathFor(audioRelativePath: string): string; // `${path}.timing.json`
 ```
 
 ### Image editor
@@ -1863,18 +2105,37 @@ function framesToMp4Wasm(
 function resolveDimensions(options: VideoExportOptions): { width: number; height: number };
 const fetchFile: typeof import('@ffmpeg/util').fetchFile; // re-export
 
-const QUALITY_PRESETS: Record<VideoQuality, QualityPreset>; // draft/normal/high → ffmpeg preset + crf
+// Target H.264 bitrate = width * height * preset.bitsPerPixel. Single source of
+// truth shared by every WebCodecs encode path (draft/normal/high → 2/4/8 bpp).
+function bitrateForQuality(q: VideoQuality, width: number, height: number): number;
+
+const QUALITY_PRESETS: Record<VideoQuality, QualityPreset>; // draft/normal/high → ffmpeg preset + crf + bitsPerPixel + audioBitrate
 const ORIENTATION_DIMENSIONS: Record<VideoOrientation, { width: number; height: number }>;
 
 type VideoQuality = 'draft' | 'normal' | 'high';
 type VideoOrientation = 'landscape' | 'portrait';
 interface QualityPreset {
-  preset: string;
-  crf: number;
+  preset: string; // ffmpeg -preset (ultrafast / medium / slow)
+  crf: number; // ffmpeg -crf (28 / 23 / 18)
+  bitsPerPixel: number; // WebCodecs bitrate targeting (2 / 4 / 8)
+  audioBitrate: number; // target AAC bits/sec (96k / 128k / 192k)
 }
 interface EncoderResult {
   data: Uint8Array;
   duration: number;
+}
+
+// Flatten a doc's narration + timed-media audio into absolute-timed clips.
+// Pure and Node-testable; the single source of truth the browser MP4 export
+// uses to place audio (and the exact schedule math the CLI mix path replicates).
+// `coverPreRoll` (default 0) shifts every start to keep audio in sync with a
+// silent cover pre-roll. Returns [] for a doc with no audio.
+function computeAudioTimeline(doc: Doc, coverPreRoll?: number): AudioTimelineClip[];
+interface AudioTimelineClip {
+  src: string; // path relative to the doc's media dir (mp3/webm/mp4/…)
+  startSec: number; // absolute second on the export timeline
+  sourceInSec: number; // in-point within the source file
+  durationSec: number; // trimmed played length
 }
 
 interface VideoExportOptions {
@@ -1906,15 +2167,25 @@ worker fallback). Depends on `@bendyline/squisq-video`, `@bendyline/squisq-react
 
 **Import:** `@bendyline/squisq-video-react`
 
+**v1.5:** the browser MP4 export now muxes an **audio** track (narration + timed
+media) — previously the exported video was silent. Audio problems never fail the
+export; the video always completes and the result reports whether audio made it
+in (see `audioIncluded` / `audioSkippedReason` below). `playerScript` is now
+**optional** on every surface — the browser path captures frames from a live
+in-page `DocPlayer`, so the IIFE bundle is only forwarded for CLI/Playwright-style
+pipelines. A new `defaultConfig?: Partial<VideoExportConfig>` prop seeds the
+modal's initial settings and is merged as a base into the export config.
+
 ### Components
 
 ```ts
 interface VideoExportButtonProps {
   doc: Doc;
-  playerScript: string;
+  playerScript?: string; // optional; only for CLI/Playwright pipelines
   mediaProvider?: MediaProvider;
   images?: Map<string, ArrayBuffer>;
   audio?: Map<string, ArrayBuffer>;
+  defaultConfig?: Partial<VideoExportConfig>; // seeds + merges into export config
   label?: string; // default 'Export Video'
   style?: React.CSSProperties;
   disabled?: boolean;
@@ -1923,10 +2194,11 @@ function VideoExportButton(props: VideoExportButtonProps): JSX.Element;
 
 interface VideoExportModalProps {
   doc: Doc;
-  playerScript: string;
+  playerScript?: string; // optional; only for CLI/Playwright pipelines
   mediaProvider?: MediaProvider;
   images?: Map<string, ArrayBuffer>;
   audio?: Map<string, ArrayBuffer>;
+  defaultConfig?: Partial<VideoExportConfig>; // seeds initial selections; explicit props win
   onClose: () => void;
 }
 function VideoExportModal(props: VideoExportModalProps): JSX.Element;
@@ -1947,7 +2219,7 @@ interface VideoExportConfig {
   audio?: Map<string, ArrayBuffer>;
   mediaProvider?: MediaProvider;
   captionMode?: CaptionMode; // default 'off'
-  playerScript?: string; // kept for CLI/Playwright path
+  playerScript?: string; // unused by the browser export path; kept for CLI/Playwright
 }
 interface VideoExportResult {
   state: VideoExportState;
@@ -1957,6 +2229,8 @@ interface VideoExportResult {
   backend: 'webcodecs' | 'ffmpeg-wasm' | null;
   downloadUrl: string | null;
   fileSize: number;
+  audioIncluded: boolean; // whether an audio track was muxed into the MP4
+  audioSkippedReason: string | null; // null = doc had no audio; string = a capability/runtime shortfall
   error: string | null;
   elapsed: number;
   estimatedRemaining: number;
@@ -1980,7 +2254,16 @@ interface FrameCaptureHandle {
 
 ```ts
 function supportsWebCodecs(): boolean; // VideoEncoder/VideoFrame present
+function supportsWebCodecsH264(config: EncoderConfig): Promise<boolean>; // H.264 config supported
+function supportsWebCodecsAac(sampleRate?: number, channels?: number): Promise<boolean>; // AAC audio encode supported (defaults to the export sample rate / channels)
+// config: { width, height, fps, quality: 'draft' | 'normal' | 'high' }
 function createEncoder(config: EncoderConfig): MainThreadEncoder; // throws if WebCodecs unavailable
+interface EncoderConfig {
+  width: number;
+  height: number;
+  fps: number;
+  quality: VideoQuality;
+}
 interface MainThreadEncoder {
   encodeFrame(bitmap: ImageBitmap, frameIndex: number): void;
   finalize(): Promise<ArrayBuffer>;
@@ -2001,31 +2284,61 @@ rendering them to MP4.
 
 #### `squisq convert <input>`
 
-Convert a markdown doc / ZIP / `.dbk` container / folder to one or more formats.
+Convert a document to one or more formats. Input can now be a **binary**
+document as well as markdown: `.md`, `.docx`, `.pptx`, `.pdf`, `.xlsx`, `.csv`,
+`.html`, a `.zip`/`.dbk` container, or a folder. Output formats now include
+`md`, `xlsx`, `csv`, and `mp4` alongside the originals.
 
-| Option                | Description                                                  | Default       |
-| --------------------- | ------------------------------------------------------------ | ------------- |
-| `-o, --output-dir`    | Output directory                                             | same as input |
-| `-f, --formats`       | Comma-separated: `docx, pptx, pdf, html, htmlzip, epub, dbk` | all           |
-| `-t, --theme`         | Squisq theme id (built-in or in-doc custom)                  | none          |
-| `--transform`         | Transform style before export (documentary, magazine, …)     | none          |
-| `--no-auto-templates` | Disable content-aware auto template picking                  | (auto on)     |
+| Option                | Description                                                                      | Default       |
+| --------------------- | -------------------------------------------------------------------------------- | ------------- |
+| `-o, --output <file>` | **Single** output file; format inferred from its extension                       | —             |
+| `-d, --output-dir`    | Output directory (multi-format mode)                                             | same as input |
+| `-f, --formats`       | Comma-separated: `docx, pptx, pdf, html, htmlzip, epub, dbk, md, xlsx, csv, mp4` | default set   |
+| `--format <id>`       | Produce a single format (alias for a one-entry `--formats`)                      | —             |
+| `-t, --theme`         | Squisq theme id (built-in or in-doc custom)                                      | none          |
+| `--transform`         | Transform style before export (documentary, magazine, …)                         | none          |
+| `--no-auto-templates` | Disable content-aware auto template picking                                      | (auto on)     |
+
+> **v1.5 breaking flag change:** `-o` is now the **single-file** output
+> (`squisq convert in.md -o out.docx`, format inferred from the extension). The
+> old `-o` output-**directory** behavior moved to `-d, --output-dir`. `-o`
+> cannot be combined with `--formats`/`--format`. A bare `convert <input>` with
+> no `-o`/`--format`/`--formats` writes a default set to the output dir that
+> deliberately excludes `md`/`xlsx`/`csv`/`mp4`.
+
+The `html` / `htmlzip` formats embed the standalone player (static mode); the
+`htmlzip` output is written as `<name>.html.zip`. `dbk` re-serializes the input
+container as a ZIP.
 
 #### `squisq video <input> [output]`
 
-Render a document to MP4 (headless render + WASM/FFmpeg encode).
+Render a document to MP4 (Playwright headless frame capture + native ffmpeg
+encode). In addition to markdown/container/folder input, accepts a pre-built
+Doc as a `.json` file.
 
-| Option                 | Description                | Default       |
-| ---------------------- | -------------------------- | ------------- |
-| `-o, --output`         | Output MP4 path            | `<input>.mp4` |
-| `--fps`                | Frames per second (1–120)  | 30            |
-| `--quality`            | draft, normal, or high     | normal        |
-| `--orientation`        | landscape or portrait      | landscape     |
-| `--captions`           | off, standard, or social   | off           |
-| `--width` / `--height` | Dimension overrides        | auto          |
-| `--no-auto-templates`  | Disable auto template pick | (auto on)     |
+| Option                 | Description                                         | Default       |
+| ---------------------- | --------------------------------------------------- | ------------- |
+| `-o, --output`         | Output MP4 path (also accepted as a positional arg) | `<input>.mp4` |
+| `--fps`                | Frames per second (1–120)                           | 30            |
+| `--quality`            | draft, normal, or high                              | normal        |
+| `--orientation`        | landscape or portrait                               | landscape     |
+| `--captions`           | off, standard, or social                            | off           |
+| `-t, --theme`          | Squisq theme id to apply                            | none          |
+| `--transform`          | Transform style to apply before rendering           | none          |
+| `--cover-preroll`      | Seconds of cover-slide pre-roll before the story    | 2             |
+| `--width` / `--height` | Dimension overrides                                 | auto          |
+| `--no-auto-templates`  | Disable auto template pick                          | (auto on)     |
 
-**Requires:** [ffmpeg](https://ffmpeg.org/) on PATH and Playwright (chromium).
+**Requires:** ffmpeg and Playwright (chromium). ffmpeg is resolved from the
+`SQUISQ_FFMPEG` env var, then `PATH`, then an optionally-installed `ffmpeg-static`
+package. Run `squisq doctor` to check the toolchain.
+
+#### `squisq doctor`
+
+Preflight check for the video toolchain: reports the resolved ffmpeg path,
+version, and which source it came from (env / PATH / `ffmpeg-static`) — with an
+actionable install hint when missing — attempts a headless Chromium launch, and
+reports the Node version.
 
 #### `squisq validate <input>`
 
@@ -2039,14 +2352,33 @@ asset references — with line numbers.
 | `--json`   | Emit diagnostics as machine-readable JSON |
 | `--strict` | Exit non-zero on warnings too             |
 
-Exit codes: `0` clean or warnings-only; `1` errors (or any finding with
+Diagnostics are reported at three severities — `error`, `warning`, and `info`
+(the info tier is counted and shown separately). Exit codes depend on **errors**
+only: `0` clean, warnings-only, or info-only; `1` errors (or any warning with
 `--strict`); `2` input unreadable.
 
 ### Programmatic API
 
 **Import:** `@bendyline/squisq-cli/api`
 
+The API surfaces a pre-bound `convert()` — a thin wrapper over
+`@bendyline/squisq-formats`' `convert()` that injects the CLI's format registry
+(every built-in exporter plus the CLI-only `mp4` format) and a default
+`resolvePlayerScript` (so HTML/player-embedding exports work out of the box).
+Both are overridable via `options`. `createCliRegistry()` returns that same
+registry for direct use.
+
 ```ts
+// Pre-bound convert(): CLI registry (+ mp4) + default player script injected.
+function convert(
+  source: ConvertSource,
+  to: FormatId, // 'docx' | 'pdf' | 'pptx' | 'xlsx' | 'csv' | 'html' | 'epub' | 'md' | 'mp4' | …
+  options?: ConvertOptions,
+): Promise<ConversionResult>;
+function createCliRegistry(): FormatRegistry; // defaultRegistry() + the mp4 exporter
+// Re-exports: ConversionError, the ConvertSource/ConvertOptions/ConversionResult/
+// FormatId/FormatRegistry/FormatDefinition/NormalizedInput types, plus readInput.
+
 function renderDocToMp4(
   doc: Doc,
   container: MemoryContentContainer,
@@ -2086,8 +2418,15 @@ interface ThumbnailSpec {
   filter: string;
 }
 
-// Re-exports
+// Read a .md file, .zip/.dbk container, folder, or Doc .json into a container.
 function readInput(inputPath: string): Promise<ReadInputResult>;
+interface ReadInputResult {
+  container: MemoryContentContainer;
+  markdownDoc: MarkdownDocument | null; // null when input is a Doc JSON file
+  doc?: Doc; // present when input is .json or the container holds doc.json
+}
+
+// Re-exports
 export { MemoryContentContainer } from '@bendyline/squisq/storage';
 export type { VideoQuality, VideoOrientation } from '@bendyline/squisq-video';
 ```

@@ -116,6 +116,36 @@ describe('extractContent — comparisons', () => {
       expect(comp.right.label).toBeTruthy();
     }
   });
+
+  it('does not let a comparison capture cross a sentence boundary', () => {
+    // Regression: greedy `.{2,30}` used to capture right="witness. Robertson"
+    // from the "from witness to witness." idiom bleeding into the next sentence.
+    const text =
+      'Testimony about who carried guns and how many shots were fired ' +
+      'contradicted from witness to witness. Robertson, who initially ' +
+      'testified against the others, was later named as the ringleader.';
+    const result = extractContent(text, { types: ['comparison'] });
+    for (const el of result.elements) {
+      if (el.data.type === 'comparison') {
+        expect(el.data.left.label).not.toContain('.');
+        expect(el.data.right.label).not.toContain('.');
+        expect(el.data.right.label.toLowerCase()).not.toContain('robertson');
+      }
+    }
+  });
+
+  it('rejects idiomatic "from X to X" non-comparisons', () => {
+    // "from witness to witness", "from day to day" mean "it varied", not "A vs B".
+    for (const text of [
+      'The testimony varied from witness to witness across the trial.',
+      'Conditions changed from day to day during the expedition.',
+      'The practice was handed down from generation to generation.',
+    ]) {
+      const result = extractContent(text, { types: ['comparison'] });
+      const comparisons = result.elements.filter((e) => e.data.type === 'comparison');
+      expect(comparisons.length).toBe(0);
+    }
+  });
 });
 
 describe('extractContent — impact lines', () => {
@@ -124,6 +154,36 @@ describe('extractContent — impact lines', () => {
       'Imagine standing above the clouds! Discover the hidden valley. The weather is variable.';
     const result = extractContent(text, { types: ['impactLine'] });
     expect(result.elements.length).toBeGreaterThan(0);
+  });
+
+  it('does not split sentences on abbreviations or initials', () => {
+    // Regression: "…at George W. Tibbetts' store…" was split at "W." into the
+    // fragment "They were met at George W" and shown as a standalone slide.
+    const text =
+      "They were met at George W. Tibbetts' store by a crowd of white and Native men " +
+      'who intimidated them into turning back.';
+    const result = extractContent(text, { types: ['impactLine', 'fact'] });
+    for (const el of result.elements) {
+      if (el.data.type === 'impactLine') {
+        expect(el.data.text).not.toMatch(/George W$/);
+      }
+      if (el.data.type === 'fact') {
+        expect(el.data.fact).not.toMatch(/George W$/);
+      }
+      // No fragment should end on a bare single-letter initial.
+      expect(el.text).not.toMatch(/\b[A-Z]$/);
+    }
+  });
+
+  it('keeps initials-heavy name lists intact as one sentence', () => {
+    const text =
+      'A jury named M. DeWitt Rumsey, Joseph Day, and David Hughes among the killers. ' +
+      'The verdict shocked the town.';
+    const result = extractContent(text, { types: ['fact', 'impactLine'] });
+    // The "M." initial must not spawn a "A jury named M" fragment.
+    for (const el of result.elements) {
+      expect(el.text).not.toMatch(/named M$/);
+    }
   });
 });
 

@@ -44,8 +44,8 @@ import type {
   MarkdownImage,
 } from '@bendyline/squisq/markdown';
 
-import { MemoryContentContainer } from '@bendyline/squisq/storage';
 import type { ContentContainer } from '@bendyline/squisq/storage';
+import { buildContainer } from '../shared/container.js';
 
 import {
   DEFAULT_FONT_SIZE,
@@ -160,30 +160,44 @@ export async function pdfToContainer(
   const textLines = await extractTextLines(bytes);
   const images = await extractImages(bytes);
 
+  // Under Node there is no DOM/canvas, so extractImages() returns [] via its
+  // environment guard and embedded images can't be decoded. The registry's
+  // `importContainer` wrapper surfaces this (typeof document === 'undefined')
+  // as a ConversionResult warning; direct callers of pdfToContainer get no
+  // signal, which is an accepted trade-off for the degraded Node path.
+
   const bodySize = options.bodyFontSize ?? detectBodyFontSize(textLines);
 
-  // If we have images, insert image references into the block list
-  let blocks = classifyLines(textLines, bodySize, options);
+  // Classify text into blocks, capturing the originating page of each block
+  // (parallel array) so images can be placed on their own page rather than
+  // dumped at the document end.
+  const blockPages: number[] = [];
+  let blocks = classifyLines(textLines, bodySize, options, blockPages);
   if (images.length > 0) {
-    blocks = insertImageBlocks(blocks, images);
+    blocks = insertImageBlocks(blocks, blockPages, images);
   }
 
   const markdownDoc: MarkdownDocument = { type: 'document', children: blocks };
 
-  const markdown = stringifyMarkdown(markdownDoc);
-
-  const container = new MemoryContentContainer();
-  await container.writeDocument(markdown);
-
-  for (const img of images) {
-    await container.writeFile(img.path, new Uint8Array(img.data), 'image/png');
-  }
-
-  return container;
+  // pdf image extraction only ever produces PNG (canvas re-encode), so every
+  // entry gets image/png.
+  return buildContainer(
+    stringifyMarkdown(markdownDoc),
+    images.map((img) => [img.path, { data: img.data, mimeType: 'image/png' }] as const),
+  );
 }
 
-/** Extracted image with position info for placement. */
-interface ExtractedImage {
+/**
+ * Extracted image with position info for placement.
+ *
+ * `page` is captured reliably from the operator-list walk. `y` is currently
+ * always 0 — recovering a real y within the page would require tracking the
+ * current transformation matrix (CTM) during the paint operator, which is out
+ * of scope here (see the placement note in `insertImageBlocks`).
+ *
+ * Exported for direct unit testing of `insertImageBlocks`.
+ */
+export interface ExtractedImage {
   path: string;
   data: ArrayBuffer;
   page: number;
@@ -328,29 +342,86 @@ function imageDataToPng(img: PdfjsImageData): ArrayBuffer | null {
   }
 }
 
+/** Wrap an extracted image as a paragraph containing an image node. */
+function imageParagraph(img: ExtractedImage): MarkdownParagraph {
+  const imgNode: MarkdownImage = {
+    type: 'image',
+    url: img.path,
+    alt: `Image ${img.path.replace('images/image', '').replace('.png', '')}`,
+  };
+  return { type: 'paragraph', children: [imgNode] };
+}
+
 /**
- * Insert image reference blocks between text blocks.
- * Places each image after the last text block on the same page (or at the end).
+ * Insert image reference blocks among the text blocks, page by page.
+ *
+ * Each image is placed immediately after the LAST content block that
+ * originated from the same page (per the parallel `blockPages` array).
+ * Images on a page that produced no text blocks (e.g. an image-only page)
+ * fall back to the last block of the nearest preceding page that did; if no
+ * such page exists, they are appended at the document end.
+ *
+ * Placement is intentionally page-level only. Ordering *within* a page follows
+ * the extraction order of the images (roughly the paint-operator order) — real
+ * vertical (y) ordering within a page is future work, since `ExtractedImage.y`
+ * is not yet populated (it needs CTM tracking during the paint operator).
+ *
+ * @param blocks - The classified content blocks, in document order.
+ * @param blockPages - Parallel array: `blockPages[i]` is the 0-based page that
+ *   `blocks[i]` came from. Must be the same length as `blocks`.
+ * @param images - Extracted images with a reliable `page` field.
  */
-function insertImageBlocks(
+export function insertImageBlocks(
   blocks: MarkdownBlockNode[],
+  blockPages: number[],
   images: ExtractedImage[],
 ): MarkdownBlockNode[] {
   if (images.length === 0) return blocks;
 
-  // Simple strategy: append all images at the end as paragraphs
-  const result = [...blocks];
+  // No text blocks at all → every image simply appends in order.
+  if (blocks.length === 0) {
+    return images.map(imageParagraph);
+  }
+
+  // Map each page → index of its LAST block, and remember which pages have
+  // blocks (sorted ascending) for the image-only-page fallback lookup.
+  const lastBlockIndexByPage = new Map<number, number>();
+  for (let i = 0; i < blocks.length; i++) {
+    lastBlockIndexByPage.set(blockPages[i], i);
+  }
+  const pagesWithBlocks = [...lastBlockIndexByPage.keys()].sort((a, b) => a - b);
+
+  const lastIndex = blocks.length - 1;
+
+  /** Resolve the block index after which an image on `page` should be inserted. */
+  const anchorFor = (page: number): number => {
+    const direct = lastBlockIndexByPage.get(page);
+    if (direct !== undefined) return direct;
+    // Image-only page: fall back to the nearest preceding page with blocks.
+    let anchor = -1;
+    for (const p of pagesWithBlocks) {
+      if (p < page) anchor = lastBlockIndexByPage.get(p)!;
+      else break;
+    }
+    // No preceding page with blocks → append at the document end.
+    return anchor === -1 ? lastIndex : anchor;
+  };
+
+  // Group image paragraphs by the block index they should follow, preserving
+  // image order within each group.
+  const insertAfter = new Map<number, MarkdownParagraph[]>();
   for (const img of images) {
-    const imgNode: MarkdownImage = {
-      type: 'image',
-      url: img.path,
-      alt: `Image ${img.path.replace('images/image', '').replace('.png', '')}`,
-    };
-    const para: MarkdownParagraph = {
-      type: 'paragraph',
-      children: [imgNode],
-    };
-    result.push(para);
+    const anchor = anchorFor(img.page);
+    const group = insertAfter.get(anchor);
+    if (group) group.push(imageParagraph(img));
+    else insertAfter.set(anchor, [imageParagraph(img)]);
+  }
+
+  const result: MarkdownBlockNode[] = [];
+  for (let i = 0; i < blocks.length; i++) {
+    result.push(blocks[i]);
+    const imgs = insertAfter.get(i);
+    if (imgs) result.push(...imgs);
   }
   return result;
 }
@@ -592,8 +663,20 @@ function classifyLines(
   lines: TextLine[],
   bodySize: number,
   options: PdfImportOptions,
+  /**
+   * Optional out-parameter: when provided, receives one entry per produced
+   * block giving the 0-based page that block originated from. Kept parallel
+   * to the returned block array so image placement can be page-aware without
+   * mutating the (strictly-typed) block nodes themselves.
+   */
+  blockPages?: number[],
 ): MarkdownBlockNode[] {
   const blocks: MarkdownBlockNode[] = [];
+  /** Push a block and record its originating page in the parallel array. */
+  const pushBlock = (block: MarkdownBlockNode, page: number): void => {
+    blocks.push(block);
+    if (blockPages) blockPages.push(page);
+  };
   const detectTables = options.detectTables !== false;
   const detectCodeBlocks = options.detectCodeBlocks !== false;
   const detectBlockquotes = options.detectBlockquotes !== false;
@@ -610,11 +693,14 @@ function classifyLines(
     // --- Heading detection ---
     if (line.fontSize >= IMPORT_HEADING_MIN_SIZE && line.fontSize > bodySize + 1) {
       const depth = sizeToHeadingDepth(line.fontSize);
-      blocks.push({
-        type: 'heading',
-        depth,
-        children: buildInlineNodes(line, options),
-      } as MarkdownHeading);
+      pushBlock(
+        {
+          type: 'heading',
+          depth,
+          children: buildInlineNodes(line, options),
+        } as MarkdownHeading,
+        line.page,
+      );
       i++;
       continue;
     }
@@ -626,10 +712,13 @@ function classifyLines(
         codeLines.push(lines[i].text);
         i++;
       }
-      blocks.push({
-        type: 'code',
-        value: codeLines.join('\n'),
-      } as MarkdownCodeBlock);
+      pushBlock(
+        {
+          type: 'code',
+          value: codeLines.join('\n'),
+        } as MarkdownCodeBlock,
+        line.page,
+      );
       continue;
     }
 
@@ -639,7 +728,7 @@ function classifyLines(
       if (tableLines > 0) {
         const table = buildTable(lines.slice(i, i + tableLines), options);
         if (table) {
-          blocks.push(table);
+          pushBlock(table, line.page);
           i += tableLines;
           continue;
         }
@@ -651,7 +740,7 @@ function classifyLines(
     const orderedMatch = line.text.match(IMPORT_ORDERED_PREFIX);
     if (bulletMatch || orderedMatch) {
       const listResult = consumeList(lines, i, typicalLeftMargin, bodySize, options);
-      blocks.push(listResult.list);
+      pushBlock(listResult.list, line.page);
       i = listResult.nextIndex;
       continue;
     }
@@ -675,10 +764,13 @@ function classifyLines(
             children: buildInlineNodes(ql, options),
           }) as MarkdownParagraph,
       );
-      blocks.push({
-        type: 'blockquote',
-        children: quoteBlocks,
-      } as MarkdownBlockquote);
+      pushBlock(
+        {
+          type: 'blockquote',
+          children: quoteBlocks,
+        } as MarkdownBlockquote,
+        line.page,
+      );
       continue;
     }
 
@@ -721,10 +813,13 @@ function classifyLines(
     }
 
     if (allInlines.length > 0) {
-      blocks.push({
-        type: 'paragraph',
-        children: mergeAdjacentText(allInlines),
-      } as MarkdownParagraph);
+      pushBlock(
+        {
+          type: 'paragraph',
+          children: mergeAdjacentText(allInlines),
+        } as MarkdownParagraph,
+        line.page,
+      );
     }
   }
 

@@ -23,7 +23,9 @@ import { RawEditor } from './RawEditor';
 import { WysiwygEditor } from './WysiwygEditor';
 import { InlinePreviewGutter } from './InlinePreviewGutter';
 import { BlockPreviewPanel } from './BlockPreviewPanel';
-import { OutlinePanel } from './OutlinePanel';
+import { OutlinePanel, OUTLINE_RESPONSIVE_WIDTH } from './OutlinePanel';
+import { CodeContextZones } from './codeContext/CodeContextZones';
+import type { CodeContext } from './codeContext/types';
 import { BlockCardView } from './BlockCardView';
 import { TimelineTrack } from './TimelineTrack';
 import { PreviewPanel } from './PreviewPanel';
@@ -32,6 +34,8 @@ import { ImageEditor } from './ImageEditor';
 import {
   PreviewSettingsProvider,
   PreviewToolbarControls,
+  PreviewModeSwitch,
+  PreviewFormatSwitch,
   ThemeDesignerDock,
 } from './PreviewControls';
 import { CustomThemeProvider, useDocCustomThemes } from './customThemes';
@@ -56,7 +60,7 @@ import {
 import type { PrunePolicy, SaveVersionResult } from '@bendyline/squisq/versions';
 import type { CSSProperties, ReactNode } from 'react';
 
-export type { EditorTheme } from './EditorContext';
+export type { EditorColorScheme } from './EditorContext';
 
 export interface EditorShellProps {
   /** Initial markdown content */
@@ -70,8 +74,13 @@ export interface EditorShellProps {
   basePath?: string;
   /** Called when markdown source changes */
   onChange?: (source: string) => void;
-  /** Color theme: 'light' or 'dark' (default: 'light') */
-  theme?: 'light' | 'dark';
+  /**
+   * Light/dark chrome color scheme for the editor shell — toolbar, tabs,
+   * status bar, and side panes (default: `'light'`). This is the editor's
+   * UI mode, **not** a Squisq `Theme` object; the rendered document's
+   * styling is controlled separately via `themeOverride` / `Doc.themeId`.
+   */
+  colorScheme?: 'light' | 'dark';
   /** Additional class name */
   className?: string;
   /** CSS height for the shell container (default: '100vh') */
@@ -166,6 +175,13 @@ export interface EditorShellProps {
    * (Slack, Discord). When omitted, the editor behaves normally.
    */
   submitOnEnter?: () => void;
+  /**
+   * Host-supplied context dictionary rendered inside the Monaco (raw / code)
+   * surface: collapsible markdown sections injected above anchor lines, plus
+   * an optional file-top summary. See {@link CodeContext}. Ignored in
+   * WYSIWYG / preview / image surfaces.
+   */
+  codeContext?: CodeContext;
   /**
    * Let the WYSIWYG editing surface fill its container instead of rendering
    * as a centered 800px "page" column. Useful when embedding in chat
@@ -324,9 +340,11 @@ export interface EditorShellProps {
    */
   outline?: boolean;
   /**
-   * Width in pixels for the outline pane. Defaults to 240. Only takes
-   * effect when {@link EditorShellProps.outline} is true (or the View
-   * menu has toggled it on).
+   * Fixed width in pixels for the outline pane. When omitted, the pane sizes
+   * responsively — never narrower than 260px, growing with the window and
+   * capped at 460px — so it stretches out when there's horizontal space to
+   * spare. Only takes effect when {@link EditorShellProps.outline} is true (or
+   * the View menu has toggled it on).
    */
   outlineWidth?: number;
   /**
@@ -378,7 +396,7 @@ export function EditorShell({
   articleId = 'untitled',
   basePath = '/',
   onChange,
-  theme = 'light',
+  colorScheme = 'light',
   className,
   height = '100vh',
   minHeight,
@@ -397,6 +415,7 @@ export function EditorShell({
   toolbarSlotRight,
   showPlayTab = true,
   submitOnEnter,
+  codeContext,
   fullWidth = false,
   uxFont,
   thinMargins = false,
@@ -417,7 +436,7 @@ export function EditorShell({
   inlinePreview = false,
   inlinePreviewWidth = 320,
   outline = false,
-  outlineWidth = 240,
+  outlineWidth,
   blockTags = true,
   themeInheritance = 'fonts',
   viewPreferences,
@@ -449,7 +468,7 @@ export function EditorShell({
       initialMarkdown={initialMarkdown}
       initialView={effectiveInitialView}
       articleId={articleId}
-      theme={theme}
+      colorScheme={colorScheme}
       workspaceContainer={effectiveContainer}
       allowVersioning={allowVersioning}
       versionBasename={versionBasename}
@@ -487,6 +506,7 @@ export function EditorShell({
         toolbarSlotRight={toolbarSlotRight}
         showPlayTab={showPlayTab}
         submitOnEnter={submitOnEnter}
+        codeContext={codeContext}
         fullWidth={fullWidth}
         uxFont={uxFont}
         thinMargins={thinMargins}
@@ -522,6 +542,7 @@ interface EditorShellInnerProps {
   toolbarSlotRight?: ReactNode;
   showPlayTab: boolean;
   submitOnEnter?: () => void;
+  codeContext?: CodeContext;
   fullWidth: boolean;
   uxFont?: string;
   thinMargins: boolean;
@@ -534,7 +555,7 @@ interface EditorShellInnerProps {
   allowVersioning: boolean;
   versioningAutoSaveIdleMs?: number;
   inlinePreviewWidth: number;
-  outlineWidth: number;
+  outlineWidth?: number;
   themeOverride: Theme | null;
 }
 
@@ -554,6 +575,7 @@ function EditorShellInner({
   toolbarSlotRight,
   showPlayTab,
   submitOnEnter,
+  codeContext,
   fullWidth,
   uxFont,
   thinMargins,
@@ -573,7 +595,7 @@ function EditorShellInner({
     activeView,
     markdownSource,
     doc,
-    theme,
+    colorScheme,
     editorMode,
     insertAtCursor,
     replaceAll,
@@ -620,7 +642,7 @@ function EditorShellInner({
     imageEditFallbackContainerRef.current = new MemoryContentContainer();
   }
   const imageEditFallbackContainer = imageEditFallbackContainerRef.current;
-  const isDark = theme === 'dark';
+  const isDark = colorScheme === 'dark';
 
   const handleToggleFiles = useCallback(() => {
     setShowFiles((prev) => !prev);
@@ -761,7 +783,7 @@ function EditorShellInner({
   return (
     <div
       className={`squisq-editor-shell ${className || ''}`}
-      data-theme={theme}
+      data-theme={colorScheme}
       data-full-width={fullWidth ? 'true' : undefined}
       data-thin-margins={thinMargins ? 'true' : undefined}
       data-outline-visible={isMarkdownMode && outlineVisible ? 'true' : undefined}
@@ -775,13 +797,16 @@ function EditorShellInner({
         // tabs, status bar) consume `--squisq-ux-font` as their
         // `font-family`, falling back to the system stack when unset.
         ...(uxFont ? ({ '--squisq-ux-font': uxFont } as CSSProperties) : {}),
-        // Exposed so the toolbar's view-tabs section can match the outline
-        // pane's width, lining up its right-edge separator with the
-        // outline's right edge. The variable is set unconditionally so the
-        // outline pane itself can also read it if needed; the
-        // `data-outline-visible` gate above keeps the toolbar override
-        // scoped to the case where alignment matters.
-        ...({ '--squisq-outline-width': `${outlineWidth}px` } as CSSProperties),
+        // Exposed so the toolbar's view-tabs section AND the outline pane read
+        // one shared width, lining up the view-tabs' right-edge separator with
+        // the outline's right edge. A fixed `outlineWidth` pins it to px;
+        // otherwise it's the responsive clamp so the pane stretches when
+        // there's room. The `data-outline-visible` gate above keeps the
+        // toolbar override scoped to the case where alignment matters.
+        ...({
+          '--squisq-outline-width':
+            outlineWidth != null ? `${outlineWidth}px` : OUTLINE_RESPONSIVE_WIDTH,
+        } as CSSProperties),
       }}
       {...containerProps}
     >
@@ -804,6 +829,16 @@ function EditorShellInner({
                 showFiles={showFiles}
                 onToggleFiles={!isCodeMode && filesToggleEnabled ? handleToggleFiles : undefined}
                 slotLeft={toolbarSlotLeft}
+                slotAfterTabs={
+                  !isCodeMode &&
+                  isPreview && (
+                    <div className="squisq-preview-left-controls">
+                      <PreviewModeSwitch />
+                      <span className="squisq-preview-seg-divider" aria-hidden="true" />
+                      <PreviewFormatSwitch />
+                    </div>
+                  )
+                }
                 slotAfterActions={
                   <>
                     {toolbarSlotAfterActions}
@@ -847,7 +882,7 @@ function EditorShellInner({
                     onExport={onImageExport}
                   />
                 ) : (
-                  <ImageViewer src={imageSrc} alt={imageAlt} theme={theme} />
+                  <ImageViewer src={imageSrc} alt={imageAlt} theme={colorScheme} />
                 ))}
               {/* Raw (Monaco) view. Always wrapped in `.squisq-editor-with-gutter`
                 so toggling a pane on/off doesn't change the editor's tree
@@ -870,7 +905,7 @@ function EditorShellInner({
                     >
                       <div key="raw-editor" className="squisq-raw-editor-container">
                         <RawEditor
-                          theme={theme === 'dark' ? 'vs-dark' : 'vs'}
+                          monacoTheme={colorScheme === 'dark' ? 'vs-dark' : 'vs'}
                           submitOnEnter={submitOnEnter}
                           readOnly={readOnly}
                         />
@@ -879,11 +914,17 @@ function EditorShellInner({
                   ) : (
                     <div key="raw-editor" className="squisq-raw-editor-container">
                       <RawEditor
-                        theme={theme === 'dark' ? 'vs-dark' : 'vs'}
+                        monacoTheme={colorScheme === 'dark' ? 'vs-dark' : 'vs'}
                         submitOnEnter={submitOnEnter}
                         readOnly={readOnly}
                       />
                     </div>
+                  )}
+                  {/* Renders nothing in normal flow — portals context
+                    sections into Monaco view zones via the context's
+                    monacoEditor. Code mode only. */}
+                  {isCodeMode && codeContext && (
+                    <CodeContextZones key="code-context" options={codeContext} />
                   )}
                   {isMarkdownMode && isCardMode && inlinePreviewVisible && (
                     <BlockPreviewPanel key="block-preview" basePath={basePath} />
@@ -1006,7 +1047,7 @@ function EditorShellInner({
           }}
           allowVersioning={allowVersioning}
           versioningAutoSaveIdleMs={versioningAutoSaveIdleMs}
-          shellTheme={theme}
+          shellTheme={colorScheme}
         />
       )}
     </div>
@@ -1031,8 +1072,8 @@ interface ImageEditModalProps {
   onSaved: () => void;
   allowVersioning: boolean;
   versioningAutoSaveIdleMs?: number;
-  /** EditorShell's `theme` prop — 'light' or 'dark'. Threaded through so
-   *  the image editor chrome matches the host shell. */
+  /** EditorShell's `colorScheme` prop — 'light' or 'dark'. Threaded through
+   *  so the image editor chrome matches the host shell. */
   shellTheme?: 'light' | 'dark';
 }
 

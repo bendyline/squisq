@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { render } from '@testing-library/react';
 import { LinearDocView } from '../LinearDocView';
 import type { Doc, Block } from '@bendyline/squisq/schemas';
@@ -277,5 +277,57 @@ describe('LinearDocView', () => {
     const probe = document.createElement('div');
     probe.style.background = DARK_SURFACE.background;
     expect(el.style.background).toBe(probe.style.background);
+  });
+});
+
+describe('LinearDocView markdown prop', () => {
+  it('renders from the markdown prop when no doc is given', () => {
+    const { container } = render(<LinearDocView markdown={'# From Markdown\n\nParagraph body.'} />);
+    expect(container.textContent).toContain('From Markdown');
+    expect(container.textContent).toContain('Paragraph body.');
+  });
+
+  it('doc wins over markdown when both are provided', () => {
+    const doc = mkDoc([mkBlock({ id: 'b', contents: [paragraph(text('Doc body wins'))] })]);
+    const { container } = render(<LinearDocView doc={doc} markdown="# Markdown Loses" />);
+    expect(container.textContent).toContain('Doc body wins');
+    expect(container.textContent).not.toContain('Markdown Loses');
+  });
+
+  it('renders an empty container when neither doc nor markdown is given', () => {
+    const { container } = render(<LinearDocView />);
+    expect(container.querySelector('.squisq-linear--empty')).toBeTruthy();
+  });
+});
+
+describe('LinearDocView unknown template annotations', () => {
+  it('warns once per unknown template name and falls back to plain markdown', () => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const doc = mkDoc([
+      mkBlock({
+        id: 'unknown-1',
+        sourceHeading: {
+          type: 'heading',
+          depth: 2,
+          children: [text('Mystery Section')],
+          templateAnnotation: { template: 'no-such-template-xyz' },
+        },
+        contents: [paragraph(text('Fallback body content'))],
+      }),
+    ]);
+
+    const { container } = render(<LinearDocView doc={doc} />);
+    // Renders as plain markdown: heading + body, no SVG card.
+    expect(container.textContent).toContain('Mystery Section');
+    expect(container.textContent).toContain('Fallback body content');
+    expect(container.querySelector('.squisq-linear-card')).toBeNull();
+
+    // Re-render: the warning stays one-shot per unknown template name.
+    render(<LinearDocView doc={doc} />);
+    const sentinelCalls = warnSpy.mock.calls.filter((c) =>
+      String(c[0]).includes('no-such-template-xyz'),
+    );
+    expect(sentinelCalls.length).toBe(1);
+    warnSpy.mockRestore();
   });
 });

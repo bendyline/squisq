@@ -43,7 +43,21 @@ export interface MarkdownRendererProps {
    * event handlers, and executable URL schemes before rendering.
    */
   htmlPolicy?: HtmlPolicy;
+  /**
+   * Extra URL schemes to allow on links (e.g. a host app's internal
+   * navigation scheme it intercepts on click). Executable schemes are
+   * never allowed regardless. See {@link SanitizeUrlOptions}.
+   */
+  linkSchemes?: readonly string[];
 }
+
+/** Options threaded through the recursive renderers. */
+interface RenderCtx {
+  htmlPolicy: HtmlPolicy;
+  linkSchemes?: readonly string[];
+}
+
+const DEFAULT_CTX: RenderCtx = { htmlPolicy: 'sanitize' };
 
 // ── Inline Renderer ────────────────────────────────────────────────
 
@@ -51,7 +65,7 @@ export interface MarkdownRendererProps {
 function renderInline(
   nodes: MarkdownInlineNode[],
   keyPrefix = '',
-  htmlPolicy: HtmlPolicy = 'sanitize',
+  ctx: RenderCtx = DEFAULT_CTX,
 ): React.ReactNode[] {
   return nodes.map((node, i) => {
     const key = `${keyPrefix}i${i}`;
@@ -79,21 +93,21 @@ function renderInline(
       case 'emphasis':
         return (
           <em key={key} className="squisq-md-em">
-            {renderInline(node.children, key, htmlPolicy)}
+            {renderInline(node.children, key, ctx)}
           </em>
         );
 
       case 'strong':
         return (
           <strong key={key} className="squisq-md-strong">
-            {renderInline(node.children, key, htmlPolicy)}
+            {renderInline(node.children, key, ctx)}
           </strong>
         );
 
       case 'delete':
         return (
           <del key={key} className="squisq-md-del">
-            {renderInline(node.children, key, htmlPolicy)}
+            {renderInline(node.children, key, ctx)}
           </del>
         );
 
@@ -105,11 +119,11 @@ function renderInline(
         );
 
       case 'link': {
-        const href = sanitizeUrl(node.url, 'link');
+        const href = sanitizeUrl(node.url, 'link', { extraLinkSchemes: ctx.linkSchemes });
         if (!href) {
           return (
             <span key={key} className="squisq-md-link squisq-md-link--blocked">
-              {renderInline(node.children, key, htmlPolicy)}
+              {renderInline(node.children, key, ctx)}
             </span>
           );
         }
@@ -122,7 +136,7 @@ function renderInline(
             target="_blank"
             rel="noopener noreferrer"
           >
-            {renderInline(node.children, key, htmlPolicy)}
+            {renderInline(node.children, key, ctx)}
           </a>
         );
       }
@@ -143,11 +157,11 @@ function renderInline(
         );
 
       case 'htmlInline':
-        if (htmlPolicy === 'strip') return null;
+        if (ctx.htmlPolicy === 'strip') return null;
         // Fast path: no <video>/<audio> in the subtree → use the original
         // rawHtml passthrough (preserves arbitrary HTML for custom embeds).
         if (
-          htmlPolicy === 'trusted' &&
+          ctx.htmlPolicy === 'trusted' &&
           !containsMediaTag(node.htmlChildren) &&
           !containsDangerousTag(node.htmlChildren) &&
           !hasDangerousRawHtml(node.rawHtml)
@@ -164,7 +178,7 @@ function renderInline(
         // go through MediaContext-aware player components.
         return (
           <span key={key} className="squisq-md-html-inline">
-            {renderHtmlNodes(resolveHtmlNodes(node.htmlChildren, htmlPolicy), `${key}h`)}
+            {renderHtmlNodes(resolveHtmlNodes(node.htmlChildren, ctx.htmlPolicy), `${key}h`)}
           </span>
         );
 
@@ -179,7 +193,7 @@ function renderInline(
         // Render as plain text (definition targets not available at render time)
         return (
           <span key={key} className="squisq-md-link-ref">
-            {renderInline(node.children, key, htmlPolicy)}
+            {renderInline(node.children, key, ctx)}
           </span>
         );
 
@@ -193,7 +207,7 @@ function renderInline(
       case 'textDirective':
         return (
           <span key={key} className="squisq-md-text-directive" data-directive={node.name}>
-            {renderInline(node.children, key, htmlPolicy)}
+            {renderInline(node.children, key, ctx)}
           </span>
         );
 
@@ -223,13 +237,13 @@ function renderInline(
 function renderBlock(
   node: MarkdownBlockNode,
   key: string,
-  htmlPolicy: HtmlPolicy = 'sanitize',
+  ctx: RenderCtx = DEFAULT_CTX,
 ): React.ReactNode {
   switch (node.type) {
     case 'paragraph':
       return (
         <p key={key} className="squisq-md-p">
-          {renderInline(node.children, key, htmlPolicy)}
+          {renderInline(node.children, key, ctx)}
         </p>
       );
 
@@ -237,7 +251,7 @@ function renderBlock(
       const Tag = `h${node.depth}` as 'h1' | 'h2' | 'h3' | 'h4' | 'h5' | 'h6';
       return (
         <Tag key={key} className={`squisq-md-heading squisq-md-h${node.depth}`}>
-          {renderInline(node.children, key, htmlPolicy)}
+          {renderInline(node.children, key, ctx)}
         </Tag>
       );
     }
@@ -245,7 +259,7 @@ function renderBlock(
     case 'blockquote':
       return (
         <blockquote key={key} className="squisq-md-blockquote">
-          {renderBlocks(node.children, key, htmlPolicy)}
+          {renderBlocks(node.children, key, ctx)}
         </blockquote>
       );
 
@@ -253,13 +267,13 @@ function renderBlock(
       if (node.ordered) {
         return (
           <ol key={key} className="squisq-md-list squisq-md-ol" start={node.start ?? undefined}>
-            {node.children.map((item, i) => renderListItem(item, `${key}li${i}`, htmlPolicy))}
+            {node.children.map((item, i) => renderListItem(item, `${key}li${i}`, ctx))}
           </ol>
         );
       }
       return (
         <ul key={key} className="squisq-md-list squisq-md-ul">
-          {node.children.map((item, i) => renderListItem(item, `${key}li${i}`, htmlPolicy))}
+          {node.children.map((item, i) => renderListItem(item, `${key}li${i}`, ctx))}
         </ul>
       );
 
@@ -274,14 +288,14 @@ function renderBlock(
       return <hr key={key} className="squisq-md-hr" />;
 
     case 'table':
-      return renderTable(node.children, node.align, key, htmlPolicy);
+      return renderTable(node.children, node.align, key, ctx);
 
     case 'htmlBlock':
-      if (htmlPolicy === 'strip') return null;
+      if (ctx.htmlPolicy === 'strip') return null;
       // Fast path: no <video>/<audio> → preserve the existing rawHtml
       // passthrough so arbitrary HTML embeds still survive verbatim.
       if (
-        htmlPolicy === 'trusted' &&
+        ctx.htmlPolicy === 'trusted' &&
         !containsMediaTag(node.htmlChildren) &&
         !containsDangerousTag(node.htmlChildren) &&
         !hasDangerousRawHtml(node.rawHtml)
@@ -298,7 +312,7 @@ function renderBlock(
       // route through the player components and resolve via MediaContext.
       return (
         <div key={key} className="squisq-md-html-block">
-          {renderHtmlNodes(resolveHtmlNodes(node.htmlChildren, htmlPolicy), `${key}h`)}
+          {renderHtmlNodes(resolveHtmlNodes(node.htmlChildren, ctx.htmlPolicy), `${key}h`)}
         </div>
       );
 
@@ -317,7 +331,7 @@ function renderBlock(
       return (
         <div key={key} className="squisq-md-footnote-def" id={`fn-${node.identifier}`}>
           <sup>{node.label ?? node.identifier}</sup>
-          {renderBlocks(node.children, key, htmlPolicy)}
+          {renderBlocks(node.children, key, ctx)}
         </div>
       );
 
@@ -329,7 +343,7 @@ function renderBlock(
           data-directive={node.name}
         >
           {node.label && <div className="squisq-md-directive-label">{node.label}</div>}
-          {renderBlocks(node.children, key, htmlPolicy)}
+          {renderBlocks(node.children, key, ctx)}
         </div>
       );
 
@@ -340,7 +354,7 @@ function renderBlock(
           className={`squisq-md-directive squisq-md-directive-${node.name}`}
           data-directive={node.name}
         >
-          {renderInline(node.children, key, htmlPolicy)}
+          {renderInline(node.children, key, ctx)}
         </div>
       );
 
@@ -351,13 +365,13 @@ function renderBlock(
             if (child.type === 'definitionTerm') {
               return (
                 <dt key={`${key}dt${i}`} className="squisq-md-dt">
-                  {renderInline(child.children, `${key}dt${i}`, htmlPolicy)}
+                  {renderInline(child.children, `${key}dt${i}`, ctx)}
                 </dt>
               );
             }
             return (
               <dd key={`${key}dd${i}`} className="squisq-md-dd">
-                {renderBlocks(child.children, `${key}dd${i}`, htmlPolicy)}
+                {renderBlocks(child.children, `${key}dd${i}`, ctx)}
               </dd>
             );
           })}
@@ -373,7 +387,7 @@ function renderBlock(
 function renderListItem(
   item: MarkdownListItem,
   key: string,
-  htmlPolicy: HtmlPolicy = 'sanitize',
+  ctx: RenderCtx = DEFAULT_CTX,
 ): React.ReactNode {
   const isTask = item.checked !== null && item.checked !== undefined;
   return (
@@ -381,7 +395,7 @@ function renderListItem(
       {isTask && (
         <input type="checkbox" checked={!!item.checked} readOnly className="squisq-md-checkbox" />
       )}
-      {renderBlocks(item.children, key, htmlPolicy)}
+      {renderBlocks(item.children, key, ctx)}
     </li>
   );
 }
@@ -391,7 +405,7 @@ function renderTable(
   rows: MarkdownTableRow[],
   align: (('left' | 'right' | 'center') | null)[] | undefined,
   key: string,
-  htmlPolicy: HtmlPolicy = 'sanitize',
+  ctx: RenderCtx = DEFAULT_CTX,
 ): React.ReactNode {
   const [headerRow, ...bodyRows] = rows;
   return (
@@ -405,7 +419,7 @@ function renderTable(
                 className="squisq-md-th"
                 style={align?.[ci] ? { textAlign: align[ci]! } : undefined}
               >
-                {renderInline(cell.children, `${key}th${ci}`, htmlPolicy)}
+                {renderInline(cell.children, `${key}th${ci}`, ctx)}
               </th>
             ))}
           </tr>
@@ -421,7 +435,7 @@ function renderTable(
                   className="squisq-md-td"
                   style={align?.[ci] ? { textAlign: align[ci]! } : undefined}
                 >
-                  {renderInline(cell.children, `${key}td${ri}-${ci}`, htmlPolicy)}
+                  {renderInline(cell.children, `${key}td${ri}-${ci}`, ctx)}
                 </td>
               ))}
             </tr>
@@ -436,9 +450,9 @@ function renderTable(
 function renderBlocks(
   nodes: MarkdownBlockNode[],
   keyPrefix = '',
-  htmlPolicy: HtmlPolicy = 'sanitize',
+  ctx: RenderCtx = DEFAULT_CTX,
 ): React.ReactNode[] {
-  return nodes.map((node, i) => renderBlock(node, `${keyPrefix}b${i}`, htmlPolicy));
+  return nodes.map((node, i) => renderBlock(node, `${keyPrefix}b${i}`, ctx));
 }
 
 // ── Image with MediaProvider resolution ───────────────────────────
@@ -655,10 +669,13 @@ export function MarkdownRenderer({
   nodes,
   className,
   htmlPolicy = 'sanitize',
+  linkSchemes,
 }: MarkdownRendererProps) {
   if (!nodes || nodes.length === 0) return null;
 
   return (
-    <div className={`squisq-md ${className || ''}`}>{renderBlocks(nodes, '', htmlPolicy)}</div>
+    <div className={`squisq-md ${className || ''}`}>
+      {renderBlocks(nodes, '', { htmlPolicy, linkSchemes })}
+    </div>
   );
 }

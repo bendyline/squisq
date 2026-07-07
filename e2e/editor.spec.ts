@@ -19,6 +19,15 @@ async function waitForWysiwyg(page: Page) {
   await page.locator('.tiptap.ProseMirror').waitFor({ state: 'visible', timeout: 5_000 });
 }
 
+/** Focus editable prose instead of the heading template badge affordances. */
+async function focusWysiwygParagraph(page: Page, position: 'first' | 'last' = 'last') {
+  const editor = page.locator('.tiptap.ProseMirror');
+  const paragraph = position === 'first' ? editor.locator('p').first() : editor.locator('p').last();
+  await paragraph.click({ position: { x: 8, y: 8 } });
+  await expect(page.locator('#squisq-template-gallery-portal')).toHaveCount(0);
+  return editor;
+}
+
 /** Wait for Monaco editor to be ready */
 async function waitForMonaco(page: Page) {
   await page.locator('[data-testid="raw-editor"]').waitFor({ state: 'visible', timeout: 5_000 });
@@ -138,20 +147,17 @@ test.describe('WYSIWYG editing', () => {
   });
 
   test('typing in the editor updates content', async ({ page }) => {
-    const editor = page.locator('.tiptap.ProseMirror');
-    // Click at end and type
-    await editor.click();
+    const editor = await focusWysiwygParagraph(page);
     await page.keyboard.press('End');
     await page.keyboard.type(' — appended text');
     await expect(editor).toContainText('appended text');
   });
 
   test('Ctrl+B applies bold formatting to new text', async ({ page }) => {
-    const editor = page.locator('.tiptap.ProseMirror');
+    const editor = await focusWysiwygParagraph(page);
     const modifier = process.platform === 'darwin' ? 'Meta' : 'Control';
 
-    // Click at end of content and type new bold text
-    await editor.click();
+    // Type new bold text from a prose caret, not a template badge/search field.
     await page.keyboard.press('End');
     await page.keyboard.press('Enter');
     await page.keyboard.press(`${modifier}+b`);

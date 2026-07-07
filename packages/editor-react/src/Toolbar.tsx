@@ -52,6 +52,10 @@ export interface ToolbarProps {
   onToggleFiles?: () => void;
   /** Content rendered at the left edge of the toolbar, before the view tabs. */
   slotLeft?: ReactNode;
+  /** Content rendered immediately after the view tabs, on the left side of the
+   *  toolbar (before the formatting controls). Used for the preview mode
+   *  switch in Play view. */
+  slotAfterTabs?: ReactNode;
   /** Content rendered after the formatting controls (in the middle area). */
   slotAfterActions?: ReactNode;
   /** Content rendered at the rightmost end of the toolbar, after all other elements. */
@@ -371,6 +375,7 @@ export function Toolbar({
   showFiles,
   onToggleFiles,
   slotLeft,
+  slotAfterTabs,
   slotAfterActions,
   slotRight,
   showPlayTab = true,
@@ -388,7 +393,7 @@ export function Toolbar({
     versioning,
     allowRecording,
     documentLinkProvider,
-    theme,
+    colorScheme,
   } = useEditorContext();
   // When a canvas textbox is being edited, its Tiptap instance takes over
   // the formatting buttons; otherwise they drive the document editor. The
@@ -826,18 +831,18 @@ export function Toolbar({
             // A diagram is just a heading with the `{[diagram]}` template
             // annotation; the WYSIWYG view renders its editable canvas.
             replacement = '\n## Diagram {[diagram]}\n';
-            newCursorOffset = 4; // start of "Diagram" (after \n## )
+            newCursorOffset = replacement.length;
             break;
           }
           case 'drawing': {
             replacement = '\n## Drawing {[drawing]}\n';
-            newCursorOffset = 4; // start of "Drawing"
+            newCursorOffset = replacement.length;
             break;
           }
           case 'layout': {
             // Seed a starter text layer (a child sub-block) so it isn't blank.
             replacement = LAYOUT_STARTER_MARKDOWN;
-            newCursorOffset = 4; // start of "Layout" in the parent heading
+            newCursorOffset = replacement.length;
             break;
           }
         }
@@ -846,13 +851,13 @@ export function Toolbar({
         const range = selection;
         monacoEditor.executeEdits('toolbar', [{ range, text: replacement }]);
 
-        // If no selection, select the placeholder text so user can type over it
+        // If no selection, move the cursor to the command's preferred edit point.
         if (!hasSelection && newCursorOffset > 0) {
           const startPos = model.getPositionAt(
             model.getOffsetAt(range.getStartPosition()) + newCursorOffset,
           );
-          // Just place cursor after the prefix
           monacoEditor.setPosition(startPos);
+          monacoEditor.revealPositionInCenterIfOutsideViewport(startPos);
         }
 
         monacoEditor.focus();
@@ -1436,6 +1441,8 @@ export function Toolbar({
           ))}
         </div>
       )}
+      {/* After-tabs slot — left side, before formatting controls (preview mode switch) */}
+      {slotAfterTabs}
       {/* Formatting buttons — hidden in preview mode and code mode */}
       {!isPreview && !isCodeMode && (
         <div className="squisq-toolbar-actions" ref={actionsRef}>
@@ -1813,9 +1820,12 @@ export function Toolbar({
 
       {/* After-actions slot — after formatting controls */}
       {slotAfterActions}
-      {/* Spacer — only needed when the actions container (which has flex:1
-          and already pushes right-side items to the end) isn't rendered. */}
-      {(isPreview || isCodeMode) && <div style={{ flex: 1 }} />}
+      {/* Spacer — pushes right-side items to the end when the flex:1 actions
+          container isn't rendered. In preview mode PreviewToolbarControls
+          supplies its own flex:1 filler (and measures that leftover width to
+          decide whether to collapse), so a second spacer here would split the
+          slack and make the controls collapse too early. */}
+      {isCodeMode && <div style={{ flex: 1 }} />}
       {/* Version history — renders only when the host enabled versioning
           and a container is wired up. The component owns its own button
           and popover; we just give it a slot in the toolbar. */}
@@ -1897,7 +1907,7 @@ export function Toolbar({
           <div
             ref={insertMenuRef}
             className="squisq-insert-menu"
-            data-theme={theme}
+            data-theme={colorScheme}
             style={{ position: 'fixed', top: insertMenuAnchor.top, left: insertMenuAnchor.left }}
             role="menu"
           >
@@ -1937,7 +1947,7 @@ export function Toolbar({
             onSelect={handleEmojiSelect}
             onClose={closeEmojiPicker}
             anchorRef={emojiButtonRef as React.RefObject<HTMLElement>}
-            theme={theme === 'dark' ? 'dark' : 'light'}
+            theme={colorScheme === 'dark' ? 'dark' : 'light'}
             style={{
               position: 'fixed',
               top: emojiPickerAnchor.top,

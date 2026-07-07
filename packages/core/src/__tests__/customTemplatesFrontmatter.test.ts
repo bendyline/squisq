@@ -71,6 +71,37 @@ describe('writeCustomTemplatesToFrontmatter → readCustomTemplatesFromFrontmatt
     expect(out![0]).toEqual(heroDef);
   });
 
+  it('default output is compact (single line) and byte-unchanged', () => {
+    const payload = writeCustomTemplatesToFrontmatter([heroDef])!;
+    expect(payload).not.toContain('\n');
+    // Explicit pretty:false must match the historical default exactly.
+    expect(writeCustomTemplatesToFrontmatter([heroDef], { pretty: false })).toBe(payload);
+  });
+
+  it('pretty:true emits multi-line JSON that still reads back', () => {
+    const payload = writeCustomTemplatesToFrontmatter([heroDef], { pretty: true })!;
+    expect(payload).toContain('\n');
+    // Same compact key codec, just pretty-printed.
+    expect(payload).toContain('"lb": "Hero"');
+    const fm = { [FRONTMATTER_CUSTOM_TEMPLATES_KEY]: payload };
+    const out = readCustomTemplatesFromFrontmatter(fm);
+    expect(out).toHaveLength(1);
+    expect(out![0]).toEqual(heroDef);
+  });
+
+  it('a hand-written block-scalar frontmatter parses back into the definition', () => {
+    const payload = writeCustomTemplatesToFrontmatter([heroDef], { pretty: true })!;
+    const body = payload
+      .split('\n')
+      .map((l) => `  ${l}`)
+      .join('\n');
+    const md = `---\n${FRONTMATTER_CUSTOM_TEMPLATES_KEY}: |-\n${body}\n---\n\n# Hi\n`;
+    const parsed = parseMarkdown(md);
+    const out = readCustomTemplatesFromFrontmatter(parsed.frontmatter);
+    expect(out).toHaveLength(1);
+    expect(out![0]).toEqual(heroDef);
+  });
+
   it('is markedly smaller than the legacy base64 form', () => {
     const compact = writeCustomTemplatesToFrontmatter([heroDef])!;
     const legacyBase64 = btoa(unescape(encodeURIComponent(JSON.stringify([{ ...heroDef }]))));

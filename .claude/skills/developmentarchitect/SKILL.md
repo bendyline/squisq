@@ -95,40 +95,25 @@ When evaluating a proposed change, any cross-package import that would violate
 this tree (e.g. `core` importing from `react`, or `formats` importing from
 `editor-react`) is a structural bug — flag it.
 
-### Subpath Exports (core) — 16 entries
+### Subpath Exports
 
-| Subpath                       | Content                                                                                                                                                      |
-| ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `@bendyline/squisq` (root)    | Re-exports everything below for ergonomic single-import                                                                                                      |
-| `@bendyline/squisq/schemas`   | Doc, Block, TemplateBlock, Viewport, LayoutStrategy, Theme + library/compile/validator, colorUtils, fontStacks, Types, MediaProvider, ImageEditDoc           |
-| `@bendyline/squisq/doc`       | 23 templates + registry + animationUtils + themeUtils + getLayers + markdownToDoc + docToMarkdown + audioMapping                                             |
-| `@bendyline/squisq/story`     | Alias for `/doc` (legacy)                                                                                                                                    |
-| `@bendyline/squisq/spatial`   | Haversine distance, Geohash encode/decode                                                                                                                    |
-| `@bendyline/squisq/storage`   | StorageAdapter, Memory/LocalStorage/LocalForage adapters, ContentContainer, MemoryContentContainer, ScopedContentContainer, createMediaProviderFromContainer |
-| `@bendyline/squisq/markdown`  | parseMarkdown, stringifyMarkdown, 30+ AST node types, tree utilities, frontmatter helpers, HTML sub-DOM                                                      |
-| `@bendyline/squisq/timing`    | Narration/reading time estimation                                                                                                                            |
-| `@bendyline/squisq/random`    | SeededRandom (Mulberry32 PRNG), hashString                                                                                                                   |
-| `@bendyline/squisq/generate`  | extractContent, stripMarkdown, generateSlideshow                                                                                                             |
-| `@bendyline/squisq/transform` | applyTransform + 5 transform styles (dataDriven, documentary, magazine, minimal, narrative) + block analyzer + doc-image extractor                           |
-| `@bendyline/squisq/versions`  | DocumentVersionManager + saveVersion/listVersions/readVersion/revertToVersion/pruneVersions/coalesceVersions + Version/PrunePolicy/CoalesceOptions types     |
-| `@bendyline/squisq/jsonForm`  | chooseControl, evaluateWhen, resolveFlag, inferSchema, JSON Pointer helpers; types: SquisqAnnotatedSchema, ControlKind                                       |
-| `@bendyline/squisq/imageEdit` | ImageEditDoc state helpers + persistence + version operations + ImageEditVersionManager + SVG → raster export                                                |
-| `@bendyline/squisq/icons`     | FontAwesome catalog (ICONS) + resolveIcon, canonicalIconToken, looksLikeIconToken, suggestIcons, iconGlyph                                                   |
-| `@bendyline/squisq/recommend` | profileBlockContents, recommendTemplatesForBlock                                                                                                             |
+**AGENTS.md's "Subpath Exports" section is the authoritative, kept-fresh list** — read
+it rather than relying on counts here, which rot. As of this writing: **core exposes 17
+subpaths** (root, `schemas`, `doc`, `story` [legacy alias of `doc`], `spatial`, `storage`,
+`markdown`, `timing`, `random`, `generate`, `transform`, `versions`, `jsonForm`,
+`imageEdit`, `icons`, `icon-marker`, `recommend`) and **formats exposes 11** (root, `docx`,
+`pdf`, `html`, `epub`, `pptx`, `xlsx`, `csv`, `ooxml`, `container`, `registry`).
 
-### Subpath Exports (formats) — 9 entries
+Notes that the old inlined tables got wrong (fixed here so a reviewer doesn't repeat them):
 
-| Subpath                               | Content                                                                                                                                                      |
-| ------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `@bendyline/squisq-formats` (root)    | Re-exports all converters                                                                                                                                    |
-| `@bendyline/squisq-formats/docx`      | markdownDocToDocx, docxToMarkdownDoc, docToDocx, docxToDoc                                                                                                   |
-| `@bendyline/squisq-formats/pdf`       | markdownDocToPdf, pdfToMarkdownDoc, configurePdfWorker                                                                                                       |
-| `@bendyline/squisq-formats/html`      | docToHtml (single-file with inlined player), docToHtmlZip (external assets), markdownDocToPlainHtml, markdownDocsToPlainHtmlBundle, markdownDocsToHtmlBundle |
-| `@bendyline/squisq-formats/epub`      | markdownDocToEpub, docToEpub                                                                                                                                 |
-| `@bendyline/squisq-formats/pptx`      | markdownDocToPptx, docToPptx (+ import stubs)                                                                                                                |
-| `@bendyline/squisq-formats/xlsx`      | Stubs (not implemented)                                                                                                                                      |
-| `@bendyline/squisq-formats/ooxml`     | Shared OOXML reader/writer/namespaces/xmlUtils                                                                                                               |
-| `@bendyline/squisq-formats/container` | containerToZip, zipToContainer (ContentContainer ↔ ZIP)                                                                                                      |
+- `@bendyline/squisq/generate` — exports `extractContent` / `stripMarkdown` / `mapElementToBlock`.
+  `generateSlideshow` was **removed** in v1.5; the slideshow path is now `markdownToDoc` + `applyTransform`.
+- `@bendyline/squisq-formats/pptx` — import is **implemented** (text/lists/tables + slide-level
+  embedded-image extraction via `pptxToContainer`), not a stub.
+- `@bendyline/squisq-formats/xlsx` — **implemented**: import (multi-sheet tables) + export
+  (tables-only, one worksheet per markdown table).
+- `@bendyline/squisq-formats/csv` and `/registry` are the two subpaths added since these tables
+  were written; `/registry` exposes the `convert()` pipeline + `FormatRegistry` + `ConversionError`.
 
 ### Key Design Principles
 

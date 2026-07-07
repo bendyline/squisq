@@ -9,9 +9,9 @@
  * Paths are forward-slash separated strings relative to the container root
  * (e.g., 'images/hero.jpg', 'index.md'). No leading slash.
  *
- * Implementations:
+ * Implementations (in core):
  * - MemoryContentContainer — in-memory Map (for zip import, tests, transient use)
- * - SlotContentContainer — backed by IndexedDB slot storage (in the site package)
+ * - ScopedContentContainer — a prefix-scoped view onto a parent container
  */
 
 /**
@@ -44,6 +44,10 @@ export interface ContentContainer {
 
   /**
    * List files in the container.
+   *
+   * Returns file **entries** (`ContentEntry[]` with `.path`/`.mimeType`/`.size`),
+   * NOT bare path strings — despite the name. Read `entry.path` for the path;
+   * calling string methods (e.g. `.startsWith`) directly on an entry will throw.
    * @param prefix — Optional path prefix to filter by (e.g., 'images/')
    */
   listFiles(prefix?: string): Promise<ContentEntry[]>;

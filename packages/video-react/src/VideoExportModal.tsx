@@ -19,14 +19,26 @@ import { useVideoExport, type VideoExportConfig } from './hooks/useVideoExport.j
 export interface VideoExportModalProps {
   /** The document to export */
   doc: Doc;
-  /** Player IIFE bundle source */
-  playerScript: string;
+  /**
+   * Player IIFE bundle source. Unused by the browser export path (frames
+   * are captured from a live in-page DocPlayer); only forwarded for
+   * CLI/Playwright-style pipelines that render standalone HTML.
+   */
+  playerScript?: string;
   /** Optional media provider for resolving images/audio */
   mediaProvider?: MediaProvider;
   /** Pre-collected images map (alternative to mediaProvider) */
   images?: Map<string, ArrayBuffer>;
   /** Pre-collected audio map */
   audio?: Map<string, ArrayBuffer>;
+  /**
+   * Seeds the modal's initial quality/fps/orientation/captionMode selections
+   * and is merged (as a base) into the config passed to the export hook, so a
+   * host can share one config shape with `useVideoExport`. The individual
+   * `images`/`audio`/`mediaProvider`/`playerScript` props still take
+   * precedence over any matching key here.
+   */
+  defaultConfig?: Partial<VideoExportConfig>;
   /** Called when the modal should close */
   onClose: () => void;
 }
@@ -139,12 +151,15 @@ export function VideoExportModal({
   mediaProvider,
   images,
   audio,
+  defaultConfig,
   onClose,
 }: VideoExportModalProps) {
-  const [quality, setQuality] = useState<VideoQuality>('normal');
-  const [fps, setFps] = useState(24);
-  const [orientation, setOrientation] = useState<VideoOrientation>('landscape');
-  const [captionMode, setCaptionMode] = useState<CaptionMode>('off');
+  const [quality, setQuality] = useState<VideoQuality>(defaultConfig?.quality ?? 'normal');
+  const [fps, setFps] = useState(defaultConfig?.fps ?? 24);
+  const [orientation, setOrientation] = useState<VideoOrientation>(
+    defaultConfig?.orientation ?? 'landscape',
+  );
+  const [captionMode, setCaptionMode] = useState<CaptionMode>(defaultConfig?.captionMode ?? 'off');
 
   const exportHook = useVideoExport();
   const {
@@ -153,6 +168,8 @@ export function VideoExportModal({
     backend,
     downloadUrl,
     fileSize,
+    audioIncluded,
+    audioSkippedReason,
     error,
     elapsed,
     estimatedRemaining,
@@ -163,6 +180,8 @@ export function VideoExportModal({
 
   const handleExport = useCallback(async () => {
     const config: VideoExportConfig = {
+      // defaultConfig is the base; explicit props/selections win over it.
+      ...defaultConfig,
       quality,
       fps,
       orientation,
@@ -170,7 +189,8 @@ export function VideoExportModal({
       images,
       audio,
       mediaProvider,
-      playerScript,
+      // Only thread the bundle through when the host actually supplied one.
+      ...(playerScript !== undefined ? { playerScript } : {}),
     };
     await startExport(doc, config);
   }, [
@@ -183,6 +203,7 @@ export function VideoExportModal({
     audio,
     mediaProvider,
     playerScript,
+    defaultConfig,
     startExport,
   ]);
 
@@ -318,6 +339,15 @@ export function VideoExportModal({
             <p style={{ fontSize: 13, color: '#5a4a2a', margin: '0 0 4px 0' }}>
               File size: {(fileSize / (1024 * 1024)).toFixed(1)} MB
             </p>
+            {audioIncluded ? (
+              <p style={{ fontSize: 12, color: '#2d6a10', margin: '0 0 4px 0' }}>
+                Audio included ✓
+              </p>
+            ) : (
+              <p style={{ fontSize: 12, color: '#8a7a5a', margin: '0 0 4px 0' }}>
+                Video only{audioSkippedReason ? ` — ${audioSkippedReason}` : ''}
+              </p>
+            )}
             {backend && (
               <p style={{ fontSize: 12, color: '#8a7a5a', margin: '0 0 12px 0' }}>
                 Encoded with WebCodecs (H.264)

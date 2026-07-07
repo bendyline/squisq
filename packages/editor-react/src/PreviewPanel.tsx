@@ -48,6 +48,7 @@ export function PreviewPanel({ basePath = '/', className, workspaceContainer }: 
     activeTheme,
     activeTransformStyle,
     activeCaptionStyle,
+    activeCaptionsEnabled,
   } = usePreviewSettings();
 
   // Build the player-ready Doc whenever the parsed doc changes.
@@ -108,10 +109,15 @@ export function PreviewPanel({ basePath = '/', className, workspaceContainer }: 
     );
   }
 
-  // Page mode renders directly from markdown — it doesn't depend on the
-  // parsed Doc tree or the player preview build, so let it fall through
-  // even when those aren't ready yet.
-  if (!previewDoc && activeDisplayMode !== 'page') {
+  // The public DisplayMode values predate the current labels: raw `page`
+  // is the plain Document preview, while raw `linear` is the styled Page view.
+  const isDocumentMode = activeDisplayMode === 'page';
+  const isPageMode = activeDisplayMode === 'linear';
+
+  // Document mode renders directly from markdown — it doesn't depend on the
+  // parsed Doc tree or the player preview build, so let it fall through even
+  // when those aren't ready yet.
+  if (!previewDoc && !isDocumentMode) {
     return (
       <div className={`squisq-preview-status ${className || ''}`} data-testid="preview-panel">
         <p>No content to preview. Start typing in the editor.</p>
@@ -119,8 +125,7 @@ export function PreviewPanel({ basePath = '/', className, workspaceContainer }: 
     );
   }
 
-  const fillsContainer =
-    activeDisplayMode === 'linear' || activeDisplayMode === 'page' ? 'stretch' : 'center';
+  const fillsContainer = isDocumentMode || isPageMode ? 'stretch' : 'center';
 
   return (
     <div
@@ -147,7 +152,7 @@ export function PreviewPanel({ basePath = '/', className, workspaceContainer }: 
           minHeight: 0,
         }}
       >
-        {activeDisplayMode === 'page' ? (
+        {isDocumentMode ? (
           <PlainHtmlPreview
             markdown={markdownSource}
             title={(doc?.frontmatter?.title as string | undefined) ?? undefined}
@@ -155,7 +160,7 @@ export function PreviewPanel({ basePath = '/', className, workspaceContainer }: 
             mediaRevision={mediaRevision}
             theme={activeTheme}
           />
-        ) : activeDisplayMode === 'linear' ? (
+        ) : isPageMode ? (
           <LinearDocView
             doc={doc!}
             basePath={basePath}
@@ -164,7 +169,7 @@ export function PreviewPanel({ basePath = '/', className, workspaceContainer }: 
           />
         ) : (
           <DocPlayer
-            script={previewDoc!}
+            doc={previewDoc!}
             basePath={basePath}
             showControls
             muted
@@ -172,6 +177,7 @@ export function PreviewPanel({ basePath = '/', className, workspaceContainer }: 
             displayMode={activeDisplayMode}
             theme={activeTheme}
             captionStyle={activeCaptionStyle}
+            captionsEnabled={activeCaptionsEnabled}
           />
         )}
       </div>

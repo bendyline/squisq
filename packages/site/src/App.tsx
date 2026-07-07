@@ -7,7 +7,7 @@
 
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { EditorShell, ThemeCustomizerPanel } from '@bendyline/squisq-editor-react';
-import type { EditorTheme } from '@bendyline/squisq-editor-react';
+import type { EditorColorScheme } from '@bendyline/squisq-editor-react';
 import '@bendyline/squisq-editor-react/styles';
 import { MediaContext } from '@bendyline/squisq-react';
 import {
@@ -21,6 +21,7 @@ import { FileToolbar } from './FileToolbar';
 import { StorageToolbar } from './StorageToolbar';
 import { JsonEditorDemo } from './JsonEditorDemo';
 import { ImageEditorDemo } from './ImageEditorDemo';
+import { CodeContextDemo } from './CodeContextDemo';
 import { createSlotMediaProvider } from './slotStorage';
 import type { MediaProvider, Theme } from '@bendyline/squisq/schemas';
 import { parseTheme, registerTheme, unregisterTheme } from '@bendyline/squisq/schemas';
@@ -64,8 +65,9 @@ export function App() {
   const [showDebug, setShowDebug] = useState(false);
   const [showJsonDemo, setShowJsonDemo] = useState(false);
   const [showImageEditorDemo, setShowImageEditorDemo] = useState(false);
+  const [showCodeContextDemo, setShowCodeContextDemo] = useState(false);
   const [currentSource, setCurrentSource] = useState(SAMPLES[initialSampleKey]);
-  const [theme] = useState<EditorTheme>('light');
+  const [colorScheme] = useState<EditorColorScheme>('light');
   const [customTheme, setCustomThemeState] = useState<Theme | null>(() => loadStoredCustomTheme());
   // Re-register the loaded theme on mount so `Doc.themeId` lookups resolve to it.
   // Subsequent edits go through handleCustomThemeChange which also registers.
@@ -143,7 +145,7 @@ export function App() {
     };
   }, [activeSlot, replaceMediaProvider, createEmptyProvider]);
 
-  const isDark = theme === 'dark';
+  const isDark = colorScheme === 'dark';
 
   const handleSampleChange = useCallback(
     (e: React.ChangeEvent<HTMLSelectElement>) => {
@@ -342,8 +344,29 @@ export function App() {
           {showImageEditorDemo ? 'Close Image Editor' : 'Image Editor'}
         </button>
 
+        <button
+          onClick={() => setShowCodeContextDemo((prev) => !prev)}
+          data-testid="toggle-code-context"
+          style={{
+            fontSize: 13,
+            fontFamily: 'system-ui, -apple-system, sans-serif',
+            padding: '4px 12px',
+            cursor: 'pointer',
+            background: showCodeContextDemo ? '#8B6914' : '#E8DFC6',
+            color: showCodeContextDemo ? '#fff' : '#4a3c1f',
+            border: `1px solid ${showCodeContextDemo ? '#7a5c10' : '#c9b98a'}`,
+            borderRadius: 0,
+          }}
+        >
+          {showCodeContextDemo ? 'Close Code Context' : 'Code Context'}
+        </button>
+
         {/* Theme customizer — wrapped in editor-shell to inherit BEM dark-theme styles. */}
-        <div className="squisq-editor-shell" data-theme={theme} style={{ position: 'relative' }}>
+        <div
+          className="squisq-editor-shell"
+          data-theme={colorScheme}
+          style={{ position: 'relative' }}
+        >
           <ThemeCustomizerPanel
             value={customTheme}
             onChange={handleCustomThemeChange}
@@ -390,7 +413,11 @@ export function App() {
       </div>
 
       {/* Main area */}
-      {showImageEditorDemo ? (
+      {showCodeContextDemo ? (
+        <div style={{ flex: 1, overflow: 'hidden' }}>
+          <CodeContextDemo />
+        </div>
+      ) : showImageEditorDemo ? (
         <div style={{ flex: 1, overflow: 'hidden' }}>
           <ImageEditorDemo />
         </div>
@@ -407,7 +434,7 @@ export function App() {
                 initialMarkdown={currentSource}
                 articleId={selectedSample || 'uploaded'}
                 onChange={handleChange}
-                theme={theme}
+                colorScheme={colorScheme}
                 height="100%"
                 mediaProvider={mediaProvider}
                 themeOverride={customTheme}
@@ -423,7 +450,7 @@ export function App() {
                   flexShrink: 0,
                 }}
               >
-                <DebugPanel source={currentSource} theme={theme} />
+                <DebugPanel source={currentSource} theme={colorScheme} />
               </div>
             )}
           </div>

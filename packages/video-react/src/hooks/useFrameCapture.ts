@@ -152,7 +152,7 @@ export function useFrameCapture(): FrameCaptureHandle {
       const captionStyle: CaptionStyle = captionMode === 'social' ? 'social' : 'standard';
 
       const playerElement = createElement(DocPlayer, {
-        script: doc,
+        doc,
         basePath: '.',
         renderMode: true,
         showControls: false,

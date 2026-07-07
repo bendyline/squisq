@@ -11,11 +11,13 @@
 import { describe, it, expect } from 'vitest';
 import { PDFDocument, StandardFonts, rgb } from 'pdf-lib';
 
-import { pdfToMarkdownDoc, pdfToDoc } from '../pdf/import';
+import { pdfToMarkdownDoc, pdfToDoc, insertImageBlocks } from '../pdf/import';
+import type { ExtractedImage } from '../pdf/import';
 import type {
   MarkdownHeading,
   MarkdownBlockNode,
   MarkdownCodeBlock,
+  MarkdownParagraph,
 } from '@bendyline/squisq/markdown';
 
 /** Structural shape shared by all markdown node types, for recursive walkers. */
@@ -275,6 +277,98 @@ describe('pdfToMarkdownDoc', () => {
 // ============================================
 // pdfToDoc convenience wrapper
 // ============================================
+
+// ============================================
+// insertImageBlocks — page-level image placement (pure)
+// ============================================
+
+describe('insertImageBlocks', () => {
+  /** Build a synthetic paragraph block carrying a marker text value. */
+  function para(label: string): MarkdownParagraph {
+    return { type: 'paragraph', children: [{ type: 'text', value: label }] };
+  }
+
+  /** Build a synthetic extracted image on a given page (data/y are irrelevant here). */
+  function img(index: number, page: number): ExtractedImage {
+    return { path: `images/image${index}.png`, data: new ArrayBuffer(0), page, y: 0 };
+  }
+
+  /** Extract a flat list of block descriptors: paragraph label or image url. */
+  function describeBlocks(blocks: MarkdownBlockNode[]): string[] {
+    return blocks.map((b) => {
+      if (b.type === 'paragraph') {
+        const child = (b as MarkdownParagraph).children[0];
+        if (child && child.type === 'image') return `img:${child.url}`;
+        if (child && child.type === 'text') return `p:${child.value}`;
+      }
+      return b.type;
+    });
+  }
+
+  it('is a no-op when there are no images', () => {
+    const blocks = [para('A'), para('B')];
+    const pages = [0, 0];
+    const result = insertImageBlocks(blocks, pages, []);
+    expect(result).toBe(blocks);
+  });
+
+  it('places an image after the last block of its page', () => {
+    // Page 0: A, B   Page 1: C
+    const blocks = [para('A'), para('B'), para('C')];
+    const pages = [0, 0, 1];
+    const result = insertImageBlocks(blocks, pages, [img(1, 0)]);
+    expect(describeBlocks(result)).toEqual(['p:A', 'p:B', 'img:images/image1.png', 'p:C']);
+  });
+
+  it('places images on the correct page in a multi-page document', () => {
+    // Page 0: A   Page 1: B   Page 2: C
+    const blocks = [para('A'), para('B'), para('C')];
+    const pages = [0, 1, 2];
+    const result = insertImageBlocks(blocks, pages, [img(1, 2), img(2, 0)]);
+    // image2 → after A (page 0), image1 → after C (page 2)
+    expect(describeBlocks(result)).toEqual([
+      'p:A',
+      'img:images/image2.png',
+      'p:B',
+      'p:C',
+      'img:images/image1.png',
+    ]);
+  });
+
+  it('preserves image order within the same page', () => {
+    const blocks = [para('A'), para('B')];
+    const pages = [0, 0];
+    const result = insertImageBlocks(blocks, pages, [img(1, 0), img(2, 0)]);
+    expect(describeBlocks(result)).toEqual([
+      'p:A',
+      'p:B',
+      'img:images/image1.png',
+      'img:images/image2.png',
+    ]);
+  });
+
+  it('falls back to the nearest preceding page for an image-only page', () => {
+    // Page 0: A   Page 1: (no blocks)   image on page 1 → after A
+    const blocks = [para('A'), para('B')];
+    const pages = [0, 2];
+    // Image on page 1 has no blocks; nearest preceding page with blocks is 0 → after A.
+    const result = insertImageBlocks(blocks, pages, [img(1, 1)]);
+    expect(describeBlocks(result)).toEqual(['p:A', 'img:images/image1.png', 'p:B']);
+  });
+
+  it('appends at the end when no preceding page has blocks', () => {
+    // Only page 5 has blocks; image on page 2 has no preceding page → append at end.
+    const blocks = [para('A'), para('B')];
+    const pages = [5, 5];
+    const result = insertImageBlocks(blocks, pages, [img(1, 2)]);
+    expect(describeBlocks(result)).toEqual(['p:A', 'p:B', 'img:images/image1.png']);
+  });
+
+  it('appends all images when there are no text blocks', () => {
+    const result = insertImageBlocks([], [], [img(1, 0), img(2, 3)]);
+    expect(describeBlocks(result)).toEqual(['img:images/image1.png', 'img:images/image2.png']);
+  });
+});
 
 describe('pdfToDoc', () => {
   it('converts PDF to a Doc object', async () => {

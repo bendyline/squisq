@@ -5,13 +5,8 @@
  */
 
 import { useMemo } from 'react';
-import {
-  applySurface,
-  resolveFontFamily,
-  type SurfaceScheme,
-  type Theme,
-} from '@bendyline/squisq/schemas';
-import { DEFAULT_THEME } from '@bendyline/squisq/doc';
+import { type SurfaceScheme, type Theme } from '@bendyline/squisq/schemas';
+import { buildJsonFormTokens, resolveJsonFormTheme } from '@bendyline/squisq/jsonForm';
 import { useAutoSurface } from '../hooks/useAutoSurface';
 
 export interface JsonViewTokens {
@@ -29,29 +24,9 @@ export function useJsonViewTokens(
   const effectiveSurface = surface === 'auto' ? auto : (surface ?? undefined);
 
   return useMemo(() => {
-    const baseTheme = theme ?? DEFAULT_THEME;
-    const finalTheme = effectiveSurface ? applySurface(baseTheme, effectiveSurface) : baseTheme;
-
-    const titleFont = resolveFontFamily(finalTheme.typography.titleFont, 'system-ui, sans-serif');
-    const bodyFont = resolveFontFamily(finalTheme.typography.bodyFont, 'system-ui, sans-serif');
-    const monoFont = resolveFontFamily(
-      finalTheme.typography.monoFont,
-      'ui-monospace, Consolas, monospace',
-    );
-
-    const style: React.CSSProperties = {
-      ['--squisq-json-bg' as string]: finalTheme.colors.background,
-      ['--squisq-json-text' as string]: finalTheme.colors.text,
-      ['--squisq-json-muted' as string]: finalTheme.colors.textMuted,
-      ['--squisq-json-primary' as string]: finalTheme.colors.primary,
-      ['--squisq-json-accent' as string]: finalTheme.colors.secondary,
-      ['--squisq-json-border' as string]: `color-mix(in srgb, ${finalTheme.colors.textMuted} 35%, transparent)`,
-      ['--squisq-json-title-font' as string]: titleFont,
-      ['--squisq-json-body-font' as string]: bodyFont,
-      ['--squisq-json-mono-font' as string]: monoFont,
-      ['--squisq-json-radius' as string]: `${finalTheme.style.borderRadius ?? 8}px`,
-    };
-
-    return { style, theme: finalTheme };
+    const style = buildJsonFormTokens(theme, effectiveSurface, {
+      prefix: '--squisq-json',
+    }) as unknown as React.CSSProperties;
+    return { style, theme: resolveJsonFormTheme(theme, effectiveSurface) };
   }, [theme, effectiveSurface]);
 }

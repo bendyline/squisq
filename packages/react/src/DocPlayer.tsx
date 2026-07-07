@@ -11,7 +11,7 @@
  * - Playback controls (play/pause, seek, next/prev)
  * - Progress display
  * - Render mode for video capture (via window.seekTo)
- * - Pluggable audio provider for different environments (browser, EFB)
+ * - Pluggable audio controller for different environments (browser, EFB)
  * - Multiple control layouts: overlay (default), sidebar, bottom
  *
  * Related Files:
@@ -39,14 +39,17 @@ import { useAutoSurface } from './hooks/useAutoSurface';
 import { useAudioSync } from './hooks/useAudioSync';
 import { useDocPlayback } from './hooks/useDocPlayback';
 import { useViewportOrientation } from './hooks/useViewportOrientation';
-import type { AudioProvider } from './hooks/AudioProvider';
+import { useSlideSwipe } from './hooks/useSlideSwipe';
+import type { AudioController } from './hooks/AudioController';
 import {
   expandCoverBlock,
   createTemplateContext,
+  markdownToDoc,
   DEFAULT_THEME,
   VIEWPORT_PRESETS,
   type ViewportConfig,
 } from '@bendyline/squisq/doc';
+import { parseMarkdown } from '@bendyline/squisq/markdown';
 import { DocControlsOverlay } from './DocControlsOverlay';
 import { DocControlsSlideshow } from './DocControlsSlideshow';
 import { DocProgressBar } from './DocProgressBar';
@@ -85,11 +88,11 @@ const SMALL_WORDS = new Set([
  * Uses sectionHeader blocks to find real titles, with fallbacks
  * for "intro" and slug-based names.
  */
-function buildSegmentTitleMap(script: Doc): Map<number, string> {
+function buildSegmentTitleMap(doc: Doc): Map<number, string> {
   const map = new Map<number, string>();
 
   // Scan blocks for sectionHeader templates which carry the real title
-  for (const block of script.blocks as DocBlock[]) {
+  for (const block of doc.blocks as DocBlock[]) {
     if (isTemplateBlock(block) && block.template === 'sectionHeader' && 'title' in block) {
       const segIdx = block.audioSegment;
       if (!map.has(segIdx)) {
@@ -99,9 +102,9 @@ function buildSegmentTitleMap(script: Doc): Map<number, string> {
   }
 
   // Fill in any segments that weren't covered by sectionHeader blocks
-  for (let i = 0; i < script.audio.segments.length; i++) {
+  for (let i = 0; i < doc.audio.segments.length; i++) {
     if (!map.has(i)) {
-      const name = script.audio.segments[i].name;
+      const name = doc.audio.segments[i].name;
       if (name === 'intro' || name.includes('intro')) {
         map.set(i, 'Introduction');
       } else if (name === 'flight-context' || name.includes('flight-context')) {
@@ -123,10 +126,20 @@ function buildSegmentTitleMap(script: Doc): Map<number, string> {
 }
 
 interface DocPlayerProps {
-  /** Doc script to play */
-  script: Doc;
-  /** Base path for resolving media URLs */
-  basePath: string;
+  /**
+   * The Doc to play. Wins over `markdown` when both are provided.
+   * When neither `doc` nor `markdown` is given, the player renders a
+   * minimal themed empty state instead of crashing.
+   */
+  doc?: Doc;
+  /**
+   * Markdown source to play. When `doc` is absent, the markdown is parsed
+   * and converted to a Doc via `markdownToDoc(parseMarkdown(markdown))`.
+   * Ignored when `doc` is provided.
+   */
+  markdown?: string;
+  /** Base path for resolving media URLs (default: `'.'`) */
+  basePath?: string;
   /** Render mode for video capture (hides controls, exposes seekTo) */
   renderMode?: boolean;
   /** Auto-play when loaded */
@@ -135,8 +148,8 @@ interface DocPlayerProps {
   onEnded?: () => void;
   /** Callback for time updates */
   onTimeUpdate?: (time: number) => void;
-  /** Optional audio provider (if not provided, uses default HTML5 audio) */
-  audioProvider?: AudioProvider;
+  /** Optional audio controller (if not provided, uses default HTML5 audio) */
+  audioController?: AudioController;
   /** Show built-in controls (default: true). Set to false for custom controls. */
   showControls?: boolean;
   /** Show only the progress bar/scrubber at bottom (no other controls).
@@ -189,16 +202,66 @@ interface DocPlayerProps {
   /** Caption display style (default: 'standard').
    *  'social' shows large centered words with the active word highlighted. */
   captionStyle?: CaptionStyle;
+  /**
+   * Enable drag-to-swipe slide navigation in slideshow mode (default: true).
+   * When enabled, press-and-drag on a slide advances/rewinds on release past a
+   * threshold (or a quick flick), and snaps back otherwise. Only applies when
+   * `displayMode === 'slideshow'` and not in render/headless mode.
+   */
+  enableSwipe?: boolean;
 }
 
-export function DocPlayer({
-  script,
-  basePath,
+// Dev-only, browser-safe environment probe. Bundlers substitute the
+// `process.env.NODE_ENV` expression; bare browsers without a bundler have
+// no `process` at all and are treated as production (no warning noise).
+function isDevEnvironment(): boolean {
+  try {
+    return typeof process !== 'undefined' && process.env.NODE_ENV !== 'production';
+  } catch {
+    return false;
+  }
+}
+
+// One-shot flag for the missing-stylesheet warning (module-level so the
+// warning fires at most once per page, not once per player instance).
+let warnedMissingStyles = false;
+
+/**
+ * Front-door component: resolves the `doc` / `markdown` props into a Doc
+ * and renders a themed empty state when neither is provided. The playback
+ * machinery lives in `DocPlayerContent` so its hook order never changes
+ * when a doc appears or disappears.
+ */
+export function DocPlayer(props: DocPlayerProps) {
+  const { doc, markdown } = props;
+
+  // Parse markdown into a Doc only when no explicit doc is supplied.
+  const markdownDoc = useMemo(
+    () => (!doc && markdown !== undefined ? markdownToDoc(parseMarkdown(markdown)) : undefined),
+    [doc, markdown],
+  );
+
+  const resolvedDoc = doc ?? markdownDoc;
+
+  if (!resolvedDoc) {
+    return <div className="doc-player doc-player--empty" />;
+  }
+
+  return <DocPlayerContent {...props} doc={resolvedDoc} />;
+}
+
+interface DocPlayerContentProps extends DocPlayerProps {
+  doc: Doc;
+}
+
+function DocPlayerContent({
+  doc,
+  basePath = '.',
   renderMode = false,
   autoPlay = false,
   onEnded,
   onTimeUpdate,
-  audioProvider: externalAudioProvider,
+  audioController: externalAudioController,
   showControls = true,
   showScrubber = false,
   muted = false,
@@ -214,7 +277,8 @@ export function DocPlayer({
   theme,
   surface,
   captionStyle = 'standard',
-}: DocPlayerProps) {
+  enableSwipe = true,
+}: DocPlayerContentProps) {
   const isSlideshowMode = displayMode === 'slideshow';
   const isLinearMode = displayMode === 'linear';
   const audioRef = useRef<HTMLAudioElement>(null);
@@ -237,11 +301,27 @@ export function DocPlayer({
     return params.get('debug') === 'true';
   }, []);
 
-  // Use internal HTML5 audio sync if no external provider is given
-  const internalAudio = useAudioSync(audioRef, script.audio, basePath);
+  // Use internal HTML5 audio sync if no external controller is given
+  const internalAudio = useAudioSync(audioRef, doc.audio, basePath);
 
-  // Use external provider if provided, otherwise fall back to internal
-  const audio = externalAudioProvider || internalAudio;
+  // Use external controller if provided, otherwise fall back to internal
+  const audio = externalAudioController || internalAudio;
+
+  // Dev-only sentinel: warn once when the package stylesheet isn't loaded.
+  // The stylesheet sets `--squisq-styles-loaded: 1` on `.doc-player`; if the
+  // mounted container computes an empty value, the CSS never made it in.
+  useEffect(() => {
+    if (warnedMissingStyles || !isDevEnvironment()) return;
+    const el = containerRef.current;
+    if (!el || typeof getComputedStyle !== 'function') return;
+    const value = getComputedStyle(el).getPropertyValue('--squisq-styles-loaded');
+    if (!value.trim()) {
+      warnedMissingStyles = true;
+      console.warn(
+        '[squisq] @bendyline/squisq-react/styles is not loaded — import "@bendyline/squisq-react/styles"',
+      );
+    }
+  }, []);
 
   // Destructure for convenience
   const {
@@ -264,7 +344,7 @@ export function DocPlayer({
   // Timed media clips (block.media + doc.documentMedia) resolved to absolute
   // doc-timeline coordinates. Empty for documents without the media model, so
   // <MediaClipLayer> renders nothing and the legacy audio path is unaffected.
-  const mediaSchedule = useMemo(() => resolveMediaSchedule(script), [script]);
+  const mediaSchedule = useMemo(() => resolveMediaSchedule(doc), [doc]);
 
   // Refs for frequently-changing values used in the keyboard handler,
   // so the handler callback doesn't need to be recreated every frame.
@@ -318,11 +398,11 @@ export function DocPlayer({
     nextBlock: _nextBlock,
     prevBlock: _prevBlock,
     blocks: expandedBlocks,
-  } = useDocPlayback(script, currentTime, activeViewport, renderMode, effectiveTheme);
+  } = useDocPlayback(doc, currentTime, activeViewport, renderMode, effectiveTheme);
 
   // Expand cover block (startBlock) if present - uses active viewport
   const coverBlock = useMemo((): Block | null => {
-    const startBlockConfig = script.startBlock as StartBlockConfig | undefined;
+    const startBlockConfig = doc.startBlock as StartBlockConfig | undefined;
     if (!startBlockConfig) return null;
 
     const context = createTemplateContext(effectiveTheme, 0, 1, activeViewport);
@@ -335,7 +415,7 @@ export function DocPlayer({
       audioSegment: -1,
       layers,
     };
-  }, [script.startBlock, activeViewport, effectiveTheme]);
+  }, [doc.startBlock, activeViewport, effectiveTheme]);
 
   // Render-mode cover block control: allows Playwright to force-show the cover block
   const [coverForced, setCoverForced] = useState(false);
@@ -520,7 +600,7 @@ export function DocPlayer({
         // The larger of the audio/block timeline and any media that spills
         // past the last block (block-clip spillover or document-spanning
         // media), so frame capture covers the full tail.
-        const mediaDuration = getDocPlaybackDuration(script);
+        const mediaDuration = getDocPlaybackDuration(doc);
         if (totalDuration > 0) return Math.max(totalDuration, mediaDuration);
         return mediaDuration;
       };
@@ -534,7 +614,7 @@ export function DocPlayer({
         }));
       // Audio segment info for video production -- returns the actual files in composition order
       w.getAudioSegments = () =>
-        script.audio.segments.map((seg) => ({
+        doc.audio.segments.map((seg) => ({
           src: seg.src,
           name: seg.name,
           duration: seg.duration,
@@ -542,15 +622,15 @@ export function DocPlayer({
         }));
       // Caption phrases for SRT/subtitle export
       w.getCaptions = () =>
-        script.captions?.phrases?.map((p) => ({
+        doc.captions?.phrases?.map((p) => ({
           text: p.text,
           startTime: p.startTime,
           endTime: p.endTime,
         })) || [];
       // Chapter markers for YouTube timestamps -- uses segment titles from sectionHeader blocks
       w.getChapters = () => {
-        const titleMap = buildSegmentTitleMap(script);
-        return script.audio.segments.map((seg, i) => ({
+        const titleMap = buildSegmentTitleMap(doc);
+        return doc.audio.segments.map((seg, i) => ({
           title: titleMap.get(i) || seg.name,
           startTime: seg.startTime,
           duration: seg.duration,
@@ -581,7 +661,7 @@ export function DocPlayer({
         delete w.hasCoverBlock;
       }
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- script is a stable prop; re-registering on every script change is unnecessary
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- doc is a stable prop; re-registering on every doc change is unnecessary
   }, [renderMode, isDebugMode, seekTo, totalDuration, expandedBlocks, coverBlock]);
 
   // Caption mode state: cycles through off → standard → social → off
@@ -590,6 +670,15 @@ export function DocPlayer({
   const defaultMode: CaptionMode =
     captionsEnabledProp === false ? 'off' : captionStyle || 'standard';
   const [captionMode, setCaptionMode] = useState<CaptionMode>(defaultMode);
+
+  // Keep the internal caption mode in sync when the controlling props change
+  // — e.g. the editor's preview toolbar drives caption style / on-off. Keyed
+  // on the derived `defaultMode` string, so it only fires on a real prop
+  // change and never disturbs the in-player CC toggle for consumers (the
+  // standalone player, video export) that set these props once at mount.
+  useEffect(() => {
+    setCaptionMode(defaultMode);
+  }, [defaultMode]);
 
   // Derive captionsEnabled and active style from the mode
   const captionsEnabled = captionMode !== 'off';
@@ -614,10 +703,10 @@ export function DocPlayer({
     });
   }, [onCaptionsToggle]);
 
-  const hasCaptions = script.captions && script.captions.phrases.length > 0;
+  const hasCaptions = doc.captions && doc.captions.phrases.length > 0;
 
   // Map segment indices to human-readable titles (from sectionHeader blocks)
-  const segmentTitleMap = useMemo(() => buildSegmentTitleMap(script), [script]);
+  const segmentTitleMap = useMemo(() => buildSegmentTitleMap(doc), [doc]);
 
   // Build shared playback state for extracted controls
   const playbackState: PlaybackState = useMemo(
@@ -634,10 +723,10 @@ export function DocPlayer({
       isFullscreen,
       currentSegmentIndex: currentSegment,
       currentSegmentName:
-        segmentTitleMap.get(currentSegment) ?? script.audio.segments[currentSegment]?.name ?? null,
+        segmentTitleMap.get(currentSegment) ?? doc.audio.segments[currentSegment]?.name ?? null,
       currentBlock: currentBlock ?? null,
     }),
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- script.audio.segments is stable within a given script
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- doc.audio.segments is stable within a given doc
     [
       isPlaying,
       currentTime,
@@ -702,6 +791,18 @@ export function DocPlayer({
     }),
     [currentBlockIndex, expandedBlocks, seekTo, pause],
   );
+
+  // Drag-to-swipe navigation for slideshow mode. Inert unless in slideshow mode,
+  // interactive (not headless), and not overridden off via `enableSwipe`.
+  const swipeEnabled = isSlideshowMode && !isLinearMode && !renderMode && enableSwipe;
+  const swipe = useSlideSwipe({
+    enabled: swipeEnabled,
+    containerRef,
+    canGoNext: currentBlockIndex < expandedBlocks.length - 1,
+    canGoPrev: currentBlockIndex > 0,
+    onNext: slideNavActions.nextSlide,
+    onPrev: slideNavActions.prevSlide,
+  });
 
   // Callback for playback state changes (for external controls)
   useEffect(() => {
@@ -855,7 +956,7 @@ export function DocPlayer({
         }}
       >
         <LinearDocView
-          doc={script}
+          doc={doc}
           basePath={basePath}
           viewport={activeViewport}
           theme={theme}
@@ -868,15 +969,21 @@ export function DocPlayer({
   return (
     <div
       ref={containerRef}
-      className="doc-player"
+      className={`doc-player${swipeEnabled ? ' doc-player--swipe' : ''}${
+        swipe.phase === 'dragging' ? ' doc-player--grabbing' : ''
+      }`}
       onClick={handleContainerClick}
+      onPointerDown={swipe.onPointerDown}
       style={{
         position: 'relative',
         width: '100%',
         aspectRatio: `${activeViewport.width} / ${activeViewport.height}`,
         margin: '0 auto',
         overflow: 'hidden',
-        cursor: renderMode ? undefined : 'pointer',
+        // Swipe uses the grab/grabbing cursor via CSS classes; let vertical page
+        // scroll through on touch while we own horizontal drags.
+        cursor: renderMode || swipeEnabled ? undefined : 'pointer',
+        touchAction: swipeEnabled ? 'pan-y' : undefined,
       }}
     >
       {/* Hidden audio element */}
@@ -926,7 +1033,15 @@ export function DocPlayer({
 
         {/* Current block */}
         {!showCoverBlock && currentBlock && (
-          <div key={currentBlock.id} className="doc-player__block doc-player__block--active">
+          <div
+            key={currentBlock.id}
+            className={`doc-player__block doc-player__block--active${
+              swipe.phase !== 'idle' ? ` doc-player__block--${swipe.phase}` : ''
+            }`}
+            style={
+              swipe.phase !== 'idle' ? { transform: `translateX(${swipe.offsetPx}px)` } : undefined
+            }
+          >
             <BlockRenderer
               block={currentBlock}
               blockTime={blockTime}
@@ -941,7 +1056,7 @@ export function DocPlayer({
         {/* Caption overlay -- shown during playback and in render mode when captions are enabled */}
         {hasCaptions && (renderMode ? captionsEnabled : true) && (
           <CaptionOverlay
-            captions={script.captions}
+            captions={doc.captions}
             currentTime={currentTime}
             enabled={captionsEnabled && (renderMode || isPlaying || currentTime > 0)}
             fontSize={16}
@@ -990,8 +1105,7 @@ export function DocPlayer({
               <span style={{ color: '#888' }}>time:</span> {currentTime.toFixed(2)}s /{' '}
               {totalDuration.toFixed(1)}s{' '}
               <span style={{ color: '#666' }}>
-                (progress: {(docProgress * 100).toFixed(1)}%, scriptDur:{' '}
-                {script.duration.toFixed(1)})
+                (progress: {(docProgress * 100).toFixed(1)}%, scriptDur: {doc.duration.toFixed(1)})
               </span>
             </div>
             <div>
@@ -1000,9 +1114,9 @@ export function DocPlayer({
             </div>
             <div>
               <span style={{ color: '#888' }}>segment:</span> {currentSegment}/
-              {script.audio.segments.length - 1}{' '}
+              {doc.audio.segments.length - 1}{' '}
               <span style={{ color: '#666' }}>
-                ({script.audio.segments[currentSegment]?.name || 'none'})
+                ({doc.audio.segments[currentSegment]?.name || 'none'})
               </span>
             </div>
             <div>
@@ -1019,13 +1133,13 @@ export function DocPlayer({
             </div>
             {hasCaptions &&
               (() => {
-                const debugPhrase = getCaptionAtTime(script.captions!, currentTime);
+                const debugPhrase = getCaptionAtTime(doc.captions!, currentTime);
                 const debugEnabled = captionsEnabled && (isPlaying || currentTime > 0);
                 return (
                   <Fragment>
                     <div>
                       <span style={{ color: '#888' }}>captions:</span>{' '}
-                      {script.captions?.phrases.length || 0} phrases{' '}
+                      {doc.captions?.phrases.length || 0} phrases{' '}
                       <span style={{ color: captionsEnabled ? '#4ade80' : '#666' }}>
                         ({captionsEnabled ? 'on' : 'off'})
                       </span>

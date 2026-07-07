@@ -1,54 +1,28 @@
 /**
- * @bendyline/squisq-formats XLSX Module (Stub)
+ * @bendyline/squisq-formats XLSX Module
  *
- * Placeholder for Excel .xlsx import/export support.
- * Will use SpreadsheetML (`<spreadsheet>`, `<worksheet>`, `<sheetData>`)
- * via the shared ooxml/ infrastructure.
+ * Excel .xlsx support via SpreadsheetML and the shared ooxml/ infrastructure.
+ * Both directions are implemented: import (`xlsxToMarkdownDoc` / `xlsxToDoc`)
+ * turns each worksheet grid into a markdown table; export (`markdownDocToXlsx`
+ * / `docToXlsx`) turns each markdown table into a worksheet. Export is
+ * tables-only fidelity — non-table content is dropped (headings only survive
+ * as sheet names). See export.ts for details.
  *
  * @example
  * ```ts
- * import { markdownDocToXlsx } from '@bendyline/squisq-formats/xlsx';
+ * import { xlsxToMarkdownDoc, markdownDocToXlsx } from '@bendyline/squisq-formats/xlsx';
  * ```
  */
 
 import { markdownToDoc } from '@bendyline/squisq/doc';
-import type { MarkdownDocument } from '@bendyline/squisq/markdown';
 import type { Doc } from '@bendyline/squisq/schemas';
 import { type XlsxImportOptions, xlsxToMarkdownDoc } from './import.js';
 
 export type { XlsxImportOptions } from './import.js';
 export { xlsxToMarkdownDoc } from './import.js';
 
-/**
- * Options for XLSX export (placeholder).
- */
-export interface XlsxExportOptions {
-  /** Workbook title */
-  title?: string;
-  /** Workbook author */
-  author?: string;
-}
-
-/**
- * Convert a MarkdownDocument to a .xlsx Blob.
- *
- * @throws Error — XLSX export is not yet implemented
- */
-export async function markdownDocToXlsx(
-  _doc: MarkdownDocument,
-  _options?: XlsxExportOptions,
-): Promise<Blob> {
-  throw new Error('XLSX export is not yet implemented');
-}
-
-/**
- * Convert a squisq Doc to a .xlsx Blob.
- *
- * @throws Error — XLSX export is not yet implemented
- */
-export async function docToXlsx(_doc: Doc, _options?: XlsxExportOptions): Promise<Blob> {
-  throw new Error('XLSX export is not yet implemented');
-}
+export type { XlsxExportOptions } from './export.js';
+export { markdownDocToXlsx, docToXlsx } from './export.js';
 
 /**
  * Convert a .xlsx file to a squisq Doc (via the markdown table model).

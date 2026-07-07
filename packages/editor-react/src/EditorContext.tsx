@@ -91,7 +91,13 @@ export type DocumentLinkProvider = (query: string) => Promise<DocumentLinkCandid
 // ─── Types ───────────────────────────────────────────────
 
 export type EditorView = 'raw' | 'wysiwyg' | 'preview';
-export type EditorTheme = 'light' | 'dark';
+/**
+ * Light/dark chrome mode for the editor shell (toolbar, tabs, status bar,
+ * side panes). This is the editor's *UI color scheme* — distinct from a
+ * Squisq `Theme` object, which styles the rendered document. Renamed from
+ * the former `EditorTheme` to remove that ambiguity.
+ */
+export type EditorColorScheme = 'light' | 'dark';
 /**
  * Document layout mode. `'document'` shows the whole markdown document in
  * the active view (the historical behavior). `'block'` is the
@@ -128,8 +134,8 @@ export interface EditorState {
   parseError: string | null;
   /** Whether a parse is pending */
   isParsing: boolean;
-  /** Current color theme */
-  theme: EditorTheme;
+  /** Current light/dark chrome color scheme for the editor shell. */
+  colorScheme: EditorColorScheme;
   /** Operating mode — 'markdown' for the full shell, 'code' for Monaco-only. */
   editorMode: EditorMode;
   /** Monaco language ID for the Raw editor. */
@@ -240,8 +246,8 @@ export interface EditorActions {
   setTiptapEditor: (editor: TiptapEditor | null) => void;
   /** Register / unregister the Monaco editor instance (called by RawEditor) */
   setMonacoEditor: (editor: MonacoEditor | null) => void;
-  /** Set the color theme */
-  setTheme: (theme: EditorTheme) => void;
+  /** Set the light/dark chrome color scheme for the editor shell. */
+  setColorScheme: (colorScheme: EditorColorScheme) => void;
   /** Show or hide the inline preview gutter at runtime (driven by the View menu). */
   setInlinePreviewVisible: (visible: boolean) => void;
   /** Show or hide the bottom status bar at runtime (driven by the View menu). */
@@ -360,8 +366,8 @@ export interface EditorProviderProps {
   initialView?: EditorView;
   /** Article ID used when generating the Doc */
   articleId?: string;
-  /** Color theme */
-  theme?: EditorTheme;
+  /** Light/dark chrome color scheme for the editor shell. */
+  colorScheme?: EditorColorScheme;
   /**
    * Workspace-scoped `ContentContainer` for this document — the folder
    * holding the doc, its `_files/` sidecar, sibling documents, and any
@@ -509,7 +515,7 @@ export function EditorProvider({
   initialMarkdown = '',
   initialView = 'raw',
   articleId = 'untitled',
-  theme: initialTheme = 'light',
+  colorScheme: initialColorScheme = 'light',
   workspaceContainer = null,
   allowVersioning = false,
   versionBasename,
@@ -570,7 +576,7 @@ export function EditorProvider({
   );
   const [parseError, setParseError] = useState<string | null>(null);
   const [isParsing, setIsParsing] = useState(false);
-  const [theme, setTheme] = useState<EditorTheme>(initialTheme);
+  const [colorScheme, setColorScheme] = useState<EditorColorScheme>(initialColorScheme);
   const [inlinePreviewVisible, setInlinePreviewVisibleRaw] =
     useState<boolean>(effectiveInlinePreview);
   // Sync visibility when the host changes the prop (e.g., toggle from outside).
@@ -731,10 +737,10 @@ export function EditorProvider({
   const articleIdRef = useRef(articleId);
   articleIdRef.current = articleId;
 
-  // Sync theme when prop changes
+  // Sync color scheme when prop changes
   useEffect(() => {
-    setTheme(initialTheme);
-  }, [initialTheme]);
+    setColorScheme(initialColorScheme);
+  }, [initialColorScheme]);
 
   // Debounced parse on markdown source change
   const parseTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -971,7 +977,7 @@ export function EditorProvider({
       activeView,
       parseError,
       isParsing,
-      theme,
+      colorScheme,
       editorMode,
       language: resolvedLanguage,
       inlinePreviewVisible,
@@ -1009,7 +1015,7 @@ export function EditorProvider({
       setActiveView,
       setTiptapEditor,
       setMonacoEditor,
-      setTheme,
+      setColorScheme,
       setInlinePreviewVisible,
       setStatusBarVisible,
       setOutlineVisible,
@@ -1028,7 +1034,7 @@ export function EditorProvider({
       activeView,
       parseError,
       isParsing,
-      theme,
+      colorScheme,
       editorMode,
       resolvedLanguage,
       inlinePreviewVisible,
@@ -1063,7 +1069,7 @@ export function EditorProvider({
       setActiveView,
       setTiptapEditor,
       setMonacoEditor,
-      setTheme,
+      setColorScheme,
       setInlinePreviewVisible,
       setStatusBarVisible,
       setOutlineVisible,

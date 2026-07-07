@@ -2215,6 +2215,32 @@
   z-index: 1;
 }
 
+/* Drag-to-swipe (slideshow mode) — the active slide tracks the pointer 1:1
+   while dragging (no transition), then eases to its resting position (snap
+   back) or flings off-screen (commit) on release. The 260ms below must match
+   DEFAULT_SETTLE_MS in hooks/useSlideSwipe.ts. Like the block slide/push
+   transitions, this is a brief, purposeful motion, so it is intentionally left
+   running under prefers-reduced-motion (only long ambient loops are frozen). */
+.doc-player__block--active.doc-player__block--dragging {
+  transition: none;
+}
+
+.doc-player__block--active.doc-player__block--settling {
+  transition: transform 260ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.doc-player--swipe {
+  cursor: grab;
+  /* Slideshow presentation surface: suppress text selection so a mouse drag
+     never starts a selection instead of a swipe. */
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+.doc-player--swipe.doc-player--grabbing {
+  cursor: grabbing;
+}
+
 /* Tap-to-toggle play/pause feedback */
 .doc-player__tap-feedback {
   position: absolute;
@@ -2346,4 +2372,24 @@
   .anim-drift {
     animation: none;
   }
+}
+
+/* ============================================
+   Empty state
+   Rendered by <DocPlayer> when neither `doc` nor `markdown` is provided.
+   ============================================ */
+.doc-player--empty {
+  min-height: 120px;
+  width: 100%;
+  background: #f0f0f0;
+}
+
+/* ============================================
+   Missing-stylesheet sentinel
+   DocPlayer reads this custom property at mount (dev builds only) and
+   warns when it computes empty — i.e. when the host app forgot to import
+   "@bendyline/squisq-react/styles".
+   ============================================ */
+.doc-player {
+  --squisq-styles-loaded: 1;
 }

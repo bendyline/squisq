@@ -12,6 +12,7 @@ import { markdownDocToCsv, csvToMarkdownDoc } from '../csv/index';
 import { markdownDocToEpub } from '../epub/export';
 import { docToHtml } from '../html/index';
 import { markdownDocToXlsx } from '../xlsx/index';
+import { xlsxToMarkdownDoc } from '../xlsx/import';
 import { assertHybridRoundTrip, extractNormalizedText } from './roundTripMatrix.helpers';
 import { ROUNDTRIP_FIXTURES } from './roundTripMatrix.fixtures';
 
@@ -128,9 +129,14 @@ describe('format content-flow matrix', () => {
     expect(csvText).toContain('throughput');
   });
 
-  it('asserts current XLSX export stub behavior', async () => {
-    await expect(markdownDocToXlsx(ROUNDTRIP_FIXTURES.table.doc)).rejects.toThrow(
-      'XLSX export is not yet implemented',
-    );
+  it('round-trips markdown through XLSX with table cell survival', async () => {
+    const source = ROUNDTRIP_FIXTURES.table;
+    const xlsx = await markdownDocToXlsx(source.doc);
+    const roundTrip = await xlsxToMarkdownDoc(xlsx);
+
+    const text = extractNormalizedText(roundTrip);
+    for (const phrase of source.keyPhrases) {
+      expect(text).toContain(phrase);
+    }
   });
 });

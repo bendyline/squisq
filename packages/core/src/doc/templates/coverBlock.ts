@@ -42,6 +42,25 @@ export interface CoverBlockInput {
   imageTreatment?: 'none' | 'mono' | 'duotone' | 'warm' | 'cool';
 }
 
+/** Base (pre-viewport-scale) font size for a full-size cover title. */
+const COVER_TITLE_BASE_PX = 120;
+/** Title length (chars) that still reads well at the full base size. */
+const COVER_TITLE_COMFORTABLE_CHARS = 26;
+/** Readability floor so very long titles never shrink to nothing. */
+const COVER_TITLE_MIN_BASE_PX = 62;
+
+/**
+ * Compute the base cover-title font size for a given title, shrinking long
+ * titles so their wrapped block fits the frame. Returns the pre-viewport-scale
+ * value expected by {@link themedFontSize}; short titles get the full base.
+ */
+export function fitCoverTitleSize(title: string): number {
+  const len = title.trim().length;
+  if (len <= COVER_TITLE_COMFORTABLE_CHARS) return COVER_TITLE_BASE_PX;
+  const scaled = COVER_TITLE_BASE_PX * Math.sqrt(COVER_TITLE_COMFORTABLE_CHARS / len);
+  return Math.max(COVER_TITLE_MIN_BASE_PX, Math.round(scaled));
+}
+
 /**
  * Generate cover block layers from StartBlockConfig.
  */
@@ -50,8 +69,16 @@ export function coverBlock(input: CoverBlockInput, context: TemplateContext): La
   const { heroSrc, heroAlt, title, subtitle, ambientMotion, heroCredit, heroLicense } = input;
   const { theme, layout } = context;
 
-  // Scale font sizes for viewport - cover titles are larger than regular title blocks
-  const titleFontSize = themedFontSize(120, context, true);
+  // Scale font sizes for viewport - cover titles are larger than regular title blocks.
+  // The cover title wraps within maxTextWidth but does not otherwise shrink, so a long
+  // title (e.g. "Seattle: The Emerald City That Rebuilt Itself on Top of Itself") wrapped
+  // to three 120px lines overflows the frame and is clipped by the player controls.
+  // Auto-fit the base size to title length so long titles stay within the frame. The
+  // wrapped title's total height grows with fontSize² × length (line count ∝ length ×
+  // fontSize / width, line height ∝ fontSize), so scaling the base by √(threshold/length)
+  // keeps the wrapped block's area roughly constant past the threshold. Short titles are
+  // unaffected (scale clamps at 1).
+  const titleFontSize = themedFontSize(fitCoverTitleSize(title), context, true);
   const subtitleFontSize = themedFontSize(40, context, false);
 
   const layers: Layer[] = [];

@@ -19,11 +19,23 @@ export type {
   EncoderResult,
 } from './types.js';
 
-export { QUALITY_PRESETS, ORIENTATION_DIMENSIONS, resolveDimensions } from './types.js';
+export {
+  QUALITY_PRESETS,
+  ORIENTATION_DIMENSIONS,
+  resolveDimensions,
+  bitrateForQuality,
+} from './types.js';
+
+// ── Audio Timeline ─────────────────────────────────────────────────
+export type { AudioTimelineClip } from './audioTimeline.js';
+export { computeAudioTimeline } from './audioTimeline.js';
 
 // ── Render HTML ────────────────────────────────────────────────────
 export type { RenderHtmlOptions } from './renderHtml.js';
 export { generateRenderHtml } from './renderHtml.js';
+
+// ── FFmpeg Argument Builders ───────────────────────────────────────
+export { ffmpegVideoQualityArgs, audioBitrateArg } from './ffmpegArgs.js';
 
 // ── WASM Encoder ───────────────────────────────────────────────────
 export { framesToMp4Wasm, fetchFile } from './wasmEncoder.js';

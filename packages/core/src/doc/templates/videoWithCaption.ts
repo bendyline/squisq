@@ -35,9 +35,9 @@ export function videoWithCaption(input: VideoWithCaptionInput, context: Template
     videoLicense,
   } = input;
   const caption = rawCaption ? cleanCaption(rawCaption) : rawCaption;
-  const { theme, layout } = context;
+  const { theme } = context;
 
-  const captionFontSize = themedFontSize(36, context, false);
+  const captionFontSize = themedFontSize(30, context, false);
   const creditFontSize = themedFontSize(16, context, false);
 
   const layers: Layer[] = [
@@ -60,30 +60,29 @@ export function videoWithCaption(input: VideoWithCaptionInput, context: Template
     },
   ];
 
-  // Caption text at bottom with gradient for readability. The scrim is
-  // tinted from the theme background so the theme text color on top of it
-  // stays readable in light and dark themes alike; it fades toward the
-  // frame edge the caption sits on.
+  // Caption text with a compact translucent band. Long archival captions are
+  // clamped so they don't collide with player controls or cover the frame.
   if (caption) {
     const bg = theme.colors.background;
-    const scrimAngle = captionPosition === 'top' ? 180 : 0;
+    const captionBgY =
+      captionPosition === 'top' ? '7%' : captionPosition === 'center' ? '42%' : '68%';
+    const captionY =
+      captionPosition === 'top' ? '13%' : captionPosition === 'center' ? '48%' : '74%';
+
     layers.push({
       type: 'shape',
       id: 'caption-gradient',
       content: {
         shape: 'rect',
-        fill: `linear-gradient(${scrimAngle}deg, ${withAlpha(bg, 0.8)} 0%, ${withAlpha(bg, 0.35)} 60%, ${withAlpha(bg, 0)} 100%)`,
+        fill: `linear-gradient(90deg, ${withAlpha(bg, 0)}, ${withAlpha(bg, 0.78)} 16%, ${withAlpha(bg, 0.78)} 84%, ${withAlpha(bg, 0)})`,
       },
       position: {
         x: 0,
-        y: captionPosition === 'top' ? 0 : '65%',
+        y: captionBgY,
         width: '100%',
-        height: '35%',
+        height: '16%',
       },
     });
-
-    const captionY =
-      captionPosition === 'top' ? '15%' : captionPosition === 'center' ? '50%' : '82%';
 
     layers.push({
       type: 'text',
@@ -96,13 +95,15 @@ export function videoWithCaption(input: VideoWithCaptionInput, context: Template
           color: theme.colors.text,
           textAlign: 'center',
           shadow: shouldUseShadow(context),
+          lineHeight: 1.18,
+          maxLines: 2,
         },
       },
       position: {
         x: '50%',
         y: captionY,
         anchor: 'center',
-        width: layout.maxTextWidth,
+        width: '78%',
       },
       animation: { type: 'fadeIn', duration: 1.5, delay: 0.5 },
     });

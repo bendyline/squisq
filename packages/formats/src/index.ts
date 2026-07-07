@@ -7,12 +7,15 @@
  * Supported formats:
  * - **DOCX** — Microsoft Word (import + export) ✅
  * - **PDF**  — Portable Document Format (import + export) ✅
- * - **PPTX** — Microsoft PowerPoint (export ✅, import ✅)
- * - **XLSX** — Microsoft Excel (import ✅, export planned)
+ * - **PPTX** — Microsoft PowerPoint (import + export ✅; import extracts slide-level embedded images)
+ * - **XLSX** — Microsoft Excel (import ✅, export ✅ tables-only)
  * - **CSV**  — Comma-separated values (import ✅, export ✅)
+ * - **HTML** — import + export (single-file, ZIP, plain, and player-embedding)
+ * - **EPUB** — export ✅
  *
  * All converters run in the browser — no server or native binaries required.
- * The shared `ooxml/` subpath export provides reusable OOXML infrastructure.
+ * The shared `ooxml/` subpath export provides reusable OOXML infrastructure, and the
+ * `registry` subpath exposes a format registry + `convert()` pipeline over all of the above.
  *
  * @example
  * ```ts
@@ -29,11 +32,11 @@
 export { markdownDocToDocx, docToDocx, docxToMarkdownDoc, docxToDoc } from './docx/index.js';
 export type { DocxExportOptions, DocxImportOptions } from './docx/index.js';
 
-// PPTX (export implemented, import stub)
+// PPTX (import + export)
 export { markdownDocToPptx, docToPptx, pptxToMarkdownDoc, pptxToDoc } from './pptx/index.js';
 export type { PptxExportOptions, PptxImportOptions } from './pptx/index.js';
 
-// XLSX (import implemented, export stub)
+// XLSX (import + export; export is tables-only → one worksheet per markdown table)
 export { markdownDocToXlsx, docToXlsx, xlsxToMarkdownDoc, xlsxToDoc } from './xlsx/index.js';
 export type { XlsxExportOptions, XlsxImportOptions } from './xlsx/index.js';
 
@@ -60,3 +63,24 @@ export type { HtmlImportOptions } from './html/index.js';
 // EPUB (export)
 export { markdownDocToEpub, docToEpub } from './epub/index.js';
 export type { EpubExportOptions } from './epub/index.js';
+
+// Format registry + programmatic convert()
+export {
+  convert,
+  createRegistry,
+  defaultRegistry,
+  defaultFormats,
+  ConversionError,
+  BUILTIN_FORMAT_IDS,
+} from './registry/index.js';
+export type {
+  FormatId,
+  ConversionResult,
+  NormalizedInput,
+  ConvertOptions,
+  FormatDefinition,
+  FormatRegistry,
+  ConvertSource,
+  ConversionErrorCode,
+  ConversionErrorOptions,
+} from './registry/index.js';

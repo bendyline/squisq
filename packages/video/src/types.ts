@@ -24,14 +24,38 @@ export interface QualityPreset {
   preset: string;
   /** FFmpeg -crf value (lower = higher quality, 0-51 range) */
   crf: number;
+  /**
+   * Bits per pixel for WebCodecs bitrate targeting.
+   * Target bitrate = width * height * bitsPerPixel (see {@link bitrateForQuality}).
+   * These values reproduce the historical per-quality formula exactly:
+   * the old code used a `width * height * 4` baseline, halved for draft and
+   * doubled for high — i.e. 2 / 4 / 8 bits per pixel.
+   */
+  bitsPerPixel: number;
+  /** Target AAC audio bitrate in bits/sec for muxed audio tracks. */
+  audioBitrate: number;
 }
 
 /** Quality preset lookup — shared between wasm and native encoders. */
 export const QUALITY_PRESETS: Record<VideoQuality, QualityPreset> = {
-  draft: { preset: 'ultrafast', crf: 28 },
-  normal: { preset: 'medium', crf: 23 },
-  high: { preset: 'slow', crf: 18 },
+  draft: { preset: 'ultrafast', crf: 28, bitsPerPixel: 2, audioBitrate: 96_000 },
+  normal: { preset: 'medium', crf: 23, bitsPerPixel: 4, audioBitrate: 128_000 },
+  high: { preset: 'slow', crf: 18, bitsPerPixel: 8, audioBitrate: 192_000 },
 };
+
+/**
+ * Target H.264 bitrate (bits/sec) for a given quality at a given resolution.
+ *
+ * Computes `width * height * preset.bitsPerPixel`. With bitsPerPixel of
+ * 2 / 4 / 8 (draft / normal / high) this is numerically identical to the
+ * legacy formula (`width * height * 4` baseline, ×0.5 for draft, ×2 for high)
+ * that previously lived in both the main-thread and worker WebCodecs encoders.
+ * The single source of truth now lives here so every encode path agrees.
+ */
+export function bitrateForQuality(q: VideoQuality, width: number, height: number): number {
+  const preset = QUALITY_PRESETS[q] ?? QUALITY_PRESETS.normal;
+  return Math.round(width * height * preset.bitsPerPixel);
+}
 
 /** Viewport dimensions for each orientation. */
 export const ORIENTATION_DIMENSIONS: Record<VideoOrientation, { width: number; height: number }> = {

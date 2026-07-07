@@ -86,7 +86,7 @@ export interface TransformStyleConfig {
   };
 
   /**
-   * Duration-based slide budget (folded in from the deprecated
+   * Duration-based slide budget (folded in from the since-removed
    * `generateSlideshow`): caps promoted template blocks at roughly
    * `slidesPerMinute` of doc duration (default: uncapped — only
    * `transformRatio` applies).

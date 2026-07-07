@@ -23,7 +23,13 @@
  */
 
 import type { Doc, Block } from '../schemas/Doc.js';
-import type { MarkdownDocument, MarkdownBlockNode, MarkdownHeading } from '../markdown/types.js';
+import type {
+  MarkdownDocument,
+  MarkdownBlockNode,
+  MarkdownHeading,
+  MarkdownParagraph,
+} from '../markdown/types.js';
+import { serializeAnnotation } from '../markdown/attrTokens.js';
 import {
   FRONTMATTER_CUSTOM_TEMPLATES_KEY,
   writeCustomTemplatesToFrontmatter,
@@ -55,6 +61,12 @@ export function docToMarkdown(doc: Doc): MarkdownDocument {
     if (block.sourceHeading) {
       const heading = ensureAnnotation(block, block.sourceHeading);
       children.push(heading);
+    } else if (block.standaloneAnnotation) {
+      // Heading-less standalone block: re-emit its `{[…]}` annotation as a
+      // paragraph before its contents. The serializer's quoting is paired
+      // with the tokenizer, and stringifyMarkdown un-escapes `{[…]}` spans,
+      // so the annotation round-trips.
+      children.push(synthesizeAnnotationParagraph(block));
     }
 
     // Emit body content
@@ -108,6 +120,16 @@ export function docToMarkdown(doc: Doc): MarkdownDocument {
 }
 
 /**
+ * Build the synthesized annotation paragraph for a heading-less standalone
+ * block: `{[templateName key=value …]}` from its `sourceAnnotation.template`
+ * and current `templateOverrides` (edits round-trip through the latter).
+ */
+function synthesizeAnnotationParagraph(block: Block): MarkdownParagraph {
+  const text = serializeAnnotation(block.sourceAnnotation?.template, block.templateOverrides);
+  return { type: 'paragraph', children: [{ type: 'text', value: text }] };
+}
+
+/**
  * Ensure the heading's `templateAnnotation` reflects the block's
  * template and templateOverrides. Returns a (possibly cloned) heading.
  */
@@ -148,6 +170,14 @@ function ensureTransitionAttributes(
   const transition = block.transition;
   if (!transition) return heading.attributes;
 
+  // The transition is deliberately written to BOTH channels, which serve
+  // different consumers:
+  // - `params` is what `stringifyMarkdown` serializes into the Pandoc `{…}`
+  //   attribute text (serializePandocAttributes reads only id/classes/params).
+  // - `blockMeta` is what `markdownToDoc` reads back directly (makeBlock,
+  //   pinnedHeadingMeta) — an in-memory Doc → MarkdownDocument → Doc round
+  //   trip never re-parses params, so a stale/missing `blockMeta.transition`
+  //   would lose or resurrect the wrong transition.
   const attrs = heading.attributes ?? {};
   return {
     ...attrs,

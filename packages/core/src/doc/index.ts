@@ -33,6 +33,7 @@ export { resolveAudioMapping, scoreTextSimilarity } from './audioMapping.js';
 export {
   isDataFence,
   parseDataFence,
+  replaceDataFence,
   parseYamlSubset,
   findFirstTable,
   extractTableData,
@@ -41,3 +42,14 @@ export type { DataFenceParseResult, ExtractedTableData } from './structuredData.
 export { validateMarkdownSource, validateMarkdownDoc } from './validate.js';
 export type { ValidateOptions, MarkdownValidationResult } from './validate.js';
 export { fallbackBlockLayers } from './templates/fallbackBlock.js';
+export {
+  BASE_INPUT_DESCRIPTORS,
+  TEMPLATE_INPUT_DESCRIPTORS,
+  coerceTemplateParams,
+  lintTemplateParams,
+} from './templates/inputDescriptors.js';
+export type {
+  InputCoercion,
+  TemplateInputDescriptor,
+  TemplateParamFinding,
+} from './templates/inputDescriptors.js';

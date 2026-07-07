@@ -31,6 +31,12 @@ export interface CsvImportOptions {
 export interface CsvExportOptions {
   /** Field delimiter. Default `,`. */
   delimiter?: string;
+  /**
+   * Zero-based index of the table to export when the document contains more
+   * than one. Default 0 (the first table). An explicitly provided index that
+   * doesn't match a table in the document is an error.
+   */
+  tableIndex?: number;
 }
 
 async function toText(data: ArrayBuffer | Blob | string): Promise<string> {
@@ -152,10 +158,27 @@ function cellText(cell: MarkdownTableCell): string {
   return walk(cell.children);
 }
 
-/** Serialize the first table in a MarkdownDocument to CSV text. */
+/**
+ * Serialize one table in a MarkdownDocument to CSV text.
+ *
+ * By default the first table is exported. Documents with multiple tables can
+ * select another via `options.tableIndex` (zero-based). An explicit
+ * `tableIndex` that is out of range throws; the implicit first-table default
+ * on a table-less document returns an empty string (back-compat).
+ */
 export function markdownDocToCsv(doc: MarkdownDocument, options: CsvExportOptions = {}): string {
   const delimiter = options.delimiter ?? ',';
-  const table = doc.children.find((n) => n.type === 'table') as MarkdownTable | undefined;
+  const tables = doc.children.filter((n): n is MarkdownTable => n.type === 'table');
+  const index = options.tableIndex ?? 0;
+  if (
+    options.tableIndex !== undefined &&
+    (!Number.isInteger(index) || index < 0 || index >= tables.length)
+  ) {
+    throw new Error(
+      `CSV export: tableIndex ${index} is out of range — the document contains ${tables.length} table(s).`,
+    );
+  }
+  const table = tables[index];
   if (!table) return '';
   return table.children
     .map((row) =>

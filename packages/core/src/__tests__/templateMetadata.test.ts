@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { templateRegistry, TEMPLATE_METADATA } from '../doc/templates/index';
+import { templateRegistry, TEMPLATE_METADATA, TEMPLATE_ALIASES } from '../doc/templates/index';
 
 describe('TEMPLATE_METADATA', () => {
   it('stays exactly 1:1 with templateRegistry (same ids)', () => {
@@ -16,6 +16,16 @@ describe('TEMPLATE_METADATA', () => {
     for (const [id, meta] of Object.entries(TEMPLATE_METADATA)) {
       expect(meta.label, `label for "${id}"`).toBeTruthy();
       expect(meta.description, `description for "${id}"`).toBeTruthy();
+    }
+  });
+});
+
+describe('TEMPLATE_ALIASES', () => {
+  it('every alias target resolves to a real registry entry', () => {
+    // A typo'd alias target would otherwise fall through resolveTemplateName's
+    // `?? name` fallback and silently resolve to a non-existent template.
+    for (const [alias, target] of Object.entries(TEMPLATE_ALIASES)) {
+      expect(target in templateRegistry, `alias "${alias}" → "${target}"`).toBe(true);
     }
   });
 });

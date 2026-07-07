@@ -38,7 +38,7 @@ export function imageWithCaption(input: ImageWithCaptionInput, context: Template
   const treatment = themedImageTreatment(context, input.imageTreatment);
 
   // Scale font sizes for viewport
-  const captionFontSize = themedFontSize(36, context, false);
+  const captionFontSize = themedFontSize(30, context, false);
   const titleFontSize = themedFontSize(96, context, true);
   const subtitleFontSize = themedFontSize(36, context, false);
 
@@ -140,23 +140,23 @@ export function imageWithCaption(input: ImageWithCaptionInput, context: Template
 
   // STANDARD MODE: Caption at bottom
   if (caption) {
-    // Subtle gradient at bottom for caption readability (raised above media controls)
+    // Compact caption band raised above media controls. Long archival captions
+    // are clamped so they don't sprawl across the image.
     layers.push({
       type: 'shape',
       id: 'caption-gradient',
       content: {
         shape: 'rect',
-        fill: `linear-gradient(0deg, ${withAlpha(bg, 0.8)} 0%, ${withAlpha(bg, 0.35)} 60%, ${withAlpha(bg, 0)} 100%)`,
+        fill: `linear-gradient(90deg, ${withAlpha(bg, 0)}, ${withAlpha(bg, 0.78)} 16%, ${withAlpha(bg, 0.78)} 84%, ${withAlpha(bg, 0)})`,
       },
       position: {
         x: 0,
-        y: '65%',
+        y: '68%',
         width: '100%',
-        height: '35%',
+        height: '16%',
       },
     });
 
-    // Caption text - raised above media controls
     layers.push({
       type: 'text',
       id: 'caption',
@@ -168,13 +168,15 @@ export function imageWithCaption(input: ImageWithCaptionInput, context: Template
           color: theme.colors.text,
           textAlign: 'center',
           shadow: shouldUseShadow(context),
+          lineHeight: 1.18,
+          maxLines: 2,
         },
       },
       position: {
         x: '50%',
-        y: '82%',
+        y: '74%',
         anchor: 'center',
-        width: layout.maxTextWidth,
+        width: '78%',
       },
       animation: { type: 'fadeIn', duration: 1.5, delay: 0.5 },
     });

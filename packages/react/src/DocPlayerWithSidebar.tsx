@@ -20,19 +20,22 @@
 
 import { useRef, useState, useCallback, useEffect } from 'react';
 import type { Doc } from '@bendyline/squisq/schemas';
-import type { ViewportConfig } from '@bendyline/squisq/schemas';
-import type { AudioProvider } from './hooks/AudioProvider';
+import type { ViewportConfig, Theme } from '@bendyline/squisq/schemas';
+import type { AudioController } from './hooks/AudioController';
 import { DocPlayer } from './DocPlayer';
 import { DocControlsSidebar } from './DocControlsSidebar';
 import type { PlaybackState, PlaybackActions } from './types';
 
 interface DocPlayerWithSidebarProps {
-  script: Doc;
-  basePath: string;
+  /** The Doc to play */
+  doc: Doc;
+  /** Base path for resolving media URLs (default: `'.'`) */
+  basePath?: string;
   autoPlay?: boolean;
   onEnded?: () => void;
   onTimeUpdate?: (time: number) => void;
-  audioProvider?: AudioProvider;
+  /** Optional audio controller (if not provided, uses default HTML5 audio) */
+  audioController?: AudioController;
   muted?: boolean;
   captionsEnabled?: boolean;
   isFullscreen?: boolean;
@@ -41,6 +44,13 @@ interface DocPlayerWithSidebarProps {
   forceViewport?: ViewportConfig;
   /** Called when playing state changes */
   onPlayingChange?: (isPlaying: boolean) => void;
+  /**
+   * Theme for rendering. Forwarded to the inner DocPlayer so the sidebar
+   * (portrait) layout matches the default (landscape) layout — without it the
+   * inner player falls back to DEFAULT_THEME, whose dark text is unreadable
+   * over a hero cover image.
+   */
+  theme?: Theme;
 }
 
 const DEFAULT_STATE: PlaybackState = {
@@ -59,18 +69,19 @@ const DEFAULT_STATE: PlaybackState = {
 };
 
 export function DocPlayerWithSidebar({
-  script,
+  doc,
   basePath,
   autoPlay = false,
   onEnded,
   onTimeUpdate,
-  audioProvider,
+  audioController,
   muted,
   captionsEnabled,
   isFullscreen,
   onFullscreenToggle,
   forceViewport,
   onPlayingChange,
+  theme,
 }: DocPlayerWithSidebarProps) {
   // Store playback state in a ref to avoid triggering re-renders from DocPlayer callbacks
   const stateRef = useRef<PlaybackState>(DEFAULT_STATE);
@@ -114,12 +125,13 @@ export function DocPlayerWithSidebar({
     <div className="doc-player-sidebar-layout">
       <div className="doc-player-sidebar-layout__video">
         <DocPlayer
-          script={script}
+          doc={doc}
+          theme={theme}
           basePath={basePath}
           autoPlay={autoPlay}
           onEnded={onEnded}
           onTimeUpdate={onTimeUpdate}
-          audioProvider={audioProvider}
+          audioController={audioController}
           muted={muted}
           captionsEnabled={captionsEnabled}
           showControls={isFullscreen}

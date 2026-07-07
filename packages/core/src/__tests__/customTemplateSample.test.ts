@@ -11,8 +11,12 @@ import { describe, it, expect } from 'vitest';
 import { markdownToDoc } from '../doc/markdownToDoc';
 import { expandDocBlocks } from '../doc/templates/index';
 import { parseMarkdown } from '../markdown/parse';
-import { writeCustomTemplatesToFrontmatter } from '../doc/customTemplatesFrontmatter';
-import type { CustomTemplateDefinition } from '../schemas/CustomTemplates.js';
+import {
+  writeCustomTemplatesToFrontmatter,
+  readCustomTemplatesFromFrontmatter,
+  FRONTMATTER_CUSTOM_TEMPLATES_KEY,
+} from '../doc/customTemplatesFrontmatter';
+import type { CustomTemplateDefinition, LayerRepeat } from '../schemas/CustomTemplates.js';
 import type { TextLayer } from '../schemas/Doc.js';
 import { VIEWPORT_PRESETS } from '../schemas/Viewport.js';
 
@@ -79,5 +83,62 @@ describe('Custom template pipeline (markdown → expanded layers)', () => {
     // renderer resolves them against the actual viewport at draw time.
     expect(layers[0].position.x).toBe('6%');
     expect(layers[0].position.width).toBe('88%');
+  });
+
+  it('resolves {attr:key} against a block heading annotation through the pipeline', () => {
+    const attrDef: CustomTemplateDefinition = {
+      name: 'badge',
+      label: 'Badge',
+      viewport: { width: 1920, height: 1080 },
+      layers: [
+        {
+          id: 'badge-role',
+          type: 'text',
+          position: { x: '6%', y: '20%', width: '88%' },
+          content: { text: 'Role: {attr:role|none}', style: { fontSize: 48, color: '#000' } },
+        },
+      ],
+    };
+    const payload = writeCustomTemplatesToFrontmatter([attrDef]);
+    const md = `---
+squisq-custom-templates: "${payload}"
+---
+
+# Team {[badge role=lead]}
+
+Body.
+`;
+    const doc = markdownToDoc(parseMarkdown(md));
+    const blocks = expandDocBlocks(doc.blocks, { customTemplates: doc.customTemplates });
+    const layers = blocks[0].layers ?? [];
+    expect((layers[0] as TextLayer).content.text).toBe('Role: lead');
+  });
+});
+
+describe('Custom template codec — repeat round-trip', () => {
+  it('preserves a layer.repeat directive through write → read (passes through unmapped)', () => {
+    const repeat: LayerRepeat = { source: 'images', direction: 'row', gap: 12, max: 4 };
+    const def: CustomTemplateDefinition = {
+      name: 'gallery',
+      label: 'Gallery',
+      viewport: { width: 1920, height: 1080 },
+      layers: [
+        {
+          id: 'thumb',
+          type: 'image',
+          position: { x: '0%', y: '0%', width: '25%', height: '25%' },
+          content: { src: '{item:src}', alt: '{item:label}' },
+          repeat,
+        },
+      ],
+    };
+    const payload = writeCustomTemplatesToFrontmatter([def]);
+    expect(payload).toBeDefined();
+    const round = readCustomTemplatesFromFrontmatter({
+      [FRONTMATTER_CUSTOM_TEMPLATES_KEY]: JSON.parse(payload as string),
+    });
+    expect(round).toBeDefined();
+    const layer = round?.[0].layers[0] as (typeof def.layers)[number];
+    expect(layer.repeat).toEqual(repeat);
   });
 });

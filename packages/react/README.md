@@ -22,37 +22,54 @@ import { DocPlayer } from '@bendyline/squisq-react';
 import '@bendyline/squisq-react/styles';
 
 function App() {
-  return <DocPlayer doc={myDoc} />;
+  return <DocPlayer markdown={'# Hello\n\nWelcome to Squisq.'} />;
 }
 ```
 
+`DocPlayer` accepts **either** raw `markdown` (parsed and converted internally)
+**or** a parsed `doc`; if you already have a `Doc`, pass `<DocPlayer doc={doc} />`.
+`basePath` is optional (default `'.'`) and is the base URL for resolving relative
+media paths. With neither `markdown` nor `doc`, the player renders a themed empty
+state rather than crashing.
+
+> **v1.5 breaking changes:** the old `script` prop is now `doc`, and the
+> `audioProvider` prop is now `audioController` (its type `AudioProvider` was
+> renamed to `AudioController`). `LinearDocView` gained the same `markdown` prop.
+
 ## Components
 
-| Component              | Description                                                        |
-| ---------------------- | ------------------------------------------------------------------ |
-| `DocPlayer`            | Main document player with timed playback, audio sync, and controls |
-| `LinearDocView`        | Scroll-based linear rendering of all blocks                        |
-| `BlockRenderer`        | SVG-based renderer for a single block                              |
-| `MarkdownRenderer`     | Renders Squisq markdown as a visual document                       |
-| `DocPlayerWithSidebar` | DocPlayer with a sidebar navigation panel                          |
-| `CaptionOverlay`       | Timed caption/subtitle overlay                                     |
-| `DocProgressBar`       | Playback progress indicator                                        |
-| `DocControlsOverlay`   | Floating playback controls                                         |
-| `DocControlsBottom`    | Bottom-bar playback controls                                       |
-| `DocControlsSidebar`   | Sidebar navigation controls                                        |
-| `DocControlsSlideshow` | Slideshow-style navigation controls                                |
+| Component              | Description                                                         |
+| ---------------------- | ------------------------------------------------------------------- |
+| `DocPlayer`            | Main document player with timed playback, audio sync, and controls  |
+| `LinearDocView`        | Scroll-based linear rendering of all blocks                         |
+| `BlockRenderer`        | SVG-based renderer for a single block                               |
+| `MarkdownRenderer`     | Renders Squisq markdown as a visual document                        |
+| `DocPlayerWithSidebar` | DocPlayer with a sidebar navigation panel                           |
+| `CaptionOverlay`       | Timed caption/subtitle overlay                                      |
+| `DocProgressBar`       | Playback progress indicator                                         |
+| `DocControlsOverlay`   | Floating playback controls                                          |
+| `DocControlsBottom`    | Bottom-bar playback controls                                        |
+| `DocControlsSidebar`   | Sidebar navigation controls                                         |
+| `DocControlsSlideshow` | Slideshow-style navigation controls                                 |
+| `SocialCaptionOverlay` | Large centered word-by-word (TikTok/Reels-style) captions           |
+| `InlineVideoPlayer`    | Native `<video>` wrapper resolving `src`/`poster` via MediaContext  |
+| `InlineAudioPlayer`    | Native `<audio>` wrapper resolving `src` via MediaContext           |
+| `MediaClipLayer`       | Hidden `<audio>`/`<video>` elements for timed media clips           |
+| `JsonView`             | Read-only viewer for JSON values bound to a Squisq-annotated schema |
 
 ## Layers
 
 Blocks are composed of typed layers rendered as SVG:
 
-| Layer        | Description                                |
-| ------------ | ------------------------------------------ |
-| `ImageLayer` | Background and foreground images           |
-| `TextLayer`  | Styled text with positioning and animation |
-| `ShapeLayer` | SVG shapes (rectangles, circles, lines)    |
-| `VideoLayer` | Embedded video with playback sync          |
-| `MapLayer`   | Tile-based map rendering                   |
+| Layer        | Description                                   |
+| ------------ | --------------------------------------------- |
+| `ImageLayer` | Background and foreground images              |
+| `TextLayer`  | Styled text with positioning and animation    |
+| `ShapeLayer` | SVG shapes (rectangles, circles, lines)       |
+| `PathLayer`  | Freeform SVG path drawing                     |
+| `VideoLayer` | Embedded video with playback sync             |
+| `TableLayer` | HTML table embedded via SVG `<foreignObject>` |
+| `MapLayer`   | Tile-based map rendering                      |
 
 ## Hooks
 
@@ -60,20 +77,32 @@ Blocks are composed of typed layers rendered as SVG:
 | ---------------------------------- | ------------------------------------------------------------------ |
 | `useDocPlayback`                   | Core playback state machine — timing, block transitions, scripting |
 | `useAudioSync`                     | Synchronizes audio playback with doc timeline                      |
+| `useMediaSchedule`                 | Resolves which timed media clips are active at the current time    |
 | `useViewportOrientation`           | Tracks viewport orientation for responsive layouts                 |
+| `useAutoSurface`                   | Live light/dark surface detection via `prefers-color-scheme`       |
 | `useMediaProvider` / `useMediaUrl` | Media URL resolution via `MediaContext`                            |
 
 ## Standalone Player
 
-A self-contained global build is available for non-React environments:
+A self-contained global build is available for non-React environments. It
+exposes a `SquisqPlayer` global with `mount`, `mountStatic`, `unmount`, and
+`version`:
 
 ```html
 <script src="https://unpkg.com/@bendyline/squisq-react/dist/squisq-player.global.js"></script>
 <div id="player"></div>
 <script>
-  SquisqPlayer.render(document.getElementById('player'), { markdown: '# Hello' });
+  // docJson is a Doc (e.g. produced by markdownToDoc and serialized)
+  SquisqPlayer.mount(document.getElementById('player'), docJson, {
+    mode: 'slideshow', // or 'static' for a scrollable document view
+    basePath: '/',
+  });
 </script>
 ```
+
+For build-time embedding, `@bendyline/squisq-react/standalone-source` exports
+the same bundle as a string constant (`PLAYER_BUNDLE`) — used by
+`@bendyline/squisq-formats` and the CLI to produce single-file HTML exports.
 
 ## Styles
 
@@ -82,6 +111,11 @@ Import the animation CSS for block transitions:
 ```ts
 import '@bendyline/squisq-react/styles';
 ```
+
+## Full API Reference
+
+See [docs/API.md](https://github.com/bendyline/squisq/blob/main/docs/API.md)
+for the complete prop tables, hook signatures, and types.
 
 ## Related Packages
 

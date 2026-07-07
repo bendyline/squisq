@@ -7,20 +7,21 @@
  * Handles multiple audio segments (MP3 files) by tracking which segment
  * is currently playing and calculating the overall timeline position.
  *
- * This is the HTML5 Audio implementation of the AudioProvider interface.
- * For EFB/MSFS environments, use useCompanionAudioSync instead.
+ * This is the HTML5 Audio implementation of the AudioController interface.
+ * Hosts that drive audio through an external player (e.g. a native shell)
+ * can supply their own AudioController to DocPlayer instead of this hook.
  */
 
 import { useState, useEffect, useRef, useCallback } from 'react';
 import type { RefObject } from 'react';
 import type { AudioTrack } from '@bendyline/squisq/schemas';
-import type { AudioProvider } from './AudioProvider';
+import type { AudioController } from './AudioController';
 
 export function useAudioSync(
   audioRef: RefObject<HTMLAudioElement>,
   audioTrack: AudioTrack | undefined,
   basePath: string = '',
-): AudioProvider {
+): AudioController {
   const [currentTime, setCurrentTime] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentSegment, setCurrentSegment] = useState(0);

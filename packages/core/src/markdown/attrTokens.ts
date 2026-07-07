@@ -220,3 +220,22 @@ export function quoteAttrValue(value: string): string {
   }
   return `"${value.replace(DQ_ESCAPE_RE, (ch) => `\\${ch}`)}"`;
 }
+
+/**
+ * Serialize a `{[templateName key=value …]}` template annotation. The inverse
+ * of {@link parseStandaloneAnnotation} / the tokenizer: emits the template
+ * name (when present) followed by each `key=value` pair in insertion order,
+ * quoting values via {@link quoteAttrValue}. Used to re-emit heading-less
+ * standalone annotation blocks in `docToMarkdown`.
+ */
+export function serializeAnnotation(
+  template: string | undefined,
+  params?: Record<string, string>,
+): string {
+  const parts: string[] = [];
+  if (template) parts.push(template);
+  for (const [key, value] of Object.entries(params ?? {})) {
+    parts.push(`${key}=${quoteAttrValue(value)}`);
+  }
+  return `{[${parts.join(' ')}]}`;
+}

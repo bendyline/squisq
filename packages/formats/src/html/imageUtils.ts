@@ -5,31 +5,17 @@
  * and inferring MIME types from filenames.
  */
 
-/** Map of file extensions to MIME types */
-const MIME_MAP: Record<string, string> = {
-  jpg: 'image/jpeg',
-  jpeg: 'image/jpeg',
-  png: 'image/png',
-  gif: 'image/gif',
-  webp: 'image/webp',
-  svg: 'image/svg+xml',
-  ico: 'image/x-icon',
-  bmp: 'image/bmp',
-  avif: 'image/avif',
-  mp3: 'audio/mpeg',
-  wav: 'audio/wav',
-  ogg: 'audio/ogg',
-  mp4: 'video/mp4',
-  webm: 'video/webm',
-};
+import { extToMime } from '../shared/images.js';
 
 /**
  * Infer a MIME type from a filename's extension.
  * Returns 'application/octet-stream' for unknown types.
+ *
+ * Thin wrapper over the shared {@link extToMime} map so html export, docx
+ * import, and pptx import all agree on extension → MIME.
  */
 export function inferMimeType(filename: string): string {
-  const ext = filename.split('.').pop()?.toLowerCase() ?? '';
-  return MIME_MAP[ext] ?? 'application/octet-stream';
+  return extToMime(filename.split('.').pop() ?? '');
 }
 
 /**

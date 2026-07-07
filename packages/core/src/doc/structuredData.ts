@@ -27,10 +27,12 @@
  *    didn't provide them explicitly.
  *
  * YAML support is a documented subset (this package has no YAML
- * dependency): top-level `key: scalar`, `key: [inline, array]`, and
- * `key:` followed by an indented `- item` block sequence whose items are
- * scalars or inline arrays. Nested maps are rejected with a clear error —
- * use a `json data` fence for deeply nested input.
+ * dependency): top-level `key: scalar`, `key: [inline, array]`, `key:`
+ * followed by an indented `- item` block sequence (scalars or inline
+ * arrays), and `key:` followed by *one level* of indented `subkey: scalar`
+ * lines (a nested map, e.g. `center:` + indented `lat:` / `lng:`). Deeper
+ * nesting, and mixing list items with mapping keys under one key, are
+ * rejected with a clear error — use a `json data` fence for those.
  */
 
 import type {
@@ -79,15 +81,40 @@ export function parseDataFence(node: MarkdownCodeBlock): DataFenceParseResult {
         return { error: 'JSON data fence must contain a top-level object ({"key": …})' };
       }
       return { data: parsed as Record<string, unknown> };
-    } catch (err) {
+    } catch (err: unknown) {
       return { error: `invalid JSON: ${err instanceof Error ? err.message : String(err)}` };
     }
   }
   try {
     return { data: parseYamlSubset(node.value) };
-  } catch (err) {
+  } catch (err: unknown) {
     return { error: `invalid YAML: ${err instanceof Error ? err.message : String(err)}` };
   }
+}
+
+/**
+ * Return a new contents array with the first data fence's code content
+ * replaced by `data` (pretty-printed JSON). The fence node keeps its
+ * language and `data` marker; only `value` changes. When no data fence
+ * exists, a new ` ```json data ` fence is appended instead.
+ *
+ * Pure: neither `contents` nor its nodes are mutated. This is the write
+ * half of the data-fence channel — editors update `block.templateData`
+ * and call this to reflect the change back into `block.contents`.
+ */
+export function replaceDataFence(
+  contents: MarkdownBlockNode[],
+  data: Record<string, unknown>,
+): MarkdownBlockNode[] {
+  const value = JSON.stringify(data, null, 2);
+  const index = contents.findIndex((node) => node.type === 'code' && isDataFence(node));
+  if (index < 0) {
+    const fence: MarkdownCodeBlock = { type: 'code', lang: 'json', meta: 'data', value };
+    return [...contents, fence];
+  }
+  const next = [...contents];
+  next[index] = { ...(contents[index] as MarkdownCodeBlock), value };
+  return next;
 }
 
 // ============================================
@@ -153,30 +180,72 @@ function parseInlineValue(raw: string): unknown {
 export function parseYamlSubset(src: string): Record<string, unknown> {
   const result: Record<string, unknown> = {};
   const lines = src.split('\n');
-  let pendingListKey: string | null = null;
+
+  // Open block under the most recent `key:` line: whether its children are a
+  // block sequence (`- …`) or a nested map (`subkey: …`) is decided by the
+  // first indented child; `childIndent` pins the one allowed child depth.
+  let pendingKey: string | null = null;
+  let pendingKind: 'list' | 'map' | null = null;
+  let childIndent = -1;
 
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
     const trimmed = line.trim();
     if (!trimmed || trimmed.startsWith('#')) continue;
 
-    const indented = /^\s/.test(line);
+    const indent = line.length - line.trimStart().length;
 
-    if (indented && trimmed.startsWith('- ')) {
-      if (!pendingListKey) {
-        throw new Error(`line ${i + 1}: list item without a preceding "key:" line`);
+    if (indent > 0) {
+      if (!pendingKey) {
+        throw new Error(`line ${i + 1}: unexpected indented line without a preceding "key:" line`);
       }
-      (result[pendingListKey] as unknown[]).push(parseInlineValue(trimmed.slice(2)));
+      if (childIndent < 0) childIndent = indent;
+      if (indent > childIndent) {
+        throw new Error(
+          `line ${i + 1}: nesting deeper than one level is not supported — use a \`\`\`json data fence for nested input`,
+        );
+      }
+
+      if (trimmed.startsWith('- ')) {
+        if (pendingKind === 'map') {
+          throw new Error(
+            `line ${i + 1}: cannot mix list items and mapping keys under "${pendingKey}"`,
+          );
+        }
+        pendingKind = 'list';
+        (result[pendingKey] as unknown[]).push(parseInlineValue(trimmed.slice(2)));
+        continue;
+      }
+
+      // Otherwise this is a nested `subkey: value` mapping line.
+      if (pendingKind === 'list') {
+        throw new Error(
+          `line ${i + 1}: cannot mix mapping keys and list items under "${pendingKey}"`,
+        );
+      }
+      const subColon = trimmed.indexOf(':');
+      if (subColon < 1) {
+        throw new Error(`line ${i + 1}: expected "key: value"`);
+      }
+      const subValue = trimmed.slice(subColon + 1).trim();
+      if (subValue === '') {
+        // A nested `subkey:` opening its own block would be a second level.
+        throw new Error(
+          `line ${i + 1}: nesting deeper than one level is not supported — use a \`\`\`json data fence for nested input`,
+        );
+      }
+      if (pendingKind !== 'map') {
+        pendingKind = 'map';
+        result[pendingKey] = {};
+      }
+      (result[pendingKey] as Record<string, unknown>)[trimmed.slice(0, subColon).trim()] =
+        parseInlineValue(subValue);
       continue;
     }
 
-    if (indented) {
-      throw new Error(
-        `line ${i + 1}: nested mappings are not supported — use a \`\`\`json data fence for nested input`,
-      );
-    }
-
-    pendingListKey = null;
+    pendingKey = null;
+    pendingKind = null;
+    childIndent = -1;
     const colonIdx = trimmed.indexOf(':');
     if (colonIdx < 1) {
       throw new Error(`line ${i + 1}: expected "key: value"`);
@@ -185,9 +254,11 @@ export function parseYamlSubset(src: string): Record<string, unknown> {
     const rawValue = trimmed.slice(colonIdx + 1).trim();
 
     if (rawValue === '') {
-      // `key:` opens a block sequence; items follow as indented `- …` lines.
+      // `key:` opens a block: an indented `- …` sequence or a `subkey: …`
+      // map. Default to an empty list so a `key:` with no children stays
+      // back-compatible (`{ key: [] }`); the map branch replaces it wholesale.
       result[key] = [];
-      pendingListKey = key;
+      pendingKey = key;
     } else {
       result[key] = parseInlineValue(rawValue);
     }

@@ -25,7 +25,7 @@ import type { Doc } from '@bendyline/squisq/schemas';
 import { type PptxImportOptions, pptxToMarkdownDoc } from './import.js';
 
 export type { PptxImportOptions } from './import.js';
-export { pptxToMarkdownDoc } from './import.js';
+export { pptxToMarkdownDoc, pptxToContainer } from './import.js';
 
 /**
  * Convert a .pptx file to a squisq Doc (via the markdown model).

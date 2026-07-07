@@ -250,6 +250,31 @@ describe('docToMarkdown (round-trip)', () => {
     expect(stripPositions(md2)).toEqual(stripPositions(md));
   });
 
+  it('round-trips inline coerced template params, keeping overrides raw', () => {
+    const input = '# Downtown {[map center="47.6,-122.3" zoom=9 mapStyle="road"]}\n\nSome text.\n';
+    const md = parseMarkdown(input);
+    const doc = markdownToDoc(md, { generateCoverBlock: false });
+
+    // The overrides must stay RAW strings — coercion only ever touches the
+    // ephemeral render input, never the stored block, so round-trips are lossless.
+    expect(doc.blocks[0].templateOverrides).toEqual({
+      center: '47.6,-122.3',
+      zoom: '9',
+      mapStyle: 'road',
+    });
+
+    // Byte-stable: one full cycle reaches a fixed point that a second cycle
+    // reproduces exactly.
+    const once = stringifyMarkdown(docToMarkdown(doc));
+    const twice = stringifyMarkdown(
+      docToMarkdown(markdownToDoc(parseMarkdown(once), { generateCoverBlock: false })),
+    );
+    expect(twice).toBe(once);
+    // And the annotation with its raw values survives serialization.
+    expect(once).toContain('center=47.6,-122.3');
+    expect(once).toContain('zoom=9');
+  });
+
   it('round-trips preamble content', () => {
     const input = 'Preamble text\n\n# Heading\n\nBody\n';
     const md = parseMarkdown(input);
@@ -377,6 +402,51 @@ describe('template annotation in markdownToDoc', () => {
     const output = stringifyMarkdown(docToMarkdown(doc));
 
     expect(output).toContain('{transition=wipe transitionDuration=0.8 transitionDirection=left}');
+  });
+
+  it('a programmatic transition survives the string round trip', () => {
+    const doc = markdownToDoc(parseMarkdown('## Section\n\nBody'));
+    doc.blocks[0].transition = { type: 'wipe', duration: 0.8, direction: 'left' };
+
+    const reparsed = markdownToDoc(parseMarkdown(stringifyMarkdown(docToMarkdown(doc))));
+
+    expect(reparsed.blocks[0].transition).toEqual({
+      type: 'wipe',
+      duration: 0.8,
+      direction: 'left',
+    });
+  });
+
+  it('a programmatic transition survives the in-memory round trip (no stringify)', () => {
+    // markdownToDoc reads heading.attributes.blockMeta directly — it never
+    // re-coerces params — so docToMarkdown must keep blockMeta in sync with
+    // the params it writes for stringifyMarkdown.
+    const doc = markdownToDoc(parseMarkdown('## Section\n\nBody'));
+    doc.blocks[0].transition = { type: 'wipe', duration: 0.8, direction: 'left' };
+
+    const reconverted = markdownToDoc(docToMarkdown(doc));
+
+    expect(reconverted.blocks[0].transition).toEqual({
+      type: 'wipe',
+      duration: 0.8,
+      direction: 'left',
+    });
+  });
+
+  it('an updated transition replaces a previously authored one in both round trips', () => {
+    // The heading already carries a parsed transition (params + blockMeta);
+    // a programmatic change must win over the stale blockMeta.
+    const doc = markdownToDoc(parseMarkdown('## Section {transition=fade}\n\nBody'));
+    expect(doc.blocks[0].transition).toEqual({ type: 'fade' });
+    doc.blocks[0].transition = { type: 'wipe', direction: 'left' };
+
+    const inMemory = markdownToDoc(docToMarkdown(doc));
+    expect(inMemory.blocks[0].transition).toEqual({ type: 'wipe', direction: 'left' });
+
+    const output = stringifyMarkdown(docToMarkdown(doc));
+    expect(output).toContain('transition=wipe');
+    const reparsed = markdownToDoc(parseMarkdown(output));
+    expect(reparsed.blocks[0].transition).toEqual({ type: 'wipe', direction: 'left' });
   });
 
   it('nested headings preserve their own annotations', () => {
@@ -782,5 +852,103 @@ describe('auto template picking (autoTemplates, default on)', () => {
     expect(doc.blocks[0].template).toBe('quote');
     const roundTripped = stringifyMarkdown(docToMarkdown(doc));
     expect(roundTripped).not.toContain('{[quote');
+  });
+});
+
+describe('standalone annotation blocks (S2)', () => {
+  const toDoc = (md: string, options?: Parameters<typeof markdownToDoc>[1]) =>
+    markdownToDoc(parseMarkdown(md), { articleId: 't', generateCoverBlock: false, ...options });
+
+  it('turns a standalone {[template]} paragraph into a heading-less block', () => {
+    const doc = toDoc('# Intro\n\nlead para\n\n{[quote]}\n\nquoted body\n');
+    // Containing block keeps only the leading content.
+    const intro = doc.blocks[0];
+    expect(intro.title).toBe('Intro');
+    expect(intro.contents?.map((n) => n.type)).toEqual(['paragraph']);
+    // The produced block is a sibling right after the containing block.
+    const q = doc.blocks[1];
+    expect(q.template).toBe('quote');
+    expect(q.standaloneAnnotation).toBe(true);
+    expect(q.sourceHeading).toBeUndefined();
+    expect(q.sourceAnnotation).toEqual({ template: 'quote' });
+    expect(q.contents?.map((n) => n.type)).toEqual(['paragraph']);
+  });
+
+  it('attaches trailing contents up to the next annotation; params → overrides + title', () => {
+    const doc = toDoc(
+      '# H\n\n{[statHighlight title="Q1 Revenue" colorScheme=blue]}\n\nbig number\n\n{[quote]}\n\nq\n',
+    );
+    const stat = doc.blocks[1];
+    expect(stat.template).toBe('statHighlight');
+    expect(stat.title).toBe('Q1 Revenue');
+    expect(stat.templateOverrides).toEqual({ title: 'Q1 Revenue', colorScheme: 'blue' });
+    expect(stat.contents?.length).toBe(1); // "big number", ended by the next annotation
+    const quote = doc.blocks[2];
+    expect(quote.template).toBe('quote');
+    expect(quote.contents?.length).toBe(1); // "q"
+  });
+
+  it('produces adjacent blocks for consecutive annotations (no content between)', () => {
+    const doc = toDoc('# H\n\n{[quote]}\n\n{[factCard]}\n\ntail\n');
+    expect(doc.blocks[1].template).toBe('quote');
+    expect(doc.blocks[1].contents ?? []).toHaveLength(0);
+    expect(doc.blocks[2].template).toBe('factCard');
+    expect(doc.blocks[2].contents?.length).toBe(1); // "tail"
+  });
+
+  it('handles an annotation as the last node (no trailing contents)', () => {
+    const doc = toDoc('# H\n\nbody\n\n{[quote]}\n');
+    expect(doc.blocks[1].template).toBe('quote');
+    expect(doc.blocks[1].contents ?? []).toHaveLength(0);
+  });
+
+  it('generates unique slug ids that dedupe against headings', () => {
+    const doc = toDoc('# Quote\n\n{[quote title=Quote]}\n\nbody\n');
+    expect(doc.blocks[0].id).toBe('quote');
+    expect(doc.blocks[1].id).toBe('quote-2');
+  });
+
+  it('lifts an annotation out of the preamble (before the first heading)', () => {
+    const doc = toDoc('intro\n\n{[quote]}\n\nquoted\n\n# Heading\n\nrest\n');
+    // preamble keeps "intro", quote block next, then the heading block.
+    expect(doc.blocks[0].sourceHeading).toBeUndefined();
+    expect(doc.blocks[0].contents?.length).toBe(1);
+    expect(doc.blocks[1].template).toBe('quote');
+    expect(doc.blocks[2].title).toBe('Heading');
+  });
+
+  it('drops a preamble that was entirely a standalone annotation', () => {
+    const doc = toDoc('{[quote]}\n\nquoted\n\n# Heading\n');
+    expect(doc.blocks[0].template).toBe('quote');
+    expect(doc.blocks[0].standaloneAnnotation).toBe(true);
+    expect(doc.blocks[1].title).toBe('Heading');
+  });
+
+  it('honors a pinned duration on a standalone annotation', () => {
+    const doc = toDoc('# H\n\n{[quote duration=9]}\n\nbody\n');
+    expect(doc.blocks[1].duration).toBe(9);
+  });
+
+  it('does not treat annotations nested inside a list as blocks', () => {
+    const doc = toDoc('# H\n\n- {[quote]}\n');
+    // Only the heading block — the list annotation stays in contents.
+    expect(doc.blocks).toHaveLength(1);
+    expect(doc.blocks[0].contents?.[0].type).toBe('list');
+  });
+
+  it('round-trips a standalone annotation block byte-for-byte', () => {
+    const md = '# Intro\n\nlead\n\n{[quote]}\n\nquoted body\n';
+    const doc = toDoc(md);
+    const out = stringifyMarkdown(docToMarkdown(doc));
+    expect(out).toBe(md);
+    // And re-parsing is stable.
+    const doc2 = toDoc(out);
+    expect(stringifyMarkdown(docToMarkdown(doc2))).toBe(md);
+  });
+
+  it('round-trips params (quoting) byte-for-byte', () => {
+    const md = '# H\n\n{[statHighlight title="Q1 Revenue" colorScheme=blue]}\n\nbody\n';
+    const out = stringifyMarkdown(docToMarkdown(toDoc(md)));
+    expect(out).toBe(md);
   });
 });

@@ -12,7 +12,8 @@ import { FFmpeg } from '@ffmpeg/ffmpeg';
 import { fetchFile } from '@ffmpeg/util';
 
 import type { VideoExportOptions, EncoderResult } from './types.js';
-import { QUALITY_PRESETS, resolveDimensions } from './types.js';
+import { resolveDimensions } from './types.js';
+import { ffmpegVideoQualityArgs, audioBitrateArg } from './ffmpegArgs.js';
 
 /**
  * Encode an array of PNG frame screenshots into an MP4 video.
@@ -30,7 +31,6 @@ export async function framesToMp4Wasm(
   const fps = options.fps ?? 30;
   const quality = options.quality ?? 'normal';
   const { width, height } = resolveDimensions(options);
-  const preset = QUALITY_PRESETS[quality];
   const onProgress = options.onProgress;
 
   if (frames.length === 0) {
@@ -85,10 +85,7 @@ export async function framesToMp4Wasm(
   args.push(
     '-c:v',
     'libx264',
-    '-preset',
-    preset.preset,
-    '-crf',
-    String(preset.crf),
+    ...ffmpegVideoQualityArgs(quality),
     '-pix_fmt',
     'yuv420p',
     '-vf',
@@ -97,7 +94,7 @@ export async function framesToMp4Wasm(
 
   // Audio encoding
   if (audio) {
-    args.push('-c:a', 'aac', '-b:a', '128k', '-shortest');
+    args.push('-c:a', 'aac', '-b:a', audioBitrateArg(quality), '-shortest');
   }
 
   args.push('output.mp4');

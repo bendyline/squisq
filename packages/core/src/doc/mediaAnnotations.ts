@@ -9,47 +9,21 @@
  * annotations, so quoting/escaping behave identically.
  */
 
-import {
-  matchTrailingTemplateAnnotation,
-  tokenizeAttrTokens,
-  splitKeyValueToken,
-} from '../markdown/attrTokens.js';
 import { parseTimeSeconds } from '../markdown/annotationCoercion.js';
 import type { MarkdownBlockNode } from '../markdown/types.js';
 import type { MediaClip } from '../schemas/Media.js';
+import { parseStandaloneAnnotation, type ParsedAnnotation } from './standaloneAnnotation.js';
 
 /** Annotation template names that produce a timed media clip. */
 const MEDIA_TEMPLATES = new Set(['audio', 'video', 'media']);
 
-interface ParsedAnnotation {
-  template?: string;
-  params: Record<string, string>;
-}
-
 /**
- * Parse a paragraph node that is *exactly* a `{[…]}` annotation (nothing
- * before or after). Returns the template + params, or null when the node
- * isn't a standalone annotation.
+ * Whether a standalone-annotation template name is a media name
+ * (`audio`/`video`/`media`). The standalone template-block extractor uses
+ * this to leave media annotations to {@link extractMediaFromContents}.
  */
-function parseStandaloneAnnotation(node: MarkdownBlockNode): ParsedAnnotation | null {
-  if (node.type !== 'paragraph') return null;
-  const children = node.children ?? [];
-  if (children.length !== 1 || children[0].type !== 'text') return null;
-  const text = children[0].value.trim();
-  const match = matchTrailingTemplateAnnotation(text);
-  // index 0 means the whole (trimmed) paragraph is the annotation.
-  if (!match || match.index !== 0) return null;
-
-  const tokens = tokenizeAttrTokens(match.inner.trim());
-  const firstIsParam = tokens.length > 0 && tokens[0].indexOf('=') > 0;
-  const template = firstIsParam || tokens.length === 0 ? undefined : tokens[0];
-  const startIdx = firstIsParam ? 0 : 1;
-  const params: Record<string, string> = {};
-  for (let i = startIdx; i < tokens.length; i++) {
-    const kv = splitKeyValueToken(tokens[i]);
-    if (kv) params[kv.key] = kv.value;
-  }
-  return { template, params };
+export function isMediaAnnotationName(name: string | undefined): boolean {
+  return name != null && MEDIA_TEMPLATES.has(name);
 }
 
 function time(raw: string | undefined): number | null {
@@ -67,7 +41,15 @@ function toMediaClip(parsed: ParsedAnnotation, id: string): MediaClip | null {
   const kind: MediaClip['kind'] = template === 'video' ? 'video' : 'audio';
   const anchor: MediaClip['anchor'] =
     params.anchor === 'document' || params.span === 'document' ? 'document' : 'block';
-  const clip: MediaClip = { id, src, kind, startAt: time(params.startAt) ?? 0, anchor };
+  // `startAt` is canonical; `startTime` is accepted as an alias (it is the
+  // heading-attribute spelling, so authors reach for it here too).
+  const clip: MediaClip = {
+    id,
+    src,
+    kind,
+    startAt: time(params.startAt ?? params.startTime) ?? 0,
+    anchor,
+  };
 
   const clipStart = time(params.clipStart);
   const clipEnd = time(params.clipEnd);

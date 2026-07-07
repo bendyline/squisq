@@ -12,6 +12,7 @@ import remarkMath from 'remark-math';
 import remarkDirective from 'remark-directive';
 import type { MarkdownDocument, StringifyOptions } from './types.js';
 import { toMdast } from './convert.js';
+import { formatBlockScalar } from './utils.js';
 
 // Cache the default processor (all extensions, default formatting) to avoid rebuilding on every call.
 let defaultProcessor: any;
@@ -193,9 +194,17 @@ export function stringifyMarkdown(doc: MarkdownDocument, options?: StringifyOpti
 
   // Prepend YAML frontmatter if present
   if (doc.frontmatter && Object.keys(doc.frontmatter).length > 0) {
-    const yamlLines = Object.entries(doc.frontmatter).map(
-      ([k, v]) => `${k}: ${typeof v === 'string' ? v : JSON.stringify(v)}`,
-    );
+    const yamlLines = Object.entries(doc.frontmatter).map(([k, v]) => {
+      if (typeof v === 'string') {
+        // Multi-line strings emit as a YAML literal block scalar, matching
+        // `formatFrontmatterValue` / `setFrontmatterValues` so both paths
+        // agree; single-line strings stay verbatim as before.
+        return /[\r\n]/.test(v)
+          ? `${k}: ${formatBlockScalar(v.replace(/\r\n?/g, '\n'))}`
+          : `${k}: ${v}`;
+      }
+      return `${k}: ${JSON.stringify(v)}`;
+    });
     return `---\n${yamlLines.join('\n')}\n---\n\n${cleaned}`;
   }
 
