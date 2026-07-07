@@ -20,7 +20,7 @@
 
 import { useRef, useState, useCallback, useEffect } from 'react';
 import type { Doc } from '@bendyline/squisq/schemas';
-import type { ViewportConfig } from '@bendyline/squisq/schemas';
+import type { ViewportConfig, Theme } from '@bendyline/squisq/schemas';
 import type { AudioController } from './hooks/AudioController';
 import { DocPlayer } from './DocPlayer';
 import { DocControlsSidebar } from './DocControlsSidebar';
@@ -44,6 +44,13 @@ interface DocPlayerWithSidebarProps {
   forceViewport?: ViewportConfig;
   /** Called when playing state changes */
   onPlayingChange?: (isPlaying: boolean) => void;
+  /**
+   * Theme for rendering. Forwarded to the inner DocPlayer so the sidebar
+   * (portrait) layout matches the default (landscape) layout — without it the
+   * inner player falls back to DEFAULT_THEME, whose dark text is unreadable
+   * over a hero cover image.
+   */
+  theme?: Theme;
 }
 
 const DEFAULT_STATE: PlaybackState = {
@@ -74,6 +81,7 @@ export function DocPlayerWithSidebar({
   onFullscreenToggle,
   forceViewport,
   onPlayingChange,
+  theme,
 }: DocPlayerWithSidebarProps) {
   // Store playback state in a ref to avoid triggering re-renders from DocPlayer callbacks
   const stateRef = useRef<PlaybackState>(DEFAULT_STATE);
@@ -118,6 +126,7 @@ export function DocPlayerWithSidebar({
       <div className="doc-player-sidebar-layout__video">
         <DocPlayer
           doc={doc}
+          theme={theme}
           basePath={basePath}
           autoPlay={autoPlay}
           onEnded={onEnded}

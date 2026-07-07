@@ -1,5 +1,10 @@
 import { describe, it, expect } from 'vitest';
-import { coverBlock, expandCoverBlock, startBlockToCoverInput } from '../doc/templates/coverBlock';
+import {
+  coverBlock,
+  expandCoverBlock,
+  startBlockToCoverInput,
+  fitCoverTitleSize,
+} from '../doc/templates/coverBlock';
 import { createTemplateContext, DEFAULT_THEME, VIEWPORT_PRESETS } from '../doc/templates/index';
 import type { StartBlockConfig } from '../schemas/Doc';
 import type { CoverBlockInput } from '../doc/templates/coverBlock';
@@ -176,6 +181,40 @@ describe('coverBlock viewport scaling', () => {
     const landTitle = findText(landLayers, 'cover-title');
     const portTitle = findText(portLayers, 'cover-title');
     expect(landTitle!.content.style.fontSize).not.toBe(portTitle!.content.style.fontSize);
+  });
+});
+
+// ── Long-title auto-fit ─────────────────────────────────────────────
+
+describe('coverBlock long-title auto-fit', () => {
+  const LONG = 'Seattle: The Emerald City That Rebuilt Itself on Top of Itself';
+
+  it('fitCoverTitleSize returns full base for short titles', () => {
+    expect(fitCoverTitleSize('Kirkland')).toBe(120);
+    expect(fitCoverTitleSize('Test Title')).toBe(120);
+  });
+
+  it('fitCoverTitleSize shrinks long titles below the full base', () => {
+    const size = fitCoverTitleSize(LONG);
+    expect(size).toBeLessThan(120);
+    expect(size).toBeGreaterThanOrEqual(62); // never below the readability floor
+  });
+
+  it('fitCoverTitleSize never drops below the readability floor', () => {
+    const size = fitCoverTitleSize('x'.repeat(400));
+    expect(size).toBe(62);
+  });
+
+  it('fitCoverTitleSize is monotonic — longer titles are never larger', () => {
+    const a = fitCoverTitleSize('A moderately long cover title here');
+    const b = fitCoverTitleSize('A moderately long cover title here that keeps going and going');
+    expect(b).toBeLessThanOrEqual(a);
+  });
+
+  it('renders a long title with a smaller font than a short one', () => {
+    const shortTitle = findText(coverBlock({ heroSrc: 'h.jpg', title: 'Short' }, landscapeContext), 'cover-title');
+    const longTitle = findText(coverBlock({ heroSrc: 'h.jpg', title: LONG }, landscapeContext), 'cover-title');
+    expect(longTitle!.content.style.fontSize).toBeLessThan(shortTitle!.content.style.fontSize);
   });
 });
 
