@@ -1,0 +1,155 @@
+/**
+ * Code-context sections — host-supplied markdown blurbs rendered inside
+ * Monaco view zones above anchor lines (see src/codeContext/).
+ *
+ * The zone dom node lives in Monaco's `.view-zones` layer, which sits below
+ * `.view-lines` in hit-test order. Raising the zone's z-index inside that
+ * shared stacking context is what makes section content clickable; Monaco's
+ * own `suppressMouseDown` keeps the cursor from jumping.
+ */
+
+.squisq-ccx-zone {
+  z-index: 10;
+  pointer-events: auto;
+  overflow: hidden;
+}
+
+.squisq-ccx-section {
+  --ccx-fg: #57606a;
+  --ccx-fg-strong: #24292f;
+  --ccx-bg: rgba(175, 184, 193, 0.12);
+  --ccx-bg-hover: rgba(175, 184, 193, 0.22);
+  --ccx-border: rgba(140, 149, 159, 0.35);
+  --ccx-accent: #0969da;
+  font-family: var(--squisq-ux-font, system-ui, -apple-system, sans-serif);
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--ccx-fg);
+  border-left: 2px solid var(--ccx-border);
+  background: var(--ccx-bg);
+  margin: 2px 8px 2px 4px;
+  border-radius: 4px;
+}
+
+.squisq-editor-shell[data-theme='dark'] .squisq-ccx-section {
+  --ccx-fg: #9198a1;
+  --ccx-fg-strong: #e6edf3;
+  --ccx-bg: rgba(110, 118, 129, 0.14);
+  --ccx-bg-hover: rgba(110, 118, 129, 0.26);
+  --ccx-border: rgba(110, 118, 129, 0.45);
+  --ccx-accent: #4493f8;
+}
+
+/* ── Collapsed strip ─────────────────────────────────────────────── */
+
+.squisq-ccx-strip {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 3px 10px;
+  border: none;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  border-radius: 4px;
+}
+
+.squisq-ccx-strip:hover {
+  background: var(--ccx-bg-hover);
+}
+
+.squisq-ccx-chevron {
+  flex: 0 0 auto;
+  font-size: 9px;
+  opacity: 0.7;
+}
+
+.squisq-ccx-strip-text {
+  flex: 1 1 auto;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Flatten the strip's markdown to a single inline line. */
+.squisq-ccx-strip-text .squisq-md,
+.squisq-ccx-strip-text .squisq-md-p {
+  display: inline;
+  margin: 0;
+}
+
+.squisq-ccx-strip-text .squisq-md-strong {
+  color: var(--ccx-fg-strong);
+}
+
+/* ── Expanded body ───────────────────────────────────────────────── */
+
+.squisq-ccx-body {
+  padding: 2px 12px 8px 24px;
+  font-size: 12px;
+  user-select: text;
+}
+
+.squisq-ccx-body--loading {
+  opacity: 0.6;
+  font-style: italic;
+}
+
+.squisq-ccx-body .squisq-md-p {
+  margin: 4px 0;
+}
+
+.squisq-ccx-body .squisq-md-strong {
+  color: var(--ccx-fg-strong);
+  font-size: 11px;
+  text-transform: none;
+}
+
+.squisq-ccx-body .squisq-md-list {
+  margin: 2px 0 6px;
+  padding-left: 18px;
+}
+
+.squisq-ccx-body .squisq-md-li {
+  margin: 1px 0;
+}
+
+.squisq-ccx-body .squisq-md-link {
+  color: var(--ccx-accent);
+  text-decoration: none;
+}
+
+.squisq-ccx-body .squisq-md-link:hover {
+  text-decoration: underline;
+}
+
+.squisq-ccx-body .squisq-md-inline-code,
+.squisq-ccx-body .squisq-md-link .squisq-md-inline-code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11px;
+  padding: 0 3px;
+  border-radius: 3px;
+  background: rgba(140, 149, 159, 0.18);
+}
+
+.squisq-ccx-body .squisq-md-link .squisq-md-inline-code {
+  color: var(--ccx-accent);
+}
+
+.squisq-ccx-body .squisq-md-code-block {
+  margin: 4px 0;
+  padding: 6px 8px;
+  border-radius: 4px;
+  background: rgba(140, 149, 159, 0.14);
+  overflow-x: auto;
+}
+
+.squisq-ccx-body .squisq-md-code-block code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11px;
+  white-space: pre;
+}

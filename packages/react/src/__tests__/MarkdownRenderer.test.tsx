@@ -102,6 +102,24 @@ describe('MarkdownRenderer', () => {
     expect(container.innerHTML).not.toContain('javascript:');
   });
 
+  it('linkSchemes allows a host scheme as a real anchor, never executable ones', () => {
+    const nodes = parseNodes('[a](gezel-nav:src%2Fa.ts) [b](javascript:alert(1))');
+    const blocked = render(<MarkdownRenderer nodes={nodes} />);
+    expect(blocked.container.querySelector('a.squisq-md-link')).toBeNull();
+
+    const allowed = render(<MarkdownRenderer nodes={nodes} linkSchemes={['gezel-nav']} />);
+    const a = allowed.container.querySelector('a.squisq-md-link') as HTMLAnchorElement;
+    expect(a?.getAttribute('href')).toBe('gezel-nav:src%2Fa.ts');
+    // javascript: stays blocked even when a host lists it
+    const evil = render(
+      <MarkdownRenderer
+        nodes={parseNodes('[b](javascript:alert(1))')}
+        linkSchemes={['javascript']}
+      />,
+    );
+    expect(evil.container.querySelector('a.squisq-md-link')).toBeNull();
+  });
+
   it('renders an image', () => {
     const nodes: MarkdownBlockNode[] = [
       paragraph({

@@ -21,6 +21,7 @@ import { FileToolbar } from './FileToolbar';
 import { StorageToolbar } from './StorageToolbar';
 import { JsonEditorDemo } from './JsonEditorDemo';
 import { ImageEditorDemo } from './ImageEditorDemo';
+import { CodeContextDemo } from './CodeContextDemo';
 import { createSlotMediaProvider } from './slotStorage';
 import type { MediaProvider, Theme } from '@bendyline/squisq/schemas';
 import { parseTheme, registerTheme, unregisterTheme } from '@bendyline/squisq/schemas';
@@ -64,6 +65,7 @@ export function App() {
   const [showDebug, setShowDebug] = useState(false);
   const [showJsonDemo, setShowJsonDemo] = useState(false);
   const [showImageEditorDemo, setShowImageEditorDemo] = useState(false);
+  const [showCodeContextDemo, setShowCodeContextDemo] = useState(false);
   const [currentSource, setCurrentSource] = useState(SAMPLES[initialSampleKey]);
   const [colorScheme] = useState<EditorColorScheme>('light');
   const [customTheme, setCustomThemeState] = useState<Theme | null>(() => loadStoredCustomTheme());
@@ -342,6 +344,23 @@ export function App() {
           {showImageEditorDemo ? 'Close Image Editor' : 'Image Editor'}
         </button>
 
+        <button
+          onClick={() => setShowCodeContextDemo((prev) => !prev)}
+          data-testid="toggle-code-context"
+          style={{
+            fontSize: 13,
+            fontFamily: 'system-ui, -apple-system, sans-serif',
+            padding: '4px 12px',
+            cursor: 'pointer',
+            background: showCodeContextDemo ? '#8B6914' : '#E8DFC6',
+            color: showCodeContextDemo ? '#fff' : '#4a3c1f',
+            border: `1px solid ${showCodeContextDemo ? '#7a5c10' : '#c9b98a'}`,
+            borderRadius: 0,
+          }}
+        >
+          {showCodeContextDemo ? 'Close Code Context' : 'Code Context'}
+        </button>
+
         {/* Theme customizer — wrapped in editor-shell to inherit BEM dark-theme styles. */}
         <div
           className="squisq-editor-shell"
@@ -394,7 +413,11 @@ export function App() {
       </div>
 
       {/* Main area */}
-      {showImageEditorDemo ? (
+      {showCodeContextDemo ? (
+        <div style={{ flex: 1, overflow: 'hidden' }}>
+          <CodeContextDemo />
+        </div>
+      ) : showImageEditorDemo ? (
         <div style={{ flex: 1, overflow: 'hidden' }}>
           <ImageEditorDemo />
         </div>

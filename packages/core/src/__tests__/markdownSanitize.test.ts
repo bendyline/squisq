@@ -17,6 +17,21 @@ describe('markdown HTML sanitization', () => {
     expect(sanitizeUrl('data:text/html,<script>alert(1)</script>', 'link')).toBeNull();
   });
 
+  it('extraLinkSchemes allows host-app schemes but never executable ones', () => {
+    expect(sanitizeUrl('gezel-nav:src%2Fa.ts', 'link')).toBeNull();
+    expect(
+      sanitizeUrl('gezel-nav:src%2Fa.ts', 'link', { extraLinkSchemes: ['gezel-nav'] }),
+    ).toBe('gezel-nav:src%2Fa.ts');
+    expect(
+      sanitizeUrl('javascript:alert(1)', 'link', { extraLinkSchemes: ['javascript'] }),
+    ).toBeNull();
+    expect(sanitizeUrl('data:text/html,x', 'link', { extraLinkSchemes: ['data'] })).toBeNull();
+    // media URLs ignore the option entirely
+    expect(
+      sanitizeUrl('gezel-nav:src%2Fa.ts', 'media', { extraLinkSchemes: ['gezel-nav'] }),
+    ).toBeNull();
+  });
+
   it('allows Squisq media URLs without allowing SVG or HTML data payloads', () => {
     expect(sanitizeUrl('blob:http://localhost/abc', 'media')).toBe('blob:http://localhost/abc');
     expect(sanitizeUrl('data:image/png;base64,AAA', 'media')).toBe('data:image/png;base64,AAA');

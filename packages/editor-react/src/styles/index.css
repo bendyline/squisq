@@ -5,6 +5,7 @@
 
 @import '@fortawesome/fontawesome-free/css/all.min.css';
 @import './editor.css';
+@import './code-context.css';
 @import './folder-view.css';
 @import '../jsonEditor/json-editor.css';
 @import '../imageEditor/image-editor.css';

@@ -7,6 +7,18 @@ export type UrlKind = 'link' | 'media';
 const SAFE_LINK_SCHEMES = new Set(['http', 'https', 'mailto', 'tel']);
 const SAFE_MEDIA_SCHEMES = new Set(['http', 'https', 'blob']);
 
+/** Schemes that can execute script — never allowed, even via extraLinkSchemes. */
+const NEVER_ALLOWED_SCHEMES = new Set(['javascript', 'vbscript', 'data']);
+
+export interface SanitizeUrlOptions {
+  /**
+   * Extra lowercase schemes allowed for `kind: 'link'` — the host-app escape
+   * hatch for custom link protocols it intercepts itself (e.g. an app-internal
+   * navigation scheme). Executable schemes are refused regardless.
+   */
+  extraLinkSchemes?: readonly string[];
+}
+
 const SAFE_DATA_MEDIA_RE =
   /^data:(?:image\/(?!svg\+xml)[a-z0-9.+-]+|audio\/[a-z0-9.+-]+|video\/[a-z0-9.+-]+);/i;
 
@@ -135,7 +147,11 @@ const SAFE_TRACK_KINDS = new Set(['subtitles', 'captions', 'descriptions', 'chap
  * `blob:` and image/audio/video `data:` URLs because Squisq uses both for
  * browser-local media previews and self-contained exports.
  */
-export function sanitizeUrl(url: string | null | undefined, kind: UrlKind = 'link'): string | null {
+export function sanitizeUrl(
+  url: string | null | undefined,
+  kind: UrlKind = 'link',
+  options?: SanitizeUrlOptions,
+): string | null {
   if (typeof url !== 'string') return null;
 
   const trimmed = url.trim();
@@ -154,7 +170,11 @@ export function sanitizeUrl(url: string | null | undefined, kind: UrlKind = 'lin
     return SAFE_MEDIA_SCHEMES.has(scheme) ? trimmed : null;
   }
 
-  return SAFE_LINK_SCHEMES.has(scheme) ? trimmed : null;
+  if (SAFE_LINK_SCHEMES.has(scheme)) return trimmed;
+  if (options?.extraLinkSchemes?.includes(scheme) && !NEVER_ALLOWED_SCHEMES.has(scheme)) {
+    return trimmed;
+  }
+  return null;
 }
 
 /**

@@ -24,6 +24,8 @@ import { WysiwygEditor } from './WysiwygEditor';
 import { InlinePreviewGutter } from './InlinePreviewGutter';
 import { BlockPreviewPanel } from './BlockPreviewPanel';
 import { OutlinePanel, OUTLINE_RESPONSIVE_WIDTH } from './OutlinePanel';
+import { CodeContextZones } from './codeContext/CodeContextZones';
+import type { CodeContext } from './codeContext/types';
 import { BlockCardView } from './BlockCardView';
 import { TimelineTrack } from './TimelineTrack';
 import { PreviewPanel } from './PreviewPanel';
@@ -173,6 +175,13 @@ export interface EditorShellProps {
    * (Slack, Discord). When omitted, the editor behaves normally.
    */
   submitOnEnter?: () => void;
+  /**
+   * Host-supplied context dictionary rendered inside the Monaco (raw / code)
+   * surface: collapsible markdown sections injected above anchor lines, plus
+   * an optional file-top summary. See {@link CodeContext}. Ignored in
+   * WYSIWYG / preview / image surfaces.
+   */
+  codeContext?: CodeContext;
   /**
    * Let the WYSIWYG editing surface fill its container instead of rendering
    * as a centered 800px "page" column. Useful when embedding in chat
@@ -406,6 +415,7 @@ export function EditorShell({
   toolbarSlotRight,
   showPlayTab = true,
   submitOnEnter,
+  codeContext,
   fullWidth = false,
   uxFont,
   thinMargins = false,
@@ -496,6 +506,7 @@ export function EditorShell({
         toolbarSlotRight={toolbarSlotRight}
         showPlayTab={showPlayTab}
         submitOnEnter={submitOnEnter}
+        codeContext={codeContext}
         fullWidth={fullWidth}
         uxFont={uxFont}
         thinMargins={thinMargins}
@@ -531,6 +542,7 @@ interface EditorShellInnerProps {
   toolbarSlotRight?: ReactNode;
   showPlayTab: boolean;
   submitOnEnter?: () => void;
+  codeContext?: CodeContext;
   fullWidth: boolean;
   uxFont?: string;
   thinMargins: boolean;
@@ -563,6 +575,7 @@ function EditorShellInner({
   toolbarSlotRight,
   showPlayTab,
   submitOnEnter,
+  codeContext,
   fullWidth,
   uxFont,
   thinMargins,
@@ -906,6 +919,12 @@ function EditorShellInner({
                         readOnly={readOnly}
                       />
                     </div>
+                  )}
+                  {/* Renders nothing in normal flow — portals context
+                    sections into Monaco view zones via the context's
+                    monacoEditor. Code mode only. */}
+                  {isCodeMode && codeContext && (
+                    <CodeContextZones key="code-context" options={codeContext} />
                   )}
                   {isMarkdownMode && isCardMode && inlinePreviewVisible && (
                     <BlockPreviewPanel key="block-preview" basePath={basePath} />

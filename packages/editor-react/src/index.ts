@@ -21,6 +21,10 @@
 export { EditorShell } from './EditorShell.js';
 export type { EditorShellProps, EditorColorScheme } from './EditorShell.js';
 
+// Code-context sections (host-supplied markdown injected into the code surface)
+export { CodeContextZones } from './codeContext/CodeContextZones.js';
+export type { CodeContext, CodeContextSection } from './codeContext/types.js';
+
 // FolderView — standalone folder browser surface (companion to the shell)
 export { FolderView } from './FolderView.js';
 export type { FolderViewProps, FolderEntry } from './FolderView.js';

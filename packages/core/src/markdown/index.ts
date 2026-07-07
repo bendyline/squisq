@@ -132,7 +132,7 @@ export type { KnownBlockMetaKey, BlockMetaKeyDescriptor } from './annotationCoer
 // HTML sub-DOM utilities
 export { parseHtmlToNodes, stringifyHtmlNodes } from './htmlParse.js';
 export { sanitizeHtmlNodes, sanitizeUrl } from './sanitize.js';
-export type { HtmlPolicy, UrlKind } from './sanitize.js';
+export type { HtmlPolicy, SanitizeUrlOptions, UrlKind } from './sanitize.js';
 
 // Tree utilities
 export {
