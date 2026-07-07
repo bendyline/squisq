@@ -123,10 +123,15 @@ function resolveRenderAs(value: unknown): ViewportPreset | null {
 function resolveDisplayMode(value: unknown): DisplayMode | null {
   if (typeof value !== 'string') return null;
   const v = value.trim().toLowerCase();
-  if (v === 'video' || v === 'slideshow' || v === 'linear' || v === 'page') return v;
+  if (v === 'video' || v === 'slideshow' || v === 'linear') return v;
   if (v === 'slides' || v === 'presentation' || v === 'deck') return 'slideshow';
-  if (v === 'document' || v === 'scroll') return 'linear';
-  if (v === 'html' || v === 'plain' || v === 'reader') return 'page';
+  // Frontmatter uses product-facing names: Document is the plain text/HTML
+  // preview, Page is the styled Squisq page view. The raw DisplayMode values
+  // are older and remain stable for the public React API.
+  if (v === 'page' || v === 'paged') return 'linear';
+  if (v === 'document' || v === 'scroll' || v === 'html' || v === 'plain' || v === 'reader') {
+    return 'page';
+  }
   return null;
 }
 
@@ -456,8 +461,8 @@ const FORMAT_SWITCH_OPTIONS: { key: ViewportPreset; label: string; w: number; h:
 const DISPLAY_MODE_OPTIONS: { key: DisplayMode; label: string }[] = [
   { key: 'video', label: 'Video' },
   { key: 'slideshow', label: 'Slideshow' },
-  { key: 'linear', label: 'Document' },
-  { key: 'page', label: 'Page' },
+  { key: 'linear', label: 'Page' },
+  { key: 'page', label: 'Document' },
 ];
 
 const TRANSFORM_STYLE_OPTIONS = [

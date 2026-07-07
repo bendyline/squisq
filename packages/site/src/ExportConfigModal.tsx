@@ -638,7 +638,7 @@ export function ExportConfigModal({
                   <div style={hintStyle}>
                     {htmlStyle === 'rendered'
                       ? 'Uses SquisqPlayer with SVG block cards, themes, and animations.'
-                      : 'Plain semantic HTML — no JS, no SVG cards. Matches the Page preview.'}
+                      : 'Plain semantic HTML — no JS, no SVG cards. Matches the Document preview.'}
                   </div>
                 </>
               )}

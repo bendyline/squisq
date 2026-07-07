@@ -212,8 +212,14 @@ describe('coverBlock long-title auto-fit', () => {
   });
 
   it('renders a long title with a smaller font than a short one', () => {
-    const shortTitle = findText(coverBlock({ heroSrc: 'h.jpg', title: 'Short' }, landscapeContext), 'cover-title');
-    const longTitle = findText(coverBlock({ heroSrc: 'h.jpg', title: LONG }, landscapeContext), 'cover-title');
+    const shortTitle = findText(
+      coverBlock({ heroSrc: 'h.jpg', title: 'Short' }, landscapeContext),
+      'cover-title',
+    );
+    const longTitle = findText(
+      coverBlock({ heroSrc: 'h.jpg', title: LONG }, landscapeContext),
+      'cover-title',
+    );
     expect(longTitle!.content.style.fontSize).toBeLessThan(shortTitle!.content.style.fontSize);
   });
 });

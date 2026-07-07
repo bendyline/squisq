@@ -19,9 +19,9 @@ describe('markdown HTML sanitization', () => {
 
   it('extraLinkSchemes allows host-app schemes but never executable ones', () => {
     expect(sanitizeUrl('gezel-nav:src%2Fa.ts', 'link')).toBeNull();
-    expect(
-      sanitizeUrl('gezel-nav:src%2Fa.ts', 'link', { extraLinkSchemes: ['gezel-nav'] }),
-    ).toBe('gezel-nav:src%2Fa.ts');
+    expect(sanitizeUrl('gezel-nav:src%2Fa.ts', 'link', { extraLinkSchemes: ['gezel-nav'] })).toBe(
+      'gezel-nav:src%2Fa.ts',
+    );
     expect(
       sanitizeUrl('javascript:alert(1)', 'link', { extraLinkSchemes: ['javascript'] }),
     ).toBeNull();
