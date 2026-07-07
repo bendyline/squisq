@@ -17,11 +17,7 @@
 
 import type { Layer } from '../../schemas/Doc.js';
 import type { PhotoGridInput, TemplateContext } from '../../schemas/BlockTemplates.js';
-import {
-  getThemeFont,
-  themedFontSize,
-  themedImageTreatment,
-} from '../utils/themeUtils.js';
+import { getThemeFont, themedFontSize, themedImageTreatment } from '../utils/themeUtils.js';
 import { withAlpha } from '../../schemas/colorUtils.js';
 import { cleanCaption } from './captionUtils.js';
 

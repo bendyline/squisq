@@ -295,6 +295,8 @@ describe('expandTemplateBlock', () => {
       audioSegment: 0,
       videoSrc: 'video.mp4',
       videoAlt: 'Video',
+      clipStart: 0,
+      clipEnd: 10,
       caption: imageBlock.caption,
     };
 
