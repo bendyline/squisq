@@ -481,8 +481,14 @@ function extractComparisons(text: string): ExtractedElement[] {
       if (seen.has(position)) continue;
       seen.add(position);
 
-      const left = match[1].trim();
-      const right = match[2].trim();
+      // Trim a trailing clause introduced by a comma + space ("retired
+      // airliners, arranged in rows" → "retired airliners"). A greedy side
+      // match often swallows the words after the compared thing; the comma is a
+      // clause boundary, not part of the value. Numeric grouping commas
+      // ("4,000") survive because those are comma+digit, not comma+space.
+      const trimClause = (s: string) => s.replace(/,\s+.*$/, '').trim();
+      const left = trimClause(match[1].trim());
+      const right = trimClause(match[2].trim());
       if (left.length < 2 || left.length > 30) continue;
       if (right.length < 2 || right.length > 30) continue;
       // Reject "from X to X"-style idioms — "from witness to witness",

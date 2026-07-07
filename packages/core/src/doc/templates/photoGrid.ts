@@ -19,7 +19,6 @@ import type { Layer } from '../../schemas/Doc.js';
 import type { PhotoGridInput, TemplateContext } from '../../schemas/BlockTemplates.js';
 import {
   getThemeFont,
-  shouldUseShadow,
   themedFontSize,
   themedImageTreatment,
 } from '../utils/themeUtils.js';
@@ -50,15 +49,10 @@ export function photoGrid(input: PhotoGridInput, context: TemplateContext): Laye
     },
   ];
 
-  // Reserve bottom space for caption — sized to the caption's one-to-two
-  // lines rather than a fixed fifth of the block (which left a dead band).
-  const captionHeight = caption ? (layout.stackColumns ? 16 : 14) : 0;
-  const gridHeight = 100 - captionHeight;
+  const gridHeight = 100;
 
   // Generate image positions based on count; stack vertically in portrait
   const positions = getGridPositions(images.length, gridHeight, layout.stackColumns);
-
-  const altFontSize = themedFontSize(24, context, false);
 
   for (let i = 0; i < Math.min(images.length, 4); i++) {
     const img = images[i];
@@ -71,24 +65,6 @@ export function photoGrid(input: PhotoGridInput, context: TemplateContext): Laye
       content: { shape: 'rect', fill: theme.colors.background },
       position: { x: `${pos.x}%`, y: `${pos.y}%`, width: `${pos.w}%`, height: `${pos.h}%` },
     });
-
-    // Alt-text label on placeholder
-    if (img.alt) {
-      layers.push({
-        type: 'text',
-        id: `grid-alt-${i}`,
-        content: {
-          text: img.alt,
-          style: {
-            fontSize: altFontSize,
-            fontFamily: getThemeFont(context, 'body'),
-            color: theme.colors.textMuted,
-            textAlign: 'center' as const,
-          },
-        },
-        position: { x: `${pos.x + pos.w / 2}%`, y: `${pos.y + pos.h / 2}%`, anchor: 'center' },
-      });
-    }
 
     // Image layer (covers placeholder when loaded)
     layers.push({
@@ -116,20 +92,23 @@ export function photoGrid(input: PhotoGridInput, context: TemplateContext): Laye
     });
   }
 
-  // Caption with gradient overlay
+  // Caption in a compact translucent chip above player controls. Long
+  // archival/Wikimedia descriptions are intentionally clamped.
   if (caption) {
-    const captionFontSize = themedFontSize(layout.stackColumns ? 28 : 32, context, false);
+    const captionFontSize = themedFontSize(layout.stackColumns ? 24 : 26, context, false);
+    const captionY = layout.stackColumns ? '78%' : '74%';
+    const captionBgY = layout.stackColumns ? '72%' : '68%';
+    const captionHeight = layout.stackColumns ? '13%' : '16%';
+    const bg = theme.colors.background;
 
-    // Caption band fades from the theme surface so the theme text color
-    // on it always reads (a fixed black band hid dark text in light themes).
     layers.push({
       type: 'shape',
       id: 'caption-bg',
       content: {
         shape: 'rect',
-        fill: `linear-gradient(${withAlpha(theme.colors.background, 0)}, ${withAlpha(theme.colors.background, 0.85)})`,
+        fill: `linear-gradient(90deg, ${withAlpha(bg, 0)}, ${withAlpha(bg, 0.78)} 16%, ${withAlpha(bg, 0.78)} 84%, ${withAlpha(bg, 0)})`,
       },
-      position: { x: 0, y: `${gridHeight - 4}%`, width: '100%', height: `${captionHeight + 4}%` },
+      position: { x: 0, y: captionBgY, width: '100%', height: captionHeight },
     });
 
     layers.push({
@@ -142,14 +121,16 @@ export function photoGrid(input: PhotoGridInput, context: TemplateContext): Laye
           fontFamily: getThemeFont(context, 'body'),
           color: theme.colors.text,
           textAlign: 'center',
-          shadow: shouldUseShadow(context),
+          shadow: true,
+          lineHeight: 1.18,
+          maxLines: layout.stackColumns ? 2 : 1,
         },
       },
       position: {
         x: '50%',
-        y: `${gridHeight + captionHeight / 2}%`,
+        y: captionY,
         anchor: 'center',
-        width: '90%',
+        width: '78%',
       },
       animation: { type: 'fadeIn', duration: 1, delay: 0.5 },
     });

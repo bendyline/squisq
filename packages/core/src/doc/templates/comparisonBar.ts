@@ -18,15 +18,22 @@ import {
 } from '../utils/themeUtils.js';
 
 export function comparisonBar(input: ComparisonBarInput, context: TemplateContext): Layer[] {
-  const { leftLabel, leftValue, rightLabel, rightValue, unit, colorScheme = 'blue' } = input;
+  const { leftLabel, rightLabel, unit, colorScheme = 'blue' } = input;
   const { theme, viewport } = context;
   const colors = resolveColorScheme(context, colorScheme);
+
+  // Defensive: coerce non-finite values to 0. Callers should pass real numbers,
+  // but a NaN would otherwise render as literal "NaN" text and collapse every
+  // bar/label to a `NaN%` position, cramming the block against its left edge.
+  const leftValue = Number.isFinite(input.leftValue) ? input.leftValue : 0;
+  const rightValue = Number.isFinite(input.rightValue) ? input.rightValue : 0;
 
   const labelFontSize = themedFontSize(28, context, false);
   const valueFontSize = themedFontSize(48, context, true);
 
   // Format values for display
   const formatValue = (v: number): string => {
+    if (!Number.isFinite(v)) return '—';
     if (v >= 1_000_000) return `${(v / 1_000_000).toFixed(1)}M`;
     if (v >= 1_000) return `${(v / 1_000).toFixed(v >= 10_000 ? 0 : 1)}K`;
     return v.toLocaleString();

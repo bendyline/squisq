@@ -10,6 +10,7 @@ import {
   VIEWPORT_PRESETS,
 } from '../doc/templates/index';
 import type { TemplateBlock } from '../schemas/BlockTemplates';
+import type { TextLayer } from '../schemas/Doc';
 import { getLayers } from '../doc/getLayers';
 import { markdownToDoc } from '../doc/markdownToDoc';
 import { parseMarkdown } from '../markdown/parse';
@@ -246,6 +247,73 @@ describe('expandTemplateBlock', () => {
       // Each template should produce at least 1 layer
       expect((result.layers ?? []).length).toBeGreaterThanOrEqual(1);
     }
+  });
+
+  it('keeps photoGrid media captions compact without placeholder alt labels', () => {
+    const block: TemplateBlock = {
+      template: 'photoGrid',
+      id: 'photo-grid-captions',
+      duration: 10,
+      audioSegment: 0,
+      images: [
+        { src: 'one.jpg', alt: 'A long archival caption for the first image' },
+        { src: 'two.jpg', alt: 'A long archival caption for the second image' },
+        { src: 'three.jpg', alt: 'A long archival caption for the third image' },
+      ],
+      caption:
+        'A long Wikimedia description with source notes, place names, dates, and details that should remain compact.',
+    };
+
+    const context = createTemplateContext(DEFAULT_THEME, 0, 10, VIEWPORT_PRESETS.landscape);
+    const result = expandTemplateBlock(block, context);
+    const layers = result.layers ?? [];
+    const captionLayer = layers.find(
+      (layer): layer is TextLayer => layer.type === 'text' && layer.id === 'caption',
+    );
+
+    expect(layers.some((layer) => layer.id.startsWith('grid-alt-'))).toBe(false);
+    expect(captionLayer).toBeDefined();
+    expect(captionLayer!.content.style.maxLines).toBe(1);
+    expect(captionLayer!.position.width).toBe('78%');
+  });
+
+  it('clamps full-bleed media captions above playback controls', () => {
+    const imageBlock: TemplateBlock = {
+      template: 'imageWithCaption',
+      id: 'image-caption',
+      duration: 10,
+      audioSegment: 0,
+      imageSrc: 'image.jpg',
+      imageAlt: 'Image',
+      caption:
+        'A long Wikimedia description with source notes, place names, dates, and details that should remain compact.',
+    };
+    const videoBlock: TemplateBlock = {
+      template: 'videoWithCaption',
+      id: 'video-caption',
+      duration: 10,
+      audioSegment: 0,
+      videoSrc: 'video.mp4',
+      videoAlt: 'Video',
+      caption: imageBlock.caption,
+    };
+
+    const context = createTemplateContext(DEFAULT_THEME, 0, 10, VIEWPORT_PRESETS.landscape);
+    const imageCaption = (expandTemplateBlock(imageBlock, context).layers ?? []).find(
+      (layer): layer is TextLayer => layer.type === 'text' && layer.id === 'caption',
+    );
+    const videoCaption = (expandTemplateBlock(videoBlock, context).layers ?? []).find(
+      (layer): layer is TextLayer => layer.type === 'text' && layer.id === 'caption',
+    );
+
+    expect(imageCaption).toBeDefined();
+    expect(videoCaption).toBeDefined();
+    expect(imageCaption!.content.style.maxLines).toBe(2);
+    expect(videoCaption!.content.style.maxLines).toBe(2);
+    expect(imageCaption!.position.y).toBe('74%');
+    expect(videoCaption!.position.y).toBe('74%');
+    expect(imageCaption!.position.width).toBe('78%');
+    expect(videoCaption!.position.width).toBe('78%');
   });
 });
 
