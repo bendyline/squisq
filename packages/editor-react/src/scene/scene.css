@@ -303,8 +303,8 @@
   overflow-y: auto;
 }
 
-/* Re-flow the (normally horizontal, right-aligned) toolbar into a top-aligned
-   vertical column whose button groups wrap within the 180px width. */
+/* Re-flow the (normally horizontal, right-aligned) gutter toolbar into a
+   top-aligned vertical column whose button groups wrap within the 180px. */
 .squisq-scene-side-toolbar .squisq-scene-block-toolbar {
   flex-direction: column;
   align-items: stretch;
@@ -324,6 +324,23 @@
   top: 0;
   left: auto;
   right: calc(100% + 6px);
+}
+
+/* ── Narrow-width fallback bar ─────────────────────────────────
+   When SceneSideToolbar measures that the right gutter can't hold the 180px
+   column, it renders the same toolbar as an in-flow horizontal bar above the
+   canvas instead. Normal flow (not an overlay) so it always paints and is
+   never clipped; it just keeps the toolbar's natural horizontal layout and
+   wraps on very narrow widths. */
+.squisq-scene-inline-toolbar {
+  display: flex;
+  margin-bottom: 8px;
+}
+.squisq-scene-inline-toolbar .squisq-scene-block-toolbar {
+  flex-wrap: wrap;
+  justify-content: flex-start;
+  width: 100%;
+  margin: 0;
 }
 
 /* ── Maximize button ──────────────────────────────────────── */

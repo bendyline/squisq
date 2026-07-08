@@ -30,6 +30,13 @@ interface TemplateEntry {
   icon: JSX.Element;
 }
 
+/**
+ * DOM id of the portaled template gallery. Exported so hosts that embed the
+ * picker inside their own popovers (e.g. the toolbar overflow menu) can treat
+ * clicks inside the gallery as "inside" in their outside-click handling.
+ */
+export const TEMPLATE_GALLERY_PORTAL_ID = 'squisq-template-gallery-portal';
+
 const W = 56;
 const H = 40;
 
@@ -550,7 +557,7 @@ export function TemplatePicker({
   const updatePosition = () => {
     if (!triggerRef.current) return;
     const rect = triggerRef.current.getBoundingClientRect();
-    const popoverEl = document.getElementById('squisq-template-gallery-portal');
+    const popoverEl = document.getElementById(TEMPLATE_GALLERY_PORTAL_ID);
     // Use the actual rendered width if the popover is already mounted;
     // otherwise fall back to the CSS-defined max so the first paint
     // doesn't overflow either. Measure the portal element directly —
@@ -579,7 +586,7 @@ export function TemplatePicker({
     const handler = (e: MouseEvent) => {
       const target = e.target as Node;
       const inTrigger = triggerRef.current?.contains(target);
-      const inPopover = document.getElementById('squisq-template-gallery-portal')?.contains(target);
+      const inPopover = document.getElementById(TEMPLATE_GALLERY_PORTAL_ID)?.contains(target);
       if (!inTrigger && !inPopover) {
         setOpen(false);
       }
@@ -790,7 +797,7 @@ function TemplateGalleryBody({
 
   return (
     <div
-      id="squisq-template-gallery-portal"
+      id={TEMPLATE_GALLERY_PORTAL_ID}
       className={`squisq-template-gallery${segmented ? ' squisq-template-gallery--segmented' : ''}`}
       role="listbox"
       aria-label="Block templates"
@@ -1011,7 +1018,7 @@ export function TemplateBadgePopover({
     };
     const onMouse = (e: MouseEvent) => {
       const target = e.target as Node;
-      const inPopover = document.getElementById('squisq-template-gallery-portal')?.contains(target);
+      const inPopover = document.getElementById(TEMPLATE_GALLERY_PORTAL_ID)?.contains(target);
       if (!inPopover) onClose();
     };
     // Defer the mousedown listener by one frame so the click that opened
@@ -1049,7 +1056,7 @@ function computePopoverStyle(rect: DOMRect): React.CSSProperties {
   // outer `.squisq-template-gallery` div). Measure it directly — using
   // `firstElementChild` returns the "(none)" option, which is ~50px tall
   // and made the "fits below" check incorrectly pass on tall galleries.
-  const popoverEl = document.getElementById('squisq-template-gallery-portal');
+  const popoverEl = document.getElementById(TEMPLATE_GALLERY_PORTAL_ID);
   const popoverRect = popoverEl?.getBoundingClientRect();
   const popoverWidth = popoverRect?.width ?? 780;
   const popoverHeight = popoverRect?.height ?? 520;

@@ -25,6 +25,7 @@ import { shapeIdFromLayerId } from './layers/shapeLayers';
 import { ShapePalette } from './ShapePalette';
 import { ScenePropsBar } from './ScenePropsBar';
 import { SceneBlockToolbar, type SceneBlockAction, type SceneAlignment } from './SceneBlockToolbar';
+import { SceneSideToolbar } from './SceneSideToolbar';
 import type { SceneTextEditConfig } from './text/sceneTextConfig';
 import { markdownToTiptap } from '../tiptapBridge';
 import { Icon } from '../Icon';
@@ -301,15 +302,15 @@ export function SceneBlockWidget({
   );
 
   const body = <div className="squisq-scene-stage">{canvas}</div>;
-  const sideToolbar = <div className="squisq-scene-side-toolbar">{toolbar}</div>;
 
   if (maximized) {
     return (
       <div className="squisq-scene-inline-placeholder">
         <DiagramMaximizedOverlay host={host ?? null} onClose={() => setMaximized(false)}>
+          {/* Maximized has a full screen for a static right column — no collapse. */}
           <div className="squisq-scene-block-max">
             {body}
-            {sideToolbar}
+            <div className="squisq-scene-side-toolbar">{toolbar}</div>
           </div>
         </DiagramMaximizedOverlay>
       </div>
@@ -318,8 +319,10 @@ export function SceneBlockWidget({
 
   return (
     <div className="squisq-scene-shell">
+      {/* Before the canvas so the narrow-width fallback bar sits above it; the
+        wide-width gutter column is absolute and unaffected by DOM order. */}
+      <SceneSideToolbar>{toolbar}</SceneSideToolbar>
       <div className="squisq-scene-inline">{body}</div>
-      {sideToolbar}
     </div>
   );
 }

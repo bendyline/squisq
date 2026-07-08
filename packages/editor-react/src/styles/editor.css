@@ -149,6 +149,15 @@
   min-width: 0;
 }
 
+/* Contextual groups (template/transition pickers, table controls) sit at the
+   end of the actions row. When measurement marks one as clipped it moves into
+   the ··· overflow menu; hide the cropped inline original rather than painting
+   half of it. `visibility` (not `display`) keeps its layout box so the
+   measurement still notices when it fits again. */
+.squisq-toolbar-contextual--clipped {
+  visibility: hidden;
+}
+
 .squisq-toolbar-view-tab {
   /* Top padding is asymmetric — bumped 4px above the bottom — so the
      label sits more vertically centered alongside the neighboring
@@ -254,6 +263,32 @@
 .squisq-toolbar-button--active:hover {
   background: #bfdbfe;
   color: #1d4ed8;
+}
+
+.squisq-toolbar-files-toggle {
+  position: relative;
+}
+
+.squisq-toolbar-files-badge {
+  position: absolute;
+  right: 1px;
+  bottom: 1px;
+  min-width: 14px;
+  height: 14px;
+  padding: 0 3px;
+  border: 1.5px solid #e5e7eb;
+  border-radius: 999px;
+  background: #2563eb;
+  color: #ffffff;
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 9px;
+  font-weight: 700;
+  line-height: 1;
+  pointer-events: none;
+  z-index: 1;
 }
 
 /* Font Awesome glyphs sit a touch larger than the 13px text labels so
@@ -379,6 +414,18 @@
   flex: 1;
   min-width: 0;
   max-width: 100%;
+}
+
+/* Section heading for the per-block controls (template/transition pickers)
+   when they fold into the overflow menu — names the block they configure. */
+.squisq-toolbar-overflow-heading {
+  padding: 4px 12px 2px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #9ca3af;
+  user-select: none;
 }
 
 /* ─── Insert Menu Dropdown ──────────────────────────── */
@@ -1738,6 +1785,12 @@
   color: #93c5fd;
 }
 
+.squisq-editor-shell[data-theme='dark'] .squisq-toolbar-files-badge {
+  border-color: #111827;
+  background: #60a5fa;
+  color: #111827;
+}
+
 .squisq-editor-shell[data-theme='dark'] .squisq-toolbar-separator {
   background: #4b5563;
 }
@@ -1777,6 +1830,10 @@
 
 .squisq-editor-shell[data-theme='dark'] .squisq-toolbar-overflow-item {
   color: #d1d5db;
+}
+
+.squisq-editor-shell[data-theme='dark'] .squisq-toolbar-overflow-heading {
+  color: #6b7280;
 }
 
 .squisq-editor-shell[data-theme='dark'] .squisq-toolbar-overflow-item:hover {
@@ -2155,6 +2212,16 @@
   border-bottom: 1px solid #f3f4f6;
 }
 
+.squisq-media-bin-item:hover,
+.squisq-media-bin-item:focus-visible {
+  background: #f3f4f6;
+}
+
+.squisq-media-bin-item:focus-visible {
+  outline: 2px solid #93c5fd;
+  outline-offset: -2px;
+}
+
 .squisq-media-bin-thumb {
   width: 32px;
   height: 32px;
@@ -2190,6 +2257,56 @@
 .squisq-media-bin-size {
   font-size: 10px;
   color: #9ca3af;
+}
+
+.squisq-media-bin-context-menu {
+  position: fixed;
+  z-index: 1000;
+  min-width: 152px;
+  padding: 4px;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  background: #fff;
+  box-shadow:
+    0 12px 28px rgba(15, 23, 42, 0.18),
+    0 2px 6px rgba(15, 23, 42, 0.12);
+}
+
+.squisq-media-bin-context-menu-item {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 9px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: #374151;
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+  text-align: left;
+}
+
+.squisq-media-bin-context-menu-item:hover,
+.squisq-media-bin-context-menu-item:focus-visible {
+  background: #f3f4f6;
+  outline: none;
+}
+
+.squisq-media-bin-context-menu-item--danger {
+  color: #b91c1c;
+}
+
+.squisq-media-bin-context-menu-item--danger:hover,
+.squisq-media-bin-context-menu-item--danger:focus-visible {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+.squisq-media-bin-context-menu-item:disabled {
+  cursor: default;
+  opacity: 0.55;
 }
 
 /* ─── Media Bin (dark) ───────────────────────────────── */
@@ -2228,6 +2345,13 @@
   border-bottom-color: #2d3748;
 }
 
+.squisq-media-bin--dark .squisq-media-bin-item:hover,
+.squisq-media-bin--dark .squisq-media-bin-item:focus-visible,
+.squisq-editor-shell[data-theme='dark'] .squisq-media-bin .squisq-media-bin-item:hover,
+.squisq-editor-shell[data-theme='dark'] .squisq-media-bin .squisq-media-bin-item:focus-visible {
+  background: #273449;
+}
+
 .squisq-media-bin--dark .squisq-media-bin-icon,
 .squisq-editor-shell[data-theme='dark'] .squisq-media-bin .squisq-media-bin-icon {
   background: #374151;
@@ -2246,6 +2370,40 @@
 .squisq-media-bin--dark .squisq-media-bin-empty,
 .squisq-editor-shell[data-theme='dark'] .squisq-media-bin .squisq-media-bin-empty {
   color: #6b7280;
+}
+
+.squisq-editor-shell[data-theme='dark'] .squisq-media-bin-context-menu,
+.squisq-media-bin--dark .squisq-media-bin-context-menu {
+  border-color: #4b5563;
+  background: #111827;
+  box-shadow:
+    0 12px 28px rgba(0, 0, 0, 0.42),
+    0 2px 6px rgba(0, 0, 0, 0.3);
+}
+
+.squisq-editor-shell[data-theme='dark'] .squisq-media-bin-context-menu-item,
+.squisq-media-bin--dark .squisq-media-bin-context-menu-item {
+  color: #d1d5db;
+}
+
+.squisq-editor-shell[data-theme='dark'] .squisq-media-bin-context-menu-item:hover,
+.squisq-editor-shell[data-theme='dark'] .squisq-media-bin-context-menu-item:focus-visible,
+.squisq-media-bin--dark .squisq-media-bin-context-menu-item:hover,
+.squisq-media-bin--dark .squisq-media-bin-context-menu-item:focus-visible {
+  background: #1f2937;
+}
+
+.squisq-editor-shell[data-theme='dark'] .squisq-media-bin-context-menu-item--danger,
+.squisq-media-bin--dark .squisq-media-bin-context-menu-item--danger {
+  color: #fca5a5;
+}
+
+.squisq-editor-shell[data-theme='dark'] .squisq-media-bin-context-menu-item--danger:hover,
+.squisq-editor-shell[data-theme='dark'] .squisq-media-bin-context-menu-item--danger:focus-visible,
+.squisq-media-bin--dark .squisq-media-bin-context-menu-item--danger:hover,
+.squisq-media-bin--dark .squisq-media-bin-context-menu-item--danger:focus-visible {
+  background: #450a0a;
+  color: #fecaca;
 }
 
 /* ============================================

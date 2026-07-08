@@ -49,6 +49,7 @@ import {
   processTextFile,
   processTextFiles,
 } from './utils/dropUtils';
+import { removeMediaReferencesFromMarkdown } from './mediaReferences';
 import type { MediaProvider, Theme } from '@bendyline/squisq/schemas';
 import { DARK_SURFACE, LIGHT_SURFACE } from '@bendyline/squisq/schemas';
 import type { ContentContainer } from '@bendyline/squisq/storage';
@@ -614,6 +615,7 @@ function EditorShellInner({
     imageEditTarget,
     closeImageEdit,
     bumpMediaRevision,
+    mediaRevision,
   } = useEditorContext();
   // Dual-catalog custom themes (doc + browser library), mirroring how
   // CustomTemplateProvider is fed. Wraps the preview subtree so the theme
@@ -632,6 +634,8 @@ function EditorShellInner({
   const isTimelineMode = isMarkdownMode && layoutMode === 'timeline' && !isPreview;
   const [showFiles, setShowFiles] = useState(false);
   const [mediaRefreshKey, setMediaRefreshKey] = useState(0);
+  const [mediaCount, setMediaCount] = useState(0);
+  const mediaListRefreshKey = mediaRefreshKey + mediaRevision;
   // Persistent fallback container for image-edit sidecars when the host
   // didn't supply one. Lifted to shell scope so opening the same image
   // multiple times sees the same `.imageEdits/<sanitized>/.versions/...`
@@ -643,6 +647,33 @@ function EditorShellInner({
   }
   const imageEditFallbackContainer = imageEditFallbackContainerRef.current;
   const isDark = colorScheme === 'dark';
+
+  useEffect(() => {
+    if (!mediaProvider) {
+      setMediaCount(0);
+      return;
+    }
+
+    let cancelled = false;
+    mediaProvider.listMedia().then(
+      (entries) => {
+        if (!cancelled) setMediaCount(entries.length);
+      },
+      (err: unknown) => {
+        if (!cancelled) {
+          setMediaCount(0);
+          console.warn(
+            '[squisq-editor] Failed to read media list:',
+            err instanceof Error ? err.message : err,
+          );
+        }
+      },
+    );
+
+    return () => {
+      cancelled = true;
+    };
+  }, [mediaProvider, mediaListRefreshKey]);
 
   const handleToggleFiles = useCallback(() => {
     setShowFiles((prev) => !prev);
@@ -699,6 +730,24 @@ function EditorShellInner({
       setMarkdownSource(markdownSource ? `${markdownSource}\n\n${snippet}` : snippet);
     },
     [activeView, tiptapEditor, monacoEditor, insertAtCursor, markdownSource, setMarkdownSource],
+  );
+
+  const handleMediaUploaded = useCallback(
+    (relativePath: string, name: string, mimeType: string) => {
+      insertMediaRef(relativePath, name, mimeType);
+      setMediaRefreshKey((k) => k + 1);
+    },
+    [insertMediaRef],
+  );
+
+  const handleMediaRemoved = useCallback(
+    (relativePath: string) => {
+      const nextSource = removeMediaReferencesFromMarkdown(markdownSource, relativePath);
+      if (nextSource !== markdownSource) replaceAll(nextSource);
+      setMediaRefreshKey((k) => k + 1);
+      bumpMediaRevision();
+    },
+    [bumpMediaRevision, markdownSource, replaceAll],
   );
 
   const handleFileDrop = useCallback(
@@ -827,6 +876,7 @@ function EditorShellInner({
             <div className="squisq-editor-header">
               <Toolbar
                 showFiles={showFiles}
+                fileCount={mediaCount}
                 onToggleFiles={!isCodeMode && filesToggleEnabled ? handleToggleFiles : undefined}
                 slotLeft={toolbarSlotLeft}
                 slotAfterTabs={
@@ -993,8 +1043,10 @@ function EditorShellInner({
               <MediaBin
                 mediaProvider={mediaProvider}
                 isDark={isDark}
-                refreshKey={mediaRefreshKey}
-                onMediaUploaded={insertMediaRef}
+                refreshKey={mediaListRefreshKey}
+                onMediaUploaded={handleMediaUploaded}
+                onMediaRemoved={handleMediaRemoved}
+                onCountChange={setMediaCount}
               />
             )}
 

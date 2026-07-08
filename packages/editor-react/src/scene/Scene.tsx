@@ -415,6 +415,32 @@ export function Scene(props: SceneProps) {
     return {};
   };
 
+  // A text box's font size is independent of its box size — a wide box exists
+  // precisely so a small caption can left/center/right-align within it. So
+  // when a text box is directly resized we reshape the box and re-align its
+  // text at the *unchanged* font, rather than scaling the glyphs with the box
+  // (the generic matrix path in `wrapperFor`, which would stretch the text and
+  // then snap it back to its real size on commit). Returns a clone positioned
+  // at the live-resize box, or null when `layer` isn't a text box being
+  // directly resized. Follower labels (drawing/diagram, whose font is derived
+  // from box height) are resized via their shape, not directly, so they never
+  // match here and keep the scale-with-box preview.
+  const liveResizedTextBox = (layer: Layer): Layer | null => {
+    if (!liveResize || liveResize.layerId !== layer.id || layer.type !== 'text') return null;
+    const b = liveResize.bounds;
+    return {
+      ...layer,
+      position: {
+        ...layer.position,
+        x: b.x,
+        y: b.y,
+        width: b.width,
+        height: b.height,
+        anchor: 'top-left',
+      },
+    };
+  };
+
   const handleHandlePointerDown = (e: React.PointerEvent<SVGElement>, corner: ResizeCorner) => {
     const id = selection.selection.values().next().value as string | undefined;
     if (!id) return;
@@ -458,11 +484,23 @@ export function Scene(props: SceneProps) {
         {/* Layers — the Scene wraps each in a transformable <g> so a
             selected layer can show a live drag/resize preview without
             requiring the host to know about drag state. */}
-        {layers.map((layer) => (
-          <g key={layer.id} data-layer-id={layer.id} {...wrapperFor(layer)}>
-            {layerRenderer(layer, viewport)}
-          </g>
-        ))}
+        {layers.map((layer) => {
+          // Text boxes reshape (font-fixed) rather than scale during resize;
+          // everything else stretches via the group transform.
+          const resizedText = liveResizedTextBox(layer);
+          if (resizedText) {
+            return (
+              <g key={layer.id} data-layer-id={layer.id}>
+                {layerRenderer(resizedText, viewport)}
+              </g>
+            );
+          }
+          return (
+            <g key={layer.id} data-layer-id={layer.id} {...wrapperFor(layer)}>
+              {layerRenderer(layer, viewport)}
+            </g>
+          );
+        })}
         <SceneSelection
           selection={selection.selection}
           hitItems={hitItems}

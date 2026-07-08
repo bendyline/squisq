@@ -17,8 +17,13 @@ import { useEditorContext, type EditorView } from './EditorContext';
 import { VersionHistoryPanel } from './VersionHistoryPanel';
 import { RecorderEntry } from './RecorderEntry';
 import { ViewMenuPanel } from './ViewMenuPanel';
-import { TemplatePicker, TEMPLATE_NAMES } from './TemplatePicker';
-import { TransitionPicker } from './TransitionPicker';
+import {
+  TemplatePicker,
+  TEMPLATE_NAMES,
+  TEMPLATE_GALLERY_PORTAL_ID,
+  templateLabel,
+} from './TemplatePicker';
+import { TransitionPicker, TRANSITION_FLYOUT_PORTAL_ID } from './TransitionPicker';
 import {
   readHeadingLineTransition,
   setHeadingLineTransition,
@@ -48,6 +53,8 @@ export interface ToolbarProps {
   className?: string;
   /** Whether the Files panel is currently shown */
   showFiles?: boolean;
+  /** Number of files currently available through the MediaProvider. */
+  fileCount?: number;
   /** Toggle the Files panel. When provided, a "Files" button appears in the toolbar. */
   onToggleFiles?: () => void;
   /** Content rendered at the left edge of the toolbar, before the view tabs. */
@@ -231,9 +238,24 @@ const FIRST_MEDIA_INDEX = BUTTONS.findIndex((b) => b.group === 'media');
 const MEDIA_BUTTONS = BUTTONS.filter((b) => b.group === 'media');
 const INSERT_MENU_WIDTH = 200;
 
+// BUTTONS position per id — stamped on each rendered button as
+// data-btn-index so the overflow measurement can map a clipped DOM button
+// back to its BUTTONS entry. Walking a counter over the DOM instead would
+// drift whenever some entries render no button of their own (hidden H5/H6
+// heading levels, the media group collapsed behind the Insert dropdown).
+const BUTTON_INDEX_BY_ID = new Map(BUTTONS.map((b, i) => [b.id, i]));
+
 /** Renders a button's icon: a Font Awesome glyph when set, else the text label. */
 function buttonIcon(btn: ToolbarButton): ReactNode {
   return btn.faIcon ? <Icon icon={btn.faIcon} /> : btn.icon;
+}
+
+function fileCountLabel(count: number): string {
+  return `${count} ${count === 1 ? 'file' : 'files'}`;
+}
+
+function fileCountBadge(count: number): string {
+  return count > 99 ? '99+' : String(count);
 }
 
 // ─── Tiptap active-state map ────────────────────────────
@@ -373,6 +395,7 @@ function insertLayoutBlock(editor: TiptapEditor): void {
 export function Toolbar({
   className,
   showFiles,
+  fileCount,
   onToggleFiles,
   slotLeft,
   slotAfterTabs,
@@ -394,6 +417,8 @@ export function Toolbar({
     allowRecording,
     documentLinkProvider,
     colorScheme,
+    mediaRevision,
+    bumpMediaRevision,
   } = useEditorContext();
   // When a canvas textbox is being edited, its Tiptap instance takes over
   // the formatting buttons; otherwise they drive the document editor. The
@@ -409,6 +434,30 @@ export function Toolbar({
     return true;
   });
   const showViewTabs = visibleViews.length > 1;
+  const [scannedFileCount, setScannedFileCount] = useState(0);
+  const resolvedFileCount = fileCount ?? scannedFileCount;
+
+  useEffect(() => {
+    if (fileCount !== undefined) return;
+    if (!mediaProvider) {
+      setScannedFileCount(0);
+      return;
+    }
+
+    let cancelled = false;
+    mediaProvider.listMedia().then(
+      (entries) => {
+        if (!cancelled) setScannedFileCount(entries.length);
+      },
+      () => {
+        if (!cancelled) setScannedFileCount(0);
+      },
+    );
+
+    return () => {
+      cancelled = true;
+    };
+  }, [fileCount, mediaProvider, mediaRevision, showFiles]);
 
   // Hidden file input for image picker
   const imageInputRef = useRef<HTMLInputElement>(null);
@@ -490,6 +539,11 @@ export function Toolbar({
   // ── Overflow detection ────────────────────────────────
   const actionsRef = useRef<HTMLDivElement>(null);
   const [measuredOverflowIndex, setMeasuredOverflowIndex] = useState<number | null>(null);
+  // '|'-joined data-contextual ids of the contextual groups (template /
+  // transition pickers, table controls) whose right edge doesn't fit in the
+  // actions row. Stored as a string so identical measurements bail out of
+  // re-rendering.
+  const [clippedContextualKey, setClippedContextualKey] = useState('');
   const [showOverflow, setShowOverflow] = useState(false);
   const overflowRef = useRef<HTMLDivElement>(null);
 
@@ -500,6 +554,7 @@ export function Toolbar({
   const [showLayoutManager, setShowLayoutManager] = useState(false);
 
   const overflowIndex = measuredOverflowIndex;
+  const clippedContextual = new Set(clippedContextualKey ? clippedContextualKey.split('|') : []);
 
   useEffect(() => {
     const container = actionsRef.current;
@@ -507,39 +562,77 @@ export function Toolbar({
 
     const measure = () => {
       const containerRight = container.getBoundingClientRect().right;
+      // Contextual groups aren't BUTTONS entries, so they must not shift the
+      // btnIndex mapping below — measure them separately.
       const children = container.querySelectorAll<HTMLElement>(
-        ':scope > .squisq-toolbar-group > .squisq-toolbar-button',
+        ':scope > .squisq-toolbar-group:not(.squisq-toolbar-contextual) > .squisq-toolbar-button',
       );
       let firstHidden: number | null = null;
-      let btnIndex = 0;
       children.forEach((child) => {
         if (firstHidden !== null) return;
-        // data-btn-count lets a single DOM button represent multiple BUTTONS entries
-        // (e.g. the Insert dropdown button represents the entire media group).
-        const btnCount = Number(child.dataset.btnCount ?? 1);
-        const rect = child.getBoundingClientRect();
-        // A button is hidden if its right edge extends past the container
-        if (rect.right > containerRight + 2) {
-          firstHidden = btnIndex;
+        // A button is hidden if its right edge extends past the container.
+        // Its data-btn-index carries its BUTTONS position (see
+        // BUTTON_INDEX_BY_ID for why the DOM can't be walked positionally).
+        if (child.getBoundingClientRect().right > containerRight + 2) {
+          const index = Number(child.dataset.btnIndex);
+          firstHidden = Number.isNaN(index) ? null : index;
         }
-        btnIndex += btnCount;
       });
       setMeasuredOverflowIndex(firstHidden);
+      // Contextual groups (template/transition pickers, table controls) that
+      // don't fit move into the overflow menu instead of painting cropped.
+      const clipped: string[] = [];
+      container
+        .querySelectorAll<HTMLElement>(':scope > .squisq-toolbar-contextual')
+        .forEach((group) => {
+          if (group.getBoundingClientRect().right > containerRight + 2) {
+            clipped.push(group.dataset.contextual ?? '');
+          }
+        });
+      setClippedContextualKey(clipped.join('|'));
     };
 
+    // Observe the row and every group in it: contextual groups mount/unmount
+    // with the cursor context and change width with their value, all without
+    // resizing the flex:1 container itself — a container-only observer would
+    // go stale.
     const ro = new ResizeObserver(measure);
-    ro.observe(container);
+    const observeAll = () => {
+      ro.disconnect();
+      ro.observe(container);
+      container
+        .querySelectorAll<HTMLElement>(':scope > .squisq-toolbar-group')
+        .forEach((group) => ro.observe(group));
+    };
+    const mo = new MutationObserver(() => {
+      observeAll();
+      measure();
+    });
+    mo.observe(container, { childList: true });
+    observeAll();
     measure();
-    return () => ro.disconnect();
+    return () => {
+      ro.disconnect();
+      mo.disconnect();
+    };
   }, [activeView]);
 
-  // Close overflow menu on outside click
+  // Close overflow menu on outside click. Clicks inside the template
+  // gallery / transition flyout portals count as inside: those popovers are
+  // hosted by pickers living in this menu, and closing the menu on their
+  // mousedown would unmount them before the click completes.
   useEffect(() => {
     if (!showOverflow) return;
     const handleClick = (e: MouseEvent) => {
-      if (overflowRef.current && !overflowRef.current.contains(e.target as Node)) {
-        setShowOverflow(false);
+      const target = e.target as Node;
+      if (overflowRef.current?.contains(target)) return;
+      if (
+        target instanceof Element &&
+        target.closest(`#${TEMPLATE_GALLERY_PORTAL_ID}, #${TRANSITION_FLYOUT_PORTAL_ID}`)
+      ) {
+        return;
       }
+      setShowOverflow(false);
     };
     document.addEventListener('mousedown', handleClick);
     return () => document.removeEventListener('mousedown', handleClick);
@@ -932,6 +1025,7 @@ export function Toolbar({
       if (!mediaProvider) return;
       const buffer = await file.arrayBuffer();
       const relativePath = await mediaProvider.addMedia(file.name, buffer, file.type);
+      bumpMediaRevision();
       const altText = file.name.replace(/\.[^.]+$/, '').replace(/[-_]/g, ' ');
 
       if (activeView === 'wysiwyg' && tiptapEditor) {
@@ -948,7 +1042,15 @@ export function Toolbar({
         setMarkdownSource(markdownSource + `\n![${altText}](${relativePath})\n`);
       }
     },
-    [mediaProvider, activeView, tiptapEditor, monacoEditor, markdownSource, setMarkdownSource],
+    [
+      mediaProvider,
+      activeView,
+      tiptapEditor,
+      monacoEditor,
+      markdownSource,
+      setMarkdownSource,
+      bumpMediaRevision,
+    ],
   );
 
   const handleAction = useCallback(
@@ -1389,6 +1491,18 @@ export function Toolbar({
     tiptapEditor.chain().focus().updateAttributes('heading', { dataBlockAttrs: inner }).run();
   };
 
+  // ── Per-block controls in the overflow menu ────────────
+  // The template + transition pickers configure the active heading block, so
+  // when either is pushed into the ··· menu we group them under a labeled
+  // "<name> Block:" heading. `currentTemplate`/`currentTransition` are non-null
+  // together (both gated on a heading being active); an empty template string
+  // is a heading with no visual template, labeled "Heading".
+  const showTemplateInOverflow = currentTemplate !== null && clippedContextual.has('template');
+  const showTransitionInOverflow =
+    currentTransition !== null && clippedContextual.has('transition');
+  const showBlockSectionInOverflow = showTemplateInOverflow || showTransitionInOverflow;
+  const overflowBlockLabel = currentTemplate ? templateLabel(currentTemplate) : 'Heading';
+
   return (
     <div
       className={`squisq-toolbar ${className || ''}`}
@@ -1462,6 +1576,7 @@ export function Toolbar({
                     key={btn.id}
                     ref={btn.id === 'emoji' ? emojiButtonRef : undefined}
                     className={`squisq-toolbar-button${active ? ' squisq-toolbar-button--active' : ''}`}
+                    data-btn-index={BUTTON_INDEX_BY_ID.get(btn.id)}
                     data-tooltip={disabled ? 'Insert image (requires media provider)' : btn.title}
                     onClick={() => handleAction(btn.id)}
                     aria-label={btn.title}
@@ -1481,7 +1596,7 @@ export function Toolbar({
             <button
               ref={insertMenuButtonRef}
               className={`squisq-toolbar-button${insertMenuAnchor ? ' squisq-toolbar-button--active' : ''}`}
-              data-btn-count={String(MEDIA_BUTTONS.length)}
+              data-btn-index={FIRST_MEDIA_INDEX}
               data-tooltip="Insert..."
               onClick={() => (insertMenuAnchor ? closeInsertMenu() : openInsertMenu())}
               aria-label="Insert"
@@ -1494,192 +1609,200 @@ export function Toolbar({
 
           {/* Template picker — visible when the cursor is in a heading.
               In WYSIWYG, reads from the heading node's `dataTemplate`; in
-              Markdown view, parses the `{[...]}` suffix on the cursor's line. */}
+              Markdown view, parses the `{[...]}` suffix on the cursor's line.
+              The `squisq-toolbar-contextual` class + data-contextual id opt
+              this group (and the two below) into the clipping measurement:
+              when it doesn't fit it hides here and moves into the ··· menu. */}
           {currentTemplate !== null && (
-            <>
+            <div
+              className={`squisq-toolbar-group squisq-toolbar-contextual squisq-template-picker${clippedContextual.has('template') ? ' squisq-toolbar-contextual--clipped' : ''}`}
+              data-contextual="template"
+            >
               <div className="squisq-toolbar-separator" />
-              <div className="squisq-toolbar-group squisq-template-picker">
-                <TemplatePicker
-                  value={currentTemplate}
-                  onChange={handleTemplatePick}
-                  recommended={recommendedTemplates}
-                />
-              </div>
-            </>
+              <TemplatePicker
+                value={currentTemplate}
+                onChange={handleTemplatePick}
+                recommended={recommendedTemplates}
+              />
+            </div>
           )}
 
           {/* Transition picker — visible alongside the template picker when a
               block (heading) is active. Writes `transition=` into the block's
               Pandoc `{…}` attribute block (the canonical home for transitions). */}
           {currentTransition !== null && (
-            <>
+            <div
+              className={`squisq-toolbar-group squisq-toolbar-contextual squisq-transition-picker-group${clippedContextual.has('transition') ? ' squisq-toolbar-contextual--clipped' : ''}`}
+              data-contextual="transition"
+            >
               <div className="squisq-toolbar-separator" />
-              <div className="squisq-toolbar-group squisq-transition-picker-group">
-                <TransitionPicker value={currentTransition} onChange={handleTransitionPick} />
-              </div>
-            </>
+              <TransitionPicker value={currentTransition} onChange={handleTransitionPick} />
+            </div>
           )}
 
           {/* Table controls — visible when cursor is in a table (WYSIWYG) */}
           {isInTable && (
-            <>
+            <div
+              className={`squisq-toolbar-group squisq-toolbar-contextual squisq-table-controls${clippedContextual.has('table') ? ' squisq-toolbar-contextual--clipped' : ''}`}
+              data-contextual="table"
+            >
               <div className="squisq-toolbar-separator" />
-              <div className="squisq-toolbar-group squisq-table-controls">
-                <span className="squisq-table-controls-label">Table:</span>
-                <button
-                  className="squisq-toolbar-button"
-                  data-tooltip="Add column before"
-                  onClick={() => tiptapEditor!.chain().focus().addColumnBefore().run()}
-                  aria-label="Add column before"
+              <span className="squisq-table-controls-label">Table:</span>
+              <button
+                className="squisq-toolbar-button"
+                data-tooltip="Add column before"
+                onClick={() => tiptapEditor!.chain().focus().addColumnBefore().run()}
+                aria-label="Add column before"
+              >
+                <svg
+                  width="16"
+                  height="16"
+                  viewBox="0 0 16 16"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.5"
+                  strokeLinecap="round"
                 >
-                  <svg
-                    width="16"
-                    height="16"
-                    viewBox="0 0 16 16"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="1.5"
-                    strokeLinecap="round"
-                  >
-                    <rect x="7" y="2" width="8" height="12" rx="1" />
-                    <line x1="11" y1="2" x2="11" y2="14" />
-                    <line x1="1" y1="8" x2="4.5" y2="8" />
-                    <line x1="2.75" y1="6.25" x2="2.75" y2="9.75" />
-                  </svg>
-                </button>
-                <button
-                  className="squisq-toolbar-button"
-                  data-tooltip="Add column after"
-                  onClick={() => tiptapEditor!.chain().focus().addColumnAfter().run()}
-                  aria-label="Add column after"
+                  <rect x="7" y="2" width="8" height="12" rx="1" />
+                  <line x1="11" y1="2" x2="11" y2="14" />
+                  <line x1="1" y1="8" x2="4.5" y2="8" />
+                  <line x1="2.75" y1="6.25" x2="2.75" y2="9.75" />
+                </svg>
+              </button>
+              <button
+                className="squisq-toolbar-button"
+                data-tooltip="Add column after"
+                onClick={() => tiptapEditor!.chain().focus().addColumnAfter().run()}
+                aria-label="Add column after"
+              >
+                <svg
+                  width="16"
+                  height="16"
+                  viewBox="0 0 16 16"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.5"
+                  strokeLinecap="round"
                 >
-                  <svg
-                    width="16"
-                    height="16"
-                    viewBox="0 0 16 16"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="1.5"
-                    strokeLinecap="round"
-                  >
-                    <rect x="1" y="2" width="8" height="12" rx="1" />
-                    <line x1="5" y1="2" x2="5" y2="14" />
-                    <line x1="11.5" y1="8" x2="15" y2="8" />
-                    <line x1="13.25" y1="6.25" x2="13.25" y2="9.75" />
-                  </svg>
-                </button>
-                <button
-                  className="squisq-toolbar-button"
-                  data-tooltip="Delete column"
-                  onClick={() => tiptapEditor!.chain().focus().deleteColumn().run()}
-                  aria-label="Delete column"
+                  <rect x="1" y="2" width="8" height="12" rx="1" />
+                  <line x1="5" y1="2" x2="5" y2="14" />
+                  <line x1="11.5" y1="8" x2="15" y2="8" />
+                  <line x1="13.25" y1="6.25" x2="13.25" y2="9.75" />
+                </svg>
+              </button>
+              <button
+                className="squisq-toolbar-button"
+                data-tooltip="Delete column"
+                onClick={() => tiptapEditor!.chain().focus().deleteColumn().run()}
+                aria-label="Delete column"
+              >
+                <svg
+                  width="16"
+                  height="16"
+                  viewBox="0 0 16 16"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.5"
+                  strokeLinecap="round"
                 >
-                  <svg
-                    width="16"
-                    height="16"
-                    viewBox="0 0 16 16"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="1.5"
-                    strokeLinecap="round"
-                  >
-                    <rect x="4" y="1" width="8" height="14" rx="1" />
-                    <line x1="6" y1="5.5" x2="10" y2="10.5" />
-                    <line x1="10" y1="5.5" x2="6" y2="10.5" />
-                  </svg>
-                </button>
-                <button
-                  className="squisq-toolbar-button"
-                  data-tooltip="Add row above"
-                  onClick={() => tiptapEditor!.chain().focus().addRowBefore().run()}
-                  aria-label="Add row above"
+                  <rect x="4" y="1" width="8" height="14" rx="1" />
+                  <line x1="6" y1="5.5" x2="10" y2="10.5" />
+                  <line x1="10" y1="5.5" x2="6" y2="10.5" />
+                </svg>
+              </button>
+              <button
+                className="squisq-toolbar-button"
+                data-tooltip="Add row above"
+                onClick={() => tiptapEditor!.chain().focus().addRowBefore().run()}
+                aria-label="Add row above"
+              >
+                <svg
+                  width="16"
+                  height="16"
+                  viewBox="0 0 16 16"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.5"
+                  strokeLinecap="round"
                 >
-                  <svg
-                    width="16"
-                    height="16"
-                    viewBox="0 0 16 16"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="1.5"
-                    strokeLinecap="round"
-                  >
-                    <rect x="2" y="6" width="12" height="9" rx="1" />
-                    <line x1="2" y1="10.5" x2="14" y2="10.5" />
-                    <line x1="8" y1="1" x2="8" y2="4.5" />
-                    <line x1="6.25" y1="2.75" x2="9.75" y2="2.75" />
-                  </svg>
-                </button>
-                <button
-                  className="squisq-toolbar-button"
-                  data-tooltip="Add row below"
-                  onClick={() => tiptapEditor!.chain().focus().addRowAfter().run()}
-                  aria-label="Add row below"
+                  <rect x="2" y="6" width="12" height="9" rx="1" />
+                  <line x1="2" y1="10.5" x2="14" y2="10.5" />
+                  <line x1="8" y1="1" x2="8" y2="4.5" />
+                  <line x1="6.25" y1="2.75" x2="9.75" y2="2.75" />
+                </svg>
+              </button>
+              <button
+                className="squisq-toolbar-button"
+                data-tooltip="Add row below"
+                onClick={() => tiptapEditor!.chain().focus().addRowAfter().run()}
+                aria-label="Add row below"
+              >
+                <svg
+                  width="16"
+                  height="16"
+                  viewBox="0 0 16 16"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.5"
+                  strokeLinecap="round"
                 >
-                  <svg
-                    width="16"
-                    height="16"
-                    viewBox="0 0 16 16"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="1.5"
-                    strokeLinecap="round"
-                  >
-                    <rect x="2" y="1" width="12" height="9" rx="1" />
-                    <line x1="2" y1="5.5" x2="14" y2="5.5" />
-                    <line x1="8" y1="11.5" x2="8" y2="15" />
-                    <line x1="6.25" y1="13.25" x2="9.75" y2="13.25" />
-                  </svg>
-                </button>
-                <button
-                  className="squisq-toolbar-button"
-                  data-tooltip="Delete row"
-                  onClick={() => tiptapEditor!.chain().focus().deleteRow().run()}
-                  aria-label="Delete row"
+                  <rect x="2" y="1" width="12" height="9" rx="1" />
+                  <line x1="2" y1="5.5" x2="14" y2="5.5" />
+                  <line x1="8" y1="11.5" x2="8" y2="15" />
+                  <line x1="6.25" y1="13.25" x2="9.75" y2="13.25" />
+                </svg>
+              </button>
+              <button
+                className="squisq-toolbar-button"
+                data-tooltip="Delete row"
+                onClick={() => tiptapEditor!.chain().focus().deleteRow().run()}
+                aria-label="Delete row"
+              >
+                <svg
+                  width="16"
+                  height="16"
+                  viewBox="0 0 16 16"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.5"
+                  strokeLinecap="round"
                 >
-                  <svg
-                    width="16"
-                    height="16"
-                    viewBox="0 0 16 16"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="1.5"
-                    strokeLinecap="round"
-                  >
-                    <rect x="1" y="4" width="14" height="8" rx="1" />
-                    <line x1="5.5" y1="6" x2="10.5" y2="10" />
-                    <line x1="10.5" y1="6" x2="5.5" y2="10" />
-                  </svg>
-                </button>
-                <button
-                  className="squisq-toolbar-button squisq-toolbar-button--danger"
-                  data-tooltip="Delete table"
-                  onClick={() => tiptapEditor!.chain().focus().deleteTable().run()}
-                  aria-label="Delete table"
+                  <rect x="1" y="4" width="14" height="8" rx="1" />
+                  <line x1="5.5" y1="6" x2="10.5" y2="10" />
+                  <line x1="10.5" y1="6" x2="5.5" y2="10" />
+                </svg>
+              </button>
+              <button
+                className="squisq-toolbar-button squisq-toolbar-button--danger"
+                data-tooltip="Delete table"
+                onClick={() => tiptapEditor!.chain().focus().deleteTable().run()}
+                aria-label="Delete table"
+              >
+                <svg
+                  width="16"
+                  height="16"
+                  viewBox="0 0 16 16"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.5"
+                  strokeLinecap="round"
                 >
-                  <svg
-                    width="16"
-                    height="16"
-                    viewBox="0 0 16 16"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="1.5"
-                    strokeLinecap="round"
-                  >
-                    <rect x="1" y="1" width="14" height="14" rx="1" />
-                    <line x1="1" y1="5.5" x2="15" y2="5.5" />
-                    <line x1="5.5" y1="1" x2="5.5" y2="15" />
-                    <line x1="4.5" y1="4.5" x2="11.5" y2="11.5" strokeWidth="2" />
-                    <line x1="11.5" y1="4.5" x2="4.5" y2="11.5" strokeWidth="2" />
-                  </svg>
-                </button>
-              </div>
-            </>
+                  <rect x="1" y="1" width="14" height="14" rx="1" />
+                  <line x1="1" y1="5.5" x2="15" y2="5.5" />
+                  <line x1="5.5" y1="1" x2="5.5" y2="15" />
+                  <line x1="4.5" y1="4.5" x2="11.5" y2="11.5" strokeWidth="2" />
+                  <line x1="11.5" y1="4.5" x2="4.5" y2="11.5" strokeWidth="2" />
+                </svg>
+              </button>
+            </div>
           )}
         </div>
       )}
 
-      {/* Overflow menu — outside the overflow:hidden actions container */}
-      {!isPreview && !isCodeMode && overflowIndex !== null && (
+      {/* Overflow menu — outside the overflow:hidden actions container.
+          Also appears when a contextual group (template/transition picker,
+          table controls) is clipped, even if every plain button fits. */}
+      {!isPreview && !isCodeMode && (overflowIndex !== null || clippedContextual.size > 0) && (
         <div className="squisq-toolbar-overflow" ref={overflowRef}>
           <button
             className={`squisq-toolbar-button squisq-toolbar-overflow-trigger${showOverflow ? ' squisq-toolbar-button--active' : ''}`}
@@ -1694,7 +1817,7 @@ export function Toolbar({
             <div
               className={`squisq-toolbar-overflow-menu squisq-toolbar-overflow-menu--${overflowPlacement}`}
             >
-              {BUTTONS.slice(overflowIndex)
+              {BUTTONS.slice(overflowIndex ?? BUTTONS.length)
                 .filter((b) => isButtonVisible(b.id))
                 // Media buttons are represented by the synthetic Insert dropdown
                 // in both the visible toolbar and the overflow menu.
@@ -1748,12 +1871,26 @@ export function Toolbar({
                 </button>
               )}
 
-              {/* Contextual: template picker in overflow */}
-              {currentTemplate !== null && (
+              {/* Per-block section — the template + transition pickers move
+                  here when clipped, under a divider and a "<name> Block:"
+                  heading that names the block they configure. */}
+              {showBlockSectionInOverflow && (
+                <>
+                  <div
+                    className="squisq-toolbar-separator"
+                    style={{ margin: '4px 0', width: '100%', height: 1 }}
+                  />
+                  <div className="squisq-toolbar-overflow-heading">{overflowBlockLabel} Block:</div>
+                </>
+              )}
+
+              {/* Contextual: template picker in overflow — only when the
+                  inline one is clipped, so the control lives in exactly one
+                  visible place at a time. */}
+              {showTemplateInOverflow && (
                 <div className="squisq-toolbar-overflow-item squisq-toolbar-overflow-template">
-                  <span>Template:</span>
                   <TemplatePicker
-                    value={currentTemplate}
+                    value={currentTemplate!}
                     onChange={(v) => {
                       handleTemplatePick(v);
                       setShowOverflow(false);
@@ -1763,8 +1900,17 @@ export function Toolbar({
                 </div>
               )}
 
+              {/* Contextual: transition picker in overflow — mirrors the
+                  template picker above. The menu stays open on change since
+                  the flyout carries follow-up controls (direction/duration). */}
+              {showTransitionInOverflow && (
+                <div className="squisq-toolbar-overflow-item squisq-toolbar-overflow-template">
+                  <TransitionPicker value={currentTransition!} onChange={handleTransitionPick} />
+                </div>
+              )}
+
               {/* Contextual: table controls in overflow */}
-              {isInTable && (
+              {isInTable && clippedContextual.has('table') && (
                 <>
                   <div
                     className="squisq-toolbar-separator"
@@ -1863,11 +2009,16 @@ export function Toolbar({
         <button
           className={`squisq-toolbar-button squisq-toolbar-files-toggle${showFiles ? ' squisq-toolbar-button--active' : ''}`}
           onClick={onToggleFiles}
-          data-tooltip={showFiles ? 'Hide Files panel' : 'Show Files panel'}
+          data-tooltip={`${showFiles ? 'Hide' : 'Show'} Files panel${resolvedFileCount > 0 ? ` (${fileCountLabel(resolvedFileCount)})` : ''}`}
           aria-pressed={showFiles}
-          aria-label="Toggle Files panel"
+          aria-label={`Toggle Files panel${resolvedFileCount > 0 ? `, ${fileCountLabel(resolvedFileCount)}` : ''}`}
         >
           <Icon icon="fa-solid fa-paperclip" />
+          {resolvedFileCount > 0 && (
+            <span className="squisq-toolbar-files-badge" aria-hidden="true">
+              {fileCountBadge(resolvedFileCount)}
+            </span>
+          )}
         </button>
       )}
       {/* Right slot — rightmost end of toolbar */}

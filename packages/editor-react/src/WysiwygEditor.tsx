@@ -108,6 +108,7 @@ export function WysiwygEditor({
     mentionProvider,
     blockTagsVisible,
     themeInheritance,
+    bumpMediaRevision,
   } = useEditorContext();
   // Custom templates inlined in the active doc's frontmatter + the
   // persist callback that writes a new list back into the source.
@@ -257,7 +258,7 @@ export function WysiwygEditor({
         const imageFiles = filesFromClipboard(clipboard);
         if (imageFiles.length > 0 && mediaProviderRef.current) {
           event.preventDefault();
-          uploadAndInsertImages(view, imageFiles, mediaProviderRef.current);
+          uploadAndInsertImages(view, imageFiles, mediaProviderRef.current, bumpMediaRevision);
           return true;
         }
 
@@ -326,7 +327,7 @@ export function WysiwygEditor({
 
         event.preventDefault();
         moveSelectionToDropPoint(view, event);
-        uploadAndInsertImages(view, imageFiles, mediaProviderRef.current);
+        uploadAndInsertImages(view, imageFiles, mediaProviderRef.current, bumpMediaRevision);
         return true;
       },
     },
@@ -631,6 +632,7 @@ async function uploadAndInsertImages(
   view: any,
   files: File[],
   mediaProvider: import('@bendyline/squisq/schemas').MediaProvider,
+  onMediaUploaded?: () => void,
 ): Promise<void> {
   for (const file of files) {
     try {
@@ -643,6 +645,7 @@ async function uploadAndInsertImages(
       const relativePath = await mediaProvider.addMedia(name, buffer, mimeType);
       const altText = name.replace(/\.[^.]+$/, '').replace(/[-_]/g, ' ');
       insertImageNode(view, relativePath, altText);
+      onMediaUploaded?.();
     } catch (err) {
       console.error('Failed to upload dropped image:', err);
     }

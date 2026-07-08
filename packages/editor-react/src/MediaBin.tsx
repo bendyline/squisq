@@ -32,6 +32,13 @@ export interface MediaBinProps {
    * else, leaving the message body empty when the user hit Send.
    */
   onMediaUploaded?: (relativePath: string, name: string, mimeType: string) => void | Promise<void>;
+  /**
+   * Fired after a file is removed through the MediaBin context menu.
+   * Hosts use this to remove matching markdown refs from the document.
+   */
+  onMediaRemoved?: (relativePath: string, entry: MediaEntry) => void | Promise<void>;
+  /** Fired whenever the panel scans media and knows the current entry count. */
+  onCountChange?: (count: number) => void;
 }
 
 // ============================================
@@ -57,21 +64,90 @@ function isImageMime(mimeType: string): boolean {
   return mimeType.startsWith('image/');
 }
 
+function sortMediaEntries(entries: MediaEntry[]): MediaEntry[] {
+  return entries.sort((a, b) => {
+    const aImg = isImageMime(a.mimeType) ? 0 : 1;
+    const bImg = isImageMime(b.mimeType) ? 0 : 1;
+    if (aImg !== bImg) return aImg - bImg;
+    return a.name.localeCompare(b.name);
+  });
+}
+
 // ============================================
 // Component
 // ============================================
 
-export function MediaBin({ mediaProvider, isDark, refreshKey, onMediaUploaded }: MediaBinProps) {
+export function MediaBin({
+  mediaProvider,
+  isDark,
+  refreshKey,
+  onMediaUploaded,
+  onMediaRemoved,
+  onCountChange,
+}: MediaBinProps) {
   const [entries, setEntries] = useState<MediaEntry[]>([]);
   const [thumbUrls, setThumbUrls] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(false);
+  const [contextMenu, setContextMenu] = useState<{
+    entry: MediaEntry;
+    x: number;
+    y: number;
+  } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const contextMenuRef = useRef<HTMLDivElement>(null);
+
+  const updateEntries = useCallback(
+    async (provider: MediaProvider) => {
+      const list = sortMediaEntries(await provider.listMedia());
+      setEntries(list);
+      onCountChange?.(list.length);
+
+      const urls: Record<string, string> = {};
+      for (const entry of list) {
+        if (isImageMime(entry.mimeType)) {
+          try {
+            urls[entry.name] = await provider.resolveUrl(entry.name);
+          } catch {
+            // skip failed resolve
+          }
+        }
+      }
+      setThumbUrls(urls);
+    },
+    [onCountChange],
+  );
+
+  useEffect(() => {
+    if (!contextMenu) return;
+
+    const handlePointerDown = (event: MouseEvent) => {
+      if (contextMenuRef.current?.contains(event.target as Node)) return;
+      setContextMenu(null);
+    };
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setContextMenu(null);
+    };
+    const close = () => setContextMenu(null);
+
+    document.addEventListener('mousedown', handlePointerDown);
+    document.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('scroll', close, true);
+    window.addEventListener('resize', close);
+
+    return () => {
+      document.removeEventListener('mousedown', handlePointerDown);
+      document.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('scroll', close, true);
+      window.removeEventListener('resize', close);
+    };
+  }, [contextMenu]);
 
   // Scan media entries whenever the provider changes or refreshKey bumps
   useEffect(() => {
     if (!mediaProvider) {
       setEntries([]);
       setThumbUrls({});
+      onCountChange?.(0);
       return;
     }
 
@@ -83,13 +159,9 @@ export function MediaBin({ mediaProvider, isDark, refreshKey, onMediaUploaded }:
         const list = await mediaProvider!.listMedia();
         if (cancelled) return;
 
-        list.sort((a, b) => {
-          const aImg = isImageMime(a.mimeType) ? 0 : 1;
-          const bImg = isImageMime(b.mimeType) ? 0 : 1;
-          if (aImg !== bImg) return aImg - bImg;
-          return a.name.localeCompare(b.name);
-        });
+        sortMediaEntries(list);
         setEntries(list);
+        onCountChange?.(list.length);
 
         const urls: Record<string, string> = {};
         for (const entry of list) {
@@ -111,7 +183,7 @@ export function MediaBin({ mediaProvider, isDark, refreshKey, onMediaUploaded }:
     return () => {
       cancelled = true;
     };
-  }, [mediaProvider, refreshKey]);
+  }, [mediaProvider, refreshKey, onCountChange]);
 
   // ---- Upload ----
 
@@ -141,32 +213,66 @@ export function MediaBin({ mediaProvider, isDark, refreshKey, onMediaUploaded }:
           }
         }
         // Re-scan
-        const list = await mediaProvider.listMedia();
-        list.sort((a, b) => {
-          const aImg = isImageMime(a.mimeType) ? 0 : 1;
-          const bImg = isImageMime(b.mimeType) ? 0 : 1;
-          if (aImg !== bImg) return aImg - bImg;
-          return a.name.localeCompare(b.name);
-        });
-        setEntries(list);
-
-        const urls: Record<string, string> = {};
-        for (const entry of list) {
-          if (isImageMime(entry.mimeType)) {
-            try {
-              urls[entry.name] = await mediaProvider.resolveUrl(entry.name);
-            } catch {
-              // skip
-            }
-          }
-        }
-        setThumbUrls(urls);
+        await updateEntries(mediaProvider);
       } finally {
         setLoading(false);
         if (fileInputRef.current) fileInputRef.current.value = '';
       }
     },
-    [mediaProvider, onMediaUploaded],
+    [mediaProvider, onMediaUploaded, updateEntries],
+  );
+
+  const handleRemoveEntry = useCallback(
+    async (entry: MediaEntry) => {
+      if (!mediaProvider) return;
+      setContextMenu(null);
+      setLoading(true);
+      try {
+        await mediaProvider.removeMedia(entry.name);
+        if (onMediaRemoved) {
+          try {
+            await onMediaRemoved(entry.name, entry);
+          } catch (err: unknown) {
+            console.warn(
+              '[squisq-editor] Failed to remove media reference from document:',
+              err instanceof Error ? err.message : err,
+            );
+          }
+        }
+        await updateEntries(mediaProvider);
+      } finally {
+        setLoading(false);
+      }
+    },
+    [mediaProvider, onMediaRemoved, updateEntries],
+  );
+
+  const openContextMenu = useCallback((entry: MediaEntry, x: number, y: number) => {
+    setContextMenu({ entry, x, y });
+  }, []);
+
+  const removeLabel = contextMenu
+    ? isImageMime(contextMenu.entry.mimeType)
+      ? 'Remove image'
+      : 'Remove file'
+    : 'Remove file';
+
+  const menuLeft = contextMenu ? Math.min(contextMenu.x, Math.max(8, window.innerWidth - 168)) : 0;
+  const menuTop = contextMenu ? Math.min(contextMenu.y, Math.max(8, window.innerHeight - 48)) : 0;
+
+  const contextMenuStyle = {
+    left: menuLeft,
+    top: menuTop,
+  };
+
+  const handleItemKeyDown = useCallback(
+    (entry: MediaEntry, event: React.KeyboardEvent<HTMLDivElement>) => {
+      if (event.key !== 'ContextMenu' && !(event.shiftKey && event.key === 'F10')) return;
+      event.preventDefault();
+      const rect = event.currentTarget.getBoundingClientRect();
+      openContextMenu(entry, rect.left + 16, rect.top + 16);
+    },
+    [openContextMenu],
   );
 
   return (
@@ -227,7 +333,13 @@ export function MediaBin({ mediaProvider, isDark, refreshKey, onMediaUploaded }:
               className="squisq-media-bin-item"
               title={`${entry.name}\n${entry.mimeType}\n${formatSize(entry.size)}`}
               draggable={isImage}
+              tabIndex={0}
+              onContextMenu={(e) => {
+                e.preventDefault();
+                openContextMenu(entry, e.clientX, e.clientY);
+              }}
               onDragStart={handleDragStart}
+              onKeyDown={(e) => handleItemKeyDown(entry, e)}
             >
               {/* Thumbnail or icon */}
               {thumb ? (
@@ -250,6 +362,26 @@ export function MediaBin({ mediaProvider, isDark, refreshKey, onMediaUploaded }:
           );
         })}
       </div>
+
+      {contextMenu && (
+        <div
+          ref={contextMenuRef}
+          className="squisq-media-bin-context-menu"
+          role="menu"
+          aria-label={`${contextMenu.entry.name} actions`}
+          style={contextMenuStyle}
+        >
+          <button
+            type="button"
+            role="menuitem"
+            className="squisq-media-bin-context-menu-item squisq-media-bin-context-menu-item--danger"
+            onClick={() => handleRemoveEntry(contextMenu.entry)}
+            disabled={!mediaProvider || loading}
+          >
+            {removeLabel}
+          </button>
+        </div>
+      )}
 
       {/* Hidden file input */}
       <input

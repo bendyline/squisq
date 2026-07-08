@@ -85,12 +85,28 @@ export function markdownToTiptap(markdown: string): string {
   let listType: 'ul' | 'ol' | 'task' = 'ul';
   let inTable = false;
   let tableLines: string[] = [];
+  let pendingBlankLines = 0;
+
+  const flushPendingBlankParagraphs = () => {
+    if (pendingBlankLines === 0) return;
+    const emptyParagraphs =
+      outputBlocks.length === 0 ? pendingBlankLines : Math.max(0, pendingBlankLines - 1);
+    for (let i = 0; i < emptyParagraphs; i++) {
+      outputBlocks.push('<p></p>');
+    }
+    pendingBlankLines = 0;
+  };
+
+  const pushBlock = (block: string) => {
+    flushPendingBlankParagraphs();
+    outputBlocks.push(block);
+  };
 
   const flushList = () => {
     if (inList && listItems.length > 0) {
       const tag = listType === 'ol' ? 'ol' : 'ul';
       const attr = listType === 'task' ? ' data-type="taskList"' : '';
-      outputBlocks.push(`<${tag}${attr}>${listItems.join('')}</${tag}>`);
+      pushBlock(`<${tag}${attr}>${listItems.join('')}</${tag}>`);
       listItems = [];
       inList = false;
     }
@@ -111,7 +127,7 @@ export function markdownToTiptap(markdown: string): string {
     if (tableLines.length < 2 || !isSeparator) {
       // Not a valid table — render accumulated lines as paragraphs
       for (const tl of tableLines) {
-        outputBlocks.push(`<p>${inlineToHtml(tl)}</p>`);
+        pushBlock(`<p>${inlineToHtml(tl)}</p>`);
       }
       inTable = false;
       tableLines = [];
@@ -146,7 +162,7 @@ export function markdownToTiptap(markdown: string): string {
       })
       .join('');
 
-    outputBlocks.push(`<table><thead><tr>${thHtml}</tr></thead><tbody>${bodyHtml}</tbody></table>`);
+    pushBlock(`<table><thead><tr>${thHtml}</tr></thead><tbody>${bodyHtml}</tbody></table>`);
 
     inTable = false;
     tableLines = [];
@@ -159,15 +175,14 @@ export function markdownToTiptap(markdown: string): string {
     if (line.startsWith('```')) {
       if (!inCodeBlock) {
         flushList();
+        flushPendingBlankParagraphs();
         inCodeBlock = true;
         codeBlockLang = line.slice(3).trim();
         codeBlockLines = [];
         continue;
       } else {
         const langAttr = codeBlockLang ? ` class="language-${escapeHtml(codeBlockLang)}"` : '';
-        outputBlocks.push(
-          `<pre><code${langAttr}>${escapeHtml(codeBlockLines.join('\n'))}</code></pre>`,
-        );
+        pushBlock(`<pre><code${langAttr}>${escapeHtml(codeBlockLines.join('\n'))}</code></pre>`);
         inCodeBlock = false;
         codeBlockLang = '';
         codeBlockLines = [];
@@ -188,8 +203,11 @@ export function markdownToTiptap(markdown: string): string {
     // Blank line flushes list
     if (line.trim() === '') {
       flushList();
+      pendingBlankLines++;
       continue;
     }
+
+    flushPendingBlankParagraphs();
 
     // Headings
     const headingMatch = line.match(/^(#{1,6})\s+(.+)$/);
@@ -243,21 +261,21 @@ export function markdownToTiptap(markdown: string): string {
         attrs += ` data-block-attrs="${escapeHtml(pandocInner)}"`;
       }
 
-      outputBlocks.push(`<h${level}${attrs}>${inlineToHtml(text)}</h${level}>`);
+      pushBlock(`<h${level}${attrs}>${inlineToHtml(text)}</h${level}>`);
       continue;
     }
 
     // Thematic break
     if (/^(---|\*\*\*|___)(\s*)$/.test(line.trim())) {
       flushList();
-      outputBlocks.push('<hr>');
+      pushBlock('<hr>');
       continue;
     }
 
     // Blockquote
     if (line.startsWith('> ')) {
       flushList();
-      outputBlocks.push(`<blockquote><p>${inlineToHtml(line.slice(2))}</p></blockquote>`);
+      pushBlock(`<blockquote><p>${inlineToHtml(line.slice(2))}</p></blockquote>`);
       continue;
     }
 
@@ -325,7 +343,7 @@ export function markdownToTiptap(markdown: string): string {
       flushList();
       const alt = escapeHtml(standaloneImageMatch[1] ?? '');
       const src = escapeHtml(standaloneImageMatch[2] ?? '');
-      outputBlocks.push(`<img alt="${alt}" src="${src}">`);
+      pushBlock(`<img alt="${alt}" src="${src}">`);
       continue;
     }
 
@@ -337,7 +355,7 @@ export function markdownToTiptap(markdown: string): string {
     const trimmed = line.trim();
     if (/^<img\b[^>]*>$/i.test(trimmed)) {
       flushList();
-      outputBlocks.push(trimmed);
+      pushBlock(trimmed);
       continue;
     }
 
@@ -348,24 +366,23 @@ export function markdownToTiptap(markdown: string): string {
     // picks up the tag attributes (`src`, `controls`, …).
     if (/^<(?:video|audio)\b[^>]*>(?:[\s\S]*?<\/(?:video|audio)>)?$/i.test(trimmed)) {
       flushList();
-      outputBlocks.push(trimmed);
+      pushBlock(trimmed);
       continue;
     }
 
     // Regular paragraph
     flushList();
-    outputBlocks.push(`<p>${inlineToHtml(line)}</p>`);
+    pushBlock(`<p>${inlineToHtml(line)}</p>`);
   }
 
   // Close any remaining open blocks
   if (inCodeBlock) {
     const langAttr = codeBlockLang ? ` class="language-${escapeHtml(codeBlockLang)}"` : '';
-    outputBlocks.push(
-      `<pre><code${langAttr}>${escapeHtml(codeBlockLines.join('\n'))}</code></pre>`,
-    );
+    pushBlock(`<pre><code${langAttr}>${escapeHtml(codeBlockLines.join('\n'))}</code></pre>`);
   }
   flushList();
   flushTable();
+  flushPendingBlankParagraphs();
 
   return outputBlocks.join('') || '<p></p>';
 }
@@ -575,6 +592,8 @@ export function tiptapToMarkdown(html: string): string {
       if (text.trim()) {
         lines.push(text);
         lines.push('');
+      } else {
+        lines.push('');
       }
       remaining = remaining.slice(pMatch[0].length);
       continue;
@@ -633,13 +652,7 @@ export function tiptapToMarkdown(html: string): string {
     remaining = remaining.slice(1);
   }
 
-  // Clean up trailing blank lines
-  return (
-    lines
-      .join('\n')
-      .replace(/\n{3,}/g, '\n\n')
-      .trim() + '\n'
-  );
+  return lines.join('\n');
 }
 
 /**
@@ -793,6 +806,7 @@ function unescapeHtml(text: string): string {
     .replace(/&lt;/g, '<')
     .replace(/&gt;/g, '>')
     .replace(/&quot;/g, '"')
+    .replace(/&nbsp;|&#160;|&#xA0;/gi, '\u00a0')
     .replace(/&amp;/g, '&');
 }
 
@@ -869,7 +883,7 @@ function inlineToHtml(text: string): string {
   // eslint-disable-next-line no-control-regex
   result = result.replace(/\u0000PH(\d+)\u0000/g, (_m, idx) => placeholders[Number(idx)] ?? '');
 
-  return result;
+  return preserveLeadingSpaces(result);
 }
 
 /** Convert inline HTML back to markdown */
@@ -929,5 +943,15 @@ function htmlToInline(html: string): string {
   // Strip remaining tags
   result = result.replace(RE_STRIP_TAGS, '');
 
-  return unescapeHtml(result);
+  return restoreLeadingSpaces(unescapeHtml(result));
+}
+
+function preserveLeadingSpaces(html: string): string {
+  return html.replace(/^ +/, (spaces) => '&nbsp;'.repeat(spaces.length));
+}
+
+function restoreLeadingSpaces(text: string): string {
+  return text.replace(/(^|\n)(\u00a0+)/g, (_match, prefix: string, spaces: string) => {
+    return prefix + ' '.repeat(spaces.length);
+  });
 }
