@@ -10,8 +10,10 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import type { CustomTemplateDefinition } from '@bendyline/squisq/schemas';
 import { TEMPLATE_METADATA, resolveTemplateName } from '@bendyline/squisq/doc';
+import { extractPlainText } from '@bendyline/squisq/markdown';
 import { useCustomTemplates } from './customTemplates/CustomTemplateContext';
 import { TemplateThumbnail } from './customTemplates/thumbnail';
+import { TemplateContentPreview, type TemplatePreviewSource } from './TemplateContentPreview';
 
 // ── Template metadata ─────────────────────────────────────────────
 //
@@ -36,6 +38,8 @@ interface TemplateEntry {
  * clicks inside the gallery as "inside" in their outside-click handling.
  */
 export const TEMPLATE_GALLERY_PORTAL_ID = 'squisq-template-gallery-portal';
+
+const TEMPLATE_GALLERY_DIALOG_ID = 'squisq-template-gallery-dialog';
 
 const W = 56;
 const H = 40;
@@ -520,6 +524,8 @@ export function templateLabel(
 export interface TemplatePickerProps {
   value: string;
   onChange: (name: string) => void;
+  /** Active editor chrome theme, used by the portaled dialog. */
+  colorScheme?: 'light' | 'dark';
   /** When true, shows only the trigger button (no popover) — used in the overflow menu. */
   compact?: boolean;
   /**
@@ -535,48 +541,35 @@ export interface TemplatePickerProps {
    * hidden.
    */
   onOpenDesigner?: () => void;
+  /**
+   * Active block content used to render live template thumbnails. When omitted,
+   * or when a template cannot be meaningfully derived from the block, cards use
+   * their static wireframe icons.
+   */
+  previewSource?: TemplatePreviewSource;
 }
 
 export function TemplatePicker({
   value,
   onChange,
+  colorScheme = 'light',
   compact,
   recommended,
   onOpenDesigner,
+  previewSource,
 }: TemplatePickerProps) {
   const [open, setOpen] = useState(false);
-  const [popoverStyle, setPopoverStyle] = useState<React.CSSProperties>({});
+  const [dialogStyle, setDialogStyle] = useState<React.CSSProperties>({});
   const containerRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
 
-  // Position the portal popover below the trigger button. Clamp the
-  // left edge so the gallery (up to 780px wide) doesn't overflow the
-  // viewport when the toolbar trigger sits near the right edge of the
-  // window — previously the popover was left-aligned to the trigger,
-  // which pushed half the cards off-screen at narrow widths.
-  const updatePosition = () => {
+  const updateDialogBounds = () => {
     if (!triggerRef.current) return;
-    const rect = triggerRef.current.getBoundingClientRect();
-    const popoverEl = document.getElementById(TEMPLATE_GALLERY_PORTAL_ID);
-    // Use the actual rendered width if the popover is already mounted;
-    // otherwise fall back to the CSS-defined max so the first paint
-    // doesn't overflow either. Measure the portal element directly —
-    // its `firstElementChild` is the (small) "(none)" option, not the
-    // gallery itself.
-    const popoverWidth = popoverEl?.getBoundingClientRect().width ?? 780;
-    const margin = 8;
-    const maxLeft = Math.max(margin, window.innerWidth - popoverWidth - margin);
-    const left = Math.min(Math.max(margin, rect.left), maxLeft);
-    setPopoverStyle({
-      position: 'fixed',
-      top: rect.bottom + 6,
-      left,
-      zIndex: 9999,
-    });
+    setDialogStyle(computeDialogStyle(triggerRef.current));
   };
 
   const handleOpen = () => {
-    updatePosition();
+    updateDialogBounds();
     setOpen((v) => !v);
   };
 
@@ -586,8 +579,8 @@ export function TemplatePicker({
     const handler = (e: MouseEvent) => {
       const target = e.target as Node;
       const inTrigger = triggerRef.current?.contains(target);
-      const inPopover = document.getElementById(TEMPLATE_GALLERY_PORTAL_ID)?.contains(target);
-      if (!inTrigger && !inPopover) {
+      const inDialog = document.getElementById(TEMPLATE_GALLERY_DIALOG_ID)?.contains(target);
+      if (!inTrigger && !inDialog) {
         setOpen(false);
       }
     };
@@ -608,10 +601,8 @@ export function TemplatePicker({
   // Reposition on scroll/resize while open
   useEffect(() => {
     if (!open) return;
-    // Reposition once on the next frame so the clamp uses the actual
-    // rendered popover width (the initial open() runs before mount).
-    requestAnimationFrame(updatePosition);
-    const handler = () => updatePosition();
+    requestAnimationFrame(updateDialogBounds);
+    const handler = () => updateDialogBounds();
     window.addEventListener('scroll', handler, true);
     window.addEventListener('resize', handler);
     return () => {
@@ -628,6 +619,7 @@ export function TemplatePicker({
   const currentLabel = templateLabel(value);
   const currentEntry: TemplateEntry =
     (value && TEMPLATE_ENTRIES.find((e) => e.name === value)) || NONE_ENTRY;
+  const dialogTitle = templateDialogTitle(previewSource);
 
   if (compact) {
     // In overflow menu, use a simple select for space efficiency
@@ -649,13 +641,21 @@ export function TemplatePicker({
 
   const gallery = open
     ? createPortal(
-        <TemplateGalleryBody
-          value={value}
-          onSelect={handleSelect}
-          style={popoverStyle}
-          recommended={recommended}
-          onOpenDesigner={onOpenDesigner}
-        />,
+        <TemplateGalleryDialog
+          title={dialogTitle}
+          colorScheme={colorScheme}
+          style={dialogStyle}
+          onClose={() => setOpen(false)}
+        >
+          <TemplateGalleryBody
+            value={value}
+            onSelect={handleSelect}
+            style={{}}
+            recommended={recommended}
+            onOpenDesigner={onOpenDesigner}
+            previewSource={previewSource}
+          />
+        </TemplateGalleryDialog>,
         document.body,
       )
     : null;
@@ -667,7 +667,7 @@ export function TemplatePicker({
         type="button"
         className={`squisq-template-picker-trigger${open ? ' squisq-template-picker-trigger--open' : ''}`}
         onClick={handleOpen}
-        aria-haspopup="listbox"
+        aria-haspopup="dialog"
         aria-expanded={open}
         title="Choose block template"
       >
@@ -702,8 +702,61 @@ export function TemplatePicker({
 
 // ── Reusable gallery body ──────────────────────────────────────────
 
+function TemplateGalleryDialog({
+  children,
+  title,
+  colorScheme,
+  style,
+  onClose,
+}: {
+  children: React.ReactNode;
+  title: string;
+  colorScheme: 'light' | 'dark';
+  style: React.CSSProperties;
+  onClose: () => void;
+}) {
+  return (
+    <div
+      id={TEMPLATE_GALLERY_DIALOG_ID}
+      className="squisq-template-gallery-dialog"
+      data-theme={colorScheme}
+      style={style}
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget) onClose();
+      }}
+    >
+      <div
+        className="squisq-template-gallery-dialog-panel"
+        role="dialog"
+        aria-modal="true"
+        aria-label={title}
+      >
+        <div className="squisq-template-gallery-dialog-header">
+          <h2 className="squisq-template-gallery-dialog-title">{title}</h2>
+          <button
+            type="button"
+            className="squisq-template-gallery-dialog-close"
+            onClick={onClose}
+            aria-label="Close template picker"
+          >
+            <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true">
+              <path
+                d="M3.2 3.2l7.6 7.6M10.8 3.2l-7.6 7.6"
+                stroke="currentColor"
+                strokeWidth="1.7"
+                strokeLinecap="round"
+              />
+            </svg>
+          </button>
+        </div>
+        <div className="squisq-template-gallery-dialog-body">{children}</div>
+      </div>
+    </div>
+  );
+}
+
 /**
- * The popover/grid markup shared by the toolbar `TemplatePicker` and the
+ * The dialog/grid markup shared by the toolbar `TemplatePicker` and the
  * inline `TemplateBadgeMenu`. Renders all template cards plus the
  * "(none)" option; no positioning logic — callers supply `style` (typically
  * a `position: fixed` rect from `getBoundingClientRect()`).
@@ -712,10 +765,12 @@ function TemplateCard({
   entry,
   value,
   onSelect,
+  previewSource,
 }: {
   entry: TemplateEntry;
   value: string;
   onSelect: (name: string) => void;
+  previewSource?: TemplatePreviewSource;
 }) {
   return (
     <button
@@ -726,7 +781,13 @@ function TemplateCard({
       onClick={() => onSelect(entry.name)}
       title={entry.description}
     >
-      <div className="squisq-template-gallery-card-icon">{entry.icon}</div>
+      <div className="squisq-template-gallery-card-icon">
+        <TemplateContentPreview
+          templateName={entry.name}
+          source={previewSource}
+          fallback={entry.icon}
+        />
+      </div>
       <div className="squisq-template-gallery-card-body">
         <span className="squisq-template-gallery-card-name">{entry.label}</span>
         <span className="squisq-template-gallery-card-desc">{entry.description}</span>
@@ -741,12 +802,14 @@ function TemplateGalleryBody({
   style,
   recommended,
   onOpenDesigner,
+  previewSource,
 }: {
   value: string;
   onSelect: (name: string) => void;
   style: React.CSSProperties;
   recommended?: readonly string[];
   onOpenDesigner?: () => void;
+  previewSource?: TemplatePreviewSource;
 }) {
   const [query, setQuery] = useState('');
   const searchRef = useRef<HTMLInputElement>(null);
@@ -861,7 +924,13 @@ function TemplateGalleryBody({
             {matches.built.length > 0 && (
               <div className="squisq-template-gallery-grid">
                 {matches.built.map((entry) => (
-                  <TemplateCard key={entry.name} entry={entry} value={value} onSelect={onSelect} />
+                  <TemplateCard
+                    key={entry.name}
+                    entry={entry}
+                    value={value}
+                    onSelect={onSelect}
+                    previewSource={previewSource}
+                  />
                 ))}
               </div>
             )}
@@ -903,7 +972,13 @@ function TemplateGalleryBody({
               <h3 className="squisq-template-gallery-section-title">Recommended for this block</h3>
               <div className="squisq-template-gallery-grid">
                 {recommendedEntries.map((entry) => (
-                  <TemplateCard key={entry.name} entry={entry} value={value} onSelect={onSelect} />
+                  <TemplateCard
+                    key={entry.name}
+                    entry={entry}
+                    value={value}
+                    onSelect={onSelect}
+                    previewSource={previewSource}
+                  />
                 ))}
               </div>
             </div>
@@ -914,14 +989,26 @@ function TemplateGalleryBody({
               <h3 className="squisq-template-gallery-section-title">All templates</h3>
               <div className="squisq-template-gallery-grid">
                 {restEntries.map((entry) => (
-                  <TemplateCard key={entry.name} entry={entry} value={value} onSelect={onSelect} />
+                  <TemplateCard
+                    key={entry.name}
+                    entry={entry}
+                    value={value}
+                    onSelect={onSelect}
+                    previewSource={previewSource}
+                  />
                 ))}
               </div>
             </div>
           ) : (
             <div className="squisq-template-gallery-grid">
               {restEntries.map((entry) => (
-                <TemplateCard key={entry.name} entry={entry} value={value} onSelect={onSelect} />
+                <TemplateCard
+                  key={entry.name}
+                  entry={entry}
+                  value={value}
+                  onSelect={onSelect}
+                  previewSource={previewSource}
+                />
               ))}
             </div>
           )}
@@ -980,6 +1067,8 @@ export interface TemplateBadgePopoverProps {
   value: string;
   onChange: (name: string) => void;
   onClose: () => void;
+  /** Active editor chrome theme, used by the portaled dialog. */
+  colorScheme?: 'light' | 'dark';
   /** Optional list of template names to surface as "Recommended for this block". */
   recommended?: readonly string[];
   /**
@@ -988,27 +1077,32 @@ export interface TemplateBadgePopoverProps {
    * it closes the popover and opens the designer.
    */
   onOpenDesigner?: () => void;
+  /**
+   * Active block content used to render live template thumbnails. Falls back to
+   * static icons when a candidate cannot be derived.
+   */
+  previewSource?: TemplatePreviewSource;
 }
 
 /**
- * Standalone popover that mirrors the toolbar `TemplatePicker`'s gallery,
- * but is anchored to a caller-supplied DOM rect (typically a clicked
- * `.squisq-template-badge` span). Handles its own positioning, outside
- * clicks, Escape, and viewport-edge clamping.
+ * Standalone dialog that mirrors the toolbar `TemplatePicker`'s gallery
+ * when opened from an inline heading badge.
  */
 export function TemplateBadgePopover({
   anchorRect,
   value,
   onChange,
   onClose,
+  colorScheme = 'light',
   recommended,
   onOpenDesigner,
+  previewSource,
 }: TemplateBadgePopoverProps) {
-  const [style, setStyle] = useState<React.CSSProperties>(() => computePopoverStyle(anchorRect));
+  const [style, setStyle] = useState<React.CSSProperties>(() => computeDialogStyle(anchorRect));
 
-  // Reposition once after mount using the actual rendered popover width.
+  // Reposition once after mount so the dialog covers the current editor shell.
   useEffect(() => {
-    requestAnimationFrame(() => setStyle(computePopoverStyle(anchorRect)));
+    requestAnimationFrame(() => setStyle(computeDialogStyle(anchorRect)));
   }, [anchorRect]);
 
   // Outside click + Escape close
@@ -1018,8 +1112,8 @@ export function TemplateBadgePopover({
     };
     const onMouse = (e: MouseEvent) => {
       const target = e.target as Node;
-      const inPopover = document.getElementById(TEMPLATE_GALLERY_PORTAL_ID)?.contains(target);
-      if (!inPopover) onClose();
+      const inDialog = document.getElementById(TEMPLATE_GALLERY_DIALOG_ID)?.contains(target);
+      if (!inDialog) onClose();
     };
     // Defer the mousedown listener by one frame so the click that opened
     // us doesn't immediately close us.
@@ -1039,62 +1133,73 @@ export function TemplateBadgePopover({
     onClose();
   };
 
+  const dialogTitle = templateDialogTitle(previewSource);
+
   return createPortal(
-    <TemplateGalleryBody
-      value={value}
-      onSelect={handleSelect}
+    <TemplateGalleryDialog
+      title={dialogTitle}
+      colorScheme={colorScheme}
       style={style}
-      recommended={recommended}
-      onOpenDesigner={onOpenDesigner}
-    />,
+      onClose={onClose}
+    >
+      <TemplateGalleryBody
+        value={value}
+        onSelect={handleSelect}
+        style={{}}
+        recommended={recommended}
+        onOpenDesigner={onOpenDesigner}
+        previewSource={previewSource}
+      />
+    </TemplateGalleryDialog>,
     document.body,
   );
 }
 
-function computePopoverStyle(rect: DOMRect): React.CSSProperties {
-  // The portal *is* the gallery (`#squisq-template-gallery-portal` is the
-  // outer `.squisq-template-gallery` div). Measure it directly — using
-  // `firstElementChild` returns the "(none)" option, which is ~50px tall
-  // and made the "fits below" check incorrectly pass on tall galleries.
-  const popoverEl = document.getElementById(TEMPLATE_GALLERY_PORTAL_ID);
-  const popoverRect = popoverEl?.getBoundingClientRect();
-  const popoverWidth = popoverRect?.width ?? 780;
-  const popoverHeight = popoverRect?.height ?? 520;
-  const margin = 8;
-  const gap = 6;
-  const vw = window.innerWidth;
-  const vh = window.innerHeight;
+function templateDialogTitle(previewSource?: TemplatePreviewSource): string {
+  return `Block type for ${templateDialogBlockTitle(previewSource)}`;
+}
 
-  // Vertical placement: prefer below the badge, fall back to above.
-  // If neither fits, center the popover in the viewport (dialog-style)
-  // so the gallery is always fully visible no matter where the chip
-  // sits in the editor (top, middle, bottom).
-  const spaceBelow = vh - rect.bottom - margin;
-  const spaceAbove = rect.top - margin;
-  let top: number;
-  let left: number;
-  if (popoverHeight + gap <= spaceBelow) {
-    top = rect.bottom + gap;
-    const maxLeft = Math.max(margin, vw - popoverWidth - margin);
-    left = Math.min(Math.max(margin, rect.left), maxLeft);
-  } else if (popoverHeight + gap <= spaceAbove) {
-    top = rect.top - popoverHeight - gap;
-    const maxLeft = Math.max(margin, vw - popoverWidth - margin);
-    left = Math.min(Math.max(margin, rect.left), maxLeft);
-  } else {
-    // Center it.
-    top = Math.max(margin, Math.floor((vh - popoverHeight) / 2));
-    left = Math.max(margin, Math.floor((vw - popoverWidth) / 2));
-  }
+function templateDialogBlockTitle(previewSource?: TemplatePreviewSource): string {
+  const block = previewSource?.block;
+  if (!block) return 'this block';
+
+  const headingText = block.sourceHeading ? extractPlainText(block.sourceHeading).trim() : '';
+  const title = (headingText || block.title || '').replace(/\s+/g, ' ').trim();
+  return title || 'this block';
+}
+
+function computeDialogStyle(anchor: Element | DOMRect): React.CSSProperties {
+  const shellRect = findEditorShellRect(anchor);
+  const left = Math.max(0, shellRect.left);
+  const top = Math.max(0, shellRect.top);
+  const right = Math.min(window.innerWidth, shellRect.right);
+  const bottom = Math.min(window.innerHeight, shellRect.bottom);
 
   return {
     position: 'fixed',
     top,
     left,
-    // Cap height so an oversized gallery still fits and scrolls
-    // gracefully instead of pushing past the viewport.
-    maxHeight: `${vh - 2 * margin}px`,
-    overflowY: 'auto',
+    width: Math.max(0, right - left),
+    height: Math.max(0, bottom - top),
     zIndex: 9999,
   };
+}
+
+function findEditorShellRect(anchor: Element | DOMRect): DOMRect {
+  if (anchor instanceof Element) {
+    const shell = anchor.closest('.squisq-editor-shell');
+    if (shell) return shell.getBoundingClientRect();
+  } else {
+    const x = anchor.left + anchor.width / 2;
+    const y = anchor.top + anchor.height / 2;
+    for (const element of document.elementsFromPoint(x, y)) {
+      const shell = element.closest('.squisq-editor-shell');
+      if (shell) return shell.getBoundingClientRect();
+    }
+  }
+
+  const fallback = document.querySelector('.squisq-editor-shell');
+  if (fallback) return fallback.getBoundingClientRect();
+
+  return new DOMRect(0, 0, window.innerWidth, window.innerHeight);
 }

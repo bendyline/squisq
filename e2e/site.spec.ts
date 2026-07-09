@@ -1,4 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
+import { switchView, viewTabLabel, type ViewTab } from './view-tabs';
 
 /**
  * E2E tests for the Squisq dev site.
@@ -14,11 +15,6 @@ import { test, expect, type Page } from '@playwright/test';
 /** Select a sample from the dropdown by its key */
 async function selectSample(page: Page, key: string) {
   await page.locator('select').first().selectOption(key);
-}
-
-/** Switch to a view tab by label text */
-async function switchView(page: Page, label: 'Markdown' | 'Editor' | 'Play' | 'Preview') {
-  await page.getByRole('tab', { name: label, exact: true }).click();
 }
 
 /** Wait for the DocPlayer to be present inside the preview panel */
@@ -60,8 +56,8 @@ test.describe('Site navigation', () => {
   });
 
   test('view switcher has Markdown, Editor, Play tabs', async ({ page }) => {
-    for (const label of ['Markdown', 'Editor', 'Play']) {
-      await expect(page.getByRole('tab', { name: label, exact: true })).toBeVisible();
+    for (const label of ['Markdown', 'Editor', 'Play'] as const satisfies readonly ViewTab[]) {
+      await expect(page.getByRole('tab', { name: viewTabLabel(label), exact: true })).toBeVisible();
     }
   });
 

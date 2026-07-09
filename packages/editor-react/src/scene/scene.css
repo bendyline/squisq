@@ -133,6 +133,18 @@
   pointer-events: none;
 }
 
+.squisq-scene-connection-point {
+  fill: #ffffff;
+  stroke: #6366f1;
+  stroke-width: 2;
+  vector-effect: non-scaling-stroke;
+  pointer-events: none;
+}
+
+.squisq-scene-connection-point--active {
+  fill: #6366f1;
+}
+
 /* ── Toolbar ──────────────────────────────────────────────── */
 
 .squisq-scene-toolbar {

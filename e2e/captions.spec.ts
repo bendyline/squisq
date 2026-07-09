@@ -1,4 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
+import { switchView } from './view-tabs';
 
 /**
  * E2E tests verifying that closed captions are derived from the
@@ -9,10 +10,6 @@ import { test, expect, type Page } from '@playwright/test';
 
 async function selectSample(page: Page, key: string) {
   await page.locator('select').first().selectOption(key);
-}
-
-async function switchView(page: Page, label: 'Markdown' | 'Editor' | 'Play' | 'Preview') {
-  await page.getByRole('tab', { name: label, exact: true }).click();
 }
 
 async function waitForDocPlayer(page: Page) {

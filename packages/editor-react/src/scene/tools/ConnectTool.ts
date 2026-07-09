@@ -51,16 +51,56 @@ function nodeBoxFromCard(ctx: SceneToolContext, nodeId: string): EdgeNodeBox | n
   };
 }
 
+function nodeBoxes(ctx: SceneToolContext): EdgeNodeBox[] {
+  const boxes: EdgeNodeBox[] = [];
+  for (const it of ctx.hitItems) {
+    if (!it.id.startsWith('node-card-')) continue;
+    const nodeId = nodeIdFromCardLayerId(it.id);
+    if (!nodeId) continue;
+    boxes.push({
+      id: nodeId,
+      x: it.bounds.x,
+      y: it.bounds.y,
+      width: it.bounds.width,
+      height: it.bounds.height,
+    });
+  }
+  return boxes;
+}
+
+function connectionPoints(box: EdgeNodeBox): Array<{ x: number; y: number }> {
+  const width = box.width ?? 0;
+  const height = box.height ?? 0;
+  const left = box.x;
+  const right = box.x + width;
+  const top = box.y;
+  const bottom = box.y + height;
+  const centerX = box.x + width / 2;
+  const centerY = box.y + height / 2;
+  return [
+    { x: centerX, y: top },
+    { x: right, y: centerY },
+    { x: centerX, y: bottom },
+    { x: left, y: centerY },
+    { x: left, y: top },
+    { x: right, y: top },
+    { x: right, y: bottom },
+    { x: left, y: bottom },
+  ];
+}
+
 function updatePreview(
   sourceBox: EdgeNodeBox,
   current: { x: number; y: number },
   targetBox: EdgeNodeBox | null,
 ): { start: { x: number; y: number }; end: { x: number; y: number } } {
   if (targetBox) {
-    return edgeEndpoints([sourceBox, targetBox], sourceBox.id, targetBox.id) ?? {
-      start: current,
-      end: current,
-    };
+    return (
+      edgeEndpoints([sourceBox, targetBox], sourceBox.id, targetBox.id) ?? {
+        start: current,
+        end: current,
+      }
+    );
   }
   return {
     start: snapPointToward([sourceBox], sourceBox.id, current) ?? current,
@@ -73,6 +113,7 @@ export const ConnectTool: SceneTool = {
   label: 'Connect',
   cursor: 'crosshair',
   shortcut: 'c',
+  hideSelectionHandles: true,
 
   onPointerDown(e, ctx) {
     if (e.button !== 0) return;
@@ -120,13 +161,32 @@ export const ConnectTool: SceneTool = {
     state = null;
   },
 
-  renderOverlay(): JSX.Element | null {
-    if (!state) return null;
+  renderOverlay(ctx): JSX.Element | null {
+    const points = nodeBoxes(ctx).flatMap((box) =>
+      connectionPoints(box).map((point, index) =>
+        createElement('circle', {
+          key: `${box.id}-${index}`,
+          cx: point.x,
+          cy: point.y,
+          r: 4,
+          className:
+            state?.hoveredTargetId === box.id
+              ? 'squisq-scene-connection-point squisq-scene-connection-point--active'
+              : 'squisq-scene-connection-point',
+        }),
+      ),
+    );
+
+    if (!state) {
+      return points.length ? createElement('g', { key: 'connection-points' }, ...points) : null;
+    }
+
     const { start: a, end: b } = state;
     const d = curvedPath(a, b);
     return createElement(
       'g',
       { key: 'connect-preview' },
+      ...points,
       createElement('path', { d, className: 'squisq-scene-connect-preview' }),
       // Optional: a dot at the endpoint so the user sees the snap target.
       createElement('circle', {

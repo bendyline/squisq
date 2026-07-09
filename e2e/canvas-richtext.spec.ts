@@ -1,4 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
+import { switchView } from './view-tabs';
 
 /**
  * Rich inline text editing for canvas textboxes.
@@ -73,7 +74,7 @@ test('double-click opens an inline editor and the toolbar bolds the selection', 
 
   // …and persists as readable markdown in the text layer's sub-block body
   // (the bold run as **…**), with no base64 layers= blob.
-  await page.getByRole('tab', { name: 'Markdown', exact: true }).click();
+  await switchView(page, 'Markdown');
   await page.locator('[data-testid="raw-editor"]').waitFor({ state: 'visible' });
   await expect(async () => {
     // Monaco renders styled spans, interleaving non-breaking spaces between
@@ -123,7 +124,7 @@ test('a selected layout box exposes Fill/Stroke in the toolbar and applies', asy
   await fill.fill('#00ff00');
 
   // Persists to the box's {[rectangle … fill=…]} child annotation (no base64).
-  await page.getByRole('tab', { name: 'Markdown', exact: true }).click();
+  await switchView(page, 'Markdown');
   await page.locator('[data-testid="raw-editor"]').waitFor({ state: 'visible' });
   await expect(async () => {
     const md = (await page.locator('.monaco-editor .view-lines').first().innerText()).replace(

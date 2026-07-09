@@ -77,7 +77,10 @@ export function SceneSideToolbar({ children }: SceneSideToolbarProps) {
   }, []);
 
   return (
-    <div ref={wrapRef} className={collapsed ? 'squisq-scene-inline-toolbar' : 'squisq-scene-side-toolbar'}>
+    <div
+      ref={wrapRef}
+      className={collapsed ? 'squisq-scene-inline-toolbar' : 'squisq-scene-side-toolbar'}
+    >
       {children}
     </div>
   );

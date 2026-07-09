@@ -1,4 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
+import { switchView } from './view-tabs';
 
 /**
  * E2E tests for the Squisq drawing editor — the Scene canvas that authors a
@@ -9,10 +10,6 @@ import { test, expect, type Page } from '@playwright/test';
  * real shapes, then verifies edits persist to markdown as `{[shape …]}`
  * headings.
  */
-
-async function switchView(page: Page, label: 'Markdown' | 'Editor' | 'Play') {
-  await page.getByRole('tab', { name: label, exact: true }).click();
-}
 
 async function loadDrawingSample(page: Page) {
   await page.goto('/');

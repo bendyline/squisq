@@ -28,6 +28,8 @@ interface SceneSelectionProps {
   } | null;
   /** Fired when the user presses a corner/edge handle. */
   onHandlePointerDown?: (e: React.PointerEvent<SVGElement>, corner: ResizeCorner) => void;
+  /** Whether to render resize handles in addition to the selection outline. */
+  showHandles?: boolean;
 }
 
 const HANDLE_SIZE = 8;
@@ -38,6 +40,7 @@ export function SceneSelection({
   liveOffset,
   liveResize,
   onHandlePointerDown,
+  showHandles = true,
 }: SceneSelectionProps) {
   if (selection.size === 0) return null;
   const selected = hitItems.filter((it) => selection.has(it.id));
@@ -84,21 +87,22 @@ export function SceneSelection({
               className="squisq-scene-selection-outline"
               pointerEvents="none"
             />
-            {corners.map(({ corner, cx, cy, cursor }) => (
-              <rect
-                key={corner}
-                x={cx - HANDLE_SIZE / 2}
-                y={cy - HANDLE_SIZE / 2}
-                width={HANDLE_SIZE}
-                height={HANDLE_SIZE}
-                className="squisq-scene-selection-handle"
-                style={{ cursor }}
-                onPointerDown={
-                  onHandlePointerDown ? (e) => onHandlePointerDown(e, corner) : undefined
-                }
-                data-corner={corner}
-              />
-            ))}
+            {showHandles &&
+              corners.map(({ corner, cx, cy, cursor }) => (
+                <rect
+                  key={corner}
+                  x={cx - HANDLE_SIZE / 2}
+                  y={cy - HANDLE_SIZE / 2}
+                  width={HANDLE_SIZE}
+                  height={HANDLE_SIZE}
+                  className="squisq-scene-selection-handle"
+                  style={{ cursor }}
+                  onPointerDown={
+                    onHandlePointerDown ? (e) => onHandlePointerDown(e, corner) : undefined
+                  }
+                  data-corner={corner}
+                />
+              ))}
           </g>
         );
       })}

@@ -91,10 +91,12 @@ export function createDrawingConnectTool(options: DrawingConnectOptions = {}): S
     targetBox: EdgeNodeBox | null,
   ): { start: { x: number; y: number }; end: { x: number; y: number } } {
     if (targetBox) {
-      return edgeEndpoints([sourceBox, targetBox], sourceBox.id, targetBox.id) ?? {
-        start: current,
-        end: current,
-      };
+      return (
+        edgeEndpoints([sourceBox, targetBox], sourceBox.id, targetBox.id) ?? {
+          start: current,
+          end: current,
+        }
+      );
     }
     return {
       start: snapPointToward([sourceBox], sourceBox.id, current) ?? current,
@@ -111,10 +113,12 @@ export function createDrawingConnectTool(options: DrawingConnectOptions = {}): S
     if (targetBox) {
       const source = movedEnd === 'from' ? targetBox : fixedBox;
       const target = movedEnd === 'from' ? fixedBox : targetBox;
-      return edgeEndpoints([source, target], source.id, target.id) ?? {
-        start: current,
-        end: current,
-      };
+      return (
+        edgeEndpoints([source, target], source.id, target.id) ?? {
+          start: current,
+          end: current,
+        }
+      );
     }
     const fixed = snapPointToward([fixedBox], fixedBox.id, current) ?? current;
     return movedEnd === 'from' ? { start: current, end: fixed } : { start: fixed, end: current };

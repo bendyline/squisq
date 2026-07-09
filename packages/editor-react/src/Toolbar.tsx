@@ -13,6 +13,9 @@ import type { Editor as TiptapEditor, JSONContent } from '@tiptap/core';
 import { TextSelection } from '@tiptap/pm/state';
 import { Fragment } from '@tiptap/pm/model';
 import type { IRange } from 'monaco-editor';
+import type { Block } from '@bendyline/squisq/schemas';
+import { VIEWPORT_PRESETS } from '@bendyline/squisq/schemas';
+import { DEFAULT_THEME, flattenBlocks } from '@bendyline/squisq/doc';
 import { useEditorContext, type EditorView } from './EditorContext';
 import { VersionHistoryPanel } from './VersionHistoryPanel';
 import { RecorderEntry } from './RecorderEntry';
@@ -41,6 +44,7 @@ import { CustomLayoutManager } from './customTemplates/CustomLayoutManager';
 import { Icon } from './Icon';
 import type { PickerEntry } from './emojiData';
 import { createPortal } from 'react-dom';
+import { usePreviewSettingsOptional } from './PreviewControls';
 
 const VIEWS: { id: EditorView; label: string; shortLabel?: string; shortcut: string }[] = [
   { id: 'wysiwyg', label: 'Write', shortcut: '⌘1' },
@@ -419,6 +423,15 @@ function insertLayoutBlock(editor: TiptapEditor): void {
     .run();
 }
 
+function findBlockBySourceLine(blocks: readonly Block[], lineNumber: number): Block | null {
+  for (const block of blocks) {
+    const pos = block.sourceHeading?.position;
+    if (!pos) continue;
+    if (pos.start.line <= lineNumber && pos.end.line >= lineNumber) return block;
+  }
+  return null;
+}
+
 /**
  * Formatting toolbar.
  * - WYSIWYG: calls Tiptap chain commands (toggleBold, etc.)
@@ -439,12 +452,15 @@ export function Toolbar({
     activeView,
     setActiveView,
     markdownSource,
+    doc,
     setMarkdownSource,
     tiptapEditor,
     monacoEditor,
     activeSceneText,
     mediaProvider,
     editorMode,
+    layoutMode,
+    activeBlockStartLine,
     versioning,
     allowRecording,
     documentLinkProvider,
@@ -452,6 +468,7 @@ export function Toolbar({
     mediaRevision,
     bumpMediaRevision,
   } = useEditorContext();
+  const previewSettings = usePreviewSettingsOptional();
   // When a canvas textbox is being edited, its Tiptap instance takes over
   // the formatting buttons; otherwise they drive the document editor. The
   // `level` gates which buttons apply (inline labels vs. rich textboxes).
@@ -1447,6 +1464,55 @@ export function Toolbar({
     return recommendTemplatesForBlock(profile, TEMPLATE_NAMES).recommended;
   }, [currentTemplate, isRawView, isWysiwyg, rawHeadingLine, wysiwygHeadingIndex, markdownSource]);
 
+  const templatePreviewBlock = useMemo(() => {
+    if (!doc || currentTemplate === null) return null;
+    const flat = flattenBlocks(doc.blocks);
+    if (flat.length === 0) return null;
+
+    if (isRawView && rawHeadingLine !== null) {
+      return findBlockBySourceLine(flat, rawHeadingLine);
+    }
+
+    if (isWysiwyg) {
+      if (layoutMode !== 'document' && activeBlockStartLine !== null) {
+        return findBlockBySourceLine(flat, activeBlockStartLine);
+      }
+      if (wysiwygHeadingIndex !== null) {
+        return flat[wysiwygHeadingIndex] ?? null;
+      }
+    }
+
+    return null;
+  }, [
+    activeBlockStartLine,
+    currentTemplate,
+    doc,
+    isRawView,
+    isWysiwyg,
+    layoutMode,
+    rawHeadingLine,
+    wysiwygHeadingIndex,
+  ]);
+
+  const templatePreviewSource = useMemo(
+    () =>
+      templatePreviewBlock
+        ? {
+            block: templatePreviewBlock,
+            theme: previewSettings?.activeTheme ?? DEFAULT_THEME,
+            viewport: previewSettings?.activeViewport ?? VIEWPORT_PRESETS.landscape,
+            basePath: '/',
+            mediaProvider,
+          }
+        : undefined,
+    [
+      mediaProvider,
+      previewSettings?.activeTheme,
+      previewSettings?.activeViewport,
+      templatePreviewBlock,
+    ],
+  );
+
   const handleTemplatePick = (value: string) => {
     // Raw (Monaco) — rewrite the heading line's annotation suffix in place.
     if (isRawView && monacoEditor) {
@@ -1665,7 +1731,9 @@ export function Toolbar({
               <TemplatePicker
                 value={currentTemplate}
                 onChange={handleTemplatePick}
+                colorScheme={colorScheme}
                 recommended={recommendedTemplates}
+                previewSource={templatePreviewSource}
               />
             </div>
           )}
@@ -1938,7 +2006,9 @@ export function Toolbar({
                       handleTemplatePick(v);
                       setShowOverflow(false);
                     }}
+                    colorScheme={colorScheme}
                     recommended={recommendedTemplates}
+                    previewSource={templatePreviewSource}
                   />
                 </div>
               )}

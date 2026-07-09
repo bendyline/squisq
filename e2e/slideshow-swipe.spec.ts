@@ -1,4 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
+import { switchView } from './view-tabs';
 
 /**
  * E2E tests for drag-to-swipe navigation in slideshow mode.
@@ -8,11 +9,6 @@ import { test, expect, type Page } from '@playwright/test';
  * advances/rewinds, a small slow drag snaps back, and dragging past the deck
  * boundary rubber-bands without navigating.
  */
-
-/** Switch the editor to a view tab by label. */
-async function switchView(page: Page, label: 'Markdown' | 'Editor' | 'Play') {
-  await page.getByRole('tab', { name: label, exact: true }).click();
-}
 
 /** Enter the Play preview and select slideshow mode. */
 async function enterSlideshow(page: Page) {

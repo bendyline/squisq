@@ -467,7 +467,10 @@ export function snapPoints(box: ClipBox): ConnectorSnapPoint[] {
 }
 
 /** Nearest stable connector port on `box` to an arbitrary point. */
-export function nearestSnapPoint(box: ClipBox, point: { x: number; y: number }): ConnectorSnapPoint {
+export function nearestSnapPoint(
+  box: ClipBox,
+  point: { x: number; y: number },
+): ConnectorSnapPoint {
   let best = snapPoints(box)[0];
   let bestScore = Number.POSITIVE_INFINITY;
   for (const candidate of snapPoints(box)) {

@@ -1,4 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
+import { switchView } from './view-tabs';
 
 /**
  * E2E tests for the Squisq diagram editor — the Scene-engine-driven
@@ -20,10 +21,6 @@ import { test, expect, type Page } from '@playwright/test';
  */
 
 // ── Helpers ──────────────────────────────────────────────────────────
-
-async function switchView(page: Page, label: 'Markdown' | 'Editor' | 'Play') {
-  await page.getByRole('tab', { name: label, exact: true }).click();
-}
 
 async function clickInsert(page: Page, name: string) {
   await page.locator('.squisq-toolbar button[aria-label="Insert"]').click();
@@ -139,6 +136,19 @@ test.describe('Diagram editor (Scene engine)', () => {
     await page.mouse.up();
     // 8 selection handles (4 corners + 4 edges) appear once selected.
     await expect(page.locator('.squisq-scene-selection-handle')).toHaveCount(8);
+  });
+
+  test('connect mode hides resize handles and shows connection points', async ({ page }) => {
+    const center = await cardCenter(page, 'grandparent');
+    await page.mouse.move(center.x, center.y);
+    await page.mouse.down();
+    await page.mouse.up();
+    await expect(page.locator('.squisq-scene-selection-handle')).toHaveCount(8);
+
+    await page.locator('.squisq-scene-block-toolbar button', { hasText: 'Connect' }).click();
+
+    await expect(page.locator('.squisq-scene-selection-handle')).toHaveCount(0);
+    await expect(page.locator('.squisq-scene-connection-point')).not.toHaveCount(0);
   });
 
   test('dragging a node persists its new position to markdown', async ({ page }) => {

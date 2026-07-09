@@ -389,6 +389,7 @@ export function Scene(props: SceneProps) {
   // ── Render ──────────────────────────────────────────────────
   const liveOffset = activeId === 'select' ? getActiveMoveOffset() : null;
   const liveResize = activeId === 'select' ? getActiveResize() : null;
+  const showSelectionHandles = activeTool?.hideSelectionHandles !== true;
 
   // Per-layer transform applied during an in-flight drag or resize so
   // the user sees the layer move/stretch in real time, not just on commit.
@@ -512,7 +513,8 @@ export function Scene(props: SceneProps) {
           hitItems={hitItems}
           liveOffset={liveOffset}
           liveResize={liveResize}
-          onHandlePointerDown={handleHandlePointerDown}
+          onHandlePointerDown={showSelectionHandles ? handleHandlePointerDown : undefined}
+          showHandles={showSelectionHandles}
         />
         {activeTool?.renderOverlay?.(ctx)}
       </SceneViewport>

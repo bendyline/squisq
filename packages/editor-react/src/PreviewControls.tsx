@@ -518,6 +518,25 @@ const TRANSFORM_STYLE_OPTIONS = [
 type ControlKey = 'mode' | 'format' | 'theme' | 'transform' | 'captions' | 'cover';
 const CONTROL_KEYS: ControlKey[] = ['mode', 'format', 'theme', 'transform', 'captions', 'cover'];
 
+const PREVIEW_POPOVER_GAP = 4;
+const PREVIEW_POPOVER_MARGIN = 8;
+const PREVIEW_POPOVER_FALLBACK_WIDTH = 220;
+
+function clampPreviewPopoverLeft(
+  triggerRect: DOMRect,
+  popoverWidth: number,
+  viewportWidth: number,
+): number {
+  const maxLeft = Math.max(
+    PREVIEW_POPOVER_MARGIN,
+    viewportWidth - popoverWidth - PREVIEW_POPOVER_MARGIN,
+  );
+  return Math.min(
+    Math.max(PREVIEW_POPOVER_MARGIN, triggerRect.right - popoverWidth),
+    maxLeft,
+  );
+}
+
 // ── Shared styles ────────────────────────────────────────────────
 
 const labelStyle: React.CSSProperties = {
@@ -561,6 +580,30 @@ export function PreviewToolbarControls() {
   // inline and overflow is computed from these per-control measurements.
   const probeRef = useRef<HTMLDivElement>(null);
   const popoverRef = useRef<HTMLDivElement>(null);
+  const popoverTriggerRef = useRef<HTMLButtonElement>(null);
+  const popoverPanelRef = useRef<HTMLDivElement>(null);
+  const [popoverAnchor, setPopoverAnchor] = useState<{ top: number; left: number } | null>(null);
+
+  const updatePopoverPosition = useCallback(() => {
+    const trigger = popoverTriggerRef.current;
+    if (!trigger) return;
+    const triggerRect = trigger.getBoundingClientRect();
+    const measuredWidth =
+      popoverPanelRef.current?.getBoundingClientRect().width ?? PREVIEW_POPOVER_FALLBACK_WIDTH;
+    const popoverWidth = Math.min(
+      measuredWidth,
+      window.innerWidth - PREVIEW_POPOVER_MARGIN * 2,
+    );
+    setPopoverAnchor({
+      top: triggerRect.bottom + PREVIEW_POPOVER_GAP,
+      left: clampPreviewPopoverLeft(triggerRect, popoverWidth, window.innerWidth),
+    });
+  }, []);
+
+  const closePopover = useCallback(() => {
+    setPopoverOpen(false);
+    setPopoverAnchor(null);
+  }, []);
 
   // Fit detection: keep as many controls inline as fit, overflow the rest.
   useLayoutEffect(() => {
@@ -603,13 +646,29 @@ export function PreviewToolbarControls() {
   useEffect(() => {
     if (!popoverOpen) return;
     const handler = (e: MouseEvent) => {
-      if (popoverRef.current && !popoverRef.current.contains(e.target as Node)) {
-        setPopoverOpen(false);
-      }
+      const target = e.target as Node;
+      if (popoverRef.current?.contains(target)) return;
+      if (popoverPanelRef.current?.contains(target)) return;
+      closePopover();
     };
     document.addEventListener('mousedown', handler);
     return () => document.removeEventListener('mousedown', handler);
-  }, [popoverOpen]);
+  }, [closePopover, popoverOpen]);
+
+  useLayoutEffect(() => {
+    if (!popoverOpen) return;
+    updatePopoverPosition();
+  }, [popoverOpen, updatePopoverPosition, visibleCount]);
+
+  useEffect(() => {
+    if (!popoverOpen) return;
+    window.addEventListener('resize', updatePopoverPosition);
+    window.addEventListener('scroll', updatePopoverPosition, true);
+    return () => {
+      window.removeEventListener('resize', updatePopoverPosition);
+      window.removeEventListener('scroll', updatePopoverPosition, true);
+    };
+  }, [popoverOpen, updatePopoverPosition]);
 
   // "Edit theme" pencil next to the dropdown. A custom theme opens directly in
   // the designer; a built-in seeds a NEW "Modified <name>" custom theme based
@@ -763,6 +822,10 @@ export function PreviewToolbarControls() {
   const visibleKeys = CONTROL_KEYS.slice(0, visibleCount);
   const overflowKeys = CONTROL_KEYS.slice(visibleCount);
 
+  useEffect(() => {
+    if (!hasOverflow && popoverOpen) closePopover();
+  }, [closePopover, hasOverflow, popoverOpen]);
+
   // The root is a flex:1 filler so it always spans the toolbar's leftover
   // width (which is what the fit measurement reads).
   return (
@@ -787,16 +850,28 @@ export function PreviewToolbarControls() {
       {hasOverflow && (
         <div className="squisq-preview-controls-compact" ref={popoverRef}>
           <button
+            ref={popoverTriggerRef}
             className={`squisq-toolbar-button${popoverOpen ? ' squisq-toolbar-button--active' : ''}`}
-            onClick={() => setPopoverOpen((v) => !v)}
+            onClick={() => {
+              if (popoverOpen) {
+                closePopover();
+                return;
+              }
+              updatePopoverPosition();
+              setPopoverOpen(true);
+            }}
             aria-label="More preview settings"
             title="More preview settings"
             aria-expanded={popoverOpen}
           >
             <Icon icon="fa-solid fa-ellipsis" />
           </button>
-          {popoverOpen && (
-            <div className="squisq-preview-controls-popover">
+          {popoverOpen && popoverAnchor && (
+            <div
+              ref={popoverPanelRef}
+              className="squisq-preview-controls-popover"
+              style={{ top: popoverAnchor.top, left: popoverAnchor.left }}
+            >
               {overflowKeys.map((key) => renderControl(key, true))}
             </div>
           )}

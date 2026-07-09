@@ -1,4 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
+import { switchView } from './view-tabs';
 
 /**
  * E2E tests for the Timeline view: block bars render, selecting a block in the
@@ -73,7 +74,7 @@ test.describe('Timeline view', () => {
     await page.mouse.up();
 
     // It is now an authored video clip annotation in the markdown.
-    await page.getByRole('tab', { name: 'Markdown', exact: true }).click();
+    await switchView(page, 'Markdown');
     await page.locator('[data-testid="raw-editor"]').waitFor({ state: 'visible' });
     await expect(page.locator('.monaco-editor').first()).toContainText('{[video');
     await expect(page.locator('.monaco-editor').first()).not.toContainText('<video');
@@ -157,7 +158,7 @@ test.describe('Timeline view', () => {
 
     // Switch to Markdown and confirm the duration was written in the
     // squisq-native squiggly form (`{[duration=…]}`), not the Pandoc block.
-    await page.getByRole('tab', { name: 'Markdown', exact: true }).click();
+    await switchView(page, 'Markdown');
     await page.locator('[data-testid="raw-editor"]').waitFor({ state: 'visible' });
     await expect(page.locator('.monaco-editor').first()).toContainText('{[duration=');
   });

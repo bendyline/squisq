@@ -1,4 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
+import { switchView } from './view-tabs';
 
 /**
  * GFM task lists (checkboxes) in the WYSIWYG editor.
@@ -8,10 +9,6 @@ import { test, expect, type Page } from '@playwright/test';
  * the item serializes back to GFM `- [ ]` / `- [x]` markdown — preserving both
  * the checked state and the task text across the editor↔markdown bridge.
  */
-
-async function switchView(page: Page, label: 'Markdown' | 'Editor' | 'Play') {
-  await page.getByRole('tab', { name: label, exact: true }).click();
-}
 
 // ProseMirror binds select-all to `Mod-a` — Cmd on macOS, Ctrl elsewhere.
 const MOD = process.platform === 'darwin' ? 'Meta' : 'Control';
