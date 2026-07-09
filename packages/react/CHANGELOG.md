@@ -1,3 +1,14 @@
+## @bendyline/squisq-react [1.4.2](https://github.com/bendyline/squisq/compare/@bendyline/squisq-react@1.4.1...@bendyline/squisq-react@1.4.2) (2026-07-09)
+
+### Bug Fixes
+
+* Many quality and UX consistency updates ([#20](https://github.com/bendyline/squisq/issues/20)) ([39730ab](https://github.com/bendyline/squisq/commit/39730ab6ce4ed49115aaf7b45f0673b2abc40f7b))
+
+
+### Dependencies
+
+* **@bendyline/squisq:** upgraded to 1.5.2
+
 ## @bendyline/squisq-react [1.4.1](https://github.com/bendyline/squisq/compare/@bendyline/squisq-react@1.4.0...@bendyline/squisq-react@1.4.1) (2026-07-07)
 
 ### Bug Fixes
