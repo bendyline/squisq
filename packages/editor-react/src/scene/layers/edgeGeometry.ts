@@ -8,6 +8,11 @@
  */
 
 import { NODE_WIDTH, NODE_HEIGHT } from './nodeCard';
+import {
+  nearestSnapPoint as nearestCoreSnapPoint,
+  snapEndpoints as coreSnapEndpoints,
+  type ConnectorSnapPoint,
+} from '@bendyline/squisq/doc';
 
 /** Minimal box an edge needs from a node/shape (id + bounds). */
 export interface EdgeNodeBox {
@@ -49,21 +54,35 @@ export function edgePoint(from: NodeBox, to: NodeBox): { x: number; y: number } 
   return { x: from.cx + dx * s, y: from.cy + dy * s };
 }
 
+function boxFor(nodes: readonly EdgeNodeBox[], id: string): NodeBox | null {
+  return boxesOf(nodes).get(id) ?? null;
+}
+
+/** Nearest stable connector port on the named node/shape to `point`. */
+export function snapPointToward(
+  nodes: readonly EdgeNodeBox[],
+  id: string,
+  point: { x: number; y: number },
+): ConnectorSnapPoint | null {
+  const box = boxFor(nodes, id);
+  return box ? nearestCoreSnapPoint(box, point) : null;
+}
+
 /**
- * Clipped start/end points of the edge `source`→`target`, or null when an
- * endpoint shape is missing. Used by the renderer and by a tool hit-testing
+ * Snapped start/end points of the edge `source`→`target`, or null when an
+ * endpoint shape is missing. Used by the renderer and by tool hit-testing
  * endpoint handles against the same geometry the renderer draws.
  */
 export function edgeEndpoints(
   nodes: readonly EdgeNodeBox[],
   source: string,
   target: string,
-): { start: { x: number; y: number }; end: { x: number; y: number } } | null {
+): { start: ConnectorSnapPoint; end: ConnectorSnapPoint } | null {
   const boxes = boxesOf(nodes);
   const a = boxes.get(source);
   const b = boxes.get(target);
   if (!a || !b) return null;
-  return { start: edgePoint(a, b), end: edgePoint(b, a) };
+  return coreSnapEndpoints(a, b);
 }
 
 export function straightPath(a: { x: number; y: number }, b: { x: number; y: number }): string {

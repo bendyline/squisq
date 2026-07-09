@@ -22,7 +22,9 @@ describe('Template annotation round-trip', () => {
     const tiptapRendered =
       '<h2 data-template="comparisonBar">' +
       '<span class="squisq-heading-content">Getting Started</span>' +
-      '<span class="squisq-template-badge" contenteditable="false" data-template="comparisonBar" data-template-label="Comparison Bar"></span>' +
+      '<span class="squisq-template-badge" contenteditable="false" data-template="comparisonBar">' +
+      '<span class="squisq-template-badge-core" data-template-label="Comparison Bar" aria-hidden="true"></span>' +
+      '</span>' +
       '</h2>';
     const md = tiptapToMarkdown(tiptapRendered);
     expect(md).toContain('## Getting Started');
@@ -39,7 +41,9 @@ describe('Template annotation round-trip', () => {
     const tiptapRendered =
       '<h2 data-block-attrs="transition=fade">' +
       '<span class="squisq-heading-content">Intro</span>' +
-      '<span class="squisq-template-badge squisq-template-badge--empty" contenteditable="false"></span>' +
+      '<span class="squisq-template-badge squisq-template-badge--empty" contenteditable="false">' +
+      '<span class="squisq-template-badge-core" data-template-label="Block" aria-hidden="true"></span>' +
+      '</span>' +
       '<span class="squisq-props-badge" contenteditable="false" data-props-summary="Fade · 1:30 start"></span>' +
       '</h2>';
     const md = tiptapToMarkdown(tiptapRendered).trim();

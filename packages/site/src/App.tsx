@@ -27,6 +27,41 @@ import type { MediaProvider, Theme } from '@bendyline/squisq/schemas';
 import { parseTheme, registerTheme, unregisterTheme } from '@bendyline/squisq/schemas';
 
 const CUSTOM_THEME_STORAGE_KEY = 'squisq-site:customTheme';
+const COLOR_MODE_STORAGE_KEY = 'squisq-site:colorMode';
+
+type DemoColorMode = 'auto' | EditorColorScheme;
+
+const COLOR_MODE_OPTIONS: ReadonlyArray<{ label: string; value: DemoColorMode }> = [
+  { label: 'Auto', value: 'auto' },
+  { label: 'Light', value: 'light' },
+  { label: 'Dark', value: 'dark' },
+];
+
+function isDemoColorMode(value: string | null): value is DemoColorMode {
+  return value === 'auto' || value === 'light' || value === 'dark';
+}
+
+function resolveSystemColorScheme(): EditorColorScheme {
+  if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return 'light';
+  return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+}
+
+function getInitialColorMode(): DemoColorMode {
+  if (typeof window === 'undefined') return 'auto';
+
+  const params = new URLSearchParams(window.location.search);
+  const requestedMode = params.get('colorMode') ?? params.get('colorScheme');
+  if (isDemoColorMode(requestedMode)) return requestedMode;
+
+  try {
+    const storedMode = window.localStorage.getItem(COLOR_MODE_STORAGE_KEY);
+    if (isDemoColorMode(storedMode)) return storedMode;
+  } catch {
+    // Ignore unavailable storage; the in-memory selection still works.
+  }
+
+  return 'auto';
+}
 
 /**
  * Resolve the initial sample from a `?sample=<key>` URL param when one
@@ -67,8 +102,39 @@ export function App() {
   const [showImageEditorDemo, setShowImageEditorDemo] = useState(false);
   const [showCodeContextDemo, setShowCodeContextDemo] = useState(false);
   const [currentSource, setCurrentSource] = useState(SAMPLES[initialSampleKey]);
-  const [colorScheme] = useState<EditorColorScheme>('light');
+  const [colorMode, setColorMode] = useState<DemoColorMode>(() => getInitialColorMode());
+  const [systemColorScheme, setSystemColorScheme] = useState<EditorColorScheme>(() =>
+    resolveSystemColorScheme(),
+  );
+  const colorScheme: EditorColorScheme = colorMode === 'auto' ? systemColorScheme : colorMode;
   const [customTheme, setCustomThemeState] = useState<Theme | null>(() => loadStoredCustomTheme());
+  useEffect(() => {
+    if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return;
+    const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
+    const handleChange = () => {
+      setSystemColorScheme(mediaQuery.matches ? 'dark' : 'light');
+    };
+
+    handleChange();
+    mediaQuery.addEventListener('change', handleChange);
+    return () => mediaQuery.removeEventListener('change', handleChange);
+  }, []);
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(COLOR_MODE_STORAGE_KEY, colorMode);
+    } catch {
+      // Ignore unavailable storage; the current React state is authoritative.
+    }
+  }, [colorMode]);
+  useEffect(() => {
+    if (typeof document === 'undefined') return;
+    document.documentElement.style.colorScheme = colorScheme;
+    document.documentElement.dataset.squisqDemoColorScheme = colorScheme;
+    return () => {
+      document.documentElement.style.removeProperty('color-scheme');
+      delete document.documentElement.dataset.squisqDemoColorScheme;
+    };
+  }, [colorScheme]);
   // Re-register the loaded theme on mount so `Doc.themeId` lookups resolve to it.
   // Subsequent edits go through handleCustomThemeChange which also registers.
   useEffect(() => {
@@ -361,6 +427,48 @@ export function App() {
           {showCodeContextDemo ? 'Close Code Context' : 'Code Context'}
         </button>
 
+        <div
+          role="group"
+          aria-label="Demo color mode"
+          title={
+            colorMode === 'auto'
+              ? `Demo color mode: auto (${systemColorScheme})`
+              : `Demo color mode: ${colorMode}`
+          }
+          style={{
+            display: 'flex',
+            alignItems: 'stretch',
+            border: '1px solid #c9b98a',
+            background: '#FFFDF7',
+            fontFamily: 'system-ui, -apple-system, sans-serif',
+          }}
+        >
+          {COLOR_MODE_OPTIONS.map((option, index) => {
+            const active = colorMode === option.value;
+            return (
+              <button
+                key={option.value}
+                type="button"
+                aria-pressed={active}
+                onClick={() => setColorMode(option.value)}
+                style={{
+                  fontSize: 12,
+                  fontFamily: 'inherit',
+                  padding: '4px 8px',
+                  cursor: 'pointer',
+                  background: active ? '#8B6914' : 'transparent',
+                  color: active ? '#fff' : '#4a3c1f',
+                  border: 'none',
+                  borderRight:
+                    index === COLOR_MODE_OPTIONS.length - 1 ? 'none' : '1px solid #c9b98a',
+                }}
+              >
+                {option.label}
+              </button>
+            );
+          })}
+        </div>
+
         {/* Theme customizer — wrapped in editor-shell to inherit BEM dark-theme styles. */}
         <div
           className="squisq-editor-shell"
@@ -372,6 +480,7 @@ export function App() {
             onChange={handleCustomThemeChange}
             onSave={handleCustomThemeSave}
             onReset={handleCustomThemeReset}
+            triggerLabel="Theme..."
           />
         </div>
 

@@ -1,6 +1,41 @@
+import { splitKeyValueToken, tokenizeAttrTokens } from '@bendyline/squisq/markdown';
+
 interface MediaReferenceRange {
   start: number;
   end: number;
+}
+
+interface MarkdownReferenceMatch {
+  destination: string;
+  range: MediaReferenceRange;
+}
+
+const MEDIA_REFERENCE_PARAM_KEYS = new Set([
+  'audio',
+  'file',
+  'href',
+  'image',
+  'imagesrc',
+  'path',
+  'poster',
+  'src',
+  'url',
+  'video',
+]);
+
+const HTML_MEDIA_ATTRS = ['src', 'href', 'poster'] as const;
+
+/**
+ * Collect media references from the document source. Used by the Files panel
+ * to distinguish stored files that are actually referenced by the document
+ * from files that only exist in the bin.
+ */
+export function collectMediaReferencesFromMarkdown(source: string): ReadonlySet<string> {
+  const refs = new Set<string>();
+  collectMarkdownInlineReferences(source, refs);
+  collectHtmlAttributeReferences(source, refs);
+  collectAnnotationReferences(source, refs);
+  return refs;
 }
 
 /**
@@ -34,6 +69,25 @@ function findNextMarkdownReference(
   startIndex: number,
   mediaPath: string,
 ): MediaReferenceRange | null {
+  const match = findNextMarkdownReferenceMatch(source, startIndex, mediaPath);
+  return match?.range ?? null;
+}
+
+function collectMarkdownInlineReferences(source: string, refs: Set<string>): void {
+  let cursor = 0;
+  while (cursor < source.length) {
+    const match = findNextMarkdownReferenceMatch(source, cursor);
+    if (!match) return;
+    refs.add(match.destination);
+    cursor = Math.max(match.range.end, cursor + 1);
+  }
+}
+
+function findNextMarkdownReferenceMatch(
+  source: string,
+  startIndex: number,
+  mediaPath?: string,
+): MarkdownReferenceMatch | null {
   let bracketIndex = source.indexOf('[', startIndex);
 
   while (bracketIndex !== -1) {
@@ -58,15 +112,49 @@ function findNextMarkdownReference(
     }
 
     const destination = readLinkDestination(source.slice(openParen + 1, closeParen));
-    if (destination === mediaPath) {
+    if (destination && (mediaPath === undefined || destination === mediaPath)) {
       const tokenStart = isImage ? bracketIndex - 1 : bracketIndex;
-      return expandStandaloneLine(source, tokenStart, closeParen + 1);
+      return {
+        destination,
+        range: expandStandaloneLine(source, tokenStart, closeParen + 1),
+      };
     }
 
     bracketIndex = source.indexOf('[', bracketIndex + 1);
   }
 
   return null;
+}
+
+function collectHtmlAttributeReferences(source: string, refs: Set<string>): void {
+  const tagPattern = /<[a-z][^>]*>/gi;
+  let match: RegExpExecArray | null;
+
+  while ((match = tagPattern.exec(source))) {
+    const tag = match[0];
+    for (const attrName of HTML_MEDIA_ATTRS) {
+      const value = readHtmlAttribute(tag, attrName);
+      if (value) refs.add(value);
+    }
+  }
+}
+
+function collectAnnotationReferences(source: string, refs: Set<string>): void {
+  const annotationPattern = /\{\[([^\]]*)\]\}/g;
+  let match: RegExpExecArray | null;
+
+  while ((match = annotationPattern.exec(source))) {
+    const inner = match[1];
+    if (!inner) continue;
+    const tokens = tokenizeAttrTokens(inner);
+    for (const token of tokens) {
+      const pair = splitKeyValueToken(token);
+      if (!pair) continue;
+      if (MEDIA_REFERENCE_PARAM_KEYS.has(pair.key.toLowerCase())) {
+        refs.add(pair.value);
+      }
+    }
+  }
 }
 
 function findClosingBracket(source: string, openIndex: number): number {

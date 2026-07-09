@@ -480,23 +480,29 @@ export function Scene(props: SceneProps) {
       >
         {/* Extras (e.g. diagram edges) render behind the layers so the
             cards visually clip edge endpoints. */}
-        {renderExtras?.(ctx)}
+        {renderExtras && <g className="squisq-scene-extras">{renderExtras(ctx)}</g>}
         {/* Layers — the Scene wraps each in a transformable <g> so a
             selected layer can show a live drag/resize preview without
             requiring the host to know about drag state. */}
         {layers.map((layer) => {
+          const layerClassName = `squisq-scene-layer squisq-scene-layer--${layer.type}`;
           // Text boxes reshape (font-fixed) rather than scale during resize;
           // everything else stretches via the group transform.
           const resizedText = liveResizedTextBox(layer);
           if (resizedText) {
             return (
-              <g key={layer.id} data-layer-id={layer.id}>
+              <g key={layer.id} className={layerClassName} data-layer-id={layer.id}>
                 {layerRenderer(resizedText, viewport)}
               </g>
             );
           }
           return (
-            <g key={layer.id} data-layer-id={layer.id} {...wrapperFor(layer)}>
+            <g
+              key={layer.id}
+              className={layerClassName}
+              data-layer-id={layer.id}
+              {...wrapperFor(layer)}
+            >
               {layerRenderer(layer, viewport)}
             </g>
           );

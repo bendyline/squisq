@@ -1,5 +1,45 @@
 import { describe, expect, it } from 'vitest';
-import { removeMediaReferencesFromMarkdown } from '../mediaReferences';
+import {
+  collectMediaReferencesFromMarkdown,
+  removeMediaReferencesFromMarkdown,
+} from '../mediaReferences';
+
+describe('collectMediaReferencesFromMarkdown', () => {
+  it('collects markdown image/link and html media references', () => {
+    const refs = collectMediaReferencesFromMarkdown(
+      [
+        '![One](attachments/one.png)',
+        '[Two](attachments/two.pdf)',
+        '<video src="video/clip.webm" poster="video/poster.png"></video>',
+        '<a href="attachments/three.txt">Three</a>',
+      ].join('\n'),
+    );
+
+    expect([...refs].sort()).toEqual([
+      'attachments/one.png',
+      'attachments/three.txt',
+      'attachments/two.pdf',
+      'video/clip.webm',
+      'video/poster.png',
+    ]);
+  });
+
+  it('collects media references from squiggly annotations', () => {
+    const refs = collectMediaReferencesFromMarkdown(
+      [
+        '## Intro {[audio=audio/take.mp3]}',
+        '{[video src="video/clip with spaces.webm"]}',
+        '### Image {#hero} {[image src=images/hero.png alt="Hero"]}',
+      ].join('\n'),
+    );
+
+    expect([...refs].sort()).toEqual([
+      'audio/take.mp3',
+      'images/hero.png',
+      'video/clip with spaces.webm',
+    ]);
+  });
+});
 
 describe('removeMediaReferencesFromMarkdown', () => {
   it('removes standalone image references to the media path', () => {

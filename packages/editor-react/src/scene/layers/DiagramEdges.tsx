@@ -16,7 +16,7 @@
 import type { MarkerStyle } from '@bendyline/squisq/schemas';
 import { connectorPath, markerPath } from '@bendyline/squisq/doc';
 import type { SceneEdge } from '../commands/SceneCommand';
-import { boxesOf, edgePoint } from './edgeGeometry';
+import { boxesOf, edgeEndpoints } from './edgeGeometry';
 import type { EdgeNodeBox } from './edgeGeometry';
 
 interface DiagramEdgesProps {
@@ -81,8 +81,9 @@ export function DiagramEdges({
         const a = boxById.get(edge.source);
         const b = boxById.get(edge.target);
         if (!a || !b) return null;
-        const start = edgePoint(a, b);
-        const end = edgePoint(b, a);
+        const snapped = edgeEndpoints(nodes, edge.source, edge.target);
+        if (!snapped) return null;
+        const { start, end } = snapped;
         const d = connectorPath(edge.routing ?? defaultRouting, start, end);
         const startMarker = edge.startMarker ?? 'none';
         const endMarker = edge.endMarker ?? 'arrow';

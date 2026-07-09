@@ -21,6 +21,8 @@ export interface MediaBinProps {
   isDark: boolean;
   /** Incremented externally to signal a re-scan of the media list */
   refreshKey?: number;
+  /** Relative media paths currently referenced by the document. */
+  usedMediaPaths?: ReadonlySet<string>;
   /**
    * Fired after a successful upload via the MediaBin's own "+ Upload"
    * button. `relativePath` is what the provider returned (the same
@@ -81,6 +83,7 @@ export function MediaBin({
   mediaProvider,
   isDark,
   refreshKey,
+  usedMediaPaths,
   onMediaUploaded,
   onMediaRemoved,
   onCountChange,
@@ -314,6 +317,7 @@ export function MediaBin({
           const basename = entry.name.includes('/') ? entry.name.split('/').pop()! : entry.name;
           const isImage = isImageMime(entry.mimeType);
           const altText = basename.replace(/\.[^.]+$/, '').replace(/[-_]/g, ' ');
+          const isUnused = !!usedMediaPaths && !usedMediaPaths.has(entry.name);
 
           const handleDragStart = (e: React.DragEvent<HTMLDivElement>) => {
             if (!isImage) return;
@@ -356,7 +360,14 @@ export function MediaBin({
               {/* Name + size */}
               <div className="squisq-media-bin-meta">
                 <div className="squisq-media-bin-name">{basename}</div>
-                <div className="squisq-media-bin-size">{formatSize(entry.size)}</div>
+                <div className="squisq-media-bin-detail-row">
+                  <span className="squisq-media-bin-size">{formatSize(entry.size)}</span>
+                  {isUnused && (
+                    <span className="squisq-media-bin-unused-badge" title="Not used in document">
+                      Unused
+                    </span>
+                  )}
+                </div>
               </div>
             </div>
           );

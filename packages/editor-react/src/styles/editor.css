@@ -103,7 +103,7 @@
   align-items: center;
   flex-wrap: nowrap;
   padding: 0 12px 0 0;
-  gap: 2px;
+  gap: 1px;
   background: rgba(0, 0, 0, 0.07);
   container-type: inline-size;
   container-name: squisq-toolbar;
@@ -233,6 +233,7 @@
   justify-content: center;
   width: 32px;
   height: 28px;
+  flex-shrink: 0;
   border: none;
   border-radius: 4px;
   background: transparent;
@@ -900,41 +901,80 @@
 .squisq-template-badge {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  gap: 1px;
   margin-left: 8px;
-  padding: 1px 6px 1px 8px;
+  padding: 0;
   font-size: 11px;
   font-weight: 600;
   font-family: inherit;
-  color: #6d28d9;
-  background: #ede9fe;
-  border: 1px solid #c4b5fd;
-  border-radius: 10px;
+  color: #c3a47d;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
   vertical-align: middle;
   user-select: none;
-  line-height: 1.6;
+  line-height: 1;
   cursor: pointer;
+  transition:
+    color 0.15s ease,
+    opacity 0.15s ease;
+}
+
+.squisq-template-badge-core {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 1px 7px;
+  color: #7c4a16;
+  background: #f8f0e3;
+  border: 1px solid #d8c2a2;
+  border-radius: 0;
+  line-height: 1.6;
   transition:
     background 0.15s ease,
     border-color 0.15s ease;
 }
 
-.squisq-template-badge:hover,
+.squisq-template-badge:hover .squisq-template-badge-core,
+.squisq-template-badge:focus-visible .squisq-template-badge-core {
+  background: #ead6b8;
+  border-color: #bb9563;
+}
+
 .squisq-template-badge:focus-visible {
-  background: #ddd6fe;
-  border-color: #a78bfa;
   outline: none;
 }
 
 .squisq-template-badge::before {
-  content: attr(data-template-label);
+  content: '{';
 }
 
 .squisq-template-badge::after {
+  content: '}';
+}
+
+.squisq-template-badge::before,
+.squisq-template-badge::after {
+  display: inline-flex;
+  position: relative;
+  top: -1px;
+  align-items: center;
+  min-height: 22px;
+  font-size: 22px;
+  font-weight: 500;
+  line-height: 1;
+  opacity: 0.64;
+}
+
+.squisq-template-badge-core::before {
+  content: attr(data-template-label);
+}
+
+.squisq-template-badge-core::after {
   content: '▾';
   font-size: 9px;
   line-height: 1;
-  opacity: 0.7;
+  opacity: 0.62;
 }
 
 /* Empty variant — subtle affordance on plain headings that opens the
@@ -943,13 +983,14 @@
 .squisq-template-badge.squisq-template-badge--empty {
   color: #94a3b8;
   background: transparent;
-  border-color: #d1d5db;
-  border-style: dashed;
   opacity: 0.5;
 }
 
-.squisq-template-badge.squisq-template-badge--empty::before {
-  content: 'Block';
+.squisq-template-badge.squisq-template-badge--empty .squisq-template-badge-core {
+  color: #94a3b8;
+  background: transparent;
+  border-color: #d1d5db;
+  border-style: dashed;
   font-weight: 500;
 }
 
@@ -960,9 +1001,14 @@
 .squisq-template-badge.squisq-template-badge--empty:hover,
 .squisq-template-badge.squisq-template-badge--empty:focus-visible {
   opacity: 1;
-  color: #6d28d9;
-  background: #ede9fe;
-  border-color: #c4b5fd;
+  color: #b89266;
+}
+
+.squisq-template-badge.squisq-template-badge--empty:hover .squisq-template-badge-core,
+.squisq-template-badge.squisq-template-badge--empty:focus-visible .squisq-template-badge-core {
+  color: #7c4a16;
+  background: #f1e2ca;
+  border-color: #d8c2a2;
   border-style: solid;
 }
 
@@ -1237,16 +1283,16 @@
   font-family: var(--squisq-theme-title-font, var(--squisq-theme-body-font, inherit));
 }
 
-/* Headings start blocks, so they get generous space ABOVE (a clear break from
-   the previous block) and a tighter margin BELOW so the heading stays visually
-   grouped with the content it introduces. */
+/* Headings start blocks, so they get a clear break from the previous block and
+   tighter space below to stay visually grouped with their content. H1/H2 use
+   modest top margins because their themed font size already creates separation. */
 .squisq-wysiwyg-editor h1 {
   font-size: 2em;
-  margin: 1em 0 0.4em;
+  margin: 0.45em 0 0.4em;
 }
 .squisq-wysiwyg-editor h2 {
   font-size: 1.5em;
-  margin: 1.15em 0 0.35em;
+  margin: 0.65em 0 0.35em;
 }
 .squisq-wysiwyg-editor h3 {
   font-size: 1.17em;
@@ -1463,24 +1509,6 @@
 
 /* ─── Preview Controls ──────────────────────────────── */
 
-/* Left-side preview switches: the segmented mode switch and the aspect-ratio
-   switch, separated by a divider. Natural width; sits just after the view
-   tabs and never shrinks. */
-.squisq-preview-left-controls {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-left: 8px;
-  flex: 0 0 auto;
-}
-
-.squisq-preview-seg-divider {
-  width: 1px;
-  height: 20px;
-  background: var(--squisq-border, #d1d5db);
-  flex: 0 0 auto;
-}
-
 /* Segmented switch — a row of connected buttons (display mode: Video /
    Slideshow / Document / Page; aspect ratio: 16:9 / 1:1 / 9:16 / 4:3),
    replacing the old "Mode:" / "Format:" dropdowns. */
@@ -1556,10 +1584,17 @@
   display: flex;
   align-items: center;
   gap: 6px;
-  flex: 1 1 auto;
+  flex: 1 1 0;
   min-width: 0;
   position: relative;
   padding-left: 9px;
+}
+
+.squisq-preview-controls[data-has-overflow='true'] {
+  /* The compact ellipsis trigger needs real flex-row width. Without this, the
+     filler can shrink below the trigger's painted width and the next toolbar
+     buttons visually collide with it at intermediate widths. */
+  min-width: 41px;
 }
 
 /* Hidden probe: renders every control at natural width so the fit measurement
@@ -1578,7 +1613,7 @@
   pointer-events: none;
 }
 
-/* Inline row sits at its natural width (the overflow gear, when present, sits
+/* Inline row sits at its natural width (the ellipsis trigger, when present, sits
    just after it); it never wraps — controls that don't fit move to the menu. */
 .squisq-preview-controls-inline {
   display: flex;
@@ -1628,6 +1663,26 @@
 .squisq-preview-control--compact select {
   flex: 1;
   min-width: 0;
+}
+
+.squisq-preview-checkbox {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--squisq-text, #1f2937);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.squisq-preview-checkbox input {
+  width: 13px;
+  height: 13px;
+  margin: 0;
+  accent-color: #2563eb;
+  cursor: pointer;
 }
 
 /* Link color follows the active theme's primary when "Theme styling →
@@ -1963,24 +2018,53 @@
 
 /* Template badge (dark) */
 .squisq-editor-shell[data-theme='dark'] .squisq-template-badge {
-  color: #a78bfa;
-  background: #2e1065;
-  border-color: #6d28d9;
+  color: #f0b75a;
+  background: transparent;
+  border-color: transparent;
+}
+
+.squisq-editor-shell[data-theme='dark'] .squisq-template-badge::before,
+.squisq-editor-shell[data-theme='dark'] .squisq-template-badge::after {
+  color: #d79a45;
+  opacity: 0.82;
+}
+
+.squisq-editor-shell[data-theme='dark'] .squisq-template-badge-core {
+  color: #ffe3ad;
+  background: #3a2818;
+  border-color: #d79a45;
 }
 
 .squisq-editor-shell[data-theme='dark'] .squisq-template-badge.squisq-template-badge--empty {
-  color: #64748b;
+  color: #e0a84d;
   background: transparent;
-  border-color: #374151;
+  opacity: 0.92;
+}
+
+.squisq-editor-shell[data-theme='dark']
+  .squisq-template-badge.squisq-template-badge--empty
+  .squisq-template-badge-core {
+  color: #e7c08a;
+  background: rgba(58, 40, 24, 0.34);
+  border-color: #c6842e;
   border-style: dashed;
 }
 
 .squisq-editor-shell[data-theme='dark'] .squisq-template-badge.squisq-template-badge--empty:hover,
 .squisq-editor-shell[data-theme='dark']
   .squisq-template-badge.squisq-template-badge--empty:focus-visible {
-  color: #c4b5fd;
-  background: #2e1065;
-  border-color: #6d28d9;
+  color: #f0b75a;
+}
+
+.squisq-editor-shell[data-theme='dark']
+  .squisq-template-badge.squisq-template-badge--empty:hover
+  .squisq-template-badge-core,
+.squisq-editor-shell[data-theme='dark']
+  .squisq-template-badge.squisq-template-badge--empty:focus-visible
+  .squisq-template-badge-core {
+  color: #ffe3ad;
+  background: #3a2818;
+  border-color: #d79a45;
   border-style: solid;
 }
 
@@ -2254,9 +2338,30 @@
   white-space: nowrap;
 }
 
+.squisq-media-bin-detail-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 14px;
+}
+
 .squisq-media-bin-size {
   font-size: 10px;
   color: #9ca3af;
+}
+
+.squisq-media-bin-unused-badge {
+  display: inline-flex;
+  align-items: center;
+  height: 14px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: #fef3c7;
+  color: #92400e;
+  font-size: 9px;
+  font-weight: 700;
+  line-height: 1;
+  text-transform: uppercase;
 }
 
 .squisq-media-bin-context-menu {
@@ -2365,6 +2470,12 @@
 .squisq-media-bin--dark .squisq-media-bin-size,
 .squisq-editor-shell[data-theme='dark'] .squisq-media-bin .squisq-media-bin-size {
   color: #6b7280;
+}
+
+.squisq-media-bin--dark .squisq-media-bin-unused-badge,
+.squisq-editor-shell[data-theme='dark'] .squisq-media-bin .squisq-media-bin-unused-badge {
+  background: #78350f;
+  color: #fde68a;
 }
 
 .squisq-media-bin--dark .squisq-media-bin-empty,
@@ -3227,6 +3338,16 @@
   position: relative;
   flex-shrink: 0;
   margin-left: 2px;
+}
+
+.squisq-theme-customizer-trigger--label {
+  width: auto;
+  min-width: 0;
+  padding: 4px 12px;
+}
+
+.squisq-theme-customizer-trigger-label {
+  line-height: 1;
 }
 
 .squisq-theme-customizer-popover {

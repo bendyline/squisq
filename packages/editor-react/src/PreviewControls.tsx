@@ -62,6 +62,10 @@ export interface PreviewSettings {
    *  that style. The single entry point so the toggle buttons persist in one
    *  frontmatter write. */
   setCaptionMode: (mode: CaptionMode) => void;
+  /** Whether Squisq should synthesize and show its managed cover slide. */
+  activeCoverSlide: boolean;
+  /** Enable/disable the managed cover slide. */
+  setCoverSlideEnabled: (enabled: boolean) => void;
   /** User-authored themes (doc + browser library) for the picker's "Custom" group. */
   customThemes: Theme[];
   /** Open the custom-theme designer for a theme (or null to create a new one). */
@@ -171,6 +175,15 @@ function resolveFrontmatterCaptionMode(value: unknown): CaptionMode | null {
   return null;
 }
 
+function resolveFrontmatterBoolean(value: unknown): boolean | null {
+  if (typeof value === 'boolean') return value;
+  if (typeof value !== 'string') return null;
+  const v = value.trim().toLowerCase();
+  if (v === 'true' || v === 'yes' || v === 'on' || v === 'show' || v === 'visible') return true;
+  if (v === 'false' || v === 'no' || v === 'off' || v === 'hide' || v === 'hidden') return false;
+  return null;
+}
+
 // ── Provider ─────────────────────────────────────────────────────
 
 export interface PreviewSettingsProviderProps {
@@ -192,6 +205,7 @@ const FM_KEYS = {
   theme: { canonical: 'squisq-theme', legacy: 'theme' as const },
   transform: { canonical: 'squisq-transform', legacy: 'transform-style' as const },
   captions: { canonical: 'squisq-captions', legacy: 'caption-style' as const },
+  coverSlide: { canonical: 'squisq-cover-slide', legacy: 'cover-slide' as const },
 } as const;
 
 function readFrontmatterKey(
@@ -366,6 +380,26 @@ export function PreviewSettingsProvider({
     [persistFrontmatter],
   );
 
+  // Managed cover slide — generated from the document startBlock. Defaults on
+  // for existing documents; authors can persist an explicit off switch.
+  const fmCoverSlide = useMemo(
+    () =>
+      resolveFrontmatterBoolean(
+        readFrontmatterKey(frontmatter, FM_KEYS.coverSlide.canonical, FM_KEYS.coverSlide.legacy),
+      ),
+    [frontmatter],
+  );
+  const [selectedCoverSlide, setSelectedCoverSlide] = useState<boolean | null>(null);
+  useEffect(() => setSelectedCoverSlide(null), [fmCoverSlide]);
+  const activeCoverSlide = selectedCoverSlide ?? fmCoverSlide ?? true;
+  const handleSetCoverSlideEnabled = useCallback(
+    (enabled: boolean) => {
+      setSelectedCoverSlide(enabled);
+      persistFrontmatter({ [FM_KEYS.coverSlide.canonical]: enabled ? 'true' : 'false' });
+    },
+    [persistFrontmatter],
+  );
+
   // Config for the docked designer (rendered by `<ThemeDesignerDock>` in the
   // editor content row). Null when closed. setPreviewTheme is a stable setter.
   const themeDesigner = useMemo<ThemeDesignerConfig | null>(
@@ -396,6 +430,8 @@ export function PreviewSettingsProvider({
       activeCaptionStyle,
       activeCaptionsEnabled,
       setCaptionMode: handleSetCaptionMode,
+      activeCoverSlide,
+      setCoverSlideEnabled: handleSetCoverSlideEnabled,
       customThemes,
       openThemeDesigner,
       deleteCustomTheme,
@@ -410,9 +446,11 @@ export function PreviewSettingsProvider({
       activeTransformStyle,
       activeCaptionStyle,
       activeCaptionsEnabled,
+      activeCoverSlide,
       handleSetThemeId,
       handleSetTransformStyle,
       handleSetCaptionMode,
+      handleSetCoverSlideEnabled,
       customThemes,
       openThemeDesigner,
       deleteCustomTheme,
@@ -473,15 +511,12 @@ const TRANSFORM_STYLE_OPTIONS = [
 /**
  * Left-to-right priority order for the preview controls. As the toolbar
  * narrows, controls drop into the overflow menu from the END of this list
- * first (Captions, then Transform, …), so the higher-priority control (Theme)
- * stays inline the longest.
- *
- * Display mode and aspect ratio are not here — they're surfaced separately as
- * the segmented {@link PreviewModeSwitch} / {@link PreviewFormatSwitch} on the
- * left of the toolbar.
+ * first (Cover, then Captions, …). Display mode and aspect ratio stay inline
+ * the longest, but still collapse into the same menu when the toolbar is very
+ * constrained.
  */
-type ControlKey = 'theme' | 'transform' | 'captions';
-const CONTROL_KEYS: ControlKey[] = ['theme', 'transform', 'captions'];
+type ControlKey = 'mode' | 'format' | 'theme' | 'transform' | 'captions' | 'cover';
+const CONTROL_KEYS: ControlKey[] = ['mode', 'format', 'theme', 'transform', 'captions', 'cover'];
 
 // ── Shared styles ────────────────────────────────────────────────
 
@@ -510,7 +545,7 @@ const selectStyle: React.CSSProperties = {
  * whole row in and out at a fixed window-width breakpoint, the controls
  * measure how many of them actually fit in the width the toolbar gives them
  * and keep that many inline, folding the rest — from the low-priority end of
- * {@link CONTROL_KEYS} — into a single settings (gear) button's popover. As
+ * {@link CONTROL_KEYS} — into a single ellipsis button's popover. As
  * the toolbar widens or narrows, controls migrate one at a time between the
  * inline row and the menu, so the available space is always well used and the
  * row never wraps onto a second line.
@@ -534,7 +569,7 @@ export function PreviewToolbarControls() {
     if (!root || !probe) return;
     const GAP = 6; // matches the row's flex `gap`
     const LEAD_PAD = 9; // root's left padding, eaten before any control
-    const GEAR_RESERVE = 40; // width kept for the overflow gear button (+ its gap)
+    const OVERFLOW_TRIGGER_RESERVE = 40; // width kept for the ellipsis button (+ its gap)
     const SAFETY = 2;
     const measure = () => {
       const available = root.clientWidth - LEAD_PAD;
@@ -549,8 +584,8 @@ export function PreviewToolbarControls() {
         setVisibleCount(widths.length);
         return;
       }
-      // Otherwise reserve room for the gear and fit as many as possible.
-      const budget = available - GEAR_RESERVE - GAP - SAFETY;
+      // Otherwise reserve room for the ellipsis and fit as many as possible.
+      const budget = available - OVERFLOW_TRIGGER_RESERVE - GAP - SAFETY;
       let count = 0;
       while (count < widths.length && rowWidth(count + 1) <= budget) count++;
       setVisibleCount(count);
@@ -593,6 +628,26 @@ export function PreviewToolbarControls() {
   // label-over-control layout used inside the overflow popover.
   const renderControl = (key: ControlKey, compact: boolean): ReactNode => {
     switch (key) {
+      case 'mode':
+        return (
+          <div
+            key="mode"
+            className={`squisq-preview-control squisq-preview-control--seg${compact ? ' squisq-preview-control--compact' : ''}`}
+          >
+            {compact && <label style={labelStyle}>Mode:</label>}
+            <PreviewModeSwitch />
+          </div>
+        );
+      case 'format':
+        return (
+          <div
+            key="format"
+            className={`squisq-preview-control squisq-preview-control--seg${compact ? ' squisq-preview-control--compact' : ''}`}
+          >
+            {compact && <label style={labelStyle}>Format:</label>}
+            <PreviewFormatSwitch />
+          </div>
+        );
       case 'theme':
         return (
           <div
@@ -684,6 +739,23 @@ export function PreviewToolbarControls() {
           </div>
         );
       }
+      case 'cover':
+        return (
+          <div
+            key="cover"
+            className={`squisq-preview-control${compact ? ' squisq-preview-control--compact' : ''}`}
+          >
+            <label style={labelStyle}>Cover:</label>
+            <label className="squisq-preview-checkbox">
+              <input
+                type="checkbox"
+                checked={s.activeCoverSlide}
+                onChange={(e) => s.setCoverSlideEnabled(e.target.checked)}
+              />
+              <span>Cover slide</span>
+            </label>
+          </div>
+        );
     }
   };
 
@@ -694,7 +766,11 @@ export function PreviewToolbarControls() {
   // The root is a flex:1 filler so it always spans the toolbar's leftover
   // width (which is what the fit measurement reads).
   return (
-    <div className="squisq-preview-controls" ref={rootRef}>
+    <div
+      className="squisq-preview-controls"
+      data-has-overflow={hasOverflow ? 'true' : undefined}
+      ref={rootRef}
+    >
       {/* Hidden probe — every control at natural width, measured to decide the
           inline/overflow split. Absolutely positioned so it never affects
           layout. */}
@@ -702,9 +778,11 @@ export function PreviewToolbarControls() {
         {CONTROL_KEYS.map((key) => renderControl(key, false))}
       </div>
 
-      <div className="squisq-preview-controls-inline">
-        {visibleKeys.map((key) => renderControl(key, false))}
-      </div>
+      {visibleKeys.length > 0 && (
+        <div className="squisq-preview-controls-inline">
+          {visibleKeys.map((key) => renderControl(key, false))}
+        </div>
+      )}
 
       {hasOverflow && (
         <div className="squisq-preview-controls-compact" ref={popoverRef}>
@@ -715,19 +793,7 @@ export function PreviewToolbarControls() {
             title="More preview settings"
             aria-expanded={popoverOpen}
           >
-            <svg
-              width="16"
-              height="16"
-              viewBox="0 0 16 16"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="1.5"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            >
-              <circle cx="8" cy="8" r="2.5" />
-              <path d="M13.5 8a5.5 5.5 0 01-.4 1.8l1.2 1.2-1.6 1.6-1.2-1.2A5.5 5.5 0 018 13.5a5.5 5.5 0 01-3.5-1.3L3.3 13.4 1.7 11.8l1.2-1.2A5.5 5.5 0 012.5 8c0-.6.1-1.2.4-1.8L1.7 5 3.3 3.4l1.2 1.2A5.5 5.5 0 018 2.5c1.3 0 2.5.5 3.5 1.3l1.2-1.2 1.6 1.6-1.2 1.2c.3.6.4 1.2.4 1.6z" />
-            </svg>
+            <Icon icon="fa-solid fa-ellipsis" />
           </button>
           {popoverOpen && (
             <div className="squisq-preview-controls-popover">
@@ -741,10 +807,9 @@ export function PreviewToolbarControls() {
 }
 
 /**
- * Segmented display-mode switch (Video / Slideshow / Document / Page) rendered
- * as four connected buttons on the left of the Play toolbar — the prominent,
- * one-click counterpart to the old "Mode:" dropdown. Reads and writes the same
- * `activeDisplayMode` in preview settings.
+ * Segmented display-mode switch (Video / Slideshow / Document / Page), used
+ * inline in the Use toolbar and inside its overflow popover. Reads and writes
+ * the same `activeDisplayMode` in preview settings.
  */
 export function PreviewModeSwitch() {
   const s = usePreviewSettings();
@@ -787,10 +852,9 @@ function AspectIcon({ w, h }: { w: number; h: number }) {
 }
 
 /**
- * Segmented aspect-ratio switch (16:9 / 1:1 / 9:16 / 4:3) rendered as connected
- * icon buttons on the left of the Play toolbar, next to the mode switch — the
- * one-click counterpart to the old "Format:" dropdown. Reads and writes the
- * same `activePreset` in preview settings.
+ * Segmented aspect-ratio switch (16:9 / 1:1 / 9:16 / 4:3), used inline in the
+ * Use toolbar and inside its overflow popover. Reads and writes the same
+ * `activePreset` in preview settings.
  */
 export function PreviewFormatSwitch() {
   const s = usePreviewSettings();

@@ -16,6 +16,12 @@
 import { createElement, type JSX } from 'react';
 import type { SceneTool, SceneToolContext } from './SceneTool';
 import { shapeIdFromLayerId, isPrimaryShapeLayer } from '../layers/shapeLayers';
+import {
+  edgeEndpoints,
+  snapPointToward,
+  straightPath,
+  type EdgeNodeBox,
+} from '../layers/edgeGeometry';
 
 /** A grab on the selected connector's endpoint handle. */
 export interface EndpointHit {
@@ -37,8 +43,9 @@ type DragState =
   | {
       mode: 'new';
       sourceId: string;
-      anchor: { x: number; y: number };
-      current: { x: number; y: number };
+      sourceBox: EdgeNodeBox;
+      start: { x: number; y: number };
+      end: { x: number; y: number };
       hovered: string | null;
     }
   | {
@@ -46,8 +53,9 @@ type DragState =
       connectorId: string;
       end: 'from' | 'to';
       fixedShapeId: string;
-      anchor: { x: number; y: number };
-      current: { x: number; y: number };
+      fixedBox: EdgeNodeBox;
+      start: { x: number; y: number };
+      endPoint: { x: number; y: number };
       hovered: string | null;
     };
 
@@ -59,16 +67,57 @@ export function createDrawingConnectTool(options: DrawingConnectOptions = {}): S
     return { sx: e.clientX - rect.left, sy: e.clientY - rect.top };
   }
 
-  function shapeCenter(ctx: SceneToolContext, shapeId: string): { x: number; y: number } | null {
+  function shapeBox(ctx: SceneToolContext, shapeId: string): EdgeNodeBox | null {
     const it = ctx.hitItems.find((h) => h.id === `dshape-${shapeId}`);
     if (!it) return null;
-    return { x: it.bounds.x + it.bounds.width / 2, y: it.bounds.y + it.bounds.height / 2 };
+    return {
+      id: shapeId,
+      x: it.bounds.x,
+      y: it.bounds.y,
+      width: it.bounds.width,
+      height: it.bounds.height,
+    };
   }
 
   function shapeAt(ctx: SceneToolContext, v: { x: number; y: number }): string | null {
     const hitId = ctx.hit(v);
     if (!hitId || !isPrimaryShapeLayer(hitId)) return null;
     return shapeIdFromLayerId(hitId);
+  }
+
+  function previewNew(
+    sourceBox: EdgeNodeBox,
+    current: { x: number; y: number },
+    targetBox: EdgeNodeBox | null,
+  ): { start: { x: number; y: number }; end: { x: number; y: number } } {
+    if (targetBox) {
+      return edgeEndpoints([sourceBox, targetBox], sourceBox.id, targetBox.id) ?? {
+        start: current,
+        end: current,
+      };
+    }
+    return {
+      start: snapPointToward([sourceBox], sourceBox.id, current) ?? current,
+      end: current,
+    };
+  }
+
+  function previewRetarget(
+    fixedBox: EdgeNodeBox,
+    movedEnd: 'from' | 'to',
+    current: { x: number; y: number },
+    targetBox: EdgeNodeBox | null,
+  ): { start: { x: number; y: number }; end: { x: number; y: number } } {
+    if (targetBox) {
+      const source = movedEnd === 'from' ? targetBox : fixedBox;
+      const target = movedEnd === 'from' ? fixedBox : targetBox;
+      return edgeEndpoints([source, target], source.id, target.id) ?? {
+        start: current,
+        end: current,
+      };
+    }
+    const fixed = snapPointToward([fixedBox], fixedBox.id, current) ?? current;
+    return movedEnd === 'from' ? { start: current, end: fixed } : { start: fixed, end: current };
   }
 
   return {
@@ -85,14 +134,17 @@ export function createDrawingConnectTool(options: DrawingConnectOptions = {}): S
       // Endpoint handle of the selected connector → re-target gesture.
       const ep = options.endpointAt?.(v);
       if (ep) {
-        const anchor = shapeCenter(ctx, ep.fixedShapeId) ?? v;
+        const fixedBox = shapeBox(ctx, ep.fixedShapeId);
+        if (!fixedBox) return;
+        const preview = previewRetarget(fixedBox, ep.end, v, null);
         drag = {
           mode: 'retarget',
           connectorId: ep.connectorId,
           end: ep.end,
           fixedShapeId: ep.fixedShapeId,
-          anchor,
-          current: v,
+          fixedBox,
+          start: preview.start,
+          endPoint: preview.end,
           hovered: null,
         };
         (e.currentTarget as Element).setPointerCapture?.(e.pointerId);
@@ -103,11 +155,15 @@ export function createDrawingConnectTool(options: DrawingConnectOptions = {}): S
       // Otherwise start a new connection from the shape under the pointer.
       const src = shapeAt(ctx, v);
       if (!src) return;
+      const sourceBox = shapeBox(ctx, src);
+      if (!sourceBox) return;
+      const preview = previewNew(sourceBox, v, null);
       drag = {
         mode: 'new',
         sourceId: src,
-        anchor: shapeCenter(ctx, src) ?? v,
-        current: v,
+        sourceBox,
+        start: preview.start,
+        end: preview.end,
         hovered: null,
       };
       (e.currentTarget as Element).setPointerCapture?.(e.pointerId);
@@ -118,10 +174,20 @@ export function createDrawingConnectTool(options: DrawingConnectOptions = {}): S
       if (!drag) return;
       const { sx, sy } = pointer(e);
       const v = ctx.screenToViewport(sx, sy);
-      drag.current = v;
       const tgt = shapeAt(ctx, v);
       const exclude = drag.mode === 'new' ? drag.sourceId : drag.fixedShapeId;
-      drag.hovered = tgt && tgt !== exclude ? tgt : null;
+      const targetId = tgt && tgt !== exclude ? tgt : null;
+      const targetBox = targetId ? shapeBox(ctx, targetId) : null;
+      if (drag.mode === 'new') {
+        const preview = previewNew(drag.sourceBox, v, targetBox);
+        drag.start = preview.start;
+        drag.end = preview.end;
+      } else {
+        const preview = previewRetarget(drag.fixedBox, drag.end, v, targetBox);
+        drag.start = preview.start;
+        drag.endPoint = preview.end;
+      }
+      drag.hovered = targetBox?.id ?? null;
     },
 
     onPointerUp(e, ctx) {
@@ -139,13 +205,13 @@ export function createDrawingConnectTool(options: DrawingConnectOptions = {}): S
 
     renderOverlay(): JSX.Element | null {
       if (!drag) return null;
-      const a = drag.anchor;
-      const b = drag.current;
+      const a = drag.start;
+      const b = drag.mode === 'new' ? drag.end : drag.endPoint;
       return createElement(
         'g',
         { key: 'drawing-connect-preview' },
         createElement('path', {
-          d: `M ${a.x} ${a.y} L ${b.x} ${b.y}`,
+          d: straightPath(a, b),
           className: 'squisq-scene-connect-preview',
           fill: 'none',
         }),

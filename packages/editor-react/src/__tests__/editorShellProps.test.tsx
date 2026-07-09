@@ -34,8 +34,13 @@ vi.mock('../PreviewPanel', () => ({
 }));
 
 import { EditorShell } from '../EditorShell';
-import { EditorProvider } from '../EditorContext';
+import { EditorProvider, useEditorContext } from '../EditorContext';
 import { Toolbar } from '../Toolbar';
+
+function MarkdownSourceProbe() {
+  const { markdownSource } = useEditorContext();
+  return <pre data-testid="markdown-source">{markdownSource}</pre>;
+}
 
 function mediaProviderWith(count: number): MediaProvider {
   const entries: MediaEntry[] = Array.from({ length: count }, (_, i) => ({
@@ -273,6 +278,46 @@ describe('<EditorShell> Files badge', () => {
       expect(changes[changes.length - 1]).toBe(['Before', '', '', 'After'].join('\n'));
     });
   });
+
+  it('marks files as unused when the document does not reference them', async () => {
+    const { container } = render(
+      <EditorShell
+        initialMarkdown={'![Used](attachments/used.png)\n\n# Notes'}
+        initialView="raw"
+        mediaProvider={
+          mutableMediaProviderWith([
+            {
+              name: 'attachments/used.png',
+              mimeType: 'image/png',
+              size: 100,
+            },
+            {
+              name: 'attachments/unused.png',
+              mimeType: 'image/png',
+              size: 200,
+            },
+          ]).provider
+        }
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByLabelText('Toggle Files panel, 2 files')).toBeTruthy();
+    });
+    fireEvent.click(screen.getByLabelText('Toggle Files panel, 2 files'));
+
+    await screen.findByText('used.png');
+    await screen.findByText('unused.png');
+
+    const items = Array.from(container.querySelectorAll('.squisq-media-bin-item'));
+    const itemNamed = (name: string) =>
+      items.find((item) => item.querySelector('.squisq-media-bin-name')?.textContent === name);
+    const usedItem = itemNamed('used.png');
+    const unusedItem = itemNamed('unused.png');
+
+    expect(usedItem?.querySelector('.squisq-media-bin-unused-badge')).toBeNull();
+    expect(unusedItem?.querySelector('.squisq-media-bin-unused-badge')?.textContent).toBe('Unused');
+  });
 });
 
 describe('<Toolbar> Files badge', () => {
@@ -292,5 +337,27 @@ describe('<Toolbar> Files badge', () => {
       expect(screen.getByLabelText('Toggle Files panel, 2 files')).toBeTruthy();
     });
     expect(container.querySelector('.squisq-toolbar-files-badge')?.textContent).toBe('2');
+  });
+});
+
+describe('<Toolbar> Insert menu', () => {
+  it('adds a default task list from the Insert menu in raw fallback mode', async () => {
+    render(
+      <EditorProvider initialMarkdown="Intro" initialView="raw" allowRecording={false}>
+        <Toolbar />
+        <MarkdownSourceProbe />
+      </EditorProvider>,
+    );
+
+    fireEvent.click(screen.getByLabelText('Insert'));
+    const item = await screen.findByRole('menuitem', { name: /Task List/i });
+
+    fireEvent.click(item);
+
+    await waitFor(() => {
+      expect(screen.getByTestId('markdown-source').textContent).toBe(
+        ['Intro', '- [ ] Task 1', '- [ ] Task 2', '- [ ] Task 3', ''].join('\n'),
+      );
+    });
   });
 });

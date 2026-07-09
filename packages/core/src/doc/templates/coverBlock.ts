@@ -18,6 +18,7 @@ import type { Layer } from '../../schemas/Doc.js';
 import type { TemplateContext } from '../../schemas/BlockTemplates.js';
 import type { StartBlockConfig } from '../../schemas/Doc.js';
 import { getThemeFont, themedFontSize, themedImageTreatment } from '../utils/themeUtils.js';
+import { relativeLuminance, withAlpha } from '../../schemas/colorUtils.js';
 import { mapAmbientMotion } from './accentImage.js';
 
 /**
@@ -61,6 +62,11 @@ export function fitCoverTitleSize(title: string): number {
   return Math.max(COVER_TITLE_MIN_BASE_PX, Math.round(scaled));
 }
 
+function isStandardLightCover(context: TemplateContext): boolean {
+  const { theme } = context;
+  return theme.id === 'standard' && relativeLuminance(theme.colors.background) > 0.85;
+}
+
 /**
  * Generate cover block layers from StartBlockConfig.
  */
@@ -68,6 +74,7 @@ export function coverBlock(input: CoverBlockInput, context: TemplateContext): La
   const treatment = themedImageTreatment(context, input.imageTreatment);
   const { heroSrc, heroAlt, title, subtitle, ambientMotion, heroCredit, heroLicense } = input;
   const { theme, layout } = context;
+  const standardLightCover = !heroSrc && isStandardLightCover(context);
 
   // Scale font sizes for viewport - cover titles are larger than regular title blocks.
   // The cover title wraps within maxTextWidth but does not otherwise shrink, so a long
@@ -113,16 +120,42 @@ export function coverBlock(input: CoverBlockInput, context: TemplateContext): La
       },
     );
   } else {
-    // No hero image: use a rich theme-driven background with radial gradient
-    layers.push({
-      type: 'shape',
-      id: 'cover-bg',
-      content: {
-        shape: 'rect',
-        fill: `radial-gradient(ellipse at 50% 40%, ${theme.colors.primary} 0%, ${theme.colors.background} 100%)`,
-      },
-      position: { x: 0, y: 0, width: '100%', height: '100%' },
-    });
+    if (standardLightCover) {
+      // Standard Light needs a restrained cover-poster treatment; a
+      // full-strength primary radial hotspot overwhelms dark serif text
+      // and makes the subtitle muddy.
+      layers.push(
+        {
+          type: 'shape',
+          id: 'cover-bg',
+          content: {
+            shape: 'rect',
+            fill: theme.colors.background,
+          },
+          position: { x: 0, y: 0, width: '100%', height: '100%' },
+        },
+        {
+          type: 'shape',
+          id: 'cover-bg-tint',
+          content: {
+            shape: 'rect',
+            fill: `radial-gradient(ellipse at 50% 40%, ${withAlpha(theme.colors.primary, 0.16)} 0%, ${withAlpha(theme.colors.primary, 0.07)} 38%, ${withAlpha(theme.colors.primary, 0)} 78%)`,
+          },
+          position: { x: 0, y: 0, width: '100%', height: '100%' },
+        },
+      );
+    } else {
+      // Non-Standard themes keep the existing dramatic radial cover look.
+      layers.push({
+        type: 'shape',
+        id: 'cover-bg',
+        content: {
+          shape: 'rect',
+          fill: `radial-gradient(ellipse at 50% 40%, ${theme.colors.primary} 0%, ${theme.colors.background} 100%)`,
+        },
+        position: { x: 0, y: 0, width: '100%', height: '100%' },
+      });
+    }
 
     // Subtle decorative accent line below title
     layers.push({
@@ -130,7 +163,9 @@ export function coverBlock(input: CoverBlockInput, context: TemplateContext): La
       id: 'cover-accent',
       content: {
         shape: 'rect',
-        fill: 'rgba(255, 255, 255, 0.2)',
+        fill: standardLightCover
+          ? withAlpha(theme.colors.primary, 0.24)
+          : 'rgba(255, 255, 255, 0.2)',
       },
       position: {
         x: '35%',
@@ -153,7 +188,7 @@ export function coverBlock(input: CoverBlockInput, context: TemplateContext): La
         fontWeight: 'bold',
         color: theme.colors.text,
         textAlign: 'center',
-        shadow: true,
+        shadow: !standardLightCover,
       },
     },
     position: {
@@ -176,7 +211,8 @@ export function coverBlock(input: CoverBlockInput, context: TemplateContext): La
         style: {
           fontSize: subtitleFontSize,
           fontFamily: getThemeFont(context, 'body'),
-          color: theme.colors.textMuted,
+          fontWeight: standardLightCover ? 'bold' : 'normal',
+          color: standardLightCover ? withAlpha(theme.colors.text, 0.78) : theme.colors.textMuted,
           textAlign: 'center',
           lineHeight: 1.5,
         },

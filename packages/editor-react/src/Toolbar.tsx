@@ -9,7 +9,7 @@
 
 import type { ReactNode } from 'react';
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react';
-import type { Editor as TiptapEditor } from '@tiptap/core';
+import type { Editor as TiptapEditor, JSONContent } from '@tiptap/core';
 import { TextSelection } from '@tiptap/pm/state';
 import { Fragment } from '@tiptap/pm/model';
 import type { IRange } from 'monaco-editor';
@@ -43,9 +43,9 @@ import type { PickerEntry } from './emojiData';
 import { createPortal } from 'react-dom';
 
 const VIEWS: { id: EditorView; label: string; shortLabel?: string; shortcut: string }[] = [
-  { id: 'wysiwyg', label: 'Editor', shortcut: '⌘1' },
-  { id: 'raw', label: 'Markdown', shortLabel: 'MD', shortcut: '⌘2' },
-  { id: 'preview', label: 'Play', shortcut: '⌘3' },
+  { id: 'wysiwyg', label: 'Write', shortcut: '⌘1' },
+  { id: 'raw', label: 'Source', shortcut: '⌘2' },
+  { id: 'preview', label: 'Use', shortcut: '⌘3' },
 ];
 
 export interface ToolbarProps {
@@ -61,7 +61,7 @@ export interface ToolbarProps {
   slotLeft?: ReactNode;
   /** Content rendered immediately after the view tabs, on the left side of the
    *  toolbar (before the formatting controls). Used for the preview mode
-   *  switch in Play view. */
+   *  switch in Use view. */
   slotAfterTabs?: ReactNode;
   /** Content rendered after the formatting controls (in the middle area). */
   slotAfterActions?: ReactNode;
@@ -193,6 +193,14 @@ const BUTTONS: ToolbarButton[] = [
     faIcon: 'fa-solid fa-table',
   },
   {
+    id: 'tasklist',
+    label: 'tasks',
+    icon: '',
+    title: 'Insert Task List',
+    group: 'media',
+    faIcon: 'fa-solid fa-list-check',
+  },
+  {
     id: 'diagram',
     label: 'diagram',
     icon: '',
@@ -237,6 +245,8 @@ const BUTTONS: ToolbarButton[] = [
 const FIRST_MEDIA_INDEX = BUTTONS.findIndex((b) => b.group === 'media');
 const MEDIA_BUTTONS = BUTTONS.filter((b) => b.group === 'media');
 const INSERT_MENU_WIDTH = 200;
+const TASK_LIST_ITEMS = ['Task 1', 'Task 2', 'Task 3'] as const;
+const TASK_LIST_MARKDOWN = TASK_LIST_ITEMS.map((item) => `- [ ] ${item}`).join('\n');
 
 // BUTTONS position per id — stamped on each rendered button as
 // data-btn-index so the overflow measurement can map a clipped DOM button
@@ -256,6 +266,28 @@ function fileCountLabel(count: number): string {
 
 function fileCountBadge(count: number): string {
   return count > 99 ? '99+' : String(count);
+}
+
+function taskListContent(): JSONContent {
+  return {
+    type: 'taskList',
+    content: TASK_LIST_ITEMS.map((item) => ({
+      type: 'taskItem',
+      attrs: { checked: false },
+      content: [
+        {
+          type: 'paragraph',
+          content: [{ type: 'text', text: item }],
+        },
+      ],
+    })),
+  };
+}
+
+function insertTaskList(editor: TiptapEditor): void {
+  const supportsTaskList = !!editor.schema.nodes.taskList && !!editor.schema.nodes.taskItem;
+  const content = supportsTaskList ? taskListContent() : TASK_LIST_MARKDOWN;
+  editor.chain().focus().insertContent(content).run();
 }
 
 // ─── Tiptap active-state map ────────────────────────────
@@ -766,6 +798,9 @@ export function Toolbar({
         case 'table':
           tiptapEditor.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run();
           break;
+        case 'tasklist':
+          insertTaskList(tiptapEditor);
+          break;
         case 'diagram':
           // Empty diagram is usable via its "+ Add first node" affordance;
           // sub-headings under this block become nodes.
@@ -920,6 +955,11 @@ export function Toolbar({
             newCursorOffset = 3; // after \n|
             break;
           }
+          case 'tasklist': {
+            replacement = `\n${TASK_LIST_MARKDOWN}\n`;
+            newCursorOffset = replacement.length;
+            break;
+          }
           case 'diagram': {
             // A diagram is just a heading with the `{[diagram]}` template
             // annotation; the WYSIWYG view renders its editable canvas.
@@ -1000,6 +1040,9 @@ export function Toolbar({
           case 'table':
             insertion =
               '\n| Header 1 | Header 2 | Header 3 |\n| --- | --- | --- |\n| Cell | Cell | Cell |\n| Cell | Cell | Cell |\n';
+            break;
+          case 'tasklist':
+            insertion = `\n${TASK_LIST_MARKDOWN}\n`;
             break;
           case 'diagram':
             insertion = '\n## Diagram {[diagram]}\n';

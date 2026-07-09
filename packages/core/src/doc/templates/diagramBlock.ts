@@ -17,7 +17,7 @@
 import type { Layer, ShapeLayer, TextLayer, PathLayer, MarkerStyle } from '../../schemas/Doc.js';
 import type { DiagramBlockInput, TemplateContext } from '../../schemas/BlockTemplates.js';
 import { resolveColorScheme, getThemeFont, themedFontSize } from '../utils/themeUtils.js';
-import { clipEndpoints, connectorPath, lineStyleDasharray } from '../utils/shapeGeometry.js';
+import { connectorPath, lineStyleDasharray, snapEndpoints } from '../utils/shapeGeometry.js';
 import { computeDiagramLayout, type DiagramNodePosition } from './diagramLayout.js';
 
 const NODE_WIDTH = 180;
@@ -124,7 +124,7 @@ export function diagramBlock(input: DiagramBlockInput, context: TemplateContext)
     const a = positions.get(edge.source);
     const b = positions.get(edge.target);
     if (!a || !b) continue;
-    const { start, end } = clipEndpoints(a, b);
+    const { start, end } = snapEndpoints(a, b);
     const pathLayer: PathLayer = {
       type: 'path',
       id: `edge-${edge.id}`,

@@ -1,15 +1,15 @@
 /**
  * ViewSwitcher
  *
- * Tab bar for switching between Raw, WYSIWYG, and Preview editor views.
+ * Tab bar for switching between Write, Source, and Use editor views.
  */
 
 import { useEditorContext, type EditorView } from './EditorContext';
 
 const VIEWS: { id: EditorView; label: string; shortLabel?: string; shortcut: string }[] = [
-  { id: 'raw', label: 'Markdown', shortLabel: 'MD', shortcut: '⌘1' },
-  { id: 'wysiwyg', label: 'Editor', shortcut: '⌘2' },
-  { id: 'preview', label: 'Preview', shortcut: '⌘3' },
+  { id: 'wysiwyg', label: 'Write', shortcut: '⌘1' },
+  { id: 'raw', label: 'Source', shortcut: '⌘2' },
+  { id: 'preview', label: 'Use', shortcut: '⌘3' },
 ];
 
 export interface ViewSwitcherProps {

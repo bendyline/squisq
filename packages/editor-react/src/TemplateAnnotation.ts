@@ -63,10 +63,10 @@ export const HeadingWithTemplate = Heading.extend({
       (HTMLAttributes['data-template-params'] as string | undefined) ?? null,
     );
 
-    // Render heading with a trailing badge span. The badge has no text
-    // content — its label is painted via CSS `content: attr(data-template-label)`
-    // so the template name never becomes part of the serialized heading
-    // text (which would leak into markdown on round-trip).
+    // Render heading with a trailing badge span. The badge and its inner core
+    // have no real text content — labels/braces are painted via CSS so the
+    // template name never becomes part of serialized heading text (which
+    // would leak into markdown on round-trip).
     //
     // When no template is set we still render a subtle "empty" badge so
     // authors have a visible affordance for opening the template picker
@@ -88,8 +88,15 @@ export const HeadingWithTemplate = Heading.extend({
             'aria-haspopup': 'listbox',
             title: 'Change block template',
             'data-template': templateName,
-            'data-template-label': templateLabel(templateName),
           },
+          [
+            'span',
+            {
+              class: 'squisq-template-badge-core',
+              'data-template-label': templateLabel(templateName),
+              'aria-hidden': 'true',
+            },
+          ],
         ],
         propsBadgeSpec(propsSummary),
       ];
@@ -109,6 +116,14 @@ export const HeadingWithTemplate = Heading.extend({
           'aria-haspopup': 'listbox',
           title: 'Choose block template',
         },
+        [
+          'span',
+          {
+            class: 'squisq-template-badge-core',
+            'data-template-label': 'Block',
+            'aria-hidden': 'true',
+          },
+        ],
       ],
       propsBadgeSpec(propsSummary),
     ];

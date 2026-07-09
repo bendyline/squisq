@@ -199,6 +199,11 @@ interface DocPlayerProps {
    *   template-annotated sections as inline SVG cards. No audio, no timeline.
    */
   displayMode?: DisplayMode;
+  /**
+   * Whether to synthesize and show the managed cover slide from
+   * `doc.startBlock`. Defaults to true for existing documents.
+   */
+  showCoverSlide?: boolean;
   /** Caption display style (default: 'standard').
    *  'social' shows large centered words with the active word highlighted. */
   captionStyle?: CaptionStyle;
@@ -274,6 +279,7 @@ function DocPlayerContent({
   onBlockMarkers,
   forceViewport,
   displayMode = 'video',
+  showCoverSlide = true,
   theme,
   surface,
   captionStyle = 'standard',
@@ -403,6 +409,7 @@ function DocPlayerContent({
   // Expand cover block (startBlock) if present - uses active viewport
   const coverBlock = useMemo((): Block | null => {
     const startBlockConfig = doc.startBlock as StartBlockConfig | undefined;
+    if (!showCoverSlide) return null;
     if (!startBlockConfig) return null;
 
     const context = createTemplateContext(effectiveTheme, 0, 1, activeViewport);
@@ -415,7 +422,24 @@ function DocPlayerContent({
       audioSegment: -1,
       layers,
     };
-  }, [doc.startBlock, activeViewport, effectiveTheme]);
+  }, [doc.startBlock, activeViewport, effectiveTheme, showCoverSlide]);
+
+  // Slideshow mode treats the managed cover as a static slide before block 1.
+  // It has no timeline startTime, so keep its visibility separate from audio.
+  const hasManagedCover = !!coverBlock;
+  const [slideshowCoverVisible, setSlideshowCoverVisible] = useState(false);
+  const slideshowCoverInitKeyRef = useRef('');
+  useEffect(() => {
+    const initKey = `${isSlideshowMode}:${hasManagedCover}:${renderMode}`;
+    if (slideshowCoverInitKeyRef.current === initKey) return;
+    slideshowCoverInitKeyRef.current = initKey;
+    if (isSlideshowMode && hasManagedCover && !renderMode) {
+      setSlideshowCoverVisible(true);
+      pause();
+    } else {
+      setSlideshowCoverVisible(false);
+    }
+  }, [isSlideshowMode, hasManagedCover, renderMode, pause]);
 
   // Render-mode cover block control: allows Playwright to force-show the cover block
   const [coverForced, setCoverForced] = useState(false);
@@ -431,6 +455,7 @@ function DocPlayerContent({
   // Track when cover is showing at rest (before play)
   const atRest = !!(
     coverBlock &&
+    !isSlideshowMode &&
     !isPlaying &&
     currentTime === 0 &&
     !hasPlayedOnce.current &&
@@ -440,7 +465,7 @@ function DocPlayerContent({
   if (atRest) coverWasShowing.current = true;
 
   useEffect(() => {
-    if (isPlaying && coverWasShowing.current && coverBlock && !renderMode) {
+    if (isPlaying && coverWasShowing.current && coverBlock && !renderMode && !isSlideshowMode) {
       coverWasShowing.current = false;
       hasPlayedOnce.current = true;
       setCoverGraceActive(true);
@@ -450,7 +475,7 @@ function DocPlayerContent({
       // re-run (coverWasShowing.current is now false).
       coverGraceTimer.current = setTimeout(() => setCoverGraceActive(false), 3000);
     }
-  }, [isPlaying, coverBlock, renderMode]);
+  }, [isPlaying, coverBlock, renderMode, isSlideshowMode]);
 
   // Always clear the grace timer on unmount
   useEffect(() => () => clearTimeout(coverGraceTimer.current), []);
@@ -458,14 +483,31 @@ function DocPlayerContent({
   // Determine if we should show the cover block
   // Show cover when: has cover block, not playing, at time 0, not in render mode
   // OR during the grace period after first play, OR when coverForced (render mode)
-  // Cover block is suppressed in slideshow and linear mode — start directly on content
-  const showCoverBlock =
+  const showVideoCoverBlock =
     !isSlideshowMode &&
     !isLinearMode &&
-    coverBlock &&
+    !!coverBlock &&
     (coverForced ||
       coverGraceActive ||
       (!isPlaying && currentTime === 0 && !hasPlayedOnce.current && !renderMode && !autoPlay));
+  const showSlideshowCover = !!(
+    isSlideshowMode &&
+    !isLinearMode &&
+    !renderMode &&
+    coverBlock &&
+    slideshowCoverVisible
+  );
+  const showCoverBlock = showVideoCoverBlock || showSlideshowCover;
+
+  const slideshowHasCover = !!(isSlideshowMode && !renderMode && coverBlock);
+  const slideshowSlideIndex = slideshowHasCover
+    ? slideshowCoverVisible
+      ? 0
+      : currentBlockIndex + 1
+    : currentBlockIndex;
+  const slideshowTotalSlides = slideshowHasCover
+    ? expandedBlocks.length + 1
+    : expandedBlocks.length;
 
   // Auto-play if enabled (wait for audio to be ready)
   // Use a ref to track if we've already auto-played to avoid repeating on every render
@@ -714,8 +756,8 @@ function DocPlayerContent({
       isPlaying,
       currentTime,
       totalDuration,
-      currentBlockIndex,
-      totalBlocks: expandedBlocks.length,
+      currentBlockIndex: slideshowSlideIndex,
+      totalBlocks: slideshowTotalSlides,
       docProgress,
       hasCaptions: !!hasCaptions,
       captionsEnabled,
@@ -724,15 +766,19 @@ function DocPlayerContent({
       currentSegmentIndex: currentSegment,
       currentSegmentName:
         segmentTitleMap.get(currentSegment) ?? doc.audio.segments[currentSegment]?.name ?? null,
-      currentBlock: currentBlock ?? null,
+      currentBlock: showSlideshowCover ? coverBlock : (currentBlock ?? null),
+      currentSlideLabel: showSlideshowCover ? 'Cover' : undefined,
+      currentSlideNumber:
+        slideshowHasCover && !showSlideshowCover ? currentBlockIndex + 1 : undefined,
+      totalSlideNumber: slideshowHasCover ? expandedBlocks.length : undefined,
     }),
     // eslint-disable-next-line react-hooks/exhaustive-deps -- doc.audio.segments is stable within a given doc
     [
       isPlaying,
       currentTime,
       totalDuration,
-      currentBlockIndex,
-      expandedBlocks.length,
+      slideshowSlideIndex,
+      slideshowTotalSlides,
       docProgress,
       hasCaptions,
       captionsEnabled,
@@ -741,6 +787,11 @@ function DocPlayerContent({
       currentSegment,
       segmentTitleMap,
       currentBlock,
+      currentBlockIndex,
+      showSlideshowCover,
+      coverBlock,
+      slideshowHasCover,
+      expandedBlocks.length,
     ],
   );
 
@@ -762,24 +813,56 @@ function DocPlayerContent({
   const slideNavActions: SlideNavActions = useMemo(
     () => ({
       nextSlide: () => {
+        if (slideshowHasCover && slideshowCoverVisible) {
+          const target = expandedBlocks[0];
+          if (target) {
+            setSlideshowCoverVisible(false);
+            seekTo(target.startTime);
+            pause();
+          }
+          return;
+        }
         if (currentBlockIndex < expandedBlocks.length - 1) {
           const target = expandedBlocks[currentBlockIndex + 1];
           if (target) {
+            setSlideshowCoverVisible(false);
             seekTo(target.startTime);
             pause();
           }
         }
       },
       prevSlide: () => {
+        if (slideshowHasCover && !slideshowCoverVisible && currentBlockIndex <= 0) {
+          setSlideshowCoverVisible(true);
+          seekTo(0);
+          pause();
+          return;
+        }
         if (currentBlockIndex > 0) {
           const target = expandedBlocks[currentBlockIndex - 1];
           if (target) {
+            setSlideshowCoverVisible(false);
             seekTo(target.startTime);
             pause();
           }
         }
       },
       goToSlide: (index: number) => {
+        if (slideshowHasCover) {
+          if (index === 0) {
+            setSlideshowCoverVisible(true);
+            seekTo(0);
+            pause();
+            return;
+          }
+          const target = expandedBlocks[index - 1];
+          if (target) {
+            setSlideshowCoverVisible(false);
+            seekTo(target.startTime);
+            pause();
+          }
+          return;
+        }
         if (index >= 0 && index < expandedBlocks.length) {
           const target = expandedBlocks[index];
           if (target) {
@@ -789,7 +872,7 @@ function DocPlayerContent({
         }
       },
     }),
-    [currentBlockIndex, expandedBlocks, seekTo, pause],
+    [currentBlockIndex, expandedBlocks, seekTo, pause, slideshowHasCover, slideshowCoverVisible],
   );
 
   // Drag-to-swipe navigation for slideshow mode. Inert unless in slideshow mode,
@@ -798,8 +881,8 @@ function DocPlayerContent({
   const swipe = useSlideSwipe({
     enabled: swipeEnabled,
     containerRef,
-    canGoNext: currentBlockIndex < expandedBlocks.length - 1,
-    canGoPrev: currentBlockIndex > 0,
+    canGoNext: slideshowSlideIndex < slideshowTotalSlides - 1,
+    canGoPrev: slideshowSlideIndex > 0,
     onNext: slideNavActions.nextSlide,
     onPrev: slideNavActions.prevSlide,
   });
@@ -873,7 +956,7 @@ function DocPlayerContent({
   }, [blockMarkers, onBlockMarkers]);
 
   // Keep expandedBlocks length in a ref so keyboard handler stays stable
-  expandedBlocksLenRef.current = expandedBlocks.length;
+  expandedBlocksLenRef.current = isSlideshowMode ? slideshowTotalSlides : expandedBlocks.length;
 
   // Handle keyboard controls — uses refs for frequently-changing values
   // (currentTime, totalDuration, expandedBlocks.length) to avoid

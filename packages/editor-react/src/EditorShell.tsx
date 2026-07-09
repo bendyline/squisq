@@ -34,8 +34,6 @@ import { ImageEditor } from './ImageEditor';
 import {
   PreviewSettingsProvider,
   PreviewToolbarControls,
-  PreviewModeSwitch,
-  PreviewFormatSwitch,
   ThemeDesignerDock,
 } from './PreviewControls';
 import { CustomThemeProvider, useDocCustomThemes } from './customThemes';
@@ -49,7 +47,10 @@ import {
   processTextFile,
   processTextFiles,
 } from './utils/dropUtils';
-import { removeMediaReferencesFromMarkdown } from './mediaReferences';
+import {
+  collectMediaReferencesFromMarkdown,
+  removeMediaReferencesFromMarkdown,
+} from './mediaReferences';
 import type { MediaProvider, Theme } from '@bendyline/squisq/schemas';
 import { DARK_SURFACE, LIGHT_SURFACE } from '@bendyline/squisq/schemas';
 import type { ContentContainer } from '@bendyline/squisq/storage';
@@ -636,6 +637,10 @@ function EditorShellInner({
   const [mediaRefreshKey, setMediaRefreshKey] = useState(0);
   const [mediaCount, setMediaCount] = useState(0);
   const mediaListRefreshKey = mediaRefreshKey + mediaRevision;
+  const usedMediaPaths = useMemo(
+    () => collectMediaReferencesFromMarkdown(markdownSource),
+    [markdownSource],
+  );
   // Persistent fallback container for image-edit sidecars when the host
   // didn't supply one. Lifted to shell scope so opening the same image
   // multiple times sees the same `.imageEdits/<sanitized>/.versions/...`
@@ -879,22 +884,8 @@ function EditorShellInner({
                 fileCount={mediaCount}
                 onToggleFiles={!isCodeMode && filesToggleEnabled ? handleToggleFiles : undefined}
                 slotLeft={toolbarSlotLeft}
-                slotAfterTabs={
-                  !isCodeMode &&
-                  isPreview && (
-                    <div className="squisq-preview-left-controls">
-                      <PreviewModeSwitch />
-                      <span className="squisq-preview-seg-divider" aria-hidden="true" />
-                      <PreviewFormatSwitch />
-                    </div>
-                  )
-                }
-                slotAfterActions={
-                  <>
-                    {toolbarSlotAfterActions}
-                    {!isCodeMode && isPreview && <PreviewToolbarControls />}
-                  </>
-                }
+                slotAfterTabs={!isCodeMode && isPreview && <PreviewToolbarControls />}
+                slotAfterActions={toolbarSlotAfterActions}
                 slotRight={toolbarSlotRight}
                 showPlayTab={showPlayTab}
               />
@@ -1044,6 +1035,7 @@ function EditorShellInner({
                 mediaProvider={mediaProvider}
                 isDark={isDark}
                 refreshKey={mediaListRefreshKey}
+                usedMediaPaths={usedMediaPaths}
                 onMediaUploaded={handleMediaUploaded}
                 onMediaRemoved={handleMediaRemoved}
                 onCountChange={setMediaCount}

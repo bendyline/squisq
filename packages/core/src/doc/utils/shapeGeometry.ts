@@ -9,9 +9,11 @@
  *  - `markerPath(style, dir)` → the `<marker>` path for a line end-style, in the
  *    standard 0–10 marker viewBox (shared by the SSR `PathLayer` renderer and the
  *    editor's edge renderer).
- *  - `connectorPath(routing, start, end)` + `clipEndpoints(a, b)` → the line/edge
+ *  - `connectorPath(routing, start, end)` + `snapEndpoints(a, b)` → the line/edge
  *    geometry between two shapes (straight / orthogonal / curved), lifted from the
- *    diagram template so drawings and diagrams draw identical connectors.
+ *    diagram template so drawings and diagrams draw identical connectors. The older
+ *    `clipEndpoints(a, b)` helper remains for free-angle clipping, but rendered
+ *    connectors use snapped ports so authored lines land on stable attachment points.
  */
 
 import type { MarkerStyle } from '../../schemas/Doc.js';
@@ -411,6 +413,22 @@ export interface ClipBox {
   ry: number;
 }
 
+export type ConnectorPort =
+  | 'top'
+  | 'right'
+  | 'bottom'
+  | 'left'
+  | 'top-left'
+  | 'top-right'
+  | 'bottom-right'
+  | 'bottom-left';
+
+export interface ConnectorSnapPoint {
+  port: ConnectorPort;
+  x: number;
+  y: number;
+}
+
 /** Intersection of the center-to-center line with `from`'s bounding box. */
 export function clipPoint(from: ClipBox, to: ClipBox): { x: number; y: number } {
   const dx = to.cx - from.cx;
@@ -428,6 +446,73 @@ export function clipEndpoints(
   b: ClipBox,
 ): { start: { x: number; y: number }; end: { x: number; y: number } } {
   return { start: clipPoint(a, b), end: clipPoint(b, a) };
+}
+
+/** The stable connector ports exposed around a shape/card box. */
+export function snapPoints(box: ClipBox): ConnectorSnapPoint[] {
+  const left = box.cx - box.rx;
+  const right = box.cx + box.rx;
+  const top = box.cy - box.ry;
+  const bottom = box.cy + box.ry;
+  return [
+    { port: 'top', x: box.cx, y: top },
+    { port: 'right', x: right, y: box.cy },
+    { port: 'bottom', x: box.cx, y: bottom },
+    { port: 'left', x: left, y: box.cy },
+    { port: 'top-left', x: left, y: top },
+    { port: 'top-right', x: right, y: top },
+    { port: 'bottom-right', x: right, y: bottom },
+    { port: 'bottom-left', x: left, y: bottom },
+  ];
+}
+
+/** Nearest stable connector port on `box` to an arbitrary point. */
+export function nearestSnapPoint(box: ClipBox, point: { x: number; y: number }): ConnectorSnapPoint {
+  let best = snapPoints(box)[0];
+  let bestScore = Number.POSITIVE_INFINITY;
+  for (const candidate of snapPoints(box)) {
+    const score = distanceSq(candidate, point) + portTieBreak(candidate.port);
+    if (score < bestScore) {
+      best = candidate;
+      bestScore = score;
+    }
+  }
+  return best;
+}
+
+/**
+ * Pick the pair of connector ports, one on each box, with the shortest
+ * distance between them. This gives stable attachments to side/corner handles
+ * instead of arbitrary center-ray intersections.
+ */
+export function snapEndpoints(
+  a: ClipBox,
+  b: ClipBox,
+): { start: ConnectorSnapPoint; end: ConnectorSnapPoint } {
+  let bestStart = snapPoints(a)[0];
+  let bestEnd = snapPoints(b)[0];
+  let bestScore = Number.POSITIVE_INFINITY;
+  for (const start of snapPoints(a)) {
+    for (const end of snapPoints(b)) {
+      const score = distanceSq(start, end) + portTieBreak(start.port) + portTieBreak(end.port);
+      if (score < bestScore) {
+        bestStart = start;
+        bestEnd = end;
+        bestScore = score;
+      }
+    }
+  }
+  return { start: bestStart, end: bestEnd };
+}
+
+function distanceSq(a: { x: number; y: number }, b: { x: number; y: number }): number {
+  const dx = a.x - b.x;
+  const dy = a.y - b.y;
+  return dx * dx + dy * dy;
+}
+
+function portTieBreak(port: ConnectorPort): number {
+  return port.includes('-') ? 0.02 : 0;
 }
 
 /** Build the SVG `d` for a connector between two clipped endpoints. */
