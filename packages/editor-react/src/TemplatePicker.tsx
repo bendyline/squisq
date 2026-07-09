@@ -13,11 +13,11 @@ import { TEMPLATE_METADATA, resolveTemplateName } from '@bendyline/squisq/doc';
 import { extractPlainText } from '@bendyline/squisq/markdown';
 import { useCustomTemplates } from './customTemplates/CustomTemplateContext';
 import { TemplateThumbnail } from './customTemplates/thumbnail';
+import { TemplateContentPreview } from './TemplateContentPreview';
 import {
-  TemplateContentPreview,
   resolveTemplateContentPreviewResult,
   type TemplatePreviewSource,
-} from './TemplateContentPreview';
+} from './templateContentPreviewResolver';
 
 // ── Template metadata ─────────────────────────────────────────────
 //

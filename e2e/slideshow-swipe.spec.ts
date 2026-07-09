@@ -22,6 +22,12 @@ async function enterSlideshow(page: Page) {
   await page
     .locator('[data-testid="slideshow-controls"]')
     .waitFor({ state: 'visible', timeout: 5_000 });
+
+  // The managed cover is a real slideshow entry before numbered content.
+  // Leave it through the explicit control so swipe assertions start on slide 1.
+  await expect(counter(page)).toHaveText('Cover');
+  await page.getByTestId('slide-next').click();
+  await expect(counter(page)).toHaveText(/^1 \/ \d+$/);
 }
 
 function counter(page: Page) {
@@ -79,11 +85,13 @@ test.describe('Slideshow drag-to-swipe', () => {
     await expect(counter(page)).toHaveText(/^2 \//);
   });
 
-  test('dragging past the first slide rubber-bands and stays put', async ({ page }) => {
-    await expect(counter(page)).toHaveText(/^1 \//);
+  test('dragging past the cover rubber-bands and stays put', async ({ page }) => {
+    // The managed cover is the true first entry in this deck.
+    await page.getByTestId('slide-prev').click();
+    await expect(counter(page)).toHaveText('Cover');
     // Drag right hard on the first slide — there is no previous slide.
     await dragPlayer(page, 0.6);
     await page.waitForTimeout(450);
-    await expect(counter(page)).toHaveText(/^1 \//);
+    await expect(counter(page)).toHaveText('Cover');
   });
 });

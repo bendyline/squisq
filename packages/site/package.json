@@ -7,7 +7,7 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "preview": "vite preview",
-    "preview:e2e": "vite preview --host 127.0.0.1 --port 5199 --strictPort"
+    "preview:e2e": "vite preview --host 127.0.0.1 --strictPort"
   },
   "dependencies": {
     "@bendyline/squisq": "*",

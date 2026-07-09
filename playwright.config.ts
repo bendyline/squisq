@@ -1,6 +1,29 @@
 import { defineConfig, devices } from '@playwright/test';
+import { findAvailablePort, SQUISQ_DEV_PORT, SQUISQ_E2E_PORT } from './scripts/portUtils';
 
-const e2eBaseUrl = 'http://127.0.0.1:5199';
+function readE2ePort(value: string, variableName: string): number {
+  const port = Number(value);
+  if (!Number.isInteger(port) || port < 1024 || port > 65_535) {
+    throw new Error(`${variableName} must be an integer between 1024 and 65535.`);
+  }
+  return port;
+}
+
+const selectedPort = process.env.SQUISQ_E2E_SELECTED_PORT;
+const e2ePort = selectedPort
+  ? readE2ePort(selectedPort, 'SQUISQ_E2E_SELECTED_PORT')
+  : await findAvailablePort({
+      preferredPort: process.env.SQUISQ_E2E_PORT
+        ? readE2ePort(process.env.SQUISQ_E2E_PORT, 'SQUISQ_E2E_PORT')
+        : SQUISQ_E2E_PORT,
+      excludedPorts: [SQUISQ_DEV_PORT],
+    });
+
+// Playwright loads this config in both its coordinator and worker processes.
+// Pin the coordinator's allocation so workers do not see the preview server
+// itself as a collision and select a different base URL.
+process.env.SQUISQ_E2E_SELECTED_PORT = String(e2ePort);
+const e2eBaseUrl = `http://127.0.0.1:${e2ePort}`;
 const htmlReportOpenMode = 'never';
 
 // Keep repo test scripts non-interactive even if a shell has
@@ -21,6 +44,7 @@ export default defineConfig({
   workers: process.env.CI ? 1 : undefined,
   reporter: [['html', { open: htmlReportOpenMode }]],
   timeout: 30_000,
+  globalSetup: './e2e/globalSetup.ts',
 
   use: {
     baseURL: e2eBaseUrl,
@@ -33,15 +57,4 @@ export default defineConfig({
       use: { ...devices['Desktop Chrome'] },
     },
   ],
-
-  /* Serve the built Vite site before running tests. */
-  webServer: {
-    command: 'npm run preview:e2e -w squisq-site',
-    url: e2eBaseUrl,
-    // Always run against the built preview server for this suite. Reusing an
-    // already-open Vite dev server can hit stale optimized deps and leave the
-    // app shell empty, which makes every UI selector time out.
-    reuseExistingServer: false,
-    timeout: 30_000,
-  },
 });

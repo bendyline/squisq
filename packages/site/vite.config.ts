@@ -4,6 +4,7 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import type { Plugin } from 'vite';
+import { SQUISQ_DEV_PORT, SQUISQ_E2E_PORT } from '../../scripts/portUtils';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -88,14 +89,14 @@ export default defineConfig({
     dedupe: ['react', 'react-dom'],
   },
   server: {
-    port: 5199,
+    port: SQUISQ_DEV_PORT,
     strictPort: true,
     open: true,
     headers: crossOriginHeaders,
   },
   preview: {
     host: '127.0.0.1',
-    port: 5199,
+    port: SQUISQ_E2E_PORT,
     strictPort: true,
     headers: crossOriginHeaders,
   },

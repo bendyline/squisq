@@ -24,8 +24,16 @@ async function waitForDocPlayer(page: Page) {
 
 /** Start playback and wait for the active block to appear (dismisses cover block) */
 async function startPlaybackAndWaitForActiveBlock(page: Page) {
-  await page.locator('.doc-player').click();
-  // Cover block has a 3s grace period; wait for the active block to appear
+  const slideshowControls = page.getByTestId('slideshow-controls');
+  if (await slideshowControls.isVisible()) {
+    const counter = page.getByTestId('slide-counter');
+    if ((await counter.textContent())?.trim() === 'Cover') {
+      await page.getByTestId('slide-next').click();
+    }
+  } else {
+    await page.locator('.doc-player').click();
+  }
+  // Video covers have a 3s grace period; slideshow covers advance immediately.
   await page.locator('.doc-player__block--active').waitFor({ state: 'visible', timeout: 8_000 });
 }
 

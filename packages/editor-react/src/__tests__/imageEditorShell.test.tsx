@@ -9,6 +9,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import { MemoryContentContainer, scopeContainer } from '@bendyline/squisq/storage';
 import { writeImageEditDoc, createEmptyImageEditDoc } from '@bendyline/squisq/imageEdit';
+import { DARK_SURFACE } from '@bendyline/squisq/schemas';
 import { ImageEditor } from '../ImageEditor.js';
 
 beforeEach(() => {
@@ -53,5 +54,27 @@ describe('<ImageEditor>', () => {
     const sidecar = scopeContainer(parent, 'pic_files');
     render(<ImageEditor filesContainer={sidecar} />);
     expect(screen.getByText(/loading image editor/i)).toBeTruthy();
+  });
+
+  it('applies an explicit dark surface to the editor chrome', async () => {
+    const parent = new MemoryContentContainer();
+    const sidecar = scopeContainer(parent, 'pic_files');
+    await writeImageEditDoc(sidecar, createEmptyImageEditDoc(64, 48));
+
+    render(<ImageEditor filesContainer={sidecar} surface={DARK_SURFACE} />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId('image-editor')).toBeTruthy();
+    });
+
+    const editor = screen.getByTestId('image-editor');
+    expect(editor.style.getPropertyValue('--squisq-image-editor-bg')).toBe(DARK_SURFACE.background);
+    expect(editor.style.getPropertyValue('--squisq-image-editor-text')).toBe(DARK_SURFACE.text);
+    expect(editor.style.getPropertyValue('--squisq-image-editor-panel-bg')).toBe(
+      `color-mix(in srgb, ${DARK_SURFACE.background} 92%, ${DARK_SURFACE.text} 8%)`,
+    );
+    expect(editor.style.getPropertyValue('--squisq-image-editor-control-bg')).toBe(
+      `color-mix(in srgb, ${DARK_SURFACE.background} 86%, ${DARK_SURFACE.text} 14%)`,
+    );
   });
 });

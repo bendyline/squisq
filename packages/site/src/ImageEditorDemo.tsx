@@ -13,7 +13,8 @@ import {
   scopeContainer,
   type ContentContainer,
 } from '@bendyline/squisq/storage';
-import { ImageEditor } from '@bendyline/squisq-editor-react';
+import { DARK_SURFACE, LIGHT_SURFACE } from '@bendyline/squisq/schemas';
+import { ImageEditor, type EditorColorScheme } from '@bendyline/squisq-editor-react';
 
 /** Build a small radial-gradient PNG that we can hand to the editor. */
 async function buildSeedPng(width = 480, height = 320): Promise<Blob | null> {
@@ -43,7 +44,11 @@ async function buildSeedPng(width = 480, height = 320): Promise<Blob | null> {
   return await new Promise((resolve) => canvas.toBlob((b) => resolve(b), 'image/png'));
 }
 
-export function ImageEditorDemo() {
+interface ImageEditorDemoProps {
+  colorScheme: EditorColorScheme;
+}
+
+export function ImageEditorDemo({ colorScheme }: ImageEditorDemoProps) {
   // One container per mount of this demo so reloads start fresh.
   const parent = useMemo<ContentContainer>(() => new MemoryContentContainer(), []);
   const sidecar = useMemo(() => scopeContainer(parent, 'pic_files'), [parent]);
@@ -89,6 +94,7 @@ export function ImageEditorDemo() {
         initialSrc={seedUrl}
         allowVersioning
         versioningAutoSaveIdleMs={3000}
+        surface={colorScheme === 'dark' ? DARK_SURFACE : LIGHT_SURFACE}
       />
     </div>
   );

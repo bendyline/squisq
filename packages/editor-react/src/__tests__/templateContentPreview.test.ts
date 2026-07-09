@@ -5,8 +5,8 @@ import { VIEWPORT_PRESETS } from '@bendyline/squisq/schemas';
 import {
   resolveTemplateContentPreview,
   resolveTemplateContentPreviewResult,
-} from '../TemplateContentPreview';
-import type { TemplatePreviewSource } from '../TemplateContentPreview';
+  type TemplatePreviewSource,
+} from '../templateContentPreviewResolver';
 
 function previewSource(markdown: string): TemplatePreviewSource {
   const doc = markdownToDoc(parseMarkdown(markdown), { autoTemplates: false });

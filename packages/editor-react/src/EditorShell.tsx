@@ -921,6 +921,7 @@ function EditorShellInner({
                     allowVersioning={allowVersioning}
                     versioningAutoSaveIdleMs={versioningAutoSaveIdleMs}
                     onExport={onImageExport}
+                    surface={colorScheme === 'dark' ? DARK_SURFACE : LIGHT_SURFACE}
                   />
                 ) : (
                   <ImageViewer src={imageSrc} alt={imageAlt} theme={colorScheme} />

@@ -528,11 +528,11 @@ export function App() {
         </div>
       ) : showImageEditorDemo ? (
         <div style={{ flex: 1, overflow: 'hidden' }}>
-          <ImageEditorDemo />
+          <ImageEditorDemo colorScheme={colorScheme} />
         </div>
       ) : showJsonDemo ? (
         <div style={{ flex: 1, overflow: 'hidden' }}>
-          <JsonEditorDemo />
+          <JsonEditorDemo colorScheme={colorScheme} />
         </div>
       ) : (
         <MediaContext.Provider value={mediaProvider}>
