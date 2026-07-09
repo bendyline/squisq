@@ -1,3 +1,9 @@
+## @bendyline/squisq [1.5.2](https://github.com/bendyline/squisq/compare/@bendyline/squisq@1.5.1...@bendyline/squisq@1.5.2) (2026-07-09)
+
+### Bug Fixes
+
+* Many quality and UX consistency updates ([#20](https://github.com/bendyline/squisq/issues/20)) ([39730ab](https://github.com/bendyline/squisq/commit/39730ab6ce4ed49115aaf7b45f0673b2abc40f7b))
+
 ## @bendyline/squisq [1.5.1](https://github.com/bendyline/squisq/compare/@bendyline/squisq@1.5.0...@bendyline/squisq@1.5.1) (2026-07-07)
 
 ### Bug Fixes
