@@ -575,6 +575,17 @@ export function WysiwygEditor({
               });
               editor.view.dispatch(tr);
             }}
+            onAnnotationChange={(next) => {
+              if (!editor) return;
+              const current = editor.state.doc.nodeAt(propsMenu.headingPos);
+              if (!current || current.type.name !== 'heading') return;
+              const tr = editor.state.tr.setNodeMarkup(propsMenu.headingPos, undefined, {
+                ...current.attrs,
+                dataBlockAttrs: next.blockAttrsInner,
+                dataTemplateParams: next.templateParams,
+              });
+              editor.view.dispatch(tr);
+            }}
             onClose={() => setPropsMenu(null)}
           />
         )}

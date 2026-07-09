@@ -13,7 +13,11 @@ import { TEMPLATE_METADATA, resolveTemplateName } from '@bendyline/squisq/doc';
 import { extractPlainText } from '@bendyline/squisq/markdown';
 import { useCustomTemplates } from './customTemplates/CustomTemplateContext';
 import { TemplateThumbnail } from './customTemplates/thumbnail';
-import { TemplateContentPreview, type TemplatePreviewSource } from './TemplateContentPreview';
+import {
+  TemplateContentPreview,
+  resolveTemplateContentPreviewResult,
+  type TemplatePreviewSource,
+} from './TemplateContentPreview';
 
 // ── Template metadata ─────────────────────────────────────────────
 //
@@ -68,7 +72,7 @@ function TemplateIcon({ children }: { children: React.ReactNode }) {
 const NONE_ENTRY: TemplateEntry = {
   name: '',
   label: '— none —',
-  description: 'Plain heading block with no visual template.',
+  description: 'Plain heading block with no visual treatment.',
   icon: (
     <TemplateIcon>
       <rect
@@ -669,7 +673,7 @@ export function TemplatePicker({
         onClick={handleOpen}
         aria-haspopup="dialog"
         aria-expanded={open}
-        title="Choose block template"
+        title="Choose block type"
       >
         <span className="squisq-template-picker-trigger-label">Block:</span>
         <span className="squisq-template-picker-trigger-thumb" aria-hidden="true">
@@ -737,7 +741,7 @@ function TemplateGalleryDialog({
             type="button"
             className="squisq-template-gallery-dialog-close"
             onClick={onClose}
-            aria-label="Close template picker"
+            aria-label="Close block type picker"
           >
             <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true">
               <path
@@ -796,6 +800,24 @@ function TemplateCard({
   );
 }
 
+function splitBlockTypeEntriesByContent(
+  entries: readonly TemplateEntry[],
+  previewSource?: TemplatePreviewSource,
+): { blockTypeEntries: TemplateEntry[]; contentNeededEntries: TemplateEntry[] } {
+  if (!previewSource) return { blockTypeEntries: [...entries], contentNeededEntries: [] };
+
+  const blockTypeEntries: TemplateEntry[] = [];
+  const contentNeededEntries: TemplateEntry[] = [];
+
+  for (const entry of entries) {
+    const result = resolveTemplateContentPreviewResult(entry.name, previewSource);
+    if (result.warning) contentNeededEntries.push(entry);
+    else blockTypeEntries.push(entry);
+  }
+
+  return { blockTypeEntries, contentNeededEntries };
+}
+
 function TemplateGalleryBody({
   value,
   onSelect,
@@ -849,21 +871,33 @@ function TemplateGalleryBody({
     return { built, custom };
   }, [hasQuery, trimmedQuery, customTemplates]);
 
-  const recommendedSet = recommended && recommended.length > 0 ? new Set(recommended) : null;
-  const recommendedEntries = recommendedSet
-    ? TEMPLATE_ENTRIES.filter((e) => recommendedSet.has(e.name))
-    : [];
-  const restEntries = recommendedSet
-    ? TEMPLATE_ENTRIES.filter((e) => !recommendedSet.has(e.name))
-    : TEMPLATE_ENTRIES;
-  const segmented = !hasQuery && recommendedEntries.length > 0;
+  const recommendedSet = useMemo(
+    () => (recommended && recommended.length > 0 ? new Set(recommended) : null),
+    [recommended],
+  );
+  const recommendedEntries = useMemo(
+    () => (recommendedSet ? TEMPLATE_ENTRIES.filter((e) => recommendedSet.has(e.name)) : []),
+    [recommendedSet],
+  );
+  const restEntries = useMemo(
+    () =>
+      recommendedSet
+        ? TEMPLATE_ENTRIES.filter((e) => !recommendedSet.has(e.name))
+        : TEMPLATE_ENTRIES,
+    [recommendedSet],
+  );
+  const { blockTypeEntries, contentNeededEntries } = useMemo(
+    () => splitBlockTypeEntriesByContent(restEntries, previewSource),
+    [restEntries, previewSource],
+  );
+  const grouped = !hasQuery && (recommendedEntries.length > 0 || contentNeededEntries.length > 0);
 
   return (
     <div
       id={TEMPLATE_GALLERY_PORTAL_ID}
-      className={`squisq-template-gallery${segmented ? ' squisq-template-gallery--segmented' : ''}`}
+      className={`squisq-template-gallery${grouped ? ' squisq-template-gallery--segmented' : ''}`}
       role="listbox"
-      aria-label="Block templates"
+      aria-label="Block types"
       style={style}
     >
       <div className="squisq-template-gallery-search">
@@ -882,10 +916,10 @@ function TemplateGalleryBody({
           ref={searchRef}
           type="search"
           className="squisq-template-gallery-search-input"
-          placeholder="Search templates…"
+          placeholder="Search block types…"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          aria-label="Search block templates"
+          aria-label="Search block types"
         />
       </div>
 
@@ -936,7 +970,7 @@ function TemplateGalleryBody({
             )}
           </>
         ) : (
-          <div className="squisq-template-gallery-empty">No templates match "{query}".</div>
+          <div className="squisq-template-gallery-empty">No block types match "{query}".</div>
         )
       ) : (
         <>
@@ -948,9 +982,9 @@ function TemplateGalleryBody({
                 +
               </span>
               <span className="squisq-template-gallery-new-body">
-                <span className="squisq-template-gallery-new-label">New layout</span>
+                <span className="squisq-template-gallery-new-label">New block type</span>
                 <span className="squisq-template-gallery-new-desc">
-                  Design a reusable layout with placeholders for {'{title}'} and {'{content}'}.
+                  Design a reusable block type with placeholders for {'{title}'} and {'{content}'}.
                 </span>
               </span>
             </button>
@@ -967,9 +1001,9 @@ function TemplateGalleryBody({
             </div>
           )}
 
-          {segmented && (
+          {recommendedEntries.length > 0 && (
             <div className="squisq-template-gallery-section">
-              <h3 className="squisq-template-gallery-section-title">Recommended for this block</h3>
+              <h3 className="squisq-template-gallery-section-title">Suggested Block Types</h3>
               <div className="squisq-template-gallery-grid">
                 {recommendedEntries.map((entry) => (
                   <TemplateCard
@@ -984,24 +1018,45 @@ function TemplateGalleryBody({
             </div>
           )}
 
-          {segmented ? (
-            <div className="squisq-template-gallery-section">
-              <h3 className="squisq-template-gallery-section-title">All templates</h3>
-              <div className="squisq-template-gallery-grid">
-                {restEntries.map((entry) => (
-                  <TemplateCard
-                    key={entry.name}
-                    entry={entry}
-                    value={value}
-                    onSelect={onSelect}
-                    previewSource={previewSource}
-                  />
-                ))}
-              </div>
-            </div>
+          {grouped ? (
+            <>
+              {blockTypeEntries.length > 0 && (
+                <div className="squisq-template-gallery-section">
+                  <h3 className="squisq-template-gallery-section-title">Block Types</h3>
+                  <div className="squisq-template-gallery-grid">
+                    {blockTypeEntries.map((entry) => (
+                      <TemplateCard
+                        key={entry.name}
+                        entry={entry}
+                        value={value}
+                        onSelect={onSelect}
+                        previewSource={previewSource}
+                      />
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {contentNeededEntries.length > 0 && (
+                <div className="squisq-template-gallery-section">
+                  <h3 className="squisq-template-gallery-section-title">Block Types for Content</h3>
+                  <div className="squisq-template-gallery-grid">
+                    {contentNeededEntries.map((entry) => (
+                      <TemplateCard
+                        key={entry.name}
+                        entry={entry}
+                        value={value}
+                        onSelect={onSelect}
+                        previewSource={previewSource}
+                      />
+                    ))}
+                  </div>
+                </div>
+              )}
+            </>
           ) : (
             <div className="squisq-template-gallery-grid">
-              {restEntries.map((entry) => (
+              {blockTypeEntries.map((entry) => (
                 <TemplateCard
                   key={entry.name}
                   entry={entry}
@@ -1051,7 +1106,7 @@ function CustomTemplateCard({
       <div className="squisq-template-gallery-card-body">
         <span className="squisq-template-gallery-card-name">{def.label}</span>
         <span className="squisq-template-gallery-card-desc">
-          {def.description ?? 'Custom template'}
+          {def.description ?? 'Custom block type'}
         </span>
       </div>
     </button>

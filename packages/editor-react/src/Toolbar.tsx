@@ -16,6 +16,12 @@ import type { IRange } from 'monaco-editor';
 import type { Block } from '@bendyline/squisq/schemas';
 import { VIEWPORT_PRESETS } from '@bendyline/squisq/schemas';
 import { DEFAULT_THEME, flattenBlocks } from '@bendyline/squisq/doc';
+import {
+  KNOWN_BLOCK_META_KEYS,
+  matchTrailingTemplateAnnotation,
+  splitKeyValueToken,
+  tokenizeAttrTokens,
+} from '@bendyline/squisq/markdown';
 import { useEditorContext, type EditorView } from './EditorContext';
 import { VersionHistoryPanel } from './VersionHistoryPanel';
 import { RecorderEntry } from './RecorderEntry';
@@ -31,7 +37,7 @@ import {
   readHeadingLineTransition,
   setHeadingLineTransition,
   readBlockAttrsTransition,
-  setBlockAttrsTransition,
+  setHeadingAttrsTransition,
   EMPTY_TRANSITION,
   type TransitionFields,
 } from './headingTransition';
@@ -51,6 +57,8 @@ const VIEWS: { id: EditorView; label: string; shortLabel?: string; shortcut: str
   { id: 'raw', label: 'Source', shortcut: '⌘2' },
   { id: 'preview', label: 'Use', shortcut: '⌘3' },
 ];
+
+const BLOCK_META_KEYS = new Set<string>(Object.keys(KNOWN_BLOCK_META_KEYS));
 
 export interface ToolbarProps {
   /** Additional class name */
@@ -430,6 +438,35 @@ function findBlockBySourceLine(blocks: readonly Block[], lineNumber: number): Bl
     if (pos.start.line <= lineNumber && pos.end.line >= lineNumber) return block;
   }
   return null;
+}
+
+function splitTemplateAnnotationParams(text: string): { text: string; params: string[] } {
+  const match = matchTrailingTemplateAnnotation(text);
+  if (!match) return { text: text.trimEnd(), params: [] };
+  const tokens = tokenizeAttrTokens(match.inner.trim());
+  const firstIsParam = tokens.length > 0 && tokens[0].indexOf('=') > 0;
+  return {
+    text: text.slice(0, match.index).trimEnd(),
+    params: keepBlockMetaParamTokens(tokens.slice(firstIsParam ? 0 : 1)),
+  };
+}
+
+function buildTemplateAnnotation(template: string, params: string[]): string | null {
+  const parts = template ? [template, ...params] : params;
+  return parts.length > 0 ? `{[${parts.join(' ')}]}` : null;
+}
+
+function keepBlockMetaParamTokens(tokens: readonly string[]): string[] {
+  return tokens.filter((token) => {
+    const kv = splitKeyValueToken(token);
+    return kv ? BLOCK_META_KEYS.has(kv.key) : false;
+  });
+}
+
+function keepBlockMetaParamString(inner: string | null | undefined): string | null {
+  if (!inner) return null;
+  const params = keepBlockMetaParamTokens(tokenizeAttrTokens(inner));
+  return params.length > 0 ? params.join(' ') : null;
 }
 
 /**
@@ -1392,11 +1429,11 @@ export function Toolbar({
       }
       setRawHeadingLine(pos.lineNumber);
       setRawTransition(readHeadingLineTransition(line));
-      const annotMatch = headingMatch[1].match(/\s*\{\[([^\]]+)\]\}[\s\]}]*$/);
+      const annotMatch = matchTrailingTemplateAnnotation(headingMatch[1]);
       if (annotMatch) {
-        // First whitespace-delimited token is the template name; the rest are params.
-        const name = annotMatch[1].trim().split(/\s+/)[0];
-        setRawTemplate(name);
+        const tokens = tokenizeAttrTokens(annotMatch.inner.trim());
+        const firstIsParam = tokens.length > 0 && tokens[0].indexOf('=') > 0;
+        setRawTemplate(firstIsParam ? '' : (tokens[0] ?? ''));
       } else {
         setRawTemplate('');
       }
@@ -1524,9 +1561,9 @@ export function Toolbar({
       const headingMatch = lineText.match(/^(#{1,6}\s+)(.+)$/);
       if (!headingMatch) return;
       const prefix = headingMatch[1];
-      // Strip any existing trailing annotation
-      const bareText = headingMatch[2].replace(/\s*\{\[[^\]]+\]\}[\s\]}]*$/, '').trimEnd();
-      const newLine = value === '' ? `${prefix}${bareText}` : `${prefix}${bareText} {[${value}]}`;
+      const { text: bareText, params } = splitTemplateAnnotationParams(headingMatch[2]);
+      const annotation = buildTemplateAnnotation(value, params);
+      const newLine = annotation ? `${prefix}${bareText} ${annotation}` : `${prefix}${bareText}`;
       monacoEditor.executeEdits('toolbar-template-pick', [
         {
           range: {
@@ -1543,14 +1580,22 @@ export function Toolbar({
     }
     // WYSIWYG — update the heading node attributes.
     if (!tiptapEditor) return;
+    const attrs = tiptapEditor.getAttributes('heading') as {
+      dataTemplateParams?: string | null;
+    };
+    const dataTemplateParams = keepBlockMetaParamString(attrs.dataTemplateParams);
     if (value === '') {
       tiptapEditor
         .chain()
         .focus()
-        .updateAttributes('heading', { dataTemplate: null, dataTemplateParams: null })
+        .updateAttributes('heading', { dataTemplate: null, dataTemplateParams })
         .run();
     } else {
-      tiptapEditor.chain().focus().updateAttributes('heading', { dataTemplate: value }).run();
+      tiptapEditor
+        .chain()
+        .focus()
+        .updateAttributes('heading', { dataTemplate: value, dataTemplateParams })
+        .run();
     }
   };
 
@@ -1593,11 +1638,22 @@ export function Toolbar({
       monacoEditor.focus();
       return;
     }
-    // WYSIWYG — rewrite the heading node's `dataBlockAttrs` (Pandoc inner).
+    // WYSIWYG — write transitions into `{[…]}` params and migrate legacy
+    // Pandoc transition keys out of `dataBlockAttrs`.
     if (!tiptapEditor) return;
-    const attrs = tiptapEditor.getAttributes('heading') as { dataBlockAttrs?: string | null };
-    const inner = setBlockAttrsTransition(attrs.dataBlockAttrs, next);
-    tiptapEditor.chain().focus().updateAttributes('heading', { dataBlockAttrs: inner }).run();
+    const attrs = tiptapEditor.getAttributes('heading') as {
+      dataBlockAttrs?: string | null;
+      dataTemplateParams?: string | null;
+    };
+    const updated = setHeadingAttrsTransition(attrs.dataBlockAttrs, attrs.dataTemplateParams, next);
+    tiptapEditor
+      .chain()
+      .focus()
+      .updateAttributes('heading', {
+        dataBlockAttrs: updated.blockAttrsInner,
+        dataTemplateParams: updated.templateParams,
+      })
+      .run();
   };
 
   // ── Per-block controls in the overflow menu ────────────

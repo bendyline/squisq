@@ -16,6 +16,14 @@ describe('Template annotation round-trip', () => {
     expect(back.trim()).toBe(original);
   });
 
+  it('round-trips param-only squiggly annotations', () => {
+    const original = '## Intro {[transition=fade]}';
+    const html = markdownToTiptap(original);
+    expect(html).not.toContain('data-template="transition=fade"');
+    expect(html).toContain('data-template-params="transition=fade"');
+    expect(tiptapToMarkdown(html).trim()).toBe(original);
+  });
+
   it('preserves template annotation through Tiptap-rendered HTML (with badge spans)', () => {
     // Simulates HTML that Tiptap actually renders after parse: includes the
     // squisq-heading-content + squisq-template-badge wrapper spans.
@@ -52,5 +60,14 @@ describe('Template annotation round-trip', () => {
     expect(md).not.toContain('*');
     // The CSS-painted summary lives in a data attribute; it must not bleed.
     expect(md).not.toContain('start');
+  });
+
+  it('serializes data-template-params without data-template as a squiggly annotation', () => {
+    const tiptapRendered =
+      '<h2 data-template-params="transition=fade">' +
+      '<span class="squisq-heading-content">Intro</span>' +
+      '<span class="squisq-props-badge" contenteditable="false" data-props-summary="Fade"></span>' +
+      '</h2>';
+    expect(tiptapToMarkdown(tiptapRendered).trim()).toBe('## Intro {[transition=fade]}');
   });
 });

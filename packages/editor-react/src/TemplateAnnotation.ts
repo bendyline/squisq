@@ -86,7 +86,7 @@ export const HeadingWithTemplate = Heading.extend({
             role: 'button',
             tabindex: '0',
             'aria-haspopup': 'listbox',
-            title: 'Change block template',
+            title: 'Change block type',
             'data-template': templateName,
           },
           [
@@ -114,7 +114,7 @@ export const HeadingWithTemplate = Heading.extend({
           role: 'button',
           tabindex: '0',
           'aria-haspopup': 'listbox',
-          title: 'Choose block template',
+          title: 'Choose block type',
         },
         [
           'span',

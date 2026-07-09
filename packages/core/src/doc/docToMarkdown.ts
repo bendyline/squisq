@@ -39,6 +39,8 @@ import {
   writeCustomThemesToFrontmatter,
 } from './customThemesFrontmatter.js';
 
+const TRANSITION_PARAM_KEYS = ['transition', 'transitionDuration', 'transitionDirection'] as const;
+
 /**
  * Convert a Doc with heading-driven blocks back to a MarkdownDocument.
  *
@@ -134,64 +136,81 @@ function synthesizeAnnotationParagraph(block: Block): MarkdownParagraph {
  * template and templateOverrides. Returns a (possibly cloned) heading.
  */
 function ensureAnnotation(block: Block, heading: MarkdownHeading): MarkdownHeading {
-  const attrs = ensureTransitionAttributes(block, heading);
+  const { attributes, transitionParams } = ensureTransitionMetadata(block, heading);
 
   // If the block has a non-default template or overrides, inject an annotation
   const hasExplicitTemplate =
     block.template && block.template !== 'sectionHeader' && block.autoTemplate !== true;
   const hasOverrides = block.templateOverrides && Object.keys(block.templateOverrides).length > 0;
 
-  // If the heading already has an annotation, trust it (it came from parsing).
-  // Transition attrs may still have been injected above if the block changed.
-  if (heading.templateAnnotation) {
-    return attrs === heading.attributes ? heading : { ...heading, attributes: attrs };
-  }
-
-  if (!hasExplicitTemplate && !hasOverrides) {
-    return attrs === heading.attributes ? heading : { ...heading, attributes: attrs };
-  }
-
-  // Clone to avoid mutating the original
-  return {
-    ...heading,
-    children: [...heading.children],
-    attributes: attrs,
-    templateAnnotation: {
-      template: block.template ?? 'sectionHeader',
+  let templateAnnotation = heading.templateAnnotation;
+  if (!templateAnnotation && (hasExplicitTemplate || hasOverrides || transitionParams)) {
+    templateAnnotation = {
+      ...(hasExplicitTemplate ? { template: block.template ?? 'sectionHeader' } : {}),
       ...(hasOverrides ? { params: block.templateOverrides } : {}),
-    },
-  };
+    };
+  }
+
+  if (transitionParams) {
+    templateAnnotation = {
+      ...(templateAnnotation ?? {}),
+      params: {
+        ...(templateAnnotation?.params ?? {}),
+        ...transitionParams,
+      },
+    };
+  }
+
+  if (attributes === heading.attributes && templateAnnotation === heading.templateAnnotation) {
+    return heading;
+  }
+
+  return { ...heading, children: [...heading.children], attributes, templateAnnotation };
 }
 
-function ensureTransitionAttributes(
+function ensureTransitionMetadata(
   block: Block,
   heading: MarkdownHeading,
-): MarkdownHeading['attributes'] {
+): {
+  attributes: MarkdownHeading['attributes'];
+  transitionParams: Record<string, string> | undefined;
+} {
   const transition = block.transition;
-  if (!transition) return heading.attributes;
+  if (!transition) {
+    return { attributes: heading.attributes, transitionParams: undefined };
+  }
 
-  // The transition is deliberately written to BOTH channels, which serve
-  // different consumers:
-  // - `params` is what `stringifyMarkdown` serializes into the Pandoc `{…}`
-  //   attribute text (serializePandocAttributes reads only id/classes/params).
-  // - `blockMeta` is what `markdownToDoc` reads back directly (makeBlock,
-  //   pinnedHeadingMeta) — an in-memory Doc → MarkdownDocument → Doc round
-  //   trip never re-parses params, so a stale/missing `blockMeta.transition`
-  //   would lose or resurrect the wrong transition.
-  const attrs = heading.attributes ?? {};
-  return {
+  // The transition is written to the squisq-native `{[…]}` params for
+  // author-facing markdown, and to `attributes.blockMeta` for the in-memory
+  // Doc → MarkdownDocument → Doc path (which does not re-parse string params).
+  const attrs = removeTransitionParams(heading.attributes) ?? {};
+  const attributes = {
     ...attrs,
-    params: {
-      ...(attrs.params ?? {}),
+    blockMeta: {
+      ...(attrs.blockMeta ?? {}),
+      transition,
+    },
+  };
+  return {
+    attributes,
+    transitionParams: {
       transition: transition.type,
       ...(transition.duration !== undefined
         ? { transitionDuration: String(transition.duration) }
         : {}),
       ...(transition.direction ? { transitionDirection: transition.direction } : {}),
     },
-    blockMeta: {
-      ...(attrs.blockMeta ?? {}),
-      transition,
-    },
+  };
+}
+
+function removeTransitionParams(
+  attrs: MarkdownHeading['attributes'],
+): MarkdownHeading['attributes'] {
+  if (!attrs?.params) return attrs;
+  const params = { ...attrs.params };
+  for (const key of TRANSITION_PARAM_KEYS) delete params[key];
+  return {
+    ...attrs,
+    ...(Object.keys(params).length > 0 ? { params } : { params: undefined }),
   };
 }

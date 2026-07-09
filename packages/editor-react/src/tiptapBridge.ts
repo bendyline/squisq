@@ -251,8 +251,11 @@ export function markdownToTiptap(markdown: string): string {
         // tokens are stored raw — quotes included — so tiptapToMarkdown
         // can re-join them into the annotation verbatim.
         const tokens = tokenizeAttrTokens(templateInner);
-        attrs += ` data-template="${escapeHtml(tokens[0] ?? '')}"`;
-        const params = tokens.slice(1).filter((t) => t.includes('='));
+        const firstIsParam = tokens.length > 0 && tokens[0].indexOf('=') > 0;
+        if (!firstIsParam && tokens[0]) {
+          attrs += ` data-template="${escapeHtml(tokens[0])}"`;
+        }
+        const params = tokens.slice(firstIsParam ? 0 : 1).filter((t) => t.includes('='));
         if (params.length > 0) {
           attrs += ` data-template-params="${escapeHtml(params.join(' '))}"`;
         }
@@ -409,10 +412,11 @@ export function tiptapToMarkdown(html: string): string {
       let text = htmlToInline(headingMatch[3]);
 
       // Re-inject heading annotations from data attributes. Canonical
-      // emit order: Pandoc `{#…}` first, then squisq `{[…]}` template
-      // annotation (matches blockToMdast in core/markdown/convert.ts).
+      // emit order: Pandoc `{#…}` first, then squisq `{[…]}` annotation
+      // (matches blockToMdast in core/markdown/convert.ts).
       const blockAttrsMatch = attrs.match(/data-block-attrs="([^"]*)"/);
       const tmplMatch = attrs.match(/data-template="([^"]+)"/);
+      const paramsMatch = attrs.match(/data-template-params="([^"]+)"/);
       if (tmplMatch) {
         // Strip an accidental trailing copy of the template label that an
         // earlier broken build briefly rendered as real text inside the
@@ -426,11 +430,10 @@ export function tiptapToMarkdown(html: string): string {
         const inner = unescapeHtml(blockAttrsMatch[1]);
         text += ` {${inner}}`;
       }
-      if (tmplMatch) {
-        let annotation = tmplMatch[1];
-        const paramsMatch = attrs.match(/data-template-params="([^"]+)"/);
+      if (tmplMatch || paramsMatch) {
+        let annotation = tmplMatch ? tmplMatch[1] : '';
         if (paramsMatch) {
-          annotation += ' ' + unescapeHtml(paramsMatch[1]);
+          annotation += (annotation ? ' ' : '') + unescapeHtml(paramsMatch[1]);
         }
         text += ` {[${annotation}]}`;
       }

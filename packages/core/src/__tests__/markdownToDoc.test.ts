@@ -394,14 +394,15 @@ describe('template annotation in markdownToDoc', () => {
     expect(output).toContain('{[factCard style=minimal]}');
   });
 
-  it('docToMarkdown injects transition attributes from block metadata', () => {
+  it('docToMarkdown injects transition params into the squiggly annotation', () => {
     const md = parseMarkdown('## Section\n\nBody');
     const doc = markdownToDoc(md);
     doc.blocks[0].transition = { type: 'wipe', duration: 0.8, direction: 'left' };
 
     const output = stringifyMarkdown(docToMarkdown(doc));
 
-    expect(output).toContain('{transition=wipe transitionDuration=0.8 transitionDirection=left}');
+    expect(output).toContain('{[transition=wipe transitionDuration=0.8 transitionDirection=left]}');
+    expect(output).not.toContain('{transition=wipe');
   });
 
   it('a programmatic transition survives the string round trip', () => {
@@ -445,6 +446,8 @@ describe('template annotation in markdownToDoc', () => {
 
     const output = stringifyMarkdown(docToMarkdown(doc));
     expect(output).toContain('transition=wipe');
+    expect(output).toContain('{[transition=wipe transitionDirection=left]}');
+    expect(output).not.toContain('{transition=wipe');
     const reparsed = markdownToDoc(parseMarkdown(output));
     expect(reparsed.blocks[0].transition).toEqual({ type: 'wipe', direction: 'left' });
   });

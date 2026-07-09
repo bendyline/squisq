@@ -531,10 +531,7 @@ function clampPreviewPopoverLeft(
     PREVIEW_POPOVER_MARGIN,
     viewportWidth - popoverWidth - PREVIEW_POPOVER_MARGIN,
   );
-  return Math.min(
-    Math.max(PREVIEW_POPOVER_MARGIN, triggerRect.right - popoverWidth),
-    maxLeft,
-  );
+  return Math.min(Math.max(PREVIEW_POPOVER_MARGIN, triggerRect.right - popoverWidth), maxLeft);
 }
 
 // ── Shared styles ────────────────────────────────────────────────
@@ -590,10 +587,7 @@ export function PreviewToolbarControls() {
     const triggerRect = trigger.getBoundingClientRect();
     const measuredWidth =
       popoverPanelRef.current?.getBoundingClientRect().width ?? PREVIEW_POPOVER_FALLBACK_WIDTH;
-    const popoverWidth = Math.min(
-      measuredWidth,
-      window.innerWidth - PREVIEW_POPOVER_MARGIN * 2,
-    );
+    const popoverWidth = Math.min(measuredWidth, window.innerWidth - PREVIEW_POPOVER_MARGIN * 2);
     setPopoverAnchor({
       top: triggerRect.bottom + PREVIEW_POPOVER_GAP,
       left: clampPreviewPopoverLeft(triggerRect, popoverWidth, window.innerWidth),
