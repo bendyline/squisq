@@ -18,6 +18,7 @@ import { DiagramMaximizedOverlay } from './DiagramMaximizedOverlay';
 import { useDiagramData } from './useDiagramData';
 import { findDiagramHeadingPos } from './DiagramExtension';
 import { SceneBlockToolbar, type SceneBlockAction } from '../scene/SceneBlockToolbar';
+import { SceneSideToolbar } from '../scene/SceneSideToolbar';
 import { nodeIdFromCardLayerId, NODE_WIDTH, NODE_HEIGHT } from '../scene';
 import { Icon } from '../Icon';
 import {
@@ -226,8 +227,6 @@ export function DiagramWidget({ editor, headingKey, fallbackParentPos, host }: D
     />
   );
 
-  const sideToolbar = <div className="squisq-scene-side-toolbar">{toolbar}</div>;
-
   if (maximized) {
     return (
       <div
@@ -235,9 +234,10 @@ export function DiagramWidget({ editor, headingKey, fallbackParentPos, host }: D
         style={effectiveHeight != null ? { height: effectiveHeight } : undefined}
       >
         <DiagramMaximizedOverlay host={host ?? null} onClose={() => setMaximized(false)}>
+          {/* Maximized has a full screen for a static right column — no collapse. */}
           <div className="squisq-scene-block-max">
             {canvas}
-            {sideToolbar}
+            <div className="squisq-scene-side-toolbar">{toolbar}</div>
           </div>
         </DiagramMaximizedOverlay>
       </div>
@@ -246,6 +246,9 @@ export function DiagramWidget({ editor, headingKey, fallbackParentPos, host }: D
 
   return (
     <div className="squisq-scene-shell">
+      {/* Before the canvas so the narrow-width fallback bar sits above it; the
+        wide-width gutter column is absolute and unaffected by DOM order. */}
+      <SceneSideToolbar>{toolbar}</SceneSideToolbar>
       <div
         className="squisq-diagram-inline"
         ref={inlineRef}
@@ -262,7 +265,6 @@ export function DiagramWidget({ editor, headingKey, fallbackParentPos, host }: D
           title="Drag to resize · double-click to reset"
         />
       </div>
-      {sideToolbar}
     </div>
   );
 }

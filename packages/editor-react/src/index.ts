@@ -141,10 +141,11 @@ export {
   readHeadingLineTransition,
   setHeadingLineTransition,
   readBlockAttrsTransition,
+  setHeadingAttrsTransition,
   setBlockAttrsTransition,
   EMPTY_TRANSITION,
 } from './headingTransition.js';
-export type { TransitionFields } from './headingTransition.js';
+export type { HeadingTransitionAttrs, TransitionFields } from './headingTransition.js';
 export {
   readBlockAttrsParams,
   readBlockAttrsValue,

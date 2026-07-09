@@ -82,6 +82,12 @@ export interface PlaybackState {
   currentSegmentName: string | null;
   /** Current block data (for extracting image info, etc.) */
   currentBlock: Block | null;
+  /** Optional display label for non-block slides, e.g. the managed cover. */
+  currentSlideLabel?: string;
+  /** Optional human-facing slide number, separate from internal nav index. */
+  currentSlideNumber?: number;
+  /** Optional human-facing slide total, separate from internal nav total. */
+  totalSlideNumber?: number;
 }
 
 /** Playback actions exposed to external control components */

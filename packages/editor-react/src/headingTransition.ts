@@ -6,16 +6,13 @@
  *
  * - Markdown (Monaco): operate on the raw heading line string.
  * - WYSIWYG (Tiptap): operate on the heading node's `dataBlockAttrs` string
- *   (the inner of the Pandoc `{…}` block, no braces — matching how
- *   `tiptapBridge` stores and re-emits it).
+ *   (Pandoc `{…}` inner) and `dataTemplateParams` string (the params inside
+ *   the squisq-native `{[…]}` annotation).
  *
- * Transitions are stored in the Pandoc `{#id .class key=value}` attribute
- * block, NOT the `{[template …]}` annotation. That mirrors the canonical
- * serializer (`core/doc/docToMarkdown.ts` → `ensureTransitionAttributes`,
- * which always emits the `{…}` form) and `diagram/diagramCommands.ts`, so a
- * value set here round-trips through a Doc render without being duplicated
- * or moved. Reads still look at the `{[…]}` params too, so a hand-typed
- * `{[title transition=fade]}` shows up in the picker.
+ * The editor writes transitions to the squisq-native `{[…]}` annotation by
+ * default. It still reads legacy Pandoc `{transition=…}` attributes and
+ * removes/migrates those keys when rewriting, so the two channels cannot drift
+ * after a toolbar edit.
  *
  * All the brace-matching / tokenizing / serializing is delegated to the
  * shared core helpers so this stays in lockstep with the parser by import
@@ -29,6 +26,7 @@ import {
   serializePandocAttributes,
   tokenizeAttrTokens,
   splitKeyValueToken,
+  quoteAttrValue,
   type HeadingAttributes,
 } from '@bendyline/squisq/markdown';
 
@@ -85,6 +83,14 @@ function applyFieldsToParams(
   return out;
 }
 
+function removeFieldsFromAttrs(attrs: HeadingAttributes): HeadingAttributes {
+  if (!attrs.params) return attrs;
+  const params = applyFieldsToParams(attrs.params, EMPTY_TRANSITION);
+  if (Object.keys(params).length > 0) attrs.params = params;
+  else delete attrs.params;
+  return attrs;
+}
+
 /** Parse a bare `key=value …` token string into a params map. */
 function paramsFromTokenString(input: string, skipFirstToken: boolean): Record<string, string> {
   const tokens = tokenizeAttrTokens(input);
@@ -94,6 +100,39 @@ function paramsFromTokenString(input: string, skipFirstToken: boolean): Record<s
     if (kv) params[kv.key] = kv.value;
   }
   return params;
+}
+
+function templatePartsFromInner(inner: string | null | undefined): {
+  template: string | undefined;
+  params: Record<string, string>;
+} {
+  if (!inner) return { template: undefined, params: {} };
+  const tokens = tokenizeAttrTokens(inner);
+  const firstIsParam = tokens.length > 0 && tokens[0].indexOf('=') > 0;
+  const template = firstIsParam || tokens.length === 0 ? undefined : tokens[0];
+  const startIdx = template ? 1 : 0;
+  const params: Record<string, string> = {};
+  for (const token of tokens.slice(startIdx)) {
+    const kv = splitKeyValueToken(token);
+    if (kv) params[kv.key] = kv.value;
+  }
+  return { template, params };
+}
+
+function paramsToInner(params: Record<string, string>): string | null {
+  const parts = Object.entries(params).map(([key, value]) => `${key}=${quoteAttrValue(value)}`);
+  return parts.length > 0 ? parts.join(' ') : null;
+}
+
+function templateAnnotationOrNull(
+  template: string | undefined,
+  params: Record<string, string>,
+): string | null {
+  const parts: string[] = [];
+  if (template) parts.push(template);
+  const paramInner = paramsToInner(params);
+  if (paramInner) parts.push(paramInner);
+  return parts.length > 0 ? `{[${parts.join(' ')}]}` : null;
 }
 
 // ============================================
@@ -141,7 +180,7 @@ function splitHeadingLine(line: string): SplitHeadingLine | null {
 
 /**
  * Read the transition fields off a heading line. Looks in both the Pandoc
- * `{…}` block (canonical) and the `{[…]}` template params (hand-typed),
+ * `{…}` block (legacy) and the `{[…]}` template params (canonical),
  * with the Pandoc block taking precedence. Returns the empty transition for
  * non-heading lines.
  */
@@ -149,7 +188,7 @@ export function readHeadingLineTransition(line: string): TransitionFields {
   const split = splitHeadingLine(line);
   if (!split) return { ...EMPTY_TRANSITION };
   const fromTemplate = split.templateText
-    ? paramsFromTokenString(stripTemplateBraces(split.templateText), true)
+    ? templatePartsFromInner(stripTemplateBraces(split.templateText)).params
     : {};
   const fromPandoc = split.pandocInner
     ? (parsePandocAttrTokens(split.pandocInner).params ?? {})
@@ -159,8 +198,9 @@ export function readHeadingLineTransition(line: string): TransitionFields {
 
 /**
  * Return `line` with its transition rewritten from `next`, writing into the
- * Pandoc `{…}` block and leaving the `{[…]}` template annotation untouched.
- * Non-heading lines are returned unchanged.
+ * squisq-native `{[…]}` annotation. Legacy Pandoc transition keys are removed
+ * while preserving ids, classes, and other Pandoc params. Non-heading lines are
+ * returned unchanged.
  */
 export function setHeadingLineTransition(line: string, next: TransitionFields): string {
   const split = splitHeadingLine(line);
@@ -168,12 +208,18 @@ export function setHeadingLineTransition(line: string, next: TransitionFields): 
   const attrs: HeadingAttributes = split.pandocInner
     ? parsePandocAttrTokens(split.pandocInner)
     : {};
-  attrs.params = applyFieldsToParams(attrs.params ?? {}, next);
+  removeFieldsFromAttrs(attrs);
   const pandoc = pandocBlockOrNull(attrs);
+
+  const templateParts = templatePartsFromInner(
+    split.templateText ? stripTemplateBraces(split.templateText) : null,
+  );
+  const templateParams = applyFieldsToParams(templateParts.params, next);
+  const template = templateAnnotationOrNull(templateParts.template, templateParams);
 
   let out = split.prefix + split.text;
   if (pandoc) out += ` ${pandoc}`;
-  if (split.templateText) out += ` ${split.templateText}`;
+  if (template) out += ` ${template}`;
   return out;
 }
 
@@ -188,8 +234,10 @@ function stripTemplateBraces(templateText: string): string {
 // ============================================
 
 /**
- * Read the transition fields from a heading node's `dataBlockAttrs` (Pandoc
- * inner) plus `dataTemplateParams` (the `{[…]}` params). Pandoc wins.
+ * Read the transition fields from a heading node's `dataBlockAttrs` (legacy
+ * Pandoc inner) plus `dataTemplateParams` (canonical `{[…]}` params). Pandoc
+ * wins so the picker mirrors the value that `markdownToDoc` will render when
+ * both channels are present.
  */
 export function readBlockAttrsTransition(
   blockAttrsInner: string | null | undefined,
@@ -200,11 +248,38 @@ export function readBlockAttrsTransition(
   return fieldsFromParams({ ...fromTemplate, ...fromPandoc });
 }
 
+export interface HeadingTransitionAttrs {
+  /** Inner of the Pandoc `{…}` block, without braces. */
+  blockAttrsInner: string | null;
+  /** Param string inside the `{[…]}` annotation, without the template token. */
+  templateParams: string | null;
+}
+
 /**
- * Rewrite the transition in a heading node's `dataBlockAttrs` inner string.
- * Returns the new inner (no braces), or null when the block carries no
- * attributes at all — matching how `tiptapBridge` stores `dataBlockAttrs`
- * (absent attribute → null, not `{}`).
+ * Rewrite a heading node's transition for Tiptap, writing the transition
+ * family into `dataTemplateParams` and removing any legacy transition keys
+ * from `dataBlockAttrs`.
+ */
+export function setHeadingAttrsTransition(
+  blockAttrsInner: string | null | undefined,
+  templateParams: string | null | undefined,
+  next: TransitionFields,
+): HeadingTransitionAttrs {
+  const attrs: HeadingAttributes = blockAttrsInner ? parsePandocAttrTokens(blockAttrsInner) : {};
+  removeFieldsFromAttrs(attrs);
+  const pandoc = pandocBlockOrNull(attrs);
+
+  const params = applyFieldsToParams(paramsFromTokenString(templateParams ?? '', false), next);
+  return {
+    blockAttrsInner: pandoc ? pandoc.slice(1, -1) : null,
+    templateParams: paramsToInner(params),
+  };
+}
+
+/**
+ * Legacy single-channel writer for callers that only own `dataBlockAttrs`.
+ * Internal editor surfaces should use {@link setHeadingAttrsTransition} so new
+ * transition edits land in the squisq-native `{[…]}` params.
  */
 export function setBlockAttrsTransition(
   blockAttrsInner: string | null | undefined,

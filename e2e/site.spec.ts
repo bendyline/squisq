@@ -1,4 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
+import { switchView, viewTabLabel, type ViewTab } from './view-tabs';
 
 /**
  * E2E tests for the Squisq dev site.
@@ -16,11 +17,6 @@ async function selectSample(page: Page, key: string) {
   await page.locator('select').first().selectOption(key);
 }
 
-/** Switch to a view tab by label text */
-async function switchView(page: Page, label: 'Markdown' | 'Editor' | 'Play' | 'Preview') {
-  await page.getByRole('tab', { name: label, exact: true }).click();
-}
-
 /** Wait for the DocPlayer to be present inside the preview panel */
 async function waitForDocPlayer(page: Page) {
   await page.locator('.doc-player').waitFor({ state: 'visible', timeout: 5_000 });
@@ -28,8 +24,16 @@ async function waitForDocPlayer(page: Page) {
 
 /** Start playback and wait for the active block to appear (dismisses cover block) */
 async function startPlaybackAndWaitForActiveBlock(page: Page) {
-  await page.locator('.doc-player').click();
-  // Cover block has a 3s grace period; wait for the active block to appear
+  const slideshowControls = page.getByTestId('slideshow-controls');
+  if (await slideshowControls.isVisible()) {
+    const counter = page.getByTestId('slide-counter');
+    if ((await counter.textContent())?.trim() === 'Cover') {
+      await page.getByTestId('slide-next').click();
+    }
+  } else {
+    await page.locator('.doc-player').click();
+  }
+  // Video covers have a 3s grace period; slideshow covers advance immediately.
   await page.locator('.doc-player__block--active').waitFor({ state: 'visible', timeout: 8_000 });
 }
 
@@ -60,8 +64,8 @@ test.describe('Site navigation', () => {
   });
 
   test('view switcher has Markdown, Editor, Play tabs', async ({ page }) => {
-    for (const label of ['Markdown', 'Editor', 'Play']) {
-      await expect(page.getByRole('tab', { name: label, exact: true })).toBeVisible();
+    for (const label of ['Markdown', 'Editor', 'Play'] as const satisfies readonly ViewTab[]) {
+      await expect(page.getByRole('tab', { name: viewTabLabel(label), exact: true })).toBeVisible();
     }
   });
 

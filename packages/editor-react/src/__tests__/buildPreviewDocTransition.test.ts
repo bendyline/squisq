@@ -11,8 +11,7 @@ function previewSlides(md: string) {
 
 describe('buildPreviewDoc transition mapping', () => {
   it('carries an authored transition through to the player slide', () => {
-    // Transition written the way the toolbar / properties palette writes it:
-    // into the heading's Pandoc `{…}` attribute block.
+    // Legacy Pandoc transition syntax remains supported.
     const md = ['# Intro', '', '# Second {transition=vortex}', '', 'body'].join('\n');
     const slides = previewSlides(md);
     expect(slides[1].transition).toEqual({ type: 'vortex' });

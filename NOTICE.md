@@ -73,12 +73,11 @@ package — no choose-one election.
 
 ## @bendyline/squisq-video
 
-| Package                 | Version   | License | Repository                                |
-| ----------------------- | --------- | ------- | ----------------------------------------- |
-| @bendyline/squisq       | workspace | MIT     | (internal)                                |
-| @bendyline/squisq-react | workspace | MIT     | (internal)                                |
-| @ffmpeg/ffmpeg          | 0.12.15   | MIT     | https://github.com/ffmpegwasm/ffmpeg.wasm |
-| @ffmpeg/util            | 0.12.2    | MIT     | https://github.com/ffmpegwasm/ffmpeg.wasm |
+| Package           | Version   | License | Repository                                |
+| ----------------- | --------- | ------- | ----------------------------------------- |
+| @bendyline/squisq | workspace | MIT     | (internal)                                |
+| @ffmpeg/ffmpeg    | 0.12.15   | MIT     | https://github.com/ffmpegwasm/ffmpeg.wasm |
+| @ffmpeg/util      | 0.12.2    | MIT     | https://github.com/ffmpegwasm/ffmpeg.wasm |
 
 ## @bendyline/squisq-video-react
 
@@ -102,6 +101,7 @@ package — no choose-one election.
 | @bendyline/squisq-formats | workspace | MIT        | (internal)                              |
 | @bendyline/squisq-react   | workspace | MIT        | (internal)                              |
 | @bendyline/squisq-video   | workspace | MIT        | (internal)                              |
+| @xmldom/xmldom            | 0.9.10    | MIT        | https://github.com/xmldom/xmldom        |
 | commander                 | 12.1.0    | MIT        | https://github.com/tj/commander.js      |
 | playwright-core           | 1.58.2    | Apache-2.0 | https://github.com/microsoft/playwright |
 | vite                      | 8.0.14    | MIT        | https://github.com/vitejs/vite          |

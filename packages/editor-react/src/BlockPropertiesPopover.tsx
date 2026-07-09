@@ -3,12 +3,11 @@
  *
  * The on-canvas "block properties" palette — the sibling of the block-template
  * badge. Anchored at the `.squisq-props-badge` chip on a heading, it edits the
- * block's playback/animation metadata, all stored in the heading's Pandoc `{…}`
- * attribute block (`dataBlockAttrs`):
+ * block's playback/animation metadata:
  *
- *   - Transition  (type / direction / duration) — reuses `TransitionPicker`
- *   - Duration    (`duration`)  — how long the block is shown
- *   - Start time  (`startTime`) — timeline position
+ *   - Transition  (type / direction / duration) — stored in `{[…]}` params
+ *   - Duration    (`duration`)  — stored in Pandoc `dataBlockAttrs`
+ *   - Start time  (`startTime`) — stored in Pandoc `dataBlockAttrs`
  *
  * The popover holds the `dataBlockAttrs` inner string as working state and
  * re-derives each control from it, so successive edits compose. Every change
@@ -23,6 +22,7 @@ import { TransitionPicker } from './TransitionPicker';
 import {
   readBlockAttrsTransition,
   setBlockAttrsTransition,
+  setHeadingAttrsTransition,
   type TransitionFields,
 } from './headingTransition';
 import { readBlockAttrsValue, setBlockAttrsValue } from './blockProperties';
@@ -36,6 +36,11 @@ export interface BlockPropertiesPopoverProps {
   templateParams: string | null;
   /** Apply a new `dataBlockAttrs` inner to the heading (null clears it). */
   onChange: (nextInner: string | null) => void;
+  /** Apply a paired `dataBlockAttrs` / `dataTemplateParams` transition rewrite. */
+  onAnnotationChange?: (next: {
+    blockAttrsInner: string | null;
+    templateParams: string | null;
+  }) => void;
   onClose: () => void;
 }
 
@@ -48,10 +53,12 @@ export function BlockPropertiesPopover({
   blockAttrs,
   templateParams,
   onChange,
+  onAnnotationChange,
   onClose,
 }: BlockPropertiesPopoverProps) {
   // Working copy of the Pandoc inner; successive edits compose off it.
   const [inner, setInner] = useState<string | null>(blockAttrs);
+  const [templateInner, setTemplateInner] = useState<string | null>(templateParams);
   const [style, setStyle] = useState<React.CSSProperties>(() => computeStyle(anchorRect));
 
   useEffect(() => {
@@ -84,11 +91,20 @@ export function BlockPropertiesPopover({
     onChange(next);
   };
 
-  const transition = readBlockAttrsTransition(inner, templateParams);
+  const transition = readBlockAttrsTransition(inner, templateInner);
   const duration = readBlockAttrsValue(inner, 'duration');
   const startTime = readBlockAttrsValue(inner, 'startTime');
 
-  const onTransition = (next: TransitionFields) => apply(setBlockAttrsTransition(inner, next));
+  const onTransition = (next: TransitionFields) => {
+    if (!onAnnotationChange) {
+      apply(setBlockAttrsTransition(inner, next));
+      return;
+    }
+    const updated = setHeadingAttrsTransition(inner, templateInner, next);
+    setInner(updated.blockAttrsInner);
+    setTemplateInner(updated.templateParams);
+    onAnnotationChange(updated);
+  };
   const onDuration = (v: string) => apply(setBlockAttrsValue(inner, 'duration', v));
   const onStartTime = (v: string) => apply(setBlockAttrsValue(inner, 'startTime', v));
 

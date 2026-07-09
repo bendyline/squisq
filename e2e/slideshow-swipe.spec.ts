@@ -1,4 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
+import { switchView } from './view-tabs';
 
 /**
  * E2E tests for drag-to-swipe navigation in slideshow mode.
@@ -8,11 +9,6 @@ import { test, expect, type Page } from '@playwright/test';
  * advances/rewinds, a small slow drag snaps back, and dragging past the deck
  * boundary rubber-bands without navigating.
  */
-
-/** Switch the editor to a view tab by label. */
-async function switchView(page: Page, label: 'Markdown' | 'Editor' | 'Play') {
-  await page.getByRole('tab', { name: label, exact: true }).click();
-}
 
 /** Enter the Play preview and select slideshow mode. */
 async function enterSlideshow(page: Page) {
@@ -26,6 +22,12 @@ async function enterSlideshow(page: Page) {
   await page
     .locator('[data-testid="slideshow-controls"]')
     .waitFor({ state: 'visible', timeout: 5_000 });
+
+  // The managed cover is a real slideshow entry before numbered content.
+  // Leave it through the explicit control so swipe assertions start on slide 1.
+  await expect(counter(page)).toHaveText('Cover');
+  await page.getByTestId('slide-next').click();
+  await expect(counter(page)).toHaveText(/^1 \/ \d+$/);
 }
 
 function counter(page: Page) {
@@ -83,11 +85,13 @@ test.describe('Slideshow drag-to-swipe', () => {
     await expect(counter(page)).toHaveText(/^2 \//);
   });
 
-  test('dragging past the first slide rubber-bands and stays put', async ({ page }) => {
-    await expect(counter(page)).toHaveText(/^1 \//);
+  test('dragging past the cover rubber-bands and stays put', async ({ page }) => {
+    // The managed cover is the true first entry in this deck.
+    await page.getByTestId('slide-prev').click();
+    await expect(counter(page)).toHaveText('Cover');
     // Drag right hard on the first slide — there is no previous slide.
     await dragPlayer(page, 0.6);
     await page.waitForTimeout(450);
-    await expect(counter(page)).toHaveText(/^1 \//);
+    await expect(counter(page)).toHaveText('Cover');
   });
 });

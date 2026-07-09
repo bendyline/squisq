@@ -20,6 +20,28 @@
   overflow: hidden;
 }
 
+.squisq-editor-shell[data-theme='dark'] .squisq-scene-shell {
+  --squisq-surface: #0f172a;
+  --squisq-surface-hover: #1e293b;
+  --squisq-border: #475569;
+  --squisq-text: #f8fafc;
+  --squisq-text-muted: #94a3b8;
+}
+
+.squisq-editor-shell[data-theme='dark'] .squisq-scene-root,
+.squisq-editor-shell[data-theme='dark'] .squisq-scene-inline,
+.squisq-editor-shell[data-theme='dark'] .squisq-diagram-inline {
+  background: #0f172a;
+  border-color: #475569;
+}
+
+.squisq-editor-shell[data-theme='dark'] .squisq-scene-layer--shape,
+.squisq-editor-shell[data-theme='dark'] .squisq-scene-layer--path,
+.squisq-editor-shell[data-theme='dark'] .squisq-scene-layer--text,
+.squisq-editor-shell[data-theme='dark'] .squisq-scene-extras {
+  filter: invert(1) hue-rotate(180deg) saturate(0.9);
+}
+
 .squisq-scene-viewport {
   display: block;
   width: 100%;
@@ -109,6 +131,18 @@
   stroke-dasharray: 6 4;
   vector-effect: non-scaling-stroke;
   pointer-events: none;
+}
+
+.squisq-scene-connection-point {
+  fill: #ffffff;
+  stroke: #6366f1;
+  stroke-width: 2;
+  vector-effect: non-scaling-stroke;
+  pointer-events: none;
+}
+
+.squisq-scene-connection-point--active {
+  fill: #6366f1;
 }
 
 /* ── Toolbar ──────────────────────────────────────────────── */
@@ -261,6 +295,46 @@
   color: #b91c1c;
 }
 
+.squisq-editor-shell[data-theme='dark'] .squisq-scene-toolbar,
+.squisq-editor-shell[data-theme='dark'] .squisq-scene-block-tools,
+.squisq-editor-shell[data-theme='dark'] .squisq-scene-block-actions,
+.squisq-editor-shell[data-theme='dark'] .squisq-scene-block-props {
+  background: #111827;
+  border-color: #475569;
+  color: #e5e7eb;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.32);
+}
+
+.squisq-editor-shell[data-theme='dark'] .squisq-scene-tool,
+.squisq-editor-shell[data-theme='dark'] .squisq-scene-action {
+  background: #111827;
+  color: #e5e7eb;
+}
+
+.squisq-editor-shell[data-theme='dark'] .squisq-scene-tool:hover,
+.squisq-editor-shell[data-theme='dark'] .squisq-scene-action:hover:not(:disabled) {
+  background: #1f2937;
+  border-color: #64748b;
+  color: #f8fafc;
+}
+
+.squisq-editor-shell[data-theme='dark'] .squisq-scene-tool--active,
+.squisq-editor-shell[data-theme='dark'] .squisq-scene-tool--active:hover {
+  background: #312e81;
+  border-color: #818cf8;
+  color: #f8fafc;
+}
+
+.squisq-editor-shell[data-theme='dark'] .squisq-scene-action--danger {
+  color: #fca5a5;
+}
+
+.squisq-editor-shell[data-theme='dark'] .squisq-scene-action--danger:hover:not(:disabled) {
+  background: #450a0a;
+  border-color: #f87171;
+  color: #fecaca;
+}
+
 /* Maximized overlay: a flex-filling canvas with the toolbar as a right-hand
    column (full screen has room to reserve it). */
 .squisq-scene-block-max {
@@ -303,8 +377,8 @@
   overflow-y: auto;
 }
 
-/* Re-flow the (normally horizontal, right-aligned) toolbar into a top-aligned
-   vertical column whose button groups wrap within the 180px width. */
+/* Re-flow the (normally horizontal, right-aligned) gutter toolbar into a
+   top-aligned vertical column whose button groups wrap within the 180px. */
 .squisq-scene-side-toolbar .squisq-scene-block-toolbar {
   flex-direction: column;
   align-items: stretch;
@@ -324,6 +398,23 @@
   top: 0;
   left: auto;
   right: calc(100% + 6px);
+}
+
+/* ── Narrow-width fallback bar ─────────────────────────────────
+   When SceneSideToolbar measures that the right gutter can't hold the 180px
+   column, it renders the same toolbar as an in-flow horizontal bar above the
+   canvas instead. Normal flow (not an overlay) so it always paints and is
+   never clipped; it just keeps the toolbar's natural horizontal layout and
+   wraps on very narrow widths. */
+.squisq-scene-inline-toolbar {
+  display: flex;
+  margin-bottom: 8px;
+}
+.squisq-scene-inline-toolbar .squisq-scene-block-toolbar {
+  flex-wrap: wrap;
+  justify-content: flex-start;
+  width: 100%;
+  margin: 0;
 }
 
 /* ── Maximize button ──────────────────────────────────────── */
@@ -352,6 +443,19 @@
   background: #f1f5f9;
   border-color: #94a3b8;
   color: #0f172a;
+}
+
+.squisq-editor-shell[data-theme='dark'] .squisq-scene-maximize-btn {
+  background: #111827;
+  border-color: #475569;
+  color: #e5e7eb;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.32);
+}
+
+.squisq-editor-shell[data-theme='dark'] .squisq-scene-maximize-btn:hover {
+  background: #1f2937;
+  border-color: #64748b;
+  color: #f8fafc;
 }
 
 /* ── Diagram node card (used by nodeCard.tsx) ─────────────── */
@@ -502,6 +606,35 @@
   font-weight: 700;
 }
 
+.squisq-editor-shell[data-theme='dark'] .squisq-shape-palette {
+  background: #111827;
+  color: #e5e7eb;
+  border-color: #475569;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.42);
+}
+
+.squisq-editor-shell[data-theme='dark'] .squisq-shape-palette-search,
+.squisq-editor-shell[data-theme='dark'] .squisq-scene-prop-select {
+  background: #0f172a;
+  color: #e5e7eb;
+  border-color: #475569;
+}
+
+.squisq-editor-shell[data-theme='dark'] .squisq-shape-palette-item:hover,
+.squisq-editor-shell[data-theme='dark'] .squisq-scene-prop-clear:hover {
+  background: #1f2937;
+  border-color: #64748b;
+}
+
+.squisq-editor-shell[data-theme='dark'] .squisq-shape-thumb,
+.squisq-editor-shell[data-theme='dark'] .squisq-shape-thumb-line {
+  stroke: #e5e7eb;
+}
+
+.squisq-editor-shell[data-theme='dark'] .squisq-shape-thumb-text {
+  fill: #e5e7eb;
+}
+
 /* Per-selection style controls, inline in the contextual toolbar (Fill /
    Stroke / Color swatches + connector dropdowns) — styled as a pill that
    matches the tools/actions groups. */
@@ -564,6 +697,13 @@
 
 .squisq-scene-prop-clear:hover {
   background: #f1f5f9;
+}
+
+.squisq-editor-shell[data-theme='dark'] .squisq-scene-prop-color,
+.squisq-editor-shell[data-theme='dark'] .squisq-scene-prop-clear {
+  background: #0f172a;
+  color: #e5e7eb;
+  border-color: #475569;
 }
 
 /* ── Inline widget host (mirrors squisq-diagram-inline) ──── */

@@ -3,6 +3,7 @@ import {
   readHeadingLineTransition,
   setHeadingLineTransition,
   readBlockAttrsTransition,
+  setHeadingAttrsTransition,
   setBlockAttrsTransition,
   EMPTY_TRANSITION,
 } from '../headingTransition';
@@ -40,6 +41,14 @@ describe('readHeadingLineTransition', () => {
     });
   });
 
+  it('reads a transition from a param-only {[…]} annotation', () => {
+    expect(readHeadingLineTransition('## Tips {[transition=zoom]}')).toEqual({
+      type: 'zoom',
+      direction: '',
+      duration: '',
+    });
+  });
+
   it('prefers the Pandoc block over the template params when both set it', () => {
     expect(
       readHeadingLineTransition('## Tips {transition=fade} {[title transition=zoom]}'),
@@ -48,32 +57,42 @@ describe('readHeadingLineTransition', () => {
 });
 
 describe('setHeadingLineTransition', () => {
-  it('adds a Pandoc block to a plain heading', () => {
+  it('adds a squiggly annotation to a plain heading', () => {
     expect(setHeadingLineTransition('## Tips', { type: 'fade', direction: '', duration: '' })).toBe(
-      '## Tips {transition=fade}',
+      '## Tips {[transition=fade]}',
     );
   });
 
-  it('writes the Pandoc block before an existing {[…]} template annotation', () => {
+  it('folds into an existing {[…]} template annotation', () => {
     expect(
       setHeadingLineTransition('## Tips {[title]}', { type: 'fade', direction: '', duration: '' }),
-    ).toBe('## Tips {transition=fade} {[title]}');
+    ).toBe('## Tips {[title transition=fade]}');
   });
 
   it('includes direction and duration when present', () => {
     expect(
       setHeadingLineTransition('## Tips', { type: 'push', direction: 'up', duration: '1.2' }),
-    ).toBe('## Tips {transition=push transitionDirection=up transitionDuration=1.2}');
+    ).toBe('## Tips {[transition=push transitionDirection=up transitionDuration=1.2]}');
   });
 
-  it('updates an existing transition in place, preserving other params and the id', () => {
+  it('migrates an existing Pandoc transition, preserving other params and the id', () => {
     expect(
       setHeadingLineTransition('## Tips {#intro transition=fade x=10}', {
         type: 'zoom',
         direction: '',
         duration: '',
       }),
-    ).toBe('## Tips {#intro x=10 transition=zoom}');
+    ).toBe('## Tips {#intro x=10} {[transition=zoom]}');
+  });
+
+  it('migrates into an existing template annotation without duplicating channels', () => {
+    expect(
+      setHeadingLineTransition('## Tips {#intro transition=fade} {[title color=blue]}', {
+        type: 'zoom',
+        direction: '',
+        duration: '',
+      }),
+    ).toBe('## Tips {#intro} {[title color=blue transition=zoom]}');
   });
 
   it('removes the transition (and an empty block) when set to none', () => {
@@ -125,13 +144,44 @@ describe('block-attrs (WYSIWYG) helpers', () => {
     });
   });
 
-  it('writes a fresh inner when none exists', () => {
+  it('writes transition edits to dataTemplateParams by default', () => {
+    expect(
+      setHeadingAttrsTransition(null, null, { type: 'fade', direction: '', duration: '' }),
+    ).toEqual({
+      blockAttrsInner: null,
+      templateParams: 'transition=fade',
+    });
+  });
+
+  it('migrates legacy dataBlockAttrs transitions to dataTemplateParams', () => {
+    expect(
+      setHeadingAttrsTransition('#intro transition=fade', 'color=blue', {
+        type: 'zoom',
+        direction: '',
+        duration: '',
+      }),
+    ).toEqual({
+      blockAttrsInner: '#intro',
+      templateParams: 'color=blue transition=zoom',
+    });
+  });
+
+  it('clears transitions from both WYSIWYG channels', () => {
+    expect(
+      setHeadingAttrsTransition('#intro transition=fade', 'transition=zoom', EMPTY_TRANSITION),
+    ).toEqual({
+      blockAttrsInner: '#intro',
+      templateParams: null,
+    });
+  });
+
+  it('legacy single-channel writer still writes a fresh inner when none exists', () => {
     expect(setBlockAttrsTransition(null, { type: 'fade', direction: '', duration: '' })).toBe(
       'transition=fade',
     );
   });
 
-  it('preserves the id and clears to null when emptied', () => {
+  it('legacy single-channel writer preserves the id and clears to null when emptied', () => {
     expect(setBlockAttrsTransition('transition=fade', EMPTY_TRANSITION)).toBeNull();
     expect(setBlockAttrsTransition('#intro transition=fade', EMPTY_TRANSITION)).toBe('#intro');
   });

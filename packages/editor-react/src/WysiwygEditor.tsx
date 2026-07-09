@@ -22,7 +22,9 @@ import TaskList from '@tiptap/extension-task-list';
 import TaskItem from '@tiptap/extension-task-item';
 import Link from '@tiptap/extension-link';
 import Placeholder from '@tiptap/extension-placeholder';
-import { resolveFontFamily, FONT_FALLBACKS } from '@bendyline/squisq/schemas';
+import { resolveFontFamily, FONT_FALLBACKS, VIEWPORT_PRESETS } from '@bendyline/squisq/schemas';
+import { DEFAULT_THEME, flattenBlocks, markdownToDoc } from '@bendyline/squisq/doc';
+import { parseMarkdown } from '@bendyline/squisq/markdown';
 import { HeadingWithTemplate } from './TemplateAnnotation';
 import { DiagramExtension } from './diagram/DiagramExtension';
 import { SceneBlockExtension } from './scene/SceneBlockExtension';
@@ -108,6 +110,8 @@ export function WysiwygEditor({
     mentionProvider,
     blockTagsVisible,
     themeInheritance,
+    colorScheme,
+    bumpMediaRevision,
   } = useEditorContext();
   // Custom templates inlined in the active doc's frontmatter + the
   // persist callback that writes a new list back into the source.
@@ -257,7 +261,7 @@ export function WysiwygEditor({
         const imageFiles = filesFromClipboard(clipboard);
         if (imageFiles.length > 0 && mediaProviderRef.current) {
           event.preventDefault();
-          uploadAndInsertImages(view, imageFiles, mediaProviderRef.current);
+          uploadAndInsertImages(view, imageFiles, mediaProviderRef.current, bumpMediaRevision);
           return true;
         }
 
@@ -326,7 +330,7 @@ export function WysiwygEditor({
 
         event.preventDefault();
         moveSelectionToDropPoint(view, event);
-        uploadAndInsertImages(view, imageFiles, mediaProviderRef.current);
+        uploadAndInsertImages(view, imageFiles, mediaProviderRef.current, bumpMediaRevision);
         return true;
       },
     },
@@ -467,6 +471,29 @@ export function WysiwygEditor({
   // a PreviewSettingsProvider in scope).
   const previewSettings = usePreviewSettingsOptional();
   const activeTheme = previewSettings?.activeTheme;
+  const badgePreviewSource = useMemo(() => {
+    if (!badgeMenu) return undefined;
+    try {
+      const previewDoc = markdownToDoc(parseMarkdown(editorSource), { autoTemplates: false });
+      const block = flattenBlocks(previewDoc.blocks)[badgeMenu.headingIndex];
+      if (!block) return undefined;
+      return {
+        block,
+        theme: previewSettings?.activeTheme ?? DEFAULT_THEME,
+        viewport: previewSettings?.activeViewport ?? VIEWPORT_PRESETS.landscape,
+        basePath: '/',
+        mediaProvider,
+      };
+    } catch {
+      return undefined;
+    }
+  }, [
+    badgeMenu,
+    editorSource,
+    mediaProvider,
+    previewSettings?.activeTheme,
+    previewSettings?.activeViewport,
+  ]);
   const themeStyle = useMemo<CSSProperties>(() => {
     if (themeInheritance === 'none' || !activeTheme) return {};
     const out: Record<string, string> = {
@@ -507,6 +534,7 @@ export function WysiwygEditor({
           <TemplateBadgePopover
             anchorRect={badgeMenu.rect}
             value={badgeMenu.template}
+            colorScheme={colorScheme}
             recommended={(() => {
               // `headingIndex` is counted within the mounted Tiptap doc, which
               // reflects `editorSource` — the active block's slice in block
@@ -516,6 +544,7 @@ export function WysiwygEditor({
               const profile = profileBlockContents(slice);
               return recommendTemplatesForBlock(profile, TEMPLATE_NAMES).recommended;
             })()}
+            previewSource={badgePreviewSource}
             onOpenDesigner={() => {
               setBadgeMenu(null);
               setDesignerState({});
@@ -543,6 +572,17 @@ export function WysiwygEditor({
               const tr = editor.state.tr.setNodeMarkup(propsMenu.headingPos, undefined, {
                 ...current.attrs,
                 dataBlockAttrs: nextInner,
+              });
+              editor.view.dispatch(tr);
+            }}
+            onAnnotationChange={(next) => {
+              if (!editor) return;
+              const current = editor.state.doc.nodeAt(propsMenu.headingPos);
+              if (!current || current.type.name !== 'heading') return;
+              const tr = editor.state.tr.setNodeMarkup(propsMenu.headingPos, undefined, {
+                ...current.attrs,
+                dataBlockAttrs: next.blockAttrsInner,
+                dataTemplateParams: next.templateParams,
               });
               editor.view.dispatch(tr);
             }}
@@ -631,6 +671,7 @@ async function uploadAndInsertImages(
   view: any,
   files: File[],
   mediaProvider: import('@bendyline/squisq/schemas').MediaProvider,
+  onMediaUploaded?: () => void,
 ): Promise<void> {
   for (const file of files) {
     try {
@@ -643,6 +684,7 @@ async function uploadAndInsertImages(
       const relativePath = await mediaProvider.addMedia(name, buffer, mimeType);
       const altText = name.replace(/\.[^.]+$/, '').replace(/[-_]/g, ' ');
       insertImageNode(view, relativePath, altText);
+      onMediaUploaded?.();
     } catch (err) {
       console.error('Failed to upload dropped image:', err);
     }

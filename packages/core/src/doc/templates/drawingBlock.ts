@@ -18,7 +18,7 @@ import type { Layer, ShapeLayer, TextLayer, PathLayer } from '../../schemas/Doc.
 import type { DrawingBlockInput, TemplateContext } from '../../schemas/BlockTemplates.js';
 import { resolveColorScheme, getThemeFont, themedFontSize } from '../utils/themeUtils.js';
 import { computeDrawingLayout, type DrawingShape, type DrawingConnector } from './drawingLayout.js';
-import { shapePath, connectorPath, clipEndpoints } from '../utils/shapeGeometry.js';
+import { shapePath, connectorPath, snapEndpoints } from '../utils/shapeGeometry.js';
 
 const PADDING = 80;
 
@@ -102,7 +102,7 @@ export function drawingBlock(input: DrawingBlockInput, context: TemplateContext)
     const a = boxes.get(conn.from);
     const b = boxes.get(conn.to);
     if (!a || !b) continue;
-    const { start, end } = clipEndpoints(a, b);
+    const { start, end } = snapEndpoints(a, b);
     const path: PathLayer = {
       type: 'path',
       id: `connector-${conn.id}`,

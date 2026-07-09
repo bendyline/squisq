@@ -4,8 +4,11 @@ import {
   markerPath,
   connectorPath,
   clipEndpoints,
+  nearestSnapPoint,
   lineStyleDasharray,
   PATH_SHAPE_KINDS,
+  snapEndpoints,
+  snapPoints,
 } from '../doc/utils/shapeGeometry.js';
 
 describe('shapePath', () => {
@@ -76,6 +79,40 @@ describe('clipEndpoints', () => {
     const r = clipEndpoints({ cx: 0, cy: 0, rx: 10, ry: 10 }, { cx: 100, cy: 0, rx: 10, ry: 10 });
     expect(r.start).toEqual({ x: 10, y: 0 });
     expect(r.end).toEqual({ x: 90, y: 0 });
+  });
+});
+
+describe('snapEndpoints', () => {
+  const a = { cx: 50, cy: 50, rx: 30, ry: 20 };
+  const b = { cx: 180, cy: 50, rx: 30, ry: 20 };
+
+  it('exposes side and corner ports around a box', () => {
+    expect(snapPoints(a).map((p) => p.port)).toEqual([
+      'top',
+      'right',
+      'bottom',
+      'left',
+      'top-left',
+      'top-right',
+      'bottom-right',
+      'bottom-left',
+    ]);
+  });
+
+  it('snaps horizontal connections to side ports', () => {
+    const r = snapEndpoints(a, b);
+    expect(r.start).toMatchObject({ port: 'right', x: 80, y: 50 });
+    expect(r.end).toMatchObject({ port: 'left', x: 150, y: 50 });
+  });
+
+  it('snaps diagonal connections to nearest corner ports', () => {
+    const r = snapEndpoints(a, { cx: 180, cy: 140, rx: 30, ry: 20 });
+    expect(r.start).toMatchObject({ port: 'bottom-right', x: 80, y: 70 });
+    expect(r.end).toMatchObject({ port: 'top-left', x: 150, y: 120 });
+  });
+
+  it('finds the nearest port toward a free pointer', () => {
+    expect(nearestSnapPoint(a, { x: 100, y: 10 }).port).toBe('top-right');
   });
 });
 

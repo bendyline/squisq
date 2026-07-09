@@ -33,16 +33,22 @@ async function openTemplatePickerForFirstHeading(page: Page): Promise<void> {
   await page.locator('#squisq-template-gallery-portal').waitFor({ state: 'visible' });
 }
 
+function customTemplateSection(page: Page) {
+  return page.locator('.squisq-template-gallery-section').filter({
+    has: page.getByRole('heading', { name: 'Custom', exact: true }),
+  });
+}
+
 test.describe('Custom template designer', () => {
   test.beforeEach(async ({ page }) => {
     await loadCustomTemplateSample(page);
   });
 
-  test('picker shows a "+ New layout" card', async ({ page }) => {
+  test('picker shows a "+ New block type" card', async ({ page }) => {
     await openTemplatePickerForFirstHeading(page);
     const newCard = page.locator('.squisq-template-gallery-new');
     await expect(newCard).toBeVisible();
-    await expect(newCard).toContainText(/new layout/i);
+    await expect(newCard).toContainText(/new block type/i);
   });
 
   test('picker shows existing doc-defined custom templates in a Custom section', async ({
@@ -51,10 +57,7 @@ test.describe('Custom template designer', () => {
     await openTemplatePickerForFirstHeading(page);
     // The "hero" template defined in the sample's frontmatter should
     // appear in a "Custom" section above the built-in templates.
-    const customSection = page
-      .locator('.squisq-template-gallery-section')
-      .filter({ hasText: /custom/i })
-      .first();
+    const customSection = customTemplateSection(page);
     await expect(customSection).toBeVisible();
     await expect(customSection.locator('.squisq-template-gallery-card-name')).toContainText(
       'Hero Section',
@@ -78,9 +81,7 @@ test.describe('Custom template designer', () => {
     // Custom section — that's our proxy for "the doc's custom
     // template is wired up to the picker".
     await openTemplatePickerForFirstHeading(page);
-    await expect(
-      page.locator('.squisq-template-gallery-section').filter({ hasText: /custom/i }),
-    ).toContainText('Hero Section');
+    await expect(customTemplateSection(page)).toContainText('Hero Section');
   });
 
   test('opening the designer mounts the modal with the placeholder palette', async ({ page }) => {
@@ -143,10 +144,7 @@ test.describe('Custom template designer', () => {
     // the doc state (via `setMarkdownSource` → re-parse → new
     // `Doc.customTemplates` → context update → picker re-render).
     await openTemplatePickerForFirstHeading(page);
-    const customSection = page
-      .locator('.squisq-template-gallery-section')
-      .filter({ hasText: /custom/i })
-      .first();
+    const customSection = customTemplateSection(page);
     await expect(customSection).toContainText('Greeting');
     await expect(customSection).toContainText('Hero Section');
   });

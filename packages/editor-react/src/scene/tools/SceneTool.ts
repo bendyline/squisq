@@ -55,6 +55,8 @@ export interface SceneTool {
   cursor: string;
   /** Optional keyboard accelerator (single-character, lowercase). */
   shortcut?: string;
+  /** Hide resize handles on selected layers while this tool is active. */
+  hideSelectionHandles?: boolean;
   /**
    * Optional icon — JSX rendered inside a fixed-size toolbar button. Keep
    * it light (a single SVG path is ideal); the toolbar wrapper handles

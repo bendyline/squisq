@@ -52,6 +52,8 @@ export interface ThemeCustomizerPanelProps {
   onSave?: (theme: Theme, json: string) => void;
   /** Fired when the user clicks Reset. Host typically clears its persistent storage. */
   onReset?: () => void;
+  /** Optional text trigger. Omit to use the compact icon trigger. */
+  triggerLabel?: string;
 }
 
 export function ThemeCustomizerPanel({
@@ -59,6 +61,7 @@ export function ThemeCustomizerPanel({
   onChange,
   onSave,
   onReset,
+  triggerLabel,
 }: ThemeCustomizerPanelProps) {
   const [open, setOpen] = useState(false);
   const [draft, setDraft] = useState<Draft>(() => themeToDraft(value));
@@ -143,26 +146,30 @@ export function ThemeCustomizerPanel({
       <button
         type="button"
         className={`squisq-toolbar-button squisq-theme-customizer-trigger${
-          open ? ' squisq-toolbar-button--active' : ''
-        }`}
+          triggerLabel ? ' squisq-theme-customizer-trigger--label' : ''
+        }${open ? ' squisq-toolbar-button--active' : ''}`}
         data-tooltip="Customize theme"
         aria-label="Customize theme"
         aria-expanded={open}
         onClick={() => setOpen((v) => !v)}
       >
-        <svg
-          width="16"
-          height="16"
-          viewBox="0 0 16 16"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="1.5"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        >
-          <circle cx="8" cy="8" r="6" />
-          <path d="M8 2 A6 6 0 0 1 8 14 Z" fill="currentColor" stroke="none" />
-        </svg>
+        {triggerLabel ? (
+          <span className="squisq-theme-customizer-trigger-label">{triggerLabel}</span>
+        ) : (
+          <svg
+            width="16"
+            height="16"
+            viewBox="0 0 16 16"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.5"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
+            <circle cx="8" cy="8" r="6" />
+            <path d="M8 2 A6 6 0 0 1 8 14 Z" fill="currentColor" stroke="none" />
+          </svg>
+        )}
       </button>
       {open && (
         <div className="squisq-theme-customizer-popover" role="dialog" aria-label="Customize theme">

@@ -85,6 +85,7 @@ describe('coverBlock with hero image', () => {
   it('does not produce theme background layers', () => {
     const layers = coverBlock(input, landscapeContext);
     expect(findLayer(layers, 'cover-bg')).toBeUndefined();
+    expect(findLayer(layers, 'cover-bg-tint')).toBeUndefined();
     expect(findLayer(layers, 'cover-accent')).toBeUndefined();
   });
 
@@ -110,12 +111,16 @@ describe('coverBlock without hero image', () => {
     subtitle: 'Subtitle text',
   };
 
-  it('produces theme background instead of hero', () => {
+  it('produces theme background and soft tint instead of hero', () => {
     const layers = coverBlock(input, landscapeContext);
     const bg = findShape(layers, 'cover-bg');
+    const tint = findShape(layers, 'cover-bg-tint');
     expect(bg).toBeDefined();
     expect(bg!.type).toBe('shape');
-    expect(bg!.content.fill).toContain('radial-gradient');
+    expect(bg!.content.fill).toBe(DEFAULT_THEME.colors.background);
+    expect(tint).toBeDefined();
+    expect(tint!.content.fill).toContain('radial-gradient');
+    expect(tint!.content.fill).toContain('rgba(37, 99, 235, 0.16)');
   });
 
   it('produces decorative accent line', () => {
@@ -143,6 +148,31 @@ describe('coverBlock without hero image', () => {
     const layers = coverBlock(input, landscapeContext);
     const subtitle = findLayer(layers, 'cover-subtitle');
     expect(subtitle!.position.y).not.toBe('82%');
+  });
+
+  it('uses high-contrast Standard Light cover text', () => {
+    const layers = coverBlock(input, landscapeContext);
+    const title = findText(layers, 'cover-title');
+    const subtitle = findText(layers, 'cover-subtitle');
+    expect(title!.content.style.shadow).toBe(false);
+    expect(subtitle!.content.style.fontWeight).toBe('bold');
+    expect(subtitle!.content.style.color).toBe('rgba(15, 23, 42, 0.78)');
+  });
+
+  it('keeps non-Standard themes on the existing dramatic cover background', () => {
+    const nonStandardContext = createTemplateContext(
+      { ...DEFAULT_THEME, id: 'custom-light' },
+      0,
+      1,
+      VIEWPORT_PRESETS.landscape,
+    );
+    const layers = coverBlock(input, nonStandardContext);
+    const bg = findShape(layers, 'cover-bg');
+    const title = findText(layers, 'cover-title');
+    expect(findShape(layers, 'cover-bg-tint')).toBeUndefined();
+    expect(bg!.content.fill).toContain('radial-gradient');
+    expect(bg!.content.fill).toContain(`${DEFAULT_THEME.colors.primary} 0%`);
+    expect(title!.content.style.shadow).toBe(true);
   });
 });
 
@@ -273,6 +303,7 @@ describe('expandCoverBlock', () => {
     const config: StartBlockConfig = { title: 'No Hero' };
     const layers = expandCoverBlock(config, landscapeContext);
     expect(layers.some((l) => l.id === 'cover-bg')).toBe(true);
+    expect(layers.some((l) => l.id === 'cover-bg-tint')).toBe(true);
     expect(layers.some((l) => l.id === 'cover-title')).toBe(true);
     expect(layers.some((l) => l.id === 'cover-hero')).toBe(false);
   });

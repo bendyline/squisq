@@ -19,9 +19,20 @@ interface DocControlsSlideshowProps {
 }
 
 export function DocControlsSlideshow({ state, slideNav }: DocControlsSlideshowProps) {
-  const { currentBlockIndex, totalBlocks } = state;
+  const {
+    currentBlockIndex,
+    currentSlideLabel,
+    currentSlideNumber,
+    totalBlocks,
+    totalSlideNumber,
+  } = state;
   const isFirst = currentBlockIndex <= 0;
   const isLast = currentBlockIndex >= totalBlocks - 1;
+  const counterText =
+    totalBlocks > 0
+      ? (currentSlideLabel ??
+        `${currentSlideNumber ?? currentBlockIndex + 1} / ${totalSlideNumber ?? totalBlocks}`)
+      : '—';
 
   return (
     <div
@@ -91,7 +102,7 @@ export function DocControlsSlideshow({ state, slideNav }: DocControlsSlideshowPr
           letterSpacing: '0.02em',
         }}
       >
-        {totalBlocks > 0 ? `${currentBlockIndex + 1} / ${totalBlocks}` : '—'}
+        {counterText}
       </span>
 
       {/* Next button */}

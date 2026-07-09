@@ -1,4 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
+import { switchView, viewTabLabel, type ViewTab } from './view-tabs';
 
 /**
  * E2E tests for the Squisq editor UI.
@@ -8,11 +9,6 @@ import { test, expect, type Page } from '@playwright/test';
  */
 
 // ── Helpers ──────────────────────────────────────────────────────────
-
-/** Switch to a view tab by its data-label */
-async function switchView(page: Page, label: 'Markdown' | 'Editor' | 'Play') {
-  await page.getByRole('tab', { name: label, exact: true }).click();
-}
 
 /** Wait for the WYSIWYG editor to be ready */
 async function waitForWysiwyg(page: Page) {
@@ -65,8 +61,8 @@ test.describe('Editor view switching', () => {
   });
 
   test('all three tabs are visible in the toolbar', async ({ page }) => {
-    for (const label of ['Editor', 'Markdown', 'Play']) {
-      await expect(page.getByRole('tab', { name: label, exact: true })).toBeVisible();
+    for (const label of ['Editor', 'Markdown', 'Play'] as const satisfies readonly ViewTab[]) {
+      await expect(page.getByRole('tab', { name: viewTabLabel(label), exact: true })).toBeVisible();
     }
   });
 

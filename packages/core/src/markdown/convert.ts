@@ -376,6 +376,14 @@ export function serializePandocAttributes(attrs: HeadingAttributes): string | nu
   return `{${parts.join(' ')}}`;
 }
 
+function hasPrintablePandocAttributes(attrs: HeadingAttributes): boolean {
+  return Boolean(
+    attrs.id ||
+    (attrs.classes && attrs.classes.length > 0) ||
+    (attrs.params && Object.keys(attrs.params).length > 0),
+  );
+}
+
 /**
  * Serialize a HeadingTemplateAnnotation back to `{[templateName key=value …]}` text.
  * Values are quoted via the shared {@link quoteAttrValue} rule (same as
@@ -977,7 +985,9 @@ function blockToMdast(node: MarkdownBlockNode): MdastNode {
       const suffixes: string[] = [];
       if (node.attributes) {
         const pandoc = serializePandocAttributes(node.attributes);
-        if (pandoc != null) suffixes.push(pandoc);
+        if (pandoc != null && (pandoc !== '{}' || hasPrintablePandocAttributes(node.attributes))) {
+          suffixes.push(pandoc);
+        }
       }
       if (node.templateAnnotation) {
         suffixes.push(serializeTemplateAnnotation(node.templateAnnotation));

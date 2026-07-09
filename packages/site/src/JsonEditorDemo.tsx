@@ -6,7 +6,7 @@
 
 import { useMemo, useState } from 'react';
 import { JsonView } from '@bendyline/squisq-react';
-import { JsonEditor } from '@bendyline/squisq-editor-react';
+import { JsonEditor, type EditorColorScheme } from '@bendyline/squisq-editor-react';
 import {
   resolveTheme,
   getThemeSummaries,
@@ -20,7 +20,11 @@ import { JSON_EDITOR_SAMPLES, type JsonEditorSample } from './jsonEditorSamples'
 
 const sampleKeys = Object.keys(JSON_EDITOR_SAMPLES);
 
-export function JsonEditorDemo() {
+interface JsonEditorDemoProps {
+  colorScheme: EditorColorScheme;
+}
+
+export function JsonEditorDemo({ colorScheme }: JsonEditorDemoProps) {
   const [sampleKey, setSampleKey] = useState<string>(sampleKeys[0]);
   const sample: JsonEditorSample = JSON_EDITOR_SAMPLES[sampleKey];
   const [value, setValue] = useState<unknown>(() => sample.initial);
@@ -30,8 +34,21 @@ export function JsonEditorDemo() {
 
   const theme: Theme = useMemo(() => resolveTheme(themeId), [themeId]);
   const themeSummaries = useMemo(() => getThemeSummaries(), []);
-  const surfaceProp: SurfaceScheme | 'auto' =
-    surface === 'auto' ? 'auto' : surface === 'light' ? LIGHT_SURFACE : DARK_SURFACE;
+  const surfaceProp: SurfaceScheme =
+    surface === 'auto'
+      ? colorScheme === 'dark'
+        ? DARK_SURFACE
+        : LIGHT_SURFACE
+      : surface === 'light'
+        ? LIGHT_SURFACE
+        : DARK_SURFACE;
+  const isDarkSurface = surfaceProp.id === 'dark';
+  const borderColor = isDarkSurface ? '#4a5568' : '#d1d5db';
+  const controlStyle = {
+    color: surfaceProp.text,
+    background: surfaceProp.backgroundLight,
+    border: `1px solid ${borderColor}`,
+  } as const;
 
   const handleSampleChange = (key: string) => {
     setSampleKey(key);
@@ -45,8 +62,10 @@ export function JsonEditorDemo() {
         flexDirection: 'column',
         height: '100%',
         overflow: 'hidden',
-        background: theme.colors.background,
-        color: theme.colors.text,
+        colorScheme: isDarkSurface ? 'dark' : 'light',
+        background: surfaceProp.background,
+        color: surfaceProp.text,
+        transition: 'background 0.2s, color 0.2s',
       }}
     >
       <div
@@ -56,15 +75,20 @@ export function JsonEditorDemo() {
           padding: '8px 16px',
           alignItems: 'center',
           flexWrap: 'wrap',
-          borderBottom: '1px solid rgba(127,127,127,0.3)',
-          background: 'rgba(127,127,127,0.06)',
+          borderBottom: `1px solid ${borderColor}`,
+          background: surfaceProp.backgroundLight,
           flexShrink: 0,
+          transition: 'background 0.2s, border-color 0.2s',
         }}
       >
         <strong style={{ fontSize: 13 }}>JSON Editor demo</strong>
         <label style={{ fontSize: 12 }}>
           Sample:&nbsp;
-          <select value={sampleKey} onChange={(e) => handleSampleChange(e.target.value)}>
+          <select
+            value={sampleKey}
+            onChange={(e) => handleSampleChange(e.target.value)}
+            style={controlStyle}
+          >
             {sampleKeys.map((k) => (
               <option key={k} value={k}>
                 {JSON_EDITOR_SAMPLES[k].label}
@@ -74,7 +98,7 @@ export function JsonEditorDemo() {
         </label>
         <label style={{ fontSize: 12 }}>
           Theme:&nbsp;
-          <select value={themeId} onChange={(e) => setThemeId(e.target.value)}>
+          <select value={themeId} onChange={(e) => setThemeId(e.target.value)} style={controlStyle}>
             {themeSummaries.map((t) => (
               <option key={t.id} value={t.id}>
                 {t.name}
@@ -84,7 +108,11 @@ export function JsonEditorDemo() {
         </label>
         <label style={{ fontSize: 12 }}>
           Surface:&nbsp;
-          <select value={surface} onChange={(e) => setSurface(e.target.value as never)}>
+          <select
+            value={surface}
+            onChange={(e) => setSurface(e.target.value as never)}
+            style={controlStyle}
+          >
             <option value="auto">Auto</option>
             <option value="light">Light</option>
             <option value="dark">Dark</option>
@@ -92,7 +120,11 @@ export function JsonEditorDemo() {
         </label>
         <label style={{ fontSize: 12 }}>
           Mode:&nbsp;
-          <select value={mode} onChange={(e) => setMode(e.target.value as never)}>
+          <select
+            value={mode}
+            onChange={(e) => setMode(e.target.value as never)}
+            style={controlStyle}
+          >
             <option value="split">Editor + Viewer</option>
             <option value="edit">Editor only</option>
             <option value="view">Viewer only</option>
@@ -101,7 +133,12 @@ export function JsonEditorDemo() {
         <button
           type="button"
           onClick={() => setValue(sample.initial)}
-          style={{ fontSize: 12, padding: '3px 10px', cursor: 'pointer' }}
+          style={{
+            ...controlStyle,
+            fontSize: 12,
+            padding: '3px 10px',
+            cursor: 'pointer',
+          }}
         >
           Reset value
         </button>
@@ -126,7 +163,7 @@ export function JsonEditorDemo() {
               flex: 1,
               overflow: 'auto',
               padding: 16,
-              borderLeft: mode === 'split' ? '1px solid rgba(127,127,127,0.3)' : 'none',
+              borderLeft: mode === 'split' ? `1px solid ${borderColor}` : 'none',
             }}
           >
             <h3 style={{ margin: '0 0 8px 0', fontSize: 13, opacity: 0.7 }}>Viewer</h3>

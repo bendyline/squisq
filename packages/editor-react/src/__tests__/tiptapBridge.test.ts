@@ -17,6 +17,22 @@ describe('markdownToTiptap', () => {
     expect(html).toContain('Hello world');
   });
 
+  it('preserves extra blank lines as empty paragraphs', () => {
+    expect(markdownToTiptap('Alpha\n\nBeta')).toBe('<p>Alpha</p><p>Beta</p>');
+    expect(markdownToTiptap('Alpha\n\n\nBeta')).toBe('<p>Alpha</p><p></p><p>Beta</p>');
+    expect(markdownToTiptap('Alpha\n\n\n\nBeta')).toBe('<p>Alpha</p><p></p><p></p><p>Beta</p>');
+  });
+
+  it('preserves trailing extra blank lines as empty paragraphs', () => {
+    expect(markdownToTiptap('Alpha\n')).toBe('<p>Alpha</p>');
+    expect(markdownToTiptap('Alpha\n\n')).toBe('<p>Alpha</p><p></p>');
+  });
+
+  it('preserves leading paragraph spaces as visible HTML whitespace', () => {
+    expect(markdownToTiptap('  indented')).toBe('<p>&nbsp;&nbsp;indented</p>');
+    expect(markdownToTiptap('Alpha\n\n   Beta')).toBe('<p>Alpha</p><p>&nbsp;&nbsp;&nbsp;Beta</p>');
+  });
+
   it('converts headings h1-h3', () => {
     expect(markdownToTiptap('# Title')).toContain('<h1');
     expect(markdownToTiptap('## Subtitle')).toContain('<h2');
@@ -191,6 +207,22 @@ describe('tiptapToMarkdown', () => {
   it('converts a paragraph to plain text', () => {
     const md = tiptapToMarkdown('<p>Hello world</p>');
     expect(md).toContain('Hello world');
+  });
+
+  it('preserves empty paragraphs as extra blank lines', () => {
+    expect(tiptapToMarkdown('<p>Alpha</p><p>Beta</p>')).toBe('Alpha\n\nBeta\n');
+    expect(tiptapToMarkdown('<p>Alpha</p><p></p><p>Beta</p>')).toBe('Alpha\n\n\nBeta\n');
+    expect(tiptapToMarkdown('<p>Alpha</p><p></p><p></p><p>Beta</p>')).toBe('Alpha\n\n\n\nBeta\n');
+  });
+
+  it('preserves trailing empty paragraphs', () => {
+    expect(tiptapToMarkdown('<p>Alpha</p><p></p>')).toBe('Alpha\n\n');
+  });
+
+  it('restores leading paragraph spaces from visible HTML whitespace', () => {
+    expect(tiptapToMarkdown('<p>&nbsp;&nbsp;indented</p>')).toBe('  indented\n');
+    expect(tiptapToMarkdown('<p>\u00a0\u00a0indented</p>')).toBe('  indented\n');
+    expect(tiptapToMarkdown('<p>&#160;&#xA0;indented</p>')).toBe('  indented\n');
   });
 
   it('converts headings', () => {
@@ -428,6 +460,21 @@ describe('round-trip: markdownToTiptap → tiptapToMarkdown', () => {
     expect(result).toContain('- [ ] buy milk');
     expect(result).toContain('- [x] walk dog');
     expect(result).not.toContain('- [x] buy milk');
+  });
+
+  it('preserves extra blank lines between paragraphs exactly', () => {
+    expect(roundTrip('Alpha\n\nBeta\n')).toBe('Alpha\n\nBeta\n');
+    expect(roundTrip('Alpha\n\n\nBeta\n')).toBe('Alpha\n\n\nBeta\n');
+    expect(roundTrip('Alpha\n\n\n\nBeta\n')).toBe('Alpha\n\n\n\nBeta\n');
+  });
+
+  it('preserves trailing empty paragraphs exactly', () => {
+    expect(roundTrip('Alpha\n\n')).toBe('Alpha\n\n');
+  });
+
+  it('preserves leading paragraph spaces exactly', () => {
+    expect(roundTrip('  indented\n')).toBe('  indented\n');
+    expect(roundTrip('Alpha\n\n   Beta\n')).toBe('Alpha\n\n   Beta\n');
   });
 
   it('preserves quoted template params with spaces', () => {

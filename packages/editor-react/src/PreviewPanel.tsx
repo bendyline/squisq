@@ -49,6 +49,7 @@ export function PreviewPanel({ basePath = '/', className, workspaceContainer }: 
     activeTransformStyle,
     activeCaptionStyle,
     activeCaptionsEnabled,
+    activeCoverSlide,
   } = usePreviewSettings();
 
   // Build the player-ready Doc whenever the parsed doc changes.
@@ -178,6 +179,7 @@ export function PreviewPanel({ basePath = '/', className, workspaceContainer }: 
             theme={activeTheme}
             captionStyle={activeCaptionStyle}
             captionsEnabled={activeCaptionsEnabled}
+            showCoverSlide={activeCoverSlide}
           />
         )}
       </div>

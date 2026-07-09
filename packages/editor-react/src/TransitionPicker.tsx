@@ -32,7 +32,14 @@ export interface TransitionPickerProps {
   onChange: (next: TransitionFields) => void;
 }
 
-const FLYOUT_ID = 'squisq-transition-flyout-portal';
+/**
+ * DOM id of the portaled transition flyout. Exported so hosts that embed the
+ * picker inside their own popovers (e.g. the toolbar overflow menu) can treat
+ * clicks inside the flyout as "inside" in their outside-click handling.
+ */
+export const TRANSITION_FLYOUT_PORTAL_ID = 'squisq-transition-flyout-portal';
+
+const FLYOUT_ID = TRANSITION_FLYOUT_PORTAL_ID;
 
 export function TransitionPicker({ value, onChange }: TransitionPickerProps) {
   const [open, setOpen] = useState(false);
