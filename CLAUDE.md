@@ -16,7 +16,7 @@ rendering and spatial utilities. It is designed to be framework-agnostic at the 
 
 - `@bendyline/squisq` — Headless utilities (schemas, themes, templates, spatial math, markdown, storage, versions, jsonForm, icons, image-edit, transform, recommend)
 - `@bendyline/squisq-react` — React component library (DocPlayer, BlockRenderer, layers, hooks, LinearDocView, MarkdownRenderer, JsonView, inline media players, standalone IIFE bundle)
-- `@bendyline/squisq-formats` — Document format converters (DOCX, PDF, HTML, EPUB, PPTX, XLSX, CSV import/export; shared OOXML infrastructure; format registry + `convert()`; ContentContainer ZIP serialization)
+- `@bendyline/squisq-formats` — Document format converters (DOCX, PDF, HTML, EPUB, PPTX, XLSX, CSV import/export; shared OOXML infrastructure; format registry + `convert()`; ContentContainer ZIP serialization; theme + layout inference from office files via `/infer`)
 - `@bendyline/squisq-editor-react` — React editor shell (Monaco raw, Tiptap WYSIWYG, block preview, toolbar, theme/template pickers, version history, image editor, JsonEditor) + browser-based audio/camera/screen recording (MediaRecorder + getUserMedia + getDisplayMedia, persists into a `ContentContainer`)
 - `@bendyline/squisq-video` — Browser-pure foundation for MP4 export (render-HTML generator, ffmpeg.wasm encoder, quality presets). Runs in both browser and Node.
 - `@bendyline/squisq-video-react` — React components for browser-based video export (WebCodecs primary, ffmpeg.wasm fallback; MP4 export now muxes narration audio)
@@ -110,7 +110,8 @@ squisq/
         standalone-entry.tsx # IIFE bundle entry — used by formats/html and squisq-cli
     formats/                # @bendyline/squisq-formats
       src/
-        ooxml/              # Shared OOXML infrastructure (reader, writer, XML utils, namespaces)
+        ooxml/              # Shared OOXML infrastructure (reader, writer, XML utils, namespaces,
+                            #   readUtils DOM helpers, themeReader for theme1.xml clrScheme/fontScheme)
         docx/               # DOCX import + export (WordprocessingML)
         pdf/                # PDF import + export (pdf-lib, pdfjs-dist)
         html/               # HTML import (htmlToMarkdownDoc) + export — single-file (data URIs)
@@ -118,12 +119,16 @@ squisq/
                             #   docsHtmlBundle modes
         epub/               # EPUB 3 e-book export
         pptx/               # PPTX export + import (PresentationML; import covers text/lists/tables +
-                            #   slide-level embedded images via pptxToContainer)
+                            #   slide-level embedded images via pptxToContainer) + layout inference
+                            #   (layouts.ts: slide layouts/masters → built-in template match or
+                            #   CustomTemplateDefinition; analyzePptxLayouts / inspectPptxLayouts)
         xlsx/               # XLSX import + export (SpreadsheetML; export is tables-only → ArrayBuffer)
         registry/           # Format registry + convert() front door (FormatDefinition per format id,
                             #   ConversionResult, ConversionError)
         csv/                # CSV import + export (parseCsv, csvToMarkdownDoc, markdownDocToCsv)
         container/          # ContentContainer ZIP serialization (containerToZip, zipToContainer)
+        infer/              # Theme inference from file imports: inferThemeFromFile (DOCX/PPTX/XLSX
+                            #   theme1.xml → compiled Squisq Theme; PPTX optionally + custom layouts)
     editor-react/           # @bendyline/squisq-editor-react
       src/
         EditorShell.tsx     # Top-level editor component (layout, keyboard shortcuts, theming)
@@ -289,18 +294,19 @@ build entry and a `package.json` export):
 - Styles: `@bendyline/squisq-react/styles` for CSS (covers DocPlayer animations + `<JsonView>`)
 - Standalone bundle: `@bendyline/squisq-react/standalone` and `/standalone-source` — IIFE bundle (`PLAYER_BUNDLE`) used by `formats/html` and `cli` to embed a complete player in a single HTML file
 
-`@bendyline/squisq-formats` exposes 9 subpath entries:
+`@bendyline/squisq-formats` exposes 10 subpath entries:
 
 - `@bendyline/squisq-formats/docx` — DOCX import/export (markdownDocToDocx, docxToMarkdownDoc, docToDocx, docxToDoc)
-- `@bendyline/squisq-formats/ooxml` — Shared OOXML package reader/writer, XML utilities, namespace constants
+- `@bendyline/squisq-formats/ooxml` — Shared OOXML package reader/writer, XML utilities, namespace constants, shared DOM-read helpers (`attrNS`, `resolveTarget`, `baseDirOf`, `findRelByType`), and the theme reader (`parseThemeXml`, `readThemePart` — `theme1.xml` clrScheme/fontScheme with sysClr fallbacks)
 - `@bendyline/squisq-formats/pdf` — PDF import/export (markdownDocToPdf, pdfToMarkdownDoc, configurePdfWorker)
 - `@bendyline/squisq-formats/html` — HTML export: `docToHtml` (single self-contained file with inlined player + data-URI images), `docToHtmlZip` (multi-file ZIP with external assets + optional audio), `collectImagePaths`, `inferMimeType`, plus the `markdownDocToPlainHtml` / `markdownDocsToPlainHtmlBundle` / `markdownDocsToHtmlBundle` static-rendering paths and HTML import (`htmlToMarkdown`, `htmlToMarkdownDoc`, `htmlToMarkdownDocSync`). Export needs `PLAYER_BUNDLE` from `@bendyline/squisq-react/standalone-source`.
 - `@bendyline/squisq-formats/epub` — EPUB 3 e-book export (markdownDocToEpub, docToEpub)
-- `@bendyline/squisq-formats/pptx` — PPTX export (markdownDocToPptx, docToPptx) + import (pptxToMarkdownDoc, pptxToDoc; covers slide text/lists/tables + slide-level embedded images via `pptxToContainer`)
+- `@bendyline/squisq-formats/pptx` — PPTX export (markdownDocToPptx, docToPptx) + import (pptxToMarkdownDoc, pptxToDoc; covers slide text/lists/tables + slide-level embedded images via `pptxToContainer`). Import infers the deck's theme and slide layouts **by default** (`inferTheme` / `inferLayouts` options, pass `false` to opt out): the theme rides as `squisq-custom-themes` + `squisq-theme` frontmatter, slide headings get `{[template]}` annotations matched to built-ins (title, sectionHeader, twoColumn, leftFeature/rightFeature, imageWithCaption, photoGrid), and distinctive layouts become `squisq-custom-templates` definitions. Layout inference is also exposed directly: `analyzePptxLayouts(pkg, opts)` and `inspectPptxLayouts(bytes, opts)` (per-layout verdict summaries for UI confirmation).
 - `@bendyline/squisq-formats/xlsx` — XLSX import (xlsxToMarkdownDoc, xlsxToDoc) + export (markdownDocToXlsx, docToXlsx — tables-only, one worksheet per markdown table; both return `Promise<ArrayBuffer>`)
 - `@bendyline/squisq-formats/csv` — CSV import/export (parseCsv, csvToMarkdownDoc, csvToDoc, markdownDocToCsv)
 - `@bendyline/squisq-formats/container` — ContentContainer ZIP serialization (containerToZip, zipToContainer)
-- `@bendyline/squisq-formats/registry` — Format registry + programmatic `convert()` front door: `convert(source, targetFormatId, opts?)`, `createRegistry` / `defaultRegistry` / `defaultFormats`, `FormatRegistry` / `FormatDefinition` / `ConversionResult` / `ConvertSource` types, `BUILTIN_FORMAT_IDS`, and structured `ConversionError` (+ `ConversionErrorCode`)
+- `@bendyline/squisq-formats/registry` — Format registry + programmatic `convert()` front door: `convert(source, targetFormatId, opts?)`, `createRegistry` / `defaultRegistry` / `defaultFormats`, `FormatRegistry` / `FormatDefinition` / `ConversionResult` / `ConvertSource` types, `BUILTIN_FORMAT_IDS`, and structured `ConversionError` (+ `ConversionErrorCode`). PPTX import inference threads through `ConvertOptions.formatOptions.pptx.{inferTheme,inferLayouts}` (default on; `false` disables)
+- `@bendyline/squisq-formats/infer` — "Infer theme from a file import": `inferThemeFromFile(bytes, { format?, inferLayouts?, nameHint? })` sniffs DOCX/PPTX/XLSX, reads the OOXML theme part, and returns `{ theme, extraction, layouts?, warnings }` — a compiled, validated Squisq `Theme` (seeds from clrScheme via the master `clrMap`, so dark decks invert correctly; fonts via core `matchFontFamily`) plus, for PPTX with `inferLayouts`, `CustomTemplateDefinition`s from distinctive slide layouts. PDF is rejected (`unsupported-input` — no theme tables). Also exports the per-format extractors (`extractDocxTheme` / `extractPptxTheme` / `extractXlsxTheme`), `compileExtractedTheme`, and `colorHintsFromExtraction`
 
 `@bendyline/squisq-editor-react` exports everything from the root (single `.` entry, no subpaths beyond `/styles`):
 
@@ -341,7 +347,7 @@ build entry and a `package.json` export):
 
 `@bendyline/squisq-cli` ships a `squisq` bin command:
 
-- `squisq convert <input> [--format docx|pdf|html|epub|pptx|xlsx|csv] [options]` — converts any supported input (markdown/JSON Doc/`.zip`/`.dbk`/folder **or** an importable binary `.docx`/`.pptx`/`.pdf`/`.xlsx`/`.csv`/`.html`) via the shared registry `convert()`. **`-o, --output <file>` is a single output file (format inferred from extension); `-d, --output-dir <dir>` is the multi-file/output-directory flag** (the old `-o`-as-directory behavior moved to `-d`).
+- `squisq convert <input> [--format docx|pdf|html|epub|pptx|xlsx|csv] [options]` — converts any supported input (markdown/JSON Doc/`.zip`/`.dbk`/folder **or** an importable binary `.docx`/`.pptx`/`.pdf`/`.xlsx`/`.csv`/`.html`) via the shared registry `convert()`. **`-o, --output <file>` is a single output file (format inferred from extension); `-d, --output-dir <dir>` is the multi-file/output-directory flag** (the old `-o`-as-directory behavior moved to `-d`). PPTX inputs infer the deck's theme + slide layouts **by default** (theme/custom-template frontmatter + heading annotations in the converted output); opt out with `--no-infer-theme` / `--no-infer-layouts`. An explicit `--theme <id>` still wins over an inferred theme.
 - `squisq video <input> [options]` — markdown → MP4 via headless render + WASM encode
 - `squisq doctor` — reports environment/runtime readiness for the conversion + video pipelines
 - Programmatic API at the `@bendyline/squisq-cli/api` subpath for consumers who want to invoke the same conversion pipeline without spawning a process
@@ -444,7 +450,7 @@ The Theme system provides unified visual styling for rendered docs. A `Theme` bu
 
 **Custom themes (in-document, parallel to custom layouts):**
 
-Users author their own themes in the editor (ThemePicker → "＋ Create custom theme"). A custom theme is a full `Theme` stored **in the document's frontmatter** under `squisq-custom-themes` (codec: `doc/customThemesFrontmatter.ts`) and surfaced as `Doc.customThemes: Theme[]` — the exact theme analog of `squisq-custom-templates` / `Doc.customTemplates`. Exactly one is active at a time via the `squisq-theme` selector (the doc-level counterpart of a block's `{[name]}` annotation). The editor mirrors the custom-templates lifecycle file-for-file in `editor-react/src/customThemes/`: a browser-local library (`customThemeLibrary.ts`, key `squisq:custom-theme-library`), a dual-catalog `CustomThemeContext` (doc + library, `applyTheme` copies library→doc for self-sufficiency), a `useDocCustomThemes` hook, and the `CustomThemeDialog` designer (base-theme picker + seed colors + N accents→`colorSchemes` + fonts + style presets, `saveTarget: 'doc' | 'library'`). The shared draft model + form rows live in `customThemes/themeDraft.ts` + `themeControls.tsx` (also used by the lighter `ThemeCustomizerPanel` popover). Resolution stays doc-scoped via `resolveThemeForDoc` — no global registry on the critical path.
+Users author their own themes in the editor (ThemePicker → "＋ Create custom theme"). A custom theme is a full `Theme` stored **in the document's frontmatter** under `squisq-custom-themes` (codec: `doc/customThemesFrontmatter.ts`) and surfaced as `Doc.customThemes: Theme[]` — the exact theme analog of `squisq-custom-templates` / `Doc.customTemplates`. Exactly one is active at a time via the `squisq-theme` selector (the doc-level counterpart of a block's `{[name]}` annotation). The editor mirrors the custom-templates lifecycle file-for-file in `editor-react/src/customThemes/`: a browser-local library (`customThemeLibrary.ts`, key `squisq:custom-theme-library`), a dual-catalog `CustomThemeContext` (doc + library, `applyTheme` copies library→doc for self-sufficiency), a `useDocCustomThemes` hook, and the `CustomThemeDialog` designer (base-theme picker + seed colors + N accents→`colorSchemes` + fonts + style presets, `saveTarget: 'doc' | 'library'`). The shared draft model + form rows live in `customThemes/themeDraft.ts` + `themeControls.tsx` (also used by the lighter `ThemeCustomizerPanel` popover). Both surfaces include an **"Import from file" section** (`customThemes/ImportThemeSection.tsx`): upload or drop a `.docx`/`.pptx`/`.xlsx` and its theme colors/fonts populate the draft via `@bendyline/squisq-formats/infer` (lazy-loaded) + `draftPatchFromImportedTheme`; in the `CustomThemeDialog`, a PPTX also yields inferred slide-layout custom templates that ride the save as `onSave(theme, target, extras)` and land in `squisq-custom-templates` in the **same** frontmatter write as the theme (single-write rule — see `PreviewControls.handleDesignerSave`). Resolution stays doc-scoped via `resolveThemeForDoc` — no global registry on the critical path.
 
 ## JSON Form System
 

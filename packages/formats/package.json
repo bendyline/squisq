@@ -86,6 +86,11 @@
       "types": "./dist/registry/index.d.ts",
       "import": "./dist/registry/index.js",
       "default": "./dist/registry/index.js"
+    },
+    "./infer": {
+      "types": "./dist/infer/index.d.ts",
+      "import": "./dist/infer/index.js",
+      "default": "./dist/infer/index.js"
     }
   },
   "scripts": {

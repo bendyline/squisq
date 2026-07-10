@@ -3991,6 +3991,69 @@
   background: #1d4ed8;
 }
 
+/* "Import from file" affordance (shared by the customizer popover + designer pane) */
+.squisq-theme-import {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.squisq-theme-import-drop {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px;
+  border: 1px dashed var(--squisq-border, #d1d5db);
+  border-radius: 6px;
+  background: var(--squisq-input-bg, #f9fafb);
+}
+
+.squisq-theme-import-drop--active {
+  border-color: #2563eb;
+  background: rgba(37, 99, 235, 0.08);
+}
+
+.squisq-theme-import-drop--busy {
+  opacity: 0.7;
+  pointer-events: none;
+}
+
+.squisq-theme-import-hint {
+  font-size: 11px;
+  color: var(--squisq-text-muted, #6b7280);
+}
+
+.squisq-theme-import-status {
+  font-size: 11px;
+  color: var(--squisq-text-muted, #6b7280);
+}
+
+.squisq-theme-import-error {
+  font-size: 11px;
+  color: #dc2626;
+}
+
+.squisq-theme-import-warnings {
+  margin: 0;
+  padding-left: 16px;
+  font-size: 11px;
+  color: var(--squisq-text-muted, #6b7280);
+}
+
+.squisq-editor-shell[data-theme='dark'] .squisq-theme-import-drop {
+  border-color: #374151;
+  background: #111827;
+}
+
+.squisq-editor-shell[data-theme='dark'] .squisq-theme-import-drop--active {
+  border-color: #3b82f6;
+  background: rgba(59, 130, 246, 0.12);
+}
+
+.squisq-editor-shell[data-theme='dark'] .squisq-theme-import-error {
+  color: #f87171;
+}
+
 .squisq-editor-shell[data-theme='dark'] .squisq-theme-customizer-popover {
   background: #1f2937;
   border-color: #374151;

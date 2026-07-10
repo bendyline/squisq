@@ -64,6 +64,15 @@ export type { HtmlImportOptions } from './html/index.js';
 export { markdownDocToEpub, docToEpub } from './epub/index.js';
 export type { EpubExportOptions } from './epub/index.js';
 
+// Theme inference from file imports (DOCX/PPTX/XLSX theme1.xml → Squisq Theme)
+export { inferThemeFromFile, compileExtractedTheme } from './infer/index.js';
+export type {
+  InferThemeOptions,
+  InferredFileTheme,
+  ExtractedFileTheme,
+  InferSourceFormat,
+} from './infer/index.js';
+
 // Format registry + programmatic convert()
 export {
   convert,

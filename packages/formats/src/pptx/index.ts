@@ -27,6 +27,20 @@ import { type PptxImportOptions, pptxToMarkdownDoc } from './import.js';
 export type { PptxImportOptions } from './import.js';
 export { pptxToMarkdownDoc, pptxToContainer } from './import.js';
 
+// Layout inference (used by the PPTX importer and the theme dialog)
+export { analyzePptxLayouts, inspectPptxLayouts } from './layouts.js';
+export type {
+  AnalyzedLayout,
+  AnalyzePptxLayoutsOptions,
+  ExtractedPlaceholder,
+  ExtractedSlideLayout,
+  InspectPptxLayoutsOptions,
+  LayoutVerdict,
+  PptxColorHints,
+  PptxLayoutInference,
+  PptxLayoutSummary,
+} from './layouts.js';
+
 /**
  * Convert a .pptx file to a squisq Doc (via the markdown model).
  */

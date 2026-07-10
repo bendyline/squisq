@@ -15,7 +15,7 @@ import type {
   ThemeSeedColors,
   ThemeColorScheme,
 } from '@bendyline/squisq/schemas';
-import { compileTheme, deriveScale, isHex } from '@bendyline/squisq/schemas';
+import { accentToColorScheme, compileTheme } from '@bendyline/squisq/schemas';
 
 // ── Preset → schema-value tables ────────────────────────────────────
 
@@ -164,14 +164,12 @@ export function accentsFromTheme(theme: Theme | null): AccentInput[] {
 }
 
 /**
- * Expand one accent color into a full `{bg, text, accent}` color scheme via
- * the OKLCh scale — dark saturated bg, light readable text, the picked accent.
- * Falls back to a neutral scheme when the input isn't a valid hex.
+ * Expand one accent color into a full `{bg, text, accent}` color scheme.
+ * Delegates to core's `accentToColorScheme` so file-import theme inference
+ * and the editor's accent list derive identical schemes.
  */
 export function schemeFromAccent(accent: string): ThemeColorScheme {
-  if (!isHex(accent)) return { bg: '#1a202c', text: '#e2e8f0', accent: '#63b3ed' };
-  const scale = deriveScale(accent, 0.3);
-  return { bg: scale.darker2, text: scale.lighter2, accent: scale.base };
+  return accentToColorScheme(accent);
 }
 
 export function themeToDraft(theme: Theme | null): Draft {
@@ -218,6 +216,24 @@ export function slugify(s: string): string {
       .replace(/[^a-z0-9]+/g, '-')
       .replace(/^-+|-+$/g, '') || 'custom'
   );
+}
+
+/**
+ * Draft patch from a theme inferred from an imported office file: name,
+ * seeds, accents (marked authored so the file's schemes survive a re-save),
+ * and fonts. Deliberately leaves `baseId` and the style presets untouched —
+ * the user's in-progress choices there aren't the file's to overwrite.
+ */
+export function draftPatchFromImportedTheme(theme: Theme): Partial<Draft> {
+  const d = themeToDraft(theme);
+  return {
+    name: d.name,
+    seeds: d.seeds,
+    accents: d.accents,
+    accentsEdited: d.accents.length > 0,
+    titleFont: d.titleFont,
+    bodyFont: d.bodyFont,
+  };
 }
 
 export interface CompileDraftOptions {

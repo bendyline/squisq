@@ -28,6 +28,8 @@ import {
   oklchSetChroma,
   pickContrastingText,
   relativeLuminance,
+  deriveScale,
+  isHex,
 } from './colorUtils.js';
 
 /** Internal default theme used to fill in fields the customizer doesn't expose. */
@@ -132,6 +134,19 @@ export function deriveColorPalette(
     highlight,
     warning,
   };
+}
+
+/**
+ * Expand one accent color into a full `{bg, text, accent}` color scheme via
+ * the OKLCh scale — dark saturated bg, light readable text, the picked accent.
+ * Falls back to a neutral scheme when the input isn't a valid hex. Shared by
+ * the editor's accent list and file-import theme inference so both derive
+ * identical schemes from the same accent.
+ */
+export function accentToColorScheme(accent: string): ThemeColorScheme {
+  if (!isHex(accent)) return { bg: '#1a202c', text: '#e2e8f0', accent: '#63b3ed' };
+  const scale = deriveScale(accent, 0.3);
+  return { bg: scale.darker2, text: scale.lighter2, accent: scale.base };
 }
 
 /** Map a contrast preset to numeric spread used by `deriveColorPalette`. */

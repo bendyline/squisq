@@ -42,6 +42,16 @@ export interface ReadInputResult {
   sourceFormat: FormatId;
 }
 
+export interface ReadInputOptions {
+  /**
+   * Infer a Squisq theme from an OOXML source's theme part (PPTX today).
+   * Default true — the importer carries it as frontmatter.
+   */
+  inferTheme?: boolean;
+  /** Derive custom layout templates from PPTX slide layouts. Default true. */
+  inferLayouts?: boolean;
+}
+
 /** MIME type lookup by extension (common content types) */
 const MIME_TYPES: Record<string, string> = {
   '.md': 'text/markdown',
@@ -95,7 +105,10 @@ async function walkDir(root: string, prefix = ''): Promise<string[]> {
  * or an importable binary format) and resolve it to a populated
  * {@link ReadInputResult}.
  */
-export async function readInput(inputPath: string): Promise<ReadInputResult> {
+export async function readInput(
+  inputPath: string,
+  options?: ReadInputOptions,
+): Promise<ReadInputResult> {
   const info = await stat(inputPath);
 
   if (info.isDirectory()) {
@@ -114,7 +127,7 @@ export async function readInput(inputPath: string): Promise<ReadInputResult> {
   if (IMPORTER_EXTS.includes(ext)) {
     const def = defaultRegistry().byExtension(ext);
     if (def && (def.importContainer || def.importDoc)) {
-      return readViaImporter(inputPath, def);
+      return readViaImporter(inputPath, def, options);
     }
   }
 
@@ -155,18 +168,27 @@ async function readDocJsonFile(filePath: string): Promise<ReadInputResult> {
 async function readViaImporter(
   filePath: string,
   def: import('@bendyline/squisq-formats').FormatDefinition,
+  options?: ReadInputOptions,
 ): Promise<ReadInputResult> {
   const buffer = await readArrayBuffer(filePath);
+  const convertOptions = {
+    formatOptions: {
+      [def.id]: {
+        inferTheme: options?.inferTheme !== false,
+        inferLayouts: options?.inferLayouts !== false,
+      },
+    },
+  };
 
   let container: ContentContainer;
   let markdownDoc: MarkdownDocument;
   if (def.importContainer) {
-    container = await def.importContainer(buffer, {});
+    container = await def.importContainer(buffer, convertOptions);
     const text = await container.readDocument();
     markdownDoc = text ? parseMarkdown(text) : { type: 'document', children: [] };
   } else {
     // importDoc is guaranteed present by the caller's guard.
-    markdownDoc = await def.importDoc!(buffer, {});
+    markdownDoc = await def.importDoc!(buffer, convertOptions);
     const mem = new MemoryContentContainer();
     await mem.writeDocument(stringifyMarkdown(markdownDoc));
     container = mem;

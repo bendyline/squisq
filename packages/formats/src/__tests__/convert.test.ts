@@ -5,9 +5,12 @@
  */
 
 import { describe, it, expect } from 'vitest';
+import JSZip from 'jszip';
 import { parseMarkdown } from '@bendyline/squisq/markdown';
 import { markdownToDoc } from '@bendyline/squisq/doc';
 import { convert, ConversionError, defaultRegistry } from '../registry/index';
+import { markdownDocToPptx } from '../pptx/export';
+import { buildThemedPptx } from './pptxInferFixtures';
 
 const SAMPLE_MD = `# Round Trip
 
@@ -181,6 +184,42 @@ describe('suggestedFilename', () => {
 });
 
 // sanity: ConversionError is exported and usable
+// ── pptx theme/layout inference threading ───────────────────────────
+
+describe('pptx import inference threading (default ON)', () => {
+  it('carries an inferred theme through convert() by default', async () => {
+    const deck = await markdownDocToPptx(parseMarkdown('# Hi\n\nBody.\n'), {});
+    const result = await convert({ kind: 'bytes', data: deck, filename: 'deck.pptx' }, 'md');
+    const md = new TextDecoder().decode(result.bytes);
+    expect(md).toContain('squisq-theme: custom-office-theme');
+    expect(md).toContain('squisq-custom-themes');
+  });
+
+  it('omits inference with formatOptions.pptx.inferTheme=false', async () => {
+    const deck = await markdownDocToPptx(parseMarkdown('# Hi\n\nBody.\n'), {});
+    const result = await convert({ kind: 'bytes', data: deck, filename: 'deck.pptx' }, 'md', {
+      formatOptions: { pptx: { inferTheme: false, inferLayouts: false } },
+    });
+    const md = new TextDecoder().decode(result.bytes);
+    expect(md).not.toContain('squisq-theme');
+    expect(md).not.toContain('squisq-custom-themes');
+  });
+
+  it('end-to-end: inferred theme colors reach a downstream docx export', async () => {
+    // Distinctive fixture theme (bg #fdfdf8, text #1a1a2e) → pptx → docx.
+    const result = await convert(
+      { kind: 'bytes', data: await buildThemedPptx(), filename: 'deck.pptx' },
+      'docx',
+    );
+    const zip = await JSZip.loadAsync(result.bytes);
+    let text = '';
+    for (const name of Object.keys(zip.files)) {
+      if (/\.(xml|rels)$/i.test(name)) text += await zip.files[name]!.async('string');
+    }
+    expect(text.toLowerCase()).toContain('1a1a2e');
+  });
+});
+
 it('exports ConversionError', () => {
   expect(new ConversionError('conversion-failed', 'x')).toBeInstanceOf(Error);
 });

@@ -191,11 +191,20 @@ export { useMonacoLoader } from './useMonacoLoader.js';
 export type { UseMonacoLoaderResult } from './useMonacoLoader.js';
 
 // Custom themes — provider stack (doc frontmatter + browser-local library)
-export { CustomThemeProvider, useCustomThemes, useDocCustomThemes } from './customThemes/index.js';
+export {
+  CustomThemeProvider,
+  useCustomThemes,
+  useDocCustomThemes,
+  ImportThemeSection,
+  draftPatchFromImportedTheme,
+} from './customThemes/index.js';
 export type {
   CustomThemeContextValue,
   CustomThemeProviderProps,
   DocCustomThemes,
+  ImportThemeSectionProps,
+  ImportedThemeResult,
+  ThemeSaveExtras,
 } from './customThemes/index.js';
 
 // Custom templates — provider stack (doc frontmatter + browser-local library)

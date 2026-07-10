@@ -33,6 +33,13 @@ export {
   getCoreProperties,
 } from './reader.js';
 
+// Read utilities
+export { attrNS, baseDirOf, resolveTarget, findRelByType } from './readUtils.js';
+
+// Theme reader
+export type { OoxmlColorScheme, OoxmlFontScheme, OoxmlTheme } from './themeReader.js';
+export { parseThemeXml, readThemePart } from './themeReader.js';
+
 // Writer
 export type { OoxmlPackageBuilder } from './writer.js';
 export { createPackage } from './writer.js';

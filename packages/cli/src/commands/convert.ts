@@ -86,6 +86,10 @@ interface ConvertOpts {
   theme?: string;
   transform?: string;
   autoTemplates?: boolean;
+  /** Commander `--no-infer-theme` negation: defaults true, false when passed. */
+  inferTheme?: boolean;
+  /** Commander `--no-infer-layouts` negation: defaults true, false when passed. */
+  inferLayouts?: boolean;
 }
 
 export function registerConvertCommand(program: Command): void {
@@ -112,6 +116,11 @@ export function registerConvertCommand(program: Command): void {
       '--no-auto-templates',
       'Disable content-aware template auto-picking for unannotated headings',
     )
+    .option(
+      '--no-infer-theme',
+      'Do not infer a Squisq theme from an office input file (PPTX theme colors/fonts)',
+    )
+    .option('--no-infer-layouts', 'Do not derive custom layout templates from PPTX slide layouts')
     .action(async (inputPath: string, opts: ConvertOpts) => {
       try {
         await runConvert(inputPath, opts);
@@ -172,7 +181,10 @@ async function runConvert(inputPath: string, opts: ConvertOpts): Promise<void> {
   }
 
   console.error(`Reading: ${resolvedInput}`);
-  const result = await readInput(resolvedInput);
+  const result = await readInput(resolvedInput, {
+    inferTheme: opts.inferTheme,
+    inferLayouts: opts.inferLayouts,
+  });
 
   if (opts.theme) {
     await assertValidThemeId(opts.theme, result);

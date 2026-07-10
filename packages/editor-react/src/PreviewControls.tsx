@@ -32,10 +32,17 @@ import { setFrontmatterValues } from '@bendyline/squisq/markdown';
 import {
   resolveThemeForDoc,
   writeCustomThemesToFrontmatter,
+  writeCustomTemplatesToFrontmatter,
   FRONTMATTER_CUSTOM_THEMES_KEY,
+  FRONTMATTER_CUSTOM_TEMPLATES_KEY,
 } from '@bendyline/squisq/doc';
 import { useEditorContext } from './EditorContext';
-import { useCustomThemes, CustomThemeDialog, type ThemeSaveTarget } from './customThemes';
+import {
+  useCustomThemes,
+  CustomThemeDialog,
+  type ThemeSaveTarget,
+  type ThemeSaveExtras,
+} from './customThemes';
 import { Icon } from './Icon';
 
 // ── Context ──────────────────────────────────────────────────────
@@ -81,7 +88,7 @@ export interface PreviewSettings {
 export interface ThemeDesignerConfig {
   value: Theme | null;
   onChange: (theme: Theme) => void;
-  onSave: (theme: Theme, target: ThemeSaveTarget) => void;
+  onSave: (theme: Theme, target: ThemeSaveTarget, extras?: ThemeSaveExtras) => void;
   onClose: () => void;
 }
 
@@ -305,27 +312,38 @@ export function PreviewSettingsProvider({
     setPreviewTheme(null);
   }, []);
   const handleDesignerSave = useCallback(
-    (theme: Theme, target: ThemeSaveTarget) => {
+    (theme: Theme, target: ThemeSaveTarget, extras?: ThemeSaveExtras) => {
       if (target === 'library') {
+        // Imported slide layouts are doc-scoped in v1; the dialog hints at this.
         custom?.upsertLibraryTheme(theme);
       } else {
-        // Write the theme payload AND select it in a SINGLE frontmatter update.
-        // Two separate `setMarkdownSource` calls (upsertDocTheme + a squisq-theme
-        // write) would each derive from the same stale source, so the second
-        // would clobber the first and drop the custom-themes payload.
+        // Write the theme payload, its selection, AND any imported layout
+        // templates in a SINGLE frontmatter update. Separate
+        // `setMarkdownSource` calls would each derive from the same stale
+        // source, so later writes would clobber earlier ones.
         const docThemes = custom?.docThemes ?? [];
         const idx = docThemes.findIndex((t) => t.id === theme.id);
         const nextThemes =
           idx >= 0 ? docThemes.map((t, i) => (i === idx ? theme : t)) : [...docThemes, theme];
-        persistFrontmatter({
+        const updates: Record<string, string | null> = {
           [FRONTMATTER_CUSTOM_THEMES_KEY]: writeCustomThemesToFrontmatter(nextThemes) ?? null,
           [FM_KEYS.theme.canonical]: theme.id,
-        });
+        };
+        if (extras?.templates && extras.templates.length > 0) {
+          const existing = doc?.customTemplates ?? [];
+          const merged = [
+            ...existing.filter((t) => !extras.templates!.some((n) => n.name === t.name)),
+            ...extras.templates,
+          ];
+          updates[FRONTMATTER_CUSTOM_TEMPLATES_KEY] =
+            writeCustomTemplatesToFrontmatter(merged) ?? null;
+        }
+        persistFrontmatter(updates);
         setSelectedThemeId(theme.id);
       }
       closeThemeDesigner();
     },
-    [custom, persistFrontmatter, closeThemeDesigner],
+    [custom, doc, persistFrontmatter, closeThemeDesigner],
   );
   const deleteCustomTheme = useCallback(
     (id: string) => {

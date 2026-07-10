@@ -7,9 +7,20 @@
  * (or "Slide N"), the remaining text as a bullet list, and any slide tables
  * (`<a:tbl>`) as markdown tables. Text lives in the DrawingML namespace
  * (`a:p` / `a:r` / `a:t`) inside PresentationML shapes (`p:sp`).
+ *
+ * Theme + layout inference (default ON): the deck's theme part is compiled
+ * into a Squisq custom theme and carried in the returned document's
+ * frontmatter (`squisq-custom-themes` + `squisq-theme`); slide layouts are
+ * classified against the built-in template set, distinctive ones become
+ * `squisq-custom-templates` definitions, and each slide's heading is
+ * annotated (`{[templateName …]}`) per its layout's verdict. Pass
+ * `inferTheme: false` / `inferLayouts: false` for legacy plain imports.
+ * Inference never fails an import — extraction errors degrade to plain
+ * output with a console warning.
  */
 
 import type {
+  HeadingTemplateAnnotation,
   MarkdownBlockNode,
   MarkdownDocument,
   MarkdownImage,
@@ -19,12 +30,16 @@ import type {
   MarkdownTableRow,
 } from '@bendyline/squisq/markdown';
 import { stringifyMarkdown } from '@bendyline/squisq/markdown';
+import type { CustomTemplateDefinition, Theme } from '@bendyline/squisq/schemas';
 import { getPartBinary, getPartRelationships, getPartXml, openPackage } from '../ooxml/reader.js';
 import type { OoxmlPackage } from '../ooxml/types.js';
 import { NS_DRAWINGML, NS_PML, NS_R } from '../ooxml/namespaces.js';
+import { attrNS, baseDirOf, resolveTarget } from '../ooxml/readUtils.js';
 import type { ContentContainer } from '@bendyline/squisq/storage';
 import { buildContainer } from '../shared/container.js';
 import { extToMime } from '../shared/images.js';
+import type { ExtractedFileTheme } from '../infer/types.js';
+import type { AnalyzedLayout, PptxLayoutInference } from './layouts.js';
 
 export interface PptxImportOptions {
   /**
@@ -34,6 +49,19 @@ export interface PptxImportOptions {
    * `pptxToContainer` forces this on. Default: false.
    */
   extractImages?: boolean;
+  /**
+   * Infer a Squisq theme from the deck's theme part (colors + fonts) and
+   * carry it in the returned document's frontmatter (`squisq-custom-themes`
+   * + `squisq-theme`). Default: true — pass false for a legacy import with
+   * no frontmatter.
+   */
+  inferTheme?: boolean;
+  /**
+   * Derive custom layout templates from the deck's slide layouts/masters
+   * (`squisq-custom-templates` frontmatter) and annotate slide headings
+   * with matching built-in or generated templates. Default: true.
+   */
+  inferLayouts?: boolean;
 }
 
 /**
@@ -46,20 +74,10 @@ interface ImportContext {
   /** Collected image files: `images/imageN.ext` → { data, mimeType } */
   extractedImages: Map<string, { data: ArrayBuffer; mimeType: string }>;
   imageCounter: number;
-}
-
-function attrNS(el: Element, ns: string, local: string, fallback: string): string | null {
-  return el.getAttributeNS(ns, local) ?? el.getAttribute(fallback);
-}
-
-function resolveTarget(baseDir: string, target: string): string {
-  if (target.startsWith('/')) return target.replace(/^\//, '');
-  const stack = baseDir ? baseDir.split('/') : [];
-  for (const seg of target.split('/')) {
-    if (seg === '..') stack.pop();
-    else if (seg !== '.') stack.push(seg);
-  }
-  return stack.join('/');
+  /** Layout analysis when `inferLayouts` is on. */
+  inference?: PptxLayoutInference;
+  /** Generated custom templates actually referenced by ≥1 slide annotation. */
+  usedCustomTemplates: Map<string, CustomTemplateDefinition>;
 }
 
 async function orderedSlidePaths(pkg: OoxmlPackage): Promise<string[]> {
@@ -114,12 +132,6 @@ function tableToMarkdown(tbl: Element): MarkdownTable {
   return { type: 'table', children: rows };
 }
 
-/** Directory portion of a part path, e.g. `ppt/slides/slide1.xml` → `ppt/slides`. */
-function baseDirOf(path: string): string {
-  const slash = path.lastIndexOf('/');
-  return slash === -1 ? '' : path.slice(0, slash);
-}
-
 /**
  * Extract every `<p:pic>` picture in a slide as an image node, reading the
  * `<a:blip r:embed>` relationship, resolving it to the media part, and copying
@@ -168,6 +180,93 @@ async function extractSlideImages(
   return images;
 }
 
+// ── Layout-verdict annotation building ───────────────────────────────
+
+/** One non-title text shape on a slide, with its placeholder identity. */
+interface SlideTextEntry {
+  rawType: string;
+  idx: number;
+  texts: string[];
+}
+
+/** Annotation params live on a single heading line — flatten whitespace. */
+function cleanParamText(text: string): string {
+  return text.replace(/\s+/g, ' ').trim();
+}
+
+/**
+ * Turn a slide's layout verdict into a heading annotation, downgrading to
+ * plain when the slide lacks the content the template needs (a bare
+ * annotation without its essential params renders an empty card in the
+ * player path, which never derives inputs for annotated blocks).
+ */
+function buildSlideAnnotation(
+  analyzed: AnalyzedLayout | undefined,
+  entries: SlideTextEntry[],
+  images: MarkdownImage[],
+  ctx: ImportContext,
+): { annotation?: HeadingTemplateAnnotation; omitted: Set<SlideTextEntry> } {
+  const omitted = new Set<SlideTextEntry>();
+  if (!analyzed) return { omitted };
+  const verdict = analyzed.verdict;
+
+  if (verdict.kind === 'custom') {
+    ctx.usedCustomTemplates.set(verdict.def.name, verdict.def);
+    return { annotation: { template: verdict.def.name }, omitted };
+  }
+  if (verdict.kind !== 'builtin') return { omitted };
+
+  switch (verdict.paramSpec) {
+    case 'titleSubtitle': {
+      const sub = entries.find((e) => e.rawType === 'subTitle');
+      const subtitle = sub ? cleanParamText(sub.texts.join(' ')) : '';
+      // The subtitle moves into the card; keep it out of the bullets.
+      if (sub && subtitle) omitted.add(sub);
+      return {
+        annotation: {
+          template: verdict.template,
+          ...(subtitle ? { params: { subtitle } } : {}),
+        },
+        omitted,
+      };
+    }
+    case 'comparisonPairs': {
+      if (!verdict.columns) return { omitted };
+      const textAt = (idx: number | undefined): string[] =>
+        idx === undefined ? [] : (entries.find((e) => e.idx === idx)?.texts ?? []);
+      const side = (idxs: number[]): string => {
+        const header = cleanParamText(textAt(idxs[0])[0] ?? '');
+        const body = cleanParamText(textAt(idxs[1])[0] ?? '');
+        return header ? (body ? `${header}|${body}` : header) : '';
+      };
+      const left = side(verdict.columns.left);
+      const right = side(verdict.columns.right);
+      // twoColumn requires both labels — a bare annotation renders nothing.
+      if (!left || !right) return { omitted };
+      return { annotation: { template: 'twoColumn', params: { left, right } }, omitted };
+    }
+    case 'featureImage': {
+      const image = images[0];
+      if (!image) return { omitted };
+      const params: Record<string, string> = { imageSrc: image.url };
+      if (image.alt && image.alt !== 'Image') params.imageAlt = cleanParamText(image.alt);
+      return { annotation: { template: verdict.template, params }, omitted };
+    }
+    case 'photoGridGate': {
+      if (images.length < 2) return { omitted };
+      return {
+        annotation: {
+          template: 'photoGrid',
+          params: { images: images.map((i) => i.url).join(',') },
+        },
+        omitted,
+      };
+    }
+    default:
+      return { annotation: { template: verdict.template }, omitted };
+  }
+}
+
 async function convertSlide(
   path: string,
   index: number,
@@ -179,7 +278,7 @@ async function convertSlide(
   const out: MarkdownBlockNode[] = [];
 
   let title = '';
-  const bullets: string[] = [];
+  const entries: SlideTextEntry[] = [];
   const shapes = doc.getElementsByTagNameNS(NS_PML, 'sp');
   for (let s = 0; s < shapes.length; s++) {
     const sp = shapes[s]!;
@@ -194,17 +293,32 @@ async function convertSlide(
     if (texts.length === 0) continue;
     if (isTitleShape(sp) && !title) {
       title = texts.join(' ');
-    } else {
-      bullets.push(...texts);
+      continue;
     }
+    const phs = sp.getElementsByTagNameNS(NS_PML, 'ph');
+    const rawType = phs.length ? (phs[0]!.getAttribute('type') ?? '') : '';
+    const idxRaw = phs.length ? phs[0]!.getAttribute('idx') : null;
+    const idx = idxRaw ? parseInt(idxRaw, 10) || 0 : 0;
+    entries.push({ rawType, idx, texts });
   }
+
+  // Images are extracted before annotation building so feature/photoGrid
+  // params can reference their container paths; they still land after the
+  // bullet list in the output, unchanged.
+  const images = ctx.extractImages ? await extractSlideImages(doc, path, ctx) : [];
+
+  const layoutPath = ctx.inference?.layoutPathBySlide.get(path);
+  const analyzed = layoutPath ? ctx.inference?.byLayoutPath.get(layoutPath) : undefined;
+  const { annotation, omitted } = buildSlideAnnotation(analyzed, entries, images, ctx);
 
   out.push({
     type: 'heading',
     depth: 2,
     children: [{ type: 'text', value: title || `Slide ${index + 1}` }],
+    ...(annotation ? { templateAnnotation: annotation } : {}),
   });
 
+  const bullets = entries.filter((e) => !omitted.has(e)).flatMap((e) => e.texts);
   if (bullets.length > 0) {
     const items: MarkdownListItem[] = bullets.map((text) => ({
       type: 'listItem',
@@ -214,17 +328,19 @@ async function convertSlide(
   }
 
   // Embedded pictures land after the bullet list and before any tables.
-  if (ctx.extractImages) {
-    const images = await extractSlideImages(doc, path, ctx);
-    for (const image of images) {
-      out.push({ type: 'paragraph', children: [image] });
-    }
+  for (const image of images) {
+    out.push({ type: 'paragraph', children: [image] });
   }
 
   const tbls = doc.getElementsByTagNameNS(NS_DRAWINGML, 'tbl');
   for (let t = 0; t < tbls.length; t++) out.push(tableToMarkdown(tbls[t]!));
 
   return out;
+}
+
+function warnInferenceFailure(step: string, err: unknown): void {
+  const message = err instanceof Error ? err.message : String(err);
+  console.warn(`pptx import: ${step} failed; importing without it — ${message}`);
 }
 
 async function importDocument(
@@ -236,13 +352,78 @@ async function importDocument(
     extractImages: options.extractImages ?? false,
     extractedImages: new Map(),
     imageCounter: 0,
+    usedCustomTemplates: new Map(),
   };
+
+  const inferTheme = options.inferTheme !== false;
+  const inferLayouts = options.inferLayouts !== false;
+
+  // All inference modules load lazily so a plain import stays light, and
+  // every inference step degrades to a warning rather than failing the import.
+  let extraction: ExtractedFileTheme | null = null;
+  if (inferTheme || inferLayouts) {
+    try {
+      const { extractPptxTheme } = await import('../infer/extract.js');
+      extraction = await extractPptxTheme(pkg);
+    } catch (err: unknown) {
+      warnInferenceFailure('theme extraction', err);
+    }
+  }
+
+  let theme: Theme | undefined;
+  if (inferTheme && extraction) {
+    try {
+      const { compileExtractedTheme } = await import('../infer/mapTheme.js');
+      theme = compileExtractedTheme(extraction).theme;
+    } catch (err: unknown) {
+      warnInferenceFailure('theme compilation', err);
+    }
+  }
+
+  if (inferLayouts) {
+    try {
+      const { analyzePptxLayouts } = await import('./layouts.js');
+      const { colorHintsFromExtraction } = await import('../infer/mapTheme.js');
+      ctx.inference = await analyzePptxLayouts(pkg, {
+        colors: extraction ? colorHintsFromExtraction(extraction) : {},
+      });
+    } catch (err: unknown) {
+      warnInferenceFailure('layout inference', err);
+    }
+  }
+
   const paths = await orderedSlidePaths(pkg);
   const children: MarkdownBlockNode[] = [];
   for (let i = 0; i < paths.length; i++) {
     children.push(...(await convertSlide(paths[i]!, i, ctx)));
   }
-  return { doc: { type: 'document', children }, ctx };
+  const doc: MarkdownDocument = { type: 'document', children };
+
+  const frontmatter: Record<string, unknown> = {};
+  if (theme || ctx.usedCustomTemplates.size > 0) {
+    const {
+      writeCustomThemesToFrontmatter,
+      writeCustomTemplatesToFrontmatter,
+      FRONTMATTER_CUSTOM_THEMES_KEY,
+      FRONTMATTER_CUSTOM_TEMPLATES_KEY,
+    } = await import('@bendyline/squisq/doc');
+    if (theme) {
+      const payload = writeCustomThemesToFrontmatter([theme]);
+      if (payload) {
+        frontmatter[FRONTMATTER_CUSTOM_THEMES_KEY] = payload;
+        // The doc-level selector `resolveThemeForDoc` reads — activates the
+        // inferred theme without any global registration.
+        frontmatter['squisq-theme'] = theme.id;
+      }
+    }
+    if (ctx.usedCustomTemplates.size > 0) {
+      const payload = writeCustomTemplatesToFrontmatter([...ctx.usedCustomTemplates.values()]);
+      if (payload) frontmatter[FRONTMATTER_CUSTOM_TEMPLATES_KEY] = payload;
+    }
+  }
+  if (Object.keys(frontmatter).length > 0) doc.frontmatter = frontmatter;
+
+  return { doc, ctx };
 }
 
 export async function pptxToMarkdownDoc(

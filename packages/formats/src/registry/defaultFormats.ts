@@ -102,6 +102,22 @@ function ok(bytes: Uint8Array, mimeType: string, warnings: string[] = []): Conve
   return { bytes, mimeType, suggestedFilename: '', warnings };
 }
 
+/**
+ * Narrow the untyped per-format escape hatch (`options.formatOptions.pptx`)
+ * into the PPTX importer's options. Theme + layout inference default ON;
+ * only an explicit `false` disables them.
+ */
+function pptxImportOptionsFrom(options: ConvertOptions): {
+  inferTheme: boolean;
+  inferLayouts: boolean;
+} {
+  const raw = options.formatOptions?.pptx;
+  return {
+    inferTheme: raw?.inferTheme !== false,
+    inferLayouts: raw?.inferLayouts !== false,
+  };
+}
+
 // ── Definitions ─────────────────────────────────────────────────────
 
 export function defaultFormats(): FormatDefinition[] {
@@ -170,13 +186,13 @@ export function defaultFormats(): FormatDefinition[] {
     label: 'PowerPoint (PPTX)',
     mimeType: MIME.pptx,
     extensions: ['.pptx'],
-    async importContainer(data): Promise<ContentContainer> {
+    async importContainer(data, options): Promise<ContentContainer> {
       const { pptxToContainer } = await import('../pptx/index.js');
-      return pptxToContainer(data);
+      return pptxToContainer(data, pptxImportOptionsFrom(options));
     },
-    async importDoc(data): Promise<MarkdownDocument> {
+    async importDoc(data, options): Promise<MarkdownDocument> {
       const { pptxToMarkdownDoc } = await import('../pptx/index.js');
-      return pptxToMarkdownDoc(data);
+      return pptxToMarkdownDoc(data, pptxImportOptionsFrom(options));
     },
     async exportDoc(input, options): Promise<ConversionResult> {
       const { markdownDocToPptx } = await import('../pptx/index.js');
