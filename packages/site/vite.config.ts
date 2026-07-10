@@ -3,7 +3,7 @@ import react from '@vitejs/plugin-react';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import type { Plugin } from 'vite';
+import type { Connect, Plugin } from 'vite';
 import { SQUISQ_DEV_PORT, SQUISQ_E2E_PORT } from '../../scripts/portUtils';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -23,46 +23,59 @@ const crossOriginHeaders = {
  * Vite plugin to serve content sample .zip files from the repo-root
  * `samplecontent/` directory under the `/samples/` URL prefix.
  *
- * - Dev: middleware intercepts `/samples/*` and streams from disk.
- * - Build: copies every *.zip into `dist/samples/`.
+ * - Dev + preview: middleware intercepts `/samples/*` and streams from disk.
+ * - Build: copies every *.zip into `dist/samples/` (for static deploys).
+ *
+ * Both the dev server (`vite`) and the preview server (`vite preview`) share
+ * the same middleware so a sample streams the current bytes off disk in
+ * either mode. Previously only the dev server had a middleware and preview
+ * relied entirely on the `writeBundle` copy — so `vite preview` against a
+ * `dist/` built before a sample was added served the SPA fallback instead of
+ * the file, and the sample failed to load.
  */
 function sampleContentPlugin(): Plugin {
   const sampleDir = path.resolve(__dirname, '../../samplecontent');
+
+  const serveSamples: Connect.NextHandleFunction = (req, res, next) => {
+    if (!req.url?.startsWith('/samples/')) return next();
+
+    let relative: string;
+    try {
+      relative = decodeURIComponent(req.url.slice('/samples/'.length));
+    } catch {
+      res.statusCode = 400;
+      res.end('Bad Request');
+      return;
+    }
+
+    const filePath = path.resolve(sampleDir, relative);
+
+    // Path-traversal guard
+    if (!filePath.startsWith(sampleDir + path.sep)) return next();
+    if (!fs.existsSync(filePath) || !fs.statSync(filePath).isFile()) return next();
+
+    const stat = fs.statSync(filePath);
+    const ext = path.extname(filePath).toLowerCase();
+    const contentType =
+      ext === '.zip'
+        ? 'application/zip'
+        : ext === '.dbk'
+          ? 'application/zip'
+          : 'application/octet-stream';
+    res.setHeader('Content-Length', stat.size);
+    res.setHeader('Content-Type', contentType);
+    fs.createReadStream(filePath).pipe(res);
+  };
 
   return {
     name: 'sample-content',
 
     configureServer(server) {
-      server.middlewares.use((req, res, next) => {
-        if (!req.url?.startsWith('/samples/')) return next();
+      server.middlewares.use(serveSamples);
+    },
 
-        let relative: string;
-        try {
-          relative = decodeURIComponent(req.url.slice('/samples/'.length));
-        } catch {
-          res.statusCode = 400;
-          res.end('Bad Request');
-          return;
-        }
-
-        const filePath = path.resolve(sampleDir, relative);
-
-        // Path-traversal guard
-        if (!filePath.startsWith(sampleDir + path.sep)) return next();
-        if (!fs.existsSync(filePath) || !fs.statSync(filePath).isFile()) return next();
-
-        const stat = fs.statSync(filePath);
-        const ext = path.extname(filePath).toLowerCase();
-        const contentType =
-          ext === '.zip'
-            ? 'application/zip'
-            : ext === '.dbk'
-              ? 'application/zip'
-              : 'application/octet-stream';
-        res.setHeader('Content-Length', stat.size);
-        res.setHeader('Content-Type', contentType);
-        fs.createReadStream(filePath).pipe(res);
-      });
+    configurePreviewServer(server) {
+      server.middlewares.use(serveSamples);
     },
 
     writeBundle(options) {
