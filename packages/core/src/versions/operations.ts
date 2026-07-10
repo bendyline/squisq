@@ -6,6 +6,7 @@
  */
 
 import type { ContentContainer } from '../storage/ContentContainer.js';
+import { ensureVersionsGitIgnored } from './gitignore.js';
 import { buildVersionPath, getDocBasename, parseVersionPath, VERSIONS_PREFIX } from './paths.js';
 import type {
   CoalesceOptions,
@@ -112,6 +113,9 @@ export async function saveVersion(
     const latest = versions[0]!;
     const existing = await readVersion(container, latest);
     if (existing === content) {
+      // Backfill the ignore rule for containers created before version
+      // histories started managing their own `.gitignore`.
+      await ensureVersionsGitIgnored(container);
       return { saved: false, version: null, reason: 'unchanged' };
     }
   }
@@ -125,6 +129,7 @@ export async function saveVersion(
   }
 
   const data = encoder.encode(content);
+  await ensureVersionsGitIgnored(container);
   await container.writeFile(path, data, 'text/markdown');
 
   const version: Version = {

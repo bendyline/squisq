@@ -460,9 +460,10 @@ export function WysiwygEditor({
     isExternalUpdate.current = false;
   }, [editorSource, editor]);
 
-  // Match the WYSIWYG editor's appearance to the active Squisq theme
-  // when one is set in frontmatter or picked in the preview dropdown.
-  // Driven by the View menu's "Theme inheritance" setting:
+  // Match the WYSIWYG editor's appearance to the active Squisq theme when one
+  // is set in frontmatter or picked in the preview dropdown. The block-props
+  // affordance always carries the theme's primary as UI accent (like the
+  // outline); document-content inheritance is driven by the View menu setting:
   //   - 'none'         → don't inherit anything
   //   - 'fonts'        → body + heading fonts only (historical default)
   //   - 'fonts-colors' → fonts plus the theme's canvas / text colors
@@ -495,8 +496,12 @@ export function WysiwygEditor({
     previewSettings?.activeViewport,
   ]);
   const themeStyle = useMemo<CSSProperties>(() => {
-    if (themeInheritance === 'none' || !activeTheme) return {};
+    if (!activeTheme) return {};
     const out: Record<string, string> = {
+      '--squisq-block-props-accent': activeTheme.colors.primary,
+    };
+    if (themeInheritance === 'none') return out as CSSProperties;
+    Object.assign(out, {
       '--squisq-theme-body-font': resolveFontFamily(
         activeTheme.typography.bodyFont,
         FONT_FALLBACKS.sans,
@@ -505,7 +510,7 @@ export function WysiwygEditor({
         activeTheme.typography.titleFont,
         FONT_FALLBACKS.sans,
       ),
-    };
+    });
     if (themeInheritance === 'fonts-colors') {
       const colors = activeTheme.colors;
       out['--squisq-theme-bg'] = colors.background;
@@ -565,6 +570,8 @@ export function WysiwygEditor({
             anchorRect={propsMenu.rect}
             blockAttrs={propsMenu.blockAttrs}
             templateParams={propsMenu.templateParams}
+            colorScheme={colorScheme}
+            accentColor={activeTheme?.colors.primary}
             onChange={(nextInner) => {
               if (!editor) return;
               const current = editor.state.doc.nodeAt(propsMenu.headingPos);

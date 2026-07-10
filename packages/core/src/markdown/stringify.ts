@@ -33,7 +33,7 @@ const SQ_RUN = `'(?:[^'\\\\]|\\\\.)*'`;
  * and quoted runs (which may themselves contain `]`).
  */
 const ESCAPED_TEMPLATE_SPAN_RE = new RegExp(
-  `\\{\\\\\\[((?:${DQ_RUN}|${SQ_RUN}|\\\\.|[^\\]\\\\])+)\\]\\}`,
+  `\\{\\\\\\[((?:${DQ_RUN}|${SQ_RUN}|\\\\.|[^\\]\\\\])*)\\]\\}`,
   'g',
 );
 

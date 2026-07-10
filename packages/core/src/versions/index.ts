@@ -3,6 +3,8 @@
  *
  * Snapshots of the primary markdown document live inside the same
  * {@link ContentContainer} at `.versions/<basename>.<timestamp>.md`.
+ * When a snapshot is retained, the container root also gets a `.gitignore`
+ * rule for `.versions/`, preserving any existing ignore rules.
  * Hosts call {@link DocumentVersionManager.saveVersion} (or the
  * underlying {@link saveVersion}) when they want to stamp a new version;
  * the editor's auto-save effect calls it on idle. Either way, snapshots

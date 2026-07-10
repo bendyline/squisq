@@ -231,6 +231,25 @@ describe('<EditorShell> Files badge', () => {
     expect(container.querySelector('.squisq-toolbar-files-badge')?.textContent).toBe('1');
   });
 
+  it('hides .gitignore entries from the Files panel and its count', async () => {
+    const { provider } = mutableMediaProviderWith([
+      { name: '.gitignore', mimeType: 'text/plain', size: 11 },
+      { name: 'notes_files/.gitignore', mimeType: 'text/plain', size: 11 },
+      { name: 'notes_files/hero.png', mimeType: 'image/png', size: 1024 },
+    ]);
+
+    render(<EditorShell initialMarkdown="# hi" initialView="raw" mediaProvider={provider} />);
+
+    await waitFor(() => {
+      expect(screen.getByLabelText('Toggle Files panel, 1 file')).toBeTruthy();
+    });
+    fireEvent.click(screen.getByLabelText('Toggle Files panel, 1 file'));
+
+    expect(await screen.findByText('hero.png')).toBeTruthy();
+    expect(screen.queryByText('.gitignore')).toBeNull();
+    expect(screen.getByText('Files (1)')).toBeTruthy();
+  });
+
   it('removes a media file and matching markdown refs from the files context menu', async () => {
     const { provider, removed } = mutableMediaProviderWith([
       {
@@ -337,6 +356,28 @@ describe('<Toolbar> Files badge', () => {
       expect(screen.getByLabelText('Toggle Files panel, 2 files')).toBeTruthy();
     });
     expect(container.querySelector('.squisq-toolbar-files-badge')?.textContent).toBe('2');
+  });
+
+  it('excludes .gitignore from a self-scanned count', async () => {
+    const { provider } = mutableMediaProviderWith([
+      { name: '.gitignore', mimeType: 'text/plain', size: 11 },
+      { name: 'hero.png', mimeType: 'image/png', size: 1024 },
+    ]);
+    const { container } = render(
+      <EditorProvider
+        initialMarkdown="# hi"
+        initialView="raw"
+        mediaProvider={provider}
+        allowRecording={false}
+      >
+        <Toolbar onToggleFiles={() => {}} />
+      </EditorProvider>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByLabelText('Toggle Files panel, 1 file')).toBeTruthy();
+    });
+    expect(container.querySelector('.squisq-toolbar-files-badge')?.textContent).toBe('1');
   });
 });
 

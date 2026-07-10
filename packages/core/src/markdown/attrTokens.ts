@@ -38,19 +38,21 @@ const SQ_RUN = `'(?:[^'\\\\]|\\\\.)*'`;
 /**
  * Quote-aware match for a trailing `{[…]}` annotation: the interior is any
  * mix of quoted runs and characters other than `]` and quotes, so quoted
- * values may contain `]`. The trailing `[\s\]}]*` tolerates an accidental
- * doubled `]}` that users sometimes type when learning the syntax.
+ * values may contain `]`. An empty interior is valid so `{[]}` can remain
+ * lossless metadata instead of visible heading text. The trailing
+ * `[\s\]}]*` tolerates an accidental doubled `]}` that users sometimes type
+ * when learning the syntax.
  */
 const TEMPLATE_STRICT_RE = new RegExp(
-  `\\s*\\{\\[((?:[^\\]"']|${DQ_RUN}|${SQ_RUN})+)\\]\\}[\\s\\]}]*$`,
+  `\\s*\\{\\[((?:[^\\]"']|${DQ_RUN}|${SQ_RUN})*)\\]\\}[\\s\\]}]*$`,
 );
 
 /**
- * Legacy fallback matching the pre-quote-aware grammar (`[^\]]+` interior).
+ * Legacy fallback matching the pre-quote-aware grammar (`[^\]]*` interior).
  * Tried after the strict form so inputs with unbalanced quotes keep parsing
  * exactly as they did before quote support landed.
  */
-const TEMPLATE_LEGACY_RE = /\s*\{\[([^\]]+)\]\}[\s\]}]*$/;
+const TEMPLATE_LEGACY_RE = /\s*\{\[([^\]]*)\]\}[\s\]}]*$/;
 
 /**
  * Quote-aware match for a trailing Pandoc `{…}` block. The negative

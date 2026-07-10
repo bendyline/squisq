@@ -51,6 +51,7 @@ import { Icon } from './Icon';
 import type { PickerEntry } from './emojiData';
 import { createPortal } from 'react-dom';
 import { usePreviewSettingsOptional } from './PreviewControls';
+import { filterVisibleMediaEntries } from './mediaEntries';
 
 const VIEWS: { id: EditorView; label: string; shortLabel?: string; shortcut: string }[] = [
   { id: 'wysiwyg', label: 'Write', shortcut: '⌘1' },
@@ -533,7 +534,7 @@ export function Toolbar({
     let cancelled = false;
     mediaProvider.listMedia().then(
       (entries) => {
-        if (!cancelled) setScannedFileCount(entries.length);
+        if (!cancelled) setScannedFileCount(filterVisibleMediaEntries(entries).length);
       },
       () => {
         if (!cancelled) setScannedFileCount(0);
@@ -1803,7 +1804,12 @@ export function Toolbar({
               data-contextual="transition"
             >
               <div className="squisq-toolbar-separator" />
-              <TransitionPicker value={currentTransition} onChange={handleTransitionPick} />
+              <TransitionPicker
+                value={currentTransition}
+                onChange={handleTransitionPick}
+                colorScheme={colorScheme}
+                accentColor={previewSettings?.activeTheme.colors.primary}
+              />
             </div>
           )}
 
@@ -2074,7 +2080,12 @@ export function Toolbar({
                   the flyout carries follow-up controls (direction/duration). */}
               {showTransitionInOverflow && (
                 <div className="squisq-toolbar-overflow-item squisq-toolbar-overflow-template">
-                  <TransitionPicker value={currentTransition!} onChange={handleTransitionPick} />
+                  <TransitionPicker
+                    value={currentTransition!}
+                    onChange={handleTransitionPick}
+                    colorScheme={colorScheme}
+                    accentColor={previewSettings?.activeTheme.colors.primary}
+                  />
                 </div>
               )}
 

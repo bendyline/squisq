@@ -1211,7 +1211,7 @@ export function TemplateBadgePopover({
 }
 
 function templateDialogTitle(previewSource?: TemplatePreviewSource): string {
-  return `Block type for ${templateDialogBlockTitle(previewSource)}`;
+  return `Block Type for ${templateDialogBlockTitle(previewSource)}`;
 }
 
 function templateDialogBlockTitle(previewSource?: TemplatePreviewSource): string {

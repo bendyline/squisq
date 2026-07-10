@@ -9,6 +9,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import type { MediaProvider, MediaEntry } from '@bendyline/squisq/schemas';
 import { SQUISQ_MEDIA_MIME } from './mediaDragMime';
+import { filterVisibleMediaEntries } from './mediaEntries';
 
 // ============================================
 // Types
@@ -101,7 +102,7 @@ export function MediaBin({
 
   const updateEntries = useCallback(
     async (provider: MediaProvider) => {
-      const list = sortMediaEntries(await provider.listMedia());
+      const list = sortMediaEntries(filterVisibleMediaEntries(await provider.listMedia()));
       setEntries(list);
       onCountChange?.(list.length);
 
@@ -159,7 +160,7 @@ export function MediaBin({
     async function scan() {
       setLoading(true);
       try {
-        const list = await mediaProvider!.listMedia();
+        const list = filterVisibleMediaEntries(await mediaProvider!.listMedia());
         if (cancelled) return;
 
         sortMediaEntries(list);

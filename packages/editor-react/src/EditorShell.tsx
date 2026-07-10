@@ -51,6 +51,7 @@ import {
   collectMediaReferencesFromMarkdown,
   removeMediaReferencesFromMarkdown,
 } from './mediaReferences';
+import { filterVisibleMediaEntries } from './mediaEntries';
 import type { MediaProvider, Theme } from '@bendyline/squisq/schemas';
 import { DARK_SURFACE, LIGHT_SURFACE } from '@bendyline/squisq/schemas';
 import type { ContentContainer } from '@bendyline/squisq/storage';
@@ -662,7 +663,7 @@ function EditorShellInner({
     let cancelled = false;
     mediaProvider.listMedia().then(
       (entries) => {
-        if (!cancelled) setMediaCount(entries.length);
+        if (!cancelled) setMediaCount(filterVisibleMediaEntries(entries).length);
       },
       (err: unknown) => {
         if (!cancelled) {

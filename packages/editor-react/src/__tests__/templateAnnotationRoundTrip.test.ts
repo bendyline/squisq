@@ -2,6 +2,15 @@ import { describe, it, expect } from 'vitest';
 import { markdownToTiptap, tiptapToMarkdown } from '../tiptapBridge';
 
 describe('Template annotation round-trip', () => {
+  it('hides an empty annotation in Write view while preserving it on round-trip', () => {
+    const original = '## Getting Started {[]}';
+    const html = markdownToTiptap(original);
+
+    expect(html).toContain('data-template-empty="true"');
+    expect(html).not.toContain('{[]}');
+    expect(tiptapToMarkdown(html).trim()).toBe(original);
+  });
+
   it('extracts {[template]} into data-template on markdownToTiptap', () => {
     const html = markdownToTiptap('## Getting Started {[comparisonBar]}');
     expect(html).toContain('data-template="comparisonBar"');

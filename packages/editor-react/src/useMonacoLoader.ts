@@ -49,42 +49,19 @@ export function useMonacoLoader(): UseMonacoLoaderResult {
   useEffect(() => {
     if (state.ready) return;
     if (!monacoPromise) {
-      // Import the explicit ESM entry file rather than the bare
-      // package specifier `'monaco-editor'`. The package's
-      // `package.json` has no `main` / no `exports` (only `module`),
-      // which trips Vite's strict resolver on both static and
-      // dynamic imports of the bare name. Pointing at the file
-      // directly — the same path monaco's `module` field points at —
-      // turns this into a regular file-path resolve that doesn't
-      // care about the manifest's entry fields. Works identically
-      // in Vite dev / build, vitest's transform pipeline, and any
-      // bundler-using downstream consumer.
+      // Load Monaco through squisq's canonical `./monaco` entry (see that
+      // file for exactly which slice of Monaco ships and why). Centralizing
+      // the choice there means the editor and any downstream app that imports
+      // `@bendyline/squisq-editor-react/monaco` share ONE instance and feature
+      // set — no host aliasing, no hand-rolled slim entry that silently drops
+      // the suggest widget. The import is dynamic so consumers that only use
+      // types or `JsonEditor` never pull Monaco into their graph.
       //
-      // Use `editor.main.js`, NOT `editor.api.js`. The `api` entry is
-      // the bare standalone API with zero language contributions —
-      // RawEditor's `defaultLanguage="typescript"` then mounts with
-      // no tokenizer registered, and every file renders as
-      // undifferentiated foreground text (the regression that surfaced
-      // when a `.ts` file in the chat workspace previewer showed up
-      // with no syntax coloring). `editor.main.js` re-exports the API
-      // and additionally pulls in `basic-languages/monaco.contribution`
-      // (TM grammars for ~70 languages) plus the four rich language
-      // services (css / html / json / typescript). This is what makes
-      // `defaultLanguage` actually do anything. The cost is the language
-      // bundle — but since we load it lazily on first EditorShell mount,
-      // it stays out of the resolver graph for consumers that only
-      // import types or `JsonEditor` from this package.
-      // `editor.main.js` ships without a sibling `.d.ts` (only
-      // `editor.api.d.ts` is published), so the subpath import has no
-      // resolvable declaration. The `declare module` shim in
-      // `src/types/monaco-shims.d.ts` makes it import as `any`; the
-      // `as unknown as` cast below pins the surface to the full namespace.
-      // At runtime `main` re-exports the entire `editor.api` surface
-      // alongside the language contributions, so the cast is sound.
+      // `./monaco` re-exports `editor.api` (the only barrel with a `.d.ts`)
+      // after side-effect-importing `editor.main.js`; the `as unknown as` cast
+      // pins the settled module to the full monaco namespace.
       monacoPromise = (
-        import('monaco-editor/esm/vs/editor/editor.main.js') as unknown as Promise<
-          typeof import('monaco-editor')
-        >
+        import('./monaco.js') as unknown as Promise<typeof import('monaco-editor')>
       ).then((m) => {
         loader.config({ monaco: m });
         monacoNamespace = m;

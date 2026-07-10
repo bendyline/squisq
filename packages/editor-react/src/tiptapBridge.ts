@@ -251,6 +251,11 @@ export function markdownToTiptap(markdown: string): string {
         // tokens are stored raw — quotes included — so tiptapToMarkdown
         // can re-join them into the annotation verbatim.
         const tokens = tokenizeAttrTokens(templateInner);
+        if (tokens.length === 0) {
+          // Preserve an authored `{[]}` through the editable Tiptap document
+          // while keeping the raw marker out of the visible heading text.
+          attrs += ' data-template-empty="true"';
+        }
         const firstIsParam = tokens.length > 0 && tokens[0].indexOf('=') > 0;
         if (!firstIsParam && tokens[0]) {
           attrs += ` data-template="${escapeHtml(tokens[0])}"`;
@@ -417,6 +422,7 @@ export function tiptapToMarkdown(html: string): string {
       const blockAttrsMatch = attrs.match(/data-block-attrs="([^"]*)"/);
       const tmplMatch = attrs.match(/data-template="([^"]+)"/);
       const paramsMatch = attrs.match(/data-template-params="([^"]+)"/);
+      const hasEmptyTemplateAnnotation = /\sdata-template-empty(?:="[^"]*")?/.test(attrs);
       if (tmplMatch) {
         // Strip an accidental trailing copy of the template label that an
         // earlier broken build briefly rendered as real text inside the
@@ -436,6 +442,8 @@ export function tiptapToMarkdown(html: string): string {
           annotation += (annotation ? ' ' : '') + unescapeHtml(paramsMatch[1]);
         }
         text += ` {[${annotation}]}`;
+      } else if (hasEmptyTemplateAnnotation) {
+        text += ' {[]}';
       }
 
       lines.push('#'.repeat(level) + ' ' + text);

@@ -41,6 +41,10 @@ export interface BlockPropertiesPopoverProps {
     blockAttrsInner: string | null;
     templateParams: string | null;
   }) => void;
+  /** Editor surface scheme. Required explicitly because this popover is portaled to `<body>`. */
+  colorScheme?: 'light' | 'dark';
+  /** Active document-theme accent used for focus and selected-state highlights. */
+  accentColor?: string;
   onClose: () => void;
 }
 
@@ -54,6 +58,8 @@ export function BlockPropertiesPopover({
   templateParams,
   onChange,
   onAnnotationChange,
+  colorScheme = 'light',
+  accentColor,
   onClose,
 }: BlockPropertiesPopoverProps) {
   // Working copy of the Pandoc inner; successive edits compose off it.
@@ -112,13 +118,19 @@ export function BlockPropertiesPopover({
     <div
       id={PANEL_ID}
       className="squisq-block-props-popover"
+      data-theme={colorScheme}
       role="dialog"
       aria-label="Block properties"
-      style={style}
+      style={{ ...style, ...blockAccentStyle(accentColor) }}
     >
       <div className="squisq-block-props-row">
         <span className="squisq-block-props-label">Transition</span>
-        <TransitionPicker value={transition} onChange={onTransition} />
+        <TransitionPicker
+          value={transition}
+          onChange={onTransition}
+          colorScheme={colorScheme}
+          accentColor={accentColor}
+        />
       </div>
 
       <div className="squisq-block-props-row">
@@ -145,6 +157,12 @@ export function BlockPropertiesPopover({
     </div>,
     document.body,
   );
+}
+
+function blockAccentStyle(accentColor: string | undefined): React.CSSProperties {
+  return accentColor
+    ? ({ ['--squisq-block-props-accent' as string]: accentColor } as React.CSSProperties)
+    : {};
 }
 
 function NumberField({

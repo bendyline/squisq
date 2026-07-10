@@ -1,9 +1,10 @@
 /**
  * TemplateAnnotation — Tiptap Heading Extension
  *
- * Extends Tiptap's built-in Heading node to support `data-template` and
- * `data-template-params` HTML attributes. These attributes store which block
- * template should be used for a heading section.
+ * Extends Tiptap's built-in Heading node to support `data-template`,
+ * `data-template-params`, and `data-template-empty` HTML attributes. These
+ * attributes store the authored template annotation without exposing its raw
+ * `{[…]}` syntax in the Write view.
  *
  * When present, the heading renders a visible badge (styled CSS chip)
  * showing the template name, e.g. `[chart]`.
@@ -39,6 +40,14 @@ export const HeadingWithTemplate = Heading.extend({
         renderHTML: (attributes: Record<string, unknown>) => {
           if (!attributes.dataTemplateParams) return {};
           return { 'data-template-params': attributes.dataTemplateParams };
+        },
+      },
+      dataTemplateEmpty: {
+        default: false,
+        parseHTML: (element: HTMLElement) => element.hasAttribute('data-template-empty'),
+        renderHTML: (attributes: Record<string, unknown>) => {
+          if (!attributes.dataTemplateEmpty) return {};
+          return { 'data-template-empty': 'true' };
         },
       },
       dataBlockAttrs: {

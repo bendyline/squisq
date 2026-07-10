@@ -5,11 +5,14 @@
  * Mirrors `core/src/versions/operations.ts` but operates on
  * {@link ImageEditDoc} JSON state at `.versions/<basename>.<timestamp>.json`
  * instead of the markdown document. Reuses {@link PrunePolicy} so hosts
- * can share their pruning configuration between the two histories.
+ * can share their pruning configuration between the two histories. The
+ * sidecar root gets a `.gitignore` rule for `.versions/` when snapshots
+ * are retained.
  */
 
 import type { ContentContainer } from '../storage/ContentContainer.js';
 import type { ImageEditDoc } from '../schemas/ImageEditDoc.js';
+import { ensureVersionsGitIgnored } from '../versions/gitignore.js';
 import type { CoalesceOptions, PrunePolicy, Version } from '../versions/types.js';
 import { readImageEditDoc, writeImageEditDoc } from './persistence.js';
 import { IMAGE_EDIT_STATE_FILENAME } from './state.js';
@@ -129,6 +132,7 @@ export async function saveImageEditVersion(
     const latest = versions[0]!;
     const existing = await readImageEditVersionText(container, latest);
     if (existing === serialized) {
+      await ensureVersionsGitIgnored(container);
       return { saved: false, version: null, reason: 'unchanged' };
     }
   }
@@ -142,6 +146,7 @@ export async function saveImageEditVersion(
   }
 
   const data = encoder.encode(serialized);
+  await ensureVersionsGitIgnored(container);
   await container.writeFile(path, data, 'application/json');
 
   const version: Version = {
