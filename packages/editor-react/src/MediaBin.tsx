@@ -25,8 +25,8 @@ export interface MediaBinProps {
   /** Relative media paths currently referenced by the document. */
   usedMediaPaths?: ReadonlySet<string>;
   /**
-   * Fired after a successful upload via the MediaBin's own "+ Upload"
-   * button. `relativePath` is what the provider returned (the same
+   * Fired after a successful upload via the MediaBin's "+ Upload"
+   * button or image drop target. `relativePath` is what the provider returned (the same
    * value embedded in markdown refs, e.g. `attachments/xyz.png`);
    * `name` is the uploader-chosen filename before storage renamed
    * it. Consumers typically use this to insert a markdown image ref
@@ -67,6 +67,24 @@ function isImageMime(mimeType: string): boolean {
   return mimeType.startsWith('image/');
 }
 
+const IMAGE_EXTENSIONS = new Set(['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'avif', 'ico']);
+
+function isImageFile(file: Pick<File, 'name' | 'type'>): boolean {
+  if (isImageMime(file.type)) return true;
+  const dot = file.name.lastIndexOf('.');
+  return dot >= 0 && IMAGE_EXTENSIONS.has(file.name.slice(dot + 1).toLowerCase());
+}
+
+/** During drag-over browsers expose item MIME types but often not filenames. */
+function dataTransferMayContainImage(dataTransfer: DataTransfer): boolean {
+  if (dataTransfer.items.length > 0) {
+    return Array.from(dataTransfer.items).some(
+      (item) => item.kind === 'file' && (item.type === '' || isImageMime(item.type)),
+    );
+  }
+  return Array.from(dataTransfer.files).some(isImageFile);
+}
+
 function sortMediaEntries(entries: MediaEntry[]): MediaEntry[] {
   return entries.sort((a, b) => {
     const aImg = isImageMime(a.mimeType) ? 0 : 1;
@@ -92,6 +110,7 @@ export function MediaBin({
   const [entries, setEntries] = useState<MediaEntry[]>([]);
   const [thumbUrls, setThumbUrls] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(false);
+  const [isDropActive, setIsDropActive] = useState(false);
   const [contextMenu, setContextMenu] = useState<{
     entry: MediaEntry;
     x: number;
@@ -99,6 +118,7 @@ export function MediaBin({
   } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const contextMenuRef = useRef<HTMLDivElement>(null);
+  const dropDepthRef = useRef(0);
 
   const updateEntries = useCallback(
     async (provider: MediaProvider) => {
@@ -195,16 +215,12 @@ export function MediaBin({
     fileInputRef.current?.click();
   }, []);
 
-  const handleFileChange = useCallback(
-    async (e: React.ChangeEvent<HTMLInputElement>) => {
-      const files = e.target.files;
-      if (!files || !mediaProvider) return;
-
+  const uploadFiles = useCallback(
+    async (files: readonly File[]) => {
+      if (files.length === 0 || !mediaProvider) return;
       setLoading(true);
       try {
-        for (let i = 0; i < files.length; i++) {
-          const file = files[i];
-          if (!file) continue;
+        for (const file of files) {
           const buffer = await file.arrayBuffer();
           const mimeType = file.type || 'application/octet-stream';
           const relativePath = await mediaProvider.addMedia(file.name, buffer, mimeType);
@@ -220,10 +236,65 @@ export function MediaBin({
         await updateEntries(mediaProvider);
       } finally {
         setLoading(false);
-        if (fileInputRef.current) fileInputRef.current.value = '';
       }
     },
     [mediaProvider, onMediaUploaded, updateEntries],
+  );
+
+  const handleFileChange = useCallback(
+    async (e: React.ChangeEvent<HTMLInputElement>) => {
+      try {
+        await uploadFiles(Array.from(e.target.files ?? []));
+      } finally {
+        if (fileInputRef.current) fileInputRef.current.value = '';
+      }
+    },
+    [uploadFiles],
+  );
+
+  const handleDragEnter = useCallback(
+    (event: React.DragEvent<HTMLDivElement>) => {
+      if (!mediaProvider || loading || !dataTransferMayContainImage(event.dataTransfer)) return;
+      event.preventDefault();
+      event.stopPropagation();
+      dropDepthRef.current += 1;
+      setIsDropActive(true);
+    },
+    [loading, mediaProvider],
+  );
+
+  const handleDragOver = useCallback(
+    (event: React.DragEvent<HTMLDivElement>) => {
+      if (!mediaProvider || loading || !dataTransferMayContainImage(event.dataTransfer)) return;
+      event.preventDefault();
+      event.stopPropagation();
+      event.dataTransfer.dropEffect = 'copy';
+    },
+    [loading, mediaProvider],
+  );
+
+  const handleDragLeave = useCallback(
+    (event: React.DragEvent<HTMLDivElement>) => {
+      if (!isDropActive) return;
+      event.preventDefault();
+      event.stopPropagation();
+      dropDepthRef.current = Math.max(0, dropDepthRef.current - 1);
+      if (dropDepthRef.current === 0) setIsDropActive(false);
+    },
+    [isDropActive],
+  );
+
+  const handleDrop = useCallback(
+    (event: React.DragEvent<HTMLDivElement>) => {
+      const imageFiles = Array.from(event.dataTransfer.files).filter(isImageFile);
+      if (!mediaProvider || (!isDropActive && imageFiles.length === 0)) return;
+      event.preventDefault();
+      event.stopPropagation();
+      dropDepthRef.current = 0;
+      setIsDropActive(false);
+      if (imageFiles.length > 0) void uploadFiles(imageFiles);
+    },
+    [isDropActive, mediaProvider, uploadFiles],
   );
 
   const handleRemoveEntry = useCallback(
@@ -280,7 +351,20 @@ export function MediaBin({
   );
 
   return (
-    <div className={`squisq-media-bin${isDark ? ' squisq-media-bin--dark' : ''}`}>
+    <div
+      className={[
+        'squisq-media-bin',
+        isDark ? 'squisq-media-bin--dark' : '',
+        isDropActive ? 'squisq-media-bin--drop-active' : '',
+      ]
+        .filter(Boolean)
+        .join(' ')}
+      onDragEnter={handleDragEnter}
+      onDragOver={handleDragOver}
+      onDragLeave={handleDragLeave}
+      onDrop={handleDrop}
+      aria-busy={loading}
+    >
       {/* Header */}
       <div className="squisq-media-bin-header">
         <span className="squisq-media-bin-title">
@@ -374,6 +458,14 @@ export function MediaBin({
           );
         })}
       </div>
+
+      {isDropActive && (
+        <div className="squisq-media-bin-drop-target" aria-hidden="true">
+          <span className="squisq-media-bin-drop-target-icon">+</span>
+          <strong>Drop images here</strong>
+          <span>Add to Files</span>
+        </div>
+      )}
 
       {contextMenu && (
         <div

@@ -31,6 +31,8 @@ function App() {
 from a live in-page `DocPlayer`, so the standalone bundle is only needed for
 CLI/Playwright-style pipelines. A new `defaultConfig?: Partial<VideoExportConfig>`
 prop seeds the modal's initial quality/fps/orientation/caption selections.
+Both components also accept `colorScheme="light" | "dark"` so their portaled
+modal can match the host application; the default remains `light`.
 
 ### Full Export Modal
 

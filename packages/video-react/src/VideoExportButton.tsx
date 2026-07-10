@@ -32,6 +32,8 @@ export interface VideoExportButtonProps {
    * config passed to the export hook. Forwarded to {@link VideoExportModal}.
    */
   defaultConfig?: Partial<VideoExportConfig>;
+  /** Visual color scheme forwarded to the portaled modal. Defaults to light. */
+  colorScheme?: 'light' | 'dark';
   /** Button label (default: "Export Video") */
   label?: string;
   /** Additional inline styles for the button */
@@ -47,6 +49,7 @@ export function VideoExportButton({
   images,
   audio,
   defaultConfig,
+  colorScheme,
   label = 'Export Video',
   style,
   disabled,
@@ -71,6 +74,7 @@ export function VideoExportButton({
             images={images}
             audio={audio}
             defaultConfig={defaultConfig}
+            colorScheme={colorScheme}
             onClose={handleClose}
           />,
           document.body,

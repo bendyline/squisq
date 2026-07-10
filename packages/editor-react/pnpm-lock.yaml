@@ -53,7 +53,7 @@ importers:
         specifier: 2.27.2
         version: 2.27.2
       monaco-editor:
-        specifier: ^0.50.0
+        specifier: '>=0.50.0'
         version: 0.50.0
     devDependencies:
       '@types/react':

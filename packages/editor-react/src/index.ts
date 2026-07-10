@@ -193,10 +193,7 @@ export type { UseMonacoLoaderResult } from './useMonacoLoader.js';
 // Monaco language-service worker wiring — the host supplies the `?worker`
 // constructors, this owns the label→worker mapping. See monacoWorkers.ts.
 export { configureMonacoWorkers } from './monacoWorkers.js';
-export type {
-  MonacoWorkerConstructor,
-  MonacoWorkerConstructors,
-} from './monacoWorkers.js';
+export type { MonacoWorkerConstructor, MonacoWorkerConstructors } from './monacoWorkers.js';
 
 // Custom themes — provider stack (doc frontmatter + browser-local library)
 export {

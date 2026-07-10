@@ -351,6 +351,20 @@ export function FileToolbar({
 
   return (
     <>
+      {/* Direct debug entry point for exercising the full export experience. */}
+      <button
+        type="button"
+        onClick={() => setShowExportModal(true)}
+        disabled={busy}
+        aria-haspopup="dialog"
+        aria-expanded={showExportModal}
+        data-testid="open-export-dialog"
+        style={buttonStyle(isDark, showExportModal)}
+        title="Open export options"
+      >
+        Export…
+      </button>
+
       {/* Download dropdown */}
       <div ref={dropdownRef} style={{ position: 'relative', display: 'inline-block' }}>
         <button
@@ -489,6 +503,7 @@ export function FileToolbar({
             doc={markdownToDoc(parseMarkdown(currentSource))}
             playerScript={playerScriptRef.current}
             mediaProvider={mediaProvider ?? undefined}
+            colorScheme={isDark ? 'dark' : 'light'}
             onClose={() => setShowVideoModal(false)}
           />,
           document.body,
@@ -500,6 +515,7 @@ export function FileToolbar({
           <ExportConfigModal
             currentSource={currentSource}
             mediaProvider={mediaProvider}
+            colorScheme={isDark ? 'dark' : 'light'}
             workspaceContainer={workspaceContainer}
             onClose={() => setShowExportModal(false)}
           />,

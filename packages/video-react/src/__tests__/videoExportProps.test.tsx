@@ -7,7 +7,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { render, renderHook } from '@testing-library/react';
+import { fireEvent, render, renderHook } from '@testing-library/react';
 import { VideoExportButton } from '../VideoExportButton';
 import { VideoExportModal } from '../VideoExportModal';
 import { useVideoExport } from '../hooks/useVideoExport';
@@ -33,6 +33,12 @@ describe('VideoExportButton', () => {
       <VideoExportButton doc={minimalDoc()} defaultConfig={{ quality: 'high', fps: 30 }} />,
     );
     expect(getByRole('button', { name: 'Export Video' })).toBeTruthy();
+  });
+
+  it('forwards the requested color scheme to its portaled modal', () => {
+    const { getByRole } = render(<VideoExportButton doc={minimalDoc()} colorScheme="dark" />);
+    fireEvent.click(getByRole('button', { name: 'Export Video' }));
+    expect(document.querySelector('[data-color-scheme="dark"]')).toBeTruthy();
   });
 });
 
@@ -61,6 +67,18 @@ describe('VideoExportModal', () => {
     expect(selects[1].value).toBe('30');
     expect(selects[2].value).toBe('portrait');
     expect(selects[3].value).toBe('standard');
+  });
+
+  it('applies dark colors to the modal surface and native controls', () => {
+    const { container } = render(
+      <VideoExportModal doc={minimalDoc()} colorScheme="dark" onClose={() => {}} />,
+    );
+    const overlay = container.querySelector('[data-color-scheme="dark"]');
+    const modal = overlay?.firstElementChild as HTMLElement | null;
+    const select = container.querySelector('select');
+    expect(modal?.style.colorScheme).toBe('dark');
+    expect(modal?.style.background).toBe('rgb(17, 24, 39)');
+    expect(select?.style.colorScheme).toBe('dark');
   });
 });
 

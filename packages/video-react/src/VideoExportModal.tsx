@@ -4,7 +4,8 @@
  * States:
  *   configure → exporting (capturing + encoding) → complete | error
  *
- * Inline styles match the site's cream/gold palette (from FileToolbar).
+ * Hosts may supply a resolved color scheme so this portaled dialog matches
+ * the surface that opened it.
  */
 
 import { useState, useCallback } from 'react';
@@ -39,6 +40,8 @@ export interface VideoExportModalProps {
    * precedence over any matching key here.
    */
   defaultConfig?: Partial<VideoExportConfig>;
+  /** Visual color scheme for the portaled dialog. Defaults to light. */
+  colorScheme?: 'light' | 'dark';
   /** Called when the modal should close */
   onClose: () => void;
 }
@@ -54,10 +57,58 @@ function formatDuration(seconds: number): string {
 
 // ── Styles ─────────────────────────────────────────────────────────
 
+interface VideoExportPalette {
+  overlay: string;
+  surface: string;
+  control: string;
+  border: string;
+  text: string;
+  heading: string;
+  label: string;
+  muted: string;
+  secondary: string;
+  primary: string;
+  primaryBorder: string;
+  success: string;
+  danger: string;
+}
+
+const VIDEO_EXPORT_PALETTES: Record<'light' | 'dark', VideoExportPalette> = {
+  light: {
+    overlay: 'rgba(0, 0, 0, 0.5)',
+    surface: '#FFFDF7',
+    control: '#ffffff',
+    border: '#c9b98a',
+    text: '#4a3c1f',
+    heading: '#2d2310',
+    label: '#5a4a2a',
+    muted: '#8a7a5a',
+    secondary: '#E8DFC6',
+    primary: '#8B6914',
+    primaryBorder: '#7a5c10',
+    success: '#2d6a10',
+    danger: '#a03020',
+  },
+  dark: {
+    overlay: 'rgba(2, 6, 23, 0.72)',
+    surface: '#111827',
+    control: '#0f172a',
+    border: '#475569',
+    text: '#e5e7eb',
+    heading: '#f8fafc',
+    label: '#cbd5e1',
+    muted: '#94a3b8',
+    secondary: '#1e293b',
+    primary: '#9a7416',
+    primaryBorder: '#d1a73b',
+    success: '#86efac',
+    danger: '#fca5a5',
+  },
+};
+
 const overlayStyle: React.CSSProperties = {
   position: 'fixed',
   inset: 0,
-  background: 'rgba(0, 0, 0, 0.5)',
   display: 'flex',
   alignItems: 'center',
   justifyContent: 'center',
@@ -65,22 +116,18 @@ const overlayStyle: React.CSSProperties = {
 };
 
 const modalStyle: React.CSSProperties = {
-  background: '#FFFDF7',
-  border: '1px solid #c9b98a',
   borderRadius: 0,
   padding: '24px 28px',
   minWidth: 380,
   maxWidth: 480,
   boxShadow: '0 8px 32px rgba(0,0,0,0.18)',
   fontFamily: 'system-ui, -apple-system, sans-serif',
-  color: '#4a3c1f',
 };
 
 const titleStyle: React.CSSProperties = {
   margin: '0 0 16px 0',
   fontSize: 18,
   fontWeight: 600,
-  color: '#2d2310',
 };
 
 const labelStyle: React.CSSProperties = {
@@ -88,7 +135,6 @@ const labelStyle: React.CSSProperties = {
   fontSize: 13,
   fontWeight: 500,
   marginBottom: 4,
-  color: '#5a4a2a',
 };
 
 const selectStyle: React.CSSProperties = {
@@ -96,10 +142,7 @@ const selectStyle: React.CSSProperties = {
   padding: '6px 8px',
   fontSize: 13,
   fontFamily: 'inherit',
-  border: '1px solid #c9b98a',
   borderRadius: 0,
-  background: '#fff',
-  color: '#4a3c1f',
   marginBottom: 12,
 };
 
@@ -109,9 +152,7 @@ const btnPrimary: React.CSSProperties = {
   fontFamily: 'inherit',
   fontWeight: 500,
   cursor: 'pointer',
-  background: '#8B6914',
   color: '#fff',
-  border: '1px solid #7a5c10',
   borderRadius: 0,
 };
 
@@ -121,16 +162,12 @@ const btnSecondary: React.CSSProperties = {
   fontFamily: 'inherit',
   fontWeight: 500,
   cursor: 'pointer',
-  background: '#E8DFC6',
-  color: '#4a3c1f',
-  border: '1px solid #c9b98a',
   borderRadius: 0,
 };
 
 const progressBarOuterStyle: React.CSSProperties = {
   width: '100%',
   height: 8,
-  background: '#E8DFC6',
   borderRadius: 0,
   overflow: 'hidden',
   marginBottom: 8,
@@ -152,6 +189,7 @@ export function VideoExportModal({
   images,
   audio,
   defaultConfig,
+  colorScheme = 'light',
   onClose,
 }: VideoExportModalProps) {
   const [quality, setQuality] = useState<VideoQuality>(defaultConfig?.quality ?? 'normal');
@@ -160,6 +198,34 @@ export function VideoExportModal({
     defaultConfig?.orientation ?? 'landscape',
   );
   const [captionMode, setCaptionMode] = useState<CaptionMode>(defaultConfig?.captionMode ?? 'off');
+  const palette = VIDEO_EXPORT_PALETTES[colorScheme];
+  const themedModalStyle: React.CSSProperties = {
+    ...modalStyle,
+    background: palette.surface,
+    border: `1px solid ${palette.border}`,
+    color: palette.text,
+    colorScheme,
+  };
+  const themedTitleStyle: React.CSSProperties = { ...titleStyle, color: palette.heading };
+  const themedLabelStyle: React.CSSProperties = { ...labelStyle, color: palette.label };
+  const themedSelectStyle: React.CSSProperties = {
+    ...selectStyle,
+    border: `1px solid ${palette.border}`,
+    background: palette.control,
+    color: palette.text,
+    colorScheme,
+  };
+  const themedPrimaryButtonStyle: React.CSSProperties = {
+    ...btnPrimary,
+    background: palette.primary,
+    border: `1px solid ${palette.primaryBorder}`,
+  };
+  const themedSecondaryButtonStyle: React.CSSProperties = {
+    ...btnSecondary,
+    background: palette.secondary,
+    color: palette.text,
+    border: `1px solid ${palette.border}`,
+  };
 
   const exportHook = useVideoExport();
   const {
@@ -229,17 +295,21 @@ export function VideoExportModal({
   const isExporting = state === 'preparing' || state === 'capturing' || state === 'encoding';
 
   return (
-    <div style={overlayStyle} onClick={handleClose}>
-      <div style={modalStyle} onClick={(e) => e.stopPropagation()}>
-        <h2 style={titleStyle}>Export Video</h2>
+    <div
+      style={{ ...overlayStyle, background: palette.overlay }}
+      data-color-scheme={colorScheme}
+      onClick={handleClose}
+    >
+      <div style={themedModalStyle} onClick={(e) => e.stopPropagation()}>
+        <h2 style={themedTitleStyle}>Export Video</h2>
 
         {/* ── Configure State ── */}
         {state === 'idle' && (
           <>
             <div>
-              <label style={labelStyle}>Quality</label>
+              <label style={themedLabelStyle}>Quality</label>
               <select
-                style={selectStyle}
+                style={themedSelectStyle}
                 value={quality}
                 onChange={(e) => setQuality(e.target.value as VideoQuality)}
               >
@@ -250,9 +320,9 @@ export function VideoExportModal({
             </div>
 
             <div>
-              <label style={labelStyle}>Frame Rate</label>
+              <label style={themedLabelStyle}>Frame Rate</label>
               <select
-                style={selectStyle}
+                style={themedSelectStyle}
                 value={fps}
                 onChange={(e) => setFps(Number(e.target.value))}
               >
@@ -263,9 +333,9 @@ export function VideoExportModal({
             </div>
 
             <div>
-              <label style={labelStyle}>Orientation</label>
+              <label style={themedLabelStyle}>Orientation</label>
               <select
-                style={selectStyle}
+                style={themedSelectStyle}
                 value={orientation}
                 onChange={(e) => setOrientation(e.target.value as VideoOrientation)}
               >
@@ -275,9 +345,9 @@ export function VideoExportModal({
             </div>
 
             <div>
-              <label style={labelStyle}>Captions</label>
+              <label style={themedLabelStyle}>Captions</label>
               <select
-                style={selectStyle}
+                style={themedSelectStyle}
                 value={captionMode}
                 onChange={(e) => setCaptionMode(e.target.value as CaptionMode)}
               >
@@ -288,10 +358,10 @@ export function VideoExportModal({
             </div>
 
             <div style={footerStyle}>
-              <button style={btnSecondary} onClick={handleClose}>
+              <button style={themedSecondaryButtonStyle} onClick={handleClose}>
                 Cancel
               </button>
-              <button style={btnPrimary} onClick={handleExport}>
+              <button style={themedPrimaryButtonStyle} onClick={handleExport}>
                 Export Video
               </button>
             </div>
@@ -302,30 +372,30 @@ export function VideoExportModal({
         {isExporting && (
           <>
             {backend && (
-              <p style={{ fontSize: 12, color: '#8a7a5a', margin: '0 0 8px 0' }}>
+              <p style={{ fontSize: 12, color: palette.muted, margin: '0 0 8px 0' }}>
                 Encoder: WebCodecs (H.264)
               </p>
             )}
 
-            <div style={progressBarOuterStyle}>
+            <div style={{ ...progressBarOuterStyle, background: palette.secondary }}>
               <div
                 style={{
                   width: `${progress}%`,
                   height: '100%',
-                  background: '#8B6914',
+                  background: palette.primary,
                   transition: 'width 0.3s ease',
                 }}
               />
             </div>
 
             <p style={{ fontSize: 13, margin: '0 0 4px 0' }}>{progress}% complete</p>
-            <p style={{ fontSize: 12, color: '#8a7a5a', margin: 0 }}>
+            <p style={{ fontSize: 12, color: palette.muted, margin: 0 }}>
               {formatDuration(elapsed)} elapsed
               {estimatedRemaining > 0 && ` · ~${formatDuration(estimatedRemaining)} remaining`}
             </p>
 
             <div style={footerStyle}>
-              <button style={btnSecondary} onClick={cancelExport}>
+              <button style={themedSecondaryButtonStyle} onClick={cancelExport}>
                 Cancel
               </button>
             </div>
@@ -335,30 +405,32 @@ export function VideoExportModal({
         {/* ── Complete State ── */}
         {state === 'complete' && (
           <>
-            <p style={{ fontSize: 14, margin: '0 0 8px 0', color: '#2d6a10' }}>Export complete!</p>
-            <p style={{ fontSize: 13, color: '#5a4a2a', margin: '0 0 4px 0' }}>
+            <p style={{ fontSize: 14, margin: '0 0 8px 0', color: palette.success }}>
+              Export complete!
+            </p>
+            <p style={{ fontSize: 13, color: palette.label, margin: '0 0 4px 0' }}>
               File size: {(fileSize / (1024 * 1024)).toFixed(1)} MB
             </p>
             {audioIncluded ? (
-              <p style={{ fontSize: 12, color: '#2d6a10', margin: '0 0 4px 0' }}>
+              <p style={{ fontSize: 12, color: palette.success, margin: '0 0 4px 0' }}>
                 Audio included ✓
               </p>
             ) : (
-              <p style={{ fontSize: 12, color: '#8a7a5a', margin: '0 0 4px 0' }}>
+              <p style={{ fontSize: 12, color: palette.muted, margin: '0 0 4px 0' }}>
                 Video only{audioSkippedReason ? ` — ${audioSkippedReason}` : ''}
               </p>
             )}
             {backend && (
-              <p style={{ fontSize: 12, color: '#8a7a5a', margin: '0 0 12px 0' }}>
+              <p style={{ fontSize: 12, color: palette.muted, margin: '0 0 12px 0' }}>
                 Encoded with WebCodecs (H.264)
               </p>
             )}
 
             <div style={footerStyle}>
-              <button style={btnSecondary} onClick={handleClose}>
+              <button style={themedSecondaryButtonStyle} onClick={handleClose}>
                 Close
               </button>
-              <button style={btnPrimary} onClick={handleDownload}>
+              <button style={themedPrimaryButtonStyle} onClick={handleDownload}>
                 Download MP4
               </button>
             </div>
@@ -368,11 +440,13 @@ export function VideoExportModal({
         {/* ── Error State ── */}
         {state === 'error' && (
           <>
-            <p style={{ fontSize: 14, margin: '0 0 8px 0', color: '#a03020' }}>Export failed</p>
+            <p style={{ fontSize: 14, margin: '0 0 8px 0', color: palette.danger }}>
+              Export failed
+            </p>
             <p
               style={{
                 fontSize: 13,
-                color: '#5a4a2a',
+                color: palette.label,
                 margin: '0 0 12px 0',
                 wordBreak: 'break-word',
               }}
@@ -381,10 +455,10 @@ export function VideoExportModal({
             </p>
 
             <div style={footerStyle}>
-              <button style={btnSecondary} onClick={handleClose}>
+              <button style={themedSecondaryButtonStyle} onClick={handleClose}>
                 Close
               </button>
-              <button style={btnPrimary} onClick={handleExport}>
+              <button style={themedPrimaryButtonStyle} onClick={handleExport}>
                 Retry
               </button>
             </div>

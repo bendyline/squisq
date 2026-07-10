@@ -2,7 +2,8 @@
  * ExportConfigModal — Modal for configuring theme, transform, format,
  * rendering mode, and aspect ratio before exporting a document.
  *
- * Inline styles match the cream/gold palette from VideoExportModal / FileToolbar.
+ * The host supplies its resolved color scheme so this portaled dialog stays
+ * visually consistent with the page that opened it.
  */
 
 import { useState, useCallback, useRef } from 'react';
@@ -30,6 +31,8 @@ import { slugifyTitle } from './exportFilename';
 export interface ExportConfigModalProps {
   currentSource: string;
   mediaProvider: MediaProvider | null;
+  /** Resolved host color scheme. Defaults to light for standalone callers. */
+  colorScheme?: 'light' | 'dark';
   /**
    * Optional workspace-scoped ContentContainer — when supplied, unlocks
    * the "Export linked documents" toggle for the plain-HTML+zip path.
@@ -49,10 +52,55 @@ type HtmlStyle = 'rendered' | 'plain';
 
 // ── Styles ─────────────────────────────────────────────────────────
 
+interface ExportDialogPalette {
+  overlay: string;
+  surface: string;
+  control: string;
+  border: string;
+  text: string;
+  heading: string;
+  label: string;
+  muted: string;
+  secondary: string;
+  primary: string;
+  primaryBorder: string;
+  danger: string;
+}
+
+const EXPORT_DIALOG_PALETTES: Record<'light' | 'dark', ExportDialogPalette> = {
+  light: {
+    overlay: 'rgba(0, 0, 0, 0.5)',
+    surface: '#FFFDF7',
+    control: '#ffffff',
+    border: '#c9b98a',
+    text: '#4a3c1f',
+    heading: '#2d2310',
+    label: '#5a4a2a',
+    muted: '#8a7a5a',
+    secondary: '#E8DFC6',
+    primary: '#8B6914',
+    primaryBorder: '#7a5c10',
+    danger: '#c53030',
+  },
+  dark: {
+    overlay: 'rgba(2, 6, 23, 0.72)',
+    surface: '#111827',
+    control: '#0f172a',
+    border: '#475569',
+    text: '#e5e7eb',
+    heading: '#f8fafc',
+    label: '#cbd5e1',
+    muted: '#94a3b8',
+    secondary: '#1e293b',
+    primary: '#9a7416',
+    primaryBorder: '#d1a73b',
+    danger: '#fca5a5',
+  },
+};
+
 const overlayStyle: React.CSSProperties = {
   position: 'fixed',
   inset: 0,
-  background: 'rgba(0, 0, 0, 0.5)',
   display: 'flex',
   alignItems: 'center',
   justifyContent: 'center',
@@ -60,15 +108,12 @@ const overlayStyle: React.CSSProperties = {
 };
 
 const modalStyle: React.CSSProperties = {
-  background: '#FFFDF7',
-  border: '1px solid #c9b98a',
   borderRadius: 0,
   padding: '24px 28px',
   minWidth: 380,
   maxWidth: 480,
   boxShadow: '0 8px 32px rgba(0,0,0,0.18)',
   fontFamily: 'system-ui, -apple-system, sans-serif',
-  color: '#4a3c1f',
 };
 
 /** Wider variant used when the plain-HTML preview pane is on. */
@@ -82,7 +127,6 @@ const titleStyle: React.CSSProperties = {
   margin: '0 0 16px 0',
   fontSize: 18,
   fontWeight: 600,
-  color: '#2d2310',
 };
 
 const labelStyle: React.CSSProperties = {
@@ -90,7 +134,6 @@ const labelStyle: React.CSSProperties = {
   fontSize: 13,
   fontWeight: 500,
   marginBottom: 4,
-  color: '#5a4a2a',
 };
 
 const selectStyle: React.CSSProperties = {
@@ -98,10 +141,7 @@ const selectStyle: React.CSSProperties = {
   padding: '6px 8px',
   fontSize: 13,
   fontFamily: 'inherit',
-  border: '1px solid #c9b98a',
   borderRadius: 0,
-  background: '#fff',
-  color: '#4a3c1f',
   marginBottom: 12,
 };
 
@@ -111,9 +151,7 @@ const btnPrimary: React.CSSProperties = {
   fontFamily: 'inherit',
   fontWeight: 500,
   cursor: 'pointer',
-  background: '#8B6914',
   color: '#fff',
-  border: '1px solid #7a5c10',
   borderRadius: 0,
 };
 
@@ -123,15 +161,11 @@ const btnSecondary: React.CSSProperties = {
   fontFamily: 'inherit',
   fontWeight: 500,
   cursor: 'pointer',
-  background: '#E8DFC6',
-  color: '#4a3c1f',
-  border: '1px solid #c9b98a',
   borderRadius: 0,
 };
 
 const hintStyle: React.CSSProperties = {
   fontSize: 11,
-  color: '#8a7a5a',
   marginTop: -8,
   marginBottom: 12,
 };
@@ -346,6 +380,7 @@ const VISUAL_FORMATS: ExportFormat[] = ['html', 'htmlzip'];
 export function ExportConfigModal({
   currentSource,
   mediaProvider,
+  colorScheme = 'light',
   workspaceContainer,
   onClose,
 }: ExportConfigModalProps) {
@@ -363,6 +398,34 @@ export function ExportConfigModal({
 
   const themes = getThemeSummaries();
   const transforms = getTransformStyleSummaries();
+  const palette = EXPORT_DIALOG_PALETTES[colorScheme];
+  const modalColorStyle: React.CSSProperties = {
+    background: palette.surface,
+    border: `1px solid ${palette.border}`,
+    color: palette.text,
+    colorScheme,
+  };
+  const themedTitleStyle: React.CSSProperties = { ...titleStyle, color: palette.heading };
+  const themedLabelStyle: React.CSSProperties = { ...labelStyle, color: palette.label };
+  const themedSelectStyle: React.CSSProperties = {
+    ...selectStyle,
+    border: `1px solid ${palette.border}`,
+    background: palette.control,
+    color: palette.text,
+    colorScheme,
+  };
+  const themedHintStyle: React.CSSProperties = { ...hintStyle, color: palette.muted };
+  const themedPrimaryButtonStyle: React.CSSProperties = {
+    ...btnPrimary,
+    background: palette.primary,
+    border: `1px solid ${palette.primaryBorder}`,
+  };
+  const themedSecondaryButtonStyle: React.CSSProperties = {
+    ...btnSecondary,
+    background: palette.secondary,
+    color: palette.text,
+    border: `1px solid ${palette.border}`,
+  };
 
   const isHtmlFormat = VISUAL_FORMATS.includes(format);
   // Plain HTML doesn't need the rendered-vs-slideshow Mode selector
@@ -574,13 +637,14 @@ export function ExportConfigModal({
   return (
     <>
       <div
-        style={overlayStyle}
+        style={{ ...overlayStyle, background: palette.overlay }}
+        data-color-scheme={colorScheme}
         onClick={(e) => {
           if (e.target === e.currentTarget) onClose();
         }}
       >
-        <div style={showPreview ? modalStyleWide : modalStyle}>
-          <h2 style={titleStyle}>Export with Options</h2>
+        <div style={{ ...(showPreview ? modalStyleWide : modalStyle), ...modalColorStyle }}>
+          <h2 style={themedTitleStyle}>Export with Options</h2>
 
           <div
             style={{
@@ -591,9 +655,9 @@ export function ExportConfigModal({
           >
             <div style={{ flex: showPreview ? '0 0 320px' : '1 1 auto', minWidth: 0 }}>
               {/* Format */}
-              <label style={labelStyle}>Format</label>
+              <label style={themedLabelStyle}>Format</label>
               <select
-                style={selectStyle}
+                style={themedSelectStyle}
                 value={format}
                 onChange={(e) => setFormat(e.target.value as ExportFormat)}
                 disabled={busy}
@@ -608,7 +672,7 @@ export function ExportConfigModal({
               {/* HTML style — Plain vs Rendered */}
               {showStyleSelector && (
                 <>
-                  <label style={labelStyle}>Style</label>
+                  <label style={themedLabelStyle}>Style</label>
                   <div style={{ display: 'flex', gap: 6, marginBottom: 12 }}>
                     {(['rendered', 'plain'] as const).map((s) => {
                       const active = htmlStyle === s;
@@ -624,9 +688,9 @@ export function ExportConfigModal({
                             fontSize: 13,
                             fontFamily: 'inherit',
                             cursor: busy ? 'default' : 'pointer',
-                            background: active ? '#8B6914' : '#E8DFC6',
-                            color: active ? '#fff' : '#4a3c1f',
-                            border: `1px solid ${active ? '#7a5c10' : '#c9b98a'}`,
+                            background: active ? palette.primary : palette.secondary,
+                            color: active ? '#fff' : palette.text,
+                            border: `1px solid ${active ? palette.primaryBorder : palette.border}`,
                             borderRadius: 0,
                           }}
                         >
@@ -635,7 +699,7 @@ export function ExportConfigModal({
                       );
                     })}
                   </div>
-                  <div style={hintStyle}>
+                  <div style={themedHintStyle}>
                     {htmlStyle === 'rendered'
                       ? 'Uses SquisqPlayer with SVG block cards, themes, and animations.'
                       : 'Plain semantic HTML — no JS, no SVG cards. Matches the Document preview.'}
@@ -651,7 +715,7 @@ export function ExportConfigModal({
                 <>
                   <label
                     style={{
-                      ...labelStyle,
+                      ...themedLabelStyle,
                       display: 'flex',
                       alignItems: 'center',
                       gap: 6,
@@ -668,7 +732,7 @@ export function ExportConfigModal({
                     />
                     <span>Export linked documents</span>
                   </label>
-                  <div style={hintStyle}>
+                  <div style={themedHintStyle}>
                     Recursively bundles every `.md` file the entry document links to (within its
                     folder or any subfolder). Cross-doc links are rewritten from `.md` to `.html` so
                     the result browses as a static site.
@@ -679,9 +743,9 @@ export function ExportConfigModal({
               {/* Render Mode — for HTML and Video formats (rendered only) */}
               {showModeSelector && (
                 <>
-                  <label style={labelStyle}>Mode</label>
+                  <label style={themedLabelStyle}>Mode</label>
                   <select
-                    style={selectStyle}
+                    style={themedSelectStyle}
                     value={renderMode}
                     onChange={(e) => setRenderMode(e.target.value as RenderMode)}
                     disabled={busy}
@@ -689,7 +753,7 @@ export function ExportConfigModal({
                     <option value="document">Document (scrollable page)</option>
                     <option value="slideshow">Slideshow (interactive player)</option>
                   </select>
-                  <div style={hintStyle}>
+                  <div style={themedHintStyle}>
                     {renderMode === 'document'
                       ? 'Renders as a readable flowing document with embedded images.'
                       : 'Renders as an interactive slideshow with animated block transitions.'}
@@ -698,9 +762,9 @@ export function ExportConfigModal({
               )}
 
               {/* Theme — applied to both rendered and plain HTML output */}
-              <label style={labelStyle}>Theme</label>
+              <label style={themedLabelStyle}>Theme</label>
               <select
-                style={selectStyle}
+                style={themedSelectStyle}
                 value={themeId}
                 onChange={(e) => setThemeId(e.target.value)}
                 disabled={busy}
@@ -716,9 +780,9 @@ export function ExportConfigModal({
               {/* Transform — plain HTML preserves markdown as-is, no transform */}
               {htmlStyle !== 'plain' || !isHtmlFormat ? (
                 <>
-                  <label style={labelStyle}>Transform</label>
+                  <label style={themedLabelStyle}>Transform</label>
                   <select
-                    style={selectStyle}
+                    style={themedSelectStyle}
                     value={transformStyle}
                     onChange={(e) => setTransformStyle(e.target.value)}
                     disabled={busy}
@@ -735,17 +799,17 @@ export function ExportConfigModal({
 
               {/* Error */}
               {error && (
-                <div style={{ color: '#c53030', fontSize: 13, marginBottom: 12 }}>
+                <div style={{ color: palette.danger, fontSize: 13, marginBottom: 12 }}>
                   Export failed: {error}
                 </div>
               )}
 
               {/* Buttons */}
               <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 8 }}>
-                <button style={btnSecondary} onClick={onClose} disabled={busy}>
+                <button style={themedSecondaryButtonStyle} onClick={onClose} disabled={busy}>
                   Cancel
                 </button>
-                <button style={btnPrimary} onClick={handleExport} disabled={busy}>
+                <button style={themedPrimaryButtonStyle} onClick={handleExport} disabled={busy}>
                   {busy ? 'Exporting...' : 'Export'}
                 </button>
               </div>
@@ -756,8 +820,8 @@ export function ExportConfigModal({
                 style={{
                   flex: '1 1 auto',
                   minWidth: 0,
-                  border: '1px solid #c9b98a',
-                  background: '#fff',
+                  border: `1px solid ${palette.border}`,
+                  background: palette.control,
                   display: 'flex',
                   flexDirection: 'column',
                   minHeight: 480,
@@ -766,10 +830,10 @@ export function ExportConfigModal({
                 <div
                   style={{
                     padding: '6px 10px',
-                    borderBottom: '1px solid #c9b98a',
+                    borderBottom: `1px solid ${palette.border}`,
                     fontSize: 12,
-                    color: '#8a7a5a',
-                    background: '#FFFDF7',
+                    color: palette.muted,
+                    background: palette.surface,
                   }}
                 >
                   Preview
@@ -795,6 +859,7 @@ export function ExportConfigModal({
             doc={markdownToDoc(parseMarkdown(currentSource))}
             playerScript={playerScriptRef.current}
             mediaProvider={mediaProvider ?? undefined}
+            colorScheme={colorScheme}
             onClose={() => {
               setShowVideoModal(false);
               onClose();

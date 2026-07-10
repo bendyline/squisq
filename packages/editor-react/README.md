@@ -16,7 +16,7 @@ npm install monaco-editor
 ```
 
 **Peer dependencies:** `react` and `react-dom` (v18 or v19). `monaco-editor`
-(^0.50.0) is an **optional** peer dependency (v1.5) — install it only if you use
+(>=0.50.0) is an **optional** peer dependency (v1.5) — install it only if you use
 the Raw view; the WYSIWYG and Preview views work without it. Tiptap is bundled as
 a regular dependency — you don't need to install it yourself.
 

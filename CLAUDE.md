@@ -336,7 +336,7 @@ build entry and a `package.json` export):
 - Hooks: useVideoExport, useFrameCapture
 - Worker: the encoding worker is built from `src/workers/encode.worker.ts` for internal use by the exported hooks/components; there is no public `/worker` subpath today
 - Encoding backends: WebCodecs (preferred, streaming H.264) with ffmpeg.wasm fallback (batched)
-- Audio: MP4 export muxes narration audio (WebCodecs path); the result reports `VideoExportResult.audioIncluded` / `audioSkippedReason`. `useVideoExport().startExport(doc, config)` takes the doc first. `playerScript` is optional on `VideoExportButton` / `VideoExportModal` (falls back to the bundled standalone player).
+- Audio: MP4 export muxes narration audio (WebCodecs path); the result reports `VideoExportResult.audioIncluded` / `audioSkippedReason`. `useVideoExport().startExport(doc, config)` takes the doc first. `playerScript` is optional on `VideoExportButton` / `VideoExportModal` (falls back to the bundled standalone player). Both components accept `colorScheme="light" | "dark"` for host-matched portaled UI (default `light`).
 - Depends on `@bendyline/squisq-video` for shared types/encoder + `@bendyline/squisq-react` + `mp4-muxer` + `html2canvas`
 
 `@bendyline/squisq-video` (browser-pure, no Node deps) is the underlying foundation:

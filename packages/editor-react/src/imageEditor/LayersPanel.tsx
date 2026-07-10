@@ -4,6 +4,7 @@
  * panel shows the array reversed so "top" appears at the top of the list.
  */
 
+import { useEffect, useRef, useState } from 'react';
 import type { ImageEditDoc } from '@bendyline/squisq/schemas';
 import type { ImageEditorAction } from './state.js';
 import {
@@ -12,23 +13,95 @@ import {
   CloseIcon,
   EyeIcon,
   EyeOffIcon,
+  ImageIcon,
   LockIcon,
+  PlusIcon,
+  ShapeIcon,
+  TextIcon,
   UnlockIcon,
 } from './icons.js';
+
+export type AddableLayerKind = 'text' | 'shape' | 'image';
 
 export interface LayersPanelProps {
   doc: ImageEditDoc;
   selectedLayerId: string | null;
   dispatch: (action: ImageEditorAction) => void;
+  onAddLayer: (kind: AddableLayerKind) => void;
 }
 
-export function LayersPanel({ doc, selectedLayerId, dispatch }: LayersPanelProps) {
+const ADD_LAYER_OPTIONS: ReadonlyArray<{
+  kind: AddableLayerKind;
+  label: string;
+  icon: React.ReactNode;
+}> = [
+  { kind: 'text', label: 'Text layer', icon: <TextIcon /> },
+  { kind: 'shape', label: 'Shape layer', icon: <ShapeIcon /> },
+  { kind: 'image', label: 'Image layer…', icon: <ImageIcon /> },
+];
+
+export function LayersPanel({ doc, selectedLayerId, dispatch, onAddLayer }: LayersPanelProps) {
+  const [addMenuOpen, setAddMenuOpen] = useState(false);
+  const addMenuRef = useRef<HTMLSpanElement | null>(null);
+
+  useEffect(() => {
+    if (!addMenuOpen) return;
+
+    const closeOnOutsideClick = (event: MouseEvent) => {
+      if (!addMenuRef.current?.contains(event.target as Node)) setAddMenuOpen(false);
+    };
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setAddMenuOpen(false);
+    };
+
+    document.addEventListener('mousedown', closeOnOutsideClick);
+    document.addEventListener('keydown', closeOnEscape);
+    return () => {
+      document.removeEventListener('mousedown', closeOnOutsideClick);
+      document.removeEventListener('keydown', closeOnEscape);
+    };
+  }, [addMenuOpen]);
+
   // Visual order: top of stack first.
   const ordered = doc.layers.slice().reverse();
 
   return (
     <div className="squisq-image-editor-layers" data-testid="image-editor-layers">
-      <div className="squisq-image-editor-panel-header">Layers</div>
+      <div className="squisq-image-editor-panel-header squisq-image-editor-layers-header">
+        <span>Layers</span>
+        <span ref={addMenuRef} className="squisq-image-editor-layer-add">
+          <button
+            type="button"
+            className="squisq-image-editor-layer-add-button"
+            onClick={() => setAddMenuOpen((open) => !open)}
+            aria-label="Add layer"
+            title="Add layer"
+            aria-haspopup="menu"
+            aria-expanded={addMenuOpen}
+          >
+            <PlusIcon />
+          </button>
+          {addMenuOpen && (
+            <div className="squisq-image-editor-layer-add-menu" role="menu">
+              {ADD_LAYER_OPTIONS.map(({ kind, label, icon }) => (
+                <button
+                  key={kind}
+                  type="button"
+                  className="squisq-image-editor-layer-add-menu-item"
+                  role="menuitem"
+                  onClick={() => {
+                    setAddMenuOpen(false);
+                    onAddLayer(kind);
+                  }}
+                >
+                  {icon}
+                  <span>{label}</span>
+                </button>
+              ))}
+            </div>
+          )}
+        </span>
+      </div>
       <ul className="squisq-image-editor-layer-list">
         {ordered.length === 0 && <li className="squisq-image-editor-layer-empty">No layers yet</li>}
         {ordered.map((layer) => {
@@ -38,6 +111,7 @@ export function LayersPanel({ doc, selectedLayerId, dispatch }: LayersPanelProps
           const canMoveUp = stackIndex < doc.layers.length - 1;
           const canMoveDown = stackIndex > 0;
           const isSelected = selectedLayerId === layer.id;
+          const layerName = layer.name ?? defaultLayerName(layer);
 
           return (
             <li
@@ -84,8 +158,9 @@ export function LayersPanel({ doc, selectedLayerId, dispatch }: LayersPanelProps
                 type="button"
                 className="squisq-image-editor-layer-name"
                 onClick={() => dispatch({ type: 'select', layerId: layer.id })}
+                title={layerName}
               >
-                {layer.name ?? defaultLayerName(layer)}
+                <span className="squisq-image-editor-layer-name-text">{layerName}</span>
                 <span className="squisq-image-editor-layer-kind">{layer.type}</span>
               </button>
               <button
