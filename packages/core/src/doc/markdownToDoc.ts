@@ -35,6 +35,7 @@ import { readCustomThemesFromFrontmatter } from './customThemesFrontmatter.js';
 import type {
   MarkdownDocument,
   MarkdownBlockNode,
+  MarkdownCodeBlock,
   MarkdownHeading,
   MarkdownNode,
   HtmlNode,
@@ -49,6 +50,9 @@ import { extractTemplateBlocksFromContents } from './annotationBlocks.js';
 import type { ParsedAnnotation } from './standaloneAnnotation.js';
 import { profileBlockContents, pickAutoTemplate } from '../recommend/templates.js';
 import { deriveTemplateInputs } from './templateInputs.js';
+import { isEligibleAsciiFenceLang } from './asciiDiagram/detect.js';
+import { parseAsciiDiagram } from './asciiDiagram/parse.js';
+import { asciiDiagramToTemplateData } from './asciiDiagram/mapping.js';
 import type { MediaClip } from '../schemas/Media.js';
 
 // ============================================
@@ -463,6 +467,14 @@ export function markdownToDoc(markdownDoc: MarkdownDocument, options?: MarkdownT
     applyStructuredData(block, diagnostics);
   }
 
+  // Explicitly diagram-annotated blocks whose body is a single eligible
+  // ASCII-art fence get nodes/edges derived from it — no detection
+  // threshold, the author asked for a diagram. Children-driven diagrams
+  // and author `json data` node lists win over the fence.
+  for (const block of allBlocks) {
+    applyAsciiDiagramData(block, diagnostics);
+  }
+
   // Content-aware template auto-pick (default on): unannotated heading
   // blocks whose body carries a strong signal get the matching template
   // plus inputs derived from that body. Strict derivation — when the
@@ -709,6 +721,32 @@ function applyStructuredData(block: Block, diagnostics: DocDiagnostic[]): void {
   }
 }
 
+/**
+ * Fill `templateData.nodes`/`edges` for an explicitly `{[diagram]}`-annotated
+ * block whose body is exactly one eligible ASCII-art fence. Runs without the
+ * detection threshold (explicit annotation = author intent), unconditionally
+ * of the autoTemplates switches. The fence stays in `contents`, untouched.
+ */
+function applyAsciiDiagramData(block: Block, diagnostics: DocDiagnostic[]): void {
+  if (resolveTemplateName(block.template ?? '') !== 'diagram') return;
+  if (block.children && block.children.length > 0) return; // native children win
+  if (block.templateData && 'nodes' in block.templateData) return; // author data wins
+  const fences = (block.contents ?? []).filter((n): n is MarkdownCodeBlock => n.type === 'code');
+  if (fences.length !== 1 || !isEligibleAsciiFenceLang(fences[0].lang)) return;
+  const parsed = parseAsciiDiagram(fences[0].value);
+  if (parsed.nodes.length === 0) {
+    diagnostics.push({
+      severity: 'warning',
+      code: 'ascii-diagram-parse',
+      message: `Diagram block "${block.id}": code fence did not parse as an ASCII diagram`,
+      blockId: block.id,
+    });
+    return;
+  }
+  const { nodes, edges } = asciiDiagramToTemplateData(parsed);
+  block.templateData = { nodes, edges, ...block.templateData };
+}
+
 /** Truthiness of the `squisq-auto-templates` frontmatter kill-switch. */
 function frontmatterDisablesAutoTemplates(markdownDoc: MarkdownDocument): boolean {
   const v = markdownDoc.frontmatter?.['squisq-auto-templates'];
@@ -755,9 +793,17 @@ function applyAutoTemplates(
  */
 function getBlockBodyText(block: Block): string {
   if (!block.contents || block.contents.length === 0) return '';
+  // A fence consumed as diagram data must not feed reading-time/captions —
+  // 20 lines of box-drawing art would add ~30s of duration and captions
+  // that "read" border runs aloud.
+  const diagramConsumedFence =
+    resolveTemplateName(block.template ?? '') === 'diagram' &&
+    block.templateData !== undefined &&
+    'nodes' in block.templateData;
   // Join with newlines to preserve paragraph/list-item boundaries.
   // splitIntoPhrases uses these newlines as natural split points.
   return block.contents
+    .filter((node) => !(diagramConsumedFence && node.type === 'code'))
     .map((node) => extractPlainText(node))
     .join('\n')
     .trim();

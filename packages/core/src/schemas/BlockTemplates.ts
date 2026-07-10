@@ -477,13 +477,44 @@ export interface VideoPullQuoteInput extends BaseTemplateBlock {
 }
 
 /**
- * Diagram block - renders child headings as a node-and-edge diagram.
+ * One diagram node supplied via `templateData.nodes` (canvas units, the
+ * same coordinate space as `Block.x`/`Block.y`). This is the data-driven
+ * alternative to child headings — used when a diagram is derived from an
+ * ASCII-art fence.
+ */
+export interface DiagramTemplateNode {
+  id: string;
+  /** Display label; may contain `\n` for multi-line labels. */
+  label: string;
+  x: number;
+  y: number;
+  /** Per-node width override in canvas units (defaults to the standard card width). */
+  w?: number;
+  /** Per-node height override in canvas units. */
+  h?: number;
+  /** Id of the node visually containing this one; containers draw behind their children. */
+  container?: string;
+}
+
+/** An edge for `DiagramTemplateNode` lists. `directed` defaults to true. */
+export interface DiagramTemplateEdge {
+  source: string;
+  target: string;
+  /** Edge label rendered at the midpoint. */
+  label?: string;
+  /** False suppresses the end arrowhead (a plain connecting line). */
+  directed?: boolean;
+}
+
+/**
+ * Diagram block - renders a node-and-edge diagram.
  *
- * Unlike other templates, the diagram template reads its content from
- * the parent block's `children` (passed via `context.children`) — each
- * child heading becomes a node, positioned by its `x`/`y` and connected
- * by its `connectsTo`. Per-diagram options on this input control overall
- * appearance; per-node data lives on the child blocks themselves.
+ * Two data sources, in precedence order:
+ * 1. Child headings (`context.children`) — each child is a node positioned
+ *    by its `x`/`y` and connected by its `connectsTo` (legacy authored form).
+ * 2. `nodes`/`edges` on this input (usually via `templateData`, derived
+ *    from an ASCII-art diagram fence in the block body).
+ * Per-diagram options on this input control overall appearance.
  */
 export interface DiagramBlockInput extends BaseTemplateBlock {
   template: 'diagram';
@@ -501,6 +532,10 @@ export interface DiagramBlockInput extends BaseTemplateBlock {
   endStyle?: MarkerStyle;
   /** Edge line style (default: 'solid'). */
   lineStyle?: 'solid' | 'dashed' | 'dotted';
+  /** Data-driven node list; used only when the block has no children. */
+  nodes?: DiagramTemplateNode[];
+  /** Edges for `nodes`. */
+  edges?: DiagramTemplateEdge[];
 }
 
 /**

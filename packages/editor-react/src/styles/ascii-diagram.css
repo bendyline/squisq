@@ -1,0 +1,39 @@
+/* ASCII diagram fences in the WYSIWYG editor.
+ *
+ * A qualifying code fence is hidden behind its interactive canvas
+ * (AsciiDiagramWidget); toggling "Source" on the widget swaps the hide
+ * class for a monospace, non-wrapping view of the raw art. */
+
+.squisq-wysiwyg-editor pre.squisq-ascii-fence-hidden {
+  display: none;
+}
+
+.squisq-wysiwyg-editor pre.squisq-ascii-fence-source {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace;
+  /* prosemirror.css sets `.ProseMirror pre { white-space: pre-wrap }`,
+     which soft-wraps and visually scrambles column-aligned art. */
+  white-space: pre;
+  overflow-x: auto;
+  line-height: 1.2;
+  tab-size: 4;
+}
+
+.squisq-ascii-diagram-widget-host {
+  margin: 0.75rem 0 1.25rem;
+}
+
+.squisq-ascii-diagram-warnings {
+  margin-top: 4px;
+  font-size: 12px;
+  color: var(--squisq-theme-text-muted, #6b7280);
+}
+
+.squisq-ascii-diagram-warnings summary {
+  cursor: pointer;
+  user-select: none;
+}
+
+.squisq-ascii-diagram-warnings ul {
+  margin: 4px 0 0;
+  padding-left: 18px;
+}

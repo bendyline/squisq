@@ -53,3 +53,25 @@ export type {
   TemplateInputDescriptor,
   TemplateParamFinding,
 } from './templates/inputDescriptors.js';
+export {
+  ASCII_CHAR_H,
+  ASCII_CHAR_W,
+  ASCII_DIAGRAM_FENCE_LANGS,
+  asciiCellToCanvas,
+  asciiDiagramFromBlocks,
+  asciiDiagramFromTemplateData,
+  asciiDiagramToTemplateData,
+  canvasToAsciiCell,
+  detectAsciiDiagram,
+  isAsciiDiagramFence,
+  isEligibleAsciiFenceLang,
+  parseAsciiDiagram,
+  renderAsciiDiagram,
+} from './asciiDiagram/index.js';
+export type {
+  AsciiDiagram,
+  AsciiDiagramDetection,
+  AsciiDiagramEdge,
+  AsciiDiagramNode,
+  RenderAsciiDiagramOptions,
+} from './asciiDiagram/index.js';

@@ -59,12 +59,17 @@ squisq/
                             #   persistentLayers / captionUtils
                             #   shared utilities
           utils/            # animationUtils, themeUtils
+          asciiDiagram/     # ASCII diagram codec: detect/parse/render box-and-line art in code
+                            #   fences (boxes=nodes, lines/arrows=edges, box-in-box=containers,
+                            #   `── label ──`/`│ label` edge labels) + grid↔canvas mapping.
+                            #   parse(render(d)) is a semantic fixpoint; render is byte-stable
+                            #   after one normalization cycle. THE authored diagram format.
           getLayers.ts      # Layer dispatch with persistent layer injection
           markdownToDoc.ts  # Markdown AST → Doc (content-aware auto templates ON by default:
                             #   unannotated headings with strong signals — table/images/quote/
-                            #   list/stat — get matching templates + derived inputs; ephemeral
-                            #   via block.autoTemplate so round-trips stay lossless; disable
-                            #   with { autoTemplates: false } or frontmatter
+                            #   list/stat/ASCII-diagram fence — get matching templates + derived
+                            #   inputs; ephemeral via block.autoTemplate so round-trips stay
+                            #   lossless; disable with { autoTemplates: false } or frontmatter
                             #   squisq-auto-templates: false, CLI --no-auto-templates)
         templateInputs.ts # deriveTemplateInputs + body extractors (images/list/table/quote)
           docToMarkdown.ts  # Doc → Markdown AST
@@ -173,7 +178,15 @@ squisq/
                             #   toggle, chip-bin, card-stack, tabs, …) — uses chooseControl from core
         recorder/           # MediaRecorder UI + helpers (RecorderModal, RecorderButton,
                             #   RecorderPanel, hooks, sources, formats, timingJson)
-        diagram/            # React Flow-backed diagram editor extension and command helpers
+        asciiDiagram/       # ASCII-fence diagram editing: AsciiDiagramExtension (position-registry
+                            #   plugin that hides qualifying code fences and mounts the canvas),
+                            #   AsciiDiagramWidget, useAsciiDiagramData, pure ops + command pipeline
+                            #   (parse → op → render → verify → single-transaction fence rewrite),
+                            #   paste gate for bare art
+        diagram/            # Shared diagram canvas (DiagramCanvas over the Scene engine, types,
+                            #   constants, maximize overlay) + heading-mutation helpers in
+                            #   diagramCommands.ts still used by drawing/layout scene commands.
+                            #   Heading-based diagram EDITING was removed in the ASCII cutover.
         tiptap/             # TiptapAudio, TiptapVideo, useResolvedMediaSrc — media node views
         utils/              # collectInlineFontAwesomeCss, dropUtils, normalizeMalformedAssetUrl
     video/                  # @bendyline/squisq-video
@@ -271,7 +284,7 @@ For CI / clean reproducible installs, run `npm ci && node scripts/run-install-al
 build entry and a `package.json` export):
 
 - `@bendyline/squisq/schemas` — Type definitions (Doc, BlockTemplates, Viewport, LayoutStrategy, Theme, themeLibrary, themeCompile, themeValidator, colorUtils, fontStacks, Types, MediaProvider, ImageEditDoc)
-- `@bendyline/squisq/doc` — Template registry + all 23 templates (`title`, `sectionHeader`, `statHighlight`, `quote`, `factCard`, `twoColumn`, `dateEvent`, `imageWithCaption`, `leftFeature`, `rightFeature`, `map`, `fullBleedQuote`, `list`, `photoGrid`, `definitionCard`, `comparisonBar`, `pullQuote`, `videoWithCaption`, `videoPullQuote`, `dataTable`, `diagram`, `layout`, `drawing`) + animationUtils + themeUtils + markdownToDoc + docToMarkdown + getLayers + resolveAudioMapping + custom-templates frontmatter codec + custom-themes frontmatter codec (`readCustomThemesFromFrontmatter` / `writeCustomThemesToFrontmatter`) + `resolveThemeForDoc` (pure doc-scoped theme resolution) + template-param tooling (`TEMPLATE_INPUT_DESCRIPTORS`, `coerceTemplateParams`, `lintTemplateParams`) + `replaceDataFence` (data-fence rewriter)
+- `@bendyline/squisq/doc` — Template registry + all 23 templates (`title`, `sectionHeader`, `statHighlight`, `quote`, `factCard`, `twoColumn`, `dateEvent`, `imageWithCaption`, `leftFeature`, `rightFeature`, `map`, `fullBleedQuote`, `list`, `photoGrid`, `definitionCard`, `comparisonBar`, `pullQuote`, `videoWithCaption`, `videoPullQuote`, `dataTable`, `diagram`, `layout`, `drawing`) + animationUtils + themeUtils + markdownToDoc + docToMarkdown + getLayers + resolveAudioMapping + custom-templates frontmatter codec + custom-themes frontmatter codec (`readCustomThemesFromFrontmatter` / `writeCustomThemesToFrontmatter`) + `resolveThemeForDoc` (pure doc-scoped theme resolution) + template-param tooling (`TEMPLATE_INPUT_DESCRIPTORS`, `coerceTemplateParams`, `lintTemplateParams`) + `replaceDataFence` (data-fence rewriter) + the ASCII diagram codec (`parseAsciiDiagram` / `renderAsciiDiagram` / `detectAsciiDiagram` / `isAsciiDiagramFence` / `isEligibleAsciiFenceLang`, mapping helpers `asciiDiagramToTemplateData` / `asciiDiagramFromTemplateData` / `asciiDiagramFromBlocks` / `asciiCellToCanvas` / `canvasToAsciiCell`, constants `ASCII_CHAR_W` / `ASCII_CHAR_H`)
 - `@bendyline/squisq/spatial` — Haversine, Geohash utilities
 - `@bendyline/squisq/storage` — StorageAdapter, MemoryStorageAdapter, LocalStorageAdapter, LocalForageAdapter, ContentContainer, MemoryContentContainer, ScopedContentContainer, createMediaProviderFromContainer
 - `@bendyline/squisq/markdown` — Markdown parsing, stringifying, AST types (MarkdownDocument), tree utilities, frontmatter helpers, HTML sub-DOM
@@ -316,7 +329,7 @@ build entry and a `package.json` export):
 - Drag-and-drop: `useFileDrop` (HTML5 drop classification), `classifyFile`, `partitionFiles`, `processMediaFiles`, `processTextFile`, `processTextFiles`
 - Bridge: `markdownToTiptap`, `tiptapToMarkdown` (bidirectional conversion in `tiptapBridge.ts`)
 - Tiptap extension: `HeadingWithTemplate` (heading-template annotation)
-- Diagram editor: `DiagramExtension`, `DiagramCanvas`, `DiagramWidget`, `useDiagramData`, `DiagramCommand`, `DiagramData`, `DiagramRFNode`, `DiagramRFEdge`, and command helpers (`moveNode`, `addConnection`, `removeConnection`, `renameNode`, `addNode`, `removeNode`, `listDiagramChildren`)
+- Diagram editor (ASCII fences are THE authored diagram format): `AsciiDiagramExtension` (+ `AsciiDiagramExtensionOptions`, `AsciiDiagramPluginState`, `AsciiDiagramBlockEntry`), `AsciiDiagramWidget`, `useAsciiDiagramData` (+ `AsciiDiagramView`, `asciiDiagramToCanvas`), `applyAsciiDiagramCommand` / `replaceAsciiFenceText`, pure ops (`moveNodeOp`, `resizeNodeOp`, `addEdgeOp`, `removeEdgeOp`, `renameNodeOp`, `addNodeOp`, `removeNodeOp`, `sanitizeAsciiLabel`), `shouldPasteAsAsciiFence`, registry helpers (`findAsciiDiagramBlockPos`, `isAsciiSourceVisible`, `toggleAsciiSource`), plus the shared canvas `DiagramCanvas` and types `DiagramCommand` / `DiagramData` / `DiagramRFNode` / `DiagramRFEdge`. **BREAKING (ASCII cutover):** the heading-based `DiagramExtension`, `DiagramWidget`, `useDiagramData`, and heading command helpers were removed — legacy `{[diagram]}` heading sections still render in preview/player via core, but have no canvas editor. The toolbar's Insert → diagram now inserts a starter ASCII fence.
 - Mention provider: `MentionCandidate`, `MentionProvider` (host wires its directory through `EditorContext`)
 - Versioning: pass `allowVersioning` + `container` to `EditorShell` to enable; the toolbar surfaces a `VersionHistoryPanel` and the editor auto-saves snapshots on idle (configurable via `versioningAutoSaveIdleMs`, default 5s; `versioningPrunePolicy` defaults to keep-last-50). Hosts can also call `useEditorContext().versioning.saveVersion()` from their own save pipeline.
 - Inline preview gutter: pass `inlinePreview` (and optional `inlinePreviewWidth`, default 320px) to `EditorShell` to render an `InlinePreviewGutter` next to the WYSIWYG surface. The gutter shows one small SVG card per template-annotated block in the document, auto-hides via container query below ~720px, and reuses the same template-resolution path as `LinearDocView`.
@@ -392,6 +405,7 @@ If you need an `any` outside these boundaries, find a different solution. Use `a
 - **Editor isolation** — heavy editor dependencies (Monaco, Tiptap) are isolated in editor-react, separate from the lighter react package
 - **Standalone player bundle** — `@bendyline/squisq-react/standalone-source` exports `PLAYER_BUNDLE`, an IIFE-wrapped string that boots a complete player into a host page. `formats/html` and `squisq-cli` inline this to produce single-file HTML exports.
 - **`<JsonView>` and `<JsonEditor>` share `chooseControl()` from core** — read-only viewer and editable form always agree on what each schema field _is_; only their rendering differs.
+- **ASCII fences are the diagram format** — a diagram is a code fence of box-and-line art (the kind AI assistants emit); the fence text is the source of truth end-to-end. Core's codec (`doc/asciiDiagram/`) parses boxes/edges/containers/labels and renders them back with a semantic fixpoint guarantee (`parse(render(d)) ≡ d`; byte-stable after one normalization cycle). The editor mounts an interactive canvas OVER the fence and rewrites the art on every semantic edit (verify-before-commit aborts if the renderer and parser ever disagree); untouched fences stay byte-identical. The doc pipeline auto-detects diagram fences via the `autoTemplate` mechanism (detection is conservative — lang allowlist, ≥2 closed boxes, table-lattice and loose-text rejectors — and the negative corpus in `asciiDiagramDetect.test.ts` is the tuning contract). Legacy `{[diagram]}` heading sections render read-only; `drawing`/`layout` keep heading-based markup.
 
 ## Adding a New Block Template
 

@@ -233,24 +233,45 @@ export { buildPreviewDoc } from './buildPreviewDoc.js';
 // Tiptap extension: Heading with template annotation support
 export { HeadingWithTemplate } from './TemplateAnnotation.js';
 
-// Diagram editor — Tiptap extension that mounts a React-Flow canvas
-// below any `### Title {[diagram]}` heading and hides the section's
-// child headings (they're rendered as nodes in the canvas).
-export { DiagramExtension } from './diagram/DiagramExtension.js';
+// Diagram editor — ASCII fences are the authored diagram format. The
+// AsciiDiagramExtension turns code fences containing box-and-line art
+// into interactive canvases; edits re-render the art (the fence stays the
+// source of truth). Legacy `{[diagram]}` heading sections still RENDER in
+// preview/player via core, but heading-based canvas editing was removed
+// (BREAKING: DiagramExtension / DiagramWidget / useDiagramData / the
+// heading command helpers are gone).
 export { DiagramCanvas } from './diagram/DiagramCanvas.js';
 export type { DiagramCommand } from './diagram/DiagramCanvas.js';
-export { DiagramWidget } from './diagram/DiagramWidget.js';
-export { useDiagramData } from './diagram/useDiagramData.js';
-export type { DiagramData, DiagramRFNode, DiagramRFEdge } from './diagram/useDiagramData.js';
+export type { DiagramData, DiagramRFNode, DiagramRFEdge } from './diagram/types.js';
 export {
-  moveNode,
-  addConnection,
-  removeConnection,
-  renameNode,
-  addNode,
-  removeNode,
-  listDiagramChildren,
-} from './diagram/diagramCommands.js';
+  AsciiDiagramExtension,
+  findAsciiDiagramBlockPos,
+  isAsciiSourceVisible,
+  toggleAsciiSource,
+} from './asciiDiagram/AsciiDiagramExtension.js';
+export type {
+  AsciiDiagramBlockEntry,
+  AsciiDiagramExtensionOptions,
+  AsciiDiagramPluginState,
+} from './asciiDiagram/AsciiDiagramExtension.js';
+export { AsciiDiagramWidget } from './asciiDiagram/AsciiDiagramWidget.js';
+export { useAsciiDiagramData, asciiDiagramToCanvas } from './asciiDiagram/asciiDiagramData.js';
+export type { AsciiDiagramView } from './asciiDiagram/asciiDiagramData.js';
+export {
+  applyAsciiDiagramCommand,
+  replaceAsciiFenceText,
+} from './asciiDiagram/asciiDiagramCommands.js';
+export {
+  addEdgeOp,
+  addNodeOp,
+  moveNodeOp,
+  removeEdgeOp,
+  removeNodeOp,
+  renameNodeOp,
+  resizeNodeOp,
+  sanitizeAsciiLabel,
+} from './asciiDiagram/asciiDiagramOps.js';
+export { shouldPasteAsAsciiFence } from './asciiDiagram/asciiPaste.js';
 
 // JSON Form — editable component
 export { JsonEditor } from './jsonEditor/index.js';

@@ -23,7 +23,7 @@ import {
 } from '../scene';
 import type { SceneTextEditConfig } from '../scene/text/sceneTextConfig';
 import { markdownToTiptap } from '../tiptapBridge';
-import type { DiagramRFNode, DiagramRFEdge } from './useDiagramData';
+import type { DiagramRFNode, DiagramRFEdge } from './types';
 import { DIAGRAM_VIEWPORT, DIAGRAM_TOOLS } from './diagramConstants';
 
 export type DiagramCommand =

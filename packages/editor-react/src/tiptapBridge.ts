@@ -452,12 +452,13 @@ export function tiptapToMarkdown(html: string): string {
       continue;
     }
 
-    // Code blocks
-    const codeMatch = remaining.match(
-      /^<pre><code(?:\s+class="language-([^"]*)")?>(.*?)<\/code><\/pre>/s,
-    );
+    // Code blocks — tolerate attributes on <pre> and <code>: real
+    // editor.getHTML() output carries class="squisq-code-block" on the
+    // <pre> (StarterKit codeBlock HTMLAttributes), which a bare
+    // `<pre><code` anchor never matches, silently dropping the fence.
+    const codeMatch = remaining.match(/^<pre\b[^>]*><code\b([^>]*)>(.*?)<\/code><\/pre>/s);
     if (codeMatch) {
-      const lang = codeMatch[1] || '';
+      const lang = /\bclass="language-([^"]*)"/.exec(codeMatch[1] ?? '')?.[1] ?? '';
       const code = unescapeHtml(codeMatch[2]);
       lines.push('```' + lang);
       lines.push(code);

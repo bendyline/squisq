@@ -53,4 +53,40 @@ describe('buildDiagramScene', () => {
     );
     expect(out.edges[0]).toEqual({ id: 'a->b', source: 'a', target: 'b' });
   });
+
+  it('passes container kind through and styles the label top-anchored', () => {
+    const out = buildDiagramScene(
+      [
+        {
+          id: 'group',
+          position: { x: 0, y: 0 },
+          data: { label: 'Cluster\nextra' },
+          width: 600,
+          height: 400,
+          kind: 'container',
+        },
+        { id: 'a', position: { x: 40, y: 60 }, data: { label: 'A' } },
+      ],
+      [],
+    );
+    expect(out.nodes[0].kind).toBe('container');
+    const label = out.layers.find((l) => l.id === 'node-label-group');
+    expect(label?.position.y).toBeLessThan(0 + 400 / 2); // top-anchored, not centered
+    if (label?.type === 'text') expect(label.content.text).toBe('Cluster'); // first line only
+  });
+
+  it('maps directed:false to endMarker none, leaves default edges alone', () => {
+    const out = buildDiagramScene(
+      [
+        { id: 'a', position: { x: 0, y: 0 }, data: { label: 'A' } },
+        { id: 'b', position: { x: 300, y: 0 }, data: { label: 'B' } },
+      ],
+      [
+        { id: 'a->b', source: 'a', target: 'b', directed: false },
+        { id: 'b->a', source: 'b', target: 'a' },
+      ],
+    );
+    expect(out.edges[0]).toEqual({ id: 'a->b', source: 'a', target: 'b', endMarker: 'none' });
+    expect(out.edges[1]).toEqual({ id: 'b->a', source: 'b', target: 'a' });
+  });
 });

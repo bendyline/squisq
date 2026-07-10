@@ -26,7 +26,8 @@ import { resolveFontFamily, FONT_FALLBACKS, VIEWPORT_PRESETS } from '@bendyline/
 import { DEFAULT_THEME, flattenBlocks, markdownToDoc } from '@bendyline/squisq/doc';
 import { parseMarkdown } from '@bendyline/squisq/markdown';
 import { HeadingWithTemplate } from './TemplateAnnotation';
-import { DiagramExtension } from './diagram/DiagramExtension';
+import { AsciiDiagramExtension } from './asciiDiagram/AsciiDiagramExtension';
+import { shouldPasteAsAsciiFence } from './asciiDiagram/asciiPaste';
 import { SceneBlockExtension } from './scene/SceneBlockExtension';
 import { InlineIcon } from './InlineIcon';
 import { ImageWithMediaProvider } from './ImageNodeView';
@@ -178,7 +179,7 @@ export function WysiwygEditor({
         },
       }),
       HeadingWithTemplate.configure({ levels: [1, 2, 3, 4, 5, 6] }),
-      DiagramExtension,
+      AsciiDiagramExtension,
       SceneBlockExtension,
       Table.configure({ resizable: true }),
       TableRow,
@@ -266,7 +267,26 @@ export function WysiwygEditor({
         }
 
         const text = clipboard.getData('text/plain');
-        if (!text || !looksLikeMarkdown(text)) return false;
+        if (!text) return false;
+
+        // Bare (unfenced) ASCII diagram art → verbatim into a fresh code
+        // block, which AsciiDiagramExtension turns into an interactive
+        // canvas. Must run BEFORE the markdown branch: `| x |` art rows
+        // false-positive as GFM table rows and would be mangled.
+        if (shouldPasteAsAsciiFence(text)) {
+          const codeBlockType = view.state.schema.nodes.codeBlock;
+          if (codeBlockType) {
+            event.preventDefault();
+            view.dispatch(
+              view.state.tr.replaceSelectionWith(
+                codeBlockType.create(null, view.state.schema.text(text)),
+              ),
+            );
+            return true;
+          }
+        }
+
+        if (!looksLikeMarkdown(text)) return false;
         const html = markdownToTiptap(text);
         if (!html) return false;
         event.preventDefault();

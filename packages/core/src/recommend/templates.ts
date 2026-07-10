@@ -13,9 +13,11 @@ import type {
   HtmlElement,
   HtmlNode,
   MarkdownBlockNode,
+  MarkdownCodeBlock,
   MarkdownHtmlBlock,
   MarkdownNode,
 } from '../markdown/types.js';
+import { detectAsciiDiagram, isEligibleAsciiFenceLang } from '../doc/asciiDiagram/detect.js';
 
 export interface BlockContentProfile {
   hasImage: boolean;
@@ -27,6 +29,12 @@ export interface BlockContentProfile {
   hasDate: boolean;
   hasNumberHighlight: boolean;
   wordCount: number;
+  /**
+   * True when the body is dominated by exactly one code fence whose content
+   * is an ASCII box-and-line diagram (see `doc/asciiDiagram/detect.ts`).
+   * Optional so externally-constructed profiles keep compiling.
+   */
+  hasAsciiDiagram?: boolean;
 }
 
 export interface RecommendationResult {
@@ -171,6 +179,27 @@ export function profileBlockContents(nodes: MarkdownBlockNode[]): BlockContentPr
     return true;
   });
 
+  // ASCII diagram: exactly one code fence with an eligible (inert) language
+  // whose content detects as box-and-line art, in a body it dominates — no
+  // competing table/image/video signal and at most a little surrounding
+  // prose. The diagram template replaces the whole slide, so hiding a real
+  // table or a second fence is the costly failure this guards against.
+  let hasAsciiDiagram = false;
+  const codeNodes: MarkdownCodeBlock[] = [];
+  for (const node of nodes) codeNodes.push(...findNodesByType<MarkdownCodeBlock>(node, 'code'));
+  if (
+    codeNodes.length === 1 &&
+    isEligibleAsciiFenceLang(codeNodes[0].lang) &&
+    !hasTable &&
+    imageCount === 0 &&
+    !hasVideo
+  ) {
+    const nonCodeChars = Math.max(0, plainText.length - codeNodes[0].value.length);
+    if (nonCodeChars <= 400 && detectAsciiDiagram(codeNodes[0].value).isDiagram) {
+      hasAsciiDiagram = true;
+    }
+  }
+
   return {
     hasImage: imageCount > 0,
     imageCount,
@@ -181,6 +210,7 @@ export function profileBlockContents(nodes: MarkdownBlockNode[]): BlockContentPr
     hasDate,
     hasNumberHighlight,
     wordCount,
+    hasAsciiDiagram,
   };
 }
 
@@ -197,6 +227,11 @@ const UNIVERSAL_DEFAULTS = ['title', 'sectionHeader', 'factCard', 'twoColumn'];
 function recommendedNamesForProfile(profile: BlockContentProfile): string[] {
   const names = new Set<string>();
   let anyContentSignal = false;
+
+  if (profile.hasAsciiDiagram) {
+    anyContentSignal = true;
+    names.add('diagram');
+  }
 
   if (profile.hasImage) {
     anyContentSignal = true;
@@ -266,6 +301,7 @@ function recommendedNamesForProfile(profile: BlockContentProfile): string[] {
  * the editor's template-picker UI instead.
  */
 export function pickAutoTemplate(profile: BlockContentProfile, blockIndex = 0): string | undefined {
+  if (profile.hasAsciiDiagram) return 'diagram';
   if (profile.hasTable) return 'dataTable';
   if (profile.imageCount >= 2) return 'photoGrid';
   if (profile.hasImage) return blockIndex % 2 === 0 ? 'leftFeature' : 'rightFeature';

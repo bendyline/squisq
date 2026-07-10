@@ -8,6 +8,7 @@ import type {
   CustomTemplateLayer,
   Layer,
 } from '@bendyline/squisq/schemas';
+import { DIAGRAM_GALLERY_SAMPLE } from './diagramGallerySample';
 
 /**
  * Content zip samples — fetched at runtime, unpacked into a ContentContainer.
@@ -435,23 +436,28 @@ A dramatic quote overlaid on a background video.
 `,
   'diagram-family-tree': `# Family Tree Demo
 
-A small genealogy diagram. Each child heading under the \`{[diagram]}\` parent becomes a node; \`connectsTo\` links them.
+A small genealogy diagram. Diagrams are ASCII-art code fences: each box is a node, lines and arrows are connections, and text beside a line (\`│ born\`) is the connection's label. The WYSIWYG editor renders the fence as an interactive canvas and writes edits back as art.
 
-## Family Tree {[diagram]}
+## Family Tree
 
-### Grandparent {#grandparent x=400 y=80}
-
-The eldest known ancestor.
-
-### Parent A {#parent-a x=240 y=260 connectsTo=grandparent}
-
-### Parent B {#parent-b x=560 y=260 connectsTo=grandparent}
-
-### Child 1 {#child-1 x=120 y=440 connectsTo=parent-a:born}
-
-### Child 2 {#child-2 x=360 y=440 connectsTo=parent-a:born}
-
-### Child 3 {#child-3 x=600 y=440 connectsTo=parent-b:born}
+\`\`\`
+                    ┌─────────────┐
+                    │ Grandparent │
+                    └─────┬─┬─────┘
+                          ▲ ▲
+             ┌────────────┘ │
+             │              └───────┐
+        ┌────┴─────┐           ┌────┴─────┐
+        │ Parent A │           │ Parent B │
+        └───┬─┬────┘           └───────┬──┘
+            ▲ ▲                        ▲
+     ┌──────┘ │                        │ born
+     │ born   └───────┐                │
+     │                │ born           │
+┌────┴────┐      ┌────┴────┐      ┌────┴────┐
+│ Child 1 │      │ Child 2 │      │ Child 3 │
+└─────────┘      └─────────┘      └─────────┘
+\`\`\`
 
 ## After the diagram
 
@@ -459,19 +465,64 @@ Regular body content continues here.
 `,
   'diagram-architecture': `# Architecture Sketch
 
-A node diagram with typed connections.
+A node diagram with typed connections — labels ride the lines, either embedded (\`── reads ──\`) or beside a vertical (\`│ dispatches\`).
+
+## System Overview
+
+\`\`\`
+               ┌────────────┐
+               │ API Server │
+               └───┬─┬─┬────┘
+     ┌─── reads ───┘ │ │
+     │         reads │ │
+     │               │ └─ publishes ─┐
+     ▼               ▼               ▼
+┌────┴─────┐   ┌─────┴─┐       ┌─────┴─────┐
+│ Database │   │ Cache │       │ Job Queue │
+└────┬─────┘   └───────┘       └─────┬─────┘
+     ▲                               │
+     │                               │
+     └────────── writes ──────────┐  │ dispatches
+                                  │  │
+                                  │  ▼
+                               ┌──┴──┴──┐
+                               │ Worker │
+                               └────────┘
+\`\`\`
+`,
+  'diagram-nested-cluster': `# Nested Containers
+
+A box drawn around other boxes becomes a container — it groups its children on the canvas and survives round-trips as a surrounding box (the kind of diagram AI assistants emit).
+
+## Inference Fleet
+
+\`\`\`
+┌────────────── Inference Cluster ───────────────┐
+│                                                │
+│ ┌──────────┐   ┌──────────┐   ┌──────────┐     │
+│ │ Worker A │   │ Worker B │   │ Worker C │     │
+│ └────┬─────┘   └────┬─────┘   └────┬─────┘     │
+│      │              │              │           │
+│      ▼              ▼              ▼           │
+│ ┌────┴─────┐   ┌────┴─────┐   ┌────┴─────┐     │
+│ │ Queue A  │   │ Queue B  │   │ Queue C  │     │
+│ └──────────┘   └──────────┘   └──────────┘     │
+│                                                │
+└────────────────────────────────────────────────┘
+\`\`\`
+`,
+  'diagram-gallery': DIAGRAM_GALLERY_SAMPLE,
+  'diagram-legacy-headings': `# Legacy Heading Diagram
+
+The pre-ASCII heading syntax (\`{[diagram]}\` + child headings with \`x=\`/\`y=\`/\`connectsTo=\`) still renders in the preview/player, but has no canvas editor — new diagrams are authored as ASCII fences.
 
 ## System Overview {[diagram]}
 
-### API Server {#api x=300 y=120 connectsTo=db:reads,cache:reads,queue:publishes}
+### API Server {#api x=300 y=120 connectsTo=db:reads,cache:reads}
 
 ### Database {#db x=80 y=320}
 
 ### Cache {#cache x=300 y=320}
-
-### Job Queue {#queue x=520 y=320 connectsTo=worker:dispatches}
-
-### Worker {#worker x=520 y=520 connectsTo=db:writes}
 `,
   'drawing-org-chart': `# Org Chart Demo
 

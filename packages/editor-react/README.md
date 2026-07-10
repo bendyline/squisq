@@ -51,8 +51,10 @@ function App() {
 | `RecorderPanel` / `RecorderButton` / `RecorderModal` | Browser audio/camera/screen recording (MediaRecorder)            |
 | `FolderView`                                         | Standalone folder browser surface                                |
 
-Beyond components, the package also exports Tiptap extensions (diagram editor,
-heading template annotations), the markdown ↔ Tiptap bridge
+Beyond components, the package also exports Tiptap extensions (the ASCII
+diagram editor — code fences of box-and-line art get an interactive canvas
+whose edits are written back as regenerated art — plus heading template
+annotations), the markdown ↔ Tiptap bridge
 (`markdownToTiptap` / `tiptapToMarkdown`), drag-and-drop helpers
 (`useFileDrop`, `processMediaFiles`), file-kind detection (`resolveFileKind`),
 and block-at-a-time / timeline editing primitives (`useBlockNavigator`,

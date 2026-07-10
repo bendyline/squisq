@@ -221,7 +221,9 @@ test('diagram node label is editable inline (plain text)', async ({ page }) => {
   await page.goto('/');
   await page.waitForLoadState('networkidle');
   await page.locator('select').first().selectOption('diagram-family-tree');
-  await page.locator('.squisq-diagram-widget-host').waitFor({ state: 'visible', timeout: 5_000 });
+  await page
+    .locator('.squisq-ascii-diagram-widget-host')
+    .waitFor({ state: 'visible', timeout: 5_000 });
   await page
     .locator('.squisq-scene-viewport [data-layer-id^="node-card-"]')
     .first()
@@ -239,8 +241,9 @@ test('diagram node label is editable inline (plain text)', async ({ page }) => {
   await page.mouse.click(box.x + box.width / 2, box.y - 120);
   await page.waitForTimeout(400);
 
-  // The node label updates (rendered as the node-label text layer).
-  await expect(page.locator('[data-layer-id="node-label-parent-a"]').first()).toContainText(
+  // ASCII-diagram node ids derive from labels, so the renamed node re-parses
+  // under a fresh id; its label layer carries the new text.
+  await expect(page.locator('[data-layer-id="node-label-renamed"]').first()).toContainText(
     'Renamed',
     { timeout: 3_000 },
   );

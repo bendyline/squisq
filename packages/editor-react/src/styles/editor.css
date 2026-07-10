@@ -1844,6 +1844,10 @@
   overflow-x: auto;
   font-size: 13px;
   line-height: 1.5;
+  /* Explicit monospace: the container sets a themed sans body font, so
+     UA defaults for <pre> are not reliable inside it. Column-aligned
+     content (ASCII diagrams) depends on this. */
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace;
 }
 
 .squisq-wysiwyg-editor code {
@@ -1852,6 +1856,7 @@
   padding: 1px 4px;
   border-radius: 3px;
   font-size: 0.9em;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace;
 }
 
 .squisq-wysiwyg-editor pre code {

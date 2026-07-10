@@ -283,6 +283,29 @@ describe('tiptapToMarkdown', () => {
     expect(md).toContain('plain code');
   });
 
+  it('converts code blocks when <pre> carries attributes (real getHTML shape)', () => {
+    // StarterKit is configured with codeBlock HTMLAttributes, so real
+    // editor.getHTML() output puts class="squisq-code-block" on <pre>.
+    const md = tiptapToMarkdown(
+      '<pre class="squisq-code-block"><code class="language-js">const x = 1;</code></pre>',
+    );
+    expect(md).toContain('```js');
+    expect(md).toContain('const x = 1;');
+  });
+
+  it('converts attribute-bearing code blocks without language', () => {
+    const md = tiptapToMarkdown('<pre class="squisq-code-block"><code>plain code</code></pre>');
+    expect(md).toContain('```\nplain code\n```');
+  });
+
+  it('extracts language regardless of surrounding attributes on <code>', () => {
+    const md = tiptapToMarkdown(
+      '<pre class="squisq-code-block"><code spellcheck="false" class="language-python">x = 1</code></pre>',
+    );
+    expect(md).toContain('```python');
+    expect(md).toContain('x = 1');
+  });
+
   it('converts blockquotes', () => {
     const md = tiptapToMarkdown('<blockquote><p>A wise quote</p></blockquote>');
     expect(md).toContain('> ');

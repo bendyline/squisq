@@ -18,8 +18,15 @@
  *   preview surfaces use this so a half-authored block still renders.
  */
 
-import type { MarkdownBlockNode, MarkdownList, MarkdownTable } from '../markdown/types.js';
+import type {
+  MarkdownBlockNode,
+  MarkdownCodeBlock,
+  MarkdownList,
+  MarkdownTable,
+} from '../markdown/types.js';
 import { extractPlainText } from '../markdown/utils.js';
+import { detectAsciiDiagram, isEligibleAsciiFenceLang } from './asciiDiagram/detect.js';
+import { asciiDiagramToTemplateData } from './asciiDiagram/mapping.js';
 
 /** First image discovered in a block's body, with explicit dimensions when present. */
 export interface FirstImage {
@@ -233,6 +240,17 @@ export function deriveTemplateInputs(
         title: headingText,
         body: bodyText,
       };
+    }
+    case 'diagram': {
+      // Nodes/edges from an ASCII-art fence in the body (the fence itself
+      // stays in `contents`, untouched, so round-trips are lossless).
+      const fences = (contents ?? []).filter((n): n is MarkdownCodeBlock => n.type === 'code');
+      const fence =
+        fences.length === 1 && isEligibleAsciiFenceLang(fences[0].lang) ? fences[0] : undefined;
+      const detection = fence ? detectAsciiDiagram(fence.value) : undefined;
+      if (!detection?.isDiagram || !detection.diagram) return placeholders ? {} : null;
+      const { nodes, edges } = asciiDiagramToTemplateData(detection.diagram);
+      return { nodes, edges, ...(headingText ? { title: headingText } : {}) };
     }
     default:
       return placeholders ? {} : null;
