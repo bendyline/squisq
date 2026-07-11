@@ -170,7 +170,12 @@ function layoutNodes(
       const horizDeg = Math.max(deg.top, deg.bottom);
       const vertDeg = Math.max(deg.left, deg.right);
       const wCols = Math.max(node.wCols, innerW + 4, 3, horizDeg > 0 ? 2 * horizDeg + 1 : 0);
-      const hRows = Math.max(node.hRows, labelLines.length + 2, 3, vertDeg > 0 ? 2 * vertDeg + 1 : 0);
+      const hRows = Math.max(
+        node.hRows,
+        labelLines.length + 2,
+        3,
+        vertDeg > 0 ? 2 * vertDeg + 1 : 0,
+      );
       const rect: Rect = {
         r0: node.row,
         c0: node.col,

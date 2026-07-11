@@ -222,6 +222,14 @@ const BUTTONS: ToolbarButton[] = [
     faIcon: 'fa-solid fa-diagram-project',
   },
   {
+    id: 'tree',
+    label: 'tree',
+    icon: '',
+    title: 'Insert tree',
+    group: 'media',
+    faIcon: 'fa-solid fa-folder-tree',
+  },
+  {
     id: 'drawing',
     label: 'drawing',
     icon: '',
@@ -373,18 +381,44 @@ const DIAGRAM_STARTER_ART = [
   '│  Next   │',
   '└─────────┘',
 ].join('\n');
-/** Fenced form for raw / code views. */
-const DIAGRAM_STARTER_MARKDOWN = '\n```\n' + DIAGRAM_STARTER_ART + '\n```\n';
+/**
+ * Fenced form for raw / code views — tagged with the explicit `diagram`
+ * language so the block's identity survives markdown ↔ Tiptap round-trips
+ * (the language class round-trips; fence meta does not).
+ */
+const DIAGRAM_STARTER_MARKDOWN = '\n```diagram\n' + DIAGRAM_STARTER_ART + '\n```\n';
 
 /** Insert a starter ASCII-diagram code fence after the current top-level block. */
 function insertAsciiDiagramBlock(editor: TiptapEditor): void {
+  insertFenceBlock(editor, DIAGRAM_STARTER_ART, 'diagram');
+}
+
+/**
+ * Starter art for a new file tree — an ASCII tree fence (the fence is the
+ * source of truth; `TreeViewExtension` mounts the interactive outline).
+ */
+const TREE_STARTER_ART = ['src/', '├── index.ts', '└── utils/', '    └── helpers.ts'].join('\n');
+const TREE_STARTER_MARKDOWN = '\n```tree\n' + TREE_STARTER_ART + '\n```\n';
+
+/** Insert a starter ASCII tree code fence after the current top-level block. */
+function insertTreeBlock(editor: TiptapEditor): void {
+  insertFenceBlock(editor, TREE_STARTER_ART, 'tree');
+}
+
+/**
+ * Insert a code fence after the current top-level block. `lang` tags the
+ * fence's `language` attribute — pass the explicit `diagram`/`tree` tag so
+ * the diagram/tree widget claims it immediately and its identity round-trips.
+ */
+function insertFenceBlock(editor: TiptapEditor, art: string, lang?: string): void {
   editor
     .chain()
     .focus()
     .command(({ tr, state, dispatch }) => {
       const codeBlockType = state.schema.nodes.codeBlock;
       if (!codeBlockType) return false;
-      const block = codeBlockType.create(null, state.schema.text(DIAGRAM_STARTER_ART));
+      const attrs = lang ? { language: lang } : null;
+      const block = codeBlockType.create(attrs, state.schema.text(art));
       const { $from } = state.selection;
       const insertPos = $from.depth > 0 ? $from.after(1) : state.doc.content.size;
       if (dispatch) tr.insert(insertPos, block);
@@ -898,6 +932,11 @@ export function Toolbar({
           // mounts the interactive canvas over the inserted starter.
           insertAsciiDiagramBlock(tiptapEditor);
           break;
+        case 'tree':
+          // File trees are ASCII tree fences; TreeViewExtension mounts the
+          // interactive outline over the inserted starter.
+          insertTreeBlock(tiptapEditor);
+          break;
         case 'drawing':
           // Empty drawing is usable via the canvas's "Shapes ▾" palette;
           // each shape persists as a child heading.
@@ -1059,6 +1098,11 @@ export function Toolbar({
             newCursorOffset = replacement.length;
             break;
           }
+          case 'tree': {
+            replacement = TREE_STARTER_MARKDOWN;
+            newCursorOffset = replacement.length;
+            break;
+          }
           case 'drawing': {
             replacement = '\n## Drawing {[drawing]}\n';
             newCursorOffset = replacement.length;
@@ -1138,6 +1182,9 @@ export function Toolbar({
             break;
           case 'diagram':
             insertion = DIAGRAM_STARTER_MARKDOWN;
+            break;
+          case 'tree':
+            insertion = TREE_STARTER_MARKDOWN;
             break;
           case 'drawing':
             insertion = '\n## Drawing {[drawing]}\n';

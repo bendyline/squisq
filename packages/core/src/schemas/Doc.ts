@@ -368,7 +368,8 @@ export type Layer =
   | PathLayer
   | MapLayer
   | VideoLayer
-  | TableLayer;
+  | TableLayer
+  | TreeLayer;
 
 interface BaseLayer {
   /** Unique identifier for this layer */
@@ -694,6 +695,61 @@ export interface TableLayerStyle {
   headerFontFamily?: string;
   /** Corner radius for the table container */
   borderRadius?: number;
+}
+
+/**
+ * One node in a `TreeLayer` — a JSON-serializable hierarchy item (mirrors
+ * the treeview codec's `TreeItem`). Rendered as an indented filesystem-style
+ * row with a folder/file icon and connector rails.
+ */
+export interface TreeLayerItem {
+  id: string;
+  label: string;
+  /** True renders a folder (container) icon; else a file (leaf) icon. */
+  isDir?: boolean;
+  /** Trailing comment shown muted after the label. */
+  comment?: string;
+  children: TreeLayerItem[];
+}
+
+/**
+ * A hierarchical treeview rendered as interactive HTML inside a
+ * `<foreignObject>` (like `TableLayer`): folder/file icons, connector
+ * rails, and collapse chevrons. Interactive (collapse/expand) in the live
+ * React player; captured fully-expanded and static in frame/PDF export.
+ */
+export interface TreeLayer extends BaseLayer {
+  type: 'tree';
+  content: {
+    items: TreeLayerItem[];
+    style: TreeLayerStyle;
+  };
+}
+
+/** Styling options for a TreeLayer. */
+export interface TreeLayerStyle {
+  /** Leaf (file) row text color. */
+  rowColor: string;
+  /** Container (folder) row text color. */
+  dirColor: string;
+  /** Connector rail / branch color. */
+  connectorColor: string;
+  /** Icon color. */
+  iconColor: string;
+  /** Muted comment color. */
+  commentColor: string;
+  /** Font size in pixels. */
+  fontSize: number;
+  /** Row label font family. */
+  fontFamily?: string;
+  /** Monospace font for the connector rails. */
+  monoFontFamily?: string;
+  /** Indent step per depth level, in pixels. */
+  indentPx: number;
+  /** FontAwesome icon token for containers (default `folder`). */
+  folderIcon?: string;
+  /** FontAwesome icon token for leaves (default `file`). */
+  fileIcon?: string;
 }
 
 /**

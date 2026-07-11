@@ -445,6 +445,27 @@ export const TEMPLATE_ENTRIES: TemplateEntry[] = [
     ),
   },
   {
+    name: 'tree',
+    label: 'Tree',
+    description:
+      'Renders an ASCII file-tree / outline fence as a filesystem-style treeview — edit as an outline.',
+    icon: (
+      <TemplateIcon>
+        <rect x={6} y={5} width={16} height={7} rx={1.5} fill={FA} opacity={0.85} />
+        <path
+          d="M 12 12 L 12 34 M 12 20 L 22 20 M 12 34 L 22 34"
+          stroke={F1}
+          strokeWidth={1.5}
+          fill="none"
+          opacity={0.7}
+        />
+        <rect x={24} y={16} width={14} height={7} rx={1.5} fill={F2} opacity={0.8} />
+        <rect x={24} y={30} width={14} height={7} rx={1.5} fill={F2} opacity={0.8} />
+        <rect x={26} y={2} width={14} height={7} rx={1.5} fill={F2} opacity={0.6} />
+      </TemplateIcon>
+    ),
+  },
+  {
     name: 'layout',
     label: 'Layout',
     description:

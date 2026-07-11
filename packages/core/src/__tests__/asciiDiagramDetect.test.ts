@@ -3,6 +3,7 @@ import {
   detectAsciiDiagram,
   isAsciiDiagramFence,
   isEligibleAsciiFenceLang,
+  isExplicitDiagramLang,
 } from '../doc/asciiDiagram/index.js';
 import type { MarkdownCodeBlock } from '../markdown/types.js';
 import { NEGATIVE_FIXTURES, POSITIVE_FIXTURES } from './fixtures/asciiDiagrams.js';
@@ -58,6 +59,38 @@ describe('detectAsciiDiagram — positive fixtures (must all accept)', () => {
       expect(detection.diagram?.nodes.length).toBeGreaterThanOrEqual(2);
     });
   }
+});
+
+describe('explicit `diagram` tag (lenient detection)', () => {
+  const ONE_BOX = ['┌────────┐', '│ Solo   │', '└────────┘'].join('\n');
+
+  it('isExplicitDiagramLang matches only the `diagram` tag', () => {
+    for (const lang of ['diagram', ' Diagram ', 'DIAGRAM'])
+      expect(isExplicitDiagramLang(lang)).toBe(true);
+    for (const lang of [undefined, null, '', 'text', 'ascii', 'tree', 'js'])
+      expect(isExplicitDiagramLang(lang)).toBe(false);
+  });
+
+  it('a single-box diagram is rejected untagged but accepted when explicit', () => {
+    expect(detectAsciiDiagram(ONE_BOX).isDiagram).toBe(false);
+    const explicit = detectAsciiDiagram(ONE_BOX, { explicit: true });
+    expect(explicit.isDiagram).toBe(true);
+    expect(explicit.diagram?.nodes).toHaveLength(1);
+  });
+
+  it('still rejects a markdown table even when explicitly tagged', () => {
+    expect(
+      detectAsciiDiagram(NEGATIVE_FIXTURES.NEG_MARKDOWN_TABLE, { explicit: true }).isDiagram,
+    ).toBe(false);
+  });
+
+  it('`diagram` is an eligible fence lang and isAsciiDiagramFence accepts a tagged single box', () => {
+    expect(isEligibleAsciiFenceLang('diagram')).toBe(true);
+    const fence: MarkdownCodeBlock = { type: 'code', lang: 'diagram', value: ONE_BOX };
+    expect(isAsciiDiagramFence(fence)).toBe(true);
+    // The same content in a bare fence is not auto-detected.
+    expect(isAsciiDiagramFence({ type: 'code', value: ONE_BOX })).toBe(false);
+  });
 });
 
 describe('fence language gate', () => {

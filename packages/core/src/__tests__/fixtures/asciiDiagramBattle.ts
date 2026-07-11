@@ -22,35 +22,46 @@ export interface BattleDiagram {
 
 export const BATTLE_DIAGRAMS: BattleDiagram[] = [
   {
-    name: "linearEtl",
-    category: "linear",
+    name: 'linearEtl',
+    category: 'linear',
     art: `┌─────────┐     ┌───────────┐     ┌──────────┐
 │ Extract │ ──> │ Transform │ ──> │   Load   │
 └─────────┘     └───────────┘     └──────────┘`,
-    nodes: ["extract","transform","load"],
-    edges: [["extract", "transform"], ["transform", "load"]],
+    nodes: ['extract', 'transform', 'load'],
+    edges: [
+      ['extract', 'transform'],
+      ['transform', 'load'],
+    ],
   },
   {
-    name: "requestLifecycle",
-    category: "linear",
+    name: 'requestLifecycle',
+    category: 'linear',
     art: `┌────────┐    ┌───────────────┐    ┌─────────┐    ┌──────────┐
 │ Client │───>│ Load Balancer │───>│   API   │───>│ Database │
 └────────┘    └───────────────┘    └─────────┘    └──────────┘`,
-    nodes: ["client","load-balancer","api","database"],
-    edges: [["client", "load-balancer"], ["load-balancer", "api"], ["api", "database"]],
+    nodes: ['client', 'load-balancer', 'api', 'database'],
+    edges: [
+      ['client', 'load-balancer'],
+      ['load-balancer', 'api'],
+      ['api', 'database'],
+    ],
   },
   {
-    name: "deployPipelineAscii",
-    category: "linear",
+    name: 'deployPipelineAscii',
+    category: 'linear',
     art: `+-------+     +------+     +-------+     +--------+
 | Build | --> | Test | --> | Stage | --> | Deploy |
 +-------+     +------+     +-------+     +--------+`,
-    nodes: ["build","test","stage","deploy"],
-    edges: [["build", "test"], ["test", "stage"], ["stage", "deploy"]],
+    nodes: ['build', 'test', 'stage', 'deploy'],
+    edges: [
+      ['build', 'test'],
+      ['test', 'stage'],
+      ['stage', 'deploy'],
+    ],
   },
   {
-    name: "mlPipeline",
-    category: "linear",
+    name: 'mlPipeline',
+    category: 'linear',
     art: `┌──────────┐   ┌──────────┐   ┌──────────┐   ┌──────────┐
 │   Data   │──►│ Features │──►│  Train   │──►│  Model   │
 └──────────┘   └──────────┘   └────┬─────┘   └──────────┘
@@ -59,21 +70,30 @@ export const BATTLE_DIAGRAMS: BattleDiagram[] = [
                               ┌──────────┐
                               │ Evaluate │
                               └──────────┘`,
-    nodes: ["data","features","train","model","evaluate"],
-    edges: [["data", "features"], ["features", "train"], ["train", "model"], ["train", "evaluate", "metrics"]],
+    nodes: ['data', 'features', 'train', 'model', 'evaluate'],
+    edges: [
+      ['data', 'features'],
+      ['features', 'train'],
+      ['train', 'model'],
+      ['train', 'evaluate', 'metrics'],
+    ],
   },
   {
-    name: "approvalFlow",
-    category: "linear",
+    name: 'approvalFlow',
+    category: 'linear',
     art: `┌─────────┐   ┌──────────┐   ┌──────────┐   ┌───────────┐
 │  Draft  │──►│  Review  │──►│ Approved │──►│ Published │
 └─────────┘   └──────────┘   └──────────┘   └───────────┘`,
-    nodes: ["draft","review","approved","published"],
-    edges: [["draft", "review"], ["review", "approved"], ["approved", "published"]],
+    nodes: ['draft', 'review', 'approved', 'published'],
+    edges: [
+      ['draft', 'review'],
+      ['review', 'approved'],
+      ['approved', 'published'],
+    ],
   },
   {
-    name: "loadBalancerFanout",
-    category: "fan-out",
+    name: 'loadBalancerFanout',
+    category: 'fan-out',
     art: `           ┌───────────────┐
            │ Load Balancer │
            └──┬──┬──┬──┬───┘
@@ -82,12 +102,17 @@ export const BATTLE_DIAGRAMS: BattleDiagram[] = [
     ┌──────┐┌──────┐┌──────┐┌──────┐
     │ Web1 ││ Web2 ││ Web3 ││ Web4 │
     └──────┘└──────┘└──────┘└──────┘`,
-    nodes: ["load-balancer","web1","web2","web3","web4"],
-    edges: [["load-balancer", "web1"], ["load-balancer", "web2"], ["load-balancer", "web3"], ["load-balancer", "web4"]],
+    nodes: ['load-balancer', 'web1', 'web2', 'web3', 'web4'],
+    edges: [
+      ['load-balancer', 'web1'],
+      ['load-balancer', 'web2'],
+      ['load-balancer', 'web3'],
+      ['load-balancer', 'web4'],
+    ],
   },
   {
-    name: "pubsubBroker",
-    category: "fan-out",
+    name: 'pubsubBroker',
+    category: 'fan-out',
     art: `  ┌──────────┐      ┌──────────┐
   │ Producer │─────►│  Broker  │
   └──────────┘      └─┬──┬──┬──┘
@@ -96,12 +121,17 @@ export const BATTLE_DIAGRAMS: BattleDiagram[] = [
       ┌──────────┐┌──────────┐┌──────────┐
       │   Sub1   ││   Sub2   ││   Sub3   │
       └──────────┘└──────────┘└──────────┘`,
-    nodes: ["producer","broker","sub1","sub2","sub3"],
-    edges: [["producer", "broker"], ["broker", "sub1"], ["broker", "sub2"], ["broker", "sub3"]],
+    nodes: ['producer', 'broker', 'sub1', 'sub2', 'sub3'],
+    edges: [
+      ['producer', 'broker'],
+      ['broker', 'sub1'],
+      ['broker', 'sub2'],
+      ['broker', 'sub3'],
+    ],
   },
   {
-    name: "collectorFanin",
-    category: "fan-in",
+    name: 'collectorFanin',
+    category: 'fan-in',
     art: `┌────┐  ┌────┐  ┌────┐
 │ S1 │  │ S2 │  │ S3 │
 └─┬──┘  └─┬──┘  └─┬──┘
@@ -110,12 +140,16 @@ export const BATTLE_DIAGRAMS: BattleDiagram[] = [
 ┌─────────────────────┐
 │      Collector      │
 └─────────────────────┘`,
-    nodes: ["s1","s2","s3","collector"],
-    edges: [["s1", "collector"], ["s2", "collector"], ["s3", "collector"]],
+    nodes: ['s1', 's2', 's3', 'collector'],
+    edges: [
+      ['s1', 'collector'],
+      ['s2', 'collector'],
+      ['s3', 'collector'],
+    ],
   },
   {
-    name: "sharedCache",
-    category: "fan-in",
+    name: 'sharedCache',
+    category: 'fan-in',
     art: `┌──────────┐   ┌──────────┐   ┌──────────┐
 │ Service1 │   │ Service2 │   │ Service3 │
 └────┬─────┘   └────┬─────┘   └────┬─────┘
@@ -124,12 +158,16 @@ export const BATTLE_DIAGRAMS: BattleDiagram[] = [
 ┌────────────────────────────────────────┐
 │              Shared Cache              │
 └────────────────────────────────────────┘`,
-    nodes: ["service1","service2","service3","shared-cache"],
-    edges: [["service1", "shared-cache"], ["service2", "shared-cache"], ["service3", "shared-cache"]],
+    nodes: ['service1', 'service2', 'service3', 'shared-cache'],
+    edges: [
+      ['service1', 'shared-cache'],
+      ['service2', 'shared-cache'],
+      ['service3', 'shared-cache'],
+    ],
   },
   {
-    name: "diamond",
-    category: "dag",
+    name: 'diamond',
+    category: 'dag',
     art: `       ┌───┐
        │ A │
        └┬─┬┘
@@ -143,12 +181,17 @@ export const BATTLE_DIAGRAMS: BattleDiagram[] = [
        ┌───┐
        │ D │
        └───┘`,
-    nodes: ["a","b","c","d"],
-    edges: [["a", "b"], ["a", "c"], ["b", "d"], ["c", "d"]],
+    nodes: ['a', 'b', 'c', 'd'],
+    edges: [
+      ['a', 'b'],
+      ['a', 'c'],
+      ['b', 'd'],
+      ['c', 'd'],
+    ],
   },
   {
-    name: "orgTree",
-    category: "dag",
+    name: 'orgTree',
+    category: 'dag',
     art: `              ┌───────┐
               │  CEO  │
               └───┬───┘
@@ -162,12 +205,17 @@ export const BATTLE_DIAGRAMS: BattleDiagram[] = [
 ┌───────┐┌───────┐
 │  Dev  ││  QA   │
 └───────┘└───────┘`,
-    nodes: ["ceo","vp-eng","vp-ops","dev","qa"],
-    edges: [["ceo", "vp-eng"], ["ceo", "vp-ops"], ["vp-eng", "dev"], ["vp-eng", "qa"]],
+    nodes: ['ceo', 'vp-eng', 'vp-ops', 'dev', 'qa'],
+    edges: [
+      ['ceo', 'vp-eng'],
+      ['ceo', 'vp-ops'],
+      ['vp-eng', 'dev'],
+      ['vp-eng', 'qa'],
+    ],
   },
   {
-    name: "decisionTree",
-    category: "dag",
+    name: 'decisionTree',
+    category: 'dag',
     art: `        ┌───────────┐
         │  Check?   │
         └──┬─────┬──┘
@@ -176,12 +224,15 @@ export const BATTLE_DIAGRAMS: BattleDiagram[] = [
     ┌────────┐ ┌────────┐
     │ Accept │ │ Reject │
     └────────┘ └────────┘`,
-    nodes: ["check","accept","reject"],
-    edges: [["check", "accept"], ["check", "reject"]],
+    nodes: ['check', 'accept', 'reject'],
+    edges: [
+      ['check', 'accept'],
+      ['check', 'reject'],
+    ],
   },
   {
-    name: "microservices",
-    category: "dag",
+    name: 'microservices',
+    category: 'dag',
     art: `              ┌──────────────┐
               │   Gateway    │
               └──┬────┬────┬─┘
@@ -194,12 +245,19 @@ export const BATTLE_DIAGRAMS: BattleDiagram[] = [
 ┌──────────┐    ┌──────────┐    ┌──────────┐
 │ UsersDB  │    │ OrdersDB │    │  PayDB   │
 └──────────┘    └──────────┘    └──────────┘`,
-    nodes: ["gateway","users","orders","payments","usersdb","ordersdb","paydb"],
-    edges: [["gateway", "users"], ["gateway", "orders"], ["gateway", "payments"], ["users", "usersdb"], ["orders", "ordersdb"], ["payments", "paydb"]],
+    nodes: ['gateway', 'users', 'orders', 'payments', 'usersdb', 'ordersdb', 'paydb'],
+    edges: [
+      ['gateway', 'users'],
+      ['gateway', 'orders'],
+      ['gateway', 'payments'],
+      ['users', 'usersdb'],
+      ['orders', 'ordersdb'],
+      ['payments', 'paydb'],
+    ],
   },
   {
-    name: "layered",
-    category: "dag",
+    name: 'layered',
+    category: 'dag',
     art: `┌─────────────────────────────┐
 │      Presentation Layer     │
 └──────────────┬──────────────┘
@@ -211,12 +269,15 @@ export const BATTLE_DIAGRAMS: BattleDiagram[] = [
 ┌─────────────────────────────┐
 │         Data Layer          │
 └─────────────────────────────┘`,
-    nodes: ["presentation-layer","business-layer","data-layer"],
-    edges: [["presentation-layer", "business-layer"], ["business-layer", "data-layer"]],
+    nodes: ['presentation-layer', 'business-layer', 'data-layer'],
+    edges: [
+      ['presentation-layer', 'business-layer'],
+      ['business-layer', 'data-layer'],
+    ],
   },
   {
-    name: "threeTier",
-    category: "dag",
+    name: 'threeTier',
+    category: 'dag',
     art: `┌──────────┐     ┌──────────┐     ┌──────────┐
 │ Browser  │────►│   App    │────►│    DB    │
 └──────────┘     └────┬─────┘     └──────────┘
@@ -225,34 +286,45 @@ export const BATTLE_DIAGRAMS: BattleDiagram[] = [
                  ┌──────────┐
                  │  Cache   │
                  └──────────┘`,
-    nodes: ["browser","app","db","cache"],
-    edges: [["browser", "app"], ["app", "db"], ["app", "cache"]],
+    nodes: ['browser', 'app', 'db', 'cache'],
+    edges: [
+      ['browser', 'app'],
+      ['app', 'db'],
+      ['app', 'cache'],
+    ],
   },
   {
-    name: "retryLoop",
-    category: "cycle",
+    name: 'retryLoop',
+    category: 'cycle',
     art: `┌─────────┐         ┌──────────┐
 │ Request │ ──────> │  Worker  │
 └─────────┘         └────┬─────┘
      ▲                   │
      └───────────────────┘`,
-    nodes: ["request","worker"],
-    edges: [["request", "worker"], ["worker", "request"]],
+    nodes: ['request', 'worker'],
+    edges: [
+      ['request', 'worker'],
+      ['worker', 'request'],
+    ],
   },
   {
-    name: "stateMachine",
-    category: "cycle",
+    name: 'stateMachine',
+    category: 'cycle',
     art: `┌─────────┐          ┌─────────┐         ┌──────────┐
 │  Idle   │ ───────> │ Running │ ──────> │ Complete │
 └─────────┘          └────┬────┘         └──────────┘
      ▲                    │
      └────────────────────┘`,
-    nodes: ["idle","running","complete"],
-    edges: [["idle", "running"], ["running", "complete"], ["running", "idle"]],
+    nodes: ['idle', 'running', 'complete'],
+    edges: [
+      ['idle', 'running'],
+      ['running', 'complete'],
+      ['running', 'idle'],
+    ],
   },
   {
-    name: "circuitBreaker",
-    category: "cycle",
+    name: 'circuitBreaker',
+    category: 'cycle',
     art: `              ┌──────────┐
               │  Closed  │
               └──┬─────┬─┘
@@ -262,12 +334,16 @@ export const BATTLE_DIAGRAMS: BattleDiagram[] = [
 ┌──────────┐     ┌─────┴─────┐
 │   Open   │────►│ Half-Open │
 └──────────┘     └───────────┘`,
-    nodes: ["closed","open","half-open"],
-    edges: [["closed", "open"], ["open", "half-open"], ["half-open", "closed"]],
+    nodes: ['closed', 'open', 'half-open'],
+    edges: [
+      ['closed', 'open'],
+      ['open', 'half-open'],
+      ['half-open', 'closed'],
+    ],
   },
   {
-    name: "fullMesh3",
-    category: "many-to-many",
+    name: 'fullMesh3',
+    category: 'many-to-many',
     art: `              ┌───────┐
               │ Alpha │
               └──┬─┬──┘
@@ -278,30 +354,40 @@ export const BATTLE_DIAGRAMS: BattleDiagram[] = [
   ┌──────┐                  ┌───────┐
   │ Beta ├◄────────────────►┤ Gamma │
   └──────┘                  └───────┘`,
-    nodes: ["alpha","beta","gamma"],
-    edges: [["alpha", "beta"], ["beta", "alpha"], ["alpha", "gamma"], ["gamma", "alpha"], ["beta", "gamma"], ["gamma", "beta"]],
+    nodes: ['alpha', 'beta', 'gamma'],
+    edges: [
+      ['alpha', 'beta'],
+      ['beta', 'alpha'],
+      ['alpha', 'gamma'],
+      ['gamma', 'alpha'],
+      ['beta', 'gamma'],
+      ['gamma', 'beta'],
+    ],
   },
   {
-    name: "bidirReplication",
-    category: "edges",
+    name: 'bidirReplication',
+    category: 'edges',
     art: `┌──────────┐               ┌──────────┐
 │ Primary  │ <───────────> │ Replica  │
 └──────────┘               └──────────┘`,
-    nodes: ["primary","replica"],
-    edges: [["primary", "replica"], ["replica", "primary"]],
+    nodes: ['primary', 'replica'],
+    edges: [
+      ['primary', 'replica'],
+      ['replica', 'primary'],
+    ],
   },
   {
-    name: "undirectedPair",
-    category: "edges",
+    name: 'undirectedPair',
+    category: 'edges',
     art: `┌────────┐          ┌────────┐
 │ NodeA  │──────────│ NodeB  │
 └────────┘          └────────┘`,
-    nodes: ["nodea","nodeb"],
-    edges: [["nodea", "nodeb", undefined, false]],
+    nodes: ['nodea', 'nodeb'],
+    edges: [['nodea', 'nodeb', undefined, false]],
   },
   {
-    name: "labeledTyped",
-    category: "labels",
+    name: 'labeledTyped',
+    category: 'labels',
     art: `┌──────────┐              ┌──────────┐
 │   API    │ ─── reads ──►│ Database │
 └────┬─────┘              └──────────┘
@@ -310,12 +396,15 @@ export const BATTLE_DIAGRAMS: BattleDiagram[] = [
 ┌──────────┐
 │  Cache   │
 └──────────┘`,
-    nodes: ["api","database","cache"],
-    edges: [["api", "database", "reads"], ["api", "cache", "writes"]],
+    nodes: ['api', 'database', 'cache'],
+    edges: [
+      ['api', 'database', 'reads'],
+      ['api', 'cache', 'writes'],
+    ],
   },
   {
-    name: "queueDlq",
-    category: "labels",
+    name: 'queueDlq',
+    category: 'labels',
     art: `┌──────────┐     ┌──────────┐     ┌──────────┐
 │ Producer │────►│  Queue   │────►│ Consumer │
 └──────────┘     └────┬─────┘     └──────────┘
@@ -324,12 +413,16 @@ export const BATTLE_DIAGRAMS: BattleDiagram[] = [
                  ┌──────────┐
                  │   DLQ    │
                  └──────────┘`,
-    nodes: ["producer","queue","consumer","dlq"],
-    edges: [["producer", "queue"], ["queue", "consumer"], ["queue", "dlq", "on-fail"]],
+    nodes: ['producer', 'queue', 'consumer', 'dlq'],
+    edges: [
+      ['producer', 'queue'],
+      ['queue', 'consumer'],
+      ['queue', 'dlq', 'on-fail'],
+    ],
   },
   {
-    name: "cqrs",
-    category: "labels",
+    name: 'cqrs',
+    category: 'labels',
     art: `┌──────────┐                    ┌──────────────┐
 │  Client  │─── command ───────►│ Write Model  │
 └────┬─────┘                    └──────┬───────┘
@@ -338,23 +431,28 @@ export const BATTLE_DIAGRAMS: BattleDiagram[] = [
 ┌──────────────┐                 ┌──────────────┐
 │  Read Model  │◄────────────────│ Event Store  │
 └──────────────┘                 └──────────────┘`,
-    nodes: ["client","write-model","read-model","event-store"],
-    edges: [["client", "write-model", "command"], ["client", "read-model", "query"], ["write-model", "event-store", "events"], ["event-store", "read-model"]],
+    nodes: ['client', 'write-model', 'read-model', 'event-store'],
+    edges: [
+      ['client', 'write-model', 'command'],
+      ['client', 'read-model', 'query'],
+      ['write-model', 'event-store', 'events'],
+      ['event-store', 'read-model'],
+    ],
   },
   {
-    name: "multilineLabels",
-    category: "labels",
+    name: 'multilineLabels',
+    category: 'labels',
     art: `┌──────────────┐        ┌──────────────┐
 │ molen-kernel │        │ molen-client │
 │ headless sim │───────►│ three.js     │
 │ no DOM       │        │ WebGL        │
 └──────────────┘        └──────────────┘`,
-    nodes: ["molen-kernel","molen-client"],
-    edges: [["molen-kernel", "molen-client"]],
+    nodes: ['molen-kernel', 'molen-client'],
+    edges: [['molen-kernel', 'molen-client']],
   },
   {
-    name: "k8sCluster",
-    category: "container",
+    name: 'k8sCluster',
+    category: 'container',
     art: `┌───────────── Kubernetes Cluster ─────────────┐
 │                                              │
 │  ┌─────────┐    ┌─────────┐    ┌─────────┐   │
@@ -362,13 +460,17 @@ export const BATTLE_DIAGRAMS: BattleDiagram[] = [
 │  └─────────┘    └─────────┘    └─────────┘   │
 │                                              │
 └──────────────────────────────────────────────┘`,
-    nodes: ["kubernetes-cluster","pod-a","pod-b","pod-c"],
+    nodes: ['kubernetes-cluster', 'pod-a', 'pod-b', 'pod-c'],
     edges: [],
-    containers: {"pod-a":"kubernetes-cluster","pod-b":"kubernetes-cluster","pod-c":"kubernetes-cluster"},
+    containers: {
+      'pod-a': 'kubernetes-cluster',
+      'pod-b': 'kubernetes-cluster',
+      'pod-c': 'kubernetes-cluster',
+    },
   },
   {
-    name: "twoRegions",
-    category: "container",
+    name: 'twoRegions',
+    category: 'container',
     art: `┌──── Region US ─────┐   ┌──── Region EU ─────┐
 │                    │   │                    │
 │  ┌──────────────┐  │   │  ┌──────────────┐  │
@@ -376,13 +478,13 @@ export const BATTLE_DIAGRAMS: BattleDiagram[] = [
 │  └──────────────┘  │   │  └──────────────┘  │
 │                    │   │                    │
 └────────────────────┘   └────────────────────┘`,
-    nodes: ["region-us","us-worker","region-eu","eu-worker"],
+    nodes: ['region-us', 'us-worker', 'region-eu', 'eu-worker'],
     edges: [],
-    containers: {"us-worker":"region-us","eu-worker":"region-eu"},
+    containers: { 'us-worker': 'region-us', 'eu-worker': 'region-eu' },
   },
   {
-    name: "nestedTwoLevels",
-    category: "container",
+    name: 'nestedTwoLevels',
+    category: 'container',
     art: `┌─────────── Region ────────────┐
 │                               │
 │  ┌─────── Zone A ────────┐    │
@@ -394,17 +496,17 @@ export const BATTLE_DIAGRAMS: BattleDiagram[] = [
 │  └───────────────────────┘    │
 │                               │
 └───────────────────────────────┘`,
-    nodes: ["region","zone-a","instance-1"],
+    nodes: ['region', 'zone-a', 'instance-1'],
     edges: [],
-    containers: {"zone-a":"region","instance-1":"zone-a"},
+    containers: { 'zone-a': 'region', 'instance-1': 'zone-a' },
   },
   {
-    name: "roundedCorners",
-    category: "style",
+    name: 'roundedCorners',
+    category: 'style',
     art: `╭─────────╮      ╭─────────╮
 │  Start  │ ───► │   End   │
 ╰─────────╯      ╰─────────╯`,
-    nodes: ["start","end"],
-    edges: [["start", "end"]],
+    nodes: ['start', 'end'],
+    edges: [['start', 'end']],
   },
 ];

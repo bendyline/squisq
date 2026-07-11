@@ -31,14 +31,14 @@ interface Semantic {
 function semantic(d: AsciiDiagram): Semantic {
   return {
     nodes: d.nodes.map((n) => `${n.id}${n.containerId ? `<${n.containerId}` : ''}`).sort(),
-    edges: d.edges
-      .map((e) => `${e.source}|${e.target}|${e.directed}|${e.label ?? ''}`)
-      .sort(),
+    edges: d.edges.map((e) => `${e.source}|${e.target}|${e.directed}|${e.label ?? ''}`).sort(),
   };
 }
 function expectedEdgeStrings(fx: BattleDiagram): string[] {
   return fx.edges
-    .map(([s, t, label, directed]) => `${s}|${t}|${directed === false ? false : true}|${label ?? ''}`)
+    .map(
+      ([s, t, label, directed]) => `${s}|${t}|${directed === false ? false : true}|${label ?? ''}`,
+    )
     .sort();
 }
 
@@ -125,14 +125,20 @@ describe('battle test — many-to-many relationships', () => {
   it('recovers a fan-out hub connecting to all of its targets', () => {
     const fx = BATTLE_DIAGRAMS.find((f) => f.name === 'loadBalancerFanout')!;
     const d = parseAsciiDiagram(fx.art);
-    const targets = d.edges.filter((e) => e.source === 'load-balancer').map((e) => e.target).sort();
+    const targets = d.edges
+      .filter((e) => e.source === 'load-balancer')
+      .map((e) => e.target)
+      .sort();
     expect(targets).toEqual(['web1', 'web2', 'web3', 'web4']);
   });
 
   it('recovers a fan-in hub reached by all of its sources', () => {
     const fx = BATTLE_DIAGRAMS.find((f) => f.name === 'collectorFanin')!;
     const d = parseAsciiDiagram(fx.art);
-    const sources = d.edges.filter((e) => e.target === 'collector').map((e) => e.source).sort();
+    const sources = d.edges
+      .filter((e) => e.target === 'collector')
+      .map((e) => e.source)
+      .sort();
     expect(sources).toEqual(['s1', 's2', 's3']);
   });
 
@@ -142,7 +148,9 @@ describe('battle test — many-to-many relationships', () => {
     const edges = new Set(d.edges.map((e) => `${e.source}->${e.target}`));
     expect(edges).toEqual(new Set(['a->b', 'a->c', 'b->d', 'c->d']));
     // Byte-stable, so an edit never collapses one of the two paths.
-    expect(renderAsciiDiagram(parseAsciiDiagram(renderAsciiDiagram(d)))).toBe(renderAsciiDiagram(d));
+    expect(renderAsciiDiagram(parseAsciiDiagram(renderAsciiDiagram(d)))).toBe(
+      renderAsciiDiagram(d),
+    );
   });
 
   it('preserves a bidirectional pair as two directed edges', () => {
@@ -222,7 +230,10 @@ describe('battle test — known limitation: labels on tight splits / cross-box f
       '    └────────┘ └────────┘',
     ].join('\n');
     const d = parseAsciiDiagram(art);
-    const labels = d.edges.map((e) => e.label).filter(Boolean).sort();
+    const labels = d.edges
+      .map((e) => e.label)
+      .filter(Boolean)
+      .sort();
     expect(labels).toEqual(['no', 'yes']);
     // The edges themselves are always preserved; only label placement is
     // best-effort on the tight-split re-render.

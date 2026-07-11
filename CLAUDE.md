@@ -50,11 +50,11 @@ squisq/
                             #   themeCompile, themeValidator, colorUtils, fontStacks, Types,
                             #   MediaProvider, ImageEditDoc
         doc/
-          templates/        # 23 block templates (title, sectionHeader, statHighlight, quote,
+          templates/        # 24 block templates (title, sectionHeader, statHighlight, quote,
                             #   factCard, twoColumn, dateEvent, imageWithCaption, leftFeature,
                             #   rightFeature, map, fullBleedQuote, list, photoGrid,
                             #   definitionCard, comparisonBar, pullQuote, videoWithCaption,
-                            #   videoPullQuote, dataTable, diagram, layout, drawing) +
+                            #   videoPullQuote, dataTable, diagram, tree, layout, drawing) +
                             #   coverBlock (start block, not in registry) + accentImage /
                             #   persistentLayers / captionUtils
                             #   shared utilities
@@ -64,13 +64,19 @@ squisq/
                             #   `── label ──`/`│ label` edge labels) + grid↔canvas mapping.
                             #   parse(render(d)) is a semantic fixpoint; render is byte-stable
                             #   after one normalization cycle. THE authored diagram format.
+          treeview/         # ASCII tree codec: detect/parse/render file-tree & outline art in
+                            #   code fences (├──/└──/│, ASCII |--/`--/+--, pure indentation,
+                            #   bullet-indent; trailing-slash dirs; # / <-- comments) + nested
+                            #   TreeNode model + templateData mapping + markdown-list→tree walker.
+                            #   Structural fixpoint (byte-stable). Mutually exclusive with the
+                            #   diagram codec (a tree has 0 closed boxes). THE authored tree format.
           getLayers.ts      # Layer dispatch with persistent layer injection
           markdownToDoc.ts  # Markdown AST → Doc (content-aware auto templates ON by default:
                             #   unannotated headings with strong signals — table/images/quote/
-                            #   list/stat/ASCII-diagram fence — get matching templates + derived
-                            #   inputs; ephemeral via block.autoTemplate so round-trips stay
-                            #   lossless; disable with { autoTemplates: false } or frontmatter
-                            #   squisq-auto-templates: false, CLI --no-auto-templates)
+                            #   list/stat/ASCII-diagram fence/ASCII-tree fence — get matching
+                            #   templates + derived inputs; ephemeral via block.autoTemplate so
+                            #   round-trips stay lossless; disable with { autoTemplates: false }
+                            #   or frontmatter squisq-auto-templates: false, CLI --no-auto-templates)
         templateInputs.ts # deriveTemplateInputs + body extractors (images/list/table/quote)
           docToMarkdown.ts  # Doc → Markdown AST
           audioMapping.ts   # resolveAudioMapping, narration linking
@@ -95,7 +101,8 @@ squisq/
         recommend/          # Block-content profiler + template recommendations
     react/                  # @bendyline/squisq-react
       src/
-        layers/             # ImageLayer, TextLayer, ShapeLayer, VideoLayer, MapLayer, TableLayer
+        layers/             # ImageLayer, TextLayer, ShapeLayer, VideoLayer, MapLayer, TableLayer,
+                            #   TreeLayer (interactive filesystem treeview via <foreignObject>)
         hooks/              # useAudioSync, useDocPlayback, useViewportOrientation, useAutoSurface,
                             #   MediaContext, AudioProvider
         styles/             # doc-animations.css + JsonView styles
@@ -183,6 +190,11 @@ squisq/
                             #   AsciiDiagramWidget, useAsciiDiagramData, pure ops + command pipeline
                             #   (parse → op → render → verify → single-transaction fence rewrite),
                             #   paste gate for bare art
+        treeview/           # ASCII-tree-fence outline editing (peer to asciiDiagram/):
+                            #   TreeViewExtension (same position-registry pattern; box-diagram
+                            #   fences excluded), TreeOutlineWidget (add/rename/indent/outdent/
+                            #   move/delete/collapse), treeOps, treeViewCommands (reuses
+                            #   replaceAsciiFenceText), useTreeViewData, paste gate for bare art
         diagram/            # Shared diagram canvas (DiagramCanvas over the Scene engine, types,
                             #   constants, maximize overlay) + heading-mutation helpers in
                             #   diagramCommands.ts still used by drawing/layout scene commands.
@@ -284,7 +296,7 @@ For CI / clean reproducible installs, run `npm ci && node scripts/run-install-al
 build entry and a `package.json` export):
 
 - `@bendyline/squisq/schemas` — Type definitions (Doc, BlockTemplates, Viewport, LayoutStrategy, Theme, themeLibrary, themeCompile, themeValidator, colorUtils, fontStacks, Types, MediaProvider, ImageEditDoc)
-- `@bendyline/squisq/doc` — Template registry + all 23 templates (`title`, `sectionHeader`, `statHighlight`, `quote`, `factCard`, `twoColumn`, `dateEvent`, `imageWithCaption`, `leftFeature`, `rightFeature`, `map`, `fullBleedQuote`, `list`, `photoGrid`, `definitionCard`, `comparisonBar`, `pullQuote`, `videoWithCaption`, `videoPullQuote`, `dataTable`, `diagram`, `layout`, `drawing`) + animationUtils + themeUtils + markdownToDoc + docToMarkdown + getLayers + resolveAudioMapping + custom-templates frontmatter codec + custom-themes frontmatter codec (`readCustomThemesFromFrontmatter` / `writeCustomThemesToFrontmatter`) + `resolveThemeForDoc` (pure doc-scoped theme resolution) + template-param tooling (`TEMPLATE_INPUT_DESCRIPTORS`, `coerceTemplateParams`, `lintTemplateParams`) + `replaceDataFence` (data-fence rewriter) + the ASCII diagram codec (`parseAsciiDiagram` / `renderAsciiDiagram` / `detectAsciiDiagram` / `isAsciiDiagramFence` / `isEligibleAsciiFenceLang`, mapping helpers `asciiDiagramToTemplateData` / `asciiDiagramFromTemplateData` / `asciiDiagramFromBlocks` / `asciiCellToCanvas` / `canvasToAsciiCell`, constants `ASCII_CHAR_W` / `ASCII_CHAR_H`)
+- `@bendyline/squisq/doc` — Template registry + all 24 templates (`title`, `sectionHeader`, `statHighlight`, `quote`, `factCard`, `twoColumn`, `dateEvent`, `imageWithCaption`, `leftFeature`, `rightFeature`, `map`, `fullBleedQuote`, `list`, `photoGrid`, `definitionCard`, `comparisonBar`, `pullQuote`, `videoWithCaption`, `videoPullQuote`, `dataTable`, `diagram`, `tree`, `layout`, `drawing`) + animationUtils + themeUtils + markdownToDoc + docToMarkdown + getLayers + resolveAudioMapping + custom-templates frontmatter codec + custom-themes frontmatter codec (`readCustomThemesFromFrontmatter` / `writeCustomThemesToFrontmatter`) + `resolveThemeForDoc` (pure doc-scoped theme resolution) + template-param tooling (`TEMPLATE_INPUT_DESCRIPTORS`, `coerceTemplateParams`, `lintTemplateParams`) + `replaceDataFence` (data-fence rewriter) + the ASCII diagram codec (`parseAsciiDiagram` / `renderAsciiDiagram` / `detectAsciiDiagram` / `isAsciiDiagramFence` / `isEligibleAsciiFenceLang` / `isExplicitDiagramLang`, mapping helpers `asciiDiagramToTemplateData` / `asciiDiagramFromTemplateData` / `asciiDiagramFromBlocks` / `asciiCellToCanvas` / `canvasToAsciiCell`, constants `ASCII_CHAR_W` / `ASCII_CHAR_H`) + the ASCII tree codec (`parseTree` / `renderTree` / `detectTree` / `isTreeFence` / `isEligibleTreeFenceLang` / `isExplicitTreeLang`, mapping helpers `treeToTemplateData` / `treeFromTemplateData` / `treeFromMarkdownList`)
 - `@bendyline/squisq/spatial` — Haversine, Geohash utilities
 - `@bendyline/squisq/storage` — StorageAdapter, MemoryStorageAdapter, LocalStorageAdapter, LocalForageAdapter, ContentContainer, MemoryContentContainer, ScopedContentContainer, createMediaProviderFromContainer
 - `@bendyline/squisq/markdown` — Markdown parsing, stringifying, AST types (MarkdownDocument), tree utilities, frontmatter helpers, HTML sub-DOM
@@ -303,7 +315,7 @@ build entry and a `package.json` export):
 
 - Components: DocPlayer, BlockRenderer, CaptionOverlay, SocialCaptionOverlay, DocProgressBar, DocControlsOverlay/Bottom/Sidebar/Slideshow, DocPlayerWithSidebar, LinearDocView, MarkdownRenderer, InlineVideoPlayer, InlineAudioPlayer, JsonView (read-only viewer for JSON values bound to a Squisq-annotated schema)
 - Hooks: useAudioSync, useDocPlayback, useViewportOrientation, useAutoSurface (light/dark surface detection), MediaContext/useMediaProvider/useMediaUrl
-- Layers: ImageLayer, TextLayer, ShapeLayer, VideoLayer, MapLayer, TableLayer (HTML table embedded via `<foreignObject>`)
+- Layers: ImageLayer, TextLayer, ShapeLayer, VideoLayer, MapLayer, TableLayer (HTML table embedded via `<foreignObject>`), TreeLayer (interactive filesystem treeview — folder/file icons, connector rails, collapse chevrons — via `<foreignObject>`; interactive in the player, captured expanded in exports)
 - Styles: `@bendyline/squisq-react/styles` for CSS (covers DocPlayer animations + `<JsonView>`)
 - Standalone bundle: `@bendyline/squisq-react/standalone` and `/standalone-source` — IIFE bundle (`PLAYER_BUNDLE`) used by `formats/html` and `cli` to embed a complete player in a single HTML file
 
@@ -330,6 +342,7 @@ build entry and a `package.json` export):
 - Bridge: `markdownToTiptap`, `tiptapToMarkdown` (bidirectional conversion in `tiptapBridge.ts`)
 - Tiptap extension: `HeadingWithTemplate` (heading-template annotation)
 - Diagram editor (ASCII fences are THE authored diagram format): `AsciiDiagramExtension` (+ `AsciiDiagramExtensionOptions`, `AsciiDiagramPluginState`, `AsciiDiagramBlockEntry`), `AsciiDiagramWidget`, `useAsciiDiagramData` (+ `AsciiDiagramView`, `asciiDiagramToCanvas`), `applyAsciiDiagramCommand` / `replaceAsciiFenceText`, pure ops (`moveNodeOp`, `resizeNodeOp`, `addEdgeOp`, `removeEdgeOp`, `renameNodeOp`, `addNodeOp`, `removeNodeOp`, `sanitizeAsciiLabel`), `shouldPasteAsAsciiFence`, registry helpers (`findAsciiDiagramBlockPos`, `isAsciiSourceVisible`, `toggleAsciiSource`), plus the shared canvas `DiagramCanvas` and types `DiagramCommand` / `DiagramData` / `DiagramRFNode` / `DiagramRFEdge`. **BREAKING (ASCII cutover):** the heading-based `DiagramExtension`, `DiagramWidget`, `useDiagramData`, and heading command helpers were removed — legacy `{[diagram]}` heading sections still render in preview/player via core, but have no canvas editor. The toolbar's Insert → diagram now inserts a starter ASCII fence.
+- Tree editor (ASCII tree fences are THE authored tree format; peer to the diagram editor): `TreeViewExtension` (+ `TreeViewExtensionOptions`, `TreeViewPluginState`, `TreeBlockEntry`), `TreeOutlineWidget`, `useTreeViewData` (+ `TreeViewData`), `applyTreeCommand` / `replaceTreeFenceText`, pure ops (`addItemOp`, `renameItemOp`, `indentItemOp`, `outdentItemOp`, `moveItemUpOp`, `moveItemDownOp`, `removeItemOp`, `toggleDirOp`, `sanitizeTreeLabel`), `shouldPasteAsTreeFence`, `findTreeBlockPos`. The outline widget manages items (add / rename / indent-outdent / move / delete / collapse); there is no on-canvas source toggle (edit the raw fence in the Source/Raw view). Toolbar Insert → tree inserts a starter ASCII tree fence. Mutually exclusive with the diagram editor (a fence with ≥2 closed boxes is a diagram, never a tree).
 - Mention provider: `MentionCandidate`, `MentionProvider` (host wires its directory through `EditorContext`)
 - Versioning: pass `allowVersioning` + `container` to `EditorShell` to enable; the toolbar surfaces a `VersionHistoryPanel` and the editor auto-saves snapshots on idle (configurable via `versioningAutoSaveIdleMs`, default 5s; `versioningPrunePolicy` defaults to keep-last-50). Hosts can also call `useEditorContext().versioning.saveVersion()` from their own save pipeline.
 - Inline preview gutter: pass `inlinePreview` (and optional `inlinePreviewWidth`, default 320px) to `EditorShell` to render an `InlinePreviewGutter` next to the WYSIWYG surface. The gutter shows one small SVG card per template-annotated block in the document, auto-hides via container query below ~720px, and reuses the same template-resolution path as `LinearDocView`.
@@ -405,7 +418,8 @@ If you need an `any` outside these boundaries, find a different solution. Use `a
 - **Editor isolation** — heavy editor dependencies (Monaco, Tiptap) are isolated in editor-react, separate from the lighter react package
 - **Standalone player bundle** — `@bendyline/squisq-react/standalone-source` exports `PLAYER_BUNDLE`, an IIFE-wrapped string that boots a complete player into a host page. `formats/html` and `squisq-cli` inline this to produce single-file HTML exports.
 - **`<JsonView>` and `<JsonEditor>` share `chooseControl()` from core** — read-only viewer and editable form always agree on what each schema field _is_; only their rendering differs.
-- **ASCII fences are the diagram format** — a diagram is a code fence of box-and-line art (the kind AI assistants emit); the fence text is the source of truth end-to-end. Core's codec (`doc/asciiDiagram/`) parses boxes/edges/containers/labels and renders them back with a semantic fixpoint guarantee (`parse(render(d)) ≡ d`; byte-stable after one normalization cycle). The editor mounts an interactive canvas OVER the fence and rewrites the art on every semantic edit (verify-before-commit aborts if the renderer and parser ever disagree); untouched fences stay byte-identical. The doc pipeline auto-detects diagram fences via the `autoTemplate` mechanism (detection is conservative — lang allowlist, ≥2 closed boxes, table-lattice and loose-text rejectors — and the negative corpus in `asciiDiagramDetect.test.ts` is the tuning contract). Legacy `{[diagram]}` heading sections render read-only; `drawing`/`layout` keep heading-based markup.
+- **ASCII fences are the diagram format** — a diagram is a code fence of box-and-line art (the kind AI assistants emit); the fence text is the source of truth end-to-end. Core's codec (`doc/asciiDiagram/`) parses boxes/edges/containers/labels and renders them back with a semantic fixpoint guarantee (`parse(render(d)) ≡ d`; byte-stable after one normalization cycle). The editor mounts an interactive canvas OVER the fence and rewrites the art on every semantic edit (verify-before-commit aborts if the renderer and parser ever disagree); untouched fences stay byte-identical. The doc pipeline auto-detects diagram fences via the `autoTemplate` mechanism (detection is conservative — lang allowlist, ≥2 closed boxes, table-lattice and loose-text rejectors — and the negative corpus in `asciiDiagramDetect.test.ts` is the tuning contract). **The fence LANGUAGE is a durable "block tag"**: a ` ```diagram ` fence is an explicit author marker that survives markdown ↔ Tiptap round-trips (the `language-diagram` class round-trips; fence _meta_ does not) and switches detection to lenient mode (≥1 box, rejectors skipped) so a degenerate/edited diagram stays a diagram. The editor makes identity sticky — toolbar-inserted starters and pasted art are tagged, and the first canvas edit promotes an untagged fence's language to `diagram` in the same transaction as the art rewrite (`replaceAsciiFenceText`'s `ensureLanguage` arg; the position registry is boundary-churn tolerant so the widget's React root survives the promotion). Legacy `{[diagram]}` heading sections render read-only; `drawing`/`layout` keep heading-based markup.
+- **ASCII fences are the tree format** (peer to diagrams, for hierarchies) — a tree is a code fence of file-tree / outline art (`├── src/`, `└── utils/`, ASCII `|--`/`` `--``/`+--`, pure indentation). Core's codec (`doc/treeview/`) recovers depth across renditions via an indent stack (label-start column → outline reconstruction), tolerates ragged dedents, and preserves trailing-slash dirs + `#`/`<--` comments. Rendering is a deterministic tree-walk, so the fixpoint is structural and byte-stable (no spatial layout → no jitter). Use mode renders a **`TreeLayer`** — an interactive filesystem treeview (folder/file icons, connector rails, collapse chevrons) via `<foreignObject>`, interactive in the player and captured expanded in exports. The editor mounts an outline widget OVER the fence (add/rename/indent/outdent/move/delete/collapse) and rewrites the art per edit (verify-before-commit). **Mutually exclusive with the diagram codec**: a diagram has ≥2 closed boxes, a tree has zero — the two partition the `├──` glyph space, so a fence is at most one. Auto-detection requires connector branches (the unambiguous AI file-tree signal); `asciiDiagramDetect.test.ts`'s file-tree rejections and `treeviewDetect.test.ts` are the mutual-exclusion contract. Like diagrams, the fence LANGUAGE is a durable "block tag": a ` ```tree ` fence is an explicit marker that survives round-trips and switches detection to lenient mode (≥1 node, no connector requirement) — this is what lets a **flattened** tree (connectors removed → auto-detection would reject) stay a treeview. Starters/paste are tagged and the first outline edit promotes the language to `tree`, so identity is sticky.
 
 ## Adding a New Block Template
 

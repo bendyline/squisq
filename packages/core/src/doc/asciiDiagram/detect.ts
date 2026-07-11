@@ -18,6 +18,7 @@ export const ASCII_DIAGRAM_FENCE_LANGS: ReadonlySet<string> = new Set([
   'plaintext',
   'plain',
   'ascii',
+  'diagram',
 ]);
 
 const MAX_LINES = 400;
@@ -31,7 +32,26 @@ export function isEligibleAsciiFenceLang(lang: string | null | undefined): boole
   return normalized === '' || ASCII_DIAGRAM_FENCE_LANGS.has(normalized);
 }
 
-export function detectAsciiDiagram(text: string): AsciiDiagramDetection {
+/**
+ * True when the fence LANGUAGE is the explicit `diagram` tag — an author-set
+ * "this is a diagram" marker that survives round-trips (the language class
+ * round-trips; fence meta does not). Detection of a tagged fence is lenient
+ * (≥1 box, no lattice rejector) so a degenerate diagram stays a diagram.
+ */
+export function isExplicitDiagramLang(lang: string | null | undefined): boolean {
+  return typeof lang === 'string' && lang.trim().toLowerCase() === 'diagram';
+}
+
+export interface DetectDiagramOptions {
+  /** The fence is explicitly `diagram`-tagged: accept ≥1 box, skip rejectors. */
+  explicit?: boolean;
+}
+
+export function detectAsciiDiagram(
+  text: string,
+  opts: DetectDiagramOptions = {},
+): AsciiDiagramDetection {
+  const explicit = opts.explicit === true;
   const reasons: string[] = [];
 
   // ---- Cheap prefilter (no parse) ----------------------------------------
@@ -48,18 +68,20 @@ export function detectAsciiDiagram(text: string): AsciiDiagramDetection {
     return { isDiagram: false, reasons: [`too-wide(${maxCols})`] };
   }
 
-  let tlCandidates = 0;
-  for (const line of lines) {
-    // Unicode TL corners, junction-started shared borders (`├──`), and
-    // ASCII `+-` starts. Junctions over-count (file trees use `├──`), but
-    // the prefilter only gates the full parse — box tracing decides.
-    const unicodeMatches = line.match(/[┌╭┏╔]|[├┬┼┣┳╋╠╦╬][─━═]/gu);
-    tlCandidates += unicodeMatches ? unicodeMatches.length : 0;
-    const plusMatches = line.match(/\+[-+]/g);
-    tlCandidates += plusMatches ? plusMatches.length : 0;
-  }
-  if (tlCandidates < 2) {
-    return { isDiagram: false, reasons: [`too-few-corner-candidates(${tlCandidates})`] };
+  if (!explicit) {
+    let tlCandidates = 0;
+    for (const line of lines) {
+      // Unicode TL corners, junction-started shared borders (`├──`), and
+      // ASCII `+-` starts. Junctions over-count (file trees use `├──`), but
+      // the prefilter only gates the full parse — box tracing decides.
+      const unicodeMatches = line.match(/[┌╭┏╔]|[├┬┼┣┳╋╠╦╬][─━═]/gu);
+      tlCandidates += unicodeMatches ? unicodeMatches.length : 0;
+      const plusMatches = line.match(/\+[-+]/g);
+      tlCandidates += plusMatches ? plusMatches.length : 0;
+    }
+    if (tlCandidates < 2) {
+      return { isDiagram: false, reasons: [`too-few-corner-candidates(${tlCandidates})`] };
+    }
   }
 
   // Markdown/GFM table shape: mostly `| … |` rows plus a separator row.
@@ -73,25 +95,28 @@ export function detectAsciiDiagram(text: string): AsciiDiagramDetection {
   // ---- Full parse + acceptance -------------------------------------------
   const { diagram, stats } = parseAsciiDiagramWithStats(text);
 
-  if (diagram.nodes.length < 2) {
+  const minBoxes = explicit ? 1 : 2;
+  if (diagram.nodes.length < minBoxes) {
     return { isDiagram: false, reasons: [`too-few-boxes(${diagram.nodes.length})`] };
   }
 
-  // Table-lattice rejector: an edge-less shared-border grid of ≥2×2 boxes
-  // is a psql/MySQL-style result table, not a diagram. Single-column
-  // stacks still pass (a legitimate "layer stack" diagram).
-  if (diagram.edges.length === 0 && diagram.nodes.length >= 4 && isLattice(diagram)) {
-    return { isDiagram: false, reasons: ['table-lattice'] };
-  }
-
-  if (stats.totalNonSpaceCells > 0) {
-    const looseRatio = stats.looseNonSpaceCells / stats.totalNonSpaceCells;
-    if (looseRatio > MAX_LOOSE_RATIO) {
-      return { isDiagram: false, reasons: [`loose-ratio(${looseRatio.toFixed(2)})`] };
+  if (!explicit) {
+    // Table-lattice rejector: an edge-less shared-border grid of ≥2×2 boxes
+    // is a psql/MySQL-style result table, not a diagram. Single-column
+    // stacks still pass (a legitimate "layer stack" diagram).
+    if (diagram.edges.length === 0 && diagram.nodes.length >= 4 && isLattice(diagram)) {
+      return { isDiagram: false, reasons: ['table-lattice'] };
+    }
+    if (stats.totalNonSpaceCells > 0) {
+      const looseRatio = stats.looseNonSpaceCells / stats.totalNonSpaceCells;
+      if (looseRatio > MAX_LOOSE_RATIO) {
+        return { isDiagram: false, reasons: [`loose-ratio(${looseRatio.toFixed(2)})`] };
+      }
     }
   }
 
   reasons.push(`boxes(${diagram.nodes.length})`, `edges(${diagram.edges.length})`);
+  if (explicit) reasons.push('explicit');
   return { isDiagram: true, diagram, reasons };
 }
 
@@ -99,7 +124,7 @@ export function detectAsciiDiagram(text: string): AsciiDiagramDetection {
 export function isAsciiDiagramFence(node: MarkdownCodeBlock): boolean {
   if (node.type !== 'code') return false;
   if (!isEligibleAsciiFenceLang(node.lang)) return false;
-  return detectAsciiDiagram(node.value).isDiagram;
+  return detectAsciiDiagram(node.value, { explicit: isExplicitDiagramLang(node.lang) }).isDiagram;
 }
 
 function isLattice(diagram: {

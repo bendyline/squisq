@@ -1532,11 +1532,12 @@
 
 /* Sliders glyph painted via CSS so the badge span stays empty in the DOM
    (see propsBadgeSpec — a real child could leak into serialized markdown).
-   `\f1de` is Font Awesome's "sliders"; the font is already loaded for the
-   editor's inline-icon glyph decorations. */
+   `\f1de` is Font Awesome's "sliders"; use Font Awesome's own family
+   variable so this follows the bundled major version instead of resolving
+   against a stale hard-coded family name. */
 .squisq-props-badge::before {
   content: '\f1de';
-  font-family: 'Font Awesome 6 Free';
+  font-family: var(--fa-family-classic, 'Font Awesome 7 Free');
   font-weight: 900;
   font-size: 10px;
   line-height: 1;

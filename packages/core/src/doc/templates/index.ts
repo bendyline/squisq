@@ -58,6 +58,7 @@ import { videoWithCaption } from './videoWithCaption.js';
 import { videoPullQuote } from './videoPullQuote.js';
 import { dataTable } from './dataTable.js';
 import { diagramBlock } from './diagramBlock.js';
+import { treeBlock } from './treeBlock.js';
 import { drawingBlock } from './drawingBlock.js';
 import { layoutBlock } from './layoutBlock.js';
 
@@ -97,6 +98,7 @@ export const templateRegistry: TemplateRegistry = {
   videoPullQuote,
   dataTable,
   diagram: diagramBlock,
+  tree: treeBlock,
   layout: layoutBlock,
   drawing: drawingBlock,
 };
@@ -757,6 +759,7 @@ export { videoWithCaption } from './videoWithCaption.js';
 export { videoPullQuote } from './videoPullQuote.js';
 export { dataTable } from './dataTable.js';
 export { diagramBlock } from './diagramBlock.js';
+export { treeBlock } from './treeBlock.js';
 export { computeDiagramLayout } from './diagramLayout.js';
 export type {
   DiagramLayout,

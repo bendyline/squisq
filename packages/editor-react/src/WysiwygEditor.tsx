@@ -28,6 +28,8 @@ import { parseMarkdown } from '@bendyline/squisq/markdown';
 import { HeadingWithTemplate } from './TemplateAnnotation';
 import { AsciiDiagramExtension } from './asciiDiagram/AsciiDiagramExtension';
 import { shouldPasteAsAsciiFence } from './asciiDiagram/asciiPaste';
+import { TreeViewExtension } from './treeview/TreeViewExtension';
+import { shouldPasteAsTreeFence } from './treeview/treePaste';
 import { SceneBlockExtension } from './scene/SceneBlockExtension';
 import { InlineIcon } from './InlineIcon';
 import { ImageWithMediaProvider } from './ImageNodeView';
@@ -180,6 +182,7 @@ export function WysiwygEditor({
       }),
       HeadingWithTemplate.configure({ levels: [1, 2, 3, 4, 5, 6] }),
       AsciiDiagramExtension,
+      TreeViewExtension,
       SceneBlockExtension,
       Table.configure({ resizable: true }),
       TableRow,
@@ -277,9 +280,29 @@ export function WysiwygEditor({
           const codeBlockType = view.state.schema.nodes.codeBlock;
           if (codeBlockType) {
             event.preventDefault();
+            // Tag the fence `diagram` so its identity survives a later
+            // flatten → markdown → re-import round-trip (the language class
+            // round-trips; fence meta does not).
             view.dispatch(
               view.state.tr.replaceSelectionWith(
-                codeBlockType.create(null, view.state.schema.text(text)),
+                codeBlockType.create({ language: 'diagram' }, view.state.schema.text(text)),
+              ),
+            );
+            return true;
+          }
+        }
+
+        // Bare (unfenced) ASCII tree art → a fresh code block that the
+        // TreeViewExtension turns into an outline. After the diagram gate,
+        // before markdown (the `├──` lines must not be mangled as prose).
+        if (shouldPasteAsTreeFence(text)) {
+          const codeBlockType = view.state.schema.nodes.codeBlock;
+          if (codeBlockType) {
+            event.preventDefault();
+            // Tag the fence `tree` so its identity survives round-trips.
+            view.dispatch(
+              view.state.tr.replaceSelectionWith(
+                codeBlockType.create({ language: 'tree' }, view.state.schema.text(text)),
               ),
             );
             return true;

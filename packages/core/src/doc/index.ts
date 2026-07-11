@@ -65,6 +65,7 @@ export {
   detectAsciiDiagram,
   isAsciiDiagramFence,
   isEligibleAsciiFenceLang,
+  isExplicitDiagramLang,
   parseAsciiDiagram,
   renderAsciiDiagram,
 } from './asciiDiagram/index.js';
@@ -75,3 +76,23 @@ export type {
   AsciiDiagramNode,
   RenderAsciiDiagramOptions,
 } from './asciiDiagram/index.js';
+export {
+  TREE_FENCE_LANGS,
+  detectTree,
+  findFirstList,
+  isEligibleTreeFenceLang,
+  isExplicitTreeLang,
+  isTreeFence,
+  parseTree,
+  renderTree,
+  treeFromMarkdownList,
+  treeFromTemplateData,
+  treeToTemplateData,
+} from './treeview/index.js';
+export type {
+  RenderTreeOptions,
+  Tree,
+  TreeDetection,
+  TreeItem,
+  TreeNode,
+} from './treeview/index.js';

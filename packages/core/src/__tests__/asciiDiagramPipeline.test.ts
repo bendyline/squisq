@@ -99,6 +99,45 @@ describe('auto-template conversion of ASCII diagram fences', () => {
   });
 });
 
+describe('explicit `diagram`-tagged fence (survives edit → round-trip)', () => {
+  // The `diagram` fence LANGUAGE is the durable "block tag" — it round-trips
+  // through markdown ↔ Tiptap as `class="language-diagram"`, and explicit-lang
+  // detection accepts a degenerate single-box diagram that would otherwise be
+  // rejected (the ≥2-box floor is for UNTAGGED auto-detection only).
+  const ONE_BOX = ['┌────────┐', '│ Solo   │', '└────────┘'].join('\n');
+  const TAGGED_DOC = ['# Systems', '', '## Architecture', '', fenced(ONE_BOX, 'diagram'), ''].join(
+    '\n',
+  );
+
+  it('a bare single-box fence does NOT become a diagram', () => {
+    const md = ['## Architecture', '', fenced(ONE_BOX), ''].join('\n');
+    expect(findBlock(convert(md), 'Architecture')?.template).not.toBe('diagram');
+  });
+
+  it('a `diagram`-tagged single-box fence DOES become a diagram', () => {
+    const block = findBlock(convert(TAGGED_DOC), 'Architecture');
+    expect(block?.template).toBe('diagram');
+    expect(block?.autoTemplate).toBe(true);
+    const nodes = block?.templateData?.nodes as DiagramTemplateNode[];
+    expect(nodes?.map((n) => n.id)).toEqual(['solo']);
+  });
+
+  it('round-trips losslessly: fence + `diagram` lang preserved, no annotation injected', () => {
+    const output = stringifyMarkdown(docToMarkdown(convert(TAGGED_DOC)));
+    expect(output).toContain('```diagram');
+    expect(output).toContain(ONE_BOX);
+    expect(output).not.toContain('{[diagram');
+    // Re-importing keeps it a diagram — the identity is sticky.
+    expect(findBlock(convert(output), 'Architecture')?.template).toBe('diagram');
+  });
+
+  it('profiles a `diagram`-tagged single-box fence as hasAsciiDiagram', () => {
+    const md = parseMarkdown(fenced(ONE_BOX, 'diagram'));
+    const profile = profileBlockContents(md.children as Parameters<typeof profileBlockContents>[0]);
+    expect(profile.hasAsciiDiagram).toBe(true);
+  });
+});
+
 describe('explicit {[diagram]} annotation with an ASCII fence', () => {
   const EXPLICIT_DOC = ['## Flow {[diagram]}', '', fenced(TWO_BOX_VERTICAL), ''].join('\n');
 

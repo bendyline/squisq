@@ -273,6 +273,34 @@ export {
 } from './asciiDiagram/asciiDiagramOps.js';
 export { shouldPasteAsAsciiFence } from './asciiDiagram/asciiPaste.js';
 
+// Treeview editor — ASCII file-tree / outline fences get an interactive
+// outline widget; edits re-render the tree art (the fence stays the source
+// of truth). Peer to the ASCII diagram editor; mutually exclusive with it
+// (a fence with boxes is a diagram, not a tree).
+export { TreeViewExtension, findTreeBlockPos } from './treeview/TreeViewExtension.js';
+export type {
+  TreeBlockEntry,
+  TreeViewExtensionOptions,
+  TreeViewPluginState,
+} from './treeview/TreeViewExtension.js';
+export { TreeOutlineWidget } from './treeview/TreeOutlineWidget.js';
+export { useTreeViewData } from './treeview/treeViewData.js';
+export type { TreeViewData } from './treeview/treeViewData.js';
+export { applyTreeCommand, replaceTreeFenceText } from './treeview/treeViewCommands.js';
+export type { TreeCommand } from './treeview/treeViewCommands.js';
+export {
+  addItemOp,
+  indentItemOp,
+  moveItemDownOp,
+  moveItemUpOp,
+  outdentItemOp,
+  removeItemOp,
+  renameItemOp,
+  sanitizeTreeLabel,
+  toggleDirOp,
+} from './treeview/treeOps.js';
+export { shouldPasteAsTreeFence } from './treeview/treePaste.js';
+
 // JSON Form — editable component
 export { JsonEditor } from './jsonEditor/index.js';
 export type { JsonEditorProps } from './jsonEditor/index.js';

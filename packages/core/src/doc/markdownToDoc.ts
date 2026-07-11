@@ -473,6 +473,7 @@ export function markdownToDoc(markdownDoc: MarkdownDocument, options?: MarkdownT
   // and author `json data` node lists win over the fence.
   for (const block of allBlocks) {
     applyAsciiDiagramData(block, diagnostics);
+    applyTreeData(block, diagnostics);
   }
 
   // Content-aware template auto-pick (default on): unannotated heading
@@ -747,6 +748,27 @@ function applyAsciiDiagramData(block: Block, diagnostics: DocDiagnostic[]): void
   block.templateData = { nodes, edges, ...block.templateData };
 }
 
+/**
+ * Fill `templateData.items` for an explicitly `{[tree]}`-annotated block
+ * whose body is one eligible ASCII tree fence (or a nested list). Runs
+ * without the detection threshold (explicit annotation = author intent).
+ */
+function applyTreeData(block: Block, diagnostics: DocDiagnostic[]): void {
+  if (resolveTemplateName(block.template ?? '') !== 'tree') return;
+  if (block.templateData && 'items' in block.templateData) return; // author data wins
+  const derived = deriveTemplateInputs('tree', block.title ?? '', block.contents);
+  if (!derived || !Array.isArray(derived.items) || derived.items.length === 0) {
+    diagnostics.push({
+      severity: 'warning',
+      code: 'tree-parse',
+      message: `Tree block "${block.id}": body did not parse as a tree`,
+      blockId: block.id,
+    });
+    return;
+  }
+  block.templateData = { ...derived, ...block.templateData };
+}
+
 /** Truthiness of the `squisq-auto-templates` frontmatter kill-switch. */
 function frontmatterDisablesAutoTemplates(markdownDoc: MarkdownDocument): boolean {
   const v = markdownDoc.frontmatter?.['squisq-auto-templates'];
@@ -796,14 +818,14 @@ function getBlockBodyText(block: Block): string {
   // A fence consumed as diagram data must not feed reading-time/captions —
   // 20 lines of box-drawing art would add ~30s of duration and captions
   // that "read" border runs aloud.
-  const diagramConsumedFence =
-    resolveTemplateName(block.template ?? '') === 'diagram' &&
-    block.templateData !== undefined &&
-    'nodes' in block.templateData;
+  const tmpl = resolveTemplateName(block.template ?? '');
+  const consumedFence =
+    (tmpl === 'diagram' && block.templateData !== undefined && 'nodes' in block.templateData) ||
+    (tmpl === 'tree' && block.templateData !== undefined && 'items' in block.templateData);
   // Join with newlines to preserve paragraph/list-item boundaries.
   // splitIntoPhrases uses these newlines as natural split points.
   return block.contents
-    .filter((node) => !(diagramConsumedFence && node.type === 'code'))
+    .filter((node) => !(consumedFence && node.type === 'code'))
     .map((node) => extractPlainText(node))
     .join('\n')
     .trim();

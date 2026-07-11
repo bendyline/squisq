@@ -512,6 +512,67 @@ A box drawn around other boxes becomes a container — it groups its children on
 \`\`\`
 `,
   'diagram-gallery': DIAGRAM_GALLERY_SAMPLE,
+  'tree-project-scaffold': `# Project Scaffold
+
+An ASCII file tree renders as an interactive filesystem treeview — edit it as an outline (add / rename / indent / move / delete items); the fence stays the source of truth.
+
+## Source Layout
+
+\`\`\`
+my-app/
+├── public/
+│   └── index.html
+├── src/
+│   ├── App.tsx
+│   ├── index.tsx
+│   └── components/
+│       ├── Header.tsx
+│       └── Footer.tsx
+├── package.json
+└── tsconfig.json
+\`\`\`
+`,
+  'tree-gallery': `# Tree Gallery
+
+A cross-section of AI-style trees — each fence renders as an interactive filesystem-style treeview.
+
+## File Tree
+
+\`\`\`
+service/
+├── main.go       # entrypoint
+├── config.yaml   # runtime config
+├── handlers/     # HTTP handlers
+│   └── users.go
+└── go.mod
+\`\`\`
+
+## Dependency Tree
+
+\`\`\`
+express@4.18.2
+├── body-parser@1.20.1
+│   ├── bytes@3.1.2
+│   └── qs@6.11.0
+├── cookie@0.5.0
+└── debug@2.6.9
+    └── ms@2.0.0
+\`\`\`
+
+## Category Outline
+
+\`\`\`
+Animals
+├── Mammals
+│   ├── Dogs
+│   └── Cats
+├── Birds
+│   ├── Eagles
+│   └── Sparrows
+└── Reptiles
+    └── Snakes
+\`\`\`
+`,
   'diagram-legacy-headings': `# Legacy Heading Diagram
 
 The pre-ASCII heading syntax (\`{[diagram]}\` + child headings with \`x=\`/\`y=\`/\`connectsTo=\`) still renders in the preview/player, but has no canvas editor — new diagrams are authored as ASCII fences.

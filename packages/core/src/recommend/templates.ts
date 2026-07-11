@@ -17,7 +17,12 @@ import type {
   MarkdownHtmlBlock,
   MarkdownNode,
 } from '../markdown/types.js';
-import { detectAsciiDiagram, isEligibleAsciiFenceLang } from '../doc/asciiDiagram/detect.js';
+import {
+  detectAsciiDiagram,
+  isEligibleAsciiFenceLang,
+  isExplicitDiagramLang,
+} from '../doc/asciiDiagram/detect.js';
+import { detectTree, isEligibleTreeFenceLang, isExplicitTreeLang } from '../doc/treeview/detect.js';
 
 export interface BlockContentProfile {
   hasImage: boolean;
@@ -35,6 +40,12 @@ export interface BlockContentProfile {
    * Optional so externally-constructed profiles keep compiling.
    */
   hasAsciiDiagram?: boolean;
+  /**
+   * True when the body is dominated by exactly one code fence whose content
+   * is an ASCII file-tree / outline (see `doc/treeview/detect.ts`). Mutually
+   * exclusive with `hasAsciiDiagram`.
+   */
+  hasTree?: boolean;
 }
 
 export interface RecommendationResult {
@@ -195,8 +206,27 @@ export function profileBlockContents(nodes: MarkdownBlockNode[]): BlockContentPr
     !hasVideo
   ) {
     const nonCodeChars = Math.max(0, plainText.length - codeNodes[0].value.length);
-    if (nonCodeChars <= 400 && detectAsciiDiagram(codeNodes[0].value).isDiagram) {
+    const explicit = isExplicitDiagramLang(codeNodes[0].lang);
+    if (nonCodeChars <= 400 && detectAsciiDiagram(codeNodes[0].value, { explicit }).isDiagram) {
       hasAsciiDiagram = true;
+    }
+  }
+
+  // ASCII tree: the same dominance rule, using the tree detector (mutually
+  // exclusive with the diagram detector — a tree has no closed boxes).
+  let hasTree = false;
+  if (
+    !hasAsciiDiagram &&
+    codeNodes.length === 1 &&
+    isEligibleTreeFenceLang(codeNodes[0].lang) &&
+    !hasTable &&
+    imageCount === 0 &&
+    !hasVideo
+  ) {
+    const nonCodeChars = Math.max(0, plainText.length - codeNodes[0].value.length);
+    const explicit = isExplicitTreeLang(codeNodes[0].lang);
+    if (nonCodeChars <= 400 && detectTree(codeNodes[0].value, { explicit }).isTree) {
+      hasTree = true;
     }
   }
 
@@ -211,6 +241,7 @@ export function profileBlockContents(nodes: MarkdownBlockNode[]): BlockContentPr
     hasNumberHighlight,
     wordCount,
     hasAsciiDiagram,
+    hasTree,
   };
 }
 
@@ -231,6 +262,11 @@ function recommendedNamesForProfile(profile: BlockContentProfile): string[] {
   if (profile.hasAsciiDiagram) {
     anyContentSignal = true;
     names.add('diagram');
+  }
+
+  if (profile.hasTree) {
+    anyContentSignal = true;
+    names.add('tree');
   }
 
   if (profile.hasImage) {
@@ -302,6 +338,7 @@ function recommendedNamesForProfile(profile: BlockContentProfile): string[] {
  */
 export function pickAutoTemplate(profile: BlockContentProfile, blockIndex = 0): string | undefined {
   if (profile.hasAsciiDiagram) return 'diagram';
+  if (profile.hasTree) return 'tree';
   if (profile.hasTable) return 'dataTable';
   if (profile.imageCount >= 2) return 'photoGrid';
   if (profile.hasImage) return blockIndex % 2 === 0 ? 'leftFeature' : 'rightFeature';

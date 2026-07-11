@@ -35,6 +35,7 @@ import { createElement } from 'react';
 import {
   detectAsciiDiagram,
   isEligibleAsciiFenceLang,
+  isExplicitDiagramLang,
   parseAsciiDiagram,
   type AsciiDiagram,
 } from '@bendyline/squisq/doc';
@@ -77,8 +78,11 @@ export function getAsciiDiagramForNode(node: PMNode): AsciiDiagram | null {
   const cached = detectCache.get(node);
   if (cached !== undefined) return cached;
   let result: AsciiDiagram | null = null;
-  if (isEligibleAsciiFenceLang(fenceLangOf(node))) {
-    const detection = detectAsciiDiagram(node.textContent);
+  const lang = fenceLangOf(node);
+  if (isEligibleAsciiFenceLang(lang)) {
+    const detection = detectAsciiDiagram(node.textContent, {
+      explicit: isExplicitDiagramLang(lang),
+    });
     if (detection.isDiagram && detection.diagram) {
       result = detection.diagram;
       parseCache.set(node, result);
@@ -213,9 +217,29 @@ function applyState(
   // the block's start shifts the tracked position forward WITH the node),
   // then walk the new doc and reconcile.
   const mapped = new Map<number, string>();
+  const claimed = new Set<string>();
+  // Pass 1: survivors whose start position wasn't touched.
   for (const entry of prev.entries) {
     const result = tr.mapping.mapResult(entry.pos, 1);
-    if (!result.deleted) mapped.set(result.pos, entry.id);
+    if (!result.deleted) {
+      mapped.set(result.pos, entry.id);
+      claimed.add(entry.id);
+    }
+  }
+  // Pass 2: boundary-churn survivors. An attrs-only `setNodeMarkup` (the
+  // language-promotion step) rewrites the codeBlock's opening token, so
+  // `mapResult` reports the start as `deleted` even though the block is still
+  // there. Adopt the old id when a codeBlock still sits at the mapped position
+  // and that slot isn't already claimed — this keeps the widget's React root
+  // (pan/zoom) alive across the one-time promotion, instead of remounting.
+  for (const entry of prev.entries) {
+    if (claimed.has(entry.id)) continue;
+    const result = tr.mapping.mapResult(entry.pos, 1);
+    if (mapped.has(result.pos)) continue;
+    if (doc.nodeAt(result.pos)?.type.name === 'codeBlock') {
+      mapped.set(result.pos, entry.id);
+      claimed.add(entry.id);
+    }
   }
 
   let seq = prev.seq;

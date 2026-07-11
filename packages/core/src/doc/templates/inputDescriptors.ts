@@ -220,6 +220,13 @@ export const TEMPLATE_INPUT_DESCRIPTORS: Readonly<
     { key: 'align', description: 'Per-column alignment (supply via a data fence)' },
     { key: 'colorScheme', description: 'Header color scheme', valueHint: COLOR_SCHEME_HINT },
   ],
+  tree: [
+    { key: 'title', description: 'Optional title above the tree' },
+    { key: 'colorScheme', description: 'Folder-row color scheme', valueHint: COLOR_SCHEME_HINT },
+    // `items` is a nested structure derived from the tree fence, not an
+    // inline string — declared so it isn't flagged as unknown.
+    { key: 'items', description: 'Tree items (derived from the tree fence)' },
+  ],
   videoWithCaption: [
     { key: 'videoSrc', description: 'Path to the video file', required: true },
     { key: 'posterSrc', description: 'Poster frame path' },

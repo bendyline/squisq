@@ -25,8 +25,14 @@ import type {
   MarkdownTable,
 } from '../markdown/types.js';
 import { extractPlainText } from '../markdown/utils.js';
-import { detectAsciiDiagram, isEligibleAsciiFenceLang } from './asciiDiagram/detect.js';
+import {
+  detectAsciiDiagram,
+  isEligibleAsciiFenceLang,
+  isExplicitDiagramLang,
+} from './asciiDiagram/detect.js';
 import { asciiDiagramToTemplateData } from './asciiDiagram/mapping.js';
+import { detectTree, isEligibleTreeFenceLang, isExplicitTreeLang } from './treeview/detect.js';
+import { treeToTemplateData, treeFromMarkdownList, findFirstList } from './treeview/mapping.js';
 
 /** First image discovered in a block's body, with explicit dimensions when present. */
 export interface FirstImage {
@@ -247,10 +253,33 @@ export function deriveTemplateInputs(
       const fences = (contents ?? []).filter((n): n is MarkdownCodeBlock => n.type === 'code');
       const fence =
         fences.length === 1 && isEligibleAsciiFenceLang(fences[0].lang) ? fences[0] : undefined;
-      const detection = fence ? detectAsciiDiagram(fence.value) : undefined;
+      const detection = fence
+        ? detectAsciiDiagram(fence.value, { explicit: isExplicitDiagramLang(fence.lang) })
+        : undefined;
       if (!detection?.isDiagram || !detection.diagram) return placeholders ? {} : null;
       const { nodes, edges } = asciiDiagramToTemplateData(detection.diagram);
       return { nodes, edges, ...(headingText ? { title: headingText } : {}) };
+    }
+    case 'tree': {
+      // Items from an ASCII tree fence, or a nested markdown bullet list when
+      // the author explicitly annotates a listed body. The fence/list stays
+      // in `contents`, so round-trips are lossless.
+      const fences = (contents ?? []).filter((n): n is MarkdownCodeBlock => n.type === 'code');
+      const fence =
+        fences.length === 1 && isEligibleTreeFenceLang(fences[0].lang) ? fences[0] : undefined;
+      if (fence) {
+        const detection = detectTree(fence.value, { explicit: isExplicitTreeLang(fence.lang) });
+        if (detection.isTree && detection.tree) {
+          const { items } = treeToTemplateData(detection.tree);
+          return { items, ...(headingText ? { title: headingText } : {}) };
+        }
+      }
+      const list = findFirstList(contents);
+      if (list) {
+        const { items } = treeToTemplateData(treeFromMarkdownList(list));
+        if (items.length > 0) return { items, ...(headingText ? { title: headingText } : {}) };
+      }
+      return placeholders ? {} : null;
     }
     default:
       return placeholders ? {} : null;

@@ -108,6 +108,11 @@ export const TEMPLATE_METADATA: Record<string, TemplateMetadata> = {
     description:
       'Renders sub-headings as connected nodes — edit visually as a node-and-edge diagram.',
   },
+  tree: {
+    label: 'Tree',
+    description:
+      'Renders an ASCII file-tree / outline fence as a filesystem-style treeview — edit as an outline.',
+  },
   layout: {
     label: 'Layout',
     description:

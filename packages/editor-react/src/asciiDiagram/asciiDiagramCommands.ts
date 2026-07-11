@@ -31,18 +31,36 @@ import {
 } from './asciiDiagramOps';
 
 /**
- * Replace only the TEXT inside the codeBlock at `pos` — attributes
- * (including `language`) stay untouched. No-op when the text is already
- * identical, so history stays clean.
+ * Replace the TEXT inside the codeBlock at `pos` and, when `ensureLanguage`
+ * is given, promote its `language` attribute in the SAME transaction (one
+ * undo step). Promoting the language to the explicit `diagram`/`tree` tag is
+ * how a semantic edit makes the block's identity "sticky" — the language
+ * class survives markdown ↔ Tiptap round-trips, so a once-edited diagram/tree
+ * is re-recognized even after it's flattened. No-op (returns false) only when
+ * BOTH the text is already identical AND the language already matches, so
+ * history stays clean on a true no-op.
  */
-export function replaceAsciiFenceText(editor: Editor, pos: number, nextText: string): boolean {
+export function replaceAsciiFenceText(
+  editor: Editor,
+  pos: number,
+  nextText: string,
+  ensureLanguage?: string,
+): boolean {
   return editor
     .chain()
     .command(({ tr, state }) => {
       const node = tr.doc.nodeAt(pos);
       if (!node || node.type.name !== 'codeBlock') return false;
-      if (node.textContent === nextText) return false;
-      tr.replaceWith(pos + 1, pos + node.nodeSize - 1, state.schema.text(nextText));
+      const textChanged = node.textContent !== nextText;
+      const currentLang = (node.attrs as { language?: string | null }).language ?? null;
+      const langChanged = ensureLanguage !== undefined && currentLang !== ensureLanguage;
+      if (!textChanged && !langChanged) return false;
+      if (langChanged) {
+        tr.setNodeMarkup(pos, undefined, { ...node.attrs, language: ensureLanguage });
+      }
+      if (textChanged) {
+        tr.replaceWith(pos + 1, pos + node.nodeSize - 1, state.schema.text(nextText));
+      }
       return true;
     })
     .run();
@@ -72,7 +90,9 @@ function applyOp(
   const verification = parseAsciiDiagram(rendered);
   if (verification.nodes.length !== next.nodes.length) return false;
 
-  return replaceAsciiFenceText(editor, pos, rendered);
+  // Promote the fence language to the explicit `diagram` tag so this block's
+  // identity survives a later flatten → markdown → re-import round-trip.
+  return replaceAsciiFenceText(editor, pos, rendered, 'diagram');
 }
 
 /** Full pipeline for a canvas command against a registered fence block. */

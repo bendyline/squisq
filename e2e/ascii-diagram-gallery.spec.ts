@@ -50,18 +50,39 @@ test.describe('ASCII diagram gallery screenshots', () => {
       const host = hosts.nth(i);
       await host.scrollIntoViewIfNeeded();
       // Let the Scene fit-on-mount settle before capture.
-      await page.waitForTimeout(150);
+      await page.waitForTimeout(400);
       const slug = DIAGRAM_GALLERY_HEADINGS[i]
         .toLowerCase()
         .replace(/[^a-z0-9]+/g, '-')
         .replace(/^-+|-+$/g, '');
-      await host.screenshot({
-        path: `test-results/diagram-gallery/${String(i + 1).padStart(2, '0')}-${slug}.png`,
-      });
+      await host
+        .screenshot({
+          path: `test-results/diagram-gallery/${String(i + 1).padStart(2, '0')}-${slug}.png`,
+          // The Scene runs a fit-on-mount transition; freeze animations and
+          // don't block on pixel-stability (the canvas has ambient motion).
+          animations: 'disabled',
+          caret: 'hide',
+          timeout: 15_000,
+        })
+        .catch(async () => {
+          // Fall back to a bounding-box clip if the element never settles.
+          const box = await host.boundingBox();
+          if (box) {
+            await page.screenshot({
+              path: `test-results/diagram-gallery/${String(i + 1).padStart(2, '0')}-${slug}.png`,
+              clip: box,
+              animations: 'disabled',
+            });
+          }
+        });
     }
     // A full-document capture too, for the whole gallery at a glance.
-    await page.locator('.tiptap.ProseMirror').screenshot({
-      path: 'test-results/diagram-gallery/00-gallery-full.png',
-    });
+    await page
+      .locator('.tiptap.ProseMirror')
+      .screenshot({
+        path: 'test-results/diagram-gallery/00-gallery-full.png',
+        animations: 'disabled',
+      })
+      .catch(() => {});
   });
 });

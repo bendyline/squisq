@@ -358,6 +358,31 @@ export interface ListBlockInput extends BaseTemplateBlock {
 }
 
 /**
+ * Tree block — renders a hierarchical filesystem-style treeview from an
+ * ASCII tree fence (file trees, dependency trees, outlines). The nested
+ * `items` arrive via `templateData`, derived from the fence by the pipeline
+ * (peer to how `diagram` receives `nodes`/`edges`).
+ */
+export interface TreeBlockInput extends BaseTemplateBlock {
+  template: 'tree';
+  /** Nested tree items (usually via `templateData.items`). */
+  items?: TreeTemplateItem[];
+  /** Optional title above the tree. */
+  title?: string;
+  /** Color scheme for folder rows / icons. */
+  colorScheme?: ColorScheme;
+}
+
+/** One node supplied via `templateData.items` (mirrors `TreeLayerItem`). */
+export interface TreeTemplateItem {
+  id: string;
+  label: string;
+  isDir?: boolean;
+  comment?: string;
+  children: TreeTemplateItem[];
+}
+
+/**
  * Photo grid - 2-4 images in a tiled layout.
  * Used when multiple images are available for visual variety.
  */
@@ -626,6 +651,7 @@ export type TemplateBlock =
   | VideoPullQuoteInput
   | DataTableInput
   | DiagramBlockInput
+  | TreeBlockInput
   | DrawingBlockInput
   | RawLayersInput;
 

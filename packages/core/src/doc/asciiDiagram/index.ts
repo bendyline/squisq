@@ -17,7 +17,9 @@ export {
   detectAsciiDiagram,
   isAsciiDiagramFence,
   isEligibleAsciiFenceLang,
+  isExplicitDiagramLang,
 } from './detect.js';
+export type { DetectDiagramOptions } from './detect.js';
 export {
   asciiCellToCanvas,
   asciiDiagramFromBlocks,

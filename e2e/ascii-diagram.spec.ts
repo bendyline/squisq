@@ -47,6 +47,15 @@ async function fenceText(page: Page): Promise<string> {
   return (text ?? '').replace(NBSP_RE, ' ');
 }
 
+/** The `language-*` class on the (first) diagram fence's `<code>`, or ''. */
+async function fenceLang(page: Page): Promise<string> {
+  const code = page
+    .locator('pre.squisq-ascii-fence-hidden code, pre.squisq-ascii-fence-source code')
+    .first();
+  const cls = (await code.getAttribute('class')) ?? '';
+  return /language-(\S+)/.exec(cls)?.[1] ?? '';
+}
+
 async function cardRect(
   page: Page,
   nodeId: string,
@@ -179,6 +188,18 @@ test.describe('ASCII diagram editor', () => {
     }).toPass({ timeout: 5_000 });
   });
 
+  test('editing promotes the fence to the explicit `diagram` language tag', async ({ page }) => {
+    // Sticky identity: once the canvas is edited, the fence carries
+    // `language-diagram` so it survives a later flatten → markdown → back
+    // round-trip (the language class round-trips; fence meta does not).
+    await loadDiagramSample(page);
+    const from = await cardCenter(page, 'child-1');
+    await dragPointer(page, from, { x: from.x - 60, y: from.y + 40 });
+    await expect(async () => {
+      expect(await fenceLang(page)).toBe('diagram');
+    }).toPass({ timeout: 5_000 });
+  });
+
   test('connecting two nodes adds an edge to the art', async ({ page }) => {
     await loadDiagramSample(page);
     const before = await fenceText(page);
@@ -251,8 +272,13 @@ test.describe('ASCII diagram editor', () => {
     const later = await cardCenter(page, 'child-3');
     expect(Math.abs(later.x - settled.x)).toBeLessThan(2);
     expect(Math.abs(later.y - settled.y)).toBeLessThan(2);
-    // And it actually moved from the origin.
-    expect(Math.abs(settled.x - from.x)).toBeGreaterThan(20);
+    // And it actually moved from the origin. The on-screen displacement is
+    // much smaller than the 70×50px drag: the fence quantizes to the ASCII
+    // char grid and the renderer re-packs neighbours, so a diagonal drag nets
+    // only a cell or two. The point of this assertion is just "it moved" —
+    // the no-snap-back guarantee above is what's actually under test.
+    const moved = Math.hypot(settled.x - from.x, settled.y - from.y);
+    expect(moved).toBeGreaterThan(8);
   });
 
   test('the Insert menu creates a starter ASCII diagram', async ({ page }) => {

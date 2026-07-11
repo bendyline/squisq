@@ -136,8 +136,27 @@ describe('applyAsciiDiagramCommand', () => {
     expect(parseAsciiDiagram(fenceOf(editor).text).nodes).toHaveLength(2);
   });
 
-  it('preserves the fence language attribute across rewrites', () => {
+  it('promotes the fence language to the explicit `diagram` tag on edit', () => {
+    // A once-edited diagram should carry `language: 'diagram'` so its identity
+    // survives a later flatten → markdown → re-import round-trip (the language
+    // class round-trips; fence meta does not).
     const editor = makeEditor('```text\n' + ART + '\n```\n');
+    const id = firstBlockId(editor);
+    expect(fenceOf(editor).language).toBe('text');
+    applyAsciiDiagramCommand(editor, id, {
+      kind: 'moveNode',
+      nodeId: 'beta',
+      x: 15 * ASCII_CHAR_W,
+      y: 9 * ASCII_CHAR_H,
+    });
+    expect(fenceOf(editor).language).toBe('diagram');
+  });
+
+  it('keeps the block id stable across the language-promotion rewrite', () => {
+    // The promotion is a `setNodeMarkup` boundary rewrite; the position
+    // registry must still recognize the same block so a follow-up command
+    // resolves it (and the widget's React root survives).
+    const editor = makeEditor('```\n' + ART + '\n```\n');
     const id = firstBlockId(editor);
     applyAsciiDiagramCommand(editor, id, {
       kind: 'moveNode',
@@ -145,7 +164,8 @@ describe('applyAsciiDiagramCommand', () => {
       x: 15 * ASCII_CHAR_W,
       y: 9 * ASCII_CHAR_H,
     });
-    expect(fenceOf(editor).language).toBe('text');
+    expect(firstBlockId(editor)).toBe(id);
+    expect(fenceOf(editor).language).toBe('diagram');
   });
 
   it('one undo restores the original fence bytes', () => {
