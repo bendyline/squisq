@@ -22,6 +22,7 @@
  * `markerPath` in core so the SSR renderer and the editor agree.
  */
 
+import { useId } from 'react';
 import type { PathLayer as PathLayerType, MarkerStyle } from '@bendyline/squisq/schemas';
 import { markerPath, shapePath } from '@bendyline/squisq/doc';
 import { getAnimationStyle } from '../utils/animationUtils';
@@ -67,18 +68,19 @@ function effectiveMarker(
 
 export function PathLayer({ layer, viewport, blockTime }: PathLayerProps) {
   const { content, animation, id } = layer;
+  const defsId = `${useId().replace(/:/g, '')}-${id}`;
   const d = effectivePath(layer, viewport);
   const stroke = content.stroke ?? '#1e293b';
   const strokeWidth = content.strokeWidth ?? 2;
-  const { fill, def: fillDef } = resolveFill(id, content.fill ?? 'none', content.gradient);
+  const { fill, def: fillDef } = resolveFill(defsId, content.fill ?? 'none', content.gradient);
   // `borderStyle` (named shapes) takes precedence over a raw `dasharray`.
   const dash = content.borderStyle
     ? borderDashArray(content.borderStyle, strokeWidth)
     : content.dasharray;
   const animStyle = getAnimationStyle(animation, blockTime);
 
-  const startId = `marker-start-${id}`;
-  const endId = `marker-end-${id}`;
+  const startId = `marker-start-${defsId}`;
+  const endId = `marker-end-${defsId}`;
   const start = markerPath(effectiveMarker(content.startMarker, content.arrow, 'start'), 'start');
   const end = markerPath(effectiveMarker(content.endMarker, content.arrow, 'end'), 'end');
 

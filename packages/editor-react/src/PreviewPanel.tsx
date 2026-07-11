@@ -77,11 +77,15 @@ export function PreviewPanel({ basePath = '/', className, workspaceContainer }: 
     // If we have a workspace container, try to resolve audio mapping before building preview
     if (workspaceContainer) {
       let cancelled = false;
-      resolveAudioMapping(sourceDoc, workspaceContainer).then((audioDoc) => {
-        if (!cancelled) {
-          setPreviewDoc(buildPreviewDoc(audioDoc));
-        }
-      });
+      resolveAudioMapping(sourceDoc, workspaceContainer).then(
+        (audioDoc) => {
+          if (!cancelled) setPreviewDoc(buildPreviewDoc(audioDoc));
+        },
+        () => {
+          // The synchronous preview below remains valid when optional audio
+          // discovery fails; consume the rejection rather than leaking it.
+        },
+      );
       // Set an immediate preview without audio while mapping resolves
       setPreviewDoc(buildPreviewDoc(sourceDoc));
       return () => {

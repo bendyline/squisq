@@ -6,6 +6,7 @@
  * Handles positioning, animations, and transitions.
  */
 
+import { useId } from 'react';
 import type { Block, Layer, Transition } from '@bendyline/squisq/schemas';
 import { resolveTransitionDuration } from '@bendyline/squisq/schemas';
 import { ImageLayer } from './layers/ImageLayer';
@@ -72,8 +73,10 @@ export function BlockRenderer({
     transitionStyle['--transition-duration'] = `${resolveTransitionDuration(activeTransition)}s`;
   }
 
-  // Unique clip path ID per block to avoid conflicts when multiple blocks render simultaneously
-  const clipId = `vb-clip-${block.id}`;
+  // React's instance id keeps SVG fragment references local even when the
+  // same block is rendered in a thumbnail, preview, and player at once.
+  const instanceId = useId().replace(/:/g, '');
+  const clipId = `vb-clip-${instanceId}-${block.id}`;
 
   return (
     <svg

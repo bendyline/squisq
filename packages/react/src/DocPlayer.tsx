@@ -22,7 +22,7 @@
  * - types.ts -- Shared control types
  */
 
-import { Fragment, useRef, useState, useEffect, useCallback, useMemo } from 'react';
+import { Fragment, useId, useRef, useState, useEffect, useCallback, useMemo } from 'react';
 import type { Doc, Block, TextLayer, StartBlockConfig, DocBlock } from '@bendyline/squisq/schemas';
 import {
   isTemplateBlock,
@@ -63,6 +63,7 @@ import type {
   CaptionMode,
   SlideNavActions,
   SquisqWindow,
+  SquisqRenderAPI,
 } from './types';
 
 const SMALL_WORDS = new Set([
@@ -289,6 +290,7 @@ function DocPlayerContent({
   const isLinearMode = displayMode === 'linear';
   const audioRef = useRef<HTMLAudioElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const playerId = `squisq-player-${useId().replace(/:/g, '')}`;
 
   // Tap-to-toggle play/pause feedback animation
   const [tapFeedback, setTapFeedback] = useState<'play' | 'pause' | null>(null);
@@ -308,7 +310,7 @@ function DocPlayerContent({
   }, []);
 
   // Use internal HTML5 audio sync if no external controller is given
-  const internalAudio = useAudioSync(audioRef, doc.audio, basePath);
+  const internalAudio = useAudioSync(audioRef, doc.audio, basePath, !externalAudioController);
 
   // Use external controller if provided, otherwise fall back to internal
   const audio = externalAudioController || internalAudio;
@@ -368,13 +370,14 @@ function DocPlayerContent({
       // Don't toggle if user clicked a control element
       if (
         target.closest(
-          'button, a, input, .doc-player__controls, .doc-player__scrubber, .doc-controls-sidebar, .doc-controls-slideshow',
+          'button, a, input, textarea, select, [contenteditable="true"], .doc-player__controls, .doc-player__scrubber, .doc-controls-sidebar, .doc-controls-slideshow',
         )
       )
         return;
+      containerRef.current?.focus({ preventScroll: true });
       toggle();
       // Show visual feedback (show the state we're transitioning TO)
-      const nextState = isPlaying ? 'play' : 'pause';
+      const nextState = isPlaying ? 'pause' : 'play';
       setTapFeedback(nextState);
       clearTimeout(tapFeedbackTimer.current);
       tapFeedbackTimer.current = setTimeout(() => setTapFeedback(null), 600);
@@ -404,7 +407,7 @@ function DocPlayerContent({
     nextBlock: _nextBlock,
     prevBlock: _prevBlock,
     blocks: expandedBlocks,
-  } = useDocPlayback(doc, currentTime, activeViewport, renderMode, effectiveTheme);
+  } = useDocPlayback(doc, currentTime, activeViewport, renderMode, effectiveTheme, seekTo);
 
   // Expand cover block (startBlock) if present - uses active viewport
   const coverBlock = useMemo((): Block | null => {
@@ -430,6 +433,9 @@ function DocPlayerContent({
   const [slideshowCoverVisible, setSlideshowCoverVisible] = useState(false);
   const slideshowCoverInitKeyRef = useRef('');
   useEffect(() => {
+    slideshowCoverInitKeyRef.current = '';
+  }, [doc]);
+  useEffect(() => {
     const initKey = `${isSlideshowMode}:${hasManagedCover}:${renderMode}`;
     if (slideshowCoverInitKeyRef.current === initKey) return;
     slideshowCoverInitKeyRef.current = initKey;
@@ -451,6 +457,14 @@ function DocPlayerContent({
   // Track whether playback has ever been initiated — prevents the cover block
   // from re-appearing when paused at currentTime === 0 (e.g., no audio source).
   const hasPlayedOnce = useRef(false);
+
+  useEffect(() => {
+    hasPlayedOnce.current = false;
+    coverWasShowing.current = false;
+    clearTimeout(coverGraceTimer.current);
+    setCoverGraceActive(false);
+    setCoverForced(false);
+  }, [doc]);
 
   // Track when cover is showing at rest (before play)
   const atRest = !!(
@@ -513,6 +527,9 @@ function DocPlayerContent({
   // Use a ref to track if we've already auto-played to avoid repeating on every render
   const hasAutoPlayed = useRef(false);
   useEffect(() => {
+    hasAutoPlayed.current = false;
+  }, [doc]);
+  useEffect(() => {
     if (isAudioReady && autoPlay && !hasAutoPlayed.current) {
       hasAutoPlayed.current = true;
       play();
@@ -535,6 +552,8 @@ function DocPlayerContent({
   useEffect(() => {
     if ((renderMode || isDebugMode) && typeof window !== 'undefined') {
       const w = window as SquisqWindow;
+      const root = containerRef.current;
+      if (!root) return;
       w.seekTo = (time: number) => {
         seekTo(time);
         // After React renders the correct block, advance CSS animations
@@ -554,7 +573,7 @@ function DocPlayerContent({
             const elapsedMs = (time - blockStartTime) * 1000;
 
             // Set all CSS animations to the correct timeline position
-            document.getAnimations().forEach((anim) => {
+            (root.getAnimations?.() ?? []).forEach((anim) => {
               const target = (anim.effect as KeyframeEffect)?.target as Element | null;
               if (!target) return;
 
@@ -576,7 +595,7 @@ function DocPlayerContent({
             // VideoLayer.tsx; we calculate targetTime = clipStart + blockElapsed.
             const blockElapsed = time - blockStartTime;
             const videoSeekPromises: Promise<void>[] = [];
-            const activeBlockEl = document.querySelector('.doc-player__block--active');
+            const activeBlockEl = root.querySelector('.doc-player__block--active');
             if (activeBlockEl) {
               const videos = activeBlockEl.querySelectorAll('video[data-clip-start]');
               videos.forEach((el) => {
@@ -610,7 +629,7 @@ function DocPlayerContent({
             // Seek player-level scheduled videos (document-spanning clips
             // rendered by MediaClipLayer, outside any single block). Each
             // carries data-abs-start/data-abs-end/data-source-in.
-            document.querySelectorAll('video[data-clip-id]').forEach((el) => {
+            root.querySelectorAll('video[data-clip-id]').forEach((el) => {
               const video = el as HTMLVideoElement;
               const absStart = parseFloat(video.dataset.absStart || '0');
               const absEnd = parseFloat(video.dataset.absEnd || '0');
@@ -688,23 +707,56 @@ function DocPlayerContent({
         return new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
       };
       w.hasCoverBlock = () => !!coverBlock;
+
+      const api: SquisqRenderAPI = {
+        seekTo: w.seekTo,
+        getDuration: w.getDuration,
+        getBlocks: w.getBlocks,
+        getAudioSegments: w.getAudioSegments,
+        getCaptions: w.getCaptions,
+        getChapters: w.getChapters,
+        showCover: w.showCover,
+        hideCover: w.hideCover,
+        hasCoverBlock: w.hasCoverBlock,
+      };
+      const registry = { ...(w.squisqPlayers ?? {}), [playerId]: api };
+      w.squisqPlayers = registry;
+      const activeId = w.squisqActivePlayerId;
+      if (!activeId || !registry[activeId]) {
+        w.squisqActivePlayerId = playerId;
+      }
+      // Keep the original Playwright API as a compatibility alias for one
+      // explicitly selected instance, while every player remains addressable
+      // through `window.squisqPlayers[playerId]`.
+      Object.assign(w, registry[w.squisqActivePlayerId!]);
     }
     return () => {
       if (typeof window !== 'undefined') {
         const w = window as SquisqWindow;
-        delete w.seekTo;
-        delete w.getDuration;
-        delete w.getBlocks;
-        delete w.getAudioSegments;
-        delete w.getCaptions;
-        delete w.getChapters;
-        delete w.showCover;
-        delete w.hideCover;
-        delete w.hasCoverBlock;
+        const registry = { ...(w.squisqPlayers ?? {}) };
+        delete registry[playerId];
+        w.squisqPlayers = registry;
+        if (w.squisqActivePlayerId === playerId) {
+          const nextId = Object.keys(registry)[0];
+          w.squisqActivePlayerId = nextId;
+          if (nextId) {
+            Object.assign(w, registry[nextId]);
+          } else {
+            delete w.seekTo;
+            delete w.getDuration;
+            delete w.getBlocks;
+            delete w.getAudioSegments;
+            delete w.getCaptions;
+            delete w.getChapters;
+            delete w.showCover;
+            delete w.hideCover;
+            delete w.hasCoverBlock;
+            delete w.squisqActivePlayerId;
+          }
+        }
       }
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- doc is a stable prop; re-registering on every doc change is unnecessary
-  }, [renderMode, isDebugMode, seekTo, totalDuration, expandedBlocks, coverBlock]);
+  }, [renderMode, isDebugMode, seekTo, totalDuration, expandedBlocks, coverBlock, doc, playerId]);
 
   // Caption mode state: cycles through off → standard → social → off
   // The captionStyle prop sets the default active style; captionsEnabledProp
@@ -962,14 +1014,15 @@ function DocPlayerContent({
   // (currentTime, totalDuration, expandedBlocks.length) to avoid
   // re-registering the event listener on every animation frame.
   const handleKeyDown = useCallback(
-    (e: KeyboardEvent) => {
-      // Don't capture keyboard events when focus is on an input/textarea
-      const activeEl = document.activeElement;
+    (e: React.KeyboardEvent<HTMLDivElement>) => {
+      // Shortcuts belong to this focused player only and never consume keys
+      // from editable or interactive descendants.
+      const target = e.target as HTMLElement;
       if (
-        activeEl &&
-        (activeEl.tagName === 'INPUT' ||
-          activeEl.tagName === 'TEXTAREA' ||
-          activeEl.tagName === 'SELECT')
+        target.isContentEditable ||
+        target.closest(
+          'input, textarea, select, button, a, [contenteditable]:not([contenteditable="false"]), [role="textbox"]',
+        )
       ) {
         return;
       }
@@ -1019,17 +1072,12 @@ function DocPlayerContent({
     [isSlideshowMode, isLinearMode, toggle, seekTo, slideNavActions],
   );
 
-  useEffect(() => {
-    if (renderMode) return; // No keyboard in render mode
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [handleKeyDown, renderMode]);
-
   // ── Linear mode: render as scrollable document ──────────────────
   if (isLinearMode) {
     return (
       <div
         ref={containerRef}
+        data-player-id={playerId}
         className="doc-player doc-player--linear"
         style={{
           position: 'relative',
@@ -1052,6 +1100,10 @@ function DocPlayerContent({
   return (
     <div
       ref={containerRef}
+      data-player-id={playerId}
+      tabIndex={renderMode ? -1 : 0}
+      aria-label="Document player"
+      onKeyDown={renderMode ? undefined : handleKeyDown}
       className={`doc-player${swipeEnabled ? ' doc-player--swipe' : ''}${
         swipe.phase === 'dragging' ? ' doc-player--grabbing' : ''
       }`}
@@ -1079,6 +1131,7 @@ function DocPlayerContent({
         isPlaying={isPlaying}
         basePath={basePath}
         renderMode={renderMode}
+        muted={muted}
       />
 
       {/* Block viewport */}
@@ -1327,7 +1380,7 @@ function DocPlayerContent({
 
       {/* Tap feedback animation -- shows play/pause icon briefly on tap (video mode only) */}
       {!isSlideshowMode && tapFeedback && (
-        <div className="doc-player__tap-feedback" key={Date.now()}>
+        <div className="doc-player__tap-feedback" key={tapFeedback}>
           <svg viewBox="0 0 24 24" fill="white" width="48" height="48">
             {tapFeedback === 'pause' ? (
               <path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z" />

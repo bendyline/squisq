@@ -29,3 +29,14 @@ export function audioBitrateArg(quality: VideoQuality): string {
   const preset = QUALITY_PRESETS[quality] ?? QUALITY_PRESETS.normal;
   return `${preset.audioBitrate / 1000}k`;
 }
+
+/**
+ * AAC muxing flags that preserve the complete video timeline.
+ *
+ * `-shortest` by itself truncates video whenever narration ends early. Padding
+ * the audio stream first makes the video stream the shortest input instead, so
+ * audio longer than the video is trimmed while shorter audio becomes silence.
+ */
+export function ffmpegAudioMuxArgs(bitrate: string | number): string[] {
+  return ['-c:a', 'aac', '-b:a', String(bitrate), '-af', 'apad', '-shortest'];
+}

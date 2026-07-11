@@ -95,6 +95,16 @@ describe('arrayBufferToBase64DataUrl', () => {
     expect(result).toMatch(/^data:text\/plain;base64,/);
     expect(result).toBe('data:text/plain;base64,aGVsbG8=');
   });
+
+  it('encodes large buffers correctly across chunk boundaries', () => {
+    const bytes = Uint8Array.from({ length: 100_003 }, (_, index) => index % 251);
+    const result = arrayBufferToBase64DataUrl(bytes.buffer, 'application/octet-stream');
+    const decoded = Uint8Array.from(atob(result.split(',')[1]), (character) =>
+      character.charCodeAt(0),
+    );
+
+    expect(decoded).toEqual(bytes);
+  });
 });
 
 describe('extractFilename', () => {

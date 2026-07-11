@@ -831,6 +831,19 @@ describe('parseFrontmatter', () => {
     expect(result).toEqual({ title: 'Hello World', name: 'Jane' });
   });
 
+  it('keeps quoted booleans and numbers as strings and decodes escapes', () => {
+    const result = parseFrontmatter(String.raw`boolean: "true"
+number: "1e3"
+path: "C:\\temp\\\"quoted\""
+single: 'it''s'`);
+    expect(result).toEqual({
+      boolean: 'true',
+      number: '1e3',
+      path: 'C:\\temp\\"quoted"',
+      single: "it's",
+    });
+  });
+
   it('skips comment lines and blank lines', () => {
     const result = parseFrontmatter('# comment\n\ntitle: Test');
     expect(result).toEqual({ title: 'Test' });
@@ -902,6 +915,34 @@ describe('multi-line frontmatter round-trips', () => {
     const md = stringifyMarkdown(doc);
     expect(md).toContain('document-render-as: portrait');
     expect(md).not.toContain('|-');
+  });
+
+  it('losslessly round-trips ambiguous and escaped single-line strings', () => {
+    const doc = createDocument();
+    doc.frontmatter = {
+      booleanLike: 'true',
+      numericLike: '1e3',
+      padded: '  keep me  ',
+      quoted: '"literal quotes"',
+      path: 'C:\\temp\\"quoted"',
+    };
+    const md = stringifyMarkdown(doc);
+    expect(md).toContain('booleanLike: "true"');
+    expect(md).toContain('numericLike: "1e3"');
+    expect(parseMarkdown(md).frontmatter).toEqual(doc.frontmatter);
+  });
+
+  it('uses the same escaping rules when updating source frontmatter', () => {
+    const out = setFrontmatterValues('# Body\n', {
+      booleanLike: 'false',
+      padded: ' value ',
+      path: 'C:\\temp\\"quoted"',
+    });
+    expect(parseMarkdown(out).frontmatter).toEqual({
+      booleanLike: 'false',
+      padded: ' value ',
+      path: 'C:\\temp\\"quoted"',
+    });
   });
 });
 

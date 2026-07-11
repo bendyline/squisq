@@ -85,4 +85,12 @@ describe('library', () => {
     saveLibraryTemplate(defn('a'));
     expect(listLibraryTemplates().map((t) => t.name)).toEqual(['a']);
   });
+
+  it('filters structurally invalid array entries instead of crashing sort', () => {
+    window.localStorage.setItem(
+      LIBRARY_STORAGE_KEY,
+      JSON.stringify({ version: 1, templates: [null, {}, defn('valid')] }),
+    );
+    expect(listLibraryTemplates().map((template) => template.name)).toEqual(['valid']);
+  });
 });

@@ -10,8 +10,8 @@
  * only set it after a `setTimeout`).
  */
 
-import { describe, it, expect } from 'vitest';
-import { renderHook } from '@testing-library/react';
+import { describe, it, expect, vi } from 'vitest';
+import { act, renderHook } from '@testing-library/react';
 import { VIEWPORT_PRESETS } from '@bendyline/squisq/doc';
 import type { Doc, Block } from '@bendyline/squisq/schemas';
 import { useDocPlayback } from '../hooks/useDocPlayback';
@@ -66,5 +66,16 @@ describe('useDocPlayback — synchronous block transitions', () => {
     expect(enteringAt(5.0)).toBe(true); // blockTime 0.0 < 0.5
     expect(enteringAt(5.4)).toBe(true); // blockTime 0.4 < 0.5
     expect(enteringAt(5.6)).toBe(false); // blockTime 0.6 >= 0.5
+  });
+
+  it('navigation actions seek to the target block', () => {
+    const seek = vi.fn();
+    const { result } = renderHook(() =>
+      useDocPlayback(doc, 0, VIEWPORT_PRESETS.landscape, false, undefined, seek),
+    );
+    act(() => result.current.nextBlock());
+    expect(seek).toHaveBeenCalledWith(5);
+    act(() => result.current.goToBlock(0));
+    expect(seek).toHaveBeenLastCalledWith(0);
   });
 });

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { ffmpegVideoQualityArgs, audioBitrateArg } from '../ffmpegArgs.js';
+import { ffmpegVideoQualityArgs, audioBitrateArg, ffmpegAudioMuxArgs } from '../ffmpegArgs.js';
 import { QUALITY_PRESETS, type VideoQuality } from '../types.js';
 
 const LEVELS: VideoQuality[] = ['draft', 'normal', 'high'];
@@ -35,5 +35,23 @@ describe('audioBitrateArg', () => {
     expect(audioBitrateArg('draft')).toBe('96k');
     expect(audioBitrateArg('normal')).toBe('128k');
     expect(audioBitrateArg('high')).toBe('192k');
+  });
+});
+
+describe('ffmpegAudioMuxArgs', () => {
+  it('pads short audio before using -shortest so video is never truncated', () => {
+    expect(ffmpegAudioMuxArgs('128k')).toEqual([
+      '-c:a',
+      'aac',
+      '-b:a',
+      '128k',
+      '-af',
+      'apad',
+      '-shortest',
+    ]);
+  });
+
+  it('accepts the numeric bitrates used by the browser audio path', () => {
+    expect(ffmpegAudioMuxArgs(192000)).toContain('192000');
   });
 });

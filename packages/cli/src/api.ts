@@ -35,13 +35,22 @@ import type {
 } from '@bendyline/squisq-formats';
 import { detectFfmpeg } from './util/detectFfmpeg.js';
 import { buildMixedAudioTrack } from './util/audioMix.js';
+import { resolveAppliedCoverPreRoll } from './util/coverPreRoll.js';
 import { createCliRegistry } from './registry.js';
+import type { Mp4FormatOptions } from './registry.js';
 
 // Re-export utility types and functions callers may need
 export type { VideoQuality, VideoOrientation } from '@bendyline/squisq-video';
 export { MemoryContentContainer } from '@bendyline/squisq/storage';
 export { readInput } from './util/readInput.js';
 export type { ReadInputResult } from './util/readInput.js';
+export { framesToMp4Native, framesToMp4NativeBytes } from './util/nativeEncoder.js';
+export type { Mp4FormatOptions } from './registry.js';
+
+/** Convert options with the CLI-only MP4 adapter strongly typed. */
+export type CliConvertOptions = Omit<ConvertOptions, 'formatOptions'> & {
+  formatOptions?: ConvertOptions['formatOptions'] & { mp4?: Mp4FormatOptions };
+};
 
 // ── Format registry / convert() surface ───────────────────────────
 // Re-export the CLI's format registry factory plus the registry types and the
@@ -81,7 +90,7 @@ export type {
 export async function convert(
   source: ConvertSource,
   to: FormatId,
-  options: ConvertOptions = {},
+  options: CliConvertOptions = {},
 ): Promise<ConversionResult> {
   return formatsConvert(source, to, {
     registry: createCliRegistry(),
@@ -177,7 +186,13 @@ export async function renderDocToMp4(
     orientation,
     width: options.width,
     height: options.height,
+    fps,
+    quality,
   });
+
+  // Validate before launching Chromium. Whether it applies is decided after
+  // the player reports that the rendered document really has a cover.
+  resolveAppliedCoverPreRoll(coverPreRoll, true);
 
   // Detect ffmpeg early — needed for audio concat and video encoding
   const ffmpegPath = await detectFfmpeg();
@@ -300,8 +315,16 @@ export async function renderDocToMp4(
     throw new Error('Document has zero duration — nothing to render');
   }
 
+  const hasCover =
+    coverPreRoll > 0
+      ? await page.evaluate(() => {
+          const w = window as unknown as { hasCoverBlock?: () => boolean };
+          return typeof w.hasCoverBlock === 'function' ? w.hasCoverBlock() : false;
+        })
+      : false;
+  const appliedCoverPreRoll = resolveAppliedCoverPreRoll(coverPreRoll, hasCover);
   const storyFrameCount = Math.ceil(docDuration * fps);
-  const preRollFrameCount = Math.ceil(coverPreRoll * fps);
+  const preRollFrameCount = Math.ceil(appliedCoverPreRoll * fps);
   const totalFrames = preRollFrameCount + storyFrameCount;
   const frames: Uint8Array[] = [];
 
@@ -309,24 +332,17 @@ export async function renderDocToMp4(
 
   // Cover slide pre-roll (if requested)
   if (preRollFrameCount > 0) {
-    const hasCover: boolean = await page.evaluate(() => {
-      const w = window as unknown as { hasCoverBlock?: () => boolean };
-      return typeof w.hasCoverBlock === 'function' ? w.hasCoverBlock() : false;
+    await page.evaluate(() => {
+      return (window as unknown as { showCover: () => Promise<void> }).showCover();
     });
-
-    if (hasCover) {
-      await page.evaluate(() => {
-        (window as unknown as { showCover: () => void }).showCover();
-      });
-      await page.waitForTimeout(100);
-      const coverFrame = new Uint8Array(await page.screenshot({ type: 'png' }));
-      for (let i = 0; i < preRollFrameCount; i++) {
-        frames.push(coverFrame);
-      }
-      await page.evaluate(() => {
-        (window as unknown as { hideCover: () => void }).hideCover();
-      });
+    await page.waitForTimeout(100);
+    const coverFrame = new Uint8Array(await page.screenshot({ type: 'png' }));
+    for (let i = 0; i < preRollFrameCount; i++) {
+      frames.push(coverFrame);
     }
+    await page.evaluate(() => {
+      (window as unknown as { hideCover: () => void }).hideCover();
+    });
   }
 
   // Story frames via seekTo
@@ -357,7 +373,7 @@ export async function renderDocToMp4(
   // is a pure consumer of `computeAudioTimeline`, so the CLI's placement can no
   // longer drift from the browser export (zero-duration narration segments are
   // skipped consistently in both).
-  const encodingAudio = await buildMixedAudioTrack(doc, container, ffmpegPath, coverPreRoll);
+  const encodingAudio = await buildMixedAudioTrack(doc, container, ffmpegPath, appliedCoverPreRoll);
 
   const { framesToMp4Native } = await import('./util/nativeEncoder.js');
   await framesToMp4Native(ffmpegPath, frames, encodingAudio, outputPath, {
@@ -373,7 +389,7 @@ export async function renderDocToMp4(
 
   onProgress?.('done', 100);
 
-  const totalDuration = docDuration + coverPreRoll;
+  const totalDuration = docDuration + appliedCoverPreRoll;
   return {
     duration: totalDuration,
     frameCount: frames.length,

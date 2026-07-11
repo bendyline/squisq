@@ -20,6 +20,7 @@ import {
   resolveDimensions,
   ffmpegVideoQualityArgs,
   audioBitrateArg,
+  ffmpegAudioMuxArgs,
 } from '@bendyline/squisq-video';
 
 /**
@@ -94,7 +95,7 @@ export async function framesToMp4Native(
     );
 
     if (audioPath) {
-      args.push('-c:a', 'aac', '-b:a', audioBitrateArg(quality), '-shortest');
+      args.push(...ffmpegAudioMuxArgs(audioBitrateArg(quality)));
     }
 
     args.push(outputPath);

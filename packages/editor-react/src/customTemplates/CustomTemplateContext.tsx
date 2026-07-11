@@ -34,6 +34,7 @@ import {
   listLibraryTemplates,
   saveLibraryTemplate as saveLibraryTemplateRaw,
   deleteLibraryTemplate as deleteLibraryTemplateRaw,
+  LIBRARY_STORAGE_KEY,
 } from './library';
 
 export interface CustomTemplateContextValue {
@@ -99,6 +100,11 @@ export function CustomTemplateProvider({
   // re-reads, which is enough for the single-tab common case.
   useEffect(() => {
     setLibraryTemplates(listLibraryTemplates());
+    const onStorage = (event: StorageEvent) => {
+      if (event.key === LIBRARY_STORAGE_KEY) setLibraryTemplates(listLibraryTemplates());
+    };
+    window.addEventListener('storage', onStorage);
+    return () => window.removeEventListener('storage', onStorage);
   }, []);
 
   const upsertDocTemplate = useCallback(

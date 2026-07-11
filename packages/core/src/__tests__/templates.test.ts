@@ -10,7 +10,8 @@ import {
   VIEWPORT_PRESETS,
 } from '../doc/templates/index';
 import type { TemplateBlock } from '../schemas/BlockTemplates';
-import type { TextLayer } from '../schemas/Doc';
+import type { Block, Layer, TextLayer } from '../schemas/Doc';
+import type { RuntimeTemplateRegistry } from '../doc/templates/index';
 import { getLayers } from '../doc/getLayers';
 import { markdownToDoc } from '../doc/markdownToDoc';
 import { parseMarkdown } from '../markdown/parse';
@@ -370,6 +371,81 @@ describe('expandDocBlocks', () => {
     expect(result[0].startTime).toBe(0);
   });
 
+  it('never mutates or aliases raw blocks and persistent layers', () => {
+    const rawLayer: Layer = {
+      type: 'shape',
+      id: 'raw-shape',
+      content: { shape: 'rect', fill: '#112233' },
+      position: { x: 0, y: 0, width: '100%', height: '100%' },
+    };
+    const rawBlock: Block = {
+      id: 'raw',
+      startTime: 99,
+      duration: 6,
+      audioSegment: 0,
+      layers: [rawLayer],
+    };
+    const persistentLayer: Layer = {
+      type: 'shape',
+      id: 'persistent',
+      content: { shape: 'rect', fill: '#445566' },
+      position: { x: 0, y: 0, width: '100%', height: '100%' },
+    };
+    const beforeBlock = JSON.stringify(rawBlock);
+    const beforePersistent = JSON.stringify(persistentLayer);
+
+    const [expanded] = expandDocBlocks([rawBlock], {
+      persistentLayers: { bottomLayers: [persistentLayer] },
+      audioSegments: [{ startTime: 10, duration: 6 }],
+    });
+
+    expect(JSON.stringify(rawBlock)).toBe(beforeBlock);
+    expect(JSON.stringify(persistentLayer)).toBe(beforePersistent);
+    expect(expanded).not.toBe(rawBlock);
+    expect(expanded.layers?.[0]).not.toBe(persistentLayer);
+    expect(expanded.layers?.[1]).not.toBe(rawLayer);
+
+    (expanded.layers?.[0] as Layer & { content: { fill: string } }).content.fill = '#ffffff';
+    expect(JSON.stringify(persistentLayer)).toBe(beforePersistent);
+    expect(expandDocBlocks([rawBlock])[0].layers).toHaveLength(1);
+  });
+
+  it('protects template inputs from mutating registry implementations', () => {
+    const source: TemplateBlock = {
+      template: 'title',
+      id: 'title-safe',
+      duration: 5,
+      audioSegment: 0,
+      title: 'Original',
+    };
+    const sharedLayer: Layer = {
+      type: 'shape',
+      id: 'shared-layer',
+      content: { shape: 'rect', fill: '#112233' },
+      position: { x: 0, y: 0, width: '100%', height: '100%' },
+    };
+    const registry: RuntimeTemplateRegistry = {
+      title: (input) => {
+        (input as { title: string }).title = 'Mutated';
+        return [sharedLayer];
+      },
+    };
+    const first = expandTemplateBlock(source, createTemplateContext(DEFAULT_THEME, 0, 1), registry);
+    const second = expandTemplateBlock(
+      source,
+      createTemplateContext(DEFAULT_THEME, 0, 1),
+      registry,
+    );
+    expect(source.title).toBe('Original');
+    expect(first.layers?.[0]).not.toBe(sharedLayer);
+    expect(first.layers?.[0]).not.toBe(second.layers?.[0]);
+    (first.layers?.[0] as Layer & { content: { fill: string } }).content.fill = '#ffffff';
+    expect((sharedLayer as Layer & { content: { fill: string } }).content.fill).toBe('#112233');
+    expect((second.layers?.[0] as Layer & { content: { fill: string } }).content.fill).toBe(
+      '#112233',
+    );
+  });
+
   it('supports landscape and portrait viewports', () => {
     const blocks: TemplateBlock[] = [
       { template: 'title', id: 'title-1', duration: 5, audioSegment: 0, title: 'Test' },
@@ -569,6 +645,24 @@ describe('inline-param coercion → getLayers', () => {
     // The sublabels from the "|" split render too.
     expect(texts).toContain('Bold');
     expect(texts).toContain('Smooth');
+  });
+});
+
+describe('shared template materialization', () => {
+  it('keeps on-demand and timed expansion layer output in lockstep', () => {
+    const block: TemplateBlock = {
+      template: 'title',
+      id: 'shared-title',
+      duration: 7,
+      audioSegment: 0,
+      title: 'One materializer',
+      subtitle: 'Two orchestration modes',
+    };
+
+    const onDemand = getLayers(block, { theme: DEFAULT_THEME });
+    const [expanded] = expandDocBlocks([block], { theme: DEFAULT_THEME });
+
+    expect(expanded.layers).toEqual(onDemand);
   });
 });
 

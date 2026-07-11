@@ -14,6 +14,13 @@
 import JSZip from 'jszip';
 import type { ContentContainer } from '@bendyline/squisq/storage';
 import { MemoryContentContainer } from '@bendyline/squisq/storage';
+import {
+  assertSafeZipPath,
+  validateZipArchive,
+  type ZipSafetyLimits,
+} from '../shared/zipSafety.js';
+
+export type ZipToContainerOptions = ZipSafetyLimits;
 
 /**
  * Serialize a ContentContainer to a ZIP blob.
@@ -29,6 +36,7 @@ export async function containerToZip(container: ContentContainer): Promise<Blob>
   const entries = await container.listFiles();
 
   for (const entry of entries) {
+    assertSafeZipPath(entry.path);
     const data = await container.readFile(entry.path);
     if (data) {
       zip.file(entry.path, new Uint8Array(data));
@@ -54,36 +62,23 @@ export async function containerToZip(container: ContentContainer): Promise<Blob>
  */
 export async function zipToContainer(
   zipData: ArrayBuffer | Uint8Array | Blob,
+  options: ZipToContainerOptions = {},
 ): Promise<MemoryContentContainer> {
   const zip = await JSZip.loadAsync(zipData);
   const container = new MemoryContentContainer();
+  const files = validateZipArchive(zip, options);
+  const maxUncompressedBytes = options.maxUncompressedBytes ?? 512 * 1024 * 1024;
 
-  const filePromises: Promise<void>[] = [];
-
-  zip.forEach((relativePath, zipEntry) => {
-    // Skip directories
-    if (zipEntry.dir) return;
-
-    // Strip leading slash if present
-    const entryPath = relativePath.startsWith('/') ? relativePath.slice(1) : relativePath;
-    if (!entryPath) return;
-
-    // Path-traversal protection: reject absolute paths, backslashes, and .. segments
-    if (
-      entryPath.startsWith('/') ||
-      entryPath.includes('\\') ||
-      entryPath.split('/').some((seg) => seg === '..')
-    ) {
-      return;
+  let totalBytes = 0;
+  for (const { path, entry } of files) {
+    const data = await entry.async('arraybuffer');
+    totalBytes += data.byteLength;
+    if (totalBytes > maxUncompressedBytes) {
+      throw new Error(
+        `ZIP import: uncompressed content exceeds ${maxUncompressedBytes} byte limit.`,
+      );
     }
-
-    filePromises.push(
-      zipEntry.async('arraybuffer').then((data) => {
-        return container.writeFile(entryPath, data);
-      }),
-    );
-  });
-
-  await Promise.all(filePromises);
+    await container.writeFile(path, data);
+  }
   return container;
 }

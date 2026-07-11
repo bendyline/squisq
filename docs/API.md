@@ -2084,8 +2084,9 @@ function timingPathFor(audioRelativePath: string): string; // `${path}.timing.js
 
 ## `@bendyline/squisq-video`
 
-Browser-pure foundation for MP4 export (render-HTML generator + ffmpeg.wasm
-encoder). No Node-specific dependencies; runs in the browser and Node.
+Cross-runtime render-HTML, timeline, and quality helpers plus a browser-only
+ffmpeg.wasm encoder. Node video export uses `framesToMp4Native` or
+`framesToMp4NativeBytes` from `@bendyline/squisq-cli/api`.
 
 **Import:** `@bendyline/squisq-video`
 
@@ -2095,19 +2096,31 @@ encoder). No Node-specific dependencies; runs in the browser and Node.
 // window.seekTo / window.getDuration for headless frame capture.
 function generateRenderHtml(doc: Doc, options: RenderHtmlOptions): string;
 
-// Encode PNG frame screenshots into an MP4 via ffmpeg.wasm (H.264 + optional AAC).
+// Encode PNG frame screenshots in a browser runtime via ffmpeg.wasm
+// (H.264 + optional AAC). Throws a clear unsupported-runtime error in Node.
 function framesToMp4Wasm(
   frames: Uint8Array[],
   audio: Uint8Array | null,
   options?: VideoExportOptions,
 ): Promise<EncoderResult>;
+interface FfmpegWasmLoadConfig {
+  coreURL?: string;
+  wasmURL?: string;
+  workerURL?: string;
+  classWorkerURL?: string;
+}
 
 function resolveDimensions(options: VideoExportOptions): { width: number; height: number };
+function validateVideoExportOptions(options: VideoExportOptions): void;
 const fetchFile: typeof import('@ffmpeg/util').fetchFile; // re-export
 
 // Target H.264 bitrate = width * height * preset.bitsPerPixel. Single source of
 // truth shared by every WebCodecs encode path (draft/normal/high → 2/4/8 bpp).
 function bitrateForQuality(q: VideoQuality, width: number, height: number): number;
+
+// AAC mux flags that pad short audio before `-shortest`, preserving the full
+// video timeline while trimming narration that runs beyond it.
+function ffmpegAudioMuxArgs(bitrate: string | number): string[];
 
 const QUALITY_PRESETS: Record<VideoQuality, QualityPreset>; // draft/normal/high → ffmpeg preset + crf + bitsPerPixel + audioBitrate
 const ORIENTATION_DIMENSIONS: Record<VideoOrientation, { width: number; height: number }>;
@@ -2220,6 +2233,13 @@ interface VideoExportConfig {
   mediaProvider?: MediaProvider;
   captionMode?: CaptionMode; // default 'off'
   playerScript?: string; // unused by the browser export path; kept for CLI/Playwright
+  ffmpegWasm?: FfmpegWasmLoadConfig; // optional self-hosted fallback assets
+}
+interface FfmpegWasmLoadConfig {
+  coreURL?: string;
+  wasmURL?: string;
+  workerURL?: string;
+  classWorkerURL?: string;
 }
 interface VideoExportResult {
   state: VideoExportState;
@@ -2256,7 +2276,7 @@ interface FrameCaptureHandle {
 function supportsWebCodecs(): boolean; // VideoEncoder/VideoFrame present
 function supportsWebCodecsH264(config: EncoderConfig): Promise<boolean>; // H.264 config supported
 function supportsWebCodecsAac(sampleRate?: number, channels?: number): Promise<boolean>; // AAC audio encode supported (defaults to the export sample rate / channels)
-// config: { width, height, fps, quality: 'draft' | 'normal' | 'high' }
+// EncoderConfig: { width, height, fps, quality }
 function createEncoder(config: EncoderConfig): MainThreadEncoder; // throws if WebCodecs unavailable
 interface EncoderConfig {
   width: number;
@@ -2265,7 +2285,8 @@ interface EncoderConfig {
   quality: VideoQuality;
 }
 interface MainThreadEncoder {
-  encodeFrame(bitmap: ImageBitmap, frameIndex: number): void;
+  encodeFrame(bitmap: ImageBitmap, frameIndex: number): Promise<void>;
+  addAudioChunk?(chunk: EncodedAudioChunk, meta?: EncodedAudioChunkMetadata): void;
   finalize(): Promise<ArrayBuffer>;
   close(): void;
 }
@@ -2373,11 +2394,36 @@ registry for direct use.
 function convert(
   source: ConvertSource,
   to: FormatId, // 'docx' | 'pdf' | 'pptx' | 'xlsx' | 'csv' | 'html' | 'epub' | 'md' | 'mp4' | …
-  options?: ConvertOptions,
+  options?: CliConvertOptions,
 ): Promise<ConversionResult>;
+type CliConvertOptions = Omit<ConvertOptions, 'formatOptions'> & {
+  formatOptions?: ConvertOptions['formatOptions'] & { mp4?: Mp4FormatOptions };
+};
+interface Mp4FormatOptions {
+  fps?: number;
+  quality?: VideoQuality;
+  orientation?: VideoOrientation;
+  coverPreRoll?: number;
+}
 function createCliRegistry(): FormatRegistry; // defaultRegistry() + the mp4 exporter
 // Re-exports: ConversionError, the ConvertSource/ConvertOptions/ConversionResult/
 // FormatId/FormatRegistry/FormatDefinition/NormalizedInput types, plus readInput.
+
+// Encode already-captured PNG frames with native FFmpeg. The bytes variant
+// returns the MP4 in memory; the path variant writes directly to outputPath.
+function framesToMp4Native(
+  ffmpegPath: string,
+  frames: Uint8Array[],
+  audio: Uint8Array | null,
+  outputPath: string,
+  options?: VideoExportOptions,
+): Promise<void>;
+function framesToMp4NativeBytes(
+  ffmpegPath: string,
+  frames: Uint8Array[],
+  audio: Uint8Array | null,
+  options?: VideoExportOptions,
+): Promise<Uint8Array>;
 
 function renderDocToMp4(
   doc: Doc,
@@ -2393,7 +2439,7 @@ interface RenderDocToMp4Options {
   width?: number;
   height?: number;
   captionStyle?: 'standard' | 'social';
-  coverPreRoll?: number; // seconds of cover pre-roll, default 0
+  coverPreRoll?: number; // seconds shown only when a cover exists, default 0
   onProgress?: (phase: string, percent: number) => void;
 }
 interface RenderDocToMp4Result {

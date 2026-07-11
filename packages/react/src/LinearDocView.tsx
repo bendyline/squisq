@@ -142,13 +142,21 @@ interface BlockSectionProps {
   viewport: ViewportConfig;
   renderContext: RenderContext;
   blockIndex: number;
+  blockIndices: ReadonlyMap<Block, number>;
 }
 
 /**
  * Render a single block section: heading + body content or SVG card.
  * Recurses into children to render the full heading tree.
  */
-function BlockSection({ block, basePath, viewport, renderContext, blockIndex }: BlockSectionProps) {
+function BlockSection({
+  block,
+  basePath,
+  viewport,
+  renderContext,
+  blockIndex,
+  blockIndices,
+}: BlockSectionProps) {
   const isAnnotated = isAnnotatedBlock(block);
 
   // For annotated blocks, compute layers and build a Block with them
@@ -196,6 +204,7 @@ function BlockSection({ block, basePath, viewport, renderContext, blockIndex }: 
     <div
       className="squisq-linear-section"
       data-block-id={block.id}
+      data-block-index={blockIndex}
       data-template={isAnnotated ? block.sourceHeading?.templateAnnotation?.template : undefined}
     >
       {/* Render the heading (if present — preamble has no sourceHeading) */}
@@ -244,7 +253,8 @@ function BlockSection({ block, basePath, viewport, renderContext, blockIndex }: 
               basePath={basePath}
               viewport={viewport}
               renderContext={renderContext}
-              blockIndex={blockIndex + i + 1}
+              blockIndex={blockIndices.get(child) ?? blockIndex + i + 1}
+              blockIndices={blockIndices}
             />
           ))}
         </div>
@@ -291,6 +301,18 @@ export function LinearDocView({
     () => (resolvedDoc ? countAll(resolvedDoc.blocks) : 0),
     [resolvedDoc],
   );
+  const blockIndices = useMemo(() => {
+    const indices = new Map<Block, number>();
+    let index = 0;
+    const visit = (blocks: Block[]) => {
+      for (const block of blocks) {
+        indices.set(block, index++);
+        if (block.children) visit(block.children);
+      }
+    };
+    if (resolvedDoc) visit(resolvedDoc.blocks);
+    return indices;
+  }, [resolvedDoc]);
   const autoSurface = useAutoSurface(surface === 'auto');
   const resolvedSurface: SurfaceScheme | undefined = surface === 'auto' ? autoSurface : surface;
 
@@ -484,7 +506,8 @@ export function LinearDocView({
             basePath={basePath}
             viewport={activeViewport}
             renderContext={renderContext}
-            blockIndex={i}
+            blockIndex={blockIndices.get(block) ?? i}
+            blockIndices={blockIndices}
           />
         ))}
       </div>

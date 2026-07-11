@@ -23,22 +23,21 @@
  */
 
 import type { Block, Layer } from '../schemas/Doc.js';
-import type {
-  TemplateBlock,
-  TemplateContext,
-  PersistentLayerConfig,
-  DocBlock,
-} from '../schemas/BlockTemplates.js';
+import type { TemplateBlock, PersistentLayerConfig, DocBlock } from '../schemas/BlockTemplates.js';
 import type { Theme } from '../schemas/Theme.js';
 import type { ViewportConfig } from '../schemas/Viewport.js';
 import { VIEWPORT_PRESETS } from '../schemas/Viewport.js';
 import { createTemplateContext, isTemplateBlock } from '../schemas/BlockTemplates.js';
 import { DEFAULT_THEME } from '../schemas/themeLibrary.js';
-import { templateRegistry, resolveTemplateName } from './templates/index.js';
-import { coerceTemplateParams } from './templates/inputDescriptors.js';
+import {
+  materializeTemplateLayers,
+  templateRegistry,
+  type RuntimeTemplateRegistry,
+} from './templates/index.js';
 import { expandPersistentLayers, wrapWithPersistentLayers } from './templates/persistentLayers.js';
 import { applyRenderStyleToLayers } from './utils/applyRenderStyle.js';
 import { fallbackBlockLayers } from './templates/fallbackBlock.js';
+import { cloneData } from '../internal/immutable.js';
 
 // ============================================
 // RenderContext
@@ -98,77 +97,38 @@ export function getLayers(block: DocBlock, context: RenderContext = {}): Layer[]
   // 1. Raw block path: block already has pre-computed layers
   const existingLayers = (block as Block).layers;
   if (existingLayers && existingLayers.length > 0 && !isTemplateBlock(block)) {
-    return injectPersistentLayers(existingLayers, block, context);
+    return injectPersistentLayers(cloneData(existingLayers), block, context);
   }
 
-  // 2. Template path: look up and call the template function.
-  //
-  // Resolve through TEMPLATE_ALIASES so legacy ids (`titleBlock`,
-  // `quoteBlock`, `mapBlock`, `listBlock`) hit the registry by their
-  // canonical short names. Without this the block-section path renders
-  // an empty SVG card: `hasTemplate()` accepts the alias (so
-  // `isAnnotatedBlock` returns true and the card wrapper renders), but
-  // a raw `block.template in templateRegistry` check below misses it
-  // and the layer list comes back empty.
+  // 2. Template path: use the same materializer as expandDocBlocks so alias
+  // resolution, input coercion, output ownership, and failure semantics cannot
+  // drift between on-demand and timed rendering.
   if (isTemplateBlock(block)) {
-    const resolved = resolveTemplateName(block.template);
     const templateCtx = createTemplateContext(theme, blockIndex, totalBlocks, viewport);
-    if (resolved in templateRegistry) {
-      const templateName = resolved as keyof typeof templateRegistry;
-      // Aggregate templates (e.g. `diagram`) consume the block's children.
-      const maybeChildren = (block as Block).children;
-      if (maybeChildren && maybeChildren.length > 0) {
-        templateCtx.children = maybeChildren;
-      }
-      // Effective template input: the block's own fields, then structured
-      // body data (```json data fences, GFM tables), then `{[…]}` string
-      // overrides — the same merge order buildPreviewDoc uses. Inline overrides
-      // are coerced to their typed shape (`center="47.6,-122.3"` → `{lat,lng}`,
-      // `zoom=9` → `9`) so pure-inline annotations render without any change to
-      // the template functions. `block.templateOverrides` itself stays raw
-      // strings for lossless round-tripping — only this ephemeral input is coerced.
-      const { templateData, templateOverrides } = block as Block;
-      const input =
-        templateData || templateOverrides
-          ? ({
-              ...block,
-              ...templateData,
-              ...coerceTemplateParams(block.template, templateOverrides ?? {}).input,
-            } as TemplateBlock)
-          : block;
-      let layers: Layer[];
-      try {
-        // Each registry entry accepts its specific TemplateBlock variant; the
-        // discriminated union guarantees the shapes match at runtime.
-        const templateFn = templateRegistry[templateName] as (
-          input: TemplateBlock,
-          ctx: TemplateContext,
-        ) => Layer[];
-        layers = templateFn(input, templateCtx);
-        if (!Array.isArray(layers)) {
-          console.warn(`Template ${templateName} did not return an array, got:`, typeof layers);
-          layers = fallbackBlockLayers(block, templateCtx, `Template "${block.template}" failed`);
-        }
-      } catch (err: unknown) {
-        console.warn(`Error expanding template ${templateName}:`, err);
-        layers = fallbackBlockLayers(block, templateCtx, `Template "${block.template}" failed`);
-      }
-
-      // Theme motion defaults apply to template-generated layers only
-      // (mirrors expandDocBlocks — the two paths must agree).
-      layers = applyRenderStyleToLayers(layers, block as Block, theme);
-
+    const materialized = materializeTemplateLayers(
+      block,
+      templateCtx,
+      templateRegistry as unknown as RuntimeTemplateRegistry,
+    );
+    if (materialized.status === 'ok') {
+      const layers = applyRenderStyleToLayers(materialized.layers, block as Block, theme);
       return injectPersistentLayers(layers, block, context);
     }
 
-    // Unknown template — graceful-degradation guarantee: render the
-    // block's heading + body text as a plain card with a visible notice
-    // instead of a blank slide.
-    return injectPersistentLayers(
-      fallbackBlockLayers(block, templateCtx, `Unknown template "${block.template}"`),
-      block,
-      context,
-    );
+    if (materialized.status === 'invalid-result') {
+      console.warn(
+        `Template ${block.template} did not return an array, got:`,
+        materialized.receivedType,
+      );
+    } else if (materialized.status === 'error') {
+      console.warn(`Error expanding template ${block.template}:`, materialized.error);
+    }
+
+    const notice =
+      materialized.status === 'unknown-template'
+        ? `Unknown template "${block.template}"`
+        : `Template "${block.template}" failed`;
+    return injectPersistentLayers(fallbackBlockLayers(block, templateCtx, notice), block, context);
   }
 
   // 3. Fallback: no layers and no template requested

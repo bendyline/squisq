@@ -1,5 +1,10 @@
 export { applyTransform } from './applyTransform.js';
-export { registerTransformStyle, unregisterTransformStyle } from './registry.js';
+export {
+  registerTransformStyle,
+  unregisterTransformStyle,
+  createTransformStyleRegistry,
+} from './registry.js';
+export type { TransformStyleRegistry } from './registry.js';
 
 export {
   resolveTransformStyle,

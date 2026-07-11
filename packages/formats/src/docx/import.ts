@@ -48,6 +48,7 @@ import type {
 } from '@bendyline/squisq/markdown';
 
 import { openPackage, getPartXml, getPartBinary, getPartRelationships } from '../ooxml/reader.js';
+import type { OoxmlOpenOptions } from '../ooxml/reader.js';
 import type { OoxmlPackage, Relationship } from '../ooxml/types.js';
 import { NS_WML, NS_R } from '../ooxml/namespaces.js';
 import type { ContentContainer } from '@bendyline/squisq/storage';
@@ -68,7 +69,7 @@ import {
 /**
  * Options for DOCX import.
  */
-export interface DocxImportOptions {
+export interface DocxImportOptions extends OoxmlOpenOptions {
   /**
    * Whether to extract embedded images as base64 data URIs.
    * When false, images are represented as `[Image]` placeholders.
@@ -88,7 +89,7 @@ export async function docxToMarkdownDoc(
   data: ArrayBuffer | Blob,
   options: DocxImportOptions = {},
 ): Promise<MarkdownDocument> {
-  const pkg = await openPackage(data);
+  const pkg = await openPackage(data, options);
   const ctx = await buildImportContext(pkg, options);
 
   const documentXml = await getPartXml(pkg, 'word/document.xml');
@@ -138,7 +139,7 @@ export async function docxToContainer(
   data: ArrayBuffer | Blob,
   options: DocxImportOptions = {},
 ): Promise<ContentContainer> {
-  const pkg = await openPackage(data);
+  const pkg = await openPackage(data, options);
   const ctx = await buildImportContext(pkg, { ...options, extractImages: true });
 
   const documentXml = await getPartXml(pkg, 'word/document.xml');

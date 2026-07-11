@@ -6,7 +6,7 @@
  * and a one-sentence description so authors can quickly find the right layout.
  */
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import type { CustomTemplateDefinition } from '@bendyline/squisq/schemas';
 import { TEMPLATE_METADATA, resolveTemplateName } from '@bendyline/squisq/doc';
@@ -42,8 +42,54 @@ interface TemplateEntry {
  * clicks inside the gallery as "inside" in their outside-click handling.
  */
 export const TEMPLATE_GALLERY_PORTAL_ID = 'squisq-template-gallery-portal';
+/** Matches every gallery when multiple editor instances are mounted. */
+export const TEMPLATE_GALLERY_PORTAL_SELECTOR = '[data-squisq-template-gallery-portal]';
 
 const TEMPLATE_GALLERY_DIALOG_ID = 'squisq-template-gallery-dialog';
+
+type LegacyPortalSetter = (isLegacyOwner: boolean) => void;
+const galleryPortalOwners = new WeakMap<Document, Map<string, LegacyPortalSetter>>();
+
+function updateLegacyPortalOwner(owners: Map<string, LegacyPortalSetter>): void {
+  let first = true;
+  for (const setIsLegacyOwner of owners.values()) {
+    setIsLegacyOwner(first);
+    first = false;
+  }
+}
+
+/**
+ * Keep the original single-gallery id as a compatibility alias while giving
+ * every additional open gallery a stable, collision-free id. Ownership is
+ * elected after commit so concurrent React renders cannot both claim it; if
+ * the owner closes, the oldest remaining gallery is promoted.
+ */
+function useTemplateGalleryPortalId(): string {
+  const uniqueId = `${TEMPLATE_GALLERY_PORTAL_ID}-${useId().replace(/:/g, '')}`;
+  const [isLegacyOwner, setIsLegacyOwner] = useState(false);
+
+  useLayoutEffect(() => {
+    const ownerDocument = document;
+    let owners = galleryPortalOwners.get(ownerDocument);
+    if (!owners) {
+      owners = new Map();
+      galleryPortalOwners.set(ownerDocument, owners);
+    }
+    owners.set(uniqueId, setIsLegacyOwner);
+    updateLegacyPortalOwner(owners);
+
+    return () => {
+      owners?.delete(uniqueId);
+      if (!owners || owners.size === 0) {
+        galleryPortalOwners.delete(ownerDocument);
+      } else {
+        updateLegacyPortalOwner(owners);
+      }
+    };
+  }, [uniqueId]);
+
+  return isLegacyOwner ? TEMPLATE_GALLERY_PORTAL_ID : uniqueId;
+}
 
 const W = 56;
 const H = 40;
@@ -419,14 +465,8 @@ export const TEMPLATE_ENTRIES: TemplateEntry[] = [
         <rect x={4} y={6} width={16} height={10} rx={2} fill={FA} opacity={0.85} />
         <rect x={36} y={6} width={16} height={10} rx={2} fill={F2} opacity={0.8} />
         <rect x={20} y={24} width={16} height={10} rx={2} fill={F2} opacity={0.8} />
-        <path
-          d="M 20 11 L 36 11"
-          stroke={FA}
-          strokeWidth={1.5}
-          fill="none"
-          opacity={0.7}
-          markerEnd="url(#tp-diagram-arrow)"
-        />
+        <path d="M 20 11 L 36 11" stroke={FA} strokeWidth={1.5} fill="none" opacity={0.7} />
+        <path d="M 36 11 L 32 8.5 L 32 13.5 Z" fill={FA} opacity={0.7} />
         <path
           d="M 12 16 C 12 22, 24 22, 24 24"
           stroke={FA}
@@ -587,6 +627,8 @@ export function TemplatePicker({
   const [dialogStyle, setDialogStyle] = useState<React.CSSProperties>({});
   const containerRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
+  const dialogRef = useRef<HTMLDivElement>(null);
+  const dialogId = `${TEMPLATE_GALLERY_DIALOG_ID}-${useId().replace(/:/g, '')}`;
 
   const updateDialogBounds = () => {
     if (!triggerRef.current) return;
@@ -604,7 +646,7 @@ export function TemplatePicker({
     const handler = (e: MouseEvent) => {
       const target = e.target as Node;
       const inTrigger = triggerRef.current?.contains(target);
-      const inDialog = document.getElementById(TEMPLATE_GALLERY_DIALOG_ID)?.contains(target);
+      const inDialog = dialogRef.current?.contains(target);
       if (!inTrigger && !inDialog) {
         setOpen(false);
       }
@@ -667,6 +709,8 @@ export function TemplatePicker({
   const gallery = open
     ? createPortal(
         <TemplateGalleryDialog
+          dialogRef={dialogRef}
+          dialogId={dialogId}
           title={dialogTitle}
           colorScheme={colorScheme}
           style={dialogStyle}
@@ -694,6 +738,7 @@ export function TemplatePicker({
         onClick={handleOpen}
         aria-haspopup="dialog"
         aria-expanded={open}
+        aria-controls={open ? dialogId : undefined}
         title="Choose block type"
       >
         <span className="squisq-template-picker-trigger-label">Block:</span>
@@ -728,12 +773,16 @@ export function TemplatePicker({
 // ── Reusable gallery body ──────────────────────────────────────────
 
 function TemplateGalleryDialog({
+  dialogRef,
+  dialogId,
   children,
   title,
   colorScheme,
   style,
   onClose,
 }: {
+  dialogRef: React.RefObject<HTMLDivElement>;
+  dialogId: string;
   children: React.ReactNode;
   title: string;
   colorScheme: 'light' | 'dark';
@@ -742,7 +791,8 @@ function TemplateGalleryDialog({
 }) {
   return (
     <div
-      id={TEMPLATE_GALLERY_DIALOG_ID}
+      ref={dialogRef}
+      id={dialogId}
       className="squisq-template-gallery-dialog"
       data-theme={colorScheme}
       style={style}
@@ -854,6 +904,7 @@ function TemplateGalleryBody({
   onOpenDesigner?: () => void;
   previewSource?: TemplatePreviewSource;
 }) {
+  const galleryId = useTemplateGalleryPortalId();
   const [query, setQuery] = useState('');
   const searchRef = useRef<HTMLInputElement>(null);
   // Pull merged doc + library templates from the surrounding context.
@@ -915,7 +966,8 @@ function TemplateGalleryBody({
 
   return (
     <div
-      id={TEMPLATE_GALLERY_PORTAL_ID}
+      id={galleryId}
+      data-squisq-template-gallery-portal=""
       className={`squisq-template-gallery${grouped ? ' squisq-template-gallery--segmented' : ''}`}
       role="listbox"
       aria-label="Block types"
@@ -1175,10 +1227,13 @@ export function TemplateBadgePopover({
   previewSource,
 }: TemplateBadgePopoverProps) {
   const [style, setStyle] = useState<React.CSSProperties>(() => computeDialogStyle(anchorRect));
+  const dialogRef = useRef<HTMLDivElement>(null);
+  const dialogId = `${TEMPLATE_GALLERY_DIALOG_ID}-${useId().replace(/:/g, '')}`;
 
   // Reposition once after mount so the dialog covers the current editor shell.
   useEffect(() => {
-    requestAnimationFrame(() => setStyle(computeDialogStyle(anchorRect)));
+    const frame = requestAnimationFrame(() => setStyle(computeDialogStyle(anchorRect)));
+    return () => cancelAnimationFrame(frame);
   }, [anchorRect]);
 
   // Outside click + Escape close
@@ -1188,7 +1243,7 @@ export function TemplateBadgePopover({
     };
     const onMouse = (e: MouseEvent) => {
       const target = e.target as Node;
-      const inDialog = document.getElementById(TEMPLATE_GALLERY_DIALOG_ID)?.contains(target);
+      const inDialog = dialogRef.current?.contains(target);
       if (!inDialog) onClose();
     };
     // Defer the mousedown listener by one frame so the click that opened
@@ -1213,6 +1268,8 @@ export function TemplateBadgePopover({
 
   return createPortal(
     <TemplateGalleryDialog
+      dialogRef={dialogRef}
+      dialogId={dialogId}
       title={dialogTitle}
       colorScheme={colorScheme}
       style={style}
@@ -1273,9 +1330,6 @@ function findEditorShellRect(anchor: Element | DOMRect): DOMRect {
       if (shell) return shell.getBoundingClientRect();
     }
   }
-
-  const fallback = document.querySelector('.squisq-editor-shell');
-  if (fallback) return fallback.getBoundingClientRect();
 
   return new DOMRect(0, 0, window.innerWidth, window.innerHeight);
 }

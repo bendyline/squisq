@@ -8,7 +8,9 @@ import { describe, it, expect } from 'vitest';
 import JSZip from 'jszip';
 import { parseMarkdown } from '@bendyline/squisq/markdown';
 import { markdownToDoc } from '@bendyline/squisq/doc';
+import { MemoryContentContainer } from '@bendyline/squisq/storage';
 import { convert, ConversionError, defaultRegistry } from '../registry/index';
+import { zipToContainer } from '../container/index';
 import { markdownDocToPptx } from '../pptx/export';
 import { buildThemedPptx } from './pptxInferFixtures';
 
@@ -42,6 +44,70 @@ describe('convert error paths', () => {
     await expect(
       convert({ kind: 'markdown', markdown: '# hi' }, 'importonly', { registry }),
     ).rejects.toMatchObject({ name: 'ConversionError', code: 'unsupported-output' });
+  });
+
+  it('normalizes importer failures to ConversionError', async () => {
+    const promise = convert({ kind: 'bytes', data: new TextEncoder().encode('not a zip') }, 'md', {
+      from: 'docx',
+    });
+    await expect(promise).rejects.toMatchObject({
+      name: 'ConversionError',
+      code: 'invalid-input',
+      format: 'docx',
+    });
+  });
+});
+
+describe('format option threading', () => {
+  it('threads CSV tableIndex and delimiter through the conversion facade', async () => {
+    const markdown =
+      '| A | B |\n|---|---|\n| first | row |\n\n| C | D |\n|---|---|\n| second | row |\n';
+    const result = await convert({ kind: 'markdown', markdown }, 'csv', {
+      formatOptions: { csv: { tableIndex: 1, delimiter: ';' } },
+    });
+    expect(new TextDecoder().decode(result.bytes)).toBe('C;D\r\nsecond;row');
+    expect(result.warnings).toEqual([]);
+  });
+
+  it('honors Markdown parse options for direct Markdown sources', async () => {
+    let captured: import('../registry/index').NormalizedInput | undefined;
+    const registry = defaultRegistry();
+    registry.register({
+      id: 'capture-md-options',
+      label: 'Capture Markdown Options',
+      mimeType: 'application/x-capture',
+      extensions: ['.capture'],
+      async exportDoc(input) {
+        captured = input;
+        return {
+          bytes: new Uint8Array(),
+          mimeType: 'application/x-capture',
+          suggestedFilename: '',
+          warnings: [],
+        };
+      },
+    });
+
+    await convert(
+      { kind: 'markdown', markdown: '---\ntitle: Hidden metadata\n---\n\n# Body' },
+      'capture-md-options',
+      {
+        registry,
+        formatOptions: { md: { parse: { frontmatter: false } } },
+      },
+    );
+
+    expect(captured?.markdownDoc?.frontmatter).toBeUndefined();
+  });
+
+  it('threads archive safety limits into OOXML importers', async () => {
+    const docx = await convert({ kind: 'markdown', markdown: '# Limited' }, 'docx');
+    await expect(
+      convert({ kind: 'bytes', data: docx.bytes }, 'md', {
+        from: 'docx',
+        formatOptions: { docx: { maxEntries: 1 } },
+      }),
+    ).rejects.toMatchObject({ code: 'invalid-input', format: 'docx' });
   });
 });
 
@@ -95,6 +161,21 @@ describe('byte sniffing', () => {
     const back = await convert({ kind: 'bytes', data: dbk.bytes }, 'md');
     const text = new TextDecoder().decode(back.bytes);
     expect(text).toContain('In a container');
+  });
+
+  it('DBK export snapshots the supplied source instead of stale container markdown', async () => {
+    const container = new MemoryContentContainer();
+    await container.writeDocument('# Old');
+    await container.writeFile('asset.bin', new Uint8Array([1, 2, 3]));
+
+    const result = await convert({ kind: 'markdown', markdown: '# New', container }, 'dbk');
+    const restored = await zipToContainer(result.bytes);
+    expect(await restored.readDocument()).toContain('# New');
+    expect(new Uint8Array((await restored.readFile('asset.bin'))!)).toEqual(
+      new Uint8Array([1, 2, 3]),
+    );
+    // Snapshotting must not mutate the caller's container.
+    expect(await container.readDocument()).toBe('# Old');
   });
 
   it('disambiguates a docx zip via its content-types part', async () => {
@@ -180,6 +261,18 @@ describe('suggestedFilename', () => {
   it('defaults baseName to "document" when none is given', async () => {
     const out = await convert({ kind: 'markdown', markdown: '# t' }, 'md');
     expect(out.suggestedFilename).toBe('document.md');
+  });
+
+  it('uses only the basename for Windows-style input paths', async () => {
+    const out = await convert(
+      {
+        kind: 'bytes',
+        data: new TextEncoder().encode('# Windows'),
+        filename: 'C:\\docs\\report.md',
+      },
+      'md',
+    );
+    expect(out.suggestedFilename).toBe('report.md');
   });
 });
 

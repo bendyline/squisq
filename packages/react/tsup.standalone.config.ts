@@ -20,6 +20,10 @@ const pkg = JSON.parse(readFileSync(resolve(import.meta.dirname, 'package.json')
 export default defineConfig({
   entry: { 'squisq-player': 'src/standalone-entry.tsx' },
   format: ['iife'],
+  // Resolve conditional exports (notably vfile's path/process/url shims) for
+  // the runtime we actually ship. Leaving tsup's Node default here produces an
+  // IIFE with external Node built-ins and only hides the problem post-build.
+  platform: 'browser',
   globalName: 'SquisqPlayer',
   outDir: 'dist',
   // Bundle everything — no external dependencies

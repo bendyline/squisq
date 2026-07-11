@@ -11,7 +11,7 @@
  */
 
 import type { Theme, ThemeColorPalette } from './Theme.js';
-import { THEME_SCHEMA_VERSION } from './Theme.js';
+import { THEME_SCHEMA_VERSION } from './themeConstants.js';
 import { isHex } from './colorUtils.js';
 import { isTransitionType } from './Transitions.js';
 

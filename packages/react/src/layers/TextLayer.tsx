@@ -16,7 +16,7 @@
  *    PDF bypasses SVG) and already used by Video/Table layers.
  */
 
-import { useMemo, type CSSProperties } from 'react';
+import { useId, useMemo, type CSSProperties } from 'react';
 import type { TextLayer as TextLayerType } from '@bendyline/squisq/schemas';
 import { DEFAULT_DOC_FONT } from '@bendyline/squisq/schemas';
 import {
@@ -165,6 +165,7 @@ function IconTextLayer({ layer, viewport, blockTime }: TextLayerProps) {
 }
 
 function PlainTextLayer({ layer, viewport, blockTime }: TextLayerProps) {
+  const defsId = `${useId().replace(/:/g, '')}-${layer.id}`;
   const { content, position, animation } = layer;
   const { text, style } = content;
 
@@ -225,7 +226,7 @@ function PlainTextLayer({ layer, viewport, blockTime }: TextLayerProps) {
   };
 
   // Add shadow filter if requested
-  const filterId = style.shadow ? `shadow-${layer.id}` : undefined;
+  const filterId = style.shadow ? `shadow-${defsId}` : undefined;
 
   return (
     <g className={`block-layer block-layer--text ${animStyle.className}`} data-layer-id={layer.id}>
@@ -244,7 +245,7 @@ function PlainTextLayer({ layer, viewport, blockTime }: TextLayerProps) {
           rectangle. Without a box we fall back to a snug rect hugging the
           text (legacy behavior for point-anchored text). */}
       <TextBox
-        layerId={layer.id}
+        layerId={defsId}
         style={style}
         box={
           boxWidth != null && boxHeight != null

@@ -18,7 +18,12 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 import type { Doc } from '@bendyline/squisq/schemas';
 import type { MediaProvider } from '@bendyline/squisq/schemas';
-import type { VideoQuality, VideoOrientation, AudioTimelineClip } from '@bendyline/squisq-video';
+import type {
+  VideoQuality,
+  VideoOrientation,
+  AudioTimelineClip,
+  FfmpegWasmLoadConfig,
+} from '@bendyline/squisq-video';
 import { resolveDimensions, computeAudioTimeline, QUALITY_PRESETS } from '@bendyline/squisq-video';
 import type { CaptionMode } from '@bendyline/squisq-react';
 import {
@@ -107,6 +112,8 @@ export interface VideoExportConfig {
   captionMode?: CaptionMode;
   /** Player IIFE bundle (unused in browser export, kept for CLI/Playwright path) */
   playerScript?: string;
+  /** Optional self-hosted ffmpeg.wasm core URLs for fallback/offline/CSP use. */
+  ffmpegWasm?: FfmpegWasmLoadConfig;
 }
 
 export interface VideoExportResult {
@@ -246,9 +253,9 @@ export function useVideoExport(): VideoExportResult {
       const quality = config.quality ?? 'normal';
       const fps = config.fps ?? 30;
       const orientation = config.orientation ?? 'landscape';
-      const { width, height } = resolveDimensions({ orientation });
 
       try {
+        const { width, height } = resolveDimensions({ orientation, fps, quality });
         // ── Check browser support ─────────────────────────────────
         const webCodecsAvailable = supportsWebCodecs();
         const sharedArrayBufferAvailable = typeof SharedArrayBuffer !== 'undefined';
@@ -388,7 +395,13 @@ export function useVideoExport(): VideoExportResult {
           });
           setBackend('webcodecs');
         } else if (sharedArrayBufferAvailable) {
-          const workerEncoder = createWorkerEncoder({ width, height, fps, quality });
+          const workerEncoder = createWorkerEncoder({
+            width,
+            height,
+            fps,
+            quality,
+            ffmpegWasm: config.ffmpegWasm,
+          });
           encoder = workerEncoder;
           const selectedBackend = await workerEncoder.ready;
           setBackend(selectedBackend);
@@ -443,7 +456,7 @@ export function useVideoExport(): VideoExportResult {
           }
 
           // Encode immediately — WebCodecs is fast and async internally
-          encoder.encodeFrame(bitmap, i);
+          await encoder.encodeFrame(bitmap, i);
         }
 
         if (cancelledRef.current) return;
@@ -486,7 +499,12 @@ export function useVideoExport(): VideoExportResult {
             const wav = audioBufferToWav(renderedAudio);
             const videoOnly =
               outputBytes instanceof Uint8Array ? outputBytes : new Uint8Array(outputBytes);
-            outputBytes = await muxAudioWithFfmpegWasm(videoOnly, wav, audioBitrate);
+            outputBytes = await muxAudioWithFfmpegWasm(
+              videoOnly,
+              wav,
+              audioBitrate,
+              config.ffmpegWasm,
+            );
             audioIncludedLocal = true;
           } catch (audioErr: unknown) {
             audioIncludedLocal = false;

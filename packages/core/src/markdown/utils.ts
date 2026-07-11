@@ -126,6 +126,17 @@ export function parseFrontmatter(yaml: string): Record<string, unknown> | null {
   const result: Record<string, unknown> = {};
   const lines = yaml.split('\n');
 
+  // Define keys as data properties so a frontmatter key named `__proto__`
+  // cannot invoke Object.prototype's legacy setter.
+  const assign = (key: string, value: unknown): void => {
+    Object.defineProperty(result, key, {
+      value,
+      enumerable: true,
+      configurable: true,
+      writable: true,
+    });
+  };
+
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
     const trimmed = line.trim();
@@ -135,7 +146,7 @@ export function parseFrontmatter(yaml: string): Record<string, unknown> | null {
     if (colonIdx < 1) continue;
 
     const key = trimmed.slice(0, colonIdx).trim();
-    let value: string | boolean | number = trimmed.slice(colonIdx + 1).trim();
+    const value = trimmed.slice(colonIdx + 1).trim();
 
     // YAML literal block scalar: `key: |` or `key: |-`. Subsequent lines
     // that are more-indented than the key belong to the scalar; they are
@@ -172,27 +183,37 @@ export function parseFrontmatter(yaml: string): Record<string, unknown> | null {
         commonIndent = Math.min(commonIndent, bl.length - bl.trimStart().length);
       }
       if (!isFinite(commonIndent)) commonIndent = 0;
-      result[key] = blockLines.map((bl) => (bl === '' ? '' : bl.slice(commonIndent))).join('\n');
+      assign(key, blockLines.map((bl) => (bl === '' ? '' : bl.slice(commonIndent))).join('\n'));
       continue;
     }
 
-    // Remove surrounding quotes
-    if (
-      (value.startsWith('"') && value.endsWith('"')) ||
-      (value.startsWith("'") && value.endsWith("'"))
-    ) {
-      value = value.slice(1, -1);
+    // Quoted scalars are always strings, even when their contents look like a
+    // number or boolean. Double-quoted values emitted by
+    // formatFrontmatterValue use JSON-compatible escaping; single-quoted YAML
+    // represents a literal quote as two consecutive quotes.
+    if (value.startsWith('"') && value.endsWith('"')) {
+      try {
+        assign(key, JSON.parse(value));
+      } catch {
+        // Be permissive for hand-authored YAML outside our formatter's subset.
+        assign(key, value.slice(1, -1));
+      }
+      continue;
+    }
+    if (value.startsWith("'") && value.endsWith("'")) {
+      assign(key, value.slice(1, -1).replace(/''/g, "'"));
+      continue;
     }
 
     // Parse booleans and numbers
     if (value === 'true') {
-      result[key] = true;
+      assign(key, true);
     } else if (value === 'false') {
-      result[key] = false;
+      assign(key, false);
     } else if (value !== '' && !isNaN(Number(value))) {
-      result[key] = Number(value);
+      assign(key, Number(value));
     } else {
-      result[key] = value;
+      assign(key, value);
     }
   }
 
@@ -217,7 +238,7 @@ export function formatBlockScalar(value: string): string {
 const FRONTMATTER_BLOCK_RE = /^---\r?\n([\s\S]*?)\r?\n---(\r?\n)?/;
 
 /** Quote a frontmatter scalar so it round-trips cleanly through `parseFrontmatter`. */
-function formatFrontmatterValue(value: string | number | boolean): string {
+export function formatFrontmatterValue(value: string | number | boolean): string {
   if (typeof value === 'boolean' || typeof value === 'number') return String(value);
   // Multi-line strings can't live on one line — emit a YAML literal block
   // scalar (`|-`) that `parseFrontmatter` reads back. This carries pretty-
@@ -239,7 +260,8 @@ function formatFrontmatterValue(value: string | number | boolean): string {
     value === '' ||
     value === 'true' ||
     value === 'false' ||
-    /^-?\d+(\.\d+)?$/.test(value);
+    (value !== '' && !Number.isNaN(Number(value))) ||
+    (/^["']/.test(value) && /["']$/.test(value));
   if (!needsQuote) return value;
   // Prefer double quotes; escape any embedded double-quote / backslash.
   const escaped = value.replace(/\\/g, '\\\\').replace(/"/g, '\\"');

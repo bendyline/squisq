@@ -1,11 +1,26 @@
 import { describe, it, expect } from 'vitest';
 import {
+  escapePointerSegment,
+  appendPointer,
   toPointer,
   pointerSegments,
   getByPointer,
   setByPointer,
   resolveRef,
 } from '../jsonForm/index.js';
+
+describe('pointer composition', () => {
+  it('escapes arbitrary member names and appends them safely', () => {
+    expect(escapePointerSegment('a~/b')).toBe('a~0~1b');
+    expect(appendPointer('/properties', 'a~/b')).toBe('/properties/a~0~1b');
+    expect(appendPointer('', '')).toBe('/');
+    expect(appendPointer('/', 'child')).toBe('//child');
+  });
+
+  it('validates an explicit base pointer before appending', () => {
+    expect(() => appendPointer('/bad~2base', 'child')).toThrow(/Invalid JSON Pointer/);
+  });
+});
 
 describe('toPointer', () => {
   it('keeps pointer-form paths intact', () => {
@@ -18,12 +33,17 @@ describe('toPointer', () => {
   });
   it('returns empty for root', () => {
     expect(toPointer('')).toBe('');
-    expect(toPointer('/')).toBe('');
+    expect(toPointer('/')).toBe('/');
   });
   it('escapes ~ and / per RFC 6901', () => {
     // dotted form does not allow / inside a segment; we test pointer-form decoding instead.
     expect(pointerSegments('/a~1b')).toEqual(['a/b']);
     expect(pointerSegments('/a~0b')).toEqual(['a~b']);
+  });
+  it('rejects malformed pointer syntax and escape sequences', () => {
+    expect(() => pointerSegments('not/a/pointer')).toThrow(/Invalid JSON Pointer/);
+    expect(() => pointerSegments('/bad~2escape')).toThrow(/Invalid JSON Pointer/);
+    expect(() => pointerSegments('/dangling~')).toThrow(/Invalid JSON Pointer/);
   });
 });
 
@@ -42,6 +62,13 @@ describe('getByPointer', () => {
   });
   it('returns the data itself for empty pointer', () => {
     expect(getByPointer(data, '')).toBe(data);
+  });
+  it('treats "/" as the empty-string member per RFC 6901', () => {
+    expect(getByPointer({ '': 'empty key' }, '/')).toBe('empty key');
+  });
+  it('requires canonical array indices', () => {
+    expect(getByPointer({ values: ['a'] }, '/values/00')).toBeUndefined();
+    expect(getByPointer({ values: ['a'] }, '/values/-')).toBeUndefined();
   });
 });
 
@@ -74,6 +101,25 @@ describe('setByPointer', () => {
     const after = setByPointer(before, '/a/b/1/c', 42);
     expect(getByPointer(after, '/a/b/1/c')).toBe(42);
     expect(getByPointer(after, '/a/b/0/c')).toBe(1);
+  });
+  it('writes the empty-string member for "/"', () => {
+    expect(setByPointer({}, '/', 'value')).toEqual({ '': 'value' });
+  });
+  it('rejects non-canonical array indices instead of creating NaN properties', () => {
+    expect(() => setByPointer({ items: [] }, '/items/nope', 'x')).toThrow(/array index/i);
+    expect(() => setByPointer({ items: [] }, '/items/01', 'x')).toThrow(/array index/i);
+  });
+  it('writes prototype-shaped keys as safe own data properties', () => {
+    const before = {};
+    const after = setByPointer(before, '/__proto__/polluted', true) as Record<string, unknown>;
+    expect(Object.getPrototypeOf(after)).toBe(Object.prototype);
+    expect(Object.prototype).not.toHaveProperty('polluted');
+    expect(Object.prototype.hasOwnProperty.call(after, '__proto__')).toBe(true);
+    expect(getByPointer(after, '/__proto__/polluted')).toBe(true);
+
+    const constructorPath = setByPointer({}, '/constructor/prototype/polluted', true);
+    expect(getByPointer(constructorPath, '/constructor/prototype/polluted')).toBe(true);
+    expect(Object.prototype).not.toHaveProperty('polluted');
   });
 });
 

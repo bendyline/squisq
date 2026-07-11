@@ -40,6 +40,7 @@ import {
   type AsciiDiagram,
 } from '@bendyline/squisq/doc';
 import { AsciiDiagramWidget } from './AsciiDiagramWidget';
+import type { SceneTextChannel } from '../scene/text/sceneTextChannel';
 
 export interface AsciiDiagramBlockEntry {
   /** Synthetic session id (`ascii-N`), stable across edits for one block. */
@@ -136,6 +137,7 @@ function buildDecorations(
   entries: AsciiDiagramBlockEntry[],
   sourceVisible: ReadonlySet<string>,
   editor: Editor,
+  textChannel?: SceneTextChannel,
 ): DecorationSet {
   const decos: Decoration[] = [];
   for (const entry of entries) {
@@ -165,6 +167,7 @@ function buildDecorations(
               blockId,
               fallbackPos,
               host: view.dom.parentElement ?? view.dom,
+              textChannel,
             }),
           );
           (container as HTMLElement & { __squisqAsciiRoot?: WidgetRootRef }).__squisqAsciiRoot = {
@@ -194,6 +197,7 @@ function applyState(
   prev: AsciiDiagramPluginState,
   editor: Editor,
   doc: PMNode,
+  textChannel?: SceneTextChannel,
 ): AsciiDiagramPluginState {
   const meta = tr.getMeta(ASCII_DIAGRAM_KEY) as { toggleSource?: string } | undefined;
   let sourceVisible = prev.sourceVisible;
@@ -209,7 +213,7 @@ function applyState(
     return {
       ...prev,
       sourceVisible,
-      decorations: buildDecorations(doc, prev.entries, sourceVisible, editor),
+      decorations: buildDecorations(doc, prev.entries, sourceVisible, editor, textChannel),
     };
   }
 
@@ -262,13 +266,14 @@ function applyState(
     entries,
     seq,
     sourceVisible: prunedSourceVisible,
-    decorations: buildDecorations(doc, entries, prunedSourceVisible, editor),
+    decorations: buildDecorations(doc, entries, prunedSourceVisible, editor, textChannel),
   };
 }
 
 export interface AsciiDiagramExtensionOptions {
   /** When false, the extension is inert (no widgets, no decorations). */
   enabled?: boolean;
+  textChannel?: SceneTextChannel;
 }
 
 export const AsciiDiagramExtension = Extension.create<AsciiDiagramExtensionOptions>({
@@ -301,10 +306,17 @@ export const AsciiDiagramExtension = Extension.create<AsciiDiagramExtensionOptio
               entries,
               seq,
               sourceVisible: new Set<string>(),
-              decorations: buildDecorations(state.doc, entries, new Set(), editor),
+              decorations: buildDecorations(
+                state.doc,
+                entries,
+                new Set(),
+                editor,
+                this.options.textChannel,
+              ),
             };
           },
-          apply: (tr, prev, _oldState, newState) => applyState(tr, prev, editor, newState.doc),
+          apply: (tr, prev, _oldState, newState) =>
+            applyState(tr, prev, editor, newState.doc, this.options.textChannel),
         },
         props: {
           decorations(state) {

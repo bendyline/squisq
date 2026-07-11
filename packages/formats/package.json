@@ -99,6 +99,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@xmldom/xmldom": "0.9.10",
     "@bendyline/squisq": "1.5.2",
     "jszip": "3.10.1",
     "pdf-lib": "1.17.1",

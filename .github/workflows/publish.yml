@@ -45,6 +45,9 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Run allowlisted install scripts
+        run: node scripts/run-install-allowlist.mjs
+
       # `npm run build` builds every workspace package *including the
       # site*, so a broken consumer like `squisq-site` fails this step
       # before semantic-release can publish a broken npm version.
@@ -54,11 +57,20 @@ jobs:
       - name: Unit tests
         run: npm test
 
+      - name: Published-package contract tests
+        run: npm run test:published
+
+      - name: CLI tests
+        run: npm run test:cli
+
       - name: Typecheck
         run: npm run typecheck
 
       - name: Lint
         run: npm run lint
+
+      - name: Check formatting
+        run: npm run format:check
 
       # ── Release ──────────────────────────────────────────────────
       # The npm plugin creates each tarball after applying that package's next

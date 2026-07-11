@@ -102,4 +102,16 @@ describe('BlockRenderer', () => {
     const rect = container.querySelector('rect');
     expect(rect).toBeTruthy();
   });
+
+  it('namespaces SVG definitions per renderer instance', () => {
+    const { container } = render(
+      <>
+        <BlockRenderer block={minimalBlock} blockTime={0} basePath="/test" />
+        <BlockRenderer block={minimalBlock} blockTime={0} basePath="/test" />
+      </>,
+    );
+    const ids = Array.from(container.querySelectorAll('clipPath')).map((node) => node.id);
+    expect(ids).toHaveLength(2);
+    expect(new Set(ids).size).toBe(2);
+  });
 });

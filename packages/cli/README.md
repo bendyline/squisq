@@ -162,6 +162,24 @@ console.log(`Rendered ${result.frameCount} frames (${result.duration}s) → ${re
 
 The container's audio segments become the MP4's audio track; timed media clips and block videos found in the doc are embedded and mixed at their scheduled positions.
 
+### Native frame encoding
+
+For callers that already have PNG frames and do not need Playwright capture,
+the API exposes the native FFmpeg layer directly:
+
+```ts
+import { framesToMp4NativeBytes } from '@bendyline/squisq-cli/api';
+
+const mp4 = await framesToMp4NativeBytes('/usr/bin/ffmpeg', pngFrames, audioBytes, {
+  fps: 30,
+  quality: 'high',
+});
+```
+
+`framesToMp4Native(...)` writes to a caller-supplied output path; the `Bytes`
+variant returns a `Uint8Array`. Both pad short audio with silence so narration
+cannot truncate the video timeline.
+
 ### `extractThumbnails`
 
 Extract JPEG thumbnails from the first frame of a rendered video:

@@ -17,6 +17,7 @@ import type {
   FrameMessage,
 } from './workerTypes.js';
 import { bitrateForQuality, ffmpegVideoQualityArgs } from '@bendyline/squisq-video';
+import type { FfmpegWasmLoadConfig } from '@bendyline/squisq-video';
 
 import { createMp4Muxer, type Mp4MuxerHandle } from '../mp4Mux.js';
 
@@ -49,6 +50,15 @@ function postProgress(percent: number, phase: string) {
 
 function postError(message: string) {
   post({ type: 'error', message });
+}
+
+function disposeFfmpeg(): void {
+  const instance = ffmpegInstance as { terminate?: () => void } | null;
+  try {
+    instance?.terminate?.();
+  } finally {
+    ffmpegInstance = null;
+  }
 }
 
 // ── Feature Detection ──────────────────────────────────────────────
@@ -153,17 +163,28 @@ async function finalizeWebCodecs() {
 async function initFfmpegWasm(config: InitMessage) {
   ffmpegConfig = config;
   ffmpegFrames = [];
+  ffmpegSegments.length = 0;
   totalFramesReceived = 0;
 
   // Lazy-load ffmpeg.wasm
+  let ffmpeg: {
+    load: (config?: FfmpegWasmLoadConfig) => Promise<unknown>;
+    terminate: () => void;
+  } | null = null;
   try {
     const { FFmpeg } = await import('@ffmpeg/ffmpeg');
-    const ffmpeg = new FFmpeg();
-    await ffmpeg.load();
+    ffmpeg = new FFmpeg();
+    await ffmpeg.load({
+      ...config.ffmpegWasm,
+      classWorkerURL:
+        config.ffmpegWasm?.classWorkerURL ??
+        new URL('./ffmpeg.class-worker.js', import.meta.url).href,
+    });
     ffmpegInstance = ffmpeg;
   } catch (err: unknown) {
+    ffmpeg?.terminate();
     const message = err instanceof Error ? err.message : String(err);
-    postError(
+    throw new Error(
       `Failed to load ffmpeg.wasm: ${message}. ` +
         'Ensure @ffmpeg/ffmpeg and @ffmpeg/util are installed and ' +
         'Cross-Origin-Isolation headers (COOP/COEP) are set.',
@@ -208,6 +229,14 @@ async function encodeFrameFfmpeg(msg: FrameMessage) {
 /** Segments already encoded as MP4 data. */
 const ffmpegSegments: Uint8Array[] = [];
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function execOrThrow(ffmpeg: any, args: string[], operation: string): Promise<void> {
+  const exitCode = await ffmpeg.exec(args);
+  if (exitCode !== 0) {
+    throw new Error(`${operation} failed with ffmpeg exit code ${exitCode}`);
+  }
+}
+
 async function encodeFfmpegBatch() {
   if (!ffmpegInstance || ffmpegFrames.length === 0 || cancelled) return;
 
@@ -228,22 +257,26 @@ async function encodeFfmpegBatch() {
   const segmentName = `segment_${batchIndex}.mp4`;
 
   // Encode batch to MP4 segment
-  await ffmpeg.exec([
-    '-framerate',
-    String(config.fps),
-    '-start_number',
-    String(firstIndex),
-    '-i',
-    `frame_%06d.png`,
-    '-frames:v',
-    String(ffmpegFrames.length),
-    '-c:v',
-    'libx264',
-    '-pix_fmt',
-    'yuv420p',
-    ...ffmpegVideoQualityArgs(config.quality),
-    segmentName,
-  ]);
+  await execOrThrow(
+    ffmpeg,
+    [
+      '-framerate',
+      String(config.fps),
+      '-start_number',
+      String(firstIndex),
+      '-i',
+      `frame_%06d.png`,
+      '-frames:v',
+      String(ffmpegFrames.length),
+      '-c:v',
+      'libx264',
+      '-pix_fmt',
+      'yuv420p',
+      ...ffmpegVideoQualityArgs(config.quality),
+      segmentName,
+    ],
+    `Encoding video segment ${batchIndex + 1}`,
+  );
 
   // Read segment and clean up frames
   const segmentData = await ffmpeg.readFile(segmentName);
@@ -286,17 +319,11 @@ async function finalizeFfmpeg() {
     }
     await ffmpeg.writeFile('concat.txt', new TextEncoder().encode(concatList.join('\n')));
 
-    await ffmpeg.exec([
-      '-f',
-      'concat',
-      '-safe',
-      '0',
-      '-i',
-      'concat.txt',
-      '-c',
-      'copy',
-      'output.mp4',
-    ]);
+    await execOrThrow(
+      ffmpeg,
+      ['-f', 'concat', '-safe', '0', '-i', 'concat.txt', '-c', 'copy', 'output.mp4'],
+      'Concatenating video segments',
+    );
 
     finalData = await ffmpeg.readFile('output.mp4');
 
@@ -318,74 +345,95 @@ async function finalizeFfmpeg() {
   post({ type: 'complete', data: sliced, size: sliced.byteLength }, [sliced]);
 
   // Clean up
-  ffmpegInstance = null;
+  disposeFfmpeg();
   ffmpegSegments.length = 0;
 }
 
 // ── Message Handler ────────────────────────────────────────────────
 
-self.onmessage = async (event: MessageEvent<MainToWorkerMessage>) => {
-  const msg = event.data;
+async function handleMessage(msg: MainToWorkerMessage): Promise<void> {
+  switch (msg.type) {
+    case 'init': {
+      cancelled = false;
+      totalFramesReceived = 0;
 
-  try {
-    switch (msg.type) {
-      case 'init': {
-        cancelled = false;
-        totalFramesReceived = 0;
-
-        if (await supportsWebCodecsH264(msg)) {
-          backend = 'webcodecs';
-          initWebCodecs(msg);
-        } else if (hasSharedArrayBuffer()) {
-          backend = 'ffmpeg-wasm';
-          await initFfmpegWasm(msg);
-        } else {
-          postError(
-            'No video encoding support available. ' +
-              'WebCodecs H.264 is unavailable (typical on Linux Chromium without proprietary codecs) ' +
-              'and ffmpeg.wasm requires SharedArrayBuffer (Cross-Origin-Isolation headers).',
-          );
-          return;
-        }
-
-        post({ type: 'capabilities', backend });
-        postProgress(0, 'Encoder ready');
-        break;
+      if (await supportsWebCodecsH264(msg)) {
+        backend = 'webcodecs';
+        initWebCodecs(msg);
+      } else if (hasSharedArrayBuffer()) {
+        backend = 'ffmpeg-wasm';
+        await initFfmpegWasm(msg);
+      } else {
+        throw new Error(
+          'No video encoding support available. ' +
+            'WebCodecs H.264 is unavailable (typical on Linux Chromium without proprietary codecs) ' +
+            'and ffmpeg.wasm requires SharedArrayBuffer (Cross-Origin-Isolation headers).',
+        );
       }
 
-      case 'frame': {
-        if (backend === 'webcodecs') {
-          await encodeFrameWebCodecs(msg);
-        } else if (backend === 'ffmpeg-wasm') {
-          await encodeFrameFfmpeg(msg);
-        }
-        break;
-      }
-
-      case 'finalize': {
-        if (backend === 'webcodecs') {
-          await finalizeWebCodecs();
-        } else if (backend === 'ffmpeg-wasm') {
-          await finalizeFfmpeg();
-        }
-        break;
-      }
-
-      case 'cancel': {
-        cancelled = true;
-        if (videoEncoder && videoEncoder.state !== 'closed') {
-          videoEncoder.close();
-          videoEncoder = null;
-        }
-        muxer = null;
-        ffmpegInstance = null;
-        ffmpegFrames = [];
-        ffmpegSegments.length = 0;
-        break;
-      }
+      post({ type: 'capabilities', backend });
+      postProgress(0, 'Encoder ready');
+      break;
     }
-  } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : String(err);
-    postError(message);
+
+    case 'frame': {
+      if (cancelled) {
+        msg.bitmap.close();
+        return;
+      }
+      if (backend === 'webcodecs') {
+        await encodeFrameWebCodecs(msg);
+      } else if (backend === 'ffmpeg-wasm') {
+        await encodeFrameFfmpeg(msg);
+      } else {
+        msg.bitmap.close();
+        throw new Error('Encoder received a frame before it was initialized');
+      }
+      post({ type: 'frame-complete', frameIndex: msg.frameIndex });
+      break;
+    }
+
+    case 'finalize': {
+      if (backend === 'webcodecs') {
+        await finalizeWebCodecs();
+      } else if (backend === 'ffmpeg-wasm') {
+        await finalizeFfmpeg();
+      } else {
+        throw new Error('Encoder cannot finalize before it is initialized');
+      }
+      break;
+    }
+
+    case 'cancel': {
+      if (videoEncoder && videoEncoder.state !== 'closed') {
+        videoEncoder.close();
+        videoEncoder = null;
+      }
+      muxer = null;
+      disposeFfmpeg();
+      ffmpegFrames = [];
+      ffmpegSegments.length = 0;
+      backend = null;
+      break;
+    }
   }
+}
+
+// MessageEvent callbacks are not implicitly serialized: an async frame handler
+// can still be running when finalize arrives. Keep one queue so frame ownership,
+// ffmpeg's virtual filesystem, and finalization have a single ordering boundary.
+let messageQueue: Promise<void> = Promise.resolve();
+
+self.onmessage = (event: MessageEvent<MainToWorkerMessage>) => {
+  const msg = event.data;
+  // Cancellation must become visible to the currently-running operation without
+  // waiting behind all queued frames. Cleanup itself remains ordered.
+  if (msg.type === 'cancel') cancelled = true;
+
+  messageQueue = messageQueue
+    .then(() => handleMessage(msg))
+    .catch((err: unknown) => {
+      const message = err instanceof Error ? err.message : String(err);
+      postError(message);
+    });
 };

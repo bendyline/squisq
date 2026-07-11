@@ -33,7 +33,11 @@ import type { editor as MonacoEditorNs } from 'monaco-editor';
 import { markdownToTiptap } from './tiptapBridge';
 import { resolveFileKind } from './fileKind';
 import { useBlockNavigator } from './useBlockNavigator';
-import { sceneTextChannel, type SceneTextHandle } from './scene/text/sceneTextChannel';
+import {
+  createSceneTextChannel,
+  type SceneTextChannel,
+  type SceneTextHandle,
+} from './scene/text/sceneTextChannel';
 
 /** Monaco standalone code editor instance type */
 type MonacoEditor = MonacoEditorNs.IStandaloneCodeEditor;
@@ -292,6 +296,8 @@ export interface EditorContextValue extends EditorState, EditorActions {
    * buttons apply (`inline` = marks only; `rich` = headings/lists too).
    */
   activeSceneText: SceneTextHandle | null;
+  /** Instance-owned bridge used by detached scene widget roots. */
+  sceneTextChannel: SceneTextChannel;
   /**
    * Workspace-scoped `ContentContainer` for this document — the folder
    * holding the doc, its `_files/` sidecar, sibling documents, and any
@@ -581,29 +587,31 @@ export function EditorProvider({
     useState<boolean>(effectiveInlinePreview);
   // Sync visibility when the host changes the prop (e.g., toggle from outside).
   useEffect(() => {
-    setInlinePreviewVisibleRaw(inlinePreview);
-  }, [inlinePreview]);
+    if (viewPreferences?.inlinePreview === undefined) setInlinePreviewVisibleRaw(inlinePreview);
+  }, [inlinePreview, viewPreferences?.inlinePreview]);
   const [statusBarVisible, setStatusBarVisibleRaw] = useState<boolean>(effectiveShowStatusBar);
   useEffect(() => {
-    setStatusBarVisibleRaw(showStatusBar);
-  }, [showStatusBar]);
+    if (viewPreferences?.showStatusBar === undefined) setStatusBarVisibleRaw(showStatusBar);
+  }, [showStatusBar, viewPreferences?.showStatusBar]);
   const [outlineVisible, setOutlineVisibleRaw] = useState<boolean>(effectiveOutline);
   useEffect(() => {
-    setOutlineVisibleRaw(outline);
-  }, [outline]);
+    if (viewPreferences?.outline === undefined) setOutlineVisibleRaw(outline);
+  }, [outline, viewPreferences?.outline]);
   const [blockTagsVisible, setBlockTagsVisibleRaw] = useState<boolean>(effectiveBlockTags);
   useEffect(() => {
-    setBlockTagsVisibleRaw(blockTags);
-  }, [blockTags]);
+    if (viewPreferences?.blockTags === undefined) setBlockTagsVisibleRaw(blockTags);
+  }, [blockTags, viewPreferences?.blockTags]);
   const [themeInheritanceState, setThemeInheritanceRaw] =
     useState<ThemeInheritance>(effectiveThemeInheritance);
   useEffect(() => {
-    setThemeInheritanceRaw(themeInheritance);
-  }, [themeInheritance]);
+    if (viewPreferences?.themeInheritance === undefined) {
+      setThemeInheritanceRaw(themeInheritance);
+    }
+  }, [themeInheritance, viewPreferences?.themeInheritance]);
   const [layoutModeState, setLayoutModeRaw] = useState<LayoutMode>(effectiveLayoutMode);
   useEffect(() => {
-    setLayoutModeRaw(layoutMode);
-  }, [layoutMode]);
+    if (viewPreferences?.layoutMode === undefined) setLayoutModeRaw(layoutMode);
+  }, [layoutMode, viewPreferences?.layoutMode]);
   const [imageEditTarget, setImageEditTarget] = useState<string | null>(null);
   const [mediaRevision, setMediaRevision] = useState(0);
   const openImageEdit = useCallback((relativePath: string) => {
@@ -732,7 +740,8 @@ export function EditorProvider({
   // SceneTextOverlay through a module channel, since the canvas renders in
   // a detached React root outside this provider) so the toolbar can target it.
   const [activeSceneText, setActiveSceneText] = useState<SceneTextHandle | null>(null);
-  useEffect(() => sceneTextChannel.subscribe(setActiveSceneText), []);
+  const sceneTextChannel = useMemo(createSceneTextChannel, []);
+  useEffect(() => sceneTextChannel.subscribe(setActiveSceneText), [sceneTextChannel]);
 
   const articleIdRef = useRef(articleId);
   articleIdRef.current = articleId;
@@ -744,6 +753,7 @@ export function EditorProvider({
 
   // Debounced parse on markdown source change
   const parseTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const skipInitialDebouncedParseRef = useRef(Boolean(initialMarkdown));
 
   const doParse = useCallback((source: string) => {
     setIsParsing(true);
@@ -778,9 +788,14 @@ export function EditorProvider({
   // parser on TypeScript / JSON / a binary image asset.
   useEffect(() => {
     if (editorMode !== 'markdown') return;
+    if (skipInitialDebouncedParseRef.current) {
+      skipInitialDebouncedParseRef.current = false;
+      return;
+    }
     if (parseTimeoutRef.current) {
       clearTimeout(parseTimeoutRef.current);
     }
+    setIsParsing(true);
     parseTimeoutRef.current = setTimeout(() => {
       doParse(markdownSource);
     }, 150);
@@ -996,6 +1011,7 @@ export function EditorProvider({
       tiptapEditor,
       monacoEditor,
       activeSceneText,
+      sceneTextChannel,
       workspaceContainer,
       versioning,
       saveVersion,
@@ -1050,6 +1066,7 @@ export function EditorProvider({
       tiptapEditor,
       monacoEditor,
       activeSceneText,
+      sceneTextChannel,
       workspaceContainer,
       versioning,
       saveVersion,

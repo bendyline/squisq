@@ -13,9 +13,10 @@
  * the props it receives so we can assert `monacoTheme` reaches it.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import type { RawEditorProps } from '../RawEditor';
 import type { MediaEntry, MediaProvider } from '@bendyline/squisq/schemas';
+import { useMediaProvider } from '@bendyline/squisq-react';
 
 // Records the props the shell passes to RawEditor on each render.
 const rawEditorProps: RawEditorProps[] = [];
@@ -40,6 +41,13 @@ import { Toolbar } from '../Toolbar';
 function MarkdownSourceProbe() {
   const { markdownSource } = useEditorContext();
   return <pre data-testid="markdown-source">{markdownSource}</pre>;
+}
+
+function MediaProviderProbe({ expected }: { expected: MediaProvider }) {
+  const provider = useMediaProvider();
+  return (
+    <span data-testid="media-context-probe">{provider === expected ? 'same' : 'missing'}</span>
+  );
 }
 
 function mediaProviderWith(count: number): MediaProvider {
@@ -181,6 +189,61 @@ describe('RawEditor monacoTheme prop', () => {
     expect(screen.getByTestId('raw-editor-stub')).toBeTruthy();
     const last = rawEditorProps[rawEditorProps.length - 1];
     expect(last?.monacoTheme).toBe('vs');
+  });
+});
+
+describe('<EditorShell> instance boundaries', () => {
+  it('provides its mediaProvider to React preview/layer consumers', async () => {
+    const provider = mediaProviderWith(0);
+    await act(async () => {
+      render(
+        <EditorShell
+          initialMarkdown="# hi"
+          initialView="raw"
+          mediaProvider={provider}
+          toolbarSlotLeft={<MediaProviderProbe expected={provider} />}
+        />,
+      );
+    });
+    expect(screen.getByTestId('media-context-probe').textContent).toBe('same');
+  });
+
+  it('keeps view shortcuts inside the editor that received the key', async () => {
+    const { container } = render(
+      <>
+        <EditorShell initialMarkdown="# first" initialView="raw" />
+        <EditorShell initialMarkdown="# second" initialView="raw" />
+      </>,
+    );
+    const shells = container.querySelectorAll<HTMLElement>('.squisq-editor-shell');
+    fireEvent.keyDown(within(shells[1]).getByTestId('raw-editor-stub'), {
+      key: '1',
+      ctrlKey: true,
+    });
+    await waitFor(() => expect(within(shells[1]).getByTestId('wysiwyg-editor-stub')).toBeTruthy());
+    expect(within(shells[0]).getByTestId('raw-editor-stub')).toBeTruthy();
+  });
+
+  it('ignores file drops in readOnly mode', async () => {
+    const { container } = render(
+      <EditorShell
+        initialMarkdown="# original"
+        initialView="raw"
+        readOnly
+        toolbarSlotRight={<MarkdownSourceProbe />}
+      />,
+    );
+    const shell = container.querySelector<HTMLElement>('.squisq-editor-shell')!;
+    const file = new File(['# replacement'], 'replacement.md', { type: 'text/markdown' });
+    fireEvent.drop(shell, {
+      dataTransfer: {
+        types: ['Files'],
+        files: [file],
+        items: [{ kind: 'file', type: 'text/markdown', getAsFile: () => file }],
+      },
+    });
+    await act(async () => Promise.resolve());
+    expect(screen.getByTestId('markdown-source').textContent).toBe('# original');
   });
 });
 

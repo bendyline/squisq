@@ -5,12 +5,36 @@
  * structural metadata: [Content_Types].xml, relationships, and
  * core properties.
  *
- * Uses JSZip to unzip and the browser's DOMParser to parse XML.
+ * Uses JSZip to unzip and a platform DOMParser (with an xmldom fallback in
+ * bare Node/SSR) to parse XML.
  */
 
 import JSZip from 'jszip';
+import { DOMParser as XmldomDOMParser } from '@xmldom/xmldom';
 import type { OoxmlPackage, ContentTypeMap, Relationship, CoreProperties } from './types.js';
 import { NS_RELATIONSHIPS, NS_DC, NS_DCTERMS, NS_CORE_PROPERTIES } from './namespaces.js';
+import { validateZipArchive, type ZipSafetyLimits } from '../shared/zipSafety.js';
+
+export type OoxmlOpenOptions = ZipSafetyLimits;
+
+type DomParserLike = new () => {
+  parseFromString(source: string, mimeType: string): unknown;
+};
+
+/**
+ * Parse XML in browsers and bare Node. Browser DOMParser is preferred; the
+ * pure-JS xmldom implementation is the package-owned fallback for Node/SSR.
+ */
+function parseXml(source: string): Document {
+  const nativeParser = (globalThis as { DOMParser?: DomParserLike }).DOMParser;
+  const Parser = nativeParser ?? (XmldomDOMParser as unknown as DomParserLike);
+  const doc = new Parser().parseFromString(source, 'application/xml') as Document;
+  const parserErrors = doc.getElementsByTagName('parsererror');
+  if (parserErrors.length > 0) {
+    throw new Error(`Invalid OOXML XML part: ${parserErrors[0]?.textContent ?? 'parse error'}`);
+  }
+  return doc;
+}
 
 // ============================================
 // Package Opening
@@ -22,10 +46,15 @@ import { NS_RELATIONSHIPS, NS_DC, NS_DCTERMS, NS_CORE_PROPERTIES } from './names
  * Parses the ZIP archive, [Content_Types].xml, and root relationships.
  *
  * @param data - The raw .docx/.pptx/.xlsx file as ArrayBuffer or Blob
+ * @param limits - Optional archive entry and uncompressed-size limits
  * @returns A parsed OoxmlPackage
  */
-export async function openPackage(data: ArrayBuffer | Blob): Promise<OoxmlPackage> {
+export async function openPackage(
+  data: ArrayBuffer | Blob,
+  limits: OoxmlOpenOptions = {},
+): Promise<OoxmlPackage> {
   const zip = await JSZip.loadAsync(data);
+  validateZipArchive(zip, limits);
   const contentTypes = await parseContentTypes(zip);
   const rootRelationships = await parseRelationships(zip, '');
 
@@ -47,7 +76,7 @@ async function parseContentTypes(zip: JSZip): Promise<ContentTypeMap> {
   if (!file) return { overrides, defaults };
 
   const text = await file.async('text');
-  const doc = new DOMParser().parseFromString(text, 'application/xml');
+  const doc = parseXml(text);
 
   // Parse <Default Extension="rels" ContentType="..." />
   const defaultEls = doc.getElementsByTagName('Default');
@@ -105,7 +134,7 @@ async function parseRelationships(zip: JSZip, partPath: string): Promise<Relatio
   if (!file) return [];
 
   const text = await file.async('text');
-  const doc = new DOMParser().parseFromString(text, 'application/xml');
+  const doc = parseXml(text);
   const result: Relationship[] = [];
 
   const els = doc.getElementsByTagNameNS(NS_RELATIONSHIPS, 'Relationship');
@@ -163,7 +192,7 @@ export async function getPartXml(pkg: OoxmlPackage, partPath: string): Promise<D
   if (!file) return null;
 
   const text = await file.async('text');
-  return new DOMParser().parseFromString(text, 'application/xml');
+  return parseXml(text);
 }
 
 /**

@@ -13,6 +13,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { CSSProperties } from 'react';
 import { useEditor, EditorContent } from '@tiptap/react';
+import { Selection } from '@tiptap/pm/state';
+import type { EditorView as ProseMirrorView } from '@tiptap/pm/view';
 import StarterKit from '@tiptap/starter-kit';
 import Table from '@tiptap/extension-table';
 import TableRow from '@tiptap/extension-table-row';
@@ -54,6 +56,9 @@ import { markdownToTiptap, tiptapToMarkdown } from './tiptapBridge';
 import { looksLikeMarkdown } from './detectMarkdown';
 import { SQUISQ_MEDIA_MIME, parseSquisqMediaPayload } from './mediaDragMime';
 import { usePreviewSettingsOptional } from './PreviewControls';
+import { uploadAndInsertImages } from './wysiwygImageUpload';
+
+type ImageMutationView = Pick<ProseMirrorView, 'state' | 'dispatch'>;
 
 /**
  * Rotating placeholder prompts shown when the editor is empty. One is
@@ -115,6 +120,7 @@ export function WysiwygEditor({
     themeInheritance,
     colorScheme,
     bumpMediaRevision,
+    sceneTextChannel,
   } = useEditorContext();
   // Custom templates inlined in the active doc's frontmatter + the
   // persist callback that writes a new list back into the source.
@@ -169,7 +175,6 @@ export function WysiwygEditor({
   useEffect(() => {
     submitOnEnterRef.current = submitOnEnter;
   }, [submitOnEnter]);
-
   const editor = useEditor({
     editable: !readOnly,
     extensions: [
@@ -181,9 +186,9 @@ export function WysiwygEditor({
         },
       }),
       HeadingWithTemplate.configure({ levels: [1, 2, 3, 4, 5, 6] }),
-      AsciiDiagramExtension,
+      AsciiDiagramExtension.configure({ textChannel: sceneTextChannel }),
       TreeViewExtension,
-      SceneBlockExtension,
+      SceneBlockExtension.configure({ textChannel: sceneTextChannel }),
       Table.configure({ resizable: true }),
       TableRow,
       TableCell,
@@ -205,8 +210,13 @@ export function WysiwygEditor({
     content: markdownToTiptap(stripFrontmatter(editorSource).body),
     onUpdate: ({ editor: ed }) => {
       if (isExternalUpdate.current) return;
-      const html = ed.getHTML();
-      const bodyMd = tiptapToMarkdown(html);
+      // Keep the source channel synchronous with Tiptap. Structural actions
+      // such as block navigation/addition may run in the very next browser
+      // event; deferring this write lets a stale callback serialize the newly
+      // selected block into the previous block's range. The expensive full-doc
+      // parse remains debounced in EditorContext, so correctness here does not
+      // reintroduce parse-on-every-keystroke work.
+      const bodyMd = tiptapToMarkdown(ed.getHTML());
       const newSource = frontmatterRef.current + bodyMd;
       lastSourceRef.current = newSource;
       setEditorSource(newSource);
@@ -229,7 +239,9 @@ export function WysiwygEditor({
         // its container with `display: block` while items are showing
         // and `display: none` when empty — only short-circuit when
         // there's actually a candidate to pick.
-        const popover = document.querySelector<HTMLElement>('.squisq-mention-popover');
+        const popover = view.dom
+          .closest('.squisq-editor-shell')
+          ?.querySelector<HTMLElement>('.squisq-mention-popover');
         if (popover && popover.style.display !== 'none') {
           return false;
         }
@@ -711,43 +723,8 @@ function filesFromClipboard(clipboard: DataTransfer): File[] {
   return files;
 }
 
-/**
- * Upload image files to the MediaProvider and insert <img> nodes at the
- * current selection. Inserts a placeholder name when files lack one
- * (e.g., screenshots from the system clipboard).
- */
-async function uploadAndInsertImages(
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  view: any,
-  files: File[],
-  mediaProvider: import('@bendyline/squisq/schemas').MediaProvider,
-  onMediaUploaded?: () => void,
-): Promise<void> {
-  for (const file of files) {
-    try {
-      const buffer = await file.arrayBuffer();
-      const mimeType = file.type || 'image/png';
-      const name =
-        file.name && file.name !== 'image.png'
-          ? file.name
-          : `pasted-${uniquePasteToken()}.${extFromMime(mimeType)}`;
-      const relativePath = await mediaProvider.addMedia(name, buffer, mimeType);
-      const altText = name.replace(/\.[^.]+$/, '').replace(/[-_]/g, ' ');
-      insertImageNode(view, relativePath, altText);
-      onMediaUploaded?.();
-    } catch (err) {
-      console.error('Failed to upload dropped image:', err);
-    }
-  }
-}
-
 /** Insert an image node at the current selection using the schema image type. */
-function insertImageNode(
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  view: any,
-  src: string,
-  alt: string,
-): void {
+function insertImageNode(view: ImageMutationView, src: string, alt: string): void {
   const { schema } = view.state;
   const imageType = schema.nodes.image;
   if (!imageType) return;
@@ -757,48 +734,11 @@ function insertImageNode(
 }
 
 /** Move the selection to the document position under the drop event's coordinates. */
-function moveSelectionToDropPoint(
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  view: any,
-  event: DragEvent,
-): void {
+function moveSelectionToDropPoint(view: ProseMirrorView, event: DragEvent): void {
   const coords = view.posAtCoords({ left: event.clientX, top: event.clientY });
   if (!coords) return;
-  const tr = view.state.tr.setSelection(
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (view.state.selection.constructor as any).near(view.state.doc.resolve(coords.pos)),
-  );
+  const tr = view.state.tr.setSelection(Selection.near(view.state.doc.resolve(coords.pos)));
   view.dispatch(tr);
-}
-
-/**
- * Produce a unique token for a pasted-file name. `Date.now()` alone can
- * collide when a user pastes several clipboard images in the same tick
- * (multi-image paste from a screenshot grid, for example), which would make
- * `MediaProvider.addMedia` overwrite or reject later entries. Prefer
- * `crypto.randomUUID()` when available and fall back to a counter so the
- * helper stays pure-JS-everywhere.
- */
-let pasteCounter = 0;
-function uniquePasteToken(): string {
-  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
-    return crypto.randomUUID();
-  }
-  pasteCounter = (pasteCounter + 1) % 1_000_000;
-  return `${Date.now()}-${pasteCounter.toString(36)}`;
-}
-
-function extFromMime(mime: string): string {
-  const map: Record<string, string> = {
-    'image/png': 'png',
-    'image/jpeg': 'jpg',
-    'image/jpg': 'jpg',
-    'image/gif': 'gif',
-    'image/webp': 'webp',
-    'image/svg+xml': 'svg',
-    'image/avif': 'avif',
-  };
-  return map[mime.toLowerCase()] ?? 'png';
 }
 
 /**

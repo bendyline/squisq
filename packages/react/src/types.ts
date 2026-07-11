@@ -173,7 +173,14 @@ export interface SquisqRenderAPI {
  * Window augmented with optional SquisqRenderAPI properties.
  * Each property is optional because they're only present in render/debug mode.
  */
-export type SquisqWindow = Window & typeof globalThis & Partial<SquisqRenderAPI>;
+export type SquisqWindow = Window &
+  typeof globalThis &
+  Partial<SquisqRenderAPI> & {
+    /** Instance-scoped render APIs, keyed by the player's data-player-id. */
+    squisqPlayers?: Record<string, SquisqRenderAPI>;
+    /** Player currently backing the legacy top-level render API aliases. */
+    squisqActivePlayerId?: string;
+  };
 
 /** Format time in seconds to MM:SS string */
 export function formatTime(seconds: number): string {

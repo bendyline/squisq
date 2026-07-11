@@ -15,7 +15,7 @@
  * the canvas is the viewport and `blockTime` is 0 (no animation).
  */
 
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
 import { PathLayer } from '@bendyline/squisq-react';
 import type { ImageEditDoc, ImageEditLayer } from '@bendyline/squisq/schemas';
 import type { CanvasRect, ImageEditorAction, ImageEditorTool } from './state.js';
@@ -97,6 +97,7 @@ export function CanvasSurface({
   surfaceRef,
   requestEditLayerId,
 }: CanvasSurfaceProps) {
+  const checkerId = `squisq-image-editor-checker-${useId().replace(/:/g, '')}`;
   const svgRef = useRef<SVGSVGElement | null>(null);
   const dragRef = useRef<DragState | null>(null);
   const [, forceRender] = useState(0);
@@ -402,16 +403,11 @@ export function CanvasSurface({
             fill={
               doc.canvas.background && doc.canvas.background !== 'transparent'
                 ? doc.canvas.background
-                : 'url(#squisq-image-editor-checker)'
+                : `url(#${checkerId})`
             }
           />
           <defs>
-            <pattern
-              id="squisq-image-editor-checker"
-              width="16"
-              height="16"
-              patternUnits="userSpaceOnUse"
-            >
+            <pattern id={checkerId} width="16" height="16" patternUnits="userSpaceOnUse">
               <rect width="16" height="16" fill="#f0f0f0" />
               <rect width="8" height="8" fill="#d0d0d0" />
               <rect x="8" y="8" width="8" height="8" fill="#d0d0d0" />

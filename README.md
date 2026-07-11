@@ -25,7 +25,7 @@ Open-source monorepo providing reusable libraries for document/block rendering, 
 | [`@bendyline/squisq-react`](packages/react)               | React components — DocPlayer, BlockRenderer, layers, hooks                                |
 | [`@bendyline/squisq-formats`](packages/formats)           | Format converters — DOCX, PDF, HTML, EPUB, PPTX, XLSX, CSV + `convert()` registry         |
 | [`@bendyline/squisq-editor-react`](packages/editor-react) | React editor shell — raw/WYSIWYG/preview modes                                            |
-| [`@bendyline/squisq-video`](packages/video)               | Browser-pure MP4 export foundation — render HTML, ffmpeg.wasm, presets                    |
+| [`@bendyline/squisq-video`](packages/video)               | Cross-runtime video helpers plus browser-based ffmpeg.wasm encoding                       |
 | [`@bendyline/squisq-video-react`](packages/video-react)   | React components for browser-based video export (WebCodecs + ffmpeg.wasm; MP4 with audio) |
 | [`@bendyline/squisq-cli`](packages/cli)                   | CLI tool — markdown **and** binary-format conversion, MP4 rendering, `squisq doctor`      |
 

@@ -14,7 +14,6 @@
  */
 
 import { useCallback, useMemo, useRef, useState } from 'react';
-import { flushSync } from 'react-dom';
 import type { Editor } from '@tiptap/react';
 import { DiagramCanvas, type DiagramCommand } from '../diagram/DiagramCanvas';
 import { DIAGRAM_TOOLS, DIAGRAM_VIEWPORT } from '../diagram/diagramConstants';
@@ -26,6 +25,7 @@ import { Icon } from '../Icon';
 import { useAsciiDiagramData } from './asciiDiagramData';
 import { applyAsciiDiagramCommand } from './asciiDiagramCommands';
 import { isAsciiSourceVisible, toggleAsciiSource } from './AsciiDiagramExtension';
+import type { SceneTextChannel } from '../scene/text/sceneTextChannel';
 
 /** Smallest height the canvas can be dragged to (px). */
 const MIN_DIAGRAM_HEIGHT = 160;
@@ -39,9 +39,15 @@ interface AsciiDiagramWidgetProps {
   fallbackPos: number;
   /** Host element used for portal targeting by the maximize overlay. */
   host?: HTMLElement | null;
+  textChannel?: SceneTextChannel;
 }
 
-export function AsciiDiagramWidget({ editor, blockId, host }: AsciiDiagramWidgetProps) {
+export function AsciiDiagramWidget({
+  editor,
+  blockId,
+  host,
+  textChannel,
+}: AsciiDiagramWidgetProps) {
   const view = useAsciiDiagramData(editor, blockId);
   const [maximized, setMaximized] = useState(false);
   const [height, setHeight] = useState<number | null>(null);
@@ -162,6 +168,7 @@ export function AsciiDiagramWidget({ editor, blockId, host }: AsciiDiagramWidget
 
   const canvas = (
     <DiagramCanvas
+      textChannel={textChannel}
       nodes={view.nodes}
       edges={view.edges}
       onCommand={dispatch}
@@ -170,12 +177,7 @@ export function AsciiDiagramWidget({ editor, blockId, host }: AsciiDiagramWidget
       onToggleMaximize={() => setMaximized((m) => !m)}
       activeToolId={activeToolId}
       onActiveToolIdChange={setActiveToolId}
-      // flushSync: the Scene surfaces selection from its own passive
-      // effect; this widget lives in a separate React root (a ProseMirror
-      // decoration), and a plain setState scheduled across roots can sit
-      // unflushed until the next external event — leaving the toolbar's
-      // Delete button stale. Flush immediately so chrome tracks selection.
-      onSelectionChange={(ids) => flushSync(() => setSelectedIds(ids))}
+      onSelectionChange={setSelectedIds}
     />
   );
 

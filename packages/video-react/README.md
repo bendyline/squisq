@@ -126,7 +126,20 @@ function CustomExport({ doc, images, audio }) {
 WebCodecs H.264 encoding requires Chrome 94+ or Edge 94+. When WebCodecs H.264
 is unavailable, the export automatically falls back to an ffmpeg.wasm worker —
 which requires `SharedArrayBuffer` (i.e. Cross-Origin-Isolation headers on the
-host page). Use `supportsWebCodecs()` to probe at runtime:
+host page). The packaged class worker is bundler-safe. Applications with
+offline or Content-Security-Policy requirements can self-host the core assets:
+
+```ts
+const config = {
+  ffmpegWasm: {
+    coreURL: '/vendor/ffmpeg-core.js',
+    wasmURL: '/vendor/ffmpeg-core.wasm',
+    workerURL: '/vendor/ffmpeg-core.worker.js', // for a multithread core
+  },
+};
+```
+
+Use `supportsWebCodecs()` to probe at runtime:
 
 ```ts
 import {
@@ -141,10 +154,11 @@ if (!supportsWebCodecs()) {
 ```
 
 **Audio tiers.** The audio track is muxed via WebCodecs AAC when available
-(`supportsWebCodecsAac()`); otherwise it is skipped and the export reports
-`audioIncluded: false` with an `audioSkippedReason`. Audio problems never fail
-the export — the video always completes. `supportsWebCodecsH264(config)` probes a
-specific encoder configuration; `EncoderConfig` is also exported.
+(`supportsWebCodecsAac()`), then via ffmpeg.wasm when cross-origin isolation is
+available, and otherwise skipped with `audioIncluded: false` plus an
+`audioSkippedReason`. Audio problems never fail the export — the video always
+completes. `supportsWebCodecsH264(config)` probes a specific encoder
+configuration; `EncoderConfig` and `FfmpegWasmLoadConfig` are also exported.
 
 ## Full API Reference
 

@@ -81,6 +81,10 @@ describe('getLayers', () => {
     const layers = getLayers(block, defaultContext);
 
     expect(layers).toEqual(existingLayers);
+    expect(layers).not.toBe(existingLayers);
+    expect(layers[0]).not.toBe(existingLayers[0]);
+    (layers[0] as ShapeLayer).content.fill = '#000000';
+    expect((existingLayers[0] as ShapeLayer).content.fill).toBe('#ff0000');
   });
 
   it('resolves legacy template aliases through TEMPLATE_ALIASES', () => {

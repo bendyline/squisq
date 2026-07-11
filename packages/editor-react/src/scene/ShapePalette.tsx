@@ -8,7 +8,7 @@
  * gets drawn.
  */
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { shapePath } from '@bendyline/squisq/doc';
 
 interface ShapePaletteProps {
@@ -152,8 +152,23 @@ export function ShapePalette({
 /** A 40×30 SVG thumbnail of a shape, inside a 48×38 button viewport. */
 function ShapeThumb({ kind }: { kind: string }) {
   const d = shapePath(kind, 4, 4, 40, 30);
+  const arrowId = `squisq-shape-thumb-arrow-${useId().replace(/:/g, '')}`;
   return (
     <svg viewBox="0 0 48 38" width={36} height={28} aria-hidden="true">
+      {kind === 'arrow' ? (
+        <defs>
+          <marker
+            id={arrowId}
+            viewBox="0 0 10 10"
+            refX={9}
+            refY={5}
+            markerWidth={4}
+            markerHeight={4}
+          >
+            <path d="M 0 0 L 10 5 L 0 10 z" className="squisq-shape-thumb-line" />
+          </marker>
+        </defs>
+      ) : null}
       {d ? (
         <path d={d} className="squisq-shape-thumb" />
       ) : kind === 'circle' ? (
@@ -167,7 +182,7 @@ function ShapeThumb({ kind }: { kind: string }) {
           x2={44}
           y2={4}
           className="squisq-shape-thumb-line"
-          markerEnd="url(#squisq-edge-arrow-end)"
+          markerEnd={`url(#${arrowId})`}
         />
       ) : kind === 'text' ? (
         <text x={24} y={26} textAnchor="middle" className="squisq-shape-thumb-text">

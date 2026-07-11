@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { parseMarkdown } from '@bendyline/squisq/markdown';
 import { markdownToDoc } from '@bendyline/squisq/doc';
-import type { Transition } from '@bendyline/squisq/schemas';
+import type { Doc, Transition } from '@bendyline/squisq/schemas';
 import { buildPreviewDoc } from '../buildPreviewDoc';
 
 function previewSlides(md: string) {
@@ -68,5 +68,25 @@ describe('buildPreviewDoc transition mapping', () => {
       const slides = previewSlides(md);
       expect(slides[1].transition).toEqual({ type: 'push', direction: 'left', duration: 0.8 });
     });
+  });
+
+  it('preserves document-wide fields and mapped audio', () => {
+    const source = markdownToDoc(parseMarkdown('# Intro'), { articleId: 'full' }) as Doc;
+    const enriched = {
+      ...source,
+      frontmatter: { owner: 'team' },
+      customThemes: [{ id: 'custom-theme' }],
+      persistentLayers: { layers: [] },
+      documentMedia: [{ id: 'bed', kind: 'audio', src: 'bed.mp3', startTime: 0 }],
+      audio: {
+        segments: [{ src: 'narration.mp3', name: 'narration', duration: 4, startTime: 0 }],
+      },
+    } as unknown as Doc;
+    const preview = buildPreviewDoc(enriched);
+    expect(preview.frontmatter).toEqual({ owner: 'team' });
+    expect(preview.customThemes).toBe(enriched.customThemes);
+    expect(preview.persistentLayers).toBe(enriched.persistentLayers);
+    expect(preview.documentMedia).toBe(enriched.documentMedia);
+    expect(preview.audio).toBe(enriched.audio);
   });
 });

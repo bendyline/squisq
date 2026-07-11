@@ -12,19 +12,17 @@
 
 import type { ContentContainer } from '../storage/ContentContainer.js';
 import type { ImageEditDoc } from '../schemas/ImageEditDoc.js';
-import { ensureVersionsGitIgnored } from '../versions/gitignore.js';
 import type { CoalesceOptions, PrunePolicy, Version } from '../versions/types.js';
+import {
+  coalesceSnapshots,
+  listSnapshots,
+  pruneSnapshots,
+  readTextSnapshot,
+  saveTextSnapshot,
+} from '../versions/snapshotStore.js';
 import { readImageEditDoc, writeImageEditDoc } from './persistence.js';
 import { IMAGE_EDIT_STATE_FILENAME } from './state.js';
-import {
-  IMAGE_EDIT_VERSIONS_PREFIX,
-  IMAGE_EDIT_DEFAULT_BASENAME,
-  buildImageEditVersionPath,
-  parseImageEditVersionPath,
-} from './versionPaths.js';
-
-const decoder = new TextDecoder();
-const encoder = new TextEncoder();
+import { IMAGE_EDIT_DEFAULT_BASENAME, IMAGE_EDIT_VERSION_PATHS } from './versionPaths.js';
 
 /** Options for {@link saveImageEditVersion}. */
 export interface SaveImageEditVersionOptions {
@@ -63,26 +61,7 @@ export async function listImageEditVersions(
   container: ContentContainer,
   basename?: string,
 ): Promise<Version[]> {
-  const entries = await container.listFiles(IMAGE_EDIT_VERSIONS_PREFIX);
-  const versions: Version[] = [];
-  for (const entry of entries) {
-    const parsed = parseImageEditVersionPath(entry.path);
-    if (!parsed) continue;
-    if (basename !== undefined && parsed.basename !== basename) continue;
-    versions.push({
-      path: entry.path,
-      basename: parsed.basename,
-      timestamp: parsed.timestamp,
-      size: entry.size,
-      collision: parsed.collision,
-    });
-  }
-  versions.sort((a, b) => {
-    const dt = b.timestamp.getTime() - a.timestamp.getTime();
-    if (dt !== 0) return dt;
-    return b.collision - a.collision;
-  });
-  return versions;
+  return listSnapshots(container, IMAGE_EDIT_VERSION_PATHS, basename);
 }
 
 /** Read a snapshot's JSON text. Returns `null` if the snapshot is missing. */
@@ -90,10 +69,7 @@ export async function readImageEditVersionText(
   container: ContentContainer,
   version: Version | string,
 ): Promise<string | null> {
-  const path = typeof version === 'string' ? version : version.path;
-  const data = await container.readFile(path);
-  if (!data) return null;
-  return decoder.decode(data);
+  return readTextSnapshot(container, version);
 }
 
 /** Read and parse a snapshot. Returns `null` if missing. */
@@ -127,36 +103,13 @@ export async function saveImageEditVersion(
   const basename = options.basename ?? IMAGE_EDIT_DEFAULT_BASENAME;
   const serialized = JSON.stringify(doc, null, 2);
 
-  const versions = await listImageEditVersions(container, basename);
-  if (!options.force && versions.length > 0) {
-    const latest = versions[0]!;
-    const existing = await readImageEditVersionText(container, latest);
-    if (existing === serialized) {
-      await ensureVersionsGitIgnored(container);
-      return { saved: false, version: null, reason: 'unchanged' };
-    }
-  }
-
-  const now = options.now ?? new Date();
-  let collision = 0;
-  let path = buildImageEditVersionPath(basename, now, collision);
-  while (await container.exists(path)) {
-    collision += 1;
-    path = buildImageEditVersionPath(basename, now, collision);
-  }
-
-  const data = encoder.encode(serialized);
-  await ensureVersionsGitIgnored(container);
-  await container.writeFile(path, data, 'application/json');
-
-  const version: Version = {
-    path,
+  return saveTextSnapshot(container, IMAGE_EDIT_VERSION_PATHS, {
+    content: serialized,
     basename,
-    timestamp: now,
-    size: data.byteLength,
-    collision,
-  };
-  return { saved: true, version, reason: 'saved' };
+    mimeType: 'application/json',
+    now: options.now,
+    force: options.force,
+  });
 }
 
 /** Revert `state.json` to a prior snapshot. Snapshots the current state first by default. */
@@ -186,27 +139,7 @@ export async function pruneImageEditVersions(
   policy: PrunePolicy,
   basename?: string,
 ): Promise<Version[]> {
-  const versions = await listImageEditVersions(container, basename);
-  const toDelete: Version[] = [];
-
-  if (policy.type === 'keep-last-n') {
-    const n = Math.max(0, Math.floor(policy.n));
-    toDelete.push(...versions.slice(n));
-  } else if (policy.type === 'older-than') {
-    const cutoff = policy.date.getTime();
-    for (const v of versions) {
-      if (v.timestamp.getTime() < cutoff) toDelete.push(v);
-    }
-  } else {
-    for (const v of versions) {
-      if (!policy.keep(v, versions)) toDelete.push(v);
-    }
-  }
-
-  for (const v of toDelete) {
-    await container.removeFile(v.path);
-  }
-  return toDelete;
+  return pruneSnapshots(container, IMAGE_EDIT_VERSION_PATHS, policy, basename);
 }
 
 /** Collapse adjacent snapshots within `windowMs`, keeping the newer of each pair. */
@@ -215,22 +148,5 @@ export async function coalesceImageEditVersions(
   options: CoalesceOptions = {},
   basename?: string,
 ): Promise<Version[]> {
-  const windowMs = options.windowMs ?? 60_000;
-  const versions = await listImageEditVersions(container, basename);
-  const toDelete: Version[] = [];
-  if (versions.length > 0) {
-    let anchor = versions[0]!;
-    for (let i = 1; i < versions.length; i++) {
-      const candidate = versions[i]!;
-      if (anchor.timestamp.getTime() - candidate.timestamp.getTime() <= windowMs) {
-        toDelete.push(candidate);
-      } else {
-        anchor = candidate;
-      }
-    }
-  }
-  for (const v of toDelete) {
-    await container.removeFile(v.path);
-  }
-  return toDelete;
+  return coalesceSnapshots(container, IMAGE_EDIT_VERSION_PATHS, options, basename);
 }

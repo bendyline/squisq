@@ -32,6 +32,7 @@ import type {
 import { stringifyMarkdown } from '@bendyline/squisq/markdown';
 import type { CustomTemplateDefinition, Theme } from '@bendyline/squisq/schemas';
 import { getPartBinary, getPartRelationships, getPartXml, openPackage } from '../ooxml/reader.js';
+import type { OoxmlOpenOptions } from '../ooxml/reader.js';
 import type { OoxmlPackage } from '../ooxml/types.js';
 import { NS_DRAWINGML, NS_PML, NS_R } from '../ooxml/namespaces.js';
 import { attrNS, baseDirOf, resolveTarget } from '../ooxml/readUtils.js';
@@ -41,7 +42,7 @@ import { extToMime } from '../shared/images.js';
 import type { ExtractedFileTheme } from '../infer/types.js';
 import type { AnalyzedLayout, PptxLayoutInference } from './layouts.js';
 
-export interface PptxImportOptions {
+export interface PptxImportOptions extends OoxmlOpenOptions {
   /**
    * Whether to extract embedded slide images into the document as image nodes
    * (referencing `images/imageN.ext`). When false, pictures are ignored so the
@@ -430,7 +431,7 @@ export async function pptxToMarkdownDoc(
   data: ArrayBuffer | Blob,
   options: PptxImportOptions = {},
 ): Promise<MarkdownDocument> {
-  const pkg = await openPackage(data);
+  const pkg = await openPackage(data, options);
   const { doc } = await importDocument(pkg, options);
   return doc;
 }
@@ -447,7 +448,7 @@ export async function pptxToContainer(
   data: ArrayBuffer | Blob,
   options: PptxImportOptions = {},
 ): Promise<ContentContainer> {
-  const pkg = await openPackage(data);
+  const pkg = await openPackage(data, options);
   const { doc, ctx } = await importDocument(pkg, { ...options, extractImages: true });
 
   return buildContainer(stringifyMarkdown(doc), ctx.extractedImages);

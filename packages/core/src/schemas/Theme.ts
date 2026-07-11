@@ -23,13 +23,15 @@
 import type { LayoutHints } from './LayoutStrategy.js';
 import type { AnimationType, ImageTreatment, TransitionType } from './Doc.js';
 import type { PersistentLayerConfig } from './BlockTemplates.js';
+import { THEME_SCHEMA_VERSION } from './themeConstants.js';
+import { validateTheme } from './themeValidator.js';
+import { cloneAndFreezeData } from '../internal/immutable.js';
 
 // ============================================
 // Schema version
 // ============================================
 
-/** Current Theme schema version. Bump on breaking changes; loader migrates. */
-export const THEME_SCHEMA_VERSION = '1' as const;
+export { THEME_SCHEMA_VERSION } from './themeConstants.js';
 export type ThemeSchemaVersion = typeof THEME_SCHEMA_VERSION;
 
 /**
@@ -357,7 +359,53 @@ export function applySurface(theme: Theme, surface: SurfaceScheme): Theme {
 // Runtime registry — for custom themes
 // ============================================
 
-const CUSTOM_THEME_REGISTRY = new Map<string, Theme>();
+/** An isolated custom-theme registry for SSR tenants, tests, and embedders. */
+export interface ThemeRegistry {
+  registerTheme(theme: Theme): void;
+  unregisterTheme(id: string): void;
+  getRegisteredThemes(): Theme[];
+  lookupRegisteredTheme(id: string | undefined): Theme | undefined;
+}
+
+function validatedThemeSnapshot(theme: Theme): Theme {
+  const result = validateTheme(theme);
+  if (!result.valid || !result.theme) {
+    const details = result.errors
+      .slice(0, 5)
+      .map((error) => `${error.path || '<root>'}: ${error.message}`)
+      .join('; ');
+    throw new TypeError(`Cannot register invalid theme: ${details}`);
+  }
+  return cloneAndFreezeData(result.theme);
+}
+
+/**
+ * Create a registry whose state is owned by the caller rather than the
+ * process. Registered values are validated and stored as deeply frozen
+ * snapshots, so later caller mutation cannot alter resolution behavior.
+ */
+export function createThemeRegistry(initialThemes: readonly Theme[] = []): ThemeRegistry {
+  const themes = new Map<string, Theme>();
+  const registry: ThemeRegistry = {
+    registerTheme(theme): void {
+      const snapshot = validatedThemeSnapshot(theme);
+      themes.set(snapshot.id, snapshot);
+    },
+    unregisterTheme(id): void {
+      themes.delete(id);
+    },
+    getRegisteredThemes(): Theme[] {
+      return Array.from(themes.values());
+    },
+    lookupRegisteredTheme(id): Theme | undefined {
+      return id ? themes.get(id) : undefined;
+    },
+  };
+  for (const theme of initialThemes) registry.registerTheme(theme);
+  return Object.freeze(registry);
+}
+
+const GLOBAL_THEME_REGISTRY = createThemeRegistry();
 
 /**
  * Register a Theme so it can be looked up by id via `resolveTheme(id)`.
@@ -366,21 +414,20 @@ const CUSTOM_THEME_REGISTRY = new Map<string, Theme>();
  * Registered themes take precedence over built-ins with the same id.
  */
 export function registerTheme(theme: Theme): void {
-  CUSTOM_THEME_REGISTRY.set(theme.id, theme);
+  GLOBAL_THEME_REGISTRY.registerTheme(theme);
 }
 
 /** Remove a previously registered theme. */
 export function unregisterTheme(id: string): void {
-  CUSTOM_THEME_REGISTRY.delete(id);
+  GLOBAL_THEME_REGISTRY.unregisterTheme(id);
 }
 
 /** Snapshot of all currently registered (non-built-in) themes. */
 export function getRegisteredThemes(): Theme[] {
-  return Array.from(CUSTOM_THEME_REGISTRY.values());
+  return GLOBAL_THEME_REGISTRY.getRegisteredThemes();
 }
 
 /** @internal — used by themeLibrary's `resolveTheme` to check the registry first. */
 export function lookupRegisteredTheme(id: string | undefined): Theme | undefined {
-  if (!id) return undefined;
-  return CUSTOM_THEME_REGISTRY.get(id);
+  return GLOBAL_THEME_REGISTRY.lookupRegisteredTheme(id);
 }

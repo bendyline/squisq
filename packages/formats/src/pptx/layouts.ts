@@ -25,6 +25,7 @@ import type {
   TextStyle,
 } from '@bendyline/squisq/schemas';
 import { getPartRelationships, getPartXml, openPackage } from '../ooxml/reader.js';
+import type { OoxmlOpenOptions } from '../ooxml/reader.js';
 import type { OoxmlPackage } from '../ooxml/types.js';
 import {
   CONTENT_TYPE_PPTX_SLIDE_LAYOUT,
@@ -147,7 +148,7 @@ export interface PptxLayoutInference {
   warnings: string[];
 }
 
-export interface AnalyzePptxLayoutsOptions {
+export interface AnalyzePptxLayoutsOptions extends OoxmlOpenOptions {
   /** Also analyze layouts no slide references (default false). */
   includeUnused?: boolean;
   colors?: PptxColorHints;
@@ -1147,7 +1148,7 @@ export async function inspectPptxLayouts(
   data: ArrayBuffer | Blob,
   options: InspectPptxLayoutsOptions = {},
 ): Promise<{ layouts: PptxLayoutSummary[]; slideSize: { cx: number; cy: number } }> {
-  const pkg = await openPackage(data);
+  const pkg = await openPackage(data, options);
   const analysis = await analyzePptxLayouts(pkg, options);
   const layouts = analysis.layouts.map((l, i): PptxLayoutSummary => {
     const { extracted, verdict, notes } = l;

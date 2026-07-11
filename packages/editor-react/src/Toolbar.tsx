@@ -29,7 +29,7 @@ import { ViewMenuPanel } from './ViewMenuPanel';
 import {
   TemplatePicker,
   TEMPLATE_NAMES,
-  TEMPLATE_GALLERY_PORTAL_ID,
+  TEMPLATE_GALLERY_PORTAL_SELECTOR,
   templateLabel,
 } from './TemplatePicker';
 import { TransitionPicker, TRANSITION_FLYOUT_PORTAL_ID } from './TransitionPicker';
@@ -754,23 +754,25 @@ export function Toolbar({
     // with the cursor context and change width with their value, all without
     // resizing the flex:1 container itself — a container-only observer would
     // go stale.
-    const ro = new ResizeObserver(measure);
+    const ro = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(measure);
     const observeAll = () => {
-      ro.disconnect();
-      ro.observe(container);
+      ro?.disconnect();
+      ro?.observe(container);
       container
         .querySelectorAll<HTMLElement>(':scope > .squisq-toolbar-group')
-        .forEach((group) => ro.observe(group));
+        .forEach((group) => ro?.observe(group));
     };
     const mo = new MutationObserver(() => {
       observeAll();
       measure();
     });
     mo.observe(container, { childList: true });
+    if (!ro) window.addEventListener('resize', measure);
     observeAll();
     measure();
     return () => {
-      ro.disconnect();
+      ro?.disconnect();
+      if (!ro) window.removeEventListener('resize', measure);
       mo.disconnect();
     };
   }, [activeView]);
@@ -786,7 +788,7 @@ export function Toolbar({
       if (overflowRef.current?.contains(target)) return;
       if (
         target instanceof Element &&
-        target.closest(`#${TEMPLATE_GALLERY_PORTAL_ID}, #${TRANSITION_FLYOUT_PORTAL_ID}`)
+        target.closest(`${TEMPLATE_GALLERY_PORTAL_SELECTOR}, #${TRANSITION_FLYOUT_PORTAL_ID}`)
       ) {
         return;
       }

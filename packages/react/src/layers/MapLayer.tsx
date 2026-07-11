@@ -12,7 +12,7 @@
  * Playwright screenshot contexts.
  */
 
-import { useState, useEffect } from 'react';
+import { useId, useState, useEffect } from 'react';
 import type { MapLayer as MapLayerType } from '@bendyline/squisq/schemas';
 import { getAnimationStyle } from '../utils/animationUtils';
 import { resolveValue, getAnchorOffset } from '../utils/layerUtils';
@@ -30,6 +30,7 @@ interface MapLayerProps {
 
 export function MapLayer({ layer, basePath, viewport, blockTime }: MapLayerProps) {
   const { content, position, animation } = layer;
+  const clipId = `map-clip-${useId().replace(/:/g, '')}-${layer.id}`;
   const [mapImageUrl, setMapImageUrl] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -89,13 +90,13 @@ export function MapLayer({ layer, basePath, viewport, blockTime }: MapLayerProps
     return () => {
       cancelled = true;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- content properties are destructured below; center/markers/showAttribution are stable per-render
   }, [
-    content.center.lat,
-    content.center.lng,
+    content.center,
     content.zoom,
     content.style,
     content.staticSrc,
+    content.markers,
+    content.showAttribution,
     width,
     height,
     basePath,
@@ -160,13 +161,13 @@ export function MapLayer({ layer, basePath, viewport, blockTime }: MapLayerProps
     >
       {/* Clip path for overflow handling */}
       <defs>
-        <clipPath id={`clip-${layer.id}`}>
+        <clipPath id={clipId}>
           <rect x={finalX} y={finalY} width={width} height={height} />
         </clipPath>
       </defs>
 
       {/* Map image */}
-      <g clipPath={`url(#clip-${layer.id})`}>
+      <g clipPath={`url(#${clipId})`}>
         <image
           href={mapImageUrl}
           x={finalX}

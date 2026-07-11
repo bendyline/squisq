@@ -30,6 +30,7 @@ import type { SceneTextEditConfig } from './text/sceneTextConfig';
 import { markdownToTiptap } from '../tiptapBridge';
 import { Icon } from '../Icon';
 import { DiagramMaximizedOverlay } from '../diagram/DiagramMaximizedOverlay';
+import type { SceneTextChannel } from './text/sceneTextChannel';
 
 export type SceneBlockMode = 'layout' | 'drawing';
 
@@ -40,6 +41,7 @@ interface SceneBlockWidgetProps {
   mode: SceneBlockMode;
   /** Host element for portal targeting (used by maximize overlay). */
   host?: HTMLElement | null;
+  textChannel?: SceneTextChannel;
 }
 
 // Default viewport for layout/drawing surfaces. Matches Squisq's 16:9
@@ -59,6 +61,7 @@ export function SceneBlockWidget({
   fallbackParentPos,
   mode,
   host,
+  textChannel,
 }: SceneBlockWidgetProps) {
   const [parentPos, setParentPos] = useState<number>(
     () => findSceneHeadingPos(editor, headingKey, mode) ?? fallbackParentPos,
@@ -89,6 +92,7 @@ export function SceneBlockWidget({
   dispatchRef.current = adapter.dispatch;
   const textConfig = useMemo<SceneTextEditConfig>(
     () => ({
+      channel: textChannel,
       resolveEditableId: (id) => {
         const l = layersRef.current.find((x) => x.id === id);
         return l && l.type === 'text' ? id : null;
@@ -114,7 +118,7 @@ export function SceneBlockWidget({
       // content is stored as the child sub-block's markdown body.
       level: isDrawing ? 'inline' : 'block',
     }),
-    [isDrawing],
+    [isDrawing, textChannel],
   );
 
   const [maximized, setMaximized] = useState(false);

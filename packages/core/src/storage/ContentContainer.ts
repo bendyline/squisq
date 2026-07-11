@@ -92,9 +92,8 @@ export function findDocumentPath(entries: ContentEntry[]): string | null {
   const rootFiles = entries.filter((e) => !e.path.includes('/'));
 
   for (const name of MARKDOWN_PRIORITY) {
-    if (rootFiles.some((e) => e.path.toLowerCase() === name)) {
-      return name;
-    }
+    const match = rootFiles.find((e) => e.path.toLowerCase() === name);
+    if (match) return match.path;
   }
 
   // Fallback: first .md file at root
@@ -120,21 +119,30 @@ export class MemoryContentContainer implements ContentContainer {
   private files = new Map<string, MemoryFile>();
 
   async readFile(path: string): Promise<ArrayBuffer | null> {
-    return this.files.get(path)?.data ?? null;
+    const stored = this.files.get(path)?.data;
+    // A container owns its bytes. Returning the backing buffer would let a
+    // caller mutate stored state without going through writeFile().
+    return stored ? stored.slice(0) : null;
   }
 
   async writeFile(path: string, data: ArrayBuffer | Uint8Array, mimeType?: string): Promise<void> {
     // Copy to a standalone ArrayBuffer. Uint8Array/Buffer may share a larger
     // backing buffer (e.g., Node's buffer pool), so we must slice to the
     // exact byte range to avoid storing stale pool data.
-    let buffer: ArrayBuffer;
-    if (data instanceof ArrayBuffer) {
-      buffer = data;
+    // ArrayBuffer.isView is cross-realm-safe (unlike `instanceof
+    // ArrayBuffer`, which fails for values created in jsdom/iframes).
+    let source: Uint8Array;
+    if (ArrayBuffer.isView(data)) {
+      source = new Uint8Array(data.buffer, data.byteOffset, data.byteLength);
     } else {
-      buffer = data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength) as ArrayBuffer;
+      source = new Uint8Array(data);
     }
+    // Always materialize in this realm, including for iframe ArrayBuffers and
+    // views backed by SharedArrayBuffer.
+    const owned = new Uint8Array(source.byteLength);
+    owned.set(source);
     this.files.set(path, {
-      data: buffer,
+      data: owned.buffer,
       mimeType: mimeType ?? guessMimeType(path),
     });
   }

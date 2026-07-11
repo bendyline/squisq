@@ -198,6 +198,22 @@ describe('LinearDocView', () => {
     expect(container.textContent).toContain('Child body');
   });
 
+  it('assigns unique pre-order indices across nested and top-level blocks', () => {
+    const doc = mkDoc([
+      mkBlock({
+        id: 'parent',
+        children: [mkBlock({ id: 'child' })],
+      }),
+      mkBlock({ id: 'sibling' }),
+    ]);
+    const { container } = render(<LinearDocView doc={doc} />);
+    expect(
+      Array.from(container.querySelectorAll('.squisq-linear-section')).map((node) =>
+        node.getAttribute('data-block-index'),
+      ),
+    ).toEqual(['0', '1', '2']);
+  });
+
   it('renders multiple top-level blocks', () => {
     const doc = mkDoc([
       mkBlock({

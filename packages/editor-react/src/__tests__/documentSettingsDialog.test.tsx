@@ -26,7 +26,7 @@ function pickTheme(name: string) {
   // Scope the option lookup to the popover — the Transform <select> in
   // the same dialog also exposes role="option" entries (one of which is
   // literally "Documentary"), so a global query would collide.
-  const popover = document.getElementById('squisq-theme-picker-popover')!;
+  const popover = document.querySelector<HTMLElement>('.squisq-theme-picker-popover')!;
   fireEvent.click(within(popover).getByRole('option', { name }));
 }
 

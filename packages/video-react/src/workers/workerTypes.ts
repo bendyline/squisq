@@ -5,7 +5,7 @@
  * the video encoding Web Worker.
  */
 
-import type { VideoQuality } from '@bendyline/squisq-video';
+import type { VideoQuality, FfmpegWasmLoadConfig } from '@bendyline/squisq-video';
 
 // ── Main → Worker Messages ─────────────────────────────────────────
 
@@ -16,6 +16,7 @@ export interface InitMessage {
   height: number;
   fps: number;
   quality: VideoQuality;
+  ffmpegWasm?: FfmpegWasmLoadConfig;
 }
 
 /** Send a single video frame to the encoder. */
@@ -68,6 +69,12 @@ export interface CompleteMessage {
   size: number;
 }
 
+/** A frame has been fully consumed by the selected backend. */
+export interface FrameCompleteMessage {
+  type: 'frame-complete';
+  frameIndex: number;
+}
+
 /** An error occurred during encoding. */
 export interface ErrorMessage {
   type: 'error';
@@ -76,6 +83,7 @@ export interface ErrorMessage {
 
 export type WorkerToMainMessage =
   | CapabilitiesMessage
+  | FrameCompleteMessage
   | ProgressMessage
   | CompleteMessage
   | ErrorMessage;

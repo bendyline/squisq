@@ -20,7 +20,13 @@ import type {
   NormalizedInput,
 } from '@bendyline/squisq-formats';
 import type { VideoOrientation, VideoQuality } from '@bendyline/squisq-video';
-import { renderDocToMp4 } from './api.js';
+
+export interface Mp4FormatOptions {
+  fps?: number;
+  quality?: VideoQuality;
+  orientation?: VideoOrientation;
+  coverPreRoll?: number;
+}
 
 /** Sensible defaults for `convert(..., 'mp4')` — a full-quality landscape clip. */
 const MP4_DEFAULTS = {
@@ -46,11 +52,9 @@ function mp4Format(): FormatDefinition {
     mimeType: 'video/mp4',
     extensions: ['.mp4'],
     async exportDoc(input: NormalizedInput, options: ConvertOptions): Promise<ConversionResult> {
-      // `renderDocToMp4` is imported statically from api.ts. api.ts imports
-      // `createCliRegistry` from this module, forming an ES module cycle — but
-      // both are hoisted function exports used only at call time, so the cycle
-      // resolves cleanly.
-      const mp4Opts = options.formatOptions?.mp4 ?? {};
+      // The renderer is lazy-loaded below so api.ts can create this registry
+      // without an eager ES-module initialization cycle.
+      const mp4Opts = (options.formatOptions?.mp4 ?? {}) as Mp4FormatOptions;
       const fps = typeof mp4Opts.fps === 'number' ? mp4Opts.fps : MP4_DEFAULTS.fps;
       const quality =
         typeof mp4Opts.quality === 'string'
@@ -65,6 +69,7 @@ function mp4Format(): FormatDefinition {
 
       const outputPath = join(tmpdir(), `squisq-mp4-${randomBytes(8).toString('hex')}.mp4`);
       try {
+        const { renderDocToMp4 } = await import('./api.js');
         await renderDocToMp4(input.doc, input.container, {
           outputPath,
           fps,

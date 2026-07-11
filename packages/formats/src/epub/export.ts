@@ -36,7 +36,7 @@ import type {
   MarkdownTableRow,
   MarkdownTableCell,
 } from '@bendyline/squisq/markdown';
-import { readFrontmatterThemeId } from '@bendyline/squisq/markdown';
+import { readFrontmatterThemeId, sanitizeUrl } from '@bendyline/squisq/markdown';
 import { escapeXml } from '../ooxml/xmlUtils.js';
 import { inferMimeType, extractFilename } from '../html/imageUtils.js';
 import { extractPlainText } from '../shared/text.js';
@@ -93,7 +93,7 @@ export async function markdownDocToEpub(
   const language = options.language ?? 'en';
   const description = options.description ?? '';
   const publisher = options.publisher ?? '';
-  const uuid = crypto.randomUUID();
+  const uuid = createEpubUuid();
 
   // Split document into chapters
   const chapters = splitIntoChapters(doc.children);
@@ -101,22 +101,13 @@ export async function markdownDocToEpub(
   // Collect images referenced in the document, deduplicating filenames
   const imageEntries = collectDocImages(doc.children);
   const resolvedImages = new Map<string, { data: ArrayBuffer; mime: string; filename: string }>();
+  const usedImageNames = new Set<string>();
   if (options.images) {
-    const usedNames = new Set<string>();
     for (const src of imageEntries) {
       const data = options.images.get(src);
       if (data) {
-        let filename = extractFilename(src);
-        // Deduplicate: if two paths share a basename (e.g. a/hero.png and b/hero.png)
-        if (usedNames.has(filename)) {
-          const dot = filename.lastIndexOf('.');
-          const base = dot > 0 ? filename.slice(0, dot) : filename;
-          const ext = dot > 0 ? filename.slice(dot) : '';
-          let counter = 2;
-          while (usedNames.has(`${base}-${counter}${ext}`)) counter++;
-          filename = `${base}-${counter}${ext}`;
-        }
-        usedNames.add(filename);
+        const filename = uniqueFilename(safeArchiveBasename(src, 'image'), usedImageNames);
+        usedImageNames.add(filename);
         resolvedImages.set(src, { data, mime: inferMimeType(filename), filename });
       }
     }
@@ -155,7 +146,8 @@ export async function markdownDocToEpub(
       bytes[1] === 0x50 &&
       bytes[2] === 0x4e &&
       bytes[3] === 0x47;
-    coverFilename = isPng ? 'cover.png' : 'cover.jpg';
+    coverFilename = uniqueFilename(isPng ? 'cover.png' : 'cover.jpg', usedImageNames);
+    usedImageNames.add(coverFilename);
     zip.file(`OEBPS/images/${coverFilename}`, options.coverImage);
 
     // Generate cover XHTML page — full-bleed image, no margins
@@ -184,17 +176,28 @@ export async function markdownDocToEpub(
   // Per-segment audio file info, indexed by segment index (null if data missing)
   const segmentAudioFiles: ({ filename: string; mime: string } | null)[] = [];
   const allAudioFiles: { filename: string; mime: string }[] = [];
+  const audioFilenameBySource = new Map<string, string>();
+  const usedAudioFilenames = new Set<string>();
 
   if (hasAudio) {
     for (const seg of audioSegments) {
       const data = audioMap.get(seg.src) ?? audioMap.get(seg.name);
       if (data) {
-        const filename = extractFilename(seg.src);
-        const finalName = filename.includes('.') ? filename : `${filename}.mp3`;
-        zip.file(`OEBPS/audio/${finalName}`, data);
+        const sourceKey = seg.src || seg.name;
+        let finalName = audioFilenameBySource.get(sourceKey);
+        let isNewFile = false;
+        if (!finalName) {
+          const basename = safeArchiveBasename(sourceKey || 'narration', 'narration');
+          const withExtension = basename.includes('.') ? basename : `${basename}.mp3`;
+          finalName = uniqueFilename(withExtension, usedAudioFilenames);
+          audioFilenameBySource.set(sourceKey, finalName);
+          usedAudioFilenames.add(finalName);
+          zip.file(`OEBPS/audio/${finalName}`, data);
+          isNewFile = true;
+        }
         const info = { filename: finalName, mime: inferMimeType(finalName) };
         segmentAudioFiles.push(info);
-        allAudioFiles.push(info);
+        if (isNewFile) allAudioFiles.push(info);
       } else {
         segmentAudioFiles.push(null);
       }
@@ -535,14 +538,18 @@ function inlineToXhtml(node: MarkdownInlineNode, images: ImageMap): string {
       return `<code>${escapeXml(node.value)}</code>`;
 
     case 'link': {
+      const href = sanitizeUrl(node.url, 'link');
+      if (!href) return inlinesToXhtml(node.children, images);
       const titleAttr = node.title ? ` title="${escapeXml(node.title)}"` : '';
-      return `<a href="${escapeXml(node.url)}"${titleAttr}>${inlinesToXhtml(node.children, images)}</a>`;
+      return `<a href="${escapeXml(href)}"${titleAttr}>${inlinesToXhtml(node.children, images)}</a>`;
     }
 
     case 'image': {
       const alt = escapeXml(node.alt ?? '');
       const resolved = images.get(node.url);
-      const src = resolved ? `../images/${resolved.filename}` : escapeXml(node.url);
+      const safeSrc = resolved ? `../images/${resolved.filename}` : sanitizeUrl(node.url, 'media');
+      if (!safeSrc) return alt;
+      const src = escapeXml(safeSrc);
       return `<img src="${src}" alt="${alt}"/>`;
     }
 
@@ -559,6 +566,58 @@ function inlineToXhtml(node: MarkdownInlineNode, images: ImageMap): string {
     default:
       return '';
   }
+}
+
+/**
+ * Produce an EPUB identifier without assuming `crypto.randomUUID()` exists.
+ * `randomUUID` is unavailable in older/non-secure browser contexts; use
+ * `getRandomValues` when possible and retain a non-cryptographic last resort
+ * because this UUID is an identifier, not a security token.
+ */
+function createEpubUuid(): string {
+  const webCrypto = globalThis.crypto;
+  if (typeof webCrypto?.randomUUID === 'function') return webCrypto.randomUUID();
+
+  const bytes = new Uint8Array(16);
+  if (typeof webCrypto?.getRandomValues === 'function') {
+    webCrypto.getRandomValues(bytes);
+  } else {
+    let seed = Date.now() ^ Math.floor(Math.random() * 0x7fffffff);
+    for (let i = 0; i < bytes.length; i++) {
+      seed = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+      bytes[i] = seed & 0xff;
+    }
+  }
+  // RFC 4122 version 4 / variant 1 bits.
+  bytes[6] = (bytes[6]! & 0x0f) | 0x40;
+  bytes[8] = (bytes[8]! & 0x3f) | 0x80;
+  const hex = Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+}
+
+/** Flatten an external path to a safe archive basename. */
+function safeArchiveBasename(path: string, fallback: string): string {
+  const filename = extractFilename(path.replace(/\\/g, '/'));
+  const safe = Array.from(filename, (character) => {
+    const codePoint = character.codePointAt(0) ?? 0;
+    return character === '\\' || character === '/' || codePoint < 0x20 || codePoint === 0x7f
+      ? '_'
+      : character;
+  })
+    .join('')
+    .trim();
+  return !safe || safe === '.' || safe === '..' ? fallback : safe;
+}
+
+/** Return a basename that does not collide with a prior archive member. */
+function uniqueFilename(filename: string, used: ReadonlySet<string>): string {
+  if (!used.has(filename)) return filename;
+  const dot = filename.lastIndexOf('.');
+  const base = dot > 0 ? filename.slice(0, dot) : filename;
+  const ext = dot > 0 ? filename.slice(dot) : '';
+  let suffix = 2;
+  while (used.has(`${base}-${suffix}${ext}`)) suffix++;
+  return `${base}-${suffix}${ext}`;
 }
 
 // ── SMIL Media Overlays ───────────────────────────────────────────

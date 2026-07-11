@@ -6,7 +6,13 @@ import {
   STARTER_THEME,
   deriveColorPalette,
 } from '../schemas/themeCompile.js';
-import { registerTheme, unregisterTheme, getRegisteredThemes } from '../schemas/Theme.js';
+import {
+  registerTheme,
+  unregisterTheme,
+  getRegisteredThemes,
+  createThemeRegistry,
+} from '../schemas/Theme.js';
+import type { Theme } from '../schemas/Theme.js';
 import { resolveTheme, DEFAULT_THEME, THEMES } from '../schemas/themeLibrary.js';
 import { resolveFontFamily } from '../schemas/fontStacks.js';
 
@@ -171,6 +177,37 @@ describe('registerTheme / resolveTheme', () => {
   it('resolveTheme falls back to default for unknown ids', () => {
     expect(resolveTheme('nonexistent-theme')).toBe(DEFAULT_THEME);
     expect(resolveTheme(undefined)).toBe(DEFAULT_THEME);
+  });
+
+  it('validates and stores an immutable snapshot', () => {
+    const registry = createThemeRegistry();
+    const source = compileTheme({
+      id: 'isolated-theme',
+      name: 'Isolated',
+      seedColors: { primary: '#336699' },
+    });
+    registry.registerTheme(source);
+    source.name = 'Changed later';
+    source.colors.primary = '#ffffff';
+
+    const stored = registry.lookupRegisteredTheme('isolated-theme')!;
+    expect(stored.name).toBe('Isolated');
+    expect(stored.colors.primary).toBe('#336699');
+    expect(Object.isFrozen(stored)).toBe(true);
+    expect(Object.isFrozen(stored.colors)).toBe(true);
+    expect(() => registry.registerTheme({ id: 'invalid' } as Theme)).toThrow(/invalid theme/i);
+  });
+
+  it('supports caller-owned registries with isolated state', () => {
+    const source = compileTheme({
+      id: 'tenant-theme',
+      name: 'Tenant',
+      seedColors: { primary: '#123456' },
+    });
+    const tenantA = createThemeRegistry([source]);
+    const tenantB = createThemeRegistry();
+    expect(tenantA.lookupRegisteredTheme('tenant-theme')?.name).toBe('Tenant');
+    expect(tenantB.lookupRegisteredTheme('tenant-theme')).toBeUndefined();
   });
 });
 

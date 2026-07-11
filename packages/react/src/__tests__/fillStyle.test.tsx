@@ -75,8 +75,9 @@ describe('ShapeLayer fill/border', () => {
         />
       </svg>,
     );
-    expect(container.querySelector('linearGradient')).not.toBeNull();
-    expect(container.querySelector('rect')!.getAttribute('fill')).toBe('url(#squisq-grad-s1)');
+    const gradient = container.querySelector('linearGradient');
+    expect(gradient).not.toBeNull();
+    expect(container.querySelector('rect')!.getAttribute('fill')).toBe(`url(#${gradient!.id})`);
   });
 });
 

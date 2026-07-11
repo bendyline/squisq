@@ -7,7 +7,9 @@
  * - WASM-based frame-to-MP4 encoding via ffmpeg.wasm
  * - Shared types, quality presets, and dimension helpers
  *
- * This package has no Node.js dependencies and works in both browser and Node.
+ * Pure helpers and HTML generation work in browsers and Node.js. The
+ * ffmpeg.wasm encoder itself requires a browser runtime; Node callers should
+ * use the native encoder supplied by @bendyline/squisq-cli.
  */
 
 // ── Types & Presets ────────────────────────────────────────────────
@@ -15,6 +17,7 @@ export type {
   VideoExportOptions,
   VideoQuality,
   VideoOrientation,
+  FfmpegWasmLoadConfig,
   QualityPreset,
   EncoderResult,
 } from './types.js';
@@ -23,6 +26,7 @@ export {
   QUALITY_PRESETS,
   ORIENTATION_DIMENSIONS,
   resolveDimensions,
+  validateVideoExportOptions,
   bitrateForQuality,
 } from './types.js';
 
@@ -35,7 +39,7 @@ export type { RenderHtmlOptions } from './renderHtml.js';
 export { generateRenderHtml } from './renderHtml.js';
 
 // ── FFmpeg Argument Builders ───────────────────────────────────────
-export { ffmpegVideoQualityArgs, audioBitrateArg } from './ffmpegArgs.js';
+export { ffmpegVideoQualityArgs, audioBitrateArg, ffmpegAudioMuxArgs } from './ffmpegArgs.js';
 
 // ── WASM Encoder ───────────────────────────────────────────────────
 export { framesToMp4Wasm, fetchFile } from './wasmEncoder.js';

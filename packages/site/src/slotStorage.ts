@@ -69,6 +69,12 @@ function mediaKey(slot: number, filename: string): string {
   return `${mediaKeyPrefix(slot)}${filename}`;
 }
 
+/** Return only binary media keys, excluding each asset's `:info` sidecar. */
+export function filterMediaDataKeys(allKeys: string[], slot: number): string[] {
+  const prefix = mediaKeyPrefix(slot);
+  return allKeys.filter((key) => key.startsWith(prefix) && !key.endsWith(':info'));
+}
+
 // ============================================
 // Slot Metadata
 // ============================================
@@ -144,7 +150,7 @@ export async function clearSlot(slot: number): Promise<void> {
 export async function listSlotMedia(slot: number): Promise<MediaEntry[]> {
   const prefix = mediaKeyPrefix(slot);
   const allKeys = await store.keys();
-  const mediaKeys = allKeys.filter((k) => k.startsWith(prefix));
+  const mediaKeys = filterMediaDataKeys(allKeys, slot);
 
   const entries: MediaEntry[] = [];
   for (const key of mediaKeys) {

@@ -17,6 +17,7 @@
 
 import type { CustomTemplateDefinition, Theme } from '@bendyline/squisq/schemas';
 import { openPackage } from '../ooxml/reader.js';
+import type { OoxmlOpenOptions } from '../ooxml/reader.js';
 import type { OoxmlPackage } from '../ooxml/types.js';
 import { ConversionError } from '../registry/errors.js';
 import type { ExtractedFileTheme, InferSourceFormat } from './types.js';
@@ -32,7 +33,7 @@ export {
   extractedThemeToPartial,
 } from './mapTheme.js';
 
-export interface InferThemeOptions {
+export interface InferThemeOptions extends OoxmlOpenOptions {
   /** Skip sniffing when the caller already knows the format (e.g. from the extension). */
   format?: InferSourceFormat;
   /** PPTX only: also derive custom layout templates from slide layouts/masters. */
@@ -119,7 +120,7 @@ export async function inferThemeFromFile(
 
   let pkg: OoxmlPackage;
   try {
-    pkg = await openPackage(data);
+    pkg = await openPackage(data, options);
   } catch (err: unknown) {
     throw new ConversionError(
       'invalid-input',

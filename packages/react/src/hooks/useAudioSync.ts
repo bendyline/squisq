@@ -17,10 +17,19 @@ import type { RefObject } from 'react';
 import type { AudioTrack } from '@bendyline/squisq/schemas';
 import type { AudioController } from './AudioController';
 
+function resolveAudioUrl(src: string, basePath: string): string {
+  // Preserve absolute/protocol-relative/data/blob URLs. Prefixing an absolute
+  // URL with the common default base path (`.`) produces `./https://...`.
+  if (!src || /^(?:[a-z][a-z0-9+.-]*:|\/\/|\/)/i.test(src)) return src;
+  if (!basePath) return src;
+  return `${basePath.replace(/\/$/, '')}/${src.replace(/^\//, '')}`;
+}
+
 export function useAudioSync(
   audioRef: RefObject<HTMLAudioElement>,
   audioTrack: AudioTrack | undefined,
   basePath: string = '',
+  enabled: boolean = true,
 ): AudioController {
   const [currentTime, setCurrentTime] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -39,13 +48,27 @@ export function useAudioSync(
   // Preloaded audio blob URLs (for seeking without range request support)
   const blobUrls = useRef<Map<string, string>>(new Map());
   const loadingPromises = useRef<Map<string, Promise<string>>>(new Map());
+  const abortControllers = useRef<Set<AbortController>>(new Set());
+  const loadGeneration = useRef(0);
 
   // Fallback timer: when audio.play() is blocked (e.g., autoplay policy),
   // advance currentTime synthetically so blocks still progress without audio.
   const fallbackMode = useRef(false);
 
   useEffect(() => {
-    if (!audioTrack?.segments) {
+    loadGeneration.current += 1;
+    pendingSeekTime.current = null;
+    shouldPlayAfterLoad.current = false;
+    fallbackMode.current = false;
+    setCurrentTime(0);
+    setCurrentSegment(0);
+    setIsPlaying(false);
+    setIsEnded(false);
+    setIsAudioReady(false);
+
+    if (!enabled || !audioTrack?.segments) {
+      segmentStarts.current = [];
+      setTotalDuration(0);
       return;
     }
 
@@ -56,12 +79,12 @@ export function useAudioSync(
       return start;
     });
     setTotalDuration(time);
-  }, [audioTrack]);
+  }, [audioTrack, enabled]);
 
   // Preload audio file as blob (enables seeking without range request support)
   const preloadAudio = useCallback(
     async (src: string): Promise<string> => {
-      const audioUrl = basePath ? `${basePath}/${src}` : src;
+      const audioUrl = resolveAudioUrl(src, basePath);
 
       // Return cached blob URL if available
       if (blobUrls.current.has(src)) {
@@ -74,18 +97,26 @@ export function useAudioSync(
       }
 
       // Start loading
+      const controller = new AbortController();
+      abortControllers.current.add(controller);
+      const generation = loadGeneration.current;
       const loadPromise = (async () => {
         try {
-          const response = await fetch(audioUrl);
+          const response = await fetch(audioUrl, { signal: controller.signal });
           if (!response.ok) throw new Error(`HTTP ${response.status}`);
           const blob = await response.blob();
           const blobUrl = URL.createObjectURL(blob);
+          if (controller.signal.aborted || generation !== loadGeneration.current) {
+            URL.revokeObjectURL(blobUrl);
+            return audioUrl;
+          }
           blobUrls.current.set(src, blobUrl);
           return blobUrl;
         } catch {
           // Fall back to direct URL if blob loading fails
           return audioUrl;
         } finally {
+          abortControllers.current.delete(controller);
           loadingPromises.current.delete(src);
         }
       })();
@@ -98,7 +129,7 @@ export function useAudioSync(
 
   // Preload all audio segments on mount
   useEffect(() => {
-    if (!audioTrack?.segments) return;
+    if (!enabled || !audioTrack?.segments) return;
 
     // Preload all segments in parallel
     audioTrack.segments.forEach((segment) => {
@@ -107,16 +138,23 @@ export function useAudioSync(
 
     // Cleanup blob URLs on unmount
     const currentBlobUrls = blobUrls.current;
+    const currentAbortControllers = abortControllers.current;
+    const currentLoadingPromises = loadingPromises.current;
     return () => {
+      loadGeneration.current += 1;
+      currentAbortControllers.forEach((controller) => controller.abort());
+      currentAbortControllers.clear();
+      currentLoadingPromises.clear();
       currentBlobUrls.forEach((url) => {
         URL.revokeObjectURL(url);
       });
       currentBlobUrls.clear();
     };
-  }, [audioTrack, preloadAudio]);
+  }, [audioTrack, preloadAudio, enabled]);
 
   // Handle audio time updates
   useEffect(() => {
+    if (!enabled) return;
     const audio = audioRef.current;
     if (!audio) return;
 
@@ -176,10 +214,11 @@ export function useAudioSync(
       audio.removeEventListener('ended', handleEnded);
       audio.removeEventListener('error', handleError);
     };
-  }, [audioRef, currentSegment, audioTrack]);
+  }, [audioRef, currentSegment, audioTrack, enabled]);
 
   // Load new segment when currentSegment changes
   useEffect(() => {
+    if (!enabled) return;
     const audio = audioRef.current;
     if (!audio || !audioTrack?.segments) return;
 
@@ -209,15 +248,20 @@ export function useAudioSync(
     const isSameSource =
       currentSrc && (currentSrc === cachedBlobUrl || currentSrc.endsWith(segment.src));
 
+    let cancelled = false;
+    let handleCanPlay: (() => void) | null = null;
+
     if (!isSameSource) {
       // Need to load new source - use preloaded blob URL
       const loadAndPlay = async () => {
         const blobUrl = await preloadAudio(segment.src);
+        if (cancelled) return;
 
-        const handleCanPlay = () => {
+        handleCanPlay = () => {
+          if (cancelled) return;
           setIsAudioReady(true);
           applyPendingSeek();
-          audio.removeEventListener('canplay', handleCanPlay);
+          if (handleCanPlay) audio.removeEventListener('canplay', handleCanPlay);
         };
 
         audio.addEventListener('canplay', handleCanPlay);
@@ -228,18 +272,23 @@ export function useAudioSync(
         // Check after a microtask to see if it's ready
         await Promise.resolve();
         if (audio.readyState >= 3) {
-          audio.removeEventListener('canplay', handleCanPlay);
+          if (handleCanPlay) audio.removeEventListener('canplay', handleCanPlay);
           setIsAudioReady(true);
           applyPendingSeek();
         }
       };
 
-      loadAndPlay();
+      void loadAndPlay();
     } else {
       // Same source - apply seek directly
       applyPendingSeek();
     }
-  }, [audioRef, currentSegment, audioTrack, preloadAudio]);
+
+    return () => {
+      cancelled = true;
+      if (handleCanPlay) audio.removeEventListener('canplay', handleCanPlay);
+    };
+  }, [audioRef, currentSegment, audioTrack, preloadAudio, enabled]);
 
   const play = useCallback(() => {
     const audio = audioRef.current;

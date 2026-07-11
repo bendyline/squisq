@@ -20,6 +20,7 @@ import {
   REL_CORE_PROPERTIES,
 } from './namespaces.js';
 import { xmlDeclaration, escapeXml } from './xmlUtils.js';
+import { assertSafeZipPath } from '../shared/zipSafety.js';
 
 // ============================================
 // Package Builder
@@ -99,14 +100,17 @@ export function createPackage(): OoxmlPackageBuilder {
 
   return {
     addPart(path, content, contentType) {
+      assertSafeZipPath(path);
       parts.push({ path, content, contentType });
     },
 
     addBinaryPart(path, data, contentType) {
+      assertSafeZipPath(path);
       parts.push({ path, binaryContent: data, contentType });
     },
 
     addRelationship(sourcePart, rel) {
+      if (sourcePart) assertSafeZipPath(sourcePart);
       relationships.push({ sourcePart, relationship: rel });
     },
 
@@ -139,6 +143,10 @@ function assemble(
   coreProps?: CoreProperties,
 ): JSZip {
   const zip = new JSZip();
+  // Assembly must be idempotent: callers may request both Blob and
+  // ArrayBuffer representations from one builder. Never append generated
+  // relationships to the builder-owned array.
+  const assembledRelationships = relationships.slice();
 
   // Write content parts
   for (const part of parts) {
@@ -154,22 +162,32 @@ function assemble(
     const coreXml = buildCorePropertiesXml(coreProps);
     zip.file('docProps/core.xml', coreXml);
 
-    // Add relationship to core properties
-    relationships.push({
-      sourcePart: '',
-      relationship: {
-        id: `rId${relationships.length + 100}`,
-        type: REL_CORE_PROPERTIES,
-        target: 'docProps/core.xml',
-      },
-    });
+    // Add the generated relationship unless the caller already supplied it.
+    if (
+      !assembledRelationships.some(
+        ({ sourcePart, relationship }) =>
+          sourcePart === '' && relationship.type === REL_CORE_PROPERTIES,
+      )
+    ) {
+      const ids = new Set(assembledRelationships.map(({ relationship }) => relationship.id));
+      let nextId = 100;
+      while (ids.has(`rId${nextId}`)) nextId++;
+      assembledRelationships.push({
+        sourcePart: '',
+        relationship: {
+          id: `rId${nextId}`,
+          type: REL_CORE_PROPERTIES,
+          target: 'docProps/core.xml',
+        },
+      });
+    }
   }
 
   // Build and write [Content_Types].xml
   zip.file('[Content_Types].xml', buildContentTypesXml(parts, coreProps));
 
   // Build and write _rels/*.rels files
-  const relsBySource = groupRelationshipsBySource(relationships);
+  const relsBySource = groupRelationshipsBySource(assembledRelationships);
   for (const [sourcePart, rels] of relsBySource) {
     const relsPath = sourcePart === '' ? '_rels/.rels' : buildRelsPath(sourcePart);
     zip.file(relsPath, buildRelationshipsXml(rels));

@@ -31,7 +31,7 @@
  */
 
 import { KNOWN_BLOCK_META_KEYS, parseNumber } from '../../markdown/annotationCoercion.js';
-import { resolveTemplateName } from './index.js';
+import { resolveTemplateName } from './templateNames.js';
 import { nearestName } from '../utils/nearest.js';
 
 // ============================================

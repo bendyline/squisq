@@ -381,18 +381,20 @@ export function buildPreviewDoc(doc: Doc): Doc {
     t += slide.duration as number;
   }
 
+  const audio =
+    doc.audio?.segments?.length > 0
+      ? doc.audio
+      : {
+          segments: t > 0 ? [{ src: '', name: 'preview', duration: t, startTime: 0 }] : [],
+        };
+
   return {
-    articleId: doc.articleId,
+    // Preserve document-wide capabilities (custom themes, persistent layers,
+    // scheduled media, frontmatter, captions, and future schema fields).
+    // Preview preparation should replace only the slide/timing projection.
+    ...doc,
     duration: t,
     blocks: slides as unknown as Block[],
-    audio: {
-      segments: t > 0 ? [{ src: '', name: 'preview', duration: t, startTime: 0 }] : [],
-    },
-    ...(doc.captions ? { captions: doc.captions } : {}),
-    ...(doc.startBlock ? { startBlock: doc.startBlock } : {}),
-    ...(doc.themeId ? { themeId: doc.themeId } : {}),
-    // Custom templates ride along so `useDocPlayback` can merge them
-    // onto the registry before expanding slides.
-    ...(doc.customTemplates ? { customTemplates: doc.customTemplates } : {}),
+    audio,
   };
 }

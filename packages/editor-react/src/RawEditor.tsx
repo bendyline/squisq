@@ -14,6 +14,7 @@ import { getAvailableTemplates } from '@bendyline/squisq/doc';
 import { suggestIcons, resolveIcon, iconGlyph } from '@bendyline/squisq/icons';
 import { BLOCK_META_KEY_DESCRIPTORS, tokenizeAttrTokens } from '@bendyline/squisq/markdown';
 import { SQUISQ_MEDIA_MIME, parseSquisqMediaPayload } from './mediaDragMime';
+import { canHandleSquisqMediaDrop, ownsMonacoModel } from './rawEditorIsolation';
 import { useMonacoLoader } from './useMonacoLoader';
 
 // Monaco is loaded lazily through `useMonacoLoader` (see the hook for the
@@ -108,9 +109,13 @@ export function RawEditor({
   const keyDisposable = useRef<monaco.IDisposable | null>(null);
   // Ref so the keydown handler always sees the latest callback.
   const submitOnEnterRef = useRef(submitOnEnter);
+  const readOnlyRef = useRef(readOnly);
   useEffect(() => {
     submitOnEnterRef.current = submitOnEnter;
   }, [submitOnEnter]);
+  useEffect(() => {
+    readOnlyRef.current = readOnly;
+  }, [readOnly]);
   // Ref so the completion provider — registered once at mount — always
   // sees the latest mentionProvider without needing to unregister.
   const mentionProviderRef = useRef(mentionProvider);
@@ -194,6 +199,7 @@ export function RawEditor({
         completionDisposable.current = monaco.languages.registerCompletionItemProvider('markdown', {
           triggerCharacters: ['['],
           provideCompletionItems(model: monaco.editor.ITextModel, position: monaco.Position) {
+            if (!ownsMonacoModel(editor, model)) return { suggestions: [] };
             const lineContent = model.getLineContent(position.lineNumber);
 
             // Only trigger inside a heading line that has {[ before the cursor
@@ -248,6 +254,7 @@ export function RawEditor({
           {
             triggerCharacters: ['@'],
             async provideCompletionItems(model, position) {
+              if (!ownsMonacoModel(editor, model)) return { suggestions: [] };
               const provider = mentionProviderRef.current;
               if (!provider) return { suggestions: [] };
               const lineContent = model.getLineContent(position.lineNumber);
@@ -306,6 +313,7 @@ export function RawEditor({
           {
             triggerCharacters: ['['],
             provideCompletionItems(model, position) {
+              if (!ownsMonacoModel(editor, model)) return { suggestions: [] };
               const lineContent = model.getLineContent(position.lineNumber);
               const textBeforeCursor = lineContent.substring(0, position.column - 1);
               const textAfterCursor = lineContent.substring(position.column - 1);
@@ -388,6 +396,7 @@ export function RawEditor({
           {
             triggerCharacters: ['=', ' '],
             provideCompletionItems(model, position) {
+              if (!ownsMonacoModel(editor, model)) return { suggestions: [] };
               const lineContent = model.getLineContent(position.lineNumber);
               // Block-meta attributes only mean something on a heading's
               // template annotation — same gate as the template provider.
@@ -498,12 +507,14 @@ export function RawEditor({
       const domNode = editor.getDomNode();
       if (domNode) {
         const onDragOver = (e: DragEvent) => {
-          if (e.dataTransfer?.types.includes(SQUISQ_MEDIA_MIME)) {
+          const dt = e.dataTransfer;
+          if (canHandleSquisqMediaDrop(readOnlyRef.current, dt)) {
             e.preventDefault();
-            e.dataTransfer.dropEffect = 'copy';
+            dt!.dropEffect = 'copy';
           }
         };
         const onDrop = (e: DragEvent) => {
+          if (!canHandleSquisqMediaDrop(readOnlyRef.current, e.dataTransfer)) return;
           const dt = e.dataTransfer;
           if (!dt) return;
           const raw = dt.getData(SQUISQ_MEDIA_MIME);

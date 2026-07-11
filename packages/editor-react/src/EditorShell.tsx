@@ -61,7 +61,8 @@ import {
   createMediaProviderFromContainer,
 } from '@bendyline/squisq/storage';
 import type { PrunePolicy, SaveVersionResult } from '@bendyline/squisq/versions';
-import type { CSSProperties, ReactNode } from 'react';
+import type { CSSProperties, KeyboardEvent as ReactKeyboardEvent, ReactNode } from 'react';
+import { MediaContext } from '@bendyline/squisq-react';
 
 export type { EditorColorScheme } from './EditorContext';
 
@@ -467,65 +468,67 @@ export function EditorShell({
     !showPlayTab && initialView === 'preview' ? 'wysiwyg' : initialView;
 
   return (
-    <EditorProvider
-      initialMarkdown={initialMarkdown}
-      initialView={effectiveInitialView}
-      articleId={articleId}
-      colorScheme={colorScheme}
-      workspaceContainer={effectiveContainer}
-      allowVersioning={allowVersioning}
-      versionBasename={versionBasename}
-      versioningPrunePolicy={versioningPrunePolicy}
-      versioningAutoSaveIdleMs={versioningAutoSaveIdleMs}
-      onSaveVersion={onSaveVersion}
-      mediaProvider={effectiveMediaProvider}
-      imageDisplayMode={imageDisplayMode}
-      mentionProvider={mentionProvider}
-      documentLinkProvider={documentLinkProvider}
-      allowRecording={allowRecording}
-      fileName={fileName}
-      language={language}
-      inlinePreview={inlinePreview}
-      showStatusBar={showStatusBar}
-      outline={outline}
-      blockTags={blockTags}
-      themeInheritance={themeInheritance}
-      viewPreferences={viewPreferences}
-      onViewPreferencesChange={onViewPreferencesChange}
-    >
-      <EditorShellInner
-        basePath={basePath}
-        onChange={onChange}
-        className={className}
-        height={height}
-        minHeight={minHeight}
-        maxHeight={maxHeight}
-        placeholder={placeholder}
-        mediaProvider={effectiveMediaProvider ?? null}
+    <MediaContext.Provider value={effectiveMediaProvider ?? null}>
+      <EditorProvider
+        initialMarkdown={initialMarkdown}
+        initialView={effectiveInitialView}
+        articleId={articleId}
+        colorScheme={colorScheme}
         workspaceContainer={effectiveContainer}
-        filesToggleEnabled={filesToggleEnabled}
-        toolbarSlotLeft={toolbarSlotLeft}
-        toolbarSlotAfterActions={toolbarSlotAfterActions}
-        toolbarSlotRight={toolbarSlotRight}
-        showPlayTab={showPlayTab}
-        submitOnEnter={submitOnEnter}
-        codeContext={codeContext}
-        fullWidth={fullWidth}
-        uxFont={uxFont}
-        thinMargins={thinMargins}
-        readOnly={readOnly}
-        imageSrc={imageSrc}
-        imageAlt={imageAlt}
-        imageMode={imageMode}
-        imageEditorContainer={imageEditorContainer}
-        onImageExport={onImageExport}
         allowVersioning={allowVersioning}
+        versionBasename={versionBasename}
+        versioningPrunePolicy={versioningPrunePolicy}
         versioningAutoSaveIdleMs={versioningAutoSaveIdleMs}
-        inlinePreviewWidth={inlinePreviewWidth}
-        outlineWidth={outlineWidth}
-        themeOverride={themeOverride}
-      />
-    </EditorProvider>
+        onSaveVersion={onSaveVersion}
+        mediaProvider={effectiveMediaProvider}
+        imageDisplayMode={imageDisplayMode}
+        mentionProvider={mentionProvider}
+        documentLinkProvider={documentLinkProvider}
+        allowRecording={allowRecording}
+        fileName={fileName}
+        language={language}
+        inlinePreview={inlinePreview}
+        showStatusBar={showStatusBar}
+        outline={outline}
+        blockTags={blockTags}
+        themeInheritance={themeInheritance}
+        viewPreferences={viewPreferences}
+        onViewPreferencesChange={onViewPreferencesChange}
+      >
+        <EditorShellInner
+          basePath={basePath}
+          onChange={onChange}
+          className={className}
+          height={height}
+          minHeight={minHeight}
+          maxHeight={maxHeight}
+          placeholder={placeholder}
+          mediaProvider={effectiveMediaProvider ?? null}
+          workspaceContainer={effectiveContainer}
+          filesToggleEnabled={filesToggleEnabled}
+          toolbarSlotLeft={toolbarSlotLeft}
+          toolbarSlotAfterActions={toolbarSlotAfterActions}
+          toolbarSlotRight={toolbarSlotRight}
+          showPlayTab={showPlayTab}
+          submitOnEnter={submitOnEnter}
+          codeContext={codeContext}
+          fullWidth={fullWidth}
+          uxFont={uxFont}
+          thinMargins={thinMargins}
+          readOnly={readOnly}
+          imageSrc={imageSrc}
+          imageAlt={imageAlt}
+          imageMode={imageMode}
+          imageEditorContainer={imageEditorContainer}
+          onImageExport={onImageExport}
+          allowVersioning={allowVersioning}
+          versioningAutoSaveIdleMs={versioningAutoSaveIdleMs}
+          inlinePreviewWidth={inlinePreviewWidth}
+          outlineWidth={outlineWidth}
+          themeOverride={themeOverride}
+        />
+      </EditorProvider>
+    </MediaContext.Provider>
   );
 }
 
@@ -594,6 +597,7 @@ function EditorShellInner({
   outlineWidth,
   themeOverride,
 }: EditorShellInnerProps) {
+  const shellRef = useRef<HTMLDivElement>(null);
   const {
     activeView,
     markdownSource,
@@ -801,6 +805,7 @@ function EditorShellInner({
 
   const { isDragging, dragContentType, containerProps, zoneProps } = useFileDrop({
     onDrop: handleFileDrop,
+    enabled: !readOnly,
   });
 
   // Notify parent of changes
@@ -808,35 +813,28 @@ function EditorShellInner({
     onChange?.(markdownSource);
   }, [markdownSource, onChange]);
 
-  // Keyboard shortcuts for view switching
-  useEffect(() => {
-    const handler = (e: KeyboardEvent) => {
-      if (e.ctrlKey || e.metaKey) {
-        switch (e.key) {
-          case '1':
-            e.preventDefault();
-            document.querySelector<HTMLButtonElement>('[data-view="wysiwyg"]')?.click();
-            break;
-          case '2':
-            e.preventDefault();
-            document.querySelector<HTMLButtonElement>('[data-view="raw"]')?.click();
-            break;
-          case '3':
-            if (!showPlayTab) return;
-            e.preventDefault();
-            document.querySelector<HTMLButtonElement>('[data-view="preview"]')?.click();
-            break;
-        }
-      }
-    };
-    window.addEventListener('keydown', handler);
-    return () => window.removeEventListener('keydown', handler);
-  }, [showPlayTab]);
+  // View shortcuts bubble only through the editor that currently owns focus.
+  const handleShellKeyDown = useCallback(
+    (e: ReactKeyboardEvent<HTMLDivElement>) => {
+      if (!e.ctrlKey && !e.metaKey) return;
+      const view =
+        e.key === '1' ? 'wysiwyg' : e.key === '2' ? 'raw' : e.key === '3' ? 'preview' : null;
+      if (!view || (view === 'preview' && !showPlayTab)) return;
+      const button = shellRef.current?.querySelector<HTMLButtonElement>(`[data-view="${view}"]`);
+      if (!button) return;
+      e.preventDefault();
+      e.stopPropagation();
+      button.click();
+    },
+    [showPlayTab],
+  );
 
   const autoGrow = minHeight !== undefined || maxHeight !== undefined;
 
   return (
     <div
+      ref={shellRef}
+      onKeyDown={handleShellKeyDown}
       className={`squisq-editor-shell ${className || ''}`}
       data-theme={colorScheme}
       data-full-width={fullWidth ? 'true' : undefined}
@@ -1141,6 +1139,19 @@ function ImageEditModal({
   versioningAutoSaveIdleMs,
   shellTheme,
 }: ImageEditModalProps) {
+  const modalRef = useRef<HTMLDivElement>(null);
+  const surfaceRef = useRef<HTMLDivElement>(null);
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
+  const extension = relativePath.split(/[?#]/, 1)[0]?.split('.').pop()?.toLowerCase();
+  const saveFormat: 'png' | 'jpeg' | 'webp' | null =
+    extension === 'png'
+      ? 'png'
+      : extension === 'jpg' || extension === 'jpeg'
+        ? 'jpeg'
+        : extension === 'webp'
+          ? 'webp'
+          : null;
   // Each unique image path gets its own sidecar so multiple images in the
   // same doc can be edited independently without colliding state. When the
   // host didn't supply a `container`, fall back to a fresh in-memory one
@@ -1148,14 +1159,22 @@ function ImageEditModal({
   // gets written back through `mediaProvider`.
   const sidecar = useMemo(() => {
     const sanitized = relativePath.replace(/[^a-zA-Z0-9._-]+/g, '_');
+    let hash = 2166136261;
+    for (let i = 0; i < relativePath.length; i++) {
+      hash ^= relativePath.charCodeAt(i);
+      hash = Math.imul(hash, 16777619);
+    }
+    const scopedName = `${sanitized}-${(hash >>> 0).toString(36)}`;
     const parent: ContentContainer = container ?? new MemoryContentContainer();
-    return scopeContainer(parent, `.imageEdits/${sanitized}`);
+    return scopeContainer(parent, `.imageEdits/${scopedName}`);
   }, [container, relativePath]);
 
   const [initialSrc, setInitialSrc] = useState<string | null>(null);
   const [resolveError, setResolveError] = useState<string | null>(null);
   useEffect(() => {
     let cancelled = false;
+    setInitialSrc(null);
+    setResolveError(null);
     mediaProvider.resolveUrl(relativePath).then(
       (url) => {
         if (!cancelled) setInitialSrc(url);
@@ -1186,15 +1205,55 @@ function ImageEditModal({
 
   // Close on Escape — global listener so it works regardless of focus.
   useEffect(() => {
+    const previousFocus = document.activeElement as HTMLElement | null;
+    const shell = modalRef.current?.closest('.squisq-editor-shell');
+    const inertSiblings = shell
+      ? Array.from(shell.children).filter((element) => !element.contains(modalRef.current))
+      : [];
+    inertSiblings.forEach((element) => {
+      (element as HTMLElement).inert = true;
+    });
+    surfaceRef.current
+      ?.querySelector<HTMLElement>(
+        'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])',
+      )
+      ?.focus();
     const handler = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        onCloseRef.current();
+        return;
+      }
+      if (e.key !== 'Tab' || !surfaceRef.current) return;
+      const focusable = Array.from(
+        surfaceRef.current.querySelectorAll<HTMLElement>(
+          'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+        ),
+      );
+      if (focusable.length === 0) return;
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (e.shiftKey && document.activeElement === first) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && document.activeElement === last) {
+        e.preventDefault();
+        first.focus();
+      }
     };
     window.addEventListener('keydown', handler);
-    return () => window.removeEventListener('keydown', handler);
-  }, [onClose]);
+    return () => {
+      window.removeEventListener('keydown', handler);
+      inertSiblings.forEach((element) => {
+        (element as HTMLElement).inert = false;
+      });
+      previousFocus?.focus();
+    };
+  }, []);
 
   return (
     <div
+      ref={modalRef}
       className="squisq-image-edit-modal"
       data-testid="image-edit-modal"
       role="dialog"
@@ -1205,7 +1264,7 @@ function ImageEditModal({
         if (e.target === e.currentTarget) onClose();
       }}
     >
-      <div className="squisq-image-edit-modal__surface">
+      <div ref={surfaceRef} className="squisq-image-edit-modal__surface">
         <header className="squisq-image-edit-modal__header">
           <span className="squisq-image-edit-modal__title">Edit image</span>
           <span className="squisq-image-edit-modal__path">{relativePath}</span>
@@ -1224,6 +1283,10 @@ function ImageEditModal({
             <div className="squisq-image-edit-modal__error">
               Failed to load image: {resolveError}
             </div>
+          ) : !saveFormat ? (
+            <div className="squisq-image-edit-modal__error">
+              Editing supports PNG, JPEG, and WebP images without changing the asset type.
+            </div>
           ) : !initialSrc ? (
             <div className="squisq-image-edit-modal__loading">Loading image…</div>
           ) : (
@@ -1234,7 +1297,7 @@ function ImageEditModal({
               versioningAutoSaveIdleMs={versioningAutoSaveIdleMs}
               onExport={handleExport}
               saveBehavior="export"
-              saveFormat="png"
+              saveFormat={saveFormat}
               saveLabel="Save and close"
               saveTitle="Save changes back to the image and close"
               surface={shellTheme === 'dark' ? DARK_SURFACE : LIGHT_SURFACE}

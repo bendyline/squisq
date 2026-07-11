@@ -22,6 +22,7 @@ import {
   type SceneCommand,
 } from '../scene';
 import type { SceneTextEditConfig } from '../scene/text/sceneTextConfig';
+import type { SceneTextChannel } from '../scene/text/sceneTextChannel';
 import { markdownToTiptap } from '../tiptapBridge';
 import type { DiagramRFNode, DiagramRFEdge } from './types';
 import { DIAGRAM_VIEWPORT, DIAGRAM_TOOLS } from './diagramConstants';
@@ -54,6 +55,8 @@ interface DiagramCanvasProps {
   onActiveToolIdChange?: (id: string) => void;
   /** Forwarded to the Scene so the host can drive a Delete action. */
   onSelectionChange?: (ids: ReadonlySet<string>) => void;
+  /** Per-editor toolbar bridge for detached scene roots. */
+  textChannel?: SceneTextChannel;
 }
 
 const TOOLS = DIAGRAM_TOOLS;
@@ -68,6 +71,7 @@ export function DiagramCanvas({
   activeToolId: controlledToolId,
   onActiveToolIdChange,
   onSelectionChange,
+  textChannel,
 }: DiagramCanvasProps) {
   const scene = useMemo(
     () => buildDiagramScene(incomingNodes, incomingEdges),
@@ -171,6 +175,7 @@ export function DiagramCanvas({
   incomingNodesRef.current = incomingNodes;
   const textConfig = useMemo<SceneTextEditConfig>(
     () => ({
+      channel: textChannel,
       resolveEditableId: (id) => (nodeIdFromCardLayerId(id) ? id : null),
       getHtml: (id) => {
         const nodeId = nodeIdFromCardLayerId(id);
@@ -184,7 +189,7 @@ export function DiagramCanvas({
       },
       level: 'inline',
     }),
-    [handleSceneCommand],
+    [handleSceneCommand, textChannel],
   );
 
   return (

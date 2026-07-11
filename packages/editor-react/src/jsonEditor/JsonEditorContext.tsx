@@ -5,7 +5,7 @@
  * to the host's `onChange`.
  */
 
-import { createContext, useContext, useMemo, type ReactNode } from 'react';
+import { createContext, useContext, useEffect, useMemo, type ReactNode } from 'react';
 import type {
   JsonFormValidationError,
   JsonFormValidator,
@@ -38,18 +38,24 @@ export interface JsonEditorProviderProps {
 export function JsonEditorProvider(props: JsonEditorProviderProps) {
   const { rootSchema, rootData, onRootChange, density, validate, onValidate, children } = props;
 
+  const validationErrors = useMemo(
+    () => (validate ? validate(rootData, rootSchema) : []),
+    [validate, rootData, rootSchema],
+  );
   const errors = useMemo(() => {
-    if (!validate) return new Map<string, JsonFormValidationError[]>();
-    const list = validate(rootData, rootSchema);
-    if (onValidate) onValidate(list);
     const grouped = new Map<string, JsonFormValidationError[]>();
-    for (const e of list) {
+    for (const e of validationErrors) {
       const arr = grouped.get(e.path) ?? [];
       arr.push(e);
       grouped.set(e.path, arr);
     }
     return grouped;
-  }, [validate, rootData, rootSchema, onValidate]);
+  }, [validationErrors]);
+
+  useEffect(() => {
+    if (!onValidate) return;
+    onValidate(validationErrors);
+  }, [validationErrors, onValidate]);
 
   const setAtPath = useMemo(
     () => (pointer: string, value: unknown) => {

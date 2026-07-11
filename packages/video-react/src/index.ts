@@ -33,6 +33,7 @@ export type { FrameCaptureHandle } from './hooks/useFrameCapture.js';
 // ── Encoder Utilities (for advanced usage) ─────────────────────────
 export { supportsWebCodecs, supportsWebCodecsH264, createEncoder } from './mainThreadEncoder.js';
 export type { MainThreadEncoder, EncoderConfig } from './mainThreadEncoder.js';
+export type { FfmpegWasmLoadConfig } from '@bendyline/squisq-video';
 
 // ── Audio (capability probe) ───────────────────────────────────────
 export { supportsWebCodecsAac } from './audioTrack.js';

@@ -66,6 +66,7 @@ export function useDocPlayback(
   viewport: ViewportConfig = VIEWPORT_PRESETS.landscape,
   renderMode: boolean = false,
   theme?: Theme,
+  onSeek?: (time: number) => void,
 ): PlaybackState & PlaybackActions {
   // `renderMode` is retained for API/signature compatibility; block transitions
   // are now computed identically for real-time and render (export) modes.
@@ -194,15 +195,12 @@ export function useDocPlayback(
   const goToBlock = useCallback(
     (index: number) => {
       if (!script || index < 0 || index >= blocks.length) return;
-      // This would need to be coordinated with seekTo from audio sync
-      // For now, just return the target block's start time
       const targetBlock = blocks[index];
       if (targetBlock) {
-        // Caller should use this time with audio seekTo
-        return targetBlock.startTime;
+        onSeek?.(targetBlock.startTime);
       }
     },
-    [script, blocks],
+    [script, blocks, onSeek],
   );
 
   const nextBlock = useCallback(() => {

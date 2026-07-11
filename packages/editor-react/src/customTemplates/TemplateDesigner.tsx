@@ -147,9 +147,8 @@ export function TemplateDesigner({
   );
 
   // Build the toolset once. Each bin entry — placeholder token or shape —
-  // gets a click-to-place tool; SelectTool is the singleton from
-  // scene/tools/SelectTool.ts. Tools are factories so each has its own
-  // state-free closure.
+  // gets a click-to-place tool. Gesture state is supplied by each Scene,
+  // so the reusable tool definitions remain instance-safe.
   const tools: SceneTool[] = useMemo(
     () => [
       SelectTool,

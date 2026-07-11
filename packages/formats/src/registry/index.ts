@@ -27,6 +27,9 @@ export type {
   FormatDefinition,
   FormatRegistry,
   ConvertSource,
+  BuiltinFormatOptions,
+  MarkdownFormatOptions,
+  DbkFormatOptions,
 } from './types.js';
 export { BUILTIN_FORMAT_IDS } from './types.js';
 

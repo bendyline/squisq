@@ -107,16 +107,21 @@ export async function pdfToMarkdownDoc(
         ? new Uint8Array(data)
         : data;
 
-  const textLines = await extractTextLines(bytes);
+  const loaded = await loadPdfDocument(bytes);
+  try {
+    const textLines = await extractTextLines(loaded.pdf);
 
-  if (textLines.length === 0) {
-    return { type: 'document', children: [] };
+    if (textLines.length === 0) {
+      return { type: 'document', children: [] };
+    }
+
+    const bodySize = options.bodyFontSize ?? detectBodyFontSize(textLines);
+    const blocks = classifyLines(textLines, bodySize, options);
+
+    return { type: 'document', children: blocks };
+  } finally {
+    await loaded.pdf.destroy?.();
   }
-
-  const bodySize = options.bodyFontSize ?? detectBodyFontSize(textLines);
-  const blocks = classifyLines(textLines, bodySize, options);
-
-  return { type: 'document', children: blocks };
 }
 
 /**
@@ -157,8 +162,14 @@ export async function pdfToContainer(
         ? new Uint8Array(data)
         : data;
 
-  const textLines = await extractTextLines(bytes);
-  const images = await extractImages(bytes);
+  const loaded = await loadPdfDocument(bytes);
+  let textLines: TextLine[];
+  let images: ExtractedImage[];
+  try {
+    [textLines, images] = await Promise.all([extractTextLines(loaded.pdf), extractImages(loaded)]);
+  } finally {
+    await loaded.pdf.destroy?.();
+  }
 
   // Under Node there is no DOM/canvas, so extractImages() returns [] via its
   // environment guard and embedded images can't be decoded. The registry's
@@ -208,32 +219,14 @@ export interface ExtractedImage {
  * Extract embedded images from a PDF using pdfjs-dist operator list API.
  * Requires browser canvas for PNG encoding.
  */
-async function extractImages(data: Uint8Array): Promise<ExtractedImage[]> {
+async function extractImages(loaded: LoadedPdf): Promise<ExtractedImage[]> {
   // Canvas is required for PNG encoding — skip in non-browser environments
   if (typeof document === 'undefined') return [];
 
-  let pdfjsLib: PdfjsLib & { OPS?: Record<string, number> };
-  try {
-    pdfjsLib = (await import('pdfjs-dist/legacy/build/pdf.mjs')) as unknown as PdfjsLib & {
-      OPS?: Record<string, number>;
-    };
-  } catch {
-    pdfjsLib = (await import('pdfjs-dist')) as unknown as PdfjsLib & {
-      OPS?: Record<string, number>;
-    };
-  }
-
-  await applyWorkerConfig(pdfjsLib);
+  const { pdfjsLib, pdf } = loaded;
 
   const OPS_paintImageXObject = pdfjsLib.OPS?.paintImageXObject ?? 85;
 
-  const loadingTask = pdfjsLib.getDocument({
-    data,
-    isEvalSupported: false,
-    useSystemFonts: true,
-  });
-
-  const pdf = await loadingTask.promise;
   const images: ExtractedImage[] = [];
   let counter = 0;
 
@@ -501,6 +494,12 @@ interface PdfjsLib {
 interface PdfjsDocument {
   numPages: number;
   getPage(pageNum: number): Promise<PdfjsPage>;
+  destroy?(): Promise<void>;
+}
+
+interface LoadedPdf {
+  pdfjsLib: PdfjsLib & { OPS?: Record<string, number> };
+  pdf: PdfjsDocument;
 }
 
 interface PdfjsPage {
@@ -528,14 +527,18 @@ async function applyWorkerConfig(pdfjsLib: PdfjsLib): Promise<void> {
   // Node.js the caller must have called configurePdfWorker() first.
 }
 
-async function extractTextLines(data: Uint8Array): Promise<TextLine[]> {
+async function loadPdfDocument(data: Uint8Array): Promise<LoadedPdf> {
   // Dynamic import — the legacy build bundles a fake-worker fallback
   // that avoids a real Web Worker in environments that don't support it.
-  let pdfjsLib: PdfjsLib;
+  let pdfjsLib: PdfjsLib & { OPS?: Record<string, number> };
   try {
-    pdfjsLib = (await import('pdfjs-dist/legacy/build/pdf.mjs')) as unknown as PdfjsLib;
+    pdfjsLib = (await import('pdfjs-dist/legacy/build/pdf.mjs')) as unknown as PdfjsLib & {
+      OPS?: Record<string, number>;
+    };
   } catch {
-    pdfjsLib = (await import('pdfjs-dist')) as unknown as PdfjsLib;
+    pdfjsLib = (await import('pdfjs-dist')) as unknown as PdfjsLib & {
+      OPS?: Record<string, number>;
+    };
   }
 
   await applyWorkerConfig(pdfjsLib);
@@ -546,7 +549,10 @@ async function extractTextLines(data: Uint8Array): Promise<TextLine[]> {
     useSystemFonts: true,
   });
 
-  const pdf = await loadingTask.promise;
+  return { pdfjsLib, pdf: await loadingTask.promise };
+}
+
+async function extractTextLines(pdf: PdfjsDocument): Promise<TextLine[]> {
   const allLines: TextLine[] = [];
 
   for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {

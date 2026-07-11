@@ -92,4 +92,7 @@ export type {
   ConvertSource,
   ConversionErrorCode,
   ConversionErrorOptions,
+  BuiltinFormatOptions,
+  MarkdownFormatOptions,
+  DbkFormatOptions,
 } from './registry/index.js';

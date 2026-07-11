@@ -27,6 +27,7 @@ import type {
   ProgressIndicatorConfig,
 } from '../../schemas/BlockTemplates.js';
 import type { Theme } from '../../schemas/Theme.js';
+import { cloneData } from '../../internal/immutable.js';
 import { isPersistentLayerTemplate } from '../../schemas/BlockTemplates.js';
 import { oklchDarken, withAlpha } from '../../schemas/colorUtils.js';
 
@@ -415,9 +416,9 @@ function expandProgressIndicator(config: ProgressIndicatorConfig): Layer {
  * Expand a single persistent layer (template or raw) to raw Layer(s).
  */
 export function expandPersistentLayer(layer: PersistentLayer, theme?: Theme): Layer[] {
-  // If already a raw Layer, return as-is
+  // If already a raw Layer, return an owned copy.
   if (!isPersistentLayerTemplate(layer)) {
-    return [layer as Layer];
+    return [cloneData(layer as Layer)];
   }
 
   const template = layer as PersistentLayerTemplate;
@@ -636,5 +637,12 @@ export function wrapWithPersistentLayers(
   if (bottomLayers.length === 0 && topLayers.length === 0) return layers;
   const useBottom = block.useBottomLayer !== false;
   const useTop = block.useTopLayer !== false;
-  return [...(useBottom ? bottomLayers : []), ...layers, ...(useTop ? topLayers : [])];
+  // Each expanded block owns its persistent layers. This prevents a renderer
+  // (or a later timing/style pass) from mutating the caller's config or a
+  // sibling block through a shared layer reference.
+  return [
+    ...(useBottom ? bottomLayers.map((layer) => cloneData(layer)) : []),
+    ...layers,
+    ...(useTop ? topLayers.map((layer) => cloneData(layer)) : []),
+  ];
 }

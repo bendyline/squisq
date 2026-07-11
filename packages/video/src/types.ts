@@ -18,6 +18,14 @@ export type VideoQuality = 'draft' | 'normal' | 'high';
 /** Viewport orientation for video output. */
 export type VideoOrientation = 'landscape' | 'portrait';
 
+/** Optional URLs for self-hosting or pinning ffmpeg.wasm runtime assets. */
+export interface FfmpegWasmLoadConfig {
+  coreURL?: string;
+  wasmURL?: string;
+  workerURL?: string;
+  classWorkerURL?: string;
+}
+
 /** Encoding preset parameters mapped from VideoQuality. */
 export interface QualityPreset {
   /** FFmpeg -preset value (ultrafast, medium, slow) */
@@ -75,6 +83,8 @@ export interface VideoExportOptions {
   quality?: VideoQuality;
   /** Viewport orientation (default: 'landscape') */
   orientation?: VideoOrientation;
+  /** Optional self-hosted ffmpeg.wasm assets for offline/CSP-controlled use. */
+  ffmpegWasm?: FfmpegWasmLoadConfig;
   /**
    * Progress callback. Called during encoding with completion percentage and phase description.
    * @param percent - 0-100 completion percentage
@@ -91,6 +101,36 @@ export interface EncoderResult {
   duration: number;
 }
 
+/** Fail fast with actionable errors before launching an encoder or browser. */
+export function validateVideoExportOptions(options: VideoExportOptions): void {
+  if (
+    options.fps !== undefined &&
+    (!Number.isFinite(options.fps) || options.fps <= 0 || options.fps > 120)
+  ) {
+    throw new RangeError('Video FPS must be a finite number between 1 and 120.');
+  }
+  for (const [label, value] of [
+    ['width', options.width],
+    ['height', options.height],
+  ] as const) {
+    if (value !== undefined && (!Number.isSafeInteger(value) || value <= 0)) {
+      throw new RangeError(`Video ${label} must be a positive integer.`);
+    }
+  }
+  if (
+    options.quality !== undefined &&
+    !Object.prototype.hasOwnProperty.call(QUALITY_PRESETS, options.quality)
+  ) {
+    throw new RangeError(`Unknown video quality: ${String(options.quality)}.`);
+  }
+  if (
+    options.orientation !== undefined &&
+    !Object.prototype.hasOwnProperty.call(ORIENTATION_DIMENSIONS, options.orientation)
+  ) {
+    throw new RangeError(`Unknown video orientation: ${String(options.orientation)}.`);
+  }
+}
+
 /**
  * Resolve dimensions from options, applying orientation defaults.
  */
@@ -98,6 +138,7 @@ export function resolveDimensions(options: VideoExportOptions): {
   width: number;
   height: number;
 } {
+  validateVideoExportOptions(options);
   const orientation = options.orientation ?? 'landscape';
   const defaults = ORIENTATION_DIMENSIONS[orientation];
   return {

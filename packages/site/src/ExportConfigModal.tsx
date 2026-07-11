@@ -6,16 +6,12 @@
  * visually consistent with the page that opened it.
  */
 
-import { useState, useCallback, useRef } from 'react';
+import { useState, useCallback, useMemo, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import { parseMarkdown, stringifyMarkdown, inferDocumentTitle } from '@bendyline/squisq/markdown';
-import { markdownToDoc, docToMarkdown } from '@bendyline/squisq/doc';
+import { stringifyMarkdown, inferDocumentTitle } from '@bendyline/squisq/markdown';
+import { markdownToDoc } from '@bendyline/squisq/doc';
 import { getThemeSummaries, resolveTheme } from '@bendyline/squisq/schemas';
-import {
-  getTransformStyleSummaries,
-  applyTransform,
-  extractDocImages,
-} from '@bendyline/squisq/transform';
+import { getTransformStyleSummaries } from '@bendyline/squisq/transform';
 import type { MediaProvider, Theme } from '@bendyline/squisq/schemas';
 import type { MarkdownDocument } from '@bendyline/squisq/markdown';
 import { MemoryContentContainer } from '@bendyline/squisq/storage';
@@ -25,6 +21,11 @@ import { buildPreviewDoc, PlainHtmlPreview } from '@bendyline/squisq-editor-reac
 import JSZip from 'jszip';
 import { collectImagesForHtmlExport } from './exportHelpers';
 import { slugifyTitle } from './exportFilename';
+import {
+  createEntryAwareDocumentReader,
+  prepareExportDoc,
+  prepareExportMarkdown,
+} from './exportPreparation';
 
 // ── Types ──────────────────────────────────────────────────────────
 
@@ -233,19 +234,17 @@ async function collectInlineImages(
  */
 async function downloadLinkedHtmlBundle(
   container: ContentContainer,
+  currentMarkdown: string,
   title: string,
   filename: string,
   theme?: Theme,
 ): Promise<void> {
   const { markdownDocsToPlainHtmlBundle } = await import('@bendyline/squisq-formats/html');
   const entryPath = (await container.getDocumentPath()) ?? 'index.md';
-  const decoder = new TextDecoder();
+  const readDocument = createEntryAwareDocumentReader(container, entryPath, currentMarkdown);
   const blob = await markdownDocsToPlainHtmlBundle({
     entryPath,
-    readDocument: async (p) => {
-      const data = await container.readFile(p);
-      return data ? decoder.decode(data) : null;
-    },
+    readDocument,
     readBinary: (p) => container.readFile(p),
     title,
     theme,
@@ -434,6 +433,10 @@ export function ExportConfigModal({
   const showModeSelector = isHtmlFormat && htmlStyle !== 'plain';
   const showStyleSelector = isHtmlFormat;
   const showPreview = isHtmlFormat && htmlStyle === 'plain';
+  const preparedVideoDoc = useMemo(
+    () => prepareExportDoc(currentSource, { transformStyle, themeId }),
+    [currentSource, transformStyle, themeId],
+  );
 
   /** Collect raw images by mediaProvider name (for pptx and other formats). */
   const collectImagesByName = useCallback(async () => {
@@ -456,18 +459,12 @@ export function ExportConfigModal({
 
   /** Apply transform and return final MarkdownDocument */
   const prepareMarkdown = useCallback((): MarkdownDocument => {
-    let mdDoc = parseMarkdown(currentSource);
-    if (transformStyle) {
-      const doc = markdownToDoc(mdDoc);
-      const images = extractDocImages(doc.blocks);
-      const result = applyTransform(doc, transformStyle, {
-        themeId: themeId || undefined,
-        images,
-      });
-      mdDoc = docToMarkdown(result.doc);
-    }
-    return mdDoc;
-  }, [currentSource, transformStyle, themeId]);
+    return prepareExportMarkdown(currentSource, {
+      transformStyle,
+      themeId,
+      applyTransform: !(isHtmlFormat && htmlStyle === 'plain'),
+    });
+  }, [currentSource, transformStyle, themeId, isHtmlFormat, htmlStyle]);
 
   const handleExport = useCallback(async () => {
     // Video format delegates to VideoExportModal
@@ -551,6 +548,7 @@ export function ExportConfigModal({
               // them all, rewrite `.md` → `.html` cross-doc references.
               await downloadLinkedHtmlBundle(
                 workspaceContainer,
+                stringifyMarkdown(mdDoc),
                 docTitle,
                 `${filenameStem}.html.zip`,
                 themeForExport,
@@ -856,7 +854,7 @@ export function ExportConfigModal({
         playerScriptRef.current &&
         createPortal(
           <VideoExportModal
-            doc={markdownToDoc(parseMarkdown(currentSource))}
+            doc={preparedVideoDoc}
             playerScript={playerScriptRef.current}
             mediaProvider={mediaProvider ?? undefined}
             colorScheme={colorScheme}

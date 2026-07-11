@@ -19,7 +19,6 @@ import { layerBounds } from '../hooks/useSceneHitTest';
 import type { SceneTransform } from '../hooks/useScenePanZoom';
 import type { SceneTextEditConfig } from './sceneTextConfig';
 import { buildSceneTextExtensions } from './sceneTiptap';
-import { sceneTextChannel } from './sceneTextChannel';
 
 interface SceneTextOverlayProps {
   config: SceneTextEditConfig;
@@ -90,12 +89,13 @@ export function SceneTextOverlay({
 
   // Publish to the toolbar channel while mounted; clear on unmount.
   useEffect(() => {
-    if (!editor) return;
-    sceneTextChannel.set({ editor, level: config.level });
+    if (!editor || !config.channel) return;
+    const channel = config.channel;
+    channel.set({ editor, level: config.level });
     return () => {
-      if (sceneTextChannel.get()?.editor === editor) sceneTextChannel.set(null);
+      if (channel.get()?.editor === editor) channel.set(null);
     };
-  }, [editor, config.level]);
+  }, [editor, config.level, config.channel]);
 
   // Commit when focus leaves the editor — unless it went to the toolbar
   // (the user clicking Bold) or stayed within the overlay.

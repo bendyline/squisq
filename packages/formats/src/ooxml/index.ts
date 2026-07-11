@@ -25,6 +25,7 @@ export type {
 } from './types.js';
 
 // Reader
+export type { OoxmlOpenOptions } from './reader.js';
 export {
   openPackage,
   getPartRelationships,

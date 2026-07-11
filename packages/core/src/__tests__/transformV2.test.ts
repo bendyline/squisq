@@ -5,6 +5,7 @@ import {
   registerTransformStyle,
   unregisterTransformStyle,
   getTransformStyleIds,
+  createTransformStyleRegistry,
 } from '../transform/index.js';
 import type { TransformStyleConfig } from '../transform/index.js';
 import type { Doc, Block } from '../schemas/Doc.js';
@@ -105,6 +106,33 @@ describe('transform style contract v2', () => {
 
   it("accepts 'dataDriven' as an alias for the hyphenated registry id", () => {
     expect(resolveTransformStyle('dataDriven').id).toBe('data-driven');
+  });
+
+  it('validates and stores immutable style snapshots in isolated registries', () => {
+    const base = resolveTransformStyle('minimal');
+    const source: TransformStyleConfig = {
+      ...base,
+      id: 'tenant-style',
+      name: 'Tenant Style',
+      preferredTypes: [...base.preferredTypes],
+      colorSchemes: [...base.colorSchemes],
+      blocksPerSection: { ...base.blocksPerSection },
+    };
+    const tenantA = createTransformStyleRegistry([source]);
+    const tenantB = createTransformStyleRegistry();
+    source.name = 'Changed later';
+    source.colorSchemes[0] = 'red';
+
+    const stored = tenantA.resolveTransformStyle('tenant-style');
+    expect(stored.name).toBe('Tenant Style');
+    expect(stored.colorSchemes[0]).toBe(base.colorSchemes[0]);
+    expect(Object.isFrozen(stored)).toBe(true);
+    expect(Object.isFrozen(stored.colorSchemes)).toBe(true);
+    expect(tenantB.resolveTransformStyle('tenant-style').id).toBe('documentary');
+
+    expect(() =>
+      tenantA.registerTransformStyle({ ...source, id: 'bad-style', transformRatio: 2 }),
+    ).toThrow(/transformRatio/);
   });
 
   it('budget.slidesPerMinute caps promotions on long docs', () => {
