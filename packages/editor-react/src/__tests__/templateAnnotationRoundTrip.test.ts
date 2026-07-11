@@ -25,6 +25,23 @@ describe('Template annotation round-trip', () => {
     expect(back.trim()).toBe(original);
   });
 
+  it('preserves a heading whose last word is also the template label', () => {
+    const original = '### A Famous Quote {[quote]}';
+    const html = markdownToTiptap(original);
+
+    expect(tiptapToMarkdown(html).trim()).toBe(original);
+  });
+
+  it('ignores legacy text rendered inside a template badge', () => {
+    const tiptapRendered =
+      '<h3 data-template="quote">' +
+      '<span class="squisq-heading-content">A Famous Quote</span>' +
+      '<span class="squisq-template-badge" contenteditable="false">Quote</span>' +
+      '</h3>';
+
+    expect(tiptapToMarkdown(tiptapRendered).trim()).toBe('### A Famous Quote {[quote]}');
+  });
+
   it('round-trips param-only squiggly annotations', () => {
     const original = '## Intro {[transition=fade]}';
     const html = markdownToTiptap(original);

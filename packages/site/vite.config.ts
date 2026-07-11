@@ -113,13 +113,20 @@ export default defineConfig({
     strictPort: true,
     headers: crossOriginHeaders,
   },
-  // Optimise monaco-editor: tell Vite to pre-bundle it so workers are served
-  // from the local dev server instead of CDN. Exclude the workspace packages
+  // Optimise the exact Monaco entry points used by editor-react's lazy loader.
+  // Listing only `monaco-editor` is not sufficient: Vite treats the two deep
+  // import specifiers in `editor-react/monaco` as newly discovered dependencies
+  // the first time Source view mounts, optimises them on demand, and reloads the
+  // page. Pre-bundling those specifiers at startup keeps the first Source-view
+  // transition in-app. Exclude the workspace packages
   // so Vite serves their `dist/` straight — otherwise pre-bundling caches
   // a snapshot at `node_modules/.vite/` and rebuilds of editor-react et al.
   // don't show up until the dev server is restarted or the cache is cleared.
   optimizeDeps: {
-    include: ['monaco-editor'],
+    include: [
+      'monaco-editor/esm/vs/editor/editor.main.js',
+      'monaco-editor/esm/vs/editor/editor.api',
+    ],
     exclude: [
       '@bendyline/squisq',
       '@bendyline/squisq-core',

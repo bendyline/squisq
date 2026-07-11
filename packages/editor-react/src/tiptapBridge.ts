@@ -11,7 +11,6 @@
  * using squisq's own parser.
  */
 
-import { templateLabel } from './TemplatePicker';
 import { resolveIcon } from '@bendyline/squisq/icons';
 import {
   matchTrailingTemplateAnnotation,
@@ -414,7 +413,16 @@ export function tiptapToMarkdown(html: string): string {
     if (headingMatch) {
       const level = parseInt(headingMatch[1], 10);
       const attrs = headingMatch[2];
-      let text = htmlToInline(headingMatch[3]);
+      const headingHtml = headingMatch[3];
+      // Template/property badges are editor chrome, not heading content. Strip
+      // them structurally before converting the inline HTML. Older builds
+      // briefly rendered the template label as real badge text; using the
+      // markup boundary preserves that cleanup without mistaking a legitimate
+      // heading suffix (for example "A Famous Quote") for the badge label.
+      const chromeStart = headingHtml.search(
+        /<span\b[^>]*\bclass="[^"]*\bsquisq-(?:template|props)-badge\b[^"]*"[^>]*>/i,
+      );
+      let text = htmlToInline(chromeStart >= 0 ? headingHtml.slice(0, chromeStart) : headingHtml);
 
       // Re-inject heading annotations from data attributes. Canonical
       // emit order: Pandoc `{#…}` first, then squisq `{[…]}` annotation
@@ -423,15 +431,6 @@ export function tiptapToMarkdown(html: string): string {
       const tmplMatch = attrs.match(/data-template="([^"]+)"/);
       const paramsMatch = attrs.match(/data-template-params="([^"]+)"/);
       const hasEmptyTemplateAnnotation = /\sdata-template-empty(?:="[^"]*")?/.test(attrs);
-      if (tmplMatch) {
-        // Strip an accidental trailing copy of the template label that an
-        // earlier broken build briefly rendered as real text inside the
-        // badge. Existing documents self-heal on save.
-        const label = templateLabel(tmplMatch[1]);
-        if (label && text.endsWith(label)) {
-          text = text.slice(0, -label.length).trimEnd();
-        }
-      }
       if (blockAttrsMatch) {
         const inner = unescapeHtml(blockAttrsMatch[1]);
         text += ` {${inner}}`;
