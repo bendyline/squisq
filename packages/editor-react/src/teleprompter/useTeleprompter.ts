@@ -170,7 +170,13 @@ export function useTeleprompter(opts: { doc: Doc | null }): TeleprompterControll
       if (!currentScript || !sampleRate) return;
 
       const currentPrefs = prefsRef.current;
-      const key = `${sampleRate}:${currentPrefs.baseWpm}:${currentPrefs.vadSensitivity}:${currentScript.tokens.length}:${currentScript.sourceText.length}`;
+      // The session (noise floor, syllable-rate EMA, pacing state) is
+      // expensive learned acoustic state — recreate it ONLY when the
+      // sample rate or the script itself changes, not on every WPM /
+      // sensitivity tweak. Those prefs are applied to the session's config
+      // LIVE below so the slider takes effect on the next hop without
+      // discarding the learned floor and forcing a re-warmup.
+      const key = `${sampleRate}:${currentScript.tokens.length}:${currentScript.sourceText.length}`;
       let session = sessionRef.current;
       if (!session || sessionKeyRef.current !== key) {
         session = reanchorSession(
@@ -181,6 +187,15 @@ export function useTeleprompter(opts: { doc: Doc | null }): TeleprompterControll
           wordPosRef.current,
         );
         sessionKeyRef.current = key;
+      } else {
+        session = {
+          ...session,
+          config: {
+            ...session.config,
+            vad: vadConfigForSensitivity(currentPrefs.vadSensitivity),
+            pacing: { baseWpm: currentPrefs.baseWpm },
+          },
+        };
       }
       session = narrationSessionStep(session, pcm);
 

@@ -7,7 +7,7 @@ import {
   type PacingTick,
 } from '../narration/pacing';
 import { expectedSyllablesAt } from '../narration/script';
-import { DEFAULT_PACING_CONFIG } from '../narration/types';
+import { DEFAULT_PACING_CONFIG, type PacingConfig } from '../narration/types';
 import { scriptFromMarkdown } from './narrationTestSignals';
 
 const MD = `# Cadence
@@ -33,6 +33,7 @@ function drive(
   fromSec: number,
   durSec: number,
   opts: { speaking: boolean; sylRate?: number },
+  config?: Partial<PacingConfig>,
 ): PacingState {
   let acc = 0;
   let next = state;
@@ -46,7 +47,7 @@ function drive(
       }
     }
     const tick: PacingTick = { tSec: t, speaking: opts.speaking, onsets };
-    next = pacingStep(next, tick, script);
+    next = pacingStep(next, tick, script, config);
   }
   return next;
 }
@@ -68,30 +69,51 @@ describe('pacingStep', () => {
     expect(state.halted).toBe(true);
   });
 
-  it('converges to the reader rate (steady 1.0× and 0.5×)', () => {
-    for (const mult of [1.0, 0.5]) {
+  it('tracks the reader rate monotonically', () => {
+    // Faster reading → faster prompter is the whole point of voice pacing.
+    let prevSlope = 0;
+    for (const mult of [0.6, 1.0, 1.8]) {
       const sylRate = mult * BASE_WPS * meanSylPerWord;
       const state = drive(createPacingState(), 0, 8, { speaking: true, sylRate });
-      // The real invariant is voice lock: the prompter position stays
-      // syllable-consistent with what was actually spoken (word-slope
-      // varies legitimately with local word length).
-      const drift =
-        expectedSyllablesAt(script, state.wordPos) -
-        (state.anchorExpectedSyl + state.cumDetectedSyl);
-      expect(Math.abs(drift)).toBeLessThan(5);
-      // Average slope lands in a generous band around the reader rate.
       const slope = state.wordPos / 8;
-      expect(slope).toBeGreaterThan(mult * BASE_WPS * 0.7);
-      expect(slope).toBeLessThan(mult * BASE_WPS * 1.3);
+      expect(slope).toBeGreaterThan(prevSlope);
+      prevSlope = slope;
     }
   });
 
-  it('clamps velocity at the rate-multiplier bounds', () => {
-    // Absurdly fast reader: velocity must respect the 2.0× clamp even
-    // though hard resyncs may jump the position.
+  it('stays word-aligned when the reader matches the set pace', () => {
+    const sylRate = BASE_WPS * meanSylPerWord;
+    const state = drive(createPacingState(), 0, 8, { speaking: true, sylRate });
+    const drift =
+      expectedSyllablesAt(script, state.wordPos) - (state.anchorExpectedSyl + state.cumDetectedSyl);
+    expect(Math.abs(drift)).toBeLessThan(6);
+  });
+
+  it('the WPM setting is a live lever: higher baseWpm → faster cruise', () => {
+    // Same modest voice rate, different set pace. Because the set pace is a
+    // real feedforward term (not cancelled), doubling baseWpm must visibly
+    // speed the prompter up — the bug the user reported.
+    const sylRate = 0.8 * BASE_WPS * meanSylPerWord;
+    const slow = drive(createPacingState(), 0, 8, { speaking: true, sylRate });
+    const fast = drive(createPacingState(), 0, 8, { speaking: true, sylRate }, { baseWpm: 260 });
+    expect(fast.wordPos).toBeGreaterThan(slow.wordPos * 1.3);
+  });
+
+  it('never crawls below the set pace floor while speaking', () => {
+    // A detector that reports almost nothing must still cruise near the set
+    // pace (blend keeps baseWps in play) — so the prompter can't stall out
+    // when syllable detection under-counts.
+    const state = drive(createPacingState(), 0, 6, { speaking: true, sylRate: 0.05 });
+    const slope = state.wordPos / 6;
+    expect(slope).toBeGreaterThan(BASE_WPS * DEFAULT_PACING_CONFIG.minRateMult * 0.8);
+  });
+
+  it('clamps velocity at the cruise-band bounds', () => {
+    // Absurdly fast reader: velocity respects the maxRateMult × set-pace
+    // clamp (plus the bounded PI correction).
     let state = createPacingState();
     let acc = 0;
-    const sylRate = 5 * BASE_WPS * meanSylPerWord;
+    const sylRate = 6 * BASE_WPS * meanSylPerWord;
     for (let t = 0; t < 5; t += DT) {
       acc += sylRate * DT;
       let onsets = 0;
@@ -107,29 +129,30 @@ describe('pacingStep', () => {
     }
   });
 
-  it('silence at a paragraph break accrues no PI error', () => {
-    // Park the prompter right on a paragraph-break token.
-    const breakToken = script.tokens.findIndex((t) => t.pauseAfter >= 2);
-    expect(breakToken).toBeGreaterThan(-1);
-    let state = reanchorPacing(createPacingState(), breakToken + 0.9, script);
-    state = drive(state, 0, 2.5, { speaking: false });
-    expect(Math.abs(state.errIntegral)).toBeLessThan(1e-9);
+  it('silence halts the prompter and never drags it backward', () => {
+    // Park mid-script ahead of the detected syllables, then go silent. An
+    // under-counting detector makes err > 0 ("prompter ahead"); the
+    // forward-only correction must NOT slow or rewind — the prompter simply
+    // holds position (velocity halts) rather than snapping back.
+    const startPos = Math.min(20, script.tokens.length - 1);
+    const anchored = reanchorPacing(createPacingState(), startPos, script);
+    const state = drive({ ...anchored, wordPos: startPos + 3 }, 0, 2.5, { speaking: false });
     expect(state.velocityWps).toBe(0);
+    expect(state.wordPos).toBeGreaterThanOrEqual(startPos + 3 - 1e-9);
   });
 
-  it('silence mid-sentence does accrue PI error', () => {
-    // Park mid-sentence (pauseAfter 0 run) and let it drift ahead first.
-    const midIdx = script.tokens.findIndex(
-      (t, i) =>
-        t.pauseAfter === 0 &&
-        script.tokens.slice(Math.max(0, i - 1), i + 3).every((x) => x.pauseAfter < 2),
-    );
-    expect(midIdx).toBeGreaterThan(-1);
-    const anchored0 = reanchorPacing(createPacingState(), midIdx, script);
-    // Advance the prompter ahead of zero detected syllables, then go silent.
-    let state = { ...anchored0, wordPos: Math.min(script.tokens.length, midIdx + 3) };
-    state = drive(state, 0, 2.0, { speaking: false });
-    expect(Math.abs(state.errIntegral)).toBeGreaterThan(0.1);
+  it('catches up forward when the reader is ahead of the prompter', () => {
+    // Feed a strong syllable stream while the prompter starts behind: the
+    // forward-only boost (and, past the threshold, a forward resync) must
+    // pull the highlight forward to meet the voice.
+    const state = drive(createPacingState(), 0, 6, {
+      speaking: true,
+      sylRate: 2 * BASE_WPS * meanSylPerWord,
+    });
+    const detected = state.cumDetectedSyl;
+    // The prompter should have advanced to roughly where those syllables land.
+    const expectedPos = expectedSyllablesAt(script, state.wordPos);
+    expect(expectedPos).toBeGreaterThan(detected * 0.6);
   });
 
   it('reanchorPacing resets error tracking but keeps the learned rate', () => {

@@ -82,6 +82,28 @@ describe('buildNarrationScript', () => {
     expect(a).toEqual(b);
   });
 
+  it('marks standalone punctuation as non-spoken with zero syllables', () => {
+    const script = buildNarrationScript(
+      markdownToDoc(parseMarkdown('# Intro\n\nSquisq — short — turns plain Markdown into slides.')),
+    );
+    const dashes = script.tokens.filter((t) => t.text === '—');
+    expect(dashes.length).toBe(2);
+    for (const dash of dashes) {
+      expect(dash.spoken).toBe(false);
+      expect(dash.syllables).toBe(0);
+      expect(dash.spokenWordEquiv).toBe(0);
+    }
+    // Real words stay spoken; the em-dashes add nothing to the syllable total.
+    for (const word of script.tokens.filter((t) => /[a-z]/i.test(t.text))) {
+      expect(word.spoken).toBe(true);
+      expect(word.syllables).toBeGreaterThanOrEqual(1);
+    }
+    const spokenSyllables = script.tokens
+      .filter((t) => t.spoken)
+      .reduce((sum, t) => sum + t.syllables, 0);
+    expect(script.totalSyllables).toBe(spokenSyllables);
+  });
+
   it('cumulative syllables are consistent prefix sums', () => {
     const script = build();
     expect(script.cumulativeSyllables.length).toBe(script.tokens.length + 1);

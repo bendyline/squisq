@@ -31,6 +31,17 @@ interface LayoutCache {
 
 let layoutCache: LayoutCache | null = null;
 
+/** Nearest spoken token at or before `idx` (falling forward for leading punctuation). */
+function nearestSpoken(tokens: NarrationScript['tokens'], idx: number): number {
+  for (let i = idx; i >= 0; i--) {
+    if (tokens[i].spoken) return i;
+  }
+  for (let i = idx + 1; i < tokens.length; i++) {
+    if (tokens[i].spoken) return i;
+  }
+  return idx;
+}
+
 /** Wrap script tokens into lines for a given canvas width/font (cached). */
 function layoutTokens(
   ctx: CanvasRenderingContext2D,
@@ -86,8 +97,10 @@ export function drawPrompterFrame(canvas: HTMLCanvasElement, frame: CanvasPrompt
   const layout = layoutTokens(ctx, frame.script, fontPx, width - marginX * 2);
   const count = frame.script.tokens.length;
   if (count > 0) {
-    const active = Math.min(Math.max(Math.floor(frame.wordPos), 0), count - 1);
-    const frac = Math.min(Math.max(frame.wordPos - active, 0), 1);
+    const rawActive = Math.min(Math.max(Math.floor(frame.wordPos), 0), count - 1);
+    const frac = Math.min(Math.max(frame.wordPos - rawActive, 0), 1);
+    // Keep the highlight off standalone punctuation (em-dashes, bullets).
+    const active = nearestSpoken(frame.script.tokens, rawActive);
     const activeLine = layout.tokenLine[active] ?? 0;
     const eyeY = height * 0.38;
     const spaceW = ctx.measureText(' ').width;

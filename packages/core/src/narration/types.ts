@@ -21,15 +21,23 @@ export interface ScriptToken {
   blockId: string;
   /** Index into {@link NarrationScript.blocks}. */
   blockIndex: number;
-  /** Estimated syllable count (≥ 1; numbers via spoken-word expansion). */
+  /** Estimated syllable count (≥ 1 for spoken tokens; 0 when `spoken` is false). */
   syllables: number;
-  /** Spoken-word equivalents (numbers count as several words). */
+  /** Spoken-word equivalents (numbers count as several words; 0 when not spoken). */
   spokenWordEquiv: number;
   /**
    * Pause class after this token:
    * 0 none · 1 clause/sentence punctuation · 2 paragraph break · 3 block boundary.
    */
   pauseAfter: 0 | 1 | 2 | 3;
+  /**
+   * Whether this token is actually spoken. Standalone punctuation runs —
+   * an em-dash, a lone bullet, `···` — tokenize on whitespace like words
+   * but carry no letters or digits: they DISPLAY in the prompter yet must
+   * never be the highlighted active word, are never paused on, and add no
+   * syllables to the pacing/alignment model.
+   */
+  spoken: boolean;
 }
 
 /** The token/char span of one doc block inside the script. */
@@ -155,9 +163,15 @@ export interface NucleiConfig {
 }
 
 export const DEFAULT_NUCLEI_CONFIG: NucleiConfig = Object.freeze({
-  envelopeHz: 10,
-  minInterOnsetMs: 120,
-  prominenceRatio: 1.6,
+  // Continuous reading blurs adjacent syllables together: a 10 Hz envelope
+  // over-smooths 5–7 Hz syllable structure and a 1.6× prominence gate
+  // rejects the shallow dips between connected syllables — both cause the
+  // detector to UNDER-count, which makes the prompter lag. A higher
+  // envelope cutoff preserves per-syllable peaks and a gentler prominence
+  // gate accepts them; the min-spacing gate still rejects true doublets.
+  envelopeHz: 16,
+  minInterOnsetMs: 110,
+  prominenceRatio: 1.3,
   minRelPeak: 0.1,
   peakRefTauSec: 3.0,
 });
@@ -165,7 +179,16 @@ export const DEFAULT_NUCLEI_CONFIG: NucleiConfig = Object.freeze({
 export interface PacingConfig {
   /** The user's base speaking rate (words per minute). */
   baseWpm: number;
-  /** Clamp on the voice-derived rate multiplier. */
+  /**
+   * How strongly the detected voice rate steers the cruise velocity vs.
+   * the user's set pace, in [0, 1]. The speaking-cruise velocity is
+   * `voiceBlend·voiceRate + (1 − voiceBlend)·baseRate`, so the WPM slider
+   * is ALWAYS felt (it never fully cancels) and an under-counting detector
+   * can't drag the prompter to a crawl. 1 = pure voice-follow (the old
+   * behavior, where WPM only mattered at the clamps); 0 = ignore the voice.
+   */
+  voiceBlend: number;
+  /** Clamp on the cruise velocity as a fraction of the set pace. */
   minRateMult: number;
   maxRateMult: number;
   /** EMA time constant for the detected syllable rate (s). */
@@ -174,35 +197,33 @@ export interface PacingConfig {
   velSlewTauSec: number;
   /** Velocity decay time constant in silence (s) — halted within ~250 ms. */
   haltTauSec: number;
-  /** PI proportional gain (per syllable of cumulative error). */
+  /** Proportional gain of the forward-only catch-up boost (per syllable behind). */
   kP: number;
-  /** PI integral gain (per syllable·second). */
+  /** Integral gain of the forward-only boost (per syllable·second behind). */
   kI: number;
-  /** Anti-windup clamp on the error integral (syllable·seconds). */
+  /** Anti-windup clamp on the (≤ 0) behind-error integral (syllable·seconds). */
   intClamp: number;
-  /** Max fraction of target velocity the PI correction may add/remove. */
+  /** Max fraction the catch-up boost may ADD to the cruise velocity. */
   maxCorrection: number;
   /** Window (words ahead) used for the local expected syllables-per-word. */
   sylWindowWords: number;
-  /** Silence within this many words of a pauseAfter ≥ 2 token accrues no error. */
-  breakLookaheadWords: number;
-  /** |cumulative error| beyond this hard-resyncs the prompter position. */
+  /** Reader-ahead error beyond this hard-resyncs the prompter FORWARD. */
   resyncSyllables: number;
 }
 
 export const DEFAULT_PACING_CONFIG: PacingConfig = Object.freeze({
   baseWpm: 150,
-  minRateMult: 0.35,
-  maxRateMult: 2.0,
-  rateEmaTauSec: 0.8,
-  velSlewTauSec: 0.25,
+  voiceBlend: 0.6,
+  minRateMult: 0.5,
+  maxRateMult: 3.0,
+  rateEmaTauSec: 0.7,
+  velSlewTauSec: 0.15,
   haltTauSec: 0.085,
-  kP: 0.12,
-  kI: 0.015,
+  kP: 0.14,
+  kI: 0.02,
   intClamp: 4,
-  maxCorrection: 0.5,
+  maxCorrection: 0.6,
   sylWindowWords: 8,
-  breakLookaheadWords: 2,
   resyncSyllables: 8,
 });
 

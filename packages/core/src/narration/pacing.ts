@@ -62,31 +62,28 @@ function clamp(value: number, min: number, max: number): number {
   return value < min ? min : value > max ? max : value;
 }
 
-/** Is `wordPos` within `lookahead` words of a paragraph/block break (or just past one)? */
-function nearExpectedBreak(script: NarrationScript, wordPos: number, lookahead: number): boolean {
-  const n = script.tokens.length;
-  if (n === 0) return true;
-  const from = Math.max(0, Math.floor(wordPos) - 1);
-  const to = Math.min(n - 1, Math.floor(wordPos + lookahead));
-  for (let i = from; i <= to; i++) {
-    if (script.tokens[i].pauseAfter >= 2) return true;
-  }
-  return false;
-}
-
-/** Mean syllables-per-word over a short window ahead of the prompter position. */
+/**
+ * Mean syllables-per-SPOKEN-word over a short window ahead of the prompter
+ * position. Standalone punctuation (0 syllables, `spoken: false`) is
+ * excluded so it doesn't deflate the average.
+ */
 function localSyllablesPerWord(
   script: NarrationScript,
   wordPos: number,
   windowWords: number,
 ): number {
   const n = script.tokens.length;
-  if (n === 0) return 1;
+  if (n === 0) return 1.4;
   const start = clamp(Math.floor(wordPos), 0, n - 1);
-  const end = Math.min(n, start + Math.max(1, windowWords));
   let sum = 0;
-  for (let i = start; i < end; i++) sum += script.tokens[i].syllables;
-  return Math.max(1, sum / (end - start));
+  let count = 0;
+  for (let i = start; i < n && count < windowWords; i++) {
+    if (!script.tokens[i].spoken) continue;
+    sum += script.tokens[i].syllables;
+    count += 1;
+  }
+  // Default to the English average (~1.4) when the window has no words yet.
+  return count > 0 ? Math.max(1, sum / count) : 1.4;
 }
 
 /** Pure controller step — same inputs always yield the same output state. */
@@ -118,33 +115,45 @@ export function pacingStep(
     cumDetectedSyl += 1;
   }
 
-  // 2–3. Voice-derived rate multiplier around the user's base rate.
+  // 2–3. Cruise velocity: BLEND the user's set pace with the voice-derived
+  // rate. The old design used `baseWps · clamp(voiceWps / baseWps)`, in
+  // which baseWps algebraically cancels in the unclamped range — so the WPM
+  // slider did nothing and a chronically under-counting detector dragged
+  // the prompter slow with no way to compensate. Blending keeps the set
+  // pace as a real feedforward term (WPM always felt), while the voice
+  // steers within a band. Then clamp to a band around the set pace so
+  // neither term alone can stall or run away.
   const sylPerWordLocal = localSyllablesPerWord(script, state.wordPos, c.sylWindowWords);
-  const rateMult =
-    emaSylPerSec > 0
-      ? clamp(emaSylPerSec / sylPerWordLocal / baseWps, c.minRateMult, c.maxRateMult)
-      : 1;
+  const voiceWps = emaSylPerSec > 0 ? emaSylPerSec / sylPerWordLocal : baseWps;
+  const cruise = clamp(
+    c.voiceBlend * voiceWps + (1 - c.voiceBlend) * baseWps,
+    baseWps * c.minRateMult,
+    baseWps * c.maxRateMult,
+  );
 
-  // 4–5. PI correction on cumulative syllables; paragraph pauses are free.
+  // 4–5. FORWARD-ONLY position correction. `err` compares where the
+  // prompter is (expected syllables at wordPos) against how many syllables
+  // the voice has actually delivered. err < 0 → the reader is AHEAD of the
+  // prompter → speed up to catch them. err > 0 → the prompter looks ahead
+  // of the reader, but this is exactly the signal a chronically
+  // under-counting syllable detector produces even when the prompter is
+  // really BEHIND — so we deliberately do NOT slow or snap backward on it.
+  // (The old symmetric PI pinned the prompter to the DETECTED count, so a
+  // detector catching half the syllables parked the prompter at half the
+  // reader's true position — the lag the user saw.) Slowing down is instead
+  // handled honestly by the cruise blend (a slow voice lowers voiceWps) and
+  // by halt-on-silence.
   const err =
     expectedSyllablesAt(script, state.wordPos) - (state.anchorExpectedSyl + cumDetectedSyl);
-  const pausedAtBreak =
-    !tick.speaking && nearExpectedBreak(script, state.wordPos, c.breakLookaheadWords);
-  let errIntegral = state.errIntegral;
-  let effErr = err;
-  if (pausedAtBreak) {
-    effErr = 0;
-  } else {
-    errIntegral = clamp(errIntegral + err * dt, -c.intClamp, c.intClamp);
-  }
-  const corr = clamp(c.kP * effErr + c.kI * errIntegral, -c.maxCorrection, c.maxCorrection);
+  let errIntegral = clamp(Math.min(0, state.errIntegral + err * dt), -c.intClamp, 0);
+  const boost = err < 0 ? clamp(c.kP * -err + c.kI * -errIntegral, 0, c.maxCorrection) : 0;
 
   // 6. Velocity: track while speaking, decay to a halt in silence.
   let velocityWps = state.velocityWps;
   let silenceSec = state.silenceSec;
   if (tick.speaking) {
     silenceSec = 0;
-    const target = Math.max(0, baseWps * rateMult * (1 - corr));
+    const target = Math.max(0, cruise * (1 + boost));
     velocityWps += (target - velocityWps) * (1 - Math.exp(-dt / c.velSlewTauSec));
   } else {
     silenceSec += dt;
@@ -152,10 +161,16 @@ export function pacingStep(
     if (velocityWps < 0.02) velocityWps = 0;
   }
 
-  // 7. Hard resync when the highlight has drifted a paragraph away.
+  // 7. Hard resync forward only: when the reader has clearly outrun the
+  // prompter by more than a paragraph, jump ahead to catch up. Never jump
+  // backward (a false "prompter ahead" from under-counting must not yank
+  // the highlight back).
   let wordPos = state.wordPos;
-  if (Math.abs(err) > c.resyncSyllables) {
-    wordPos = wordPosAtExpectedSyllables(script, state.anchorExpectedSyl + cumDetectedSyl);
+  if (err < -c.resyncSyllables) {
+    wordPos = Math.max(
+      wordPos,
+      wordPosAtExpectedSyllables(script, state.anchorExpectedSyl + cumDetectedSyl),
+    );
     errIntegral = 0;
   }
 

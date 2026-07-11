@@ -77,15 +77,19 @@ export function buildNarrationScript(doc: Doc, options?: BuildScriptOptions): Na
     while (blockIndex < blocks.length - 1 && charOffset >= blocks[blockIndex].charEnd) {
       blockIndex++;
     }
+    // A token with no letters or digits (a standalone em-dash, bullet, …)
+    // is punctuation, not a word: it displays but is never spoken.
+    const spoken = hasSpokenContent(match[0]);
     tokens.push({
       text: match[0],
       charOffset,
       charEnd,
       blockId: blocks[blockIndex]?.blockId ?? '',
       blockIndex,
-      syllables: estimateSyllables(match[0]),
-      spokenWordEquiv: estimateSpokenWordCount(stripBoundaryPunct(match[0])),
+      syllables: spoken ? estimateSyllables(match[0]) : 0,
+      spokenWordEquiv: spoken ? estimateSpokenWordCount(stripBoundaryPunct(match[0])) : 0,
       pauseAfter: 0,
+      spoken,
     });
   }
 
@@ -140,6 +144,11 @@ export function buildNarrationScript(doc: Doc, options?: BuildScriptOptions): Na
 }
 
 const TRAILING_CLOSERS = /["')\]}»”’]+$/;
+
+/** True when a token carries at least one letter or digit (i.e. is spoken). */
+function hasSpokenContent(token: string): boolean {
+  return /[\p{L}\p{N}]/u.test(token);
+}
 
 function stripBoundaryPunct(token: string): string {
   return token.replace(/^[.,!?;:'"()[\]{}]+|[.,!?;:'"()[\]{}]+$/g, '');

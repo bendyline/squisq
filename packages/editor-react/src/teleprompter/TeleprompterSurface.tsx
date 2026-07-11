@@ -145,6 +145,26 @@ export function TeleprompterSurface({
     let lastTime = performance.now();
     let raf = 0;
 
+    // Map each token index to the token that should be highlighted when the
+    // prompter is on it: the nearest spoken word at or before it (falling
+    // forward for leading punctuation). Keeps the active-word marker off
+    // standalone punctuation as the cursor glides across it.
+    const tokens = script.tokens;
+    const spokenAt = new Int32Array(tokens.length);
+    let lastSpoken = -1;
+    for (let i = 0; i < tokens.length; i++) {
+      if (tokens[i].spoken) lastSpoken = i;
+      spokenAt[i] = lastSpoken;
+    }
+    let firstSpoken = -1;
+    for (let i = 0; i < tokens.length; i++) {
+      if (tokens[i].spoken) {
+        firstSpoken = i;
+        break;
+      }
+    }
+    for (let i = 0; i < tokens.length && spokenAt[i] === -1; i++) spokenAt[i] = firstSpoken;
+
     const remeasure = () => {
       lines = measureTokenLines(column);
       spans = Array.from(column.querySelectorAll<HTMLElement>('[data-token-idx]'));
@@ -169,7 +189,12 @@ export function TeleprompterSurface({
       lastTime = now;
       const pos = wordPosRef.current;
       const clampedIdx = Math.min(Math.max(Math.floor(pos), 0), spans.length - 1);
-      if (spans.length > 0) applyHighlight(clampedIdx);
+      // Snap the highlight off punctuation onto the nearest spoken word.
+      const highlightIdx =
+        clampedIdx < spokenAt.length && spokenAt[clampedIdx] >= 0
+          ? spokenAt[clampedIdx]
+          : clampedIdx;
+      if (spans.length > 0) applyHighlight(highlightIdx);
       if (lines) {
         const target = targetOffsetFor(pos, lines, surface.clientHeight);
         offset = stepScroll(offset, target, dtMs);
