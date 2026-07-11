@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { parseMarkdown, stringifyMarkdown } from '../markdown/index';
 import { markdownToDoc } from '../doc/markdownToDoc';
 import { docToMarkdown } from '../doc/docToMarkdown';
-import { getLayers } from '../doc/getLayers';
+import { materializeLayers } from './materializeTestUtils';
 import { profileBlockContents, recommendTemplatesForBlock } from '../recommend/templates';
 import type { Block, Layer } from '../schemas/Doc';
 import type { TreeTemplateItem } from '../schemas/BlockTemplates';
@@ -150,10 +150,10 @@ describe('explicit {[tree]} annotation', () => {
   });
 });
 
-describe('rendering a derived tree through getLayers', () => {
+describe('rendering a derived tree through materializeBlockLayers', () => {
   it('emits a single tree layer with the item hierarchy', () => {
     const block = findBlock(convert(AUTO_DOC), 'Layout') as Block;
-    const layers = getLayers(block, {});
+    const layers = materializeLayers(block, {});
     const treeLayer = layers.find((l: Layer) => l.type === 'tree');
     expect(treeLayer).toBeDefined();
     if (treeLayer?.type === 'tree') {

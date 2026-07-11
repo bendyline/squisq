@@ -13,7 +13,7 @@
  * lookup; the user can paste anything we don't have.
  */
 
-export interface EmojiEntry {
+interface EmojiEntry {
   /** The actual emoji glyph (may be multi-codepoint, e.g. ZWJ sequences). */
   char: string;
   /** Display name shown in the tooltip. */
@@ -22,7 +22,7 @@ export interface EmojiEntry {
   keywords: string;
 }
 
-export interface EmojiCategory {
+interface EmojiCategory {
   id: string;
   label: string;
   /** Single-glyph icon shown on the tab. */
@@ -34,7 +34,7 @@ function e(char: string, name: string, ...kw: string[]): EmojiEntry {
   return { char, name, keywords: [name, ...kw].join(' ').toLowerCase() };
 }
 
-export const EMOJI_CATEGORIES: EmojiCategory[] = [
+const EMOJI_CATEGORIES: EmojiCategory[] = [
   {
     id: 'smileys',
     label: 'Smileys',
@@ -1215,26 +1215,6 @@ export const EMOJI_CATEGORIES: EmojiCategory[] = [
     ],
   },
 ];
-
-/**
- * Flat list of every emoji across all categories — used as the search
- * corpus and to expose a `getEmojiByChar` lookup.
- */
-export const ALL_EMOJIS: EmojiEntry[] = EMOJI_CATEGORIES.flatMap((c) => c.emojis);
-
-/** Search for emoji whose name or keywords contain the query (case-insensitive). */
-export function searchEmojis(query: string, limit = 80): EmojiEntry[] {
-  const q = query.trim().toLowerCase();
-  if (!q) return [];
-  const out: EmojiEntry[] = [];
-  for (const entry of ALL_EMOJIS) {
-    if (entry.keywords.includes(q)) {
-      out.push(entry);
-      if (out.length >= limit) break;
-    }
-  }
-  return out;
-}
 
 // ── Unified picker entries (emoji + FontAwesome icons) ─────────────
 

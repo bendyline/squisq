@@ -18,7 +18,7 @@ import {
   NODE_HEIGHT,
   type DiagramNodeDescriptor,
 } from '../layers/nodeCard';
-import type { DiagramRFNode, DiagramRFEdge } from '../../diagram/types';
+import type { DiagramNode, DiagramEdge } from '../../diagram/types';
 
 export interface DiagramSceneData {
   layers: Layer[];
@@ -33,8 +33,8 @@ export interface DiagramSceneData {
  * shape so the existing data hook can stay unchanged during the swap.
  */
 export function buildDiagramScene(
-  nodes: readonly DiagramRFNode[],
-  edges: readonly DiagramRFEdge[],
+  nodes: readonly DiagramNode[],
+  edges: readonly DiagramEdge[],
 ): DiagramSceneData {
   const descriptors: DiagramNodeDescriptor[] = nodes.map((n) => ({
     id: n.id,

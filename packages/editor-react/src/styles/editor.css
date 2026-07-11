@@ -5143,10 +5143,7 @@
   color: #d1d5db;
 }
 
-/* Dark-mode rebind for all preview-gutter custom properties. Individual
-   rules below remain as no-ops kept for back-compat with any host CSS
-   that may still target them — the variable redefinition is the single
-   source of truth going forward. */
+/* Dark-mode rebind for all preview-gutter custom properties. */
 .squisq-editor-shell[data-theme='dark'] {
   --squisq-preview-accent: #818cf8;
   --squisq-preview-accent-muted: #475569;
@@ -5160,10 +5157,6 @@
   --squisq-preview-empty-bg: #111827;
   --squisq-preview-empty-border: #374151;
   --squisq-preview-empty-text: #94a3b8;
-}
-
-.squisq-editor-shell[data-theme='dark'] .squisq-inline-preview-gutter {
-  background: var(--squisq-preview-gutter-bg);
 }
 
 .squisq-editor-shell[data-theme='dark'] .squisq-outline-empty {

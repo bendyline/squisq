@@ -1627,10 +1627,12 @@ export function Toolbar({
             viewport: previewSettings?.activeViewport ?? VIEWPORT_PRESETS.landscape,
             basePath: '/',
             mediaProvider,
+            customTemplates: doc?.customTemplates,
           }
         : undefined,
     [
       mediaProvider,
+      doc?.customTemplates,
       previewSettings?.activeTheme,
       previewSettings?.activeViewport,
       templatePreviewBlock,

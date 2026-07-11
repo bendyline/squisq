@@ -117,12 +117,6 @@ export interface EditorShellProps {
    */
   workspaceContainer?: ContentContainer | null;
   /**
-   * @deprecated Renamed to `workspaceContainer` to make the workspace-
-   * vs. doc-scoped distinction explicit. Still accepted as a fallback
-   * for now; remove in the next breaking release.
-   */
-  container?: ContentContainer | null;
-  /**
    * Enable version history. Snapshots are stored at
    * `.versions/<basename>.<timestamp>.md` inside the same
    * `workspaceContainer`, so they ride along with the document when
@@ -407,7 +401,6 @@ export function EditorShell({
   maxHeight,
   mediaProvider,
   workspaceContainer,
-  container,
   allowVersioning = false,
   versionBasename,
   versioningPrunePolicy,
@@ -447,7 +440,7 @@ export function EditorShell({
   onViewPreferencesChange,
   themeOverride = null,
 }: EditorShellProps) {
-  const effectiveContainer = workspaceContainer ?? container ?? null;
+  const effectiveContainer = workspaceContainer ?? null;
 
   // If the host gave us a `workspaceContainer` but no explicit `mediaProvider`,
   // derive one automatically. Without this, drag-and-drop of an image

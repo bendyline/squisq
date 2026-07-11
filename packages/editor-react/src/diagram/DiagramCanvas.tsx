@@ -24,7 +24,7 @@ import {
 import type { SceneTextEditConfig } from '../scene/text/sceneTextConfig';
 import type { SceneTextChannel } from '../scene/text/sceneTextChannel';
 import { markdownToTiptap } from '../tiptapBridge';
-import type { DiagramRFNode, DiagramRFEdge } from './types';
+import type { DiagramNode, DiagramEdge } from './types';
 import { DIAGRAM_VIEWPORT, DIAGRAM_TOOLS } from './diagramConstants';
 
 export type DiagramCommand =
@@ -37,8 +37,8 @@ export type DiagramCommand =
   | { kind: 'removeNode'; nodeId: string };
 
 interface DiagramCanvasProps {
-  nodes: DiagramRFNode[];
-  edges: DiagramRFEdge[];
+  nodes: DiagramNode[];
+  edges: DiagramEdge[];
   onCommand: (cmd: DiagramCommand) => void;
   /** When true, render the maximize button. Click toggles `onToggleMaximize`. */
   showMaximize?: boolean;

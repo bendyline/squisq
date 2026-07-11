@@ -1,14 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { render } from '@testing-library/react';
-import { BlockRenderer, VIEWPORT } from '../BlockRenderer';
+import { BlockRenderer } from '../BlockRenderer';
 import type { Block } from '@bendyline/squisq/schemas';
-
-describe('VIEWPORT constant', () => {
-  it('has correct 1080p dimensions', () => {
-    expect(VIEWPORT.width).toBe(1920);
-    expect(VIEWPORT.height).toBe(1080);
-  });
-});
 
 describe('BlockRenderer', () => {
   const minimalBlock: Block = {

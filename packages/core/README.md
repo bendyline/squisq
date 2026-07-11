@@ -18,7 +18,7 @@ npm install @bendyline/squisq
 | Module       | Description                                                                      |
 | ------------ | -------------------------------------------------------------------------------- |
 | **schemas**  | Type definitions — `Doc`, `BlockTemplate`, `Viewport`, `Theme`, `LayoutStrategy` |
-| **doc**      | Template registry, 23 block templates, animation/theme utilities                 |
+| **doc**      | Template registry, 24 block templates, animation/theme utilities                 |
 | **markdown** | Markdown parsing, stringifying, AST types (`MarkdownDocument`), tree utilities   |
 | **spatial**  | Haversine distance, Geohash encode/decode                                        |
 | **storage**  | `StorageAdapter` interface, Memory + LocalStorage + LocalForage adapters         |
@@ -42,16 +42,16 @@ Import only what you need:
 
 ```ts
 import type { Doc, BlockTemplate, Theme } from '@bendyline/squisq/schemas';
-import { getLayers, expandDocBlocks } from '@bendyline/squisq/doc';
+import { materializeBlockLayers, expandDocBlocks } from '@bendyline/squisq/doc';
 import { parseMarkdown, stringifyMarkdown } from '@bendyline/squisq/markdown';
-import { haversineDistance, geohashEncode } from '@bendyline/squisq/spatial';
+import { encodeGeohash, haversineDistance } from '@bendyline/squisq/spatial';
 import { LocalStorageAdapter } from '@bendyline/squisq/storage';
 ```
 
 Or import everything from the root:
 
 ```ts
-import { parseMarkdown, haversineDistance, getLayers } from '@bendyline/squisq';
+import { parseMarkdown, haversineDistance, materializeBlockLayers } from '@bendyline/squisq';
 ```
 
 ## Quick Examples
@@ -70,19 +70,50 @@ const md = stringifyMarkdown(doc);
 ### Spatial Utilities
 
 ```ts
-import { haversineDistance, geohashEncode } from '@bendyline/squisq/spatial';
+import { encodeGeohash, haversineDistance } from '@bendyline/squisq/spatial';
 
-const meters = haversineDistance(47.6, -122.3, 37.7, -122.4);
-const hash = geohashEncode(47.6, -122.3, 7);
+const distanceKm = haversineDistance({ lat: 47.6, lng: -122.3 }, { lat: 37.7, lng: -122.4 });
+const hash = encodeGeohash(47.6, -122.3, 7);
 ```
+
+### Materialize a Block
+
+```ts
+import { materializeBlockLayers } from '@bendyline/squisq/doc';
+
+const result = materializeBlockLayers(block, {
+  theme,
+  viewport,
+  customTemplates: doc.customTemplates,
+});
+
+render(result.layers);
+if (result.diagnostic) report(result.diagnostic);
+```
+
+The canonical materializer handles authored layers, built-in and document-scoped
+templates, theme motion, and persistent layers. Failed templates produce a
+visible fallback plus a structured diagnostic by default; pass
+`failureMode: 'empty'` when a host deliberately wants no fallback UI.
 
 ### Theme System
 
 ```ts
-import { resolveTheme, getAvailableThemes } from '@bendyline/squisq/schemas';
+import {
+  compileTheme,
+  createThemeRegistry,
+  getAvailableThemes,
+  resolveTheme,
+} from '@bendyline/squisq/schemas';
 
-const themes = getAvailableThemes(); // 8 built-in themes
+const themes = getAvailableThemes(); // 11 built-in themes
 const theme = resolveTheme('cinematic');
+
+// Host-level custom themes live in an explicit caller-owned registry.
+const registry = createThemeRegistry([
+  compileTheme({ id: 'brand', name: 'Brand', seedColors: { primary: '#6633cc' } }),
+]);
+const brand = resolveTheme('brand', registry);
 ```
 
 ## Related Packages

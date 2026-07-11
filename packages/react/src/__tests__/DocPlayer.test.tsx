@@ -3,7 +3,7 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { DocPlayer } from '../DocPlayer';
 import type { Doc } from '@bendyline/squisq/schemas';
 import type { AudioController } from '../hooks/AudioController';
-import type { SquisqWindow } from '../types';
+import type { SquisqRenderAPI } from '../types';
 
 function minimalDoc(): Doc {
   return {
@@ -162,25 +162,102 @@ describe('DocPlayer smoke test', () => {
     expect(second.toggle).toHaveBeenCalledOnce();
   });
 
-  it('registers render APIs per player and does not clobber a sibling on cleanup', () => {
-    const one = render(<DocPlayer doc={minimalDoc()} renderMode audioController={controller()} />);
-    const two = render(<DocPlayer doc={minimalDoc()} renderMode audioController={controller()} />);
-    const w = window as SquisqWindow;
-    expect(Object.keys(w.squisqPlayers ?? {})).toHaveLength(2);
-    const secondId = two.container.querySelector('.doc-player')?.getAttribute('data-player-id');
+  it('keeps render APIs scoped to their player callbacks during sibling cleanup', () => {
+    const firstEvents: Array<SquisqRenderAPI | null> = [];
+    const secondEvents: Array<SquisqRenderAPI | null> = [];
+    const one = render(
+      <DocPlayer
+        doc={minimalDoc()}
+        renderMode
+        audioController={controller()}
+        onRenderAPIReady={(api) => firstEvents.push(api)}
+      />,
+    );
+    render(
+      <DocPlayer
+        doc={minimalDoc()}
+        renderMode
+        audioController={controller()}
+        onRenderAPIReady={(api) => secondEvents.push(api)}
+      />,
+    );
+    const secondAPI = secondEvents[secondEvents.length - 1];
+    expect(firstEvents[firstEvents.length - 1]).not.toBeNull();
+    expect(secondAPI).not.toBeNull();
 
     one.unmount();
 
-    expect(Object.keys(w.squisqPlayers ?? {})).toEqual([secondId]);
-    expect(typeof w.seekTo).toBe('function');
+    expect(firstEvents[firstEvents.length - 1]).toBeNull();
+    expect(secondEvents[secondEvents.length - 1]).toBe(secondAPI);
+    expect(typeof secondAPI?.seekTo).toBe('function');
+    expect('seekTo' in window).toBe(false);
+    expect('getDuration' in window).toBe(false);
+    expect('squisqActivePlayerId' in window).toBe(false);
+    expect('squisqPlayers' in window).toBe(false);
+  });
+
+  it('delivers and cleans up an instance render API through the callback', () => {
+    const observed: Array<SquisqRenderAPI | null> = [];
+    const { unmount } = render(
+      <DocPlayer
+        doc={minimalDoc()}
+        renderMode
+        audioController={controller()}
+        onRenderAPIReady={(api) => observed.push(api)}
+      />,
+    );
+
+    expect(observed[observed.length - 1]?.getDuration()).toBeGreaterThan(0);
+    unmount();
+    expect(observed[observed.length - 1]).toBeNull();
+  });
+
+  it('keeps the render API identity stable while dispatching to the latest controller', async () => {
+    const firstController = controller({ currentSegment: 0 });
+    const secondController = controller({ currentSegment: 1 });
+    const observed: Array<SquisqRenderAPI | null> = [];
+    const onRenderAPIReady = (api: SquisqRenderAPI | null) => observed.push(api);
+    const { rerender } = render(
+      <DocPlayer
+        doc={minimalDoc()}
+        renderMode
+        audioController={firstController}
+        onRenderAPIReady={onRenderAPIReady}
+      />,
+    );
+    const api = observed[observed.length - 1];
+    expect(api).not.toBeNull();
+
+    rerender(
+      <DocPlayer
+        doc={minimalDoc()}
+        renderMode
+        audioController={secondController}
+        onRenderAPIReady={onRenderAPIReady}
+      />,
+    );
+
+    expect(observed[observed.length - 1]).toBe(api);
+    await api!.seekTo(3.25);
+    expect(secondController.seekTo).toHaveBeenCalledWith(3.25);
+    expect(firstController.seekTo).not.toHaveBeenCalled();
   });
 
   it('refreshes instance render metadata when the doc prop changes', () => {
     const firstDoc: Doc = { ...minimalDoc(), captions: { version: 1, phrases: [] } };
+    const observed: Array<SquisqRenderAPI | null> = [];
+    const onRenderAPIReady = (next: SquisqRenderAPI | null) => {
+      observed.push(next);
+    };
     const { container, rerender } = render(
-      <DocPlayer doc={firstDoc} renderMode audioController={controller()} />,
+      <DocPlayer
+        doc={firstDoc}
+        renderMode
+        audioController={controller()}
+        onRenderAPIReady={onRenderAPIReady}
+      />,
     );
-    const id = container.querySelector('.doc-player')?.getAttribute('data-player-id') ?? '';
+    expect(container.querySelector('.doc-player')).toBeTruthy();
     const nextDoc: Doc = {
       ...minimalDoc(),
       captions: {
@@ -188,8 +265,15 @@ describe('DocPlayer smoke test', () => {
         phrases: [{ text: 'new caption', startTime: 0, endTime: 1, audioSegment: 0 }],
       },
     };
-    rerender(<DocPlayer doc={nextDoc} renderMode audioController={controller()} />);
-    expect((window as SquisqWindow).squisqPlayers?.[id].getCaptions()).toEqual([
+    rerender(
+      <DocPlayer
+        doc={nextDoc}
+        renderMode
+        audioController={controller()}
+        onRenderAPIReady={onRenderAPIReady}
+      />,
+    );
+    expect(observed[observed.length - 1]?.getCaptions()).toEqual([
       { text: 'new caption', startTime: 0, endTime: 1 },
     ]);
   });

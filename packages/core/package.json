@@ -46,11 +46,6 @@
       "import": "./dist/spatial/index.js",
       "default": "./dist/spatial/index.js"
     },
-    "./story": {
-      "types": "./dist/story/index.d.ts",
-      "import": "./dist/story/index.js",
-      "default": "./dist/story/index.js"
-    },
     "./doc": {
       "types": "./dist/doc/index.d.ts",
       "import": "./dist/doc/index.js",

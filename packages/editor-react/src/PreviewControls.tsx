@@ -28,7 +28,7 @@ import type { Theme } from '@bendyline/squisq/schemas';
 import { ThemePicker } from './ThemePicker';
 import { getTransformStyleSummaries } from '@bendyline/squisq/transform';
 import type { Doc } from '@bendyline/squisq/schemas';
-import { setFrontmatterValues } from '@bendyline/squisq/markdown';
+import { readFrontmatterThemeId, setFrontmatterValues } from '@bendyline/squisq/markdown';
 import {
   resolveThemeForDoc,
   writeCustomThemesToFrontmatter,
@@ -44,6 +44,7 @@ import {
   type ThemeSaveExtras,
 } from './customThemes';
 import { Icon } from './Icon';
+import { resolvePersistedTransformStyleId } from './transformStyleId';
 
 // ── Context ──────────────────────────────────────────────────────
 
@@ -162,17 +163,6 @@ function resolveFrontmatterTheme(value: unknown, customIds?: Set<string>): strin
   return null;
 }
 
-const VALID_TRANSFORM_IDS = new Set(getTransformStyleSummaries().map((s) => s.id));
-
-function resolveFrontmatterTransform(value: unknown): string | null {
-  if (typeof value !== 'string') return null;
-  const v = value.trim().toLowerCase();
-  if (VALID_TRANSFORM_IDS.has(v)) return v;
-  const normalized = v.replace(/\s+/g, '-');
-  if (VALID_TRANSFORM_IDS.has(normalized)) return normalized;
-  return null;
-}
-
 function resolveFrontmatterCaptionMode(value: unknown): CaptionMode | null {
   if (typeof value !== 'string') return null;
   const v = value.trim().toLowerCase();
@@ -209,7 +199,7 @@ export interface PreviewSettingsProviderProps {
  *  keys are the canonical names; the legacy keys are still read so existing
  *  documents keep working. Persistence (writes) uses only the squisq names. */
 const FM_KEYS = {
-  theme: { canonical: 'squisq-theme', legacy: 'theme' as const },
+  theme: { canonical: 'squisq-theme', legacy: ['themeId', 'theme'] as const },
   transform: { canonical: 'squisq-transform', legacy: 'transform-style' as const },
   captions: { canonical: 'squisq-captions', legacy: 'caption-style' as const },
   coverSlide: { canonical: 'squisq-cover-slide', legacy: 'cover-slide' as const },
@@ -259,28 +249,30 @@ export function PreviewSettingsProvider({
   const activeDisplayMode = selectedDisplayMode ?? fmMode ?? 'video';
 
   // Custom themes (doc + browser library). `useCustomThemes` returns null when
-  // no provider is mounted; the picker then just shows built-ins.
+  // no provider is mounted; document-scoped themes still remain available.
   const custom = useCustomThemes();
-  const customThemes = useMemo(() => custom?.allThemes ?? [], [custom]);
+  const docThemes = useMemo(
+    () => custom?.docThemes ?? doc?.customThemes ?? [],
+    [custom, doc?.customThemes],
+  );
+  const customThemes = useMemo(() => custom?.allThemes ?? docThemes, [custom, docThemes]);
   const customIds = useMemo(() => new Set(customThemes.map((t) => t.id)), [customThemes]);
 
-  // Theme — persisted to `squisq-theme` (legacy `theme` still read for compat)
+  // Theme — persisted to `squisq-theme`; `themeId` / `theme` remain readable.
   const fmTheme = useMemo(
-    () =>
-      resolveFrontmatterTheme(
-        readFrontmatterKey(frontmatter, FM_KEYS.theme.canonical, FM_KEYS.theme.legacy),
-        customIds,
-      ),
+    () => resolveFrontmatterTheme(readFrontmatterThemeId(frontmatter), customIds),
     [frontmatter, customIds],
   );
   const [selectedThemeId, setSelectedThemeId] = useState<string | null>(null);
   useEffect(() => setSelectedThemeId(null), [fmTheme]);
   const resolvedThemeId = selectedThemeId ?? fmTheme ?? 'standard';
-  // Doc-scoped resolution: an inline custom theme id resolves from the doc's
-  // own `customThemes` before built-ins — no global registration needed.
+  // Doc themes precede browser-library themes in `allThemes`; choosing a
+  // library-only entry copies it into the document below for portable export.
   const resolvedTheme = useMemo(
-    () => resolveThemeForDoc(doc, resolvedThemeId),
-    [doc, resolvedThemeId],
+    () =>
+      customThemes.find((theme) => theme.id === resolvedThemeId) ??
+      resolveThemeForDoc(doc, resolvedThemeId),
+    [customThemes, doc, resolvedThemeId],
   );
 
   // In-progress theme from the designer dialog; previews live without mutating
@@ -298,9 +290,21 @@ export function PreviewSettingsProvider({
   const handleSetThemeId = useCallback(
     (id: string | null) => {
       setSelectedThemeId(id);
-      if (id !== null) persistFrontmatter({ [FM_KEYS.theme.canonical]: id });
+      if (id === null) return;
+      const selectedCustom = customThemes.find((theme) => theme.id === id);
+      const alreadyDocScoped = docThemes.some((theme) => theme.id === id);
+      const updates: Record<string, string | null> = {
+        [FM_KEYS.theme.canonical]: id,
+        [FM_KEYS.theme.legacy[0]]: null,
+        [FM_KEYS.theme.legacy[1]]: null,
+      };
+      if (selectedCustom && !alreadyDocScoped) {
+        updates[FRONTMATTER_CUSTOM_THEMES_KEY] =
+          writeCustomThemesToFrontmatter([...docThemes, selectedCustom]) ?? null;
+      }
+      persistFrontmatter(updates);
     },
-    [persistFrontmatter],
+    [customThemes, docThemes, persistFrontmatter],
   );
 
   const openThemeDesigner = useCallback((theme: Theme | null) => {
@@ -356,7 +360,7 @@ export function PreviewSettingsProvider({
   // Transform — persisted to `squisq-transform` (legacy `transform-style` read for compat)
   const fmTransform = useMemo(
     () =>
-      resolveFrontmatterTransform(
+      resolvePersistedTransformStyleId(
         readFrontmatterKey(frontmatter, FM_KEYS.transform.canonical, FM_KEYS.transform.legacy),
       ),
     [frontmatter],

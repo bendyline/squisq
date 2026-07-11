@@ -13,6 +13,7 @@ describe('BlockPropertiesPopover theme propagation', () => {
         colorScheme="dark"
         accentColor="#c2410c"
         onChange={vi.fn()}
+        onAnnotationChange={vi.fn()}
         onClose={vi.fn()}
       />,
     );

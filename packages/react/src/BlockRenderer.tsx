@@ -19,9 +19,8 @@ import { TableLayer } from './layers/TableLayer';
 import { TreeLayer } from './layers/TreeLayer';
 import { getTransitionClass } from './utils/animationUtils';
 
-/** Default viewport dimensions (1080p landscape) - for backwards compatibility */
-// eslint-disable-next-line react-refresh/only-export-components
-export const VIEWPORT = {
+/** Default viewport dimensions (1080p landscape). */
+const DEFAULT_VIEWPORT = {
   width: 1920,
   height: 1080,
 };
@@ -58,7 +57,7 @@ export function BlockRenderer({
   isEntering = false,
   isExiting = false,
   transition,
-  viewport = VIEWPORT,
+  viewport = DEFAULT_VIEWPORT,
   isPlaying,
 }: BlockRendererProps) {
   // Build transition class and inline style for dynamic duration

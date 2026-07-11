@@ -24,7 +24,7 @@ import { ImageEditorDemo } from './ImageEditorDemo';
 import { CodeContextDemo } from './CodeContextDemo';
 import { createSlotMediaProvider } from './slotStorage';
 import type { MediaProvider, Theme } from '@bendyline/squisq/schemas';
-import { parseTheme, registerTheme, unregisterTheme } from '@bendyline/squisq/schemas';
+import { parseTheme } from '@bendyline/squisq/schemas';
 
 const CUSTOM_THEME_STORAGE_KEY = 'squisq-site:customTheme';
 const COLOR_MODE_STORAGE_KEY = 'squisq-site:colorMode';
@@ -135,30 +135,21 @@ export function App() {
       delete document.documentElement.dataset.squisqDemoColorScheme;
     };
   }, [colorScheme]);
-  // Re-register the loaded theme on mount so `Doc.themeId` lookups resolve to it.
-  // Subsequent edits go through handleCustomThemeChange which also registers.
-  useEffect(() => {
-    if (customTheme) registerTheme(customTheme);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
   const handleCustomThemeChange = useCallback((next: Theme) => {
-    registerTheme(next);
     setCustomThemeState(next);
   }, []);
   const handleCustomThemeSave = useCallback((next: Theme, json: string) => {
     if (typeof localStorage !== 'undefined') {
       localStorage.setItem(CUSTOM_THEME_STORAGE_KEY, json);
     }
-    registerTheme(next);
     setCustomThemeState(next);
   }, []);
   const handleCustomThemeReset = useCallback(() => {
-    if (customTheme) unregisterTheme(customTheme.id);
     if (typeof localStorage !== 'undefined') {
       localStorage.removeItem(CUSTOM_THEME_STORAGE_KEY);
     }
     setCustomThemeState(null);
-  }, [customTheme]);
+  }, []);
   // Key to force EditorShell remount on upload
   const [editorKey, setEditorKey] = useState(0);
   // Storage slot state

@@ -16,11 +16,16 @@ import type { ContentContainer } from '@bendyline/squisq/storage';
 import { MemoryContentContainer } from '@bendyline/squisq/storage';
 import {
   assertSafeZipPath,
-  validateZipArchive,
+  openBoundedZipArchive,
+  ZipSafetyError,
   type ZipSafetyLimits,
+  type ZipSafetyErrorCode,
+  type ZipSafetyErrorOptions,
 } from '../shared/zipSafety.js';
 
 export type ZipToContainerOptions = ZipSafetyLimits;
+export { ZipSafetyError };
+export type { ZipSafetyLimits, ZipSafetyErrorCode, ZipSafetyErrorOptions };
 
 /**
  * Serialize a ContentContainer to a ZIP blob.
@@ -64,21 +69,12 @@ export async function zipToContainer(
   zipData: ArrayBuffer | Uint8Array | Blob,
   options: ZipToContainerOptions = {},
 ): Promise<MemoryContentContainer> {
-  const zip = await JSZip.loadAsync(zipData);
+  const archive = await openBoundedZipArchive(zipData, options);
   const container = new MemoryContentContainer();
-  const files = validateZipArchive(zip, options);
-  const maxUncompressedBytes = options.maxUncompressedBytes ?? 512 * 1024 * 1024;
-
-  let totalBytes = 0;
-  for (const { path, entry } of files) {
-    const data = await entry.async('arraybuffer');
-    totalBytes += data.byteLength;
-    if (totalBytes > maxUncompressedBytes) {
-      throw new Error(
-        `ZIP import: uncompressed content exceeds ${maxUncompressedBytes} byte limit.`,
-      );
-    }
-    await container.writeFile(path, data);
+  for (const { path } of archive.entries) {
+    const data = await archive.read(path);
+    if (data) await container.writeFile(path, data);
+    archive.release(path);
   }
   return container;
 }

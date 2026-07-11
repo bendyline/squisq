@@ -219,7 +219,7 @@ export interface Block {
    * Pre-computed visual layers, rendered back-to-front.
    *
    * Optional — template-derived blocks typically omit this and compute
-   * layers on demand via `getLayers()` from `@bendyline/squisq/doc`.
+   * layers on demand via `materializeBlockLayers()` from `@bendyline/squisq/doc`.
    * Raw blocks (e.g., hand-crafted by AI) may provide layers directly.
    */
   layers?: Layer[];
@@ -574,14 +574,9 @@ export interface PathLayer extends BaseLayer {
     borderStyle?: BorderStyle;
     /** Optional stroke dash pattern (SVG `stroke-dasharray` syntax). */
     dasharray?: string;
-    /**
-     * Legacy arrowhead flag. Prefer `startMarker`/`endMarker`. When those are
-     * unset, `'end'`/`'start'`/`'both'` render a filled-triangle arrowhead.
-     */
-    arrow?: 'none' | 'end' | 'start' | 'both';
-    /** Marker at the path start (overrides `arrow`). Default: derived from `arrow`. */
+    /** Marker at the path start. */
     startMarker?: MarkerStyle;
-    /** Marker at the path end (overrides `arrow`). Default: derived from `arrow`. */
+    /** Marker at the path end. */
     endMarker?: MarkerStyle;
   };
 }

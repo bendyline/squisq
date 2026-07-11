@@ -15,13 +15,13 @@ import {
   ASCII_CHAR_W,
   type AsciiDiagram,
 } from '@bendyline/squisq/doc';
-import type { DiagramRFEdge, DiagramRFNode } from '../diagram/types';
+import type { DiagramEdge, DiagramNode } from '../diagram/types';
 import { findAsciiDiagramBlockPos, parseAsciiDiagramForNode } from './AsciiDiagramExtension';
 
 export interface AsciiDiagramView {
   /** Canvas nodes, containers ordered first so their cards paint behind. */
-  nodes: DiagramRFNode[];
-  edges: DiagramRFEdge[];
+  nodes: DiagramNode[];
+  edges: DiagramEdge[];
   warnings: string[];
   style: 'unicode' | 'ascii';
   /** The current fence text. */
@@ -52,7 +52,7 @@ export function asciiDiagramToCanvas(
     const bContainer = containerIds.has(b.id) ? 0 : 1;
     return aContainer - bContainer || depthOf(a.id) - depthOf(b.id);
   });
-  const nodes: DiagramRFNode[] = ordered.map((n) => ({
+  const nodes: DiagramNode[] = ordered.map((n) => ({
     id: n.id,
     position: asciiCellToCanvas(n.col, n.row),
     data: { label: n.label },
@@ -60,7 +60,7 @@ export function asciiDiagramToCanvas(
     height: n.hRows * ASCII_CHAR_H,
     ...(containerIds.has(n.id) ? { kind: 'container' as const } : {}),
   }));
-  const edges: DiagramRFEdge[] = diagram.edges.map((e) => ({
+  const edges: DiagramEdge[] = diagram.edges.map((e) => ({
     id: e.label ? `${e.source}->${e.target}:${e.label}` : `${e.source}->${e.target}`,
     source: e.source,
     target: e.target,

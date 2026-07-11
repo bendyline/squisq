@@ -33,7 +33,10 @@ This package is the shared foundation under [@bendyline/squisq-video-react](http
 
 ### Generate Render HTML
 
-Create a self-contained HTML page that mounts the standalone Squisq player in render mode, with all images and audio embedded as base64 data URIs. The page exposes `window.seekTo(time)` and `window.getDuration()` so a headless browser (Playwright, Puppeteer) can step through frames and screenshot each one:
+Create a self-contained HTML page that mounts the standalone Squisq player in render mode, with all images and audio embedded as base64 data URIs. A headless browser (Playwright, Puppeteer) obtains the player-specific handle with `SquisqPlayer.getHandle(root)` and uses its render API to step through frames and screenshot each one:
+
+Render methods are deliberately instance-scoped; generated pages do not expose
+legacy top-level `window.seekTo` or `window.getDuration` functions.
 
 ```ts
 import { generateRenderHtml } from '@bendyline/squisq-video';

@@ -62,8 +62,8 @@ describe('layout container behavior', () => {
     expect(isContainerTemplate('layout')).toBe(true);
   });
 
-  it('renders a layout block through the template registry (getLayers)', async () => {
-    const { getLayers } = await import('../doc/getLayers.js');
+  it('renders a layout block through the template registry', async () => {
+    const { materializeBlockLayers } = await import('../doc/materializeBlockLayers.js');
     const parent: Block = {
       id: 'lay',
       startTime: 0,
@@ -75,7 +75,7 @@ describe('layout container behavior', () => {
         child('box-1', 'rectangle', { x: '760', y: '390', width: '400', height: '300' }),
       ],
     };
-    const layers = getLayers(parent, {});
+    const layers = materializeBlockLayers(parent, { persistentLayers: false }).layers;
     const types = new Set(layers.map((l: Layer) => l.type));
     expect(types.has('text')).toBe(true);
     expect(types.has('shape')).toBe(true);

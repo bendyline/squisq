@@ -146,15 +146,15 @@ export interface RenderChapterInfo {
 }
 
 /**
- * API surface exposed on `window` in render mode and debug mode.
- * Used by Playwright for video export and by ?debug=true for testing.
+ * Instance-scoped API created in render mode and debug mode.
+ * React hosts receive it via `DocPlayer.onRenderAPIReady`; standalone hosts
+ * receive it from their mount handle.
  *
  * @example
  * ```ts
- * // In Playwright:
- * const w = window as unknown as SquisqWindow;
- * await w.seekTo!(5.0);
- * const blocks = w.getBlocks!();
+ * const handle = SquisqPlayer.getHandle(rootElement);
+ * const api = await handle?.renderAPI;
+ * await api?.seekTo(5.0);
  * ```
  */
 export interface SquisqRenderAPI {
@@ -168,19 +168,6 @@ export interface SquisqRenderAPI {
   hideCover: () => Promise<void>;
   hasCoverBlock: () => boolean;
 }
-
-/**
- * Window augmented with optional SquisqRenderAPI properties.
- * Each property is optional because they're only present in render/debug mode.
- */
-export type SquisqWindow = Window &
-  typeof globalThis &
-  Partial<SquisqRenderAPI> & {
-    /** Instance-scoped render APIs, keyed by the player's data-player-id. */
-    squisqPlayers?: Record<string, SquisqRenderAPI>;
-    /** Player currently backing the legacy top-level render API aliases. */
-    squisqActivePlayerId?: string;
-  };
 
 /** Format time in seconds to MM:SS string */
 export function formatTime(seconds: number): string {

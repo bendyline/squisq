@@ -3,6 +3,7 @@
  */
 import { afterEach, describe, expect, it } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { compileTheme } from '@bendyline/squisq/schemas';
 import { EditorProvider, useEditorContext } from '../EditorContext';
 import {
   PreviewModeSwitch,
@@ -10,10 +11,24 @@ import {
   PreviewToolbarControls,
   usePreviewSettings,
 } from '../PreviewControls';
+import {
+  clearThemeLibrary,
+  CustomThemeProvider,
+  saveLibraryTheme,
+  useDocCustomThemes,
+} from '../customThemes';
 
 function ModeProbe() {
-  const { activeDisplayMode } = usePreviewSettings();
-  return <div data-testid="active-mode">{activeDisplayMode}</div>;
+  const { activeDisplayMode, activeThemeId, activeTransformStyle } = usePreviewSettings();
+  return (
+    <div
+      data-testid="active-mode"
+      data-theme-id={activeThemeId}
+      data-transform-style={activeTransformStyle}
+    >
+      {activeDisplayMode}
+    </div>
+  );
 }
 
 function PreviewHarness() {
@@ -35,6 +50,32 @@ function PreviewToolbarHarness() {
   );
 }
 
+function LibraryThemeProbe() {
+  const { activeTheme, setSelectedThemeId } = usePreviewSettings();
+  const { markdownSource } = useEditorContext();
+  return (
+    <>
+      <button type="button" onClick={() => setSelectedThemeId('library-theme')}>
+        Select library theme
+      </button>
+      <div data-testid="active-theme-name">{activeTheme.name}</div>
+      <pre data-testid="markdown-source">{markdownSource}</pre>
+    </>
+  );
+}
+
+function LibraryThemeHarness() {
+  const { doc } = useEditorContext();
+  const { docThemes, onDocThemesChange } = useDocCustomThemes();
+  return (
+    <CustomThemeProvider docThemes={docThemes} onDocThemesChange={onDocThemesChange}>
+      <PreviewSettingsProvider doc={doc}>
+        <LibraryThemeProbe />
+      </PreviewSettingsProvider>
+    </CustomThemeProvider>
+  );
+}
+
 function renderPreviewControls(markdown: string) {
   render(
     <EditorProvider initialMarkdown={markdown}>
@@ -51,7 +92,10 @@ function renderPreviewToolbar(markdown: string) {
   );
 }
 
-afterEach(() => cleanup());
+afterEach(() => {
+  cleanup();
+  clearThemeLibrary();
+});
 
 describe('PreviewModeSwitch', () => {
   it('labels the plain document preview as Document and the styled view as Page', () => {
@@ -88,6 +132,49 @@ describe('PreviewModeSwitch', () => {
       expect(screen.getByTestId('active-mode').textContent).toBe('linear');
     });
     expect(screen.getByRole('button', { name: 'Page' }).getAttribute('aria-pressed')).toBe('true');
+  });
+
+  it('uses the shared squisq-theme, themeId, theme fallback order', async () => {
+    renderPreviewControls('---\nthemeId: bold\ntheme: cinematic\n---\n\n# Hello');
+
+    await waitFor(() => {
+      expect(screen.getByTestId('active-mode').getAttribute('data-theme-id')).toBe('bold');
+    });
+  });
+
+  it('canonicalizes the stored dataDriven transform id', async () => {
+    renderPreviewControls('---\nsquisq-transform: dataDriven\n---\n\n# Hello');
+
+    await waitFor(() => {
+      expect(screen.getByTestId('active-mode').getAttribute('data-transform-style')).toBe(
+        'data-driven',
+      );
+    });
+  });
+
+  it('copies a selected browser-library theme into the document atomically', async () => {
+    saveLibraryTheme(
+      compileTheme({
+        id: 'library-theme',
+        name: 'Library Theme',
+        seedColors: { primary: '#456789' },
+      }),
+    );
+    render(
+      <EditorProvider initialMarkdown="# Hello">
+        <LibraryThemeHarness />
+      </EditorProvider>,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Select library theme' }));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('active-theme-name').textContent).toBe('Library Theme');
+      const source = screen.getByTestId('markdown-source').textContent ?? '';
+      expect(source).toContain('squisq-theme: library-theme');
+      expect(source).toContain('squisq-custom-themes:');
+      expect(source).toContain('library-theme');
+    });
   });
 });
 

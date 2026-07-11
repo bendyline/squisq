@@ -11,7 +11,7 @@ function renderPath(layer: PathLayerType) {
       <PathLayer layer={layer} viewport={viewport} blockTime={0} />
     </svg>,
   );
-  return container.querySelector('path')!;
+  return container.querySelector('.block-layer--path > path')!;
 }
 
 describe('PathLayer', () => {
@@ -69,5 +69,16 @@ describe('PathLayer', () => {
       content: { d: 'M 1 2 L 3 4', shapeKind: 'not-a-real-shape' },
     });
     expect(path.getAttribute('d')).toBe('M 1 2 L 3 4');
+  });
+
+  it('reads the old serialized arrow field without exposing it in the PathLayer type', () => {
+    const legacyLayer = {
+      id: 'legacy-arrow',
+      type: 'path',
+      position: { x: 0, y: 0, width: 100, height: 100 },
+      content: { d: 'M 0 0 L 100 100', arrow: 'end' },
+    } as unknown as PathLayerType;
+
+    expect(renderPath(legacyLayer).getAttribute('marker-end')).toMatch(/^url\(#marker-end-/);
   });
 });

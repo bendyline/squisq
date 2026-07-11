@@ -195,6 +195,7 @@ export function defaultFormats(): FormatDefinition[] {
         ...raw,
         ...(options.title !== undefined ? { title: options.title } : {}),
         themeId: resolveThemeId(input, options),
+        themeRegistry: options.themeRegistry ?? raw.themeRegistry,
         images,
       });
       return ok(await toBytes(buf), MIME.docx, markdownFidelityWarnings(markdownDoc, 'docx'));
@@ -222,6 +223,7 @@ export function defaultFormats(): FormatDefinition[] {
         ...raw,
         ...(options.title !== undefined ? { title: options.title } : {}),
         themeId: resolveThemeId(input, options),
+        themeRegistry: options.themeRegistry ?? raw.themeRegistry,
       });
       return ok(await toBytes(buf), MIME.pdf, markdownFidelityWarnings(markdownDoc, 'pdf'));
     },
@@ -250,6 +252,7 @@ export function defaultFormats(): FormatDefinition[] {
         ...raw,
         ...(options.title !== undefined ? { title: options.title } : {}),
         themeId: resolveThemeId(input, options),
+        themeRegistry: options.themeRegistry ?? raw.themeRegistry,
         images,
       });
       return ok(await toBytes(buf), MIME.pptx, markdownFidelityWarnings(markdownDoc, 'pptx'));
@@ -335,6 +338,7 @@ export function defaultFormats(): FormatDefinition[] {
         title: options.title ?? input.baseName,
         mode: raw.mode ?? 'static',
         themeId: resolveThemeId(input, options),
+        themeRegistry: options.themeRegistry ?? raw.themeRegistry,
       });
       return ok(new TextEncoder().encode(htmlText), MIME.html);
     },
@@ -358,6 +362,7 @@ export function defaultFormats(): FormatDefinition[] {
         title: options.title ?? input.baseName,
         mode: raw.mode ?? 'static',
         themeId: resolveThemeId(input, options),
+        themeRegistry: options.themeRegistry ?? raw.themeRegistry,
       });
       return ok(await toBytes(blob), MIME.zip);
     },
@@ -378,6 +383,7 @@ export function defaultFormats(): FormatDefinition[] {
         ...raw,
         title: options.title ?? input.baseName,
         themeId: resolveThemeId(input, options),
+        themeRegistry: options.themeRegistry ?? raw.themeRegistry,
         images,
       });
       return ok(await toBytes(buf), MIME.epub, markdownFidelityWarnings(markdownDoc, 'epub'));

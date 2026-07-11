@@ -9,9 +9,10 @@
 
 import type { MarkdownDocument } from '@bendyline/squisq/markdown';
 import type { ContentContainer } from '@bendyline/squisq/storage';
+import type { TransformStyleInput, TransformStyleRegistry } from '@bendyline/squisq/transform';
 import { ConversionError } from './errors.js';
 import { defaultRegistry } from './registry.js';
-import { validateZipArchive } from '../shared/zipSafety.js';
+import { openBoundedZipArchive, ZipSafetyError } from '../shared/zipSafety.js';
 import type {
   BuiltinFormatOptions,
   ConversionResult,
@@ -47,21 +48,18 @@ const PDF_MAGIC = [0x25, 0x50, 0x44, 0x46]; // "%PDF"
  * marker means `dbk`.
  */
 async function sniffZip(bytes: Uint8Array): Promise<FormatId> {
-  const JSZip = (await import('jszip')).default;
-  const zip = await JSZip.loadAsync(bytes).catch(() => {
-    throw new ConversionError('invalid-input', 'Input is not a readable ZIP archive.');
+  const archive = await openBoundedZipArchive(bytes).catch((cause: unknown) => {
+    if (cause instanceof ZipSafetyError && cause.code !== 'invalid-archive') throw cause;
+    throw new ConversionError('invalid-input', 'Input is not a readable ZIP archive.', { cause });
   });
-  const entries = validateZipArchive(zip);
-  const contentTypes = entries.find((entry) => entry.path === '[Content_Types].xml');
+  const contentTypes = archive.entries.find((entry) => entry.path === '[Content_Types].xml');
   if (!contentTypes) return 'dbk';
   const maxContentTypesBytes = 1024 * 1024;
   if ((contentTypes.declaredSize ?? 0) > maxContentTypesBytes) {
     throw new ConversionError('invalid-input', 'OOXML content-types metadata is too large.');
   }
-  const xmlBytes = await contentTypes.entry.async('uint8array');
-  if (xmlBytes.byteLength > maxContentTypesBytes) {
-    throw new ConversionError('invalid-input', 'OOXML content-types metadata is too large.');
-  }
+  const xmlBytes = await archive.read(contentTypes.path, maxContentTypesBytes);
+  if (!xmlBytes) return 'dbk';
   const xml = new TextDecoder().decode(xmlBytes);
   if (xml.includes('wordprocessingml')) return 'docx';
   if (xml.includes('presentationml')) return 'pptx';
@@ -249,13 +247,14 @@ async function normalize(
 
 async function applyTransformStyle(
   input: NormalizedInput,
-  transformStyle: string,
+  transformStyle: TransformStyleInput,
   themeId?: string,
+  registry?: TransformStyleRegistry,
 ): Promise<string[]> {
   const { applyTransform, extractDocImages } = await import('@bendyline/squisq/transform');
   const { docToMarkdown, markdownToDoc } = await import('@bendyline/squisq/doc');
   const images = extractDocImages(input.doc.blocks);
-  const result = applyTransform(input.doc, transformStyle, { themeId, images });
+  const result = applyTransform(input.doc, transformStyle, { themeId, images, registry });
   input.doc = result.doc;
   const markdownDoc = docToMarkdown(result.doc);
   input.markdownDoc = markdownDoc;
@@ -330,6 +329,7 @@ export async function convert(
           input,
           options.transformStyle,
           options.themeId ?? input.doc.themeId,
+          options.transformRegistry,
         )),
       );
     }

@@ -3,26 +3,25 @@
  *
  * Shared type definitions for all Office Open XML formats (DOCX, PPTX, XLSX).
  * These model the common structural elements of the OOXML package format:
- * ZIP archive, relationships, content types, and core properties.
+ * relationships, content types, and core properties.
  */
-
-import type JSZip from 'jszip';
 
 // ============================================
 // Package
 // ============================================
 
 /**
- * An opened OOXML package — wraps the JSZip archive plus parsed
- * structural metadata (content types, root relationships).
+ * An opened OOXML package. Instances are created only by `openPackage`; the
+ * archive remains private so every part read goes through the bounded reader.
  */
+declare const ooxmlPackageBrand: unique symbol;
 export interface OoxmlPackage {
-  /** The underlying JSZip archive */
-  zip: JSZip;
+  /** Nominal brand: callers cannot manually construct a safety-bypassing package. */
+  readonly [ooxmlPackageBrand]: never;
   /** Parsed [Content_Types].xml entries */
-  contentTypes: ContentTypeMap;
+  readonly contentTypes: ContentTypeMap;
   /** Root-level relationships (_rels/.rels) */
-  rootRelationships: Relationship[];
+  readonly rootRelationships: readonly Relationship[];
 }
 
 /**

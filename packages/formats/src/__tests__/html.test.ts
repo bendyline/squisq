@@ -8,6 +8,7 @@
 import { describe, it, expect } from 'vitest';
 import JSZip from 'jszip';
 import type { Doc, Block, ImageLayer } from '@bendyline/squisq/schemas';
+import { compileTheme, createThemeRegistry } from '@bendyline/squisq/schemas';
 import { docToHtml, docToHtmlZip, collectImagePaths } from '../html/index';
 import { inferMimeType, arrayBufferToBase64DataUrl, extractFilename } from '../html/imageUtils';
 
@@ -235,6 +236,41 @@ describe('docToHtml', () => {
     expect(html).toContain('test-doc');
   });
 
+  it('embeds an explicitly registered theme selected by the document', () => {
+    const external = compileTheme({
+      id: 'tenant-brand',
+      name: 'External Tenant Brand',
+      seedColors: { primary: '#6633cc' },
+    });
+    const html = docToHtml(makeDoc({ themeId: external.id }), {
+      playerScript: MOCK_PLAYER_SCRIPT,
+      themeRegistry: createThemeRegistry([external]),
+    });
+
+    expect(html).toContain('External Tenant Brand');
+    expect(html).toContain('\\"themeId\\":\\"tenant-brand\\"');
+  });
+
+  it('keeps a document-scoped theme ahead of the explicit registry', () => {
+    const inline = compileTheme({
+      id: 'tenant-brand',
+      name: 'Inline Tenant Brand',
+      seedColors: { primary: '#112233' },
+    });
+    const external = compileTheme({
+      id: 'tenant-brand',
+      name: 'External Tenant Brand',
+      seedColors: { primary: '#6633cc' },
+    });
+    const html = docToHtml(makeDoc({ themeId: inline.id, customThemes: [inline] }), {
+      playerScript: MOCK_PLAYER_SCRIPT,
+      themeRegistry: createThemeRegistry([external]),
+    });
+
+    expect(html).toContain('Inline Tenant Brand');
+    expect(html).not.toContain('External Tenant Brand');
+  });
+
   it('calls SquisqPlayer.mount', () => {
     const doc = makeDoc();
     const html = docToHtml(doc, { playerScript: MOCK_PLAYER_SCRIPT });
@@ -318,6 +354,22 @@ describe('docToHtmlZip', () => {
     expect(html).toContain('src="squisq-player.js"');
     // Should NOT contain the inline script
     expect(html).not.toContain(MOCK_PLAYER_SCRIPT);
+  });
+
+  it('embeds a caller-owned theme selected by the document', async () => {
+    const external = compileTheme({
+      id: 'tenant-zip-brand',
+      name: 'Tenant ZIP Brand',
+      seedColors: { primary: '#224466' },
+    });
+    const blob = await docToHtmlZip(makeDoc({ themeId: external.id }), {
+      playerScript: MOCK_PLAYER_SCRIPT,
+      themeRegistry: createThemeRegistry([external]),
+    });
+
+    const zip = await JSZip.loadAsync(await blobToUint8Array(blob));
+    const html = await zip.file('index.html')!.async('text');
+    expect(html).toContain('Tenant ZIP Brand');
   });
 
   it('preserves the original image path inside the zip', async () => {

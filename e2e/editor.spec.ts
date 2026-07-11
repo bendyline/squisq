@@ -20,7 +20,7 @@ async function focusWysiwygParagraph(page: Page, position: 'first' | 'last' = 'l
   const editor = page.locator('.tiptap.ProseMirror');
   const paragraph = position === 'first' ? editor.locator('p').first() : editor.locator('p').last();
   await paragraph.click({ position: { x: 8, y: 8 } });
-  await expect(page.locator('#squisq-template-gallery-portal')).toHaveCount(0);
+  await expect(page.locator('[data-squisq-template-gallery-portal]')).toHaveCount(0);
   return editor;
 }
 
@@ -235,7 +235,7 @@ test.describe('Template picker', () => {
 
     await expect(chip).toBeVisible();
     await chip.click();
-    await expect(page.locator('#squisq-template-gallery-portal')).toBeVisible();
+    await expect(page.locator('[data-squisq-template-gallery-portal]')).toBeVisible();
   });
 
   test('template picker is hidden when cursor is in body text', async ({ page }) => {

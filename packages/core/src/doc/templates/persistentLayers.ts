@@ -467,128 +467,6 @@ export function expandPersistentLayers(
   );
 }
 
-// ============================================
-// Style Presets (legacy helper — prefer theme.persistentLayers)
-// ============================================
-
-/** Legacy style preset names. Prefer using `Theme.persistentLayers` directly. */
-export type DocStylePreset = 'minimal' | 'documentary' | 'branded' | 'cinematic' | 'clean';
-
-/**
- * Get a PersistentLayerConfig from a style preset.
- *
- * @param preset - Style preset name
- * @param articleTitle - Article title for title caption
- * @param heroSrc - Optional hero image for cinematic style
- */
-export function getDocStyleConfig(
-  preset: DocStylePreset,
-  articleTitle: string,
-  heroSrc?: string,
-  subtitle?: string,
-): PersistentLayerConfig {
-  switch (preset) {
-    case 'minimal':
-      return {};
-
-    case 'documentary':
-      return {
-        bottomLayers: [
-          {
-            template: 'gradientBackground',
-            config: { type: 'gradientBackground', preset: 'dark-vignette' },
-          },
-        ],
-        topLayers: [
-          {
-            template: 'titleCaption',
-            config: {
-              type: 'titleCaption',
-              title: articleTitle,
-              subtitle,
-              position: 'bottom-left',
-              fontSize: 24,
-              showThumbnail: !!heroSrc,
-              thumbnailSrc: heroSrc,
-            },
-          },
-        ],
-      };
-
-    case 'branded':
-      return {
-        bottomLayers: [
-          {
-            template: 'gradientBackground',
-            config: { type: 'gradientBackground', preset: 'cool-blue' },
-          },
-        ],
-        topLayers: [
-          {
-            template: 'titleCaption',
-            config: {
-              type: 'titleCaption',
-              title: articleTitle,
-              subtitle,
-              position: 'bottom-left',
-              fontSize: 26,
-              showThumbnail: !!heroSrc,
-              thumbnailSrc: heroSrc,
-            },
-          },
-        ],
-      };
-
-    case 'cinematic':
-      return {
-        bottomLayers: heroSrc
-          ? [
-              {
-                template: 'imageBackground',
-                config: {
-                  type: 'imageBackground',
-                  src: heroSrc,
-                  blur: 12,
-                  opacity: 0.3,
-                  ambientMotion: 'zoomIn',
-                },
-              },
-            ]
-          : [
-              {
-                template: 'gradientBackground',
-                config: { type: 'gradientBackground', preset: 'radial-dark' },
-              },
-            ],
-        topLayers: [
-          {
-            template: 'titleCaption',
-            config: {
-              type: 'titleCaption',
-              title: articleTitle,
-              subtitle,
-              position: 'bottom-right',
-              fontSize: 22,
-            },
-          },
-        ],
-      };
-
-    case 'clean':
-      return {
-        bottomLayers: [
-          {
-            template: 'solidBackground',
-            config: { type: 'solidBackground', color: '#1a202c' },
-          },
-        ],
-      };
-
-    default:
-      return {};
-  }
-}
-
 /**
  * Get persistent layers from a Theme. Returns the theme's baked-in
  * persistentLayers config, or an empty config when the theme has none.
@@ -626,7 +504,7 @@ export function resolvePersistentLayers(
 /**
  * Compose a block's layers between pre-expanded persistent bottom/top
  * layers, honoring the per-block `useBottomLayer` / `useTopLayer` opt-outs.
- * Single shared implementation for `expandDocBlocks` and `getLayers`.
+ * Shared persistent-layer primitive used by `materializeBlockLayers`.
  */
 export function wrapWithPersistentLayers(
   layers: Layer[],

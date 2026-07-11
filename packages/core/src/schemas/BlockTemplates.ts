@@ -691,7 +691,7 @@ export interface TemplateContext {
   /** Layout hints for this orientation */
   layout: LayoutHints;
   /**
-   * The block's direct children (set by `getLayers` when the block has
+   * The block's direct children (set by `materializeBlockLayers` when the block has
    * `children`). Most templates ignore this; aggregate templates like
    * `diagram` consume it to render each child as part of their output.
    */

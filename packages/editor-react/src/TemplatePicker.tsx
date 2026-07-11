@@ -6,7 +6,7 @@
  * and a one-sentence description so authors can quickly find the right layout.
  */
 
-import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import type { CustomTemplateDefinition } from '@bendyline/squisq/schemas';
 import { TEMPLATE_METADATA, resolveTemplateName } from '@bendyline/squisq/doc';
@@ -36,59 +36,19 @@ interface TemplateEntry {
   icon: JSX.Element;
 }
 
-/**
- * DOM id of the portaled template gallery. Exported so hosts that embed the
- * picker inside their own popovers (e.g. the toolbar overflow menu) can treat
- * clicks inside the gallery as "inside" in their outside-click handling.
- */
-export const TEMPLATE_GALLERY_PORTAL_ID = 'squisq-template-gallery-portal';
 /** Matches every gallery when multiple editor instances are mounted. */
 export const TEMPLATE_GALLERY_PORTAL_SELECTOR = '[data-squisq-template-gallery-portal]';
 
 const TEMPLATE_GALLERY_DIALOG_ID = 'squisq-template-gallery-dialog';
-
-type LegacyPortalSetter = (isLegacyOwner: boolean) => void;
-const galleryPortalOwners = new WeakMap<Document, Map<string, LegacyPortalSetter>>();
-
-function updateLegacyPortalOwner(owners: Map<string, LegacyPortalSetter>): void {
-  let first = true;
-  for (const setIsLegacyOwner of owners.values()) {
-    setIsLegacyOwner(first);
-    first = false;
-  }
-}
+const TEMPLATE_GALLERY_PORTAL_ID_PREFIX = 'squisq-template-gallery-portal';
 
 /**
- * Keep the original single-gallery id as a compatibility alias while giving
- * every additional open gallery a stable, collision-free id. Ownership is
- * elected after commit so concurrent React renders cannot both claim it; if
- * the owner closes, the oldest remaining gallery is promoted.
+ * Give each portaled gallery a stable, collision-free id. Hosts should match
+ * galleries through {@link TEMPLATE_GALLERY_PORTAL_SELECTOR}; a process-wide
+ * singleton id cannot identify the right editor when several are mounted.
  */
 function useTemplateGalleryPortalId(): string {
-  const uniqueId = `${TEMPLATE_GALLERY_PORTAL_ID}-${useId().replace(/:/g, '')}`;
-  const [isLegacyOwner, setIsLegacyOwner] = useState(false);
-
-  useLayoutEffect(() => {
-    const ownerDocument = document;
-    let owners = galleryPortalOwners.get(ownerDocument);
-    if (!owners) {
-      owners = new Map();
-      galleryPortalOwners.set(ownerDocument, owners);
-    }
-    owners.set(uniqueId, setIsLegacyOwner);
-    updateLegacyPortalOwner(owners);
-
-    return () => {
-      owners?.delete(uniqueId);
-      if (!owners || owners.size === 0) {
-        galleryPortalOwners.delete(ownerDocument);
-      } else {
-        updateLegacyPortalOwner(owners);
-      }
-    };
-  }, [uniqueId]);
-
-  return isLegacyOwner ? TEMPLATE_GALLERY_PORTAL_ID : uniqueId;
+  return `${TEMPLATE_GALLERY_PORTAL_ID_PREFIX}-${useId().replace(/:/g, '')}`;
 }
 
 const W = 56;

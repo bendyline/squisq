@@ -9,6 +9,7 @@ import JSZip from 'jszip';
 import { parseMarkdown } from '@bendyline/squisq/markdown';
 import { markdownToDoc } from '@bendyline/squisq/doc';
 import { MemoryContentContainer } from '@bendyline/squisq/storage';
+import { createTransformStyleRegistry, resolveTransformStyle } from '@bendyline/squisq/transform';
 import { convert, ConversionError, defaultRegistry } from '../registry/index';
 import { zipToContainer } from '../container/index';
 import { markdownDocToPptx } from '../pptx/export';
@@ -223,6 +224,40 @@ describe('transform threading', () => {
     expect(captured!.doc.blocks.length).not.toBe(plainDoc.blocks.length);
     // markdownDoc is re-derived from the transformed Doc.
     expect(captured!.markdownDoc).toBeDefined();
+  });
+
+  it('resolves transform ids only from the explicitly supplied registry', async () => {
+    let captured: import('../registry/index').NormalizedInput | undefined;
+    const formats = defaultRegistry();
+    formats.register({
+      id: 'capture-custom-transform',
+      label: 'Capture Custom Transform',
+      mimeType: 'application/x-capture',
+      extensions: ['.cap'],
+      async exportDoc(input) {
+        captured = input;
+        return {
+          bytes: new Uint8Array([1]),
+          mimeType: 'application/x-capture',
+          suggestedFilename: '',
+          warnings: [],
+        };
+      },
+    });
+    const custom = {
+      ...resolveTransformStyle('minimal'),
+      id: 'tenant-transform',
+      suggestedThemeId: 'cinematic',
+    };
+    const transformRegistry = createTransformStyleRegistry([custom]);
+
+    await convert({ kind: 'markdown', markdown: SAMPLE_MD }, 'capture-custom-transform', {
+      registry: formats,
+      transformStyle: 'tenant-transform',
+      transformRegistry,
+    });
+
+    expect(captured?.doc.themeId).toBe('cinematic');
   });
 });
 

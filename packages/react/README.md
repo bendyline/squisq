@@ -70,6 +70,7 @@ Blocks are composed of typed layers rendered as SVG:
 | `VideoLayer` | Embedded video with playback sync             |
 | `TableLayer` | HTML table embedded via SVG `<foreignObject>` |
 | `MapLayer`   | Tile-based map rendering                      |
+| `TreeLayer`  | Interactive filesystem/outline tree           |
 
 ## Hooks
 
@@ -82,23 +83,44 @@ Blocks are composed of typed layers rendered as SVG:
 | `useAutoSurface`                   | Live light/dark surface detection via `prefers-color-scheme`       |
 | `useMediaProvider` / `useMediaUrl` | Media URL resolution via `MediaContext`                            |
 
+`useDocPlayback` takes configuration as an options object:
+
+```ts
+useDocPlayback(doc, currentTime, { viewport, theme, onSeek });
+```
+
 ## Standalone Player
 
 A self-contained global build is available for non-React environments. It
-exposes a `SquisqPlayer` global with `mount`, `mountStatic`, `unmount`, and
-`version`:
+exposes a `SquisqPlayer` global with `mount`, `getHandle`, `unmount`, and
+`version`. `mount` returns an instance handle.
+
+The former `mountStatic()` shortcut was removed; pass `mode: 'static'` to
+`mount()`. Render methods are instance-scoped and are no longer copied to
+top-level `window.seekTo` / `window.getDuration` properties.
+
+Interactive mount:
 
 ```html
 <script src="https://unpkg.com/@bendyline/squisq-react/dist/squisq-player.global.js"></script>
 <div id="player"></div>
 <script>
   // docJson is a Doc (e.g. produced by markdownToDoc and serialized)
-  SquisqPlayer.mount(document.getElementById('player'), docJson, {
+  const root = document.getElementById('player');
+  const handle = SquisqPlayer.mount(root, docJson, {
     mode: 'slideshow', // or 'static' for a scrollable document view
     basePath: '/',
   });
+
+  // In render mode: const api = await handle.renderAPI;
+  // The same handle is available later as SquisqPlayer.getHandle(root).
 </script>
 ```
+
+For headless capture, add `renderMode: true`, then await
+`handle.renderAPI` before calling `seekTo()` or reading render metadata.
+TypeScript hosts can import `MountOptions` and `SquisqPlayerHandle` from the
+package root.
 
 For build-time embedding, `@bendyline/squisq-react/standalone-source` exports
 the same bundle as a string constant (`PLAYER_BUNDLE`) — used by

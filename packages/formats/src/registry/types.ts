@@ -8,7 +8,8 @@
  * methods, so pulling in the registry never eagerly bundles heavy converters.
  */
 
-import type { Doc } from '@bendyline/squisq/schemas';
+import type { Doc, ThemeRegistry } from '@bendyline/squisq/schemas';
+import type { TransformStyleInput, TransformStyleRegistry } from '@bendyline/squisq/transform';
 import type { MarkdownDocument } from '@bendyline/squisq/markdown';
 import type { ContentContainer } from '@bendyline/squisq/storage';
 import type { ParseOptions, StringifyOptions } from '@bendyline/squisq/markdown';
@@ -24,6 +25,7 @@ import type { PdfImportOptions } from '../pdf/import.js';
 import type { HtmlExportOptions } from '../html/htmlTemplate.js';
 import type { HtmlImportOptions } from '../html/import.js';
 import type { EpubExportOptions } from '../epub/export.js';
+import type { ZipSafetyLimits } from '../shared/zipSafety.js';
 
 /** A format identifier (e.g. `'docx'`). Strings so hosts can register their own. */
 export type FormatId = string;
@@ -60,10 +62,7 @@ export interface MarkdownFormatOptions {
 }
 
 /** Resource limits applied when importing a DBK/ZIP container. */
-export interface DbkFormatOptions {
-  maxEntries?: number;
-  maxUncompressedBytes?: number;
-}
+export type DbkFormatOptions = ZipSafetyLimits;
 
 /**
  * Strongly typed option bags for built-in formats. Import and export options
@@ -104,8 +103,12 @@ export interface ConvertOptions {
   from?: FormatId;
   /** Theme id to apply to the exported document. */
   themeId?: string;
-  /** Transform style id to apply before export. */
-  transformStyle?: string;
+  /** Explicit caller-owned registry for non-document custom themes. */
+  themeRegistry?: ThemeRegistry;
+  /** Built-in/registry id or call-scoped style to apply before export. */
+  transformStyle?: TransformStyleInput;
+  /** Explicit caller-owned registry used to resolve transform style ids. */
+  transformRegistry?: TransformStyleRegistry;
   /** Content-aware auto-templating when deriving a Doc from markdown. */
   autoTemplates?: boolean;
   /** Title hint for exporters that expose document metadata. */

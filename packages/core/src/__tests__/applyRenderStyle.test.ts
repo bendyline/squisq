@@ -73,13 +73,13 @@ describe('applyRenderStyleToLayers', () => {
     expect(c[0].animation?.type).toBe('slowZoom');
   });
 
-  it("treats defaultImageAnimation 'slowZoom' as ambient motion", () => {
+  it('does not let a default entrance animation override ambientMotion=false', () => {
     const out = applyRenderStyleToLayers(
       [fullBleedImage()],
       BLOCK,
-      themeWith({ defaultImageAnimation: 'slowZoom' }),
+      themeWith({ ambientMotion: false, defaultImageAnimation: 'slowZoom' }),
     );
-    expect(out[0].animation?.type).toBe('slowZoom');
+    expect(out[0].animation).toBeUndefined();
   });
 
   it('never overrides an authored animation, including type none', () => {

@@ -12,7 +12,7 @@
  * Usage:
  *   squisq convert <input> [--output-dir <dir>] [--formats <list>] [--theme <id>] [--transform <style>]
  *   squisq convert <input> -o <file>          # single output; format inferred from extension
- *   squisq convert <input> --format <id>      # single format to the default output dir
+ *   squisq convert <input> --formats <id>     # single format to the default output dir
  */
 
 import { writeFile, mkdir } from 'node:fs/promises';
@@ -29,8 +29,8 @@ import { assertValidThemeId, assertValidTransformStyle } from '../util/applyTran
 const VALID_FORMATS: readonly FormatId[] = [...BUILTIN_FORMAT_IDS, 'mp4'];
 
 /**
- * Default formats produced by a bare `convert <input>` (no -o / --format /
- * --formats). Deliberately excludes md/xlsx/csv and — crucially — mp4, so a
+ * Default formats produced by a bare `convert <input>` (no -o / --formats).
+ * Deliberately excludes md/xlsx/csv and — crucially — mp4, so a
  * bare convert never spins up Playwright/FFmpeg.
  */
 const DEFAULT_FORMATS: readonly FormatId[] = [
@@ -72,7 +72,7 @@ function formatFromOutputPath(outputPath: string): FormatId {
   if (!def) {
     throw new Error(
       `Cannot infer a format from output extension "${ext || '(none)'}". ` +
-        `Use --format to specify one. Valid: ${VALID_FORMATS.join(', ')}`,
+        `Use --formats to specify one. Valid: ${VALID_FORMATS.join(', ')}`,
     );
   }
   return def.id;
@@ -82,7 +82,6 @@ interface ConvertOpts {
   output?: string;
   outputDir?: string;
   formats?: string;
-  format?: string;
   theme?: string;
   transform?: string;
   autoTemplates?: boolean;
@@ -106,7 +105,6 @@ export function registerConvertCommand(program: Command): void {
       '-f, --formats <list>',
       `Comma-separated formats to produce (default: a standard set). Valid: ${VALID_FORMATS.join(', ')}`,
     )
-    .option('--format <id>', 'Produce a single format (alias for a one-entry --formats)')
     .option('-t, --theme <id>', 'Squisq theme ID to apply (e.g., documentary, cinematic, bold)')
     .option(
       '--transform <style>',
@@ -140,22 +138,14 @@ export function registerConvertCommand(program: Command): void {
 /** Resolve the set of target formats from the mutually-exclusive flags. */
 function resolveFormats(opts: ConvertOpts): FormatId[] {
   const hasOutput = Boolean(opts.output);
-  const hasFormatSelection = Boolean(opts.formats || opts.format);
+  const hasFormatSelection = Boolean(opts.formats);
 
   if (hasOutput && hasFormatSelection) {
-    throw new Error(
-      '--output is a single-file destination and cannot be combined with --formats/--format.',
-    );
+    throw new Error('--output is a single-file destination and cannot be combined with --formats.');
   }
 
   if (hasOutput) {
     return [formatFromOutputPath(opts.output!)];
-  }
-  if (opts.format) {
-    if (!isValidFormat(opts.format.toLowerCase())) {
-      throw new Error(`Unknown format "${opts.format}". Valid: ${VALID_FORMATS.join(', ')}`);
-    }
-    return [opts.format.toLowerCase()];
   }
   if (opts.formats) {
     return parseFormats(opts.formats);

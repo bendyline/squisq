@@ -21,7 +21,7 @@
 
 import { PDFDocument, StandardFonts, rgb, PDFFont, PDFPage } from 'pdf-lib';
 
-import type { Doc } from '@bendyline/squisq/schemas';
+import type { Doc, ThemeRegistry } from '@bendyline/squisq/schemas';
 import { docToMarkdown, resolveThemeForDoc } from '@bendyline/squisq/doc';
 import type {
   MarkdownDocument,
@@ -110,6 +110,8 @@ export interface PdfExportOptions {
    * Font changes are not supported (pdf-lib uses standard 14 PDF fonts only).
    */
   themeId?: string;
+  /** Explicit caller-owned registry for non-document custom themes. */
+  themeRegistry?: ThemeRegistry;
 }
 
 /**
@@ -219,7 +221,7 @@ async function createExportContext(
   // including inline custom themes (resolved doc-scoped).
   const themeId = options.themeId ?? readFrontmatterThemeId(doc.frontmatter);
   if (themeId) {
-    const theme = resolveThemeForDoc(doc, themeId);
+    const theme = resolveThemeForDoc(doc, themeId, options.themeRegistry);
     if (theme.colors) {
       colorText = hexToRgb(theme.colors.text) ?? COLOR_TEXT;
       colorHeading = hexToRgb(theme.colors.primary) ?? COLOR_HEADING;

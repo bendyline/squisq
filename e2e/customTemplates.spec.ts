@@ -30,7 +30,7 @@ async function openTemplatePickerForFirstHeading(page: Page): Promise<void> {
   const firstBadge = editor.locator('.squisq-template-badge').first();
   await firstBadge.waitFor({ state: 'visible' });
   await firstBadge.click();
-  await page.locator('#squisq-template-gallery-portal').waitFor({ state: 'visible' });
+  await page.locator('[data-squisq-template-gallery-portal]').waitFor({ state: 'visible' });
 }
 
 function customTemplateSection(page: Page) {

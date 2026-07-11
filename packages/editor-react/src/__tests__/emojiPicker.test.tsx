@@ -1,43 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen } from '@testing-library/react';
-import { EmojiPicker } from '../EmojiPicker';
-import {
-  EMOJI_CATEGORIES,
-  ALL_EMOJIS,
-  searchEmojis,
-  PICKER_CATEGORIES,
-  ALL_PICKER_ENTRIES,
-  searchPickerEntries,
-} from '../emojiData';
-
-describe('emojiData — legacy emoji exports', () => {
-  it('exposes the standard CLDR category buckets', () => {
-    const ids = EMOJI_CATEGORIES.map((c) => c.id);
-    expect(ids).toEqual([
-      'smileys',
-      'people',
-      'nature',
-      'food',
-      'travel',
-      'activities',
-      'objects',
-      'symbols',
-      'flags',
-    ]);
-  });
-
-  it('each entry has a non-empty char and name', () => {
-    for (const entry of ALL_EMOJIS) {
-      expect(entry.char.length).toBeGreaterThan(0);
-      expect(entry.name.length).toBeGreaterThan(0);
-    }
-  });
-
-  it('searchEmojis matches by name (case-insensitive)', () => {
-    const results = searchEmojis('HEART');
-    expect(results.some((e) => e.char === '❤️')).toBe(true);
-  });
-});
+import { EmojiPicker, PICKER_CATEGORIES, ALL_PICKER_ENTRIES, searchPickerEntries } from '../index';
 
 describe('emojiData — unified picker entries', () => {
   it('appends FA Brands, Solid, and Regular categories after the emoji buckets', () => {
@@ -78,12 +41,9 @@ describe('EmojiPicker', () => {
 
   it('renders all emoji + FA tabs when open', () => {
     render(<EmojiPicker open onSelect={() => {}} onClose={() => {}} />);
-    for (const cat of EMOJI_CATEGORIES) {
+    for (const cat of PICKER_CATEGORIES) {
       expect(screen.getByRole('tab', { name: cat.label })).toBeTruthy();
     }
-    expect(screen.getByRole('tab', { name: 'Brands' })).toBeTruthy();
-    expect(screen.getByRole('tab', { name: 'Solid' })).toBeTruthy();
-    expect(screen.getByRole('tab', { name: 'Regular' })).toBeTruthy();
   });
 
   it('fires onSelect with an emoji PickerEntry when an emoji tile is clicked', () => {

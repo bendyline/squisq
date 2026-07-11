@@ -120,10 +120,18 @@ interface StartBlockConfig {
 #### Layer Types
 
 Layers carry their visual data in a nested `content` object (not flat fields).
-The discriminated union has **seven** members:
+The discriminated union has **eight** members:
 
 ```ts
-type Layer = ImageLayer | TextLayer | ShapeLayer | PathLayer | MapLayer | VideoLayer | TableLayer;
+type Layer =
+  | ImageLayer
+  | TextLayer
+  | ShapeLayer
+  | PathLayer
+  | MapLayer
+  | VideoLayer
+  | TableLayer
+  | TreeLayer;
 
 interface BaseLayer {
   id: string;
@@ -181,7 +189,6 @@ interface PathLayer extends BaseLayer {
     gradient?: LinearGradient;
     borderStyle?: BorderStyle;
     dasharray?: string;
-    arrow?: 'none' | 'end' | 'start' | 'both'; // legacy; prefer start/endMarker
     startMarker?: MarkerStyle;
     endMarker?: MarkerStyle;
   };
@@ -288,6 +295,9 @@ interface ImageTreatment {
   color?: string; // duotone tint
 }
 ```
+
+Readers still interpret the historical serialized `content.arrow` field, but
+it is no longer part of `PathLayer`; new code uses `startMarker` / `endMarker`.
 
 #### Audio & Captions
 
@@ -446,28 +456,38 @@ interface Theme {
   /* colors, typography, style, renderStyle, colorSchemes, persistentLayers, … */
 }
 
-const THEMES: Record<string, Theme>; // 8 built-ins
+const THEMES: Readonly<Record<string, Theme>>; // 11 deeply frozen built-ins
 const DEFAULT_THEME: Theme;
 const DEFAULT_THEME_ID: string;
 
-function resolveTheme(themeId?: string): Theme; // built-ins only
+interface ThemeRegistry {
+  register(theme: Theme): void;
+  unregister(id: string): boolean;
+  get(id: string): Theme | undefined;
+  list(): Theme[];
+}
+
+function createThemeRegistry(initialThemes?: readonly Theme[]): ThemeRegistry;
+function resolveTheme(themeId?: string, registry?: ThemeRegistry): Theme;
 function createTheme(base: Theme, overrides: DeepPartial<Theme>): Theme;
 function compileTheme(partial: Partial<Theme>, opts?: CompileOptions): Theme;
-function getAvailableThemes(): string[];
-function getThemeSummaries(): { id: string; name: string; description: string }[];
+function getAvailableThemes(registry?: ThemeRegistry): string[];
+function getThemeSummaries(registry?: ThemeRegistry): {
+  id: string;
+  name: string;
+  description?: string;
+}[];
 function validateTheme(theme: unknown): ValidationResult;
-
-// registry (built-ins + host-registered)
-function registerTheme(theme: Theme): void;
-function unregisterTheme(id: string): void;
-function getRegisteredThemes(): Theme[];
-function lookupRegisteredTheme(id: string): Theme | undefined;
 ```
 
-> Built-in theme ids: `documentary`, `minimalist`, `bold`, `morning-light`,
-> `tech-dark`, `magazine`, `cinematic`, `warm-earth`. For pure, doc-scoped
-> resolution that consults a doc's own `customThemes` first, use
-> `resolveThemeForDoc(doc, id?)` from `@bendyline/squisq/doc`.
+> Built-in theme ids: `standard` (default), `standard-dark`, `documentary`,
+> `minimalist`, `bold`, `morning-light`, `tech-dark`, `magazine`, `cinematic`,
+> `warm-earth`, `gezellig`. Custom themes do not mutate process-global state:
+> keep host themes in a caller-owned
+> `ThemeRegistry`, or put portable themes on `Doc.customThemes`. For doc-scoped
+> resolution, use `resolveThemeForDoc(doc, id?, registry?)` from
+> `@bendyline/squisq/doc`; document definitions take precedence over the
+> explicit registry and built-ins.
 
 #### Media & Layout
 
@@ -505,9 +525,9 @@ interface LayoutHints {
 
 ### Subpath: Doc
 
-**Import:** `@bendyline/squisq/doc` — the template registry, all 23 templates,
-markdown↔doc conversion, layer resolution, and theme/validation helpers.
-`@bendyline/squisq/story` is a byte-for-byte alias of this subpath (legacy).
+**Import:** `@bendyline/squisq/doc` — the template registry, all 24 templates,
+markdown↔doc conversion, canonical layer materialization, and
+theme/validation helpers.
 
 #### Doc ↔ Markdown Conversion
 
@@ -533,20 +553,48 @@ interface MarkdownToDocOptions {
 #### Layer Resolution
 
 ```ts
-function getLayers(block: DocBlock, context?: RenderContext): Layer[];
-function expandTemplateBlock(templateBlock: TemplateBlock, context: TemplateContext): Block;
+function materializeBlockLayers(
+  block: DocBlock,
+  options?: MaterializeBlockLayersOptions,
+): BlockLayerMaterialization;
+
+interface MaterializeBlockLayersOptions {
+  theme?: Theme;
+  viewport?: ViewportConfig;
+  persistentLayers?: PersistentLayerConfig | false; // undefined inherits the theme
+  blockIndex?: number;
+  totalBlocks?: number;
+  customTemplates?: readonly CustomTemplateDefinition[];
+  failureMode?: 'fallback' | 'empty'; // default 'fallback'
+}
+
+interface BlockLayerMaterialization {
+  layers: Layer[];
+  source: 'authored' | 'template' | 'fallback' | 'empty';
+  diagnostic?: LayerMaterializationDiagnostic;
+}
+
 function expandDocBlocks(blocks: DocBlock[], options?: ExpandDocBlocksOptions): Block[];
-function fallbackBlockLayers(block: Block, context: RenderContext): Layer[]; // graceful-degradation card
+function fallbackBlockLayers(block: Block, context: TemplateContext): Layer[]; // graceful-degradation card
 ```
 
-> `getLayers` resolves a `TemplateBlock` through its template function (with
-> theme render-style applied), or returns a plain `Block`'s layers directly.
+`materializeBlockLayers` is the single layer-resolution contract used by
+on-demand UI and timed expansion. It resolves authored layers, built-in and
+document-scoped custom templates, theme render-style, and persistent layers.
+Template failures are returned as structured diagnostics without hidden console
+output. The default visible fallback keeps previews and playback readable;
+`failureMode: 'empty'` is the explicit opt-out. Theme persistent layers are
+inherited by default and `persistentLayers: false` disables them.
+
+`expandDocBlocks` adds timeline scheduling and transitions around the canonical
+materializer. Its `persistentLayers`, `failureMode`, and `customTemplates`
+options have identical semantics, and `onDiagnostic` receives failures with the
+source block and block index.
 
 #### Template Registry
 
 ```ts
 const templateRegistry: TemplateRegistry;
-const TEMPLATE_ALIASES: Readonly<Record<string, string>>;
 const CONTAINER_TEMPLATES: ReadonlySet<string>; // diagram, drawing, layout
 
 function resolveTemplateName(name: string): string;
@@ -559,8 +607,8 @@ function buildRegistry(custom?: readonly CustomTemplateDefinition[]): RuntimeTem
 ```
 
 All 23 built-in templates register at import time under their canonical short
-ids. `TEMPLATE_ALIASES` maps legacy names (`titleBlock→title`, `quoteBlock→quote`,
-`mapBlock→map`, `listBlock→list`, `diagramBlock→diagram`, `diagramNode→diagram`).
+ids. `resolveTemplateName` continues to read legacy ids such as `titleBlock`
+and `diagramNode`, while the compatibility table itself remains internal.
 
 > There is no global `registerTemplate()`. Custom templates travel with the doc
 > (`Doc.customTemplates`, from the `squisq-custom-templates` frontmatter key) and
@@ -569,7 +617,11 @@ ids. `TEMPLATE_ALIASES` maps legacy names (`titleBlock→title`, `quoteBlock→q
 #### Theme Resolution & Validation
 
 ```ts
-function resolveThemeForDoc(doc: Doc | null | undefined, explicitId?: string): Theme;
+function resolveThemeForDoc(
+  doc: Doc | null | undefined,
+  explicitId?: string,
+  registry?: ThemeRegistry,
+): Theme;
 function validateMarkdownSource(
   source: string,
   options?: ValidateOptions,
@@ -761,7 +813,7 @@ function countNodes(root: MarkdownNode): number;
 function createDocument(...children: MarkdownBlockNode[]): MarkdownDocument;
 
 // Pandoc/annotation attribute helpers
-function parsePandocAttrTokens(tokens: string[]): HeadingAttributes;
+function parsePandocAttrTokens(inner: string): HeadingAttributes;
 function serializePandocAttributes(attrs: HeadingAttributes): string;
 function matchTrailingTemplateAnnotation(text: string): TrailingAnnotationMatch | null;
 function parseTimeSeconds(value: string): number | null; // "02:15", "1500ms", "8"
@@ -832,21 +884,14 @@ function hashString(str: string): number; // djb2, unsigned 32-bit
 
 ### Subpath: Generate
 
-**Import:** `@bendyline/squisq/generate` — content extraction + slideshow
-generation. `extractContent` / `stripMarkdown` output shapes are a frozen
-external contract.
+**Import:** `@bendyline/squisq/generate` — content extraction only.
+`extractContent` / `stripMarkdown` output shapes are a frozen external
+contract. Build slides with `markdownToDoc` + `applyTransform`.
 
 ```ts
 function extractContent(text: string, options?: ExtractionOptions): ExtractionResult;
 function stripMarkdown(markdown: string): string;
 function mapElementToBlock(element: ExtractedElement, options: MapOptions): TemplateBlock;
-
-/** @deprecated prefer markdownToDoc + applyTransform */
-function generateSlideshow(
-  text: string,
-  images?: SlideshowImage[],
-  options?: SlideshowOptions,
-): SlideshowDoc;
 
 type ExtractionType =
   | 'stat'
@@ -887,16 +932,29 @@ interface ExtractionResult {
 ```ts
 function applyTransform(
   doc: Doc,
-  styleId: TransformStyleId,
+  style: TransformStyleInput,
   options?: TransformOptions,
 ): TransformResult;
 
+type TransformStyleInput = TransformStyleId | TransformStyleConfig;
+
+interface TransformStyleRegistry {
+  register(style: TransformStyleConfig): void;
+  unregister(id: string): boolean;
+  get(id: string): TransformStyleConfig | undefined;
+  list(): TransformStyleConfig[];
+}
+
 const DEFAULT_TRANSFORM_STYLE_ID = 'documentary';
-function resolveTransformStyle(id: string): TransformStyleConfig; // aliases honoured; unknown → default
-function registerTransformStyle(style: TransformStyleConfig): void;
-function unregisterTransformStyle(id: string): void;
-function getTransformStyleIds(): string[];
-function getTransformStyleSummaries(): TransformStyleSummary[];
+function createTransformStyleRegistry(
+  initialStyles?: readonly TransformStyleConfig[],
+): TransformStyleRegistry;
+function resolveTransformStyle(
+  style: TransformStyleInput,
+  registry?: TransformStyleRegistry,
+): TransformStyleConfig; // unknown id → default
+function getTransformStyleIds(registry?: TransformStyleRegistry): string[];
+function getTransformStyleSummaries(registry?: TransformStyleRegistry): TransformStyleSummary[];
 
 function analyzeBlocks(blocks: Block[], options?: ExtractionOptions): AnalyzedBlock[];
 function extractDocImages(blocks: Block[]): TransformImage[];
@@ -906,6 +964,7 @@ interface TransformOptions {
   images?: TransformImage[];
   themeId?: string;
   overrides?: Partial<TransformStyleConfig>;
+  registry?: TransformStyleRegistry;
 }
 interface TransformResult {
   doc: Doc;
@@ -913,8 +972,12 @@ interface TransformResult {
 }
 ```
 
-Built-in style ids: `documentary` (default), `magazine`, `data-driven` (alias
-`dataDriven`), `narrative`, `minimal`.
+Built-in style ids: `documentary` (default), `magazine`, `data-driven`,
+`narrative`, `minimal`. Custom definitions are either passed directly to
+`applyTransform()` or resolved through an explicit caller-owned registry; no
+transform call mutates process-global state. The historical persisted value
+`dataDriven` remains readable and resolves to `data-driven`; APIs and editor
+writes expose only the canonical kebab-case id.
 
 ---
 
@@ -1170,6 +1233,7 @@ interface DocPlayerProps {
   markdown?: string; // parsed via markdownToDoc(parseMarkdown(markdown)) when `doc` is absent
   basePath?: string; // default '.'
   renderMode?: boolean; // default false — headless capture mode
+  onRenderAPIReady?: (api: SquisqRenderAPI | null) => void;
   autoPlay?: boolean; // default false
   onEnded?: () => void;
   onTimeUpdate?: (time: number) => void;
@@ -1195,8 +1259,9 @@ interface DocPlayerProps {
 
 #### `BlockRenderer`
 
-SVG-based renderer for a single (expanded) block. Also exports the `VIEWPORT`
-constant (`{ width: 1920, height: 1080 }`).
+SVG-based renderer for a single (expanded) block. Its default viewport is
+1920×1080; import the shared `VIEWPORT_PRESETS.landscape` value from
+`@bendyline/squisq/doc` when a caller needs that configuration explicitly.
 
 ```ts
 interface BlockRendererProps {
@@ -1255,8 +1320,8 @@ interface JsonViewProps {
 ### Layers
 
 SVG layer components used internally by `BlockRenderer`, exported for custom
-rendering. There are **seven**: `ImageLayer`, `TextLayer`, `ShapeLayer`,
-`PathLayer`, `VideoLayer`, `TableLayer`, `MapLayer`. Each takes
+rendering. There are **eight**: `ImageLayer`, `TextLayer`, `ShapeLayer`,
+`PathLayer`, `VideoLayer`, `TableLayer`, `MapLayer`, `TreeLayer`. Each takes
 `{ layer, viewport, blockTime }` (image/video/map also take `basePath`; video
 also takes `isPlaying`).
 
@@ -1286,9 +1351,11 @@ function useMediaSchedule(schedule: ScheduledClip[], currentTime: number): Media
 function useDocPlayback(
   script: Doc | null,
   currentTime: number,
-  viewport?: ViewportConfig,
-  renderMode?: boolean,
-  theme?: Theme,
+  options?: {
+    viewport?: ViewportConfig;
+    theme?: Theme;
+    onSeek?: (time: number) => void;
+  },
 ): PlaybackState & PlaybackActions;
 function useAudioSync(
   audioRef: RefObject<HTMLAudioElement>,
@@ -1347,9 +1414,17 @@ interface BlockMarker {
 
 // v1.5: the audio-controller type was renamed from `AudioProvider` to `AudioController`.
 type AudioController = AudioState & AudioActions;
-// render-mode host API
-type SquisqWindow = Window & typeof globalThis & Partial<SquisqRenderAPI>;
-
+interface SquisqRenderAPI {
+  seekTo(time: number): Promise<void>;
+  getDuration(): number;
+  getBlocks(): RenderBlockInfo[];
+  getAudioSegments(): RenderAudioSegmentInfo[];
+  getCaptions(): RenderCaptionInfo[];
+  getChapters(): RenderChapterInfo[];
+  showCover(): Promise<void>;
+  hideCover(): Promise<void>;
+  hasCoverBlock(): boolean;
+}
 function formatTime(seconds: number): string; // "M:SS"
 function getAnimationStyle(
   animation: Animation | undefined,
@@ -1364,12 +1439,33 @@ function getTransitionClass(
 
 ### Styles & Standalone Bundle
 
+```ts
+interface MountOptions {
+  mode?: 'slideshow' | 'static';
+  basePath?: string;
+  images?: Record<string, string>;
+  audio?: Record<string, string>;
+  theme?: Theme;
+  autoPlay?: boolean;
+  renderMode?: boolean;
+  captionStyle?: 'standard' | 'social';
+}
+interface SquisqPlayerHandle {
+  readonly element: Element;
+  readonly renderAPI: Promise<SquisqRenderAPI | null>;
+  getRenderAPI(): SquisqRenderAPI | null;
+  unmount(): void;
+}
+```
+
 Import `@bendyline/squisq-react/styles` for the DocPlayer animation + `<JsonView>`
 stylesheet. `@bendyline/squisq-react/standalone-source` exports a single
 constant, `PLAYER_BUNDLE: string` — an IIFE that boots a complete player into a
 host page (consumed by `formats/html` and `squisq-cli`). The runtime IIFE at
 `@bendyline/squisq-react/standalone` exposes a global `SquisqPlayer` with
-`mount`, `mountStatic`, `unmount`, and `version`.
+`mount`, `getHandle`, `unmount`, and `version`. `mount()` returns an
+instance-scoped `SquisqPlayerHandle`; in render mode, await
+`handle.renderAPI`. `getHandle(element)` retrieves that exact mounted instance.
 
 ---
 
@@ -1427,6 +1523,7 @@ interface DocxExportOptions {
   defaultFont?: string; // default 'Calibri'
   defaultFontSize?: number; // default 11
   themeId?: string;
+  themeRegistry?: ThemeRegistry;
   images?: Map<string, { data: ArrayBuffer | Uint8Array; contentType: string }>;
 }
 interface DocxImportOptions {
@@ -1474,6 +1571,7 @@ interface PdfExportOptions {
   margin?: number; // default 72 (points)
   defaultFontSize?: number; // default 11
   themeId?: string; // colours only (pdf-lib standard fonts)
+  themeRegistry?: ThemeRegistry;
 }
 interface PdfImportOptions {
   bodyFontSize?: number;
@@ -1491,7 +1589,7 @@ Office Open XML formats (DOCX, PPTX, XLSX).
 
 ```ts
 // package reader
-function openPackage(data: ArrayBuffer | Blob): Promise<OoxmlPackage>;
+function openPackage(data: ArrayBuffer | Blob, options?: OoxmlOpenOptions): Promise<OoxmlPackage>;
 function getPartRelationships(pkg: OoxmlPackage, partPath: string): Promise<Relationship[]>;
 function getPartXml(pkg: OoxmlPackage, partPath: string): Promise<Document | null>;
 function getPartBinary(pkg: OoxmlPackage, partPath: string): Promise<ArrayBuffer | null>;
@@ -1508,6 +1606,31 @@ function selfClosingElement(tag: string, attrs?): string;
 function xmlElement(tag: string, attrs?, ...children: string[]): string;
 function textElement(tag: string, attrs?, text?: string): string;
 ```
+
+`OoxmlOpenOptions` is `ZipSafetyLimits`; DOCX, PPTX, and XLSX import option
+types inherit the same fields. All part access above shares one JSZip-backed,
+actual-byte budget. Repeated reads are cached and charged once. Content-types
+metadata is capped at 1 MiB and each relationships part at 4 MiB before DOM
+parsing, independently of the larger allowance for document/media parts.
+`OoxmlPackage` is opaque and can only be created by `openPackage()`; its JSZip
+archive is intentionally not exposed, so advanced callers cannot bypass the
+bounded part readers.
+
+```ts
+interface ZipSafetyLimits {
+  maxEntries?: number; // default 10,000; includes directory records
+  maxEntryUncompressedBytes?: number; // default maxUncompressedBytes
+  maxUncompressedBytes?: number; // default 512 MiB, aggregate actual output
+  maxCompressionRatio?: number; // default 1,000:1 per member
+}
+```
+
+Archive failures throw `ZipSafetyError` with `code` plus optional `path`,
+`limit`, `actual`, and `cause`. The class/types are exported from the package
+root and `/ooxml`. Codes: `invalid-limit`, `invalid-archive`, `unsafe-path`,
+`invalid-entry-metadata`, `too-many-entries`, `entry-too-large`,
+`archive-too-large`, `compression-ratio-exceeded`, `size-mismatch`,
+`crc-mismatch`, and `decompression-failed`.
 
 Plus ~40 namespace / content-type / relationship constants (`NS_WML`, `NS_PML`,
 `NS_SML`, `NS_DRAWINGML`, `REL_IMAGE`, `REL_SLIDE`, `CONTENT_TYPE_DOCX_DOCUMENT`,
@@ -1533,6 +1656,7 @@ interface EpubExportOptions {
   language?: string; // BCP-47, default 'en'
   publisher?: string;
   themeId?: string;
+  themeRegistry?: ThemeRegistry;
   images?: Map<string, ArrayBuffer>;
   coverImage?: ArrayBuffer; // JPEG or PNG
   audio?: Map<string, ArrayBuffer>;
@@ -1581,6 +1705,7 @@ interface PptxExportOptions {
   defaultFont?: string; // default 'Calibri'
   defaultFontSize?: number; // default 18
   themeId?: string;
+  themeRegistry?: ThemeRegistry;
   images?: Map<string, ArrayBuffer>;
 }
 interface PptxImportOptions {
@@ -1677,6 +1802,7 @@ interface HtmlExportOptions {
   title?: string; // default 'Squisq Document'
   autoPlay?: boolean; // default false
   themeId?: string;
+  themeRegistry?: ThemeRegistry;
 }
 interface HtmlZipExportOptions extends HtmlExportOptions {}
 
@@ -1700,6 +1826,7 @@ interface PlainHtmlExportOptions {
   links?: Map<string, string>; // href URL → emitted URL (e.g. .md → .html)
   theme?: Theme; // wins over themeId, then doc frontmatter themeId
   themeId?: string;
+  themeRegistry?: ThemeRegistry;
   iconsCss?: string; // inline FontAwesome CSS instead of a CDN <link>
   htmlPolicy?: HtmlPolicy; // default 'sanitize'
 }
@@ -1714,11 +1841,22 @@ interface HtmlImportOptions {
 
 ```ts
 function containerToZip(container: ContentContainer): Promise<Blob>;
-function zipToContainer(zipData: ArrayBuffer | Uint8Array | Blob): Promise<MemoryContentContainer>;
+function zipToContainer(
+  zipData: ArrayBuffer | Uint8Array | Blob,
+  options?: ZipSafetyLimits,
+): Promise<MemoryContentContainer>;
 ```
 
 `zipToContainer` skips directories and rejects path-traversal (absolute paths,
-backslashes, `..` segments).
+backslashes, `..` segments). It applies the same defaults and structured
+`ZipSafetyError` contract documented under OOXML above. Reads use JSZip's
+incremental stream, enforce per-entry/aggregate actual-byte and compression
+ratio bounds while inflating, and release each member cache after the
+`MemoryContentContainer` takes its owned copy.
+
+JSZip pause is cooperative: a failure prevents future compressed-input ticks,
+while pako may synchronously finish the current tick. Any chunks emitted after
+the failure are discarded and are never retained or written.
 
 ### Subpath: Registry & `convert()`
 
@@ -1758,7 +1896,9 @@ interface ConvertOptions {
   registry?: FormatRegistry; // defaults to defaultRegistry()
   from?: FormatId; // explicit source format (skips extension/byte sniffing)
   themeId?: string; // applied only when the doc has no theme of its own
-  transformStyle?: string; // applied before export
+  themeRegistry?: ThemeRegistry; // explicit host-owned custom themes
+  transformStyle?: TransformStyleInput; // applied before export
+  transformRegistry?: TransformStyleRegistry; // resolves custom transform ids
   autoTemplates?: boolean; // content-aware auto-templating when deriving a Doc from markdown
   title?: string; // title hint for exporters that support one (epub, html)
   resolvePlayerScript?: () => Promise<string>; // required for player-embedding HTML export
@@ -1880,7 +2020,6 @@ interface EditorShellProps {
   // Content container & media
   mediaProvider?: MediaProvider | null; // enables the Files panel
   workspaceContainer?: ContentContainer | null; // doc folder: audio map, versions, siblings, sidecars
-  container?: ContentContainer | null; // @deprecated → workspaceContainer
   showFilesToggle?: boolean; // default: true when mediaProvider was passed
   // Versioning
   allowVersioning?: boolean; // default false
@@ -1954,13 +2093,13 @@ the live `tiptapEditor` / `monacoEditor` instances.
 - `PreviewSettingsProvider`, `PreviewToolbarControls`, `usePreviewSettings`
 - `ThemePicker`, `ThemeCustomizerPanel`, `TemplatePicker`, `templateLabel`
 - `TransitionPicker` + catalog (`TRANSITION_GROUPS`, `TRANSITION_ENTRIES`, `transitionLabel`, `findTransitionEntry`)
-- `DocumentSettingsDialog`, `LinkDialog`, `EmojiPicker` (+ `EMOJI_CATEGORIES`, `ALL_EMOJIS`, `searchEmojis`)
+- `DocumentSettingsDialog`, `LinkDialog`, `EmojiPicker` (+ `PICKER_CATEGORIES`, `ALL_PICKER_ENTRIES`, `searchPickerEntries`)
 - `VersionHistoryPanel`, `InlinePreviewGutter`, `DropZoneOverlay`, `BlockPropertiesPopover`
 - `JsonEditor` — editable form for JSON bound to a Squisq-annotated schema (embeds `WysiwygEditor` for `richtext`)
 
 `RawEditor` takes a `monacoTheme?: string` prop (default `'vs'`; accepts
 Monaco's built-in ids `'vs'` / `'vs-dark'` / `'hc-black'`, transparently mapped
-to Squisq-tinted variants, or a custom registered theme) — distinct from the
+to Squisq-tinted variants, or a host-defined Monaco theme) — distinct from the
 shell's `colorScheme`.
 
 ### Monaco loader & custom theme / template providers
@@ -2011,8 +2150,8 @@ Plus block-property (Pandoc-attr) read/write helpers used by
 `setBlockAttrsValue`, and `summarizeBlockProps` — and heading-transition
 read/write helpers used by `TransitionPicker`: `readHeadingLineTransition`,
 `setHeadingLineTransition`, `readBlockAttrsTransition`,
-`setBlockAttrsTransition`, and the `EMPTY_TRANSITION` constant
-(`TransitionFields` type).
+`setHeadingAttrsTransition`, and the `EMPTY_TRANSITION` constant
+(`HeadingTransitionAttrs` / `TransitionFields` types).
 
 ### File-kind & drag-and-drop
 
@@ -2043,9 +2182,18 @@ const HeadingWithTemplate: Extension; // recognises `{[tpl key=value]}` in headi
 
 ### Diagram editor
 
-`DiagramExtension` (Tiptap), `DiagramCanvas`, `DiagramWidget`, `useDiagramData`,
-plus command helpers `moveNode`, `addConnection`, `removeConnection`,
-`renameNode`, `addNode`, `removeNode`, `listDiagramChildren`.
+ASCII `diagram` fences are the authored format. `AsciiDiagramExtension` mounts
+an interactive `AsciiDiagramWidget` over qualifying fences while keeping the
+fence text as the source of truth. The public surface includes
+`DiagramCanvas`, `DiagramCommand`, `DiagramData`, `DiagramNode`, `DiagramEdge`,
+`useAsciiDiagramData`, `asciiDiagramToCanvas`, `applyAsciiDiagramCommand`,
+`replaceAsciiFenceText`, the pure node/edge operations, paste gate, and
+position/source-visibility helpers. The obsolete React Flow-derived
+`DiagramRFNode` / `DiagramRFEdge` names were removed.
+
+Legacy heading-based `{[diagram]}` documents still render through core, but
+their former `DiagramExtension`, `DiagramWidget`, `useDiagramData`, and heading
+command exports are no longer an editable canvas API.
 
 ### Recorder (`src/recorder`)
 
@@ -2092,8 +2240,8 @@ ffmpeg.wasm encoder. Node video export uses `framesToMp4Native` or
 
 ```ts
 // Generate a self-contained HTML page that mounts the standalone player in
-// renderMode (images/audio embedded as base64 data URIs), exposing
-// window.seekTo / window.getDuration for headless frame capture.
+// renderMode (images/audio embedded as base64 data URIs). Headless callers use
+// SquisqPlayer.getHandle(root).renderAPI for frame capture.
 function generateRenderHtml(doc: Doc, options: RenderHtmlOptions): string;
 
 // Encode PNG frame screenshots in a browser runtime via ffmpeg.wasm
@@ -2315,7 +2463,6 @@ document as well as markdown: `.md`, `.docx`, `.pptx`, `.pdf`, `.xlsx`, `.csv`,
 | `-o, --output <file>` | **Single** output file; format inferred from its extension                       | —             |
 | `-d, --output-dir`    | Output directory (multi-format mode)                                             | same as input |
 | `-f, --formats`       | Comma-separated: `docx, pptx, pdf, html, htmlzip, epub, dbk, md, xlsx, csv, mp4` | default set   |
-| `--format <id>`       | Produce a single format (alias for a one-entry `--formats`)                      | —             |
 | `-t, --theme`         | Squisq theme id (built-in or in-doc custom)                                      | none          |
 | `--transform`         | Transform style before export (documentary, magazine, …)                         | none          |
 | `--no-auto-templates` | Disable content-aware auto template picking                                      | (auto on)     |
@@ -2323,8 +2470,8 @@ document as well as markdown: `.md`, `.docx`, `.pptx`, `.pdf`, `.xlsx`, `.csv`,
 > **v1.5 breaking flag change:** `-o` is now the **single-file** output
 > (`squisq convert in.md -o out.docx`, format inferred from the extension). The
 > old `-o` output-**directory** behavior moved to `-d, --output-dir`. `-o`
-> cannot be combined with `--formats`/`--format`. A bare `convert <input>` with
-> no `-o`/`--format`/`--formats` writes a default set to the output dir that
+> cannot be combined with `--formats`. A bare `convert <input>` with no
+> `-o`/`--formats` writes a default set to the output dir that
 > deliberately excludes `md`/`xlsx`/`csv`/`mp4`.
 
 The `html` / `htmlzip` formats embed the standalone player (static mode); the

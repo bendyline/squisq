@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { parseMarkdown, stringifyMarkdown } from '../markdown/index';
 import { markdownToDoc } from '../doc/markdownToDoc';
 import { docToMarkdown } from '../doc/docToMarkdown';
-import { getLayers } from '../doc/getLayers';
+import { materializeLayers } from './materializeTestUtils';
 import { profileBlockContents, recommendTemplatesForBlock } from '../recommend/templates';
 import type { Block, Layer } from '../schemas/Doc';
 import type { DiagramTemplateEdge, DiagramTemplateNode } from '../schemas/BlockTemplates';
@@ -203,13 +203,13 @@ describe('explicit {[diagram]} annotation with an ASCII fence', () => {
   });
 });
 
-describe('rendering derived diagrams through getLayers', () => {
+describe('rendering derived diagrams through materializeBlockLayers', () => {
   it('renders container cards behind leaf cards with per-node sizes', () => {
     const md = ['## Pipeline', '', fenced(NESTED_CONTAINER), ''].join('\n');
     const doc = convert(md);
     const block = findBlock(doc, 'Pipeline');
     expect(block?.template).toBe('diagram');
-    const layers = getLayers(block as Block, {});
+    const layers = materializeLayers(block as Block, {});
     const ids = layers.map((l: Layer) => l.id);
     // Container card present and drawn before (behind) leaf cards.
     const containerIdx = ids.indexOf('node-card-data-pipeline');
@@ -228,7 +228,7 @@ describe('rendering derived diagrams through getLayers', () => {
     ].join('\n');
     const md = ['## Pair', '', fenced(art), ''].join('\n');
     const block = findBlock(convert(md), 'Pair');
-    const layers = getLayers(block as Block, {});
+    const layers = materializeLayers(block as Block, {});
     const edge = layers.find((l: Layer) => l.id.startsWith('edge-'));
     expect(edge).toBeDefined();
     expect((edge as { content: { endMarker?: string } }).content.endMarker).toBeUndefined();

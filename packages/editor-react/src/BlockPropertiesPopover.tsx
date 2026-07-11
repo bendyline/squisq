@@ -21,7 +21,6 @@ import { createPortal } from 'react-dom';
 import { TransitionPicker } from './TransitionPicker';
 import {
   readBlockAttrsTransition,
-  setBlockAttrsTransition,
   setHeadingAttrsTransition,
   type TransitionFields,
 } from './headingTransition';
@@ -37,7 +36,7 @@ export interface BlockPropertiesPopoverProps {
   /** Apply a new `dataBlockAttrs` inner to the heading (null clears it). */
   onChange: (nextInner: string | null) => void;
   /** Apply a paired `dataBlockAttrs` / `dataTemplateParams` transition rewrite. */
-  onAnnotationChange?: (next: {
+  onAnnotationChange: (next: {
     blockAttrsInner: string | null;
     templateParams: string | null;
   }) => void;
@@ -103,10 +102,6 @@ export function BlockPropertiesPopover({
   const startTime = readBlockAttrsValue(inner, 'startTime');
 
   const onTransition = (next: TransitionFields) => {
-    if (!onAnnotationChange) {
-      apply(setBlockAttrsTransition(inner, next));
-      return;
-    }
     const updated = setHeadingAttrsTransition(inner, templateInner, next);
     setInner(updated.blockAttrsInner);
     setTemplateInner(updated.templateParams);

@@ -8,7 +8,7 @@
  * - landscape (16:9) - Default, standard video/presentation format
  * - portrait (9:16) - Vertical video, mobile stories
  * - square (1:1) - Social media posts
- * - standard (4:3) - Legacy presentation format
+ * - standard (4:3) - Classic presentation format
  */
 
 /**
@@ -33,7 +33,7 @@ export const VIEWPORT_PRESETS = {
   portrait: { width: 1080, height: 1920, name: '9:16 Portrait' },
   /** 1:1 square (social media) */
   square: { width: 1080, height: 1080, name: '1:1 Square' },
-  /** 4:3 standard (legacy) */
+  /** 4:3 standard */
   standard: { width: 1440, height: 1080, name: '4:3 Standard' },
 } as const;
 

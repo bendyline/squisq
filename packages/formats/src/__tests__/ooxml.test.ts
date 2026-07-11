@@ -131,7 +131,10 @@ describe('createPackage / openPackage round-trip', () => {
     pkg.addPart('word/document.xml', '<doc/>', 'application/xml');
     const buffer = await pkg.toArrayBuffer();
 
-    await expect(openPackage(buffer, { maxEntries: 1 })).rejects.toThrow(/archive has 2 files/);
+    await expect(openPackage(buffer, { maxEntries: 1 })).rejects.toMatchObject({
+      code: 'too-many-entries',
+      actual: 3,
+    });
     await expect(openPackage(buffer, { maxUncompressedBytes: 1 })).rejects.toThrow(
       /uncompressed content exceeds 1 byte limit/,
     );
@@ -156,7 +159,7 @@ describe('createPackage / openPackage round-trip', () => {
 
     // Read it back
     const opened = await openPackage(arrayBuffer);
-    expect(opened.zip).toBeDefined();
+    expect(opened).not.toHaveProperty('zip');
     expect(opened.contentTypes.overrides.has('word/document.xml')).toBe(true);
     expect(opened.rootRelationships.length).toBeGreaterThanOrEqual(1);
     expect(opened.rootRelationships[0].type).toBe(REL_OFFICE_DOCUMENT);

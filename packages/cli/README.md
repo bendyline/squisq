@@ -29,23 +29,22 @@ Convert a document to one or more formats. Input can be Markdown or a binary doc
 ```bash
 squisq convert input.md -o report.docx           # single file; format inferred from extension
 squisq convert report.docx -o report.md           # binary input → markdown
-squisq convert input.md --format pptx              # single format to the default output dir
+squisq convert input.md --formats pptx             # single format to the default output dir
 squisq convert input.md --formats docx,pptx,pdf    # multiple formats
 squisq convert project.dbk --output-dir ./out --formats html,docx
-squisq convert input.md --theme cinematic --transform magazine --format pptx
+squisq convert input.md --theme cinematic --transform magazine --formats pptx
 ```
 
-| Option                | Description                                                                                             | Default       |
-| --------------------- | ------------------------------------------------------------------------------------------------------- | ------------- |
-| `-o, --output <file>` | **Single** output file; format inferred from its extension (cannot combine with `--formats`/`--format`) | —             |
-| `-d, --output-dir`    | Output directory (multi-format mode)                                                                    | same as input |
-| `-f, --formats`       | Comma-separated: `docx`, `pptx`, `pdf`, `html`, `htmlzip`, `epub`, `dbk`, `md`, `xlsx`, `csv`, `mp4`    | default set   |
-| `--format <id>`       | Produce a single format (alias for a one-entry `--formats`)                                             | —             |
-| `-t, --theme`         | Squisq theme id — built-in or a custom theme inlined in the doc's frontmatter                           | none          |
-| `--transform`         | Transform style applied before export (e.g. `documentary`, `magazine`, `minimal`)                       | none          |
-| `--no-auto-templates` | Disable content-aware template auto-picking for unannotated headings                                    | (auto on)     |
+| Option                | Description                                                                                          | Default       |
+| --------------------- | ---------------------------------------------------------------------------------------------------- | ------------- |
+| `-o, --output <file>` | **Single** output file; format inferred from its extension (cannot combine with `--formats`)         | —             |
+| `-d, --output-dir`    | Output directory (multi-format mode)                                                                 | same as input |
+| `-f, --formats`       | Comma-separated: `docx`, `pptx`, `pdf`, `html`, `htmlzip`, `epub`, `dbk`, `md`, `xlsx`, `csv`, `mp4` | default set   |
+| `-t, --theme`         | Squisq theme id — built-in or a custom theme inlined in the doc's frontmatter                        | none          |
+| `--transform`         | Transform style applied before export (e.g. `documentary`, `magazine`, `minimal`)                    | none          |
+| `--no-auto-templates` | Disable content-aware template auto-picking for unannotated headings                                 | (auto on)     |
 
-> **v1.5 breaking flag change:** `-o` is now a **single-file** destination (format inferred from the extension). The old `-o` output-**directory** behavior is now `-d, --output-dir`. A bare `convert <input>` with no `-o`/`--format`/`--formats` writes a default set that deliberately excludes `md`/`xlsx`/`csv`/`mp4`.
+> **v1.5 breaking flag change:** `-o` is now a **single-file** destination (format inferred from the extension). The old `-o` output-**directory** behavior is now `-d, --output-dir`. A bare `convert <input>` with no `-o`/`--formats` writes a default set that deliberately excludes `md`/`xlsx`/`csv`/`mp4`.
 
 Notes:
 

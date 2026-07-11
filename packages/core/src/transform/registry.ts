@@ -1,13 +1,11 @@
 /**
  * Transform Style Registry
  *
- * Central registry of built-in transform styles plus a dynamic
- * registration API. Follows the same pattern as themeLibrary.ts /
- * `registerTheme` — registered styles take precedence over built-ins,
- * unknown ids fall back to the default.
+ * Immutable built-in lookup plus explicit caller-owned custom registries.
+ * There is deliberately no process-global mutable registry.
  */
 
-import type { TransformStyleConfig, TransformStyleSummary } from './types.js';
+import type { TransformStyleConfig, TransformStyleInput, TransformStyleRegistry } from './types.js';
 import { documentaryStyle } from './styles/documentary.js';
 import { magazineStyle } from './styles/magazine.js';
 import { dataDrivenStyle } from './styles/dataDriven.js';
@@ -23,14 +21,6 @@ const TRANSFORM_STYLES: Readonly<Record<string, TransformStyleConfig>> = Object.
   [narrativeStyle.id]: cloneAndFreezeData(narrativeStyle),
   [minimalStyle.id]: cloneAndFreezeData(minimalStyle),
 });
-
-/**
- * Id aliases: the data-driven style's file/export are named `dataDriven`
- * but its registered id is hyphenated — accept both.
- */
-const STYLE_ALIASES: Record<string, string> = {
-  dataDriven: 'data-driven',
-};
 
 /** Default style used when no id is provided. */
 export const DEFAULT_TRANSFORM_STYLE_ID = 'documentary';
@@ -50,7 +40,7 @@ const TRANSITION_STYLES = new Set(['cut', 'fade', 'dissolve', 'mixed']);
 function validateTransformStyle(style: TransformStyleConfig): void {
   const candidate = style as unknown as Record<string, unknown>;
   const fail = (message: string): never => {
-    throw new TypeError(`Cannot register invalid transform style: ${message}`);
+    throw new TypeError(`Invalid transform style: ${message}`);
   };
   for (const key of ['id', 'name', 'description']) {
     if (typeof candidate[key] !== 'string' || !(candidate[key] as string).trim()) {
@@ -133,87 +123,76 @@ function validateTransformStyle(style: TransformStyleConfig): void {
   }
 }
 
-/** An isolated registry for SSR tenants, tests, and embedded consumers. */
-export interface TransformStyleRegistry {
-  registerTransformStyle(style: TransformStyleConfig): void;
-  unregisterTransformStyle(id: string): void;
-  resolveTransformStyle(id: string): TransformStyleConfig;
-  getTransformStyleIds(): string[];
-  getTransformStyleSummaries(): TransformStyleSummary[];
+function styleSnapshot(style: TransformStyleConfig): TransformStyleConfig {
+  validateTransformStyle(style);
+  return cloneAndFreezeData(style);
+}
+
+/** Stored documents emitted before the canonical kebab-case id. Not exported. */
+function normalizeBuiltinStyleId(id: string): string {
+  return id === 'dataDriven' ? 'data-driven' : id;
+}
+
+function resolveBuiltinStyle(id: string): TransformStyleConfig {
+  return (
+    TRANSFORM_STYLES[normalizeBuiltinStyleId(id)] ?? TRANSFORM_STYLES[DEFAULT_TRANSFORM_STYLE_ID]
+  );
 }
 
 /**
  * Create a caller-owned registry. Custom styles are validated, cloned, and
- * deeply frozen at registration time; built-in styles remain available as
- * fallbacks just like they are through the process-global API.
+ * deeply frozen at registration time. Built-in resolution remains in the
+ * top-level helpers, separate from the registry's caller-owned state.
  */
 export function createTransformStyleRegistry(
   initialStyles: readonly TransformStyleConfig[] = [],
 ): TransformStyleRegistry {
   const registeredStyles = new Map<string, TransformStyleConfig>();
-  const canonicalId = (id: string): string => STYLE_ALIASES[id] ?? id;
   const registry: TransformStyleRegistry = {
-    registerTransformStyle(style): void {
-      validateTransformStyle(style);
-      const id = canonicalId(style.id);
-      const snapshot = cloneAndFreezeData({ ...style, id });
-      registeredStyles.set(id, snapshot);
+    register(style): void {
+      const snapshot = styleSnapshot(style);
+      registeredStyles.set(snapshot.id, snapshot);
     },
-    unregisterTransformStyle(id): void {
-      registeredStyles.delete(canonicalId(id));
+    unregister(id): boolean {
+      return registeredStyles.delete(id);
     },
-    resolveTransformStyle(id): TransformStyleConfig {
-      const canonical = canonicalId(id);
-      return (
-        registeredStyles.get(canonical) ??
-        TRANSFORM_STYLES[canonical] ??
-        TRANSFORM_STYLES[DEFAULT_TRANSFORM_STYLE_ID]
-      );
+    get(id): TransformStyleConfig | undefined {
+      return registeredStyles.get(id);
     },
-    getTransformStyleIds(): string[] {
-      return Array.from(new Set([...Object.keys(TRANSFORM_STYLES), ...registeredStyles.keys()]));
-    },
-    getTransformStyleSummaries(): TransformStyleSummary[] {
-      return registry.getTransformStyleIds().map((id) => {
-        const { name, description } = registry.resolveTransformStyle(id);
-        return { id, name, description };
-      });
+    list(): TransformStyleConfig[] {
+      return Array.from(registeredStyles.values());
     },
   };
-  for (const style of initialStyles) registry.registerTransformStyle(style);
+  for (const style of initialStyles) registry.register(style);
   return Object.freeze(registry);
 }
 
-const GLOBAL_TRANSFORM_STYLE_REGISTRY = createTransformStyleRegistry();
-
 /**
- * Register (or replace) a custom transform style at runtime. Hosts use
- * this the same way they use `registerTheme` — to add product-specific
- * styles without forking the registry.
+ * Resolve a built-in id, explicit-registry id, or call-scoped style config.
+ * Unknown ids fall back to the default style.
  */
-export function registerTransformStyle(style: TransformStyleConfig): void {
-  GLOBAL_TRANSFORM_STYLE_REGISTRY.registerTransformStyle(style);
+export function resolveTransformStyle(
+  style: TransformStyleInput,
+  registry?: TransformStyleRegistry,
+): TransformStyleConfig {
+  if (typeof style !== 'string') return styleSnapshot(style);
+  return registry?.get(style) ?? resolveBuiltinStyle(style);
 }
 
-/** Remove a previously registered custom style. */
-export function unregisterTransformStyle(id: string): void {
-  GLOBAL_TRANSFORM_STYLE_REGISTRY.unregisterTransformStyle(id);
+/** Get built-in ids plus ids from an optional caller-owned registry. */
+export function getTransformStyleIds(registry?: TransformStyleRegistry): string[] {
+  return Array.from(
+    new Set([
+      ...Object.keys(TRANSFORM_STYLES),
+      ...(registry?.list().map((style) => style.id) ?? []),
+    ]),
+  );
 }
 
-/**
- * Resolve a transform style by id. Registered styles win over built-ins;
- * aliases are honored; unknown ids fall back to the default style.
- */
-export function resolveTransformStyle(id: string): TransformStyleConfig {
-  return GLOBAL_TRANSFORM_STYLE_REGISTRY.resolveTransformStyle(id);
-}
-
-/** Get all known style ids (built-ins plus registered). */
-export function getTransformStyleIds(): string[] {
-  return GLOBAL_TRANSFORM_STYLE_REGISTRY.getTransformStyleIds();
-}
-
-/** Get summary info for all styles (for UI dropdowns). */
-export function getTransformStyleSummaries(): TransformStyleSummary[] {
-  return GLOBAL_TRANSFORM_STYLE_REGISTRY.getTransformStyleSummaries();
+/** Get summaries for built-ins plus an optional caller-owned registry. */
+export function getTransformStyleSummaries(registry?: TransformStyleRegistry) {
+  return getTransformStyleIds(registry).map((id) => {
+    const { name, description } = resolveTransformStyle(id, registry);
+    return { id, name, description };
+  });
 }

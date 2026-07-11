@@ -8,7 +8,7 @@
  * agents reviewing screenshots) can see *why* the block degraded.
  *
  * This is intentionally not a registered template: it can't be requested by
- * name, only reached when a requested template fails. See `getLayers()`.
+ * name, only reached when a requested template fails. See `materializeBlockLayers()`.
  */
 
 import type { Layer } from '../../schemas/Doc.js';

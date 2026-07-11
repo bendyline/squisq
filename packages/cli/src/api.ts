@@ -33,7 +33,7 @@ import type {
   ConversionResult,
   FormatId,
 } from '@bendyline/squisq-formats';
-import { detectFfmpeg } from './util/detectFfmpeg.js';
+import { detectFfmpegDetailed } from './util/detectFfmpeg.js';
 import { buildMixedAudioTrack } from './util/audioMix.js';
 import { resolveAppliedCoverPreRoll } from './util/coverPreRoll.js';
 import { createCliRegistry } from './registry.js';
@@ -150,6 +150,27 @@ export interface RenderDocToMp4Result {
   outputPath: string;
 }
 
+/** Minimal standalone-player contract used inside Playwright's page realm. */
+interface BrowserRenderAPI {
+  seekTo(time: number): Promise<void>;
+  getDuration(): number;
+  hasCoverBlock(): boolean;
+  showCover(): Promise<void>;
+  hideCover(): Promise<void>;
+}
+
+interface BrowserPlayerHandle {
+  getRenderAPI(): BrowserRenderAPI | null;
+}
+
+interface BrowserStandalonePlayer {
+  getHandle(element: Element): BrowserPlayerHandle | undefined;
+}
+
+interface SquisqBrowserWindow {
+  SquisqPlayer?: BrowserStandalonePlayer;
+}
+
 /**
  * Render a Doc + media container to an MP4 video file.
  *
@@ -160,7 +181,7 @@ export interface RenderDocToMp4Result {
  * Requires:
  * - Playwright (chromium) — for headless frame capture
  * - FFmpeg — for video encoding (resolved from SQUISQ_FFMPEG, PATH, or an
- *   optionally installed `ffmpeg-static` package — see detectFfmpeg)
+ *   optionally installed `ffmpeg-static` package)
  *
  * @param doc - The Doc structure to render
  * @param container - MemoryContentContainer with audio/image files
@@ -195,7 +216,7 @@ export async function renderDocToMp4(
   resolveAppliedCoverPreRoll(coverPreRoll, true);
 
   // Detect ffmpeg early — needed for audio concat and video encoding
-  const ffmpegPath = await detectFfmpeg();
+  const ffmpegPath = (await detectFfmpegDetailed())?.path ?? null;
   if (!ffmpegPath) {
     throw new Error(
       'ffmpeg is required but not found in PATH.\n' +
@@ -292,7 +313,11 @@ export async function renderDocToMp4(
 
   try {
     await page.waitForFunction(
-      () => typeof (window as unknown as Record<string, unknown>).getDuration === 'function',
+      () => {
+        const root = document.getElementById('squisq-root');
+        const player = (window as unknown as SquisqBrowserWindow).SquisqPlayer;
+        return root ? player?.getHandle(root)?.getRenderAPI() != null : false;
+      },
       { timeout: 15000 },
     );
   } catch {
@@ -306,9 +331,14 @@ export async function renderDocToMp4(
     );
   }
 
-  const docDuration: number = await page.evaluate(() => {
-    return (window as unknown as { getDuration: () => number }).getDuration();
+  const renderAPI = await page.evaluateHandle(() => {
+    const root = document.getElementById('squisq-root');
+    const player = (window as unknown as SquisqBrowserWindow).SquisqPlayer;
+    const api = root ? player?.getHandle(root)?.getRenderAPI() : null;
+    if (!api) throw new Error('Squisq render API disappeared after initialization.');
+    return api;
   });
+  const docDuration = await renderAPI.evaluate((api) => api.getDuration());
 
   if (docDuration <= 0) {
     await browser.close();
@@ -316,12 +346,7 @@ export async function renderDocToMp4(
   }
 
   const hasCover =
-    coverPreRoll > 0
-      ? await page.evaluate(() => {
-          const w = window as unknown as { hasCoverBlock?: () => boolean };
-          return typeof w.hasCoverBlock === 'function' ? w.hasCoverBlock() : false;
-        })
-      : false;
+    coverPreRoll > 0 ? await renderAPI.evaluate((api) => api.hasCoverBlock()) : false;
   const appliedCoverPreRoll = resolveAppliedCoverPreRoll(coverPreRoll, hasCover);
   const storyFrameCount = Math.ceil(docDuration * fps);
   const preRollFrameCount = Math.ceil(appliedCoverPreRoll * fps);
@@ -332,26 +357,20 @@ export async function renderDocToMp4(
 
   // Cover slide pre-roll (if requested)
   if (preRollFrameCount > 0) {
-    await page.evaluate(() => {
-      return (window as unknown as { showCover: () => Promise<void> }).showCover();
-    });
+    await renderAPI.evaluate((api) => api.showCover());
     await page.waitForTimeout(100);
     const coverFrame = new Uint8Array(await page.screenshot({ type: 'png' }));
     for (let i = 0; i < preRollFrameCount; i++) {
       frames.push(coverFrame);
     }
-    await page.evaluate(() => {
-      (window as unknown as { hideCover: () => void }).hideCover();
-    });
+    await renderAPI.evaluate((api) => api.hideCover());
   }
 
   // Story frames via seekTo
   const frameInterval = 1 / fps;
   for (let i = 0; i < storyFrameCount; i++) {
     const time = i * frameInterval;
-    await page.evaluate((t: number) => {
-      return (window as unknown as { seekTo: (t: number) => Promise<void> }).seekTo(t);
-    }, time);
+    await renderAPI.evaluate((api, t: number) => api.seekTo(t), time);
 
     const screenshot = await page.screenshot({ type: 'png' });
     frames.push(new Uint8Array(screenshot));
@@ -363,6 +382,7 @@ export async function renderDocToMp4(
     }
   }
 
+  await renderAPI.dispose();
   await browser.close();
 
   onProgress?.('encoding video', 80);
@@ -435,7 +455,7 @@ export async function extractThumbnails(options: ExtractThumbnailsOptions): Prom
   const { join } = await import('node:path');
   const { execFile } = await import('node:child_process');
 
-  const ffmpegPath = await detectFfmpeg();
+  const ffmpegPath = (await detectFfmpegDetailed())?.path ?? null;
   if (!ffmpegPath) {
     throw new Error(
       'ffmpeg is required for thumbnail extraction but not found in PATH.\n' +

@@ -1,9 +1,7 @@
-import { describe, it, expect, afterEach } from 'vitest';
+import { describe, it, expect } from 'vitest';
 import {
   applyTransform,
   resolveTransformStyle,
-  registerTransformStyle,
-  unregisterTransformStyle,
   getTransformStyleIds,
   createTransformStyleRegistry,
 } from '../transform/index.js';
@@ -50,8 +48,6 @@ function sampleDoc(): Doc {
 }
 
 describe('transform style contract v2', () => {
-  afterEach(() => unregisterTransformStyle('custom-test'));
-
   it('suggestedThemeId applies only when the doc declares no theme', () => {
     const { doc } = applyTransform(sampleDoc(), 'magazine');
     expect(doc.themeId).toBe('magazine');
@@ -89,23 +85,26 @@ describe('transform style contract v2', () => {
     expect(last.template).toBe('sectionHeader');
   });
 
-  it('registerTransformStyle adds a resolvable style that wins over unknown fallback', () => {
+  it('resolves custom styles only through their caller-owned registry', () => {
     const custom: TransformStyleConfig = {
       ...resolveTransformStyle('minimal'),
       id: 'custom-test',
       name: 'Custom Test',
       description: 'test style',
     };
-    registerTransformStyle(custom);
-    expect(getTransformStyleIds()).toContain('custom-test');
-    expect(resolveTransformStyle('custom-test').name).toBe('Custom Test');
-    unregisterTransformStyle('custom-test');
-    // Unknown id falls back to the default (documentary)
+    const registry = createTransformStyleRegistry([custom]);
+    expect(getTransformStyleIds(registry)).toContain('custom-test');
+    expect(resolveTransformStyle('custom-test', registry).name).toBe('Custom Test');
     expect(resolveTransformStyle('custom-test').id).toBe('documentary');
+    expect(
+      applyTransform(sampleDoc(), 'custom-test', { registry }).doc.blocks.length,
+    ).toBeGreaterThan(0);
   });
 
-  it("accepts 'dataDriven' as an alias for the hyphenated registry id", () => {
+  it('normalizes the stored legacy dataDriven id without advertising it', () => {
+    expect(resolveTransformStyle('data-driven').id).toBe('data-driven');
     expect(resolveTransformStyle('dataDriven').id).toBe('data-driven');
+    expect(getTransformStyleIds()).not.toContain('dataDriven');
   });
 
   it('validates and stores immutable style snapshots in isolated registries', () => {
@@ -123,16 +122,16 @@ describe('transform style contract v2', () => {
     source.name = 'Changed later';
     source.colorSchemes[0] = 'red';
 
-    const stored = tenantA.resolveTransformStyle('tenant-style');
+    const stored = tenantA.get('tenant-style')!;
     expect(stored.name).toBe('Tenant Style');
     expect(stored.colorSchemes[0]).toBe(base.colorSchemes[0]);
     expect(Object.isFrozen(stored)).toBe(true);
     expect(Object.isFrozen(stored.colorSchemes)).toBe(true);
-    expect(tenantB.resolveTransformStyle('tenant-style').id).toBe('documentary');
+    expect(tenantB.get('tenant-style')).toBeUndefined();
 
-    expect(() =>
-      tenantA.registerTransformStyle({ ...source, id: 'bad-style', transformRatio: 2 }),
-    ).toThrow(/transformRatio/);
+    expect(() => tenantA.register({ ...source, id: 'bad-style', transformRatio: 2 })).toThrow(
+      /transformRatio/,
+    );
   });
 
   it('budget.slidesPerMinute caps promotions on long docs', () => {
@@ -155,9 +154,8 @@ describe('transform style contract v2', () => {
       id: 'custom-test',
       budget: { slidesPerMinute: 2 },
     };
-    registerTransformStyle(budgeted);
     const loose = applyTransform(manyBlocks, 'data-driven');
-    const tight = applyTransform(manyBlocks, 'custom-test');
+    const tight = applyTransform(manyBlocks, budgeted);
     expect(tight.stats.transformedBlocks).toBeLessThan(loose.stats.transformedBlocks);
     // 12 blocks x 5s = 60s → 2/minute → at most 2 promotions
     expect(tight.stats.transformedBlocks).toBeLessThanOrEqual(2);

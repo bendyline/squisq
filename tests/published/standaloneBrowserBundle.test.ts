@@ -13,6 +13,10 @@ describe('@bendyline/squisq-react standalone browser contract', () => {
     expect(bundle).not.toContain('__SQUISQ_PATH_SHIM__');
     expect(bundle).not.toContain('__SQUISQ_PROCESS_SHIM__');
     expect(bundle).not.toContain('__SQUISQ_URL_SHIM__');
+    expect(bundle).toContain('exports.getHandle=');
+    expect(bundle).not.toContain('exports.mountStatic=');
+    expect(bundle).not.toContain('squisqActivePlayerId');
+    expect(bundle).not.toContain('squisqPlayers');
   });
 
   it('resolves vfile through its browser conditional exports', () => {
@@ -22,5 +26,14 @@ describe('@bendyline/squisq-react standalone browser contract', () => {
     expect(map.sources).not.toContain('../../../node_modules/vfile/lib/minpath.js');
     expect(map.sources).not.toContain('../../../node_modules/vfile/lib/minproc.js');
     expect(map.sources).not.toContain('../../../node_modules/vfile/lib/minurl.js');
+  });
+
+  it('publishes the callback API and options-object playback signature', () => {
+    const declarations = readFileSync(resolve(pkg.dist, 'index.d.ts'), 'utf8');
+    expect(declarations).toContain('onRenderAPIReady?: (api: SquisqRenderAPI | null) => void;');
+    expect(declarations).toContain('interface SquisqPlayerHandle');
+    expect(declarations).toContain('interface UseDocPlaybackOptions');
+    expect(declarations).toContain('options?: UseDocPlaybackOptions');
+    expect(declarations).not.toMatch(/\bSquisqWindow\b/);
   });
 });

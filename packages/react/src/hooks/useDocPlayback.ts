@@ -60,17 +60,21 @@ interface PlaybackActions {
   goToBlock: (index: number) => void;
 }
 
+export interface UseDocPlaybackOptions {
+  /** Target viewport used to materialize template blocks. */
+  viewport?: ViewportConfig;
+  /** Active theme used for materialization and transition defaults. */
+  theme?: Theme;
+  /** Host seek callback used by block navigation actions. */
+  onSeek?: (time: number) => void;
+}
+
 export function useDocPlayback(
   script: Doc | null,
   currentTime: number,
-  viewport: ViewportConfig = VIEWPORT_PRESETS.landscape,
-  renderMode: boolean = false,
-  theme?: Theme,
-  onSeek?: (time: number) => void,
+  options: UseDocPlaybackOptions = {},
 ): PlaybackState & PlaybackActions {
-  // `renderMode` is retained for API/signature compatibility; block transitions
-  // are now computed identically for real-time and render (export) modes.
-  void renderMode;
+  const { viewport = VIEWPORT_PRESETS.landscape, theme, onSeek } = options;
   // Expand any template blocks into full blocks
   const blocks = useMemo(() => {
     if (!script?.blocks) {

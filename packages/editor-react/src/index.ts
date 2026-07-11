@@ -99,8 +99,8 @@ export { DocumentSettingsDialog } from './DocumentSettingsDialog.js';
 export type { DocumentSettingsDialogProps } from './DocumentSettingsDialog.js';
 export { ThemePicker } from './ThemePicker.js';
 export type { ThemePickerProps } from './ThemePicker.js';
-export { EMOJI_CATEGORIES, ALL_EMOJIS, searchEmojis } from './emojiData.js';
-export type { EmojiEntry, EmojiCategory } from './emojiData.js';
+export { PICKER_CATEGORIES, ALL_PICKER_ENTRIES, searchPickerEntries } from './emojiData.js';
+export type { PickerEntry, PickerCategory } from './emojiData.js';
 export {
   PreviewSettingsProvider,
   PreviewToolbarControls,
@@ -142,7 +142,6 @@ export {
   setHeadingLineTransition,
   readBlockAttrsTransition,
   setHeadingAttrsTransition,
-  setBlockAttrsTransition,
   EMPTY_TRANSITION,
 } from './headingTransition.js';
 export type { HeadingTransitionAttrs, TransitionFields } from './headingTransition.js';
@@ -242,7 +241,7 @@ export { HeadingWithTemplate } from './TemplateAnnotation.js';
 // heading command helpers are gone).
 export { DiagramCanvas } from './diagram/DiagramCanvas.js';
 export type { DiagramCommand } from './diagram/DiagramCanvas.js';
-export type { DiagramData, DiagramRFNode, DiagramRFEdge } from './diagram/types.js';
+export type { DiagramData, DiagramNode, DiagramEdge } from './diagram/types.js';
 export {
   AsciiDiagramExtension,
   findAsciiDiagramBlockPos,

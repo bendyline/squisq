@@ -1,12 +1,6 @@
-/**
- * Data shapes consumed by `DiagramCanvas` / `buildDiagramScene`.
- *
- * The `RF` prefix is a React Flow legacy — the canvas is rendered by the
- * in-house Scene engine now, but the flat node/edge shape was kept when
- * the renderer was swapped.
- */
+/** Data shapes consumed by `DiagramCanvas` / `buildDiagramScene`. */
 
-export interface DiagramRFNode {
+export interface DiagramNode {
   id: string;
   position: { x: number; y: number };
   data: { label: string };
@@ -19,7 +13,7 @@ export interface DiagramRFNode {
   kind?: 'container';
 }
 
-export interface DiagramRFEdge {
+export interface DiagramEdge {
   id: string;
   source: string;
   target: string;
@@ -29,7 +23,7 @@ export interface DiagramRFEdge {
 }
 
 export interface DiagramData {
-  nodes: DiagramRFNode[];
-  edges: DiagramRFEdge[];
+  nodes: DiagramNode[];
+  edges: DiagramEdge[];
   warnings: string[];
 }

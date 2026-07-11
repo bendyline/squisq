@@ -317,7 +317,7 @@ describe('LinearDocView markdown prop', () => {
 });
 
 describe('LinearDocView unknown template annotations', () => {
-  it('warns once per unknown template name and falls back to plain markdown', () => {
+  it('renders the canonical visible fallback without hidden console output', () => {
     const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
     const doc = mkDoc([
       mkBlock({
@@ -333,17 +333,49 @@ describe('LinearDocView unknown template annotations', () => {
     ]);
 
     const { container } = render(<LinearDocView doc={doc} />);
-    // Renders as plain markdown: heading + body, no SVG card.
     expect(container.textContent).toContain('Mystery Section');
     expect(container.textContent).toContain('Fallback body content');
-    expect(container.querySelector('.squisq-linear-card')).toBeNull();
-
-    // Re-render: the warning stays one-shot per unknown template name.
-    render(<LinearDocView doc={doc} />);
-    const sentinelCalls = warnSpy.mock.calls.filter((c) =>
-      String(c[0]).includes('no-such-template-xyz'),
-    );
-    expect(sentinelCalls.length).toBe(1);
+    expect(container.textContent).toContain('Unknown template "no-such-template-xyz"');
+    expect(container.querySelector('.squisq-linear-card')).not.toBeNull();
+    expect(warnSpy).not.toHaveBeenCalled();
     warnSpy.mockRestore();
+  });
+});
+
+describe('LinearDocView custom template materialization', () => {
+  it('renders document-scoped templates through the canonical API', () => {
+    const doc: Doc = {
+      ...mkDoc([
+        mkBlock({
+          id: 'custom-1',
+          sourceHeading: {
+            type: 'heading',
+            depth: 2,
+            children: [text('Custom Hero')],
+            templateAnnotation: { template: 'hero' },
+          },
+          contents: [paragraph(text('Custom body'))],
+        }),
+      ]),
+      customTemplates: [
+        {
+          name: 'hero',
+          label: 'Hero',
+          viewport: { width: 1920, height: 1080 },
+          layers: [
+            {
+              id: 'hero-title',
+              type: 'text',
+              position: { x: '5%', y: '10%', width: '90%' },
+              content: { text: '{title}: {content}', style: { fontSize: 48, color: '#000000' } },
+            },
+          ],
+        },
+      ],
+    };
+
+    const { container } = render(<LinearDocView doc={doc} />);
+    expect(container.textContent).toContain('Custom Hero: Custom body');
+    expect(container.textContent).not.toContain('Unknown template');
   });
 });

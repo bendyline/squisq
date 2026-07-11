@@ -19,8 +19,11 @@ describe('generateRenderHtml', () => {
     expect(html).toContain('<!DOCTYPE html>');
     expect(html).toContain('id="squisq-root"');
     expect(html).toContain(PLAYER_STUB);
+    expect(html).toContain('var root = document.getElementById("squisq-root")');
     expect(html).toContain('SquisqPlayer.mount');
     expect(html).toContain('renderMode: true');
+    expect(html).not.toContain('window.seekTo');
+    expect(html).not.toContain('window.getDuration');
   });
 
   it('applies the requested viewport dimensions', () => {

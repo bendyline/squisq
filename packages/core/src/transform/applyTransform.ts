@@ -10,7 +10,7 @@
 
 import type { Doc } from '../schemas/Doc.js';
 import type { DocBlock, TitleBlockInput, SectionHeaderInput } from '../schemas/BlockTemplates.js';
-import type { TransformStyleId, TransformOptions, TransformResult } from './types.js';
+import type { TransformStyleInput, TransformOptions, TransformResult } from './types.js';
 import { resolveTransformStyle } from './registry.js';
 import { analyzeBlocks, extractDocImages } from './blockAnalyzer.js';
 import { selectAndBuild } from './templateSelector.js';
@@ -22,16 +22,16 @@ import { hashString } from '../random/SeededRandom.js';
  * optimized for visual presentation.
  *
  * @param doc - The source Doc (not mutated).
- * @param styleId - Registered transform style id (e.g. 'documentary', 'magazine').
- * @param options - Optional seed, images, theme override.
+ * @param style - Built-in/registry id or a call-scoped declarative style.
+ * @param options - Optional seed, images, theme override, and explicit registry.
  * @returns TransformResult with the new Doc and stats.
  */
 export function applyTransform(
   doc: Doc,
-  styleId: TransformStyleId,
+  style: TransformStyleInput,
   options?: TransformOptions,
 ): TransformResult {
-  const baseConfig = resolveTransformStyle(styleId);
+  const baseConfig = resolveTransformStyle(style, options?.registry);
   const config = options?.overrides
     ? { ...baseConfig, ...options.overrides, id: baseConfig.id }
     : baseConfig;

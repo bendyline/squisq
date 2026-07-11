@@ -4,9 +4,9 @@
  * Generates a self-contained HTML document that loads the SquisqPlayer standalone
  * bundle in renderMode, embedding all images and audio as base64 data URIs.
  *
- * The generated page exposes `window.seekTo(time)`, `window.getDuration()`, etc.
- * via the SquisqRenderAPI, enabling Playwright (or any headless browser) to step
- * through frames and capture screenshots.
+ * The generated page mounts one standalone player whose instance handle is
+ * available through `SquisqPlayer.getHandle(root)`. Headless callers use that
+ * handle's render API to step through frames and capture screenshots.
  *
  * Browser-pure: uses only btoa() and Uint8Array — no Node.js APIs.
  */
@@ -102,8 +102,8 @@ function escapeHtml(str: string): string {
 /**
  * Generate a self-contained HTML document for headless video frame capture.
  *
- * The page mounts the SquisqPlayer in renderMode, which exposes the
- * SquisqRenderAPI on `window` (seekTo, getDuration, getCaptions, etc.).
+ * The page mounts the SquisqPlayer in renderMode. Call
+ * `SquisqPlayer.getHandle(root)` to obtain this instance's render API.
  *
  * @param doc - The Doc to render
  * @param options - Render HTML options including player script and media
@@ -154,7 +154,8 @@ html,body{margin:0;padding:0;width:${width}px;height:${height}px;overflow:hidden
   var doc = JSON.parse(${JSON.stringify(docJson)});
   var images = JSON.parse(${JSON.stringify(imageMapJson)});
   var audio = ${audioMapJson === 'null' ? 'null' : 'JSON.parse(' + JSON.stringify(audioMapJson) + ')'};
-  SquisqPlayer.mount(document.getElementById("squisq-root"), doc, {
+  var root = document.getElementById("squisq-root");
+  SquisqPlayer.mount(root, doc, {
     mode: "slideshow",
     images: images,
     audio: audio,

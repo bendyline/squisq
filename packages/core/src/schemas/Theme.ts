@@ -356,15 +356,15 @@ export function applySurface(theme: Theme, surface: SurfaceScheme): Theme {
 }
 
 // ============================================
-// Runtime registry — for custom themes
+// Caller-owned registry — for custom themes
 // ============================================
 
-/** An isolated custom-theme registry for SSR tenants, tests, and embedders. */
+/** A caller-owned custom-theme registry for SSR tenants, tests, and embedders. */
 export interface ThemeRegistry {
-  registerTheme(theme: Theme): void;
-  unregisterTheme(id: string): void;
-  getRegisteredThemes(): Theme[];
-  lookupRegisteredTheme(id: string | undefined): Theme | undefined;
+  register(theme: Theme): void;
+  unregister(id: string): boolean;
+  get(id: string): Theme | undefined;
+  list(): Theme[];
 }
 
 function validatedThemeSnapshot(theme: Theme): Theme {
@@ -387,47 +387,20 @@ function validatedThemeSnapshot(theme: Theme): Theme {
 export function createThemeRegistry(initialThemes: readonly Theme[] = []): ThemeRegistry {
   const themes = new Map<string, Theme>();
   const registry: ThemeRegistry = {
-    registerTheme(theme): void {
+    register(theme): void {
       const snapshot = validatedThemeSnapshot(theme);
       themes.set(snapshot.id, snapshot);
     },
-    unregisterTheme(id): void {
-      themes.delete(id);
+    unregister(id): boolean {
+      return themes.delete(id);
     },
-    getRegisteredThemes(): Theme[] {
+    get(id): Theme | undefined {
+      return themes.get(id);
+    },
+    list(): Theme[] {
       return Array.from(themes.values());
     },
-    lookupRegisteredTheme(id): Theme | undefined {
-      return id ? themes.get(id) : undefined;
-    },
   };
-  for (const theme of initialThemes) registry.registerTheme(theme);
+  for (const theme of initialThemes) registry.register(theme);
   return Object.freeze(registry);
-}
-
-const GLOBAL_THEME_REGISTRY = createThemeRegistry();
-
-/**
- * Register a Theme so it can be looked up by id via `resolveTheme(id)`.
- * Lets `Doc.themeId` round-trip through Doc serialization for custom themes.
- *
- * Registered themes take precedence over built-ins with the same id.
- */
-export function registerTheme(theme: Theme): void {
-  GLOBAL_THEME_REGISTRY.registerTheme(theme);
-}
-
-/** Remove a previously registered theme. */
-export function unregisterTheme(id: string): void {
-  GLOBAL_THEME_REGISTRY.unregisterTheme(id);
-}
-
-/** Snapshot of all currently registered (non-built-in) themes. */
-export function getRegisteredThemes(): Theme[] {
-  return GLOBAL_THEME_REGISTRY.getRegisteredThemes();
-}
-
-/** @internal — used by themeLibrary's `resolveTheme` to check the registry first. */
-export function lookupRegisteredTheme(id: string | undefined): Theme | undefined {
-  return GLOBAL_THEME_REGISTRY.lookupRegisteredTheme(id);
 }

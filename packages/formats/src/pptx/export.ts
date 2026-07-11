@@ -29,7 +29,7 @@
 
 import type { Doc, Transition, TransitionDirection } from '@bendyline/squisq/schemas';
 import { resolveFontFamily } from '@bendyline/squisq/schemas';
-import type { Theme } from '@bendyline/squisq/schemas';
+import type { Theme, ThemeRegistry } from '@bendyline/squisq/schemas';
 import { docToMarkdown, resolveThemeForDoc } from '@bendyline/squisq/doc';
 import type {
   MarkdownDocument,
@@ -132,6 +132,8 @@ export interface PptxExportOptions {
    * Falls back to the document's frontmatter `themeId` if not set here.
    */
   themeId?: string;
+  /** Explicit caller-owned registry for non-document custom themes. */
+  themeRegistry?: ThemeRegistry;
   /**
    * Image data keyed by the path/URL used in markdown.
    * When provided, images are embedded as picture shapes instead of
@@ -224,7 +226,7 @@ function resolveSlideStyle(
     };
   }
 
-  const theme: Theme = resolveThemeForDoc(doc, themeId);
+  const theme: Theme = resolveThemeForDoc(doc, themeId, options.themeRegistry);
   const c = theme.colors;
 
   return {

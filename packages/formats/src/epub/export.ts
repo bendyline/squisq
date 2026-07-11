@@ -22,7 +22,7 @@
  */
 
 import JSZip from 'jszip';
-import type { Doc, AudioSegment } from '@bendyline/squisq/schemas';
+import type { Doc, AudioSegment, ThemeRegistry } from '@bendyline/squisq/schemas';
 import { resolveFontFamily } from '@bendyline/squisq/schemas';
 import { resolveThemeForDoc } from '@bendyline/squisq/doc';
 import type {
@@ -56,6 +56,8 @@ export interface EpubExportOptions {
   publisher?: string;
   /** Squisq theme ID for CSS styling */
   themeId?: string;
+  /** Explicit caller-owned registry for non-document custom themes. */
+  themeRegistry?: ThemeRegistry;
   /** Pre-resolved image data keyed by relative path as it appears in the markdown */
   images?: Map<string, ArrayBuffer>;
   /** Cover image data (JPEG or PNG) */
@@ -115,7 +117,11 @@ export async function markdownDocToEpub(
 
   // Generate theme CSS — honor an explicit themeId, else the doc's frontmatter
   // theme (`squisq-theme` / legacy), mirroring the other export formats.
-  const css = generateStylesheet(options.themeId ?? readFrontmatterThemeId(doc.frontmatter), doc);
+  const css = generateStylesheet(
+    options.themeId ?? readFrontmatterThemeId(doc.frontmatter),
+    doc,
+    options.themeRegistry,
+  );
 
   // Build the ZIP
   const zip = new JSZip();
@@ -837,10 +843,14 @@ ${navItems}
 
 // ── Stylesheet ────────────────────────────────────────────────────
 
-function generateStylesheet(themeId: string | undefined, doc?: MarkdownDocument): string {
+function generateStylesheet(
+  themeId: string | undefined,
+  doc?: MarkdownDocument,
+  registry?: ThemeRegistry,
+): string {
   let themeVars = '';
   if (themeId) {
-    const theme = resolveThemeForDoc(doc, themeId);
+    const theme = resolveThemeForDoc(doc, themeId, registry);
     themeVars = `
   --epub-bg: ${theme.colors.background};
   --epub-text: ${theme.colors.text};

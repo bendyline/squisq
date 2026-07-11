@@ -10,7 +10,7 @@
  * - Block transitions (fade, dissolve, slide)
  * - Playback controls (play/pause, seek, next/prev)
  * - Progress display
- * - Render mode for video capture (via window.seekTo)
+ * - Instance-scoped render API for deterministic video capture
  * - Pluggable audio controller for different environments (browser, EFB)
  * - Multiple control layouts: overlay (default), sidebar, bottom
  *
@@ -62,7 +62,6 @@ import type {
   CaptionStyle,
   CaptionMode,
   SlideNavActions,
-  SquisqWindow,
   SquisqRenderAPI,
 } from './types';
 
@@ -126,7 +125,7 @@ function buildSegmentTitleMap(doc: Doc): Map<number, string> {
   return map;
 }
 
-interface DocPlayerProps {
+export interface DocPlayerProps {
   /**
    * The Doc to play. Wins over `markdown` when both are provided.
    * When neither `doc` nor `markdown` is given, the player renders a
@@ -141,8 +140,13 @@ interface DocPlayerProps {
   markdown?: string;
   /** Base path for resolving media URLs (default: `'.'`) */
   basePath?: string;
-  /** Render mode for video capture (hides controls, exposes seekTo) */
+  /** Render mode for video capture (hides controls and creates a render API). */
   renderMode?: boolean;
+  /**
+   * Receives this player's instance-scoped render API, and `null` on cleanup.
+   * The API is created in render mode and `?debug=true` mode only.
+   */
+  onRenderAPIReady?: (api: SquisqRenderAPI | null) => void;
   /** Auto-play when loaded */
   autoPlay?: boolean;
   /** Callback when playback ends */
@@ -275,6 +279,7 @@ function DocPlayerContent({
   onCaptionsToggle,
   onPlaybackStateChange,
   onControlsReady,
+  onRenderAPIReady,
   isFullscreen = false,
   onFullscreenToggle,
   onBlockMarkers,
@@ -407,7 +412,11 @@ function DocPlayerContent({
     nextBlock: _nextBlock,
     prevBlock: _prevBlock,
     blocks: expandedBlocks,
-  } = useDocPlayback(doc, currentTime, activeViewport, renderMode, effectiveTheme, seekTo);
+  } = useDocPlayback(doc, currentTime, {
+    viewport: activeViewport,
+    theme: effectiveTheme,
+    onSeek: seekTo,
+  });
 
   // Expand cover block (startBlock) if present - uses active viewport
   const coverBlock = useMemo((): Block | null => {
@@ -548,215 +557,223 @@ function DocPlayerContent({
     }
   }, [isEnded, onEnded]);
 
-  // Expose seekTo globally for render mode (Playwright) and debug mode (testing)
+  // Consumers keep this API object for the lifetime of the mounted player
+  // (the standalone handle promise and Playwright both do). The implementation
+  // behind it may change as audio segments, documents, or viewports change, so
+  // every method dispatches through the latest implementation ref.
+  const liveRenderAPIRef = useRef<SquisqRenderAPI | null>(null);
+  const stableRenderAPIRef = useRef<SquisqRenderAPI | null>(null);
+  if (!stableRenderAPIRef.current) {
+    const current = (): SquisqRenderAPI => {
+      const api = liveRenderAPIRef.current;
+      if (!api) throw new Error('Squisq render API is not currently available.');
+      return api;
+    };
+    stableRenderAPIRef.current = {
+      seekTo: (time) => current().seekTo(time),
+      getDuration: () => current().getDuration(),
+      getBlocks: () => current().getBlocks(),
+      getAudioSegments: () => current().getAudioSegments(),
+      getCaptions: () => current().getCaptions(),
+      getChapters: () => current().getChapters(),
+      showCover: () => current().showCover(),
+      hideCover: () => current().hideCover(),
+      hasCoverBlock: () => current().hasCoverBlock(),
+    };
+  }
+  const stableRenderAPI = stableRenderAPIRef.current;
+
+  // Refresh the implementation behind the stable instance API.
   useEffect(() => {
-    if ((renderMode || isDebugMode) && typeof window !== 'undefined') {
-      const w = window as SquisqWindow;
-      const root = containerRef.current;
-      if (!root) return;
-      w.seekTo = (time: number) => {
-        seekTo(time);
-        // After React renders the correct block, advance CSS animations
-        // (Ken Burns, transitions) to match the doc timeline position.
-        // Without this, animations restart from zero on each seekTo because
-        // they run on the browser's real clock, not doc time.
-        return new Promise<void>((resolve) => {
-          requestAnimationFrame(() => {
-            // Find the current block's start time
-            let blockStartTime = 0;
-            for (let i = expandedBlocks.length - 1; i >= 0; i--) {
-              if (time >= expandedBlocks[i].startTime) {
-                blockStartTime = expandedBlocks[i].startTime;
-                break;
-              }
+    if (!renderMode && !isDebugMode) {
+      liveRenderAPIRef.current = null;
+      return;
+    }
+    const root = containerRef.current;
+    if (!root) {
+      liveRenderAPIRef.current = null;
+      return;
+    }
+    const renderSeekTo = (time: number) => {
+      seekTo(time);
+      // After React renders the correct block, advance CSS animations
+      // (Ken Burns, transitions) to match the doc timeline position.
+      // Without this, animations restart from zero on each seekTo because
+      // they run on the browser's real clock, not doc time.
+      return new Promise<void>((resolve) => {
+        requestAnimationFrame(() => {
+          // Find the current block's start time
+          let blockStartTime = 0;
+          for (let i = expandedBlocks.length - 1; i >= 0; i--) {
+            if (time >= expandedBlocks[i].startTime) {
+              blockStartTime = expandedBlocks[i].startTime;
+              break;
             }
-            const elapsedMs = (time - blockStartTime) * 1000;
+          }
+          const elapsedMs = (time - blockStartTime) * 1000;
 
-            // Set all CSS animations to the correct timeline position
-            (root.getAnimations?.() ?? []).forEach((anim) => {
-              const target = (anim.effect as KeyframeEffect)?.target as Element | null;
-              if (!target) return;
+          // Set all CSS animations to the correct timeline position
+          (root.getAnimations?.() ?? []).forEach((anim) => {
+            const target = (anim.effect as KeyframeEffect)?.target as Element | null;
+            if (!target) return;
 
-              // Animations on the active block: use current block elapsed time
-              if (target.closest('.doc-player__block--active')) {
-                anim.currentTime = Math.max(0, elapsedMs);
-              }
-              // Animations on the exiting block (during crossfade): use current
-              // block elapsed for transition animations, keep Ken Burns at their
-              // natural position based on when that block started
-              // eslint-disable-next-line sonarjs/no-duplicated-branches
-              else if (target.closest('.doc-player__block--previous')) {
-                anim.currentTime = Math.max(0, elapsedMs);
-              }
-            });
-
-            // Seek <video> elements in the active block to the correct clip position.
-            // Each <video> carries data-clip-start/data-clip-end attributes set by
-            // VideoLayer.tsx; we calculate targetTime = clipStart + blockElapsed.
-            const blockElapsed = time - blockStartTime;
-            const videoSeekPromises: Promise<void>[] = [];
-            const activeBlockEl = root.querySelector('.doc-player__block--active');
-            if (activeBlockEl) {
-              const videos = activeBlockEl.querySelectorAll('video[data-clip-start]');
-              videos.forEach((el) => {
-                const video = el as HTMLVideoElement;
-                const clipStart = parseFloat(video.dataset.clipStart || '0');
-                const clipEnd = parseFloat(video.dataset.clipEnd || '0');
-                // Honor the per-clip startAt offset: before it, hold at the
-                // in-point; after, advance by (blockElapsed - startAt).
-                const startAt = parseFloat(video.dataset.startAt || '0');
-                const targetTime = Math.min(
-                  clipStart + Math.max(0, blockElapsed - startAt),
-                  clipEnd,
-                );
-
-                video.pause();
-                video.currentTime = targetTime;
-
-                videoSeekPromises.push(
-                  new Promise<void>((r) => {
-                    if (Math.abs(video.currentTime - targetTime) < 0.1) {
-                      r();
-                    } else {
-                      video.addEventListener('seeked', () => r(), { once: true });
-                      setTimeout(r, 200); // Fallback if seeked never fires
-                    }
-                  }),
-                );
-              });
+            // Animations on the active block: use current block elapsed time
+            if (target.closest('.doc-player__block--active')) {
+              anim.currentTime = Math.max(0, elapsedMs);
             }
+            // Animations on the exiting block (during crossfade): use current
+            // block elapsed for transition animations, keep Ken Burns at their
+            // natural position based on when that block started
+            // eslint-disable-next-line sonarjs/no-duplicated-branches
+            else if (target.closest('.doc-player__block--previous')) {
+              anim.currentTime = Math.max(0, elapsedMs);
+            }
+          });
 
-            // Seek player-level scheduled videos (document-spanning clips
-            // rendered by MediaClipLayer, outside any single block). Each
-            // carries data-abs-start/data-abs-end/data-source-in.
-            root.querySelectorAll('video[data-clip-id]').forEach((el) => {
+          // Seek <video> elements in the active block to the correct clip position.
+          // Each <video> carries data-clip-start/data-clip-end attributes set by
+          // VideoLayer.tsx; we calculate targetTime = clipStart + blockElapsed.
+          const blockElapsed = time - blockStartTime;
+          const videoSeekPromises: Promise<void>[] = [];
+          const activeBlockEl = root.querySelector('.doc-player__block--active');
+          if (activeBlockEl) {
+            const videos = activeBlockEl.querySelectorAll('video[data-clip-start]');
+            videos.forEach((el) => {
               const video = el as HTMLVideoElement;
-              const absStart = parseFloat(video.dataset.absStart || '0');
-              const absEnd = parseFloat(video.dataset.absEnd || '0');
-              const sourceIn = parseFloat(video.dataset.sourceIn || '0');
+              const clipStart = parseFloat(video.dataset.clipStart || '0');
+              const clipEnd = parseFloat(video.dataset.clipEnd || '0');
+              // Honor the per-clip startAt offset: before it, hold at the
+              // in-point; after, advance by (blockElapsed - startAt).
+              const startAt = parseFloat(video.dataset.startAt || '0');
+              const targetTime = Math.min(clipStart + Math.max(0, blockElapsed - startAt), clipEnd);
+
               video.pause();
-              if (time < absStart || time >= absEnd) return;
-              const targetTime = sourceIn + (time - absStart);
               video.currentTime = targetTime;
+
               videoSeekPromises.push(
                 new Promise<void>((r) => {
                   if (Math.abs(video.currentTime - targetTime) < 0.1) {
                     r();
                   } else {
                     video.addEventListener('seeked', () => r(), { once: true });
-                    setTimeout(r, 200);
+                    setTimeout(r, 200); // Fallback if seeked never fires
                   }
                 }),
               );
             });
+          }
 
-            // Wait for video seeks + one more frame for the browser to render
-            Promise.all(videoSeekPromises).then(() => {
-              requestAnimationFrame(() => resolve());
-            });
+          // Seek player-level scheduled videos (document-spanning clips
+          // rendered by MediaClipLayer, outside any single block). Each
+          // carries data-abs-start/data-abs-end/data-source-in.
+          root.querySelectorAll('video[data-clip-id]').forEach((el) => {
+            const video = el as HTMLVideoElement;
+            const absStart = parseFloat(video.dataset.absStart || '0');
+            const absEnd = parseFloat(video.dataset.absEnd || '0');
+            const sourceIn = parseFloat(video.dataset.sourceIn || '0');
+            video.pause();
+            if (time < absStart || time >= absEnd) return;
+            const targetTime = sourceIn + (time - absStart);
+            video.currentTime = targetTime;
+            videoSeekPromises.push(
+              new Promise<void>((r) => {
+                if (Math.abs(video.currentTime - targetTime) < 0.1) {
+                  r();
+                } else {
+                  video.addEventListener('seeked', () => r(), { once: true });
+                  setTimeout(r, 200);
+                }
+              }),
+            );
+          });
+
+          // Wait for video seeks + one more frame for the browser to render
+          Promise.all(videoSeekPromises).then(() => {
+            requestAnimationFrame(() => resolve());
           });
         });
-      };
-      w.getDuration = () => {
-        // The larger of the audio/block timeline and any media that spills
-        // past the last block (block-clip spillover or document-spanning
-        // media), so frame capture covers the full tail.
-        const mediaDuration = getDocPlaybackDuration(doc);
-        if (totalDuration > 0) return Math.max(totalDuration, mediaDuration);
-        return mediaDuration;
-      };
-      // Expose block metadata for testing -- allows tests to find specific templates
-      w.getBlocks = () =>
-        expandedBlocks.map((s: Block) => ({
-          id: s.id,
-          template: (s as DocBlock).template ?? 'raw',
-          startTime: s.startTime,
-          duration: s.duration,
-        }));
-      // Audio segment info for video production -- returns the actual files in composition order
-      w.getAudioSegments = () =>
-        doc.audio.segments.map((seg) => ({
-          src: seg.src,
-          name: seg.name,
-          duration: seg.duration,
-          startTime: seg.startTime,
-        }));
-      // Caption phrases for SRT/subtitle export
-      w.getCaptions = () =>
-        doc.captions?.phrases?.map((p) => ({
-          text: p.text,
-          startTime: p.startTime,
-          endTime: p.endTime,
-        })) || [];
-      // Chapter markers for YouTube timestamps -- uses segment titles from sectionHeader blocks
-      w.getChapters = () => {
-        const titleMap = buildSegmentTitleMap(doc);
-        return doc.audio.segments.map((seg, i) => ({
-          title: titleMap.get(i) || seg.name,
-          startTime: seg.startTime,
-          duration: seg.duration,
-        }));
-      };
-      // Cover block control for video pre-roll -- force-show or hide the cover block
-      w.showCover = () => {
-        setCoverForced(true);
-        return new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
-      };
-      w.hideCover = () => {
-        setCoverForced(false);
-        return new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
-      };
-      w.hasCoverBlock = () => !!coverBlock;
-
-      const api: SquisqRenderAPI = {
-        seekTo: w.seekTo,
-        getDuration: w.getDuration,
-        getBlocks: w.getBlocks,
-        getAudioSegments: w.getAudioSegments,
-        getCaptions: w.getCaptions,
-        getChapters: w.getChapters,
-        showCover: w.showCover,
-        hideCover: w.hideCover,
-        hasCoverBlock: w.hasCoverBlock,
-      };
-      const registry = { ...(w.squisqPlayers ?? {}), [playerId]: api };
-      w.squisqPlayers = registry;
-      const activeId = w.squisqActivePlayerId;
-      if (!activeId || !registry[activeId]) {
-        w.squisqActivePlayerId = playerId;
-      }
-      // Keep the original Playwright API as a compatibility alias for one
-      // explicitly selected instance, while every player remains addressable
-      // through `window.squisqPlayers[playerId]`.
-      Object.assign(w, registry[w.squisqActivePlayerId!]);
-    }
-    return () => {
-      if (typeof window !== 'undefined') {
-        const w = window as SquisqWindow;
-        const registry = { ...(w.squisqPlayers ?? {}) };
-        delete registry[playerId];
-        w.squisqPlayers = registry;
-        if (w.squisqActivePlayerId === playerId) {
-          const nextId = Object.keys(registry)[0];
-          w.squisqActivePlayerId = nextId;
-          if (nextId) {
-            Object.assign(w, registry[nextId]);
-          } else {
-            delete w.seekTo;
-            delete w.getDuration;
-            delete w.getBlocks;
-            delete w.getAudioSegments;
-            delete w.getCaptions;
-            delete w.getChapters;
-            delete w.showCover;
-            delete w.hideCover;
-            delete w.hasCoverBlock;
-            delete w.squisqActivePlayerId;
-          }
-        }
-      }
+      });
     };
-  }, [renderMode, isDebugMode, seekTo, totalDuration, expandedBlocks, coverBlock, doc, playerId]);
+    const getDuration = () => {
+      // The larger of the audio/block timeline and any media that spills
+      // past the last block (block-clip spillover or document-spanning
+      // media), so frame capture covers the full tail.
+      const mediaDuration = getDocPlaybackDuration(doc);
+      if (totalDuration > 0) return Math.max(totalDuration, mediaDuration);
+      return mediaDuration;
+    };
+    // Expose block metadata for testing -- allows tests to find specific templates
+    const getBlocks = () =>
+      expandedBlocks.map((s: Block) => ({
+        id: s.id,
+        template: (s as DocBlock).template ?? 'raw',
+        startTime: s.startTime,
+        duration: s.duration,
+      }));
+    // Audio segment info for video production -- returns the actual files in composition order
+    const getAudioSegments = () =>
+      doc.audio.segments.map((seg) => ({
+        src: seg.src,
+        name: seg.name,
+        duration: seg.duration,
+        startTime: seg.startTime,
+      }));
+    // Caption phrases for SRT/subtitle export
+    const getCaptions = () =>
+      doc.captions?.phrases?.map((p) => ({
+        text: p.text,
+        startTime: p.startTime,
+        endTime: p.endTime,
+      })) || [];
+    // Chapter markers for YouTube timestamps -- uses segment titles from sectionHeader blocks
+    const getChapters = () => {
+      const titleMap = buildSegmentTitleMap(doc);
+      return doc.audio.segments.map((seg, i) => ({
+        title: titleMap.get(i) || seg.name,
+        startTime: seg.startTime,
+        duration: seg.duration,
+      }));
+    };
+    // Cover block control for video pre-roll -- force-show or hide the cover block
+    const showCover = () => {
+      setCoverForced(true);
+      return new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+    };
+    const hideCover = () => {
+      setCoverForced(false);
+      return new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+    };
+    const hasCoverBlock = () => !!coverBlock;
+
+    const api: SquisqRenderAPI = {
+      seekTo: renderSeekTo,
+      getDuration,
+      getBlocks,
+      getAudioSegments,
+      getCaptions,
+      getChapters,
+      showCover,
+      hideCover,
+      hasCoverBlock,
+    };
+    liveRenderAPIRef.current = api;
+
+    return () => {
+      if (liveRenderAPIRef.current === api) liveRenderAPIRef.current = null;
+    };
+  }, [renderMode, isDebugMode, seekTo, totalDuration, expandedBlocks, coverBlock, doc]);
+
+  // Publish/clean up only when the host callback or API availability changes;
+  // ordinary playback state changes update the implementation ref above
+  // without replacing the object consumers already hold.
+  useEffect(() => {
+    if ((!renderMode && !isDebugMode) || !containerRef.current) {
+      onRenderAPIReady?.(null);
+      return;
+    }
+    onRenderAPIReady?.(stableRenderAPI);
+    return () => onRenderAPIReady?.(null);
+  }, [renderMode, isDebugMode, onRenderAPIReady, stableRenderAPI]);
 
   // Caption mode state: cycles through off → standard → social → off
   // The captionStyle prop sets the default active style; captionsEnabledProp

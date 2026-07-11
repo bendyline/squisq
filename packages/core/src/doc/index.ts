@@ -15,8 +15,6 @@ export {
 export type { MarkdownToDocOptions } from './markdownToDoc.js';
 export { docToMarkdown } from './docToMarkdown.js';
 export {
-  encodeLayersForFrontmatter,
-  decodeLayersFromFrontmatter,
   readCustomTemplatesFromFrontmatter,
   writeCustomTemplatesToFrontmatter,
   FRONTMATTER_CUSTOM_TEMPLATES_KEY,
@@ -27,8 +25,6 @@ export {
   FRONTMATTER_CUSTOM_THEMES_KEY,
 } from './customThemesFrontmatter.js';
 export { resolveThemeForDoc } from './resolveDocTheme.js';
-export { getLayers } from './getLayers.js';
-export type { RenderContext } from './getLayers.js';
 export { resolveAudioMapping, scoreTextSimilarity } from './audioMapping.js';
 export {
   isDataFence,

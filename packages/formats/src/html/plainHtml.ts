@@ -23,7 +23,7 @@ import {
   type HtmlNode,
   readFrontmatterThemeId,
 } from '@bendyline/squisq/markdown';
-import type { Theme } from '@bendyline/squisq/schemas';
+import type { Theme, ThemeRegistry } from '@bendyline/squisq/schemas';
 import { resolveFontFamily, buildGoogleFontsUrl } from '@bendyline/squisq/schemas';
 import { resolveThemeForDoc } from '@bendyline/squisq/doc';
 
@@ -68,6 +68,8 @@ export interface PlainHtmlExportOptions {
    * When both `theme` and `themeId` are provided, `theme` wins.
    */
   themeId?: string;
+  /** Explicit caller-owned registry for non-document custom themes. */
+  themeRegistry?: ThemeRegistry;
   /**
    * Optional FontAwesome CSS text to inline into the rendered page,
    * replacing the default cross-origin `<link>` to cdnjs. Required for
@@ -124,7 +126,9 @@ export function markdownDocToPlainHtml(
   // `squisq-theme` key. Stays undefined when nothing selects a theme so
   // un-themed exports render unstyled (unchanged behavior).
   const resolveId = themeId ?? readFrontmatterThemeId(doc.frontmatter);
-  const theme = options.theme ?? (resolveId ? resolveThemeForDoc(doc, resolveId) : undefined);
+  const theme =
+    options.theme ??
+    (resolveId ? resolveThemeForDoc(doc, resolveId, options.themeRegistry) : undefined);
   const ctx: RenderCtx = { images, links, htmlPolicy };
   const body = renderTopLevel(doc.children, ctx);
   const fontsLink = theme ? renderFontsLink(theme) : '';
@@ -187,7 +191,7 @@ function docUsesIcons(doc: MarkdownDocument): boolean {
  * blocks that follow them (up to the next sibling-or-higher heading).
  * Each group renders as a single `<section class="squisq-feature ...">`
  * with a media column and a text column — the plain-HTML analogue of
- * the SVG layer layout produced by `getLayers` for the same templates.
+ * the SVG layer layout produced by `materializeBlockLayers` for the same templates.
  */
 function renderTopLevel(children: MarkdownNode[], ctx: RenderCtx | undefined): string {
   const out: string[] = [];

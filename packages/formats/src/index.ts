@@ -82,6 +82,14 @@ export {
   ConversionError,
   BUILTIN_FORMAT_IDS,
 } from './registry/index.js';
+
+// Shared bounded-decompression errors/options used by DBK and OOXML imports.
+export { ZipSafetyError } from './shared/zipSafety.js';
+export type {
+  ZipSafetyLimits,
+  ZipSafetyErrorCode,
+  ZipSafetyErrorOptions,
+} from './shared/zipSafety.js';
 export type {
   FormatId,
   ConversionResult,

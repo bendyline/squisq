@@ -14,7 +14,6 @@
  * derives the `Doc` via `markdownToDoc()` when the source is markdown-shaped.
  */
 
-import './domPolyfill.js';
 import { readFile, readdir, stat } from 'node:fs/promises';
 import { join, extname } from 'node:path';
 import { parseMarkdown, stringifyMarkdown } from '@bendyline/squisq/markdown';

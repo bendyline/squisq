@@ -539,12 +539,14 @@ export function WysiwygEditor({
         viewport: previewSettings?.activeViewport ?? VIEWPORT_PRESETS.landscape,
         basePath: '/',
         mediaProvider,
+        customTemplates: docTemplates,
       };
     } catch {
       return undefined;
     }
   }, [
     badgeMenu,
+    docTemplates,
     editorSource,
     mediaProvider,
     previewSettings?.activeTheme,

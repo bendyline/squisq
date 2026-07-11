@@ -26,6 +26,12 @@ export type {
 
 // Reader
 export type { OoxmlOpenOptions } from './reader.js';
+export { ZipSafetyError } from '../shared/zipSafety.js';
+export type {
+  ZipSafetyLimits,
+  ZipSafetyErrorCode,
+  ZipSafetyErrorOptions,
+} from '../shared/zipSafety.js';
 export {
   openPackage,
   getPartRelationships,

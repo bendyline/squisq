@@ -148,10 +148,16 @@ describe('convert command', () => {
     expect(result.stderr).to.include('cannot be combined');
   });
 
-  it('errors on an unknown --format', async () => {
-    const result = await runCliAllowError('convert', FIXTURE_MD, '--format', 'bogus');
+  it('errors when the removed singular --format flag is used', async () => {
+    const result = await runCliAllowError('convert', FIXTURE_MD, '--format', 'pdf');
     expect(result.exitCode).to.equal(1);
-    expect(result.stderr).to.include('Unknown format "bogus"');
+    expect(result.stderr).to.include("unknown option '--format'");
+  });
+
+  it('errors when --formats contains no valid formats', async () => {
+    const result = await runCliAllowError('convert', FIXTURE_MD, '--formats', 'bogus');
+    expect(result.exitCode).to.equal(1);
+    expect(result.stderr).to.include('No valid formats specified');
   });
 
   it('dispatches .pptx input to a text export format', async () => {

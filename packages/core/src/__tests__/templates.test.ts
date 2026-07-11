@@ -1,6 +1,5 @@
 import { describe, it, expect } from 'vitest';
 import {
-  expandTemplateBlock,
   expandDocBlocks,
   getAvailableTemplates,
   hasTemplate,
@@ -12,9 +11,38 @@ import {
 import type { TemplateBlock } from '../schemas/BlockTemplates';
 import type { Block, Layer, TextLayer } from '../schemas/Doc';
 import type { RuntimeTemplateRegistry } from '../doc/templates/index';
-import { getLayers } from '../doc/getLayers';
+import { materializeBlockLayersWithRuntime } from '../doc/materializeBlockLayers';
+import { materializeLayers } from './materializeTestUtils';
 import { markdownToDoc } from '../doc/markdownToDoc';
 import { parseMarkdown } from '../markdown/parse';
+
+function materializeTemplateForTest(
+  block: TemplateBlock,
+  context: ReturnType<typeof createTemplateContext>,
+  registry: RuntimeTemplateRegistry = templateRegistry as unknown as RuntimeTemplateRegistry,
+): Block {
+  const { layers } = materializeBlockLayersWithRuntime(
+    block,
+    {
+      theme: context.theme,
+      viewport: context.viewport,
+      persistentLayers: false,
+      blockIndex: context.blockIndex,
+      totalBlocks: context.totalBlocks,
+      failureMode: 'empty',
+    },
+    { registry, templateContext: context, applyRenderStyle: false },
+  );
+  return {
+    id: block.id,
+    startTime: 0,
+    duration: block.duration,
+    audioSegment: block.audioSegment,
+    ...(layers.length > 0 ? { layers } : {}),
+    transition: block.transition,
+    template: block.template,
+  };
+}
 
 describe('templateRegistry', () => {
   it('contains all expected templates', () => {
@@ -67,7 +95,7 @@ describe('hasTemplate', () => {
   });
 });
 
-describe('expandTemplateBlock', () => {
+describe('canonical template materialization', () => {
   it('expands titleSlide template into layers', () => {
     const block: TemplateBlock = {
       template: 'title',
@@ -78,7 +106,7 @@ describe('expandTemplateBlock', () => {
       subtitle: 'Test Subtitle',
     };
     const context = createTemplateContext(DEFAULT_THEME, 0, 5, VIEWPORT_PRESETS.landscape);
-    const result = expandTemplateBlock(block, context);
+    const result = materializeTemplateForTest(block, context);
 
     expect(result.id).toBe('title-1');
     expect(result.duration).toBe(10);
@@ -98,7 +126,7 @@ describe('expandTemplateBlock', () => {
       body: 'I love building software platforms.',
     };
     const context = createTemplateContext(DEFAULT_THEME, 0, 1, VIEWPORT_PRESETS.landscape);
-    const result = expandTemplateBlock(block, context);
+    const result = materializeTemplateForTest(block, context);
     const layers = result.layers ?? [];
     const imageLayer = layers.find((l) => l.type === 'image');
     expect(imageLayer).toBeDefined();
@@ -131,7 +159,7 @@ describe('expandTemplateBlock', () => {
       title: 'Sized',
     };
     const context = createTemplateContext(DEFAULT_THEME, 0, 1, VIEWPORT_PRESETS.landscape);
-    const result = expandTemplateBlock(block, context);
+    const result = materializeTemplateForTest(block, context);
     const imageLayer = (result.layers ?? []).find((l) => l.type === 'image');
     expect(imageLayer).toBeDefined();
     expect((imageLayer!.content as { fit?: string }).fit).toBe('contain');
@@ -154,7 +182,7 @@ describe('expandTemplateBlock', () => {
       body: 'A list of things.',
     };
     const context = createTemplateContext(DEFAULT_THEME, 0, 1, VIEWPORT_PRESETS.landscape);
-    const result = expandTemplateBlock(block, context);
+    const result = materializeTemplateForTest(block, context);
     const layers = result.layers ?? [];
     const imageLayer = layers.find((l) => l.type === 'image');
     expect(imageLayer).toBeDefined();
@@ -180,7 +208,7 @@ describe('expandTemplateBlock', () => {
       description: 'drop in salmon',
     };
     const context = createTemplateContext(DEFAULT_THEME, 0, 5, VIEWPORT_PRESETS.landscape);
-    const result = expandTemplateBlock(block, context);
+    const result = materializeTemplateForTest(block, context);
 
     expect((result.layers ?? []).length).toBeGreaterThan(0);
     // Should have at least a shape background + text layers
@@ -196,7 +224,7 @@ describe('expandTemplateBlock', () => {
       audioSegment: 0,
     } as unknown as TemplateBlock;
     const context = createTemplateContext(DEFAULT_THEME, 0, 1, VIEWPORT_PRESETS.landscape);
-    const result = expandTemplateBlock(block, context);
+    const result = materializeTemplateForTest(block, context);
     expect(result.layers ?? []).toEqual([]);
   });
 
@@ -242,7 +270,7 @@ describe('expandTemplateBlock', () => {
         leftValue: 50,
         rightValue: 50,
       } as unknown as TemplateBlock;
-      const result = expandTemplateBlock(block, context);
+      const result = materializeTemplateForTest(block, context);
       expect(result.id).toBe(`test-${name}`);
       expect(result.layers ?? []).toBeInstanceOf(Array);
       // Each template should produce at least 1 layer
@@ -266,7 +294,7 @@ describe('expandTemplateBlock', () => {
     };
 
     const context = createTemplateContext(DEFAULT_THEME, 0, 10, VIEWPORT_PRESETS.landscape);
-    const result = expandTemplateBlock(block, context);
+    const result = materializeTemplateForTest(block, context);
     const layers = result.layers ?? [];
     const captionLayer = layers.find(
       (layer): layer is TextLayer => layer.type === 'text' && layer.id === 'caption',
@@ -302,10 +330,10 @@ describe('expandTemplateBlock', () => {
     };
 
     const context = createTemplateContext(DEFAULT_THEME, 0, 10, VIEWPORT_PRESETS.landscape);
-    const imageCaption = (expandTemplateBlock(imageBlock, context).layers ?? []).find(
+    const imageCaption = (materializeTemplateForTest(imageBlock, context).layers ?? []).find(
       (layer): layer is TextLayer => layer.type === 'text' && layer.id === 'caption',
     );
-    const videoCaption = (expandTemplateBlock(videoBlock, context).layers ?? []).find(
+    const videoCaption = (materializeTemplateForTest(videoBlock, context).layers ?? []).find(
       (layer): layer is TextLayer => layer.type === 'text' && layer.id === 'caption',
     );
 
@@ -430,8 +458,12 @@ describe('expandDocBlocks', () => {
         return [sharedLayer];
       },
     };
-    const first = expandTemplateBlock(source, createTemplateContext(DEFAULT_THEME, 0, 1), registry);
-    const second = expandTemplateBlock(
+    const first = materializeTemplateForTest(
+      source,
+      createTemplateContext(DEFAULT_THEME, 0, 1),
+      registry,
+    );
+    const second = materializeTemplateForTest(
       source,
       createTemplateContext(DEFAULT_THEME, 0, 1),
       registry,
@@ -609,7 +641,7 @@ describe('DEFAULT_THEME', () => {
   });
 });
 
-describe('inline-param coercion → getLayers', () => {
+describe('inline-param coercion → materializeBlockLayers', () => {
   function firstBlock(md: string) {
     return markdownToDoc(parseMarkdown(md), { generateCoverBlock: false }).blocks[0];
   }
@@ -623,7 +655,7 @@ describe('inline-param coercion → getLayers', () => {
       mapStyle: 'road',
     });
 
-    const layers = getLayers(block, {});
+    const layers = materializeLayers(block, {});
     const mapLayer = layers.find((l) => l.type === 'map');
     expect(mapLayer).toBeDefined();
     // Coerced center/zoom flow into the map layer's content — not empty strings.
@@ -634,7 +666,7 @@ describe('inline-param coercion → getLayers', () => {
 
   it('renders a twoColumn from pure-inline labeled-pair annotation', () => {
     const block = firstBlock('# Coffee {[twoColumn left="Espresso|Bold" right="Filter|Smooth"]}\n');
-    const layers = getLayers(block, {});
+    const layers = materializeLayers(block, {});
     // Guard requires both labels — a non-empty layer set proves coercion worked.
     expect(layers.length).toBeGreaterThan(0);
     const texts = layers
@@ -659,7 +691,7 @@ describe('shared template materialization', () => {
       subtitle: 'Two orchestration modes',
     };
 
-    const onDemand = getLayers(block, { theme: DEFAULT_THEME });
+    const onDemand = materializeLayers(block, { theme: DEFAULT_THEME });
     const [expanded] = expandDocBlocks([block], { theme: DEFAULT_THEME });
 
     expect(expanded.layers).toEqual(onDemand);

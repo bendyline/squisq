@@ -1,8 +1,9 @@
 /**
  * Media-clip timing model.
  *
- * An additive layer on top of the legacy sequential `Doc.audio.segments[]`
- * narration track. A {@link MediaClip} is a piece of audio or video whose
+ * An additive layer on top of the simple sequential `Doc.audio.segments[]`
+ * narration track, which remains first-class. A {@link MediaClip} is a piece
+ * of audio or video whose
  * timing is expressed *relative to its parent block* (or the whole document),
  * with an optional `startAt` offset and an optional `spillover` past the
  * block's end. {@link resolveMediaSchedule} flattens these into absolute,

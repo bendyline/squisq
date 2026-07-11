@@ -50,16 +50,9 @@ function isFullBleedCoverMedia(layer: Layer): boolean {
   return fit === undefined || fit === 'cover';
 }
 
-/**
- * Whether the theme asks for ambient Ken Burns on otherwise-static imagery.
- * `defaultImageAnimation: 'slowZoom'` is treated as an alias for the boolean
- * (that's what themes authoring it were reaching for).
- */
+/** Whether the theme asks for ambient Ken Burns on otherwise-static imagery. */
 export function themeWantsAmbientMotion(theme: Theme): boolean {
-  return (
-    theme.renderStyle.ambientMotion === true ||
-    theme.renderStyle.defaultImageAnimation === 'slowZoom'
-  );
+  return theme.renderStyle.ambientMotion === true;
 }
 
 /**

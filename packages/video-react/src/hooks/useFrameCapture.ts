@@ -16,7 +16,7 @@ import { useRef, useCallback, useMemo } from 'react';
 import type { Doc, MediaProvider } from '@bendyline/squisq/schemas';
 import type { RenderHtmlOptions } from '@bendyline/squisq-video';
 import { DocPlayer, MediaContext } from '@bendyline/squisq-react';
-import type { SquisqWindow, CaptionMode, CaptionStyle } from '@bendyline/squisq-react';
+import type { SquisqRenderAPI, CaptionMode, CaptionStyle } from '@bendyline/squisq-react';
 import html2canvas from 'html2canvas';
 
 export interface FrameCaptureHandle {
@@ -95,6 +95,7 @@ function createInlineProvider(images: Map<string, ArrayBuffer>): MediaProvider {
 export function useFrameCapture(): FrameCaptureHandle {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const rootRef = useRef<Root | null>(null);
+  const renderAPIRef = useRef<SquisqRenderAPI | null>(null);
   const dimensionsRef = useRef<{ width: number; height: number }>({ width: 1920, height: 1080 });
 
   const init = useCallback(
@@ -111,6 +112,7 @@ export function useFrameCapture(): FrameCaptureHandle {
         const oldContainer = containerRef.current;
         rootRef.current = null;
         containerRef.current = null;
+        renderAPIRef.current = null;
         await new Promise<void>((resolve) => {
           setTimeout(() => {
             if (oldRoot) oldRoot.unmount();
@@ -150,6 +152,10 @@ export function useFrameCapture(): FrameCaptureHandle {
       // Derive caption props from captionMode
       const captionsEnabled = captionMode !== undefined && captionMode !== 'off';
       const captionStyle: CaptionStyle = captionMode === 'social' ? 'social' : 'standard';
+      let resolveRenderAPI!: (api: SquisqRenderAPI) => void;
+      const renderAPIReady = new Promise<SquisqRenderAPI>((resolve) => {
+        resolveRenderAPI = resolve;
+      });
 
       const playerElement = createElement(DocPlayer, {
         doc,
@@ -160,6 +166,11 @@ export function useFrameCapture(): FrameCaptureHandle {
         forceViewport: { width, height, name: 'export' },
         captionsEnabled,
         captionStyle,
+        onRenderAPIReady: (api: SquisqRenderAPI | null) => {
+          if (containerRef.current !== container) return;
+          renderAPIRef.current = api;
+          if (api) resolveRenderAPI(api);
+        },
       });
 
       // Defer rendering to the next microtask to avoid "synchronously unmount
@@ -173,12 +184,12 @@ export function useFrameCapture(): FrameCaptureHandle {
         root.render(playerElement);
       }
 
-      // Wait for the render API to appear on window
+      // Wait for this exact player's instance API.
       return new Promise<number>((resolve, reject) => {
         const timeout = setTimeout(() => {
-          const w = window as SquisqWindow;
-          const hasSeek = typeof w.seekTo === 'function';
-          const hasDur = typeof w.getDuration === 'function';
+          const api = renderAPIRef.current;
+          const hasSeek = typeof api?.seekTo === 'function';
+          const hasDur = typeof api?.getDuration === 'function';
           const rootEl = containerRef.current?.querySelector('#squisq-capture-root');
           const hasPlayer = rootEl ? rootEl.querySelector('.doc-player') !== null : false;
           reject(
@@ -189,19 +200,10 @@ export function useFrameCapture(): FrameCaptureHandle {
           );
         }, 15000);
 
-        const checkApi = () => {
-          const w = window as SquisqWindow;
-          if (typeof w.getDuration === 'function' && typeof w.seekTo === 'function') {
-            clearTimeout(timeout);
-            const duration = w.getDuration();
-            resolve(duration);
-          } else {
-            requestAnimationFrame(checkApi);
-          }
-        };
-
-        // Give React time to mount and run useEffects
-        setTimeout(checkApi, 500);
+        void renderAPIReady.then((api) => {
+          clearTimeout(timeout);
+          resolve(api.getDuration());
+        });
       });
     },
     [],
@@ -209,15 +211,15 @@ export function useFrameCapture(): FrameCaptureHandle {
 
   const captureFrame = useCallback(async (time: number): Promise<ImageBitmap> => {
     const container = containerRef.current;
-    const w = window as SquisqWindow;
-    if (!container || typeof w.seekTo !== 'function') {
+    const api = renderAPIRef.current;
+    if (!container || !api) {
       throw new Error('Frame capture not initialized — call init() first');
     }
 
     const { width, height } = dimensionsRef.current;
 
     // Seek the player to the target time
-    await w.seekTo(time);
+    await api.seekTo(time);
 
     // Wait for the DOM to update after seek
     await new Promise<void>((resolve) =>
@@ -255,6 +257,7 @@ export function useFrameCapture(): FrameCaptureHandle {
       containerRef.current.remove();
       containerRef.current = null;
     }
+    renderAPIRef.current = null;
   }, []);
 
   // Return a stable object to prevent useEffect cleanup loops

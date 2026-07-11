@@ -187,14 +187,55 @@ const xlsxBytes = await markdownDocToXlsx(markdownDoc);
 ### Container ZIP
 
 ```ts
-import { containerToZip, zipToContainer } from '@bendyline/squisq-formats/container';
+import {
+  containerToZip,
+  zipToContainer,
+  ZipSafetyError,
+} from '@bendyline/squisq-formats/container';
 
 // ContentContainer → ZIP Blob (paths preserved)
 const zipBlob = await containerToZip(container);
 
 // ZIP → MemoryContentContainer (directories skipped, path traversal rejected)
-const container2 = await zipToContainer(zipData);
+const container2 = await zipToContainer(zipData, {
+  maxUncompressedBytes: 128 * 1024 * 1024,
+});
 ```
+
+### Archive import safety
+
+Every production ZIP readâ€”container ZIP/DBK sniffing and OOXML-backed DOCX,
+PPTX, and XLSX importâ€”uses one JSZip-backed bounded read session. The session
+checks paths and central-directory metadata before inflation, then consumes
+JSZip's incremental member stream while sharing an actual emitted-byte budget
+across all members. Repeated OOXML part reads are cached and charged once;
+concurrent streams are all paused on the first failure. `[Content_Types].xml`
+is capped at 1 MiB and each relationship part at 4 MiB before DOM parsing.
+`OoxmlPackage` is opaque: create it with `openPackage()` and access parts through
+the bounded getters rather than reaching into a raw JSZip archive.
+
+`ZipSafetyLimits` is accepted by `zipToContainer` and inherited by the OOXML
+import option types:
+
+| Field                       | Default                | Meaning                                              |
+| --------------------------- | ---------------------- | ---------------------------------------------------- |
+| `maxEntries`                | `10_000`               | Total central records, including directory records   |
+| `maxEntryUncompressedBytes` | `maxUncompressedBytes` | Maximum emitted bytes retained for one member        |
+| `maxUncompressedBytes`      | `512 * 1024 * 1024`    | Aggregate emitted bytes across the archive           |
+| `maxCompressionRatio`       | `1_000`                | Maximum uncompressed/compressed ratio for one member |
+
+Failures are `ZipSafetyError` instances, exported from the package root and
+the `/container` and `/ooxml` subpaths. They expose `code`, and where relevant
+`path`, `limit`, `actual`, and `cause`. Stable codes are `invalid-limit`,
+`invalid-archive`, `unsafe-path`, `invalid-entry-metadata`,
+`too-many-entries`, `entry-too-large`, `archive-too-large`,
+`compression-ratio-exceeded`, `size-mismatch`, `crc-mismatch`, and
+`decompression-failed`.
+
+JSZip's public pause is cooperative: it prevents the next compressed-input
+tick, but pako may finish producing chunks already in the current synchronous
+tick. Once a limit fails, Squisq discards those chunks immediatelyâ€”they are not
+retained, CRC-counted, or written to a container.
 
 ### Doc-level Convenience Functions
 
@@ -222,6 +263,11 @@ const result = await convert(
 );
 // result.bytes, result.mimeType, result.suggestedFilename === 'greeting.docx'
 ```
+
+`ConvertOptions` also accepts `themeRegistry` and `transformRegistry` for
+caller-owned custom definitions. `transformStyle` may be either a style id or
+a call-scoped `TransformStyleConfig`; these options never mutate process-global
+state.
 
 Sources are `{ kind: 'bytes' | 'markdown' | 'doc', … }`; byte sources are format-sniffed by magic bytes + extension (pass `from` to skip). Failures throw a structured `ConversionError` with a stable `code` (`unknown-format`, `unsupported-input`, `unsupported-output`, `invalid-input`, `missing-dependency`, `conversion-failed`) plus a `hint`.
 

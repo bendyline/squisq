@@ -13,7 +13,7 @@
  * - Headings from the block hierarchy rendered as HTML headings
  * - Body content rendered via MarkdownRenderer
  * - Template-annotated sections show an SVG card (BlockRenderer)
- *   using `getLayers()` for on-demand layer computation
+ *   using `materializeBlockLayers()` for on-demand layer computation
  * - Blocks are rendered recursively to preserve the heading hierarchy
  */
 
@@ -29,13 +29,12 @@ import {
 } from '@bendyline/squisq/schemas';
 import { VIEWPORT_PRESETS } from '@bendyline/squisq/schemas';
 import {
-  getLayers,
-  hasTemplate,
+  materializeBlockLayers,
   markdownToDoc,
   DEFAULT_THEME,
   deriveTemplateInputs,
 } from '@bendyline/squisq/doc';
-import type { RenderContext } from '@bendyline/squisq/doc';
+import type { MaterializeBlockLayersOptions } from '@bendyline/squisq/doc';
 import { extractPlainText, parseMarkdown } from '@bendyline/squisq/markdown';
 import { BlockRenderer } from './BlockRenderer';
 import { MarkdownRenderer } from './MarkdownRenderer';
@@ -93,37 +92,17 @@ export type ImageDisplayMode = 'inline' | 'thumbnail';
 
 // ── Helpers ────────────────────────────────────────────────────────
 
-// Unknown template names we've already warned about (module-level so each
-// name warns at most once per page, not once per render).
-const warnedUnknownTemplates = new Set<string>();
-
 /**
  * Determine whether a block has a template annotation that should be
- * rendered as a visual SVG card. A block is "annotated" when:
- * 1. Its sourceHeading has a templateAnnotation, AND
- * 2. The annotated template exists in the registry
- *
- * Blocks annotated with a template that is NOT in the registry fall back
- * to plain markdown rendering, with a one-shot dev-visible warning per
- * unknown template name.
+ * rendered as a visual SVG card. Unknown templates remain annotated so the
+ * materializer can return a visible fallback and structured diagnostic.
  */
 function isAnnotatedBlock(block: Block): boolean {
-  const annotation = block.sourceHeading?.templateAnnotation;
-  if (!annotation?.template) return false;
-  if (!hasTemplate(annotation.template)) {
-    if (!warnedUnknownTemplates.has(annotation.template)) {
-      warnedUnknownTemplates.add(annotation.template);
-      console.warn(
-        `[squisq] Unknown template "${annotation.template}" — rendering the block as plain markdown.`,
-      );
-    }
-    return false;
-  }
-  return true;
+  return !!block.sourceHeading?.templateAnnotation?.template;
 }
 
 /**
- * Count total blocks in a hierarchy (for RenderContext.totalBlocks).
+ * Count total blocks in a hierarchy for the materialization context.
  */
 function countAll(blocks: Block[]): number {
   let count = 0;
@@ -140,7 +119,7 @@ interface BlockSectionProps {
   block: Block;
   basePath: string;
   viewport: ViewportConfig;
-  renderContext: RenderContext;
+  renderContext: MaterializeBlockLayersOptions;
   blockIndex: number;
   blockIndices: ReadonlyMap<Block, number>;
 }
@@ -174,6 +153,8 @@ function BlockSection({
       duration: 1,
       audioSegment: 0,
       title: headingText,
+      contents: block.contents,
+      children: block.children,
       ...(deriveTemplateInputs(
         annotation.template ?? 'sectionHeader',
         headingText,
@@ -186,12 +167,11 @@ function BlockSection({
       ...block.templateOverrides,
     };
 
-    // Compute layers via getLayers
-    const ctx: RenderContext = {
+    const ctx: MaterializeBlockLayersOptions = {
       ...renderContext,
       blockIndex,
     };
-    const layers = getLayers(templateBlock as unknown as DocBlock, ctx);
+    const { layers } = materializeBlockLayers(templateBlock as unknown as DocBlock, ctx);
 
     return {
       ...block,
@@ -316,7 +296,7 @@ export function LinearDocView({
   const autoSurface = useAutoSurface(surface === 'auto');
   const resolvedSurface: SurfaceScheme | undefined = surface === 'auto' ? autoSurface : surface;
 
-  const renderContext: RenderContext = useMemo(() => {
+  const renderContext: MaterializeBlockLayersOptions = useMemo(() => {
     const baseTheme = theme ?? DEFAULT_THEME;
     const effectiveTheme = resolvedSurface ? applySurface(baseTheme, resolvedSurface) : baseTheme;
     return {
@@ -326,8 +306,9 @@ export function LinearDocView({
       // Theme atmosphere (vignette/grain/gradient persistent layers) shows
       // on the inline template cards so they match the player's look.
       persistentLayers: effectiveTheme.persistentLayers,
+      customTemplates: resolvedDoc?.customTemplates,
     };
-  }, [activeViewport, totalBlocks, theme, resolvedSurface]);
+  }, [activeViewport, resolvedDoc?.customTemplates, totalBlocks, theme, resolvedSurface]);
 
   const activeTheme = renderContext.theme!;
 

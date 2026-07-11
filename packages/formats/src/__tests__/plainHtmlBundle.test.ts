@@ -10,6 +10,7 @@
 
 import { describe, it, expect } from 'vitest';
 import JSZip from 'jszip';
+import { compileTheme, createThemeRegistry } from '@bendyline/squisq/schemas';
 import { markdownDocsToPlainHtmlBundle } from '../html/plainHtmlBundle';
 
 /** Helper to read a Blob as Uint8Array (works in jsdom). */
@@ -56,6 +57,23 @@ describe('markdownDocsToPlainHtmlBundle', () => {
     expect(paths).toEqual(['home.html']);
     const html = await readZipPath(blob, 'home.html');
     expect(html).toContain('<h1>Home</h1>');
+  });
+
+  it('resolves a caller-owned theme without process-global registration', async () => {
+    const theme = compileTheme({
+      id: 'tenant-brand',
+      name: 'Tenant Brand',
+      seedColors: { primary: '#123456' },
+    });
+    const c = makeContainer({ 'home.md': '# Home' });
+    const blob = await markdownDocsToPlainHtmlBundle({
+      entryPath: 'home.md',
+      themeId: theme.id,
+      themeRegistry: createThemeRegistry([theme]),
+      ...c,
+    });
+
+    expect(await readZipPath(blob, 'home.html')).toContain('--plain-primary: #123456');
   });
 
   it('follows a linear chain home.md → resume.md and bundles both', async () => {
