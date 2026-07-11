@@ -15,11 +15,12 @@ import {
   inferDocumentTitle,
   readFrontmatterThemeId,
 } from '@bendyline/squisq/markdown';
-import { markdownToDoc } from '@bendyline/squisq/doc';
+import { markdownToDoc, resolveAudioMapping } from '@bendyline/squisq/doc';
+import type { Doc } from '@bendyline/squisq/schemas';
 import { VideoExportModal } from '@bendyline/squisq-video-react';
 import { ExportConfigModal } from './ExportConfigModal';
 import { SITE_FFMPEG_WASM_CONFIG } from './ffmpegWasmConfig';
-import { collectImagesForHtmlExport } from './exportHelpers';
+import { collectAudioForHtmlExport, collectImagesForHtmlExport } from './exportHelpers';
 import { MemoryContentContainer } from '@bendyline/squisq/storage';
 import type { ContentContainer } from '@bendyline/squisq/storage';
 import type { MediaProvider } from '@bendyline/squisq/schemas';
@@ -156,9 +157,36 @@ export function FileToolbar({
   const [busy, setBusy] = useState(false);
   const [showVideoModal, setShowVideoModal] = useState(false);
   const [showExportModal, setShowExportModal] = useState(false);
+  const [videoExportDoc, setVideoExportDoc] = useState<Doc | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const playerScriptRef = useRef<string | null>(null);
+
+  // The video exporter needs the audio-resolved doc (narration timing +
+  // segment mapping ride the workspace container, asynchronously).
+  useEffect(() => {
+    if (!showVideoModal) {
+      setVideoExportDoc(null);
+      return;
+    }
+    let cancelled = false;
+    const parsed = markdownToDoc(parseMarkdown(currentSource));
+    if (!workspaceContainer) {
+      setVideoExportDoc(parsed);
+      return;
+    }
+    resolveAudioMapping(parsed, workspaceContainer).then(
+      (resolved) => {
+        if (!cancelled) setVideoExportDoc(resolved);
+      },
+      () => {
+        if (!cancelled) setVideoExportDoc(parsed);
+      },
+    );
+    return () => {
+      cancelled = true;
+    };
+  }, [showVideoModal, currentSource, workspaceContainer]);
 
   // Close dropdown on outside click
   useEffect(() => {
@@ -255,13 +283,19 @@ export function FileToolbar({
             playerScriptRef.current = PLAYER_BUNDLE;
           }
           const mdDoc = parseMarkdown(currentSource);
-          const doc = markdownToDoc(mdDoc);
+          const parsedDoc = markdownToDoc(mdDoc);
+          // Narration timing + audio mapping ride the workspace container.
+          const doc = workspaceContainer
+            ? await resolveAudioMapping(parsedDoc, workspaceContainer)
+            : parsedDoc;
           const images = await collectImagesForHtmlExport(doc, mediaProvider);
+          const audio = await collectAudioForHtmlExport(doc, workspaceContainer);
           const themeId = readFrontmatterThemeId(mdDoc.frontmatter);
           const title = inferDocumentTitle(mdDoc);
           const options = {
             playerScript: playerScriptRef.current,
             images,
+            ...(audio ? { audio } : {}),
             mode: 'static' as const,
             title,
             themeId,
@@ -282,7 +316,7 @@ export function FileToolbar({
         setBusy(false);
       }
     },
-    [currentSource, mediaProvider],
+    [currentSource, mediaProvider, workspaceContainer],
   );
 
   // ---- Upload ----
@@ -499,9 +533,10 @@ export function FileToolbar({
       {/* Video export modal */}
       {showVideoModal &&
         playerScriptRef.current &&
+        videoExportDoc &&
         createPortal(
           <VideoExportModal
-            doc={markdownToDoc(parseMarkdown(currentSource))}
+            doc={videoExportDoc}
             playerScript={playerScriptRef.current}
             mediaProvider={mediaProvider ?? undefined}
             defaultConfig={{ ffmpegWasm: SITE_FFMPEG_WASM_CONFIG }}

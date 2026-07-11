@@ -106,7 +106,7 @@ describe('PreviewModeSwitch', () => {
       .map((button) => button.textContent)
       .filter(Boolean);
 
-    expect(labels).toEqual(['Video', 'Slideshow', 'Page', 'Document']);
+    expect(labels).toEqual(['Video', 'Slideshow', 'Page', 'Document', 'Narrate']);
 
     fireEvent.click(screen.getByRole('button', { name: 'Document' }));
     expect(screen.getByTestId('active-mode').textContent).toBe('page');
@@ -246,5 +246,47 @@ describe('PreviewToolbarControls', () => {
         Reflect.deleteProperty(HTMLElement.prototype, 'clientWidth');
       }
     }
+  });
+});
+
+describe('Narrate mode gating', () => {
+  function renderWithNarrateGate(markdown: string, allowNarrate: boolean) {
+    render(
+      <EditorProvider initialMarkdown={markdown} allowNarrate={allowNarrate}>
+        <PreviewHarness />
+      </EditorProvider>,
+    );
+  }
+
+  it('selects narrate from the switch and resolves teleprompter frontmatter aliases', async () => {
+    renderPreviewControls('# Hello');
+    fireEvent.click(screen.getByRole('button', { name: 'Narrate' }));
+    expect(screen.getByTestId('active-mode').textContent).toBe('narrate');
+
+    cleanup();
+    renderPreviewControls('---\ndisplay-mode: teleprompter\n---\n\n# Hello');
+    await waitFor(() => {
+      expect(screen.getByTestId('active-mode').textContent).toBe('narrate');
+    });
+    expect(screen.getByRole('button', { name: 'Narrate' }).getAttribute('aria-pressed')).toBe(
+      'true',
+    );
+  });
+
+  it('allowNarrate=false hides the button and clamps frontmatter-forced narrate to video', async () => {
+    renderWithNarrateGate('---\ndisplay-mode: narrate\n---\n\n# Hello', false);
+
+    expect(screen.queryByRole('button', { name: 'Narrate' })).toBeNull();
+    // Give the frontmatter parse a tick, then confirm the clamp held.
+    await waitFor(() => {
+      expect(screen.getByTestId('active-mode').textContent).toBe('video');
+    });
+  });
+
+  it('allowNarrate=true (default) honors frontmatter narrate', async () => {
+    renderWithNarrateGate('---\ndisplay-mode: narrate\n---\n\n# Hello', true);
+    await waitFor(() => {
+      expect(screen.getByTestId('active-mode').textContent).toBe('narrate');
+    });
   });
 });

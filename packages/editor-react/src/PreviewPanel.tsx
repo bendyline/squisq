@@ -18,6 +18,7 @@ import { useEditorContext } from './EditorContext';
 import { usePreviewSettings } from './PreviewControls';
 import { buildPreviewDoc } from './buildPreviewDoc';
 import { PlainHtmlPreview } from './PlainHtmlPreview';
+import { TeleprompterView } from './teleprompter/TeleprompterView';
 
 export interface PreviewPanelProps {
   /** Base path for resolving media URLs in DocPlayer */
@@ -40,7 +41,16 @@ export interface PreviewPanelProps {
  * are rendered in the main toolbar via PreviewToolbarControls.
  */
 export function PreviewPanel({ basePath = '/', className, workspaceContainer }: PreviewPanelProps) {
-  const { doc, parseError, isParsing, markdownSource, mediaRevision } = useEditorContext();
+  const {
+    doc,
+    parseError,
+    isParsing,
+    markdownSource,
+    mediaRevision,
+    setMarkdownSource,
+    bumpMediaRevision,
+    allowRecording,
+  } = useEditorContext();
   const mediaProvider = useMediaProvider();
   const {
     activeViewport,
@@ -68,18 +78,22 @@ export function PreviewPanel({ basePath = '/', className, workspaceContainer }: 
       return;
     }
 
-    let sourceDoc = doc;
-    if (activeTransformStyle) {
-      const result = applyTransform(doc, activeTransformStyle);
-      sourceDoc = result.doc;
-    }
+    // Audio resolution runs BEFORE the transform: a document-anchored
+    // narration take re-times the SOURCE blocks, and the transform's
+    // provenance (`sourceStartTime` in seconds) is derived from those
+    // times — so summarized slides land where the words are spoken.
+    const build = (sourceDoc: Doc) => {
+      const transformed = activeTransformStyle
+        ? applyTransform(sourceDoc, activeTransformStyle).doc
+        : sourceDoc;
+      return buildPreviewDoc(transformed);
+    };
 
-    // If we have a workspace container, try to resolve audio mapping before building preview
     if (workspaceContainer) {
       let cancelled = false;
-      resolveAudioMapping(sourceDoc, workspaceContainer).then(
+      resolveAudioMapping(doc, workspaceContainer).then(
         (audioDoc) => {
-          if (!cancelled) setPreviewDoc(buildPreviewDoc(audioDoc));
+          if (!cancelled) setPreviewDoc(build(audioDoc));
         },
         () => {
           // The synchronous preview below remains valid when optional audio
@@ -87,17 +101,27 @@ export function PreviewPanel({ basePath = '/', className, workspaceContainer }: 
         },
       );
       // Set an immediate preview without audio while mapping resolves
-      setPreviewDoc(buildPreviewDoc(sourceDoc));
+      setPreviewDoc(build(doc));
       return () => {
         cancelled = true;
       };
     }
 
-    setPreviewDoc(buildPreviewDoc(sourceDoc));
+    setPreviewDoc(build(doc));
   }, [doc, activeTransformStyle, workspaceContainer]);
 
-  // Status overlays for non-ready states
-  if (isParsing) {
+  // The public DisplayMode values predate the current labels: raw `page`
+  // is the plain Document preview, while raw `linear` is the styled Page view.
+  const isDocumentMode = activeDisplayMode === 'page';
+  const isPageMode = activeDisplayMode === 'linear';
+  const isNarrateMode = activeDisplayMode === 'narrate';
+
+  // Status overlays for non-ready states. Narrate is exempt: the
+  // teleprompter holds live state (mic capture, an in-flight recording,
+  // pacing position) that an unmount would destroy — e.g. saving a take
+  // rewrites the markdown, which triggers exactly this reparse. It keeps
+  // rendering the last-good doc until the new parse lands.
+  if (isParsing && !isNarrateMode) {
     return (
       <div className={`squisq-preview-status ${className || ''}`} data-testid="preview-panel">
         <p>Parsing…</p>
@@ -105,7 +129,7 @@ export function PreviewPanel({ basePath = '/', className, workspaceContainer }: 
     );
   }
 
-  if (parseError) {
+  if (parseError && !isNarrateMode) {
     return (
       <div className={`squisq-preview-status ${className || ''}`} data-testid="preview-panel">
         <h3>Parse Error</h3>
@@ -114,15 +138,11 @@ export function PreviewPanel({ basePath = '/', className, workspaceContainer }: 
     );
   }
 
-  // The public DisplayMode values predate the current labels: raw `page`
-  // is the plain Document preview, while raw `linear` is the styled Page view.
-  const isDocumentMode = activeDisplayMode === 'page';
-  const isPageMode = activeDisplayMode === 'linear';
-
-  // Document mode renders directly from markdown — it doesn't depend on the
-  // parsed Doc tree or the player preview build, so let it fall through even
-  // when those aren't ready yet.
-  if (!previewDoc && !isDocumentMode) {
+  // Document mode renders directly from markdown, and Narrate builds its
+  // script from the parsed doc (showing its own empty state) — neither
+  // depends on the player preview build, so let them fall through even
+  // when that isn't ready yet.
+  if (!previewDoc && !isDocumentMode && !isNarrateMode) {
     return (
       <div className={`squisq-preview-status ${className || ''}`} data-testid="preview-panel">
         <p>No content to preview. Start typing in the editor.</p>
@@ -130,7 +150,7 @@ export function PreviewPanel({ basePath = '/', className, workspaceContainer }: 
     );
   }
 
-  const fillsContainer = isDocumentMode || isPageMode ? 'stretch' : 'center';
+  const fillsContainer = isDocumentMode || isPageMode || isNarrateMode ? 'stretch' : 'center';
 
   return (
     <div
@@ -164,6 +184,26 @@ export function PreviewPanel({ basePath = '/', className, workspaceContainer }: 
             mediaProvider={mediaProvider}
             mediaRevision={mediaRevision}
             theme={activeTheme}
+          />
+        ) : isNarrateMode ? (
+          // Narrate consumes the UN-transformed doc: the teleprompter must
+          // show the author's actual words, not a summarized slideshow.
+          <TeleprompterView
+            doc={doc}
+            theme={activeTheme}
+            workspaceContainer={workspaceContainer ?? null}
+            basePath={basePath}
+            recording={
+              allowRecording && mediaProvider
+                ? {
+                    mediaProvider,
+                    container: workspaceContainer ?? null,
+                    markdownSource,
+                    setMarkdownSource,
+                    bumpMediaRevision,
+                  }
+                : null
+            }
           />
         ) : isPageMode ? (
           <LinearDocView

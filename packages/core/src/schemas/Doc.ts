@@ -216,6 +216,18 @@ export interface Block {
   audioSegment: number;
 
   /**
+   * Transform provenance: the source block id this block was derived
+   * from (see `BaseTemplateBlock.sourceBlockId`). Present on blocks a
+   * transform produced; lets a persisted transformed Doc keep its typed
+   * link back to the source content.
+   */
+  sourceBlockId?: string;
+  /** All source block ids when this block summarizes several. */
+  sourceBlockIds?: string[];
+  /** Char offset of the extraction inside the source block's plain text. */
+  sourceCharOffset?: number;
+
+  /**
    * Pre-computed visual layers, rendered back-to-front.
    *
    * Optional — template-derived blocks typically omit this and compute

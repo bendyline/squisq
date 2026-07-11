@@ -232,8 +232,13 @@ async function runVideo(inputPath: string, opts: VideoCommandOptions): Promise<v
   let doc: Doc = result.doc;
   if (result.markdownDoc) {
     if (opts.autoTemplates === false) {
-      const { markdownToDoc } = await import('@bendyline/squisq/doc');
-      doc = markdownToDoc(result.markdownDoc, { autoTemplates: false });
+      const { markdownToDoc, resolveAudioMapping } = await import('@bendyline/squisq/doc');
+      // Re-deriving from markdown discards readInput's audio resolution
+      // (narration timing + segment mapping) — re-run it.
+      doc = await resolveAudioMapping(
+        markdownToDoc(result.markdownDoc, { autoTemplates: false }),
+        container,
+      );
     }
   } else {
     console.error('Using pre-built Doc JSON');

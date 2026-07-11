@@ -111,6 +111,19 @@ interface BaseTemplateBlock {
    */
   sourceDuration?: number;
   /**
+   * Transform provenance: the id of the source Block this template block
+   * was derived from. Lets narration timing (and any per-source styling)
+   * be remapped onto transformed/summarized docs.
+   */
+  sourceBlockId?: string;
+  /** All source block ids when the block summarizes more than one. */
+  sourceBlockIds?: string[];
+  /**
+   * Char offset of the extraction inside the source block's plain text.
+   * Provenance only — NOT a time (see sourceStartTime for seconds).
+   */
+  sourceCharOffset?: number;
+  /**
    * Per-block override for the theme's photographic image grade
    * (`theme.style.imageTreatment`). `'none'` opts this block's imagery out;
    * a treatment type forces that grade regardless of the theme.

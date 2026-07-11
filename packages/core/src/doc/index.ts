@@ -11,6 +11,8 @@ export {
   flattenRenderableBlocks,
   countBlocks,
   getBlockDepth,
+  getBlockBodyText,
+  getPinnedBlockMeta,
 } from './markdownToDoc.js';
 export type { MarkdownToDocOptions } from './markdownToDoc.js';
 export { docToMarkdown } from './docToMarkdown.js';
@@ -26,6 +28,7 @@ export {
 } from './customThemesFrontmatter.js';
 export { resolveThemeForDoc } from './resolveDocTheme.js';
 export { resolveAudioMapping, scoreTextSimilarity } from './audioMapping.js';
+export { applyNarrationTiming, type NarrationResolution } from './applyNarrationTiming.js';
 export {
   isDataFence,
   parseDataFence,

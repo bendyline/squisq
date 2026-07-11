@@ -18,7 +18,7 @@ import { readFile, readdir, stat } from 'node:fs/promises';
 import { join, extname } from 'node:path';
 import { parseMarkdown, stringifyMarkdown } from '@bendyline/squisq/markdown';
 import type { MarkdownDocument } from '@bendyline/squisq/markdown';
-import { markdownToDoc } from '@bendyline/squisq/doc';
+import { markdownToDoc, resolveAudioMapping } from '@bendyline/squisq/doc';
 import type { Doc } from '@bendyline/squisq/schemas';
 import type { ContentContainer } from '@bendyline/squisq/storage';
 import { MemoryContentContainer } from '@bendyline/squisq/storage';
@@ -105,6 +105,19 @@ async function walkDir(root: string, prefix = ''): Promise<string[]> {
  * {@link ReadInputResult}.
  */
 export async function readInput(
+  inputPath: string,
+  options?: ReadInputOptions,
+): Promise<ReadInputResult> {
+  const result = await readInputRaw(inputPath, options);
+  // Audio rides in the container: a document-anchored narration take
+  // (`{[audio src=… anchor=document]}` + timing sidecar) re-times the
+  // block timeline, and per-block audio files map into segments — so
+  // `squisq convert`/`video` exports pace exactly like the editor preview.
+  const doc = await resolveAudioMapping(result.doc, result.container);
+  return doc === result.doc ? result : { ...result, doc };
+}
+
+async function readInputRaw(
   inputPath: string,
   options?: ReadInputOptions,
 ): Promise<ReadInputResult> {

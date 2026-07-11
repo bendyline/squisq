@@ -33,8 +33,12 @@ export type ControlsLayout = 'overlay' | 'sidebar' | 'bottom';
  *   `markdownDocToPlainHtml` export produces. No SquisqPlayer, no SVG
  *   cards — just `<h1>`/`<p>`/`<ul>` etc. inside a sandboxed iframe.
  *   Use when you want a WYSIWYG view of the simple HTML export.
+ * - `'narrate'` — Teleprompter/performance surface. DocPlayer does not
+ *   implement this mode; it is owned by the editor package
+ *   (`@bendyline/squisq-editor-react`), which renders its own
+ *   voice-paced teleprompter view for it.
  */
-export type DisplayMode = 'video' | 'slideshow' | 'linear' | 'page';
+export type DisplayMode = 'video' | 'slideshow' | 'linear' | 'page' | 'narrate';
 
 /**
  * Caption display style.

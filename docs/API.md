@@ -23,6 +23,7 @@
   - [Image Edit](#subpath-imageedit)
   - [Icons](#subpath-icons)
   - [Recommend](#subpath-recommend)
+  - [Narration](#subpath-narration)
 - [`@bendyline/squisq-react`](#bendylinesquisq-react)
 - [`@bendyline/squisq-formats`](#bendylinesquisq-formats)
 - [`@bendyline/squisq-editor-react`](#bendylinesquisq-editor-react)
@@ -1201,6 +1202,105 @@ interface RecommendationResult {
 }
 ```
 
+### Subpath: Narration
+
+**Import:** `@bendyline/squisq/narration` — the narration/teleprompter engine.
+Pure TS, zero dependencies, no DOM: audio arrives as mono `Float32Array` PCM
+and every stage is a deterministic step function, so the whole pipeline is
+Node-testable. Powers the editor's Narrate mode (voice-adaptive teleprompter)
+and post-recording word/block timing refinement.
+
+```ts
+// Script model — Doc → ordered word tokens + per-block ranges.
+// sourceText is canonical: charOffsets index into it and the timing
+// sidecar stores it verbatim.
+function buildNarrationScript(doc: Doc, options?: BuildScriptOptions): NarrationScript;
+interface NarrationScript {
+  sourceText: string;
+  tokens: ScriptToken[]; // { text, charOffset, charEnd, blockId, blockIndex,
+  //   syllables, spokenWordEquiv, pauseAfter: 0|1|2|3 }
+  blocks: ScriptBlockRange[]; // { blockId, heading?, tokenStart, tokenEnd, charStart, charEnd }
+  totalSyllables: number;
+  cumulativeSyllables: number[];
+}
+function estimateSyllables(token: string): number;
+function expectedSyllablesAt(script: NarrationScript, wordPos: number): number;
+function wordPosAtExpectedSyllables(script: NarrationScript, syllables: number): number;
+function wordIndexAtChar(script: NarrationScript, charOffset: number): number;
+function wordIndexAtTime(words: WordTiming[], tSec: number): number;
+
+// Streaming DSP (feed PCM hops; frames carry rms / bandEnergy / zcr).
+function createFeatureState(sampleRate: number, config?: Partial<FeatureConfig>): FeatureState;
+function featureStep(
+  state: FeatureState,
+  hop: Float32Array,
+): { state: FeatureState; frames: FrameFeatures[] };
+function extractFrameFeatures(
+  pcm: Float32Array,
+  sampleRate: number,
+  config?: Partial<FeatureConfig>,
+): FrameFeatures[];
+function createVadState(config?: Partial<VadConfig>): VadState;
+function vadStep(state: VadState, frame: FrameFeatures, config?: Partial<VadConfig>): VadState;
+function createNucleiState(config?: Partial<NucleiConfig>): NucleiState;
+function nucleiStep(
+  state: NucleiState,
+  frame: FrameFeatures,
+  speaking: boolean,
+  config?: Partial<NucleiConfig>,
+): { state: NucleiState; onset: number | null };
+function detectSyllableOnsets(
+  frames: FrameFeatures[],
+  vadFlags: boolean[],
+  config?: Partial<NucleiConfig>,
+): number[];
+
+// Voice-adaptive pacing controller (pure step; halts on silence,
+// tracks syllable rate, PI-corrected against cumulative syllables).
+function createPacingState(startWordPos?: number): PacingState;
+function pacingStep(
+  state: PacingState,
+  tick: PacingTick,
+  script: NarrationScript,
+  config?: Partial<PacingConfig>,
+): PacingState;
+function reanchorPacing(state: PacingState, wordPos: number, script: NarrationScript): PacingState;
+
+// Live-session composition — one pure call per PCM hop.
+function createNarrationSession(
+  sampleRate: number,
+  script: NarrationScript,
+  config?: NarrationSessionConfig,
+): NarrationSessionState;
+function narrationSessionStep(
+  state: NarrationSessionState,
+  hop: Float32Array,
+): NarrationSessionState;
+function reanchorSession(state: NarrationSessionState, wordPos: number): NarrationSessionState;
+
+// Live prompter trace (recorded by the UI during a take).
+interface NarrationTrace {
+  samples: { tMs: number; wordPos: number }[];
+}
+function traceWordPosAt(trace: NarrationTrace, tSec: number): number;
+function downsampleTrace(trace: NarrationTrace, maxSamples: number): NarrationTrace;
+
+// Offline refinement: banded DTW of detected syllables/gaps vs the
+// script's expected syllable/pause slots → word timestamps + contiguous
+// per-block ranges (endSec === next.startSec).
+function alignNarration(input: AlignInput, config?: Partial<AlignConfig>): NarrationAlignment;
+interface NarrationAlignment {
+  words: WordTiming[]; // { tokenIndex, tSec, interpolated }
+  blocks: NarrationBlockRange[]; // { blockId, heading?, blockIndex, charStart, charEnd, startSec, endSec }
+  detectedSyllables: number;
+  cost: number;
+}
+```
+
+All tuning configs (`FeatureConfig`, `VadConfig`, `NucleiConfig`,
+`PacingConfig`, `AlignConfig`) are exported alongside frozen `DEFAULT_*`
+defaults.
+
 ---
 
 ## `@bendyline/squisq-react`
@@ -2198,6 +2298,47 @@ position/source-visibility helpers. The obsolete React Flow-derived
 Legacy heading-based `{[diagram]}` documents still render through core, but
 their former `DiagramExtension`, `DiagramWidget`, `useDiagramData`, and heading
 command exports are no longer an editable canvas API.
+
+### Teleprompter (`src/teleprompter`)
+
+The **Narrate** display mode under the Use tab: a voice-paced teleprompter
+(silence halts the scroll; speech rate drives it via the core
+`@bendyline/squisq/narration` engine on AudioWorklet PCM hops), a 3-tier
+always-on-top float ladder, and an in-place narration recorder whose takes
+re-time the document to the recorded voice.
+
+```ts
+// Mode surface (PreviewPanel mounts it for DisplayMode 'narrate';
+// gate with the EditorShell `allowNarrate` prop, default true)
+function TeleprompterView(props: TeleprompterViewProps): JSX.Element;
+// props: { doc, theme, workspaceContainer?, basePath?, recording?: TeleprompterRecordingDeps | null }
+function TeleprompterSurface(props: TeleprompterSurfaceProps): JSX.Element; // prop-driven, portal-able
+function TeleprompterControls(props: TeleprompterControlsProps): JSX.Element;
+
+// Controller + mic pipeline
+function useTeleprompter(opts: { doc: Doc | null }): TeleprompterController;
+function useMicAnalysis(): MicAnalysisHandle; // start() RESOLVES with the live stream
+function vadConfigForSensitivity(sensitivity: number): Partial<VadConfig>;
+const PCM_WORKLET_SOURCE: string; // inline AudioWorklet tap (clone, not transfer)
+function registerPcmWorklet(ctx: AudioContext): Promise<void>;
+
+// Floating window (document-pip → video-pip canvas → popup → docked)
+function detectFloatTiers(): FloatTier[];
+function createFloatingWindowManager(deps: { styleCss: string }): FloatingWindowManager;
+function useFloatingWindow(styleCss: string): FloatingWindowHandle;
+
+// Recording (record the analysis stream + optional camera; live trace →
+// core alignNarration → v3 sidecar; ONE markdown write inserts/replaces
+// the `{[audio src=… anchor=document]}` preamble)
+function useNarrationRecorder(options: UseNarrationRecorderOptions): NarrationRecorderController;
+function buildNarrationSavePlan(args: NarrationSavePlanArgs): NarrationSavePlan;
+function executeNarrationSave(plan, take, deps): Promise<NarrationSaveResult>;
+function insertNarrationPreamble(
+  source: string,
+  audioPath: string,
+  cameraPath: string | null,
+): string;
+```
 
 ### Recorder (`src/recorder`)
 

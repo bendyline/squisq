@@ -135,8 +135,9 @@ function resolveRenderAs(value: unknown): ViewportPreset | null {
 function resolveDisplayMode(value: unknown): DisplayMode | null {
   if (typeof value !== 'string') return null;
   const v = value.trim().toLowerCase();
-  if (v === 'video' || v === 'slideshow' || v === 'linear') return v;
+  if (v === 'video' || v === 'slideshow' || v === 'linear' || v === 'narrate') return v;
   if (v === 'slides' || v === 'presentation' || v === 'deck') return 'slideshow';
+  if (v === 'teleprompter' || v === 'prompter') return 'narrate';
   // Frontmatter uses product-facing names: Document is the plain text/HTML
   // preview, Page is the styled Squisq page view. The raw DisplayMode values
   // are older and remain stable for the public React API.
@@ -220,7 +221,7 @@ export function PreviewSettingsProvider({
   themeOverride,
 }: PreviewSettingsProviderProps) {
   const frontmatter = doc?.frontmatter;
-  const { markdownSource, setMarkdownSource } = useEditorContext();
+  const { markdownSource, setMarkdownSource, allowNarrate } = useEditorContext();
 
   const persistFrontmatter = useCallback(
     (updates: Record<string, string | null>) => {
@@ -242,11 +243,14 @@ export function PreviewSettingsProvider({
   const activePreset = selectedPreset ?? fmPreset ?? 'landscape';
   const activeViewport = VIEWPORT_PRESETS[activePreset];
 
-  // Display mode
+  // Display mode. A frontmatter-forced `narrate` clamps back to video when
+  // the host disabled the mode, so hostile frontmatter can't turn it on.
   const fmMode = useMemo(() => resolveDisplayMode(frontmatter?.['display-mode']), [frontmatter]);
   const [selectedDisplayMode, setSelectedDisplayMode] = useState<DisplayMode | null>(null);
   useEffect(() => setSelectedDisplayMode(null), [fmMode]);
-  const activeDisplayMode = selectedDisplayMode ?? fmMode ?? 'video';
+  const requestedDisplayMode = selectedDisplayMode ?? fmMode ?? 'video';
+  const activeDisplayMode =
+    requestedDisplayMode === 'narrate' && !allowNarrate ? 'video' : requestedDisplayMode;
 
   // Custom themes (doc + browser library). `useCustomThemes` returns null when
   // no provider is mounted; document-scoped themes still remain available.
@@ -523,6 +527,7 @@ const DISPLAY_MODE_OPTIONS: { key: DisplayMode; label: string }[] = [
   { key: 'slideshow', label: 'Slideshow' },
   { key: 'linear', label: 'Page' },
   { key: 'page', label: 'Document' },
+  { key: 'narrate', label: 'Narrate' },
 ];
 
 const TRANSFORM_STYLE_OPTIONS = [
@@ -898,15 +903,18 @@ export function PreviewToolbarControls() {
 }
 
 /**
- * Segmented display-mode switch (Video / Slideshow / Document / Page), used
- * inline in the Use toolbar and inside its overflow popover. Reads and writes
- * the same `activeDisplayMode` in preview settings.
+ * Segmented display-mode switch (Video / Slideshow / Page / Document /
+ * Narrate), used inline in the Use toolbar and inside its overflow popover.
+ * Reads and writes the same `activeDisplayMode` in preview settings. The
+ * Narrate segment is hidden when the host disables `allowNarrate`.
  */
 export function PreviewModeSwitch() {
   const s = usePreviewSettings();
+  const { allowNarrate } = useEditorContext();
+  const options = DISPLAY_MODE_OPTIONS.filter((opt) => opt.key !== 'narrate' || allowNarrate);
   return (
     <div className="squisq-preview-seg" role="group" aria-label="Display mode">
-      {DISPLAY_MODE_OPTIONS.map((opt) => {
+      {options.map((opt) => {
         const active = s.activeDisplayMode === opt.key;
         return (
           <button

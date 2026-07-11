@@ -268,6 +268,14 @@ export interface EditorShellProps {
    */
   allowRecording?: boolean;
   /**
+   * Whether the Narrate (teleprompter) display mode is offered under the
+   * Use tab. Defaults to true. Orthogonal to `allowRecording` — the
+   * prompter is useful without capture (reading for external recording
+   * software), and the in-mode Record affordance additionally requires
+   * `allowRecording` + a `mediaProvider`.
+   */
+  allowNarrate?: boolean;
+  /**
    * Placeholder text shown in the WYSIWYG editor while the document is
    * empty. When omitted, the editor rotates through its own generic
    * "start typing…" prompts; pass a value here to override with copy
@@ -423,6 +431,7 @@ export function EditorShell({
   mentionProvider,
   documentLinkProvider,
   allowRecording = true,
+  allowNarrate = true,
   placeholder,
   readOnly = false,
   imageSrc,
@@ -478,6 +487,7 @@ export function EditorShell({
         mentionProvider={mentionProvider}
         documentLinkProvider={documentLinkProvider}
         allowRecording={allowRecording}
+        allowNarrate={allowNarrate}
         fileName={fileName}
         language={language}
         inlinePreview={inlinePreview}

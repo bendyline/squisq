@@ -201,6 +201,13 @@ export interface EditorState {
    */
   allowRecording: boolean;
   /**
+   * Whether the Narrate (teleprompter) display mode is offered under the
+   * Use tab. Orthogonal to `allowRecording`: the teleprompter is useful
+   * without any capture (reading for external recording software), and a
+   * host may allow the recorder modal but not want a prompter surface.
+   */
+  allowNarrate: boolean;
+  /**
    * Document layout mode. `'document'` (default) edits the whole document;
    * `'block'` activates the block-at-a-time card view. Initialized from the
    * EditorShell `layoutMode` prop; the View menu can toggle it at runtime.
@@ -431,6 +438,12 @@ export interface EditorProviderProps {
    */
   allowRecording?: boolean;
   /**
+   * Whether the Narrate (teleprompter) display mode is offered under the
+   * Use tab. Defaults to true. When false the mode button is hidden and a
+   * frontmatter-forced `display-mode: narrate` clamps back to video.
+   */
+  allowNarrate?: boolean;
+  /**
    * File name (e.g. `foo.ts`) or bare extension — used to pick a Monaco
    * language and decide between markdown vs. code mode.
    */
@@ -533,6 +546,7 @@ export function EditorProvider({
   mentionProvider = null,
   documentLinkProvider = null,
   allowRecording = true,
+  allowNarrate = true,
   fileName,
   language,
   inlinePreview = false,
@@ -1008,6 +1022,7 @@ export function EditorProvider({
       imageEditTarget,
       mediaRevision,
       allowRecording,
+      allowNarrate,
       tiptapEditor,
       monacoEditor,
       activeSceneText,
@@ -1097,6 +1112,7 @@ export function EditorProvider({
       imageEditTarget,
       mediaRevision,
       allowRecording,
+      allowNarrate,
       openImageEdit,
       closeImageEdit,
       bumpMediaRevision,

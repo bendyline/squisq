@@ -14,8 +14,10 @@
  */
 
 import type { Doc, Block, AudioSegment, AudioTimingData } from '../schemas/Doc.js';
+import { resolveMediaSchedule } from '../schemas/Media.js';
 import type { ContentContainer } from '../storage/ContentContainer.js';
 import { extractPlainText } from '../markdown/utils.js';
+import { applyNarrationTiming } from './applyNarrationTiming.js';
 
 // ── Helpers ──────────────────────────────────────────────────────────
 
@@ -345,15 +347,29 @@ function autoMatchBlocks(
  * @returns New Doc with audio segments resolved, or original doc if no matches.
  */
 export async function resolveAudioMapping(doc: Doc, container: ContentContainer): Promise<Doc> {
+  // Step 0: a document-anchored narration take (preamble `{[audio src=…
+  // anchor=document]}` + v3 timing sidecar) re-times the block timeline
+  // to the recorded voice. See applyNarrationTiming for precedence.
+  const narration = await applyNarrationTiming(doc, container);
+  doc = narration.doc;
+
   const audioFiles = await discoverNarrationAudio(container);
-  if (audioFiles.length === 0) return doc;
+
+  // Files already playing through the media schedule (documentMedia /
+  // block clips) must not ALSO be auto-mapped into audio.segments —
+  // that would play the narration twice.
+  const scheduledSrcs = new Set(resolveMediaSchedule(doc).map((clip) => clip.src));
+  const available = audioFiles.filter((f) => !scheduledSrcs.has(f.path));
+  if (available.length === 0) return doc;
 
   // Try annotations first
-  let matches = resolveFromAnnotations(doc.blocks, audioFiles);
+  let matches = resolveFromAnnotations(doc.blocks, available);
 
-  // Fall back to auto-matching if no annotations found
-  if (matches.length === 0) {
-    matches = autoMatchBlocks(doc.blocks, audioFiles).map((m) => ({
+  // Fall back to auto-matching if no annotations found. When narration
+  // timing was applied, content auto-matching is skipped — the take owns
+  // the timeline, and fuzzy matches against other files would fight it.
+  if (matches.length === 0 && !narration.applied) {
+    matches = autoMatchBlocks(doc.blocks, available).map((m) => ({
       block: m.block,
       audio: m.audio,
     }));
@@ -393,7 +409,9 @@ export async function resolveAudioMapping(doc: Doc, container: ContentContainer)
   return {
     ...doc,
     blocks: newBlocks,
-    duration: startTime,
+    // A narration take owns the overall duration; explicit per-block
+    // segments only ever extend it.
+    duration: narration.applied ? Math.max(doc.duration, startTime) : startTime,
     audio: { segments },
   };
 }

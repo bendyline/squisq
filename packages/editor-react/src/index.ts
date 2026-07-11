@@ -339,6 +339,59 @@ export type { CaptureKind, ResolvedFormat } from './recorder/formats.js';
 export { buildTimingJson, encodeTimingJson, timingPathFor } from './recorder/timingJson.js';
 export type { TimingJson, RecordedBookmark } from './recorder/timingJson.js';
 
+// Teleprompter — the Narrate display mode under the Use tab: voice-paced
+// prompter surface, floating-window tiers, and the mic analysis pipeline.
+export {
+  TeleprompterView,
+  TeleprompterSurface,
+  TeleprompterControls,
+  useTeleprompter,
+  useNarrationRecorder,
+  buildNarrationSavePlan,
+  executeNarrationSave,
+  insertNarrationPreamble,
+  narrationAnnotationLine,
+  cameraVideoLine,
+  vadConfigForSensitivity,
+  useMicAnalysis,
+  PCM_WORKLET_SOURCE,
+  PCM_WORKLET_NAME,
+  registerPcmWorklet,
+  createFloatingWindowManager,
+  detectFloatTiers,
+  useFloatingWindow,
+  measureTokenLines,
+  targetOffsetFor,
+  stepScroll,
+  EYE_LINE_FRACTION,
+  TELEPROMPTER_CSS,
+  ensureTeleprompterStyles,
+  prompterVarsFromTheme,
+  DEFAULT_TELEPROMPTER_PREFS,
+} from './teleprompter/index.js';
+export type {
+  TeleprompterViewProps,
+  TeleprompterSurfaceProps,
+  TeleprompterControlsProps,
+  TeleprompterController,
+  TeleprompterRecordingDeps,
+  NarrationRecorderController,
+  NarrationRecorderState,
+  NarrationTake,
+  NarrationSavePlan,
+  NarrationSaveResult,
+  MicAnalysisHandle,
+  MicAnalysisStatus,
+  FloatingWindowManager,
+  FloatOpenOptions,
+  CanvasSink,
+  FloatingWindowHandle,
+  TokenLineMap,
+  TeleprompterPrefs,
+  PrompterTransport,
+  FloatTier,
+} from './teleprompter/index.js';
+
 // Image editor — layered, sidecar-persisted raster authoring surface.
 // Pairs with `ImageViewer` and the `<basename>_files/` sidecar convention.
 export { ImageEditor } from './ImageEditor.js';

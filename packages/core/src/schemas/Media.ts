@@ -52,6 +52,15 @@ export interface MediaClip {
    * `startAt`) back to the exact line. Absent for programmatically built clips.
    */
   sourceLine?: number;
+  /**
+   * Round-trip home of the authoring annotation: the block whose contents
+   * held the paragraph, its position in that block's ORIGINAL contents
+   * array (before extraction), and the paragraph's exact source text.
+   * `docToMarkdown` re-inserts the annotation from this — `raw` verbatim
+   * when present, a re-serialized annotation otherwise. Absent for
+   * programmatically built clips (those emit at the document top).
+   */
+  origin?: { blockId: string; index: number; raw?: string };
 }
 
 /**

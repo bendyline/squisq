@@ -18,6 +18,7 @@ export default defineConfig({
     'icons/index': 'src/icons/index.ts',
     'icons/inlineIconMarker': 'src/icons/inlineIconMarker.ts',
     'recommend/index': 'src/recommend/index.ts',
+    'narration/index': 'src/narration/index.ts',
   },
   format: ['esm'],
   dts: true,

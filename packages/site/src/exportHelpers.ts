@@ -2,7 +2,9 @@
  * Shared helpers for document exports from the site package.
  */
 
+import { resolveMediaSchedule } from '@bendyline/squisq/schemas';
 import type { Doc, MediaProvider } from '@bendyline/squisq/schemas';
+import type { ContentContainer } from '@bendyline/squisq/storage';
 
 /**
  * Collect images from a MediaProvider keyed by both the storage name and
@@ -43,4 +45,32 @@ export async function collectImagesForHtmlExport(
   }
 
   return images;
+}
+
+/**
+ * Collect the doc's audio (narration segments + scheduled audio clips,
+ * including a document-anchored narration take and its timing sidecar)
+ * from the workspace container for the HTML ZIP export's `audio` map.
+ */
+export async function collectAudioForHtmlExport(
+  doc: Doc,
+  container: ContentContainer | null | undefined,
+): Promise<Map<string, ArrayBuffer> | undefined> {
+  if (!container) return undefined;
+  const srcs = new Set<string>();
+  for (const segment of doc.audio?.segments ?? []) {
+    if (segment.src) srcs.add(segment.src);
+  }
+  for (const clip of resolveMediaSchedule(doc)) {
+    if (clip.kind === 'audio' && clip.src) srcs.add(clip.src);
+  }
+  const audio = new Map<string, ArrayBuffer>();
+  for (const src of srcs) {
+    const data = await container.readFile(src);
+    if (!data) continue;
+    audio.set(src, data);
+    const sidecar = await container.readFile(`${src}.timing.json`);
+    if (sidecar) audio.set(`${src}.timing.json`, sidecar);
+  }
+  return audio.size > 0 ? audio : undefined;
 }

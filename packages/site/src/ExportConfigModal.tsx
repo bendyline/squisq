@@ -9,7 +9,7 @@
 import { useState, useCallback, useMemo, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { stringifyMarkdown, inferDocumentTitle } from '@bendyline/squisq/markdown';
-import { markdownToDoc } from '@bendyline/squisq/doc';
+import { markdownToDoc, resolveAudioMapping } from '@bendyline/squisq/doc';
 import { getThemeSummaries, resolveTheme } from '@bendyline/squisq/schemas';
 import { getTransformStyleSummaries } from '@bendyline/squisq/transform';
 import type { MediaProvider, Theme } from '@bendyline/squisq/schemas';
@@ -19,7 +19,7 @@ import type { ContentContainer } from '@bendyline/squisq/storage';
 import { VideoExportModal } from '@bendyline/squisq-video-react';
 import { buildPreviewDoc, PlainHtmlPreview } from '@bendyline/squisq-editor-react';
 import JSZip from 'jszip';
-import { collectImagesForHtmlExport } from './exportHelpers';
+import { collectAudioForHtmlExport, collectImagesForHtmlExport } from './exportHelpers';
 import { slugifyTitle } from './exportFilename';
 import { SITE_FFMPEG_WASM_CONFIG } from './ffmpegWasmConfig';
 import {
@@ -570,12 +570,19 @@ export function ExportConfigModal({
             import('@bendyline/squisq-formats/html'),
             import('@bendyline/squisq-react/standalone-source'),
           ]);
-          const rawDoc = markdownToDoc(mdDoc);
+          // Narration timing + audio mapping ride the workspace container;
+          // without this the exported player paces on reading-time estimates.
+          const parsedDoc = markdownToDoc(mdDoc);
+          const rawDoc = workspaceContainer
+            ? await resolveAudioMapping(parsedDoc, workspaceContainer)
+            : parsedDoc;
           const doc = renderMode === 'slideshow' ? buildPreviewDoc(rawDoc) : rawDoc;
           const images = await collectImagesForHtmlExport(doc, mediaProvider);
+          const audio = await collectAudioForHtmlExport(doc, workspaceContainer);
           const options = {
             playerScript: PLAYER_BUNDLE,
             images,
+            ...(audio ? { audio } : {}),
             mode: renderMode === 'slideshow' ? ('slideshow' as const) : ('static' as const),
             themeId: exportThemeId,
             title: inferDocumentTitle(mdDoc),

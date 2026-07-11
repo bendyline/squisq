@@ -33,6 +33,7 @@ export const CONTENT_SAMPLES: Record<string, ContentSample> = {
  */
 export const SAMPLE_LABELS: Record<string, string> = {
   'about-squisq': 'About SquigglySquare (squisq)',
+  'teleprompter-demo': 'Teleprompter (Narrate mode)',
 };
 
 export const SAMPLES: Record<string, string> = {
@@ -68,6 +69,34 @@ More text.
 
 End.
 `,
+  // Narrate-mode demo: opens straight into the teleprompter (frontmatter
+  // display-mode) with varied-length spoken prose — short punchy lines and
+  // one long paragraph — to exercise voice pacing, plus a list so list-item
+  // pauses show up. ~200 words keeps the script scrollable but quick to read.
+  'teleprompter-demo': `---
+title: Teleprompter Demo
+display-mode: narrate
+---
+
+# Welcome to the Teleprompter
+
+Read this aloud at your own pace. When voice pacing is on, the prompter follows your voice — speed up and it speeds up, pause and it waits for you.
+
+Short lines are easy. This one is longer, winding through a few extra clauses so the pacing controller has to keep tracking your syllables across a full breath of continuous reading before you finally reach the period.
+
+## How to Use It
+
+Press start, take a breath, and begin reading. The highlighted word marks where the prompter thinks you are.
+
+- Use the arrow keys to nudge the script if it drifts
+- Drag the speed slider to match your natural pace
+- Pop the prompter out and park it next to your camera
+
+## The Finish
+
+End on a steady, confident line. When you stop speaking, the prompter stops with you. That is the whole trick.
+`,
+
   'hello-world': `# Hello World
 
 Welcome to the **Squisq Editor**. This is a simple markdown document.

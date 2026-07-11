@@ -227,6 +227,17 @@ function pinnedMeta(block: Block): CoercedBlockMeta {
 }
 
 /**
+ * Public accessor for {@link pinnedMeta}: the timing/meta values an author
+ * pinned on a block (heading `{key=value}` attrs or `{[key=value]}`
+ * annotation params). Consumers use this to tell "author pinned this"
+ * from "derive it" — e.g. narration timing never overwrites a pinned
+ * `duration=`/`startTime=`.
+ */
+export function getPinnedBlockMeta(block: Block): CoercedBlockMeta {
+  return pinnedMeta(block);
+}
+
+/**
  * Rebuild a block list, lifting standalone `{[…]}` template annotations out of
  * each block's body into heading-less sibling blocks (recursing into children
  * first). See {@link extractTemplateBlocksFromContents}.
@@ -412,6 +423,7 @@ export function markdownToDoc(markdownDoc: MarkdownDocument, options?: MarkdownT
     } = extractMediaFromContents(
       block.contents,
       (src, i) => `${block.id}-media-${i}-${src.replace(/[^a-zA-Z0-9]+/g, '-')}`,
+      block.id,
     );
     if (media.length > 0) block.media = media;
     if (docMedia.length > 0) documentMedia.push(...docMedia);
@@ -812,8 +824,12 @@ function applyAutoTemplates(
 
 /**
  * Extract the plain text from a block's body contents (excluding heading text).
+ *
+ * Exported because the narration script builder and the narration timing
+ * resolver must derive the *same* spoken text per block that captions and
+ * reading-time use — one source of truth for "what does this block say".
  */
-function getBlockBodyText(block: Block): string {
+export function getBlockBodyText(block: Block): string {
   if (!block.contents || block.contents.length === 0) return '';
   // A fence consumed as diagram data must not feed reading-time/captions —
   // 20 lines of box-drawing art would add ~30s of duration and captions
