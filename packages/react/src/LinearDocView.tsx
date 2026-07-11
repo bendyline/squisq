@@ -61,6 +61,8 @@ export interface LinearDocViewProps {
   className?: string;
   /** Theme to use for rendering (default: DEFAULT_THEME from the theme library) */
   theme?: Theme;
+  /** Whether inline visual cards render their layer animations (default: true). */
+  animationsEnabled?: boolean;
   /**
    * Optional surface scheme (light / dark paper) overlaid on top of the
    * theme's colors. Orthogonal to `theme` — a theme picks editorial
@@ -122,6 +124,7 @@ interface BlockSectionProps {
   renderContext: MaterializeBlockLayersOptions;
   blockIndex: number;
   blockIndices: ReadonlyMap<Block, number>;
+  animationsEnabled: boolean;
 }
 
 /**
@@ -135,6 +138,7 @@ function BlockSection({
   renderContext,
   blockIndex,
   blockIndices,
+  animationsEnabled,
 }: BlockSectionProps) {
   const isAnnotated = isAnnotatedBlock(block);
 
@@ -213,6 +217,7 @@ function BlockSection({
               blockTime={0}
               basePath={basePath}
               viewport={viewport}
+              animationsEnabled={animationsEnabled}
             />
           </div>
         </div>
@@ -235,6 +240,7 @@ function BlockSection({
               renderContext={renderContext}
               blockIndex={blockIndices.get(child) ?? blockIndex + i + 1}
               blockIndices={blockIndices}
+              animationsEnabled={animationsEnabled}
             />
           ))}
         </div>
@@ -265,6 +271,7 @@ export function LinearDocView({
   className,
   theme,
   surface,
+  animationsEnabled = true,
   thinMargins = false,
   imageDisplayMode = 'inline',
 }: LinearDocViewProps) {
@@ -489,6 +496,7 @@ export function LinearDocView({
             renderContext={renderContext}
             blockIndex={blockIndices.get(block) ?? i}
             blockIndices={blockIndices}
+            animationsEnabled={animationsEnabled}
           />
         ))}
       </div>

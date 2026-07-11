@@ -122,6 +122,11 @@ For headless capture, add `renderMode: true`, then await
 TypeScript hosts can import `MountOptions` and `SquisqPlayerHandle` from the
 package root.
 
+Set `animationsEnabled: false` on `DocPlayer`, `BlockRenderer`, or standalone
+`mount()` to render authored layer animations and block transitions as static
+content. Embedded video, timed media, captions, audio, and document timing stay
+active; this makes the option suitable for compact MP4 and animated-GIF export.
+
 For build-time embedding, `@bendyline/squisq-react/standalone-source` exports
 the same bundle as a string constant (`PLAYER_BUNDLE`) — used by
 `@bendyline/squisq-formats` and the CLI to produce single-file HTML exports.

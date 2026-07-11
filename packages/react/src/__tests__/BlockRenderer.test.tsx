@@ -107,4 +107,70 @@ describe('BlockRenderer', () => {
     expect(ids).toHaveLength(2);
     expect(new Set(ids).size).toBe(2);
   });
+
+  it('renders transitions and layer animations by default', () => {
+    const animatedBlock: Block = {
+      ...minimalBlock,
+      transition: { type: 'fade', duration: 0.5 },
+      layers: [
+        {
+          type: 'text',
+          id: 'animated-title',
+          content: { text: 'Animated', style: { fontSize: 48, color: '#fff' } },
+          position: { x: 100, y: 100 },
+          animation: { type: 'fadeIn', duration: 1 },
+        },
+      ],
+    };
+
+    const { container } = render(
+      <BlockRenderer block={animatedBlock} blockTime={0} basePath="/test" isEntering />,
+    );
+
+    expect(container.querySelector('svg')?.classList.contains('transition-fade-enter')).toBe(true);
+    expect(
+      container
+        .querySelector('[data-layer-id="animated-title"]')
+        ?.classList.contains('anim-fadeIn'),
+    ).toBe(true);
+  });
+
+  it('suppresses transitions and every layer animation without mutating the block', () => {
+    const animatedBlock: Block = {
+      ...minimalBlock,
+      transition: { type: 'fade', duration: 0.5 },
+      layers: [
+        {
+          type: 'text',
+          id: 'animated-title',
+          content: { text: 'Static', style: { fontSize: 48, color: '#fff' } },
+          position: { x: 100, y: 100 },
+          animation: { type: 'fadeIn', duration: 1 },
+        },
+        {
+          type: 'image',
+          id: 'animated-hero',
+          content: { src: 'hero.jpg', alt: 'Hero', fit: 'cover' },
+          position: { x: 0, y: 0, width: '100%', height: '100%' },
+          animation: { type: 'slowZoom', duration: 5 },
+        },
+      ],
+    };
+    const originalAnimations = animatedBlock.layers?.map((layer) => layer.animation);
+
+    const { container } = render(
+      <BlockRenderer
+        block={animatedBlock}
+        blockTime={0}
+        basePath="/test"
+        isEntering
+        animationsEnabled={false}
+      />,
+    );
+
+    expect(container.querySelector('svg')?.className.baseVal).not.toContain('transition-');
+    expect(container.querySelector('[class*="anim-"]')).toBeNull();
+    expect(animatedBlock.transition).toEqual({ type: 'fade', duration: 0.5 });
+    expect(animatedBlock.layers?.map((layer) => layer.animation)).toEqual(originalAnimations);
+  });
 });

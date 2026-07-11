@@ -35,6 +35,13 @@ describe('VideoExportButton', () => {
     expect(getByRole('button', { name: 'Export Video' })).toBeTruthy();
   });
 
+  it('uses a GIF-specific default label when configured for GIF output', () => {
+    const { getByRole } = render(
+      <VideoExportButton doc={minimalDoc()} defaultConfig={{ outputFormat: 'gif' }} />,
+    );
+    expect(getByRole('button', { name: 'Export GIF' })).toBeTruthy();
+  });
+
   it('forwards the requested color scheme to its portaled modal', () => {
     const { getByRole } = render(<VideoExportButton doc={minimalDoc()} colorScheme="dark" />);
     fireEvent.click(getByRole('button', { name: 'Export Video' }));
@@ -61,12 +68,61 @@ describe('VideoExportModal', () => {
         onClose={() => {}}
       />,
     );
-    const selects = Array.from(container.querySelectorAll('select')) as HTMLSelectElement[];
-    // Order in the configure form: Quality, Frame Rate, Orientation, Captions.
-    expect(selects[0].value).toBe('high');
-    expect(selects[1].value).toBe('30');
-    expect(selects[2].value).toBe('portrait');
-    expect(selects[3].value).toBe('standard');
+    expect((container.querySelector('[aria-label="Format"]') as HTMLSelectElement).value).toBe(
+      'mp4',
+    );
+    expect((container.querySelector('[aria-label="Quality"]') as HTMLSelectElement).value).toBe(
+      'high',
+    );
+    expect((container.querySelector('[aria-label="Frame Rate"]') as HTMLSelectElement).value).toBe(
+      '30',
+    );
+    expect((container.querySelector('[aria-label="Orientation"]') as HTMLSelectElement).value).toBe(
+      'portrait',
+    );
+    expect((container.querySelector('[aria-label="Captions"]') as HTMLSelectElement).value).toBe(
+      'standard',
+    );
+    expect(
+      (container.querySelector('[aria-label="Animations and transitions"]') as HTMLSelectElement)
+        .value,
+    ).toBe('enabled');
+  });
+
+  it('defaults GIF export to 10fps with animations and transitions disabled', () => {
+    const { container, getByRole } = render(
+      <VideoExportModal
+        doc={minimalDoc()}
+        defaultConfig={{ outputFormat: 'gif' }}
+        onClose={() => {}}
+      />,
+    );
+
+    expect(getByRole('heading', { name: 'Export Animated GIF' })).toBeTruthy();
+    expect((container.querySelector('[aria-label="Frame Rate"]') as HTMLSelectElement).value).toBe(
+      '10',
+    );
+    expect(
+      (container.querySelector('[aria-label="Animations and transitions"]') as HTMLSelectElement)
+        .value,
+    ).toBe('disabled');
+    expect(container.textContent).toContain('Landscape (960 × 540)');
+    expect(getByRole('button', { name: 'Export GIF' })).toBeTruthy();
+  });
+
+  it('applies GIF recommendations when the format selection changes', () => {
+    const { container } = render(<VideoExportModal doc={minimalDoc()} onClose={() => {}} />);
+    fireEvent.change(container.querySelector('[aria-label="Format"]')!, {
+      target: { value: 'gif' },
+    });
+
+    expect((container.querySelector('[aria-label="Frame Rate"]') as HTMLSelectElement).value).toBe(
+      '10',
+    );
+    expect(
+      (container.querySelector('[aria-label="Animations and transitions"]') as HTMLSelectElement)
+        .value,
+    ).toBe('disabled');
   });
 
   it('applies dark colors to the modal surface and native controls', () => {
@@ -85,6 +141,7 @@ describe('VideoExportModal', () => {
 describe('useVideoExport result shape', () => {
   it('exposes the additive audio result fields, defaulted for idle', () => {
     const { result } = renderHook(() => useVideoExport());
+    expect(result.current.outputFormat).toBe('mp4');
     expect(result.current.audioIncluded).toBe(false);
     expect(result.current.audioSkippedReason).toBeNull();
   });

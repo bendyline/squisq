@@ -62,6 +62,11 @@ export interface MountOptions {
    * auto-play.
    */
   renderMode?: boolean;
+  /**
+   * Whether to render slide transitions and per-layer animations (default: true).
+   * Timed media continues to play when disabled.
+   */
+  animationsEnabled?: boolean;
   /** Caption style: 'standard' or 'social'. Omit or set to undefined for no captions. */
   captionStyle?: 'standard' | 'social';
 }
@@ -246,6 +251,7 @@ export function mount(element: Element, doc: Doc, options: MountOptions = {}): S
     autoPlay = false,
     theme,
     renderMode = false,
+    animationsEnabled = true,
     captionStyle,
   } = options;
 
@@ -265,6 +271,7 @@ export function mount(element: Element, doc: Doc, options: MountOptions = {}): S
       doc: finalDoc,
       basePath,
       theme,
+      animationsEnabled,
     });
   } else {
     content = createElement(DocPlayer, {
@@ -274,6 +281,7 @@ export function mount(element: Element, doc: Doc, options: MountOptions = {}): S
       autoPlay: renderMode ? false : autoPlay,
       showControls: !renderMode,
       renderMode,
+      animationsEnabled,
       theme,
       captionsEnabled: !!captionStyle,
       captionStyle: captionStyle ?? 'standard',

@@ -48,6 +48,12 @@ interface BlockRendererProps {
   viewport?: ViewportDimensions;
   /** Whether the doc is currently playing (controls video playback) */
   isPlaying?: boolean;
+  /**
+   * Whether to render block transitions and layer animations (default: true).
+   * Disabling this only removes authored/render-style motion; timed video
+   * layers continue to advance normally.
+   */
+  animationsEnabled?: boolean;
 }
 
 export function BlockRenderer({
@@ -59,11 +65,12 @@ export function BlockRenderer({
   transition,
   viewport = DEFAULT_VIEWPORT,
   isPlaying,
+  animationsEnabled = true,
 }: BlockRendererProps) {
   // Build transition class and inline style for dynamic duration
   let transitionClass = '';
   const transitionStyle: Record<string, string> = {};
-  const activeTransition = transition ?? block.transition;
+  const activeTransition = animationsEnabled ? (transition ?? block.transition) : undefined;
   if (activeTransition && isEntering) {
     transitionClass = getTransitionClass(activeTransition.type, true, activeTransition.direction);
     transitionStyle['--transition-duration'] = `${resolveTransitionDuration(activeTransition)}s`;
@@ -105,6 +112,7 @@ export function BlockRenderer({
             viewport={viewport}
             blockTime={blockTime}
             isPlaying={isPlaying}
+            animationsEnabled={animationsEnabled}
           />
         ))}
       </g>
@@ -118,31 +126,54 @@ interface LayerRendererProps {
   viewport: { width: number; height: number };
   blockTime: number;
   isPlaying?: boolean;
+  animationsEnabled: boolean;
 }
 
 /**
  * Dispatch to the appropriate layer component based on type.
  */
-function LayerRenderer({ layer, basePath, viewport, blockTime, isPlaying }: LayerRendererProps) {
-  switch (layer.type) {
+function LayerRenderer({
+  layer,
+  basePath,
+  viewport,
+  blockTime,
+  isPlaying,
+  animationsEnabled,
+}: LayerRendererProps) {
+  // Render policy must not mutate caller-owned Docs. A shallow copy is enough:
+  // every layer renderer reads animation only from the base layer field.
+  const renderedLayer: Layer =
+    animationsEnabled || !layer.animation ? layer : { ...layer, animation: undefined };
+
+  switch (renderedLayer.type) {
     case 'image':
       return (
-        <ImageLayer layer={layer} basePath={basePath} viewport={viewport} blockTime={blockTime} />
+        <ImageLayer
+          layer={renderedLayer}
+          basePath={basePath}
+          viewport={viewport}
+          blockTime={blockTime}
+        />
       );
     case 'text':
-      return <TextLayer layer={layer} viewport={viewport} blockTime={blockTime} />;
+      return <TextLayer layer={renderedLayer} viewport={viewport} blockTime={blockTime} />;
     case 'shape':
-      return <ShapeLayer layer={layer} viewport={viewport} blockTime={blockTime} />;
+      return <ShapeLayer layer={renderedLayer} viewport={viewport} blockTime={blockTime} />;
     case 'path':
-      return <PathLayer layer={layer} viewport={viewport} blockTime={blockTime} />;
+      return <PathLayer layer={renderedLayer} viewport={viewport} blockTime={blockTime} />;
     case 'map':
       return (
-        <MapLayer layer={layer} basePath={basePath} viewport={viewport} blockTime={blockTime} />
+        <MapLayer
+          layer={renderedLayer}
+          basePath={basePath}
+          viewport={viewport}
+          blockTime={blockTime}
+        />
       );
     case 'video':
       return (
         <VideoLayer
-          layer={layer}
+          layer={renderedLayer}
           basePath={basePath}
           viewport={viewport}
           blockTime={blockTime}
@@ -150,11 +181,11 @@ function LayerRenderer({ layer, basePath, viewport, blockTime, isPlaying }: Laye
         />
       );
     case 'table':
-      return <TableLayer layer={layer} viewport={viewport} blockTime={blockTime} />;
+      return <TableLayer layer={renderedLayer} viewport={viewport} blockTime={blockTime} />;
     case 'tree':
-      return <TreeLayer layer={layer} viewport={viewport} blockTime={blockTime} />;
+      return <TreeLayer layer={renderedLayer} viewport={viewport} blockTime={blockTime} />;
     default:
-      console.warn(`Unknown layer type: ${(layer as Layer).type}`);
+      console.warn(`Unknown layer type: ${(renderedLayer as Layer).type}`);
       return null;
   }
 }

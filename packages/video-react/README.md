@@ -1,6 +1,6 @@
 # @bendyline/squisq-video-react
 
-React components and hooks for exporting Squisq documents to MP4 video directly in the browser. Uses WebCodecs for hardware-accelerated H.264 encoding (with an ffmpeg.wasm worker fallback) and html2canvas for frame capture. As of v1.5 the exported MP4 also carries an **audio** track (narration + timed media).
+React components and hooks for exporting Squisq documents to MP4 video or animated GIF directly in the browser. MP4 uses WebCodecs for hardware-accelerated H.264 encoding (with an ffmpeg.wasm worker fallback); GIF uses that compact video as an intermediate for an ffmpeg.wasm global-palette pass. html2canvas provides deterministic frame capture. MP4 carries an **audio** track (narration + timed media); GIF is silent by design.
 
 Part of the [Squisq](https://github.com/bendyline/squisq) monorepo.
 
@@ -25,6 +25,12 @@ import { VideoExportButton } from '@bendyline/squisq-video-react';
 function App() {
   return <VideoExportButton doc={myDoc} images={imageMap} audio={audioMap} />;
 }
+```
+
+To open directly in the compact GIF preset:
+
+```tsx
+<VideoExportButton doc={myDoc} defaultConfig={{ outputFormat: 'gif' }} />
 ```
 
 **v1.5:** `playerScript` is now **optional** — the browser export captures frames
@@ -60,10 +66,10 @@ function App() {
 
 ## Components
 
-| Component           | Description                                                             |
-| ------------------- | ----------------------------------------------------------------------- |
-| `VideoExportModal`  | Full modal UI — configure quality/fps/orientation, export, and download |
-| `VideoExportButton` | Drop-in button that opens the export modal via portal                   |
+| Component           | Description                                                              |
+| ------------------- | ------------------------------------------------------------------------ |
+| `VideoExportModal`  | Full modal UI — configure MP4/GIF, motion, quality, fps, and orientation |
+| `VideoExportButton` | Drop-in button that opens the export modal via portal                    |
 
 ## Hooks
 
@@ -76,10 +82,12 @@ function App() {
 
 The `VideoExportModal` lets users configure:
 
+- **Format:** MP4 video or animated GIF
 - **Quality:** draft, normal, or high
-- **FPS:** 15, 24, or 30
-- **Orientation:** landscape (1920x1080) or portrait (1080x1920)
+- **FPS:** 10, 15, 24, or 30
+- **Orientation:** MP4 defaults to 1920x1080/1080x1920; GIF defaults to 960x540/540x960
 - **Captions:** off, standard, or social
+- **Animations & transitions:** enabled by default for MP4 and disabled by default for GIF
 
 ## Using the Hook Directly
 
@@ -92,6 +100,7 @@ function CustomExport({ doc, images, audio }) {
   const {
     state, // 'idle' | 'preparing' | 'capturing' | 'encoding' | 'complete' | 'error'
     progress, // 0–100
+    outputFormat, // 'mp4' | 'gif'
     backend, // 'webcodecs' | 'ffmpeg-wasm' | null
     elapsed,
     estimatedRemaining,
@@ -107,12 +116,20 @@ function CustomExport({ doc, images, audio }) {
 
   return (
     <div>
-      <button onClick={() => startExport(doc, { images, audio, quality: 'normal', fps: 30 })}>
-        Export
+      <button
+        onClick={() =>
+          startExport(doc, {
+            outputFormat: 'gif',
+            images,
+            animationsEnabled: false,
+          })
+        }
+      >
+        Export GIF
       </button>
       {state === 'capturing' && <p>Progress: {progress}%</p>}
       {downloadUrl && (
-        <a href={downloadUrl} download="video.mp4">
+        <a href={downloadUrl} download={`document.${outputFormat}`}>
           Download
         </a>
       )}
@@ -126,14 +143,19 @@ function CustomExport({ doc, images, audio }) {
 WebCodecs H.264 encoding requires Chrome 94+ or Edge 94+. When WebCodecs H.264
 is unavailable, the export automatically falls back to an ffmpeg.wasm worker —
 which requires `SharedArrayBuffer` (i.e. Cross-Origin-Isolation headers on the
-host page). The packaged class worker is bundler-safe. Applications with
-offline or Content-Security-Policy requirements can self-host the core assets:
+host page). Animated GIF always performs an ffmpeg.wasm palette pass and therefore
+also requires `SharedArrayBuffer`. The packaged class worker is bundler-safe.
+
+`@ffmpeg/core` is pinned as a runtime dependency. Hosts should publish its ESM
+`ffmpeg-core.js` and `ffmpeg-core.wasm` files from the same origin and pass their
+URLs, especially for offline or Content-Security-Policy-controlled deployments:
 
 ```ts
 const config = {
   ffmpegWasm: {
-    coreURL: '/vendor/ffmpeg-core.js',
-    wasmURL: '/vendor/ffmpeg-core.wasm',
+    // Copy from node_modules/@ffmpeg/core/dist/esm/ during your build.
+    coreURL: '/ffmpeg-core/ffmpeg-core.js',
+    wasmURL: '/ffmpeg-core/ffmpeg-core.wasm',
     workerURL: '/vendor/ffmpeg-core.worker.js', // for a multithread core
   },
 };
@@ -153,11 +175,11 @@ if (!supportsWebCodecs()) {
 }
 ```
 
-**Audio tiers.** The audio track is muxed via WebCodecs AAC when available
+**Audio tiers.** MP4 audio is muxed via WebCodecs AAC when available
 (`supportsWebCodecsAac()`), then via ffmpeg.wasm when cross-origin isolation is
 available, and otherwise skipped with `audioIncluded: false` plus an
 `audioSkippedReason`. Audio problems never fail the export — the video always
-completes. `supportsWebCodecsH264(config)` probes a specific encoder
+completes. GIF skips audio preparation entirely. `supportsWebCodecsH264(config)` probes a specific encoder
 configuration; `EncoderConfig` and `FfmpegWasmLoadConfig` are also exported.
 
 ## Full API Reference
@@ -167,13 +189,16 @@ for complete prop tables, `VideoExportConfig`, and the encoder utilities.
 
 ## Related Packages
 
-| Package                                                                          | Description                                     |
-| -------------------------------------------------------------------------------- | ----------------------------------------------- |
-| [@bendyline/squisq-video](https://www.npmjs.com/package/@bendyline/squisq-video) | Headless video rendering and WASM encoding      |
-| [@bendyline/squisq](https://www.npmjs.com/package/@bendyline/squisq)             | Headless core — schemas, templates, markdown    |
-| [@bendyline/squisq-react](https://www.npmjs.com/package/@bendyline/squisq-react) | React components for rendering docs             |
-| [@bendyline/squisq-cli](https://www.npmjs.com/package/@bendyline/squisq-cli)     | CLI for document conversion and video rendering |
+| Package                                                                          | Description                                       |
+| -------------------------------------------------------------------------------- | ------------------------------------------------- |
+| [@bendyline/squisq-video](https://www.npmjs.com/package/@bendyline/squisq-video) | Headless video/GIF rendering and WASM helpers     |
+| [@bendyline/squisq](https://www.npmjs.com/package/@bendyline/squisq)             | Headless core — schemas, templates, markdown      |
+| [@bendyline/squisq-react](https://www.npmjs.com/package/@bendyline/squisq-react) | React components for rendering docs               |
+| [@bendyline/squisq-cli](https://www.npmjs.com/package/@bendyline/squisq-cli)     | CLI for document conversion and MP4/GIF rendering |
 
 ## License
 
 [MIT](https://github.com/bendyline/squisq/blob/main/LICENSE)
+
+The separately distributed `@ffmpeg/core` runtime retains its own
+GPL-2.0-or-later license.

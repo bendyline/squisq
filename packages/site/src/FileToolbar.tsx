@@ -18,6 +18,7 @@ import {
 import { markdownToDoc } from '@bendyline/squisq/doc';
 import { VideoExportModal } from '@bendyline/squisq-video-react';
 import { ExportConfigModal } from './ExportConfigModal';
+import { SITE_FFMPEG_WASM_CONFIG } from './ffmpegWasmConfig';
 import { collectImagesForHtmlExport } from './exportHelpers';
 import { MemoryContentContainer } from '@bendyline/squisq/storage';
 import type { ContentContainer } from '@bendyline/squisq/storage';
@@ -470,7 +471,7 @@ export function FileToolbar({
                 setShowVideoModal(true);
               }}
             >
-              Video (.mp4)
+              Video / Animated GIF
             </button>
           </div>
         )}
@@ -503,6 +504,7 @@ export function FileToolbar({
             doc={markdownToDoc(parseMarkdown(currentSource))}
             playerScript={playerScriptRef.current}
             mediaProvider={mediaProvider ?? undefined}
+            defaultConfig={{ ffmpegWasm: SITE_FFMPEG_WASM_CONFIG }}
             colorScheme={isDark ? 'dark' : 'light'}
             onClose={() => setShowVideoModal(false)}
           />,

@@ -124,6 +124,7 @@ export function useFrameCapture(): FrameCaptureHandle {
 
       const width = renderOptions.width ?? 1920;
       const height = renderOptions.height ?? 1080;
+      const animationsEnabled = renderOptions.animationsEnabled ?? true;
       dimensionsRef.current = { width, height };
 
       // Create a hidden container
@@ -161,6 +162,7 @@ export function useFrameCapture(): FrameCaptureHandle {
         doc,
         basePath: '.',
         renderMode: true,
+        animationsEnabled,
         showControls: false,
         autoPlay: false,
         forceViewport: { width, height, name: 'export' },

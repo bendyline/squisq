@@ -43,6 +43,9 @@ export const SAMPLES: Record<string, string> = {
   // timeout. Don't add anything that would inflate this — it exists
   // purely to keep `e2e/video-export.spec.ts` fast.
   'e2e-tiny': `# Tiny\n`,
+  // Two visibly different half-second blocks for proving that GIF export
+  // produces multiple image frames without making the browser E2E expensive.
+  'e2e-gif': `# Blue {duration=0.5}\n\nFirst frame.\n\n# Orange {duration=0.5}\n\nSecond frame.\n`,
   // Task-list fixture for `e2e/task-list.spec.ts`. GFM checkboxes the WYSIWYG
   // editor must render as `<input type="checkbox">` (one unchecked, one
   // checked). Loaded as a sample — the deterministic way the app ingests

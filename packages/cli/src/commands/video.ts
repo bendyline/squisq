@@ -1,11 +1,11 @@
 /**
  * video command
  *
- * Renders a squisq document to MP4 video by delegating to the
- * programmatic renderDocToMp4 API.
+ * Renders a squisq document to MP4 or animated GIF by delegating to the
+ * programmatic render APIs.
  *
  * Usage:
- *   squisq video <input> [-o output.mp4] [--fps 30] [--quality normal] [--orientation landscape]
+ *   squisq video <input> [-o output.mp4|output.gif] [--format mp4|gif]
  *     [--theme <id>] [--transform <style>] [--cover-preroll <seconds>]
  */
 
@@ -19,15 +19,17 @@ import {
   assertValidThemeId,
   assertValidTransformStyle,
 } from '../util/applyTransformPipeline.js';
-import { renderDocToMp4 } from '../api.js';
+import { renderDocToGif, renderDocToMp4 } from '../api.js';
 
-import type { VideoQuality, VideoOrientation } from '@bendyline/squisq-video';
+import type { GifDither, VideoQuality, VideoOrientation } from '@bendyline/squisq-video';
 
 type CaptionOption = 'off' | 'standard' | 'social';
+type VideoOutputFormat = 'mp4' | 'gif';
 
 interface VideoCommandOptions {
   autoTemplates?: boolean;
   output?: string;
+  format?: string;
   fps?: string;
   quality?: VideoQuality;
   orientation?: VideoOrientation;
@@ -37,24 +39,31 @@ interface VideoCommandOptions {
   theme?: string;
   transform?: string;
   coverPreroll?: string;
+  animations?: boolean;
+  loop?: string;
+  maxColors?: string;
+  dither?: string;
+  bayerScale?: string;
 }
 
 const VALID_QUALITIES = ['draft', 'normal', 'high'] as const;
 const VALID_ORIENTATIONS = ['landscape', 'portrait'] as const;
 const VALID_CAPTIONS = ['off', 'standard', 'social'] as const;
+const VALID_FORMATS = ['mp4', 'gif'] as const;
+const VALID_GIF_DITHERS = ['bayer', 'sierra2_4a', 'none'] as const;
 
 export function registerVideoCommand(program: Command): void {
   program
     .command('video')
-    .description('Render a squisq document to MP4 video')
+    .description('Render a squisq document to MP4 video or animated GIF')
     .argument('<input>', 'Path to .md file, .zip/.dbk container, or folder')
-    .argument('[output]', 'Output MP4 path (default: <input>.mp4)')
-    .option('-o, --output <path>', 'Output MP4 path (default: <input>.mp4)')
-    .option('--fps <number>', 'Frames per second (default: 30)', '30')
+    .argument('[output]', 'Output .mp4 or .gif path (default: <input>.<format>)')
+    .option('-o, --output <path>', 'Output .mp4 or .gif path (format inferred from extension)')
+    .option('--format <format>', `Output format: ${VALID_FORMATS.join(', ')} (default: mp4)`)
+    .option('--fps <number>', 'Frames per second (default: 30 for MP4, 10 for GIF)')
     .option(
       '--quality <level>',
-      `Encoding quality: ${VALID_QUALITIES.join(', ')} (default: normal)`,
-      'normal',
+      `MP4 encoding quality: ${VALID_QUALITIES.join(', ')} (default: normal)`,
     )
     .option(
       '--orientation <orient>',
@@ -82,9 +91,18 @@ export function registerVideoCommand(program: Command): void {
     )
     .option('--width <pixels>', 'Override video width')
     .option('--height <pixels>', 'Override video height')
+    .option('--animations', 'Enable slide animations/transitions (GIF default: disabled)')
+    .option('--no-animations', 'Disable slide animations/transitions')
+    .option('--loop <count>', 'GIF repeat count: 0 forever, -1 no loop (default: 0)')
+    .option('--max-colors <count>', 'GIF palette size from 2 to 256 (default: 256)')
+    .option(
+      '--dither <algorithm>',
+      `GIF dithering: ${VALID_GIF_DITHERS.join(', ')} (default: sierra2_4a)`,
+    )
+    .option('--bayer-scale <number>', 'GIF Bayer dither strength from 0 to 5 (default: 3)')
     .action(async (inputPath: string, outputArg: string | undefined, opts: VideoCommandOptions) => {
       try {
-        // Positional output arg takes precedence, then -o flag
+        // Use the positional output only when -o/--output was not supplied.
         if (outputArg && !opts.output) {
           opts.output = outputArg;
         }
@@ -100,13 +118,38 @@ export function registerVideoCommand(program: Command): void {
 async function runVideo(inputPath: string, opts: VideoCommandOptions): Promise<void> {
   const resolvedInput = resolve(inputPath);
 
-  // Validate options
-  const fps = parseInt(opts.fps ?? '30', 10);
-  if (isNaN(fps) || fps < 1 || fps > 120) {
-    throw new Error('FPS must be a number between 1 and 120');
+  const requestedFormat = opts.format?.toLowerCase();
+  if (
+    requestedFormat !== undefined &&
+    !VALID_FORMATS.includes(requestedFormat as VideoOutputFormat)
+  ) {
+    throw new Error(`Invalid format "${requestedFormat}". Valid: ${VALID_FORMATS.join(', ')}`);
+  }
+  const outputExtension = opts.output ? extname(opts.output).toLowerCase() : '';
+  const extensionFormat: VideoOutputFormat | undefined =
+    outputExtension === '.gif' ? 'gif' : outputExtension === '.mp4' ? 'mp4' : undefined;
+  if (opts.output && !extensionFormat) {
+    throw new Error('Output path must end in .mp4 or .gif');
+  }
+  if (requestedFormat && extensionFormat && requestedFormat !== extensionFormat) {
+    throw new Error(
+      `Output extension "${outputExtension}" conflicts with --format ${requestedFormat}.`,
+    );
+  }
+  const outputFormat = (requestedFormat ?? extensionFormat ?? 'mp4') as VideoOutputFormat;
+
+  // Resolve format-specific defaults before validating. GIF frame delays are
+  // centisecond-based, so rates above 100 cannot be represented precisely.
+  const maxFps = outputFormat === 'gif' ? 100 : 120;
+  const fps = parseInt(opts.fps ?? (outputFormat === 'gif' ? '10' : '30'), 10);
+  if (isNaN(fps) || fps < 1 || fps > maxFps) {
+    throw new Error(`FPS must be a number between 1 and ${maxFps}`);
   }
 
   const quality = opts.quality ?? 'normal';
+  if (outputFormat === 'gif' && opts.quality !== undefined) {
+    throw new Error('--quality only applies to MP4 output');
+  }
   if (!VALID_QUALITIES.includes(quality as (typeof VALID_QUALITIES)[number])) {
     throw new Error(`Invalid quality "${quality}". Valid: ${VALID_QUALITIES.join(', ')}`);
   }
@@ -129,6 +172,30 @@ async function runVideo(inputPath: string, opts: VideoCommandOptions): Promise<v
     throw new Error('Cover pre-roll must be a number of seconds >= 0');
   }
 
+  const animationsEnabled = opts.animations ?? outputFormat === 'mp4';
+  const loop = opts.loop === undefined ? 0 : Number(opts.loop);
+  const maxColors = opts.maxColors === undefined ? 256 : Number(opts.maxColors);
+  const bayerScale = opts.bayerScale === undefined ? undefined : Number(opts.bayerScale);
+  const dither = (opts.dither ?? 'sierra2_4a') as GifDither;
+  if (outputFormat === 'mp4' && (opts.loop || opts.maxColors || opts.dither || opts.bayerScale)) {
+    throw new Error('--loop, --max-colors, --dither, and --bayer-scale only apply to GIF output');
+  }
+  if (!Number.isSafeInteger(loop) || loop < -1 || loop > 65_535) {
+    throw new Error('GIF loop must be an integer between -1 and 65535');
+  }
+  if (!Number.isSafeInteger(maxColors) || maxColors < 2 || maxColors > 256) {
+    throw new Error('GIF max colors must be an integer between 2 and 256');
+  }
+  if (!VALID_GIF_DITHERS.includes(dither as (typeof VALID_GIF_DITHERS)[number])) {
+    throw new Error(`Invalid GIF dither "${dither}". Valid: ${VALID_GIF_DITHERS.join(', ')}`);
+  }
+  if (
+    bayerScale !== undefined &&
+    (!Number.isSafeInteger(bayerScale) || bayerScale < 0 || bayerScale > 5)
+  ) {
+    throw new Error('GIF Bayer scale must be an integer between 0 and 5');
+  }
+
   // Validate the transform ID up front. The theme id is validated after the
   // doc is read (below), so a custom theme inlined in the doc is admitted
   // rather than rejected as "unknown".
@@ -142,7 +209,7 @@ async function runVideo(inputPath: string, opts: VideoCommandOptions): Promise<v
   const baseName = inputExt ? inputBasename.slice(0, -inputExt.length) : inputBasename;
   const outputPath = opts.output
     ? resolve(opts.output)
-    : resolve(dirname(resolvedInput), `${baseName}.mp4`);
+    : resolve(dirname(resolvedInput), `${baseName}.${outputFormat}`);
 
   // Ensure output directory exists
   await mkdir(dirname(outputPath), { recursive: true });
@@ -182,26 +249,43 @@ async function runVideo(inputPath: string, opts: VideoCommandOptions): Promise<v
     doc = { ...doc, themeId: opts.theme };
   }
 
+  const motionLabel = animationsEnabled ? 'animations on' : 'animations off';
+  const qualityLabel = outputFormat === 'mp4' ? `, quality: ${quality}` : '';
   console.error(
-    `Rendering: ${fps} fps, quality: ${quality}, orientation: ${orientation}, captions: ${captions}`,
+    `Rendering ${outputFormat.toUpperCase()}: ${fps} fps${qualityLabel}, orientation: ${orientation}, captions: ${captions}, ${motionLabel}`,
   );
 
   // ── Step 3: Render via programmatic API ─────────────────────────
-  const result2 = await renderDocToMp4(doc, container, {
+  const sharedRenderOptions = {
     outputPath,
     fps,
-    quality: quality as VideoQuality,
     orientation: orientation as VideoOrientation,
     width: opts.width ? parseInt(opts.width, 10) : undefined,
     height: opts.height ? parseInt(opts.height, 10) : undefined,
     captionStyle,
     coverPreRoll,
-    onProgress: (phase, percent) => {
-      writeProgress(phase, percent, 100);
-    },
-  });
+    animationsEnabled,
+    onProgress: (phase: string, percent: number) => writeProgress(phase, percent, 100),
+  };
+  const result2 =
+    outputFormat === 'gif'
+      ? await renderDocToGif(doc, container, {
+          ...sharedRenderOptions,
+          loop,
+          maxColors,
+          dither,
+          bayerScale,
+        })
+      : await renderDocToMp4(doc, container, {
+          ...sharedRenderOptions,
+          quality: quality as VideoQuality,
+        });
 
   clearProgress();
+  const warnings = 'warnings' in result2 && Array.isArray(result2.warnings) ? result2.warnings : [];
+  for (const warning of warnings) {
+    console.error(`  ⚠ ${warning}`);
+  }
   console.error(
     `  ✓ ${outputPath} (${result2.duration.toFixed(1)}s, ${result2.frameCount} frames)`,
   );

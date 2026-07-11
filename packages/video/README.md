@@ -1,6 +1,6 @@
 # @bendyline/squisq-video
 
-Video rendering foundation for Squisq documents. Its pure timeline, quality, and render-HTML helpers work in Node.js and browsers; `framesToMp4Wasm` encodes frames in browser runtimes without native dependencies.
+Video and animated-GIF rendering foundation for Squisq documents. Its pure timeline, quality, palette, and render-HTML helpers work in Node.js and browsers; `framesToMp4Wasm` encodes frames in browser runtimes without native dependencies.
 
 Part of the [Squisq](https://github.com/bendyline/squisq) monorepo.
 
@@ -15,17 +15,18 @@ npm install @bendyline/squisq-video
 
 ## What's Inside
 
-| Export                                                                                                          | Description                                                                                                     |
-| --------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
-| `generateRenderHtml(doc, options)`                                                                              | Self-contained HTML page with embedded media for headless frame capture                                         |
-| `framesToMp4Wasm(frames, audio, options)`                                                                       | Encode PNG frames (+ optional audio) to MP4 via ffmpeg.wasm                                                     |
-| `computeAudioTimeline(doc, coverPreRoll?)`                                                                      | Flatten a doc's narration + timed media into absolute-timed audio clips (browser export and CLI mix share this) |
-| `bitrateForQuality(quality, width, height)`                                                                     | Target H.264 bitrate (`w*h*bitsPerPixel`) — the single source of truth for WebCodecs bitrate                    |
-| `ffmpegVideoQualityArgs`, `audioBitrateArg`, `ffmpegAudioMuxArgs`                                               | Shared FFmpeg flags; audio muxing pads short narration so it cannot truncate the video                          |
-| `QUALITY_PRESETS`, `ORIENTATION_DIMENSIONS`, `resolveDimensions`                                                | Quality/dimension presets and helpers                                                                           |
-| `validateVideoExportOptions(options)`                                                                           | Fail-fast runtime validation for FPS, dimensions, quality, and orientation                                      |
-| `VideoExportOptions`, `VideoQuality`, `VideoOrientation`, `QualityPreset`, `EncoderResult`, `AudioTimelineClip` | Shared types                                                                                                    |
-| `fetchFile`                                                                                                     | Re-export of `@ffmpeg/util`'s `fetchFile` for preparing audio bytes                                             |
+| Export                                                                                                  | Description                                                                                                     |
+| ------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
+| `generateRenderHtml(doc, options)`                                                                      | Self-contained HTML page with embedded media for headless frame capture                                         |
+| `framesToMp4Wasm(frames, audio, options)`                                                               | Encode PNG frames (+ optional audio) to MP4 via ffmpeg.wasm                                                     |
+| `computeAudioTimeline(doc, coverPreRoll?)`                                                              | Flatten a doc's narration + timed media into absolute-timed audio clips (browser export and CLI mix share this) |
+| `bitrateForQuality(quality, width, height)`                                                             | Target H.264 bitrate (`w*h*bitsPerPixel`) — the single source of truth for WebCodecs bitrate                    |
+| `ffmpegVideoQualityArgs`, `audioBitrateArg`, `ffmpegAudioMuxArgs`                                       | Shared FFmpeg flags; audio muxing pads short narration so it cannot truncate the video                          |
+| `ffmpegGifFilterGraph`, `ffmpegGifOutputArgs`                                                           | Shared global-palette GIF filters and muxer flags used by native and browser exporters                          |
+| `QUALITY_PRESETS`, `ORIENTATION_DIMENSIONS`, `resolveDimensions`                                        | Quality/dimension presets and helpers                                                                           |
+| `validateVideoExportOptions(options)`                                                                   | Fail-fast runtime validation for FPS, dimensions, quality, and orientation                                      |
+| `VideoExportOptions`, `VideoQuality`, `VideoOrientation`, `GifDither`, `QualityPreset`, `EncoderResult` | Shared video and GIF types                                                                                      |
+| `fetchFile`                                                                                             | Re-export of `@ffmpeg/util`'s `fetchFile` for preparing audio bytes                                             |
 
 This package is the shared foundation under [@bendyline/squisq-video-react](https://www.npmjs.com/package/@bendyline/squisq-video-react) (in-browser export UI) and [@bendyline/squisq-cli](https://www.npmjs.com/package/@bendyline/squisq-cli) (`squisq video`, which pairs the render HTML with Playwright capture and native ffmpeg encoding).
 

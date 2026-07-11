@@ -24,6 +24,33 @@ function docWithCover(): Doc {
   };
 }
 
+function docWithTransition(): Doc {
+  return {
+    articleId: 'transition-doc',
+    duration: 10,
+    blocks: [
+      { id: 'first', startTime: 0, duration: 5, audioSegment: 0, layers: [] },
+      {
+        id: 'second',
+        startTime: 5,
+        duration: 5,
+        audioSegment: 0,
+        transition: { type: 'fade', duration: 1 },
+        layers: [
+          {
+            type: 'text',
+            id: 'animated-title',
+            content: { text: 'Second slide', style: { fontSize: 48, color: '#fff' } },
+            position: { x: 100, y: 100 },
+            animation: { type: 'fadeIn', duration: 1 },
+          },
+        ],
+      },
+    ],
+    audio: { segments: [] },
+  };
+}
+
 function controller(overrides: Partial<AudioController> = {}): AudioController {
   return {
     currentTime: 0,
@@ -83,6 +110,53 @@ describe('DocPlayer smoke test', () => {
     );
     expect(container.textContent).not.toContain('Managed Cover');
     expect(screen.getByTestId('slide-counter').textContent).toBe('1 / 1');
+  });
+
+  it('renders the managed cover without layer animation classes when animations are disabled', async () => {
+    const { container } = render(
+      <DocPlayer
+        doc={docWithCover()}
+        basePath="/test"
+        displayMode="slideshow"
+        animationsEnabled={false}
+      />,
+    );
+
+    await waitFor(() => expect(container.textContent).toContain('Managed Cover'));
+    expect(container.querySelector('[class*="anim-"]')).toBeNull();
+  });
+
+  it('uses static cuts without an outgoing slide while preserving timeline changes', () => {
+    const doc = docWithTransition();
+    const onRenderAPIReady = vi.fn();
+    const { container, rerender } = render(
+      <DocPlayer
+        doc={doc}
+        audioController={controller({ currentTime: 0, totalDuration: 10 })}
+        showControls={false}
+        renderMode
+        animationsEnabled={false}
+        onRenderAPIReady={onRenderAPIReady}
+      />,
+    );
+
+    rerender(
+      <DocPlayer
+        doc={doc}
+        audioController={controller({ currentTime: 5.1, totalDuration: 10 })}
+        showControls={false}
+        renderMode
+        animationsEnabled={false}
+        onRenderAPIReady={onRenderAPIReady}
+      />,
+    );
+
+    expect(container.querySelector('.doc-player__block--previous')).toBeNull();
+    expect(
+      container.querySelector('.doc-player__block--active [data-block-id="second"]'),
+    ).toBeTruthy();
+    expect(container.querySelector('.transition-fade-enter')).toBeNull();
+    expect(container.querySelector('[class*="anim-"]')).toBeNull();
   });
 
   it('advances from slideshow cover to slide 1', async () => {

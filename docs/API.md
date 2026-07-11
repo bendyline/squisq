@@ -1233,6 +1233,7 @@ interface DocPlayerProps {
   markdown?: string; // parsed via markdownToDoc(parseMarkdown(markdown)) when `doc` is absent
   basePath?: string; // default '.'
   renderMode?: boolean; // default false — headless capture mode
+  animationsEnabled?: boolean; // default true — false removes layer animations + block transitions
   onRenderAPIReady?: (api: SquisqRenderAPI | null) => void;
   autoPlay?: boolean; // default false
   onEnded?: () => void;
@@ -1273,6 +1274,7 @@ interface BlockRendererProps {
   transition?: Transition;
   viewport?: { width: number; height: number };
   isPlaying?: boolean;
+  animationsEnabled?: boolean; // default true
 }
 ```
 
@@ -1301,6 +1303,7 @@ interface LinearDocViewProps {
   basePath?: string;
   viewport?: ViewportConfig;
   theme?: Theme; // default DEFAULT_THEME
+  animationsEnabled?: boolean; // default true
   surface?: SurfaceScheme | 'auto';
   thinMargins?: boolean;
   imageDisplayMode?: ImageDisplayMode; // 'inline' (default) | 'thumbnail'
@@ -1448,6 +1451,7 @@ interface MountOptions {
   theme?: Theme;
   autoPlay?: boolean;
   renderMode?: boolean;
+  animationsEnabled?: boolean; // default true; media and timing remain active
   captionStyle?: 'standard' | 'social';
 }
 interface SquisqPlayerHandle {
@@ -2232,9 +2236,9 @@ function timingPathFor(audioRelativePath: string): string; // `${path}.timing.js
 
 ## `@bendyline/squisq-video`
 
-Cross-runtime render-HTML, timeline, and quality helpers plus a browser-only
-ffmpeg.wasm encoder. Node video export uses `framesToMp4Native` or
-`framesToMp4NativeBytes` from `@bendyline/squisq-cli/api`.
+Cross-runtime render-HTML, timeline, quality, and GIF-palette helpers plus a
+browser-only ffmpeg.wasm MP4 encoder. Node MP4/GIF export uses the native frame
+encoders from `@bendyline/squisq-cli/api`.
 
 **Import:** `@bendyline/squisq-video`
 
@@ -2269,6 +2273,22 @@ function bitrateForQuality(q: VideoQuality, width: number, height: number): numb
 // AAC mux flags that pad short audio before `-shortest`, preserving the full
 // video timeline while trimming narration that runs beyond it.
 function ffmpegAudioMuxArgs(bitrate: string | number): string[];
+
+// Global diff palette + changed-rectangle application used consistently by
+// native and browser animated-GIF exporters.
+function ffmpegGifFilterGraph(options: GifFilterOptions): string;
+function ffmpegGifOutputArgs(options: GifOutputOptions): string[];
+type GifDither = 'bayer' | 'sierra2_4a' | 'none';
+interface GifFilterOptions {
+  width: number;
+  height: number;
+  maxColors?: number; // 2–256, default 256
+  dither?: GifDither; // default sierra2_4a
+  bayerScale?: number; // 0–5, default 3
+}
+interface GifOutputOptions extends GifFilterOptions {
+  loop?: number; // 0 forever, -1 no loop
+}
 
 const QUALITY_PRESETS: Record<VideoQuality, QualityPreset>; // draft/normal/high → ffmpeg preset + crf + bitsPerPixel + audioBitrate
 const ORIENTATION_DIMENSIONS: Record<VideoOrientation, { width: number; height: number }>;
@@ -2315,6 +2335,7 @@ interface RenderHtmlOptions {
   width?: number; // default 1920
   height?: number; // default 1080
   captionStyle?: 'standard' | 'social';
+  animationsEnabled?: boolean; // default true
 }
 ```
 
@@ -2322,9 +2343,11 @@ interface RenderHtmlOptions {
 
 ## `@bendyline/squisq-video-react`
 
-React components for browser-based video export (WebCodecs primary, ffmpeg.wasm
-worker fallback). Depends on `@bendyline/squisq-video`, `@bendyline/squisq-react`,
-`mp4-muxer`, and `html2canvas`.
+React components for browser-based MP4 and animated-GIF export. MP4 uses
+WebCodecs primarily with an ffmpeg.wasm worker fallback; GIF palette-transcodes
+the compact video-only MP4 intermediate through ffmpeg.wasm. Depends on
+`@bendyline/squisq-video`, `@bendyline/squisq-react`, `@ffmpeg/ffmpeg`, the
+pinned `@ffmpeg/core` runtime, `mp4-muxer`, and `html2canvas`.
 
 **Import:** `@bendyline/squisq-video-react`
 
@@ -2336,6 +2359,16 @@ in (see `audioIncluded` / `audioSkippedReason` below). `playerScript` is now
 in-page `DocPlayer`, so the IIFE bundle is only forwarded for CLI/Playwright-style
 pipelines. A new `defaultConfig?: Partial<VideoExportConfig>` prop seeds the
 modal's initial settings and is merged as a base into the export config.
+
+Animated GIF export defaults to 10 fps, 960×540 landscape (540×960 portrait),
+and `animationsEnabled: false` for compact output. It skips audio entirely and
+uses ffmpeg.wasm for the final palette pass, so it requires cross-origin
+isolation / `SharedArrayBuffer` in the browser.
+
+For reliable offline/CSP operation, publish
+`node_modules/@ffmpeg/core/dist/esm/ffmpeg-core.{js,wasm}` from the same origin
+and provide those URLs through `VideoExportConfig.ffmpegWasm`. The demo site's
+Vite build does this automatically.
 
 ### Components
 
@@ -2372,10 +2405,15 @@ function useVideoExport(): VideoExportResult;
 function useFrameCapture(): FrameCaptureHandle;
 
 type VideoExportState = 'idle' | 'preparing' | 'capturing' | 'encoding' | 'complete' | 'error';
+type VideoOutputFormat = 'mp4' | 'gif';
 interface VideoExportConfig {
+  outputFormat?: VideoOutputFormat; // default 'mp4'
+  animationsEnabled?: boolean; // MP4 default true; GIF default false
   quality?: VideoQuality; // default 'normal'
-  fps?: number; // default 30
+  fps?: number; // MP4 default 30; GIF default 10
   orientation?: VideoOrientation; // default 'landscape'
+  width?: number; // GIF default 960 landscape / 540 portrait
+  height?: number; // GIF default 540 landscape / 960 portrait
   images?: Map<string, ArrayBuffer>;
   audio?: Map<string, ArrayBuffer>;
   mediaProvider?: MediaProvider;
@@ -2394,10 +2432,11 @@ interface VideoExportResult {
   progress: number;
   phase: string;
   duration: number;
+  outputFormat: VideoOutputFormat;
   backend: 'webcodecs' | 'ffmpeg-wasm' | null;
   downloadUrl: string | null;
   fileSize: number;
-  audioIncluded: boolean; // whether an audio track was muxed into the MP4
+  audioIncluded: boolean; // MP4 audio result; always false for GIF
   audioSkippedReason: string | null; // null = doc had no audio; string = a capability/runtime shortfall
   error: string | null;
   elapsed: number;
@@ -2445,7 +2484,7 @@ interface MainThreadEncoder {
 ## `@bendyline/squisq-cli`
 
 Command-line tool and programmatic API for converting Squisq documents and
-rendering them to MP4.
+rendering them to MP4 or animated GIF.
 
 **Install:** `npm install -g @bendyline/squisq-cli`
 
@@ -2456,23 +2495,23 @@ rendering them to MP4.
 Convert a document to one or more formats. Input can now be a **binary**
 document as well as markdown: `.md`, `.docx`, `.pptx`, `.pdf`, `.xlsx`, `.csv`,
 `.html`, a `.zip`/`.dbk` container, or a folder. Output formats now include
-`md`, `xlsx`, `csv`, and `mp4` alongside the originals.
+`md`, `xlsx`, `csv`, `mp4`, and `gif` alongside the originals.
 
-| Option                | Description                                                                      | Default       |
-| --------------------- | -------------------------------------------------------------------------------- | ------------- |
-| `-o, --output <file>` | **Single** output file; format inferred from its extension                       | —             |
-| `-d, --output-dir`    | Output directory (multi-format mode)                                             | same as input |
-| `-f, --formats`       | Comma-separated: `docx, pptx, pdf, html, htmlzip, epub, dbk, md, xlsx, csv, mp4` | default set   |
-| `-t, --theme`         | Squisq theme id (built-in or in-doc custom)                                      | none          |
-| `--transform`         | Transform style before export (documentary, magazine, …)                         | none          |
-| `--no-auto-templates` | Disable content-aware auto template picking                                      | (auto on)     |
+| Option                | Description                                                                           | Default       |
+| --------------------- | ------------------------------------------------------------------------------------- | ------------- |
+| `-o, --output <file>` | **Single** output file; format inferred from its extension                            | —             |
+| `-d, --output-dir`    | Output directory (multi-format mode)                                                  | same as input |
+| `-f, --formats`       | Comma-separated: `docx, pptx, pdf, html, htmlzip, epub, dbk, md, xlsx, csv, mp4, gif` | default set   |
+| `-t, --theme`         | Squisq theme id (built-in or in-doc custom)                                           | none          |
+| `--transform`         | Transform style before export (documentary, magazine, …)                              | none          |
+| `--no-auto-templates` | Disable content-aware auto template picking                                           | (auto on)     |
 
 > **v1.5 breaking flag change:** `-o` is now the **single-file** output
 > (`squisq convert in.md -o out.docx`, format inferred from the extension). The
 > old `-o` output-**directory** behavior moved to `-d, --output-dir`. `-o`
 > cannot be combined with `--formats`. A bare `convert <input>` with no
 > `-o`/`--formats` writes a default set to the output dir that
-> deliberately excludes `md`/`xlsx`/`csv`/`mp4`.
+> deliberately excludes `md`/`xlsx`/`csv`/`mp4`/`gif`.
 
 The `html` / `htmlzip` formats embed the standalone player (static mode); the
 `htmlzip` output is written as `<name>.html.zip`. `dbk` re-serializes the input
@@ -2480,22 +2519,25 @@ container as a ZIP.
 
 #### `squisq video <input> [output]`
 
-Render a document to MP4 (Playwright headless frame capture + native ffmpeg
-encode). In addition to markdown/container/folder input, accepts a pre-built
-Doc as a `.json` file.
+Render a document to MP4 or animated GIF (Playwright headless frame capture +
+native ffmpeg encode). In addition to markdown/container/folder input, accepts
+a pre-built Doc as a `.json` file.
 
-| Option                 | Description                                         | Default       |
-| ---------------------- | --------------------------------------------------- | ------------- |
-| `-o, --output`         | Output MP4 path (also accepted as a positional arg) | `<input>.mp4` |
-| `--fps`                | Frames per second (1–120)                           | 30            |
-| `--quality`            | draft, normal, or high                              | normal        |
-| `--orientation`        | landscape or portrait                               | landscape     |
-| `--captions`           | off, standard, or social                            | off           |
-| `-t, --theme`          | Squisq theme id to apply                            | none          |
-| `--transform`          | Transform style to apply before rendering           | none          |
-| `--cover-preroll`      | Seconds of cover-slide pre-roll before the story    | 2             |
-| `--width` / `--height` | Dimension overrides                                 | auto          |
-| `--no-auto-templates`  | Disable auto template pick                          | (auto on)     |
+| Option                                 | Description                                      | Default              |
+| -------------------------------------- | ------------------------------------------------ | -------------------- |
+| `-o, --output`                         | Output `.mp4` or `.gif` path                     | `<input>.mp4`        |
+| `--format`                             | `mp4` or `gif`                                   | inferred / mp4       |
+| `--fps`                                | Frames per second (MP4 1–120; GIF 1–100)         | MP4 30; GIF 10       |
+| `--quality`                            | MP4 only: draft, normal, or high                 | normal               |
+| `--orientation`                        | landscape or portrait                            | landscape            |
+| `--captions`                           | off, standard, or social                         | off                  |
+| `--animations` / `--no-animations`     | Layer animations and block transitions           | MP4 on; GIF off      |
+| `--loop` / `--max-colors` / `--dither` | GIF loop and palette controls                    | 0 / 256 / sierra2_4a |
+| `-t, --theme`                          | Squisq theme id to apply                         | none                 |
+| `--transform`                          | Transform style to apply before rendering        | none                 |
+| `--cover-preroll`                      | Seconds of cover-slide pre-roll before the story | 2                    |
+| `--width` / `--height`                 | Dimension overrides                              | auto                 |
+| `--no-auto-templates`                  | Disable auto template pick                       | (auto on)            |
 
 **Requires:** ffmpeg and Playwright (chromium). ffmpeg is resolved from the
 `SQUISQ_FFMPEG` env var, then `PATH`, then an optionally-installed `ffmpeg-static`
@@ -2531,28 +2573,42 @@ only: `0` clean, warnings-only, or info-only; `1` errors (or any warning with
 
 The API surfaces a pre-bound `convert()` — a thin wrapper over
 `@bendyline/squisq-formats`' `convert()` that injects the CLI's format registry
-(every built-in exporter plus the CLI-only `mp4` format) and a default
+(every built-in exporter plus the CLI-only `mp4` and `gif` formats) and a default
 `resolvePlayerScript` (so HTML/player-embedding exports work out of the box).
 Both are overridable via `options`. `createCliRegistry()` returns that same
 registry for direct use.
 
 ```ts
-// Pre-bound convert(): CLI registry (+ mp4) + default player script injected.
+// Pre-bound convert(): CLI registry (+ mp4/gif) + default player script injected.
 function convert(
   source: ConvertSource,
-  to: FormatId, // 'docx' | 'pdf' | 'pptx' | 'xlsx' | 'csv' | 'html' | 'epub' | 'md' | 'mp4' | …
+  to: FormatId, // 'docx' | 'pdf' | 'pptx' | 'xlsx' | 'csv' | 'html' | 'epub' | 'md' | 'mp4' | 'gif' | …
   options?: CliConvertOptions,
 ): Promise<ConversionResult>;
 type CliConvertOptions = Omit<ConvertOptions, 'formatOptions'> & {
-  formatOptions?: ConvertOptions['formatOptions'] & { mp4?: Mp4FormatOptions };
+  formatOptions?: ConvertOptions['formatOptions'] & {
+    mp4?: Mp4FormatOptions;
+    gif?: GifFormatOptions;
+  };
 };
 interface Mp4FormatOptions {
   fps?: number;
   quality?: VideoQuality;
   orientation?: VideoOrientation;
   coverPreRoll?: number;
+  animationsEnabled?: boolean; // default true
 }
-function createCliRegistry(): FormatRegistry; // defaultRegistry() + the mp4 exporter
+interface GifFormatOptions {
+  fps?: number; // default 10
+  orientation?: VideoOrientation;
+  coverPreRoll?: number;
+  animationsEnabled?: boolean; // default false
+  loop?: number;
+  maxColors?: number;
+  dither?: GifDither;
+  bayerScale?: number;
+}
+function createCliRegistry(): FormatRegistry; // defaultRegistry() + mp4/gif exporters
 // Re-exports: ConversionError, the ConvertSource/ConvertOptions/ConversionResult/
 // FormatId/FormatRegistry/FormatDefinition/NormalizedInput types, plus readInput.
 
@@ -2572,6 +2628,18 @@ function framesToMp4NativeBytes(
   options?: VideoExportOptions,
 ): Promise<Uint8Array>;
 
+function framesToGifNative(
+  ffmpegPath: string,
+  frames: Uint8Array[],
+  outputPath: string,
+  options?: GifExportOptions,
+): Promise<void>;
+function framesToGifNativeBytes(
+  ffmpegPath: string,
+  frames: Uint8Array[],
+  options?: GifExportOptions,
+): Promise<Uint8Array>;
+
 function renderDocToMp4(
   doc: Doc,
   container: MemoryContentContainer,
@@ -2586,6 +2654,7 @@ interface RenderDocToMp4Options {
   width?: number;
   height?: number;
   captionStyle?: 'standard' | 'social';
+  animationsEnabled?: boolean; // default true
   coverPreRoll?: number; // seconds shown only when a cover exists, default 0
   onProgress?: (phase: string, percent: number) => void;
 }
@@ -2593,6 +2662,30 @@ interface RenderDocToMp4Result {
   duration: number;
   frameCount: number;
   outputPath: string;
+}
+
+function renderDocToGif(
+  doc: Doc,
+  container: MemoryContentContainer,
+  options: RenderDocToGifOptions,
+): Promise<RenderDocToGifResult>;
+interface RenderDocToGifOptions {
+  outputPath: string;
+  fps?: number; // default 10
+  orientation?: VideoOrientation;
+  width?: number; // default 960 landscape / 540 portrait
+  height?: number; // default 540 landscape / 960 portrait
+  captionStyle?: 'standard' | 'social';
+  coverPreRoll?: number;
+  animationsEnabled?: boolean; // default false
+  loop?: number; // default 0 (forever)
+  maxColors?: number; // default 256
+  dither?: GifDither;
+  bayerScale?: number;
+  onProgress?: (phase: string, percent: number) => void;
+}
+interface RenderDocToGifResult extends RenderDocToMp4Result {
+  warnings: string[]; // includes omitted-audio warning when applicable
 }
 
 // Extract JPEG thumbnails from the first frame of an MP4.
@@ -2621,7 +2714,7 @@ interface ReadInputResult {
 
 // Re-exports
 export { MemoryContentContainer } from '@bendyline/squisq/storage';
-export type { VideoQuality, VideoOrientation } from '@bendyline/squisq-video';
+export type { GifDither, VideoQuality, VideoOrientation } from '@bendyline/squisq-video';
 ```
 
-`renderDocToMp4` requires Playwright chromium and ffmpeg on PATH.
+`renderDocToMp4` and `renderDocToGif` require Playwright chromium and ffmpeg on PATH.

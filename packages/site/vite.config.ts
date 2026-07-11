@@ -9,12 +9,9 @@ import { SQUISQ_DEV_PORT, SQUISQ_E2E_PORT } from '../../scripts/portUtils';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const crossOriginHeaders = {
-  // COOP/COEP were originally set for SharedArrayBuffer (ffmpeg.wasm).
-  // The current video export uses WebCodecs on the main thread, which
-  // doesn't need SharedArrayBuffer. COEP: require-corp blocks blob: URL
-  // iframes used by the frame capture system, so we use 'credentialless'
-  // which allows blob iframes while still enabling SharedArrayBuffer
-  // in browsers that support it.
+  // GIF export and the video fallback use ffmpeg.wasm/SharedArrayBuffer.
+  // COEP: require-corp blocks blob: URL iframes used by frame capture, so use
+  // credentialless: it permits those frames while preserving isolation.
   'Cross-Origin-Opener-Policy': 'same-origin',
   'Cross-Origin-Embedder-Policy': 'credentialless',
 };
@@ -94,9 +91,54 @@ function sampleContentPlugin(): Plugin {
   };
 }
 
+/**
+ * Serve and publish ffmpeg.wasm's pinned core beside the demo site. GIF export
+ * always needs the core, and a same-origin module avoids CDN/CORS failures in
+ * cross-origin-isolated workers.
+ */
+function ffmpegCorePlugin(): Plugin {
+  const coreDir = path.resolve(__dirname, '../../node_modules/@ffmpeg/core/dist/esm');
+  const allowedFiles = new Set(['ffmpeg-core.js', 'ffmpeg-core.wasm']);
+
+  const serveCore: Connect.NextHandleFunction = (req, res, next) => {
+    const pathname = req.url?.split('?', 1)[0] ?? '';
+    if (!pathname.startsWith('/ffmpeg-core/')) return next();
+    const fileName = pathname.slice('/ffmpeg-core/'.length);
+    if (!allowedFiles.has(fileName)) return next();
+
+    const filePath = path.join(coreDir, fileName);
+    if (!fs.existsSync(filePath)) return next();
+    const stat = fs.statSync(filePath);
+    res.setHeader('Content-Length', stat.size);
+    res.setHeader(
+      'Content-Type',
+      fileName.endsWith('.wasm') ? 'application/wasm' : 'text/javascript; charset=utf-8',
+    );
+    fs.createReadStream(filePath).pipe(res);
+  };
+
+  return {
+    name: 'ffmpeg-core',
+    configureServer(server) {
+      server.middlewares.use(serveCore);
+    },
+    configurePreviewServer(server) {
+      server.middlewares.use(serveCore);
+    },
+    writeBundle(options) {
+      const outDir = options.dir ?? path.resolve(__dirname, 'dist');
+      const destDir = path.join(outDir, 'ffmpeg-core');
+      fs.mkdirSync(destDir, { recursive: true });
+      for (const fileName of allowedFiles) {
+        fs.copyFileSync(path.join(coreDir, fileName), path.join(destDir, fileName));
+      }
+    },
+  };
+}
+
 export default defineConfig({
   base: process.env.VITE_BASE || '/',
-  plugins: [react(), sampleContentPlugin()],
+  plugins: [react(), sampleContentPlugin(), ffmpegCorePlugin()],
   resolve: {
     // Ensure workspace packages resolve to their source
     dedupe: ['react', 'react-dom'],

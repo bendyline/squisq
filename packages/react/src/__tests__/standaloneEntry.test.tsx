@@ -12,6 +12,20 @@ function doc(id: string): Doc {
   };
 }
 
+function animatedDoc(id: string): Doc {
+  const result = doc(id);
+  result.blocks[0].layers = [
+    {
+      type: 'text',
+      id: `${id}-title`,
+      content: { text: 'Standalone motion', style: { fontSize: 48, color: '#fff' } },
+      position: { x: 100, y: 100 },
+      animation: { type: 'fadeIn', duration: 1 },
+    },
+  ];
+  return result;
+}
+
 const mountedElements: Element[] = [];
 
 afterEach(() => {
@@ -71,5 +85,19 @@ describe('standalone player instance handles', () => {
     first.unmount();
     expect(getHandle(root)).toBe(second);
     expect(second.getRenderAPI()?.getBlocks()[0].id).toBe('second-block');
+  });
+
+  it('forwards the animationsEnabled render policy to the mounted player', async () => {
+    const root = document.createElement('div');
+    document.body.append(root);
+    mountedElements.push(root);
+
+    const handle = mount(root, animatedDoc('motionless'), {
+      renderMode: true,
+      animationsEnabled: false,
+    });
+    await handle.renderAPI;
+
+    expect(root.querySelector('[class*="anim-"]')).toBeNull();
   });
 });

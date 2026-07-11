@@ -73,4 +73,15 @@ describe('generateRenderHtml', () => {
     const withoutCaptions = generateRenderHtml(minimalDoc(), { playerScript: PLAYER_STUB });
     expect(withoutCaptions).not.toContain('captionStyle');
   });
+
+  it('threads the animation policy to the standalone player', () => {
+    const disabled = generateRenderHtml(minimalDoc(), {
+      playerScript: PLAYER_STUB,
+      animationsEnabled: false,
+    });
+    expect(disabled).toContain('animationsEnabled: false');
+
+    const defaults = generateRenderHtml(minimalDoc(), { playerScript: PLAYER_STUB });
+    expect(defaults).toContain('animationsEnabled: true');
+  });
 });

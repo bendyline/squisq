@@ -143,6 +143,12 @@ export interface DocPlayerProps {
   /** Render mode for video capture (hides controls and creates a render API). */
   renderMode?: boolean;
   /**
+   * Whether to render slide transitions and per-layer animations (default: true).
+   * Set to false for static slide changes while preserving timeline and media
+   * playback.
+   */
+  animationsEnabled?: boolean;
+  /**
    * Receives this player's instance-scoped render API, and `null` on cleanup.
    * The API is created in render mode and `?debug=true` mode only.
    */
@@ -268,6 +274,7 @@ function DocPlayerContent({
   doc,
   basePath = '.',
   renderMode = false,
+  animationsEnabled = true,
   autoPlay = false,
   onEnded,
   onTimeUpdate,
@@ -1109,6 +1116,7 @@ function DocPlayerContent({
           viewport={activeViewport}
           theme={theme}
           surface={surface}
+          animationsEnabled={animationsEnabled}
         />
       </div>
     );
@@ -1162,12 +1170,13 @@ function DocPlayerContent({
               basePath={basePath}
               isEntering={false}
               viewport={activeViewport}
+              animationsEnabled={animationsEnabled}
             />
           </div>
         )}
 
         {/* Previous block (during transition) */}
-        {!showCoverBlock && previousBlock && isExiting && (
+        {animationsEnabled && !showCoverBlock && previousBlock && isExiting && (
           // Keyed by block id so each block is its own DOM subtree: React never
           // reconciles one block's layers onto another's (templates reuse layer
           // ids like `title`/`background`), which would otherwise reuse stale
@@ -1180,6 +1189,7 @@ function DocPlayerContent({
               isExiting={true}
               transition={currentBlock?.transition}
               viewport={activeViewport}
+              animationsEnabled={animationsEnabled}
             />
           </div>
         )}
@@ -1199,9 +1209,10 @@ function DocPlayerContent({
               block={currentBlock}
               blockTime={blockTime}
               basePath={basePath}
-              isEntering={isEntering}
+              isEntering={animationsEnabled && isEntering}
               viewport={activeViewport}
               isPlaying={isPlaying}
+              animationsEnabled={animationsEnabled}
             />
           </div>
         )}

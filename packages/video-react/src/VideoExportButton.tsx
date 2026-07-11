@@ -28,13 +28,14 @@ export interface VideoExportButtonProps {
   /** Pre-collected audio map */
   audio?: Map<string, ArrayBuffer>;
   /**
-   * Seeds the modal's initial export settings and is merged as a base into the
-   * config passed to the export hook. Forwarded to {@link VideoExportModal}.
+   * Seeds the modal's initial output format and export settings and is merged
+   * as a base into the config passed to the export hook. Forwarded to
+   * {@link VideoExportModal}.
    */
   defaultConfig?: Partial<VideoExportConfig>;
   /** Visual color scheme forwarded to the portaled modal. Defaults to light. */
   colorScheme?: 'light' | 'dark';
-  /** Button label (default: "Export Video") */
+  /** Button label (defaults to "Export Video", or "Export GIF" for a GIF default config) */
   label?: string;
   /** Additional inline styles for the button */
   style?: React.CSSProperties;
@@ -50,11 +51,13 @@ export function VideoExportButton({
   audio,
   defaultConfig,
   colorScheme,
-  label = 'Export Video',
+  label,
   style,
   disabled,
 }: VideoExportButtonProps) {
   const [showModal, setShowModal] = useState(false);
+  const resolvedLabel =
+    label ?? (defaultConfig?.outputFormat === 'gif' ? 'Export GIF' : 'Export Video');
 
   const handleOpen = useCallback(() => setShowModal(true), []);
   const handleClose = useCallback(() => setShowModal(false), []);
@@ -62,7 +65,7 @@ export function VideoExportButton({
   return (
     <>
       <button onClick={handleOpen} disabled={disabled} style={style}>
-        {label}
+        {resolvedLabel}
       </button>
 
       {showModal &&

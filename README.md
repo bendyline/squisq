@@ -19,15 +19,15 @@ Open-source monorepo providing reusable libraries for document/block rendering, 
 
 ## Packages
 
-| Package                                                   | Description                                                                               |
-| --------------------------------------------------------- | ----------------------------------------------------------------------------------------- |
-| [`@bendyline/squisq`](packages/core)                      | Headless utilities — schemas, templates, spatial math, Markdown, storage                  |
-| [`@bendyline/squisq-react`](packages/react)               | React components — DocPlayer, BlockRenderer, layers, hooks                                |
-| [`@bendyline/squisq-formats`](packages/formats)           | Format converters — DOCX, PDF, HTML, EPUB, PPTX, XLSX, CSV + `convert()` registry         |
-| [`@bendyline/squisq-editor-react`](packages/editor-react) | React editor shell — raw/WYSIWYG/preview modes                                            |
-| [`@bendyline/squisq-video`](packages/video)               | Cross-runtime video helpers plus browser-based ffmpeg.wasm encoding                       |
-| [`@bendyline/squisq-video-react`](packages/video-react)   | React components for browser-based video export (WebCodecs + ffmpeg.wasm; MP4 with audio) |
-| [`@bendyline/squisq-cli`](packages/cli)                   | CLI tool — markdown **and** binary-format conversion, MP4 rendering, `squisq doctor`      |
+| Package                                                   | Description                                                                          |
+| --------------------------------------------------------- | ------------------------------------------------------------------------------------ |
+| [`@bendyline/squisq`](packages/core)                      | Headless utilities — schemas, templates, spatial math, Markdown, storage             |
+| [`@bendyline/squisq-react`](packages/react)               | React components — DocPlayer, BlockRenderer, layers, hooks                           |
+| [`@bendyline/squisq-formats`](packages/formats)           | Format converters — DOCX, PDF, HTML, EPUB, PPTX, XLSX, CSV + `convert()` registry    |
+| [`@bendyline/squisq-editor-react`](packages/editor-react) | React editor shell — raw/WYSIWYG/preview modes                                       |
+| [`@bendyline/squisq-video`](packages/video)               | Cross-runtime video/GIF helpers plus browser-based ffmpeg.wasm encoding              |
+| [`@bendyline/squisq-video-react`](packages/video-react)   | React browser export UI — MP4 with audio or animated GIF via WebCodecs + ffmpeg.wasm |
+| [`@bendyline/squisq-cli`](packages/cli)                   | CLI tool — markdown **and** binary conversion, MP4/GIF rendering, `squisq doctor`    |
 
 ## Documentation
 

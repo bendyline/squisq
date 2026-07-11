@@ -1,8 +1,9 @@
 /**
- * Programmatic Video API
+ * Programmatic Rendered-Media API
  *
- * Provides a library-style entry point for rendering Squisq documents to MP4
- * from Node.js callers (e.g., Qualla's pipeline). This avoids the need to shell
+ * Provides library-style entry points for rendering Squisq documents to MP4
+ * or animated GIF from Node.js callers (e.g., Qualla's pipeline). This avoids
+ * the need to shell
  * out to the `squisq video` CLI and gives callers full control over the Doc,
  * MemoryContentContainer, and encoding options.
  *
@@ -17,14 +18,19 @@
  *     quality: 'normal',
  *     orientation: 'landscape',
  *   });
+ *
+ *   await renderDocToGif(doc, container, {
+ *     outputPath: '/tmp/output.gif',
+ *     animationsEnabled: false,
+ *   });
  */
 
 import type { Doc } from '@bendyline/squisq/schemas';
 import { resolveMediaSchedule } from '@bendyline/squisq/schemas';
 import { flattenBlocks } from '@bendyline/squisq/doc';
 import type { ContentContainer } from '@bendyline/squisq/storage';
-import type { VideoQuality, VideoOrientation } from '@bendyline/squisq-video';
-import { generateRenderHtml } from '@bendyline/squisq-video';
+import type { GifDither, VideoQuality, VideoOrientation } from '@bendyline/squisq-video';
+import { ffmpegGifOutputArgs, generateRenderHtml } from '@bendyline/squisq-video';
 import { resolveDimensions } from '@bendyline/squisq-video';
 import { convert as formatsConvert } from '@bendyline/squisq-formats';
 import type {
@@ -36,20 +42,31 @@ import type {
 import { detectFfmpegDetailed } from './util/detectFfmpeg.js';
 import { buildMixedAudioTrack } from './util/audioMix.js';
 import { resolveAppliedCoverPreRoll } from './util/coverPreRoll.js';
+import { GIF_EXPORT_DEFAULTS } from './util/nativeEncoder.js';
 import { createCliRegistry } from './registry.js';
-import type { Mp4FormatOptions } from './registry.js';
+import type { GifFormatOptions, Mp4FormatOptions } from './registry.js';
 
 // Re-export utility types and functions callers may need
-export type { VideoQuality, VideoOrientation } from '@bendyline/squisq-video';
+export type { GifDither, VideoQuality, VideoOrientation } from '@bendyline/squisq-video';
 export { MemoryContentContainer } from '@bendyline/squisq/storage';
 export { readInput } from './util/readInput.js';
 export type { ReadInputResult } from './util/readInput.js';
-export { framesToMp4Native, framesToMp4NativeBytes } from './util/nativeEncoder.js';
-export type { Mp4FormatOptions } from './registry.js';
+export {
+  GIF_EXPORT_DEFAULTS,
+  framesToGifNative,
+  framesToGifNativeBytes,
+  framesToMp4Native,
+  framesToMp4NativeBytes,
+} from './util/nativeEncoder.js';
+export type { GifExportOptions } from './util/nativeEncoder.js';
+export type { GifFormatOptions, Mp4FormatOptions } from './registry.js';
 
-/** Convert options with the CLI-only MP4 adapter strongly typed. */
+/** Convert options with the CLI-only rendered-media adapters strongly typed. */
 export type CliConvertOptions = Omit<ConvertOptions, 'formatOptions'> & {
-  formatOptions?: ConvertOptions['formatOptions'] & { mp4?: Mp4FormatOptions };
+  formatOptions?: ConvertOptions['formatOptions'] & {
+    mp4?: Mp4FormatOptions;
+    gif?: GifFormatOptions;
+  };
 };
 
 // ── Format registry / convert() surface ───────────────────────────
@@ -75,13 +92,13 @@ export type {
  *
  * This is a thin, pre-bound wrapper over `convert()` from
  * `@bendyline/squisq-formats`: it injects the CLI registry (which adds the
- * `mp4` format on top of every built-in exporter) and a default
+ * `mp4` and `gif` formats on top of every built-in exporter) and a default
  * `resolvePlayerScript` that lazily loads the standalone player IIFE bundle
  * (required for HTML/EPUB-style exports). Callers may override either via
  * `options`.
  *
  * @param source - A bytes / markdown / doc {@link ConvertSource}.
- * @param to - Target format id (`docx`, `pdf`, `pptx`, `html`, `mp4`, …).
+ * @param to - Target format id (`docx`, `pdf`, `pptx`, `html`, `mp4`, `gif`, …).
  * @param options - Conversion options; `registry` and `resolvePlayerScript`
  *   default to the CLI's values but can be overridden.
  * @returns The encoded bytes plus mime type, suggested filename, and warnings.
@@ -123,6 +140,9 @@ export interface RenderDocToMp4Options {
   /** Caption style to bake into the video (default: none). */
   captionStyle?: 'standard' | 'social';
 
+  /** Render layer animations and block transitions (default: true). */
+  animationsEnabled?: boolean;
+
   /**
    * Seconds of cover-slide pre-roll before the story starts (default: 0).
    *
@@ -138,6 +158,36 @@ export interface RenderDocToMp4Options {
   onProgress?: (phase: string, percent: number) => void;
 }
 
+/** Options for rendering a document to an animated GIF. */
+export interface RenderDocToGifOptions {
+  /** Output file path for the GIF. */
+  outputPath: string;
+  /** Frames per second (default: 10). */
+  fps?: number;
+  /** Viewport orientation (default: landscape). */
+  orientation?: VideoOrientation;
+  /** Override output width (default: 960 landscape / 540 portrait). */
+  width?: number;
+  /** Override output height (default: 540 landscape / 960 portrait). */
+  height?: number;
+  /** Caption style to bake into the GIF (default: none). */
+  captionStyle?: 'standard' | 'social';
+  /** Seconds of cover-slide pre-roll (default: 0). */
+  coverPreRoll?: number;
+  /** Render layer animations and block transitions (default: false). */
+  animationsEnabled?: boolean;
+  /** Number of repeats; 0 loops forever and -1 disables looping. */
+  loop?: number;
+  /** Palette size, from 2 through 256 (default: 256). */
+  maxColors?: number;
+  /** Palette dithering algorithm (default: sierra2_4a). */
+  dither?: GifDither;
+  /** Bayer strength when dither is bayer (0-5, default: 3). */
+  bayerScale?: number;
+  /** Progress callback. */
+  onProgress?: (phase: string, percent: number) => void;
+}
+
 /** Result returned by renderDocToMp4. */
 export interface RenderDocToMp4Result {
   /** Duration of the rendered video in seconds (including pre-roll). */
@@ -148,6 +198,12 @@ export interface RenderDocToMp4Result {
 
   /** Output file path. */
   outputPath: string;
+}
+
+/** Result returned by renderDocToGif. */
+export interface RenderDocToGifResult extends RenderDocToMp4Result {
+  /** Non-fatal fidelity warnings, including GIF's lack of audio. */
+  warnings: string[];
 }
 
 /** Minimal standalone-player contract used inside Playwright's page realm. */
@@ -171,51 +227,32 @@ interface SquisqBrowserWindow {
   SquisqPlayer?: BrowserStandalonePlayer;
 }
 
-/**
- * Render a Doc + media container to an MP4 video file.
- *
- * The container should contain audio and image files referenced by the Doc's
- * audio.segments[].src and block image paths. Files are embedded as base64
- * data URIs in a self-contained render HTML page.
- *
- * Requires:
- * - Playwright (chromium) — for headless frame capture
- * - FFmpeg — for video encoding (resolved from SQUISQ_FFMPEG, PATH, or an
- *   optionally installed `ffmpeg-static` package)
- *
- * @param doc - The Doc structure to render
- * @param container - MemoryContentContainer with audio/image files
- * @param options - Rendering and encoding options
- * @returns Result with duration and frame count
- */
-export async function renderDocToMp4(
+interface CaptureDocFramesOptions {
+  fps: number;
+  width: number;
+  height: number;
+  captionStyle?: 'standard' | 'social';
+  coverPreRoll: number;
+  animationsEnabled: boolean;
+  onProgress?: (phase: string, percent: number) => void;
+}
+
+interface CapturedDocFrames {
+  frames: Uint8Array[];
+  totalDuration: number;
+  appliedCoverPreRoll: number;
+  ffmpegPath: string;
+}
+
+/** Capture deterministic PNG frames once, independent of the output encoder. */
+async function captureDocFrames(
   doc: Doc,
   container: ContentContainer,
-  options: RenderDocToMp4Options,
-): Promise<RenderDocToMp4Result> {
-  const {
-    outputPath,
-    fps = 30,
-    quality = 'normal',
-    orientation = 'landscape',
-    captionStyle,
-    coverPreRoll = 0,
-    onProgress,
-  } = options;
+  options: CaptureDocFramesOptions,
+): Promise<CapturedDocFrames> {
+  const { fps, width, height, captionStyle, coverPreRoll, animationsEnabled, onProgress } = options;
 
-  const dimensions = resolveDimensions({
-    orientation,
-    width: options.width,
-    height: options.height,
-    fps,
-    quality,
-  });
-
-  // Validate before launching Chromium. Whether it applies is decided after
-  // the player reports that the rendered document really has a cover.
   resolveAppliedCoverPreRoll(coverPreRoll, true);
-
-  // Detect ffmpeg early — needed for audio concat and video encoding
   const ffmpegPath = (await detectFfmpegDetailed())?.path ?? null;
   if (!ffmpegPath) {
     throw new Error(
@@ -229,40 +266,25 @@ export async function renderDocToMp4(
   }
 
   onProgress?.('collecting media', 0);
-
-  // ── Collect images from container ───────────────────────────────
   const { collectImagePaths } = await import('@bendyline/squisq-formats/html');
-  const imagePaths = collectImagePaths(doc);
   const images = new Map<string, ArrayBuffer>();
-  for (const imgPath of imagePaths) {
+  for (const imgPath of collectImagePaths(doc)) {
     const data = await container.readFile(imgPath);
-    if (data) {
-      images.set(imgPath, data);
-    }
+    if (data) images.set(imgPath, data);
   }
 
-  // ── Collect audio segments for the render HTML ──────────────────
-  // The player page loads narration so the doc's duration/timing resolves; the
-  // captured frames themselves are silent (audio is reconstructed offline from
-  // the timeline below). Keyed by both src and name so the inline provider
-  // resolves either reference.
+  // Audio remains available to the headless player even for silent GIF output:
+  // narration metadata and media duration still define the visual timeline.
   const audio = new Map<string, ArrayBuffer>();
-  if (doc.audio?.segments?.length) {
-    for (const seg of doc.audio.segments) {
-      const data = await container.readFile(seg.src);
-      if (data) {
-        audio.set(seg.src, data);
-        audio.set(seg.name, data);
-      }
+  for (const seg of doc.audio?.segments ?? []) {
+    const data = await container.readFile(seg.src);
+    if (data) {
+      audio.set(seg.src, data);
+      audio.set(seg.name, data);
     }
   }
 
-  // ── Collect timed-media clips + block video sources ─────────────
-  // Every scheduled clip (block.media + doc.documentMedia) and every
-  // template-produced VideoLayer needs its bytes embedded so the headless
-  // page can load them with no network. They resolve through the inline
-  // media provider's `images` map (which infers mp4/mp3 MIME by extension).
-  const mediaSrcs = new Set<string>(resolveMediaSchedule(doc).map((c) => c.src));
+  const mediaSrcs = new Set<string>(resolveMediaSchedule(doc).map((clip) => clip.src));
   for (const block of flattenBlocks(doc.blocks)) {
     for (const layer of block.layers ?? []) {
       if (layer.type === 'video') mediaSrcs.add(layer.content.src);
@@ -275,21 +297,18 @@ export async function renderDocToMp4(
   }
 
   onProgress?.('generating render HTML', 10);
-
-  // ── Generate self-contained render HTML ─────────────────────────
   const { PLAYER_BUNDLE } = await import('@bendyline/squisq-react/standalone-source');
   const renderHtml = generateRenderHtml(doc, {
     playerScript: PLAYER_BUNDLE,
     images,
     audio: audio.size > 0 ? audio : undefined,
-    width: dimensions.width,
-    height: dimensions.height,
+    width,
+    height,
     captionStyle,
+    animationsEnabled,
   });
 
   onProgress?.('launching browser', 15);
-
-  // ── Playwright frame capture ────────────────────────────────────
   const { chromium } = await import('playwright-core');
   let browser: import('playwright-core').Browser;
   try {
@@ -301,119 +320,196 @@ export async function renderDocToMp4(
         `(launch failed: ${detail})`,
     );
   }
-  const page = await browser.newPage({
-    viewport: { width: dimensions.width, height: dimensions.height },
-  });
 
+  const page = await browser.newPage({ viewport: { width, height } });
   const pageErrors: string[] = [];
   page.on('pageerror', (err) => pageErrors.push(err.message));
-
-  await page.setContent(renderHtml, { waitUntil: 'load' });
-  await page.waitForTimeout(500);
+  let renderAPI: import('playwright-core').JSHandle<BrowserRenderAPI> | null = null;
 
   try {
-    await page.waitForFunction(
-      () => {
-        const root = document.getElementById('squisq-root');
-        const player = (window as unknown as SquisqBrowserWindow).SquisqPlayer;
-        return root ? player?.getHandle(root)?.getRenderAPI() != null : false;
-      },
-      { timeout: 15000 },
-    );
-  } catch {
-    await browser.close();
-    const errorDetail = pageErrors.length
-      ? `\nPage errors:\n  ${pageErrors.join('\n  ')}`
-      : '\nNo page errors captured — the player may have failed to mount.';
-    throw new Error(
-      `The standalone player failed to boot in headless Chromium. ` +
-        `Render API did not initialize within 15 seconds.${errorDetail}`,
-    );
-  }
+    await page.setContent(renderHtml, { waitUntil: 'load' });
+    await page.waitForTimeout(500);
+    try {
+      await page.waitForFunction(
+        () => {
+          const root = document.getElementById('squisq-root');
+          const player = (window as unknown as SquisqBrowserWindow).SquisqPlayer;
+          return root ? player?.getHandle(root)?.getRenderAPI() != null : false;
+        },
+        { timeout: 15000 },
+      );
+    } catch {
+      const errorDetail = pageErrors.length
+        ? `\nPage errors:\n  ${pageErrors.join('\n  ')}`
+        : '\nNo page errors captured — the player may have failed to mount.';
+      throw new Error(
+        `The standalone player failed to boot in headless Chromium. ` +
+          `Render API did not initialize within 15 seconds.${errorDetail}`,
+      );
+    }
 
-  const renderAPI = await page.evaluateHandle(() => {
-    const root = document.getElementById('squisq-root');
-    const player = (window as unknown as SquisqBrowserWindow).SquisqPlayer;
-    const api = root ? player?.getHandle(root)?.getRenderAPI() : null;
-    if (!api) throw new Error('Squisq render API disappeared after initialization.');
-    return api;
+    renderAPI = await page.evaluateHandle(() => {
+      const root = document.getElementById('squisq-root');
+      const player = (window as unknown as SquisqBrowserWindow).SquisqPlayer;
+      const api = root ? player?.getHandle(root)?.getRenderAPI() : null;
+      if (!api) throw new Error('Squisq render API disappeared after initialization.');
+      return api;
+    });
+    const docDuration = await renderAPI.evaluate((api) => api.getDuration());
+    if (docDuration <= 0) throw new Error('Document has zero duration — nothing to render');
+
+    const hasCover =
+      coverPreRoll > 0 ? await renderAPI.evaluate((api) => api.hasCoverBlock()) : false;
+    const appliedCoverPreRoll = resolveAppliedCoverPreRoll(coverPreRoll, hasCover);
+    const storyFrameCount = Math.ceil(docDuration * fps);
+    const preRollFrameCount = Math.ceil(appliedCoverPreRoll * fps);
+    const totalFrames = preRollFrameCount + storyFrameCount;
+    const frames: Uint8Array[] = [];
+    onProgress?.('capturing frames', 20);
+
+    if (preRollFrameCount > 0) {
+      await renderAPI.evaluate((api) => api.showCover());
+      await page.waitForTimeout(100);
+      const coverFrame = new Uint8Array(await page.screenshot({ type: 'png' }));
+      for (let i = 0; i < preRollFrameCount; i++) frames.push(coverFrame);
+      await renderAPI.evaluate((api) => api.hideCover());
+    }
+
+    const frameInterval = 1 / fps;
+    for (let i = 0; i < storyFrameCount; i++) {
+      const time = i * frameInterval;
+      await renderAPI.evaluate((api, t: number) => api.seekTo(t), time);
+      frames.push(new Uint8Array(await page.screenshot({ type: 'png' })));
+      if (i % Math.max(1, Math.floor(fps / 2)) === 0 || i === storyFrameCount - 1) {
+        onProgress?.('capturing frames', 20 + Math.round((frames.length / totalFrames) * 60));
+      }
+    }
+
+    return {
+      frames,
+      totalDuration: docDuration + appliedCoverPreRoll,
+      appliedCoverPreRoll,
+      ffmpegPath,
+    };
+  } finally {
+    await renderAPI?.dispose();
+    await browser.close();
+  }
+}
+
+/** Render a Doc + media container to an MP4 video file. */
+export async function renderDocToMp4(
+  doc: Doc,
+  container: ContentContainer,
+  options: RenderDocToMp4Options,
+): Promise<RenderDocToMp4Result> {
+  const fps = options.fps ?? 30;
+  const quality = options.quality ?? 'normal';
+  const orientation = options.orientation ?? 'landscape';
+  const dimensions = resolveDimensions({
+    orientation,
+    width: options.width,
+    height: options.height,
+    fps,
+    quality,
   });
-  const docDuration = await renderAPI.evaluate((api) => api.getDuration());
+  const capture = await captureDocFrames(doc, container, {
+    fps,
+    width: dimensions.width,
+    height: dimensions.height,
+    captionStyle: options.captionStyle,
+    coverPreRoll: options.coverPreRoll ?? 0,
+    animationsEnabled: options.animationsEnabled ?? true,
+    onProgress: options.onProgress,
+  });
 
-  if (docDuration <= 0) {
-    await browser.close();
-    throw new Error('Document has zero duration — nothing to render');
-  }
-
-  const hasCover =
-    coverPreRoll > 0 ? await renderAPI.evaluate((api) => api.hasCoverBlock()) : false;
-  const appliedCoverPreRoll = resolveAppliedCoverPreRoll(coverPreRoll, hasCover);
-  const storyFrameCount = Math.ceil(docDuration * fps);
-  const preRollFrameCount = Math.ceil(appliedCoverPreRoll * fps);
-  const totalFrames = preRollFrameCount + storyFrameCount;
-  const frames: Uint8Array[] = [];
-
-  onProgress?.('capturing frames', 20);
-
-  // Cover slide pre-roll (if requested)
-  if (preRollFrameCount > 0) {
-    await renderAPI.evaluate((api) => api.showCover());
-    await page.waitForTimeout(100);
-    const coverFrame = new Uint8Array(await page.screenshot({ type: 'png' }));
-    for (let i = 0; i < preRollFrameCount; i++) {
-      frames.push(coverFrame);
-    }
-    await renderAPI.evaluate((api) => api.hideCover());
-  }
-
-  // Story frames via seekTo
-  const frameInterval = 1 / fps;
-  for (let i = 0; i < storyFrameCount; i++) {
-    const time = i * frameInterval;
-    await renderAPI.evaluate((api, t: number) => api.seekTo(t), time);
-
-    const screenshot = await page.screenshot({ type: 'png' });
-    frames.push(new Uint8Array(screenshot));
-
-    // Report progress: frames phase is 20% to 80%
-    if (i % Math.max(1, Math.floor(fps / 2)) === 0 || i === storyFrameCount - 1) {
-      const pct = 20 + Math.round((frames.length / totalFrames) * 60);
-      onProgress?.('capturing frames', pct);
-    }
-  }
-
-  await renderAPI.dispose();
-  await browser.close();
-
-  onProgress?.('encoding video', 80);
-
-  // Build the final audio track from the single-source-of-truth timeline:
-  // narration segments laid sequentially + timed media clips at their absolute
-  // positions, every start shifted by the cover pre-roll. `buildMixedAudioTrack`
-  // is a pure consumer of `computeAudioTimeline`, so the CLI's placement can no
-  // longer drift from the browser export (zero-duration narration segments are
-  // skipped consistently in both).
-  const encodingAudio = await buildMixedAudioTrack(doc, container, ffmpegPath, appliedCoverPreRoll);
-
+  options.onProgress?.('encoding video', 80);
+  const encodingAudio = await buildMixedAudioTrack(
+    doc,
+    container,
+    capture.ffmpegPath,
+    capture.appliedCoverPreRoll,
+  );
   const { framesToMp4Native } = await import('./util/nativeEncoder.js');
-  await framesToMp4Native(ffmpegPath, frames, encodingAudio, outputPath, {
+  await framesToMp4Native(capture.ffmpegPath, capture.frames, encodingAudio, options.outputPath, {
     fps,
     quality,
     orientation,
     width: dimensions.width,
     height: dimensions.height,
-    onProgress: (percent, phase) => {
-      onProgress?.(`encoding: ${phase}`, 80 + Math.round(percent * 0.2));
-    },
+    onProgress: (percent, phase) =>
+      options.onProgress?.(`encoding: ${phase}`, 80 + Math.round(percent * 0.2)),
+  });
+  options.onProgress?.('done', 100);
+  return {
+    duration: capture.totalDuration,
+    frameCount: capture.frames.length,
+    outputPath: options.outputPath,
+  };
+}
+
+/** Render a Doc + media container to a silent animated GIF. */
+export async function renderDocToGif(
+  doc: Doc,
+  container: ContentContainer,
+  options: RenderDocToGifOptions,
+): Promise<RenderDocToGifResult> {
+  const fps = options.fps ?? GIF_EXPORT_DEFAULTS.fps;
+  if (!Number.isFinite(fps) || fps <= 0 || fps > 100) {
+    throw new RangeError('GIF FPS must be a finite number between 1 and 100.');
+  }
+  const orientation = options.orientation ?? 'landscape';
+  const portrait = orientation === 'portrait';
+  const width =
+    options.width ?? (portrait ? GIF_EXPORT_DEFAULTS.height : GIF_EXPORT_DEFAULTS.width);
+  const height =
+    options.height ?? (portrait ? GIF_EXPORT_DEFAULTS.width : GIF_EXPORT_DEFAULTS.height);
+  // Reuse shared dimension validation without inheriting MP4's 1080p defaults.
+  resolveDimensions({ orientation, width, height, fps });
+  // Validate palette/muxer options before the expensive browser capture.
+  ffmpegGifOutputArgs({
+    width,
+    height,
+    loop: options.loop ?? GIF_EXPORT_DEFAULTS.loop,
+    maxColors: options.maxColors ?? GIF_EXPORT_DEFAULTS.maxColors,
+    dither: options.dither ?? GIF_EXPORT_DEFAULTS.dither,
+    bayerScale: options.bayerScale,
   });
 
-  onProgress?.('done', 100);
+  const capture = await captureDocFrames(doc, container, {
+    fps,
+    width,
+    height,
+    captionStyle: options.captionStyle,
+    coverPreRoll: options.coverPreRoll ?? 0,
+    animationsEnabled: options.animationsEnabled ?? false,
+    onProgress: options.onProgress,
+  });
 
-  const totalDuration = docDuration + appliedCoverPreRoll;
+  options.onProgress?.('encoding GIF', 80);
+  const { framesToGifNative } = await import('./util/nativeEncoder.js');
+  await framesToGifNative(capture.ffmpegPath, capture.frames, options.outputPath, {
+    fps,
+    orientation,
+    width,
+    height,
+    loop: options.loop,
+    maxColors: options.maxColors,
+    dither: options.dither,
+    bayerScale: options.bayerScale,
+    onProgress: (percent, phase) =>
+      options.onProgress?.(`encoding: ${phase}`, 80 + Math.round(percent * 0.2)),
+  });
+  options.onProgress?.('done', 100);
+
+  const hasAudio =
+    (doc.audio?.segments?.length ?? 0) > 0 ||
+    resolveMediaSchedule(doc).some((clip) => clip.kind === 'audio');
   return {
-    duration: totalDuration,
-    frameCount: frames.length,
-    outputPath,
+    duration: capture.totalDuration,
+    frameCount: capture.frames.length,
+    outputPath: options.outputPath,
+    warnings: hasAudio ? ['Animated GIF does not support audio; audio tracks were omitted.'] : [],
   };
 }
 

@@ -21,6 +21,7 @@ import { buildPreviewDoc, PlainHtmlPreview } from '@bendyline/squisq-editor-reac
 import JSZip from 'jszip';
 import { collectImagesForHtmlExport } from './exportHelpers';
 import { slugifyTitle } from './exportFilename';
+import { SITE_FFMPEG_WASM_CONFIG } from './ffmpegWasmConfig';
 import {
   createEntryAwareDocumentReader,
   prepareExportDoc,
@@ -368,7 +369,7 @@ const FORMAT_LABELS: Record<ExportFormat, string> = {
   html: 'Standalone HTML (.html)',
   htmlzip: 'HTML + Assets (.zip)',
   zip: 'Content Zip (.zip)',
-  video: 'Video (.mp4)',
+  video: 'Video / Animated GIF',
 };
 
 /** Formats that support render mode (document vs slideshow) selection */
@@ -857,6 +858,7 @@ export function ExportConfigModal({
             doc={preparedVideoDoc}
             playerScript={playerScriptRef.current}
             mediaProvider={mediaProvider ?? undefined}
+            defaultConfig={{ ffmpegWasm: SITE_FFMPEG_WASM_CONFIG }}
             colorScheme={colorScheme}
             onClose={() => {
               setShowVideoModal(false);

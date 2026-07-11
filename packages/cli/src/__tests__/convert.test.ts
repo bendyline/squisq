@@ -67,13 +67,15 @@ describe('convert command', () => {
     }
   });
 
-  it('does not produce mp4 for a bare default convert', async () => {
+  it('does not produce rendered media for a bare default convert', async () => {
     await runCli('convert', FIXTURE_MD, '-d', tempDir);
-    try {
-      await stat(join(tempDir, 'test.mp4'));
-      expect.fail('test.mp4 should not be produced by the default format set');
-    } catch (err: unknown) {
-      expect((err as NodeJS.ErrnoException).code).to.equal('ENOENT');
+    for (const ext of ['mp4', 'gif']) {
+      try {
+        await stat(join(tempDir, `test.${ext}`));
+        expect.fail(`test.${ext} should not be produced by the default format set`);
+      } catch (err: unknown) {
+        expect((err as NodeJS.ErrnoException).code).to.equal('ENOENT');
+      }
     }
   });
 

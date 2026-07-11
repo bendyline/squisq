@@ -18,9 +18,9 @@ rendering and spatial utilities. It is designed to be framework-agnostic at the 
 - `@bendyline/squisq-react` — React component library (DocPlayer, BlockRenderer, layers, hooks, LinearDocView, MarkdownRenderer, JsonView, inline media players, standalone IIFE bundle)
 - `@bendyline/squisq-formats` — Document format converters (DOCX, PDF, HTML, EPUB, PPTX, XLSX, CSV import/export; shared OOXML infrastructure; format registry + `convert()`; ContentContainer ZIP serialization; theme + layout inference from office files via `/infer`)
 - `@bendyline/squisq-editor-react` — React editor shell (Monaco raw, Tiptap WYSIWYG, block preview, toolbar, theme/template pickers, version history, image editor, JsonEditor) + browser-based audio/camera/screen recording (MediaRecorder + getUserMedia + getDisplayMedia, persists into a `ContentContainer`)
-- `@bendyline/squisq-video` — Cross-runtime render/timeline/preset helpers plus a browser-only ffmpeg.wasm MP4 encoder. Node video export uses the CLI's native FFmpeg path.
-- `@bendyline/squisq-video-react` — React components for browser-based video export (WebCodecs primary, ffmpeg.wasm fallback; MP4 export now muxes narration audio)
-- `@bendyline/squisq-cli` — `squisq` bin command for converting documents (markdown **or** binary DOCX/PPTX/PDF/XLSX/CSV/HTML inputs) to DOCX/PDF/HTML/EPUB/PPTX/XLSX/CSV/MP4 from the terminal, plus `squisq doctor` (environment readiness) — built on the shared format registry `convert()`
+- `@bendyline/squisq-video` — Cross-runtime render/timeline/preset helpers, shared GIF palette arguments, and a browser-only ffmpeg.wasm MP4 encoder. Node MP4/GIF export uses the CLI's native FFmpeg path.
+- `@bendyline/squisq-video-react` — React components for browser-based MP4/GIF export (WebCodecs primary, ffmpeg.wasm fallback/palette pass; MP4 muxes narration audio, GIF is silent)
+- `@bendyline/squisq-cli` — `squisq` bin command for converting documents (markdown **or** binary DOCX/PPTX/PDF/XLSX/CSV/HTML inputs) to DOCX/PDF/HTML/EPUB/PPTX/XLSX/CSV/MP4/GIF from the terminal, plus `squisq doctor` (environment readiness) — built on the shared format registry `convert()`
 - `squisq-site` — Dev/demo site (not published)
 
 ## Git & Version Control (Agent Boundaries)
@@ -205,6 +205,7 @@ squisq/
       src/
         renderHtml.ts       # Generates standalone player HTML for headless frame capture
         wasmEncoder.ts      # ffmpeg.wasm frame → MP4 encoder
+        ffmpegArgs.ts       # Shared MP4/audio flags + compression-friendly GIF palette graph
         types.ts            # VideoQuality, QualityPreset, orientation/dimension helpers
     video-react/            # @bendyline/squisq-video-react
       src/
@@ -213,17 +214,20 @@ squisq/
         hooks/              # useVideoExport, useFrameCapture
         workers/            # Web Worker for encoding (WebCodecs primary, ffmpeg.wasm fallback)
         mp4Mux.ts           # mp4-muxer wrapper for WebCodecs path
+        gifTranscode.ts     # Bounded MP4 intermediate → global-palette animated GIF
     cli/                    # @bendyline/squisq-cli
       src/
         index.ts            # `squisq` bin entry point (commander-based)
         commands/           # convert (markdown/binary → DOCX/PDF/HTML/EPUB/PPTX/XLSX/CSV via registry),
-                            #   video (markdown → MP4), doctor (environment readiness), validate
-        registry.ts         # createCliRegistry — wires the formats registry + CLI-only mp4
+                            #   video (markdown → MP4/GIF), doctor (environment readiness), validate
+        registry.ts         # createCliRegistry — wires the formats registry + CLI-only mp4/gif
         api.ts              # Programmatic API surface (exported as `@bendyline/squisq-cli/api`)
     site/                   # squisq-site (dev/demo, not published)
       src/
         App.tsx             # Sample picker + view switching
         samples.ts          # Sample documents for testing
+        ffmpegWasmConfig.ts # Same-origin ffmpeg.wasm core URLs used by MP4/GIF export
+      vite.config.ts        # Serves/copies the pinned ffmpeg core for browser export
 ```
 
 ## Installing Dependencies
@@ -361,7 +365,7 @@ build entry and a `package.json` export):
 - Hooks: useVideoExport, useFrameCapture
 - Worker: the encoding worker is built from `src/workers/encode.worker.ts` for internal use by the exported hooks/components; there is no public `/worker` subpath today
 - Encoding backends: WebCodecs (preferred, streaming H.264) with ffmpeg.wasm fallback (batched)
-- Audio: MP4 export muxes narration audio (WebCodecs path); the result reports `VideoExportResult.audioIncluded` / `audioSkippedReason`. `useVideoExport().startExport(doc, config)` takes the doc first. `playerScript` is optional on `VideoExportButton` / `VideoExportModal` (falls back to the bundled standalone player). Both components accept `colorScheme="light" | "dark"` for host-matched portaled UI (default `light`).
+- Output: MP4 export muxes narration audio (WebCodecs path); animated GIF uses a bounded MP4 intermediate plus an ffmpeg.wasm diff-palette pass and omits audio. `VideoExportConfig.outputFormat` selects `mp4`/`gif`, and `animationsEnabled` can disable authored layer animations plus block transitions without freezing media/timing. The result reports `VideoExportResult.audioIncluded` / `audioSkippedReason`. `useVideoExport().startExport(doc, config)` takes the doc first. `playerScript` is optional on `VideoExportButton` / `VideoExportModal` (falls back to the bundled standalone player). Both components accept `colorScheme="light" | "dark"` for host-matched portaled UI (default `light`).
 - Depends on `@bendyline/squisq-video` for shared types/encoder + `@bendyline/squisq-react` + `mp4-muxer` + `html2canvas`
 
 `@bendyline/squisq-video` (browser-pure, no Node deps) is the underlying foundation:

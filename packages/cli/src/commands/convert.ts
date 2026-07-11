@@ -25,12 +25,12 @@ import { createCliRegistry } from '../registry.js';
 import { convert } from '../api.js';
 import { assertValidThemeId, assertValidTransformStyle } from '../util/applyTransformPipeline.js';
 
-/** Every format the registry can export (built-ins + the CLI-only mp4). */
-const VALID_FORMATS: readonly FormatId[] = [...BUILTIN_FORMAT_IDS, 'mp4'];
+/** Every format the registry can export (built-ins + CLI rendered media). */
+const VALID_FORMATS: readonly FormatId[] = [...BUILTIN_FORMAT_IDS, 'mp4', 'gif'];
 
 /**
  * Default formats produced by a bare `convert <input>` (no -o / --formats).
- * Deliberately excludes md/xlsx/csv and — crucially — mp4, so a
+ * Deliberately excludes md/xlsx/csv and — crucially — mp4/gif, so a
  * bare convert never spins up Playwright/FFmpeg.
  */
 const DEFAULT_FORMATS: readonly FormatId[] = [
@@ -89,12 +89,16 @@ interface ConvertOpts {
   inferTheme?: boolean;
   /** Commander `--no-infer-layouts` negation: defaults true, false when passed. */
   inferLayouts?: boolean;
+  /** Explicit rendered-media animation preference; undefined uses format defaults. */
+  animations?: boolean;
 }
 
 export function registerConvertCommand(program: Command): void {
   program
     .command('convert')
-    .description('Convert a document to DOCX, PPTX, PDF, HTML, EPUB, MP4, and container formats')
+    .description(
+      'Convert a document to DOCX, PPTX, PDF, HTML, EPUB, MP4, animated GIF, and container formats',
+    )
     .argument('<input>', 'Path to .md/.docx/.pptx/.pdf/.xlsx/.csv/.html file, .zip/.dbk, or folder')
     .option('-o, --output <file>', 'Single output file (format inferred from its extension)')
     .option(
@@ -119,6 +123,8 @@ export function registerConvertCommand(program: Command): void {
       'Do not infer a Squisq theme from an office input file (PPTX theme colors/fonts)',
     )
     .option('--no-infer-layouts', 'Do not derive custom layout templates from PPTX slide layouts')
+    .option('--animations', 'Enable slide animations/transitions in rendered media')
+    .option('--no-animations', 'Disable slide animations/transitions in rendered media')
     .action(async (inputPath: string, opts: ConvertOpts) => {
       try {
         await runConvert(inputPath, opts);
@@ -196,11 +202,16 @@ async function runConvert(inputPath: string, opts: ConvertOpts): Promise<void> {
   }
 
   for (const format of formats) {
+    const formatOptions =
+      (format === 'mp4' || format === 'gif') && opts.animations !== undefined
+        ? { [format]: { animationsEnabled: opts.animations } }
+        : undefined;
     const conversion = await convert(source, format, {
       themeId: opts.theme,
       transformStyle: opts.transform,
       autoTemplates: opts.autoTemplates,
       title: baseName,
+      formatOptions,
     });
 
     for (const warning of conversion.warnings) {

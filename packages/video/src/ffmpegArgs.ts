@@ -12,6 +12,27 @@
 
 import { QUALITY_PRESETS, type VideoQuality } from './types.js';
 
+/** Dithering algorithms intentionally exposed by Squisq's GIF encoder. */
+export type GifDither = 'bayer' | 'sierra2_4a' | 'none';
+
+/** Options for the shared palette-based animated GIF filter graph. */
+export interface GifFilterOptions {
+  width: number;
+  height: number;
+  /** Palette size, from 2 through GIF's maximum of 256. */
+  maxColors?: number;
+  /** Palette dithering algorithm (default: `sierra2_4a`). */
+  dither?: GifDither;
+  /** Ordered Bayer strength, used only when `dither` is `bayer` (0-5). */
+  bayerScale?: number;
+}
+
+/** Options for GIF muxing in addition to the palette filter graph. */
+export interface GifOutputOptions extends GifFilterOptions {
+  /** Number of repeats; 0 loops forever and -1 disables looping. */
+  loop?: number;
+}
+
 /**
  * H.264 speed/quality flags (`-preset`, `-crf`) for a quality level.
  * @example ffmpegVideoQualityArgs('high') // ['-preset', 'slow', '-crf', '18']
@@ -39,4 +60,62 @@ export function audioBitrateArg(quality: VideoQuality): string {
  */
 export function ffmpegAudioMuxArgs(bitrate: string | number): string[] {
   return ['-c:a', 'aac', '-b:a', String(bitrate), '-af', 'apad', '-shortest'];
+}
+
+/**
+ * Build a high-quality, compression-friendly GIF palette filter graph.
+ *
+ * A single palette is derived from the parts of the frame that change, while
+ * `diff_mode=rectangle` keeps error diffusion inside the changed rectangle so
+ * static slide backgrounds remain byte-stable and compress efficiently.
+ */
+export function ffmpegGifFilterGraph(options: GifFilterOptions): string {
+  const { width, height } = options;
+  const maxColors = options.maxColors ?? 256;
+  const dither = options.dither ?? 'sierra2_4a';
+  const bayerScale = options.bayerScale ?? 3;
+
+  for (const [label, value] of [
+    ['width', width],
+    ['height', height],
+  ] as const) {
+    if (!Number.isSafeInteger(value) || value <= 0) {
+      throw new RangeError(`GIF ${label} must be a positive integer.`);
+    }
+  }
+  if (!Number.isSafeInteger(maxColors) || maxColors < 2 || maxColors > 256) {
+    throw new RangeError('GIF maxColors must be an integer between 2 and 256.');
+  }
+  if (!['bayer', 'sierra2_4a', 'none'].includes(dither)) {
+    throw new RangeError(`Unknown GIF dither: ${String(dither)}.`);
+  }
+  if (!Number.isSafeInteger(bayerScale) || bayerScale < 0 || bayerScale > 5) {
+    throw new RangeError('GIF bayerScale must be an integer between 0 and 5.');
+  }
+
+  const ditherArgs =
+    dither === 'bayer' ? `dither=bayer:bayer_scale=${bayerScale}` : `dither=${dither}`;
+  return (
+    `[0:v]scale=${width}:${height}:force_original_aspect_ratio=decrease:flags=lanczos,` +
+    `pad=${width}:${height}:(ow-iw)/2:(oh-ih)/2:black,split[gif_frames][gif_palette_source];` +
+    `[gif_palette_source]palettegen=stats_mode=diff:max_colors=${maxColors}:reserve_transparent=0[gif_palette];` +
+    `[gif_frames][gif_palette]paletteuse=${ditherArgs}:diff_mode=rectangle[gif_out]`
+  );
+}
+
+/** Build the output-side FFmpeg arguments for an animated GIF. */
+export function ffmpegGifOutputArgs(options: GifOutputOptions): string[] {
+  const loop = options.loop ?? 0;
+  if (!Number.isSafeInteger(loop) || loop < -1 || loop > 65_535) {
+    throw new RangeError('GIF loop must be an integer between -1 and 65535.');
+  }
+  return [
+    '-filter_complex',
+    ffmpegGifFilterGraph(options),
+    '-map',
+    '[gif_out]',
+    '-an',
+    '-loop',
+    String(loop),
+  ];
 }

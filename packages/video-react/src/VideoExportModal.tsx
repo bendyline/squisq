@@ -13,7 +13,11 @@ import type { Doc } from '@bendyline/squisq/schemas';
 import type { MediaProvider } from '@bendyline/squisq/schemas';
 import type { VideoQuality, VideoOrientation } from '@bendyline/squisq-video';
 import type { CaptionMode } from '@bendyline/squisq-react';
-import { useVideoExport, type VideoExportConfig } from './hooks/useVideoExport.js';
+import {
+  useVideoExport,
+  type VideoExportConfig,
+  type VideoOutputFormat,
+} from './hooks/useVideoExport.js';
 
 // ── Types ──────────────────────────────────────────────────────────
 
@@ -33,11 +37,11 @@ export interface VideoExportModalProps {
   /** Pre-collected audio map */
   audio?: Map<string, ArrayBuffer>;
   /**
-   * Seeds the modal's initial quality/fps/orientation/captionMode selections
-   * and is merged (as a base) into the config passed to the export hook, so a
-   * host can share one config shape with `useVideoExport`. The individual
-   * `images`/`audio`/`mediaProvider`/`playerScript` props still take
-   * precedence over any matching key here.
+   * Seeds the modal's initial format, motion, quality, FPS, orientation, and
+   * caption selections. It is merged (as a base) into the config passed to the
+   * export hook, so a host can share one config shape with `useVideoExport`.
+   * The individual `images`/`audio`/`mediaProvider`/`playerScript` props still
+   * take precedence over any matching key here.
    */
   defaultConfig?: Partial<VideoExportConfig>;
   /** Visual color scheme for the portaled dialog. Defaults to light. */
@@ -53,6 +57,18 @@ function formatDuration(seconds: number): string {
   const m = Math.floor(seconds / 60);
   const s = seconds % 60;
   return `${m}m ${s}s`;
+}
+
+function encoderLabel(
+  outputFormat: VideoOutputFormat,
+  backend: 'webcodecs' | 'ffmpeg-wasm',
+): string {
+  if (outputFormat === 'gif') {
+    return backend === 'webcodecs'
+      ? 'WebCodecs (H.264) → ffmpeg.wasm (GIF)'
+      : 'ffmpeg.wasm (H.264 → GIF)';
+  }
+  return backend === 'webcodecs' ? 'WebCodecs (H.264)' : 'ffmpeg.wasm (H.264)';
 }
 
 // ── Styles ─────────────────────────────────────────────────────────
@@ -192,12 +208,17 @@ export function VideoExportModal({
   colorScheme = 'light',
   onClose,
 }: VideoExportModalProps) {
+  const initialOutputFormat = defaultConfig?.outputFormat ?? 'mp4';
+  const [outputFormat, setOutputFormat] = useState<VideoOutputFormat>(initialOutputFormat);
   const [quality, setQuality] = useState<VideoQuality>(defaultConfig?.quality ?? 'normal');
-  const [fps, setFps] = useState(defaultConfig?.fps ?? 24);
+  const [fps, setFps] = useState(defaultConfig?.fps ?? (initialOutputFormat === 'gif' ? 10 : 24));
   const [orientation, setOrientation] = useState<VideoOrientation>(
     defaultConfig?.orientation ?? 'landscape',
   );
   const [captionMode, setCaptionMode] = useState<CaptionMode>(defaultConfig?.captionMode ?? 'off');
+  const [animationsEnabled, setAnimationsEnabled] = useState(
+    defaultConfig?.animationsEnabled ?? initialOutputFormat === 'mp4',
+  );
   const palette = VIDEO_EXPORT_PALETTES[colorScheme];
   const themedModalStyle: React.CSSProperties = {
     ...modalStyle,
@@ -232,6 +253,7 @@ export function VideoExportModal({
     state,
     progress,
     backend,
+    outputFormat: completedOutputFormat,
     downloadUrl,
     fileSize,
     audioIncluded,
@@ -244,10 +266,23 @@ export function VideoExportModal({
     reset: resetExport,
   } = exportHook;
 
+  const handleOutputFormatChange = useCallback((next: VideoOutputFormat) => {
+    setOutputFormat(next);
+    if (next === 'gif') {
+      setFps(10);
+      setAnimationsEnabled(false);
+    } else {
+      setFps(24);
+      setAnimationsEnabled(true);
+    }
+  }, []);
+
   const handleExport = useCallback(async () => {
     const config: VideoExportConfig = {
       // defaultConfig is the base; explicit props/selections win over it.
       ...defaultConfig,
+      outputFormat,
+      animationsEnabled,
       quality,
       fps,
       orientation,
@@ -261,6 +296,8 @@ export function VideoExportModal({
     await startExport(doc, config);
   }, [
     doc,
+    outputFormat,
+    animationsEnabled,
     quality,
     fps,
     orientation,
@@ -278,11 +315,11 @@ export function VideoExportModal({
     const a = document.createElement('a');
     a.href = downloadUrl;
     const ts = new Date().toISOString().slice(0, 10);
-    a.download = `document-${ts}.mp4`;
+    a.download = `document-${ts}.${completedOutputFormat}`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
-  }, [downloadUrl]);
+  }, [downloadUrl, completedOutputFormat]);
 
   const handleClose = useCallback(() => {
     if (state === 'capturing' || state === 'encoding' || state === 'preparing') {
@@ -301,14 +338,30 @@ export function VideoExportModal({
       onClick={handleClose}
     >
       <div style={themedModalStyle} onClick={(e) => e.stopPropagation()}>
-        <h2 style={themedTitleStyle}>Export Video</h2>
+        <h2 style={themedTitleStyle}>
+          {outputFormat === 'gif' ? 'Export Animated GIF' : 'Export Video'}
+        </h2>
 
         {/* ── Configure State ── */}
         {state === 'idle' && (
           <>
             <div>
+              <label style={themedLabelStyle}>Format</label>
+              <select
+                aria-label="Format"
+                style={themedSelectStyle}
+                value={outputFormat}
+                onChange={(e) => handleOutputFormatChange(e.target.value as VideoOutputFormat)}
+              >
+                <option value="mp4">MP4 video</option>
+                <option value="gif">Animated GIF</option>
+              </select>
+            </div>
+
+            <div>
               <label style={themedLabelStyle}>Quality</label>
               <select
+                aria-label="Quality"
                 style={themedSelectStyle}
                 value={quality}
                 onChange={(e) => setQuality(e.target.value as VideoQuality)}
@@ -322,10 +375,12 @@ export function VideoExportModal({
             <div>
               <label style={themedLabelStyle}>Frame Rate</label>
               <select
+                aria-label="Frame Rate"
                 style={themedSelectStyle}
                 value={fps}
                 onChange={(e) => setFps(Number(e.target.value))}
               >
+                <option value={10}>10 fps — recommended for GIF</option>
                 <option value={15}>15 fps — fast export</option>
                 <option value={24}>24 fps — cinematic</option>
                 <option value={30}>30 fps — smooth</option>
@@ -335,18 +390,24 @@ export function VideoExportModal({
             <div>
               <label style={themedLabelStyle}>Orientation</label>
               <select
+                aria-label="Orientation"
                 style={themedSelectStyle}
                 value={orientation}
                 onChange={(e) => setOrientation(e.target.value as VideoOrientation)}
               >
-                <option value="landscape">Landscape (1920 × 1080)</option>
-                <option value="portrait">Portrait (1080 × 1920)</option>
+                <option value="landscape">
+                  Landscape ({outputFormat === 'gif' ? '960 × 540' : '1920 × 1080'})
+                </option>
+                <option value="portrait">
+                  Portrait ({outputFormat === 'gif' ? '540 × 960' : '1080 × 1920'})
+                </option>
               </select>
             </div>
 
             <div>
               <label style={themedLabelStyle}>Captions</label>
               <select
+                aria-label="Captions"
                 style={themedSelectStyle}
                 value={captionMode}
                 onChange={(e) => setCaptionMode(e.target.value as CaptionMode)}
@@ -357,12 +418,30 @@ export function VideoExportModal({
               </select>
             </div>
 
+            <div>
+              <label style={themedLabelStyle}>Animations &amp; transitions</label>
+              <select
+                aria-label="Animations and transitions"
+                style={themedSelectStyle}
+                value={animationsEnabled ? 'enabled' : 'disabled'}
+                onChange={(e) => setAnimationsEnabled(e.target.value === 'enabled')}
+              >
+                <option value="enabled">Enabled</option>
+                <option value="disabled">Disabled — smaller files</option>
+              </select>
+              {outputFormat === 'gif' && animationsEnabled && (
+                <p style={{ fontSize: 12, color: palette.muted, margin: '-6px 0 12px' }}>
+                  Disabling motion is recommended for much smaller GIFs.
+                </p>
+              )}
+            </div>
+
             <div style={footerStyle}>
               <button style={themedSecondaryButtonStyle} onClick={handleClose}>
                 Cancel
               </button>
               <button style={themedPrimaryButtonStyle} onClick={handleExport}>
-                Export Video
+                {outputFormat === 'gif' ? 'Export GIF' : 'Export Video'}
               </button>
             </div>
           </>
@@ -373,7 +452,7 @@ export function VideoExportModal({
           <>
             {backend && (
               <p style={{ fontSize: 12, color: palette.muted, margin: '0 0 8px 0' }}>
-                Encoder: WebCodecs (H.264)
+                Encoder: {encoderLabel(completedOutputFormat, backend)}
               </p>
             )}
 
@@ -411,7 +490,11 @@ export function VideoExportModal({
             <p style={{ fontSize: 13, color: palette.label, margin: '0 0 4px 0' }}>
               File size: {(fileSize / (1024 * 1024)).toFixed(1)} MB
             </p>
-            {audioIncluded ? (
+            {completedOutputFormat === 'gif' ? (
+              <p style={{ fontSize: 12, color: palette.muted, margin: '0 0 4px 0' }}>
+                Animated GIF does not include audio.
+              </p>
+            ) : audioIncluded ? (
               <p style={{ fontSize: 12, color: palette.success, margin: '0 0 4px 0' }}>
                 Audio included ✓
               </p>
@@ -422,7 +505,7 @@ export function VideoExportModal({
             )}
             {backend && (
               <p style={{ fontSize: 12, color: palette.muted, margin: '0 0 12px 0' }}>
-                Encoded with WebCodecs (H.264)
+                Encoded with {encoderLabel(completedOutputFormat, backend)}
               </p>
             )}
 
@@ -431,7 +514,7 @@ export function VideoExportModal({
                 Close
               </button>
               <button style={themedPrimaryButtonStyle} onClick={handleDownload}>
-                Download MP4
+                Download {completedOutputFormat.toUpperCase()}
               </button>
             </div>
           </>
@@ -459,7 +542,7 @@ export function VideoExportModal({
                 Close
               </button>
               <button style={themedPrimaryButtonStyle} onClick={handleExport}>
-                Retry
+                Retry {outputFormat === 'gif' ? 'GIF' : 'video'}
               </button>
             </div>
           </>

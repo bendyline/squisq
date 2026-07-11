@@ -11,5 +11,8 @@ describe('@bendyline/squisq-cli/api built surface', () => {
 
     expect(api.framesToMp4Native).toBeTypeOf('function');
     expect(api.framesToMp4NativeBytes).toBeTypeOf('function');
+    expect(api.framesToGifNative).toBeTypeOf('function');
+    expect(api.framesToGifNativeBytes).toBeTypeOf('function');
+    expect(api.renderDocToGif).toBeTypeOf('function');
   });
 });

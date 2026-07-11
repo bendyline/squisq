@@ -29,6 +29,17 @@ describe('CLI format registry', () => {
     expect(registry.byExtension('.mp4')!.id).to.equal('mp4');
   });
 
+  it('registers animated GIF as a CLI-only rendered format', () => {
+    const registry = createCliRegistry();
+    const gif = registry.get('gif');
+    expect(gif).to.not.equal(undefined);
+    expect(gif!.label).to.equal('Animated GIF');
+    expect(gif!.mimeType).to.equal('image/gif');
+    expect(gif!.extensions).to.include('.gif');
+    expect(gif!.exportDoc).to.be.a('function');
+    expect(registry.byExtension('.GIF')!.id).to.equal('gif');
+  });
+
   it('pre-binds convert() end-to-end for a non-mp4 conversion', async () => {
     const result = await convert(
       { kind: 'markdown', markdown: '# Hello\n\nWorld', baseName: 'greeting' },
