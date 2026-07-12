@@ -1,5 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
-import { switchView, viewTabLabel, type ViewTab } from './view-tabs';
+import { selectUseMode, switchView, viewTab, type ViewTab } from './view-tabs';
 
 /**
  * E2E tests for the Squisq dev site.
@@ -65,7 +65,7 @@ test.describe('Site navigation', () => {
 
   test('view switcher has Markdown, Editor, Play tabs', async ({ page }) => {
     for (const label of ['Markdown', 'Editor', 'Play'] as const satisfies readonly ViewTab[]) {
-      await expect(page.getByRole('tab', { name: viewTabLabel(label), exact: true })).toBeVisible();
+      await expect(viewTab(page, label)).toBeVisible();
     }
   });
 
@@ -88,6 +88,7 @@ test.describe('DocPlayer preview', () => {
     await page.waitForLoadState('networkidle');
     await selectSample(page, 'all-templates');
     await switchView(page, 'Play');
+    await selectUseMode(page, 'Video');
     await waitForDocPlayer(page);
   });
 
@@ -164,6 +165,7 @@ test.describe('Template rendering correctness', () => {
     await page.waitForLoadState('networkidle');
     await selectSample(page, 'all-templates');
     await switchView(page, 'Play');
+    await selectUseMode(page, 'Video');
     await waitForDocPlayer(page);
 
     // Start playback and check every few seconds that the active block has layers
@@ -204,6 +206,7 @@ test.describe('Template rendering correctness', () => {
     await page.waitForLoadState('networkidle');
     await selectSample(page, 'all-templates');
     await switchView(page, 'Play');
+    await selectUseMode(page, 'Video');
     await waitForDocPlayer(page);
 
     // Start playback and advance to find the statHighlight block
@@ -231,6 +234,7 @@ test.describe('DocPlayer controls', () => {
     await page.waitForLoadState('networkidle');
     await selectSample(page, 'all-templates');
     await switchView(page, 'Play');
+    await selectUseMode(page, 'Video');
     await waitForDocPlayer(page);
   });
 

@@ -51,10 +51,13 @@ function App() {
 | `RecorderPanel` / `RecorderButton` / `RecorderModal` | Browser audio/camera/screen recording (MediaRecorder)            |
 | `FolderView`                                         | Standalone folder browser surface                                |
 
-Beyond components, the package also exports Tiptap extensions (the ASCII
-diagram editor — code fences of box-and-line art get an interactive canvas
-whose edits are written back as regenerated art — plus heading template
-annotations), the markdown ↔ Tiptap bridge
+Beyond components, the package also exports Tiptap extensions for authored
+ASCII diagrams, trees, and timelines. Timeline fences become a shared-scale
+rail canvas in WYSIWYG mode: click the line or a keyboard-accessible Add button
+to add a point, select any dot to edit its label/callout, and keep multiple
+tracks and branches visible. Every safe edit is written back as regenerated,
+verified fence text, so Raw Markdown stays the source of truth; visual mutation
+pauses if unmodeled source would be lost. The package also exports heading template annotations, the markdown ↔ Tiptap bridge
 (`markdownToTiptap` / `tiptapToMarkdown`), drag-and-drop helpers
 (`useFileDrop`, `processMediaFiles`), file-kind detection (`resolveFileKind`),
 and block-at-a-time / timeline editing primitives (`useBlockNavigator`,
@@ -68,6 +71,10 @@ and block-at-a-time / timeline editing primitives (`useBlockNavigator`,
   appears in the toolbar.
 - **Recording** — with a `mediaProvider` wired, a record button appears in the
   toolbar (`allowRecording`, default `true`).
+- **Presentation mode** — every Use view can fill the Squisq control, open a
+  synchronized audience window, or enter browser full screen. Slideshow/video
+  playback, Page/Document scrolling, and the Narrate surface remain linked to
+  the main view.
 - **Panels** — `outline` (heading outline pane) and `inlinePreview` (per-block
   SVG preview gutter, `inlinePreviewWidth` default 320).
 - **Code & image modes** — pass `fileName` / `language` to get a Monaco-only

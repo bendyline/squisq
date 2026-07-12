@@ -55,10 +55,9 @@ test.describe('Repair as diagram', () => {
     await page.getByText('Broken Diagram', { exact: false }).first().click();
     await page.keyboard.press(process.platform === 'darwin' ? 'Meta+z' : 'Control+z');
 
-    // Canvas torn down, broken code block + repair banner restored.
-    await expect(page.locator('.squisq-ascii-diagram-widget-host')).toHaveCount(0, {
-      timeout: 8_000,
-    });
+    // The repair banner reappears — proof the broken art is restored and
+    // re-detected as repairable (the raw code fence is back too).
     await expect(page.locator('.squisq-repair-banner-btn').first()).toBeVisible({ timeout: 8_000 });
+    await expect(page.locator('pre').filter({ hasText: '@scope/event-bus' }).first()).toBeVisible();
   });
 });

@@ -155,7 +155,7 @@ You almost never type the content *into* the tag. Write it as ordinary Markdown 
 
 The blocks below are all live — each heading picks a different template. Keep paging through Play mode to see them render.
 
-### The Big Number {[statHighlight colorScheme=green]}
+### The Big Number {[statHighlight colorScheme=green stat="42%\\*" detail="\\* statistic randomly made up :)"]}
 
 **42%** of teams prefer visual blocks over raw slides.
 

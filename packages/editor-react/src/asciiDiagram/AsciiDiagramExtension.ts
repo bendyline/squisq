@@ -93,7 +93,17 @@ export function getAsciiDiagramForNode(node: PMNode): AsciiDiagram | null {
   return result;
 }
 
-/** Relaxed gate for ALREADY-REGISTERED blocks: any parse with ≥1 box. */
+/** Box-drawing corners/junctions/verticals leaking into a label = a garbled parse. */
+const GARBLED_LABEL = /[│┃║┌┐└┘├┤┬┴┼╭╮╰╯┏┓┗┛╔╗╚╝┣┫┳┻╋╠╣╦╩╬]/;
+
+/**
+ * Relaxed gate for ALREADY-REGISTERED blocks: any parse with ≥1 box, so
+ * editing a diagram down doesn't kick the user out mid-edit. But a GARBLED
+ * parse (box-drawing chars leaked into labels — the desync signature of
+ * broken art) is never a valid diagram; rejecting it here keeps a broken
+ * fence from being held as a diagram by hysteresis (e.g. after undoing a
+ * repair, where the fence reverts to broken art the RepairableExtension owns).
+ */
 export function parseAsciiDiagramForNode(node: PMNode): AsciiDiagram | null {
   if (node.type.name !== 'codeBlock') return null;
   const cached = parseCache.get(node);
@@ -101,7 +111,9 @@ export function parseAsciiDiagramForNode(node: PMNode): AsciiDiagram | null {
   let result: AsciiDiagram | null = null;
   if (isEligibleAsciiFenceLang(fenceLangOf(node))) {
     const parsed = parseAsciiDiagram(node.textContent);
-    if (parsed.nodes.length > 0) result = parsed;
+    if (parsed.nodes.length > 0 && !parsed.nodes.some((n) => GARBLED_LABEL.test(n.label))) {
+      result = parsed;
+    }
   }
   parseCache.set(node, result);
   return result;

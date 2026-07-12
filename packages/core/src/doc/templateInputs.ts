@@ -32,6 +32,8 @@ import {
   isExplicitDiagramLang,
 } from './asciiDiagram/detect.js';
 import { asciiDiagramToTemplateData } from './asciiDiagram/mapping.js';
+import { detectAsciiTimeline, isEligibleAsciiTimelineFenceLang } from './asciiTimeline/detect.js';
+import { asciiTimelineToTemplateData } from './asciiTimeline/mapping.js';
 import { detectTree, isEligibleTreeFenceLang, isExplicitTreeLang } from './treeview/detect.js';
 import { treeToTemplateData, treeFromMarkdownList, findFirstList } from './treeview/mapping.js';
 
@@ -379,6 +381,20 @@ export function deriveTemplateInputs(
       if (!detection?.isDiagram || !detection.diagram) return placeholders ? {} : null;
       const { nodes, edges } = asciiDiagramToTemplateData(detection.diagram);
       return { nodes, edges, ...(headingText ? { title: headingText } : {}) };
+    }
+    case 'timeline': {
+      // Tracks/events from a spatial ASCII timeline fence. Calling this case
+      // already implies author/template intent, so accept the detector's
+      // explicit one-event form even when the fence itself is untagged.
+      const fences = (contents ?? []).filter((n): n is MarkdownCodeBlock => n.type === 'code');
+      const fence =
+        fences.length === 1 && isEligibleAsciiTimelineFenceLang(fences[0].lang)
+          ? fences[0]
+          : undefined;
+      const detection = fence ? detectAsciiTimeline(fence.value, { explicit: true }) : undefined;
+      if (!detection?.isTimeline || !detection.timeline) return placeholders ? {} : null;
+      const { tracks, links } = asciiTimelineToTemplateData(detection.timeline);
+      return { tracks, links, ...(headingText ? { title: headingText } : {}) };
     }
     case 'tree': {
       // Items from an ASCII tree fence, or a nested markdown bullet list when

@@ -1,5 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
-import { switchView, viewTabLabel, type ViewTab } from './view-tabs';
+import { switchView, viewTab, type ViewTab } from './view-tabs';
 
 /**
  * E2E tests for the Squisq editor UI.
@@ -62,7 +62,7 @@ test.describe('Editor view switching', () => {
 
   test('all three tabs are visible in the toolbar', async ({ page }) => {
     for (const label of ['Editor', 'Markdown', 'Play'] as const satisfies readonly ViewTab[]) {
-      await expect(page.getByRole('tab', { name: viewTabLabel(label), exact: true })).toBeVisible();
+      await expect(viewTab(page, label)).toBeVisible();
     }
   });
 

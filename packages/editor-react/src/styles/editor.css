@@ -168,6 +168,11 @@
   box-sizing: content-box;
 }
 
+.squisq-use-mode-trigger > svg {
+  display: block;
+  transform: translateY(-1px);
+}
+
 .squisq-use-mode-trigger:hover,
 .squisq-use-mode-trigger--open {
   color: #111827;
@@ -1704,6 +1709,22 @@
   display: none;
 }
 
+/* In active mode the selection and pointer classes are independent, so tags
+ * can be visible on two heading-defined blocks at once. */
+.squisq-wysiwyg-container[data-block-tags='active'] .squisq-template-badge,
+.squisq-wysiwyg-container[data-block-tags='active'] .squisq-props-badge {
+  display: none;
+}
+
+.squisq-wysiwyg-container[data-block-tags='active']
+  :is(.squisq-block-tags--selected, .squisq-block-tags--hovered)
+  > .squisq-template-badge,
+.squisq-wysiwyg-container[data-block-tags='active']
+  :is(.squisq-block-tags--selected, .squisq-block-tags--hovered)
+  > .squisq-props-badge {
+  display: inline-flex;
+}
+
 /* ─── Block-properties badge (sibling of the template badge) ───────────
    The on-canvas entry point to the block-properties palette: a small
    sliders chip just after the template badge. Quiet by default like the
@@ -2395,6 +2416,54 @@
   cursor: pointer;
 }
 
+/* Presentation is a fixed split button after the adaptive Use controls, so
+   it remains available even when individual preview settings overflow. */
+.squisq-presentation-control {
+  display: inline-flex;
+  align-items: center;
+  flex: 0 0 auto;
+  margin: 0 5px 0 3px;
+  border: 1px solid var(--squisq-border, #d1d5db);
+  border-radius: 5px;
+  background: var(--squisq-input-bg, #fff);
+  overflow: hidden;
+}
+
+.squisq-presentation-control .squisq-presentation-start {
+  width: 30px;
+  border-radius: 0;
+}
+
+.squisq-presentation-menu-trigger {
+  align-self: stretch;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  padding: 0;
+  border: 0;
+  border-left: 1px solid var(--squisq-border, #d1d5db);
+  background: transparent;
+  color: var(--squisq-text-muted, #6b7280);
+  cursor: pointer;
+}
+
+.squisq-presentation-menu-trigger:hover,
+.squisq-presentation-menu-trigger--open {
+  background: rgba(107, 114, 128, 0.2);
+  color: var(--squisq-text, #111827);
+}
+
+.squisq-presentation-menu-item:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.squisq-presentation-menu-item:disabled:hover {
+  background: transparent;
+  color: inherit;
+}
+
 /* Link color follows the active theme's primary when "Theme styling →
    Fonts & colors" is on, otherwise falls back to the historical blue.
    In both cases we blend toward the surface text color so the link
@@ -2453,6 +2522,136 @@
   font-size: 13px;
   overflow: auto;
   color: #dc2626;
+}
+
+/* Bounded presentation keeps the host page intact while giving the entire
+   EditorShell to the active Use surface. Browser fullscreen uses the same
+   chrome suppression, then lets the Fullscreen API size the shell. */
+.squisq-editor-shell[data-presentation-mode='control'],
+.squisq-editor-shell[data-presentation-mode='fullscreen'] {
+  position: relative;
+  background: #000;
+}
+
+.squisq-editor-shell[data-presentation-mode='control'] > .squisq-editor-header,
+.squisq-editor-shell[data-presentation-mode='fullscreen'] > .squisq-editor-header,
+.squisq-editor-shell[data-presentation-mode='control'] > .squisq-status-bar,
+.squisq-editor-shell[data-presentation-mode='fullscreen'] > .squisq-status-bar,
+.squisq-editor-shell[data-presentation-mode='control'] > .squisq-timeline,
+.squisq-editor-shell[data-presentation-mode='fullscreen'] > .squisq-timeline {
+  display: none;
+}
+
+.squisq-editor-shell[data-presentation-mode='control'] .squisq-media-bin,
+.squisq-editor-shell[data-presentation-mode='fullscreen'] .squisq-media-bin,
+.squisq-editor-shell[data-presentation-mode='control'] .squisq-custom-theme-pane,
+.squisq-editor-shell[data-presentation-mode='fullscreen'] .squisq-custom-theme-pane {
+  display: none;
+}
+
+.squisq-editor-shell[data-presentation-mode='control'] .squisq-preview-player,
+.squisq-editor-shell[data-presentation-mode='fullscreen'] .squisq-preview-player {
+  padding: 0;
+  background: #000;
+}
+
+.squisq-editor-shell[data-presentation-mode='fullscreen']:fullscreen {
+  width: 100vw !important;
+  height: 100vh !important;
+  min-width: 0 !important;
+  min-height: 0 !important;
+  max-width: none !important;
+  max-height: none !important;
+}
+
+.squisq-presentation-exit {
+  position: absolute;
+  z-index: 1001;
+  top: 12px;
+  right: 12px;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 34px;
+  padding: 7px 11px;
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  border-radius: 7px;
+  background: rgba(15, 23, 42, 0.78);
+  color: #fff;
+  font: 600 12px/1 var(--squisq-ux-font, sans-serif);
+  cursor: pointer;
+  opacity: 0.72;
+  backdrop-filter: blur(8px);
+  transition:
+    opacity 0.12s ease,
+    background 0.12s ease;
+}
+
+.squisq-presentation-exit:hover,
+.squisq-presentation-exit:focus-visible {
+  outline: none;
+  background: rgba(15, 23, 42, 0.94);
+  opacity: 1;
+}
+
+.squisq-presentation-window {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  overflow: hidden;
+  background: #000;
+}
+
+.squisq-presentation-window-preview,
+.squisq-presentation-window-surface,
+.squisq-presentation-teleprompter {
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+}
+
+.squisq-presentation-window-preview {
+  display: flex;
+}
+
+.squisq-presentation-window-surface {
+  padding: 0;
+  background: #000;
+  pointer-events: none;
+}
+
+.squisq-presentation-teleprompter {
+  display: flex;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.squisq-presentation-connecting {
+  color: rgba(255, 255, 255, 0.72);
+  font: 500 14px/1.4 var(--squisq-ux-font, sans-serif);
+}
+
+.squisq-presentation-error {
+  position: fixed;
+  z-index: 10000;
+  top: 16px;
+  left: 50%;
+  max-width: min(420px, calc(100vw - 32px));
+  padding: 10px 14px;
+  border: 1px solid #fecaca;
+  border-radius: 8px;
+  background: #fff1f2;
+  color: #991b1b;
+  box-shadow: 0 10px 30px rgba(15, 23, 42, 0.2);
+  font: 500 13px/1.4 var(--squisq-ux-font, sans-serif);
+  transform: translateX(-50%);
+}
+
+.squisq-presentation-error[data-theme='dark'] {
+  border-color: #7f1d1d;
+  background: #3f151b;
+  color: #fecdd3;
 }
 
 /* ─── CSS custom properties ──────────────────────────── */
@@ -5168,6 +5367,7 @@
 }
 
 .squisq-outline-item {
+  position: relative;
   margin: 0;
 }
 
@@ -5190,6 +5390,56 @@
 
 .squisq-outline-row:hover {
   background: #f3f4f6;
+}
+
+.squisq-outline-row[draggable='true'] {
+  cursor: grab;
+}
+
+.squisq-outline-row[draggable='true']:active {
+  cursor: grabbing;
+}
+
+.squisq-outline-drag-handle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 8px;
+  color: currentColor;
+  opacity: 0.35;
+  transition: opacity 0.1s ease;
+}
+
+.squisq-outline-row:hover .squisq-outline-drag-handle,
+.squisq-outline-row:focus-visible .squisq-outline-drag-handle {
+  opacity: 0.75;
+}
+
+.squisq-outline-item--dragging {
+  opacity: 0.42;
+}
+
+.squisq-outline-item--drop-before > .squisq-outline-row-wrap::before,
+.squisq-outline-item--drop-after::after {
+  content: '';
+  position: absolute;
+  z-index: 2;
+  left: 4px;
+  right: 4px;
+  height: 2px;
+  border-radius: 999px;
+  background: var(--squisq-outline-accent, #4338ca);
+  pointer-events: none;
+}
+
+.squisq-outline-item--drop-before > .squisq-outline-row-wrap::before {
+  top: -1px;
+}
+
+/* The after marker belongs to the whole tree item so a parent section's
+   insertion boundary appears below its complete nested subtree. */
+.squisq-outline-item--drop-after::after {
+  bottom: -1px;
 }
 
 .squisq-outline-row-text {

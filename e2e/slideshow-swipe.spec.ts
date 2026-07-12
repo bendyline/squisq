@@ -1,5 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
-import { switchView } from './view-tabs';
+import { selectUseMode, switchView } from './view-tabs';
 
 /**
  * E2E tests for drag-to-swipe navigation in slideshow mode.
@@ -13,11 +13,7 @@ import { switchView } from './view-tabs';
 /** Enter the Play preview and select slideshow mode. */
 async function enterSlideshow(page: Page) {
   await switchView(page, 'Play');
-  // Display mode is a segmented button group (formerly a <select>).
-  await page
-    .getByRole('group', { name: 'Display mode' })
-    .getByRole('button', { name: 'Slideshow', exact: true })
-    .click();
+  await selectUseMode(page, 'Slideshow');
   await page.locator('.doc-player').waitFor({ state: 'visible', timeout: 5_000 });
   await page
     .locator('[data-testid="slideshow-controls"]')

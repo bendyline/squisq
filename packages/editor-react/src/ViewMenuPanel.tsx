@@ -10,7 +10,7 @@
  * EditorShell `inlinePreview` prop.
  */
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import { useEditorContext, type ThemeInheritance, type LayoutMode } from './EditorContext';
 import { Icon } from './Icon';
 
@@ -22,8 +22,8 @@ export function ViewMenuPanel() {
     setStatusBarVisible,
     outlineVisible,
     setOutlineVisible,
-    blockTagsVisible,
-    setBlockTagsVisible,
+    blockTagVisibility,
+    setBlockTagVisibility,
     themeInheritance,
     setThemeInheritance,
     layoutMode,
@@ -56,10 +56,6 @@ export function ViewMenuPanel() {
     setOutlineVisible(!outlineVisible);
   }, [outlineVisible, setOutlineVisible]);
 
-  const toggleBlockTags = useCallback(() => {
-    setBlockTagsVisible(!blockTagsVisible);
-  }, [blockTagsVisible, setBlockTagsVisible]);
-
   return (
     <div className="squisq-view-menu" ref={containerRef}>
       <button
@@ -79,7 +75,6 @@ export function ViewMenuPanel() {
         <div className="squisq-view-menu-popover" role="menu" aria-label="View options">
           <MenuRadioGroup
             label="View"
-            name="layout-mode"
             value={layoutMode}
             onChange={(v) => setLayoutMode(v as LayoutMode)}
             options={[
@@ -95,10 +90,15 @@ export function ViewMenuPanel() {
             checked={inlinePreviewVisible}
             onChange={toggleInlinePreview}
           />
-          <MenuToggle
+          <MenuRadioGroup
             label="Show block tags"
-            checked={blockTagsVisible}
-            onChange={toggleBlockTags}
+            value={blockTagVisibility}
+            onChange={(v) => setBlockTagVisibility(v as typeof blockTagVisibility)}
+            options={[
+              { value: 'none', label: 'No inline block tags' },
+              { value: 'active', label: 'Selected/hovered block' },
+              { value: 'always', label: 'Always show' },
+            ]}
           />
           <MenuToggle
             label="Show status bar"
@@ -108,7 +108,6 @@ export function ViewMenuPanel() {
           <div className="squisq-view-menu-separator" role="separator" />
           <MenuRadioGroup
             label="Editor styling from theme"
-            name="theme-inheritance"
             value={themeInheritance}
             onChange={(v) => setThemeInheritance(v as ThemeInheritance)}
             options={[
@@ -147,17 +146,16 @@ function MenuToggle({
 
 function MenuRadioGroup({
   label,
-  name,
   value,
   onChange,
   options,
 }: {
   label: string;
-  name: string;
   value: string;
   onChange: (next: string) => void;
   options: readonly { value: string; label: string }[];
 }) {
+  const name = useId();
   return (
     <div
       className="squisq-view-menu-row squisq-view-menu-row--radios"

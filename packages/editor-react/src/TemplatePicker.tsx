@@ -466,6 +466,25 @@ export const TEMPLATE_ENTRIES: TemplateEntry[] = [
     ),
   },
   {
+    name: 'timeline',
+    label: 'Timeline',
+    description:
+      'Plots events across one or more horizontal tracks with callouts and optional branching links.',
+    icon: (
+      <TemplateIcon>
+        <path d="M 5 21 L 51 21" stroke={F1} strokeWidth={1.8} fill="none" />
+        <path d="M 47 18 L 52 21 L 47 24" stroke={F1} strokeWidth={1.5} fill="none" />
+        <circle cx={13} cy={21} r={3} fill={FA} />
+        <circle cx={29} cy={21} r={3} fill={F2} />
+        <circle cx={44} cy={21} r={3} fill={FA} />
+        <path d="M 13 18 L 13 10 M 29 24 L 29 32 M 44 18 L 44 8" stroke={F1} strokeWidth={1} />
+        <rect x={7} y={5} width={12} height={3} rx={1} fill={F2} opacity={0.8} />
+        <rect x={23} y={33} width={12} height={3} rx={1} fill={F2} opacity={0.8} />
+        <rect x={38} y={3} width={12} height={3} rx={1} fill={F2} opacity={0.8} />
+      </TemplateIcon>
+    ),
+  },
+  {
     name: 'layout',
     label: 'Layout',
     description:

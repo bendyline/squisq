@@ -1,5 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
-import { switchView } from './view-tabs';
+import { switchView, viewTab } from './view-tabs';
 
 /**
  * E2E for the Narrate (teleprompter) display mode — Phase A surface:
@@ -42,10 +42,8 @@ async function translateY(page: Page): Promise<number> {
 test('narrate mode renders the script with block markers and controls', async ({ page }) => {
   await openTeleprompter(page);
 
-  // The frontmatter `display-mode: narrate` preselects the mode button.
-  await expect(
-    page.getByRole('group', { name: 'Display mode' }).getByRole('button', { name: 'Narrate' }),
-  ).toHaveAttribute('aria-pressed', 'true');
+  // The frontmatter `display-mode: narrate` preselects the Use mode.
+  await expect(viewTab(page, 'Play')).toHaveAccessibleName('Narrate');
 
   await expect(page.getByTestId('teleprompter-surface')).toBeVisible();
   await expect(page.getByTestId('teleprompter-controls')).toBeVisible();

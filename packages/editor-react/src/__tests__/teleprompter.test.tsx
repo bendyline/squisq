@@ -132,10 +132,42 @@ describe('TeleprompterView', () => {
     expect(screen.getByRole('button', { name: 'Start prompter' })).toBeTruthy();
   });
 
+  it('mirrors the live surface into a presentation target without duplicating controls', () => {
+    const doc = markdownToDoc(parseMarkdown(MD));
+    const audienceDocument = document.implementation.createHTMLDocument('Audience');
+    const audienceTarget = audienceDocument.createElement('div');
+    audienceDocument.body.appendChild(audienceTarget);
+
+    render(
+      <TeleprompterView doc={doc} theme={DEFAULT_THEME} presentationTarget={audienceTarget} />,
+    );
+
+    expect(audienceTarget.querySelector('[aria-label="Audience presentation"]')).toBeTruthy();
+    expect(audienceTarget.querySelectorAll('[data-token-idx]').length).toBe(
+      buildNarrationScript(doc).tokens.length,
+    );
+    expect(audienceTarget.querySelector('[data-testid="teleprompter-controls"]')).toBeNull();
+    expect(screen.getAllByTestId('teleprompter-controls')).toHaveLength(1);
+  });
+
   it('shows an empty state for an empty doc', () => {
     renderView(null);
     expect(screen.getByText(/Nothing to narrate yet/)).toBeTruthy();
     expect(screen.queryByTestId('teleprompter-controls')).toBeNull();
+  });
+
+  it('mirrors the empty state into a presentation target', () => {
+    const audienceDocument = document.implementation.createHTMLDocument('Audience');
+    const audienceTarget = audienceDocument.createElement('div');
+    audienceDocument.body.appendChild(audienceTarget);
+
+    render(
+      <TeleprompterView doc={null} theme={DEFAULT_THEME} presentationTarget={audienceTarget} />,
+    );
+
+    expect(audienceTarget.querySelector('[aria-label="Audience presentation"]')).toBeTruthy();
+    expect(audienceTarget.textContent).toContain('Nothing to narrate yet');
+    expect(audienceTarget.querySelector('[data-testid="teleprompter-controls"]')).toBeNull();
   });
 
   it('start button enters countdown and Escape cancels back to stopped', () => {

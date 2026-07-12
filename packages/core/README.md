@@ -18,7 +18,7 @@ npm install @bendyline/squisq
 | Module       | Description                                                                      |
 | ------------ | -------------------------------------------------------------------------------- |
 | **schemas**  | Type definitions — `Doc`, `BlockTemplate`, `Viewport`, `Theme`, `LayoutStrategy` |
-| **doc**      | Template registry, 24 block templates, animation/theme utilities                 |
+| **doc**      | Template registry, 25 block templates, animation/theme utilities                 |
 | **markdown** | Markdown parsing, stringifying, AST types (`MarkdownDocument`), tree utilities   |
 | **spatial**  | Haversine distance, Geohash encode/decode                                        |
 | **storage**  | `StorageAdapter` interface, Memory + LocalStorage + LocalForage adapters         |
@@ -66,6 +66,28 @@ console.log(doc.children); // AST nodes
 
 const md = stringifyMarkdown(doc);
 ```
+
+### Author an ASCII Timeline
+
+Timeline fences are source-of-truth markdown. Unicode marker rails are
+auto-detected; the explicit `timeline` language also accepts sparse/ASCII
+forms. Repeat rails for multiple tracks and use event ids in `branch:` lines
+for forks or cross-track links. Add longer callout text after `::`; optional
+`side=above|below`, `descriptionSide=above|below`, and `callout=false` metadata
+control placement or suppress labels on dense cadence points.
+
+````markdown
+## Runtime timing
+
+```timeline
+Kernel: ● T28 :: Δ28 {#t28 side=above descriptionSide=below} ─────● T29 {#t29} ─────● T30 {#t30} ───►
+Client: ──────────────────● Frame A {#frame-a} ───● Frame B {#frame-b} ───►
+branch: t29 -> frame-a : interpolate
+```
+````
+
+`markdownToDoc()` derives globally aligned event positions while preserving
+the original fence byte-for-byte for markdown round-trips.
 
 ### Spatial Utilities
 

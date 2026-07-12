@@ -30,6 +30,7 @@ import { videoPullQuote } from './videoPullQuote.js';
 import { dataTable } from './dataTable.js';
 import { diagramBlock } from './diagramBlock.js';
 import { treeBlock } from './treeBlock.js';
+import { timelineBlock } from './timelineBlock.js';
 import { drawingBlock } from './drawingBlock.js';
 import { layoutBlock } from './layoutBlock.js';
 
@@ -57,6 +58,7 @@ export const templateRegistry: TemplateRegistry = {
   dataTable,
   diagram: diagramBlock,
   tree: treeBlock,
+  timeline: timelineBlock,
   layout: layoutBlock,
   drawing: drawingBlock,
 };

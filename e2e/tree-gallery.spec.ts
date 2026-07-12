@@ -1,5 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
-import { switchView } from './view-tabs';
+import { selectUseMode, switchView } from './view-tabs';
 
 /**
  * Screenshot spec: loads the tree gallery and captures the Use-mode
@@ -14,10 +14,7 @@ async function enterPlay(page: Page) {
   await page.locator('select').first().selectOption('tree-gallery');
   await page.locator('.tiptap.ProseMirror').waitFor({ state: 'visible', timeout: 5_000 });
   await switchView(page, 'Play');
-  await page
-    .getByRole('group', { name: 'Display mode' })
-    .getByRole('button', { name: 'Slideshow', exact: true })
-    .click();
+  await selectUseMode(page, 'Slideshow');
   await page.locator('.doc-player').waitFor({ state: 'visible', timeout: 5_000 });
 }
 

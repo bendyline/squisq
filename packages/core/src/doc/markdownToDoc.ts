@@ -53,6 +53,8 @@ import { deriveTemplateInputs } from './templateInputs.js';
 import { isEligibleAsciiFenceLang } from './asciiDiagram/detect.js';
 import { parseAsciiDiagram } from './asciiDiagram/parse.js';
 import { asciiDiagramToTemplateData } from './asciiDiagram/mapping.js';
+import { isEligibleAsciiTimelineFenceLang } from './asciiTimeline/detect.js';
+import { parseAsciiTimeline } from './asciiTimeline/parse.js';
 import type { MediaClip } from '../schemas/Media.js';
 
 // ============================================
@@ -485,6 +487,7 @@ export function markdownToDoc(markdownDoc: MarkdownDocument, options?: MarkdownT
   // and author `json data` node lists win over the fence.
   for (const block of allBlocks) {
     applyAsciiDiagramData(block, diagnostics);
+    applyTimelineData(block, diagnostics);
     applyTreeData(block, diagnostics);
   }
 
@@ -496,6 +499,11 @@ export function markdownToDoc(markdownDoc: MarkdownDocument, options?: MarkdownT
   if ((options?.autoTemplates ?? true) && !frontmatterDisablesAutoTemplates(markdownDoc)) {
     applyAutoTemplates(rootBlocks, resolveTemplateName(defaultTemplate), { featureIndex: 0 });
   }
+
+  // Timeline parsing is intentionally tolerant and can retain unresolved
+  // branch declarations as warnings. Surface those after auto-template
+  // selection so both explicit and auto-derived timeline blocks participate.
+  for (const block of allBlocks) collectTimelineWarnings(block, diagnostics);
 
   // Duplicate ids make connections and navigation ambiguous. Generated
   // slugs are already deduped; this catches author-pinned `{#id}` clashes.
@@ -781,6 +789,47 @@ function applyTreeData(block: Block, diagnostics: DocDiagnostic[]): void {
   block.templateData = { ...derived, ...block.templateData };
 }
 
+/**
+ * Fill `templateData.tracks`/`links` for an explicitly `{[timeline]}`-
+ * annotated block whose body is one eligible ASCII timeline fence.
+ */
+function applyTimelineData(block: Block, diagnostics: DocDiagnostic[]): void {
+  if (resolveTemplateName(block.template ?? '') !== 'timeline') return;
+  if (block.templateData && 'tracks' in block.templateData) return; // author data wins
+  const derived = deriveTemplateInputs('timeline', block.title ?? '', block.contents);
+  if (!derived || !Array.isArray(derived.tracks) || derived.tracks.length === 0) {
+    diagnostics.push({
+      severity: 'warning',
+      code: 'timeline-parse',
+      message: `Timeline block "${block.id}": body did not parse as an ASCII timeline`,
+      blockId: block.id,
+    });
+    return;
+  }
+  block.templateData = { ...derived, ...block.templateData };
+}
+
+function collectTimelineWarnings(block: Block, diagnostics: DocDiagnostic[]): void {
+  if (resolveTemplateName(block.template ?? '') !== 'timeline') return;
+  if (!block.templateData || !('tracks' in block.templateData)) return;
+  const fences = (block.contents ?? []).filter(
+    (node): node is MarkdownCodeBlock =>
+      node.type === 'code' && isEligibleAsciiTimelineFenceLang(node.lang),
+  );
+  if (fences.length !== 1) return;
+  for (const warning of parseAsciiTimeline(fences[0].value).warnings) {
+    const unresolved = /^unresolved-link\((.+)\)$/.exec(warning);
+    diagnostics.push({
+      severity: 'warning',
+      code: unresolved ? 'timeline-unresolved-link' : 'timeline-parse-warning',
+      message: unresolved
+        ? `Timeline block "${block.id}": unresolved branch ${unresolved[1]}`
+        : `Timeline block "${block.id}": ${warning}`,
+      blockId: block.id,
+    });
+  }
+}
+
 /** Truthiness of the `squisq-auto-templates` frontmatter kill-switch. */
 function frontmatterDisablesAutoTemplates(markdownDoc: MarkdownDocument): boolean {
   const v = markdownDoc.frontmatter?.['squisq-auto-templates'];
@@ -837,6 +886,7 @@ export function getBlockBodyText(block: Block): string {
   const tmpl = resolveTemplateName(block.template ?? '');
   const consumedFence =
     (tmpl === 'diagram' && block.templateData !== undefined && 'nodes' in block.templateData) ||
+    (tmpl === 'timeline' && block.templateData !== undefined && 'tracks' in block.templateData) ||
     (tmpl === 'tree' && block.templateData !== undefined && 'items' in block.templateData);
   // Join with newlines to preserve paragraph/list-item boundaries.
   // splitIntoPhrases uses these newlines as natural split points.

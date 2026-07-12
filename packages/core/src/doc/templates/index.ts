@@ -611,6 +611,7 @@ export { videoPullQuote } from './videoPullQuote.js';
 export { dataTable } from './dataTable.js';
 export { diagramBlock } from './diagramBlock.js';
 export { treeBlock } from './treeBlock.js';
+export { timelineBlock } from './timelineBlock.js';
 export { computeDiagramLayout } from './diagramLayout.js';
 export type {
   DiagramLayout,

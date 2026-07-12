@@ -43,12 +43,18 @@ export interface TeleprompterViewProps {
   workspaceContainer?: ContentContainer | null;
   /** Media base path (reserved for future preview integrations). */
   basePath?: string;
+  /**
+   * Optional audience-window portal owned by the editor's Presentation mode.
+   * The main controller remains authoritative; only this live surface is
+   * mirrored into the target.
+   */
+  presentationTarget?: HTMLElement | null;
   /** Recording deps; null/omitted disables the Record affordance. */
   recording?: TeleprompterRecordingDeps | null;
 }
 
 export function TeleprompterView(props: TeleprompterViewProps) {
-  const { doc, theme, recording = null } = props;
+  const { doc, theme, presentationTarget = null, recording = null } = props;
   const controller = useTeleprompter({ doc });
   const float = useFloatingWindow(TELEPROMPTER_CSS);
   const rootRef = useRef<HTMLDivElement | null>(null);
@@ -73,6 +79,10 @@ export function TeleprompterView(props: TeleprompterViewProps) {
     const ownerDoc = rootRef.current?.ownerDocument;
     if (ownerDoc) ensureTeleprompterStyles(ownerDoc);
   }, []);
+
+  useEffect(() => {
+    if (presentationTarget) ensureTeleprompterStyles(presentationTarget.ownerDocument);
+  }, [presentationTarget]);
 
   // ── Video-PiP pump: draw on analysis ticks, never rAF ──────────────
   const canvasFrameRef = useRef<Omit<CanvasPrompterFrame, 'wordPos'> | null>(null);
@@ -186,11 +196,23 @@ export function TeleprompterView(props: TeleprompterViewProps) {
 
   if (!controller.script) {
     return (
-      <div className="squisq-teleprompter-root" data-testid="teleprompter-view">
-        <div className="squisq-teleprompter-float-note">
-          <p>Nothing to narrate yet — add some content to the document.</p>
+      <>
+        <div ref={rootRef} className="squisq-teleprompter-root" data-testid="teleprompter-view">
+          <div className="squisq-teleprompter-float-note">
+            <p>Nothing to narrate yet — add some content to the document.</p>
+          </div>
         </div>
-      </div>
+        {presentationTarget
+          ? createPortal(
+              <div className="squisq-presentation-teleprompter" aria-label="Audience presentation">
+                <div className="squisq-teleprompter-float-note">
+                  <p>Nothing to narrate yet — add some content to the document.</p>
+                </div>
+              </div>,
+              presentationTarget,
+            )
+          : null}
+      </>
     );
   }
 
@@ -261,6 +283,18 @@ export function TeleprompterView(props: TeleprompterViewProps) {
                 compact
               />,
               float.portalTarget,
+            )
+          : null}
+        {presentationTarget
+          ? createPortal(
+              <div className="squisq-presentation-teleprompter" aria-label="Audience presentation">
+                <TeleprompterSurface
+                  key="presentation-audience"
+                  script={script}
+                  {...surfaceProps}
+                />
+              </div>,
+              presentationTarget,
             )
           : null}
         <TeleprompterSelfView stream={recorder.cameraStream} />

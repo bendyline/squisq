@@ -11,6 +11,7 @@
 
 import type { MarkdownCodeBlock } from '../../markdown/types.js';
 import { parseAsciiDiagramWithStats } from '../asciiDiagram/parse.js';
+import { detectAsciiTimeline } from '../asciiTimeline/detect.js';
 import { parseTreeWithStats } from './parse.js';
 import type { TreeDetection } from './types.js';
 
@@ -90,6 +91,12 @@ export function detectTree(text: string, opts: DetectTreeOptions = {}): TreeDete
   // corners └ ┗ ╰ ╚ ╘ are deliberately excluded — they double as tree elbows.)
   if (BOX_CORNER_RE.test(text)) {
     return { isTree: false, reasons: ['has-box-corners'] };
+  }
+
+  // Timeline callout elbows can resemble tree branches. Give a qualifying
+  // marker+axis timeline ownership before the loose tree parser sees it.
+  if (!explicit && detectAsciiTimeline(text).isTimeline) {
+    return { isTree: false, reasons: ['is-timeline'] };
   }
 
   // Mutual exclusion with the diagram codec: a fence with ≥2 closed boxes is

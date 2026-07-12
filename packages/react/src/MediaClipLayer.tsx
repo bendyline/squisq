@@ -102,7 +102,7 @@ function MediaClipElement({
     } else {
       el.pause();
     }
-  }, [active, currentTime, isPlaying, renderMode, clip.sourceIn, clip.absoluteStart]);
+  }, [active, currentTime, isPlaying, renderMode, clip.sourceIn, clip.absoluteStart, src]);
 
   const isVideo = clip.kind === 'video';
   const common = {

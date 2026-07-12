@@ -360,6 +360,8 @@ type TemplateBlock =
   | VideoPullQuoteInput
   | DataTableInput
   | DiagramBlockInput
+  | TreeBlockInput
+  | TimelineBlockInput
   | RawLayersInput /* layout */
   | DrawingBlockInput;
 
@@ -420,6 +422,8 @@ Required fields are shown without `?`. Every template also inherits the
 | `videoPullQuote`   | `text`, `backgroundVideo {src, posterSrc?, alt, clipStart, clipEnd, …}` | `attribution`                                                                                                                   |
 | `dataTable`        | `headers[]`, `rows[][]`                                                 | `title`, `align`, `colorScheme`                                                                                                 |
 | `diagram`          | — (nodes/edges come from child headings)                                | `title`, `colorScheme`, `nodeShape`, `edgeStyle`, `startStyle`, `endStyle`, `lineStyle`                                         |
+| `tree`             | — (`items` derive from an ASCII tree fence)                             | `items`, `title`, `colorScheme`                                                                                                 |
+| `timeline`         | — (`tracks` derive from an ASCII timeline fence)                        | `tracks`, `links`, `title`, `colorScheme`                                                                                       |
 | `layout`           | — (`Layer[]` authored via the Scene engine, children-driven)            | —                                                                                                                               |
 | `drawing`          | — (shapes come from child headings)                                     | `title`, `colorScheme`, `fill`, `stroke`                                                                                        |
 
@@ -526,7 +530,7 @@ interface LayoutHints {
 
 ### Subpath: Doc
 
-**Import:** `@bendyline/squisq/doc` — the template registry, all 24 templates,
+**Import:** `@bendyline/squisq/doc` — the template registry, all 25 templates,
 markdown↔doc conversion, canonical layer materialization, and
 theme/validation helpers.
 
@@ -607,7 +611,7 @@ function isContainerTemplate(name: string): boolean;
 function buildRegistry(custom?: readonly CustomTemplateDefinition[]): RuntimeTemplateRegistry;
 ```
 
-All 23 built-in templates register at import time under their canonical short
+All 25 built-in templates register at import time under their canonical short
 ids. `resolveTemplateName` continues to read legacy ids such as `titleBlock`
 and `diagramNode`, while the compatibility table itself remains internal.
 
@@ -1353,6 +1357,8 @@ interface DocPlayerProps {
   theme?: Theme; // default DEFAULT_THEME
   surface?: SurfaceScheme | 'auto';
   displayMode?: DisplayMode; // default 'video'
+  showCoverSlide?: boolean; // default true
+  coverVisible?: boolean; // controlled cover cursor for synchronized audience mirrors
   captionStyle?: CaptionStyle; // default 'standard'
   enableSwipe?: boolean; // default true — drag-to-swipe navigation in slideshow mode
 }
@@ -1491,6 +1497,7 @@ interface PlaybackState {
   isPlaying: boolean;
   currentTime: number;
   totalDuration: number;
+  isCoverVisible?: boolean;
   currentBlockIndex: number;
   totalBlocks: number;
   docProgress: number;
@@ -2143,6 +2150,7 @@ interface EditorShellProps {
   showStatusBar?: boolean; // default true
   showPlayTab?: boolean; // default true
   blockTags?: boolean; // default true
+  blockTagVisibility?: BlockTagVisibility; // 'none' | 'active' | 'always'; overrides blockTags
   imageDisplayMode?: ImageDisplayMode; // 'inline' (default) | 'thumbnail'
   thinMargins?: boolean;
   fullWidth?: boolean;
@@ -2170,6 +2178,11 @@ interface EditorShellProps {
 }
 ```
 
+In the Use view, the Presentation split button can fill only the current
+`EditorShell`, open a read-only audience window synchronized to the main
+playback/scroll position, or request browser full screen. This is ephemeral UI
+state and is not written to document frontmatter.
+
 ### Context
 
 ```ts
@@ -2181,7 +2194,13 @@ type EditorColorScheme = 'light' | 'dark'; // v1.5: renamed from `EditorTheme`
 type EditorMode = 'markdown' | 'code' | 'image';
 type LayoutMode = 'document' | 'block' | 'timeline';
 type ThemeInheritance = 'none' | 'fonts' | 'fonts-colors';
+type BlockTagVisibility = 'none' | 'active' | 'always';
 ```
+
+`blockTagVisibility: 'active'` shows inline template/property tags for the
+heading-defined block containing the caret and for the block under the pointer.
+Legacy `blockTags` booleans remain supported (`false` = `none`, `true` =
+`always`). View-preference snapshots include both fields.
 
 `EditorContextValue` is flat — it extends `EditorState` (e.g. `markdownSource`,
 `markdownDoc`, `doc`, `activeView`, `parseError`) and `EditorActions` (e.g.
@@ -2298,6 +2317,49 @@ position/source-visibility helpers. The obsolete React Flow-derived
 Legacy heading-based `{[diagram]}` documents still render through core, but
 their former `DiagramExtension`, `DiagramWidget`, `useDiagramData`, and heading
 command exports are no longer an editable canvas API.
+
+### Authored tree and timeline editors
+
+`TreeViewExtension` and `TimelineViewExtension` are peers to the diagram
+extension. They hide qualifying authored fences in WYSIWYG mode and mount
+interactive editors while preserving regenerated fence text as the canonical
+Markdown. The timeline canvas uses one shared horizontal scale across tracks,
+shows existing branch curves, adds points by clicking the rail or activating an
+always-available per-track Add button, and opens a form for the selected point's
+label, callout, side, marker, and visibility.
+
+```ts
+const TimelineViewExtension: Extension;
+function useTimelineData(editor: Editor, blockId: string): TimelineViewData | null;
+function applyTimelineCommand(
+  editor: Editor,
+  blockId: string,
+  command: TimelineCommand,
+): TimelineCommandResult;
+function isTimelineSourceSafeForSemanticEdit(source: string, timeline: AsciiTimeline): boolean;
+
+function addTimelineEventOp(
+  timeline: AsciiTimeline,
+  trackId: string,
+  position: number,
+  options?: AddTimelineEventOptions,
+): AddTimelineEventResult | null;
+function updateTimelineEventOp(
+  timeline: AsciiTimeline,
+  eventId: string,
+  patch: TimelineEventPatch,
+): AsciiTimeline;
+function removeTimelineEventOp(timeline: AsciiTimeline, eventId: string): AsciiTimeline;
+```
+
+Successful semantic edits promote the fence language to `timeline` and update
+the code-block text in the same ProseMirror transaction, so each field commit
+or point operation is one undo step. Edits fail closed with `reason:
+'unsafe-source'` when an unresolved branch, ignored line, or unknown attribute
+could be lost; stale controls also return `reason: 'read-only'`. The WYSIWYG
+surface disables mutation and directs authors to Source view in the unsafe
+case. Bare high-confidence timeline art is handled by
+`shouldPasteAsTimelineFence` before generic Markdown paste handling.
 
 ### Teleprompter (`src/teleprompter`)
 

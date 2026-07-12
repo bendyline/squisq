@@ -139,8 +139,10 @@ describe('RepairableDiagramExtension', () => {
     expect(fenceOf(editor).text).not.toBe(before);
     editor.commands.undo();
     expect(fenceOf(editor).text).toBe(before);
-    // …and it is a repair candidate again.
+    // …and it is a repair candidate again, NOT still claimed as a diagram
+    // (the relaxed hysteresis gate must reject the garbled art).
     expect(REPAIRABLE_KEY.getState(editor.state)?.entries.length).toBe(1);
+    expect(ASCII_DIAGRAM_KEY.getState(editor.state)?.entries.length).toBe(0);
   });
 
   it('is inert when disabled', () => {

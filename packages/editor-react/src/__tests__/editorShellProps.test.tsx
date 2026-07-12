@@ -464,4 +464,22 @@ describe('<Toolbar> Insert menu', () => {
       );
     });
   });
+
+  it('adds an explicit authored timeline fence from the Insert menu', async () => {
+    render(
+      <EditorProvider initialMarkdown="Intro" initialView="raw" allowRecording={false}>
+        <Toolbar />
+        <MarkdownSourceProbe />
+      </EditorProvider>,
+    );
+
+    fireEvent.click(screen.getByLabelText('Insert'));
+    fireEvent.click(await screen.findByRole('menuitem', { name: /Timeline/i }));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('markdown-source').textContent).toContain(
+        '```timeline\nMilestones: ● Start',
+      );
+    });
+  });
 });

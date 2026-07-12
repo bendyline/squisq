@@ -45,6 +45,7 @@ export type {
   DocumentLinkProvider,
   ViewPreferences,
   ThemeInheritance,
+  BlockTagVisibility,
   LayoutMode,
 } from './EditorContext.js';
 
@@ -317,6 +318,44 @@ export {
   toggleDirOp,
 } from './treeview/treeOps.js';
 export { shouldPasteAsTreeFence } from './treeview/treePaste.js';
+
+// Timeline editor — authored marker-rail fences become an accessible canvas
+// with add-point affordances and a selected-point inspector. Semantic edits
+// re-render the canonical `timeline` fence in one undoable transaction.
+export {
+  TimelineViewExtension,
+  TIMELINE_VIEW_KEY,
+  findTimelineBlockPos,
+  getTimelineForNode,
+  parseTimelineForNode,
+} from './timeline/TimelineViewExtension.js';
+export type {
+  TimelineBlockEntry,
+  TimelineViewExtensionOptions,
+  TimelineViewPluginState,
+} from './timeline/TimelineViewExtension.js';
+export { TimelineEditorWidget } from './timeline/TimelineEditorWidget.js';
+export type { TimelineEditorWidgetProps } from './timeline/TimelineEditorWidget.js';
+export { useTimelineData } from './timeline/timelineData.js';
+export type { TimelineViewData } from './timeline/timelineData.js';
+export {
+  applyTimelineCommand,
+  isTimelineSourceSafeForSemanticEdit,
+} from './timeline/timelineCommands.js';
+export type { TimelineCommand, TimelineCommandResult } from './timeline/timelineCommands.js';
+export {
+  addTimelineEventOp,
+  nextTimelineEventId,
+  removeTimelineEventOp,
+  sanitizeTimelineText,
+  updateTimelineEventOp,
+} from './timeline/timelineOps.js';
+export type {
+  AddTimelineEventOptions,
+  AddTimelineEventResult,
+  TimelineEventPatch,
+} from './timeline/timelineOps.js';
+export { shouldPasteAsTimelineFence } from './timeline/timelinePaste.js';
 
 // JSON Form — editable component
 export { JsonEditor } from './jsonEditor/index.js';

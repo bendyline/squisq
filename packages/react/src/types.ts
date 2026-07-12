@@ -72,6 +72,8 @@ export interface PlaybackState {
   isPlaying: boolean;
   currentTime: number;
   totalDuration: number;
+  /** Whether the managed cover is the visual currently shown. */
+  isCoverVisible?: boolean;
   currentBlockIndex: number;
   totalBlocks: number;
   docProgress: number;

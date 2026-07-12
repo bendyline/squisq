@@ -119,6 +119,11 @@ export type LayoutMode = 'document' | 'block' | 'timeline';
  */
 export type ThemeInheritance = 'none' | 'fonts' | 'fonts-colors';
 /**
+ * When inline block-template tags are shown in the WYSIWYG surface.
+ * `'active'` shows tags for the cursor's block and the block under the pointer.
+ */
+export type BlockTagVisibility = 'none' | 'active' | 'always';
+/**
  * Editor operating mode. `markdown` is the full experience (WYSIWYG +
  * Preview tabs, formatting toolbar). `code` is a Monaco-only view used
  * when the content represents a non-markdown file like `foo.ts`.
@@ -163,12 +168,11 @@ export interface EditorState {
    * the toolbar can toggle it at runtime.
    */
   outlineVisible: boolean;
+  /** When inline block-template tags are shown in the WYSIWYG view. */
+  blockTagVisibility: BlockTagVisibility;
   /**
-   * Whether inline block-template tags (the chip next to each templated
-   * heading in the WYSIWYG view, plus the subtle affordance chip on plain
-   * headings) are currently visible. Initialized from the EditorShell
-   * `blockTags` prop (default true); the View menu in the toolbar can
-   * toggle it at runtime.
+   * Whether inline block-template tags can currently be visible.
+   * Kept for compatibility; prefer {@link blockTagVisibility}.
    */
   blockTagsVisible: boolean;
   /**
@@ -267,6 +271,8 @@ export interface EditorActions {
   setOutlineVisible: (visible: boolean) => void;
   /** Show or hide inline block-template tags at runtime (driven by the View menu). */
   setBlockTagsVisible: (visible: boolean) => void;
+  /** Choose when inline block-template tags are shown. */
+  setBlockTagVisibility: (visibility: BlockTagVisibility) => void;
   /** Change how much of the active Squisq theme the WYSIWYG surface mirrors. */
   setThemeInheritance: (mode: ThemeInheritance) => void;
   /** Insert text at the current cursor position in the active editor */
@@ -471,6 +477,11 @@ export interface EditorProviderProps {
    */
   blockTags?: boolean;
   /**
+   * Initial block-tag visibility mode. When set, this takes precedence over
+   * the legacy boolean {@link blockTags} prop.
+   */
+  blockTagVisibility?: BlockTagVisibility;
+  /**
    * Initial value for how much of the active Squisq theme the WYSIWYG
    * editing surface should mirror. Defaults to `'fonts'` — the
    * historical behavior of inheriting body / heading fonts only. The
@@ -487,9 +498,9 @@ export interface EditorProviderProps {
    * Bundled view preferences — a serializable JSON blob covering all
    * runtime-toggleable view options. When provided, individual values
    * here override the matching individual props (`inlinePreview`,
-   * `showStatusBar`, `outline`). Hosts wiring this up typically load
-   * the blob from their own preferences storage and pair it with
-   * {@link onViewPreferencesChange}.
+   * `showStatusBar`, `outline`, `blockTagVisibility`, `blockTags`). Hosts
+   * wiring this up typically load the blob from their own preferences storage
+   * and pair it with {@link onViewPreferencesChange}.
    */
   viewPreferences?: ViewPreferences;
   /**
@@ -517,6 +528,8 @@ export interface ViewPreferences {
   showStatusBar?: boolean;
   /** Whether inline block-template tags on headings are visible. */
   blockTags?: boolean;
+  /** When inline block-template tags are shown. Takes precedence over `blockTags`. */
+  blockTagVisibility?: BlockTagVisibility;
   /** How much of the active Squisq theme the WYSIWYG surface mirrors. */
   themeInheritance?: ThemeInheritance;
   /** Document vs. block-at-a-time layout. */
@@ -529,6 +542,14 @@ export interface ViewPreferences {
  */
 const DEFAULT_PRUNE_POLICY: PrunePolicy = { type: 'keep-last-n', n: 50 };
 const DEFAULT_AUTOSAVE_IDLE_MS = 5_000;
+
+function normalizeBlockTagVisibility(
+  value: BlockTagVisibility | boolean | undefined,
+): BlockTagVisibility {
+  if (value === false || value === 'none') return 'none';
+  if (value === 'active') return 'active';
+  return 'always';
+}
 
 export function EditorProvider({
   initialMarkdown = '',
@@ -553,6 +574,7 @@ export function EditorProvider({
   showStatusBar = true,
   outline = false,
   blockTags = true,
+  blockTagVisibility: initialBlockTagVisibility,
   themeInheritance = 'fonts',
   layoutMode = 'document',
   viewPreferences,
@@ -565,7 +587,12 @@ export function EditorProvider({
   const effectiveInlinePreview = viewPreferences?.inlinePreview ?? inlinePreview;
   const effectiveShowStatusBar = viewPreferences?.showStatusBar ?? showStatusBar;
   const effectiveOutline = viewPreferences?.outline ?? outline;
-  const effectiveBlockTags = viewPreferences?.blockTags ?? blockTags;
+  const effectiveBlockTagVisibility = normalizeBlockTagVisibility(
+    viewPreferences?.blockTagVisibility ??
+      viewPreferences?.blockTags ??
+      initialBlockTagVisibility ??
+      blockTags,
+  );
   const effectiveThemeInheritance = viewPreferences?.themeInheritance ?? themeInheritance;
   const effectiveLayoutMode = viewPreferences?.layoutMode ?? layoutMode;
   // Resolve once per provider mount. Changing fileName/language after mount
@@ -611,10 +638,18 @@ export function EditorProvider({
   useEffect(() => {
     if (viewPreferences?.outline === undefined) setOutlineVisibleRaw(outline);
   }, [outline, viewPreferences?.outline]);
-  const [blockTagsVisible, setBlockTagsVisibleRaw] = useState<boolean>(effectiveBlockTags);
+  const [blockTagVisibilityState, setBlockTagVisibilityRaw] = useState<BlockTagVisibility>(
+    effectiveBlockTagVisibility,
+  );
+  const blockTagsVisible = blockTagVisibilityState !== 'none';
   useEffect(() => {
-    if (viewPreferences?.blockTags === undefined) setBlockTagsVisibleRaw(blockTags);
-  }, [blockTags, viewPreferences?.blockTags]);
+    if (
+      viewPreferences?.blockTagVisibility === undefined &&
+      viewPreferences?.blockTags === undefined
+    ) {
+      setBlockTagVisibilityRaw(normalizeBlockTagVisibility(initialBlockTagVisibility ?? blockTags));
+    }
+  }, [blockTags, initialBlockTagVisibility, viewPreferences]);
   const [themeInheritanceState, setThemeInheritanceRaw] =
     useState<ThemeInheritance>(effectiveThemeInheritance);
   useEffect(() => {
@@ -652,8 +687,10 @@ export function EditorProvider({
     if (viewPreferences.outline !== undefined) {
       setOutlineVisibleRaw(viewPreferences.outline);
     }
-    if (viewPreferences.blockTags !== undefined) {
-      setBlockTagsVisibleRaw(viewPreferences.blockTags);
+    if (viewPreferences.blockTagVisibility !== undefined) {
+      setBlockTagVisibilityRaw(normalizeBlockTagVisibility(viewPreferences.blockTagVisibility));
+    } else if (viewPreferences.blockTags !== undefined) {
+      setBlockTagVisibilityRaw(normalizeBlockTagVisibility(viewPreferences.blockTags));
     }
     if (viewPreferences.themeInheritance !== undefined) {
       setThemeInheritanceRaw(viewPreferences.themeInheritance);
@@ -663,7 +700,7 @@ export function EditorProvider({
     }
   }, [viewPreferences]);
 
-  // Wrap the three setters so user-driven toggles emit a snapshot via
+  // Wrap the view setters so user-driven changes emit a snapshot via
   // `onViewPreferencesChange`. Refs hold the latest values + callback so
   // each wrapper can build a current snapshot without re-creating itself
   // on every state change (the setters are kept referentially stable for
@@ -676,8 +713,8 @@ export function EditorProvider({
   statusBarRef.current = statusBarVisible;
   const outlineRef = useRef(outlineVisible);
   outlineRef.current = outlineVisible;
-  const blockTagsRef = useRef(blockTagsVisible);
-  blockTagsRef.current = blockTagsVisible;
+  const blockTagVisibilityRef = useRef(blockTagVisibilityState);
+  blockTagVisibilityRef.current = blockTagVisibilityState;
   const themeInheritanceRef = useRef(themeInheritanceState);
   themeInheritanceRef.current = themeInheritanceState;
   const layoutModeRef = useRef(layoutModeState);
@@ -688,7 +725,8 @@ export function EditorProvider({
       inlinePreview: visible,
       showStatusBar: statusBarRef.current,
       outline: outlineRef.current,
-      blockTags: blockTagsRef.current,
+      blockTags: blockTagVisibilityRef.current !== 'none',
+      blockTagVisibility: blockTagVisibilityRef.current,
       themeInheritance: themeInheritanceRef.current,
       layoutMode: layoutModeRef.current,
     });
@@ -699,7 +737,8 @@ export function EditorProvider({
       inlinePreview: inlinePreviewRef.current,
       showStatusBar: visible,
       outline: outlineRef.current,
-      blockTags: blockTagsRef.current,
+      blockTags: blockTagVisibilityRef.current !== 'none',
+      blockTagVisibility: blockTagVisibilityRef.current,
       themeInheritance: themeInheritanceRef.current,
       layoutMode: layoutModeRef.current,
     });
@@ -710,29 +749,36 @@ export function EditorProvider({
       inlinePreview: inlinePreviewRef.current,
       showStatusBar: statusBarRef.current,
       outline: visible,
-      blockTags: blockTagsRef.current,
+      blockTags: blockTagVisibilityRef.current !== 'none',
+      blockTagVisibility: blockTagVisibilityRef.current,
       themeInheritance: themeInheritanceRef.current,
       layoutMode: layoutModeRef.current,
     });
   }, []);
-  const setBlockTagsVisible = useCallback((visible: boolean) => {
-    setBlockTagsVisibleRaw(visible);
+  const setBlockTagVisibility = useCallback((visibility: BlockTagVisibility) => {
+    setBlockTagVisibilityRaw(visibility);
     onViewPreferencesChangeRef.current?.({
       inlinePreview: inlinePreviewRef.current,
       showStatusBar: statusBarRef.current,
       outline: outlineRef.current,
-      blockTags: visible,
+      blockTags: visibility !== 'none',
+      blockTagVisibility: visibility,
       themeInheritance: themeInheritanceRef.current,
       layoutMode: layoutModeRef.current,
     });
   }, []);
+  const setBlockTagsVisible = useCallback(
+    (visible: boolean) => setBlockTagVisibility(visible ? 'always' : 'none'),
+    [setBlockTagVisibility],
+  );
   const setThemeInheritance = useCallback((mode: ThemeInheritance) => {
     setThemeInheritanceRaw(mode);
     onViewPreferencesChangeRef.current?.({
       inlinePreview: inlinePreviewRef.current,
       showStatusBar: statusBarRef.current,
       outline: outlineRef.current,
-      blockTags: blockTagsRef.current,
+      blockTags: blockTagVisibilityRef.current !== 'none',
+      blockTagVisibility: blockTagVisibilityRef.current,
       themeInheritance: mode,
       layoutMode: layoutModeRef.current,
     });
@@ -743,7 +789,8 @@ export function EditorProvider({
       inlinePreview: inlinePreviewRef.current,
       showStatusBar: statusBarRef.current,
       outline: outlineRef.current,
-      blockTags: blockTagsRef.current,
+      blockTags: blockTagVisibilityRef.current !== 'none',
+      blockTagVisibility: blockTagVisibilityRef.current,
       themeInheritance: themeInheritanceRef.current,
       layoutMode: mode,
     });
@@ -1012,6 +1059,7 @@ export function EditorProvider({
       inlinePreviewVisible,
       statusBarVisible,
       outlineVisible,
+      blockTagVisibility: blockTagVisibilityState,
       blockTagsVisible,
       themeInheritance: themeInheritanceState,
       layoutMode: layoutModeState,
@@ -1050,6 +1098,7 @@ export function EditorProvider({
       setInlinePreviewVisible,
       setStatusBarVisible,
       setOutlineVisible,
+      setBlockTagVisibility,
       setBlockTagsVisible,
       setThemeInheritance,
       insertAtCursor,
@@ -1071,6 +1120,7 @@ export function EditorProvider({
       inlinePreviewVisible,
       statusBarVisible,
       outlineVisible,
+      blockTagVisibilityState,
       blockTagsVisible,
       themeInheritanceState,
       layoutModeState,
@@ -1105,6 +1155,7 @@ export function EditorProvider({
       setInlinePreviewVisible,
       setStatusBarVisible,
       setOutlineVisible,
+      setBlockTagVisibility,
       setBlockTagsVisible,
       setThemeInheritance,
       insertAtCursor,

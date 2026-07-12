@@ -22,6 +22,11 @@ import {
   isEligibleAsciiFenceLang,
   isExplicitDiagramLang,
 } from '../doc/asciiDiagram/detect.js';
+import {
+  detectAsciiTimeline,
+  isEligibleAsciiTimelineFenceLang,
+  isExplicitTimelineLang,
+} from '../doc/asciiTimeline/detect.js';
 import { detectTree, isEligibleTreeFenceLang, isExplicitTreeLang } from '../doc/treeview/detect.js';
 import { matchNumberHighlight } from './numberHighlight.js';
 
@@ -41,6 +46,8 @@ export interface BlockContentProfile {
    * Optional so externally-constructed profiles keep compiling.
    */
   hasAsciiDiagram?: boolean;
+  /** True when a dominant code fence is an authored marker+axis timeline. */
+  hasTimeline?: boolean;
   /**
    * True when the body is dominated by exactly one code fence whose content
    * is an ASCII file-tree / outline (see `doc/treeview/detect.ts`). Mutually
@@ -202,11 +209,30 @@ export function profileBlockContents(nodes: MarkdownBlockNode[]): BlockContentPr
     }
   }
 
-  // ASCII tree: the same dominance rule, using the tree detector (mutually
-  // exclusive with the diagram detector — a tree has no closed boxes).
+  // ASCII timeline: after the more specific closed-box diagram gate and
+  // before tree connector detection.
+  let hasTimeline = false;
+  if (
+    !hasAsciiDiagram &&
+    codeNodes.length === 1 &&
+    isEligibleAsciiTimelineFenceLang(codeNodes[0].lang) &&
+    !hasTable &&
+    imageCount === 0 &&
+    !hasVideo
+  ) {
+    const nonCodeChars = Math.max(0, plainText.length - codeNodes[0].value.length);
+    const explicit = isExplicitTimelineLang(codeNodes[0].lang);
+    if (nonCodeChars <= 400 && detectAsciiTimeline(codeNodes[0].value, { explicit }).isTimeline) {
+      hasTimeline = true;
+    }
+  }
+
+  // Tree detection comes last: timeline callout elbows can otherwise look
+  // like connector branches to the deliberately lenient tree parser.
   let hasTree = false;
   if (
     !hasAsciiDiagram &&
+    !hasTimeline &&
     codeNodes.length === 1 &&
     isEligibleTreeFenceLang(codeNodes[0].lang) &&
     !hasTable &&
@@ -231,6 +257,7 @@ export function profileBlockContents(nodes: MarkdownBlockNode[]): BlockContentPr
     hasNumberHighlight,
     wordCount,
     hasAsciiDiagram,
+    hasTimeline,
     hasTree,
   };
 }
@@ -252,6 +279,11 @@ function recommendedNamesForProfile(profile: BlockContentProfile): string[] {
   if (profile.hasAsciiDiagram) {
     anyContentSignal = true;
     names.add('diagram');
+  }
+
+  if (profile.hasTimeline) {
+    anyContentSignal = true;
+    names.add('timeline');
   }
 
   if (profile.hasTree) {
@@ -328,6 +360,7 @@ function recommendedNamesForProfile(profile: BlockContentProfile): string[] {
  */
 export function pickAutoTemplate(profile: BlockContentProfile, blockIndex = 0): string | undefined {
   if (profile.hasAsciiDiagram) return 'diagram';
+  if (profile.hasTimeline) return 'timeline';
   if (profile.hasTree) return 'tree';
   if (profile.hasTable) return 'dataTable';
   if (profile.imageCount >= 2) return 'photoGrid';

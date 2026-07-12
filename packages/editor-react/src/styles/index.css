@@ -13,5 +13,6 @@
 @import './diagram.css';
 @import './ascii-diagram.css';
 @import './tree-view.css';
+@import './ascii-timeline.css';
 @import '../scene/scene.css';
 @import '../customTemplates/designer.css';

@@ -227,6 +227,18 @@ export const TEMPLATE_INPUT_DESCRIPTORS: Readonly<
     // inline string — declared so it isn't flagged as unknown.
     { key: 'items', description: 'Tree items (derived from the tree fence)' },
   ],
+  timeline: [
+    { key: 'title', description: 'Optional title above the timeline' },
+    {
+      key: 'colorScheme',
+      description: 'Track and marker color scheme',
+      valueHint: COLOR_SCHEME_HINT,
+    },
+    // Tracks/events and branch links are nested structures derived from the
+    // timeline source, not values that can be expressed as one inline string.
+    { key: 'tracks', description: 'Timeline tracks and events (supply via template data)' },
+    { key: 'links', description: 'Branch links between event ids (supply via template data)' },
+  ],
   videoWithCaption: [
     { key: 'videoSrc', description: 'Path to the video file', required: true },
     { key: 'posterSrc', description: 'Poster frame path' },

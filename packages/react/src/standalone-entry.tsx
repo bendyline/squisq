@@ -57,6 +57,11 @@ export interface MountOptions {
   /** Auto-play on mount (only for slideshow mode, default: false) */
   autoPlay?: boolean;
   /**
+   * Capture presentation arrow keys without requiring focus (default: true).
+   * Disable when mounting multiple interactive players on the same page.
+   */
+  globalKeyboardShortcuts?: boolean;
+  /**
    * Enable render mode for headless frame capture. The instance API is
    * available through the returned mount handle. Disables controls and
    * auto-play.
@@ -253,6 +258,7 @@ export function mount(element: Element, doc: Doc, options: MountOptions = {}): S
     renderMode = false,
     animationsEnabled = true,
     captionStyle,
+    globalKeyboardShortcuts = true,
   } = options;
 
   // Rewrite audio URLs if map provided
@@ -272,7 +278,7 @@ export function mount(element: Element, doc: Doc, options: MountOptions = {}): S
       basePath,
       theme,
       animationsEnabled,
-      globalKeyboardShortcuts: true,
+      globalKeyboardShortcuts,
     });
   } else {
     content = createElement(DocPlayer, {
@@ -286,7 +292,7 @@ export function mount(element: Element, doc: Doc, options: MountOptions = {}): S
       theme,
       captionsEnabled: !!captionStyle,
       captionStyle: captionStyle ?? 'standard',
-      globalKeyboardShortcuts: true,
+      globalKeyboardShortcuts,
       onRenderAPIReady: (api: SquisqRenderAPI | null) => handle.setRenderAPI(api),
     });
   }

@@ -215,6 +215,12 @@ export interface DocPlayerProps {
    * `doc.startBlock`. Defaults to true for existing documents.
    */
   showCoverSlide?: boolean;
+  /**
+   * Optional controlled cover visibility. Intended for synchronized audience
+   * mirrors that follow another DocPlayer's visual cursor. When omitted, the
+   * player owns its normal cover lifecycle.
+   */
+  coverVisible?: boolean;
   /** Caption display style (default: 'standard').
    *  'social' shows large centered words with the active word highlighted. */
   captionStyle?: CaptionStyle;
@@ -299,6 +305,7 @@ function DocPlayerContent({
   forceViewport,
   displayMode = 'video',
   showCoverSlide = true,
+  coverVisible,
   theme,
   surface,
   captionStyle = 'standard',
@@ -538,18 +545,22 @@ function DocPlayerContent({
     (coverForced ||
       coverGraceActive ||
       (!isPlaying && currentTime === 0 && !hasPlayedOnce.current && !renderMode && !autoPlay));
+  const effectiveSlideshowCoverVisible = coverVisible ?? slideshowCoverVisible;
   const showSlideshowCover = !!(
     isSlideshowMode &&
     !isLinearMode &&
     !renderMode &&
     coverBlock &&
-    slideshowCoverVisible
+    effectiveSlideshowCoverVisible
   );
-  const showCoverBlock = showVideoCoverBlock || showSlideshowCover;
+  const showCoverBlock =
+    coverVisible === undefined
+      ? showVideoCoverBlock || showSlideshowCover
+      : !!coverBlock && coverVisible;
 
   const slideshowHasCover = !!(isSlideshowMode && !renderMode && coverBlock);
   const slideshowSlideIndex = slideshowHasCover
-    ? slideshowCoverVisible
+    ? effectiveSlideshowCoverVisible
       ? 0
       : currentBlockIndex + 1
     : currentBlockIndex;
@@ -850,6 +861,7 @@ function DocPlayerContent({
       isPlaying,
       currentTime,
       totalDuration,
+      isCoverVisible: showCoverBlock,
       currentBlockIndex: slideshowSlideIndex,
       totalBlocks: slideshowTotalSlides,
       docProgress,
@@ -871,6 +883,7 @@ function DocPlayerContent({
       isPlaying,
       currentTime,
       totalDuration,
+      showCoverBlock,
       slideshowSlideIndex,
       slideshowTotalSlides,
       docProgress,
@@ -1486,7 +1499,7 @@ function DocPlayerContent({
       )}
 
       {/* Slideshow controls (prev / counter / next) */}
-      {!renderMode && isSlideshowMode && (
+      {!renderMode && isSlideshowMode && showControls && (
         <DocControlsSlideshow
           state={playbackState}
           slideNav={slideNavActions}

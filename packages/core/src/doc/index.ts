@@ -79,6 +79,30 @@ export type {
   RepairResult,
 } from './asciiDiagram/index.js';
 export {
+  ASCII_TIMELINE_FENCE_LANGS,
+  asciiTimelineToTemplateData,
+  detectAsciiTimeline,
+  isAsciiTimelineFence,
+  isEligibleAsciiTimelineFenceLang,
+  isExplicitTimelineLang,
+  parseAsciiTimeline,
+  parseAsciiTimelineWithStats,
+  renderAsciiTimeline,
+} from './asciiTimeline/index.js';
+export type {
+  AsciiTimeline,
+  AsciiTimelineDetection,
+  AsciiTimelineEvent,
+  AsciiTimelineLink,
+  AsciiTimelineMarker,
+  AsciiTimelineSide,
+  AsciiTimelineStats,
+  AsciiTimelineStyle,
+  AsciiTimelineTrack,
+  DetectAsciiTimelineOptions,
+  RenderAsciiTimelineOptions,
+} from './asciiTimeline/index.js';
+export {
   TREE_FENCE_LANGS,
   detectTree,
   findFirstList,

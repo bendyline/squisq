@@ -396,6 +396,67 @@ export interface TreeTemplateItem {
 }
 
 /**
+ * One point on a timeline track. Event positions are normalized across the
+ * whole timeline (0 = left edge, 1 = right edge) so events on separate tracks
+ * remain horizontally comparable.
+ */
+export interface TimelineTemplateEvent {
+  /** Stable id used by cross-track branch links. */
+  id: string;
+  /** Short label displayed next to the event dot. */
+  label: string;
+  /** Optional longer callout text. */
+  description?: string;
+  /** Normalized horizontal position; renderers clamp values to 0..1. */
+  position: number;
+  /** Preferred callout placement. Defaults to alternating above/below. */
+  side?: 'above' | 'below';
+  /** Description placement when it should sit opposite the event label. */
+  descriptionSide?: 'above' | 'below';
+  /** False renders the point only (useful for dense cadence tracks). */
+  callout?: boolean;
+  /** Dot treatment. Defaults to `filled`. */
+  marker?: 'filled' | 'hollow' | 'diamond';
+}
+
+/** A horizontal timeline lane with zero or more positioned events. */
+export interface TimelineTemplateTrack {
+  id: string;
+  /** Optional label displayed to the left of the track. */
+  label?: string;
+  /** Optional label displayed after the track's terminal arrow. */
+  endLabel?: string;
+  events: TimelineTemplateEvent[];
+}
+
+/**
+ * A branch or relationship between two events. Source and target resolve
+ * against event ids globally, so links may cross tracks.
+ */
+export interface TimelineTemplateLink {
+  source: string;
+  target: string;
+  /** Optional text displayed near the branch path. */
+  label?: string;
+}
+
+/**
+ * Timeline block - renders one or more horizontal tracks with event dots,
+ * text callouts, and optional branches between events.
+ */
+export interface TimelineBlockInput extends BaseTemplateBlock {
+  template: 'timeline';
+  /** Tracks and their events (usually supplied through `templateData`). */
+  tracks?: TimelineTemplateTrack[];
+  /** Optional branch/cross-track links between event ids. */
+  links?: TimelineTemplateLink[];
+  /** Optional title above the timeline. */
+  title?: string;
+  /** Color scheme for tracks, markers, and branch links. */
+  colorScheme?: ColorScheme;
+}
+
+/**
  * Photo grid - 2-4 images in a tiled layout.
  * Used when multiple images are available for visual variety.
  */
@@ -665,6 +726,7 @@ export type TemplateBlock =
   | DataTableInput
   | DiagramBlockInput
   | TreeBlockInput
+  | TimelineBlockInput
   | DrawingBlockInput
   | RawLayersInput;
 

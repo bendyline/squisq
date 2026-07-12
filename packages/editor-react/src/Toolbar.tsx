@@ -230,6 +230,14 @@ const BUTTONS: ToolbarButton[] = [
     faIcon: 'fa-solid fa-folder-tree',
   },
   {
+    id: 'timeline',
+    label: 'timeline',
+    icon: '',
+    title: 'Insert timeline',
+    group: 'media',
+    faIcon: 'fa-solid fa-timeline',
+  },
+  {
     id: 'drawing',
     label: 'drawing',
     icon: '',
@@ -405,10 +413,20 @@ function insertTreeBlock(editor: TiptapEditor): void {
   insertFenceBlock(editor, TREE_STARTER_ART, 'tree');
 }
 
+/** Starter multi-event rail for the authored timeline view. */
+const TIMELINE_STARTER_ART =
+  'Milestones: ● Start {#start} ─────● Review {#review} ─────● Ship {#ship} ───►';
+const TIMELINE_STARTER_MARKDOWN = '\n```timeline\n' + TIMELINE_STARTER_ART + '\n```\n';
+
+/** Insert a starter ASCII timeline code fence after the current top-level block. */
+function insertTimelineBlock(editor: TiptapEditor): void {
+  insertFenceBlock(editor, TIMELINE_STARTER_ART, 'timeline');
+}
+
 /**
  * Insert a code fence after the current top-level block. `lang` tags the
- * fence's `language` attribute — pass the explicit `diagram`/`tree` tag so
- * the diagram/tree widget claims it immediately and its identity round-trips.
+ * fence's `language` attribute — pass the explicit authored-view tag so its
+ * identity round-trips through markdown and Tiptap.
  */
 function insertFenceBlock(editor: TiptapEditor, art: string, lang?: string): void {
   editor
@@ -940,6 +958,11 @@ export function Toolbar({
           // interactive outline over the inserted starter.
           insertTreeBlock(tiptapEditor);
           break;
+        case 'timeline':
+          // The authored fence is immediately replaced by the WYSIWYG rail
+          // canvas; Preview uses the same events as vector layers.
+          insertTimelineBlock(tiptapEditor);
+          break;
         case 'drawing':
           // Empty drawing is usable via the canvas's "Shapes ▾" palette;
           // each shape persists as a child heading.
@@ -1106,6 +1129,11 @@ export function Toolbar({
             newCursorOffset = replacement.length;
             break;
           }
+          case 'timeline': {
+            replacement = TIMELINE_STARTER_MARKDOWN;
+            newCursorOffset = replacement.length;
+            break;
+          }
           case 'drawing': {
             replacement = '\n## Drawing {[drawing]}\n';
             newCursorOffset = replacement.length;
@@ -1188,6 +1216,9 @@ export function Toolbar({
             break;
           case 'tree':
             insertion = TREE_STARTER_MARKDOWN;
+            break;
+          case 'timeline':
+            insertion = TIMELINE_STARTER_MARKDOWN;
             break;
           case 'drawing':
             insertion = '\n## Drawing {[drawing]}\n';

@@ -191,6 +191,25 @@ describe('DocPlayer smoke test', () => {
     expect(audioController.seekTo).toHaveBeenNthCalledWith(2, 10);
   });
 
+  it('handles a focused-player arrow only once when global shortcuts are enabled', () => {
+    const audioController = controller({ currentTime: 5, totalDuration: 15 });
+    const { container } = render(
+      <DocPlayer
+        doc={docWithThreeSlides()}
+        audioController={audioController}
+        displayMode="slideshow"
+        globalKeyboardShortcuts
+      />,
+    );
+
+    fireEvent.keyDown(container.querySelector<HTMLElement>('.doc-player')!, {
+      key: 'ArrowRight',
+    });
+
+    expect(audioController.seekTo).toHaveBeenCalledTimes(1);
+    expect(audioController.seekTo).toHaveBeenCalledWith(10);
+  });
+
   it('does not globally intercept arrows from editable fields', () => {
     const audioController = controller({ currentTime: 20, totalDuration: 60 });
     render(
@@ -367,6 +386,38 @@ describe('DocPlayer smoke test', () => {
     fireEvent.click(screen.getByTestId('slide-next'));
     await waitFor(() => expect(screen.getByTestId('slide-counter').textContent).toBe('1 / 1'));
     expect(container.textContent).not.toContain('Managed Cover');
+  });
+
+  it('accepts controlled cover visibility for a synchronized audience mirror', async () => {
+    const states: Array<{ isCoverVisible?: boolean }> = [];
+    const { container, rerender } = render(
+      <DocPlayer
+        doc={docWithCover()}
+        audioController={controller()}
+        displayMode="slideshow"
+        showControls={false}
+        coverVisible={false}
+        onPlaybackStateChange={(state) => states.push(state)}
+      />,
+    );
+
+    await waitFor(() => expect(container.textContent).not.toContain('Managed Cover'));
+    expect(states[states.length - 1]?.isCoverVisible).toBe(false);
+    expect(screen.queryByTestId('slide-counter')).toBeNull();
+
+    rerender(
+      <DocPlayer
+        doc={docWithCover()}
+        audioController={controller()}
+        displayMode="slideshow"
+        showControls={false}
+        coverVisible
+        onPlaybackStateChange={(state) => states.push(state)}
+      />,
+    );
+
+    await waitFor(() => expect(container.textContent).toContain('Managed Cover'));
+    expect(states[states.length - 1]?.isCoverVisible).toBe(true);
   });
 
   it('reinitializes cover state when a new document replaces the old one', async () => {

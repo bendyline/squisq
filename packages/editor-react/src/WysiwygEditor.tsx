@@ -34,6 +34,9 @@ import { applyRepairCommand } from './asciiDiagram/asciiDiagramCommands';
 import { shouldPasteAsAsciiFence } from './asciiDiagram/asciiPaste';
 import { TreeViewExtension } from './treeview/TreeViewExtension';
 import { shouldPasteAsTreeFence } from './treeview/treePaste';
+import { TimelineViewExtension } from './timeline/TimelineViewExtension';
+import { shouldPasteAsTimelineFence } from './timeline/timelinePaste';
+import { BlockTagActivityExtension } from './blockTagActivity';
 import { SceneBlockExtension } from './scene/SceneBlockExtension';
 import { InlineIcon } from './InlineIcon';
 import { ImageWithMediaProvider } from './ImageNodeView';
@@ -80,6 +83,12 @@ const EMPTY_PROMPTS = [
   'Begin at the beginning…',
 ];
 
+const BLOCK_TAG_DATA_VALUES = {
+  none: 'hidden',
+  active: 'active',
+  always: 'visible',
+} as const;
+
 function pickEmptyPrompt(): string {
   return EMPTY_PROMPTS[Math.floor(Math.random() * EMPTY_PROMPTS.length)];
 }
@@ -118,7 +127,7 @@ export function WysiwygEditor({
     setTiptapEditor,
     mediaProvider,
     mentionProvider,
-    blockTagsVisible,
+    blockTagVisibility,
     themeInheritance,
     colorScheme,
     bumpMediaRevision,
@@ -188,8 +197,10 @@ export function WysiwygEditor({
         },
       }),
       HeadingWithTemplate.configure({ levels: [1, 2, 3, 4, 5, 6] }),
+      BlockTagActivityExtension,
       AsciiDiagramExtension.configure({ textChannel: sceneTextChannel }),
       RepairableDiagramExtension.configure({ onRepair: applyRepairCommand }),
+      TimelineViewExtension,
       TreeViewExtension,
       SceneBlockExtension.configure({ textChannel: sceneTextChannel }),
       Table.configure({ resizable: true }),
@@ -301,6 +312,22 @@ export function WysiwygEditor({
             view.dispatch(
               view.state.tr.replaceSelectionWith(
                 codeBlockType.create({ language: 'diagram' }, view.state.schema.text(text)),
+              ),
+            );
+            return true;
+          }
+        }
+
+        // Bare (unfenced) marker rails → an explicit timeline code block.
+        // Run before the tree gate because timeline callout elbows can look
+        // like nested tree connectors to a deliberately lenient parser.
+        if (shouldPasteAsTimelineFence(text)) {
+          const codeBlockType = view.state.schema.nodes.codeBlock;
+          if (codeBlockType) {
+            event.preventDefault();
+            view.dispatch(
+              view.state.tr.replaceSelectionWith(
+                codeBlockType.create({ language: 'timeline' }, view.state.schema.text(text)),
               ),
             );
             return true;
@@ -590,7 +617,7 @@ export function WysiwygEditor({
         className={`squisq-wysiwyg-container${className ? ` ${className}` : ''}`}
         style={{ width: '100%', height: '100%', overflow: 'auto', ...themeStyle }}
         data-testid="wysiwyg-container"
-        data-block-tags={blockTagsVisible ? 'visible' : 'hidden'}
+        data-block-tags={BLOCK_TAG_DATA_VALUES[blockTagVisibility]}
         data-theme-inheritance={themeInheritance}
         ref={containerRef}
       >

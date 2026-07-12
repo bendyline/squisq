@@ -410,6 +410,77 @@ const TEMPLATE_SCREENSHOT_FIXTURES_INTERNAL = {
       ],
     },
   },
+  tree: {
+    block: {
+      id: 'sample-tree',
+      template: 'tree',
+      duration: 6,
+      audioSegment: 0,
+      title: 'Package Layout',
+      items: [
+        {
+          id: 'src',
+          label: 'src/',
+          isDir: true,
+          children: [
+            { id: 'index', label: 'index.ts', children: [] },
+            {
+              id: 'timeline-dir',
+              label: 'asciiTimeline/',
+              isDir: true,
+              children: [
+                { id: 'parse', label: 'parse.ts', children: [] },
+                { id: 'render', label: 'render.ts', children: [] },
+              ],
+            },
+          ],
+        },
+      ],
+    },
+  },
+  timeline: {
+    block: {
+      id: 'sample-timeline',
+      template: 'timeline',
+      duration: 6,
+      audioSegment: 0,
+      title: 'Kernel and Client Timing',
+      tracks: [
+        {
+          id: 'kernel',
+          label: 'Kernel',
+          endLabel: 'simulation time',
+          events: [
+            { id: 't28', label: 'T28', description: 'delta 28', position: 0, side: 'above' },
+            { id: 't29', label: 'T29', description: 'delta 29', position: 0.5, side: 'below' },
+            { id: 't30', label: 'T30', description: 'delta 30', position: 1, side: 'above' },
+          ],
+        },
+        {
+          id: 'client',
+          label: 'Client',
+          events: [
+            {
+              id: 'render-start',
+              label: 'Render start',
+              description: 'interpolate buffered snapshots',
+              position: 0,
+              side: 'below',
+            },
+            {
+              id: 'present',
+              label: 'Present frame',
+              description: 'display-rate output',
+              position: 1,
+              side: 'above',
+              marker: 'diamond',
+            },
+          ],
+        },
+      ],
+      links: [{ source: 't29', target: 'render-start', label: 'interpolation path' }],
+    },
+  },
   layout: {
     block: {
       id: 'sample-layout',
