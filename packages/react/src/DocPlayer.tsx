@@ -225,6 +225,12 @@ export interface DocPlayerProps {
    * `displayMode === 'slideshow'` and not in render/headless mode.
    */
   enableSwipe?: boolean;
+  /**
+   * Listen for playback/navigation shortcuts at the document level instead of
+   * requiring this player to hold focus. Intended for a primary preview or
+   * standalone presentation; leave disabled when several players share a page.
+   */
+  globalKeyboardShortcuts?: boolean;
 }
 
 // Dev-only, browser-safe environment probe. Bundlers substitute the
@@ -297,6 +303,7 @@ function DocPlayerContent({
   surface,
   captionStyle = 'standard',
   enableSwipe = true,
+  globalKeyboardShortcuts = false,
 }: DocPlayerContentProps) {
   const isSlideshowMode = displayMode === 'slideshow';
   const isLinearMode = displayMode === 'linear';
@@ -377,8 +384,17 @@ function DocPlayerContent({
   // Tap the player surface to toggle play/pause (disabled in slideshow and linear mode)
   const handleContainerClick = useCallback(
     (e: React.MouseEvent) => {
-      if (renderMode || isSlideshowMode || isLinearMode) return;
+      if (renderMode || isLinearMode) return;
       const target = e.target as HTMLElement;
+      if (isSlideshowMode) {
+        // The keyboard shortcuts are intentionally scoped to the focused player.
+        // A presentation surface is not naturally focusable on click, so focus it
+        // explicitly while preserving native focus for its controls.
+        if (!target.closest('button, a, input, textarea, select, [contenteditable="true"]')) {
+          containerRef.current?.focus({ preventScroll: true });
+        }
+        return;
+      }
       // Don't toggle if user clicked a control element
       if (
         target.closest(
@@ -419,6 +435,7 @@ function DocPlayerContent({
     nextBlock: _nextBlock,
     prevBlock: _prevBlock,
     blocks: expandedBlocks,
+    suppressOutgoingForNextBlock,
   } = useDocPlayback(doc, currentTime, {
     viewport: activeViewport,
     theme: effectiveTheme,
@@ -447,6 +464,7 @@ function DocPlayerContent({
   // It has no timeline startTime, so keep its visibility separate from audio.
   const hasManagedCover = !!coverBlock;
   const [slideshowCoverVisible, setSlideshowCoverVisible] = useState(false);
+  const [isSlideshowPickerOpen, setIsSlideshowPickerOpen] = useState(false);
   const slideshowCoverInitKeyRef = useRef('');
   useEffect(() => {
     slideshowCoverInitKeyRef.current = '';
@@ -954,13 +972,29 @@ function DocPlayerContent({
   // Drag-to-swipe navigation for slideshow mode. Inert unless in slideshow mode,
   // interactive (not headless), and not overridden off via `enableSwipe`.
   const swipeEnabled = isSlideshowMode && !isLinearMode && !renderMode && enableSwipe;
+  const armContextFreeSwipeEntry = useCallback(
+    (destinationSlideIndex: number) => {
+      const destinationBlockIndex = destinationSlideIndex - (slideshowHasCover ? 1 : 0);
+      const destinationBlock = expandedBlocks[destinationBlockIndex];
+      if (destinationBlock) suppressOutgoingForNextBlock(destinationBlock.id);
+    },
+    [expandedBlocks, slideshowHasCover, suppressOutgoingForNextBlock],
+  );
+  const handleSwipeNext = useCallback(() => {
+    armContextFreeSwipeEntry(slideshowSlideIndex + 1);
+    slideNavActions.nextSlide();
+  }, [armContextFreeSwipeEntry, slideshowSlideIndex, slideNavActions]);
+  const handleSwipePrev = useCallback(() => {
+    armContextFreeSwipeEntry(slideshowSlideIndex - 1);
+    slideNavActions.prevSlide();
+  }, [armContextFreeSwipeEntry, slideshowSlideIndex, slideNavActions]);
   const swipe = useSlideSwipe({
     enabled: swipeEnabled,
     containerRef,
     canGoNext: slideshowSlideIndex < slideshowTotalSlides - 1,
     canGoPrev: slideshowSlideIndex > 0,
-    onNext: slideNavActions.nextSlide,
-    onPrev: slideNavActions.prevSlide,
+    onNext: handleSwipeNext,
+    onPrev: handleSwipePrev,
   });
 
   // Callback for playback state changes (for external controls)
@@ -1007,6 +1041,24 @@ function DocPlayerContent({
     return block.id.replace(/-/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
   }, []);
 
+  const slideshowPickerItems = useMemo(() => {
+    const blockItems = expandedBlocks.map((block, index) => ({
+      id: block.id,
+      label: String(index + 1),
+      summary: getBlockTitle(block),
+    }));
+
+    if (!slideshowHasCover || !coverBlock) return blockItems;
+    return [
+      {
+        id: '__cover__',
+        label: 'Cover',
+        summary: getBlockTitle(coverBlock),
+      },
+      ...blockItems,
+    ];
+  }, [coverBlock, expandedBlocks, getBlockTitle, slideshowHasCover]);
+
   // Compute block markers for progress bar (using expanded blocks)
   const blockMarkers = useMemo(() => {
     if (!totalDuration || !expandedBlocks.length) return [];
@@ -1037,16 +1089,29 @@ function DocPlayerContent({
   // Handle keyboard controls — uses refs for frequently-changing values
   // (currentTime, totalDuration, expandedBlocks.length) to avoid
   // re-registering the event listener on every animation frame.
-  const handleKeyDown = useCallback(
-    (e: React.KeyboardEvent<HTMLDivElement>) => {
-      // Shortcuts belong to this focused player only and never consume keys
-      // from editable or interactive descendants.
-      const target = e.target as HTMLElement;
+  const handleKeyboardShortcut = useCallback(
+    (e: KeyboardEvent | React.KeyboardEvent<HTMLDivElement>, global: boolean) => {
+      if (e.defaultPrevented || e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) return;
+
+      const target = e.target instanceof Element ? e.target : null;
+      const isEditableTarget = !!target?.closest(
+        'input, textarea, select, [contenteditable]:not([contenteditable="false"]), [role="textbox"], [role="combobox"], [role="listbox"], [role="slider"], [role="spinbutton"], .monaco-editor',
+      );
+      const isOpenInteractionTarget = !!target?.closest(
+        '[role="menu"], [role="dialog"], [aria-modal="true"]',
+      );
+      const isSlideshowToolbarTarget =
+        isSlideshowMode &&
+        !!target?.closest('.doc-controls-slideshow') &&
+        !target.closest('[role="menu"]');
       if (
-        target.isContentEditable ||
-        target.closest(
-          'input, textarea, select, button, a, [contenteditable]:not([contenteditable="false"]), [role="textbox"]',
-        )
+        isEditableTarget ||
+        (global && isOpenInteractionTarget) ||
+        (!global &&
+          !!target?.closest(
+            'input, textarea, select, button, a, [contenteditable]:not([contenteditable="false"]), [role="textbox"]',
+          ) &&
+          !isSlideshowToolbarTarget)
       ) {
         return;
       }
@@ -1064,9 +1129,12 @@ function DocPlayerContent({
             slideNavActions.nextSlide();
             break;
           case 'ArrowLeft':
-          case 'ArrowUp':
             e.preventDefault();
             slideNavActions.prevSlide();
+            break;
+          case 'ArrowUp':
+            e.preventDefault();
+            setIsSlideshowPickerOpen(true);
             break;
           case 'Home':
             e.preventDefault();
@@ -1085,9 +1153,11 @@ function DocPlayerContent({
             toggle();
             break;
           case 'ArrowRight':
+            e.preventDefault();
             seekTo(Math.min(currentTimeRef.current + 10, totalDurationRef.current));
             break;
           case 'ArrowLeft':
+            e.preventDefault();
             seekTo(Math.max(currentTimeRef.current - 10, 0));
             break;
         }
@@ -1095,6 +1165,20 @@ function DocPlayerContent({
     },
     [isSlideshowMode, isLinearMode, toggle, seekTo, slideNavActions],
   );
+
+  const handleKeyDown = useCallback(
+    (e: React.KeyboardEvent<HTMLDivElement>) => handleKeyboardShortcut(e, false),
+    [handleKeyboardShortcut],
+  );
+
+  useEffect(() => {
+    if (!globalKeyboardShortcuts || renderMode || isLinearMode) return;
+    const handleDocumentKeyDown = (event: KeyboardEvent) => {
+      handleKeyboardShortcut(event, true);
+    };
+    document.addEventListener('keydown', handleDocumentKeyDown);
+    return () => document.removeEventListener('keydown', handleDocumentKeyDown);
+  }, [globalKeyboardShortcuts, handleKeyboardShortcut, isLinearMode, renderMode]);
 
   // ── Linear mode: render as scrollable document ──────────────────
   if (isLinearMode) {
@@ -1403,7 +1487,13 @@ function DocPlayerContent({
 
       {/* Slideshow controls (prev / counter / next) */}
       {!renderMode && isSlideshowMode && (
-        <DocControlsSlideshow state={playbackState} slideNav={slideNavActions} />
+        <DocControlsSlideshow
+          state={playbackState}
+          slideNav={slideNavActions}
+          slides={slideshowPickerItems}
+          pickerOpen={isSlideshowPickerOpen}
+          onPickerOpenChange={setIsSlideshowPickerOpen}
+        />
       )}
 
       {/* Tap feedback animation -- shows play/pause icon briefly on tap (video mode only) */}

@@ -16,10 +16,12 @@ import {
   ASCII_CHAR_W,
   parseAsciiDiagram,
   renderAsciiDiagram,
+  repairAsciiDiagram,
   type AsciiDiagram,
 } from '@bendyline/squisq/doc';
 import type { DiagramCommand } from '../diagram/DiagramCanvas';
 import { findAsciiDiagramBlockPos, parseAsciiDiagramForNode } from './AsciiDiagramExtension';
+import { findRepairableBlockPos } from './RepairableDiagramExtension';
 import {
   addEdgeOp,
   addNodeOp,
@@ -64,6 +66,22 @@ export function replaceAsciiFenceText(
       return true;
     })
     .run();
+}
+
+/**
+ * Reconstruct a broken box-art fence into clean, `diagram`-tagged art in a
+ * single transaction (one undo step). The AsciiDiagramExtension then claims
+ * the tagged fence and mounts the interactive canvas. Returns false when the
+ * block is gone or nothing recoverable (the button simply no-ops).
+ */
+export function applyRepairCommand(editor: Editor, blockId: string): boolean {
+  const pos = findRepairableBlockPos(editor, blockId);
+  if (pos === null) return false;
+  const node = editor.state.doc.nodeAt(pos);
+  if (!node || node.type.name !== 'codeBlock') return false;
+  const repaired = repairAsciiDiagram(node.textContent);
+  if (!repaired) return false;
+  return replaceAsciiFenceText(editor, pos, repaired.art, 'diagram');
 }
 
 /** Apply one pure op to a registered block's parsed diagram. */

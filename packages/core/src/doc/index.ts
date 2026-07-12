@@ -65,8 +65,10 @@ export {
   isAsciiDiagramFence,
   isEligibleAsciiFenceLang,
   isExplicitDiagramLang,
+  isRepairableDiagram,
   parseAsciiDiagram,
   renderAsciiDiagram,
+  repairAsciiDiagram,
 } from './asciiDiagram/index.js';
 export type {
   AsciiDiagram,
@@ -74,6 +76,7 @@ export type {
   AsciiDiagramEdge,
   AsciiDiagramNode,
   RenderAsciiDiagramOptions,
+  RepairResult,
 } from './asciiDiagram/index.js';
 export {
   TREE_FENCE_LANGS,

@@ -25,6 +25,7 @@ import type {
   MarkdownTable,
 } from '../markdown/types.js';
 import { extractPlainText } from '../markdown/utils.js';
+import { matchNumberHighlight } from '../recommend/numberHighlight.js';
 import {
   detectAsciiDiagram,
   isEligibleAsciiFenceLang,
@@ -166,6 +167,125 @@ export function extractBlockquoteText(contents?: MarkdownBlockNode[]): string {
   return '';
 }
 
+function firstParagraph(
+  contents: MarkdownBlockNode[] | undefined,
+): { node: Extract<MarkdownBlockNode, { type: 'paragraph' }>; index: number } | null {
+  if (!contents) return null;
+  const index = contents.findIndex((node) => node.type === 'paragraph');
+  if (index < 0) return null;
+  return {
+    node: contents[index] as Extract<MarkdownBlockNode, { type: 'paragraph' }>,
+    index,
+  };
+}
+
+/** A leading bold number is an explicit authoring signal for the hero stat. */
+function leadingStrongStat(
+  paragraph: Extract<MarkdownBlockNode, { type: 'paragraph' }>,
+): string | null {
+  for (const child of paragraph.children) {
+    if (child.type === 'text' && child.value.trim() === '') continue;
+    if (child.type !== 'strong') return null;
+    const text = extractPlainText(child).trim();
+    // Explicit bold authoring is intentionally broader than automatic stat
+    // recommendation: a small integer such as `**42**` is a valid hero when
+    // the author chose statHighlight. Anchor at the beginning so a bold phrase
+    // like `**Revenue grew 42%**` does not become oversized wholesale.
+    const match = text.match(/^(?:[$€£¥]\s*)?[+-]?\d+(?:[.,]\d+)*(?:\s?(?:[%‰x×]|[A-Za-z]+))?/);
+    return match?.[0].trim() || null;
+  }
+  return null;
+}
+
+function removeStatPhrase(text: string, start: number, end: number): string {
+  const before = text.slice(0, start).trim();
+  let after = text.slice(end);
+  // A dash/colon visually separates inline prose, but is redundant once the
+  // stat and description render on separate lines.
+  if (!before) after = after.replace(/^\s*(?:[-–—:]\s*)?/, '');
+  else after = after.trim();
+  return [before, after].filter(Boolean).join(' ').trim();
+}
+
+function bodyWithoutParagraphStat(
+  contents: MarkdownBlockNode[] | undefined,
+  paragraphIndex: number,
+  paragraphText: string,
+  start: number,
+  end: number,
+): string {
+  if (!contents) return '';
+  return contents
+    .map((node, index) =>
+      index === paragraphIndex
+        ? removeStatPhrase(paragraphText, start, end)
+        : extractPlainText(node).trim(),
+    )
+    .filter(Boolean)
+    .join('\n')
+    .trim();
+}
+
+/**
+ * Map Markdown-authored stat content onto the template's visual roles.
+ *
+ * A leading bold metric in the body is the strongest signal (`**42%** of
+ * teams`), followed by a stat-looking heading for backward compatibility,
+ * then an unformatted metric in the first body paragraph (used by automatic
+ * templates). Generic content retains the historical heading/body mapping.
+ */
+function deriveStatHighlightInputs(
+  headingText: string,
+  contents: MarkdownBlockNode[] | undefined,
+  bodyText: string,
+): Record<string, unknown> {
+  const paragraph = firstParagraph(contents);
+  if (paragraph) {
+    const paragraphText = extractPlainText(paragraph.node).trim();
+    const strongStat = leadingStrongStat(paragraph.node);
+    if (strongStat) {
+      const start = paragraphText.indexOf(strongStat);
+      const description = bodyWithoutParagraphStat(
+        contents,
+        paragraph.index,
+        paragraphText,
+        start,
+        start + strongStat.length,
+      );
+      return {
+        stat: strongStat,
+        description: description || headingText || strongStat,
+      };
+    }
+  }
+
+  const trimmedHeading = headingText.trim();
+  const headingStat = matchNumberHighlight(trimmedHeading);
+  if (headingStat && headingStat.index === 0 && headingStat.end === trimmedHeading.length) {
+    return { stat: headingText, description: bodyText || headingText };
+  }
+
+  if (paragraph) {
+    const paragraphText = extractPlainText(paragraph.node).trim();
+    const bodyStat = matchNumberHighlight(paragraphText);
+    if (bodyStat) {
+      const description = bodyWithoutParagraphStat(
+        contents,
+        paragraph.index,
+        paragraphText,
+        bodyStat.index,
+        bodyStat.end,
+      );
+      return {
+        stat: bodyStat.value,
+        description: description || headingText || bodyStat.value,
+      };
+    }
+  }
+
+  return { stat: headingText, description: bodyText || headingText };
+}
+
 export interface DeriveTemplateInputsOptions {
   /**
    * Return visible placeholder values instead of `null` when an essential
@@ -190,7 +310,7 @@ export function deriveTemplateInputs(
 
   switch (templateName) {
     case 'statHighlight':
-      return { stat: headingText, description: bodyText || headingText };
+      return deriveStatHighlightInputs(headingText, contents, bodyText);
     case 'quote': {
       const quote = extractBlockquoteText(contents) || bodyText || headingText;
       return { quote };

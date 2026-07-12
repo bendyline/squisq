@@ -23,6 +23,7 @@ import {
   isExplicitDiagramLang,
 } from '../doc/asciiDiagram/detect.js';
 import { detectTree, isEligibleTreeFenceLang, isExplicitTreeLang } from '../doc/treeview/detect.js';
+import { matchNumberHighlight } from './numberHighlight.js';
 
 export interface BlockContentProfile {
   hasImage: boolean;
@@ -75,17 +76,6 @@ const DATE_PATTERNS: RegExp[] = [
   /\b\d{4}s\b/,
   /\b\d{1,2}(st|nd|rd|th)\s+century\b/i,
 ];
-
-/**
- * Matches a "highlight number" — a prominent figure suitable for a Stat
- * Highlight block. Qualifies on any of:
- *   - currency prefix:   `$2.3M`, `€500`, `¥1,234`
- *   - unit suffix:       `50%`, `100 years`, `5×`, `2.3M`
- *   - standalone large:  `1,234`, `5000`, `12,345`
- * Plain small numbers (`42`) intentionally don't qualify.
- */
-const NUMBER_HIGHLIGHT_RE =
-  /(?:[$€£¥]\s?\d+(?:[.,]\d+)*(?:\s?(?:[MBK]|million|billion|thousand))?|\d+(?:[.,]\d+)*\s?(?:%|‰|x|×|[MBK]|million|billion|thousand|percent|years?|days?|hours?)|\d{3,}(?:[.,]\d+)*)/i;
 
 const VIDEO_HOST_RE = /(youtube\.com|youtu\.be|vimeo\.com|wistia\.|loom\.com)/i;
 
@@ -180,7 +170,7 @@ export function profileBlockContents(nodes: MarkdownBlockNode[]): BlockContentPr
     if (n.type !== 'paragraph') return;
     const text = extractPlainText(n).trim();
     if (!text) return true;
-    const m = text.match(NUMBER_HIGHLIGHT_RE);
+    const m = matchNumberHighlight(text);
     if (!m) return true;
     // Paragraph qualifies when its word count is small AND a prominent
     // number occupies a meaningful chunk of it. Keeps "the company grew

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { render } from '@testing-library/react';
+import { fireEvent, render } from '@testing-library/react';
 import { LinearDocView } from '../LinearDocView';
 import type { Doc, Block } from '@bendyline/squisq/schemas';
 import { DARK_SURFACE, DEFAULT_THEME, LIGHT_SURFACE } from '@bendyline/squisq/schemas';
@@ -56,6 +56,20 @@ describe('LinearDocView', () => {
     const el = container.querySelector('.squisq-linear');
     expect(el).toBeTruthy();
     expect((el as HTMLElement).style.overflowY).toBe('auto');
+  });
+
+  it('globally scrolls with up and down arrows when enabled', () => {
+    const doc = mkDoc([mkBlock({ contents: [paragraph(text('Scrollable body'))] })]);
+    const { container } = render(<LinearDocView doc={doc} globalKeyboardShortcuts />);
+    const scroller = container.querySelector<HTMLElement>('.squisq-linear')!;
+    const scrollBy = vi.fn();
+    Object.defineProperty(scroller, 'scrollBy', { configurable: true, value: scrollBy });
+
+    fireEvent.keyDown(document, { key: 'ArrowDown' });
+    fireEvent.keyDown(document, { key: 'ArrowUp' });
+
+    expect(scrollBy).toHaveBeenNthCalledWith(1, { top: 64, behavior: 'smooth' });
+    expect(scrollBy).toHaveBeenNthCalledWith(2, { top: -64, behavior: 'smooth' });
   });
 
   it('renders preamble content (no heading)', () => {
@@ -174,6 +188,24 @@ describe('LinearDocView', () => {
     // Should contain an SVG (from BlockRenderer)
     const svg = card?.querySelector('svg');
     expect(svg).toBeTruthy();
+  });
+
+  it('renders transform-generated template blocks without authoring nodes', () => {
+    const doc = mkDoc([
+      mkBlock({
+        id: 'transform-stat',
+        template: 'statHighlight',
+        stat: '42%',
+        description: 'Year-over-year growth',
+      } as Partial<Block>),
+    ]);
+
+    const { container } = render(<LinearDocView doc={doc} />);
+    const section = container.querySelector('[data-block-id="transform-stat"]');
+    expect(section?.getAttribute('data-template')).toBe('statHighlight');
+    expect(section?.querySelector('.squisq-linear-card svg')).toBeTruthy();
+    expect(section?.textContent).toContain('42%');
+    expect(section?.textContent).toContain('Year-over-year growth');
   });
 
   it('renders children recursively', () => {

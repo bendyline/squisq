@@ -16,7 +16,7 @@
  * it can fetch.
  */
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { CSSProperties } from 'react';
 import { parseMarkdown } from '@bendyline/squisq/markdown';
 import type { MarkdownDocument, HtmlNode } from '@bendyline/squisq/markdown';
@@ -68,6 +68,8 @@ export interface PlainHtmlPreviewProps {
   theme?: Theme;
   className?: string;
   style?: CSSProperties;
+  /** Let unmodified Up/Down arrows scroll the preview without requiring iframe focus. */
+  globalKeyboardShortcuts?: boolean;
 }
 
 const IFRAME_STYLE: CSSProperties = {
@@ -87,7 +89,9 @@ export function PlainHtmlPreview({
   theme,
   className,
   style,
+  globalKeyboardShortcuts = false,
 }: PlainHtmlPreviewProps) {
+  const iframeRef = useRef<HTMLIFrameElement>(null);
   const mdDoc = useMemo<MarkdownDocument>(() => parseMarkdown(markdown), [markdown]);
 
   // Resolve any relative image URLs the doc references. Blob URLs are
@@ -161,8 +165,43 @@ export function PlainHtmlPreview({
     [renderFn, mdDoc, title, mergedImages, theme, iconsCss],
   );
 
+  useEffect(() => {
+    if (!globalKeyboardShortcuts) return;
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (
+        event.defaultPrevented ||
+        event.altKey ||
+        event.ctrlKey ||
+        event.metaKey ||
+        event.shiftKey ||
+        (event.key !== 'ArrowDown' && event.key !== 'ArrowUp')
+      ) {
+        return;
+      }
+      const target = event.target instanceof Element ? event.target : null;
+      if (
+        target?.closest(
+          'input, textarea, select, [contenteditable]:not([contenteditable="false"]), [role="textbox"], [role="combobox"], [role="listbox"], [role="menu"], [role="dialog"], [aria-modal="true"], .monaco-editor',
+        )
+      ) {
+        return;
+      }
+      const frameWindow = iframeRef.current?.contentWindow;
+      if (!frameWindow) return;
+      event.preventDefault();
+      const distance = Math.max(64, Math.round(iframeRef.current?.clientHeight ?? 0) * 0.12);
+      frameWindow.scrollBy({
+        top: event.key === 'ArrowDown' ? distance : -distance,
+        behavior: 'smooth',
+      });
+    };
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [globalKeyboardShortcuts]);
+
   return (
     <iframe
+      ref={iframeRef}
       className={className}
       data-testid="plain-html-preview"
       title={title ?? 'HTML preview'}

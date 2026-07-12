@@ -11,7 +11,7 @@
  * 4. Synthesize a dummy audio segment for timer-based playback
  */
 
-import { flattenRenderableBlocks, hasTemplate } from '@bendyline/squisq/doc';
+import { deriveTemplateInputs, flattenRenderableBlocks, hasTemplate } from '@bendyline/squisq/doc';
 import { extractPlainText, KNOWN_BLOCK_META_KEYS } from '@bendyline/squisq/markdown';
 import { getChildren } from '@bendyline/squisq/markdown';
 import { iconMarker } from '@bendyline/squisq/icon-marker';
@@ -158,7 +158,12 @@ function getTemplateDefaults(
 
   switch (templateName) {
     case 'statHighlight':
-      return { stat: headingText, description: body || headingText };
+      return (
+        deriveTemplateInputs(templateName, headingText, block.contents) ?? {
+          stat: headingText,
+          description: body || headingText,
+        }
+      );
     case 'quote':
     case 'fullBleedQuote':
     case 'pullQuote':

@@ -20,6 +20,8 @@ export {
   isExplicitDiagramLang,
 } from './detect.js';
 export type { DetectDiagramOptions } from './detect.js';
+export { repairAsciiDiagram, isRepairableDiagram } from './repair.js';
+export type { RepairResult } from './repair.js';
 export {
   asciiCellToCanvas,
   asciiDiagramFromBlocks,

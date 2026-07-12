@@ -8,7 +8,7 @@
  * in sync.
  */
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { DocPlayer, LinearDocView, useMediaProvider } from '@bendyline/squisq-react';
 import type { Doc } from '@bendyline/squisq/schemas';
 import { applyTransform } from '@bendyline/squisq/transform';
@@ -17,6 +17,7 @@ import type { ContentContainer } from '@bendyline/squisq/storage';
 import { useEditorContext } from './EditorContext';
 import { usePreviewSettings } from './PreviewControls';
 import { buildPreviewDoc } from './buildPreviewDoc';
+import { buildDocumentPreviewMarkdown } from './buildDocumentPreviewMarkdown';
 import { PlainHtmlPreview } from './PlainHtmlPreview';
 import { TeleprompterView } from './teleprompter/TeleprompterView';
 
@@ -70,11 +71,16 @@ export function PreviewPanel({ basePath = '/', className, workspaceContainer }: 
   // Audio mapping is async (reads container files), so we use a two-phase
   // approach: first build the base doc synchronously, then resolve audio
   // in an effect and update the state.
-  const [previewDoc, setPreviewDoc] = useState<Doc | null>(null);
+  const [previewProjection, setPreviewProjection] = useState<{
+    /** Transformed content model shared by Page and Document. */
+    contentDoc: Doc;
+    /** Flattened/timed player model shared by Slideshow and Video. */
+    playerDoc: Doc;
+  } | null>(null);
 
   useEffect(() => {
     if (!doc || !doc.blocks.length) {
-      setPreviewDoc(null);
+      setPreviewProjection(null);
       return;
     }
 
@@ -83,17 +89,17 @@ export function PreviewPanel({ basePath = '/', className, workspaceContainer }: 
     // provenance (`sourceStartTime` in seconds) is derived from those
     // times — so summarized slides land where the words are spoken.
     const build = (sourceDoc: Doc) => {
-      const transformed = activeTransformStyle
+      const contentDoc = activeTransformStyle
         ? applyTransform(sourceDoc, activeTransformStyle).doc
         : sourceDoc;
-      return buildPreviewDoc(transformed);
+      return { contentDoc, playerDoc: buildPreviewDoc(contentDoc) };
     };
 
     if (workspaceContainer) {
       let cancelled = false;
       resolveAudioMapping(doc, workspaceContainer).then(
         (audioDoc) => {
-          if (!cancelled) setPreviewDoc(build(audioDoc));
+          if (!cancelled) setPreviewProjection(build(audioDoc));
         },
         () => {
           // The synchronous preview below remains valid when optional audio
@@ -101,14 +107,24 @@ export function PreviewPanel({ basePath = '/', className, workspaceContainer }: 
         },
       );
       // Set an immediate preview without audio while mapping resolves
-      setPreviewDoc(build(doc));
+      setPreviewProjection(build(doc));
       return () => {
         cancelled = true;
       };
     }
 
-    setPreviewDoc(build(doc));
+    setPreviewProjection(build(doc));
   }, [doc, activeTransformStyle, workspaceContainer]);
+
+  const previewDoc = previewProjection?.playerDoc ?? null;
+  const contentDoc = previewProjection?.contentDoc ?? null;
+  const documentMarkdown = useMemo(
+    () =>
+      activeTransformStyle && contentDoc
+        ? buildDocumentPreviewMarkdown(contentDoc)
+        : markdownSource,
+    [activeTransformStyle, contentDoc, markdownSource],
+  );
 
   // The public DisplayMode values predate the current labels: raw `page`
   // is the plain Document preview, while raw `linear` is the styled Page view.
@@ -138,10 +154,10 @@ export function PreviewPanel({ basePath = '/', className, workspaceContainer }: 
     );
   }
 
-  // Document mode renders directly from markdown, and Narrate builds its
-  // script from the parsed doc (showing its own empty state) — neither
-  // depends on the player preview build, so let them fall through even
-  // when that isn't ready yet.
+  // Document mode renders a text-first markdown projection, and Narrate
+  // builds its script from the parsed source doc (showing its own empty
+  // state). Neither depends on the player projection, so let them fall
+  // through even when that isn't ready yet.
   if (!previewDoc && !isDocumentMode && !isNarrateMode) {
     return (
       <div className={`squisq-preview-status ${className || ''}`} data-testid="preview-panel">
@@ -179,11 +195,12 @@ export function PreviewPanel({ basePath = '/', className, workspaceContainer }: 
       >
         {isDocumentMode ? (
           <PlainHtmlPreview
-            markdown={markdownSource}
-            title={(doc?.frontmatter?.title as string | undefined) ?? undefined}
+            markdown={documentMarkdown}
+            title={(contentDoc?.frontmatter?.title as string | undefined) ?? undefined}
             mediaProvider={mediaProvider}
             mediaRevision={mediaRevision}
             theme={activeTheme}
+            globalKeyboardShortcuts
           />
         ) : isNarrateMode ? (
           // Narrate consumes the UN-transformed doc: the teleprompter must
@@ -207,13 +224,18 @@ export function PreviewPanel({ basePath = '/', className, workspaceContainer }: 
           />
         ) : isPageMode ? (
           <LinearDocView
-            doc={doc!}
+            doc={contentDoc ?? doc!}
             basePath={basePath}
             viewport={activeViewport}
             theme={activeTheme}
+            globalKeyboardShortcuts
           />
         ) : (
           <DocPlayer
+            // A style change replaces the slide sequence. Remounting clears
+            // slideshow navigation/transition state that belongs to the old
+            // sequence and guarantees the newly transformed deck is used.
+            key={activeTransformStyle || 'none'}
             doc={previewDoc!}
             basePath={basePath}
             showControls
@@ -224,6 +246,7 @@ export function PreviewPanel({ basePath = '/', className, workspaceContainer }: 
             captionStyle={activeCaptionStyle}
             captionsEnabled={activeCaptionsEnabled}
             showCoverSlide={activeCoverSlide}
+            globalKeyboardShortcuts
           />
         )}
       </div>

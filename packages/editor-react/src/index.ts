@@ -104,6 +104,7 @@ export type { PickerEntry, PickerCategory } from './emojiData.js';
 export {
   PreviewSettingsProvider,
   PreviewToolbarControls,
+  PreviewModeMenu,
   PreviewModeSwitch,
   PreviewFormatSwitch,
   usePreviewSettings,
@@ -258,8 +259,25 @@ export { useAsciiDiagramData, asciiDiagramToCanvas } from './asciiDiagram/asciiD
 export type { AsciiDiagramView } from './asciiDiagram/asciiDiagramData.js';
 export {
   applyAsciiDiagramCommand,
+  applyRepairCommand,
   replaceAsciiFenceText,
 } from './asciiDiagram/asciiDiagramCommands.js';
+// RepairableDiagramExtension mounts an inline "Repair as diagram" button on
+// code fences holding BROKEN box art — art too misaligned for clean detection
+// (so it renders as a faithful code block). One click reconstructs it into
+// clean `diagram`-tagged art that the AsciiDiagramExtension turns into a
+// canvas. Peer to the diagram/tree editors; claims the fences neither does.
+export {
+  RepairableDiagramExtension,
+  findRepairableBlockPos,
+  isRepairableFence,
+  REPAIRABLE_KEY,
+} from './asciiDiagram/RepairableDiagramExtension.js';
+export type {
+  RepairableBlockEntry,
+  RepairableDiagramExtensionOptions,
+  RepairablePluginState,
+} from './asciiDiagram/RepairableDiagramExtension.js';
 export {
   addEdgeOp,
   addNodeOp,

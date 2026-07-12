@@ -2,7 +2,7 @@
  * @vitest-environment jsdom
  */
 import { afterEach, describe, expect, it } from 'vitest';
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { compileTheme } from '@bendyline/squisq/schemas';
 import { EditorProvider, useEditorContext } from '../EditorContext';
 import {
@@ -11,6 +11,7 @@ import {
   PreviewToolbarControls,
   usePreviewSettings,
 } from '../PreviewControls';
+import { Toolbar } from '../Toolbar';
 import {
   clearThemeLibrary,
   CustomThemeProvider,
@@ -46,6 +47,17 @@ function PreviewToolbarHarness() {
   return (
     <PreviewSettingsProvider doc={doc}>
       <PreviewToolbarControls />
+    </PreviewSettingsProvider>
+  );
+}
+
+function UseTabHarness() {
+  const { activeView, doc } = useEditorContext();
+  return (
+    <PreviewSettingsProvider doc={doc}>
+      <Toolbar />
+      <ModeProbe />
+      <div data-testid="active-view">{activeView}</div>
     </PreviewSettingsProvider>
   );
 }
@@ -106,7 +118,8 @@ describe('PreviewModeSwitch', () => {
       .map((button) => button.textContent)
       .filter(Boolean);
 
-    expect(labels).toEqual(['Video', 'Slideshow', 'Page', 'Document', 'Narrate']);
+    expect(labels).toEqual(['Slideshow', 'Video', 'Page', 'Document', 'Narrate']);
+    expect(screen.getByTestId('active-mode').textContent).toBe('slideshow');
 
     fireEvent.click(screen.getByRole('button', { name: 'Document' }));
     expect(screen.getByTestId('active-mode').textContent).toBe('page');
@@ -179,6 +192,37 @@ describe('PreviewModeSwitch', () => {
 });
 
 describe('PreviewToolbarControls', () => {
+  it('presents transforms as summarization without implying the source is changed', () => {
+    const originalResizeObserver = globalThis.ResizeObserver;
+    class ResizeObserverStub implements ResizeObserver {
+      observe() {}
+      unobserve() {}
+      disconnect() {}
+    }
+
+    globalThis.ResizeObserver = ResizeObserverStub;
+    try {
+      renderPreviewToolbar('# Hello');
+
+      const summarizeLabels = screen.getAllByText('Summarize:');
+      expect(summarizeLabels.length).toBeGreaterThan(0);
+      for (const label of summarizeLabels) {
+        expect(label.getAttribute('title')).toBe(
+          'Extract and summarize content for presentation with these Use modes. Your underlying content is not changed.',
+        );
+      }
+      expect(screen.queryByText('Transform:')).toBeNull();
+      expect(document.querySelector('[role="group"][aria-label="Display mode"]')).toBeNull();
+      expect(document.querySelector('[role="group"][aria-label="Aspect ratio"]')).not.toBeNull();
+    } finally {
+      if (originalResizeObserver) {
+        globalThis.ResizeObserver = originalResizeObserver;
+      } else {
+        Reflect.deleteProperty(globalThis, 'ResizeObserver');
+      }
+    }
+  });
+
   it('keeps the overflow popover inside the left viewport edge', async () => {
     const originalResizeObserver = globalThis.ResizeObserver;
     const originalGetBoundingClientRect = HTMLElement.prototype.getBoundingClientRect;
@@ -246,6 +290,46 @@ describe('PreviewToolbarControls', () => {
         Reflect.deleteProperty(HTMLElement.prototype, 'clientWidth');
       }
     }
+  });
+});
+
+describe('Use tab mode menu', () => {
+  it('lists the Use modes beside the tab and selects a mode without a toolbar radio group', () => {
+    render(
+      <EditorProvider initialMarkdown="# Hello" initialView="wysiwyg" allowRecording={false}>
+        <UseTabHarness />
+      </EditorProvider>,
+    );
+
+    const useTab = screen.getByRole('tab', { name: 'Slideshow' });
+    expect(screen.queryByRole('tab', { name: 'Use' })).toBeNull();
+    const tabGroup = useTab.parentElement;
+    expect(tabGroup).not.toBeNull();
+    expect(within(tabGroup!).getByRole('button', { name: 'Choose Use mode' })).toBeTruthy();
+
+    // The first click enters Use; once active, clicking the tab again opens
+    // the mode menu.
+    fireEvent.click(useTab);
+    expect(screen.getByTestId('active-view').textContent).toBe('preview');
+    expect(screen.queryByRole('menu', { name: 'Use mode' })).toBeNull();
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Slideshow' }));
+
+    const menu = screen.getByRole('menu', { name: 'Use mode' });
+    expect(
+      within(menu)
+        .getAllByRole('menuitemradio')
+        .map((item) => item.querySelector('.squisq-use-mode-menu-label')?.textContent),
+    ).toEqual(['Slideshow', 'Video', 'Page', 'Document', 'Narrate']);
+    const slideshowItem = within(menu).getByRole('menuitemradio', { name: 'Slideshow' });
+    expect(slideshowItem.getAttribute('aria-checked')).toBe('true');
+    expect(within(slideshowItem).getByText('Present designed slides one at a time.')).toBeTruthy();
+
+    fireEvent.click(within(menu).getByRole('menuitemradio', { name: 'Document' }));
+    expect(screen.getByTestId('active-mode').textContent).toBe('page');
+    expect(screen.getByTestId('active-view').textContent).toBe('preview');
+    expect(screen.getByRole('tab', { name: 'Document' })).toBeTruthy();
+    expect(screen.queryByRole('menu', { name: 'Use mode' })).toBeNull();
   });
 });
 

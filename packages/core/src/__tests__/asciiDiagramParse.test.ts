@@ -202,3 +202,32 @@ describe('parseAsciiDiagram — containers', () => {
     expect(worker?.containerId).toBe('cluster');
   });
 });
+
+describe('parseAsciiDiagram — hand-drawn robustness', () => {
+  it('treats an arrowhead embedded in the top border as a stem, not a title', () => {
+    // An incoming edge often lands in the border (`┌───▼───┐`). The arrowhead
+    // must not be captured as the box label, and the box must still close.
+    const art = ['┌───▼───┐', '│ Alpha │', '└───────┘', '┌───────┐', '│ Beta  │', '└───────┘'].join(
+      '\n',
+    );
+    const d = parseAsciiDiagram(art);
+    expect(d.nodes.map((n) => n.label.split('\n')[0])).toEqual(['Alpha', 'Beta']);
+  });
+
+  it('traces a box whose side border overflowed on one interior row', () => {
+    // A label wider than its box leaves a gap where the `│` should be. The
+    // four corners + solid top/bottom borders still anchor the box.
+    const art = [
+      '┌──────────┐',
+      '│ Alpha    │',
+      '│ a wide overflowing note',
+      '│ tail     │',
+      '└──────────┘',
+      '┌──────────┐',
+      '│ Beta     │',
+      '└──────────┘',
+    ].join('\n');
+    const d = parseAsciiDiagram(art);
+    expect(d.nodes.map((n) => n.label.split('\n')[0])).toEqual(['Alpha', 'Beta']);
+  });
+});

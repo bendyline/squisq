@@ -51,6 +51,26 @@ function docWithTransition(): Doc {
   };
 }
 
+function docWithThreeSlides(): Doc {
+  return {
+    articleId: 'three-slide-transition-doc',
+    duration: 15,
+    blocks: [
+      { id: 'first', startTime: 0, duration: 5, audioSegment: 0, layers: [] },
+      { id: 'second', startTime: 5, duration: 5, audioSegment: 0, layers: [] },
+      {
+        id: 'third',
+        startTime: 10,
+        duration: 5,
+        audioSegment: 0,
+        transition: { type: 'fade', duration: 1 },
+        layers: [],
+      },
+    ],
+    audio: { segments: [] },
+  };
+}
+
 function controller(overrides: Partial<AudioController> = {}): AudioController {
   return {
     currentTime: 0,
@@ -68,6 +88,15 @@ function controller(overrides: Partial<AudioController> = {}): AudioController {
     restart: vi.fn(async () => {}),
     ...overrides,
   };
+}
+
+function pointerEvent(type: string, clientX: number): MouseEvent {
+  const event = new MouseEvent(type, { bubbles: true, cancelable: true, button: 0, clientX });
+  Object.defineProperties(event, {
+    pointerId: { value: 1 },
+    pointerType: { value: 'touch' },
+  });
+  return event;
 }
 
 describe('DocPlayer smoke test', () => {
@@ -89,6 +118,97 @@ describe('DocPlayer smoke test', () => {
       <DocPlayer doc={minimalDoc()} basePath="/test" displayMode="slideshow" />,
     );
     expect(container.firstChild).toBeTruthy();
+  });
+
+  it('lists block summaries and jumps to a selected slideshow block', () => {
+    const audioController = controller({ totalDuration: 15 });
+    render(
+      <DocPlayer
+        doc={docWithThreeSlides()}
+        audioController={audioController}
+        displayMode="slideshow"
+      />,
+    );
+
+    fireEvent.click(screen.getByTestId('slide-counter'));
+    expect(screen.getByTestId('slide-picker-item-0').textContent).toContain('1First');
+    expect(screen.getByTestId('slide-picker-item-2').textContent).toContain('3Third');
+
+    fireEvent.click(screen.getByTestId('slide-picker-item-2'));
+    expect(audioController.seekTo).toHaveBeenCalledWith(10);
+    expect(screen.queryByTestId('slide-picker')).toBeNull();
+  });
+
+  it('uses global left and right arrows to change slides without focusing the player', () => {
+    const audioController = controller({ currentTime: 5, totalDuration: 15 });
+    render(
+      <DocPlayer
+        doc={docWithThreeSlides()}
+        audioController={audioController}
+        displayMode="slideshow"
+        globalKeyboardShortcuts
+      />,
+    );
+
+    fireEvent.keyDown(document, { key: 'ArrowLeft' });
+    fireEvent.keyDown(document, { key: 'ArrowRight' });
+
+    expect(audioController.seekTo).toHaveBeenNthCalledWith(1, 0);
+    expect(audioController.seekTo).toHaveBeenNthCalledWith(2, 10);
+  });
+
+  it('globally opens the slide picker with ArrowUp instead of changing slides', () => {
+    const audioController = controller({ currentTime: 5, totalDuration: 15 });
+    render(
+      <DocPlayer
+        doc={docWithThreeSlides()}
+        audioController={audioController}
+        displayMode="slideshow"
+        globalKeyboardShortcuts
+      />,
+    );
+
+    fireEvent.keyDown(document, { key: 'ArrowUp' });
+
+    expect(screen.getByTestId('slide-picker')).toBeTruthy();
+    expect(audioController.seekTo).not.toHaveBeenCalled();
+  });
+
+  it('globally seeks video with left and right arrows', () => {
+    const audioController = controller({ currentTime: 20, totalDuration: 60 });
+    render(
+      <DocPlayer
+        doc={docWithThreeSlides()}
+        audioController={audioController}
+        globalKeyboardShortcuts
+      />,
+    );
+
+    fireEvent.keyDown(document, { key: 'ArrowRight' });
+    fireEvent.keyDown(document, { key: 'ArrowLeft' });
+
+    expect(audioController.seekTo).toHaveBeenNthCalledWith(1, 30);
+    expect(audioController.seekTo).toHaveBeenNthCalledWith(2, 10);
+  });
+
+  it('does not globally intercept arrows from editable fields', () => {
+    const audioController = controller({ currentTime: 20, totalDuration: 60 });
+    render(
+      <>
+        <input aria-label="Editable field" />
+        <DocPlayer
+          doc={docWithThreeSlides()}
+          audioController={audioController}
+          globalKeyboardShortcuts
+        />
+      </>,
+    );
+
+    fireEvent.keyDown(screen.getByRole('textbox', { name: 'Editable field' }), {
+      key: 'ArrowRight',
+    });
+
+    expect(audioController.seekTo).not.toHaveBeenCalled();
   });
 
   it('shows the managed cover as the first slideshow entry by default', async () => {
@@ -157,6 +277,86 @@ describe('DocPlayer smoke test', () => {
     ).toBeTruthy();
     expect(container.querySelector('.transition-fade-enter')).toBeNull();
     expect(container.querySelector('[class*="anim-"]')).toBeNull();
+  });
+
+  it('keeps a swiped-to slide entrance transition without remounting the swiped-away slide', async () => {
+    const doc = docWithThreeSlides();
+    const secondSlideController = controller({ currentTime: 5, totalDuration: 15 });
+    const { container, rerender } = render(
+      <DocPlayer
+        doc={doc}
+        audioController={secondSlideController}
+        displayMode="slideshow"
+        showControls={false}
+      />,
+    );
+    const player = container.querySelector<HTMLElement>('.doc-player');
+    expect(player).not.toBeNull();
+    vi.spyOn(player!, 'getBoundingClientRect').mockReturnValue({
+      width: 1000,
+      height: 600,
+      x: 0,
+      y: 0,
+      top: 0,
+      right: 1000,
+      bottom: 600,
+      left: 0,
+      toJSON: () => ({}),
+    });
+
+    fireEvent(player!, pointerEvent('pointerdown', 800));
+    expect(player!.classList.contains('doc-player--grabbing')).toBe(true);
+    fireEvent(window, pointerEvent('pointermove', 400));
+    expect(
+      container.querySelector<HTMLElement>('.doc-player__block--active')?.style.transform,
+    ).toBe('translateX(-400px)');
+    fireEvent(window, pointerEvent('pointerup', 400));
+
+    await waitFor(() => expect(secondSlideController.seekTo).toHaveBeenCalledWith(10), {
+      timeout: 1000,
+    });
+    rerender(
+      <DocPlayer
+        doc={doc}
+        audioController={controller({ currentTime: 10, totalDuration: 15 })}
+        displayMode="slideshow"
+        showControls={false}
+      />,
+    );
+
+    expect(
+      container.querySelector(
+        '.doc-player__block--active [data-block-id="third"].transition-fade-enter',
+      ),
+    ).toBeTruthy();
+    expect(container.querySelector('.doc-player__block--previous')).toBeNull();
+  });
+
+  it('keeps outgoing slide context for ordinary slideshow button navigation', () => {
+    const doc = docWithThreeSlides();
+    const secondSlideController = controller({ currentTime: 5, totalDuration: 15 });
+    const { container, rerender } = render(
+      <DocPlayer doc={doc} audioController={secondSlideController} displayMode="slideshow" />,
+    );
+
+    fireEvent.click(screen.getByTestId('slide-next'));
+    expect(secondSlideController.seekTo).toHaveBeenCalledWith(10);
+    rerender(
+      <DocPlayer
+        doc={doc}
+        audioController={controller({ currentTime: 10, totalDuration: 15 })}
+        displayMode="slideshow"
+      />,
+    );
+
+    expect(
+      container.querySelector('.doc-player__block--previous [data-block-id="second"]'),
+    ).toBeTruthy();
+    expect(
+      container.querySelector(
+        '.doc-player__block--active [data-block-id="third"].transition-fade-enter',
+      ),
+    ).toBeTruthy();
   });
 
   it('advances from slideshow cover to slide 1', async () => {

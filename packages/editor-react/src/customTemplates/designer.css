@@ -4,6 +4,61 @@
  * at the top, and save/cancel actions at the bottom.
  */
 
+/* Both entry points are portaled to <body>, so they establish their own
+   editor-shell theme scope. These tokens keep the light palette unchanged
+   while giving every piece of designer chrome a dark-mode counterpart. */
+.squisq-template-designer-overlay,
+.squisq-layout-manager-overlay {
+  color-scheme: light;
+  --squisq-layout-panel: #ffffff;
+  --squisq-layout-chrome: #f9fafb;
+  --squisq-layout-subtle: #fafafa;
+  --squisq-layout-workspace: #f3f4f6;
+  --squisq-layout-input: #ffffff;
+  --squisq-layout-border: #e5e7eb;
+  --squisq-layout-border-strong: #d1d5db;
+  --squisq-layout-text: #111827;
+  --squisq-layout-text-soft: #1f2937;
+  --squisq-layout-muted: #6b7280;
+  --squisq-layout-faint: #9ca3af;
+  --squisq-layout-hover: #f1f5f9;
+  --squisq-layout-accent-text: #4338ca;
+  --squisq-layout-accent-bg: #4f46e5;
+  --squisq-layout-accent-bg-hover: #4338ca;
+  --squisq-layout-accent-border: #6366f1;
+  --squisq-layout-accent-soft: #eef2ff;
+  --squisq-layout-accent-soft-hover: #e0e7ff;
+  --squisq-layout-accent-soft-border: #c7d2fe;
+  --squisq-layout-accent-hover-border: #a5b4fc;
+  --squisq-layout-thumb: #f8fafc;
+}
+
+.squisq-template-designer-overlay[data-theme='dark'],
+.squisq-layout-manager-overlay[data-theme='dark'] {
+  color-scheme: dark;
+  --squisq-layout-panel: #111827;
+  --squisq-layout-chrome: #1f2937;
+  --squisq-layout-subtle: #18212f;
+  --squisq-layout-workspace: #0f172a;
+  --squisq-layout-input: #111827;
+  --squisq-layout-border: #374151;
+  --squisq-layout-border-strong: #4b5563;
+  --squisq-layout-text: #f3f4f6;
+  --squisq-layout-text-soft: #e5e7eb;
+  --squisq-layout-muted: #9ca3af;
+  --squisq-layout-faint: #6b7280;
+  --squisq-layout-hover: #334155;
+  --squisq-layout-accent-text: #c7d2fe;
+  --squisq-layout-accent-bg: #4f46e5;
+  --squisq-layout-accent-bg-hover: #6366f1;
+  --squisq-layout-accent-border: #818cf8;
+  --squisq-layout-accent-soft: #312e81;
+  --squisq-layout-accent-soft-hover: #3730a3;
+  --squisq-layout-accent-soft-border: #4f46e5;
+  --squisq-layout-accent-hover-border: #6366f1;
+  --squisq-layout-thumb: #0f172a;
+}
+
 .squisq-template-designer-overlay {
   position: fixed;
   inset: 0;
@@ -20,7 +75,8 @@
   flex-direction: column;
   width: min(1200px, 100%);
   height: min(800px, 100%);
-  background: #ffffff;
+  color: var(--squisq-layout-text-soft);
+  background: var(--squisq-layout-panel);
   border-radius: 12px;
   box-shadow: 0 24px 60px rgba(0, 0, 0, 0.3);
   overflow: hidden;
@@ -54,15 +110,15 @@
   align-items: center;
   justify-content: space-between;
   padding: 14px 20px;
-  border-bottom: 1px solid #e5e7eb;
-  background: #f9fafb;
+  border-bottom: 1px solid var(--squisq-layout-border);
+  background: var(--squisq-layout-chrome);
 }
 
 .squisq-template-designer-title {
   margin: 0;
   font-size: 16px;
   font-weight: 600;
-  color: #111827;
+  color: var(--squisq-layout-text);
 }
 
 .squisq-template-designer-close {
@@ -73,7 +129,7 @@
   justify-content: center;
   font-size: 24px;
   line-height: 1;
-  color: #6b7280;
+  color: var(--squisq-layout-muted);
   background: transparent;
   border: 1px solid transparent;
   border-radius: 6px;
@@ -81,9 +137,9 @@
 }
 
 .squisq-template-designer-close:hover {
-  color: #111827;
-  background: #f1f5f9;
-  border-color: #cbd5e1;
+  color: var(--squisq-layout-text);
+  background: var(--squisq-layout-hover);
+  border-color: var(--squisq-layout-border-strong);
 }
 
 .squisq-template-designer-meta {
@@ -91,8 +147,8 @@
   grid-template-columns: minmax(160px, 1fr) minmax(160px, 1fr) minmax(240px, 2fr);
   gap: 12px;
   padding: 12px 20px;
-  border-bottom: 1px solid #e5e7eb;
-  background: #fdfdfd;
+  border-bottom: 1px solid var(--squisq-layout-border);
+  background: var(--squisq-layout-panel);
 }
 
 .squisq-template-designer-field {
@@ -106,21 +162,21 @@
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.04em;
-  color: #6b7280;
+  color: var(--squisq-layout-muted);
 }
 
 .squisq-template-designer-field input {
   padding: 6px 10px;
   font-size: 13px;
-  color: #111827;
-  background: #ffffff;
-  border: 1px solid #d1d5db;
+  color: var(--squisq-layout-text);
+  background: var(--squisq-layout-input);
+  border: 1px solid var(--squisq-layout-border-strong);
   border-radius: 6px;
   outline: none;
 }
 
 .squisq-template-designer-field input:focus {
-  border-color: #6366f1;
+  border-color: var(--squisq-layout-accent-border);
   box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.15);
 }
 
@@ -129,7 +185,7 @@
   font-weight: 400;
   text-transform: none;
   letter-spacing: normal;
-  color: #9ca3af;
+  color: var(--squisq-layout-faint);
 }
 
 .squisq-template-designer-body {
@@ -142,8 +198,8 @@
   width: 220px;
   flex-shrink: 0;
   padding: 16px;
-  border-right: 1px solid #e5e7eb;
-  background: #fafafa;
+  border-right: 1px solid var(--squisq-layout-border);
+  background: var(--squisq-layout-subtle);
   overflow-y: auto;
 }
 
@@ -153,13 +209,13 @@
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.06em;
-  color: #4338ca;
+  color: var(--squisq-layout-accent-text);
 }
 
 .squisq-template-designer-palette-hint {
   margin: 0 0 12px;
   font-size: 11px;
-  color: #6b7280;
+  color: var(--squisq-layout-muted);
   line-height: 1.4;
 }
 
@@ -185,7 +241,7 @@
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.06em;
-  color: #6b7280;
+  color: var(--squisq-layout-muted);
 }
 
 /* Shapes are compact icon tiles in a grid. */
@@ -201,11 +257,11 @@
   justify-content: center;
   aspect-ratio: 1 / 1;
   padding: 4px;
-  background: #ffffff;
-  border: 1px solid #e5e7eb;
+  background: var(--squisq-layout-input);
+  border: 1px solid var(--squisq-layout-border);
   border-radius: 6px;
   cursor: grab;
-  color: #475569;
+  color: var(--squisq-layout-muted);
   transition:
     background 0.1s,
     border-color 0.1s;
@@ -216,13 +272,13 @@
 }
 
 .squisq-template-designer-shape-item:hover {
-  background: #eef2ff;
-  border-color: #c7d2fe;
+  background: var(--squisq-layout-accent-soft);
+  border-color: var(--squisq-layout-accent-soft-border);
 }
 
 .squisq-template-designer-shape-item--active {
-  background: #eef2ff;
-  border-color: #6366f1;
+  background: var(--squisq-layout-accent-soft);
+  border-color: var(--squisq-layout-accent-border);
 }
 
 .squisq-template-designer-palette-media-add {
@@ -231,22 +287,22 @@
   padding: 8px 10px;
   font-size: 12px;
   font-weight: 600;
-  color: #4338ca;
-  background: #eef2ff;
-  border: 1px dashed #c7d2fe;
+  color: var(--squisq-layout-accent-text);
+  background: var(--squisq-layout-accent-soft);
+  border: 1px dashed var(--squisq-layout-accent-soft-border);
   border-radius: 6px;
   cursor: pointer;
 }
 
 .squisq-template-designer-palette-media-add:hover:not(:disabled) {
-  background: #e0e7ff;
-  border-color: #a5b4fc;
+  background: var(--squisq-layout-accent-soft-hover);
+  border-color: var(--squisq-layout-accent-hover-border);
 }
 
 .squisq-template-designer-palette-media-add:disabled {
-  color: #9ca3af;
-  background: #f3f4f6;
-  border-color: #e5e7eb;
+  color: var(--squisq-layout-faint);
+  background: var(--squisq-layout-workspace);
+  border-color: var(--squisq-layout-border);
   cursor: not-allowed;
 }
 
@@ -256,8 +312,9 @@
   align-items: flex-start;
   gap: 2px;
   padding: 8px 10px;
-  background: #ffffff;
-  border: 1px solid #e5e7eb;
+  color: var(--squisq-layout-text-soft);
+  background: var(--squisq-layout-input);
+  border: 1px solid var(--squisq-layout-border);
   border-radius: 6px;
   /* Draggable onto the canvas — `grab` hints the drag affordance. */
   cursor: grab;
@@ -272,24 +329,24 @@
 }
 
 .squisq-template-designer-palette-item:hover {
-  background: #eef2ff;
-  border-color: #c7d2fe;
+  background: var(--squisq-layout-accent-soft);
+  border-color: var(--squisq-layout-accent-soft-border);
 }
 
 .squisq-template-designer-palette-item--active {
-  background: #eef2ff;
-  border-color: #6366f1;
+  background: var(--squisq-layout-accent-soft);
+  border-color: var(--squisq-layout-accent-border);
 }
 
 .squisq-template-designer-palette-item-preview {
   font-family: 'JetBrains Mono', 'SF Mono', 'Menlo', monospace;
   font-size: 12px;
-  color: #4338ca;
+  color: var(--squisq-layout-accent-text);
 }
 
 .squisq-template-designer-palette-item-label {
   font-size: 11px;
-  color: #6b7280;
+  color: var(--squisq-layout-muted);
 }
 
 .squisq-template-designer-stage {
@@ -299,7 +356,7 @@
   min-width: 0;
   padding: 12px;
   gap: 8px;
-  background: #f3f4f6;
+  background: var(--squisq-layout-workspace);
 }
 
 /* Unified controls bar above the canvas: the compact aspect-ratio
@@ -314,8 +371,8 @@
   align-items: center;
   gap: 5px;
   padding: 6px 8px;
-  background: #ffffff;
-  border: 1px solid #e5e7eb;
+  background: var(--squisq-layout-panel);
+  border: 1px solid var(--squisq-layout-border);
   border-radius: 6px;
   align-self: stretch;
   overflow-x: auto;
@@ -327,7 +384,7 @@
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.04em;
-  color: #6b7280;
+  color: var(--squisq-layout-muted);
 }
 
 /* ─── Contextual layer styling controls ─────────────────── */
@@ -365,7 +422,7 @@
   width: 28px;
   height: 28px;
   font-size: 13px;
-  color: #374151;
+  color: var(--squisq-layout-text-soft);
   background: transparent;
   border: 1px solid transparent;
   border-radius: 4px;
@@ -373,22 +430,22 @@
 }
 
 .squisq-layer-toolbar-btn:hover {
-  background: #f1f5f9;
+  background: var(--squisq-layout-hover);
 }
 
 .squisq-layer-toolbar-btn--active {
-  background: #eef2ff;
-  border-color: #6366f1;
-  color: #4338ca;
+  background: var(--squisq-layout-accent-soft);
+  border-color: var(--squisq-layout-accent-border);
+  color: var(--squisq-layout-accent-text);
 }
 
 .squisq-layer-toolbar-select {
   height: 28px;
   padding: 0 6px;
   font-size: 12px;
-  color: #1f2937;
-  background: #ffffff;
-  border: 1px solid #d1d5db;
+  color: var(--squisq-layout-text-soft);
+  background: var(--squisq-layout-input);
+  border: 1px solid var(--squisq-layout-border-strong);
   border-radius: 4px;
   cursor: pointer;
 }
@@ -398,9 +455,9 @@
   height: 28px;
   padding: 0 4px 0 6px;
   font-size: 12px;
-  color: #1f2937;
-  background: #ffffff;
-  border: 1px solid #d1d5db;
+  color: var(--squisq-layout-text-soft);
+  background: var(--squisq-layout-input);
+  border: 1px solid var(--squisq-layout-border-strong);
   border-radius: 4px;
 }
 
@@ -417,7 +474,7 @@
 .squisq-layer-toolbar-label {
   display: inline-flex;
   align-items: center;
-  color: #6b7280;
+  color: var(--squisq-layout-muted);
   font-size: 13px;
 }
 
@@ -431,9 +488,9 @@
   width: 28px;
   height: 28px;
   padding: 0;
-  border: 1px solid #d1d5db;
+  border: 1px solid var(--squisq-layout-border-strong);
   border-radius: 4px;
-  background: #ffffff;
+  background: var(--squisq-layout-input);
   cursor: pointer;
 }
 
@@ -441,14 +498,14 @@
   width: 1px;
   align-self: stretch;
   margin: 2px 2px;
-  background: #e5e7eb;
+  background: var(--squisq-layout-border);
 }
 
 .squisq-template-designer-scene {
   flex: 1;
   min-height: 0;
-  background: #ffffff;
-  border: 1px solid #e5e7eb;
+  background: var(--squisq-layout-panel);
+  border: 1px solid var(--squisq-layout-border);
   border-radius: 8px;
   overflow: hidden;
 }
@@ -458,14 +515,14 @@
   align-items: center;
   justify-content: space-between;
   padding: 12px 20px;
-  border-top: 1px solid #e5e7eb;
-  background: #f9fafb;
+  border-top: 1px solid var(--squisq-layout-border);
+  background: var(--squisq-layout-chrome);
   gap: 12px;
 }
 
 .squisq-template-designer-footer-hint {
   font-size: 11px;
-  color: #6b7280;
+  color: var(--squisq-layout-muted);
   flex: 1;
   min-width: 0;
 }
@@ -479,26 +536,26 @@
   padding: 6px 14px;
   font-size: 13px;
   font-weight: 500;
-  color: #1f2937;
-  background: #ffffff;
-  border: 1px solid #d1d5db;
+  color: var(--squisq-layout-text-soft);
+  background: var(--squisq-layout-input);
+  border: 1px solid var(--squisq-layout-border-strong);
   border-radius: 6px;
   cursor: pointer;
   transition: background 0.1s;
 }
 
 .squisq-template-designer-btn:hover {
-  background: #f1f5f9;
+  background: var(--squisq-layout-hover);
 }
 
 .squisq-template-designer-btn--primary {
   color: #ffffff;
-  background: #4f46e5;
-  border-color: #4338ca;
+  background: var(--squisq-layout-accent-bg);
+  border-color: var(--squisq-layout-accent-bg-hover);
 }
 
 .squisq-template-designer-btn--primary:hover {
-  background: #4338ca;
+  background: var(--squisq-layout-accent-bg-hover);
 }
 
 /* ─── Custom Layout Manager ────────────────────────────────
@@ -521,7 +578,8 @@
   flex-direction: column;
   width: min(1600px, 96vw);
   height: 92vh;
-  background: #ffffff;
+  color: var(--squisq-layout-text-soft);
+  background: var(--squisq-layout-panel);
   border-radius: 12px;
   box-shadow: 0 24px 60px rgba(0, 0, 0, 0.3);
   overflow: hidden;
@@ -532,15 +590,15 @@
   align-items: center;
   justify-content: space-between;
   padding: 14px 20px;
-  border-bottom: 1px solid #e5e7eb;
-  background: #f9fafb;
+  border-bottom: 1px solid var(--squisq-layout-border);
+  background: var(--squisq-layout-chrome);
 }
 
 .squisq-layout-manager-title {
   margin: 0;
   font-size: 16px;
   font-weight: 600;
-  color: #111827;
+  color: var(--squisq-layout-text);
 }
 
 .squisq-layout-manager-body {
@@ -556,8 +614,8 @@
   flex-direction: column;
   gap: 8px;
   padding: 16px;
-  border-right: 1px solid #e5e7eb;
-  background: #fafafa;
+  border-right: 1px solid var(--squisq-layout-border);
+  background: var(--squisq-layout-subtle);
   overflow-y: auto;
 }
 
@@ -565,22 +623,22 @@
   padding: 10px 12px;
   font-size: 13px;
   font-weight: 600;
-  color: #4338ca;
-  background: #eef2ff;
-  border: 1px dashed #c7d2fe;
+  color: var(--squisq-layout-accent-text);
+  background: var(--squisq-layout-accent-soft);
+  border: 1px dashed var(--squisq-layout-accent-soft-border);
   border-radius: 8px;
   cursor: pointer;
   text-align: center;
 }
 
 .squisq-layout-manager-new:hover {
-  background: #e0e7ff;
-  border-color: #a5b4fc;
+  background: var(--squisq-layout-accent-soft-hover);
+  border-color: var(--squisq-layout-accent-hover-border);
 }
 
 .squisq-layout-manager-new--active {
   border-style: solid;
-  border-color: #6366f1;
+  border-color: var(--squisq-layout-accent-border);
 }
 
 .squisq-layout-manager-section-title {
@@ -589,7 +647,7 @@
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.06em;
-  color: #6b7280;
+  color: var(--squisq-layout-muted);
 }
 
 .squisq-layout-manager-list {
@@ -603,8 +661,9 @@
   align-items: center;
   gap: 10px;
   padding: 8px;
-  background: #ffffff;
-  border: 1px solid #e5e7eb;
+  color: var(--squisq-layout-text-soft);
+  background: var(--squisq-layout-input);
+  border: 1px solid var(--squisq-layout-border);
   border-radius: 8px;
   cursor: pointer;
   text-align: left;
@@ -614,13 +673,13 @@
 }
 
 .squisq-layout-manager-item:hover {
-  background: #eef2ff;
-  border-color: #c7d2fe;
+  background: var(--squisq-layout-accent-soft);
+  border-color: var(--squisq-layout-accent-soft-border);
 }
 
 .squisq-layout-manager-item--active {
-  background: #eef2ff;
-  border-color: #6366f1;
+  background: var(--squisq-layout-accent-soft);
+  border-color: var(--squisq-layout-accent-border);
 }
 
 .squisq-layout-manager-item-thumb {
@@ -628,10 +687,10 @@
   display: inline-flex;
   width: 56px;
   height: 40px;
-  border: 1px solid #e5e7eb;
+  border: 1px solid var(--squisq-layout-border);
   border-radius: 4px;
   overflow: hidden;
-  background: #f8fafc;
+  background: var(--squisq-layout-thumb);
 }
 
 .squisq-layout-manager-item-text {
@@ -644,7 +703,7 @@
 .squisq-layout-manager-item-label {
   font-size: 13px;
   font-weight: 600;
-  color: #111827;
+  color: var(--squisq-layout-text);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -653,7 +712,7 @@
 .squisq-layout-manager-item-name {
   font-family: 'JetBrains Mono', 'SF Mono', 'Menlo', monospace;
   font-size: 11px;
-  color: #6b7280;
+  color: var(--squisq-layout-muted);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -663,7 +722,7 @@
   margin: 8px 2px;
   font-size: 12px;
   line-height: 1.5;
-  color: #6b7280;
+  color: var(--squisq-layout-muted);
 }
 
 .squisq-layout-manager-main {

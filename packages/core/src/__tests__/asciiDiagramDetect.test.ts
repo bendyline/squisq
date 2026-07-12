@@ -61,6 +61,40 @@ describe('detectAsciiDiagram — positive fixtures (must all accept)', () => {
   }
 });
 
+describe('garbled-label guard (over-broken art falls back to code)', () => {
+  // Hand-drawn boxes whose labels overflow their borders AND collide with a
+  // neighbour desync the columns row-to-row, so box-drawing chars leak into
+  // the extracted labels. That's an unrecoverable parse — detection must
+  // decline so the fence renders as a faithful code block, not a garbled
+  // canvas. (This is the shape of real "half-broken" architecture art.)
+  const COLLIDING = [
+    '┌────────┐   ┌────────┐',
+    '│ @scope/kernel  │   │ @scope/client  │',
+    '│ x      │   │ y      │',
+    '└────────┘   └────────┘',
+    '┌────────┐   ┌────────┐',
+    '│ @scope/materls │   │ @scope/schema  │',
+    '│ z      │   │ w      │',
+    '└────────┘   └────────┘',
+  ].join('\n');
+
+  it('rejects a diagram whose labels are structurally garbled', () => {
+    const d = detectAsciiDiagram(COLLIDING);
+    expect(d.isDiagram).toBe(false);
+    expect(d.reasons.join(' ')).toMatch(/garbled-labels/);
+  });
+
+  it('rejects garbled art even when explicitly `diagram`-tagged', () => {
+    expect(detectAsciiDiagram(COLLIDING, { explicit: true }).isDiagram).toBe(false);
+  });
+
+  it('does not flag a clean diagram (no box chars in labels)', () => {
+    // Sanity: clean labels never trip the guard.
+    expect(detectAsciiDiagram(POSITIVE_FIXTURES.TWO_BOX_VERTICAL).isDiagram).toBe(true);
+    expect(detectAsciiDiagram(POSITIVE_FIXTURES.NESTED_CONTAINER).isDiagram).toBe(true);
+  });
+});
+
 describe('explicit `diagram` tag (lenient detection)', () => {
   const ONE_BOX = ['┌────────┐', '│ Solo   │', '└────────┘'].join('\n');
 

@@ -33,6 +33,9 @@ export const CONTENT_SAMPLES: Record<string, ContentSample> = {
  */
 export const SAMPLE_LABELS: Record<string, string> = {
   'about-squisq': 'About SquigglySquare (squisq)',
+  'e2e-tiny': 'E2E tiny',
+  'e2e-gif': 'E2E gif',
+  'e2e-tasklist': 'E2E tasklist',
   'teleprompter-demo': 'Teleprompter (Narrate mode)',
 };
 
@@ -616,6 +619,30 @@ The pre-ASCII heading syntax (\`{[diagram]}\` + child headings with \`x=\`/\`y=\
 ### Database {#db x=80 y=320}
 
 ### Cache {#cache x=300 y=320}
+`,
+  'diagram-broken': `# Broken Diagram (Repair Demo)
+
+Real-world ASCII architecture art is often *half-broken* — here a rename widened the labels past their boxes, so the columns desync row-to-row and no clean diagram can be parsed. Squisq renders it faithfully as a code block and offers a **⟳ Repair as diagram** button that reconstructs a clean, editable diagram.
+
+\`\`\`
+┌──────────────┐   ┌──────────────┐   ┌──────────────┐
+│ @scope/gateway-service  │   │ @scope/orders-service   │   │ @scope/billing-service  │
+│ edge, auth   │   │ checkout     │   │ invoices     │
+└──────┬───────┘   └──────┬───────┘   └──────┬───────┘
+       │                  │                  │
+       ▼                  ▼                  ▼
+┌────────────────────────────────────────────────────┐
+│ @scope/event-bus                                    │
+│ pub/sub backbone                                    │
+└────────────────────────┬───────────────────────────┘
+                         ▼
+              ┌──────────────────────┐
+              │ @scope/analytics-warehouse │
+              │ rollups              │
+              └──────────────────────┘
+\`\`\`
+
+Click **Repair** above the block to turn it into an interactive canvas.
 `,
   'drawing-org-chart': `# Org Chart Demo
 

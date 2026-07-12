@@ -68,6 +68,38 @@ describe('useDocPlayback — synchronous block transitions', () => {
     expect(enteringAt(5.6)).toBe(false); // blockTime 0.6 >= 0.5
   });
 
+  it('can enter a swipe destination without restoring the outgoing block', () => {
+    const { result, rerender } = renderHook(
+      ({ t }: { t: number }) => useDocPlayback(doc, t, { viewport: VIEWPORT_PRESETS.landscape }),
+      { initialProps: { t: 0 } },
+    );
+
+    act(() => result.current.suppressOutgoingForNextBlock('b'));
+    rerender({ t: 5 });
+
+    // The destination still gets its own entrance animation, but the slide
+    // already carried away by the swipe is not mounted again as context.
+    expect(result.current.isEntering).toBe(true);
+    expect(result.current.isExiting).toBe(false);
+    expect(result.current.previousBlock).toBeNull();
+  });
+
+  it('clears stale outgoing context when a cover reveals the already-active block', () => {
+    const { result, rerender } = renderHook(
+      ({ t }: { t: number }) => useDocPlayback(doc, t, { viewport: VIEWPORT_PRESETS.landscape }),
+      { initialProps: { t: 0 } },
+    );
+    rerender({ t: 5 });
+    expect(result.current.previousBlock?.id).toBe('a');
+
+    act(() => result.current.suppressOutgoingForNextBlock('b'));
+    rerender({ t: 5 });
+
+    expect(result.current.isEntering).toBe(true);
+    expect(result.current.isExiting).toBe(false);
+    expect(result.current.previousBlock).toBeNull();
+  });
+
   it('navigation actions seek to the target block', () => {
     const seek = vi.fn();
     const { result } = renderHook(() =>

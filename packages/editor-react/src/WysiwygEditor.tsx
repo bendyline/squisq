@@ -29,6 +29,8 @@ import { DEFAULT_THEME, flattenBlocks, markdownToDoc } from '@bendyline/squisq/d
 import { parseMarkdown } from '@bendyline/squisq/markdown';
 import { HeadingWithTemplate } from './TemplateAnnotation';
 import { AsciiDiagramExtension } from './asciiDiagram/AsciiDiagramExtension';
+import { RepairableDiagramExtension } from './asciiDiagram/RepairableDiagramExtension';
+import { applyRepairCommand } from './asciiDiagram/asciiDiagramCommands';
 import { shouldPasteAsAsciiFence } from './asciiDiagram/asciiPaste';
 import { TreeViewExtension } from './treeview/TreeViewExtension';
 import { shouldPasteAsTreeFence } from './treeview/treePaste';
@@ -187,6 +189,7 @@ export function WysiwygEditor({
       }),
       HeadingWithTemplate.configure({ levels: [1, 2, 3, 4, 5, 6] }),
       AsciiDiagramExtension.configure({ textChannel: sceneTextChannel }),
+      RepairableDiagramExtension.configure({ onRepair: applyRepairCommand }),
       TreeViewExtension,
       SceneBlockExtension.configure({ textChannel: sceneTextChannel }),
       Table.configure({ resizable: true }),
@@ -659,6 +662,7 @@ export function WysiwygEditor({
             onSave={handleDesignerSave}
             onClose={() => setDesignerState(null)}
             mediaProvider={mediaProvider}
+            colorScheme={colorScheme}
           />
         )}
       </div>

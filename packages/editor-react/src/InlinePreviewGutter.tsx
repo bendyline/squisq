@@ -33,6 +33,7 @@ import {
   flattenBlocks,
   materializeBlockLayers,
   DEFAULT_THEME,
+  deriveTemplateInputs,
   type MaterializeBlockLayersOptions,
 } from '@bendyline/squisq/doc';
 import { extractPlainText, getChildren } from '@bendyline/squisq/markdown';
@@ -187,7 +188,12 @@ function getTemplateDefaults(
 ): Record<string, unknown> {
   switch (templateName) {
     case 'statHighlight':
-      return { stat: headingText, description: bodyText || headingText };
+      return (
+        deriveTemplateInputs(templateName, headingText, contents, { placeholders: true }) ?? {
+          stat: headingText,
+          description: bodyText || headingText,
+        }
+      );
     case 'quote':
     case 'fullBleedQuote':
     case 'pullQuote':

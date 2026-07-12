@@ -29,6 +29,13 @@ const MIN_LINES = 2;
 const MIN_CONNECTOR_LINES = 2;
 const MIN_NODES = 2;
 
+/**
+ * Box-drawing corners a file tree NEVER contains: top-left/right and
+ * bottom-right in light, heavy, double, and rounded weights. Bottom-LEFT
+ * corners (└ ┗ ╰ ╚ ╘) are excluded — the tree codec uses them as elbows.
+ */
+const BOX_CORNER_RE = /[┌┐┘┏┓┛╔╗╝╭╮╯]/u;
+
 export function isEligibleTreeFenceLang(lang: string | null | undefined): boolean {
   if (lang === null || lang === undefined) return true;
   const normalized = lang.trim().toLowerCase();
@@ -71,6 +78,18 @@ export function detectTree(text: string, opts: DetectTreeOptions = {}): TreeDete
   const hasGfmSeparator = nonBlank.some((l) => /^\s*\|?[\s:|-]+\|?\s*$/.test(l) && l.includes('-'));
   if (pipeRows > nonBlank.length / 2 && hasGfmSeparator) {
     return { isTree: false, reasons: ['markdown-table'] };
+  }
+
+  // Box-drawing CORNERS are an unambiguous box-diagram signal. A file tree /
+  // outline is built only from tees (├), elbows (└ ┗ ╰), rails (│), and dashes
+  // (─) — it never contains a TOP corner (┌ ┐) or a BOTTOM-RIGHT corner (┘).
+  // A fence with those is a diagram, even a MALFORMED one whose borders are
+  // misaligned so the tracer finds <2 closed boxes (e.g. hand-drawn art
+  // knocked out of alignment by a later rename that widened the labels).
+  // Without this, such art falls through to a mangled treeview. (Bottom-LEFT
+  // corners └ ┗ ╰ ╚ ╘ are deliberately excluded — they double as tree elbows.)
+  if (BOX_CORNER_RE.test(text)) {
+    return { isTree: false, reasons: ['has-box-corners'] };
   }
 
   // Mutual exclusion with the diagram codec: a fence with ≥2 closed boxes is

@@ -131,6 +131,211 @@
   box-sizing: border-box;
 }
 
+.squisq-toolbar-view-tab-wrap {
+  display: flex;
+  align-items: flex-end;
+  align-self: stretch;
+}
+
+/* The Use tab owns the primary preview-mode chooser. Keeping the arrow in the
+   tab cluster makes mode selection available before entering Use and frees the
+   preview toolbar for format/theme/output settings. */
+.squisq-toolbar-use-tab {
+  border-bottom: 2px solid transparent;
+}
+
+.squisq-toolbar-use-tab > .squisq-toolbar-view-tab {
+  padding-right: 4px;
+  padding-bottom: 4px;
+  border-bottom: 0;
+}
+
+.squisq-toolbar-use-tab--active {
+  border-bottom-color: #2563eb;
+}
+
+.squisq-use-mode-trigger {
+  align-self: stretch;
+  display: inline-flex;
+  align-items: flex-end;
+  justify-content: center;
+  width: 20px;
+  padding: 0 6px 9px 0;
+  border: 0;
+  background: transparent;
+  color: #4b5563;
+  cursor: pointer;
+  box-sizing: content-box;
+}
+
+.squisq-use-mode-trigger:hover,
+.squisq-use-mode-trigger--open {
+  color: #111827;
+}
+
+.squisq-toolbar-use-tab--active .squisq-use-mode-trigger {
+  color: #1d4ed8;
+}
+
+.squisq-use-mode-menu {
+  position: fixed;
+  z-index: 120;
+  width: min(340px, calc(100vw - 16px));
+  padding: 6px;
+  border: 1px solid #d1d5db;
+  border-radius: 10px;
+  background: #ffffff;
+  box-shadow:
+    0 12px 32px rgba(15, 23, 42, 0.2),
+    0 2px 6px rgba(15, 23, 42, 0.08);
+  box-sizing: border-box;
+  font-family:
+    -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans', Helvetica, Arial, sans-serif;
+  animation: squisq-use-mode-menu-in 0.12s ease-out;
+}
+
+.squisq-use-mode-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 52px;
+  padding: 7px 9px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: #374151;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    background 0.12s ease,
+    color 0.12s ease;
+}
+
+.squisq-use-mode-menu-item:hover,
+.squisq-use-mode-menu-item:focus-visible {
+  outline: none;
+  background: #f3f4f6;
+  color: #111827;
+}
+
+.squisq-use-mode-menu-item--selected {
+  background: #eff6ff;
+  color: #1d4ed8;
+}
+
+.squisq-use-mode-menu-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  flex: 0 0 32px;
+  border-radius: 8px;
+  background: #f1f5f9;
+  color: #64748b;
+  font-size: 14px;
+}
+
+.squisq-use-mode-menu-item--selected .squisq-use-mode-menu-icon {
+  background: #dbeafe;
+  color: #2563eb;
+}
+
+.squisq-use-mode-menu-copy {
+  display: flex;
+  flex: 1 1 auto;
+  min-width: 0;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.squisq-use-mode-menu-label {
+  color: inherit;
+  font-size: 12.5px;
+  font-weight: 650;
+  line-height: 1.2;
+}
+
+.squisq-use-mode-menu-summary {
+  overflow: hidden;
+  color: #6b7280;
+  font-size: 11.5px;
+  font-weight: 400;
+  line-height: 1.3;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.squisq-use-mode-menu-check {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  flex: 0 0 16px;
+  color: #2563eb;
+  font-size: 11px;
+  text-align: center;
+}
+
+@keyframes squisq-use-mode-menu-in {
+  from {
+    opacity: 0;
+    transform: translateY(-3px) scale(0.99);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .squisq-use-mode-menu {
+    animation: none;
+  }
+}
+
+.squisq-use-mode-menu[data-theme='dark'] {
+  border-color: #4b5563;
+  background: #1f2937;
+}
+
+.squisq-use-mode-menu[data-theme='dark'] .squisq-use-mode-menu-item {
+  color: #d1d5db;
+}
+
+.squisq-use-mode-menu[data-theme='dark'] .squisq-use-mode-menu-item:hover,
+.squisq-use-mode-menu[data-theme='dark'] .squisq-use-mode-menu-item:focus-visible {
+  background: #374151;
+  color: #f9fafb;
+}
+
+.squisq-use-mode-menu[data-theme='dark'] .squisq-use-mode-menu-item--selected {
+  background: #172f4f;
+  color: #93c5fd;
+}
+
+.squisq-use-mode-menu[data-theme='dark'] .squisq-use-mode-menu-icon {
+  background: #334155;
+  color: #cbd5e1;
+}
+
+.squisq-use-mode-menu[data-theme='dark']
+  .squisq-use-mode-menu-item--selected
+  .squisq-use-mode-menu-icon {
+  background: #1e4976;
+  color: #bfdbfe;
+}
+
+.squisq-use-mode-menu[data-theme='dark'] .squisq-use-mode-menu-summary {
+  color: #94a3b8;
+}
+
+.squisq-use-mode-menu[data-theme='dark'] .squisq-use-mode-menu-check {
+  color: #93c5fd;
+}
+
 /* When the outline pane is visible, anchor the toolbar's view-tabs section
  * to the outline pane's width so their right-edge dividers line up
  * vertically — otherwise the view-tabs border and the outline's right edge
@@ -2320,6 +2525,20 @@
 .squisq-editor-shell[data-theme='dark'] .squisq-toolbar-view-tab--active {
   color: #93c5fd;
   border-bottom-color: #60a5fa;
+}
+
+.squisq-editor-shell[data-theme='dark'] .squisq-toolbar-use-tab--active {
+  border-bottom-color: #60a5fa;
+}
+
+.squisq-editor-shell[data-theme='dark'] .squisq-use-mode-trigger {
+  color: #d1d5db;
+}
+
+.squisq-editor-shell[data-theme='dark'] .squisq-use-mode-trigger:hover,
+.squisq-editor-shell[data-theme='dark'] .squisq-use-mode-trigger--open,
+.squisq-editor-shell[data-theme='dark'] .squisq-toolbar-use-tab--active .squisq-use-mode-trigger {
+  color: #93c5fd;
 }
 
 .squisq-editor-shell[data-theme='dark'] .squisq-toolbar-button {
@@ -5556,6 +5775,14 @@
 .squisq-theme-picker-name-chip--trigger {
   flex: 1;
   min-width: 0;
+}
+
+/* Georgia's glyph box sits visibly high in its line box. Nudge only the
+   Standard Light trigger label; keep the surrounding chip centered. */
+.squisq-theme-picker-name-chip--trigger[data-theme-id='standard']
+  .squisq-theme-picker-name-chip-label {
+  position: relative;
+  top: 2px;
 }
 
 .squisq-theme-picker-name-chip--default {

@@ -20,6 +20,20 @@ const NEGATIVES: Record<string, string> = {
     '│ Beta   │',
     '└────────┘',
   ].join('\n'),
+  // A hand-drawn box diagram whose right borders are misaligned (e.g. a
+  // rename widened the labels), so NO box traces as a closed rectangle. It
+  // must still be rejected as a tree — the top corners (┌ ┐) give it away.
+  misalignedBoxDiagram: [
+    '┌─────────────────┐',
+    '│  @scope/tooling      │',
+    '│  CLI + MCP server │',
+    '└───────┬─────────┘',
+    '        │',
+    '        ▼',
+    '┌───────┴──┐   ┌──────────┐',
+    '│  kernel  │   │  client  │',
+    '└──────────┘   └──────────┘',
+  ].join('\n'),
   markdownTable: ['| Name  | Role     |', '|-------|----------|', '| Ada   | Engineer |'].join(
     '\n',
   ),
@@ -48,6 +62,19 @@ describe('detectTree — negative corpus (must all reject)', () => {
       expect(d.reasons.length).toBeGreaterThan(0);
     });
   }
+
+  it('rejects a misaligned box diagram via the corner signal, not the box count', () => {
+    // No box traces closed (misaligned), so the ≥2-box rule can't catch it —
+    // the corner rejector is what keeps it out of the tree widget.
+    const d = detectTree(NEGATIVES.misalignedBoxDiagram);
+    expect(d.isTree).toBe(false);
+    expect(d.reasons).toContain('has-box-corners');
+  });
+
+  it('rejects box-corner art even when explicitly `tree`-tagged', () => {
+    expect(detectTree(NEGATIVES.misalignedBoxDiagram, { explicit: true }).isTree).toBe(false);
+    expect(detectTree(NEGATIVES.boxDiagram, { explicit: true }).isTree).toBe(false);
+  });
 });
 
 describe('detectTree — positive fixtures (must all accept)', () => {

@@ -272,6 +272,7 @@ export function mount(element: Element, doc: Doc, options: MountOptions = {}): S
       basePath,
       theme,
       animationsEnabled,
+      globalKeyboardShortcuts: true,
     });
   } else {
     content = createElement(DocPlayer, {
@@ -285,6 +286,7 @@ export function mount(element: Element, doc: Doc, options: MountOptions = {}): S
       theme,
       captionsEnabled: !!captionStyle,
       captionStyle: captionStyle ?? 'standard',
+      globalKeyboardShortcuts: true,
       onRenderAPIReady: (api: SquisqRenderAPI | null) => handle.setRenderAPI(api),
     });
   }

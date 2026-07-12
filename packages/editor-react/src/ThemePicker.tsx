@@ -95,6 +95,7 @@ function ThemeNameChip({
   return (
     <span
       className={`squisq-theme-picker-name-chip${className ? ` ${className}` : ''}`}
+      data-theme-id={theme.id}
       style={{
         background: theme.colors.background,
         color: theme.colors.text,
@@ -102,7 +103,7 @@ function ThemeNameChip({
         borderColor: theme.colors.backgroundLight,
       }}
     >
-      {label}
+      <span className="squisq-theme-picker-name-chip-label">{label}</span>
     </span>
   );
 }

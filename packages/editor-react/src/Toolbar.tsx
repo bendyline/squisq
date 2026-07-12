@@ -50,7 +50,7 @@ import { CustomLayoutManager } from './customTemplates/CustomLayoutManager';
 import { Icon } from './Icon';
 import type { PickerEntry } from './emojiData';
 import { createPortal } from 'react-dom';
-import { usePreviewSettingsOptional } from './PreviewControls';
+import { PreviewModeMenu, displayModeLabel, usePreviewSettingsOptional } from './PreviewControls';
 import { filterVisibleMediaEntries } from './mediaEntries';
 
 const VIEWS: { id: EditorView; label: string; shortLabel?: string; shortcut: string }[] = [
@@ -578,6 +578,7 @@ export function Toolbar({
     bumpMediaRevision,
   } = useEditorContext();
   const previewSettings = usePreviewSettingsOptional();
+  const [useModeMenuRequest, requestUseModeMenu] = useReducer((count: number) => count + 1, 0);
   // When a canvas textbox is being edited, its Tiptap instance takes over
   // the formatting buttons; otherwise they drive the document editor. The
   // `level` gates which buttons apply (inline labels vs. rich textboxes).
@@ -1781,35 +1782,65 @@ export function Toolbar({
       {/* View tabs — hidden when only one view is available (e.g. code mode). */}
       {showViewTabs && (
         <div className="squisq-toolbar-view-tabs" role="tablist" aria-label="Editor view">
-          {visibleViews.map((view) => (
-            <button
-              key={view.id}
-              role="tab"
-              data-view={view.id}
-              aria-selected={activeView === view.id}
-              className={`squisq-toolbar-view-tab${activeView === view.id ? ' squisq-toolbar-view-tab--active' : ''}`}
-              onClick={() => setActiveView(view.id)}
-              data-tooltip={`${view.label} (${view.shortcut})`}
-            >
-              <span
-                className="squisq-toolbar-view-tab-label squisq-toolbar-view-tab-label--long"
-                data-label={view.label}
+          {visibleViews.map((view) => {
+            const viewLabel =
+              view.id === 'preview' && previewSettings
+                ? displayModeLabel(previewSettings.activeDisplayMode)
+                : view.label;
+            const tab = (
+              <button
+                role="tab"
+                data-view={view.id}
+                aria-selected={activeView === view.id}
+                className={`squisq-toolbar-view-tab${activeView === view.id ? ' squisq-toolbar-view-tab--active' : ''}`}
+                onClick={() => {
+                  if (view.id === 'preview' && activeView === 'preview' && previewSettings) {
+                    requestUseModeMenu();
+                    return;
+                  }
+                  setActiveView(view.id);
+                }}
+                data-tooltip={`${viewLabel} (${view.shortcut})`}
               >
-                {view.label}
-              </span>
-              {view.shortLabel && view.shortLabel !== view.label && (
                 <span
-                  className="squisq-toolbar-view-tab-label squisq-toolbar-view-tab-label--short"
-                  data-label={view.shortLabel}
+                  className="squisq-toolbar-view-tab-label squisq-toolbar-view-tab-label--long"
+                  data-label={viewLabel}
                 >
-                  {view.shortLabel}
+                  {viewLabel}
                 </span>
-              )}
-            </button>
-          ))}
+                {view.shortLabel && view.shortLabel !== view.label && (
+                  <span
+                    className="squisq-toolbar-view-tab-label squisq-toolbar-view-tab-label--short"
+                    data-label={view.shortLabel}
+                  >
+                    {view.shortLabel}
+                  </span>
+                )}
+              </button>
+            );
+
+            if (view.id !== 'preview' || !previewSettings) {
+              return (
+                <div key={view.id} className="squisq-toolbar-view-tab-wrap" role="presentation">
+                  {tab}
+                </div>
+              );
+            }
+
+            return (
+              <div
+                key={view.id}
+                className={`squisq-toolbar-view-tab-wrap squisq-toolbar-use-tab${activeView === 'preview' ? ' squisq-toolbar-use-tab--active' : ''}`}
+                role="presentation"
+              >
+                {tab}
+                <PreviewModeMenu openRequest={useModeMenuRequest} />
+              </div>
+            );
+          })}
         </div>
       )}
-      {/* After-tabs slot — left side, before formatting controls (preview mode switch) */}
+      {/* After-tabs slot — left side, before formatting or preview controls. */}
       {slotAfterTabs}
       {/* Formatting buttons — hidden in preview mode and code mode */}
       {!isPreview && !isCodeMode && (

@@ -17,7 +17,7 @@
  * - Blocks are rendered recursively to preserve the heading hierarchy
  */
 
-import { useMemo } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import { useAutoSurface } from './hooks/useAutoSurface';
 import type { Doc, Block, DocBlock } from '@bendyline/squisq/schemas';
 import type { ViewportConfig } from '@bendyline/squisq/schemas';
@@ -33,6 +33,7 @@ import {
   markdownToDoc,
   DEFAULT_THEME,
   deriveTemplateInputs,
+  isTemplateBlock,
 } from '@bendyline/squisq/doc';
 import type { MaterializeBlockLayersOptions } from '@bendyline/squisq/doc';
 import { extractPlainText, parseMarkdown } from '@bendyline/squisq/markdown';
@@ -88,6 +89,11 @@ export interface LinearDocViewProps {
    * full-size images would dominate the layout.
    */
   imageDisplayMode?: ImageDisplayMode;
+  /**
+   * Let unmodified Up/Down arrows scroll this view even when it does not
+   * currently hold focus. Intended for a primary document preview.
+   */
+  globalKeyboardShortcuts?: boolean;
 }
 
 export type ImageDisplayMode = 'inline' | 'thumbnail';
@@ -100,7 +106,14 @@ export type ImageDisplayMode = 'inline' | 'thumbnail';
  * materializer can return a visible fallback and structured diagnostic.
  */
 function isAnnotatedBlock(block: Block): boolean {
-  return !!block.sourceHeading?.templateAnnotation?.template;
+  return (
+    !!block.sourceHeading?.templateAnnotation?.template ||
+    (!block.sourceHeading && isTemplateBlock(block as DocBlock))
+  );
+}
+
+function visualTemplateName(block: Block): string | undefined {
+  return block.sourceHeading?.templateAnnotation?.template ?? block.template;
 }
 
 /**
@@ -146,30 +159,39 @@ function BlockSection({
   const visualBlock = useMemo(() => {
     if (!isAnnotated) return null;
 
-    const annotation = block.sourceHeading!.templateAnnotation!;
-    const headingText = extractPlainText(block.sourceHeading!);
+    const annotation = block.sourceHeading?.templateAnnotation;
+    const templateName = visualTemplateName(block) ?? 'sectionHeader';
 
-    // Build a TemplateBlock-compatible object
-    const templateBlock: Record<string, unknown> = {
-      id: block.id,
-      template: annotation.template,
-      startTime: 0,
-      duration: 1,
-      audioSegment: 0,
-      title: headingText,
-      contents: block.contents,
-      children: block.children,
-      ...(deriveTemplateInputs(
-        annotation.template ?? 'sectionHeader',
-        headingText,
-        block.contents,
-        {
-          placeholders: true,
-        },
-      ) ?? {}),
-      ...annotation.params,
-      ...block.templateOverrides,
-    };
+    // Authored Markdown blocks derive their typed template inputs from the
+    // heading/body. Transform-generated blocks already ARE typed template
+    // inputs, so materialize them directly instead of looking for authoring
+    // nodes they intentionally do not carry.
+    const templateBlock: Record<string, unknown> = annotation
+      ? (() => {
+          const headingText = extractPlainText(block.sourceHeading!);
+          return {
+            id: block.id,
+            template: templateName,
+            startTime: 0,
+            duration: 1,
+            audioSegment: 0,
+            title: headingText,
+            contents: block.contents,
+            children: block.children,
+            ...(deriveTemplateInputs(templateName, headingText, block.contents, {
+              placeholders: true,
+            }) ?? {}),
+            ...annotation.params,
+            ...block.templateOverrides,
+          };
+        })()
+      : {
+          ...block,
+          startTime: block.startTime ?? 0,
+          duration: block.duration ?? 1,
+          audioSegment: block.audioSegment ?? 0,
+          template: templateName,
+        };
 
     const ctx: MaterializeBlockLayersOptions = {
       ...renderContext,
@@ -180,7 +202,7 @@ function BlockSection({
     return {
       ...block,
       layers,
-      template: annotation.template,
+      template: templateName,
     } as Block;
   }, [block, isAnnotated, renderContext, blockIndex]);
 
@@ -189,7 +211,7 @@ function BlockSection({
       className="squisq-linear-section"
       data-block-id={block.id}
       data-block-index={blockIndex}
-      data-template={isAnnotated ? block.sourceHeading?.templateAnnotation?.template : undefined}
+      data-template={isAnnotated ? visualTemplateName(block) : undefined}
     >
       {/* Render the heading (if present — preamble has no sourceHeading) */}
       {block.sourceHeading && !isAnnotated && <MarkdownRenderer nodes={[block.sourceHeading]} />}
@@ -274,7 +296,9 @@ export function LinearDocView({
   animationsEnabled = true,
   thinMargins = false,
   imageDisplayMode = 'inline',
+  globalKeyboardShortcuts = false,
 }: LinearDocViewProps) {
+  const scrollRef = useRef<HTMLDivElement>(null);
   const activeViewport = viewport ?? VIEWPORT_PRESETS.landscape;
 
   // Parse markdown into a Doc only when no explicit doc is supplied.
@@ -319,10 +343,46 @@ export function LinearDocView({
 
   const activeTheme = renderContext.theme!;
 
+  useEffect(() => {
+    if (!globalKeyboardShortcuts) return;
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (
+        event.defaultPrevented ||
+        event.altKey ||
+        event.ctrlKey ||
+        event.metaKey ||
+        event.shiftKey ||
+        (event.key !== 'ArrowDown' && event.key !== 'ArrowUp')
+      ) {
+        return;
+      }
+      const target = event.target instanceof Element ? event.target : null;
+      if (
+        target?.closest(
+          'input, textarea, select, [contenteditable]:not([contenteditable="false"]), [role="textbox"], [role="combobox"], [role="listbox"], [role="menu"], [role="dialog"], [aria-modal="true"], .monaco-editor',
+        )
+      ) {
+        return;
+      }
+      const scroller = scrollRef.current;
+      if (!scroller) return;
+      event.preventDefault();
+      const distance = Math.max(64, Math.round(scroller.clientHeight * 0.12));
+      scroller.scrollBy({
+        top: event.key === 'ArrowDown' ? distance : -distance,
+        behavior: 'smooth',
+      });
+    };
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [globalKeyboardShortcuts]);
+
   // Nothing to render — keep an empty (but classed) container so hosts can
   // still target/measure the view.
   if (!resolvedDoc) {
-    return <div className={`squisq-linear squisq-linear--empty ${className || ''}`} />;
+    return (
+      <div ref={scrollRef} className={`squisq-linear squisq-linear--empty ${className || ''}`} />
+    );
   }
 
   const bgColor = activeTheme.colors.background;
@@ -335,6 +395,7 @@ export function LinearDocView({
 
   return (
     <div
+      ref={scrollRef}
       className={`squisq-linear ${className || ''}`}
       style={{
         width: '100%',

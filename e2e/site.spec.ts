@@ -209,18 +209,17 @@ test.describe('Template rendering correctness', () => {
     // Start playback and advance to find the statHighlight block
     await startPlaybackAndWaitForActiveBlock(page);
 
-    let foundStat = false;
+    let renderedStat: string | null = null;
     for (let i = 0; i < 14; i++) {
       await page.waitForTimeout(2_500);
-      const text = await activeBlock(page).textContent();
-      // The statHighlight block shows "The Big Number" as title and "42%" as stat
-      if (text && (text.includes('42%') || text.includes('Big Number'))) {
-        foundStat = true;
+      const statLayer = activeBlock(page).locator('[data-layer-id="stat"]');
+      if ((await statLayer.count()) > 0) {
+        renderedStat = (await statLayer.textContent())?.trim() ?? null;
         break;
       }
     }
 
-    expect(foundStat).toBe(true);
+    expect(renderedStat).toBe('42%');
   });
 });
 

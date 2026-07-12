@@ -28,6 +28,11 @@ import { parseTheme } from '@bendyline/squisq/schemas';
 
 const CUSTOM_THEME_STORAGE_KEY = 'squisq-site:customTheme';
 const COLOR_MODE_STORAGE_KEY = 'squisq-site:colorMode';
+const DEFAULT_SAMPLE_KEY = 'about-squisq';
+const SAMPLE_KEYS = [
+  DEFAULT_SAMPLE_KEY,
+  ...Object.keys(SAMPLES).filter((key) => key !== DEFAULT_SAMPLE_KEY),
+];
 
 type DemoColorMode = 'auto' | EditorColorScheme;
 
@@ -73,10 +78,10 @@ function getInitialColorMode(): DemoColorMode {
  * fetch/unpack pipeline that runs from `handleSampleChange`.
  */
 function getInitialSampleKey(): string {
-  if (typeof window === 'undefined') return 'about-squisq';
+  if (typeof window === 'undefined') return DEFAULT_SAMPLE_KEY;
   const param = new URLSearchParams(window.location.search).get('sample');
   if (param && Object.prototype.hasOwnProperty.call(SAMPLES, param)) return param;
-  return 'about-squisq';
+  return DEFAULT_SAMPLE_KEY;
 }
 
 /** Load a previously-saved custom theme from localStorage. Returns null on miss / parse failure. */
@@ -339,7 +344,7 @@ export function App() {
               opacity: loadingContent ? 0.6 : 1,
             }}
           >
-            {Object.keys(SAMPLES).map((key) => (
+            {SAMPLE_KEYS.map((key) => (
               <option key={key} value={key}>
                 {SAMPLE_LABELS[key] ?? key.replace(/-/g, ' ')}
               </option>

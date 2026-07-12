@@ -38,7 +38,7 @@ export interface AsciiParseStats {
   hasWideChars: boolean;
 }
 
-interface Rect {
+export interface Rect {
   r0: number;
   c0: number;
   r1: number;
@@ -56,6 +56,18 @@ interface ParsedBox extends Rect {
 const MAX_TITLE_RUN = 60;
 const MAX_BRIDGE_GAP = 40;
 const MAX_LOOSE_WARNINGS = 10;
+/**
+ * Consecutive non-border cells tolerated while walking a box's side wall.
+ * Hand-drawn art frequently has ragged side borders — a label line that
+ * overflowed its box (e.g. a rename widened the text) leaves a space where
+ * the `│` should be. The four corners plus the solid top/bottom borders are
+ * the real box anchors, so a short run of gaps in a side wall shouldn't stop
+ * the wall from reaching its corner. Kept small so two unrelated horizontal
+ * rules can't span into a phantom box.
+ */
+const MAX_WALL_GAP = 3;
+/** Larger side-wall gap budget for the opt-in repair pass (badly-drawn art). */
+const REPAIR_WALL_GAP = 10;
 
 /** True crossings: vertical and horizontal runs pass through independently. */
 const CROSS_CHARS = new Set(['┼', '╋', '╬', '╫', '╪']);
@@ -249,22 +261,35 @@ function detectStyle(grid: string[][]): 'unicode' | 'ascii' {
 // Box tracing
 // ---------------------------------------------------------------------------
 
-interface TracedRect extends Rect {
+export interface TracedRect extends Rect {
   borderTitle?: string;
 }
 
-function traceBoxes(grid: string[][]): TracedRect[] {
+/**
+ * Trace every box rectangle in the grid. `repair` mode is the aggressive
+ * variant used only by the opt-in `repairAsciiDiagram` pass: it lets a side
+ * wall cross edge-routing chars (a hand-drawn box whose label overflowed can
+ * push arrows/lines through where its `│` should be), so more boxes of
+ * genuinely-broken art are recovered. Conservative auto-detection never uses
+ * it (a phantom box there would hide real code).
+ */
+export function traceBoxes(grid: string[][], repair = false): TracedRect[] {
   const H = grid.length;
   const W = H > 0 ? grid[0].length : 0;
   const found: TracedRect[] = [];
   for (let r = 0; r < H; r++) {
     for (let c = 0; c < W; c++) {
       if (!isTlCandidate(grid, r, c)) continue;
-      const rect = traceBoxFrom(grid, r, c);
+      const rect = traceBoxFrom(grid, r, c, repair);
       if (rect) found.push(rect);
     }
   }
   return found;
+}
+
+/** Build the code-point grid for a fence's text (CRLF/tab-normalized, padded). */
+export function toGrid(text: string): string[][] {
+  return buildGrid(text, []);
 }
 
 function isTlCandidate(grid: string[][], r: number, c: number): boolean {
@@ -286,7 +311,7 @@ function isTlCandidate(grid: string[][], r: number, c: number): boolean {
  * that closes wins, so `+` lattices decompose into cells and stacked
  * shared-border boxes parse as siblings.
  */
-function traceBoxFrom(grid: string[][], r0: number, c0: number): TracedRect | null {
+function traceBoxFrom(grid: string[][], r0: number, c0: number, repair = false): TracedRect | null {
   const H = grid.length;
   const W = grid[0]?.length ?? 0;
 
@@ -309,6 +334,14 @@ function traceBoxFrom(grid: string[][], r0: number, c0: number): TracedRect | nu
       c++;
       continue;
     }
+    // An arrowhead embedded in the border (`┌───▼──┐`, `┌─▼──▼──▼─┐`) is a
+    // stem where an edge attaches, not a title — walk through it so the box
+    // still closes (and so a border can hold several arrival points). Edge
+    // extraction connects the line above/below to this box.
+    if (arrowDirection(ch) !== null) {
+      c++;
+      continue;
+    }
     // Possible embedded title (`┌── Title ──┐`): a single non-border run
     // bounded by border chars on both sides.
     if (titleRun) break;
@@ -316,7 +349,7 @@ function traceBoxFrom(grid: string[][], r0: number, c0: number): TracedRect | nu
     let sawText = false;
     while (end < W && end - c <= MAX_TITLE_RUN) {
       const tch = grid[r0][end];
-      if (isFlatBorderChar(tch) || isTrCorner(tch)) break;
+      if (isFlatBorderChar(tch) || isTrCorner(tch) || arrowDirection(tch) !== null) break;
       if (tch !== ' ') sawText = true;
       end++;
     }
@@ -327,20 +360,7 @@ function traceBoxFrom(grid: string[][], r0: number, c0: number): TracedRect | nu
   if (trCandidates.length === 0) return null;
 
   // -- Left wall (same for every TR candidate).
-  const leftCandidates: number[] = [];
-  for (let r = r0 + 1; r < H; r++) {
-    const ch = grid[r][c0];
-    if (isBlCorner(ch)) {
-      leftCandidates.push(r);
-      break;
-    }
-    if (isPlus(ch) || isJunction(ch)) {
-      leftCandidates.push(r);
-      continue;
-    }
-    if (isSideBorderChar(ch)) continue;
-    break;
-  }
+  const leftCandidates = walkSideWall(grid, c0, r0, H, isBlCorner, repair);
   if (leftCandidates.length === 0) return null;
   const leftSet = new Set(leftCandidates);
 
@@ -348,20 +368,7 @@ function traceBoxFrom(grid: string[][], r0: number, c0: number): TracedRect | nu
     if (c1 < c0 + 2) continue; // minimum width 3
 
     // -- Right wall for this candidate.
-    const rightCandidates: number[] = [];
-    for (let r = r0 + 1; r < H; r++) {
-      const ch = grid[r][c1];
-      if (isBrCorner(ch)) {
-        rightCandidates.push(r);
-        break;
-      }
-      if (isPlus(ch) || isJunction(ch)) {
-        rightCandidates.push(r);
-        continue;
-      }
-      if (isSideBorderChar(ch)) continue;
-      break;
-    }
+    const rightCandidates = walkSideWall(grid, c1, r0, H, isBrCorner, repair);
 
     for (const r1 of rightCandidates) {
       if (r1 < r0 + 2) continue; // minimum height 3
@@ -375,6 +382,23 @@ function traceBoxFrom(grid: string[][], r0: number, c0: number): TracedRect | nu
         }
       }
       if (!ok) continue;
+      // -- Anti-phantom guard for the gap tolerance: a real box has an actual
+      // side-border char on EACH wall's interior. A rectangle bridged purely
+      // through gap cells (e.g. the `┌──┴──┐`/`└──┬──┘` routing corners of a
+      // fan-out/fan-in, whose sides are empty) has none, and must not become a
+      // box. Clean boxes always pass — their interior rows carry `│`/`├`/`┤`.
+      // Repair mode widens the check to a ±1 column window so a uniformly
+      // SHIFTED side border (corners at c1 but the `│` a column over — common
+      // in hand-drawn art) still counts as evidence; a phantom's empty sides
+      // stay empty in the window too, so it's still rejected.
+      const win = repair ? 1 : 0;
+      let leftBorders = 0;
+      let rightBorders = 0;
+      for (let ir = r0 + 1; ir <= r1 - 1; ir++) {
+        if (hasSideBorderNear(grid[ir], c0, win)) leftBorders++;
+        if (hasSideBorderNear(grid[ir], c1, win)) rightBorders++;
+      }
+      if (leftBorders === 0 || rightBorders === 0) continue;
       const title =
         titleRun && titleRun.to < c1
           ? grid[r0]
@@ -386,6 +410,62 @@ function traceBoxFrom(grid: string[][], r0: number, c0: number): TracedRect | nu
     }
   }
   return null;
+}
+
+/**
+ * Walk one side wall of a box down from just below its top corner, collecting
+ * corner-candidate rows (and junction rows, which double as shared-border
+ * candidates). Tolerates up to {@link MAX_WALL_GAP} consecutive non-border
+ * cells so a ragged / overflowed side border (hand-drawn art, or a rename
+ * that widened a label past its box) still reaches the bottom corner. The
+ * caller still requires the intersecting BL/BR corners and a solid bottom
+ * border, so the gap tolerance can't invent a box out of empty columns.
+ */
+/** True when a side-border char sits within `win` columns of `col` on `row`. */
+function hasSideBorderNear(row: string[], col: number, win: number): boolean {
+  for (let c = col - win; c <= col + win; c++) {
+    const ch = row[c];
+    if (ch !== undefined && isSideBorderChar(ch)) return true;
+  }
+  return false;
+}
+
+function walkSideWall(
+  grid: string[][],
+  col: number,
+  r0: number,
+  H: number,
+  isCorner: (ch: string) => boolean,
+  repair = false,
+): number[] {
+  const candidates: number[] = [];
+  const maxGap = repair ? REPAIR_WALL_GAP : MAX_WALL_GAP;
+  let gap = 0;
+  for (let r = r0 + 1; r < H; r++) {
+    const ch = grid[r][col];
+    if (isCorner(ch)) {
+      candidates.push(r);
+      break;
+    }
+    if (isPlus(ch) || isJunction(ch)) {
+      candidates.push(r);
+      gap = 0;
+      continue;
+    }
+    if (isSideBorderChar(ch)) {
+      gap = 0;
+      continue;
+    }
+    // Only spaces / overflow label text are tolerable ragged-wall gaps. A
+    // line or arrowhead sitting in the wall path is edge routing crossing
+    // here (e.g. a fan-in `▼` between a source box and the collector), not a
+    // box wall — stop, so routing can't bridge into a phantom box. In the
+    // opt-in repair pass we tolerate even that (badly-drawn boxes push routing
+    // through their walls); the side-border-evidence guard still applies.
+    if (!repair && (isLineChar(ch) || arrowDirection(ch) !== null)) break;
+    if (++gap > maxGap) break;
+  }
+  return candidates;
 }
 
 // ---------------------------------------------------------------------------

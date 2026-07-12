@@ -26,6 +26,14 @@ const MAX_COLS = 400;
 const MIN_LINES = 3;
 const MAX_LOOSE_RATIO = 0.25;
 
+/**
+ * Box-drawing corners, junctions, and (Unicode) verticals — characters that
+ * signal a box border leaked into a node's label, i.e. a mis-aligned parse.
+ * ASCII `|`/`+`/`-` and the horizontal `─` are excluded: they occur in real
+ * label text (`stdin | stdout`, `read-only`, `A + B`).
+ */
+const STRUCTURAL_IN_LABEL = /[│┃║┌┐└┘├┤┬┴┼╭╮╰╯┏┓┗┛╔╗╚╝┣┫┳┻╋╠╣╦╩╬╞╡╥╨╫╪]/;
+
 export function isEligibleAsciiFenceLang(lang: string | null | undefined): boolean {
   if (lang === null || lang === undefined) return true;
   const normalized = lang.trim().toLowerCase();
@@ -98,6 +106,18 @@ export function detectAsciiDiagram(
   const minBoxes = explicit ? 1 : 2;
   if (diagram.nodes.length < minBoxes) {
     return { isDiagram: false, reasons: [`too-few-boxes(${diagram.nodes.length})`] };
+  }
+
+  // Garbled-label guard: a clean box label never contains box-drawing
+  // corners/junctions/verticals — those only leak in when the label columns
+  // are desynced from the box borders (hand-drawn art whose labels overflow
+  // their boxes and shove every following column out of alignment row-to-row,
+  // so no parser can map the text back to the boxes). When a meaningful share
+  // of labels are corrupt this way, the "diagram" would render as garbage, so
+  // decline detection and let the fence fall back to a faithful code block.
+  const garbled = diagram.nodes.filter((n) => STRUCTURAL_IN_LABEL.test(n.label)).length;
+  if (garbled > 0 && garbled >= diagram.nodes.length * 0.25) {
+    return { isDiagram: false, reasons: [`garbled-labels(${garbled}/${diagram.nodes.length})`] };
   }
 
   if (!explicit) {

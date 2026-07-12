@@ -77,6 +77,8 @@ interface TemplateDesignerProps {
    * preview. Omit to disable media in the bin.
    */
   mediaProvider?: MediaProvider | null;
+  /** Editor chrome scheme, copied onto the portal root for theme inheritance. */
+  colorScheme?: 'light' | 'dark';
 }
 
 const DESIGN_CANVAS = { width: 1920, height: 1080 };
@@ -112,6 +114,7 @@ export function TemplateDesigner({
   embedded = false,
   primarySaveLabel = 'Save to this doc',
   mediaProvider = null,
+  colorScheme = 'light',
 }: TemplateDesignerProps) {
   const [name, setName] = useState(initial?.name ?? '');
   const [label, setLabel] = useState(initial?.label ?? '');
@@ -413,7 +416,8 @@ export function TemplateDesigner({
   // Standalone: full-screen modal over a click-to-dismiss backdrop.
   return createPortal(
     <div
-      className="squisq-template-designer-overlay"
+      className="squisq-editor-shell squisq-template-designer-overlay"
+      data-theme={colorScheme}
       role="dialog"
       aria-modal="true"
       aria-label="Custom layout designer"

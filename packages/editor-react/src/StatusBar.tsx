@@ -5,6 +5,7 @@
  */
 
 import { useMemo } from 'react';
+import { countBlocks } from '@bendyline/squisq/doc';
 import { useEditorContext } from './EditorContext';
 
 export interface StatusBarProps {
@@ -23,7 +24,7 @@ export function StatusBar({ className }: StatusBarProps) {
     const chars = markdownSource.length;
     const words = markdownSource.trim() ? markdownSource.trim().split(/\s+/).length : 0;
     const lines = markdownSource.split('\n').length;
-    const blocks = doc?.blocks.length ?? 0;
+    const blocks = doc ? countBlocks(doc.blocks) : 0;
     return { chars, words, lines, blocks };
   }, [markdownSource, doc]);
 
@@ -32,7 +33,9 @@ export function StatusBar({ className }: StatusBarProps) {
       <span className="squisq-status-item">{stats.words} words</span>
       <span className="squisq-status-item">{stats.chars} chars</span>
       <span className="squisq-status-item">{stats.lines} lines</span>
-      <span className="squisq-status-item">{stats.blocks} blocks</span>
+      <span className="squisq-status-item">
+        {stats.blocks} {stats.blocks === 1 ? 'block' : 'blocks'}
+      </span>
       <span className="squisq-status-spacer" />
       {isParsing && <span className="squisq-status-item squisq-status-parsing">Parsing…</span>}
       {parseError && (
