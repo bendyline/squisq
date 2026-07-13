@@ -38,6 +38,12 @@ import {
   type SceneTextChannel,
   type SceneTextHandle,
 } from './scene/text/sceneTextChannel';
+import {
+  readMonacoScrollRatio,
+  readWysiwygScrollRatio,
+  restoreMonacoScrollRatio,
+  restoreWysiwygScrollRatio,
+} from './editorScrollSync';
 
 /** Monaco standalone code editor instance type */
 type MonacoEditor = MonacoEditorNs.IStandaloneCodeEditor;
@@ -472,13 +478,14 @@ export interface EditorProviderProps {
    */
   outline?: boolean;
   /**
-   * Initial visibility of inline block-template tags on headings.
-   * Defaults to true. The toolbar's View menu can toggle it at runtime.
+   * Legacy initial visibility of inline block-template tags on headings.
+   * `true` maps to always visible and `false` maps to hidden. When omitted,
+   * {@link blockTagVisibility} defaults to `'active'`.
    */
   blockTags?: boolean;
   /**
    * Initial block-tag visibility mode. When set, this takes precedence over
-   * the legacy boolean {@link blockTags} prop.
+   * the legacy boolean {@link blockTags} prop. Defaults to `'active'`.
    */
   blockTagVisibility?: BlockTagVisibility;
   /**
@@ -547,7 +554,7 @@ function normalizeBlockTagVisibility(
   value: BlockTagVisibility | boolean | undefined,
 ): BlockTagVisibility {
   if (value === false || value === 'none') return 'none';
-  if (value === 'active') return 'active';
+  if (value === undefined || value === 'active') return 'active';
   return 'always';
 }
 
@@ -573,7 +580,7 @@ export function EditorProvider({
   inlinePreview = false,
   showStatusBar = true,
   outline = false,
-  blockTags = true,
+  blockTags,
   blockTagVisibility: initialBlockTagVisibility,
   themeInheritance = 'fonts',
   layoutMode = 'document',
@@ -611,12 +618,36 @@ export function EditorProvider({
   const [activeView, setActiveViewRaw] = useState<EditorView>(
     editorMode === 'markdown' ? initialView : 'raw',
   );
+  const activeViewRef = useRef(activeView);
+  activeViewRef.current = activeView;
+  const tiptapEditorRef = useRef<TiptapEditor | null>(null);
+  const monacoEditorRef = useRef<MonacoEditor | null>(null);
+  const pendingEditorScrollRef = useRef<{ view: 'raw' | 'wysiwyg'; ratio: number } | null>(null);
   const setActiveView = useCallback(
     (view: EditorView) => {
       // In code mode only the raw view is valid. In image mode no text view
       // is valid at all — ignore any switch attempt.
       if (editorMode === 'code' && view !== 'raw') return;
       if (editorMode === 'image') return;
+
+      const currentView = activeViewRef.current;
+      if (view === currentView) return;
+
+      // Write and Source are separate editor instances and are unmounted as
+      // their tabs are hidden. Capture a proportional document position
+      // before the current instance disappears, then restore it after the
+      // destination has mounted and completed layout.
+      let ratio: number | null = null;
+      let targetView: 'raw' | 'wysiwyg' | null = null;
+      if (currentView === 'raw' && view === 'wysiwyg' && monacoEditorRef.current) {
+        ratio = readMonacoScrollRatio(monacoEditorRef.current);
+        targetView = 'wysiwyg';
+      } else if (currentView === 'wysiwyg' && view === 'raw' && tiptapEditorRef.current) {
+        ratio = readWysiwygScrollRatio(tiptapEditorRef.current);
+        targetView = 'raw';
+      }
+      pendingEditorScrollRef.current =
+        ratio === null || targetView === null ? null : { view: targetView, ratio };
       setActiveViewRaw(view);
     },
     [editorMode],
@@ -795,8 +826,50 @@ export function EditorProvider({
       layoutMode: mode,
     });
   }, []);
-  const [tiptapEditor, setTiptapEditor] = useState<TiptapEditor | null>(null);
-  const [monacoEditor, setMonacoEditor] = useState<MonacoEditor | null>(null);
+  const [tiptapEditor, setTiptapEditorRaw] = useState<TiptapEditor | null>(null);
+  const [monacoEditor, setMonacoEditorRaw] = useState<MonacoEditor | null>(null);
+  const setTiptapEditor = useCallback((editor: TiptapEditor | null) => {
+    tiptapEditorRef.current = editor;
+    setTiptapEditorRaw(editor);
+  }, []);
+  const setMonacoEditor = useCallback((editor: MonacoEditor | null) => {
+    monacoEditorRef.current = editor;
+    setMonacoEditorRaw(editor);
+  }, []);
+
+  useEffect(() => {
+    const pending = pendingEditorScrollRef.current;
+    if (!pending || pending.view !== activeView) return;
+
+    const restore =
+      activeView === 'raw' && monacoEditor
+        ? () => restoreMonacoScrollRatio(monacoEditor, pending.ratio)
+        : activeView === 'wysiwyg' && tiptapEditor
+          ? () => restoreWysiwygScrollRatio(tiptapEditor, pending.ratio)
+          : null;
+    if (!restore) return;
+
+    let cancelled = false;
+    const apply = () => {
+      if (cancelled) return;
+      restore();
+      if (pendingEditorScrollRef.current === pending) pendingEditorScrollRef.current = null;
+    };
+
+    if (typeof requestAnimationFrame === 'function') {
+      const frame = requestAnimationFrame(apply);
+      return () => {
+        cancelled = true;
+        cancelAnimationFrame(frame);
+      };
+    }
+
+    const timeout = setTimeout(apply, 0);
+    return () => {
+      cancelled = true;
+      clearTimeout(timeout);
+    };
+  }, [activeView, monacoEditor, tiptapEditor]);
   // Mirror the focused canvas textbox editor (published by the inline
   // SceneTextOverlay through a module channel, since the canvas renders in
   // a detached React root outside this provider) so the toolbar can target it.

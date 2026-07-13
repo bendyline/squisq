@@ -10,6 +10,7 @@ import {
   MULTI_TRACK_BRANCH_TIMELINE,
   SINGLE_POINT_ASCII_TIMELINE,
   TICK_INTERPOLATION_TIMELINE,
+  WRAPPED_CLIENT_KERNEL_TIMELINE,
 } from './fixtures/asciiTimelines.js';
 
 const fenced = (art: string, lang = ''): string => '```' + lang + '\n' + art + '\n```';
@@ -75,6 +76,17 @@ describe('auto-template conversion of ASCII timeline fences', () => {
     expect(output).toContain(TICK_INTERPOLATION_TIMELINE);
     expect(output).not.toContain('{[timeline');
     expect(findBlock(convert(output), 'Tick interpolation')?.template).toBe('timeline');
+  });
+
+  it('auto-templates a wrapped client/kernel flow without changing its authored bytes', () => {
+    const markdown = ['## Client/kernel loop', '', fenced(WRAPPED_CLIENT_KERNEL_TIMELINE), ''].join(
+      '\n',
+    );
+    const doc = convert(markdown);
+    const block = findBlock(doc, 'Client/kernel loop');
+    expect(block?.template).toBe('timeline');
+    expect(block?.templateData?.tracks as TimelineTemplateTrack[]).toHaveLength(2);
+    expect(stringifyMarkdown(docToMarkdown(doc))).toContain(WRAPPED_CLIENT_KERNEL_TIMELINE);
   });
 });
 

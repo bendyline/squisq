@@ -69,8 +69,20 @@ describe('connectorPath', () => {
     expect(connectorPath('orthogonal', a, b)).toBe('M 0 0 L 50 0 L 50 50 L 100 50');
   });
 
+  it('orthogonal routing approaches top/bottom ports vertically', () => {
+    expect(
+      connectorPath('orthogonal', { port: 'bottom', x: 80, y: 60 }, { port: 'top', x: 20, y: 140 }),
+    ).toBe('M 80 60 L 80 100 L 20 100 L 20 140');
+  });
+
   it('curved is a cubic bezier', () => {
     expect(connectorPath('curved', a, b).startsWith('M 0 0 C')).toBe(true);
+  });
+
+  it('curved routing follows the endpoint port directions', () => {
+    expect(
+      connectorPath('curved', { port: 'bottom', x: 80, y: 60 }, { port: 'top', x: 20, y: 140 }),
+    ).toBe('M 80 60 C 80 110, 20 90, 20 140');
   });
 });
 

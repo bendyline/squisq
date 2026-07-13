@@ -83,7 +83,13 @@ export function DiagramEdges({
         const a = boxById.get(edge.source);
         const b = boxById.get(edge.target);
         if (!a || !b) return null;
-        const snapped = edgeEndpoints(nodes, edge.source, edge.target);
+        const snapped = edgeEndpoints(
+          nodes,
+          edge.source,
+          edge.target,
+          edge.sourceAnchor,
+          edge.targetAnchor,
+        );
         if (!snapped) return null;
         const { start, end } = snapped;
         const d = connectorPath(edge.routing ?? defaultRouting, start, end);

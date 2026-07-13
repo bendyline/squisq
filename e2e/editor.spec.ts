@@ -233,6 +233,8 @@ test.describe('Template picker', () => {
     const heading = editor.locator('h1, h2, h3').first();
     const chip = heading.locator('.squisq-template-badge').first();
 
+    // Inline block tags default to selected/hovered visibility.
+    await heading.click({ position: { x: 8, y: 8 } });
     await expect(chip).toBeVisible();
     await chip.click();
     await expect(page.locator('[data-squisq-template-gallery-portal]')).toBeVisible();

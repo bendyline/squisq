@@ -66,6 +66,36 @@ export function findOwningHeadingElement(
   return candidate && isHeadingElement(candidate) ? candidate : null;
 }
 
+/**
+ * Resolve blank canvas space to the heading-defined block at that vertical
+ * position. Margins between top-level nodes are not owned by either node in
+ * the DOM, so pointer events there target the ProseMirror root. Treating the
+ * root as "no block" makes active-only tags disappear while the pointer
+ * crosses ordinary paragraph/list spacing.
+ */
+export function findOwningHeadingElementAtPoint(
+  editorDom: HTMLElement,
+  target: EventTarget | null,
+  clientY: number,
+): HTMLElement | null {
+  const direct = findOwningHeadingElement(editorDom, target);
+  if (direct) return direct;
+  if (!(target instanceof Node) || !editorDom.contains(target) || !Number.isFinite(clientY)) {
+    return null;
+  }
+
+  const children = Array.from(editorDom.children);
+  const lastChild = children[children.length - 1];
+  if (!lastChild || clientY > lastChild.getBoundingClientRect().bottom) return null;
+
+  let owningHeading: HTMLElement | null = null;
+  for (const child of children) {
+    if (child.getBoundingClientRect().top > clientY) break;
+    if (isHeadingElement(child)) owningHeading = child;
+  }
+  return owningHeading;
+}
+
 function validHeadingPosition(doc: ProseMirrorNode, position: number | null): number | null {
   if (position === null) return null;
   return doc.nodeAt(position)?.type.name === 'heading' ? position : null;
@@ -129,8 +159,9 @@ function nextHoveredPosition(
 function headingPositionForTarget(
   view: ProseMirrorView,
   target: EventTarget | null,
+  clientY: number,
 ): number | null {
-  const heading = findOwningHeadingElement(view.dom, target);
+  const heading = findOwningHeadingElementAtPoint(view.dom, target, clientY);
   if (!heading) return null;
 
   try {
@@ -177,7 +208,15 @@ export const BlockTagActivityExtension = Extension.create({
           },
           handleDOMEvents: {
             mouseover(view, event) {
-              setHoveredPosition(view, headingPositionForTarget(view, event.target));
+              setHoveredPosition(view, headingPositionForTarget(view, event.target, event.clientY));
+              return false;
+            },
+            mousemove(view, event) {
+              // `mouseover` covers real document nodes. Only track continuous
+              // movement while the root itself owns the pointer (the blank
+              // margin/gutter case), avoiding geometry reads over text.
+              if (event.target !== view.dom) return false;
+              setHoveredPosition(view, headingPositionForTarget(view, event.target, event.clientY));
               return false;
             },
             mouseleave(view) {

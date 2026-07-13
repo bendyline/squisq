@@ -11,7 +11,7 @@ import type {
 import { DIAGRAM_GALLERY_SAMPLE } from './diagramGallerySample';
 
 /**
- * Content zip samples — fetched at runtime, unpacked into a ContentContainer.
+ * Content zip samples -- fetched at runtime, unpacked into a ContentContainer.
  * Each entry maps a sample key to its URL under `/samples/` (served from repo-root samplecontent/).
  */
 export interface ContentSample {
@@ -41,10 +41,10 @@ export const SAMPLE_LABELS: Record<string, string> = {
 
 export const SAMPLES: Record<string, string> = {
   // Single-block fixture for E2E tests that drive the full export
-  // pipeline. Kept intentionally tiny — one block hits the 3-second
+  // pipeline. Kept intentionally tiny -- one block hits the 3-second
   // `minDuration` floor in markdownToDoc, which at 15 fps is ~45
   // frames, so the encode finishes well inside the default Playwright
-  // timeout. Don't add anything that would inflate this — it exists
+  // timeout. Don't add anything that would inflate this -- it exists
   // purely to keep `e2e/video-export.spec.ts` fast.
   'e2e-tiny': `# Tiny\n`,
   // Two visibly different half-second blocks for proving that GIF export
@@ -52,8 +52,8 @@ export const SAMPLES: Record<string, string> = {
   'e2e-gif': `# Blue {duration=0.5}\n\nFirst frame.\n\n# Orange {duration=0.5}\n\nSecond frame.\n`,
   // Task-list fixture for `e2e/task-list.spec.ts`. GFM checkboxes the WYSIWYG
   // editor must render as `<input type="checkbox">` (one unchecked, one
-  // checked). Loaded as a sample — the deterministic way the app ingests
-  // markdown — rather than typed into Monaco, which races the controlled
+  // checked). Loaded as a sample -- the deterministic way the app ingests
+  // markdown -- rather than typed into Monaco, which races the controlled
   // editor's value pipeline (see that test for the history).
   'e2e-tasklist': `# Tasks\n\n- [ ] open task\n- [x] closed task\n`,
   // Used by the timeline e2e: a block with an embedded <video> the timeline
@@ -73,8 +73,8 @@ More text.
 End.
 `,
   // Narrate-mode demo: opens straight into the teleprompter (frontmatter
-  // display-mode) with varied-length spoken prose — short punchy lines and
-  // one long paragraph — to exercise voice pacing, plus a list so list-item
+  // display-mode) with varied-length spoken prose -- short punchy lines and
+  // one long paragraph -- to exercise voice pacing, plus a list so list-item
   // pauses show up. ~200 words keeps the script scrollable but quick to read.
   'teleprompter-demo': `---
 title: Teleprompter Demo
@@ -83,7 +83,7 @@ display-mode: narrate
 
 # Welcome to the Teleprompter
 
-Read this aloud at your own pace. When voice pacing is on, the prompter follows your voice — speed up and it speeds up, pause and it waits for you.
+Read this aloud at your own pace. When voice pacing is on, the prompter follows your voice -- speed up and it speeds up, pause and it waits for you.
 
 Short lines are easy. This one is longer, winding through a few extra clauses so the pacing controller has to keep tracking your syllables across a full breath of continuous reading before you finally reach the period.
 
@@ -108,9 +108,9 @@ Welcome to the **Squisq Editor**. This is a simple markdown document.
 
 Start editing this document in any of the three views:
 
-1. **Raw** — Direct markdown source editing with Monaco
-2. **Editor** — WYSIWYG rich text editing with Tiptap
-3. **Preview** — See how the document maps to blocks
+1. **Raw** -- Direct markdown source editing with Monaco
+2. **Editor** -- WYSIWYG rich text editing with Tiptap
+3. **Preview** -- See how the document maps to blocks
 
 ### Tips
 
@@ -131,17 +131,17 @@ document-render-as: landscape
 
 # About SquigglySquare {[title]}
 
-SquigglySquare — **squisq** for short — turns plain Markdown into designed, animated documents. Write prose the way you always have, annotate a heading with a squiggly-square tag, and get a slide, a video frame, a diagram, or a drawing.
+SquigglySquare -- **squisq** for short -- turns plain Markdown into designed, animated documents. Write prose the way you always have, annotate a heading with a squiggly-square tag, and get a slide, a video frame, a diagram, or a drawing.
 
 ## The Philosophy {[sectionHeader colorScheme=blue]}
 
-Author in the Markdown you already know. Layer on presentation only where it earns its keep. Every tag is optional, reversible, and lossless — delete one and you are left with clean Markdown, never a broken file.
+Author in the Markdown you already know. You can focus on your thoughts; layer on presentation only when you need it. Every tag is optional, reversible, and lossless -- delete one and you are left with clean Markdown, never a broken file.
 
 ## One Document, Three Views {[list colorScheme=teal]}
 
-- **Raw** — the Markdown source, with autocomplete for every tag and parameter
-- **Editor** — WYSIWYG rich-text editing
-- **Play** — the same content rendered as a slideshow or video
+- **Raw** -- the Markdown source, with autocomplete for every tag and parameter
+- **Editor** -- WYSIWYG rich-text editing
+- **Play** -- the same content rendered as a slideshow or video
 
 ## The Anatomy of a Tag {[sectionHeader colorScheme=purple]}
 
@@ -149,11 +149,11 @@ A squiggly-square tag is a trailing annotation on a heading. It has the shape \`
 
 ## Content Comes From Markdown {[factCard]}
 
-You almost never type the content *into* the tag. Write it as ordinary Markdown under the heading — the template reads it. The tag is where design lives — the sampler below shows several block types in action.
+You almost never type the content *into* the tag. Write it as ordinary Markdown under the heading -- the template reads it. The tag is where design lives -- the sampler below shows several block types in action.
 
 ## A Sampler of Block Types {[sectionHeader colorScheme=orange]}
 
-The blocks below are all live — each heading picks a different template. Keep paging through Play mode to see them render.
+The blocks below are all live -- each heading picks a different template. Keep paging through Play mode to see them render.
 
 ### The Big Number {[statHighlight colorScheme=green stat="42%\\*" detail="\\* statistic randomly made up :)"]}
 
@@ -162,19 +162,19 @@ The blocks below are all live — each heading picks a different template. Keep 
 ### A Famous Quote {[quote]}
 
 > "The best way to predict the future is to invent it."
-> — Alan Kay
+> -- Alan Kay
 
 ### Honey Never Spoils {[factCard]}
 
-Archaeologists have found 3,000-year-old honey in Egyptian tombs still perfectly edible — its low moisture and acidic pH make it inhospitable to bacteria.
+Archaeologists have found 3,000-year-old honey in Egyptian tombs still perfectly edible -- its low moisture and acidic pH make it inhospitable to bacteria.
 
 ### East vs. West {[comparisonBar leftLabel="East" leftValue=58 rightLabel="West" rightValue=42 unit="%"]}
 
-Numeric comparisons render as paired bars — great for A/B data at a glance.
+Numeric comparisons render as paired bars -- great for A/B data at a glance.
 
 ### Squisq, Defined {[definitionCard colorScheme=orange]}
 
-**Squisq** — a family of open-source libraries for turning Markdown into designed, animated documents.
+**Squisq** -- a family of open-source libraries for turning Markdown into designed, animated documents.
 
 ### One Sentence, Full Screen {[fullBleedQuote colorScheme=purple]}
 
@@ -182,19 +182,19 @@ Sometimes a single line deserves the whole canvas.
 
 ## Parameters: Style {[sectionHeader colorScheme=green]}
 
-Most templates accept a \`colorScheme\` drawn from the active theme: \`blue\`, \`green\`, \`purple\`, \`red\`, \`orange\`, or \`teal\`. Because the colors come from the theme, your document stays consistent when you switch themes — no hard-coded hex to hunt down.
+Most templates accept a \`colorScheme\` drawn from the active theme: \`blue\`, \`green\`, \`purple\`, \`red\`, \`orange\`, or \`teal\`. Because the colors come from the theme, your document stays consistent when you switch themes -- no hard-coded hex to hunt down.
 
 ## Parameters: Motion {[sectionHeader colorScheme=blue]}
 
-Add a \`transition\` to control how one block gives way to the next: \`transition=fade\`. Pair a \`transitionDirection\` with directional effects — \`transition=push transitionDirection=left\` — and tune the pace with \`transitionDuration=0.7\`. There are dozens of types (fade, push, wipe, zoom, doors, cube, vortex, and more) and eight directions (\`left\`, \`right\`, \`up\`, \`down\`, \`in\`, \`out\`, \`horizontal\`, \`vertical\`).
+Add a \`transition\` to control how one block gives way to the next: \`transition=fade\`. Pair a \`transitionDirection\` with directional effects -- \`transition=push transitionDirection=left\` -- and tune the pace with \`transitionDuration=0.7\`. There are dozens of types (fade, push, wipe, zoom, doors, cube, vortex, and more) and eight directions (\`left\`, \`right\`, \`up\`, \`down\`, \`in\`, \`out\`, \`horizontal\`, \`vertical\`).
 
 ## A Gentle Fade {[quote transition=fade transitionDuration=0.8]}
 
-> "This block was tagged transition=fade — it dissolves into view."
+> "This block was tagged transition=fade -- it dissolves into view."
 
 ## Pushes In From the Left {[factCard transition=push transitionDirection=left]}
 
-And this one used \`transition=push transitionDirection=left\` — watch the edge as it enters.
+And this one used \`transition=push transitionDirection=left\` -- watch the edge as it enters.
 
 ## Arrives With a Vortex {[fullBleedQuote colorScheme=teal transition=vortex]}
 
@@ -206,7 +206,7 @@ In video mode every block sits on a clock. \`startTime=1:30\` pins when a block 
 
 ## Inline Icons {[factCard]}
 
-A FontAwesome name inside a squiggly-square becomes an icon right in your prose: {[rocket]} {[paintbrush]} {[wand-magic-sparkles]} {[github]} {[youtube]}. Qualify a name that lives in two styles — \`{[fa-solid:star]}\` — and unknown or ambiguous names stay as plain text, so writing \`{[notathing]}\` is never swallowed.
+A FontAwesome name inside a squiggly-square becomes an icon right in your prose: {[rocket]} {[paintbrush]} {[wand-magic-sparkles]} {[github]} {[youtube]}. Qualify a name that lives in two styles -- \`{[fa-solid:star]}\` -- and unknown or ambiguous names stay as plain text, so writing \`{[notathing]}\` is never swallowed.
 
 ## Diagrams From Headings {[factCard]}
 
@@ -217,7 +217,7 @@ A few tags turn **child** headings into parts. Under \`{[diagram]}\`, each \`###
 - Start in Markdown; add tags only where design matters
 - Let the heading and body carry content; let the tag carry style
 - Prefer \`colorScheme\` over hard-coded colors so themes stay in control
-- Use transitions sparingly — motion should guide the eye, not fight for it
+- Use transitions sparingly -- motion should guide the eye, not fight for it
 - Keep every tag reversible: strip them all and you still have a clean document
 
 ## Author once. Render everywhere. {[fullBleedQuote colorScheme=blue]}
@@ -401,16 +401,16 @@ A showcase of every built-in template.
 
 ## Section One {[sectionHeader colorScheme=blue]}
 
-This is a section header — great for dividing a document into chapters.
+This is a section header -- great for dividing a document into chapters.
 
 ## The Big Number {[statHighlight colorScheme=green]}
 
-**42%** — The percentage of developers who prefer visual block editors over raw markup.
+**42%** -- The percentage of developers who prefer visual block editors over raw markup.
 
 ## A Famous Quote {[quote]}
 
 > "The best way to predict the future is to invent it."
-> — Alan Kay
+> -- Alan Kay
 
 ## Did You Know? {[factCard]}
 
@@ -422,7 +422,7 @@ This is a section header — great for dividing a document into chapters.
 
 ## A Pivotal Moment {[dateEvent mood=celebratory]}
 
-**July 20, 1969** — Humanity set foot on the Moon for the first time when Apollo 11 landed in the Sea of Tranquility.
+**July 20, 1969** -- Humanity set foot on the Moon for the first time when Apollo 11 landed in the Sea of Tranquility.
 
 ## Photo Showcase {[imageWithCaption imageSrc="https://picsum.photos/seed/squisq/800/600" imageAlt="Sample landscape" caption="A beautiful landscape photograph"]}
 
@@ -450,7 +450,7 @@ A grid layout for showcasing multiple images side by side.
 
 ## Vocabulary {[definitionCard colorScheme=orange]}
 
-**Squisq** — A family of open-source libraries for document rendering, spatial utilities, and format conversion.
+**Squisq** -- A family of open-source libraries for document rendering, spatial utilities, and format conversion.
 
 ## East vs West {[comparisonBar leftLabel="East Coast" leftValue=58 rightLabel="West Coast" rightValue=42 unit="%"]}
 
@@ -459,7 +459,7 @@ Regional comparison shown as a horizontal bar, perfect for A/B data.
 ## Highlighted Passage {[pullQuote]}
 
 > "Simplicity is the ultimate sophistication."
-> — Leonardo da Vinci
+> -- Leonardo da Vinci
 
 ## Video Clip {[videoWithCaption videoSrc="https://example.com/sample.mp4" videoAlt="Demo video" clipStart=0 clipEnd=10 caption="A short demonstration"]}
 
@@ -500,7 +500,7 @@ Regular body content continues here.
 `,
   'diagram-architecture': `# Architecture Sketch
 
-A node diagram with typed connections — labels ride the lines, either embedded (\`── reads ──\`) or beside a vertical (\`│ dispatches\`).
+A node diagram with typed connections -- labels ride the lines, either embedded (\`── reads ──\`) or beside a vertical (\`│ dispatches\`).
 
 ## System Overview
 
@@ -527,7 +527,7 @@ A node diagram with typed connections — labels ride the lines, either embedded
 `,
   'diagram-nested-cluster': `# Nested Containers
 
-A box drawn around other boxes becomes a container — it groups its children on the canvas and survives round-trips as a surrounding box (the kind of diagram AI assistants emit).
+A box drawn around other boxes becomes a container -- it groups its children on the canvas and survives round-trips as a surrounding box (the kind of diagram AI assistants emit).
 
 ## Inference Fleet
 
@@ -549,7 +549,7 @@ A box drawn around other boxes becomes a container — it groups its children on
   'diagram-gallery': DIAGRAM_GALLERY_SAMPLE,
   'tree-project-scaffold': `# Project Scaffold
 
-An ASCII file tree renders as an interactive filesystem treeview — edit it as an outline (add / rename / indent / move / delete items); the fence stays the source of truth.
+An ASCII file tree renders as an interactive filesystem treeview -- edit it as an outline (add / rename / indent / move / delete items); the fence stays the source of truth.
 
 ## Source Layout
 
@@ -569,7 +569,7 @@ my-app/
 `,
   'tree-gallery': `# Tree Gallery
 
-A cross-section of AI-style trees — each fence renders as an interactive filesystem-style treeview.
+A cross-section of AI-style trees -- each fence renders as an interactive filesystem-style treeview.
 
 ## File Tree
 
@@ -610,7 +610,7 @@ Animals
 `,
   'diagram-legacy-headings': `# Legacy Heading Diagram
 
-The pre-ASCII heading syntax (\`{[diagram]}\` + child headings with \`x=\`/\`y=\`/\`connectsTo=\`) still renders in the preview/player, but has no canvas editor — new diagrams are authored as ASCII fences.
+The pre-ASCII heading syntax (\`{[diagram]}\` + child headings with \`x=\`/\`y=\`/\`connectsTo=\`) still renders in the preview/player, but has no canvas editor -- new diagrams are authored as ASCII fences.
 
 ## System Overview {[diagram]}
 
@@ -622,7 +622,7 @@ The pre-ASCII heading syntax (\`{[diagram]}\` + child headings with \`x=\`/\`y=\
 `,
   'diagram-broken': `# Broken Diagram (Repair Demo)
 
-Real-world ASCII architecture art is often *half-broken* — here a rename widened the labels past their boxes, so the columns desync row-to-row and no clean diagram can be parsed. Squisq renders it faithfully as a code block and offers a **⟳ Repair as diagram** button that reconstructs a clean, editable diagram.
+Real-world ASCII architecture art is often *half-broken* -- here a rename widened the labels past their boxes, so the columns desync row-to-row and no clean diagram can be parsed. Squisq renders it faithfully as a code block and offers a **⟳ Repair as diagram** button that reconstructs a clean, editable diagram.
 
 \`\`\`
 ┌──────────────┐   ┌──────────────┐   ┌──────────────┐
@@ -668,14 +668,14 @@ Regular body content continues here.
   // v1.5 "inline everything": every `{[…]}` param below is authored as a
   // plain string and coerced to the template's typed input at parse time
   // (numbers, `lat,lng` pairs, `label|sublabel` pairs). The map's markers
-  // — an array of objects, which the yaml subset can't express — ride in a
+  // -- an array of objects, which the yaml subset can't express -- ride in a
   // ```json data fence. The statHighlight is a STANDALONE annotation: a
   // paragraph that is nothing but `{[…]}`, so it becomes its own block with
   // no heading.
   'inline-everything': `# Inline Everything
 
 Everything on this page is authored with inline, string-valued annotation
-params — no JSON hand-editing required. The parser coerces each one to the
+params -- no JSON hand-editing required. The parser coerces each one to the
 template's typed shape.
 
 ## Find Us {[map center="47.6,-122.3" zoom=11]}
@@ -691,7 +691,7 @@ template's typed shape.
 
 ## Two Ways to Brew {[twoColumn left="Espresso|Bold & rich" right="Filter|Bright & clean"]}
 
-Same beans, two extractions — the \`left\`/\`right\` params coerce from
+Same beans, two extractions -- the \`left\`/\`right\` params coerce from
 \`label|sublabel\` strings into the column objects the template expects.
 
 {[statHighlight colorScheme=green stat="98%" description="of params need no JSON"]}
@@ -745,7 +745,7 @@ function buildCustomTemplateDemo(): string {
   const heroDef: CustomTemplateDefinition = {
     name: 'hero',
     label: 'Hero Section',
-    description: 'Large title with body below — uses {title} and {content}.',
+    description: 'Large title with body below -- uses {title} and {content}.',
     viewport: { width: 1920, height: 1080 },
     layers: heroLayers,
   };
@@ -779,9 +779,9 @@ your doc can use them. No more copy-pasting positions across slides.
 /**
  * Build a markdown doc whose \`gallery\` custom template exercises the
  * v1.5 token additions:
- *   - \`{attr:key|default}\` — reads a per-block annotation attribute
+ *   - \`{attr:key|default}\` -- reads a per-block annotation attribute
  *     (\`{[gallery subtitle="…"]}\`), falling back to the pipe default.
- *   - a \`repeat\` layer — cloned once per image in the block body, laid
+ *   - a \`repeat\` layer -- cloned once per image in the block body, laid
  *     out in a row, resolving per-item \`{item:src}\` / \`{item}\` tokens.
  */
 function buildGalleryTemplateDemo(): string {
@@ -818,7 +818,7 @@ function buildGalleryTemplateDemo(): string {
   const galleryDef: CustomTemplateDefinition = {
     name: 'gallery',
     label: 'Image Gallery',
-    description: 'Title + subtitle over a row of thumbnails — uses {attr:…} and a repeat layer.',
+    description: 'Title + subtitle over a row of thumbnails -- uses {attr:…} and a repeat layer.',
     viewport: { width: 1920, height: 1080 },
     layers: galleryLayers,
   };
@@ -842,7 +842,7 @@ thumbnail per image in the block body via a \`repeat\` layer.
 
 ## Studio Work {[gallery]}
 
-No \`subtitle\` here — the template falls back to its default label.
+No \`subtitle\` here -- the template falls back to its default label.
 
 ![Piece one](https://picsum.photos/seed/art1/600/800)
 ![Piece two](https://picsum.photos/seed/art2/600/800)

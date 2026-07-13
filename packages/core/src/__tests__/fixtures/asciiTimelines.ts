@@ -17,3 +17,19 @@ export const MULTI_TRACK_BRANCH_TIMELINE = [
 
 /** Sparse ASCII form: only an explicit `timeline` fence should claim it. */
 export const SINGLE_POINT_ASCII_TIMELINE = 'Release: *---- Alpha {#alpha} ---->';
+
+/** Multi-lane AI-authored flow with a right-edge error return. */
+export const WRAPPED_CLIENT_KERNEL_TIMELINE = `  CLIENT (main thread)                          KERNEL (Web Worker / Node)
+  ────────────────────                          ──────────────────────────
+  input events ──► InputMap ──► command ───────►  validate (schema)
+                                                  ├─ invalid → command-rejected event ─┐
+                                                  └─ valid → queue at tick T           │
+                                                                                       │
+                                                  tick T: phases                       │
+                                                  commands → update → physics → late   │
+                                                                                       │
+  interpolation buffer ◄── delta {tick T} ◄────── dirty-tracked per-tick delta         │
+  (render ~1.5 ticks                                                                   │
+   behind, lerp/slerp)  ◄── keyframe ◄─────────── every 60 ticks + on demand           │
+                                                                                       │
+  error surfaced to user/agent ◄───────────────────────────────────────────────────────┘`;

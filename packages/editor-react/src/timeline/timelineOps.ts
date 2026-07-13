@@ -187,8 +187,22 @@ export function updateTimelineEventOp(
   const events = location.track.events
     .map((event) => (event.id === eventId ? nextEvent : event))
     .sort((left, right) => left.column - right.column || left.id.localeCompare(right.id));
+  // A point authored exactly on a track boundary anchors that edge. Let the
+  // old scale remain stable throughout a drag preview, then move/reassign the
+  // boundary in the single drop transaction. Crossing the next point hands
+  // the edge to that point; moving any point outside a shorter track expands
+  // the track so every marker remains inside its authored bounds.
+  const movedPosition = hasPosition && nextEvent.column !== location.event.column;
+  const anchoredStart =
+    movedPosition && Math.abs(location.event.column - location.track.startColumn) <= COLUMN_EPSILON;
+  const anchoredEnd =
+    movedPosition && Math.abs(location.event.column - location.track.endColumn) <= COLUMN_EPSILON;
+  const eventStart = Math.min(...events.map((event) => event.column));
+  const eventEnd = Math.max(...events.map((event) => event.column));
+  const startColumn = anchoredStart ? eventStart : Math.min(location.track.startColumn, eventStart);
+  const endColumn = anchoredEnd ? eventEnd : Math.max(location.track.endColumn, eventEnd);
   const tracks = timeline.tracks.map((track) =>
-    track.id === location.track.id ? { ...track, events } : track,
+    track.id === location.track.id ? { ...track, startColumn, endColumn, events } : track,
   );
   const style = patch.marker === 'diamond' ? 'unicode' : timeline.style;
   return { ...timeline, tracks, style };

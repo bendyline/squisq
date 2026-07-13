@@ -48,7 +48,7 @@ function renderViewMenu({
 }
 
 describe('ViewMenuPanel block-tag visibility', () => {
-  it('offers the three visibility choices and defaults to Always show', () => {
+  it('offers the three visibility choices and defaults to the selected/hovered block', () => {
     const group = renderViewMenu();
 
     const items = within(group).getAllByRole('menuitemradio');
@@ -59,15 +59,18 @@ describe('ViewMenuPanel block-tag visibility', () => {
     ]);
     expect(
       within(group)
-        .getByRole('menuitemradio', { name: 'Always show' })
+        .getByRole('menuitemradio', { name: 'Selected/hovered block' })
         .getAttribute('aria-checked'),
     ).toBe('true');
-    expect(screen.getByTestId('block-tag-visibility').textContent).toBe('always');
+    expect(screen.getByTestId('block-tag-visibility').textContent).toBe('active');
   });
 
   it('switches to active and none and emits both new and legacy preferences', () => {
     const onViewPreferencesChange = vi.fn<(preferences: ViewPreferences) => void>();
     const group = renderViewMenu({ onViewPreferencesChange });
+
+    fireEvent.click(within(group).getByRole('menuitemradio', { name: 'Always show' }));
+    expect(screen.getByTestId('block-tag-visibility').textContent).toBe('always');
 
     fireEvent.click(within(group).getByRole('menuitemradio', { name: 'Selected/hovered block' }));
     expect(screen.getByTestId('block-tag-visibility').textContent).toBe('active');
@@ -95,6 +98,17 @@ describe('ViewMenuPanel block-tag visibility', () => {
     expect(
       within(group)
         .getByRole('menuitemradio', { name: 'No inline block tags' })
+        .getAttribute('aria-checked'),
+    ).toBe('true');
+  });
+
+  it('maps the legacy blockTags={true} prop to always show', () => {
+    const group = renderViewMenu({ blockTags: true });
+
+    expect(screen.getByTestId('block-tag-visibility').textContent).toBe('always');
+    expect(
+      within(group)
+        .getByRole('menuitemradio', { name: 'Always show' })
         .getAttribute('aria-checked'),
     ).toBe('true');
   });

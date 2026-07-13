@@ -24,10 +24,12 @@ async function loadCustomTemplateSample(page: Page) {
 
 async function openTemplatePickerForFirstHeading(page: Page): Promise<void> {
   const editor = page.locator('.tiptap.ProseMirror');
+  const firstHeading = editor.locator('h1, h2, h3, h4, h5, h6').first();
   // Click the template badge on the first heading (the doc's "# Custom
-  // Templates Demo" title). Badge is a span with role=button — clicking
-  // it opens the picker popover.
-  const firstBadge = editor.locator('.squisq-template-badge').first();
+  // Templates Demo" title). Block tags default to active-only visibility,
+  // so select the heading before using its badge.
+  await firstHeading.click({ position: { x: 8, y: 8 } });
+  const firstBadge = firstHeading.locator('.squisq-template-badge').first();
   await firstBadge.waitFor({ state: 'visible' });
   await firstBadge.click();
   await page.locator('[data-squisq-template-gallery-portal]').waitFor({ state: 'visible' });

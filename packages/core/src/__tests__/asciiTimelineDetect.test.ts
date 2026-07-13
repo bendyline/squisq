@@ -4,6 +4,8 @@ import {
   isAsciiTimelineFence,
   isEligibleAsciiTimelineFenceLang,
   isExplicitTimelineLang,
+  renderAsciiTimeline,
+  type AsciiTimeline,
 } from '../doc/asciiTimeline/index.js';
 import { detectAsciiDiagram } from '../doc/asciiDiagram/index.js';
 import { detectTree } from '../doc/treeview/index.js';
@@ -12,6 +14,7 @@ import {
   MULTI_TRACK_BRANCH_TIMELINE,
   SINGLE_POINT_ASCII_TIMELINE,
   TICK_INTERPOLATION_TIMELINE,
+  WRAPPED_CLIENT_KERNEL_TIMELINE,
 } from './fixtures/asciiTimelines.js';
 
 describe('detectAsciiTimeline', () => {
@@ -29,6 +32,17 @@ describe('detectAsciiTimeline', () => {
     expect(detection.timeline?.links).toEqual([
       { source: 't29', target: 'f29', label: 'interpolation path' },
     ]);
+  });
+
+  it('conservatively recognizes a multi-lane flow with a wrapped return edge', () => {
+    const detection = detectAsciiTimeline(WRAPPED_CLIENT_KERNEL_TIMELINE);
+    expect(detection.isTimeline).toBe(true);
+    expect(detection.reasons).toContain('wrapped-flow');
+    expect(detection.timeline?.tracks).toHaveLength(2);
+    expect(detectAsciiDiagram(WRAPPED_CLIENT_KERNEL_TIMELINE).isDiagram).toBe(false);
+
+    const withoutReturn = WRAPPED_CLIENT_KERNEL_TIMELINE.replace(/┐/gu, '│').replace(/┘/gu, '│');
+    expect(detectAsciiTimeline(withoutReturn).isTimeline).toBe(false);
   });
 
   it('only accepts a sparse ASCII track when author intent is explicit', () => {
@@ -110,5 +124,34 @@ describe('detectAsciiTimeline', () => {
       isTimeline: false,
       reasons: [expect.stringMatching(/^too-wide\(/)],
     });
+  });
+
+  it('allows long canonical callout form while retaining the ordinary line cap', () => {
+    const timeline: AsciiTimeline = {
+      tracks: Array.from({ length: 150 }, (_, index) => ({
+        id: `track-${index}`,
+        label: `Track ${index}`,
+        row: index,
+        startColumn: 0,
+        endColumn: 10,
+        events: [
+          { id: `start-${index}`, label: 'Start', column: 0, side: 'above' as const },
+          { id: `end-${index}`, label: 'End', column: 10, side: 'below' as const },
+        ],
+      })),
+      links: [],
+      width: 11,
+      height: 150,
+      style: 'unicode',
+      warnings: [],
+    };
+    const canonical = renderAsciiTimeline(timeline);
+    expect(canonical.split('\n').length).toBeGreaterThan(400);
+    expect(detectAsciiTimeline(canonical, { explicit: true }).isTimeline).toBe(true);
+
+    const arbitrary = Array.from({ length: 401 }, () => '●────────●').join('\n');
+    expect(detectAsciiTimeline(arbitrary, { explicit: true }).reasons[0]).toMatch(
+      /^too-many-lines\(/,
+    );
   });
 });

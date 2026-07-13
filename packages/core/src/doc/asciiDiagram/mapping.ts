@@ -7,10 +7,20 @@
  * (cluster-based schemes flap under small moves and churn the art).
  */
 
-import type { DiagramTemplateEdge, DiagramTemplateNode } from '../../schemas/BlockTemplates.js';
+import type {
+  DiagramEdgeAnchor,
+  DiagramTemplateEdge,
+  DiagramTemplateNode,
+} from '../../schemas/BlockTemplates.js';
 import type { Block } from '../../schemas/Doc.js';
 import { computeDiagramLayout } from '../templates/diagramLayout.js';
-import { ASCII_CHAR_H, ASCII_CHAR_W, type AsciiDiagram, type AsciiDiagramNode } from './types.js';
+import {
+  ASCII_CHAR_H,
+  ASCII_CHAR_W,
+  type AsciiDiagram,
+  type AsciiDiagramEdge,
+  type AsciiDiagramNode,
+} from './types.js';
 
 export function asciiCellToCanvas(col: number, row: number): { x: number; y: number } {
   return { x: col * ASCII_CHAR_W, y: row * ASCII_CHAR_H };
@@ -36,13 +46,113 @@ export function asciiDiagramToTemplateData(diagram: AsciiDiagram): {
     h: n.hRows * ASCII_CHAR_H,
     ...(n.containerId ? { container: n.containerId } : {}),
   }));
-  const edges: DiagramTemplateEdge[] = diagram.edges.map((e) => ({
+  const anchors = inferEdgeAnchors(nodes, diagram.edges);
+  const edges: DiagramTemplateEdge[] = diagram.edges.map((e, index) => ({
     source: e.source,
     target: e.target,
     ...(e.label ? { label: e.label } : {}),
     ...(e.directed ? {} : { directed: false }),
+    ...anchors[index],
+    routing: 'orthogonal',
   }));
   return { nodes, edges };
+}
+
+interface EdgeAnchorPair {
+  sourceAnchor: DiagramEdgeAnchor;
+  targetAnchor: DiagramEdgeAnchor;
+}
+
+/**
+ * Recover the visual intent carried by orthogonal ASCII art. Fan-out ports
+ * spread across the source face; fan-in ports spread across the target face.
+ * A single endpoint stays centered on its facing side.
+ */
+function inferEdgeAnchors(
+  nodes: readonly DiagramTemplateNode[],
+  edges: readonly AsciiDiagramEdge[],
+): EdgeAnchorPair[] {
+  const nodeById = new Map(nodes.map((node) => [node.id, node]));
+  const pairs = edges.map((edge) => {
+    const source = nodeById.get(edge.source);
+    const target = nodeById.get(edge.target);
+    if (!source || !target) {
+      return {
+        sourceAnchor: { side: 'right' as const, offset: 0.5 },
+        targetAnchor: { side: 'left' as const, offset: 0.5 },
+      };
+    }
+    const sourceW = source.w ?? ASCII_CHAR_W * 12;
+    const sourceH = source.h ?? ASCII_CHAR_H * 3;
+    const targetW = target.w ?? ASCII_CHAR_W * 12;
+    const targetH = target.h ?? ASCII_CHAR_H * 3;
+    const dx = target.x + targetW / 2 - (source.x + sourceW / 2);
+    const dy = target.y + targetH / 2 - (source.y + sourceH / 2);
+    const horizontalDistance = Math.abs(dx) / Math.max(1, (sourceW + targetW) / 2);
+    const verticalDistance = Math.abs(dy) / Math.max(1, (sourceH + targetH) / 2);
+    if (verticalDistance >= horizontalDistance) {
+      return dy >= 0
+        ? {
+            sourceAnchor: { side: 'bottom' as const, offset: 0.5 },
+            targetAnchor: { side: 'top' as const, offset: 0.5 },
+          }
+        : {
+            sourceAnchor: { side: 'top' as const, offset: 0.5 },
+            targetAnchor: { side: 'bottom' as const, offset: 0.5 },
+          };
+    }
+    return dx >= 0
+      ? {
+          sourceAnchor: { side: 'right' as const, offset: 0.5 },
+          targetAnchor: { side: 'left' as const, offset: 0.5 },
+        }
+      : {
+          sourceAnchor: { side: 'left' as const, offset: 0.5 },
+          targetAnchor: { side: 'right' as const, offset: 0.5 },
+        };
+  });
+
+  distributeOffsets(pairs, edges, nodes, 'source');
+  distributeOffsets(pairs, edges, nodes, 'target');
+  return pairs;
+}
+
+function distributeOffsets(
+  pairs: EdgeAnchorPair[],
+  edges: readonly AsciiDiagramEdge[],
+  nodes: readonly DiagramTemplateNode[],
+  endpoint: 'source' | 'target',
+): void {
+  const nodeById = new Map(nodes.map((node) => [node.id, node]));
+  const groups = new Map<string, number[]>();
+  for (let index = 0; index < edges.length; index++) {
+    const edge = edges[index];
+    const anchor = endpoint === 'source' ? pairs[index].sourceAnchor : pairs[index].targetAnchor;
+    const nodeId = endpoint === 'source' ? edge.source : edge.target;
+    const key = `${nodeId}:${anchor.side}`;
+    const group = groups.get(key) ?? [];
+    group.push(index);
+    groups.set(key, group);
+  }
+  for (const indexes of groups.values()) {
+    if (indexes.length < 2) continue;
+    const side =
+      endpoint === 'source'
+        ? pairs[indexes[0]].sourceAnchor.side
+        : pairs[indexes[0]].targetAnchor.side;
+    indexes.sort((a, b) => {
+      const oppositeA = nodeById.get(endpoint === 'source' ? edges[a].target : edges[a].source);
+      const oppositeB = nodeById.get(endpoint === 'source' ? edges[b].target : edges[b].source);
+      const axisA = side === 'top' || side === 'bottom' ? (oppositeA?.x ?? 0) : (oppositeA?.y ?? 0);
+      const axisB = side === 'top' || side === 'bottom' ? (oppositeB?.x ?? 0) : (oppositeB?.y ?? 0);
+      return axisA - axisB || a - b;
+    });
+    indexes.forEach((edgeIndex, rank) => {
+      const anchor =
+        endpoint === 'source' ? pairs[edgeIndex].sourceAnchor : pairs[edgeIndex].targetAnchor;
+      anchor.offset = (rank + 1) / (indexes.length + 1);
+    });
+  }
 }
 
 /** Template/canvas model → grid model, quantizing positions and sizes. */

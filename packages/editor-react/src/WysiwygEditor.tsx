@@ -455,6 +455,16 @@ export function WysiwygEditor({
     templateParams: string | null;
   } | null>(null);
 
+  const closeBadgeMenu = useCallback(() => {
+    setBadgeMenu(null);
+    // The portaled gallery moves focus into its search field. Restore the
+    // document's preserved ProseMirror selection after React has unmounted the
+    // dialog, so the caret resumes blinking where the author left it.
+    requestAnimationFrame(() => {
+      if (editor && !editor.isDestroyed) editor.commands.focus();
+    });
+  }, [editor]);
+
   useEffect(() => {
     if (!editor) return;
     const root = containerRef.current;
@@ -649,7 +659,7 @@ export function WysiwygEditor({
               });
               editor.view.dispatch(tr);
             }}
-            onClose={() => setBadgeMenu(null)}
+            onClose={closeBadgeMenu}
           />
         )}
         {propsMenu && (

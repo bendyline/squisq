@@ -1,6 +1,6 @@
 import { Editor } from '@tiptap/core';
 import StarterKit from '@tiptap/starter-kit';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   BlockTagActivityExtension,
   BLOCK_TAG_HOVERED_CLASS,
@@ -125,6 +125,59 @@ describe('block-tag activity', () => {
     expect(firstHeading.classList.contains(BLOCK_TAG_HOVERED_CLASS)).toBe(true);
     expect(firstHeading.classList.contains(BLOCK_TAG_SELECTED_CLASS)).toBe(false);
     expect(secondHeading.classList.contains(BLOCK_TAG_SELECTED_CLASS)).toBe(true);
+    expect(secondHeading.classList.contains(BLOCK_TAG_HOVERED_CLASS)).toBe(false);
+  });
+
+  it('keeps the owning block hovered across blank space between its nodes', async () => {
+    const editor = makeEditor();
+    await waitForDomReconciliation();
+
+    const [firstHeading, secondHeading] = headings(editor);
+    const topLevelChildren = Array.from(editor.view.dom.children);
+    const firstHeadingIndex = topLevelChildren.indexOf(firstHeading);
+    const secondHeadingIndex = topLevelChildren.indexOf(secondHeading);
+
+    topLevelChildren.forEach((element, index) => {
+      const top =
+        index < secondHeadingIndex
+          ? 10 + (index - firstHeadingIndex) * 25
+          : 120 + (index - secondHeadingIndex) * 25;
+      vi.spyOn(element, 'getBoundingClientRect').mockReturnValue({
+        top,
+        bottom: top + 18,
+      } as DOMRect);
+    });
+
+    editor.view.dom.dispatchEvent(new MouseEvent('mousemove', { bubbles: true, clientY: 105 }));
+    await waitForDomReconciliation();
+
+    expect(firstHeading.classList.contains(BLOCK_TAG_HOVERED_CLASS)).toBe(true);
+    expect(secondHeading.classList.contains(BLOCK_TAG_HOVERED_CLASS)).toBe(false);
+
+    editor.view.dom.dispatchEvent(new MouseEvent('mousemove', { bubbles: true, clientY: 145 }));
+    await waitForDomReconciliation();
+
+    expect(firstHeading.classList.contains(BLOCK_TAG_HOVERED_CLASS)).toBe(false);
+    expect(secondHeading.classList.contains(BLOCK_TAG_HOVERED_CLASS)).toBe(true);
+  });
+
+  it('clears block hover below the final content node', async () => {
+    const editor = makeEditor();
+    await waitForDomReconciliation();
+
+    const [, secondHeading] = headings(editor);
+    const topLevelChildren = Array.from(editor.view.dom.children);
+    topLevelChildren.forEach((element, index) => {
+      const top = index * 25;
+      vi.spyOn(element, 'getBoundingClientRect').mockReturnValue({
+        top,
+        bottom: top + 18,
+      } as DOMRect);
+    });
+
+    editor.view.dom.dispatchEvent(new MouseEvent('mousemove', { bubbles: true, clientY: 1000 }));
+    await waitForDomReconciliation();
+
     expect(secondHeading.classList.contains(BLOCK_TAG_HOVERED_CLASS)).toBe(false);
   });
 });

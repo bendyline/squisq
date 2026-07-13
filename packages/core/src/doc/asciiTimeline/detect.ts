@@ -15,6 +15,7 @@ export const ASCII_TIMELINE_FENCE_LANGS: ReadonlySet<string> = new Set([
 ]);
 
 const MAX_LINES = 400;
+const MAX_CANONICAL_LINES = 2000;
 const MAX_COLS = 400;
 const MAX_EXPLICIT_COLS = 4096;
 const BOX_TOP_EDGE_RE = /[┌┏╔╭].*[┐┓╗╮]/u;
@@ -41,7 +42,17 @@ export function detectAsciiTimeline(
 ): AsciiTimelineDetection {
   const explicit = options.explicit === true;
   const lines = text.replace(/\r\n?/g, '\n').split('\n');
-  if (lines.length > MAX_LINES) {
+  const canonicalTrackRows = lines.filter((line) => CANONICAL_TRACK_RE.test(line)).length;
+  const canonicalLineBudget = Math.min(
+    MAX_CANONICAL_LINES,
+    canonicalTrackRows * 6 +
+      lines.filter((line) => /^\s*(?:branch|link)\s*:/iu.test(line)).length +
+      2,
+  );
+  if (
+    lines.length > MAX_LINES &&
+    (canonicalTrackRows === 0 || lines.length > canonicalLineBudget)
+  ) {
     return { isTimeline: false, reasons: [`too-many-lines(${lines.length})`] };
   }
   const maxCols = Math.max(0, ...lines.map((line) => Array.from(line).length));
@@ -49,7 +60,7 @@ export function detectAsciiTimeline(
   // row. Permit that high-confidence form up to the explicit-fence cap while
   // retaining the conservative 400-column limit for arbitrary untagged art.
   const canonicalLongForm =
-    lines.some((line) => CANONICAL_TRACK_RE.test(line)) &&
+    canonicalTrackRows > 0 &&
     lines.every((line) => Array.from(line).length <= MAX_COLS || CANONICAL_TRACK_RE.test(line));
   const maxAllowedCols = explicit || canonicalLongForm ? MAX_EXPLICIT_COLS : MAX_COLS;
   if (maxCols > maxAllowedCols) {
@@ -87,6 +98,13 @@ export function detectAsciiTimeline(
   }
 
   const { timeline, stats } = parseAsciiTimelineWithStats(text);
+  if (stats.wrappedFlow) {
+    return {
+      isTimeline: true,
+      timeline,
+      reasons: [`tracks(${stats.axisLines})`, `events(${stats.markerCount})`, 'wrapped-flow'],
+    };
+  }
   if (stats.axisLines === 0) return { isTimeline: false, reasons: ['no-axis-lines'] };
   const explicitCadence = explicit && stats.horizontalChars === 0 && stats.markerCount >= 4;
   if (!explicitCadence && stats.horizontalChars < (explicit ? 2 : 8)) {

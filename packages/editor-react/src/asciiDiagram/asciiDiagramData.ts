@@ -11,6 +11,7 @@ import { useEffect, useMemo, useState } from 'react';
 import type { Editor } from '@tiptap/react';
 import {
   asciiCellToCanvas,
+  asciiDiagramToTemplateData,
   ASCII_CHAR_H,
   ASCII_CHAR_W,
   type AsciiDiagram,
@@ -60,12 +61,20 @@ export function asciiDiagramToCanvas(
     height: n.hRows * ASCII_CHAR_H,
     ...(containerIds.has(n.id) ? { kind: 'container' as const } : {}),
   }));
-  const edges: DiagramEdge[] = diagram.edges.map((e) => ({
+  const templateEdges = asciiDiagramToTemplateData(diagram).edges;
+  const edges: DiagramEdge[] = diagram.edges.map((e, index) => ({
     id: e.label ? `${e.source}->${e.target}:${e.label}` : `${e.source}->${e.target}`,
     source: e.source,
     target: e.target,
     ...(e.label ? { label: e.label } : {}),
     ...(e.directed ? {} : { directed: false }),
+    ...(templateEdges[index]?.sourceAnchor
+      ? { sourceAnchor: templateEdges[index].sourceAnchor }
+      : {}),
+    ...(templateEdges[index]?.targetAnchor
+      ? { targetAnchor: templateEdges[index].targetAnchor }
+      : {}),
+    ...(templateEdges[index]?.routing ? { routing: templateEdges[index].routing } : {}),
   }));
   return { nodes, edges };
 }

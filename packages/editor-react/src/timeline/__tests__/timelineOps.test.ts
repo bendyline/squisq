@@ -134,7 +134,27 @@ describe('timeline editor pure operations', () => {
       marker: 'diamond',
     });
     expect(next.links[0]).toMatchObject({ source: 'start', target: 'frame' });
+    expect(next.tracks[0].startColumn).toBe(46);
     expectFixpoint(next);
+  });
+
+  it('resets track bounds after dropping a point that anchored an edge', () => {
+    const timeline = makeTimeline();
+
+    const movedStart = updateTimelineEventOp(timeline, 'start', { position: 0.3 });
+    expect(event(movedStart, 'start')?.column).toBe(37);
+    expect(movedStart.tracks[0]).toMatchObject({ startColumn: 37, endColumn: 70 });
+
+    const crossedStart = updateTimelineEventOp(timeline, 'start', { position: 0.8 });
+    expect(crossedStart.tracks[0].events.map((point) => point.id)).toEqual(['review', 'start']);
+    expect(crossedStart.tracks[0]).toMatchObject({ startColumn: 55, endColumn: 82 });
+
+    const movedEnd = updateTimelineEventOp(timeline, 'paint', { position: 0.7 });
+    expect(event(movedEnd, 'paint')?.column).toBe(73);
+    expect(movedEnd.tracks[1]).toMatchObject({ startColumn: 20, endColumn: 73 });
+    expectFixpoint(movedStart);
+    expectFixpoint(crossedStart);
+    expectFixpoint(movedEnd);
   });
 
   it('promotes an edited cadence point to a visible callout and can clear its description', () => {

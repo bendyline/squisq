@@ -1710,16 +1710,20 @@
 }
 
 /* In active mode the selection and pointer classes are independent, so tags
- * can be visible on two heading-defined blocks at once. */
+ * can be visible on two heading-defined blocks at once. Gate both on the
+ * ProseMirror focus class: the document keeps its selection after blur, but a
+ * non-blinking caret should not leave that remembered block's tags behind. */
 .squisq-wysiwyg-container[data-block-tags='active'] .squisq-template-badge,
 .squisq-wysiwyg-container[data-block-tags='active'] .squisq-props-badge {
   display: none;
 }
 
 .squisq-wysiwyg-container[data-block-tags='active']
+  .squisq-wysiwyg-editor.ProseMirror-focused
   :is(.squisq-block-tags--selected, .squisq-block-tags--hovered)
   > .squisq-template-badge,
 .squisq-wysiwyg-container[data-block-tags='active']
+  .squisq-wysiwyg-editor.ProseMirror-focused
   :is(.squisq-block-tags--selected, .squisq-block-tags--hovered)
   > .squisq-props-badge {
   display: inline-flex;
@@ -2019,10 +2023,14 @@
 }
 .squisq-wysiwyg-editor h2 {
   font-size: 1.5em;
-  margin: 0.65em 0 0.35em;
+  margin: 0.8em 0 0.25em;
 }
 .squisq-wysiwyg-editor h3 {
   font-size: 1.17em;
+  /* The inline template/property controls are 22–23px tall. Reserve their
+     line-box height while they are hidden so active-mode hover does not make
+     an H3 (and the content below it) jump by a pixel or two. */
+  min-height: 26px;
   margin: 1.3em 0 0.3em;
 }
 .squisq-wysiwyg-editor h4 {
@@ -2048,7 +2056,7 @@
 
 .squisq-wysiwyg-editor p {
   margin: 0.5em 0;
-  line-height: 1.6;
+  line-height: 1.7;
 }
 
 .squisq-wysiwyg-editor blockquote {
@@ -6025,14 +6033,6 @@
 .squisq-theme-picker-name-chip--trigger {
   flex: 1;
   min-width: 0;
-}
-
-/* Georgia's glyph box sits visibly high in its line box. Nudge only the
-   Standard Light trigger label; keep the surrounding chip centered. */
-.squisq-theme-picker-name-chip--trigger[data-theme-id='standard']
-  .squisq-theme-picker-name-chip-label {
-  position: relative;
-  top: 2px;
 }
 
 .squisq-theme-picker-name-chip--default {

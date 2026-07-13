@@ -9,12 +9,13 @@ import type {
   AsciiTimelineStyle,
   AsciiTimelineTrack,
 } from './types.js';
+import { parseWrappedFlowTimeline } from './wrappedFlow.js';
 
 const STRONG_MARKERS = new Set(['●', '○', '◉', '◆', '◇', '•']);
 const ASCII_MARKERS = new Set(['*', 'o', 'O']);
 const HORIZONTAL = new Set(['─', '━', '═', '╌', '╍', '┄', '┅', '┈', '┉', '-']);
 const END_ARROWS = new Set(['►', '▶', '▷', '→', '>']);
-const POINTERS = new Set(['▲', '△', '▼', '▽']);
+const POINTERS = new Set(['▲', '△', '▼', '▽', '^', 'v']);
 const CONNECTOR_ANCHORS = new Set(['└', '┌', '├', '┬', '┘', '┐', '╰', '╭', '╯', '╮']);
 
 export interface AsciiTimelineStats {
@@ -24,6 +25,8 @@ export interface AsciiTimelineStats {
   horizontalChars: number;
   pointerCount: number;
   branchDeclarations: number;
+  /** True for high-confidence multi-lane flow art with a return edge. */
+  wrappedFlow?: boolean;
 }
 
 interface AxisAnalysis {
@@ -70,6 +73,22 @@ export function parseAsciiTimelineWithStats(text: string): {
 } {
   const lines = text.replace(/\r\n?/g, '\n').split('\n');
   const width = Math.max(0, ...lines.map((line) => Array.from(line).length));
+  const wrappedFlow = parseWrappedFlowTimeline(text);
+  if (wrappedFlow) {
+    const markerCount = wrappedFlow.tracks.reduce((sum, track) => sum + track.events.length, 0);
+    return {
+      timeline: wrappedFlow,
+      stats: {
+        axisLines: wrappedFlow.tracks.length,
+        markerCount,
+        strongMarkerCount: markerCount,
+        horizontalChars: Array.from(text).filter((char) => HORIZONTAL.has(char)).length,
+        pointerCount: 0,
+        branchDeclarations: wrappedFlow.links.length,
+        wrappedFlow: true,
+      },
+    };
+  }
   const style = detectStyle(lines);
   const pendingBranches: PendingBranch[] = [];
   const axes: AxisAnalysis[] = [];
@@ -156,11 +175,16 @@ export function parseAsciiTimelineWithStats(text: string): {
     const chars = Array.from(lines[row]);
     const pointerColumns = chars
       .map((char, column) => ({ char, column }))
-      .filter(({ char }) => POINTERS.has(char))
+      .filter(({ column }) => isPointerAt(chars, column))
       .map(({ column }) => column);
     for (let pointerIndex = 0; pointerIndex < pointerColumns.length; pointerIndex++) {
       const column = pointerColumns[pointerIndex];
-      const track = nearestTrack(tracks, row, column);
+      // Canonical pointer callouts carry semantic `column=` metadata while
+      // their glyph remains aligned to the physical marker on the pretty
+      // rail. Prefer an as-yet-unclaimed marker at that source column before
+      // falling back to the general nearest-track heuristic.
+      const track =
+        nearestUnclaimedMarkerTrack(tracks, row, column) ?? nearestTrack(tracks, row, column);
       if (!track) continue;
       pointerCount++;
       const nextPointer = pointerColumns[pointerIndex + 1] ?? chars.length;
@@ -169,25 +193,42 @@ export function parseAsciiTimelineWithStats(text: string): {
       // pointers own the text to their right, preventing `▲ A  ▲ B` from
       // contaminating both labels with the whole row.
       const prefix = pointerIndex === 0 ? cleanProseText(chars.slice(0, column).join('')) : '';
-      const label = stripTrailingColon(prefix) || after || `Event ${track.events.length + 1}`;
-      const description = prefix && after ? after : undefined;
-      const side: AsciiTimelineSide = row < track.row ? 'above' : 'below';
-      const existing = track.events.find(
-        (event) => event.callout !== false && Math.abs(event.column - column) <= 1,
-      );
+      const parsed = /\{[^{}]*#[^{}\s]+[^{}]*\}\s*$/u.test(after)
+        ? parseInlineEvent(after)
+        : { label: after || undefined };
+      const label =
+        stripTrailingColon(prefix) || parsed.label || after || `Event ${track.events.length + 1}`;
+      const description = prefix && after ? after : parsed.description;
+      const side: AsciiTimelineSide = parsed.side ?? (row < track.row ? 'above' : 'below');
+      const existing =
+        track.events.find((event) => !event.id && Math.abs(event.column - column) <= 1) ??
+        track.events.find(
+          (event) => event.callout !== false && Math.abs(event.column - column) <= 1,
+        );
       if (existing) {
+        if (parsed.id) existing.id = parsed.id;
+        if (parsed.column !== undefined) existing.column = parsed.column;
         if (!existing.label) existing.label = label;
+        if (parsed.label) existing.label = parsed.label;
         if (description && !existing.description) existing.description = description;
-        if (description) existing.descriptionSide ??= side;
-        existing.side ??= side;
+        if (parsed.description) existing.description = parsed.description;
+        if (parsed.descriptionSide) existing.descriptionSide = parsed.descriptionSide;
+        else if (description && !parsed.id) existing.descriptionSide ??= side;
+        if (parsed.callout !== undefined) existing.callout = parsed.callout;
+        existing.side = side;
       } else {
         track.events.push({
-          id: '',
+          id: parsed.id ?? '',
           label,
           ...(description ? { description } : {}),
-          column,
+          column: parsed.column ?? column,
           side,
-          ...(description ? { descriptionSide: side } : {}),
+          ...(parsed.descriptionSide
+            ? { descriptionSide: parsed.descriptionSide }
+            : description && !parsed.id
+              ? { descriptionSide: side }
+              : {}),
+          ...(parsed.callout !== undefined ? { callout: parsed.callout } : {}),
           marker: 'hollow',
         });
       }
@@ -273,6 +314,7 @@ export function parseAsciiTimelineWithStats(text: string): {
     horizontalChars: axes.reduce((sum, axis) => sum + axis.horizontalChars, 0),
     pointerCount,
     branchDeclarations: pendingBranches.length,
+    wrappedFlow: false,
   };
 
   return {
@@ -685,6 +727,28 @@ function nearestTrack(
 ): AsciiTimelineTrack | undefined {
   return tracks
     .filter((track) => column >= track.startColumn - 2 && column <= track.endColumn + 2)
+    .sort((a, b) => Math.abs(a.row - row) - Math.abs(b.row - row))[0];
+}
+
+function isPointerAt(chars: readonly string[], column: number): boolean {
+  const char = chars[column];
+  if (!POINTERS.has(char)) return false;
+  if (char !== '^' && char !== 'v') return true;
+  return (
+    (column === 0 || /\s/u.test(chars[column - 1] ?? '')) &&
+    (column + 1 >= chars.length || /\s/u.test(chars[column + 1] ?? ''))
+  );
+}
+
+function nearestUnclaimedMarkerTrack(
+  tracks: readonly AsciiTimelineTrack[],
+  row: number,
+  column: number,
+): AsciiTimelineTrack | undefined {
+  return tracks
+    .filter((track) =>
+      track.events.some((event) => !event.id && Math.abs(event.column - column) <= 1),
+    )
     .sort((a, b) => Math.abs(a.row - row) - Math.abs(b.row - row))[0];
 }
 

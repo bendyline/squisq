@@ -3,6 +3,7 @@ import { asciiTimelineToTemplateData, parseAsciiTimeline } from '../doc/asciiTim
 import {
   MULTI_TRACK_BRANCH_TIMELINE,
   TICK_INTERPOLATION_TIMELINE,
+  WRAPPED_CLIENT_KERNEL_TIMELINE,
 } from './fixtures/asciiTimelines.js';
 
 describe('parseAsciiTimeline', () => {
@@ -60,6 +61,48 @@ describe('parseAsciiTimeline', () => {
     ]);
     expect(timeline.links).toEqual([{ source: 't29', target: 'f29', label: 'interpolation path' }]);
     expect(timeline.warnings).toEqual([]);
+  });
+
+  it('maps a wrapped client/kernel flow into tracks, events, and a return branch', () => {
+    const timeline = parseAsciiTimeline(WRAPPED_CLIENT_KERNEL_TIMELINE);
+    expect(timeline.warnings).toEqual([]);
+    expect(timeline.tracks.map((track) => track.label)).toEqual([
+      'CLIENT (main thread)',
+      'KERNEL (Web Worker / Node)',
+    ]);
+
+    const events = timeline.tracks.flatMap((track) => track.events);
+    expect(events.map((event) => event.label)).toEqual(
+      expect.arrayContaining([
+        'input events',
+        'InputMap',
+        'command',
+        'validate (schema)',
+        'command-rejected event',
+        'queue at tick T',
+        'dirty-tracked per-tick delta',
+        'delta {tick T}',
+        'interpolation buffer',
+        'keyframe',
+        'error surfaced to user/agent',
+      ]),
+    );
+    expect(events.find((event) => event.id === 'interpolation-buffer')?.description).toBe(
+      '(render ~1.5 ticks behind, lerp/slerp)',
+    );
+    expect(timeline.tracks[0].events.map((event) => event.id)).toEqual(
+      expect.arrayContaining(['input-events', 'inputmap', 'command', 'delta-tick-t', 'keyframe']),
+    );
+    expect(timeline.links).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ source: 'command', target: 'validate-schema' }),
+        expect.objectContaining({ source: 'dirty-tracked-per-tick-delta', target: 'delta-tick-t' }),
+        expect.objectContaining({
+          source: 'command-rejected-event',
+          target: 'error-surfaced-to-user-agent',
+        }),
+      ]),
+    );
   });
 
   it('normalizes every track against one shared horizontal scale', () => {

@@ -3,6 +3,7 @@ export * from './utils/animationUtils.js';
 export * from './utils/themeUtils.js';
 export * from './utils/applyRenderStyle.js';
 export * from './utils/imageTreatment.js';
+export * from './utils/diagramText.js';
 export * from './templateInputs.js';
 export * from './utils/shapeGeometry.js';
 export {
@@ -85,8 +86,10 @@ export {
   isAsciiTimelineFence,
   isEligibleAsciiTimelineFenceLang,
   isExplicitTimelineLang,
+  isWrappedFlowTimelineSource,
   parseAsciiTimeline,
   parseAsciiTimelineWithStats,
+  parseWrappedFlowTimeline,
   renderAsciiTimeline,
 } from './asciiTimeline/index.js';
 export type {

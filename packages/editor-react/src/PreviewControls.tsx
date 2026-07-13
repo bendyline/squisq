@@ -854,7 +854,6 @@ export function PreviewToolbarControls() {
             key="cover"
             className={`squisq-preview-control${compact ? ' squisq-preview-control--compact' : ''}`}
           >
-            <label style={labelStyle}>Cover:</label>
             <label className="squisq-preview-checkbox">
               <input
                 type="checkbox"

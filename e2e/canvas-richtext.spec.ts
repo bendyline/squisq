@@ -32,6 +32,13 @@ async function insertLayout(page: Page) {
   await page.waitForTimeout(300);
 }
 
+/** Read Monaco's selected source through its accessibility textarea. */
+async function readMonacoMarkdown(page: Page): Promise<string> {
+  const input = page.getByRole('textbox', { name: /Editor content/ });
+  await input.press(SELECT_ALL);
+  return (await input.inputValue()).replace(/\s+/g, ' ');
+}
+
 test('double-click opens an inline editor and the toolbar bolds the selection', async ({
   page,
 }) => {
@@ -77,12 +84,7 @@ test('double-click opens an inline editor and the toolbar bolds the selection', 
   await switchView(page, 'Markdown');
   await page.locator('[data-testid="raw-editor"]').waitFor({ state: 'visible' });
   await expect(async () => {
-    // Monaco renders styled spans, interleaving non-breaking spaces between
-    // tokens — normalize whitespace before substring checks.
-    const md = (await page.locator('.monaco-editor .view-lines').first().innerText()).replace(
-      /\s+/g,
-      ' ',
-    );
+    const md = await readMonacoMarkdown(page);
     expect(md).toContain('Hello bold');
     expect(md).toContain('{[text');
     expect(md).not.toContain('layers=');
@@ -127,10 +129,7 @@ test('a selected layout box exposes Fill/Stroke in the toolbar and applies', asy
   await switchView(page, 'Markdown');
   await page.locator('[data-testid="raw-editor"]').waitFor({ state: 'visible' });
   await expect(async () => {
-    const md = (await page.locator('.monaco-editor .view-lines').first().innerText()).replace(
-      /\s+/g,
-      ' ',
-    );
+    const md = await readMonacoMarkdown(page);
     expect(md).toMatch(/fill="?#00ff00"?/i);
     expect(md).not.toContain('layers=');
   }).toPass({ timeout: 3_000 });

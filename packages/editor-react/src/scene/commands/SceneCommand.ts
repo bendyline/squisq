@@ -11,7 +11,7 @@
  * component drive three different editing surfaces.
  */
 
-import type { Layer } from '@bendyline/squisq/schemas';
+import type { DiagramEdgeAnchor, Layer } from '@bendyline/squisq/schemas';
 
 export type SceneCommand =
   /** Commit a layer's new top-left position (in viewport units). */
@@ -67,4 +67,7 @@ export interface SceneEdge {
   dasharray?: string;
   /** Per-edge routing override (else the renderer's variant default). */
   routing?: import('@bendyline/squisq/doc').ConnectorRouting;
+  /** Optional authored node-side attachments (used by ASCII-derived diagrams). */
+  sourceAnchor?: DiagramEdgeAnchor;
+  targetAnchor?: DiagramEdgeAnchor;
 }

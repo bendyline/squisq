@@ -52,6 +52,9 @@ export function buildDiagramScene(
     target: e.target,
     ...(e.label ? { label: e.label } : {}),
     ...(e.directed === false ? { endMarker: 'none' as const } : {}),
+    ...(e.sourceAnchor ? { sourceAnchor: e.sourceAnchor } : {}),
+    ...(e.targetAnchor ? { targetAnchor: e.targetAnchor } : {}),
+    ...(e.routing ? { routing: e.routing } : {}),
   }));
   return { layers, edges: sceneEdges, nodes: descriptors };
 }

@@ -18,12 +18,20 @@
 import type { Layer, ShapeLayer, TextLayer, PathLayer, MarkerStyle } from '../../schemas/Doc.js';
 import type {
   DiagramBlockInput,
+  DiagramEdgeAnchor,
   DiagramTemplateEdge,
   DiagramTemplateNode,
   TemplateContext,
 } from '../../schemas/BlockTemplates.js';
 import { resolveColorScheme, getThemeFont, themedFontSize } from '../utils/themeUtils.js';
-import { connectorPath, lineStyleDasharray, snapEndpoints } from '../utils/shapeGeometry.js';
+import { DIAGRAM_LABEL_LINE_HEIGHT, fitDiagramLabel } from '../utils/diagramText.js';
+import {
+  anchorPoint,
+  connectorPath,
+  lineStyleDasharray,
+  snapEndpoints,
+  type ConnectorRouting,
+} from '../utils/shapeGeometry.js';
 import { computeDiagramLayout } from './diagramLayout.js';
 
 const NODE_WIDTH = 180;
@@ -48,6 +56,9 @@ interface ResolvedDiagramEdge {
   target: string;
   label?: string;
   directed: boolean;
+  sourceAnchor?: DiagramEdgeAnchor;
+  targetAnchor?: DiagramEdgeAnchor;
+  routing?: ConnectorRouting;
 }
 
 interface ResolvedDiagram {
@@ -140,6 +151,9 @@ function nodesFromTemplateData(input: DiagramBlockInput): ResolvedDiagram {
       target: e.target,
       ...(e.label ? { label: e.label } : {}),
       directed: e.directed !== false,
+      ...(e.sourceAnchor ? { sourceAnchor: e.sourceAnchor } : {}),
+      ...(e.targetAnchor ? { targetAnchor: e.targetAnchor } : {}),
+      ...(e.routing ? { routing: e.routing } : {}),
     }));
   return { nodes, edges };
 }
@@ -276,12 +290,14 @@ export function diagramBlock(input: DiagramBlockInput, context: TemplateContext)
     const b = positions.get(edge.target);
     if (!a || !b) continue;
     const endMarker: MarkerStyle = edge.directed ? configuredEnd : 'none';
-    const { start, end } = snapEndpoints(a, b);
+    const snapped = snapEndpoints(a, b);
+    const start = edge.sourceAnchor ? anchorPoint(a, edge.sourceAnchor) : snapped.start;
+    const end = edge.targetAnchor ? anchorPoint(b, edge.targetAnchor) : snapped.end;
     const pathLayer: PathLayer = {
       type: 'path',
       id: `edge-${edge.id}`,
       content: {
-        d: connectorPath(input.edgeStyle ?? 'curved', start, end),
+        d: connectorPath(edge.routing ?? input.edgeStyle ?? 'curved', start, end),
         stroke: colors.text ?? theme.colors.primary,
         strokeWidth: strokeW,
         fill: 'none',
@@ -334,20 +350,28 @@ export function diagramBlock(input: DiagramBlockInput, context: TemplateContext)
     };
     layers.push(card);
 
+    const preferredFontSize = themedFontSize(Math.round(22 * fontAdj), context, false);
+    const fit = fitDiagramLabel(node.label, t.w, t.h, preferredFontSize);
     const label: TextLayer = {
       type: 'text',
       id: `node-label-${node.id}`,
       content: {
         text: node.label,
         style: {
-          fontSize: themedFontSize(Math.round(22 * fontAdj), context, false),
+          fontSize: fit.fontSize,
           fontFamily: getThemeFont(context, 'body'),
           fontWeight: 'bold',
           color: colors.text ?? theme.colors.text,
           textAlign: 'center',
+          lineHeight: DIAGRAM_LABEL_LINE_HEIGHT,
         },
       },
-      position: { x: t.x + t.w / 2, y: t.y + t.h / 2, anchor: 'center', width: t.w },
+      position: {
+        x: t.x + t.w / 2,
+        y: t.y + t.h / 2 + fit.firstLineOffset,
+        anchor: 'center',
+        width: fit.textWidth,
+      },
     };
     layers.push(label);
   }

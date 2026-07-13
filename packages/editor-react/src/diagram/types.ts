@@ -1,5 +1,8 @@
 /** Data shapes consumed by `DiagramCanvas` / `buildDiagramScene`. */
 
+import type { DiagramEdgeAnchor } from '@bendyline/squisq/schemas';
+import type { ConnectorRouting } from '@bendyline/squisq/doc';
+
 export interface DiagramNode {
   id: string;
   position: { x: number; y: number };
@@ -20,6 +23,9 @@ export interface DiagramEdge {
   label?: string;
   /** False → no end arrowhead. Undefined keeps the diagram default (arrow). */
   directed?: boolean;
+  sourceAnchor?: DiagramEdgeAnchor;
+  targetAnchor?: DiagramEdgeAnchor;
+  routing?: ConnectorRouting;
 }
 
 export interface DiagramData {

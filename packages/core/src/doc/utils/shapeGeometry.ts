@@ -429,6 +429,11 @@ export interface ConnectorSnapPoint {
   y: number;
 }
 
+export interface ConnectorAnchor {
+  side: 'top' | 'right' | 'bottom' | 'left';
+  offset: number;
+}
+
 /** Intersection of the center-to-center line with `from`'s bounding box. */
 export function clipPoint(from: ClipBox, to: ClipBox): { x: number; y: number } {
   const dx = to.cx - from.cx;
@@ -464,6 +469,25 @@ export function snapPoints(box: ClipBox): ConnectorSnapPoint[] {
     { port: 'bottom-right', x: right, y: bottom },
     { port: 'bottom-left', x: left, y: bottom },
   ];
+}
+
+/** Resolve a normalized authored anchor to a concrete point on a box. */
+export function anchorPoint(box: ClipBox, anchor: ConnectorAnchor): ConnectorSnapPoint {
+  const offset = Math.max(0, Math.min(1, anchor.offset));
+  const left = box.cx - box.rx;
+  const right = box.cx + box.rx;
+  const top = box.cy - box.ry;
+  const bottom = box.cy + box.ry;
+  switch (anchor.side) {
+    case 'top':
+      return { port: 'top', x: left + (right - left) * offset, y: top };
+    case 'right':
+      return { port: 'right', x: right, y: top + (bottom - top) * offset };
+    case 'bottom':
+      return { port: 'bottom', x: left + (right - left) * offset, y: bottom };
+    case 'left':
+      return { port: 'left', x: left, y: top + (bottom - top) * offset };
+  }
 }
 
 /** Nearest stable connector port on `box` to an arbitrary point. */
@@ -521,20 +545,58 @@ function portTieBreak(port: ConnectorPort): number {
 /** Build the SVG `d` for a connector between two clipped endpoints. */
 export function connectorPath(
   routing: ConnectorRouting,
-  start: { x: number; y: number },
-  end: { x: number; y: number },
+  start: { x: number; y: number; port?: ConnectorPort },
+  end: { x: number; y: number; port?: ConnectorPort },
 ): string {
   if (routing === 'straight') {
     return `M ${r(start.x)} ${r(start.y)} L ${r(end.x)} ${r(end.y)}`;
   }
   if (routing === 'orthogonal') {
+    const startAxis = portAxis(start.port);
+    const endAxis = portAxis(end.port);
+    if (startAxis === 'vertical' && endAxis === 'vertical') {
+      const midY = (start.y + end.y) / 2;
+      return `M ${r(start.x)} ${r(start.y)} L ${r(start.x)} ${r(midY)} L ${r(end.x)} ${r(midY)} L ${r(end.x)} ${r(end.y)}`;
+    }
+    if (startAxis === 'vertical' && endAxis === 'horizontal') {
+      return `M ${r(start.x)} ${r(start.y)} L ${r(start.x)} ${r(end.y)} L ${r(end.x)} ${r(end.y)}`;
+    }
+    if (startAxis === 'horizontal' && endAxis === 'vertical') {
+      return `M ${r(start.x)} ${r(start.y)} L ${r(end.x)} ${r(start.y)} L ${r(end.x)} ${r(end.y)}`;
+    }
     const midX = (start.x + end.x) / 2;
     return `M ${r(start.x)} ${r(start.y)} L ${r(midX)} ${r(start.y)} L ${r(midX)} ${r(end.y)} L ${r(end.x)} ${r(end.y)}`;
   }
   // curved
-  const dx = Math.abs(end.x - start.x);
-  const cp = Math.max(40, dx / 2);
-  return `M ${r(start.x)} ${r(start.y)} C ${r(start.x + cp)} ${r(start.y)}, ${r(end.x - cp)} ${r(end.y)}, ${r(end.x)} ${r(end.y)}`;
+  const distance = Math.hypot(end.x - start.x, end.y - start.y);
+  const cp = Math.max(40, distance / 2);
+  const startVector = portVector(start.port, { x: 1, y: 0 });
+  const endVector = portVector(end.port, { x: -1, y: 0 });
+  return `M ${r(start.x)} ${r(start.y)} C ${r(start.x + startVector.x * cp)} ${r(start.y + startVector.y * cp)}, ${r(end.x + endVector.x * cp)} ${r(end.y + endVector.y * cp)}, ${r(end.x)} ${r(end.y)}`;
+}
+
+function portAxis(port: ConnectorPort | undefined): 'horizontal' | 'vertical' | null {
+  if (port === 'top' || port === 'bottom') return 'vertical';
+  if (port === 'left' || port === 'right') return 'horizontal';
+  return null;
+}
+
+function portVector(
+  port: ConnectorPort | undefined,
+  fallback: { x: number; y: number },
+): { x: number; y: number } {
+  switch (port) {
+    case 'top':
+      return { x: 0, y: -1 };
+    case 'right':
+      return { x: 1, y: 0 };
+    case 'bottom':
+      return { x: 0, y: 1 };
+    case 'left':
+      return { x: -1, y: 0 };
+    default:
+      return fallback;
+  }
 }
 
 /** Map a `lineStyle` (solid|dashed|dotted) to an SVG `stroke-dasharray`. */

@@ -26,6 +26,16 @@ const ART = [
   'branch: start -> review : flow',
 ].join('\n');
 
+const WRAPPED_FLOW = [
+  'CLIENT                    KERNEL',
+  '──────                    ──────',
+  'input ──► command ───────► validate',
+  '                           ├─ invalid → rejected ─┐',
+  '                           └─ valid → queue      │',
+  'buffer ◄── delta ◄──────── output                │',
+  'error ◄──────────────────────────────────────────┘',
+].join('\n');
+
 let editors: Editor[] = [];
 
 function makeEditor(markdown: string): Editor {
@@ -103,6 +113,26 @@ describe('applyTimelineCommand', () => {
       marker: 'diamond',
     });
     expect(timeline.links[0]).toMatchObject({ source: 'start', target: 'review' });
+  });
+
+  it('allows a first visual edit to canonicalize a wrapped flow', () => {
+    const parsed = parseAsciiTimeline(WRAPPED_FLOW);
+    expect(isTimelineSourceSafeForSemanticEdit(WRAPPED_FLOW, parsed)).toBe(true);
+
+    const editor = makeEditor('```text\n' + WRAPPED_FLOW + '\n```\n');
+    const result = applyTimelineCommand(editor, firstBlockId(editor), {
+      kind: 'updateEvent',
+      eventId: 'input',
+      patch: { label: 'Input received' },
+    });
+
+    expect(result).toEqual({ applied: true });
+    expect(fenceOf(editor).language).toBe('timeline');
+    expect(fenceOf(editor).text).toContain('{#client start=');
+    expect(parseAsciiTimeline(fenceOf(editor).text).tracks[0].events[0]).toMatchObject({
+      id: 'input',
+      label: 'Input received',
+    });
   });
 
   it('removes a point and its incident branch', () => {

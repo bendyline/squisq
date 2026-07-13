@@ -6,7 +6,10 @@ import {
   renderAsciiTimeline,
   type AsciiTimeline,
 } from '../doc/asciiTimeline/index.js';
-import { TICK_INTERPOLATION_TIMELINE } from './fixtures/asciiTimelines.js';
+import {
+  TICK_INTERPOLATION_TIMELINE,
+  WRAPPED_CLIENT_KERNEL_TIMELINE,
+} from './fixtures/asciiTimelines.js';
 
 function renderFixpoint(timeline: AsciiTimeline, style?: 'unicode' | 'ascii'): string {
   const first = renderAsciiTimeline(timeline, style ? { style } : {});
@@ -68,24 +71,23 @@ describe('renderAsciiTimeline', () => {
     warnings: [],
   };
 
-  it('emits inline event data followed by branch declarations', () => {
+  it('emits a continuous rail with pointer callouts and branch declarations', () => {
     const output = renderFixpoint(timeline);
     const lines = output.split('\n');
+    const kernelRail = lines.find((line) => line.includes('kernel ticks (30 Hz)'));
 
-    expect(lines[0]).toContain(
-      'kernel ticks (30 Hz) {#kernel start=20 end=65}: ● T28 :: delta-28 {#tick-28 side=above column=22}',
-    );
-    expect(lines[0]).toContain('○ T29 {#tick-29 side=below column=38}');
-    expect(lines[0].endsWith('►')).toBe(true);
-    expect(lines[2]).toBe('');
-    expect(lines[3]).toBe('branch: tick-28 → render-point : feeds renderer');
+    expect(kernelRail).toMatch(/kernel ticks \(30 Hz\) \{#kernel start=20 end=65\}: ─*●─*○─*►/u);
+    expect(output).toContain('▲ T28 :: delta-28 {#tick-28 column=22}');
+    expect(output).toContain('▼ T29 {#tick-29 column=38}');
+    expect(lines[lines.length - 1]).toBe('branch: tick-28 → render-point : feeds renderer');
   });
 
   it('uses parser-recognizable ASCII markers and rails', () => {
     const output = renderFixpoint(timeline, 'ascii');
 
-    expect(output).toMatch(/^kernel ticks \(30 Hz\) \{#kernel start=20 end=65\}: \*-- T28/m);
-    expect(output).toContain('---o T29');
+    expect(output).toMatch(/^kernel ticks \(30 Hz\) \{#kernel start=20 end=65\}: -*\*-*o-*>/m);
+    expect(output).toContain('^ T28 :: delta-28 {#tick-28 column=22}');
+    expect(output).toContain('v T29 {#tick-29 column=38}');
     expect(output).toContain('branch: tick-28 -> render-point : feeds renderer');
     expect(output).not.toMatch(/[─●○◆►→]/u);
   });
@@ -101,7 +103,7 @@ describe('renderAsciiTimeline', () => {
     };
     const output = renderFixpoint(shuffled);
 
-    expect(output.split('\n')[0]).toContain('kernel ticks');
+    expect(output.indexOf('kernel ticks')).toBeLessThan(output.indexOf('client frames'));
     expect(output.indexOf('T28')).toBeLessThan(output.indexOf('T29'));
     expect(output).not.toContain('missing');
   });
@@ -129,9 +131,9 @@ describe('renderAsciiTimeline', () => {
     };
     const output = renderFixpoint(adversarial);
 
-    expect(output).toContain('{#same side=above column=0}');
-    expect(output).toContain('{#same_2 side=below column=10}');
-    expect(output).toContain('{#same_2_2 side=above column=20}');
+    expect(output).toContain('{#same column=0}');
+    expect(output).toContain('{#same_2 column=10}');
+    expect(output).toContain('{#same_2_2 column=20}');
     expect(parseAsciiTimeline(output).style).toBe('unicode');
   });
 
@@ -241,6 +243,20 @@ describe('renderAsciiTimeline', () => {
         track.events.map((event) => event.position),
       ),
     ).toEqual(before);
+  });
+
+  it('canonicalizes wrapped flow art into a byte-stable point timeline', () => {
+    const wrapped = parseAsciiTimeline(WRAPPED_CLIENT_KERNEL_TIMELINE);
+    const output = renderFixpoint(wrapped);
+    const reparsed = parseAsciiTimeline(output);
+
+    expect(output).toContain('CLIENT (main thread)');
+    expect(output).toContain('KERNEL (Web Worker / Node)');
+    expect(output).toContain('branch: command-rejected-event → error-surfaced-to-user-agent');
+    expect(reparsed.tracks.map((track) => track.events.map((event) => event.id))).toEqual(
+      wrapped.tracks.map((track) => track.events.map((event) => event.id)),
+    );
+    expect(reparsed.links).toEqual(wrapped.links);
   });
 
   it('round-trips a hyphenated label ending in an ASCII-marker letter', () => {

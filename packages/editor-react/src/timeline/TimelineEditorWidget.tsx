@@ -6,8 +6,8 @@
  * and the selected event is edited through ordinary form controls.
  */
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import type { CSSProperties, KeyboardEvent } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import type { CSSProperties, KeyboardEvent, PointerEvent as ReactPointerEvent } from 'react';
 import type { Editor } from '@tiptap/react';
 import {
   asciiTimelineToTemplateData,
@@ -42,12 +42,23 @@ interface PositionedEvent {
   position: number;
 }
 
+interface DraggedEvent {
+  eventId: string;
+  pointerId: number;
+  startClientX: number;
+  startPosition: number;
+  position: number;
+  moved: boolean;
+}
+
 const clamp01 = (value: number): number => Math.max(0, Math.min(1, value));
 
 export function TimelineEditorWidget({ editor, blockId }: TimelineEditorWidgetProps) {
   const view = useTimelineData(editor, blockId);
   const [selectedEventId, setSelectedEventId] = useState<string | null>(null);
   const [hover, setHover] = useState<{ trackId: string; position: number } | null>(null);
+  const [dragged, setDragged] = useState<DraggedEvent | null>(null);
+  const suppressClickEventId = useRef<string | null>(null);
   const [announcement, setAnnouncement] = useState('');
 
   const dispatch = useCallback(
@@ -92,9 +103,19 @@ export function TimelineEditorWidget({ editor, blockId }: TimelineEditorWidgetPr
     });
   }, [view]);
 
+  const displayedPositioned = useMemo(
+    () =>
+      dragged
+        ? positioned.map((point) =>
+            point.event.id === dragged.eventId ? { ...point, position: dragged.position } : point,
+          )
+        : positioned,
+    [dragged, positioned],
+  );
+
   const positionById = useMemo(
-    () => new Map(positioned.map((point) => [point.event.id, point.position])),
-    [positioned],
+    () => new Map(displayedPositioned.map((point) => [point.event.id, point.position])),
+    [displayedPositioned],
   );
 
   const selected = useMemo<SelectedEvent | null>(() => {
@@ -140,6 +161,14 @@ export function TimelineEditorWidget({ editor, blockId }: TimelineEditorWidgetPr
     setAnnouncement(`${event.label || 'Timeline point'} selected on ${trackLabel}.`);
   };
 
+  const dragPosition = (event: ReactPointerEvent<HTMLButtonElement>): number | null => {
+    const rail = event.currentTarget.closest<HTMLElement>('.squisq-ascii-timeline-rail');
+    if (!rail) return null;
+    const rect = rail.getBoundingClientRect();
+    if (rect.width <= 0 || !Number.isFinite(event.clientX)) return null;
+    return clamp01((event.clientX - rect.left) / rect.width);
+  };
+
   return (
     <section className="squisq-ascii-timeline-editor" aria-label="Timeline editor">
       <header className="squisq-ascii-timeline-header">
@@ -147,7 +176,7 @@ export function TimelineEditorWidget({ editor, blockId }: TimelineEditorWidgetPr
           <Icon icon="fa-solid fa-timeline" /> Timeline
         </span>
         {editable ? (
-          <small>Click the line to add a point</small>
+          <small>Click the line to add a point · Drag dots to move</small>
         ) : editorEditable ? (
           <small>Source repair needed</small>
         ) : (
@@ -169,8 +198,8 @@ export function TimelineEditorWidget({ editor, blockId }: TimelineEditorWidgetPr
             aria-hidden="true"
           >
             {view.timeline.links.map((link, index) => {
-              const source = positioned.find((point) => point.event.id === link.source);
-              const target = positioned.find((point) => point.event.id === link.target);
+              const source = displayedPositioned.find((point) => point.event.id === link.source);
+              const target = displayedPositioned.find((point) => point.event.id === link.target);
               if (!source || !target) return null;
               const sx = source.position * 100;
               const tx = target.position * 100;
@@ -220,7 +249,7 @@ export function TimelineEditorWidget({ editor, blockId }: TimelineEditorWidgetPr
                 aria-label={`${trackLabel} timeline rail`}
                 title={editable ? 'Click anywhere on the line to add a point' : undefined}
                 onPointerMove={(event) => {
-                  if (!editable) return;
+                  if (!editable || dragged) return;
                   const rect = event.currentTarget.getBoundingClientRect();
                   if (rect.width <= 0) return;
                   setHover({
@@ -239,7 +268,7 @@ export function TimelineEditorWidget({ editor, blockId }: TimelineEditorWidgetPr
                 }}
               >
                 <span className="squisq-ascii-timeline-rail-line" aria-hidden="true" />
-                {hover?.trackId === track.id ? (
+                {hover?.trackId === track.id && !dragged ? (
                   <span
                     className="squisq-ascii-timeline-add-ghost"
                     style={{ left: `${hover.position * 100}%` }}
@@ -249,7 +278,7 @@ export function TimelineEditorWidget({ editor, blockId }: TimelineEditorWidgetPr
                   </span>
                 ) : null}
 
-                {editable
+                {editable && !dragged
                   ? gaps.map((position) => (
                       <button
                         type="button"
@@ -270,11 +299,12 @@ export function TimelineEditorWidget({ editor, blockId }: TimelineEditorWidgetPr
 
                 {events.map(({ event, position }, eventIndex) => {
                   const selectedPoint = selectedEventId === event.id;
+                  const draggedPoint = dragged?.eventId === event.id;
                   const side = event.side ?? (eventIndex % 2 === 0 ? 'above' : 'below');
                   const descriptionSide = event.descriptionSide ?? side;
                   return (
                     <span
-                      className={`squisq-ascii-timeline-point squisq-ascii-timeline-point--${side}`}
+                      className={`squisq-ascii-timeline-point squisq-ascii-timeline-point--${side}${draggedPoint ? ' squisq-ascii-timeline-point--dragging' : ''}`}
                       style={{ left: `${position * 100}%` }}
                       key={event.id}
                     >
@@ -297,9 +327,123 @@ export function TimelineEditorWidget({ editor, blockId }: TimelineEditorWidgetPr
                         className={`squisq-ascii-timeline-marker squisq-ascii-timeline-marker--${event.marker ?? 'filled'}${selectedPoint ? ' squisq-ascii-timeline-marker--selected' : ''}`}
                         aria-label={`Edit ${event.label || 'timeline point'}, ${trackLabel}, ${Math.round(position * 100)} percent`}
                         aria-pressed={selectedPoint}
-                        title={event.description || event.label}
+                        aria-roledescription={editable ? 'draggable timeline point' : undefined}
+                        title={
+                          editable
+                            ? `${event.description || event.label || 'Timeline point'} · Drag to move`
+                            : event.description || event.label
+                        }
+                        draggable={false}
+                        onPointerDown={(pointerEvent) => {
+                          if (
+                            !editable ||
+                            (pointerEvent.button !== undefined && pointerEvent.button !== 0)
+                          ) {
+                            return;
+                          }
+                          const point = dragPosition(pointerEvent);
+                          if (point === null) return;
+                          pointerEvent.stopPropagation();
+                          setHover(null);
+                          setSelectedEventId(event.id);
+                          suppressClickEventId.current = null;
+                          setDragged({
+                            eventId: event.id,
+                            pointerId: pointerEvent.pointerId,
+                            startClientX: pointerEvent.clientX,
+                            startPosition: position,
+                            position,
+                            moved: false,
+                          });
+                          pointerEvent.currentTarget.setPointerCapture?.(pointerEvent.pointerId);
+                        }}
+                        onPointerMove={(pointerEvent) => {
+                          if (
+                            !editable ||
+                            !draggedPoint ||
+                            dragged.pointerId !== pointerEvent.pointerId
+                          ) {
+                            return;
+                          }
+                          const point = dragPosition(pointerEvent);
+                          if (point === null) return;
+                          pointerEvent.preventDefault();
+                          pointerEvent.stopPropagation();
+                          setDragged((current) =>
+                            current?.eventId === event.id &&
+                            current.pointerId === pointerEvent.pointerId
+                              ? {
+                                  ...current,
+                                  position: point,
+                                  moved:
+                                    current.moved ||
+                                    Math.abs(pointerEvent.clientX - current.startClientX) >= 3,
+                                }
+                              : current,
+                          );
+                        }}
+                        onPointerUp={(pointerEvent) => {
+                          if (!draggedPoint || dragged.pointerId !== pointerEvent.pointerId) {
+                            return;
+                          }
+                          const point = dragPosition(pointerEvent);
+                          const finalPosition = point ?? dragged.position;
+                          const moved =
+                            dragged.moved ||
+                            Math.abs(pointerEvent.clientX - dragged.startClientX) >= 3;
+                          pointerEvent.preventDefault();
+                          pointerEvent.stopPropagation();
+                          if (
+                            pointerEvent.currentTarget.hasPointerCapture?.(pointerEvent.pointerId)
+                          ) {
+                            pointerEvent.currentTarget.releasePointerCapture(
+                              pointerEvent.pointerId,
+                            );
+                          }
+                          setDragged(null);
+                          if (!moved) {
+                            selectEvent(event, trackLabel);
+                            return;
+                          }
+                          suppressClickEventId.current = event.id;
+                          const result = dispatch({
+                            kind: 'updateEvent',
+                            eventId: event.id,
+                            patch: { position: finalPosition },
+                          });
+                          if (result.applied) {
+                            setAnnouncement(
+                              `${event.label || 'Timeline point'} moved to ${Math.round(finalPosition * 100)} percent.`,
+                            );
+                          } else if (
+                            !result.reason &&
+                            Math.abs(finalPosition - dragged.startPosition) > 0.001
+                          ) {
+                            setAnnouncement(
+                              'Timeline points cannot overlap. Move the point elsewhere.',
+                            );
+                          }
+                        }}
+                        onPointerCancel={(pointerEvent) => {
+                          if (!draggedPoint || dragged.pointerId !== pointerEvent.pointerId) {
+                            return;
+                          }
+                          if (
+                            pointerEvent.currentTarget.hasPointerCapture?.(pointerEvent.pointerId)
+                          ) {
+                            pointerEvent.currentTarget.releasePointerCapture(
+                              pointerEvent.pointerId,
+                            );
+                          }
+                          setDragged(null);
+                          setAnnouncement('Timeline point move cancelled.');
+                        }}
                         onClick={(clickEvent) => {
                           clickEvent.stopPropagation();
+                          if (suppressClickEventId.current === event.id) {
+                            suppressClickEventId.current = null;
+                            return;
+                          }
                           selectEvent(event, trackLabel);
                         }}
                         onKeyDown={(keyEvent) => navigateTrackPoints(keyEvent)}

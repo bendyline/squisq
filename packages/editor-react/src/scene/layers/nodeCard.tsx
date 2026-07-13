@@ -11,6 +11,7 @@
  */
 
 import type { ShapeLayer, TextLayer, Layer } from '@bendyline/squisq/schemas';
+import { DIAGRAM_LABEL_LINE_HEIGHT, fitDiagramLabel } from '@bendyline/squisq/doc';
 
 export const NODE_WIDTH = 180;
 export const NODE_HEIGHT = 64;
@@ -69,7 +70,12 @@ export function nodeCardLayers(node: DiagramNodeDescriptor): [ShapeLayer, TextLa
   // Scale the label font with the node height so resized cards stay
   // legible without the text overflowing. Containers keep a fixed, small
   // title size — their height tracks their children, not their label.
-  const fontSize = isContainer ? 16 : Math.max(12, Math.min(48, Math.round(height * 0.34)));
+  const labelText = isContainer ? (node.label.split('\n')[0] ?? '') : node.label;
+  const preferredFontSize = Math.max(12, Math.min(48, Math.round(height * 0.34)));
+  const fit = isContainer
+    ? { fontSize: 16, firstLineOffset: 0, textWidth: width }
+    : fitDiagramLabel(labelText, width, height, preferredFontSize);
+  const { fontSize } = fit;
 
   // Label has no explicit height — that keeps its bounding box
   // unresolvable in `layerBounds`, which in turn keeps it out of the
@@ -84,14 +90,15 @@ export function nodeCardLayers(node: DiagramNodeDescriptor): [ShapeLayer, TextLa
     type: 'text',
     position: {
       x: node.x + width / 2,
-      y: isContainer ? node.y + fontSize + 8 : node.y + height / 2,
-      width,
+      y: isContainer ? node.y + fontSize + 8 : node.y + height / 2 + fit.firstLineOffset,
+      width: fit.textWidth,
       anchor: 'center',
     },
     content: {
-      text: isContainer ? (node.label.split('\n')[0] ?? '') : node.label,
+      text: labelText,
       style: {
         fontSize,
+        ...(!isContainer ? { lineHeight: DIAGRAM_LABEL_LINE_HEIGHT } : {}),
         fontWeight: 'bold',
         color: node.stroke ?? (isContainer ? '#64748b' : '#1e293b'),
         textAlign: 'center',

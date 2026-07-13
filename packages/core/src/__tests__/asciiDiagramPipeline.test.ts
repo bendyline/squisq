@@ -38,7 +38,15 @@ describe('auto-template conversion of ASCII diagram fences', () => {
     const edges = block?.templateData?.edges as DiagramTemplateEdge[];
     expect(nodes?.map((n) => n.id)).toEqual(['alpha', 'beta']);
     expect(nodes?.[0].w).toBeGreaterThan(0);
-    expect(edges).toEqual([{ source: 'alpha', target: 'beta' }]);
+    expect(edges).toEqual([
+      {
+        source: 'alpha',
+        target: 'beta',
+        sourceAnchor: { side: 'bottom', offset: 0.5 },
+        targetAnchor: { side: 'top', offset: 0.5 },
+        routing: 'orthogonal',
+      },
+    ]);
     expect(block?.templateData?.title).toBe('Architecture');
   });
 

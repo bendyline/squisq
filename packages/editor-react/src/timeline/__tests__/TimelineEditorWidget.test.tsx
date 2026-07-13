@@ -2,7 +2,7 @@ import { Editor } from '@tiptap/core';
 import StarterKit from '@tiptap/starter-kit';
 import { EditorContent } from '@tiptap/react';
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeAll, describe, expect, it } from 'vitest';
 import { parseAsciiTimeline, renderAsciiTimeline, type AsciiTimeline } from '@bendyline/squisq/doc';
 import { markdownToTiptap } from '../../tiptapBridge';
 import { HeadingWithTemplate } from '../../TemplateAnnotation';
@@ -51,6 +51,19 @@ const TIMELINE: AsciiTimeline = {
 
 const ART = renderAsciiTimeline(TIMELINE);
 const editors: Editor[] = [];
+
+beforeAll(() => {
+  if (typeof globalThis.PointerEvent !== 'undefined') return;
+  class PointerEventStub extends MouseEvent {
+    readonly pointerId: number;
+
+    constructor(type: string, init: PointerEventInit = {}) {
+      super(type, init);
+      this.pointerId = init.pointerId ?? 0;
+    }
+  }
+  globalThis.PointerEvent = PointerEventStub as typeof PointerEvent;
+});
 
 function makeEditor(editable = true, art = ART): Editor {
   const editor = new Editor({
@@ -180,6 +193,62 @@ describe('TimelineEditorWidget', () => {
     expect(marker.getAttribute('aria-pressed')).toBe('true');
     expect((screen.getByLabelText('Label') as HTMLInputElement).value).toBe('New event');
     expect(screen.getByText('New timeline point added. Edit its text below.')).toBeTruthy();
+  });
+
+  it('previews a dragged dot and commits its new position only on drop', async () => {
+    const editor = renderWidget();
+    const rail = screen.getByRole('group', { name: 'Kernel timeline rail' });
+    rail.getBoundingClientRect = () =>
+      ({
+        x: 100,
+        y: 0,
+        left: 100,
+        top: 0,
+        right: 500,
+        bottom: 40,
+        width: 400,
+        height: 40,
+        toJSON: () => ({}),
+      }) as DOMRect;
+
+    const review = screen.getByRole('button', { name: /Edit Review, Kernel/ });
+    fireEvent.pointerDown(review, { pointerId: 7, button: 0, clientX: 300 });
+    fireEvent.pointerMove(review, { pointerId: 7, clientX: 400 });
+
+    await waitFor(() =>
+      expect(review.closest('.squisq-ascii-timeline-point')?.getAttribute('style')).toContain(
+        '75%',
+      ),
+    );
+    expect(eventOf(editor, 'review')?.column).toBe(50);
+    expect(screen.queryAllByRole('button', { name: /Add point to Kernel at/ })).toHaveLength(0);
+
+    fireEvent.pointerUp(review, { pointerId: 7, button: 0, clientX: 400 });
+
+    await waitFor(() => expect(eventOf(editor, 'review')?.column).toBe(75));
+    expect(screen.getByText('Review moved to 75 percent.')).toBeTruthy();
+    expect(
+      screen
+        .getByRole('button', { name: /Edit Review, Kernel, 75 percent/ })
+        .getAttribute('aria-pressed'),
+    ).toBe('true');
+  });
+
+  it('cancels a pointer drag without rewriting the timeline', async () => {
+    const editor = renderWidget();
+    const rail = screen.getByRole('group', { name: 'Kernel timeline rail' });
+    rail.getBoundingClientRect = () =>
+      ({ left: 0, right: 400, top: 0, bottom: 40, width: 400, height: 40 }) as DOMRect;
+    const before = JSON.stringify(editor.state.doc.toJSON());
+    const review = screen.getByRole('button', { name: /Edit Review, Kernel/ });
+
+    fireEvent.pointerDown(review, { pointerId: 8, button: 0, clientX: 200 });
+    fireEvent.pointerMove(review, { pointerId: 8, clientX: 320 });
+    fireEvent.pointerCancel(review, { pointerId: 8 });
+
+    await waitFor(() => expect(screen.getByText('Timeline point move cancelled.')).toBeTruthy());
+    expect(JSON.stringify(editor.state.doc.toJSON())).toBe(before);
+    expect(eventOf(editor, 'review')?.column).toBe(50);
   });
 
   it('always exposes a keyboard-reachable add-point control for each track', async () => {

@@ -356,15 +356,14 @@ export interface EditorShellProps {
    */
   outlineWidth?: number;
   /**
-   * Initial visibility of inline block-template tags on headings — the
-   * chip rendered next to each heading in the WYSIWYG view that opens
-   * the block-template picker. Defaults to true; the View menu can
-   * toggle it at runtime regardless of the initial value.
+   * Legacy initial visibility of inline block-template tags on headings.
+   * `true` maps to always visible and `false` maps to hidden. When omitted,
+   * {@link blockTagVisibility} defaults to `'active'`.
    */
   blockTags?: boolean;
   /**
    * Initial block-tag visibility mode. Takes precedence over `blockTags`.
-   * Defaults to `'always'` through the legacy `blockTags` default.
+   * Defaults to `'active'` (selected/hovered block only).
    */
   blockTagVisibility?: BlockTagVisibility;
   /**
@@ -451,7 +450,7 @@ export function EditorShell({
   inlinePreviewWidth = 320,
   outline = false,
   outlineWidth,
-  blockTags = true,
+  blockTags,
   blockTagVisibility,
   themeInheritance = 'fonts',
   viewPreferences,

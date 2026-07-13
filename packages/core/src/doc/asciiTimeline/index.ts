@@ -13,6 +13,7 @@ export {
 } from './detect.js';
 export type { DetectAsciiTimelineOptions } from './detect.js';
 export { asciiTimelineToTemplateData } from './mapping.js';
+export { isWrappedFlowTimelineSource, parseWrappedFlowTimeline } from './wrappedFlow.js';
 export type {
   AsciiTimeline,
   AsciiTimelineDetection,

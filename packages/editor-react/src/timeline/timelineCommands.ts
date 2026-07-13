@@ -9,6 +9,7 @@
 
 import type { Editor } from '@tiptap/react';
 import {
+  isWrappedFlowTimelineSource,
   parseAsciiTimeline,
   renderAsciiTimeline,
   type AsciiTimeline,
@@ -120,14 +121,17 @@ function validateAndStripMetadata(source: string, timeline: AsciiTimeline): stri
   const lines = source.replace(/\r\n?/g, '\n').split('\n');
 
   for (let row = 0; row < lines.length; row++) {
-    if (!trackRows.has(row)) continue;
     const line = lines[row];
-    const firstMarker = firstAxisMarkerOffset(line, timeline.style);
+    const trackRow = trackRows.has(row);
+    const pointerRow = /[▲△▼▽^v]/u.test(line);
+    if (!trackRow && !pointerRow) continue;
+    const firstMarker = trackRow ? firstAxisMarkerOffset(line, timeline.style) : -1;
     let valid = true;
     const stripped = line.replace(METADATA_BLOCK_RE, (block, inner: string, offset: number) => {
       const tokens = inner.trim() ? inner.trim().split(/\s+/u) : [];
       if (!tokens.some((token) => METADATA_ATTEMPT_RE.test(token))) return block;
-      const kind: MetadataKind = firstMarker >= 0 && offset < firstMarker ? 'track' : 'event';
+      const kind: MetadataKind =
+        trackRow && firstMarker >= 0 && offset < firstMarker ? 'track' : 'event';
       if (!isValidMetadata(tokens, kind)) valid = false;
       return ' '.repeat(block.length);
     });
@@ -242,6 +246,12 @@ export function isTimelineSourceSafeForSemanticEdit(
   const reparsed = parseAsciiTimeline(rendered);
   const signature = semanticSignature(timeline);
   if (reparsed.warnings.length > 0 || semanticSignature(reparsed) !== signature) return false;
+  // Wrapped-flow acceptance is deliberately all-or-nothing: its parser only
+  // returns a model when every nonblank row is represented. Once the model
+  // also survives the canonical render/parse signature above, the differing
+  // source vocabulary (lane headings and wrap connectors versus point
+  // metadata) is safe to normalize on the first visual edit.
+  if (isWrappedFlowTimelineSource(source)) return true;
 
   const strippedSource = validateAndStripMetadata(source, timeline);
   const strippedRendered = validateAndStripMetadata(rendered, reparsed);

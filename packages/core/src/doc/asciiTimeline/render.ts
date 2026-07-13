@@ -1,9 +1,12 @@
 /**
  * ASCII timeline renderer: semantic tracks/events -> canonical timeline art.
  *
- * The authored form intentionally keeps every event on its track line:
+ * The canonical authored form keeps the rail visually continuous and moves
+ * event payloads onto pointer callouts:
  *
- *   Kernel {#kernel start=8 end=72}: ● T28 :: delta 28 {#t28 side=above column=12} ───○ T29 {#t29 side=below column=36} ───►
+ *                       ▲ T28 :: delta 28 {#t28 column=12}
+ *   Kernel {#kernel start=8 end=72}: ───●────────────────○────►
+ *                                                ▼ T29 {#t29 column=36}
  *
  * Links follow the tracks as declarations. This form is compact, readable in
  * raw Markdown, and is the exact grammar consumed by `parse.ts`. Rendering is
@@ -80,8 +83,10 @@ const ASCII_VOCAB: TimelineVocab = {
   },
 };
 
-const MIN_RAIL_LENGTH = 3;
-const ASCII_FIRST_MARKER_RAIL = 2;
+const MIN_AXIS_WIDTH = 48;
+const MAX_COORDINATE_AXIS_WIDTH = 64;
+const EVENT_SPACING = 3;
+const TERMINAL_RAIL_LENGTH = 3;
 
 /** Render a timeline into deterministic, parser-canonical ASCII/Unicode art. */
 export function renderAsciiTimeline(
@@ -93,8 +98,33 @@ export function renderAsciiTimeline(
   const { tracks, links } = prepareTimeline(timeline, style);
   if (tracks.length === 0) return '';
 
-  const railLength = MIN_RAIL_LENGTH;
-  const lines = tracks.map((track) => renderTrack(track, style, vocab, railLength));
+  const globalStart = Math.min(...tracks.map((track) => track.startColumn));
+  const globalEnd = Math.max(...tracks.map((track) => track.endColumn));
+  const globalSpan = Math.max(1, globalEnd - globalStart);
+  const axisWidth = Math.max(
+    MIN_AXIS_WIDTH,
+    Math.min(MAX_COORDINATE_AXIS_WIDTH, Math.ceil(globalSpan)),
+    ...tracks.map((track) => track.events.length * EVENT_SPACING),
+  );
+  const prefixes = tracks.map((track) => renderTrackPrefix(track));
+  const prefixWidth = Math.max(...prefixes.map(displayWidth));
+  const lines: string[] = [];
+
+  tracks.forEach((track, index) => {
+    if (index > 0) lines.push('');
+    lines.push(
+      ...renderTrack(
+        track,
+        style,
+        vocab,
+        prefixes[index],
+        prefixWidth,
+        axisWidth,
+        globalStart,
+        globalSpan,
+      ),
+    );
+  });
 
   if (links.length > 0) {
     lines.push('');
@@ -108,32 +138,93 @@ function renderTrack(
   track: PreparedTrack,
   style: AsciiTimelineStyle,
   vocab: TimelineVocab,
-  railLength: number,
-): string {
-  const metadata = `{#${track.id} start=${formatCoordinate(track.startColumn)} end=${formatCoordinate(track.endColumn)}}`;
-  const prefix = track.label ? `${track.label} ${metadata}: ` : `${metadata}: `;
-  const rail = vocab.rail.repeat(railLength);
-  const parts: string[] = [];
+  prefix: string,
+  prefixWidth: number,
+  axisWidth: number,
+  globalStart: number,
+  globalSpan: number,
+): string[] {
+  const paddedPrefix = `${prefix}${' '.repeat(Math.max(0, prefixWidth - displayWidth(prefix)))}`;
+  const positioned = positionEvents(track.events, axisWidth, globalStart, globalSpan);
+  const rail = Array.from({ length: axisWidth + 1 }, () => vocab.rail);
+  for (const { event, offset } of positioned) rail[offset] = vocab.marker[event.marker];
 
-  track.events.forEach((event, index) => {
-    const marker = vocab.marker[event.marker];
-    // ASCII point glyphs (`*`, `o`) are ordinary prose characters. The
-    // parser only accepts one when it physically touches a rail, so give the
-    // first point a tiny leading segment. Later points already touch the
-    // preceding event's separator rail.
-    const firstAsciiRail =
-      style === 'ascii' && index === 0 ? vocab.rail.repeat(ASCII_FIRST_MARKER_RAIL) : '';
-    parts.push(`${marker}${firstAsciiRail} ${renderEventPayload(event)} ${rail}`);
-  });
-
-  return `${prefix}${parts.join('')}${vocab.arrow}${track.endLabel ? ` ${track.endLabel}` : ''}`;
+  const callouts = positioned.map(({ event, offset }) => ({
+    event,
+    column: prefixWidth + offset,
+    text: renderEventPayload(event),
+  }));
+  const pointer = style === 'ascii' ? { above: '^', below: 'v' } : { above: '▲', below: '▼' };
+  const above = renderCalloutLanes(
+    callouts.filter(({ event }) => event.side === 'above'),
+    pointer.above,
+  );
+  const below = renderCalloutLanes(
+    callouts.filter(({ event }) => event.side === 'below'),
+    pointer.below,
+  );
+  const axis = `${paddedPrefix}${rail.join('')}${vocab.rail.repeat(TERMINAL_RAIL_LENGTH)}${vocab.arrow}${track.endLabel ? ` ${track.endLabel}` : ''}`;
+  return [...above, axis, ...below];
 }
 
 function renderEventPayload(event: PreparedEvent): string {
   const body = event.description ? `${event.label} :: ${event.description}` : event.label;
   const descriptionSide = event.descriptionSide ? ` descriptionSide=${event.descriptionSide}` : '';
   const callout = event.callout === false ? ' callout=false' : '';
-  return `${body} {#${event.id} side=${event.side} column=${formatCoordinate(event.column)}${descriptionSide}${callout}}`;
+  return `${body} {#${event.id} column=${formatCoordinate(event.column)}${descriptionSide}${callout}}`;
+}
+
+function renderTrackPrefix(track: PreparedTrack): string {
+  const metadata = `{#${track.id} start=${formatCoordinate(track.startColumn)} end=${formatCoordinate(track.endColumn)}}`;
+  return track.label ? `${track.label} ${metadata}: ` : `${metadata}: `;
+}
+
+function positionEvents(
+  events: readonly PreparedEvent[],
+  axisWidth: number,
+  globalStart: number,
+  globalSpan: number,
+): Array<{ event: PreparedEvent; offset: number }> {
+  let previous = -1;
+  return events.map((event, index) => {
+    const ideal = Math.round(((event.column - globalStart) / globalSpan) * axisWidth);
+    const remaining = events.length - index - 1;
+    const latest = Math.max(0, axisWidth - remaining);
+    const offset = Math.max(previous + 1, Math.min(latest, Math.max(0, ideal)));
+    previous = offset;
+    return { event, offset };
+  });
+}
+
+function renderCalloutLanes(
+  callouts: ReadonlyArray<{ column: number; text: string }>,
+  pointer: string,
+): string[] {
+  const lanes: Array<Array<{ column: number; text: string }>> = [];
+  const laneEnds: number[] = [];
+  for (const callout of callouts) {
+    const end = callout.column + 2 + displayWidth(callout.text);
+    let lane = laneEnds.findIndex((laneEnd) => callout.column > laneEnd + 1);
+    if (lane < 0) {
+      lane = lanes.length;
+      lanes.push([]);
+      laneEnds.push(-1);
+    }
+    lanes[lane].push(callout);
+    laneEnds[lane] = end;
+  }
+  return lanes.map((lane) => {
+    const chars: string[] = [];
+    for (const callout of lane) {
+      while (chars.length < callout.column) chars.push(' ');
+      chars.push(pointer, ' ', ...Array.from(callout.text));
+    }
+    return chars.join('').trimEnd();
+  });
+}
+
+function displayWidth(value: string): number {
+  return Array.from(value).length;
 }
 
 function renderLink(link: PreparedLink, style: AsciiTimelineStyle): string {

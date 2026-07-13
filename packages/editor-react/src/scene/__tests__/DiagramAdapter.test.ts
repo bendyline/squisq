@@ -75,6 +75,31 @@ describe('buildDiagramScene', () => {
     if (label?.type === 'text') expect(label.content.text).toBe('Cluster'); // first line only
   });
 
+  it('fits and vertically centers dense multi-line labels inside ASCII-sized cards', () => {
+    const out = buildDiagramScene(
+      [
+        {
+          id: 'kernel',
+          position: { x: 100, y: 200 },
+          data: {
+            label: '@bendyline/molen-kernel\nheadless sim — no DOM, no thread\nWorker + Node',
+          },
+          width: 252,
+          height: 112,
+        },
+      ],
+      [],
+    );
+    const label = out.layers.find((layer) => layer.id === 'node-label-kernel');
+    expect(label?.type).toBe('text');
+    if (label?.type !== 'text') return;
+
+    expect(label.content.style.fontSize).toBeLessThan(38);
+    expect(label.content.style.lineHeight).toBe(1.25);
+    expect(label.position.width).toBe(228);
+    expect(label.position.y).toBeLessThan(200 + 112 / 2);
+  });
+
   it('maps directed:false to endMarker none, leaves default edges alone', () => {
     const out = buildDiagramScene(
       [
@@ -88,5 +113,30 @@ describe('buildDiagramScene', () => {
     );
     expect(out.edges[0]).toEqual({ id: 'a->b', source: 'a', target: 'b', endMarker: 'none' });
     expect(out.edges[1]).toEqual({ id: 'b->a', source: 'b', target: 'a' });
+  });
+
+  it('preserves authored anchors and routing for ASCII-derived edges', () => {
+    const out = buildDiagramScene(
+      [
+        { id: 'source', position: { x: 0, y: 0 }, data: { label: 'Source' } },
+        { id: 'target', position: { x: 0, y: 200 }, data: { label: 'Target' } },
+      ],
+      [
+        {
+          id: 'source->target',
+          source: 'source',
+          target: 'target',
+          sourceAnchor: { side: 'bottom', offset: 0.25 },
+          targetAnchor: { side: 'top', offset: 0.5 },
+          routing: 'orthogonal',
+        },
+      ],
+    );
+
+    expect(out.edges[0]).toMatchObject({
+      sourceAnchor: { side: 'bottom', offset: 0.25 },
+      targetAnchor: { side: 'top', offset: 0.5 },
+      routing: 'orthogonal',
+    });
   });
 });

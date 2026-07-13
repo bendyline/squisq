@@ -595,6 +595,13 @@ export interface DiagramTemplateNode {
   container?: string;
 }
 
+/** A position along one side of a diagram node, normalized from 0 to 1. */
+export interface DiagramEdgeAnchor {
+  side: 'top' | 'right' | 'bottom' | 'left';
+  /** Left→right on horizontal sides; top→bottom on vertical sides. */
+  offset: number;
+}
+
 /** An edge for `DiagramTemplateNode` lists. `directed` defaults to true. */
 export interface DiagramTemplateEdge {
   source: string;
@@ -603,6 +610,12 @@ export interface DiagramTemplateEdge {
   label?: string;
   /** False suppresses the end arrowhead (a plain connecting line). */
   directed?: boolean;
+  /** Optional authored attachment on the source node. */
+  sourceAnchor?: DiagramEdgeAnchor;
+  /** Optional authored attachment on the target node. */
+  targetAnchor?: DiagramEdgeAnchor;
+  /** Per-edge path routing; ASCII-derived edges use orthogonal routing. */
+  routing?: 'straight' | 'orthogonal' | 'curved';
 }
 
 /**
