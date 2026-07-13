@@ -16,6 +16,7 @@ test.use({ viewport: { width: 1500, height: 950 } });
 // Use the platform-correct modifier so select-all works locally (Mac) and
 // in CI (Linux). Matches the convention in editor.spec.ts / timeline.spec.ts.
 const SELECT_ALL = process.platform === 'darwin' ? 'Meta+a' : 'Control+a';
+const COPY = process.platform === 'darwin' ? 'Meta+c' : 'Control+c';
 
 async function clickInsert(page: Page, name: string) {
   await page.locator('.squisq-toolbar button[aria-label="Insert"]').click();
@@ -32,11 +33,14 @@ async function insertLayout(page: Page) {
   await page.waitForTimeout(300);
 }
 
-/** Read Monaco's selected source through its accessibility textarea. */
+/** Read Monaco's full source through its model-aware Copy command. */
 async function readMonacoMarkdown(page: Page): Promise<string> {
+  await page.context().grantPermissions(['clipboard-read', 'clipboard-write']);
   const input = page.getByRole('textbox', { name: /Editor content/ });
   await input.press(SELECT_ALL);
-  return (await input.inputValue()).replace(/\s+/g, ' ');
+  await input.press(COPY);
+  const value = await page.evaluate(() => navigator.clipboard.readText());
+  return value.replace(/\s+/g, ' ');
 }
 
 test('double-click opens an inline editor and the toolbar bolds the selection', async ({
