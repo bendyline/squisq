@@ -472,8 +472,13 @@ export function tiptapToMarkdown(html: string): string {
     if (bqMatch) {
       const inner = htmlToInline(bqMatch[1].replace(/<\/?p>/g, ''));
       lines.push('> ' + inner);
-      lines.push('');
-      remaining = remaining.slice(bqMatch[0].length);
+      const next = remaining.slice(bqMatch[0].length);
+      // markdownToTiptap represents each adjacent `> ` source line as its
+      // own blockquote node. Keep those nodes adjacent when serializing;
+      // inserting the normal block separator here turns one quote into two
+      // paragraphs every time the document passes through WYSIWYG mode.
+      if (!/^\s*<blockquote>/.test(next)) lines.push('');
+      remaining = next;
       continue;
     }
 

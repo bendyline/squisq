@@ -13,12 +13,14 @@ import { findTreeBlockPos, parseTreeForNode } from './TreeViewExtension';
 import {
   addItemOp,
   indentItemOp,
+  moveItemOp,
   moveItemDownOp,
   moveItemUpOp,
   outdentItemOp,
   removeItemOp,
   renameItemOp,
   toggleDirOp,
+  type TreeDropPosition,
 } from './treeOps';
 
 export type TreeCommand =
@@ -32,6 +34,7 @@ export type TreeCommand =
   | { kind: 'renameItem'; id: string; label: string }
   | { kind: 'indentItem'; id: string }
   | { kind: 'outdentItem'; id: string }
+  | { kind: 'moveItem'; id: string; targetId: string; position: TreeDropPosition }
   | { kind: 'moveItemUp'; id: string }
   | { kind: 'moveItemDown'; id: string }
   | { kind: 'removeItem'; id: string }
@@ -79,6 +82,8 @@ export function applyTreeCommand(editor: Editor, blockId: string, cmd: TreeComma
       return applyOp(editor, blockId, (t) => indentItemOp(t, cmd.id));
     case 'outdentItem':
       return applyOp(editor, blockId, (t) => outdentItemOp(t, cmd.id));
+    case 'moveItem':
+      return applyOp(editor, blockId, (t) => moveItemOp(t, cmd.id, cmd.targetId, cmd.position));
     case 'moveItemUp':
       return applyOp(editor, blockId, (t) => moveItemUpOp(t, cmd.id));
     case 'moveItemDown':

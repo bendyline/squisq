@@ -12,7 +12,7 @@ import { tiptapToMarkdown } from '../tiptapBridge';
  *   when a pasted / uploaded image is inserted into the tiptap
  *   editor via `setImage({src, alt})`, does the markdown we serialize
  *   out (via `getHTML()` + `tiptapToMarkdown`) contain
- *   `![alt](src)` — the shape the gezel service's image-attachment
+ *   `![alt](src)` — the shape the downstream service's image-attachment
  *   extractor expects?
  *
  * Unit tests on the regex alone have been green the whole time, and

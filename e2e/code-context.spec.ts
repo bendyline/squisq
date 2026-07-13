@@ -47,8 +47,8 @@ test.describe('codeContext view zones', () => {
   test('custom-scheme links are intercepted without navigating', async ({ page }) => {
     const fileTop = page.locator('[data-section-id="file"]');
     // .view-zones is aria-hidden — target by href, not role
-    await fileTop.locator('a[href="gezel-nav:src%2Fresolver.ts"]').click();
-    await expect(page.getByTestId('link-log')).toContainText('gezel-nav:src%2Fresolver.ts');
+    await fileTop.locator('a[href="workspace-nav:src%2Fresolver.ts"]').click();
+    await expect(page.getByTestId('link-log')).toContainText('workspace-nav:src%2Fresolver.ts');
     // still on the demo page — no navigation happened
     await expect(page.getByTestId('toggle-code-context')).toBeVisible();
   });

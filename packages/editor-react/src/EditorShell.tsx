@@ -716,7 +716,7 @@ function EditorShellInner({
    *
    * Without this, upload-via-MediaBin and upload-via-drop both
    * added the file to the bin and nowhere else — the composer sent
-   * an empty body and the downstream gezel reported "nothing came
+   * an empty body and the downstream consumer reported "nothing came
    * through."
    */
   const insertMediaRef = useCallback(

@@ -81,6 +81,7 @@ export function RecorderEntry() {
     bumpMediaRevision,
     markdownSource,
     setMarkdownSource,
+    colorScheme,
   } = useEditorContext();
 
   const handleSave = useCallback(
@@ -150,6 +151,7 @@ export function RecorderEntry() {
     <RecorderPanel
       mediaProvider={mediaProvider}
       container={workspaceContainer}
+      colorScheme={colorScheme}
       onSave={handleSave}
       className="squisq-toolbar-button"
     />

@@ -25,6 +25,7 @@ import type { PdfImportOptions } from '../pdf/import.js';
 import type { HtmlExportOptions } from '../html/htmlTemplate.js';
 import type { HtmlImportOptions } from '../html/import.js';
 import type { EpubExportOptions } from '../epub/export.js';
+import type { ContainerToZipOptions } from '../container/index.js';
 import type { ZipSafetyLimits } from '../shared/zipSafety.js';
 
 /** A format identifier (e.g. `'docx'`). Strings so hosts can register their own. */
@@ -62,7 +63,7 @@ export interface MarkdownFormatOptions {
 }
 
 /** Resource limits applied when importing a DBK/ZIP container. */
-export type DbkFormatOptions = ZipSafetyLimits;
+export type DbkFormatOptions = ZipSafetyLimits & ContainerToZipOptions;
 
 /**
  * Strongly typed option bags for built-in formats. Import and export options
@@ -97,6 +98,8 @@ export interface NormalizedInput {
 
 /** Options threaded through `convert()` and into every format method. */
 export interface ConvertOptions {
+  /** Cancel normalization, transformation, or export at the next bounded work boundary. */
+  signal?: AbortSignal;
   /** Registry to resolve formats against. Defaults to `defaultRegistry()`. */
   registry?: FormatRegistry;
   /** Explicit source format id (skips extension/byte sniffing). */
@@ -117,6 +120,20 @@ export interface ConvertOptions {
   resolvePlayerScript?: () => Promise<string>;
   /** Typed per-format options for built-ins; custom format ids remain extensible. */
   formatOptions?: Partial<BuiltinFormatOptions> & Record<FormatId, unknown>;
+}
+
+/** Target-only options accepted after a source has already been normalized and transformed. */
+export type PreparedExportOptions = Pick<
+  ConvertOptions,
+  'signal' | 'title' | 'resolvePlayerScript' | 'formatOptions'
+>;
+
+/**
+ * An opaque normalized conversion snapshot. The source and transform pipeline
+ * has already completed; each call exports that same snapshot to one target.
+ */
+export interface PreparedConversion {
+  convert(to: FormatId, options?: PreparedExportOptions): Promise<ConversionResult>;
 }
 
 /** Describes how a single format imports to / exports from the squisq model. */

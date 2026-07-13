@@ -3,6 +3,8 @@
 import type JSZip from 'jszip';
 
 export interface ZipSafetyLimits {
+  /** Cooperatively cancel archive opening, validation, and member traversal. */
+  signal?: AbortSignal;
   /** Maximum number of archive records, including directories. Default: 10,000. */
   maxEntries?: number;
   /** Maximum uncompressed bytes for one member. Defaults to maxUncompressedBytes. */
@@ -77,6 +79,7 @@ export const DEFAULT_MAX_ZIP_COMPRESSION_RATIO = 1_000;
  * JSZip normalizes traversal names, so inspect `unsafeOriginalName` too.
  */
 export function validateZipArchive(zip: JSZip, limits: ZipSafetyLimits = {}): ValidatedZipEntry[] {
+  throwIfZipAborted(limits.signal);
   const resolved = resolveZipSafetyLimits(limits);
   const files: ValidatedZipEntry[] = [];
   let memberCount = 0;
@@ -84,6 +87,7 @@ export function validateZipArchive(zip: JSZip, limits: ZipSafetyLimits = {}): Va
   let oversizedEntry: { path: string; actual: number; limit: number } | undefined;
 
   zip.forEach((relativePath, entry) => {
+    throwIfZipAborted(limits.signal);
     memberCount++;
     if (entry.dir) return;
     const originalPath = originalEntryPath(entry, relativePath);
@@ -138,6 +142,12 @@ export function validateZipArchive(zip: JSZip, limits: ZipSafetyLimits = {}): Va
     throw entryTooLargeError(oversizedEntry.path, oversizedEntry.actual, oversizedEntry.limit);
   }
   return files;
+}
+
+/** Preserve the caller's exact cancellation reason across ZIP/OOXML layers. */
+export function throwIfZipAborted(signal?: AbortSignal): void {
+  if (!signal?.aborted) return;
+  throw signal.reason ?? new Error('ZIP operation was cancelled');
 }
 
 /** Reject a path that could be interpreted outside an archive's logical root. */

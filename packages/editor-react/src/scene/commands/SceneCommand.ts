@@ -16,8 +16,19 @@ import type { DiagramEdgeAnchor, Layer } from '@bendyline/squisq/schemas';
 export type SceneCommand =
   /** Commit a layer's new top-left position (in viewport units). */
   | { kind: 'moveLayer'; id: string; x: number; y: number }
-  /** Commit a layer's new size (in viewport units). */
-  | { kind: 'resizeLayer'; id: string; width: number; height: number }
+  /**
+   * Commit a layer's new size (in viewport units). `x`/`y` carry the final
+   * top-left for west/north handle drags so hosts can persist the whole
+   * resize atomically instead of reparsing between a move and a size write.
+   */
+  | {
+      kind: 'resizeLayer';
+      id: string;
+      width: number;
+      height: number;
+      x?: number;
+      y?: number;
+    }
   /** Append a new layer to the scene. */
   | { kind: 'addLayer'; layer: Layer }
   /** Remove a layer by id. */

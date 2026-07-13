@@ -30,6 +30,8 @@ export type {
   BuiltinFormatOptions,
   MarkdownFormatOptions,
   DbkFormatOptions,
+  PreparedConversion,
+  PreparedExportOptions,
 } from './types.js';
 export { BUILTIN_FORMAT_IDS } from './types.js';
 
@@ -38,4 +40,4 @@ export type { ConversionErrorCode, ConversionErrorOptions } from './errors.js';
 
 export { createRegistry, defaultRegistry } from './registry.js';
 export { defaultFormats } from './defaultFormats.js';
-export { convert } from './convert.js';
+export { convert, prepareConversion } from './convert.js';

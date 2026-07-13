@@ -126,6 +126,23 @@ describe('createPackage / openPackage round-trip', () => {
     expect(doc?.getElementsByTagName('value')[0]?.textContent).toBe('node');
   });
 
+  it('ignores an incomplete ambient DOMParser when running in Node', async () => {
+    const pkg = createPackage();
+    pkg.addPart('word/document.xml', '<doc><value>node</value></doc>', 'application/xml');
+    const buffer = await pkg.toArrayBuffer();
+
+    class IncompleteDomParser {
+      parseFromString(): never {
+        throw new Error('ambient parser must not be used in Node');
+      }
+    }
+
+    vi.stubGlobal('DOMParser', IncompleteDomParser);
+    const opened = await openPackage(buffer);
+    const doc = await getPartXml(opened, 'word/document.xml');
+    expect(doc?.getElementsByTagName('value')[0]?.textContent).toBe('node');
+  });
+
   it('applies archive resource limits before parsing OOXML parts', async () => {
     const pkg = createPackage();
     pkg.addPart('word/document.xml', '<doc/>', 'application/xml');

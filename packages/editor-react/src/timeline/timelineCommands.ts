@@ -19,13 +19,26 @@ import {
 import { replaceAsciiFenceText } from '../asciiDiagram/asciiDiagramCommands';
 import { findTimelineBlockPos, parseTimelineForNode } from './TimelineViewExtension';
 import {
+  addTimelineTrackOp,
   addTimelineEventOp,
+  removeTimelineTrackOp,
   removeTimelineEventOp,
+  sanitizeTimelineText,
+  updateTimelineTrackOp,
   updateTimelineEventOp,
   type TimelineEventPatch,
 } from './timelineOps';
 
 export type TimelineCommand =
+  | {
+      kind: 'addTrack';
+      id?: string;
+      label?: string;
+      eventId?: string;
+      eventLabel?: string;
+    }
+  | { kind: 'updateTrack'; trackId: string; label: string }
+  | { kind: 'removeTrack'; trackId: string }
   | {
       kind: 'addEvent';
       trackId: string;
@@ -46,6 +59,8 @@ export interface TimelineCommandResult {
   applied: boolean;
   /** Present after add so the widget can select/focus the new marker. */
   eventId?: string;
+  /** Present after adding a track. */
+  trackId?: string;
   /** Why an otherwise valid semantic edit was deliberately blocked. */
   reason?: 'read-only' | 'unsafe-source';
 }
@@ -53,6 +68,7 @@ export interface TimelineCommandResult {
 interface OpResult {
   timeline: AsciiTimeline;
   eventId?: string;
+  trackId?: string;
 }
 
 const NOT_APPLIED: TimelineCommandResult = { applied: false };
@@ -65,6 +81,10 @@ function countEvents(timeline: AsciiTimeline): number {
 
 function hasEvent(timeline: AsciiTimeline, eventId: string): boolean {
   return timeline.tracks.some((track) => track.events.some((event) => event.id === eventId));
+}
+
+function hasTrack(timeline: AsciiTimeline, trackId: string): boolean {
+  return timeline.tracks.some((track) => track.id === trackId);
 }
 
 /**
@@ -276,6 +296,8 @@ function verifyRenderedTimeline(next: AsciiTimeline, rendered: string): AsciiTim
   const ids = new Set(
     verification.tracks.flatMap((track) => track.events.map((event) => event.id)),
   );
+  const trackIds = new Set(verification.tracks.map((track) => track.id));
+  if (trackIds.size !== verification.tracks.length) return null;
   if (ids.size !== countEvents(verification)) return null;
   if (verification.links.some((link) => !ids.has(link.source) || !ids.has(link.target))) {
     return null;
@@ -306,6 +328,7 @@ function applyOp(
   if (
     !verification ||
     (result.eventId && !hasEvent(verification, result.eventId)) ||
+    (result.trackId && !hasTrack(verification, result.trackId)) ||
     (verifyResult && !verifyResult(verification))
   ) {
     return NOT_APPLIED;
@@ -317,6 +340,7 @@ function applyOp(
   return {
     applied: true,
     ...(result.eventId ? { eventId: result.eventId } : {}),
+    ...(result.trackId ? { trackId: result.trackId } : {}),
   };
 }
 
@@ -331,6 +355,36 @@ export function applyTimelineCommand(
   if (!editor.isEditable) return READ_ONLY;
 
   switch (command.kind) {
+    case 'addTrack':
+      return applyOp(editor, blockId, (timeline) =>
+        addTimelineTrackOp(timeline, {
+          id: command.id,
+          label: command.label,
+          eventId: command.eventId,
+          eventLabel: command.eventLabel,
+        }),
+      );
+    case 'updateTrack': {
+      const expectedLabel = sanitizeTimelineText(command.label);
+      return applyOp(
+        editor,
+        blockId,
+        (timeline) => ({
+          timeline: updateTimelineTrackOp(timeline, command.trackId, command.label),
+        }),
+        (timeline) =>
+          timeline.tracks.some(
+            (track) => track.id === command.trackId && track.label === expectedLabel,
+          ),
+      );
+    }
+    case 'removeTrack':
+      return applyOp(
+        editor,
+        blockId,
+        (timeline) => ({ timeline: removeTimelineTrackOp(timeline, command.trackId) }),
+        (timeline) => !hasTrack(timeline, command.trackId),
+      );
     case 'addEvent':
       return applyOp(editor, blockId, (timeline) => {
         const result = addTimelineEventOp(timeline, command.trackId, command.position, {

@@ -1,10 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import { parseAsciiTimeline, renderAsciiTimeline, type AsciiTimeline } from '@bendyline/squisq/doc';
 import {
+  addTimelineTrackOp,
   addTimelineEventOp,
   nextTimelineEventId,
+  nextTimelineTrackId,
+  removeTimelineTrackOp,
   removeTimelineEventOp,
   sanitizeTimelineText,
+  updateTimelineTrackOp,
   updateTimelineEventOp,
 } from '../timelineOps';
 
@@ -72,6 +76,57 @@ describe('timeline editor pure operations', () => {
     const timeline = makeTimeline();
     expect(nextTimelineEventId(timeline, 'Start')).toBe('start-2');
     expect(nextTimelineEventId(timeline, 'A new point')).toBe('a-new-point');
+    expect(nextTimelineTrackId(timeline, 'Kernel')).toBe('kernel-2');
+  });
+
+  it('adds a representable line with a starter point without mutating its input', () => {
+    const timeline = makeTimeline();
+    const before = JSON.stringify(timeline);
+    const result = addTimelineTrackOp(timeline, { label: 'Release', eventLabel: 'Ready' });
+
+    expect(JSON.stringify(timeline)).toBe(before);
+    expect(result).toMatchObject({ trackId: 'release', eventId: 'ready' });
+    expect(result.timeline.tracks[2]).toMatchObject({
+      id: 'release',
+      label: 'Release',
+      row: 3,
+      startColumn: 10,
+      endColumn: 100,
+      events: [
+        {
+          id: 'ready',
+          label: 'Ready',
+          column: 55,
+          side: 'above',
+          marker: 'filled',
+        },
+      ],
+    });
+    expectFixpoint(result.timeline);
+  });
+
+  it('renames and removes a line while preserving or pruning branches as appropriate', () => {
+    const timeline = makeTimeline();
+    const renamed = updateTimelineTrackOp(timeline, 'client', '  Browser\nwork  ');
+    expect(renamed.tracks[1]).toMatchObject({ id: 'client', label: 'Browser work' });
+    expect(renamed.tracks[1].events).toEqual(timeline.tracks[1].events);
+    expect(renamed.links).toEqual(timeline.links);
+
+    const removed = removeTimelineTrackOp(renamed, 'client');
+    expect(removed.tracks.map((track) => track.id)).toEqual(['kernel']);
+    expect(removed.links).toEqual([]);
+    expectFixpoint(renamed);
+    expectFixpoint(removed);
+  });
+
+  it('rejects invalid line edits and retains the final line', () => {
+    const timeline = makeTimeline();
+    expect(updateTimelineTrackOp(timeline, 'missing', 'Nope')).toBe(timeline);
+    expect(updateTimelineTrackOp(timeline, 'kernel', '  ')).toBe(timeline);
+    expect(removeTimelineTrackOp(timeline, 'missing')).toBe(timeline);
+
+    const oneLine = { ...timeline, tracks: [timeline.tracks[0]], links: [] };
+    expect(removeTimelineTrackOp(oneLine, 'kernel')).toBe(oneLine);
   });
 
   it('adds at the globally normalized position without mutating its input', () => {

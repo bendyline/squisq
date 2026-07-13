@@ -11,7 +11,11 @@ import { useCallback, useState, type CSSProperties } from 'react';
 import { createPortal } from 'react-dom';
 import type { MediaProvider } from '@bendyline/squisq/schemas';
 import type { ContentContainer } from '@bendyline/squisq/storage';
-import { RecorderModal, type RecorderSaveResult } from './RecorderModal.js';
+import {
+  RecorderModal,
+  type RecorderColorScheme,
+  type RecorderSaveResult,
+} from './RecorderModal.js';
 import type { RecorderSource } from './hooks/useMediaRecorder.js';
 
 export interface RecorderButtonProps {
@@ -21,6 +25,8 @@ export interface RecorderButtonProps {
   container?: ContentContainer | null;
   /** Initial capture source. Defaults to `'mic'`. */
   initialMode?: RecorderSource;
+  /** Light/dark chrome scheme copied onto the portaled modal. */
+  colorScheme?: RecorderColorScheme;
   /** Fired after a successful save. */
   onSave?: (result: RecorderSaveResult) => void;
   /** Button label. Defaults to `'Record'`. */
@@ -35,6 +41,7 @@ export function RecorderButton({
   mediaProvider,
   container = null,
   initialMode = 'mic',
+  colorScheme = 'light',
   onSave,
   label = 'Record',
   style,
@@ -62,6 +69,7 @@ export function RecorderButton({
             mediaProvider={mediaProvider}
             container={container}
             initialMode={initialMode}
+            colorScheme={colorScheme}
             onClose={handleClose}
             onSave={handleSave}
           />,

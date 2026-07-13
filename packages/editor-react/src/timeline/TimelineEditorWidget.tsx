@@ -56,6 +56,8 @@ const clamp01 = (value: number): number => Math.max(0, Math.min(1, value));
 export function TimelineEditorWidget({ editor, blockId }: TimelineEditorWidgetProps) {
   const view = useTimelineData(editor, blockId);
   const [selectedEventId, setSelectedEventId] = useState<string | null>(null);
+  const [addingTrackId, setAddingTrackId] = useState<string | null>(null);
+  const [editingTrackId, setEditingTrackId] = useState<string | null>(null);
   const [hover, setHover] = useState<{ trackId: string; position: number } | null>(null);
   const [dragged, setDragged] = useState<DraggedEvent | null>(null);
   const suppressClickEventId = useRef<string | null>(null);
@@ -86,6 +88,8 @@ export function TimelineEditorWidget({ editor, blockId }: TimelineEditorWidgetPr
     // editor's cursor/selection hot path.
     [sourceText, sourceTimeline],
   );
+  const editorEditable = editor.isEditable;
+  const editable = editorEditable && sourceSafe;
 
   const positioned = useMemo(() => {
     if (!view) return [];
@@ -142,23 +146,63 @@ export function TimelineEditorWidget({ editor, blockId }: TimelineEditorWidgetPr
     setSelectedEventId(view.timeline.tracks[0]?.events[0]?.id ?? null);
   }, [selectedEventId, view]);
 
+  useEffect(() => {
+    if (editable) return;
+    setAddingTrackId(null);
+    setEditingTrackId(null);
+    setHover(null);
+  }, [editable]);
+
+  useEffect(() => {
+    if (!editingTrackId || view?.timeline.tracks.some((track) => track.id === editingTrackId)) {
+      return;
+    }
+    setEditingTrackId(null);
+  }, [editingTrackId, view]);
+
   if (!view) return null;
 
-  const editorEditable = editor.isEditable;
-  const editable = editorEditable && sourceSafe;
   const totalEvents = positioned.length;
+  const addTrack = () => {
+    if (!editable) return;
+    const result = dispatch({ kind: 'addTrack' });
+    if (result.applied && result.eventId && result.trackId) {
+      setAddingTrackId(null);
+      setEditingTrackId(result.trackId);
+      setHover(null);
+      setSelectedEventId(result.eventId);
+      setAnnouncement('New timeline line added. Edit its name on the line.');
+    }
+  };
+
   const addEvent = (trackId: string, position: number) => {
     if (!editable) return;
     const result = dispatch({ kind: 'addEvent', trackId, position: clamp01(position) });
     if (result.applied && result.eventId) {
+      setAddingTrackId(null);
+      setEditingTrackId(null);
+      setHover(null);
       setSelectedEventId(result.eventId);
       setAnnouncement('New timeline point added. Edit its text below.');
     }
   };
 
   const selectEvent = (event: AsciiTimelineEvent, trackLabel: string) => {
+    setAddingTrackId(null);
+    setHover(null);
     setSelectedEventId(event.id);
     setAnnouncement(`${event.label || 'Timeline point'} selected on ${trackLabel}.`);
+  };
+
+  const deleteTrack = (trackId: string, trackLabel: string) => {
+    const remaining = positioned.filter((point) => point.trackId !== trackId);
+    const result = dispatch({ kind: 'removeTrack', trackId });
+    if (!result.applied) return;
+    setAddingTrackId(null);
+    setEditingTrackId((current) => (current === trackId ? null : current));
+    setHover(null);
+    if (selected?.trackId === trackId) setSelectedEventId(remaining[0]?.event.id ?? null);
+    setAnnouncement(`${trackLabel} line deleted.`);
   };
 
   const dragPosition = (event: ReactPointerEvent<HTMLButtonElement>): number | null => {
@@ -170,18 +214,36 @@ export function TimelineEditorWidget({ editor, blockId }: TimelineEditorWidgetPr
   };
 
   return (
-    <section className="squisq-ascii-timeline-editor" aria-label="Timeline editor">
+    <section
+      className="squisq-ascii-timeline-editor"
+      aria-label="Timeline editor"
+      onKeyDown={(event) => {
+        if (event.key !== 'Escape' || !addingTrackId) return;
+        setAddingTrackId(null);
+        setHover(null);
+        setAnnouncement('Add point cancelled.');
+      }}
+    >
       <header className="squisq-ascii-timeline-header">
         <span>
           <Icon icon="fa-solid fa-timeline" /> Timeline
         </span>
-        {editable ? (
-          <small>Click the line to add a point · Drag dots to move</small>
-        ) : editorEditable ? (
-          <small>Source repair needed</small>
-        ) : (
-          <small>Read only</small>
-        )}
+        <div className="squisq-ascii-timeline-header-actions">
+          {editable && addingTrackId ? (
+            <small>Click the line to add a point · Esc to cancel</small>
+          ) : editable ? (
+            <small>Use + to add a point · Drag dots to move</small>
+          ) : editorEditable ? (
+            <small>Source repair needed</small>
+          ) : (
+            <small>Read only</small>
+          )}
+          {editable ? (
+            <button type="button" onClick={addTrack}>
+              <Icon icon="fa-solid fa-plus" /> Add line
+            </button>
+          ) : null}
+        </div>
       </header>
 
       <div
@@ -227,29 +289,68 @@ export function TimelineEditorWidget({ editor, blockId }: TimelineEditorWidgetPr
             .sort((a, b) => a.position - b.position);
           const eventPositions = events.map((entry) => entry.position);
           const gaps = insertionGaps(eventPositions);
+          const addingPoint = editable && addingTrackId === track.id;
           return (
             <div className="squisq-ascii-timeline-track" key={track.id}>
-              <div className="squisq-ascii-timeline-track-label" title={trackLabel}>
-                <span>{trackLabel}</span>
+              <div className="squisq-ascii-timeline-track-label">
+                <InlineTrackLabel
+                  trackId={track.id}
+                  label={trackLabel}
+                  editing={editable && editingTrackId === track.id}
+                  editable={editable}
+                  dispatch={dispatch}
+                  onStart={() => {
+                    setAddingTrackId(null);
+                    setHover(null);
+                    setEditingTrackId(track.id);
+                  }}
+                  onFinish={() => setEditingTrackId(null)}
+                />
                 {editable ? (
-                  <button
-                    type="button"
-                    className="squisq-ascii-timeline-track-add"
-                    aria-label={`Add point to ${trackLabel} timeline`}
-                    title="Add point in the largest available gap"
-                    onClick={() => addEvent(track.id, largestGap(eventPositions))}
-                  >
-                    +
-                  </button>
+                  <>
+                    <button
+                      type="button"
+                      className="squisq-ascii-timeline-track-delete"
+                      aria-label={`Delete line: ${trackLabel}`}
+                      disabled={view.timeline.tracks.length <= 1}
+                      title={
+                        view.timeline.tracks.length > 1
+                          ? `Delete ${trackLabel} line and all of its points`
+                          : 'A timeline needs one line'
+                      }
+                      onClick={() => deleteTrack(track.id, trackLabel)}
+                    >
+                      <Icon icon="fa-solid fa-trash" />
+                    </button>
+                    <button
+                      type="button"
+                      className="squisq-ascii-timeline-track-add"
+                      aria-label={`Add point to ${trackLabel} timeline`}
+                      aria-pressed={addingPoint}
+                      title={addingPoint ? 'Cancel adding a point' : 'Choose where to add a point'}
+                      onClick={() => {
+                        setEditingTrackId(null);
+                        setAddingTrackId((current) => (current === track.id ? null : track.id));
+                        setHover(null);
+                        setAnnouncement(
+                          addingPoint
+                            ? 'Add point cancelled.'
+                            : `Choose where to add a point on ${trackLabel}.`,
+                        );
+                      }}
+                    >
+                      +
+                    </button>
+                  </>
                 ) : null}
               </div>
               <div
-                className={`squisq-ascii-timeline-rail${editable ? '' : ' squisq-ascii-timeline-rail--readonly'}`}
+                className={`squisq-ascii-timeline-rail${addingPoint ? ' squisq-ascii-timeline-rail--adding' : ''}${editable ? '' : ' squisq-ascii-timeline-rail--readonly'}`}
                 role="group"
                 aria-label={`${trackLabel} timeline rail`}
-                title={editable ? 'Click anywhere on the line to add a point' : undefined}
+                title={addingPoint ? 'Click anywhere on the line to add a point' : undefined}
                 onPointerMove={(event) => {
-                  if (!editable || dragged) return;
+                  if (!addingPoint || dragged) return;
                   const rect = event.currentTarget.getBoundingClientRect();
                   if (rect.width <= 0) return;
                   setHover({
@@ -261,14 +362,14 @@ export function TimelineEditorWidget({ editor, blockId }: TimelineEditorWidgetPr
                   setHover((current) => (current?.trackId === track.id ? null : current))
                 }
                 onClick={(event) => {
-                  if (!editable || event.target !== event.currentTarget) return;
+                  if (!addingPoint || event.target !== event.currentTarget) return;
                   const rect = event.currentTarget.getBoundingClientRect();
                   if (rect.width <= 0) return;
                   addEvent(track.id, (event.clientX - rect.left) / rect.width);
                 }}
               >
                 <span className="squisq-ascii-timeline-rail-line" aria-hidden="true" />
-                {hover?.trackId === track.id && !dragged ? (
+                {addingPoint && hover?.trackId === track.id && !dragged ? (
                   <span
                     className="squisq-ascii-timeline-add-ghost"
                     style={{ left: `${hover.position * 100}%` }}
@@ -278,7 +379,7 @@ export function TimelineEditorWidget({ editor, blockId }: TimelineEditorWidgetPr
                   </span>
                 ) : null}
 
-                {editable && !dragged
+                {addingPoint && !dragged
                   ? gaps.map((position) => (
                       <button
                         type="button"
@@ -344,6 +445,7 @@ export function TimelineEditorWidget({ editor, blockId }: TimelineEditorWidgetPr
                           const point = dragPosition(pointerEvent);
                           if (point === null) return;
                           pointerEvent.stopPropagation();
+                          setAddingTrackId(null);
                           setHover(null);
                           setSelectedEventId(event.id);
                           suppressClickEventId.current = null;
@@ -505,6 +607,77 @@ export function TimelineEditorWidget({ editor, blockId }: TimelineEditorWidgetPr
   );
 }
 
+function InlineTrackLabel({
+  trackId,
+  label,
+  editing,
+  editable,
+  dispatch,
+  onStart,
+  onFinish,
+}: {
+  trackId: string;
+  label: string;
+  editing: boolean;
+  editable: boolean;
+  dispatch: (command: TimelineCommand) => TimelineCommandResult;
+  onStart: () => void;
+  onFinish: () => void;
+}) {
+  const [draft, setDraft] = useState(label);
+
+  useEffect(() => {
+    if (editing) setDraft(label);
+  }, [editing, label]);
+
+  const commitLabel = () => {
+    const next = draft.trim();
+    if (!next) {
+      setDraft(label);
+    } else if (next !== label) {
+      const result = dispatch({ kind: 'updateTrack', trackId, label: next });
+      if (!result.applied) setDraft(label);
+    }
+    onFinish();
+  };
+
+  if (!editable) return <span className="squisq-ascii-timeline-track-name">{label}</span>;
+
+  return editing ? (
+    <input
+      className="squisq-ascii-timeline-track-name-input"
+      aria-label={`Rename line: ${label}`}
+      value={draft}
+      autoFocus
+      onFocus={(event) => event.currentTarget.select()}
+      onChange={(event) => setDraft(event.target.value)}
+      onBlur={commitLabel}
+      onKeyDown={(event) => {
+        if (event.key === 'Enter') {
+          event.preventDefault();
+          event.stopPropagation();
+          commitLabel();
+        } else if (event.key === 'Escape') {
+          event.preventDefault();
+          event.stopPropagation();
+          setDraft(label);
+          onFinish();
+        }
+      }}
+    />
+  ) : (
+    <button
+      type="button"
+      className="squisq-ascii-timeline-track-name"
+      aria-label={`Rename line: ${label}`}
+      title={`Rename ${label}`}
+      onClick={onStart}
+    >
+      {label}
+    </button>
+  );
+}
+
 function EventInspector({
   selected,
   editable,
@@ -662,20 +835,6 @@ function insertionGaps(positions: readonly number[]): number[] {
     if (end - start >= 0.09) gaps.push((start + end) / 2);
   }
   return gaps;
-}
-
-function largestGap(positions: readonly number[]): number {
-  if (positions.length === 0) return 0.5;
-  const sorted = [0, ...positions.map(clamp01).sort((a, b) => a - b), 1];
-  let start = sorted[0];
-  let end = sorted[1];
-  for (let index = 1; index < sorted.length - 1; index++) {
-    if (sorted[index + 1] - sorted[index] > end - start) {
-      start = sorted[index];
-      end = sorted[index + 1];
-    }
-  }
-  return (start + end) / 2;
 }
 
 function navigateTrackPoints(event: KeyboardEvent<HTMLButtonElement>): void {

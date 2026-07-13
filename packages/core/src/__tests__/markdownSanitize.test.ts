@@ -18,17 +18,19 @@ describe('markdown HTML sanitization', () => {
   });
 
   it('extraLinkSchemes allows host-app schemes but never executable ones', () => {
-    expect(sanitizeUrl('gezel-nav:src%2Fa.ts', 'link')).toBeNull();
-    expect(sanitizeUrl('gezel-nav:src%2Fa.ts', 'link', { extraLinkSchemes: ['gezel-nav'] })).toBe(
-      'gezel-nav:src%2Fa.ts',
-    );
+    expect(sanitizeUrl('workspace-nav:src%2Fa.ts', 'link')).toBeNull();
+    expect(
+      sanitizeUrl('workspace-nav:src%2Fa.ts', 'link', { extraLinkSchemes: ['workspace-nav'] }),
+    ).toBe('workspace-nav:src%2Fa.ts');
     expect(
       sanitizeUrl('javascript:alert(1)', 'link', { extraLinkSchemes: ['javascript'] }),
     ).toBeNull();
     expect(sanitizeUrl('data:text/html,x', 'link', { extraLinkSchemes: ['data'] })).toBeNull();
     // media URLs ignore the option entirely
     expect(
-      sanitizeUrl('gezel-nav:src%2Fa.ts', 'media', { extraLinkSchemes: ['gezel-nav'] }),
+      sanitizeUrl('workspace-nav:src%2Fa.ts', 'media', {
+        extraLinkSchemes: ['workspace-nav'],
+      }),
     ).toBeNull();
   });
 

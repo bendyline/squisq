@@ -110,6 +110,10 @@ function eventOf(editor: Editor, id: string) {
     .find((event) => event.id === id);
 }
 
+function trackOf(editor: Editor, id: string) {
+  return timelineOf(editor).tracks.find((track) => track.id === id);
+}
+
 afterEach(() => {
   cleanup();
   for (const editor of editors) editor.destroy();
@@ -117,6 +121,40 @@ afterEach(() => {
 });
 
 describe('TimelineEditorWidget', () => {
+  it('creates, renames, selects, and deletes timeline lines', async () => {
+    const editor = renderWidget();
+    expect(screen.queryByRole('textbox', { name: 'Rename line: Kernel' })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Rename line: Kernel' }));
+    expect(
+      (screen.getByRole('textbox', { name: 'Rename line: Kernel' }) as HTMLInputElement).value,
+    ).toBe('Kernel');
+    fireEvent.keyDown(screen.getByRole('textbox', { name: 'Rename line: Kernel' }), {
+      key: 'Escape',
+    });
+    expect(screen.queryByRole('textbox', { name: 'Rename line: Kernel' })).toBeNull();
+
+    fireEvent.click(screen.getByRole('button', { name: /Add line/ }));
+
+    await waitFor(() => expect(trackOf(editor, 'new-line')).toBeTruthy());
+    expect(timelineOf(editor).tracks).toHaveLength(3);
+    expect(trackOf(editor, 'new-line')?.events).toHaveLength(1);
+    expect(screen.getByRole('button', { name: /Edit New event, New line/ })).toBeTruthy();
+    const lineName = screen.getByRole('textbox', {
+      name: 'Rename line: New line',
+    }) as HTMLInputElement;
+    expect(lineName.value).toBe('New line');
+
+    fireEvent.change(lineName, { target: { value: 'Release' } });
+    fireEvent.blur(lineName);
+    await waitFor(() => expect(trackOf(editor, 'new-line')?.label).toBe('Release'));
+    expect(screen.getByRole('group', { name: 'Release timeline rail' })).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Delete line: Release' }));
+    await waitFor(() => expect(trackOf(editor, 'new-line')).toBeUndefined());
+    expect(timelineOf(editor).tracks).toHaveLength(2);
+    expect(screen.getByRole('button', { name: 'Rename line: Kernel' })).toBeTruthy();
+  });
+
   it('selects different dots, including a cadence-only dot, and exposes branches', async () => {
     const editor = makeEditor();
     const rendered = render(<TimelineEditorWidget editor={editor} blockId={blockIdOf(editor)} />);
@@ -170,7 +208,7 @@ describe('TimelineEditorWidget', () => {
     ).toBe('true');
   });
 
-  it('adds and selects a point where the empty rail is clicked', async () => {
+  it('adds one point on an armed rail, then returns to selection mode', async () => {
     const editor = renderWidget();
     const rail = screen.getByRole('group', { name: 'Kernel timeline rail' });
     rail.getBoundingClientRect = () =>
@@ -186,6 +224,12 @@ describe('TimelineEditorWidget', () => {
         toJSON: () => ({}),
       }) as DOMRect;
 
+    const addPoint = screen.getByRole('button', { name: 'Add point to Kernel timeline' });
+    expect(addPoint.getAttribute('aria-pressed')).toBe('false');
+    fireEvent.click(addPoint);
+    expect(addPoint.getAttribute('aria-pressed')).toBe('true');
+    expect(screen.getByText('Click the line to add a point · Esc to cancel')).toBeTruthy();
+
     fireEvent.click(rail, { clientX: 240 });
 
     await waitFor(() => expect(eventOf(editor, 'new-event')?.column).toBe(35));
@@ -193,6 +237,13 @@ describe('TimelineEditorWidget', () => {
     expect(marker.getAttribute('aria-pressed')).toBe('true');
     expect((screen.getByLabelText('Label') as HTMLInputElement).value).toBe('New event');
     expect(screen.getByText('New timeline point added. Edit its text below.')).toBeTruthy();
+    expect(addPoint.getAttribute('aria-pressed')).toBe('false');
+    expect(screen.getByText('Use + to add a point · Drag dots to move')).toBeTruthy();
+
+    fireEvent.click(rail, { clientX: 400 });
+    await Promise.resolve();
+    expect(timelineOf(editor).tracks[0].events).toHaveLength(3);
+    expect(eventOf(editor, 'new-event-2')).toBeUndefined();
   });
 
   it('previews a dragged dot and commits its new position only on drop', async () => {
@@ -253,10 +304,14 @@ describe('TimelineEditorWidget', () => {
 
   it('always exposes a keyboard-reachable add-point control for each track', async () => {
     const editor = renderWidget();
-    fireEvent.click(screen.getByRole('button', { name: 'Add point to Kernel timeline' }));
+    const addPoint = screen.getByRole('button', { name: 'Add point to Kernel timeline' });
+    fireEvent.click(addPoint);
+    expect(addPoint.getAttribute('aria-pressed')).toBe('true');
+    fireEvent.click(screen.getByRole('button', { name: 'Add point to Kernel at 25 percent' }));
 
     await waitFor(() => expect(eventOf(editor, 'new-event')?.column).toBe(25));
     expect(screen.getByRole('button', { name: /Edit New event, Kernel/ })).toBeTruthy();
+    expect(addPoint.getAttribute('aria-pressed')).toBe('false');
   });
 
   it('keeps dots selectable but prevents every mutation in read-only mode', async () => {
@@ -278,6 +333,9 @@ describe('TimelineEditorWidget', () => {
     expect(JSON.stringify(editor.state.doc.toJSON())).toBe(before);
     expect(screen.queryByRole('button', { name: /Add point to Kernel at/ })).toBeNull();
     expect(screen.queryByRole('button', { name: 'Add point to Kernel timeline' })).toBeNull();
+    expect(screen.queryByRole('button', { name: /Add line/ })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Rename line: Kernel' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Delete line: Kernel' })).toBeNull();
   });
 
   it('reacts when a mounted editor toggles between editable and read-only', async () => {
@@ -287,6 +345,7 @@ describe('TimelineEditorWidget', () => {
     editor.setEditable(false);
     await screen.findByText('Read only');
     expect(screen.queryByRole('button', { name: 'Add point to Kernel timeline' })).toBeNull();
+    expect(screen.queryByRole('button', { name: /Add line/ })).toBeNull();
     expect(
       (screen.getByLabelText('Label').closest('fieldset') as HTMLFieldSetElement).disabled,
     ).toBe(true);

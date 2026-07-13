@@ -18,6 +18,16 @@ import {
 } from '@bendyline/squisq/doc';
 import type { DiagramEdge, DiagramNode } from '../diagram/types';
 import { findAsciiDiagramBlockPos, parseAsciiDiagramForNode } from './AsciiDiagramExtension';
+import { translateDiagramOp } from './asciiDiagramOps';
+
+/** Persisted grid space reserved north/west of legacy origin-hugging art. */
+export const ASCII_DIAGRAM_GUTTER_COLS = 8;
+export const ASCII_DIAGRAM_GUTTER_ROWS = 2;
+
+export interface AsciiDiagramCanvasOffset {
+  col: number;
+  row: number;
+}
 
 export interface AsciiDiagramView {
   /** Canvas nodes, containers ordered first so their cards paint behind. */
@@ -29,6 +39,29 @@ export interface AsciiDiagramView {
   text: string;
   /** The parse behind `nodes`/`edges` (grid units) — ops operate on this. */
   diagram: AsciiDiagram;
+}
+
+/**
+ * Offset needed to give an existing diagram the same editing gutter as a
+ * newly inserted one. The widget applies this virtually until the first real
+ * canvas edit, which then writes the shifted coordinates into the fence.
+ */
+export function initialAsciiDiagramCanvasOffset(diagram: AsciiDiagram): AsciiDiagramCanvasOffset {
+  if (diagram.nodes.length === 0) return { col: 0, row: 0 };
+  const minCol = Math.min(...diagram.nodes.map((node) => node.col));
+  const minRow = Math.min(...diagram.nodes.map((node) => node.row));
+  return {
+    col: Math.max(0, ASCII_DIAGRAM_GUTTER_COLS - minCol),
+    row: Math.max(0, ASCII_DIAGRAM_GUTTER_ROWS - minRow),
+  };
+}
+
+/** Apply a canvas-only origin offset to a parsed grid model. */
+export function offsetAsciiDiagram(
+  diagram: AsciiDiagram,
+  offset: AsciiDiagramCanvasOffset,
+): AsciiDiagram {
+  return translateDiagramOp(diagram, offset.col, offset.row);
 }
 
 /** Grid model → canvas model, containers-first for paint order. */

@@ -22,10 +22,20 @@ import type {
   FormatId,
   FormatRegistry,
   NormalizedInput,
+  PreparedConversion,
+  PreparedExportOptions,
 } from './types.js';
 
 function markdownFormatOptions(options: ConvertOptions): BuiltinFormatOptions['md'] {
   return (options.formatOptions?.md ?? {}) as BuiltinFormatOptions['md'];
+}
+
+function throwIfAborted(signal?: AbortSignal): void {
+  if (!signal?.aborted) return;
+  if (signal.reason !== undefined) throw signal.reason;
+  const error = new Error('Document conversion was cancelled.');
+  error.name = 'AbortError';
+  throw error;
 }
 
 // ── Byte sniffing ───────────────────────────────────────────────────
@@ -274,39 +284,30 @@ async function applyTransformStyle(
   return [];
 }
 
-// ── convert() ───────────────────────────────────────────────────────
+// ── prepare / convert ───────────────────────────────────────────────
 
-/**
- * Convert a source document to a target format.
- *
- * @param source - A bytes / markdown / doc source.
- * @param to - The target format id (must be registered and support export).
- * @param options - Conversion options (registry, theme, transform, …).
- * @throws {@link ConversionError} on any failure, with a stable `code`.
- */
-export async function convert(
+/** Normalize and transform a source once, then safely export that snapshot many times. */
+export async function prepareConversion(
   source: ConvertSource,
-  to: FormatId,
   options: ConvertOptions = {},
-): Promise<ConversionResult> {
-  const registry = options.registry ?? defaultRegistry();
+): Promise<PreparedConversion> {
+  return prepareConversionInternal(source, options);
+}
 
-  const target: FormatDefinition | undefined = registry.get(to);
-  if (!target) {
-    throw new ConversionError('unknown-format', `Unknown target format "${to}".`, { format: to });
-  }
-  if (!target.exportDoc) {
-    throw new ConversionError(
-      'unsupported-output',
-      `Format "${target.label}" does not support export.`,
-      { format: to, hint: 'This format is import-only.' },
-    );
-  }
+async function prepareConversionInternal(
+  source: ConvertSource,
+  options: ConvertOptions,
+  failureFormat?: FormatId,
+): Promise<PreparedConversion> {
+  throwIfAborted(options.signal);
+  const registry = options.registry ?? defaultRegistry();
 
   let normalized: Normalized;
   try {
     normalized = await normalize(source, options, registry);
+    throwIfAborted(options.signal);
   } catch (err: unknown) {
+    throwIfAborted(options.signal);
     if (err instanceof ConversionError) throw err;
     const message = err instanceof Error ? err.message : String(err);
     throw new ConversionError('invalid-input', message, {
@@ -321,7 +322,6 @@ export async function convert(
     input.doc = { ...input.doc, themeId: options.themeId };
   }
 
-  let result: ConversionResult;
   try {
     if (options.transformStyle) {
       warnings.push(
@@ -332,18 +332,102 @@ export async function convert(
           options.transformRegistry,
         )),
       );
+      throwIfAborted(options.signal);
     }
-    result = await target.exportDoc(input, options);
   } catch (err: unknown) {
+    throwIfAborted(options.signal);
     if (err instanceof ConversionError) throw err;
     const message = err instanceof Error ? err.message : String(err);
-    throw new ConversionError('conversion-failed', message, { format: to, cause: err });
+    throw new ConversionError('conversion-failed', message, {
+      format: failureFormat,
+      cause: err,
+    });
   }
 
-  const ext = target.extensions[0]?.replace(/^\.+/, '') ?? to;
+  const preparedWarnings = Object.freeze([...warnings]);
+  const preparedInput = { ...input };
+  return Object.freeze({
+    async convert(to: FormatId, targetOptions: PreparedExportOptions = {}) {
+      const target = requireExportTarget(registry, to);
+      const exportOptions = mergePreparedExportOptions(options, targetOptions);
+      throwIfAborted(exportOptions.signal);
+      let result: ConversionResult;
+      try {
+        result = await target.exportDoc!({ ...preparedInput }, exportOptions);
+        throwIfAborted(exportOptions.signal);
+      } catch (err: unknown) {
+        throwIfAborted(exportOptions.signal);
+        if (err instanceof ConversionError) throw err;
+        const message = err instanceof Error ? err.message : String(err);
+        throw new ConversionError('conversion-failed', message, { format: to, cause: err });
+      }
+
+      const ext = target.extensions[0]?.replace(/^\.+/, '') ?? to;
+      return {
+        ...result,
+        suggestedFilename: `${preparedInput.baseName}.${ext}`,
+        warnings: [...preparedWarnings, ...result.warnings],
+      };
+    },
+  });
+}
+
+function requireExportTarget(registry: FormatRegistry, to: FormatId): FormatDefinition {
+  const target = registry.get(to);
+  if (!target) {
+    throw new ConversionError('unknown-format', `Unknown target format "${to}".`, { format: to });
+  }
+  if (!target.exportDoc) {
+    throw new ConversionError(
+      'unsupported-output',
+      `Format "${target.label}" does not support export.`,
+      { format: to, hint: 'This format is import-only.' },
+    );
+  }
+  return target;
+}
+
+function mergePreparedExportOptions(
+  prepared: ConvertOptions,
+  target: PreparedExportOptions,
+): ConvertOptions {
   return {
-    ...result,
-    suggestedFilename: `${input.baseName}.${ext}`,
-    warnings: [...warnings, ...result.warnings],
+    ...prepared,
+    signal: mergeAbortSignals(prepared.signal, target.signal),
+    title: target.title ?? prepared.title,
+    resolvePlayerScript: target.resolvePlayerScript ?? prepared.resolvePlayerScript,
+    formatOptions:
+      target.formatOptions === undefined
+        ? prepared.formatOptions
+        : { ...(prepared.formatOptions ?? {}), ...target.formatOptions },
   };
+}
+
+function mergeAbortSignals(
+  preparedSignal?: AbortSignal,
+  targetSignal?: AbortSignal,
+): AbortSignal | undefined {
+  if (!preparedSignal) return targetSignal;
+  if (!targetSignal || preparedSignal === targetSignal) return preparedSignal;
+  return AbortSignal.any([preparedSignal, targetSignal]);
+}
+
+/**
+ * Convert a source document to a target format.
+ *
+ * @param source - A bytes / markdown / doc source.
+ * @param to - The target format id (must be registered and support export).
+ * @param options - Conversion options (registry, theme, transform, …).
+ * @throws {@link ConversionError} on any failure, with a stable `code`.
+ */
+export async function convert(
+  source: ConvertSource,
+  to: FormatId,
+  options: ConvertOptions = {},
+): Promise<ConversionResult> {
+  throwIfAborted(options.signal);
+  const registry = options.registry ?? defaultRegistry();
+  requireExportTarget(registry, to);
+  const prepared = await prepareConversionInternal(source, { ...options, registry }, to);
+  return prepared.convert(to);
 }

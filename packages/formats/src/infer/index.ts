@@ -16,7 +16,7 @@
  */
 
 import type { CustomTemplateDefinition, Theme } from '@bendyline/squisq/schemas';
-import { openPackage } from '../ooxml/reader.js';
+import { openPackage, throwIfOoxmlAborted } from '../ooxml/reader.js';
 import type { OoxmlOpenOptions } from '../ooxml/reader.js';
 import type { OoxmlPackage } from '../ooxml/types.js';
 import { ConversionError } from '../registry/errors.js';
@@ -53,7 +53,8 @@ export interface InferredFileTheme {
   warnings: string[];
 }
 
-async function looksLikePdf(data: ArrayBuffer | Blob): Promise<boolean> {
+async function looksLikePdf(data: ArrayBuffer | Blob, signal?: AbortSignal): Promise<boolean> {
+  throwIfOoxmlAborted(signal);
   // Duck-typed (not instanceof): buffers routinely cross realms in test
   // environments and web workers. Blobs carry `size`; ArrayBuffers carry
   // `byteLength`.
@@ -64,14 +65,37 @@ async function looksLikePdf(data: ArrayBuffer | Blob): Promise<boolean> {
     typeof blob.slice === 'function' &&
     typeof blob.arrayBuffer === 'function'
   ) {
-    head = new Uint8Array(await blob.slice(0, 5).arrayBuffer());
+    head = new Uint8Array(await waitForAbortable(blob.slice(0, 5).arrayBuffer(), signal));
   } else if (typeof (data as ArrayBuffer).byteLength === 'number') {
     const buf = data as ArrayBuffer;
     head = new Uint8Array(buf, 0, Math.min(5, buf.byteLength));
   }
+  throwIfOoxmlAborted(signal);
   if (!head || head.length < 4) return false;
   // '%PDF'
   return head[0] === 0x25 && head[1] === 0x50 && head[2] === 0x44 && head[3] === 0x46;
+}
+
+function waitForAbortable<T>(work: Promise<T>, signal?: AbortSignal): Promise<T> {
+  throwIfOoxmlAborted(signal);
+  if (!signal) return work;
+  return new Promise<T>((resolve, reject) => {
+    let settled = false;
+    const finish = (complete: () => void): void => {
+      if (settled) return;
+      settled = true;
+      signal.removeEventListener('abort', handleAbort);
+      complete();
+    };
+    const handleAbort = (): void =>
+      finish(() => reject(signal.reason ?? new Error('OOXML operation was cancelled')));
+    signal.addEventListener('abort', handleAbort, { once: true });
+    if (signal.aborted) handleAbort();
+    work.then(
+      (value) => finish(() => resolve(value)),
+      (error: unknown) => finish(() => reject(error)),
+    );
+  });
 }
 
 /**
@@ -110,7 +134,8 @@ export async function inferThemeFromFile(
   data: ArrayBuffer | Blob,
   options: InferThemeOptions = {},
 ): Promise<InferredFileTheme> {
-  if (await looksLikePdf(data)) {
+  throwIfOoxmlAborted(options.signal);
+  if (await looksLikePdf(data, options.signal)) {
     throw new ConversionError(
       'unsupported-input',
       'PDF theme inference is not supported — PDF files carry no theme color/font tables.',
@@ -122,6 +147,7 @@ export async function inferThemeFromFile(
   try {
     pkg = await openPackage(data, options);
   } catch (err: unknown) {
+    if (options.signal?.aborted) throw options.signal.reason ?? err;
     throw new ConversionError(
       'invalid-input',
       'Could not read this file as a Word, PowerPoint, or Excel document.',
@@ -130,6 +156,7 @@ export async function inferThemeFromFile(
   }
 
   const format = options.format ?? sniffOoxmlFormat(pkg);
+  throwIfOoxmlAborted(options.signal);
   if (!format) {
     throw new ConversionError(
       'invalid-input',
@@ -138,6 +165,7 @@ export async function inferThemeFromFile(
   }
 
   const extraction = await EXTRACTORS[format](pkg);
+  throwIfOoxmlAborted(options.signal);
   if (!extraction) {
     throw new ConversionError('invalid-input', 'No theme part found in this file.', { format });
   }
@@ -145,6 +173,7 @@ export async function inferThemeFromFile(
   const { theme, warnings: mapWarnings } = compileExtractedTheme(extraction, {
     nameHint: options.nameHint,
   });
+  throwIfOoxmlAborted(options.signal);
   const warnings = [...extraction.warnings, ...mapWarnings];
 
   let layouts: CustomTemplateDefinition[] | undefined;
@@ -155,6 +184,7 @@ export async function inferThemeFromFile(
       const { analyzePptxLayouts } = await import('../pptx/layouts.js');
       const analysis = await analyzePptxLayouts(pkg, {
         colors: colorHintsFromExtraction(extraction),
+        signal: options.signal,
       });
       warnings.push(...analysis.warnings);
       const defs = analysis.layouts
@@ -164,5 +194,6 @@ export async function inferThemeFromFile(
     }
   }
 
+  throwIfOoxmlAborted(options.signal);
   return { theme, extraction, ...(layouts ? { layouts } : {}), warnings };
 }

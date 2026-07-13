@@ -30,7 +30,16 @@ import {
   removeNodeOp,
   renameNodeOp,
   resizeNodeOp,
+  translateDiagramOp,
 } from './asciiDiagramOps';
+
+export interface ApplyAsciiDiagramCommandOptions {
+  /**
+   * Virtual grid offset currently shown by the canvas for legacy art. It is
+   * folded into the source in the same transaction as the user's first edit.
+   */
+  diagramOffset?: { col: number; row: number };
+}
 
 /**
  * Replace the TEXT inside the codeBlock at `pos` and, when `ensureLanguage`
@@ -89,6 +98,7 @@ function applyOp(
   editor: Editor,
   blockId: string,
   op: (diagram: AsciiDiagram) => AsciiDiagram,
+  diagramOffset?: { col: number; row: number },
 ): boolean {
   // Resolve the position at dispatch time — captured positions go stale
   // the moment anything above the block changes.
@@ -96,11 +106,14 @@ function applyOp(
   if (pos === null) return false;
   const node = editor.state.doc.nodeAt(pos);
   if (!node || node.type.name !== 'codeBlock') return false;
-  const diagram = parseAsciiDiagramForNode(node);
-  if (!diagram) return false;
+  const sourceDiagram = parseAsciiDiagramForNode(node);
+  if (!sourceDiagram) return false;
+  const diagram = diagramOffset
+    ? translateDiagramOp(sourceDiagram, diagramOffset.col, diagramOffset.row)
+    : sourceDiagram;
 
   const next = op(diagram);
-  if (next === diagram) return false;
+  if (next === diagram && diagram === sourceDiagram) return false;
   const rendered = renderAsciiDiagram(next);
 
   // Verify before committing: the rendered art must re-parse to the same
@@ -118,29 +131,42 @@ export function applyAsciiDiagramCommand(
   editor: Editor,
   blockId: string,
   cmd: DiagramCommand,
+  options: ApplyAsciiDiagramCommandOptions = {},
 ): boolean {
+  const apply = (op: (diagram: AsciiDiagram) => AsciiDiagram) =>
+    applyOp(editor, blockId, op, options.diagramOffset);
   switch (cmd.kind) {
     case 'moveNode': {
       const { col, row } = canvasToAsciiCell(cmd.x, cmd.y);
-      return applyOp(editor, blockId, (d) => moveNodeOp(d, cmd.nodeId, col, row));
+      return apply((d) => moveNodeOp(d, cmd.nodeId, col, row));
     }
     case 'resizeNode': {
       const wCols = Math.max(3, Math.round(cmd.width / ASCII_CHAR_W));
       const hRows = Math.max(3, Math.round(cmd.height / ASCII_CHAR_H));
-      return applyOp(editor, blockId, (d) => resizeNodeOp(d, cmd.nodeId, wCols, hRows));
+      return apply((d) => {
+        // A north/west resize changes position and size. Apply both to the
+        // same parsed model and render once so collision/layout normalization
+        // cannot run between the two halves of one pointer gesture.
+        let next = d;
+        if (cmd.x !== undefined && cmd.y !== undefined) {
+          const { col, row } = canvasToAsciiCell(cmd.x, cmd.y);
+          next = moveNodeOp(next, cmd.nodeId, col, row);
+        }
+        return resizeNodeOp(next, cmd.nodeId, wCols, hRows);
+      });
     }
     case 'addConnection':
-      return applyOp(editor, blockId, (d) => addEdgeOp(d, cmd.source, cmd.target, cmd.type));
+      return apply((d) => addEdgeOp(d, cmd.source, cmd.target, cmd.type));
     case 'removeConnection':
-      return applyOp(editor, blockId, (d) => removeEdgeOp(d, cmd.source, cmd.target, cmd.type));
+      return apply((d) => removeEdgeOp(d, cmd.source, cmd.target, cmd.type));
     case 'renameNode':
-      return applyOp(editor, blockId, (d) => renameNodeOp(d, cmd.nodeId, cmd.newLabel));
+      return apply((d) => renameNodeOp(d, cmd.nodeId, cmd.newLabel));
     case 'addNode': {
       const { col, row } = canvasToAsciiCell(cmd.x, cmd.y);
-      return applyOp(editor, blockId, (d) => addNodeOp(d, { col, row }).diagram);
+      return apply((d) => addNodeOp(d, { col, row }).diagram);
     }
     case 'removeNode':
-      return applyOp(editor, blockId, (d) => removeNodeOp(d, cmd.nodeId));
+      return apply((d) => removeNodeOp(d, cmd.nodeId));
   }
   const _exhaustive: never = cmd;
   void _exhaustive;

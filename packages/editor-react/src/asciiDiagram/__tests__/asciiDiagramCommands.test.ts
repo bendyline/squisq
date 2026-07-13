@@ -5,7 +5,7 @@
 
 import { Editor } from '@tiptap/core';
 import StarterKit from '@tiptap/starter-kit';
-import { afterEach, beforeAll, describe, expect, it } from 'vitest';
+import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { ASCII_CHAR_H, ASCII_CHAR_W, parseAsciiDiagram } from '@bendyline/squisq/doc';
 import { markdownToTiptap } from '../../tiptapBridge';
 import { HeadingWithTemplate } from '../../TemplateAnnotation';
@@ -92,6 +92,63 @@ describe('applyAsciiDiagramCommand', () => {
     expect(reparsed.nodes.map((n) => n.id).sort()).toEqual(['alpha', 'beta']);
     expect(reparsed.edges).toEqual([{ source: 'alpha', target: 'beta', directed: true }]);
     expect(reparsed.nodes.find((n) => n.id === 'beta')?.col).toBe(20);
+  });
+
+  it('commits a north/west resize position and size in one fence rewrite', () => {
+    const editor = makeEditor('```\n' + ART + '\n```\n');
+    const id = firstBlockId(editor);
+    const onTransaction = vi.fn();
+    editor.on('transaction', onTransaction);
+
+    const ok = applyAsciiDiagramCommand(editor, id, {
+      kind: 'resizeNode',
+      nodeId: 'beta',
+      x: 18 * ASCII_CHAR_W,
+      y: 10 * ASCII_CHAR_H,
+      width: 14 * ASCII_CHAR_W,
+      height: 5 * ASCII_CHAR_H,
+    });
+
+    expect(ok).toBe(true);
+    expect(onTransaction).toHaveBeenCalledTimes(1);
+    const beta = parseAsciiDiagram(fenceOf(editor).text).nodes.find((n) => n.id === 'beta');
+    expect(beta).toMatchObject({ col: 18, row: 10, wCols: 14, hRows: 5 });
+
+    editor.commands.undo();
+    const restored = parseAsciiDiagram(fenceOf(editor).text).nodes.find((n) => n.id === 'beta');
+    expect(restored).toMatchObject({ col: 0, row: 5, wCols: 10, hRows: 3 });
+  });
+
+  it('persists a virtual gutter with the first edit of legacy origin-hugging art', () => {
+    const editor = makeEditor('```diagram\n' + ART + '\n```\n');
+    const id = firstBlockId(editor);
+
+    expect(
+      applyAsciiDiagramCommand(
+        editor,
+        id,
+        {
+          kind: 'resizeNode',
+          nodeId: 'alpha',
+          x: 6 * ASCII_CHAR_W,
+          y: 1 * ASCII_CHAR_H,
+          width: 12 * ASCII_CHAR_W,
+          height: 4 * ASCII_CHAR_H,
+        },
+        { diagramOffset: { col: 8, row: 2 } },
+      ),
+    ).toBe(true);
+
+    const nodes = parseAsciiDiagram(fenceOf(editor).text).nodes;
+    expect(nodes.find((node) => node.id === 'alpha')).toMatchObject({
+      col: 6,
+      row: 1,
+      wCols: 12,
+      hRows: 4,
+    });
+    // The untouched peer receives the persisted origin shift, preserving the
+    // same coordinates that were already projected on the canvas.
+    expect(nodes.find((node) => node.id === 'beta')).toMatchObject({ col: 8, row: 7 });
   });
 
   it('addConnection adds a reciprocal edge (renders as a double arrow)', () => {

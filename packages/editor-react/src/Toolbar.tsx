@@ -377,17 +377,23 @@ const LAYOUT_STARTER_MARKDOWN = `\n## Layout {[layout]}\n\n### {#text-1} {[text 
  * fences (the fence is the source of truth; `AsciiDiagramExtension` mounts
  * the interactive canvas over it). This exact art is the codec's own
  * canonical rendering of a two-node flow, so it re-parses and re-renders
- * byte-stably.
+ * byte-stably. The leading rows/columns are deliberate: ASCII has no
+ * separate canvas-origin metadata, so this persisted gutter gives the first
+ * node real grid space to move north/west. Without it, content-fit makes the
+ * node look centered while its authored coordinate is still (0, 0), and a
+ * drag into the apparent margin clamps straight back to that corner.
  */
 const DIAGRAM_STARTER_ART = [
-  '┌─────────┐',
-  '│  Start  │',
-  '└────┬────┘',
-  '     │',
-  '     ▼',
-  '┌────┴────┐',
-  '│  Next   │',
-  '└─────────┘',
+  '',
+  '',
+  '        ┌─────────┐',
+  '        │  Start  │',
+  '        └────┬────┘',
+  '             │',
+  '             ▼',
+  '        ┌────┴────┐',
+  '        │  Next   │',
+  '        └─────────┘',
 ].join('\n');
 /**
  * Fenced form for raw / code views — tagged with the explicit `diagram`

@@ -1,5 +1,7 @@
 /** Narrow EOCD preflight for rejecting record-count bombs before JSZip allocation. */
 
+import { throwIfZipAborted } from './zipLimits.js';
+
 const END_OF_CENTRAL_DIRECTORY = 0x06054b50;
 const ZIP64_END_OF_CENTRAL_DIRECTORY = 0x06064b50;
 const ZIP64_END_LOCATOR = 0x07064b50;
@@ -12,7 +14,9 @@ export type ZipInput = ArrayBuffer | Uint8Array | Blob;
 /** Materialize Blob input once when possible so preflight bytes feed JSZip too. */
 export async function prepareZipInput(
   data: ZipInput,
+  signal?: AbortSignal,
 ): Promise<{ input: ZipInput; bytes?: Uint8Array }> {
+  throwIfZipAborted(signal);
   if (ArrayBuffer.isView(data)) {
     const bytes = new Uint8Array(data.buffer, data.byteOffset, data.byteLength);
     return { input: bytes, bytes };
@@ -22,7 +26,8 @@ export async function prepareZipInput(
     return { input: bytes, bytes };
   }
 
-  const bytes = await readBlobBytes(data);
+  const bytes = await readBlobBytes(data, signal);
+  throwIfZipAborted(signal);
   return bytes ? { input: bytes, bytes } : { input: data };
 }
 
@@ -82,16 +87,65 @@ function isBlobLike(data: ZipInput): data is Blob {
   return typeof candidate.size === 'number' && typeof candidate.slice === 'function';
 }
 
-async function readBlobBytes(blob: Blob): Promise<Uint8Array | undefined> {
+async function readBlobBytes(blob: Blob, signal?: AbortSignal): Promise<Uint8Array | undefined> {
   const arrayBuffer = (blob as Blob & { arrayBuffer?: () => Promise<ArrayBuffer> }).arrayBuffer;
   if (typeof arrayBuffer === 'function') {
-    return new Uint8Array(await arrayBuffer.call(blob));
+    return new Uint8Array(await raceWithAbort(arrayBuffer.call(blob), signal));
   }
   if (typeof FileReader === 'undefined') return undefined;
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
-    reader.onload = () => resolve(new Uint8Array(reader.result as ArrayBuffer));
-    reader.onerror = () => reject(reader.error ?? new Error('Could not read ZIP blob.'));
+    let settled = false;
+    const cleanup = (): void => signal?.removeEventListener('abort', handleAbort);
+    const finish = (work: () => void): void => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      work();
+    };
+    const handleAbort = (): void => {
+      if (settled) return;
+      const reason = signal?.reason ?? new Error('ZIP operation was cancelled');
+      // Mark the promise settled before FileReader.abort(): browsers are
+      // allowed to dispatch `abort` synchronously and re-enter this handler.
+      finish(() => reject(reason));
+      try {
+        reader.abort();
+      } catch {
+        // Preserve the caller's reason if a platform reader is already done.
+      }
+    };
+    reader.onload = () => finish(() => resolve(new Uint8Array(reader.result as ArrayBuffer)));
+    reader.onerror = () =>
+      finish(() => reject(reader.error ?? new Error('Could not read ZIP blob.')));
+    reader.onabort = handleAbort;
+    signal?.addEventListener('abort', handleAbort, { once: true });
+    if (signal?.aborted) {
+      handleAbort();
+      return;
+    }
     reader.readAsArrayBuffer(blob);
+  });
+}
+
+function raceWithAbort<T>(work: Promise<T>, signal?: AbortSignal): Promise<T> {
+  throwIfZipAborted(signal);
+  if (!signal) return work;
+  return new Promise<T>((resolve, reject) => {
+    let settled = false;
+    const finish = (complete: () => void): void => {
+      if (settled) return;
+      settled = true;
+      signal.removeEventListener('abort', handleAbort);
+      complete();
+    };
+    const handleAbort = (): void =>
+      finish(() => reject(signal.reason ?? new Error('ZIP operation was cancelled')));
+    signal.addEventListener('abort', handleAbort, { once: true });
+    if (signal.aborted) handleAbort();
+    work.then(
+      (value) => finish(() => resolve(value)),
+      (error: unknown) => finish(() => reject(error)),
+    );
   });
 }

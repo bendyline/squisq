@@ -11,12 +11,13 @@
  * deletes it.
  */
 
-import { useCallback, useState } from 'react';
+import { type DragEvent as ReactDragEvent, useCallback, useRef, useState } from 'react';
 import type { Editor } from '@tiptap/react';
 import type { TreeNode } from '@bendyline/squisq/doc';
 import { Icon } from '../Icon';
 import { useTreeViewData } from './treeViewData';
 import { applyTreeCommand, type TreeCommand } from './treeViewCommands';
+import type { TreeDropPosition } from './treeOps';
 
 interface TreeOutlineWidgetProps {
   editor: Editor;
@@ -25,9 +26,46 @@ interface TreeOutlineWidgetProps {
   host?: HTMLElement | null;
 }
 
+interface TreeDropTarget {
+  id: string;
+  position: TreeDropPosition;
+}
+
+const TREE_DRAG_MIME = 'application/x-squisq-tree-node';
+
+function findNode(nodes: readonly TreeNode[], id: string): TreeNode | null {
+  for (const node of nodes) {
+    if (node.id === id) return node;
+    const child = findNode(node.children, id);
+    if (child) return child;
+  }
+  return null;
+}
+
+function nodeContains(node: TreeNode, id: string): boolean {
+  return node.id === id || node.children.some((child) => nodeContains(child, id));
+}
+
+function canDropNode(nodes: readonly TreeNode[], sourceId: string, targetId: string): boolean {
+  const source = findNode(nodes, sourceId);
+  return source != null && !nodeContains(source, targetId);
+}
+
+function dropPositionForPointer(event: ReactDragEvent<HTMLElement>): TreeDropPosition {
+  const rect = event.currentTarget.getBoundingClientRect();
+  if (rect.height <= 0) return 'child';
+  const ratio = (event.clientY - rect.top) / rect.height;
+  if (ratio < 0.3) return 'before';
+  if (ratio > 0.7) return 'after';
+  return 'child';
+}
+
 export function TreeOutlineWidget({ editor, blockId }: TreeOutlineWidgetProps) {
   const view = useTreeViewData(editor, blockId);
   const [collapsed, setCollapsed] = useState<ReadonlySet<string>>(() => new Set());
+  const activeDragRef = useRef<string | null>(null);
+  const [draggedId, setDraggedId] = useState<string | null>(null);
+  const [dropTarget, setDropTarget] = useState<TreeDropTarget | null>(null);
 
   const dispatch = useCallback(
     (cmd: TreeCommand) => applyTreeCommand(editor, blockId, cmd),
@@ -41,6 +79,72 @@ export function TreeOutlineWidget({ editor, blockId }: TreeOutlineWidgetProps) {
       return next;
     });
   }, []);
+
+  const clearDragState = useCallback(() => {
+    activeDragRef.current = null;
+    setDraggedId(null);
+    setDropTarget(null);
+  }, []);
+
+  const handleDragStart = useCallback((event: ReactDragEvent<HTMLElement>, id: string) => {
+    event.stopPropagation();
+    activeDragRef.current = id;
+    setDraggedId(id);
+    setDropTarget(null);
+    event.dataTransfer.effectAllowed = 'move';
+    // Firefox requires a text payload before it starts a native drag.
+    event.dataTransfer.setData(TREE_DRAG_MIME, id);
+    event.dataTransfer.setData('text/plain', id);
+  }, []);
+
+  const handleDragOver = useCallback(
+    (event: ReactDragEvent<HTMLElement>, targetId: string) => {
+      const sourceId = activeDragRef.current;
+      if (!sourceId) return;
+      event.preventDefault();
+      event.stopPropagation();
+
+      if (!view || !canDropNode(view.tree.roots, sourceId, targetId)) {
+        event.dataTransfer.dropEffect = 'none';
+        setDropTarget(null);
+        return;
+      }
+
+      const position = dropPositionForPointer(event);
+      event.dataTransfer.dropEffect = 'move';
+      setDropTarget((current) =>
+        current?.id === targetId && current.position === position
+          ? current
+          : { id: targetId, position },
+      );
+    },
+    [view],
+  );
+
+  const handleDrop = useCallback(
+    (event: ReactDragEvent<HTMLElement>, targetId: string) => {
+      const sourceId = activeDragRef.current;
+      if (!sourceId) return;
+      event.preventDefault();
+      event.stopPropagation();
+      const position = dropPositionForPointer(event);
+      const canMove = view && canDropNode(view.tree.roots, sourceId, targetId);
+
+      clearDragState();
+      if (!canMove) return;
+      const moved = dispatch({ kind: 'moveItem', id: sourceId, targetId, position });
+      if (moved && position === 'child') {
+        // Make the result visible when a node is dropped into a collapsed row.
+        setCollapsed((current) => {
+          if (!current.has(targetId)) return current;
+          const next = new Set(current);
+          next.delete(targetId);
+          return next;
+        });
+      }
+    },
+    [clearDragState, dispatch, view],
+  );
 
   if (!view) return null;
   const roots = view.tree.roots;
@@ -89,8 +193,14 @@ export function TreeOutlineWidget({ editor, blockId }: TreeOutlineWidgetProps) {
             node={node}
             depth={0}
             collapsed={collapsed}
+            draggedId={draggedId}
+            dropTarget={dropTarget}
             toggleCollapse={toggleCollapse}
             dispatch={dispatch}
+            onDragStart={handleDragStart}
+            onDragOver={handleDragOver}
+            onDrop={handleDrop}
+            onDragEnd={clearDragState}
           />
         ))}
       </ul>
@@ -108,19 +218,39 @@ function TreeRowView({
   node,
   depth,
   collapsed,
+  draggedId,
+  dropTarget,
   toggleCollapse,
   dispatch,
+  onDragStart,
+  onDragOver,
+  onDrop,
+  onDragEnd,
 }: {
   node: TreeNode;
   depth: number;
   collapsed: ReadonlySet<string>;
+  draggedId: string | null;
+  dropTarget: TreeDropTarget | null;
   toggleCollapse: (id: string) => void;
   dispatch: (cmd: TreeCommand) => boolean;
+  onDragStart: (event: ReactDragEvent<HTMLElement>, id: string) => void;
+  onDragOver: (event: ReactDragEvent<HTMLElement>, id: string) => void;
+  onDrop: (event: ReactDragEvent<HTMLElement>, id: string) => void;
+  onDragEnd: () => void;
 }) {
   const hasChildren = node.children.length > 0;
   const isCollapsed = collapsed.has(node.id);
   const isDir = node.isDir || hasChildren;
   const [draft, setDraft] = useState(node.label);
+  const dropPosition = dropTarget?.id === node.id ? dropTarget.position : null;
+  const itemClassName = [
+    'squisq-tree-item',
+    draggedId === node.id ? 'squisq-tree-item--dragging' : '',
+    dropPosition ? `squisq-tree-item--drop-${dropPosition}` : '',
+  ]
+    .filter(Boolean)
+    .join(' ');
 
   const commit = () => {
     if (draft !== node.label && draft.trim().length > 0) {
@@ -129,8 +259,12 @@ function TreeRowView({
   };
 
   return (
-    <li role="treeitem" style={{ paddingLeft: `${depth * 18}px` }}>
-      <div className="squisq-tree-row">
+    <li className={itemClassName} role="treeitem" style={{ paddingLeft: `${depth * 18}px` }}>
+      <div
+        className="squisq-tree-row"
+        onDragOver={(event) => onDragOver(event, node.id)}
+        onDrop={(event) => onDrop(event, node.id)}
+      >
         {hasChildren ? (
           <button
             type="button"
@@ -174,6 +308,16 @@ function TreeRowView({
           }}
         />
         <span className="squisq-tree-controls">
+          <span
+            className="squisq-tree-drag-handle"
+            draggable
+            aria-hidden="true"
+            title={`Drag ${node.label} to move`}
+            onDragStart={(event) => onDragStart(event, node.id)}
+            onDragEnd={onDragEnd}
+          >
+            <Icon icon="fa-solid fa-grip-vertical" />
+          </span>
           <button
             type="button"
             title="Add child"
@@ -227,8 +371,14 @@ function TreeRowView({
               node={child}
               depth={depth + 1}
               collapsed={collapsed}
+              draggedId={draggedId}
+              dropTarget={dropTarget}
               toggleCollapse={toggleCollapse}
               dispatch={dispatch}
+              onDragStart={onDragStart}
+              onDragOver={onDragOver}
+              onDrop={onDrop}
+              onDragEnd={onDragEnd}
             />
           ))}
         </ul>

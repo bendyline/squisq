@@ -1,4 +1,6 @@
 import { describe, it, expect } from 'vitest';
+import { Editor } from '@tiptap/core';
+import StarterKit from '@tiptap/starter-kit';
 import { markdownToTiptap, tiptapToMarkdown } from '../tiptapBridge';
 
 // ---------------------------------------------------------------------------
@@ -66,25 +68,25 @@ describe('markdownToTiptap', () => {
   });
 
   it('converts mentions to chip spans', () => {
-    const html = markdownToTiptap('Hey @[Leo](gezel:leo), take a look.');
+    const html = markdownToTiptap('Hey @[Leo](person:leo), take a look.');
     expect(html).toContain('data-mention="true"');
-    expect(html).toContain('data-kind="gezel"');
+    expect(html).toContain('data-kind="person"');
     expect(html).toContain('data-id="leo"');
     expect(html).toContain('data-label="Leo"');
     // "@Leo" appears inside the chip — NOT as a broken link
-    expect(html).not.toContain('href="gezel:leo"');
+    expect(html).not.toContain('href="person:leo"');
   });
 
   it('tolerates the backslash-escaped colon remark emits', () => {
-    // remark-stringify sometimes emits `gezel\:leo` to disambiguate
+    // remark-stringify sometimes emits `person\:leo` to disambiguate
     // from autolink syntax. The bridge should still recognize it.
-    const html = markdownToTiptap('Hey @[Leo](gezel\\:leo).');
-    expect(html).toContain('data-kind="gezel"');
+    const html = markdownToTiptap('Hey @[Leo](person\\:leo).');
+    expect(html).toContain('data-kind="person"');
     expect(html).toContain('data-id="leo"');
   });
 
   it('round-trips mentions back to markdown', () => {
-    const md = 'Hey @[Leo](gezel:leo), ping @[Tess](gezel:tess) too.';
+    const md = 'Hey @[Leo](person:leo), ping @[Tess](person:tess) too.';
     const html = markdownToTiptap(md);
     const back = tiptapToMarkdown(html);
     expect(back.trim()).toBe(md);
@@ -312,6 +314,13 @@ describe('tiptapToMarkdown', () => {
     expect(md).toContain('A wise quote');
   });
 
+  it('keeps adjacent blockquote nodes on adjacent markdown lines', () => {
+    const md = tiptapToMarkdown(
+      '<blockquote><p>A wise quote</p></blockquote><blockquote><p>-- Ada</p></blockquote>',
+    );
+    expect(md).toBe('> A wise quote\n> -- Ada\n');
+  });
+
   it('converts horizontal rules', () => {
     const md = tiptapToMarkdown('<p>Before</p><hr><p>After</p>');
     expect(md).toContain('---');
@@ -464,6 +473,30 @@ describe('round-trip: markdownToTiptap → tiptapToMarkdown', () => {
 
   it('preserves blockquotes', () => {
     expect(roundTrip('> Important note')).toContain('> Important note');
+  });
+
+  it('does not add a blank line before a quote attribution', () => {
+    const md = [
+      '### A Famous Quote {[quote]}',
+      '',
+      '> "The best way to predict the future is to invent it."',
+      '> -- Alan Kay',
+    ].join('\n');
+
+    expect(roundTrip(md)).toBe(md + '\n');
+  });
+
+  it('does not add a blank line after Tiptap normalizes a quote attribution', () => {
+    const md = ['> "The best way to predict the future is to invent it."', '> -- Alan Kay'].join(
+      '\n',
+    );
+    const editor = new Editor({
+      extensions: [StarterKit],
+      content: markdownToTiptap(md),
+    });
+
+    expect(tiptapToMarkdown(editor.getHTML())).toBe(md + '\n');
+    editor.destroy();
   });
 
   it('preserves unordered lists', () => {

@@ -3,6 +3,7 @@ import { parseTree, renderTree, type Tree, type TreeNode } from '@bendyline/squi
 import {
   addItemOp,
   indentItemOp,
+  moveItemOp,
   moveItemDownOp,
   moveItemUpOp,
   outdentItemOp,
@@ -90,6 +91,56 @@ describe('treeOps', () => {
     expect(outdentItemOp(t, 'root')).toBe(t);
   });
 
+  it('moveItemOp reorders siblings before or after a target', () => {
+    expect(flat(moveItemOp(tree(BASE), 'c', 'a', 'before'))).toEqual([
+      '0:root/',
+      '1:c',
+      '1:a',
+      '1:b/',
+      '2:b1',
+    ]);
+    expect(flat(moveItemOp(tree(BASE), 'b', 'c', 'after'))).toEqual([
+      '0:root/',
+      '1:a',
+      '1:c',
+      '1:b/',
+      '2:b1',
+    ]);
+  });
+
+  it('moveItemOp reparents nodes and carries their subtrees', () => {
+    expect(flat(moveItemOp(tree(BASE), 'c', 'a', 'child'))).toEqual([
+      '0:root/',
+      '1:a',
+      '2:c',
+      '1:b/',
+      '2:b1',
+    ]);
+    expect(flat(moveItemOp(tree(BASE), 'b', 'a', 'child'))).toEqual([
+      '0:root/',
+      '1:a',
+      '2:b/',
+      '3:b1',
+      '1:c',
+    ]);
+  });
+
+  it('moveItemOp can outdent relative to a shallower target', () => {
+    expect(flat(moveItemOp(tree(BASE), 'b1', 'b', 'before'))).toEqual([
+      '0:root/',
+      '1:a',
+      '1:b1',
+      '1:b/',
+      '1:c',
+    ]);
+  });
+
+  it('moveItemOp rejects self-drops and drops into the source subtree', () => {
+    const t = tree(BASE);
+    expect(moveItemOp(t, 'b', 'b', 'child')).toBe(t);
+    expect(moveItemOp(t, 'b', 'b1', 'child')).toBe(t);
+  });
+
   it('moveItemUp / moveItemDown reorder siblings within bounds', () => {
     expect(flat(moveItemDownOp(tree(BASE), 'a'))).toEqual([
       '0:root/',
@@ -115,6 +166,7 @@ describe('treeOps', () => {
       (t: Tree) => addItemOp(t, 'b', 'child', 'b2'),
       (t: Tree) => indentItemOp(t, 'c'),
       (t: Tree) => outdentItemOp(t, 'b1'),
+      (t: Tree) => moveItemOp(t, 'c', 'a', 'child'),
       (t: Tree) => moveItemDownOp(t, 'a'),
     ]) {
       const next = op(tree(BASE));

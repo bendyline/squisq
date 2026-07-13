@@ -153,6 +153,7 @@ function LayerRenderer({
           basePath={basePath}
           viewport={viewport}
           blockTime={blockTime}
+          animationsEnabled={animationsEnabled}
         />
       );
     case 'text':

@@ -263,6 +263,7 @@ export {
   applyRepairCommand,
   replaceAsciiFenceText,
 } from './asciiDiagram/asciiDiagramCommands.js';
+export type { ApplyAsciiDiagramCommandOptions } from './asciiDiagram/asciiDiagramCommands.js';
 // RepairableDiagramExtension mounts an inline "Repair as diagram" button on
 // code fences holding BROKEN box art — art too misaligned for clean detection
 // (so it renders as a faithful code block). One click reconstructs it into
@@ -288,6 +289,7 @@ export {
   renameNodeOp,
   resizeNodeOp,
   sanitizeAsciiLabel,
+  translateDiagramOp,
 } from './asciiDiagram/asciiDiagramOps.js';
 export { shouldPasteAsAsciiFence } from './asciiDiagram/asciiPaste.js';
 
@@ -367,7 +369,11 @@ export type { JsonEditorProps } from './jsonEditor/index.js';
 // `MediaProvider`. Previously published as `@bendyline/squisq-recorder-react`;
 // folded into editor-react so it ships with the editor it's wired into.
 export { RecorderModal } from './recorder/RecorderModal.js';
-export type { RecorderModalProps, RecorderSaveResult } from './recorder/RecorderModal.js';
+export type {
+  RecorderColorScheme,
+  RecorderModalProps,
+  RecorderSaveResult,
+} from './recorder/RecorderModal.js';
 export { RecorderButton } from './recorder/RecorderButton.js';
 export type { RecorderButtonProps } from './recorder/RecorderButton.js';
 export { RecorderPanel } from './recorder/RecorderPanel.js';

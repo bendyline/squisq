@@ -408,10 +408,13 @@ These are read by core and every export path (not just the editor preview):
 
 These are read only by the editor's Preview controls (like `document-render-as` / `display-mode`):
 
-| Key                                           | Purpose                                                                         |
-| --------------------------------------------- | ------------------------------------------------------------------------------- |
-| `squisq-transform` (legacy `transform-style`) | Slideshow transform style id applied in preview.                                |
-| `squisq-captions` (legacy `caption-style`)    | Caption style — `standard` or `social` (`instagram`/`tiktok`/`reels` → social). |
+| Key                                           | Purpose                                                                                                     |
+| --------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| `squisq-transform` (legacy `transform-style`) | Slideshow transform style id applied in preview. Omitted for the default of no transform.                   |
+| `squisq-captions` (legacy `caption-style`)    | Caption mode — `off`, `standard`, or `social` (`instagram`/`tiktok`/`reels` → social). Default: `standard`. |
+| `squisq-cover-slide` (legacy `cover-slide`)   | Whether to show the generated cover slide. Default: `true`.                                                 |
+
+When the editor writes these settings, values matching their runtime defaults are omitted rather than persisted. The same applies to the default `standard` theme. Choosing a default also removes any legacy alias; non-default values use the canonical `squisq-*` key.
 
 ### Custom frontmatter
 

@@ -76,6 +76,7 @@ export type {
 // Format registry + programmatic convert()
 export {
   convert,
+  prepareConversion,
   createRegistry,
   defaultRegistry,
   defaultFormats,
@@ -103,4 +104,6 @@ export type {
   BuiltinFormatOptions,
   MarkdownFormatOptions,
   DbkFormatOptions,
+  PreparedConversion,
+  PreparedExportOptions,
 } from './registry/index.js';

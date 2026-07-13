@@ -22,7 +22,13 @@ import { SceneBlockToolbar, type SceneBlockAction } from '../scene/SceneBlockToo
 import { SceneSideToolbar } from '../scene/SceneSideToolbar';
 import { nodeIdFromCardLayerId, NODE_WIDTH, NODE_HEIGHT } from '../scene';
 import { Icon } from '../Icon';
-import { useAsciiDiagramData } from './asciiDiagramData';
+import {
+  asciiDiagramToCanvas,
+  initialAsciiDiagramCanvasOffset,
+  offsetAsciiDiagram,
+  useAsciiDiagramData,
+  type AsciiDiagramCanvasOffset,
+} from './asciiDiagramData';
 import { applyAsciiDiagramCommand } from './asciiDiagramCommands';
 import { isAsciiSourceVisible, toggleAsciiSource } from './AsciiDiagramExtension';
 import type { SceneTextChannel } from '../scene/text/sceneTextChannel';
@@ -52,12 +58,36 @@ export function AsciiDiagramWidget({
   const [maximized, setMaximized] = useState(false);
   const [height, setHeight] = useState<number | null>(null);
   const [dragHeight, setDragHeight] = useState<number | null>(null);
+  const canvasOffsetRef = useRef<AsciiDiagramCanvasOffset | null>(null);
+  const [canvasOffsetVersion, setCanvasOffsetVersion] = useState(0);
   const inlineRef = useRef<HTMLDivElement>(null);
   const effectiveHeight = dragHeight ?? height;
 
+  if (view && canvasOffsetRef.current === null) {
+    canvasOffsetRef.current = initialAsciiDiagramCanvasOffset(view.diagram);
+  }
+
+  const canvasView = useMemo(() => {
+    if (!view) return null;
+    const offset = canvasOffsetRef.current ?? { col: 0, row: 0 };
+    return asciiDiagramToCanvas(offsetAsciiDiagram(view.diagram, offset));
+    // The ref is intentionally versioned only when its value is consumed.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [view, canvasOffsetVersion]);
+
   const dispatch = useCallback(
     (cmd: DiagramCommand) => {
-      applyAsciiDiagramCommand(editor, blockId, cmd);
+      const offset = canvasOffsetRef.current ?? { col: 0, row: 0 };
+      const applied = applyAsciiDiagramCommand(editor, blockId, cmd, {
+        diagramOffset: offset,
+      });
+      if (applied && (offset.col !== 0 || offset.row !== 0)) {
+        // The same rewrite that applied the edit has now persisted the virtual
+        // gutter. Drop the projection offset so the on-screen coordinates do
+        // not change while the fence-backed view refreshes.
+        canvasOffsetRef.current = { col: 0, row: 0 };
+        setCanvasOffsetVersion((version) => version + 1);
+      }
     },
     [editor, blockId],
   );
@@ -169,8 +199,8 @@ export function AsciiDiagramWidget({
   const canvas = (
     <DiagramCanvas
       textChannel={textChannel}
-      nodes={view.nodes}
-      edges={view.edges}
+      nodes={canvasView?.nodes ?? view.nodes}
+      edges={canvasView?.edges ?? view.edges}
       onCommand={dispatch}
       showMaximize
       maximized={maximized}

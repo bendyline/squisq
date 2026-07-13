@@ -48,7 +48,10 @@
   border-color: var(--squisq-text-muted, #94a3b8);
 }
 
-.squisq-tree-rows {
+/* Include the widget wrapper so this reset wins over the editor's generic
+ * `.squisq-wysiwyg-editor ul` padding. Otherwise every nested rail picks up
+ * another 24px of list indentation. */
+.squisq-tree-outline .squisq-tree-rows {
   list-style: none;
   margin: 0;
   padding: 0;
@@ -58,14 +61,49 @@
   margin-left: 8px;
 }
 
+.squisq-tree-item {
+  position: relative;
+}
+
 .squisq-tree-row {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 4px;
   padding: 1px 0;
+  border-radius: 4px;
 }
 .squisq-tree-row:hover .squisq-tree-controls {
   opacity: 1;
+}
+
+.squisq-tree-item--dragging {
+  opacity: 0.42;
+}
+
+.squisq-tree-item--drop-before > .squisq-tree-row::before,
+.squisq-tree-item--drop-after::after {
+  content: '';
+  position: absolute;
+  z-index: 2;
+  left: 0;
+  right: 0;
+  height: 2px;
+  border-radius: 999px;
+  background: #6366f1;
+  pointer-events: none;
+}
+.squisq-tree-item--drop-before > .squisq-tree-row::before {
+  top: -1px;
+}
+/* An after-drop becomes the target's sibling, so show the marker below its
+ * complete subtree rather than directly below the target row. */
+.squisq-tree-item--drop-after::after {
+  bottom: -1px;
+}
+.squisq-tree-item--drop-child > .squisq-tree-row {
+  background: rgba(99, 102, 241, 0.12);
+  box-shadow: inset 0 0 0 1px #6366f1;
 }
 
 .squisq-tree-chevron {
@@ -114,6 +152,18 @@
   gap: 2px;
   opacity: 0;
   transition: opacity 0.12s;
+}
+.squisq-tree-drag-handle {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  color: var(--squisq-text-muted, #64748b);
+  cursor: grab;
+}
+.squisq-tree-drag-handle:active {
+  cursor: grabbing;
 }
 .squisq-tree-controls button {
   border: none;

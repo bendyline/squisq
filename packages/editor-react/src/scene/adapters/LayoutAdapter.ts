@@ -130,6 +130,9 @@ export function useLayoutAdapter(
         moveLayoutLayer(editor, headingPos, cmd.id, cmd.x, cmd.y);
         return;
       case 'resizeLayer':
+        if (cmd.x !== undefined && cmd.y !== undefined) {
+          moveLayoutLayer(editor, headingPos, cmd.id, cmd.x, cmd.y);
+        }
         resizeLayoutLayer(editor, headingPos, cmd.id, cmd.width, cmd.height);
         return;
       case 'addLayer': {

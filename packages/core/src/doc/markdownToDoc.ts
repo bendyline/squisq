@@ -40,7 +40,7 @@ import type {
   MarkdownNode,
   HtmlNode,
 } from '../markdown/types.js';
-import { extractPlainText } from '../markdown/utils.js';
+import { extractPlainText, readFrontmatterThemeId } from '../markdown/utils.js';
 import { coerceAnnotationValues, type CoercedBlockMeta } from '../markdown/annotationCoercion.js';
 import { estimateReadingTime } from '../timing/readingTime.js';
 import { resolveTemplateName, isContainerTemplate } from './templates/index.js';
@@ -600,6 +600,7 @@ export function markdownToDoc(markdownDoc: MarkdownDocument, options?: MarkdownT
 
   const customTemplates = readCustomTemplatesFromFrontmatter(markdownDoc.frontmatter);
   const customThemes = readCustomThemesFromFrontmatter(markdownDoc.frontmatter);
+  const themeId = readFrontmatterThemeId(markdownDoc.frontmatter);
   const doc: Doc = {
     articleId,
     duration: currentTime,
@@ -609,6 +610,7 @@ export function markdownToDoc(markdownDoc: MarkdownDocument, options?: MarkdownT
     },
     ...(captions ? { captions } : {}),
     ...(markdownDoc.frontmatter ? { frontmatter: markdownDoc.frontmatter } : {}),
+    ...(themeId ? { themeId } : {}),
     ...(customTemplates ? { customTemplates } : {}),
     ...(customThemes ? { customThemes } : {}),
     ...(diagnostics.length > 0 ? { diagnostics } : {}),

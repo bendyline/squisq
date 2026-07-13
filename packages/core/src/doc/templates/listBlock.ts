@@ -19,6 +19,43 @@ import {
 } from '../utils/themeUtils.js';
 import { createAccentLayers, getAccentLayout, adjustY, DEFAULT_LAYOUT } from './accentImage.js';
 
+const LIST_ITEM_LINE_HEIGHT = 1.2;
+const LIST_ITEM_GAP_PX = 18;
+
+/**
+ * Mirror the renderer's character-based wrapping closely enough to reserve
+ * vertical space for each independently positioned text layer.
+ */
+function estimateWrappedLineCount(text: string, fontSize: number, maxWidth: number): number {
+  if (!text.trim()) return 1;
+
+  const charsPerLine = Math.floor(maxWidth / (fontSize * 0.5));
+  if (charsPerLine <= 0) return 1;
+
+  let lineCount = 0;
+  let currentLineLength = 0;
+
+  for (const word of text.split(/\s+/)) {
+    const testLineLength = currentLineLength ? currentLineLength + 1 + word.length : word.length;
+
+    if (testLineLength <= charsPerLine) {
+      currentLineLength = testLineLength;
+      continue;
+    }
+
+    if (currentLineLength) lineCount += 1;
+
+    let remainingLength = word.length;
+    while (remainingLength > charsPerLine) {
+      lineCount += 1;
+      remainingLength -= charsPerLine;
+    }
+    currentLineLength = remainingLength;
+  }
+
+  return Math.max(1, lineCount + (currentLineLength ? 1 : 0));
+}
+
 export function listBlock(input: ListBlockInput, context: TemplateContext): Layer[] {
   const { title, accentImage } = input;
   // `items` is required by the schema, but malformed / partially-authored
@@ -66,8 +103,9 @@ export function listBlock(input: ListBlockInput, context: TemplateContext): Laye
   // defensive against future edits to the accent-layout types).
   const centerX = parseFloat(accentLayout.textCenterX);
   const widthPct = parseFloat(accentLayout.textWidth);
-  const leftX =
-    Number.isFinite(centerX) && Number.isFinite(widthPct) ? `${centerX - widthPct / 2}%` : '8%';
+  const leftPct =
+    Number.isFinite(centerX) && Number.isFinite(widthPct) ? centerX - widthPct / 2 : 8;
+  const leftX = `${leftPct}%`;
 
   // Title if provided
   const startY = title ? 34 : 26;
@@ -95,28 +133,49 @@ export function listBlock(input: ListBlockInput, context: TemplateContext): Laye
     });
   }
 
-  // Stack items with a fixed compact gap rather than stretching them
-  // across the available band. Distributing items across (startY → 80%)
-  // left big vertical gaps for short lists and made the slide read as a
-  // sparse menu instead of a tight enumeration; conversely a bare
-  // line-height gap read as a cramped paragraph — 18px of air keeps each
-  // entry its own line without breaking the group.
-  //
-  // Spacing = item line-height (34px base × 1.2) + 18px gap, expressed
-  // as % of the 1080px design canvas (~5.4%). Wrapped items push the
-  // next entry down via their own line-height, so this sets the
-  // minimum baseline-to-baseline distance for unwrapped items.
-  const LIST_ITEM_BASE_PX = 34;
-  const LIST_ITEM_LINE_HEIGHT = 1.2;
-  const LIST_ITEM_GAP_PX = 18;
-  const DESIGN_HEIGHT_PX = 1080;
-  const spacing =
-    ((LIST_ITEM_BASE_PX * LIST_ITEM_LINE_HEIGHT + LIST_ITEM_GAP_PX) / DESIGN_HEIGHT_PX) * 100;
+  // Render the number and body in separate columns. The body is therefore a
+  // single text layer whose wrapped lines all share the same x coordinate,
+  // producing a hanging indent instead of wrapping underneath the number.
+  const textWidthPx = (Number.isFinite(widthPct) ? widthPct / 100 : 0.85) * context.viewport.width;
+  const markerText = `${items.length}.`;
+  const markerWidthPx = Math.max(itemFontSize, markerText.length * itemFontSize * 0.5);
+  const markerGapPx = itemFontSize * 0.35;
+  const bodyIndentPx = markerWidthPx + markerGapPx;
+  const bodyLeftX = `${leftPct + (bodyIndentPx / context.viewport.width) * 100}%`;
+  const bodyWidthPx = Math.max(itemFontSize, textWidthPx - bodyIndentPx);
+  let itemY = startY;
 
   // List items with staggered animation
   for (let i = 0; i < items.length; i++) {
-    const y = startY + spacing * i;
-    const itemText = `${i + 1}.  ${items[i]}`;
+    const itemText = items[i]!;
+    const lineCount = estimateWrappedLineCount(itemText, itemFontSize, bodyWidthPx);
+    const animation = themedEntrance(context, 'text', {
+      type: 'fadeIn',
+      duration: 0.8,
+      delay: 0.3 + 0.3 * i,
+    });
+
+    layers.push({
+      type: 'text',
+      id: `item-${i}-marker`,
+      content: {
+        text: `${i + 1}.`,
+        style: {
+          fontSize: itemFontSize,
+          fontFamily: getThemeFont(context, 'body'),
+          color: theme.colors.text,
+          textAlign: 'right',
+          lineHeight: LIST_ITEM_LINE_HEIGHT,
+          shadow: shouldUseShadow(context),
+        },
+      },
+      position: {
+        x: leftX,
+        y: adjustY(`${itemY}%`, accentLayout),
+        width: markerWidthPx,
+      },
+      animation,
+    });
 
     layers.push({
       type: 'text',
@@ -128,21 +187,20 @@ export function listBlock(input: ListBlockInput, context: TemplateContext): Laye
           fontFamily: getThemeFont(context, 'body'),
           color: theme.colors.text,
           textAlign: 'left',
-          lineHeight: 1.2,
+          lineHeight: LIST_ITEM_LINE_HEIGHT,
           shadow: shouldUseShadow(context),
         },
       },
       position: {
-        x: leftX,
-        y: adjustY(`${y}%`, accentLayout),
-        width: accentLayout.textWidth,
+        x: bodyLeftX,
+        y: adjustY(`${itemY}%`, accentLayout),
+        width: bodyWidthPx,
       },
-      animation: themedEntrance(context, 'text', {
-        type: 'fadeIn',
-        duration: 0.8,
-        delay: 0.3 + 0.3 * i,
-      }),
+      animation,
     });
+
+    const itemHeightPx = lineCount * itemFontSize * LIST_ITEM_LINE_HEIGHT;
+    itemY += ((itemHeightPx + LIST_ITEM_GAP_PX) / context.viewport.height) * 100;
   }
 
   return layers;

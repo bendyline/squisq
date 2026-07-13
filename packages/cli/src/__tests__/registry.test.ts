@@ -56,4 +56,21 @@ describe('CLI format registry', () => {
     const html = new TextDecoder().decode(result.bytes);
     expect(html).to.include('SquisqPlayer');
   });
+
+  for (const format of ['mp4', 'gif'] as const) {
+    it(`stops a pre-aborted ${format} conversion before browser or FFmpeg work`, async () => {
+      const controller = new AbortController();
+      const reason = new Error(`cancel ${format}`);
+      controller.abort(reason);
+
+      try {
+        await convert({ kind: 'markdown', markdown: '# Cancel' }, format, {
+          signal: controller.signal,
+        });
+        expect.fail(`Expected ${format} cancellation`);
+      } catch (err: unknown) {
+        expect(err).to.equal(reason);
+      }
+    });
+  }
 });

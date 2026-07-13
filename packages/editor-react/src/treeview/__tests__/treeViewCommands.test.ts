@@ -111,6 +111,22 @@ describe('applyTreeCommand', () => {
     expect(utils?.children.map((c) => c.label)).toContain('config.ts');
   });
 
+  it('moveItem reorders and reparents through one fence rewrite', () => {
+    const editor = makeEditor('```\n' + ART + '\n```\n');
+    const id = firstId(editor);
+    expect(
+      applyTreeCommand(editor, id, {
+        kind: 'moveItem',
+        id: 'config-ts',
+        targetId: 'utils',
+        position: 'child',
+      }),
+    ).toBe(true);
+    const tree = parseTree(fenceOf(editor).text);
+    const utils = tree.roots[0].children.find((n) => n.label === 'utils/');
+    expect(utils?.children.map((child) => child.label)).toEqual(['math.ts', 'config.ts']);
+  });
+
   it('removeItem drops a node', () => {
     const editor = makeEditor('```\n' + ART + '\n```\n');
     const id = firstId(editor);
