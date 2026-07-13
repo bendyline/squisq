@@ -61,7 +61,7 @@ with their licenses. All licenses are permissive and compatible with MIT.
 | @tiptap/react                  | 2.27.2    | MIT                           | https://tiptap.dev                           |
 | @tiptap/starter-kit            | 2.27.2    | MIT                           | https://tiptap.dev                           |
 | @tiptap/suggestion             | 2.27.2    | MIT                           | https://tiptap.dev                           |
-| monaco-editor _(peer)_         | ^0.50.0   | MIT                           | https://github.com/microsoft/monaco-editor   |
+| monaco-editor _(peer)_         | >=0.50.0  | MIT                           | https://github.com/microsoft/monaco-editor   |
 | react _(peer)_                 | ^18 / ^19 | MIT                           | https://reactjs.org                          |
 | react-dom _(peer)_             | ^18 / ^19 | MIT                           | https://reactjs.org                          |
 

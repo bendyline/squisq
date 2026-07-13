@@ -73,9 +73,18 @@ export function useMediaUrl(relativePath: string, basePath: string): string {
     }
 
     let cancelled = false;
-    provider!.resolveUrl(safePath).then((resolved) => {
-      if (!cancelled) setUrl(resolved);
-    });
+    // Never show the prior asset while a new provider/path is resolving.
+    setUrl(fallback);
+    provider!.resolveUrl(safePath).then(
+      (resolved) => {
+        if (!cancelled) setUrl(resolved);
+      },
+      () => {
+        // Resolution failures should be non-fatal and must not become
+        // unhandled promise rejections in rendering surfaces.
+        if (!cancelled) setUrl(fallback);
+      },
+    );
 
     return () => {
       cancelled = true;

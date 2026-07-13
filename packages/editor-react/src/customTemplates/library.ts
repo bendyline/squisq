@@ -37,17 +37,30 @@ function safeStorage(): Storage | null {
 function readPayload(): LibraryPayload {
   const storage = safeStorage();
   if (!storage) return { version: 1, templates: [] };
-  const raw = storage.getItem(LIBRARY_STORAGE_KEY);
-  if (!raw) return { version: 1, templates: [] };
   try {
+    const raw = storage.getItem(LIBRARY_STORAGE_KEY);
+    if (!raw) return { version: 1, templates: [] };
     const parsed = JSON.parse(raw) as Partial<LibraryPayload>;
     if (parsed && Array.isArray(parsed.templates)) {
-      return { version: 1, templates: parsed.templates };
+      return { version: 1, templates: parsed.templates.filter(isTemplateDefinition) };
     }
   } catch {
     // Corrupt payload — drop it.
   }
   return { version: 1, templates: [] };
+}
+
+function isTemplateDefinition(value: unknown): value is CustomTemplateDefinition {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const candidate = value as Partial<CustomTemplateDefinition>;
+  return (
+    typeof candidate.name === 'string' &&
+    typeof candidate.label === 'string' &&
+    !!candidate.viewport &&
+    Number.isFinite(candidate.viewport.width) &&
+    Number.isFinite(candidate.viewport.height) &&
+    Array.isArray(candidate.layers)
+  );
 }
 
 function writePayload(payload: LibraryPayload): void {

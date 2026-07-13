@@ -1,10 +1,10 @@
 /**
  * CLI format registry.
  *
- * The CLI extends the formats package's default registry with an `mp4` format
- * so `convert()` can produce video the same way it produces DOCX/PDF/HTML. MP4
- * export is Node-only (it needs Playwright + FFmpeg), which is why it lives
- * here in the CLI rather than in the browser-pure formats package.
+ * The CLI extends the formats package's default registry with `mp4` and `gif`
+ * formats so `convert()` can produce rendered media like DOCX/PDF/HTML. These
+ * exports are Node-only (Playwright + FFmpeg), which is why they live here
+ * rather than in the browser-pure formats package.
  */
 
 import { randomBytes } from 'node:crypto';
@@ -19,8 +19,33 @@ import type {
   FormatRegistry,
   NormalizedInput,
 } from '@bendyline/squisq-formats';
-import type { VideoOrientation, VideoQuality } from '@bendyline/squisq-video';
-import { renderDocToMp4 } from './api.js';
+import type { GifDither, VideoOrientation, VideoQuality } from '@bendyline/squisq-video';
+
+export interface Mp4FormatOptions {
+  fps?: number;
+  quality?: VideoQuality;
+  orientation?: VideoOrientation;
+  width?: number;
+  height?: number;
+  captionStyle?: 'standard' | 'social';
+  coverPreRoll?: number;
+  animationsEnabled?: boolean;
+}
+
+/** Per-export options for `convert(..., 'gif')`. */
+export interface GifFormatOptions {
+  fps?: number;
+  orientation?: VideoOrientation;
+  width?: number;
+  height?: number;
+  captionStyle?: 'standard' | 'social';
+  coverPreRoll?: number;
+  animationsEnabled?: boolean;
+  loop?: number;
+  maxColors?: number;
+  dither?: GifDither;
+  bayerScale?: number;
+}
 
 /** Sensible defaults for `convert(..., 'mp4')` — a full-quality landscape clip. */
 const MP4_DEFAULTS = {
@@ -28,6 +53,20 @@ const MP4_DEFAULTS = {
   quality: 'normal' as VideoQuality,
   orientation: 'landscape' as VideoOrientation,
   coverPreRoll: 0,
+  animationsEnabled: true,
+} as const;
+
+/** Compression-friendly defaults for `convert(..., 'gif')`. */
+const GIF_DEFAULTS = {
+  fps: 10,
+  orientation: 'landscape' as VideoOrientation,
+  width: 960,
+  height: 540,
+  coverPreRoll: 0,
+  animationsEnabled: false,
+  loop: 0,
+  maxColors: 256,
+  dither: 'sierra2_4a' as GifDither,
 } as const;
 
 /**
@@ -46,11 +85,9 @@ function mp4Format(): FormatDefinition {
     mimeType: 'video/mp4',
     extensions: ['.mp4'],
     async exportDoc(input: NormalizedInput, options: ConvertOptions): Promise<ConversionResult> {
-      // `renderDocToMp4` is imported statically from api.ts. api.ts imports
-      // `createCliRegistry` from this module, forming an ES module cycle — but
-      // both are hoisted function exports used only at call time, so the cycle
-      // resolves cleanly.
-      const mp4Opts = options.formatOptions?.mp4 ?? {};
+      // The renderer is lazy-loaded below so api.ts can create this registry
+      // without an eager ES-module initialization cycle.
+      const mp4Opts = (options.formatOptions?.mp4 ?? {}) as Mp4FormatOptions;
       const fps = typeof mp4Opts.fps === 'number' ? mp4Opts.fps : MP4_DEFAULTS.fps;
       const quality =
         typeof mp4Opts.quality === 'string'
@@ -62,15 +99,24 @@ function mp4Format(): FormatDefinition {
           : MP4_DEFAULTS.orientation;
       const coverPreRoll =
         typeof mp4Opts.coverPreRoll === 'number' ? mp4Opts.coverPreRoll : MP4_DEFAULTS.coverPreRoll;
+      const animationsEnabled =
+        typeof mp4Opts.animationsEnabled === 'boolean'
+          ? mp4Opts.animationsEnabled
+          : MP4_DEFAULTS.animationsEnabled;
 
       const outputPath = join(tmpdir(), `squisq-mp4-${randomBytes(8).toString('hex')}.mp4`);
       try {
+        const { renderDocToMp4 } = await import('./api.js');
         await renderDocToMp4(input.doc, input.container, {
           outputPath,
           fps,
           quality,
           orientation,
+          width: mp4Opts.width,
+          height: mp4Opts.height,
+          captionStyle: mp4Opts.captionStyle,
           coverPreRoll,
+          animationsEnabled,
         });
         const data = await readFile(outputPath);
         const bytes = new Uint8Array(data.buffer, data.byteOffset, data.byteLength);
@@ -82,12 +128,68 @@ function mp4Format(): FormatDefinition {
   };
 }
 
+/** The CLI-only animated GIF format definition. */
+function gifFormat(): FormatDefinition {
+  return {
+    id: 'gif',
+    label: 'Animated GIF',
+    mimeType: 'image/gif',
+    extensions: ['.gif'],
+    async exportDoc(input: NormalizedInput, options: ConvertOptions): Promise<ConversionResult> {
+      const gifOpts = (options.formatOptions?.gif ?? {}) as GifFormatOptions;
+      const orientation =
+        typeof gifOpts.orientation === 'string'
+          ? (gifOpts.orientation as VideoOrientation)
+          : GIF_DEFAULTS.orientation;
+      const portrait = orientation === 'portrait';
+      const defaultWidth = portrait ? GIF_DEFAULTS.height : GIF_DEFAULTS.width;
+      const defaultHeight = portrait ? GIF_DEFAULTS.width : GIF_DEFAULTS.height;
+      const outputPath = join(tmpdir(), `squisq-gif-${randomBytes(8).toString('hex')}.gif`);
+      try {
+        const { renderDocToGif } = await import('./api.js');
+        const result = await renderDocToGif(input.doc, input.container, {
+          outputPath,
+          fps: typeof gifOpts.fps === 'number' ? gifOpts.fps : GIF_DEFAULTS.fps,
+          orientation,
+          width: typeof gifOpts.width === 'number' ? gifOpts.width : defaultWidth,
+          height: typeof gifOpts.height === 'number' ? gifOpts.height : defaultHeight,
+          captionStyle: gifOpts.captionStyle,
+          coverPreRoll:
+            typeof gifOpts.coverPreRoll === 'number'
+              ? gifOpts.coverPreRoll
+              : GIF_DEFAULTS.coverPreRoll,
+          animationsEnabled:
+            typeof gifOpts.animationsEnabled === 'boolean'
+              ? gifOpts.animationsEnabled
+              : GIF_DEFAULTS.animationsEnabled,
+          loop: typeof gifOpts.loop === 'number' ? gifOpts.loop : GIF_DEFAULTS.loop,
+          maxColors:
+            typeof gifOpts.maxColors === 'number' ? gifOpts.maxColors : GIF_DEFAULTS.maxColors,
+          dither: gifOpts.dither ?? GIF_DEFAULTS.dither,
+          bayerScale: gifOpts.bayerScale,
+        });
+        const data = await readFile(outputPath);
+        const bytes = new Uint8Array(data.buffer, data.byteOffset, data.byteLength);
+        return {
+          bytes,
+          mimeType: 'image/gif',
+          suggestedFilename: '',
+          warnings: result.warnings,
+        };
+      } finally {
+        await rm(outputPath, { force: true });
+      }
+    },
+  };
+}
+
 /**
  * Build the CLI's format registry: every built-in format from
- * `@bendyline/squisq-formats` plus the CLI-only `mp4` exporter.
+ * `@bendyline/squisq-formats` plus the CLI-only rendered-media exporters.
  */
 export function createCliRegistry(): FormatRegistry {
   const registry = defaultRegistry();
   registry.register(mp4Format());
+  registry.register(gifFormat());
   return registry;
 }

@@ -182,8 +182,10 @@ describe('<EditorShell> image-edit modal wiring', () => {
 
     expect(screen.queryByTestId('image-edit-modal')).toBeNull();
 
+    const trigger = screen.getByTestId('trigger');
+    trigger.focus();
     await act(async () => {
-      fireEvent.click(screen.getByTestId('trigger'));
+      fireEvent.click(trigger);
     });
 
     await waitFor(() => {
@@ -191,6 +193,7 @@ describe('<EditorShell> image-edit modal wiring', () => {
     });
     // Shows the relative path in the header.
     expect(screen.getByText('hero.png')).toBeTruthy();
+    expect(document.activeElement).toBe(screen.getByTestId('image-edit-modal-close'));
 
     await act(async () => {
       fireEvent.click(screen.getByTestId('image-edit-modal-close'));
@@ -198,6 +201,7 @@ describe('<EditorShell> image-edit modal wiring', () => {
     await waitFor(() => {
       expect(screen.queryByTestId('image-edit-modal')).toBeNull();
     });
+    expect(document.activeElement).toBe(screen.getByTestId('trigger'));
   });
 
   it('opens the modal with a transient sidecar when only a mediaProvider is wired (no host container)', async () => {

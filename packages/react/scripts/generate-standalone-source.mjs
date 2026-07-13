@@ -19,14 +19,14 @@ const iifeFile = resolve(distDir, 'squisq-player.global.js');
 const cssFile = resolve(distDir, 'squisq-player.css');
 const outJs = resolve(distDir, 'standalone-source.js');
 
-// Read the IIFE bundle
 const source = readFileSync(iifeFile, 'utf-8');
 const css = readFileSync(cssFile, 'utf-8');
-const browserReadySource = addBrowserRuntimeShims(inlineCssSource(source, css));
+const browserReadySource = inlineCssSource(source, css);
 
 // Keep the public standalone JS self-contained too. The sourcemap still points
 // back to the original bundle, but the runtime artifact no longer depends on a
-// sidecar CSS file or ambient Rollup globals for Node built-ins.
+// sidecar CSS file. The standalone build itself targets the browser, so Node
+// built-ins never enter this artifact.
 writeFileSync(iifeFile, browserReadySource, 'utf-8');
 
 // Write ESM module that exports the source as a string. The matching
@@ -55,43 +55,4 @@ function inlineCssSource(bundleSource, cssSource) {
 
   const cssVar = cssVarMatch[1];
   return bundleSource.replace(`var ${cssVar}={};`, `var ${cssVar}=${JSON.stringify(cssSource)};`);
-}
-
-function addBrowserRuntimeShims(bundleSource) {
-  const wrapperMatch = bundleSource.match(
-    /^var SquisqPlayer=\(function\(exports,([^,]+),([^,]+),([^)]+)\)\{/,
-  );
-
-  if (!wrapperMatch) {
-    return bundleSource;
-  }
-
-  const [, pathGlobal, processGlobal, urlGlobal] = wrapperMatch;
-  const callPattern = new RegExp(
-    `\\}\\)\\(\\{\\},${escapeRegExp(pathGlobal)},${escapeRegExp(processGlobal)},${escapeRegExp(
-      urlGlobal,
-    )}\\);`,
-  );
-
-  if (!callPattern.test(bundleSource)) {
-    throw new Error('Could not find standalone bundle global call site');
-  }
-
-  const shimSource = [
-    'var __SQUISQ_PATH_SHIM__={basename:function(p){return String(p).split(/[\\\\/]/).pop()||""},dirname:function(p){var s=String(p).replace(/[\\\\/][^\\\\/]*$/,"");return s||"."},extname:function(p){var b=String(p).split(/[\\\\/]/).pop()||"";var i=b.lastIndexOf(".");return i>0?b.slice(i):""},join:function(){return Array.prototype.slice.call(arguments).filter(Boolean).join("/").replace(/\\\\/g,"/")},resolve:function(){return Array.prototype.slice.call(arguments).filter(Boolean).join("/").replace(/\\\\/g,"/")}};',
-    'var __SQUISQ_PROCESS_SHIM__={env:{},browser:true};',
-    'var __SQUISQ_URL_SHIM__={fileURLToPath:function(v){return String(v).replace(/^file:\\/\\//,"")},pathToFileURL:function(v){return {href:"file://"+v,toString:function(){return this.href}}}};',
-  ].join('');
-
-  return (
-    shimSource +
-    bundleSource.replace(
-      callPattern,
-      '})({},__SQUISQ_PATH_SHIM__,__SQUISQ_PROCESS_SHIM__,__SQUISQ_URL_SHIM__);',
-    )
-  );
-}
-
-function escapeRegExp(value) {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }

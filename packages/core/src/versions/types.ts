@@ -5,7 +5,9 @@
  * the document inside the same {@link ContentContainer}. They live under
  * `.versions/<docBasename>.<sortableTimestamp>.md`. The container is the
  * unit of persistence — when the host serializes the container to a ZIP,
- * a real folder, or anywhere else, the version snapshots ride along.
+ * a real folder, or anywhere else, the version snapshots ride along. When
+ * snapshots are retained, a container-root `.gitignore` rule excludes the
+ * `.versions/` folder from Git.
  */
 
 /**

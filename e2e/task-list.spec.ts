@@ -24,7 +24,7 @@ async function startInEmptyEditor(page: Page) {
     .locator('p')
     .first()
     .click({ position: { x: 8, y: 8 } });
-  await expect(page.locator('#squisq-template-gallery-portal')).toHaveCount(0);
+  await expect(page.locator('[data-squisq-template-gallery-portal]')).toHaveCount(0);
   await page.keyboard.press(`${MOD}+a`);
   await page.keyboard.press('Delete');
   return editor;

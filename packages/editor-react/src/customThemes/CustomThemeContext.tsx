@@ -34,6 +34,7 @@ import {
   listLibraryThemes,
   saveLibraryTheme as saveLibraryThemeRaw,
   deleteLibraryTheme as deleteLibraryThemeRaw,
+  THEME_LIBRARY_STORAGE_KEY,
 } from './customThemeLibrary';
 
 export interface CustomThemeContextValue {
@@ -96,6 +97,11 @@ export function CustomThemeProvider({
   // which is enough for the single-tab common case.
   useEffect(() => {
     setLibraryThemes(listLibraryThemes());
+    const onStorage = (event: StorageEvent) => {
+      if (event.key === THEME_LIBRARY_STORAGE_KEY) setLibraryThemes(listLibraryThemes());
+    };
+    window.addEventListener('storage', onStorage);
+    return () => window.removeEventListener('storage', onStorage);
   }, []);
 
   const upsertDocTheme = useCallback(

@@ -40,6 +40,7 @@ import {
   type ImageTreatmentPreset,
 } from './customThemes/themeDraft';
 import { Section, SeedColorRow, FontPicker, PresetRow } from './customThemes/themeControls';
+import { ImportThemeSection } from './customThemes/ImportThemeSection';
 
 // ── Component ───────────────────────────────────────────────────────
 
@@ -186,6 +187,13 @@ export function ThemeCustomizerPanel({
                 onChange={(e) => updateDraft({ name: e.target.value })}
                 aria-label="Theme name"
               />
+            </Section>
+
+            <Section
+              title="Import from file"
+              hint="Pull colors and fonts from a Word, PowerPoint, or Excel file."
+            >
+              <ImportThemeSection onImported={(patch) => updateDraft(patch)} />
             </Section>
 
             <Section title="Colors" hint="Pick seed colors. The rest is derived.">

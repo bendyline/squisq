@@ -6,6 +6,7 @@
  *
  * Usage:
  *   squisq convert <input> [options]
+ *   squisq video <input> [output.mp4|output.gif] [options]
  *   squisq --help
  */
 

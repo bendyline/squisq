@@ -18,7 +18,12 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 import type { Doc } from '@bendyline/squisq/schemas';
 import type { MediaProvider } from '@bendyline/squisq/schemas';
-import type { VideoQuality, VideoOrientation, AudioTimelineClip } from '@bendyline/squisq-video';
+import type {
+  VideoQuality,
+  VideoOrientation,
+  AudioTimelineClip,
+  FfmpegWasmLoadConfig,
+} from '@bendyline/squisq-video';
 import { resolveDimensions, computeAudioTimeline, QUALITY_PRESETS } from '@bendyline/squisq-video';
 import type { CaptionMode } from '@bendyline/squisq-react';
 import {
@@ -38,6 +43,7 @@ import {
   EXPORT_AUDIO_SAMPLE_RATE,
   EXPORT_AUDIO_CHANNELS,
 } from '../audioTrack.js';
+import { transcodeMp4ToGifWithFfmpegWasm } from '../gifTranscode.js';
 import { useFrameCapture } from './useFrameCapture.js';
 
 // ── Audio resolution ───────────────────────────────────────────────
@@ -84,13 +90,24 @@ export type VideoExportState =
   | 'complete'
   | 'error';
 
+/** Browser export container format. */
+export type VideoOutputFormat = 'mp4' | 'gif';
+
 export interface VideoExportConfig {
+  /** Output container (default: 'mp4') */
+  outputFormat?: VideoOutputFormat;
+  /** Render authored animations and slide transitions (default: true for MP4, false for GIF). */
+  animationsEnabled?: boolean;
   /** Encoding quality preset (default: 'normal') */
   quality?: VideoQuality;
   /** Frames per second (default: 30) */
   fps?: number;
   /** Viewport orientation (default: 'landscape') */
   orientation?: VideoOrientation;
+  /** Explicit output width. GIF defaults to 960 landscape / 540 portrait. */
+  width?: number;
+  /** Explicit output height. GIF defaults to 540 landscape / 960 portrait. */
+  height?: number;
   /**
    * Map of relative image paths to binary data.
    * Used to embed images into the render HTML.
@@ -107,6 +124,8 @@ export interface VideoExportConfig {
   captionMode?: CaptionMode;
   /** Player IIFE bundle (unused in browser export, kept for CLI/Playwright path) */
   playerScript?: string;
+  /** Optional self-hosted ffmpeg.wasm core URLs for fallback/offline/CSP use. */
+  ffmpegWasm?: FfmpegWasmLoadConfig;
 }
 
 export interface VideoExportResult {
@@ -118,6 +137,8 @@ export interface VideoExportResult {
   phase: string;
   /** Video duration detected from the doc (seconds) */
   duration: number;
+  /** Effective output format for the current or most recent export. */
+  outputFormat: VideoOutputFormat;
   /** Encoder backend ('webcodecs' when WebCodecs H.264 active, 'ffmpeg-wasm' when worker fallback active, null when idle) */
   backend: 'webcodecs' | 'ffmpeg-wasm' | null;
   /** Blob download URL (populated when state === 'complete') */
@@ -158,6 +179,7 @@ export function useVideoExport(): VideoExportResult {
   const [progress, setProgress] = useState(0);
   const [phase, setPhase] = useState('');
   const [duration, setDuration] = useState(0);
+  const [outputFormat, setOutputFormat] = useState<VideoOutputFormat>('mp4');
   const [backend, setBackend] = useState<'webcodecs' | 'ffmpeg-wasm' | null>(null);
   const [downloadUrl, setDownloadUrl] = useState<string | null>(null);
   const [fileSize, setFileSize] = useState(0);
@@ -169,6 +191,7 @@ export function useVideoExport(): VideoExportResult {
   const [estimatedRemaining, setEstimatedRemaining] = useState(0);
 
   const encoderRef = useRef<MainThreadEncoder | null>(null);
+  const gifAbortRef = useRef<AbortController | null>(null);
   const cancelledRef = useRef(false);
   const downloadUrlRef = useRef<string | null>(null);
   const startTimeRef = useRef<number>(0);
@@ -186,6 +209,7 @@ export function useVideoExport(): VideoExportResult {
       if (encoderRef.current) {
         encoderRef.current.close();
       }
+      gifAbortRef.current?.abort();
       frameCapture.destroy();
     };
   }, [frameCapture]);
@@ -199,11 +223,14 @@ export function useVideoExport(): VideoExportResult {
       encoderRef.current.close();
       encoderRef.current = null;
     }
+    gifAbortRef.current?.abort();
+    gifAbortRef.current = null;
     frameCapture.destroy();
     setState('idle');
     setProgress(0);
     setPhase('');
     setDuration(0);
+    setOutputFormat('mp4');
     setBackend(null);
     setDownloadUrl(null);
     setFileSize(0);
@@ -223,6 +250,8 @@ export function useVideoExport(): VideoExportResult {
       encoderRef.current.close();
       encoderRef.current = null;
     }
+    gifAbortRef.current?.abort();
+    gifAbortRef.current = null;
     frameCapture.destroy();
     setState('idle');
     setProgress(0);
@@ -244,14 +273,39 @@ export function useVideoExport(): VideoExportResult {
       setError(null);
 
       const quality = config.quality ?? 'normal';
-      const fps = config.fps ?? 30;
+      const effectiveOutputFormat = config.outputFormat ?? 'mp4';
+      const fps = config.fps ?? (effectiveOutputFormat === 'gif' ? 10 : 30);
       const orientation = config.orientation ?? 'landscape';
-      const { width, height } = resolveDimensions({ orientation });
+      const animationsEnabled = config.animationsEnabled ?? effectiveOutputFormat === 'mp4';
+      setOutputFormat(effectiveOutputFormat);
 
       try {
+        const gifDefaults =
+          orientation === 'portrait' ? { width: 540, height: 960 } : { width: 960, height: 540 };
+        const { width, height } = resolveDimensions({
+          orientation,
+          fps,
+          quality,
+          ...(config.width !== undefined
+            ? { width: config.width }
+            : effectiveOutputFormat === 'gif'
+              ? { width: gifDefaults.width }
+              : {}),
+          ...(config.height !== undefined
+            ? { height: config.height }
+            : effectiveOutputFormat === 'gif'
+              ? { height: gifDefaults.height }
+              : {}),
+        });
         // ── Check browser support ─────────────────────────────────
         const webCodecsAvailable = supportsWebCodecs();
         const sharedArrayBufferAvailable = typeof SharedArrayBuffer !== 'undefined';
+        if (effectiveOutputFormat === 'gif' && !sharedArrayBufferAvailable) {
+          throw new Error(
+            'Animated GIF export requires ffmpeg.wasm and SharedArrayBuffer ' +
+              '(Cross-Origin-Isolation headers).',
+          );
+        }
         if (!webCodecsAvailable && !sharedArrayBufferAvailable) {
           throw new Error(
             'No video encoder available. WebCodecs requires Chrome 94+ / Edge 94+, ' +
@@ -291,7 +345,7 @@ export function useVideoExport(): VideoExportResult {
 
         const docDuration = await frameCapture.init(
           doc,
-          { images, audio: config.audio, width, height },
+          { images, audio: config.audio, width, height, animationsEnabled },
           config.captionMode,
         );
 
@@ -319,7 +373,9 @@ export function useVideoExport(): VideoExportResult {
         // wrapped so a failure degrades to a silent video with a reason —
         // audio never aborts the export.
         const audioBitrate = (QUALITY_PRESETS[quality] ?? QUALITY_PRESETS.normal).audioBitrate;
-        const timeline = computeAudioTimeline(doc, 0);
+        // GIF has no audio track. An empty timeline skips preparation and
+        // muxing without reporting the format limitation as an export error.
+        const timeline = effectiveOutputFormat === 'mp4' ? computeAudioTimeline(doc, 0) : [];
         const aacSupported =
           timeline.length > 0
             ? await supportsWebCodecsAac(EXPORT_AUDIO_SAMPLE_RATE, EXPORT_AUDIO_CHANNELS)
@@ -388,7 +444,13 @@ export function useVideoExport(): VideoExportResult {
           });
           setBackend('webcodecs');
         } else if (sharedArrayBufferAvailable) {
-          const workerEncoder = createWorkerEncoder({ width, height, fps, quality });
+          const workerEncoder = createWorkerEncoder({
+            width,
+            height,
+            fps,
+            quality,
+            ffmpegWasm: config.ffmpegWasm,
+          });
           encoder = workerEncoder;
           const selectedBackend = await workerEncoder.ready;
           setBackend(selectedBackend);
@@ -443,7 +505,7 @@ export function useVideoExport(): VideoExportResult {
           }
 
           // Encode immediately — WebCodecs is fast and async internally
-          encoder.encodeFrame(bitmap, i);
+          await encoder.encodeFrame(bitmap, i);
         }
 
         if (cancelledRef.current) return;
@@ -468,9 +530,9 @@ export function useVideoExport(): VideoExportResult {
           }
         }
 
-        // ── Step 4: Finalize MP4 ──────────────────────────────────
+        // ── Step 4: Finalize MP4 (or GIF's MP4 intermediate) ─────
         setState('encoding');
-        setPhase('Finalizing video…');
+        setPhase(effectiveOutputFormat === 'gif' ? 'Finalizing GIF frames…' : 'Finalizing video…');
         setProgress(95);
 
         let outputBytes: ArrayBuffer | Uint8Array = await encoder.finalize();
@@ -478,15 +540,36 @@ export function useVideoExport(): VideoExportResult {
 
         if (cancelledRef.current) return;
 
-        // ── Step 4b: ffmpeg.wasm audio mux (tier 2) ───────────────
-        // Video is finalized; add the audio in a single copy-video pass.
-        if (useFfmpegAudio && renderedAudio) {
+        // ── Step 4b: GIF palette transcode or audio mux ───────────
+        if (effectiveOutputFormat === 'gif') {
+          setPhase('Generating GIF palette…');
+          const videoOnly =
+            outputBytes instanceof Uint8Array ? outputBytes : new Uint8Array(outputBytes);
+          const gifAbort = new AbortController();
+          gifAbortRef.current = gifAbort;
+          try {
+            outputBytes = await transcodeMp4ToGifWithFfmpegWasm(
+              videoOnly,
+              { width, height, loop: 0 },
+              config.ffmpegWasm,
+              gifAbort.signal,
+            );
+          } finally {
+            if (gifAbortRef.current === gifAbort) gifAbortRef.current = null;
+          }
+        } else if (useFfmpegAudio && renderedAudio) {
+          // Video is finalized; add audio in a single copy-video pass.
           setPhase('Muxing audio…');
           try {
             const wav = audioBufferToWav(renderedAudio);
             const videoOnly =
               outputBytes instanceof Uint8Array ? outputBytes : new Uint8Array(outputBytes);
-            outputBytes = await muxAudioWithFfmpegWasm(videoOnly, wav, audioBitrate);
+            outputBytes = await muxAudioWithFfmpegWasm(
+              videoOnly,
+              wav,
+              audioBitrate,
+              config.ffmpegWasm,
+            );
             audioIncludedLocal = true;
           } catch (audioErr: unknown) {
             audioIncludedLocal = false;
@@ -503,14 +586,17 @@ export function useVideoExport(): VideoExportResult {
         // output may be typed over SharedArrayBuffer).
         const finalBytes =
           outputBytes instanceof Uint8Array ? outputBytes.slice() : new Uint8Array(outputBytes);
-        const blob = new Blob([finalBytes], { type: 'video/mp4' });
+        const mimeType = effectiveOutputFormat === 'gif' ? 'image/gif' : 'video/mp4';
+        const blob = new Blob([finalBytes], { type: mimeType });
         const url = URL.createObjectURL(blob);
         downloadUrlRef.current = url;
 
         setDownloadUrl(url);
         setFileSize(finalBytes.byteLength);
         setAudioIncluded(audioIncludedLocal);
-        setAudioSkippedReason(audioIncludedLocal ? null : audioReasonLocal);
+        setAudioSkippedReason(
+          effectiveOutputFormat === 'gif' || audioIncludedLocal ? null : audioReasonLocal,
+        );
         setState('complete');
         setProgress(100);
         setPhase('Export complete');
@@ -532,6 +618,8 @@ export function useVideoExport(): VideoExportResult {
           encoderRef.current.close();
           encoderRef.current = null;
         }
+        gifAbortRef.current?.abort();
+        gifAbortRef.current = null;
         frameCapture.destroy();
       }
     },
@@ -543,6 +631,7 @@ export function useVideoExport(): VideoExportResult {
     progress,
     phase,
     duration,
+    outputFormat,
     backend,
     downloadUrl,
     fileSize,

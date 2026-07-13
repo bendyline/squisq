@@ -11,6 +11,7 @@ import {
   saveLibraryTheme,
   deleteLibraryTheme,
   clearThemeLibrary,
+  THEME_LIBRARY_STORAGE_KEY,
 } from '../customThemeLibrary';
 import { compileTheme } from '@bendyline/squisq/schemas';
 import type { Theme } from '@bendyline/squisq/schemas';
@@ -47,5 +48,13 @@ describe('customThemeLibrary', () => {
     saveLibraryTheme(theme('a'));
     clearThemeLibrary();
     expect(listLibraryThemes()).toEqual([]);
+  });
+
+  it('filters invalid stored entries instead of crashing sort', () => {
+    window.localStorage.setItem(
+      THEME_LIBRARY_STORAGE_KEY,
+      JSON.stringify({ version: 1, themes: [null, {}, theme('valid')] }),
+    );
+    expect(listLibraryThemes().map((entry) => entry.id)).toEqual(['valid']);
   });
 });

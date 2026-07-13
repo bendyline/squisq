@@ -9,8 +9,10 @@
 
 import { NODE_WIDTH, NODE_HEIGHT } from './nodeCard';
 import {
+  anchorPoint,
   nearestSnapPoint as nearestCoreSnapPoint,
   snapEndpoints as coreSnapEndpoints,
+  type ConnectorAnchor,
   type ConnectorSnapPoint,
 } from '@bendyline/squisq/doc';
 
@@ -77,12 +79,18 @@ export function edgeEndpoints(
   nodes: readonly EdgeNodeBox[],
   source: string,
   target: string,
+  sourceAnchor?: ConnectorAnchor,
+  targetAnchor?: ConnectorAnchor,
 ): { start: ConnectorSnapPoint; end: ConnectorSnapPoint } | null {
   const boxes = boxesOf(nodes);
   const a = boxes.get(source);
   const b = boxes.get(target);
   if (!a || !b) return null;
-  return coreSnapEndpoints(a, b);
+  const snapped = coreSnapEndpoints(a, b);
+  return {
+    start: sourceAnchor ? anchorPoint(a, sourceAnchor) : snapped.start,
+    end: targetAnchor ? anchorPoint(b, targetAnchor) : snapped.end,
+  };
 }
 
 export function straightPath(a: { x: number; y: number }, b: { x: number; y: number }): string {

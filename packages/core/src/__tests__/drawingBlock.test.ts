@@ -90,9 +90,9 @@ describe('drawingBlock template', () => {
   });
 });
 
-describe('drawingBlock integration with getLayers', () => {
+describe('drawingBlock integration with materializeBlockLayers', () => {
   it('renders a drawing block through the template registry', async () => {
-    const { getLayers } = await import('../doc/getLayers.js');
+    const { materializeBlockLayers } = await import('../doc/materializeBlockLayers.js');
     const parent: Block = {
       id: 'sketch',
       startTime: 0,
@@ -116,7 +116,7 @@ describe('drawingBlock integration with getLayers', () => {
         shape('l', 'arrow', { from: 'ceo', to: 'dev' }, { title: 'manages' }),
       ],
     };
-    const layers = getLayers(parent, {});
+    const layers = materializeBlockLayers(parent, { persistentLayers: false }).layers;
     const types = new Set(layers.map((l: Layer) => l.type));
     expect(types.has('shape')).toBe(true);
     expect(types.has('path')).toBe(true);

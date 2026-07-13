@@ -3,6 +3,7 @@ import {
   QUALITY_PRESETS,
   ORIENTATION_DIMENSIONS,
   resolveDimensions,
+  validateVideoExportOptions,
   bitrateForQuality,
   type VideoQuality,
   type VideoOrientation,
@@ -106,5 +107,21 @@ describe('resolveDimensions', () => {
       width: 1280,
       height: ORIENTATION_DIMENSIONS.landscape.height,
     });
+  });
+});
+
+describe('validateVideoExportOptions', () => {
+  it('rejects invalid runtime values before encoder setup', () => {
+    expect(() => validateVideoExportOptions({ fps: 0 })).toThrow('Video FPS');
+    expect(() => validateVideoExportOptions({ width: -1 })).toThrow('Video width');
+    expect(() => validateVideoExportOptions({ quality: 'ultra' as never })).toThrow(
+      'Unknown video quality',
+    );
+    expect(() => validateVideoExportOptions({ quality: 'toString' as never })).toThrow(
+      'Unknown video quality',
+    );
+    expect(() => validateVideoExportOptions({ orientation: 'square' as never })).toThrow(
+      'Unknown video orientation',
+    );
   });
 });

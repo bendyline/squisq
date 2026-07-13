@@ -3,18 +3,15 @@ import react from '@vitejs/plugin-react';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import type { Plugin } from 'vite';
+import type { Connect, Plugin } from 'vite';
 import { SQUISQ_DEV_PORT, SQUISQ_E2E_PORT } from '../../scripts/portUtils';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const crossOriginHeaders = {
-  // COOP/COEP were originally set for SharedArrayBuffer (ffmpeg.wasm).
-  // The current video export uses WebCodecs on the main thread, which
-  // doesn't need SharedArrayBuffer. COEP: require-corp blocks blob: URL
-  // iframes used by the frame capture system, so we use 'credentialless'
-  // which allows blob iframes while still enabling SharedArrayBuffer
-  // in browsers that support it.
+  // GIF export and the video fallback use ffmpeg.wasm/SharedArrayBuffer.
+  // COEP: require-corp blocks blob: URL iframes used by frame capture, so use
+  // credentialless: it permits those frames while preserving isolation.
   'Cross-Origin-Opener-Policy': 'same-origin',
   'Cross-Origin-Embedder-Policy': 'credentialless',
 };
@@ -23,46 +20,59 @@ const crossOriginHeaders = {
  * Vite plugin to serve content sample .zip files from the repo-root
  * `samplecontent/` directory under the `/samples/` URL prefix.
  *
- * - Dev: middleware intercepts `/samples/*` and streams from disk.
- * - Build: copies every *.zip into `dist/samples/`.
+ * - Dev + preview: middleware intercepts `/samples/*` and streams from disk.
+ * - Build: copies every *.zip into `dist/samples/` (for static deploys).
+ *
+ * Both the dev server (`vite`) and the preview server (`vite preview`) share
+ * the same middleware so a sample streams the current bytes off disk in
+ * either mode. Previously only the dev server had a middleware and preview
+ * relied entirely on the `writeBundle` copy — so `vite preview` against a
+ * `dist/` built before a sample was added served the SPA fallback instead of
+ * the file, and the sample failed to load.
  */
 function sampleContentPlugin(): Plugin {
   const sampleDir = path.resolve(__dirname, '../../samplecontent');
+
+  const serveSamples: Connect.NextHandleFunction = (req, res, next) => {
+    if (!req.url?.startsWith('/samples/')) return next();
+
+    let relative: string;
+    try {
+      relative = decodeURIComponent(req.url.slice('/samples/'.length));
+    } catch {
+      res.statusCode = 400;
+      res.end('Bad Request');
+      return;
+    }
+
+    const filePath = path.resolve(sampleDir, relative);
+
+    // Path-traversal guard
+    if (!filePath.startsWith(sampleDir + path.sep)) return next();
+    if (!fs.existsSync(filePath) || !fs.statSync(filePath).isFile()) return next();
+
+    const stat = fs.statSync(filePath);
+    const ext = path.extname(filePath).toLowerCase();
+    const contentType =
+      ext === '.zip'
+        ? 'application/zip'
+        : ext === '.dbk'
+          ? 'application/zip'
+          : 'application/octet-stream';
+    res.setHeader('Content-Length', stat.size);
+    res.setHeader('Content-Type', contentType);
+    fs.createReadStream(filePath).pipe(res);
+  };
 
   return {
     name: 'sample-content',
 
     configureServer(server) {
-      server.middlewares.use((req, res, next) => {
-        if (!req.url?.startsWith('/samples/')) return next();
+      server.middlewares.use(serveSamples);
+    },
 
-        let relative: string;
-        try {
-          relative = decodeURIComponent(req.url.slice('/samples/'.length));
-        } catch {
-          res.statusCode = 400;
-          res.end('Bad Request');
-          return;
-        }
-
-        const filePath = path.resolve(sampleDir, relative);
-
-        // Path-traversal guard
-        if (!filePath.startsWith(sampleDir + path.sep)) return next();
-        if (!fs.existsSync(filePath) || !fs.statSync(filePath).isFile()) return next();
-
-        const stat = fs.statSync(filePath);
-        const ext = path.extname(filePath).toLowerCase();
-        const contentType =
-          ext === '.zip'
-            ? 'application/zip'
-            : ext === '.dbk'
-              ? 'application/zip'
-              : 'application/octet-stream';
-        res.setHeader('Content-Length', stat.size);
-        res.setHeader('Content-Type', contentType);
-        fs.createReadStream(filePath).pipe(res);
-      });
+    configurePreviewServer(server) {
+      server.middlewares.use(serveSamples);
     },
 
     writeBundle(options) {
@@ -81,9 +91,54 @@ function sampleContentPlugin(): Plugin {
   };
 }
 
+/**
+ * Serve and publish ffmpeg.wasm's pinned core beside the demo site. GIF export
+ * always needs the core, and a same-origin module avoids CDN/CORS failures in
+ * cross-origin-isolated workers.
+ */
+function ffmpegCorePlugin(): Plugin {
+  const coreDir = path.resolve(__dirname, '../../node_modules/@ffmpeg/core/dist/esm');
+  const allowedFiles = new Set(['ffmpeg-core.js', 'ffmpeg-core.wasm']);
+
+  const serveCore: Connect.NextHandleFunction = (req, res, next) => {
+    const pathname = req.url?.split('?', 1)[0] ?? '';
+    if (!pathname.startsWith('/ffmpeg-core/')) return next();
+    const fileName = pathname.slice('/ffmpeg-core/'.length);
+    if (!allowedFiles.has(fileName)) return next();
+
+    const filePath = path.join(coreDir, fileName);
+    if (!fs.existsSync(filePath)) return next();
+    const stat = fs.statSync(filePath);
+    res.setHeader('Content-Length', stat.size);
+    res.setHeader(
+      'Content-Type',
+      fileName.endsWith('.wasm') ? 'application/wasm' : 'text/javascript; charset=utf-8',
+    );
+    fs.createReadStream(filePath).pipe(res);
+  };
+
+  return {
+    name: 'ffmpeg-core',
+    configureServer(server) {
+      server.middlewares.use(serveCore);
+    },
+    configurePreviewServer(server) {
+      server.middlewares.use(serveCore);
+    },
+    writeBundle(options) {
+      const outDir = options.dir ?? path.resolve(__dirname, 'dist');
+      const destDir = path.join(outDir, 'ffmpeg-core');
+      fs.mkdirSync(destDir, { recursive: true });
+      for (const fileName of allowedFiles) {
+        fs.copyFileSync(path.join(coreDir, fileName), path.join(destDir, fileName));
+      }
+    },
+  };
+}
+
 export default defineConfig({
   base: process.env.VITE_BASE || '/',
-  plugins: [react(), sampleContentPlugin()],
+  plugins: [react(), sampleContentPlugin(), ffmpegCorePlugin()],
   resolve: {
     // Ensure workspace packages resolve to their source
     dedupe: ['react', 'react-dom'],
@@ -100,13 +155,20 @@ export default defineConfig({
     strictPort: true,
     headers: crossOriginHeaders,
   },
-  // Optimise monaco-editor: tell Vite to pre-bundle it so workers are served
-  // from the local dev server instead of CDN. Exclude the workspace packages
+  // Optimise the exact Monaco entry points used by editor-react's lazy loader.
+  // Listing only `monaco-editor` is not sufficient: Vite treats the two deep
+  // import specifiers in `editor-react/monaco` as newly discovered dependencies
+  // the first time Source view mounts, optimises them on demand, and reloads the
+  // page. Pre-bundling those specifiers at startup keeps the first Source-view
+  // transition in-app. Exclude the workspace packages
   // so Vite serves their `dist/` straight — otherwise pre-bundling caches
   // a snapshot at `node_modules/.vite/` and rebuilds of editor-react et al.
   // don't show up until the dev server is restarted or the cache is cleared.
   optimizeDeps: {
-    include: ['monaco-editor'],
+    include: [
+      'monaco-editor/esm/vs/editor/editor.main.js',
+      'monaco-editor/esm/vs/editor/editor.api',
+    ],
     exclude: [
       '@bendyline/squisq',
       '@bendyline/squisq-core',

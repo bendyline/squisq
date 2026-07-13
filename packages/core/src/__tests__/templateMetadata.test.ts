@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { templateRegistry, TEMPLATE_METADATA, TEMPLATE_ALIASES } from '../doc/templates/index';
+import { templateRegistry, TEMPLATE_METADATA } from '../doc/templates/index';
+import { TEMPLATE_ALIASES } from '../doc/templates/templateNames';
 
 describe('TEMPLATE_METADATA', () => {
   it('stays exactly 1:1 with templateRegistry (same ids)', () => {

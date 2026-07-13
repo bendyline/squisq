@@ -2,7 +2,7 @@
  * Tests for the shared OOXML layer: xmlUtils, writer, reader round-trips.
  */
 
-import { describe, it, expect } from 'vitest';
+import { afterEach, describe, it, expect, vi } from 'vitest';
 import {
   escapeXml,
   xmlElement,
@@ -14,6 +14,10 @@ import {
 import { createPackage } from '../ooxml/writer';
 import { openPackage, getPartXml, getCoreProperties, getPartRelationships } from '../ooxml/reader';
 import { REL_OFFICE_DOCUMENT } from '../ooxml/namespaces';
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
 
 // ============================================
 // XML Utilities
@@ -97,6 +101,45 @@ describe('xmlDeclaration', () => {
 // ============================================
 
 describe('createPackage / openPackage round-trip', () => {
+  it('rejects unsafe authored part paths', () => {
+    const pkg = createPackage();
+    expect(() => pkg.addPart('../outside.xml', '<doc/>', 'application/xml')).toThrow(
+      /path is unsafe/i,
+    );
+    expect(() =>
+      pkg.addRelationship('..\\outside.xml', {
+        id: 'rId1',
+        type: REL_OFFICE_DOCUMENT,
+        target: 'word/document.xml',
+      }),
+    ).toThrow(/path is unsafe/i);
+  });
+
+  it('parses packages when the browser DOMParser global is unavailable', async () => {
+    const pkg = createPackage();
+    pkg.addPart('word/document.xml', '<doc><value>node</value></doc>', 'application/xml');
+    const buffer = await pkg.toArrayBuffer();
+
+    vi.stubGlobal('DOMParser', undefined);
+    const opened = await openPackage(buffer);
+    const doc = await getPartXml(opened, 'word/document.xml');
+    expect(doc?.getElementsByTagName('value')[0]?.textContent).toBe('node');
+  });
+
+  it('applies archive resource limits before parsing OOXML parts', async () => {
+    const pkg = createPackage();
+    pkg.addPart('word/document.xml', '<doc/>', 'application/xml');
+    const buffer = await pkg.toArrayBuffer();
+
+    await expect(openPackage(buffer, { maxEntries: 1 })).rejects.toMatchObject({
+      code: 'too-many-entries',
+      actual: 3,
+    });
+    await expect(openPackage(buffer, { maxUncompressedBytes: 1 })).rejects.toThrow(
+      /uncompressed content exceeds 1 byte limit/,
+    );
+  });
+
   it('creates a valid ZIP with content types and parts', async () => {
     const pkg = createPackage();
     pkg.addPart(
@@ -116,7 +159,7 @@ describe('createPackage / openPackage round-trip', () => {
 
     // Read it back
     const opened = await openPackage(arrayBuffer);
-    expect(opened.zip).toBeDefined();
+    expect(opened).not.toHaveProperty('zip');
     expect(opened.contentTypes.overrides.has('word/document.xml')).toBe(true);
     expect(opened.rootRelationships.length).toBeGreaterThanOrEqual(1);
     expect(opened.rootRelationships[0].type).toBe(REL_OFFICE_DOCUMENT);
@@ -154,6 +197,20 @@ describe('createPackage / openPackage round-trip', () => {
     expect(props.title).toBe('Test Title');
     expect(props.creator).toBe('Test Author');
     expect(props.description).toBe('Test description with <special> & chars');
+  });
+
+  it('serializes repeatedly without accumulating generated relationships', async () => {
+    const pkg = createPackage();
+    pkg.addPart('word/document.xml', '<doc/>', 'application/xml');
+    pkg.setCoreProperties({ title: 'Stable' });
+
+    await pkg.toArrayBuffer();
+    const second = await pkg.toArrayBuffer();
+    const opened = await openPackage(second);
+    const coreRelationships = opened.rootRelationships.filter((rel) =>
+      rel.type.endsWith('/metadata/core-properties'),
+    );
+    expect(coreRelationships).toHaveLength(1);
   });
 
   it('round-trips part relationships', async () => {

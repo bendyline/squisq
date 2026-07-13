@@ -110,6 +110,7 @@ export function useImageEditor(options: UseImageEditorOptions): UseImageEditorRe
         const seeded = await seedFromSource(container, initialSrc);
         if (cancelled) return;
         await writeImageEditDoc(container, seeded, stateFilename);
+        if (cancelled) return;
         dispatch({ type: 'load', doc: seeded });
         setReady(true);
         // Capture an initial snapshot of the freshly-seeded state so the
@@ -131,27 +132,53 @@ export function useImageEditor(options: UseImageEditorOptions): UseImageEditorRe
   // ── Debounced persistence of state.json ────────────────────────────────
   const persistTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const docRef = useRef<ImageEditDoc | null>(null);
-  docRef.current = state?.doc ?? null;
+  const dirtyRef = useRef(false);
+  const revisionRef = useRef(0);
+  const previousDocRef = useRef<ImageEditDoc | null>(null);
+  const nextDoc = state?.doc ?? null;
+  if (nextDoc !== previousDocRef.current) {
+    previousDocRef.current = nextDoc;
+    revisionRef.current += 1;
+  }
+  docRef.current = nextDoc;
+  dirtyRef.current = state?.dirty ?? false;
+  const writeQueueRef = useRef<Promise<void>>(Promise.resolve());
+  const persistTargetRef = useRef({ container, stateFilename });
+  persistTargetRef.current = { container, stateFilename };
+
+  const enqueueWrite = useCallback(
+    (doc: ImageEditDoc, revision: number, markClean: boolean): Promise<void> => {
+      const write = writeQueueRef.current
+        .catch(() => undefined)
+        .then(() => writeImageEditDoc(container, doc, stateFilename));
+      writeQueueRef.current = write.catch(() => undefined);
+      return write.then(() => {
+        if (markClean && revision === revisionRef.current && docRef.current === doc) {
+          dispatch({ type: 'mark-clean' });
+        }
+      });
+    },
+    [container, stateFilename],
+  );
 
   useEffect(() => {
     if (!state?.dirty) return;
     if (persistTimerRef.current) clearTimeout(persistTimerRef.current);
     persistTimerRef.current = setTimeout(() => {
-      const doc = docRef.current;
+      const doc = state.doc;
       if (!doc) return;
-      writeImageEditDoc(container, doc, stateFilename)
-        .then(() => dispatch({ type: 'mark-clean' }))
-        .catch((err: unknown) => {
-          console.warn(
-            '[squisq-editor] image-edit state persist failed:',
-            err instanceof Error ? err.message : err,
-          );
-        });
+      const revision = revisionRef.current;
+      enqueueWrite(doc, revision, true).catch((err: unknown) => {
+        console.warn(
+          '[squisq-editor] image-edit state persist failed:',
+          err instanceof Error ? err.message : err,
+        );
+      });
     }, persistDebounceMs);
     return () => {
       if (persistTimerRef.current) clearTimeout(persistTimerRef.current);
     };
-  }, [state?.dirty, state?.doc, container, stateFilename, persistDebounceMs]);
+  }, [state?.dirty, state?.doc, persistDebounceMs, enqueueWrite]);
 
   const flush = useCallback(async () => {
     const doc = docRef.current;
@@ -160,9 +187,29 @@ export function useImageEditor(options: UseImageEditorOptions): UseImageEditorRe
       clearTimeout(persistTimerRef.current);
       persistTimerRef.current = null;
     }
-    await writeImageEditDoc(container, doc, stateFilename);
-    dispatch({ type: 'mark-clean' });
-  }, [container, stateFilename]);
+    await enqueueWrite(doc, revisionRef.current, true);
+  }, [enqueueWrite]);
+
+  // A quick modal close must not discard the final edit that is still inside
+  // the debounce window. Queue it behind any in-flight write on unmount.
+  useEffect(
+    () => () => {
+      if (persistTimerRef.current) clearTimeout(persistTimerRef.current);
+      const doc = docRef.current;
+      if (!dirtyRef.current || !doc) return;
+      const target = persistTargetRef.current;
+      const write = writeQueueRef.current
+        .catch(() => undefined)
+        .then(() => writeImageEditDoc(target.container, doc, target.stateFilename));
+      writeQueueRef.current = write.catch((err: unknown) => {
+        console.warn(
+          '[squisq-editor] image-edit final persist failed:',
+          err instanceof Error ? err.message : err,
+        );
+      });
+    },
+    [],
+  );
 
   // ── Versioning ─────────────────────────────────────────────────────────
   const versioning = useMemo(
@@ -204,17 +251,26 @@ export function useImageEditor(options: UseImageEditorOptions): UseImageEditorRe
 
   // ── Asset URL cache ────────────────────────────────────────────────────
   const urlCacheRef = useRef<Map<string, string>>(new Map());
+  const urlCacheGenerationRef = useRef(0);
 
   const resolveAssetUrl = useCallback(
     async (path: string): Promise<string> => {
       const cache = urlCacheRef.current;
+      const generation = urlCacheGenerationRef.current;
       const cached = cache.get(path);
       if (cached) return cached;
       const data = await container.readFile(path);
+      if (generation !== urlCacheGenerationRef.current) {
+        throw new Error('useImageEditor: asset resolution cancelled');
+      }
       if (!data) throw new Error(`useImageEditor: missing asset "${path}"`);
       const list = await container.listFiles(path);
       const mime = list.find((e) => e.path === path)?.mimeType ?? 'application/octet-stream';
       const url = URL.createObjectURL(new Blob([data], { type: mime }));
+      if (generation !== urlCacheGenerationRef.current) {
+        URL.revokeObjectURL(url);
+        throw new Error('useImageEditor: asset resolution cancelled');
+      }
       cache.set(path, url);
       return url;
     },
@@ -225,6 +281,7 @@ export function useImageEditor(options: UseImageEditorOptions): UseImageEditorRe
   useEffect(() => {
     const cache = urlCacheRef.current;
     return () => {
+      urlCacheGenerationRef.current += 1;
       for (const url of cache.values()) URL.revokeObjectURL(url);
       cache.clear();
     };

@@ -23,7 +23,7 @@ import {
 } from 'react';
 import type { Layer } from '@bendyline/squisq/schemas';
 import type { SceneCommand, SceneEdge } from './commands/SceneCommand';
-import type { SceneTool, SceneToolContext } from './tools/SceneTool';
+import type { SceneInteractionState, SceneTool, SceneToolContext } from './tools/SceneTool';
 import { useScenePanZoom } from './hooks/useScenePanZoom';
 import { useSceneSelection } from './hooks/useSceneSelection';
 import { useSceneHitTest, layerBounds, type HitTestable } from './hooks/useSceneHitTest';
@@ -140,12 +140,21 @@ export function Scene(props: SceneProps) {
   // ── Pan/zoom + selection ────────────────────────────────────
   const panZoom = useScenePanZoom();
   const selection = useSceneSelection();
+  const setSceneSelection = selection.setSelection;
   const { hit } = useSceneHitTest();
+  const interaction = useRef<SceneInteractionState>({}).current;
 
-  // Surface selection upward so a host can drive a properties panel.
-  useEffect(() => {
-    onSelectionChange?.(selection.selection);
-  }, [selection.selection, onSelectionChange]);
+  // Surface selection in the originating interaction rather than a passive
+  // effect. Detached editor roots can then update their toolbar without
+  // forcing a flush from inside another component's lifecycle.
+  const setSelection = useCallback(
+    (ids: Iterable<string>) => {
+      const next = new Set(ids);
+      setSceneSelection(next);
+      onSelectionChange?.(next);
+    },
+    [setSceneSelection, onSelectionChange],
+  );
 
   // ── Hit-test cache ──────────────────────────────────────────
   const hitItems: HitTestable[] = useMemo(() => {
@@ -161,6 +170,7 @@ export function Scene(props: SceneProps) {
   // ── Tool context (rebuilt every render — cheap, no allocations in hot path) ──
   const ctx: SceneToolContext = useMemo(
     () => ({
+      interaction,
       viewport,
       transform: panZoom.transform,
       layers,
@@ -170,7 +180,7 @@ export function Scene(props: SceneProps) {
       screenToViewport: panZoom.screenToViewport,
       viewportToScreen: panZoom.viewportToScreen,
       hit: (p) => hit(p, hitItems),
-      setSelection: selection.setSelection,
+      setSelection,
       dispatch: onCommand,
       setActiveTool,
       beginTextEdit: textEdit.begin,
@@ -183,16 +193,17 @@ export function Scene(props: SceneProps) {
       layers,
       edges,
       selection.selection,
-      selection.setSelection,
+      setSelection,
       hitItems,
       hit,
       onCommand,
       setActiveTool,
       textEdit.begin,
+      interaction,
     ],
   );
-  // Mirror ctx in a ref so keyboard handlers attached to window read the
-  // latest selection without re-binding on every selection change.
+  // Mirror ctx in a ref so root keyboard handlers read the latest selection
+  // without re-binding on every selection change.
   const ctxRef = useRef(ctx);
   ctxRef.current = ctx;
 
@@ -220,12 +231,9 @@ export function Scene(props: SceneProps) {
     [panZoom],
   );
 
-  // Tools keep their drag state in module-level closures (so it survives
-  // outside React's render cycle). To make the live drag/resize preview
-  // *visible*, the Scene needs to re-render on every pointer-move while
-  // a gesture is in progress. We bump `dragTick` on pointer-down and on
-  // every move thereafter — cheap (one setState per move) and only fires
-  // while the user is actively interacting.
+  // Gesture state belongs to this Scene instance and lives outside React's
+  // render cycle. Bump `dragTick` while a pointer gesture is active so its
+  // live drag/resize preview is visible.
   const [, setDragTick] = useState(0);
   const pointerActive = useRef(false);
   const bumpTick = useCallback(() => setDragTick((t) => t + 1), []);
@@ -278,6 +286,27 @@ export function Scene(props: SceneProps) {
       activeTool?.onPointerUp?.(e, ctxRef.current);
     },
     [activeTool],
+  );
+
+  const handlePointerCancel = useCallback(
+    (e: React.PointerEvent<SVGSVGElement>) => {
+      pointerActive.current = false;
+      isPanning.current = false;
+      panLast.current = null;
+      interaction.selectDrag = undefined;
+      interaction.connect = undefined;
+      (e.currentTarget as Element).releasePointerCapture?.(e.pointerId);
+      bumpTick();
+    },
+    [interaction, bumpTick],
+  );
+
+  useEffect(
+    () => () => {
+      interaction.selectDrag = undefined;
+      interaction.connect = undefined;
+    },
+    [interaction],
   );
 
   const handleDoubleClick = useCallback(
@@ -387,8 +416,8 @@ export function Scene(props: SceneProps) {
   }, [containerSize, hitItems, panZoom]);
 
   // ── Render ──────────────────────────────────────────────────
-  const liveOffset = activeId === 'select' ? getActiveMoveOffset() : null;
-  const liveResize = activeId === 'select' ? getActiveResize() : null;
+  const liveOffset = activeId === 'select' ? getActiveMoveOffset(interaction) : null;
+  const liveResize = activeId === 'select' ? getActiveResize(interaction) : null;
   const showSelectionHandles = activeTool?.hideSelectionHandles !== true;
 
   // Per-layer transform applied during an in-flight drag or resize so
@@ -453,7 +482,7 @@ export function Scene(props: SceneProps) {
     const sx = e.clientX - rect.left;
     const sy = e.clientY - rect.top;
     const startV = panZoom.screenToViewport(sx, sy);
-    beginHandleDrag({ layerId: id, corner, startV, startBounds: bounds });
+    beginHandleDrag({ layerId: id, corner, startV, startBounds: bounds }, interaction);
     (e.currentTarget as Element).setPointerCapture?.(e.pointerId);
     // Mark a gesture as active so the Scene's pointer-move handler
     // triggers re-renders for the live resize preview.
@@ -475,6 +504,7 @@ export function Scene(props: SceneProps) {
         onPointerDown={handlePointerDown}
         onPointerMove={handlePointerMove}
         onPointerUp={handlePointerUp}
+        onPointerCancel={handlePointerCancel}
         onDoubleClick={handleDoubleClick}
         onDragOver={onDrop ? handleDragOver : undefined}
         onDrop={onDrop ? handleDrop : undefined}

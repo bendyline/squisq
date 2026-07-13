@@ -6,7 +6,8 @@ import {
   STARTER_THEME,
   deriveColorPalette,
 } from '../schemas/themeCompile.js';
-import { registerTheme, unregisterTheme, getRegisteredThemes } from '../schemas/Theme.js';
+import { createThemeRegistry } from '../schemas/Theme.js';
+import type { Theme } from '../schemas/Theme.js';
 import { resolveTheme, DEFAULT_THEME, THEMES } from '../schemas/themeLibrary.js';
 import { resolveFontFamily } from '../schemas/fontStacks.js';
 
@@ -132,45 +133,71 @@ describe('parseTheme / serializeTheme round-trip', () => {
   });
 });
 
-describe('registerTheme / resolveTheme', () => {
-  it('registered theme takes precedence over built-in with same id', () => {
+describe('caller-owned theme registries', () => {
+  it('an explicit registry can override a built-in without process-global leakage', () => {
     const overlay = compileTheme({
       id: 'standard',
       name: 'Standard Override',
       seedColors: { primary: '#ff0000' },
     });
-    registerTheme(overlay);
-    try {
-      const resolved = resolveTheme('standard');
-      expect(resolved.name).toBe('Standard Override');
-      expect(resolved.colors.primary).toBe('#ff0000');
-    } finally {
-      unregisterTheme('standard');
-    }
-    // After cleanup, built-in is restored
+    const registry = createThemeRegistry([overlay]);
+    const resolved = resolveTheme('standard', registry);
+    expect(resolved.name).toBe('Standard Override');
+    expect(resolved.colors.primary).toBe('#ff0000');
     expect(resolveTheme('standard').name).toBe('Standard Light');
   });
 
-  it('registered custom-id theme is resolvable via Doc.themeId', () => {
+  it('resolves a custom id only through the registry that owns it', () => {
     const custom = compileTheme({
       id: 'custom-test-1',
       name: 'Custom Test One',
       seedColors: { primary: '#00aabb' },
     });
-    registerTheme(custom);
-    try {
-      const resolved = resolveTheme('custom-test-1');
-      expect(resolved.id).toBe('custom-test-1');
-      expect(resolved.name).toBe('Custom Test One');
-      expect(getRegisteredThemes().some((t) => t.id === 'custom-test-1')).toBe(true);
-    } finally {
-      unregisterTheme('custom-test-1');
-    }
+    const registry = createThemeRegistry([custom]);
+    expect(resolveTheme('custom-test-1', registry).name).toBe('Custom Test One');
+    expect(resolveTheme('custom-test-1')).toBe(DEFAULT_THEME);
+    expect(registry.list().map((theme) => theme.id)).toContain('custom-test-1');
   });
 
   it('resolveTheme falls back to default for unknown ids', () => {
     expect(resolveTheme('nonexistent-theme')).toBe(DEFAULT_THEME);
     expect(resolveTheme(undefined)).toBe(DEFAULT_THEME);
+  });
+
+  it('validates and stores an immutable snapshot', () => {
+    const registry = createThemeRegistry();
+    const source = compileTheme({
+      id: 'isolated-theme',
+      name: 'Isolated',
+      seedColors: { primary: '#336699' },
+    });
+    registry.register(source);
+    source.name = 'Changed later';
+    source.colors.primary = '#ffffff';
+
+    const stored = registry.get('isolated-theme')!;
+    expect(stored.name).toBe('Isolated');
+    expect(stored.colors.primary).toBe('#336699');
+    expect(Object.isFrozen(stored)).toBe(true);
+    expect(Object.isFrozen(stored.colors)).toBe(true);
+    expect(() => registry.register({ id: 'invalid' } as Theme)).toThrow(/invalid theme/i);
+  });
+
+  it('supports caller-owned registries with isolated state', () => {
+    const source = compileTheme({
+      id: 'tenant-theme',
+      name: 'Tenant',
+      seedColors: { primary: '#123456' },
+    });
+    const tenantA = createThemeRegistry([source]);
+    const tenantB = createThemeRegistry();
+    expect(tenantA.get('tenant-theme')?.name).toBe('Tenant');
+    expect(tenantB.get('tenant-theme')).toBeUndefined();
+  });
+
+  it('freezes built-ins so lookup ergonomics do not expose mutable global state', () => {
+    expect(Object.isFrozen(THEMES)).toBe(true);
+    expect(Object.isFrozen(resolveTheme('cinematic'))).toBe(true);
   });
 });
 

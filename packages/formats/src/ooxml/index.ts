@@ -25,6 +25,13 @@ export type {
 } from './types.js';
 
 // Reader
+export type { OoxmlOpenOptions } from './reader.js';
+export { ZipSafetyError } from '../shared/zipSafety.js';
+export type {
+  ZipSafetyLimits,
+  ZipSafetyErrorCode,
+  ZipSafetyErrorOptions,
+} from '../shared/zipSafety.js';
 export {
   openPackage,
   getPartRelationships,
@@ -32,6 +39,13 @@ export {
   getPartBinary,
   getCoreProperties,
 } from './reader.js';
+
+// Read utilities
+export { attrNS, baseDirOf, resolveTarget, findRelByType } from './readUtils.js';
+
+// Theme reader
+export type { OoxmlColorScheme, OoxmlFontScheme, OoxmlTheme } from './themeReader.js';
+export { parseThemeXml, readThemePart } from './themeReader.js';
 
 // Writer
 export type { OoxmlPackageBuilder } from './writer.js';

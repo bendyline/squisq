@@ -13,9 +13,22 @@ import type {
   HtmlElement,
   HtmlNode,
   MarkdownBlockNode,
+  MarkdownCodeBlock,
   MarkdownHtmlBlock,
   MarkdownNode,
 } from '../markdown/types.js';
+import {
+  detectAsciiDiagram,
+  isEligibleAsciiFenceLang,
+  isExplicitDiagramLang,
+} from '../doc/asciiDiagram/detect.js';
+import {
+  detectAsciiTimeline,
+  isEligibleAsciiTimelineFenceLang,
+  isExplicitTimelineLang,
+} from '../doc/asciiTimeline/detect.js';
+import { detectTree, isEligibleTreeFenceLang, isExplicitTreeLang } from '../doc/treeview/detect.js';
+import { matchNumberHighlight } from './numberHighlight.js';
 
 export interface BlockContentProfile {
   hasImage: boolean;
@@ -27,6 +40,20 @@ export interface BlockContentProfile {
   hasDate: boolean;
   hasNumberHighlight: boolean;
   wordCount: number;
+  /**
+   * True when the body is dominated by exactly one code fence whose content
+   * is an ASCII box-and-line diagram (see `doc/asciiDiagram/detect.ts`).
+   * Optional so externally-constructed profiles keep compiling.
+   */
+  hasAsciiDiagram?: boolean;
+  /** True when a dominant code fence is an authored marker+axis timeline. */
+  hasTimeline?: boolean;
+  /**
+   * True when the body is dominated by exactly one code fence whose content
+   * is an ASCII file-tree / outline (see `doc/treeview/detect.ts`). Mutually
+   * exclusive with `hasAsciiDiagram`.
+   */
+  hasTree?: boolean;
 }
 
 export interface RecommendationResult {
@@ -56,17 +83,6 @@ const DATE_PATTERNS: RegExp[] = [
   /\b\d{4}s\b/,
   /\b\d{1,2}(st|nd|rd|th)\s+century\b/i,
 ];
-
-/**
- * Matches a "highlight number" — a prominent figure suitable for a Stat
- * Highlight block. Qualifies on any of:
- *   - currency prefix:   `$2.3M`, `€500`, `¥1,234`
- *   - unit suffix:       `50%`, `100 years`, `5×`, `2.3M`
- *   - standalone large:  `1,234`, `5000`, `12,345`
- * Plain small numbers (`42`) intentionally don't qualify.
- */
-const NUMBER_HIGHLIGHT_RE =
-  /(?:[$€£¥]\s?\d+(?:[.,]\d+)*(?:\s?(?:[MBK]|million|billion|thousand))?|\d+(?:[.,]\d+)*\s?(?:%|‰|x|×|[MBK]|million|billion|thousand|percent|years?|days?|hours?)|\d{3,}(?:[.,]\d+)*)/i;
 
 const VIDEO_HOST_RE = /(youtube\.com|youtu\.be|vimeo\.com|wistia\.|loom\.com)/i;
 
@@ -161,7 +177,7 @@ export function profileBlockContents(nodes: MarkdownBlockNode[]): BlockContentPr
     if (n.type !== 'paragraph') return;
     const text = extractPlainText(n).trim();
     if (!text) return true;
-    const m = text.match(NUMBER_HIGHLIGHT_RE);
+    const m = matchNumberHighlight(text);
     if (!m) return true;
     // Paragraph qualifies when its word count is small AND a prominent
     // number occupies a meaningful chunk of it. Keeps "the company grew
@@ -170,6 +186,65 @@ export function profileBlockContents(nodes: MarkdownBlockNode[]): BlockContentPr
     if (words <= 8) hasNumberHighlight = true;
     return true;
   });
+
+  // ASCII diagram: exactly one code fence with an eligible (inert) language
+  // whose content detects as box-and-line art, in a body it dominates — no
+  // competing table/image/video signal and at most a little surrounding
+  // prose. The diagram template replaces the whole slide, so hiding a real
+  // table or a second fence is the costly failure this guards against.
+  let hasAsciiDiagram = false;
+  const codeNodes: MarkdownCodeBlock[] = [];
+  for (const node of nodes) codeNodes.push(...findNodesByType<MarkdownCodeBlock>(node, 'code'));
+  if (
+    codeNodes.length === 1 &&
+    isEligibleAsciiFenceLang(codeNodes[0].lang) &&
+    !hasTable &&
+    imageCount === 0 &&
+    !hasVideo
+  ) {
+    const nonCodeChars = Math.max(0, plainText.length - codeNodes[0].value.length);
+    const explicit = isExplicitDiagramLang(codeNodes[0].lang);
+    if (nonCodeChars <= 400 && detectAsciiDiagram(codeNodes[0].value, { explicit }).isDiagram) {
+      hasAsciiDiagram = true;
+    }
+  }
+
+  // ASCII timeline: after the more specific closed-box diagram gate and
+  // before tree connector detection.
+  let hasTimeline = false;
+  if (
+    !hasAsciiDiagram &&
+    codeNodes.length === 1 &&
+    isEligibleAsciiTimelineFenceLang(codeNodes[0].lang) &&
+    !hasTable &&
+    imageCount === 0 &&
+    !hasVideo
+  ) {
+    const nonCodeChars = Math.max(0, plainText.length - codeNodes[0].value.length);
+    const explicit = isExplicitTimelineLang(codeNodes[0].lang);
+    if (nonCodeChars <= 400 && detectAsciiTimeline(codeNodes[0].value, { explicit }).isTimeline) {
+      hasTimeline = true;
+    }
+  }
+
+  // Tree detection comes last: timeline callout elbows can otherwise look
+  // like connector branches to the deliberately lenient tree parser.
+  let hasTree = false;
+  if (
+    !hasAsciiDiagram &&
+    !hasTimeline &&
+    codeNodes.length === 1 &&
+    isEligibleTreeFenceLang(codeNodes[0].lang) &&
+    !hasTable &&
+    imageCount === 0 &&
+    !hasVideo
+  ) {
+    const nonCodeChars = Math.max(0, plainText.length - codeNodes[0].value.length);
+    const explicit = isExplicitTreeLang(codeNodes[0].lang);
+    if (nonCodeChars <= 400 && detectTree(codeNodes[0].value, { explicit }).isTree) {
+      hasTree = true;
+    }
+  }
 
   return {
     hasImage: imageCount > 0,
@@ -181,6 +256,9 @@ export function profileBlockContents(nodes: MarkdownBlockNode[]): BlockContentPr
     hasDate,
     hasNumberHighlight,
     wordCount,
+    hasAsciiDiagram,
+    hasTimeline,
+    hasTree,
   };
 }
 
@@ -197,6 +275,21 @@ const UNIVERSAL_DEFAULTS = ['title', 'sectionHeader', 'factCard', 'twoColumn'];
 function recommendedNamesForProfile(profile: BlockContentProfile): string[] {
   const names = new Set<string>();
   let anyContentSignal = false;
+
+  if (profile.hasAsciiDiagram) {
+    anyContentSignal = true;
+    names.add('diagram');
+  }
+
+  if (profile.hasTimeline) {
+    anyContentSignal = true;
+    names.add('timeline');
+  }
+
+  if (profile.hasTree) {
+    anyContentSignal = true;
+    names.add('tree');
+  }
 
   if (profile.hasImage) {
     anyContentSignal = true;
@@ -266,6 +359,9 @@ function recommendedNamesForProfile(profile: BlockContentProfile): string[] {
  * the editor's template-picker UI instead.
  */
 export function pickAutoTemplate(profile: BlockContentProfile, blockIndex = 0): string | undefined {
+  if (profile.hasAsciiDiagram) return 'diagram';
+  if (profile.hasTimeline) return 'timeline';
+  if (profile.hasTree) return 'tree';
   if (profile.hasTable) return 'dataTable';
   if (profile.imageCount >= 2) return 'photoGrid';
   if (profile.hasImage) return blockIndex % 2 === 0 ? 'leftFeature' : 'rightFeature';

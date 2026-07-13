@@ -29,10 +29,6 @@
  * payload and a structured array, so older documents load unchanged.
  * The first save migrates them to the compact form.
  *
- * The `encodeLayersForFrontmatter` / `decodeLayersFromFrontmatter` pair
- * handles a single Layer array for the editor's `dataLayers="…"` Pandoc
- * param path; that path stays base64 (it's a different, per-block
- * mechanism) and is re-exported here for locality.
  */
 
 import type { Layer } from '../schemas/Doc.js';
@@ -132,43 +128,6 @@ function renameKeys(value: unknown, map: Readonly<Record<string, string>>): unkn
 
 function isDefaultViewport(v: { width: number; height: number } | undefined): boolean {
   return !v || (v.width === DEFAULT_VIEWPORT.width && v.height === DEFAULT_VIEWPORT.height);
-}
-
-// ─── Single-Layer base64 codec (legacy `dataLayers` path) ───────────
-
-/**
- * Base64-encode a Layer array as JSON, UTF-8 safe. Used by the editor's
- * per-block `dataLayers="…"` Pandoc param (not the doc-level template
- * list, which uses the compact JSON above).
- *
- * `btoa` only accepts Latin1 strings — any character outside that range
- * (e.g. an em-dash in a description) throws — so we round through
- * `TextEncoder`. Works in Node ≥18 and browsers.
- */
-export function encodeLayersForFrontmatter(layers: readonly Layer[]): string {
-  return utf8ToBase64(JSON.stringify(layers));
-}
-
-/** Inverse of {@link encodeLayersForFrontmatter}. Returns [] on parse failure. */
-export function decodeLayersFromFrontmatter(encoded: string): Layer[] {
-  try {
-    const json = base64ToUtf8(encoded);
-    const parsed = JSON.parse(json);
-    return Array.isArray(parsed) ? (parsed as Layer[]) : [];
-  } catch {
-    return [];
-  }
-}
-
-/** UTF-8 safe `btoa` — uses TextEncoder so arbitrary Unicode round-trips. */
-function utf8ToBase64(str: string): string {
-  const bytes = new TextEncoder().encode(str);
-  if (typeof globalThis.btoa === 'function') {
-    let binary = '';
-    for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
-    return globalThis.btoa(binary);
-  }
-  return Buffer.from(bytes).toString('base64');
 }
 
 /** UTF-8 safe `atob`. */

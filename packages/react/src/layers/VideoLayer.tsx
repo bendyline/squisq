@@ -26,6 +26,8 @@ import type { VideoLayer as VideoLayerType } from '@bendyline/squisq/schemas';
 import { useMediaUrl } from '../hooks/MediaContext';
 import { resolveValue, getAnchorOffset } from '../utils/layerUtils';
 
+const VIDEO_SYNC_DRIFT_SECONDS = 0.2;
+
 interface VideoLayerProps {
   layer: VideoLayerType;
   /** Base path for resolving relative video URLs */
@@ -100,22 +102,34 @@ export function VideoLayer({ layer, basePath, viewport, blockTime, isPlaying }: 
       video.pause();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- isPlaying is handled by the separate sync effect below
-  }, [content.src, content.clipStart, content.clipEnd]);
+  }, [src, content.clipStart, content.clipEnd]);
 
-  // Sync video play/pause with doc playback state, honoring the startAt gate.
+  // Sync video time + play/pause with the doc clock, honoring the startAt
+  // gate. The time correction matters when a synchronized audience player is
+  // opened partway through a block: its video must join at the main player's
+  // current frame rather than restarting from clipStart.
   useEffect(() => {
     const video = videoRef.current;
     if (!video || !hasStartedRef.current) return;
 
+    const targetTime = gated
+      ? content.clipStart
+      : Math.min(content.clipEnd, content.clipStart + Math.max(0, blockTime - startAt));
+    if (Math.abs(video.currentTime - targetTime) > VIDEO_SYNC_DRIFT_SECONDS) {
+      video.currentTime = targetTime;
+    }
+
     // Before the clip's startAt offset, hold at the in-point.
     if (gated) {
       video.pause();
-      video.currentTime = content.clipStart;
       return;
     }
 
-    // Don't resume if clip has already reached its end
-    if (video.currentTime >= content.clipEnd) return;
+    // Don't resume if the document clock has already reached the clip end.
+    if (targetTime >= content.clipEnd) {
+      video.pause();
+      return;
+    }
 
     if (isPlaying) {
       const playPromise = video.play();
@@ -125,7 +139,7 @@ export function VideoLayer({ layer, basePath, viewport, blockTime, isPlaying }: 
     } else {
       video.pause();
     }
-  }, [isPlaying, gated, content.clipStart, content.clipEnd]);
+  }, [isPlaying, gated, blockTime, startAt, src, content.clipStart, content.clipEnd]);
 
   return (
     <g className="block-layer block-layer--video" data-layer-id={layer.id}>

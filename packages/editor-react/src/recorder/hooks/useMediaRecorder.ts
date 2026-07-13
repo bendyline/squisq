@@ -173,6 +173,9 @@ export function useMediaRecorder(options: UseMediaRecorderOptions = {}): UseMedi
   const startTimestampRef = useRef<number | null>(null);
   const tickerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const stopResolversRef = useRef<Array<(blob: Blob | null) => void>>([]);
+  const stopPromiseRef = useRef<Promise<Blob | null> | null>(null);
+  const requestPromiseRef = useRef<Promise<void> | null>(null);
+  const lifecycleRef = useRef(0);
 
   // Stable copy of options for callbacks that read them late. Re-evaluated
   // each render, but each callback closes over the ref so we don't have
@@ -222,9 +225,13 @@ export function useMediaRecorder(options: UseMediaRecorderOptions = {}): UseMedi
   }, [clearTicker]);
 
   const cancel = useCallback(() => {
+    lifecycleRef.current += 1;
     const rec = recorderRef.current;
     if (rec && rec.state !== 'inactive') {
       try {
+        rec.ondataavailable = null;
+        rec.onstop = null;
+        rec.onerror = null;
         rec.stop();
       } catch {
         // Ignore — we're tearing down anyway.
@@ -237,6 +244,8 @@ export function useMediaRecorder(options: UseMediaRecorderOptions = {}): UseMedi
     startTimestampRef.current = null;
     // Any in-flight stop() promises won't get a blob.
     stopResolversRef.current.splice(0).forEach((resolve) => resolve(null));
+    stopPromiseRef.current = null;
+    requestPromiseRef.current = null;
     setBlob(null);
     setDurationMs(0);
     setError(null);
@@ -244,66 +253,89 @@ export function useMediaRecorder(options: UseMediaRecorderOptions = {}): UseMedi
   }, [clearTicker, releaseStream]);
 
   const request = useCallback(async () => {
+    if (requestPromiseRef.current) return requestPromiseRef.current;
+    if (recorderRef.current?.stream.active) return;
     if (!supportsMediaRecorder()) {
       const err = new Error('MediaRecorder is not supported in this environment.');
       setError(err);
       setState('error');
       throw err;
     }
-    if (state === 'recording' || state === 'stopping') {
-      // Don't start a parallel acquisition while one is in flight.
-      return;
-    }
-    setError(null);
-    setState('requesting');
-    try {
-      const source = optionsRef.current.source ?? 'mic';
-      const { stream: nextStream, dispose } = await acquireStream(source, optionsRef.current);
-      const resolved = resolveFormat(captureKindFor(source), optionsRef.current.mimeType);
-      const recorderOptions: MediaRecorderOptions = {};
-      if (resolved.mimeType) recorderOptions.mimeType = resolved.mimeType;
-      if (optionsRef.current.bitsPerSecond) {
-        recorderOptions.bitsPerSecond = optionsRef.current.bitsPerSecond;
+    const lifecycle = ++lifecycleRef.current;
+    const requestPromise = (async () => {
+      setError(null);
+      setState('requesting');
+      let acquired: { stream: MediaStream; dispose: () => void } | null = null;
+      try {
+        const source = optionsRef.current.source ?? 'mic';
+        acquired = await acquireStream(source, optionsRef.current);
+        const { stream: nextStream, dispose } = acquired;
+        if (lifecycle !== lifecycleRef.current) {
+          nextStream.getTracks().forEach((track) => track.stop());
+          dispose();
+          return;
+        }
+        const resolved = resolveFormat(captureKindFor(source), optionsRef.current.mimeType);
+        const recorderOptions: MediaRecorderOptions = {};
+        if (resolved.mimeType) recorderOptions.mimeType = resolved.mimeType;
+        if (optionsRef.current.bitsPerSecond) {
+          recorderOptions.bitsPerSecond = optionsRef.current.bitsPerSecond;
+        }
+        const recorder = new MediaRecorder(nextStream, recorderOptions);
+
+        recorder.ondataavailable = (e) => {
+          if (e.data && e.data.size > 0) chunksRef.current.push(e.data);
+        };
+        recorder.onstop = () => {
+          if (recorderRef.current !== recorder || lifecycle !== lifecycleRef.current) return;
+          // The recorded MIME type is authoritative once data is in hand —
+          // some browsers down-negotiate the format (e.g. drop codec hint).
+          const recordedType = recorder.mimeType || resolved.mimeType || 'application/octet-stream';
+          const finalBlob = new Blob(chunksRef.current, { type: recordedType });
+          chunksRef.current = [];
+          setBlob(finalBlob);
+          setState('stopped');
+          clearTicker();
+          stopResolversRef.current.splice(0).forEach((resolve) => resolve(finalBlob));
+          stopPromiseRef.current = null;
+        };
+        recorder.onerror = (event) => {
+          if (recorderRef.current !== recorder || lifecycle !== lifecycleRef.current) return;
+          const detail = (event as unknown as { error?: DOMException }).error;
+          const err = detail instanceof Error ? detail : new Error('Recorder error');
+          setError(err);
+          setState('error');
+          clearTicker();
+          stopResolversRef.current.splice(0).forEach((resolve) => resolve(null));
+          stopPromiseRef.current = null;
+        };
+
+        recorderRef.current = recorder;
+        disposeStreamRef.current = dispose;
+        setStream(nextStream);
+        setFormat(resolved);
+        setBlob(null);
+        setDurationMs(0);
+        setState('ready');
+        acquired = null;
+      } catch (err: unknown) {
+        if (acquired) {
+          acquired.stream.getTracks().forEach((track) => track.stop());
+          acquired.dispose();
+        }
+        const normalized = err instanceof Error ? err : new Error('Stream acquisition failed');
+        if (lifecycle === lifecycleRef.current) {
+          setError(normalized);
+          setState('error');
+        }
+        throw normalized;
+      } finally {
+        if (lifecycle === lifecycleRef.current) requestPromiseRef.current = null;
       }
-      const recorder = new MediaRecorder(nextStream, recorderOptions);
-
-      recorder.ondataavailable = (e) => {
-        if (e.data && e.data.size > 0) chunksRef.current.push(e.data);
-      };
-      recorder.onstop = () => {
-        // The recorded MIME type is authoritative once data is in hand —
-        // some browsers down-negotiate the format (e.g. drop codec hint).
-        const recordedType = recorder.mimeType || resolved.mimeType || 'application/octet-stream';
-        const finalBlob = new Blob(chunksRef.current, { type: recordedType });
-        chunksRef.current = [];
-        setBlob(finalBlob);
-        setState('stopped');
-        clearTicker();
-        stopResolversRef.current.splice(0).forEach((resolve) => resolve(finalBlob));
-      };
-      recorder.onerror = (event) => {
-        const detail = (event as unknown as { error?: DOMException }).error;
-        const err = detail instanceof Error ? detail : new Error('Recorder error');
-        setError(err);
-        setState('error');
-        clearTicker();
-        stopResolversRef.current.splice(0).forEach((resolve) => resolve(null));
-      };
-
-      recorderRef.current = recorder;
-      disposeStreamRef.current = dispose;
-      setStream(nextStream);
-      setFormat(resolved);
-      setBlob(null);
-      setDurationMs(0);
-      setState('ready');
-    } catch (err: unknown) {
-      const normalized = err instanceof Error ? err : new Error('Stream acquisition failed');
-      setError(normalized);
-      setState('error');
-      throw normalized;
-    }
-  }, [state, clearTicker]);
+    })();
+    requestPromiseRef.current = requestPromise;
+    return requestPromise;
+  }, [clearTicker]);
 
   const start = useCallback(() => {
     const rec = recorderRef.current;
@@ -329,12 +361,13 @@ export function useMediaRecorder(options: UseMediaRecorderOptions = {}): UseMedi
   }, [clearTicker]);
 
   const stop = useCallback((): Promise<Blob | null> => {
+    if (stopPromiseRef.current) return stopPromiseRef.current;
     const rec = recorderRef.current;
     if (!rec || rec.state === 'inactive') {
       return Promise.resolve(blob);
     }
     setState('stopping');
-    return new Promise<Blob | null>((resolve) => {
+    const stopPromise = new Promise<Blob | null>((resolve) => {
       stopResolversRef.current.push(resolve);
       try {
         rec.stop();
@@ -346,6 +379,11 @@ export function useMediaRecorder(options: UseMediaRecorderOptions = {}): UseMedi
         stopResolversRef.current.splice(0).forEach((r) => r(null));
       }
     });
+    stopPromiseRef.current = stopPromise;
+    void stopPromise.finally(() => {
+      if (stopPromiseRef.current === stopPromise) stopPromiseRef.current = null;
+    });
+    return stopPromise;
   }, [blob, clearTicker]);
 
   // Final unmount cleanup — make sure we don't leak the camera light /
@@ -360,9 +398,14 @@ export function useMediaRecorder(options: UseMediaRecorderOptions = {}): UseMedi
   useEffect(() => {
     const pendingResolvers = stopResolversRef.current;
     return () => {
+      lifecycleRef.current += 1;
+      requestPromiseRef.current = null;
       const rec = recorderRef.current;
       if (rec && rec.state !== 'inactive') {
         try {
+          rec.ondataavailable = null;
+          rec.onstop = null;
+          rec.onerror = null;
           rec.stop();
         } catch {
           // ignore
@@ -371,6 +414,7 @@ export function useMediaRecorder(options: UseMediaRecorderOptions = {}): UseMedi
       releaseStream();
       clearTicker();
       pendingResolvers.splice(0).forEach((resolve) => resolve(null));
+      stopPromiseRef.current = null;
     };
   }, [releaseStream, clearTicker]);
 

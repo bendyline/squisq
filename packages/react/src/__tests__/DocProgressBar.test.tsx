@@ -1,5 +1,5 @@
-import { describe, it, expect } from 'vitest';
-import { render } from '@testing-library/react';
+import { describe, it, expect, vi } from 'vitest';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { DocProgressBar } from '../DocProgressBar';
 import type { PlaybackState, PlaybackActions } from '../types';
 
@@ -72,5 +72,31 @@ describe('DocProgressBar fill', () => {
       />,
     );
     expect(fillWidth(container)).toBe('100%');
+  });
+
+  it('exposes keyboard seeking and accessible marker buttons', () => {
+    const seekTo = vi.fn();
+    render(
+      <DocProgressBar
+        state={makeState({ currentTime: 12, totalDuration: 23 })}
+        actions={{ ...actions, seekTo }}
+        blockMarkers={[
+          {
+            block: { id: 'b', startTime: 8, duration: 5, audioSegment: 0, layers: [] },
+            index: 0,
+            position: 35,
+            title: 'Chapter two',
+            isSectionStart: false,
+          },
+        ]}
+        expandedBlocks={[]}
+      />,
+    );
+    const slider = screen.getByRole('slider', { name: 'Playback position' });
+    expect(slider.getAttribute('aria-valuenow')).toBe('12');
+    fireEvent.keyDown(slider, { key: 'ArrowRight' });
+    expect(seekTo).toHaveBeenCalledWith(17);
+    fireEvent.click(screen.getByRole('button', { name: 'Seek to Chapter two' }));
+    expect(seekTo).toHaveBeenLastCalledWith(8);
   });
 });

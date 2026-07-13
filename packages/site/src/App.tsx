@@ -24,10 +24,15 @@ import { ImageEditorDemo } from './ImageEditorDemo';
 import { CodeContextDemo } from './CodeContextDemo';
 import { createSlotMediaProvider } from './slotStorage';
 import type { MediaProvider, Theme } from '@bendyline/squisq/schemas';
-import { parseTheme, registerTheme, unregisterTheme } from '@bendyline/squisq/schemas';
+import { parseTheme } from '@bendyline/squisq/schemas';
 
 const CUSTOM_THEME_STORAGE_KEY = 'squisq-site:customTheme';
 const COLOR_MODE_STORAGE_KEY = 'squisq-site:colorMode';
+const DEFAULT_SAMPLE_KEY = 'about-squisq';
+const SAMPLE_KEYS = [
+  DEFAULT_SAMPLE_KEY,
+  ...Object.keys(SAMPLES).filter((key) => key !== DEFAULT_SAMPLE_KEY),
+];
 
 type DemoColorMode = 'auto' | EditorColorScheme;
 
@@ -73,10 +78,10 @@ function getInitialColorMode(): DemoColorMode {
  * fetch/unpack pipeline that runs from `handleSampleChange`.
  */
 function getInitialSampleKey(): string {
-  if (typeof window === 'undefined') return 'about-squisq';
+  if (typeof window === 'undefined') return DEFAULT_SAMPLE_KEY;
   const param = new URLSearchParams(window.location.search).get('sample');
   if (param && Object.prototype.hasOwnProperty.call(SAMPLES, param)) return param;
-  return 'about-squisq';
+  return DEFAULT_SAMPLE_KEY;
 }
 
 /** Load a previously-saved custom theme from localStorage. Returns null on miss / parse failure. */
@@ -135,30 +140,21 @@ export function App() {
       delete document.documentElement.dataset.squisqDemoColorScheme;
     };
   }, [colorScheme]);
-  // Re-register the loaded theme on mount so `Doc.themeId` lookups resolve to it.
-  // Subsequent edits go through handleCustomThemeChange which also registers.
-  useEffect(() => {
-    if (customTheme) registerTheme(customTheme);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
   const handleCustomThemeChange = useCallback((next: Theme) => {
-    registerTheme(next);
     setCustomThemeState(next);
   }, []);
   const handleCustomThemeSave = useCallback((next: Theme, json: string) => {
     if (typeof localStorage !== 'undefined') {
       localStorage.setItem(CUSTOM_THEME_STORAGE_KEY, json);
     }
-    registerTheme(next);
     setCustomThemeState(next);
   }, []);
   const handleCustomThemeReset = useCallback(() => {
-    if (customTheme) unregisterTheme(customTheme.id);
     if (typeof localStorage !== 'undefined') {
       localStorage.removeItem(CUSTOM_THEME_STORAGE_KEY);
     }
     setCustomThemeState(null);
-  }, [customTheme]);
+  }, []);
   // Key to force EditorShell remount on upload
   const [editorKey, setEditorKey] = useState(0);
   // Storage slot state
@@ -348,7 +344,7 @@ export function App() {
               opacity: loadingContent ? 0.6 : 1,
             }}
           >
-            {Object.keys(SAMPLES).map((key) => (
+            {SAMPLE_KEYS.map((key) => (
               <option key={key} value={key}>
                 {SAMPLE_LABELS[key] ?? key.replace(/-/g, ' ')}
               </option>

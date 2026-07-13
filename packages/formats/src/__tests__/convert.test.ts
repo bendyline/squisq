@@ -5,9 +5,15 @@
  */
 
 import { describe, it, expect } from 'vitest';
+import JSZip from 'jszip';
 import { parseMarkdown } from '@bendyline/squisq/markdown';
 import { markdownToDoc } from '@bendyline/squisq/doc';
+import { MemoryContentContainer } from '@bendyline/squisq/storage';
+import { createTransformStyleRegistry, resolveTransformStyle } from '@bendyline/squisq/transform';
 import { convert, ConversionError, defaultRegistry } from '../registry/index';
+import { zipToContainer } from '../container/index';
+import { markdownDocToPptx } from '../pptx/export';
+import { buildThemedPptx } from './pptxInferFixtures';
 
 const SAMPLE_MD = `# Round Trip
 
@@ -39,6 +45,70 @@ describe('convert error paths', () => {
     await expect(
       convert({ kind: 'markdown', markdown: '# hi' }, 'importonly', { registry }),
     ).rejects.toMatchObject({ name: 'ConversionError', code: 'unsupported-output' });
+  });
+
+  it('normalizes importer failures to ConversionError', async () => {
+    const promise = convert({ kind: 'bytes', data: new TextEncoder().encode('not a zip') }, 'md', {
+      from: 'docx',
+    });
+    await expect(promise).rejects.toMatchObject({
+      name: 'ConversionError',
+      code: 'invalid-input',
+      format: 'docx',
+    });
+  });
+});
+
+describe('format option threading', () => {
+  it('threads CSV tableIndex and delimiter through the conversion facade', async () => {
+    const markdown =
+      '| A | B |\n|---|---|\n| first | row |\n\n| C | D |\n|---|---|\n| second | row |\n';
+    const result = await convert({ kind: 'markdown', markdown }, 'csv', {
+      formatOptions: { csv: { tableIndex: 1, delimiter: ';' } },
+    });
+    expect(new TextDecoder().decode(result.bytes)).toBe('C;D\r\nsecond;row');
+    expect(result.warnings).toEqual([]);
+  });
+
+  it('honors Markdown parse options for direct Markdown sources', async () => {
+    let captured: import('../registry/index').NormalizedInput | undefined;
+    const registry = defaultRegistry();
+    registry.register({
+      id: 'capture-md-options',
+      label: 'Capture Markdown Options',
+      mimeType: 'application/x-capture',
+      extensions: ['.capture'],
+      async exportDoc(input) {
+        captured = input;
+        return {
+          bytes: new Uint8Array(),
+          mimeType: 'application/x-capture',
+          suggestedFilename: '',
+          warnings: [],
+        };
+      },
+    });
+
+    await convert(
+      { kind: 'markdown', markdown: '---\ntitle: Hidden metadata\n---\n\n# Body' },
+      'capture-md-options',
+      {
+        registry,
+        formatOptions: { md: { parse: { frontmatter: false } } },
+      },
+    );
+
+    expect(captured?.markdownDoc?.frontmatter).toBeUndefined();
+  });
+
+  it('threads archive safety limits into OOXML importers', async () => {
+    const docx = await convert({ kind: 'markdown', markdown: '# Limited' }, 'docx');
+    await expect(
+      convert({ kind: 'bytes', data: docx.bytes }, 'md', {
+        from: 'docx',
+        formatOptions: { docx: { maxEntries: 1 } },
+      }),
+    ).rejects.toMatchObject({ code: 'invalid-input', format: 'docx' });
   });
 });
 
@@ -94,6 +164,21 @@ describe('byte sniffing', () => {
     expect(text).toContain('In a container');
   });
 
+  it('DBK export snapshots the supplied source instead of stale container markdown', async () => {
+    const container = new MemoryContentContainer();
+    await container.writeDocument('# Old');
+    await container.writeFile('asset.bin', new Uint8Array([1, 2, 3]));
+
+    const result = await convert({ kind: 'markdown', markdown: '# New', container }, 'dbk');
+    const restored = await zipToContainer(result.bytes);
+    expect(await restored.readDocument()).toContain('# New');
+    expect(new Uint8Array((await restored.readFile('asset.bin'))!)).toEqual(
+      new Uint8Array([1, 2, 3]),
+    );
+    // Snapshotting must not mutate the caller's container.
+    expect(await container.readDocument()).toBe('# Old');
+  });
+
   it('disambiguates a docx zip via its content-types part', async () => {
     const docx = await convert({ kind: 'markdown', markdown: '# Word doc' }, 'docx');
     // No filename, no `from` — must read [Content_Types].xml to pick docx.
@@ -140,6 +225,40 @@ describe('transform threading', () => {
     // markdownDoc is re-derived from the transformed Doc.
     expect(captured!.markdownDoc).toBeDefined();
   });
+
+  it('resolves transform ids only from the explicitly supplied registry', async () => {
+    let captured: import('../registry/index').NormalizedInput | undefined;
+    const formats = defaultRegistry();
+    formats.register({
+      id: 'capture-custom-transform',
+      label: 'Capture Custom Transform',
+      mimeType: 'application/x-capture',
+      extensions: ['.cap'],
+      async exportDoc(input) {
+        captured = input;
+        return {
+          bytes: new Uint8Array([1]),
+          mimeType: 'application/x-capture',
+          suggestedFilename: '',
+          warnings: [],
+        };
+      },
+    });
+    const custom = {
+      ...resolveTransformStyle('minimal'),
+      id: 'tenant-transform',
+      suggestedThemeId: 'cinematic',
+    };
+    const transformRegistry = createTransformStyleRegistry([custom]);
+
+    await convert({ kind: 'markdown', markdown: SAMPLE_MD }, 'capture-custom-transform', {
+      registry: formats,
+      transformStyle: 'tenant-transform',
+      transformRegistry,
+    });
+
+    expect(captured?.doc.themeId).toBe('cinematic');
+  });
 });
 
 // ── doc-kind source ─────────────────────────────────────────────────
@@ -178,9 +297,57 @@ describe('suggestedFilename', () => {
     const out = await convert({ kind: 'markdown', markdown: '# t' }, 'md');
     expect(out.suggestedFilename).toBe('document.md');
   });
+
+  it('uses only the basename for Windows-style input paths', async () => {
+    const out = await convert(
+      {
+        kind: 'bytes',
+        data: new TextEncoder().encode('# Windows'),
+        filename: 'C:\\docs\\report.md',
+      },
+      'md',
+    );
+    expect(out.suggestedFilename).toBe('report.md');
+  });
 });
 
 // sanity: ConversionError is exported and usable
+// ── pptx theme/layout inference threading ───────────────────────────
+
+describe('pptx import inference threading (default ON)', () => {
+  it('carries an inferred theme through convert() by default', async () => {
+    const deck = await markdownDocToPptx(parseMarkdown('# Hi\n\nBody.\n'), {});
+    const result = await convert({ kind: 'bytes', data: deck, filename: 'deck.pptx' }, 'md');
+    const md = new TextDecoder().decode(result.bytes);
+    expect(md).toContain('squisq-theme: custom-office-theme');
+    expect(md).toContain('squisq-custom-themes');
+  });
+
+  it('omits inference with formatOptions.pptx.inferTheme=false', async () => {
+    const deck = await markdownDocToPptx(parseMarkdown('# Hi\n\nBody.\n'), {});
+    const result = await convert({ kind: 'bytes', data: deck, filename: 'deck.pptx' }, 'md', {
+      formatOptions: { pptx: { inferTheme: false, inferLayouts: false } },
+    });
+    const md = new TextDecoder().decode(result.bytes);
+    expect(md).not.toContain('squisq-theme');
+    expect(md).not.toContain('squisq-custom-themes');
+  });
+
+  it('end-to-end: inferred theme colors reach a downstream docx export', async () => {
+    // Distinctive fixture theme (bg #fdfdf8, text #1a1a2e) → pptx → docx.
+    const result = await convert(
+      { kind: 'bytes', data: await buildThemedPptx(), filename: 'deck.pptx' },
+      'docx',
+    );
+    const zip = await JSZip.loadAsync(result.bytes);
+    let text = '';
+    for (const name of Object.keys(zip.files)) {
+      if (/\.(xml|rels)$/i.test(name)) text += await zip.files[name]!.async('string');
+    }
+    expect(text.toLowerCase()).toContain('1a1a2e');
+  });
+});
+
 it('exports ConversionError', () => {
   expect(new ConversionError('conversion-failed', 'x')).toBeInstanceOf(Error);
 });

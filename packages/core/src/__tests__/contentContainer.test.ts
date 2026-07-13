@@ -34,6 +34,38 @@ describe('MemoryContentContainer', () => {
     expect(new Uint8Array(result!)).toEqual(new Uint8Array([1, 2, 3, 4]));
   });
 
+  it('accepts ArrayBuffers created in another browser realm', async () => {
+    const iframe = document.createElement('iframe');
+    document.body.appendChild(iframe);
+    try {
+      const foreignWindow = iframe.contentWindow as unknown as {
+        ArrayBuffer: ArrayBufferConstructor;
+        Uint8Array: Uint8ArrayConstructor;
+      };
+      const data = new foreignWindow.ArrayBuffer(3);
+      new foreignWindow.Uint8Array(data).set([7, 8, 9]);
+      await container.writeFile('foreign.bin', data);
+      expect(new Uint8Array((await container.readFile('foreign.bin'))!)).toEqual(
+        new Uint8Array([7, 8, 9]),
+      );
+    } finally {
+      iframe.remove();
+    }
+  });
+
+  it('owns copies on both write and read', async () => {
+    const input = new ArrayBuffer(2);
+    new Uint8Array(input).set([1, 2]);
+    await container.writeFile('owned.bin', input);
+
+    new Uint8Array(input)[0] = 9;
+    const firstRead = (await container.readFile('owned.bin'))!;
+    expect(Array.from(new Uint8Array(firstRead))).toEqual([1, 2]);
+
+    new Uint8Array(firstRead)[1] = 9;
+    expect(Array.from(new Uint8Array((await container.readFile('owned.bin'))!))).toEqual([1, 2]);
+  });
+
   it('writeFile overwrites existing file', async () => {
     await container.writeFile('f.txt', new TextEncoder().encode('first'));
     await container.writeFile('f.txt', new TextEncoder().encode('second'));
@@ -120,6 +152,12 @@ describe('getDocumentPath', () => {
     expect(await container.getDocumentPath()).toBe('index.md');
   });
 
+  it('preserves the actual case of a priority filename', async () => {
+    await container.writeFile('Index.MD', new TextEncoder().encode('# Hello'));
+    expect(await container.getDocumentPath()).toBe('Index.MD');
+    expect(await container.readDocument()).toBe('# Hello');
+  });
+
   it('prefers index.md over doc.md', async () => {
     await container.writeFile('doc.md', new TextEncoder().encode('doc'));
     await container.writeFile('index.md', new TextEncoder().encode('index'));
@@ -194,6 +232,11 @@ describe('findDocumentPath', () => {
       { path: 'index.md', mimeType: 'text/markdown', size: 50 },
     ];
     expect(findDocumentPath(entries)).toBe('index.md');
+  });
+
+  it('returns the matched entry path rather than a lower-cased synthetic path', () => {
+    const entries: ContentEntry[] = [{ path: 'INDEX.md', mimeType: 'text/markdown', size: 50 }];
+    expect(findDocumentPath(entries)).toBe('INDEX.md');
   });
 
   it('skips subdirectory .md files', () => {

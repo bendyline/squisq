@@ -86,6 +86,11 @@
       "types": "./dist/registry/index.d.ts",
       "import": "./dist/registry/index.js",
       "default": "./dist/registry/index.js"
+    },
+    "./infer": {
+      "types": "./dist/infer/index.d.ts",
+      "import": "./dist/infer/index.js",
+      "default": "./dist/infer/index.js"
     }
   },
   "scripts": {
@@ -94,6 +99,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@xmldom/xmldom": "0.9.10",
     "@bendyline/squisq": "1.5.2",
     "jszip": "3.10.1",
     "pdf-lib": "1.17.1",

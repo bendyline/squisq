@@ -17,7 +17,11 @@
  *    `useVideoExport` (and unit-tested at the module boundary).
  */
 
-import type { AudioTimelineClip } from '@bendyline/squisq-video';
+import {
+  ffmpegAudioMuxArgs,
+  type AudioTimelineClip,
+  type FfmpegWasmLoadConfig,
+} from '@bendyline/squisq-video';
 
 /** Sample rate the export renders + encodes audio at. */
 export const EXPORT_AUDIO_SAMPLE_RATE = 48_000;
@@ -287,34 +291,39 @@ export function audioBufferToWav(buffer: AudioBuffer): Uint8Array {
 
 /**
  * Mux a pre-encoded video-only MP4 with a WAV audio track in a single
- * ffmpeg.wasm pass (`-c:v copy -c:a aac -shortest`). Requires
+ * ffmpeg.wasm pass (`-c:v copy -c:a aac -af apad -shortest`). Requires
  * `SharedArrayBuffer` (cross-origin isolation). Returns the muxed MP4 bytes.
  */
 export async function muxAudioWithFfmpegWasm(
   videoMp4: Uint8Array,
   wav: Uint8Array,
   audioBitrate: number,
+  loadConfig?: FfmpegWasmLoadConfig,
 ): Promise<Uint8Array> {
   const { FFmpeg } = await import('@ffmpeg/ffmpeg');
   const ffmpeg = new FFmpeg();
-  await ffmpeg.load();
   try {
+    await ffmpeg.load({
+      ...loadConfig,
+      classWorkerURL:
+        loadConfig?.classWorkerURL ??
+        new URL('./workers/ffmpeg.class-worker.js', import.meta.url).href,
+    });
     await ffmpeg.writeFile('video.mp4', videoMp4);
     await ffmpeg.writeFile('audio.wav', wav);
-    await ffmpeg.exec([
+    const exitCode = await ffmpeg.exec([
       '-i',
       'video.mp4',
       '-i',
       'audio.wav',
       '-c:v',
       'copy',
-      '-c:a',
-      'aac',
-      '-b:a',
-      String(audioBitrate),
-      '-shortest',
+      ...ffmpegAudioMuxArgs(audioBitrate),
       'out.mp4',
     ]);
+    if (exitCode !== 0) {
+      throw new Error(`ffmpeg.wasm audio mux failed with exit code ${exitCode}`);
+    }
     const data = await ffmpeg.readFile('out.mp4');
     return data instanceof Uint8Array ? data : new TextEncoder().encode(data as string);
   } finally {

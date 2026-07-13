@@ -30,6 +30,10 @@ import {
 export interface TransitionPickerProps {
   value: TransitionFields;
   onChange: (next: TransitionFields) => void;
+  /** Surface scheme copied onto the portaled flyout so it can style independently of the shell. */
+  colorScheme?: 'light' | 'dark';
+  /** Active document-theme accent used for open and selected states. */
+  accentColor?: string;
 }
 
 /**
@@ -41,7 +45,12 @@ export const TRANSITION_FLYOUT_PORTAL_ID = 'squisq-transition-flyout-portal';
 
 const FLYOUT_ID = TRANSITION_FLYOUT_PORTAL_ID;
 
-export function TransitionPicker({ value, onChange }: TransitionPickerProps) {
+export function TransitionPicker({
+  value,
+  onChange,
+  colorScheme = 'light',
+  accentColor,
+}: TransitionPickerProps) {
   const [open, setOpen] = useState(false);
   const [style, setStyle] = useState<React.CSSProperties>({});
   const triggerRef = useRef<HTMLButtonElement>(null);
@@ -119,13 +128,22 @@ export function TransitionPicker({ value, onChange }: TransitionPickerProps) {
 
   const flyout = open
     ? createPortal(
-        <TransitionFlyout style={style} value={value} onChange={onChange} />,
+        <TransitionFlyout
+          style={{ ...style, ...blockAccentStyle(accentColor) }}
+          value={value}
+          onChange={onChange}
+          colorScheme={colorScheme}
+        />,
         document.body,
       )
     : null;
 
   return (
-    <div className="squisq-transition-picker">
+    <div
+      className="squisq-transition-picker"
+      data-theme={colorScheme}
+      style={blockAccentStyle(accentColor)}
+    >
       <button
         ref={triggerRef}
         type="button"
@@ -158,10 +176,12 @@ function TransitionFlyout({
   style,
   value,
   onChange,
+  colorScheme,
 }: {
   style: React.CSSProperties;
   value: TransitionFields;
   onChange: (next: TransitionFields) => void;
+  colorScheme: 'light' | 'dark';
 }) {
   const [query, setQuery] = useState('');
   const searchRef = useRef<HTMLInputElement>(null);
@@ -211,7 +231,13 @@ function TransitionFlyout({
   };
 
   return (
-    <div id={FLYOUT_ID} className="squisq-transition-flyout" role="menu" style={style}>
+    <div
+      id={FLYOUT_ID}
+      className="squisq-transition-flyout"
+      data-theme={colorScheme}
+      role="menu"
+      style={style}
+    >
       <div className="squisq-transition-flyout-search">
         <input
           ref={searchRef}
@@ -311,6 +337,12 @@ function TransitionFlyout({
       )}
     </div>
   );
+}
+
+function blockAccentStyle(accentColor: string | undefined): React.CSSProperties {
+  return accentColor
+    ? ({ ['--squisq-block-props-accent' as string]: accentColor } as React.CSSProperties)
+    : {};
 }
 
 function TransitionOption({

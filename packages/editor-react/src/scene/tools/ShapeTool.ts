@@ -2,9 +2,8 @@
  * ShapeTool — drag to draw a rectangle or circle as a new ShapeLayer.
  *
  * Exposed as a factory so a host can pre-bind the shape kind and
- * stroke/fill defaults. Returns a fresh SceneTool instance — the
- * factory pattern lets multiple Scene instances coexist without
- * sharing module-level drag state.
+ * stroke/fill defaults. Returns a fresh SceneTool instance so hosts can bind
+ * independent tool identities and defaults; gesture state belongs to Scene.
  */
 
 import { createElement, type JSX } from 'react';

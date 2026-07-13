@@ -8,7 +8,7 @@
  *
  * The gutter consumes the parsed `Doc` from `useEditorContext()` and reuses
  * the same template-resolution path as `LinearDocView` (heading text →
- * template defaults → `getLayers()` → `BlockRenderer`).
+ * template defaults → `materializeBlockLayers()` → `BlockRenderer`).
  *
  * Auto-hides via container queries when the surrounding container is too
  * narrow (see `.squisq-editor-with-gutter` rules in `styles/editor.css`).
@@ -31,10 +31,10 @@ import type { Block, DocBlock, ViewportConfig } from '@bendyline/squisq/schemas'
 import { VIEWPORT_PRESETS } from '@bendyline/squisq/schemas';
 import {
   flattenBlocks,
-  getLayers,
-  hasTemplate,
+  materializeBlockLayers,
   DEFAULT_THEME,
-  type RenderContext,
+  deriveTemplateInputs,
+  type MaterializeBlockLayersOptions,
 } from '@bendyline/squisq/doc';
 import { extractPlainText, getChildren } from '@bendyline/squisq/markdown';
 import { usePreviewSettingsOptional } from './PreviewControls';
@@ -56,7 +56,7 @@ import { useHeadingLayout } from './useHeadingLayout';
 function isAnnotated(block: Block): boolean {
   const annotation = block.sourceHeading?.templateAnnotation;
   if (!annotation) return false;
-  return !!annotation.template && hasTemplate(annotation.template);
+  return !!annotation.template;
 }
 
 function extractBodyPlainText(contents?: MarkdownBlockNode[]): string {
@@ -188,7 +188,12 @@ function getTemplateDefaults(
 ): Record<string, unknown> {
   switch (templateName) {
     case 'statHighlight':
-      return { stat: headingText, description: bodyText || headingText };
+      return (
+        deriveTemplateInputs(templateName, headingText, contents, { placeholders: true }) ?? {
+          stat: headingText,
+          description: bodyText || headingText,
+        }
+      );
     case 'quote':
     case 'fullBleedQuote':
     case 'pullQuote':
@@ -334,6 +339,8 @@ export function InlinePreviewGutter({
         duration: 1,
         audioSegment: 0,
         title: headingText,
+        contents: block.contents,
+        children: block.children,
         ...getTemplateDefaults(
           template,
           headingText,
@@ -345,15 +352,16 @@ export function InlinePreviewGutter({
         ...block.templateOverrides,
       };
 
-      const ctx: RenderContext = {
+      const ctx: MaterializeBlockLayersOptions = {
         blockIndex: index,
         totalBlocks,
         theme: activeTheme,
         viewport,
+        customTemplates: doc.customTemplates,
       };
 
       try {
-        const layers = getLayers(templateBlock as unknown as DocBlock, ctx);
+        const { layers } = materializeBlockLayers(templateBlock as unknown as DocBlock, ctx);
         const visualBlock = {
           ...block,
           layers,

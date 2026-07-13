@@ -17,11 +17,11 @@
  * rect/circle/line `ShapeLayer` behaves — rather than pinned to a baked
  * absolute path.
  *
- * End markers are configured via `startMarker`/`endMarker` (with the legacy
- * `arrow` flag mapping to a filled triangle). Marker geometry comes from
- * `markerPath` in core so the SSR renderer and the editor agree.
+ * End markers are configured via `startMarker`/`endMarker`. Marker geometry
+ * comes from `markerPath` in core so the SSR renderer and the editor agree.
  */
 
+import { useId } from 'react';
 import type { PathLayer as PathLayerType, MarkerStyle } from '@bendyline/squisq/schemas';
 import { markerPath, shapePath } from '@bendyline/squisq/doc';
 import { getAnimationStyle } from '../utils/animationUtils';
@@ -54,33 +54,42 @@ function effectivePath(layer: PathLayerType, viewport: { width: number; height: 
   return derived ?? content.d;
 }
 
-/** Resolve the effective marker for an endpoint (explicit field, else `arrow`). */
+type LegacyArrow = 'none' | 'end' | 'start' | 'both';
+
+/** Tolerant-reader support for documents authored before endpoint markers. */
+function readLegacyArrow(content: PathLayerType['content']): LegacyArrow | undefined {
+  return (content as PathLayerType['content'] & { arrow?: LegacyArrow }).arrow;
+}
+
+/** Resolve the effective marker for an endpoint. */
 function effectiveMarker(
   explicit: MarkerStyle | undefined,
-  arrow: PathLayerType['content']['arrow'],
+  legacyArrow: LegacyArrow | undefined,
   end: 'start' | 'end',
 ): MarkerStyle {
   if (explicit) return explicit;
-  const wants = arrow === 'both' || arrow === end;
+  const wants = legacyArrow === 'both' || legacyArrow === end;
   return wants ? 'arrow' : 'none';
 }
 
 export function PathLayer({ layer, viewport, blockTime }: PathLayerProps) {
   const { content, animation, id } = layer;
+  const defsId = `${useId().replace(/:/g, '')}-${id}`;
   const d = effectivePath(layer, viewport);
   const stroke = content.stroke ?? '#1e293b';
   const strokeWidth = content.strokeWidth ?? 2;
-  const { fill, def: fillDef } = resolveFill(id, content.fill ?? 'none', content.gradient);
+  const { fill, def: fillDef } = resolveFill(defsId, content.fill ?? 'none', content.gradient);
   // `borderStyle` (named shapes) takes precedence over a raw `dasharray`.
   const dash = content.borderStyle
     ? borderDashArray(content.borderStyle, strokeWidth)
     : content.dasharray;
   const animStyle = getAnimationStyle(animation, blockTime);
 
-  const startId = `marker-start-${id}`;
-  const endId = `marker-end-${id}`;
-  const start = markerPath(effectiveMarker(content.startMarker, content.arrow, 'start'), 'start');
-  const end = markerPath(effectiveMarker(content.endMarker, content.arrow, 'end'), 'end');
+  const startId = `marker-start-${defsId}`;
+  const endId = `marker-end-${defsId}`;
+  const legacyArrow = readLegacyArrow(content);
+  const start = markerPath(effectiveMarker(content.startMarker, legacyArrow, 'start'), 'start');
+  const end = markerPath(effectiveMarker(content.endMarker, legacyArrow, 'end'), 'end');
 
   return (
     <g

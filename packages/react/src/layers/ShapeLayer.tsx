@@ -5,6 +5,7 @@
  * Useful for visual accents, dividers, and background elements.
  */
 
+import { useId } from 'react';
 import type { ShapeLayer as ShapeLayerType } from '@bendyline/squisq/schemas';
 import { getAnimationStyle } from '../utils/animationUtils';
 import { resolveValue, getAnchorOffset } from '../utils/layerUtils';
@@ -20,6 +21,7 @@ interface ShapeLayerProps {
 
 export function ShapeLayer({ layer, viewport, blockTime }: ShapeLayerProps) {
   const { content, position, animation } = layer;
+  const defsId = `${useId().replace(/:/g, '')}-${layer.id}`;
 
   // Resolve position values to pixels
   const rawX = resolveValue(position.x, viewport.width);
@@ -65,12 +67,12 @@ export function ShapeLayer({ layer, viewport, blockTime }: ShapeLayerProps) {
   }
 
   const { fill: fillValue, def: fillDef } = resolveFill(
-    layer.id,
+    defsId,
     fill,
     content.gradient,
     content.pattern,
   );
-  const { filterAttr, def: filterDef } = resolveShapeFilter(layer.id, content.filter);
+  const { filterAttr, def: filterDef } = resolveShapeFilter(defsId, content.filter);
   const dash = borderDashArray(content.borderStyle, content.strokeWidth);
 
   // Common style props for native SVG shapes. `line` is stroke-only.

@@ -11,7 +11,7 @@
  * 4. Synthesize a dummy audio segment for timer-based playback
  */
 
-import { flattenRenderableBlocks, hasTemplate } from '@bendyline/squisq/doc';
+import { deriveTemplateInputs, flattenRenderableBlocks, hasTemplate } from '@bendyline/squisq/doc';
 import { extractPlainText, KNOWN_BLOCK_META_KEYS } from '@bendyline/squisq/markdown';
 import { getChildren } from '@bendyline/squisq/markdown';
 import { iconMarker } from '@bendyline/squisq/icon-marker';
@@ -158,7 +158,12 @@ function getTemplateDefaults(
 
   switch (templateName) {
     case 'statHighlight':
-      return { stat: headingText, description: body || headingText };
+      return (
+        deriveTemplateInputs(templateName, headingText, block.contents) ?? {
+          stat: headingText,
+          description: body || headingText,
+        }
+      );
     case 'quote':
     case 'fullBleedQuote':
     case 'pullQuote':
@@ -381,18 +386,20 @@ export function buildPreviewDoc(doc: Doc): Doc {
     t += slide.duration as number;
   }
 
+  const audio =
+    doc.audio?.segments?.length > 0
+      ? doc.audio
+      : {
+          segments: t > 0 ? [{ src: '', name: 'preview', duration: t, startTime: 0 }] : [],
+        };
+
   return {
-    articleId: doc.articleId,
+    // Preserve document-wide capabilities (custom themes, persistent layers,
+    // scheduled media, frontmatter, captions, and future schema fields).
+    // Preview preparation should replace only the slide/timing projection.
+    ...doc,
     duration: t,
     blocks: slides as unknown as Block[],
-    audio: {
-      segments: t > 0 ? [{ src: '', name: 'preview', duration: t, startTime: 0 }] : [],
-    },
-    ...(doc.captions ? { captions: doc.captions } : {}),
-    ...(doc.startBlock ? { startBlock: doc.startBlock } : {}),
-    ...(doc.themeId ? { themeId: doc.themeId } : {}),
-    // Custom templates ride along so `useDocPlayback` can merge them
-    // onto the registry before expanding slides.
-    ...(doc.customTemplates ? { customTemplates: doc.customTemplates } : {}),
+    audio,
   };
 }

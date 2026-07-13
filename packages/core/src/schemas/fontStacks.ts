@@ -258,3 +258,82 @@ export function buildGoogleFontsUrl(families: Array<FontFamily | undefined>): st
 
 /** Default fallback families exposed for tools that need them. */
 export const FONT_FALLBACKS = FALLBACK_BY_KIND;
+
+// ── Arbitrary font-name matching ─────────────────────────────────────
+//
+// Used by file-import theme inference (OOXML fontScheme → FontFamily):
+// a typeface name from an office document either matches a curated stack
+// or becomes a `{ custom }` reference that preserves the original face.
+
+/** Normalize a raw typeface name for lookup: trim, unquote, lowercase, collapse whitespace. */
+function normalizeFontName(name: string): string {
+  return name
+    .trim()
+    .replace(/^["']+|["']+$/g, '')
+    .replace(/\s+/g, ' ')
+    .toLowerCase();
+}
+
+/**
+ * Normalized name → stackId. Seeded from every stack's label and Google
+ * Fonts family name, plus explicit aliases for common variants and the
+ * web-safe faces that already anchor the system stacks' CSS families.
+ */
+const STACK_NAME_ALIASES: Record<string, string> = (() => {
+  const aliases: Record<string, string> = {};
+  for (const stack of AVAILABLE_FONT_STACKS) {
+    aliases[normalizeFontName(stack.label)] = stack.id;
+    if (stack.googleFontFamily) aliases[normalizeFontName(stack.googleFontFamily)] = stack.id;
+  }
+  Object.assign(aliases, {
+    playfair: 'playfair',
+    'source serif': 'source-serif',
+    'source serif pro': 'source-serif',
+    'crimson pro': 'crimson',
+    cormorant: 'cormorant',
+    georgia: 'system-serif',
+    'times new roman': 'system-serif',
+    times: 'system-serif',
+    consolas: 'system-mono',
+    'courier new': 'system-mono',
+    courier: 'system-mono',
+    'segoe ui': 'system-sans',
+    'system-ui': 'system-sans',
+  });
+  return aliases;
+})();
+
+const MONO_NAME_RE =
+  /\b(mono|monospace|consolas|courier|menlo|inconsolata|cascadia|fira code|source code|code)\b/;
+const SERIF_NAME_RE =
+  /\b(georgia|times|garamond|cambria|caslon|baskerville|bodoni|didot|palatino|book antiqua|goudy|minion|charter|constantia|century schoolbook|antiqua|roman)\b/;
+
+/**
+ * Guess the structured fallback bucket for an arbitrary typeface name.
+ * Deliberately never guesses `system-ui` — a wrong serif/sans guess is
+ * recoverable in the customizer; `system-ui` erases the signal entirely.
+ */
+export function guessFontFallback(
+  name: string,
+): 'serif' | 'sans-serif' | 'monospace' | 'system-ui' {
+  const n = normalizeFontName(name);
+  if (MONO_NAME_RE.test(n)) return 'monospace';
+  if ((n.includes('serif') && !n.includes('sans')) || SERIF_NAME_RE.test(n)) return 'serif';
+  return 'sans-serif';
+}
+
+/**
+ * Map an arbitrary typeface name (e.g. from an imported office document's
+ * fontScheme) to a `FontFamily`: a curated `{ stackId }` when the name
+ * matches a known stack, else `{ custom }` preserving the original name
+ * (original casing, quotes stripped) with a heuristic fallback bucket.
+ * Empty/blank names resolve to the system sans stack.
+ */
+export function matchFontFamily(name: string): FontFamily {
+  const normalized = normalizeFontName(name);
+  if (!normalized) return { stackId: 'system-sans' };
+  const stackId = STACK_NAME_ALIASES[normalized];
+  if (stackId) return { stackId };
+  const displayName = name.trim().replace(/^["']+|["']+$/g, '');
+  return { custom: { name: displayName, fallback: guessFontFallback(name) } };
+}

@@ -36,6 +36,8 @@ interface DocPlayerWithSidebarProps {
   onTimeUpdate?: (time: number) => void;
   /** Optional audio controller (if not provided, uses default HTML5 audio) */
   audioController?: AudioController;
+  /** Whether to render slide transitions and per-layer animations (default: true). */
+  animationsEnabled?: boolean;
   muted?: boolean;
   captionsEnabled?: boolean;
   isFullscreen?: boolean;
@@ -75,6 +77,7 @@ export function DocPlayerWithSidebar({
   onEnded,
   onTimeUpdate,
   audioController,
+  animationsEnabled = true,
   muted,
   captionsEnabled,
   isFullscreen,
@@ -132,6 +135,7 @@ export function DocPlayerWithSidebar({
           onEnded={onEnded}
           onTimeUpdate={onTimeUpdate}
           audioController={audioController}
+          animationsEnabled={animationsEnabled}
           muted={muted}
           captionsEnabled={captionsEnabled}
           showControls={isFullscreen}

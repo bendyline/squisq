@@ -6,27 +6,67 @@
 
 import type { SquisqAnnotatedSchema } from './types.js';
 
+/** Escape one object-member name for use as an RFC 6901 pointer segment. */
+export function escapePointerSegment(segment: string): string {
+  return segment.replace(/~/g, '~0').replace(/\//g, '~1');
+}
+
 /** Normalize a path to a JSON Pointer string. Accepts both forms. */
 export function toPointer(path: string): string {
-  if (path === '' || path === '/') return '';
+  if (path === '') return '';
   if (path.startsWith('/')) return path;
   // Dotted form: split on `.` and escape per RFC 6901.
-  return (
-    '/' +
-    path
-      .split('.')
-      .map((seg) => seg.replace(/~/g, '~0').replace(/\//g, '~1'))
-      .join('/')
-  );
+  return '/' + path.split('.').map(escapePointerSegment).join('/');
+}
+
+/** Append one member name to a dotted path or validated JSON Pointer. */
+export function appendPointer(base: string, segment: string): string {
+  const pointer = toPointer(base);
+  pointerSegments(pointer); // validate explicit pointer syntax before composing
+  return `${pointer}/${escapePointerSegment(segment)}`;
 }
 
 /** Split a JSON Pointer into decoded segments. Empty string → []. */
 export function pointerSegments(pointer: string): string[] {
   if (pointer === '') return [];
+  if (!pointer.startsWith('/')) {
+    throw new TypeError(`Invalid JSON Pointer ${JSON.stringify(pointer)}: expected "" or "/..."`);
+  }
   return pointer
     .slice(1)
     .split('/')
-    .map((seg) => seg.replace(/~1/g, '/').replace(/~0/g, '~'));
+    .map((seg) => {
+      if (/~(?:[^01]|$)/.test(seg)) {
+        throw new TypeError(
+          `Invalid JSON Pointer ${JSON.stringify(pointer)}: "~" must be escaped as "~0"`,
+        );
+      }
+      return seg.replace(/~1/g, '/').replace(/~0/g, '~');
+    });
+}
+
+/** Parse the canonical array-index spelling used by JSON Pointer consumers. */
+function arrayIndex(segment: string): number | undefined {
+  if (!/^(?:0|[1-9]\d*)$/.test(segment)) return undefined;
+  const index = Number(segment);
+  // 2^32 - 1 is the Array length sentinel, not an element index.
+  return Number.isSafeInteger(index) && index <= 0xffff_fffe ? index : undefined;
+}
+
+function ownValue(object: object, key: string): unknown {
+  return Object.prototype.hasOwnProperty.call(object, key)
+    ? (object as Record<string, unknown>)[key]
+    : undefined;
+}
+
+/** Define a data member without invoking Object.prototype.__proto__'s setter. */
+function setOwn(object: Record<string, unknown>, key: string, value: unknown): void {
+  Object.defineProperty(object, key, {
+    value,
+    enumerable: true,
+    configurable: true,
+    writable: true,
+  });
 }
 
 /** Read a value from data by path (dotted or pointer). Returns undefined if missing. */
@@ -36,11 +76,11 @@ export function getByPointer(data: unknown, path: string): unknown {
   for (const seg of segments) {
     if (cur === null || cur === undefined) return undefined;
     if (Array.isArray(cur)) {
-      const idx = Number(seg);
-      if (!Number.isInteger(idx) || idx < 0 || idx >= cur.length) return undefined;
+      const idx = arrayIndex(seg);
+      if (idx === undefined || idx >= cur.length) return undefined;
       cur = cur[idx];
     } else if (typeof cur === 'object') {
-      cur = (cur as Record<string, unknown>)[seg];
+      cur = ownValue(cur, seg);
     } else {
       return undefined;
     }
@@ -65,10 +105,13 @@ function setRec(node: unknown, segments: string[], i: number, value: unknown): u
 
   // Decide whether the slot we're about to write into is an array index.
   const nextSeg = isLast ? undefined : segments[i + 1];
-  const writingArrayChild = nextSeg !== undefined && /^\d+$/.test(nextSeg);
+  const writingArrayChild = nextSeg !== undefined && arrayIndex(nextSeg) !== undefined;
 
   if (Array.isArray(node)) {
-    const idx = Number(seg);
+    const idx = arrayIndex(seg);
+    if (idx === undefined) {
+      throw new TypeError(`Invalid array index ${JSON.stringify(seg)} in JSON Pointer`);
+    }
     const next = node.slice();
     next[idx] = isLast
       ? value
@@ -80,9 +123,12 @@ function setRec(node: unknown, segments: string[], i: number, value: unknown): u
     string,
     unknown
   >;
-  obj[seg] = isLast
-    ? value
-    : setRec(obj[seg] ?? (writingArrayChild ? [] : {}), segments, i + 1, value);
+  const previous = ownValue(obj, seg);
+  setOwn(
+    obj,
+    seg,
+    isLast ? value : setRec(previous ?? (writingArrayChild ? [] : {}), segments, i + 1, value),
+  );
   return obj;
 }
 
@@ -98,12 +144,11 @@ export function resolveRef(
 ): SquisqAnnotatedSchema | undefined {
   if (!schema.$ref) return schema;
   const ref = schema.$ref;
+  if (ref === '#') return root;
   if (!ref.startsWith('#/')) return undefined;
-  const segments = pointerSegments(ref.slice(1));
-  let cur: unknown = root;
-  for (const seg of segments) {
-    if (cur === null || cur === undefined || typeof cur !== 'object') return undefined;
-    cur = (cur as Record<string, unknown>)[seg];
+  try {
+    return getByPointer(root, ref.slice(1)) as SquisqAnnotatedSchema | undefined;
+  } catch {
+    return undefined;
   }
-  return (cur as SquisqAnnotatedSchema | undefined) ?? undefined;
 }

@@ -193,6 +193,73 @@
 .squisq-image-editor-layers {
   border-bottom: 1px solid var(--squisq-image-editor-panel-border);
 }
+.squisq-image-editor-layers-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 32px;
+}
+.squisq-image-editor-layer-add {
+  position: relative;
+  display: inline-flex;
+}
+.squisq-image-editor-layer-add-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  color: inherit;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 3px;
+  cursor: pointer;
+  font: inherit;
+}
+.squisq-image-editor-layer-add-button:hover,
+.squisq-image-editor-layer-add-button[aria-expanded='true'] {
+  background: var(--squisq-image-editor-control-bg);
+  border-color: var(--squisq-image-editor-control-border);
+}
+.squisq-image-editor-layer-add-menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  z-index: 20;
+  min-width: 150px;
+  padding: 4px;
+  background: var(--squisq-image-editor-panel-bg);
+  border: 1px solid var(--squisq-image-editor-panel-border);
+  border-radius: 5px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+  text-transform: none;
+  letter-spacing: normal;
+}
+.squisq-image-editor-layer-add-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 6px 8px;
+  color: inherit;
+  background: transparent;
+  border: 0;
+  border-radius: 3px;
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+  text-align: left;
+}
+.squisq-image-editor-layer-add-menu-item:hover,
+.squisq-image-editor-layer-add-menu-item:focus-visible {
+  background: var(--squisq-image-editor-control-bg);
+  outline: none;
+}
+.squisq-image-editor-layer-add-menu-item svg {
+  flex: 0 0 auto;
+  width: 14px;
+}
 .squisq-image-editor-layer-list {
   list-style: none;
   margin: 0;
@@ -239,6 +306,7 @@
   cursor: not-allowed;
 }
 .squisq-image-editor-layer-name {
+  min-width: 0;
   flex: 1 1 auto;
   text-align: left;
   background: transparent;
@@ -254,7 +322,14 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+.squisq-image-editor-layer-name-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .squisq-image-editor-layer-kind {
+  flex: 0 0 auto;
   margin-left: auto;
   font-size: 10px;
   color: var(--squisq-image-editor-text-muted);

@@ -120,6 +120,11 @@ describe('needsQuoting / quoteAttrValue', () => {
 });
 
 describe('matchTrailingTemplateAnnotation', () => {
+  it('matches an empty trailing annotation', () => {
+    const m = matchTrailingTemplateAnnotation('Heading {[]}');
+    expect(m?.inner).toBe('');
+  });
+
   it('matches a simple trailing annotation', () => {
     const m = matchTrailingTemplateAnnotation('Getting Started {[comparisonBar]}');
     expect(m?.inner).toBe('comparisonBar');

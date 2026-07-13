@@ -37,10 +37,13 @@
 
 .squisq-editor-shell[data-theme='dark'] .squisq-scene-layer--shape,
 .squisq-editor-shell[data-theme='dark'] .squisq-scene-layer--path,
-.squisq-editor-shell[data-theme='dark'] .squisq-scene-layer--text,
-.squisq-editor-shell[data-theme='dark'] .squisq-scene-extras {
+.squisq-editor-shell[data-theme='dark'] .squisq-scene-layer--text {
   filter: invert(1) hue-rotate(180deg) saturate(0.9);
 }
+
+/* Scene extras (diagram/drawing connectors) already use the dark-aware
+   --squisq-text tokens below. Inverting this group a second time turns the
+   intended light strokes and arrowheads nearly black against the canvas. */
 
 .squisq-scene-viewport {
   display: block;

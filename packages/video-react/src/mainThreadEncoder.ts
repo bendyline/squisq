@@ -11,7 +11,7 @@
  * Requirements: Chrome 94+ / Edge 94+ (WebCodecs support).
  */
 
-import { bitrateForQuality } from '@bendyline/squisq-video';
+import { bitrateForQuality, validateVideoExportOptions } from '@bendyline/squisq-video';
 
 import { createMp4Muxer, type Mp4MuxerHandle } from './mp4Mux.js';
 
@@ -33,7 +33,7 @@ export interface EncoderConfig {
 
 export interface MainThreadEncoder {
   /** Encode a single frame. The bitmap is closed after encoding. */
-  encodeFrame(bitmap: ImageBitmap, frameIndex: number): void;
+  encodeFrame(bitmap: ImageBitmap, frameIndex: number): Promise<void>;
   /**
    * Hand an encoded audio chunk (from a WebCodecs `AudioEncoder`) to the muxer.
    * Only valid when the encoder was created with an `audio` config; otherwise a
@@ -81,16 +81,11 @@ export async function supportsWebCodecsH264(config: EncoderConfig): Promise<bool
  * Throws if WebCodecs is not available.
  */
 export function createEncoder(config: EncoderConfig): MainThreadEncoder {
+  validateVideoExportOptions(config);
   if (!supportsWebCodecs()) {
     throw new Error(
       'WebCodecs is not available in this browser. ' +
         'Video export requires Chrome 94+, Edge 94+, or another Chromium-based browser.',
-    );
-  }
-
-  if (!config.fps || config.fps <= 0 || !config.width || !config.height) {
-    throw new Error(
-      `Invalid encoder config: fps=${config.fps}, width=${config.width}, height=${config.height}`,
     );
   }
 
@@ -126,10 +121,10 @@ export function createEncoder(config: EncoderConfig): MainThreadEncoder {
   });
 
   return {
-    encodeFrame(bitmap: ImageBitmap, frameIndex: number) {
+    async encodeFrame(bitmap: ImageBitmap, frameIndex: number): Promise<void> {
       if (closed) {
         bitmap.close();
-        return;
+        throw new Error('Encoder already closed');
       }
       const timestamp = Math.round(frameIndex * frameDuration);
       const frame = new VideoFrame(bitmap, { timestamp });

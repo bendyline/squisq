@@ -37,7 +37,7 @@ const HEAVY_DEPS = [
 /**
  * Per-package allowlist of heavy deps that are *expected* to appear
  * as top-level static imports in `dist/index.js`. These are
- * packages where the heavy dep is the package's purpose.
+ * packages where a heavy dependency is intentionally eager.
  *
  * Keep this map tight — every entry here represents a deliberate
  * "yes, every consumer of this package pays this cost" decision.
@@ -46,8 +46,11 @@ const ALLOWED_HEAVY: Record<string, readonly string[]> = {
   '@bendyline/squisq': [],
   '@bendyline/squisq-react': [],
   '@bendyline/squisq-formats': ['pdfjs-dist'],
-  '@bendyline/squisq-video': ['@ffmpeg/ffmpeg', '@ffmpeg/util', 'html2canvas'],
-  '@bendyline/squisq-video-react': ['@ffmpeg/ffmpeg', '@ffmpeg/util', 'html2canvas'],
+  // The FFmpeg runtime is intentionally lazy: timeline/render helpers should
+  // not pull the encoder into ordinary consumers. `fetchFile` remains a small
+  // compatibility re-export from the video package.
+  '@bendyline/squisq-video': ['@ffmpeg/util'],
+  '@bendyline/squisq-video-react': ['html2canvas'],
   // editor-react deliberately keeps monaco-editor *off* this list —
   // the package lazy-loads monaco through `useMonacoLoader` so that
   // consumers who only import JsonEditor or a type don't drag in

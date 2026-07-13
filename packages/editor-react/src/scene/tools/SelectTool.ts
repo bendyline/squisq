@@ -18,7 +18,7 @@
  */
 
 import { createElement, type JSX } from 'react';
-import type { SceneTool, SceneToolContext } from './SceneTool';
+import type { SceneInteractionState, SceneTool, SceneToolContext } from './SceneTool';
 import type { SceneCommand } from '../commands/SceneCommand';
 import type { ResizeCorner } from '../SceneSelection';
 
@@ -53,7 +53,13 @@ type DragState = MoveDragState | MarqueeDragState | ResizeDragState;
 const DRAG_THRESHOLD_PX = 3;
 const MIN_LAYER_SIZE = 8;
 
-let dragState: DragState | null = null;
+function getDragState(interaction: SceneInteractionState): DragState | null {
+  return (interaction.selectDrag as DragState | undefined) ?? null;
+}
+
+function setDragState(interaction: SceneInteractionState, state: DragState | null): void {
+  interaction.selectDrag = state ?? undefined;
+}
 
 function pointerCoords(e: React.PointerEvent): { sx: number; sy: number } {
   const rect = (e.currentTarget as Element).getBoundingClientRect();
@@ -90,20 +96,23 @@ function applyResize(
 }
 
 /** Begin a handle-initiated resize drag. Called by the Scene when a corner is pressed. */
-export function beginHandleDrag(args: {
-  layerId: string;
-  corner: ResizeCorner;
-  startV: { x: number; y: number };
-  startBounds: { x: number; y: number; width: number; height: number };
-}): void {
-  dragState = {
+export function beginHandleDrag(
+  args: {
+    layerId: string;
+    corner: ResizeCorner;
+    startV: { x: number; y: number };
+    startBounds: { x: number; y: number; width: number; height: number };
+  },
+  interaction: SceneInteractionState,
+): void {
+  setDragState(interaction, {
     kind: 'resize',
     layerId: args.layerId,
     corner: args.corner,
     startV: args.startV,
     startBounds: args.startBounds,
     currentBounds: args.startBounds,
-  };
+  });
 }
 
 export const SelectTool: SceneTool = {
@@ -135,29 +144,30 @@ export const SelectTool: SceneTool = {
         const origin = getLayerOrigin(ctx, id);
         if (origin) layerStarts.set(id, origin);
       }
-      dragState = {
+      setDragState(ctx.interaction, {
         kind: 'move',
         startV: v,
         startS: { x: sx, y: sy },
         layerStarts,
         currentV: v,
         movedPastThreshold: false,
-      };
+      });
     } else {
       if (!e.shiftKey) ctx.setSelection([]);
-      dragState = {
+      setDragState(ctx.interaction, {
         kind: 'marquee',
         startV: v,
         startS: { x: sx, y: sy },
         currentV: v,
         movedPastThreshold: false,
-      };
+      });
     }
 
     (e.currentTarget as Element).setPointerCapture?.(e.pointerId);
   },
 
   onPointerMove(e, ctx) {
+    const dragState = getDragState(ctx.interaction);
     if (!dragState) return;
     const { sx, sy } = pointerCoords(e);
     const v = ctx.screenToViewport(sx, sy);
@@ -182,6 +192,7 @@ export const SelectTool: SceneTool = {
   },
 
   onPointerUp(e, ctx) {
+    const dragState = getDragState(ctx.interaction);
     if (!dragState) return;
     if (
       dragState.kind === 'move' &&
@@ -208,7 +219,7 @@ export const SelectTool: SceneTool = {
       ctx.dispatch({ kind: 'resizeLayer', id: dragState.layerId, width, height });
     }
     (e.currentTarget as Element).releasePointerCapture?.(e.pointerId);
-    dragState = null;
+    setDragState(ctx.interaction, null);
   },
 
   onDoubleClick(e, ctx) {
@@ -232,7 +243,8 @@ export const SelectTool: SceneTool = {
     }
   },
 
-  renderOverlay(): JSX.Element | null {
+  renderOverlay(ctx): JSX.Element | null {
+    const dragState = getDragState(ctx.interaction);
     if (!dragState || dragState.kind !== 'marquee' || !dragState.movedPastThreshold) return null;
     const box = boxFromCorners(dragState.startV, dragState.currentV);
     return createElement('rect', {
@@ -247,7 +259,10 @@ export const SelectTool: SceneTool = {
 };
 
 /** Return the active move-drag offset (viewport units). Null if no drag, or if the drag is a marquee/resize. */
-export function getActiveMoveOffset(): { dx: number; dy: number } | null {
+export function getActiveMoveOffset(
+  interaction: SceneInteractionState,
+): { dx: number; dy: number } | null {
+  const dragState = getDragState(interaction);
   if (!dragState || dragState.kind !== 'move' || !dragState.movedPastThreshold) return null;
   return {
     dx: dragState.currentV.x - dragState.startV.x,
@@ -256,10 +271,11 @@ export function getActiveMoveOffset(): { dx: number; dy: number } | null {
 }
 
 /** Return the live bounds for the layer currently being resized. */
-export function getActiveResize(): {
+export function getActiveResize(interaction: SceneInteractionState): {
   layerId: string;
   bounds: { x: number; y: number; width: number; height: number };
 } | null {
+  const dragState = getDragState(interaction);
   if (!dragState || dragState.kind !== 'resize') return null;
   return { layerId: dragState.layerId, bounds: dragState.currentBounds };
 }

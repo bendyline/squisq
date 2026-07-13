@@ -1,7 +1,7 @@
 {
   "name": "@bendyline/squisq-cli",
   "version": "1.2.2",
-  "description": "Squisq CLI — convert markdown documents to DOCX, PDF, HTML, and more",
+  "description": "Squisq CLI — convert documents and render MP4 video or animated GIF",
   "license": "MIT",
   "author": "Bendyline",
   "repository": {
@@ -17,6 +17,7 @@
     "pdf",
     "html",
     "converter",
+    "gif",
     "cli"
   ],
   "publishConfig": {
@@ -53,7 +54,6 @@
     "@bendyline/squisq-formats": "1.4.2",
     "@bendyline/squisq-react": "1.4.2",
     "@bendyline/squisq-video": "1.2.2",
-    "@xmldom/xmldom": "0.9.10",
     "commander": "12.1.0",
     "playwright-core": "1.58.2",
     "vite": "8.0.14"

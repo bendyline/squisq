@@ -91,4 +91,70 @@ describe('video command flag validation', () => {
     const stderr = await runCliExpectingError('video', FIXTURE_MD, '--fps', '0');
     expect(stderr).to.include('FPS must be a number between 1 and 120');
   });
+
+  it('rejects an unknown output format', async () => {
+    const stderr = await runCliExpectingError('video', FIXTURE_MD, '--format', 'webp');
+    expect(stderr).to.include('Invalid format "webp". Valid: mp4, gif');
+  });
+
+  it('infers GIF from the output extension and applies its FPS limit', async () => {
+    const stderr = await runCliExpectingError('video', FIXTURE_MD, '-o', 'out.gif', '--fps', '101');
+    expect(stderr).to.include('FPS must be a number between 1 and 100');
+  });
+
+  it('rejects a format that conflicts with the output extension', async () => {
+    const stderr = await runCliExpectingError(
+      'video',
+      FIXTURE_MD,
+      '-o',
+      'out.gif',
+      '--format',
+      'mp4',
+    );
+    expect(stderr).to.include('Output extension ".gif" conflicts with --format mp4');
+  });
+
+  it('rejects an output path whose media format cannot be inferred', async () => {
+    const stderr = await runCliExpectingError('video', FIXTURE_MD, '-o', 'out.bin');
+    expect(stderr).to.include('Output path must end in .mp4 or .gif');
+  });
+
+  it('validates GIF palette options before rendering', async () => {
+    const stderr = await runCliExpectingError(
+      'video',
+      FIXTURE_MD,
+      '--format',
+      'gif',
+      '--max-colors',
+      '257',
+    );
+    expect(stderr).to.include('GIF max colors must be an integer between 2 and 256');
+  });
+
+  it('rejects the MP4-only quality option for GIF output', async () => {
+    const stderr = await runCliExpectingError(
+      'video',
+      FIXTURE_MD,
+      '--format',
+      'gif',
+      '--quality',
+      'draft',
+    );
+    expect(stderr).to.include('--quality only applies to MP4 output');
+  });
+
+  it('accepts GIF and --no-animations options through early validation', async () => {
+    const stderr = await runCliExpectingError(
+      'video',
+      FIXTURE_MD,
+      '--format',
+      'gif',
+      '--no-animations',
+      '--theme',
+      'bogus-theme',
+    );
+    expect(stderr).to.not.include('Invalid format');
+    expect(stderr).to.not.include('unknown option');
+    expect(stderr).to.include('Unknown theme "bogus-theme"');
+  });
 });

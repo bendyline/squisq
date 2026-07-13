@@ -35,6 +35,7 @@ import { readCustomThemesFromFrontmatter } from './customThemesFrontmatter.js';
 import type {
   MarkdownDocument,
   MarkdownBlockNode,
+  MarkdownCodeBlock,
   MarkdownHeading,
   MarkdownNode,
   HtmlNode,
@@ -49,6 +50,11 @@ import { extractTemplateBlocksFromContents } from './annotationBlocks.js';
 import type { ParsedAnnotation } from './standaloneAnnotation.js';
 import { profileBlockContents, pickAutoTemplate } from '../recommend/templates.js';
 import { deriveTemplateInputs } from './templateInputs.js';
+import { isEligibleAsciiFenceLang } from './asciiDiagram/detect.js';
+import { parseAsciiDiagram } from './asciiDiagram/parse.js';
+import { asciiDiagramToTemplateData } from './asciiDiagram/mapping.js';
+import { isEligibleAsciiTimelineFenceLang } from './asciiTimeline/detect.js';
+import { parseAsciiTimeline } from './asciiTimeline/parse.js';
 import type { MediaClip } from '../schemas/Media.js';
 
 // ============================================
@@ -220,6 +226,17 @@ function pinnedMeta(block: Block): CoercedBlockMeta {
     return coerceAnnotationValues(block.sourceAnnotation.params).blockMeta;
   }
   return {};
+}
+
+/**
+ * Public accessor for {@link pinnedMeta}: the timing/meta values an author
+ * pinned on a block (heading `{key=value}` attrs or `{[key=value]}`
+ * annotation params). Consumers use this to tell "author pinned this"
+ * from "derive it" — e.g. narration timing never overwrites a pinned
+ * `duration=`/`startTime=`.
+ */
+export function getPinnedBlockMeta(block: Block): CoercedBlockMeta {
+  return pinnedMeta(block);
 }
 
 /**
@@ -408,6 +425,7 @@ export function markdownToDoc(markdownDoc: MarkdownDocument, options?: MarkdownT
     } = extractMediaFromContents(
       block.contents,
       (src, i) => `${block.id}-media-${i}-${src.replace(/[^a-zA-Z0-9]+/g, '-')}`,
+      block.id,
     );
     if (media.length > 0) block.media = media;
     if (docMedia.length > 0) documentMedia.push(...docMedia);
@@ -463,6 +481,16 @@ export function markdownToDoc(markdownDoc: MarkdownDocument, options?: MarkdownT
     applyStructuredData(block, diagnostics);
   }
 
+  // Explicitly diagram-annotated blocks whose body is a single eligible
+  // ASCII-art fence get nodes/edges derived from it — no detection
+  // threshold, the author asked for a diagram. Children-driven diagrams
+  // and author `json data` node lists win over the fence.
+  for (const block of allBlocks) {
+    applyAsciiDiagramData(block, diagnostics);
+    applyTimelineData(block, diagnostics);
+    applyTreeData(block, diagnostics);
+  }
+
   // Content-aware template auto-pick (default on): unannotated heading
   // blocks whose body carries a strong signal get the matching template
   // plus inputs derived from that body. Strict derivation — when the
@@ -471,6 +499,11 @@ export function markdownToDoc(markdownDoc: MarkdownDocument, options?: MarkdownT
   if ((options?.autoTemplates ?? true) && !frontmatterDisablesAutoTemplates(markdownDoc)) {
     applyAutoTemplates(rootBlocks, resolveTemplateName(defaultTemplate), { featureIndex: 0 });
   }
+
+  // Timeline parsing is intentionally tolerant and can retain unresolved
+  // branch declarations as warnings. Surface those after auto-template
+  // selection so both explicit and auto-derived timeline blocks participate.
+  for (const block of allBlocks) collectTimelineWarnings(block, diagnostics);
 
   // Duplicate ids make connections and navigation ambiguous. Generated
   // slugs are already deduped; this catches author-pinned `{#id}` clashes.
@@ -709,6 +742,94 @@ function applyStructuredData(block: Block, diagnostics: DocDiagnostic[]): void {
   }
 }
 
+/**
+ * Fill `templateData.nodes`/`edges` for an explicitly `{[diagram]}`-annotated
+ * block whose body is exactly one eligible ASCII-art fence. Runs without the
+ * detection threshold (explicit annotation = author intent), unconditionally
+ * of the autoTemplates switches. The fence stays in `contents`, untouched.
+ */
+function applyAsciiDiagramData(block: Block, diagnostics: DocDiagnostic[]): void {
+  if (resolveTemplateName(block.template ?? '') !== 'diagram') return;
+  if (block.children && block.children.length > 0) return; // native children win
+  if (block.templateData && 'nodes' in block.templateData) return; // author data wins
+  const fences = (block.contents ?? []).filter((n): n is MarkdownCodeBlock => n.type === 'code');
+  if (fences.length !== 1 || !isEligibleAsciiFenceLang(fences[0].lang)) return;
+  const parsed = parseAsciiDiagram(fences[0].value);
+  if (parsed.nodes.length === 0) {
+    diagnostics.push({
+      severity: 'warning',
+      code: 'ascii-diagram-parse',
+      message: `Diagram block "${block.id}": code fence did not parse as an ASCII diagram`,
+      blockId: block.id,
+    });
+    return;
+  }
+  const { nodes, edges } = asciiDiagramToTemplateData(parsed);
+  block.templateData = { nodes, edges, ...block.templateData };
+}
+
+/**
+ * Fill `templateData.items` for an explicitly `{[tree]}`-annotated block
+ * whose body is one eligible ASCII tree fence (or a nested list). Runs
+ * without the detection threshold (explicit annotation = author intent).
+ */
+function applyTreeData(block: Block, diagnostics: DocDiagnostic[]): void {
+  if (resolveTemplateName(block.template ?? '') !== 'tree') return;
+  if (block.templateData && 'items' in block.templateData) return; // author data wins
+  const derived = deriveTemplateInputs('tree', block.title ?? '', block.contents);
+  if (!derived || !Array.isArray(derived.items) || derived.items.length === 0) {
+    diagnostics.push({
+      severity: 'warning',
+      code: 'tree-parse',
+      message: `Tree block "${block.id}": body did not parse as a tree`,
+      blockId: block.id,
+    });
+    return;
+  }
+  block.templateData = { ...derived, ...block.templateData };
+}
+
+/**
+ * Fill `templateData.tracks`/`links` for an explicitly `{[timeline]}`-
+ * annotated block whose body is one eligible ASCII timeline fence.
+ */
+function applyTimelineData(block: Block, diagnostics: DocDiagnostic[]): void {
+  if (resolveTemplateName(block.template ?? '') !== 'timeline') return;
+  if (block.templateData && 'tracks' in block.templateData) return; // author data wins
+  const derived = deriveTemplateInputs('timeline', block.title ?? '', block.contents);
+  if (!derived || !Array.isArray(derived.tracks) || derived.tracks.length === 0) {
+    diagnostics.push({
+      severity: 'warning',
+      code: 'timeline-parse',
+      message: `Timeline block "${block.id}": body did not parse as an ASCII timeline`,
+      blockId: block.id,
+    });
+    return;
+  }
+  block.templateData = { ...derived, ...block.templateData };
+}
+
+function collectTimelineWarnings(block: Block, diagnostics: DocDiagnostic[]): void {
+  if (resolveTemplateName(block.template ?? '') !== 'timeline') return;
+  if (!block.templateData || !('tracks' in block.templateData)) return;
+  const fences = (block.contents ?? []).filter(
+    (node): node is MarkdownCodeBlock =>
+      node.type === 'code' && isEligibleAsciiTimelineFenceLang(node.lang),
+  );
+  if (fences.length !== 1) return;
+  for (const warning of parseAsciiTimeline(fences[0].value).warnings) {
+    const unresolved = /^unresolved-link\((.+)\)$/.exec(warning);
+    diagnostics.push({
+      severity: 'warning',
+      code: unresolved ? 'timeline-unresolved-link' : 'timeline-parse-warning',
+      message: unresolved
+        ? `Timeline block "${block.id}": unresolved branch ${unresolved[1]}`
+        : `Timeline block "${block.id}": ${warning}`,
+      blockId: block.id,
+    });
+  }
+}
+
 /** Truthiness of the `squisq-auto-templates` frontmatter kill-switch. */
 function frontmatterDisablesAutoTemplates(markdownDoc: MarkdownDocument): boolean {
   const v = markdownDoc.frontmatter?.['squisq-auto-templates'];
@@ -752,12 +873,25 @@ function applyAutoTemplates(
 
 /**
  * Extract the plain text from a block's body contents (excluding heading text).
+ *
+ * Exported because the narration script builder and the narration timing
+ * resolver must derive the *same* spoken text per block that captions and
+ * reading-time use — one source of truth for "what does this block say".
  */
-function getBlockBodyText(block: Block): string {
+export function getBlockBodyText(block: Block): string {
   if (!block.contents || block.contents.length === 0) return '';
+  // A fence consumed as diagram data must not feed reading-time/captions —
+  // 20 lines of box-drawing art would add ~30s of duration and captions
+  // that "read" border runs aloud.
+  const tmpl = resolveTemplateName(block.template ?? '');
+  const consumedFence =
+    (tmpl === 'diagram' && block.templateData !== undefined && 'nodes' in block.templateData) ||
+    (tmpl === 'timeline' && block.templateData !== undefined && 'tracks' in block.templateData) ||
+    (tmpl === 'tree' && block.templateData !== undefined && 'items' in block.templateData);
   // Join with newlines to preserve paragraph/list-item boundaries.
   // splitIntoPhrases uses these newlines as natural split points.
   return block.contents
+    .filter((node) => !(consumedFence && node.type === 'code'))
     .map((node) => extractPlainText(node))
     .join('\n')
     .trim();

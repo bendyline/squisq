@@ -38,8 +38,13 @@ export interface MapOptions {
   audioSegment: number;
   colorScheme?: ColorScheme;
   accentImage?: AccentImage;
+  /** Doc-timeline SECONDS when the extracted content is spoken. */
   sourceStartTime?: number;
   sourceDuration?: number;
+  /** Provenance: the source block the element was extracted from. */
+  sourceBlockId?: string;
+  /** Provenance: char offset of the extraction in the source plain text. */
+  sourceCharOffset?: number;
 }
 
 /**
@@ -52,6 +57,8 @@ export function mapElementToBlock(element: ExtractedElement, options: MapOptions
     audioSegment: options.audioSegment,
     sourceStartTime: options.sourceStartTime,
     sourceDuration: options.sourceDuration,
+    sourceBlockId: options.sourceBlockId,
+    sourceCharOffset: options.sourceCharOffset,
   };
 
   switch (element.data.type) {

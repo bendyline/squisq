@@ -1,5 +1,6 @@
 import { describe, expect, it, beforeEach } from 'vitest';
 import { MemoryContentContainer } from '../storage/ContentContainer';
+import { scopeContainer } from '../storage/ScopedContentContainer';
 import {
   DocumentVersionManager,
   VERSIONS_PREFIX,
@@ -111,6 +112,49 @@ describe('saveVersion', () => {
     expect(result.version?.path).toBe(`${VERSIONS_PREFIX}index.20260430T152030Z.md`);
     expect(result.version?.basename).toBe('index');
     expect(await readUtf8(container, result.version!.path)).toBe('# hello');
+    expect(await readUtf8(container, '.gitignore')).toBe('.versions/\n');
+  });
+
+  it('writes the ignore rule at the root of a scoped *_files sidecar', async () => {
+    const parent = new MemoryContentContainer();
+    const sidecar = scopeContainer(parent, 'notes_files');
+    const now = new Date(Date.UTC(2026, 3, 30, 15, 20, 30));
+
+    const result = await saveVersion(sidecar, {
+      basename: 'notes',
+      content: '# hello',
+      now,
+    });
+
+    expect(result.saved).toBe(true);
+    expect(await readUtf8(parent, 'notes_files/.gitignore')).toBe('.versions/\n');
+    expect(await parent.exists(`notes_files/${result.version!.path}`)).toBe(true);
+  });
+
+  it('preserves existing .gitignore rules and does not duplicate the versions rule', async () => {
+    await container.writeDocument('# hello', 'index.md');
+    await container.writeFile(
+      '.gitignore',
+      new TextEncoder().encode('generated/\r\n'),
+      'text/plain',
+    );
+    await saveVersion(container, { now: new Date(Date.UTC(2026, 3, 30, 15, 20, 30)) });
+    await saveVersion(container, { now: new Date(Date.UTC(2026, 3, 30, 15, 20, 31)) });
+
+    expect(await readUtf8(container, '.gitignore')).toBe('generated/\r\n.versions/\r\n');
+  });
+
+  it('backfills .gitignore when an existing snapshot is unchanged', async () => {
+    await container.writeDocument('# hello', 'index.md');
+    await saveVersion(container, { now: new Date(Date.UTC(2026, 3, 30, 15, 20, 30)) });
+    await container.removeFile('.gitignore');
+
+    const result = await saveVersion(container, {
+      now: new Date(Date.UTC(2026, 3, 30, 15, 20, 31)),
+    });
+
+    expect(result.reason).toBe('unchanged');
+    expect(await readUtf8(container, '.gitignore')).toBe('.versions/\n');
   });
 
   it('returns unchanged on identical second save', async () => {

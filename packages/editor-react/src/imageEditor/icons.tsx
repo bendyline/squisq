@@ -58,6 +58,10 @@ export function PlusIcon(props: Props) {
   return <Icon icon="fa-solid fa-plus" {...props} />;
 }
 
+export function ImageIcon(props: Props) {
+  return <Icon icon="fa-solid fa-image" {...props} />;
+}
+
 export function NoneIcon(props: Props) {
   // "No fill / transparent" affordance.
   return <Icon icon="fa-solid fa-ban" {...props} />;

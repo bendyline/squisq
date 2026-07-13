@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { getLayers, RenderContext } from '../doc/getLayers.js';
+import type { MaterializeBlockLayersOptions } from '../doc/materializeBlockLayers.js';
+import { materializeLayers } from './materializeTestUtils.js';
 import { DEFAULT_THEME } from '../schemas/themeLibrary.js';
 import { VIEWPORT_PRESETS } from '../schemas/Viewport.js';
 import type { TemplateBlock } from '../schemas/BlockTemplates.js';
@@ -24,7 +25,7 @@ function makeDataTableBlock(overrides: Record<string, unknown> = {}): TemplateBl
   } as TemplateBlock;
 }
 
-const defaultContext: RenderContext = {
+const defaultContext: MaterializeBlockLayersOptions = {
   theme: DEFAULT_THEME,
   viewport: VIEWPORT_PRESETS.landscape,
   blockIndex: 0,
@@ -37,7 +38,7 @@ const defaultContext: RenderContext = {
 
 describe('dataTable template', () => {
   it('produces layers including a table layer', () => {
-    const layers = getLayers(makeDataTableBlock(), defaultContext);
+    const layers = materializeLayers(makeDataTableBlock(), defaultContext);
     expect(layers.length).toBeGreaterThan(0);
 
     const tableLayer = layers.find((l) => l.type === 'table');
@@ -45,14 +46,14 @@ describe('dataTable template', () => {
   });
 
   it('table layer contains the correct headers', () => {
-    const layers = getLayers(makeDataTableBlock(), defaultContext);
+    const layers = materializeLayers(makeDataTableBlock(), defaultContext);
     const tableLayer = layers.find((l) => l.type === 'table') as TableLayer;
 
     expect(tableLayer.content.headers).toEqual(['Name', 'Value']);
   });
 
   it('table layer contains the correct rows', () => {
-    const layers = getLayers(makeDataTableBlock(), defaultContext);
+    const layers = materializeLayers(makeDataTableBlock(), defaultContext);
     const tableLayer = layers.find((l) => l.type === 'table') as TableLayer;
 
     expect(tableLayer.content.rows).toEqual([
@@ -62,7 +63,7 @@ describe('dataTable template', () => {
   });
 
   it('includes a title text layer when title is provided', () => {
-    const layers = getLayers(makeDataTableBlock({ title: 'My Table' }), defaultContext);
+    const layers = materializeLayers(makeDataTableBlock({ title: 'My Table' }), defaultContext);
     const textLayers = layers.filter((l) => l.type === 'text');
 
     expect(textLayers.length).toBeGreaterThanOrEqual(1);
@@ -71,7 +72,7 @@ describe('dataTable template', () => {
   });
 
   it('omits title layer when no title is given', () => {
-    const layers = getLayers(makeDataTableBlock({ title: undefined }), defaultContext);
+    const layers = materializeLayers(makeDataTableBlock({ title: undefined }), defaultContext);
     const textLayers = layers.filter((l) => l.type === 'text');
 
     // Should have no text layers (only bg + table)
@@ -79,20 +80,23 @@ describe('dataTable template', () => {
   });
 
   it('includes a background layer', () => {
-    const layers = getLayers(makeDataTableBlock(), defaultContext);
+    const layers = materializeLayers(makeDataTableBlock(), defaultContext);
     // Background is the first layer (shape with gradient fill)
     expect(['shape', 'image']).toContain(layers[0].type);
   });
 
   it('passes column alignment to the table layer', () => {
-    const layers = getLayers(makeDataTableBlock({ align: ['left', 'right'] }), defaultContext);
+    const layers = materializeLayers(
+      makeDataTableBlock({ align: ['left', 'right'] }),
+      defaultContext,
+    );
     const tableLayer = layers.find((l) => l.type === 'table') as TableLayer;
 
     expect(tableLayer.content.align).toEqual(['left', 'right']);
   });
 
   it('applies theme colors to table styling', () => {
-    const layers = getLayers(makeDataTableBlock(), defaultContext);
+    const layers = materializeLayers(makeDataTableBlock(), defaultContext);
     const tableLayer = layers.find((l) => l.type === 'table') as TableLayer;
     const style = tableLayer.content.style;
 
@@ -106,8 +110,11 @@ describe('dataTable template', () => {
   });
 
   it('adjusts table position when title is present vs absent', () => {
-    const withTitle = getLayers(makeDataTableBlock({ title: 'Title' }), defaultContext);
-    const withoutTitle = getLayers(makeDataTableBlock({ title: undefined }), defaultContext);
+    const withTitle = materializeLayers(makeDataTableBlock({ title: 'Title' }), defaultContext);
+    const withoutTitle = materializeLayers(
+      makeDataTableBlock({ title: undefined }),
+      defaultContext,
+    );
 
     const tableWithTitle = withTitle.find((l) => l.type === 'table') as TableLayer;
     const tableWithoutTitle = withoutTitle.find((l) => l.type === 'table') as TableLayer;
@@ -117,18 +124,21 @@ describe('dataTable template', () => {
   });
 
   it('works with portrait viewport', () => {
-    const portraitContext: RenderContext = {
+    const portraitContext: MaterializeBlockLayersOptions = {
       ...defaultContext,
       viewport: VIEWPORT_PRESETS.portrait,
     };
-    const layers = getLayers(makeDataTableBlock(), portraitContext);
+    const layers = materializeLayers(makeDataTableBlock(), portraitContext);
     expect(layers.length).toBeGreaterThan(0);
     const tableLayer = layers.find((l) => l.type === 'table');
     expect(tableLayer).toBeDefined();
   });
 
   it('handles empty rows gracefully', () => {
-    const layers = getLayers(makeDataTableBlock({ headers: ['A', 'B'], rows: [] }), defaultContext);
+    const layers = materializeLayers(
+      makeDataTableBlock({ headers: ['A', 'B'], rows: [] }),
+      defaultContext,
+    );
     const tableLayer = layers.find((l) => l.type === 'table') as TableLayer;
     expect(tableLayer.content.rows).toEqual([]);
   });

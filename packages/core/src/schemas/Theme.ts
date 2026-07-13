@@ -23,13 +23,15 @@
 import type { LayoutHints } from './LayoutStrategy.js';
 import type { AnimationType, ImageTreatment, TransitionType } from './Doc.js';
 import type { PersistentLayerConfig } from './BlockTemplates.js';
+import { THEME_SCHEMA_VERSION } from './themeConstants.js';
+import { validateTheme } from './themeValidator.js';
+import { cloneAndFreezeData } from '../internal/immutable.js';
 
 // ============================================
 // Schema version
 // ============================================
 
-/** Current Theme schema version. Bump on breaking changes; loader migrates. */
-export const THEME_SCHEMA_VERSION = '1' as const;
+export { THEME_SCHEMA_VERSION } from './themeConstants.js';
 export type ThemeSchemaVersion = typeof THEME_SCHEMA_VERSION;
 
 /**
@@ -354,33 +356,51 @@ export function applySurface(theme: Theme, surface: SurfaceScheme): Theme {
 }
 
 // ============================================
-// Runtime registry — for custom themes
+// Caller-owned registry — for custom themes
 // ============================================
 
-const CUSTOM_THEME_REGISTRY = new Map<string, Theme>();
+/** A caller-owned custom-theme registry for SSR tenants, tests, and embedders. */
+export interface ThemeRegistry {
+  register(theme: Theme): void;
+  unregister(id: string): boolean;
+  get(id: string): Theme | undefined;
+  list(): Theme[];
+}
+
+function validatedThemeSnapshot(theme: Theme): Theme {
+  const result = validateTheme(theme);
+  if (!result.valid || !result.theme) {
+    const details = result.errors
+      .slice(0, 5)
+      .map((error) => `${error.path || '<root>'}: ${error.message}`)
+      .join('; ');
+    throw new TypeError(`Cannot register invalid theme: ${details}`);
+  }
+  return cloneAndFreezeData(result.theme);
+}
 
 /**
- * Register a Theme so it can be looked up by id via `resolveTheme(id)`.
- * Lets `Doc.themeId` round-trip through Doc serialization for custom themes.
- *
- * Registered themes take precedence over built-ins with the same id.
+ * Create a registry whose state is owned by the caller rather than the
+ * process. Registered values are validated and stored as deeply frozen
+ * snapshots, so later caller mutation cannot alter resolution behavior.
  */
-export function registerTheme(theme: Theme): void {
-  CUSTOM_THEME_REGISTRY.set(theme.id, theme);
-}
-
-/** Remove a previously registered theme. */
-export function unregisterTheme(id: string): void {
-  CUSTOM_THEME_REGISTRY.delete(id);
-}
-
-/** Snapshot of all currently registered (non-built-in) themes. */
-export function getRegisteredThemes(): Theme[] {
-  return Array.from(CUSTOM_THEME_REGISTRY.values());
-}
-
-/** @internal — used by themeLibrary's `resolveTheme` to check the registry first. */
-export function lookupRegisteredTheme(id: string | undefined): Theme | undefined {
-  if (!id) return undefined;
-  return CUSTOM_THEME_REGISTRY.get(id);
+export function createThemeRegistry(initialThemes: readonly Theme[] = []): ThemeRegistry {
+  const themes = new Map<string, Theme>();
+  const registry: ThemeRegistry = {
+    register(theme): void {
+      const snapshot = validatedThemeSnapshot(theme);
+      themes.set(snapshot.id, snapshot);
+    },
+    unregister(id): boolean {
+      return themes.delete(id);
+    },
+    get(id): Theme | undefined {
+      return themes.get(id);
+    },
+    list(): Theme[] {
+      return Array.from(themes.values());
+    },
+  };
+  for (const theme of initialThemes) registry.register(theme);
+  return Object.freeze(registry);
 }

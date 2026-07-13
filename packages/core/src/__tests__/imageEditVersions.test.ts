@@ -137,6 +137,8 @@ describe('imageEdit/versions', () => {
     expect(result.version?.path).toMatch(/^\.versions\/state\.\d{8}T\d{6}Z\.json$/);
     // snapshot is inside the sidecar, visible to the parent under the prefix
     expect(await parent.exists(`image_files/${result.version!.path}`)).toBe(true);
+    const gitignore = await parent.readFile('image_files/.gitignore');
+    expect(gitignore && new TextDecoder().decode(gitignore)).toBe('.versions/\n');
   });
 
   it('returns no-state when sidecar is empty', async () => {

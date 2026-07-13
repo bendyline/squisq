@@ -1,13 +1,13 @@
 /**
- * sceneTextChannel — a module singleton that bridges the canvas's inline
+ * sceneTextChannel — an editor-owned channel that bridges the canvas's inline
  * text editor (which renders in a **detached React root** created by the
  * Diagram/SceneBlock ProseMirror extensions, outside `<EditorProvider>`)
  * to the provider, so the top formatting toolbar can target it.
  *
  * The active textbox's `SceneTextOverlay` publishes its Tiptap editor here
  * on focus and clears it on blur/unmount; `EditorProvider` subscribes and
- * mirrors the handle into `activeSceneText`. Singleton because only one
- * canvas textbox can be focused at a time.
+ * mirrors the handle into `activeSceneText`. Each EditorProvider creates its
+ * own channel, preventing focus in one editor from mutating another editor.
  */
 
 import type { Editor as TiptapEditor } from '@tiptap/core';
@@ -20,21 +20,27 @@ export interface SceneTextHandle {
 
 type Listener = (handle: SceneTextHandle | null) => void;
 
-let current: SceneTextHandle | null = null;
-const listeners = new Set<Listener>();
+export interface SceneTextChannel {
+  set(handle: SceneTextHandle | null): void;
+  get(): SceneTextHandle | null;
+  subscribe(listener: Listener): () => void;
+}
 
-export const sceneTextChannel = {
-  /** Publish (or clear with `null`) the focused canvas textbox editor. */
-  set(handle: SceneTextHandle | null): void {
-    current = handle;
-    for (const listener of listeners) listener(handle);
-  },
-  get(): SceneTextHandle | null {
-    return current;
-  },
-  /** Subscribe to handle changes. Returns an unsubscribe function. */
-  subscribe(listener: Listener): () => void {
-    listeners.add(listener);
-    return () => listeners.delete(listener);
-  },
-};
+/** Create a channel owned by one EditorProvider; no cross-editor singleton. */
+export function createSceneTextChannel(): SceneTextChannel {
+  let current: SceneTextHandle | null = null;
+  const listeners = new Set<Listener>();
+  return {
+    set(handle) {
+      current = handle;
+      for (const listener of listeners) listener(handle);
+    },
+    get() {
+      return current;
+    },
+    subscribe(listener) {
+      listeners.add(listener);
+      return () => listeners.delete(listener);
+    },
+  };
+}

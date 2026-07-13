@@ -13,9 +13,10 @@
  * the props it receives so we can assert `monacoTheme` reaches it.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import type { RawEditorProps } from '../RawEditor';
 import type { MediaEntry, MediaProvider } from '@bendyline/squisq/schemas';
+import { useMediaProvider } from '@bendyline/squisq-react';
 
 // Records the props the shell passes to RawEditor on each render.
 const rawEditorProps: RawEditorProps[] = [];
@@ -40,6 +41,13 @@ import { Toolbar } from '../Toolbar';
 function MarkdownSourceProbe() {
   const { markdownSource } = useEditorContext();
   return <pre data-testid="markdown-source">{markdownSource}</pre>;
+}
+
+function MediaProviderProbe({ expected }: { expected: MediaProvider }) {
+  const provider = useMediaProvider();
+  return (
+    <span data-testid="media-context-probe">{provider === expected ? 'same' : 'missing'}</span>
+  );
 }
 
 function mediaProviderWith(count: number): MediaProvider {
@@ -184,6 +192,61 @@ describe('RawEditor monacoTheme prop', () => {
   });
 });
 
+describe('<EditorShell> instance boundaries', () => {
+  it('provides its mediaProvider to React preview/layer consumers', async () => {
+    const provider = mediaProviderWith(0);
+    await act(async () => {
+      render(
+        <EditorShell
+          initialMarkdown="# hi"
+          initialView="raw"
+          mediaProvider={provider}
+          toolbarSlotLeft={<MediaProviderProbe expected={provider} />}
+        />,
+      );
+    });
+    expect(screen.getByTestId('media-context-probe').textContent).toBe('same');
+  });
+
+  it('keeps view shortcuts inside the editor that received the key', async () => {
+    const { container } = render(
+      <>
+        <EditorShell initialMarkdown="# first" initialView="raw" />
+        <EditorShell initialMarkdown="# second" initialView="raw" />
+      </>,
+    );
+    const shells = container.querySelectorAll<HTMLElement>('.squisq-editor-shell');
+    fireEvent.keyDown(within(shells[1]).getByTestId('raw-editor-stub'), {
+      key: '1',
+      ctrlKey: true,
+    });
+    await waitFor(() => expect(within(shells[1]).getByTestId('wysiwyg-editor-stub')).toBeTruthy());
+    expect(within(shells[0]).getByTestId('raw-editor-stub')).toBeTruthy();
+  });
+
+  it('ignores file drops in readOnly mode', async () => {
+    const { container } = render(
+      <EditorShell
+        initialMarkdown="# original"
+        initialView="raw"
+        readOnly
+        toolbarSlotRight={<MarkdownSourceProbe />}
+      />,
+    );
+    const shell = container.querySelector<HTMLElement>('.squisq-editor-shell')!;
+    const file = new File(['# replacement'], 'replacement.md', { type: 'text/markdown' });
+    fireEvent.drop(shell, {
+      dataTransfer: {
+        types: ['Files'],
+        files: [file],
+        items: [{ kind: 'file', type: 'text/markdown', getAsFile: () => file }],
+      },
+    });
+    await act(async () => Promise.resolve());
+    expect(screen.getByTestId('markdown-source').textContent).toBe('# original');
+  });
+});
+
 describe('<EditorShell> Files badge', () => {
   it('shows the mediaProvider file count on the paperclip button', async () => {
     const { container } = render(
@@ -229,6 +292,25 @@ describe('<EditorShell> Files badge', () => {
       expect(screen.getByLabelText('Toggle Files panel, 1 file')).toBeTruthy();
     });
     expect(container.querySelector('.squisq-toolbar-files-badge')?.textContent).toBe('1');
+  });
+
+  it('hides .gitignore entries from the Files panel and its count', async () => {
+    const { provider } = mutableMediaProviderWith([
+      { name: '.gitignore', mimeType: 'text/plain', size: 11 },
+      { name: 'notes_files/.gitignore', mimeType: 'text/plain', size: 11 },
+      { name: 'notes_files/hero.png', mimeType: 'image/png', size: 1024 },
+    ]);
+
+    render(<EditorShell initialMarkdown="# hi" initialView="raw" mediaProvider={provider} />);
+
+    await waitFor(() => {
+      expect(screen.getByLabelText('Toggle Files panel, 1 file')).toBeTruthy();
+    });
+    fireEvent.click(screen.getByLabelText('Toggle Files panel, 1 file'));
+
+    expect(await screen.findByText('hero.png')).toBeTruthy();
+    expect(screen.queryByText('.gitignore')).toBeNull();
+    expect(screen.getByText('Files (1)')).toBeTruthy();
   });
 
   it('removes a media file and matching markdown refs from the files context menu', async () => {
@@ -338,6 +420,28 @@ describe('<Toolbar> Files badge', () => {
     });
     expect(container.querySelector('.squisq-toolbar-files-badge')?.textContent).toBe('2');
   });
+
+  it('excludes .gitignore from a self-scanned count', async () => {
+    const { provider } = mutableMediaProviderWith([
+      { name: '.gitignore', mimeType: 'text/plain', size: 11 },
+      { name: 'hero.png', mimeType: 'image/png', size: 1024 },
+    ]);
+    const { container } = render(
+      <EditorProvider
+        initialMarkdown="# hi"
+        initialView="raw"
+        mediaProvider={provider}
+        allowRecording={false}
+      >
+        <Toolbar onToggleFiles={() => {}} />
+      </EditorProvider>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByLabelText('Toggle Files panel, 1 file')).toBeTruthy();
+    });
+    expect(container.querySelector('.squisq-toolbar-files-badge')?.textContent).toBe('1');
+  });
 });
 
 describe('<Toolbar> Insert menu', () => {
@@ -357,6 +461,24 @@ describe('<Toolbar> Insert menu', () => {
     await waitFor(() => {
       expect(screen.getByTestId('markdown-source').textContent).toBe(
         ['Intro', '- [ ] Task 1', '- [ ] Task 2', '- [ ] Task 3', ''].join('\n'),
+      );
+    });
+  });
+
+  it('adds an explicit authored timeline fence from the Insert menu', async () => {
+    render(
+      <EditorProvider initialMarkdown="Intro" initialView="raw" allowRecording={false}>
+        <Toolbar />
+        <MarkdownSourceProbe />
+      </EditorProvider>,
+    );
+
+    fireEvent.click(screen.getByLabelText('Insert'));
+    fireEvent.click(await screen.findByRole('menuitem', { name: /Timeline/i }));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('markdown-source').textContent).toContain(
+        '```timeline\nMilestones: ● Start',
       );
     });
   });

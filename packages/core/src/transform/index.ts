@@ -1,5 +1,5 @@
 export { applyTransform } from './applyTransform.js';
-export { registerTransformStyle, unregisterTransformStyle } from './registry.js';
+export { createTransformStyleRegistry } from './registry.js';
 
 export {
   resolveTransformStyle,
@@ -10,8 +10,10 @@ export {
 
 export type {
   TransformStyleId,
+  TransformStyleInput,
   TransformStyleSummary,
   TransformStyleConfig,
+  TransformStyleRegistry,
   TransformImage,
   TransformOptions,
   TransformResult,

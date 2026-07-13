@@ -64,6 +64,15 @@ export type { HtmlImportOptions } from './html/index.js';
 export { markdownDocToEpub, docToEpub } from './epub/index.js';
 export type { EpubExportOptions } from './epub/index.js';
 
+// Theme inference from file imports (DOCX/PPTX/XLSX theme1.xml → Squisq Theme)
+export { inferThemeFromFile, compileExtractedTheme } from './infer/index.js';
+export type {
+  InferThemeOptions,
+  InferredFileTheme,
+  ExtractedFileTheme,
+  InferSourceFormat,
+} from './infer/index.js';
+
 // Format registry + programmatic convert()
 export {
   convert,
@@ -73,6 +82,14 @@ export {
   ConversionError,
   BUILTIN_FORMAT_IDS,
 } from './registry/index.js';
+
+// Shared bounded-decompression errors/options used by DBK and OOXML imports.
+export { ZipSafetyError } from './shared/zipSafety.js';
+export type {
+  ZipSafetyLimits,
+  ZipSafetyErrorCode,
+  ZipSafetyErrorOptions,
+} from './shared/zipSafety.js';
 export type {
   FormatId,
   ConversionResult,
@@ -83,4 +100,7 @@ export type {
   ConvertSource,
   ConversionErrorCode,
   ConversionErrorOptions,
+  BuiltinFormatOptions,
+  MarkdownFormatOptions,
+  DbkFormatOptions,
 } from './registry/index.js';

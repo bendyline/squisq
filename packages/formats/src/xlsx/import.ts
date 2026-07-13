@@ -16,10 +16,11 @@ import type {
   MarkdownTableRow,
 } from '@bendyline/squisq/markdown';
 import { getPartXml, getPartRelationships, openPackage } from '../ooxml/reader.js';
+import type { OoxmlOpenOptions } from '../ooxml/reader.js';
 import type { OoxmlPackage } from '../ooxml/types.js';
 import { NS_R, NS_SML } from '../ooxml/namespaces.js';
 
-export interface XlsxImportOptions {
+export interface XlsxImportOptions extends OoxmlOpenOptions {
   /** Which sheet to import (0-based index or sheet name). Default: all sheets. */
   sheet?: number | string;
 }
@@ -133,7 +134,7 @@ export async function xlsxToMarkdownDoc(
   data: ArrayBuffer | Blob,
   options: XlsxImportOptions = {},
 ): Promise<MarkdownDocument> {
-  const pkg = await openPackage(data);
+  const pkg = await openPackage(data, options);
   const sheets = await readSheets(pkg);
   const shared = await readSharedStrings(pkg);
 

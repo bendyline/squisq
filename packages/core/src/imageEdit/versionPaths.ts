@@ -10,7 +10,11 @@
  * `.md` so the two histories live side-by-side without colliding.
  */
 
-import { formatVersionTimestamp, parseVersionTimestamp } from '../versions/timestamp.js';
+import {
+  buildSnapshotPath,
+  parseSnapshotPath,
+  type SnapshotPathStrategy,
+} from '../versions/snapshotStore.js';
 
 /** Subfolder (inside the sidecar) that holds image-editor snapshots. */
 export const IMAGE_EDIT_VERSIONS_PREFIX = '.versions/';
@@ -18,11 +22,15 @@ export const IMAGE_EDIT_VERSIONS_PREFIX = '.versions/';
 /** Default basename when none is supplied. Matches `IMAGE_EDIT_STATE_FILENAME` stem. */
 export const IMAGE_EDIT_DEFAULT_BASENAME = 'state';
 
+/** Internal strategy shared with the generic snapshot store. */
+export const IMAGE_EDIT_VERSION_PATHS: SnapshotPathStrategy = Object.freeze({
+  prefix: IMAGE_EDIT_VERSIONS_PREFIX,
+  extension: 'json',
+});
+
 /** Build a snapshot path. Optionally append a collision suffix. */
 export function buildImageEditVersionPath(basename: string, date: Date, collision = 0): string {
-  const stamp = formatVersionTimestamp(date);
-  const suffix = collision > 0 ? `-${collision + 1}` : '';
-  return `${IMAGE_EDIT_VERSIONS_PREFIX}${basename}.${stamp}${suffix}.json`;
+  return buildSnapshotPath(IMAGE_EDIT_VERSION_PATHS, basename, date, collision);
 }
 
 /**
@@ -32,26 +40,5 @@ export function buildImageEditVersionPath(basename: string, date: Date, collisio
 export function parseImageEditVersionPath(
   path: string,
 ): { basename: string; timestamp: Date; collision: number } | null {
-  if (!path.startsWith(IMAGE_EDIT_VERSIONS_PREFIX)) return null;
-  const rest = path.slice(IMAGE_EDIT_VERSIONS_PREFIX.length);
-  if (!rest.endsWith('.json')) return null;
-  const stem = rest.slice(0, -'.json'.length);
-  const lastDot = stem.lastIndexOf('.');
-  if (lastDot <= 0) return null;
-  const basename = stem.slice(0, lastDot);
-  const tail = stem.slice(lastDot + 1);
-  const dash = tail.indexOf('-');
-  let stamp: string;
-  let collision = 0;
-  if (dash >= 0) {
-    stamp = tail.slice(0, dash);
-    const n = Number(tail.slice(dash + 1));
-    if (!Number.isInteger(n) || n < 2) return null;
-    collision = n - 1;
-  } else {
-    stamp = tail;
-  }
-  const timestamp = parseVersionTimestamp(stamp);
-  if (!timestamp) return null;
-  return { basename, timestamp, collision };
+  return parseSnapshotPath(IMAGE_EDIT_VERSION_PATHS, path);
 }

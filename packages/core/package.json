@@ -46,11 +46,6 @@
       "import": "./dist/spatial/index.js",
       "default": "./dist/spatial/index.js"
     },
-    "./story": {
-      "types": "./dist/story/index.d.ts",
-      "import": "./dist/story/index.js",
-      "default": "./dist/story/index.js"
-    },
     "./doc": {
       "types": "./dist/doc/index.d.ts",
       "import": "./dist/doc/index.js",
@@ -115,6 +110,11 @@
       "types": "./dist/recommend/index.d.ts",
       "import": "./dist/recommend/index.js",
       "default": "./dist/recommend/index.js"
+    },
+    "./narration": {
+      "types": "./dist/narration/index.d.ts",
+      "import": "./dist/narration/index.js",
+      "default": "./dist/narration/index.js"
     }
   },
   "scripts": {

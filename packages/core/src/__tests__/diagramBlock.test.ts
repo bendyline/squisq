@@ -98,9 +98,9 @@ describe('diagramBlock template', () => {
   });
 });
 
-describe('diagramBlock integration with getLayers', () => {
+describe('diagramBlock integration with materializeBlockLayers', () => {
   it('renders through the full template registry', async () => {
-    const { getLayers } = await import('../doc/getLayers.js');
+    const { materializeBlockLayers } = await import('../doc/materializeBlockLayers.js');
     const parentBlock: Block = {
       id: 'family',
       startTime: 0,
@@ -113,7 +113,7 @@ describe('diagramBlock integration with getLayers', () => {
         makeBlock({ id: 'b', title: 'B', x: 400, y: 100, connectsTo: [{ target: 'a' }] }),
       ],
     };
-    const layers = getLayers(parentBlock, {});
+    const layers = materializeBlockLayers(parentBlock, { persistentLayers: false }).layers;
     // Should contain at least one shape (node card) and one path (edge).
     const types = new Set(layers.map((l: Layer) => l.type));
     expect(types.has('shape')).toBe(true);

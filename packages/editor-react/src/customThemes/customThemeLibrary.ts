@@ -14,7 +14,7 @@
  * unavailable.
  */
 
-import type { Theme } from '@bendyline/squisq/schemas';
+import { validateTheme, type Theme } from '@bendyline/squisq/schemas';
 
 export const THEME_LIBRARY_STORAGE_KEY = 'squisq:custom-theme-library';
 
@@ -38,12 +38,15 @@ function safeStorage(): Storage | null {
 function readPayload(): LibraryPayload {
   const storage = safeStorage();
   if (!storage) return { version: 1, themes: [] };
-  const raw = storage.getItem(THEME_LIBRARY_STORAGE_KEY);
-  if (!raw) return { version: 1, themes: [] };
   try {
+    const raw = storage.getItem(THEME_LIBRARY_STORAGE_KEY);
+    if (!raw) return { version: 1, themes: [] };
     const parsed = JSON.parse(raw) as Partial<LibraryPayload>;
     if (parsed && Array.isArray(parsed.themes)) {
-      return { version: 1, themes: parsed.themes };
+      return {
+        version: 1,
+        themes: parsed.themes.filter((theme): theme is Theme => validateTheme(theme).valid),
+      };
     }
   } catch {
     // Corrupt payload — drop it.

@@ -10,8 +10,6 @@ import { describe, it, expect, vi } from 'vitest';
 import { markdownToDoc } from '../doc/markdownToDoc';
 import { docToMarkdown } from '../doc/docToMarkdown';
 import {
-  encodeLayersForFrontmatter,
-  decodeLayersFromFrontmatter,
   readCustomTemplatesFromFrontmatter,
   writeCustomTemplatesToFrontmatter,
   FRONTMATTER_CUSTOM_TEMPLATES_KEY,
@@ -42,19 +40,6 @@ const heroDef: CustomTemplateDefinition = {
   viewport: { width: 1920, height: 1080 },
   layers: sampleLayers,
 };
-
-describe('encodeLayersForFrontmatter ↔ decodeLayersFromFrontmatter', () => {
-  it('round-trips a single Layer array verbatim', () => {
-    const encoded = encodeLayersForFrontmatter(sampleLayers);
-    const decoded = decodeLayersFromFrontmatter(encoded);
-    expect(decoded).toEqual(sampleLayers);
-  });
-
-  it("returns [] when the base64 isn't valid JSON", () => {
-    const garbage = encodeLayersForFrontmatter(sampleLayers).slice(0, 4);
-    expect(decodeLayersFromFrontmatter(garbage)).toEqual([]);
-  });
-});
 
 describe('writeCustomTemplatesToFrontmatter → readCustomTemplatesFromFrontmatter', () => {
   it('round-trips a single definition through the compact JSON wire format', () => {

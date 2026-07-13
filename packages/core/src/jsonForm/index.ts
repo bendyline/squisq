@@ -17,7 +17,15 @@ export type {
 
 export { chooseControl, primaryType, arrayItemKind } from './chooseControl.js';
 export { evaluateWhen, resolveFlag } from './evaluateWhen.js';
-export { toPointer, pointerSegments, getByPointer, setByPointer, resolveRef } from './pointer.js';
+export {
+  escapePointerSegment,
+  appendPointer,
+  toPointer,
+  pointerSegments,
+  getByPointer,
+  setByPointer,
+  resolveRef,
+} from './pointer.js';
 export { inferSchema } from './inferSchema.js';
 export type { InferSchemaOptions } from './inferSchema.js';
 export { buildJsonFormTokens, resolveJsonFormTheme } from './tokens.js';

@@ -11,7 +11,6 @@
  * using squisq's own parser.
  */
 
-import { templateLabel } from './TemplatePicker';
 import { resolveIcon } from '@bendyline/squisq/icons';
 import {
   matchTrailingTemplateAnnotation,
@@ -251,6 +250,11 @@ export function markdownToTiptap(markdown: string): string {
         // tokens are stored raw — quotes included — so tiptapToMarkdown
         // can re-join them into the annotation verbatim.
         const tokens = tokenizeAttrTokens(templateInner);
+        if (tokens.length === 0) {
+          // Preserve an authored `{[]}` through the editable Tiptap document
+          // while keeping the raw marker out of the visible heading text.
+          attrs += ' data-template-empty="true"';
+        }
         const firstIsParam = tokens.length > 0 && tokens[0].indexOf('=') > 0;
         if (!firstIsParam && tokens[0]) {
           attrs += ` data-template="${escapeHtml(tokens[0])}"`;
@@ -409,7 +413,16 @@ export function tiptapToMarkdown(html: string): string {
     if (headingMatch) {
       const level = parseInt(headingMatch[1], 10);
       const attrs = headingMatch[2];
-      let text = htmlToInline(headingMatch[3]);
+      const headingHtml = headingMatch[3];
+      // Template/property badges are editor chrome, not heading content. Strip
+      // them structurally before converting the inline HTML. Older builds
+      // briefly rendered the template label as real badge text; using the
+      // markup boundary preserves that cleanup without mistaking a legitimate
+      // heading suffix (for example "A Famous Quote") for the badge label.
+      const chromeStart = headingHtml.search(
+        /<span\b[^>]*\bclass="[^"]*\bsquisq-(?:template|props)-badge\b[^"]*"[^>]*>/i,
+      );
+      let text = htmlToInline(chromeStart >= 0 ? headingHtml.slice(0, chromeStart) : headingHtml);
 
       // Re-inject heading annotations from data attributes. Canonical
       // emit order: Pandoc `{#…}` first, then squisq `{[…]}` annotation
@@ -417,15 +430,7 @@ export function tiptapToMarkdown(html: string): string {
       const blockAttrsMatch = attrs.match(/data-block-attrs="([^"]*)"/);
       const tmplMatch = attrs.match(/data-template="([^"]+)"/);
       const paramsMatch = attrs.match(/data-template-params="([^"]+)"/);
-      if (tmplMatch) {
-        // Strip an accidental trailing copy of the template label that an
-        // earlier broken build briefly rendered as real text inside the
-        // badge. Existing documents self-heal on save.
-        const label = templateLabel(tmplMatch[1]);
-        if (label && text.endsWith(label)) {
-          text = text.slice(0, -label.length).trimEnd();
-        }
-      }
+      const hasEmptyTemplateAnnotation = /\sdata-template-empty(?:="[^"]*")?/.test(attrs);
       if (blockAttrsMatch) {
         const inner = unescapeHtml(blockAttrsMatch[1]);
         text += ` {${inner}}`;
@@ -436,6 +441,8 @@ export function tiptapToMarkdown(html: string): string {
           annotation += (annotation ? ' ' : '') + unescapeHtml(paramsMatch[1]);
         }
         text += ` {[${annotation}]}`;
+      } else if (hasEmptyTemplateAnnotation) {
+        text += ' {[]}';
       }
 
       lines.push('#'.repeat(level) + ' ' + text);
@@ -444,12 +451,13 @@ export function tiptapToMarkdown(html: string): string {
       continue;
     }
 
-    // Code blocks
-    const codeMatch = remaining.match(
-      /^<pre><code(?:\s+class="language-([^"]*)")?>(.*?)<\/code><\/pre>/s,
-    );
+    // Code blocks — tolerate attributes on <pre> and <code>: real
+    // editor.getHTML() output carries class="squisq-code-block" on the
+    // <pre> (StarterKit codeBlock HTMLAttributes), which a bare
+    // `<pre><code` anchor never matches, silently dropping the fence.
+    const codeMatch = remaining.match(/^<pre\b[^>]*><code\b([^>]*)>(.*?)<\/code><\/pre>/s);
     if (codeMatch) {
-      const lang = codeMatch[1] || '';
+      const lang = /\bclass="language-([^"]*)"/.exec(codeMatch[1] ?? '')?.[1] ?? '';
       const code = unescapeHtml(codeMatch[2]);
       lines.push('```' + lang);
       lines.push(code);

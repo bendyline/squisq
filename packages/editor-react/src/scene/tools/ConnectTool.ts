@@ -32,7 +32,13 @@ interface ConnectState {
   hoveredTargetId: string | null;
 }
 
-let state: ConnectState | null = null;
+function getState(ctx: SceneToolContext): ConnectState | null {
+  return (ctx.interaction.connect as ConnectState | undefined) ?? null;
+}
+
+function setState(ctx: SceneToolContext, state: ConnectState | null): void {
+  ctx.interaction.connect = state ?? undefined;
+}
 
 function pointerFromEvent(e: React.PointerEvent): { sx: number; sy: number } {
   const rect = (e.currentTarget as Element).getBoundingClientRect();
@@ -126,18 +132,19 @@ export const ConnectTool: SceneTool = {
     const sourceBox = nodeBoxFromCard(ctx, nodeId);
     if (!sourceBox) return;
     const preview = updatePreview(sourceBox, v, null);
-    state = {
+    setState(ctx, {
       sourceNodeId: nodeId,
       sourceBox,
       start: preview.start,
       end: preview.end,
       hoveredTargetId: null,
-    };
+    });
     (e.currentTarget as Element).setPointerCapture?.(e.pointerId);
     e.stopPropagation();
   },
 
   onPointerMove(e, ctx) {
+    const state = getState(ctx);
     if (!state) return;
     const { sx, sy } = pointerFromEvent(e);
     const v = ctx.screenToViewport(sx, sy);
@@ -152,16 +159,18 @@ export const ConnectTool: SceneTool = {
   },
 
   onPointerUp(e, ctx) {
+    const state = getState(ctx);
     if (!state) return;
     const target = state.hoveredTargetId;
     if (target) {
       ctx.dispatch({ kind: 'addEdge', source: state.sourceNodeId, target });
     }
     (e.currentTarget as Element).releasePointerCapture?.(e.pointerId);
-    state = null;
+    setState(ctx, null);
   },
 
   renderOverlay(ctx): JSX.Element | null {
+    const state = getState(ctx);
     const points = nodeBoxes(ctx).flatMap((box) =>
       connectionPoints(box).map((point, index) =>
         createElement('circle', {

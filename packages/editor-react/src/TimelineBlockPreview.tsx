@@ -3,7 +3,7 @@
  *
  * Renders a tiny slideshow-style thumbnail of a single block, used to fill each
  * bar on the timeline. Reuses the same rendering path as the inline preview
- * gutter and the slideshow: `buildPreviewDoc` → `getLayers` → `BlockRenderer`.
+ * gutter and the slideshow: `buildPreviewDoc` → `materializeBlockLayers` → `BlockRenderer`.
  */
 
 import { memo } from 'react';

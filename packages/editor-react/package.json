@@ -34,6 +34,10 @@
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
     },
+    "./monaco": {
+      "types": "./dist/monaco.d.ts",
+      "import": "./dist/monaco.js"
+    },
     "./styles": "./dist/styles/index.css"
   },
   "scripts": {
@@ -42,7 +46,7 @@
     "typecheck": "tsc --noEmit"
   },
   "peerDependencies": {
-    "monaco-editor": "^0.50.0",
+    "monaco-editor": ">=0.50.0",
     "react": "^18.0.0 || ^19.0.0",
     "react-dom": "^18.0.0 || ^19.0.0"
   },

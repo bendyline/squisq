@@ -27,6 +27,7 @@ import type {
   ProgressIndicatorConfig,
 } from '../../schemas/BlockTemplates.js';
 import type { Theme } from '../../schemas/Theme.js';
+import { cloneData } from '../../internal/immutable.js';
 import { isPersistentLayerTemplate } from '../../schemas/BlockTemplates.js';
 import { oklchDarken, withAlpha } from '../../schemas/colorUtils.js';
 
@@ -415,9 +416,9 @@ function expandProgressIndicator(config: ProgressIndicatorConfig): Layer {
  * Expand a single persistent layer (template or raw) to raw Layer(s).
  */
 export function expandPersistentLayer(layer: PersistentLayer, theme?: Theme): Layer[] {
-  // If already a raw Layer, return as-is
+  // If already a raw Layer, return an owned copy.
   if (!isPersistentLayerTemplate(layer)) {
-    return [layer as Layer];
+    return [cloneData(layer as Layer)];
   }
 
   const template = layer as PersistentLayerTemplate;
@@ -466,128 +467,6 @@ export function expandPersistentLayers(
   );
 }
 
-// ============================================
-// Style Presets (legacy helper — prefer theme.persistentLayers)
-// ============================================
-
-/** Legacy style preset names. Prefer using `Theme.persistentLayers` directly. */
-export type DocStylePreset = 'minimal' | 'documentary' | 'branded' | 'cinematic' | 'clean';
-
-/**
- * Get a PersistentLayerConfig from a style preset.
- *
- * @param preset - Style preset name
- * @param articleTitle - Article title for title caption
- * @param heroSrc - Optional hero image for cinematic style
- */
-export function getDocStyleConfig(
-  preset: DocStylePreset,
-  articleTitle: string,
-  heroSrc?: string,
-  subtitle?: string,
-): PersistentLayerConfig {
-  switch (preset) {
-    case 'minimal':
-      return {};
-
-    case 'documentary':
-      return {
-        bottomLayers: [
-          {
-            template: 'gradientBackground',
-            config: { type: 'gradientBackground', preset: 'dark-vignette' },
-          },
-        ],
-        topLayers: [
-          {
-            template: 'titleCaption',
-            config: {
-              type: 'titleCaption',
-              title: articleTitle,
-              subtitle,
-              position: 'bottom-left',
-              fontSize: 24,
-              showThumbnail: !!heroSrc,
-              thumbnailSrc: heroSrc,
-            },
-          },
-        ],
-      };
-
-    case 'branded':
-      return {
-        bottomLayers: [
-          {
-            template: 'gradientBackground',
-            config: { type: 'gradientBackground', preset: 'cool-blue' },
-          },
-        ],
-        topLayers: [
-          {
-            template: 'titleCaption',
-            config: {
-              type: 'titleCaption',
-              title: articleTitle,
-              subtitle,
-              position: 'bottom-left',
-              fontSize: 26,
-              showThumbnail: !!heroSrc,
-              thumbnailSrc: heroSrc,
-            },
-          },
-        ],
-      };
-
-    case 'cinematic':
-      return {
-        bottomLayers: heroSrc
-          ? [
-              {
-                template: 'imageBackground',
-                config: {
-                  type: 'imageBackground',
-                  src: heroSrc,
-                  blur: 12,
-                  opacity: 0.3,
-                  ambientMotion: 'zoomIn',
-                },
-              },
-            ]
-          : [
-              {
-                template: 'gradientBackground',
-                config: { type: 'gradientBackground', preset: 'radial-dark' },
-              },
-            ],
-        topLayers: [
-          {
-            template: 'titleCaption',
-            config: {
-              type: 'titleCaption',
-              title: articleTitle,
-              subtitle,
-              position: 'bottom-right',
-              fontSize: 22,
-            },
-          },
-        ],
-      };
-
-    case 'clean':
-      return {
-        bottomLayers: [
-          {
-            template: 'solidBackground',
-            config: { type: 'solidBackground', color: '#1a202c' },
-          },
-        ],
-      };
-
-    default:
-      return {};
-  }
-}
-
 /**
  * Get persistent layers from a Theme. Returns the theme's baked-in
  * persistentLayers config, or an empty config when the theme has none.
@@ -625,7 +504,7 @@ export function resolvePersistentLayers(
 /**
  * Compose a block's layers between pre-expanded persistent bottom/top
  * layers, honoring the per-block `useBottomLayer` / `useTopLayer` opt-outs.
- * Single shared implementation for `expandDocBlocks` and `getLayers`.
+ * Shared persistent-layer primitive used by `materializeBlockLayers`.
  */
 export function wrapWithPersistentLayers(
   layers: Layer[],
@@ -636,5 +515,12 @@ export function wrapWithPersistentLayers(
   if (bottomLayers.length === 0 && topLayers.length === 0) return layers;
   const useBottom = block.useBottomLayer !== false;
   const useTop = block.useTopLayer !== false;
-  return [...(useBottom ? bottomLayers : []), ...layers, ...(useTop ? topLayers : [])];
+  // Each expanded block owns its persistent layers. This prevents a renderer
+  // (or a later timing/style pass) from mutating the caller's config or a
+  // sibling block through a shared layer reference.
+  return [
+    ...(useBottom ? bottomLayers.map((layer) => cloneData(layer)) : []),
+    ...layers,
+    ...(useTop ? topLayers.map((layer) => cloneData(layer)) : []),
+  ];
 }

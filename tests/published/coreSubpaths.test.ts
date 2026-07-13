@@ -9,7 +9,7 @@
  * an external app would after `import '@bendyline/squisq/storage'`.
  *
  * Core gets the dedicated treatment because it has the richest
- * subpath surface in the monorepo (16 entries today) and is the
+ * subpath surface in the monorepo (17 entries today) and is the
  * package where adding a subpath without wiring the corresponding
  * tsup entry has historically been easiest to overlook.
  */

@@ -1,5 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
-import { switchView, viewTabLabel, type ViewTab } from './view-tabs';
+import { switchView, viewTab, type ViewTab } from './view-tabs';
 
 /**
  * E2E tests for the Squisq editor UI.
@@ -20,7 +20,7 @@ async function focusWysiwygParagraph(page: Page, position: 'first' | 'last' = 'l
   const editor = page.locator('.tiptap.ProseMirror');
   const paragraph = position === 'first' ? editor.locator('p').first() : editor.locator('p').last();
   await paragraph.click({ position: { x: 8, y: 8 } });
-  await expect(page.locator('#squisq-template-gallery-portal')).toHaveCount(0);
+  await expect(page.locator('[data-squisq-template-gallery-portal]')).toHaveCount(0);
   return editor;
 }
 
@@ -62,7 +62,7 @@ test.describe('Editor view switching', () => {
 
   test('all three tabs are visible in the toolbar', async ({ page }) => {
     for (const label of ['Editor', 'Markdown', 'Play'] as const satisfies readonly ViewTab[]) {
-      await expect(page.getByRole('tab', { name: viewTabLabel(label), exact: true })).toBeVisible();
+      await expect(viewTab(page, label)).toBeVisible();
     }
   });
 
@@ -233,9 +233,11 @@ test.describe('Template picker', () => {
     const heading = editor.locator('h1, h2, h3').first();
     const chip = heading.locator('.squisq-template-badge').first();
 
+    // Inline block tags default to selected/hovered visibility.
+    await heading.click({ position: { x: 8, y: 8 } });
     await expect(chip).toBeVisible();
     await chip.click();
-    await expect(page.locator('#squisq-template-gallery-portal')).toBeVisible();
+    await expect(page.locator('[data-squisq-template-gallery-portal]')).toBeVisible();
   });
 
   test('template picker is hidden when cursor is in body text', async ({ page }) => {

@@ -89,9 +89,7 @@ describe('expandDocBlocks with customTemplates', () => {
     expect(expanded[0].layers![0].position.width).toBe('90%');
   });
 
-  it('falls back to a no-layer block (with a warning) when the template is unknown', () => {
-    // Suppress the expected console.warn from `expandTemplateBlock`.
-    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+  it('returns a visible fallback and structured diagnostic when the template is unknown', () => {
     const block: Block = {
       id: 'b1',
       startTime: 0,
@@ -100,11 +98,27 @@ describe('expandDocBlocks with customTemplates', () => {
       title: 'Y',
       template: 'nonexistent',
     };
-    const expanded = expandDocBlocks([block], { customTemplates: [heroDef] });
+    const diagnostics: string[] = [];
+    const expanded = expandDocBlocks([block], {
+      customTemplates: [heroDef],
+      onDiagnostic: (diagnostic) => diagnostics.push(diagnostic.code),
+    });
+    expect(expanded[0].layers?.some((layer) => layer.id === 'fallback-notice')).toBe(true);
+    expect(diagnostics).toEqual(['unknown-template']);
+  });
+
+  it('retains an explicit empty policy for hosts that do not want fallback UI', () => {
+    const block: Block = {
+      id: 'b1',
+      startTime: 0,
+      duration: 1,
+      audioSegment: 0,
+      template: 'nonexistent',
+    };
+    const expanded = expandDocBlocks([block], {
+      customTemplates: [heroDef],
+      failureMode: 'empty',
+    });
     expect(expanded[0].layers).toBeUndefined();
-    expect(warnSpy).toHaveBeenCalled();
-    warnSpy.mockRestore();
   });
 });
-
-import { vi } from 'vitest';

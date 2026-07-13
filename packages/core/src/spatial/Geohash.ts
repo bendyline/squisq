@@ -194,6 +194,3 @@ export function geohashOverlapsBounds(
     hashWest > bounds.east
   );
 }
-
-// Re-export for backwards compatibility with existing imports.
-export { haversineDistance };

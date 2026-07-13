@@ -1,5 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
-import { switchView } from './view-tabs';
+import { selectUseMode, switchView } from './view-tabs';
 
 /**
  * E2E tests verifying that closed captions are derived from the
@@ -31,6 +31,7 @@ test.describe('Caption display', () => {
     await page.waitForLoadState('networkidle');
     await selectSample(page, 'hello-world');
     await switchView(page, 'Play');
+    await selectUseMode(page, 'Video');
     await waitForDocPlayer(page);
   });
 

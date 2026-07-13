@@ -5,7 +5,7 @@
  * image embedding, metadata, and stylesheet generation.
  */
 
-import { describe, it, expect } from 'vitest';
+import { afterEach, describe, it, expect, vi } from 'vitest';
 import JSZip from 'jszip';
 import type { MarkdownDocument, MarkdownBlockNode } from '@bendyline/squisq/markdown';
 import { markdownDocToEpub } from '../epub/export';
@@ -65,6 +65,10 @@ async function exportAndUnzip(doc: MarkdownDocument, options?: EpubExportOptions
 // ============================================
 
 describe('markdownDocToEpub', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
   describe('EPUB structure', () => {
     it('produces a valid ZIP with required EPUB files', async () => {
       const doc = makeDoc([heading(1, 'Title'), paragraph('Content')]);
@@ -173,6 +177,15 @@ describe('markdownDocToEpub', () => {
       const zip = await exportAndUnzip(doc);
       const ch = await zip.file('OEBPS/chapters/chapter-001.xhtml')!.async('string');
       expect(ch).toContain('<a href="https://example.com">click</a>');
+    });
+
+    it('strips executable link schemes while preserving link text', async () => {
+      const doc = makeDoc([heading(1, 'Test'), linkParagraph('click', 'javascript:alert(1)')]);
+      const zip = await exportAndUnzip(doc);
+      const ch = await zip.file('OEBPS/chapters/chapter-001.xhtml')!.async('string');
+      expect(ch).not.toContain('javascript:');
+      expect(ch).not.toContain('<a ');
+      expect(ch).toContain('click');
     });
 
     it('renders code blocks with language class', async () => {
@@ -298,6 +311,17 @@ describe('markdownDocToEpub', () => {
       expect(opf).toContain('image/png');
     });
 
+    it('flattens backslash-separated image paths to safe archive basenames', async () => {
+      const source = '..\\private\\logo.png';
+      const doc = makeDoc([heading(1, 'Test'), imageParagraph('Logo', source)]);
+      const zip = await exportAndUnzip(doc, {
+        images: new Map([[source, new Uint8Array([0x89]).buffer]]),
+      });
+
+      expect(zip.file('OEBPS/images/logo.png')).toBeTruthy();
+      expect(Object.keys(zip.files).some((path) => path.includes('\\'))).toBe(false);
+    });
+
     it('embeds cover image with cover-image property', async () => {
       const coverData = new Uint8Array([0xff, 0xd8]).buffer;
       const doc = makeDoc([heading(1, 'Test')]);
@@ -306,6 +330,23 @@ describe('markdownDocToEpub', () => {
       expect(zip.file('OEBPS/images/cover.jpg')).toBeTruthy();
       const opf = await zip.file('OEBPS/content.opf')!.async('string');
       expect(opf).toContain('cover-image');
+    });
+
+    it('does not overwrite a document image whose basename collides with the cover', async () => {
+      const documentImage = new Uint8Array([1, 2, 3]).buffer;
+      const coverImage = new Uint8Array([0x89, 0x50, 0x4e, 0x47]).buffer;
+      const doc = makeDoc([heading(1, 'Test'), imageParagraph('Inline cover', 'cover.png')]);
+      const zip = await exportAndUnzip(doc, {
+        images: new Map([['cover.png', documentImage]]),
+        coverImage,
+      });
+
+      expect(await zip.file('OEBPS/images/cover.png')!.async('uint8array')).toEqual(
+        new Uint8Array(documentImage),
+      );
+      expect(zip.file('OEBPS/images/cover-2.png')).toBeTruthy();
+      const opf = await zip.file('OEBPS/content.opf')!.async('string');
+      expect(opf).toContain('href="images/cover-2.png"');
     });
   });
 
@@ -354,6 +395,18 @@ describe('markdownDocToEpub', () => {
       const zip = await exportAndUnzip(doc);
       const opf = await zip.file('OEBPS/content.opf')!.async('string');
       expect(opf).toContain('urn:uuid:');
+    });
+
+    it('falls back to getRandomValues when randomUUID is unavailable', async () => {
+      vi.stubGlobal('crypto', {
+        getRandomValues<T extends ArrayBufferView>(array: T): T {
+          new Uint8Array(array.buffer, array.byteOffset, array.byteLength).fill(0xab);
+          return array;
+        },
+      });
+      const zip = await exportAndUnzip(makeDoc([heading(1, 'Test')]));
+      const opf = await zip.file('OEBPS/content.opf')!.async('string');
+      expect(opf).toMatch(/urn:uuid:abababab-abab-4bab-abab-abababababab/);
     });
 
     it('uses frontmatter title as fallback', async () => {
@@ -444,6 +497,54 @@ describe('markdownDocToEpub', () => {
 
       expect(zip.file('OEBPS/audio/intro.mp3')).toBeTruthy();
       expect(zip.file('OEBPS/audio/body.mp3')).toBeTruthy();
+    });
+
+    it('deduplicates colliding audio basenames without overwriting either segment', async () => {
+      const doc = makeDoc([
+        heading(1, 'One'),
+        paragraph('First'),
+        heading(1, 'Two'),
+        paragraph('Second'),
+      ]);
+      const segments = [
+        { src: 'a/narration.mp3', name: 'one', duration: 10, startTime: 0 },
+        { src: 'b/narration.mp3', name: 'two', duration: 10, startTime: 10 },
+      ];
+      const zip = await exportAndUnzip(doc, {
+        audio: new Map([
+          ['a/narration.mp3', new Uint8Array([1]).buffer],
+          ['b/narration.mp3', new Uint8Array([2]).buffer],
+        ]),
+        audioSegments: segments,
+        totalDuration: 20,
+      });
+
+      expect(zip.file('OEBPS/audio/narration.mp3')).toBeTruthy();
+      expect(zip.file('OEBPS/audio/narration-2.mp3')).toBeTruthy();
+      const firstSmil = await zip.file('OEBPS/chapters/chapter-001.smil')!.async('string');
+      const secondSmil = await zip.file('OEBPS/chapters/chapter-002.smil')!.async('string');
+      expect(firstSmil).toContain('narration.mp3');
+      expect(secondSmil).toContain('narration-2.mp3');
+    });
+
+    it('writes one manifest item when multiple segments reuse one audio source', async () => {
+      const doc = makeDoc([
+        heading(1, 'One'),
+        paragraph('First'),
+        heading(1, 'Two'),
+        paragraph('Second'),
+      ]);
+      const zip = await exportAndUnzip(doc, {
+        audio: new Map([['narration.mp3', new Uint8Array([1, 2, 3]).buffer]]),
+        audioSegments: [
+          { src: 'narration.mp3', name: 'one', duration: 10, startTime: 0 },
+          { src: 'narration.mp3', name: 'two', duration: 10, startTime: 10 },
+        ],
+        totalDuration: 20,
+      });
+      const opf = await zip.file('OEBPS/content.opf')!.async('string');
+
+      expect(opf.match(/href="audio\/narration\.mp3"/g)).toHaveLength(1);
     });
 
     it('generates SMIL overlay files for each chapter', async () => {

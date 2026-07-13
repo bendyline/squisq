@@ -1,6 +1,6 @@
 # @bendyline/squisq-video
 
-Headless video rendering foundation for Squisq documents. Generates self-contained render HTML for frame capture and encodes frames to MP4 via ffmpeg.wasm. Browser-pure — works in Node.js and the browser with no native dependencies.
+Video and animated-GIF rendering foundation for Squisq documents. Its pure timeline, quality, palette, and render-HTML helpers work in Node.js and browsers; `framesToMp4Wasm` encodes frames in browser runtimes without native dependencies.
 
 Part of the [Squisq](https://github.com/bendyline/squisq) monorepo.
 
@@ -15,15 +15,18 @@ npm install @bendyline/squisq-video
 
 ## What's Inside
 
-| Export                                                                                                          | Description                                                                                                     |
-| --------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
-| `generateRenderHtml(doc, options)`                                                                              | Self-contained HTML page with embedded media for headless frame capture                                         |
-| `framesToMp4Wasm(frames, audio, options)`                                                                       | Encode PNG frames (+ optional audio) to MP4 via ffmpeg.wasm                                                     |
-| `computeAudioTimeline(doc, coverPreRoll?)`                                                                      | Flatten a doc's narration + timed media into absolute-timed audio clips (browser export and CLI mix share this) |
-| `bitrateForQuality(quality, width, height)`                                                                     | Target H.264 bitrate (`w*h*bitsPerPixel`) — the single source of truth for WebCodecs bitrate                    |
-| `QUALITY_PRESETS`, `ORIENTATION_DIMENSIONS`, `resolveDimensions`                                                | Quality/dimension presets and helpers                                                                           |
-| `VideoExportOptions`, `VideoQuality`, `VideoOrientation`, `QualityPreset`, `EncoderResult`, `AudioTimelineClip` | Shared types                                                                                                    |
-| `fetchFile`                                                                                                     | Re-export of `@ffmpeg/util`'s `fetchFile` for preparing audio bytes                                             |
+| Export                                                                                                  | Description                                                                                                     |
+| ------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
+| `generateRenderHtml(doc, options)`                                                                      | Self-contained HTML page with embedded media for headless frame capture                                         |
+| `framesToMp4Wasm(frames, audio, options)`                                                               | Encode PNG frames (+ optional audio) to MP4 via ffmpeg.wasm                                                     |
+| `computeAudioTimeline(doc, coverPreRoll?)`                                                              | Flatten a doc's narration + timed media into absolute-timed audio clips (browser export and CLI mix share this) |
+| `bitrateForQuality(quality, width, height)`                                                             | Target H.264 bitrate (`w*h*bitsPerPixel`) — the single source of truth for WebCodecs bitrate                    |
+| `ffmpegVideoQualityArgs`, `audioBitrateArg`, `ffmpegAudioMuxArgs`                                       | Shared FFmpeg flags; audio muxing pads short narration so it cannot truncate the video                          |
+| `ffmpegGifFilterGraph`, `ffmpegGifOutputArgs`                                                           | Shared global-palette GIF filters and muxer flags used by native and browser exporters                          |
+| `QUALITY_PRESETS`, `ORIENTATION_DIMENSIONS`, `resolveDimensions`                                        | Quality/dimension presets and helpers                                                                           |
+| `validateVideoExportOptions(options)`                                                                   | Fail-fast runtime validation for FPS, dimensions, quality, and orientation                                      |
+| `VideoExportOptions`, `VideoQuality`, `VideoOrientation`, `GifDither`, `QualityPreset`, `EncoderResult` | Shared video and GIF types                                                                                      |
+| `fetchFile`                                                                                             | Re-export of `@ffmpeg/util`'s `fetchFile` for preparing audio bytes                                             |
 
 This package is the shared foundation under [@bendyline/squisq-video-react](https://www.npmjs.com/package/@bendyline/squisq-video-react) (in-browser export UI) and [@bendyline/squisq-cli](https://www.npmjs.com/package/@bendyline/squisq-cli) (`squisq video`, which pairs the render HTML with Playwright capture and native ffmpeg encoding).
 
@@ -31,7 +34,10 @@ This package is the shared foundation under [@bendyline/squisq-video-react](http
 
 ### Generate Render HTML
 
-Create a self-contained HTML page that mounts the standalone Squisq player in render mode, with all images and audio embedded as base64 data URIs. The page exposes `window.seekTo(time)` and `window.getDuration()` so a headless browser (Playwright, Puppeteer) can step through frames and screenshot each one:
+Create a self-contained HTML page that mounts the standalone Squisq player in render mode, with all images and audio embedded as base64 data URIs. A headless browser (Playwright, Puppeteer) obtains the player-specific handle with `SquisqPlayer.getHandle(root)` and uses its render API to step through frames and screenshot each one:
+
+Render methods are deliberately instance-scoped; generated pages do not expose
+legacy top-level `window.seekTo` or `window.getDuration` functions.
 
 ```ts
 import { generateRenderHtml } from '@bendyline/squisq-video';
@@ -60,13 +66,18 @@ const { data, duration } = await framesToMp4Wasm(
     quality: 'normal', // 'draft' | 'normal' | 'high' (default 'normal')
     orientation: 'landscape', // 'landscape' | 'portrait' (default 'landscape')
     // width / height override the orientation defaults
+    // Optional for offline/CSP-controlled hosting:
+    ffmpegWasm: {
+      coreURL: '/vendor/ffmpeg-core.js',
+      wasmURL: '/vendor/ffmpeg-core.wasm',
+    },
     onProgress: (percent, phase) => console.log(`${phase}: ${percent}%`),
   },
 );
 // data: Uint8Array of MP4 bytes; duration: seconds (frames.length / fps)
 ```
 
-Encoding is H.264 (`libx264`, `yuv420p`) with optional AAC audio; frames are scaled/padded to the target dimensions preserving aspect ratio. ffmpeg.wasm needs `SharedArrayBuffer` — in browsers that means COOP/COEP headers; Node 18+ works out of the box.
+Encoding is H.264 (`libx264`, `yuv420p`) with optional AAC audio; frames are scaled/padded to the target dimensions preserving aspect ratio. ffmpeg.wasm needs `SharedArrayBuffer`, which normally means serving COOP/COEP headers. `framesToMp4Wasm` is browser-only; Node callers can use `framesToMp4Native` or `framesToMp4NativeBytes` from `@bendyline/squisq-cli/api`.
 
 ### Schedule a Doc's Audio
 

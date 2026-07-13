@@ -11,6 +11,7 @@ import type {
   MarkdownParagraph,
   MarkdownText,
 } from '@bendyline/squisq/markdown';
+import { readCustomThemesFromFrontmatter } from '@bendyline/squisq/doc';
 import { NS_DRAWINGML, NS_PML, NS_R, REL_OFFICE_DOCUMENT, REL_SLIDE } from '../ooxml/namespaces';
 import { createPackage } from '../ooxml/writer';
 import { xmlDeclaration } from '../ooxml/xmlUtils';
@@ -111,5 +112,34 @@ describe('pptxToContainer (embedded image import)', () => {
       (b) => b.type === 'paragraph' && b.children.some((c) => c.type === 'image'),
     );
     expect(hasImage).toBe(false);
+  });
+});
+
+describe('theme inference defaults (ON)', () => {
+  const simpleDoc: MarkdownDocument = {
+    type: 'document',
+    children: [{ type: 'heading', depth: 2, children: [{ type: 'text', value: 'Hello' }] }],
+  };
+
+  it('carries the deck theme in frontmatter on an export → import round trip', async () => {
+    const deck = await markdownDocToPptx(simpleDoc, {});
+    const imported = await pptxToMarkdownDoc(deck);
+    // The exporter writes the stock Office theme part; import infers it.
+    expect(imported.frontmatter?.['squisq-theme']).toBe('custom-office-theme');
+    const themes = readCustomThemesFromFrontmatter(imported.frontmatter);
+    expect(themes).toHaveLength(1);
+    expect(themes![0]!.seedColors?.primary).toBe('#4472c4');
+    expect(themes![0]!.seedColors?.background).toBe('#ffffff');
+  });
+
+  it('produces the legacy frontmatter-free import when inference is disabled', async () => {
+    const deck = await markdownDocToPptx(simpleDoc, {});
+    const imported = await pptxToMarkdownDoc(deck, { inferTheme: false, inferLayouts: false });
+    expect(imported.frontmatter).toBeUndefined();
+  });
+
+  it('imports decks without theme parts cleanly (no frontmatter, no failure)', async () => {
+    const doc = await pptxToMarkdownDoc(await buildTestPptx());
+    expect(doc.frontmatter).toBeUndefined();
   });
 });

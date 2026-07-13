@@ -24,9 +24,10 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { Theme, ThemeSeedColors } from '@bendyline/squisq/schemas';
+import type { CustomTemplateDefinition, Theme, ThemeSeedColors } from '@bendyline/squisq/schemas';
 import { resolveTheme } from '@bendyline/squisq/schemas';
 import { ThemePicker } from '../ThemePicker';
+import { ImportThemeSection } from './ImportThemeSection';
 import {
   type Draft,
   type AccentInput,
@@ -49,13 +50,19 @@ import { Section, SeedColorRow, FontPicker, PresetRow, AccentEditor } from './th
 /** Where a saved theme lands — mirrors `DesignerSaveTarget` for templates. */
 export type ThemeSaveTarget = 'doc' | 'library';
 
+/** Extra assets riding along with a theme save (file-import byproducts). */
+export interface ThemeSaveExtras {
+  /** Custom layout templates inferred from an imported PPTX. */
+  templates?: CustomTemplateDefinition[];
+}
+
 export interface CustomThemeDialogProps {
   /** Theme being edited, or null to author a new one. */
   value: Theme | null;
   /** Fired on every edit with the compiled theme (host previews via themeOverride). */
   onChange?: (theme: Theme) => void;
   /** Fired when the user saves, with the chosen target. */
-  onSave: (theme: Theme, target: ThemeSaveTarget) => void;
+  onSave: (theme: Theme, target: ThemeSaveTarget, extras?: ThemeSaveExtras) => void;
   /** Dismiss (Cancel / Esc / close button). */
   onClose: () => void;
 }
@@ -70,6 +77,8 @@ function initialDraft(value: Theme | null): Draft {
 
 export function CustomThemeDialog({ value, onChange, onSave, onClose }: CustomThemeDialogProps) {
   const [draft, setDraft] = useState<Draft>(() => initialDraft(value));
+  // Layout templates inferred from a file import, saved alongside the theme.
+  const [importedLayouts, setImportedLayouts] = useState<CustomTemplateDefinition[] | null>(null);
 
   const nameRef = useRef<HTMLInputElement>(null);
   useEffect(() => {
@@ -117,12 +126,16 @@ export function CustomThemeDialog({ value, onChange, onSave, onClose }: CustomTh
   const handleSave = useCallback(
     (target: ThemeSaveTarget) => {
       try {
-        onSave(compile(draft), target);
+        const extras =
+          importedLayouts && importedLayouts.length > 0
+            ? { templates: importedLayouts }
+            : undefined;
+        onSave(compile(draft), target, extras);
       } catch {
         // A compile failure here means the draft is invalid; leave the dialog open.
       }
     },
-    [draft, onSave, compile],
+    [draft, onSave, compile, importedLayouts],
   );
 
   // Accents show the base's schemes until the user edits them (then the draft's
@@ -172,6 +185,19 @@ export function CustomThemeDialog({ value, onChange, onSave, onClose }: CustomTh
             includeDefault
             variant="full"
             ariaLabel="Base theme"
+          />
+        </Section>
+
+        <Section
+          title="Import from file"
+          hint="Pull colors and fonts from a Word, PowerPoint, or Excel file. PowerPoint slide layouts become custom layouts."
+        >
+          <ImportThemeSection
+            allowLayouts
+            onImported={(patch, result) => {
+              updateDraft(patch);
+              setImportedLayouts(result.layouts ?? null);
+            }}
           />
         </Section>
 
@@ -269,7 +295,11 @@ export function CustomThemeDialog({ value, onChange, onSave, onClose }: CustomTh
           type="button"
           className="squisq-doc-settings-btn squisq-doc-settings-btn--secondary"
           onClick={() => handleSave('library')}
-          title="Save to your browser-local library so other docs can use it"
+          title={
+            importedLayouts && importedLayouts.length > 0
+              ? 'Save to your browser-local library so other docs can use it (imported slide layouts only save to the document)'
+              : 'Save to your browser-local library so other docs can use it'
+          }
         >
           Save to library
         </button>

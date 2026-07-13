@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import type { MediaProvider } from '@bendyline/squisq/schemas';
 import { resolveTheme } from '@bendyline/squisq/schemas';
 import { PlainHtmlPreview } from '../PlainHtmlPreview';
@@ -24,6 +24,22 @@ describe('PlainHtmlPreview', () => {
     const sandbox = iframe.getAttribute('sandbox') ?? '';
     expect(sandbox).toContain('allow-same-origin');
     expect(sandbox).not.toContain('allow-scripts');
+  });
+
+  it('globally scrolls the iframe with up and down arrows when enabled', () => {
+    render(<PlainHtmlPreview markdown={'# Scroll me'} globalKeyboardShortcuts />);
+    const iframe = screen.getByTestId('plain-html-preview') as HTMLIFrameElement;
+    const scrollBy = vi.fn();
+    Object.defineProperty(iframe.contentWindow, 'scrollBy', {
+      configurable: true,
+      value: scrollBy,
+    });
+
+    fireEvent.keyDown(document, { key: 'ArrowDown' });
+    fireEvent.keyDown(document, { key: 'ArrowUp' });
+
+    expect(scrollBy).toHaveBeenNthCalledWith(1, { top: 64, behavior: 'smooth' });
+    expect(scrollBy).toHaveBeenNthCalledWith(2, { top: -64, behavior: 'smooth' });
   });
 
   it('applies pre-resolved images via the images prop', async () => {
