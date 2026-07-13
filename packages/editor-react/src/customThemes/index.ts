@@ -27,5 +27,11 @@ export {
   CustomThemeDialog,
   type CustomThemeDialogProps,
   type ThemeSaveTarget,
+  type ThemeSaveExtras,
 } from './CustomThemeDialog';
-export { compileDraft, themeToDraft, type Draft } from './themeDraft';
+export {
+  ImportThemeSection,
+  type ImportThemeSectionProps,
+  type ImportedThemeResult,
+} from './ImportThemeSection';
+export { compileDraft, themeToDraft, draftPatchFromImportedTheme, type Draft } from './themeDraft';

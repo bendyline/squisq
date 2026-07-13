@@ -23,6 +23,7 @@
   - [Image Edit](#subpath-imageedit)
   - [Icons](#subpath-icons)
   - [Recommend](#subpath-recommend)
+  - [Narration](#subpath-narration)
 - [`@bendyline/squisq-react`](#bendylinesquisq-react)
 - [`@bendyline/squisq-formats`](#bendylinesquisq-formats)
 - [`@bendyline/squisq-editor-react`](#bendylinesquisq-editor-react)
@@ -120,10 +121,18 @@ interface StartBlockConfig {
 #### Layer Types
 
 Layers carry their visual data in a nested `content` object (not flat fields).
-The discriminated union has **seven** members:
+The discriminated union has **eight** members:
 
 ```ts
-type Layer = ImageLayer | TextLayer | ShapeLayer | PathLayer | MapLayer | VideoLayer | TableLayer;
+type Layer =
+  | ImageLayer
+  | TextLayer
+  | ShapeLayer
+  | PathLayer
+  | MapLayer
+  | VideoLayer
+  | TableLayer
+  | TreeLayer;
 
 interface BaseLayer {
   id: string;
@@ -181,7 +190,6 @@ interface PathLayer extends BaseLayer {
     gradient?: LinearGradient;
     borderStyle?: BorderStyle;
     dasharray?: string;
-    arrow?: 'none' | 'end' | 'start' | 'both'; // legacy; prefer start/endMarker
     startMarker?: MarkerStyle;
     endMarker?: MarkerStyle;
   };
@@ -289,6 +297,9 @@ interface ImageTreatment {
 }
 ```
 
+Readers still interpret the historical serialized `content.arrow` field, but
+it is no longer part of `PathLayer`; new code uses `startMarker` / `endMarker`.
+
 #### Audio & Captions
 
 ```ts
@@ -349,6 +360,8 @@ type TemplateBlock =
   | VideoPullQuoteInput
   | DataTableInput
   | DiagramBlockInput
+  | TreeBlockInput
+  | TimelineBlockInput
   | RawLayersInput /* layout */
   | DrawingBlockInput;
 
@@ -409,6 +422,8 @@ Required fields are shown without `?`. Every template also inherits the
 | `videoPullQuote`   | `text`, `backgroundVideo {src, posterSrc?, alt, clipStart, clipEnd, …}` | `attribution`                                                                                                                   |
 | `dataTable`        | `headers[]`, `rows[][]`                                                 | `title`, `align`, `colorScheme`                                                                                                 |
 | `diagram`          | — (nodes/edges come from child headings)                                | `title`, `colorScheme`, `nodeShape`, `edgeStyle`, `startStyle`, `endStyle`, `lineStyle`                                         |
+| `tree`             | — (`items` derive from an ASCII tree fence)                             | `items`, `title`, `colorScheme`                                                                                                 |
+| `timeline`         | — (`tracks` derive from an ASCII timeline fence)                        | `tracks`, `links`, `title`, `colorScheme`                                                                                       |
 | `layout`           | — (`Layer[]` authored via the Scene engine, children-driven)            | —                                                                                                                               |
 | `drawing`          | — (shapes come from child headings)                                     | `title`, `colorScheme`, `fill`, `stroke`                                                                                        |
 
@@ -446,28 +461,38 @@ interface Theme {
   /* colors, typography, style, renderStyle, colorSchemes, persistentLayers, … */
 }
 
-const THEMES: Record<string, Theme>; // 8 built-ins
+const THEMES: Readonly<Record<string, Theme>>; // 11 deeply frozen built-ins
 const DEFAULT_THEME: Theme;
 const DEFAULT_THEME_ID: string;
 
-function resolveTheme(themeId?: string): Theme; // built-ins only
+interface ThemeRegistry {
+  register(theme: Theme): void;
+  unregister(id: string): boolean;
+  get(id: string): Theme | undefined;
+  list(): Theme[];
+}
+
+function createThemeRegistry(initialThemes?: readonly Theme[]): ThemeRegistry;
+function resolveTheme(themeId?: string, registry?: ThemeRegistry): Theme;
 function createTheme(base: Theme, overrides: DeepPartial<Theme>): Theme;
 function compileTheme(partial: Partial<Theme>, opts?: CompileOptions): Theme;
-function getAvailableThemes(): string[];
-function getThemeSummaries(): { id: string; name: string; description: string }[];
+function getAvailableThemes(registry?: ThemeRegistry): string[];
+function getThemeSummaries(registry?: ThemeRegistry): {
+  id: string;
+  name: string;
+  description?: string;
+}[];
 function validateTheme(theme: unknown): ValidationResult;
-
-// registry (built-ins + host-registered)
-function registerTheme(theme: Theme): void;
-function unregisterTheme(id: string): void;
-function getRegisteredThemes(): Theme[];
-function lookupRegisteredTheme(id: string): Theme | undefined;
 ```
 
-> Built-in theme ids: `documentary`, `minimalist`, `bold`, `morning-light`,
-> `tech-dark`, `magazine`, `cinematic`, `warm-earth`. For pure, doc-scoped
-> resolution that consults a doc's own `customThemes` first, use
-> `resolveThemeForDoc(doc, id?)` from `@bendyline/squisq/doc`.
+> Built-in theme ids: `standard` (default), `standard-dark`, `documentary`,
+> `minimalist`, `bold`, `morning-light`, `tech-dark`, `magazine`, `cinematic`,
+> `warm-earth`, `gezellig`. Custom themes do not mutate process-global state:
+> keep host themes in a caller-owned
+> `ThemeRegistry`, or put portable themes on `Doc.customThemes`. For doc-scoped
+> resolution, use `resolveThemeForDoc(doc, id?, registry?)` from
+> `@bendyline/squisq/doc`; document definitions take precedence over the
+> explicit registry and built-ins.
 
 #### Media & Layout
 
@@ -505,9 +530,9 @@ interface LayoutHints {
 
 ### Subpath: Doc
 
-**Import:** `@bendyline/squisq/doc` — the template registry, all 23 templates,
-markdown↔doc conversion, layer resolution, and theme/validation helpers.
-`@bendyline/squisq/story` is a byte-for-byte alias of this subpath (legacy).
+**Import:** `@bendyline/squisq/doc` — the template registry, all 25 templates,
+markdown↔doc conversion, canonical layer materialization, and
+theme/validation helpers.
 
 #### Doc ↔ Markdown Conversion
 
@@ -533,20 +558,48 @@ interface MarkdownToDocOptions {
 #### Layer Resolution
 
 ```ts
-function getLayers(block: DocBlock, context?: RenderContext): Layer[];
-function expandTemplateBlock(templateBlock: TemplateBlock, context: TemplateContext): Block;
+function materializeBlockLayers(
+  block: DocBlock,
+  options?: MaterializeBlockLayersOptions,
+): BlockLayerMaterialization;
+
+interface MaterializeBlockLayersOptions {
+  theme?: Theme;
+  viewport?: ViewportConfig;
+  persistentLayers?: PersistentLayerConfig | false; // undefined inherits the theme
+  blockIndex?: number;
+  totalBlocks?: number;
+  customTemplates?: readonly CustomTemplateDefinition[];
+  failureMode?: 'fallback' | 'empty'; // default 'fallback'
+}
+
+interface BlockLayerMaterialization {
+  layers: Layer[];
+  source: 'authored' | 'template' | 'fallback' | 'empty';
+  diagnostic?: LayerMaterializationDiagnostic;
+}
+
 function expandDocBlocks(blocks: DocBlock[], options?: ExpandDocBlocksOptions): Block[];
-function fallbackBlockLayers(block: Block, context: RenderContext): Layer[]; // graceful-degradation card
+function fallbackBlockLayers(block: Block, context: TemplateContext): Layer[]; // graceful-degradation card
 ```
 
-> `getLayers` resolves a `TemplateBlock` through its template function (with
-> theme render-style applied), or returns a plain `Block`'s layers directly.
+`materializeBlockLayers` is the single layer-resolution contract used by
+on-demand UI and timed expansion. It resolves authored layers, built-in and
+document-scoped custom templates, theme render-style, and persistent layers.
+Template failures are returned as structured diagnostics without hidden console
+output. The default visible fallback keeps previews and playback readable;
+`failureMode: 'empty'` is the explicit opt-out. Theme persistent layers are
+inherited by default and `persistentLayers: false` disables them.
+
+`expandDocBlocks` adds timeline scheduling and transitions around the canonical
+materializer. Its `persistentLayers`, `failureMode`, and `customTemplates`
+options have identical semantics, and `onDiagnostic` receives failures with the
+source block and block index.
 
 #### Template Registry
 
 ```ts
 const templateRegistry: TemplateRegistry;
-const TEMPLATE_ALIASES: Readonly<Record<string, string>>;
 const CONTAINER_TEMPLATES: ReadonlySet<string>; // diagram, drawing, layout
 
 function resolveTemplateName(name: string): string;
@@ -558,9 +611,9 @@ function isContainerTemplate(name: string): boolean;
 function buildRegistry(custom?: readonly CustomTemplateDefinition[]): RuntimeTemplateRegistry;
 ```
 
-All 23 built-in templates register at import time under their canonical short
-ids. `TEMPLATE_ALIASES` maps legacy names (`titleBlock→title`, `quoteBlock→quote`,
-`mapBlock→map`, `listBlock→list`, `diagramBlock→diagram`, `diagramNode→diagram`).
+All 25 built-in templates register at import time under their canonical short
+ids. `resolveTemplateName` continues to read legacy ids such as `titleBlock`
+and `diagramNode`, while the compatibility table itself remains internal.
 
 > There is no global `registerTemplate()`. Custom templates travel with the doc
 > (`Doc.customTemplates`, from the `squisq-custom-templates` frontmatter key) and
@@ -569,7 +622,11 @@ ids. `TEMPLATE_ALIASES` maps legacy names (`titleBlock→title`, `quoteBlock→q
 #### Theme Resolution & Validation
 
 ```ts
-function resolveThemeForDoc(doc: Doc | null | undefined, explicitId?: string): Theme;
+function resolveThemeForDoc(
+  doc: Doc | null | undefined,
+  explicitId?: string,
+  registry?: ThemeRegistry,
+): Theme;
 function validateMarkdownSource(
   source: string,
   options?: ValidateOptions,
@@ -761,7 +818,7 @@ function countNodes(root: MarkdownNode): number;
 function createDocument(...children: MarkdownBlockNode[]): MarkdownDocument;
 
 // Pandoc/annotation attribute helpers
-function parsePandocAttrTokens(tokens: string[]): HeadingAttributes;
+function parsePandocAttrTokens(inner: string): HeadingAttributes;
 function serializePandocAttributes(attrs: HeadingAttributes): string;
 function matchTrailingTemplateAnnotation(text: string): TrailingAnnotationMatch | null;
 function parseTimeSeconds(value: string): number | null; // "02:15", "1500ms", "8"
@@ -832,21 +889,14 @@ function hashString(str: string): number; // djb2, unsigned 32-bit
 
 ### Subpath: Generate
 
-**Import:** `@bendyline/squisq/generate` — content extraction + slideshow
-generation. `extractContent` / `stripMarkdown` output shapes are a frozen
-external contract.
+**Import:** `@bendyline/squisq/generate` — content extraction only.
+`extractContent` / `stripMarkdown` output shapes are a frozen external
+contract. Build slides with `markdownToDoc` + `applyTransform`.
 
 ```ts
 function extractContent(text: string, options?: ExtractionOptions): ExtractionResult;
 function stripMarkdown(markdown: string): string;
 function mapElementToBlock(element: ExtractedElement, options: MapOptions): TemplateBlock;
-
-/** @deprecated prefer markdownToDoc + applyTransform */
-function generateSlideshow(
-  text: string,
-  images?: SlideshowImage[],
-  options?: SlideshowOptions,
-): SlideshowDoc;
 
 type ExtractionType =
   | 'stat'
@@ -887,16 +937,29 @@ interface ExtractionResult {
 ```ts
 function applyTransform(
   doc: Doc,
-  styleId: TransformStyleId,
+  style: TransformStyleInput,
   options?: TransformOptions,
 ): TransformResult;
 
+type TransformStyleInput = TransformStyleId | TransformStyleConfig;
+
+interface TransformStyleRegistry {
+  register(style: TransformStyleConfig): void;
+  unregister(id: string): boolean;
+  get(id: string): TransformStyleConfig | undefined;
+  list(): TransformStyleConfig[];
+}
+
 const DEFAULT_TRANSFORM_STYLE_ID = 'documentary';
-function resolveTransformStyle(id: string): TransformStyleConfig; // aliases honoured; unknown → default
-function registerTransformStyle(style: TransformStyleConfig): void;
-function unregisterTransformStyle(id: string): void;
-function getTransformStyleIds(): string[];
-function getTransformStyleSummaries(): TransformStyleSummary[];
+function createTransformStyleRegistry(
+  initialStyles?: readonly TransformStyleConfig[],
+): TransformStyleRegistry;
+function resolveTransformStyle(
+  style: TransformStyleInput,
+  registry?: TransformStyleRegistry,
+): TransformStyleConfig; // unknown id → default
+function getTransformStyleIds(registry?: TransformStyleRegistry): string[];
+function getTransformStyleSummaries(registry?: TransformStyleRegistry): TransformStyleSummary[];
 
 function analyzeBlocks(blocks: Block[], options?: ExtractionOptions): AnalyzedBlock[];
 function extractDocImages(blocks: Block[]): TransformImage[];
@@ -906,6 +969,7 @@ interface TransformOptions {
   images?: TransformImage[];
   themeId?: string;
   overrides?: Partial<TransformStyleConfig>;
+  registry?: TransformStyleRegistry;
 }
 interface TransformResult {
   doc: Doc;
@@ -913,8 +977,12 @@ interface TransformResult {
 }
 ```
 
-Built-in style ids: `documentary` (default), `magazine`, `data-driven` (alias
-`dataDriven`), `narrative`, `minimal`.
+Built-in style ids: `documentary` (default), `magazine`, `data-driven`,
+`narrative`, `minimal`. Custom definitions are either passed directly to
+`applyTransform()` or resolved through an explicit caller-owned registry; no
+transform call mutates process-global state. The historical persisted value
+`dataDriven` remains readable and resolves to `data-driven`; APIs and editor
+writes expose only the canonical kebab-case id.
 
 ---
 
@@ -1138,6 +1206,105 @@ interface RecommendationResult {
 }
 ```
 
+### Subpath: Narration
+
+**Import:** `@bendyline/squisq/narration` — the narration/teleprompter engine.
+Pure TS, zero dependencies, no DOM: audio arrives as mono `Float32Array` PCM
+and every stage is a deterministic step function, so the whole pipeline is
+Node-testable. Powers the editor's Narrate mode (voice-adaptive teleprompter)
+and post-recording word/block timing refinement.
+
+```ts
+// Script model — Doc → ordered word tokens + per-block ranges.
+// sourceText is canonical: charOffsets index into it and the timing
+// sidecar stores it verbatim.
+function buildNarrationScript(doc: Doc, options?: BuildScriptOptions): NarrationScript;
+interface NarrationScript {
+  sourceText: string;
+  tokens: ScriptToken[]; // { text, charOffset, charEnd, blockId, blockIndex,
+  //   syllables, spokenWordEquiv, pauseAfter: 0|1|2|3 }
+  blocks: ScriptBlockRange[]; // { blockId, heading?, tokenStart, tokenEnd, charStart, charEnd }
+  totalSyllables: number;
+  cumulativeSyllables: number[];
+}
+function estimateSyllables(token: string): number;
+function expectedSyllablesAt(script: NarrationScript, wordPos: number): number;
+function wordPosAtExpectedSyllables(script: NarrationScript, syllables: number): number;
+function wordIndexAtChar(script: NarrationScript, charOffset: number): number;
+function wordIndexAtTime(words: WordTiming[], tSec: number): number;
+
+// Streaming DSP (feed PCM hops; frames carry rms / bandEnergy / zcr).
+function createFeatureState(sampleRate: number, config?: Partial<FeatureConfig>): FeatureState;
+function featureStep(
+  state: FeatureState,
+  hop: Float32Array,
+): { state: FeatureState; frames: FrameFeatures[] };
+function extractFrameFeatures(
+  pcm: Float32Array,
+  sampleRate: number,
+  config?: Partial<FeatureConfig>,
+): FrameFeatures[];
+function createVadState(config?: Partial<VadConfig>): VadState;
+function vadStep(state: VadState, frame: FrameFeatures, config?: Partial<VadConfig>): VadState;
+function createNucleiState(config?: Partial<NucleiConfig>): NucleiState;
+function nucleiStep(
+  state: NucleiState,
+  frame: FrameFeatures,
+  speaking: boolean,
+  config?: Partial<NucleiConfig>,
+): { state: NucleiState; onset: number | null };
+function detectSyllableOnsets(
+  frames: FrameFeatures[],
+  vadFlags: boolean[],
+  config?: Partial<NucleiConfig>,
+): number[];
+
+// Voice-adaptive pacing controller (pure step; halts on silence,
+// tracks syllable rate, PI-corrected against cumulative syllables).
+function createPacingState(startWordPos?: number): PacingState;
+function pacingStep(
+  state: PacingState,
+  tick: PacingTick,
+  script: NarrationScript,
+  config?: Partial<PacingConfig>,
+): PacingState;
+function reanchorPacing(state: PacingState, wordPos: number, script: NarrationScript): PacingState;
+
+// Live-session composition — one pure call per PCM hop.
+function createNarrationSession(
+  sampleRate: number,
+  script: NarrationScript,
+  config?: NarrationSessionConfig,
+): NarrationSessionState;
+function narrationSessionStep(
+  state: NarrationSessionState,
+  hop: Float32Array,
+): NarrationSessionState;
+function reanchorSession(state: NarrationSessionState, wordPos: number): NarrationSessionState;
+
+// Live prompter trace (recorded by the UI during a take).
+interface NarrationTrace {
+  samples: { tMs: number; wordPos: number }[];
+}
+function traceWordPosAt(trace: NarrationTrace, tSec: number): number;
+function downsampleTrace(trace: NarrationTrace, maxSamples: number): NarrationTrace;
+
+// Offline refinement: banded DTW of detected syllables/gaps vs the
+// script's expected syllable/pause slots → word timestamps + contiguous
+// per-block ranges (endSec === next.startSec).
+function alignNarration(input: AlignInput, config?: Partial<AlignConfig>): NarrationAlignment;
+interface NarrationAlignment {
+  words: WordTiming[]; // { tokenIndex, tSec, interpolated }
+  blocks: NarrationBlockRange[]; // { blockId, heading?, blockIndex, charStart, charEnd, startSec, endSec }
+  detectedSyllables: number;
+  cost: number;
+}
+```
+
+All tuning configs (`FeatureConfig`, `VadConfig`, `NucleiConfig`,
+`PacingConfig`, `AlignConfig`) are exported alongside frozen `DEFAULT_*`
+defaults.
+
 ---
 
 ## `@bendyline/squisq-react`
@@ -1170,6 +1337,8 @@ interface DocPlayerProps {
   markdown?: string; // parsed via markdownToDoc(parseMarkdown(markdown)) when `doc` is absent
   basePath?: string; // default '.'
   renderMode?: boolean; // default false — headless capture mode
+  animationsEnabled?: boolean; // default true — false removes layer animations + block transitions
+  onRenderAPIReady?: (api: SquisqRenderAPI | null) => void;
   autoPlay?: boolean; // default false
   onEnded?: () => void;
   onTimeUpdate?: (time: number) => void;
@@ -1188,6 +1357,8 @@ interface DocPlayerProps {
   theme?: Theme; // default DEFAULT_THEME
   surface?: SurfaceScheme | 'auto';
   displayMode?: DisplayMode; // default 'video'
+  showCoverSlide?: boolean; // default true
+  coverVisible?: boolean; // controlled cover cursor for synchronized audience mirrors
   captionStyle?: CaptionStyle; // default 'standard'
   enableSwipe?: boolean; // default true — drag-to-swipe navigation in slideshow mode
 }
@@ -1195,8 +1366,9 @@ interface DocPlayerProps {
 
 #### `BlockRenderer`
 
-SVG-based renderer for a single (expanded) block. Also exports the `VIEWPORT`
-constant (`{ width: 1920, height: 1080 }`).
+SVG-based renderer for a single (expanded) block. Its default viewport is
+1920×1080; import the shared `VIEWPORT_PRESETS.landscape` value from
+`@bendyline/squisq/doc` when a caller needs that configuration explicitly.
 
 ```ts
 interface BlockRendererProps {
@@ -1208,6 +1380,7 @@ interface BlockRendererProps {
   transition?: Transition;
   viewport?: { width: number; height: number };
   isPlaying?: boolean;
+  animationsEnabled?: boolean; // default true
 }
 ```
 
@@ -1236,6 +1409,7 @@ interface LinearDocViewProps {
   basePath?: string;
   viewport?: ViewportConfig;
   theme?: Theme; // default DEFAULT_THEME
+  animationsEnabled?: boolean; // default true
   surface?: SurfaceScheme | 'auto';
   thinMargins?: boolean;
   imageDisplayMode?: ImageDisplayMode; // 'inline' (default) | 'thumbnail'
@@ -1255,8 +1429,8 @@ interface JsonViewProps {
 ### Layers
 
 SVG layer components used internally by `BlockRenderer`, exported for custom
-rendering. There are **seven**: `ImageLayer`, `TextLayer`, `ShapeLayer`,
-`PathLayer`, `VideoLayer`, `TableLayer`, `MapLayer`. Each takes
+rendering. There are **eight**: `ImageLayer`, `TextLayer`, `ShapeLayer`,
+`PathLayer`, `VideoLayer`, `TableLayer`, `MapLayer`, `TreeLayer`. Each takes
 `{ layer, viewport, blockTime }` (image/video/map also take `basePath`; video
 also takes `isPlaying`).
 
@@ -1286,9 +1460,11 @@ function useMediaSchedule(schedule: ScheduledClip[], currentTime: number): Media
 function useDocPlayback(
   script: Doc | null,
   currentTime: number,
-  viewport?: ViewportConfig,
-  renderMode?: boolean,
-  theme?: Theme,
+  options?: {
+    viewport?: ViewportConfig;
+    theme?: Theme;
+    onSeek?: (time: number) => void;
+  },
 ): PlaybackState & PlaybackActions;
 function useAudioSync(
   audioRef: RefObject<HTMLAudioElement>,
@@ -1321,6 +1497,7 @@ interface PlaybackState {
   isPlaying: boolean;
   currentTime: number;
   totalDuration: number;
+  isCoverVisible?: boolean;
   currentBlockIndex: number;
   totalBlocks: number;
   docProgress: number;
@@ -1347,9 +1524,17 @@ interface BlockMarker {
 
 // v1.5: the audio-controller type was renamed from `AudioProvider` to `AudioController`.
 type AudioController = AudioState & AudioActions;
-// render-mode host API
-type SquisqWindow = Window & typeof globalThis & Partial<SquisqRenderAPI>;
-
+interface SquisqRenderAPI {
+  seekTo(time: number): Promise<void>;
+  getDuration(): number;
+  getBlocks(): RenderBlockInfo[];
+  getAudioSegments(): RenderAudioSegmentInfo[];
+  getCaptions(): RenderCaptionInfo[];
+  getChapters(): RenderChapterInfo[];
+  showCover(): Promise<void>;
+  hideCover(): Promise<void>;
+  hasCoverBlock(): boolean;
+}
 function formatTime(seconds: number): string; // "M:SS"
 function getAnimationStyle(
   animation: Animation | undefined,
@@ -1364,12 +1549,34 @@ function getTransitionClass(
 
 ### Styles & Standalone Bundle
 
+```ts
+interface MountOptions {
+  mode?: 'slideshow' | 'static';
+  basePath?: string;
+  images?: Record<string, string>;
+  audio?: Record<string, string>;
+  theme?: Theme;
+  autoPlay?: boolean;
+  renderMode?: boolean;
+  animationsEnabled?: boolean; // default true; media and timing remain active
+  captionStyle?: 'standard' | 'social';
+}
+interface SquisqPlayerHandle {
+  readonly element: Element;
+  readonly renderAPI: Promise<SquisqRenderAPI | null>;
+  getRenderAPI(): SquisqRenderAPI | null;
+  unmount(): void;
+}
+```
+
 Import `@bendyline/squisq-react/styles` for the DocPlayer animation + `<JsonView>`
 stylesheet. `@bendyline/squisq-react/standalone-source` exports a single
 constant, `PLAYER_BUNDLE: string` — an IIFE that boots a complete player into a
 host page (consumed by `formats/html` and `squisq-cli`). The runtime IIFE at
 `@bendyline/squisq-react/standalone` exposes a global `SquisqPlayer` with
-`mount`, `mountStatic`, `unmount`, and `version`.
+`mount`, `getHandle`, `unmount`, and `version`. `mount()` returns an
+instance-scoped `SquisqPlayerHandle`; in render mode, await
+`handle.renderAPI`. `getHandle(element)` retrieves that exact mounted instance.
 
 ---
 
@@ -1427,6 +1634,7 @@ interface DocxExportOptions {
   defaultFont?: string; // default 'Calibri'
   defaultFontSize?: number; // default 11
   themeId?: string;
+  themeRegistry?: ThemeRegistry;
   images?: Map<string, { data: ArrayBuffer | Uint8Array; contentType: string }>;
 }
 interface DocxImportOptions {
@@ -1474,6 +1682,7 @@ interface PdfExportOptions {
   margin?: number; // default 72 (points)
   defaultFontSize?: number; // default 11
   themeId?: string; // colours only (pdf-lib standard fonts)
+  themeRegistry?: ThemeRegistry;
 }
 interface PdfImportOptions {
   bodyFontSize?: number;
@@ -1491,7 +1700,7 @@ Office Open XML formats (DOCX, PPTX, XLSX).
 
 ```ts
 // package reader
-function openPackage(data: ArrayBuffer | Blob): Promise<OoxmlPackage>;
+function openPackage(data: ArrayBuffer | Blob, options?: OoxmlOpenOptions): Promise<OoxmlPackage>;
 function getPartRelationships(pkg: OoxmlPackage, partPath: string): Promise<Relationship[]>;
 function getPartXml(pkg: OoxmlPackage, partPath: string): Promise<Document | null>;
 function getPartBinary(pkg: OoxmlPackage, partPath: string): Promise<ArrayBuffer | null>;
@@ -1508,6 +1717,31 @@ function selfClosingElement(tag: string, attrs?): string;
 function xmlElement(tag: string, attrs?, ...children: string[]): string;
 function textElement(tag: string, attrs?, text?: string): string;
 ```
+
+`OoxmlOpenOptions` is `ZipSafetyLimits`; DOCX, PPTX, and XLSX import option
+types inherit the same fields. All part access above shares one JSZip-backed,
+actual-byte budget. Repeated reads are cached and charged once. Content-types
+metadata is capped at 1 MiB and each relationships part at 4 MiB before DOM
+parsing, independently of the larger allowance for document/media parts.
+`OoxmlPackage` is opaque and can only be created by `openPackage()`; its JSZip
+archive is intentionally not exposed, so advanced callers cannot bypass the
+bounded part readers.
+
+```ts
+interface ZipSafetyLimits {
+  maxEntries?: number; // default 10,000; includes directory records
+  maxEntryUncompressedBytes?: number; // default maxUncompressedBytes
+  maxUncompressedBytes?: number; // default 512 MiB, aggregate actual output
+  maxCompressionRatio?: number; // default 1,000:1 per member
+}
+```
+
+Archive failures throw `ZipSafetyError` with `code` plus optional `path`,
+`limit`, `actual`, and `cause`. The class/types are exported from the package
+root and `/ooxml`. Codes: `invalid-limit`, `invalid-archive`, `unsafe-path`,
+`invalid-entry-metadata`, `too-many-entries`, `entry-too-large`,
+`archive-too-large`, `compression-ratio-exceeded`, `size-mismatch`,
+`crc-mismatch`, and `decompression-failed`.
 
 Plus ~40 namespace / content-type / relationship constants (`NS_WML`, `NS_PML`,
 `NS_SML`, `NS_DRAWINGML`, `REL_IMAGE`, `REL_SLIDE`, `CONTENT_TYPE_DOCX_DOCUMENT`,
@@ -1533,6 +1767,7 @@ interface EpubExportOptions {
   language?: string; // BCP-47, default 'en'
   publisher?: string;
   themeId?: string;
+  themeRegistry?: ThemeRegistry;
   images?: Map<string, ArrayBuffer>;
   coverImage?: ArrayBuffer; // JPEG or PNG
   audio?: Map<string, ArrayBuffer>;
@@ -1581,6 +1816,7 @@ interface PptxExportOptions {
   defaultFont?: string; // default 'Calibri'
   defaultFontSize?: number; // default 18
   themeId?: string;
+  themeRegistry?: ThemeRegistry;
   images?: Map<string, ArrayBuffer>;
 }
 interface PptxImportOptions {
@@ -1677,6 +1913,7 @@ interface HtmlExportOptions {
   title?: string; // default 'Squisq Document'
   autoPlay?: boolean; // default false
   themeId?: string;
+  themeRegistry?: ThemeRegistry;
 }
 interface HtmlZipExportOptions extends HtmlExportOptions {}
 
@@ -1700,6 +1937,7 @@ interface PlainHtmlExportOptions {
   links?: Map<string, string>; // href URL → emitted URL (e.g. .md → .html)
   theme?: Theme; // wins over themeId, then doc frontmatter themeId
   themeId?: string;
+  themeRegistry?: ThemeRegistry;
   iconsCss?: string; // inline FontAwesome CSS instead of a CDN <link>
   htmlPolicy?: HtmlPolicy; // default 'sanitize'
 }
@@ -1714,11 +1952,22 @@ interface HtmlImportOptions {
 
 ```ts
 function containerToZip(container: ContentContainer): Promise<Blob>;
-function zipToContainer(zipData: ArrayBuffer | Uint8Array | Blob): Promise<MemoryContentContainer>;
+function zipToContainer(
+  zipData: ArrayBuffer | Uint8Array | Blob,
+  options?: ZipSafetyLimits,
+): Promise<MemoryContentContainer>;
 ```
 
 `zipToContainer` skips directories and rejects path-traversal (absolute paths,
-backslashes, `..` segments).
+backslashes, `..` segments). It applies the same defaults and structured
+`ZipSafetyError` contract documented under OOXML above. Reads use JSZip's
+incremental stream, enforce per-entry/aggregate actual-byte and compression
+ratio bounds while inflating, and release each member cache after the
+`MemoryContentContainer` takes its owned copy.
+
+JSZip pause is cooperative: a failure prevents future compressed-input ticks,
+while pako may synchronously finish the current tick. Any chunks emitted after
+the failure are discarded and are never retained or written.
 
 ### Subpath: Registry & `convert()`
 
@@ -1758,7 +2007,9 @@ interface ConvertOptions {
   registry?: FormatRegistry; // defaults to defaultRegistry()
   from?: FormatId; // explicit source format (skips extension/byte sniffing)
   themeId?: string; // applied only when the doc has no theme of its own
-  transformStyle?: string; // applied before export
+  themeRegistry?: ThemeRegistry; // explicit host-owned custom themes
+  transformStyle?: TransformStyleInput; // applied before export
+  transformRegistry?: TransformStyleRegistry; // resolves custom transform ids
   autoTemplates?: boolean; // content-aware auto-templating when deriving a Doc from markdown
   title?: string; // title hint for exporters that support one (epub, html)
   resolvePlayerScript?: () => Promise<string>; // required for player-embedding HTML export
@@ -1880,7 +2131,6 @@ interface EditorShellProps {
   // Content container & media
   mediaProvider?: MediaProvider | null; // enables the Files panel
   workspaceContainer?: ContentContainer | null; // doc folder: audio map, versions, siblings, sidecars
-  container?: ContentContainer | null; // @deprecated → workspaceContainer
   showFilesToggle?: boolean; // default: true when mediaProvider was passed
   // Versioning
   allowVersioning?: boolean; // default false
@@ -1900,6 +2150,7 @@ interface EditorShellProps {
   showStatusBar?: boolean; // default true
   showPlayTab?: boolean; // default true
   blockTags?: boolean; // default true
+  blockTagVisibility?: BlockTagVisibility; // 'none' | 'active' | 'always'; overrides blockTags
   imageDisplayMode?: ImageDisplayMode; // 'inline' (default) | 'thumbnail'
   thinMargins?: boolean;
   fullWidth?: boolean;
@@ -1927,6 +2178,11 @@ interface EditorShellProps {
 }
 ```
 
+In the Use view, the Presentation split button can fill only the current
+`EditorShell`, open a read-only audience window synchronized to the main
+playback/scroll position, or request browser full screen. This is ephemeral UI
+state and is not written to document frontmatter.
+
 ### Context
 
 ```ts
@@ -1938,7 +2194,13 @@ type EditorColorScheme = 'light' | 'dark'; // v1.5: renamed from `EditorTheme`
 type EditorMode = 'markdown' | 'code' | 'image';
 type LayoutMode = 'document' | 'block' | 'timeline';
 type ThemeInheritance = 'none' | 'fonts' | 'fonts-colors';
+type BlockTagVisibility = 'none' | 'active' | 'always';
 ```
+
+`blockTagVisibility: 'active'` shows inline template/property tags for the
+heading-defined block containing the caret and for the block under the pointer.
+Legacy `blockTags` booleans remain supported (`false` = `none`, `true` =
+`always`). View-preference snapshots include both fields.
 
 `EditorContextValue` is flat — it extends `EditorState` (e.g. `markdownSource`,
 `markdownDoc`, `doc`, `activeView`, `parseError`) and `EditorActions` (e.g.
@@ -1954,13 +2216,13 @@ the live `tiptapEditor` / `monacoEditor` instances.
 - `PreviewSettingsProvider`, `PreviewToolbarControls`, `usePreviewSettings`
 - `ThemePicker`, `ThemeCustomizerPanel`, `TemplatePicker`, `templateLabel`
 - `TransitionPicker` + catalog (`TRANSITION_GROUPS`, `TRANSITION_ENTRIES`, `transitionLabel`, `findTransitionEntry`)
-- `DocumentSettingsDialog`, `LinkDialog`, `EmojiPicker` (+ `EMOJI_CATEGORIES`, `ALL_EMOJIS`, `searchEmojis`)
+- `DocumentSettingsDialog`, `LinkDialog`, `EmojiPicker` (+ `PICKER_CATEGORIES`, `ALL_PICKER_ENTRIES`, `searchPickerEntries`)
 - `VersionHistoryPanel`, `InlinePreviewGutter`, `DropZoneOverlay`, `BlockPropertiesPopover`
 - `JsonEditor` — editable form for JSON bound to a Squisq-annotated schema (embeds `WysiwygEditor` for `richtext`)
 
 `RawEditor` takes a `monacoTheme?: string` prop (default `'vs'`; accepts
 Monaco's built-in ids `'vs'` / `'vs-dark'` / `'hc-black'`, transparently mapped
-to Squisq-tinted variants, or a custom registered theme) — distinct from the
+to Squisq-tinted variants, or a host-defined Monaco theme) — distinct from the
 shell's `colorScheme`.
 
 ### Monaco loader & custom theme / template providers
@@ -2011,8 +2273,8 @@ Plus block-property (Pandoc-attr) read/write helpers used by
 `setBlockAttrsValue`, and `summarizeBlockProps` — and heading-transition
 read/write helpers used by `TransitionPicker`: `readHeadingLineTransition`,
 `setHeadingLineTransition`, `readBlockAttrsTransition`,
-`setBlockAttrsTransition`, and the `EMPTY_TRANSITION` constant
-(`TransitionFields` type).
+`setHeadingAttrsTransition`, and the `EMPTY_TRANSITION` constant
+(`HeadingTransitionAttrs` / `TransitionFields` types).
 
 ### File-kind & drag-and-drop
 
@@ -2043,9 +2305,102 @@ const HeadingWithTemplate: Extension; // recognises `{[tpl key=value]}` in headi
 
 ### Diagram editor
 
-`DiagramExtension` (Tiptap), `DiagramCanvas`, `DiagramWidget`, `useDiagramData`,
-plus command helpers `moveNode`, `addConnection`, `removeConnection`,
-`renameNode`, `addNode`, `removeNode`, `listDiagramChildren`.
+ASCII `diagram` fences are the authored format. `AsciiDiagramExtension` mounts
+an interactive `AsciiDiagramWidget` over qualifying fences while keeping the
+fence text as the source of truth. The public surface includes
+`DiagramCanvas`, `DiagramCommand`, `DiagramData`, `DiagramNode`, `DiagramEdge`,
+`useAsciiDiagramData`, `asciiDiagramToCanvas`, `applyAsciiDiagramCommand`,
+`replaceAsciiFenceText`, the pure node/edge operations, paste gate, and
+position/source-visibility helpers. The obsolete React Flow-derived
+`DiagramRFNode` / `DiagramRFEdge` names were removed.
+
+Legacy heading-based `{[diagram]}` documents still render through core, but
+their former `DiagramExtension`, `DiagramWidget`, `useDiagramData`, and heading
+command exports are no longer an editable canvas API.
+
+### Authored tree and timeline editors
+
+`TreeViewExtension` and `TimelineViewExtension` are peers to the diagram
+extension. They hide qualifying authored fences in WYSIWYG mode and mount
+interactive editors while preserving regenerated fence text as the canonical
+Markdown. The timeline canvas uses one shared horizontal scale across tracks,
+shows existing branch curves, adds points by clicking the rail or activating an
+always-available per-track Add button, and opens a form for the selected point's
+label, callout, side, marker, and visibility.
+
+```ts
+const TimelineViewExtension: Extension;
+function useTimelineData(editor: Editor, blockId: string): TimelineViewData | null;
+function applyTimelineCommand(
+  editor: Editor,
+  blockId: string,
+  command: TimelineCommand,
+): TimelineCommandResult;
+function isTimelineSourceSafeForSemanticEdit(source: string, timeline: AsciiTimeline): boolean;
+
+function addTimelineEventOp(
+  timeline: AsciiTimeline,
+  trackId: string,
+  position: number,
+  options?: AddTimelineEventOptions,
+): AddTimelineEventResult | null;
+function updateTimelineEventOp(
+  timeline: AsciiTimeline,
+  eventId: string,
+  patch: TimelineEventPatch,
+): AsciiTimeline;
+function removeTimelineEventOp(timeline: AsciiTimeline, eventId: string): AsciiTimeline;
+```
+
+Successful semantic edits promote the fence language to `timeline` and update
+the code-block text in the same ProseMirror transaction, so each field commit
+or point operation is one undo step. Edits fail closed with `reason:
+'unsafe-source'` when an unresolved branch, ignored line, or unknown attribute
+could be lost; stale controls also return `reason: 'read-only'`. The WYSIWYG
+surface disables mutation and directs authors to Source view in the unsafe
+case. Bare high-confidence timeline art is handled by
+`shouldPasteAsTimelineFence` before generic Markdown paste handling.
+
+### Teleprompter (`src/teleprompter`)
+
+The **Narrate** display mode under the Use tab: a voice-paced teleprompter
+(silence halts the scroll; speech rate drives it via the core
+`@bendyline/squisq/narration` engine on AudioWorklet PCM hops), a 3-tier
+always-on-top float ladder, and an in-place narration recorder whose takes
+re-time the document to the recorded voice.
+
+```ts
+// Mode surface (PreviewPanel mounts it for DisplayMode 'narrate';
+// gate with the EditorShell `allowNarrate` prop, default true)
+function TeleprompterView(props: TeleprompterViewProps): JSX.Element;
+// props: { doc, theme, workspaceContainer?, basePath?, recording?: TeleprompterRecordingDeps | null }
+function TeleprompterSurface(props: TeleprompterSurfaceProps): JSX.Element; // prop-driven, portal-able
+function TeleprompterControls(props: TeleprompterControlsProps): JSX.Element;
+
+// Controller + mic pipeline
+function useTeleprompter(opts: { doc: Doc | null }): TeleprompterController;
+function useMicAnalysis(): MicAnalysisHandle; // start() RESOLVES with the live stream
+function vadConfigForSensitivity(sensitivity: number): Partial<VadConfig>;
+const PCM_WORKLET_SOURCE: string; // inline AudioWorklet tap (clone, not transfer)
+function registerPcmWorklet(ctx: AudioContext): Promise<void>;
+
+// Floating window (document-pip → video-pip canvas → popup → docked)
+function detectFloatTiers(): FloatTier[];
+function createFloatingWindowManager(deps: { styleCss: string }): FloatingWindowManager;
+function useFloatingWindow(styleCss: string): FloatingWindowHandle;
+
+// Recording (record the analysis stream + optional camera; live trace →
+// core alignNarration → v3 sidecar; ONE markdown write inserts/replaces
+// the `{[audio src=… anchor=document]}` preamble)
+function useNarrationRecorder(options: UseNarrationRecorderOptions): NarrationRecorderController;
+function buildNarrationSavePlan(args: NarrationSavePlanArgs): NarrationSavePlan;
+function executeNarrationSave(plan, take, deps): Promise<NarrationSaveResult>;
+function insertNarrationPreamble(
+  source: string,
+  audioPath: string,
+  cameraPath: string | null,
+): string;
+```
 
 ### Recorder (`src/recorder`)
 
@@ -2084,30 +2439,59 @@ function timingPathFor(audioRelativePath: string): string; // `${path}.timing.js
 
 ## `@bendyline/squisq-video`
 
-Browser-pure foundation for MP4 export (render-HTML generator + ffmpeg.wasm
-encoder). No Node-specific dependencies; runs in the browser and Node.
+Cross-runtime render-HTML, timeline, quality, and GIF-palette helpers plus a
+browser-only ffmpeg.wasm MP4 encoder. Node MP4/GIF export uses the native frame
+encoders from `@bendyline/squisq-cli/api`.
 
 **Import:** `@bendyline/squisq-video`
 
 ```ts
 // Generate a self-contained HTML page that mounts the standalone player in
-// renderMode (images/audio embedded as base64 data URIs), exposing
-// window.seekTo / window.getDuration for headless frame capture.
+// renderMode (images/audio embedded as base64 data URIs). Headless callers use
+// SquisqPlayer.getHandle(root).renderAPI for frame capture.
 function generateRenderHtml(doc: Doc, options: RenderHtmlOptions): string;
 
-// Encode PNG frame screenshots into an MP4 via ffmpeg.wasm (H.264 + optional AAC).
+// Encode PNG frame screenshots in a browser runtime via ffmpeg.wasm
+// (H.264 + optional AAC). Throws a clear unsupported-runtime error in Node.
 function framesToMp4Wasm(
   frames: Uint8Array[],
   audio: Uint8Array | null,
   options?: VideoExportOptions,
 ): Promise<EncoderResult>;
+interface FfmpegWasmLoadConfig {
+  coreURL?: string;
+  wasmURL?: string;
+  workerURL?: string;
+  classWorkerURL?: string;
+}
 
 function resolveDimensions(options: VideoExportOptions): { width: number; height: number };
+function validateVideoExportOptions(options: VideoExportOptions): void;
 const fetchFile: typeof import('@ffmpeg/util').fetchFile; // re-export
 
 // Target H.264 bitrate = width * height * preset.bitsPerPixel. Single source of
 // truth shared by every WebCodecs encode path (draft/normal/high → 2/4/8 bpp).
 function bitrateForQuality(q: VideoQuality, width: number, height: number): number;
+
+// AAC mux flags that pad short audio before `-shortest`, preserving the full
+// video timeline while trimming narration that runs beyond it.
+function ffmpegAudioMuxArgs(bitrate: string | number): string[];
+
+// Global diff palette + changed-rectangle application used consistently by
+// native and browser animated-GIF exporters.
+function ffmpegGifFilterGraph(options: GifFilterOptions): string;
+function ffmpegGifOutputArgs(options: GifOutputOptions): string[];
+type GifDither = 'bayer' | 'sierra2_4a' | 'none';
+interface GifFilterOptions {
+  width: number;
+  height: number;
+  maxColors?: number; // 2–256, default 256
+  dither?: GifDither; // default sierra2_4a
+  bayerScale?: number; // 0–5, default 3
+}
+interface GifOutputOptions extends GifFilterOptions {
+  loop?: number; // 0 forever, -1 no loop
+}
 
 const QUALITY_PRESETS: Record<VideoQuality, QualityPreset>; // draft/normal/high → ffmpeg preset + crf + bitsPerPixel + audioBitrate
 const ORIENTATION_DIMENSIONS: Record<VideoOrientation, { width: number; height: number }>;
@@ -2154,6 +2538,7 @@ interface RenderHtmlOptions {
   width?: number; // default 1920
   height?: number; // default 1080
   captionStyle?: 'standard' | 'social';
+  animationsEnabled?: boolean; // default true
 }
 ```
 
@@ -2161,9 +2546,11 @@ interface RenderHtmlOptions {
 
 ## `@bendyline/squisq-video-react`
 
-React components for browser-based video export (WebCodecs primary, ffmpeg.wasm
-worker fallback). Depends on `@bendyline/squisq-video`, `@bendyline/squisq-react`,
-`mp4-muxer`, and `html2canvas`.
+React components for browser-based MP4 and animated-GIF export. MP4 uses
+WebCodecs primarily with an ffmpeg.wasm worker fallback; GIF palette-transcodes
+the compact video-only MP4 intermediate through ffmpeg.wasm. Depends on
+`@bendyline/squisq-video`, `@bendyline/squisq-react`, `@ffmpeg/ffmpeg`, the
+pinned `@ffmpeg/core` runtime, `mp4-muxer`, and `html2canvas`.
 
 **Import:** `@bendyline/squisq-video-react`
 
@@ -2175,6 +2562,16 @@ in (see `audioIncluded` / `audioSkippedReason` below). `playerScript` is now
 in-page `DocPlayer`, so the IIFE bundle is only forwarded for CLI/Playwright-style
 pipelines. A new `defaultConfig?: Partial<VideoExportConfig>` prop seeds the
 modal's initial settings and is merged as a base into the export config.
+
+Animated GIF export defaults to 10 fps, 960×540 landscape (540×960 portrait),
+and `animationsEnabled: false` for compact output. It skips audio entirely and
+uses ffmpeg.wasm for the final palette pass, so it requires cross-origin
+isolation / `SharedArrayBuffer` in the browser.
+
+For reliable offline/CSP operation, publish
+`node_modules/@ffmpeg/core/dist/esm/ffmpeg-core.{js,wasm}` from the same origin
+and provide those URLs through `VideoExportConfig.ffmpegWasm`. The demo site's
+Vite build does this automatically.
 
 ### Components
 
@@ -2211,25 +2608,38 @@ function useVideoExport(): VideoExportResult;
 function useFrameCapture(): FrameCaptureHandle;
 
 type VideoExportState = 'idle' | 'preparing' | 'capturing' | 'encoding' | 'complete' | 'error';
+type VideoOutputFormat = 'mp4' | 'gif';
 interface VideoExportConfig {
+  outputFormat?: VideoOutputFormat; // default 'mp4'
+  animationsEnabled?: boolean; // MP4 default true; GIF default false
   quality?: VideoQuality; // default 'normal'
-  fps?: number; // default 30
+  fps?: number; // MP4 default 30; GIF default 10
   orientation?: VideoOrientation; // default 'landscape'
+  width?: number; // GIF default 960 landscape / 540 portrait
+  height?: number; // GIF default 540 landscape / 960 portrait
   images?: Map<string, ArrayBuffer>;
   audio?: Map<string, ArrayBuffer>;
   mediaProvider?: MediaProvider;
   captionMode?: CaptionMode; // default 'off'
   playerScript?: string; // unused by the browser export path; kept for CLI/Playwright
+  ffmpegWasm?: FfmpegWasmLoadConfig; // optional self-hosted fallback assets
+}
+interface FfmpegWasmLoadConfig {
+  coreURL?: string;
+  wasmURL?: string;
+  workerURL?: string;
+  classWorkerURL?: string;
 }
 interface VideoExportResult {
   state: VideoExportState;
   progress: number;
   phase: string;
   duration: number;
+  outputFormat: VideoOutputFormat;
   backend: 'webcodecs' | 'ffmpeg-wasm' | null;
   downloadUrl: string | null;
   fileSize: number;
-  audioIncluded: boolean; // whether an audio track was muxed into the MP4
+  audioIncluded: boolean; // MP4 audio result; always false for GIF
   audioSkippedReason: string | null; // null = doc had no audio; string = a capability/runtime shortfall
   error: string | null;
   elapsed: number;
@@ -2256,7 +2666,7 @@ interface FrameCaptureHandle {
 function supportsWebCodecs(): boolean; // VideoEncoder/VideoFrame present
 function supportsWebCodecsH264(config: EncoderConfig): Promise<boolean>; // H.264 config supported
 function supportsWebCodecsAac(sampleRate?: number, channels?: number): Promise<boolean>; // AAC audio encode supported (defaults to the export sample rate / channels)
-// config: { width, height, fps, quality: 'draft' | 'normal' | 'high' }
+// EncoderConfig: { width, height, fps, quality }
 function createEncoder(config: EncoderConfig): MainThreadEncoder; // throws if WebCodecs unavailable
 interface EncoderConfig {
   width: number;
@@ -2265,7 +2675,8 @@ interface EncoderConfig {
   quality: VideoQuality;
 }
 interface MainThreadEncoder {
-  encodeFrame(bitmap: ImageBitmap, frameIndex: number): void;
+  encodeFrame(bitmap: ImageBitmap, frameIndex: number): Promise<void>;
+  addAudioChunk?(chunk: EncodedAudioChunk, meta?: EncodedAudioChunkMetadata): void;
   finalize(): Promise<ArrayBuffer>;
   close(): void;
 }
@@ -2276,7 +2687,7 @@ interface MainThreadEncoder {
 ## `@bendyline/squisq-cli`
 
 Command-line tool and programmatic API for converting Squisq documents and
-rendering them to MP4.
+rendering them to MP4 or animated GIF.
 
 **Install:** `npm install -g @bendyline/squisq-cli`
 
@@ -2287,24 +2698,23 @@ rendering them to MP4.
 Convert a document to one or more formats. Input can now be a **binary**
 document as well as markdown: `.md`, `.docx`, `.pptx`, `.pdf`, `.xlsx`, `.csv`,
 `.html`, a `.zip`/`.dbk` container, or a folder. Output formats now include
-`md`, `xlsx`, `csv`, and `mp4` alongside the originals.
+`md`, `xlsx`, `csv`, `mp4`, and `gif` alongside the originals.
 
-| Option                | Description                                                                      | Default       |
-| --------------------- | -------------------------------------------------------------------------------- | ------------- |
-| `-o, --output <file>` | **Single** output file; format inferred from its extension                       | —             |
-| `-d, --output-dir`    | Output directory (multi-format mode)                                             | same as input |
-| `-f, --formats`       | Comma-separated: `docx, pptx, pdf, html, htmlzip, epub, dbk, md, xlsx, csv, mp4` | default set   |
-| `--format <id>`       | Produce a single format (alias for a one-entry `--formats`)                      | —             |
-| `-t, --theme`         | Squisq theme id (built-in or in-doc custom)                                      | none          |
-| `--transform`         | Transform style before export (documentary, magazine, …)                         | none          |
-| `--no-auto-templates` | Disable content-aware auto template picking                                      | (auto on)     |
+| Option                | Description                                                                           | Default       |
+| --------------------- | ------------------------------------------------------------------------------------- | ------------- |
+| `-o, --output <file>` | **Single** output file; format inferred from its extension                            | —             |
+| `-d, --output-dir`    | Output directory (multi-format mode)                                                  | same as input |
+| `-f, --formats`       | Comma-separated: `docx, pptx, pdf, html, htmlzip, epub, dbk, md, xlsx, csv, mp4, gif` | default set   |
+| `-t, --theme`         | Squisq theme id (built-in or in-doc custom)                                           | none          |
+| `--transform`         | Transform style before export (documentary, magazine, …)                              | none          |
+| `--no-auto-templates` | Disable content-aware auto template picking                                           | (auto on)     |
 
 > **v1.5 breaking flag change:** `-o` is now the **single-file** output
 > (`squisq convert in.md -o out.docx`, format inferred from the extension). The
 > old `-o` output-**directory** behavior moved to `-d, --output-dir`. `-o`
-> cannot be combined with `--formats`/`--format`. A bare `convert <input>` with
-> no `-o`/`--format`/`--formats` writes a default set to the output dir that
-> deliberately excludes `md`/`xlsx`/`csv`/`mp4`.
+> cannot be combined with `--formats`. A bare `convert <input>` with no
+> `-o`/`--formats` writes a default set to the output dir that
+> deliberately excludes `md`/`xlsx`/`csv`/`mp4`/`gif`.
 
 The `html` / `htmlzip` formats embed the standalone player (static mode); the
 `htmlzip` output is written as `<name>.html.zip`. `dbk` re-serializes the input
@@ -2312,22 +2722,25 @@ container as a ZIP.
 
 #### `squisq video <input> [output]`
 
-Render a document to MP4 (Playwright headless frame capture + native ffmpeg
-encode). In addition to markdown/container/folder input, accepts a pre-built
-Doc as a `.json` file.
+Render a document to MP4 or animated GIF (Playwright headless frame capture +
+native ffmpeg encode). In addition to markdown/container/folder input, accepts
+a pre-built Doc as a `.json` file.
 
-| Option                 | Description                                         | Default       |
-| ---------------------- | --------------------------------------------------- | ------------- |
-| `-o, --output`         | Output MP4 path (also accepted as a positional arg) | `<input>.mp4` |
-| `--fps`                | Frames per second (1–120)                           | 30            |
-| `--quality`            | draft, normal, or high                              | normal        |
-| `--orientation`        | landscape or portrait                               | landscape     |
-| `--captions`           | off, standard, or social                            | off           |
-| `-t, --theme`          | Squisq theme id to apply                            | none          |
-| `--transform`          | Transform style to apply before rendering           | none          |
-| `--cover-preroll`      | Seconds of cover-slide pre-roll before the story    | 2             |
-| `--width` / `--height` | Dimension overrides                                 | auto          |
-| `--no-auto-templates`  | Disable auto template pick                          | (auto on)     |
+| Option                                 | Description                                      | Default              |
+| -------------------------------------- | ------------------------------------------------ | -------------------- |
+| `-o, --output`                         | Output `.mp4` or `.gif` path                     | `<input>.mp4`        |
+| `--format`                             | `mp4` or `gif`                                   | inferred / mp4       |
+| `--fps`                                | Frames per second (MP4 1–120; GIF 1–100)         | MP4 30; GIF 10       |
+| `--quality`                            | MP4 only: draft, normal, or high                 | normal               |
+| `--orientation`                        | landscape or portrait                            | landscape            |
+| `--captions`                           | off, standard, or social                         | off                  |
+| `--animations` / `--no-animations`     | Layer animations and block transitions           | MP4 on; GIF off      |
+| `--loop` / `--max-colors` / `--dither` | GIF loop and palette controls                    | 0 / 256 / sierra2_4a |
+| `-t, --theme`                          | Squisq theme id to apply                         | none                 |
+| `--transform`                          | Transform style to apply before rendering        | none                 |
+| `--cover-preroll`                      | Seconds of cover-slide pre-roll before the story | 2                    |
+| `--width` / `--height`                 | Dimension overrides                              | auto                 |
+| `--no-auto-templates`                  | Disable auto template pick                       | (auto on)            |
 
 **Requires:** ffmpeg and Playwright (chromium). ffmpeg is resolved from the
 `SQUISQ_FFMPEG` env var, then `PATH`, then an optionally-installed `ffmpeg-static`
@@ -2363,21 +2776,72 @@ only: `0` clean, warnings-only, or info-only; `1` errors (or any warning with
 
 The API surfaces a pre-bound `convert()` — a thin wrapper over
 `@bendyline/squisq-formats`' `convert()` that injects the CLI's format registry
-(every built-in exporter plus the CLI-only `mp4` format) and a default
+(every built-in exporter plus the CLI-only `mp4` and `gif` formats) and a default
 `resolvePlayerScript` (so HTML/player-embedding exports work out of the box).
 Both are overridable via `options`. `createCliRegistry()` returns that same
 registry for direct use.
 
 ```ts
-// Pre-bound convert(): CLI registry (+ mp4) + default player script injected.
+// Pre-bound convert(): CLI registry (+ mp4/gif) + default player script injected.
 function convert(
   source: ConvertSource,
-  to: FormatId, // 'docx' | 'pdf' | 'pptx' | 'xlsx' | 'csv' | 'html' | 'epub' | 'md' | 'mp4' | …
-  options?: ConvertOptions,
+  to: FormatId, // 'docx' | 'pdf' | 'pptx' | 'xlsx' | 'csv' | 'html' | 'epub' | 'md' | 'mp4' | 'gif' | …
+  options?: CliConvertOptions,
 ): Promise<ConversionResult>;
-function createCliRegistry(): FormatRegistry; // defaultRegistry() + the mp4 exporter
+type CliConvertOptions = Omit<ConvertOptions, 'formatOptions'> & {
+  formatOptions?: ConvertOptions['formatOptions'] & {
+    mp4?: Mp4FormatOptions;
+    gif?: GifFormatOptions;
+  };
+};
+interface Mp4FormatOptions {
+  fps?: number;
+  quality?: VideoQuality;
+  orientation?: VideoOrientation;
+  coverPreRoll?: number;
+  animationsEnabled?: boolean; // default true
+}
+interface GifFormatOptions {
+  fps?: number; // default 10
+  orientation?: VideoOrientation;
+  coverPreRoll?: number;
+  animationsEnabled?: boolean; // default false
+  loop?: number;
+  maxColors?: number;
+  dither?: GifDither;
+  bayerScale?: number;
+}
+function createCliRegistry(): FormatRegistry; // defaultRegistry() + mp4/gif exporters
 // Re-exports: ConversionError, the ConvertSource/ConvertOptions/ConversionResult/
 // FormatId/FormatRegistry/FormatDefinition/NormalizedInput types, plus readInput.
+
+// Encode already-captured PNG frames with native FFmpeg. The bytes variant
+// returns the MP4 in memory; the path variant writes directly to outputPath.
+function framesToMp4Native(
+  ffmpegPath: string,
+  frames: Uint8Array[],
+  audio: Uint8Array | null,
+  outputPath: string,
+  options?: VideoExportOptions,
+): Promise<void>;
+function framesToMp4NativeBytes(
+  ffmpegPath: string,
+  frames: Uint8Array[],
+  audio: Uint8Array | null,
+  options?: VideoExportOptions,
+): Promise<Uint8Array>;
+
+function framesToGifNative(
+  ffmpegPath: string,
+  frames: Uint8Array[],
+  outputPath: string,
+  options?: GifExportOptions,
+): Promise<void>;
+function framesToGifNativeBytes(
+  ffmpegPath: string,
+  frames: Uint8Array[],
+  options?: GifExportOptions,
+): Promise<Uint8Array>;
 
 function renderDocToMp4(
   doc: Doc,
@@ -2393,13 +2857,38 @@ interface RenderDocToMp4Options {
   width?: number;
   height?: number;
   captionStyle?: 'standard' | 'social';
-  coverPreRoll?: number; // seconds of cover pre-roll, default 0
+  animationsEnabled?: boolean; // default true
+  coverPreRoll?: number; // seconds shown only when a cover exists, default 0
   onProgress?: (phase: string, percent: number) => void;
 }
 interface RenderDocToMp4Result {
   duration: number;
   frameCount: number;
   outputPath: string;
+}
+
+function renderDocToGif(
+  doc: Doc,
+  container: MemoryContentContainer,
+  options: RenderDocToGifOptions,
+): Promise<RenderDocToGifResult>;
+interface RenderDocToGifOptions {
+  outputPath: string;
+  fps?: number; // default 10
+  orientation?: VideoOrientation;
+  width?: number; // default 960 landscape / 540 portrait
+  height?: number; // default 540 landscape / 960 portrait
+  captionStyle?: 'standard' | 'social';
+  coverPreRoll?: number;
+  animationsEnabled?: boolean; // default false
+  loop?: number; // default 0 (forever)
+  maxColors?: number; // default 256
+  dither?: GifDither;
+  bayerScale?: number;
+  onProgress?: (phase: string, percent: number) => void;
+}
+interface RenderDocToGifResult extends RenderDocToMp4Result {
+  warnings: string[]; // includes omitted-audio warning when applicable
 }
 
 // Extract JPEG thumbnails from the first frame of an MP4.
@@ -2428,7 +2917,7 @@ interface ReadInputResult {
 
 // Re-exports
 export { MemoryContentContainer } from '@bendyline/squisq/storage';
-export type { VideoQuality, VideoOrientation } from '@bendyline/squisq-video';
+export type { GifDither, VideoQuality, VideoOrientation } from '@bendyline/squisq-video';
 ```
 
-`renderDocToMp4` requires Playwright chromium and ffmpeg on PATH.
+`renderDocToMp4` and `renderDocToGif` require Playwright chromium and ffmpeg on PATH.

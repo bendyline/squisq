@@ -33,6 +33,24 @@ export function allocateTiming(
 ): Block[] {
   if (blocks.length === 0) return [];
 
+  // Template blocks carrying a numeric `sourceStartTime` are ANCHORED to
+  // the doc timeline — when the source doc is narration-timed
+  // (`applyNarrationTiming`), those anchors are where the words are
+  // actually spoken, and rescaling would tear the slides away from the
+  // voice. Anchored blocks keep their positions; floating blocks
+  // (intro/outro bookends, section headers, interleaved images) fill the
+  // gaps between anchors. With no anchors at all, behavior is the
+  // historical rescale-to-fit.
+  const hasAnchors = blocks.some(
+    (b) => isTemplateBlock(b) && typeof b.sourceStartTime === 'number',
+  );
+  return hasAnchors
+    ? allocateAnchored(blocks, totalDuration)
+    : allocateRescaled(blocks, totalDuration);
+}
+
+/** Historical behavior: scale every duration to fill the total, clamp 3–20 s. */
+function allocateRescaled(blocks: Array<Block | TemplateBlock>, totalDuration: number): Block[] {
   const effectiveDuration = totalDuration > 0 ? totalDuration : estimateDefaultDuration(blocks);
 
   // First pass: assign raw durations
@@ -59,35 +77,148 @@ export function allocateTiming(
   // Second pass: assign startTimes and build output Blocks
   let currentTime = 0;
   const result: Block[] = [];
-
   for (let i = 0; i < blocks.length; i++) {
-    const block = blocks[i];
-    const duration = durations[i];
+    result.push(toOutputBlock(blocks[i], currentTime, durations[i]));
+    currentTime += durations[i];
+  }
+  return result;
+}
 
+/** Minimum duration for a floating block squeezed between anchors. */
+const MIN_FLOATING_DURATION = 1;
+
+/**
+ * Anchor-aware allocation: anchored entries (template blocks with a
+ * numeric `sourceStartTime`, and untransformed source Blocks with their
+ * own real timing) are PLACED at their timeline positions; runs of
+ * floating blocks (bookends, headers, images) distribute across the gap
+ * before the next anchor. Durations then derive from consecutive starts
+ * so the timeline stays CONTIGUOUS — a slide summarizing unpromoted
+ * source content simply holds until the next slide begins, which is
+ * what keeps every narration second covered by some block.
+ */
+function allocateAnchored(blocks: Array<Block | TemplateBlock>, totalDuration: number): Block[] {
+  interface Entry {
+    block: Block | TemplateBlock;
+    anchorStart: number | null;
+    rawDuration: number;
+  }
+  const entries: Entry[] = blocks.map((block) => {
     if (isTemplateBlock(block)) {
-      // Convert TemplateBlock to Block shell, preserving all template-specific
-      // fields (stat, quote, description, etc.) so they survive through to
-      // the player's template expansion step.
-      const outputBlock = {
-        ...block,
-        startTime: currentTime,
-        duration,
-        title: getTemplateTitle(block),
-      } as unknown as Block;
-      result.push(outputBlock);
-    } else {
-      // Existing block — update timing
-      result.push({
-        ...block,
-        startTime: currentTime,
-        duration,
-      });
+      return {
+        block,
+        anchorStart: typeof block.sourceStartTime === 'number' ? block.sourceStartTime : null,
+        rawDuration: block.duration > 0 ? block.duration : DEFAULT_BLOCK_DURATION,
+      };
     }
+    // Untransformed source blocks carry real (possibly narration) timing.
+    return {
+      block,
+      anchorStart: block.startTime,
+      rawDuration: block.duration > 0 ? block.duration : DEFAULT_BLOCK_DURATION,
+    };
+  });
 
-    currentTime += duration;
+  // Pass 1: starts. Anchors pin their positions (the cursor then jumps
+  // past the anchor's authored span, so following floats land AFTER it).
+  // Float runs place differently by position: LEADING floats (before any
+  // anchor — intro bookends) fill the opening gap from t=0; MID floats
+  // (section headers, images) end-align just before the next anchor —
+  // a header belongs to the section it introduces; TRAILING floats
+  // (outro) run sequentially after the last anchor's span.
+  const starts = new Array<number>(entries.length);
+  let cursor = 0;
+  let seenAnchor = false;
+  let i = 0;
+  while (i < entries.length) {
+    const entry = entries[i];
+    if (entry.anchorStart !== null) {
+      const start = Math.max(cursor, entry.anchorStart);
+      starts[i] = start;
+      const hint = isTemplateBlock(entry.block)
+        ? (entry.block.sourceDuration ?? entry.rawDuration)
+        : entry.rawDuration;
+      cursor = start + Math.max(MIN_FLOATING_DURATION, hint);
+      seenAnchor = true;
+      i++;
+      continue;
+    }
+    const runStart = i;
+    while (i < entries.length && entries[i].anchorStart === null) i++;
+    const run = entries.slice(runStart, i);
+    const rawSum = run.reduce((sum, e) => sum + e.rawDuration, 0);
+    const nextAnchorStart =
+      i < entries.length ? Math.max(entries[i].anchorStart ?? cursor, cursor) : null;
+
+    if (nextAnchorStart === null) {
+      // Trailing floats: natural sizes after the last anchor's span.
+      let acc = cursor;
+      for (let k = 0; k < run.length; k++) {
+        starts[runStart + k] = acc;
+        acc += run[k].rawDuration;
+      }
+      cursor = acc;
+    } else if (!seenAnchor) {
+      // Leading floats: fill [cursor, nextAnchorStart) proportionally.
+      const gap = nextAnchorStart - cursor;
+      let acc = cursor;
+      for (let k = 0; k < run.length; k++) {
+        starts[runStart + k] = acc;
+        acc += rawSum > 0 ? (run[k].rawDuration / rawSum) * gap : gap / run.length;
+      }
+      cursor = nextAnchorStart;
+    } else {
+      // Mid floats: end-aligned at natural size, capped by the gap.
+      const gap = Math.max(0, nextAnchorStart - cursor);
+      const scale = rawSum > 0 ? Math.min(1, gap / rawSum) : 0;
+      let acc = Math.max(cursor, nextAnchorStart - rawSum * scale);
+      for (let k = 0; k < run.length; k++) {
+        starts[runStart + k] = acc;
+        acc += run[k].rawDuration * scale;
+      }
+      cursor = nextAnchorStart;
+    }
   }
 
+  // Pass 2: strictly increasing starts, then contiguous durations.
+  for (let k = 0; k < starts.length; k++) {
+    const floor = k > 0 ? starts[k - 1] + MIN_FLOATING_DURATION : 0;
+    if (starts[k] < floor) starts[k] = floor;
+  }
+  const result: Block[] = [];
+  for (let k = 0; k < entries.length; k++) {
+    const entry = entries[k];
+    let duration: number;
+    if (k + 1 < entries.length) {
+      duration = Math.max(MIN_FLOATING_DURATION, starts[k + 1] - starts[k]);
+    } else {
+      const authored = isTemplateBlock(entry.block)
+        ? (entry.block.sourceDuration ?? entry.rawDuration)
+        : entry.rawDuration;
+      // The final block covers through the end of the doc/narration when
+      // the caller knows it runs longer.
+      duration = Math.max(MIN_FLOATING_DURATION, authored, totalDuration - starts[k]);
+    }
+    result.push(toOutputBlock(entry.block, starts[k], duration));
+  }
   return result;
+}
+
+/**
+ * Convert an entry to an output Block shell. Template blocks preserve all
+ * template-specific fields (stat, quote, description, …) so they survive
+ * through to the player's template expansion step.
+ */
+function toOutputBlock(block: Block | TemplateBlock, startTime: number, duration: number): Block {
+  if (isTemplateBlock(block)) {
+    return {
+      ...block,
+      startTime,
+      duration,
+      title: getTemplateTitle(block),
+    } as unknown as Block;
+  }
+  return { ...block, startTime, duration };
 }
 
 /** Clamp a duration to the min/max range. */

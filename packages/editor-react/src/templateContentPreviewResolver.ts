@@ -1,5 +1,6 @@
 import type {
   Block,
+  CustomTemplateDefinition,
   DocBlock,
   MediaProvider,
   Theme,
@@ -12,8 +13,8 @@ import {
   extractImages,
   extractListItems,
   extractTableFromContents,
-  getLayers,
-  type RenderContext,
+  materializeBlockLayers,
+  type MaterializeBlockLayersOptions,
 } from '@bendyline/squisq/doc';
 import { extractPlainText } from '@bendyline/squisq/markdown';
 
@@ -23,6 +24,7 @@ export interface TemplatePreviewSource {
   viewport: ViewportConfig;
   basePath?: string;
   mediaProvider?: MediaProvider | null;
+  customTemplates?: readonly CustomTemplateDefinition[];
 }
 
 export interface TemplatePreviewResult {
@@ -82,17 +84,22 @@ export function resolveTemplateContentPreviewResult(
     ...(inputs ?? {}),
   };
 
-  const ctx: RenderContext = {
+  const ctx: MaterializeBlockLayersOptions = {
     blockIndex: 0,
     totalBlocks: 1,
     theme,
     viewport,
+    customTemplates: source.customTemplates,
   };
 
   try {
-    const layers = getLayers(candidate as unknown as DocBlock, ctx);
+    const materialized = materializeBlockLayers(candidate as unknown as DocBlock, ctx);
+    const { layers } = materialized;
     if (layers.length === 0) return { visual: null, warning };
-    return { visual: { ...candidate, layers } };
+    return {
+      visual: { ...candidate, layers },
+      warning: warning ?? materialized.diagnostic?.message,
+    };
   } catch {
     return { visual: null, warning };
   }

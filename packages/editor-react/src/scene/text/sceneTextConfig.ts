@@ -5,9 +5,13 @@
  * the host owns persistence (markdown heading vs. layout JSON blob).
  */
 
+import type { SceneTextChannel } from './sceneTextChannel';
+
 export type SceneTextLevel = 'inline' | 'block' | 'rich';
 
 export interface SceneTextEditConfig {
+  /** Per-editor bridge to the formatting toolbar. */
+  channel?: SceneTextChannel;
   /**
    * Map a hit layer id (what the pointer landed on) to the layer id whose
    * on-screen box the editor should cover, or `null` when that layer isn't

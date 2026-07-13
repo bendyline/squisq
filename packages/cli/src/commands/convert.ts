@@ -12,7 +12,7 @@
  * Usage:
  *   squisq convert <input> [--output-dir <dir>] [--formats <list>] [--theme <id>] [--transform <style>]
  *   squisq convert <input> -o <file>          # single output; format inferred from extension
- *   squisq convert <input> --format <id>      # single format to the default output dir
+ *   squisq convert <input> --formats <id>     # single format to the default output dir
  */
 
 import { writeFile, mkdir } from 'node:fs/promises';
@@ -25,12 +25,12 @@ import { createCliRegistry } from '../registry.js';
 import { convert } from '../api.js';
 import { assertValidThemeId, assertValidTransformStyle } from '../util/applyTransformPipeline.js';
 
-/** Every format the registry can export (built-ins + the CLI-only mp4). */
-const VALID_FORMATS: readonly FormatId[] = [...BUILTIN_FORMAT_IDS, 'mp4'];
+/** Every format the registry can export (built-ins + CLI rendered media). */
+const VALID_FORMATS: readonly FormatId[] = [...BUILTIN_FORMAT_IDS, 'mp4', 'gif'];
 
 /**
- * Default formats produced by a bare `convert <input>` (no -o / --format /
- * --formats). Deliberately excludes md/xlsx/csv and — crucially — mp4, so a
+ * Default formats produced by a bare `convert <input>` (no -o / --formats).
+ * Deliberately excludes md/xlsx/csv and — crucially — mp4/gif, so a
  * bare convert never spins up Playwright/FFmpeg.
  */
 const DEFAULT_FORMATS: readonly FormatId[] = [
@@ -72,7 +72,7 @@ function formatFromOutputPath(outputPath: string): FormatId {
   if (!def) {
     throw new Error(
       `Cannot infer a format from output extension "${ext || '(none)'}". ` +
-        `Use --format to specify one. Valid: ${VALID_FORMATS.join(', ')}`,
+        `Use --formats to specify one. Valid: ${VALID_FORMATS.join(', ')}`,
     );
   }
   return def.id;
@@ -82,16 +82,23 @@ interface ConvertOpts {
   output?: string;
   outputDir?: string;
   formats?: string;
-  format?: string;
   theme?: string;
   transform?: string;
   autoTemplates?: boolean;
+  /** Commander `--no-infer-theme` negation: defaults true, false when passed. */
+  inferTheme?: boolean;
+  /** Commander `--no-infer-layouts` negation: defaults true, false when passed. */
+  inferLayouts?: boolean;
+  /** Explicit rendered-media animation preference; undefined uses format defaults. */
+  animations?: boolean;
 }
 
 export function registerConvertCommand(program: Command): void {
   program
     .command('convert')
-    .description('Convert a document to DOCX, PPTX, PDF, HTML, EPUB, MP4, and container formats')
+    .description(
+      'Convert a document to DOCX, PPTX, PDF, HTML, EPUB, MP4, animated GIF, and container formats',
+    )
     .argument('<input>', 'Path to .md/.docx/.pptx/.pdf/.xlsx/.csv/.html file, .zip/.dbk, or folder')
     .option('-o, --output <file>', 'Single output file (format inferred from its extension)')
     .option(
@@ -102,7 +109,6 @@ export function registerConvertCommand(program: Command): void {
       '-f, --formats <list>',
       `Comma-separated formats to produce (default: a standard set). Valid: ${VALID_FORMATS.join(', ')}`,
     )
-    .option('--format <id>', 'Produce a single format (alias for a one-entry --formats)')
     .option('-t, --theme <id>', 'Squisq theme ID to apply (e.g., documentary, cinematic, bold)')
     .option(
       '--transform <style>',
@@ -112,6 +118,13 @@ export function registerConvertCommand(program: Command): void {
       '--no-auto-templates',
       'Disable content-aware template auto-picking for unannotated headings',
     )
+    .option(
+      '--no-infer-theme',
+      'Do not infer a Squisq theme from an office input file (PPTX theme colors/fonts)',
+    )
+    .option('--no-infer-layouts', 'Do not derive custom layout templates from PPTX slide layouts')
+    .option('--animations', 'Enable slide animations/transitions in rendered media')
+    .option('--no-animations', 'Disable slide animations/transitions in rendered media')
     .action(async (inputPath: string, opts: ConvertOpts) => {
       try {
         await runConvert(inputPath, opts);
@@ -131,22 +144,14 @@ export function registerConvertCommand(program: Command): void {
 /** Resolve the set of target formats from the mutually-exclusive flags. */
 function resolveFormats(opts: ConvertOpts): FormatId[] {
   const hasOutput = Boolean(opts.output);
-  const hasFormatSelection = Boolean(opts.formats || opts.format);
+  const hasFormatSelection = Boolean(opts.formats);
 
   if (hasOutput && hasFormatSelection) {
-    throw new Error(
-      '--output is a single-file destination and cannot be combined with --formats/--format.',
-    );
+    throw new Error('--output is a single-file destination and cannot be combined with --formats.');
   }
 
   if (hasOutput) {
     return [formatFromOutputPath(opts.output!)];
-  }
-  if (opts.format) {
-    if (!isValidFormat(opts.format.toLowerCase())) {
-      throw new Error(`Unknown format "${opts.format}". Valid: ${VALID_FORMATS.join(', ')}`);
-    }
-    return [opts.format.toLowerCase()];
   }
   if (opts.formats) {
     return parseFormats(opts.formats);
@@ -172,7 +177,10 @@ async function runConvert(inputPath: string, opts: ConvertOpts): Promise<void> {
   }
 
   console.error(`Reading: ${resolvedInput}`);
-  const result = await readInput(resolvedInput);
+  const result = await readInput(resolvedInput, {
+    inferTheme: opts.inferTheme,
+    inferLayouts: opts.inferLayouts,
+  });
 
   if (opts.theme) {
     await assertValidThemeId(opts.theme, result);
@@ -194,11 +202,16 @@ async function runConvert(inputPath: string, opts: ConvertOpts): Promise<void> {
   }
 
   for (const format of formats) {
+    const formatOptions =
+      (format === 'mp4' || format === 'gif') && opts.animations !== undefined
+        ? { [format]: { animationsEnabled: opts.animations } }
+        : undefined;
     const conversion = await convert(source, format, {
       themeId: opts.theme,
       transformStyle: opts.transform,
       autoTemplates: opts.autoTemplates,
       title: baseName,
+      formatOptions,
     });
 
     for (const warning of conversion.warnings) {

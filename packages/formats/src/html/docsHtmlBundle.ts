@@ -25,7 +25,7 @@ import type {
   HtmlNode,
 } from '@bendyline/squisq/markdown';
 import { markdownToDoc } from '@bendyline/squisq/doc';
-import type { Block, Doc } from '@bendyline/squisq/schemas';
+import type { Block, Doc, ThemeRegistry } from '@bendyline/squisq/schemas';
 import { generateExternalHtml } from './htmlTemplate.js';
 import {
   collectLinkRefs,
@@ -51,6 +51,8 @@ export interface HtmlBundleOptions {
   title?: string;
   /** Theme id applied uniformly to every page. */
   themeId?: string;
+  /** Explicit caller-owned registry for non-document custom themes. */
+  themeRegistry?: ThemeRegistry;
   /** Rendering mode for every page (default: 'static' — scrollable, link-friendly). */
   mode?: 'slideshow' | 'static';
   /** Maximum recursion depth (default: unlimited; cycles always handled). */
@@ -83,6 +85,7 @@ export async function markdownDocsToHtmlBundle(options: HtmlBundleOptions): Prom
     playerScript,
     title,
     themeId,
+    themeRegistry,
     mode = 'static',
     maxDepth = Infinity,
     entryAsIndex = false,
@@ -161,7 +164,6 @@ export async function markdownDocsToHtmlBundle(options: HtmlBundleOptions): Prom
     // link rewrite must walk that tree on every Doc before we serialize
     // it into the rendered HTML.
     let doc = markdownToDoc(mdDoc);
-    if (themeId) doc = { ...doc, themeId };
     if (linkMap.size > 0) {
       doc = rewriteDocLinks(doc, linkMap);
     }
@@ -179,6 +181,8 @@ export async function markdownDocsToHtmlBundle(options: HtmlBundleOptions): Prom
         imageRewriteMap.size > 0 ? Object.fromEntries(imageRewriteMap.entries()) : undefined,
       mode,
       title: pageTitle,
+      themeId,
+      themeRegistry,
     });
     zip.file(htmlPath, html);
   }

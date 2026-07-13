@@ -12,7 +12,7 @@ import remarkMath from 'remark-math';
 import remarkDirective from 'remark-directive';
 import type { MarkdownDocument, StringifyOptions } from './types.js';
 import { toMdast } from './convert.js';
-import { formatBlockScalar } from './utils.js';
+import { formatFrontmatterValue } from './utils.js';
 
 // Cache the default processor (all extensions, default formatting) to avoid rebuilding on every call.
 let defaultProcessor: any;
@@ -33,7 +33,7 @@ const SQ_RUN = `'(?:[^'\\\\]|\\\\.)*'`;
  * and quoted runs (which may themselves contain `]`).
  */
 const ESCAPED_TEMPLATE_SPAN_RE = new RegExp(
-  `\\{\\\\\\[((?:${DQ_RUN}|${SQ_RUN}|\\\\.|[^\\]\\\\])+)\\]\\}`,
+  `\\{\\\\\\[((?:${DQ_RUN}|${SQ_RUN}|\\\\.|[^\\]\\\\])*)\\]\\}`,
   'g',
 );
 
@@ -195,13 +195,8 @@ export function stringifyMarkdown(doc: MarkdownDocument, options?: StringifyOpti
   // Prepend YAML frontmatter if present
   if (doc.frontmatter && Object.keys(doc.frontmatter).length > 0) {
     const yamlLines = Object.entries(doc.frontmatter).map(([k, v]) => {
-      if (typeof v === 'string') {
-        // Multi-line strings emit as a YAML literal block scalar, matching
-        // `formatFrontmatterValue` / `setFrontmatterValues` so both paths
-        // agree; single-line strings stay verbatim as before.
-        return /[\r\n]/.test(v)
-          ? `${k}: ${formatBlockScalar(v.replace(/\r\n?/g, '\n'))}`
-          : `${k}: ${v}`;
+      if (typeof v === 'string' || typeof v === 'number' || typeof v === 'boolean') {
+        return `${k}: ${formatFrontmatterValue(v)}`;
       }
       return `${k}: ${JSON.stringify(v)}`;
     });

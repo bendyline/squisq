@@ -28,12 +28,21 @@ export function inferMimeType(filename: string): string {
  */
 export function arrayBufferToBase64DataUrl(buffer: ArrayBuffer, mimeType: string): string {
   const bytes = new Uint8Array(buffer);
-  let binary = '';
-  for (let i = 0; i < bytes.length; i++) {
-    binary += String.fromCharCode(bytes[i]);
+  // Keep chunks divisible by three so concatenating their independently
+  // encoded results cannot introduce padding in the middle of the stream.
+  // This avoids both quadratic string concatenation and one image-sized
+  // intermediate binary string for large embedded assets.
+  const chunkSize = 3 * 8192;
+  const chunks: string[] = [];
+  for (let offset = 0; offset < bytes.length; offset += chunkSize) {
+    const end = Math.min(offset + chunkSize, bytes.length);
+    let binary = '';
+    for (let i = offset; i < end; i++) {
+      binary += String.fromCharCode(bytes[i]);
+    }
+    chunks.push(btoa(binary));
   }
-  const base64 = btoa(binary);
-  return `data:${mimeType};base64,${base64}`;
+  return `data:${mimeType};base64,${chunks.join('')}`;
 }
 
 /**

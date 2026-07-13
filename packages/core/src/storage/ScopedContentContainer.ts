@@ -16,20 +16,48 @@
 
 import type { ContentContainer, ContentEntry } from './ContentContainer.js';
 
-/** Normalize a prefix: strip leading/trailing slashes, ensure no `..` segments. */
-function normalizePrefix(prefix: string): string {
-  let p = prefix.trim();
-  while (p.startsWith('/')) p = p.slice(1);
-  while (p.endsWith('/')) p = p.slice(0, -1);
-  if (p.length === 0) {
-    throw new Error('ScopedContentContainer: prefix must not be empty');
+interface NormalizePathOptions {
+  allowEmpty?: boolean;
+  preserveTrailingSlash?: boolean;
+}
+
+/**
+ * Normalize a container-relative path without ever resolving traversal.
+ * Backslashes are rejected rather than translated because a filesystem-backed
+ * parent may interpret them as separators even when an in-memory parent does
+ * not. Dot segments are similarly rejected instead of collapsed so an invalid
+ * caller path can never escape after a later platform-specific normalization.
+ */
+function normalizeRelativePath(
+  path: string,
+  label: 'prefix' | 'path',
+  options: NormalizePathOptions = {},
+): string {
+  const original = path;
+  let normalized = label === 'prefix' ? path.trim() : path;
+  if (normalized.includes('\\')) {
+    throw new Error(`ScopedContentContainer: ${label} must use forward slashes: ${original}`);
   }
-  if (p.split('/').some((seg) => seg === '..' || seg === '.')) {
+
+  const hadTrailingSlash = normalized.endsWith('/');
+  normalized = normalized.replace(/^\/+|\/+$/g, '');
+  const segments = normalized === '' ? [] : normalized.split('/').filter(Boolean);
+  if (segments.some((segment) => segment === '.' || segment === '..')) {
     throw new Error(
-      `ScopedContentContainer: prefix must not contain '.' or '..' segments: ${prefix}`,
+      `ScopedContentContainer: ${label} must not contain '.' or '..' segments: ${original}`,
     );
   }
-  return p;
+  if (segments.length === 0 && !options.allowEmpty) {
+    throw new Error(`ScopedContentContainer: ${label} must not be empty`);
+  }
+
+  const result = segments.join('/');
+  return options.preserveTrailingSlash && hadTrailingSlash && result ? `${result}/` : result;
+}
+
+/** Normalize a prefix: strip leading/trailing slashes, ensure no `..` segments. */
+function normalizePrefix(prefix: string): string {
+  return normalizeRelativePath(prefix, 'prefix');
 }
 
 /**
@@ -50,10 +78,9 @@ export class ScopedContentContainer implements ContentContainer {
     this.prefixSlash = `${this.prefix}/`;
   }
 
-  private toParent(path: string): string {
-    let p = path;
-    while (p.startsWith('/')) p = p.slice(1);
-    return this.prefixSlash + p;
+  private toParent(path: string, options: NormalizePathOptions = {}): string {
+    const normalized = normalizeRelativePath(path, 'path', options);
+    return this.prefixSlash + normalized;
   }
 
   /** Strip the prefix from a parent-space path. Returns null if the path is outside the scope. */
@@ -75,7 +102,10 @@ export class ScopedContentContainer implements ContentContainer {
   }
 
   async listFiles(prefix?: string): Promise<ContentEntry[]> {
-    const parentPrefix = prefix ? this.toParent(prefix) : this.prefixSlash;
+    const parentPrefix =
+      prefix == null
+        ? this.prefixSlash
+        : this.toParent(prefix, { allowEmpty: true, preserveTrailingSlash: true });
     const entries = await this.parent.listFiles(parentPrefix);
     const out: ContentEntry[] = [];
     for (const e of entries) {

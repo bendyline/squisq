@@ -131,6 +131,216 @@
   box-sizing: border-box;
 }
 
+.squisq-toolbar-view-tab-wrap {
+  display: flex;
+  align-items: flex-end;
+  align-self: stretch;
+}
+
+/* The Use tab owns the primary preview-mode chooser. Keeping the arrow in the
+   tab cluster makes mode selection available before entering Use and frees the
+   preview toolbar for format/theme/output settings. */
+.squisq-toolbar-use-tab {
+  border-bottom: 2px solid transparent;
+}
+
+.squisq-toolbar-use-tab > .squisq-toolbar-view-tab {
+  padding-right: 4px;
+  padding-bottom: 4px;
+  border-bottom: 0;
+}
+
+.squisq-toolbar-use-tab--active {
+  border-bottom-color: #2563eb;
+}
+
+.squisq-use-mode-trigger {
+  align-self: stretch;
+  display: inline-flex;
+  align-items: flex-end;
+  justify-content: center;
+  width: 20px;
+  padding: 0 6px 9px 0;
+  border: 0;
+  background: transparent;
+  color: #4b5563;
+  cursor: pointer;
+  box-sizing: content-box;
+}
+
+.squisq-use-mode-trigger > svg {
+  display: block;
+  transform: translateY(-1px);
+}
+
+.squisq-use-mode-trigger:hover,
+.squisq-use-mode-trigger--open {
+  color: #111827;
+}
+
+.squisq-toolbar-use-tab--active .squisq-use-mode-trigger {
+  color: #1d4ed8;
+}
+
+.squisq-use-mode-menu {
+  position: fixed;
+  z-index: 120;
+  width: min(340px, calc(100vw - 16px));
+  padding: 6px;
+  border: 1px solid #d1d5db;
+  border-radius: 10px;
+  background: #ffffff;
+  box-shadow:
+    0 12px 32px rgba(15, 23, 42, 0.2),
+    0 2px 6px rgba(15, 23, 42, 0.08);
+  box-sizing: border-box;
+  font-family:
+    -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans', Helvetica, Arial, sans-serif;
+  animation: squisq-use-mode-menu-in 0.12s ease-out;
+}
+
+.squisq-use-mode-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 52px;
+  padding: 7px 9px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: #374151;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    background 0.12s ease,
+    color 0.12s ease;
+}
+
+.squisq-use-mode-menu-item:hover,
+.squisq-use-mode-menu-item:focus-visible {
+  outline: none;
+  background: #f3f4f6;
+  color: #111827;
+}
+
+.squisq-use-mode-menu-item--selected {
+  background: #eff6ff;
+  color: #1d4ed8;
+}
+
+.squisq-use-mode-menu-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  flex: 0 0 32px;
+  border-radius: 8px;
+  background: #f1f5f9;
+  color: #64748b;
+  font-size: 14px;
+}
+
+.squisq-use-mode-menu-item--selected .squisq-use-mode-menu-icon {
+  background: #dbeafe;
+  color: #2563eb;
+}
+
+.squisq-use-mode-menu-copy {
+  display: flex;
+  flex: 1 1 auto;
+  min-width: 0;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.squisq-use-mode-menu-label {
+  color: inherit;
+  font-size: 12.5px;
+  font-weight: 650;
+  line-height: 1.2;
+}
+
+.squisq-use-mode-menu-summary {
+  overflow: hidden;
+  color: #6b7280;
+  font-size: 11.5px;
+  font-weight: 400;
+  line-height: 1.3;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.squisq-use-mode-menu-check {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  flex: 0 0 16px;
+  color: #2563eb;
+  font-size: 11px;
+  text-align: center;
+}
+
+@keyframes squisq-use-mode-menu-in {
+  from {
+    opacity: 0;
+    transform: translateY(-3px) scale(0.99);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .squisq-use-mode-menu {
+    animation: none;
+  }
+}
+
+.squisq-use-mode-menu[data-theme='dark'] {
+  border-color: #4b5563;
+  background: #1f2937;
+}
+
+.squisq-use-mode-menu[data-theme='dark'] .squisq-use-mode-menu-item {
+  color: #d1d5db;
+}
+
+.squisq-use-mode-menu[data-theme='dark'] .squisq-use-mode-menu-item:hover,
+.squisq-use-mode-menu[data-theme='dark'] .squisq-use-mode-menu-item:focus-visible {
+  background: #374151;
+  color: #f9fafb;
+}
+
+.squisq-use-mode-menu[data-theme='dark'] .squisq-use-mode-menu-item--selected {
+  background: #172f4f;
+  color: #93c5fd;
+}
+
+.squisq-use-mode-menu[data-theme='dark'] .squisq-use-mode-menu-icon {
+  background: #334155;
+  color: #cbd5e1;
+}
+
+.squisq-use-mode-menu[data-theme='dark']
+  .squisq-use-mode-menu-item--selected
+  .squisq-use-mode-menu-icon {
+  background: #1e4976;
+  color: #bfdbfe;
+}
+
+.squisq-use-mode-menu[data-theme='dark'] .squisq-use-mode-menu-summary {
+  color: #94a3b8;
+}
+
+.squisq-use-mode-menu[data-theme='dark'] .squisq-use-mode-menu-check {
+  color: #93c5fd;
+}
+
 /* When the outline pane is visible, anchor the toolbar's view-tabs section
  * to the outline pane's width so their right-edge dividers line up
  * vertically — otherwise the view-tabs border and the outline's right edge
@@ -1385,7 +1595,7 @@
   border: 0;
   border-radius: 0;
   vertical-align: baseline;
-  transform: translateY(2px);
+  transform: translate(3px, 0);
   user-select: none;
   line-height: 1;
   cursor: pointer;
@@ -1499,6 +1709,26 @@
   display: none;
 }
 
+/* In active mode the selection and pointer classes are independent, so tags
+ * can be visible on two heading-defined blocks at once. Gate both on the
+ * ProseMirror focus class: the document keeps its selection after blur, but a
+ * non-blinking caret should not leave that remembered block's tags behind. */
+.squisq-wysiwyg-container[data-block-tags='active'] .squisq-template-badge,
+.squisq-wysiwyg-container[data-block-tags='active'] .squisq-props-badge {
+  display: none;
+}
+
+.squisq-wysiwyg-container[data-block-tags='active']
+  .squisq-wysiwyg-editor.ProseMirror-focused
+  :is(.squisq-block-tags--selected, .squisq-block-tags--hovered)
+  > .squisq-template-badge,
+.squisq-wysiwyg-container[data-block-tags='active']
+  .squisq-wysiwyg-editor.ProseMirror-focused
+  :is(.squisq-block-tags--selected, .squisq-block-tags--hovered)
+  > .squisq-props-badge {
+  display: inline-flex;
+}
+
 /* ─── Block-properties badge (sibling of the template badge) ───────────
    The on-canvas entry point to the block-properties palette: a small
    sliders chip just after the template badge. Quiet by default like the
@@ -1521,6 +1751,7 @@
   border: 1px solid #d1d5db;
   border-radius: 10px;
   vertical-align: middle;
+  transform: translate(3px, -2px);
   user-select: none;
   cursor: pointer;
   opacity: 0.5;
@@ -1532,11 +1763,12 @@
 
 /* Sliders glyph painted via CSS so the badge span stays empty in the DOM
    (see propsBadgeSpec — a real child could leak into serialized markdown).
-   `\f1de` is Font Awesome's "sliders"; the font is already loaded for the
-   editor's inline-icon glyph decorations. */
+   `\f1de` is Font Awesome's "sliders"; use Font Awesome's own family
+   variable so this follows the bundled major version instead of resolving
+   against a stale hard-coded family name. */
 .squisq-props-badge::before {
   content: '\f1de';
-  font-family: 'Font Awesome 6 Free';
+  font-family: var(--fa-family-classic, 'Font Awesome 7 Free');
   font-weight: 900;
   font-size: 10px;
   line-height: 1;
@@ -1546,9 +1778,9 @@
    it after the glyph — and reads as an active (not just affordance) chip. */
 .squisq-props-badge[data-props-summary] {
   opacity: 1;
-  color: #6d28d9;
-  background: #f5f3ff;
-  border-color: #c4b5fd;
+  color: var(--squisq-block-props-accent, inherit);
+  background: color-mix(in oklch, currentColor 12%, transparent);
+  border-color: color-mix(in oklch, currentColor 35%, transparent);
 }
 
 .squisq-props-badge[data-props-summary]::after {
@@ -1565,13 +1797,39 @@
 .squisq-props-badge:hover,
 .squisq-props-badge:focus-visible {
   opacity: 1;
-  color: #6d28d9;
-  background: #ede9fe;
-  border-color: #c4b5fd;
+  color: var(--squisq-block-props-accent, inherit);
+  background: color-mix(in oklch, currentColor 16%, transparent);
+  border-color: color-mix(in oklch, currentColor 42%, transparent);
   outline: none;
 }
 
 /* ─── Block-properties palette popover (portaled to <body>) ──────────── */
+:is(.squisq-block-props-popover, .squisq-transition-picker, .squisq-transition-flyout) {
+  --squisq-block-props-surface: #ffffff;
+  --squisq-block-props-surface-hover: #f3f4f6;
+  --squisq-block-props-input: #ffffff;
+  --squisq-block-props-text: #111827;
+  --squisq-block-props-muted: #6b7280;
+  --squisq-block-props-quiet: #9ca3af;
+  --squisq-block-props-border: #d1d5db;
+  --squisq-block-props-divider: #e5e7eb;
+}
+
+:is(
+  .squisq-block-props-popover,
+  .squisq-transition-picker,
+  .squisq-transition-flyout
+)[data-theme='dark'] {
+  --squisq-block-props-surface: #1f2937;
+  --squisq-block-props-surface-hover: #374151;
+  --squisq-block-props-input: #111827;
+  --squisq-block-props-text: #f9fafb;
+  --squisq-block-props-muted: #d1d5db;
+  --squisq-block-props-quiet: #9ca3af;
+  --squisq-block-props-border: #4b5563;
+  --squisq-block-props-divider: #374151;
+}
+
 .squisq-block-props-popover {
   width: 280px;
   max-width: calc(100vw - 24px);
@@ -1579,8 +1837,9 @@
   display: flex;
   flex-direction: column;
   gap: 10px;
-  background: #fff;
-  border: 1px solid #e5e7eb;
+  color: var(--squisq-block-props-text);
+  background: var(--squisq-block-props-surface);
+  border: 1px solid var(--squisq-block-props-divider);
   border-radius: 10px;
   box-shadow:
     0 8px 24px rgba(0, 0, 0, 0.12),
@@ -1597,7 +1856,7 @@
 .squisq-block-props-label {
   font-size: 11px;
   font-weight: 600;
-  color: #6b7280;
+  color: var(--squisq-block-props-muted);
   flex-shrink: 0;
 }
 
@@ -1611,52 +1870,45 @@
   width: 72px;
   padding: 4px 6px;
   font-size: 12px;
-  color: #111827;
-  border: 1px solid #d1d5db;
+  color: var(--squisq-block-props-text);
+  background: var(--squisq-block-props-input);
+  border: 1px solid var(--squisq-block-props-border);
   border-radius: 5px;
   outline: none;
 }
 
 .squisq-block-props-input:focus {
-  border-color: #6366f1;
+  border-color: var(--squisq-block-props-accent, #6366f1);
 }
 
 .squisq-block-props-unit {
   font-size: 11px;
-  color: #9ca3af;
+  color: var(--squisq-block-props-quiet);
 }
 
 /* Dark theme */
-.squisq-editor-shell[data-theme='dark'] .squisq-props-badge {
+.squisq-editor-shell[data-theme='dark'] .squisq-props-badge:not([data-props-summary]) {
   border-color: #4b5563;
   color: #9ca3af;
 }
 
 .squisq-editor-shell[data-theme='dark'] .squisq-props-badge[data-props-summary] {
-  color: #ddd6fe;
-  background: #3730a3;
-  border-color: #6d5fd6;
+  color: var(--squisq-block-props-accent, inherit);
+  background: color-mix(in oklch, currentColor 24%, transparent);
+  border-color: color-mix(in oklch, currentColor 52%, transparent);
 }
 
 .squisq-editor-shell[data-theme='dark'] .squisq-props-badge:hover,
 .squisq-editor-shell[data-theme='dark'] .squisq-props-badge:focus-visible {
-  color: #ede9fe;
-  background: #4c1d95;
-  border-color: #7c3aed;
+  color: var(--squisq-block-props-accent, inherit);
+  background: color-mix(in oklch, currentColor 28%, transparent);
+  border-color: color-mix(in oklch, currentColor 58%, transparent);
 }
 
-.squisq-editor-shell[data-theme='dark'] .squisq-block-props-popover {
-  background: #1f2937;
-  border-color: #374151;
+.squisq-block-props-popover[data-theme='dark'] {
   box-shadow:
     0 8px 24px rgba(0, 0, 0, 0.4),
     0 2px 6px rgba(0, 0, 0, 0.2);
-}
-
-.squisq-editor-shell[data-theme='dark'] .squisq-block-props-input {
-  background: #111827;
-  color: #f9fafb;
-  border-color: #4b5563;
 }
 
 /* ─── Status Bar ─────────────────────────────────────── */
@@ -1771,10 +2023,14 @@
 }
 .squisq-wysiwyg-editor h2 {
   font-size: 1.5em;
-  margin: 0.65em 0 0.35em;
+  margin: 0.8em 0 0.25em;
 }
 .squisq-wysiwyg-editor h3 {
   font-size: 1.17em;
+  /* The inline template/property controls are 22–23px tall. Reserve their
+     line-box height while they are hidden so active-mode hover does not make
+     an H3 (and the content below it) jump by a pixel or two. */
+  min-height: 26px;
   margin: 1.3em 0 0.3em;
 }
 .squisq-wysiwyg-editor h4 {
@@ -1800,7 +2056,7 @@
 
 .squisq-wysiwyg-editor p {
   margin: 0.5em 0;
-  line-height: 1.6;
+  line-height: 1.7;
 }
 
 .squisq-wysiwyg-editor blockquote {
@@ -1824,6 +2080,10 @@
   overflow-x: auto;
   font-size: 13px;
   line-height: 1.5;
+  /* Explicit monospace: the container sets a themed sans body font, so
+     UA defaults for <pre> are not reliable inside it. Column-aligned
+     content (ASCII diagrams) depends on this. */
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace;
 }
 
 .squisq-wysiwyg-editor code {
@@ -1832,6 +2092,7 @@
   padding: 1px 4px;
   border-radius: 3px;
   font-size: 0.9em;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace;
 }
 
 .squisq-wysiwyg-editor pre code {
@@ -2163,6 +2424,54 @@
   cursor: pointer;
 }
 
+/* Presentation is a fixed split button after the adaptive Use controls, so
+   it remains available even when individual preview settings overflow. */
+.squisq-presentation-control {
+  display: inline-flex;
+  align-items: center;
+  flex: 0 0 auto;
+  margin: 0 5px 0 3px;
+  border: 1px solid var(--squisq-border, #d1d5db);
+  border-radius: 5px;
+  background: var(--squisq-input-bg, #fff);
+  overflow: hidden;
+}
+
+.squisq-presentation-control .squisq-presentation-start {
+  width: 30px;
+  border-radius: 0;
+}
+
+.squisq-presentation-menu-trigger {
+  align-self: stretch;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  padding: 0;
+  border: 0;
+  border-left: 1px solid var(--squisq-border, #d1d5db);
+  background: transparent;
+  color: var(--squisq-text-muted, #6b7280);
+  cursor: pointer;
+}
+
+.squisq-presentation-menu-trigger:hover,
+.squisq-presentation-menu-trigger--open {
+  background: rgba(107, 114, 128, 0.2);
+  color: var(--squisq-text, #111827);
+}
+
+.squisq-presentation-menu-item:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.squisq-presentation-menu-item:disabled:hover {
+  background: transparent;
+  color: inherit;
+}
+
 /* Link color follows the active theme's primary when "Theme styling →
    Fonts & colors" is on, otherwise falls back to the historical blue.
    In both cases we blend toward the surface text color so the link
@@ -2221,6 +2530,136 @@
   font-size: 13px;
   overflow: auto;
   color: #dc2626;
+}
+
+/* Bounded presentation keeps the host page intact while giving the entire
+   EditorShell to the active Use surface. Browser fullscreen uses the same
+   chrome suppression, then lets the Fullscreen API size the shell. */
+.squisq-editor-shell[data-presentation-mode='control'],
+.squisq-editor-shell[data-presentation-mode='fullscreen'] {
+  position: relative;
+  background: #000;
+}
+
+.squisq-editor-shell[data-presentation-mode='control'] > .squisq-editor-header,
+.squisq-editor-shell[data-presentation-mode='fullscreen'] > .squisq-editor-header,
+.squisq-editor-shell[data-presentation-mode='control'] > .squisq-status-bar,
+.squisq-editor-shell[data-presentation-mode='fullscreen'] > .squisq-status-bar,
+.squisq-editor-shell[data-presentation-mode='control'] > .squisq-timeline,
+.squisq-editor-shell[data-presentation-mode='fullscreen'] > .squisq-timeline {
+  display: none;
+}
+
+.squisq-editor-shell[data-presentation-mode='control'] .squisq-media-bin,
+.squisq-editor-shell[data-presentation-mode='fullscreen'] .squisq-media-bin,
+.squisq-editor-shell[data-presentation-mode='control'] .squisq-custom-theme-pane,
+.squisq-editor-shell[data-presentation-mode='fullscreen'] .squisq-custom-theme-pane {
+  display: none;
+}
+
+.squisq-editor-shell[data-presentation-mode='control'] .squisq-preview-player,
+.squisq-editor-shell[data-presentation-mode='fullscreen'] .squisq-preview-player {
+  padding: 0;
+  background: #000;
+}
+
+.squisq-editor-shell[data-presentation-mode='fullscreen']:fullscreen {
+  width: 100vw !important;
+  height: 100vh !important;
+  min-width: 0 !important;
+  min-height: 0 !important;
+  max-width: none !important;
+  max-height: none !important;
+}
+
+.squisq-presentation-exit {
+  position: absolute;
+  z-index: 1001;
+  top: 12px;
+  right: 12px;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 34px;
+  padding: 7px 11px;
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  border-radius: 7px;
+  background: rgba(15, 23, 42, 0.78);
+  color: #fff;
+  font: 600 12px/1 var(--squisq-ux-font, sans-serif);
+  cursor: pointer;
+  opacity: 0.72;
+  backdrop-filter: blur(8px);
+  transition:
+    opacity 0.12s ease,
+    background 0.12s ease;
+}
+
+.squisq-presentation-exit:hover,
+.squisq-presentation-exit:focus-visible {
+  outline: none;
+  background: rgba(15, 23, 42, 0.94);
+  opacity: 1;
+}
+
+.squisq-presentation-window {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  overflow: hidden;
+  background: #000;
+}
+
+.squisq-presentation-window-preview,
+.squisq-presentation-window-surface,
+.squisq-presentation-teleprompter {
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+}
+
+.squisq-presentation-window-preview {
+  display: flex;
+}
+
+.squisq-presentation-window-surface {
+  padding: 0;
+  background: #000;
+  pointer-events: none;
+}
+
+.squisq-presentation-teleprompter {
+  display: flex;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.squisq-presentation-connecting {
+  color: rgba(255, 255, 255, 0.72);
+  font: 500 14px/1.4 var(--squisq-ux-font, sans-serif);
+}
+
+.squisq-presentation-error {
+  position: fixed;
+  z-index: 10000;
+  top: 16px;
+  left: 50%;
+  max-width: min(420px, calc(100vw - 32px));
+  padding: 10px 14px;
+  border: 1px solid #fecaca;
+  border-radius: 8px;
+  background: #fff1f2;
+  color: #991b1b;
+  box-shadow: 0 10px 30px rgba(15, 23, 42, 0.2);
+  font: 500 13px/1.4 var(--squisq-ux-font, sans-serif);
+  transform: translateX(-50%);
+}
+
+.squisq-presentation-error[data-theme='dark'] {
+  border-color: #7f1d1d;
+  background: #3f151b;
+  color: #fecdd3;
 }
 
 /* ─── CSS custom properties ──────────────────────────── */
@@ -2293,6 +2732,20 @@
 .squisq-editor-shell[data-theme='dark'] .squisq-toolbar-view-tab--active {
   color: #93c5fd;
   border-bottom-color: #60a5fa;
+}
+
+.squisq-editor-shell[data-theme='dark'] .squisq-toolbar-use-tab--active {
+  border-bottom-color: #60a5fa;
+}
+
+.squisq-editor-shell[data-theme='dark'] .squisq-use-mode-trigger {
+  color: #d1d5db;
+}
+
+.squisq-editor-shell[data-theme='dark'] .squisq-use-mode-trigger:hover,
+.squisq-editor-shell[data-theme='dark'] .squisq-use-mode-trigger--open,
+.squisq-editor-shell[data-theme='dark'] .squisq-toolbar-use-tab--active .squisq-use-mode-trigger {
+  color: #93c5fd;
 }
 
 .squisq-editor-shell[data-theme='dark'] .squisq-toolbar-button {
@@ -2708,6 +3161,7 @@
 /* ─── Media Bin ──────────────────────────────────────── */
 
 .squisq-media-bin {
+  position: relative;
   width: 220px;
   border-left: 1px solid #e5e7eb;
   background: #f9fafb;
@@ -2715,6 +3169,46 @@
   flex-direction: column;
   flex-shrink: 0;
   overflow: hidden;
+}
+
+.squisq-media-bin-drop-target {
+  position: absolute;
+  inset: 6px;
+  z-index: 5;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  border: 2px dashed #2563eb;
+  border-radius: 6px;
+  background: rgba(239, 246, 255, 0.96);
+  color: #1d4ed8;
+  font-size: 12px;
+  text-align: center;
+  pointer-events: none;
+}
+
+.squisq-media-bin-drop-target-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 999px;
+  background: #2563eb;
+  color: #fff;
+  font-size: 22px;
+  font-weight: 400;
+  line-height: 1;
+}
+
+.squisq-media-bin-drop-target strong {
+  font-size: 13px;
+}
+
+.squisq-media-bin-drop-target span:last-child {
+  color: #64748b;
 }
 
 .squisq-media-bin-header {
@@ -2902,6 +3396,21 @@
 .squisq-editor-shell[data-theme='dark'] .squisq-media-bin {
   background: #1e293b;
   border-left-color: #374151;
+}
+
+.squisq-media-bin--dark .squisq-media-bin-drop-target,
+.squisq-editor-shell[data-theme='dark'] .squisq-media-bin .squisq-media-bin-drop-target {
+  border-color: #60a5fa;
+  background: rgba(15, 23, 42, 0.96);
+  color: #bfdbfe;
+}
+
+.squisq-media-bin--dark .squisq-media-bin-drop-target span:last-child,
+.squisq-editor-shell[data-theme='dark']
+  .squisq-media-bin
+  .squisq-media-bin-drop-target
+  span:last-child {
+  color: #94a3b8;
 }
 
 .squisq-media-bin--dark .squisq-media-bin-header,
@@ -3991,6 +4500,69 @@
   background: #1d4ed8;
 }
 
+/* "Import from file" affordance (shared by the customizer popover + designer pane) */
+.squisq-theme-import {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.squisq-theme-import-drop {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px;
+  border: 1px dashed var(--squisq-border, #d1d5db);
+  border-radius: 6px;
+  background: var(--squisq-input-bg, #f9fafb);
+}
+
+.squisq-theme-import-drop--active {
+  border-color: #2563eb;
+  background: rgba(37, 99, 235, 0.08);
+}
+
+.squisq-theme-import-drop--busy {
+  opacity: 0.7;
+  pointer-events: none;
+}
+
+.squisq-theme-import-hint {
+  font-size: 11px;
+  color: var(--squisq-text-muted, #6b7280);
+}
+
+.squisq-theme-import-status {
+  font-size: 11px;
+  color: var(--squisq-text-muted, #6b7280);
+}
+
+.squisq-theme-import-error {
+  font-size: 11px;
+  color: #dc2626;
+}
+
+.squisq-theme-import-warnings {
+  margin: 0;
+  padding-left: 16px;
+  font-size: 11px;
+  color: var(--squisq-text-muted, #6b7280);
+}
+
+.squisq-editor-shell[data-theme='dark'] .squisq-theme-import-drop {
+  border-color: #374151;
+  background: #111827;
+}
+
+.squisq-editor-shell[data-theme='dark'] .squisq-theme-import-drop--active {
+  border-color: #3b82f6;
+  background: rgba(59, 130, 246, 0.12);
+}
+
+.squisq-editor-shell[data-theme='dark'] .squisq-theme-import-error {
+  color: #f87171;
+}
+
 .squisq-editor-shell[data-theme='dark'] .squisq-theme-customizer-popover {
   background: #1f2937;
   border-color: #374151;
@@ -4803,6 +5375,7 @@
 }
 
 .squisq-outline-item {
+  position: relative;
   margin: 0;
 }
 
@@ -4825,6 +5398,56 @@
 
 .squisq-outline-row:hover {
   background: #f3f4f6;
+}
+
+.squisq-outline-row[draggable='true'] {
+  cursor: grab;
+}
+
+.squisq-outline-row[draggable='true']:active {
+  cursor: grabbing;
+}
+
+.squisq-outline-drag-handle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 8px;
+  color: currentColor;
+  opacity: 0.35;
+  transition: opacity 0.1s ease;
+}
+
+.squisq-outline-row:hover .squisq-outline-drag-handle,
+.squisq-outline-row:focus-visible .squisq-outline-drag-handle {
+  opacity: 0.75;
+}
+
+.squisq-outline-item--dragging {
+  opacity: 0.42;
+}
+
+.squisq-outline-item--drop-before > .squisq-outline-row-wrap::before,
+.squisq-outline-item--drop-after::after {
+  content: '';
+  position: absolute;
+  z-index: 2;
+  left: 4px;
+  right: 4px;
+  height: 2px;
+  border-radius: 999px;
+  background: var(--squisq-outline-accent, #4338ca);
+  pointer-events: none;
+}
+
+.squisq-outline-item--drop-before > .squisq-outline-row-wrap::before {
+  top: -1px;
+}
+
+/* The after marker belongs to the whole tree item so a parent section's
+   insertion boundary appears below its complete nested subtree. */
+.squisq-outline-item--drop-after::after {
+  bottom: -1px;
 }
 
 .squisq-outline-row-text {
@@ -4997,10 +5620,7 @@
   color: #d1d5db;
 }
 
-/* Dark-mode rebind for all preview-gutter custom properties. Individual
-   rules below remain as no-ops kept for back-compat with any host CSS
-   that may still target them — the variable redefinition is the single
-   source of truth going forward. */
+/* Dark-mode rebind for all preview-gutter custom properties. */
 .squisq-editor-shell[data-theme='dark'] {
   --squisq-preview-accent: #818cf8;
   --squisq-preview-accent-muted: #475569;
@@ -5014,10 +5634,6 @@
   --squisq-preview-empty-bg: #111827;
   --squisq-preview-empty-border: #374151;
   --squisq-preview-empty-text: #94a3b8;
-}
-
-.squisq-editor-shell[data-theme='dark'] .squisq-inline-preview-gutter {
-  background: var(--squisq-preview-gutter-bg);
 }
 
 .squisq-editor-shell[data-theme='dark'] .squisq-outline-empty {
@@ -5891,9 +6507,9 @@
   padding: 3px 8px;
   font-size: 12px;
   font-weight: 500;
-  color: #374151;
-  background: #fff;
-  border: 1px solid #d1d5db;
+  color: var(--squisq-block-props-text);
+  background: var(--squisq-block-props-surface);
+  border: 1px solid var(--squisq-block-props-border);
   border-radius: 5px;
   cursor: pointer;
   white-space: nowrap;
@@ -5903,23 +6519,23 @@
 }
 
 .squisq-transition-picker-trigger:hover {
-  background: #f3f4f6;
-  border-color: #9ca3af;
+  background: var(--squisq-block-props-surface-hover);
+  border-color: var(--squisq-block-props-quiet);
 }
 
 .squisq-transition-picker-trigger--open {
-  background: #f3f4f6;
-  border-color: #6366f1;
-  outline: 2px solid rgba(99, 102, 241, 0.25);
+  background: var(--squisq-block-props-surface-hover);
+  border-color: var(--squisq-block-props-accent, #6366f1);
+  outline: 2px solid color-mix(in oklch, var(--squisq-block-props-accent, #6366f1) 25%, transparent);
   outline-offset: -1px;
 }
 
 .squisq-transition-picker-trigger-label {
-  color: #6b7280;
+  color: var(--squisq-block-props-muted);
 }
 
 .squisq-transition-picker-trigger-value {
-  color: #111827;
+  color: var(--squisq-block-props-text);
   font-weight: 400;
   max-width: 110px;
   overflow: hidden;
@@ -5927,7 +6543,7 @@
 }
 
 .squisq-transition-picker-trigger svg {
-  color: #9ca3af;
+  color: var(--squisq-block-props-quiet);
   flex-shrink: 0;
 }
 
@@ -5946,8 +6562,9 @@
   max-width: calc(100vw - 24px);
   display: flex;
   flex-direction: column;
-  background: #fff;
-  border: 1px solid #e5e7eb;
+  color: var(--squisq-block-props-text);
+  background: var(--squisq-block-props-surface);
+  border: 1px solid var(--squisq-block-props-divider);
   border-radius: 10px;
   box-shadow:
     0 8px 24px rgba(0, 0, 0, 0.12),
@@ -5957,21 +6574,22 @@
 
 .squisq-transition-flyout-search {
   padding: 8px;
-  border-bottom: 1px solid #f0f0f0;
+  border-bottom: 1px solid var(--squisq-block-props-divider);
 }
 
 .squisq-transition-flyout-search-input {
   width: 100%;
   padding: 6px 8px;
   font-size: 13px;
-  color: #111827;
-  border: 1px solid #d1d5db;
+  color: var(--squisq-block-props-text);
+  background: var(--squisq-block-props-input);
+  border: 1px solid var(--squisq-block-props-border);
   border-radius: 6px;
   outline: none;
 }
 
 .squisq-transition-flyout-search-input:focus {
-  border-color: #6366f1;
+  border-color: var(--squisq-block-props-accent, #6366f1);
 }
 
 .squisq-transition-flyout-list {
@@ -5993,7 +6611,7 @@
   font-weight: 600;
   letter-spacing: 0.04em;
   text-transform: uppercase;
-  color: #9ca3af;
+  color: var(--squisq-block-props-quiet);
 }
 
 .squisq-transition-flyout-grid {
@@ -6008,9 +6626,9 @@
   text-align: left;
   padding: 6px 8px;
   font-size: 12px;
-  color: #374151;
-  background: #fff;
-  border: 1px solid #e5e7eb;
+  color: var(--squisq-block-props-text);
+  background: var(--squisq-block-props-surface);
+  border: 1px solid var(--squisq-block-props-divider);
   border-radius: 6px;
   cursor: pointer;
   white-space: nowrap;
@@ -6019,14 +6637,14 @@
 }
 
 .squisq-transition-option:hover {
-  background: #f3f4f6;
-  border-color: #d1d5db;
+  background: var(--squisq-block-props-surface-hover);
+  border-color: var(--squisq-block-props-border);
 }
 
 .squisq-transition-option--selected {
-  background: #eef2ff;
-  border-color: #6366f1;
-  color: #4338ca;
+  color: var(--squisq-block-props-accent, #4338ca);
+  background: color-mix(in oklch, var(--squisq-block-props-accent, #6366f1) 14%, transparent);
+  border-color: var(--squisq-block-props-accent, #6366f1);
   font-weight: 600;
 }
 
@@ -6055,13 +6673,13 @@
 .squisq-transition-flyout-empty {
   padding: 12px 8px;
   font-size: 12px;
-  color: #9ca3af;
+  color: var(--squisq-block-props-quiet);
   text-align: center;
 }
 
 /* Direction + duration controls, shown below the list once a type is set. */
 .squisq-transition-flyout-controls {
-  border-top: 1px solid #f0f0f0;
+  border-top: 1px solid var(--squisq-block-props-divider);
   padding: 10px 12px;
   display: flex;
   flex-direction: column;
@@ -6078,7 +6696,7 @@
 .squisq-transition-flyout-control-label {
   font-size: 11px;
   font-weight: 600;
-  color: #6b7280;
+  color: var(--squisq-block-props-muted);
 }
 
 .squisq-transition-direction-row {
@@ -6089,21 +6707,21 @@
 .squisq-transition-direction-button {
   padding: 4px 8px;
   font-size: 11px;
-  color: #374151;
-  background: #fff;
-  border: 1px solid #d1d5db;
+  color: var(--squisq-block-props-text);
+  background: var(--squisq-block-props-surface);
+  border: 1px solid var(--squisq-block-props-border);
   border-radius: 5px;
   cursor: pointer;
 }
 
 .squisq-transition-direction-button:hover {
-  background: #f3f4f6;
+  background: var(--squisq-block-props-surface-hover);
 }
 
 .squisq-transition-direction-button--selected {
-  background: #eef2ff;
-  border-color: #6366f1;
-  color: #4338ca;
+  color: var(--squisq-block-props-accent, #4338ca);
+  background: color-mix(in oklch, var(--squisq-block-props-accent, #6366f1) 14%, transparent);
+  border-color: var(--squisq-block-props-accent, #6366f1);
   font-weight: 600;
 }
 
@@ -6117,19 +6735,20 @@
   width: 64px;
   padding: 4px 6px;
   font-size: 12px;
-  color: #111827;
-  border: 1px solid #d1d5db;
+  color: var(--squisq-block-props-text);
+  background: var(--squisq-block-props-input);
+  border: 1px solid var(--squisq-block-props-border);
   border-radius: 5px;
   outline: none;
 }
 
 .squisq-transition-duration-input:focus {
-  border-color: #6366f1;
+  border-color: var(--squisq-block-props-accent, #6366f1);
 }
 
 .squisq-transition-duration-unit {
   font-size: 11px;
-  color: #9ca3af;
+  color: var(--squisq-block-props-quiet);
 }
 
 /* Dark theme */
@@ -6146,50 +6765,17 @@
 
 .squisq-editor-shell[data-theme='dark'] .squisq-transition-picker-trigger--open {
   background: #374151;
-  border-color: #818cf8;
+  border-color: var(--squisq-block-props-accent, #818cf8);
 }
 
 .squisq-editor-shell[data-theme='dark'] .squisq-transition-picker-trigger-value {
   color: #f9fafb;
 }
 
-/* Dark styling for the portaled flyout — keyed off the editor shell the same
-   way the template gallery popover is (see `.squisq-template-gallery` above). */
-.squisq-editor-shell[data-theme='dark'] .squisq-transition-flyout {
-  background: #1f2937;
-  border-color: #374151;
+/* Portaled to <body>, so the flyout's own data-theme is the reliable dark-mode
+   boundary. Child colors come from the local surface tokens above. */
+.squisq-transition-flyout[data-theme='dark'] {
   box-shadow:
     0 8px 24px rgba(0, 0, 0, 0.4),
     0 2px 6px rgba(0, 0, 0, 0.2);
-}
-
-.squisq-editor-shell[data-theme='dark'] .squisq-transition-flyout-search,
-.squisq-editor-shell[data-theme='dark'] .squisq-transition-flyout-controls {
-  border-color: #374151;
-}
-
-.squisq-editor-shell[data-theme='dark'] .squisq-transition-flyout-search-input,
-.squisq-editor-shell[data-theme='dark'] .squisq-transition-duration-input {
-  background: #111827;
-  color: #f9fafb;
-  border-color: #4b5563;
-}
-
-.squisq-editor-shell[data-theme='dark'] .squisq-transition-option,
-.squisq-editor-shell[data-theme='dark'] .squisq-transition-direction-button {
-  background: #1f2937;
-  color: #e5e7eb;
-  border-color: #4b5563;
-}
-
-.squisq-editor-shell[data-theme='dark'] .squisq-transition-option:hover,
-.squisq-editor-shell[data-theme='dark'] .squisq-transition-direction-button:hover {
-  background: #374151;
-}
-
-.squisq-editor-shell[data-theme='dark'] .squisq-transition-option--selected,
-.squisq-editor-shell[data-theme='dark'] .squisq-transition-direction-button--selected {
-  background: #3730a3;
-  border-color: #818cf8;
-  color: #e0e7ff;
 }

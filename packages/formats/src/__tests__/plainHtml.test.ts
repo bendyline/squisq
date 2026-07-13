@@ -4,7 +4,7 @@
 
 import { describe, it, expect } from 'vitest';
 import { parseMarkdown } from '@bendyline/squisq/markdown';
-import { resolveTheme } from '@bendyline/squisq/schemas';
+import { compileTheme, createThemeRegistry, resolveTheme } from '@bendyline/squisq/schemas';
 import { markdownDocToPlainHtml } from '../html/plainHtml';
 
 function render(md: string, options?: Parameters<typeof markdownDocToPlainHtml>[1]): string {
@@ -24,6 +24,20 @@ describe('markdownDocToPlainHtml', () => {
   it('uses the title option and escapes it', () => {
     const html = render('# x', { title: 'A <script> & more' });
     expect(html).toContain('<title>A &lt;script&gt; &amp; more</title>');
+  });
+
+  it('resolves custom themes only through an explicit caller-owned registry', () => {
+    const custom = compileTheme({
+      id: 'tenant-theme',
+      name: 'Tenant Theme',
+      seedColors: { primary: '#123456' },
+    });
+    const registry = createThemeRegistry([custom]);
+    const withoutRegistry = render('# Title', { themeId: 'tenant-theme' });
+    const withRegistry = render('# Title', { themeId: 'tenant-theme', themeRegistry: registry });
+
+    expect(withoutRegistry).not.toContain('--plain-primary: #123456');
+    expect(withRegistry).toContain('--plain-primary: #123456');
   });
 
   it('renders headings at the correct depth', () => {

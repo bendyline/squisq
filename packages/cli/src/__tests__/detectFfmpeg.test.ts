@@ -11,7 +11,7 @@ import { expect } from 'chai';
 import { writeFile, mkdir, rm, chmod } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { detectFfmpeg, detectFfmpegDetailed, getFfmpegVersion } from '../util/detectFfmpeg.js';
+import { detectFfmpegDetailed, getFfmpegVersion } from '../util/detectFfmpeg.js';
 
 describe('detectFfmpeg', () => {
   let tempDir: string;
@@ -48,9 +48,6 @@ describe('detectFfmpeg', () => {
     expect(detection).to.not.equal(null);
     expect(detection!.path).to.equal(fakePath);
     expect(detection!.source).to.equal('env');
-
-    // The back-compat wrapper returns the same path
-    expect(await detectFfmpeg()).to.equal(fakePath);
   });
 
   it('errors clearly when SQUISQ_FFMPEG is set but broken', async () => {

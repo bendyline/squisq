@@ -29,7 +29,7 @@ import { ViewMenuPanel } from './ViewMenuPanel';
 import {
   TemplatePicker,
   TEMPLATE_NAMES,
-  TEMPLATE_GALLERY_PORTAL_ID,
+  TEMPLATE_GALLERY_PORTAL_SELECTOR,
   templateLabel,
 } from './TemplatePicker';
 import { TransitionPicker, TRANSITION_FLYOUT_PORTAL_ID } from './TransitionPicker';
@@ -50,7 +50,8 @@ import { CustomLayoutManager } from './customTemplates/CustomLayoutManager';
 import { Icon } from './Icon';
 import type { PickerEntry } from './emojiData';
 import { createPortal } from 'react-dom';
-import { usePreviewSettingsOptional } from './PreviewControls';
+import { PreviewModeMenu, displayModeLabel, usePreviewSettingsOptional } from './PreviewControls';
+import { filterVisibleMediaEntries } from './mediaEntries';
 
 const VIEWS: { id: EditorView; label: string; shortLabel?: string; shortcut: string }[] = [
   { id: 'wysiwyg', label: 'Write', shortcut: '⌘1' },
@@ -221,6 +222,22 @@ const BUTTONS: ToolbarButton[] = [
     faIcon: 'fa-solid fa-diagram-project',
   },
   {
+    id: 'tree',
+    label: 'tree',
+    icon: '',
+    title: 'Insert tree',
+    group: 'media',
+    faIcon: 'fa-solid fa-folder-tree',
+  },
+  {
+    id: 'timeline',
+    label: 'timeline',
+    icon: '',
+    title: 'Insert timeline',
+    group: 'media',
+    faIcon: 'fa-solid fa-timeline',
+  },
+  {
     id: 'drawing',
     label: 'drawing',
     icon: '',
@@ -354,6 +371,79 @@ const LAYOUT_STARTER_TEXT_PARAMS =
   'x=360 y=380 width=1200 height=320 fontSize=64 fontWeight=bold align=center valign=middle color="#1e293b"';
 /** Multi-line markdown for a new layout (raw / code views). */
 const LAYOUT_STARTER_MARKDOWN = `\n## Layout {[layout]}\n\n### {#text-1} {[text ${LAYOUT_STARTER_TEXT_PARAMS}]}\n\nLayout\n`;
+
+/**
+ * Starter art for a new diagram — diagrams are authored as ASCII-art code
+ * fences (the fence is the source of truth; `AsciiDiagramExtension` mounts
+ * the interactive canvas over it). This exact art is the codec's own
+ * canonical rendering of a two-node flow, so it re-parses and re-renders
+ * byte-stably.
+ */
+const DIAGRAM_STARTER_ART = [
+  '┌─────────┐',
+  '│  Start  │',
+  '└────┬────┘',
+  '     │',
+  '     ▼',
+  '┌────┴────┐',
+  '│  Next   │',
+  '└─────────┘',
+].join('\n');
+/**
+ * Fenced form for raw / code views — tagged with the explicit `diagram`
+ * language so the block's identity survives markdown ↔ Tiptap round-trips
+ * (the language class round-trips; fence meta does not).
+ */
+const DIAGRAM_STARTER_MARKDOWN = '\n```diagram\n' + DIAGRAM_STARTER_ART + '\n```\n';
+
+/** Insert a starter ASCII-diagram code fence after the current top-level block. */
+function insertAsciiDiagramBlock(editor: TiptapEditor): void {
+  insertFenceBlock(editor, DIAGRAM_STARTER_ART, 'diagram');
+}
+
+/**
+ * Starter art for a new file tree — an ASCII tree fence (the fence is the
+ * source of truth; `TreeViewExtension` mounts the interactive outline).
+ */
+const TREE_STARTER_ART = ['src/', '├── index.ts', '└── utils/', '    └── helpers.ts'].join('\n');
+const TREE_STARTER_MARKDOWN = '\n```tree\n' + TREE_STARTER_ART + '\n```\n';
+
+/** Insert a starter ASCII tree code fence after the current top-level block. */
+function insertTreeBlock(editor: TiptapEditor): void {
+  insertFenceBlock(editor, TREE_STARTER_ART, 'tree');
+}
+
+/** Starter multi-event rail for the authored timeline view. */
+const TIMELINE_STARTER_ART =
+  'Milestones: ● Start {#start} ─────● Review {#review} ─────● Ship {#ship} ───►';
+const TIMELINE_STARTER_MARKDOWN = '\n```timeline\n' + TIMELINE_STARTER_ART + '\n```\n';
+
+/** Insert a starter ASCII timeline code fence after the current top-level block. */
+function insertTimelineBlock(editor: TiptapEditor): void {
+  insertFenceBlock(editor, TIMELINE_STARTER_ART, 'timeline');
+}
+
+/**
+ * Insert a code fence after the current top-level block. `lang` tags the
+ * fence's `language` attribute — pass the explicit authored-view tag so its
+ * identity round-trips through markdown and Tiptap.
+ */
+function insertFenceBlock(editor: TiptapEditor, art: string, lang?: string): void {
+  editor
+    .chain()
+    .focus()
+    .command(({ tr, state, dispatch }) => {
+      const codeBlockType = state.schema.nodes.codeBlock;
+      if (!codeBlockType) return false;
+      const attrs = lang ? { language: lang } : null;
+      const block = codeBlockType.create(attrs, state.schema.text(art));
+      const { $from } = state.selection;
+      const insertPos = $from.depth > 0 ? $from.after(1) : state.doc.content.size;
+      if (dispatch) tr.insert(insertPos, block);
+      return true;
+    })
+    .run();
+}
 
 /**
  * Insert a block-level heading carrying a Scene template (`diagram` /
@@ -506,6 +596,7 @@ export function Toolbar({
     bumpMediaRevision,
   } = useEditorContext();
   const previewSettings = usePreviewSettingsOptional();
+  const [useModeMenuRequest, requestUseModeMenu] = useReducer((count: number) => count + 1, 0);
   // When a canvas textbox is being edited, its Tiptap instance takes over
   // the formatting buttons; otherwise they drive the document editor. The
   // `level` gates which buttons apply (inline labels vs. rich textboxes).
@@ -533,7 +624,7 @@ export function Toolbar({
     let cancelled = false;
     mediaProvider.listMedia().then(
       (entries) => {
-        if (!cancelled) setScannedFileCount(entries.length);
+        if (!cancelled) setScannedFileCount(filterVisibleMediaEntries(entries).length);
       },
       () => {
         if (!cancelled) setScannedFileCount(0);
@@ -682,23 +773,25 @@ export function Toolbar({
     // with the cursor context and change width with their value, all without
     // resizing the flex:1 container itself — a container-only observer would
     // go stale.
-    const ro = new ResizeObserver(measure);
+    const ro = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(measure);
     const observeAll = () => {
-      ro.disconnect();
-      ro.observe(container);
+      ro?.disconnect();
+      ro?.observe(container);
       container
         .querySelectorAll<HTMLElement>(':scope > .squisq-toolbar-group')
-        .forEach((group) => ro.observe(group));
+        .forEach((group) => ro?.observe(group));
     };
     const mo = new MutationObserver(() => {
       observeAll();
       measure();
     });
     mo.observe(container, { childList: true });
+    if (!ro) window.addEventListener('resize', measure);
     observeAll();
     measure();
     return () => {
-      ro.disconnect();
+      ro?.disconnect();
+      if (!ro) window.removeEventListener('resize', measure);
       mo.disconnect();
     };
   }, [activeView]);
@@ -714,7 +807,7 @@ export function Toolbar({
       if (overflowRef.current?.contains(target)) return;
       if (
         target instanceof Element &&
-        target.closest(`#${TEMPLATE_GALLERY_PORTAL_ID}, #${TRANSITION_FLYOUT_PORTAL_ID}`)
+        target.closest(`${TEMPLATE_GALLERY_PORTAL_SELECTOR}, #${TRANSITION_FLYOUT_PORTAL_ID}`)
       ) {
         return;
       }
@@ -856,9 +949,19 @@ export function Toolbar({
           insertTaskList(tiptapEditor);
           break;
         case 'diagram':
-          // Empty diagram is usable via its "+ Add first node" affordance;
-          // sub-headings under this block become nodes.
-          insertTemplateHeading(tiptapEditor, { template: 'diagram', text: 'Diagram' });
+          // Diagrams are ASCII-art code fences; the AsciiDiagramExtension
+          // mounts the interactive canvas over the inserted starter.
+          insertAsciiDiagramBlock(tiptapEditor);
+          break;
+        case 'tree':
+          // File trees are ASCII tree fences; TreeViewExtension mounts the
+          // interactive outline over the inserted starter.
+          insertTreeBlock(tiptapEditor);
+          break;
+        case 'timeline':
+          // The authored fence is immediately replaced by the WYSIWYG rail
+          // canvas; Preview uses the same events as vector layers.
+          insertTimelineBlock(tiptapEditor);
           break;
         case 'drawing':
           // Empty drawing is usable via the canvas's "Shapes ▾" palette;
@@ -1015,9 +1118,19 @@ export function Toolbar({
             break;
           }
           case 'diagram': {
-            // A diagram is just a heading with the `{[diagram]}` template
-            // annotation; the WYSIWYG view renders its editable canvas.
-            replacement = '\n## Diagram {[diagram]}\n';
+            // A diagram is an ASCII-art code fence; the WYSIWYG view
+            // renders its editable canvas, preview renders it as a slide.
+            replacement = DIAGRAM_STARTER_MARKDOWN;
+            newCursorOffset = replacement.length;
+            break;
+          }
+          case 'tree': {
+            replacement = TREE_STARTER_MARKDOWN;
+            newCursorOffset = replacement.length;
+            break;
+          }
+          case 'timeline': {
+            replacement = TIMELINE_STARTER_MARKDOWN;
             newCursorOffset = replacement.length;
             break;
           }
@@ -1099,7 +1212,13 @@ export function Toolbar({
             insertion = `\n${TASK_LIST_MARKDOWN}\n`;
             break;
           case 'diagram':
-            insertion = '\n## Diagram {[diagram]}\n';
+            insertion = DIAGRAM_STARTER_MARKDOWN;
+            break;
+          case 'tree':
+            insertion = TREE_STARTER_MARKDOWN;
+            break;
+          case 'timeline':
+            insertion = TIMELINE_STARTER_MARKDOWN;
             break;
           case 'drawing':
             insertion = '\n## Drawing {[drawing]}\n';
@@ -1540,10 +1659,12 @@ export function Toolbar({
             viewport: previewSettings?.activeViewport ?? VIEWPORT_PRESETS.landscape,
             basePath: '/',
             mediaProvider,
+            customTemplates: doc?.customTemplates,
           }
         : undefined,
     [
       mediaProvider,
+      doc?.customTemplates,
       previewSettings?.activeTheme,
       previewSettings?.activeViewport,
       templatePreviewBlock,
@@ -1692,35 +1813,65 @@ export function Toolbar({
       {/* View tabs — hidden when only one view is available (e.g. code mode). */}
       {showViewTabs && (
         <div className="squisq-toolbar-view-tabs" role="tablist" aria-label="Editor view">
-          {visibleViews.map((view) => (
-            <button
-              key={view.id}
-              role="tab"
-              data-view={view.id}
-              aria-selected={activeView === view.id}
-              className={`squisq-toolbar-view-tab${activeView === view.id ? ' squisq-toolbar-view-tab--active' : ''}`}
-              onClick={() => setActiveView(view.id)}
-              data-tooltip={`${view.label} (${view.shortcut})`}
-            >
-              <span
-                className="squisq-toolbar-view-tab-label squisq-toolbar-view-tab-label--long"
-                data-label={view.label}
+          {visibleViews.map((view) => {
+            const viewLabel =
+              view.id === 'preview' && previewSettings
+                ? displayModeLabel(previewSettings.activeDisplayMode)
+                : view.label;
+            const tab = (
+              <button
+                role="tab"
+                data-view={view.id}
+                aria-selected={activeView === view.id}
+                className={`squisq-toolbar-view-tab${activeView === view.id ? ' squisq-toolbar-view-tab--active' : ''}`}
+                onClick={() => {
+                  if (view.id === 'preview' && activeView === 'preview' && previewSettings) {
+                    requestUseModeMenu();
+                    return;
+                  }
+                  setActiveView(view.id);
+                }}
+                data-tooltip={`${viewLabel} (${view.shortcut})`}
               >
-                {view.label}
-              </span>
-              {view.shortLabel && view.shortLabel !== view.label && (
                 <span
-                  className="squisq-toolbar-view-tab-label squisq-toolbar-view-tab-label--short"
-                  data-label={view.shortLabel}
+                  className="squisq-toolbar-view-tab-label squisq-toolbar-view-tab-label--long"
+                  data-label={viewLabel}
                 >
-                  {view.shortLabel}
+                  {viewLabel}
                 </span>
-              )}
-            </button>
-          ))}
+                {view.shortLabel && view.shortLabel !== view.label && (
+                  <span
+                    className="squisq-toolbar-view-tab-label squisq-toolbar-view-tab-label--short"
+                    data-label={view.shortLabel}
+                  >
+                    {view.shortLabel}
+                  </span>
+                )}
+              </button>
+            );
+
+            if (view.id !== 'preview' || !previewSettings) {
+              return (
+                <div key={view.id} className="squisq-toolbar-view-tab-wrap" role="presentation">
+                  {tab}
+                </div>
+              );
+            }
+
+            return (
+              <div
+                key={view.id}
+                className={`squisq-toolbar-view-tab-wrap squisq-toolbar-use-tab${activeView === 'preview' ? ' squisq-toolbar-use-tab--active' : ''}`}
+                role="presentation"
+              >
+                {tab}
+                <PreviewModeMenu openRequest={useModeMenuRequest} />
+              </div>
+            );
+          })}
         </div>
       )}
-      {/* After-tabs slot — left side, before formatting controls (preview mode switch) */}
+      {/* After-tabs slot — left side, before formatting or preview controls. */}
       {slotAfterTabs}
       {/* Formatting buttons — hidden in preview mode and code mode */}
       {!isPreview && !isCodeMode && (
@@ -1803,7 +1954,12 @@ export function Toolbar({
               data-contextual="transition"
             >
               <div className="squisq-toolbar-separator" />
-              <TransitionPicker value={currentTransition} onChange={handleTransitionPick} />
+              <TransitionPicker
+                value={currentTransition}
+                onChange={handleTransitionPick}
+                colorScheme={colorScheme}
+                accentColor={previewSettings?.activeTheme.colors.primary}
+              />
             </div>
           )}
 
@@ -2074,7 +2230,12 @@ export function Toolbar({
                   the flyout carries follow-up controls (direction/duration). */}
               {showTransitionInOverflow && (
                 <div className="squisq-toolbar-overflow-item squisq-toolbar-overflow-template">
-                  <TransitionPicker value={currentTransition!} onChange={handleTransitionPick} />
+                  <TransitionPicker
+                    value={currentTransition!}
+                    onChange={handleTransitionPick}
+                    colorScheme={colorScheme}
+                    accentColor={previewSettings?.activeTheme.colors.primary}
+                  />
                 </div>
               )}
 

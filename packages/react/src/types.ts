@@ -33,8 +33,12 @@ export type ControlsLayout = 'overlay' | 'sidebar' | 'bottom';
  *   `markdownDocToPlainHtml` export produces. No SquisqPlayer, no SVG
  *   cards — just `<h1>`/`<p>`/`<ul>` etc. inside a sandboxed iframe.
  *   Use when you want a WYSIWYG view of the simple HTML export.
+ * - `'narrate'` — Teleprompter/performance surface. DocPlayer does not
+ *   implement this mode; it is owned by the editor package
+ *   (`@bendyline/squisq-editor-react`), which renders its own
+ *   voice-paced teleprompter view for it.
  */
-export type DisplayMode = 'video' | 'slideshow' | 'linear' | 'page';
+export type DisplayMode = 'video' | 'slideshow' | 'linear' | 'page' | 'narrate';
 
 /**
  * Caption display style.
@@ -68,6 +72,8 @@ export interface PlaybackState {
   isPlaying: boolean;
   currentTime: number;
   totalDuration: number;
+  /** Whether the managed cover is the visual currently shown. */
+  isCoverVisible?: boolean;
   currentBlockIndex: number;
   totalBlocks: number;
   docProgress: number;
@@ -146,15 +152,15 @@ export interface RenderChapterInfo {
 }
 
 /**
- * API surface exposed on `window` in render mode and debug mode.
- * Used by Playwright for video export and by ?debug=true for testing.
+ * Instance-scoped API created in render mode and debug mode.
+ * React hosts receive it via `DocPlayer.onRenderAPIReady`; standalone hosts
+ * receive it from their mount handle.
  *
  * @example
  * ```ts
- * // In Playwright:
- * const w = window as unknown as SquisqWindow;
- * await w.seekTo!(5.0);
- * const blocks = w.getBlocks!();
+ * const handle = SquisqPlayer.getHandle(rootElement);
+ * const api = await handle?.renderAPI;
+ * await api?.seekTo(5.0);
  * ```
  */
 export interface SquisqRenderAPI {
@@ -168,12 +174,6 @@ export interface SquisqRenderAPI {
   hideCover: () => Promise<void>;
   hasCoverBlock: () => boolean;
 }
-
-/**
- * Window augmented with optional SquisqRenderAPI properties.
- * Each property is optional because they're only present in render/debug mode.
- */
-export type SquisqWindow = Window & typeof globalThis & Partial<SquisqRenderAPI>;
 
 /** Format time in seconds to MM:SS string */
 export function formatTime(seconds: number): string {

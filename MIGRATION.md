@@ -1,4 +1,47 @@
-# Upgrading to Squisq v1.5
+# Squisq Migration Guide
+
+## Next-major API cleanup (unreleased)
+
+This release removes code-only compatibility shims and process-global
+registries. The replacements are explicit, instance-scoped APIs. Persisted
+document compatibility is intentionally different: historical Markdown,
+frontmatter, transition, template-id, and encoded-layout spellings remain
+readable. When an editor or serializer rewrites those values, it emits the
+canonical spelling.
+
+| Package      | Removed API                                                                        | Replacement                                                                                                                     |
+| ------------ | ---------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| core         | `@bendyline/squisq/story`                                                          | `@bendyline/squisq/doc`                                                                                                         |
+| core         | `getLayers(block, context)`                                                        | `materializeBlockLayers(block, options).layers`; pass `persistentLayers: false` when reproducing the old no-inheritance default |
+| core         | `expandTemplateBlock`, `materializeTemplateLayers`                                 | `materializeBlockLayers` for layers; `expandDocBlocks` when timeline scheduling is also required                                |
+| core         | exported `TEMPLATE_ALIASES` table                                                  | `resolveTemplateName(name)`; the compatibility table is internal                                                                |
+| core         | `DocStylePreset`, `getDocStyleConfig`                                              | author `Theme.persistentLayers`, then use `resolvePersistentLayers` / `expandPersistentLayers`                                  |
+| core         | `encodeLayersForFrontmatter`, `decodeLayersFromFrontmatter`                        | legacy `layers=` payload reading is internal to the editor migration path                                                       |
+| core         | `PathLayer.content.arrow`                                                          | `startMarker` / `endMarker`; old serialized documents remain readable                                                           |
+| core         | `registerTheme`, `unregisterTheme`, `getRegisteredThemes`, `lookupRegisteredTheme` | caller-owned `createThemeRegistry()` and its `register` / `unregister` / `get` / `list` methods                                 |
+| core         | `registerTransformStyle`, `unregisterTransformStyle`                               | caller-owned `createTransformStyleRegistry()` and its methods, passed through `TransformOptions.registry`                       |
+| react        | `VIEWPORT`                                                                         | `VIEWPORT_PRESETS.landscape` from `@bendyline/squisq/doc`                                                                       |
+| react        | positional `useDocPlayback(doc, time, viewport, renderMode, theme, onSeek)`        | `useDocPlayback(doc, time, { viewport, theme, onSeek })`                                                                        |
+| react        | standalone `mountStatic(element, doc, options)`                                    | `mount(element, doc, { ...options, mode: 'static' })`                                                                           |
+| react        | `window.squisqPlayers` plus top-level render methods                               | React hosts use `onRenderAPIReady`; standalone hosts use the handle returned by `mount()` or `getHandle(element)`               |
+| formats      | public `OoxmlPackage.zip` / manually constructed `OoxmlPackage`                    | `openPackage()` plus `getPartXml` / `getPartBinary`; all reads remain bounded                                                   |
+| editor-react | `EditorShell.container`                                                            | `EditorShell.workspaceContainer`                                                                                                |
+| editor-react | `EMOJI_CATEGORIES`, `ALL_EMOJIS`, `searchEmojis`                                   | `PICKER_CATEGORIES`, `ALL_PICKER_ENTRIES`, `searchPickerEntries`                                                                |
+| editor-react | `setBlockAttrsTransition`                                                          | `setHeadingAttrsTransition`, which updates both canonical and legacy attribute channels safely                                  |
+| editor-react | optional `BlockPropertiesPopover.onAnnotationChange`                               | required paired-channel callback; transitions are no longer written to the legacy channel alone                                 |
+| editor-react | `DiagramRFNode`, `DiagramRFEdge`                                                   | `DiagramNode`, `DiagramEdge`                                                                                                    |
+| CLI          | `--format <id>`                                                                    | `--formats <list>` for selected outputs, or `--output <file>` for one inferred format                                           |
+
+The following are **not** removed document formats: legacy template ids such as
+`titleBlock` and `diagramNode`; the transform value `dataDriven`; theme keys
+`themeId` / `theme`; older transition spellings; heading-based diagrams; and
+legacy custom-template or `layers=` payloads. Readers continue to accept them,
+while public APIs and editor writes use canonical names. Do not remove these
+reader paths without a separate, versioned document migration.
+
+---
+
+## Upgrading to Squisq v1.5
 
 v1.5 ships a batch of API renames and a few removals across the published
 packages. **Markdown document syntax is unchanged** — every `.md`, `.dbk`, and
@@ -137,7 +180,7 @@ needed a Blob).
 +squisq convert deck.md -o ./out/deck.docx  # new: single file, format from extension
 ```
 
-`--output` cannot be combined with `--formats`/`--format` (a single file has one
+`--output` cannot be combined with `--formats` (a single file has one
 format). New transitive dependency `@xmldom/xmldom` — no consumer action needed.
 
 ---

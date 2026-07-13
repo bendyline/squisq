@@ -7,6 +7,8 @@ import type { ImageEditDoc } from '@bendyline/squisq/schemas';
 import { LayersPanel } from '../imageEditor/LayersPanel.js';
 import type { ImageEditorAction } from '../imageEditor/state.js';
 
+const ignoreAddLayer = () => {};
+
 function buildDoc(): ImageEditDoc {
   return {
     version: 1,
@@ -41,7 +43,14 @@ function buildDoc(): ImageEditDoc {
 describe('LayersPanel', () => {
   it('renders layers with the top of the SVG stack first', () => {
     const dispatch = vi.fn<(a: ImageEditorAction) => void>();
-    render(<LayersPanel doc={buildDoc()} selectedLayerId={null} dispatch={dispatch} />);
+    render(
+      <LayersPanel
+        doc={buildDoc()}
+        selectedLayerId={null}
+        dispatch={dispatch}
+        onAddLayer={ignoreAddLayer}
+      />,
+    );
     const items = screen.getAllByText(/Bottom|Middle|Top/);
     expect(items[0]?.textContent).toContain('Top');
     expect(items[items.length - 1]?.textContent).toContain('Bottom');
@@ -49,14 +58,60 @@ describe('LayersPanel', () => {
 
   it('clicking the layer name dispatches a select action', () => {
     const dispatch = vi.fn<(a: ImageEditorAction) => void>();
-    render(<LayersPanel doc={buildDoc()} selectedLayerId={null} dispatch={dispatch} />);
+    render(
+      <LayersPanel
+        doc={buildDoc()}
+        selectedLayerId={null}
+        dispatch={dispatch}
+        onAddLayer={ignoreAddLayer}
+      />,
+    );
     fireEvent.click(screen.getByText('Middle'));
     expect(dispatch).toHaveBeenCalledWith({ type: 'select', layerId: 'b' });
   });
 
+  it('exposes the full layer name as a tooltip when the row is truncated', () => {
+    const dispatch = vi.fn<(a: ImageEditorAction) => void>();
+    render(
+      <LayersPanel
+        doc={buildDoc()}
+        selectedLayerId={null}
+        dispatch={dispatch}
+        onAddLayer={ignoreAddLayer}
+      />,
+    );
+    expect(screen.getByTitle('Middle').textContent).toContain('Middle');
+  });
+
+  it('opens the add-layer menu and reports the selected layer kind', () => {
+    const dispatch = vi.fn<(a: ImageEditorAction) => void>();
+    const onAddLayer = vi.fn();
+    render(
+      <LayersPanel
+        doc={buildDoc()}
+        selectedLayerId={null}
+        dispatch={dispatch}
+        onAddLayer={onAddLayer}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Add layer' }));
+    expect(screen.getByRole('menu')).toBeTruthy();
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Text layer' }));
+    expect(onAddLayer).toHaveBeenCalledWith('text');
+    expect(screen.queryByRole('menu')).toBeNull();
+  });
+
   it('toggling visibility dispatches an update-layer action', () => {
     const dispatch = vi.fn<(a: ImageEditorAction) => void>();
-    render(<LayersPanel doc={buildDoc()} selectedLayerId={null} dispatch={dispatch} />);
+    render(
+      <LayersPanel
+        doc={buildDoc()}
+        selectedLayerId={null}
+        dispatch={dispatch}
+        onAddLayer={ignoreAddLayer}
+      />,
+    );
     // The "Hide layer" buttons exist for visible layers.
     const hideButtons = screen.getAllByRole('button', { name: 'Hide layer' });
     fireEvent.click(hideButtons[0]!); // top-most visible layer is 'b'
@@ -69,7 +124,14 @@ describe('LayersPanel', () => {
 
   it('move-up button is disabled at the top of the stack', () => {
     const dispatch = vi.fn<(a: ImageEditorAction) => void>();
-    render(<LayersPanel doc={buildDoc()} selectedLayerId={null} dispatch={dispatch} />);
+    render(
+      <LayersPanel
+        doc={buildDoc()}
+        selectedLayerId={null}
+        dispatch={dispatch}
+        onAddLayer={ignoreAddLayer}
+      />,
+    );
     const upButtons = screen.getAllByRole('button', { name: 'Move layer up' });
     // Visual order is c, b, a; layer 'c' is at the top of the stack and cannot move up.
     expect((upButtons[0] as HTMLButtonElement).disabled).toBe(true);
@@ -77,7 +139,14 @@ describe('LayersPanel', () => {
 
   it('delete button dispatches a remove-layer action', () => {
     const dispatch = vi.fn<(a: ImageEditorAction) => void>();
-    render(<LayersPanel doc={buildDoc()} selectedLayerId={null} dispatch={dispatch} />);
+    render(
+      <LayersPanel
+        doc={buildDoc()}
+        selectedLayerId={null}
+        dispatch={dispatch}
+        onAddLayer={ignoreAddLayer}
+      />,
+    );
     const delButtons = screen.getAllByRole('button', { name: 'Delete layer' });
     fireEvent.click(delButtons[0]!); // top of stack ('c')
     expect(dispatch).toHaveBeenCalledWith({ type: 'remove-layer', layerId: 'c' });
@@ -90,6 +159,7 @@ describe('LayersPanel', () => {
         doc={{ version: 1, canvas: { width: 1, height: 1 }, layers: [] }}
         selectedLayerId={null}
         dispatch={dispatch}
+        onAddLayer={ignoreAddLayer}
       />,
     );
     expect(screen.getByText(/no layers yet/i)).toBeTruthy();

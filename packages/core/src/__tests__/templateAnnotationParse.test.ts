@@ -11,6 +11,16 @@ function getHeading(md: string) {
 }
 
 describe('Template annotation in Heading parse path', () => {
+  it('extracts and round-trips an empty annotation without leaving literal heading text', () => {
+    const source = '## Getting Started {[]}';
+    const heading = getHeading(source);
+
+    expect(heading.templateAnnotation).toEqual({});
+    expect(heading.children).toHaveLength(1);
+    expect(heading.children[0]).toMatchObject({ type: 'text', value: 'Getting Started' });
+    expect(stringifyMarkdown(parseMarkdown(source)).trim()).toBe(source);
+  });
+
   it('parseMarkdown extracts {[template]} from a heading', () => {
     const md = '## Getting Started {[comparisonBar]}';
     const doc = parseMarkdown(md);

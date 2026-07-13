@@ -2,13 +2,14 @@
  * resolveThemeForDoc — pure, doc-scoped theme resolution.
  *
  * The theme analog of buildRegistry: an inline custom theme resolves from the
- * doc's own `customThemes` list, with no global `registerTheme` call. Falls
- * back to built-ins for non-inline ids.
+ * doc's own `customThemes` list. Explicit caller registries and built-ins are
+ * fallback sources for non-inline ids.
  */
 
 import { describe, it, expect } from 'vitest';
 import { resolveThemeForDoc } from '../doc/resolveDocTheme';
 import { compileTheme } from '../schemas/themeCompile';
+import { createThemeRegistry } from '../schemas/Theme';
 import { DEFAULT_THEME } from '../schemas/themeLibrary';
 import type { Doc } from '../schemas/Doc.js';
 
@@ -51,5 +52,18 @@ describe('resolveThemeForDoc', () => {
 
   it('returns the default theme for a null doc', () => {
     expect(resolveThemeForDoc(null).id).toBe(DEFAULT_THEME.id);
+  });
+
+  it('uses an explicit registry only after document-scoped definitions', () => {
+    const external = compileTheme({
+      id: 'external-brand',
+      name: 'External Brand',
+      seedColors: { primary: '#8844aa' },
+    });
+    const registry = createThemeRegistry([external]);
+    const doc = docWith({ themeId: 'external-brand' });
+
+    expect(resolveThemeForDoc(doc)).toBe(DEFAULT_THEME);
+    expect(resolveThemeForDoc(doc, undefined, registry)).toEqual(external);
   });
 });

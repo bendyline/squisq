@@ -203,9 +203,10 @@ function renderPathToSvg(
   const fill = c.fill ?? 'none';
   const dash = c.dasharray ? ` stroke-dasharray="${escapeAttr(c.dasharray)}"` : '';
 
-  // Markers: explicit start/end win; otherwise derive from the legacy `arrow` flag.
-  const startStyle = effectiveExportMarker(c.startMarker, c.arrow, 'start');
-  const endStyle = effectiveExportMarker(c.endMarker, c.arrow, 'end');
+  // Keep old serialized documents readable without retaining `arrow` in the public type.
+  const legacyArrow = (c as typeof c & { arrow?: 'none' | 'end' | 'start' | 'both' }).arrow;
+  const startStyle = effectiveExportMarker(c.startMarker, legacyArrow, 'start');
+  const endStyle = effectiveExportMarker(c.endMarker, legacyArrow, 'end');
   const start = markerPath(startStyle, 'start');
   const end = markerPath(endStyle, 'end');
   const startId = `marker-start-${layer.id}`;
@@ -228,11 +229,11 @@ function renderPathToSvg(
 
 function effectiveExportMarker(
   explicit: MarkerStyle | undefined,
-  arrow: (ImageEditLayer & { type: 'path' })['content']['arrow'],
+  legacyArrow: 'none' | 'end' | 'start' | 'both' | undefined,
   end: 'start' | 'end',
 ): MarkerStyle {
   if (explicit) return explicit;
-  return arrow === 'both' || arrow === end ? 'arrow' : 'none';
+  return legacyArrow === 'both' || legacyArrow === end ? 'arrow' : 'none';
 }
 
 function markerDefSvg(

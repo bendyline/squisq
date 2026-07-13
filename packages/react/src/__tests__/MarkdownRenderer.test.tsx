@@ -289,7 +289,7 @@ describe('MarkdownRenderer', () => {
     expect(container.querySelector('span')).toBeNull();
   });
 
-  it('preserves raw HTML only with the trusted opt-in', () => {
+  it('preserves trusted HTML structure without executable attributes', () => {
     const { container } = render(
       <MarkdownRenderer
         nodes={parseNodes('<div><span class="trusted" onclick="alert(1)">ok</span></div>')}
@@ -297,7 +297,18 @@ describe('MarkdownRenderer', () => {
       />,
     );
     const span = container.querySelector('span.trusted');
-    expect(span?.getAttribute('onclick')).toBe('alert(1)');
+    expect(span?.getAttribute('onclick')).toBeNull();
+  });
+
+  it('blocks executable URLs under the trusted policy', () => {
+    const { container } = render(
+      <MarkdownRenderer
+        nodes={parseNodes('<a href="javascript:alert(1)">bad</a><img src="javascript:x">')}
+        htmlPolicy="trusted"
+      />,
+    );
+    expect(container.querySelector('a')?.getAttribute('href')).toBeNull();
+    expect(container.querySelector('img')?.getAttribute('src')).toBeNull();
   });
 
   // Host-affecting tags (style/script/…) must never reach the document.

@@ -1,8 +1,9 @@
 /**
  * Media-clip timing model.
  *
- * An additive layer on top of the legacy sequential `Doc.audio.segments[]`
- * narration track. A {@link MediaClip} is a piece of audio or video whose
+ * An additive layer on top of the simple sequential `Doc.audio.segments[]`
+ * narration track, which remains first-class. A {@link MediaClip} is a piece
+ * of audio or video whose
  * timing is expressed *relative to its parent block* (or the whole document),
  * with an optional `startAt` offset and an optional `spillover` past the
  * block's end. {@link resolveMediaSchedule} flattens these into absolute,
@@ -51,6 +52,15 @@ export interface MediaClip {
    * `startAt`) back to the exact line. Absent for programmatically built clips.
    */
   sourceLine?: number;
+  /**
+   * Round-trip home of the authoring annotation: the block whose contents
+   * held the paragraph, its position in that block's ORIGINAL contents
+   * array (before extraction), and the paragraph's exact source text.
+   * `docToMarkdown` re-inserts the annotation from this — `raw` verbatim
+   * when present, a re-serialized annotation otherwise. Absent for
+   * programmatically built clips (those emit at the document top).
+   */
+  origin?: { blockId: string; index: number; raw?: string };
 }
 
 /**

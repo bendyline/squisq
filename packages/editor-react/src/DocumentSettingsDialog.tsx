@@ -19,17 +19,19 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   inferDocumentTitle,
   parseMarkdown,
+  readFrontmatterThemeId,
   setFrontmatterValues,
 } from '@bendyline/squisq/markdown';
 import { getTransformStyleSummaries } from '@bendyline/squisq/transform';
 import { ThemePicker } from './ThemePicker';
+import { resolvePersistedTransformStyleId } from './transformStyleId';
 
 // ── Frontmatter key constants ─────────────────────────────────────
 
 /** Mirror of `FM_KEYS` in PreviewControls.tsx. Canonical names are the
  *  ones we write; legacy aliases are still read so older docs work. */
 const FM = {
-  theme: { canonical: 'squisq-theme', legacy: 'theme' },
+  theme: { canonical: 'squisq-theme', legacy: ['themeId', 'theme'] },
   transform: { canonical: 'squisq-transform', legacy: 'transform-style' },
   captions: { canonical: 'squisq-captions', legacy: 'caption-style' },
 } as const;
@@ -75,8 +77,11 @@ export function DocumentSettingsDialog({
   const inferredTitle = useMemo(() => inferDocumentTitle(parsed), [parsed]);
 
   const currentTitle = typeof frontmatter?.title === 'string' ? (frontmatter.title as string) : '';
-  const currentTheme = readFm(frontmatter, FM.theme.canonical, FM.theme.legacy);
-  const currentTransform = readFm(frontmatter, FM.transform.canonical, FM.transform.legacy);
+  const currentTheme = readFrontmatterThemeId(frontmatter) ?? '';
+  const currentTransform =
+    resolvePersistedTransformStyleId(
+      readFm(frontmatter, FM.transform.canonical, FM.transform.legacy),
+    ) ?? '';
   const currentCaptions = readFm(frontmatter, FM.captions.canonical, FM.captions.legacy);
 
   const [title, setTitle] = useState(currentTitle);
@@ -128,13 +133,11 @@ export function DocumentSettingsDialog({
       const updates: Record<string, string | null> = {
         title: nextTitle,
         [FM.theme.canonical]: theme || null,
-        // Legacy `theme` key would shadow our canonical one — clear it
-        // when the user changes the theme so the canonical write wins.
-        ...(currentTheme && theme !== currentTheme ? { [FM.theme.legacy]: null } : {}),
+        // Saving settings canonicalizes all older theme spellings.
+        [FM.theme.legacy[0]]: null,
+        [FM.theme.legacy[1]]: null,
         [FM.transform.canonical]: transform || null,
-        ...(currentTransform && transform !== currentTransform
-          ? { [FM.transform.legacy]: null }
-          : {}),
+        [FM.transform.legacy]: null,
         [FM.captions.canonical]: captions || null,
         ...(currentCaptions && captions !== currentCaptions ? { [FM.captions.legacy]: null } : {}),
       };
@@ -142,18 +145,7 @@ export function DocumentSettingsDialog({
       const nextSource = setFrontmatterValues(markdownSource, updates);
       onSave(nextSource);
     },
-    [
-      title,
-      theme,
-      transform,
-      captions,
-      inferredTitle,
-      markdownSource,
-      currentTheme,
-      currentTransform,
-      currentCaptions,
-      onSave,
-    ],
+    [title, theme, transform, captions, inferredTitle, markdownSource, currentCaptions, onSave],
   );
 
   return (

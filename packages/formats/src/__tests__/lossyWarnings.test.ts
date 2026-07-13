@@ -8,7 +8,48 @@
 
 import { describe, it, expect, afterEach, vi } from 'vitest';
 import { MemoryContentContainer } from '@bendyline/squisq/storage';
+import type { MarkdownDocument } from '@bendyline/squisq/markdown';
 import { convert, defaultRegistry } from '../registry/index';
+
+// ── shared Markdown exporter capability profiles ───────────────────
+
+describe('Markdown exporters warn about unsupported AST extensions', () => {
+  const extendedMarkdown: MarkdownDocument = {
+    type: 'document',
+    children: [
+      {
+        type: 'paragraph',
+        children: [
+          { type: 'text', value: 'Assigned to ' },
+          {
+            type: 'mention',
+            targetKind: 'user',
+            targetId: '42',
+            displayName: 'Ada',
+          },
+        ],
+      },
+      {
+        type: 'containerDirective',
+        name: 'note',
+        children: [{ type: 'paragraph', children: [{ type: 'text', value: 'Important' }] }],
+      },
+    ],
+  };
+
+  it('surfaces the omitted node types through ConversionResult', async () => {
+    const result = await convert({ kind: 'markdown', markdown: extendedMarkdown }, 'docx');
+    const warning = result.warnings.find((item) => /unsupported Markdown node/i.test(item));
+
+    expect(warning).toMatch(/mention \(1\)/);
+    expect(warning).toMatch(/containerDirective \(1\)/);
+  });
+
+  it('does not warn for the supported Markdown subset', async () => {
+    const result = await convert({ kind: 'markdown', markdown: '# Title\n\nBody.' }, 'docx');
+    expect(result.warnings.some((item) => /unsupported Markdown node/i.test(item))).toBe(false);
+  });
+});
 
 // ── xlsx: tables-only fidelity ──────────────────────────────────────
 

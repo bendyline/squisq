@@ -45,6 +45,7 @@ export type {
   DocumentLinkProvider,
   ViewPreferences,
   ThemeInheritance,
+  BlockTagVisibility,
   LayoutMode,
 } from './EditorContext.js';
 
@@ -99,11 +100,12 @@ export { DocumentSettingsDialog } from './DocumentSettingsDialog.js';
 export type { DocumentSettingsDialogProps } from './DocumentSettingsDialog.js';
 export { ThemePicker } from './ThemePicker.js';
 export type { ThemePickerProps } from './ThemePicker.js';
-export { EMOJI_CATEGORIES, ALL_EMOJIS, searchEmojis } from './emojiData.js';
-export type { EmojiEntry, EmojiCategory } from './emojiData.js';
+export { PICKER_CATEGORIES, ALL_PICKER_ENTRIES, searchPickerEntries } from './emojiData.js';
+export type { PickerEntry, PickerCategory } from './emojiData.js';
 export {
   PreviewSettingsProvider,
   PreviewToolbarControls,
+  PreviewModeMenu,
   PreviewModeSwitch,
   PreviewFormatSwitch,
   usePreviewSettings,
@@ -142,7 +144,6 @@ export {
   setHeadingLineTransition,
   readBlockAttrsTransition,
   setHeadingAttrsTransition,
-  setBlockAttrsTransition,
   EMPTY_TRANSITION,
 } from './headingTransition.js';
 export type { HeadingTransitionAttrs, TransitionFields } from './headingTransition.js';
@@ -190,12 +191,26 @@ export {
 export { useMonacoLoader } from './useMonacoLoader.js';
 export type { UseMonacoLoaderResult } from './useMonacoLoader.js';
 
+// Monaco language-service worker wiring — the host supplies the `?worker`
+// constructors, this owns the label→worker mapping. See monacoWorkers.ts.
+export { configureMonacoWorkers } from './monacoWorkers.js';
+export type { MonacoWorkerConstructor, MonacoWorkerConstructors } from './monacoWorkers.js';
+
 // Custom themes — provider stack (doc frontmatter + browser-local library)
-export { CustomThemeProvider, useCustomThemes, useDocCustomThemes } from './customThemes/index.js';
+export {
+  CustomThemeProvider,
+  useCustomThemes,
+  useDocCustomThemes,
+  ImportThemeSection,
+  draftPatchFromImportedTheme,
+} from './customThemes/index.js';
 export type {
   CustomThemeContextValue,
   CustomThemeProviderProps,
   DocCustomThemes,
+  ImportThemeSectionProps,
+  ImportedThemeResult,
+  ThemeSaveExtras,
 } from './customThemes/index.js';
 
 // Custom templates — provider stack (doc frontmatter + browser-local library)
@@ -219,24 +234,128 @@ export { buildPreviewDoc } from './buildPreviewDoc.js';
 // Tiptap extension: Heading with template annotation support
 export { HeadingWithTemplate } from './TemplateAnnotation.js';
 
-// Diagram editor — Tiptap extension that mounts a React-Flow canvas
-// below any `### Title {[diagram]}` heading and hides the section's
-// child headings (they're rendered as nodes in the canvas).
-export { DiagramExtension } from './diagram/DiagramExtension.js';
+// Diagram editor — ASCII fences are the authored diagram format. The
+// AsciiDiagramExtension turns code fences containing box-and-line art
+// into interactive canvases; edits re-render the art (the fence stays the
+// source of truth). Legacy `{[diagram]}` heading sections still RENDER in
+// preview/player via core, but heading-based canvas editing was removed
+// (BREAKING: DiagramExtension / DiagramWidget / useDiagramData / the
+// heading command helpers are gone).
 export { DiagramCanvas } from './diagram/DiagramCanvas.js';
 export type { DiagramCommand } from './diagram/DiagramCanvas.js';
-export { DiagramWidget } from './diagram/DiagramWidget.js';
-export { useDiagramData } from './diagram/useDiagramData.js';
-export type { DiagramData, DiagramRFNode, DiagramRFEdge } from './diagram/useDiagramData.js';
+export type { DiagramData, DiagramNode, DiagramEdge } from './diagram/types.js';
 export {
-  moveNode,
-  addConnection,
-  removeConnection,
-  renameNode,
-  addNode,
-  removeNode,
-  listDiagramChildren,
-} from './diagram/diagramCommands.js';
+  AsciiDiagramExtension,
+  findAsciiDiagramBlockPos,
+  isAsciiSourceVisible,
+  toggleAsciiSource,
+} from './asciiDiagram/AsciiDiagramExtension.js';
+export type {
+  AsciiDiagramBlockEntry,
+  AsciiDiagramExtensionOptions,
+  AsciiDiagramPluginState,
+} from './asciiDiagram/AsciiDiagramExtension.js';
+export { AsciiDiagramWidget } from './asciiDiagram/AsciiDiagramWidget.js';
+export { useAsciiDiagramData, asciiDiagramToCanvas } from './asciiDiagram/asciiDiagramData.js';
+export type { AsciiDiagramView } from './asciiDiagram/asciiDiagramData.js';
+export {
+  applyAsciiDiagramCommand,
+  applyRepairCommand,
+  replaceAsciiFenceText,
+} from './asciiDiagram/asciiDiagramCommands.js';
+// RepairableDiagramExtension mounts an inline "Repair as diagram" button on
+// code fences holding BROKEN box art — art too misaligned for clean detection
+// (so it renders as a faithful code block). One click reconstructs it into
+// clean `diagram`-tagged art that the AsciiDiagramExtension turns into a
+// canvas. Peer to the diagram/tree editors; claims the fences neither does.
+export {
+  RepairableDiagramExtension,
+  findRepairableBlockPos,
+  isRepairableFence,
+  REPAIRABLE_KEY,
+} from './asciiDiagram/RepairableDiagramExtension.js';
+export type {
+  RepairableBlockEntry,
+  RepairableDiagramExtensionOptions,
+  RepairablePluginState,
+} from './asciiDiagram/RepairableDiagramExtension.js';
+export {
+  addEdgeOp,
+  addNodeOp,
+  moveNodeOp,
+  removeEdgeOp,
+  removeNodeOp,
+  renameNodeOp,
+  resizeNodeOp,
+  sanitizeAsciiLabel,
+} from './asciiDiagram/asciiDiagramOps.js';
+export { shouldPasteAsAsciiFence } from './asciiDiagram/asciiPaste.js';
+
+// Treeview editor — ASCII file-tree / outline fences get an interactive
+// outline widget; edits re-render the tree art (the fence stays the source
+// of truth). Peer to the ASCII diagram editor; mutually exclusive with it
+// (a fence with boxes is a diagram, not a tree).
+export { TreeViewExtension, findTreeBlockPos } from './treeview/TreeViewExtension.js';
+export type {
+  TreeBlockEntry,
+  TreeViewExtensionOptions,
+  TreeViewPluginState,
+} from './treeview/TreeViewExtension.js';
+export { TreeOutlineWidget } from './treeview/TreeOutlineWidget.js';
+export { useTreeViewData } from './treeview/treeViewData.js';
+export type { TreeViewData } from './treeview/treeViewData.js';
+export { applyTreeCommand, replaceTreeFenceText } from './treeview/treeViewCommands.js';
+export type { TreeCommand } from './treeview/treeViewCommands.js';
+export {
+  addItemOp,
+  indentItemOp,
+  moveItemDownOp,
+  moveItemUpOp,
+  outdentItemOp,
+  removeItemOp,
+  renameItemOp,
+  sanitizeTreeLabel,
+  toggleDirOp,
+} from './treeview/treeOps.js';
+export { shouldPasteAsTreeFence } from './treeview/treePaste.js';
+
+// Timeline editor — authored marker-rail fences become an accessible canvas
+// with add-point affordances and a selected-point inspector. Semantic edits
+// re-render the canonical `timeline` fence in one undoable transaction.
+export {
+  TimelineViewExtension,
+  TIMELINE_VIEW_KEY,
+  findTimelineBlockPos,
+  getTimelineForNode,
+  parseTimelineForNode,
+} from './timeline/TimelineViewExtension.js';
+export type {
+  TimelineBlockEntry,
+  TimelineViewExtensionOptions,
+  TimelineViewPluginState,
+} from './timeline/TimelineViewExtension.js';
+export { TimelineEditorWidget } from './timeline/TimelineEditorWidget.js';
+export type { TimelineEditorWidgetProps } from './timeline/TimelineEditorWidget.js';
+export { useTimelineData } from './timeline/timelineData.js';
+export type { TimelineViewData } from './timeline/timelineData.js';
+export {
+  applyTimelineCommand,
+  isTimelineSourceSafeForSemanticEdit,
+} from './timeline/timelineCommands.js';
+export type { TimelineCommand, TimelineCommandResult } from './timeline/timelineCommands.js';
+export {
+  addTimelineEventOp,
+  nextTimelineEventId,
+  removeTimelineEventOp,
+  sanitizeTimelineText,
+  updateTimelineEventOp,
+} from './timeline/timelineOps.js';
+export type {
+  AddTimelineEventOptions,
+  AddTimelineEventResult,
+  TimelineEventPatch,
+} from './timeline/timelineOps.js';
+export { shouldPasteAsTimelineFence } from './timeline/timelinePaste.js';
 
 // JSON Form — editable component
 export { JsonEditor } from './jsonEditor/index.js';
@@ -276,6 +395,59 @@ export {
 export type { CaptureKind, ResolvedFormat } from './recorder/formats.js';
 export { buildTimingJson, encodeTimingJson, timingPathFor } from './recorder/timingJson.js';
 export type { TimingJson, RecordedBookmark } from './recorder/timingJson.js';
+
+// Teleprompter — the Narrate display mode under the Use tab: voice-paced
+// prompter surface, floating-window tiers, and the mic analysis pipeline.
+export {
+  TeleprompterView,
+  TeleprompterSurface,
+  TeleprompterControls,
+  useTeleprompter,
+  useNarrationRecorder,
+  buildNarrationSavePlan,
+  executeNarrationSave,
+  insertNarrationPreamble,
+  narrationAnnotationLine,
+  cameraVideoLine,
+  vadConfigForSensitivity,
+  useMicAnalysis,
+  PCM_WORKLET_SOURCE,
+  PCM_WORKLET_NAME,
+  registerPcmWorklet,
+  createFloatingWindowManager,
+  detectFloatTiers,
+  useFloatingWindow,
+  measureTokenLines,
+  targetOffsetFor,
+  stepScroll,
+  EYE_LINE_FRACTION,
+  TELEPROMPTER_CSS,
+  ensureTeleprompterStyles,
+  prompterVarsFromTheme,
+  DEFAULT_TELEPROMPTER_PREFS,
+} from './teleprompter/index.js';
+export type {
+  TeleprompterViewProps,
+  TeleprompterSurfaceProps,
+  TeleprompterControlsProps,
+  TeleprompterController,
+  TeleprompterRecordingDeps,
+  NarrationRecorderController,
+  NarrationRecorderState,
+  NarrationTake,
+  NarrationSavePlan,
+  NarrationSaveResult,
+  MicAnalysisHandle,
+  MicAnalysisStatus,
+  FloatingWindowManager,
+  FloatOpenOptions,
+  CanvasSink,
+  FloatingWindowHandle,
+  TokenLineMap,
+  TeleprompterPrefs,
+  PrompterTransport,
+  FloatTier,
+} from './teleprompter/index.js';
 
 // Image editor — layered, sidecar-persisted raster authoring surface.
 // Pairs with `ImageViewer` and the `<basename>_files/` sidecar convention.

@@ -20,6 +20,7 @@ import { createElement } from 'react';
 import type { Node as PMNode } from '@tiptap/pm/model';
 import { parsePandocAttrTokens } from '@bendyline/squisq/markdown';
 import { SceneBlockWidget, type SceneBlockMode } from './SceneBlockWidget';
+import type { SceneTextChannel } from './text/sceneTextChannel';
 
 /**
  * Stable identifier for a layout/drawing heading — used as part of the
@@ -27,24 +28,24 @@ import { SceneBlockWidget, type SceneBlockMode } from './SceneBlockWidget';
  * changes (drag/resize commits write into the heading's
  * `data-block-attrs`).
  */
-export function getHeadingKey(node: PMNode): string {
+export function getHeadingKey(node: PMNode, position?: number): string {
   const raw = (node.attrs as Record<string, unknown>).dataBlockAttrs;
   if (typeof raw === 'string' && raw.length > 0) {
     const attrs = parsePandocAttrTokens(raw);
-    if (attrs.id) return attrs.id;
+    if (attrs.id) return position == null ? attrs.id : `${attrs.id}@${position}`;
   }
   let text = '';
   node.content.forEach((child) => {
     if (child.isText) text += child.text ?? '';
   });
-  return (
+  const slug =
     text
       .toLowerCase()
       .replace(/[^\w\s-]/g, '')
       .replace(/[\s_]+/g, '-')
       .replace(/-+/g, '-')
-      .replace(/^-|-$/g, '') || 'block'
-  );
+      .replace(/^-|-$/g, '') || 'block';
+  return position == null ? slug : `${slug}@${position}`;
 }
 
 /**
@@ -63,7 +64,7 @@ export function findSceneHeadingPos(
     if (node.type.name !== 'heading') return;
     const attrs = node.attrs as { dataTemplate?: string };
     if (attrs.dataTemplate !== expectedTemplate) return;
-    if (getHeadingKey(node) === headingKey) {
+    if (getHeadingKey(node, pos) === headingKey) {
       found = pos;
       return false;
     }
@@ -82,7 +83,11 @@ interface SceneRoot {
   root: Root;
 }
 
-function buildDecorations(state: EditorState, editor: Editor): DecorationSet {
+function buildDecorations(
+  state: EditorState,
+  editor: Editor,
+  textChannel?: SceneTextChannel,
+): DecorationSet {
   const decos: Decoration[] = [];
 
   state.doc.descendants((node, pos) => {
@@ -93,7 +98,7 @@ function buildDecorations(state: EditorState, editor: Editor): DecorationSet {
     const parentDepth = attrs.level;
     const widgetPos = pos + node.nodeSize;
     const parentPos = pos;
-    const headingKey = getHeadingKey(node);
+    const headingKey = getHeadingKey(node, pos);
     decos.push(
       Decoration.widget(
         widgetPos,
@@ -112,6 +117,7 @@ function buildDecorations(state: EditorState, editor: Editor): DecorationSet {
               fallbackParentPos: parentPos,
               mode,
               host: view.dom.parentElement ?? view.dom,
+              textChannel,
             }),
           );
 
@@ -161,6 +167,7 @@ function buildDecorations(state: EditorState, editor: Editor): DecorationSet {
 export interface SceneBlockExtensionOptions {
   /** When false, the extension is inert. */
   enabled?: boolean;
+  textChannel?: SceneTextChannel;
 }
 
 export const SceneBlockExtension = Extension.create<SceneBlockExtensionOptions>({
@@ -179,10 +186,10 @@ export const SceneBlockExtension = Extension.create<SceneBlockExtensionOptions>(
       new Plugin({
         key: KEY,
         state: {
-          init: (_config, state) => buildDecorations(state, editor),
+          init: (_config, state) => buildDecorations(state, editor, this.options.textChannel),
           apply: (tr, oldDecos, _oldState, newState) => {
             if (!tr.docChanged) return oldDecos;
-            return buildDecorations(newState, editor);
+            return buildDecorations(newState, editor, this.options.textChannel);
           },
         },
         props: {

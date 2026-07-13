@@ -11,7 +11,7 @@
  * canvas grid would.
  */
 
-import { forwardRef, type ReactNode, type WheelEvent } from 'react';
+import { forwardRef, useId, type ReactNode, type WheelEvent } from 'react';
 import type { SceneTransform } from './hooks/useScenePanZoom';
 
 interface SceneViewportProps {
@@ -24,6 +24,7 @@ interface SceneViewportProps {
   onPointerDown?: (e: React.PointerEvent<SVGSVGElement>) => void;
   onPointerMove?: (e: React.PointerEvent<SVGSVGElement>) => void;
   onPointerUp?: (e: React.PointerEvent<SVGSVGElement>) => void;
+  onPointerCancel?: (e: React.PointerEvent<SVGSVGElement>) => void;
   onDoubleClick?: (e: React.MouseEvent<SVGSVGElement>) => void;
   /** HTML5 drag-and-drop handlers — used for palette drag-to-place. */
   onDragOver?: (e: React.DragEvent<SVGSVGElement>) => void;
@@ -43,6 +44,7 @@ export const SceneViewport = forwardRef<SVGSVGElement, SceneViewportProps>(funct
     onPointerDown,
     onPointerMove,
     onPointerUp,
+    onPointerCancel,
     onDoubleClick,
     onDragOver,
     onDrop,
@@ -52,6 +54,7 @@ export const SceneViewport = forwardRef<SVGSVGElement, SceneViewportProps>(funct
   ref,
 ) {
   const t = transform;
+  const gridId = `squisq-scene-dot-grid-${useId().replace(/:/g, '')}`;
   const groupTransform = `translate(${t.tx} ${t.ty}) scale(${t.scale})`;
 
   return (
@@ -70,6 +73,7 @@ export const SceneViewport = forwardRef<SVGSVGElement, SceneViewportProps>(funct
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
       onPointerUp={onPointerUp}
+      onPointerCancel={onPointerCancel}
       onDoubleClick={onDoubleClick}
       onDragOver={onDragOver}
       onDrop={onDrop}
@@ -85,7 +89,7 @@ export const SceneViewport = forwardRef<SVGSVGElement, SceneViewportProps>(funct
     >
       <defs>
         <pattern
-          id="squisq-scene-dot-grid"
+          id={gridId}
           x={t.tx}
           y={t.ty}
           width={24 * t.scale}
@@ -95,7 +99,7 @@ export const SceneViewport = forwardRef<SVGSVGElement, SceneViewportProps>(funct
           <circle cx={1} cy={1} r={1} className="squisq-scene-dot" />
         </pattern>
       </defs>
-      <rect width="100%" height="100%" fill="url(#squisq-scene-dot-grid)" />
+      <rect width="100%" height="100%" fill={`url(#${gridId})`} />
       <g transform={groupTransform}>{children}</g>
     </svg>
   );

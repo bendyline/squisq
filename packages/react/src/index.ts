@@ -1,6 +1,8 @@
 // Main components
 export { DocPlayer } from './DocPlayer.js';
-export { BlockRenderer, VIEWPORT } from './BlockRenderer.js';
+export type { DocPlayerProps } from './DocPlayer.js';
+export type { MountOptions, SquisqPlayerHandle } from './standalone-entry.js';
+export { BlockRenderer } from './BlockRenderer.js';
 export { CaptionOverlay } from './CaptionOverlay.js';
 export { SocialCaptionOverlay } from './SocialCaptionOverlay.js';
 export { DocControlsOverlay } from './DocControlsOverlay.js';
@@ -24,6 +26,7 @@ export { ShapeLayer } from './layers/ShapeLayer.js';
 export { PathLayer } from './layers/PathLayer.js';
 export { VideoLayer } from './layers/VideoLayer.js';
 export { TableLayer } from './layers/TableLayer.js';
+export { TreeLayer } from './layers/TreeLayer.js';
 export { MapLayer } from './layers/MapLayer.js';
 
 // Timed media clips (block.media + doc.documentMedia playback)
@@ -35,6 +38,7 @@ export { useAudioSync } from './hooks/useAudioSync.js';
 export { useMediaSchedule } from './hooks/useMediaSchedule.js';
 export type { MediaScheduleController } from './hooks/useMediaSchedule.js';
 export { useDocPlayback } from './hooks/useDocPlayback.js';
+export type { UseDocPlaybackOptions } from './hooks/useDocPlayback.js';
 export { useViewportOrientation } from './hooks/useViewportOrientation.js';
 export { MediaContext, useMediaProvider, useMediaUrl } from './hooks/MediaContext.js';
 export { useAutoSurface } from './hooks/useAutoSurface.js';
@@ -51,7 +55,6 @@ export type {
   CaptionMode,
   SlideNavActions,
   SquisqRenderAPI,
-  SquisqWindow,
   RenderBlockInfo,
   RenderAudioSegmentInfo,
   RenderCaptionInfo,

@@ -1,7 +1,7 @@
 {
   "name": "@bendyline/squisq-video",
   "version": "1.2.2",
-  "description": "Video encoding and render HTML generation for Squisq documents — browser-pure, works in Node and browser",
+  "description": "Cross-runtime video and animated-GIF helpers with browser-based ffmpeg.wasm encoding for Squisq documents",
   "license": "MIT",
   "author": "Bendyline",
   "repository": {
@@ -14,6 +14,7 @@
     "squisq",
     "video",
     "mp4",
+    "gif",
     "ffmpeg",
     "wasm",
     "export"

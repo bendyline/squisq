@@ -16,6 +16,7 @@ test.use({ viewport: { width: 1500, height: 950 } });
 // Use the platform-correct modifier so select-all works locally (Mac) and
 // in CI (Linux). Matches the convention in editor.spec.ts / timeline.spec.ts.
 const SELECT_ALL = process.platform === 'darwin' ? 'Meta+a' : 'Control+a';
+const COPY = process.platform === 'darwin' ? 'Meta+c' : 'Control+c';
 
 async function clickInsert(page: Page, name: string) {
   await page.locator('.squisq-toolbar button[aria-label="Insert"]').click();
@@ -30,6 +31,16 @@ async function insertLayout(page: Page) {
   await clickInsert(page, 'Layout');
   await page.locator('.squisq-scene-widget-host').waitFor({ state: 'visible' });
   await page.waitForTimeout(300);
+}
+
+/** Read Monaco's full source through its model-aware Copy command. */
+async function readMonacoMarkdown(page: Page): Promise<string> {
+  await page.context().grantPermissions(['clipboard-read', 'clipboard-write']);
+  const input = page.getByRole('textbox', { name: /Editor content/ });
+  await input.press(SELECT_ALL);
+  await input.press(COPY);
+  const value = await page.evaluate(() => navigator.clipboard.readText());
+  return value.replace(/\s+/g, ' ');
 }
 
 test('double-click opens an inline editor and the toolbar bolds the selection', async ({
@@ -77,12 +88,7 @@ test('double-click opens an inline editor and the toolbar bolds the selection', 
   await switchView(page, 'Markdown');
   await page.locator('[data-testid="raw-editor"]').waitFor({ state: 'visible' });
   await expect(async () => {
-    // Monaco renders styled spans, interleaving non-breaking spaces between
-    // tokens — normalize whitespace before substring checks.
-    const md = (await page.locator('.monaco-editor .view-lines').first().innerText()).replace(
-      /\s+/g,
-      ' ',
-    );
+    const md = await readMonacoMarkdown(page);
     expect(md).toContain('Hello bold');
     expect(md).toContain('{[text');
     expect(md).not.toContain('layers=');
@@ -127,10 +133,7 @@ test('a selected layout box exposes Fill/Stroke in the toolbar and applies', asy
   await switchView(page, 'Markdown');
   await page.locator('[data-testid="raw-editor"]').waitFor({ state: 'visible' });
   await expect(async () => {
-    const md = (await page.locator('.monaco-editor .view-lines').first().innerText()).replace(
-      /\s+/g,
-      ' ',
-    );
+    const md = await readMonacoMarkdown(page);
     expect(md).toMatch(/fill="?#00ff00"?/i);
     expect(md).not.toContain('layers=');
   }).toPass({ timeout: 3_000 });
@@ -221,7 +224,9 @@ test('diagram node label is editable inline (plain text)', async ({ page }) => {
   await page.goto('/');
   await page.waitForLoadState('networkidle');
   await page.locator('select').first().selectOption('diagram-family-tree');
-  await page.locator('.squisq-diagram-widget-host').waitFor({ state: 'visible', timeout: 5_000 });
+  await page
+    .locator('.squisq-ascii-diagram-widget-host')
+    .waitFor({ state: 'visible', timeout: 5_000 });
   await page
     .locator('.squisq-scene-viewport [data-layer-id^="node-card-"]')
     .first()
@@ -239,8 +244,9 @@ test('diagram node label is editable inline (plain text)', async ({ page }) => {
   await page.mouse.click(box.x + box.width / 2, box.y - 120);
   await page.waitForTimeout(400);
 
-  // The node label updates (rendered as the node-label text layer).
-  await expect(page.locator('[data-layer-id="node-label-parent-a"]').first()).toContainText(
+  // ASCII-diagram node ids derive from labels, so the renamed node re-parses
+  // under a fresh id; its label layer carries the new text.
+  await expect(page.locator('[data-layer-id="node-label-renamed"]').first()).toContainText(
     'Renamed',
     { timeout: 3_000 },
   );

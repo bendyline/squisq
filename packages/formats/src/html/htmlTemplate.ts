@@ -10,7 +10,8 @@
  * 2. **External** — JS is referenced via `<script src>`, images via relative paths.
  */
 
-import type { Doc, Layer, Block } from '@bendyline/squisq/schemas';
+import type { Doc, Layer, Block, ThemeRegistry } from '@bendyline/squisq/schemas';
+import { readFrontmatterThemeId } from '@bendyline/squisq/markdown';
 import { arrayBufferToBase64DataUrl, inferMimeType } from './imageUtils.js';
 
 // ── Types ──────────────────────────────────────────────────────────
@@ -48,6 +49,8 @@ export interface HtmlExportOptions {
    * so the SquisqPlayer renders with that theme's colors and typography.
    */
   themeId?: string;
+  /** Explicit caller-owned registry for non-document custom themes. */
+  themeRegistry?: ThemeRegistry;
 }
 
 // ── Image Path Collection ──────────────────────────────────────────
@@ -230,12 +233,10 @@ export function generateInlineHtml(doc: Doc, options: HtmlExportOptions): string
     title = 'Squisq Document',
     autoPlay = false,
     themeId,
+    themeRegistry,
   } = options;
 
-  // Apply theme to doc if specified (the SquisqPlayer respects doc.themeId at render time)
-  if (themeId) {
-    doc = { ...doc, themeId };
-  }
+  doc = applyThemeSelection(doc, themeId, themeRegistry);
 
   // Build base64 image map
   const imageMap: Record<string, string> = {};
@@ -291,7 +292,7 @@ ${mode === 'static' ? '#squisq-root{align-items:flex-start;overflow-y:auto;backg
  */
 export function generateExternalHtml(
   doc: Doc,
-  options: Pick<HtmlExportOptions, 'mode' | 'title' | 'autoPlay'> & {
+  options: Pick<HtmlExportOptions, 'mode' | 'title' | 'autoPlay' | 'themeId' | 'themeRegistry'> & {
     /** Relative path to the player JS file (e.g., 'squisq-player.js') */
     playerScriptPath: string;
     /** Map of original image paths to their rewritten relative paths in the ZIP */
@@ -307,7 +308,11 @@ export function generateExternalHtml(
     mode = 'slideshow',
     title = 'Squisq Document',
     autoPlay = false,
+    themeId,
+    themeRegistry,
   } = options;
+
+  doc = applyThemeSelection(doc, themeId, themeRegistry);
 
   const docJson = escapeForScript(JSON.stringify(doc));
   const imageMapJson = imagePathMap ? escapeForScript(JSON.stringify(imagePathMap)) : '{}';
@@ -345,6 +350,26 @@ ${mode === 'static' ? '#squisq-root{align-items:flex-start;overflow-y:auto;backg
 </script>
 </body>
 </html>`;
+}
+
+function applyThemeSelection(
+  doc: Doc,
+  themeId: string | undefined,
+  registry: ThemeRegistry | undefined,
+): Doc {
+  const selectedId = themeId ?? doc.themeId ?? readFrontmatterThemeId(doc.frontmatter);
+  if (!selectedId) return doc;
+  const selectedDocTheme = doc.customThemes?.some((theme) => theme.id === selectedId);
+  if (selectedDocTheme || !registry) {
+    return selectedId === doc.themeId ? doc : { ...doc, themeId: selectedId };
+  }
+  const registered = registry.get(selectedId);
+  if (!registered) return selectedId === doc.themeId ? doc : { ...doc, themeId: selectedId };
+  return {
+    ...doc,
+    themeId: selectedId,
+    customThemes: [...(doc.customThemes ?? []), registered],
+  };
 }
 
 /**

@@ -13,6 +13,7 @@
  * drag).
  */
 
+import { useId } from 'react';
 import type { MarkerStyle } from '@bendyline/squisq/schemas';
 import { connectorPath, markerPath } from '@bendyline/squisq/doc';
 import type { SceneEdge } from '../commands/SceneCommand';
@@ -33,8 +34,8 @@ interface DiagramEdgesProps {
 /** Marker styles that carry a glyph (everything except 'none'). */
 const MARKER_STYLES: MarkerStyle[] = ['arrow', 'open', 'diamond', 'circle', 'square'];
 
-function markerId(style: MarkerStyle, dir: 'start' | 'end'): string {
-  return `squisq-edge-${style}-${dir}`;
+function markerId(prefix: string, style: MarkerStyle, dir: 'start' | 'end'): string {
+  return `${prefix}-squisq-edge-${style}-${dir}`;
 }
 
 export function DiagramEdges({
@@ -45,6 +46,7 @@ export function DiagramEdges({
   onEdgeClick,
 }: DiagramEdgesProps) {
   const boxById = boxesOf(nodes);
+  const markerPrefix = useId().replace(/:/g, '');
   const defaultRouting = variant === 'straight' ? 'straight' : 'curved';
 
   return (
@@ -56,8 +58,8 @@ export function DiagramEdges({
             if (!mp) return null;
             return (
               <marker
-                key={markerId(style, dir)}
-                id={markerId(style, dir)}
+                key={markerId(markerPrefix, style, dir)}
+                id={markerId(markerPrefix, style, dir)}
                 viewBox="0 0 10 10"
                 refX={dir === 'end' ? 9 : 1}
                 refY={5}
@@ -81,7 +83,13 @@ export function DiagramEdges({
         const a = boxById.get(edge.source);
         const b = boxById.get(edge.target);
         if (!a || !b) return null;
-        const snapped = edgeEndpoints(nodes, edge.source, edge.target);
+        const snapped = edgeEndpoints(
+          nodes,
+          edge.source,
+          edge.target,
+          edge.sourceAnchor,
+          edge.targetAnchor,
+        );
         if (!snapped) return null;
         const { start, end } = snapped;
         const d = connectorPath(edge.routing ?? defaultRouting, start, end);
@@ -99,9 +107,15 @@ export function DiagramEdges({
               className="squisq-scene-edge-path"
               strokeDasharray={edge.dasharray}
               markerStart={
-                startMarker !== 'none' ? `url(#${markerId(startMarker, 'start')})` : undefined
+                startMarker !== 'none'
+                  ? `url(#${markerId(markerPrefix, startMarker, 'start')})`
+                  : undefined
               }
-              markerEnd={endMarker !== 'none' ? `url(#${markerId(endMarker, 'end')})` : undefined}
+              markerEnd={
+                endMarker !== 'none'
+                  ? `url(#${markerId(markerPrefix, endMarker, 'end')})`
+                  : undefined
+              }
             />
             {edge.label ? (
               <text

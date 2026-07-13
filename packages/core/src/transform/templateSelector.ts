@@ -22,6 +22,7 @@ import type { TransformStyleConfig, TransformImage } from './types.js';
 import type { AnalyzedBlock } from './blockAnalyzer.js';
 import { mapElementToBlock } from '../generate/templateMapper.js';
 import { SeededRandom } from '../random/SeededRandom.js';
+import { estimateTimeFromText } from '../timing/narrationTiming.js';
 
 /** Accent positions to rotate through. */
 const ACCENT_POSITIONS: AccentPosition[] = [
@@ -219,6 +220,7 @@ function buildBlockSequence(
         audioSegment: ab.block.audioSegment,
         title: ab.block.title,
         colorScheme: config.colorSchemes[colorIndex % config.colorSchemes.length],
+        sourceBlockId: ab.block.id,
       };
       blocks.push(headerBlock);
       insertedCount++;
@@ -245,13 +247,27 @@ function buildBlockSequence(
         accentPositionIndex++;
       }
 
+      // `sourcePosition` is a CHAR OFFSET into the analyzed plain text;
+      // `sourceStartTime` is doc-timeline SECONDS. Convert via spoken-word
+      // proportion over the source block's timing — which, when the doc
+      // carries a narration take (applyNarrationTiming ran upstream), is
+      // the recorded voice: summarized slides land where the words are
+      // actually spoken.
+      const slideShare = ab.block.duration > 0 ? ab.block.duration / extractions.length : 6;
+      const offsetInBlock =
+        ab.block.duration > 0
+          ? estimateTimeFromText(ab.plainText, sel.element.sourcePosition, ab.block.duration)
+          : 0;
       let templateBlock = mapElementToBlock(sel.element, {
         id: `transform-${blockIdCounter++}`,
-        duration: ab.block.duration > 0 ? ab.block.duration / extractions.length : 6,
+        duration: slideShare,
         audioSegment: ab.block.audioSegment,
         colorScheme,
         accentImage,
-        sourceStartTime: sel.element.sourcePosition,
+        sourceStartTime: ab.block.startTime + offsetInBlock,
+        sourceDuration: slideShare,
+        sourceBlockId: ab.block.id,
+        sourceCharOffset: sel.element.sourcePosition,
       });
 
       // Style-level extraction→template remap (v2 contract). Only known
@@ -302,6 +318,7 @@ function buildBlockSequence(
           imageSrc: img.src,
           imageAlt: img.alt ?? '',
           ambientMotion: rng.pick(AMBIENT_MOTIONS) ?? 'zoomIn',
+          sourceBlockId: ab.block.id,
         };
         blocks.push(imageBlock);
         imageIndex++;
@@ -327,6 +344,8 @@ function translateTemplateBlock(block: TemplateBlock, target: string): TemplateB
     audioSegment: block.audioSegment,
     sourceStartTime: block.sourceStartTime,
     sourceDuration: block.sourceDuration,
+    sourceBlockId: block.sourceBlockId,
+    sourceCharOffset: block.sourceCharOffset,
   };
 
   if (block.template === 'quote') {

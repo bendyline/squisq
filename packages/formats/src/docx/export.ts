@@ -17,7 +17,7 @@
  * ```
  */
 
-import type { Doc, Theme } from '@bendyline/squisq/schemas';
+import type { Doc, Theme, ThemeRegistry } from '@bendyline/squisq/schemas';
 import { resolveFontFamily } from '@bendyline/squisq/schemas';
 import { docToMarkdown, resolveThemeForDoc } from '@bendyline/squisq/doc';
 import type {
@@ -105,6 +105,8 @@ export interface DocxExportOptions {
    * the theme's primary color to headings.
    */
   themeId?: string;
+  /** Explicit caller-owned registry for non-document custom themes. */
+  themeRegistry?: ThemeRegistry;
   /**
    * Pre-resolved image data keyed by image URL/path as it appears in the
    * markdown source. When provided, images are embedded in the .docx file
@@ -221,7 +223,7 @@ class ExportContext {
     let themeBackgroundColor: string | undefined;
 
     if (options.themeId) {
-      const theme: Theme = resolveThemeForDoc(doc, options.themeId);
+      const theme: Theme = resolveThemeForDoc(doc, options.themeId, options.themeRegistry);
       // Theme fonts arrive as CSS stacks (e.g. `"Oswald", Impact,
       // "Arial Black", sans-serif`). Word's `w:ascii` attribute is a
       // single font name — passing the whole stack is treated as a

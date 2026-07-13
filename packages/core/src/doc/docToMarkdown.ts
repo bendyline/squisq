@@ -23,6 +23,7 @@
  */
 
 import type { Doc, Block } from '../schemas/Doc.js';
+import type { MediaClip } from '../schemas/Media.js';
 import type {
   MarkdownDocument,
   MarkdownBlockNode,
@@ -30,6 +31,7 @@ import type {
   MarkdownParagraph,
 } from '../markdown/types.js';
 import { serializeAnnotation } from '../markdown/attrTokens.js';
+import { flattenBlocks } from './markdownToDoc.js';
 import {
   FRONTMATTER_CUSTOM_TEMPLATES_KEY,
   writeCustomTemplatesToFrontmatter,
@@ -58,6 +60,29 @@ const TRANSITION_PARAM_KEYS = ['transition', 'transitionDuration', 'transitionDi
 export function docToMarkdown(doc: Doc): MarkdownDocument {
   const children: MarkdownBlockNode[] = [];
 
+  // Media clips were LIFTED out of block contents at parse time
+  // (`extractMediaFromContents`); re-insert their authoring annotations so
+  // the round-trip doesn't silently drop narration/clip references.
+  // Doc-anchored clips whose home block still exists ride back into that
+  // block's body; homeless ones (programmatic clips, or a preamble block
+  // that was dropped once emptied) emit at the document top — the
+  // canonical authored position.
+  const blockIds = new Set(flattenBlocks(doc.blocks).map((b) => b.id));
+  const docMediaByBlock = new Map<string, MediaClip[]>();
+  const homelessDocMedia: MediaClip[] = [];
+  for (const clip of doc.documentMedia ?? []) {
+    if (clip.origin && blockIds.has(clip.origin.blockId)) {
+      const list = docMediaByBlock.get(clip.origin.blockId) ?? [];
+      list.push(clip);
+      docMediaByBlock.set(clip.origin.blockId, list);
+    } else {
+      homelessDocMedia.push(clip);
+    }
+  }
+  for (const clip of homelessDocMedia) {
+    children.push(synthesizeMediaParagraph(clip));
+  }
+
   function emitBlock(block: Block): void {
     // Emit the heading node if present
     if (block.sourceHeading) {
@@ -71,8 +96,29 @@ export function docToMarkdown(doc: Doc): MarkdownDocument {
       children.push(synthesizeAnnotationParagraph(block));
     }
 
-    // Emit body content
-    if (block.contents) {
+    // Emit body content, with this block's media annotations re-inserted
+    // at their original positions. `origin.index` refers to the ORIGINAL
+    // contents array (which included every annotation), so ascending
+    // insertion into the stripped contents reproduces the source order.
+    const clips = [...(block.media ?? []), ...(docMediaByBlock.get(block.id) ?? [])];
+    if (clips.length > 0) {
+      const contents = [...(block.contents ?? [])];
+      const anchored = clips
+        .filter((clip) => clip.origin)
+        .sort((a, b) => a.origin!.index - b.origin!.index);
+      for (const clip of anchored) {
+        contents.splice(
+          Math.min(clip.origin!.index, contents.length),
+          0,
+          synthesizeMediaParagraph(clip),
+        );
+      }
+      // Origin-less block clips (programmatic) sit right under the heading.
+      for (const clip of clips.filter((c) => !c.origin).reverse()) {
+        contents.unshift(synthesizeMediaParagraph(clip));
+      }
+      children.push(...contents);
+    } else if (block.contents) {
       children.push(...block.contents);
     }
 
@@ -129,6 +175,28 @@ export function docToMarkdown(doc: Doc): MarkdownDocument {
 function synthesizeAnnotationParagraph(block: Block): MarkdownParagraph {
   const text = serializeAnnotation(block.sourceAnnotation?.template, block.templateOverrides);
   return { type: 'paragraph', children: [{ type: 'text', value: text }] };
+}
+
+/**
+ * Re-synthesize the authoring paragraph for a media clip. The extraction
+ * kept the exact source text (`origin.raw`) — emit it verbatim so quoting,
+ * param order, and `mm:ss` time forms stay byte-stable. Programmatic clips
+ * (no raw) serialize canonically: src, anchor, then timing params.
+ */
+function synthesizeMediaParagraph(clip: MediaClip): MarkdownParagraph {
+  if (clip.origin?.raw) {
+    return { type: 'paragraph', children: [{ type: 'text', value: clip.origin.raw }] };
+  }
+  const params: Record<string, string> = { src: clip.src };
+  if (clip.anchor === 'document') params.anchor = 'document';
+  if (clip.startAt) params.startAt = String(clip.startAt);
+  if (clip.clipStart != null) params.clipStart = String(clip.clipStart);
+  if (clip.clipEnd != null) params.clipEnd = String(clip.clipEnd);
+  if (clip.spillover) params.spillover = 'true';
+  return {
+    type: 'paragraph',
+    children: [{ type: 'text', value: serializeAnnotation(clip.kind, params) }],
+  };
 }
 
 /**

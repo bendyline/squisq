@@ -16,12 +16,11 @@
  * `TemplateBadgePopover`.
  */
 
-import { useEffect, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { TransitionPicker } from './TransitionPicker';
 import {
   readBlockAttrsTransition,
-  setBlockAttrsTransition,
   setHeadingAttrsTransition,
   type TransitionFields,
 } from './headingTransition';
@@ -37,14 +36,17 @@ export interface BlockPropertiesPopoverProps {
   /** Apply a new `dataBlockAttrs` inner to the heading (null clears it). */
   onChange: (nextInner: string | null) => void;
   /** Apply a paired `dataBlockAttrs` / `dataTemplateParams` transition rewrite. */
-  onAnnotationChange?: (next: {
+  onAnnotationChange: (next: {
     blockAttrsInner: string | null;
     templateParams: string | null;
   }) => void;
+  /** Editor surface scheme. Required explicitly because this popover is portaled to `<body>`. */
+  colorScheme?: 'light' | 'dark';
+  /** Active document-theme accent used for focus and selected-state highlights. */
+  accentColor?: string;
   onClose: () => void;
 }
 
-const PANEL_ID = 'squisq-block-props-portal';
 /** The nested transition flyout is portaled out here; don't treat it as "outside". */
 const TRANSITION_FLYOUT = '.squisq-transition-flyout';
 
@@ -54,15 +56,19 @@ export function BlockPropertiesPopover({
   templateParams,
   onChange,
   onAnnotationChange,
+  colorScheme = 'light',
+  accentColor,
   onClose,
 }: BlockPropertiesPopoverProps) {
+  const panelRef = useRef<HTMLDivElement>(null);
+  const panelId = `squisq-block-props-portal-${useId().replace(/:/g, '')}`;
   // Working copy of the Pandoc inner; successive edits compose off it.
   const [inner, setInner] = useState<string | null>(blockAttrs);
   const [templateInner, setTemplateInner] = useState<string | null>(templateParams);
   const [style, setStyle] = useState<React.CSSProperties>(() => computeStyle(anchorRect));
 
   useEffect(() => {
-    requestAnimationFrame(() => setStyle(computeStyle(anchorRect)));
+    requestAnimationFrame(() => setStyle(computeStyle(anchorRect, panelRef.current)));
   }, [anchorRect]);
 
   // Outside click + Escape close. A click inside the popover OR inside the
@@ -73,7 +79,7 @@ export function BlockPropertiesPopover({
     };
     const onMouse = (e: MouseEvent) => {
       const target = e.target as HTMLElement;
-      const inPanel = document.getElementById(PANEL_ID)?.contains(target);
+      const inPanel = panelRef.current?.contains(target);
       const inFlyout = target.closest?.(TRANSITION_FLYOUT);
       if (!inPanel && !inFlyout) onClose();
     };
@@ -96,10 +102,6 @@ export function BlockPropertiesPopover({
   const startTime = readBlockAttrsValue(inner, 'startTime');
 
   const onTransition = (next: TransitionFields) => {
-    if (!onAnnotationChange) {
-      apply(setBlockAttrsTransition(inner, next));
-      return;
-    }
     const updated = setHeadingAttrsTransition(inner, templateInner, next);
     setInner(updated.blockAttrsInner);
     setTemplateInner(updated.templateParams);
@@ -110,15 +112,22 @@ export function BlockPropertiesPopover({
 
   return createPortal(
     <div
-      id={PANEL_ID}
+      ref={panelRef}
+      id={panelId}
       className="squisq-block-props-popover"
+      data-theme={colorScheme}
       role="dialog"
       aria-label="Block properties"
-      style={style}
+      style={{ ...style, ...blockAccentStyle(accentColor) }}
     >
       <div className="squisq-block-props-row">
         <span className="squisq-block-props-label">Transition</span>
-        <TransitionPicker value={transition} onChange={onTransition} />
+        <TransitionPicker
+          value={transition}
+          onChange={onTransition}
+          colorScheme={colorScheme}
+          accentColor={accentColor}
+        />
       </div>
 
       <div className="squisq-block-props-row">
@@ -145,6 +154,12 @@ export function BlockPropertiesPopover({
     </div>,
     document.body,
   );
+}
+
+function blockAccentStyle(accentColor: string | undefined): React.CSSProperties {
+  return accentColor
+    ? ({ ['--squisq-block-props-accent' as string]: accentColor } as React.CSSProperties)
+    : {};
 }
 
 function NumberField({
@@ -178,8 +193,8 @@ function NumberField({
 }
 
 /** Place the panel below the badge, flipping above / clamping to the viewport. */
-function computeStyle(rect: DOMRect): React.CSSProperties {
-  const panel = document.getElementById(PANEL_ID)?.getBoundingClientRect();
+function computeStyle(rect: DOMRect, element?: HTMLElement | null): React.CSSProperties {
+  const panel = element?.getBoundingClientRect();
   const width = panel?.width ?? 280;
   const height = panel?.height ?? 160;
   const margin = 8;

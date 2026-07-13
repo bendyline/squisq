@@ -15,7 +15,7 @@
  * the canvas is the viewport and `blockTime` is 0 (no animation).
  */
 
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
 import { PathLayer } from '@bendyline/squisq-react';
 import type { ImageEditDoc, ImageEditLayer } from '@bendyline/squisq/schemas';
 import type { CanvasRect, ImageEditorAction, ImageEditorTool } from './state.js';
@@ -97,6 +97,7 @@ export function CanvasSurface({
   surfaceRef,
   requestEditLayerId,
 }: CanvasSurfaceProps) {
+  const checkerId = `squisq-image-editor-checker-${useId().replace(/:/g, '')}`;
   const svgRef = useRef<SVGSVGElement | null>(null);
   const dragRef = useRef<DragState | null>(null);
   const [, forceRender] = useState(0);
@@ -402,16 +403,11 @@ export function CanvasSurface({
             fill={
               doc.canvas.background && doc.canvas.background !== 'transparent'
                 ? doc.canvas.background
-                : 'url(#squisq-image-editor-checker)'
+                : `url(#${checkerId})`
             }
           />
           <defs>
-            <pattern
-              id="squisq-image-editor-checker"
-              width="16"
-              height="16"
-              patternUnits="userSpaceOnUse"
-            >
+            <pattern id={checkerId} width="16" height="16" patternUnits="userSpaceOnUse">
               <rect width="16" height="16" fill="#f0f0f0" />
               <rect width="8" height="8" fill="#d0d0d0" />
               <rect x="8" y="8" width="8" height="8" fill="#d0d0d0" />
@@ -461,9 +457,16 @@ export function CanvasSurface({
           })}
 
           {/* Selection handles */}
-          {selectedLayer && paddedSelectionBox && tool === 'select' && !selectedLayer.locked && (
-            <SelectionHandles box={paddedSelectionBox} onHandlePointerDown={onPointerDownHandle} />
-          )}
+          {selectedLayer &&
+            paddedSelectionBox &&
+            tool === 'select' &&
+            !selectedLayer.locked &&
+            editingLayerId !== selectedLayer.id && (
+              <SelectionHandles
+                box={paddedSelectionBox}
+                onHandlePointerDown={onPointerDownHandle}
+              />
+            )}
 
           {/* Inline text editor — foreignObject overlays the hidden text layer */}
           {editingLayerId &&
@@ -471,16 +474,16 @@ export function CanvasSurface({
               const editLayer = doc.layers.find((l) => l.id === editingLayerId);
               if (!editLayer || editLayer.type !== 'text') return null;
               const pos = layerBox(editLayer, doc);
-              const s = (editLayer as ImageEditLayer & { type: 'text' }).content;
-              // Give generous height so text can grow without being clipped.
-              const foHeight = Math.max(pos.height * 4, 200);
+              const textLayer = editLayer as ImageEditLayer & { type: 'text' };
+              const s = textLayer.content;
+              const editBox = measureTextLayerBox(textLayer, pos);
               return (
                 <foreignObject
                   key={`inline-edit-${editingLayerId}`}
-                  x={pos.x}
-                  y={pos.y}
-                  width={pos.width}
-                  height={foHeight}
+                  x={editBox.x}
+                  y={editBox.y}
+                  width={editBox.width}
+                  height={editBox.height}
                   style={{ overflow: 'visible' }}
                 >
                   <textarea
@@ -503,9 +506,11 @@ export function CanvasSurface({
                     }}
                     onPointerDown={(e) => e.stopPropagation()}
                     onClick={(e) => e.stopPropagation()}
+                    wrap="off"
                     style={{
                       display: 'block',
                       width: '100%',
+                      height: '100%',
                       padding: 0,
                       margin: 0,
                       border: 'none',
@@ -514,9 +519,9 @@ export function CanvasSurface({
                       resize: 'none',
                       background: 'transparent',
                       fontFamily: s.style.fontFamily ?? 'sans-serif',
-                      // font-size in CSS pixels must be scaled by zoom because foreignObject
-                      // content renders in screen pixels, not SVG user-space pixels.
-                      fontSize: `${s.style.fontSize * zoom}px`,
+                      // The foreignObject participates in the SVG viewBox transform, so its
+                      // contents use canvas units and inherit zoom from the SVG exactly once.
+                      fontSize: `${s.style.fontSize}px`,
                       fontWeight: s.style.fontWeight ?? 'normal',
                       color: s.style.color,
                       textAlign: (s.style.textAlign ?? 'left') as 'left' | 'center' | 'right',
@@ -677,8 +682,9 @@ function measureTextLayerBox(
   }
   const lineHeight = style.lineHeight ?? 1.4;
   const lineHeightPx = fontSize * lineHeight;
-  // First line spans fontSize tall; subsequent lines add lineHeightPx each.
-  const totalHeight = fontSize + Math.max(0, lines.length - 1) * lineHeightPx;
+  // Use full line boxes so the SVG selection and textarea editor share
+  // identical bounds without clipping the caret or the final line.
+  const totalHeight = Math.max(1, lines.length) * lineHeightPx;
   // Mirror the textAnchor logic in EditorTextLayer.
   const anchor =
     style.textAlign === 'center' ? 'middle' : style.textAlign === 'right' ? 'end' : 'start';

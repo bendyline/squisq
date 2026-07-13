@@ -73,15 +73,21 @@ export interface MediaExtraction {
 /**
  * Walk `contents`, lifting every standalone media annotation into a
  * {@link MediaClip}. `makeId(src, index)` produces stable clip ids.
+ * When `blockId` is given, each clip records its round-trip `origin` —
+ * the owning block, its position in the ORIGINAL contents array, and
+ * the annotation paragraph's exact text — so `docToMarkdown` can
+ * re-insert it byte-stably.
  */
 export function extractMediaFromContents(
   contents: MarkdownBlockNode[] | undefined,
   makeId: (src: string, index: number) => string,
+  blockId?: string,
 ): MediaExtraction {
   const media: MediaClip[] = [];
   const documentMedia: MediaClip[] = [];
   const remaining: MarkdownBlockNode[] = [];
   let index = 0;
+  let originalIndex = 0;
 
   for (const node of contents ?? []) {
     const parsed = parseStandaloneAnnotation(node);
@@ -90,10 +96,24 @@ export function extractMediaFromContents(
       clip.id = makeId(clip.src, index++);
       const line = node.position?.start.line;
       if (line != null) clip.sourceLine = line;
+      if (blockId !== undefined) {
+        // parseStandaloneAnnotation only matches a paragraph with exactly
+        // one text child, so this read is safe when `parsed` is non-null.
+        const rawText =
+          node.type === 'paragraph' && node.children?.[0]?.type === 'text'
+            ? node.children[0].value.trim()
+            : undefined;
+        clip.origin = {
+          blockId,
+          index: originalIndex,
+          ...(rawText !== undefined ? { raw: rawText } : {}),
+        };
+      }
       (clip.anchor === 'document' ? documentMedia : media).push(clip);
     } else {
       remaining.push(node);
     }
+    originalIndex++;
   }
 
   return { media, documentMedia, remaining };

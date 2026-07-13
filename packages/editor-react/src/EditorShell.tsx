@@ -16,6 +16,7 @@ import {
   type DocumentLinkProvider,
   type ViewPreferences,
   type ThemeInheritance,
+  type BlockTagVisibility,
 } from './EditorContext';
 import { Toolbar } from './Toolbar';
 import { StatusBar } from './StatusBar';
@@ -36,6 +37,7 @@ import {
   PreviewToolbarControls,
   ThemeDesignerDock,
 } from './PreviewControls';
+import { PresentationModeControl, PresentationModeProvider } from './presentation/PresentationMode';
 import { CustomThemeProvider, useDocCustomThemes } from './customThemes';
 import { MediaBin } from './MediaBin';
 import { DropZoneOverlay } from './DropZoneOverlay';
@@ -51,6 +53,7 @@ import {
   collectMediaReferencesFromMarkdown,
   removeMediaReferencesFromMarkdown,
 } from './mediaReferences';
+import { filterVisibleMediaEntries } from './mediaEntries';
 import type { MediaProvider, Theme } from '@bendyline/squisq/schemas';
 import { DARK_SURFACE, LIGHT_SURFACE } from '@bendyline/squisq/schemas';
 import type { ContentContainer } from '@bendyline/squisq/storage';
@@ -60,7 +63,8 @@ import {
   createMediaProviderFromContainer,
 } from '@bendyline/squisq/storage';
 import type { PrunePolicy, SaveVersionResult } from '@bendyline/squisq/versions';
-import type { CSSProperties, ReactNode } from 'react';
+import type { CSSProperties, KeyboardEvent as ReactKeyboardEvent, ReactNode } from 'react';
+import { MediaContext } from '@bendyline/squisq-react';
 
 export type { EditorColorScheme } from './EditorContext';
 
@@ -114,12 +118,6 @@ export interface EditorShellProps {
    * this container via `createMediaProviderFromContainer`.
    */
   workspaceContainer?: ContentContainer | null;
-  /**
-   * @deprecated Renamed to `workspaceContainer` to make the workspace-
-   * vs. doc-scoped distinction explicit. Still accepted as a fallback
-   * for now; remove in the next breaking release.
-   */
-  container?: ContentContainer | null;
   /**
    * Enable version history. Snapshots are stored at
    * `.versions/<basename>.<timestamp>.md` inside the same
@@ -272,6 +270,14 @@ export interface EditorShellProps {
    */
   allowRecording?: boolean;
   /**
+   * Whether the Narrate (teleprompter) display mode is offered under the
+   * Use tab. Defaults to true. Orthogonal to `allowRecording` — the
+   * prompter is useful without capture (reading for external recording
+   * software), and the in-mode Record affordance additionally requires
+   * `allowRecording` + a `mediaProvider`.
+   */
+  allowNarrate?: boolean;
+  /**
    * Placeholder text shown in the WYSIWYG editor while the document is
    * empty. When omitted, the editor rotates through its own generic
    * "start typing…" prompts; pass a value here to override with copy
@@ -350,12 +356,16 @@ export interface EditorShellProps {
    */
   outlineWidth?: number;
   /**
-   * Initial visibility of inline block-template tags on headings — the
-   * chip rendered next to each heading in the WYSIWYG view that opens
-   * the block-template picker. Defaults to true; the View menu can
-   * toggle it at runtime regardless of the initial value.
+   * Legacy initial visibility of inline block-template tags on headings.
+   * `true` maps to always visible and `false` maps to hidden. When omitted,
+   * {@link blockTagVisibility} defaults to `'active'`.
    */
   blockTags?: boolean;
+  /**
+   * Initial block-tag visibility mode. Takes precedence over `blockTags`.
+   * Defaults to `'active'` (selected/hovered block only).
+   */
+  blockTagVisibility?: BlockTagVisibility;
   /**
    * How much of the active Squisq theme the WYSIWYG editing surface
    * mirrors. Defaults to `'fonts'` — the historical behavior of
@@ -367,7 +377,8 @@ export interface EditorShellProps {
    * Bundled view preferences — a serializable JSON blob covering the
    * runtime-toggleable view options surfaced in the View menu. When
    * provided, fields here override the corresponding individual props
-   * (`outline`, `inlinePreview`, `showStatusBar`). Pair with
+   * (`outline`, `inlinePreview`, `showStatusBar`, `blockTagVisibility`,
+   * `blockTags`). Pair with
    * {@link onViewPreferencesChange} to externalize storage of these
    * preferences in the host.
    */
@@ -405,7 +416,6 @@ export function EditorShell({
   maxHeight,
   mediaProvider,
   workspaceContainer,
-  container,
   allowVersioning = false,
   versionBasename,
   versioningPrunePolicy,
@@ -428,6 +438,7 @@ export function EditorShell({
   mentionProvider,
   documentLinkProvider,
   allowRecording = true,
+  allowNarrate = true,
   placeholder,
   readOnly = false,
   imageSrc,
@@ -439,13 +450,14 @@ export function EditorShell({
   inlinePreviewWidth = 320,
   outline = false,
   outlineWidth,
-  blockTags = true,
+  blockTags,
+  blockTagVisibility,
   themeInheritance = 'fonts',
   viewPreferences,
   onViewPreferencesChange,
   themeOverride = null,
 }: EditorShellProps) {
-  const effectiveContainer = workspaceContainer ?? container ?? null;
+  const effectiveContainer = workspaceContainer ?? null;
 
   // If the host gave us a `workspaceContainer` but no explicit `mediaProvider`,
   // derive one automatically. Without this, drag-and-drop of an image
@@ -466,65 +478,69 @@ export function EditorShell({
     !showPlayTab && initialView === 'preview' ? 'wysiwyg' : initialView;
 
   return (
-    <EditorProvider
-      initialMarkdown={initialMarkdown}
-      initialView={effectiveInitialView}
-      articleId={articleId}
-      colorScheme={colorScheme}
-      workspaceContainer={effectiveContainer}
-      allowVersioning={allowVersioning}
-      versionBasename={versionBasename}
-      versioningPrunePolicy={versioningPrunePolicy}
-      versioningAutoSaveIdleMs={versioningAutoSaveIdleMs}
-      onSaveVersion={onSaveVersion}
-      mediaProvider={effectiveMediaProvider}
-      imageDisplayMode={imageDisplayMode}
-      mentionProvider={mentionProvider}
-      documentLinkProvider={documentLinkProvider}
-      allowRecording={allowRecording}
-      fileName={fileName}
-      language={language}
-      inlinePreview={inlinePreview}
-      showStatusBar={showStatusBar}
-      outline={outline}
-      blockTags={blockTags}
-      themeInheritance={themeInheritance}
-      viewPreferences={viewPreferences}
-      onViewPreferencesChange={onViewPreferencesChange}
-    >
-      <EditorShellInner
-        basePath={basePath}
-        onChange={onChange}
-        className={className}
-        height={height}
-        minHeight={minHeight}
-        maxHeight={maxHeight}
-        placeholder={placeholder}
-        mediaProvider={effectiveMediaProvider ?? null}
+    <MediaContext.Provider value={effectiveMediaProvider ?? null}>
+      <EditorProvider
+        initialMarkdown={initialMarkdown}
+        initialView={effectiveInitialView}
+        articleId={articleId}
+        colorScheme={colorScheme}
         workspaceContainer={effectiveContainer}
-        filesToggleEnabled={filesToggleEnabled}
-        toolbarSlotLeft={toolbarSlotLeft}
-        toolbarSlotAfterActions={toolbarSlotAfterActions}
-        toolbarSlotRight={toolbarSlotRight}
-        showPlayTab={showPlayTab}
-        submitOnEnter={submitOnEnter}
-        codeContext={codeContext}
-        fullWidth={fullWidth}
-        uxFont={uxFont}
-        thinMargins={thinMargins}
-        readOnly={readOnly}
-        imageSrc={imageSrc}
-        imageAlt={imageAlt}
-        imageMode={imageMode}
-        imageEditorContainer={imageEditorContainer}
-        onImageExport={onImageExport}
         allowVersioning={allowVersioning}
+        versionBasename={versionBasename}
+        versioningPrunePolicy={versioningPrunePolicy}
         versioningAutoSaveIdleMs={versioningAutoSaveIdleMs}
-        inlinePreviewWidth={inlinePreviewWidth}
-        outlineWidth={outlineWidth}
-        themeOverride={themeOverride}
-      />
-    </EditorProvider>
+        onSaveVersion={onSaveVersion}
+        mediaProvider={effectiveMediaProvider}
+        imageDisplayMode={imageDisplayMode}
+        mentionProvider={mentionProvider}
+        documentLinkProvider={documentLinkProvider}
+        allowRecording={allowRecording}
+        allowNarrate={allowNarrate}
+        fileName={fileName}
+        language={language}
+        inlinePreview={inlinePreview}
+        showStatusBar={showStatusBar}
+        outline={outline}
+        blockTags={blockTags}
+        blockTagVisibility={blockTagVisibility}
+        themeInheritance={themeInheritance}
+        viewPreferences={viewPreferences}
+        onViewPreferencesChange={onViewPreferencesChange}
+      >
+        <EditorShellInner
+          basePath={basePath}
+          onChange={onChange}
+          className={className}
+          height={height}
+          minHeight={minHeight}
+          maxHeight={maxHeight}
+          placeholder={placeholder}
+          mediaProvider={effectiveMediaProvider ?? null}
+          workspaceContainer={effectiveContainer}
+          filesToggleEnabled={filesToggleEnabled}
+          toolbarSlotLeft={toolbarSlotLeft}
+          toolbarSlotAfterActions={toolbarSlotAfterActions}
+          toolbarSlotRight={toolbarSlotRight}
+          showPlayTab={showPlayTab}
+          submitOnEnter={submitOnEnter}
+          codeContext={codeContext}
+          fullWidth={fullWidth}
+          uxFont={uxFont}
+          thinMargins={thinMargins}
+          readOnly={readOnly}
+          imageSrc={imageSrc}
+          imageAlt={imageAlt}
+          imageMode={imageMode}
+          imageEditorContainer={imageEditorContainer}
+          onImageExport={onImageExport}
+          allowVersioning={allowVersioning}
+          versioningAutoSaveIdleMs={versioningAutoSaveIdleMs}
+          inlinePreviewWidth={inlinePreviewWidth}
+          outlineWidth={outlineWidth}
+          themeOverride={themeOverride}
+        />
+      </EditorProvider>
+    </MediaContext.Provider>
   );
 }
 
@@ -593,6 +609,7 @@ function EditorShellInner({
   outlineWidth,
   themeOverride,
 }: EditorShellInnerProps) {
+  const shellRef = useRef<HTMLDivElement>(null);
   const {
     activeView,
     markdownSource,
@@ -662,7 +679,7 @@ function EditorShellInner({
     let cancelled = false;
     mediaProvider.listMedia().then(
       (entries) => {
-        if (!cancelled) setMediaCount(entries.length);
+        if (!cancelled) setMediaCount(filterVisibleMediaEntries(entries).length);
       },
       (err: unknown) => {
         if (!cancelled) {
@@ -800,6 +817,7 @@ function EditorShellInner({
 
   const { isDragging, dragContentType, containerProps, zoneProps } = useFileDrop({
     onDrop: handleFileDrop,
+    enabled: !readOnly,
   });
 
   // Notify parent of changes
@@ -807,35 +825,28 @@ function EditorShellInner({
     onChange?.(markdownSource);
   }, [markdownSource, onChange]);
 
-  // Keyboard shortcuts for view switching
-  useEffect(() => {
-    const handler = (e: KeyboardEvent) => {
-      if (e.ctrlKey || e.metaKey) {
-        switch (e.key) {
-          case '1':
-            e.preventDefault();
-            document.querySelector<HTMLButtonElement>('[data-view="wysiwyg"]')?.click();
-            break;
-          case '2':
-            e.preventDefault();
-            document.querySelector<HTMLButtonElement>('[data-view="raw"]')?.click();
-            break;
-          case '3':
-            if (!showPlayTab) return;
-            e.preventDefault();
-            document.querySelector<HTMLButtonElement>('[data-view="preview"]')?.click();
-            break;
-        }
-      }
-    };
-    window.addEventListener('keydown', handler);
-    return () => window.removeEventListener('keydown', handler);
-  }, [showPlayTab]);
+  // View shortcuts bubble only through the editor that currently owns focus.
+  const handleShellKeyDown = useCallback(
+    (e: ReactKeyboardEvent<HTMLDivElement>) => {
+      if (!e.ctrlKey && !e.metaKey) return;
+      const view =
+        e.key === '1' ? 'wysiwyg' : e.key === '2' ? 'raw' : e.key === '3' ? 'preview' : null;
+      if (!view || (view === 'preview' && !showPlayTab)) return;
+      const button = shellRef.current?.querySelector<HTMLButtonElement>(`[data-view="${view}"]`);
+      if (!button) return;
+      e.preventDefault();
+      e.stopPropagation();
+      button.click();
+    },
+    [showPlayTab],
+  );
 
   const autoGrow = minHeight !== undefined || maxHeight !== undefined;
 
   return (
     <div
+      ref={shellRef}
+      onKeyDown={handleShellKeyDown}
       className={`squisq-editor-shell ${className || ''}`}
       data-theme={colorScheme}
       data-full-width={fullWidth ? 'true' : undefined}
@@ -866,85 +877,103 @@ function EditorShellInner({
     >
       <CustomThemeProvider docThemes={docThemes} onDocThemesChange={onDocThemesChange}>
         <PreviewSettingsProvider doc={doc} themeOverride={themeOverride}>
-          {/* Header. In image mode the full markdown/code Toolbar is replaced
+          <PresentationModeProvider rootRef={shellRef}>
+            {/* Header. In image mode the full markdown/code Toolbar is replaced
             with a minimal slot bar — view tabs, formatting, and preview
             controls don't apply to a binary asset. */}
-          {isImageMode ? (
-            (toolbarSlotLeft || toolbarSlotRight) && (
-              <div className="squisq-editor-header squisq-editor-header--image">
-                {toolbarSlotLeft}
-                <div style={{ flex: 1 }} />
-                {toolbarSlotRight}
+            {isImageMode ? (
+              (toolbarSlotLeft || toolbarSlotRight) && (
+                <div className="squisq-editor-header squisq-editor-header--image">
+                  {toolbarSlotLeft}
+                  <div style={{ flex: 1 }} />
+                  {toolbarSlotRight}
+                </div>
+              )
+            ) : (
+              <div className="squisq-editor-header">
+                <Toolbar
+                  showFiles={showFiles}
+                  fileCount={mediaCount}
+                  onToggleFiles={!isCodeMode && filesToggleEnabled ? handleToggleFiles : undefined}
+                  slotLeft={toolbarSlotLeft}
+                  slotAfterTabs={
+                    !isCodeMode &&
+                    isPreview && (
+                      <>
+                        <PreviewToolbarControls />
+                        <PresentationModeControl />
+                      </>
+                    )
+                  }
+                  slotAfterActions={toolbarSlotAfterActions}
+                  slotRight={toolbarSlotRight}
+                  showPlayTab={showPlayTab}
+                />
               </div>
-            )
-          ) : (
-            <div className="squisq-editor-header">
-              <Toolbar
-                showFiles={showFiles}
-                fileCount={mediaCount}
-                onToggleFiles={!isCodeMode && filesToggleEnabled ? handleToggleFiles : undefined}
-                slotLeft={toolbarSlotLeft}
-                slotAfterTabs={!isCodeMode && isPreview && <PreviewToolbarControls />}
-                slotAfterActions={toolbarSlotAfterActions}
-                slotRight={toolbarSlotRight}
-                showPlayTab={showPlayTab}
-              />
-            </div>
-          )}
+            )}
 
-          {/* Main content area */}
-          <div
-            className="squisq-editor-content"
-            style={{
-              flex: autoGrow ? '1 1 auto' : 1,
-              overflowY: autoGrow ? 'auto' : 'hidden',
-              overflowX: 'hidden',
-              minHeight: 0,
-              position: 'relative',
-              display: 'flex',
-            }}
-          >
+            {/* Main content area */}
             <div
+              className="squisq-editor-content"
               style={{
                 flex: autoGrow ? '1 1 auto' : 1,
-                overflow: autoGrow ? 'visible' : 'hidden',
+                overflowY: autoGrow ? 'auto' : 'hidden',
+                overflowX: 'hidden',
                 minHeight: 0,
                 position: 'relative',
+                display: 'flex',
               }}
             >
-              {isImageMode &&
-                imageSrc &&
-                (imageMode === 'edit' && imageEditorContainer ? (
-                  <ImageEditor
-                    filesContainer={imageEditorContainer}
-                    initialSrc={imageSrc}
-                    allowVersioning={allowVersioning}
-                    versioningAutoSaveIdleMs={versioningAutoSaveIdleMs}
-                    onExport={onImageExport}
-                    surface={colorScheme === 'dark' ? DARK_SURFACE : LIGHT_SURFACE}
-                  />
-                ) : (
-                  <ImageViewer src={imageSrc} alt={imageAlt} theme={colorScheme} />
-                ))}
-              {/* Raw (Monaco) view. Always wrapped in `.squisq-editor-with-gutter`
+              <div
+                style={{
+                  flex: autoGrow ? '1 1 auto' : 1,
+                  overflow: autoGrow ? 'visible' : 'hidden',
+                  minHeight: 0,
+                  position: 'relative',
+                }}
+              >
+                {isImageMode &&
+                  imageSrc &&
+                  (imageMode === 'edit' && imageEditorContainer ? (
+                    <ImageEditor
+                      filesContainer={imageEditorContainer}
+                      initialSrc={imageSrc}
+                      allowVersioning={allowVersioning}
+                      versioningAutoSaveIdleMs={versioningAutoSaveIdleMs}
+                      onExport={onImageExport}
+                      surface={colorScheme === 'dark' ? DARK_SURFACE : LIGHT_SURFACE}
+                    />
+                  ) : (
+                    <ImageViewer src={imageSrc} alt={imageAlt} theme={colorScheme} />
+                  ))}
+                {/* Raw (Monaco) view. Always wrapped in `.squisq-editor-with-gutter`
                 so toggling a pane on/off doesn't change the editor's tree
                 position — Monaco stays mounted and `monacoEditor` in
                 context stays stable, which is what `useHeadingLayout` needs
                 to compute positions. */}
-              {!isImageMode && activeView === 'raw' && (
-                <div className="squisq-editor-with-gutter" key="raw-shell">
-                  {isMarkdownMode && outlineVisible && (
-                    <OutlinePanel key="outline" width={outlineWidth} />
-                  )}
-                  {isCardMode ? (
-                    <BlockCardView
-                      key="raw-card"
-                      blockCount={blockCount}
-                      activeBlockKey={activeBlockKey}
-                      onPrev={prevBlock}
-                      onNext={nextBlock}
-                      onAdd={addBlock}
-                    >
+                {!isImageMode && activeView === 'raw' && (
+                  <div className="squisq-editor-with-gutter" key="raw-shell">
+                    {isMarkdownMode && outlineVisible && (
+                      <OutlinePanel key="outline" width={outlineWidth} readOnly={readOnly} />
+                    )}
+                    {isCardMode ? (
+                      <BlockCardView
+                        key="raw-card"
+                        blockCount={blockCount}
+                        activeBlockKey={activeBlockKey}
+                        onPrev={prevBlock}
+                        onNext={nextBlock}
+                        onAdd={addBlock}
+                      >
+                        <div key="raw-editor" className="squisq-raw-editor-container">
+                          <RawEditor
+                            monacoTheme={colorScheme === 'dark' ? 'vs-dark' : 'vs'}
+                            submitOnEnter={submitOnEnter}
+                            readOnly={readOnly}
+                          />
+                        </div>
+                      </BlockCardView>
+                    ) : (
                       <div key="raw-editor" className="squisq-raw-editor-container">
                         <RawEditor
                           monacoTheme={colorScheme === 'dark' ? 'vs-dark' : 'vs'}
@@ -952,103 +981,96 @@ function EditorShellInner({
                           readOnly={readOnly}
                         />
                       </div>
-                    </BlockCardView>
-                  ) : (
-                    <div key="raw-editor" className="squisq-raw-editor-container">
-                      <RawEditor
-                        monacoTheme={colorScheme === 'dark' ? 'vs-dark' : 'vs'}
-                        submitOnEnter={submitOnEnter}
-                        readOnly={readOnly}
-                      />
-                    </div>
-                  )}
-                  {/* Renders nothing in normal flow — portals context
+                    )}
+                    {/* Renders nothing in normal flow — portals context
                     sections into Monaco view zones via the context's
                     monacoEditor. Code mode only. */}
-                  {isCodeMode && codeContext && (
-                    <CodeContextZones key="code-context" options={codeContext} />
-                  )}
-                  {isMarkdownMode && isCardMode && inlinePreviewVisible && (
-                    <BlockPreviewPanel key="block-preview" basePath={basePath} />
-                  )}
-                  {isMarkdownMode && !isCardMode && inlinePreviewVisible && (
-                    <InlinePreviewGutter
-                      key="inline"
-                      width={inlinePreviewWidth}
-                      basePath={basePath}
-                      mediaProvider={mediaProvider}
-                    />
-                  )}
-                </div>
-              )}
-              {/* WYSIWYG + Preview are markdown-only surfaces — skip them
+                    {isCodeMode && codeContext && (
+                      <CodeContextZones key="code-context" options={codeContext} />
+                    )}
+                    {isMarkdownMode && isCardMode && inlinePreviewVisible && (
+                      <BlockPreviewPanel key="block-preview" basePath={basePath} />
+                    )}
+                    {isMarkdownMode && !isCardMode && inlinePreviewVisible && (
+                      <InlinePreviewGutter
+                        key="inline"
+                        width={inlinePreviewWidth}
+                        basePath={basePath}
+                        mediaProvider={mediaProvider}
+                      />
+                    )}
+                  </div>
+                )}
+                {/* WYSIWYG + Preview are markdown-only surfaces — skip them
                 entirely in code or image mode so Tiptap never initializes
                 and the preview pipeline stays idle. Same always-wrapped
                 pattern as the Raw branch above so pane toggles don't
                 remount Tiptap. */}
-              {isMarkdownMode && activeView === 'wysiwyg' && (
-                <div className="squisq-editor-with-gutter" key="wysiwyg-shell">
-                  {outlineVisible && <OutlinePanel key="outline" width={outlineWidth} />}
-                  {isCardMode ? (
-                    <BlockCardView
-                      key="wysiwyg-card"
-                      blockCount={blockCount}
-                      activeBlockKey={activeBlockKey}
-                      onPrev={prevBlock}
-                      onNext={nextBlock}
-                      onAdd={addBlock}
-                    >
+                {isMarkdownMode && activeView === 'wysiwyg' && (
+                  <div className="squisq-editor-with-gutter" key="wysiwyg-shell">
+                    {outlineVisible && (
+                      <OutlinePanel key="outline" width={outlineWidth} readOnly={readOnly} />
+                    )}
+                    {isCardMode ? (
+                      <BlockCardView
+                        key="wysiwyg-card"
+                        blockCount={blockCount}
+                        activeBlockKey={activeBlockKey}
+                        onPrev={prevBlock}
+                        onNext={nextBlock}
+                        onAdd={addBlock}
+                      >
+                        <WysiwygEditor
+                          key="wysiwyg-editor"
+                          submitOnEnter={submitOnEnter}
+                          placeholder={placeholder}
+                          readOnly={readOnly}
+                        />
+                      </BlockCardView>
+                    ) : (
                       <WysiwygEditor
                         key="wysiwyg-editor"
                         submitOnEnter={submitOnEnter}
                         placeholder={placeholder}
                         readOnly={readOnly}
                       />
-                    </BlockCardView>
-                  ) : (
-                    <WysiwygEditor
-                      key="wysiwyg-editor"
-                      submitOnEnter={submitOnEnter}
-                      placeholder={placeholder}
-                      readOnly={readOnly}
-                    />
-                  )}
-                  {isCardMode && inlinePreviewVisible && (
-                    <BlockPreviewPanel key="block-preview" basePath={basePath} />
-                  )}
-                  {!isCardMode && inlinePreviewVisible && (
-                    <InlinePreviewGutter
-                      key="inline"
-                      width={inlinePreviewWidth}
-                      basePath={basePath}
-                      mediaProvider={mediaProvider}
-                    />
-                  )}
-                </div>
-              )}
-              {isMarkdownMode && isPreview && (
-                <PreviewPanel basePath={basePath} workspaceContainer={workspaceContainer} />
-              )}
-            </div>
+                    )}
+                    {isCardMode && inlinePreviewVisible && (
+                      <BlockPreviewPanel key="block-preview" basePath={basePath} />
+                    )}
+                    {!isCardMode && inlinePreviewVisible && (
+                      <InlinePreviewGutter
+                        key="inline"
+                        width={inlinePreviewWidth}
+                        basePath={basePath}
+                        mediaProvider={mediaProvider}
+                      />
+                    )}
+                  </div>
+                )}
+                {isMarkdownMode && isPreview && (
+                  <PreviewPanel basePath={basePath} workspaceContainer={workspaceContainer} />
+                )}
+              </div>
 
-            {isMarkdownMode && showFiles && (
-              <MediaBin
-                mediaProvider={mediaProvider}
-                isDark={isDark}
-                refreshKey={mediaListRefreshKey}
-                usedMediaPaths={usedMediaPaths}
-                onMediaUploaded={handleMediaUploaded}
-                onMediaRemoved={handleMediaRemoved}
-                onCountChange={setMediaCount}
-              />
-            )}
+              {isMarkdownMode && showFiles && (
+                <MediaBin
+                  mediaProvider={mediaProvider}
+                  isDark={isDark}
+                  refreshKey={mediaListRefreshKey}
+                  usedMediaPaths={usedMediaPaths}
+                  onMediaUploaded={handleMediaUploaded}
+                  onMediaRemoved={handleMediaRemoved}
+                  onCountChange={setMediaCount}
+                />
+              )}
 
-            {/* Docked custom-theme designer — a flex sibling of the preview, so
+              {/* Docked custom-theme designer — a flex sibling of the preview, so
               opening it reflows the preview narrower. Renders nothing when the
               designer is closed. */}
-            {isMarkdownMode && <ThemeDesignerDock />}
+              {isMarkdownMode && <ThemeDesignerDock />}
 
-            {/* Drop zone overlay — image / text drop UX is markdown-specific.
+              {/* Drop zone overlay — image / text drop UX is markdown-specific.
               In WYSIWYG, image drops are handled directly by Tiptap's
               `handleDrop` (uploads to the MediaProvider and inserts an
               image node at the mouse position). The overlay would sit on
@@ -1056,27 +1078,28 @@ function EditorShellInner({
               when the dragged content is media-only on the WYSIWYG view —
               the user gets a one-step "drop where you want it" flow
               instead of a two-step "drop in bin, then insert" flow. */}
-            {isMarkdownMode &&
-              isDragging &&
-              !(activeView === 'wysiwyg' && dragContentType === 'media') && (
-                <DropZoneOverlay
-                  dragContentType={dragContentType}
-                  zoneProps={zoneProps}
-                  hasMediaProvider={mediaProvider !== null}
-                />
-              )}
-          </div>
+              {isMarkdownMode &&
+                isDragging &&
+                !(activeView === 'wysiwyg' && dragContentType === 'media') && (
+                  <DropZoneOverlay
+                    dragContentType={dragContentType}
+                    zoneProps={zoneProps}
+                    hasMediaProvider={mediaProvider !== null}
+                  />
+                )}
+            </div>
 
-          {/* Timeline track — horizontal strip of block + media bars shown
+            {/* Timeline track — horizontal strip of block + media bars shown
             below the editor in Timeline view. The card editor above (driven by
             the block navigator) shows whichever block is selected here. */}
-          {isTimelineMode && <TimelineTrack />}
+            {isTimelineMode && <TimelineTrack />}
 
-          {/* Status bar — word / char / line / block counts. Host can
+            {/* Status bar — word / char / line / block counts. Host can
             suppress via `showStatusBar={false}` for embedded chat-style
             composers where the stats are noise. The image viewer has its
             own dimension/zoom status row, so suppress here too. */}
-          {statusBarVisible && !isImageMode && <StatusBar />}
+            {statusBarVisible && !isImageMode && <StatusBar />}
+          </PresentationModeProvider>
         </PreviewSettingsProvider>
       </CustomThemeProvider>
       <TooltipLayer />
@@ -1140,6 +1163,19 @@ function ImageEditModal({
   versioningAutoSaveIdleMs,
   shellTheme,
 }: ImageEditModalProps) {
+  const modalRef = useRef<HTMLDivElement>(null);
+  const surfaceRef = useRef<HTMLDivElement>(null);
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
+  const extension = relativePath.split(/[?#]/, 1)[0]?.split('.').pop()?.toLowerCase();
+  const saveFormat: 'png' | 'jpeg' | 'webp' | null =
+    extension === 'png'
+      ? 'png'
+      : extension === 'jpg' || extension === 'jpeg'
+        ? 'jpeg'
+        : extension === 'webp'
+          ? 'webp'
+          : null;
   // Each unique image path gets its own sidecar so multiple images in the
   // same doc can be edited independently without colliding state. When the
   // host didn't supply a `container`, fall back to a fresh in-memory one
@@ -1147,14 +1183,22 @@ function ImageEditModal({
   // gets written back through `mediaProvider`.
   const sidecar = useMemo(() => {
     const sanitized = relativePath.replace(/[^a-zA-Z0-9._-]+/g, '_');
+    let hash = 2166136261;
+    for (let i = 0; i < relativePath.length; i++) {
+      hash ^= relativePath.charCodeAt(i);
+      hash = Math.imul(hash, 16777619);
+    }
+    const scopedName = `${sanitized}-${(hash >>> 0).toString(36)}`;
     const parent: ContentContainer = container ?? new MemoryContentContainer();
-    return scopeContainer(parent, `.imageEdits/${sanitized}`);
+    return scopeContainer(parent, `.imageEdits/${scopedName}`);
   }, [container, relativePath]);
 
   const [initialSrc, setInitialSrc] = useState<string | null>(null);
   const [resolveError, setResolveError] = useState<string | null>(null);
   useEffect(() => {
     let cancelled = false;
+    setInitialSrc(null);
+    setResolveError(null);
     mediaProvider.resolveUrl(relativePath).then(
       (url) => {
         if (!cancelled) setInitialSrc(url);
@@ -1185,15 +1229,55 @@ function ImageEditModal({
 
   // Close on Escape — global listener so it works regardless of focus.
   useEffect(() => {
+    const previousFocus = document.activeElement as HTMLElement | null;
+    const shell = modalRef.current?.closest('.squisq-editor-shell');
+    const inertSiblings = shell
+      ? Array.from(shell.children).filter((element) => !element.contains(modalRef.current))
+      : [];
+    inertSiblings.forEach((element) => {
+      (element as HTMLElement).inert = true;
+    });
+    surfaceRef.current
+      ?.querySelector<HTMLElement>(
+        'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])',
+      )
+      ?.focus();
     const handler = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        onCloseRef.current();
+        return;
+      }
+      if (e.key !== 'Tab' || !surfaceRef.current) return;
+      const focusable = Array.from(
+        surfaceRef.current.querySelectorAll<HTMLElement>(
+          'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+        ),
+      );
+      if (focusable.length === 0) return;
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (e.shiftKey && document.activeElement === first) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && document.activeElement === last) {
+        e.preventDefault();
+        first.focus();
+      }
     };
     window.addEventListener('keydown', handler);
-    return () => window.removeEventListener('keydown', handler);
-  }, [onClose]);
+    return () => {
+      window.removeEventListener('keydown', handler);
+      inertSiblings.forEach((element) => {
+        (element as HTMLElement).inert = false;
+      });
+      previousFocus?.focus();
+    };
+  }, []);
 
   return (
     <div
+      ref={modalRef}
       className="squisq-image-edit-modal"
       data-testid="image-edit-modal"
       role="dialog"
@@ -1204,7 +1288,7 @@ function ImageEditModal({
         if (e.target === e.currentTarget) onClose();
       }}
     >
-      <div className="squisq-image-edit-modal__surface">
+      <div ref={surfaceRef} className="squisq-image-edit-modal__surface">
         <header className="squisq-image-edit-modal__header">
           <span className="squisq-image-edit-modal__title">Edit image</span>
           <span className="squisq-image-edit-modal__path">{relativePath}</span>
@@ -1223,6 +1307,10 @@ function ImageEditModal({
             <div className="squisq-image-edit-modal__error">
               Failed to load image: {resolveError}
             </div>
+          ) : !saveFormat ? (
+            <div className="squisq-image-edit-modal__error">
+              Editing supports PNG, JPEG, and WebP images without changing the asset type.
+            </div>
           ) : !initialSrc ? (
             <div className="squisq-image-edit-modal__loading">Loading image…</div>
           ) : (
@@ -1233,7 +1321,7 @@ function ImageEditModal({
               versioningAutoSaveIdleMs={versioningAutoSaveIdleMs}
               onExport={handleExport}
               saveBehavior="export"
-              saveFormat="png"
+              saveFormat={saveFormat}
               saveLabel="Save and close"
               saveTitle="Save changes back to the image and close"
               surface={shellTheme === 'dark' ? DARK_SURFACE : LIGHT_SURFACE}

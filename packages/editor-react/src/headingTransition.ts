@@ -276,21 +276,6 @@ export function setHeadingAttrsTransition(
   };
 }
 
-/**
- * Legacy single-channel writer for callers that only own `dataBlockAttrs`.
- * Internal editor surfaces should use {@link setHeadingAttrsTransition} so new
- * transition edits land in the squisq-native `{[…]}` params.
- */
-export function setBlockAttrsTransition(
-  blockAttrsInner: string | null | undefined,
-  next: TransitionFields,
-): string | null {
-  const attrs: HeadingAttributes = blockAttrsInner ? parsePandocAttrTokens(blockAttrsInner) : {};
-  attrs.params = applyFieldsToParams(attrs.params ?? {}, next);
-  const pandoc = pandocBlockOrNull(attrs);
-  return pandoc ? pandoc.slice(1, -1) : null;
-}
-
 // ============================================
 // shared
 // ============================================

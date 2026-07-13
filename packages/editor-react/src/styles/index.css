@@ -11,5 +11,8 @@
 @import '../imageEditor/image-editor.css';
 @import './image-edit-affordance.css';
 @import './diagram.css';
+@import './ascii-diagram.css';
+@import './tree-view.css';
+@import './ascii-timeline.css';
 @import '../scene/scene.css';
 @import '../customTemplates/designer.css';

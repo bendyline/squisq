@@ -4,7 +4,6 @@ import {
   setHeadingLineTransition,
   readBlockAttrsTransition,
   setHeadingAttrsTransition,
-  setBlockAttrsTransition,
   EMPTY_TRANSITION,
 } from '../headingTransition';
 
@@ -173,16 +172,5 @@ describe('block-attrs (WYSIWYG) helpers', () => {
       blockAttrsInner: '#intro',
       templateParams: null,
     });
-  });
-
-  it('legacy single-channel writer still writes a fresh inner when none exists', () => {
-    expect(setBlockAttrsTransition(null, { type: 'fade', direction: '', duration: '' })).toBe(
-      'transition=fade',
-    );
-  });
-
-  it('legacy single-channel writer preserves the id and clears to null when emptied', () => {
-    expect(setBlockAttrsTransition('transition=fade', EMPTY_TRANSITION)).toBeNull();
-    expect(setBlockAttrsTransition('#intro transition=fade', EMPTY_TRANSITION)).toBe('#intro');
   });
 });

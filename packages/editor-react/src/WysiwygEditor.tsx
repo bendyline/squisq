@@ -13,6 +13,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { CSSProperties } from 'react';
 import { useEditor, EditorContent } from '@tiptap/react';
+import { Selection } from '@tiptap/pm/state';
+import type { EditorView as ProseMirrorView } from '@tiptap/pm/view';
 import StarterKit from '@tiptap/starter-kit';
 import Table from '@tiptap/extension-table';
 import TableRow from '@tiptap/extension-table-row';
@@ -26,7 +28,15 @@ import { resolveFontFamily, FONT_FALLBACKS, VIEWPORT_PRESETS } from '@bendyline/
 import { DEFAULT_THEME, flattenBlocks, markdownToDoc } from '@bendyline/squisq/doc';
 import { parseMarkdown } from '@bendyline/squisq/markdown';
 import { HeadingWithTemplate } from './TemplateAnnotation';
-import { DiagramExtension } from './diagram/DiagramExtension';
+import { AsciiDiagramExtension } from './asciiDiagram/AsciiDiagramExtension';
+import { RepairableDiagramExtension } from './asciiDiagram/RepairableDiagramExtension';
+import { applyRepairCommand } from './asciiDiagram/asciiDiagramCommands';
+import { shouldPasteAsAsciiFence } from './asciiDiagram/asciiPaste';
+import { TreeViewExtension } from './treeview/TreeViewExtension';
+import { shouldPasteAsTreeFence } from './treeview/treePaste';
+import { TimelineViewExtension } from './timeline/TimelineViewExtension';
+import { shouldPasteAsTimelineFence } from './timeline/timelinePaste';
+import { BlockTagActivityExtension } from './blockTagActivity';
 import { SceneBlockExtension } from './scene/SceneBlockExtension';
 import { InlineIcon } from './InlineIcon';
 import { ImageWithMediaProvider } from './ImageNodeView';
@@ -51,6 +61,9 @@ import { markdownToTiptap, tiptapToMarkdown } from './tiptapBridge';
 import { looksLikeMarkdown } from './detectMarkdown';
 import { SQUISQ_MEDIA_MIME, parseSquisqMediaPayload } from './mediaDragMime';
 import { usePreviewSettingsOptional } from './PreviewControls';
+import { uploadAndInsertImages } from './wysiwygImageUpload';
+
+type ImageMutationView = Pick<ProseMirrorView, 'state' | 'dispatch'>;
 
 /**
  * Rotating placeholder prompts shown when the editor is empty. One is
@@ -69,6 +82,12 @@ const EMPTY_PROMPTS = [
   'Write something the future you will thank you for…',
   'Begin at the beginning…',
 ];
+
+const BLOCK_TAG_DATA_VALUES = {
+  none: 'hidden',
+  active: 'active',
+  always: 'visible',
+} as const;
 
 function pickEmptyPrompt(): string {
   return EMPTY_PROMPTS[Math.floor(Math.random() * EMPTY_PROMPTS.length)];
@@ -108,10 +127,11 @@ export function WysiwygEditor({
     setTiptapEditor,
     mediaProvider,
     mentionProvider,
-    blockTagsVisible,
+    blockTagVisibility,
     themeInheritance,
     colorScheme,
     bumpMediaRevision,
+    sceneTextChannel,
   } = useEditorContext();
   // Custom templates inlined in the active doc's frontmatter + the
   // persist callback that writes a new list back into the source.
@@ -166,7 +186,6 @@ export function WysiwygEditor({
   useEffect(() => {
     submitOnEnterRef.current = submitOnEnter;
   }, [submitOnEnter]);
-
   const editor = useEditor({
     editable: !readOnly,
     extensions: [
@@ -178,8 +197,12 @@ export function WysiwygEditor({
         },
       }),
       HeadingWithTemplate.configure({ levels: [1, 2, 3, 4, 5, 6] }),
-      DiagramExtension,
-      SceneBlockExtension,
+      BlockTagActivityExtension,
+      AsciiDiagramExtension.configure({ textChannel: sceneTextChannel }),
+      RepairableDiagramExtension.configure({ onRepair: applyRepairCommand }),
+      TimelineViewExtension,
+      TreeViewExtension,
+      SceneBlockExtension.configure({ textChannel: sceneTextChannel }),
       Table.configure({ resizable: true }),
       TableRow,
       TableCell,
@@ -201,8 +224,13 @@ export function WysiwygEditor({
     content: markdownToTiptap(stripFrontmatter(editorSource).body),
     onUpdate: ({ editor: ed }) => {
       if (isExternalUpdate.current) return;
-      const html = ed.getHTML();
-      const bodyMd = tiptapToMarkdown(html);
+      // Keep the source channel synchronous with Tiptap. Structural actions
+      // such as block navigation/addition may run in the very next browser
+      // event; deferring this write lets a stale callback serialize the newly
+      // selected block into the previous block's range. The expensive full-doc
+      // parse remains debounced in EditorContext, so correctness here does not
+      // reintroduce parse-on-every-keystroke work.
+      const bodyMd = tiptapToMarkdown(ed.getHTML());
       const newSource = frontmatterRef.current + bodyMd;
       lastSourceRef.current = newSource;
       setEditorSource(newSource);
@@ -225,7 +253,9 @@ export function WysiwygEditor({
         // its container with `display: block` while items are showing
         // and `display: none` when empty — only short-circuit when
         // there's actually a candidate to pick.
-        const popover = document.querySelector<HTMLElement>('.squisq-mention-popover');
+        const popover = view.dom
+          .closest('.squisq-editor-shell')
+          ?.querySelector<HTMLElement>('.squisq-mention-popover');
         if (popover && popover.style.display !== 'none') {
           return false;
         }
@@ -266,7 +296,62 @@ export function WysiwygEditor({
         }
 
         const text = clipboard.getData('text/plain');
-        if (!text || !looksLikeMarkdown(text)) return false;
+        if (!text) return false;
+
+        // Bare (unfenced) ASCII diagram art → verbatim into a fresh code
+        // block, which AsciiDiagramExtension turns into an interactive
+        // canvas. Must run BEFORE the markdown branch: `| x |` art rows
+        // false-positive as GFM table rows and would be mangled.
+        if (shouldPasteAsAsciiFence(text)) {
+          const codeBlockType = view.state.schema.nodes.codeBlock;
+          if (codeBlockType) {
+            event.preventDefault();
+            // Tag the fence `diagram` so its identity survives a later
+            // flatten → markdown → re-import round-trip (the language class
+            // round-trips; fence meta does not).
+            view.dispatch(
+              view.state.tr.replaceSelectionWith(
+                codeBlockType.create({ language: 'diagram' }, view.state.schema.text(text)),
+              ),
+            );
+            return true;
+          }
+        }
+
+        // Bare (unfenced) marker rails → an explicit timeline code block.
+        // Run before the tree gate because timeline callout elbows can look
+        // like nested tree connectors to a deliberately lenient parser.
+        if (shouldPasteAsTimelineFence(text)) {
+          const codeBlockType = view.state.schema.nodes.codeBlock;
+          if (codeBlockType) {
+            event.preventDefault();
+            view.dispatch(
+              view.state.tr.replaceSelectionWith(
+                codeBlockType.create({ language: 'timeline' }, view.state.schema.text(text)),
+              ),
+            );
+            return true;
+          }
+        }
+
+        // Bare (unfenced) ASCII tree art → a fresh code block that the
+        // TreeViewExtension turns into an outline. After the diagram gate,
+        // before markdown (the `├──` lines must not be mangled as prose).
+        if (shouldPasteAsTreeFence(text)) {
+          const codeBlockType = view.state.schema.nodes.codeBlock;
+          if (codeBlockType) {
+            event.preventDefault();
+            // Tag the fence `tree` so its identity survives round-trips.
+            view.dispatch(
+              view.state.tr.replaceSelectionWith(
+                codeBlockType.create({ language: 'tree' }, view.state.schema.text(text)),
+              ),
+            );
+            return true;
+          }
+        }
+
+        if (!looksLikeMarkdown(text)) return false;
         const html = markdownToTiptap(text);
         if (!html) return false;
         event.preventDefault();
@@ -370,6 +455,16 @@ export function WysiwygEditor({
     templateParams: string | null;
   } | null>(null);
 
+  const closeBadgeMenu = useCallback(() => {
+    setBadgeMenu(null);
+    // The portaled gallery moves focus into its search field. Restore the
+    // document's preserved ProseMirror selection after React has unmounted the
+    // dialog, so the caret resumes blinking where the author left it.
+    requestAnimationFrame(() => {
+      if (editor && !editor.isDestroyed) editor.commands.focus();
+    });
+  }, [editor]);
+
   useEffect(() => {
     if (!editor) return;
     const root = containerRef.current;
@@ -460,9 +555,10 @@ export function WysiwygEditor({
     isExternalUpdate.current = false;
   }, [editorSource, editor]);
 
-  // Match the WYSIWYG editor's appearance to the active Squisq theme
-  // when one is set in frontmatter or picked in the preview dropdown.
-  // Driven by the View menu's "Theme inheritance" setting:
+  // Match the WYSIWYG editor's appearance to the active Squisq theme when one
+  // is set in frontmatter or picked in the preview dropdown. The block-props
+  // affordance always carries the theme's primary as UI accent (like the
+  // outline); document-content inheritance is driven by the View menu setting:
   //   - 'none'         → don't inherit anything
   //   - 'fonts'        → body + heading fonts only (historical default)
   //   - 'fonts-colors' → fonts plus the theme's canvas / text colors
@@ -483,20 +579,26 @@ export function WysiwygEditor({
         viewport: previewSettings?.activeViewport ?? VIEWPORT_PRESETS.landscape,
         basePath: '/',
         mediaProvider,
+        customTemplates: docTemplates,
       };
     } catch {
       return undefined;
     }
   }, [
     badgeMenu,
+    docTemplates,
     editorSource,
     mediaProvider,
     previewSettings?.activeTheme,
     previewSettings?.activeViewport,
   ]);
   const themeStyle = useMemo<CSSProperties>(() => {
-    if (themeInheritance === 'none' || !activeTheme) return {};
+    if (!activeTheme) return {};
     const out: Record<string, string> = {
+      '--squisq-block-props-accent': activeTheme.colors.primary,
+    };
+    if (themeInheritance === 'none') return out as CSSProperties;
+    Object.assign(out, {
       '--squisq-theme-body-font': resolveFontFamily(
         activeTheme.typography.bodyFont,
         FONT_FALLBACKS.sans,
@@ -505,7 +607,7 @@ export function WysiwygEditor({
         activeTheme.typography.titleFont,
         FONT_FALLBACKS.sans,
       ),
-    };
+    });
     if (themeInheritance === 'fonts-colors') {
       const colors = activeTheme.colors;
       out['--squisq-theme-bg'] = colors.background;
@@ -525,7 +627,7 @@ export function WysiwygEditor({
         className={`squisq-wysiwyg-container${className ? ` ${className}` : ''}`}
         style={{ width: '100%', height: '100%', overflow: 'auto', ...themeStyle }}
         data-testid="wysiwyg-container"
-        data-block-tags={blockTagsVisible ? 'visible' : 'hidden'}
+        data-block-tags={BLOCK_TAG_DATA_VALUES[blockTagVisibility]}
         data-theme-inheritance={themeInheritance}
         ref={containerRef}
       >
@@ -557,7 +659,7 @@ export function WysiwygEditor({
               });
               editor.view.dispatch(tr);
             }}
-            onClose={() => setBadgeMenu(null)}
+            onClose={closeBadgeMenu}
           />
         )}
         {propsMenu && (
@@ -565,6 +667,8 @@ export function WysiwygEditor({
             anchorRect={propsMenu.rect}
             blockAttrs={propsMenu.blockAttrs}
             templateParams={propsMenu.templateParams}
+            colorScheme={colorScheme}
+            accentColor={activeTheme?.colors.primary}
             onChange={(nextInner) => {
               if (!editor) return;
               const current = editor.state.doc.nodeAt(propsMenu.headingPos);
@@ -595,6 +699,7 @@ export function WysiwygEditor({
             onSave={handleDesignerSave}
             onClose={() => setDesignerState(null)}
             mediaProvider={mediaProvider}
+            colorScheme={colorScheme}
           />
         )}
       </div>
@@ -661,43 +766,8 @@ function filesFromClipboard(clipboard: DataTransfer): File[] {
   return files;
 }
 
-/**
- * Upload image files to the MediaProvider and insert <img> nodes at the
- * current selection. Inserts a placeholder name when files lack one
- * (e.g., screenshots from the system clipboard).
- */
-async function uploadAndInsertImages(
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  view: any,
-  files: File[],
-  mediaProvider: import('@bendyline/squisq/schemas').MediaProvider,
-  onMediaUploaded?: () => void,
-): Promise<void> {
-  for (const file of files) {
-    try {
-      const buffer = await file.arrayBuffer();
-      const mimeType = file.type || 'image/png';
-      const name =
-        file.name && file.name !== 'image.png'
-          ? file.name
-          : `pasted-${uniquePasteToken()}.${extFromMime(mimeType)}`;
-      const relativePath = await mediaProvider.addMedia(name, buffer, mimeType);
-      const altText = name.replace(/\.[^.]+$/, '').replace(/[-_]/g, ' ');
-      insertImageNode(view, relativePath, altText);
-      onMediaUploaded?.();
-    } catch (err) {
-      console.error('Failed to upload dropped image:', err);
-    }
-  }
-}
-
 /** Insert an image node at the current selection using the schema image type. */
-function insertImageNode(
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  view: any,
-  src: string,
-  alt: string,
-): void {
+function insertImageNode(view: ImageMutationView, src: string, alt: string): void {
   const { schema } = view.state;
   const imageType = schema.nodes.image;
   if (!imageType) return;
@@ -707,48 +777,11 @@ function insertImageNode(
 }
 
 /** Move the selection to the document position under the drop event's coordinates. */
-function moveSelectionToDropPoint(
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  view: any,
-  event: DragEvent,
-): void {
+function moveSelectionToDropPoint(view: ProseMirrorView, event: DragEvent): void {
   const coords = view.posAtCoords({ left: event.clientX, top: event.clientY });
   if (!coords) return;
-  const tr = view.state.tr.setSelection(
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (view.state.selection.constructor as any).near(view.state.doc.resolve(coords.pos)),
-  );
+  const tr = view.state.tr.setSelection(Selection.near(view.state.doc.resolve(coords.pos)));
   view.dispatch(tr);
-}
-
-/**
- * Produce a unique token for a pasted-file name. `Date.now()` alone can
- * collide when a user pastes several clipboard images in the same tick
- * (multi-image paste from a screenshot grid, for example), which would make
- * `MediaProvider.addMedia` overwrite or reject later entries. Prefer
- * `crypto.randomUUID()` when available and fall back to a counter so the
- * helper stays pure-JS-everywhere.
- */
-let pasteCounter = 0;
-function uniquePasteToken(): string {
-  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
-    return crypto.randomUUID();
-  }
-  pasteCounter = (pasteCounter + 1) % 1_000_000;
-  return `${Date.now()}-${pasteCounter.toString(36)}`;
-}
-
-function extFromMime(mime: string): string {
-  const map: Record<string, string> = {
-    'image/png': 'png',
-    'image/jpeg': 'jpg',
-    'image/jpg': 'jpg',
-    'image/gif': 'gif',
-    'image/webp': 'webp',
-    'image/svg+xml': 'svg',
-    'image/avif': 'avif',
-  };
-  return map[mime.toLowerCase()] ?? 'png';
 }
 
 /**

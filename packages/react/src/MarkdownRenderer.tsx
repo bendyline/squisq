@@ -158,27 +158,12 @@ function renderInline(
 
       case 'htmlInline':
         if (ctx.htmlPolicy === 'strip') return null;
-        // Fast path: no <video>/<audio> in the subtree → use the original
-        // rawHtml passthrough (preserves arbitrary HTML for custom embeds).
-        if (
-          ctx.htmlPolicy === 'trusted' &&
-          !containsMediaTag(node.htmlChildren) &&
-          !containsDangerousTag(node.htmlChildren) &&
-          !hasDangerousRawHtml(node.rawHtml)
-        ) {
-          return (
-            <span
-              key={key}
-              className="squisq-md-html-inline"
-              dangerouslySetInnerHTML={{ __html: node.rawHtml }}
-            />
-          );
-        }
-        // Otherwise reconstruct the subtree as React so <video>/<audio>
-        // go through MediaContext-aware player components.
+        // Reconstruct every subtree as React. Besides routing media through
+        // MediaContext, this keeps event-handler attributes and unsafe URLs
+        // out of the DOM even when the caller selected `trusted` structure.
         return (
           <span key={key} className="squisq-md-html-inline">
-            {renderHtmlNodes(resolveHtmlNodes(node.htmlChildren, ctx.htmlPolicy), `${key}h`)}
+            {renderHtmlNodes(resolveHtmlNodes(node.htmlChildren, ctx.htmlPolicy), `${key}h`, ctx)}
           </span>
         );
 
@@ -292,27 +277,11 @@ function renderBlock(
 
     case 'htmlBlock':
       if (ctx.htmlPolicy === 'strip') return null;
-      // Fast path: no <video>/<audio> → preserve the existing rawHtml
-      // passthrough so arbitrary HTML embeds still survive verbatim.
-      if (
-        ctx.htmlPolicy === 'trusted' &&
-        !containsMediaTag(node.htmlChildren) &&
-        !containsDangerousTag(node.htmlChildren) &&
-        !hasDangerousRawHtml(node.rawHtml)
-      ) {
-        return (
-          <div
-            key={key}
-            className="squisq-md-html-block"
-            dangerouslySetInnerHTML={{ __html: node.rawHtml }}
-          />
-        );
-      }
-      // Otherwise reconstruct subtree as React so <video>/<audio>
-      // route through the player components and resolve via MediaContext.
+      // The structural walker is deliberately the only rendering path: raw
+      // HTML strings never bypass the tag, attribute, and URL policy below.
       return (
         <div key={key} className="squisq-md-html-block">
-          {renderHtmlNodes(resolveHtmlNodes(node.htmlChildren, ctx.htmlPolicy), `${key}h`)}
+          {renderHtmlNodes(resolveHtmlNodes(node.htmlChildren, ctx.htmlPolicy), `${key}h`, ctx)}
         </div>
       );
 
@@ -467,23 +436,11 @@ function MdImage({ src, alt, title }: { src: string; alt: string; title?: string
 
 // ── Raw-HTML walker (intercepts <video>/<audio>) ─────────────────
 
-/** True when the htmlElement subtree contains a tag we want to swap
- *  for a React component. Cheap recursive scan — lets us keep the
- *  `dangerouslySetInnerHTML` fast path for everything else. */
+/** Apply the caller's structural HTML policy before React reconstruction. */
 function resolveHtmlNodes(nodes: HtmlNode[], htmlPolicy: HtmlPolicy): HtmlNode[] {
   if (htmlPolicy === 'strip') return [];
   if (htmlPolicy === 'trusted') return nodes;
   return sanitizeHtmlNodes(nodes);
-}
-
-function containsMediaTag(nodes: HtmlNode[]): boolean {
-  for (const node of nodes) {
-    if (node.type !== 'htmlElement') continue;
-    const tagName = node.tagName.toLowerCase();
-    if (tagName === 'video' || tagName === 'audio') return true;
-    if (containsMediaTag(node.children)) return true;
-  }
-  return false;
 }
 
 /**
@@ -510,41 +467,9 @@ const DANGEROUS_HTML_TAGS = new Set([
   'title',
 ]);
 
-/** True when the subtree contains any host-affecting tag (see
- *  {@link DANGEROUS_HTML_TAGS}). Mirrors {@link containsMediaTag}: keeps
- *  such content off the verbatim `dangerouslySetInnerHTML` fast path so
- *  it routes through the React reconstruction, which drops the tag. */
-function containsDangerousTag(nodes: HtmlNode[]): boolean {
-  for (const node of nodes) {
-    if (node.type !== 'htmlElement') continue;
-    if (DANGEROUS_HTML_TAGS.has(node.tagName.toLowerCase())) return true;
-    if (containsDangerousTag(node.children)) return true;
-  }
-  return false;
-}
-
-/**
- * Raw-string backstop for {@link DANGEROUS_HTML_TAGS}. The structural
- * {@link containsDangerousTag} check covers the normal case, but a block
- * parsed with `parseHtml: false` carries an empty `htmlChildren` while
- * `rawHtml` still holds the markup — so the verbatim fast path scans the
- * raw string too, guaranteeing a `<style>`/`<script>` can never be
- * injected into the host document by that path no matter how the node
- * was produced. The `\b` keeps `<styled-thing>` from matching `<style>`.
- */
-const DANGEROUS_RAW_HTML_RE =
-  /<\s*\/?\s*(?:base|embed|iframe|link|meta|object|script|style|title)\b/i;
-
-function hasDangerousRawHtml(rawHtml: string): boolean {
-  return DANGEROUS_RAW_HTML_RE.test(rawHtml);
-}
-
 /** A pragmatic shortlist of HTML attributes the raw-HTML walker
  *  passes through to React when reconstructing a non-media element.
- *  Anything outside this list is silently dropped — the media-tag
- *  fast path means most authors will never hit this code, so we
- *  keep the surface narrow to avoid React warnings about unknown
- *  attributes. */
+ *  Anything outside this list is silently dropped. */
 const PASSTHROUGH_ATTRS: Record<string, string> = {
   // common
   class: 'className',
@@ -564,7 +489,10 @@ const PASSTHROUGH_ATTRS: Record<string, string> = {
   rel: 'rel',
 };
 
-function reactPropsFromAttrs(attrs: Record<string, string>): Record<string, unknown> {
+function reactPropsFromAttrs(
+  attrs: Record<string, string>,
+  ctx: RenderCtx,
+): Record<string, unknown> {
   const out: Record<string, unknown> = {};
   for (const [name, value] of Object.entries(attrs)) {
     const propName = PASSTHROUGH_ATTRS[name];
@@ -576,26 +504,36 @@ function reactPropsFromAttrs(attrs: Record<string, string>): Record<string, unkn
       out['data-style'] = value;
       continue;
     }
+    if (propName === 'href') {
+      const href = sanitizeUrl(value, 'link', { extraLinkSchemes: ctx.linkSchemes });
+      if (href) out.href = href;
+      continue;
+    }
+    if (propName === 'src') {
+      const src = sanitizeUrl(value, 'media');
+      if (src) out.src = src;
+      continue;
+    }
     out[propName] = value;
   }
   return out;
 }
 
-function renderHtmlElement(el: HtmlElement, key: string): React.ReactNode {
+function renderHtmlElement(el: HtmlElement, key: string, ctx: RenderCtx): React.ReactNode {
   const tagName = el.tagName.toLowerCase();
-  // Final safety net: never reconstruct a host-affecting element (e.g. a
-  // <style> that would leak globally), whatever the policy. The fast path
-  // is gated by containsDangerousTag, so trusted content carrying these
-  // tags lands here — drop the tag and keep the rest of the subtree.
+  // Never reconstruct a host-affecting element (e.g. a <style> that would
+  // leak globally), whatever the policy.
   if (DANGEROUS_HTML_TAGS.has(tagName)) return null;
   if (tagName === 'video') {
+    const src = sanitizeUrl(el.attributes.src ?? '', 'media') ?? '';
+    const poster = sanitizeUrl(el.attributes.poster ?? '', 'media') ?? undefined;
     return (
       <InlineVideoPlayer
         key={key}
-        src={el.attributes.src ?? ''}
+        src={src}
         width={el.attributes.width}
         height={el.attributes.height}
-        poster={el.attributes.poster}
+        poster={poster}
         // The `controls` attribute is a boolean — present means true,
         // even if its value is an empty string.
         controls={'controls' in el.attributes}
@@ -610,10 +548,11 @@ function renderHtmlElement(el: HtmlElement, key: string): React.ReactNode {
     );
   }
   if (tagName === 'audio') {
+    const src = sanitizeUrl(el.attributes.src ?? '', 'media') ?? '';
     return (
       <InlineAudioPlayer
         key={key}
-        src={el.attributes.src ?? ''}
+        src={src}
         controls={'controls' in el.attributes}
         preload={
           el.attributes.preload === 'none' ||
@@ -627,23 +566,27 @@ function renderHtmlElement(el: HtmlElement, key: string): React.ReactNode {
   }
 
   const Tag = tagName as keyof JSX.IntrinsicElements;
-  const props = reactPropsFromAttrs(el.attributes);
+  const props = reactPropsFromAttrs(el.attributes, ctx);
   if (el.selfClosing) {
     return <Tag key={key} {...props} />;
   }
   return (
     <Tag key={key} {...props}>
-      {renderHtmlNodes(el.children, `${key}c`)}
+      {renderHtmlNodes(el.children, `${key}c`, ctx)}
     </Tag>
   );
 }
 
-function renderHtmlNodes(nodes: HtmlNode[], keyPrefix: string): React.ReactNode[] {
+function renderHtmlNodes(
+  nodes: HtmlNode[],
+  keyPrefix: string,
+  ctx: RenderCtx = DEFAULT_CTX,
+): React.ReactNode[] {
   return nodes.map((node, i) => {
     const key = `${keyPrefix}${i}`;
     switch (node.type) {
       case 'htmlElement':
-        return renderHtmlElement(node, key);
+        return renderHtmlElement(node, key, ctx);
       case 'htmlText':
         return <Fragment key={key}>{node.value}</Fragment>;
       case 'htmlComment':

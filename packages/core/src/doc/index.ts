@@ -3,6 +3,7 @@ export * from './utils/animationUtils.js';
 export * from './utils/themeUtils.js';
 export * from './utils/applyRenderStyle.js';
 export * from './utils/imageTreatment.js';
+export * from './utils/diagramText.js';
 export * from './templateInputs.js';
 export * from './utils/shapeGeometry.js';
 export {
@@ -11,12 +12,12 @@ export {
   flattenRenderableBlocks,
   countBlocks,
   getBlockDepth,
+  getBlockBodyText,
+  getPinnedBlockMeta,
 } from './markdownToDoc.js';
 export type { MarkdownToDocOptions } from './markdownToDoc.js';
 export { docToMarkdown } from './docToMarkdown.js';
 export {
-  encodeLayersForFrontmatter,
-  decodeLayersFromFrontmatter,
   readCustomTemplatesFromFrontmatter,
   writeCustomTemplatesToFrontmatter,
   FRONTMATTER_CUSTOM_TEMPLATES_KEY,
@@ -27,9 +28,8 @@ export {
   FRONTMATTER_CUSTOM_THEMES_KEY,
 } from './customThemesFrontmatter.js';
 export { resolveThemeForDoc } from './resolveDocTheme.js';
-export { getLayers } from './getLayers.js';
-export type { RenderContext } from './getLayers.js';
 export { resolveAudioMapping, scoreTextSimilarity } from './audioMapping.js';
+export { applyNarrationTiming, type NarrationResolution } from './applyNarrationTiming.js';
 export {
   isDataFence,
   parseDataFence,
@@ -53,3 +53,75 @@ export type {
   TemplateInputDescriptor,
   TemplateParamFinding,
 } from './templates/inputDescriptors.js';
+export {
+  ASCII_CHAR_H,
+  ASCII_CHAR_W,
+  ASCII_DIAGRAM_FENCE_LANGS,
+  asciiCellToCanvas,
+  asciiDiagramFromBlocks,
+  asciiDiagramFromTemplateData,
+  asciiDiagramToTemplateData,
+  canvasToAsciiCell,
+  detectAsciiDiagram,
+  isAsciiDiagramFence,
+  isEligibleAsciiFenceLang,
+  isExplicitDiagramLang,
+  isRepairableDiagram,
+  parseAsciiDiagram,
+  renderAsciiDiagram,
+  repairAsciiDiagram,
+} from './asciiDiagram/index.js';
+export type {
+  AsciiDiagram,
+  AsciiDiagramDetection,
+  AsciiDiagramEdge,
+  AsciiDiagramNode,
+  RenderAsciiDiagramOptions,
+  RepairResult,
+} from './asciiDiagram/index.js';
+export {
+  ASCII_TIMELINE_FENCE_LANGS,
+  asciiTimelineToTemplateData,
+  detectAsciiTimeline,
+  isAsciiTimelineFence,
+  isEligibleAsciiTimelineFenceLang,
+  isExplicitTimelineLang,
+  isWrappedFlowTimelineSource,
+  parseAsciiTimeline,
+  parseAsciiTimelineWithStats,
+  parseWrappedFlowTimeline,
+  renderAsciiTimeline,
+} from './asciiTimeline/index.js';
+export type {
+  AsciiTimeline,
+  AsciiTimelineDetection,
+  AsciiTimelineEvent,
+  AsciiTimelineLink,
+  AsciiTimelineMarker,
+  AsciiTimelineSide,
+  AsciiTimelineStats,
+  AsciiTimelineStyle,
+  AsciiTimelineTrack,
+  DetectAsciiTimelineOptions,
+  RenderAsciiTimelineOptions,
+} from './asciiTimeline/index.js';
+export {
+  TREE_FENCE_LANGS,
+  detectTree,
+  findFirstList,
+  isEligibleTreeFenceLang,
+  isExplicitTreeLang,
+  isTreeFence,
+  parseTree,
+  renderTree,
+  treeFromMarkdownList,
+  treeFromTemplateData,
+  treeToTemplateData,
+} from './treeview/index.js';
+export type {
+  RenderTreeOptions,
+  Tree,
+  TreeDetection,
+  TreeItem,
+  TreeNode,
+} from './treeview/index.js';

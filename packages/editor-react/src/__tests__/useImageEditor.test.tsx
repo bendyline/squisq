@@ -12,6 +12,14 @@ import {
 } from '@bendyline/squisq/imageEdit';
 import { useImageEditor } from '../imageEditor/useImageEditor.js';
 
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((res) => {
+    resolve = res;
+  });
+  return { promise, resolve };
+}
+
 beforeEach(() => {
   // jsdom doesn't implement createObjectURL or HTMLImageElement loading.
   // Stub both so the hook can complete its asset-resolution path.
@@ -129,6 +137,65 @@ describe('useImageEditor', () => {
     expect(result.current.state?.dirty).toBe(false);
     const persisted = await readImageEditDoc(container);
     expect(persisted?.canvas.width).toBe(25);
+  });
+
+  it('does not mark a newer edit clean when an older write resolves', async () => {
+    const container = new MemoryContentContainer();
+    await writeImageEditDoc(container, createEmptyImageEditDoc(10, 10));
+    const originalWrite = container.writeFile.bind(container);
+    const gate = deferred<void>();
+    const started = deferred<void>();
+    let writes = 0;
+    vi.spyOn(container, 'writeFile').mockImplementation(async (...args) => {
+      writes += 1;
+      if (writes === 1) {
+        started.resolve();
+        await gate.promise;
+      }
+      return originalWrite(...args);
+    });
+    const { result } = renderHook(() => useImageEditor({ container, persistDebounceMs: 5 }));
+    await waitFor(() => expect(result.current.ready).toBe(true));
+
+    act(() => result.current.dispatch({ type: 'set-canvas', canvas: { width: 20, height: 20 } }));
+    await started.promise;
+    act(() => result.current.dispatch({ type: 'set-canvas', canvas: { width: 30, height: 30 } }));
+    gate.resolve();
+
+    await waitFor(() => expect(result.current.state?.dirty).toBe(false));
+    expect((await readImageEditDoc(container))?.canvas.width).toBe(30);
+  });
+
+  it('flushes a dirty debounce when the editor unmounts', async () => {
+    const container = new MemoryContentContainer();
+    await writeImageEditDoc(container, createEmptyImageEditDoc(10, 10));
+    const { result, unmount } = renderHook(() =>
+      useImageEditor({ container, persistDebounceMs: 100000 }),
+    );
+    await waitFor(() => expect(result.current.ready).toBe(true));
+    act(() => result.current.dispatch({ type: 'set-canvas', canvas: { width: 44, height: 44 } }));
+    unmount();
+    await waitFor(async () => expect((await readImageEditDoc(container))?.canvas.width).toBe(44));
+  });
+
+  it('does not populate the URL cache after unmount', async () => {
+    const container = new MemoryContentContainer();
+    await writeImageEditDoc(container, createEmptyImageEditDoc(10, 10));
+    await container.writeFile('assets/late.png', new Uint8Array([1]).buffer, 'image/png');
+    const { result, unmount } = renderHook(() => useImageEditor({ container }));
+    await waitFor(() => expect(result.current.ready).toBe(true));
+    const originalRead = container.readFile.bind(container);
+    const gate = deferred<ArrayBuffer | null>();
+    vi.spyOn(container, 'readFile').mockImplementation((path) =>
+      path === 'assets/late.png' ? gate.promise : originalRead(path),
+    );
+    const create = vi.mocked(URL.createObjectURL);
+    const before = create.mock.calls.length;
+    const pending = result.current.resolveAssetUrl('assets/late.png');
+    unmount();
+    gate.resolve(new Uint8Array([1]).buffer);
+    await expect(pending).rejects.toThrow(/cancelled/);
+    expect(create).toHaveBeenCalledTimes(before);
   });
 
   it('versioning is null when allowVersioning is false', async () => {

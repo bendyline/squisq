@@ -63,6 +63,32 @@ export function DocProgressBar({
     setHoverPosition(null);
   }, []);
 
+  const handleProgressKeyDown = useCallback(
+    (e: React.KeyboardEvent<HTMLDivElement>) => {
+      let next: number | null = null;
+      switch (e.key) {
+        case 'ArrowLeft':
+        case 'ArrowDown':
+          next = state.currentTime - 5;
+          break;
+        case 'ArrowRight':
+        case 'ArrowUp':
+          next = state.currentTime + 5;
+          break;
+        case 'Home':
+          next = 0;
+          break;
+        case 'End':
+          next = state.totalDuration;
+          break;
+      }
+      if (next == null) return;
+      e.preventDefault();
+      actions.seekTo(Math.max(0, Math.min(state.totalDuration, next)));
+    },
+    [actions, state.currentTime, state.totalDuration],
+  );
+
   const getBlockAtTimeLocal = useCallback(
     (time: number): { block: Block; index: number } | null => {
       for (let i = expandedBlocks.length - 1; i >= 0; i--) {
@@ -79,6 +105,8 @@ export function DocProgressBar({
   return (
     <div
       ref={progressBarRef}
+      role="group"
+      aria-label="Playback timeline"
       style={{
         flex: 1,
         height: '24px',
@@ -98,6 +126,14 @@ export function DocProgressBar({
     >
       {/* Track background */}
       <div
+        role="slider"
+        tabIndex={0}
+        aria-label="Playback position"
+        aria-valuemin={0}
+        aria-valuemax={state.totalDuration}
+        aria-valuenow={Math.max(0, Math.min(state.totalDuration, state.currentTime))}
+        aria-valuetext={`${formatTime(state.currentTime)} of ${formatTime(state.totalDuration)}`}
+        onKeyDown={handleProgressKeyDown}
         style={{
           position: 'absolute',
           left: 0,
@@ -132,7 +168,8 @@ export function DocProgressBar({
 
       {/* Block markers (dots) */}
       {blockMarkers.map((marker, i) => (
-        <div
+        <button
+          type="button"
           key={`${marker.block.id}-${i}`}
           style={{
             position: 'absolute',
@@ -144,11 +181,13 @@ export function DocProgressBar({
             background:
               marker.index === state.currentBlockIndex ? '#ffffff' : 'rgba(255,255,255,0.5)',
             border: '2px solid #5b9bd5',
+            padding: 0,
             cursor: 'pointer',
             zIndex: 2,
             transition: 'transform 0.15s, background 0.15s',
           }}
           title={marker.title}
+          aria-label={`Seek to ${marker.title}`}
           onClick={(e) => {
             e.stopPropagation();
             actions.seekTo(marker.block.startTime);

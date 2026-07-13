@@ -11,8 +11,10 @@
 import type { ContentContainer } from '@bendyline/squisq/storage';
 import type { MarkdownDocument } from '@bendyline/squisq/markdown';
 import { ConversionError } from './errors.js';
+import { markdownFidelityWarnings } from '../shared/fidelity.js';
 import type {
   ConversionResult,
+  BuiltinFormatOptions,
   ConvertOptions,
   FormatDefinition,
   NormalizedInput,
@@ -57,6 +59,13 @@ function resolveThemeId(input: NormalizedInput, options: ConvertOptions): string
   return options.themeId ?? input.doc.themeId;
 }
 
+function optionsFor<K extends keyof BuiltinFormatOptions>(
+  options: ConvertOptions,
+  id: K,
+): BuiltinFormatOptions[K] {
+  return (options.formatOptions?.[id] ?? {}) as BuiltinFormatOptions[K];
+}
+
 /** The markdown shape an exporter needs — reuse the source's, else derive it. */
 async function markdownOf(input: NormalizedInput): Promise<MarkdownDocument> {
   if (input.markdownDoc) return input.markdownDoc;
@@ -85,6 +94,34 @@ async function collectContainerImages(
   return images;
 }
 
+async function collectContainerDocxImages(
+  container: ContentContainer,
+): Promise<Map<string, { data: ArrayBuffer; contentType: string }>> {
+  const images = await collectContainerImages(container);
+  const { extToMime } = await import('../shared/images.js');
+  return new Map(
+    [...images].map(([path, data]) => [
+      path,
+      { data, contentType: extToMime(path.split('.').pop() ?? '') },
+    ]),
+  );
+}
+
+/** Copy a container and make its primary document match the normalized source. */
+async function snapshotContainerWithDocument(input: NormalizedInput): Promise<ContentContainer> {
+  const { MemoryContentContainer } = await import('@bendyline/squisq/storage');
+  const snapshot = new MemoryContentContainer();
+  const entries = await input.container.listFiles();
+  for (const entry of entries) {
+    const data = await input.container.readFile(entry.path);
+    if (data) await snapshot.writeFile(entry.path, new Uint8Array(data), entry.mimeType);
+  }
+  const { stringifyMarkdown } = await import('@bendyline/squisq/markdown');
+  const documentPath = (await input.container.getDocumentPath()) ?? 'index.md';
+  await snapshot.writeDocument(stringifyMarkdown(await markdownOf(input)), documentPath);
+  return snapshot;
+}
+
 /** Resolve the player IIFE bundle or throw a helpful missing-dependency error. */
 async function requirePlayerScript(options: ConvertOptions, format: string): Promise<string> {
   const script = await options.resolvePlayerScript?.();
@@ -102,6 +139,20 @@ function ok(bytes: Uint8Array, mimeType: string, warnings: string[] = []): Conve
   return { bytes, mimeType, suggestedFilename: '', warnings };
 }
 
+/**
+ * Narrow the untyped per-format escape hatch (`options.formatOptions.pptx`)
+ * into the PPTX importer's options. Theme + layout inference default ON;
+ * only an explicit `false` disables them.
+ */
+function pptxImportOptionsFrom(options: ConvertOptions): BuiltinFormatOptions['pptx'] {
+  const raw = optionsFor(options, 'pptx');
+  return {
+    ...raw,
+    inferTheme: raw?.inferTheme !== false,
+    inferLayouts: raw?.inferLayouts !== false,
+  };
+}
+
 // ── Definitions ─────────────────────────────────────────────────────
 
 export function defaultFormats(): FormatDefinition[] {
@@ -110,13 +161,13 @@ export function defaultFormats(): FormatDefinition[] {
     label: 'Markdown',
     mimeType: MIME.md,
     extensions: ['.md', '.markdown'],
-    async importDoc(data): Promise<MarkdownDocument> {
+    async importDoc(data, options): Promise<MarkdownDocument> {
       const { parseMarkdown } = await import('@bendyline/squisq/markdown');
-      return parseMarkdown(new TextDecoder().decode(data));
+      return parseMarkdown(new TextDecoder().decode(data), optionsFor(options, 'md').parse);
     },
-    async exportDoc(input): Promise<ConversionResult> {
+    async exportDoc(input, options): Promise<ConversionResult> {
       const { stringifyMarkdown } = await import('@bendyline/squisq/markdown');
-      const text = stringifyMarkdown(await markdownOf(input));
+      const text = stringifyMarkdown(await markdownOf(input), optionsFor(options, 'md').stringify);
       return ok(new TextEncoder().encode(text), MIME.md);
     },
   };
@@ -126,20 +177,28 @@ export function defaultFormats(): FormatDefinition[] {
     label: 'Word (DOCX)',
     mimeType: MIME.docx,
     extensions: ['.docx'],
-    async importContainer(data): Promise<ContentContainer> {
+    async importContainer(data, options): Promise<ContentContainer> {
       const { docxToContainer } = await import('../docx/index.js');
-      return docxToContainer(data);
+      return docxToContainer(data, optionsFor(options, 'docx'));
     },
-    async importDoc(data): Promise<MarkdownDocument> {
+    async importDoc(data, options): Promise<MarkdownDocument> {
       const { docxToMarkdownDoc } = await import('../docx/index.js');
-      return docxToMarkdownDoc(data);
+      return docxToMarkdownDoc(data, optionsFor(options, 'docx'));
     },
     async exportDoc(input, options): Promise<ConversionResult> {
       const { markdownDocToDocx } = await import('../docx/index.js');
-      const buf = await markdownDocToDocx(await markdownOf(input), {
+      const raw = optionsFor(options, 'docx');
+      const markdownDoc = await markdownOf(input);
+      const containerImages = await collectContainerDocxImages(input.container);
+      const images = new Map([...containerImages, ...(raw.images ?? new Map())]);
+      const buf = await markdownDocToDocx(markdownDoc, {
+        ...raw,
+        ...(options.title !== undefined ? { title: options.title } : {}),
         themeId: resolveThemeId(input, options),
+        themeRegistry: options.themeRegistry ?? raw.themeRegistry,
+        images,
       });
-      return ok(await toBytes(buf), MIME.docx);
+      return ok(await toBytes(buf), MIME.docx, markdownFidelityWarnings(markdownDoc, 'docx'));
     },
   };
 
@@ -148,20 +207,25 @@ export function defaultFormats(): FormatDefinition[] {
     label: 'PDF',
     mimeType: MIME.pdf,
     extensions: ['.pdf'],
-    async importContainer(data): Promise<ContentContainer> {
+    async importContainer(data, options): Promise<ContentContainer> {
       const { pdfToContainer } = await import('../pdf/index.js');
-      return pdfToContainer(data);
+      return pdfToContainer(data, optionsFor(options, 'pdf'));
     },
-    async importDoc(data): Promise<MarkdownDocument> {
+    async importDoc(data, options): Promise<MarkdownDocument> {
       const { pdfToMarkdownDoc } = await import('../pdf/index.js');
-      return pdfToMarkdownDoc(data);
+      return pdfToMarkdownDoc(data, optionsFor(options, 'pdf'));
     },
     async exportDoc(input, options): Promise<ConversionResult> {
       const { markdownDocToPdf } = await import('../pdf/index.js');
-      const buf = await markdownDocToPdf(await markdownOf(input), {
+      const raw = optionsFor(options, 'pdf');
+      const markdownDoc = await markdownOf(input);
+      const buf = await markdownDocToPdf(markdownDoc, {
+        ...raw,
+        ...(options.title !== undefined ? { title: options.title } : {}),
         themeId: resolveThemeId(input, options),
+        themeRegistry: options.themeRegistry ?? raw.themeRegistry,
       });
-      return ok(await toBytes(buf), MIME.pdf);
+      return ok(await toBytes(buf), MIME.pdf, markdownFidelityWarnings(markdownDoc, 'pdf'));
     },
   };
 
@@ -170,22 +234,28 @@ export function defaultFormats(): FormatDefinition[] {
     label: 'PowerPoint (PPTX)',
     mimeType: MIME.pptx,
     extensions: ['.pptx'],
-    async importContainer(data): Promise<ContentContainer> {
+    async importContainer(data, options): Promise<ContentContainer> {
       const { pptxToContainer } = await import('../pptx/index.js');
-      return pptxToContainer(data);
+      return pptxToContainer(data, pptxImportOptionsFrom(options));
     },
-    async importDoc(data): Promise<MarkdownDocument> {
+    async importDoc(data, options): Promise<MarkdownDocument> {
       const { pptxToMarkdownDoc } = await import('../pptx/index.js');
-      return pptxToMarkdownDoc(data);
+      return pptxToMarkdownDoc(data, pptxImportOptionsFrom(options));
     },
     async exportDoc(input, options): Promise<ConversionResult> {
       const { markdownDocToPptx } = await import('../pptx/index.js');
-      const images = await collectContainerImages(input.container);
-      const buf = await markdownDocToPptx(await markdownOf(input), {
+      const raw = optionsFor(options, 'pptx');
+      const markdownDoc = await markdownOf(input);
+      const containerImages = await collectContainerImages(input.container);
+      const images = new Map([...containerImages, ...(raw.images ?? new Map())]);
+      const buf = await markdownDocToPptx(markdownDoc, {
+        ...raw,
+        ...(options.title !== undefined ? { title: options.title } : {}),
         themeId: resolveThemeId(input, options),
+        themeRegistry: options.themeRegistry ?? raw.themeRegistry,
         images,
       });
-      return ok(await toBytes(buf), MIME.pptx);
+      return ok(await toBytes(buf), MIME.pptx, markdownFidelityWarnings(markdownDoc, 'pptx'));
     },
   };
 
@@ -194,11 +264,11 @@ export function defaultFormats(): FormatDefinition[] {
     label: 'Excel (XLSX)',
     mimeType: MIME.xlsx,
     extensions: ['.xlsx'],
-    async importDoc(data): Promise<MarkdownDocument> {
+    async importDoc(data, options): Promise<MarkdownDocument> {
       const { xlsxToMarkdownDoc } = await import('../xlsx/index.js');
-      return xlsxToMarkdownDoc(data);
+      return xlsxToMarkdownDoc(data, optionsFor(options, 'xlsx'));
     },
-    async exportDoc(input): Promise<ConversionResult> {
+    async exportDoc(input, options): Promise<ConversionResult> {
       const { markdownDocToXlsx } = await import('../xlsx/index.js');
       const markdownDoc = await markdownOf(input);
       // XLSX fidelity is tables-only: `table` nodes become worksheets and
@@ -211,7 +281,10 @@ export function defaultFormats(): FormatDefinition[] {
         omitted > 0
           ? [`XLSX export is tables-only; ${omitted} non-table block(s) were omitted.`]
           : [];
-      const blob = await markdownDocToXlsx(markdownDoc);
+      const blob = await markdownDocToXlsx(markdownDoc, {
+        ...optionsFor(options, 'xlsx'),
+        ...(options.title !== undefined ? { title: options.title } : {}),
+      });
       return ok(await toBytes(blob), MIME.xlsx, warnings);
     },
   };
@@ -221,21 +294,22 @@ export function defaultFormats(): FormatDefinition[] {
     label: 'CSV',
     mimeType: MIME.csv,
     extensions: ['.csv'],
-    async importDoc(data): Promise<MarkdownDocument> {
+    async importDoc(data, options): Promise<MarkdownDocument> {
       const { csvToMarkdownDoc } = await import('../csv/index.js');
-      return csvToMarkdownDoc(data);
+      return csvToMarkdownDoc(data, optionsFor(options, 'csv'));
     },
-    async exportDoc(input): Promise<ConversionResult> {
+    async exportDoc(input, options): Promise<ConversionResult> {
       const { markdownDocToCsv } = await import('../csv/index.js');
       const markdownDoc = await markdownOf(input);
+      const raw = optionsFor(options, 'csv');
       const tableCount = markdownDoc.children.filter((n) => n.type === 'table').length;
       const warnings: string[] = [];
-      if (tableCount > 1) {
+      if (tableCount > 1 && raw.tableIndex === undefined) {
         warnings.push(
           `Document has ${tableCount} tables; CSV export emitted only the first. Use the csv converter's tableIndex option to select another.`,
         );
       }
-      const text = markdownDocToCsv(markdownDoc);
+      const text = markdownDocToCsv(markdownDoc, raw);
       return ok(new TextEncoder().encode(text), MIME.csv, warnings);
     },
   };
@@ -245,22 +319,26 @@ export function defaultFormats(): FormatDefinition[] {
     label: 'HTML (single file)',
     mimeType: MIME.html,
     extensions: ['.html', '.htm'],
-    async importDoc(data): Promise<MarkdownDocument> {
+    async importDoc(data, options): Promise<MarkdownDocument> {
       const { htmlToMarkdownDoc } = await import('../html/index.js');
-      return htmlToMarkdownDoc(data);
+      return htmlToMarkdownDoc(data, optionsFor(options, 'html'));
     },
     // importContainer omitted: HTML import already inlines images as data URIs,
     // so there is nothing to extract into a container this wave.
     async exportDoc(input, options): Promise<ConversionResult> {
       const playerScript = await requirePlayerScript(options, 'html');
       const { docToHtml } = await import('../html/index.js');
-      const images = await collectContainerImages(input.container);
+      const raw = optionsFor(options, 'html');
+      const containerImages = await collectContainerImages(input.container);
+      const images = new Map([...containerImages, ...(raw.images ?? new Map())]);
       const htmlText = docToHtml(input.doc, {
+        ...raw,
         playerScript,
         images,
         title: options.title ?? input.baseName,
-        mode: 'static',
+        mode: raw.mode ?? 'static',
         themeId: resolveThemeId(input, options),
+        themeRegistry: options.themeRegistry ?? raw.themeRegistry,
       });
       return ok(new TextEncoder().encode(htmlText), MIME.html);
     },
@@ -274,13 +352,17 @@ export function defaultFormats(): FormatDefinition[] {
     async exportDoc(input, options): Promise<ConversionResult> {
       const playerScript = await requirePlayerScript(options, 'htmlzip');
       const { docToHtmlZip } = await import('../html/index.js');
-      const images = await collectContainerImages(input.container);
+      const raw = optionsFor(options, 'htmlzip');
+      const containerImages = await collectContainerImages(input.container);
+      const images = new Map([...containerImages, ...(raw.images ?? new Map())]);
       const blob = await docToHtmlZip(input.doc, {
+        ...raw,
         playerScript,
         images,
         title: options.title ?? input.baseName,
-        mode: 'static',
+        mode: raw.mode ?? 'static',
         themeId: resolveThemeId(input, options),
+        themeRegistry: options.themeRegistry ?? raw.themeRegistry,
       });
       return ok(await toBytes(blob), MIME.zip);
     },
@@ -293,13 +375,18 @@ export function defaultFormats(): FormatDefinition[] {
     extensions: ['.epub'],
     async exportDoc(input, options): Promise<ConversionResult> {
       const { markdownDocToEpub } = await import('../epub/index.js');
-      const images = await collectContainerImages(input.container);
-      const buf = await markdownDocToEpub(await markdownOf(input), {
+      const raw = optionsFor(options, 'epub');
+      const markdownDoc = await markdownOf(input);
+      const containerImages = await collectContainerImages(input.container);
+      const images = new Map([...containerImages, ...(raw.images ?? new Map())]);
+      const buf = await markdownDocToEpub(markdownDoc, {
+        ...raw,
         title: options.title ?? input.baseName,
         themeId: resolveThemeId(input, options),
+        themeRegistry: options.themeRegistry ?? raw.themeRegistry,
         images,
       });
-      return ok(await toBytes(buf), MIME.epub);
+      return ok(await toBytes(buf), MIME.epub, markdownFidelityWarnings(markdownDoc, 'epub'));
     },
   };
 
@@ -308,13 +395,13 @@ export function defaultFormats(): FormatDefinition[] {
     label: 'Squisq container (DBK)',
     mimeType: MIME.zip,
     extensions: ['.dbk', '.zip'],
-    async importContainer(data): Promise<ContentContainer> {
+    async importContainer(data, options): Promise<ContentContainer> {
       const { zipToContainer } = await import('../container/index.js');
-      return zipToContainer(data);
+      return zipToContainer(data, optionsFor(options, 'dbk'));
     },
     async exportDoc(input): Promise<ConversionResult> {
       const { containerToZip } = await import('../container/index.js');
-      const blob = await containerToZip(input.container);
+      const blob = await containerToZip(await snapshotContainerWithDocument(input));
       return ok(await toBytes(blob), MIME.zip);
     },
   };

@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import { useState } from 'react';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import type { SquisqAnnotatedSchema } from '@bendyline/squisq/jsonForm';
 import { JsonEditor } from '../jsonEditor';
 
@@ -164,5 +164,60 @@ describe('JsonEditor', () => {
     expect(input.disabled).toBe(true);
     fireEvent.change(input, { target: { value: 'changed' } });
     expect(onChange).not.toHaveBeenCalled();
+  });
+
+  it('escapes object property names as RFC 6901 pointer segments', () => {
+    const schema: SquisqAnnotatedSchema = {
+      type: 'object',
+      properties: { 'a/b~c': { type: 'string', title: 'Odd key' } },
+    };
+    const onChange = vi.fn();
+    render(<Controlled schema={schema} initial={{ 'a/b~c': 'before' }} onValueChange={onChange} />);
+    fireEvent.change(screen.getByLabelText('Odd key'), { target: { value: 'after' } });
+    expect(onChange).toHaveBeenLastCalledWith({ 'a/b~c': 'after' });
+  });
+
+  it('associates labels/help/errors and reports validation after render', async () => {
+    const schema: SquisqAnnotatedSchema = {
+      type: 'object',
+      properties: {
+        title: { type: 'string', title: 'Title', description: 'A useful title' },
+      },
+    };
+    const onValidate = vi.fn();
+    render(
+      <JsonEditor
+        schema={schema}
+        value={{ title: '' }}
+        onChange={() => {}}
+        validate={() => [{ path: '/title', message: 'Required' }]}
+        onValidate={onValidate}
+      />,
+    );
+    const input = screen.getByLabelText('Title');
+    expect(input.getAttribute('aria-invalid')).toBe('true');
+    const described = input.getAttribute('aria-describedby') ?? '';
+    expect(described).toContain('-help');
+    expect(described).toContain('-error');
+    expect(screen.getByRole('alert').textContent).toBe('Required');
+    await waitFor(() =>
+      expect(onValidate).toHaveBeenCalledWith([{ path: '/title', message: 'Required' }]),
+    );
+  });
+
+  it('adds ARIA state and keyboard navigation to segmented/tabs controls', () => {
+    const schema: SquisqAnnotatedSchema = {
+      oneOf: [
+        { type: 'string', title: 'Text option' },
+        { type: 'number', title: 'Number option' },
+      ],
+      squisq: { control: 'tabs', label: 'Value type' },
+    };
+    render(<JsonEditor schema={schema} value="hello" onChange={() => {}} />);
+    const tabs = screen.getAllByRole('tab');
+    expect(tabs[0].getAttribute('aria-selected')).toBe('true');
+    fireEvent.keyDown(tabs[0], { key: 'ArrowRight' });
+    expect(tabs[1].getAttribute('aria-selected')).toBe('true');
+    expect(screen.getByRole('tabpanel')).toBeTruthy();
   });
 });

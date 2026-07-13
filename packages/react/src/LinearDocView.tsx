@@ -13,11 +13,11 @@
  * - Headings from the block hierarchy rendered as HTML headings
  * - Body content rendered via MarkdownRenderer
  * - Template-annotated sections show an SVG card (BlockRenderer)
- *   using `getLayers()` for on-demand layer computation
+ *   using `materializeBlockLayers()` for on-demand layer computation
  * - Blocks are rendered recursively to preserve the heading hierarchy
  */
 
-import { useMemo } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import { useAutoSurface } from './hooks/useAutoSurface';
 import type { Doc, Block, DocBlock } from '@bendyline/squisq/schemas';
 import type { ViewportConfig } from '@bendyline/squisq/schemas';
@@ -29,13 +29,13 @@ import {
 } from '@bendyline/squisq/schemas';
 import { VIEWPORT_PRESETS } from '@bendyline/squisq/schemas';
 import {
-  getLayers,
-  hasTemplate,
+  materializeBlockLayers,
   markdownToDoc,
   DEFAULT_THEME,
   deriveTemplateInputs,
+  isTemplateBlock,
 } from '@bendyline/squisq/doc';
-import type { RenderContext } from '@bendyline/squisq/doc';
+import type { MaterializeBlockLayersOptions } from '@bendyline/squisq/doc';
 import { extractPlainText, parseMarkdown } from '@bendyline/squisq/markdown';
 import { BlockRenderer } from './BlockRenderer';
 import { MarkdownRenderer } from './MarkdownRenderer';
@@ -62,6 +62,8 @@ export interface LinearDocViewProps {
   className?: string;
   /** Theme to use for rendering (default: DEFAULT_THEME from the theme library) */
   theme?: Theme;
+  /** Whether inline visual cards render their layer animations (default: true). */
+  animationsEnabled?: boolean;
   /**
    * Optional surface scheme (light / dark paper) overlaid on top of the
    * theme's colors. Orthogonal to `theme` — a theme picks editorial
@@ -87,43 +89,35 @@ export interface LinearDocViewProps {
    * full-size images would dominate the layout.
    */
   imageDisplayMode?: ImageDisplayMode;
+  /**
+   * Let unmodified Up/Down arrows scroll this view even when it does not
+   * currently hold focus. Intended for a primary document preview.
+   */
+  globalKeyboardShortcuts?: boolean;
 }
 
 export type ImageDisplayMode = 'inline' | 'thumbnail';
 
 // ── Helpers ────────────────────────────────────────────────────────
 
-// Unknown template names we've already warned about (module-level so each
-// name warns at most once per page, not once per render).
-const warnedUnknownTemplates = new Set<string>();
-
 /**
  * Determine whether a block has a template annotation that should be
- * rendered as a visual SVG card. A block is "annotated" when:
- * 1. Its sourceHeading has a templateAnnotation, AND
- * 2. The annotated template exists in the registry
- *
- * Blocks annotated with a template that is NOT in the registry fall back
- * to plain markdown rendering, with a one-shot dev-visible warning per
- * unknown template name.
+ * rendered as a visual SVG card. Unknown templates remain annotated so the
+ * materializer can return a visible fallback and structured diagnostic.
  */
 function isAnnotatedBlock(block: Block): boolean {
-  const annotation = block.sourceHeading?.templateAnnotation;
-  if (!annotation?.template) return false;
-  if (!hasTemplate(annotation.template)) {
-    if (!warnedUnknownTemplates.has(annotation.template)) {
-      warnedUnknownTemplates.add(annotation.template);
-      console.warn(
-        `[squisq] Unknown template "${annotation.template}" — rendering the block as plain markdown.`,
-      );
-    }
-    return false;
-  }
-  return true;
+  return (
+    !!block.sourceHeading?.templateAnnotation?.template ||
+    (!block.sourceHeading && isTemplateBlock(block as DocBlock))
+  );
+}
+
+function visualTemplateName(block: Block): string | undefined {
+  return block.sourceHeading?.templateAnnotation?.template ?? block.template;
 }
 
 /**
- * Count total blocks in a hierarchy (for RenderContext.totalBlocks).
+ * Count total blocks in a hierarchy for the materialization context.
  */
 function countAll(blocks: Block[]): number {
   let count = 0;
@@ -140,55 +134,75 @@ interface BlockSectionProps {
   block: Block;
   basePath: string;
   viewport: ViewportConfig;
-  renderContext: RenderContext;
+  renderContext: MaterializeBlockLayersOptions;
   blockIndex: number;
+  blockIndices: ReadonlyMap<Block, number>;
+  animationsEnabled: boolean;
 }
 
 /**
  * Render a single block section: heading + body content or SVG card.
  * Recurses into children to render the full heading tree.
  */
-function BlockSection({ block, basePath, viewport, renderContext, blockIndex }: BlockSectionProps) {
+function BlockSection({
+  block,
+  basePath,
+  viewport,
+  renderContext,
+  blockIndex,
+  blockIndices,
+  animationsEnabled,
+}: BlockSectionProps) {
   const isAnnotated = isAnnotatedBlock(block);
 
   // For annotated blocks, compute layers and build a Block with them
   const visualBlock = useMemo(() => {
     if (!isAnnotated) return null;
 
-    const annotation = block.sourceHeading!.templateAnnotation!;
-    const headingText = extractPlainText(block.sourceHeading!);
+    const annotation = block.sourceHeading?.templateAnnotation;
+    const templateName = visualTemplateName(block) ?? 'sectionHeader';
 
-    // Build a TemplateBlock-compatible object
-    const templateBlock: Record<string, unknown> = {
-      id: block.id,
-      template: annotation.template,
-      startTime: 0,
-      duration: 1,
-      audioSegment: 0,
-      title: headingText,
-      ...(deriveTemplateInputs(
-        annotation.template ?? 'sectionHeader',
-        headingText,
-        block.contents,
-        {
-          placeholders: true,
-        },
-      ) ?? {}),
-      ...annotation.params,
-      ...block.templateOverrides,
-    };
+    // Authored Markdown blocks derive their typed template inputs from the
+    // heading/body. Transform-generated blocks already ARE typed template
+    // inputs, so materialize them directly instead of looking for authoring
+    // nodes they intentionally do not carry.
+    const templateBlock: Record<string, unknown> = annotation
+      ? (() => {
+          const headingText = extractPlainText(block.sourceHeading!);
+          return {
+            id: block.id,
+            template: templateName,
+            startTime: 0,
+            duration: 1,
+            audioSegment: 0,
+            title: headingText,
+            contents: block.contents,
+            children: block.children,
+            ...(deriveTemplateInputs(templateName, headingText, block.contents, {
+              placeholders: true,
+            }) ?? {}),
+            ...annotation.params,
+            ...block.templateOverrides,
+          };
+        })()
+      : {
+          ...block,
+          startTime: block.startTime ?? 0,
+          duration: block.duration ?? 1,
+          audioSegment: block.audioSegment ?? 0,
+          template: templateName,
+        };
 
-    // Compute layers via getLayers
-    const ctx: RenderContext = {
+    const ctx: MaterializeBlockLayersOptions = {
       ...renderContext,
       blockIndex,
     };
-    const layers = getLayers(templateBlock as unknown as DocBlock, ctx);
+    const { layers } = materializeBlockLayers(templateBlock as unknown as DocBlock, ctx);
 
     return {
       ...block,
       layers,
-      template: annotation.template,
+      template: templateName,
     } as Block;
   }, [block, isAnnotated, renderContext, blockIndex]);
 
@@ -196,7 +210,8 @@ function BlockSection({ block, basePath, viewport, renderContext, blockIndex }: 
     <div
       className="squisq-linear-section"
       data-block-id={block.id}
-      data-template={isAnnotated ? block.sourceHeading?.templateAnnotation?.template : undefined}
+      data-block-index={blockIndex}
+      data-template={isAnnotated ? visualTemplateName(block) : undefined}
     >
       {/* Render the heading (if present — preamble has no sourceHeading) */}
       {block.sourceHeading && !isAnnotated && <MarkdownRenderer nodes={[block.sourceHeading]} />}
@@ -224,6 +239,7 @@ function BlockSection({ block, basePath, viewport, renderContext, blockIndex }: 
               blockTime={0}
               basePath={basePath}
               viewport={viewport}
+              animationsEnabled={animationsEnabled}
             />
           </div>
         </div>
@@ -244,7 +260,9 @@ function BlockSection({ block, basePath, viewport, renderContext, blockIndex }: 
               basePath={basePath}
               viewport={viewport}
               renderContext={renderContext}
-              blockIndex={blockIndex + i + 1}
+              blockIndex={blockIndices.get(child) ?? blockIndex + i + 1}
+              blockIndices={blockIndices}
+              animationsEnabled={animationsEnabled}
             />
           ))}
         </div>
@@ -275,9 +293,12 @@ export function LinearDocView({
   className,
   theme,
   surface,
+  animationsEnabled = true,
   thinMargins = false,
   imageDisplayMode = 'inline',
+  globalKeyboardShortcuts = false,
 }: LinearDocViewProps) {
+  const scrollRef = useRef<HTMLDivElement>(null);
   const activeViewport = viewport ?? VIEWPORT_PRESETS.landscape;
 
   // Parse markdown into a Doc only when no explicit doc is supplied.
@@ -291,10 +312,22 @@ export function LinearDocView({
     () => (resolvedDoc ? countAll(resolvedDoc.blocks) : 0),
     [resolvedDoc],
   );
+  const blockIndices = useMemo(() => {
+    const indices = new Map<Block, number>();
+    let index = 0;
+    const visit = (blocks: Block[]) => {
+      for (const block of blocks) {
+        indices.set(block, index++);
+        if (block.children) visit(block.children);
+      }
+    };
+    if (resolvedDoc) visit(resolvedDoc.blocks);
+    return indices;
+  }, [resolvedDoc]);
   const autoSurface = useAutoSurface(surface === 'auto');
   const resolvedSurface: SurfaceScheme | undefined = surface === 'auto' ? autoSurface : surface;
 
-  const renderContext: RenderContext = useMemo(() => {
+  const renderContext: MaterializeBlockLayersOptions = useMemo(() => {
     const baseTheme = theme ?? DEFAULT_THEME;
     const effectiveTheme = resolvedSurface ? applySurface(baseTheme, resolvedSurface) : baseTheme;
     return {
@@ -304,15 +337,52 @@ export function LinearDocView({
       // Theme atmosphere (vignette/grain/gradient persistent layers) shows
       // on the inline template cards so they match the player's look.
       persistentLayers: effectiveTheme.persistentLayers,
+      customTemplates: resolvedDoc?.customTemplates,
     };
-  }, [activeViewport, totalBlocks, theme, resolvedSurface]);
+  }, [activeViewport, resolvedDoc?.customTemplates, totalBlocks, theme, resolvedSurface]);
 
   const activeTheme = renderContext.theme!;
+
+  useEffect(() => {
+    if (!globalKeyboardShortcuts) return;
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (
+        event.defaultPrevented ||
+        event.altKey ||
+        event.ctrlKey ||
+        event.metaKey ||
+        event.shiftKey ||
+        (event.key !== 'ArrowDown' && event.key !== 'ArrowUp')
+      ) {
+        return;
+      }
+      const target = event.target instanceof Element ? event.target : null;
+      if (
+        target?.closest(
+          'input, textarea, select, [contenteditable]:not([contenteditable="false"]), [role="textbox"], [role="combobox"], [role="listbox"], [role="menu"], [role="dialog"], [aria-modal="true"], .monaco-editor',
+        )
+      ) {
+        return;
+      }
+      const scroller = scrollRef.current;
+      if (!scroller) return;
+      event.preventDefault();
+      const distance = Math.max(64, Math.round(scroller.clientHeight * 0.12));
+      scroller.scrollBy({
+        top: event.key === 'ArrowDown' ? distance : -distance,
+        behavior: 'smooth',
+      });
+    };
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [globalKeyboardShortcuts]);
 
   // Nothing to render — keep an empty (but classed) container so hosts can
   // still target/measure the view.
   if (!resolvedDoc) {
-    return <div className={`squisq-linear squisq-linear--empty ${className || ''}`} />;
+    return (
+      <div ref={scrollRef} className={`squisq-linear squisq-linear--empty ${className || ''}`} />
+    );
   }
 
   const bgColor = activeTheme.colors.background;
@@ -325,6 +395,7 @@ export function LinearDocView({
 
   return (
     <div
+      ref={scrollRef}
       className={`squisq-linear ${className || ''}`}
       style={{
         width: '100%',
@@ -484,7 +555,9 @@ export function LinearDocView({
             basePath={basePath}
             viewport={activeViewport}
             renderContext={renderContext}
-            blockIndex={i}
+            blockIndex={blockIndices.get(block) ?? i}
+            blockIndices={blockIndices}
+            animationsEnabled={animationsEnabled}
           />
         ))}
       </div>

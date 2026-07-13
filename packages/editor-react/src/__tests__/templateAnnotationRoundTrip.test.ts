@@ -2,6 +2,15 @@ import { describe, it, expect } from 'vitest';
 import { markdownToTiptap, tiptapToMarkdown } from '../tiptapBridge';
 
 describe('Template annotation round-trip', () => {
+  it('hides an empty annotation in Write view while preserving it on round-trip', () => {
+    const original = '## Getting Started {[]}';
+    const html = markdownToTiptap(original);
+
+    expect(html).toContain('data-template-empty="true"');
+    expect(html).not.toContain('{[]}');
+    expect(tiptapToMarkdown(html).trim()).toBe(original);
+  });
+
   it('extracts {[template]} into data-template on markdownToTiptap', () => {
     const html = markdownToTiptap('## Getting Started {[comparisonBar]}');
     expect(html).toContain('data-template="comparisonBar"');
@@ -14,6 +23,23 @@ describe('Template annotation round-trip', () => {
     const html = markdownToTiptap(original);
     const back = tiptapToMarkdown(html);
     expect(back.trim()).toBe(original);
+  });
+
+  it('preserves a heading whose last word is also the template label', () => {
+    const original = '### A Famous Quote {[quote]}';
+    const html = markdownToTiptap(original);
+
+    expect(tiptapToMarkdown(html).trim()).toBe(original);
+  });
+
+  it('ignores legacy text rendered inside a template badge', () => {
+    const tiptapRendered =
+      '<h3 data-template="quote">' +
+      '<span class="squisq-heading-content">A Famous Quote</span>' +
+      '<span class="squisq-template-badge" contenteditable="false">Quote</span>' +
+      '</h3>';
+
+    expect(tiptapToMarkdown(tiptapRendered).trim()).toBe('### A Famous Quote {[quote]}');
   });
 
   it('round-trips param-only squiggly annotations', () => {

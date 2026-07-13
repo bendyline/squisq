@@ -14,7 +14,15 @@ import type { SceneCommand, SceneEdge } from '../commands/SceneCommand';
 import type { HitTestable } from '../hooks/useSceneHitTest';
 import type { SceneTransform } from '../hooks/useScenePanZoom';
 
+/** Mutable gesture storage owned by one Scene instance. */
+export interface SceneInteractionState {
+  selectDrag?: unknown;
+  connect?: unknown;
+}
+
 export interface SceneToolContext {
+  /** Gesture state private to the owning Scene instance. */
+  interaction: SceneInteractionState;
   /** Current viewport size in viewport units. */
   viewport: { width: number; height: number };
   /** Current pan/zoom transform. */

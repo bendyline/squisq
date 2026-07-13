@@ -6,7 +6,7 @@
  * renders the toolbar / canvas / panels.
  */
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryContentContainer, scopeContainer } from '@bendyline/squisq/storage';
 import { writeImageEditDoc, createEmptyImageEditDoc } from '@bendyline/squisq/imageEdit';
 import { DARK_SURFACE } from '@bendyline/squisq/schemas';
@@ -54,6 +54,20 @@ describe('<ImageEditor>', () => {
     const sidecar = scopeContainer(parent, 'pic_files');
     render(<ImageEditor filesContainer={sidecar} />);
     expect(screen.getByText(/loading image editor/i)).toBeTruthy();
+  });
+
+  it('adds a centered shape layer from the Layers panel menu', async () => {
+    const parent = new MemoryContentContainer();
+    const sidecar = scopeContainer(parent, 'pic_files');
+    await writeImageEditDoc(sidecar, createEmptyImageEditDoc(640, 480));
+
+    render(<ImageEditor filesContainer={sidecar} />);
+    await waitFor(() => expect(screen.getByTestId('image-editor')).toBeTruthy());
+
+    fireEvent.click(screen.getByRole('button', { name: 'Add layer' }));
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Shape layer' }));
+
+    await waitFor(() => expect(screen.getByTitle('Rectangle')).toBeTruthy());
   });
 
   it('applies an explicit dark surface to the editor chrome', async () => {

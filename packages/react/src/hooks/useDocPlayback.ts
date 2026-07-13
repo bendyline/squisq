@@ -58,18 +58,28 @@ interface PlaybackActions {
   prevBlock: () => void;
   /** Go to specific block by index */
   goToBlock: (index: number) => void;
+  /**
+   * Let the identified block enter without remounting the outgoing block.
+   * Used when another interaction (such as a swipe) already removed it.
+   */
+  suppressOutgoingForNextBlock: (blockId: string) => void;
+}
+
+export interface UseDocPlaybackOptions {
+  /** Target viewport used to materialize template blocks. */
+  viewport?: ViewportConfig;
+  /** Active theme used for materialization and transition defaults. */
+  theme?: Theme;
+  /** Host seek callback used by block navigation actions. */
+  onSeek?: (time: number) => void;
 }
 
 export function useDocPlayback(
   script: Doc | null,
   currentTime: number,
-  viewport: ViewportConfig = VIEWPORT_PRESETS.landscape,
-  renderMode: boolean = false,
-  theme?: Theme,
+  options: UseDocPlaybackOptions = {},
 ): PlaybackState & PlaybackActions {
-  // `renderMode` is retained for API/signature compatibility; block transitions
-  // are now computed identically for real-time and render (export) modes.
-  void renderMode;
+  const { viewport = VIEWPORT_PRESETS.landscape, theme, onSeek } = options;
   // Expand any template blocks into full blocks
   const blocks = useMemo(() => {
     if (!script?.blocks) {
@@ -174,8 +184,28 @@ export function useDocPlayback(
   const outgoingBlockRef = useRef<Block | null>(null);
   const activeBlockIdRef = useRef<string | null>(null);
   const lastRenderedBlockRef = useRef<Block | null>(null);
+  const suppressOutgoingTargetRef = useRef<string | null>(null);
+  const suppressOutgoingForNextBlock = useCallback((blockId: string) => {
+    // The managed cover is outside the document timeline, so revealing block
+    // one can target the block that is already active underneath it. Clear any
+    // stale outgoing context immediately; the cover visibility update will
+    // provide the render that observes this ref change.
+    if (activeBlockIdRef.current === blockId) {
+      outgoingBlockRef.current = null;
+      suppressOutgoingTargetRef.current = null;
+      return;
+    }
+    suppressOutgoingTargetRef.current = blockId;
+  }, []);
   if (currentBlock && currentBlock.id !== activeBlockIdRef.current) {
-    outgoingBlockRef.current = lastRenderedBlockRef.current;
+    // A swipe has already carried the outgoing slide fully off-screen. Keep
+    // the incoming block's own transition, but do not re-mount the old block
+    // as transition context when the armed destination becomes active.
+    const suppressOutgoing = suppressOutgoingTargetRef.current === currentBlock.id;
+    outgoingBlockRef.current = suppressOutgoing ? null : lastRenderedBlockRef.current;
+    // Consume on the first real block change even if the destination did not
+    // match (for example, a host performed a different seek in between).
+    suppressOutgoingTargetRef.current = null;
     activeBlockIdRef.current = currentBlock.id;
   }
   lastRenderedBlockRef.current = currentBlock;
@@ -194,15 +224,12 @@ export function useDocPlayback(
   const goToBlock = useCallback(
     (index: number) => {
       if (!script || index < 0 || index >= blocks.length) return;
-      // This would need to be coordinated with seekTo from audio sync
-      // For now, just return the target block's start time
       const targetBlock = blocks[index];
       if (targetBlock) {
-        // Caller should use this time with audio seekTo
-        return targetBlock.startTime;
+        onSeek?.(targetBlock.startTime);
       }
     },
-    [script, blocks],
+    [script, blocks, onSeek],
   );
 
   const nextBlock = useCallback(() => {
@@ -229,6 +256,7 @@ export function useDocPlayback(
     nextBlock,
     prevBlock,
     goToBlock,
+    suppressOutgoingForNextBlock,
     /** Expanded blocks (templates converted to full blocks with layers) */
     blocks,
   };

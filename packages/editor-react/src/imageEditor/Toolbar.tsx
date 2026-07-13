@@ -18,6 +18,8 @@ export interface ToolbarProps {
   dispatch: (a: ImageEditorAction) => void;
   /** Upload an image asset and return its sidecar-relative path. */
   uploadAsset: (file: Blob, suggestedName?: string) => Promise<string>;
+  /** Shared image picker ref used by the toolbar and Layers panel. */
+  imageInputRef?: React.RefObject<HTMLInputElement>;
   /** Trigger an export (PNG/JPEG/WebP) of the flattened canvas. */
   onExport: (format: 'png' | 'jpeg' | 'webp') => void;
   /** Force-flush the state.json (host's "save" button). */
@@ -142,6 +144,7 @@ export function Toolbar({
   shapeKind,
   dispatch,
   uploadAsset,
+  imageInputRef,
   onExport,
   onSave,
   saveLabel = 'Save',
@@ -154,7 +157,8 @@ export function Toolbar({
   onZoomFit,
   onZoom1to1,
 }: ToolbarProps) {
-  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const internalImageInputRef = useRef<HTMLInputElement>(null);
+  const fileInputRef = imageInputRef ?? internalImageInputRef;
   const [shapePaletteOpen, setShapePaletteOpen] = useState(false);
 
   const onFilePicked = async (file: File) => {

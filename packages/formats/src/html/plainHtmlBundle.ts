@@ -18,8 +18,7 @@
 import JSZip from 'jszip';
 import { parseMarkdown, inferDocumentTitle } from '@bendyline/squisq/markdown';
 import type { MarkdownDocument, HtmlNode } from '@bendyline/squisq/markdown';
-import type { Theme } from '@bendyline/squisq/schemas';
-import { resolveTheme } from '@bendyline/squisq/schemas';
+import type { Theme, ThemeRegistry } from '@bendyline/squisq/schemas';
 import { markdownDocToPlainHtml } from './plainHtml.js';
 
 // ── Public Types ───────────────────────────────────────────────────
@@ -36,13 +35,14 @@ export interface PlainHtmlBundleOptions {
   /** Optional theme applied uniformly to every page. Overrides {@link themeId}. */
   theme?: Theme;
   /**
-   * Optional theme id (e.g. `'warm-earth'`, `'gezellig'`). Resolved via
-   * `resolveTheme` and applied to every page. Convenient for callers
-   * that track themes by id (like the host export dialog) without
-   * having to resolve to a `Theme` object first. When both `theme` and
-   * `themeId` are supplied, `theme` wins.
+   * Optional theme id (e.g. `'warm-earth'`, `'gezellig'`) applied to every
+   * page. Each document resolves its own inline definition before consulting
+   * {@link themeRegistry}. When both `theme` and `themeId` are supplied,
+   * `theme` wins.
    */
   themeId?: string;
+  /** Explicit caller-owned registry for non-document custom themes. */
+  themeRegistry?: ThemeRegistry;
   /** Maximum recursion depth (default: unlimited; cycles always handled). */
   maxDepth?: number;
   /**
@@ -74,10 +74,10 @@ export async function markdownDocsToPlainHtmlBundle(
     title,
     theme,
     themeId,
+    themeRegistry,
     maxDepth = Infinity,
     entryAsIndex = false,
   } = options;
-  const resolvedTheme = theme ?? (themeId ? resolveTheme(themeId) : undefined);
   const entry = normalizePath(entryPath);
   if (!entry) {
     throw new Error('markdownDocsToPlainHtmlBundle: entryPath is required');
@@ -165,7 +165,9 @@ export async function markdownDocsToPlainHtmlBundle(
       title: docTitle ?? titleForFilename(path, mdDoc),
       images: imageRewriteMap,
       links: linkMap,
-      theme: resolvedTheme,
+      theme,
+      themeId,
+      themeRegistry,
     });
 
     const htmlPath = htmlPathFor(path);

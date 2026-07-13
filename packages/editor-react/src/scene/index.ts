@@ -59,12 +59,7 @@ export {
 } from './layers/nodeCard';
 export { DiagramEdges } from './layers/DiagramEdges';
 
-export {
-  buildDiagramScene,
-  makeDiagramDispatch,
-  nodeCenter,
-  type DiagramSceneData,
-} from './adapters/DiagramAdapter';
+export { buildDiagramScene, nodeCenter, type DiagramSceneData } from './adapters/DiagramAdapter';
 
 export {
   useLayoutAdapter,

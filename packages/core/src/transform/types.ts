@@ -12,7 +12,7 @@ import type { ColorScheme } from '../schemas/BlockTemplates.js';
 
 // ── Style identification ─────────────────────────────────────────
 
-/** Identifier for a registered transform style. */
+/** Identifier for a built-in or caller-registered transform style. */
 export type TransformStyleId = string;
 
 /** Summary info for UI dropdowns (mirrors getThemeSummaries pattern). */
@@ -97,6 +97,17 @@ export interface TransformStyleConfig {
   };
 }
 
+/** Built-in id or a call-scoped declarative style definition. */
+export type TransformStyleInput = TransformStyleId | TransformStyleConfig;
+
+/** Explicit caller-owned registry for custom transform styles. */
+export interface TransformStyleRegistry {
+  register(style: TransformStyleConfig): void;
+  unregister(id: string): boolean;
+  get(id: string): TransformStyleConfig | undefined;
+  list(): TransformStyleConfig[];
+}
+
 // ── Transform options ────────────────────────────────────────────
 
 /** Image metadata for image interleaving. */
@@ -121,6 +132,8 @@ export interface TransformOptions {
   themeId?: string;
   /** Override specific style config values. */
   overrides?: Partial<TransformStyleConfig>;
+  /** Caller-owned registry used when `style` is an id. */
+  registry?: TransformStyleRegistry;
 }
 
 // ── Transform result ─────────────────────────────────────────────

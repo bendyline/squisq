@@ -1,0 +1,139 @@
+/* ASCII tree fences in the WYSIWYG editor.
+ *
+ * A qualifying code fence is hidden behind its interactive outline widget
+ * (TreeOutlineWidget). The raw art is always editable in the Source / Raw
+ * view; there is no on-canvas source toggle.
+ *
+ * Colors use the editor-shell CSS custom properties (`--squisq-bg`,
+ * `--squisq-input-bg`, `--squisq-border`, `--squisq-text`,
+ * `--squisq-text-muted`) which the shell flips for `[data-theme='dark']`,
+ * so the outline follows the editor's light/dark mode. */
+
+.squisq-wysiwyg-editor pre.squisq-tree-fence-hidden {
+  display: none;
+}
+
+.squisq-tree-widget-host {
+  margin: 0.75rem 0 1.25rem;
+}
+
+.squisq-tree-outline {
+  border: 1px solid var(--squisq-border, #e2e8f0);
+  border-radius: 8px;
+  padding: 8px 10px;
+  background: var(--squisq-input-bg, #ffffff);
+  color: var(--squisq-text, #1e293b);
+  font-size: 14px;
+}
+
+.squisq-tree-toolbar {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 6px;
+}
+
+.squisq-tree-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+  padding: 3px 8px;
+  border: 1px solid var(--squisq-border, #e2e8f0);
+  border-radius: 5px;
+  background: var(--squisq-bg, #f8fafc);
+  color: var(--squisq-text, #1e293b);
+  cursor: pointer;
+}
+.squisq-tree-btn:hover {
+  border-color: var(--squisq-text-muted, #94a3b8);
+}
+
+.squisq-tree-rows {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.squisq-tree-rows .squisq-tree-rows {
+  border-left: 1px solid var(--squisq-border, #e2e8f0);
+  margin-left: 8px;
+}
+
+.squisq-tree-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 1px 0;
+}
+.squisq-tree-row:hover .squisq-tree-controls {
+  opacity: 1;
+}
+
+.squisq-tree-chevron {
+  flex: 0 0 auto;
+  width: 16px;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  color: var(--squisq-text-muted, #64748b);
+  padding: 0;
+  font-size: 11px;
+}
+.squisq-tree-chevron--empty {
+  cursor: default;
+}
+
+.squisq-tree-icon {
+  flex: 0 0 auto;
+  width: 18px;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  color: #6366f1;
+  padding: 0;
+}
+
+.squisq-tree-label {
+  flex: 1 1 auto;
+  min-width: 0;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  padding: 1px 4px;
+  font: inherit;
+  color: var(--squisq-text, #1e293b);
+  background: transparent;
+}
+.squisq-tree-label:focus {
+  outline: none;
+  border-color: #6366f1;
+  background: var(--squisq-bg, #f8fafc);
+}
+
+.squisq-tree-controls {
+  flex: 0 0 auto;
+  display: inline-flex;
+  gap: 2px;
+  opacity: 0;
+  transition: opacity 0.12s;
+}
+.squisq-tree-controls button {
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  color: var(--squisq-text-muted, #64748b);
+  padding: 2px 4px;
+  border-radius: 4px;
+  font-size: 11px;
+}
+.squisq-tree-controls button:hover {
+  background: var(--squisq-bg, #f1f5f9);
+  color: var(--squisq-text, #1e293b);
+}
+.squisq-tree-controls .squisq-tree-delete:hover {
+  color: #ef4444;
+}
+
+.squisq-tree-warnings {
+  margin-top: 6px;
+  font-size: 12px;
+  color: var(--squisq-text-muted, #6b7280);
+}

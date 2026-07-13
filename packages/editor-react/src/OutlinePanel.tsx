@@ -8,7 +8,15 @@
  * lives in `useHeadingLayout`.
  */
 
-import { type CSSProperties, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import {
+  type CSSProperties,
+  type DragEvent as ReactDragEvent,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import type { Block } from '@bendyline/squisq/schemas';
 import { flattenBlocks, hasTemplate } from '@bendyline/squisq/doc';
 import { extractPlainText } from '@bendyline/squisq/markdown';
@@ -16,6 +24,7 @@ import { useEditorContext } from './EditorContext';
 import { templateLabel } from './TemplatePicker';
 import { useHeadingLayout } from './useHeadingLayout';
 import { usePreviewSettingsOptional } from './PreviewControls';
+import { moveHeadingSectionInSource, type OutlineDropPlacement } from './outlineSource';
 
 /**
  * Responsive default width for the outline pane, used when no fixed `width`
@@ -38,13 +47,34 @@ export interface OutlinePanelProps {
   width?: number;
   /** Optional CSS class for the outer container. */
   className?: string;
+  /** Disable heading-level changes and section reordering. */
+  readOnly?: boolean;
 }
 
-export function OutlinePanel({ width, className }: OutlinePanelProps) {
+interface OutlineSectionRef {
+  blockId: string;
+  headingLine: number;
+  depth: number;
+  parentId: string | null;
+}
+
+interface ActiveOutlineDrag extends OutlineSectionRef {
+  sourceAtStart: string;
+}
+
+interface OutlineDropTarget {
+  blockId: string;
+  placement: OutlineDropPlacement;
+}
+
+const OUTLINE_DRAG_MIME = 'application/x-squisq-outline-section';
+
+export function OutlinePanel({ width, className, readOnly = false }: OutlinePanelProps) {
   const {
     doc,
     markdownSource,
     setMarkdownSource,
+    isParsing,
     layoutMode,
     goToBlockByLine,
     activeBlockStartLine,
@@ -52,6 +82,9 @@ export function OutlinePanel({ width, className }: OutlinePanelProps) {
   const paneRef = useRef<HTMLElement | null>(null);
   const { scrollToBlock } = useHeadingLayout(paneRef);
   const cursorActiveId = useActiveOutlineBlockId();
+  const activeDragRef = useRef<ActiveOutlineDrag | null>(null);
+  const [draggedBlockId, setDraggedBlockId] = useState<string | null>(null);
+  const [dropTarget, setDropTarget] = useState<OutlineDropTarget | null>(null);
 
   // In block-at-a-time mode there's no live cursor across the whole document
   // (only the active block is mounted), so the highlight follows the card:
@@ -87,12 +120,94 @@ export function OutlinePanel({ width, className }: OutlinePanelProps) {
   // Both editor surfaces resync from `markdownSource` automatically.
   const changeHeadingLevel = useCallback(
     (block: Block, delta: number) => {
+      if (readOnly || isParsing) return;
       const line = block.sourceHeading?.position?.start.line;
       if (typeof line !== 'number') return;
       const next = bumpHeadingLevelInSource(markdownSource, line, delta);
       if (next != null) setMarkdownSource(next);
     },
-    [markdownSource, setMarkdownSource],
+    [isParsing, markdownSource, readOnly, setMarkdownSource],
+  );
+
+  const clearDragState = useCallback(() => {
+    activeDragRef.current = null;
+    setDraggedBlockId(null);
+    setDropTarget(null);
+  }, []);
+
+  const handleDragStart = useCallback(
+    (event: ReactDragEvent<HTMLElement>, section: OutlineSectionRef) => {
+      if (readOnly || isParsing) {
+        event.preventDefault();
+        return;
+      }
+
+      activeDragRef.current = { ...section, sourceAtStart: markdownSource };
+      setDraggedBlockId(section.blockId);
+      setDropTarget(null);
+      event.dataTransfer.effectAllowed = 'move';
+      // Firefox requires a text payload before it will initiate a native drag.
+      // The custom type makes the payload identifiable to other Squisq panes;
+      // the in-memory ref remains authoritative for this mounted panel.
+      event.dataTransfer.setData(OUTLINE_DRAG_MIME, String(section.headingLine));
+      event.dataTransfer.setData('text/plain', String(section.headingLine));
+    },
+    [isParsing, markdownSource, readOnly],
+  );
+
+  const handleDragOver = useCallback(
+    (event: ReactDragEvent<HTMLElement>, section: OutlineSectionRef) => {
+      const dragged = activeDragRef.current;
+      if (!dragged) return;
+
+      // Prevent the editor shell's file-drop handler from changing this to a
+      // copy operation while an outline section is being moved.
+      event.preventDefault();
+      event.stopPropagation();
+
+      if (!canDropOnSection(dragged, section) || readOnly || isParsing) {
+        event.dataTransfer.dropEffect = 'none';
+        setDropTarget(null);
+        return;
+      }
+
+      const placement = placementForPointer(event);
+      event.dataTransfer.dropEffect = 'move';
+      setDropTarget((current) =>
+        current?.blockId === section.blockId && current.placement === placement
+          ? current
+          : { blockId: section.blockId, placement },
+      );
+    },
+    [isParsing, readOnly],
+  );
+
+  const handleDrop = useCallback(
+    (event: ReactDragEvent<HTMLElement>, section: OutlineSectionRef) => {
+      const dragged = activeDragRef.current;
+      if (!dragged) return;
+
+      event.preventDefault();
+      event.stopPropagation();
+      const placement = placementForPointer(event);
+      const canMove =
+        !readOnly &&
+        !isParsing &&
+        dragged.sourceAtStart === markdownSource &&
+        canDropOnSection(dragged, section);
+      const next = canMove
+        ? moveHeadingSectionInSource(
+            markdownSource,
+            dragged.headingLine,
+            section.headingLine,
+            placement,
+          )
+        : null;
+
+      clearDragState();
+      if (next != null) setMarkdownSource(next);
+    },
+    [clearDragState, isParsing, markdownSource, readOnly, setMarkdownSource],
   );
 
   // Inherit the active document theme's primary color so the current-row
@@ -137,9 +252,17 @@ export function OutlinePanel({ width, className }: OutlinePanelProps) {
             <OutlineNode
               key={b.id}
               block={b}
+              parentId={null}
               activeBlockId={activeBlockId}
+              draggedBlockId={draggedBlockId}
+              dropTarget={dropTarget}
+              mutationsDisabled={readOnly || isParsing}
               onSelect={handleSelect}
               onChangeLevel={changeHeadingLevel}
+              onDragStart={handleDragStart}
+              onDragOver={handleDragOver}
+              onDrop={handleDrop}
+              onDragEnd={clearDragState}
             />
           ))}
         </ul>
@@ -152,17 +275,34 @@ export function OutlinePanel({ width, className }: OutlinePanelProps) {
 
 function OutlineNode({
   block,
+  parentId,
   activeBlockId,
+  draggedBlockId,
+  dropTarget,
+  mutationsDisabled,
   onSelect,
   onChangeLevel,
+  onDragStart,
+  onDragOver,
+  onDrop,
+  onDragEnd,
 }: {
   block: Block;
+  parentId: string | null;
   activeBlockId: string | null;
+  draggedBlockId: string | null;
+  dropTarget: OutlineDropTarget | null;
+  mutationsDisabled: boolean;
   onSelect: (b: Block) => void;
   onChangeLevel: (block: Block, delta: number) => void;
+  onDragStart: (event: ReactDragEvent<HTMLElement>, section: OutlineSectionRef) => void;
+  onDragOver: (event: ReactDragEvent<HTMLElement>, section: OutlineSectionRef) => void;
+  onDrop: (event: ReactDragEvent<HTMLElement>, section: OutlineSectionRef) => void;
+  onDragEnd: () => void;
 }) {
   const heading = block.sourceHeading;
   const depth = heading?.depth ?? 1;
+  const headingLine = heading?.position?.start.line;
   const text = heading ? extractPlainText(heading).trim() : '';
   const annotation = heading?.templateAnnotation;
   const tplName = annotation?.template;
@@ -170,18 +310,52 @@ function OutlineNode({
   const isActive = block.id === activeBlockId;
   const canPromote = !!heading && depth > 1;
   const canDemote = !!heading && depth < 6;
+  const section =
+    heading && typeof headingLine === 'number'
+      ? { blockId: block.id, headingLine, depth, parentId }
+      : null;
+  const canDrag = section != null && !mutationsDisabled;
+  const isDragging = block.id === draggedBlockId;
+  const dropPlacement = dropTarget?.blockId === block.id ? dropTarget.placement : null;
+  const itemClasses = [
+    'squisq-outline-item',
+    isDragging ? 'squisq-outline-item--dragging' : '',
+    dropPlacement ? `squisq-outline-item--drop-${dropPlacement}` : '',
+  ]
+    .filter(Boolean)
+    .join(' ');
 
   return (
-    <li className="squisq-outline-item" role="treeitem" aria-current={isActive || undefined}>
-      <div className="squisq-outline-row-wrap">
+    <li className={itemClasses} role="treeitem" aria-current={isActive || undefined}>
+      <div
+        className="squisq-outline-row-wrap"
+        onDragOver={section ? (event) => onDragOver(event, section) : undefined}
+        onDrop={section ? (event) => onDrop(event, section) : undefined}
+      >
         <button
           type="button"
           className={`squisq-outline-row squisq-outline-row--depth-${depth}${
             isActive ? ' squisq-outline-row--current' : ''
           }`}
           onClick={() => onSelect(block)}
+          draggable={canDrag}
+          aria-grabbed={isDragging || undefined}
+          onDragStart={section ? (event) => onDragStart(event, section) : undefined}
+          onDragEnd={onDragEnd}
           title={text || '(empty heading)'}
         >
+          {canDrag && (
+            <span className="squisq-outline-drag-handle" aria-hidden="true">
+              <svg width="8" height="12" viewBox="0 0 8 12">
+                <circle cx="2" cy="2" r="1" fill="currentColor" />
+                <circle cx="6" cy="2" r="1" fill="currentColor" />
+                <circle cx="2" cy="6" r="1" fill="currentColor" />
+                <circle cx="6" cy="6" r="1" fill="currentColor" />
+                <circle cx="2" cy="10" r="1" fill="currentColor" />
+                <circle cx="6" cy="10" r="1" fill="currentColor" />
+              </svg>
+            </span>
+          )}
           <span className="squisq-outline-row-text">{text || '(untitled)'}</span>
           {showChip && (
             <span className="squisq-outline-template-chip">{templateLabel(tplName!)}</span>
@@ -194,7 +368,7 @@ function OutlineNode({
               className="squisq-outline-row-arrow"
               aria-label={`Promote heading (currently H${depth})`}
               title="Promote heading"
-              disabled={!canPromote}
+              disabled={mutationsDisabled || !canPromote}
               onClick={() => onChangeLevel(block, -1)}
             >
               <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true">
@@ -213,7 +387,7 @@ function OutlineNode({
               className="squisq-outline-row-arrow"
               aria-label={`Demote heading (currently H${depth})`}
               title="Demote heading"
-              disabled={!canDemote}
+              disabled={mutationsDisabled || !canDemote}
               onClick={() => onChangeLevel(block, +1)}
             >
               <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true">
@@ -236,9 +410,17 @@ function OutlineNode({
             <OutlineNode
               key={child.id}
               block={child}
+              parentId={block.id}
               activeBlockId={activeBlockId}
+              draggedBlockId={draggedBlockId}
+              dropTarget={dropTarget}
+              mutationsDisabled={mutationsDisabled}
               onSelect={onSelect}
               onChangeLevel={onChangeLevel}
+              onDragStart={onDragStart}
+              onDragOver={onDragOver}
+              onDrop={onDrop}
+              onDragEnd={onDragEnd}
             />
           ))}
         </ul>
@@ -322,6 +504,19 @@ function useActiveOutlineBlockId(): string | null {
 }
 
 // ── Helpers ────────────────────────────────────────────────────────
+
+function canDropOnSection(dragged: OutlineSectionRef, target: OutlineSectionRef): boolean {
+  return (
+    dragged.blockId !== target.blockId &&
+    dragged.depth === target.depth &&
+    dragged.parentId === target.parentId
+  );
+}
+
+function placementForPointer(event: ReactDragEvent<HTMLElement>): OutlineDropPlacement {
+  const bounds = event.currentTarget.getBoundingClientRect();
+  return event.clientY < bounds.top + bounds.height / 2 ? 'before' : 'after';
+}
 
 function hasAnyHeading(blocks: Block[]): boolean {
   for (const b of blocks) {

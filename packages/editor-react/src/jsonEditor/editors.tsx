@@ -8,6 +8,7 @@
 
 import { useEffect, useId, useRef, useState, type ChangeEvent } from 'react';
 import {
+  appendPointer,
   arrayItemKind,
   type ControlKind,
   type SquisqAnnotatedSchema,
@@ -21,6 +22,19 @@ export interface EditorProps {
   schema: SquisqAnnotatedSchema;
   pointer: string;
   disabled: boolean;
+  controlId?: string;
+  labelledBy?: string;
+  describedBy?: string;
+  invalid?: boolean;
+}
+
+function accessibilityProps(props: EditorProps) {
+  return {
+    id: props.controlId,
+    'aria-labelledby': props.labelledBy,
+    'aria-describedby': props.describedBy,
+    'aria-invalid': props.invalid || undefined,
+  };
 }
 
 // ── Helpers ───────────────────────────────────────────────────────
@@ -38,10 +52,12 @@ function asNumber(v: unknown): number | '' {
 
 // ── Primitive editors ────────────────────────────────────────────
 
-export function TextEditor({ value, schema, pointer, disabled }: EditorProps) {
+export function TextEditor(props: EditorProps) {
+  const { value, schema, pointer, disabled } = props;
   const { setAtPath } = useJsonEditor();
   return (
     <input
+      {...accessibilityProps(props)}
       type="text"
       className="squisq-jf-input"
       value={asString(value)}
@@ -52,7 +68,8 @@ export function TextEditor({ value, schema, pointer, disabled }: EditorProps) {
   );
 }
 
-export function MultilineEditor({ value, schema, pointer, disabled }: EditorProps) {
+export function MultilineEditor(props: EditorProps) {
+  const { value, schema, pointer, disabled } = props;
   const { setAtPath } = useJsonEditor();
   const ref = useRef<HTMLTextAreaElement>(null);
   // Auto-grow vertically.
@@ -64,6 +81,7 @@ export function MultilineEditor({ value, schema, pointer, disabled }: EditorProp
   }, [value]);
   return (
     <textarea
+      {...accessibilityProps(props)}
       ref={ref}
       className="squisq-jf-textarea"
       value={asString(value)}
@@ -86,7 +104,8 @@ export function RichTextEditor({ value, schema, pointer, disabled }: EditorProps
   );
 }
 
-export function NumberStepperEditor({ value, schema, pointer, disabled }: EditorProps) {
+export function NumberStepperEditor(props: EditorProps) {
+  const { value, schema, pointer, disabled } = props;
   const { setAtPath } = useJsonEditor();
   const isInt = schema.type === 'integer';
   const step = schema.squisq?.step ?? schema.multipleOf ?? (isInt ? 1 : 0.1);
@@ -111,6 +130,7 @@ export function NumberStepperEditor({ value, schema, pointer, disabled }: Editor
         −
       </button>
       <input
+        {...accessibilityProps(props)}
         className="squisq-jf-stepper__input"
         type="number"
         value={num === '' ? '' : num}
@@ -138,7 +158,8 @@ export function NumberStepperEditor({ value, schema, pointer, disabled }: Editor
   );
 }
 
-export function SliderEditor({ value, schema, pointer, disabled }: EditorProps) {
+export function SliderEditor(props: EditorProps) {
+  const { value, schema, pointer, disabled } = props;
   const { setAtPath } = useJsonEditor();
   const min = (schema.minimum ?? schema.exclusiveMinimum ?? 0) as number;
   const max = (schema.maximum ?? schema.exclusiveMaximum ?? 100) as number;
@@ -148,6 +169,7 @@ export function SliderEditor({ value, schema, pointer, disabled }: EditorProps) 
   return (
     <span className="squisq-jf-slider-row">
       <input
+        {...accessibilityProps(props)}
         type="range"
         className="squisq-jf-slider"
         min={min}
@@ -162,11 +184,13 @@ export function SliderEditor({ value, schema, pointer, disabled }: EditorProps) 
   );
 }
 
-export function ToggleEditor({ value, schema, pointer, disabled }: EditorProps) {
+export function ToggleEditor(props: EditorProps) {
+  const { value, schema, pointer, disabled } = props;
   const { setAtPath } = useJsonEditor();
   const on = Boolean(value);
   return (
     <button
+      {...accessibilityProps(props)}
       type="button"
       className={`squisq-jf-toggle${on ? ' squisq-jf-toggle--on' : ''}`}
       disabled={disabled}
@@ -189,12 +213,17 @@ export function ToggleEditor({ value, schema, pointer, disabled }: EditorProps) 
   );
 }
 
-export function CheckboxEditor({ value, schema, pointer, disabled }: EditorProps) {
+export function CheckboxEditor(props: EditorProps) {
+  const { value, schema, pointer, disabled } = props;
   const { setAtPath } = useJsonEditor();
-  const id = useId();
+  const generatedId = useId();
+  const id = props.controlId ?? generatedId;
   return (
     <label htmlFor={id} className="squisq-jf-toggle">
       <input
+        aria-labelledby={props.labelledBy}
+        aria-describedby={props.describedBy}
+        aria-invalid={props.invalid || undefined}
         id={id}
         type="checkbox"
         checked={Boolean(value)}
@@ -214,11 +243,12 @@ function enumOptions(schema: SquisqAnnotatedSchema): { value: unknown; label: st
   }));
 }
 
-export function SegmentedEditor({ value, schema, pointer, disabled }: EditorProps) {
+export function SegmentedEditor(props: EditorProps) {
+  const { value, schema, pointer, disabled } = props;
   const { setAtPath } = useJsonEditor();
   const options = enumOptions(schema);
   return (
-    <span className="squisq-jf-segmented">
+    <span {...accessibilityProps(props)} className="squisq-jf-segmented" role="group">
       {options.map((opt, i) => {
         const active = value === opt.value;
         return (
@@ -228,6 +258,7 @@ export function SegmentedEditor({ value, schema, pointer, disabled }: EditorProp
             className={`squisq-jf-segmented__btn${active ? ' squisq-jf-segmented__btn--active' : ''}`}
             disabled={disabled}
             onClick={() => setAtPath(pointer, opt.value)}
+            aria-pressed={active}
           >
             {opt.label}
           </button>
@@ -237,12 +268,13 @@ export function SegmentedEditor({ value, schema, pointer, disabled }: EditorProp
   );
 }
 
-export function RadioEditor({ value, schema, pointer, disabled }: EditorProps) {
+export function RadioEditor(props: EditorProps) {
+  const { value, schema, pointer, disabled } = props;
   const { setAtPath } = useJsonEditor();
   const options = enumOptions(schema);
   const name = useId();
   return (
-    <div className="squisq-jf-radio">
+    <div {...accessibilityProps(props)} className="squisq-jf-radio" role="radiogroup">
       {options.map((opt, i) => {
         const active = value === opt.value;
         return (
@@ -262,11 +294,13 @@ export function RadioEditor({ value, schema, pointer, disabled }: EditorProps) {
   );
 }
 
-export function ComboboxEditor({ value, schema, pointer, disabled }: EditorProps) {
+export function ComboboxEditor(props: EditorProps) {
+  const { value, schema, pointer, disabled } = props;
   const { setAtPath } = useJsonEditor();
   const options = enumOptions(schema);
   return (
     <select
+      {...accessibilityProps(props)}
       className="squisq-jf-select"
       value={asString(value)}
       disabled={disabled}
@@ -285,12 +319,14 @@ export function ComboboxEditor({ value, schema, pointer, disabled }: EditorProps
   );
 }
 
-export function ColorEditor({ value, pointer, disabled }: EditorProps) {
+export function ColorEditor(props: EditorProps) {
+  const { value, pointer, disabled } = props;
   const { setAtPath } = useJsonEditor();
   const hex = typeof value === 'string' && /^#[0-9a-f]{6}$/i.test(value) ? value : '#000000';
   return (
     <span className="squisq-jf-color">
       <input
+        {...accessibilityProps(props)}
         type="color"
         className="squisq-jf-color__input"
         value={hex}
@@ -308,7 +344,8 @@ export function ColorEditor({ value, pointer, disabled }: EditorProps) {
   );
 }
 
-export function DateEditor({ value, schema, pointer, disabled }: EditorProps) {
+export function DateEditor(props: EditorProps) {
+  const { value, schema, pointer, disabled } = props;
   const { setAtPath } = useJsonEditor();
   const fmt = schema.format;
   const inputType = fmt === 'time' ? 'time' : fmt === 'date' ? 'date' : 'datetime-local';
@@ -321,6 +358,7 @@ export function DateEditor({ value, schema, pointer, disabled }: EditorProps) {
       : asString(value);
   return (
     <input
+      {...accessibilityProps(props)}
       type={inputType}
       className="squisq-jf-input"
       value={display}
@@ -348,7 +386,7 @@ export function GroupEditor(props: EditorProps & { suppressTitle?: boolean }) {
           key={key}
           value={obj[key]}
           schema={propSchema}
-          pointer={`${pointer}/${key}`}
+          pointer={appendPointer(pointer, key)}
           parentDisabled={disabled}
         />
       ))}
@@ -581,7 +619,9 @@ function defaultForSchema(schema: SquisqAnnotatedSchema): unknown {
   }
 }
 
-export function TabsEditor({ value, schema, pointer, disabled }: EditorProps) {
+export function TabsEditor(props: EditorProps) {
+  const { value, schema, pointer, disabled } = props;
+  const tabsId = useId().replace(/:/g, '');
   const branches = (schema.oneOf ?? schema.anyOf ?? []) as readonly SquisqAnnotatedSchema[];
   const initial = pickMatchingBranch(branches, value);
   const [active, setActive] = useState(initial);
@@ -593,9 +633,14 @@ export function TabsEditor({ value, schema, pointer, disabled }: EditorProps) {
 
   const branch = branches[active];
   if (!branch) return null;
+  const activateTab = (index: number) => {
+    const next = (index + branches.length) % branches.length;
+    setActive(next);
+    requestAnimationFrame(() => document.getElementById(`${tabsId}-tab-${next}`)?.focus());
+  };
   return (
-    <div>
-      <div className="squisq-jf-tabs__strip">
+    <div {...accessibilityProps(props)}>
+      <div className="squisq-jf-tabs__strip" role="tablist">
         {branches.map((b, i) => (
           <button
             key={i}
@@ -603,12 +648,34 @@ export function TabsEditor({ value, schema, pointer, disabled }: EditorProps) {
             className={`squisq-jf-tabs__tab${i === active ? ' squisq-jf-tabs__tab--active' : ''}`}
             disabled={disabled}
             onClick={() => setActive(i)}
+            onKeyDown={(event) => {
+              if (event.key === 'ArrowRight' || event.key === 'ArrowDown') {
+                event.preventDefault();
+                activateTab(i + 1);
+              } else if (event.key === 'ArrowLeft' || event.key === 'ArrowUp') {
+                event.preventDefault();
+                activateTab(i - 1);
+              } else if (event.key === 'Home') {
+                event.preventDefault();
+                activateTab(0);
+              } else if (event.key === 'End') {
+                event.preventDefault();
+                activateTab(branches.length - 1);
+              }
+            }}
+            role="tab"
+            id={`${tabsId}-tab-${i}`}
+            aria-selected={i === active}
+            aria-controls={`${tabsId}-panel`}
+            tabIndex={i === active ? 0 : -1}
           >
             {b.squisq?.label ?? b.title ?? `Option ${i + 1}`}
           </button>
         ))}
       </div>
-      <RenderNode value={value} schema={branch} pointer={pointer} parentDisabled={disabled} />
+      <div id={`${tabsId}-panel`} role="tabpanel" aria-labelledby={`${tabsId}-tab-${active}`}>
+        <RenderNode value={value} schema={branch} pointer={pointer} parentDisabled={disabled} />
+      </div>
     </div>
   );
 }

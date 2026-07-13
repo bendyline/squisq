@@ -50,6 +50,7 @@ interface FakeRecorderHandle {
 }
 
 let lastRecorder: FakeRecorderHandle | null = null;
+let lastStream: FakeMediaStream | null = null;
 
 class FakeMediaRecorder implements FakeRecorderHandle {
   state: 'recording' | 'inactive' = 'inactive';
@@ -90,6 +91,7 @@ beforeEach(() => {
   lastRecorder = null;
   (globalThis as { MediaRecorder?: unknown }).MediaRecorder = FakeMediaRecorder;
   const fakeStream = new FakeMediaStream([new FakeMediaStreamTrack('audio')]);
+  lastStream = fakeStream;
   Object.defineProperty(globalThis, 'navigator', {
     value: {
       mediaDevices: {
@@ -223,5 +225,78 @@ describe('useMediaRecorder lifecycle', () => {
     expect(result.current.state).toBe('idle');
     expect(result.current.stream).toBeNull();
     expect(tracks.every((t) => t.stop.mock.calls.length > 0)).toBe(true);
+  });
+
+  it('deduplicates concurrent permission requests', async () => {
+    let resolve!: (stream: FakeMediaStream) => void;
+    const pending = new Promise<FakeMediaStream>((res) => {
+      resolve = res;
+    });
+    const getUserMedia = vi.fn().mockReturnValue(pending);
+    Object.defineProperty(globalThis, 'navigator', {
+      configurable: true,
+      value: { mediaDevices: { getUserMedia } },
+    });
+    const stream = new FakeMediaStream([new FakeMediaStreamTrack('audio')]);
+    const { result } = renderHook(() => useMediaRecorder({ source: 'mic' }));
+    let first!: Promise<void>;
+    let second!: Promise<void>;
+    act(() => {
+      first = result.current.request();
+      second = result.current.request();
+    });
+    expect(getUserMedia).toHaveBeenCalledTimes(1);
+    resolve(stream);
+    await act(async () => Promise.all([first, second]));
+    expect(result.current.state).toBe('ready');
+  });
+
+  it('releases an acquired stream when recorder construction fails', async () => {
+    class ThrowingRecorder {
+      static isTypeSupported() {
+        return true;
+      }
+      constructor() {
+        throw new Error('construction failed');
+      }
+    }
+    (globalThis as { MediaRecorder?: unknown }).MediaRecorder = ThrowingRecorder;
+    const { result } = renderHook(() => useMediaRecorder({ source: 'mic' }));
+    await act(async () => {
+      await expect(result.current.request()).rejects.toThrow('construction failed');
+    });
+    expect(lastStream?.getTracks().every((track) => track.stop.mock.calls.length > 0)).toBe(true);
+  });
+
+  it('ignores a late onstop event after cancel', async () => {
+    const { result } = renderHook(() => useMediaRecorder({ source: 'mic' }));
+    await act(async () => result.current.request());
+    act(() => result.current.start());
+    const lateOnStop = lastRecorder?.onstop;
+    act(() => result.current.cancel());
+    act(() => lateOnStop?.());
+    expect(result.current.state).toBe('idle');
+    expect(result.current.blob).toBeNull();
+  });
+
+  it('returns the same in-flight stop promise to repeated callers', async () => {
+    const { result } = renderHook(() => useMediaRecorder({ source: 'mic' }));
+    await act(async () => result.current.request());
+    act(() => result.current.start());
+    const recorder = lastRecorder!;
+    const complete = recorder.onstop!;
+    recorder.stop = vi.fn(() => {
+      recorder.state = 'inactive';
+    });
+    let first!: Promise<Blob | null>;
+    let second!: Promise<Blob | null>;
+    act(() => {
+      first = result.current.stop();
+      second = result.current.stop();
+    });
+    expect(second).toBe(first);
+    act(() => complete());
+    await first;
+    expect(result.current.state).toBe('stopped');
   });
 });

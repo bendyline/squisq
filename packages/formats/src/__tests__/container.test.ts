@@ -78,6 +78,13 @@ describe('containerToZip', () => {
     const data = await zip.file('image.png')!.async('uint8array');
     expect(data).toEqual(binaryData);
   });
+
+  it('refuses to create a ZIP with an unsafe container path', async () => {
+    const container = new MemoryContentContainer();
+    await container.writeFile('../outside.txt', new TextEncoder().encode('nope'));
+
+    await expect(containerToZip(container)).rejects.toThrow(/path is unsafe/i);
+  });
 });
 
 // ============================================
@@ -136,6 +143,40 @@ describe('zipToContainer', () => {
 
     const container = await zipToContainer(ab);
     expect(await container.readDocument()).toBe('# Read me');
+  });
+
+  it('rejects archives that exceed the configured entry limit', async () => {
+    const zip = new JSZip();
+    zip.file('one.txt', '1');
+    zip.file('two.txt', '2');
+    const data = await zip.generateAsync({ type: 'arraybuffer' });
+    await expect(zipToContainer(data, { maxEntries: 1 })).rejects.toThrow(/archive has 2 files/);
+  });
+
+  it('rejects archives that exceed the configured uncompressed byte limit', async () => {
+    const zip = new JSZip();
+    zip.file('large.txt', '12345');
+    const data = await zip.generateAsync({ type: 'arraybuffer' });
+    await expect(zipToContainer(data, { maxUncompressedBytes: 4 })).rejects.toThrow(
+      /uncompressed content exceeds 4 byte limit/,
+    );
+  });
+
+  it('rejects traversal paths even when JSZip sanitizes their loaded key', async () => {
+    const zip = new JSZip();
+    zip.file('../outside.txt', 'nope');
+    const data = await zip.generateAsync({ type: 'arraybuffer' });
+
+    await expect(zipToContainer(data)).rejects.toThrow(/unsafe path.*\.\.\/outside\.txt/i);
+  });
+
+  it('rejects absolute and Windows-style archive paths', async () => {
+    for (const path of ['/absolute.txt', 'C:\\outside.txt']) {
+      const zip = new JSZip();
+      zip.file(path, 'nope');
+      const data = await zip.generateAsync({ type: 'arraybuffer' });
+      await expect(zipToContainer(data)).rejects.toThrow(/unsafe path/i);
+    }
   });
 });
 

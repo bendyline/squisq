@@ -111,6 +111,19 @@ interface BaseTemplateBlock {
    */
   sourceDuration?: number;
   /**
+   * Transform provenance: the id of the source Block this template block
+   * was derived from. Lets narration timing (and any per-source styling)
+   * be remapped onto transformed/summarized docs.
+   */
+  sourceBlockId?: string;
+  /** All source block ids when the block summarizes more than one. */
+  sourceBlockIds?: string[];
+  /**
+   * Char offset of the extraction inside the source block's plain text.
+   * Provenance only — NOT a time (see sourceStartTime for seconds).
+   */
+  sourceCharOffset?: number;
+  /**
    * Per-block override for the theme's photographic image grade
    * (`theme.style.imageTreatment`). `'none'` opts this block's imagery out;
    * a treatment type forces that grade regardless of the theme.
@@ -358,6 +371,92 @@ export interface ListBlockInput extends BaseTemplateBlock {
 }
 
 /**
+ * Tree block — renders a hierarchical filesystem-style treeview from an
+ * ASCII tree fence (file trees, dependency trees, outlines). The nested
+ * `items` arrive via `templateData`, derived from the fence by the pipeline
+ * (peer to how `diagram` receives `nodes`/`edges`).
+ */
+export interface TreeBlockInput extends BaseTemplateBlock {
+  template: 'tree';
+  /** Nested tree items (usually via `templateData.items`). */
+  items?: TreeTemplateItem[];
+  /** Optional title above the tree. */
+  title?: string;
+  /** Color scheme for folder rows / icons. */
+  colorScheme?: ColorScheme;
+}
+
+/** One node supplied via `templateData.items` (mirrors `TreeLayerItem`). */
+export interface TreeTemplateItem {
+  id: string;
+  label: string;
+  isDir?: boolean;
+  comment?: string;
+  children: TreeTemplateItem[];
+}
+
+/**
+ * One point on a timeline track. Event positions are normalized across the
+ * whole timeline (0 = left edge, 1 = right edge) so events on separate tracks
+ * remain horizontally comparable.
+ */
+export interface TimelineTemplateEvent {
+  /** Stable id used by cross-track branch links. */
+  id: string;
+  /** Short label displayed next to the event dot. */
+  label: string;
+  /** Optional longer callout text. */
+  description?: string;
+  /** Normalized horizontal position; renderers clamp values to 0..1. */
+  position: number;
+  /** Preferred callout placement. Defaults to alternating above/below. */
+  side?: 'above' | 'below';
+  /** Description placement when it should sit opposite the event label. */
+  descriptionSide?: 'above' | 'below';
+  /** False renders the point only (useful for dense cadence tracks). */
+  callout?: boolean;
+  /** Dot treatment. Defaults to `filled`. */
+  marker?: 'filled' | 'hollow' | 'diamond';
+}
+
+/** A horizontal timeline lane with zero or more positioned events. */
+export interface TimelineTemplateTrack {
+  id: string;
+  /** Optional label displayed to the left of the track. */
+  label?: string;
+  /** Optional label displayed after the track's terminal arrow. */
+  endLabel?: string;
+  events: TimelineTemplateEvent[];
+}
+
+/**
+ * A branch or relationship between two events. Source and target resolve
+ * against event ids globally, so links may cross tracks.
+ */
+export interface TimelineTemplateLink {
+  source: string;
+  target: string;
+  /** Optional text displayed near the branch path. */
+  label?: string;
+}
+
+/**
+ * Timeline block - renders one or more horizontal tracks with event dots,
+ * text callouts, and optional branches between events.
+ */
+export interface TimelineBlockInput extends BaseTemplateBlock {
+  template: 'timeline';
+  /** Tracks and their events (usually supplied through `templateData`). */
+  tracks?: TimelineTemplateTrack[];
+  /** Optional branch/cross-track links between event ids. */
+  links?: TimelineTemplateLink[];
+  /** Optional title above the timeline. */
+  title?: string;
+  /** Color scheme for tracks, markers, and branch links. */
+  colorScheme?: ColorScheme;
+}
+
+/**
  * Photo grid - 2-4 images in a tiled layout.
  * Used when multiple images are available for visual variety.
  */
@@ -477,13 +576,57 @@ export interface VideoPullQuoteInput extends BaseTemplateBlock {
 }
 
 /**
- * Diagram block - renders child headings as a node-and-edge diagram.
+ * One diagram node supplied via `templateData.nodes` (canvas units, the
+ * same coordinate space as `Block.x`/`Block.y`). This is the data-driven
+ * alternative to child headings — used when a diagram is derived from an
+ * ASCII-art fence.
+ */
+export interface DiagramTemplateNode {
+  id: string;
+  /** Display label; may contain `\n` for multi-line labels. */
+  label: string;
+  x: number;
+  y: number;
+  /** Per-node width override in canvas units (defaults to the standard card width). */
+  w?: number;
+  /** Per-node height override in canvas units. */
+  h?: number;
+  /** Id of the node visually containing this one; containers draw behind their children. */
+  container?: string;
+}
+
+/** A position along one side of a diagram node, normalized from 0 to 1. */
+export interface DiagramEdgeAnchor {
+  side: 'top' | 'right' | 'bottom' | 'left';
+  /** Left→right on horizontal sides; top→bottom on vertical sides. */
+  offset: number;
+}
+
+/** An edge for `DiagramTemplateNode` lists. `directed` defaults to true. */
+export interface DiagramTemplateEdge {
+  source: string;
+  target: string;
+  /** Edge label rendered at the midpoint. */
+  label?: string;
+  /** False suppresses the end arrowhead (a plain connecting line). */
+  directed?: boolean;
+  /** Optional authored attachment on the source node. */
+  sourceAnchor?: DiagramEdgeAnchor;
+  /** Optional authored attachment on the target node. */
+  targetAnchor?: DiagramEdgeAnchor;
+  /** Per-edge path routing; ASCII-derived edges use orthogonal routing. */
+  routing?: 'straight' | 'orthogonal' | 'curved';
+}
+
+/**
+ * Diagram block - renders a node-and-edge diagram.
  *
- * Unlike other templates, the diagram template reads its content from
- * the parent block's `children` (passed via `context.children`) — each
- * child heading becomes a node, positioned by its `x`/`y` and connected
- * by its `connectsTo`. Per-diagram options on this input control overall
- * appearance; per-node data lives on the child blocks themselves.
+ * Two data sources, in precedence order:
+ * 1. Child headings (`context.children`) — each child is a node positioned
+ *    by its `x`/`y` and connected by its `connectsTo` (legacy authored form).
+ * 2. `nodes`/`edges` on this input (usually via `templateData`, derived
+ *    from an ASCII-art diagram fence in the block body).
+ * Per-diagram options on this input control overall appearance.
  */
 export interface DiagramBlockInput extends BaseTemplateBlock {
   template: 'diagram';
@@ -501,6 +644,10 @@ export interface DiagramBlockInput extends BaseTemplateBlock {
   endStyle?: MarkerStyle;
   /** Edge line style (default: 'solid'). */
   lineStyle?: 'solid' | 'dashed' | 'dotted';
+  /** Data-driven node list; used only when the block has no children. */
+  nodes?: DiagramTemplateNode[];
+  /** Edges for `nodes`. */
+  edges?: DiagramTemplateEdge[];
 }
 
 /**
@@ -591,6 +738,8 @@ export type TemplateBlock =
   | VideoPullQuoteInput
   | DataTableInput
   | DiagramBlockInput
+  | TreeBlockInput
+  | TimelineBlockInput
   | DrawingBlockInput
   | RawLayersInput;
 
@@ -630,7 +779,7 @@ export interface TemplateContext {
   /** Layout hints for this orientation */
   layout: LayoutHints;
   /**
-   * The block's direct children (set by `getLayers` when the block has
+   * The block's direct children (set by `materializeBlockLayers` when the block has
    * `children`). Most templates ignore this; aggregate templates like
    * `diagram` consume it to render each child as part of their output.
    */

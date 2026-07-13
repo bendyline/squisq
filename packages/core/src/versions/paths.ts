@@ -6,10 +6,20 @@
  * snapshots collide on the same UTC second.
  */
 
-import { formatVersionTimestamp, parseVersionTimestamp } from './timestamp.js';
+import {
+  buildSnapshotPath,
+  parseSnapshotPath,
+  type SnapshotPathStrategy,
+} from './snapshotStore.js';
 
 /** Subfolder (inside the ContentContainer) that holds version snapshots. */
 export const VERSIONS_PREFIX = '.versions/';
+
+/** Internal strategy shared with the generic snapshot store. */
+export const DOCUMENT_VERSION_PATHS: SnapshotPathStrategy = Object.freeze({
+  prefix: VERSIONS_PREFIX,
+  extension: 'md',
+});
 
 /**
  * Strip the directory and extension from a document path to produce the
@@ -27,9 +37,7 @@ export function getDocBasename(documentPath: string): string {
  * (e.g. `2`, `3`) when two saves land on the same UTC second.
  */
 export function buildVersionPath(basename: string, date: Date, collision = 0): string {
-  const stamp = formatVersionTimestamp(date);
-  const suffix = collision > 0 ? `-${collision + 1}` : '';
-  return `${VERSIONS_PREFIX}${basename}.${stamp}${suffix}.md`;
+  return buildSnapshotPath(DOCUMENT_VERSION_PATHS, basename, date, collision);
 }
 
 /**
@@ -39,28 +47,5 @@ export function buildVersionPath(basename: string, date: Date, collision = 0): s
 export function parseVersionPath(
   path: string,
 ): { basename: string; timestamp: Date; collision: number } | null {
-  if (!path.startsWith(VERSIONS_PREFIX)) return null;
-  const rest = path.slice(VERSIONS_PREFIX.length);
-  if (!rest.endsWith('.md')) return null;
-  const stem = rest.slice(0, -'.md'.length);
-  // basename can contain dots; the timestamp is always the *last* dot-segment
-  // (optionally followed by a `-N` collision suffix).
-  const lastDot = stem.lastIndexOf('.');
-  if (lastDot <= 0) return null;
-  const basename = stem.slice(0, lastDot);
-  const tail = stem.slice(lastDot + 1);
-  const dash = tail.indexOf('-');
-  let stamp: string;
-  let collision = 0;
-  if (dash >= 0) {
-    stamp = tail.slice(0, dash);
-    const n = Number(tail.slice(dash + 1));
-    if (!Number.isInteger(n) || n < 2) return null;
-    collision = n - 1;
-  } else {
-    stamp = tail;
-  }
-  const timestamp = parseVersionTimestamp(stamp);
-  if (!timestamp) return null;
-  return { basename, timestamp, collision };
+  return parseSnapshotPath(DOCUMENT_VERSION_PATHS, path);
 }

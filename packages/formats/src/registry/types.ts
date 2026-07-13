@@ -8,9 +8,24 @@
  * methods, so pulling in the registry never eagerly bundles heavy converters.
  */
 
-import type { Doc } from '@bendyline/squisq/schemas';
+import type { Doc, ThemeRegistry } from '@bendyline/squisq/schemas';
+import type { TransformStyleInput, TransformStyleRegistry } from '@bendyline/squisq/transform';
 import type { MarkdownDocument } from '@bendyline/squisq/markdown';
 import type { ContentContainer } from '@bendyline/squisq/storage';
+import type { ParseOptions, StringifyOptions } from '@bendyline/squisq/markdown';
+import type { DocxExportOptions } from '../docx/export.js';
+import type { DocxImportOptions } from '../docx/import.js';
+import type { PptxExportOptions } from '../pptx/export.js';
+import type { PptxImportOptions } from '../pptx/import.js';
+import type { XlsxExportOptions } from '../xlsx/export.js';
+import type { XlsxImportOptions } from '../xlsx/import.js';
+import type { CsvExportOptions, CsvImportOptions } from '../csv/index.js';
+import type { PdfExportOptions } from '../pdf/export.js';
+import type { PdfImportOptions } from '../pdf/import.js';
+import type { HtmlExportOptions } from '../html/htmlTemplate.js';
+import type { HtmlImportOptions } from '../html/import.js';
+import type { EpubExportOptions } from '../epub/export.js';
+import type { ZipSafetyLimits } from '../shared/zipSafety.js';
 
 /** A format identifier (e.g. `'docx'`). Strings so hosts can register their own. */
 export type FormatId = string;
@@ -41,6 +56,33 @@ export interface ConversionResult {
   warnings: string[];
 }
 
+export interface MarkdownFormatOptions {
+  parse?: ParseOptions;
+  stringify?: StringifyOptions;
+}
+
+/** Resource limits applied when importing a DBK/ZIP container. */
+export type DbkFormatOptions = ZipSafetyLimits;
+
+/**
+ * Strongly typed option bags for built-in formats. Import and export options
+ * share a bag because a single conversion may use the format on either side.
+ * Custom registries may add arbitrary keys through the intersection used by
+ * {@link ConvertOptions.formatOptions}.
+ */
+export interface BuiltinFormatOptions {
+  md: MarkdownFormatOptions;
+  docx: DocxImportOptions & DocxExportOptions;
+  pptx: PptxImportOptions & PptxExportOptions;
+  xlsx: XlsxImportOptions & XlsxExportOptions;
+  csv: CsvImportOptions & CsvExportOptions;
+  pdf: PdfImportOptions & PdfExportOptions;
+  html: HtmlImportOptions & Partial<Omit<HtmlExportOptions, 'playerScript'>>;
+  htmlzip: Partial<Omit<HtmlExportOptions, 'playerScript'>>;
+  epub: EpubExportOptions;
+  dbk: DbkFormatOptions;
+}
+
 /**
  * A source normalized into every shape an exporter might need. `doc` is always
  * present; `markdownDoc` is present when the source was markdown-shaped (an
@@ -61,16 +103,20 @@ export interface ConvertOptions {
   from?: FormatId;
   /** Theme id to apply to the exported document. */
   themeId?: string;
-  /** Transform style id to apply before export. */
-  transformStyle?: string;
+  /** Explicit caller-owned registry for non-document custom themes. */
+  themeRegistry?: ThemeRegistry;
+  /** Built-in/registry id or call-scoped style to apply before export. */
+  transformStyle?: TransformStyleInput;
+  /** Explicit caller-owned registry used to resolve transform style ids. */
+  transformRegistry?: TransformStyleRegistry;
   /** Content-aware auto-templating when deriving a Doc from markdown. */
   autoTemplates?: boolean;
-  /** Title hint for exporters that support one (epub, html). */
+  /** Title hint for exporters that expose document metadata. */
   title?: string;
   /** Lazily resolve the standalone player IIFE bundle (required for HTML export). */
   resolvePlayerScript?: () => Promise<string>;
-  /** Per-format escape hatch for extra options. */
-  formatOptions?: Record<FormatId, Record<string, unknown>>;
+  /** Typed per-format options for built-ins; custom format ids remain extensible. */
+  formatOptions?: Partial<BuiltinFormatOptions> & Record<FormatId, unknown>;
 }
 
 /** Describes how a single format imports to / exports from the squisq model. */

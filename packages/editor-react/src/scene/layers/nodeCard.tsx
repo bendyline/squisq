@@ -11,6 +11,7 @@
  */
 
 import type { ShapeLayer, TextLayer, Layer } from '@bendyline/squisq/schemas';
+import { DIAGRAM_LABEL_LINE_HEIGHT, fitDiagramLabel } from '@bendyline/squisq/doc';
 
 export const NODE_WIDTH = 180;
 export const NODE_HEIGHT = 64;
@@ -34,6 +35,12 @@ export interface DiagramNodeDescriptor {
   stroke?: string;
   /** Optional shape: 'rect' (default) or 'pill' (fully rounded). */
   shape?: 'rect' | 'pill';
+  /**
+   * 'container' renders as a background grouping card: translucent fill,
+   * muted stroke, label anchored near the top edge instead of centered
+   * (children paint over the interior).
+   */
+  kind?: 'container';
 }
 
 /**
@@ -45,43 +52,55 @@ export interface DiagramNodeDescriptor {
 export function nodeCardLayers(node: DiagramNodeDescriptor): [ShapeLayer, TextLayer] {
   const width = node.width ?? NODE_WIDTH;
   const height = node.height ?? NODE_HEIGHT;
+  const isContainer = node.kind === 'container';
   const card: ShapeLayer = {
     id: `node-card-${node.id}`,
     type: 'shape',
     position: { x: node.x, y: node.y, width, height },
     content: {
       shape: 'rect',
-      fill: node.fill ?? '#ffffff',
-      stroke: node.stroke ?? '#1e293b',
+      fill: node.fill ?? (isContainer ? '#94a3b8' : '#ffffff'),
+      ...(isContainer ? { fillOpacity: 0.12 } : {}),
+      stroke: node.stroke ?? (isContainer ? '#94a3b8' : '#1e293b'),
       strokeWidth: 2,
       borderRadius: node.shape === 'pill' ? height / 2 : 10,
     },
   };
 
   // Scale the label font with the node height so resized cards stay
-  // legible without the text overflowing.
-  const fontSize = Math.max(12, Math.min(48, Math.round(height * 0.34)));
+  // legible without the text overflowing. Containers keep a fixed, small
+  // title size — their height tracks their children, not their label.
+  const labelText = isContainer ? (node.label.split('\n')[0] ?? '') : node.label;
+  const preferredFontSize = Math.max(12, Math.min(48, Math.round(height * 0.34)));
+  const fit = isContainer
+    ? { fontSize: 16, firstLineOffset: 0, textWidth: width }
+    : fitDiagramLabel(labelText, width, height, preferredFontSize);
+  const { fontSize } = fit;
 
   // Label has no explicit height — that keeps its bounding box
   // unresolvable in `layerBounds`, which in turn keeps it out of the
   // Scene's hit-test. The label rides along visually via `layerFollows`
   // but never wins a pointer-down (the card underneath does), so a
   // drag-on-text moves the card as expected.
+  //
+  // Container labels anchor near the top edge — the interior belongs to
+  // the children painting over it.
   const label: TextLayer = {
     id: `node-label-${node.id}`,
     type: 'text',
     position: {
       x: node.x + width / 2,
-      y: node.y + height / 2,
-      width,
+      y: isContainer ? node.y + fontSize + 8 : node.y + height / 2 + fit.firstLineOffset,
+      width: fit.textWidth,
       anchor: 'center',
     },
     content: {
-      text: node.label,
+      text: labelText,
       style: {
         fontSize,
+        ...(!isContainer ? { lineHeight: DIAGRAM_LABEL_LINE_HEIGHT } : {}),
         fontWeight: 'bold',
-        color: node.stroke ?? '#1e293b',
+        color: node.stroke ?? (isContainer ? '#64748b' : '#1e293b'),
         textAlign: 'center',
       },
     },

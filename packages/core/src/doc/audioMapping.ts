@@ -14,8 +14,10 @@
  */
 
 import type { Doc, Block, AudioSegment, AudioTimingData } from '../schemas/Doc.js';
+import { resolveMediaSchedule } from '../schemas/Media.js';
 import type { ContentContainer } from '../storage/ContentContainer.js';
 import { extractPlainText } from '../markdown/utils.js';
+import { applyNarrationTiming } from './applyNarrationTiming.js';
 
 // ── Helpers ──────────────────────────────────────────────────────────
 
@@ -115,12 +117,9 @@ function flattenForAudio(blocks: Block[]): Block[] {
 /**
  * Info about a narration audio file found in the container.
  *
- * Originally limited to MP3, this now also covers WebM/MP4/Ogg/M4A
- * audio files that the browser recorder writes into `audio/`. The type
- * name is retained for backwards compatibility with the surrounding
- * matching logic; the data shape is identical regardless of codec.
+ * Covers MP3/WebM/MP4/Ogg/M4A audio files, including browser-recorder output.
  */
-interface Mp3Info {
+interface NarrationAudioInfo {
   /** Path in the container (e.g., "audio/narration-2026.webm"). */
   path: string;
   /** Filename without path (e.g., "narration-2026.webm"). */
@@ -189,10 +188,10 @@ function parseConsolidatedTiming(data: ArrayBuffer): Record<string, AudioTimingD
  * Checks for a consolidated timing.json first, then falls back to
  * per-file `.timing.json` sidecars.
  */
-async function discoverMp3s(container: ContentContainer): Promise<Mp3Info[]> {
+async function discoverNarrationAudio(container: ContentContainer): Promise<NarrationAudioInfo[]> {
   const files = await container.listFiles();
   const audioFiles = files.filter((f) => isNarrationAudioPath(f.path));
-  const results: Mp3Info[] = [];
+  const results: NarrationAudioInfo[] = [];
 
   // Try to load consolidated timing.json
   let consolidatedSections: Record<string, AudioTimingData> | null = null;
@@ -237,22 +236,22 @@ async function discoverMp3s(container: ContentContainer): Promise<Mp3Info[]> {
  */
 function resolveFromAnnotations(
   blocks: Block[],
-  mp3s: Mp3Info[],
-): Array<{ block: Block; mp3: Mp3Info }> {
-  const matches: Array<{ block: Block; mp3: Mp3Info }> = [];
+  audioFiles: NarrationAudioInfo[],
+): Array<{ block: Block; audio: NarrationAudioInfo }> {
+  const matches: Array<{ block: Block; audio: NarrationAudioInfo }> = [];
   const flat = flattenForAudio(blocks);
 
   for (const block of flat) {
     const audioRef = block.templateOverrides?.audio;
     if (!audioRef) continue;
 
-    // Find the MP3 by filename (exact or suffix match)
-    const mp3 = mp3s.find(
+    // Find the narration file by filename (exact or suffix match).
+    const audio = audioFiles.find(
       (m) => m.filename === audioRef || m.path === audioRef || m.path.endsWith(`/${audioRef}`),
     );
 
-    if (mp3) {
-      matches.push({ block, mp3 });
+    if (audio) {
+      matches.push({ block, audio });
     }
   }
 
@@ -266,27 +265,27 @@ const MIN_CONTENT_SIMILARITY = 0.35;
 const MIN_FILENAME_SIMILARITY = 0.5;
 
 /**
- * Auto-match MP3 files to blocks by content similarity.
+ * Auto-match narration files to blocks by content similarity.
  * Uses timing.json sourceText when available, falls back to filename matching.
  */
 function autoMatchBlocks(
   blocks: Block[],
-  mp3s: Mp3Info[],
-): Array<{ block: Block; mp3: Mp3Info; score: number }> {
+  audioFiles: NarrationAudioInfo[],
+): Array<{ block: Block; audio: NarrationAudioInfo; score: number }> {
   const flat = flattenForAudio(blocks);
-  if (flat.length === 0 || mp3s.length === 0) return [];
+  if (flat.length === 0 || audioFiles.length === 0) return [];
 
-  // Score all (mp3, block) pairs
+  // Score all (audio, block) pairs.
   const scoredPairs: Array<{
     block: Block;
     blockIndex: number;
-    mp3: Mp3Info;
-    mp3Index: number;
+    audio: NarrationAudioInfo;
+    audioIndex: number;
     score: number;
   }> = [];
 
-  for (let mi = 0; mi < mp3s.length; mi++) {
-    const mp3 = mp3s[mi];
+  for (let audioIndex = 0; audioIndex < audioFiles.length; audioIndex++) {
+    const audio = audioFiles[audioIndex];
 
     for (let bi = 0; bi < flat.length; bi++) {
       const block = flat[bi];
@@ -296,14 +295,14 @@ function autoMatchBlocks(
       let score = 0;
 
       // Primary: content similarity via timing.json sourceText
-      if (mp3.timing?.sourceText) {
-        score = scoreTextSimilarity(mp3.timing.sourceText, blockText);
+      if (audio.timing?.sourceText) {
+        score = scoreTextSimilarity(audio.timing.sourceText, blockText);
       }
 
       // Fallback: filename-based matching
       if (score < MIN_CONTENT_SIMILARITY && block.title) {
         const titleSlug = slugify(block.title);
-        const fileSlug = slugify(stripAudioExtension(mp3.filename));
+        const fileSlug = slugify(stripAudioExtension(audio.filename));
         // Check if the title slug appears in the filename slug
         if (fileSlug.includes(titleSlug) && titleSlug.length >= 3) {
           score = Math.max(score, MIN_FILENAME_SIMILARITY + 0.1);
@@ -311,22 +310,22 @@ function autoMatchBlocks(
       }
 
       if (score >= MIN_CONTENT_SIMILARITY) {
-        scoredPairs.push({ block, blockIndex: bi, mp3, mp3Index: mi, score });
+        scoredPairs.push({ block, blockIndex: bi, audio, audioIndex, score });
       }
     }
   }
 
-  // Greedy assignment: highest score first, each mp3 and block used at most once
+  // Greedy assignment: highest score first, each audio file and block at most once.
   scoredPairs.sort((a, b) => b.score - a.score);
   const usedBlocks = new Set<number>();
-  const usedMp3s = new Set<number>();
-  const matches: Array<{ block: Block; mp3: Mp3Info; score: number }> = [];
+  const usedAudio = new Set<number>();
+  const matches: Array<{ block: Block; audio: NarrationAudioInfo; score: number }> = [];
 
   for (const pair of scoredPairs) {
-    if (usedBlocks.has(pair.blockIndex) || usedMp3s.has(pair.mp3Index)) continue;
+    if (usedBlocks.has(pair.blockIndex) || usedAudio.has(pair.audioIndex)) continue;
     usedBlocks.add(pair.blockIndex);
-    usedMp3s.add(pair.mp3Index);
-    matches.push({ block: pair.block, mp3: pair.mp3, score: pair.score });
+    usedAudio.add(pair.audioIndex);
+    matches.push({ block: pair.block, audio: pair.audio, score: pair.score });
   }
 
   return matches;
@@ -344,22 +343,35 @@ function autoMatchBlocks(
  * assigned to the correct `audioSegment` indices.
  *
  * @param doc - The source Doc (not mutated).
- * @param container - ContentContainer with MP3 and timing files.
+ * @param container - ContentContainer with narration and timing files.
  * @returns New Doc with audio segments resolved, or original doc if no matches.
  */
 export async function resolveAudioMapping(doc: Doc, container: ContentContainer): Promise<Doc> {
-  // Discover MP3 files and their timing data
-  const mp3s = await discoverMp3s(container);
-  if (mp3s.length === 0) return doc;
+  // Step 0: a document-anchored narration take (preamble `{[audio src=…
+  // anchor=document]}` + v3 timing sidecar) re-times the block timeline
+  // to the recorded voice. See applyNarrationTiming for precedence.
+  const narration = await applyNarrationTiming(doc, container);
+  doc = narration.doc;
+
+  const audioFiles = await discoverNarrationAudio(container);
+
+  // Files already playing through the media schedule (documentMedia /
+  // block clips) must not ALSO be auto-mapped into audio.segments —
+  // that would play the narration twice.
+  const scheduledSrcs = new Set(resolveMediaSchedule(doc).map((clip) => clip.src));
+  const available = audioFiles.filter((f) => !scheduledSrcs.has(f.path));
+  if (available.length === 0) return doc;
 
   // Try annotations first
-  let matches = resolveFromAnnotations(doc.blocks, mp3s);
+  let matches = resolveFromAnnotations(doc.blocks, available);
 
-  // Fall back to auto-matching if no annotations found
-  if (matches.length === 0) {
-    matches = autoMatchBlocks(doc.blocks, mp3s).map((m) => ({
+  // Fall back to auto-matching if no annotations found. When narration
+  // timing was applied, content auto-matching is skipped — the take owns
+  // the timeline, and fuzzy matches against other files would fight it.
+  if (matches.length === 0 && !narration.applied) {
+    matches = autoMatchBlocks(doc.blocks, available).map((m) => ({
       block: m.block,
-      mp3: m.mp3,
+      audio: m.audio,
     }));
   }
 
@@ -377,11 +389,11 @@ export async function resolveAudioMapping(doc: Doc, container: ContentContainer)
   let startTime = 0;
 
   for (let i = 0; i < matches.length; i++) {
-    const { block, mp3 } = matches[i];
-    const duration = mp3.timing?.duration ?? 30; // Fallback duration if no timing
+    const { block, audio } = matches[i];
+    const duration = audio.timing?.duration ?? 30; // Fallback duration if no timing
 
     segments.push({
-      src: mp3.path,
+      src: audio.path,
       name: block.title ?? block.id,
       duration,
       startTime,
@@ -397,7 +409,9 @@ export async function resolveAudioMapping(doc: Doc, container: ContentContainer)
   return {
     ...doc,
     blocks: newBlocks,
-    duration: startTime,
+    // A narration take owns the overall duration; explicit per-block
+    // segments only ever extend it.
+    duration: narration.applied ? Math.max(doc.duration, startTime) : startTime,
     audio: { segments },
   };
 }

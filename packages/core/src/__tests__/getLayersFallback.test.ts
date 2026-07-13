@@ -1,7 +1,7 @@
 import { describe, it, expect, afterEach } from 'vitest';
 import { parseMarkdown } from '../markdown/parse.js';
 import { markdownToDoc } from '../doc/markdownToDoc.js';
-import { getLayers } from '../doc/getLayers.js';
+import { materializeLayers } from './materializeTestUtils.js';
 import { templateRegistry } from '../doc/templates/index.js';
 import type { Block, Layer } from '../schemas/Doc.js';
 
@@ -15,10 +15,10 @@ function firstBlock(md: string): Block {
   return markdownToDoc(parseMarkdown(md)).blocks[0];
 }
 
-describe('getLayers — graceful degradation', () => {
+describe('materializeBlockLayers — graceful degradation', () => {
   it('renders an unknown template as a plain card with title, body, and notice', () => {
     const block = firstBlock('## My Section {[photGrid]}\n\nSome body prose here.');
-    const layers = getLayers(block);
+    const layers = materializeLayers(block);
     expect(layers.length).toBeGreaterThan(0);
     const text = textOf(layers);
     expect(text).toContain('My Section');
@@ -39,7 +39,7 @@ describe('getLayers — graceful degradation', () => {
         template: '__boom',
         title: 'Exploding block',
       };
-      const layers = getLayers(block);
+      const layers = materializeLayers(block);
       expect(layers.length).toBeGreaterThan(0);
       expect(textOf(layers)).toContain('Template "__boom" failed');
       expect(textOf(layers)).toContain('Exploding block');
@@ -50,11 +50,11 @@ describe('getLayers — graceful degradation', () => {
 
   it('blocks with no template at all still return empty layers', () => {
     const block: Block = { id: 'raw', startTime: 0, duration: 5, audioSegment: 0 };
-    expect(getLayers(block)).toEqual([]);
+    expect(materializeLayers(block)).toEqual([]);
   });
 });
 
-describe('getLayers — structured data feeds templates', () => {
+describe('materializeBlockLayers — structured data feeds templates', () => {
   afterEach(() => {
     delete (templateRegistry as Record<string, unknown>)['__capture'];
   });
@@ -76,7 +76,7 @@ describe('getLayers — structured data feeds templates', () => {
       templateData: { rows: [['a', 'b']], zoom: 12 },
       templateOverrides: { zoom: '14' },
     };
-    getLayers(block);
+    materializeLayers(block);
     expect(received).not.toBeNull();
     expect(received!['rows']).toEqual([['a', 'b']]);
     // String overrides from {[…]} params win last.
@@ -92,7 +92,7 @@ describe('getLayers — structured data feeds templates', () => {
       '| Alice | 30 |',
     ].join('\n');
     const block = firstBlock(md);
-    const layers = getLayers(block);
+    const layers = materializeLayers(block);
     expect(layers.length).toBeGreaterThan(0);
     const tableLayer = layers.find((l) => l.type === 'table');
     expect(tableLayer).toBeDefined();

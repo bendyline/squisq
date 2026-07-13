@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
-import { getLayers, RenderContext } from '../doc/getLayers.js';
+import type { MaterializeBlockLayersOptions } from '../doc/materializeBlockLayers.js';
+import { materializeLayers } from './materializeTestUtils.js';
 import { DEFAULT_THEME } from '../schemas/themeLibrary.js';
 import { TemplateBlock, PersistentLayerConfig } from '../schemas/BlockTemplates.js';
 import { VIEWPORT_PRESETS } from '../schemas/Viewport.js';
@@ -30,7 +31,7 @@ function makeRawBlock(layers: Layer[]): Block {
   };
 }
 
-const defaultContext: RenderContext = {
+const defaultContext: MaterializeBlockLayersOptions = {
   theme: DEFAULT_THEME,
   viewport: VIEWPORT_PRESETS.landscape,
   blockIndex: 0,
@@ -41,10 +42,10 @@ const defaultContext: RenderContext = {
 // Tests
 // ---------------------------------------------------------------------------
 
-describe('getLayers', () => {
+describe('materializeBlockLayers', () => {
   it('generates layers for a known template block', () => {
     const block = makeTemplateBlock({ template: 'title', title: 'Test Title' });
-    const layers = getLayers(block, defaultContext);
+    const layers = materializeLayers(block, defaultContext);
 
     expect(Array.isArray(layers)).toBe(true);
     expect(layers.length).toBeGreaterThan(0);
@@ -61,7 +62,7 @@ describe('getLayers', () => {
       stat: '42%',
       description: 'of users',
     });
-    const layers = getLayers(block, defaultContext);
+    const layers = materializeLayers(block, defaultContext);
 
     expect(layers.length).toBeGreaterThan(0);
     const texts = layers.filter((l) => l.type === 'text');
@@ -78,13 +79,17 @@ describe('getLayers', () => {
       } as ShapeLayer,
     ];
     const block = makeRawBlock(existingLayers);
-    const layers = getLayers(block, defaultContext);
+    const layers = materializeLayers(block, defaultContext);
 
     expect(layers).toEqual(existingLayers);
+    expect(layers).not.toBe(existingLayers);
+    expect(layers[0]).not.toBe(existingLayers[0]);
+    (layers[0] as ShapeLayer).content.fill = '#000000';
+    expect((existingLayers[0] as ShapeLayer).content.fill).toBe('#ff0000');
   });
 
   it('resolves legacy template aliases through TEMPLATE_ALIASES', () => {
-    // Regression: `getLayers` previously did `block.template in templateRegistry`
+    // Regression: the old resolver used `block.template in templateRegistry`
     // without alias resolution, so docs authored with the legacy long ids
     // (`titleBlock`, `quoteBlock`, `mapBlock`, `listBlock`) rendered as
     // empty SVG cards in the linear/document view — `hasTemplate()` accepts
@@ -103,7 +108,7 @@ describe('getLayers', () => {
         items: ['a', 'b', 'c'],
         quote: 'q',
       } as Partial<TemplateBlock>);
-      const layers = getLayers(block, defaultContext);
+      const layers = materializeLayers(block, defaultContext);
       expect(layers.length).toBeGreaterThan(0);
     }
   });
@@ -115,7 +120,7 @@ describe('getLayers', () => {
       duration: 5,
       audioSegment: 0,
     } as unknown as TemplateBlock;
-    const layers = getLayers(block, defaultContext);
+    const layers = materializeLayers(block, defaultContext);
 
     expect(layers.length).toBeGreaterThan(0);
     const noticeText = layers
@@ -126,14 +131,14 @@ describe('getLayers', () => {
 
   it('returns empty array for block with no template and no layers', () => {
     const block: Block = { id: 'empty-1', duration: 5, startTime: 0, audioSegment: 0 };
-    const layers = getLayers(block, defaultContext);
+    const layers = materializeLayers(block, defaultContext);
 
     expect(layers).toEqual([]);
   });
 
   it('uses default context values when context is omitted', () => {
     const block = makeTemplateBlock({ template: 'title', title: 'Defaults' });
-    const layers = getLayers(block);
+    const layers = materializeLayers(block);
 
     expect(Array.isArray(layers)).toBe(true);
     expect(layers.length).toBeGreaterThan(0);
@@ -144,12 +149,12 @@ describe('getLayers', () => {
     const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
 
     // comparisonBar requires numeric values; passing invalid data may throw
-    // but getLayers should catch and return []
+    // but materialization should degrade without throwing
     const block = makeTemplateBlock({
       template: 'comparisonBar',
       // Missing required fields
     });
-    const layers = getLayers(block, defaultContext);
+    const layers = materializeLayers(block, defaultContext);
 
     expect(Array.isArray(layers)).toBe(true);
     consoleSpy.mockRestore();
@@ -177,7 +182,10 @@ describe('getLayers', () => {
 
     it('injects persistent bottom and top layers around block layers', () => {
       const block = makeTemplateBlock({ template: 'title', title: 'With Persistent' });
-      const layers = getLayers(block, { ...defaultContext, persistentLayers: persistentConfig });
+      const layers = materializeLayers(block, {
+        ...defaultContext,
+        persistentLayers: persistentConfig,
+      });
 
       // First layer should be the bottom persistent layer
       expect(layers[0]).toEqual(bottomLayer);
@@ -193,7 +201,10 @@ describe('getLayers', () => {
         title: 'No Bottom',
         useBottomLayer: false,
       });
-      const layers = getLayers(block, { ...defaultContext, persistentLayers: persistentConfig });
+      const layers = materializeLayers(block, {
+        ...defaultContext,
+        persistentLayers: persistentConfig,
+      });
 
       // Should NOT start with the bottom persistent layer
       expect(layers[0]).not.toEqual(bottomLayer);
@@ -207,7 +218,10 @@ describe('getLayers', () => {
         title: 'No Top',
         useTopLayer: false,
       });
-      const layers = getLayers(block, { ...defaultContext, persistentLayers: persistentConfig });
+      const layers = materializeLayers(block, {
+        ...defaultContext,
+        persistentLayers: persistentConfig,
+      });
 
       // Should start with the bottom persistent layer
       expect(layers[0]).toEqual(bottomLayer);
@@ -217,8 +231,8 @@ describe('getLayers', () => {
 
     it('skips injection when no persistent layers are configured', () => {
       const block = makeTemplateBlock({ template: 'title', title: 'No Persistent' });
-      const withoutPersistent = getLayers(block, defaultContext);
-      const withEmptyPersistent = getLayers(block, {
+      const withoutPersistent = materializeLayers(block, defaultContext);
+      const withEmptyPersistent = materializeLayers(block, {
         ...defaultContext,
         persistentLayers: { bottomLayers: [], topLayers: [] },
       });

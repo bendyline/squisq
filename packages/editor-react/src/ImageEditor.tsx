@@ -19,7 +19,7 @@ import { exportImageEditDoc, type ImageEditExportFormat } from '@bendyline/squis
 import type { SurfaceScheme, Theme } from '@bendyline/squisq/schemas';
 import { CanvasSurface } from './imageEditor/CanvasSurface.js';
 import { ImageVersionHistoryDropdown } from './imageEditor/ImageVersionHistoryDropdown.js';
-import { LayersPanel } from './imageEditor/LayersPanel.js';
+import { LayersPanel, type AddableLayerKind } from './imageEditor/LayersPanel.js';
 import { PropertiesPanel } from './imageEditor/PropertiesPanel.js';
 import { Toolbar } from './imageEditor/Toolbar.js';
 import { useImageEditor } from './imageEditor/useImageEditor.js';
@@ -115,6 +115,7 @@ export function ImageEditor(props: ImageEditorProps) {
   const [historyRefreshKey, setHistoryRefreshKey] = useState(0);
 
   const surfaceRef = useRef<HTMLDivElement>(null);
+  const imageInputRef = useRef<HTMLInputElement>(null);
   const [zoom, setZoom] = useState(1.0);
 
   const handleZoomIn = useCallback(() => {
@@ -276,6 +277,24 @@ export function ImageEditor(props: ImageEditorProps) {
     [dispatch, shapeKind],
   );
 
+  const handleAddLayer = useCallback(
+    (kind: AddableLayerKind) => {
+      if (!state) return;
+      if (kind === 'image') {
+        imageInputRef.current?.click();
+        return;
+      }
+
+      const { width, height } = state.doc.canvas;
+      if (kind === 'text') {
+        handleCreateTextAt(Math.max(0, (width - 240) / 2), Math.max(0, (height - 48) / 2));
+        return;
+      }
+      handleCreateShapeAt(width / 2, height / 2);
+    },
+    [handleCreateShapeAt, handleCreateTextAt, state],
+  );
+
   if (error) {
     return (
       <div
@@ -312,6 +331,7 @@ export function ImageEditor(props: ImageEditorProps) {
         shapeKind={state.shapeKind}
         dispatch={dispatch}
         uploadAsset={uploadAsset}
+        imageInputRef={imageInputRef}
         onExport={handleExport}
         onSave={saveBehavior === 'export' ? handleSaveAndClose : flush}
         saveLabel={saveLabel ?? (saveBehavior === 'export' ? 'Save and close' : 'Save')}
@@ -361,6 +381,7 @@ export function ImageEditor(props: ImageEditorProps) {
             doc={state.doc}
             selectedLayerId={state.selectedLayerId}
             dispatch={dispatch}
+            onAddLayer={handleAddLayer}
           />
           <PropertiesPanel
             doc={state.doc}

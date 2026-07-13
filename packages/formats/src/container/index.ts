@@ -14,6 +14,18 @@
 import JSZip from 'jszip';
 import type { ContentContainer } from '@bendyline/squisq/storage';
 import { MemoryContentContainer } from '@bendyline/squisq/storage';
+import {
+  assertSafeZipPath,
+  openBoundedZipArchive,
+  ZipSafetyError,
+  type ZipSafetyLimits,
+  type ZipSafetyErrorCode,
+  type ZipSafetyErrorOptions,
+} from '../shared/zipSafety.js';
+
+export type ZipToContainerOptions = ZipSafetyLimits;
+export { ZipSafetyError };
+export type { ZipSafetyLimits, ZipSafetyErrorCode, ZipSafetyErrorOptions };
 
 /**
  * Serialize a ContentContainer to a ZIP blob.
@@ -29,6 +41,7 @@ export async function containerToZip(container: ContentContainer): Promise<Blob>
   const entries = await container.listFiles();
 
   for (const entry of entries) {
+    assertSafeZipPath(entry.path);
     const data = await container.readFile(entry.path);
     if (data) {
       zip.file(entry.path, new Uint8Array(data));
@@ -54,36 +67,14 @@ export async function containerToZip(container: ContentContainer): Promise<Blob>
  */
 export async function zipToContainer(
   zipData: ArrayBuffer | Uint8Array | Blob,
+  options: ZipToContainerOptions = {},
 ): Promise<MemoryContentContainer> {
-  const zip = await JSZip.loadAsync(zipData);
+  const archive = await openBoundedZipArchive(zipData, options);
   const container = new MemoryContentContainer();
-
-  const filePromises: Promise<void>[] = [];
-
-  zip.forEach((relativePath, zipEntry) => {
-    // Skip directories
-    if (zipEntry.dir) return;
-
-    // Strip leading slash if present
-    const entryPath = relativePath.startsWith('/') ? relativePath.slice(1) : relativePath;
-    if (!entryPath) return;
-
-    // Path-traversal protection: reject absolute paths, backslashes, and .. segments
-    if (
-      entryPath.startsWith('/') ||
-      entryPath.includes('\\') ||
-      entryPath.split('/').some((seg) => seg === '..')
-    ) {
-      return;
-    }
-
-    filePromises.push(
-      zipEntry.async('arraybuffer').then((data) => {
-        return container.writeFile(entryPath, data);
-      }),
-    );
-  });
-
-  await Promise.all(filePromises);
+  for (const { path } of archive.entries) {
+    const data = await archive.read(path);
+    if (data) await container.writeFile(path, data);
+    archive.release(path);
+  }
   return container;
 }

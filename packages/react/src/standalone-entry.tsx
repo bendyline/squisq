@@ -12,10 +12,12 @@
  *   <script src="squisq-player.iife.js"></script>
  *   <div id="root"></div>
  *   <script>
- *     SquisqPlayer.mount(document.getElementById('root'), docJson, {
+ *     const root = document.getElementById('root');
+ *     const handle = SquisqPlayer.mount(root, docJson, {
  *       mode: 'slideshow',
  *       images: { 'hero.jpg': 'data:image/jpeg;base64,...' }
  *     });
+ *     // In render mode: const api = await handle.renderAPI;
  *   </script>
  */
 
@@ -23,6 +25,7 @@ import { createElement } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import type { Doc, MediaProvider } from '@bendyline/squisq/schemas';
 import type { Theme } from '@bendyline/squisq/schemas';
+import type { SquisqRenderAPI } from './types';
 import { DocPlayer } from './DocPlayer';
 import { LinearDocView } from './LinearDocView';
 import { MediaContext } from './hooks/MediaContext';
@@ -54,13 +57,35 @@ export interface MountOptions {
   /** Auto-play on mount (only for slideshow mode, default: false) */
   autoPlay?: boolean;
   /**
-   * Enable render mode for headless frame capture.
-   * Exposes window.seekTo(), getDuration(), getCaptions(), etc.
-   * Disables controls and auto-play. Used by Playwright video export.
+   * Capture presentation arrow keys without requiring focus (default: true).
+   * Disable when mounting multiple interactive players on the same page.
+   */
+  globalKeyboardShortcuts?: boolean;
+  /**
+   * Enable render mode for headless frame capture. The instance API is
+   * available through the returned mount handle. Disables controls and
+   * auto-play.
    */
   renderMode?: boolean;
+  /**
+   * Whether to render slide transitions and per-layer animations (default: true).
+   * Timed media continues to play when disabled.
+   */
+  animationsEnabled?: boolean;
   /** Caption style: 'standard' or 'social'. Omit or set to undefined for no captions. */
   captionStyle?: 'standard' | 'social';
+}
+
+/** Instance handle returned by {@link mount}. */
+export interface SquisqPlayerHandle {
+  /** DOM element that owns this player instance. */
+  readonly element: Element;
+  /** Resolves to this instance's render API, or null when render mode is off. */
+  readonly renderAPI: Promise<SquisqRenderAPI | null>;
+  /** Current render API without waiting for effects to run. */
+  getRenderAPI(): SquisqRenderAPI | null;
+  /** Unmount this exact player instance. */
+  unmount(): void;
 }
 
 // ── CSS Injection ──────────────────────────────────────────────────
@@ -167,6 +192,50 @@ function rewriteAudioUrls(doc: Doc, audioMap: Record<string, string>): Doc {
 
 const roots = new WeakMap<Element, Root>();
 
+interface InternalPlayerHandle extends SquisqPlayerHandle {
+  setRenderAPI(api: SquisqRenderAPI | null): void;
+  cancel(): void;
+}
+
+const handles = new WeakMap<Element, InternalPlayerHandle>();
+
+function createPlayerHandle(element: Element, expectsRenderAPI: boolean): InternalPlayerHandle {
+  let currentAPI: SquisqRenderAPI | null = null;
+  let active = true;
+  let settled = false;
+  let resolveRenderAPI!: (api: SquisqRenderAPI | null) => void;
+  const renderAPI = new Promise<SquisqRenderAPI | null>((resolve) => {
+    resolveRenderAPI = resolve;
+  });
+
+  const settle = (api: SquisqRenderAPI | null) => {
+    if (settled) return;
+    settled = true;
+    resolveRenderAPI(api);
+  };
+  if (!expectsRenderAPI) settle(null);
+
+  const handle: InternalPlayerHandle = {
+    element,
+    renderAPI,
+    getRenderAPI: () => currentAPI,
+    unmount: () => {
+      if (handles.get(element) === handle) unmount(element);
+    },
+    setRenderAPI(api) {
+      if (!active) return;
+      currentAPI = api;
+      if (api) settle(api);
+    },
+    cancel() {
+      active = false;
+      currentAPI = null;
+      settle(null);
+    },
+  };
+  return handle;
+}
+
 // ── Public API ─────────────────────────────────────────────────────
 
 /**
@@ -176,7 +245,7 @@ const roots = new WeakMap<Element, Root>();
  * @param doc - A Doc object (parsed JSON)
  * @param options - Rendering options
  */
-export function mount(element: Element, doc: Doc, options: MountOptions = {}): void {
+export function mount(element: Element, doc: Doc, options: MountOptions = {}): SquisqPlayerHandle {
   injectCss();
 
   const {
@@ -187,7 +256,9 @@ export function mount(element: Element, doc: Doc, options: MountOptions = {}): v
     autoPlay = false,
     theme,
     renderMode = false,
+    animationsEnabled = true,
     captionStyle,
+    globalKeyboardShortcuts = true,
   } = options;
 
   // Rewrite audio URLs if map provided
@@ -195,6 +266,9 @@ export function mount(element: Element, doc: Doc, options: MountOptions = {}): v
 
   // Build the media provider if images are provided
   const mediaProvider = images ? createInlineMediaProvider(images, basePath) : null;
+  handles.get(element)?.cancel();
+  const handle = createPlayerHandle(element, mode === 'slideshow' && renderMode);
+  handles.set(element, handle);
 
   let content: ReturnType<typeof createElement>;
 
@@ -203,6 +277,8 @@ export function mount(element: Element, doc: Doc, options: MountOptions = {}): v
       doc: finalDoc,
       basePath,
       theme,
+      animationsEnabled,
+      globalKeyboardShortcuts,
     });
   } else {
     content = createElement(DocPlayer, {
@@ -212,9 +288,12 @@ export function mount(element: Element, doc: Doc, options: MountOptions = {}): v
       autoPlay: renderMode ? false : autoPlay,
       showControls: !renderMode,
       renderMode,
+      animationsEnabled,
       theme,
       captionsEnabled: !!captionStyle,
       captionStyle: captionStyle ?? 'standard',
+      globalKeyboardShortcuts,
+      onRenderAPIReady: (api: SquisqRenderAPI | null) => handle.setRenderAPI(api),
     });
   }
 
@@ -230,23 +309,21 @@ export function mount(element: Element, doc: Doc, options: MountOptions = {}): v
     roots.set(element, root);
   }
   root.render(content);
+  return handle;
 }
 
-/**
- * Mount a static scrollable document view (alias for mount with mode='static').
- */
-export function mountStatic(
-  element: Element,
-  doc: Doc,
-  options: Omit<MountOptions, 'mode'> = {},
-): void {
-  mount(element, doc, { ...options, mode: 'static' });
+/** Return the handle for the player mounted into `element`, if any. */
+export function getHandle(element: Element): SquisqPlayerHandle | undefined {
+  return handles.get(element);
 }
 
 /**
  * Unmount a previously mounted SquisqPlayer from an element.
  */
 export function unmount(element: Element): void {
+  const handle = handles.get(element);
+  handle?.cancel();
+  handles.delete(element);
   const root = roots.get(element);
   if (root) {
     root.unmount();

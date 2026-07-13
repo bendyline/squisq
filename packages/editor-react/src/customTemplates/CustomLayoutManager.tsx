@@ -47,7 +47,7 @@ type Selection =
 
 export function CustomLayoutManager({ onClose }: CustomLayoutManagerProps) {
   const { docTemplates, onDocTemplatesChange } = useDocCustomTemplates();
-  const { mediaProvider } = useEditorContext();
+  const { mediaProvider, colorScheme } = useEditorContext();
 
   // Close on Escape, mirroring the other editor dialogs.
   useEffect(() => {
@@ -60,7 +60,8 @@ export function CustomLayoutManager({ onClose }: CustomLayoutManagerProps) {
 
   return createPortal(
     <div
-      className="squisq-layout-manager-overlay"
+      className="squisq-editor-shell squisq-layout-manager-overlay"
+      data-theme={colorScheme}
       role="dialog"
       aria-modal="true"
       aria-label="Custom layouts"

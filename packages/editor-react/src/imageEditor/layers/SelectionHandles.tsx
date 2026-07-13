@@ -35,7 +35,7 @@ export function SelectionHandles({ box, onHandlePointerDown }: Props) {
   ];
 
   return (
-    <g pointerEvents="none">
+    <g className="squisq-image-editor-selection-handles" pointerEvents="none">
       {/*
        * Outline: rendered as two stacked rectangles so the selection
        * stays visible over both light and dark imagery. The white

@@ -36,12 +36,12 @@ import { deriveTemplateInputs } from './templateInputs.js';
 import { lintTemplateParams } from './templates/inputDescriptors.js';
 import {
   templateRegistry,
-  TEMPLATE_ALIASES,
   resolveTemplateName,
   isShapeName,
   normalizeShapeKind,
   SHAPE_NAMES,
 } from './templates/index.js';
+import { TEMPLATE_ALIASES } from './templates/templateNames.js';
 import { nearestName } from './utils/nearest.js';
 
 // ============================================

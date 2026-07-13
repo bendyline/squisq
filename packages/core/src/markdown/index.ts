@@ -144,6 +144,7 @@ export {
   createDocument,
   parseFrontmatter,
   formatBlockScalar,
+  formatFrontmatterValue,
   setFrontmatterValues,
   inferDocumentTitle,
   readFrontmatterThemeId,

@@ -27,6 +27,8 @@ export interface MediaClipLayerProps {
   isPlaying: boolean;
   basePath: string;
   renderMode?: boolean;
+  /** Silence every scheduled clip during live playback. */
+  muted?: boolean;
 }
 
 export function MediaClipLayer({
@@ -35,6 +37,7 @@ export function MediaClipLayer({
   isPlaying,
   basePath,
   renderMode = false,
+  muted = false,
 }: MediaClipLayerProps) {
   const { renderClips, activeIds } = useMediaSchedule(schedule, currentTime);
   if (renderClips.length === 0) return null;
@@ -49,6 +52,7 @@ export function MediaClipLayer({
           isPlaying={isPlaying}
           basePath={basePath}
           renderMode={renderMode}
+          muted={muted}
         />
       ))}
     </div>
@@ -62,6 +66,7 @@ interface MediaClipElementProps {
   isPlaying: boolean;
   basePath: string;
   renderMode: boolean;
+  muted: boolean;
 }
 
 function MediaClipElement({
@@ -71,6 +76,7 @@ function MediaClipElement({
   isPlaying,
   basePath,
   renderMode,
+  muted,
 }: MediaClipElementProps) {
   const ref = useRef<HTMLMediaElement | null>(null);
   const src = useMediaUrl(clip.src, basePath);
@@ -96,7 +102,7 @@ function MediaClipElement({
     } else {
       el.pause();
     }
-  }, [active, currentTime, isPlaying, renderMode, clip.sourceIn, clip.absoluteStart]);
+  }, [active, currentTime, isPlaying, renderMode, clip.sourceIn, clip.absoluteStart, src]);
 
   const isVideo = clip.kind === 'video';
   const common = {
@@ -130,6 +136,10 @@ function MediaClipElement({
   }
 
   return (
-    <audio {...common} muted={renderMode} style={{ position: 'absolute', width: 0, height: 0 }} />
+    <audio
+      {...common}
+      muted={renderMode || muted}
+      style={{ position: 'absolute', width: 0, height: 0 }}
+    />
   );
 }

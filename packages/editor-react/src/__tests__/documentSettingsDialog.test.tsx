@@ -26,7 +26,7 @@ function pickTheme(name: string) {
   // Scope the option lookup to the popover — the Transform <select> in
   // the same dialog also exposes role="option" entries (one of which is
   // literally "Documentary"), so a global query would collide.
-  const popover = document.getElementById('squisq-theme-picker-popover')!;
+  const popover = document.querySelector<HTMLElement>('.squisq-theme-picker-popover')!;
   fireEvent.click(within(popover).getByRole('option', { name }));
 }
 
@@ -99,6 +99,20 @@ describe('DocumentSettingsDialog', () => {
     expect(next).not.toMatch(/^theme:/m);
   });
 
+  it('reads themeId and canonicalizes both legacy theme keys on save', () => {
+    const onSave = vi.fn();
+    const src = '---\nthemeId: bold\ntheme: cinematic\n---\n\n# Doc\n';
+    open(src, onSave);
+
+    expect(screen.getByLabelText('Theme').textContent).toContain('Bold');
+    clickSave();
+
+    const next = onSave.mock.calls[0][0] as string;
+    expect(next).toContain('squisq-theme: bold');
+    expect(next).not.toMatch(/^themeId:/m);
+    expect(next).not.toMatch(/^theme:/m);
+  });
+
   it('removes squisq-theme when reverting to default', () => {
     const onSave = vi.fn();
     const src = '---\nsquisq-theme: documentary\n---\n\n# Doc\n';
@@ -120,6 +134,20 @@ describe('DocumentSettingsDialog', () => {
     clickSave();
     const next = onSave.mock.calls[0][0] as string;
     expect(next).toContain(`squisq-transform: ${first.value}`);
+  });
+
+  it('canonicalizes a stored dataDriven transform id', () => {
+    const onSave = vi.fn();
+    open('---\ntransform-style: dataDriven\n---\n\n# Doc\n', onSave);
+
+    const select = screen.getByLabelText('Transform') as HTMLSelectElement;
+    expect(select.value).toBe('data-driven');
+    clickSave();
+
+    const next = onSave.mock.calls[0][0] as string;
+    expect(next).toContain('squisq-transform: data-driven');
+    expect(next).not.toContain('dataDriven');
+    expect(next).not.toContain('transform-style');
   });
 
   it('writes squisq-captions when picked', () => {

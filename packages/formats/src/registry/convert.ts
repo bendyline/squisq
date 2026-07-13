@@ -9,9 +9,12 @@
 
 import type { MarkdownDocument } from '@bendyline/squisq/markdown';
 import type { ContentContainer } from '@bendyline/squisq/storage';
+import type { TransformStyleInput, TransformStyleRegistry } from '@bendyline/squisq/transform';
 import { ConversionError } from './errors.js';
 import { defaultRegistry } from './registry.js';
+import { openBoundedZipArchive, ZipSafetyError } from '../shared/zipSafety.js';
 import type {
+  BuiltinFormatOptions,
   ConversionResult,
   ConvertOptions,
   ConvertSource,
@@ -20,6 +23,10 @@ import type {
   FormatRegistry,
   NormalizedInput,
 } from './types.js';
+
+function markdownFormatOptions(options: ConvertOptions): BuiltinFormatOptions['md'] {
+  return (options.formatOptions?.md ?? {}) as BuiltinFormatOptions['md'];
+}
 
 // ── Byte sniffing ───────────────────────────────────────────────────
 
@@ -41,13 +48,19 @@ const PDF_MAGIC = [0x25, 0x50, 0x44, 0x46]; // "%PDF"
  * marker means `dbk`.
  */
 async function sniffZip(bytes: Uint8Array): Promise<FormatId> {
-  const JSZip = (await import('jszip')).default;
-  const zip = await JSZip.loadAsync(bytes).catch(() => {
-    throw new ConversionError('invalid-input', 'Input is not a readable ZIP archive.');
+  const archive = await openBoundedZipArchive(bytes).catch((cause: unknown) => {
+    if (cause instanceof ZipSafetyError && cause.code !== 'invalid-archive') throw cause;
+    throw new ConversionError('invalid-input', 'Input is not a readable ZIP archive.', { cause });
   });
-  const contentTypes = zip.file('[Content_Types].xml');
+  const contentTypes = archive.entries.find((entry) => entry.path === '[Content_Types].xml');
   if (!contentTypes) return 'dbk';
-  const xml = await contentTypes.async('string');
+  const maxContentTypesBytes = 1024 * 1024;
+  if ((contentTypes.declaredSize ?? 0) > maxContentTypesBytes) {
+    throw new ConversionError('invalid-input', 'OOXML content-types metadata is too large.');
+  }
+  const xmlBytes = await archive.read(contentTypes.path, maxContentTypesBytes);
+  if (!xmlBytes) return 'dbk';
+  const xml = new TextDecoder().decode(xmlBytes);
   if (xml.includes('wordprocessingml')) return 'docx';
   if (xml.includes('presentationml')) return 'pptx';
   if (xml.includes('spreadsheetml')) return 'xlsx';
@@ -80,7 +93,8 @@ async function detectByteFormat(
 
 /** Lowercased extension without the leading dot (`report.DocX` → `docx`). */
 function extractExt(filename: string): string {
-  const base = filename.split('/').pop() ?? filename;
+  const normalized = filename.replace(/\\/g, '/');
+  const base = normalized.split('/').pop() ?? normalized;
   const dot = base.lastIndexOf('.');
   if (dot <= 0) return '';
   return base.slice(dot + 1).toLowerCase();
@@ -88,7 +102,8 @@ function extractExt(filename: string): string {
 
 /** Basename without its final extension (`a/b/report.docx` → `report`). */
 function baseNameOf(filename: string): string {
-  const base = filename.split('/').pop() ?? filename;
+  const normalized = filename.replace(/\\/g, '/');
+  const base = normalized.split('/').pop() ?? normalized;
   const dot = base.lastIndexOf('.');
   return dot > 0 ? base.slice(0, dot) : base;
 }
@@ -147,7 +162,9 @@ async function normalizeBytes(
       );
     }
     const text = await container.readDocument();
-    markdownDoc = text ? parseMarkdown(text) : { type: 'document', children: [] };
+    markdownDoc = text
+      ? parseMarkdown(text, markdownFormatOptions(options).parse)
+      : { type: 'document', children: [] };
   } else {
     // importDoc is guaranteed present by the guard above.
     markdownDoc = await fromDef.importDoc!(buffer, options);
@@ -176,7 +193,9 @@ async function normalizeMarkdown(
   const { stringifyMarkdown } = await import('@bendyline/squisq/markdown');
 
   const markdownDoc =
-    typeof source.markdown === 'string' ? parseMarkdown(source.markdown) : source.markdown;
+    typeof source.markdown === 'string'
+      ? parseMarkdown(source.markdown, markdownFormatOptions(options).parse)
+      : source.markdown;
 
   let container = source.container;
   if (!container) {
@@ -228,13 +247,14 @@ async function normalize(
 
 async function applyTransformStyle(
   input: NormalizedInput,
-  transformStyle: string,
+  transformStyle: TransformStyleInput,
   themeId?: string,
+  registry?: TransformStyleRegistry,
 ): Promise<string[]> {
   const { applyTransform, extractDocImages } = await import('@bendyline/squisq/transform');
   const { docToMarkdown, markdownToDoc } = await import('@bendyline/squisq/doc');
   const images = extractDocImages(input.doc.blocks);
-  const result = applyTransform(input.doc, transformStyle, { themeId, images });
+  const result = applyTransform(input.doc, transformStyle, { themeId, images, registry });
   input.doc = result.doc;
   const markdownDoc = docToMarkdown(result.doc);
   input.markdownDoc = markdownDoc;
@@ -283,25 +303,36 @@ export async function convert(
     );
   }
 
-  const { input, warnings } = await normalize(source, options, registry);
+  let normalized: Normalized;
+  try {
+    normalized = await normalize(source, options, registry);
+  } catch (err: unknown) {
+    if (err instanceof ConversionError) throw err;
+    const message = err instanceof Error ? err.message : String(err);
+    throw new ConversionError('invalid-input', message, {
+      format: options.from,
+      cause: err,
+    });
+  }
+  const { input, warnings } = normalized;
 
   // Respect an existing doc theme; only fill it in from options when absent.
   if (options.themeId && !input.doc.themeId) {
-    input.doc.themeId = options.themeId;
-  }
-
-  if (options.transformStyle) {
-    warnings.push(
-      ...(await applyTransformStyle(
-        input,
-        options.transformStyle,
-        options.themeId ?? input.doc.themeId,
-      )),
-    );
+    input.doc = { ...input.doc, themeId: options.themeId };
   }
 
   let result: ConversionResult;
   try {
+    if (options.transformStyle) {
+      warnings.push(
+        ...(await applyTransformStyle(
+          input,
+          options.transformStyle,
+          options.themeId ?? input.doc.themeId,
+          options.transformRegistry,
+        )),
+      );
+    }
     result = await target.exportDoc(input, options);
   } catch (err: unknown) {
     if (err instanceof ConversionError) throw err;

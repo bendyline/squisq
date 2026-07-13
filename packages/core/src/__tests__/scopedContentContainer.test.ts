@@ -73,6 +73,26 @@ describe('ScopedContentContainer', () => {
     expect(() => scopeContainer(parent, '/')).toThrow();
     expect(() => scopeContainer(parent, 'a/../b')).toThrow();
     expect(() => scopeContainer(parent, './a')).toThrow();
+    expect(() => scopeContainer(parent, 'a\\b')).toThrow(/forward slashes/);
+  });
+
+  it('rejects traversal, dot segments, and backslashes on every file operation', async () => {
+    const scoped = scopeContainer(parent, 'sidecar');
+    for (const badPath of ['../escape.txt', 'a/../../escape.txt', './same.txt', 'a\\b.txt']) {
+      expect(() => scoped.readFile(badPath)).toThrow();
+      expect(() => scoped.writeFile(badPath, enc('x'))).toThrow();
+      expect(() => scoped.removeFile(badPath)).toThrow();
+      expect(() => scoped.exists(badPath)).toThrow();
+      await expect(scoped.listFiles(badPath)).rejects.toThrow();
+    }
+    expect(await parent.listFiles()).toEqual([]);
+  });
+
+  it('normalizes repeated and leading slashes without changing scope', async () => {
+    const scoped = scopeContainer(parent, '//sidecar//nested//');
+    expect(scoped.prefix).toBe('sidecar/nested');
+    await scoped.writeFile('//assets//x.txt', enc('x'));
+    expect(dec(await parent.readFile('sidecar/nested/assets/x.txt'))).toBe('x');
   });
 
   it('getDocumentPath / readDocument always return null', async () => {

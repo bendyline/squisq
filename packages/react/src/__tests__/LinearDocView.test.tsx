@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { render } from '@testing-library/react';
+import { fireEvent, render } from '@testing-library/react';
 import { LinearDocView } from '../LinearDocView';
 import type { Doc, Block } from '@bendyline/squisq/schemas';
 import { DARK_SURFACE, DEFAULT_THEME, LIGHT_SURFACE } from '@bendyline/squisq/schemas';
@@ -56,6 +56,20 @@ describe('LinearDocView', () => {
     const el = container.querySelector('.squisq-linear');
     expect(el).toBeTruthy();
     expect((el as HTMLElement).style.overflowY).toBe('auto');
+  });
+
+  it('globally scrolls with up and down arrows when enabled', () => {
+    const doc = mkDoc([mkBlock({ contents: [paragraph(text('Scrollable body'))] })]);
+    const { container } = render(<LinearDocView doc={doc} globalKeyboardShortcuts />);
+    const scroller = container.querySelector<HTMLElement>('.squisq-linear')!;
+    const scrollBy = vi.fn();
+    Object.defineProperty(scroller, 'scrollBy', { configurable: true, value: scrollBy });
+
+    fireEvent.keyDown(document, { key: 'ArrowDown' });
+    fireEvent.keyDown(document, { key: 'ArrowUp' });
+
+    expect(scrollBy).toHaveBeenNthCalledWith(1, { top: 64, behavior: 'smooth' });
+    expect(scrollBy).toHaveBeenNthCalledWith(2, { top: -64, behavior: 'smooth' });
   });
 
   it('renders preamble content (no heading)', () => {
@@ -176,6 +190,24 @@ describe('LinearDocView', () => {
     expect(svg).toBeTruthy();
   });
 
+  it('renders transform-generated template blocks without authoring nodes', () => {
+    const doc = mkDoc([
+      mkBlock({
+        id: 'transform-stat',
+        template: 'statHighlight',
+        stat: '42%',
+        description: 'Year-over-year growth',
+      } as Partial<Block>),
+    ]);
+
+    const { container } = render(<LinearDocView doc={doc} />);
+    const section = container.querySelector('[data-block-id="transform-stat"]');
+    expect(section?.getAttribute('data-template')).toBe('statHighlight');
+    expect(section?.querySelector('.squisq-linear-card svg')).toBeTruthy();
+    expect(section?.textContent).toContain('42%');
+    expect(section?.textContent).toContain('Year-over-year growth');
+  });
+
   it('renders children recursively', () => {
     const doc = mkDoc([
       mkBlock({
@@ -196,6 +228,22 @@ describe('LinearDocView', () => {
     expect(container.querySelector('h2')?.textContent).toBe('Child');
     expect(container.textContent).toContain('Parent body');
     expect(container.textContent).toContain('Child body');
+  });
+
+  it('assigns unique pre-order indices across nested and top-level blocks', () => {
+    const doc = mkDoc([
+      mkBlock({
+        id: 'parent',
+        children: [mkBlock({ id: 'child' })],
+      }),
+      mkBlock({ id: 'sibling' }),
+    ]);
+    const { container } = render(<LinearDocView doc={doc} />);
+    expect(
+      Array.from(container.querySelectorAll('.squisq-linear-section')).map((node) =>
+        node.getAttribute('data-block-index'),
+      ),
+    ).toEqual(['0', '1', '2']);
   });
 
   it('renders multiple top-level blocks', () => {
@@ -301,7 +349,7 @@ describe('LinearDocView markdown prop', () => {
 });
 
 describe('LinearDocView unknown template annotations', () => {
-  it('warns once per unknown template name and falls back to plain markdown', () => {
+  it('renders the canonical visible fallback without hidden console output', () => {
     const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
     const doc = mkDoc([
       mkBlock({
@@ -317,17 +365,49 @@ describe('LinearDocView unknown template annotations', () => {
     ]);
 
     const { container } = render(<LinearDocView doc={doc} />);
-    // Renders as plain markdown: heading + body, no SVG card.
     expect(container.textContent).toContain('Mystery Section');
     expect(container.textContent).toContain('Fallback body content');
-    expect(container.querySelector('.squisq-linear-card')).toBeNull();
-
-    // Re-render: the warning stays one-shot per unknown template name.
-    render(<LinearDocView doc={doc} />);
-    const sentinelCalls = warnSpy.mock.calls.filter((c) =>
-      String(c[0]).includes('no-such-template-xyz'),
-    );
-    expect(sentinelCalls.length).toBe(1);
+    expect(container.textContent).toContain('Unknown template "no-such-template-xyz"');
+    expect(container.querySelector('.squisq-linear-card')).not.toBeNull();
+    expect(warnSpy).not.toHaveBeenCalled();
     warnSpy.mockRestore();
+  });
+});
+
+describe('LinearDocView custom template materialization', () => {
+  it('renders document-scoped templates through the canonical API', () => {
+    const doc: Doc = {
+      ...mkDoc([
+        mkBlock({
+          id: 'custom-1',
+          sourceHeading: {
+            type: 'heading',
+            depth: 2,
+            children: [text('Custom Hero')],
+            templateAnnotation: { template: 'hero' },
+          },
+          contents: [paragraph(text('Custom body'))],
+        }),
+      ]),
+      customTemplates: [
+        {
+          name: 'hero',
+          label: 'Hero',
+          viewport: { width: 1920, height: 1080 },
+          layers: [
+            {
+              id: 'hero-title',
+              type: 'text',
+              position: { x: '5%', y: '10%', width: '90%' },
+              content: { text: '{title}: {content}', style: { fontSize: 48, color: '#000000' } },
+            },
+          ],
+        },
+      ],
+    };
+
+    const { container } = render(<LinearDocView doc={doc} />);
+    expect(container.textContent).toContain('Custom Hero: Custom body');
+    expect(container.textContent).not.toContain('Unknown template');
   });
 });

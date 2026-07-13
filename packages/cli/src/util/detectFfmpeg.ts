@@ -93,15 +93,3 @@ export async function detectFfmpegDetailed(): Promise<FfmpegDetection | null> {
 
   return null;
 }
-
-/**
- * Detect whether native ffmpeg is available (SQUISQ_FFMPEG, PATH, or an
- * installed `ffmpeg-static` package).
- *
- * @returns Absolute path to ffmpeg binary, or null if not found
- * @throws Error when `SQUISQ_FFMPEG` is set but broken
- */
-export async function detectFfmpeg(): Promise<string | null> {
-  const detection = await detectFfmpegDetailed();
-  return detection?.path ?? null;
-}

@@ -9,7 +9,7 @@
  * preview-on-hover style listing rather than a wall of names.
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import {
   getThemeSummaries,
@@ -95,6 +95,7 @@ function ThemeNameChip({
   return (
     <span
       className={`squisq-theme-picker-name-chip${className ? ` ${className}` : ''}`}
+      data-theme-id={theme.id}
       style={{
         background: theme.colors.background,
         color: theme.colors.text,
@@ -102,7 +103,7 @@ function ThemeNameChip({
         borderColor: theme.colors.backgroundLight,
       }}
     >
-      {label}
+      <span className="squisq-theme-picker-name-chip-label">{label}</span>
     </span>
   );
 }
@@ -133,6 +134,8 @@ export function ThemePicker({
   const [open, setOpen] = useState(false);
   const [popoverStyle, setPopoverStyle] = useState<React.CSSProperties>({});
   const triggerRef = useRef<HTMLButtonElement>(null);
+  const popoverRef = useRef<HTMLDivElement>(null);
+  const popoverId = `squisq-theme-picker-popover-${useId().replace(/:/g, '')}`;
 
   // Custom entries are computed per-render (built-ins stay static at module
   // load). A custom theme is already a full Theme, so it becomes an entry
@@ -189,7 +192,7 @@ export function ThemePicker({
     // trigger as-is. On the first open it doesn't exist yet — we'll
     // re-run after mount via the requestAnimationFrame in the open
     // effect, so estimate generously for paint #1.
-    const popoverEl = document.getElementById('squisq-theme-picker-popover');
+    const popoverEl = popoverRef.current;
     const measured = popoverEl?.scrollHeight ?? 520;
     const spaceBelow = vh - rect.bottom - margin - gap;
     const spaceAbove = rect.top - margin - gap;
@@ -229,7 +232,7 @@ export function ThemePicker({
     const onDown = (e: MouseEvent) => {
       const target = e.target as Node;
       if (triggerRef.current?.contains(target)) return;
-      const popoverEl = document.getElementById('squisq-theme-picker-popover');
+      const popoverEl = popoverRef.current;
       if (popoverEl?.contains(target)) return;
       setOpen(false);
     };
@@ -258,7 +261,8 @@ export function ThemePicker({
   const popover = open
     ? createPortal(
         <div
-          id="squisq-theme-picker-popover"
+          ref={popoverRef}
+          id={popoverId}
           className="squisq-theme-picker-popover"
           role="listbox"
           aria-label={ariaLabel}
@@ -392,6 +396,7 @@ export function ThemePicker({
         onClick={handleToggle}
         aria-haspopup="listbox"
         aria-expanded={open}
+        aria-controls={open ? popoverId : undefined}
         aria-label={ariaLabel}
       >
         {previewEntry && (

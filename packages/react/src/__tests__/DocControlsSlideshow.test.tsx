@@ -1,7 +1,13 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { render, fireEvent } from '@testing-library/react';
 import { DocControlsSlideshow } from '../DocControlsSlideshow';
 import type { PlaybackState, SlideNavActions } from '../types';
+
+const slides = [
+  { id: 'intro', label: '1', summary: 'Introduction' },
+  { id: 'results', label: '2', summary: 'Key results' },
+  { id: 'next', label: '3', summary: 'What comes next' },
+];
 
 function makeState(overrides: Partial<PlaybackState> = {}): PlaybackState {
   return {
@@ -47,6 +53,93 @@ describe('DocControlsSlideshow', () => {
       />,
     );
     expect(getByTestId('slide-counter').textContent).toBe('5 / 12');
+  });
+
+  it('opens an upward slide picker with block summaries', () => {
+    const { getByTestId, getByRole } = render(
+      <DocControlsSlideshow
+        state={makeState({ currentBlockIndex: 1, totalBlocks: slides.length })}
+        slideNav={makeSlideNav()}
+        slides={slides}
+      />,
+    );
+
+    fireEvent.click(getByTestId('slide-counter'));
+
+    const picker = getByRole('menu', { name: 'Choose a slide' });
+    expect(picker.style.bottom).toBe('calc(100% + 8px)');
+    expect(getByTestId('slide-picker-item-0').textContent).toContain('1Introduction');
+    expect(getByTestId('slide-picker-item-1').textContent).toContain('2Key results');
+    expect(getByTestId('slide-picker-item-1').getAttribute('aria-current')).toBe('true');
+  });
+
+  it('uses the available player height above the toolbar', () => {
+    const { getByTestId } = render(
+      <div className="doc-player">
+        <DocControlsSlideshow
+          state={makeState({ currentBlockIndex: 1, totalBlocks: slides.length })}
+          slideNav={makeSlideNav()}
+          slides={slides}
+        />
+      </div>,
+    );
+    const controls = getByTestId('slideshow-controls');
+    const player = controls.parentElement as HTMLElement;
+    const rect = (top: number, height: number) =>
+      ({
+        x: 0,
+        y: top,
+        top,
+        right: 640,
+        bottom: top + height,
+        left: 0,
+        width: 640,
+        height,
+        toJSON: () => ({}),
+      }) as DOMRect;
+    const playerBounds = vi.spyOn(player, 'getBoundingClientRect').mockReturnValue(rect(0, 480));
+    const controlsBounds = vi
+      .spyOn(controls, 'getBoundingClientRect')
+      .mockReturnValue(rect(420, 40));
+
+    fireEvent.click(getByTestId('slide-counter'));
+
+    expect(getByTestId('slide-picker').style.maxHeight).toBe('396px');
+    playerBounds.mockRestore();
+    controlsBounds.mockRestore();
+  });
+
+  it('navigates directly to a selected slide and closes the picker', () => {
+    let selectedIndex = -1;
+    const { getByTestId, queryByTestId } = render(
+      <DocControlsSlideshow
+        state={makeState({ currentBlockIndex: 0, totalBlocks: slides.length })}
+        slideNav={makeSlideNav({ goToSlide: (index) => (selectedIndex = index) })}
+        slides={slides}
+      />,
+    );
+
+    fireEvent.click(getByTestId('slide-counter'));
+    fireEvent.click(getByTestId('slide-picker-item-2'));
+
+    expect(selectedIndex).toBe(2);
+    expect(queryByTestId('slide-picker')).toBeNull();
+  });
+
+  it('closes the slide picker with Escape', () => {
+    const { getByTestId, queryByTestId } = render(
+      <DocControlsSlideshow
+        state={makeState({ currentBlockIndex: 0, totalBlocks: slides.length })}
+        slideNav={makeSlideNav()}
+        slides={slides}
+      />,
+    );
+
+    fireEvent.click(getByTestId('slide-counter'));
+    fireEvent.keyDown(document, { key: 'Escape' });
+
+    expect(queryByTestId('slide-picker')).toBeNull();
+    expect(document.activeElement).toBe(getByTestId('slide-counter'));
   });
 
   it('disables prev button on first slide', () => {

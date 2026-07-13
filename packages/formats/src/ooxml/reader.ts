@@ -5,12 +5,44 @@
  * structural metadata: [Content_Types].xml, relationships, and
  * core properties.
  *
- * Uses JSZip to unzip and the browser's DOMParser to parse XML.
+ * Uses bounded JSZip member streams and a platform DOMParser (with an xmldom
+ * fallback in bare Node/SSR) to parse XML.
  */
 
-import JSZip from 'jszip';
+import { DOMParser as XmldomDOMParser } from '@xmldom/xmldom';
 import type { OoxmlPackage, ContentTypeMap, Relationship, CoreProperties } from './types.js';
 import { NS_RELATIONSHIPS, NS_DC, NS_DCTERMS, NS_CORE_PROPERTIES } from './namespaces.js';
+import {
+  openBoundedZipArchive,
+  type BoundedZipArchive,
+  type ZipSafetyLimits,
+} from '../shared/zipSafety.js';
+
+export type OoxmlOpenOptions = ZipSafetyLimits;
+
+type DomParserLike = new () => {
+  parseFromString(source: string, mimeType: string): unknown;
+};
+
+/** Safe read sessions for opaque packages opened by this module. */
+const packageArchives = new WeakMap<OoxmlPackage, BoundedZipArchive>();
+const MAX_CONTENT_TYPES_BYTES = 1024 * 1024;
+const MAX_RELATIONSHIPS_BYTES = 4 * 1024 * 1024;
+
+/**
+ * Parse XML in browsers and bare Node. Browser DOMParser is preferred; the
+ * pure-JS xmldom implementation is the package-owned fallback for Node/SSR.
+ */
+function parseXml(source: string): Document {
+  const nativeParser = (globalThis as { DOMParser?: DomParserLike }).DOMParser;
+  const Parser = nativeParser ?? (XmldomDOMParser as unknown as DomParserLike);
+  const doc = new Parser().parseFromString(source, 'application/xml') as Document;
+  const parserErrors = doc.getElementsByTagName('parsererror');
+  if (parserErrors.length > 0) {
+    throw new Error(`Invalid OOXML XML part: ${parserErrors[0]?.textContent ?? 'parse error'}`);
+  }
+  return doc;
+}
 
 // ============================================
 // Package Opening
@@ -22,14 +54,23 @@ import { NS_RELATIONSHIPS, NS_DC, NS_DCTERMS, NS_CORE_PROPERTIES } from './names
  * Parses the ZIP archive, [Content_Types].xml, and root relationships.
  *
  * @param data - The raw .docx/.pptx/.xlsx file as ArrayBuffer or Blob
+ * @param limits - Optional archive count, size, and compression-ratio limits
  * @returns A parsed OoxmlPackage
  */
-export async function openPackage(data: ArrayBuffer | Blob): Promise<OoxmlPackage> {
-  const zip = await JSZip.loadAsync(data);
-  const contentTypes = await parseContentTypes(zip);
-  const rootRelationships = await parseRelationships(zip, '');
+export async function openPackage(
+  data: ArrayBuffer | Blob,
+  limits: OoxmlOpenOptions = {},
+): Promise<OoxmlPackage> {
+  const archive = await openBoundedZipArchive(data, limits);
+  const contentTypes = await parseContentTypes(archive);
+  const rootRelationships = await parseRelationships(archive, '');
 
-  return { zip, contentTypes, rootRelationships };
+  const pkg = {
+    contentTypes,
+    rootRelationships,
+  } as unknown as OoxmlPackage;
+  packageArchives.set(pkg, archive);
+  return pkg;
 }
 
 // ============================================
@@ -39,15 +80,13 @@ export async function openPackage(data: ArrayBuffer | Blob): Promise<OoxmlPackag
 /**
  * Parse [Content_Types].xml from the archive.
  */
-async function parseContentTypes(zip: JSZip): Promise<ContentTypeMap> {
+async function parseContentTypes(archive: BoundedZipArchive): Promise<ContentTypeMap> {
   const overrides = new Map<string, string>();
   const defaults = new Map<string, string>();
 
-  const file = zip.file('[Content_Types].xml');
-  if (!file) return { overrides, defaults };
-
-  const text = await file.async('text');
-  const doc = new DOMParser().parseFromString(text, 'application/xml');
+  const text = await archive.readText('[Content_Types].xml', MAX_CONTENT_TYPES_BYTES);
+  if (text === null) return { overrides, defaults };
+  const doc = parseXml(text);
 
   // Parse <Default Extension="rels" ContentType="..." />
   const defaultEls = doc.getElementsByTagName('Default');
@@ -89,7 +128,7 @@ export async function getPartRelationships(
   pkg: OoxmlPackage,
   partPath: string,
 ): Promise<Relationship[]> {
-  return parseRelationships(pkg.zip, partPath);
+  return parseRelationships(pkg, partPath);
 }
 
 /**
@@ -98,14 +137,16 @@ export async function getPartRelationships(
  * For root relationships, relsPath = "_rels/.rels".
  * For part relationships, relsPath = "<dir>/_rels/<filename>.rels".
  */
-async function parseRelationships(zip: JSZip, partPath: string): Promise<Relationship[]> {
+async function parseRelationships(
+  source: OoxmlPackage | BoundedZipArchive,
+  partPath: string,
+): Promise<Relationship[]> {
   const relsPath = partPath === '' ? '_rels/.rels' : buildRelsPath(partPath);
 
-  const file = zip.file(relsPath);
-  if (!file) return [];
-
-  const text = await file.async('text');
-  const doc = new DOMParser().parseFromString(text, 'application/xml');
+  const bytes = await readArchivePart(source, relsPath, MAX_RELATIONSHIPS_BYTES);
+  if (!bytes) return [];
+  const text = new TextDecoder().decode(bytes);
+  const doc = parseXml(text);
   const result: Relationship[] = [];
 
   const els = doc.getElementsByTagNameNS(NS_RELATIONSHIPS, 'Relationship');
@@ -159,11 +200,8 @@ function buildRelsPath(partPath: string): string {
  * @returns Parsed XML Document, or null if the part doesn't exist
  */
 export async function getPartXml(pkg: OoxmlPackage, partPath: string): Promise<Document | null> {
-  const file = pkg.zip.file(partPath);
-  if (!file) return null;
-
-  const text = await file.async('text');
-  return new DOMParser().parseFromString(text, 'application/xml');
+  const bytes = await readPackagePart(pkg, partPath);
+  return bytes ? parseXml(new TextDecoder().decode(bytes)) : null;
 }
 
 /**
@@ -177,9 +215,30 @@ export async function getPartBinary(
   pkg: OoxmlPackage,
   partPath: string,
 ): Promise<ArrayBuffer | null> {
-  const file = pkg.zip.file(partPath);
-  if (!file) return null;
-  return file.async('arraybuffer');
+  const bytes = await readPackagePart(pkg, partPath);
+  return bytes ? bytes.slice().buffer : null;
+}
+
+function readArchivePart(
+  source: OoxmlPackage | BoundedZipArchive,
+  path: string,
+  maxBytes?: number,
+): Promise<Uint8Array | null> {
+  return 'entries' in source
+    ? source.read(path, maxBytes)
+    : readPackagePart(source, path, maxBytes);
+}
+
+async function readPackagePart(
+  pkg: OoxmlPackage,
+  path: string,
+  maxBytes?: number,
+): Promise<Uint8Array | null> {
+  const archive = packageArchives.get(pkg);
+  if (!archive) {
+    throw new TypeError('Invalid OoxmlPackage: create packages with openPackage().');
+  }
+  return archive.read(path, maxBytes);
 }
 
 // ============================================

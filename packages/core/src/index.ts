@@ -12,3 +12,4 @@ export * from './jsonForm/index.js';
 export * from './imageEdit/index.js';
 export * from './icons/index.js';
 export * from './recommend/index.js';
+export * from './narration/index.js';

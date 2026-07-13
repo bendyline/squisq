@@ -127,7 +127,16 @@ export function docToHtml(doc: Doc, options: HtmlExportOptions): string {
  * ```
  */
 export async function docToHtmlZip(doc: Doc, options: HtmlZipExportOptions): Promise<Blob> {
-  const { playerScript, images, audio, mode = 'slideshow', title, autoPlay } = options;
+  const {
+    playerScript,
+    images,
+    audio,
+    mode = 'slideshow',
+    title,
+    autoPlay,
+    themeId,
+    themeRegistry,
+  } = options;
 
   const zip = new JSZip();
 
@@ -174,6 +183,8 @@ export async function docToHtmlZip(doc: Doc, options: HtmlZipExportOptions): Pro
     mode,
     title,
     autoPlay,
+    themeId,
+    themeRegistry,
   });
   zip.file('index.html', html);
 

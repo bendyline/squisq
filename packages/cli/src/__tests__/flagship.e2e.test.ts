@@ -14,7 +14,7 @@
 
 import { after, before, describe, it } from 'mocha';
 import { expect } from 'chai';
-import { detectFfmpeg } from '../util/detectFfmpeg.js';
+import { detectFfmpegDetailed } from '../util/detectFfmpeg.js';
 
 // 1×1 transparent PNG (68 bytes). Enough for the pptx image-extraction path.
 const PNG_1x1_BASE64 =
@@ -55,7 +55,7 @@ describe('flagship pptx → mp4 e2e', function () {
 
   before(async function () {
     try {
-      ffmpegPath = await detectFfmpeg();
+      ffmpegPath = (await detectFfmpegDetailed())?.path ?? null;
     } catch {
       // SQUISQ_FFMPEG set but broken — treat as unavailable for this test.
       ffmpegPath = null;

@@ -36,15 +36,13 @@ function getOrientationFromWindow(width: number, height: number): ViewportOrient
   // Use thresholds to determine orientation
   // - Ratio > 1.2 = landscape (wider than tall)
   // - Ratio < 0.83 (1/1.2) = portrait (taller than wide)
-  // - Otherwise = square-ish, use landscape for better readability
+  // - Otherwise = square-ish
   if (ratio > 1.2) {
     return 'landscape';
   } else if (ratio < 0.83) {
     return 'portrait';
   } else {
-    // Near-square viewports: use landscape for better text readability
-    // Could also use 'square' preset if available and desired
-    return 'landscape';
+    return 'square';
   }
 }
 
