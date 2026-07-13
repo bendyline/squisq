@@ -128,7 +128,6 @@ title: About SquigglySquare
 display-mode: slideshow
 document-render-as: landscape
 ---
-
 # About SquigglySquare {[title]}
 
 SquigglySquare -- **squisq** for short -- turns plain Markdown into designed, animated documents. Write prose the way you always have, annotate a heading with a squiggly-square tag, and get a slide, a video frame, a diagram, or a drawing.
@@ -153,7 +152,7 @@ You almost never type the content *into* the tag. Write it as ordinary Markdown 
 
 ## A Sampler of Block Types {[sectionHeader colorScheme=orange]}
 
-The blocks below are all live -- each heading picks a different template. Keep paging through Play mode to see them render.
+The blocks below are all live -- each heading picks a different template. Keep paging through Slideshow mode to see them render.
 
 ### The Big Number {[statHighlight colorScheme=green stat="42%\\*" detail="\\* statistic randomly made up :)"]}
 

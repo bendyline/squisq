@@ -238,7 +238,12 @@ export function useDrawingAdapter(
       case 'resizeLayer': {
         if (!isPrimaryShapeLayer(cmd.id)) return;
         const id = shapeIdFromLayerId(cmd.id);
-        if (id) resizeShape(editor, headingPos, id, cmd.width, cmd.height);
+        if (id) {
+          if (cmd.x !== undefined && cmd.y !== undefined) {
+            moveShape(editor, headingPos, id, cmd.x, cmd.y);
+          }
+          resizeShape(editor, headingPos, id, cmd.width, cmd.height);
+        }
         return;
       }
       case 'addLayer': {

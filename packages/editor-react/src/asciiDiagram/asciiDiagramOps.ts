@@ -40,6 +40,25 @@ function descendantsOf(diagram: AsciiDiagram, nodeId: string): Set<string> {
   return out;
 }
 
+/** Translate every node by the same grid delta (edges/containment are unchanged). */
+export function translateDiagramOp(
+  diagram: AsciiDiagram,
+  dCol: number,
+  dRow: number,
+): AsciiDiagram {
+  const colDelta = Math.round(dCol);
+  const rowDelta = Math.round(dRow);
+  if (colDelta === 0 && rowDelta === 0) return diagram;
+  return {
+    ...diagram,
+    nodes: diagram.nodes.map((node) => ({
+      ...node,
+      col: Math.max(0, node.col + colDelta),
+      row: Math.max(0, node.row + rowDelta),
+    })),
+  };
+}
+
 /** Move a node to (col, row); a container drags its whole subtree along. */
 export function moveNodeOp(
   diagram: AsciiDiagram,

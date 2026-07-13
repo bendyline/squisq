@@ -24,7 +24,12 @@ import type {
   TextLayer,
   TextStyle,
 } from '@bendyline/squisq/schemas';
-import { getPartRelationships, getPartXml, openPackage } from '../ooxml/reader.js';
+import {
+  getPartRelationships,
+  getPartXml,
+  openPackage,
+  throwIfOoxmlAborted,
+} from '../ooxml/reader.js';
 import type { OoxmlOpenOptions } from '../ooxml/reader.js';
 import type { OoxmlPackage } from '../ooxml/types.js';
 import {
@@ -162,6 +167,7 @@ const DEFAULT_SLIDE_SIZE = { cx: 12192000, cy: 6858000 };
 const CHROME_PH_TYPES = new Set(['dt', 'ftr', 'sldNum', 'hdr']);
 const MAX_INFERRED_TEMPLATES = 12;
 const MAX_DECORATIONS = 4;
+const CANCELLATION_CHECKPOINT_INTERVAL = 128;
 /** Decorative rects smaller than this share of the slide are clutter. */
 const MIN_DECORATION_AREA_PCT = 2;
 
@@ -172,6 +178,14 @@ const DEFAULT_BODY_RECT: PctRect = { x: 5, y: 23.3, w: 90, h: 66 };
 const DEFAULT_TITLE_PT = 44;
 const DEFAULT_SUBTITLE_PT = 24;
 const DEFAULT_BODY_PT = 22;
+
+async function cancellationCheckpoint(index: number, signal?: AbortSignal): Promise<void> {
+  throwIfOoxmlAborted(signal);
+  if (index > 0 && index % CANCELLATION_CHECKPOINT_INTERVAL === 0) {
+    await new Promise<void>((resolve) => setTimeout(resolve, 0));
+    throwIfOoxmlAborted(signal);
+  }
+}
 
 // ── Small helpers ────────────────────────────────────────────────────
 
@@ -316,7 +330,12 @@ interface MasterIndex {
   bodyStyle?: PlaceholderTextStyle;
 }
 
-async function readMasterIndex(pkg: OoxmlPackage, masterPath: string): Promise<MasterIndex> {
+async function readMasterIndex(
+  pkg: OoxmlPackage,
+  masterPath: string,
+  signal?: AbortSignal,
+): Promise<MasterIndex> {
+  throwIfOoxmlAborted(signal);
   const index: MasterIndex = { name: '', exact: new Map(), baseIdx: new Map(), base: new Map() };
   const doc = await getPartXml(pkg, masterPath);
   if (!doc) return index;
@@ -333,6 +352,7 @@ async function readMasterIndex(pkg: OoxmlPackage, masterPath: string): Promise<M
 
   const shapes = doc.getElementsByTagNameNS(NS_PML, 'sp');
   for (let i = 0; i < shapes.length; i++) {
+    await cancellationCheckpoint(i, signal);
     const sp = shapes[i]!;
     const ph = firstPml(sp, 'ph');
     if (!ph) continue;
@@ -425,7 +445,9 @@ async function extractLayout(
   pxPerPt: number,
   hints: PptxColorHints,
   masterCache: Map<string, Promise<MasterIndex>>,
+  signal?: AbortSignal,
 ): Promise<ExtractedSlideLayout | null> {
+  throwIfOoxmlAborted(signal);
   const doc = await getPartXml(pkg, layoutPath);
   if (!doc) return null;
 
@@ -440,7 +462,7 @@ async function extractLayout(
     masterPath = resolveTarget(baseDirOf(layoutPath), masterRel.target);
     let cached = masterCache.get(masterPath);
     if (!cached) {
-      cached = readMasterIndex(pkg, masterPath);
+      cached = readMasterIndex(pkg, masterPath, signal);
       masterCache.set(masterPath, cached);
     }
     master = await cached;
@@ -451,6 +473,7 @@ async function extractLayout(
 
   const shapes = doc.getElementsByTagNameNS(NS_PML, 'sp');
   for (let i = 0; i < shapes.length; i++) {
+    await cancellationCheckpoint(i, signal);
     const sp = shapes[i]!;
     const ph = firstPml(sp, 'ph');
 
@@ -1003,7 +1026,11 @@ function resolveVerdict(
 
 // ── Deck-level analysis ──────────────────────────────────────────────
 
-async function readSlideSize(pkg: OoxmlPackage): Promise<{ cx: number; cy: number }> {
+async function readSlideSize(
+  pkg: OoxmlPackage,
+  signal?: AbortSignal,
+): Promise<{ cx: number; cy: number }> {
+  throwIfOoxmlAborted(signal);
   const pres = await getPartXml(pkg, 'ppt/presentation.xml');
   const sldSz = pres ? firstPml(pres, 'sldSz') : null;
   const cx = intAttr(sldSz, 'cx');
@@ -1012,7 +1039,11 @@ async function readSlideSize(pkg: OoxmlPackage): Promise<{ cx: number; cy: numbe
   return { ...DEFAULT_SLIDE_SIZE };
 }
 
-async function orderedSlidePathsForLayouts(pkg: OoxmlPackage): Promise<string[]> {
+async function orderedSlidePathsForLayouts(
+  pkg: OoxmlPackage,
+  signal?: AbortSignal,
+): Promise<string[]> {
+  throwIfOoxmlAborted(signal);
   const pres = await getPartXml(pkg, 'ppt/presentation.xml');
   if (!pres) return [];
   const rels = await getPartRelationships(pkg, 'ppt/presentation.xml');
@@ -1020,6 +1051,7 @@ async function orderedSlidePathsForLayouts(pkg: OoxmlPackage): Promise<string[]>
   const out: string[] = [];
   const ids = pres.getElementsByTagNameNS(NS_PML, 'sldId');
   for (let i = 0; i < ids.length; i++) {
+    await cancellationCheckpoint(i, signal);
     const rid = attrNS(ids[i]!, NS_R, 'id', 'r:id');
     const target = rid ? relById.get(rid) : undefined;
     if (target) out.push(resolveTarget('ppt', target));
@@ -1043,20 +1075,23 @@ export async function analyzePptxLayouts(
   pkg: OoxmlPackage,
   options: AnalyzePptxLayoutsOptions = {},
 ): Promise<PptxLayoutInference> {
+  throwIfOoxmlAborted(options.signal);
   const warnings: string[] = [];
   const hints = options.colors ?? {};
   const maxTemplates = options.maxTemplates ?? MAX_INFERRED_TEMPLATES;
 
-  const sldSz = await readSlideSize(pkg);
+  const sldSz = await readSlideSize(pkg, options.signal);
   const viewport = viewportFor(sldSz);
   const pxPerPt = viewport.height / (sldSz.cy / 12700);
 
   // Layouts used by slides, in first-use order, with usage counts.
-  const slidePaths = await orderedSlidePathsForLayouts(pkg);
+  const slidePaths = await orderedSlidePathsForLayouts(pkg, options.signal);
   const layoutPathBySlide = new Map<string, string>();
   const usage = new Map<string, number>();
   const orderedLayoutPaths: string[] = [];
-  for (const slidePath of slidePaths) {
+  for (let slideIndex = 0; slideIndex < slidePaths.length; slideIndex++) {
+    await cancellationCheckpoint(slideIndex, options.signal);
+    const slidePath = slidePaths[slideIndex]!;
     const rels = await getPartRelationships(pkg, slidePath);
     const layoutRel = findRelByType(rels, REL_SLIDE_LAYOUT);
     if (!layoutRel) continue;
@@ -1068,7 +1103,9 @@ export async function analyzePptxLayouts(
 
   if (options.includeUnused) {
     const unused: string[] = [];
+    let partIndex = 0;
     for (const [partPath, contentType] of pkg.contentTypes.overrides) {
+      await cancellationCheckpoint(partIndex++, options.signal);
       if (contentType === CONTENT_TYPE_PPTX_SLIDE_LAYOUT && !usage.has(partPath)) {
         unused.push(partPath);
       }
@@ -1082,8 +1119,17 @@ export async function analyzePptxLayouts(
   const layouts: AnalyzedLayout[] = [];
   const usedNames = new Set<string>();
   for (let i = 0; i < orderedLayoutPaths.length; i++) {
+    await cancellationCheckpoint(i, options.signal);
     const layoutPath = orderedLayoutPaths[i]!;
-    const extracted = await extractLayout(pkg, layoutPath, sldSz, pxPerPt, hints, masterCache);
+    const extracted = await extractLayout(
+      pkg,
+      layoutPath,
+      sldSz,
+      pxPerPt,
+      hints,
+      masterCache,
+      options.signal,
+    );
     if (!extracted) {
       warnings.push(`layout ${layoutPath} could not be read; its slides import plain`);
       continue;
@@ -1108,7 +1154,10 @@ export async function analyzePptxLayouts(
   const customs = layouts.filter((l) => l.verdict.kind === 'custom');
   if (customs.length > maxTemplates) {
     const ranked = [...customs].sort((a, b) => b.extracted.slideCount - a.extracted.slideCount);
-    for (const layout of ranked.slice(maxTemplates)) {
+    const excess = ranked.slice(maxTemplates);
+    for (let index = 0; index < excess.length; index++) {
+      await cancellationCheckpoint(index, options.signal);
+      const layout = excess[index]!;
       layout.verdict = { kind: 'plain' };
       layout.notes.push('dropped: more inferred layouts than the template cap');
     }
@@ -1118,6 +1167,7 @@ export async function analyzePptxLayouts(
   }
 
   const byLayoutPath = new Map(layouts.map((l) => [l.extracted.partPath, l]));
+  throwIfOoxmlAborted(options.signal);
   return { slideSize: sldSz, layouts, byLayoutPath, layoutPathBySlide, warnings };
 }
 
@@ -1148,11 +1198,15 @@ export async function inspectPptxLayouts(
   data: ArrayBuffer | Blob,
   options: InspectPptxLayoutsOptions = {},
 ): Promise<{ layouts: PptxLayoutSummary[]; slideSize: { cx: number; cy: number } }> {
+  throwIfOoxmlAborted(options.signal);
   const pkg = await openPackage(data, options);
   const analysis = await analyzePptxLayouts(pkg, options);
-  const layouts = analysis.layouts.map((l, i): PptxLayoutSummary => {
+  const layouts: PptxLayoutSummary[] = [];
+  for (let i = 0; i < analysis.layouts.length; i++) {
+    await cancellationCheckpoint(i, options.signal);
+    const l = analysis.layouts[i]!;
     const { extracted, verdict, notes } = l;
-    return {
+    layouts.push({
       layoutPath: extracted.partPath,
       name: extracted.name || `Layout ${i + 1}`,
       ...(extracted.masterName ? { masterName: extracted.masterName } : {}),
@@ -1162,7 +1216,7 @@ export async function inspectPptxLayouts(
       ...(verdict.kind === 'builtin' ? { builtinTemplate: verdict.template } : {}),
       ...(verdict.kind === 'custom' ? { customTemplate: verdict.def } : {}),
       ...(notes.length > 0 ? { notes } : {}),
-    };
-  });
+    });
+  }
   return { layouts, slideSize: analysis.slideSize };
 }

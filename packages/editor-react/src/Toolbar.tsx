@@ -52,6 +52,13 @@ import type { PickerEntry } from './emojiData';
 import { createPortal } from 'react-dom';
 import { PreviewModeMenu, displayModeLabel, usePreviewSettingsOptional } from './PreviewControls';
 import { filterVisibleMediaEntries } from './mediaEntries';
+import {
+  selectionToTable,
+  selectionToTableMarkdown,
+  selectionToTaskItems,
+  selectionToTaskListMarkdown,
+  type SelectionTaskItem,
+} from './selectionConversions';
 
 const VIEWS: { id: EditorView; label: string; shortLabel?: string; shortcut: string }[] = [
   { id: 'wysiwyg', label: 'Write', shortcut: '⌘1' },
@@ -273,6 +280,7 @@ const BUTTONS: ToolbarButton[] = [
 
 const FIRST_MEDIA_INDEX = BUTTONS.findIndex((b) => b.group === 'media');
 const MEDIA_BUTTONS = BUTTONS.filter((b) => b.group === 'media');
+const CONVERT_BUTTONS = MEDIA_BUTTONS.filter((b) => b.id === 'table' || b.id === 'tasklist');
 const INSERT_MENU_WIDTH = 200;
 const TASK_LIST_ITEMS = ['Task 1', 'Task 2', 'Task 3'] as const;
 const TASK_LIST_MARKDOWN = TASK_LIST_ITEMS.map((item) => `- [ ] ${item}`).join('\n');
@@ -297,18 +305,35 @@ function fileCountBadge(count: number): string {
   return count > 99 ? '99+' : String(count);
 }
 
-function taskListContent(): JSONContent {
+function paragraphContent(text: string): JSONContent {
+  return text ? { type: 'paragraph', content: [{ type: 'text', text }] } : { type: 'paragraph' };
+}
+
+function tableContent(rows: string[][]): JSONContent {
+  return {
+    type: 'table',
+    content: rows.map((row, rowIndex) => ({
+      type: 'tableRow',
+      content: row.map((cell) => ({
+        type: rowIndex === 0 ? 'tableHeader' : 'tableCell',
+        content: [paragraphContent(cell)],
+      })),
+    })),
+  };
+}
+
+function taskListContent(
+  items: readonly SelectionTaskItem[] = TASK_LIST_ITEMS.map((text) => ({
+    checked: false,
+    text,
+  })),
+): JSONContent {
   return {
     type: 'taskList',
-    content: TASK_LIST_ITEMS.map((item) => ({
+    content: items.map((item) => ({
       type: 'taskItem',
-      attrs: { checked: false },
-      content: [
-        {
-          type: 'paragraph',
-          content: [{ type: 'text', text: item }],
-        },
-      ],
+      attrs: { checked: item.checked },
+      content: [paragraphContent(item.text)],
     })),
   };
 }
@@ -317,6 +342,26 @@ function insertTaskList(editor: TiptapEditor): void {
   const supportsTaskList = !!editor.schema.nodes.taskList && !!editor.schema.nodes.taskItem;
   const content = supportsTaskList ? taskListContent() : TASK_LIST_MARKDOWN;
   editor.chain().focus().insertContent(content).run();
+}
+
+/**
+ * Expand a full-line Tiptap text selection to the surrounding top-level node
+ * boundaries. Inserting a list/table at an in-paragraph range makes
+ * ProseMirror preserve the emptied paragraph before or after the new block.
+ * Partial-line selections deliberately retain their exact range.
+ */
+function blockConversionRange(editor: TiptapEditor): { from: number; to: number } {
+  const { from, to, $from, $to } = editor.state.selection;
+  return {
+    from:
+      $from.depth === 1 && $from.parent.isTextblock && $from.parentOffset === 0
+        ? $from.before(1)
+        : from,
+    to:
+      $to.depth === 1 && $to.parent.isTextblock && $to.parentOffset === $to.parent.content.size
+        ? $to.after(1)
+        : to,
+  };
 }
 
 // ─── Tiptap active-state map ────────────────────────────
@@ -377,17 +422,23 @@ const LAYOUT_STARTER_MARKDOWN = `\n## Layout {[layout]}\n\n### {#text-1} {[text 
  * fences (the fence is the source of truth; `AsciiDiagramExtension` mounts
  * the interactive canvas over it). This exact art is the codec's own
  * canonical rendering of a two-node flow, so it re-parses and re-renders
- * byte-stably.
+ * byte-stably. The leading rows/columns are deliberate: ASCII has no
+ * separate canvas-origin metadata, so this persisted gutter gives the first
+ * node real grid space to move north/west. Without it, content-fit makes the
+ * node look centered while its authored coordinate is still (0, 0), and a
+ * drag into the apparent margin clamps straight back to that corner.
  */
 const DIAGRAM_STARTER_ART = [
-  '┌─────────┐',
-  '│  Start  │',
-  '└────┬────┘',
-  '     │',
-  '     ▼',
-  '┌────┴────┐',
-  '│  Next   │',
-  '└─────────┘',
+  '',
+  '',
+  '        ┌─────────┐',
+  '        │  Start  │',
+  '        └────┬────┘',
+  '             │',
+  '             ▼',
+  '        ┌────┴────┐',
+  '        │  Next   │',
+  '        └─────────┘',
 ].join('\n');
 /**
  * Fenced form for raw / code views — tagged with the explicit `diagram`
@@ -1235,6 +1286,68 @@ export function Toolbar({
     [monacoEditor, markdownSource, setMarkdownSource],
   );
 
+  // ── Selected-text conversion handlers ─────────────────
+  const readSelectedText = useCallback((): string => {
+    // Canvas text overlays intentionally have a smaller schema without tables
+    // or task lists. Ignore their selection instead of surfacing actions that
+    // cannot be represented by those layers.
+    if (activeSceneText) return '';
+
+    if (activeView === 'wysiwyg' && tiptapEditor) {
+      const { from, to, empty } = tiptapEditor.state.selection;
+      return empty ? '' : tiptapEditor.state.doc.textBetween(from, to, '\n');
+    }
+
+    if (activeView === 'raw' && monacoEditor) {
+      const selection = monacoEditor.getSelection();
+      const model = monacoEditor.getModel();
+      return selection && model ? model.getValueInRange(selection) : '';
+    }
+
+    return '';
+  }, [activeSceneText, activeView, monacoEditor, tiptapEditor]);
+
+  const handleConvertSelection = useCallback(
+    (target: 'table' | 'tasklist') => {
+      const selectedText = readSelectedText();
+      if (!selectedText.trim()) return;
+
+      if (activeView === 'wysiwyg' && tiptapEditor) {
+        const content =
+          target === 'table'
+            ? tableContent(selectionToTable(selectedText).rows)
+            : taskListContent(selectionToTaskItems(selectedText));
+        tiptapEditor
+          .chain()
+          .focus()
+          .insertContentAt(blockConversionRange(tiptapEditor), content)
+          .run();
+        return;
+      }
+
+      if (activeView === 'raw' && monacoEditor) {
+        const selection = monacoEditor.getSelection();
+        if (!selection) return;
+        const converted =
+          target === 'table'
+            ? selectionToTableMarkdown(selectedText)
+            : selectionToTaskListMarkdown(selectedText);
+        if (!converted) return;
+
+        // Monaco line selections commonly include the newline after the last
+        // selected line. Retain selected edge newlines so the replacement
+        // block never runs into the surrounding Markdown.
+        const leadingNewline = /^(?:\r?\n)/.test(selectedText) ? '\n' : '';
+        const trailingNewline = /(?:\r?\n)$/.test(selectedText) ? '\n' : '';
+        monacoEditor.executeEdits('toolbar-convert-selection', [
+          { range: selection, text: leadingNewline + converted + trailingNewline },
+        ]);
+        monacoEditor.focus();
+      }
+    },
+    [activeView, monacoEditor, readSelectedText, tiptapEditor],
+  );
+
   // ── Image upload handler ───────────────────────────────
   const handleImageFile = useCallback(
     async (file: File) => {
@@ -1471,6 +1584,10 @@ export function Toolbar({
     if (sceneTextLevel === 'block') return BLOCK_SCENE_BUTTONS.has(id);
     return INLINE_SCENE_BUTTONS.has(id);
   };
+  const showConvertActions =
+    insertMenuAnchor !== null &&
+    readSelectedText().trim().length > 0 &&
+    CONVERT_BUTTONS.some((button) => buttonAllowed(button.id));
 
   // ── Progressive heading disclosure ───────────────────
   // H1\u2013H3 are always visible. H4 appears once the document already
@@ -2392,7 +2509,35 @@ export function Toolbar({
             style={{ position: 'fixed', top: insertMenuAnchor.top, left: insertMenuAnchor.left }}
             role="menu"
           >
-            <div className="squisq-insert-menu-header">Insert</div>
+            {showConvertActions && (
+              <>
+                <div className="squisq-insert-menu-header">Convert</div>
+                {CONVERT_BUTTONS.map((btn) => {
+                  const label = btn.id === 'table' ? 'Table' : 'Task List';
+                  return (
+                    <button
+                      key={`convert-${btn.id}`}
+                      className="squisq-toolbar-overflow-item"
+                      disabled={!buttonAllowed(btn.id)}
+                      onClick={() => {
+                        handleConvertSelection(btn.id as 'table' | 'tasklist');
+                        closeInsertMenu();
+                      }}
+                      role="menuitem"
+                      aria-label={`Convert selection to ${label}`}
+                    >
+                      <span className="squisq-toolbar-overflow-icon">{buttonIcon(btn)}</span>
+                      <span>{label}</span>
+                    </button>
+                  );
+                })}
+              </>
+            )}
+            <div
+              className={`squisq-insert-menu-header${showConvertActions ? ' squisq-insert-menu-header--separated' : ''}`}
+            >
+              Insert
+            </div>
             {MEDIA_BUTTONS.filter((b) => isButtonVisible(b.id)).map((btn) => {
               const disabled = (btn.id === 'image' && !mediaProvider) || !buttonAllowed(btn.id);
               const stripped = btn.title.replace(/^Insert\s+/i, '');

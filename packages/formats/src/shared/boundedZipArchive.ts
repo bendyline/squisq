@@ -8,6 +8,7 @@ import {
   compressionRatioError,
   entryTooLargeError,
   resolveZipSafetyLimits,
+  throwIfZipAborted,
   validateZipArchive,
   tooManyEntriesError,
   ZipSafetyError,
@@ -19,7 +20,7 @@ import {
 import { declaredZipEntryCount, prepareZipInput, type ZipInput } from './zipEntryCount.js';
 
 interface ActiveZipRead {
-  stop(error: ZipSafetyError): void;
+  stop(error: unknown): void;
 }
 
 interface ZipChunkStream {
@@ -58,15 +59,22 @@ class JsZipBoundedArchive implements BoundedZipArchive {
 
   private readonly limits: ResolvedZipSafetyLimits;
   private readonly entriesByPath: ReadonlyMap<string, ValidatedZipEntry>;
+  private readonly signal?: AbortSignal;
   private readonly reads = new Map<string, Promise<Uint8Array>>();
   private readonly activeReads = new Set<ActiveZipRead>();
   private terminalError?: ZipSafetyError;
   private emittedBytes = 0;
 
-  constructor(zip: JSZip, entries: readonly ValidatedZipEntry[], limits: ResolvedZipSafetyLimits) {
+  constructor(
+    zip: JSZip,
+    entries: readonly ValidatedZipEntry[],
+    limits: ResolvedZipSafetyLimits,
+    signal?: AbortSignal,
+  ) {
     this.zip = zip;
     this.entries = entries;
     this.limits = limits;
+    this.signal = signal;
     this.entriesByPath = new Map(entries.map((entry) => [entry.path, entry]));
   }
 
@@ -77,6 +85,7 @@ class JsZipBoundedArchive implements BoundedZipArchive {
 
   /** Read and cache one member, returning null when it does not exist. */
   async read(path: string, maxBytes?: number): Promise<Uint8Array | null> {
+    throwIfZipAborted(this.signal);
     this.throwIfFailed();
     if (maxBytes !== undefined) assertNonNegativeFinite('member read limit', maxBytes);
     const entry = this.entriesByPath.get(path);
@@ -87,7 +96,16 @@ class JsZipBoundedArchive implements BoundedZipArchive {
       pending = this.streamEntry(entry, maxBytes);
       this.reads.set(path, pending);
     }
-    const bytes = await pending;
+    let bytes: Uint8Array;
+    try {
+      bytes = await pending;
+    } catch (error: unknown) {
+      // Cancellation is scoped to the current operation, not archive
+      // corruption. Do not leave a cancelled read cached for a later caller.
+      if (this.reads.get(path) === pending && !this.terminalError) this.reads.delete(path);
+      throw error;
+    }
+    throwIfZipAborted(this.signal);
     if (maxBytes !== undefined && bytes.byteLength > maxBytes) {
       const error = entryTooLargeError(path, bytes.byteLength, maxBytes);
       this.failArchive(error);
@@ -108,6 +126,7 @@ class JsZipBoundedArchive implements BoundedZipArchive {
   }
 
   private streamEntry(metadata: ValidatedZipEntry, readLimit?: number): Promise<Uint8Array> {
+    throwIfZipAborted(this.signal);
     const { path, entry, declaredSize, crc32: expectedCrc } = metadata;
     const effectiveEntryLimit = Math.min(
       this.limits.maxEntryUncompressedBytes,
@@ -129,12 +148,17 @@ class JsZipBoundedArchive implements BoundedZipArchive {
       let settled = false;
       let written = 0;
       let crc = 0xffffffff;
+      const removeAbortListener = (): void =>
+        this.signal?.removeEventListener('abort', handleAbort);
+      const handleAbort = (): void =>
+        controller.stop(this.signal?.reason ?? new Error('ZIP operation was cancelled'));
 
       const controller: ActiveZipRead = {
         stop: (error) => {
           if (settled) return;
           settled = true;
           this.activeReads.delete(controller);
+          removeAbortListener();
           // Public JSZip cancellation is cooperative. It prevents another
           // compressed-input tick; data already emitted synchronously by the
           // current tick is ignored because `settled` is now true.
@@ -148,19 +172,28 @@ class JsZipBoundedArchive implements BoundedZipArchive {
         },
       };
       this.activeReads.add(controller);
+      if (this.signal) {
+        this.signal.addEventListener('abort', handleAbort, { once: true });
+        if (this.signal.aborted) {
+          handleAbort();
+          return;
+        }
+      }
 
       stream
         .on('data', (chunk: Uint8Array) => {
           if (settled) return;
           const nextWritten = written + chunk.byteLength;
           try {
+            throwIfZipAborted(this.signal);
             this.assertChunkAllowed(metadata, nextWritten, chunk.byteLength, effectiveEntryLimit);
             output = growOutput(output, nextWritten, declaredSize, effectiveEntryLimit);
             output.set(chunk, written);
             written = nextWritten;
             crc = updateCrc32(crc, chunk);
           } catch (error: unknown) {
-            this.failArchive(asZipSafetyError(error, path));
+            if (this.signal?.aborted) controller.stop(error);
+            else this.failArchive(asZipSafetyError(error, path));
           }
         })
         .on('error', (error: unknown) => {
@@ -200,6 +233,7 @@ class JsZipBoundedArchive implements BoundedZipArchive {
 
           settled = true;
           this.activeReads.delete(controller);
+          removeAbortListener();
           resolve(output.byteLength === written ? output : output.slice(0, written));
         })
         .resume();
@@ -260,13 +294,16 @@ export async function openBoundedZipArchive(
   data: ZipInput,
   limits: ZipSafetyLimits = {},
 ): Promise<BoundedZipArchive> {
+  throwIfZipAborted(limits.signal);
   const resolved = resolveZipSafetyLimits(limits);
   let prepared: { input: ZipInput; bytes?: Uint8Array };
   try {
-    prepared = await prepareZipInput(data);
+    prepared = await prepareZipInput(data, limits.signal);
   } catch (error: unknown) {
+    if (limits.signal?.aborted) throw limits.signal.reason ?? error;
     throw invalidArchiveError(error);
   }
+  throwIfZipAborted(limits.signal);
   if (prepared.bytes) {
     const declaredEntries = declaredZipEntryCount(prepared.bytes);
     if (declaredEntries !== undefined && declaredEntries > resolved.maxEntries) {
@@ -277,9 +314,11 @@ export async function openBoundedZipArchive(
   try {
     zip = await JSZip.loadAsync(prepared.input);
   } catch (error: unknown) {
+    if (limits.signal?.aborted) throw limits.signal.reason ?? error;
     throw invalidArchiveError(error);
   }
-  return createBoundedZipArchive(zip, resolved);
+  throwIfZipAborted(limits.signal);
+  return createBoundedZipArchive(zip, limits);
 }
 
 function invalidArchiveError(cause: unknown): ZipSafetyError {
@@ -291,9 +330,11 @@ export function createBoundedZipArchive(
   zip: JSZip,
   limits: ZipSafetyLimits = {},
 ): BoundedZipArchive {
+  throwIfZipAborted(limits.signal);
   const resolved = resolveZipSafetyLimits(limits);
-  const entries = validateZipArchive(zip, resolved);
-  return new JsZipBoundedArchive(zip, entries, resolved);
+  const entries = validateZipArchive(zip, limits);
+  throwIfZipAborted(limits.signal);
+  return new JsZipBoundedArchive(zip, entries, resolved, limits.signal);
 }
 
 function asZipSafetyError(error: unknown, path: string): ZipSafetyError {

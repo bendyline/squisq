@@ -25,9 +25,14 @@ export interface FfmpegDetection {
 }
 
 /** Run a command and resolve with trimmed stdout, or null on any failure. */
-function run(command: string, args: string[]): Promise<string | null> {
-  return new Promise((resolve) => {
-    execFile(command, args, { timeout: 5000 }, (err, stdout) => {
+function run(command: string, args: string[], signal?: AbortSignal): Promise<string | null> {
+  signal?.throwIfAborted();
+  return new Promise((resolve, reject) => {
+    execFile(command, args, { timeout: 5000, signal }, (err, stdout) => {
+      if (signal?.aborted) {
+        reject(signal.reason);
+        return;
+      }
       if (err || !stdout.trim()) {
         resolve(null);
         return;
@@ -41,8 +46,8 @@ function run(command: string, args: string[]): Promise<string | null> {
  * Run `<path> -version` and return the first line of output
  * (e.g. "ffmpeg version 7.1 ..."), or null when the binary fails to run.
  */
-export async function getFfmpegVersion(path: string): Promise<string | null> {
-  const out = await run(path, ['-version']);
+export async function getFfmpegVersion(path: string, signal?: AbortSignal): Promise<string | null> {
+  const out = await run(path, ['-version'], signal);
   return out ? out.split('\n')[0].trim() : null;
 }
 
@@ -53,11 +58,12 @@ export async function getFfmpegVersion(path: string): Promise<string | null> {
  * @throws Error when `SQUISQ_FFMPEG` is set but the binary does not run —
  *   an explicit override must never be silently ignored.
  */
-export async function detectFfmpegDetailed(): Promise<FfmpegDetection | null> {
+export async function detectFfmpegDetailed(signal?: AbortSignal): Promise<FfmpegDetection | null> {
+  signal?.throwIfAborted();
   // 1. Explicit override
   const envPath = process.env.SQUISQ_FFMPEG;
   if (envPath) {
-    const version = await getFfmpegVersion(envPath);
+    const version = await getFfmpegVersion(envPath, signal);
     if (!version) {
       throw new Error(
         `SQUISQ_FFMPEG is set to "${envPath}" but running "${envPath} -version" failed. ` +
@@ -69,7 +75,7 @@ export async function detectFfmpegDetailed(): Promise<FfmpegDetection | null> {
 
   // 2. System PATH
   const command = process.platform === 'win32' ? 'where' : 'which';
-  const found = await run(command, ['ffmpeg']);
+  const found = await run(command, ['ffmpeg'], signal);
   if (found) {
     // `which` and `where` can return multiple lines; take the first
     return { path: found.split('\n')[0].trim(), source: 'path' };
@@ -78,6 +84,7 @@ export async function detectFfmpegDetailed(): Promise<FfmpegDetection | null> {
   // 3. Optional ffmpeg-static package. The specifier is a variable so
   // bundlers/TypeScript don't try to resolve a package we don't depend on.
   try {
+    signal?.throwIfAborted();
     const specifier = 'ffmpeg-static';
     const mod = (await import(specifier)) as { default?: unknown } | string;
     // CJS default export shape (`module.exports = path`) surfaces as
@@ -88,8 +95,10 @@ export async function detectFfmpegDetailed(): Promise<FfmpegDetection | null> {
       return { path: candidate, source: 'ffmpeg-static' };
     }
   } catch {
+    signal?.throwIfAborted();
     // Not installed — fall through.
   }
 
+  signal?.throwIfAborted();
   return null;
 }

@@ -23,6 +23,7 @@ import type { Doc } from '@bendyline/squisq/schemas';
 import type { ContentContainer } from '@bendyline/squisq/storage';
 import { computeAudioTimeline } from '@bendyline/squisq-video';
 import type { AudioTimelineClip } from '@bendyline/squisq-video';
+import { runFfmpeg } from './runFfmpeg.js';
 
 /**
  * Build the final mixed MP3 audio track for a doc's MP4 export.
@@ -44,39 +45,45 @@ export async function buildMixedAudioTrack(
   container: ContentContainer,
   ffmpegPath: string,
   coverPreRoll: number,
+  signal?: AbortSignal,
 ): Promise<Uint8Array | null> {
+  signal?.throwIfAborted();
   const timeline = computeAudioTimeline(doc, coverPreRoll);
   if (timeline.length === 0) return null;
 
   // Load each clip's bytes, caching reads by `src` (a src may back several clips).
   const bytesBySrc = new Map<string, ArrayBuffer | null>();
   const readSrc = async (src: string): Promise<ArrayBuffer | null> => {
+    signal?.throwIfAborted();
     if (bytesBySrc.has(src)) return bytesBySrc.get(src)!;
     const data = await container.readFile(src);
+    signal?.throwIfAborted();
     bytesBySrc.set(src, data ?? null);
     return data ?? null;
   };
 
   const usable: Array<{ clip: AudioTimelineClip; buffer: ArrayBuffer }> = [];
   for (const clip of timeline) {
+    signal?.throwIfAborted();
     const buffer = await readSrc(clip.src);
     if (buffer) usable.push({ clip, buffer });
   }
   if (usable.length === 0) return null;
 
-  return mixTimelineClips(ffmpegPath, usable);
+  return mixTimelineClips(ffmpegPath, usable, signal);
 }
 
 /** Assemble the ffmpeg `amix` filtergraph and run it, returning the mixed MP3. */
 async function mixTimelineClips(
   ffmpegPath: string,
   usable: Array<{ clip: AudioTimelineClip; buffer: ArrayBuffer }>,
+  signal?: AbortSignal,
 ): Promise<Uint8Array> {
   const { writeFile, readFile, mkdir, rm } = await import('node:fs/promises');
   const { join } = await import('node:path');
   const { tmpdir } = await import('node:os');
   const { randomBytes } = await import('node:crypto');
-  const { execFile } = await import('node:child_process');
+  signal?.throwIfAborted();
 
   const workDir = join(tmpdir(), `squisq-audio-mix-${randomBytes(8).toString('hex')}`);
   await mkdir(workDir, { recursive: true });
@@ -84,13 +91,16 @@ async function mixTimelineClips(
   const ms = (s: number) => Math.max(0, Math.round(s * 1000));
 
   try {
+    signal?.throwIfAborted();
     const inputs: string[] = [];
     const filters: string[] = [];
     const labels: string[] = [];
 
     for (const { clip, buffer } of usable) {
+      signal?.throwIfAborted();
       const p = join(workDir, `clip-${inputs.length}.mp3`);
       await writeFile(p, new Uint8Array(buffer));
+      signal?.throwIfAborted();
       const i = inputs.push(p) - 1;
       const delayMs = ms(clip.startSec);
       const start = Math.max(0, clip.sourceInSec);
@@ -120,14 +130,15 @@ async function mixTimelineClips(
       outputPath,
     );
 
-    await new Promise<void>((resolve, reject) => {
-      execFile(ffmpegPath, args, { timeout: 180_000 }, (err) => {
-        if (err) reject(new Error(`ffmpeg audio mix failed: ${err.message}`));
-        else resolve();
-      });
+    await runFfmpeg(ffmpegPath, args, {
+      timeoutMs: 180_000,
+      failureMessage: 'ffmpeg audio mix failed',
+      signal,
     });
 
+    signal?.throwIfAborted();
     const data = await readFile(outputPath);
+    signal?.throwIfAborted();
     return new Uint8Array(data.buffer, data.byteOffset, data.byteLength);
   } finally {
     await rm(workDir, { recursive: true, force: true });

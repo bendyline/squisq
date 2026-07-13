@@ -399,9 +399,12 @@ export function defaultFormats(): FormatDefinition[] {
       const { zipToContainer } = await import('../container/index.js');
       return zipToContainer(data, optionsFor(options, 'dbk'));
     },
-    async exportDoc(input): Promise<ConversionResult> {
+    async exportDoc(input, options): Promise<ConversionResult> {
       const { containerToZip } = await import('../container/index.js');
-      const blob = await containerToZip(await snapshotContainerWithDocument(input));
+      const blob = await containerToZip(
+        await snapshotContainerWithDocument(input),
+        optionsFor(options, 'dbk'),
+      );
       return ok(await toBytes(blob), MIME.zip);
     },
   };

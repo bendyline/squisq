@@ -29,7 +29,14 @@ import { DIAGRAM_VIEWPORT, DIAGRAM_TOOLS } from './diagramConstants';
 
 export type DiagramCommand =
   | { kind: 'moveNode'; nodeId: string; x: number; y: number }
-  | { kind: 'resizeNode'; nodeId: string; width: number; height: number }
+  | {
+      kind: 'resizeNode';
+      nodeId: string;
+      width: number;
+      height: number;
+      x?: number;
+      y?: number;
+    }
   | { kind: 'addConnection'; source: string; target: string; type?: string }
   | { kind: 'removeConnection'; source: string; target: string; type?: string }
   | { kind: 'renameNode'; nodeId: string; newLabel: string }
@@ -145,7 +152,14 @@ export function DiagramCanvas({
           if (!cmd.id.startsWith('node-card-')) return;
           const nodeId = nodeIdFromCardLayerId(cmd.id);
           if (!nodeId) return;
-          onCommand({ kind: 'resizeNode', nodeId, width: cmd.width, height: cmd.height });
+          onCommand({
+            kind: 'resizeNode',
+            nodeId,
+            width: cmd.width,
+            height: cmd.height,
+            ...(cmd.x !== undefined ? { x: cmd.x } : {}),
+            ...(cmd.y !== undefined ? { y: cmd.y } : {}),
+          });
           return;
         }
         case 'setLayerAttr':

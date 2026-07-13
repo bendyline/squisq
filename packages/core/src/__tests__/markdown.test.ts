@@ -155,14 +155,14 @@ describe('parseMarkdown / stringifyMarkdown', () => {
     });
 
     it('parses mentions from @[Name](scheme:id)', () => {
-      const doc = parse('Hey @[Leo](gezel:leo), take a look.');
+      const doc = parse('Hey @[Leo](person:leo), take a look.');
       const p = doc.children[0] as MarkdownParagraph;
       const text0 = p.children[0] as MarkdownText;
       expect(text0).toEqual({ type: 'text', value: 'Hey ' });
       const mention = p.children[1] as MarkdownMention;
       expect(mention).toEqual({
         type: 'mention',
-        targetKind: 'gezel',
+        targetKind: 'person',
         targetId: 'leo',
         displayName: 'Leo',
       });
@@ -176,7 +176,7 @@ describe('parseMarkdown / stringifyMarkdown', () => {
       // re-parsing `\:` produces the unescaped url, so the round-trip
       // preserves the mention semantically even if the raw text changes
       // on the first pass.
-      const input = 'Hey @[Leo](gezel:leo), ping @[Tess](gezel:tess) too.\n';
+      const input = 'Hey @[Leo](person:leo), ping @[Tess](person:tess) too.\n';
       const once = stringifyMarkdown(parseMarkdown(input));
       const twice = stringifyMarkdown(parseMarkdown(once));
       expect(twice).toBe(once);
@@ -184,7 +184,7 @@ describe('parseMarkdown / stringifyMarkdown', () => {
       const doc = parseMarkdown(once) as MarkdownDocument;
       const p = doc.children[0] as MarkdownParagraph;
       const m1 = p.children.find((c) => c.type === 'mention') as MarkdownMention;
-      expect(m1.targetKind).toBe('gezel');
+      expect(m1.targetKind).toBe('person');
       expect(m1.targetId).toBe('leo');
       expect(m1.displayName).toBe('Leo');
     });
@@ -943,6 +943,15 @@ describe('multi-line frontmatter round-trips', () => {
       padded: ' value ',
       path: 'C:\\temp\\"quoted"',
     });
+  });
+
+  it('writes boolean values as unquoted YAML booleans', () => {
+    const out = setFrontmatterValues('# Body\n', { enabled: true, disabled: false });
+    expect(out).toContain('enabled: true');
+    expect(out).toContain('disabled: false');
+    expect(out).not.toContain('enabled: "true"');
+    expect(out).not.toContain('disabled: "false"');
+    expect(parseMarkdown(out).frontmatter).toEqual({ enabled: true, disabled: false });
   });
 });
 

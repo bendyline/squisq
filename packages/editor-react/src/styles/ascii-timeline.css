@@ -13,7 +13,7 @@
 
 .squisq-ascii-timeline-editor {
   --squisq-ascii-timeline-accent: var(--squisq-theme-primary, #6366f1);
-  --squisq-ascii-timeline-label-width: 120px;
+  --squisq-ascii-timeline-label-width: 160px;
   border: 1px solid var(--squisq-border, #e2e8f0);
   border-radius: 10px;
   background: var(--squisq-input-bg, #fff);
@@ -44,6 +44,33 @@
   color: var(--squisq-text-muted, #64748b);
 }
 
+.squisq-ascii-timeline-header-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.squisq-ascii-timeline-header-actions button {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 8px;
+  border: 1px solid var(--squisq-border, #cbd5e1);
+  border-radius: 5px;
+  background: var(--squisq-input-bg, #fff);
+  color: var(--squisq-ascii-timeline-accent);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.squisq-ascii-timeline-header-actions button:hover,
+.squisq-ascii-timeline-header-actions button:focus-visible {
+  border-color: var(--squisq-ascii-timeline-accent);
+  outline: 2px solid color-mix(in srgb, var(--squisq-ascii-timeline-accent) 22%, transparent);
+}
+
 .squisq-ascii-timeline-canvas {
   position: relative;
   min-width: 600px;
@@ -72,9 +99,70 @@
   white-space: nowrap;
 }
 
-.squisq-ascii-timeline-track-label > span {
+.squisq-ascii-timeline-track-name {
+  min-width: 0;
+  flex: 1 1 auto;
+  padding: 3px 4px;
   overflow: hidden;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: right;
   text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+button.squisq-ascii-timeline-track-name {
+  cursor: text;
+}
+
+button.squisq-ascii-timeline-track-name:hover,
+button.squisq-ascii-timeline-track-name:focus-visible {
+  border-color: var(--squisq-border, #cbd5e1);
+  background: var(--squisq-input-bg, #fff);
+  outline: none;
+}
+
+.squisq-ascii-timeline-track-name-input {
+  width: 100%;
+  min-width: 0;
+  flex: 1 1 auto;
+  padding: 3px 4px;
+  border: 1px solid var(--squisq-ascii-timeline-accent);
+  border-radius: 4px;
+  background: var(--squisq-input-bg, #fff);
+  color: var(--squisq-text, #1e293b);
+  font: inherit;
+  text-align: right;
+  outline: 2px solid color-mix(in srgb, var(--squisq-ascii-timeline-accent) 22%, transparent);
+}
+
+.squisq-ascii-timeline-track-delete {
+  display: grid;
+  width: 22px;
+  height: 22px;
+  flex: 0 0 22px;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--squisq-text-muted, #64748b);
+  cursor: pointer;
+}
+
+.squisq-ascii-timeline-track-delete:hover,
+.squisq-ascii-timeline-track-delete:focus-visible {
+  background: color-mix(in srgb, #ef4444 12%, transparent);
+  color: #dc2626;
+  outline: 2px solid color-mix(in srgb, #ef4444 25%, transparent);
+}
+
+.squisq-ascii-timeline-track-delete:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
 }
 
 .squisq-ascii-timeline-track-add {
@@ -95,7 +183,8 @@
 }
 
 .squisq-ascii-timeline-track-add:hover,
-.squisq-ascii-timeline-track-add:focus-visible {
+.squisq-ascii-timeline-track-add:focus-visible,
+.squisq-ascii-timeline-track-add[aria-pressed='true'] {
   border-color: var(--squisq-ascii-timeline-accent);
   outline: 2px solid color-mix(in srgb, var(--squisq-ascii-timeline-accent) 22%, transparent);
 }
@@ -105,6 +194,10 @@
   height: 96px;
   min-width: 420px;
   outline: none;
+  cursor: default;
+}
+
+.squisq-ascii-timeline-rail--adding {
   cursor: crosshair;
 }
 
@@ -460,7 +553,7 @@
 
 @media (max-width: 760px) {
   .squisq-ascii-timeline-editor {
-    --squisq-ascii-timeline-label-width: 88px;
+    --squisq-ascii-timeline-label-width: 132px;
   }
 
   .squisq-ascii-timeline-inspector {
@@ -474,6 +567,10 @@
 
   .squisq-ascii-timeline-delete {
     grid-column: 2 / 3;
+  }
+
+  .squisq-ascii-timeline-header-actions small {
+    display: none;
   }
 }
 

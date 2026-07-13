@@ -335,6 +335,19 @@ describe('LinearDocView markdown prop', () => {
     expect(container.textContent).toContain('Paragraph body.');
   });
 
+  it('adds extra spacing between blank-line-separated paragraphs', () => {
+    const { container } = render(
+      <LinearDocView markdown={'First paragraph.\n\nSecond paragraph.'} />,
+    );
+    const paragraphs = container.querySelectorAll('.squisq-md-p');
+    const styles = container.querySelector('.squisq-linear-content > style')?.textContent;
+
+    expect(paragraphs).toHaveLength(2);
+    expect(paragraphs[0]?.nextElementSibling).toBe(paragraphs[1]);
+    expect(styles).toContain('.squisq-linear-content p + p');
+    expect(styles).toContain('margin-top: 1.25em');
+  });
+
   it('doc wins over markdown when both are provided', () => {
     const doc = mkDoc([mkBlock({ id: 'b', contents: [paragraph(text('Doc body wins'))] })]);
     const { container } = render(<LinearDocView doc={doc} markdown="# Markdown Loses" />);

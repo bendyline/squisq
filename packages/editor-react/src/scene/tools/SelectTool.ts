@@ -212,11 +212,11 @@ export const SelectTool: SceneTool = {
       }
     } else if (dragState.kind === 'resize') {
       const { x, y, width, height } = dragState.currentBounds;
-      // Resize translates into a move (if origin shifted) + a size change.
-      // We dispatch both so a single grab on a corner can change all four
-      // fields atomically from the host's point of view.
-      ctx.dispatch({ kind: 'moveLayer', id: dragState.layerId, x, y });
-      ctx.dispatch({ kind: 'resizeLayer', id: dragState.layerId, width, height });
+      // Keep the final origin + size in one command. In particular, the ASCII
+      // diagram adapter must render/reparse only once: committing a move and
+      // then a resize used to normalize the art between the two halves of one
+      // pointer gesture and could snap the node to a different grid position.
+      ctx.dispatch({ kind: 'resizeLayer', id: dragState.layerId, x, y, width, height });
     }
     (e.currentTarget as Element).releasePointerCapture?.(e.pointerId);
     setDragState(ctx.interaction, null);

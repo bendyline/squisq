@@ -42,6 +42,8 @@ export interface ReadInputResult {
 }
 
 export interface ReadInputOptions {
+  /** Cancel filesystem traversal, import, or audio resolution at a bounded boundary. */
+  signal?: AbortSignal;
   /**
    * Infer a Squisq theme from an OOXML source's theme part (PPTX today).
    * Default true — the importer carries it as frontmatter.
@@ -83,14 +85,17 @@ function mimeFromExt(filePath: string): string {
 /**
  * Recursively walk a directory and return all file paths (relative to root).
  */
-async function walkDir(root: string, prefix = ''): Promise<string[]> {
+async function walkDir(root: string, prefix = '', signal?: AbortSignal): Promise<string[]> {
+  throwIfAborted(signal);
   const entries = await readdir(root, { withFileTypes: true });
+  throwIfAborted(signal);
   const paths: string[] = [];
 
   for (const entry of entries) {
+    throwIfAborted(signal);
     const relPath = prefix ? `${prefix}/${entry.name}` : entry.name;
     if (entry.isDirectory()) {
-      paths.push(...(await walkDir(join(root, entry.name), relPath)));
+      paths.push(...(await walkDir(join(root, entry.name), relPath, signal)));
     } else if (entry.isFile()) {
       paths.push(relPath);
     }
@@ -108,12 +113,15 @@ export async function readInput(
   inputPath: string,
   options?: ReadInputOptions,
 ): Promise<ReadInputResult> {
+  throwIfAborted(options?.signal);
   const result = await readInputRaw(inputPath, options);
+  throwIfAborted(options?.signal);
   // Audio rides in the container: a document-anchored narration take
   // (`{[audio src=… anchor=document]}` + timing sidecar) re-times the
   // block timeline, and per-block audio files map into segments — so
   // `squisq convert`/`video` exports pace exactly like the editor preview.
   const doc = await resolveAudioMapping(result.doc, result.container);
+  throwIfAborted(options?.signal);
   return doc === result.doc ? result : { ...result, doc };
 }
 
@@ -121,19 +129,21 @@ async function readInputRaw(
   inputPath: string,
   options?: ReadInputOptions,
 ): Promise<ReadInputResult> {
+  throwIfAborted(options?.signal);
   const info = await stat(inputPath);
+  throwIfAborted(options?.signal);
 
   if (info.isDirectory()) {
-    return readFolder(inputPath);
+    return readFolder(inputPath, options?.signal);
   }
 
   const ext = extname(inputPath).toLowerCase();
   if (ext === '.zip' || ext === '.dbk') {
-    return readContainer(inputPath);
+    return readContainer(inputPath, options?.signal);
   }
 
   if (ext === '.json') {
-    return readDocJsonFile(inputPath);
+    return readDocJsonFile(inputPath, options?.signal);
   }
 
   if (IMPORTER_EXTS.includes(ext)) {
@@ -144,19 +154,44 @@ async function readInputRaw(
   }
 
   // Default: treat as a markdown file
-  return readMarkdownFile(inputPath);
+  return readMarkdownFile(inputPath, options?.signal);
 }
 
 /** Read a file into an ArrayBuffer (a fresh copy, not a Buffer view). */
-async function readArrayBuffer(filePath: string): Promise<ArrayBuffer> {
-  const data = await readFile(filePath);
+async function readArrayBuffer(filePath: string, signal?: AbortSignal): Promise<ArrayBuffer> {
+  const data = await readBinaryFile(filePath, signal);
   return data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength) as ArrayBuffer;
 }
 
-async function readMarkdownFile(filePath: string): Promise<ReadInputResult> {
-  const content = await readFile(filePath, 'utf-8');
+async function readBinaryFile(filePath: string, signal?: AbortSignal): Promise<Uint8Array> {
+  throwIfAborted(signal);
+  try {
+    const data = await readFile(filePath, { signal });
+    throwIfAborted(signal);
+    return data;
+  } catch (error: unknown) {
+    throwIfAborted(signal);
+    throw error;
+  }
+}
+
+async function readUtf8File(filePath: string, signal?: AbortSignal): Promise<string> {
+  throwIfAborted(signal);
+  try {
+    const content = await readFile(filePath, { encoding: 'utf-8', signal });
+    throwIfAborted(signal);
+    return content;
+  } catch (error: unknown) {
+    throwIfAborted(signal);
+    throw error;
+  }
+}
+
+async function readMarkdownFile(filePath: string, signal?: AbortSignal): Promise<ReadInputResult> {
+  const content = await readUtf8File(filePath, signal);
   const container = new MemoryContentContainer();
   await container.writeDocument(content);
+  throwIfAborted(signal);
   const markdownDoc = parseMarkdown(content);
   return { doc: markdownToDoc(markdownDoc), container, markdownDoc, sourceFormat: 'md' };
 }
@@ -165,8 +200,8 @@ async function readMarkdownFile(filePath: string): Promise<ReadInputResult> {
  * Read a standalone Doc JSON file. The container is empty (no media bundled);
  * callers should populate it or set basePath for media resolution.
  */
-async function readDocJsonFile(filePath: string): Promise<ReadInputResult> {
-  const content = await readFile(filePath, 'utf-8');
+async function readDocJsonFile(filePath: string, signal?: AbortSignal): Promise<ReadInputResult> {
+  const content = await readUtf8File(filePath, signal);
   const doc = JSON.parse(content) as Doc;
   const container = new MemoryContentContainer();
   return { doc, container, sourceFormat: 'json' };
@@ -182,8 +217,11 @@ async function readViaImporter(
   def: import('@bendyline/squisq-formats').FormatDefinition,
   options?: ReadInputOptions,
 ): Promise<ReadInputResult> {
-  const buffer = await readArrayBuffer(filePath);
+  const signal = options?.signal;
+  throwIfAborted(signal);
+  const buffer = await readArrayBuffer(filePath, signal);
   const convertOptions = {
+    signal,
     formatOptions: {
       [def.id]: {
         inferTheme: options?.inferTheme !== false,
@@ -195,14 +233,20 @@ async function readViaImporter(
   let container: ContentContainer;
   let markdownDoc: MarkdownDocument;
   if (def.importContainer) {
+    throwIfAborted(signal);
     container = await def.importContainer(buffer, convertOptions);
+    throwIfAborted(signal);
     const text = await container.readDocument();
+    throwIfAborted(signal);
     markdownDoc = text ? parseMarkdown(text) : { type: 'document', children: [] };
   } else {
     // importDoc is guaranteed present by the caller's guard.
+    throwIfAborted(signal);
     markdownDoc = await def.importDoc!(buffer, convertOptions);
+    throwIfAborted(signal);
     const mem = new MemoryContentContainer();
     await mem.writeDocument(stringifyMarkdown(markdownDoc));
+    throwIfAborted(signal);
     container = mem;
   }
 
@@ -220,17 +264,22 @@ async function resolveContainer(
   container: ContentContainer,
   sourceFormat: FormatId,
   missingMessage: string,
+  signal?: AbortSignal,
 ): Promise<ReadInputResult> {
   // Check for Doc JSON first.
   for (const name of DOC_JSON_NAMES) {
+    throwIfAborted(signal);
     const jsonData = await container.readFile(name);
+    throwIfAborted(signal);
     if (jsonData) {
       const doc = JSON.parse(new TextDecoder().decode(jsonData)) as Doc;
       return { doc, container, sourceFormat };
     }
   }
 
+  throwIfAborted(signal);
   const markdown = await container.readDocument();
+  throwIfAborted(signal);
   if (!markdown) {
     throw new Error(missingMessage);
   }
@@ -239,32 +288,49 @@ async function resolveContainer(
   return { doc: markdownToDoc(markdownDoc), container, markdownDoc, sourceFormat };
 }
 
-async function readContainer(filePath: string): Promise<ReadInputResult> {
-  const container = await zipToContainer(await readArrayBuffer(filePath));
+async function readContainer(filePath: string, signal?: AbortSignal): Promise<ReadInputResult> {
+  throwIfAborted(signal);
+  const container = await zipToContainer(await readArrayBuffer(filePath, signal));
+  throwIfAborted(signal);
   return resolveContainer(
     container,
     'dbk',
     `No markdown document or doc.json found in container: ${filePath}`,
+    signal,
   );
 }
 
-async function readFolder(dirPath: string): Promise<ReadInputResult> {
+async function readFolder(dirPath: string, signal?: AbortSignal): Promise<ReadInputResult> {
+  throwIfAborted(signal);
   const container = new MemoryContentContainer();
-  const files = await walkDir(dirPath);
+  const files = await walkDir(dirPath, '', signal);
+  throwIfAborted(signal);
 
   for (const relPath of files) {
+    throwIfAborted(signal);
     const absPath = join(dirPath, relPath);
-    const data = await readFile(absPath);
+    const data = await readBinaryFile(absPath, signal);
+    throwIfAborted(signal);
     await container.writeFile(
       relPath,
       new Uint8Array(data.buffer, data.byteOffset, data.byteLength),
       mimeFromExt(relPath),
     );
+    throwIfAborted(signal);
   }
 
   return resolveContainer(
     container,
     'folder',
     `No markdown document or doc.json found in folder: ${dirPath}`,
+    signal,
   );
+}
+
+function throwIfAborted(signal?: AbortSignal): void {
+  if (!signal?.aborted) return;
+  if (signal.reason !== undefined) throw signal.reason;
+  const error = new Error('Input reading was cancelled');
+  error.name = 'AbortError';
+  throw error;
 }

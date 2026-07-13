@@ -25,16 +25,13 @@ import {
 import { getTransformStyleSummaries } from '@bendyline/squisq/transform';
 import { ThemePicker } from './ThemePicker';
 import { resolvePersistedTransformStyleId } from './transformStyleId';
+import {
+  FRONTMATTER_SETTING_DEFAULTS,
+  FRONTMATTER_SETTING_KEYS,
+  omitFrontmatterDefault,
+} from './frontmatterSettings';
 
 // ── Frontmatter key constants ─────────────────────────────────────
-
-/** Mirror of `FM_KEYS` in PreviewControls.tsx. Canonical names are the
- *  ones we write; legacy aliases are still read so older docs work. */
-const FM = {
-  theme: { canonical: 'squisq-theme', legacy: ['themeId', 'theme'] },
-  transform: { canonical: 'squisq-transform', legacy: 'transform-style' },
-  captions: { canonical: 'squisq-captions', legacy: 'caption-style' },
-} as const;
 
 function readFm(
   fm: Record<string, unknown> | undefined,
@@ -80,9 +77,17 @@ export function DocumentSettingsDialog({
   const currentTheme = readFrontmatterThemeId(frontmatter) ?? '';
   const currentTransform =
     resolvePersistedTransformStyleId(
-      readFm(frontmatter, FM.transform.canonical, FM.transform.legacy),
+      readFm(
+        frontmatter,
+        FRONTMATTER_SETTING_KEYS.transform.canonical,
+        FRONTMATTER_SETTING_KEYS.transform.legacy,
+      ),
     ) ?? '';
-  const currentCaptions = readFm(frontmatter, FM.captions.canonical, FM.captions.legacy);
+  const currentCaptions = readFm(
+    frontmatter,
+    FRONTMATTER_SETTING_KEYS.captions.canonical,
+    FRONTMATTER_SETTING_KEYS.captions.legacy,
+  );
 
   const [title, setTitle] = useState(currentTitle);
   const [theme, setTheme] = useState(currentTheme);
@@ -132,20 +137,29 @@ export function DocumentSettingsDialog({
 
       const updates: Record<string, string | null> = {
         title: nextTitle,
-        [FM.theme.canonical]: theme || null,
+        [FRONTMATTER_SETTING_KEYS.theme.canonical]: omitFrontmatterDefault(
+          theme || FRONTMATTER_SETTING_DEFAULTS.theme,
+          FRONTMATTER_SETTING_DEFAULTS.theme,
+        ),
         // Saving settings canonicalizes all older theme spellings.
-        [FM.theme.legacy[0]]: null,
-        [FM.theme.legacy[1]]: null,
-        [FM.transform.canonical]: transform || null,
-        [FM.transform.legacy]: null,
-        [FM.captions.canonical]: captions || null,
-        ...(currentCaptions && captions !== currentCaptions ? { [FM.captions.legacy]: null } : {}),
+        [FRONTMATTER_SETTING_KEYS.theme.legacy[0]]: null,
+        [FRONTMATTER_SETTING_KEYS.theme.legacy[1]]: null,
+        [FRONTMATTER_SETTING_KEYS.transform.canonical]: omitFrontmatterDefault(
+          transform,
+          FRONTMATTER_SETTING_DEFAULTS.transform,
+        ),
+        [FRONTMATTER_SETTING_KEYS.transform.legacy]: null,
+        [FRONTMATTER_SETTING_KEYS.captions.canonical]: omitFrontmatterDefault(
+          captions || FRONTMATTER_SETTING_DEFAULTS.captions,
+          FRONTMATTER_SETTING_DEFAULTS.captions,
+        ),
+        [FRONTMATTER_SETTING_KEYS.captions.legacy]: null,
       };
 
       const nextSource = setFrontmatterValues(markdownSource, updates);
       onSave(nextSource);
     },
-    [title, theme, transform, captions, inferredTitle, markdownSource, currentCaptions, onSave],
+    [title, theme, transform, captions, inferredTitle, markdownSource, onSave],
   );
 
   return (

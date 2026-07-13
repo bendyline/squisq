@@ -9,7 +9,6 @@
  * callers use the WebCodecs/ffmpeg.wasm paths in the video packages instead.
  */
 
-import { execFile } from 'node:child_process';
 import { writeFile, readFile, mkdir, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
@@ -23,9 +22,17 @@ import {
   ffmpegAudioMuxArgs,
   ffmpegGifOutputArgs,
 } from '@bendyline/squisq-video';
+import { runFfmpeg } from './runFfmpeg.js';
+
+/** Node-native video options with cooperative and child-process cancellation. */
+export interface NativeVideoExportOptions extends VideoExportOptions {
+  signal?: AbortSignal;
+}
 
 /** Options for native animated-GIF encoding. */
 export interface GifExportOptions {
+  /** Cancel staging or encoding and terminate the native FFmpeg process. */
+  signal?: AbortSignal;
   /** Frames per second (default: 10; GIF timing is centisecond-based). */
   fps?: number;
   /** Output width in pixels (default: 960 landscape / 540 portrait). */
@@ -98,8 +105,9 @@ export async function framesToMp4Native(
   frames: Uint8Array[],
   audio: Uint8Array | null,
   outputPath: string,
-  options: VideoExportOptions = {},
+  options: NativeVideoExportOptions = {},
 ): Promise<void> {
+  options.signal?.throwIfAborted();
   const fps = options.fps ?? 30;
   const quality = options.quality ?? 'normal';
   const { width, height } = resolveDimensions(options);
@@ -114,13 +122,16 @@ export async function framesToMp4Native(
   await mkdir(workDir, { recursive: true });
 
   try {
+    options.signal?.throwIfAborted();
     onProgress?.(0, 'writing frames');
 
     // Write frame PNGs to temp directory
     const padLen = String(frames.length).length;
     for (let i = 0; i < frames.length; i++) {
+      options.signal?.throwIfAborted();
       const name = `frame-${String(i + 1).padStart(padLen, '0')}.png`;
       await writeFile(join(workDir, name), frames[i]);
+      options.signal?.throwIfAborted();
 
       if (onProgress && i % 10 === 0) {
         onProgress(Math.round((i / frames.length) * 30), 'writing frames');
@@ -130,8 +141,10 @@ export async function framesToMp4Native(
     // Write audio if provided
     let audioPath: string | null = null;
     if (audio) {
+      options.signal?.throwIfAborted();
       audioPath = join(workDir, 'audio-input');
       await writeFile(audioPath, audio);
+      options.signal?.throwIfAborted();
     }
 
     onProgress?.(30, 'encoding');
@@ -162,17 +175,14 @@ export async function framesToMp4Native(
 
     // Run ffmpeg. execFile buffers stdout/stderr internally for the callback,
     // so the child's pipes are already drained — no manual stderr listener needed.
-    await new Promise<void>((resolve, reject) => {
-      execFile(ffmpegPath, args, { timeout: 600_000 }, (err) => {
-        if (err) {
-          reject(new Error(`ffmpeg failed: ${err.message}`));
-        } else {
-          resolve();
-        }
-      });
+    await runFfmpeg(ffmpegPath, args, {
+      timeoutMs: 600_000,
+      failureMessage: 'ffmpeg failed',
+      signal: options.signal,
     });
 
     onProgress?.(100, 'done');
+    options.signal?.throwIfAborted();
   } finally {
     // Clean up temp directory
     await rm(workDir, { recursive: true, force: true });
@@ -187,14 +197,17 @@ export async function framesToMp4NativeBytes(
   ffmpegPath: string,
   frames: Uint8Array[],
   audio: Uint8Array | null,
-  options: VideoExportOptions = {},
+  options: NativeVideoExportOptions = {},
 ): Promise<Uint8Array> {
+  options.signal?.throwIfAborted();
   const tmpId = randomBytes(8).toString('hex');
   const tmpOutput = join(tmpdir(), `squisq-video-out-${tmpId}.mp4`);
 
   try {
     await framesToMp4Native(ffmpegPath, frames, audio, tmpOutput, options);
+    options.signal?.throwIfAborted();
     const data = await readFile(tmpOutput);
+    options.signal?.throwIfAborted();
     return new Uint8Array(data.buffer, data.byteOffset, data.byteLength);
   } finally {
     await rm(tmpOutput, { force: true });
@@ -214,6 +227,7 @@ export async function framesToGifNative(
   outputPath: string,
   options: GifExportOptions = {},
 ): Promise<void> {
+  options.signal?.throwIfAborted();
   const fps = resolveGifFps(options);
   const { width, height } = resolveGifDimensions(options);
   const onProgress = options.onProgress;
@@ -235,11 +249,14 @@ export async function framesToGifNative(
   await mkdir(workDir, { recursive: true });
 
   try {
+    options.signal?.throwIfAborted();
     onProgress?.(0, 'writing frames');
     const padLen = String(frames.length).length;
     for (let i = 0; i < frames.length; i++) {
+      options.signal?.throwIfAborted();
       const name = `frame-${String(i + 1).padStart(padLen, '0')}.png`;
       await writeFile(join(workDir, name), frames[i]);
+      options.signal?.throwIfAborted();
       if (onProgress && i % 10 === 0) {
         onProgress(Math.round((i / frames.length) * 30), 'writing frames');
       }
@@ -249,13 +266,13 @@ export async function framesToGifNative(
     const padPattern = join(workDir, `frame-%0${padLen}d.png`);
     const args = ['-y', '-framerate', String(fps), '-i', padPattern, ...gifOutputArgs, outputPath];
 
-    await new Promise<void>((resolve, reject) => {
-      execFile(ffmpegPath, args, { timeout: 600_000 }, (err) => {
-        if (err) reject(new Error(`ffmpeg GIF encoding failed: ${err.message}`));
-        else resolve();
-      });
+    await runFfmpeg(ffmpegPath, args, {
+      timeoutMs: 600_000,
+      failureMessage: 'ffmpeg GIF encoding failed',
+      signal: options.signal,
     });
     onProgress?.(100, 'done');
+    options.signal?.throwIfAborted();
   } finally {
     await rm(workDir, { recursive: true, force: true });
   }
@@ -267,11 +284,14 @@ export async function framesToGifNativeBytes(
   frames: Uint8Array[],
   options: GifExportOptions = {},
 ): Promise<Uint8Array> {
+  options.signal?.throwIfAborted();
   const tmpId = randomBytes(8).toString('hex');
   const tmpOutput = join(tmpdir(), `squisq-gif-out-${tmpId}.gif`);
   try {
     await framesToGifNative(ffmpegPath, frames, tmpOutput, options);
+    options.signal?.throwIfAborted();
     const data = await readFile(tmpOutput);
+    options.signal?.throwIfAborted();
     return new Uint8Array(data.buffer, data.byteOffset, data.byteLength);
   } finally {
     await rm(tmpOutput, { force: true });

@@ -12,6 +12,7 @@ import type {
   AsciiTimelineEvent,
   AsciiTimelineMarker,
   AsciiTimelineSide,
+  AsciiTimelineTrack,
 } from '@bendyline/squisq/doc';
 
 const STRUCTURAL_MARKERS = /[●○◉◆◇•]+/gu;
@@ -47,6 +48,19 @@ export interface AddTimelineEventResult {
   eventId: string;
 }
 
+export interface AddTimelineTrackOptions {
+  id?: string;
+  label?: string;
+  eventId?: string;
+  eventLabel?: string;
+}
+
+export interface AddTimelineTrackResult {
+  timeline: AsciiTimeline;
+  trackId: string;
+  eventId: string;
+}
+
 /**
  * Normalize editable one-line prose exactly as the canonical core renderer
  * does. This prevents the verified command path from accepting a value that
@@ -70,11 +84,101 @@ export function sanitizeTimelineText(value: string): string {
 /** Return a globally unique, renderer-safe event id. */
 export function nextTimelineEventId(timeline: AsciiTimeline, base = 'event'): string {
   const used = new Set(timeline.tracks.flatMap((track) => track.events.map((event) => event.id)));
-  const safeBase = safeId(base) || 'event';
+  const safeBase = safeId(base, 'event');
   if (!used.has(safeBase)) return safeBase;
   let suffix = 2;
   while (used.has(`${safeBase}-${suffix}`)) suffix++;
   return `${safeBase}-${suffix}`;
+}
+
+/** Return a renderer-safe id that is unique among timeline tracks. */
+export function nextTimelineTrackId(timeline: AsciiTimeline, base = 'track'): string {
+  const used = new Set(timeline.tracks.map((track) => track.id));
+  const safeBase = safeId(base, 'track');
+  if (!used.has(safeBase)) return safeBase;
+  let suffix = 2;
+  while (used.has(`${safeBase}-${suffix}`)) suffix++;
+  return `${safeBase}-${suffix}`;
+}
+
+/**
+ * Add a representable track with one starter point. Empty tracks are not part
+ * of the authored ASCII grammar, so line creation and its first point are one
+ * atomic operation/undo step.
+ */
+export function addTimelineTrackOp(
+  timeline: AsciiTimeline,
+  options: AddTimelineTrackOptions = {},
+): AddTimelineTrackResult {
+  const label = sanitizeTimelineText(options.label ?? '') || 'New line';
+  const eventLabel = sanitizeTimelineText(options.eventLabel ?? '') || 'New event';
+  const trackId = nextTimelineTrackId(timeline, options.id ?? label);
+  const eventId = nextTimelineEventId(timeline, options.eventId ?? eventLabel);
+  const { start, span } = globalBounds(timeline);
+  const column = Math.round((start + span / 2) * COORDINATE_PRECISION) / COORDINATE_PRECISION;
+  const row = timeline.tracks.reduce((maximum, track) => Math.max(maximum, track.row), -1) + 1;
+  const track: AsciiTimelineTrack = {
+    id: trackId,
+    label,
+    row,
+    startColumn: start,
+    endColumn: start + span,
+    events: [
+      {
+        id: eventId,
+        label: eventLabel,
+        column,
+        side: 'above',
+        marker: 'filled',
+      },
+    ],
+  };
+
+  return {
+    timeline: {
+      ...timeline,
+      tracks: [...timeline.tracks, track],
+      width: Math.max(timeline.width, Math.ceil(track.endColumn) + 1),
+      height: Math.max(timeline.height, row + 1),
+    },
+    trackId,
+    eventId,
+  };
+}
+
+/** Rename a track without changing its stable id, points, or branches. */
+export function updateTimelineTrackOp(
+  timeline: AsciiTimeline,
+  trackId: string,
+  label: string,
+): AsciiTimeline {
+  const track = timeline.tracks.find((candidate) => candidate.id === trackId);
+  const nextLabel = sanitizeTimelineText(label);
+  if (!track || !nextLabel || track.label === nextLabel) return timeline;
+  return {
+    ...timeline,
+    tracks: timeline.tracks.map((candidate) =>
+      candidate.id === trackId ? { ...candidate, label: nextLabel } : candidate,
+    ),
+  };
+}
+
+/**
+ * Remove a whole track, including branches incident to any of its points.
+ * Keep the last track so the source fence remains representable and mounted.
+ */
+export function removeTimelineTrackOp(timeline: AsciiTimeline, trackId: string): AsciiTimeline {
+  if (timeline.tracks.length <= 1) return timeline;
+  const track = timeline.tracks.find((candidate) => candidate.id === trackId);
+  if (!track) return timeline;
+  const removedEventIds = new Set(track.events.map((event) => event.id));
+  return {
+    ...timeline,
+    tracks: timeline.tracks.filter((candidate) => candidate.id !== trackId),
+    links: timeline.links.filter(
+      (link) => !removedEventIds.has(link.source) && !removedEventIds.has(link.target),
+    ),
+  };
 }
 
 /**
@@ -243,12 +347,12 @@ function columnAtPosition(timeline: AsciiTimeline, position: number): number {
   return Math.round((start + clamped * span) * COORDINATE_PRECISION) / COORDINATE_PRECISION;
 }
 
-function safeId(value: string): string {
+function safeId(value: string, fallback: string): string {
   return (
     sanitizeTimelineText(value)
       .toLowerCase()
       .replace(/[^a-z0-9_.~-]+/g, '-')
-      .replace(/^-+|-+$/g, '') || 'event'
+      .replace(/^-+|-+$/g, '') || fallback
   );
 }
 

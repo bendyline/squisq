@@ -34,6 +34,19 @@ describe('applyCommand', () => {
     expect(after[0].position.height).toBe(80);
   });
 
+  it('resizeLayer applies an optional north/west origin atomically', () => {
+    const before: Layer[] = [rect('a', 10, 20, 100, 50)];
+    const after = applyCommand(before, {
+      kind: 'resizeLayer',
+      id: 'a',
+      x: 0,
+      y: 5,
+      width: 110,
+      height: 65,
+    });
+    expect(after[0].position).toMatchObject({ x: 0, y: 5, width: 110, height: 65 });
+  });
+
   it('addLayer appends', () => {
     const before: Layer[] = [rect('a', 0, 0)];
     const newLayer = rect('b', 100, 100);

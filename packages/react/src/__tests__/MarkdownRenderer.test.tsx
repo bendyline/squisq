@@ -103,13 +103,13 @@ describe('MarkdownRenderer', () => {
   });
 
   it('linkSchemes allows a host scheme as a real anchor, never executable ones', () => {
-    const nodes = parseNodes('[a](gezel-nav:src%2Fa.ts) [b](javascript:alert(1))');
+    const nodes = parseNodes('[a](workspace-nav:src%2Fa.ts) [b](javascript:alert(1))');
     const blocked = render(<MarkdownRenderer nodes={nodes} />);
     expect(blocked.container.querySelector('a.squisq-md-link')).toBeNull();
 
-    const allowed = render(<MarkdownRenderer nodes={nodes} linkSchemes={['gezel-nav']} />);
+    const allowed = render(<MarkdownRenderer nodes={nodes} linkSchemes={['workspace-nav']} />);
     const a = allowed.container.querySelector('a.squisq-md-link') as HTMLAnchorElement;
-    expect(a?.getAttribute('href')).toBe('gezel-nav:src%2Fa.ts');
+    expect(a?.getAttribute('href')).toBe('workspace-nav:src%2Fa.ts');
     // javascript: stays blocked even when a host lists it
     const evil = render(
       <MarkdownRenderer

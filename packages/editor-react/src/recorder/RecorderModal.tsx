@@ -12,7 +12,8 @@
  * doc parse.
  *
  * Visual conventions match `VideoExportModal` from `@bendyline/squisq-
- * video-react` (cream / gold palette, inline styles, no external CSS).
+ * video-react`, with inline theme tokens so the body-level portal follows
+ * the editor's light/dark chrome scheme.
  */
 
 import { useCallback, useEffect, useRef, useState, type CSSProperties } from 'react';
@@ -24,6 +25,8 @@ import { buildFilename } from './formats.js';
 import { buildTimingJson, encodeTimingJson, timingPathFor } from './timingJson.js';
 
 // ── Types ──────────────────────────────────────────────────────────
+
+export type RecorderColorScheme = 'light' | 'dark';
 
 export interface RecorderModalProps {
   /** Required — recordings are written here. */
@@ -37,6 +40,8 @@ export interface RecorderModalProps {
   container?: ContentContainer | null;
   /** Initial capture source. Defaults to `'mic'` (narration). */
   initialMode?: RecorderSource;
+  /** Light/dark chrome scheme. Defaults to `'light'`. */
+  colorScheme?: RecorderColorScheme;
   /** Called after the modal is dismissed (save or cancel). */
   onClose: () => void;
   /**
@@ -77,9 +82,34 @@ const overlayStyle: CSSProperties = {
   zIndex: 10000,
 };
 
+/**
+ * The recorder is normally portaled to `document.body`, outside the editor
+ * shell's CSS-variable scope. Copy the scheme onto a fresh scope and provide
+ * inline fallbacks so the standalone RecorderModal/RecorderButton exports are
+ * themed even when a host has not loaded the editor stylesheet.
+ */
+function recorderThemeStyle(colorScheme: RecorderColorScheme): CSSProperties {
+  const dark = colorScheme === 'dark';
+  return {
+    colorScheme,
+    '--squisq-recorder-surface': `var(--squisq-bg, ${dark ? '#1f2937' : '#fffdf7'})`,
+    '--squisq-recorder-input': `var(--squisq-input-bg, ${dark ? '#374151' : '#fff'})`,
+    '--squisq-recorder-border': `var(--squisq-border, ${dark ? '#4b5563' : '#c9b98a'})`,
+    '--squisq-recorder-text': `var(--squisq-text, ${dark ? '#e5e7eb' : '#4a3c1f'})`,
+    '--squisq-recorder-muted': `var(--squisq-text-muted, ${dark ? '#9ca3af' : '#5a4a2a'})`,
+    '--squisq-recorder-accent': 'var(--squisq-accent, #8b6914)',
+    '--squisq-recorder-accent-text': '#fff',
+    '--squisq-recorder-danger': dark ? '#dc4c4c' : '#b33a3a',
+    '--squisq-recorder-danger-border': dark ? '#ef6a6a' : '#902929',
+    '--squisq-recorder-error-bg': dark ? '#3f151b' : '#fceeee',
+    '--squisq-recorder-error-border': dark ? '#7f1d1d' : '#d88a8a',
+    '--squisq-recorder-error-text': dark ? '#fecdd3' : '#8c2a2a',
+  } as CSSProperties;
+}
+
 const modalStyle: CSSProperties = {
-  background: '#FFFDF7',
-  border: '1px solid #c9b98a',
+  background: 'var(--squisq-recorder-surface)',
+  border: '1px solid var(--squisq-recorder-border)',
   borderRadius: 0,
   padding: '24px 28px',
   width: 'min(560px, calc(100vw - 48px))',
@@ -87,14 +117,14 @@ const modalStyle: CSSProperties = {
   overflowY: 'auto',
   boxShadow: '0 8px 32px rgba(0,0,0,0.18)',
   fontFamily: 'system-ui, -apple-system, sans-serif',
-  color: '#4a3c1f',
+  color: 'var(--squisq-recorder-text)',
 };
 
 const titleStyle: CSSProperties = {
   margin: '0 0 16px 0',
   fontSize: 18,
   fontWeight: 600,
-  color: '#2d2310',
+  color: 'var(--squisq-recorder-text)',
 };
 
 const labelStyle: CSSProperties = {
@@ -102,7 +132,7 @@ const labelStyle: CSSProperties = {
   fontSize: 13,
   fontWeight: 500,
   marginBottom: 4,
-  color: '#5a4a2a',
+  color: 'var(--squisq-recorder-text)',
 };
 
 const inputStyle: CSSProperties = {
@@ -110,10 +140,10 @@ const inputStyle: CSSProperties = {
   padding: '6px 8px',
   fontSize: 13,
   fontFamily: 'inherit',
-  border: '1px solid #c9b98a',
+  border: '1px solid var(--squisq-recorder-border)',
   borderRadius: 0,
-  background: '#fff',
-  color: '#4a3c1f',
+  background: 'var(--squisq-recorder-input)',
+  color: 'var(--squisq-recorder-text)',
   marginBottom: 12,
   boxSizing: 'border-box',
 };
@@ -130,9 +160,9 @@ const btnPrimary: CSSProperties = {
   fontFamily: 'inherit',
   fontWeight: 500,
   cursor: 'pointer',
-  background: '#8B6914',
-  color: '#fff',
-  border: '1px solid #7a5c10',
+  background: 'var(--squisq-recorder-accent)',
+  color: 'var(--squisq-recorder-accent-text)',
+  border: '1px solid var(--squisq-recorder-accent)',
   borderRadius: 0,
 };
 
@@ -142,16 +172,16 @@ const btnSecondary: CSSProperties = {
   fontFamily: 'inherit',
   fontWeight: 500,
   cursor: 'pointer',
-  background: '#E8DFC6',
-  color: '#4a3c1f',
-  border: '1px solid #c9b98a',
+  background: 'var(--squisq-recorder-input)',
+  color: 'var(--squisq-recorder-text)',
+  border: '1px solid var(--squisq-recorder-border)',
   borderRadius: 0,
 };
 
 const btnDanger: CSSProperties = {
   ...btnPrimary,
-  background: '#B33A3A',
-  borderColor: '#902929',
+  background: 'var(--squisq-recorder-danger)',
+  borderColor: 'var(--squisq-recorder-danger-border)',
 };
 
 const toggleRowStyle: CSSProperties = {
@@ -166,17 +196,17 @@ const toggleBase: CSSProperties = {
   fontFamily: 'inherit',
   cursor: 'pointer',
   background: 'transparent',
-  color: '#5a4a2a',
-  border: '1px solid #c9b98a',
+  color: 'var(--squisq-recorder-text)',
+  border: '1px solid var(--squisq-recorder-border)',
   borderRadius: 999,
 };
 
 const toggleActive: CSSProperties = {
   ...toggleBase,
-  color: '#fffdf5',
+  color: 'var(--squisq-recorder-accent-text)',
   fontWeight: 600,
-  background: '#8B6914',
-  borderColor: '#8B6914',
+  background: 'var(--squisq-recorder-accent)',
+  borderColor: 'var(--squisq-recorder-accent)',
 };
 
 const previewBoxStyle: CSSProperties = {
@@ -196,21 +226,21 @@ const previewBoxStyle: CSSProperties = {
 const audioMeterStyle: CSSProperties = {
   width: '100%',
   height: 56,
-  background: '#F2EBD9',
-  border: '1px solid #c9b98a',
+  background: 'var(--squisq-recorder-input)',
+  border: '1px solid var(--squisq-recorder-border)',
   marginBottom: 12,
   display: 'flex',
   alignItems: 'center',
   justifyContent: 'center',
-  color: '#5a4a2a',
+  color: 'var(--squisq-recorder-muted)',
   fontSize: 13,
   fontVariantNumeric: 'tabular-nums',
 };
 
 const errorStyle: CSSProperties = {
-  background: '#FCEEEE',
-  border: '1px solid #D88A8A',
-  color: '#8C2A2A',
+  background: 'var(--squisq-recorder-error-bg)',
+  border: '1px solid var(--squisq-recorder-error-border)',
+  color: 'var(--squisq-recorder-error-text)',
   padding: '8px 10px',
   fontSize: 13,
   marginBottom: 12,
@@ -221,6 +251,20 @@ const buttonRowStyle: CSSProperties = {
   gap: 8,
   justifyContent: 'flex-end',
   marginTop: 8,
+};
+
+const summaryStyle: CSSProperties = {
+  margin: '0 0 12px 0',
+  fontSize: 12,
+  color: 'var(--squisq-recorder-muted)',
+};
+
+const recordingStatusStyle: CSSProperties = {
+  fontSize: 13,
+  fontVariantNumeric: 'tabular-nums',
+  marginBottom: 12,
+  color: 'var(--squisq-recorder-accent)',
+  fontWeight: 600,
 };
 
 // ── Helpers ────────────────────────────────────────────────────────
@@ -293,6 +337,7 @@ export function RecorderModal({
   mediaProvider,
   container = null,
   initialMode = 'mic',
+  colorScheme = 'light',
   onClose,
   onSave,
 }: RecorderModalProps) {
@@ -471,7 +516,14 @@ export function RecorderModal({
   };
 
   return (
-    <div style={overlayStyle} role="dialog" aria-modal="true" aria-label="Record media">
+    <div
+      className="squisq-editor-shell squisq-recorder-overlay"
+      data-theme={colorScheme}
+      style={{ ...overlayStyle, ...recorderThemeStyle(colorScheme) }}
+      role="dialog"
+      aria-modal="true"
+      aria-label="Record media"
+    >
       <div style={modalStyle} onClick={(e) => e.stopPropagation()}>
         <h2 style={titleStyle}>Record media</h2>
 
@@ -493,9 +545,7 @@ export function RecorderModal({
           })}
         </div>
 
-        <p style={{ margin: '0 0 12px 0', fontSize: 12, color: '#5a4a2a' }}>
-          {captureSummary(micOn, video)}
-        </p>
+        <p style={summaryStyle}>{captureSummary(micOn, video)}</p>
 
         {recorder.error && <div style={errorStyle}>{recorder.error.message}</div>}
         {saveError && <div style={errorStyle}>{saveError}</div>}
@@ -579,6 +629,7 @@ export function RecorderModal({
           >
             <input
               type="checkbox"
+              style={{ accentColor: 'var(--squisq-recorder-accent)' }}
               checked={includeSystemAudio}
               onChange={(e) => setIncludeSystemAudio(e.target.checked)}
               disabled={recorder.state === 'recording' || recorder.state === 'requesting'}
@@ -602,15 +653,7 @@ export function RecorderModal({
 
         {/* Live duration during recording */}
         {recorder.state === 'recording' && !isAudioOnly && (
-          <div
-            style={{
-              fontSize: 13,
-              fontVariantNumeric: 'tabular-nums',
-              marginBottom: 12,
-              color: '#8B6914',
-              fontWeight: 600,
-            }}
-          >
+          <div style={recordingStatusStyle}>
             ● Recording {formatDurationMs(recorder.durationMs)}
           </div>
         )}

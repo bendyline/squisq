@@ -115,6 +115,7 @@ squisq-custom-themes: ${encoded}
 A small editor for big ideas.
 `;
     const doc = markdownToDoc(parseMarkdown(sourceMd));
+    expect(doc.themeId).toBe('my-brand');
     expect(doc.customThemes).toHaveLength(1);
     expect(doc.customThemes![0]).toEqual(brand);
 

@@ -2,7 +2,7 @@
 import { render } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import type { SceneToolContext } from '../tools/SceneTool';
-import { SelectTool, getActiveMoveOffset } from '../tools/SelectTool';
+import { SelectTool, beginHandleDrag, getActiveMoveOffset } from '../tools/SelectTool';
 import { ConnectTool } from '../tools/ConnectTool';
 import { createSceneTextChannel } from '../text/sceneTextChannel';
 import { SceneViewport } from '../SceneViewport';
@@ -59,6 +59,32 @@ describe('Scene instance isolation', () => {
     ConnectTool.onPointerDown!(pointer(5, 5), first);
     expect(first.interaction.connect).toBeTruthy();
     expect(second.interaction.connect).toBeUndefined();
+  });
+
+  it('commits a resize as one command containing origin and size', () => {
+    const ctx = context('node-card-a');
+    beginHandleDrag(
+      {
+        layerId: 'node-card-a',
+        corner: 'nw',
+        startV: { x: 10, y: 20 },
+        startBounds: { x: 10, y: 20, width: 100, height: 50 },
+      },
+      ctx.interaction,
+    );
+
+    SelectTool.onPointerMove!(pointer(0, 0), ctx);
+    SelectTool.onPointerUp!(pointer(0, 0), ctx);
+
+    expect(ctx.dispatch).toHaveBeenCalledTimes(1);
+    expect(ctx.dispatch).toHaveBeenCalledWith({
+      kind: 'resizeLayer',
+      id: 'node-card-a',
+      x: 0,
+      y: 0,
+      width: 110,
+      height: 70,
+    });
   });
 
   it('creates independent text-toolbar channels', () => {

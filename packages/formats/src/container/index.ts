@@ -24,6 +24,12 @@ import {
 } from '../shared/zipSafety.js';
 
 export type ZipToContainerOptions = ZipSafetyLimits;
+export interface ContainerToZipOptions {
+  /** STORE avoids producing archives that violate strict import compression-ratio policies. */
+  compression?: 'STORE' | 'DEFLATE';
+  /** JSZip DEFLATE level; ignored for STORE. */
+  compressionLevel?: number;
+}
 export { ZipSafetyError };
 export type { ZipSafetyLimits, ZipSafetyErrorCode, ZipSafetyErrorOptions };
 
@@ -36,7 +42,10 @@ export type { ZipSafetyLimits, ZipSafetyErrorCode, ZipSafetyErrorOptions };
  * @param container — The container to serialize
  * @returns A Blob containing the ZIP archive
  */
-export async function containerToZip(container: ContentContainer): Promise<Blob> {
+export async function containerToZip(
+  container: ContentContainer,
+  options: ContainerToZipOptions = {},
+): Promise<Blob> {
   const zip = new JSZip();
   const entries = await container.listFiles();
 
@@ -48,10 +57,15 @@ export async function containerToZip(container: ContentContainer): Promise<Blob>
     }
   }
 
+  const compression = options.compression ?? 'DEFLATE';
+  const compressionLevel = options.compressionLevel ?? 6;
+  if (!Number.isSafeInteger(compressionLevel) || compressionLevel < 1 || compressionLevel > 9) {
+    throw new Error('ZIP compression level must be an integer between 1 and 9');
+  }
   return zip.generateAsync({
     type: 'blob',
-    compression: 'DEFLATE',
-    compressionOptions: { level: 6 },
+    compression,
+    ...(compression === 'DEFLATE' ? { compressionOptions: { level: compressionLevel } } : {}),
   });
 }
 

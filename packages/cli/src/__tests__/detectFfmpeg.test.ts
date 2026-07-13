@@ -76,6 +76,19 @@ describe('detectFfmpeg', () => {
     }
   });
 
+  it('preserves a pre-aborted caller reason', async () => {
+    const controller = new AbortController();
+    const reason = new Error('stop ffmpeg detection');
+    controller.abort(reason);
+
+    try {
+      await detectFfmpegDetailed(controller.signal);
+      expect.fail('Expected detectFfmpegDetailed to abort');
+    } catch (err: unknown) {
+      expect(err).to.equal(reason);
+    }
+  });
+
   it('getFfmpegVersion returns the first line for a working binary and null for a broken one', async function () {
     if (process.platform === 'win32') this.skip();
 

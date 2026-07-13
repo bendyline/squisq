@@ -178,6 +178,26 @@
   }
 }
 
+/* Portrait framing for dominant cover photos. Animating object-position scans
+   exactly across the crop overflow without adding another scale transform. */
+@keyframes portraitCoverPanRight {
+  from {
+    object-position: left center;
+  }
+  to {
+    object-position: right center;
+  }
+}
+
+@keyframes portraitCoverPanLeft {
+  from {
+    object-position: right center;
+  }
+  to {
+    object-position: left center;
+  }
+}
+
 @keyframes slideInLeft {
   from {
     transform: translateX(-100%);
@@ -2170,6 +2190,18 @@
     forwards;
 }
 
+.squisq-image--portrait-pan-right {
+  animation: portraitCoverPanRight var(--portrait-pan-duration, 12s)
+    var(--portrait-pan-easing, ease-in-out) var(--portrait-pan-delay, 0s) forwards;
+  will-change: object-position;
+}
+
+.squisq-image--portrait-pan-left {
+  animation: portraitCoverPanLeft var(--portrait-pan-duration, 12s)
+    var(--portrait-pan-easing, ease-in-out) var(--portrait-pan-delay, 0s) forwards;
+  will-change: object-position;
+}
+
 .anim-typewriter {
   animation: typewriter var(--anim-duration, 2s) var(--anim-easing, steps(40, end))
     var(--anim-delay, 0s) forwards;
@@ -2369,6 +2401,10 @@
   .anim-slowZoom-out,
   .anim-slowZoom-panLeft,
   .anim-slowZoom-panRight,
+  .anim-panLeft,
+  .anim-panRight,
+  .squisq-image--portrait-pan-left,
+  .squisq-image--portrait-pan-right,
   .anim-drift {
     animation: none;
   }

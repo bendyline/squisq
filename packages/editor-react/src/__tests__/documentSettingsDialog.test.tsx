@@ -123,6 +123,28 @@ describe('DocumentSettingsDialog', () => {
     expect(next).not.toContain('squisq-theme');
   });
 
+  it('removes explicit managed defaults and their legacy aliases on save', () => {
+    const onSave = vi.fn();
+    const src = `---
+squisq-theme: standard
+themeId: standard
+theme: standard
+squisq-captions: standard
+caption-style: standard
+author: Keep
+---
+
+# Doc
+`;
+    open(src, onSave);
+    clickSave();
+
+    const next = onSave.mock.calls[0][0] as string;
+    expect(next).not.toMatch(/^(?:squisq-theme|themeId|theme):/m);
+    expect(next).not.toMatch(/^(?:squisq-captions|caption-style):/m);
+    expect(next).toContain('author: Keep');
+  });
+
   it('writes squisq-transform when a transform is picked', () => {
     const onSave = vi.fn();
     open('# Doc\n', onSave);

@@ -41,6 +41,8 @@ interface Loc {
   parent: TreeNode | null;
 }
 
+export type TreeDropPosition = 'before' | 'child' | 'after';
+
 /** Locate a node by id in a (cloned) tree, returning its sibling array + index + parent. */
 function locate(roots: TreeNode[], id: string, parent: TreeNode | null = null): Loc | null {
   for (let i = 0; i < roots.length; i++) {
@@ -53,6 +55,10 @@ function locate(roots: TreeNode[], id: string, parent: TreeNode | null = null): 
 
 function markDir(n: TreeNode): void {
   n.isDir = n.label.endsWith('/') || n.children.length > 0;
+}
+
+function containsNode(node: TreeNode, id: string): boolean {
+  return node.id === id || node.children.some((child) => containsNode(child, id));
 }
 
 export function renameItemOp(tree: Tree, id: string, label: string): Tree {
@@ -124,6 +130,59 @@ export function outdentItemOp(tree: Tree, id: string): Tree {
   const [moved] = loc.siblings.splice(loc.index, 1);
   grand.siblings.splice(grand.index + 1, 0, moved);
   markDir(loc.parent);
+  return next;
+}
+
+/**
+ * Move a node and its complete subtree relative to any other node. Dropping
+ * before/after adopts the target's parent; dropping as a child appends to the
+ * target. A node can never be moved into its own subtree.
+ */
+export function moveItemOp(
+  tree: Tree,
+  id: string,
+  targetId: string,
+  position: TreeDropPosition,
+): Tree {
+  const currentSource = locate(tree.roots, id);
+  const currentTarget = locate(tree.roots, targetId);
+  if (
+    !currentSource ||
+    !currentTarget ||
+    id === targetId ||
+    containsNode(currentSource.node, targetId)
+  ) {
+    return tree;
+  }
+
+  // Avoid a fence rewrite when the drop describes the node's current slot.
+  if (currentSource.siblings === currentTarget.siblings) {
+    if (position === 'before' && currentSource.index === currentTarget.index - 1) return tree;
+    if (position === 'after' && currentSource.index === currentTarget.index + 1) return tree;
+  }
+  if (
+    position === 'child' &&
+    currentSource.parent?.id === currentTarget.node.id &&
+    currentSource.index === currentSource.siblings.length - 1
+  ) {
+    return tree;
+  }
+
+  const next = cloneTree(tree);
+  const source = locate(next.roots, id);
+  if (!source) return tree;
+  const [moved] = source.siblings.splice(source.index, 1);
+  if (source.parent) markDir(source.parent);
+
+  // Locate again after removal so same-sibling indices are current.
+  const target = locate(next.roots, targetId);
+  if (!target) return tree;
+  if (position === 'child') {
+    target.node.children.push(moved);
+    markDir(target.node);
+  } else {
+    target.siblings.splice(target.index + (position === 'after' ? 1 : 0), 0, moved);
+  }
   return next;
 }
 

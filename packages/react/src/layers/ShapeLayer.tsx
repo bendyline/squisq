@@ -19,6 +19,14 @@ interface ShapeLayerProps {
   blockTime: number;
 }
 
+/**
+ * Full-bleed HTML and SVG layers can be rasterized on slightly different
+ * subpixel boundaries. Extend unbordered background rectangles beyond the
+ * viewport so an image cannot peek through at the outermost pixel; the block
+ * renderer clips the combined layer stack back to the viewBox.
+ */
+const FULL_BLEED_OVERSCAN = 1;
+
 export function ShapeLayer({ layer, viewport, blockTime }: ShapeLayerProps) {
   const { content, position, animation } = layer;
   const defsId = `${useId().replace(/:/g, '')}-${layer.id}`;
@@ -33,6 +41,20 @@ export function ShapeLayer({ layer, viewport, blockTime }: ShapeLayerProps) {
   const anchorOffset = getAnchorOffset(position.anchor, width, height);
   const x = rawX + anchorOffset.x;
   const y = rawY + anchorOffset.y;
+
+  const isUnborderedFullBleedRect =
+    content.shape === 'rect' &&
+    x === 0 &&
+    y === 0 &&
+    width === viewport.width &&
+    height === viewport.height &&
+    !content.stroke &&
+    !content.borderRadius;
+  const overscan = isUnborderedFullBleedRect ? FULL_BLEED_OVERSCAN : 0;
+  const paintX = x - overscan;
+  const paintY = y - overscan;
+  const paintWidth = width + overscan * 2;
+  const paintHeight = height + overscan * 2;
 
   // Get animation styles
   const animStyle = getAnimationStyle(animation, blockTime);
@@ -51,11 +73,11 @@ export function ShapeLayer({ layer, viewport, blockTime }: ShapeLayerProps) {
         style={animStyle.style}
         data-layer-id={layer.id}
       >
-        <foreignObject x={x} y={y} width={width} height={height}>
+        <foreignObject x={paintX} y={paintY} width={paintWidth} height={paintHeight}>
           <div
             style={{
-              width: `${width}px`,
-              height: `${height}px`,
+              width: `${paintWidth}px`,
+              height: `${paintHeight}px`,
               background: fill,
               borderRadius: content.borderRadius ? `${content.borderRadius}px` : undefined,
               pointerEvents: 'none',
@@ -99,10 +121,10 @@ export function ShapeLayer({ layer, viewport, blockTime }: ShapeLayerProps) {
       )}
       {content.shape === 'rect' && (
         <rect
-          x={x}
-          y={y}
-          width={width}
-          height={height}
+          x={paintX}
+          y={paintY}
+          width={paintWidth}
+          height={paintHeight}
           rx={content.borderRadius}
           ry={content.borderRadius}
           {...shapeProps}

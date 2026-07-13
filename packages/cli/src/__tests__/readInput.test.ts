@@ -44,6 +44,53 @@ describe('readInput', () => {
     expect(docContent).to.be.a('string').that.includes('# Test Document');
   });
 
+  it('preserves the exact reason of a pre-aborted read', async () => {
+    const controller = new AbortController();
+    const reason = new Error('caller cancelled input read');
+    controller.abort(reason);
+
+    let caught: unknown;
+    try {
+      await readInput(FIXTURE_MD, { signal: controller.signal });
+    } catch (error: unknown) {
+      caught = error;
+    }
+
+    expect(caught).to.equal(reason);
+  });
+
+  it('stops a folder file read and preserves the exact abort reason', async () => {
+    const folderPath = join(tempDir, 'cancelled-folder');
+    const nestedPath = join(folderPath, 'nested');
+    await mkdir(nestedPath, { recursive: true });
+    await writeFile(join(nestedPath, 'index.md'), '# Must not be read');
+
+    const controller = new AbortController();
+    const reason = new Error('folder traversal cancelled');
+    let checks = 0;
+    const signal: AbortSignal = new Proxy(controller.signal, {
+      get(target, property) {
+        if (property === 'aborted') {
+          checks += 1;
+          if (checks === 13) queueMicrotask(() => controller.abort(reason));
+        }
+
+        const value: unknown = Reflect.get(target, property, target);
+        return typeof value === 'function' ? value.bind(target) : value;
+      },
+    });
+
+    let caught: unknown;
+    try {
+      await readInput(folderPath, { signal });
+    } catch (error: unknown) {
+      caught = error;
+    }
+
+    expect(checks).to.be.at.least(13);
+    expect(caught).to.equal(reason);
+  });
+
   it('reads a .zip container', async () => {
     // Build a minimal container ZIP
     const container = new MemoryContentContainer();

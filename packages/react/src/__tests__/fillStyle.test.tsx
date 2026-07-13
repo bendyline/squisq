@@ -44,6 +44,13 @@ describe('ShapeLayer fill/border', () => {
     } as ShapeLayerType;
   }
 
+  function makeFullBleedShape(content: Partial<ShapeLayerType['content']>): ShapeLayerType {
+    return {
+      ...makeShape(content),
+      position: { x: 0, y: 0, width: '100%', height: '100%' },
+    };
+  }
+
   it('applies fill opacity and a dashed border', () => {
     const { container } = render(
       <svg>
@@ -78,6 +85,46 @@ describe('ShapeLayer fill/border', () => {
     const gradient = container.querySelector('linearGradient');
     expect(gradient).not.toBeNull();
     expect(container.querySelector('rect')!.getAttribute('fill')).toBe(`url(#${gradient!.id})`);
+  });
+
+  it('overscans a full-bleed solid shade to prevent an image edge seam', () => {
+    const { container } = render(
+      <svg>
+        <ShapeLayer
+          layer={makeFullBleedShape({ fill: 'rgba(0, 0, 0, 0.5)' })}
+          viewport={viewport}
+          blockTime={0}
+        />
+      </svg>,
+    );
+
+    const rect = container.querySelector('rect')!;
+    expect(rect.getAttribute('x')).toBe('-1');
+    expect(rect.getAttribute('y')).toBe('-1');
+    expect(rect.getAttribute('width')).toBe('1002');
+    expect(rect.getAttribute('height')).toBe('1002');
+  });
+
+  it('overscans a full-bleed CSS gradient shade and its HTML fill', () => {
+    const { container } = render(
+      <svg>
+        <ShapeLayer
+          layer={makeFullBleedShape({
+            fill: 'linear-gradient(0deg, rgba(0,0,0,0.8), transparent)',
+          })}
+          viewport={viewport}
+          blockTime={0}
+        />
+      </svg>,
+    );
+
+    const foreignObject = container.querySelector('foreignObject')!;
+    expect(foreignObject.getAttribute('x')).toBe('-1');
+    expect(foreignObject.getAttribute('y')).toBe('-1');
+    expect(foreignObject.getAttribute('width')).toBe('1002');
+    expect(foreignObject.getAttribute('height')).toBe('1002');
+    expect(foreignObject.querySelector('div')!.style.width).toBe('1002px');
+    expect(foreignObject.querySelector('div')!.style.height).toBe('1002px');
   });
 });
 

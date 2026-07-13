@@ -10,7 +10,7 @@ const noop = () => {};
 const baseSection = {
   id: 'foo@10',
   summaryMarkdown: '**foo** — does things · ↓2 imported-by',
-  markdown: 'Body text with [`a.ts`](gezel-nav:src%2Fa.ts) and [line 4](#L4).',
+  markdown: 'Body text with [`a.ts`](workspace-nav:src%2Fa.ts) and [line 4](#L4).',
 };
 
 function renderView(over: Partial<Parameters<typeof CodeContextSectionView>[0]> = {}) {
@@ -18,7 +18,7 @@ function renderView(over: Partial<Parameters<typeof CodeContextSectionView>[0]> 
     section: baseSection,
     expanded: false,
     onToggle: vi.fn(),
-    linkSchemes: ['gezel-nav'] as const,
+    linkSchemes: ['workspace-nav'] as const,
     onLinkClick: vi.fn(),
     onRevealLine: vi.fn(),
     onMeasure: noop,
@@ -47,7 +47,7 @@ describe('<CodeContextSectionView>', () => {
     const body = container.querySelector('.squisq-ccx-body')!;
     expect(body.textContent).toContain('Body text');
     const anchors = [...body.querySelectorAll('a')].map((a) => a.getAttribute('href'));
-    expect(anchors).toContain('gezel-nav:src%2Fa.ts');
+    expect(anchors).toContain('workspace-nav:src%2Fa.ts');
     expect(anchors).toContain('#L4');
   });
 
@@ -63,10 +63,12 @@ describe('<CodeContextSectionView>', () => {
     const onLinkClick = vi.fn(() => undefined);
     const { container } = renderView({ expanded: true, onLinkClick });
     const nav = [...container.querySelectorAll('a')].find(
-      (a) => a.getAttribute('href') === 'gezel-nav:src%2Fa.ts',
+      (a) => a.getAttribute('href') === 'workspace-nav:src%2Fa.ts',
     )!;
     const first = fireEvent.click(nav);
-    expect(onLinkClick).toHaveBeenCalledWith('gezel-nav:src%2Fa.ts', { sectionId: 'foo@10' });
+    expect(onLinkClick).toHaveBeenCalledWith('workspace-nav:src%2Fa.ts', {
+      sectionId: 'foo@10',
+    });
     expect(first).toBe(false); // preventDefault was called
 
     onLinkClick.mockReturnValue(false as unknown as undefined);
@@ -89,7 +91,7 @@ describe('<CodeContextSectionView>', () => {
   it('without linkSchemes, custom-scheme links render blocked (no anchor)', () => {
     const { container } = renderView({ expanded: true, linkSchemes: undefined });
     const anchors = [...container.querySelectorAll('a')].map((a) => a.getAttribute('href'));
-    expect(anchors).not.toContain('gezel-nav:src%2Fa.ts');
+    expect(anchors).not.toContain('workspace-nav:src%2Fa.ts');
     expect(container.querySelector('.squisq-md-link--blocked')).toBeTruthy();
   });
 });

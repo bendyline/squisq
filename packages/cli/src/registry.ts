@@ -22,6 +22,7 @@ import type {
 import type { GifDither, VideoOrientation, VideoQuality } from '@bendyline/squisq-video';
 
 export interface Mp4FormatOptions {
+  onProgress?: (phase: string, percent: number) => void;
   fps?: number;
   quality?: VideoQuality;
   orientation?: VideoOrientation;
@@ -34,6 +35,7 @@ export interface Mp4FormatOptions {
 
 /** Per-export options for `convert(..., 'gif')`. */
 export interface GifFormatOptions {
+  onProgress?: (phase: string, percent: number) => void;
   fps?: number;
   orientation?: VideoOrientation;
   width?: number;
@@ -85,6 +87,7 @@ function mp4Format(): FormatDefinition {
     mimeType: 'video/mp4',
     extensions: ['.mp4'],
     async exportDoc(input: NormalizedInput, options: ConvertOptions): Promise<ConversionResult> {
+      options.signal?.throwIfAborted();
       // The renderer is lazy-loaded below so api.ts can create this registry
       // without an eager ES-module initialization cycle.
       const mp4Opts = (options.formatOptions?.mp4 ?? {}) as Mp4FormatOptions;
@@ -117,8 +120,12 @@ function mp4Format(): FormatDefinition {
           captionStyle: mp4Opts.captionStyle,
           coverPreRoll,
           animationsEnabled,
+          signal: options.signal,
+          onProgress: mp4Opts.onProgress,
         });
-        const data = await readFile(outputPath);
+        options.signal?.throwIfAborted();
+        const data = await readFile(outputPath, { signal: options.signal });
+        options.signal?.throwIfAborted();
         const bytes = new Uint8Array(data.buffer, data.byteOffset, data.byteLength);
         return { bytes, mimeType: 'video/mp4', suggestedFilename: '', warnings: [] };
       } finally {
@@ -136,6 +143,7 @@ function gifFormat(): FormatDefinition {
     mimeType: 'image/gif',
     extensions: ['.gif'],
     async exportDoc(input: NormalizedInput, options: ConvertOptions): Promise<ConversionResult> {
+      options.signal?.throwIfAborted();
       const gifOpts = (options.formatOptions?.gif ?? {}) as GifFormatOptions;
       const orientation =
         typeof gifOpts.orientation === 'string'
@@ -167,8 +175,12 @@ function gifFormat(): FormatDefinition {
             typeof gifOpts.maxColors === 'number' ? gifOpts.maxColors : GIF_DEFAULTS.maxColors,
           dither: gifOpts.dither ?? GIF_DEFAULTS.dither,
           bayerScale: gifOpts.bayerScale,
+          signal: options.signal,
+          onProgress: gifOpts.onProgress,
         });
-        const data = await readFile(outputPath);
+        options.signal?.throwIfAborted();
+        const data = await readFile(outputPath, { signal: options.signal });
+        options.signal?.throwIfAborted();
         const bytes = new Uint8Array(data.buffer, data.byteOffset, data.byteLength);
         return {
           bytes,

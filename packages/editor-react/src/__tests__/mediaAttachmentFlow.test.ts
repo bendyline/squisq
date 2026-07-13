@@ -7,7 +7,7 @@ import { markdownToTiptap, tiptapToMarkdown } from '../tiptapBridge';
  * uploaded files into the bin without inserting a markdown ref into
  * the editor body. A user would upload an image, hit Send in the
  * downstream chat composer, and the outgoing markdown would have no
- * image reference — the gezel would reply "nothing came through."
+ * image reference — the downstream consumer would reply "nothing came through."
  *
  * The fix: after `mediaProvider.addMedia(...)` succeeds, MediaBin
  * fires `onMediaUploaded(relativePath, name, mimeType)`. The
@@ -18,7 +18,7 @@ import { markdownToTiptap, tiptapToMarkdown } from '../tiptapBridge';
  * These tests exercise the contract directly: the markdown snippet
  * produced by the upload callback, once round-tripped through the
  * editor's markdown↔HTML bridge, must round-trip back to a form
- * the gezel service's image-extraction regex can see.
+ * the downstream service's image-extraction regex can see.
  */
 
 function fakeMediaProvider(records: string[]): MediaProvider {

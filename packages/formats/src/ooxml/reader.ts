@@ -5,8 +5,8 @@
  * structural metadata: [Content_Types].xml, relationships, and
  * core properties.
  *
- * Uses bounded JSZip member streams and a platform DOMParser (with an xmldom
- * fallback in bare Node/SSR) to parse XML.
+ * Uses bounded JSZip member streams and a platform DOMParser (with the
+ * package-owned xmldom parser in Node/SSR) to parse XML.
  */
 
 import { DOMParser as XmldomDOMParser } from '@xmldom/xmldom';
@@ -26,21 +26,44 @@ type DomParserLike = new () => {
 
 /** Safe read sessions for opaque packages opened by this module. */
 const packageArchives = new WeakMap<OoxmlPackage, BoundedZipArchive>();
+const packageSignals = new WeakMap<OoxmlPackage, AbortSignal>();
 const MAX_CONTENT_TYPES_BYTES = 1024 * 1024;
 const MAX_RELATIONSHIPS_BYTES = 4 * 1024 * 1024;
+const CANCELLATION_CHECKPOINT_INTERVAL = 256;
+
+/** Preserve the caller's exact cancellation reason across OOXML traversal. */
+export function throwIfOoxmlAborted(signal?: AbortSignal): void {
+  if (!signal?.aborted) return;
+  throw signal.reason ?? new Error('OOXML operation was cancelled');
+}
+
+async function cancellationCheckpoint(index: number, signal?: AbortSignal): Promise<void> {
+  throwIfOoxmlAborted(signal);
+  if (index > 0 && index % CANCELLATION_CHECKPOINT_INTERVAL === 0) {
+    await new Promise<void>((resolve) => setTimeout(resolve, 0));
+    throwIfOoxmlAborted(signal);
+  }
+}
 
 /**
- * Parse XML in browsers and bare Node. Browser DOMParser is preferred; the
- * pure-JS xmldom implementation is the package-owned fallback for Node/SSR.
+ * Parse XML in browsers and Node. Test runners and SSR hosts can install a
+ * partial browser DOMParser whose namespace behavior differs from browsers,
+ * so Node always uses the package-owned, namespace-aware xmldom parser.
  */
-function parseXml(source: string): Document {
-  const nativeParser = (globalThis as { DOMParser?: DomParserLike }).DOMParser;
+function parseXml(source: string, signal?: AbortSignal): Document {
+  throwIfOoxmlAborted(signal);
+  const runtime = globalThis as {
+    DOMParser?: DomParserLike;
+    process?: { versions?: { node?: string } };
+  };
+  const nativeParser = runtime.process?.versions?.node ? undefined : runtime.DOMParser;
   const Parser = nativeParser ?? (XmldomDOMParser as unknown as DomParserLike);
   const doc = new Parser().parseFromString(source, 'application/xml') as Document;
   const parserErrors = doc.getElementsByTagName('parsererror');
   if (parserErrors.length > 0) {
     throw new Error(`Invalid OOXML XML part: ${parserErrors[0]?.textContent ?? 'parse error'}`);
   }
+  throwIfOoxmlAborted(signal);
   return doc;
 }
 
@@ -61,15 +84,18 @@ export async function openPackage(
   data: ArrayBuffer | Blob,
   limits: OoxmlOpenOptions = {},
 ): Promise<OoxmlPackage> {
+  throwIfOoxmlAborted(limits.signal);
   const archive = await openBoundedZipArchive(data, limits);
-  const contentTypes = await parseContentTypes(archive);
-  const rootRelationships = await parseRelationships(archive, '');
+  const contentTypes = await parseContentTypes(archive, limits.signal);
+  const rootRelationships = await parseRelationships(archive, '', limits.signal);
+  throwIfOoxmlAborted(limits.signal);
 
   const pkg = {
     contentTypes,
     rootRelationships,
   } as unknown as OoxmlPackage;
   packageArchives.set(pkg, archive);
+  if (limits.signal) packageSignals.set(pkg, limits.signal);
   return pkg;
 }
 
@@ -80,17 +106,21 @@ export async function openPackage(
 /**
  * Parse [Content_Types].xml from the archive.
  */
-async function parseContentTypes(archive: BoundedZipArchive): Promise<ContentTypeMap> {
+async function parseContentTypes(
+  archive: BoundedZipArchive,
+  signal?: AbortSignal,
+): Promise<ContentTypeMap> {
   const overrides = new Map<string, string>();
   const defaults = new Map<string, string>();
 
   const text = await archive.readText('[Content_Types].xml', MAX_CONTENT_TYPES_BYTES);
   if (text === null) return { overrides, defaults };
-  const doc = parseXml(text);
+  const doc = parseXml(text, signal);
 
   // Parse <Default Extension="rels" ContentType="..." />
   const defaultEls = doc.getElementsByTagName('Default');
   for (let i = 0; i < defaultEls.length; i++) {
+    await cancellationCheckpoint(i, signal);
     const el = defaultEls[i];
     const ext = el.getAttribute('Extension');
     const ct = el.getAttribute('ContentType');
@@ -100,6 +130,7 @@ async function parseContentTypes(archive: BoundedZipArchive): Promise<ContentTyp
   // Parse <Override PartName="/word/document.xml" ContentType="..." />
   const overrideEls = doc.getElementsByTagName('Override');
   for (let i = 0; i < overrideEls.length; i++) {
+    await cancellationCheckpoint(i, signal);
     const el = overrideEls[i];
     const partName = el.getAttribute('PartName');
     const ct = el.getAttribute('ContentType');
@@ -128,7 +159,7 @@ export async function getPartRelationships(
   pkg: OoxmlPackage,
   partPath: string,
 ): Promise<Relationship[]> {
-  return parseRelationships(pkg, partPath);
+  return parseRelationships(pkg, partPath, packageSignals.get(pkg));
 }
 
 /**
@@ -140,13 +171,14 @@ export async function getPartRelationships(
 async function parseRelationships(
   source: OoxmlPackage | BoundedZipArchive,
   partPath: string,
+  signal?: AbortSignal,
 ): Promise<Relationship[]> {
   const relsPath = partPath === '' ? '_rels/.rels' : buildRelsPath(partPath);
 
   const bytes = await readArchivePart(source, relsPath, MAX_RELATIONSHIPS_BYTES);
   if (!bytes) return [];
   const text = new TextDecoder().decode(bytes);
-  const doc = parseXml(text);
+  const doc = parseXml(text, signal);
   const result: Relationship[] = [];
 
   const els = doc.getElementsByTagNameNS(NS_RELATIONSHIPS, 'Relationship');
@@ -154,6 +186,7 @@ async function parseRelationships(
   const fallbackEls = els.length > 0 ? els : doc.getElementsByTagName('Relationship');
 
   for (let i = 0; i < fallbackEls.length; i++) {
+    await cancellationCheckpoint(i, signal);
     const el = fallbackEls[i];
     const id = el.getAttribute('Id');
     const type = el.getAttribute('Type');
@@ -200,8 +233,10 @@ function buildRelsPath(partPath: string): string {
  * @returns Parsed XML Document, or null if the part doesn't exist
  */
 export async function getPartXml(pkg: OoxmlPackage, partPath: string): Promise<Document | null> {
+  const signal = packageSignals.get(pkg);
+  throwIfOoxmlAborted(signal);
   const bytes = await readPackagePart(pkg, partPath);
-  return bytes ? parseXml(new TextDecoder().decode(bytes)) : null;
+  return bytes ? parseXml(new TextDecoder().decode(bytes), signal) : null;
 }
 
 /**
@@ -215,6 +250,7 @@ export async function getPartBinary(
   pkg: OoxmlPackage,
   partPath: string,
 ): Promise<ArrayBuffer | null> {
+  throwIfOoxmlAborted(packageSignals.get(pkg));
   const bytes = await readPackagePart(pkg, partPath);
   return bytes ? bytes.slice().buffer : null;
 }
@@ -234,6 +270,7 @@ async function readPackagePart(
   path: string,
   maxBytes?: number,
 ): Promise<Uint8Array | null> {
+  throwIfOoxmlAborted(packageSignals.get(pkg));
   const archive = packageArchives.get(pkg);
   if (!archive) {
     throw new TypeError('Invalid OoxmlPackage: create packages with openPackage().');
@@ -252,6 +289,8 @@ async function readPackagePart(
  * @returns Parsed core properties (all fields optional)
  */
 export async function getCoreProperties(pkg: OoxmlPackage): Promise<CoreProperties> {
+  const signal = packageSignals.get(pkg);
+  throwIfOoxmlAborted(signal);
   const doc = await getPartXml(pkg, 'docProps/core.xml');
   if (!doc) return {};
 
@@ -263,7 +302,7 @@ export async function getCoreProperties(pkg: OoxmlPackage): Promise<CoreProperti
     return undefined;
   }
 
-  return {
+  const properties = {
     title: getText(NS_DC, 'title'),
     subject: getText(NS_DC, 'subject'),
     creator: getText(NS_DC, 'creator'),
@@ -274,4 +313,6 @@ export async function getCoreProperties(pkg: OoxmlPackage): Promise<CoreProperti
     created: getText(NS_DCTERMS, 'created'),
     modified: getText(NS_DCTERMS, 'modified'),
   };
+  throwIfOoxmlAborted(signal);
+  return properties;
 }

@@ -454,6 +454,9 @@ export function LinearDocView({
           .squisq-linear-content p {
             margin-bottom: 0.75em;
           }
+          .squisq-linear-content p + p {
+            margin-top: 1.25em;
+          }
           .squisq-linear-content ul,
           .squisq-linear-content ol {
             padding-left: 2em;

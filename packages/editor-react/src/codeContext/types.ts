@@ -56,7 +56,7 @@ export interface CodeContext {
   /** Line-anchored sections. Array order is preserved for equal lines. */
   sections?: CodeContextSection[];
   /**
-   * Extra URI schemes section links may use (e.g. `['gezel-nav']`).
+   * Extra URI schemes section links may use (e.g. `['workspace-nav']`).
    * http/https/mailto/tel are always allowed; executable schemes
    * (javascript:, data:) are never allowed regardless.
    */

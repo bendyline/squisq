@@ -69,7 +69,13 @@ export function applyCommand(layers: readonly Layer[], cmd: SceneCommand): Layer
         l.id === cmd.id
           ? ({
               ...l,
-              position: { ...l.position, width: cmd.width, height: cmd.height },
+              position: {
+                ...l.position,
+                ...(cmd.x !== undefined ? { x: cmd.x } : {}),
+                ...(cmd.y !== undefined ? { y: cmd.y } : {}),
+                width: cmd.width,
+                height: cmd.height,
+              },
             } as Layer)
           : l,
       );

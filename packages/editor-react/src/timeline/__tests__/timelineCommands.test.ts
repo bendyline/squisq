@@ -78,6 +78,38 @@ function fenceOf(editor: Editor): { text: string; language: string | null } {
 }
 
 describe('applyTimelineCommand', () => {
+  it('creates, renames, and deletes a line through verified fence rewrites', () => {
+    const editor = makeEditor('```timeline\n' + ART + '\n```\n');
+    const blockId = firstBlockId(editor);
+
+    expect(
+      applyTimelineCommand(editor, blockId, {
+        kind: 'addTrack',
+        label: 'Release',
+        eventLabel: 'Ready',
+      }),
+    ).toEqual({ applied: true, eventId: 'ready', trackId: 'release' });
+    let timeline = parseAsciiTimeline(fenceOf(editor).text);
+    expect(timeline.tracks.map((track) => track.label)).toEqual(['Milestones', 'Release']);
+    expect(timeline.tracks[1].events[0]).toMatchObject({ id: 'ready', label: 'Ready' });
+
+    expect(
+      applyTimelineCommand(editor, blockId, {
+        kind: 'updateTrack',
+        trackId: 'release',
+        label: 'Shipping',
+      }),
+    ).toEqual({ applied: true });
+    timeline = parseAsciiTimeline(fenceOf(editor).text);
+    expect(timeline.tracks[1]).toMatchObject({ id: 'release', label: 'Shipping' });
+
+    expect(
+      applyTimelineCommand(editor, blockId, { kind: 'removeTrack', trackId: 'release' }),
+    ).toEqual({ applied: true });
+    timeline = parseAsciiTimeline(fenceOf(editor).text);
+    expect(timeline.tracks.map((track) => track.id)).toEqual(['milestones']);
+  });
+
   it('adds a point, returns its id, and promotes the language in one rewrite', () => {
     const editor = makeEditor('```text\n' + ART + '\n```\n');
     const blockId = firstBlockId(editor);

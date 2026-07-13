@@ -12,6 +12,21 @@ async function rejectionMessage(promise: Promise<unknown>): Promise<string> {
 }
 
 describe('native animated GIF encoder validation', () => {
+  it('rejects a pre-aborted signal before staging frames or launching FFmpeg', async () => {
+    const controller = new AbortController();
+    const reason = new Error('cancel GIF');
+    controller.abort(reason);
+
+    try {
+      await framesToGifNative('not-used', [new Uint8Array([1])], 'out.gif', {
+        signal: controller.signal,
+      });
+      expect.fail('Expected GIF cancellation');
+    } catch (err: unknown) {
+      expect(err).to.equal(reason);
+    }
+  });
+
   it('rejects an empty frame sequence before launching FFmpeg', async () => {
     const message = await rejectionMessage(framesToGifNative('not-used', [], 'out.gif'));
     expect(message).to.equal('No frames provided for encoding');

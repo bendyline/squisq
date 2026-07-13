@@ -10,7 +10,7 @@ import { parseMarkdown } from '@bendyline/squisq/markdown';
 import { markdownToDoc } from '@bendyline/squisq/doc';
 import { MemoryContentContainer } from '@bendyline/squisq/storage';
 import { createTransformStyleRegistry, resolveTransformStyle } from '@bendyline/squisq/transform';
-import { convert, ConversionError, defaultRegistry } from '../registry/index';
+import { convert, ConversionError, defaultRegistry, prepareConversion } from '../registry/index';
 import { zipToContainer } from '../container/index';
 import { markdownDocToPptx } from '../pptx/export';
 import { buildThemedPptx } from './pptxInferFixtures';
@@ -56,6 +56,31 @@ describe('convert error paths', () => {
       code: 'invalid-input',
       format: 'docx',
     });
+  });
+
+  it('threads cancellation to exporters and preserves the abort reason', async () => {
+    const controller = new AbortController();
+    const reason = new Error('caller cancelled conversion');
+    reason.name = 'AbortError';
+    const registry = defaultRegistry();
+    registry.register({
+      id: 'abortable',
+      label: 'Abortable',
+      mimeType: 'application/x-abortable',
+      extensions: ['.abortable'],
+      async exportDoc(_input, options) {
+        expect(options.signal).toBe(controller.signal);
+        controller.abort(reason);
+        throw new Error('must not replace the abort reason');
+      },
+    });
+
+    await expect(
+      convert({ kind: 'markdown', markdown: '# Cancel me' }, 'abortable', {
+        registry,
+        signal: controller.signal,
+      }),
+    ).rejects.toBe(reason);
   });
 });
 
@@ -109,6 +134,16 @@ describe('format option threading', () => {
         formatOptions: { docx: { maxEntries: 1 } },
       }),
     ).rejects.toMatchObject({ code: 'invalid-input', format: 'docx' });
+  });
+
+  it('can emit DBK with STORE so strict import compression limits accept its own output', async () => {
+    const result = await convert(
+      { kind: 'markdown', markdown: `# Self-compatible DBK\n\n${'x'.repeat(16 * 1024)}` },
+      'dbk',
+      { formatOptions: { dbk: { compression: 'STORE' } } },
+    );
+    const restored = await zipToContainer(result.bytes, { maxCompressionRatio: 1.01 });
+    expect(await restored.readDocument()).toContain('Self-compatible DBK');
   });
 });
 
@@ -191,6 +226,113 @@ describe('byte sniffing', () => {
 // ── transform threading ─────────────────────────────────────────────
 
 describe('transform threading', () => {
+  it('normalizes and transforms once before exporting multiple targets', async () => {
+    let importCount = 0;
+    let transformLookupCount = 0;
+    const exportCounts = { first: 0, second: 0 };
+    const markers: string[] = [];
+    const exportSignals: Array<AbortSignal | undefined> = [];
+    const formats = defaultRegistry();
+    formats.register({
+      id: 'counted-input',
+      label: 'Counted input',
+      mimeType: 'application/x-counted-input',
+      extensions: ['.counted'],
+      async importDoc() {
+        importCount += 1;
+        return parseMarkdown(SAMPLE_MD);
+      },
+    });
+    for (const [id, key] of [
+      ['prepared-first', 'first'],
+      ['prepared-second', 'second'],
+    ] as const) {
+      formats.register({
+        id,
+        label: id,
+        mimeType: `application/x-${id}`,
+        extensions: [`.${key}`],
+        async exportDoc(input, options) {
+          exportCounts[key] += 1;
+          exportSignals.push(options.signal);
+          const targetOptions = options.formatOptions?.[id] as { marker?: string } | undefined;
+          markers.push(targetOptions?.marker ?? 'missing');
+          expect(input.doc.blocks.length).toBeGreaterThan(0);
+          return {
+            bytes: new TextEncoder().encode(key),
+            mimeType: `application/x-${id}`,
+            suggestedFilename: '',
+            warnings: [`${key} warning`],
+          };
+        },
+      });
+    }
+
+    const style = { ...resolveTransformStyle('magazine'), id: 'counted-transform' };
+    const backingTransforms = createTransformStyleRegistry([style]);
+    const transformRegistry = {
+      register: (candidate: typeof style) => backingTransforms.register(candidate),
+      unregister: (id: string) => backingTransforms.unregister(id),
+      get: (id: string) => {
+        transformLookupCount += 1;
+        return backingTransforms.get(id);
+      },
+      list: () => backingTransforms.list(),
+    };
+    const overall = new AbortController();
+    const prepared = await prepareConversion(
+      {
+        kind: 'bytes',
+        data: new TextEncoder().encode('count me once'),
+        filename: 'source.counted',
+      },
+      {
+        registry: formats,
+        from: 'counted-input',
+        transformStyle: 'counted-transform',
+        transformRegistry,
+        signal: overall.signal,
+      },
+    );
+    const first = await prepared.convert('prepared-first', {
+      formatOptions: { 'prepared-first': { marker: 'one' } },
+    });
+    const target = new AbortController();
+    const second = await prepared.convert('prepared-second', {
+      signal: target.signal,
+      formatOptions: { 'prepared-second': { marker: 'two' } },
+    });
+
+    expect(importCount).toBe(1);
+    expect(transformLookupCount).toBe(1);
+    expect(exportCounts).toEqual({ first: 1, second: 1 });
+    expect(markers).toEqual(['one', 'two']);
+    expect(exportSignals[0]).toBe(overall.signal);
+    expect(exportSignals[1]?.aborted).toBe(false);
+    expect(first.suggestedFilename).toBe('source.first');
+    expect(second.suggestedFilename).toBe('source.second');
+    expect(first.warnings).toContain('first warning');
+    expect(second.warnings).toContain('second warning');
+
+    await expect(prepared.convert('missing-target')).rejects.toMatchObject({
+      name: 'ConversionError',
+      code: 'unknown-format',
+      format: 'missing-target',
+    });
+    const targetReason = new Error('cancel target export');
+    target.abort(targetReason);
+    expect(exportSignals[1]?.reason).toBe(targetReason);
+    await expect(prepared.convert('prepared-first', { signal: target.signal })).rejects.toBe(
+      targetReason,
+    );
+    const overallReason = new Error('cancel prepared conversion');
+    overall.abort(overallReason);
+    await expect(
+      prepared.convert('prepared-first', { signal: new AbortController().signal }),
+    ).rejects.toBe(overallReason);
+    expect(exportCounts.first).toBe(1);
+  });
+
   it('applies a transform style before handing off to the exporter', async () => {
     // A capture format records the NormalizedInput it receives, letting us
     // observe that the transform ran without depending on any converter.

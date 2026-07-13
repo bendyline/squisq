@@ -12,7 +12,11 @@ import { useCallback, useState } from 'react';
 import { createPortal } from 'react-dom';
 import type { MediaProvider } from '@bendyline/squisq/schemas';
 import type { ContentContainer } from '@bendyline/squisq/storage';
-import { RecorderModal, type RecorderSaveResult } from './RecorderModal.js';
+import {
+  RecorderModal,
+  type RecorderColorScheme,
+  type RecorderSaveResult,
+} from './RecorderModal.js';
 import { Icon } from '../Icon';
 import type { RecorderSource } from './hooks/useMediaRecorder.js';
 
@@ -20,6 +24,8 @@ export interface RecorderPanelProps {
   mediaProvider: MediaProvider;
   container?: ContentContainer | null;
   initialMode?: RecorderSource;
+  /** Light/dark chrome scheme copied onto the portaled modal. */
+  colorScheme?: RecorderColorScheme;
   onSave?: (result: RecorderSaveResult) => void;
   /** ARIA / tooltip label. Defaults to `'Record media'`. */
   tooltip?: string;
@@ -31,6 +37,7 @@ export function RecorderPanel({
   mediaProvider,
   container = null,
   initialMode = 'mic',
+  colorScheme = 'light',
   onSave,
   tooltip = 'Record media',
   className,
@@ -57,6 +64,7 @@ export function RecorderPanel({
             mediaProvider={mediaProvider}
             container={container}
             initialMode={initialMode}
+            colorScheme={colorScheme}
             onClose={handleClose}
             onSave={(result) => {
               onSave?.(result);

@@ -88,6 +88,75 @@ function LibraryThemeHarness() {
   );
 }
 
+function CoverSlideProbe() {
+  const { activeCoverSlide, setCoverSlideEnabled } = usePreviewSettings();
+  const { markdownSource } = useEditorContext();
+  return (
+    <>
+      <button type="button" onClick={() => setCoverSlideEnabled(false)}>
+        Hide cover slide
+      </button>
+      <button type="button" onClick={() => setCoverSlideEnabled(true)}>
+        Use default cover slide
+      </button>
+      <div data-testid="active-cover-slide">{String(activeCoverSlide)}</div>
+      <pre data-testid="markdown-source">{markdownSource}</pre>
+    </>
+  );
+}
+
+function CoverSlideHarness() {
+  const { doc } = useEditorContext();
+  return (
+    <PreviewSettingsProvider doc={doc}>
+      <CoverSlideProbe />
+    </PreviewSettingsProvider>
+  );
+}
+
+function ManagedDefaultsProbe() {
+  const {
+    activeThemeId,
+    activeTransformStyle,
+    activeCaptionStyle,
+    activeCaptionsEnabled,
+    setSelectedThemeId,
+    setSelectedTransformStyle,
+    setCaptionMode,
+  } = usePreviewSettings();
+  const { markdownSource } = useEditorContext();
+  return (
+    <>
+      <button type="button" onClick={() => setSelectedThemeId('standard')}>
+        Use default theme
+      </button>
+      <button type="button" onClick={() => setSelectedTransformStyle('')}>
+        Use default transform
+      </button>
+      <button type="button" onClick={() => setCaptionMode('standard')}>
+        Use default captions
+      </button>
+      <div
+        data-testid="managed-defaults"
+        data-theme={activeThemeId}
+        data-transform={activeTransformStyle}
+        data-caption-style={activeCaptionStyle}
+        data-captions-enabled={String(activeCaptionsEnabled)}
+      />
+      <pre data-testid="markdown-source">{markdownSource}</pre>
+    </>
+  );
+}
+
+function ManagedDefaultsHarness() {
+  const { doc } = useEditorContext();
+  return (
+    <PreviewSettingsProvider doc={doc}>
+      <ManagedDefaultsProbe />
+    </PreviewSettingsProvider>
+  );
+}
+
 function renderPreviewControls(markdown: string) {
   render(
     <EditorProvider initialMarkdown={markdown}>
@@ -188,6 +257,101 @@ describe('PreviewModeSwitch', () => {
       expect(source).toContain('squisq-custom-themes:');
       expect(source).toContain('library-theme');
     });
+  });
+});
+
+describe('cover-slide frontmatter', () => {
+  it('writes the non-default as a boolean and removes the default value', async () => {
+    render(
+      <EditorProvider initialMarkdown="# Hello">
+        <CoverSlideHarness />
+      </EditorProvider>,
+    );
+
+    expect(screen.getByTestId('active-cover-slide').textContent).toBe('true');
+    fireEvent.click(screen.getByRole('button', { name: 'Hide cover slide' }));
+
+    await waitFor(() => {
+      const source = screen.getByTestId('markdown-source').textContent ?? '';
+      expect(source).toContain('squisq-cover-slide: false');
+      expect(source).not.toContain('squisq-cover-slide: "false"');
+    });
+    expect(screen.getByTestId('active-cover-slide').textContent).toBe('false');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Use default cover slide' }));
+
+    await waitFor(() => {
+      const source = screen.getByTestId('markdown-source').textContent ?? '';
+      expect(source).not.toContain('squisq-cover-slide');
+      expect(source).not.toContain('---');
+    });
+    expect(screen.getByTestId('active-cover-slide').textContent).toBe('true');
+  });
+
+  it('removes a legacy cover-slide override when restoring the default', async () => {
+    render(
+      <EditorProvider initialMarkdown={'---\ncover-slide: false\ntitle: Hello\n---\n\n# Hello'}>
+        <CoverSlideHarness />
+      </EditorProvider>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId('active-cover-slide').textContent).toBe('false');
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Use default cover slide' }));
+
+    await waitFor(() => {
+      const source = screen.getByTestId('markdown-source').textContent ?? '';
+      expect(source).not.toContain('cover-slide');
+      expect(source).toContain('title: Hello');
+    });
+    expect(screen.getByTestId('active-cover-slide').textContent).toBe('true');
+  });
+});
+
+describe('managed preview-setting defaults', () => {
+  it('removes default theme, transform, and caption values plus their legacy aliases', async () => {
+    const markdown = `---
+squisq-theme: documentary
+themeId: bold
+theme: cinematic
+squisq-transform: documentary
+transform-style: magazine
+squisq-captions: social
+caption-style: off
+title: Hello
+---
+
+# Hello`;
+    render(
+      <EditorProvider initialMarkdown={markdown}>
+        <ManagedDefaultsHarness />
+      </EditorProvider>,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Use default theme' }));
+    await waitFor(() => {
+      const source = screen.getByTestId('markdown-source').textContent ?? '';
+      expect(source).not.toMatch(/^(?:squisq-theme|themeId|theme):/m);
+    });
+    expect(screen.getByTestId('managed-defaults').getAttribute('data-theme')).toBe('standard');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Use default transform' }));
+    await waitFor(() => {
+      const source = screen.getByTestId('markdown-source').textContent ?? '';
+      expect(source).not.toMatch(/^(?:squisq-transform|transform-style):/m);
+    });
+    expect(screen.getByTestId('managed-defaults').getAttribute('data-transform')).toBe('');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Use default captions' }));
+    await waitFor(() => {
+      const source = screen.getByTestId('markdown-source').textContent ?? '';
+      expect(source).not.toMatch(/^(?:squisq-captions|caption-style):/m);
+      expect(source).toContain('title: Hello');
+    });
+    const defaults = screen.getByTestId('managed-defaults');
+    expect(defaults.getAttribute('data-caption-style')).toBe('standard');
+    expect(defaults.getAttribute('data-captions-enabled')).toBe('true');
   });
 });
 

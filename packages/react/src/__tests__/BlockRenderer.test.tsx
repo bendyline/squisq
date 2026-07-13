@@ -41,6 +41,63 @@ describe('BlockRenderer', () => {
     expect(svg?.getAttribute('viewBox')).toBe('0 0 1080 1920');
   });
 
+  it('pans dominant cover images across portrait frames without adding zoom', () => {
+    const portraitHero: Block = {
+      ...minimalBlock,
+      layers: [
+        {
+          type: 'image',
+          id: 'portrait-hero',
+          content: { src: 'wide-hero.jpg', alt: 'Wide hero', fit: 'cover' },
+          position: { x: 0, y: 0, width: '100%', height: '100%' },
+          animation: { type: 'slowZoom', duration: 9, direction: 'in' },
+        },
+      ],
+    };
+
+    const { container } = render(
+      <BlockRenderer
+        block={portraitHero}
+        blockTime={0}
+        basePath="/test"
+        viewport={{ width: 1080, height: 1920 }}
+      />,
+    );
+
+    const layer = container.querySelector('[data-layer-id="portrait-hero"]');
+    const image = layer?.querySelector('img');
+    expect(layer?.getAttribute('data-image-framing')).toBe('portrait-pan');
+    expect(image?.classList.contains('squisq-image--portrait-pan-right')).toBe(true);
+    expect(layer?.classList.contains('anim-slowZoom-in')).toBe(false);
+    expect(image?.style.objectFit).toBe('cover');
+    expect(image?.style.getPropertyValue('--portrait-pan-duration')).toBe('9s');
+  });
+
+  it('keeps smaller portrait cover tiles static', () => {
+    const portraitTile: Block = {
+      ...minimalBlock,
+      layers: [
+        {
+          type: 'image',
+          id: 'portrait-tile',
+          content: { src: 'tile.jpg', alt: 'Tile', fit: 'cover' },
+          position: { x: '5%', y: '5%', width: '42%', height: '42%' },
+        },
+      ],
+    };
+
+    const { container } = render(
+      <BlockRenderer
+        block={portraitTile}
+        blockTime={0}
+        basePath="/test"
+        viewport={{ width: 1080, height: 1920 }}
+      />,
+    );
+
+    expect(container.querySelector('[data-image-framing="portrait-pan"]')).toBeNull();
+  });
+
   it('renders text layers', () => {
     const blockWithText: Block = {
       id: 'text-block',
@@ -165,11 +222,13 @@ describe('BlockRenderer', () => {
         basePath="/test"
         isEntering
         animationsEnabled={false}
+        viewport={{ width: 1080, height: 1920 }}
       />,
     );
 
     expect(container.querySelector('svg')?.className.baseVal).not.toContain('transition-');
     expect(container.querySelector('[class*="anim-"]')).toBeNull();
+    expect(container.querySelector('[data-image-framing="portrait-pan"]')).toBeNull();
     expect(animatedBlock.transition).toEqual({ type: 'fade', duration: 0.5 });
     expect(animatedBlock.layers?.map((layer) => layer.animation)).toEqual(originalAnimations);
   });

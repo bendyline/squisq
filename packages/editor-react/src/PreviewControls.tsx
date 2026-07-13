@@ -47,6 +47,11 @@ import {
 } from './customThemes';
 import { Icon } from './Icon';
 import { resolvePersistedTransformStyleId } from './transformStyleId';
+import {
+  FRONTMATTER_SETTING_DEFAULTS,
+  FRONTMATTER_SETTING_KEYS,
+  omitFrontmatterDefault,
+} from './frontmatterSettings';
 
 // ── Context ──────────────────────────────────────────────────────
 
@@ -198,16 +203,6 @@ export interface PreviewSettingsProviderProps {
   themeOverride?: Theme | null;
 }
 
-/** Frontmatter keys we read/write for preview settings. The squisq-prefixed
- *  keys are the canonical names; the legacy keys are still read so existing
- *  documents keep working. Persistence (writes) uses only the squisq names. */
-const FM_KEYS = {
-  theme: { canonical: 'squisq-theme', legacy: ['themeId', 'theme'] as const },
-  transform: { canonical: 'squisq-transform', legacy: 'transform-style' as const },
-  captions: { canonical: 'squisq-captions', legacy: 'caption-style' as const },
-  coverSlide: { canonical: 'squisq-cover-slide', legacy: 'cover-slide' as const },
-} as const;
-
 function readFrontmatterKey(
   fm: Record<string, unknown> | undefined,
   canonical: string,
@@ -226,7 +221,7 @@ export function PreviewSettingsProvider({
   const { markdownSource, setMarkdownSource, allowNarrate } = useEditorContext();
 
   const persistFrontmatter = useCallback(
-    (updates: Record<string, string | null>) => {
+    (updates: Record<string, string | number | boolean | null | undefined>) => {
       const next = setFrontmatterValues(markdownSource, updates);
       if (next !== markdownSource) {
         setMarkdownSource(next);
@@ -271,7 +266,7 @@ export function PreviewSettingsProvider({
   );
   const [selectedThemeId, setSelectedThemeId] = useState<string | null>(null);
   useEffect(() => setSelectedThemeId(null), [fmTheme]);
-  const resolvedThemeId = selectedThemeId ?? fmTheme ?? 'standard';
+  const resolvedThemeId = selectedThemeId ?? fmTheme ?? FRONTMATTER_SETTING_DEFAULTS.theme;
   // Doc themes precede browser-library themes in `allThemes`; choosing a
   // library-only entry copies it into the document below for portable export.
   const resolvedTheme = useMemo(
@@ -300,9 +295,12 @@ export function PreviewSettingsProvider({
       const selectedCustom = customThemes.find((theme) => theme.id === id);
       const alreadyDocScoped = docThemes.some((theme) => theme.id === id);
       const updates: Record<string, string | null> = {
-        [FM_KEYS.theme.canonical]: id,
-        [FM_KEYS.theme.legacy[0]]: null,
-        [FM_KEYS.theme.legacy[1]]: null,
+        [FRONTMATTER_SETTING_KEYS.theme.canonical]: omitFrontmatterDefault(
+          id,
+          FRONTMATTER_SETTING_DEFAULTS.theme,
+        ),
+        [FRONTMATTER_SETTING_KEYS.theme.legacy[0]]: null,
+        [FRONTMATTER_SETTING_KEYS.theme.legacy[1]]: null,
       };
       if (selectedCustom && !alreadyDocScoped) {
         updates[FRONTMATTER_CUSTOM_THEMES_KEY] =
@@ -337,7 +335,7 @@ export function PreviewSettingsProvider({
           idx >= 0 ? docThemes.map((t, i) => (i === idx ? theme : t)) : [...docThemes, theme];
         const updates: Record<string, string | null> = {
           [FRONTMATTER_CUSTOM_THEMES_KEY]: writeCustomThemesToFrontmatter(nextThemes) ?? null,
-          [FM_KEYS.theme.canonical]: theme.id,
+          [FRONTMATTER_SETTING_KEYS.theme.canonical]: theme.id,
         };
         if (extras?.templates && extras.templates.length > 0) {
           const existing = doc?.customTemplates ?? [];
@@ -367,7 +365,11 @@ export function PreviewSettingsProvider({
   const fmTransform = useMemo(
     () =>
       resolvePersistedTransformStyleId(
-        readFrontmatterKey(frontmatter, FM_KEYS.transform.canonical, FM_KEYS.transform.legacy),
+        readFrontmatterKey(
+          frontmatter,
+          FRONTMATTER_SETTING_KEYS.transform.canonical,
+          FRONTMATTER_SETTING_KEYS.transform.legacy,
+        ),
       ),
     [frontmatter],
   );
@@ -379,7 +381,13 @@ export function PreviewSettingsProvider({
       setSelectedTransformStyle(id);
       if (id !== null) {
         // Empty string = "None" — remove the key rather than writing a blank value.
-        persistFrontmatter({ [FM_KEYS.transform.canonical]: id === '' ? null : id });
+        persistFrontmatter({
+          [FRONTMATTER_SETTING_KEYS.transform.canonical]: omitFrontmatterDefault(
+            id,
+            FRONTMATTER_SETTING_DEFAULTS.transform,
+          ),
+          [FRONTMATTER_SETTING_KEYS.transform.legacy]: null,
+        });
       }
     },
     [persistFrontmatter],
@@ -391,19 +399,30 @@ export function PreviewSettingsProvider({
   const fmCaptionMode = useMemo(
     () =>
       resolveFrontmatterCaptionMode(
-        readFrontmatterKey(frontmatter, FM_KEYS.captions.canonical, FM_KEYS.captions.legacy),
+        readFrontmatterKey(
+          frontmatter,
+          FRONTMATTER_SETTING_KEYS.captions.canonical,
+          FRONTMATTER_SETTING_KEYS.captions.legacy,
+        ),
       ),
     [frontmatter],
   );
   const [selectedCaptionMode, setSelectedCaptionMode] = useState<CaptionMode | null>(null);
   useEffect(() => setSelectedCaptionMode(null), [fmCaptionMode]);
-  const activeCaptionMode = selectedCaptionMode ?? fmCaptionMode ?? 'standard';
+  const activeCaptionMode =
+    selectedCaptionMode ?? fmCaptionMode ?? FRONTMATTER_SETTING_DEFAULTS.captions;
   const activeCaptionsEnabled = activeCaptionMode !== 'off';
   const activeCaptionStyle: CaptionStyle = activeCaptionMode === 'social' ? 'social' : 'standard';
   const handleSetCaptionMode = useCallback(
     (mode: CaptionMode) => {
       setSelectedCaptionMode(mode);
-      persistFrontmatter({ [FM_KEYS.captions.canonical]: mode });
+      persistFrontmatter({
+        [FRONTMATTER_SETTING_KEYS.captions.canonical]: omitFrontmatterDefault(
+          mode,
+          FRONTMATTER_SETTING_DEFAULTS.captions,
+        ),
+        [FRONTMATTER_SETTING_KEYS.captions.legacy]: null,
+      });
     },
     [persistFrontmatter],
   );
@@ -413,17 +432,31 @@ export function PreviewSettingsProvider({
   const fmCoverSlide = useMemo(
     () =>
       resolveFrontmatterBoolean(
-        readFrontmatterKey(frontmatter, FM_KEYS.coverSlide.canonical, FM_KEYS.coverSlide.legacy),
+        readFrontmatterKey(
+          frontmatter,
+          FRONTMATTER_SETTING_KEYS.coverSlide.canonical,
+          FRONTMATTER_SETTING_KEYS.coverSlide.legacy,
+        ),
       ),
     [frontmatter],
   );
   const [selectedCoverSlide, setSelectedCoverSlide] = useState<boolean | null>(null);
   useEffect(() => setSelectedCoverSlide(null), [fmCoverSlide]);
-  const activeCoverSlide = selectedCoverSlide ?? fmCoverSlide ?? true;
+  const activeCoverSlide =
+    selectedCoverSlide ?? fmCoverSlide ?? FRONTMATTER_SETTING_DEFAULTS.coverSlide;
   const handleSetCoverSlideEnabled = useCallback(
     (enabled: boolean) => {
       setSelectedCoverSlide(enabled);
-      persistFrontmatter({ [FM_KEYS.coverSlide.canonical]: enabled ? 'true' : 'false' });
+      persistFrontmatter({
+        // The cover is enabled by default, so only persist the non-default
+        // state. Pass the boolean through so YAML writes `false`, not
+        // the string `"false"`.
+        [FRONTMATTER_SETTING_KEYS.coverSlide.canonical]: omitFrontmatterDefault(
+          enabled,
+          FRONTMATTER_SETTING_DEFAULTS.coverSlide,
+        ),
+        [FRONTMATTER_SETTING_KEYS.coverSlide.legacy]: null,
+      });
     },
     [persistFrontmatter],
   );
