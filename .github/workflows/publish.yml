@@ -11,6 +11,10 @@ on:
         description: 'Run semantic-release (version bump + GitHub Release + tarballs)'
         type: boolean
         default: true
+      force_major:
+        description: 'Force major bumps for packages with releasable changes'
+        type: boolean
+        default: false
 
 permissions:
   contents: write
@@ -79,7 +83,13 @@ jobs:
         if: inputs.publish_release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: npx multi-semantic-release --ignore-packages=packages/site --sequential-prepare
+          SEMANTIC_RELEASE_FORCE_MAJOR: ${{ inputs.force_major }}
+        run: |
+          args=(--ignore-packages=packages/site --sequential-prepare)
+          if [[ "$SEMANTIC_RELEASE_FORCE_MAJOR" == "true" ]]; then
+            args+=(--deps.release=inherit)
+          fi
+          npx multi-semantic-release "${args[@]}"
 
       # ── Pages ────────────────────────────────────────────────────
       # The site `dist/` was already produced by the earlier
