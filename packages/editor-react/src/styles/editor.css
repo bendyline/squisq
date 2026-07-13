@@ -645,6 +645,19 @@
   z-index: 100;
   min-width: 200px;
   padding: 4px 0;
+  /* This menu is portaled to <body>, outside the editor shell that normally
+     supplies the UX font. Keep its unbuttoned content (notably the header)
+     on the same sans-serif UI stack instead of inheriting the host page font. */
+  font-family: var(
+    --squisq-ux-font,
+    -apple-system,
+    BlinkMacSystemFont,
+    'Segoe UI',
+    'Noto Sans',
+    Helvetica,
+    Arial,
+    sans-serif
+  );
   background: #fff;
   border: 1px solid #e5e7eb;
   border-radius: 6px;
@@ -659,6 +672,12 @@
   text-transform: uppercase;
   color: #9ca3af;
   user-select: none;
+}
+
+.squisq-insert-menu-header--separated {
+  margin-top: 4px;
+  padding-top: 8px;
+  border-top: 1px solid #e5e7eb;
 }
 
 /* Portaled outside squisq-editor-shell, so dark mode is applied via data-theme. */
@@ -678,6 +697,10 @@
 
 .squisq-insert-menu[data-theme='dark'] .squisq-insert-menu-header {
   color: #6b7280;
+}
+
+.squisq-insert-menu[data-theme='dark'] .squisq-insert-menu-header--separated {
+  border-top-color: #374151;
 }
 
 /* ─── Template Picker (toolbar) ──────────────────────── */
@@ -2064,6 +2087,13 @@
   padding-left: 16px;
   margin: 0.5em 0;
   color: var(--squisq-theme-text-muted, #6b7280);
+}
+
+/* Consecutive Markdown quote lines share one blockquote. Keep their Tiptap
+   paragraphs visually line-adjacent instead of applying the normal prose
+   paragraph gap between every authored `>` line. */
+.squisq-wysiwyg-editor blockquote > p {
+  margin: 0;
 }
 
 /* Inline `code` and `<pre>` blocks: the foreground / background draw from

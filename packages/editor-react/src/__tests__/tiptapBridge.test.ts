@@ -160,6 +160,12 @@ describe('markdownToTiptap', () => {
     expect(html).toContain('This is a quote');
   });
 
+  it('groups consecutive quote lines into one visual blockquote', () => {
+    const html = markdownToTiptap('> A wise quote\n> -- Ada');
+    expect(html.match(/<blockquote>/g)).toHaveLength(1);
+    expect(html).toContain('<blockquote><p>A wise quote</p><p>-- Ada</p></blockquote>');
+  });
+
   it('converts horizontal rules', () => {
     const md = 'Before\n\n---\n\nAfter';
     const html = markdownToTiptap(md);
@@ -495,7 +501,9 @@ describe('round-trip: markdownToTiptap → tiptapToMarkdown', () => {
       content: markdownToTiptap(md),
     });
 
-    expect(tiptapToMarkdown(editor.getHTML())).toBe(md + '\n');
+    const normalizedHtml = editor.getHTML();
+    expect(normalizedHtml.match(/<blockquote>/g)).toHaveLength(1);
+    expect(tiptapToMarkdown(normalizedHtml)).toBe(md + '\n');
     editor.destroy();
   });
 

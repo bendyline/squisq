@@ -282,7 +282,14 @@ export function markdownToTiptap(markdown: string): string {
     // Blockquote
     if (line.startsWith('> ')) {
       flushList();
-      pushBlock(`<blockquote><p>${inlineToHtml(line.slice(2))}</p></blockquote>`);
+      const quoteLines = [line.slice(2)];
+      while (i + 1 < lines.length && lines[i + 1].startsWith('> ')) {
+        i++;
+        quoteLines.push(lines[i].slice(2));
+      }
+      pushBlock(
+        `<blockquote>${quoteLines.map((quoteLine) => `<p>${inlineToHtml(quoteLine)}</p>`).join('')}</blockquote>`,
+      );
       continue;
     }
 
@@ -470,11 +477,17 @@ export function tiptapToMarkdown(html: string): string {
     // Blockquote
     const bqMatch = remaining.match(/^<blockquote>(.*?)<\/blockquote>/s);
     if (bqMatch) {
-      const inner = htmlToInline(bqMatch[1].replace(/<\/?p>/g, ''));
-      lines.push('> ' + inner);
+      const paragraphs = bqMatch[1]
+        .split(/<\/p>\s*<p[^>]*>/i)
+        .map((paragraph) => paragraph.replace(/^<p[^>]*>/i, '').replace(/<\/p>\s*$/i, ''));
+      for (const paragraph of paragraphs) {
+        for (const quoteLine of htmlToInline(paragraph).split('\n')) {
+          lines.push('> ' + quoteLine);
+        }
+      }
       const next = remaining.slice(bqMatch[0].length);
-      // markdownToTiptap represents each adjacent `> ` source line as its
-      // own blockquote node. Keep those nodes adjacent when serializing;
+      // Older bridge output and direct Tiptap edits can still leave adjacent
+      // blockquote nodes. Keep those nodes adjacent when serializing;
       // inserting the normal block separator here turns one quote into two
       // paragraphs every time the document passes through WYSIWYG mode.
       if (!/^\s*<blockquote>/.test(next)) lines.push('');
