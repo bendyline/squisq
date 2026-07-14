@@ -62,12 +62,16 @@ import {
   REL_HYPERLINK,
   REL_IMAGE,
   REL_FOOTNOTES,
+  REL_HEADER,
+  REL_FOOTER,
   CONTENT_TYPE_DOCX_DOCUMENT,
   CONTENT_TYPE_DOCX_STYLES,
   CONTENT_TYPE_DOCX_NUMBERING,
   CONTENT_TYPE_DOCX_SETTINGS,
   CONTENT_TYPE_DOCX_FONT_TABLE,
   CONTENT_TYPE_DOCX_FOOTNOTES,
+  CONTENT_TYPE_DOCX_HEADER,
+  CONTENT_TYPE_DOCX_FOOTER,
 } from '../ooxml/namespaces.js';
 import {
   DEPTH_TO_STYLE_ID,
@@ -135,8 +139,35 @@ export async function markdownDocToDocx(
       ? options
       : { ...options, themeId: readFrontmatterThemeId(doc.frontmatter) };
   const ctx = new ExportContext(resolvedOptions, doc);
-  const bodyXml = convertBlocks(doc.children, ctx);
-  return buildDocxPackage(bodyXml, ctx, resolvedOptions);
+  const stories = partitionDocumentStories(doc.children);
+  ctx.setRelationshipSource('document');
+  const bodyXml = convertBlocks(stories.body, ctx);
+  ctx.setRelationshipSource('header');
+  const headerXml = convertBlocks(stories.header, ctx);
+  ctx.setRelationshipSource('footer');
+  const footerXml = convertBlocks(stories.footer, ctx);
+  ctx.setRelationshipSource('document');
+  return buildDocxPackage(bodyXml, headerXml, footerXml, ctx, resolvedOptions);
+}
+
+interface DocumentStories {
+  body: MarkdownBlockNode[];
+  header: MarkdownBlockNode[];
+  footer: MarkdownBlockNode[];
+}
+
+function partitionDocumentStories(nodes: MarkdownBlockNode[]): DocumentStories {
+  const stories: DocumentStories = { body: [], header: [], footer: [] };
+  for (const node of nodes) {
+    if (node.type === 'containerDirective' && node.name === 'docx-header') {
+      stories.header.push(...node.children);
+    } else if (node.type === 'containerDirective' && node.name === 'docx-footer') {
+      stories.footer.push(...node.children);
+    } else {
+      stories.body.push(node);
+    }
+  }
+  return stories;
 }
 
 /**
@@ -172,7 +203,10 @@ class ExportContext {
     type: string;
     target: string;
     targetMode?: 'External';
+    source: DocxStoryPart;
   }> = [];
+
+  private relationshipSource: DocxStoryPart = 'document';
 
   /** Numbering definitions (abstract + num) */
   readonly numberingDefs: NumberingDef[] = [];
@@ -257,6 +291,10 @@ class ExportContext {
     return `rId${this.nextRelId++}`;
   }
 
+  setRelationshipSource(source: DocxStoryPart): void {
+    this.relationshipSource = source;
+  }
+
   /** Add a hyperlink relationship and return the rId */
   addHyperlink(url: string): string {
     const id = this.allocRelId();
@@ -265,6 +303,7 @@ class ExportContext {
       type: REL_HYPERLINK,
       target: url,
       targetMode: 'External',
+      source: this.relationshipSource,
     });
     return id;
   }
@@ -284,6 +323,7 @@ class ExportContext {
       id: relId,
       type: REL_IMAGE,
       target: `media/${filename}`,
+      source: this.relationshipSource,
     });
 
     return { relId, docPrId };
@@ -308,6 +348,8 @@ class ExportContext {
     return id;
   }
 }
+
+type DocxStoryPart = 'document' | 'header' | 'footer';
 
 interface NumberingDef {
   numId: number;
@@ -384,6 +426,10 @@ function convertBlock(node: MarkdownBlockNode, ctx: ExportContext, listDepth: nu
       return convertMathBlock(node);
     case 'footnoteDefinition':
       return convertFootnoteDefinition(node, ctx);
+    case 'containerDirective':
+      // Non-DOCX directives have no native Word wrapper. Preserve their
+      // contents rather than silently dropping the entire subtree.
+      return convertBlocks(node.children, ctx);
     default:
       // Definition lists, directives, link definitions — skip or emit as plain text
       return '';
@@ -858,6 +904,8 @@ function convertFootnoteRef(node: MarkdownFootnoteReference, ctx: ExportContext)
 
 async function buildDocxPackage(
   bodyXml: string,
+  headerXml: string,
+  footerXml: string,
   ctx: ExportContext,
   options: DocxExportOptions,
 ): Promise<ArrayBuffer> {
@@ -870,10 +918,26 @@ async function buildDocxPackage(
   const settingsRelId = `rId${relCounter++}`;
   const fontTableRelId = `rId${relCounter++}`;
   const footnotesRelId = `rId${relCounter++}`;
+  const headerRelId = `rId${relCounter++}`;
+  const footerRelId = `rId${relCounter++}`;
+  const hasHeader = headerXml.trim().length > 0;
+  const hasFooter = footerXml.trim().length > 0;
 
   // --- word/document.xml ---
-  const documentXml = buildDocumentXml(bodyXml, ctx.backgroundColor);
+  const documentXml = buildDocumentXml(
+    bodyXml,
+    ctx.backgroundColor,
+    hasHeader ? headerRelId : undefined,
+    hasFooter ? footerRelId : undefined,
+  );
   pkg.addPart('word/document.xml', documentXml, CONTENT_TYPE_DOCX_DOCUMENT);
+
+  if (hasHeader) {
+    pkg.addPart('word/header1.xml', buildStoryXml('header', headerXml), CONTENT_TYPE_DOCX_HEADER);
+  }
+  if (hasFooter) {
+    pkg.addPart('word/footer1.xml', buildStoryXml('footer', footerXml), CONTENT_TYPE_DOCX_FOOTER);
+  }
 
   // --- word/styles.xml ---
   const stylesXml = buildStylesXml(options, ctx);
@@ -942,9 +1006,31 @@ async function buildDocxPackage(
     });
   }
 
+  if (hasHeader) {
+    pkg.addRelationship('word/document.xml', {
+      id: headerRelId,
+      type: REL_HEADER,
+      target: 'header1.xml',
+    });
+  }
+
+  if (hasFooter) {
+    pkg.addRelationship('word/document.xml', {
+      id: footerRelId,
+      type: REL_FOOTER,
+      target: 'footer1.xml',
+    });
+  }
+
   // --- Dynamic relationships (hyperlinks, images) ---
   for (const rel of ctx.relationships) {
-    pkg.addRelationship('word/document.xml', {
+    const sourcePart =
+      rel.source === 'header'
+        ? 'word/header1.xml'
+        : rel.source === 'footer'
+          ? 'word/footer1.xml'
+          : 'word/document.xml';
+    pkg.addRelationship(sourcePart, {
       id: rel.id,
       type: rel.type,
       target: rel.target,
@@ -975,11 +1061,19 @@ async function buildDocxPackage(
 // XML Part Generators
 // ============================================
 
-function buildDocumentXml(bodyXml: string, backgroundColor?: string): string {
+function buildDocumentXml(
+  bodyXml: string,
+  backgroundColor?: string,
+  headerRelId?: string,
+  footerRelId?: string,
+): string {
   // `<w:background>` must be the FIRST child of `<w:document>` per the
   // WordprocessingML schema. Word also requires `<w:displayBackgroundShape/>`
   // in settings.xml before the bg actually paints (see buildSettingsXml).
   const backgroundEl = backgroundColor ? `<w:background w:color="${backgroundColor}"/>` : '';
+  const storyReferences =
+    (headerRelId ? `<w:headerReference w:type="default" r:id="${headerRelId}"/>` : '') +
+    (footerRelId ? `<w:footerReference w:type="default" r:id="${footerRelId}"/>` : '');
   return (
     xmlDeclaration() +
     `<w:document` +
@@ -997,12 +1091,26 @@ function buildDocumentXml(bodyXml: string, backgroundColor?: string): string {
     `<w:body>` +
     bodyXml +
     `<w:sectPr>` +
+    storyReferences +
     `<w:pgSz w:w="12240" w:h="15840"/>` +
     `<w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1440" w:header="720" w:footer="720" w:gutter="0"/>` +
     `<w:cols w:space="720"/>` +
     `</w:sectPr>` +
     `</w:body>` +
     `</w:document>`
+  );
+}
+
+function buildStoryXml(kind: 'header' | 'footer', bodyXml: string): string {
+  const element = kind === 'header' ? 'hdr' : 'ftr';
+  return (
+    xmlDeclaration() +
+    `<w:${element}` +
+    ` xmlns:w="${NS_WML}"` +
+    ` xmlns:r="${NS_R}"` +
+    ` xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing">` +
+    bodyXml +
+    `</w:${element}>`
   );
 }
 

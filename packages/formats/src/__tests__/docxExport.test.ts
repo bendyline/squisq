@@ -22,6 +22,7 @@ import type {
   MarkdownEmphasis,
   MarkdownInlineCode,
   MarkdownLink,
+  MarkdownContainerDirective,
 } from '@bendyline/squisq/markdown';
 
 import { markdownDocToDocx, docToDocx } from '../docx/export';
@@ -79,6 +80,39 @@ describe('markdownDocToDocx', () => {
     const xmlDoc = await getDocumentXml(zip);
     const body = xmlDoc.getElementsByTagName('w:body')[0];
     expect(body).toBeDefined();
+  });
+
+  it('exports DOCX story directives to header and footer parts', async () => {
+    const doc: MarkdownDocument = {
+      type: 'document',
+      children: [
+        { type: 'paragraph', children: [{ type: 'text', value: 'Body' }] },
+        {
+          type: 'containerDirective',
+          name: 'docx-header',
+          children: [{ type: 'paragraph', children: [{ type: 'text', value: 'Header' }] }],
+        } satisfies MarkdownContainerDirective,
+        {
+          type: 'containerDirective',
+          name: 'docx-footer',
+          children: [{ type: 'paragraph', children: [{ type: 'text', value: 'Footer' }] }],
+        } satisfies MarkdownContainerDirective,
+      ],
+    };
+
+    const zip = await exportAndParse(doc);
+    const documentXml = await zip.file('word/document.xml')!.async('text');
+    const headerXml = await zip.file('word/header1.xml')!.async('text');
+    const footerXml = await zip.file('word/footer1.xml')!.async('text');
+    const relationships = await zip.file('word/_rels/document.xml.rels')!.async('text');
+
+    expect(documentXml).toContain('<w:headerReference');
+    expect(documentXml).toContain('<w:footerReference');
+    expect(documentXml).not.toContain('Header');
+    expect(headerXml).toContain('Header');
+    expect(footerXml).toContain('Footer');
+    expect(relationships).toContain('/relationships/header');
+    expect(relationships).toContain('/relationships/footer');
   });
 
   // ============================================

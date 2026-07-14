@@ -45,12 +45,14 @@ import type {
   MarkdownBreak,
   MarkdownFootnoteReference,
   MarkdownFootnoteDefinition,
+  MarkdownContainerDirective,
 } from '@bendyline/squisq/markdown';
 
 import { openPackage, getPartXml, getPartBinary, getPartRelationships } from '../ooxml/reader.js';
 import type { OoxmlOpenOptions } from '../ooxml/reader.js';
 import type { OoxmlPackage, Relationship } from '../ooxml/types.js';
 import { NS_WML, NS_R } from '../ooxml/namespaces.js';
+import { baseDirOf, resolveTarget } from '../ooxml/readUtils.js';
 import type { ContentContainer } from '@bendyline/squisq/storage';
 import { buildContainer } from '../shared/container.js';
 import { extToMime } from '../shared/images.js';
@@ -102,7 +104,7 @@ export async function docxToMarkdownDoc(
     return { type: 'document', children: [] };
   }
 
-  const blocks = await convertBody(body, ctx);
+  const blocks = await convertDocumentStories(body, ctx);
 
   return { type: 'document', children: blocks };
 }
@@ -148,7 +150,7 @@ export async function docxToContainer(
   const body = getFirstElement(documentXml, 'body');
   if (!body) return buildContainer('', []);
 
-  const blocks = await convertBody(body, ctx);
+  const blocks = await convertDocumentStories(body, ctx);
   const markdownDoc: MarkdownDocument = { type: 'document', children: blocks };
 
   return buildContainer(stringifyMarkdown(markdownDoc), ctx.extractedImages);
@@ -173,6 +175,10 @@ interface ImportContext {
   numbering: Map<string, NumberingInfo>;
   /** Footnote bodies: footnoteId → Element */
   footnotes: Map<string, Element>;
+  /** Endnote bodies: endnoteId → Element */
+  endnotes: Map<string, Element>;
+  /** Part whose relationships are active while converting runs. */
+  currentPartPath: string;
   /** Reference to the OOXML package (for extracting images) */
   pkg: OoxmlPackage;
   /** Import options */
@@ -199,6 +205,8 @@ async function buildImportContext(
     documentRels: new Map(),
     numbering: new Map(),
     footnotes: new Map(),
+    endnotes: new Map(),
+    currentPartPath: 'word/document.xml',
     pkg,
     options,
     extractedImages: new Map(),
@@ -233,6 +241,9 @@ async function buildImportContext(
 
   // Parse footnotes.xml
   await parseFootnotes(pkg, ctx);
+
+  // Parse endnotes.xml
+  await parseEndnotes(pkg, ctx);
 
   return ctx;
 }
@@ -351,13 +362,97 @@ async function parseFootnotes(pkg: OoxmlPackage, ctx: ImportContext): Promise<vo
   }
 }
 
+async function parseEndnotes(pkg: OoxmlPackage, ctx: ImportContext): Promise<void> {
+  const doc = await getPartXml(pkg, 'word/endnotes.xml');
+  if (!doc) return;
+
+  const endnoteEls = getAllElements(doc, 'endnote');
+  for (const note of endnoteEls) {
+    const id = getAttr(note, 'id');
+    const type = getAttr(note, 'type');
+    if (!id || type === 'separator' || type === 'continuationSeparator') continue;
+    ctx.endnotes.set(id, note);
+  }
+}
+
 // ============================================
 // Body Conversion
 // ============================================
 
+/**
+ * Convert the main story plus the related header/footer stories. Header and
+ * footer blocks live in named directives so Markdown consumers can distinguish
+ * them from body content and the DOCX exporter can put them back in the right
+ * OOXML parts.
+ */
+async function convertDocumentStories(
+  body: Element,
+  ctx: ImportContext,
+): Promise<MarkdownBlockNode[]> {
+  const bodyBlocks = await convertBody(body, ctx);
+  const headers = await convertRelatedStories(body, ctx, 'header');
+  const footers = await convertRelatedStories(body, ctx, 'footer');
+  const noteDefinitions = await convertNoteDefinitions(ctx);
+  return [...bodyBlocks, ...headers, ...footers, ...noteDefinitions];
+}
+
+async function convertRelatedStories(
+  body: Element,
+  ctx: ImportContext,
+  kind: 'header' | 'footer',
+): Promise<MarkdownContainerDirective[]> {
+  const relationshipTypeSuffix = `/${kind}`;
+  const referenceName = `${kind}Reference`;
+  const referenceTypes = new Map<string, string>();
+  for (const reference of getAllElements(body, referenceName)) {
+    const id = reference.getAttributeNS(NS_R, 'id') ?? reference.getAttribute('r:id');
+    if (id) referenceTypes.set(id, getAttr(reference, 'type') ?? 'default');
+  }
+
+  const documentRelationships = ctx.documentRels;
+  const previousPartPath = ctx.currentPartPath;
+  const results: MarkdownContainerDirective[] = [];
+
+  for (const relationship of documentRelationships.values()) {
+    if (!relationship.type.endsWith(relationshipTypeSuffix)) continue;
+
+    const partPath = resolveTarget(baseDirOf('word/document.xml'), relationship.target);
+    const part = await getPartXml(ctx.pkg, partPath);
+    if (!part?.documentElement) continue;
+
+    const partRelationships = await getPartRelationships(ctx.pkg, partPath);
+    ctx.documentRels = new Map(partRelationships.map((rel) => [rel.id, rel]));
+    ctx.currentPartPath = partPath;
+    try {
+      const children = await convertBody(part.documentElement, ctx);
+      if (children.length === 0) continue;
+      results.push({
+        type: 'containerDirective',
+        name: `docx-${kind}`,
+        attributes: {
+          type: referenceTypes.get(relationship.id) ?? 'default',
+          source: partPath,
+        },
+        children,
+      });
+    } finally {
+      ctx.documentRels = documentRelationships;
+      ctx.currentPartPath = previousPartPath;
+    }
+  }
+
+  return results;
+}
+
 async function convertBody(body: Element, ctx: ImportContext): Promise<MarkdownBlockNode[]> {
+  return convertBlockElements(Array.from(body.children), ctx);
+}
+
+async function convertBlockElements(
+  children: Element[],
+  ctx: ImportContext,
+): Promise<MarkdownBlockNode[]> {
   const result: MarkdownBlockNode[] = [];
-  const children = Array.from(body.children);
 
   let i = 0;
   while (i < children.length) {
@@ -384,15 +479,29 @@ async function convertBody(body: Element, ctx: ImportContext): Promise<MarkdownB
       const table = await convertTable(el, ctx);
       if (table) result.push(table);
       i++;
+    } else if (localName === 'sdt') {
+      const content = getFirstChildElement(el, 'sdtContent');
+      if (content) result.push(...(await convertBlockElements(Array.from(content.children), ctx)));
+      i++;
+    } else if (
+      localName === 'ins' ||
+      localName === 'moveTo' ||
+      localName === 'customXml' ||
+      localName === 'smartTag' ||
+      localName === 'fldSimple'
+    ) {
+      result.push(...(await convertBlockElements(Array.from(el.children), ctx)));
+      i++;
+    } else if (localName === 'AlternateContent') {
+      const selected = getFirstChildElement(el, 'Choice') ?? getFirstChildElement(el, 'Fallback');
+      if (selected)
+        result.push(...(await convertBlockElements(Array.from(selected.children), ctx)));
+      i++;
     } else {
       // Skip unknown elements (sectPr, bookmarkStart, etc.)
       i++;
     }
   }
-
-  // Append footnote definitions at the end
-  const footnoteNodes = await convertFootnoteDefinitions(ctx);
-  result.push(...footnoteNodes);
 
   return result;
 }
@@ -448,8 +557,14 @@ async function convertRuns(
   paragraphEl: Element,
   ctx: ImportContext,
 ): Promise<MarkdownInlineNode[]> {
+  return mergeAdjacentText(await convertInlineElements(Array.from(paragraphEl.children), ctx));
+}
+
+async function convertInlineElements(
+  children: Element[],
+  ctx: ImportContext,
+): Promise<MarkdownInlineNode[]> {
   const result: MarkdownInlineNode[] = [];
-  const children = Array.from(paragraphEl.children);
 
   for (const child of children) {
     const localName = child.localName;
@@ -460,11 +575,34 @@ async function convertRuns(
     } else if (localName === 'hyperlink') {
       const link = await convertHyperlink(child, ctx);
       if (link) result.push(link);
+    } else if (localName === 'sdt') {
+      const content = getFirstChildElement(child, 'sdtContent');
+      if (content) {
+        result.push(...(await convertInlineElements(Array.from(content.children), ctx)));
+      }
+    } else if (
+      localName === 'ins' ||
+      localName === 'moveTo' ||
+      localName === 'customXml' ||
+      localName === 'smartTag' ||
+      localName === 'fldSimple'
+    ) {
+      result.push(...(await convertInlineElements(Array.from(child.children), ctx)));
+    } else if (localName === 'AlternateContent') {
+      // Choice and Fallback represent the same content for different Word
+      // versions. Reading both duplicates every text box and legacy image.
+      const selected =
+        getFirstChildElement(child, 'Choice') ?? getFirstChildElement(child, 'Fallback');
+      if (selected) {
+        result.push(...(await convertInlineElements(Array.from(selected.children), ctx)));
+      }
+    } else if (localName === 'drawing' || localName === 'pict') {
+      result.push(...(await convertDrawingContent(child, ctx)));
     }
     // Skip pPr, bookmarkStart, bookmarkEnd, etc.
   }
 
-  return mergeAdjacentText(result);
+  return result;
 }
 
 async function convertRun(runEl: Element, ctx: ImportContext): Promise<MarkdownInlineNode[]> {
@@ -494,8 +632,13 @@ async function convertRun(runEl: Element, ctx: ImportContext): Promise<MarkdownI
         }
         result.push(node);
       }
-    } else if (localName === 'br') {
+    } else if (localName === 'br' || localName === 'cr') {
       result.push({ type: 'break' } satisfies MarkdownBreak);
+    } else if (localName === 'tab') {
+      // Tabs are visible separators in Word. A literal tab is unstable when
+      // serialized through Markdown (it may become indentation), so retain the
+      // word boundary as a regular space.
+      result.push({ type: 'text', value: ' ' } satisfies MarkdownText);
     } else if (localName === 'footnoteReference') {
       const fnId = getAttr(child, 'id');
       if (fnId && fnId !== '0' && fnId !== '-1') {
@@ -504,13 +647,111 @@ async function convertRun(runEl: Element, ctx: ImportContext): Promise<MarkdownI
           identifier: `fn${fnId}`,
         } satisfies MarkdownFootnoteReference);
       }
-    } else if (localName === 'drawing' || localName === 'pict') {
-      const img = await extractImage(child, ctx);
-      if (img) result.push(img);
+    } else if (localName === 'endnoteReference') {
+      const noteId = getAttr(child, 'id');
+      if (noteId && noteId !== '0' && noteId !== '-1') {
+        result.push({
+          type: 'footnoteReference',
+          identifier: `endnote${noteId}`,
+        } satisfies MarkdownFootnoteReference);
+      }
+    } else if (localName === 'drawing' || localName === 'pict' || localName === 'object') {
+      result.push(...(await convertDrawingContent(child, ctx)));
+    } else if (localName === 'AlternateContent') {
+      const selected =
+        getFirstChildElement(child, 'Choice') ?? getFirstChildElement(child, 'Fallback');
+      if (selected) {
+        result.push(...(await convertInlineElements(Array.from(selected.children), ctx)));
+      }
     }
   }
 
   return result;
+}
+
+async function convertDrawingContent(
+  el: Element,
+  ctx: ImportContext,
+): Promise<MarkdownInlineNode[]> {
+  const result: MarkdownInlineNode[] = [];
+
+  // A positioned Word shape may be a text box, an image, or both. Text box
+  // paragraphs are nested inside the drawing rather than being paragraph
+  // siblings, so the normal body walker never sees them.
+  const textBoxes = findDescendants(el, 'txbxContent');
+  for (const textBox of textBoxes) {
+    const inlines = await flattenContainerToInlines(textBox, ctx);
+    appendInlineGroup(result, inlines);
+  }
+
+  const image = await extractImage(el, ctx);
+  if (image) result.push(image);
+  if (textBoxes.length > 0 && result.length > 0) {
+    // Positioned text boxes are independent visual regions. Several can be
+    // anchored in the same otherwise-empty paragraph (for example, labels on
+    // a number line); hard boundaries prevent their text from collapsing into
+    // one synthetic word during Markdown serialization.
+    if (result[0]?.type !== 'break') result.unshift({ type: 'break' } satisfies MarkdownBreak);
+    if (result[result.length - 1]?.type !== 'break') {
+      result.push({ type: 'break' } satisfies MarkdownBreak);
+    }
+  }
+  return result;
+}
+
+async function flattenContainerToInlines(
+  container: Element,
+  ctx: ImportContext,
+): Promise<MarkdownInlineNode[]> {
+  const result: MarkdownInlineNode[] = [];
+
+  for (const child of Array.from(container.children)) {
+    if (child.localName === 'p') {
+      appendInlineGroup(result, await convertRuns(child, ctx));
+    } else if (child.localName === 'tbl') {
+      appendInlineGroup(result, await flattenTableToInlines(child, ctx));
+    } else if (child.localName === 'sdt') {
+      const content = getFirstChildElement(child, 'sdtContent');
+      if (content) appendInlineGroup(result, await flattenContainerToInlines(content, ctx));
+    } else if (
+      child.localName === 'ins' ||
+      child.localName === 'moveTo' ||
+      child.localName === 'customXml' ||
+      child.localName === 'smartTag' ||
+      child.localName === 'fldSimple'
+    ) {
+      appendInlineGroup(result, await flattenContainerToInlines(child, ctx));
+    } else if (child.localName === 'AlternateContent') {
+      const selected =
+        getFirstChildElement(child, 'Choice') ?? getFirstChildElement(child, 'Fallback');
+      if (selected) appendInlineGroup(result, await flattenContainerToInlines(selected, ctx));
+    } else if (child.localName === 'r' || child.localName === 'hyperlink') {
+      appendInlineGroup(result, await convertInlineElements([child], ctx));
+    }
+  }
+
+  return mergeAdjacentText(result);
+}
+
+async function flattenTableToInlines(
+  table: Element,
+  ctx: ImportContext,
+): Promise<MarkdownInlineNode[]> {
+  const result: MarkdownInlineNode[] = [];
+  for (const row of getAllChildElements(table, 'tr')) {
+    for (const cell of getAllChildElements(row, 'tc')) {
+      appendInlineGroup(result, await flattenContainerToInlines(cell, ctx));
+    }
+  }
+  return mergeAdjacentText(result);
+}
+
+function appendInlineGroup(target: MarkdownInlineNode[], group: MarkdownInlineNode[]): void {
+  if (group.length === 0) return;
+  if (target.length > 0 && target[target.length - 1]?.type !== 'break') {
+    target.push({ type: 'break' } satisfies MarkdownBreak);
+  }
+  target.push(...group);
 }
 
 interface RunFormat {
@@ -565,12 +806,7 @@ async function convertHyperlink(el: Element, ctx: ImportContext): Promise<Markdo
     if (anchor) url = `#${anchor}`;
   }
 
-  const inlines: MarkdownInlineNode[] = [];
-  for (const child of Array.from(el.children)) {
-    if (child.localName === 'r') {
-      inlines.push(...(await convertRun(child, ctx)));
-    }
-  }
+  const inlines = await convertInlineElements(Array.from(el.children), ctx);
 
   if (inlines.length === 0) return null;
 
@@ -586,30 +822,26 @@ async function convertHyperlink(el: Element, ctx: ImportContext): Promise<Markdo
 // ============================================
 
 async function extractImage(el: Element, ctx: ImportContext): Promise<MarkdownImage | null> {
-  // Find <a:blip r:embed="rIdX"/> anywhere in the drawing tree
+  // DrawingML uses <a:blip r:embed="...">; older Word/VML documents use
+  // <v:imagedata r:id="...">. Supporting both also recovers many scanned
+  // forms and older templates in the corpus.
   const blip = findDescendant(el, 'blip');
-  if (!blip) {
-    return { type: 'image', url: '', alt: 'Image' };
-  }
-
-  const rId = blip.getAttributeNS(NS_R, 'embed') ?? blip.getAttribute('r:embed');
-  if (!rId) {
-    return { type: 'image', url: '', alt: 'Image' };
-  }
+  const imageData = findDescendant(el, 'imagedata');
+  const rId = blip
+    ? (blip.getAttributeNS(NS_R, 'embed') ?? blip.getAttribute('r:embed'))
+    : (imageData?.getAttributeNS(NS_R, 'id') ??
+      imageData?.getAttribute('r:id') ??
+      imageData?.getAttribute('o:relid'));
+  if (!rId) return null;
 
   const rel = ctx.documentRels.get(rId);
-  if (!rel) {
-    return { type: 'image', url: '', alt: 'Image' };
-  }
+  if (!rel || rel.targetMode === 'External') return null;
 
-  // Resolve the target path relative to word/
-  const target = rel.target.startsWith('/') ? rel.target.slice(1) : `word/${rel.target}`;
+  const target = resolveTarget(baseDirOf(ctx.currentPartPath), rel.target);
 
   // Extract binary data from the zip
   const data = await getPartBinary(ctx.pkg, target);
-  if (!data) {
-    return { type: 'image', url: '', alt: 'Image' };
-  }
+  if (!data) return null;
 
   // Determine extension and MIME type
   const dot = target.lastIndexOf('.');
@@ -625,7 +857,13 @@ async function extractImage(el: Element, ctx: ImportContext): Promise<MarkdownIm
 
   // Try to extract alt text from the drawing's docPr element
   const docPr = findDescendant(el, 'docPr');
-  const alt = docPr?.getAttribute('descr') || docPr?.getAttribute('title') || 'Image';
+  const shape = findDescendant(el, 'shape');
+  const alt =
+    docPr?.getAttribute('descr') ||
+    docPr?.getAttribute('title') ||
+    shape?.getAttribute('alt') ||
+    shape?.getAttribute('title') ||
+    'Image';
 
   return {
     type: 'image',
@@ -642,6 +880,16 @@ function findDescendant(el: Element, localName: string): Element | null {
     if (found) return found;
   }
   return null;
+}
+
+/** Recursively find every descendant element with the given local name. */
+function findDescendants(el: Element, localName: string): Element[] {
+  const results: Element[] = [];
+  for (const child of Array.from(el.children)) {
+    if (child.localName === localName) results.push(child);
+    results.push(...findDescendants(child, localName));
+  }
+  return results;
 }
 
 // ============================================
@@ -700,6 +948,12 @@ async function collectList(
             children: nested.items,
           };
           lastItem.children.push(nestedList);
+        } else {
+          // Some Word producers emit an empty parent-level numbering
+          // paragraph before the first real (more deeply indented) item. With
+          // no parent item to attach to, retain those items at this level
+          // instead of silently discarding the entire nested subtree.
+          items.push(...nested.items);
         }
         i += nested.consumed;
         consumed += nested.consumed;
@@ -827,17 +1081,10 @@ async function convertTableCell(
   ctx: ImportContext,
   isHeader: boolean,
 ): Promise<MarkdownTableCell> {
-  const inlines: MarkdownInlineNode[] = [];
-
-  // A cell can contain multiple paragraphs; flatten them with breaks
-  const paragraphs = getAllChildElements(tcEl, 'p');
-  for (let pi = 0; pi < paragraphs.length; pi++) {
-    if (pi > 0) {
-      inlines.push({ type: 'break' } as MarkdownBreak);
-    }
-    const runs = await convertRuns(paragraphs[pi], ctx);
-    inlines.push(...runs);
-  }
+  // Cells may contain paragraphs, content controls, and recursively nested
+  // tables (a common layout technique in Word forms). Markdown tables cannot
+  // nest, so preserve all cell text in reading order separated by hard breaks.
+  const inlines = await flattenContainerToInlines(tcEl, ctx);
 
   return {
     type: 'tableCell',
@@ -850,32 +1097,40 @@ async function convertTableCell(
 // Footnote Definition Conversion
 // ============================================
 
-async function convertFootnoteDefinitions(
+async function convertNoteDefinitions(ctx: ImportContext): Promise<MarkdownFootnoteDefinition[]> {
+  return [
+    ...(await convertNotePartDefinitions(ctx, ctx.footnotes, 'fn', 'word/footnotes.xml')),
+    ...(await convertNotePartDefinitions(ctx, ctx.endnotes, 'endnote', 'word/endnotes.xml')),
+  ];
+}
+
+async function convertNotePartDefinitions(
   ctx: ImportContext,
+  notes: Map<string, Element>,
+  identifierPrefix: string,
+  partPath: string,
 ): Promise<MarkdownFootnoteDefinition[]> {
   const results: MarkdownFootnoteDefinition[] = [];
+  const previousRelationships = ctx.documentRels;
+  const previousPartPath = ctx.currentPartPath;
+  const partRelationships = await getPartRelationships(ctx.pkg, partPath);
+  ctx.documentRels = new Map(partRelationships.map((rel) => [rel.id, rel]));
+  ctx.currentPartPath = partPath;
 
-  for (const [id, el] of ctx.footnotes) {
-    const children: MarkdownBlockNode[] = [];
-    const paragraphs = getAllChildElements(el, 'p');
-
-    for (const p of paragraphs) {
-      const inlines = await convertRuns(p, ctx);
-      if (inlines.length > 0) {
-        children.push({
-          type: 'paragraph',
-          children: inlines,
-        } satisfies MarkdownParagraph);
+  try {
+    for (const [id, el] of notes) {
+      const children = await convertBody(el, ctx);
+      if (children.length > 0) {
+        results.push({
+          type: 'footnoteDefinition',
+          identifier: `${identifierPrefix}${id}`,
+          children,
+        });
       }
     }
-
-    if (children.length > 0) {
-      results.push({
-        type: 'footnoteDefinition',
-        identifier: `fn${id}`,
-        children,
-      });
-    }
+  } finally {
+    ctx.documentRels = previousRelationships;
+    ctx.currentPartPath = previousPartPath;
   }
 
   return results;
