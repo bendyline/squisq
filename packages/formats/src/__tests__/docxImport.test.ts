@@ -14,9 +14,13 @@ import {
   REL_STYLES,
   REL_NUMBERING,
   REL_HYPERLINK,
+  REL_HEADER,
+  REL_FOOTER,
   CONTENT_TYPE_DOCX_DOCUMENT,
   CONTENT_TYPE_DOCX_STYLES,
   CONTENT_TYPE_DOCX_NUMBERING,
+  CONTENT_TYPE_DOCX_HEADER,
+  CONTENT_TYPE_DOCX_FOOTER,
 } from '../ooxml/namespaces';
 import { xmlDeclaration } from '../ooxml/xmlUtils';
 import { docxToMarkdownDoc, docxToDoc } from '../docx/import';
@@ -31,6 +35,7 @@ import type {
   MarkdownStrikethrough,
   MarkdownLink,
   MarkdownInlineNode,
+  MarkdownContainerDirective,
 } from '@bendyline/squisq/markdown';
 
 // ============================================
@@ -47,6 +52,7 @@ interface DocxFixtureOptions {
     target: string;
     targetMode?: 'External';
   }>;
+  extraParts?: Array<{ path: string; content: string; contentType: string }>;
 }
 
 async function buildTestDocx(options: DocxFixtureOptions): Promise<ArrayBuffer> {
@@ -79,6 +85,10 @@ async function buildTestDocx(options: DocxFixtureOptions): Promise<ArrayBuffer> 
   // numbering.xml
   if (options.numberingXml) {
     pkg.addPart('word/numbering.xml', options.numberingXml, CONTENT_TYPE_DOCX_NUMBERING);
+  }
+
+  for (const part of options.extraParts ?? []) {
+    pkg.addPart(part.path, part.content, part.contentType);
   }
 
   // Root relationship
@@ -162,6 +172,25 @@ describe('docxToMarkdownDoc', () => {
     expect(((doc.children[0] as MarkdownParagraph).children[0] as MarkdownText).value).toBe(
       'Hello world',
     );
+  });
+
+  it('imports visible content inside controls, revisions, and text boxes once', async () => {
+    const data = await buildTestDocx({
+      bodyXml:
+        `<w:p>` +
+        `<w:r><w:t>Body </w:t></w:r>` +
+        `<w:sdt><w:sdtContent><w:r><w:t>controlled </w:t></w:r></w:sdtContent></w:sdt>` +
+        `<w:ins><w:r><w:t>inserted </w:t></w:r></w:ins>` +
+        `<mc:AlternateContent xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006">` +
+        `<mc:Choice><w:drawing><w:txbxContent><w:p><w:r><w:t>text box</w:t></w:r></w:p></w:txbxContent></w:drawing></mc:Choice>` +
+        `<mc:Fallback><w:pict><w:txbxContent><w:p><w:r><w:t>fallback duplicate</w:t></w:r></w:p></w:txbxContent></w:pict></mc:Fallback>` +
+        `</mc:AlternateContent>` +
+        `</w:p>`,
+    });
+
+    const paragraph = docText(await docxToMarkdownDoc(data));
+    expect(paragraph).toContain('Body controlled inserted text box');
+    expect(paragraph).not.toContain('fallback duplicate');
   });
 
   it('skips empty paragraphs', async () => {
@@ -331,6 +360,27 @@ describe('docxToMarkdownDoc', () => {
     expect(list.ordered).toBe(true);
   });
 
+  it('retains nested list text after an empty parent numbering paragraph', async () => {
+    const numberingXml =
+      xmlDeclaration() +
+      `<w:numbering xmlns:w="${NS_WML}">` +
+      `<w:abstractNum w:abstractNumId="3">` +
+      `<w:lvl w:ilvl="0"><w:numFmt w:val="decimal"/></w:lvl>` +
+      `<w:lvl w:ilvl="1"><w:numFmt w:val="decimal"/></w:lvl>` +
+      `</w:abstractNum>` +
+      `<w:num w:numId="3"><w:abstractNumId w:val="3"/></w:num>` +
+      `</w:numbering>`;
+    const data = await buildTestDocx({
+      bodyXml:
+        `<w:p><w:pPr><w:numPr><w:ilvl w:val="0"/><w:numId w:val="3"/></w:numPr></w:pPr></w:p>` +
+        `<w:p><w:pPr><w:numPr><w:ilvl w:val="1"/><w:numId w:val="3"/></w:numPr></w:pPr>` +
+        `<w:r><w:t>Nested content survives</w:t></w:r></w:p>`,
+      numberingXml,
+    });
+
+    expect(docText(await docxToMarkdownDoc(data))).toContain('Nested content survives');
+  });
+
   // ============================================
   // Tables
   // ============================================
@@ -363,6 +413,57 @@ describe('docxToMarkdownDoc', () => {
     expect((cell10.children[0] as MarkdownText).value).toBe('1');
   });
 
+  it('flattens nested table contents without losing their text', async () => {
+    const data = await buildTestDocx({
+      bodyXml:
+        `<w:tbl><w:tr><w:tc>` +
+        `<w:p><w:r><w:t>Outer</w:t></w:r></w:p>` +
+        `<w:tbl><w:tr>` +
+        `<w:tc><w:p><w:r><w:t>Nested A</w:t></w:r></w:p></w:tc>` +
+        `<w:tc><w:p><w:r><w:t>Nested B</w:t></w:r></w:p></w:tc>` +
+        `</w:tr></w:tbl>` +
+        `</w:tc></w:tr></w:tbl>`,
+    });
+
+    expect(docText(await docxToMarkdownDoc(data))).toContain('Outer Nested A Nested B');
+  });
+
+  it('imports headers and footers as explicit DOCX story directives', async () => {
+    const headerXml =
+      xmlDeclaration() +
+      `<w:hdr xmlns:w="${NS_WML}"><w:p><w:r><w:t>Header text</w:t></w:r></w:p></w:hdr>`;
+    const footerXml =
+      xmlDeclaration() +
+      `<w:ftr xmlns:w="${NS_WML}"><w:p><w:r><w:t>Footer text</w:t></w:r></w:p></w:ftr>`;
+    const data = await buildTestDocx({
+      bodyXml:
+        `<w:p><w:r><w:t>Body text</w:t></w:r></w:p>` +
+        `<w:sectPr><w:headerReference w:type="default" r:id="rIdHeader"/>` +
+        `<w:footerReference w:type="default" r:id="rIdFooter"/></w:sectPr>`,
+      documentRels: [
+        { id: 'rIdHeader', type: REL_HEADER, target: 'header1.xml' },
+        { id: 'rIdFooter', type: REL_FOOTER, target: 'footer1.xml' },
+      ],
+      extraParts: [
+        { path: 'word/header1.xml', content: headerXml, contentType: CONTENT_TYPE_DOCX_HEADER },
+        { path: 'word/footer1.xml', content: footerXml, contentType: CONTENT_TYPE_DOCX_FOOTER },
+      ],
+    });
+
+    const doc = await docxToMarkdownDoc(data);
+    const header = doc.children.find(
+      (node): node is MarkdownContainerDirective =>
+        node.type === 'containerDirective' && node.name === 'docx-header',
+    );
+    const footer = doc.children.find(
+      (node): node is MarkdownContainerDirective =>
+        node.type === 'containerDirective' && node.name === 'docx-footer',
+    );
+    expect(header?.attributes?.type).toBe('default');
+    expect(footer?.attributes?.type).toBe('default');
+    expect(docText(doc)).toContain('Body text Header text Footer text');
+  });
+
   // ============================================
   // Empty Document
   // ============================================
@@ -387,7 +488,27 @@ describe('docxToMarkdownDoc', () => {
     const para = doc.children[0] as MarkdownParagraph;
     expect(para.children.some((c: MarkdownInlineNode) => c.type === 'break')).toBe(true);
   });
+
+  it('retains tabs as visible word boundaries', async () => {
+    const data = await buildTestDocx({
+      bodyXml: `<w:p><w:r><w:t>Before</w:t><w:tab/><w:t>After</w:t></w:r></w:p>`,
+    });
+
+    expect(docText(await docxToMarkdownDoc(data))).toBe('Before After');
+  });
 });
+
+function docText(doc: Awaited<ReturnType<typeof docxToMarkdownDoc>>): string {
+  const text: string[] = [];
+  const visit = (node: unknown): void => {
+    if (!node || typeof node !== 'object') return;
+    const value = node as { type?: string; value?: string; children?: unknown[] };
+    if ((value.type === 'text' || value.type === 'code') && value.value) text.push(value.value);
+    value.children?.forEach(visit);
+  };
+  visit(doc);
+  return text.join(' ').replace(/\s+/g, ' ').trim();
+}
 
 // ============================================
 // docxToDoc convenience wrapper

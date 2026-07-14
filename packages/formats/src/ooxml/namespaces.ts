@@ -59,6 +59,18 @@ export const REL_IMAGE =
 export const REL_FOOTNOTES =
   'http://schemas.openxmlformats.org/officeDocument/2006/relationships/footnotes';
 
+/** Relationship type: Endnotes */
+export const REL_ENDNOTES =
+  'http://schemas.openxmlformats.org/officeDocument/2006/relationships/endnotes';
+
+/** Relationship type: Header */
+export const REL_HEADER =
+  'http://schemas.openxmlformats.org/officeDocument/2006/relationships/header';
+
+/** Relationship type: Footer */
+export const REL_FOOTER =
+  'http://schemas.openxmlformats.org/officeDocument/2006/relationships/footer';
+
 /** Relationship type: Theme */
 export const REL_THEME =
   'http://schemas.openxmlformats.org/officeDocument/2006/relationships/theme';
@@ -155,6 +167,15 @@ export const CONTENT_TYPE_DOCX_FONT_TABLE =
 
 export const CONTENT_TYPE_DOCX_FOOTNOTES =
   'application/vnd.openxmlformats-officedocument.wordprocessingml.footnotes+xml';
+
+export const CONTENT_TYPE_DOCX_ENDNOTES =
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.endnotes+xml';
+
+export const CONTENT_TYPE_DOCX_HEADER =
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.header+xml';
+
+export const CONTENT_TYPE_DOCX_FOOTER =
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.footer+xml';
 
 export const CONTENT_TYPE_PPTX_PRESENTATION =
   'application/vnd.openxmlformats-officedocument.presentationml.presentation.main+xml';
