@@ -40,8 +40,12 @@ export interface SceneBlockAction {
   title?: string;
   onClick: () => void;
   disabled?: boolean;
+  /** Apply the selected-mode treatment (for actions such as Connect). */
+  active?: boolean;
   /** Render with the destructive (red) treatment — used for Delete. */
   danger?: boolean;
+  /** Optional dropdown anchored to this action button. */
+  popover?: ReactNode;
 }
 
 export interface SceneBlockToolbarProps {
@@ -178,20 +182,31 @@ export function SceneBlockToolbar({
       {properties}
       {actions.length > 0 && (
         <div className="squisq-scene-block-actions">
-          {actions.map((a) => (
-            <button
-              key={a.id}
-              type="button"
-              className={`squisq-scene-action${a.danger ? ' squisq-scene-action--danger' : ''}`}
-              onClick={a.onClick}
-              disabled={a.disabled}
-              title={a.title ?? a.label}
-              aria-label={a.title ?? a.label}
-            >
-              {a.icon && <span className="squisq-scene-action-icon">{a.icon}</span>}
-              <span className="squisq-scene-action-label">{a.label}</span>
-            </button>
-          ))}
+          {actions.map((a) => {
+            const button = (
+              <button
+                key={a.id}
+                type="button"
+                className={`squisq-scene-action${a.active ? ' squisq-scene-action--active' : ''}${a.danger ? ' squisq-scene-action--danger' : ''}`}
+                onClick={a.onClick}
+                disabled={a.disabled}
+                title={a.title ?? a.label}
+                aria-label={a.title ?? a.label}
+                aria-pressed={a.active || undefined}
+              >
+                {a.icon && <span className="squisq-scene-action-icon">{a.icon}</span>}
+                <span className="squisq-scene-action-label">{a.label}</span>
+              </button>
+            );
+            return a.popover ? (
+              <span key={a.id} className="squisq-scene-action-popover-anchor">
+                {button}
+                {a.popover}
+              </span>
+            ) : (
+              button
+            );
+          })}
         </div>
       )}
     </div>

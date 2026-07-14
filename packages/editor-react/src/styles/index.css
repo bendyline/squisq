@@ -12,6 +12,8 @@
 @import './image-edit-affordance.css';
 @import './diagram.css';
 @import './ascii-diagram.css';
+@import './mermaid-diagram.css';
+@import './code-snippet.css';
 @import './tree-view.css';
 @import './ascii-timeline.css';
 @import '../scene/scene.css';

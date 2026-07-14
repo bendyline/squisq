@@ -260,7 +260,7 @@ export function generateInlineHtml(doc: Doc, options: HtmlExportOptions): string
 *,*::before,*::after{box-sizing:border-box}
 html,body{margin:0;padding:0;height:100%;background:#1a1a2e;color:#e0e0e0;font-family:system-ui,-apple-system,sans-serif}
 #squisq-root{width:100%;height:100%;display:flex;align-items:center;justify-content:center}
-${mode === 'static' ? '#squisq-root{align-items:flex-start;overflow-y:auto;background:#fff;color:#1f2937}' : ''}
+${mode === 'static' ? '#squisq-root{display:block}' : ''}
 </style>
 </head>
 <body>
@@ -328,7 +328,7 @@ export function generateExternalHtml(
 *,*::before,*::after{box-sizing:border-box}
 html,body{margin:0;padding:0;height:100%;background:#1a1a2e;color:#e0e0e0;font-family:system-ui,-apple-system,sans-serif}
 #squisq-root{width:100%;height:100%;display:flex;align-items:center;justify-content:center}
-${mode === 'static' ? '#squisq-root{align-items:flex-start;overflow-y:auto;background:#fff;color:#1f2937}' : ''}
+${mode === 'static' ? '#squisq-root{display:block}' : ''}
 </style>
 </head>
 <body>

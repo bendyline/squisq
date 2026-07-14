@@ -30,6 +30,7 @@ import {
 import { useMediaUrl } from './hooks/MediaContext';
 import { InlineVideoPlayer } from './InlineVideoPlayer.js';
 import { InlineAudioPlayer } from './InlineAudioPlayer.js';
+import { MermaidDiagram } from './mermaid/MermaidDiagram.js';
 
 // ── Props ──────────────────────────────────────────────────────────
 
@@ -263,6 +264,16 @@ function renderBlock(
       );
 
     case 'code':
+      if (node.lang?.trim().toLowerCase() === 'mermaid') {
+        return (
+          <MermaidDiagram
+            key={key}
+            source={node.value}
+            className="squisq-md-mermaid"
+            ariaLabel="Mermaid diagram"
+          />
+        );
+      }
       return (
         <pre key={key} className="squisq-md-code-block">
           <code className={node.lang ? `language-${node.lang}` : undefined}>{node.value}</code>

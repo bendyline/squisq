@@ -101,8 +101,8 @@ describe('LinearDocView', () => {
 
   it('feeds imageWithCaption blocks the first body image as imageSrc', () => {
     // Regression: without auto-extracting imageSrc from contents, the
-    // template renders a layer with `src=undefined` and the SVG card
-    // shows a broken image in document (linear) mode.
+    // section renders an <img> with `src=undefined` — a broken figure in
+    // Page (linear) mode.
     const doc = mkDoc([
       mkBlock({
         id: 'img-1',
@@ -116,13 +116,11 @@ describe('LinearDocView', () => {
       }),
     ]);
     const { container } = render(<LinearDocView doc={doc} />);
-    const card = container.querySelector('.squisq-linear-card');
-    expect(card).toBeTruthy();
-    const img = card!.querySelector('image, img') as Element | null;
+    const section = container.querySelector('section[data-template="imageWithCaption"]');
+    expect(section).toBeTruthy();
+    const img = section!.querySelector('img');
     expect(img).toBeTruthy();
-    const href =
-      img!.getAttribute('href') ?? img!.getAttribute('xlink:href') ?? img!.getAttribute('src');
-    expect(href).toContain('mikehome_files/profile.png');
+    expect(img!.getAttribute('src')).toContain('mikehome_files/profile.png');
   });
 
   it('extracts imageSrc from raw HTML <img> (resized image)', () => {
@@ -157,15 +155,13 @@ describe('LinearDocView', () => {
       }),
     ]);
     const { container } = render(<LinearDocView doc={doc} />);
-    const card = container.querySelector('.squisq-linear-card');
-    expect(card).toBeTruthy();
-    const img = card!.querySelector('image, img') as Element | null;
-    const href =
-      img?.getAttribute('href') ?? img?.getAttribute('xlink:href') ?? img?.getAttribute('src');
-    expect(href).toContain('resized.png');
+    const section = container.querySelector('section[data-template="imageWithCaption"]');
+    expect(section).toBeTruthy();
+    const img = section!.querySelector('img');
+    expect(img?.getAttribute('src')).toContain('resized.png');
   });
 
-  it('renders annotated block as SVG card', () => {
+  it('renders annotated sectionHeader as an HTML banner section (no SVG)', () => {
     const doc = mkDoc([
       mkBlock({
         id: 'annotated-1',
@@ -182,12 +178,33 @@ describe('LinearDocView', () => {
       }),
     ]);
     const { container } = render(<LinearDocView doc={doc} />);
-    // Should have a card wrapper
-    const card = container.querySelector('.squisq-linear-card');
-    expect(card).toBeTruthy();
-    // Should contain an SVG (from BlockRenderer)
-    const svg = card?.querySelector('svg');
-    expect(svg).toBeTruthy();
+    const section = container.querySelector('[data-section-kind="banner"]');
+    expect(section).toBeTruthy();
+    expect(section!.textContent).toContain('Visual Block');
+    // Text-first templates render reflowable HTML, not slide SVG.
+    expect(section!.querySelector('svg')).toBeNull();
+  });
+
+  it('renders spatial templates as SVG inside a responsive canvas section', () => {
+    const doc = mkDoc([
+      mkBlock({
+        id: 'diagram-1',
+        template: 'diagram',
+        templateData: {
+          nodes: [
+            { id: 'a', label: 'A', x: 0, y: 0 },
+            { id: 'b', label: 'B', x: 40, y: 0 },
+          ],
+          edges: [{ source: 'a', target: 'b' }],
+        },
+      } as Partial<Block>),
+    ]);
+    const { container } = render(<LinearDocView doc={doc} />);
+    const section = container.querySelector('[data-section-kind="canvas-embed"]');
+    expect(section).toBeTruthy();
+    const canvas = section!.querySelector('.squisq-page-canvas');
+    expect(canvas).toBeTruthy();
+    expect(canvas!.querySelector('svg')).toBeTruthy();
   });
 
   it('renders transform-generated template blocks without authoring nodes', () => {
@@ -203,7 +220,7 @@ describe('LinearDocView', () => {
     const { container } = render(<LinearDocView doc={doc} />);
     const section = container.querySelector('[data-block-id="transform-stat"]');
     expect(section?.getAttribute('data-template')).toBe('statHighlight');
-    expect(section?.querySelector('.squisq-linear-card svg')).toBeTruthy();
+    expect(section?.getAttribute('data-section-kind')).toBe('stat-band');
     expect(section?.textContent).toContain('42%');
     expect(section?.textContent).toContain('Year-over-year growth');
   });
@@ -340,11 +357,11 @@ describe('LinearDocView markdown prop', () => {
       <LinearDocView markdown={'First paragraph.\n\nSecond paragraph.'} />,
     );
     const paragraphs = container.querySelectorAll('.squisq-md-p');
-    const styles = container.querySelector('.squisq-linear-content > style')?.textContent;
+    const styles = container.querySelector('style[data-squisq-page]')?.textContent;
 
     expect(paragraphs).toHaveLength(2);
     expect(paragraphs[0]?.nextElementSibling).toBe(paragraphs[1]);
-    expect(styles).toContain('.squisq-linear-content p + p');
+    expect(styles).toContain('.squisq-page-prose p + p');
     expect(styles).toContain('margin-top: 1.25em');
   });
 
@@ -381,7 +398,7 @@ describe('LinearDocView unknown template annotations', () => {
     expect(container.textContent).toContain('Mystery Section');
     expect(container.textContent).toContain('Fallback body content');
     expect(container.textContent).toContain('Unknown template "no-such-template-xyz"');
-    expect(container.querySelector('.squisq-linear-card')).not.toBeNull();
+    expect(container.querySelector('[data-section-kind="callout"]')).not.toBeNull();
     expect(warnSpy).not.toHaveBeenCalled();
     warnSpy.mockRestore();
   });

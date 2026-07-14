@@ -81,5 +81,29 @@
         }
       }
     ]
+  },
+  "pageStyle": {
+    "family": "clean",
+    "tokens": {
+      "contentMaxWidth": 760,
+      "wideMaxWidth": 1100,
+      "sectionSpacing": "comfortable",
+      "cornerRadius": 8,
+      "divider": "hairline",
+      "backgroundRhythm": "tinted-panels",
+      "heroStyle": "stacked",
+      "headingTreatment": {
+        "eyebrow": "kicker",
+        "scale": "regular",
+        "underline": "none"
+      },
+      "imageFraming": "rounded",
+      "shadow": "none",
+      "quoteMark": "accent-bar",
+      "numeralStyle": "oversized"
+    },
+    "accentRotation": {
+      "strategy": "cycle"
+    }
   }
 }

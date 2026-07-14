@@ -14,4 +14,5 @@ export const documentaryStyle: TransformStyleConfig = {
   blocksPerSection: { max: 3 },
   transitionStyle: 'fade',
   suggestedThemeId: 'documentary',
+  page: { spacing: 'generous', emphasisCurve: 'front-loaded' },
 };

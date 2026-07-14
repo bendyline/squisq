@@ -16,6 +16,7 @@ import { BLOCK_META_KEY_DESCRIPTORS, tokenizeAttrTokens } from '@bendyline/squis
 import { SQUISQ_MEDIA_MIME, parseSquisqMediaPayload } from './mediaDragMime';
 import { canHandleSquisqMediaDrop, ownsMonacoModel } from './rawEditorIsolation';
 import { useMonacoLoader } from './useMonacoLoader';
+import { isMarkdownFencedCodeLine, markdownFencedCodeLineMask } from './markdownCodeFence';
 
 // Monaco is loaded lazily through `useMonacoLoader` (see the hook for the
 // rationale). The type-only `import type * as monaco from 'monaco-editor'`
@@ -200,6 +201,9 @@ export function RawEditor({
           triggerCharacters: ['['],
           provideCompletionItems(model: monaco.editor.ITextModel, position: monaco.Position) {
             if (!ownsMonacoModel(editor, model)) return { suggestions: [] };
+            if (isMarkdownFencedCodeLine(model.getValue(), position.lineNumber)) {
+              return { suggestions: [] };
+            }
             const lineContent = model.getLineContent(position.lineNumber);
 
             // Only trigger inside a heading line that has {[ before the cursor
@@ -314,6 +318,9 @@ export function RawEditor({
             triggerCharacters: ['['],
             provideCompletionItems(model, position) {
               if (!ownsMonacoModel(editor, model)) return { suggestions: [] };
+              if (isMarkdownFencedCodeLine(model.getValue(), position.lineNumber)) {
+                return { suggestions: [] };
+              }
               const lineContent = model.getLineContent(position.lineNumber);
               const textBeforeCursor = lineContent.substring(0, position.column - 1);
               const textAfterCursor = lineContent.substring(position.column - 1);
@@ -397,6 +404,9 @@ export function RawEditor({
             triggerCharacters: ['=', ' '],
             provideCompletionItems(model, position) {
               if (!ownsMonacoModel(editor, model)) return { suggestions: [] };
+              if (isMarkdownFencedCodeLine(model.getValue(), position.lineNumber)) {
+                return { suggestions: [] };
+              }
               const lineContent = model.getLineContent(position.lineNumber);
               // Block-meta attributes only mean something on a heading's
               // template annotation — same gate as the template provider.
@@ -624,8 +634,10 @@ export function RawEditor({
 
     const decorations: monaco.editor.IModelDeltaDecoration[] = [];
     const lines = model.getLineCount();
+    const fencedLines = markdownFencedCodeLineMask(model.getValue());
     const re = /\{\[([a-zA-Z0-9_:-]+)\]\}/g;
     for (let line = 1; line <= lines; line++) {
+      if (fencedLines[line - 1]) continue;
       const text = model.getLineContent(line);
       re.lastIndex = 0;
       let match: RegExpExecArray | null;

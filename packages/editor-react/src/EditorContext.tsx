@@ -153,6 +153,8 @@ export interface EditorState {
   colorScheme: EditorColorScheme;
   /** Operating mode — 'markdown' for the full shell, 'code' for Monaco-only. */
   editorMode: EditorMode;
+  /** Whether the host-triggered Find toolbar is active. */
+  findMode: boolean;
   /** Monaco language ID for the Raw editor. */
   language: string;
   /**
@@ -263,6 +265,8 @@ export interface EditorActions {
   setMarkdownDoc: (doc: MarkdownDocument) => void;
   /** Switch the active view */
   setActiveView: (view: EditorView) => void;
+  /** Enter or leave the host-triggered Find toolbar mode. */
+  setFindMode: (active: boolean) => void;
   /** Register / unregister the Tiptap editor instance (called by WysiwygEditor) */
   setTiptapEditor: (editor: TiptapEditor | null) => void;
   /** Register / unregister the Monaco editor instance (called by RawEditor) */
@@ -463,6 +467,13 @@ export interface EditorProviderProps {
   /** Explicit Monaco language ID — wins over the fileName-derived one. */
   language?: string;
   /**
+   * Controlled Find-mode state. No trigger button is rendered by default;
+   * hosts can set this prop or call `setFindMode` from editor context.
+   */
+  findMode?: boolean;
+  /** Notified when Find mode requests a state change (for example, its X button). */
+  onFindModeChange?: (active: boolean) => void;
+  /**
    * Initial visibility of the inline preview gutter. Defaults to false.
    * The toolbar's View menu can toggle it at runtime.
    */
@@ -577,6 +588,8 @@ export function EditorProvider({
   allowNarrate = true,
   fileName,
   language,
+  findMode: controlledFindMode,
+  onFindModeChange,
   inlinePreview = false,
   showStatusBar = true,
   outline = false,
@@ -617,6 +630,16 @@ export function EditorProvider({
   const [doc, setDoc] = useState<Doc | null>(null);
   const [activeView, setActiveViewRaw] = useState<EditorView>(
     editorMode === 'markdown' ? initialView : 'raw',
+  );
+  const [uncontrolledFindMode, setUncontrolledFindMode] = useState(false);
+  const findMode = editorMode !== 'image' && (controlledFindMode ?? uncontrolledFindMode);
+  const setFindMode = useCallback(
+    (active: boolean) => {
+      if (editorMode === 'image') return;
+      if (controlledFindMode === undefined) setUncontrolledFindMode(active);
+      onFindModeChange?.(active);
+    },
+    [controlledFindMode, editorMode, onFindModeChange],
   );
   const activeViewRef = useRef(activeView);
   activeViewRef.current = activeView;
@@ -1128,6 +1151,7 @@ export function EditorProvider({
       isParsing,
       colorScheme,
       editorMode,
+      findMode,
       language: resolvedLanguage,
       inlinePreviewVisible,
       statusBarVisible,
@@ -1165,6 +1189,7 @@ export function EditorProvider({
       addBlock,
       setMarkdownDoc,
       setActiveView,
+      setFindMode,
       setTiptapEditor,
       setMonacoEditor,
       setColorScheme,
@@ -1189,6 +1214,7 @@ export function EditorProvider({
       isParsing,
       colorScheme,
       editorMode,
+      findMode,
       resolvedLanguage,
       inlinePreviewVisible,
       statusBarVisible,
@@ -1222,6 +1248,7 @@ export function EditorProvider({
       addBlock,
       setMarkdownDoc,
       setActiveView,
+      setFindMode,
       setTiptapEditor,
       setMonacoEditor,
       setColorScheme,

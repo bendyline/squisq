@@ -79,8 +79,15 @@ and block-at-a-time / timeline editing primitives (`useBlockNavigator`,
   SVG preview gutter, `inlinePreviewWidth` default 320).
 - **Code & image modes** — pass `fileName` / `language` to get a Monaco-only
   code editor, or `imageSrc` (+ `imageMode: 'edit'`) for the image surface.
+- **Host-triggered Find mode** — control `findMode` and
+  `onFindModeChange` (or call `setFindMode` from context) to replace the
+  toolbar's editing actions with live search, previous/next navigation, and
+  highlighted matches. No Find trigger button is added unless the host supplies
+  one.
 - **Embedding** — `readOnly`, `placeholder`, `submitOnEnter`, `fullWidth`,
-  `thinMargins`, `minHeight`/`maxHeight` auto-grow for chat-composer use.
+  `thinMargins`, `minHeight`/`maxHeight` auto-grow for chat-composer use, plus
+  host-controlled Write typography through `writeCanvasSettings` (`textSize`
+  and `lineSpacing`).
 - **Color scheme** — pass `colorScheme="light" | "dark"` for the editor chrome
   (**v1.5:** renamed from the old `theme` prop; `RawEditor`'s own `theme` prop is
   now `monacoTheme`).
@@ -100,7 +107,8 @@ side by side:
 import { useEditorContext } from '@bendyline/squisq-editor-react';
 
 function MyComponent() {
-  const { markdownSource, doc, activeView, setMarkdownSource, setActiveView } = useEditorContext();
+  const { markdownSource, doc, activeView, setMarkdownSource, setActiveView, setFindMode } =
+    useEditorContext();
   // markdownSource: string, doc: Doc | null, activeView: 'raw' | 'wysiwyg' | 'preview'
 }
 ```

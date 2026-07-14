@@ -70,5 +70,29 @@
       "text": "#115e59",
       "accent": "#0d9488"
     }
+  },
+  "pageStyle": {
+    "family": "clean",
+    "tokens": {
+      "contentMaxWidth": 760,
+      "wideMaxWidth": 1100,
+      "sectionSpacing": "comfortable",
+      "cornerRadius": 8,
+      "divider": "hairline",
+      "backgroundRhythm": "alternate",
+      "heroStyle": "stacked",
+      "headingTreatment": {
+        "eyebrow": "kicker",
+        "scale": "regular",
+        "underline": "none"
+      },
+      "imageFraming": "rounded",
+      "shadow": "soft",
+      "quoteMark": "accent-bar",
+      "numeralStyle": "plain"
+    },
+    "accentRotation": {
+      "strategy": "cycle"
+    }
   }
 }

@@ -95,6 +95,13 @@ export interface TransformStyleConfig {
     /** Target promoted blocks per minute of content (e.g. 5). */
     slidesPerMinute?: number;
   };
+
+  /**
+   * Page (linear) mode hints for docs produced by this style. Consumers
+   * pass this as `MaterializePageSectionsOptions.transformPage` so the
+   * summarization strategy shapes the page rendition (spacing, emphasis).
+   */
+  page?: import('../doc/page/materializePageSection.js').PageTransformHints;
 }
 
 /** Built-in id or a call-scoped declarative style definition. */

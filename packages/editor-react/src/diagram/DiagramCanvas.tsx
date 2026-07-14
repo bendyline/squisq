@@ -222,6 +222,7 @@ export function DiagramCanvas({
         showMaximize={showMaximize}
         maximized={maximized}
         onToggleMaximize={onToggleMaximize}
+        showViewControls
         showToolbar={false}
         textEditing={textConfig}
       />

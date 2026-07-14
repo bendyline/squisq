@@ -109,7 +109,9 @@ test.describe('Video export', () => {
     // Modal labels aren't wired with htmlFor, so target the selects by their
     // unique option values instead.
     await page.locator('select:has(option[value="draft"])').selectOption('draft');
-    await page.locator('select:has(option[value="15"])').selectOption('15');
+    // Scope to the export modal — the site toolbar's text-size select also
+    // carries a "15" option and would make the bare locator ambiguous.
+    await page.getByLabel('Frame Rate').selectOption('15');
 
     const exportBtn = page.getByRole('button', { name: 'Export Video' });
     await exportBtn.click();

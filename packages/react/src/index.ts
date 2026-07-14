@@ -12,8 +12,16 @@ export { DocControlsSlideshow } from './DocControlsSlideshow.js';
 export { DocPlayerWithSidebar } from './DocPlayerWithSidebar.js';
 export { DocProgressBar } from './DocProgressBar.js';
 export { MarkdownRenderer } from './MarkdownRenderer.js';
+export { MermaidDiagram } from './mermaid/MermaidDiagram.js';
+export type { MermaidDiagramProps } from './mermaid/MermaidDiagram.js';
 export { LinearDocView } from './LinearDocView.js';
 export type { LinearDocViewProps, ImageDisplayMode } from './LinearDocView.js';
+export { PageSectionView } from './page/PageSectionView.js';
+export type { PageSectionViewProps } from './page/PageSectionView.js';
+export { CanvasSection } from './page/CanvasSection.js';
+export type { CanvasSectionProps } from './page/CanvasSection.js';
+export { PageViewContext, usePageView } from './page/PageViewContext.js';
+export type { PageViewContextValue } from './page/PageViewContext.js';
 export { InlineVideoPlayer } from './InlineVideoPlayer.js';
 export type { InlineVideoPlayerProps } from './InlineVideoPlayer.js';
 export { InlineAudioPlayer } from './InlineAudioPlayer.js';
@@ -28,6 +36,7 @@ export { VideoLayer } from './layers/VideoLayer.js';
 export { TableLayer } from './layers/TableLayer.js';
 export { TreeLayer } from './layers/TreeLayer.js';
 export { MapLayer } from './layers/MapLayer.js';
+export { MermaidLayer } from './layers/MermaidLayer.js';
 
 // Timed media clips (block.media + doc.documentMedia playback)
 export { MediaClipLayer } from './MediaClipLayer.js';

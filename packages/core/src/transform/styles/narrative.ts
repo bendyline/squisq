@@ -15,4 +15,5 @@ export const narrativeStyle: TransformStyleConfig = {
   transitionStyle: 'fade',
   suggestedThemeId: 'cinematic',
   pacing: { intro: true, outro: true },
+  page: { spacing: 'comfortable', emphasisCurve: 'even' },
 };

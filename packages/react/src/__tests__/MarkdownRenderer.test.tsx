@@ -1,11 +1,21 @@
-import { describe, it, expect } from 'vitest';
-import { render } from '@testing-library/react';
+import { describe, it, expect, vi } from 'vitest';
+import { render, waitFor } from '@testing-library/react';
 import { MarkdownRenderer } from '../MarkdownRenderer';
 import {
   parseMarkdown,
   type MarkdownBlockNode,
   type MarkdownInlineNode,
 } from '@bendyline/squisq/markdown';
+
+vi.mock('mermaid', () => ({
+  default: {
+    initialize: vi.fn(),
+    render: vi.fn(async (id: string) => ({
+      svg: `<svg id="${id}" viewBox="0 0 100 50"><text>Rendered graph</text></svg>`,
+      diagramType: 'flowchart-v2',
+    })),
+  },
+}));
 
 // ── Helpers ────────────────────────────────────────────────────────
 
@@ -195,6 +205,18 @@ describe('MarkdownRenderer', () => {
     expect(pre).toBeTruthy();
     const code = pre?.querySelector('code.language-typescript');
     expect(code?.textContent).toBe('const x = 1;');
+  });
+
+  it('renders Mermaid fences as diagrams instead of source markup', async () => {
+    const nodes = parseNodes('```mermaid\nflowchart LR\n  a --> b\n```');
+    const { container } = render(<MarkdownRenderer nodes={nodes} />);
+
+    await waitFor(() => {
+      expect(container.querySelector('.squisq-mermaid-render-svg svg')).not.toBeNull();
+    });
+    expect(container.querySelector('pre.squisq-md-code-block')).toBeNull();
+    expect(container.textContent).toContain('Rendered graph');
+    expect(container.textContent).not.toContain('flowchart LR');
   });
 
   it('renders a blockquote', () => {

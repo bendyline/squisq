@@ -149,6 +149,36 @@ test.describe('WYSIWYG editing', () => {
     await expect(editor).toContainText('appended text');
   });
 
+  test('keeps block controls on the empty heading line after a Markdown shortcut', async ({
+    page,
+  }) => {
+    const editor = await focusWysiwygParagraph(page);
+    await editor.evaluate((element) => {
+      const range = document.createRange();
+      range.selectNodeContents(element);
+      range.collapse(false);
+      const selection = window.getSelection();
+      selection?.removeAllRanges();
+      selection?.addRange(range);
+      (element as HTMLElement).focus();
+    });
+    await page.keyboard.press('Enter');
+    await page.keyboard.type('# ');
+
+    const heading = editor.locator('h1').last();
+    const content = heading.locator('.squisq-heading-content');
+    const badge = heading.locator('.squisq-template-badge');
+    await expect(heading).toHaveClass(/squisq-block-tags--selected/);
+    await expect(content.locator('br.ProseMirror-trailingBreak')).toHaveCount(1);
+    await expect(badge).toBeVisible();
+
+    const [contentBox, badgeBox] = await Promise.all([content.boundingBox(), badge.boundingBox()]);
+    expect(contentBox).toBeTruthy();
+    expect(badgeBox).toBeTruthy();
+    expect(badgeBox!.y).toBeLessThan(contentBox!.y + contentBox!.height);
+    expect(badgeBox!.y + badgeBox!.height).toBeGreaterThan(contentBox!.y);
+  });
+
   test('Ctrl+B applies bold formatting to new text', async ({ page }) => {
     const editor = await focusWysiwygParagraph(page);
     const modifier = process.platform === 'darwin' ? 'Meta' : 'Control';

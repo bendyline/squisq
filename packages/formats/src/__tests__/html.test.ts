@@ -300,6 +300,10 @@ describe('docToHtml', () => {
     const html = docToHtml(doc, { playerScript: MOCK_PLAYER_SCRIPT, mode: 'static' });
 
     expect(html).toContain('"static"');
+    // The page rendition owns its own background/scrolling — the host shim
+    // must not hardcode a white background that fights themed pages.
+    expect(html).toContain('#squisq-root{display:block}');
+    expect(html).not.toContain('background:#fff');
   });
 
   it('inlines images as base64 data URIs', () => {

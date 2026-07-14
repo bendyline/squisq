@@ -15,4 +15,5 @@ export const magazineStyle: TransformStyleConfig = {
   transitionStyle: 'dissolve',
   suggestedThemeId: 'magazine',
   templateMap: { quote: 'pullQuote', impactLine: 'fullBleedQuote' },
+  page: { spacing: 'comfortable', emphasisCurve: 'front-loaded' },
 };

@@ -596,6 +596,49 @@ materializer. Its `persistentLayers`, `failureMode`, and `customTemplates`
 options have identical semantics, and `onDiagnostic` receives failures with the
 source block and block index.
 
+#### Page Section Resolution
+
+```ts
+function materializePageSections(
+  doc: Doc,
+  options?: MaterializePageSectionsOptions,
+): PageSectionMaterialization[];
+
+function materializePageSection(
+  block: Block,
+  options?: MaterializePageSectionOptions,
+): PageSectionMaterialization;
+
+interface MaterializePageSectionsOptions {
+  theme?: Theme; // theme.pageStyle (or a derived default) art-directs the page
+  viewport?: ViewportConfig; // aspect for canvas embeds
+  customTemplates?: readonly CustomTemplateDefinition[];
+  cover?: StartBlockConfig | false; // synthesize a leading hero (deduped vs an authored title/H1)
+  transformPage?: PageTransformHints; // spacing / emphasis hints from a transform style
+}
+
+function resolvePageStyle(theme?: Theme, hints?: PageTransformHints): ThemePageStyle;
+
+// Shared page CSS source (React preview + string-HTML exporters)
+const PAGE_BASE_CSS: string;
+function buildPageCssVars(theme?: Theme, pageStyle?: ThemePageStyle): Record<string, string>;
+function buildPageCss(theme?: Theme): string;
+function pageStyleDataAttributes(pageStyle: ThemePageStyle): Record<string, string>;
+```
+
+`materializePageSections` is the Page (linear) mode sibling of
+`materializeBlockLayers`: it walks the block tree pre-order and maps every
+block onto a variable-height `PageSection` (15 closed kinds — hero, banner,
+stat-band, quote-band, feature-split, media-figure, gallery, callout,
+card-grid, item-list, timeline-rail, table-section, canvas-embed, prose,
+footer) with typed content slots, then applies the theme's sequence-scoped
+art direction: background rhythm, accent rotation over `colorSchemes`,
+emphasis curve, and numbered/mono-tag eyebrow ordinals. Inherently spatial
+blocks (diagram/tree/timeline/map/drawing/layout, authored layers, custom
+templates) become `canvas-embed` sections whose consumers render the carried
+block through `materializeBlockLayers`. Unknown templates degrade to a
+visible diagnostic callout — failures are data, never console output.
+
 #### Template Registry
 
 ```ts
@@ -1386,33 +1429,38 @@ interface BlockRendererProps {
 
 #### Other components
 
-| Component              | Summary                                                               |
-| ---------------------- | --------------------------------------------------------------------- |
-| `DocPlayerWithSidebar` | `DocPlayer` composed with `DocControlsSidebar`.                       |
-| `LinearDocView`        | Scrollable/printable render of all blocks (`LinearDocViewProps`).     |
-| `MarkdownRenderer`     | Renders `MarkdownBlockNode[]` as React (`MarkdownRendererProps`).     |
-| `CaptionOverlay`       | Standard caption overlay bound to `CaptionTrack` + `currentTime`.     |
-| `SocialCaptionOverlay` | Large centered TikTok/Reels-style word-by-word captions.              |
-| `DocProgressBar`       | Block progress indicator with seek.                                   |
-| `DocControlsOverlay`   | Floating play/pause + prev/next over the player.                      |
-| `DocControlsBottom`    | Bottom bar with progress + counter.                                   |
-| `DocControlsSidebar`   | Side panel with block thumbnails.                                     |
-| `DocControlsSlideshow` | Minimal slideshow controls (arrows + counter).                        |
-| `InlineVideoPlayer`    | Native `<video>` wrapper resolving `src`/`poster` via `MediaContext`. |
-| `InlineAudioPlayer`    | Native `<audio>` wrapper resolving `src` via `MediaContext`.          |
-| `JsonView`             | Read-only viewer for a JSON value bound to a Squisq-annotated schema. |
+| Component              | Summary                                                                                                                                                                |
+| ---------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `DocPlayerWithSidebar` | `DocPlayer` composed with `DocControlsSidebar`.                                                                                                                        |
+| `LinearDocView`        | The "Page" rendition: theme-art-directed, variable-height HTML sections via core `materializePageSections`; SVG only for spatial canvas embeds (`LinearDocViewProps`). |
+| `PageSectionView`      | Dispatches one `PageSection` to its section layout component.                                                                                                          |
+| `CanvasSection`        | Responsive SVG embed for spatial sections (diagram/tree/map/…).                                                                                                        |
+| `MarkdownRenderer`     | Renders `MarkdownBlockNode[]` as React (`MarkdownRendererProps`).                                                                                                      |
+| `CaptionOverlay`       | Standard caption overlay bound to `CaptionTrack` + `currentTime`.                                                                                                      |
+| `SocialCaptionOverlay` | Large centered TikTok/Reels-style word-by-word captions.                                                                                                               |
+| `DocProgressBar`       | Block progress indicator with seek.                                                                                                                                    |
+| `DocControlsOverlay`   | Floating play/pause + prev/next over the player.                                                                                                                       |
+| `DocControlsBottom`    | Bottom bar with progress + counter.                                                                                                                                    |
+| `DocControlsSidebar`   | Side panel with block thumbnails.                                                                                                                                      |
+| `DocControlsSlideshow` | Minimal slideshow controls (arrows + counter).                                                                                                                         |
+| `InlineVideoPlayer`    | Native `<video>` wrapper resolving `src`/`poster` via `MediaContext`.                                                                                                  |
+| `InlineAudioPlayer`    | Native `<audio>` wrapper resolving `src` via `MediaContext`.                                                                                                           |
+| `JsonView`             | Read-only viewer for a JSON value bound to a Squisq-annotated schema.                                                                                                  |
 
 ```ts
 interface LinearDocViewProps {
   doc?: Doc; // wins over `markdown` when both are given
   markdown?: string; // parsed internally when `doc` is absent (empty container otherwise)
   basePath?: string;
-  viewport?: ViewportConfig;
-  theme?: Theme; // default DEFAULT_THEME
+  viewport?: ViewportConfig; // aspect for embedded canvas sections
+  theme?: Theme; // default DEFAULT_THEME; theme.pageStyle art-directs the page
   animationsEnabled?: boolean; // default true
   surface?: SurfaceScheme | 'auto';
   thinMargins?: boolean;
   imageDisplayMode?: ImageDisplayMode; // 'inline' (default) | 'thumbnail'
+  globalKeyboardShortcuts?: boolean; // default false
+  showCover?: boolean; // default true — hero from doc.startBlock (deduped vs an authored title)
+  transformPage?: PageTransformHints; // page hints from the active Summarize style
   className?: string;
 }
 
@@ -2154,9 +2202,12 @@ interface EditorShellProps {
   imageDisplayMode?: ImageDisplayMode; // 'inline' (default) | 'thumbnail'
   thinMargins?: boolean;
   fullWidth?: boolean;
+  writeCanvasSettings?: WriteCanvasSettings; // { textSize?: px; lineSpacing?: unitless }
   // File-kind / read-only / image mode
   fileName?: string;
   language?: string;
+  findMode?: boolean; // controlled; no built-in trigger button
+  onFindModeChange?: (active: boolean) => void;
   readOnly?: boolean;
   imageSrc?: string;
   imageAlt?: string;
@@ -2177,6 +2228,22 @@ interface EditorShellProps {
   submitOnEnter?: () => void;
 }
 ```
+
+`writeCanvasSettings` controls only the WYSIWYG Write canvas and can be updated
+live by the host without changing document markdown. `textSize` is a CSS-pixel
+base size (headings remain relative to it); `lineSpacing` is a unitless body-text
+line-height multiplier. Custom layouts using `WysiwygEditor` directly can pass
+the same prop. The equivalent CSS variables are `--squisq-write-text-size` and
+`--squisq-write-line-spacing`.
+
+`findMode` is an opt-in toolbar state controlled by the host. While active, a
+search box appears immediately after the Write/Source/Use tabs; formatting and
+middle-slot controls are cleared while the normal right-side toolbar items stay
+available. Matches update as the query changes, the active match receives a
+stronger highlight, and Enter / Shift+Enter or the arrow buttons navigate the
+results. Handle `onFindModeChange` so the X button can close a controlled Find
+mode. Descendants rendered inside `EditorProvider` can instead call
+`setFindMode(true)` from `useEditorContext()`.
 
 In the Use view, the Presentation split button can fill only the current
 `EditorShell`, open a read-only audience window synchronized to the main

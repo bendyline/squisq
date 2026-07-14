@@ -89,6 +89,7 @@ export type { RawEditorProps } from './RawEditor.js';
 
 export { WysiwygEditor } from './WysiwygEditor.js';
 export type { WysiwygEditorProps } from './WysiwygEditor.js';
+export type { WriteCanvasSettings } from './writeCanvasSettings.js';
 
 export { PreviewPanel } from './PreviewPanel.js';
 export type { PreviewPanelProps } from './PreviewPanel.js';
@@ -292,6 +293,94 @@ export {
   translateDiagramOp,
 } from './asciiDiagram/asciiDiagramOps.js';
 export { shouldPasteAsAsciiFence } from './asciiDiagram/asciiPaste.js';
+
+// Complex diagram editor — every explicit `mermaid` fence is rendered through
+// Mermaid's public renderer inside the shared diagram chrome. Flowcharts add
+// source-backed node/edge gestures and the full Mermaid shape catalog; every
+// other diagram family remains lossless render + source editing.
+export {
+  MermaidDiagramExtension,
+  MERMAID_DIAGRAM_KEY,
+  findMermaidDiagramBlockPos,
+  isMermaidDiagramNode,
+  isMermaidSourceVisible,
+  toggleMermaidSource,
+} from './mermaid/MermaidDiagramExtension.js';
+export type {
+  MermaidDiagramBlockEntry,
+  MermaidDiagramExtensionOptions,
+  MermaidDiagramPluginState,
+} from './mermaid/MermaidDiagramExtension.js';
+export { MermaidDiagramWidget } from './mermaid/MermaidDiagramWidget.js';
+export type { MermaidDiagramWidgetProps } from './mermaid/MermaidDiagramWidget.js';
+export { MermaidDiagramCanvas } from './mermaid/MermaidDiagramCanvas.js';
+export type {
+  MermaidDiagramCanvasProps,
+  MermaidNodeCanvasAction,
+} from './mermaid/MermaidDiagramCanvas.js';
+export { useMermaidDiagramData } from './mermaid/mermaidData.js';
+export type { MermaidDiagramData } from './mermaid/mermaidData.js';
+export {
+  renderMermaidDiagram,
+  inspectMermaidSource,
+  mermaidErrorMessage,
+} from './mermaid/mermaidRenderer.js';
+export type { MermaidRenderResult } from './mermaid/mermaidRenderer.js';
+export { MermaidShapePalette } from './mermaid/MermaidShapePalette.js';
+export type { MermaidShapePaletteProps } from './mermaid/MermaidShapePalette.js';
+export {
+  MERMAID_FLOWCHART_SHAPES,
+  isMermaidFlowchartShapeId,
+  normalizeMermaidFlowchartShape,
+} from './mermaid/mermaidShapes.js';
+export type { MermaidFlowchartShape, MermaidFlowchartShapeId } from './mermaid/mermaidShapes.js';
+export type {
+  MermaidEditableEdge,
+  MermaidEditableModel,
+  MermaidEditableNode,
+  MermaidFlowchartDirection,
+  MermaidFlowchartModel,
+} from './mermaid/mermaidModel.js';
+export {
+  DEFAULT_MERMAID_DIAGRAM_TYPE,
+  MERMAID_DIAGRAM_TYPES,
+  mermaidDiagramMarkdown,
+} from './mermaid/mermaidDiagramTypes.js';
+export type {
+  MermaidDiagramCategory,
+  MermaidDiagramPreview,
+  MermaidDiagramType,
+} from './mermaid/mermaidDiagramTypes.js';
+export { MermaidDiagramTypeThumbnail } from './mermaid/MermaidDiagramTypeThumbnail.js';
+
+// Code snippets — every ordinary explicit-language fence is replaced in the
+// WYSIWYG surface by a Monaco inset. The fence node remains authoritative, so
+// edits preserve the exact language tag and source when serialized to Markdown.
+export {
+  CodeSnippetExtension,
+  CODE_SNIPPET_KEY,
+  findCodeSnippetBlockPos,
+  isCodeSnippetNode,
+} from './codeSnippet/CodeSnippetExtension.js';
+export type {
+  CodeSnippetBlockEntry,
+  CodeSnippetExtensionOptions,
+  CodeSnippetPluginState,
+} from './codeSnippet/CodeSnippetExtension.js';
+export { CodeSnippetWidget } from './codeSnippet/CodeSnippetWidget.js';
+export type { CodeSnippetWidgetProps } from './codeSnippet/CodeSnippetWidget.js';
+export { replaceCodeSnippetText } from './codeSnippet/codeSnippetCommands.js';
+export { useCodeSnippetData } from './codeSnippet/codeSnippetData.js';
+export type { CodeSnippetData } from './codeSnippet/codeSnippetData.js';
+export {
+  CODE_SNIPPET_LANGUAGES,
+  codeSnippetFenceLanguageToken,
+  codeSnippetLanguageLabel,
+  codeSnippetMarkdown,
+  isCodeSnippetFenceLanguage,
+  monacoLanguageForFence,
+} from './codeSnippet/codeSnippetLanguages.js';
+export type { CodeSnippetLanguage } from './codeSnippet/codeSnippetLanguages.js';
 
 // Treeview editor — ASCII file-tree / outline fences get an interactive
 // outline widget; edits re-render the tree art (the fence stays the source

@@ -1,0 +1,76 @@
+/* Monaco inset for ordinary explicit-language Markdown code fences. */
+
+.squisq-wysiwyg-editor pre.squisq-code-snippet-fence-hidden {
+  display: none;
+}
+
+.squisq-code-snippet-widget-host {
+  margin: 0.75rem 0 1.25rem;
+}
+
+.squisq-code-snippet-shell {
+  box-sizing: border-box;
+  display: flex;
+  width: 100%;
+  height: 240px;
+  min-height: 128px;
+  max-height: 70vh;
+  flex-direction: column;
+  overflow: hidden;
+  resize: vertical;
+  border: 1px solid var(--squisq-border, #d1d5db);
+  border-radius: 8px;
+  background: var(--squisq-surface, #ffffff);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+}
+
+.squisq-code-snippet-header {
+  box-sizing: border-box;
+  display: flex;
+  min-height: 34px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 0 10px;
+  border-bottom: 1px solid var(--squisq-border, #d1d5db);
+  background: var(--squisq-surface-muted, #f8fafc);
+  color: var(--squisq-text-muted, #64748b);
+  font-family: var(--squisq-ux-font, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif);
+  font-size: 12px;
+  user-select: none;
+}
+
+.squisq-code-snippet-title {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  gap: 7px;
+  color: var(--squisq-text, #334155);
+  font-weight: 600;
+}
+
+.squisq-code-snippet-header code {
+  overflow: hidden;
+  color: inherit;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.squisq-code-snippet-editor {
+  position: relative;
+  min-height: 0;
+  flex: 1;
+  overflow: hidden;
+}
+
+.squisq-code-snippet-loading {
+  display: flex;
+  width: 100%;
+  height: 100%;
+  align-items: center;
+  justify-content: center;
+  color: var(--squisq-text-muted, #64748b);
+  font-family: var(--squisq-ux-font, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif);
+  font-size: 12px;
+}

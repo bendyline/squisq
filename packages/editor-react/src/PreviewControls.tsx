@@ -616,6 +616,20 @@ const SUMMARIZE_TOOLTIP =
 type ControlKey = 'format' | 'theme' | 'transform' | 'captions' | 'cover';
 const CONTROL_KEYS: ControlKey[] = ['format', 'theme', 'transform', 'captions', 'cover'];
 
+/**
+ * Controls that apply to the active display mode. Page (`linear`) is a
+ * variable-height HTML rendition: the aspect-ratio format switch only
+ * affects embedded canvas sections (which default sensibly) and captions
+ * never applied, so both are hidden there. Cover, Theme, and Summarize
+ * remain live in every mode.
+ */
+function controlKeysForMode(displayMode: string): ControlKey[] {
+  if (displayMode === 'linear') {
+    return CONTROL_KEYS.filter((key) => key !== 'format' && key !== 'captions');
+  }
+  return CONTROL_KEYS;
+}
+
 const PREVIEW_POPOVER_GAP = 4;
 const PREVIEW_POPOVER_MARGIN = 8;
 const PREVIEW_POPOVER_FALLBACK_WIDTH = 220;
@@ -666,6 +680,7 @@ const selectStyle: React.CSSProperties = {
  */
 export function PreviewToolbarControls() {
   const s = usePreviewSettings();
+  const controlKeys = controlKeysForMode(s.activeDisplayMode);
   const [visibleCount, setVisibleCount] = useState(CONTROL_KEYS.length);
   const [popoverOpen, setPopoverOpen] = useState(false);
   // `rootRef` (flex:1) always spans the toolbar's leftover width, so its
@@ -732,7 +747,7 @@ export function PreviewToolbarControls() {
     ro.observe(probe);
     measure();
     return () => ro.disconnect();
-  }, []);
+  }, [controlKeys.length]);
 
   // Close popover on outside click
   useEffect(() => {
@@ -900,9 +915,9 @@ export function PreviewToolbarControls() {
     }
   };
 
-  const hasOverflow = visibleCount < CONTROL_KEYS.length;
-  const visibleKeys = CONTROL_KEYS.slice(0, visibleCount);
-  const overflowKeys = CONTROL_KEYS.slice(visibleCount);
+  const hasOverflow = visibleCount < controlKeys.length;
+  const visibleKeys = controlKeys.slice(0, visibleCount);
+  const overflowKeys = controlKeys.slice(visibleCount);
 
   useEffect(() => {
     if (!hasOverflow && popoverOpen) closePopover();
@@ -920,7 +935,7 @@ export function PreviewToolbarControls() {
           inline/overflow split. Absolutely positioned so it never affects
           layout. */}
       <div className="squisq-preview-controls-probe" ref={probeRef} aria-hidden="true">
-        {CONTROL_KEYS.map((key) => renderControl(key, false))}
+        {controlKeys.map((key) => renderControl(key, false))}
       </div>
 
       {visibleKeys.length > 0 && (

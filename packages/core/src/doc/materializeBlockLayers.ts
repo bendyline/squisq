@@ -6,7 +6,7 @@
  * failure policy, and diagnostics cannot drift by render mode.
  */
 
-import type { Block, Layer } from '../schemas/Doc.js';
+import type { Block, Layer, MermaidLayer, Position } from '../schemas/Doc.js';
 import type {
   DocBlock,
   PersistentLayerConfig,
@@ -16,6 +16,7 @@ import type {
 import type { CustomTemplateDefinition } from '../schemas/CustomTemplates.js';
 import type { Theme } from '../schemas/Theme.js';
 import type { ViewportConfig } from '../schemas/Viewport.js';
+import type { MarkdownCodeBlock } from '../markdown/types.js';
 import { createTemplateContext, isTemplateBlock } from '../schemas/BlockTemplates.js';
 import { DEFAULT_THEME } from '../schemas/themeLibrary.js';
 import { VIEWPORT_PRESETS } from '../schemas/Viewport.js';
@@ -62,7 +63,12 @@ export type LayerMaterializationDiagnostic =
     };
 
 /** Identifies which path produced a materialized layer graph. */
-export type LayerMaterializationSource = 'authored' | 'template' | 'fallback' | 'empty';
+export type LayerMaterializationSource =
+  | 'authored'
+  | 'template'
+  | 'rich-content'
+  | 'fallback'
+  | 'empty';
 
 /**
  * Complete result from {@link materializeBlockLayers}. Failures are data, not
@@ -145,9 +151,10 @@ export function materializeBlockLayersWithRuntime(
 
   const existingLayers = (block as Block).layers;
   if (existingLayers && existingLayers.length > 0 && !isTemplateBlock(block)) {
+    const layers = appendMermaidLayers(cloneData(existingLayers), block as Block, theme, viewport);
     return {
       layers: injectPersistentLayers(
-        cloneData(existingLayers),
+        layers,
         block,
         theme,
         effectivePersistentLayers,
@@ -158,15 +165,16 @@ export function materializeBlockLayersWithRuntime(
   }
 
   if (!isTemplateBlock(block)) {
+    const layers = appendMermaidLayers([], block as Block, theme, viewport);
     return {
       layers: injectPersistentLayers(
-        [],
+        layers,
         block,
         theme,
         effectivePersistentLayers,
         runtime.expandedPersistentLayers,
       ),
-      source: 'empty',
+      source: layers.length > 0 ? 'rich-content' : 'empty',
     };
   }
 
@@ -181,9 +189,10 @@ export function materializeBlockLayersWithRuntime(
       runtime.applyRenderStyle !== false
         ? applyRenderStyleToLayers(execution.layers, block as Block, theme)
         : execution.layers;
+    const layers = appendMermaidLayers(styledLayers, block as Block, theme, viewport);
     return {
       layers: injectPersistentLayers(
-        styledLayers,
+        layers,
         block,
         theme,
         effectivePersistentLayers,
@@ -195,22 +204,29 @@ export function materializeBlockLayersWithRuntime(
 
   const diagnostic = toLayerMaterializationDiagnostic(block.template, execution);
   if ((options.failureMode ?? 'fallback') === 'empty') {
+    const layers = appendMermaidLayers([], block as Block, theme, viewport);
     return {
       layers: injectPersistentLayers(
-        [],
+        layers,
         block,
         theme,
         effectivePersistentLayers,
         runtime.expandedPersistentLayers,
       ),
-      source: 'empty',
+      source: layers.length > 0 ? 'rich-content' : 'empty',
       diagnostic,
     };
   }
 
+  const fallbackLayers = appendMermaidLayers(
+    fallbackBlockLayers(block, context, diagnostic.message),
+    block as Block,
+    theme,
+    viewport,
+  );
   return {
     layers: injectPersistentLayers(
-      fallbackBlockLayers(block, context, diagnostic.message),
+      fallbackLayers,
       block,
       theme,
       effectivePersistentLayers,
@@ -219,6 +235,151 @@ export function materializeBlockLayersWithRuntime(
     source: 'fallback',
     diagnostic,
   };
+}
+
+interface LayerRect {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+/** Mermaid fences are explicit author intent and never inferred from other code. */
+function mermaidSources(block: Block): string[] {
+  return (block.contents ?? [])
+    .filter(
+      (node): node is MarkdownCodeBlock =>
+        node.type === 'code' && node.lang?.trim().toLowerCase() === 'mermaid',
+    )
+    .map((node) => node.value)
+    .filter((source) => source.trim().length > 0);
+}
+
+function resolvePositionValue(value: number | string | undefined, dimension: number): number {
+  if (value === undefined) return 0;
+  if (typeof value === 'number') return value;
+  const percent = value.match(/^\s*(-?\d+(?:\.\d+)?)%\s*$/);
+  if (percent) return (Number(percent[1]) / 100) * dimension;
+  const numeric = Number.parseFloat(value);
+  return Number.isFinite(numeric) ? numeric : 0;
+}
+
+function positionRect(
+  position: Position,
+  viewport: ViewportConfig,
+  fallbackWidth: number,
+  fallbackHeight: number,
+): LayerRect {
+  const width = position.width
+    ? resolvePositionValue(position.width, viewport.width)
+    : fallbackWidth;
+  const height = position.height
+    ? resolvePositionValue(position.height, viewport.height)
+    : fallbackHeight;
+  let x = resolvePositionValue(position.x, viewport.width);
+  let y = resolvePositionValue(position.y, viewport.height);
+  const anchor = position.anchor ?? 'top-left';
+  if (anchor === 'center') {
+    x -= width / 2;
+    y -= height / 2;
+  } else {
+    if (anchor.endsWith('right')) x -= width;
+    if (anchor.startsWith('bottom')) y -= height;
+  }
+  return { x, y, width, height };
+}
+
+function overlapArea(a: LayerRect, b: LayerRect): number {
+  const width = Math.max(0, Math.min(a.x + a.width, b.x + b.width) - Math.max(a.x, b.x));
+  const height = Math.max(0, Math.min(a.y + a.height, b.y + b.height) - Math.max(a.y, b.y));
+  return width * height;
+}
+
+/**
+ * Pick the least-obstructed media region when a template already owns the
+ * slide. Background shapes/paths are deliberately ignored; text and existing
+ * rich media are what the Mermaid inset must avoid.
+ */
+function mermaidRegion(layers: readonly Layer[], viewport: ViewportConfig): LayerRect {
+  const occupied = layers
+    .filter((layer) => layer.type !== 'shape' && layer.type !== 'path' && layer.type !== 'mermaid')
+    .map((layer) =>
+      positionRect(
+        layer.position,
+        viewport,
+        layer.type === 'text' ? viewport.width * 0.45 : viewport.width * 0.5,
+        layer.type === 'text' ? viewport.height * 0.2 : viewport.height * 0.55,
+      ),
+    );
+  if (occupied.length === 0) {
+    return {
+      x: viewport.width * 0.06,
+      y: viewport.height * 0.08,
+      width: viewport.width * 0.88,
+      height: viewport.height * 0.84,
+    };
+  }
+
+  const candidates: LayerRect[] = [
+    {
+      x: viewport.width * 0.52,
+      y: viewport.height * 0.12,
+      width: viewport.width * 0.44,
+      height: viewport.height * 0.76,
+    },
+    {
+      x: viewport.width * 0.04,
+      y: viewport.height * 0.12,
+      width: viewport.width * 0.44,
+      height: viewport.height * 0.76,
+    },
+    {
+      x: viewport.width * 0.15,
+      y: viewport.height * 0.53,
+      width: viewport.width * 0.7,
+      height: viewport.height * 0.41,
+    },
+  ];
+  return candidates.reduce((best, candidate) => {
+    const score = occupied.reduce((sum, rect) => sum + overlapArea(candidate, rect), 0);
+    const bestScore = occupied.reduce((sum, rect) => sum + overlapArea(best, rect), 0);
+    return score < bestScore ? candidate : best;
+  });
+}
+
+/** Add every Mermaid fence as a responsive rich-media layer. */
+function appendMermaidLayers(
+  layers: Layer[],
+  block: Block,
+  theme: Theme,
+  viewport: ViewportConfig,
+): Layer[] {
+  const sources = mermaidSources(block);
+  if (sources.length === 0 || layers.some((layer) => layer.type === 'mermaid')) return layers;
+
+  const region = mermaidRegion(layers, viewport);
+  const columns = sources.length === 1 ? 1 : 2;
+  const rows = Math.ceil(sources.length / columns);
+  const gap = Math.min(viewport.width, viewport.height) * 0.018;
+  const width = (region.width - gap * (columns - 1)) / columns;
+  const height = (region.height - gap * (rows - 1)) / rows;
+  const mermaidLayers: MermaidLayer[] = sources.map((source, index) => ({
+    id: `${block.id}-mermaid-${index + 1}`,
+    type: 'mermaid',
+    position: {
+      x: region.x + (index % columns) * (width + gap),
+      y: region.y + Math.floor(index / columns) * (height + gap),
+      width,
+      height,
+    },
+    content: {
+      source,
+      background: theme.colors.backgroundLight,
+      foreground: theme.colors.text,
+      padding: Math.max(12, Math.round(Math.min(width, height) * 0.025)),
+    },
+  }));
+  return [...layers, ...mermaidLayers];
 }
 
 function executeTemplateMaterialization(

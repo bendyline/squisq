@@ -1,0 +1,487 @@
+/* Lossless Mermaid-fence editor. Mermaid owns syntax/rendering; Squisq owns
+ * the same source/maximize/resize chrome used by the ASCII diagram canvas. */
+
+.squisq-wysiwyg-editor pre.squisq-mermaid-fence-hidden {
+  display: none;
+}
+
+.squisq-wysiwyg-editor pre.squisq-mermaid-fence-source {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace;
+  white-space: pre;
+  overflow-x: auto;
+  line-height: 1.35;
+  tab-size: 2;
+}
+
+.squisq-mermaid-diagram-widget-host {
+  margin: 0.75rem 0 1.25rem;
+}
+
+.squisq-mermaid-canvas {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  background: var(--squisq-surface, #ffffff);
+}
+
+.squisq-mermaid-canvas-scroll {
+  box-sizing: border-box;
+  width: 100%;
+  height: 100%;
+  overflow: auto;
+  padding: 44px 24px 24px;
+}
+
+.squisq-mermaid-canvas-scroll[data-panning='true'] {
+  cursor: grabbing;
+  user-select: none;
+}
+
+.squisq-mermaid-svg {
+  position: relative;
+  min-height: 100%;
+  margin: 0 auto;
+  will-change: transform;
+  transition: width 120ms ease;
+}
+
+.squisq-mermaid-svg > div:first-child > svg {
+  display: block;
+  width: 100% !important;
+  height: auto !important;
+  max-width: none !important;
+  margin: 0 auto;
+}
+
+.squisq-mermaid-svg g.node {
+  cursor: pointer;
+}
+
+.squisq-mermaid-svg g.node:focus-visible {
+  outline: none;
+  filter: drop-shadow(0 0 4px #4f46e5);
+}
+
+.squisq-mermaid-svg g.squisq-mermaid-node-selected {
+  filter: drop-shadow(0 0 5px #4f46e5);
+}
+
+.squisq-mermaid-svg g.squisq-mermaid-connect-source {
+  filter: drop-shadow(0 0 6px #0d9488);
+}
+
+.squisq-mermaid-svg .edgePath,
+.squisq-mermaid-svg path.flowchart-link,
+.squisq-mermaid-svg .edgeLabel {
+  cursor: pointer;
+}
+
+.squisq-mermaid-svg path.squisq-mermaid-edge-hit-target {
+  fill: none;
+  stroke: rgba(0, 0, 0, 0.001);
+  stroke-width: 14px;
+  pointer-events: stroke;
+  cursor: pointer;
+}
+
+.squisq-mermaid-svg .squisq-mermaid-edge-selected {
+  filter: drop-shadow(0 0 3px #4f46e5);
+}
+
+/* Mermaid's default lineColor is #333, which is nearly invisible against the
+ * editor's dark canvas. Retheme default relationship strokes and arrowheads
+ * while leaving explicitly authored edge strokes (linkStyle/style) intact. */
+.squisq-editor-shell[data-theme='dark'] .squisq-mermaid-svg {
+  --squisq-mermaid-edge: #cbd5e1;
+  --squisq-mermaid-edge-label-bg: rgba(15, 23, 42, 0.88);
+}
+
+.squisq-editor-shell[data-theme='dark']
+  .squisq-mermaid-svg
+  :is(
+    path.flowchart-link,
+    .edgePath .path,
+    .relationshipLine,
+    .messageLine0,
+    .messageLine1,
+    .transition
+  ):not([style*='stroke:']) {
+  stroke: var(--squisq-mermaid-edge) !important;
+}
+
+.squisq-editor-shell[data-theme='dark'] .squisq-mermaid-svg :is(.marker, .arrowheadPath),
+.squisq-editor-shell[data-theme='dark'] .squisq-mermaid-svg marker :is(path, polygon) {
+  stroke: var(--squisq-mermaid-edge) !important;
+}
+
+.squisq-editor-shell[data-theme='dark']
+  .squisq-mermaid-svg
+  marker
+  :is(path, polygon):not([fill='none']):not([style*='fill:none']):not([style*='fill: none']) {
+  fill: var(--squisq-mermaid-edge) !important;
+}
+
+.squisq-editor-shell[data-theme='dark'] .squisq-mermaid-svg .edgeLabel,
+.squisq-editor-shell[data-theme='dark'] .squisq-mermaid-svg .edgeLabel :is(span, p) {
+  color: var(--squisq-mermaid-edge) !important;
+}
+
+.squisq-editor-shell[data-theme='dark'] .squisq-mermaid-svg .edgeLabel p,
+.squisq-editor-shell[data-theme='dark'] .squisq-mermaid-svg .edgeLabel rect {
+  background: var(--squisq-mermaid-edge-label-bg) !important;
+  fill: var(--squisq-mermaid-edge-label-bg) !important;
+}
+
+.squisq-mermaid-selection-actions {
+  position: absolute;
+  z-index: 12;
+  display: inline-flex;
+  gap: 2px;
+  padding: 3px;
+  border: 1px solid var(--squisq-border, #cbd5e1);
+  border-radius: 7px;
+  background: var(--squisq-surface, #ffffff);
+  box-shadow: 0 4px 14px rgba(15, 23, 42, 0.2);
+  transform: translate(-50%, calc(-100% - 8px));
+}
+
+.squisq-mermaid-selection-actions[data-placement='below'] {
+  transform: translate(-50%, 8px);
+}
+
+.squisq-mermaid-inline-rename {
+  position: absolute;
+  z-index: 14;
+  margin: 0;
+  transform: translate(-50%, -50%);
+}
+
+.squisq-mermaid-inline-rename input {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 36px;
+  padding: 6px 10px;
+  border: 2px solid var(--squisq-accent, #4f46e5);
+  border-radius: 7px;
+  outline: none;
+  background: var(--squisq-surface, #ffffff);
+  color: var(--squisq-text, #1e293b);
+  box-shadow:
+    0 0 0 3px color-mix(in srgb, var(--squisq-accent, #4f46e5) 22%, transparent),
+    0 6px 18px rgba(15, 23, 42, 0.2);
+  font: inherit;
+  font-size: 16px;
+  line-height: 1.3;
+  text-align: center;
+}
+
+.squisq-mermaid-inline-rename input:invalid {
+  border-color: #dc2626;
+}
+
+.squisq-mermaid-inline-rename span {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 50%;
+  padding: 3px 7px;
+  border: 1px solid var(--squisq-border, #cbd5e1);
+  border-radius: 5px;
+  background: var(--squisq-surface, #ffffff);
+  color: var(--squisq-text-muted, #64748b);
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.14);
+  font-size: 11px;
+  line-height: 1.2;
+  white-space: nowrap;
+  transform: translateX(-50%);
+  pointer-events: none;
+}
+
+.squisq-mermaid-selection-actions button {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--squisq-text, #1e293b);
+  cursor: pointer;
+}
+
+.squisq-mermaid-selection-actions button:hover {
+  background: var(--squisq-surface-hover, #f1f5f9);
+}
+
+.squisq-mermaid-selection-actions button[data-danger='true'] {
+  color: #b91c1c;
+}
+
+.squisq-mermaid-connect-hint {
+  position: absolute;
+  top: 10px;
+  left: 50%;
+  z-index: 11;
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: #312e81;
+  color: #fff;
+  font-size: 12px;
+  transform: translateX(-50%);
+  pointer-events: none;
+}
+
+.squisq-mermaid-shape-palette,
+.squisq-mermaid-direction-picker {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  z-index: 40;
+  display: flex;
+  box-sizing: border-box;
+  width: 360px;
+  max-height: min(520px, 70vh);
+  flex-direction: column;
+  padding: 8px;
+  border: 1px solid var(--squisq-border, #e2e8f0);
+  border-radius: 8px;
+  background: var(--squisq-surface, #ffffff);
+  color: var(--squisq-text, #1e293b);
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.18);
+}
+
+.squisq-mermaid-shape-search {
+  box-sizing: border-box;
+  width: 100%;
+  margin-bottom: 6px;
+  padding: 7px 8px;
+  border: 1px solid var(--squisq-border, #cbd5e1);
+  border-radius: 6px;
+  background: var(--squisq-surface-subtle, #f8fafc);
+  color: inherit;
+}
+
+.squisq-mermaid-shape-scroll {
+  min-height: 0;
+  flex: 1 1 auto;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.squisq-mermaid-shape-heading {
+  margin: 9px 3px 4px;
+  color: var(--squisq-text-muted, #64748b);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.squisq-mermaid-shape-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 3px;
+}
+
+.squisq-mermaid-shape-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  padding: 5px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  font-size: 12px;
+  text-align: left;
+}
+
+.squisq-mermaid-shape-item svg {
+  width: 34px;
+  height: 24px;
+  flex: 0 0 34px;
+}
+
+.squisq-mermaid-shape-item span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.squisq-mermaid-shape-item:hover,
+.squisq-mermaid-shape-item--selected {
+  border-color: #a5b4fc;
+  background: #eef2ff;
+  color: #3730a3;
+}
+
+.squisq-mermaid-direction-picker {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 7px;
+  width: min(344px, calc(100vw - 24px));
+  padding: 10px;
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+
+.squisq-mermaid-direction-heading {
+  display: flex;
+  grid-column: 1 / -1;
+  flex-direction: column;
+  gap: 2px;
+  padding: 1px 3px 5px;
+}
+
+.squisq-mermaid-direction-heading strong {
+  font-size: 13px;
+}
+
+.squisq-mermaid-direction-heading span {
+  color: var(--squisq-text-muted, #64748b);
+  font-size: 11px;
+}
+
+.squisq-mermaid-direction-card {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 5px;
+  padding: 7px;
+  border: 1px solid var(--squisq-border, #cbd5e1);
+  border-radius: 7px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+}
+
+.squisq-mermaid-direction-card svg {
+  width: 100%;
+  height: 64px;
+  border-radius: 5px;
+  background: var(--squisq-surface-subtle, rgb(148 163 184 / 10%));
+  color: var(--squisq-text, #334155);
+}
+
+.squisq-mermaid-direction-card svg rect,
+.squisq-mermaid-direction-card svg path {
+  fill: none;
+  stroke: currentcolor;
+  stroke-width: 1.8;
+}
+
+.squisq-mermaid-direction-card svg polygon,
+.squisq-mermaid-direction-card svg text {
+  fill: currentcolor;
+}
+
+.squisq-mermaid-direction-card svg text {
+  font-size: 9px;
+  text-anchor: middle;
+}
+
+.squisq-mermaid-direction-copy {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.squisq-mermaid-direction-copy strong {
+  overflow: hidden;
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.squisq-mermaid-direction-copy small {
+  color: var(--squisq-text-muted, #64748b);
+  font-size: 10px;
+}
+
+.squisq-mermaid-direction-card:hover,
+.squisq-mermaid-direction-card[aria-pressed='true'] {
+  border-color: #818cf8;
+  background: #eef2ff;
+  color: #3730a3;
+}
+
+.squisq-mermaid-direction-card:hover svg,
+.squisq-mermaid-direction-card[aria-pressed='true'] svg {
+  color: currentcolor;
+}
+
+.squisq-editor-shell[data-theme='dark'] .squisq-mermaid-direction-card svg {
+  color: #cbd5e1;
+}
+
+.squisq-editor-shell[data-theme='dark'] .squisq-mermaid-connect-hint,
+.squisq-editor-shell[data-theme='dark'] .squisq-mermaid-shape-item:hover,
+.squisq-editor-shell[data-theme='dark'] .squisq-mermaid-shape-item--selected,
+.squisq-editor-shell[data-theme='dark'] .squisq-mermaid-direction-card:hover,
+.squisq-editor-shell[data-theme='dark'] .squisq-mermaid-direction-card[aria-pressed='true'] {
+  border-color: #6366f1;
+  background: #312e81;
+  color: #eef2ff;
+}
+
+.squisq-mermaid-edit-notice {
+  margin-top: 6px;
+  padding: 7px 9px;
+  border: 1px solid #fbbf24;
+  border-radius: 6px;
+  background: #fffbeb;
+  color: #92400e;
+  font-size: 12px;
+}
+
+.squisq-editor-shell[data-theme='dark'] .squisq-mermaid-edit-notice {
+  border-color: #92400e;
+  background: #451a03;
+  color: #fde68a;
+}
+
+.squisq-mermaid-status,
+.squisq-mermaid-error {
+  display: flex;
+  min-height: 180px;
+  align-items: center;
+  justify-content: center;
+  color: var(--squisq-text-muted, #64748b);
+  text-align: center;
+}
+
+.squisq-mermaid-error {
+  box-sizing: border-box;
+  flex-direction: column;
+  gap: 8px;
+  align-items: flex-start;
+  justify-content: flex-start;
+  padding: 16px;
+  border: 1px solid #fca5a5;
+  border-radius: 8px;
+  background: #fef2f2;
+  color: #991b1b;
+  text-align: left;
+}
+
+.squisq-mermaid-error pre {
+  width: 100%;
+  max-height: 160px;
+  overflow: auto;
+  margin: 0;
+  padding: 8px;
+  white-space: pre-wrap;
+  background: transparent;
+  color: inherit;
+  font-size: 12px;
+}
+
+.squisq-editor-shell[data-theme='dark'] .squisq-mermaid-error {
+  border-color: #7f1d1d;
+  background: #450a0a;
+  color: #fecaca;
+}

@@ -14,7 +14,7 @@ import { createPortal } from 'react-dom';
 import { DocPlayer, LinearDocView, useMediaProvider } from '@bendyline/squisq-react';
 import type { AudioController, PlaybackState } from '@bendyline/squisq-react';
 import type { Doc } from '@bendyline/squisq/schemas';
-import { applyTransform } from '@bendyline/squisq/transform';
+import { applyTransform, resolveTransformStyle } from '@bendyline/squisq/transform';
 import { resolveAudioMapping } from '@bendyline/squisq/doc';
 import type { ContentContainer } from '@bendyline/squisq/storage';
 import { useEditorContext } from './EditorContext';
@@ -333,6 +333,10 @@ export function PreviewPanel({ basePath = '/', className, workspaceContainer }: 
           viewport={activeViewport}
           theme={activeTheme}
           globalKeyboardShortcuts={!audience}
+          showCover={activeCoverSlide}
+          transformPage={
+            activeTransformStyle ? resolveTransformStyle(activeTransformStyle).page : undefined
+          }
         />
       );
     }

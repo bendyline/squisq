@@ -176,6 +176,29 @@ describe('<EditorShell> colorScheme prop', () => {
   });
 });
 
+describe('<EditorShell> Write canvas settings', () => {
+  it('exposes host settings as live CSS variables on the shell', () => {
+    const { container, rerender } = render(
+      <EditorShell
+        initialMarkdown="Paragraph"
+        writeCanvasSettings={{ textSize: 18, lineSpacing: 1.9 }}
+      />,
+    );
+    const shell = container.querySelector<HTMLElement>('.squisq-editor-shell')!;
+    expect(shell.style.getPropertyValue('--squisq-write-text-size')).toBe('18px');
+    expect(shell.style.getPropertyValue('--squisq-write-line-spacing')).toBe('1.9');
+
+    rerender(
+      <EditorShell
+        initialMarkdown="Paragraph"
+        writeCanvasSettings={{ textSize: 20, lineSpacing: 2 }}
+      />,
+    );
+    expect(shell.style.getPropertyValue('--squisq-write-text-size')).toBe('20px');
+    expect(shell.style.getPropertyValue('--squisq-write-line-spacing')).toBe('2');
+  });
+});
+
 describe('RawEditor monacoTheme prop', () => {
   it('maps colorScheme="dark" to monacoTheme="vs-dark"', () => {
     render(<EditorShell initialMarkdown="# hi" initialView="raw" colorScheme="dark" />);
@@ -479,6 +502,48 @@ describe('<Toolbar> Insert menu', () => {
     await waitFor(() => {
       expect(screen.getByTestId('markdown-source').textContent).toContain(
         '```timeline\nMilestones: ● Start',
+      );
+    });
+  });
+
+  it('opens the Mermaid type gallery and inserts the selected diagram grammar', async () => {
+    render(
+      <EditorProvider initialMarkdown="Intro" initialView="raw" allowRecording={false}>
+        <Toolbar />
+        <MarkdownSourceProbe />
+      </EditorProvider>,
+    );
+
+    fireEvent.click(screen.getByLabelText('Insert'));
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Complex Diagram (Mermaid)' }));
+    expect(await screen.findByRole('menu', { name: 'Mermaid diagram type' })).toBeTruthy();
+    expect(screen.getByText(/Flow direction remains a separate edit/)).toBeTruthy();
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Insert Gantt Mermaid diagram' }));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('markdown-source').textContent).toContain(
+        '```mermaid\ngantt\n  title Project plan\n  dateFormat YYYY-MM-DD',
+      );
+    });
+  });
+
+  it('adds a typed code fence from the Code Snippet submenu', async () => {
+    render(
+      <EditorProvider initialMarkdown="Intro" initialView="raw" allowRecording={false}>
+        <Toolbar />
+        <MarkdownSourceProbe />
+      </EditorProvider>,
+    );
+
+    fireEvent.click(screen.getByLabelText('Insert'));
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Insert Code Snippet' }));
+    fireEvent.click(
+      await screen.findByRole('menuitem', { name: 'Insert TypeScript code snippet' }),
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId('markdown-source').textContent).toContain(
+        "```typescript\nconst message: string = 'Hello, world!';\n```",
       );
     });
   });

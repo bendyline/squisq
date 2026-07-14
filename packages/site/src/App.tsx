@@ -7,7 +7,7 @@
 
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { EditorShell, ThemeCustomizerPanel } from '@bendyline/squisq-editor-react';
-import type { EditorColorScheme } from '@bendyline/squisq-editor-react';
+import type { EditorColorScheme, WriteCanvasSettings } from '@bendyline/squisq-editor-react';
 import '@bendyline/squisq-editor-react/styles';
 import { MediaContext } from '@bendyline/squisq-react';
 import {
@@ -28,6 +28,7 @@ import { parseTheme } from '@bendyline/squisq/schemas';
 
 const CUSTOM_THEME_STORAGE_KEY = 'squisq-site:customTheme';
 const COLOR_MODE_STORAGE_KEY = 'squisq-site:colorMode';
+const WRITE_CANVAS_STORAGE_KEY = 'squisq-site:writeCanvasSettings';
 const DEFAULT_SAMPLE_KEY = 'about-squisq';
 const SAMPLE_KEYS = [
   DEFAULT_SAMPLE_KEY,
@@ -35,6 +36,15 @@ const SAMPLE_KEYS = [
 ];
 
 type DemoColorMode = 'auto' | EditorColorScheme;
+type DemoWriteCanvasSettings = Required<WriteCanvasSettings>;
+
+const DEFAULT_WRITE_CANVAS_SETTINGS: DemoWriteCanvasSettings = {
+  textSize: 16,
+  lineSpacing: 1.7,
+};
+
+const WRITE_TEXT_SIZE_OPTIONS = [12, 14, 15, 16, 17, 18, 20, 22, 24, 28, 32] as const;
+const WRITE_LINE_SPACING_OPTIONS = [1.2, 1.4, 1.5, 1.6, 1.7, 1.8, 2, 2.2, 2.4] as const;
 
 const COLOR_MODE_OPTIONS: ReadonlyArray<{ label: string; value: DemoColorMode }> = [
   { label: 'Auto', value: 'auto' },
@@ -66,6 +76,29 @@ function getInitialColorMode(): DemoColorMode {
   }
 
   return 'auto';
+}
+
+function getInitialWriteCanvasSettings(): DemoWriteCanvasSettings {
+  if (typeof window === 'undefined') return DEFAULT_WRITE_CANVAS_SETTINGS;
+  try {
+    const stored = window.localStorage.getItem(WRITE_CANVAS_STORAGE_KEY);
+    if (!stored) return DEFAULT_WRITE_CANVAS_SETTINGS;
+    const parsed = JSON.parse(stored) as Partial<WriteCanvasSettings>;
+    return {
+      textSize: isNumberInRange(parsed.textSize, 10, 32)
+        ? parsed.textSize
+        : DEFAULT_WRITE_CANVAS_SETTINGS.textSize,
+      lineSpacing: isNumberInRange(parsed.lineSpacing, 1, 3)
+        ? parsed.lineSpacing
+        : DEFAULT_WRITE_CANVAS_SETTINGS.lineSpacing,
+    };
+  } catch {
+    return DEFAULT_WRITE_CANVAS_SETTINGS;
+  }
+}
+
+function isNumberInRange(value: unknown, min: number, max: number): value is number {
+  return typeof value === 'number' && Number.isFinite(value) && value >= min && value <= max;
 }
 
 /**
@@ -106,8 +139,12 @@ export function App() {
   const [showJsonDemo, setShowJsonDemo] = useState(false);
   const [showImageEditorDemo, setShowImageEditorDemo] = useState(false);
   const [showCodeContextDemo, setShowCodeContextDemo] = useState(false);
+  const [findMode, setFindMode] = useState(false);
   const [currentSource, setCurrentSource] = useState(SAMPLES[initialSampleKey]);
   const [colorMode, setColorMode] = useState<DemoColorMode>(() => getInitialColorMode());
+  const [writeCanvasSettings, setWriteCanvasSettings] = useState<DemoWriteCanvasSettings>(() =>
+    getInitialWriteCanvasSettings(),
+  );
   const [systemColorScheme, setSystemColorScheme] = useState<EditorColorScheme>(() =>
     resolveSystemColorScheme(),
   );
@@ -131,6 +168,13 @@ export function App() {
       // Ignore unavailable storage; the current React state is authoritative.
     }
   }, [colorMode]);
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(WRITE_CANVAS_STORAGE_KEY, JSON.stringify(writeCanvasSettings));
+    } catch {
+      // Ignore unavailable storage; the in-memory selection still works.
+    }
+  }, [writeCanvasSettings]);
   useEffect(() => {
     if (typeof document === 'undefined') return;
     document.documentElement.style.colorScheme = colorScheme;
@@ -375,6 +419,25 @@ export function App() {
         </button>
 
         <button
+          type="button"
+          data-testid="toggle-find-mode"
+          aria-pressed={findMode}
+          onClick={() => setFindMode((active) => !active)}
+          style={{
+            fontSize: 13,
+            fontFamily: 'system-ui, -apple-system, sans-serif',
+            padding: '4px 12px',
+            cursor: 'pointer',
+            background: findMode ? '#8B6914' : '#E8DFC6',
+            color: findMode ? '#fff' : '#4a3c1f',
+            border: `1px solid ${findMode ? '#7a5c10' : '#c9b98a'}`,
+            borderRadius: 0,
+          }}
+        >
+          Find
+        </button>
+
+        <button
           onClick={() => setShowJsonDemo((prev) => !prev)}
           style={{
             fontSize: 13,
@@ -465,6 +528,75 @@ export function App() {
           })}
         </div>
 
+        {/* Demo-level controls for the host-facing Write canvas settings. */}
+        <div
+          role="group"
+          aria-label="Write canvas settings"
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 8,
+            padding: '3px 7px',
+            border: '1px solid #c9b98a',
+            background: '#FFFDF7',
+            color: '#4a3c1f',
+            fontFamily: 'system-ui, -apple-system, sans-serif',
+            fontSize: 12,
+          }}
+        >
+          <span style={{ fontWeight: 600 }}>Write</span>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+            Text
+            <select
+              aria-label="Write text size"
+              value={writeCanvasSettings.textSize}
+              onChange={(event) =>
+                setWriteCanvasSettings((current) => ({
+                  ...current,
+                  textSize: Number(event.target.value),
+                }))
+              }
+              style={{
+                border: '1px solid #c9b98a',
+                background: '#fff',
+                color: '#4a3c1f',
+                font: 'inherit',
+              }}
+            >
+              {WRITE_TEXT_SIZE_OPTIONS.map((size) => (
+                <option key={size} value={size}>
+                  {size}px
+                </option>
+              ))}
+            </select>
+          </label>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+            Spacing
+            <select
+              aria-label="Write line spacing"
+              value={writeCanvasSettings.lineSpacing}
+              onChange={(event) =>
+                setWriteCanvasSettings((current) => ({
+                  ...current,
+                  lineSpacing: Number(event.target.value),
+                }))
+              }
+              style={{
+                border: '1px solid #c9b98a',
+                background: '#fff',
+                color: '#4a3c1f',
+                font: 'inherit',
+              }}
+            >
+              {WRITE_LINE_SPACING_OPTIONS.map((spacing) => (
+                <option key={spacing} value={spacing}>
+                  {spacing}×
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
+
         {/* Theme customizer — wrapped in editor-shell to inherit BEM dark-theme styles. */}
         <div
           className="squisq-editor-shell"
@@ -515,6 +647,20 @@ export function App() {
         >
           Terms of Use
         </a>
+        <a
+          href="https://github.com/bendyline/squisq/blob/main/NOTICE.md"
+          target="_blank"
+          rel="noopener noreferrer"
+          style={{
+            fontSize: 12,
+            fontFamily: 'system-ui, -apple-system, sans-serif',
+            color: '#4a3c1f',
+            textDecoration: 'underline',
+            whiteSpace: 'nowrap',
+          }}
+        >
+          Built on open source
+        </a>
       </div>
 
       {/* Main area */}
@@ -543,6 +689,9 @@ export function App() {
                 height="100%"
                 mediaProvider={mediaProvider}
                 themeOverride={customTheme}
+                writeCanvasSettings={writeCanvasSettings}
+                findMode={findMode}
+                onFindModeChange={setFindMode}
               />
             </div>
 

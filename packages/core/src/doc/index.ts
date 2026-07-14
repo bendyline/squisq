@@ -28,6 +28,40 @@ export {
   FRONTMATTER_CUSTOM_THEMES_KEY,
 } from './customThemesFrontmatter.js';
 export { resolveThemeForDoc } from './resolveDocTheme.js';
+export {
+  materializePageSection,
+  materializePageSections,
+  resolvePageStyle,
+} from './page/materializePageSection.js';
+export type {
+  MaterializePageSectionOptions,
+  MaterializePageSectionsOptions,
+  PageTransformHints,
+} from './page/materializePageSection.js';
+export { isTemplatedPageBlock, resolvePageBlock } from './page/resolvePageBlock.js';
+export type { ResolvedPageBlock } from './page/resolvePageBlock.js';
+export { sectionExtractors } from './page/sectionExtractors.js';
+export type {
+  PageSectionContext,
+  PageSectionDraft,
+  SectionExtractor,
+} from './page/sectionExtractors.js';
+export type {
+  PageMedia,
+  PageRichText,
+  PageSection,
+  PageSectionDiagnostic,
+  PageSectionItem,
+  PageSectionMaterialization,
+  PageSectionSource,
+  PageSpatialKind,
+} from './page/PageSection.js';
+export {
+  PAGE_BASE_CSS,
+  buildPageCss,
+  buildPageCssVars,
+  pageStyleDataAttributes,
+} from './pageCss.js';
 export { resolveAudioMapping, scoreTextSimilarity } from './audioMapping.js';
 export { applyNarrationTiming, type NarrationResolution } from './applyNarrationTiming.js';
 export {

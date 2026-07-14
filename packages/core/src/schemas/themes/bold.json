@@ -44,5 +44,34 @@
     "red": { "bg": "#1a202c", "text": "#fc8181", "accent": "#feb2b2" },
     "orange": { "bg": "#1a202c", "text": "#f6ad55", "accent": "#fbd38d" },
     "teal": { "bg": "#1a202c", "text": "#4fd1c5", "accent": "#81e6d9" }
+  },
+  "pageStyle": {
+    "family": "brutalist",
+    "tokens": {
+      "contentMaxWidth": 760,
+      "wideMaxWidth": 1200,
+      "sectionSpacing": "compact",
+      "cornerRadius": 0,
+      "divider": "thick-rule",
+      "backgroundRhythm": "accent-bands",
+      "heroStyle": "oversized-type",
+      "headingTreatment": {
+        "eyebrow": "kicker",
+        "scale": "oversized",
+        "case": "uppercase"
+      },
+      "imageFraming": "bordered",
+      "shadow": "heavy",
+      "quoteMark": "none",
+      "numeralStyle": "oversized"
+    },
+    "sections": {
+      "quote-band": {
+        "background": "accent"
+      }
+    },
+    "accentRotation": {
+      "strategy": "cycle"
+    }
   }
 }

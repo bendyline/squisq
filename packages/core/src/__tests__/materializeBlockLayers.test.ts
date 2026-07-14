@@ -39,6 +39,38 @@ describe('materializeBlockLayers', () => {
     expect(materialized.layers[0]).not.toBe(authoredLayer);
   });
 
+  it('materializes Mermaid fences for empty and templated blocks', () => {
+    const contents = [
+      {
+        type: 'code' as const,
+        lang: 'mermaid',
+        value: 'flowchart LR\n  start --> next',
+      },
+    ];
+    const empty: Block = {
+      id: 'rich-empty',
+      startTime: 0,
+      duration: 5,
+      audioSegment: 0,
+      contents,
+    };
+    const richOnly = materializeBlockLayers(empty, { persistentLayers: false });
+    expect(richOnly.source).toBe('rich-content');
+    expect(richOnly.layers).toHaveLength(1);
+    expect(richOnly.layers[0]).toMatchObject({
+      type: 'mermaid',
+      content: { source: 'flowchart LR\n  start --> next' },
+    });
+
+    const templated = materializeBlockLayers(
+      { ...titleBlock, contents } as unknown as TemplateBlock,
+      { persistentLayers: false },
+    );
+    expect(templated.source).toBe('template');
+    expect(templated.layers.some((layer) => layer.type === 'text')).toBe(true);
+    expect(templated.layers.some((layer) => layer.type === 'mermaid')).toBe(true);
+  });
+
   it('resolves document-scoped custom templates in the on-demand API', () => {
     const customTemplate: CustomTemplateDefinition = {
       name: 'hero',

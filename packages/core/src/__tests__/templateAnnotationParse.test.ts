@@ -57,6 +57,19 @@ describe('Template annotation in Heading parse path', () => {
     if (heading.type !== 'heading') throw new Error('expected heading');
     expect(heading.templateAnnotation).toBeUndefined();
   });
+
+  it('keeps annotation-shaped text inside a code fence as literal code', () => {
+    const source = '```markdown\n## Example {[comparisonBar]}\n{[ ]}\n```';
+    const parsed = parseMarkdown(source);
+
+    expect(parsed.children).toHaveLength(1);
+    expect(parsed.children[0]).toMatchObject({
+      type: 'code',
+      lang: 'markdown',
+      value: '## Example {[comparisonBar]}\n{[ ]}',
+    });
+    expect(stringifyMarkdown(parsed).trim()).toBe(source);
+  });
 });
 
 describe('Quoted values in {[…]} annotations', () => {
