@@ -26,6 +26,7 @@ import { RecorderPanel } from './recorder/RecorderPanel.js';
 import type { RecorderSaveResult } from './recorder/RecorderModal.js';
 import { insertMediaBlock } from './recorder/insertMediaBlock.js';
 import { useEditorContext } from './EditorContext';
+import { markdownFencedCodeLineMask } from './markdownCodeFence';
 
 /**
  * Insert a narration annotation `{[audio=filename]}` onto the heading
@@ -42,8 +43,10 @@ function annotateMonacoHeading(
   if (!model) return false;
   const position = editor.getPosition();
   if (!position) return false;
+  const fencedLines = markdownFencedCodeLineMask(model.getValue());
   // Walk upward from the cursor to find the nearest heading line.
   for (let line = position.lineNumber; line >= 1; line--) {
+    if (fencedLines[line - 1]) continue;
     const text = model.getLineContent(line);
     if (!/^#{1,6}\s/.test(text)) continue;
     // Skip if the heading already has an audio annotation — don't

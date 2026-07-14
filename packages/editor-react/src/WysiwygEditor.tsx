@@ -32,6 +32,8 @@ import { AsciiDiagramExtension } from './asciiDiagram/AsciiDiagramExtension';
 import { RepairableDiagramExtension } from './asciiDiagram/RepairableDiagramExtension';
 import { applyRepairCommand } from './asciiDiagram/asciiDiagramCommands';
 import { shouldPasteAsAsciiFence } from './asciiDiagram/asciiPaste';
+import { MermaidDiagramExtension } from './mermaid/MermaidDiagramExtension';
+import { CodeSnippetExtension } from './codeSnippet/CodeSnippetExtension';
 import { TreeViewExtension } from './treeview/TreeViewExtension';
 import { shouldPasteAsTreeFence } from './treeview/treePaste';
 import { TimelineViewExtension } from './timeline/TimelineViewExtension';
@@ -71,16 +73,14 @@ type ImageMutationView = Pick<ProseMirrorView, 'state' | 'dispatch'>;
  * `placeholder` prop with a fixed string.
  */
 const EMPTY_PROMPTS = [
-  'Start typing your content, or drop images on top of me…',
-  'Write anything — paste markdown, drag in images, or just start typing…',
-  'Type away. Markdown syntax works too…',
-  'Chapter 1 begins here…',
-  'Once upon a time…',
-  'A blank page. Exciting, isn\u2019t it?',
-  'The first word is always the hardest…',
-  'Plot twist: this is where it all starts…',
-  'Write something the future you will thank you for…',
-  'Begin at the beginning…',
+  'Start typing your content, or drop images on top of me...',
+  'Write anything -- paste markdown, drag in images, or just start typing...',
+  'Type away. Markdown syntax works too...',
+  'Chapter 1 begins here...',
+  'Once upon a time...',
+  'A blank page. Exciting, isn\'t it?',
+  'The first word is always the hardest...',
+  'Plot twist: this is where it all starts...'
 ];
 
 const BLOCK_TAG_DATA_VALUES = {
@@ -199,6 +199,8 @@ export function WysiwygEditor({
       HeadingWithTemplate.configure({ levels: [1, 2, 3, 4, 5, 6] }),
       BlockTagActivityExtension,
       AsciiDiagramExtension.configure({ textChannel: sceneTextChannel }),
+      MermaidDiagramExtension,
+      CodeSnippetExtension,
       RepairableDiagramExtension.configure({ onRepair: applyRepairCommand }),
       TimelineViewExtension,
       TreeViewExtension,

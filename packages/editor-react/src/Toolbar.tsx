@@ -59,6 +59,12 @@ import {
   selectionToTaskListMarkdown,
   type SelectionTaskItem,
 } from './selectionConversions';
+import { isMarkdownFencedCodeLine, markdownFencedCodeLineMask } from './markdownCodeFence';
+import {
+  CODE_SNIPPET_LANGUAGES,
+  codeSnippetMarkdown,
+  type CodeSnippetLanguage,
+} from './codeSnippet/codeSnippetLanguages';
 
 const VIEWS: { id: EditorView; label: string; shortLabel?: string; shortcut: string }[] = [
   { id: 'wysiwyg', label: 'Write', shortcut: '⌘1' },
@@ -229,6 +235,14 @@ const BUTTONS: ToolbarButton[] = [
     faIcon: 'fa-solid fa-diagram-project',
   },
   {
+    id: 'complexdiagram',
+    label: 'complex diagram',
+    icon: '',
+    title: 'Insert Complex Diagram',
+    group: 'media',
+    faIcon: 'fa-solid fa-code-branch',
+  },
+  {
     id: 'tree',
     label: 'tree',
     icon: '',
@@ -282,6 +296,7 @@ const FIRST_MEDIA_INDEX = BUTTONS.findIndex((b) => b.group === 'media');
 const MEDIA_BUTTONS = BUTTONS.filter((b) => b.group === 'media');
 const CONVERT_BUTTONS = MEDIA_BUTTONS.filter((b) => b.id === 'table' || b.id === 'tasklist');
 const INSERT_MENU_WIDTH = 200;
+const CODE_SNIPPET_MENU_WIDTH = 220;
 const TASK_LIST_ITEMS = ['Task 1', 'Task 2', 'Task 3'] as const;
 const TASK_LIST_MARKDOWN = TASK_LIST_ITEMS.map((item) => `- [ ] ${item}`).join('\n');
 
@@ -450,6 +465,15 @@ const DIAGRAM_STARTER_MARKDOWN = '\n```diagram\n' + DIAGRAM_STARTER_ART + '\n```
 /** Insert a starter ASCII-diagram code fence after the current top-level block. */
 function insertAsciiDiagramBlock(editor: TiptapEditor): void {
   insertFenceBlock(editor, DIAGRAM_STARTER_ART, 'diagram');
+}
+
+/** Starter source for the lossless, full-syntax Mermaid diagram mode. */
+const MERMAID_STARTER_ART = ['flowchart LR', '  start["Start"] --> next["Next"]'].join('\n');
+const MERMAID_STARTER_MARKDOWN = '\n```mermaid\n' + MERMAID_STARTER_ART + '\n```\n';
+
+/** Insert a Mermaid fence that MermaidDiagramExtension turns into the complex canvas. */
+function insertMermaidDiagramBlock(editor: TiptapEditor): void {
+  insertFenceBlock(editor, MERMAID_STARTER_ART, 'mermaid');
 }
 
 /**
@@ -744,9 +768,14 @@ export function Toolbar({
   // buttons with a single "+" button. Portaled out to avoid overflow:hidden clipping.
   const insertMenuButtonRef = useRef<HTMLButtonElement | null>(null);
   const insertMenuRef = useRef<HTMLDivElement | null>(null);
+  const codeSnippetMenuRef = useRef<HTMLDivElement | null>(null);
   const [insertMenuAnchor, setInsertMenuAnchor] = useState<{ top: number; left: number } | null>(
     null,
   );
+  const [codeSnippetMenuAnchor, setCodeSnippetMenuAnchor] = useState<{
+    top: number;
+    left: number;
+  } | null>(null);
 
   const openInsertMenu = useCallback((trigger?: HTMLElement | null) => {
     const btn = trigger ?? insertMenuButtonRef.current;
@@ -760,9 +789,28 @@ export function Toolbar({
       left = Math.max(margin, rect.right - INSERT_MENU_WIDTH);
     }
     setInsertMenuAnchor({ top: rect.bottom + gap, left });
+    setCodeSnippetMenuAnchor(null);
   }, []);
 
-  const closeInsertMenu = useCallback(() => setInsertMenuAnchor(null), []);
+  const openCodeSnippetMenu = useCallback((trigger: HTMLElement) => {
+    const rect = trigger.getBoundingClientRect();
+    const gap = 4;
+    const margin = 8;
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
+    let left = rect.right + gap;
+    if (left + CODE_SNIPPET_MENU_WIDTH + margin > vw) {
+      left = Math.max(margin, rect.left - CODE_SNIPPET_MENU_WIDTH - gap);
+    }
+    const maxMenuHeight = Math.min(440, vh - margin * 2);
+    const top = Math.max(margin, Math.min(rect.top, vh - maxMenuHeight - margin));
+    setCodeSnippetMenuAnchor({ top, left });
+  }, []);
+
+  const closeInsertMenu = useCallback(() => {
+    setInsertMenuAnchor(null);
+    setCodeSnippetMenuAnchor(null);
+  }, []);
 
   // ── Overflow detection ────────────────────────────────
   const actionsRef = useRef<HTMLDivElement>(null);
@@ -874,6 +922,7 @@ export function Toolbar({
     const handleClick = (e: MouseEvent) => {
       if (insertMenuButtonRef.current?.contains(e.target as Node)) return;
       if (insertMenuRef.current?.contains(e.target as Node)) return;
+      if (codeSnippetMenuRef.current?.contains(e.target as Node)) return;
       closeInsertMenu();
     };
     document.addEventListener('mousedown', handleClick);
@@ -1003,6 +1052,11 @@ export function Toolbar({
           // Diagrams are ASCII-art code fences; the AsciiDiagramExtension
           // mounts the interactive canvas over the inserted starter.
           insertAsciiDiagramBlock(tiptapEditor);
+          break;
+        case 'complexdiagram':
+          // Complex diagrams remain full Mermaid source; the Mermaid extension
+          // renders the fence without narrowing it to Squisq's graph model.
+          insertMermaidDiagramBlock(tiptapEditor);
           break;
         case 'tree':
           // File trees are ASCII tree fences; TreeViewExtension mounts the
@@ -1175,6 +1229,11 @@ export function Toolbar({
             newCursorOffset = replacement.length;
             break;
           }
+          case 'complexdiagram': {
+            replacement = MERMAID_STARTER_MARKDOWN;
+            newCursorOffset = replacement.length;
+            break;
+          }
           case 'tree': {
             replacement = TREE_STARTER_MARKDOWN;
             newCursorOffset = replacement.length;
@@ -1265,6 +1324,9 @@ export function Toolbar({
           case 'diagram':
             insertion = DIAGRAM_STARTER_MARKDOWN;
             break;
+          case 'complexdiagram':
+            insertion = MERMAID_STARTER_MARKDOWN;
+            break;
           case 'tree':
             insertion = TREE_STARTER_MARKDOWN;
             break;
@@ -1284,6 +1346,43 @@ export function Toolbar({
       }
     },
     [monacoEditor, markdownSource, setMarkdownSource],
+  );
+
+  const handleCodeSnippetInsert = useCallback(
+    (language: CodeSnippetLanguage) => {
+      if (activeView === 'wysiwyg' && tiptapEditor) {
+        insertFenceBlock(tiptapEditor, language.starter, language.fenceLanguage);
+        closeInsertMenu();
+        return;
+      }
+
+      if (monacoEditor) {
+        const selection = monacoEditor.getSelection();
+        const model = monacoEditor.getModel();
+        if (!selection || !model) return;
+        const selectedText = model.getValueInRange(selection);
+        const source = selectedText.length > 0 ? selectedText : language.starter;
+        const markdown = codeSnippetMarkdown(language.fenceLanguage, source);
+        monacoEditor.executeEdits('toolbar-code-snippet', [{ range: selection, text: markdown }]);
+        if (selectedText.length === 0) {
+          const sourceOffset = 5 + language.fenceLanguage.length;
+          const sourcePosition = model.getPositionAt(
+            model.getOffsetAt(selection.getStartPosition()) + sourceOffset,
+          );
+          monacoEditor.setPosition(sourcePosition);
+          monacoEditor.revealPositionInCenterIfOutsideViewport(sourcePosition);
+        }
+        monacoEditor.focus();
+        closeInsertMenu();
+        return;
+      }
+
+      setMarkdownSource(
+        markdownSource + codeSnippetMarkdown(language.fenceLanguage, language.starter),
+      );
+      closeInsertMenu();
+    },
+    [activeView, closeInsertMenu, markdownSource, monacoEditor, setMarkdownSource, tiptapEditor],
   );
 
   // ── Selected-text conversion handlers ─────────────────
@@ -1597,14 +1696,12 @@ export function Toolbar({
   const maxHeadingLevelInDoc = useMemo(() => {
     if (!markdownSource) return 0;
     let max = 0;
-    let inFence = false;
-    for (const rawLine of markdownSource.split('\n')) {
+    const lines = markdownSource.split(/\r\n|\r|\n/);
+    const fencedLines = markdownFencedCodeLineMask(markdownSource);
+    for (let index = 0; index < lines.length; index++) {
+      if (fencedLines[index]) continue;
+      const rawLine = lines[index];
       const line = rawLine.trimEnd();
-      if (/^\s*```/.test(line)) {
-        inFence = !inFence;
-        continue;
-      }
-      if (inFence) continue;
       const m = /^(#{1,6})\s+\S/.exec(line);
       if (m && m[1].length > max) max = m[1].length;
     }
@@ -1650,6 +1747,12 @@ export function Toolbar({
       const model = monacoEditor.getModel();
       const pos = monacoEditor.getPosition();
       if (!model || !pos) {
+        setRawTemplate(null);
+        setRawHeadingLine(null);
+        setRawTransition(EMPTY_TRANSITION);
+        return;
+      }
+      if (isMarkdownFencedCodeLine(model.getValue(), pos.lineNumber)) {
         setRawTemplate(null);
         setRawHeadingLine(null);
         setRawTransition(EMPTY_TRANSITION);
@@ -1794,6 +1897,7 @@ export function Toolbar({
       const model = monacoEditor.getModel();
       const pos = monacoEditor.getPosition();
       if (!model || !pos) return;
+      if (isMarkdownFencedCodeLine(model.getValue(), pos.lineNumber)) return;
       const lineNumber = pos.lineNumber;
       const lineText = model.getLineContent(lineNumber);
       const headingMatch = lineText.match(/^(#{1,6}\s+)(.+)$/);
@@ -1858,6 +1962,7 @@ export function Toolbar({
       const model = monacoEditor.getModel();
       const pos = monacoEditor.getPosition();
       if (!model || !pos) return;
+      if (isMarkdownFencedCodeLine(model.getValue(), pos.lineNumber)) return;
       const lineNumber = pos.lineNumber;
       const lineText = model.getLineContent(lineNumber);
       const newLine = setHeadingLineTransition(lineText, next);
@@ -2538,6 +2643,23 @@ export function Toolbar({
             >
               Insert
             </div>
+            <button
+              className="squisq-toolbar-overflow-item"
+              onClick={(event) => {
+                if (codeSnippetMenuAnchor) setCodeSnippetMenuAnchor(null);
+                else openCodeSnippetMenu(event.currentTarget);
+              }}
+              role="menuitem"
+              aria-label="Insert Code Snippet"
+              aria-haspopup="menu"
+              aria-expanded={codeSnippetMenuAnchor !== null}
+            >
+              <span className="squisq-toolbar-overflow-icon">
+                <Icon icon="fa-solid fa-file-code" />
+              </span>
+              <span>Code Snippet</span>
+              <Icon icon="fa-solid fa-chevron-right" />
+            </button>
             {MEDIA_BUTTONS.filter((b) => isButtonVisible(b.id)).map((btn) => {
               const disabled = (btn.id === 'image' && !mediaProvider) || !buttonAllowed(btn.id);
               const stripped = btn.title.replace(/^Insert\s+/i, '');
@@ -2559,6 +2681,37 @@ export function Toolbar({
                 </button>
               );
             })}
+          </div>,
+          document.body,
+        )}
+
+      {codeSnippetMenuAnchor &&
+        createPortal(
+          <div
+            ref={codeSnippetMenuRef}
+            className="squisq-insert-menu squisq-code-snippet-menu"
+            data-theme={colorScheme}
+            style={{
+              position: 'fixed',
+              top: codeSnippetMenuAnchor.top,
+              left: codeSnippetMenuAnchor.left,
+            }}
+            role="menu"
+            aria-label="Code snippet language"
+          >
+            <div className="squisq-insert-menu-header">Code Snippet</div>
+            {CODE_SNIPPET_LANGUAGES.map((language) => (
+              <button
+                key={language.fenceLanguage}
+                className="squisq-toolbar-overflow-item squisq-code-snippet-language"
+                onClick={() => handleCodeSnippetInsert(language)}
+                role="menuitem"
+                aria-label={`Insert ${language.label} code snippet`}
+              >
+                <span>{language.label}</span>
+                <code>{language.fenceLanguage}</code>
+              </button>
+            ))}
           </div>,
           document.body,
         )}

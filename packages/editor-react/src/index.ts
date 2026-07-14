@@ -293,6 +293,60 @@ export {
 } from './asciiDiagram/asciiDiagramOps.js';
 export { shouldPasteAsAsciiFence } from './asciiDiagram/asciiPaste.js';
 
+// Complex diagram editor — every explicit `mermaid` fence is rendered through
+// Mermaid's public renderer inside the shared diagram chrome. The editable
+// code fence remains authoritative, so the full Mermaid language round-trips
+// without being narrowed to Squisq's node/edge model.
+export {
+  MermaidDiagramExtension,
+  MERMAID_DIAGRAM_KEY,
+  findMermaidDiagramBlockPos,
+  isMermaidDiagramNode,
+  isMermaidSourceVisible,
+  toggleMermaidSource,
+} from './mermaid/MermaidDiagramExtension.js';
+export type {
+  MermaidDiagramBlockEntry,
+  MermaidDiagramExtensionOptions,
+  MermaidDiagramPluginState,
+} from './mermaid/MermaidDiagramExtension.js';
+export { MermaidDiagramWidget } from './mermaid/MermaidDiagramWidget.js';
+export type { MermaidDiagramWidgetProps } from './mermaid/MermaidDiagramWidget.js';
+export { MermaidDiagramCanvas } from './mermaid/MermaidDiagramCanvas.js';
+export type { MermaidDiagramCanvasProps } from './mermaid/MermaidDiagramCanvas.js';
+export { useMermaidDiagramData } from './mermaid/mermaidData.js';
+export type { MermaidDiagramData } from './mermaid/mermaidData.js';
+export { renderMermaidDiagram, mermaidErrorMessage } from './mermaid/mermaidRenderer.js';
+
+// Code snippets — every ordinary explicit-language fence is replaced in the
+// WYSIWYG surface by a Monaco inset. The fence node remains authoritative, so
+// edits preserve the exact language tag and source when serialized to Markdown.
+export {
+  CodeSnippetExtension,
+  CODE_SNIPPET_KEY,
+  findCodeSnippetBlockPos,
+  isCodeSnippetNode,
+} from './codeSnippet/CodeSnippetExtension.js';
+export type {
+  CodeSnippetBlockEntry,
+  CodeSnippetExtensionOptions,
+  CodeSnippetPluginState,
+} from './codeSnippet/CodeSnippetExtension.js';
+export { CodeSnippetWidget } from './codeSnippet/CodeSnippetWidget.js';
+export type { CodeSnippetWidgetProps } from './codeSnippet/CodeSnippetWidget.js';
+export { replaceCodeSnippetText } from './codeSnippet/codeSnippetCommands.js';
+export { useCodeSnippetData } from './codeSnippet/codeSnippetData.js';
+export type { CodeSnippetData } from './codeSnippet/codeSnippetData.js';
+export {
+  CODE_SNIPPET_LANGUAGES,
+  codeSnippetFenceLanguageToken,
+  codeSnippetLanguageLabel,
+  codeSnippetMarkdown,
+  isCodeSnippetFenceLanguage,
+  monacoLanguageForFence,
+} from './codeSnippet/codeSnippetLanguages.js';
+export type { CodeSnippetLanguage } from './codeSnippet/codeSnippetLanguages.js';
+
 // Treeview editor — ASCII file-tree / outline fences get an interactive
 // outline widget; edits re-render the tree art (the fence stays the source
 // of truth). Peer to the ASCII diagram editor; mutually exclusive with it

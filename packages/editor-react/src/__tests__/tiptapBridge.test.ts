@@ -122,6 +122,15 @@ describe('markdownToTiptap', () => {
     expect(html).toContain('const x = 1;');
   });
 
+  it('keeps squisq annotation syntax literal inside fenced code', () => {
+    const md = '```markdown\n## Example {[sectionHeader]}\n{[github]}\n{[ ]}\n```';
+    const html = markdownToTiptap(md);
+
+    expect(html).not.toContain('data-template=');
+    expect(html).not.toContain('data-icon=');
+    expect(tiptapToMarkdown(html).trim()).toBe(md);
+  });
+
   it('converts unordered lists', () => {
     const md = '- Item one\n- Item two\n- Item three';
     const html = markdownToTiptap(md);

@@ -1,7 +1,10 @@
 # Third-Party Notices
 
-This file lists the open-source dependencies used by the Squisq packages, along
-with their licenses. All licenses are permissive and compatible with MIT.
+This file lists the direct open-source runtime dependencies used by the Squisq
+packages, plus notable bundled and transitive components, along with their
+licenses. Most dependencies are permissively licensed. The separately
+distributed `@ffmpeg/core` WebAssembly runtime is the exception: it retains its
+GPL-2.0-or-later license and is not covered by Squisq's MIT license.
 
 ---
 
@@ -34,6 +37,7 @@ with their licenses. All licenses are permissive and compatible with MIT.
 | Package           | Version   | License                 | Repository                       |
 | ----------------- | --------- | ----------------------- | -------------------------------- |
 | @bendyline/squisq | workspace | MIT                     | (internal)                       |
+| @xmldom/xmldom    | 0.9.10    | MIT                     | https://github.com/xmldom/xmldom |
 | jszip             | 3.10.1    | MIT OR GPL-3.0-or-later | https://github.com/Stuk/jszip    |
 | pdf-lib           | 1.17.1    | MIT                     | https://pdf-lib.js.org           |
 | pdfjs-dist        | 4.10.38   | Apache-2.0              | https://mozilla.github.io/pdf.js |
@@ -61,6 +65,7 @@ with their licenses. All licenses are permissive and compatible with MIT.
 | @tiptap/react                  | 2.27.2    | MIT                           | https://tiptap.dev                           |
 | @tiptap/starter-kit            | 2.27.2    | MIT                           | https://tiptap.dev                           |
 | @tiptap/suggestion             | 2.27.2    | MIT                           | https://tiptap.dev                           |
+| mermaid                        | 11.16.0   | MIT                           | https://github.com/mermaid-js/mermaid        |
 | monaco-editor _(peer)_         | >=0.50.0  | MIT                           | https://github.com/microsoft/monaco-editor   |
 | react _(peer)_                 | ^18 / ^19 | MIT                           | https://reactjs.org                          |
 | react-dom _(peer)_             | ^18 / ^19 | MIT                           | https://reactjs.org                          |
@@ -70,6 +75,14 @@ icon glyph artwork under **CC-BY-4.0** (attribution required when redistributing
 the icons), the FontAwesome font files under **OFL-1.1**, and the CSS/JS
 loader code under **MIT**. Each applies to its respective subset of the
 package — no choose-one election.
+
+Mermaid is Copyright (c) 2014-2022 Knut Sveidqvist and is distributed under
+the MIT License. Its source and license are available at
+https://github.com/mermaid-js/mermaid. Mermaid's rendering stack includes
+transitive ISC, BSD-3-Clause, Apache-2.0, Unlicense, and dual-licensed
+DOMPurify components called out in the transitive-dependency and license
+summary tables below. `khroma` 2.1.0 omits an SPDX field from its package
+metadata but ships an MIT license file with its distribution.
 
 ## @bendyline/squisq-video
 
@@ -81,17 +94,26 @@ package — no choose-one election.
 
 ## @bendyline/squisq-video-react
 
-| Package                 | Version   | License | Repository                                |
-| ----------------------- | --------- | ------- | ----------------------------------------- |
-| @bendyline/squisq       | workspace | MIT     | (internal)                                |
-| @bendyline/squisq-video | workspace | MIT     | (internal)                                |
-| @bendyline/squisq-react | workspace | MIT     | (internal)                                |
-| @ffmpeg/ffmpeg          | 0.12.15   | MIT     | https://github.com/ffmpegwasm/ffmpeg.wasm |
-| @ffmpeg/util            | 0.12.2    | MIT     | https://github.com/ffmpegwasm/ffmpeg.wasm |
-| html2canvas             | 1.4.1     | MIT     | https://github.com/niklasvh/html2canvas   |
-| mp4-muxer               | 5.2.2     | MIT     | https://github.com/Vanilagy/mp4-muxer     |
-| react _(peer)_          | ^18 / ^19 | MIT     | https://reactjs.org                       |
-| react-dom _(peer)_      | ^18 / ^19 | MIT     | https://reactjs.org                       |
+| Package                 | Version   | License          | Repository                                |
+| ----------------------- | --------- | ---------------- | ----------------------------------------- |
+| @bendyline/squisq       | workspace | MIT              | (internal)                                |
+| @bendyline/squisq-video | workspace | MIT              | (internal)                                |
+| @bendyline/squisq-react | workspace | MIT              | (internal)                                |
+| @ffmpeg/core            | 0.12.9    | GPL-2.0-or-later | https://github.com/ffmpegwasm/ffmpeg.wasm |
+| @ffmpeg/ffmpeg          | 0.12.15   | MIT              | https://github.com/ffmpegwasm/ffmpeg.wasm |
+| @ffmpeg/util            | 0.12.2    | MIT              | https://github.com/ffmpegwasm/ffmpeg.wasm |
+| html2canvas             | 1.4.1     | MIT              | https://github.com/niklasvh/html2canvas   |
+| mp4-muxer               | 5.2.2     | MIT              | https://github.com/Vanilagy/mp4-muxer     |
+| react _(peer)_          | ^18 / ^19 | MIT              | https://reactjs.org                       |
+| react-dom _(peer)_      | ^18 / ^19 | MIT              | https://reactjs.org                       |
+
+`@ffmpeg/core` is the separately distributed single-thread FFmpeg WebAssembly
+runtime used by the browser fallback and GIF encoder. It remains licensed
+under GPL-2.0-or-later; the MIT licenses on Squisq, `@ffmpeg/ffmpeg`, and
+`@ffmpeg/util` do not relicense that runtime. Redistributors of the core files
+must preserve its GPL license and satisfy the corresponding source-availability
+requirements. Upstream source and licensing information:
+https://github.com/ffmpegwasm/ffmpeg.wasm.
 
 ## @bendyline/squisq-cli
 
@@ -101,7 +123,6 @@ package — no choose-one election.
 | @bendyline/squisq-formats | workspace | MIT        | (internal)                              |
 | @bendyline/squisq-react   | workspace | MIT        | (internal)                              |
 | @bendyline/squisq-video   | workspace | MIT        | (internal)                              |
-| @xmldom/xmldom            | 0.9.10    | MIT        | https://github.com/xmldom/xmldom        |
 | commander                 | 12.1.0    | MIT        | https://github.com/tj/commander.js      |
 | playwright-core           | 1.58.2    | Apache-2.0 | https://github.com/microsoft/playwright |
 | vite                      | 8.0.14    | MIT        | https://github.com/vitejs/vite          |
@@ -141,31 +162,44 @@ https://openfontlicense.org/open-font-license-official-text/
 
 ## Notable Transitive Dependencies
 
-| Package                 | Version | License      | Used By        |
-| ----------------------- | ------- | ------------ | -------------- |
-| pako                    | 1.0.11  | MIT AND Zlib | jszip, pdf-lib |
-| tslib                   | 1.14.1  | 0BSD         | pdf-lib        |
-| @pdf-lib/standard-fonts | 1.0.0   | MIT          | pdf-lib        |
-| @pdf-lib/upng           | 1.0.1   | MIT          | pdf-lib        |
+| Package                 | Version | License               | Used By        |
+| ----------------------- | ------- | --------------------- | -------------- |
+| pako                    | 1.0.11  | MIT AND Zlib          | jszip, pdf-lib |
+| tslib                   | 1.14.1  | 0BSD                  | pdf-lib        |
+| @pdf-lib/standard-fonts | 1.0.0   | MIT                   | pdf-lib        |
+| @pdf-lib/upng           | 1.0.1   | MIT                   | pdf-lib        |
+| @chevrotain/types       | 11.1.2  | Apache-2.0            | Mermaid parser |
+| d3                      | 7.9.0   | ISC                   | Mermaid        |
+| d3-sankey               | 0.12.3  | BSD-3-Clause          | Mermaid        |
+| dompurify               | 3.4.12  | MPL-2.0 OR Apache-2.0 | Mermaid        |
+| khroma                  | 2.1.0   | MIT (shipped license) | Mermaid        |
+| robust-predicates       | 3.0.3   | Unlicense             | Mermaid / D3   |
 
 ---
 
 ## License Summary
 
-| License                       | Packages                                                                  |
-| ----------------------------- | ------------------------------------------------------------------------- |
-| MIT                           | majority of dependencies                                                  |
-| Apache-2.0                    | genson-js, localforage, pdfjs-dist, playwright-core, Roboto font          |
-| OFL-1.1                       | 14 self-hosted Google Fonts (see table above) + FontAwesome font files    |
-| CC-BY-4.0                     | FontAwesome icon artwork (attribution required when redistributing icons) |
-| MIT OR GPL-3.0-or-later       | jszip (dual-licensed; MIT option used)                                    |
-| MIT AND Zlib                  | pako (both permissive)                                                    |
-| 0BSD                          | tslib (maximally permissive)                                              |
-| CC-BY-4.0 AND OFL-1.1 AND MIT | @fortawesome/fontawesome-free (composite — see editor-react table note)   |
+| License                       | Packages                                                                      |
+| ----------------------------- | ----------------------------------------------------------------------------- |
+| MIT                           | Mermaid and the majority of dependencies                                      |
+| Apache-2.0                    | genson-js, localforage, pdfjs-dist, playwright-core, Roboto, Chevrotain types |
+| MPL-2.0 OR Apache-2.0         | DOMPurify (dual-licensed; Apache-2.0 option available)                        |
+| ISC                           | D3 and most current D3 modules used by Mermaid                                |
+| BSD-3-Clause                  | d3-sankey and related legacy D3 modules                                       |
+| Unlicense                     | robust-predicates                                                             |
+| OFL-1.1                       | 14 self-hosted Google Fonts (see table above) + FontAwesome font files        |
+| CC-BY-4.0                     | FontAwesome icon artwork (attribution required when redistributing icons)     |
+| GPL-2.0-or-later              | @ffmpeg/core WebAssembly runtime                                              |
+| MIT OR GPL-3.0-or-later       | jszip (dual-licensed; MIT option used)                                        |
+| MIT AND Zlib                  | pako (both permissive)                                                        |
+| 0BSD                          | tslib (maximally permissive)                                                  |
+| CC-BY-4.0 AND OFL-1.1 AND MIT | @fortawesome/fontawesome-free (composite — see editor-react table note)       |
 
-All dependencies use permissive licenses compatible with MIT. The jszip
-dual-license allows choosing MIT. Apache-2.0 dependencies (genson-js,
-localforage, pdfjs-dist, playwright-core, Roboto font) require preserving their
-copyright notice and license text. OFL-1.1 fonts require attribution and permit
-redistribution. The FontAwesome Free icon artwork (CC-BY-4.0) requires visible
-attribution to FontAwesome when the icons are redistributed.
+Most dependencies use permissive licenses compatible with MIT. The jszip
+dual-license allows choosing MIT, and DOMPurify offers an Apache-2.0 option.
+Apache-2.0 dependencies require preserving their copyright notices and license
+text. OFL-1.1 fonts require attribution and permit redistribution. The
+FontAwesome Free icon artwork (CC-BY-4.0) requires visible attribution to
+FontAwesome when the icons are redistributed. `@ffmpeg/core` is not
+permissively licensed; its separately distributed WebAssembly runtime remains
+GPL-2.0-or-later and must be redistributed under those terms.

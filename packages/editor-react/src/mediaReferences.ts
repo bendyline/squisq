@@ -1,4 +1,5 @@
 import { splitKeyValueToken, tokenizeAttrTokens } from '@bendyline/squisq/markdown';
+import { maskMarkdownFencedCode } from './markdownCodeFence';
 
 interface MediaReferenceRange {
   start: number;
@@ -32,9 +33,10 @@ const HTML_MEDIA_ATTRS = ['src', 'href', 'poster'] as const;
  */
 export function collectMediaReferencesFromMarkdown(source: string): ReadonlySet<string> {
   const refs = new Set<string>();
-  collectMarkdownInlineReferences(source, refs);
-  collectHtmlAttributeReferences(source, refs);
-  collectAnnotationReferences(source, refs);
+  const searchableSource = maskMarkdownFencedCode(source);
+  collectMarkdownInlineReferences(searchableSource, refs);
+  collectHtmlAttributeReferences(searchableSource, refs);
+  collectAnnotationReferences(searchableSource, refs);
   return refs;
 }
 

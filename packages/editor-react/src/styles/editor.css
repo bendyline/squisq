@@ -703,6 +703,26 @@
   border-top-color: #374151;
 }
 
+.squisq-code-snippet-menu {
+  width: 220px;
+  max-height: min(440px, calc(100vh - 16px));
+  overflow-y: auto;
+}
+
+.squisq-code-snippet-language {
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.squisq-code-snippet-language code {
+  overflow: hidden;
+  color: #9ca3af;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace;
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 /* ─── Template Picker (toolbar) ──────────────────────── */
 
 .squisq-template-picker {

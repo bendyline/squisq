@@ -31,6 +31,7 @@ function monacoWithSelection(selectedText: string) {
     endColumn: 1,
   };
   const model = {
+    getValue: () => selectedText,
     getValueInRange: () => selectedText,
     getLineContent: () => selectedText.split('\n')[0] ?? '',
   };
@@ -114,6 +115,31 @@ describe('<Toolbar> selection conversion menu', () => {
     const menu = await screen.findByRole('menu');
     expect(within(menu).queryByText('Convert')).toBeNull();
     expect(within(menu).queryByRole('menuitem', { name: 'Convert selection to Table' })).toBeNull();
+  });
+
+  it('wraps the selected Monaco text in the chosen code-snippet language', async () => {
+    const source = 'const answer = 42;';
+    const { editor, executeEdits, selection } = monacoWithSelection(source);
+    render(
+      <EditorProvider initialMarkdown={source} initialView="raw" allowRecording={false}>
+        <Toolbar />
+        <ContextProbe />
+      </EditorProvider>,
+    );
+    act(() => context().setMonacoEditor(editor as never));
+
+    fireEvent.click(screen.getByLabelText('Insert'));
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Insert Code Snippet' }));
+    fireEvent.click(
+      await screen.findByRole('menuitem', { name: 'Insert JavaScript code snippet' }),
+    );
+
+    expect(executeEdits).toHaveBeenCalledWith('toolbar-code-snippet', [
+      {
+        range: selection,
+        text: '\n```javascript\nconst answer = 42;\n```\n',
+      },
+    ]);
   });
 
   it('replaces fully selected Write paragraphs without leaving a blank paragraph', async () => {

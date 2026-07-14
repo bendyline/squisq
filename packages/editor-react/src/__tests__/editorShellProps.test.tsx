@@ -482,4 +482,43 @@ describe('<Toolbar> Insert menu', () => {
       );
     });
   });
+
+  it('adds a Mermaid fence from Insert Complex Diagram', async () => {
+    render(
+      <EditorProvider initialMarkdown="Intro" initialView="raw" allowRecording={false}>
+        <Toolbar />
+        <MarkdownSourceProbe />
+      </EditorProvider>,
+    );
+
+    fireEvent.click(screen.getByLabelText('Insert'));
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Complex Diagram' }));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('markdown-source').textContent).toContain(
+        '```mermaid\nflowchart LR\n  start["Start"] --> next["Next"]\n```',
+      );
+    });
+  });
+
+  it('adds a typed code fence from the Code Snippet submenu', async () => {
+    render(
+      <EditorProvider initialMarkdown="Intro" initialView="raw" allowRecording={false}>
+        <Toolbar />
+        <MarkdownSourceProbe />
+      </EditorProvider>,
+    );
+
+    fireEvent.click(screen.getByLabelText('Insert'));
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Insert Code Snippet' }));
+    fireEvent.click(
+      await screen.findByRole('menuitem', { name: 'Insert TypeScript code snippet' }),
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId('markdown-source').textContent).toContain(
+        "```typescript\nconst message: string = 'Hello, world!';\n```",
+      );
+    });
+  });
 });

@@ -74,7 +74,8 @@
     "@tiptap/pm": "2.27.2",
     "@tiptap/react": "2.27.2",
     "@tiptap/starter-kit": "2.27.2",
-    "@tiptap/suggestion": "2.27.2"
+    "@tiptap/suggestion": "2.27.2",
+    "mermaid": "11.16.0"
   },
   "devDependencies": {
     "@types/react": "18.3.28",

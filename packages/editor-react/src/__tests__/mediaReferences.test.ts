@@ -39,6 +39,21 @@ describe('collectMediaReferencesFromMarkdown', () => {
       'video/clip with spaces.webm',
     ]);
   });
+
+  it('ignores annotations and other reference-shaped text inside code fences', () => {
+    const refs = collectMediaReferencesFromMarkdown(
+      [
+        '## Real {[image src=images/outside.png]}',
+        '```markdown',
+        '{[audio src=audio/inside.mp3]}',
+        '![Example](images/inside.png)',
+        '<video src="video/inside.webm"></video>',
+        '```',
+      ].join('\n'),
+    );
+
+    expect([...refs]).toEqual(['images/outside.png']);
+  });
 });
 
 describe('removeMediaReferencesFromMarkdown', () => {
