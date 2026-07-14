@@ -8,6 +8,7 @@ import type {
   MermaidFlowchartDirection,
 } from './mermaidModel';
 import { normalizeMermaidFlowchartShape } from './mermaidShapes';
+import { inspectMermaidSourceAdapter } from './mermaidSourceAdapters';
 
 let mermaidPromise: Promise<typeof import('mermaid').default> | null = null;
 
@@ -116,7 +117,9 @@ async function inspectMermaidSourceWith(
   if (typeof getDiagramFromText !== 'function') return null;
   try {
     const diagram = await getDiagramFromText(source);
-    if (diagram.type !== 'flowchart' && diagram.type !== 'flowchart-v2') return null;
+    if (diagram.type !== 'flowchart' && diagram.type !== 'flowchart-v2') {
+      return inspectMermaidSourceAdapter(source);
+    }
     const db = diagram.db as FlowDbLike;
     if (typeof db.getVertices !== 'function' || typeof db.getEdges !== 'function') return null;
 

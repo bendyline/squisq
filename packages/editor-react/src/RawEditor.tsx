@@ -14,9 +14,13 @@ import { getAvailableTemplates } from '@bendyline/squisq/doc';
 import { suggestIcons, resolveIcon, iconGlyph } from '@bendyline/squisq/icons';
 import { BLOCK_META_KEY_DESCRIPTORS, tokenizeAttrTokens } from '@bendyline/squisq/markdown';
 import { SQUISQ_MEDIA_MIME, parseSquisqMediaPayload } from './mediaDragMime';
-import { canHandleSquisqMediaDrop, ownsMonacoModel } from './rawEditorIsolation';
+import {
+  canHandleSquisqMediaDrop,
+  getCachedMarkdownFencedCodeLineMask,
+  isMarkdownFencedCodeModelLine,
+  ownsMonacoModel,
+} from './rawEditorIsolation';
 import { useMonacoLoader } from './useMonacoLoader';
-import { isMarkdownFencedCodeLine, markdownFencedCodeLineMask } from './markdownCodeFence';
 
 // Monaco is loaded lazily through `useMonacoLoader` (see the hook for the
 // rationale). The type-only `import type * as monaco from 'monaco-editor'`
@@ -201,7 +205,7 @@ export function RawEditor({
           triggerCharacters: ['['],
           provideCompletionItems(model: monaco.editor.ITextModel, position: monaco.Position) {
             if (!ownsMonacoModel(editor, model)) return { suggestions: [] };
-            if (isMarkdownFencedCodeLine(model.getValue(), position.lineNumber)) {
+            if (isMarkdownFencedCodeModelLine(model, position.lineNumber)) {
               return { suggestions: [] };
             }
             const lineContent = model.getLineContent(position.lineNumber);
@@ -318,7 +322,7 @@ export function RawEditor({
             triggerCharacters: ['['],
             provideCompletionItems(model, position) {
               if (!ownsMonacoModel(editor, model)) return { suggestions: [] };
-              if (isMarkdownFencedCodeLine(model.getValue(), position.lineNumber)) {
+              if (isMarkdownFencedCodeModelLine(model, position.lineNumber)) {
                 return { suggestions: [] };
               }
               const lineContent = model.getLineContent(position.lineNumber);
@@ -404,7 +408,7 @@ export function RawEditor({
             triggerCharacters: ['=', ' '],
             provideCompletionItems(model, position) {
               if (!ownsMonacoModel(editor, model)) return { suggestions: [] };
-              if (isMarkdownFencedCodeLine(model.getValue(), position.lineNumber)) {
+              if (isMarkdownFencedCodeModelLine(model, position.lineNumber)) {
                 return { suggestions: [] };
               }
               const lineContent = model.getLineContent(position.lineNumber);
@@ -634,7 +638,7 @@ export function RawEditor({
 
     const decorations: monaco.editor.IModelDeltaDecoration[] = [];
     const lines = model.getLineCount();
-    const fencedLines = markdownFencedCodeLineMask(model.getValue());
+    const fencedLines = getCachedMarkdownFencedCodeLineMask(model);
     const re = /\{\[([a-zA-Z0-9_:-]+)\]\}/g;
     for (let line = 1; line <= lines; line++) {
       if (fencedLines[line - 1]) continue;

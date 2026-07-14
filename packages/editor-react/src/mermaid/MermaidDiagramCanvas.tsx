@@ -2,7 +2,7 @@ import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from
 import { Icon } from '../Icon';
 import { calculateFitScale, type SceneSize } from '../scene/fitScale';
 import { SceneViewControls } from '../scene/SceneViewControls';
-import type { MermaidEditableModel } from './mermaidModel';
+import { mermaidEditCapabilities, type MermaidEditableModel } from './mermaidModel';
 import { mermaidErrorMessage, renderMermaidDiagram } from './mermaidRenderer';
 
 let renderSequence = 0;
@@ -229,10 +229,14 @@ export function MermaidDiagramCanvas({
   }, [fitZoom, viewMode]);
 
   const findNodeElement = useCallback(
-    (id: string): SVGGElement | null => {
+    (id: string): Element | null => {
       const root = svgRootRef.current;
       const node = model?.nodes.find((candidate) => candidate.id === id);
       if (!root || !node) return null;
+      const decorated = [...root.querySelectorAll<Element>('[data-squisq-node-id]')].find(
+        (element) => element.getAttribute('data-squisq-node-id') === id,
+      );
+      if (decorated) return decorated;
       return (
         [...root.querySelectorAll<SVGGElement>('g.node')].find((element) =>
           matchesMermaidNodeDomId(element.id, node.domId),
@@ -245,8 +249,10 @@ export function MermaidDiagramCanvas({
   const findEdgeElements = useCallback((id: string): Element[] => {
     const root = svgRootRef.current;
     if (!root) return [];
-    return [...root.querySelectorAll<Element>('[data-id]')].filter(
-      (element) => element.getAttribute('data-id') === id,
+    return [...root.querySelectorAll<Element>('[data-id], [data-squisq-edge-id]')].filter(
+      (element) =>
+        element.getAttribute('data-id') === id ||
+        element.getAttribute('data-squisq-edge-id') === id,
     );
   }, []);
 
@@ -306,18 +312,54 @@ export function MermaidDiagramCanvas({
       setSelectionAnchor(null);
       return;
     }
+    for (const previous of root.querySelectorAll('[data-squisq-node-id]')) {
+      previous.removeAttribute('data-squisq-node-id');
+      previous.classList.remove('squisq-mermaid-node-selected', 'squisq-mermaid-connect-source');
+    }
+    const decoratedNodes = new Set<Element>();
     const groups = [...root.querySelectorAll<SVGGElement>('g.node')];
     for (const group of groups) {
       const node = model.nodes.find((candidate) =>
         matchesMermaidNodeDomId(group.id, candidate.domId),
       );
       if (!node) continue;
+      decoratedNodes.add(group);
       group.dataset.squisqNodeId = node.id;
       group.setAttribute('role', 'button');
       group.setAttribute('tabindex', '0');
       group.setAttribute('aria-label', `${node.label}, ${node.shape} Mermaid node`);
       group.classList.toggle('squisq-mermaid-node-selected', node.id === selectedNodeId);
       group.classList.toggle('squisq-mermaid-connect-source', node.id === connectSourceId);
+    }
+    // Most Mermaid grammars do not expose stable SVG ids. Match their authored
+    // labels to rendered text and decorate the smallest useful visual wrapper.
+    // This keeps the SVG render official while making tasks, participants,
+    // states, timeline events, data points, and similar entities selectable.
+    const textElements = [...root.querySelectorAll<Element>('text, foreignObject')];
+    const usedText = new Set<Element>();
+    for (const item of model.nodes) {
+      if (
+        [...decoratedNodes].some(
+          (element) => element.getAttribute('data-squisq-node-id') === item.id,
+        )
+      )
+        continue;
+      const text = textElements.find(
+        (candidate) =>
+          !usedText.has(candidate) && candidate.textContent?.trim() === item.label.trim(),
+      );
+      if (!text) continue;
+      usedText.add(text);
+      const group = text.closest<SVGGElement>('g');
+      const target =
+        group && group.querySelectorAll('text, foreignObject').length <= 2 ? group : text;
+      decoratedNodes.add(target);
+      target.setAttribute('data-squisq-node-id', item.id);
+      target.setAttribute('role', 'button');
+      target.setAttribute('tabindex', '0');
+      target.setAttribute('aria-label', `${item.label}, Mermaid ${model.kind} item`);
+      target.classList.toggle('squisq-mermaid-node-selected', item.id === selectedNodeId);
+      target.classList.toggle('squisq-mermaid-connect-source', item.id === connectSourceId);
     }
     for (const previous of root.querySelectorAll('.squisq-mermaid-edge-hit-target')) {
       previous.remove();
@@ -348,6 +390,35 @@ export function MermaidDiagramCanvas({
         hitTarget.setAttribute('aria-hidden', 'true');
       }
       path.after(hitTarget);
+    }
+    if (model.kind !== 'flowchart') {
+      const relationshipGeometry = [
+        ...root.querySelectorAll<SVGGeometryElement>(
+          'path[marker-end], path[marker-start], line[marker-end], line[marker-start], polyline[marker-end], polyline[marker-start]',
+        ),
+      ].filter((element) => !element.closest('defs'));
+      relationshipGeometry.slice(0, model.edges.length).forEach((geometry, index) => {
+        const item = model.edges[index];
+        geometry.setAttribute('data-squisq-edge-id', item.id);
+        const hitTarget = geometry.cloneNode(false) as SVGGeometryElement;
+        hitTarget.removeAttribute('id');
+        hitTarget.removeAttribute('marker-start');
+        hitTarget.removeAttribute('marker-mid');
+        hitTarget.removeAttribute('marker-end');
+        hitTarget.setAttribute('class', 'squisq-mermaid-edge-hit-target');
+        hitTarget.setAttribute('data-squisq-edge-id', item.id);
+        hitTarget.setAttribute('role', 'button');
+        hitTarget.setAttribute('tabindex', '0');
+        const sourceLabel =
+          model.nodes.find((node) => node.id === item.source)?.label ?? item.source;
+        const targetLabel =
+          model.nodes.find((node) => node.id === item.target)?.label ?? item.target;
+        hitTarget.setAttribute(
+          'aria-label',
+          `${model.kind} connection from ${sourceLabel} to ${targetLabel}`,
+        );
+        geometry.after(hitTarget);
+      });
     }
     for (const element of root.querySelectorAll('.squisq-mermaid-edge-selected')) {
       element.classList.remove('squisq-mermaid-edge-selected');
@@ -383,13 +454,13 @@ export function MermaidDiagramCanvas({
 
   const nodeIdFromTarget = (target: EventTarget | null): string | null => {
     if (!(target instanceof Element)) return null;
-    return target.closest<SVGGElement>('g.node')?.dataset.squisqNodeId ?? null;
+    return target.closest<HTMLElement>('[data-squisq-node-id]')?.dataset.squisqNodeId ?? null;
   };
 
   const edgeIdFromTarget = (target: EventTarget | null): string | null => {
     if (!(target instanceof Element) || !model) return null;
-    const element = target.closest<Element>('[data-id]');
-    const id = element?.getAttribute('data-id');
+    const element = target.closest<Element>('[data-id], [data-squisq-edge-id]');
+    const id = element?.getAttribute('data-squisq-edge-id') ?? element?.getAttribute('data-id');
     return id && model.edges.some((edge) => edge.id === id) ? id : null;
   };
 
@@ -467,6 +538,7 @@ export function MermaidDiagramCanvas({
 
   const editingNodeLabel = renamingNodeId !== null && renamingNodeId === selectedNodeId;
   const editingEdgeLabel = renamingEdgeId !== null && renamingEdgeId === selectedEdgeId;
+  const editCapabilities = model ? mermaidEditCapabilities(model) : null;
 
   const commitInlineLabel = () => {
     const committed = editingNodeLabel
@@ -609,32 +681,42 @@ export function MermaidDiagramCanvas({
                 style={{ left: selectionAnchor.left, top: selectionAnchor.top }}
                 onClick={(event) => event.stopPropagation()}
               >
-                <CanvasAction
-                  icon="fa-solid fa-pen"
-                  label="Rename node"
-                  onClick={() => onNodeAction?.('rename', selectedNodeId)}
-                />
-                <CanvasAction
-                  icon="fa-solid fa-shapes"
-                  label="Change shape"
-                  onClick={() => onNodeAction?.('shape', selectedNodeId)}
-                />
-                <CanvasAction
-                  icon="fa-solid fa-copy"
-                  label="Duplicate node"
-                  onClick={() => onNodeAction?.('duplicate', selectedNodeId)}
-                />
-                <CanvasAction
-                  icon="fa-solid fa-link"
-                  label="Connect node"
-                  onClick={() => onNodeAction?.('connect', selectedNodeId)}
-                />
-                <CanvasAction
-                  icon="fa-solid fa-trash"
-                  label="Delete node"
-                  danger
-                  onClick={() => onNodeAction?.('delete', selectedNodeId)}
-                />
+                {editCapabilities?.renameNode && (
+                  <CanvasAction
+                    icon="fa-solid fa-pen"
+                    label="Rename node"
+                    onClick={() => onNodeAction?.('rename', selectedNodeId)}
+                  />
+                )}
+                {editCapabilities?.shape && (
+                  <CanvasAction
+                    icon="fa-solid fa-shapes"
+                    label="Change shape"
+                    onClick={() => onNodeAction?.('shape', selectedNodeId)}
+                  />
+                )}
+                {editCapabilities?.duplicateNode && (
+                  <CanvasAction
+                    icon="fa-solid fa-copy"
+                    label="Duplicate node"
+                    onClick={() => onNodeAction?.('duplicate', selectedNodeId)}
+                  />
+                )}
+                {editCapabilities?.connect && (
+                  <CanvasAction
+                    icon="fa-solid fa-link"
+                    label="Connect node"
+                    onClick={() => onNodeAction?.('connect', selectedNodeId)}
+                  />
+                )}
+                {editCapabilities?.deleteNode && (
+                  <CanvasAction
+                    icon="fa-solid fa-trash"
+                    label="Delete node"
+                    danger
+                    onClick={() => onNodeAction?.('delete', selectedNodeId)}
+                  />
+                )}
               </div>
             )}
             {selectionAnchor && selectedEdgeId && renamingEdgeId !== selectedEdgeId && (
@@ -646,17 +728,21 @@ export function MermaidDiagramCanvas({
                 style={{ left: selectionAnchor.left, top: selectionAnchor.top }}
                 onClick={(event) => event.stopPropagation()}
               >
-                <CanvasAction
-                  icon="fa-solid fa-pen"
-                  label="Edit connection label"
-                  onClick={() => onEditEdgeLabel?.(selectedEdgeId)}
-                />
-                <CanvasAction
-                  icon="fa-solid fa-link-slash"
-                  label="Disconnect nodes"
-                  danger
-                  onClick={() => onDisconnectEdge?.(selectedEdgeId)}
-                />
+                {editCapabilities?.edgeLabel && (
+                  <CanvasAction
+                    icon="fa-solid fa-pen"
+                    label="Edit connection label"
+                    onClick={() => onEditEdgeLabel?.(selectedEdgeId)}
+                  />
+                )}
+                {editCapabilities?.disconnect && (
+                  <CanvasAction
+                    icon="fa-solid fa-link-slash"
+                    label="Disconnect nodes"
+                    danger
+                    onClick={() => onDisconnectEdge?.(selectedEdgeId)}
+                  />
+                )}
               </div>
             )}
           </div>

@@ -335,12 +335,17 @@ export {
 } from './mermaid/mermaidShapes.js';
 export type { MermaidFlowchartShape, MermaidFlowchartShapeId } from './mermaid/mermaidShapes.js';
 export type {
+  MermaidDiagramProperty,
+  MermaidEditCapabilities,
+  MermaidEditableDiagramKind,
   MermaidEditableEdge,
   MermaidEditableModel,
   MermaidEditableNode,
   MermaidFlowchartDirection,
   MermaidFlowchartModel,
+  MermaidSourceEditableModel,
 } from './mermaid/mermaidModel.js';
+export { mermaidDiagramProperties, mermaidEditCapabilities } from './mermaid/mermaidModel.js';
 export {
   DEFAULT_MERMAID_DIAGRAM_TYPE,
   MERMAID_DIAGRAM_TYPES,

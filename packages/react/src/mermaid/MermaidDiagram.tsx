@@ -56,7 +56,7 @@ export function MermaidDiagram({
           <pre>{error}</pre>
         </div>
       )}
-      {!error && svg && (
+      {!rendering && !error && svg && (
         <div
           className="squisq-mermaid-render-svg"
           // Mermaid's strict security level sanitizes authored markup.

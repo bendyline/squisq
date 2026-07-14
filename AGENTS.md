@@ -332,8 +332,9 @@ npm run test:published     # Run vitest against published-shape outputs
 npm run test:e2e           # Build all + run Playwright E2E tests against Vite preview
 npm run test:e2e:built     # Run Playwright E2E tests when dist/ is already current
 npm run typecheck          # tsc -b across all packages (no emit)
-npm run site               # Build all + start dev site
-npm run dev                # Build all + watch all packages + start dev site (Vite, port 5199)
+npm run site               # Alias for npm run dev
+npm run dev                # Build runtime packages, start their watchers, then start the dev site
+                           # (Vite, port 5199) after every initial ESM watch build is ready
 npm run lint               # ESLint
 npm run format             # Prettier format
 npm run all                # install:safe + build + lint + format:check + typecheck + test +

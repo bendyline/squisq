@@ -25,7 +25,6 @@ const RE_ITALIC_STAR = /\*(.+?)\*/g;
 const RE_ITALIC_UNDER = /_(.+?)_/g;
 const RE_STRIKETHROUGH = /~~(.+?)~~/g;
 const RE_INLINE_CODE = /`(.+?)`/g;
-const RE_LINK = /\[(.+?)\]\((.+?)\)/g;
 // `*?` on the alt — an empty alt (`![](foo.png)`) is valid markdown and
 // the most common shape for pasted/uploaded images that don't yet have
 // a human-picked caption. Previously required at least one alt char,
@@ -841,11 +840,12 @@ function unescapeHtml(text: string): string {
 
 /** Convert inline markdown to HTML for Tiptap consumption */
 function inlineToHtml(text: string): string {
-  // Extract images/mentions/links to opaque placeholders BEFORE running
-  // any inline-formatting regexes. Otherwise `_` characters inside a URL
+  // Extract code/images/mentions/links to opaque placeholders BEFORE running
+  // any other inline-formatting regexes. Otherwise `_` characters inside a URL
   // (e.g. `mikehome_files/IMG_6829.JPEG`) get turned into `<em>` tags by
   // the underscore-italic rule, mangling the src so the image renders
-  // broken after a markdown ↔ WYSIWYG round-trip.
+  // broken after a markdown ↔ WYSIWYG round-trip. Code comes first because
+  // every markdown-looking character inside a code span must stay literal.
   const placeholders: string[] = [];
   const stash = (html: string): string => {
     const token = `\u0000PH${placeholders.length}\u0000`;
@@ -856,9 +856,12 @@ function inlineToHtml(text: string): string {
   // We run extraction on the RAW text (before escapeHtml) so the
   // captured groups are the literal markdown contents; then we
   // selectively escape the parts of each placeholder that need it.
+  let staged = text.replace(RE_INLINE_CODE, (_m, code) =>
+    stash(`<code>${escapeHtml(code)}</code>`),
+  );
 
   // Images first: ![alt](src) — must be before links so the `!` prefix is consumed
-  let staged = text.replace(RE_IMAGE, (_m, alt, src) =>
+  staged = staged.replace(RE_IMAGE, (_m, alt, src) =>
     stash(`<img alt="${escapeHtml(alt)}" src="${escapeHtml(src)}">`),
   );
 
@@ -886,7 +889,7 @@ function inlineToHtml(text: string): string {
 
   // Links: [text](url) — stash but keep the link text available to
   // inline formatting by recursing.
-  staged = staged.replace(RE_LINK, (_m, linkText, href) =>
+  staged = replaceMarkdownLinks(staged, (linkText, href) =>
     stash(`<a href="${escapeHtml(href)}">${inlineToHtml(linkText)}</a>`),
   );
 
@@ -903,16 +906,91 @@ function inlineToHtml(text: string): string {
   // Strikethrough: ~~text~~
   result = result.replace(RE_STRIKETHROUGH, '<s>$1</s>');
 
-  // Inline code: `text`
-  result = result.replace(RE_INLINE_CODE, '<code>$1</code>');
-
-  // Restore placeholders. escapeHtml turned each `\u0000PHn\u0000` into
-  // the same string (the NULs and digits are escape-safe), so the
-  // restoration regex still matches.
-  // eslint-disable-next-line no-control-regex
-  result = result.replace(/\u0000PH(\d+)\u0000/g, (_m, idx) => placeholders[Number(idx)] ?? '');
+  // Restore newest placeholders first. A link placeholder can contain an
+  // older code/icon placeholder from its label, so a single regex replacement
+  // would leave that nested token unresolved.
+  for (let index = placeholders.length - 1; index >= 0; index--) {
+    result = result.split(`\u0000PH${index}\u0000`).join(placeholders[index] ?? '');
+  }
 
   return preserveLeadingSpaces(result);
+}
+
+/**
+ * Replace inline links while respecting balanced label brackets. A regex like
+ * `\[(.+?)\]\((.+?)\)` incorrectly joins the two bracket pairs in prose such
+ * as `[squiggly square], or [squisq](https://squisq.com)`, creating one giant
+ * link. The small delimiter scanner also preserves valid nested link labels.
+ */
+function replaceMarkdownLinks(
+  text: string,
+  replace: (label: string, href: string) => string,
+): string {
+  let output = '';
+  let consumedThrough = 0;
+  let searchFrom = 0;
+
+  while (searchFrom < text.length) {
+    const labelOpen = text.indexOf('[', searchFrom);
+    if (labelOpen < 0) break;
+    if (isEscapedMarkdownCharacter(text, labelOpen)) {
+      searchFrom = labelOpen + 1;
+      continue;
+    }
+
+    const labelClose = findMatchingMarkdownDelimiter(text, labelOpen, '[', ']');
+    const destinationOpen = labelClose + 1;
+    if (labelClose < 0 || text[destinationOpen] !== '(') {
+      searchFrom = labelOpen + 1;
+      continue;
+    }
+
+    const destinationClose = findMatchingMarkdownDelimiter(text, destinationOpen, '(', ')');
+    if (destinationClose < 0) {
+      searchFrom = labelOpen + 1;
+      continue;
+    }
+
+    const label = text.slice(labelOpen + 1, labelClose);
+    const href = text.slice(destinationOpen + 1, destinationClose);
+    // Match the bridge's historical regex behavior: empty labels or
+    // destinations remain literal source.
+    if (!label || !href) {
+      searchFrom = labelOpen + 1;
+      continue;
+    }
+
+    output += text.slice(consumedThrough, labelOpen) + replace(label, href);
+    consumedThrough = destinationClose + 1;
+    searchFrom = consumedThrough;
+  }
+
+  return output + text.slice(consumedThrough);
+}
+
+function findMatchingMarkdownDelimiter(
+  text: string,
+  start: number,
+  open: '[' | '(',
+  close: ']' | ')',
+): number {
+  let depth = 0;
+  for (let index = start; index < text.length; index++) {
+    if (isEscapedMarkdownCharacter(text, index)) continue;
+    if (text[index] === open) depth++;
+    if (text[index] !== close) continue;
+    depth--;
+    if (depth === 0) return index;
+  }
+  return -1;
+}
+
+function isEscapedMarkdownCharacter(text: string, index: number): boolean {
+  let backslashes = 0;
+  for (let cursor = index - 1; cursor >= 0 && text[cursor] === '\\'; cursor--) {
+    backslashes++;
+  }
+  return backslashes % 2 === 1;
 }
 
 /** Convert inline HTML back to markdown */
