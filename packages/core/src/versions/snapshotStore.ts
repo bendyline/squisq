@@ -11,6 +11,27 @@ import type { CoalesceOptions, PrunePolicy, Version } from './types.js';
 
 const decoder = new TextDecoder();
 const encoder = new TextEncoder();
+const INVALID_BASENAME_CHARS = /[<>:"/\\|?*]/;
+const WINDOWS_DEVICE_NAME = /^(?:con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\.|$)/i;
+
+function assertSafeBasename(basename: string): void {
+  if (
+    basename.length === 0 ||
+    basename.length > 200 ||
+    basename === '.' ||
+    basename === '..' ||
+    basename.endsWith('.') ||
+    basename.endsWith(' ') ||
+    INVALID_BASENAME_CHARS.test(basename) ||
+    [...basename].some((char) => {
+      const code = char.codePointAt(0)!;
+      return code < 32 || code === 127;
+    }) ||
+    WINDOWS_DEVICE_NAME.test(basename)
+  ) {
+    throw new TypeError(`Invalid snapshot basename: ${JSON.stringify(basename)}`);
+  }
+}
 
 export interface SnapshotPathStrategy {
   readonly prefix: string;
@@ -37,6 +58,11 @@ export function buildSnapshotPath(
   date: Date,
   collision = 0,
 ): string {
+  assertSafeBasename(basename);
+  if (!Number.isFinite(date.getTime())) throw new TypeError('Snapshot date must be valid');
+  if (!Number.isInteger(collision) || collision < 0) {
+    throw new RangeError('Snapshot collision must be a non-negative integer');
+  }
   const stamp = formatVersionTimestamp(date);
   const suffix = collision > 0 ? `-${collision + 1}` : '';
   return `${strategy.prefix}${basename}.${stamp}${suffix}.${strategy.extension}`;
@@ -154,9 +180,13 @@ export async function pruneSnapshots(
   let toDelete: Version[];
 
   if (policy.type === 'keep-last-n') {
-    toDelete = versions.slice(Math.max(0, Math.floor(policy.n)));
+    if (!Number.isSafeInteger(policy.n) || policy.n < 0) {
+      throw new RangeError('keep-last-n requires a non-negative safe integer');
+    }
+    toDelete = versions.slice(policy.n);
   } else if (policy.type === 'older-than') {
     const cutoff = policy.date.getTime();
+    if (!Number.isFinite(cutoff)) throw new TypeError('older-than requires a valid date');
     toDelete = versions.filter((version) => version.timestamp.getTime() < cutoff);
   } else {
     toDelete = versions.filter((version) => !policy.keep(version, versions));
@@ -173,6 +203,9 @@ export async function coalesceSnapshots(
   basename?: string,
 ): Promise<Version[]> {
   const windowMs = options.windowMs ?? 60_000;
+  if (!Number.isFinite(windowMs) || windowMs < 0) {
+    throw new RangeError('windowMs must be a non-negative finite number');
+  }
   const versions = await listSnapshots(container, strategy, basename);
   const toDelete: Version[] = [];
 

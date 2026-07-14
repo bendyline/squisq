@@ -82,3 +82,22 @@ describe('markdownDocToCsv tableIndex', () => {
     expect(() => markdownDocToCsv(doc, { tableIndex: 0 })).toThrow('out of range');
   });
 });
+
+describe('markdownDocToCsv spreadsheet safety', () => {
+  it('neutralizes formula-like cells by default', async () => {
+    const doc = await csvToMarkdownDoc(
+      'Value\r\n=HYPERLINK("https://example.test","Click")\r\n+1\r\n-2\r\n@SUM(A1:A2)',
+    );
+    const csv = markdownDocToCsv(doc);
+
+    expect(csv).toContain(`'=HYPERLINK(https://example.test,Click)`);
+    expect(csv).toContain("'+1");
+    expect(csv).toContain("'-2");
+    expect(csv).toContain("'@SUM(A1:A2)");
+  });
+
+  it('allows an explicit raw-data opt-out', async () => {
+    const doc = await csvToMarkdownDoc('Value\r\n=1+1');
+    expect(markdownDocToCsv(doc, { formulaHandling: 'preserve' })).toBe('Value\r\n=1+1');
+  });
+});

@@ -1,23 +1,26 @@
 /**
  * StatusBar
  *
- * Bottom status bar showing document statistics and parse status.
+ * Bottom status bar showing document statistics and host status.
  */
 
 import { useMemo } from 'react';
+import type { ReactNode } from 'react';
 import { countBlocks } from '@bendyline/squisq/doc';
 import { useEditorContext } from './EditorContext';
 
 export interface StatusBarProps {
   /** Additional class name */
   className?: string;
+  /** Host-supplied status content rendered at the right edge. */
+  slotRight?: ReactNode;
 }
 
 /**
  * Status bar displaying document statistics: character count, word count,
- * block count, and parse/error status.
+ * block count, parse errors, and optional host status.
  */
-export function StatusBar({ className }: StatusBarProps) {
+export function StatusBar({ className, slotRight }: StatusBarProps) {
   const { markdownSource, doc, parseError, isParsing } = useEditorContext();
 
   const stats = useMemo(() => {
@@ -37,7 +40,6 @@ export function StatusBar({ className }: StatusBarProps) {
         {stats.blocks} {stats.blocks === 1 ? 'block' : 'blocks'}
       </span>
       <span className="squisq-status-spacer" />
-      {isParsing && <span className="squisq-status-item squisq-status-parsing">Parsing…</span>}
       {parseError && (
         <span className="squisq-status-item squisq-status-error" title={parseError}>
           ⚠ Error
@@ -46,6 +48,7 @@ export function StatusBar({ className }: StatusBarProps) {
       {!isParsing && !parseError && (
         <span className="squisq-status-item squisq-status-ok">✓ OK</span>
       )}
+      {slotRight}
     </div>
   );
 }

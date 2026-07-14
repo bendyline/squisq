@@ -50,6 +50,8 @@ export function useAudioSync(
   const loadingPromises = useRef<Map<string, Promise<string>>>(new Map());
   const abortControllers = useRef<Set<AbortController>>(new Set());
   const loadGeneration = useRef(0);
+  const activeSegmentSrc = useRef<string | undefined>(undefined);
+  activeSegmentSrc.current = audioTrack?.segments[currentSegment]?.src;
 
   // Fallback timer: when audio.play() is blocked (e.g., autoplay policy),
   // advance currentTime synthetically so blocks still progress without audio.
@@ -88,7 +90,11 @@ export function useAudioSync(
 
       // Return cached blob URL if available
       if (blobUrls.current.has(src)) {
-        return blobUrls.current.get(src)!;
+        const cached = blobUrls.current.get(src)!;
+        // Refresh insertion order so the bounded cache behaves as an LRU.
+        blobUrls.current.delete(src);
+        blobUrls.current.set(src, cached);
+        return cached;
       }
 
       // Return existing loading promise if in progress
@@ -111,30 +117,37 @@ export function useAudioSync(
             return audioUrl;
           }
           blobUrls.current.set(src, blobUrl);
+          while (blobUrls.current.size > 2) {
+            const oldest =
+              [...blobUrls.current.entries()].find(([key]) => key !== activeSegmentSrc.current) ??
+              (blobUrls.current.entries().next().value as [string, string] | undefined);
+            if (!oldest) break;
+            blobUrls.current.delete(oldest[0]);
+            URL.revokeObjectURL(oldest[1]);
+          }
           return blobUrl;
         } catch {
           // Fall back to direct URL if blob loading fails
           return audioUrl;
-        } finally {
-          abortControllers.current.delete(controller);
-          loadingPromises.current.delete(src);
         }
       })();
 
       loadingPromises.current.set(src, loadPromise);
+      void loadPromise.then(() => {
+        abortControllers.current.delete(controller);
+        if (loadingPromises.current.get(src) === loadPromise) {
+          loadingPromises.current.delete(src);
+        }
+      });
       return loadPromise;
     },
     [basePath],
   );
 
-  // Preload all audio segments on mount
+  // Scope requests and blob URLs to the active track. Loading is deliberately
+  // demand-driven below: large narrations must not fetch every segment at once.
   useEffect(() => {
     if (!enabled || !audioTrack?.segments) return;
-
-    // Preload all segments in parallel
-    audioTrack.segments.forEach((segment) => {
-      preloadAudio(segment.src);
-    });
 
     // Cleanup blob URLs on unmount
     const currentBlobUrls = blobUrls.current;
@@ -151,6 +164,14 @@ export function useAudioSync(
       currentBlobUrls.clear();
     };
   }, [audioTrack, preloadAudio, enabled]);
+
+  // Warm only the active segment. The audio-element effect shares the same
+  // in-flight promise, so this also supports hosts that attach the ref later.
+  useEffect(() => {
+    if (!enabled) return;
+    const segment = audioTrack?.segments[currentSegment];
+    if (segment) void preloadAudio(segment.src);
+  }, [audioTrack, currentSegment, enabled, preloadAudio]);
 
   // Handle audio time updates
   useEffect(() => {

@@ -7,11 +7,12 @@
  * used to name the sheet. This mirrors the import side (`xlsxToMarkdownDoc`),
  * which turns each worksheet grid back into a markdown table.
  *
- * Cells are emitted as inline strings (`t="inlineStr"`) so no sharedStrings
- * part is needed, except values matching a plain-number pattern, which are
- * emitted as numeric cells. The package is assembled with the shared ooxml/
- * writer (auto-generates `[Content_Types].xml` + `_rels`), so only the
- * SpreadsheetML-specific parts (workbook, worksheets, styles) are written here.
+ * Cells are emitted as inline strings (`t="inlineStr"`) by default so no
+ * sharedStrings part is needed and identifier-like numbers remain lossless.
+ * Callers can explicitly opt into conservative numeric inference. The package
+ * is assembled with the shared ooxml/ writer (auto-generates
+ * `[Content_Types].xml` + `_rels`), so only the SpreadsheetML-specific parts
+ * (workbook, worksheets, styles) are written here.
  *
  * @example
  * ```ts
@@ -56,6 +57,13 @@ export interface XlsxExportOptions {
   author?: string;
   /** Prefix used for auto-named sheets when no heading precedes a table. Default: "Sheet". */
   sheetNamePrefix?: string;
+  /**
+   * Emit canonical, Excel-safe number strings as numeric cells. Default false:
+   * Markdown tables have no column schema, so preserving authored text is the
+   * only lossless default. Leading-zero and >15-significant-digit values remain
+   * strings even when this option is enabled.
+   */
+  inferNumericCells?: boolean;
 }
 
 interface SheetData {
@@ -67,18 +75,37 @@ interface SheetData {
 /** A plain integer or decimal (optionally negative) — emitted as a numeric cell. */
 const NUMERIC_RE = /^-?\d+(\.\d+)?$/;
 
+function isSafeNumericCell(value: string): boolean {
+  if (!NUMERIC_RE.test(value)) return false;
+  const unsigned = value.startsWith('-') ? value.slice(1) : value;
+  const [integer] = unsigned.split('.');
+  if (integer!.length > 1 && integer!.startsWith('0')) return false;
+  const significantDigits = unsigned.replace('.', '').replace(/^0+/, '');
+  if (significantDigits.length > 15) return false;
+  return Number.isFinite(Number(value));
+}
+
 /**
  * Sanitize a candidate name into a valid, unique Excel sheet name.
  * Strips characters Excel forbids (`[]:*?/\`), caps at 31 chars, and
  * de-duplicates against already-used names by appending 2, 3, …
  */
-function sanitizeSheetName(raw: string, used: Set<string>, fallback: string): string {
-  let name = raw.replace(/[[\]:*?/\\]/g, '').trim();
-  if (name.length === 0) name = fallback;
-  name = name.slice(0, 31);
+function cleanSheetName(value: string): string {
+  return value
+    .replace(/[[\]:*?/\\]/g, '')
+    .trim()
+    .slice(0, 31)
+    .trim()
+    .replace(/^'+|'+$/g, '');
+}
 
-  if (!used.has(name)) {
-    used.add(name);
+function sanitizeSheetName(raw: string, used: Set<string>, fallback: string): string {
+  const safeFallback = cleanSheetName(fallback) || 'Sheet';
+  const name = cleanSheetName(raw) || safeFallback;
+
+  const key = name.toLocaleLowerCase('en-US');
+  if (!used.has(key)) {
+    used.add(key);
     return name;
   }
   // Dedupe: "Name", "Name2", "Name3", … keeping within the 31-char cap.
@@ -86,8 +113,9 @@ function sanitizeSheetName(raw: string, used: Set<string>, fallback: string): st
     const suffix = String(n);
     const base = name.slice(0, 31 - suffix.length);
     const candidate = `${base}${suffix}`;
-    if (!used.has(candidate)) {
-      used.add(candidate);
+    const candidateKey = candidate.toLocaleLowerCase('en-US');
+    if (!used.has(candidateKey)) {
+      used.add(candidateKey);
       return candidate;
     }
   }
@@ -135,18 +163,20 @@ function columnLetter(index: number): string {
   return letters;
 }
 
-function cellXml(value: string, ref: string): string {
-  if (NUMERIC_RE.test(value)) {
+function cellXml(value: string, ref: string, inferNumericCells: boolean): string {
+  if (inferNumericCells && isSafeNumericCell(value)) {
     return `<c r="${ref}"><v>${escapeXml(value)}</v></c>`;
   }
   return `<c r="${ref}" t="inlineStr"><is><t xml:space="preserve">${escapeXml(value)}</t></is></c>`;
 }
 
-function worksheetXml(grid: string[][]): string {
+function worksheetXml(grid: string[][], inferNumericCells: boolean): string {
   const rows: string[] = [];
   for (let r = 0; r < grid.length; r++) {
     const cells = grid[r]!;
-    const cellsXml = cells.map((value, c) => cellXml(value, `${columnLetter(c)}${r + 1}`)).join('');
+    const cellsXml = cells
+      .map((value, c) => cellXml(value, `${columnLetter(c)}${r + 1}`, inferNumericCells))
+      .join('');
     rows.push(`<row r="${r + 1}">${cellsXml}</row>`);
   }
   return (
@@ -196,12 +226,13 @@ export async function markdownDocToXlsx(
   doc: MarkdownDocument,
   options: XlsxExportOptions = {},
 ): Promise<ArrayBuffer> {
-  const prefix = options.sheetNamePrefix ?? 'Sheet';
+  const prefix = cleanSheetName(options.sheetNamePrefix ?? 'Sheet') || 'Sheet';
+  const inferNumericCells = options.inferNumericCells ?? false;
   let sheets = collectSheets(doc, prefix);
 
   // Zero tables → one empty sheet so the file is still valid.
   if (sheets.length === 0) {
-    sheets = [{ name: `${prefix}1`, grid: [] }];
+    sheets = [{ name: sanitizeSheetName(`${prefix}1`, new Set(), 'Sheet1'), grid: [] }];
   }
 
   const pkg = createPackage();
@@ -209,7 +240,11 @@ export async function markdownDocToXlsx(
   // Worksheets + workbook→worksheet relationships.
   sheets.forEach((sheet, i) => {
     const sheetPath = `xl/worksheets/sheet${i + 1}.xml`;
-    pkg.addPart(sheetPath, worksheetXml(sheet.grid), CONTENT_TYPE_XLSX_WORKSHEET);
+    pkg.addPart(
+      sheetPath,
+      worksheetXml(sheet.grid, inferNumericCells),
+      CONTENT_TYPE_XLSX_WORKSHEET,
+    );
     pkg.addRelationship('xl/workbook.xml', {
       id: `rId${i + 1}`,
       type: REL_WORKSHEET,

@@ -46,6 +46,34 @@ import {
 import { transcodeMp4ToGifWithFfmpegWasm } from '../gifTranscode.js';
 import { useFrameCapture } from './useFrameCapture.js';
 
+const MAX_EXPORT_MEDIA_FILES = 256;
+const MAX_EXPORT_MEDIA_FILE_BYTES = 64 * 1024 * 1024;
+const MAX_EXPORT_MEDIA_TOTAL_BYTES = 256 * 1024 * 1024;
+
+/** Collect exact string values from the document that may name stored media. */
+export function collectDocumentMediaReferences(doc: Doc): Set<string> {
+  const references = new Set<string>();
+  const seen = new WeakSet<object>();
+
+  const visit = (value: unknown): void => {
+    if (typeof value === 'string') {
+      references.add(value);
+      if (value.startsWith('./')) references.add(value.slice(2));
+      return;
+    }
+    if (!value || typeof value !== 'object' || seen.has(value)) return;
+    seen.add(value);
+    if (Array.isArray(value)) {
+      value.forEach(visit);
+      return;
+    }
+    Object.values(value as Record<string, unknown>).forEach(visit);
+  };
+
+  visit(doc);
+  return references;
+}
+
 // ── Audio resolution ───────────────────────────────────────────────
 
 /**
@@ -328,16 +356,41 @@ export function useVideoExport(): VideoExportResult {
           setElapsed(Math.floor((performance.now() - startTimeRef.current) / 1000));
         }, 1000);
 
-        // Collect images from MediaProvider if provided and images not passed directly
+        // Resolve only assets referenced by this document. Providers can hold an
+        // entire workspace; downloading that workspace makes export memory scale
+        // with unrelated customer files instead of with the exported document.
         let images = config.images;
         if (!images && config.mediaProvider) {
           images = new Map<string, ArrayBuffer>();
           const entries = await config.mediaProvider.listMedia();
-          for (const entry of entries) {
+          const references = collectDocumentMediaReferences(doc);
+          const neededEntries = entries.filter(
+            (entry) => references.has(entry.name) || references.has(`./${entry.name}`),
+          );
+          if (neededEntries.length > MAX_EXPORT_MEDIA_FILES) {
+            throw new Error(
+              `Document references ${neededEntries.length} media files; browser export supports at most ${MAX_EXPORT_MEDIA_FILES}.`,
+            );
+          }
+          let totalMediaBytes = 0;
+          for (const entry of neededEntries) {
+            if (cancelledRef.current) return;
+            if (entry.size > MAX_EXPORT_MEDIA_FILE_BYTES) {
+              throw new Error(`Media file "${entry.name}" is too large for browser video export.`);
+            }
             const url = await config.mediaProvider.resolveUrl(entry.name);
             const res = await fetch(url);
             if (res.ok) {
               const data = await res.arrayBuffer();
+              if (data.byteLength > MAX_EXPORT_MEDIA_FILE_BYTES) {
+                throw new Error(
+                  `Media file "${entry.name}" is too large for browser video export.`,
+                );
+              }
+              totalMediaBytes += data.byteLength;
+              if (totalMediaBytes > MAX_EXPORT_MEDIA_TOTAL_BYTES) {
+                throw new Error('Referenced media exceeds the browser video export memory limit.');
+              }
               images.set(entry.name, data);
             }
           }

@@ -4,7 +4,12 @@
 
 import { describe, it, expect } from 'vitest';
 import { parseMarkdown } from '@bendyline/squisq/markdown';
-import { compileTheme, createThemeRegistry, resolveTheme } from '@bendyline/squisq/schemas';
+import {
+  compileTheme,
+  createThemeRegistry,
+  resolveTheme,
+  validateTheme,
+} from '@bendyline/squisq/schemas';
 import { markdownDocToPlainHtml } from '../html/plainHtml';
 
 function render(md: string, options?: Parameters<typeof markdownDocToPlainHtml>[1]): string {
@@ -329,6 +334,18 @@ describe('markdownDocToPlainHtml', () => {
   });
 
   describe('with a theme', () => {
+    it('rejects unsafe custom font names and cannot close the style element', () => {
+      const theme = structuredClone(resolveTheme('standard'));
+      const payload = 'x;}</style><script>globalThis.PWNED=1</script><style>';
+      theme.typography.bodyFont = { custom: { name: payload, fallback: 'sans-serif' } };
+
+      expect(validateTheme(theme).valid).toBe(false);
+      const html = render('# Hello', { theme });
+      expect(html).not.toContain('</style><script>globalThis.PWNED=1</script><style>');
+      expect(html.match(/<script>/g)).toBeNull();
+      expect(html).toContain('\\3c /style>');
+    });
+
     it('embeds the theme colors as CSS custom properties', () => {
       const theme = resolveTheme('warm-earth');
       const html = render('# Hello', { theme });

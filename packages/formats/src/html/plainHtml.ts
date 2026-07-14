@@ -140,9 +140,17 @@ export function markdownDocToPlainHtml(
   const usesIcons = docUsesIcons(doc);
   let iconsLink = '';
   if (usesIcons) {
-    iconsLink = iconsCss ? `<style data-fa-inline>\n${iconsCss}\n</style>\n` : FONT_AWESOME_LINK;
+    iconsLink = iconsCss
+      ? `<style data-fa-inline>\n${escapeStyleText(iconsCss)}\n</style>\n`
+      : FONT_AWESOME_LINK;
   }
   const themedCss = theme ? renderThemedCss(theme) : DEFAULT_CSS;
+  // A <style> element is an HTML raw-text context: `</style>` closes it even
+  // when those bytes occur inside a quoted CSS value. Escape every literal
+  // less-than sign as a CSS code point so caller-owned theme values cannot
+  // break back into HTML. This is a final output-boundary defense in addition
+  // to theme validation and font-family quoting.
+  const safeCss = escapeStyleText(`${themedCss}\n${FEATURE_CSS}`);
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -150,14 +158,17 @@ export function markdownDocToPlainHtml(
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>${escapeHtml(title)}</title>
 ${fontsLink}${iconsLink}<style>
-${themedCss}
-${FEATURE_CSS}
+${safeCss}
 </style>
 </head>
 <body>
 ${body}
 </body>
 </html>`;
+}
+
+function escapeStyleText(css: string): string {
+  return css.replace(/</g, '\\3c ');
 }
 
 /**

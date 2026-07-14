@@ -112,7 +112,7 @@ describe('markdownDocToPdf', () => {
     expect(pdf.getPageCount()).toBe(1);
   });
 
-  it('renders a link', async () => {
+  it('renders a clickable link annotation', async () => {
     const doc: MarkdownDocument = {
       type: 'document',
       children: [
@@ -131,6 +131,27 @@ describe('markdownDocToPdf', () => {
     };
     const pdf = await exportAndLoad(doc);
     expect(pdf.getPageCount()).toBe(1);
+    expect(pdf.getPage(0).node.Annots()?.size()).toBe(1);
+  });
+
+  it('does not create annotations for unsafe link schemes', async () => {
+    const doc: MarkdownDocument = {
+      type: 'document',
+      children: [
+        {
+          type: 'paragraph',
+          children: [
+            {
+              type: 'link',
+              url: 'javascript:alert(1)',
+              children: [text('Unsafe')],
+            } as MarkdownLink,
+          ],
+        } as MarkdownParagraph,
+      ],
+    };
+    const pdf = await exportAndLoad(doc);
+    expect(pdf.getPage(0).node.Annots()?.size() ?? 0).toBe(0);
   });
 
   it('renders unordered and ordered lists', async () => {

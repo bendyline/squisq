@@ -5,7 +5,7 @@
  * in jsdom/Node environments) to verify the adapter contract.
  */
 
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { LocalForageAdapter } from '../storage/LocalForageAdapter';
 
 describe('LocalForageAdapter', () => {
@@ -14,6 +14,10 @@ describe('LocalForageAdapter', () => {
   beforeEach(async () => {
     storage = new LocalForageAdapter({ name: 'test-db', storeName: 'test-store' });
     await storage.clear();
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
   });
 
   it('supports enumeration', () => {
@@ -50,6 +54,14 @@ describe('LocalForageAdapter', () => {
     expect(await storage.get('key')).toBeNull();
   });
 
+  it('remove reports persistence failures to the caller', async () => {
+    const store = (storage as unknown as { store: { removeItem: (key: string) => Promise<void> } })
+      .store;
+    vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    vi.spyOn(store, 'removeItem').mockRejectedValueOnce(new Error('remove failed'));
+    await expect(storage.remove('key')).rejects.toThrow('remove failed');
+  });
+
   it('clear removes all keys', async () => {
     await storage.set('a', 1);
     await storage.set('b', 2);
@@ -57,6 +69,13 @@ describe('LocalForageAdapter', () => {
     expect(await storage.get('a')).toBeNull();
     expect(await storage.get('b')).toBeNull();
     expect(await storage.keys()).toEqual([]);
+  });
+
+  it('clear reports persistence failures to the caller', async () => {
+    const store = (storage as unknown as { store: { clear: () => Promise<void> } }).store;
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    vi.spyOn(store, 'clear').mockRejectedValueOnce(new Error('clear failed'));
+    await expect(storage.clear()).rejects.toThrow('clear failed');
   });
 
   it('keys returns all stored keys', async () => {

@@ -5,7 +5,13 @@
 
 import { describe, expect, it } from 'vitest';
 import type { MarkdownHeading, MarkdownTable, MarkdownText } from '@bendyline/squisq/markdown';
-import { NS_R, NS_SML, REL_OFFICE_DOCUMENT } from '../ooxml/namespaces';
+import {
+  CONTENT_TYPE_XLSX_STYLES,
+  NS_R,
+  NS_SML,
+  REL_OFFICE_DOCUMENT,
+  REL_STYLES,
+} from '../ooxml/namespaces';
 import { createPackage } from '../ooxml/writer';
 import { xmlDeclaration } from '../ooxml/xmlUtils';
 import { xlsxToMarkdownDoc } from '../xlsx/import';
@@ -27,14 +33,27 @@ async function buildTestXlsx(): Promise<ArrayBuffer> {
   pkg.addPart(
     'xl/sharedStrings.xml',
     `${xmlDeclaration()}<sst xmlns="${NS_SML}">` +
-      `<si><t>Name</t></si><si><t>Age</t></si><si><t>Alice</t></si></sst>`,
+      `<si><t>Name</t></si><si><t>Age</t></si><si><t>Alice</t></si>` +
+      `<si><t>Start</t></si><si><t>Zip</t></si></sst>`,
     'application/xml',
+  );
+  pkg.addPart(
+    'xl/styles.xml',
+    `${xmlDeclaration()}<styleSheet xmlns="${NS_SML}">` +
+      `<numFmts count="1"><numFmt numFmtId="164" formatCode="00000"/></numFmts>` +
+      `<cellXfs count="3">` +
+      `<xf numFmtId="0"/><xf numFmtId="14" applyNumberFormat="1"/>` +
+      `<xf numFmtId="164" applyNumberFormat="1"/>` +
+      `</cellXfs></styleSheet>`,
+    CONTENT_TYPE_XLSX_STYLES,
   );
   pkg.addPart(
     'xl/worksheets/sheet1.xml',
     `${xmlDeclaration()}<worksheet xmlns="${NS_SML}"><sheetData>` +
-      `<row r="1"><c r="A1" t="s"><v>0</v></c><c r="B1" t="s"><v>1</v></c></row>` +
-      `<row r="2"><c r="A2" t="s"><v>2</v></c><c r="B2"><v>30</v></c></row>` +
+      `<row r="1"><c r="A1" t="s"><v>0</v></c><c r="B1" t="s"><v>1</v></c>` +
+      `<c r="C1" t="s"><v>3</v></c><c r="D1" t="s"><v>4</v></c></row>` +
+      `<row r="2"><c r="A2" t="s"><v>2</v></c><c r="B2"><v>30</v></c>` +
+      `<c r="C2" s="1"><v>45292</v></c><c r="D2" s="2"><v>123</v></c></row>` +
       `</sheetData></worksheet>`,
     'application/xml',
   );
@@ -49,6 +68,11 @@ async function buildTestXlsx(): Promise<ArrayBuffer> {
     id: 'rId2',
     type: REL_SHARED_STRINGS,
     target: 'sharedStrings.xml',
+  });
+  pkg.addRelationship('xl/workbook.xml', {
+    id: 'rId3',
+    type: REL_STYLES,
+    target: 'styles.xml',
   });
 
   return pkg.toArrayBuffer();
@@ -71,6 +95,8 @@ describe('xlsxToMarkdownDoc', () => {
     expect((headerCell.children[0] as MarkdownText).value).toBe('Name');
     expect((table.children[1]!.children[0]!.children[0] as MarkdownText).value).toBe('Alice');
     expect((table.children[1]!.children[1]!.children[0] as MarkdownText).value).toBe('30');
+    expect((table.children[1]!.children[2]!.children[0] as MarkdownText).value).toBe('2024-01-01');
+    expect((table.children[1]!.children[3]!.children[0] as MarkdownText).value).toBe('00123');
   });
 
   it('selects a single sheet by name without a heading', async () => {

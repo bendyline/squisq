@@ -46,4 +46,24 @@ describe('useAudioSync resource loading', () => {
     await act(async () => Promise.resolve());
     expect(fetchSpy).not.toHaveBeenCalled();
   });
+
+  it('loads only the active segment instead of downloading the full track', async () => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+      ok: true,
+      blob: async () => new Blob(['audio']),
+    } as Response);
+    vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:active');
+    vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {});
+    const longTrack: AudioTrack = {
+      segments: [
+        { src: 'a.mp3', name: 'a', duration: 2, startTime: 0 },
+        { src: 'b.mp3', name: 'b', duration: 2, startTime: 2 },
+        { src: 'c.mp3', name: 'c', duration: 2, startTime: 4 },
+      ],
+    };
+
+    renderHook(() => useAudioSync({ current: null }, longTrack, '/audio'));
+    await waitFor(() => expect(fetchSpy).toHaveBeenCalledTimes(1));
+    expect(fetchSpy).toHaveBeenCalledWith('/audio/a.mp3', expect.any(Object));
+  });
 });

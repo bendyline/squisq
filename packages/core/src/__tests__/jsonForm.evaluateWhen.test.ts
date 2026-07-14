@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { evaluateWhen, resolveFlag } from '../jsonForm/index.js';
+import { evaluateWhen, isSafeConditionRegex, resolveFlag } from '../jsonForm/index.js';
 
 const data = {
   user: { role: 'admin', name: 'Alex' },
@@ -27,6 +27,19 @@ describe('evaluateWhen', () => {
   it('matches regex', () => {
     expect(evaluateWhen({ field: 'user.name', matches: '^Al' }, data)).toBe(true);
     expect(evaluateWhen({ field: 'user.name', matches: '^Bo' }, data)).toBe(false);
+  });
+
+  it('rejects catastrophic and advanced backtracking patterns', () => {
+    expect(isSafeConditionRegex('^(a+)+$')).toBe(false);
+    expect(isSafeConditionRegex('^(a|aa)+$')).toBe(false);
+    expect(isSafeConditionRegex('(a)\\1')).toBe(false);
+    expect(isSafeConditionRegex('^Al')).toBe(true);
+    expect(
+      evaluateWhen(
+        { field: 'user.name', matches: '^(a+)+$' },
+        { user: { name: 'a'.repeat(40) + '!' } },
+      ),
+    ).toBe(false);
   });
 
   it('matches: returns false for non-string targets', () => {

@@ -86,28 +86,43 @@ describe('markdownDocToXlsx', () => {
     expect(sheetNames(workbook)).toEqual(['Report', 'Report2', 'Report3']);
   });
 
+  it('de-duplicates sheet names case-insensitively and removes edge apostrophes', async () => {
+    const md = parseMarkdown("# 'Data'\n\n| A |\n| - |\n| 1 |\n\n# data\n\n| B |\n| - |\n| 2 |\n");
+    const { workbook } = await unzip(await markdownDocToXlsx(md));
+    expect(sheetNames(workbook)).toEqual(['Data', 'data2']);
+  });
+
   it('falls back to Sheet1, Sheet2 when a table has no preceding heading', async () => {
     const md = parseMarkdown('| A |\n| - |\n| 1 |\n\n| B |\n| - |\n| 2 |\n');
     const { workbook } = await unzip(await markdownDocToXlsx(md));
     expect(sheetNames(workbook)).toEqual(['Sheet1', 'Sheet2']);
   });
 
-  it('emits plain numbers as numeric cells and everything else as inline strings', async () => {
+  it('preserves numeric-looking text as strings by default', async () => {
     const md = parseMarkdown(
-      '# T\n\n| Label | N |\n| - | - |\n| Alpha | 42 |\n| Neg | -3.5 |\n| Mixed | 120 req/s |\n',
+      '# T\n\n| Zip | Account | Number |\n| - | - | - |\n| 00123 | 1234567890123456 | 42 |\n',
     );
     const { sheets } = await unzip(await markdownDocToXlsx(md));
     const xml = sheets[0]!;
 
-    // Numeric cells: <v>…</v> without t="inlineStr"
-    expect(xml).toContain('<v>42</v>');
+    expect(xml).toContain('>00123<');
+    expect(xml).toContain('>1234567890123456<');
+    expect(xml).toContain('>42<');
+    expect(xml).not.toContain('<v>00123</v>');
+    expect(xml).not.toContain('<v>1234567890123456</v>');
+  });
+
+  it('conservatively infers numeric cells only when explicitly requested', async () => {
+    const md = parseMarkdown(
+      '# T\n\n| Safe | Zip | Long | Mixed |\n| - | - | - | - |\n| -3.5 | 00123 | 1234567890123456 | 120 req/s |\n',
+    );
+    const { sheets } = await unzip(await markdownDocToXlsx(md, { inferNumericCells: true }));
+    const xml = sheets[0]!;
+
     expect(xml).toContain('<v>-3.5</v>');
-    // String cells: inlineStr
-    expect(xml).toContain('t="inlineStr"');
-    expect(xml).toContain('>Alpha<');
+    expect(xml).toContain('>00123<');
+    expect(xml).toContain('>1234567890123456<');
     expect(xml).toContain('>120 req/s<');
-    // "120 req/s" must NOT be numeric
-    expect(xml).not.toContain('<v>120 req/s</v>');
   });
 
   it('maps multiple tables to multiple worksheets', async () => {
@@ -133,6 +148,14 @@ describe('markdownDocToXlsx', () => {
     const md = parseMarkdown('| A |\n| - |\n| 1 |\n');
     const { workbook } = await unzip(await markdownDocToXlsx(md, { sheetNamePrefix: 'Tab' }));
     expect(sheetNames(workbook)).toEqual(['Tab1']);
+  });
+
+  it('sanitizes custom prefixes even for an empty workbook', async () => {
+    const md = parseMarkdown('# No tables');
+    const { workbook } = await unzip(
+      await markdownDocToXlsx(md, { sheetNamePrefix: "'Bad:/Prefix'" }),
+    );
+    expect(sheetNames(workbook)).toEqual(['BadPrefix1']);
   });
 
   it('survives a full round-trip (cell text preserved through import)', async () => {

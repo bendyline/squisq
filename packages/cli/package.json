@@ -55,8 +55,7 @@
     "@bendyline/squisq-react": "2.1.0",
     "@bendyline/squisq-video": "2.0.2",
     "commander": "12.1.0",
-    "playwright-core": "1.58.2",
-    "vite": "8.0.14"
+    "playwright-core": "1.58.2"
   },
   "devDependencies": {
     "@types/chai": "5.2.3",

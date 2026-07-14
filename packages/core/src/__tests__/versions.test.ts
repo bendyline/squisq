@@ -80,6 +80,13 @@ describe('paths', () => {
     expect(parseVersionPath('.versions/index.invalidstamp.md')).toBeNull();
     expect(parseVersionPath('.versions/index.20260430T152030Z-1.md')).toBeNull(); // suffix must be >= 2
   });
+
+  it('rejects basenames that could escape or break the snapshot directory', () => {
+    const date = new Date(Date.UTC(2026, 3, 30, 15, 20, 30));
+    for (const basename of ['../escape', '..\\escape', 'bad:name', 'CON', 'trailing.']) {
+      expect(() => buildVersionPath(basename, date)).toThrow();
+    }
+  });
 });
 
 describe('saveVersion', () => {
@@ -377,6 +384,18 @@ describe('pruneVersions', () => {
     expect(await listVersions(container)).toHaveLength(0);
   });
 
+  it('rejects invalid limits without deleting any snapshots', async () => {
+    await seed(3);
+    for (const n of [-1, Number.NaN, 1.5, Number.POSITIVE_INFINITY]) {
+      await expect(pruneVersions(container, { type: 'keep-last-n', n })).rejects.toThrow();
+      expect(await listVersions(container)).toHaveLength(3);
+    }
+    await expect(
+      pruneVersions(container, { type: 'older-than', date: new Date(Number.NaN) }),
+    ).rejects.toThrow();
+    expect(await listVersions(container)).toHaveLength(3);
+  });
+
   it('older-than deletes only items older than the cutoff', async () => {
     await seed(5);
     const cutoff = new Date(Date.UTC(2026, 3, 30, 12, 0, 0));
@@ -400,6 +419,14 @@ describe('pruneVersions', () => {
 });
 
 describe('coalesceVersions', () => {
+  it('rejects invalid windows without deleting any snapshots', async () => {
+    const container = new MemoryContentContainer();
+    await container.writeDocument('a', 'index.md');
+    await saveVersion(container);
+    await expect(coalesceVersions(container, { windowMs: -1 })).rejects.toThrow();
+    expect(await listVersions(container)).toHaveLength(1);
+  });
+
   it('collapses snapshots within the window', async () => {
     const container = new MemoryContentContainer();
     // Three saves: t=0, t=30s (within window), t=2min (outside window).

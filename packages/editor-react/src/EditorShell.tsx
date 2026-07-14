@@ -162,6 +162,8 @@ export interface EditorShellProps {
   toolbarSlotAfterActions?: ReactNode;
   /** Content rendered at the rightmost end of the toolbar, after all other elements. */
   toolbarSlotRight?: ReactNode;
+  /** Host-supplied content rendered at the right edge of the bottom status bar. */
+  statusBarSlotRight?: ReactNode;
   /**
    * Whether to show the "Play" (preview) tab in the toolbar. When false, the
    * tab and its preview panel are hidden, and ⌘3 becomes a no-op. Use this
@@ -218,8 +220,8 @@ export interface EditorShellProps {
    */
   writeCanvasSettings?: WriteCanvasSettings;
   /**
-   * Render the bottom status bar (word / character / line / block counts
-   * and parse-state indicator). Defaults to `true`. Set to `false` in
+   * Render the bottom status bar (word / character / line / block counts,
+   * parse errors, and optional host status). Defaults to `true`. Set to `false` in
    * embedded surfaces — chat composers and other short-form inputs —
    * where the stats are noise.
    */
@@ -440,6 +442,7 @@ export function EditorShell({
   toolbarSlotLeft,
   toolbarSlotAfterActions,
   toolbarSlotRight,
+  statusBarSlotRight,
   showPlayTab = true,
   submitOnEnter,
   codeContext,
@@ -541,6 +544,7 @@ export function EditorShell({
           toolbarSlotLeft={toolbarSlotLeft}
           toolbarSlotAfterActions={toolbarSlotAfterActions}
           toolbarSlotRight={toolbarSlotRight}
+          statusBarSlotRight={statusBarSlotRight}
           showPlayTab={showPlayTab}
           submitOnEnter={submitOnEnter}
           codeContext={codeContext}
@@ -579,6 +583,7 @@ interface EditorShellInnerProps {
   toolbarSlotLeft?: ReactNode;
   toolbarSlotAfterActions?: ReactNode;
   toolbarSlotRight?: ReactNode;
+  statusBarSlotRight?: ReactNode;
   showPlayTab: boolean;
   submitOnEnter?: () => void;
   codeContext?: CodeContext;
@@ -613,6 +618,7 @@ function EditorShellInner({
   toolbarSlotLeft,
   toolbarSlotAfterActions,
   toolbarSlotRight,
+  statusBarSlotRight,
   showPlayTab,
   submitOnEnter,
   codeContext,
@@ -1122,7 +1128,7 @@ function EditorShellInner({
             suppress via `showStatusBar={false}` for embedded chat-style
             composers where the stats are noise. The image viewer has its
             own dimension/zoom status row, so suppress here too. */}
-            {statusBarVisible && !isImageMode && <StatusBar />}
+            {statusBarVisible && !isImageMode && <StatusBar slotRight={statusBarSlotRight} />}
           </PresentationModeProvider>
         </PreviewSettingsProvider>
       </CustomThemeProvider>

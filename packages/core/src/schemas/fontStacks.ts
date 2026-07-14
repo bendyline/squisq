@@ -216,7 +216,16 @@ export function resolveFontFamily(
           : fallback === 'monospace'
             ? 'Consolas, monospace'
             : 'system-ui, sans-serif';
-    const safeName = name.includes(' ') || name.includes(',') ? `"${name}"` : name;
+    // Always quote caller-owned family names. Besides preserving punctuation,
+    // this prevents a custom name from terminating the font-family value and
+    // injecting additional declarations. CSS string escapes are deliberately
+    // ASCII-only so the result is safe in both style properties and generated
+    // stylesheet text.
+    const safeName = `"${name
+      .replace(/\\/g, '\\\\')
+      .replace(/"/g, '\\"')
+      .replace(/[\n\r\f]/g, (ch) => `\\${ch.codePointAt(0)!.toString(16)} `)
+      .replace(/</g, '\\3c ')}"`;
     return `${safeName}, ${fb}`;
   }
   return roleFallback;

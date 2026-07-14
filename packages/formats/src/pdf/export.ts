@@ -19,7 +19,7 @@
  * ```
  */
 
-import { PDFDocument, StandardFonts, rgb, PDFFont, PDFPage } from 'pdf-lib';
+import { PDFDocument, StandardFonts, rgb, PDFFont, PDFPage, PDFString } from 'pdf-lib';
 
 import type { Doc, ThemeRegistry } from '@bendyline/squisq/schemas';
 import { docToMarkdown, resolveThemeForDoc } from '@bendyline/squisq/doc';
@@ -50,7 +50,7 @@ import type {
   MarkdownInlineMath,
   MarkdownFootnoteReference,
 } from '@bendyline/squisq/markdown';
-import { readFrontmatterThemeId } from '@bendyline/squisq/markdown';
+import { readFrontmatterThemeId, sanitizeUrl } from '@bendyline/squisq/markdown';
 
 import {
   PAGE_WIDTH_LETTER,
@@ -344,11 +344,12 @@ function flattenInlines(
 
       case 'link': {
         const linkNode = node as MarkdownLink;
+        const safeLink = sanitizeUrl(linkNode.url, 'link') ?? undefined;
         spans.push(
           ...flattenInlines(linkNode.children, ctx, {
             ...state,
-            link: linkNode.url,
-            color: ctx.colors.link,
+            link: safeLink,
+            color: safeLink ? ctx.colors.link : state.color,
           }),
         );
         break;
@@ -473,12 +474,27 @@ function drawSpans(
 
       // Underline for links
       if (span.link) {
+        const baseline = ctx.y - span.fontSize;
         ctx.page.drawLine({
-          start: { x, y: ctx.y - span.fontSize - 1 },
-          end: { x: x + textWidth, y: ctx.y - span.fontSize - 1 },
+          start: { x, y: baseline - 1 },
+          end: { x: x + textWidth, y: baseline - 1 },
           thickness: 0.5,
           color: rgb(span.color.r, span.color.g, span.color.b),
         });
+        const annotation = ctx.pdfDoc.context.register(
+          ctx.pdfDoc.context.obj({
+            Type: 'Annot',
+            Subtype: 'Link',
+            Rect: [x, baseline - 2, x + textWidth, baseline + span.fontSize + 2],
+            Border: [0, 0, 0],
+            A: {
+              Type: 'Action',
+              S: 'URI',
+              URI: PDFString.of(span.link),
+            },
+          }),
+        );
+        ctx.page.node.addAnnot(annotation);
       }
 
       // Strikethrough

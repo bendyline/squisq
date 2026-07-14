@@ -2247,10 +2247,6 @@
   color: #dc2626;
 }
 
-.squisq-status-parsing {
-  color: #d97706;
-}
-
 /* ─── WYSIWYG Editor ─────────────────────────────────── */
 
 .squisq-wysiwyg-container {
@@ -3366,10 +3362,6 @@
 
 .squisq-editor-shell[data-theme='dark'] .squisq-status-error {
   color: #f87171;
-}
-
-.squisq-editor-shell[data-theme='dark'] .squisq-status-parsing {
-  color: #fbbf24;
 }
 
 /* WYSIWYG Editor */

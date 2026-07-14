@@ -32,6 +32,13 @@ export interface CsvExportOptions {
   /** Field delimiter. Default `,`. */
   delimiter?: string;
   /**
+   * How to handle values that spreadsheet applications may execute as
+   * formulas. The safe default, `escape`, prefixes a leading apostrophe when
+   * the first non-space character is `=`, `+`, `-`, or `@`. Use `preserve`
+   * only when the CSV will not be opened by a spreadsheet application.
+   */
+  formulaHandling?: 'escape' | 'preserve';
+  /**
    * Zero-based index of the table to export when the document contains more
    * than one. Default 0 (the first table). An explicitly provided index that
    * doesn't match a table in the document is an error.
@@ -144,6 +151,16 @@ function escapeCsvField(value: string, delimiter: string): string {
   return value;
 }
 
+const SPREADSHEET_FORMULA_PREFIX = /^[\t\r\n \uFEFF]*[=+\-@]/;
+
+function neutralizeSpreadsheetFormula(
+  value: string,
+  handling: CsvExportOptions['formulaHandling'],
+): string {
+  if (handling === 'preserve' || !SPREADSHEET_FORMULA_PREFIX.test(value)) return value;
+  return `'${value}`;
+}
+
 function cellText(cell: MarkdownTableCell): string {
   // Flatten inline children to plain text (CSV has no formatting).
   const walk = (nodes: unknown[]): string =>
@@ -168,6 +185,7 @@ function cellText(cell: MarkdownTableCell): string {
  */
 export function markdownDocToCsv(doc: MarkdownDocument, options: CsvExportOptions = {}): string {
   const delimiter = options.delimiter ?? ',';
+  const formulaHandling = options.formulaHandling ?? 'escape';
   const tables = doc.children.filter((n): n is MarkdownTable => n.type === 'table');
   const index = options.tableIndex ?? 0;
   if (
@@ -182,7 +200,11 @@ export function markdownDocToCsv(doc: MarkdownDocument, options: CsvExportOption
   if (!table) return '';
   return table.children
     .map((row) =>
-      row.children.map((cell) => escapeCsvField(cellText(cell), delimiter)).join(delimiter),
+      row.children
+        .map((cell) =>
+          escapeCsvField(neutralizeSpreadsheetFormula(cellText(cell), formulaHandling), delimiter),
+        )
+        .join(delimiter),
     )
     .join('\r\n');
 }
