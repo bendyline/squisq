@@ -26,6 +26,7 @@ export type {
   VideoExportConfig,
   VideoExportResult,
   VideoOutputFormat,
+  VideoAudioPolicy,
 } from './hooks/useVideoExport.js';
 
 export { useFrameCapture } from './hooks/useFrameCapture.js';

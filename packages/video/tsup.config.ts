@@ -6,7 +6,7 @@ export default defineConfig({
   },
   format: ['esm'],
   dts: true,
-  sourcemap: true,
+  sourcemap: false,
   clean: true,
   external: ['@bendyline/squisq', '@ffmpeg/ffmpeg', '@ffmpeg/util'],
 });

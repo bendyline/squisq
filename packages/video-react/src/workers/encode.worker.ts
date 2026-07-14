@@ -17,7 +17,7 @@ import type {
   FrameMessage,
 } from './workerTypes.js';
 import { bitrateForQuality, ffmpegVideoQualityArgs } from '@bendyline/squisq-video';
-import type { FfmpegWasmLoadConfig } from '@bendyline/squisq-video';
+import type { FFmpeg } from '@ffmpeg/ffmpeg';
 
 import { createMp4Muxer, type Mp4MuxerHandle } from '../mp4Mux.js';
 
@@ -31,7 +31,7 @@ let videoEncoder: VideoEncoder | null = null;
 let muxer: Mp4MuxerHandle | null = null;
 
 // ffmpeg.wasm state
-let ffmpegInstance: unknown = null;
+let ffmpegInstance: FFmpeg | null = null;
 let ffmpegFrames: Array<{ data: Uint8Array; index: number }> = [];
 let ffmpegConfig: InitMessage | null = null;
 
@@ -53,9 +53,8 @@ function postError(message: string) {
 }
 
 function disposeFfmpeg(): void {
-  const instance = ffmpegInstance as { terminate?: () => void } | null;
   try {
-    instance?.terminate?.();
+    ffmpegInstance?.terminate();
   } finally {
     ffmpegInstance = null;
   }
@@ -167,10 +166,7 @@ async function initFfmpegWasm(config: InitMessage) {
   totalFramesReceived = 0;
 
   // Lazy-load ffmpeg.wasm
-  let ffmpeg: {
-    load: (config?: FfmpegWasmLoadConfig) => Promise<unknown>;
-    terminate: () => void;
-  } | null = null;
+  let ffmpeg: FFmpeg | null = null;
   try {
     const { FFmpeg } = await import('@ffmpeg/ffmpeg');
     ffmpeg = new FFmpeg();
@@ -229,19 +225,25 @@ async function encodeFrameFfmpeg(msg: FrameMessage) {
 /** Segments already encoded as MP4 data. */
 const ffmpegSegments: Uint8Array[] = [];
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-async function execOrThrow(ffmpeg: any, args: string[], operation: string): Promise<void> {
+async function execOrThrow(ffmpeg: FFmpeg, args: string[], operation: string): Promise<void> {
   const exitCode = await ffmpeg.exec(args);
   if (exitCode !== 0) {
     throw new Error(`${operation} failed with ffmpeg exit code ${exitCode}`);
   }
 }
 
+async function readBinaryFile(ffmpeg: FFmpeg, path: string): Promise<Uint8Array> {
+  const data = await ffmpeg.readFile(path);
+  if (typeof data === 'string') {
+    throw new Error(`Expected binary data from ffmpeg for ${path}`);
+  }
+  return data;
+}
+
 async function encodeFfmpegBatch() {
   if (!ffmpegInstance || ffmpegFrames.length === 0 || cancelled) return;
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const ffmpeg = ffmpegInstance as any;
+  const ffmpeg = ffmpegInstance;
   const config = ffmpegConfig!;
   const batchIndex = ffmpegSegments.length;
 
@@ -279,7 +281,7 @@ async function encodeFfmpegBatch() {
   );
 
   // Read segment and clean up frames
-  const segmentData = await ffmpeg.readFile(segmentName);
+  const segmentData = await readBinaryFile(ffmpeg, segmentName);
   ffmpegSegments.push(segmentData);
 
   // Clean up frame files
@@ -299,8 +301,7 @@ async function finalizeFfmpeg() {
   // Encode any remaining frames
   await encodeFfmpegBatch();
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const ffmpeg = ffmpegInstance as any;
+  const ffmpeg = ffmpegInstance;
 
   postProgress(85, 'Concatenating segments…');
 
@@ -325,7 +326,7 @@ async function finalizeFfmpeg() {
       'Concatenating video segments',
     );
 
-    finalData = await ffmpeg.readFile('output.mp4');
+    finalData = await readBinaryFile(ffmpeg, 'output.mp4');
 
     // Clean up
     for (let i = 0; i < ffmpegSegments.length; i++) {

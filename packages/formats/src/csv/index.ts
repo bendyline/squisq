@@ -52,8 +52,18 @@ async function toText(data: ArrayBuffer | Blob | string): Promise<string> {
   return new TextDecoder().decode(new Uint8Array(data as ArrayBuffer));
 }
 
+function validateDelimiter(delimiter: string): string {
+  if ([...delimiter].length !== 1 || /["\r\n\uFEFF]/u.test(delimiter)) {
+    throw new TypeError(
+      'CSV delimiter must be exactly one character and cannot be a quote, line break, or BOM',
+    );
+  }
+  return delimiter;
+}
+
 /** Parse CSV text into a grid of string cells (RFC 4180: quotes, escaped quotes). */
 export function parseCsv(text: string, delimiter = ','): string[][] {
+  delimiter = validateDelimiter(delimiter);
   const rows: string[][] = [];
   let row: string[] = [];
   let field = '';
@@ -69,7 +79,11 @@ export function parseCsv(text: string, delimiter = ','): string[][] {
     row = [];
   };
   for (let i = 0; i < text.length; i++) {
-    const ch = text[i]!;
+    let ch = text[i]!;
+    if (delimiter.length === 2 && text.slice(i, i + 2) === delimiter) {
+      ch = delimiter;
+      i++;
+    }
     if (inQuotes) {
       if (ch === '"') {
         if (text[i + 1] === '"') {
@@ -129,7 +143,7 @@ export async function csvToMarkdownDoc(
   data: ArrayBuffer | Blob | string,
   options: CsvImportOptions = {},
 ): Promise<MarkdownDocument> {
-  const text = await toText(data);
+  const text = (await toText(data)).replace(/^\uFEFF/, '');
   const rows = parseCsv(text, options.delimiter ?? ',');
   const hasHeader = options.hasHeader ?? true;
   const children = rows.length > 0 ? [rowsToTable(rows, hasHeader)] : [];
@@ -184,7 +198,7 @@ function cellText(cell: MarkdownTableCell): string {
  * on a table-less document returns an empty string (back-compat).
  */
 export function markdownDocToCsv(doc: MarkdownDocument, options: CsvExportOptions = {}): string {
-  const delimiter = options.delimiter ?? ',';
+  const delimiter = validateDelimiter(options.delimiter ?? ',');
   const formulaHandling = options.formulaHandling ?? 'escape';
   const tables = doc.children.filter((n): n is MarkdownTable => n.type === 'table');
   const index = options.tableIndex ?? 0;

@@ -27,6 +27,16 @@ describe('parseCsv', () => {
       ['1', '2'],
     ]);
   });
+
+  it('rejects empty, multi-character, line-break, and BOM delimiters', () => {
+    for (const delimiter of ['', '||', '"', '\n', '\uFEFF']) {
+      expect(() => parseCsv('a,b', delimiter)).toThrow('exactly one character');
+    }
+  });
+
+  it('accepts a single Unicode code point as a delimiter', () => {
+    expect(parseCsv('a\u{1F9F1}b', '\u{1F9F1}')).toEqual([['a', 'b']]);
+  });
 });
 
 describe('csvToMarkdownDoc', () => {
@@ -47,6 +57,12 @@ describe('csvToMarkdownDoc', () => {
     const csv = 'Name,Age\r\nAlice,30\r\n"Bob, Jr.",40';
     const doc = await csvToMarkdownDoc(csv);
     expect(markdownDocToCsv(doc)).toBe(csv);
+  });
+
+  it('strips one UTF-8 BOM from the first imported header', async () => {
+    const doc = await csvToMarkdownDoc('\uFEFFName,Age\r\nAlice,30');
+    const table = doc.children[0] as MarkdownTable;
+    expect(cellValue(table, 0, 0)).toBe('Name');
   });
 });
 
@@ -99,5 +115,13 @@ describe('markdownDocToCsv spreadsheet safety', () => {
   it('allows an explicit raw-data opt-out', async () => {
     const doc = await csvToMarkdownDoc('Value\r\n=1+1');
     expect(markdownDocToCsv(doc, { formulaHandling: 'preserve' })).toBe('Value\r\n=1+1');
+  });
+});
+
+describe('markdownDocToCsv delimiter validation', () => {
+  it('rejects invalid delimiters on export', async () => {
+    const doc = await csvToMarkdownDoc('a,b');
+    expect(() => markdownDocToCsv(doc, { delimiter: '' })).toThrow('exactly one character');
+    expect(() => markdownDocToCsv(doc, { delimiter: '||' })).toThrow('exactly one character');
   });
 });

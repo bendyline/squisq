@@ -17,6 +17,7 @@ import {
   useVideoExport,
   type VideoExportConfig,
   type VideoOutputFormat,
+  type VideoAudioPolicy,
 } from './hooks/useVideoExport.js';
 
 // ── Types ──────────────────────────────────────────────────────────
@@ -219,6 +220,9 @@ export function VideoExportModal({
   const [animationsEnabled, setAnimationsEnabled] = useState(
     defaultConfig?.animationsEnabled ?? initialOutputFormat === 'mp4',
   );
+  const [audioPolicy, setAudioPolicy] = useState<VideoAudioPolicy>(
+    defaultConfig?.audioPolicy ?? 'require',
+  );
   const palette = VIDEO_EXPORT_PALETTES[colorScheme];
   const themedModalStyle: React.CSSProperties = {
     ...modalStyle,
@@ -287,6 +291,7 @@ export function VideoExportModal({
       fps,
       orientation,
       captionMode,
+      audioPolicy,
       images,
       audio,
       mediaProvider,
@@ -302,6 +307,7 @@ export function VideoExportModal({
     fps,
     orientation,
     captionMode,
+    audioPolicy,
     images,
     audio,
     mediaProvider,
@@ -417,6 +423,22 @@ export function VideoExportModal({
                 <option value="social">Social media (large words)</option>
               </select>
             </div>
+
+            {outputFormat === 'mp4' && (
+              <div>
+                <label style={themedLabelStyle}>Audio</label>
+                <select
+                  aria-label="Audio handling"
+                  style={themedSelectStyle}
+                  value={audioPolicy}
+                  onChange={(e) => setAudioPolicy(e.target.value as VideoAudioPolicy)}
+                >
+                  <option value="require">Require document audio</option>
+                  <option value="best-effort">Best effort — allow video-only fallback</option>
+                  <option value="omit">Omit audio intentionally</option>
+                </select>
+              </div>
+            )}
 
             <div>
               <label style={themedLabelStyle}>Animations &amp; transitions</label>

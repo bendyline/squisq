@@ -12,8 +12,9 @@
  * `home.md → resume.md` without typing the relative path by hand.
  */
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import type { DocumentLinkProvider, DocumentLinkCandidate } from './EditorContext';
+import { useModalDialog } from './modal/useModalDialog';
 
 export interface LinkDialogProps {
   /** Whether this is a brand-new link (Insert) or an existing one (Update). */
@@ -60,14 +61,11 @@ export function LinkDialog({
   const textRef = useRef<HTMLInputElement>(null);
   const urlRef = useRef<HTMLInputElement>(null);
   const docSearchRef = useRef<HTMLInputElement>(null);
-
-  useEffect(() => {
-    // If we have a caption already, the URL is what the user is most
-    // likely here to edit; otherwise focus the caption field first.
-    const target = initialText ? urlRef.current : textRef.current;
-    target?.focus();
-    target?.select();
-  }, [initialText]);
+  const overlayRef = useRef<HTMLDivElement>(null);
+  const dialogRef = useRef<HTMLFormElement>(null);
+  const headingId = useId();
+  const initialFocusRef = initialText ? urlRef : textRef;
+  useModalDialog({ rootRef: overlayRef, dialogRef, initialFocusRef, onClose });
 
   // Refresh the document candidate list whenever the user types into
   // the picker or first opens it. Empty query = initial list.
@@ -102,17 +100,6 @@ export function LinkDialog({
     return undefined;
   }, [tab]);
 
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        e.stopPropagation();
-        onClose();
-      }
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [onClose]);
-
   const handleSubmit = useCallback(
     (e: React.FormEvent) => {
       e.preventDefault();
@@ -143,10 +130,20 @@ export function LinkDialog({
   }, []);
 
   return (
-    <div className="squisq-link-dialog-overlay" onMouseDown={handleBackdropClick}>
-      <form className="squisq-link-dialog" onSubmit={handleSubmit}>
+    <div ref={overlayRef} className="squisq-link-dialog-overlay" onMouseDown={handleBackdropClick}>
+      <form
+        ref={dialogRef}
+        className="squisq-link-dialog"
+        onSubmit={handleSubmit}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={headingId}
+        tabIndex={-1}
+      >
         <div className="squisq-link-dialog-header">
-          <h2 className="squisq-link-dialog-title">{heading}</h2>
+          <h2 id={headingId} className="squisq-link-dialog-title">
+            {heading}
+          </h2>
           <button
             type="button"
             className="squisq-link-dialog-close"

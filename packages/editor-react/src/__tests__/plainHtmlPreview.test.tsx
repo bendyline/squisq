@@ -95,10 +95,10 @@ describe('PlainHtmlPreview', () => {
     expect(srcdoc).toContain('--plain-body-font:');
   });
 
-  it('loads Google Fonts for themes that reference google-hosted faces', async () => {
+  it('does not add remote Google Fonts to the sandboxed preview', async () => {
     const theme = resolveTheme('documentary');
     render(<PlainHtmlPreview markdown={'# Hi'} theme={theme} />);
-    await waitFor(() => expect(getIframeSrcDoc()).toContain('https://fonts.googleapis.com/css2?'));
+    await waitFor(() => expect(getIframeSrcDoc()).not.toContain('fonts.googleapis.com'));
   });
 
   it('resolves raw HTML <img> tags too (resized image case)', async () => {

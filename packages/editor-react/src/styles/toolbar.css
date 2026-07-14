@@ -1,0 +1,739 @@
+/* ─── Toolbar ────────────────────────────────────────── */
+
+.squisq-toolbar {
+  display: flex;
+  align-items: center;
+  flex-wrap: nowrap;
+  padding: 0 12px 0 0;
+  gap: 1px;
+  background: rgba(0, 0, 0, 0.07);
+  container-type: inline-size;
+  container-name: squisq-toolbar;
+  /* Icon glyphs render a touch lighter than the dark text labels (#374151)
+     so the solid Font Awesome icons read less heavy. Hosts can override.
+     Only the Free solid family ships these glyphs (no light/thin in Free),
+     so we soften the color rather than the stroke weight. */
+  --squisq-toolbar-icon: #6b7280;
+}
+
+/* ─── View Tabs (inside toolbar) ─────────────────────── */
+
+.squisq-toolbar-view-tabs {
+  display: flex;
+  gap: 0;
+  margin-right: 0;
+  padding: 0 16px 0 12px;
+  background: #ffffff;
+  border-right: 1px solid rgba(0, 0, 0, 0.12);
+  align-self: stretch;
+  /* Bottom-align so the active-tab underline lands flush with the
+     toolbar's lower edge — the underline-as-tab-indicator pattern
+     reads as "tab", not "floating button in the middle of a bar". */
+  align-items: flex-end;
+  box-sizing: border-box;
+}
+
+.squisq-toolbar-view-tab-wrap {
+  display: flex;
+  align-items: flex-end;
+  align-self: stretch;
+}
+
+/* The Use tab owns the primary preview-mode chooser. Keeping the arrow in the
+   tab cluster makes mode selection available before entering Use and frees the
+   preview toolbar for format/theme/output settings. */
+.squisq-toolbar-use-tab {
+  border-bottom: 2px solid transparent;
+}
+
+.squisq-toolbar-use-tab > .squisq-toolbar-view-tab {
+  padding-right: 4px;
+  padding-bottom: 4px;
+  border-bottom: 0;
+}
+
+.squisq-toolbar-use-tab--active {
+  border-bottom-color: #2563eb;
+}
+
+.squisq-use-mode-trigger {
+  align-self: stretch;
+  display: inline-flex;
+  align-items: flex-end;
+  justify-content: center;
+  width: 20px;
+  padding: 0 6px 9px 0;
+  border: 0;
+  background: transparent;
+  color: #4b5563;
+  cursor: pointer;
+  box-sizing: content-box;
+}
+
+.squisq-use-mode-trigger > svg {
+  display: block;
+  transform: translateY(-1px);
+}
+
+.squisq-use-mode-trigger:hover,
+.squisq-use-mode-trigger--open {
+  color: #111827;
+}
+
+.squisq-toolbar-use-tab--active .squisq-use-mode-trigger {
+  color: #1d4ed8;
+}
+
+.squisq-use-mode-menu {
+  position: fixed;
+  z-index: 120;
+  width: min(340px, calc(100vw - 16px));
+  padding: 6px;
+  border: 1px solid #d1d5db;
+  border-radius: 10px;
+  background: #ffffff;
+  box-shadow:
+    0 12px 32px rgba(15, 23, 42, 0.2),
+    0 2px 6px rgba(15, 23, 42, 0.08);
+  box-sizing: border-box;
+  font-family:
+    -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans', Helvetica, Arial, sans-serif;
+  animation: squisq-use-mode-menu-in 0.12s ease-out;
+}
+
+.squisq-use-mode-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 52px;
+  padding: 7px 9px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: #374151;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    background 0.12s ease,
+    color 0.12s ease;
+}
+
+.squisq-use-mode-menu-item:hover,
+.squisq-use-mode-menu-item:focus-visible {
+  outline: none;
+  background: #f3f4f6;
+  color: #111827;
+}
+
+.squisq-use-mode-menu-item--selected {
+  background: #eff6ff;
+  color: #1d4ed8;
+}
+
+.squisq-use-mode-menu-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  flex: 0 0 32px;
+  border-radius: 8px;
+  background: #f1f5f9;
+  color: #64748b;
+  font-size: 14px;
+}
+
+.squisq-use-mode-menu-item--selected .squisq-use-mode-menu-icon {
+  background: #dbeafe;
+  color: #2563eb;
+}
+
+.squisq-use-mode-menu-copy {
+  display: flex;
+  flex: 1 1 auto;
+  min-width: 0;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.squisq-use-mode-menu-label {
+  color: inherit;
+  font-size: 12.5px;
+  font-weight: 650;
+  line-height: 1.2;
+}
+
+.squisq-use-mode-menu-summary {
+  overflow: hidden;
+  color: #6b7280;
+  font-size: 11.5px;
+  font-weight: 400;
+  line-height: 1.3;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.squisq-use-mode-menu-check {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  flex: 0 0 16px;
+  color: #2563eb;
+  font-size: 11px;
+  text-align: center;
+}
+
+@keyframes squisq-use-mode-menu-in {
+  from {
+    opacity: 0;
+    transform: translateY(-3px) scale(0.99);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .squisq-use-mode-menu {
+    animation: none;
+  }
+}
+
+.squisq-use-mode-menu[data-theme='dark'] {
+  border-color: #4b5563;
+  background: #1f2937;
+}
+
+.squisq-use-mode-menu[data-theme='dark'] .squisq-use-mode-menu-item {
+  color: #d1d5db;
+}
+
+.squisq-use-mode-menu[data-theme='dark'] .squisq-use-mode-menu-item:hover,
+.squisq-use-mode-menu[data-theme='dark'] .squisq-use-mode-menu-item:focus-visible {
+  background: #374151;
+  color: #f9fafb;
+}
+
+.squisq-use-mode-menu[data-theme='dark'] .squisq-use-mode-menu-item--selected {
+  background: #172f4f;
+  color: #93c5fd;
+}
+
+.squisq-use-mode-menu[data-theme='dark'] .squisq-use-mode-menu-icon {
+  background: #334155;
+  color: #cbd5e1;
+}
+
+.squisq-use-mode-menu[data-theme='dark']
+  .squisq-use-mode-menu-item--selected
+  .squisq-use-mode-menu-icon {
+  background: #1e4976;
+  color: #bfdbfe;
+}
+
+.squisq-use-mode-menu[data-theme='dark'] .squisq-use-mode-menu-summary {
+  color: #94a3b8;
+}
+
+.squisq-use-mode-menu[data-theme='dark'] .squisq-use-mode-menu-check {
+  color: #93c5fd;
+}
+
+/* When the outline pane is visible, anchor the toolbar's view-tabs section
+ * to the outline pane's width so their right-edge dividers line up
+ * vertically — otherwise the view-tabs border and the outline's right edge
+ * sit at different X positions and the chrome looks misaligned. */
+.squisq-editor-shell[data-outline-visible='true'] .squisq-toolbar-view-tabs {
+  flex-shrink: 0;
+  min-width: var(--squisq-outline-width, 240px);
+}
+
+.squisq-toolbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  overflow: hidden;
+  flex: 1;
+  min-width: 0;
+}
+
+/* Host-triggered Find mode. It occupies the toolbar's flexible middle lane,
+   leaving the view tabs on its left and the normal right-side host/settings
+   controls on its right. */
+.squisq-find-toolbar {
+  display: flex;
+  align-items: center;
+  flex: 1 1 auto;
+  gap: 3px;
+  min-width: 180px;
+  padding: 4px 6px;
+}
+
+.squisq-find-field {
+  display: flex;
+  align-items: center;
+  flex: 0 1 420px;
+  min-width: 130px;
+  height: 28px;
+  border: 1px solid #9ca3af;
+  border-radius: 5px;
+  background: #ffffff;
+  color: #6b7280;
+  box-sizing: border-box;
+}
+
+.squisq-find-field:focus-within {
+  border-color: #2563eb;
+  box-shadow: 0 0 0 1px #2563eb;
+}
+
+.squisq-find-field > i {
+  margin-left: 8px;
+  color: #6b7280;
+  font-size: 11px;
+}
+
+.squisq-find-input {
+  flex: 1 1 auto;
+  min-width: 32px;
+  height: 100%;
+  padding: 0 7px;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: #111827;
+  font: inherit;
+  font-size: 12.5px;
+}
+
+.squisq-find-input::-webkit-search-cancel-button {
+  display: none;
+}
+
+.squisq-find-count {
+  flex: 0 0 auto;
+  padding-right: 7px;
+  color: #6b7280;
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.squisq-find-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--squisq-toolbar-icon);
+  cursor: pointer;
+}
+
+.squisq-find-button:hover:not(:disabled) {
+  background: rgba(0, 0, 0, 0.08);
+  color: #111827;
+}
+
+.squisq-find-button:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.squisq-find-close {
+  margin-left: 2px;
+}
+
+/* Shared by Tiptap decorations, Monaco inline decorations, and the fallback
+   used when a preview webview lacks the CSS Custom Highlight API. */
+.squisq-find-match {
+  border-radius: 2px;
+  background: #fde68a !important;
+  color: #111827 !important;
+}
+
+.squisq-find-match--selected {
+  background: #f59e0b !important;
+  box-shadow: 0 0 0 1px #b45309;
+}
+
+@container squisq-toolbar (max-width: 680px) {
+  .squisq-find-toolbar {
+    min-width: 120px;
+    padding-right: 2px;
+  }
+
+  .squisq-find-count {
+    display: none;
+  }
+}
+
+/* Contextual groups (template/transition pickers, table controls) sit at the
+   end of the actions row. When measurement marks one as clipped it moves into
+   the ··· overflow menu; hide the cropped inline original rather than painting
+   half of it. `visibility` (not `display`) keeps its layout box so the
+   measurement still notices when it fits again. */
+.squisq-toolbar-contextual--clipped {
+  visibility: hidden;
+}
+
+.squisq-toolbar-view-tab {
+  /* Top padding is asymmetric — bumped 4px above the bottom — so the
+     label sits more vertically centered alongside the neighboring
+     toolbar buttons rather than floating up against the toolbar's
+     top edge. The 2px `border-bottom` remains the active-tab
+     underline at the tab's lower edge. */
+  padding: 8px 14px 4px;
+  border: none;
+  background: transparent;
+  color: #4b5563;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 500;
+  border-bottom: 2px solid transparent;
+  transition:
+    color 0.15s,
+    border-color 0.15s;
+}
+
+.squisq-toolbar-view-tab-label {
+  display: inline-block;
+}
+
+.squisq-toolbar-view-tab-label--short {
+  display: none;
+}
+
+.squisq-toolbar-view-tab-label::after {
+  content: attr(data-label);
+  display: block;
+  font-weight: 600;
+  height: 0;
+  overflow: hidden;
+  visibility: hidden;
+}
+
+@container squisq-toolbar (max-width: 900px) {
+  .squisq-toolbar-view-tab:has(.squisq-toolbar-view-tab-label--short)
+    .squisq-toolbar-view-tab-label--long {
+    display: none;
+  }
+  .squisq-toolbar-view-tab-label--short {
+    display: inline-block;
+  }
+}
+
+.squisq-toolbar-view-tab:hover {
+  color: #111827;
+}
+
+.squisq-toolbar-view-tab--active {
+  color: #1d4ed8;
+  font-weight: 600;
+  border-bottom-color: #2563eb;
+}
+
+.squisq-toolbar-group {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.squisq-toolbar-separator {
+  width: 1px;
+  height: 20px;
+  background: #d1d5db;
+  margin: 0 6px;
+}
+
+.squisq-toolbar-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 28px;
+  flex-shrink: 0;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: #374151;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+  transition:
+    background 0.12s,
+    color 0.12s;
+}
+
+.squisq-toolbar-button:hover {
+  background: #e5e7eb;
+  color: #111827;
+}
+
+.squisq-toolbar-button:active {
+  background: #d1d5db;
+}
+
+.squisq-toolbar-button--active {
+  background: #dbeafe;
+  color: #2563eb;
+}
+
+.squisq-toolbar-button--active:hover {
+  background: #bfdbfe;
+  color: #1d4ed8;
+}
+
+.squisq-toolbar-files-toggle {
+  position: relative;
+}
+
+.squisq-toolbar-files-badge {
+  position: absolute;
+  right: 1px;
+  bottom: 1px;
+  min-width: 14px;
+  height: 14px;
+  padding: 0 3px;
+  border: 1.5px solid #e5e7eb;
+  border-radius: 999px;
+  background: #2563eb;
+  color: #ffffff;
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 9px;
+  font-weight: 700;
+  line-height: 1;
+  pointer-events: none;
+  z-index: 1;
+}
+
+/* Font Awesome glyphs sit a touch larger than the 13px text labels so
+   icon buttons read at a comfortable weight against H1–H6 etc. They
+   render in a lighter color than the text labels by default. */
+.squisq-toolbar-button > i {
+  font-size: 15px;
+  line-height: 1;
+  color: var(--squisq-toolbar-icon);
+}
+
+/* On hover / active, glyphs follow the button's color so the existing
+   hover and toggled-on feedback still applies. */
+.squisq-toolbar-button:hover > i,
+.squisq-toolbar-button--active > i {
+  color: inherit;
+}
+
+/* ─── Toolbar: narrow screen adjustments ───────────────── */
+
+@media (max-width: 768px) {
+  .squisq-toolbar-view-tabs {
+    padding: 0 8px;
+  }
+}
+
+/* ─── Toolbar Overflow Menu ──────────────────────────── */
+
+.squisq-toolbar-overflow {
+  position: relative;
+  flex-shrink: 0;
+  margin-left: 2px;
+}
+
+.squisq-toolbar-overflow-trigger {
+  font-size: 16px;
+  letter-spacing: 1px;
+}
+
+.squisq-toolbar-overflow-menu {
+  position: absolute;
+  right: 0;
+  z-index: 100;
+  min-width: 220px;
+  max-width: 280px;
+  padding: 4px 0;
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
+}
+
+/* Downward-opening (default): menu sits below the trigger. */
+.squisq-toolbar-overflow-menu--down {
+  top: 100%;
+  margin-top: 4px;
+}
+
+/* Upward-opening: when the host clips the bottom of the toolbar (e.g. a
+   chat composer near the bottom of the viewport), the menu flips above
+   the trigger so the items stay visible. */
+.squisq-toolbar-overflow-menu--up {
+  bottom: 100%;
+  margin-bottom: 4px;
+  box-shadow: 0 -4px 12px rgba(0, 0, 0, 0.12);
+}
+
+.squisq-toolbar-overflow-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 6px 12px;
+  border: none;
+  background: transparent;
+  color: #374151;
+  font-size: 13px;
+  cursor: pointer;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.squisq-toolbar-overflow-item:hover {
+  background: #f3f4f6;
+}
+
+.squisq-toolbar-overflow-item:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.squisq-toolbar-overflow-item--active {
+  color: #2563eb;
+  background: #eff6ff;
+}
+
+.squisq-toolbar-overflow-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.squisq-toolbar-overflow-item--danger {
+  color: #dc2626;
+}
+
+.squisq-toolbar-overflow-item--danger:hover {
+  background: #fef2f2;
+  color: #b91c1c;
+}
+
+.squisq-toolbar-overflow-template {
+  gap: 6px;
+  padding: 6px 12px;
+  box-sizing: border-box;
+  max-width: 100%;
+}
+
+.squisq-toolbar-overflow-template select {
+  flex: 1;
+  min-width: 0;
+  max-width: 100%;
+}
+
+/* Section heading for the per-block controls (template/transition pickers)
+   when they fold into the overflow menu — names the block they configure. */
+.squisq-toolbar-overflow-heading {
+  padding: 4px 12px 2px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #9ca3af;
+  user-select: none;
+}
+
+/* ─── Insert Menu Dropdown ──────────────────────────── */
+
+.squisq-insert-menu {
+  z-index: 100;
+  min-width: 200px;
+  padding: 4px 0;
+  /* This menu is portaled to <body>, outside the editor shell that normally
+     supplies the UX font. Keep its unbuttoned content (notably the header)
+     on the same sans-serif UI stack instead of inheriting the host page font. */
+  font-family: var(
+    --squisq-ux-font,
+    -apple-system,
+    BlinkMacSystemFont,
+    'Segoe UI',
+    'Noto Sans',
+    Helvetica,
+    Arial,
+    sans-serif
+  );
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
+}
+
+.squisq-insert-menu-header {
+  padding: 6px 12px 4px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #9ca3af;
+  user-select: none;
+}
+
+.squisq-insert-menu-header--separated {
+  margin-top: 4px;
+  padding-top: 8px;
+  border-top: 1px solid #e5e7eb;
+}
+
+/* Portaled outside squisq-editor-shell, so dark mode is applied via data-theme. */
+.squisq-insert-menu[data-theme='dark'] {
+  background: #1f2937;
+  border-color: #374151;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+}
+
+.squisq-insert-menu[data-theme='dark'] .squisq-toolbar-overflow-item {
+  color: #d1d5db;
+}
+
+.squisq-insert-menu[data-theme='dark'] .squisq-toolbar-overflow-item:hover {
+  background: #374151;
+}
+
+.squisq-insert-menu[data-theme='dark'] .squisq-insert-menu-header {
+  color: #6b7280;
+}
+
+.squisq-insert-menu[data-theme='dark'] .squisq-insert-menu-header--separated {
+  border-top-color: #374151;
+}
+
+.squisq-code-snippet-menu {
+  width: 220px;
+  max-height: min(440px, calc(100vh - 16px));
+  overflow-y: auto;
+}
+
+.squisq-code-snippet-language {
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.squisq-code-snippet-language code {
+  overflow: hidden;
+  color: #9ca3af;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace;
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

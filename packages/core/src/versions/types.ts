@@ -43,7 +43,7 @@ export interface SaveVersionResult {
    * - `'saved'`        — a new snapshot was written.
    * - `'unchanged'`    — current content matches the latest snapshot byte-for-byte.
    * - `'no-document'`  — the container has no primary markdown document.
-   * - `'empty'`        — the resolved content was empty.
+   * - `'empty'`        — legacy value retained for source compatibility; no longer emitted.
    */
   reason: 'saved' | 'unchanged' | 'no-document' | 'empty';
 }

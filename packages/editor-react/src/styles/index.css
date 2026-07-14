@@ -4,6 +4,9 @@
  */
 
 @import '@fortawesome/fontawesome-free/css/all.min.css';
+@import './toolbar.css';
+@import './template-picker.css';
+@import './template-gallery.css';
 @import './editor.css';
 @import './code-context.css';
 @import './folder-view.css';

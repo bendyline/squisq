@@ -87,6 +87,23 @@ describe('VideoExportModal', () => {
       (container.querySelector('[aria-label="Animations and transitions"]') as HTMLSelectElement)
         .value,
     ).toBe('enabled');
+    expect(
+      (container.querySelector('[aria-label="Audio handling"]') as HTMLSelectElement).value,
+    ).toBe('require');
+  });
+
+  it('allows an explicit best-effort or omit audio policy', () => {
+    const { container } = render(
+      <VideoExportModal
+        doc={minimalDoc()}
+        defaultConfig={{ audioPolicy: 'best-effort' }}
+        onClose={() => {}}
+      />,
+    );
+    const select = container.querySelector('[aria-label="Audio handling"]') as HTMLSelectElement;
+    expect(select.value).toBe('best-effort');
+    fireEvent.change(select, { target: { value: 'omit' } });
+    expect(select.value).toBe('omit');
   });
 
   it('defaults GIF export to 10fps with animations and transitions disabled', () => {

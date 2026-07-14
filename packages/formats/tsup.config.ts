@@ -17,7 +17,7 @@ export default defineConfig({
   },
   format: ['esm'],
   dts: true,
-  sourcemap: true,
+  sourcemap: false,
   clean: true,
   external: ['@bendyline/squisq', 'jszip', 'pdf-lib', 'pdfjs-dist'],
 });

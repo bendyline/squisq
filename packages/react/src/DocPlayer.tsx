@@ -31,7 +31,6 @@ import {
   getDocPlaybackDuration,
 } from '@bendyline/squisq/schemas';
 import { MediaClipLayer } from './MediaClipLayer';
-import type { SurfaceScheme, Theme } from '@bendyline/squisq/schemas';
 import { applySurface } from '@bendyline/squisq/schemas';
 import { BlockRenderer } from './BlockRenderer';
 import { CaptionOverlay } from './CaptionOverlay';
@@ -40,14 +39,12 @@ import { useAudioSync } from './hooks/useAudioSync';
 import { useDocPlayback } from './hooks/useDocPlayback';
 import { useViewportOrientation } from './hooks/useViewportOrientation';
 import { useSlideSwipe } from './hooks/useSlideSwipe';
-import type { AudioController } from './hooks/AudioController';
 import {
   expandCoverBlock,
   createTemplateContext,
   markdownToDoc,
   DEFAULT_THEME,
   VIEWPORT_PRESETS,
-  type ViewportConfig,
 } from '@bendyline/squisq/doc';
 import { parseMarkdown } from '@bendyline/squisq/markdown';
 import { DocControlsOverlay } from './DocControlsOverlay';
@@ -57,187 +54,15 @@ import { LinearDocView } from './LinearDocView';
 import type {
   PlaybackState,
   PlaybackActions,
-  BlockMarker,
-  DisplayMode,
   CaptionStyle,
   CaptionMode,
   SlideNavActions,
   SquisqRenderAPI,
 } from './types';
 
-const SMALL_WORDS = new Set([
-  'a',
-  'an',
-  'the',
-  'and',
-  'but',
-  'or',
-  'for',
-  'nor',
-  'on',
-  'at',
-  'to',
-  'in',
-  'of',
-  'by',
-  'is',
-]);
-
-/**
- * Build a map of audio segment index -> display-friendly title.
- * Uses sectionHeader blocks to find real titles, with fallbacks
- * for "intro" and slug-based names.
- */
-function buildSegmentTitleMap(doc: Doc): Map<number, string> {
-  const map = new Map<number, string>();
-
-  // Scan blocks for sectionHeader templates which carry the real title
-  for (const block of doc.blocks as DocBlock[]) {
-    if (isTemplateBlock(block) && block.template === 'sectionHeader' && 'title' in block) {
-      const segIdx = block.audioSegment;
-      if (!map.has(segIdx)) {
-        map.set(segIdx, (block as { title: string }).title);
-      }
-    }
-  }
-
-  // Fill in any segments that weren't covered by sectionHeader blocks
-  for (let i = 0; i < doc.audio.segments.length; i++) {
-    if (!map.has(i)) {
-      const name = doc.audio.segments[i].name;
-      if (name === 'intro' || name.includes('intro')) {
-        map.set(i, 'Introduction');
-      } else if (name === 'flight-context' || name.includes('flight-context')) {
-        map.set(i, 'Flight Context');
-      } else {
-        // Title-case the slug: "hands-on-history" -> "Hands on History"
-        const words = name.split('-');
-        const titled = words
-          .map((w, idx) =>
-            idx === 0 || !SMALL_WORDS.has(w) ? w.charAt(0).toUpperCase() + w.slice(1) : w,
-          )
-          .join(' ');
-        map.set(i, titled);
-      }
-    }
-  }
-
-  return map;
-}
-
-export interface DocPlayerProps {
-  /**
-   * The Doc to play. Wins over `markdown` when both are provided.
-   * When neither `doc` nor `markdown` is given, the player renders a
-   * minimal themed empty state instead of crashing.
-   */
-  doc?: Doc;
-  /**
-   * Markdown source to play. When `doc` is absent, the markdown is parsed
-   * and converted to a Doc via `markdownToDoc(parseMarkdown(markdown))`.
-   * Ignored when `doc` is provided.
-   */
-  markdown?: string;
-  /** Base path for resolving media URLs (default: `'.'`) */
-  basePath?: string;
-  /** Render mode for video capture (hides controls and creates a render API). */
-  renderMode?: boolean;
-  /**
-   * Whether to render slide transitions and per-layer animations (default: true).
-   * Set to false for static slide changes while preserving timeline and media
-   * playback.
-   */
-  animationsEnabled?: boolean;
-  /**
-   * Receives this player's instance-scoped render API, and `null` on cleanup.
-   * The API is created in render mode and `?debug=true` mode only.
-   */
-  onRenderAPIReady?: (api: SquisqRenderAPI | null) => void;
-  /** Auto-play when loaded */
-  autoPlay?: boolean;
-  /** Callback when playback ends */
-  onEnded?: () => void;
-  /** Callback for time updates */
-  onTimeUpdate?: (time: number) => void;
-  /** Optional audio controller (if not provided, uses default HTML5 audio) */
-  audioController?: AudioController;
-  /** Show built-in controls (default: true). Set to false for custom controls. */
-  showControls?: boolean;
-  /** Show only the progress bar/scrubber at bottom (no other controls).
-   *  Only takes effect when showControls is false. Allows external controls
-   *  while keeping the scrubber in-video. */
-  showScrubber?: boolean;
-  /** Mute audio (default: false) */
-  muted?: boolean;
-  /** Enable captions (default: true) */
-  captionsEnabled?: boolean;
-  /** Callback when captions enabled state is toggled */
-  onCaptionsToggle?: (enabled: boolean) => void;
-  /** Callback for playback state changes (for external controls) */
-  onPlaybackStateChange?: (state: PlaybackState) => void;
-  /** Callback when playback controls are ready (for external controls) */
-  onControlsReady?: (
-    controls: PlaybackActions & {
-      play: () => void;
-      pause: () => void;
-    },
-  ) => void;
-  /** Whether the player is currently in fullscreen mode */
-  isFullscreen?: boolean;
-  /** Callback to toggle fullscreen mode */
-  onFullscreenToggle?: () => void;
-  /** Callback when block markers are computed (for external progress bars) */
-  onBlockMarkers?: (markers: BlockMarker[]) => void;
-  /** Force a specific viewport preset, bypassing window-based orientation detection.
-   *  Used when the player is rendered in a constrained container (e.g., map overlay panel)
-   *  whose shape differs from the window's. */
-  forceViewport?: ViewportConfig;
-  /** Theme to use for rendering (default: DEFAULT_THEME from the theme library) */
-  theme?: Theme;
-  /**
-   * Optional surface scheme (light / dark paper) overlaid on top of the
-   * theme's colors. Passed through to the underlying LinearDocView when
-   * `displayMode === 'linear'`; otherwise overlaid onto the theme that
-   * renders the player's SVG blocks.
-   */
-  surface?: SurfaceScheme | 'auto';
-  /**
-   * Display mode for the player.
-   * - `'video'` (default) — Traditional video playback with play/pause, scrub bar, auto-advance.
-   * - `'slideshow'` — PowerPoint-style with prev/next buttons. Blocks are static slides
-   *   that only change on user click. No auto-advance, no scrub bar.
-   * - `'linear'` — Long-scrolling document view. Renders markdown as readable HTML with
-   *   template-annotated sections as inline SVG cards. No audio, no timeline.
-   */
-  displayMode?: DisplayMode;
-  /**
-   * Whether to synthesize and show the managed cover slide from
-   * `doc.startBlock`. Defaults to true for existing documents.
-   */
-  showCoverSlide?: boolean;
-  /**
-   * Optional controlled cover visibility. Intended for synchronized audience
-   * mirrors that follow another DocPlayer's visual cursor. When omitted, the
-   * player owns its normal cover lifecycle.
-   */
-  coverVisible?: boolean;
-  /** Caption display style (default: 'standard').
-   *  'social' shows large centered words with the active word highlighted. */
-  captionStyle?: CaptionStyle;
-  /**
-   * Enable drag-to-swipe slide navigation in slideshow mode (default: true).
-   * When enabled, press-and-drag on a slide advances/rewinds on release past a
-   * threshold (or a quick flick), and snaps back otherwise. Only applies when
-   * `displayMode === 'slideshow'` and not in render/headless mode.
-   */
-  enableSwipe?: boolean;
-  /**
-   * Listen for playback/navigation shortcuts at the document level instead of
-   * requiring this player to hold focus. Intended for a primary preview or
-   * standalone presentation; leave disabled when several players share a page.
-   */
-  globalKeyboardShortcuts?: boolean;
-}
+import type { DocPlayerProps } from './DocPlayerProps';
+export type { DocPlayerProps } from './DocPlayerProps';
+import { buildSegmentTitleMap } from './docPlayer/segmentTitles';
 
 // Dev-only, browser-safe environment probe. Bundlers substitute the
 // `process.env.NODE_ENV` expression; bare browsers without a bundler have
@@ -291,6 +116,7 @@ function DocPlayerContent({
   onEnded,
   onTimeUpdate,
   audioController: externalAudioController,
+  audioMode = 'media',
   showControls = true,
   showScrubber = false,
   muted = false,
@@ -336,7 +162,13 @@ function DocPlayerContent({
   }, []);
 
   // Use internal HTML5 audio sync if no external controller is given
-  const internalAudio = useAudioSync(audioRef, doc.audio, basePath, !externalAudioController);
+  const internalAudio = useAudioSync(
+    audioRef,
+    doc.audio,
+    basePath,
+    !externalAudioController,
+    audioMode,
+  );
 
   // Use external controller if provided, otherwise fall back to internal
   const audio = externalAudioController || internalAudio;

@@ -34,7 +34,10 @@
   },
   "files": [
     "dist",
-    "src"
+    "!dist/**/*.map",
+    "LICENSE",
+    "NOTICE.md",
+    "COPYING.GPL-2.0.txt"
   ],
   "scripts": {
     "build": "tsup",

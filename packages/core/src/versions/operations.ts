@@ -76,10 +76,6 @@ export async function saveVersion(
   if (content === null || content === undefined) {
     return { saved: false, version: null, reason: 'no-document' };
   }
-  if (content.length === 0) {
-    return { saved: false, version: null, reason: 'empty' };
-  }
-
   const basename = await resolveBasename(container, options.basename);
   if (!basename) {
     return { saved: false, version: null, reason: 'no-document' };

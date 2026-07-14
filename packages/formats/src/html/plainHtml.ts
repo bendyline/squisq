@@ -78,10 +78,17 @@ export interface PlainHtmlExportOptions {
    * inlining keeps the icons resolvable purely from same-origin
    * resources. Hosts typically gather this string by scraping
    * `document.styleSheets` for `@font-face` rules whose family starts
-   * with `"Font Awesome"`. The CDN `<link>` is only emitted when this
-   * option is not provided.
+   * with `"Font Awesome"`. A CDN `<link>` is emitted only when this option
+   * is absent and {@link externalResources} is explicitly `allow`.
    */
   iconsCss?: string;
+  /**
+   * Whether this exporter may add remote font/icon stylesheets. Defaults to
+   * `deny`, keeping the generated file self-contained. Authored links and
+   * images are unaffected; bundle exporters are responsible for inlining or
+   * rewriting those document resources.
+   */
+  externalResources?: 'deny' | 'allow';
   /**
    * Raw HTML policy. Defaults to `sanitize`, which removes unsafe tags,
    * event handlers, and executable URL schemes before emitting HTML.
@@ -114,7 +121,15 @@ export function markdownDocToPlainHtml(
   doc: MarkdownDocument,
   options: PlainHtmlExportOptions = {},
 ): string {
-  const { title = 'Document', images, links, themeId, iconsCss, htmlPolicy = 'sanitize' } = options;
+  const {
+    title = 'Document',
+    images,
+    links,
+    themeId,
+    iconsCss,
+    htmlPolicy = 'sanitize',
+    externalResources = 'deny',
+  } = options;
   // Fall back chain for theme: explicit `theme` → explicit `themeId`
   // option → doc frontmatter `themeId`. Hosts whose export dialog
   // tracks themes by id can pass `themeId` straight through; authored
@@ -131,7 +146,7 @@ export function markdownDocToPlainHtml(
     (resolveId ? resolveThemeForDoc(doc, resolveId, options.themeRegistry) : undefined);
   const ctx: RenderCtx = { images, links, htmlPolicy };
   const body = renderTopLevel(doc.children, ctx);
-  const fontsLink = theme ? renderFontsLink(theme) : '';
+  const fontsLink = theme && externalResources === 'allow' ? renderFontsLink(theme) : '';
   // Resolve how to load FontAwesome — only when the doc actually uses
   // icons. When the host supplies `iconsCss` (typical for sandboxed
   // iframe previews where cross-origin font fetches get blocked), we
@@ -142,7 +157,9 @@ export function markdownDocToPlainHtml(
   if (usesIcons) {
     iconsLink = iconsCss
       ? `<style data-fa-inline>\n${escapeStyleText(iconsCss)}\n</style>\n`
-      : FONT_AWESOME_LINK;
+      : externalResources === 'allow'
+        ? FONT_AWESOME_LINK
+        : '';
   }
   const themedCss = theme ? renderThemedCss(theme) : DEFAULT_CSS;
   // A <style> element is an HTML raw-text context: `</style>` closes it even
@@ -172,11 +189,10 @@ function escapeStyleText(css: string): string {
 }
 
 /**
- * Hosted FontAwesome Free CSS. Pinned to a specific release so the
- * integrity hash stays in sync — bump both fields together when
- * upgrading. Cdnjs serves the matching SRI hash on every release page.
+ * Hosted FontAwesome Free CSS. Pinned to the same release as the editor's
+ * local icon catalog and emitted only after an explicit external-resource opt-in.
  */
-const FONT_AWESOME_LINK = `<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css" integrity="sha512-SnH5WK+bZxgPHs44uWIX+LLJAJ9/2PkPKZ5QiAj6Ta86w+fsb2TkcmfRyVX3pBnMFcV7oQPJkl9QevSCWr3W6A==" crossorigin="anonymous" referrerpolicy="no-referrer">
+const FONT_AWESOME_LINK = `<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/7.2.0/css/all.min.css" crossorigin="anonymous" referrerpolicy="no-referrer">
 `;
 
 /** Walk the doc looking for any `inlineIcon` node. Cheap depth-first

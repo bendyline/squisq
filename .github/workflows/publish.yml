@@ -76,6 +76,12 @@ jobs:
       - name: Check formatting
         run: npm run format:check
 
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Browser end-to-end tests
+        run: npm run test:e2e:built
+
       # ── Release ──────────────────────────────────────────────────
       # The npm plugin creates each tarball after applying that package's next
       # version; the GitHub plugin attaches it to the corresponding release.

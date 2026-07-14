@@ -17,6 +17,8 @@ import type { RefObject } from 'react';
 import type { AudioTrack } from '@bendyline/squisq/schemas';
 import type { AudioController } from './AudioController';
 
+export type AudioSyncMode = 'media' | 'synthetic';
+
 function resolveAudioUrl(src: string, basePath: string): string {
   // Preserve absolute/protocol-relative/data/blob URLs. Prefixing an absolute
   // URL with the common default base path (`.`) produces `./https://...`.
@@ -30,6 +32,7 @@ export function useAudioSync(
   audioTrack: AudioTrack | undefined,
   basePath: string = '',
   enabled: boolean = true,
+  mode: AudioSyncMode = 'media',
 ): AudioController {
   const [currentTime, setCurrentTime] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -37,12 +40,15 @@ export function useAudioSync(
   const [isEnded, setIsEnded] = useState(false);
   const [isAudioReady, setIsAudioReady] = useState(false);
   const [totalDuration, setTotalDuration] = useState(0);
+  const [isAvailable, setIsAvailable] = useState(true);
+  const [unavailableMessage, setUnavailableMessage] = useState<string | undefined>();
 
   // Calculate segment start times
   const segmentStarts = useRef<number[]>([]);
 
   // Pending seek time (used when switching segments)
   const pendingSeekTime = useRef<number | null>(null);
+  const pendingSeekCompletion = useRef<(() => void) | null>(null);
   const shouldPlayAfterLoad = useRef(false);
 
   // Preloaded audio blob URLs (for seeking without range request support)
@@ -60,6 +66,8 @@ export function useAudioSync(
   useEffect(() => {
     loadGeneration.current += 1;
     pendingSeekTime.current = null;
+    pendingSeekCompletion.current?.();
+    pendingSeekCompletion.current = null;
     shouldPlayAfterLoad.current = false;
     fallbackMode.current = false;
     setCurrentTime(0);
@@ -67,6 +75,8 @@ export function useAudioSync(
     setIsPlaying(false);
     setIsEnded(false);
     setIsAudioReady(false);
+    setIsAvailable(true);
+    setUnavailableMessage(undefined);
 
     if (!enabled || !audioTrack?.segments) {
       segmentStarts.current = [];
@@ -81,7 +91,8 @@ export function useAudioSync(
       return start;
     });
     setTotalDuration(time);
-  }, [audioTrack, enabled]);
+    if (mode === 'synthetic') setIsAudioReady(true);
+  }, [audioTrack, enabled, mode]);
 
   // Preload audio file as blob (enables seeking without range request support)
   const preloadAudio = useCallback(
@@ -168,14 +179,14 @@ export function useAudioSync(
   // Warm only the active segment. The audio-element effect shares the same
   // in-flight promise, so this also supports hosts that attach the ref later.
   useEffect(() => {
-    if (!enabled) return;
+    if (!enabled || mode === 'synthetic') return;
     const segment = audioTrack?.segments[currentSegment];
     if (segment) void preloadAudio(segment.src);
-  }, [audioTrack, currentSegment, enabled, preloadAudio]);
+  }, [audioTrack, currentSegment, enabled, mode, preloadAudio]);
 
   // Handle audio time updates
   useEffect(() => {
-    if (!enabled) return;
+    if (!enabled || mode === 'synthetic') return;
     const audio = audioRef.current;
     if (!audio) return;
 
@@ -205,9 +216,10 @@ export function useAudioSync(
     };
     const handlePause = () => setIsPlaying(false);
     const handleError = () => {
-      // Audio source failed to load (e.g., 404 in CI or missing files).
-      // Set ready so the UI can still render controls and progress.
       setIsAudioReady(true);
+      setIsPlaying(false);
+      setIsAvailable(false);
+      setUnavailableMessage('Audio could not be loaded. Check that the media file is available.');
     };
     const handleEnded = () => {
       // Move to next segment or end
@@ -235,11 +247,11 @@ export function useAudioSync(
       audio.removeEventListener('ended', handleEnded);
       audio.removeEventListener('error', handleError);
     };
-  }, [audioRef, currentSegment, audioTrack, enabled]);
+  }, [audioRef, currentSegment, audioTrack, enabled, mode]);
 
   // Load new segment when currentSegment changes
   useEffect(() => {
-    if (!enabled) return;
+    if (!enabled || mode === 'synthetic') return;
     const audio = audioRef.current;
     if (!audio || !audioTrack?.segments) return;
 
@@ -254,10 +266,20 @@ export function useAudioSync(
         audio.currentTime = Math.max(0, segmentTime);
         setCurrentTime(pendingSeekTime.current);
         pendingSeekTime.current = null;
+        pendingSeekCompletion.current?.();
+        pendingSeekCompletion.current = null;
       }
 
       if (shouldPlayAfterLoad.current) {
-        audio.play().catch(() => {});
+        audio.play().catch((error: unknown) => {
+          setIsPlaying(false);
+          if (!(error instanceof Error && error.name === 'NotAllowedError')) {
+            setIsAvailable(false);
+            setUnavailableMessage(
+              'Audio playback failed. Check that the media file is supported and available.',
+            );
+          }
+        });
         shouldPlayAfterLoad.current = false;
       }
     };
@@ -309,9 +331,14 @@ export function useAudioSync(
       cancelled = true;
       if (handleCanPlay) audio.removeEventListener('canplay', handleCanPlay);
     };
-  }, [audioRef, currentSegment, audioTrack, preloadAudio, enabled]);
+  }, [audioRef, currentSegment, audioTrack, preloadAudio, enabled, mode]);
 
-  const play = useCallback(() => {
+  const play = useCallback(async () => {
+    if (mode === 'synthetic') {
+      fallbackMode.current = true;
+      setIsPlaying(true);
+      return;
+    }
     const audio = audioRef.current;
     if (audio) {
       if (isEnded) {
@@ -319,19 +346,24 @@ export function useAudioSync(
         setCurrentSegment(0);
         setIsEnded(false);
       }
-      audio
-        .play()
-        .then(() => {
-          fallbackMode.current = false;
-        })
-        .catch(() => {
-          // Audio playback failed (e.g., autoplay policy or 404).
-          // Enable fallback timer so blocks progress without audio.
-          fallbackMode.current = true;
-          setIsPlaying(true);
-        });
+      try {
+        await audio.play();
+        fallbackMode.current = false;
+        setIsAvailable(true);
+        setUnavailableMessage(undefined);
+      } catch (error) {
+        fallbackMode.current = false;
+        setIsPlaying(false);
+        const name = error instanceof Error ? error.name : '';
+        if (name !== 'NotAllowedError') {
+          setIsAvailable(false);
+          setUnavailableMessage(
+            'Audio playback failed. Check that the media file is supported and available.',
+          );
+        }
+      }
     }
-  }, [audioRef, isEnded]);
+  }, [audioRef, isEnded, mode]);
 
   const pause = useCallback(() => {
     const audio = audioRef.current;
@@ -345,7 +377,7 @@ export function useAudioSync(
 
   const toggle = useCallback(() => {
     const audio = audioRef.current;
-    if (!audio) return;
+    if (!audio && mode === 'media') return;
 
     // Use component state instead of audio.paused to handle cases where
     // audio source isn't loaded (audio.paused is always true without a source)
@@ -354,12 +386,12 @@ export function useAudioSync(
     } else {
       pause();
     }
-  }, [audioRef, isPlaying, play, pause]);
+  }, [audioRef, isPlaying, mode, play, pause]);
 
   const seekTo = useCallback(
-    (time: number) => {
+    async (time: number): Promise<void> => {
       const audio = audioRef.current;
-      if (!audio || !audioTrack?.segments) return;
+      if (!audioTrack?.segments) return;
 
       // Clamp time to valid range.
       // When totalDuration is 0 (no audio segments), don't clamp — allow
@@ -383,23 +415,40 @@ export function useAudioSync(
         }
       }
 
-      const wasPlaying = !audio.paused;
+      const wasPlaying = mode === 'synthetic' ? isPlaying : !audio?.paused;
       setIsEnded(false);
+
+      if (!audio && mode === 'media') {
+        setCurrentSegment(segmentIndex);
+        setCurrentTime(clampedTime);
+        return;
+      }
 
       // Check if we need to switch segments
       if (segmentIndex !== currentSegment) {
         // Store pending seek time - will be applied after segment loads
         pendingSeekTime.current = clampedTime;
         shouldPlayAfterLoad.current = wasPlaying;
+        const completion = new Promise<void>((resolve) => {
+          pendingSeekCompletion.current?.();
+          pendingSeekCompletion.current = resolve;
+        });
         setCurrentSegment(segmentIndex);
+        if (mode === 'synthetic') {
+          setCurrentTime(clampedTime);
+          pendingSeekTime.current = null;
+          pendingSeekCompletion.current?.();
+          pendingSeekCompletion.current = null;
+        }
+        await completion;
       } else {
         // Same segment - seek directly
         const segmentTime = clampedTime - segmentStart;
-        audio.currentTime = Math.max(0, segmentTime);
+        if (audio && mode === 'media') audio.currentTime = Math.max(0, segmentTime);
         setCurrentTime(clampedTime);
       }
     },
-    [audioRef, audioTrack, currentSegment, totalDuration],
+    [audioRef, audioTrack, currentSegment, isPlaying, mode, totalDuration],
   );
 
   const skipToSegment = useCallback(
@@ -415,15 +464,12 @@ export function useAudioSync(
 
   // Restart from beginning
   const restart = useCallback(async () => {
-    seekTo(0);
-    // Small delay to ensure seek completes before playing
-    await new Promise((resolve) => setTimeout(resolve, 50));
-    play();
+    await seekTo(0);
+    await play();
   }, [seekTo, play]);
 
-  // Fallback timer: advance currentTime synthetically when audio.play() was blocked
-  // (e.g., autoplay policy or missing audio). Blocks progress at real-time pace
-  // without sound. Stops when audio actually starts playing or playback is paused.
+  // Explicit synthetic-clock mode is used by previews that have timing but no
+  // narration asset. Real playback failures never silently enter this mode.
   useEffect(() => {
     if (!isPlaying || !fallbackMode.current || !totalDuration) return;
 
@@ -463,12 +509,13 @@ export function useAudioSync(
     totalDuration,
     isEnded,
     isReady: isAudioReady,
-    isAvailable: true, // HTML5 audio is always available in browsers
+    isAvailable,
+    unavailableMessage,
     // Actions
-    play: async () => play(),
+    play,
     pause: async () => pause(),
     toggle: async () => toggle(),
-    seekTo: async (time: number) => seekTo(time),
+    seekTo,
     skipToSegment: async (index: number) => skipToSegment(index),
     restart,
   };

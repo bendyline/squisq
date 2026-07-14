@@ -198,7 +198,14 @@ for complete prop tables, `VideoExportConfig`, and the encoder utilities.
 
 ## License
 
-[MIT](https://github.com/bendyline/squisq/blob/main/LICENSE)
+Squisq-authored code in this package is
+[MIT licensed](https://github.com/bendyline/squisq/blob/main/LICENSE).
 
-The separately distributed `@ffmpeg/core` runtime retains its own
-GPL-2.0-or-later license.
+The separately distributed `@ffmpeg/core` WebAssembly runtime has an upstream
+dependency on FFmpeg and external libraries. The 0.12.9 package declares
+GPL-2.0-or-later and is distributed under those terms. This package ships
+[`NOTICE.md`](./NOTICE.md) and the complete
+[`COPYING.GPL-2.0.txt`](./COPYING.GPL-2.0.txt). Hosts that publish
+`ffmpeg-core.js` or `ffmpeg-core.wasm` must publish those materials with the
+runtime and preserve equivalent access to the exact corresponding source
+identified in the notice.

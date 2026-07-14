@@ -315,10 +315,22 @@ describe('markdownDocToPlainHtml', () => {
       expect(html).toContain('data-icon="github"');
     });
 
-    it('emits the FontAwesome CDN <link> when any icon is present', () => {
+    it('does not add a FontAwesome CDN dependency by default', () => {
       const html = render('Hello {[github]} world');
+      expect(html).not.toContain('cdnjs.cloudflare.com');
+    });
+
+    it('emits the matching FontAwesome CDN release after explicit opt-in', () => {
+      const html = render('Hello {[github]} world', { externalResources: 'allow' });
       expect(html).toContain('href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/');
-      expect(html).toContain('integrity="sha512-');
+      expect(html).toContain('/font-awesome/7.2.0/css/all.min.css');
+    });
+
+    it('prefers caller-supplied inline icon CSS without external resources', () => {
+      const html = render('Hello {[github]} world', { iconsCss: '.fa-github{display:inline}' });
+      expect(html).toContain('<style data-fa-inline>');
+      expect(html).toContain('.fa-github{display:inline}');
+      expect(html).not.toContain('cdnjs.cloudflare.com');
     });
 
     it('omits the FontAwesome <link> when no icons appear', () => {
@@ -362,9 +374,15 @@ describe('markdownDocToPlainHtml', () => {
       expect(html).toContain('--plain-body-font: "Source Serif 4"');
     });
 
-    it('emits a Google Fonts <link> for themes that reference google-hosted faces', () => {
+    it('does not emit Google Fonts for a self-contained export by default', () => {
       const theme = resolveTheme('documentary');
       const html = render('# Hello', { theme });
+      expect(html).not.toContain('fonts.googleapis.com');
+    });
+
+    it('emits Google Fonts after explicit external-resource opt-in', () => {
+      const theme = resolveTheme('documentary');
+      const html = render('# Hello', { theme, externalResources: 'allow' });
       expect(html).toContain('<link rel="preconnect" href="https://fonts.googleapis.com">');
       expect(html).toContain('https://fonts.googleapis.com/css2?');
       expect(html).toContain('family=Playfair+Display:wght@400;700');

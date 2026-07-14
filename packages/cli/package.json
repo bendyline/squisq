@@ -42,7 +42,10 @@
     }
   },
   "files": [
-    "dist"
+    "dist",
+    "!dist/**/*.map",
+    "LICENSE",
+    "NOTICE.md"
   ],
   "scripts": {
     "build": "tsup",

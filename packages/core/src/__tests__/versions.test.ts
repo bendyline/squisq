@@ -102,11 +102,13 @@ describe('saveVersion', () => {
     expect(result.reason).toBe('no-document');
   });
 
-  it('returns empty when document content is empty', async () => {
+  it('versions an intentionally empty document', async () => {
     await container.writeDocument('', 'index.md');
-    const result = await saveVersion(container);
-    expect(result.saved).toBe(false);
-    expect(result.reason).toBe('empty');
+    const now = new Date(Date.UTC(2026, 3, 30, 15, 20, 30));
+    const result = await saveVersion(container, { now });
+    expect(result.saved).toBe(true);
+    expect(result.reason).toBe('saved');
+    expect(await readUtf8(container, result.version!.path)).toBe('');
   });
 
   it('writes a snapshot to .versions/ on first save', async () => {

@@ -2,9 +2,30 @@
 
 This file lists the direct open-source runtime dependencies used by the Squisq
 packages, plus notable bundled and transitive components, along with their
-licenses. Most dependencies are permissively licensed. The separately
-distributed `@ffmpeg/core` WebAssembly runtime is the exception: it retains its
-GPL-2.0-or-later license and is not covered by Squisq's MIT license.
+licenses. Most dependencies are permissively licensed. The `@ffmpeg/core`
+WebAssembly runtime used by browser video export is built from the upstream
+FFmpeg project and external libraries; version 0.12.9 declares
+GPL-2.0-or-later and is distributed under those terms.
+
+## Scope of the Squisq MIT license
+
+Squisq-authored source and package artifacts are licensed under the MIT license
+in [`LICENSE`](LICENSE). That license is not a blanket relicensing of
+third-party code, generated artifacts, fonts, icons, or binaries identified in
+this notice. Each third-party component remains available under its own license
+terms.
+
+The ffmpeg.wasm JavaScript wrapper and utility packages are MIT licensed. Its
+WebAssembly core has an upstream dependency on FFmpeg and external libraries
+and follows the licenses applicable to that build. The
+`@ffmpeg/core@0.12.9` package used by Squisq declares
+`GPL-2.0-or-later`; upstream describes the component licenses in its
+[licensing FAQ](https://ffmpegwasm.netlify.app/docs/faq/#what-is-the-license-of-ffmpegwasm).
+
+Every published Squisq npm package includes a package-scoped notice covering
+the third-party components relevant to that package. Packages continue to
+carry Squisq's MIT `LICENSE`; each third-party component remains under its own
+license terms.
 
 ---
 
@@ -107,13 +128,33 @@ metadata but ships an MIT license file with its distribution.
 | react _(peer)_          | ^18 / ^19 | MIT              | https://reactjs.org                       |
 | react-dom _(peer)_      | ^18 / ^19 | MIT              | https://reactjs.org                       |
 
-`@ffmpeg/core` is the separately distributed single-thread FFmpeg WebAssembly
-runtime used by the browser fallback and GIF encoder. It remains licensed
-under GPL-2.0-or-later; the MIT licenses on Squisq, `@ffmpeg/ffmpeg`, and
-`@ffmpeg/util` do not relicense that runtime. Redistributors of the core files
-must preserve its GPL license and satisfy the corresponding source-availability
-requirements. Upstream source and licensing information:
-https://github.com/ffmpegwasm/ffmpeg.wasm.
+`@ffmpeg/core` is the separately distributed single-thread WebAssembly runtime
+used by the browser fallback and GIF encoder. It is built from the upstream
+FFmpeg project and external libraries. The 0.12.9 package declares
+GPL-2.0-or-later and is distributed under those terms.
+
+Squisq's demo site distributes unmodified ESM copies of `ffmpeg-core.js` and
+`ffmpeg-core.wasm`. The component-specific notice, binary hashes, complete
+GPLv2 text, and exact source/build references are maintained in
+`third_party/ffmpeg-core/`. The site publishes that
+notice and GPL text beside the core files. The `@bendyline/squisq-video-react`
+npm package also includes this notice and the GPLv2 text so hosts are informed
+before redistributing the optional runtime.
+
+Upstream identifies its `v12.14` release, commit
+`d3c018aa40a241384965268f0506b73f47dee60c`, as the release containing
+`@ffmpeg/core` / `@ffmpeg/core-mt` 0.12.9. Source and build materials:
+
+- https://github.com/ffmpegwasm/ffmpeg.wasm/releases/tag/v12.14
+- https://github.com/ffmpegwasm/ffmpeg.wasm/tree/d3c018aa40a241384965268f0506b73f47dee60c
+- https://github.com/ffmpegwasm/ffmpeg.wasm/archive/refs/tags/v12.14.tar.gz
+- https://ffmpegwasm.netlify.app/docs/contribution/core/
+
+Redistributors of the core files must preserve the applicable copyright and
+license notices, provide a copy of the GPL, impose no additional restrictions
+on recipients' GPL rights, and provide equivalent access to the complete
+corresponding source for the exact binaries for as long as they distribute
+them.
 
 ## @bendyline/squisq-cli
 
@@ -200,6 +241,7 @@ dual-license allows choosing MIT, and DOMPurify offers an Apache-2.0 option.
 Apache-2.0 dependencies require preserving their copyright notices and license
 text. OFL-1.1 fonts require attribution and permit redistribution. The
 FontAwesome Free icon artwork (CC-BY-4.0) requires visible attribution to
-FontAwesome when the icons are redistributed. `@ffmpeg/core` is not
-permissively licensed; its separately distributed WebAssembly runtime remains
-GPL-2.0-or-later and must be redistributed under those terms.
+FontAwesome when the icons are redistributed. The separately distributed
+`@ffmpeg/core` WebAssembly runtime is built from upstream FFmpeg and external
+libraries; version 0.12.9 declares GPL-2.0-or-later and must be redistributed
+under those terms.

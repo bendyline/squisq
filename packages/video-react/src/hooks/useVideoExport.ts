@@ -120,10 +120,18 @@ export type VideoExportState =
 
 /** Browser export container format. */
 export type VideoOutputFormat = 'mp4' | 'gif';
+export type VideoAudioPolicy = 'require' | 'best-effort' | 'omit';
 
 export interface VideoExportConfig {
   /** Output container (default: 'mp4') */
   outputFormat?: VideoOutputFormat;
+  /**
+   * How authored MP4 audio is handled. `require` (default) fails before
+   * capture when audio cannot be loaded/decoded and fails the export if later
+   * encoding or muxing fails. `best-effort` explicitly permits video-only
+   * degradation; `omit` intentionally skips audio.
+   */
+  audioPolicy?: VideoAudioPolicy;
   /** Render authored animations and slide transitions (default: true for MP4, false for GIF). */
   animationsEnabled?: boolean;
   /** Encoding quality preset (default: 'normal') */
@@ -305,6 +313,7 @@ export function useVideoExport(): VideoExportResult {
       const fps = config.fps ?? (effectiveOutputFormat === 'gif' ? 10 : 30);
       const orientation = config.orientation ?? 'landscape';
       const animationsEnabled = config.animationsEnabled ?? effectiveOutputFormat === 'mp4';
+      const audioPolicy = config.audioPolicy ?? 'require';
       setOutputFormat(effectiveOutputFormat);
 
       try {
@@ -428,7 +437,10 @@ export function useVideoExport(): VideoExportResult {
         const audioBitrate = (QUALITY_PRESETS[quality] ?? QUALITY_PRESETS.normal).audioBitrate;
         // GIF has no audio track. An empty timeline skips preparation and
         // muxing without reporting the format limitation as an export error.
-        const timeline = effectiveOutputFormat === 'mp4' ? computeAudioTimeline(doc, 0) : [];
+        const timeline =
+          effectiveOutputFormat === 'mp4' && audioPolicy !== 'omit'
+            ? computeAudioTimeline(doc, 0)
+            : [];
         const aacSupported =
           timeline.length > 0
             ? await supportsWebCodecsAac(EXPORT_AUDIO_SAMPLE_RATE, EXPORT_AUDIO_CHANNELS)
@@ -444,6 +456,10 @@ export function useVideoExport(): VideoExportResult {
         let audioIncludedLocal = false;
         let audioReasonLocal: string | null = tierDecision.reason;
 
+        if (timeline.length > 0 && tierDecision.tier === 3 && audioPolicy === 'require') {
+          throw new Error(tierDecision.reason ?? 'This browser cannot include the document audio.');
+        }
+
         if (tierDecision.tier === 1 || tierDecision.tier === 2) {
           setPhase('Preparing audio…');
           try {
@@ -452,8 +468,15 @@ export function useVideoExport(): VideoExportResult {
               images,
               mediaProvider: config.mediaProvider,
             });
+            const missingSources = [...new Set(timeline.map((clip) => clip.src))].filter(
+              (src) => !buffers.has(src),
+            );
+            if (missingSources.length > 0) {
+              audioReasonLocal = `Audio files could not be loaded: ${missingSources.join(', ')}`;
+              if (audioPolicy === 'require') throw new Error(audioReasonLocal);
+            }
             if (buffers.size === 0) {
-              audioReasonLocal = 'Audio files for this document could not be loaded.';
+              audioReasonLocal ??= 'Audio files for this document could not be loaded.';
             } else {
               const totalAudioDur = timeline.reduce(
                 (max, c) => Math.max(max, c.startSec + c.durationSec),
@@ -471,6 +494,7 @@ export function useVideoExport(): VideoExportResult {
             audioReasonLocal = `Audio could not be prepared: ${
               audioErr instanceof Error ? audioErr.message : String(audioErr)
             }`;
+            if (audioPolicy === 'require') throw new Error(audioReasonLocal);
           }
         }
 
@@ -580,6 +604,7 @@ export function useVideoExport(): VideoExportResult {
             audioReasonLocal = `Audio encoding failed: ${
               audioErr instanceof Error ? audioErr.message : String(audioErr)
             }`;
+            if (audioPolicy === 'require') throw new Error(audioReasonLocal);
           }
         }
 
@@ -629,6 +654,7 @@ export function useVideoExport(): VideoExportResult {
             audioReasonLocal = `Audio muxing failed: ${
               audioErr instanceof Error ? audioErr.message : String(audioErr)
             }`;
+            if (audioPolicy === 'require') throw new Error(audioReasonLocal);
           }
         }
 

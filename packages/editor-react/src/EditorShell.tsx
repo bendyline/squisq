@@ -66,6 +66,7 @@ import type { PrunePolicy, SaveVersionResult } from '@bendyline/squisq/versions'
 import type { CSSProperties, KeyboardEvent as ReactKeyboardEvent, ReactNode } from 'react';
 import { MediaContext } from '@bendyline/squisq-react';
 import { writeCanvasSettingsStyle, type WriteCanvasSettings } from './writeCanvasSettings';
+import { useModalDialog } from './modal/useModalDialog';
 
 export type { EditorColorScheme } from './EditorContext';
 
@@ -1195,8 +1196,7 @@ function ImageEditModal({
 }: ImageEditModalProps) {
   const modalRef = useRef<HTMLDivElement>(null);
   const surfaceRef = useRef<HTMLDivElement>(null);
-  const onCloseRef = useRef(onClose);
-  onCloseRef.current = onClose;
+  useModalDialog({ rootRef: modalRef, dialogRef: surfaceRef, onClose });
   const extension = relativePath.split(/[?#]/, 1)[0]?.split('.').pop()?.toLowerCase();
   const saveFormat: 'png' | 'jpeg' | 'webp' | null =
     extension === 'png'
@@ -1256,54 +1256,6 @@ function ImageEditModal({
     },
     [mediaProvider, relativePath, onSaved],
   );
-
-  // Close on Escape — global listener so it works regardless of focus.
-  useEffect(() => {
-    const previousFocus = document.activeElement as HTMLElement | null;
-    const shell = modalRef.current?.closest('.squisq-editor-shell');
-    const inertSiblings = shell
-      ? Array.from(shell.children).filter((element) => !element.contains(modalRef.current))
-      : [];
-    inertSiblings.forEach((element) => {
-      (element as HTMLElement).inert = true;
-    });
-    surfaceRef.current
-      ?.querySelector<HTMLElement>(
-        'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])',
-      )
-      ?.focus();
-    const handler = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        e.preventDefault();
-        onCloseRef.current();
-        return;
-      }
-      if (e.key !== 'Tab' || !surfaceRef.current) return;
-      const focusable = Array.from(
-        surfaceRef.current.querySelectorAll<HTMLElement>(
-          'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
-        ),
-      );
-      if (focusable.length === 0) return;
-      const first = focusable[0];
-      const last = focusable[focusable.length - 1];
-      if (e.shiftKey && document.activeElement === first) {
-        e.preventDefault();
-        last.focus();
-      } else if (!e.shiftKey && document.activeElement === last) {
-        e.preventDefault();
-        first.focus();
-      }
-    };
-    window.addEventListener('keydown', handler);
-    return () => {
-      window.removeEventListener('keydown', handler);
-      inertSiblings.forEach((element) => {
-        (element as HTMLElement).inert = false;
-      });
-      previousFocus?.focus();
-    };
-  }, []);
 
   return (
     <div
