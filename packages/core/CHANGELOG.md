@@ -1,3 +1,9 @@
+## @bendyline/squisq [2.1.0](https://github.com/bendyline/squisq/compare/@bendyline/squisq@2.0.1...@bendyline/squisq@2.1.0) (2026-07-14)
+
+### Features
+
+* Mermaid (Complex) diagrams ([#24](https://github.com/bendyline/squisq/issues/24)) ([f8ccb88](https://github.com/bendyline/squisq/commit/f8ccb883bfc86bba407d4d47a2caf1d8ffcf739a))
+
 ## @bendyline/squisq [2.0.1](https://github.com/bendyline/squisq/compare/@bendyline/squisq@2.0.0...@bendyline/squisq@2.0.1) (2026-07-13)
 
 ### Bug Fixes
