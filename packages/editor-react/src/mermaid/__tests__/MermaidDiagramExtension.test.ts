@@ -320,7 +320,12 @@ describe('MermaidDiagramExtension', () => {
 
     const viewport = root.querySelector<HTMLElement>('.squisq-mermaid-canvas-scroll')!;
     const diagram = root.querySelector<HTMLElement>('.squisq-mermaid-svg')!;
+    const fitButton = root.querySelector<HTMLButtonElement>('button[aria-label="Fit diagram"]')!;
+    expect(fitButton.getAttribute('aria-pressed')).toBe('true');
     expect(diagram.style.transform).toBe('translate3d(0px, 0px, 0)');
+
+    root.querySelector<HTMLButtonElement>('button[aria-label="Zoom out"]')?.click();
+    await vi.waitFor(() => expect(fitButton.getAttribute('aria-pressed')).toBe('false'));
 
     fireEvent.mouseDown(viewport, {
       button: 2,
@@ -342,8 +347,9 @@ describe('MermaidDiagramExtension', () => {
     fireEvent.mouseUp(window, { button: 2, buttons: 0 });
     await vi.waitFor(() => expect(viewport.dataset.panning).toBeUndefined());
 
-    root.querySelector<HTMLButtonElement>('button[aria-label="Fit diagram"]')?.click();
+    fitButton.click();
     await vi.waitFor(() => {
+      expect(fitButton.getAttribute('aria-pressed')).toBe('true');
       expect(diagram.style.transform).toBe('translate3d(0px, 0px, 0)');
     });
   });

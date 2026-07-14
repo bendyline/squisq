@@ -34,6 +34,7 @@ import { RenderLayer } from './layers/renderLayer';
 import { useSceneTextEditing } from './text/useSceneTextEditing';
 import { SceneTextOverlay } from './text/SceneTextOverlay';
 import type { SceneTextEditConfig } from './text/sceneTextConfig';
+import { SceneViewControls } from './SceneViewControls';
 
 export interface SceneProps {
   /** Viewport size in viewport units. Layers render in this coordinate space. */
@@ -78,6 +79,8 @@ export interface SceneProps {
   showMaximize?: boolean;
   maximized?: boolean;
   onToggleMaximize?: () => void;
+  /** Show the shared diagram zoom and fit controls. */
+  showViewControls?: boolean;
   /** Render the built-in toolbar (Select / Connect / etc.). Default true. */
   showToolbar?: boolean;
   /**
@@ -112,6 +115,7 @@ export function Scene(props: SceneProps) {
     showMaximize,
     maximized,
     onToggleMaximize,
+    showViewControls = false,
     showToolbar = true,
     textEditing,
     onDrop,
@@ -139,6 +143,8 @@ export function Scene(props: SceneProps) {
 
   // ── Pan/zoom + selection ────────────────────────────────────
   const panZoom = useScenePanZoom();
+  const { fitBox, zoomAt } = panZoom;
+  const [viewMode, setViewMode] = useState<'fit' | 'manual'>('fit');
   const selection = useSceneSelection();
   const setSceneSelection = selection.setSelection;
   const { hit } = useSceneHitTest();
@@ -226,6 +232,7 @@ export function Scene(props: SceneProps) {
       const sy = e.clientY - rect.top;
       // Negative deltaY = wheel up = zoom in.
       const factor = Math.exp(-e.deltaY * 0.0015);
+      setViewMode('manual');
       panZoom.zoomAt(factor, sx, sy);
     },
     [panZoom],
@@ -246,6 +253,7 @@ export function Scene(props: SceneProps) {
       (e.currentTarget as SVGSVGElement).focus({ preventScroll: true });
       // Middle-button or space-modified drag → pan, regardless of tool.
       if (e.button === 1 || (e.button === 0 && e.altKey)) {
+        setViewMode('manual');
         isPanning.current = true;
         panLast.current = { x: e.clientX, y: e.clientY };
         (e.currentTarget as Element).setPointerCapture?.(e.pointerId);
@@ -372,8 +380,7 @@ export function Scene(props: SceneProps) {
     return () => root.removeEventListener('keydown', onKey);
   }, [tools, activeTool, setActiveTool, textEdit.activeRef]);
 
-  // ── Initial fit ─────────────────────────────────────────────
-  const didFitRef = useRef(false);
+  // ── Responsive fit ──────────────────────────────────────────
   const [containerSize, setContainerSize] = useState<{ width: number; height: number } | null>(
     null,
   );
@@ -391,12 +398,8 @@ export function Scene(props: SceneProps) {
     return () => ro.disconnect();
   }, []);
 
-  useEffect(() => {
-    if (didFitRef.current) return;
-    if (!containerSize) return;
-    if (hitItems.length === 0) return;
-    didFitRef.current = true;
-    // Fit to the bounding box of all hit items (the visible content).
+  const contentBox = useMemo(() => {
+    if (hitItems.length === 0) return null;
     let minX = Infinity;
     let minY = Infinity;
     let maxX = -Infinity;
@@ -407,13 +410,32 @@ export function Scene(props: SceneProps) {
       if (it.bounds.x + it.bounds.width > maxX) maxX = it.bounds.x + it.bounds.width;
       if (it.bounds.y + it.bounds.height > maxY) maxY = it.bounds.y + it.bounds.height;
     }
-    if (!Number.isFinite(minX)) return;
-    panZoom.fitBox(
-      { x: minX, y: minY, width: maxX - minX, height: maxY - minY },
-      containerSize,
-      40,
-    );
-  }, [containerSize, hitItems, panZoom]);
+    if (!Number.isFinite(minX)) return null;
+    return { x: minX, y: minY, width: maxX - minX, height: maxY - minY };
+  }, [hitItems]);
+
+  const fitContent = useCallback(() => {
+    if (!containerSize || !contentBox) return;
+    fitBox(contentBox, containerSize, 40, 1);
+  }, [containerSize, contentBox, fitBox]);
+
+  useEffect(() => {
+    if (viewMode === 'fit') fitContent();
+  }, [fitContent, viewMode]);
+
+  const adjustZoom = useCallback(
+    (factor: number) => {
+      setViewMode('manual');
+      if (!containerSize) return;
+      zoomAt(factor, containerSize.width / 2, containerSize.height / 2);
+    },
+    [containerSize, zoomAt],
+  );
+
+  const activateFit = useCallback(() => {
+    setViewMode('fit');
+    fitContent();
+  }, [fitContent]);
 
   // ── Render ──────────────────────────────────────────────────
   const liveOffset = activeId === 'select' ? getActiveMoveOffset(interaction) : null;
@@ -548,6 +570,15 @@ export function Scene(props: SceneProps) {
         />
         {activeTool?.renderOverlay?.(ctx)}
       </SceneViewport>
+      {showViewControls && (
+        <SceneViewControls
+          scale={panZoom.transform.scale}
+          fit={viewMode === 'fit'}
+          onZoomOut={() => adjustZoom(1 / 1.2)}
+          onZoomIn={() => adjustZoom(1.2)}
+          onFit={activateFit}
+        />
+      )}
       {showMaximize && onToggleMaximize && (
         <button
           type="button"

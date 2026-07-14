@@ -341,6 +341,17 @@ export type {
   MermaidFlowchartDirection,
   MermaidFlowchartModel,
 } from './mermaid/mermaidModel.js';
+export {
+  DEFAULT_MERMAID_DIAGRAM_TYPE,
+  MERMAID_DIAGRAM_TYPES,
+  mermaidDiagramMarkdown,
+} from './mermaid/mermaidDiagramTypes.js';
+export type {
+  MermaidDiagramCategory,
+  MermaidDiagramPreview,
+  MermaidDiagramType,
+} from './mermaid/mermaidDiagramTypes.js';
+export { MermaidDiagramTypeThumbnail } from './mermaid/MermaidDiagramTypeThumbnail.js';
 
 // Code snippets — every ordinary explicit-language fence is replaced in the
 // WYSIWYG surface by a Monaco inset. The fence node remains authoritative, so

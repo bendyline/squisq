@@ -13,6 +13,7 @@
  */
 
 import { useCallback, useRef, useState } from 'react';
+import { calculateFitScale } from '../fitScale';
 
 export interface SceneTransform {
   /** Translation in screen pixels. */
@@ -25,7 +26,7 @@ export interface SceneTransform {
 export const IDENTITY_TRANSFORM: SceneTransform = Object.freeze({ tx: 0, ty: 0, scale: 1 });
 
 /** Clamp scale to a sensible range so a single accidental wheel doesn't escape. */
-const MIN_SCALE = 0.1;
+const MIN_SCALE = 0.02;
 const MAX_SCALE = 8;
 
 export interface UseScenePanZoomResult {
@@ -45,13 +46,14 @@ export interface UseScenePanZoomResult {
   reset: () => void;
   /**
    * Fit a viewport-unit bounding box into a container of `containerSize`
-   * screen pixels, with optional padding (also in screen pixels). When
-   * the box is empty, no-ops.
+   * screen pixels, with optional padding (also in screen pixels) and an
+   * optional maximum scale. When the box is empty, no-ops.
    */
   fitBox: (
     box: { x: number; y: number; width: number; height: number },
     containerSize: { width: number; height: number },
     padding?: number,
+    maxScale?: number,
   ) => void;
   /** Convert a screen-pixel point (container-relative) → viewport units. */
   screenToViewport: (sx: number, sy: number) => { x: number; y: number };
@@ -104,12 +106,17 @@ export function useScenePanZoom(
       box: { x: number; y: number; width: number; height: number },
       containerSize: { width: number; height: number },
       padding = 24,
+      maxScale = MAX_SCALE,
     ) => {
       if (box.width <= 0 || box.height <= 0) return;
       if (containerSize.width <= 0 || containerSize.height <= 0) return;
       const availW = Math.max(1, containerSize.width - padding * 2);
       const availH = Math.max(1, containerSize.height - padding * 2);
-      const scale = clamp(Math.min(availW / box.width, availH / box.height), MIN_SCALE, MAX_SCALE);
+      const scale = calculateFitScale(
+        { width: box.width, height: box.height },
+        { width: availW, height: availH },
+        Math.min(MAX_SCALE, Math.max(Number.EPSILON, maxScale)),
+      );
       // Center the box in the container.
       const scaledW = box.width * scale;
       const scaledH = box.height * scale;

@@ -65,6 +65,13 @@ import {
   codeSnippetMarkdown,
   type CodeSnippetLanguage,
 } from './codeSnippet/codeSnippetLanguages';
+import {
+  DEFAULT_MERMAID_DIAGRAM_TYPE,
+  MERMAID_DIAGRAM_TYPES,
+  mermaidDiagramMarkdown,
+  type MermaidDiagramType,
+} from './mermaid/mermaidDiagramTypes';
+import { MermaidDiagramTypeThumbnail } from './mermaid/MermaidDiagramTypeThumbnail';
 import { FindToolbar } from './find/FindToolbar';
 
 const VIEWS: { id: EditorView; label: string; shortLabel?: string; shortcut: string }[] = [
@@ -298,6 +305,7 @@ const MEDIA_BUTTONS = BUTTONS.filter((b) => b.group === 'media');
 const CONVERT_BUTTONS = MEDIA_BUTTONS.filter((b) => b.id === 'table' || b.id === 'tasklist');
 const INSERT_MENU_WIDTH = 200;
 const CODE_SNIPPET_MENU_WIDTH = 220;
+const MERMAID_TYPE_MENU_WIDTH = 520;
 const TASK_LIST_ITEMS = ['Task 1', 'Task 2', 'Task 3'] as const;
 const TASK_LIST_MARKDOWN = TASK_LIST_ITEMS.map((item) => `- [ ] ${item}`).join('\n');
 
@@ -468,13 +476,13 @@ function insertAsciiDiagramBlock(editor: TiptapEditor): void {
   insertFenceBlock(editor, DIAGRAM_STARTER_ART, 'diagram');
 }
 
-/** Starter source for the lossless, full-syntax Mermaid diagram mode. */
-const MERMAID_STARTER_ART = ['flowchart LR', '  start["Start"] --> next["Next"]'].join('\n');
-const MERMAID_STARTER_MARKDOWN = '\n```mermaid\n' + MERMAID_STARTER_ART + '\n```\n';
+/** Default source for callers that invoke the legacy single-click action. */
+const MERMAID_STARTER_ART = DEFAULT_MERMAID_DIAGRAM_TYPE.starter;
+const MERMAID_STARTER_MARKDOWN = mermaidDiagramMarkdown(MERMAID_STARTER_ART);
 
 /** Insert a Mermaid fence that MermaidDiagramExtension turns into the complex canvas. */
-function insertMermaidDiagramBlock(editor: TiptapEditor): void {
-  insertFenceBlock(editor, MERMAID_STARTER_ART, 'mermaid');
+function insertMermaidDiagramBlock(editor: TiptapEditor, source = MERMAID_STARTER_ART): void {
+  insertFenceBlock(editor, source, 'mermaid');
 }
 
 /**
@@ -772,10 +780,15 @@ export function Toolbar({
   const insertMenuButtonRef = useRef<HTMLButtonElement | null>(null);
   const insertMenuRef = useRef<HTMLDivElement | null>(null);
   const codeSnippetMenuRef = useRef<HTMLDivElement | null>(null);
+  const mermaidTypeMenuRef = useRef<HTMLDivElement | null>(null);
   const [insertMenuAnchor, setInsertMenuAnchor] = useState<{ top: number; left: number } | null>(
     null,
   );
   const [codeSnippetMenuAnchor, setCodeSnippetMenuAnchor] = useState<{
+    top: number;
+    left: number;
+  } | null>(null);
+  const [mermaidTypeMenuAnchor, setMermaidTypeMenuAnchor] = useState<{
     top: number;
     left: number;
   } | null>(null);
@@ -793,6 +806,7 @@ export function Toolbar({
     }
     setInsertMenuAnchor({ top: rect.bottom + gap, left });
     setCodeSnippetMenuAnchor(null);
+    setMermaidTypeMenuAnchor(null);
   }, []);
 
   const openCodeSnippetMenu = useCallback((trigger: HTMLElement) => {
@@ -808,11 +822,29 @@ export function Toolbar({
     const maxMenuHeight = Math.min(440, vh - margin * 2);
     const top = Math.max(margin, Math.min(rect.top, vh - maxMenuHeight - margin));
     setCodeSnippetMenuAnchor({ top, left });
+    setMermaidTypeMenuAnchor(null);
+  }, []);
+
+  const openMermaidTypeMenu = useCallback((trigger: HTMLElement) => {
+    const rect = trigger.getBoundingClientRect();
+    const gap = 4;
+    const margin = 8;
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
+    let left = rect.right + gap;
+    if (left + MERMAID_TYPE_MENU_WIDTH + margin > vw) {
+      left = Math.max(margin, rect.left - MERMAID_TYPE_MENU_WIDTH - gap);
+    }
+    const maxMenuHeight = Math.min(600, vh - margin * 2);
+    const top = Math.max(margin, Math.min(rect.top, vh - maxMenuHeight - margin));
+    setMermaidTypeMenuAnchor({ top, left });
+    setCodeSnippetMenuAnchor(null);
   }, []);
 
   const closeInsertMenu = useCallback(() => {
     setInsertMenuAnchor(null);
     setCodeSnippetMenuAnchor(null);
+    setMermaidTypeMenuAnchor(null);
   }, []);
 
   // ── Overflow detection ────────────────────────────────
@@ -933,6 +965,7 @@ export function Toolbar({
       if (insertMenuButtonRef.current?.contains(e.target as Node)) return;
       if (insertMenuRef.current?.contains(e.target as Node)) return;
       if (codeSnippetMenuRef.current?.contains(e.target as Node)) return;
+      if (mermaidTypeMenuRef.current?.contains(e.target as Node)) return;
       closeInsertMenu();
     };
     document.addEventListener('mousedown', handleClick);
@@ -1396,6 +1429,38 @@ export function Toolbar({
   );
 
   // ── Selected-text conversion handlers ─────────────────
+  const handleMermaidDiagramInsert = useCallback(
+    (diagramType: MermaidDiagramType) => {
+      if (activeView === 'wysiwyg' && tiptapEditor) {
+        insertMermaidDiagramBlock(tiptapEditor, diagramType.starter);
+        closeInsertMenu();
+        return;
+      }
+
+      const markdown = mermaidDiagramMarkdown(diagramType.starter);
+      if (monacoEditor) {
+        const selection = monacoEditor.getSelection();
+        const model = monacoEditor.getModel();
+        if (!selection || !model) return;
+        monacoEditor.executeEdits('toolbar-mermaid-diagram', [
+          { range: selection, text: markdown },
+        ]);
+        const endPosition = model.getPositionAt(
+          model.getOffsetAt(selection.getStartPosition()) + markdown.length,
+        );
+        monacoEditor.setPosition(endPosition);
+        monacoEditor.revealPositionInCenterIfOutsideViewport(endPosition);
+        monacoEditor.focus();
+        closeInsertMenu();
+        return;
+      }
+
+      setMarkdownSource(markdownSource + markdown);
+      closeInsertMenu();
+    },
+    [activeView, closeInsertMenu, markdownSource, monacoEditor, setMarkdownSource, tiptapEditor],
+  );
+
   const readSelectedText = useCallback((): string => {
     // Canvas text overlays intentionally have a smaller schema without tables
     // or task lists. Ignore their selection instead of surfacing actions that
@@ -2662,20 +2727,29 @@ export function Toolbar({
               const disabled = (btn.id === 'image' && !mediaProvider) || !buttonAllowed(btn.id);
               const stripped = btn.title.replace(/^Insert\s+/i, '');
               const label = stripped.charAt(0).toUpperCase() + stripped.slice(1);
+              const hasMermaidTypeMenu = btn.id === 'complexdiagram';
               return (
                 <button
                   key={btn.id}
                   ref={btn.id === 'emoji' ? emojiButtonRef : undefined}
                   className="squisq-toolbar-overflow-item"
                   disabled={disabled}
-                  onClick={() => {
+                  onClick={(event) => {
+                    if (hasMermaidTypeMenu) {
+                      if (mermaidTypeMenuAnchor) setMermaidTypeMenuAnchor(null);
+                      else openMermaidTypeMenu(event.currentTarget);
+                      return;
+                    }
                     handleAction(btn.id);
                     if (btn.id !== 'emoji') closeInsertMenu();
                   }}
                   role="menuitem"
+                  aria-haspopup={hasMermaidTypeMenu ? 'menu' : undefined}
+                  aria-expanded={hasMermaidTypeMenu ? mermaidTypeMenuAnchor !== null : undefined}
                 >
                   <span className="squisq-toolbar-overflow-icon">{buttonIcon(btn)}</span>
                   <span>{label}</span>
+                  {hasMermaidTypeMenu && <Icon icon="fa-solid fa-chevron-right" />}
                 </button>
               );
             })}
@@ -2696,6 +2770,62 @@ export function Toolbar({
               <span>Code Snippet</span>
               <Icon icon="fa-solid fa-chevron-right" />
             </button>
+          </div>,
+          document.body,
+        )}
+
+      {mermaidTypeMenuAnchor &&
+        createPortal(
+          <div
+            ref={mermaidTypeMenuRef}
+            className="squisq-insert-menu squisq-mermaid-type-menu"
+            data-theme={colorScheme}
+            style={{
+              position: 'fixed',
+              top: mermaidTypeMenuAnchor.top,
+              left: mermaidTypeMenuAnchor.left,
+            }}
+            role="menu"
+            aria-label="Mermaid diagram type"
+          >
+            <div className="squisq-mermaid-type-menu-heading">
+              <strong>Complex Diagram</strong>
+              <span>Choose a Mermaid diagram type. Flow direction remains a separate edit.</span>
+            </div>
+            {(['Structure', 'Planning', 'Data'] as const).map((category) => (
+              <section key={category} className="squisq-mermaid-type-section">
+                <div className="squisq-insert-menu-header">{category}</div>
+                <div className="squisq-mermaid-type-grid">
+                  {MERMAID_DIAGRAM_TYPES.filter((entry) => entry.category === category).map(
+                    (entry) => (
+                      <button
+                        key={entry.id}
+                        type="button"
+                        className="squisq-mermaid-type-card"
+                        onClick={() => handleMermaidDiagramInsert(entry)}
+                        role="menuitem"
+                        aria-label={`Insert ${entry.label} Mermaid diagram`}
+                      >
+                        <span className="squisq-mermaid-type-thumbnail">
+                          <MermaidDiagramTypeThumbnail preview={entry.preview} />
+                        </span>
+                        <span className="squisq-mermaid-type-copy">
+                          <span className="squisq-mermaid-type-title">
+                            {entry.label}
+                            {entry.badge && (
+                              <span className="squisq-mermaid-type-badge">{entry.badge}</span>
+                            )}
+                          </span>
+                          <span className="squisq-mermaid-type-description">
+                            {entry.description}
+                          </span>
+                        </span>
+                      </button>
+                    ),
+                  )}
+                </div>
+              </section>
+            ))}
           </div>,
           document.body,
         )}

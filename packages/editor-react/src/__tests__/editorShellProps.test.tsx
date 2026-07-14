@@ -506,7 +506,7 @@ describe('<Toolbar> Insert menu', () => {
     });
   });
 
-  it('adds a Mermaid fence from Insert Complex Diagram', async () => {
+  it('opens the Mermaid type gallery and inserts the selected diagram grammar', async () => {
     render(
       <EditorProvider initialMarkdown="Intro" initialView="raw" allowRecording={false}>
         <Toolbar />
@@ -516,10 +516,13 @@ describe('<Toolbar> Insert menu', () => {
 
     fireEvent.click(screen.getByLabelText('Insert'));
     fireEvent.click(await screen.findByRole('menuitem', { name: 'Complex Diagram (Mermaid)' }));
+    expect(await screen.findByRole('menu', { name: 'Mermaid diagram type' })).toBeTruthy();
+    expect(screen.getByText(/Flow direction remains a separate edit/)).toBeTruthy();
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Insert Gantt Mermaid diagram' }));
 
     await waitFor(() => {
       expect(screen.getByTestId('markdown-source').textContent).toContain(
-        '```mermaid\nflowchart LR\n  start["Start"] --> next["Next"]\n```',
+        '```mermaid\ngantt\n  title Project plan\n  dateFormat YYYY-MM-DD',
       );
     });
   });

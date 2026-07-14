@@ -44,7 +44,7 @@ describe('useScenePanZoom', () => {
     act(() => result.current.zoomAt(100, 0, 0));
     expect(result.current.transform.scale).toBeLessThanOrEqual(8);
     act(() => result.current.zoomAt(0.0001, 0, 0));
-    expect(result.current.transform.scale).toBeGreaterThanOrEqual(0.1);
+    expect(result.current.transform.scale).toBeGreaterThanOrEqual(0.02);
   });
 
   it('reset returns to identity', () => {
@@ -86,6 +86,33 @@ describe('useScenePanZoom', () => {
     );
     // Available area after padding: 160x160 → scale 1.6.
     expect(result.current.transform.scale).toBeCloseTo(1.6, 5);
+  });
+
+  it('fitBox can cap fit at 100% without enlarging small content', () => {
+    const { result } = renderHook(() => useScenePanZoom());
+    act(() =>
+      result.current.fitBox(
+        { x: 25, y: 50, width: 100, height: 80 },
+        { width: 800, height: 600 },
+        20,
+        1,
+      ),
+    );
+    expect(result.current.transform.scale).toBe(1);
+    expect(result.current.viewportToScreen(75, 90)).toEqual({ x: 400, y: 300 });
+  });
+
+  it('fitBox may shrink below the manual zoom floor to keep all content visible', () => {
+    const { result } = renderHook(() => useScenePanZoom());
+    act(() =>
+      result.current.fitBox(
+        { x: 0, y: 0, width: 10_000, height: 10_000 },
+        { width: 400, height: 300 },
+        20,
+        1,
+      ),
+    );
+    expect(result.current.transform.scale).toBeCloseTo(0.026, 5);
   });
 
   it('screenToViewport and viewportToScreen are inverses', () => {

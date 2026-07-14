@@ -6,7 +6,7 @@
 
 import { Editor } from '@tiptap/core';
 import StarterKit from '@tiptap/starter-kit';
-import { afterEach, beforeAll, describe, expect, it } from 'vitest';
+import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { markdownToTiptap } from '../../tiptapBridge';
 import { HeadingWithTemplate } from '../../TemplateAnnotation';
 import {
@@ -136,6 +136,25 @@ describe('AsciiDiagramExtension registry', () => {
     toggleAsciiSource(editor, entry.id);
     expect(isAsciiSourceVisible(editor, entry.id)).toBe(false);
     expect(JSON.stringify(editor.state.doc.toJSON())).toBe(json);
+  });
+
+  it('shows zoom, fit, and fullscreen affordances with fit active by default', async () => {
+    const editor = makeEditor('```diagram\n' + ART_A + '\n```\n');
+    const root = editor.view.dom;
+    await vi.waitFor(() => {
+      expect(root.querySelector('[aria-label="Diagram view"]')).not.toBeNull();
+    });
+
+    expect(root.querySelector('button[aria-label="Zoom out"]')).not.toBeNull();
+    expect(root.querySelector('button[aria-label="Zoom in"]')).not.toBeNull();
+    expect(root.querySelector('button[title^="Maximize"]')).not.toBeNull();
+
+    const fitButton = root.querySelector<HTMLButtonElement>('button[aria-label="Fit diagram"]')!;
+    expect(fitButton.getAttribute('aria-pressed')).toBe('true');
+    root.querySelector<HTMLButtonElement>('button[aria-label="Zoom in"]')?.click();
+    await vi.waitFor(() => expect(fitButton.getAttribute('aria-pressed')).toBe('false'));
+    fitButton.click();
+    await vi.waitFor(() => expect(fitButton.getAttribute('aria-pressed')).toBe('true'));
   });
 
   it('enabled: false disables the plugin entirely', () => {

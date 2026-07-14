@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
 import { Icon } from '../Icon';
+import { calculateFitScale, type SceneSize } from '../scene/fitScale';
+import { SceneViewControls } from '../scene/SceneViewControls';
 import type { MermaidEditableModel } from './mermaidModel';
 import { mermaidErrorMessage, renderMermaidDiagram } from './mermaidRenderer';
 
@@ -64,6 +66,20 @@ function matchesMermaidNodeDomId(elementId: string, modelDomId: string): boolean
   return elementId === modelDomId || elementId.endsWith(`-${modelDomId}`);
 }
 
+function readSvgViewBox(root: HTMLElement | null): SceneSize | null {
+  const raw = root?.querySelector('svg')?.getAttribute('viewBox');
+  if (!raw) return null;
+  const values = raw
+    .trim()
+    .split(/[\s,]+/)
+    .map(Number);
+  const width = values[2];
+  const height = values[3];
+  return Number.isFinite(width) && Number.isFinite(height) && width > 0 && height > 0
+    ? { width, height }
+    : null;
+}
+
 export function MermaidDiagramCanvas({
   source,
   maximized = false,
@@ -85,7 +101,6 @@ export function MermaidDiagramCanvas({
   onCancelEdgeLabel,
   onDisconnectEdge,
 }: MermaidDiagramCanvasProps) {
-  const renderContainerRef = useRef<HTMLDivElement>(null);
   const svgRootRef = useRef<HTMLDivElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const renameInputRef = useRef<HTMLInputElement>(null);
@@ -97,6 +112,9 @@ export function MermaidDiagramCanvas({
   const [error, setError] = useState('');
   const [rendering, setRendering] = useState(true);
   const [zoom, setZoom] = useState(1);
+  const [viewMode, setViewMode] = useState<'fit' | 'manual'>('fit');
+  const [contentSize, setContentSize] = useState<SceneSize | null>(null);
+  const [canvasSize, setCanvasSize] = useState<SceneSize | null>(null);
   const [pan, setPan] = useState<PanOffset>({ x: 0, y: 0 });
   const [panning, setPanning] = useState(false);
   const [selectionAnchor, setSelectionAnchor] = useState<SelectionAnchor | null>(null);
@@ -138,7 +156,11 @@ export function MermaidDiagramCanvas({
     const id = `squisq-mermaid-svg-${++renderSequence}`;
     setRendering(true);
     setError('');
-    void renderMermaidDiagram(id, source, renderContainerRef.current ?? undefined)
+    // Mermaid measures HTML labels during rendering. Its temporary host must
+    // outlive this editor canvas: switching to Page/Slideshow can unmount the
+    // widget while an async render is in flight. The renderer's body host is
+    // stable and also avoids measurements beneath the zoomed canvas.
+    void renderMermaidDiagram(id, source)
       .then((result) => {
         if (!current) return;
         const nextModel = result.model ?? null;
@@ -161,6 +183,50 @@ export function MermaidDiagramCanvas({
       current = false;
     };
   }, [source, onModelChange]);
+
+  useLayoutEffect(() => {
+    const scroll = scrollRef.current;
+    if (!scroll) return;
+    const measure = () => {
+      const rect = scroll.getBoundingClientRect();
+      const styles = window.getComputedStyle(scroll);
+      const horizontalPadding =
+        (Number.parseFloat(styles.paddingLeft) || 0) +
+        (Number.parseFloat(styles.paddingRight) || 0);
+      const verticalPadding =
+        (Number.parseFloat(styles.paddingTop) || 0) +
+        (Number.parseFloat(styles.paddingBottom) || 0);
+      const next = {
+        width: Math.max(0, rect.width - horizontalPadding),
+        height: Math.max(0, rect.height - verticalPadding),
+      };
+      setCanvasSize((current) =>
+        current?.width === next.width && current.height === next.height ? current : next,
+      );
+    };
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(scroll);
+    return () => observer.disconnect();
+  }, []);
+
+  useLayoutEffect(() => {
+    setContentSize(readSvgViewBox(svgRootRef.current));
+  }, [svg]);
+
+  const fitZoom = contentSize && canvasSize ? calculateFitScale(contentSize, canvasSize) : 1;
+
+  const applyFit = useCallback(() => {
+    setViewMode('fit');
+    setZoom(fitZoom);
+    setPan({ x: 0, y: 0 });
+  }, [fitZoom]);
+
+  useLayoutEffect(() => {
+    if (viewMode !== 'fit') return;
+    setZoom(fitZoom);
+    setPan({ x: 0, y: 0 });
+  }, [fitZoom, viewMode]);
 
   const findNodeElement = useCallback(
     (id: string): SVGGElement | null => {
@@ -382,16 +448,13 @@ export function MermaidDiagramCanvas({
   };
 
   const adjustZoom = (delta: number) => {
-    setZoom((value) => Math.min(3, Math.max(0.4, Math.round((value + delta) * 10) / 10)));
-  };
-
-  const resetView = () => {
-    setZoom(1);
-    setPan({ x: 0, y: 0 });
+    setViewMode('manual');
+    setZoom((value) => Math.min(3, Math.max(0.02, Math.round((value + delta) * 100) / 100)));
   };
 
   const onPanMouseDown = (event: React.MouseEvent<HTMLDivElement>) => {
     if (event.button !== 2 || excludesCanvasPan(event.target, event.currentTarget)) return;
+    setViewMode('manual');
     panDragRef.current = {
       startX: event.clientX,
       startY: event.clientY,
@@ -418,27 +481,13 @@ export function MermaidDiagramCanvas({
 
   return (
     <div className="squisq-mermaid-canvas" aria-label={`${diagramType} diagram editor`}>
-      <div
-        ref={renderContainerRef}
-        className="squisq-mermaid-render-container"
-        aria-hidden="true"
+      <SceneViewControls
+        scale={zoom}
+        fit={viewMode === 'fit'}
+        onZoomOut={() => adjustZoom(-0.2)}
+        onZoomIn={() => adjustZoom(0.2)}
+        onFit={applyFit}
       />
-      <div className="squisq-mermaid-canvas-controls" role="toolbar" aria-label="Diagram view">
-        <button
-          type="button"
-          onClick={() => adjustZoom(-0.2)}
-          title="Zoom out"
-          aria-label="Zoom out"
-        >
-          <Icon icon="fa-solid fa-minus" />
-        </button>
-        <button type="button" onClick={resetView} title="Fit diagram" aria-label="Fit diagram">
-          <span>{Math.round(zoom * 100)}%</span>
-        </button>
-        <button type="button" onClick={() => adjustZoom(0.2)} title="Zoom in" aria-label="Zoom in">
-          <Icon icon="fa-solid fa-plus" />
-        </button>
-      </div>
       {connecting && (
         <div className="squisq-mermaid-connect-hint">
           {connectSourceId ? 'Choose a target node' : 'Choose a source node'}
@@ -483,7 +532,7 @@ export function MermaidDiagramCanvas({
             ref={svgRootRef}
             className="squisq-mermaid-svg"
             style={{
-              width: `${zoom * 100}%`,
+              width: contentSize ? `${contentSize.width * zoom}px` : `${zoom * 100}%`,
               transform: `translate3d(${pan.x}px, ${pan.y}px, 0)`,
             }}
             onClick={onSvgClick}
