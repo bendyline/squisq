@@ -45,4 +45,21 @@ describe('buildPreviewDoc content mapping', () => {
       description: 'Pinned description',
     });
   });
+
+  it('keeps Mermaid source available to the slide materializer for every template', () => {
+    const slide = firstPreviewSlide(
+      '# Architecture\n\n```mermaid\nflowchart LR\n  client --> server\n```',
+    );
+    expect(slide.contents).toEqual([expect.objectContaining({ type: 'code', lang: 'mermaid' })]);
+
+    const { layers } = materializeBlockLayers(slide as unknown as DocBlock, {
+      persistentLayers: false,
+    });
+    expect(layers.some((layer) => layer.type === 'mermaid')).toBe(true);
+    const narrativeText = layers
+      .filter((layer): layer is TextLayer => layer.type === 'text')
+      .map((layer) => layer.content.text)
+      .join('\n');
+    expect(narrativeText).not.toContain('flowchart LR');
+  });
 });

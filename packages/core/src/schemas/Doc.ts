@@ -381,7 +381,8 @@ export type Layer =
   | MapLayer
   | VideoLayer
   | TableLayer
-  | TreeLayer;
+  | TreeLayer
+  | MermaidLayer;
 
 interface BaseLayer {
   /** Unique identifier for this layer */
@@ -757,6 +758,26 @@ export interface TreeLayerStyle {
   folderIcon?: string;
   /** FontAwesome icon token for leaves (default `file`). */
   fileIcon?: string;
+}
+
+/**
+ * Mermaid diagram layer — renders an authored `mermaid` code fence through
+ * the official Mermaid runtime while keeping the fence source authoritative.
+ * Like video/table/tree layers, the browser renderer hosts the diagram in an
+ * SVG `<foreignObject>` so it participates in slide layout and frame capture.
+ */
+export interface MermaidLayer extends BaseLayer {
+  type: 'mermaid';
+  content: {
+    /** Complete Mermaid source, excluding the Markdown fence delimiters. */
+    source: string;
+    /** Theme-derived panel color behind the generated SVG. */
+    background?: string;
+    /** Theme-derived foreground used by loading/error states. */
+    foreground?: string;
+    /** Inner panel padding in pixels. */
+    padding?: number;
+  };
 }
 
 /**

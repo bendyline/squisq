@@ -44,6 +44,9 @@ function extractBodyText(contents: MarkdownBlockNode[] | undefined): string {
   if (!contents || contents.length === 0) return '';
   const parts: string[] = [];
   for (const node of contents) {
+    // Mermaid fences are visual source, not narrative copy. They stay on the
+    // slide as `contents` and materialize into Mermaid layers downstream.
+    if (node.type === 'code' && node.lang?.trim().toLowerCase() === 'mermaid') continue;
     parts.push(extractRichText(node));
   }
   return parts.join('\n').trim();
@@ -247,13 +250,12 @@ function blockToSlide(
     // block has no previous slide to transition in from.
     transition: block.transition ?? (index > 0 ? { type: 'fade', duration: 0.5 } : undefined),
     title: headingText,
-    // Custom templates need access to the source block's body content
-    // + children so their token resolver (`{content}`, `{children}`,
-    // `{image:N}`) substitutes against the user's prose, not just the
-    // heading. Built-in templates don't read these fields and risk
-    // surprising overlap with their typed inputs, so we only attach
-    // them when the slide actually maps to a custom template.
-    ...(isCustomTemplate && block.contents ? { contents: block.contents } : {}),
+    // Preserve body nodes on every slide. Built-in templates ignore this
+    // structural field, while the canonical materializer uses it to retain
+    // authored rich elements (Mermaid fences today; other media can follow)
+    // independently of the selected visual template.
+    ...(block.contents ? { contents: block.contents } : {}),
+    // Custom templates additionally consume child blocks through tokens.
     ...(isCustomTemplate && block.children ? { children: block.children } : {}),
     ...defaults,
     ...extraFields,

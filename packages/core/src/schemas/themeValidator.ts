@@ -14,6 +14,26 @@ import type { Theme, ThemeColorPalette } from './Theme.js';
 import { THEME_SCHEMA_VERSION } from './themeConstants.js';
 import { isHex } from './colorUtils.js';
 import { isTransitionType } from './Transitions.js';
+import {
+  PAGE_SECTION_KINDS,
+  PAGE_DESIGN_FAMILIES,
+  PAGE_SECTION_SPACINGS,
+  PAGE_DIVIDERS,
+  PAGE_BACKGROUND_RHYTHMS,
+  PAGE_HERO_STYLES,
+  PAGE_EYEBROWS,
+  PAGE_HEADING_SCALES,
+  PAGE_HEADING_CASES,
+  PAGE_HEADING_UNDERLINES,
+  PAGE_IMAGE_FRAMINGS,
+  PAGE_SHADOWS,
+  PAGE_QUOTE_MARKS,
+  PAGE_NUMERAL_STYLES,
+  PAGE_PATTERNS,
+  PAGE_EMPHASES,
+  PAGE_BACKGROUNDS,
+  PAGE_ACCENT_STRATEGIES,
+} from './PageStyle.js';
 
 export interface ValidationError {
   path: string;
@@ -28,6 +48,28 @@ export interface ValidationResult {
 }
 
 const VALID_FALLBACK = new Set(['serif', 'sans-serif', 'monospace', 'system-ui']);
+const VALID_SECTION_KINDS = new Set<string>(PAGE_SECTION_KINDS);
+const VALID_DESIGN_FAMILIES = new Set<string>(PAGE_DESIGN_FAMILIES);
+const VALID_PAGE_EMPHASES = new Set<string>(PAGE_EMPHASES);
+const VALID_PAGE_BACKGROUNDS = new Set<string>(PAGE_BACKGROUNDS);
+const VALID_ACCENT_STRATEGIES = new Set<string>(PAGE_ACCENT_STRATEGIES);
+/** PageTokens enum fields → their allowed values. */
+const PAGE_TOKEN_ENUMS: Record<string, Set<string>> = {
+  sectionSpacing: new Set<string>(PAGE_SECTION_SPACINGS),
+  divider: new Set<string>(PAGE_DIVIDERS),
+  backgroundRhythm: new Set<string>(PAGE_BACKGROUND_RHYTHMS),
+  heroStyle: new Set<string>(PAGE_HERO_STYLES),
+  imageFraming: new Set<string>(PAGE_IMAGE_FRAMINGS),
+  shadow: new Set<string>(PAGE_SHADOWS),
+  quoteMark: new Set<string>(PAGE_QUOTE_MARKS),
+  numeralStyle: new Set<string>(PAGE_NUMERAL_STYLES),
+};
+const HEADING_TREATMENT_ENUMS: Record<string, { values: Set<string>; required: boolean }> = {
+  eyebrow: { values: new Set<string>(PAGE_EYEBROWS), required: true },
+  scale: { values: new Set<string>(PAGE_HEADING_SCALES), required: true },
+  case: { values: new Set<string>(PAGE_HEADING_CASES), required: false },
+  underline: { values: new Set<string>(PAGE_HEADING_UNDERLINES), required: false },
+};
 const VALID_TITLE_WEIGHT = new Set(['normal', 'bold']);
 const VALID_GRADIENT_PRESETS = new Set([
   'dark-vignette',
@@ -340,6 +382,143 @@ class V {
       arr.forEach((entry, i) => this.persistentLayer(`${path}.${side}[${i}]`, entry));
     }
   }
+
+  scalarHints(path: string, v: unknown): void {
+    if (!this.isObject(v)) {
+      this.err(path, 'expected object');
+      return;
+    }
+    for (const key of Object.keys(v)) {
+      const t = typeof v[key];
+      if (t !== 'string' && t !== 'number' && t !== 'boolean') {
+        this.err(`${path}.${key}`, `expected string|number|boolean, got ${t}`);
+      }
+    }
+  }
+
+  pageSectionOverride(path: string, v: unknown): void {
+    if (!this.isObject(v)) {
+      this.err(path, 'expected object');
+      return;
+    }
+    if (v.kind !== undefined && (!this.isString(v.kind) || !VALID_SECTION_KINDS.has(v.kind))) {
+      this.err(`${path}.kind`, `expected one of: ${PAGE_SECTION_KINDS.join(', ')}`);
+    }
+    if (v.variant !== undefined && !this.isString(v.variant)) {
+      this.err(`${path}.variant`, 'expected string');
+    }
+    if (
+      v.emphasis !== undefined &&
+      (!this.isString(v.emphasis) || !VALID_PAGE_EMPHASES.has(v.emphasis))
+    ) {
+      this.err(`${path}.emphasis`, `expected one of: ${PAGE_EMPHASES.join(', ')}`);
+    }
+    if (
+      v.background !== undefined &&
+      (!this.isString(v.background) || !VALID_PAGE_BACKGROUNDS.has(v.background))
+    ) {
+      this.err(`${path}.background`, `expected one of: ${PAGE_BACKGROUNDS.join(', ')}`);
+    }
+    if (v.hints !== undefined) this.scalarHints(`${path}.hints`, v.hints);
+  }
+
+  pageTokens(path: string, v: unknown): void {
+    if (!this.isObject(v)) {
+      this.err(path, 'expected object');
+      return;
+    }
+    for (const k of ['contentMaxWidth', 'wideMaxWidth', 'cornerRadius']) {
+      if (!this.isNumber(v[k])) {
+        this.err(`${path}.${k}`, 'expected number');
+      }
+    }
+    for (const [k, values] of Object.entries(PAGE_TOKEN_ENUMS)) {
+      if (!this.isString(v[k]) || !values.has(v[k] as string)) {
+        this.err(`${path}.${k}`, `expected one of: ${Array.from(values).join(', ')}`);
+      }
+    }
+    if (v.pattern !== undefined) {
+      if (!this.isString(v.pattern) || !(PAGE_PATTERNS as readonly string[]).includes(v.pattern)) {
+        this.err(`${path}.pattern`, `expected one of: ${PAGE_PATTERNS.join(', ')}`);
+      }
+    }
+    const ht = v.headingTreatment;
+    if (!this.isObject(ht)) {
+      this.err(`${path}.headingTreatment`, 'expected object');
+      return;
+    }
+    for (const [k, spec] of Object.entries(HEADING_TREATMENT_ENUMS)) {
+      const val = ht[k];
+      if (val === undefined) {
+        if (spec.required) this.err(`${path}.headingTreatment.${k}`, 'required');
+        continue;
+      }
+      if (!this.isString(val) || !spec.values.has(val)) {
+        this.err(
+          `${path}.headingTreatment.${k}`,
+          `expected one of: ${Array.from(spec.values).join(', ')}`,
+        );
+      }
+    }
+  }
+
+  pageStyle(path: string, v: unknown): void {
+    if (!this.isObject(v)) {
+      this.err(path, 'expected object');
+      return;
+    }
+    if (!this.isString(v.family) || !VALID_DESIGN_FAMILIES.has(v.family)) {
+      this.err(`${path}.family`, `expected one of: ${PAGE_DESIGN_FAMILIES.join(', ')}`);
+    }
+    if (v.tokens === undefined) {
+      this.err(`${path}.tokens`, 'required');
+    } else {
+      this.pageTokens(`${path}.tokens`, v.tokens);
+    }
+    if (v.sections !== undefined) {
+      if (!this.isObject(v.sections)) {
+        this.err(`${path}.sections`, 'expected object map');
+      } else {
+        for (const key of Object.keys(v.sections)) {
+          if (!VALID_SECTION_KINDS.has(key)) {
+            this.err(`${path}.sections.${key}`, `unknown section kind`);
+            continue;
+          }
+          this.pageSectionOverride(`${path}.sections.${key}`, v.sections[key]);
+        }
+      }
+    }
+    if (v.templates !== undefined) {
+      if (!this.isObject(v.templates)) {
+        this.err(`${path}.templates`, 'expected object map');
+      } else {
+        for (const key of Object.keys(v.templates)) {
+          this.pageSectionOverride(`${path}.templates.${key}`, v.templates[key]);
+        }
+      }
+    }
+    if (v.accentRotation === undefined) {
+      this.err(`${path}.accentRotation`, 'required');
+    } else if (!this.isObject(v.accentRotation)) {
+      this.err(`${path}.accentRotation`, 'expected object');
+    } else {
+      const rotation = v.accentRotation;
+      if (!this.isString(rotation.strategy) || !VALID_ACCENT_STRATEGIES.has(rotation.strategy)) {
+        this.err(
+          `${path}.accentRotation.strategy`,
+          `expected one of: ${PAGE_ACCENT_STRATEGIES.join(', ')}`,
+        );
+      }
+      if (rotation.schemes !== undefined) {
+        if (
+          !Array.isArray(rotation.schemes) ||
+          rotation.schemes.some((s) => typeof s !== 'string')
+        ) {
+          this.err(`${path}.accentRotation.schemes`, 'expected array of strings');
+        }
+      }
+    }
+  }
 }
 
 export function validateTheme(input: unknown): ValidationResult {
@@ -401,6 +580,10 @@ export function validateTheme(input: unknown): ValidationResult {
 
   if (input.persistentLayers !== undefined) {
     v.persistentLayers('persistentLayers', input.persistentLayers);
+  }
+
+  if (input.pageStyle !== undefined) {
+    v.pageStyle('pageStyle', input.pageStyle);
   }
 
   if (v.errors.length === 0) {

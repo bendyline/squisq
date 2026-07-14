@@ -14,4 +14,5 @@ export const dataDrivenStyle: TransformStyleConfig = {
   blocksPerSection: { max: 6 },
   transitionStyle: 'cut',
   suggestedThemeId: 'tech-dark',
+  page: { spacing: 'compact', emphasisCurve: 'even' },
 };

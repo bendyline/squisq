@@ -22,6 +22,7 @@ import type {
 } from './Theme.js';
 import { THEME_SCHEMA_VERSION, createTheme } from './Theme.js';
 import { assertTheme } from './themeValidator.js';
+import { defaultPageStyle } from './pageStyleDefaults.js';
 import {
   oklchLighten,
   oklchDarken,
@@ -208,6 +209,12 @@ export function compileTheme(partial: DeepPartial<Theme>, opts: CompileOptions =
     merged.colors = deriveColorPalette(merged.seedColors, partialColors, {
       contrast: opts.contrast,
     });
+  }
+
+  // Step 2b: fill page art direction from existing fields when absent, so
+  // every compiled theme carries an explicit, serializable pageStyle.
+  if (!merged.pageStyle) {
+    merged.pageStyle = defaultPageStyle(merged);
   }
 
   // Step 3: validate

@@ -1,5 +1,6 @@
 import mermaid from 'mermaid';
 import { beforeAll, describe, expect, it } from 'vitest';
+import { inspectMermaidSource } from '../mermaidRenderer';
 
 const COMPLEX_FLOWCHART = [
   'flowchart LR',
@@ -39,6 +40,22 @@ describe('pinned Mermaid syntax integration', () => {
     await expect(mermaid.parse(COMPLEX_FLOWCHART)).resolves.toMatchObject({
       diagramType: expect.stringMatching(/^flowchart/),
     });
+  });
+
+  it('exposes Mermaid node and edge ids for structured canvas gestures', async () => {
+    const model = await inspectMermaidSource(
+      'flowchart LR\n  start["Start"] --> decision@{ shape: diam, label: "Ready?" }',
+    );
+    expect(model).toMatchObject({
+      kind: 'flowchart',
+      direction: 'LR',
+      nodes: [
+        { id: 'start', label: 'Start', shape: 'rect' },
+        { id: 'decision', label: 'Ready?', shape: 'diam' },
+      ],
+      edges: [{ source: 'start', target: 'decision' }],
+    });
+    expect(model?.nodes.every((node) => node.domId.startsWith('flowchart-'))).toBe(true);
   });
 
   it.each([

@@ -89,5 +89,35 @@
         }
       }
     ]
+  },
+  "pageStyle": {
+    "family": "soft",
+    "tokens": {
+      "contentMaxWidth": 740,
+      "wideMaxWidth": 1060,
+      "sectionSpacing": "comfortable",
+      "cornerRadius": 16,
+      "divider": "dotted",
+      "backgroundRhythm": "tinted-panels",
+      "heroStyle": "stacked",
+      "headingTreatment": {
+        "eyebrow": "kicker",
+        "scale": "regular",
+        "case": "none"
+      },
+      "imageFraming": "circle-accent",
+      "shadow": "soft",
+      "quoteMark": "oversized-glyph",
+      "numeralStyle": "plain",
+      "pattern": "noise"
+    },
+    "sections": {
+      "quote-band": {
+        "background": "alternate"
+      }
+    },
+    "accentRotation": {
+      "strategy": "alternate-two"
+    }
   }
 }

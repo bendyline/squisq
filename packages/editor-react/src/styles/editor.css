@@ -359,6 +359,119 @@
   min-width: 0;
 }
 
+/* Host-triggered Find mode. It occupies the toolbar's flexible middle lane,
+   leaving the view tabs on its left and the normal right-side host/settings
+   controls on its right. */
+.squisq-find-toolbar {
+  display: flex;
+  align-items: center;
+  flex: 1 1 auto;
+  gap: 3px;
+  min-width: 180px;
+  padding: 4px 6px;
+}
+
+.squisq-find-field {
+  display: flex;
+  align-items: center;
+  flex: 0 1 420px;
+  min-width: 130px;
+  height: 28px;
+  border: 1px solid #9ca3af;
+  border-radius: 5px;
+  background: #ffffff;
+  color: #6b7280;
+  box-sizing: border-box;
+}
+
+.squisq-find-field:focus-within {
+  border-color: #2563eb;
+  box-shadow: 0 0 0 1px #2563eb;
+}
+
+.squisq-find-field > i {
+  margin-left: 8px;
+  color: #6b7280;
+  font-size: 11px;
+}
+
+.squisq-find-input {
+  flex: 1 1 auto;
+  min-width: 32px;
+  height: 100%;
+  padding: 0 7px;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: #111827;
+  font: inherit;
+  font-size: 12.5px;
+}
+
+.squisq-find-input::-webkit-search-cancel-button {
+  display: none;
+}
+
+.squisq-find-count {
+  flex: 0 0 auto;
+  padding-right: 7px;
+  color: #6b7280;
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.squisq-find-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--squisq-toolbar-icon);
+  cursor: pointer;
+}
+
+.squisq-find-button:hover:not(:disabled) {
+  background: rgba(0, 0, 0, 0.08);
+  color: #111827;
+}
+
+.squisq-find-button:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.squisq-find-close {
+  margin-left: 2px;
+}
+
+/* Shared by Tiptap decorations, Monaco inline decorations, and the fallback
+   used when a preview webview lacks the CSS Custom Highlight API. */
+.squisq-find-match {
+  border-radius: 2px;
+  background: #fde68a !important;
+  color: #111827 !important;
+}
+
+.squisq-find-match--selected {
+  background: #f59e0b !important;
+  box-shadow: 0 0 0 1px #b45309;
+}
+
+@container squisq-toolbar (max-width: 680px) {
+  .squisq-find-toolbar {
+    min-width: 120px;
+    padding-right: 2px;
+  }
+
+  .squisq-find-count {
+    display: none;
+  }
+}
+
 /* Contextual groups (template/transition pickers, table controls) sit at the
    end of the actions row. When measurement marks one as clipped it moves into
    the ··· overflow menu; hide the cropped inline original rather than painting
@@ -2010,6 +2123,7 @@
   /* Body font follows the active squisq theme when one is selected; the
      fallback inherits from the host page when it isn't. */
   font-family: var(--squisq-theme-body-font, inherit);
+  font-size: var(--squisq-write-text-size, inherit);
   /* Explicit caret color so the blinking insertion point stays visible
      even when an ancestor (e.g. a DocBlocks shell with the OS in dark
      mode) inherits a near-white color into the editor. Without this
@@ -2089,6 +2203,15 @@
   margin: 1.6em 0 0.3em;
 }
 
+/* ProseMirror gives an empty text block a trailing <br> so its caret remains
+   visible. Heading controls are siblings of the editable content span, so an
+   uncontained break would temporarily push those controls onto a second line
+   after a Markdown heading shortcut. Keep the break's caret line inside a
+   zero-width inline box until the first heading character replaces it. */
+.squisq-heading-content:has(> br.ProseMirror-trailingBreak:only-child) {
+  display: inline-block;
+}
+
 /* The first block in the document has nothing above it — don't push the top of
    the editor down with the section-break margin. (The editable ProseMirror node
    itself carries the `squisq-wysiwyg-editor` class, so its blocks are direct
@@ -2098,8 +2221,10 @@
 }
 
 .squisq-wysiwyg-editor p {
-  margin: 0.5em 0;
-  line-height: 1.7;
+  /* Slightly roomier paragraph separators make authored blank lines easier
+     to scan without turning each paragraph into a separate card. */
+  margin: 0.625em 0;
+  line-height: var(--squisq-write-line-spacing, 1.7);
 }
 
 .squisq-wysiwyg-editor blockquote {
@@ -2763,6 +2888,31 @@
   background: rgba(255, 255, 255, 0.08);
   /* Muted, but lighter than the dark-theme label color (#d1d5db). */
   --squisq-toolbar-icon: #9ca3af;
+}
+
+.squisq-editor-shell[data-theme='dark'] .squisq-find-field {
+  border-color: #4b5563;
+  background: #111827;
+  color: #9ca3af;
+}
+
+.squisq-editor-shell[data-theme='dark'] .squisq-find-field:focus-within {
+  border-color: #60a5fa;
+  box-shadow: 0 0 0 1px #60a5fa;
+}
+
+.squisq-editor-shell[data-theme='dark'] .squisq-find-input {
+  color: #f9fafb;
+}
+
+.squisq-editor-shell[data-theme='dark'] .squisq-find-input::placeholder,
+.squisq-editor-shell[data-theme='dark'] .squisq-find-count {
+  color: #9ca3af;
+}
+
+.squisq-editor-shell[data-theme='dark'] .squisq-find-button:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.1);
+  color: #f9fafb;
 }
 
 .squisq-editor-shell[data-theme='dark'] .squisq-toolbar-view-tabs {

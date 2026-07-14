@@ -140,7 +140,17 @@ export default defineConfig({
   base: process.env.VITE_BASE || '/',
   plugins: [react(), sampleContentPlugin(), ffmpegCorePlugin()],
   resolve: {
-    // Ensure workspace packages resolve to their source
+    // The editor package's CSS is bundled into dist/ only by its one-shot
+    // build. Its tsup dev watchers rebuild JS and declarations, so resolving
+    // the package style export here can briefly fail while dist/ is changing
+    // and CSS source edits are otherwise invisible to Vite. Point the demo
+    // site at the stable source entry so Vite owns CSS watching and HMR.
+    alias: {
+      '@bendyline/squisq-editor-react/styles': path.resolve(
+        __dirname,
+        '../editor-react/src/styles/index.css',
+      ),
+    },
     dedupe: ['react', 'react-dom'],
   },
   server: {

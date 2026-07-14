@@ -85,5 +85,42 @@
         }
       }
     ]
+  },
+  "pageStyle": {
+    "family": "editorial",
+    "tokens": {
+      "contentMaxWidth": 720,
+      "wideMaxWidth": 1240,
+      "sectionSpacing": "comfortable",
+      "cornerRadius": 6,
+      "divider": "double-rule",
+      "backgroundRhythm": "flat",
+      "heroStyle": "split",
+      "headingTreatment": {
+        "eyebrow": "kicker",
+        "scale": "display",
+        "underline": "none"
+      },
+      "imageFraming": "flush",
+      "shadow": "none",
+      "quoteMark": "oversized-glyph",
+      "numeralStyle": "oversized",
+      "pattern": "diagonal"
+    },
+    "sections": {
+      "prose": {
+        "hints": {
+          "dropCap": true
+        }
+      },
+      "feature-split": {
+        "hints": {
+          "alternate": true
+        }
+      }
+    },
+    "accentRotation": {
+      "strategy": "alternate-two"
+    }
   }
 }

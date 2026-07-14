@@ -49,6 +49,7 @@ export interface FirstImage {
 export function extractBodyPlainText(contents?: MarkdownBlockNode[]): string {
   if (!contents || contents.length === 0) return '';
   return contents
+    .filter((node) => !(node.type === 'code' && node.lang?.trim().toLowerCase() === 'mermaid'))
     .map((n) => extractPlainText(n))
     .join('\n')
     .trim();

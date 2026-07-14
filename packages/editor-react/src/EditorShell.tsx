@@ -65,6 +65,7 @@ import {
 import type { PrunePolicy, SaveVersionResult } from '@bendyline/squisq/versions';
 import type { CSSProperties, KeyboardEvent as ReactKeyboardEvent, ReactNode } from 'react';
 import { MediaContext } from '@bendyline/squisq-react';
+import { writeCanvasSettingsStyle, type WriteCanvasSettings } from './writeCanvasSettings';
 
 export type { EditorColorScheme } from './EditorContext';
 
@@ -211,6 +212,12 @@ export interface EditorShellProps {
    */
   thinMargins?: boolean;
   /**
+   * Host-controlled typography for the markdown Write canvas. `textSize` is
+   * measured in CSS pixels and `lineSpacing` is a unitless line-height
+   * multiplier. This is presentation-only and does not modify the markdown.
+   */
+  writeCanvasSettings?: WriteCanvasSettings;
+  /**
    * Render the bottom status bar (word / character / line / block counts
    * and parse-state indicator). Defaults to `true`. Set to `false` in
    * embedded surfaces — chat composers and other short-form inputs —
@@ -243,6 +250,14 @@ export interface EditorShellProps {
    * switches the shell into code mode.
    */
   language?: string;
+  /**
+   * Controlled Find-mode state. Find has no built-in trigger button; hosts
+   * opt in by setting this prop (or by calling `setFindMode` from a toolbar
+   * slot rendered inside the editor context).
+   */
+  findMode?: boolean;
+  /** Called when Find mode requests a state change, including its X button. */
+  onFindModeChange?: (active: boolean) => void;
   /**
    * Optional async provider for `@`-mention suggestions. When supplied,
    * typing `@` inside the editor opens a popover of candidates; selecting
@@ -431,10 +446,13 @@ export function EditorShell({
   fullWidth = false,
   uxFont,
   thinMargins = false,
+  writeCanvasSettings,
   showStatusBar = true,
   imageDisplayMode = 'inline',
   fileName,
   language,
+  findMode,
+  onFindModeChange,
   mentionProvider,
   documentLinkProvider,
   allowRecording = true,
@@ -498,6 +516,8 @@ export function EditorShell({
         allowNarrate={allowNarrate}
         fileName={fileName}
         language={language}
+        findMode={findMode}
+        onFindModeChange={onFindModeChange}
         inlinePreview={inlinePreview}
         showStatusBar={showStatusBar}
         outline={outline}
@@ -527,6 +547,7 @@ export function EditorShell({
           fullWidth={fullWidth}
           uxFont={uxFont}
           thinMargins={thinMargins}
+          writeCanvasSettings={writeCanvasSettings}
           readOnly={readOnly}
           imageSrc={imageSrc}
           imageAlt={imageAlt}
@@ -564,6 +585,7 @@ interface EditorShellInnerProps {
   fullWidth: boolean;
   uxFont?: string;
   thinMargins: boolean;
+  writeCanvasSettings?: WriteCanvasSettings;
   readOnly: boolean;
   imageSrc?: string;
   imageAlt?: string;
@@ -597,6 +619,7 @@ function EditorShellInner({
   fullWidth,
   uxFont,
   thinMargins,
+  writeCanvasSettings,
   readOnly,
   imageSrc,
   imageAlt,
@@ -862,6 +885,7 @@ function EditorShellInner({
         // tabs, status bar) consume `--squisq-ux-font` as their
         // `font-family`, falling back to the system stack when unset.
         ...(uxFont ? ({ '--squisq-ux-font': uxFont } as CSSProperties) : {}),
+        ...writeCanvasSettingsStyle(writeCanvasSettings),
         // Exposed so the toolbar's view-tabs section AND the outline pane read
         // one shared width, lining up the view-tabs' right-edge separator with
         // the outline's right edge. A fixed `outlineWidth` pins it to px;

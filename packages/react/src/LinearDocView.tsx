@@ -1,25 +1,26 @@
 /**
- * LinearDocView Component
+ * LinearDocView Component — the "Page" rendition of a Doc.
  *
- * Renders a Doc as a long-scrolling document view. Each block is displayed
- * as a readable section: non-annotated blocks render their markdown content
- * as HTML, while template-annotated blocks render as inline SVG visual cards
- * via BlockRenderer.
+ * Renders a Doc as a marketing-website-style scrolling page. Every block
+ * becomes a variable-height HTML section via core's
+ * `materializePageSections` (hero, banner, stat band, quote band, feature
+ * split, gallery, prose, …), art-directed by the active theme's
+ * `pageStyle`. Inherently spatial blocks (diagram/tree/timeline/map/
+ * drawing/layout, authored layers, custom templates) keep rendering
+ * through `materializeBlockLayers` + `BlockRenderer`, embedded responsively
+ * inside a canvas section.
  *
  * This is the view used when `displayMode === 'linear'` in DocPlayer.
  *
- * Layout:
- * - Scrollable container with max-width for readability
- * - Headings from the block hierarchy rendered as HTML headings
- * - Body content rendered via MarkdownRenderer
- * - Template-annotated sections show an SVG card (BlockRenderer)
- *   using `materializeBlockLayers()` for on-demand layer computation
- * - Blocks are rendered recursively to preserve the heading hierarchy
+ * Styling: the structural stylesheet (`PAGE_BASE_CSS` from core) is
+ * injected inline so the standalone bundle and single-file HTML exports
+ * stay self-contained; the theme flows exclusively through
+ * `--squisq-page-*` custom properties + token data-attributes.
  */
 
 import { useEffect, useMemo, useRef } from 'react';
 import { useAutoSurface } from './hooks/useAutoSurface';
-import type { Doc, Block, DocBlock } from '@bendyline/squisq/schemas';
+import type { Doc } from '@bendyline/squisq/schemas';
 import type { ViewportConfig } from '@bendyline/squisq/schemas';
 import {
   applySurface,
@@ -29,16 +30,22 @@ import {
 } from '@bendyline/squisq/schemas';
 import { VIEWPORT_PRESETS } from '@bendyline/squisq/schemas';
 import {
-  materializeBlockLayers,
   markdownToDoc,
+  materializePageSections,
+  resolvePageStyle,
+  buildPageCssVars,
+  pageStyleDataAttributes,
+  PAGE_BASE_CSS,
   DEFAULT_THEME,
-  deriveTemplateInputs,
-  isTemplateBlock,
 } from '@bendyline/squisq/doc';
-import type { MaterializeBlockLayersOptions } from '@bendyline/squisq/doc';
-import { extractPlainText, parseMarkdown } from '@bendyline/squisq/markdown';
-import { BlockRenderer } from './BlockRenderer';
-import { MarkdownRenderer } from './MarkdownRenderer';
+import type {
+  MaterializeBlockLayersOptions,
+  PageSectionMaterialization,
+  PageTransformHints,
+} from '@bendyline/squisq/doc';
+import { parseMarkdown } from '@bendyline/squisq/markdown';
+import { PageViewContext, type PageViewContextValue } from './page/PageViewContext';
+import { PageSectionView } from './page/PageSectionView';
 
 // ── Props ──────────────────────────────────────────────────────────
 
@@ -56,13 +63,13 @@ export interface LinearDocViewProps {
   markdown?: string;
   /** Base path for resolving media URLs (images, etc.) */
   basePath?: string;
-  /** Viewport config for SVG card rendering (default: landscape) */
+  /** Viewport config for embedded SVG canvas sections (default: landscape) */
   viewport?: ViewportConfig;
   /** Optional CSS class for the outer container */
   className?: string;
   /** Theme to use for rendering (default: DEFAULT_THEME from the theme library) */
   theme?: Theme;
-  /** Whether inline visual cards render their layer animations (default: true). */
+  /** Whether embedded canvas sections render their layer animations (default: true). */
   animationsEnabled?: boolean;
   /**
    * Optional surface scheme (light / dark paper) overlaid on top of the
@@ -73,12 +80,10 @@ export interface LinearDocViewProps {
    */
   surface?: SurfaceScheme | 'auto';
   /**
-   * Use tight padding + a wider content column. The default layout is
-   * designed for a reading surface with breathing room (720px column,
-   * 24×16px padding). Short conversational snippets like chat replies
-   * benefit from a much tighter layout. Set to `true` to render with
-   * minimal padding and no max-width cap so the content hugs its
-   * container.
+   * Use tight padding + a hugging layout. The default layout is a full
+   * page with themed section bands. Short conversational snippets like
+   * chat replies benefit from a much tighter layout. Set to `true` to
+   * render with minimal padding so the content hugs its container.
    */
   thinMargins?: boolean;
   /**
@@ -94,191 +99,24 @@ export interface LinearDocViewProps {
    * currently hold focus. Intended for a primary document preview.
    */
   globalKeyboardShortcuts?: boolean;
+  /**
+   * Synthesize a hero section from `doc.startBlock` at the top of the
+   * page (default: true). The editor's Cover toggle maps here.
+   */
+  showCover?: boolean;
+  /**
+   * Page hints from the active transform (Summarize) style — spacing and
+   * emphasis-curve adjustments defined by `TransformStyleConfig.page`.
+   */
+  transformPage?: PageTransformHints;
 }
 
 export type ImageDisplayMode = 'inline' | 'thumbnail';
 
-// ── Helpers ────────────────────────────────────────────────────────
-
-/**
- * Determine whether a block has a template annotation that should be
- * rendered as a visual SVG card. Unknown templates remain annotated so the
- * materializer can return a visible fallback and structured diagnostic.
- */
-function isAnnotatedBlock(block: Block): boolean {
-  return (
-    !!block.sourceHeading?.templateAnnotation?.template ||
-    (!block.sourceHeading && isTemplateBlock(block as DocBlock))
-  );
-}
-
-function visualTemplateName(block: Block): string | undefined {
-  return block.sourceHeading?.templateAnnotation?.template ?? block.template;
-}
-
-/**
- * Count total blocks in a hierarchy for the materialization context.
- */
-function countAll(blocks: Block[]): number {
-  let count = 0;
-  for (const b of blocks) {
-    count++;
-    if (b.children) count += countAll(b.children);
-  }
-  return count;
-}
-
-// ── Block Section Renderer ─────────────────────────────────────────
-
-interface BlockSectionProps {
-  block: Block;
-  basePath: string;
-  viewport: ViewportConfig;
-  renderContext: MaterializeBlockLayersOptions;
-  blockIndex: number;
-  blockIndices: ReadonlyMap<Block, number>;
-  animationsEnabled: boolean;
-}
-
-/**
- * Render a single block section: heading + body content or SVG card.
- * Recurses into children to render the full heading tree.
- */
-function BlockSection({
-  block,
-  basePath,
-  viewport,
-  renderContext,
-  blockIndex,
-  blockIndices,
-  animationsEnabled,
-}: BlockSectionProps) {
-  const isAnnotated = isAnnotatedBlock(block);
-
-  // For annotated blocks, compute layers and build a Block with them
-  const visualBlock = useMemo(() => {
-    if (!isAnnotated) return null;
-
-    const annotation = block.sourceHeading?.templateAnnotation;
-    const templateName = visualTemplateName(block) ?? 'sectionHeader';
-
-    // Authored Markdown blocks derive their typed template inputs from the
-    // heading/body. Transform-generated blocks already ARE typed template
-    // inputs, so materialize them directly instead of looking for authoring
-    // nodes they intentionally do not carry.
-    const templateBlock: Record<string, unknown> = annotation
-      ? (() => {
-          const headingText = extractPlainText(block.sourceHeading!);
-          return {
-            id: block.id,
-            template: templateName,
-            startTime: 0,
-            duration: 1,
-            audioSegment: 0,
-            title: headingText,
-            contents: block.contents,
-            children: block.children,
-            ...(deriveTemplateInputs(templateName, headingText, block.contents, {
-              placeholders: true,
-            }) ?? {}),
-            ...annotation.params,
-            ...block.templateOverrides,
-          };
-        })()
-      : {
-          ...block,
-          startTime: block.startTime ?? 0,
-          duration: block.duration ?? 1,
-          audioSegment: block.audioSegment ?? 0,
-          template: templateName,
-        };
-
-    const ctx: MaterializeBlockLayersOptions = {
-      ...renderContext,
-      blockIndex,
-    };
-    const { layers } = materializeBlockLayers(templateBlock as unknown as DocBlock, ctx);
-
-    return {
-      ...block,
-      layers,
-      template: templateName,
-    } as Block;
-  }, [block, isAnnotated, renderContext, blockIndex]);
-
-  return (
-    <div
-      className="squisq-linear-section"
-      data-block-id={block.id}
-      data-block-index={blockIndex}
-      data-template={isAnnotated ? visualTemplateName(block) : undefined}
-    >
-      {/* Render the heading (if present — preamble has no sourceHeading) */}
-      {block.sourceHeading && !isAnnotated && <MarkdownRenderer nodes={[block.sourceHeading]} />}
-
-      {/* Annotated block: render SVG card.
-          The heading is intentionally *not* duplicated above the card —
-          every template card renders its own title layer internally, so
-          a separate `squisq-linear-card-label` only made the heading
-          appear twice in the linear view. The card also drops its
-          rounded border + drop shadow so it reads as a continuation of
-          the surrounding page rather than a chrome'd preview. */}
-      {isAnnotated && visualBlock && (
-        <div className="squisq-linear-card">
-          <div
-            className="squisq-linear-card-svg"
-            style={{
-              width: '100%',
-              aspectRatio: `${viewport.width} / ${viewport.height}`,
-              overflow: 'hidden',
-              marginBottom: '1em',
-            }}
-          >
-            <BlockRenderer
-              block={visualBlock}
-              blockTime={0}
-              basePath={basePath}
-              viewport={viewport}
-              animationsEnabled={animationsEnabled}
-            />
-          </div>
-        </div>
-      )}
-
-      {/* Body content (always render for non-annotated blocks, skipped for annotated) */}
-      {!isAnnotated && block.contents && block.contents.length > 0 && (
-        <MarkdownRenderer nodes={block.contents} />
-      )}
-
-      {/* Recurse into children */}
-      {block.children && block.children.length > 0 && (
-        <div className="squisq-linear-children">
-          {block.children.map((child, i) => (
-            <BlockSection
-              key={child.id}
-              block={child}
-              basePath={basePath}
-              viewport={viewport}
-              renderContext={renderContext}
-              blockIndex={blockIndices.get(child) ?? blockIndex + i + 1}
-              blockIndices={blockIndices}
-              animationsEnabled={animationsEnabled}
-            />
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
 // ── Main Component ─────────────────────────────────────────────────
 
 /**
- * Renders a Doc as a long-scrolling, readable document.
- *
- * Non-annotated blocks are rendered as HTML text (headings, paragraphs,
- * lists, etc.) via MarkdownRenderer. Template-annotated blocks are
- * rendered as inline SVG visual cards via BlockRenderer.
+ * Renders a Doc as a scrolling, theme-art-directed page.
  *
  * @example
  * ```tsx
@@ -297,6 +135,8 @@ export function LinearDocView({
   thinMargins = false,
   imageDisplayMode = 'inline',
   globalKeyboardShortcuts = false,
+  showCover = true,
+  transformPage,
 }: LinearDocViewProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const activeViewport = viewport ?? VIEWPORT_PRESETS.landscape;
@@ -308,40 +148,80 @@ export function LinearDocView({
   );
   const resolvedDoc = doc ?? markdownDoc;
 
-  const totalBlocks = useMemo(
-    () => (resolvedDoc ? countAll(resolvedDoc.blocks) : 0),
-    [resolvedDoc],
-  );
-  const blockIndices = useMemo(() => {
-    const indices = new Map<Block, number>();
-    let index = 0;
-    const visit = (blocks: Block[]) => {
-      for (const block of blocks) {
-        indices.set(block, index++);
-        if (block.children) visit(block.children);
-      }
-    };
-    if (resolvedDoc) visit(resolvedDoc.blocks);
-    return indices;
-  }, [resolvedDoc]);
   const autoSurface = useAutoSurface(surface === 'auto');
   const resolvedSurface: SurfaceScheme | undefined = surface === 'auto' ? autoSurface : surface;
 
-  const renderContext: MaterializeBlockLayersOptions = useMemo(() => {
+  const activeTheme = useMemo(() => {
     const baseTheme = theme ?? DEFAULT_THEME;
-    const effectiveTheme = resolvedSurface ? applySurface(baseTheme, resolvedSurface) : baseTheme;
-    return {
-      theme: effectiveTheme,
-      viewport: activeViewport,
-      totalBlocks,
-      // Theme atmosphere (vignette/grain/gradient persistent layers) shows
-      // on the inline template cards so they match the player's look.
-      persistentLayers: effectiveTheme.persistentLayers,
-      customTemplates: resolvedDoc?.customTemplates,
-    };
-  }, [activeViewport, resolvedDoc?.customTemplates, totalBlocks, theme, resolvedSurface]);
+    return resolvedSurface ? applySurface(baseTheme, resolvedSurface) : baseTheme;
+  }, [theme, resolvedSurface]);
 
-  const activeTheme = renderContext.theme!;
+  const pageStyle = useMemo(
+    () => resolvePageStyle(activeTheme, transformPage),
+    [activeTheme, transformPage],
+  );
+
+  const sections: PageSectionMaterialization[] = useMemo(() => {
+    if (!resolvedDoc) return [];
+    return materializePageSections(resolvedDoc, {
+      theme: activeTheme,
+      viewport: activeViewport,
+      customTemplates: resolvedDoc.customTemplates,
+      cover: showCover !== false ? resolvedDoc.startBlock : false,
+      transformPage,
+    });
+  }, [resolvedDoc, activeTheme, activeViewport, showCover, transformPage]);
+
+  // Canvas embeds materialize SVG layers with the same options the player
+  // uses, so diagrams/trees/maps keep the theme atmosphere.
+  const renderContext: MaterializeBlockLayersOptions = useMemo(
+    () => ({
+      theme: activeTheme,
+      viewport: activeViewport,
+      totalBlocks: sections.length,
+      persistentLayers: activeTheme.persistentLayers,
+      customTemplates: resolvedDoc?.customTemplates,
+    }),
+    [activeTheme, activeViewport, sections.length, resolvedDoc?.customTemplates],
+  );
+
+  const pageContext: PageViewContextValue = useMemo(
+    () => ({
+      theme: activeTheme,
+      pageStyle,
+      basePath,
+      viewport: activeViewport,
+      renderContext,
+      animationsEnabled,
+      imageDisplayMode,
+    }),
+    [
+      activeTheme,
+      pageStyle,
+      basePath,
+      activeViewport,
+      renderContext,
+      animationsEnabled,
+      imageDisplayMode,
+    ],
+  );
+
+  // Feature-split alternation (theme `alternate` hint) + lead-prose
+  // detection (drop-cap target) are sequence-scoped presentation details.
+  const { featureOrdinals, leadProseIndex } = useMemo(() => {
+    const ordinals = new Map<number, number>();
+    let featureCount = 0;
+    let firstProse = -1;
+    for (const entry of sections) {
+      if (entry.section.kind === 'feature-split') {
+        ordinals.set(entry.section.index, featureCount++);
+      }
+      if (firstProse < 0 && entry.section.kind === 'prose') {
+        firstProse = entry.section.index;
+      }
+    }
+    return { featureOrdinals: ordinals, leadProseIndex: firstProse };
+  }, [sections]);
 
   useEffect(() => {
     if (!globalKeyboardShortcuts) return;
@@ -391,7 +271,19 @@ export function LinearDocView({
   const primaryColor = activeTheme.colors.primary;
   const bodyFont = resolveFontFamily(activeTheme.typography.bodyFont, 'system-ui, sans-serif');
   const titleFont = resolveFontFamily(activeTheme.typography.titleFont, 'Georgia, serif');
-  const lineHt = activeTheme.typography.lineHeight ?? 1.7;
+  const lineHt = activeTheme.typography.lineHeight ?? 1.65;
+
+  const contentClasses = [
+    'squisq-linear-content',
+    'squisq-md',
+    'squisq-page',
+    thinMargins ? 'squisq-linear-content--thin squisq-page--thin' : '',
+    imageDisplayMode === 'thumbnail'
+      ? 'squisq-linear-content--thumbnail-images squisq-page--thumbnail-images'
+      : '',
+  ]
+    .filter(Boolean)
+    .join(' ');
 
   return (
     <div
@@ -408,24 +300,25 @@ export function LinearDocView({
         overflowY: thinMargins ? 'visible' : 'auto',
         overflowX: 'hidden',
         background: bgColor,
+        // Container queries drive the responsive page layout — the page
+        // often lives inside editor panes / chat bubbles where viewport
+        // media queries lie about the available width.
+        containerType: 'inline-size',
+        containerName: 'squisq-page',
       }}
     >
       <div
-        className={`squisq-linear-content squisq-md${thinMargins ? ' squisq-linear-content--thin' : ''}${imageDisplayMode === 'thumbnail' ? ' squisq-linear-content--thumbnail-images' : ''}`}
+        className={contentClasses}
+        {...pageStyleDataAttributes(pageStyle)}
         style={
           {
-            // Thin-margins mode drops the 720px reading column + generous
-            // page padding (right for standalone docs) in favor of a tight
-            // layout that hugs its container (right for chat bubbles and
-            // sidebar previews).
-            maxWidth: thinMargins ? 'none' : '720px',
-            margin: thinMargins ? '0' : '0 auto',
-            padding: thinMargins ? '0' : '24px 16px',
             lineHeight: lineHt,
             fontSize: '16px',
             fontFamily: bodyFont,
             color: textColor,
-            // CSS custom properties for MarkdownRenderer / nested elements
+            ...buildPageCssVars(activeTheme, pageStyle),
+            // Legacy custom properties kept for one release so host CSS
+            // and MarkdownRenderer content keyed on them keep working.
             '--squisq-linear-title-font': titleFont,
             '--squisq-linear-body-font': bodyFont,
             '--squisq-linear-text': textColor,
@@ -435,134 +328,22 @@ export function LinearDocView({
           } as React.CSSProperties
         }
       >
-        {/* Theme-aware typography and layout for document mode */}
-        <style>{`
-          .squisq-linear-content h1,
-          .squisq-linear-content h2,
-          .squisq-linear-content h3,
-          .squisq-linear-content h4,
-          .squisq-linear-content h5,
-          .squisq-linear-content h6 {
-            font-family: var(--squisq-linear-title-font);
-            color: var(--squisq-linear-text);
-            margin-top: 1.2em;
-            margin-bottom: 0.4em;
-          }
-          .squisq-linear-content h1 { font-size: 2em; }
-          .squisq-linear-content h2 { font-size: 1.5em; }
-          .squisq-linear-content h3 { font-size: 1.25em; }
-          .squisq-linear-content p {
-            margin-bottom: 0.75em;
-          }
-          .squisq-linear-content p + p {
-            margin-top: 1.25em;
-          }
-          .squisq-linear-content ul,
-          .squisq-linear-content ol {
-            padding-left: 2em;
-            margin-bottom: 0.75em;
-          }
-          .squisq-linear-content li {
-            margin-bottom: 0.3em;
-          }
-          .squisq-linear-content a {
-            /* Blend the theme's primary toward the body text color so
-               links stay theme-flavored but always have enough contrast
-               against the background. Some themes (e.g. Gezellig) pick a
-               mid-tone primary that's nearly invisible on a dark page
-               without this lift. */
-            color: color-mix(in srgb, var(--squisq-linear-primary) 65%, var(--squisq-linear-text));
-            text-decoration: underline;
-            text-decoration-thickness: 1px;
-            text-underline-offset: 2px;
-          }
-          .squisq-linear-content a:hover {
-            color: var(--squisq-linear-primary);
-          }
-          .squisq-linear-content code {
-            color: var(--squisq-linear-primary);
-            font-size: 0.9em;
-            padding: 0.15em 0.3em;
-            border-radius: 3px;
-            background: rgba(128, 128, 128, 0.15);
-          }
-          .squisq-linear-content pre {
-            padding: 1em;
-            border-radius: 6px;
-            background: rgba(0, 0, 0, 0.2);
-            overflow-x: auto;
-            margin-bottom: 0.75em;
-          }
-          .squisq-linear-content pre code {
-            padding: 0;
-            background: none;
-          }
-          .squisq-linear-content blockquote {
-            border-left: 3px solid var(--squisq-linear-muted);
-            color: var(--squisq-linear-muted);
-            padding-left: 1em;
-            margin-left: 0;
-            margin-bottom: 0.75em;
-          }
-          .squisq-linear-content hr {
-            border: none;
-            border-top: 1px solid var(--squisq-linear-muted);
-            margin: 1.5em 0;
-          }
-          .squisq-linear-content img {
-            max-width: 100%;
-            height: auto;
-            border-radius: 6px;
-            margin: 0.5em 0;
-          }
-          .squisq-linear-content--thumbnail-images img {
-            max-width: 100px;
-            max-height: 100px;
-            width: auto;
-            height: auto;
-            object-fit: contain;
-            display: block;
-          }
-          .squisq-linear-content strong {
-            font-weight: 700;
-          }
-          .squisq-linear-content em {
-            font-style: italic;
-          }
-          .squisq-linear-content table {
-            width: 100%;
-            border-collapse: collapse;
-            margin: 1em 0;
-            font-size: 0.95em;
-          }
-          .squisq-linear-content thead th {
-            background: var(--squisq-linear-primary);
-            color: var(--squisq-linear-bg);
-            font-family: var(--squisq-linear-title-font);
-            font-weight: 600;
-            padding: 10px 14px;
-            text-align: left;
-          }
-          .squisq-linear-content tbody td {
-            padding: 8px 14px;
-            border-bottom: 1px solid color-mix(in srgb, var(--squisq-linear-muted) 30%, transparent);
-          }
-          .squisq-linear-content tbody tr:hover {
-            background: color-mix(in srgb, var(--squisq-linear-primary) 8%, transparent);
-          }
-        `}</style>
-        {resolvedDoc.blocks.map((block, i) => (
-          <BlockSection
-            key={block.id}
-            block={block}
-            basePath={basePath}
-            viewport={activeViewport}
-            renderContext={renderContext}
-            blockIndex={blockIndices.get(block) ?? i}
-            blockIndices={blockIndices}
-            animationsEnabled={animationsEnabled}
-          />
-        ))}
+        {/* Structural page stylesheet (theme-independent; values via vars). */}
+        <style data-squisq-page="">{PAGE_BASE_CSS}</style>
+        <PageViewContext.Provider value={pageContext}>
+          {sections.map((entry) => {
+            const ordinal = featureOrdinals.get(entry.section.index) ?? 0;
+            const flip = !!entry.section.hints?.alternate && ordinal % 2 === 1;
+            return (
+              <PageSectionView
+                key={`${entry.section.blockId}-${entry.section.index}`}
+                entry={entry}
+                featureFlip={flip}
+                isLeadProse={entry.section.index === leadProseIndex}
+              />
+            );
+          })}
+        </PageViewContext.Provider>
       </div>
     </div>
   );

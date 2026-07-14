@@ -92,5 +92,34 @@
         }
       }
     ]
+  },
+  "pageStyle": {
+    "family": "documentary",
+    "tokens": {
+      "contentMaxWidth": 680,
+      "wideMaxWidth": 1000,
+      "sectionSpacing": "generous",
+      "cornerRadius": 2,
+      "divider": "thick-rule",
+      "backgroundRhythm": "flat",
+      "heroStyle": "letterbox",
+      "headingTreatment": {
+        "eyebrow": "numbered",
+        "scale": "display",
+        "underline": "none"
+      },
+      "imageFraming": "letterboxed",
+      "shadow": "none",
+      "quoteMark": "accent-bar",
+      "numeralStyle": "boxed"
+    },
+    "sections": {
+      "quote-band": {
+        "variant": "editorial"
+      }
+    },
+    "accentRotation": {
+      "strategy": "primary-only"
+    }
   }
 }

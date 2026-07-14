@@ -65,6 +65,7 @@ import {
   codeSnippetMarkdown,
   type CodeSnippetLanguage,
 } from './codeSnippet/codeSnippetLanguages';
+import { FindToolbar } from './find/FindToolbar';
 
 const VIEWS: { id: EditorView; label: string; shortLabel?: string; shortcut: string }[] = [
   { id: 'wysiwyg', label: 'Write', shortcut: '⌘1' },
@@ -238,7 +239,7 @@ const BUTTONS: ToolbarButton[] = [
     id: 'complexdiagram',
     label: 'complex diagram',
     icon: '',
-    title: 'Insert Complex Diagram',
+    title: 'Insert Complex Diagram (Mermaid)',
     group: 'media',
     faIcon: 'fa-solid fa-code-branch',
   },
@@ -661,6 +662,8 @@ export function Toolbar({
     activeSceneText,
     mediaProvider,
     editorMode,
+    findMode,
+    setFindMode,
     layoutMode,
     activeBlockStartLine,
     versioning,
@@ -828,6 +831,13 @@ export function Toolbar({
 
   // Custom layout manager dialog (list of doc/library layouts + designer)
   const [showLayoutManager, setShowLayoutManager] = useState(false);
+
+  useEffect(() => {
+    if (!findMode) return;
+    setShowOverflow(false);
+    closeInsertMenu();
+    closeEmojiPicker();
+  }, [closeEmojiPicker, closeInsertMenu, findMode]);
 
   const overflowIndex = measuredOverflowIndex;
   const clippedContextual = new Set(clippedContextualKey ? clippedContextualKey.split('|') : []);
@@ -2010,12 +2020,17 @@ export function Toolbar({
     currentTransition !== null && clippedContextual.has('transition');
   const showBlockSectionInOverflow = showTemplateInOverflow || showTransitionInOverflow;
   const overflowBlockLabel = currentTemplate ? templateLabel(currentTemplate) : 'Heading';
+  const showToolbarOverflow =
+    !findMode &&
+    !isPreview &&
+    !isCodeMode &&
+    (overflowIndex !== null || clippedContextual.size > 0);
 
   return (
     <div
-      className={`squisq-toolbar ${className || ''}`}
+      className={`squisq-toolbar${findMode ? ' squisq-toolbar--find' : ''} ${className || ''}`}
       role="toolbar"
-      aria-label="Formatting toolbar"
+      aria-label={findMode ? 'Find toolbar' : 'Formatting toolbar'}
     >
       {/* Hidden file input for image picker */}
       <input
@@ -2031,7 +2046,7 @@ export function Toolbar({
         }}
       />
       {/* Left slot — before view tabs */}
-      {slotLeft}
+      {!findMode && slotLeft}
       {/* View tabs — hidden when only one view is available (e.g. code mode). */}
       {showViewTabs && (
         <div className="squisq-toolbar-view-tabs" role="tablist" aria-label="Editor view">
@@ -2094,9 +2109,9 @@ export function Toolbar({
         </div>
       )}
       {/* After-tabs slot — left side, before formatting or preview controls. */}
-      {slotAfterTabs}
+      {findMode ? <FindToolbar onClose={() => setFindMode(false)} /> : slotAfterTabs}
       {/* Formatting buttons — hidden in preview mode and code mode */}
-      {!isPreview && !isCodeMode && (
+      {!findMode && !isPreview && !isCodeMode && (
         <div className="squisq-toolbar-actions" ref={actionsRef}>
           {groups.map((group, gi) => (
             <div key={group} className="squisq-toolbar-group">
@@ -2347,7 +2362,7 @@ export function Toolbar({
       {/* Overflow menu — outside the overflow:hidden actions container.
           Also appears when a contextual group (template/transition picker,
           table controls) is clipped, even if every plain button fits. */}
-      {!isPreview && !isCodeMode && (overflowIndex !== null || clippedContextual.size > 0) && (
+      {showToolbarOverflow && (
         <div className="squisq-toolbar-overflow" ref={overflowRef}>
           <button
             className={`squisq-toolbar-button squisq-toolbar-overflow-trigger${showOverflow ? ' squisq-toolbar-button--active' : ''}`}
@@ -2517,13 +2532,13 @@ export function Toolbar({
       )}
 
       {/* After-actions slot — after formatting controls */}
-      {slotAfterActions}
+      {!findMode && slotAfterActions}
       {/* Spacer — pushes right-side items to the end when the flex:1 actions
           container isn't rendered. In preview mode PreviewToolbarControls
           supplies its own flex:1 filler (and measures that leftover width to
           decide whether to collapse), so a second spacer here would split the
           slack and make the controls collapse too early. */}
-      {isCodeMode && <div style={{ flex: 1 }} />}
+      {isCodeMode && !findMode && <div style={{ flex: 1 }} />}
       {/* Version history — renders only when the host enabled versioning
           and a container is wired up. The component owns its own button
           and popover; we just give it a slot in the toolbar. */}
@@ -2643,23 +2658,6 @@ export function Toolbar({
             >
               Insert
             </div>
-            <button
-              className="squisq-toolbar-overflow-item"
-              onClick={(event) => {
-                if (codeSnippetMenuAnchor) setCodeSnippetMenuAnchor(null);
-                else openCodeSnippetMenu(event.currentTarget);
-              }}
-              role="menuitem"
-              aria-label="Insert Code Snippet"
-              aria-haspopup="menu"
-              aria-expanded={codeSnippetMenuAnchor !== null}
-            >
-              <span className="squisq-toolbar-overflow-icon">
-                <Icon icon="fa-solid fa-file-code" />
-              </span>
-              <span>Code Snippet</span>
-              <Icon icon="fa-solid fa-chevron-right" />
-            </button>
             {MEDIA_BUTTONS.filter((b) => isButtonVisible(b.id)).map((btn) => {
               const disabled = (btn.id === 'image' && !mediaProvider) || !buttonAllowed(btn.id);
               const stripped = btn.title.replace(/^Insert\s+/i, '');
@@ -2681,6 +2679,23 @@ export function Toolbar({
                 </button>
               );
             })}
+            <button
+              className="squisq-toolbar-overflow-item"
+              onClick={(event) => {
+                if (codeSnippetMenuAnchor) setCodeSnippetMenuAnchor(null);
+                else openCodeSnippetMenu(event.currentTarget);
+              }}
+              role="menuitem"
+              aria-label="Insert Code Snippet"
+              aria-haspopup="menu"
+              aria-expanded={codeSnippetMenuAnchor !== null}
+            >
+              <span className="squisq-toolbar-overflow-icon">
+                <Icon icon="fa-solid fa-file-code" />
+              </span>
+              <span>Code Snippet</span>
+              <Icon icon="fa-solid fa-chevron-right" />
+            </button>
           </div>,
           document.body,
         )}

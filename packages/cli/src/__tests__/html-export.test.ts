@@ -101,6 +101,11 @@ describe('HTML export with images', () => {
     expect(html).to.include('SquisqPlayer');
     expect(html).to.include('squisq-root');
 
+    // The default html export is the static Page rendition — the bundled
+    // player must carry the page section renderer.
+    expect(html).to.include('"static"');
+    expect(html).to.include('squisq-page');
+
     // Verify the image is embedded as base64
     expect(html).to.include('data:image/png;base64,');
 

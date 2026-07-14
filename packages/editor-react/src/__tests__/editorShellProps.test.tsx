@@ -176,6 +176,29 @@ describe('<EditorShell> colorScheme prop', () => {
   });
 });
 
+describe('<EditorShell> Write canvas settings', () => {
+  it('exposes host settings as live CSS variables on the shell', () => {
+    const { container, rerender } = render(
+      <EditorShell
+        initialMarkdown="Paragraph"
+        writeCanvasSettings={{ textSize: 18, lineSpacing: 1.9 }}
+      />,
+    );
+    const shell = container.querySelector<HTMLElement>('.squisq-editor-shell')!;
+    expect(shell.style.getPropertyValue('--squisq-write-text-size')).toBe('18px');
+    expect(shell.style.getPropertyValue('--squisq-write-line-spacing')).toBe('1.9');
+
+    rerender(
+      <EditorShell
+        initialMarkdown="Paragraph"
+        writeCanvasSettings={{ textSize: 20, lineSpacing: 2 }}
+      />,
+    );
+    expect(shell.style.getPropertyValue('--squisq-write-text-size')).toBe('20px');
+    expect(shell.style.getPropertyValue('--squisq-write-line-spacing')).toBe('2');
+  });
+});
+
 describe('RawEditor monacoTheme prop', () => {
   it('maps colorScheme="dark" to monacoTheme="vs-dark"', () => {
     render(<EditorShell initialMarkdown="# hi" initialView="raw" colorScheme="dark" />);
@@ -492,7 +515,7 @@ describe('<Toolbar> Insert menu', () => {
     );
 
     fireEvent.click(screen.getByLabelText('Insert'));
-    fireEvent.click(await screen.findByRole('menuitem', { name: 'Complex Diagram' }));
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Complex Diagram (Mermaid)' }));
 
     await waitFor(() => {
       expect(screen.getByTestId('markdown-source').textContent).toContain(

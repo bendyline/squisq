@@ -14,4 +14,5 @@ export const minimalStyle: TransformStyleConfig = {
   blocksPerSection: { max: 2 },
   transitionStyle: 'fade',
   suggestedThemeId: 'minimalist',
+  page: { spacing: 'generous', emphasisCurve: 'even' },
 };

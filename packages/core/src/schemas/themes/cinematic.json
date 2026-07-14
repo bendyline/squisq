@@ -107,5 +107,37 @@
         }
       }
     ]
+  },
+  "pageStyle": {
+    "family": "cinematic",
+    "tokens": {
+      "contentMaxWidth": 760,
+      "wideMaxWidth": 1100,
+      "sectionSpacing": "generous",
+      "cornerRadius": 0,
+      "divider": "gap-only",
+      "backgroundRhythm": "flat",
+      "heroStyle": "full-bleed",
+      "headingTreatment": {
+        "eyebrow": "kicker",
+        "scale": "display",
+        "case": "uppercase"
+      },
+      "imageFraming": "letterboxed",
+      "shadow": "none",
+      "quoteMark": "none",
+      "numeralStyle": "oversized",
+      "pattern": "noise"
+    },
+    "sections": {
+      "quote-band": {
+        "hints": {
+          "vignette": true
+        }
+      }
+    },
+    "accentRotation": {
+      "strategy": "primary-only"
+    }
   }
 }

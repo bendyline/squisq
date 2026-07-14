@@ -285,7 +285,8 @@ test.describe('ASCII diagram editor', () => {
     await loadSample(page, 'e2e-tiny');
     await page.locator('.tiptap.ProseMirror').click();
     await page.locator('.squisq-toolbar button[aria-label="Insert"]').click();
-    await page.getByRole('menuitem', { name: /diagram/i }).click();
+    // Exact name — the Insert menu also offers "Complex Diagram" (Mermaid).
+    await page.getByRole('menuitem', { name: 'Diagram', exact: true }).click();
     await page
       .locator('.squisq-ascii-diagram-widget-host')
       .waitFor({ state: 'visible', timeout: 5_000 });

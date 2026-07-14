@@ -46,5 +46,29 @@
         "config": { "type": "gradientBackground", "preset": "earth-tones" }
       }
     ]
+  },
+  "pageStyle": {
+    "family": "organic",
+    "tokens": {
+      "contentMaxWidth": 740,
+      "wideMaxWidth": 1080,
+      "sectionSpacing": "comfortable",
+      "cornerRadius": 12,
+      "divider": "thick-rule",
+      "backgroundRhythm": "tinted-panels",
+      "heroStyle": "stacked",
+      "headingTreatment": {
+        "eyebrow": "kicker",
+        "scale": "regular",
+        "underline": "accent-bar"
+      },
+      "imageFraming": "polaroid",
+      "shadow": "soft",
+      "quoteMark": "oversized-glyph",
+      "numeralStyle": "boxed"
+    },
+    "accentRotation": {
+      "strategy": "alternate-two"
+    }
   }
 }

@@ -23,6 +23,7 @@
 import type { LayoutHints } from './LayoutStrategy.js';
 import type { AnimationType, ImageTreatment, TransitionType } from './Doc.js';
 import type { PersistentLayerConfig } from './BlockTemplates.js';
+import type { ThemePageStyle } from './PageStyle.js';
 import { THEME_SCHEMA_VERSION } from './themeConstants.js';
 import { validateTheme } from './themeValidator.js';
 import { cloneAndFreezeData } from '../internal/immutable.js';
@@ -236,6 +237,12 @@ export interface Theme {
   colorSchemes: Record<string, ThemeColorScheme>;
   /** Optional persistent layers baked into the theme */
   persistentLayers?: PersistentLayerConfig;
+  /**
+   * Optional page art direction for Page (linear) mode. When absent,
+   * `resolvePageStyle`/`defaultPageStyle` derive one from the fields above,
+   * so legacy themes render pages without declaring this.
+   */
+  pageStyle?: ThemePageStyle;
 }
 
 // ============================================

@@ -121,6 +121,25 @@ function validateTransformStyle(style: TransformStyleConfig): void {
       fail('budget.slidesPerMinute must be a positive finite number');
     }
   }
+  const pageValue = candidate.page;
+  if (pageValue !== undefined) {
+    if (!pageValue || typeof pageValue !== 'object' || Array.isArray(pageValue)) {
+      fail('page must be an object');
+    }
+    const page = pageValue as { spacing?: unknown; emphasisCurve?: unknown };
+    if (
+      page.spacing !== undefined &&
+      !['compact', 'comfortable', 'generous'].includes(page.spacing as string)
+    ) {
+      fail('page.spacing must be compact, comfortable, or generous');
+    }
+    if (
+      page.emphasisCurve !== undefined &&
+      !['even', 'front-loaded'].includes(page.emphasisCurve as string)
+    ) {
+      fail('page.emphasisCurve must be even or front-loaded');
+    }
+  }
 }
 
 function styleSnapshot(style: TransformStyleConfig): TransformStyleConfig {

@@ -89,6 +89,7 @@ export type { RawEditorProps } from './RawEditor.js';
 
 export { WysiwygEditor } from './WysiwygEditor.js';
 export type { WysiwygEditorProps } from './WysiwygEditor.js';
+export type { WriteCanvasSettings } from './writeCanvasSettings.js';
 
 export { PreviewPanel } from './PreviewPanel.js';
 export type { PreviewPanelProps } from './PreviewPanel.js';
@@ -294,9 +295,9 @@ export {
 export { shouldPasteAsAsciiFence } from './asciiDiagram/asciiPaste.js';
 
 // Complex diagram editor — every explicit `mermaid` fence is rendered through
-// Mermaid's public renderer inside the shared diagram chrome. The editable
-// code fence remains authoritative, so the full Mermaid language round-trips
-// without being narrowed to Squisq's node/edge model.
+// Mermaid's public renderer inside the shared diagram chrome. Flowcharts add
+// source-backed node/edge gestures and the full Mermaid shape catalog; every
+// other diagram family remains lossless render + source editing.
 export {
   MermaidDiagramExtension,
   MERMAID_DIAGRAM_KEY,
@@ -313,10 +314,33 @@ export type {
 export { MermaidDiagramWidget } from './mermaid/MermaidDiagramWidget.js';
 export type { MermaidDiagramWidgetProps } from './mermaid/MermaidDiagramWidget.js';
 export { MermaidDiagramCanvas } from './mermaid/MermaidDiagramCanvas.js';
-export type { MermaidDiagramCanvasProps } from './mermaid/MermaidDiagramCanvas.js';
+export type {
+  MermaidDiagramCanvasProps,
+  MermaidNodeCanvasAction,
+} from './mermaid/MermaidDiagramCanvas.js';
 export { useMermaidDiagramData } from './mermaid/mermaidData.js';
 export type { MermaidDiagramData } from './mermaid/mermaidData.js';
-export { renderMermaidDiagram, mermaidErrorMessage } from './mermaid/mermaidRenderer.js';
+export {
+  renderMermaidDiagram,
+  inspectMermaidSource,
+  mermaidErrorMessage,
+} from './mermaid/mermaidRenderer.js';
+export type { MermaidRenderResult } from './mermaid/mermaidRenderer.js';
+export { MermaidShapePalette } from './mermaid/MermaidShapePalette.js';
+export type { MermaidShapePaletteProps } from './mermaid/MermaidShapePalette.js';
+export {
+  MERMAID_FLOWCHART_SHAPES,
+  isMermaidFlowchartShapeId,
+  normalizeMermaidFlowchartShape,
+} from './mermaid/mermaidShapes.js';
+export type { MermaidFlowchartShape, MermaidFlowchartShapeId } from './mermaid/mermaidShapes.js';
+export type {
+  MermaidEditableEdge,
+  MermaidEditableModel,
+  MermaidEditableNode,
+  MermaidFlowchartDirection,
+  MermaidFlowchartModel,
+} from './mermaid/mermaidModel.js';
 
 // Code snippets — every ordinary explicit-language fence is replaced in the
 // WYSIWYG surface by a Monaco inset. The fence node remains authoritative, so

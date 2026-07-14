@@ -6,7 +6,7 @@ export default defineConfig({
   dts: true,
   sourcemap: true,
   clean: true,
-  external: ['react', 'react-dom', '@bendyline/squisq'],
+  external: ['react', 'react-dom', '@bendyline/squisq', 'mermaid'],
   esbuildOptions(options) {
     options.jsx = 'automatic';
   },

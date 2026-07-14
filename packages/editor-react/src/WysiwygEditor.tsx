@@ -64,6 +64,8 @@ import { looksLikeMarkdown } from './detectMarkdown';
 import { SQUISQ_MEDIA_MIME, parseSquisqMediaPayload } from './mediaDragMime';
 import { usePreviewSettingsOptional } from './PreviewControls';
 import { uploadAndInsertImages } from './wysiwygImageUpload';
+import { writeCanvasSettingsStyle, type WriteCanvasSettings } from './writeCanvasSettings';
+import { FindHighlightExtension } from './find/FindHighlightExtension';
 
 type ImageMutationView = Pick<ProseMirrorView, 'state' | 'dispatch'>;
 
@@ -78,9 +80,9 @@ const EMPTY_PROMPTS = [
   'Type away. Markdown syntax works too...',
   'Chapter 1 begins here...',
   'Once upon a time...',
-  'A blank page. Exciting, isn\'t it?',
+  "A blank page. Exciting, isn't it?",
   'The first word is always the hardest...',
-  'Plot twist: this is where it all starts...'
+  'Plot twist: this is where it all starts...',
 ];
 
 const BLOCK_TAG_DATA_VALUES = {
@@ -109,6 +111,8 @@ export interface WysiwygEditorProps {
   submitOnEnter?: () => void;
   /** Disable Tiptap editing — renders content but blocks input. */
   readOnly?: boolean;
+  /** Host-controlled base text size and line spacing for the Write canvas. */
+  writeCanvasSettings?: WriteCanvasSettings;
 }
 
 /**
@@ -120,6 +124,7 @@ export function WysiwygEditor({
   className,
   submitOnEnter,
   readOnly = false,
+  writeCanvasSettings,
 }: WysiwygEditorProps) {
   const {
     editorSource,
@@ -222,6 +227,7 @@ export function WysiwygEditor({
       Placeholder.configure({ placeholder: resolvedPlaceholder }),
       buildMentionExtension(() => mentionProviderRef.current),
       InlineIcon,
+      FindHighlightExtension,
     ],
     content: markdownToTiptap(stripFrontmatter(editorSource).body),
     onUpdate: ({ editor: ed }) => {
@@ -627,7 +633,13 @@ export function WysiwygEditor({
     <CustomTemplateProvider docTemplates={docTemplates} onDocTemplatesChange={onDocTemplatesChange}>
       <div
         className={`squisq-wysiwyg-container${className ? ` ${className}` : ''}`}
-        style={{ width: '100%', height: '100%', overflow: 'auto', ...themeStyle }}
+        style={{
+          width: '100%',
+          height: '100%',
+          overflow: 'auto',
+          ...themeStyle,
+          ...writeCanvasSettingsStyle(writeCanvasSettings),
+        }}
         data-testid="wysiwyg-container"
         data-block-tags={BLOCK_TAG_DATA_VALUES[blockTagVisibility]}
         data-theme-inheritance={themeInheritance}

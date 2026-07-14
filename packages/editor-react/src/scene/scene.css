@@ -266,6 +266,18 @@
   border-color: #cbd5e1;
 }
 
+.squisq-scene-action--active,
+.squisq-scene-action--active:hover:not(:disabled) {
+  background: #e0e7ff;
+  border-color: #4f46e5;
+  color: #4338ca;
+}
+
+.squisq-scene-action-popover-anchor {
+  position: relative;
+  display: inline-flex;
+}
+
 .squisq-scene-action:focus-visible {
   outline: 2px solid #6366f1;
   outline-offset: 1px;
@@ -322,7 +334,9 @@
 }
 
 .squisq-editor-shell[data-theme='dark'] .squisq-scene-tool--active,
-.squisq-editor-shell[data-theme='dark'] .squisq-scene-tool--active:hover {
+.squisq-editor-shell[data-theme='dark'] .squisq-scene-tool--active:hover,
+.squisq-editor-shell[data-theme='dark'] .squisq-scene-action--active,
+.squisq-editor-shell[data-theme='dark'] .squisq-scene-action--active:hover:not(:disabled) {
   background: #312e81;
   border-color: #818cf8;
   color: #f8fafc;
@@ -350,7 +364,8 @@
   padding: 12px;
 }
 .squisq-scene-block-max > .squisq-diagram-canvas,
-.squisq-scene-block-max > .squisq-scene-stage {
+.squisq-scene-block-max > .squisq-scene-stage,
+.squisq-scene-block-max > .squisq-mermaid-canvas {
   flex: 1;
   min-width: 0;
   min-height: 0;
@@ -398,6 +413,12 @@
 /* In the gutter the Shape palette can't drop straight down (it'd run off the
    page edge), so open it toward the canvas (to the left of the button). */
 .squisq-scene-side-toolbar .squisq-scene-tool-popover-anchor .squisq-shape-palette {
+  top: 0;
+  left: auto;
+  right: calc(100% + 6px);
+}
+
+.squisq-scene-side-toolbar .squisq-scene-action-popover-anchor > [role='dialog'] {
   top: 0;
   left: auto;
   right: calc(100% + 6px);

@@ -1,7 +1,17 @@
-import { describe, it, expect } from 'vitest';
-import { render } from '@testing-library/react';
+import { describe, it, expect, vi } from 'vitest';
+import { render, waitFor } from '@testing-library/react';
 import { BlockRenderer } from '../BlockRenderer';
 import type { Block } from '@bendyline/squisq/schemas';
+
+vi.mock('mermaid', () => ({
+  default: {
+    initialize: vi.fn(),
+    render: vi.fn(async (id: string) => ({
+      svg: `<svg id="${id}" viewBox="0 0 100 50"><text>Slide graph</text></svg>`,
+      diagramType: 'flowchart-v2',
+    })),
+  },
+}));
 
 describe('BlockRenderer', () => {
   const minimalBlock: Block = {
@@ -151,6 +161,26 @@ describe('BlockRenderer', () => {
     );
     const rect = container.querySelector('rect');
     expect(rect).toBeTruthy();
+  });
+
+  it('renders Mermaid layers inside the slide SVG', async () => {
+    const block: Block = {
+      ...minimalBlock,
+      layers: [
+        {
+          type: 'mermaid',
+          id: 'diagram',
+          content: { source: 'flowchart LR\n  a --> b' },
+          position: { x: 100, y: 100, width: 800, height: 500 },
+        },
+      ],
+    };
+    const { container } = render(<BlockRenderer block={block} blockTime={0} basePath="/test" />);
+
+    await waitFor(() => {
+      expect(container.querySelector('.block-layer--mermaid svg')).not.toBeNull();
+    });
+    expect(container.textContent).toContain('Slide graph');
   });
 
   it('namespaces SVG definitions per renderer instance', () => {

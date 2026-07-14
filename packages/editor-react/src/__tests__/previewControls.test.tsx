@@ -387,6 +387,37 @@ describe('PreviewToolbarControls', () => {
     }
   });
 
+  it('hides the aspect-ratio and captions controls in Page (linear) mode', () => {
+    const originalResizeObserver = globalThis.ResizeObserver;
+    class ResizeObserverStub implements ResizeObserver {
+      observe() {}
+      unobserve() {}
+      disconnect() {}
+    }
+
+    globalThis.ResizeObserver = ResizeObserverStub;
+    try {
+      // Frontmatter `display-mode: page` resolves to the internal 'linear'
+      // display mode (the styled Page view).
+      renderPreviewToolbar('---\ndisplay-mode: page\n---\n\n# Hello');
+
+      // Page is a variable-height HTML rendition: aspect ratio and captions
+      // do not apply there.
+      expect(document.querySelector('[role="group"][aria-label="Aspect ratio"]')).toBeNull();
+      expect(screen.queryByText('Captions:')).toBeNull();
+      // Theme, Summarize, and Cover stay live.
+      expect(screen.getAllByText('Theme:').length).toBeGreaterThan(0);
+      expect(screen.getAllByText('Summarize:').length).toBeGreaterThan(0);
+      expect(screen.getAllByText('Cover slide').length).toBeGreaterThan(0);
+    } finally {
+      if (originalResizeObserver) {
+        globalThis.ResizeObserver = originalResizeObserver;
+      } else {
+        Reflect.deleteProperty(globalThis, 'ResizeObserver');
+      }
+    }
+  });
+
   it('keeps the overflow popover inside the left viewport edge', async () => {
     const originalResizeObserver = globalThis.ResizeObserver;
     const originalGetBoundingClientRect = HTMLElement.prototype.getBoundingClientRect;
