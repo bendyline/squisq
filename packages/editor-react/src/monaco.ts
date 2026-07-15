@@ -32,4 +32,4 @@
 import 'monaco-editor/esm/vs/editor/editor.main.js';
 
 // Typed API surface (the only barrel Monaco publishes declarations for).
-export * from 'monaco-editor/esm/vs/editor/editor.api';
+export * from 'monaco-editor/esm/vs/editor/editor.api.js';

@@ -194,6 +194,7 @@ export function QuoteBandSection({ section }: SectionProps) {
           {media.type === 'image' ? <PageImg media={media} /> : <BackdropVideo media={media} />}
         </div>
       )}
+      {section.slots.title && <h2 className="squisq-page-section-title">{section.slots.title}</h2>}
       <figure className="squisq-page-quote-figure" style={{ margin: 0 }}>
         <blockquote className="squisq-page-quote">{section.slots.body?.text}</blockquote>
         {section.slots.attribution && (
@@ -447,17 +448,18 @@ export function TableSection({ section }: SectionProps) {
 // ── Prose ──────────────────────────────────────────────────────────
 
 export function ProseSection({ section, block }: SectionProps) {
+  const { theme } = usePageView();
   // The title slot may be deliberately suppressed (e.g. cover dedupe), so
   // gate the heading on it rather than on the source heading alone.
   const heading: ReactNode =
     section.slots.title !== undefined && block?.sourceHeading ? (
-      <MarkdownRenderer nodes={[block.sourceHeading]} />
+      <MarkdownRenderer nodes={[block.sourceHeading]} theme={theme} />
     ) : null;
   const bodyNodes = section.slots.body?.markdown ?? block?.contents;
   return (
     <div className="squisq-page-prose">
       {heading}
-      {bodyNodes && bodyNodes.length > 0 && <MarkdownRenderer nodes={bodyNodes} />}
+      {bodyNodes && bodyNodes.length > 0 && <MarkdownRenderer nodes={bodyNodes} theme={theme} />}
     </div>
   );
 }

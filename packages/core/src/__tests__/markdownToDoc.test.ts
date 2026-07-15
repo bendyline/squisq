@@ -887,12 +887,14 @@ describe('auto template picking (autoTemplates, default on)', () => {
     expect(block.template).toBe('quote');
     expect(block.autoTemplate).toBe(true);
     expect(block.templateData?.quote).toBe('The best template feels obvious.');
+    expect(block.templateData?.title).toBe('Wisdom');
   });
 
   it('picks dataTable for a table-bearing section with derived headers/rows', () => {
     const doc = toDocFromMd('# Results\n\n| A | B |\n| - | - |\n| 1 | 2 |\n');
     const block = doc.blocks[0];
     expect(block.template).toBe('dataTable');
+    expect(block.templateData?.title).toBe('Results');
     expect(block.templateData?.headers).toEqual(['A', 'B']);
     expect(block.templateData?.rows).toEqual([['1', '2']]);
   });
@@ -901,7 +903,30 @@ describe('auto template picking (autoTemplates, default on)', () => {
     const doc = toDocFromMd('# Steps\n\n- one\n- two\n\n# Gallery\n\n![a](a.jpg)\n\n![b](b.jpg)\n');
     expect(doc.blocks[0].template).toBe('list');
     expect(doc.blocks[0].templateData?.items).toEqual(['one', 'two']);
+    expect(doc.blocks[0].templateData?.title).toBe('Steps');
     expect(doc.blocks[1].template).toBe('photoGrid');
+  });
+
+  it('declines a quote template when a sibling list would be hidden', () => {
+    const doc = toDocFromMd(
+      '# Guidance\n\n- keep the heading\n- keep the list\n\n> Keep the quote too.\n',
+    );
+    const block = doc.blocks[0];
+
+    expect(block.template).toBe('sectionHeader');
+    expect(block.autoTemplate).toBeUndefined();
+    expect(block.contents?.map((node) => node.type)).toEqual(['list', 'blockquote']);
+  });
+
+  it('declines a data table template when a sibling code block would be hidden', () => {
+    const doc = toDocFromMd(
+      '# Results\n\n| A | B |\n| - | - |\n| 1 | 2 |\n\n```js\nconsole.log("kept")\n```\n',
+    );
+    const block = doc.blocks[0];
+
+    expect(block.template).toBe('sectionHeader');
+    expect(block.autoTemplate).toBeUndefined();
+    expect(block.contents?.map((node) => node.type)).toEqual(['table', 'code']);
   });
 
   it('alternates left/right feature for consecutive single-image sections', () => {

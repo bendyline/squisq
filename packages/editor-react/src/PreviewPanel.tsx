@@ -24,6 +24,8 @@ import { buildDocumentPreviewMarkdown } from './buildDocumentPreviewMarkdown';
 import { PlainHtmlPreview } from './PlainHtmlPreview';
 import { TeleprompterView } from './teleprompter/TeleprompterView';
 import { usePresentationModeOptional } from './presentation/PresentationMode';
+import { usePrintModeOptional } from './print/PrintMode';
+import { PrintPreview } from './print/PrintPreview';
 
 export interface PreviewPanelProps {
   /** Base path for resolving media URLs in DocPlayer */
@@ -59,6 +61,7 @@ export function PreviewPanel({ basePath = '/', className, workspaceContainer }: 
   } = useEditorContext();
   const mediaProvider = useMediaProvider();
   const presentation = usePresentationModeOptional();
+  const printMode = usePrintModeOptional();
   const {
     activeViewport,
     activeDisplayMode,
@@ -280,10 +283,28 @@ export function PreviewPanel({ basePath = '/', className, workspaceContainer }: 
     );
   }
 
-  const fillsContainer = isDocumentMode || isPageMode || isNarrateMode ? 'stretch' : 'center';
+  const fillsContainer =
+    printMode?.active || isDocumentMode || isPageMode || isNarrateMode ? 'stretch' : 'center';
   const audienceWindowOpen = presentation?.activeTarget === 'window';
 
   const renderSurface = (audience: boolean): ReactNode => {
+    if (!audience && printMode?.active) {
+      return (
+        <PrintPreview
+          displayMode={activeDisplayMode}
+          previewDoc={previewDoc}
+          contentDoc={contentDoc ?? doc}
+          documentMarkdown={documentMarkdown}
+          basePath={basePath}
+          viewport={activeViewport}
+          theme={activeTheme}
+          showCover={activeCoverSlide}
+          transformStyle={activeTransformStyle}
+          mediaRevision={mediaRevision}
+        />
+      );
+    }
+
     if (isDocumentMode) {
       return (
         <PlainHtmlPreview

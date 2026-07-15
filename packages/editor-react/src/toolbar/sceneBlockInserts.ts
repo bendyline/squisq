@@ -5,6 +5,7 @@ import {
   DEFAULT_MERMAID_DIAGRAM_TYPE,
   mermaidDiagramMarkdown,
 } from '../mermaid/mermaidDiagramTypes';
+import { CODE_SNIPPET_FOCUS_INSERTED_META } from '../codeSnippet/codeSnippetFocus';
 
 // ─── Scene-block inserts (diagram / drawing / layout) ───
 
@@ -94,7 +95,17 @@ export function insertTimelineBlock(editor: TiptapEditor): void {
  * fence's `language` attribute — pass the explicit authored-view tag so its
  * identity round-trips through markdown and Tiptap.
  */
-export function insertFenceBlock(editor: TiptapEditor, art: string, lang?: string): void {
+export interface InsertFenceBlockOptions {
+  /** Ask the ordinary-code-fence widget to focus its Monaco model at the body end. */
+  focusInsertedCodeSnippet?: boolean;
+}
+
+export function insertFenceBlock(
+  editor: TiptapEditor,
+  art: string,
+  lang?: string,
+  options: InsertFenceBlockOptions = {},
+): void {
   editor
     .chain()
     .focus()
@@ -105,7 +116,12 @@ export function insertFenceBlock(editor: TiptapEditor, art: string, lang?: strin
       const block = codeBlockType.create(attrs, state.schema.text(art));
       const { $from } = state.selection;
       const insertPos = $from.depth > 0 ? $from.after(1) : state.doc.content.size;
-      if (dispatch) tr.insert(insertPos, block);
+      if (dispatch) {
+        tr.insert(insertPos, block);
+        if (options.focusInsertedCodeSnippet) {
+          tr.setMeta(CODE_SNIPPET_FOCUS_INSERTED_META, insertPos);
+        }
+      }
       return true;
     })
     .run();

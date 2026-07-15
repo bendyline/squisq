@@ -1,18 +1,21 @@
 /** Monaco inset mounted in place of an ordinary language-tagged code fence. */
 
 import { useCallback, useEffect, useState } from 'react';
-import MonacoEditor, { type OnChange } from '@monaco-editor/react';
+import MonacoEditor, { type OnChange, type OnMount } from '@monaco-editor/react';
 import type { Editor } from '@tiptap/react';
 import { Icon } from '../Icon';
 import { useMonacoLoader } from '../useMonacoLoader';
 import { replaceCodeSnippetText } from './codeSnippetCommands';
 import { useCodeSnippetData } from './codeSnippetData';
+import { focusCodeSnippetAtEnd } from './codeSnippetFocus';
 import { codeSnippetFenceLanguageToken } from './codeSnippetLanguages';
 
 export interface CodeSnippetWidgetProps {
   editor: Editor;
   blockId: string;
   host?: HTMLElement | null;
+  /** Focus this newly inserted snippet after Monaco has mounted. */
+  focusOnMount?: boolean;
 }
 
 function schemeFromHost(host: HTMLElement | null | undefined): 'light' | 'dark' {
@@ -46,7 +49,12 @@ function useEditorEditable(editor: Editor): boolean {
   return editable;
 }
 
-export function CodeSnippetWidget({ editor, blockId, host }: CodeSnippetWidgetProps) {
+export function CodeSnippetWidget({
+  editor,
+  blockId,
+  host,
+  focusOnMount = false,
+}: CodeSnippetWidgetProps) {
   const data = useCodeSnippetData(editor, blockId);
   const { ready } = useMonacoLoader();
   const colorScheme = useHostColorScheme(host);
@@ -58,6 +66,12 @@ export function CodeSnippetWidget({ editor, blockId, host }: CodeSnippetWidgetPr
       replaceCodeSnippetText(editor, blockId, value ?? '');
     },
     [blockId, editable, editor],
+  );
+  const handleMount: OnMount = useCallback(
+    (mountedEditor) => {
+      if (focusOnMount && editable) focusCodeSnippetAtEnd(mountedEditor);
+    },
+    [editable, focusOnMount],
   );
 
   if (!data) return null;
@@ -73,7 +87,6 @@ export function CodeSnippetWidget({ editor, blockId, host }: CodeSnippetWidgetPr
           <Icon icon="fa-solid fa-file-code" />
           <span>{data.label}</span>
         </span>
-        <code>{`\`\`\`${data.fenceLanguage}`}</code>
       </div>
       <div className="squisq-code-snippet-editor" aria-label={`${data.label} code editor`}>
         {ready ? (
@@ -83,6 +96,7 @@ export function CodeSnippetWidget({ editor, blockId, host }: CodeSnippetWidgetPr
             theme={colorScheme === 'dark' ? 'vs-dark' : 'vs'}
             value={data.source}
             onChange={handleChange}
+            onMount={handleMount}
             options={{
               automaticLayout: true,
               contextmenu: true,

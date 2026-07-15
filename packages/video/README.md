@@ -132,7 +132,7 @@ targeting via `bitrateForQuality`) and `audioBitrate` (target AAC bits/sec):
 
 `resolveDimensions(options)` applies these defaults, honoring explicit `width`/`height` overrides.
 
-See the full [API Reference](../../docs/API.md#bendylinesquisq-video) for all types.
+See the full [API Reference](https://github.com/bendyline/squisq/blob/main/docs/API.md#bendylinesquisq-video) for all types.
 
 ## Related Packages
 

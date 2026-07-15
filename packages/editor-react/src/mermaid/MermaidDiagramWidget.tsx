@@ -6,6 +6,7 @@ import {
   useLayoutEffect,
   useRef,
   useState,
+  useSyncExternalStore,
   type CSSProperties,
 } from 'react';
 import type { Editor } from '@tiptap/react';
@@ -23,9 +24,15 @@ import type {
   MermaidEditableEdge,
   MermaidEditableModel,
   MermaidEditableNode,
+  MermaidEditableText,
   MermaidFlowchartDirection,
+  MermaidSelection,
 } from './mermaidModel';
-import { mermaidDiagramProperties, mermaidEditCapabilities } from './mermaidModel';
+import {
+  mermaidDiagramProperties,
+  mermaidEditableTexts,
+  mermaidEditCapabilities,
+} from './mermaidModel';
 import {
   addMermaidNode,
   changeMermaidNodeShape,
@@ -41,14 +48,18 @@ import {
 import {
   addAdapterNode,
   connectAdapterNodes,
+  deleteAdapterText,
   deleteAdapterNode,
   disconnectAdapterEdge,
   duplicateAdapterNode,
+  renameAdapterText,
   renameAdapterNode,
   setAdapterEdgeLabel,
   setAdapterProperty,
 } from './mermaidSourceAdapters';
 import type { MermaidFlowchartShapeId } from './mermaidShapes';
+import { DEFAULT_THEME } from '@bendyline/squisq/doc';
+import type { MermaidThemeStore } from './mermaidThemeStore';
 
 const MIN_DIAGRAM_HEIGHT = 160;
 const DEFAULT_DIAGRAM_HEIGHT = 420;
@@ -58,6 +69,8 @@ const PROPERTIES_PICKER_WIDTH = 320;
 const PROPERTIES_PICKER_MAX_HEIGHT = 520;
 const DIRECTION_PICKER_GAP = 6;
 const VIEWPORT_GUTTER = 8;
+const subscribeToDefaultTheme = () => () => undefined;
+const getDefaultTheme = () => DEFAULT_THEME;
 
 interface DirectionPickerPosition extends CSSProperties {
   position: 'fixed';
@@ -72,15 +85,38 @@ export interface MermaidDiagramWidgetProps {
   editor: Editor;
   blockId: string;
   host?: HTMLElement | null;
+  themeStore?: MermaidThemeStore;
 }
 
-export function MermaidDiagramWidget({ editor, blockId, host }: MermaidDiagramWidgetProps) {
+function sameSelection(left: MermaidSelection | null, right: MermaidSelection | null): boolean {
+  return left?.kind === right?.kind && left?.id === right?.id;
+}
+
+function selectionExists(
+  model: MermaidEditableModel | null,
+  selection: MermaidSelection | null,
+): boolean {
+  if (!model || !selection) return false;
+  if (selection.kind === 'node') return model.nodes.some((node) => node.id === selection.id);
+  if (selection.kind === 'edge') return model.edges.some((edge) => edge.id === selection.id);
+  return mermaidEditableTexts(model).some((text) => text.id === selection.id);
+}
+
+export function MermaidDiagramWidget({
+  editor,
+  blockId,
+  host,
+  themeStore,
+}: MermaidDiagramWidgetProps) {
   const data = useMermaidDiagramData(editor, blockId);
+  const theme = useSyncExternalStore(
+    themeStore?.subscribe ?? subscribeToDefaultTheme,
+    themeStore?.getSnapshot ?? getDefaultTheme,
+    themeStore?.getSnapshot ?? getDefaultTheme,
+  );
   const [model, setModel] = useState<MermaidEditableModel | null>(null);
-  const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
-  const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null);
-  const [renamingNodeId, setRenamingNodeId] = useState<string | null>(null);
-  const [renamingEdgeId, setRenamingEdgeId] = useState<string | null>(null);
+  const [selection, setSelection] = useState<MermaidSelection | null>(null);
+  const [renaming, setRenaming] = useState<MermaidSelection | null>(null);
   const [connecting, setConnecting] = useState(false);
   const [connectSourceId, setConnectSourceId] = useState<string | null>(null);
   const [openPopover, setOpenPopover] = useState<'shape' | 'direction' | 'properties' | null>(null);
@@ -93,10 +129,8 @@ export function MermaidDiagramWidget({ editor, blockId, host }: MermaidDiagramWi
 
   const onModelChange = useCallback((next: MermaidEditableModel | null) => {
     setModel(next);
-    setSelectedNodeId((id) => (id && next?.nodes.some((node) => node.id === id) ? id : null));
-    setSelectedEdgeId((id) => (id && next?.edges.some((edge) => edge.id === id) ? id : null));
-    setRenamingNodeId((id) => (id && next?.nodes.some((node) => node.id === id) ? id : null));
-    setRenamingEdgeId((id) => (id && next?.edges.some((edge) => edge.id === id) ? id : null));
+    setSelection((current) => (selectionExists(next, current) ? current : null));
+    setRenaming((current) => (selectionExists(next, current) ? current : null));
     setConnectSourceId((id) => (id && next?.nodes.some((node) => node.id === id) ? id : null));
   }, []);
 
@@ -113,25 +147,39 @@ export function MermaidDiagramWidget({ editor, blockId, host }: MermaidDiagramWi
     [blockId, editor],
   );
 
-  const selectedNode = model?.nodes.find((node) => node.id === selectedNodeId) ?? null;
-  const selectedEdge = model?.edges.find((edge) => edge.id === selectedEdgeId) ?? null;
+  const texts = model ? mermaidEditableTexts(model) : [];
+  const selectedNode =
+    selection?.kind === 'node'
+      ? (model?.nodes.find((node) => node.id === selection.id) ?? null)
+      : null;
+  const selectedEdge =
+    selection?.kind === 'edge'
+      ? (model?.edges.find((edge) => edge.id === selection.id) ?? null)
+      : null;
+  const selectedText =
+    selection?.kind === 'text' ? (texts.find((text) => text.id === selection.id) ?? null) : null;
   const editCapabilities = model ? mermaidEditCapabilities(model) : null;
   const diagramProperties = model ? mermaidDiagramProperties(model) : [];
 
   const beginRename = useCallback((node: MermaidEditableNode) => {
-    setSelectedNodeId(node.id);
-    setSelectedEdgeId(null);
-    setRenamingEdgeId(null);
+    const next = { kind: 'node' as const, id: node.id };
+    setSelection(next);
     setOpenPopover(null);
-    setRenamingNodeId(node.id);
+    setRenaming(next);
   }, []);
 
   const beginRenameEdge = useCallback((edge: MermaidEditableEdge) => {
-    setSelectedNodeId(null);
-    setSelectedEdgeId(edge.id);
-    setRenamingNodeId(null);
+    const next = { kind: 'edge' as const, id: edge.id };
+    setSelection(next);
     setOpenPopover(null);
-    setRenamingEdgeId(edge.id);
+    setRenaming(next);
+  }, []);
+
+  const beginRenameText = useCallback((text: MermaidEditableText) => {
+    const next = { kind: 'text' as const, id: text.id };
+    setSelection(next);
+    setOpenPopover(null);
+    setRenaming(next);
   }, []);
 
   const commitRename = useCallback(
@@ -139,7 +187,7 @@ export function MermaidDiagramWidget({ editor, blockId, host }: MermaidDiagramWi
       const node = model?.nodes.find((candidate) => candidate.id === nodeId);
       if (!data || !node) return false;
       if (label.trim() === node.label) {
-        setRenamingNodeId(null);
+        setRenaming(null);
         return true;
       }
       const applied = applyEdit(
@@ -149,7 +197,7 @@ export function MermaidDiagramWidget({ editor, blockId, host }: MermaidDiagramWi
             ? renameAdapterNode(data.source, model, node, label)
             : { ok: false, source: data.source },
       );
-      if (applied) setRenamingNodeId(null);
+      if (applied) setRenaming(null);
       return applied;
     },
     [applyEdit, data, model],
@@ -160,7 +208,7 @@ export function MermaidDiagramWidget({ editor, blockId, host }: MermaidDiagramWi
       const edge = model?.edges.find((candidate) => candidate.id === edgeId);
       if (!data || !model || !edge) return false;
       if (label.trim() === edge.label.trim()) {
-        setRenamingEdgeId(null);
+        setRenaming(null);
         return true;
       }
       const applied = applyEdit(
@@ -168,7 +216,42 @@ export function MermaidDiagramWidget({ editor, blockId, host }: MermaidDiagramWi
           ? setMermaidEdgeLabel(data.source, model, edge, label)
           : setAdapterEdgeLabel(data.source, model, edge, label),
       );
-      if (applied) setRenamingEdgeId(null);
+      if (applied) setRenaming(null);
+      return applied;
+    },
+    [applyEdit, data, model],
+  );
+
+  const commitTextLabel = useCallback(
+    (textId: string, label: string): boolean => {
+      const text = model ? mermaidEditableTexts(model).find((item) => item.id === textId) : null;
+      if (!data || !model || !text) return false;
+      if (label.trim() === text.label.trim()) {
+        setRenaming(null);
+        return true;
+      }
+      let edit: MermaidSourceEditResult;
+      if (model.kind !== 'flowchart') {
+        edit = renameAdapterText(data.source, model, text, label);
+      } else if (text.target === 'node') {
+        const node = model.nodes.find((item) => item.id === text.targetId);
+        edit = node
+          ? renameMermaidNode(data.source, node, label)
+          : { ok: false, source: data.source, reason: 'The selected node no longer exists.' };
+      } else if (text.target === 'edge') {
+        const edge = model.edges.find((item) => item.id === text.targetId);
+        edit = edge
+          ? setMermaidEdgeLabel(data.source, model, edge, label)
+          : { ok: false, source: data.source, reason: 'The selected edge no longer exists.' };
+      } else {
+        edit = {
+          ok: false,
+          source: data.source,
+          reason: 'This label can only be edited in Source.',
+        };
+      }
+      const applied = applyEdit(edit);
+      if (applied) setRenaming(null);
       return applied;
     },
     [applyEdit, data, model],
@@ -177,23 +260,22 @@ export function MermaidDiagramWidget({ editor, blockId, host }: MermaidDiagramWi
   const beginConnect = useCallback((nodeId?: string) => {
     setConnecting(true);
     setConnectSourceId(nodeId ?? null);
-    setSelectedEdgeId(null);
-    setRenamingEdgeId(null);
-    if (nodeId) setSelectedNodeId(nodeId);
+    setRenaming(null);
+    if (nodeId) setSelection({ kind: 'node', id: nodeId });
     setEditNotice('');
   }, []);
 
   const handleSelectNode = useCallback(
     (nodeId: string | null) => {
       if (!connecting || !nodeId || !model || !data) {
-        setSelectedNodeId(nodeId);
-        setRenamingNodeId((current) => (current === nodeId ? current : null));
-        if (nodeId) setRenamingEdgeId(null);
+        const next = nodeId ? { kind: 'node' as const, id: nodeId } : null;
+        setSelection(next);
+        setRenaming((current) => (sameSelection(current, next) ? current : null));
         return;
       }
       if (!connectSourceId) {
         setConnectSourceId(nodeId);
-        setSelectedNodeId(nodeId);
+        setSelection({ kind: 'node', id: nodeId });
         return;
       }
       const applied = applyEdit(
@@ -204,10 +286,29 @@ export function MermaidDiagramWidget({ editor, blockId, host }: MermaidDiagramWi
       if (applied) {
         setConnecting(false);
         setConnectSourceId(null);
-        setSelectedNodeId(nodeId);
+        setSelection({ kind: 'node', id: nodeId });
       }
     },
     [applyEdit, connectSourceId, connecting, data, model],
+  );
+
+  const handleSelect = useCallback(
+    (next: MermaidSelection | null) => {
+      if (!next || next.kind === 'node') {
+        handleSelectNode(next?.id ?? null);
+        return;
+      }
+      if (connecting && next.kind === 'text') {
+        const text = model ? mermaidEditableTexts(model).find((item) => item.id === next.id) : null;
+        if (text?.target === 'node') {
+          handleSelectNode(text.targetId);
+          return;
+        }
+      }
+      setSelection(next);
+      setRenaming((current) => (sameSelection(current, next) ? current : null));
+    },
+    [connecting, handleSelectNode, model],
   );
 
   const handleNodeAction = useCallback(
@@ -215,28 +316,30 @@ export function MermaidDiagramWidget({ editor, blockId, host }: MermaidDiagramWi
       if (!model || !data) return;
       const node = model.nodes.find((candidate) => candidate.id === nodeId);
       if (!node) return;
-      setSelectedNodeId(nodeId);
-      setSelectedEdgeId(null);
-      setRenamingEdgeId(null);
+      const nodeCapabilities = mermaidEditCapabilities(model);
+      setSelection({ kind: 'node', id: nodeId });
+      setRenaming(null);
       switch (action) {
         case 'rename':
-          beginRename(node);
+          if (nodeCapabilities.renameNode) beginRename(node);
           break;
         case 'shape':
-          if (editCapabilities?.shape) setOpenPopover('shape');
+          if (nodeCapabilities.shape) setOpenPopover('shape');
           break;
         case 'duplicate': {
+          if (!nodeCapabilities.duplicateNode) break;
           const result =
             model.kind === 'flowchart'
               ? duplicateMermaidNode(data.source, model, node)
               : duplicateAdapterNode(data.source, model, node);
-          if (applyEdit(result) && result.nodeId) setSelectedNodeId(result.nodeId);
+          if (applyEdit(result) && result.nodeId) setSelection({ kind: 'node', id: result.nodeId });
           break;
         }
         case 'connect':
-          if (editCapabilities?.connect) beginConnect(nodeId);
+          if (nodeCapabilities.connect) beginConnect(nodeId);
           break;
         case 'delete':
+          if (!nodeCapabilities.deleteNode) break;
           if (
             applyEdit(
               model.kind === 'flowchart'
@@ -244,13 +347,13 @@ export function MermaidDiagramWidget({ editor, blockId, host }: MermaidDiagramWi
                 : deleteAdapterNode(data.source, model, node),
             )
           ) {
-            setSelectedNodeId(null);
+            setSelection(null);
             setConnectSourceId(null);
           }
           break;
       }
     },
-    [applyEdit, beginConnect, beginRename, data, editCapabilities, model],
+    [applyEdit, beginConnect, beginRename, data, model],
   );
 
   const handleDisconnect = useCallback(
@@ -265,8 +368,38 @@ export function MermaidDiagramWidget({ editor, blockId, host }: MermaidDiagramWi
             : disconnectAdapterEdge(data.source, model, edge),
         )
       ) {
-        setSelectedEdgeId(null);
-        setRenamingEdgeId(null);
+        setSelection(null);
+        setRenaming(null);
+      }
+    },
+    [applyEdit, data, model],
+  );
+
+  const handleDeleteText = useCallback(
+    (textId: string) => {
+      if (!model || !data) return;
+      const text = mermaidEditableTexts(model).find((item) => item.id === textId);
+      if (!text || !text.deletable) return;
+      let edit: MermaidSourceEditResult;
+      if (model.kind !== 'flowchart') {
+        edit = deleteAdapterText(data.source, model, text);
+      } else if (text.target === 'node') {
+        edit = deleteMermaidNode(data.source, model, text.targetId);
+      } else if (text.target === 'edge') {
+        const edge = model.edges.find((item) => item.id === text.targetId);
+        edit = edge
+          ? setMermaidEdgeLabel(data.source, model, edge, '')
+          : { ok: false, source: data.source, reason: 'The selected edge no longer exists.' };
+      } else {
+        edit = {
+          ok: false,
+          source: data.source,
+          reason: 'This label can only be removed in Source.',
+        };
+      }
+      if (applyEdit(edit)) {
+        setSelection(null);
+        setRenaming(null);
       }
     },
     [applyEdit, data, model],
@@ -331,7 +464,7 @@ export function MermaidDiagramWidget({ editor, blockId, host }: MermaidDiagramWi
           model.kind === 'flowchart'
             ? addMermaidNode(data.source, model)
             : addAdapterNode(data.source, model);
-        if (applyEdit(result) && result.nodeId) setSelectedNodeId(result.nodeId);
+        if (applyEdit(result) && result.nodeId) setSelection({ kind: 'node', id: result.nodeId });
       },
     },
     {
@@ -344,7 +477,7 @@ export function MermaidDiagramWidget({ editor, blockId, host }: MermaidDiagramWi
           ? `Connect two Mermaid ${nodeNoun.toLowerCase()}s`
           : (editCapabilities?.connectionHint ??
             'This Mermaid grammar has no explicit connections'),
-      disabled: !editCapabilities?.connect,
+      disabled: !editCapabilities?.connect || (selection !== null && selection.kind !== 'node'),
       active: connecting,
       onClick: () => {
         if (connecting) {
@@ -355,16 +488,22 @@ export function MermaidDiagramWidget({ editor, blockId, host }: MermaidDiagramWi
     },
     {
       id: 'rename-label',
-      label: selectedEdge ? 'Label' : 'Rename',
+      label: selectedEdge ? 'Label' : selectedText ? 'Text' : 'Rename',
       icon: <Icon icon="fa-solid fa-pen" />,
-      title: selectedEdge ? 'Edit connection label' : 'Rename Mermaid node',
+      title: selectedEdge
+        ? 'Edit connection label'
+        : selectedText
+          ? 'Edit Mermaid text'
+          : 'Rename Mermaid node',
       disabled:
         (!selectedNode || !editCapabilities?.renameNode) &&
-        (!selectedEdge || !editCapabilities?.edgeLabel),
-      active: renamingNodeId === selectedNode?.id || renamingEdgeId === selectedEdge?.id,
+        (!selectedEdge || !editCapabilities?.edgeLabel) &&
+        !selectedText,
+      active: renaming !== null,
       onClick: () => {
         if (selectedNode) beginRename(selectedNode);
         else if (selectedEdge) beginRenameEdge(selectedEdge);
+        else if (selectedText) beginRenameText(selectedText);
       },
     },
     {
@@ -405,11 +544,23 @@ export function MermaidDiagramWidget({ editor, blockId, host }: MermaidDiagramWi
     },
     {
       id: 'delete-node',
-      label: 'Delete',
+      label:
+        selectedText?.target === 'node'
+          ? 'Delete node'
+          : selectedText?.target === 'edge'
+            ? 'Remove label'
+            : selectedText
+              ? 'Delete text'
+              : 'Delete',
       icon: <Icon icon="fa-solid fa-trash" />,
       danger: true,
-      disabled: !selectedNode || !editCapabilities?.deleteNode,
-      onClick: () => selectedNode && handleNodeAction('delete', selectedNode.id),
+      disabled:
+        (!selectedNode || !editCapabilities?.deleteNode) &&
+        (!selectedText || !selectedText.deletable),
+      onClick: () => {
+        if (selectedNode) handleNodeAction('delete', selectedNode.id);
+        else if (selectedText) handleDeleteText(selectedText.id);
+      },
     },
     {
       id: 'direction',
@@ -476,36 +627,32 @@ export function MermaidDiagramWidget({ editor, blockId, host }: MermaidDiagramWi
   const canvas = (
     <MermaidDiagramCanvas
       source={data.source}
+      theme={theme}
       maximized={maximized}
       onToggleMaximize={() => setMaximized((value) => !value)}
-      selectedNodeId={selectedNodeId}
-      selectedEdgeId={selectedEdgeId}
-      renamingNodeId={renamingNodeId}
-      renamingEdgeId={renamingEdgeId}
+      selection={selection}
+      renaming={renaming}
       connecting={connecting}
       connectSourceId={connectSourceId}
       onModelChange={onModelChange}
-      onSelectNode={handleSelectNode}
-      onSelectEdge={(id) => {
-        setSelectedEdgeId(id);
-        if (id) {
-          setSelectedNodeId(null);
-          setRenamingNodeId(null);
-          setRenamingEdgeId((current) => (current === id ? current : null));
-        } else {
-          setRenamingEdgeId(null);
-        }
-      }}
+      onSelect={handleSelect}
       onNodeAction={handleNodeAction}
       onEditEdgeLabel={(id) => {
         const edge = model?.edges.find((candidate) => candidate.id === id);
         if (edge) beginRenameEdge(edge);
       }}
+      onEditText={(id) => {
+        const text = texts.find((item) => item.id === id);
+        if (text) beginRenameText(text);
+      }}
       onCommitRename={commitRename}
       onCommitEdgeLabel={commitEdgeLabel}
-      onCancelRename={() => setRenamingNodeId(null)}
-      onCancelEdgeLabel={() => setRenamingEdgeId(null)}
+      onCommitText={commitTextLabel}
+      onCancelRename={() => setRenaming(null)}
+      onCancelEdgeLabel={() => setRenaming(null)}
+      onCancelText={() => setRenaming(null)}
       onDisconnectEdge={handleDisconnect}
+      onDeleteText={handleDeleteText}
     />
   );
 

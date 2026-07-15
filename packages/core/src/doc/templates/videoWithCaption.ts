@@ -26,7 +26,7 @@ export function videoWithCaption(input: VideoWithCaptionInput, context: Template
     videoSrc,
     posterSrc,
     videoAlt,
-    clipStart,
+    clipStart = 0,
     clipEnd,
     sourceDuration,
     caption: rawCaption,
@@ -36,6 +36,7 @@ export function videoWithCaption(input: VideoWithCaptionInput, context: Template
   } = input;
   const caption = rawCaption ? cleanCaption(rawCaption) : rawCaption;
   const { theme } = context;
+  const resolvedClipEnd = Math.max(clipStart, clipEnd ?? clipStart + Math.max(0, input.duration));
 
   const captionFontSize = themedFontSize(30, context, false);
   const creditFontSize = themedFontSize(16, context, false);
@@ -51,7 +52,7 @@ export function videoWithCaption(input: VideoWithCaptionInput, context: Template
         alt: videoAlt,
         fit: 'cover',
         clipStart,
-        clipEnd,
+        clipEnd: resolvedClipEnd,
         sourceDuration,
         credit: videoCredit,
         license: videoLicense,

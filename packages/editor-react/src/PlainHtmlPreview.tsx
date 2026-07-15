@@ -16,7 +16,7 @@
  * it can fetch.
  */
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { CSSProperties } from 'react';
 import { parseMarkdown } from '@bendyline/squisq/markdown';
 import type { MarkdownDocument, HtmlNode } from '@bendyline/squisq/markdown';
@@ -70,6 +70,8 @@ export interface PlainHtmlPreviewProps {
   style?: CSSProperties;
   /** Let unmodified Up/Down arrows scroll the preview without requiring iframe focus. */
   globalKeyboardShortcuts?: boolean;
+  /** Receives the rendered iframe, primarily for printing its isolated document. */
+  onFrameChange?: (frame: HTMLIFrameElement | null) => void;
 }
 
 const IFRAME_STYLE: CSSProperties = {
@@ -90,8 +92,16 @@ export function PlainHtmlPreview({
   className,
   style,
   globalKeyboardShortcuts = false,
+  onFrameChange,
 }: PlainHtmlPreviewProps) {
-  const iframeRef = useRef<HTMLIFrameElement>(null);
+  const iframeRef = useRef<HTMLIFrameElement | null>(null);
+  const setIframeRef = useCallback(
+    (frame: HTMLIFrameElement | null) => {
+      iframeRef.current = frame;
+      onFrameChange?.(frame);
+    },
+    [onFrameChange],
+  );
   const mdDoc = useMemo<MarkdownDocument>(() => parseMarkdown(markdown), [markdown]);
 
   // Resolve any relative image URLs the doc references. Blob URLs are
@@ -201,7 +211,7 @@ export function PlainHtmlPreview({
 
   return (
     <iframe
-      ref={iframeRef}
+      ref={setIframeRef}
       className={className}
       data-testid="plain-html-preview"
       title={title ?? 'HTML preview'}

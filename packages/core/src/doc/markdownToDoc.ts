@@ -49,7 +49,7 @@ import { extractMediaFromContents } from './mediaAnnotations.js';
 import { extractTemplateBlocksFromContents } from './annotationBlocks.js';
 import type { ParsedAnnotation } from './standaloneAnnotation.js';
 import { profileBlockContents, pickAutoTemplate } from '../recommend/templates.js';
-import { deriveTemplateInputs } from './templateInputs.js';
+import { autoTemplatePreservesContent, deriveTemplateInputs } from './templateInputs.js';
 import { isEligibleAsciiFenceLang } from './asciiDiagram/detect.js';
 import { parseAsciiDiagram } from './asciiDiagram/parse.js';
 import { asciiDiagramToTemplateData } from './asciiDiagram/mapping.js';
@@ -891,8 +891,10 @@ function applyAutoTemplates(
     if (block.sourceHeading && !annotated && block.template === resolvedDefault) {
       const profile = profileBlockContents(block.contents ?? []);
       const picked = pickAutoTemplate(profile, state.featureIndex);
-      if (picked) {
-        const inputs = deriveTemplateInputs(picked, block.title ?? '', block.contents);
+      if (picked && autoTemplatePreservesContent(picked, block.contents)) {
+        const inputs = deriveTemplateInputs(picked, block.title ?? '', block.contents, {
+          preserveSourceHeading: true,
+        });
         if (inputs) {
           if (picked === 'leftFeature' || picked === 'rightFeature') state.featureIndex += 1;
           block.template = picked;

@@ -350,7 +350,7 @@ function recommendedNamesForProfile(profile: BlockContentProfile): string[] {
  * decisive — the caller keeps its structural default (`sectionHeader`).
  *
  * Precedence favors the most specific/structured content: a table beats
- * an image beats a blockquote beats a stat-looking line. `blockIndex`
+ * a video beats an image beats a blockquote beats a stat-looking line. `blockIndex`
  * alternates left/right feature composition for single-image blocks so a
  * run of image sections doesn't stack the same layout.
  *
@@ -363,6 +363,7 @@ export function pickAutoTemplate(profile: BlockContentProfile, blockIndex = 0): 
   if (profile.hasTimeline) return 'timeline';
   if (profile.hasTree) return 'tree';
   if (profile.hasTable) return 'dataTable';
+  if (profile.hasVideo) return 'videoWithCaption';
   if (profile.imageCount >= 2) return 'photoGrid';
   if (profile.hasImage) return blockIndex % 2 === 0 ? 'leftFeature' : 'rightFeature';
   if (profile.hasBlockquote) return 'quote';

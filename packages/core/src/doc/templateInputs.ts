@@ -45,6 +45,15 @@ export interface FirstImage {
   height?: number;
 }
 
+/** First-class video reference discovered in a block body. */
+export interface EmbeddedVideo {
+  src: string;
+  posterSrc?: string;
+  alt: string;
+}
+
+const VIDEO_FILE_RE = /\.(?:webm|mp4|mov|m4v|ogv)(?:[?#].*)?$/i;
+
 /** Plain text of a block's body contents (excluding the heading). */
 export function extractBodyPlainText(contents?: MarkdownBlockNode[]): string {
   if (!contents || contents.length === 0) return '';
@@ -139,6 +148,86 @@ export function extractImages(
 /** First image in a block's body, or null. */
 export function extractFirstImage(contents: MarkdownBlockNode[] | undefined): FirstImage | null {
   return extractImages(contents, 1)[0] ?? null;
+}
+
+/**
+ * Find playable video references in block contents.
+ *
+ * Recorder output is raw HTML (`<video src="...">`), sometimes with a
+ * nested `<source>`. Direct markdown links/images to video files are also
+ * accepted. Hosted watch-page/iframe URLs are deliberately excluded: an
+ * HTML5 VideoLayer cannot play those URLs directly.
+ */
+export function extractEmbeddedVideos(
+  contents: MarkdownBlockNode[] | undefined,
+  limit = Infinity,
+): EmbeddedVideo[] {
+  if (!contents || contents.length === 0) return [];
+  const found: EmbeddedVideo[] = [];
+  const seen = new Set<string>();
+
+  const add = (video: EmbeddedVideo): void => {
+    if (!video.src || found.length >= limit || seen.has(video.src)) return;
+    seen.add(video.src);
+    found.push(video);
+  };
+
+  function nestedSource(children: unknown): string | undefined {
+    if (!Array.isArray(children)) return undefined;
+    for (const child of children) {
+      if (!child || typeof child !== 'object') continue;
+      const node = child as Record<string, unknown>;
+      if (node.tagName === 'source') {
+        const attrs = node.attributes as Record<string, string> | undefined;
+        if (typeof attrs?.src === 'string' && attrs.src) return attrs.src;
+      }
+      const nested = nestedSource(node.children);
+      if (nested) return nested;
+    }
+    return undefined;
+  }
+
+  function walk(node: unknown): void {
+    if (found.length >= limit || !node || typeof node !== 'object') return;
+    const n = node as Record<string, unknown>;
+
+    if (n.type === 'htmlElement' && n.tagName === 'video') {
+      const attrs = n.attributes as Record<string, string> | undefined;
+      const src = attrs?.src || nestedSource(n.children);
+      if (src) {
+        add({
+          src,
+          ...(attrs?.poster ? { posterSrc: attrs.poster } : {}),
+          alt: attrs?.['aria-label'] || attrs?.title || attrs?.alt || '',
+        });
+      }
+    } else if (
+      (n.type === 'link' || n.type === 'image') &&
+      typeof n.url === 'string' &&
+      VIDEO_FILE_RE.test(n.url)
+    ) {
+      add({
+        src: n.url,
+        alt:
+          typeof n.alt === 'string'
+            ? n.alt
+            : extractPlainText(n as unknown as MarkdownBlockNode).trim(),
+      });
+    }
+
+    if (Array.isArray(n.children)) n.children.forEach(walk);
+    if (Array.isArray(n.htmlChildren)) n.htmlChildren.forEach(walk);
+  }
+
+  contents.forEach(walk);
+  return found;
+}
+
+/** First directly playable video in a block body, or null. */
+export function extractFirstEmbeddedVideo(
+  contents: MarkdownBlockNode[] | undefined,
+): EmbeddedVideo | null {
+  return extractEmbeddedVideos(contents, 1)[0] ?? null;
 }
 
 /** Extract table data (headers, rows, alignment) from block contents. */
@@ -295,6 +384,69 @@ export interface DeriveTemplateInputsOptions {
    * input can't be derived (preview surfaces). Default false (strict).
    */
   placeholders?: boolean;
+  /**
+   * Keep the source heading visible when a template normally promotes only
+   * body content. Used by automatic templates; explicit annotations retain
+   * their historical input derivation.
+   */
+  preserveSourceHeading?: boolean;
+}
+
+function normalizeCoverageText(value: string): string {
+  return value.replace(/\s+/g, ' ').trim();
+}
+
+/**
+ * Whether an automatically selected template can represent every authored
+ * node in the block. Auto-selection must be conservative: the source remains
+ * round-trippable either way, but a successful render may not hide sibling
+ * content that the chosen template has no slot for.
+ */
+export function autoTemplatePreservesContent(
+  templateName: string,
+  contents: MarkdownBlockNode[] | undefined,
+): boolean {
+  const nodes = contents ?? [];
+
+  switch (templateName) {
+    case 'quote':
+      return nodes.length === 1 && nodes[0]?.type === 'blockquote';
+    case 'dataTable':
+      return nodes.length === 1 && nodes[0]?.type === 'table';
+    case 'list':
+      return nodes.length === 1 && nodes[0]?.type === 'list';
+    case 'diagram':
+    case 'timeline':
+      return nodes.length === 1 && nodes[0]?.type === 'code';
+    case 'tree':
+      return nodes.length === 1 && (nodes[0]?.type === 'code' || nodes[0]?.type === 'list');
+    case 'photoGrid': {
+      const images = extractImages(nodes);
+      if (images.length < 2 || images.length > 4) return false;
+      const bodyText = normalizeCoverageText(extractBodyPlainText(nodes));
+      const representedText = normalizeCoverageText(
+        images
+          .map((image) => image.alt)
+          .filter(Boolean)
+          .join(' '),
+      );
+      return bodyText === '' || bodyText === representedText;
+    }
+    case 'videoWithCaption': {
+      const videos = extractEmbeddedVideos(nodes);
+      if (videos.length !== 1) return false;
+      const bodyText = normalizeCoverageText(extractBodyPlainText(nodes));
+      return bodyText === normalizeCoverageText(videos[0]?.alt ?? '');
+    }
+    case 'leftFeature':
+    case 'rightFeature':
+    case 'statHighlight':
+      // Feature bodies retain all plain text; stat auto-derivation uses the
+      // preserveSourceHeading mode below and retains the remaining body.
+      return true;
+    default:
+      return false;
+  }
 }
 
 /**
@@ -312,11 +464,25 @@ export function deriveTemplateInputs(
   const bodyText = extractBodyPlainText(contents);
 
   switch (templateName) {
-    case 'statHighlight':
-      return deriveStatHighlightInputs(headingText, contents, bodyText);
+    case 'statHighlight': {
+      const inputs = deriveStatHighlightInputs(headingText, contents, bodyText);
+      if (
+        options.preserveSourceHeading &&
+        headingText &&
+        inputs.stat !== headingText &&
+        inputs.description !== headingText
+      ) {
+        return {
+          ...inputs,
+          description: headingText,
+          ...(inputs.description ? { detail: inputs.description } : {}),
+        };
+      }
+      return inputs;
+    }
     case 'quote': {
       const quote = extractBlockquoteText(contents) || bodyText || headingText;
-      return { quote };
+      return { quote, ...(headingText ? { title: headingText } : {}) };
     }
     case 'fullBleedQuote':
     case 'pullQuote': {
@@ -332,7 +498,7 @@ export function deriveTemplateInputs(
         : null;
     case 'list': {
       const items = extractListItems(contents);
-      if (items.length > 0) return { items };
+      if (items.length > 0) return { items, ...(headingText ? { title: headingText } : {}) };
       return placeholders ? { items: ['Item 1', 'Item 2', 'Item 3'] } : null;
     }
     case 'definitionCard':
@@ -341,7 +507,7 @@ export function deriveTemplateInputs(
       return { date: headingText, description: bodyText || headingText };
     case 'dataTable': {
       const tableData = extractTableFromContents(contents);
-      if (tableData) return tableData;
+      if (tableData) return { ...tableData, ...(headingText ? { title: headingText } : {}) };
       return placeholders ? { headers: ['Column'], rows: [['Data']] } : null;
     }
     case 'imageWithCaption': {
@@ -354,6 +520,16 @@ export function deriveTemplateInputs(
       if (images.length < 2) return placeholders ? {} : null;
       return {
         images: images.map((i) => ({ src: i.src, alt: i.alt })),
+        caption: headingText,
+      };
+    }
+    case 'videoWithCaption': {
+      const video = extractFirstEmbeddedVideo(contents);
+      if (!video) return placeholders ? { caption: headingText } : null;
+      return {
+        videoSrc: video.src,
+        posterSrc: video.posterSrc,
+        videoAlt: video.alt || headingText,
         caption: headingText,
       };
     }

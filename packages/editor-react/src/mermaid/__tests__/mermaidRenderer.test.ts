@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { THEMES } from '@bendyline/squisq/schemas';
 
 const mocks = vi.hoisted(() => ({
   initialize: vi.fn(),
@@ -16,7 +17,35 @@ import { mermaidErrorMessage, renderMermaidDiagram } from '../mermaidRenderer';
 
 describe('Mermaid renderer', () => {
   beforeEach(() => {
+    mocks.initialize.mockClear();
     mocks.render.mockReset();
+  });
+
+  it('configures Mermaid from the active Squisq theme for every render', async () => {
+    mocks.render.mockResolvedValue({
+      svg: '<svg viewBox="0 0 200 100"></svg>',
+      diagramType: 'timeline',
+    });
+
+    await renderMermaidDiagram(
+      'diagram-themed',
+      'timeline\n  Q1 : Research',
+      undefined,
+      THEMES.magazine,
+    );
+
+    expect(mocks.initialize).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        theme: 'base',
+        themeVariables: expect.objectContaining({
+          background: THEMES.magazine.colors.background,
+          primaryColor: THEMES.magazine.colors.primary,
+          secondaryColor: THEMES.magazine.colors.secondary,
+          cScale0: THEMES.magazine.colors.primary,
+          cScale1: THEMES.magazine.colors.secondary,
+        }),
+      }),
+    );
   });
 
   it('uses Mermaid output without narrowing the authored syntax', async () => {

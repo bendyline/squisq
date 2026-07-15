@@ -1,8 +1,18 @@
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 import { loadPublicPackages } from './_packages';
+
+function readDeclarations(directory: string): string {
+  return readdirSync(directory, { withFileTypes: true })
+    .flatMap((entry) => {
+      const path = resolve(directory, entry.name);
+      if (entry.isDirectory()) return readDeclarations(path);
+      return entry.name.endsWith('.d.ts') ? [readFileSync(path, 'utf8')] : [];
+    })
+    .join('\n');
+}
 
 describe('@bendyline/squisq-react standalone browser contract', () => {
   const pkg = loadPublicPackages().find((candidate) => candidate.name.endsWith('squisq-react'))!;
@@ -33,8 +43,18 @@ describe('@bendyline/squisq-react standalone browser contract', () => {
     expect(full.byteLength).toBeGreaterThan(light.byteLength);
   });
 
+  it.each(['squisq-player.global.js', 'squisq-player.full.global.js'])(
+    '%s reports the package manifest version',
+    (file) => {
+      const bundle = readFileSync(resolve(pkg.dist, file), 'utf8');
+      const bundledVersion = Function(`${bundle}; return SquisqPlayer.version;`)() as unknown;
+
+      expect(bundledVersion).toBe(pkg.pkg.version);
+    },
+  );
+
   it('publishes the callback API and options-object playback signature', () => {
-    const declarations = readFileSync(resolve(pkg.dist, 'index.d.ts'), 'utf8');
+    const declarations = readDeclarations(pkg.dist);
     expect(declarations).toContain('onRenderAPIReady?: (api: SquisqRenderAPI | null) => void;');
     expect(declarations).toContain('interface SquisqPlayerHandle');
     expect(declarations).toContain('interface UseDocPlaybackOptions');

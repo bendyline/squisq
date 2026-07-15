@@ -20,7 +20,15 @@
  *   picker and the N-accent editor).
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+} from 'react';
 import type { Theme, ThemeSeedColors } from '@bendyline/squisq/schemas';
 import { deriveScale, isHex, serializeTheme } from '@bendyline/squisq/schemas';
 import {
@@ -41,6 +49,17 @@ import {
 } from './customThemes/themeDraft';
 import { Section, SeedColorRow, FontPicker, PresetRow } from './customThemes/themeControls';
 import { ImportThemeSection } from './customThemes/ImportThemeSection';
+
+const POPOVER_WIDTH = 360;
+const POPOVER_GUTTER = 8;
+const POPOVER_GAP = 4;
+
+interface PopoverPosition {
+  left: number;
+  top: number;
+  width: number;
+  maxHeight: number;
+}
 
 // ── Component ───────────────────────────────────────────────────────
 
@@ -66,6 +85,7 @@ export function ThemeCustomizerPanel({
 }: ThemeCustomizerPanelProps) {
   const [open, setOpen] = useState(false);
   const [draft, setDraft] = useState<Draft>(() => themeToDraft(value));
+  const [popoverPosition, setPopoverPosition] = useState<PopoverPosition | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
   // Whenever an external value lands (e.g., page load with persisted theme),
@@ -89,6 +109,38 @@ export function ThemeCustomizerPanel({
     };
     document.addEventListener('mousedown', handler);
     return () => document.removeEventListener('mousedown', handler);
+  }, [open]);
+
+  // Keep the popover inside the viewport even when its trigger is near an
+  // edge (for example, when the demo site is shown in a narrow side pane).
+  useLayoutEffect(() => {
+    if (!open) return;
+
+    const positionPopover = () => {
+      const container = containerRef.current;
+      if (!container) return;
+
+      const anchor = container.getBoundingClientRect();
+      const width = Math.max(0, Math.min(POPOVER_WIDTH, window.innerWidth - POPOVER_GUTTER * 2));
+      const maxLeft = Math.max(POPOVER_GUTTER, window.innerWidth - width - POPOVER_GUTTER);
+      const left = Math.min(Math.max(POPOVER_GUTTER, anchor.right - width), maxLeft);
+      const top = anchor.bottom;
+
+      setPopoverPosition({
+        left,
+        top,
+        width,
+        maxHeight: Math.max(0, window.innerHeight - top - POPOVER_GAP - POPOVER_GUTTER),
+      });
+    };
+
+    positionPopover();
+    window.addEventListener('resize', positionPopover);
+    window.addEventListener('scroll', positionPopover, true);
+    return () => {
+      window.removeEventListener('resize', positionPopover);
+      window.removeEventListener('scroll', positionPopover, true);
+    };
   }, [open]);
 
   const updateDraft = useCallback(
@@ -173,7 +225,20 @@ export function ThemeCustomizerPanel({
         )}
       </button>
       {open && (
-        <div className="squisq-theme-customizer-popover" role="dialog" aria-label="Customize theme">
+        <div
+          className="squisq-theme-customizer-popover"
+          role="dialog"
+          aria-label="Customize theme"
+          style={
+            popoverPosition
+              ? ({
+                  ...popoverPosition,
+                  position: 'fixed',
+                  right: 'auto',
+                } satisfies CSSProperties)
+              : undefined
+          }
+        >
           <div className="squisq-theme-customizer-header">
             <span className="squisq-theme-customizer-title">Customize theme</span>
           </div>

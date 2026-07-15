@@ -22,6 +22,9 @@
     "access": "public"
   },
   "type": "module",
+  "engines": {
+    "node": ">=22.14.0"
+  },
   "main": "./dist/index.js",
   "module": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -36,6 +39,30 @@
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
     },
+    "./player": {
+      "types": "./dist/player/index.d.ts",
+      "import": "./dist/player/index.js"
+    },
+    "./page": {
+      "types": "./dist/page/index.d.ts",
+      "import": "./dist/page/index.js"
+    },
+    "./layers": {
+      "types": "./dist/layers/index.d.ts",
+      "import": "./dist/layers/index.js"
+    },
+    "./hooks": {
+      "types": "./dist/hooks/index.d.ts",
+      "import": "./dist/hooks/index.js"
+    },
+    "./markdown": {
+      "types": "./dist/markdown/index.d.ts",
+      "import": "./dist/markdown/index.js"
+    },
+    "./json-view": {
+      "types": "./dist/json-view/index.d.ts",
+      "import": "./dist/json-view/index.js"
+    },
     "./styles": "./dist/styles/index.css",
     "./standalone": "./dist/squisq-player.global.js",
     "./standalone/full": "./dist/squisq-player.full.global.js",
@@ -45,7 +72,7 @@
     }
   },
   "scripts": {
-    "build": "tsup && tsup --config tsup.standalone.config.ts && node scripts/generate-standalone-source.mjs && node ../../scripts/build-styles.mjs",
+    "build": "tsup && tsup --config tsup.standalone.config.ts && node scripts/generate-standalone-source.mjs && node ../../scripts/build-styles.mjs && node ../../scripts/remove-empty-chunks.mjs dist",
     "build:esm": "tsup",
     "build:standalone": "tsup --config tsup.standalone.config.ts && node scripts/generate-standalone-source.mjs",
     "dev": "npm run build:standalone && concurrently -n js,dts -c blue,gray -r \"tsup --watch --no-dts --no-clean\" \"tsup --watch --dts-only --no-clean\"",

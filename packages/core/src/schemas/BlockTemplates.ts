@@ -184,6 +184,8 @@ export interface StatHighlightInput extends BaseTemplateBlock {
  */
 export interface QuoteBlockInput extends BaseTemplateBlock {
   template: 'quote';
+  /** Optional heading above the quote. */
+  title?: string;
   /** The quote text (supports \n for line breaks) */
   quote: string;
   /** Attribution (author, source) */
@@ -537,10 +539,10 @@ export interface VideoWithCaptionInput extends BaseTemplateBlock {
   posterSrc?: string;
   /** Alt text for accessibility */
   videoAlt: string;
-  /** Start time within source video (seconds) */
-  clipStart: number;
-  /** End time within source video (seconds) */
-  clipEnd: number;
+  /** Start time within source video (seconds). Defaults to 0. */
+  clipStart?: number;
+  /** End time within source video (seconds). Defaults to the block duration. */
+  clipEnd?: number;
   /** Source video total duration (for validation) */
   sourceDuration?: number;
   /** Caption text overlay */

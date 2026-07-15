@@ -27,7 +27,7 @@ import { createAccentLayers, getAccentLayout, adjustY, DEFAULT_LAYOUT } from './
 import { createBackgroundLayer, estimateTextHeight } from './captionUtils.js';
 
 export function quoteBlock(input: QuoteBlockInput, context: TemplateContext): Layer[] {
-  const { quote, attribution, accentImage } = input;
+  const { title, quote, attribution, accentImage } = input;
   const { theme, viewport } = context;
 
   // Get layout adjustments if accent image is present
@@ -35,6 +35,7 @@ export function quoteBlock(input: QuoteBlockInput, context: TemplateContext): La
 
   // Scale font sizes for viewport
   const quoteFontSize = themedFontSize(48, context, true);
+  const titleFontSize = themedFontSize(34, context, true);
   const attrFontSize = themedFontSize(26, context, false);
   const quoteLineHeight = Math.max(theme.typography.titleLineHeight ?? 1.4, 1.25);
 
@@ -52,6 +53,31 @@ export function quoteBlock(input: QuoteBlockInput, context: TemplateContext): La
         themedImageTreatment(context, input.imageTreatment),
       ),
     );
+  }
+
+  if (title) {
+    layers.push({
+      type: 'text',
+      id: 'quote-title',
+      content: {
+        text: title,
+        style: {
+          fontSize: titleFontSize,
+          fontFamily: getThemeFont(context, 'body'),
+          fontWeight: 'bold',
+          color: theme.colors.textMuted,
+          textAlign: 'center',
+          shadow: shouldUseShadow(context),
+        },
+      },
+      position: {
+        x: accentLayout.textCenterX,
+        y: adjustY('14%', accentLayout),
+        width: accentLayout.textWidth,
+        anchor: 'center',
+      },
+      animation: { type: 'fadeIn', duration: 0.8 },
+    });
   }
 
   // Decorative opening quotation mark — oversized, low-opacity behind the
@@ -79,7 +105,7 @@ export function quoteBlock(input: QuoteBlockInput, context: TemplateContext): La
 
   // Quote text — optically centered, nudged up slightly when an
   // attribution hangs below it.
-  const quoteYPct = attribution ? 45 : 50;
+  const quoteYPct = attribution ? 45 : title ? 52 : 50;
   layers.push({
     type: 'text',
     id: 'quote',

@@ -12,7 +12,8 @@ async function openRecorder(page: Page) {
   await page.waitForLoadState('networkidle');
   await page.locator('select').first().selectOption('hello-world');
   await page.locator('.tiptap.ProseMirror').waitFor({ state: 'visible', timeout: 5_000 });
-  await page.getByRole('button', { name: 'Record media' }).click();
+  await page.getByRole('button', { name: 'Insert' }).click();
+  await page.getByRole('menuitem', { name: 'Record media' }).click();
   const dialog = page.getByRole('dialog', { name: 'Record media' });
   await expect(dialog).toBeVisible();
   return dialog;

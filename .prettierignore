@@ -1,4 +1,5 @@
 dist
+.stryker-tmp
 node_modules
 *.tgz
 test-results

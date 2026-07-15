@@ -299,7 +299,7 @@ Also exported: `createRegistry` / `defaultRegistry` / `defaultFormats`, `BUILTIN
 
 The package root re-exports the common converters; `./container`, the plain-HTML/bundle functions, `docxToContainer`, `pdfToContainer`, `PdfPageSize`, and the image utilities are subpath-only.
 
-See the full [API Reference](../../docs/API.md#bendylinesquisq-formats) for every signature and options interface.
+See the full [API Reference](https://github.com/bendyline/squisq/blob/main/docs/API.md#bendylinesquisq-formats) for every signature and options interface.
 
 ## Related Packages
 

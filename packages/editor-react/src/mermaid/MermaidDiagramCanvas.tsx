@@ -2,8 +2,14 @@ import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from
 import { Icon } from '../Icon';
 import { calculateFitScale, type SceneSize } from '../scene/fitScale';
 import { SceneViewControls } from '../scene/SceneViewControls';
-import { mermaidEditCapabilities, type MermaidEditableModel } from './mermaidModel';
+import {
+  mermaidEditableTexts,
+  mermaidEditCapabilities,
+  type MermaidEditableModel,
+  type MermaidSelection,
+} from './mermaidModel';
 import { mermaidErrorMessage, renderMermaidDiagram } from './mermaidRenderer';
+import type { Theme } from '@bendyline/squisq/schemas';
 
 let renderSequence = 0;
 
@@ -11,24 +17,44 @@ export type MermaidNodeCanvasAction = 'rename' | 'shape' | 'duplicate' | 'connec
 
 export interface MermaidDiagramCanvasProps {
   source: string;
+  theme: Theme;
   maximized?: boolean;
   onToggleMaximize?: () => void;
+  selection?: MermaidSelection | null;
+  renaming?: MermaidSelection | null;
+  /** @deprecated Use the discriminated `selection` prop. */
   selectedNodeId?: string | null;
+  /** @deprecated Use the discriminated `selection` prop. */
   selectedEdgeId?: string | null;
+  /** @deprecated Use the discriminated `selection` prop. */
+  selectedTextId?: string | null;
+  /** @deprecated Use the discriminated `renaming` prop. */
   renamingNodeId?: string | null;
+  /** @deprecated Use the discriminated `renaming` prop. */
   renamingEdgeId?: string | null;
+  /** @deprecated Use the discriminated `renaming` prop. */
+  renamingTextId?: string | null;
   connectSourceId?: string | null;
   connecting?: boolean;
   onModelChange?: (model: MermaidEditableModel | null) => void;
+  onSelect?: (selection: MermaidSelection | null) => void;
+  /** @deprecated Use the discriminated `onSelect` callback. */
   onSelectNode?: (id: string | null) => void;
+  /** @deprecated Use the discriminated `onSelect` callback. */
   onSelectEdge?: (id: string | null) => void;
+  /** @deprecated Use the discriminated `onSelect` callback. */
+  onSelectText?: (id: string | null) => void;
   onNodeAction?: (action: MermaidNodeCanvasAction, id: string) => void;
   onEditEdgeLabel?: (id: string) => void;
+  onEditText?: (id: string) => void;
   onCommitRename?: (id: string, label: string) => boolean;
   onCommitEdgeLabel?: (id: string, label: string) => boolean;
+  onCommitText?: (id: string, label: string) => boolean;
   onCancelRename?: () => void;
   onCancelEdgeLabel?: () => void;
+  onCancelText?: () => void;
   onDisconnectEdge?: (id: string) => void;
+  onDeleteText?: (id: string) => void;
 }
 
 interface SelectionAnchor {
@@ -82,25 +108,60 @@ function readSvgViewBox(root: HTMLElement | null): SceneSize | null {
 
 export function MermaidDiagramCanvas({
   source,
+  theme,
   maximized = false,
   onToggleMaximize,
-  selectedNodeId = null,
-  selectedEdgeId = null,
-  renamingNodeId = null,
-  renamingEdgeId = null,
+  selection,
+  renaming,
+  selectedNodeId: legacySelectedNodeId = null,
+  selectedEdgeId: legacySelectedEdgeId = null,
+  selectedTextId: legacySelectedTextId = null,
+  renamingNodeId: legacyRenamingNodeId = null,
+  renamingEdgeId: legacyRenamingEdgeId = null,
+  renamingTextId: legacyRenamingTextId = null,
   connectSourceId = null,
   connecting = false,
   onModelChange,
+  onSelect,
   onSelectNode,
   onSelectEdge,
+  onSelectText,
   onNodeAction,
   onEditEdgeLabel,
+  onEditText,
   onCommitRename,
   onCommitEdgeLabel,
+  onCommitText,
   onCancelRename,
   onCancelEdgeLabel,
+  onCancelText,
   onDisconnectEdge,
+  onDeleteText,
 }: MermaidDiagramCanvasProps) {
+  const selectedNodeId =
+    selection === undefined
+      ? legacySelectedNodeId
+      : selection?.kind === 'node'
+        ? selection.id
+        : null;
+  const selectedEdgeId =
+    selection === undefined
+      ? legacySelectedEdgeId
+      : selection?.kind === 'edge'
+        ? selection.id
+        : null;
+  const selectedTextId =
+    selection === undefined
+      ? legacySelectedTextId
+      : selection?.kind === 'text'
+        ? selection.id
+        : null;
+  const renamingNodeId =
+    renaming === undefined ? legacyRenamingNodeId : renaming?.kind === 'node' ? renaming.id : null;
+  const renamingEdgeId =
+    renaming === undefined ? legacyRenamingEdgeId : renaming?.kind === 'edge' ? renaming.id : null;
+  const renamingTextId =
+    renaming === undefined ? legacyRenamingTextId : renaming?.kind === 'text' ? renaming.id : null;
   const svgRootRef = useRef<HTMLDivElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const renameInputRef = useRef<HTMLInputElement>(null);
@@ -160,7 +221,7 @@ export function MermaidDiagramCanvas({
     // outlive this editor canvas: switching to Page/Slideshow can unmount the
     // widget while an async render is in flight. The renderer's body host is
     // stable and also avoids measurements beneath the zoomed canvas.
-    void renderMermaidDiagram(id, source)
+    void renderMermaidDiagram(id, source, undefined, theme)
       .then((result) => {
         if (!current) return;
         const nextModel = result.model ?? null;
@@ -182,7 +243,7 @@ export function MermaidDiagramCanvas({
     return () => {
       current = false;
     };
-  }, [source, onModelChange]);
+  }, [source, onModelChange, theme]);
 
   useLayoutEffect(() => {
     const scroll = scrollRef.current;
@@ -256,13 +317,25 @@ export function MermaidDiagramCanvas({
     );
   }, []);
 
+  const findTextElement = useCallback((id: string): Element | null => {
+    const root = svgRootRef.current;
+    if (!root) return null;
+    return (
+      [...root.querySelectorAll<Element>('[data-squisq-text-id]')].find(
+        (element) => element.getAttribute('data-squisq-text-id') === id,
+      ) ?? null
+    );
+  }, []);
+
   const updateSelectionAnchor = useCallback(() => {
     const root = svgRootRef.current;
-    const selected = selectedNodeId
-      ? findNodeElement(selectedNodeId)
-      : selectedEdgeId
-        ? findEdgeElements(selectedEdgeId)[0]
-        : null;
+    const selected = selectedTextId
+      ? findTextElement(selectedTextId)
+      : selectedNodeId
+        ? findNodeElement(selectedNodeId)
+        : selectedEdgeId
+          ? findEdgeElements(selectedEdgeId)[0]
+          : null;
     if (!root || !selected) {
       setSelectionAnchor(null);
       return;
@@ -285,7 +358,14 @@ export function MermaidDiagramCanvas({
       editorTop: selectedTop + selectedRect.height / 2,
       editorWidth: Math.min(420, Math.max(140, selectedRect.width - 20)),
     });
-  }, [findEdgeElements, findNodeElement, selectedEdgeId, selectedNodeId]);
+  }, [
+    findEdgeElements,
+    findNodeElement,
+    findTextElement,
+    selectedEdgeId,
+    selectedNodeId,
+    selectedTextId,
+  ]);
 
   useLayoutEffect(() => {
     const node = renamingNodeId
@@ -294,7 +374,10 @@ export function MermaidDiagramCanvas({
     const edge = renamingEdgeId
       ? model?.edges.find((candidate) => candidate.id === renamingEdgeId)
       : null;
-    const label = node?.label ?? edge?.label;
+    const text = renamingTextId
+      ? model && mermaidEditableTexts(model).find((candidate) => candidate.id === renamingTextId)
+      : null;
+    const label = node?.label ?? edge?.label ?? text?.label;
     if (label === undefined) return;
     setRenameValue(label);
     const frame = window.requestAnimationFrame(() => {
@@ -302,7 +385,7 @@ export function MermaidDiagramCanvas({
       renameInputRef.current?.select();
     });
     return () => window.cancelAnimationFrame(frame);
-  }, [model, renamingEdgeId, renamingNodeId]);
+  }, [model, renamingEdgeId, renamingNodeId, renamingTextId]);
 
   // Decorate Mermaid-owned SVG groups with editor-only hit metadata. The SVG
   // string remains Mermaid output; these attributes are session UI state.
@@ -311,6 +394,10 @@ export function MermaidDiagramCanvas({
     if (!root || !model) {
       setSelectionAnchor(null);
       return;
+    }
+    for (const previous of root.querySelectorAll('[data-squisq-text-id]')) {
+      previous.removeAttribute('data-squisq-text-id');
+      previous.classList.remove('squisq-mermaid-text-selected');
     }
     for (const previous of root.querySelectorAll('[data-squisq-node-id]')) {
       previous.removeAttribute('data-squisq-node-id');
@@ -360,6 +447,23 @@ export function MermaidDiagramCanvas({
       target.setAttribute('aria-label', `${item.label}, Mermaid ${model.kind} item`);
       target.classList.toggle('squisq-mermaid-node-selected', item.id === selectedNodeId);
       target.classList.toggle('squisq-mermaid-connect-source', item.id === connectSourceId);
+    }
+    // Text selection is independent from structural selection. Clicking a
+    // rendered label selects the authored text; clicking its surrounding shape
+    // still selects the node or connection that owns it.
+    const usedEditableText = new Set<Element>();
+    for (const item of mermaidEditableTexts(model)) {
+      const text = textElements.find(
+        (candidate) =>
+          !usedEditableText.has(candidate) && candidate.textContent?.trim() === item.label.trim(),
+      );
+      if (!text) continue;
+      usedEditableText.add(text);
+      text.setAttribute('data-squisq-text-id', item.id);
+      text.setAttribute('role', 'button');
+      text.setAttribute('tabindex', '0');
+      text.setAttribute('aria-label', `${item.label}, editable Mermaid text`);
+      text.classList.toggle('squisq-mermaid-text-selected', item.id === selectedTextId);
     }
     for (const previous of root.querySelectorAll('.squisq-mermaid-edge-hit-target')) {
       previous.remove();
@@ -435,6 +539,7 @@ export function MermaidDiagramCanvas({
     model,
     selectedEdgeId,
     selectedNodeId,
+    selectedTextId,
     svg,
     updateSelectionAnchor,
     zoom,
@@ -457,6 +562,11 @@ export function MermaidDiagramCanvas({
     return target.closest<HTMLElement>('[data-squisq-node-id]')?.dataset.squisqNodeId ?? null;
   };
 
+  const textIdFromTarget = (target: EventTarget | null): string | null => {
+    if (!(target instanceof Element)) return null;
+    return target.closest<HTMLElement>('[data-squisq-text-id]')?.dataset.squisqTextId ?? null;
+  };
+
   const edgeIdFromTarget = (target: EventTarget | null): string | null => {
     if (!(target instanceof Element) || !model) return null;
     const element = target.closest<Element>('[data-id], [data-squisq-edge-id]');
@@ -464,27 +574,46 @@ export function MermaidDiagramCanvas({
     return id && model.edges.some((edge) => edge.id === id) ? id : null;
   };
 
+  const selectItem = (next: MermaidSelection | null) => {
+    if (onSelect) {
+      onSelect(next);
+      return;
+    }
+    onSelectNode?.(next?.kind === 'node' ? next.id : null);
+    onSelectEdge?.(next?.kind === 'edge' ? next.id : null);
+    onSelectText?.(next?.kind === 'text' ? next.id : null);
+  };
+
   const onSvgClick = (event: React.MouseEvent<HTMLDivElement>) => {
+    const textId = textIdFromTarget(event.target);
+    if (textId) {
+      selectItem({ kind: 'text', id: textId });
+      return;
+    }
     const nodeId = nodeIdFromTarget(event.target);
     if (nodeId) {
-      onSelectEdge?.(null);
-      onSelectNode?.(nodeId);
+      selectItem({ kind: 'node', id: nodeId });
       return;
     }
     const edgeId = edgeIdFromTarget(event.target);
     if (edgeId) {
-      onSelectNode?.(null);
-      onSelectEdge?.(edgeId);
+      selectItem({ kind: 'edge', id: edgeId });
       return;
     }
-    onSelectNode?.(null);
-    onSelectEdge?.(null);
+    selectItem(null);
   };
 
   const onSvgDoubleClick = (event: React.MouseEvent<HTMLDivElement>) => {
+    const textId = textIdFromTarget(event.target);
+    if (textId) {
+      onEditText?.(textId);
+      return;
+    }
     const nodeId = nodeIdFromTarget(event.target);
     if (nodeId) {
-      onNodeAction?.('rename', nodeId);
+      if (model && mermaidEditCapabilities(model).renameNode) {
+        onNodeAction?.('rename', nodeId);
+      }
       return;
     }
     const edgeId = edgeIdFromTarget(event.target);
@@ -492,29 +621,40 @@ export function MermaidDiagramCanvas({
   };
 
   const onSvgKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
+    const textId = textIdFromTarget(event.target);
     const nodeId = nodeIdFromTarget(event.target);
     const edgeId = edgeIdFromTarget(event.target);
-    if (nodeId && (event.key === 'Enter' || event.key === ' ')) {
-      onSelectNode?.(nodeId);
+    if (textId && (event.key === 'Enter' || event.key === ' ')) {
+      selectItem({ kind: 'text', id: textId });
+      event.preventDefault();
+    } else if (textId && event.key === 'F2') {
+      selectItem({ kind: 'text', id: textId });
+      onEditText?.(textId);
+      event.preventDefault();
+    } else if (textId && (event.key === 'Delete' || event.key === 'Backspace')) {
+      const text = model && mermaidEditableTexts(model).find((item) => item.id === textId);
+      if (text?.deletable) onDeleteText?.(textId);
+      event.preventDefault();
+    } else if (nodeId && (event.key === 'Enter' || event.key === ' ')) {
+      selectItem({ kind: 'node', id: nodeId });
       event.preventDefault();
     } else if (nodeId && (event.key === 'Delete' || event.key === 'Backspace')) {
-      onNodeAction?.('delete', nodeId);
+      if (model && mermaidEditCapabilities(model).deleteNode) {
+        onNodeAction?.('delete', nodeId);
+      }
       event.preventDefault();
     } else if (edgeId && (event.key === 'Enter' || event.key === ' ')) {
-      onSelectNode?.(null);
-      onSelectEdge?.(edgeId);
+      selectItem({ kind: 'edge', id: edgeId });
       event.preventDefault();
     } else if (edgeId && event.key === 'F2') {
-      onSelectNode?.(null);
-      onSelectEdge?.(edgeId);
+      selectItem({ kind: 'edge', id: edgeId });
       onEditEdgeLabel?.(edgeId);
       event.preventDefault();
     } else if (edgeId && (event.key === 'Delete' || event.key === 'Backspace')) {
       onDisconnectEdge?.(edgeId);
       event.preventDefault();
     } else if (event.key === 'Escape') {
-      onSelectNode?.(null);
-      onSelectEdge?.(null);
+      selectItem(null);
     }
   };
 
@@ -538,21 +678,32 @@ export function MermaidDiagramCanvas({
 
   const editingNodeLabel = renamingNodeId !== null && renamingNodeId === selectedNodeId;
   const editingEdgeLabel = renamingEdgeId !== null && renamingEdgeId === selectedEdgeId;
+  const editingText = renamingTextId !== null && renamingTextId === selectedTextId;
   const editCapabilities = model ? mermaidEditCapabilities(model) : null;
+  const selectedText =
+    model && selectedTextId
+      ? (mermaidEditableTexts(model).find((text) => text.id === selectedTextId) ?? null)
+      : null;
 
   const commitInlineLabel = () => {
     const committed = editingNodeLabel
       ? (onCommitRename?.(renamingNodeId, renameValue) ?? true)
       : editingEdgeLabel
         ? (onCommitEdgeLabel?.(renamingEdgeId, renameValue) ?? true)
-        : true;
+        : editingText
+          ? (onCommitText?.(renamingTextId, renameValue) ?? true)
+          : true;
     if (!committed) {
       window.requestAnimationFrame(() => renameInputRef.current?.focus());
     }
   };
 
   return (
-    <div className="squisq-mermaid-canvas" aria-label={`${diagramType} diagram editor`}>
+    <div
+      className="squisq-mermaid-canvas"
+      aria-label={`${diagramType} diagram editor`}
+      style={{ background: theme.colors.backgroundLight, color: theme.colors.text }}
+    >
       <SceneViewControls
         scale={zoom}
         fit={viewMode === 'fit'}
@@ -615,11 +766,15 @@ export function MermaidDiagramCanvas({
               // Mermaid's strict security level sanitizes authored markup.
               dangerouslySetInnerHTML={{ __html: svg }}
             />
-            {selectionAnchor && (editingNodeLabel || editingEdgeLabel) && (
+            {selectionAnchor && (editingNodeLabel || editingEdgeLabel || editingText) && (
               <form
                 className="squisq-mermaid-inline-rename"
                 aria-label={
-                  editingNodeLabel ? 'Edit Mermaid node label' : 'Edit Mermaid connection label'
+                  editingNodeLabel
+                    ? 'Edit Mermaid node label'
+                    : editingEdgeLabel
+                      ? 'Edit Mermaid connection label'
+                      : 'Edit Mermaid text'
                 }
                 contentEditable={false}
                 style={{
@@ -639,9 +794,15 @@ export function MermaidDiagramCanvas({
                   ref={renameInputRef}
                   type="text"
                   value={renameValue}
-                  required={editingNodeLabel}
+                  required={editingNodeLabel || editingText}
                   spellCheck
-                  aria-label={editingNodeLabel ? 'Mermaid node label' : 'Mermaid connection label'}
+                  aria-label={
+                    editingNodeLabel
+                      ? 'Mermaid node label'
+                      : editingEdgeLabel
+                        ? 'Mermaid connection label'
+                        : 'Mermaid text'
+                  }
                   aria-describedby={renameHintId}
                   onChange={(event) => setRenameValue(event.target.value)}
                   onBeforeInput={(event) => event.stopPropagation()}
@@ -662,7 +823,8 @@ export function MermaidDiagramCanvas({
                     if (event.key !== 'Escape') return;
                     event.preventDefault();
                     if (editingNodeLabel) onCancelRename?.();
-                    else onCancelEdgeLabel?.();
+                    else if (editingEdgeLabel) onCancelEdgeLabel?.();
+                    else onCancelText?.();
                   }}
                 />
                 <span id={renameHintId} aria-hidden="true">
@@ -741,6 +903,36 @@ export function MermaidDiagramCanvas({
                     label="Disconnect nodes"
                     danger
                     onClick={() => onDisconnectEdge?.(selectedEdgeId)}
+                  />
+                )}
+              </div>
+            )}
+            {selectionAnchor && selectedTextId && renamingTextId !== selectedTextId && (
+              <div
+                className="squisq-mermaid-selection-actions"
+                role="toolbar"
+                aria-label="Selected Mermaid text actions"
+                data-placement={selectionAnchor.placement}
+                style={{ left: selectionAnchor.left, top: selectionAnchor.top }}
+                onClick={(event) => event.stopPropagation()}
+              >
+                <CanvasAction
+                  icon="fa-solid fa-pen"
+                  label="Edit text"
+                  onClick={() => onEditText?.(selectedTextId)}
+                />
+                {selectedText?.deletable && (
+                  <CanvasAction
+                    icon="fa-solid fa-trash"
+                    label={
+                      selectedText.target === 'node'
+                        ? 'Delete node'
+                        : selectedText.target === 'edge'
+                          ? 'Remove label'
+                          : 'Delete text'
+                    }
+                    danger
+                    onClick={() => onDeleteText?.(selectedTextId)}
                   />
                 )}
               </div>

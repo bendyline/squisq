@@ -20,7 +20,7 @@ export interface CanvasSectionProps {
 }
 
 export function CanvasSection({ section }: CanvasSectionProps) {
-  const { renderContext, basePath, animationsEnabled } = usePageView();
+  const { renderContext, basePath, animationsEnabled, theme } = usePageView();
   const media = section.slots.media;
   const canvas = media?.type === 'canvas' ? media : undefined;
 
@@ -59,6 +59,7 @@ export function CanvasSection({ section }: CanvasSectionProps) {
         basePath={basePath}
         viewport={{ width: aspect.width, height: aspect.height }}
         animationsEnabled={animationsEnabled}
+        theme={theme}
       />
     </div>
   );

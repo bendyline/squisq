@@ -29,14 +29,25 @@ function monacoWithSelection(selectedText: string) {
     startColumn: 1,
     endLineNumber: selectedText.split('\n').length,
     endColumn: 1,
+    getStartPosition: () => ({ lineNumber: 1, column: 1 }),
   };
+  let value = selectedText;
   const model = {
-    getValue: () => selectedText,
+    getValue: () => value,
     getValueInRange: () => selectedText,
     getLineContent: () => selectedText.split('\n')[0] ?? '',
+    getOffsetAt: () => 0,
+    getPositionAt: (offset: number) => {
+      const lines = value.slice(0, offset).split('\n');
+      return { lineNumber: lines.length, column: (lines[lines.length - 1]?.length ?? 0) + 1 };
+    },
   };
   const disposable = { dispose: vi.fn() };
-  const executeEdits = vi.fn();
+  const executeEdits = vi.fn((_source: string, edits: Array<{ text: string }>) => {
+    value = edits[0]?.text ?? value;
+  });
+  const setPosition = vi.fn();
+  const revealPositionInCenterIfOutsideViewport = vi.fn();
   const editor = {
     getSelection: () => selection,
     getModel: () => model,
@@ -44,9 +55,11 @@ function monacoWithSelection(selectedText: string) {
     onDidChangeCursorPosition: () => disposable,
     onDidChangeModelContent: () => disposable,
     executeEdits,
+    setPosition,
+    revealPositionInCenterIfOutsideViewport,
     focus: vi.fn(),
   };
-  return { editor, executeEdits, selection };
+  return { editor, executeEdits, selection, setPosition };
 }
 
 beforeEach(() => {
@@ -140,6 +153,23 @@ describe('<Toolbar> selection conversion menu', () => {
         text: '\n```javascript\nconst answer = 42;\n```\n',
       },
     ]);
+  });
+
+  it('places the Monaco caret after a newly inserted snippet starter', async () => {
+    const { editor, setPosition } = monacoWithSelection('');
+    render(
+      <EditorProvider initialMarkdown="" initialView="raw" allowRecording={false}>
+        <Toolbar />
+        <ContextProbe />
+      </EditorProvider>,
+    );
+    act(() => context().setMonacoEditor(editor as never));
+
+    fireEvent.click(screen.getByLabelText('Insert'));
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Insert Code Snippet' }));
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Insert JSON code snippet' }));
+
+    expect(setPosition).toHaveBeenCalledWith({ lineNumber: 5, column: 2 });
   });
 
   it('replaces fully selected Write paragraphs without leaving a blank paragraph', async () => {

@@ -23,6 +23,9 @@
     "access": "public"
   },
   "type": "module",
+  "engines": {
+    "node": ">=22.14.0"
+  },
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "exports": {
@@ -30,6 +33,18 @@
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js",
       "default": "./dist/index.js"
+    },
+    "./components": {
+      "types": "./dist/components/index.d.ts",
+      "import": "./dist/components/index.js"
+    },
+    "./hooks": {
+      "types": "./dist/hooks/index.d.ts",
+      "import": "./dist/hooks/index.js"
+    },
+    "./encoder": {
+      "types": "./dist/encoder/index.d.ts",
+      "import": "./dist/encoder/index.js"
     }
   },
   "files": [
@@ -40,7 +55,7 @@
     "COPYING.GPL-2.0.txt"
   ],
   "scripts": {
-    "build": "tsup",
+    "build": "tsup && node ../../scripts/remove-empty-chunks.mjs dist",
     "dev": "concurrently -n js,dts -c blue,gray -r \"tsup --watch --no-dts --no-clean\" \"tsup --watch --dts-only --no-clean\"",
     "typecheck": "tsc --noEmit"
   },
@@ -55,14 +70,14 @@
     "@ffmpeg/core": "0.12.9",
     "@ffmpeg/ffmpeg": "0.12.15",
     "@ffmpeg/util": "0.12.2",
-    "html2canvas": "1.4.1",
-    "mp4-muxer": "5.2.2"
+    "html2canvas": "1.4.1"
   },
   "devDependencies": {
     "@types/react": "18.3.28",
     "@types/react-dom": "18.3.7",
     "react": "18.3.1",
     "react-dom": "18.3.1",
+    "mp4-muxer": "5.2.2",
     "tsup": "8.5.1",
     "typescript": "5.9.3"
   },

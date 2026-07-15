@@ -1,6 +1,9 @@
 /** Browser-only, lazy Mermaid renderer shared by all complex-diagram widgets. */
 
 import type { RenderResult } from 'mermaid';
+import type { Theme } from '@bendyline/squisq/schemas';
+import { buildMermaidThemeVariables } from '@bendyline/squisq/schemas';
+import { DEFAULT_THEME } from '@bendyline/squisq/doc';
 import type {
   MermaidEditableEdge,
   MermaidEditableModel,
@@ -11,6 +14,14 @@ import { normalizeMermaidFlowchartShape } from './mermaidShapes';
 import { inspectMermaidSourceAdapter } from './mermaidSourceAdapters';
 
 let mermaidPromise: Promise<typeof import('mermaid').default> | null = null;
+
+const MERMAID_BASE_CONFIG = {
+  startOnLoad: false,
+  securityLevel: 'strict' as const,
+  suppressErrorRendering: true,
+  deterministicIds: false,
+  logLevel: 'error' as const,
+};
 
 interface MermaidQueueHost {
   __squisqMermaidWorkQueue?: Promise<void>;
@@ -62,16 +73,7 @@ export interface MermaidRenderResult extends Pick<RenderResult, 'svg' | 'diagram
 async function loadMermaid(): Promise<typeof import('mermaid').default> {
   if (!mermaidPromise) {
     mermaidPromise = import('mermaid')
-      .then(({ default: mermaid }) => {
-        mermaid.initialize({
-          startOnLoad: false,
-          securityLevel: 'strict',
-          suppressErrorRendering: true,
-          deterministicIds: false,
-          logLevel: 'error',
-        });
-        return mermaid;
-      })
+      .then(({ default: mermaid }) => mermaid)
       .catch((error: unknown) => {
         // A transient chunk-load failure should not poison every diagram for
         // the rest of the editor session.
@@ -92,9 +94,15 @@ export async function renderMermaidDiagram(
   id: string,
   source: string,
   container?: Element,
+  theme: Theme = DEFAULT_THEME,
 ): Promise<MermaidRenderResult> {
   const run = async (): Promise<MermaidRenderResult> => {
     const mermaid = await loadMermaid();
+    mermaid.initialize({
+      ...MERMAID_BASE_CONFIG,
+      theme: 'base',
+      themeVariables: buildMermaidThemeVariables(theme),
+    });
     const model = await inspectMermaidSourceWith(mermaid, source);
     const { svg, diagramType } = await mermaid.render(id, source, container);
     return model ? { svg, diagramType, model } : { svg, diagramType };
@@ -106,7 +114,15 @@ export async function renderMermaidDiagram(
 
 /** Inspect the subset Mermaid exposes as structured flowchart nodes/edges. */
 export function inspectMermaidSource(source: string): Promise<MermaidEditableModel | null> {
-  return enqueueMermaidWork(async () => inspectMermaidSourceWith(await loadMermaid(), source));
+  return enqueueMermaidWork(async () => {
+    const mermaid = await loadMermaid();
+    mermaid.initialize({
+      ...MERMAID_BASE_CONFIG,
+      theme: 'base',
+      themeVariables: buildMermaidThemeVariables(DEFAULT_THEME),
+    });
+    return inspectMermaidSourceWith(mermaid, source);
+  });
 }
 
 async function inspectMermaidSourceWith(

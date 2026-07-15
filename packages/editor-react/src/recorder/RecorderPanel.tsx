@@ -31,6 +31,12 @@ export interface RecorderPanelProps {
   tooltip?: string;
   /** Optional className for the trigger button. */
   className?: string;
+  /** Controlled modal state. Omit to let the panel manage its own state. */
+  open?: boolean;
+  /** Called whenever the trigger or modal requests an open-state change. */
+  onOpenChange?: (open: boolean) => void;
+  /** Render the built-in trigger button. Defaults to true. */
+  showTrigger?: boolean;
 }
 
 export function RecorderPanel({
@@ -41,22 +47,35 @@ export function RecorderPanel({
   onSave,
   tooltip = 'Record media',
   className,
+  open: controlledOpen,
+  onOpenChange,
+  showTrigger = true,
 }: RecorderPanelProps) {
-  const [open, setOpen] = useState(false);
-  const handleClose = useCallback(() => setOpen(false), []);
+  const [uncontrolledOpen, setUncontrolledOpen] = useState(false);
+  const open = controlledOpen ?? uncontrolledOpen;
+  const setOpen = useCallback(
+    (nextOpen: boolean) => {
+      if (controlledOpen === undefined) setUncontrolledOpen(nextOpen);
+      onOpenChange?.(nextOpen);
+    },
+    [controlledOpen, onOpenChange],
+  );
+  const handleClose = useCallback(() => setOpen(false), [setOpen]);
 
   return (
     <>
-      <button
-        type="button"
-        className={className}
-        data-tooltip={tooltip}
-        aria-label={tooltip}
-        aria-expanded={open}
-        onClick={() => setOpen((v) => !v)}
-      >
-        <Icon icon="fa-solid fa-microphone" />
-      </button>
+      {showTrigger && (
+        <button
+          type="button"
+          className={className}
+          data-tooltip={tooltip}
+          aria-label={tooltip}
+          aria-expanded={open}
+          onClick={() => setOpen(!open)}
+        >
+          <Icon icon="fa-solid fa-microphone" />
+        </button>
+      )}
       {open &&
         typeof document !== 'undefined' &&
         createPortal(

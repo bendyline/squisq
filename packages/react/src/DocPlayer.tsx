@@ -1116,6 +1116,7 @@ function DocPlayerContent({
               isEntering={false}
               viewport={activeViewport}
               animationsEnabled={animationsEnabled}
+              theme={effectiveTheme}
             />
           </div>
         )}
@@ -1135,6 +1136,7 @@ function DocPlayerContent({
               transition={currentBlock?.transition}
               viewport={activeViewport}
               animationsEnabled={animationsEnabled}
+              theme={effectiveTheme}
             />
           </div>
         )}
@@ -1158,6 +1160,7 @@ function DocPlayerContent({
               viewport={activeViewport}
               isPlaying={isPlaying}
               animationsEnabled={animationsEnabled}
+              theme={effectiveTheme}
             />
           </div>
         )}

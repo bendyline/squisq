@@ -12,6 +12,7 @@ export * from './themeValidator.js';
 export * from './themeCompile.js';
 export * from './fontStacks.js';
 export * from './colorUtils.js';
+export * from './mermaidTheme.js';
 export * from './Viewport.js';
 export {
   getLayoutHints,

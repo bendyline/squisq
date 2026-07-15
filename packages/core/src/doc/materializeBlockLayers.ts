@@ -6,7 +6,7 @@
  * failure policy, and diagnostics cannot drift by render mode.
  */
 
-import type { Block, Layer, MermaidLayer, Position } from '../schemas/Doc.js';
+import type { Block, Layer, MermaidLayer, Position, VideoLayer } from '../schemas/Doc.js';
 import type {
   DocBlock,
   PersistentLayerConfig,
@@ -26,6 +26,7 @@ import { coerceTemplateParams } from './templates/inputDescriptors.js';
 import { fallbackBlockLayers } from './templates/fallbackBlock.js';
 import { expandPersistentLayers, wrapWithPersistentLayers } from './templates/persistentLayers.js';
 import { resolveTemplateName } from './templates/templateNames.js';
+import { deriveTemplateInputs, extractEmbeddedVideos } from './templateInputs.js';
 import {
   buildRegistry,
   templateRegistry,
@@ -151,7 +152,12 @@ export function materializeBlockLayersWithRuntime(
 
   const existingLayers = (block as Block).layers;
   if (existingLayers && existingLayers.length > 0 && !isTemplateBlock(block)) {
-    const layers = appendMermaidLayers(cloneData(existingLayers), block as Block, theme, viewport);
+    const layers = appendRichContentLayers(
+      cloneData(existingLayers),
+      block as Block,
+      theme,
+      viewport,
+    );
     return {
       layers: injectPersistentLayers(
         layers,
@@ -165,7 +171,7 @@ export function materializeBlockLayersWithRuntime(
   }
 
   if (!isTemplateBlock(block)) {
-    const layers = appendMermaidLayers([], block as Block, theme, viewport);
+    const layers = appendRichContentLayers([], block as Block, theme, viewport);
     return {
       layers: injectPersistentLayers(
         layers,
@@ -189,7 +195,7 @@ export function materializeBlockLayersWithRuntime(
       runtime.applyRenderStyle !== false
         ? applyRenderStyleToLayers(execution.layers, block as Block, theme)
         : execution.layers;
-    const layers = appendMermaidLayers(styledLayers, block as Block, theme, viewport);
+    const layers = appendRichContentLayers(styledLayers, block as Block, theme, viewport);
     return {
       layers: injectPersistentLayers(
         layers,
@@ -204,7 +210,7 @@ export function materializeBlockLayersWithRuntime(
 
   const diagnostic = toLayerMaterializationDiagnostic(block.template, execution);
   if ((options.failureMode ?? 'fallback') === 'empty') {
-    const layers = appendMermaidLayers([], block as Block, theme, viewport);
+    const layers = appendRichContentLayers([], block as Block, theme, viewport);
     return {
       layers: injectPersistentLayers(
         layers,
@@ -218,7 +224,7 @@ export function materializeBlockLayersWithRuntime(
     };
   }
 
-  const fallbackLayers = appendMermaidLayers(
+  const fallbackLayers = appendRichContentLayers(
     fallbackBlockLayers(block, context, diagnostic.message),
     block as Block,
     theme,
@@ -298,9 +304,9 @@ function overlapArea(a: LayerRect, b: LayerRect): number {
 /**
  * Pick the least-obstructed media region when a template already owns the
  * slide. Background shapes/paths are deliberately ignored; text and existing
- * rich media are what the Mermaid inset must avoid.
+ * rich media are what an embedded-media inset must avoid.
  */
-function mermaidRegion(layers: readonly Layer[], viewport: ViewportConfig): LayerRect {
+function richMediaRegion(layers: readonly Layer[], viewport: ViewportConfig): LayerRect {
   const occupied = layers
     .filter((layer) => layer.type !== 'shape' && layer.type !== 'path' && layer.type !== 'mermaid')
     .map((layer) =>
@@ -347,6 +353,50 @@ function mermaidRegion(layers: readonly Layer[], viewport: ViewportConfig): Laye
   });
 }
 
+/** Add directly embedded videos as synchronized, muted slide layers. */
+function appendEmbeddedVideoLayers(
+  layers: Layer[],
+  block: Block,
+  viewport: ViewportConfig,
+): Layer[] {
+  const existingSrcs = new Set(
+    layers
+      .filter((layer): layer is VideoLayer => layer.type === 'video')
+      .map((layer) => layer.content.src),
+  );
+  const videos = extractEmbeddedVideos(block.contents).filter(
+    (video) => !existingSrcs.has(video.src),
+  );
+  if (videos.length === 0) return layers;
+
+  const region = richMediaRegion(layers, viewport);
+  const columns = videos.length === 1 ? 1 : 2;
+  const rows = Math.ceil(videos.length / columns);
+  const gap = Math.min(viewport.width, viewport.height) * 0.018;
+  const width = (region.width - gap * (columns - 1)) / columns;
+  const height = (region.height - gap * (rows - 1)) / rows;
+  const clipEnd = Math.max(0, block.duration);
+  const videoLayers: VideoLayer[] = videos.map((video, index) => ({
+    id: `${block.id}-embedded-video-${index + 1}`,
+    type: 'video',
+    position: {
+      x: region.x + (index % columns) * (width + gap),
+      y: region.y + Math.floor(index / columns) * (height + gap),
+      width,
+      height,
+    },
+    content: {
+      src: video.src,
+      ...(video.posterSrc ? { posterSrc: video.posterSrc } : {}),
+      alt: video.alt || block.title || 'Embedded video',
+      fit: 'contain',
+      clipStart: 0,
+      clipEnd,
+    },
+  }));
+  return [...layers, ...videoLayers];
+}
+
 /** Add every Mermaid fence as a responsive rich-media layer. */
 function appendMermaidLayers(
   layers: Layer[],
@@ -357,7 +407,7 @@ function appendMermaidLayers(
   const sources = mermaidSources(block);
   if (sources.length === 0 || layers.some((layer) => layer.type === 'mermaid')) return layers;
 
-  const region = mermaidRegion(layers, viewport);
+  const region = richMediaRegion(layers, viewport);
   const columns = sources.length === 1 ? 1 : 2;
   const rows = Math.ceil(sources.length / columns);
   const gap = Math.min(viewport.width, viewport.height) * 0.018;
@@ -382,6 +432,21 @@ function appendMermaidLayers(
   return [...layers, ...mermaidLayers];
 }
 
+/** Promote high-value body embeds through one shared materialization path. */
+function appendRichContentLayers(
+  layers: Layer[],
+  block: Block,
+  theme: Theme,
+  viewport: ViewportConfig,
+): Layer[] {
+  return appendMermaidLayers(
+    appendEmbeddedVideoLayers(layers, block, viewport),
+    block,
+    theme,
+    viewport,
+  );
+}
+
 function executeTemplateMaterialization(
   templateBlock: TemplateBlock,
   context: TemplateContext,
@@ -398,9 +463,18 @@ function executeTemplateMaterialization(
   if (!templateFn) return { status: 'unknown-template', layers: [] };
 
   const { templateData, templateOverrides } = safeTemplateBlock as Block;
+  const sourceBlock = safeTemplateBlock as Block;
+  const derivedInputs = sourceBlock.sourceHeading
+    ? deriveTemplateInputs(
+        safeTemplateBlock.template,
+        sourceBlock.title ?? '',
+        sourceBlock.contents,
+      )
+    : null;
   const input =
-    templateData || templateOverrides
+    derivedInputs || templateData || templateOverrides
       ? ({
+          ...derivedInputs,
           ...safeTemplateBlock,
           ...templateData,
           ...coerceTemplateParams(safeTemplateBlock.template, templateOverrides ?? {}).input,
