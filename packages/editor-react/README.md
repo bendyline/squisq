@@ -10,15 +10,14 @@ Part of the [Squisq](https://github.com/bendyline/squisq) monorepo.
 ## Install
 
 ```bash
-npm install @bendyline/squisq-editor-react @bendyline/squisq @bendyline/squisq-react
-# optional: add monaco-editor only if you use the Raw (Monaco) view
-npm install monaco-editor
+npm install @bendyline/squisq-editor-react @bendyline/squisq @bendyline/squisq-react monaco-editor
 ```
 
-**Peer dependencies:** `react` and `react-dom` (v18 or v19). `monaco-editor`
-(>=0.50.0) is an **optional** peer dependency (v1.5) — install it only if you use
-the Raw view; the WYSIWYG and Preview views work without it. Tiptap is bundled as
-a regular dependency — you don't need to install it yourself.
+**Peer dependencies:** `react` and `react-dom` (v18 or v19), plus
+`monaco-editor` (>=0.50.0). Monaco is loaded lazily at runtime, but it is a
+required peer because the package's public TypeScript declarations expose
+Monaco editor types. Tiptap is bundled as a regular dependency — you don't
+need to install it yourself.
 
 ## Quick Start
 
