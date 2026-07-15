@@ -1,3 +1,9 @@
+## @bendyline/squisq [2.2.0](https://github.com/bendyline/squisq/compare/@bendyline/squisq@2.1.0...@bendyline/squisq@2.2.0) (2026-07-15)
+
+### Features
+
+* Extended styling control ([#25](https://github.com/bendyline/squisq/issues/25)) ([29f7d26](https://github.com/bendyline/squisq/commit/29f7d26b89f82631b9e293563fca40bdfb4965de))
+
 ## @bendyline/squisq [2.1.0](https://github.com/bendyline/squisq/compare/@bendyline/squisq@2.0.1...@bendyline/squisq@2.1.0) (2026-07-14)
 
 ### Features
