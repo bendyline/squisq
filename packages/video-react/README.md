@@ -38,7 +38,10 @@ from a live in-page `DocPlayer`, so the standalone bundle is only needed for
 CLI/Playwright-style pipelines. A new `defaultConfig?: Partial<VideoExportConfig>`
 prop seeds the modal's initial quality/fps/orientation/caption selections.
 Both components also accept `colorScheme="light" | "dark"` so their portaled
-modal can match the host application; the default remains `light`.
+modal can match the host application; the default remains `light`. Hosts with
+their own theme tokens can pass `uiPalette?: Partial<VideoExportPalette>` to
+override dialog surfaces, controls, status colors, and the shared primary color
+used by the export action and progress bar.
 
 ### Full Export Modal
 

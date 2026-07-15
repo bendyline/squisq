@@ -87,6 +87,7 @@ license terms.
 | @tiptap/starter-kit            | 2.27.2    | MIT                           | https://tiptap.dev                           |
 | @tiptap/suggestion             | 2.27.2    | MIT                           | https://tiptap.dev                           |
 | mermaid                        | 11.16.0   | MIT                           | https://github.com/mermaid-js/mermaid        |
+| type-fest                      | 4.41.0    | MIT OR CC0-1.0                | https://github.com/sindresorhus/type-fest    |
 | monaco-editor _(peer)_         | >=0.50.0  | MIT                           | https://github.com/microsoft/monaco-editor   |
 | react _(peer)_                 | ^18 / ^19 | MIT                           | https://reactjs.org                          |
 | react-dom _(peer)_             | ^18 / ^19 | MIT                           | https://reactjs.org                          |

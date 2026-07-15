@@ -47,6 +47,8 @@ export interface VideoExportModalProps {
   defaultConfig?: Partial<VideoExportConfig>;
   /** Visual color scheme for the portaled dialog. Defaults to light. */
   colorScheme?: 'light' | 'dark';
+  /** Optional host overrides for dialog surfaces, controls, status, and accent colors. */
+  uiPalette?: Partial<VideoExportPalette>;
   /** Called when the modal should close */
   onClose: () => void;
 }
@@ -74,7 +76,7 @@ function encoderLabel(
 
 // ── Styles ─────────────────────────────────────────────────────────
 
-interface VideoExportPalette {
+export interface VideoExportPalette {
   overlay: string;
   surface: string;
   control: string;
@@ -86,6 +88,7 @@ interface VideoExportPalette {
   secondary: string;
   primary: string;
   primaryBorder: string;
+  primaryText: string;
   success: string;
   danger: string;
 }
@@ -103,6 +106,7 @@ const VIDEO_EXPORT_PALETTES: Record<'light' | 'dark', VideoExportPalette> = {
     secondary: '#E8DFC6',
     primary: '#8B6914',
     primaryBorder: '#7a5c10',
+    primaryText: '#ffffff',
     success: '#2d6a10',
     danger: '#a03020',
   },
@@ -118,6 +122,7 @@ const VIDEO_EXPORT_PALETTES: Record<'light' | 'dark', VideoExportPalette> = {
     secondary: '#1e293b',
     primary: '#9a7416',
     primaryBorder: '#d1a73b',
+    primaryText: '#ffffff',
     success: '#86efac',
     danger: '#fca5a5',
   },
@@ -169,7 +174,6 @@ const btnPrimary: React.CSSProperties = {
   fontFamily: 'inherit',
   fontWeight: 500,
   cursor: 'pointer',
-  color: '#fff',
   borderRadius: 0,
 };
 
@@ -207,6 +211,7 @@ export function VideoExportModal({
   audio,
   defaultConfig,
   colorScheme = 'light',
+  uiPalette,
   onClose,
 }: VideoExportModalProps) {
   const initialOutputFormat = defaultConfig?.outputFormat ?? 'mp4';
@@ -223,7 +228,10 @@ export function VideoExportModal({
   const [audioPolicy, setAudioPolicy] = useState<VideoAudioPolicy>(
     defaultConfig?.audioPolicy ?? 'require',
   );
-  const palette = VIDEO_EXPORT_PALETTES[colorScheme];
+  const palette: VideoExportPalette = {
+    ...VIDEO_EXPORT_PALETTES[colorScheme],
+    ...uiPalette,
+  };
   const themedModalStyle: React.CSSProperties = {
     ...modalStyle,
     background: palette.surface,
@@ -244,6 +252,7 @@ export function VideoExportModal({
     ...btnPrimary,
     background: palette.primary,
     border: `1px solid ${palette.primaryBorder}`,
+    color: palette.primaryText,
   };
   const themedSecondaryButtonStyle: React.CSSProperties = {
     ...btnSecondary,
@@ -343,7 +352,11 @@ export function VideoExportModal({
       data-color-scheme={colorScheme}
       onClick={handleClose}
     >
-      <div style={themedModalStyle} onClick={(e) => e.stopPropagation()}>
+      <div
+        style={themedModalStyle}
+        data-squisq-video-export-modal
+        onClick={(e) => e.stopPropagation()}
+      >
         <h2 style={themedTitleStyle}>
           {outputFormat === 'gif' ? 'Export Animated GIF' : 'Export Video'}
         </h2>
@@ -478,7 +491,10 @@ export function VideoExportModal({
               </p>
             )}
 
-            <div style={{ ...progressBarOuterStyle, background: palette.secondary }}>
+            <div
+              style={{ ...progressBarOuterStyle, background: palette.secondary }}
+              data-squisq-video-export-progress-track
+            >
               <div
                 style={{
                   width: `${progress}%`,
@@ -486,6 +502,7 @@ export function VideoExportModal({
                   background: palette.primary,
                   transition: 'width 0.3s ease',
                 }}
+                data-squisq-video-export-progress
               />
             </div>
 

@@ -47,6 +47,15 @@ describe('VideoExportButton', () => {
     fireEvent.click(getByRole('button', { name: 'Export Video' }));
     expect(document.querySelector('[data-color-scheme="dark"]')).toBeTruthy();
   });
+
+  it('forwards host palette overrides to its portaled modal', () => {
+    const { getByRole } = render(
+      <VideoExportButton doc={minimalDoc()} uiPalette={{ surface: '#123456' }} />,
+    );
+    fireEvent.click(getByRole('button', { name: 'Export Video' }));
+    const modal = document.querySelector<HTMLElement>('[data-squisq-video-export-modal]');
+    expect(modal?.style.background).toBe('rgb(18, 52, 86)');
+  });
 });
 
 describe('VideoExportModal', () => {
@@ -152,6 +161,30 @@ describe('VideoExportModal', () => {
     expect(modal?.style.colorScheme).toBe('dark');
     expect(modal?.style.background).toBe('rgb(17, 24, 39)');
     expect(select?.style.colorScheme).toBe('dark');
+  });
+
+  it('applies host palette overrides to the dialog, controls, and primary action', () => {
+    const { container, getByRole } = render(
+      <VideoExportModal
+        doc={minimalDoc()}
+        uiPalette={{
+          surface: '#123456',
+          control: '#234567',
+          primary: '#345678',
+          primaryBorder: '#456789',
+          primaryText: '#f1f2f3',
+        }}
+        onClose={() => {}}
+      />,
+    );
+    const modal = container.querySelector<HTMLElement>('[data-squisq-video-export-modal]');
+    const select = container.querySelector<HTMLSelectElement>('select');
+    const primary = getByRole('button', { name: 'Export Video' });
+    expect(modal?.style.background).toBe('rgb(18, 52, 86)');
+    expect(select?.style.background).toBe('rgb(35, 69, 103)');
+    expect(primary.style.background).toBe('rgb(52, 86, 120)');
+    expect(primary.style.borderColor).toBe('rgb(69, 103, 137)');
+    expect(primary.style.color).toBe('rgb(241, 242, 243)');
   });
 });
 
