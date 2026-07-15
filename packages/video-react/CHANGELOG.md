@@ -1,3 +1,16 @@
+## @bendyline/squisq-video-react [2.1.0](https://github.com/bendyline/squisq/compare/@bendyline/squisq-video-react@2.0.2...@bendyline/squisq-video-react@2.1.0) (2026-07-15)
+
+### Features
+
+* Extended styling control ([#25](https://github.com/bendyline/squisq/issues/25)) ([29f7d26](https://github.com/bendyline/squisq/commit/29f7d26b89f82631b9e293563fca40bdfb4965de))
+
+
+### Dependencies
+
+* **@bendyline/squisq:** upgraded to 2.2.0
+* **@bendyline/squisq-video:** upgraded to 2.1.0
+* **@bendyline/squisq-react:** upgraded to 2.2.0
+
 ## @bendyline/squisq-video-react [2.0.2](https://github.com/bendyline/squisq/compare/@bendyline/squisq-video-react@2.0.1...@bendyline/squisq-video-react@2.0.2) (2026-07-14)
 
 
