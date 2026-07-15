@@ -13,6 +13,7 @@ import remarkDirective from 'remark-directive';
 import type { MarkdownDocument, StringifyOptions } from './types.js';
 import { toMdast } from './convert.js';
 import { formatFrontmatterValue } from './utils.js';
+import { assertMarkdownDocumentWithinLimits } from './limits.js';
 
 // Cache the default processor (all extensions, default formatting) to avoid rebuilding on every call.
 let defaultProcessor: any;
@@ -95,6 +96,8 @@ function unescapeMarkdownPunct(text: string): string {
  * ```
  */
 export function stringifyMarkdown(doc: MarkdownDocument, options?: StringifyOptions): string {
+  options?.signal?.throwIfAborted();
+  assertMarkdownDocumentWithinLimits(doc, options?.limits, options?.signal);
   // Convert MarkdownDocument → mdast tree
   const mdastTree = toMdast(doc);
 

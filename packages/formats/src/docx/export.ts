@@ -45,6 +45,7 @@ import { readFrontmatterThemeId } from '@bendyline/squisq/markdown';
 import { createPackage } from '../ooxml/writer.js';
 import { xmlDeclaration, escapeXml } from '../ooxml/xmlUtils.js';
 import { stripHtmlTags } from '../shared/text.js';
+import { sanitizeOfficeHyperlink } from '../shared/officeHyperlinks.js';
 import {
   inlineNodesToRuns,
   inlineNodeToRuns,
@@ -93,6 +94,8 @@ import {
  * Options for DOCX export.
  */
 export interface DocxExportOptions {
+  /** Cancel at bounded export checkpoints. */
+  signal?: AbortSignal;
   /** Document title (appears in core properties) */
   title?: string;
   /** Document author */
@@ -117,6 +120,8 @@ export interface DocxExportOptions {
    * as binary parts instead of emitting placeholder text.
    */
   images?: Map<string, { data: ArrayBuffer | Uint8Array; contentType: string }>;
+  /** Permit carefully validated relative hyperlink targets. Default: false. */
+  allowRelativeHyperlinks?: boolean;
 }
 
 /**
@@ -130,6 +135,7 @@ export async function markdownDocToDocx(
   doc: MarkdownDocument,
   options: DocxExportOptions = {},
 ): Promise<ArrayBuffer> {
+  options.signal?.throwIfAborted();
   // Mirror the PPTX export: fall back to the doc's frontmatter themeId
   // when the caller didn't pass one explicitly. Lets the editor's
   // `squisq-theme: …` frontmatter flow straight through without each
@@ -245,6 +251,8 @@ class ExportContext {
 
   /** Pre-resolved image data keyed by markdown image URL */
   readonly resolvedImages: Map<string, { data: ArrayBuffer | Uint8Array; contentType: string }>;
+  readonly allowRelativeHyperlinks: boolean;
+  readonly signal: AbortSignal | undefined;
 
   private nextDocPrId = 1;
 
@@ -284,6 +292,8 @@ class ExportContext {
     this.mutedColor = themeMutedColor;
     this.backgroundColor = themeBackgroundColor;
     this.resolvedImages = options.images ?? new Map();
+    this.allowRelativeHyperlinks = options.allowRelativeHyperlinks ?? false;
+    this.signal = options.signal;
   }
 
   /** Allocate a new relationship ID */
@@ -296,12 +306,16 @@ class ExportContext {
   }
 
   /** Add a hyperlink relationship and return the rId */
-  addHyperlink(url: string): string {
+  addHyperlink(url: string): string | null {
+    const target = sanitizeOfficeHyperlink(url, {
+      allowRelative: this.allowRelativeHyperlinks,
+    });
+    if (!target) return null;
     const id = this.allocRelId();
     this.relationships.push({
       id,
       type: REL_HYPERLINK,
-      target: url,
+      target,
       targetMode: 'External',
       source: this.relationshipSource,
     });
@@ -398,7 +412,9 @@ function firstFontFromStack(stack: string): string {
 
 function convertBlocks(nodes: MarkdownBlockNode[], ctx: ExportContext): string {
   const parts: string[] = [];
-  for (const node of nodes) {
+  for (let index = 0; index < nodes.length; index++) {
+    if ((index & 255) === 0) ctx.signal?.throwIfAborted();
+    const node = nodes[index]!;
     parts.push(convertBlock(node, ctx, 0));
   }
   return parts.join('');
@@ -734,6 +750,7 @@ function makeRun(text: string, format: InlineFormat): string {
 
 function convertLink(node: MarkdownLink, ctx: ExportContext, format: InlineFormat): string {
   const rId = ctx.addHyperlink(node.url);
+  if (!rId) return convertInlines(node.children, ctx, format);
   const styledRuns = convertInlinesWithHyperlinkStyle(node.children, ctx, format);
 
   return `<w:hyperlink r:id="${rId}">${styledRuns}</w:hyperlink>`;

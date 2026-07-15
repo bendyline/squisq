@@ -26,6 +26,14 @@ export interface CsvImportOptions {
   delimiter?: string;
   /** Treat the first row as a header row. Default true. */
   hasHeader?: boolean;
+  /** Maximum parsed cells. Default: 100,000. */
+  maxCells?: number;
+  /** Maximum rows. Default: 10,000. */
+  maxRows?: number;
+  /** Maximum characters in one field. Default: 1 MiB. */
+  maxFieldChars?: number;
+  /** Cancel during parsing checkpoints. */
+  signal?: AbortSignal;
 }
 
 export interface CsvExportOptions {
@@ -44,7 +52,22 @@ export interface CsvExportOptions {
    * doesn't match a table in the document is an error.
    */
   tableIndex?: number;
+  /** Maximum cells emitted. Default: 100,000. */
+  maxCells?: number;
+  /** Cancel during export checkpoints. */
+  signal?: AbortSignal;
 }
+
+export interface CsvSafetyLimits {
+  maxCells?: number;
+  maxRows?: number;
+  maxFieldChars?: number;
+  signal?: AbortSignal;
+}
+
+const DEFAULT_MAX_CSV_CELLS = 100_000;
+const DEFAULT_MAX_CSV_ROWS = 10_000;
+const DEFAULT_MAX_CSV_FIELD_CHARS = 1024 * 1024;
 
 async function toText(data: ArrayBuffer | Blob | string): Promise<string> {
   if (typeof data === 'string') return data;
@@ -62,23 +85,34 @@ function validateDelimiter(delimiter: string): string {
 }
 
 /** Parse CSV text into a grid of string cells (RFC 4180: quotes, escaped quotes). */
-export function parseCsv(text: string, delimiter = ','): string[][] {
+export function parseCsv(text: string, delimiter = ',', limits: CsvSafetyLimits = {}): string[][] {
   delimiter = validateDelimiter(delimiter);
+  const maxCells = safetyInteger('maxCells', limits.maxCells ?? DEFAULT_MAX_CSV_CELLS);
+  const maxRows = safetyInteger('maxRows', limits.maxRows ?? DEFAULT_MAX_CSV_ROWS);
+  const maxFieldChars = safetyInteger(
+    'maxFieldChars',
+    limits.maxFieldChars ?? DEFAULT_MAX_CSV_FIELD_CHARS,
+  );
   const rows: string[][] = [];
   let row: string[] = [];
   let field = '';
   let inQuotes = false;
   let sawAny = false;
+  let cellCount = 0;
   const pushField = () => {
+    if (++cellCount > maxCells)
+      throw new RangeError(`CSV exceeds the ${maxCells}-cell safety limit`);
     row.push(field);
     field = '';
   };
   const pushRow = () => {
+    if (rows.length >= maxRows) throw new RangeError(`CSV exceeds the ${maxRows}-row safety limit`);
     pushField();
     rows.push(row);
     row = [];
   };
   for (let i = 0; i < text.length; i++) {
+    if ((i & 16383) === 0) limits.signal?.throwIfAborted();
     let ch = text[i]!;
     if (delimiter.length === 2 && text.slice(i, i + 2) === delimiter) {
       ch = delimiter;
@@ -94,6 +128,9 @@ export function parseCsv(text: string, delimiter = ','): string[][] {
         }
       } else {
         field += ch;
+        if (field.length > maxFieldChars) {
+          throw new RangeError(`CSV field exceeds the ${maxFieldChars}-character safety limit`);
+        }
       }
       continue;
     }
@@ -115,10 +152,20 @@ export function parseCsv(text: string, delimiter = ','): string[][] {
     }
     sawAny = true;
     field += ch;
+    if (field.length > maxFieldChars) {
+      throw new RangeError(`CSV field exceeds the ${maxFieldChars}-character safety limit`);
+    }
   }
   // Flush a trailing field/row only if the last line wasn't terminated.
   if (field !== '' || row.length > 0 || sawAny) pushRow();
   return rows;
+}
+
+function safetyInteger(name: string, value: number): number {
+  if (!Number.isSafeInteger(value) || value < 0) {
+    throw new RangeError(`${name} must be a non-negative safe integer`);
+  }
+  return value;
 }
 
 function rowsToTable(rows: string[][], hasHeader: boolean): MarkdownTable {
@@ -144,7 +191,7 @@ export async function csvToMarkdownDoc(
   options: CsvImportOptions = {},
 ): Promise<MarkdownDocument> {
   const text = (await toText(data)).replace(/^\uFEFF/, '');
-  const rows = parseCsv(text, options.delimiter ?? ',');
+  const rows = parseCsv(text, options.delimiter ?? ',', options);
   const hasHeader = options.hasHeader ?? true;
   const children = rows.length > 0 ? [rowsToTable(rows, hasHeader)] : [];
   return { type: 'document', children };
@@ -212,13 +259,17 @@ export function markdownDocToCsv(doc: MarkdownDocument, options: CsvExportOption
   }
   const table = tables[index];
   if (!table) return '';
+  const maxCells = safetyInteger('maxCells', options.maxCells ?? DEFAULT_MAX_CSV_CELLS);
+  const cellCount = table.children.reduce((count, row) => count + row.children.length, 0);
+  if (cellCount > maxCells) throw new RangeError(`CSV exceeds the ${maxCells}-cell safety limit`);
   return table.children
-    .map((row) =>
-      row.children
+    .map((row, rowIndex) => {
+      if ((rowIndex & 255) === 0) options.signal?.throwIfAborted();
+      return row.children
         .map((cell) =>
           escapeCsvField(neutralizeSpreadsheetFormula(cellText(cell), formulaHandling), delimiter),
         )
-        .join(delimiter),
-    )
+        .join(delimiter);
+    })
     .join('\r\n');
 }

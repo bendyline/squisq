@@ -17,6 +17,8 @@ import { arrayBufferToBase64DataUrl, inferMimeType } from './imageUtils.js';
 // ── Types ──────────────────────────────────────────────────────────
 
 export interface HtmlExportOptions {
+  /** Cancel before synchronous generation and during asset checkpoints. */
+  signal?: AbortSignal;
   /** The IIFE player bundle source code (from @bendyline/squisq-react/standalone-source) */
   playerScript: string;
 

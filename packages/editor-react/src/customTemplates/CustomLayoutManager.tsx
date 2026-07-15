@@ -12,7 +12,7 @@
  * sits outside the WYSIWYG editor's provider.
  */
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useId, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import type { CustomTemplateDefinition, MediaProvider } from '@bendyline/squisq/schemas';
 import {
@@ -24,6 +24,7 @@ import { TemplateDesigner, type DesignerSaveTarget } from './TemplateDesigner';
 import { TemplateThumbnail } from './thumbnail';
 import { useDocCustomTemplates } from './useDocCustomTemplates';
 import { useEditorContext } from '../EditorContext';
+import { useModalDialog } from '../modal/useModalDialog';
 
 export interface CustomLayoutManagerProps {
   /** Close the manager. */
@@ -49,29 +50,33 @@ export function CustomLayoutManager({ onClose }: CustomLayoutManagerProps) {
   const { docTemplates, onDocTemplatesChange } = useDocCustomTemplates();
   const { mediaProvider, colorScheme } = useEditorContext();
 
-  // Close on Escape, mirroring the other editor dialogs.
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [onClose]);
+  const overlayRef = useRef<HTMLDivElement>(null);
+  const dialogRef = useRef<HTMLDivElement>(null);
+  const titleId = useId();
+  useModalDialog({ rootRef: overlayRef, dialogRef, onClose });
 
   return createPortal(
     <div
+      ref={overlayRef}
       className="squisq-editor-shell squisq-layout-manager-overlay"
       data-theme={colorScheme}
-      role="dialog"
-      aria-modal="true"
-      aria-label="Custom layouts"
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
     >
-      <div className="squisq-layout-manager-panel">
+      <div
+        ref={dialogRef}
+        className="squisq-editor-shell squisq-layout-manager-panel"
+        data-theme={colorScheme}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        tabIndex={-1}
+      >
         <header className="squisq-layout-manager-header">
-          <h2 className="squisq-layout-manager-title">Custom layouts</h2>
+          <h2 id={titleId} className="squisq-layout-manager-title">
+            Custom layouts
+          </h2>
           <button
             type="button"
             className="squisq-template-designer-close"

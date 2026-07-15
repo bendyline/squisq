@@ -87,7 +87,7 @@ const imported = await pdfToMarkdownDoc(pdfBuffer);
 const container = await pdfToContainer(pdfBuffer);
 ```
 
-**Fidelity:** export uses pdf-lib's standard 14 fonts (`themeId` affects colors only). PDF has no semantic structure, so import is heuristic and best-effort: headings are detected by font size, and tables / code blocks / blockquotes / links via the `detectTables` / `detectCodeBlocks` / `detectBlockquotes` / `detectLinks` options (all default true). `pdfToMarkdownDoc` is text-only; `pdfToContainer` also extracts embedded images, placed **by page** — each image is inserted after the last content block from its page (image-only pages fall back to the nearest preceding page with content, else the document end). Placement is page-level only. Image extraction needs a browser canvas to encode PNG — **under Node it is skipped** (with a `console.warn`) and no images are emitted.
+**Fidelity:** export uses pdf-lib's standard 14 fonts (`themeId` affects colors only). PDF has no semantic structure, so import is heuristic and best-effort: headings are detected by font size, and tables / code blocks / blockquotes / links via the `detectTables` / `detectCodeBlocks` / `detectBlockquotes` / `detectLinks` options (all default true). `pdfToMarkdownDoc` is text-only; `pdfToContainer` also extracts embedded XObject and inline raster images in browsers and Node, placed **by page** — each image is inserted after the last content block from its page (image-only pages fall back to the nearest preceding page with content, else the document end). Placement is page-level only; masks, vector artwork, and images that PDF.js cannot expose as decoded pixels are not emitted.
 
 ### HTML
 

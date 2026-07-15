@@ -15,7 +15,9 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import type { RefObject } from 'react';
 import type { AudioTrack } from '@bendyline/squisq/schemas';
+import { fetchResourceBytes, isResourceUrlAllowed } from '@bendyline/squisq/markdown';
 import type { AudioController } from './AudioController';
+import { useResourcePolicy } from './MediaContext';
 
 export type AudioSyncMode = 'media' | 'synthetic';
 
@@ -34,6 +36,7 @@ export function useAudioSync(
   enabled: boolean = true,
   mode: AudioSyncMode = 'media',
 ): AudioController {
+  const resourcePolicy = useResourcePolicy();
   const [currentTime, setCurrentTime] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentSegment, setCurrentSegment] = useState(0);
@@ -98,6 +101,7 @@ export function useAudioSync(
   const preloadAudio = useCallback(
     async (src: string): Promise<string> => {
       const audioUrl = resolveAudioUrl(src, basePath);
+      if (!isResourceUrlAllowed(audioUrl, resourcePolicy)) return '';
 
       // Return cached blob URL if available
       if (blobUrls.current.has(src)) {
@@ -119,9 +123,14 @@ export function useAudioSync(
       const generation = loadGeneration.current;
       const loadPromise = (async () => {
         try {
-          const response = await fetch(audioUrl, { signal: controller.signal });
-          if (!response.ok) throw new Error(`HTTP ${response.status}`);
-          const blob = await response.blob();
+          const resource = await fetchResourceBytes(audioUrl, {
+            policy: resourcePolicy,
+            signal: controller.signal,
+            contentTypePrefixes: ['audio/', 'video/', 'application/octet-stream'],
+          });
+          const blob = new Blob([resource.bytes.slice().buffer as ArrayBuffer], {
+            type: resource.contentType || 'application/octet-stream',
+          });
           const blobUrl = URL.createObjectURL(blob);
           if (controller.signal.aborted || generation !== loadGeneration.current) {
             URL.revokeObjectURL(blobUrl);
@@ -138,8 +147,8 @@ export function useAudioSync(
           }
           return blobUrl;
         } catch {
-          // Fall back to direct URL if blob loading fails
-          return audioUrl;
+          // Do not bypass policy byte/time limits with an unbounded direct load.
+          return '';
         }
       })();
 
@@ -152,7 +161,7 @@ export function useAudioSync(
       });
       return loadPromise;
     },
-    [basePath],
+    [basePath, resourcePolicy],
   );
 
   // Scope requests and blob URLs to the active track. Loading is deliberately

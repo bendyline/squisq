@@ -18,6 +18,11 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 import type { Doc } from '@bendyline/squisq/schemas';
 import type { MediaProvider } from '@bendyline/squisq/schemas';
+import {
+  DEFAULT_INTERACTIVE_RESOURCE_POLICY,
+  fetchResourceBytes,
+  type ResourcePolicy,
+} from '@bendyline/squisq/markdown';
 import type {
   VideoQuality,
   VideoOrientation,
@@ -49,6 +54,10 @@ import { useFrameCapture } from './useFrameCapture.js';
 const MAX_EXPORT_MEDIA_FILES = 256;
 const MAX_EXPORT_MEDIA_FILE_BYTES = 64 * 1024 * 1024;
 const MAX_EXPORT_MEDIA_TOTAL_BYTES = 256 * 1024 * 1024;
+
+function toArrayBuffer(bytes: Uint8Array): ArrayBuffer {
+  return bytes.slice().buffer as ArrayBuffer;
+}
 
 /** Collect exact string values from the document that may name stored media. */
 export function collectDocumentMediaReferences(doc: Doc): Set<string> {
@@ -88,6 +97,7 @@ async function resolveAudioBuffers(
     audio?: Map<string, ArrayBuffer>;
     images?: Map<string, ArrayBuffer>;
     mediaProvider?: MediaProvider;
+    resourcePolicy?: ResourcePolicy;
   },
 ): Promise<Map<string, ArrayBuffer>> {
   const srcs = new Set(clips.map((c) => c.src));
@@ -97,8 +107,10 @@ async function resolveAudioBuffers(
     if (!data && sources.mediaProvider) {
       try {
         const url = await sources.mediaProvider.resolveUrl(src);
-        const res = await fetch(url);
-        if (res.ok) data = await res.arrayBuffer();
+        const resource = await fetchResourceBytes(url, {
+          policy: sources.resourcePolicy,
+        });
+        data = toArrayBuffer(resource.bytes);
       } catch {
         // Unresolvable source; skip it.
       }
@@ -156,6 +168,8 @@ export interface VideoExportConfig {
   audio?: Map<string, ArrayBuffer>;
   /** MediaProvider to resolve media URLs (alternative to passing images directly) */
   mediaProvider?: MediaProvider;
+  /** Policy and byte/time limits for MediaProvider URLs. */
+  resourcePolicy?: ResourcePolicy;
   /** Caption mode for the exported video (default: 'off') */
   captionMode?: CaptionMode;
   /** Player IIFE bundle (unused in browser export, kept for CLI/Playwright path) */
@@ -388,20 +402,22 @@ export function useVideoExport(): VideoExportResult {
               throw new Error(`Media file "${entry.name}" is too large for browser video export.`);
             }
             const url = await config.mediaProvider.resolveUrl(entry.name);
-            const res = await fetch(url);
-            if (res.ok) {
-              const data = await res.arrayBuffer();
-              if (data.byteLength > MAX_EXPORT_MEDIA_FILE_BYTES) {
-                throw new Error(
-                  `Media file "${entry.name}" is too large for browser video export.`,
-                );
-              }
-              totalMediaBytes += data.byteLength;
-              if (totalMediaBytes > MAX_EXPORT_MEDIA_TOTAL_BYTES) {
-                throw new Error('Referenced media exceeds the browser video export memory limit.');
-              }
-              images.set(entry.name, data);
+            const resource = await fetchResourceBytes(url, {
+              policy: {
+                ...DEFAULT_INTERACTIVE_RESOURCE_POLICY,
+                ...config.resourcePolicy,
+                maxBytes: Math.min(
+                  config.resourcePolicy?.maxBytes ?? MAX_EXPORT_MEDIA_FILE_BYTES,
+                  MAX_EXPORT_MEDIA_FILE_BYTES,
+                ),
+              },
+            });
+            const data = toArrayBuffer(resource.bytes);
+            totalMediaBytes += data.byteLength;
+            if (totalMediaBytes > MAX_EXPORT_MEDIA_TOTAL_BYTES) {
+              throw new Error('Referenced media exceeds the browser video export memory limit.');
             }
+            images.set(entry.name, data);
           }
         }
 
@@ -467,6 +483,7 @@ export function useVideoExport(): VideoExportResult {
               audio: config.audio,
               images,
               mediaProvider: config.mediaProvider,
+              resourcePolicy: config.resourcePolicy,
             });
             const missingSources = [...new Set(timeline.map((clip) => clip.src))].filter(
               (src) => !buffers.has(src),

@@ -15,11 +15,29 @@
 
 import { createContext, useContext, useState, useEffect, useMemo } from 'react';
 import type { MediaProvider } from '@bendyline/squisq/schemas';
+import {
+  DEFAULT_INTERACTIVE_RESOURCE_POLICY,
+  isResourceUrlAllowed,
+  type ResourcePolicy,
+} from '@bendyline/squisq/markdown';
 
 /**
  * React context holding the current MediaProvider (or null if none provided).
  */
 export const MediaContext = createContext<MediaProvider | null>(null);
+
+/**
+ * Policy for document-controlled media URLs. Hosts rendering untrusted
+ * documents can provide `LOCAL_ONLY_RESOURCE_POLICY` or an explicit host
+ * allow-list without changing their MediaProvider.
+ */
+export const ResourcePolicyContext = createContext<ResourcePolicy>(
+  DEFAULT_INTERACTIVE_RESOURCE_POLICY,
+);
+
+export function useResourcePolicy(): ResourcePolicy {
+  return useContext(ResourcePolicyContext);
+}
 
 /**
  * Hook to access the current MediaProvider from context.
@@ -40,6 +58,7 @@ export function useMediaProvider(): MediaProvider | null {
  */
 export function useMediaUrl(relativePath: string, basePath: string): string {
   const provider = useMediaProvider();
+  const resourcePolicy = useResourcePolicy();
 
   // Defensive: callers (esp. preview surfaces like InlinePreviewGutter)
   // sometimes feed in template-generated layers whose `content.src` is
@@ -48,18 +67,13 @@ export function useMediaUrl(relativePath: string, basePath: string): string {
   const safePath = typeof relativePath === 'string' ? relativePath : '';
 
   // For absolute/http URLs, skip resolution entirely
-  const isAbsolute =
-    !safePath ||
-    safePath.startsWith('http') ||
-    safePath.startsWith('/') ||
-    safePath.startsWith('data:') ||
-    safePath.startsWith('blob:');
+  const isAbsolute = !safePath || /^(?:[a-z][a-z0-9+.-]*:|\/\/|\/)/i.test(safePath);
 
   // Memoize fallback to avoid recalculating on every render
-  const fallback = useMemo(
-    () => (isAbsolute ? safePath : `${basePath}/${safePath}`),
-    [isAbsolute, safePath, basePath],
-  );
+  const fallback = useMemo(() => {
+    const candidate = isAbsolute ? safePath : `${basePath.replace(/\/$/, '')}/${safePath}`;
+    return isResourceUrlAllowed(candidate, resourcePolicy) ? candidate : '';
+  }, [isAbsolute, safePath, basePath, resourcePolicy]);
 
   // Fast path: no provider or absolute URL — return synchronously, skip effect entirely
   const needsProvider = !isAbsolute && !!provider;
@@ -77,7 +91,9 @@ export function useMediaUrl(relativePath: string, basePath: string): string {
     setUrl(fallback);
     provider!.resolveUrl(safePath).then(
       (resolved) => {
-        if (!cancelled) setUrl(resolved);
+        if (!cancelled) {
+          setUrl(isResourceUrlAllowed(resolved, resourcePolicy) ? resolved : '');
+        }
       },
       () => {
         // Resolution failures should be non-fatal and must not become
@@ -89,7 +105,7 @@ export function useMediaUrl(relativePath: string, basePath: string): string {
     return () => {
       cancelled = true;
     };
-  }, [needsProvider, provider, safePath, fallback]);
+  }, [needsProvider, provider, safePath, fallback, resourcePolicy]);
 
   // When provider is not needed, return fallback directly to avoid
   // the one-frame delay from the initial useState → useEffect cycle

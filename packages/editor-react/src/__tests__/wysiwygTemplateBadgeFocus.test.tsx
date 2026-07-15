@@ -48,7 +48,7 @@ describe('WysiwygEditor inline block-type picker focus', () => {
     const search = await screen.findByRole('searchbox', { name: 'Search block types' });
     await waitFor(() => expect(document.activeElement).toBe(search));
 
-    fireEvent.click(screen.getByRole('option', { name: /^Quote\b/ }));
+    fireEvent.click(screen.getByRole('button', { name: /^Quote\b/ }));
 
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
     await waitFor(() => expect(document.activeElement).toBe(editor));

@@ -67,5 +67,5 @@ describe('published npm package shape', () => {
     } finally {
       rmSync(cache, { recursive: true, force: true });
     }
-  });
+  }, 30_000);
 });

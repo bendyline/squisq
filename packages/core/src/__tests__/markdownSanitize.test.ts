@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { parseHtmlToNodes, sanitizeHtmlNodes, sanitizeUrl } from '../markdown/index';
+import {
+  fetchResourceBytes,
+  isResourceUrlAllowed,
+  parseHtmlToNodes,
+  sanitizeHtmlNodes,
+  sanitizeUrl,
+} from '../markdown/index';
 import type { HtmlElement, HtmlNode } from '../markdown/index';
 
 function elements(nodes: HtmlNode[]): HtmlElement[] {
@@ -77,5 +83,37 @@ describe('markdown HTML sanitization', () => {
 
     expect(strong.tagName).toBe('strong');
     expect(strong.children).toEqual([{ type: 'htmlText', value: 'kept' }]);
+  });
+});
+
+describe('document resource policy', () => {
+  it('supports local-only and explicit remote-host policies', () => {
+    expect(isResourceUrlAllowed('images/local.png', { allowRemote: false })).toBe(true);
+    expect(isResourceUrlAllowed('https://example.com/a.png', { allowRemote: false })).toBe(false);
+    expect(
+      isResourceUrlAllowed('https://cdn.example.com/a.png', {
+        allowedHosts: ['*.example.com'],
+      }),
+    ).toBe(true);
+    expect(
+      isResourceUrlAllowed('https://example.net/a.png', { allowedHosts: ['*.example.com'] }),
+    ).toBe(false);
+    expect(isResourceUrlAllowed('file:///etc/passwd')).toBe(false);
+    expect(isResourceUrlAllowed('\\\\server\\share\\file')).toBe(false);
+  });
+
+  it('enforces actual streamed bytes even when Content-Length is absent', async () => {
+    const fetchMock = async (): Promise<Response> =>
+      new Response(new Uint8Array([1, 2, 3, 4]), {
+        status: 200,
+        headers: { 'content-type': 'image/png' },
+      });
+
+    await expect(
+      fetchResourceBytes('https://example.com/a.png', {
+        policy: { maxBytes: 3 },
+        fetch: fetchMock as typeof fetch,
+      }),
+    ).rejects.toMatchObject({ code: 'RESOURCE_TOO_LARGE' });
   });
 });

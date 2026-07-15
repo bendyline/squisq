@@ -8,10 +8,10 @@
  * Standard fonts embedded by pdf-lib should produce readable text items.
  */
 
-import { describe, it, expect } from 'vitest';
+import { afterEach, describe, it, expect, vi } from 'vitest';
 import { PDFDocument, StandardFonts, rgb } from 'pdf-lib';
 
-import { pdfToMarkdownDoc, pdfToDoc, insertImageBlocks } from '../pdf/import';
+import { pdfToContainer, pdfToMarkdownDoc, pdfToDoc, insertImageBlocks } from '../pdf/import';
 import type { ExtractedImage } from '../pdf/import';
 import type {
   MarkdownHeading,
@@ -22,6 +22,8 @@ import type {
 
 /** Structural shape shared by all markdown node types, for recursive walkers. */
 type TreeNode = { type: string; value?: string; children?: TreeNode[] };
+
+afterEach(() => vi.unstubAllGlobals());
 
 // ============================================
 // Helpers
@@ -380,5 +382,27 @@ describe('pdfToDoc', () => {
     expect(doc).toBeDefined();
     expect(doc.blocks).toBeDefined();
     expect(doc.blocks.length).toBeGreaterThan(0);
+  });
+});
+
+describe('pdfToContainer image extraction', () => {
+  it('extracts an image-only PDF under Node without a DOM canvas', async () => {
+    const encoded = atob(
+      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Wl2nWQAAAAASUVORK5CYII=',
+    );
+    const png = Uint8Array.from(encoded, (char) => char.charCodeAt(0));
+    const pdf = await PDFDocument.create();
+    const image = await pdf.embedPng(png);
+    const page = pdf.addPage([72, 72]);
+    page.drawImage(image, { x: 0, y: 0, width: 72, height: 72 });
+    const bytes = await pdf.save();
+
+    vi.stubGlobal('document', undefined);
+    const container = await pdfToContainer(bytes);
+
+    expect(await container.exists('images/image1.png')).toBe(true);
+    const extracted = new Uint8Array((await container.readFile('images/image1.png'))!);
+    expect([...extracted.slice(0, 8)]).toEqual([137, 80, 78, 71, 13, 10, 26, 10]);
+    expect(await container.readDocument()).toContain('images/image1.png');
   });
 });

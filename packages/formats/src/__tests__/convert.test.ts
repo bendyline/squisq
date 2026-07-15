@@ -23,6 +23,14 @@ This is a paragraph that should survive a docx round trip.
 // ── unknown-format / unsupported-output ─────────────────────────────
 
 describe('convert error paths', () => {
+  it('rejects raw input above the caller limit before format detection', async () => {
+    await expect(
+      convert({ kind: 'bytes', data: new Uint8Array([1, 2, 3, 4]), filename: 'large.md' }, 'md', {
+        limits: { maxInputBytes: 3 },
+      }),
+    ).rejects.toThrow('3-byte safety limit');
+  });
+
   it('throws unknown-format for an unregistered target', async () => {
     await expect(convert({ kind: 'markdown', markdown: '# hi' }, 'nope')).rejects.toMatchObject({
       name: 'ConversionError',

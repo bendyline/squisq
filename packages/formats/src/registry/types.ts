@@ -27,6 +27,7 @@ import type { HtmlImportOptions } from '../html/import.js';
 import type { EpubExportOptions } from '../epub/export.js';
 import type { ContainerToZipOptions } from '../container/index.js';
 import type { ZipSafetyLimits } from '../shared/zipSafety.js';
+import type { ConversionLimits } from './limits.js';
 
 /** A format identifier (e.g. `'docx'`). Strings so hosts can register their own. */
 export type FormatId = string;
@@ -100,6 +101,8 @@ export interface NormalizedInput {
 export interface ConvertOptions {
   /** Cancel normalization, transformation, or export at the next bounded work boundary. */
   signal?: AbortSignal;
+  /** Cross-format safety limits. Pass false only for explicitly trusted input. */
+  limits?: Partial<ConversionLimits> | false;
   /** Registry to resolve formats against. Defaults to `defaultRegistry()`. */
   registry?: FormatRegistry;
   /** Explicit source format id (skips extension/byte sniffing). */

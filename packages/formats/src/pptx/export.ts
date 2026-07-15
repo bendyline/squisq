@@ -54,6 +54,7 @@ import { createPackage } from '../ooxml/writer.js';
 import { xmlDeclaration, escapeXml } from '../ooxml/xmlUtils.js';
 import { inferMimeType } from '../html/imageUtils.js';
 import { stripHtmlTags, extractPlainText } from '../shared/text.js';
+import { sanitizeOfficeHyperlink } from '../shared/officeHyperlinks.js';
 import {
   inlineNodesToRuns,
   inlineNodeToRuns,
@@ -109,6 +110,8 @@ import {
  * Options for PPTX export.
  */
 export interface PptxExportOptions {
+  /** Cancel at bounded export checkpoints. */
+  signal?: AbortSignal;
   /** Presentation title (appears in core properties) */
   title?: string;
   /** Presentation author */
@@ -140,6 +143,8 @@ export interface PptxExportOptions {
    * showing `[Image: alt]` placeholders.
    */
   images?: Map<string, ArrayBuffer>;
+  /** Permit carefully validated relative hyperlink targets. Default: false. */
+  allowRelativeHyperlinks?: boolean;
 }
 
 /**
@@ -149,6 +154,7 @@ export async function markdownDocToPptx(
   doc: MarkdownDocument,
   options: PptxExportOptions = {},
 ): Promise<ArrayBuffer> {
+  options.signal?.throwIfAborted();
   // Resolve theme from options or frontmatter. The frontmatter lookup
   // accepts the editor's canonical `squisq-theme` key as well as the
   // shorter legacy `themeId` / `theme` aliases — see
@@ -167,7 +173,14 @@ export async function markdownDocToPptx(
   const slideContexts: SlideContext[] = [];
 
   for (let i = 0; i < slides.length; i++) {
-    const ctx = new SlideContext(style, options.images, i);
+    if ((i & 31) === 0) options.signal?.throwIfAborted();
+    const ctx = new SlideContext(
+      style,
+      options.images,
+      i,
+      options.allowRelativeHyperlinks ?? false,
+      options.signal,
+    );
     const xml = buildSlideXml(slides[i], ctx);
     slideXmls.push(xml);
     slideContexts.push(ctx);
@@ -313,11 +326,21 @@ class SlideContext {
   readonly slideIndex: number;
   readonly embeddedImages: EmbeddedImage[] = [];
   private nextShapeId = 4; // 1=group, 2=title, 3=body
+  private readonly allowRelativeHyperlinks: boolean;
+  readonly signal: AbortSignal | undefined;
 
-  constructor(style: SlideStyle, images: Map<string, ArrayBuffer> | undefined, slideIndex: number) {
+  constructor(
+    style: SlideStyle,
+    images: Map<string, ArrayBuffer> | undefined,
+    slideIndex: number,
+    allowRelativeHyperlinks: boolean,
+    signal?: AbortSignal,
+  ) {
     this.style = style;
     this.images = images;
     this.slideIndex = slideIndex;
+    this.allowRelativeHyperlinks = allowRelativeHyperlinks;
+    this.signal = signal;
   }
 
   allocRelId(): string {
@@ -328,12 +351,16 @@ class SlideContext {
     return this.nextShapeId++;
   }
 
-  addHyperlink(url: string): string {
+  addHyperlink(url: string): string | null {
+    const target = sanitizeOfficeHyperlink(url, {
+      allowRelative: this.allowRelativeHyperlinks,
+    });
+    if (!target) return null;
     const id = this.allocRelId();
     this.relationships.push({
       id,
       type: REL_HYPERLINK,
-      target: url,
+      target,
       targetMode: 'External',
     });
     return id;
@@ -996,6 +1023,7 @@ function makeRun(text: string, format: InlineFormat, style: SlideStyle): string 
 
 function convertLink(node: MarkdownLink, ctx: SlideContext, format: InlineFormat): string {
   const rId = ctx.addHyperlink(node.url);
+  if (!rId) return convertInlines(node.children, ctx, format);
   const parts: string[] = [];
 
   for (const child of node.children) {

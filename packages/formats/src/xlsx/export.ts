@@ -51,6 +51,10 @@ import {
  * Options for XLSX export.
  */
 export interface XlsxExportOptions {
+  /** Cancel at bounded export checkpoints. */
+  signal?: AbortSignal;
+  /** Maximum cells emitted. Default: 100,000. */
+  maxCells?: number;
   /** Workbook title (written to core properties). */
   title?: string;
   /** Workbook author (written to core properties). */
@@ -226,9 +230,21 @@ export async function markdownDocToXlsx(
   doc: MarkdownDocument,
   options: XlsxExportOptions = {},
 ): Promise<ArrayBuffer> {
+  options.signal?.throwIfAborted();
   const prefix = cleanSheetName(options.sheetNamePrefix ?? 'Sheet') || 'Sheet';
   const inferNumericCells = options.inferNumericCells ?? false;
   let sheets = collectSheets(doc, prefix);
+  const maxCells = options.maxCells ?? 100_000;
+  if (!Number.isSafeInteger(maxCells) || maxCells < 0) {
+    throw new RangeError('maxCells must be a non-negative safe integer');
+  }
+  const cellCount = sheets.reduce(
+    (total, sheet) => total + sheet.grid.reduce((sum, row) => sum + row.length, 0),
+    0,
+  );
+  if (cellCount > maxCells) {
+    throw new RangeError(`XLSX export exceeds the ${maxCells}-cell safety limit`);
+  }
 
   // Zero tables → one empty sheet so the file is still valid.
   if (sheets.length === 0) {
@@ -239,6 +255,7 @@ export async function markdownDocToXlsx(
 
   // Worksheets + workbook→worksheet relationships.
   sheets.forEach((sheet, i) => {
+    if ((i & 31) === 0) options.signal?.throwIfAborted();
     const sheetPath = `xl/worksheets/sheet${i + 1}.xml`;
     pkg.addPart(
       sheetPath,

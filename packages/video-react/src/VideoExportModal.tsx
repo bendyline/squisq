@@ -8,11 +8,11 @@
  * the surface that opened it.
  */
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useId, useRef } from 'react';
 import type { Doc } from '@bendyline/squisq/schemas';
 import type { MediaProvider } from '@bendyline/squisq/schemas';
 import type { VideoQuality, VideoOrientation } from '@bendyline/squisq-video';
-import type { CaptionMode } from '@bendyline/squisq-react';
+import { useModalDialog, type CaptionMode } from '@bendyline/squisq-react';
 import {
   useVideoExport,
   type VideoExportConfig,
@@ -209,6 +209,9 @@ export function VideoExportModal({
   colorScheme = 'light',
   onClose,
 }: VideoExportModalProps) {
+  const overlayRef = useRef<HTMLDivElement>(null);
+  const dialogRef = useRef<HTMLDivElement>(null);
+  const titleId = useId();
   const initialOutputFormat = defaultConfig?.outputFormat ?? 'mp4';
   const [outputFormat, setOutputFormat] = useState<VideoOutputFormat>(initialOutputFormat);
   const [quality, setQuality] = useState<VideoQuality>(defaultConfig?.quality ?? 'normal');
@@ -336,15 +339,25 @@ export function VideoExportModal({
   }, [state, cancelExport, resetExport, onClose]);
 
   const isExporting = state === 'preparing' || state === 'capturing' || state === 'encoding';
+  useModalDialog({ rootRef: overlayRef, dialogRef, onClose: handleClose });
 
   return (
     <div
+      ref={overlayRef}
       style={{ ...overlayStyle, background: palette.overlay }}
       data-color-scheme={colorScheme}
       onClick={handleClose}
     >
-      <div style={themedModalStyle} onClick={(e) => e.stopPropagation()}>
-        <h2 style={themedTitleStyle}>
+      <div
+        ref={dialogRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        tabIndex={-1}
+        style={themedModalStyle}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <h2 id={titleId} style={themedTitleStyle}>
           {outputFormat === 'gif' ? 'Export Animated GIF' : 'Export Video'}
         </h2>
 
@@ -478,7 +491,14 @@ export function VideoExportModal({
               </p>
             )}
 
-            <div style={{ ...progressBarOuterStyle, background: palette.secondary }}>
+            <div
+              role="progressbar"
+              aria-label="Video export progress"
+              aria-valuemin={0}
+              aria-valuemax={100}
+              aria-valuenow={progress}
+              style={{ ...progressBarOuterStyle, background: palette.secondary }}
+            >
               <div
                 style={{
                   width: `${progress}%`,

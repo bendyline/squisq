@@ -90,6 +90,7 @@ export interface HtmlZipExportOptions extends HtmlExportOptions {
  * ```
  */
 export function docToHtml(doc: Doc, options: HtmlExportOptions): string {
+  options.signal?.throwIfAborted();
   return generateInlineHtml(doc, options);
 }
 
@@ -127,6 +128,7 @@ export function docToHtml(doc: Doc, options: HtmlExportOptions): string {
  * ```
  */
 export async function docToHtmlZip(doc: Doc, options: HtmlZipExportOptions): Promise<Blob> {
+  options.signal?.throwIfAborted();
   const {
     playerScript,
     images,
@@ -154,7 +156,9 @@ export async function docToHtmlZip(doc: Doc, options: HtmlZipExportOptions): Pro
   // folder is organized (e.g. pandoc-style `notes_files/` sidecars).
   const imagePathMap: Record<string, string> = {};
   if (images) {
+    let imageIndex = 0;
     for (const [originalPath, buffer] of images.entries()) {
+      if ((imageIndex++ & 63) === 0) options.signal?.throwIfAborted();
       const zipPath = sanitizeZipPath(originalPath);
       if (!zipPath) continue;
       zip.file(zipPath, buffer);
@@ -165,7 +169,9 @@ export async function docToHtmlZip(doc: Doc, options: HtmlZipExportOptions): Pro
   // 3. Add audio to audio/ folder and build path mapping
   const audioPathMap: Record<string, string> = {};
   if (audio) {
+    let audioIndex = 0;
     for (const [segmentKey, buffer] of audio.entries()) {
+      if ((audioIndex++ & 63) === 0) options.signal?.throwIfAborted();
       const filename = extractFilename(segmentKey);
       // Ensure .mp3 extension
       const finalName = filename.includes('.') ? filename : `${filename}.mp3`;

@@ -213,6 +213,21 @@ describe('saveVersion', () => {
     expect(r2.version?.path).toBe(`${VERSIONS_PREFIX}index.20260430T152030Z-2.md`);
   });
 
+  it('preserves both contents when saves race for the same timestamp', async () => {
+    const now = new Date(Date.UTC(2026, 3, 30, 15, 20, 30));
+    const [first, second] = await Promise.all([
+      saveVersion(container, { basename: 'index', content: 'A', now }),
+      saveVersion(container, { basename: 'index', content: 'B', now }),
+    ]);
+
+    expect(first.version?.path).not.toBe(second.version?.path);
+    expect(await listVersions(container, 'index')).toHaveLength(2);
+    const contents = await Promise.all(
+      [first.version!, second.version!].map((version) => readVersion(container, version)),
+    );
+    expect(new Set(contents)).toEqual(new Set(['A', 'B']));
+  });
+
   it('content option overrides container.readDocument()', async () => {
     await container.writeDocument('# stored', 'index.md');
     const r = await saveVersion(container, {

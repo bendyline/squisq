@@ -671,6 +671,10 @@ export type MarkdownNode =
  * Options for parseMarkdown().
  */
 export interface ParseOptions {
+  /** Safety limits for untrusted input. Pass false only for trusted documents. */
+  limits?: Partial<import('./limits.js').MarkdownSafetyLimits> | false;
+  /** Cancel before parse and during post-parse validation. */
+  signal?: AbortSignal;
   /** Enable GFM extensions (tables, strikethrough, task lists, autolinks, footnotes). Default: true */
   gfm?: boolean;
   /** Enable math extensions ($...$ and $$...$$). Default: true */
@@ -687,6 +691,10 @@ export interface ParseOptions {
  * Options for stringifyMarkdown().
  */
 export interface StringifyOptions {
+  /** Safety limits for untrusted trees. Pass false only for trusted documents. */
+  limits?: Partial<import('./limits.js').MarkdownSafetyLimits> | false;
+  /** Cancel before serialization and during validation. */
+  signal?: AbortSignal;
   /** Enable GFM extensions in output. Default: true */
   gfm?: boolean;
   /** Enable math extensions in output. Default: true */

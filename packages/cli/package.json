@@ -50,7 +50,8 @@
   "scripts": {
     "build": "tsup",
     "typecheck": "tsc --noEmit",
-    "test": "mocha"
+    "test": "mocha",
+    "test:native": "mocha --grep \"flagship pptx|native animated GIF\""
   },
   "dependencies": {
     "@bendyline/squisq": "2.1.0",

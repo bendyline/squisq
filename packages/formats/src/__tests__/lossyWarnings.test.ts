@@ -2,7 +2,7 @@
  * Tests for the registry's consolidated lossy-path warnings, all surfaced
  * through `ConversionResult.warnings`:
  *  - xlsx export drops non-table content (tables-only fidelity)
- *  - pdf import under Node skips embedded images (no DOM canvas)
+ *  - PDF import does not report the retired Node/canvas degradation
  *  - transform → markdown produces blocks that don't round-trip
  */
 
@@ -70,9 +70,9 @@ describe('xlsx export warns about omitted non-table content', () => {
   });
 });
 
-// ── pdf: Node has no DOM canvas → images skipped ────────────────────
+// ── pdf: Node image extraction no longer depends on DOM canvas ─────
 
-describe('pdf import warns when running without a DOM (Node)', () => {
+describe('pdf import warning behavior across runtimes', () => {
   afterEach(() => {
     vi.unstubAllGlobals();
   });
@@ -93,14 +93,14 @@ describe('pdf import warns when running without a DOM (Node)', () => {
 
   const pdfBytes = new TextEncoder().encode('%PDF-1.4\n%mock\n');
 
-  it('surfaces the skipped-images warning when document is undefined', async () => {
+  it('does not report skipped images when document is undefined', async () => {
     vi.stubGlobal('document', undefined);
     const registry = registryWithStubPdf();
     const result = await convert({ kind: 'bytes', data: pdfBytes, filename: 'x.pdf' }, 'md', {
       from: 'pdf',
       registry,
     });
-    expect(result.warnings.some((w) => /embedded images were skipped/i.test(w))).toBe(true);
+    expect(result.warnings.some((w) => /embedded images were skipped/i.test(w))).toBe(false);
   });
 
   it('does not warn when a DOM is present (jsdom default)', async () => {

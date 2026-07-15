@@ -1,0 +1,44 @@
+{
+  "docx": {
+    "producer": "independently assembled ISO/IEC 29500 parts",
+    "phrases": ["Quarterly field report", "Revenue grew 42 percent", "North", "1,024"],
+    "nodeTypes": ["heading", "strong", "table"]
+  },
+  "pptx": {
+    "producer": "independently assembled ISO/IEC 29500 parts",
+    "phrases": ["Quarterly field report", "First finding", "Second finding"],
+    "nodeTypes": ["heading", "list"]
+  },
+  "xlsx": {
+    "producer": "independently assembled ISO/IEC 29500 parts",
+    "phrases": ["Operations", "Region", "North", "2024-01-01", "00123"],
+    "nodeTypes": ["heading", "table"]
+  },
+  "pdf": {
+    "producer": "pdf-lib interoperability fixture",
+    "phrases": ["Quarterly Field Report", "Revenue grew 42 percent"],
+    "nodeTypes": ["heading", "paragraph"]
+  },
+  "html": {
+    "producer": "hand-authored semantic HTML",
+    "phrases": ["Quarterly field report", "Revenue grew", "São Paulo", "Read the details"],
+    "nodeTypes": ["heading", "strong", "list", "table"]
+  },
+  "csv": {
+    "producer": "hand-authored RFC 4180 with BOM and multiline field",
+    "phrases": ["Region", "Contains, comma", "Two lines: second line", "Chloé", "São Paulo"],
+    "nodeTypes": ["table"]
+  },
+  "epub": {
+    "producer": "export golden checked as EPUB 3 package semantics",
+    "phrases": ["Quarterly field report", "Measured twice", "Second chapter"],
+    "entries": [
+      "mimetype",
+      "META-INF/container.xml",
+      "OEBPS/content.opf",
+      "OEBPS/toc.xhtml",
+      "OEBPS/chapters/chapter-001.xhtml",
+      "OEBPS/chapters/chapter-002.xhtml"
+    ]
+  }
+}

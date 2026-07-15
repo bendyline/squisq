@@ -18,6 +18,7 @@ import {
   resolveTemplateContentPreviewResult,
   type TemplatePreviewSource,
 } from './templateContentPreviewResolver';
+import { useModalDialog } from './modal/useModalDialog';
 
 // ── Template metadata ─────────────────────────────────────────────
 //
@@ -689,6 +690,7 @@ export function TemplatePicker({
     ? createPortal(
         <TemplateGalleryDialog
           dialogRef={dialogRef}
+          returnFocusRef={triggerRef}
           dialogId={dialogId}
           title={dialogTitle}
           colorScheme={colorScheme}
@@ -753,6 +755,7 @@ export function TemplatePicker({
 
 function TemplateGalleryDialog({
   dialogRef,
+  returnFocusRef,
   dialogId,
   children,
   title,
@@ -761,6 +764,7 @@ function TemplateGalleryDialog({
   onClose,
 }: {
   dialogRef: React.RefObject<HTMLDivElement>;
+  returnFocusRef?: React.RefObject<HTMLElement | null>;
   dialogId: string;
   children: React.ReactNode;
   title: string;
@@ -768,6 +772,10 @@ function TemplateGalleryDialog({
   style: React.CSSProperties;
   onClose: () => void;
 }) {
+  const panelRef = useRef<HTMLDivElement>(null);
+  const titleId = useId();
+  useModalDialog({ rootRef: dialogRef, dialogRef: panelRef, returnFocusRef, onClose });
+
   return (
     <div
       ref={dialogRef}
@@ -780,13 +788,17 @@ function TemplateGalleryDialog({
       }}
     >
       <div
+        ref={panelRef}
         className="squisq-template-gallery-dialog-panel"
         role="dialog"
         aria-modal="true"
-        aria-label={title}
+        aria-labelledby={titleId}
+        tabIndex={-1}
       >
         <div className="squisq-template-gallery-dialog-header">
-          <h2 className="squisq-template-gallery-dialog-title">{title}</h2>
+          <h2 id={titleId} className="squisq-template-gallery-dialog-title">
+            {title}
+          </h2>
           <button
             type="button"
             className="squisq-template-gallery-dialog-close"
@@ -829,8 +841,7 @@ function TemplateCard({
   return (
     <button
       type="button"
-      role="option"
-      aria-selected={value === entry.name}
+      aria-pressed={value === entry.name}
       className={`squisq-template-gallery-card${value === entry.name ? ' squisq-template-gallery-card--selected' : ''}`}
       onClick={() => onSelect(entry.name)}
       title={entry.description}
@@ -948,7 +959,7 @@ function TemplateGalleryBody({
       id={galleryId}
       data-squisq-template-gallery-portal=""
       className={`squisq-template-gallery${grouped ? ' squisq-template-gallery--segmented' : ''}`}
-      role="listbox"
+      role="region"
       aria-label="Block types"
       style={style}
     >
@@ -978,8 +989,7 @@ function TemplateGalleryBody({
       {!hasQuery && (
         <button
           type="button"
-          role="option"
-          aria-selected={value === ''}
+          aria-pressed={value === ''}
           className={`squisq-template-gallery-none${value === '' ? ' squisq-template-gallery-card--selected' : ''}`}
           onClick={() => onSelect('')}
         >
@@ -1144,8 +1154,7 @@ function CustomTemplateCard({
   return (
     <button
       type="button"
-      role="option"
-      aria-selected={value === def.name}
+      aria-pressed={value === def.name}
       className={`squisq-template-gallery-card${
         value === def.name ? ' squisq-template-gallery-card--selected' : ''
       }`}

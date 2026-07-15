@@ -94,6 +94,8 @@ export type PdfPageSize = 'letter' | 'a4';
  * Options for PDF export.
  */
 export interface PdfExportOptions {
+  /** Cancel at bounded export checkpoints. */
+  signal?: AbortSignal;
   /** Document title (PDF metadata). */
   title?: string;
   /** Document author (PDF metadata). */
@@ -121,6 +123,7 @@ export async function markdownDocToPdf(
   doc: MarkdownDocument,
   options: PdfExportOptions = {},
 ): Promise<ArrayBuffer> {
+  options.signal?.throwIfAborted();
   const pdfDoc = await PDFDocument.create();
 
   // Metadata
@@ -187,6 +190,7 @@ interface ExportContext {
     heading: RgbColor;
     link: RgbColor;
   };
+  signal?: AbortSignal;
 }
 
 async function createExportContext(
@@ -241,6 +245,7 @@ async function createExportContext(
     contentWidth: pageWidth - 2 * margin,
     bottomY: margin,
     colors: { text: colorText, heading: colorHeading, link: colorLink },
+    signal: options.signal,
   };
 }
 
@@ -598,7 +603,9 @@ function getLineHeight(line: TextSpan[]): number {
 // ============================================
 
 function renderBlocks(nodes: MarkdownBlockNode[], ctx: ExportContext, extraIndent: number): void {
-  for (const node of nodes) {
+  for (let index = 0; index < nodes.length; index++) {
+    if ((index & 255) === 0) ctx.signal?.throwIfAborted();
+    const node = nodes[index]!;
     renderBlock(node, ctx, extraIndent);
   }
 }

@@ -25,9 +25,32 @@ import type {
   PreparedConversion,
   PreparedExportOptions,
 } from './types.js';
+import {
+  assertDocWithinConversionLimits,
+  markdownLimitsFromConversion,
+  resolveConversionLimits,
+} from './limits.js';
 
 function markdownFormatOptions(options: ConvertOptions): BuiltinFormatOptions['md'] {
   return (options.formatOptions?.md ?? {}) as BuiltinFormatOptions['md'];
+}
+
+function parseOptions(options: ConvertOptions): BuiltinFormatOptions['md']['parse'] {
+  const raw = markdownFormatOptions(options).parse ?? {};
+  return {
+    ...raw,
+    signal: options.signal,
+    limits: raw.limits ?? markdownLimitsFromConversion(options.limits),
+  };
+}
+
+function stringifyOptions(options: ConvertOptions): BuiltinFormatOptions['md']['stringify'] {
+  const raw = markdownFormatOptions(options).stringify ?? {};
+  return {
+    ...raw,
+    signal: options.signal,
+    limits: raw.limits ?? markdownLimitsFromConversion(options.limits),
+  };
 }
 
 function throwIfAborted(signal?: AbortSignal): void {
@@ -131,6 +154,15 @@ async function normalizeBytes(
   registry: FormatRegistry,
 ): Promise<Normalized> {
   const bytes = source.data instanceof Uint8Array ? source.data : new Uint8Array(source.data);
+  if (
+    options.limits !== false &&
+    bytes.byteLength > resolveConversionLimits(options.limits).maxInputBytes
+  ) {
+    throw new ConversionError(
+      'invalid-input',
+      `Input exceeds the ${resolveConversionLimits(options.limits).maxInputBytes}-byte safety limit.`,
+    );
+  }
   const buffer = bytes.buffer.slice(
     bytes.byteOffset,
     bytes.byteOffset + bytes.byteLength,
@@ -163,28 +195,28 @@ async function normalizeBytes(
 
   if (fromDef.importContainer) {
     container = await fromDef.importContainer(buffer, options);
-    // PDF embedded-image extraction needs a browser canvas; under Node it's
-    // skipped inside pdfToContainer. importContainer has no warnings channel of
-    // its own, so surface that degraded path here where warnings are collected.
-    if (fromDef.id === 'pdf' && typeof document === 'undefined') {
-      warnings.push(
-        'PDF embedded images were skipped — image decoding requires a browser canvas (running under Node).',
-      );
-    }
     const text = await container.readDocument();
     markdownDoc = text
-      ? parseMarkdown(text, markdownFormatOptions(options).parse)
+      ? parseMarkdown(text, parseOptions(options))
       : { type: 'document', children: [] };
   } else {
     // importDoc is guaranteed present by the guard above.
     markdownDoc = await fromDef.importDoc!(buffer, options);
     const { MemoryContentContainer } = await import('@bendyline/squisq/storage');
     const mem = new MemoryContentContainer();
-    await mem.writeDocument(stringifyMarkdown(markdownDoc));
+    await mem.writeDocument(stringifyMarkdown(markdownDoc, stringifyOptions(options)));
     container = mem;
   }
 
+  const { assertMarkdownDocumentWithinLimits } = await import('@bendyline/squisq/markdown');
+  assertMarkdownDocumentWithinLimits(
+    markdownDoc,
+    markdownLimitsFromConversion(options.limits),
+    options.signal,
+  );
+
   const doc = markdownToDoc(markdownDoc, { autoTemplates: options.autoTemplates });
+  assertDocWithinConversionLimits(doc, options.limits, options.signal);
   const baseName = source.filename ? baseNameOf(source.filename) : 'document';
 
   return {
@@ -204,8 +236,14 @@ async function normalizeMarkdown(
 
   const markdownDoc =
     typeof source.markdown === 'string'
-      ? parseMarkdown(source.markdown, markdownFormatOptions(options).parse)
+      ? parseMarkdown(source.markdown, parseOptions(options))
       : source.markdown;
+  const { assertMarkdownDocumentWithinLimits } = await import('@bendyline/squisq/markdown');
+  assertMarkdownDocumentWithinLimits(
+    markdownDoc,
+    markdownLimitsFromConversion(options.limits),
+    options.signal,
+  );
 
   let container = source.container;
   if (!container) {
@@ -213,24 +251,31 @@ async function normalizeMarkdown(
     // (dbk) and media resolution have the markdown to serialize.
     const { MemoryContentContainer } = await import('@bendyline/squisq/storage');
     const mem = new MemoryContentContainer();
-    await mem.writeDocument(stringifyMarkdown(markdownDoc));
+    await mem.writeDocument(stringifyMarkdown(markdownDoc, stringifyOptions(options)));
     container = mem;
   }
 
   const doc = markdownToDoc(markdownDoc, { autoTemplates: options.autoTemplates });
+  assertDocWithinConversionLimits(doc, options.limits, options.signal);
   const baseName = source.baseName ?? 'document';
 
   return { input: { doc, markdownDoc, container, baseName }, warnings: [] };
 }
 
-async function normalizeDoc(source: Extract<ConvertSource, { kind: 'doc' }>): Promise<Normalized> {
+async function normalizeDoc(
+  source: Extract<ConvertSource, { kind: 'doc' }>,
+  options: ConvertOptions,
+): Promise<Normalized> {
+  assertDocWithinConversionLimits(source.doc, options.limits, options.signal);
   let container = source.container;
   if (!container) {
     const { MemoryContentContainer } = await import('@bendyline/squisq/storage');
     const { docToMarkdown } = await import('@bendyline/squisq/doc');
     const { stringifyMarkdown } = await import('@bendyline/squisq/markdown');
     const mem = new MemoryContentContainer();
-    await mem.writeDocument(stringifyMarkdown(docToMarkdown(source.doc)));
+    await mem.writeDocument(
+      stringifyMarkdown(docToMarkdown(source.doc), stringifyOptions(options)),
+    );
     container = mem;
   }
   const baseName = source.baseName ?? 'document';
@@ -249,7 +294,7 @@ async function normalize(
     case 'markdown':
       return normalizeMarkdown(source, options);
     case 'doc':
-      return normalizeDoc(source);
+      return normalizeDoc(source, options);
   }
 }
 

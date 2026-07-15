@@ -76,8 +76,19 @@ jobs:
       - name: Check formatting
         run: npm run format:check
 
-      - name: Install Chromium
-        run: npx playwright install --with-deps chromium
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps chromium firefox webkit
+
+      - name: Install FFmpeg
+        run: sudo apt-get update && sudo apt-get install --yes ffmpeg
+
+      - name: Assert native video capabilities
+        run: node scripts/assert-native-video-tools.mjs
+
+      - name: Required native MP4/GIF tests
+        env:
+          SQUISQ_REQUIRE_NATIVE_E2E: '1'
+        run: npm run test:cli:native
 
       - name: Browser end-to-end tests
         run: npm run test:e2e:built

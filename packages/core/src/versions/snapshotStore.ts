@@ -13,6 +13,7 @@ const decoder = new TextDecoder();
 const encoder = new TextEncoder();
 const INVALID_BASENAME_CHARS = /[<>:"/\\|?*]/;
 const WINDOWS_DEVICE_NAME = /^(?:con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\.|$)/i;
+const mutationQueues = new WeakMap<object, Promise<void>>();
 
 function assertSafeBasename(basename: string): void {
   if (
@@ -136,38 +137,71 @@ export async function saveTextSnapshot(
   strategy: SnapshotPathStrategy,
   options: SaveTextSnapshotOptions,
 ): Promise<SaveTextSnapshotResult> {
-  const versions = await listSnapshots(container, strategy, options.basename);
-  if (!options.force && versions.length > 0) {
-    const existing = await readTextSnapshot(container, versions[0]!);
-    if (existing === options.content) {
-      // Backfill containers written before history owned its ignore rule.
-      await ensureVersionsGitIgnored(container);
-      return { saved: false, version: null, reason: 'unchanged' };
+  return withContainerMutationLock(container, async () => {
+    const versions = await listSnapshots(container, strategy, options.basename);
+    if (!options.force && versions.length > 0) {
+      const existing = await readTextSnapshot(container, versions[0]!);
+      if (existing === options.content) {
+        // Backfill containers written before history owned its ignore rule.
+        await ensureVersionsGitIgnored(container);
+        return { saved: false, version: null, reason: 'unchanged' };
+      }
     }
-  }
 
-  const now = options.now ?? new Date();
-  let collision = 0;
-  let path = buildSnapshotPath(strategy, options.basename, now, collision);
-  while (await container.exists(path)) {
-    collision += 1;
-    path = buildSnapshotPath(strategy, options.basename, now, collision);
-  }
+    const now = options.now ?? new Date();
+    const data = encoder.encode(options.content);
+    await ensureVersionsGitIgnored(container);
 
-  const data = encoder.encode(options.content);
-  await ensureVersionsGitIgnored(container);
-  await container.writeFile(path, data, options.mimeType);
-  return {
-    saved: true,
-    version: {
-      path,
-      basename: options.basename,
-      timestamp: now,
-      size: data.byteLength,
-      collision,
-    },
-    reason: 'saved',
-  };
+    let collision = 0;
+    let path = buildSnapshotPath(strategy, options.basename, now, collision);
+    if (container.writeFileExclusive) {
+      while (!(await container.writeFileExclusive(path, data, options.mimeType))) {
+        collision += 1;
+        path = buildSnapshotPath(strategy, options.basename, now, collision);
+      }
+    } else {
+      // The shared in-process lock closes the check/write race for legacy
+      // adapters. Cross-process safety requires writeFileExclusive().
+      while (await container.exists(path)) {
+        collision += 1;
+        path = buildSnapshotPath(strategy, options.basename, now, collision);
+      }
+      await container.writeFile(path, data, options.mimeType);
+    }
+
+    return {
+      saved: true,
+      version: {
+        path,
+        basename: options.basename,
+        timestamp: now,
+        size: data.byteLength,
+        collision,
+      },
+      reason: 'saved',
+    };
+  });
+}
+
+async function withContainerMutationLock<T>(
+  container: ContentContainer,
+  operation: () => Promise<T>,
+): Promise<T> {
+  const key = container.mutationLock ?? container;
+  const previous = mutationQueues.get(key) ?? Promise.resolve();
+  let release!: () => void;
+  const gate = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const queued = previous.catch(() => undefined).then(() => gate);
+  mutationQueues.set(key, queued);
+  await previous.catch(() => undefined);
+  try {
+    return await operation();
+  } finally {
+    release();
+    if (mutationQueues.get(key) === queued) mutationQueues.delete(key);
+  }
 }
 
 export async function pruneSnapshots(

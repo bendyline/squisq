@@ -44,6 +44,8 @@ import { extractPlainText } from '../shared/text.js';
 // ── Public API ────────────────────────────────────────────────────
 
 export interface EpubExportOptions {
+  /** Cancel at bounded export checkpoints. */
+  signal?: AbortSignal;
   /** Book title (default: 'Untitled') */
   title?: string;
   /** Author name */
@@ -88,6 +90,7 @@ export async function markdownDocToEpub(
   doc: MarkdownDocument,
   options: EpubExportOptions = {},
 ): Promise<ArrayBuffer> {
+  options.signal?.throwIfAborted();
   const fmTitle = doc.frontmatter?.title;
   const fmAuthor = doc.frontmatter?.author;
   const title = options.title ?? (typeof fmTitle === 'string' ? fmTitle : 'Untitled');
@@ -105,7 +108,9 @@ export async function markdownDocToEpub(
   const resolvedImages = new Map<string, { data: ArrayBuffer; mime: string; filename: string }>();
   const usedImageNames = new Set<string>();
   if (options.images) {
+    let imageIndex = 0;
     for (const src of imageEntries) {
+      if ((imageIndex++ & 63) === 0) options.signal?.throwIfAborted();
       const data = options.images.get(src);
       if (data) {
         const filename = uniqueFilename(safeArchiveBasename(src, 'image'), usedImageNames);
@@ -137,6 +142,7 @@ export async function markdownDocToEpub(
 
   // OEBPS/images/*
   for (const [, img] of resolvedImages) {
+    options.signal?.throwIfAborted();
     zip.file(`OEBPS/images/${img.filename}`, img.data);
   }
 

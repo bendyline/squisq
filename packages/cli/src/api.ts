@@ -379,6 +379,14 @@ async function captureDocFrames(
     const page = await browser.newPage({ viewport: { width, height } });
     const pageErrors: string[] = [];
     page.on('pageerror', (err) => pageErrors.push(err.message));
+    // The render HTML already embeds every container asset as data. A document
+    // must not be able to turn the CLI/CI host into an SSRF client by naming a
+    // loopback, private-network, metadata, file, or arbitrary remote URL.
+    await page.route('**/*', async (route) => {
+      const url = route.request().url();
+      if (/^(?:about:|blob:|data:)/i.test(url)) await route.continue();
+      else await route.abort('blockedbyclient');
+    });
     signal?.throwIfAborted();
     await page.setContent(renderHtml, { waitUntil: 'load' });
     signal?.throwIfAborted();

@@ -13,6 +13,12 @@ function cellValue(table: MarkdownTable, row: number, col: number): string {
 }
 
 describe('parseCsv', () => {
+  it('enforces row, cell, and field limits', () => {
+    expect(() => parseCsv('a,b\n1,2', ',', { maxCells: 3 })).toThrow('3-cell');
+    expect(() => parseCsv('a\nb', ',', { maxRows: 1 })).toThrow('1-row');
+    expect(() => parseCsv('abcd', ',', { maxFieldChars: 3 })).toThrow('3-character');
+  });
+
   it('parses quoted fields, escaped quotes, and embedded delimiters', () => {
     const rows = parseCsv('a,b,c\n"x,y","he said ""hi""",z\n');
     expect(rows).toEqual([

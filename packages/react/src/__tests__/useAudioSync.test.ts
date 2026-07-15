@@ -10,38 +10,25 @@ const track: AudioTrack = {
 afterEach(() => vi.restoreAllMocks());
 
 describe('useAudioSync resource loading', () => {
-  it('does not prefix absolute URLs and revokes a blob that resolves after cleanup', async () => {
-    let resolveFetch!: (value: unknown) => void;
-    const fetchPromise = new Promise((resolve) => {
-      resolveFetch = resolve;
+  it('does not prefix absolute URLs and aborts a pending bounded fetch on cleanup', async () => {
+    let requestSignal: AbortSignal | undefined;
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation((_input, init) => {
+      requestSignal = init?.signal ?? undefined;
+      return new Promise<Response>(() => {});
     });
-    const fetchSpy = vi
-      .spyOn(globalThis, 'fetch')
-      .mockReturnValue(fetchPromise as Promise<Response>);
-    const create = vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:late');
-    const revoke = vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {});
     const audioRef = { current: null };
     const { unmount } = renderHook(() => useAudioSync(audioRef, track, '.'));
 
     await waitFor(() => expect(fetchSpy).toHaveBeenCalled());
     expect(fetchSpy.mock.calls[0][0]).toBe('https://cdn.example.test/a.mp3');
     unmount();
-
-    await act(async () => {
-      resolveFetch({ ok: true, blob: async () => new Blob(['audio']) });
-      await fetchPromise;
-      await Promise.resolve();
-      await Promise.resolve();
-    });
-    expect(create).toHaveBeenCalled();
-    expect(revoke).toHaveBeenCalledWith('blob:late');
+    expect(requestSignal?.aborted).toBe(true);
   });
 
   it('does not preload when an external controller disables the hook', async () => {
-    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue({
-      ok: true,
-      blob: async () => new Blob(['audio']),
-    } as Response);
+    const fetchSpy = vi
+      .spyOn(globalThis, 'fetch')
+      .mockResolvedValue(new Response(new Blob(['audio'], { type: 'audio/mpeg' })));
     renderHook(() => useAudioSync({ current: null }, track, '.', false));
     await act(async () => Promise.resolve());
     expect(fetchSpy).not.toHaveBeenCalled();
@@ -71,10 +58,7 @@ describe('useAudioSync resource loading', () => {
 describe('useAudioSync playback modes', () => {
   it('reports a real media element error instead of silently advancing', async () => {
     const audio = document.createElement('audio');
-    vi.spyOn(globalThis, 'fetch').mockResolvedValue({
-      ok: false,
-      status: 404,
-    } as Response);
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(null, { status: 404 }));
     const { result } = renderHook(() => useAudioSync({ current: audio }, track));
 
     act(() => audio.dispatchEvent(new Event('error')));
@@ -89,7 +73,7 @@ describe('useAudioSync playback modes', () => {
     const blocked = new Error('User gesture required');
     blocked.name = 'NotAllowedError';
     vi.spyOn(audio, 'play').mockRejectedValue(blocked);
-    vi.spyOn(globalThis, 'fetch').mockResolvedValue({ ok: false, status: 404 } as Response);
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(null, { status: 404 }));
     const { result } = renderHook(() => useAudioSync({ current: audio }, track));
 
     await act(() => result.current.play());
@@ -121,10 +105,11 @@ describe('useAudioSync playback modes', () => {
         { src: 'b.mp3', name: 'b', duration: 2, startTime: 2 },
       ],
     };
-    vi.spyOn(globalThis, 'fetch').mockResolvedValue({
-      ok: true,
-      blob: async () => new Blob(['audio']),
-    } as Response);
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response(new Uint8Array([1, 2, 3]), {
+        headers: { 'content-type': 'audio/mpeg' },
+      }),
+    );
     vi.spyOn(URL, 'createObjectURL').mockReturnValueOnce('blob:a').mockReturnValueOnce('blob:b');
     vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {});
     const play = vi.spyOn(audio, 'play').mockResolvedValue(undefined);

@@ -6,8 +6,9 @@
  * VideoExportModal must accept being rendered without it.
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { fireEvent, render, renderHook } from '@testing-library/react';
+import axe from 'axe-core';
 import { VideoExportButton } from '../VideoExportButton';
 import { VideoExportModal } from '../VideoExportModal';
 import { useVideoExport } from '../hooks/useVideoExport';
@@ -50,6 +51,22 @@ describe('VideoExportButton', () => {
 });
 
 describe('VideoExportModal', () => {
+  it('has dialog semantics, keyboard dismissal, and no automated WCAG A/AA violations', async () => {
+    const onClose = vi.fn();
+    const { getByRole } = render(<VideoExportModal doc={minimalDoc()} onClose={onClose} />);
+    const dialog = getByRole('dialog', { name: 'Export Video' });
+    expect(dialog.getAttribute('aria-modal')).toBe('true');
+
+    const results = await axe.run(dialog, {
+      runOnly: { type: 'tag', values: ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'] },
+      rules: { 'color-contrast': { enabled: false } },
+    });
+    expect(results.violations).toEqual([]);
+
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(onClose).toHaveBeenCalledOnce();
+  });
+
   it('renders the configure state without a playerScript prop', () => {
     const { container } = render(<VideoExportModal doc={minimalDoc()} onClose={() => {}} />);
     expect(container.textContent).toContain('Export Video');

@@ -127,7 +127,7 @@
   --squisq-template-gallery-preview-warning-border: rgba(255, 255, 255, 0.22);
   --squisq-template-gallery-preview-warning-text: #ffffff;
   --squisq-template-gallery-name: #111827;
-  --squisq-template-gallery-description: #6b7280;
+  --squisq-template-gallery-description: #4b5563;
   --squisq-template-gallery-new-bg: #f5f3ff;
   --squisq-template-gallery-new-border: #a5b4fc;
   --squisq-template-gallery-new-hover-bg: #ede9fe;
@@ -136,7 +136,7 @@
   --squisq-template-gallery-new-plus-bg: #ffffff;
   --squisq-template-gallery-new-plus-border: #c4b5fd;
   --squisq-template-gallery-new-label: #4338ca;
-  --squisq-template-gallery-new-desc: #6b7280;
+  --squisq-template-gallery-new-desc: #4b5563;
   --squisq-template-gallery-section-border: #e5e7eb;
   --squisq-template-gallery-section-title: #6b7280;
   box-sizing: border-box;

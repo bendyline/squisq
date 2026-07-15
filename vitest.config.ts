@@ -7,6 +7,7 @@ export default defineConfig({
     exclude: [
       '**/node_modules/**',
       '**/dist/**',
+      '**/.stryker-tmp/**',
       'e2e/**',
       'packages/cli/**',
       // `tests/published/**` is the built-artifact suite. It runs

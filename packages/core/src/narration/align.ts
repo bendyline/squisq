@@ -34,6 +34,8 @@ export interface AlignInput {
   script: NarrationScript;
   /** Live prompter trace recorded during the take, if any. */
   trace?: NarrationTrace;
+  /** Cancel before expensive alignment phases. */
+  signal?: AbortSignal;
 }
 
 interface DetectedEvent {
@@ -62,7 +64,20 @@ export function alignNarration(
 ): NarrationAlignment {
   const c = { ...DEFAULT_ALIGN_CONFIG, ...config };
   const { pcm, sampleRate, script } = input;
+  input.signal?.throwIfAborted();
+  if (!Number.isFinite(sampleRate) || sampleRate <= 0) {
+    throw new RangeError('sampleRate must be a positive finite number');
+  }
+  if (pcm.length > c.maxPcmSamples) {
+    throw new RangeError(`Narration take exceeds the ${c.maxPcmSamples}-sample safety limit`);
+  }
+  if (script.tokens.length > c.maxScriptTokens) {
+    throw new RangeError(`Narration script exceeds the ${c.maxScriptTokens}-token safety limit`);
+  }
   const takeDuration = pcm.length / Math.max(1, sampleRate);
+  if (takeDuration > c.maxDurationSec) {
+    throw new RangeError(`Narration take exceeds the ${c.maxDurationSec}-second safety limit`);
+  }
 
   if (script.tokens.length === 0 || takeDuration <= 0) {
     return { words: [], blocks: [], detectedSyllables: 0, cost: 0 };
@@ -70,6 +85,7 @@ export function alignNarration(
 
   // ── 1. Detected events over the whole take ─────────────────────────
   const frames = extractFrameFeatures(pcm, sampleRate, { hopSec: c.hopSec });
+  input.signal?.throwIfAborted();
   const vadFlags = runVad(frames);
   const onsets = detectSyllableOnsets(frames, vadFlags);
   const gaps = findSilenceGaps(frames, vadFlags, c.gapMinSec);

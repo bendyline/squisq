@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
+import axe from 'axe-core';
 import { LinkDialog } from '../LinkDialog';
 
 function LinkDialogHarness() {
@@ -44,5 +45,16 @@ describe('editor modal accessibility', () => {
     expect(screen.queryByRole('dialog')).toBeNull();
     expect(opener.inert).toBe(false);
     expect(opener).toBe(document.activeElement);
+  });
+
+  it('has no automated WCAG A/AA violations in the link dialog', async () => {
+    render(<LinkDialogHarness />);
+    fireEvent.click(screen.getByRole('button', { name: 'Open link dialog' }));
+
+    const results = await axe.run(screen.getByRole('dialog'), {
+      runOnly: { type: 'tag', values: ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'] },
+      rules: { 'color-contrast': { enabled: false } },
+    });
+    expect(results.violations).toEqual([]);
   });
 });
