@@ -121,6 +121,9 @@ describe('print preview mode', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Print' }));
 
     const frame = await screen.findByTestId('plain-html-preview');
+    await waitFor(() => {
+      expect((frame as HTMLIFrameElement).srcdoc).toContain('Opening copy.');
+    });
     const frameWindow = (frame as HTMLIFrameElement).contentWindow!;
     const print = vi.spyOn(frameWindow, 'print').mockImplementation(() => undefined);
     fireEvent.click(screen.getByRole('button', { name: 'Print' }));

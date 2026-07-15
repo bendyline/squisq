@@ -11,6 +11,7 @@ export default tseslint.config(
     ignores: [
       '**/dist/**',
       '**/node_modules/**',
+      '**/.stryker-tmp/**',
       '**/*.config.ts',
       '**/*.config.js',
       '**/vitest.setup.ts',
