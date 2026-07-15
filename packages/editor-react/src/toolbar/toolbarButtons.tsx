@@ -68,7 +68,9 @@ export const BUTTONS: ToolbarButton[] = [
   { id: 'h5', label: 'H5', icon: 'H5', title: 'Heading 5', group: 'structure' },
   { id: 'h6', label: 'H6', icon: 'H6', title: 'Heading 6', group: 'structure' },
 
-  // Insert group — block-level inserts (quote, code blocks, rules)
+  // Insert group — block-level inserts (quote and rules). Generic code
+  // blocks live alongside the language-specific entries in the Code Snippet
+  // submenu.
   {
     id: 'quote',
     label: '❝',
@@ -76,14 +78,6 @@ export const BUTTONS: ToolbarButton[] = [
     title: 'Blockquote',
     group: 'insert',
     faIcon: 'fa-solid fa-quote-left',
-  },
-  {
-    id: 'codeblock',
-    label: '{ }',
-    icon: '{ }',
-    title: 'Code block',
-    group: 'insert',
-    faIcon: 'fa-solid fa-file-code',
   },
   {
     id: 'code',

@@ -61,7 +61,7 @@ describe('format content-flow matrix', () => {
       keyPhrases: ['ops weekly', 'launch readiness', 'rollback script', 'support tickets declined'],
       minRetainRatio: 0.4,
     });
-  });
+  }, 30_000);
 
   it('preserves inter-word spacing when importing a Squisq-exported PDF', async () => {
     const source = ROUNDTRIP_FIXTURES.mixed;

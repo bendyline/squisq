@@ -155,6 +155,34 @@ describe('<Toolbar> selection conversion menu', () => {
     ]);
   });
 
+  it('moves generic code from the toolbar to the top of the Code Snippet submenu', async () => {
+    const source = 'const answer = 42;';
+    const { editor, executeEdits, selection } = monacoWithSelection(source);
+    render(
+      <EditorProvider initialMarkdown={source} initialView="raw" allowRecording={false}>
+        <Toolbar />
+        <ContextProbe />
+      </EditorProvider>,
+    );
+    act(() => context().setMonacoEditor(editor as never));
+
+    expect(screen.queryByRole('button', { name: 'Code block' })).toBeNull();
+    fireEvent.click(screen.getByLabelText('Insert'));
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Insert Code Snippet' }));
+
+    const menu = await screen.findByRole('menu', { name: 'Code snippet language' });
+    const items = within(menu).getAllByRole('menuitem');
+    expect(items[0].getAttribute('aria-label')).toBe('Insert Generic Code');
+    fireEvent.click(items[0]);
+
+    expect(executeEdits).toHaveBeenCalledWith('toolbar', [
+      {
+        range: selection,
+        text: '```\nconst answer = 42;\n```',
+      },
+    ]);
+  });
+
   it('places the Monaco caret after a newly inserted snippet starter', async () => {
     const { editor, setPosition } = monacoWithSelection('');
     render(

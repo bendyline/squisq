@@ -6,7 +6,15 @@
  * failure policy, and diagnostics cannot drift by render mode.
  */
 
-import type { Block, Layer, MermaidLayer, Position, VideoLayer } from '../schemas/Doc.js';
+import type {
+  Block,
+  ImageLayer,
+  ImageTreatment,
+  Layer,
+  MermaidLayer,
+  ShapeLayer,
+  VideoLayer,
+} from '../schemas/Doc.js';
 import type {
   DocBlock,
   PersistentLayerConfig,
@@ -20,13 +28,15 @@ import type { MarkdownCodeBlock } from '../markdown/types.js';
 import { createTemplateContext, isTemplateBlock } from '../schemas/BlockTemplates.js';
 import { DEFAULT_THEME } from '../schemas/themeLibrary.js';
 import { VIEWPORT_PRESETS } from '../schemas/Viewport.js';
+import { withAlpha } from '../schemas/colorUtils.js';
 import { cloneData } from '../internal/immutable.js';
 import { applyRenderStyleToLayers } from './utils/applyRenderStyle.js';
 import { coerceTemplateParams } from './templates/inputDescriptors.js';
 import { fallbackBlockLayers } from './templates/fallbackBlock.js';
 import { expandPersistentLayers, wrapWithPersistentLayers } from './templates/persistentLayers.js';
 import { resolveTemplateName } from './templates/templateNames.js';
-import { deriveTemplateInputs, extractEmbeddedVideos } from './templateInputs.js';
+import { deriveTemplateInputs, extractEmbeddedVideos, extractImages } from './templateInputs.js';
+import { resolveSupplementalMediaLayout, type LayerRect } from './richMediaLayout.js';
 import {
   buildRegistry,
   templateRegistry,
@@ -243,13 +253,6 @@ export function materializeBlockLayersWithRuntime(
   };
 }
 
-interface LayerRect {
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-}
-
 /** Mermaid fences are explicit author intent and never inferred from other code. */
 function mermaidSources(block: Block): string[] {
   return (block.contents ?? [])
@@ -261,190 +264,188 @@ function mermaidSources(block: Block): string[] {
     .filter((source) => source.trim().length > 0);
 }
 
-function resolvePositionValue(value: number | string | undefined, dimension: number): number {
-  if (value === undefined) return 0;
-  if (typeof value === 'number') return value;
-  const percent = value.match(/^\s*(-?\d+(?:\.\d+)?)%\s*$/);
-  if (percent) return (Number(percent[1]) / 100) * dimension;
-  const numeric = Number.parseFloat(value);
-  return Number.isFinite(numeric) ? numeric : 0;
-}
+type RichMediaItem =
+  | { kind: 'image'; src: string; alt: string; aspectRatio?: number }
+  | { kind: 'video'; src: string; posterSrc?: string; alt: string; aspectRatio: number }
+  | { kind: 'mermaid'; source: string; aspectRatio: number };
 
-function positionRect(
-  position: Position,
-  viewport: ViewportConfig,
-  fallbackWidth: number,
-  fallbackHeight: number,
-): LayerRect {
-  const width = position.width
-    ? resolvePositionValue(position.width, viewport.width)
-    : fallbackWidth;
-  const height = position.height
-    ? resolvePositionValue(position.height, viewport.height)
-    : fallbackHeight;
-  let x = resolvePositionValue(position.x, viewport.width);
-  let y = resolvePositionValue(position.y, viewport.height);
-  const anchor = position.anchor ?? 'top-left';
-  if (anchor === 'center') {
-    x -= width / 2;
-    y -= height / 2;
-  } else {
-    if (anchor.endsWith('right')) x -= width;
-    if (anchor.startsWith('bottom')) y -= height;
-  }
-  return { x, y, width, height };
-}
-
-function overlapArea(a: LayerRect, b: LayerRect): number {
-  const width = Math.max(0, Math.min(a.x + a.width, b.x + b.width) - Math.max(a.x, b.x));
-  const height = Math.max(0, Math.min(a.y + a.height, b.y + b.height) - Math.max(a.y, b.y));
-  return width * height;
-}
-
-/**
- * Pick the least-obstructed media region when a template already owns the
- * slide. Background shapes/paths are deliberately ignored; text and existing
- * rich media are what an embedded-media inset must avoid.
- */
-function richMediaRegion(layers: readonly Layer[], viewport: ViewportConfig): LayerRect {
-  const occupied = layers
-    .filter((layer) => layer.type !== 'shape' && layer.type !== 'path' && layer.type !== 'mermaid')
-    .map((layer) =>
-      positionRect(
-        layer.position,
-        viewport,
-        layer.type === 'text' ? viewport.width * 0.45 : viewport.width * 0.5,
-        layer.type === 'text' ? viewport.height * 0.2 : viewport.height * 0.55,
-      ),
-    );
-  if (occupied.length === 0) {
-    return {
-      x: viewport.width * 0.06,
-      y: viewport.height * 0.08,
-      width: viewport.width * 0.88,
-      height: viewport.height * 0.84,
-    };
-  }
-
-  const candidates: LayerRect[] = [
-    {
-      x: viewport.width * 0.52,
-      y: viewport.height * 0.12,
-      width: viewport.width * 0.44,
-      height: viewport.height * 0.76,
-    },
-    {
-      x: viewport.width * 0.04,
-      y: viewport.height * 0.12,
-      width: viewport.width * 0.44,
-      height: viewport.height * 0.76,
-    },
-    {
-      x: viewport.width * 0.15,
-      y: viewport.height * 0.53,
-      width: viewport.width * 0.7,
-      height: viewport.height * 0.41,
-    },
-  ];
-  return candidates.reduce((best, candidate) => {
-    const score = occupied.reduce((sum, rect) => sum + overlapArea(candidate, rect), 0);
-    const bestScore = occupied.reduce((sum, rect) => sum + overlapArea(best, rect), 0);
-    return score < bestScore ? candidate : best;
-  });
-}
-
-/** Add directly embedded videos as synchronized, muted slide layers. */
-function appendEmbeddedVideoLayers(
-  layers: Layer[],
-  block: Block,
-  viewport: ViewportConfig,
-): Layer[] {
-  const existingSrcs = new Set(
+function collectRichMediaItems(layers: readonly Layer[], block: Block): RichMediaItem[] {
+  const existingImages = new Set(
+    layers
+      .filter((layer): layer is ImageLayer => layer.type === 'image')
+      .map((layer) => layer.content.src),
+  );
+  const existingVideos = new Set(
     layers
       .filter((layer): layer is VideoLayer => layer.type === 'video')
       .map((layer) => layer.content.src),
   );
-  const videos = extractEmbeddedVideos(block.contents).filter(
-    (video) => !existingSrcs.has(video.src),
+  const existingMermaid = new Set(
+    layers
+      .filter((layer): layer is MermaidLayer => layer.type === 'mermaid')
+      .map((layer) => layer.content.source),
   );
-  if (videos.length === 0) return layers;
 
-  const region = richMediaRegion(layers, viewport);
-  const columns = videos.length === 1 ? 1 : 2;
-  const rows = Math.ceil(videos.length / columns);
-  const gap = Math.min(viewport.width, viewport.height) * 0.018;
-  const width = (region.width - gap * (columns - 1)) / columns;
-  const height = (region.height - gap * (rows - 1)) / rows;
-  const clipEnd = Math.max(0, block.duration);
-  const videoLayers: VideoLayer[] = videos.map((video, index) => ({
-    id: `${block.id}-embedded-video-${index + 1}`,
-    type: 'video',
-    position: {
-      x: region.x + (index % columns) * (width + gap),
-      y: region.y + Math.floor(index / columns) * (height + gap),
-      width,
-      height,
-    },
-    content: {
-      src: video.src,
-      ...(video.posterSrc ? { posterSrc: video.posterSrc } : {}),
-      alt: video.alt || block.title || 'Embedded video',
-      fit: 'contain',
-      clipStart: 0,
-      clipEnd,
-    },
-  }));
-  return [...layers, ...videoLayers];
+  const embeddedVideos = extractEmbeddedVideos(block.contents);
+  const videos = embeddedVideos.filter((video) => !existingVideos.has(video.src));
+  const videoSources = new Set(embeddedVideos.map((video) => video.src));
+  const seenImages = new Set(existingImages);
+  const images = extractImages(block.contents).filter((image) => {
+    if (videoSources.has(image.src) || seenImages.has(image.src)) return false;
+    seenImages.add(image.src);
+    return true;
+  });
+  const sources = mermaidSources(block).filter((source) => !existingMermaid.has(source));
+
+  return [
+    ...images.map(
+      (image): RichMediaItem => ({
+        kind: 'image',
+        src: image.src,
+        alt: image.alt,
+        ...(image.width && image.height ? { aspectRatio: image.width / image.height } : {}),
+      }),
+    ),
+    ...videos.map(
+      (video): RichMediaItem => ({
+        kind: 'video',
+        src: video.src,
+        ...(video.posterSrc ? { posterSrc: video.posterSrc } : {}),
+        alt: video.alt,
+        aspectRatio: 16 / 9,
+      }),
+    ),
+    ...sources.map((source): RichMediaItem => ({ kind: 'mermaid', source, aspectRatio: 16 / 9 })),
+  ];
 }
 
-/** Add every Mermaid fence as a responsive rich-media layer. */
-function appendMermaidLayers(
-  layers: Layer[],
+function gridCells(
+  region: LayerRect,
+  count: number,
+  viewport: ViewportConfig,
+  inset: boolean,
+): LayerRect[] {
+  const unit = Math.min(viewport.width, viewport.height);
+  const padding = inset ? unit * 0.025 : 0;
+  const gap = count > 1 ? unit * 0.018 : 0;
+  const inner = {
+    x: region.x + padding,
+    y: region.y + padding,
+    width: Math.max(0, region.width - padding * 2),
+    height: Math.max(0, region.height - padding * 2),
+  };
+  const columns = Math.min(
+    count,
+    Math.max(1, Math.ceil(Math.sqrt(count * (inner.width / Math.max(1, inner.height))))),
+  );
+  const rows = Math.ceil(count / columns);
+  const width = (inner.width - gap * (columns - 1)) / columns;
+  const height = (inner.height - gap * (rows - 1)) / rows;
+  return Array.from({ length: count }, (_, index) => ({
+    x: inner.x + (index % columns) * (width + gap),
+    y: inner.y + Math.floor(index / columns) * (height + gap),
+    width,
+    height,
+  }));
+}
+
+function effectiveImageTreatment(theme: Theme, block: Block): ImageTreatment | undefined {
+  const override = (block as Block & { imageTreatment?: ImageTreatment['type'] }).imageTreatment;
+  if (override === 'none') return undefined;
+  const base = override
+    ? { type: override, strength: theme.style.imageTreatment?.strength }
+    : theme.style.imageTreatment;
+  if (!base || base.type === 'none') return undefined;
+  return base.type === 'duotone' && !base.color ? { ...base, color: theme.colors.primary } : base;
+}
+
+function richMediaLayer(
+  item: RichMediaItem,
+  position: LayerRect,
   block: Block,
   theme: Theme,
-  viewport: ViewportConfig,
-): Layer[] {
-  const sources = mermaidSources(block);
-  if (sources.length === 0 || layers.some((layer) => layer.type === 'mermaid')) return layers;
-
-  const region = richMediaRegion(layers, viewport);
-  const columns = sources.length === 1 ? 1 : 2;
-  const rows = Math.ceil(sources.length / columns);
-  const gap = Math.min(viewport.width, viewport.height) * 0.018;
-  const width = (region.width - gap * (columns - 1)) / columns;
-  const height = (region.height - gap * (rows - 1)) / rows;
-  const mermaidLayers: MermaidLayer[] = sources.map((source, index) => ({
-    id: `${block.id}-mermaid-${index + 1}`,
+  kindIndex: number,
+): ImageLayer | VideoLayer | MermaidLayer {
+  if (item.kind === 'image') {
+    const treatment = effectiveImageTreatment(theme, block);
+    return {
+      id: `${block.id}-embedded-image-${kindIndex}`,
+      type: 'image',
+      position,
+      content: {
+        src: item.src,
+        alt: item.alt || block.title || 'Embedded image',
+        fit: 'contain',
+        ...(treatment ? { treatment } : {}),
+      },
+    };
+  }
+  if (item.kind === 'video') {
+    return {
+      id: `${block.id}-embedded-video-${kindIndex}`,
+      type: 'video',
+      position,
+      content: {
+        src: item.src,
+        ...(item.posterSrc ? { posterSrc: item.posterSrc } : {}),
+        alt: item.alt || block.title || 'Embedded video',
+        fit: 'contain',
+        clipStart: 0,
+        clipEnd: Math.max(0, block.duration),
+      },
+    };
+  }
+  return {
+    id: `${block.id}-mermaid-${kindIndex}`,
     type: 'mermaid',
-    position: {
-      x: region.x + (index % columns) * (width + gap),
-      y: region.y + Math.floor(index / columns) * (height + gap),
-      width,
-      height,
-    },
+    position,
     content: {
-      source,
+      source: item.source,
       background: theme.colors.backgroundLight,
       foreground: theme.colors.text,
-      padding: Math.max(12, Math.round(Math.min(width, height) * 0.025)),
+      padding: Math.max(12, Math.round(Math.min(position.width, position.height) * 0.025)),
     },
-  }));
-  return [...layers, ...mermaidLayers];
+  };
 }
 
-/** Promote high-value body embeds through one shared materialization path. */
+/** Promote unconsumed images, videos, and Mermaid fences through one layout path. */
 function appendRichContentLayers(
   layers: Layer[],
   block: Block,
   theme: Theme,
   viewport: ViewportConfig,
 ): Layer[] {
-  return appendMermaidLayers(
-    appendEmbeddedVideoLayers(layers, block, viewport),
-    block,
-    theme,
+  const items = collectRichMediaItems(layers, block);
+  if (items.length === 0) return layers;
+
+  const layout = resolveSupplementalMediaLayout(
+    layers,
+    block.template ? resolveTemplateName(block.template) : undefined,
     viewport,
+    items.length,
+    items.map((item) => item.aspectRatio),
   );
+  const cells = gridCells(layout.mediaRect, items.length, viewport, layout.framed);
+  const counters: Record<RichMediaItem['kind'], number> = { image: 0, video: 0, mermaid: 0 };
+  const mediaLayers = items.map((item, index) => {
+    counters[item.kind] += 1;
+    return richMediaLayer(item, cells[index], block, theme, counters[item.kind]);
+  });
+  const frame: ShapeLayer | undefined = layout.framed
+    ? {
+        id: `${block.id}-rich-media-frame`,
+        type: 'shape',
+        position: layout.mediaRect,
+        content: {
+          shape: 'rect',
+          fill: theme.colors.backgroundLight,
+          stroke: withAlpha(theme.colors.text, 0.14),
+          strokeWidth: 2,
+          borderRadius: Math.max(12, Math.round(Math.min(viewport.width, viewport.height) * 0.018)),
+        },
+      }
+    : undefined;
+  return [...layout.layers, ...(frame ? [frame] : []), ...mediaLayers];
 }
 
 function executeTemplateMaterialization(
@@ -471,15 +472,45 @@ function executeTemplateMaterialization(
         sourceBlock.contents,
       )
     : null;
+  const coercedOverrides = coerceTemplateParams(
+    safeTemplateBlock.template,
+    templateOverrides ?? {},
+  ).input;
   const input =
     derivedInputs || templateData || templateOverrides
       ? ({
           ...derivedInputs,
           ...safeTemplateBlock,
           ...templateData,
-          ...coerceTemplateParams(safeTemplateBlock.template, templateOverrides ?? {}).input,
+          ...coercedOverrides,
         } as TemplateBlock)
       : safeTemplateBlock;
+
+  const explicitQuote = Object.prototype.hasOwnProperty.call(coercedOverrides, 'quote')
+    ? coercedOverrides.quote
+    : Object.prototype.hasOwnProperty.call(templateData ?? {}, 'quote')
+      ? templateData?.quote
+      : Object.prototype.hasOwnProperty.call(safeTemplateBlock, 'quote')
+        ? (safeTemplateBlock as unknown as Record<string, unknown>).quote
+        : undefined;
+  if (
+    resolveTemplateName(safeTemplateBlock.template) === 'quote' &&
+    derivedInputs &&
+    !Object.prototype.hasOwnProperty.call(derivedInputs, 'title') &&
+    !(typeof explicitQuote === 'string' && explicitQuote.trim())
+  ) {
+    const quoteInput = input as unknown as Record<string, unknown>;
+    quoteInput.quote = derivedInputs.quote;
+    if (
+      !Object.prototype.hasOwnProperty.call(templateData ?? {}, 'title') &&
+      !Object.prototype.hasOwnProperty.call(coercedOverrides, 'title')
+    ) {
+      // `safeTemplateBlock.title` is the structural markdown heading. When
+      // derivation promoted it into `quote`, remove that structural copy unless
+      // the author explicitly supplied a distinct template title.
+      delete quoteInput.title;
+    }
+  }
 
   try {
     const renderedLayers = templateFn(input, safeContext);

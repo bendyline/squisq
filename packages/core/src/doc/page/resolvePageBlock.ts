@@ -73,8 +73,12 @@ export function resolvePageBlock(block: Block): ResolvedPageBlock {
   const coercedParams = coerceTemplateParams(rawName, rawParams).input;
 
   let base: Record<string, unknown>;
+  let derivedInputs: Record<string, unknown> | null = null;
   if (annotation) {
     const headingText = extractPlainText(block.sourceHeading!);
+    derivedInputs = deriveTemplateInputs(rawName, headingText, block.contents, {
+      placeholders: true,
+    });
     base = {
       id: block.id,
       template: rawName,
@@ -84,9 +88,7 @@ export function resolvePageBlock(block: Block): ResolvedPageBlock {
       title: headingText,
       contents: block.contents,
       children: block.children,
-      ...(deriveTemplateInputs(rawName, headingText, block.contents, {
-        placeholders: true,
-      }) ?? {}),
+      ...(derivedInputs ?? {}),
     };
   } else {
     base = {
@@ -103,6 +105,25 @@ export function resolvePageBlock(block: Block): ResolvedPageBlock {
     ...(block.templateData ?? {}),
     ...coercedParams,
   } as unknown as TemplateBlock;
+
+  const explicitQuote = Object.prototype.hasOwnProperty.call(coercedParams, 'quote')
+    ? coercedParams.quote
+    : block.templateData?.quote;
+  if (
+    templateName === 'quote' &&
+    derivedInputs &&
+    !Object.prototype.hasOwnProperty.call(derivedInputs, 'title') &&
+    !(typeof explicitQuote === 'string' && explicitQuote.trim())
+  ) {
+    const quoteInput = templateBlock as unknown as Record<string, unknown>;
+    quoteInput.quote = derivedInputs.quote;
+    if (
+      !Object.prototype.hasOwnProperty.call(block.templateData ?? {}, 'title') &&
+      !Object.prototype.hasOwnProperty.call(coercedParams, 'title')
+    ) {
+      delete quoteInput.title;
+    }
+  }
 
   return { templated: true, templateName, templateBlock };
 }

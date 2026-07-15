@@ -174,6 +174,14 @@ describe('non-template paths', () => {
     expect(auto!.section.slots.body?.text).toContain('only way out');
   });
 
+  it('uses a heading-only quote as the quote body without a duplicate title', () => {
+    const doc = markdownToDoc(parseMarkdown('# Words worth quoting {[quote]}'));
+    const quote = materializePageSections(doc).find((entry) => entry.section.template === 'quote');
+
+    expect(quote?.section.slots.body?.text).toBe('Words worth quoting');
+    expect(quote?.section.slots.title).toBeUndefined();
+  });
+
   it('preserves Mermaid and unconsumed media alongside typed page templates', () => {
     const doc = markdownToDoc(
       parseMarkdown(
