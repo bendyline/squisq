@@ -364,6 +364,61 @@ describe('MarkdownRenderer', () => {
     expect(container.textContent).not.toContain('font-family');
   });
 
+  // A raw-HTML anchor reconstructed with `target=_blank` and no `rel` hands the
+  // destination a live `window.opener` back to this page — reverse tabnabbing,
+  // in markup that ships inside customer-exported standalone HTML. Markdown
+  // links hardcode `rel="noopener noreferrer"`; raw HTML must not opt out.
+  describe('raw-HTML anchor targets', () => {
+    const anchor = (html: string): HTMLAnchorElement | null => {
+      const { container } = render(
+        <MarkdownRenderer nodes={parseNodes(html)} htmlPolicy="trusted" />,
+      );
+      return container.querySelector('a');
+    };
+
+    it('forces noopener on target=_blank authored without rel', () => {
+      const a = anchor('<a href="https://evil.example.test" target="_blank">x</a>');
+      expect(a?.getAttribute('target')).toBe('_blank');
+      expect(a?.getAttribute('rel')?.split(/\s+/)).toContain('noopener');
+    });
+
+    it('preserves an authored rel while adding noopener', () => {
+      const a = anchor('<a href="https://example.test" target="_blank" rel="nofollow">x</a>');
+      const rel = a?.getAttribute('rel')?.split(/\s+/) ?? [];
+      expect(rel).toContain('nofollow');
+      expect(rel).toContain('noopener');
+    });
+
+    it('does not duplicate an already-correct rel', () => {
+      const a = anchor(
+        '<a href="https://example.test" target="_blank" rel="noopener noreferrer">x</a>',
+      );
+      expect(a?.getAttribute('rel')).toBe('noopener noreferrer');
+    });
+
+    it('overrides an explicit opener token', () => {
+      const a = anchor('<a href="https://evil.example.test" target="_blank" rel="opener">x</a>');
+      const rel = a?.getAttribute('rel')?.split(/\s+/) ?? [];
+      expect(rel).toContain('noopener');
+      expect(rel).not.toContain('opener');
+    });
+
+    it('forces noopener on a named target, which also opens a new context', () => {
+      const a = anchor('<a href="https://evil.example.test" target="win1">x</a>');
+      expect(a?.getAttribute('rel')?.split(/\s+/)).toContain('noopener');
+    });
+
+    it('leaves a same-context target alone', () => {
+      const a = anchor('<a href="https://example.test" target="_self">x</a>');
+      expect(a?.getAttribute('rel')).toBeNull();
+    });
+
+    it('leaves an anchor with no target alone', () => {
+      const a = anchor('<a href="https://example.test">x</a>');
+      expect(a?.getAttribute('rel')).toBeNull();
+    });
+  });
+
   it('drops a raw <style> on the verbatim path when htmlChildren was not parsed', () => {
     // parseHtml:false leaves htmlChildren empty while rawHtml keeps the
     // markup — the raw-string backstop must still refuse the fast path.

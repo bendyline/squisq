@@ -72,6 +72,13 @@ const doc: Doc = {
 };
 
 describe('useVideoExport GIF flow', () => {
+  /**
+   * GIF always finishes with an ffmpeg.wasm palette pass, so the host must
+   * supply self-hosted core assets. Omitting this used to silently fetch
+   * @ffmpeg/ffmpeg's unpkg CDN default — see the regression test below.
+   */
+  const CORE = { coreURL: '/vendor/core.js', wasmURL: '/vendor/core.wasm' };
+
   let createObjectUrl: ReturnType<typeof vi.spyOn>;
   let revokeObjectUrl: ReturnType<typeof vi.spyOn>;
 
@@ -95,7 +102,7 @@ describe('useVideoExport GIF flow', () => {
     const { result, unmount } = renderHook(() => useVideoExport());
 
     await act(async () => {
-      await result.current.startExport(doc, { outputFormat: 'gif' });
+      await result.current.startExport(doc, { outputFormat: 'gif', ffmpegWasm: CORE });
     });
 
     expect(mocks.frameInit).toHaveBeenCalledWith(
@@ -109,7 +116,7 @@ describe('useVideoExport GIF flow', () => {
     expect(mocks.gifTranscode).toHaveBeenCalledWith(
       expect.any(Uint8Array),
       { width: 960, height: 540, loop: 0 },
-      undefined,
+      CORE,
       expect.any(AbortSignal),
     );
 
@@ -119,6 +126,30 @@ describe('useVideoExport GIF flow', () => {
     expect(result.current.outputFormat).toBe('gif');
     expect(result.current.audioIncluded).toBe(false);
     expect(result.current.audioSkippedReason).toBeNull();
+
+    unmount();
+  });
+
+  /**
+   * Regression (silent CDN fetch + late failure): a GIF export with no
+   * `ffmpegWasm` used to capture every frame, then reach the palette pass and
+   * quietly fetch @ffmpeg/core from unpkg. It must instead fail immediately,
+   * before any capture work, with setup instructions.
+   */
+  it('fails before capturing a single frame when no ffmpeg core is configured', async () => {
+    const { result, unmount } = renderHook(() => useVideoExport());
+
+    await act(async () => {
+      await result.current.startExport(doc, { outputFormat: 'gif' });
+    });
+
+    expect(result.current.state).toBe('error');
+    expect(result.current.error).toMatch(/needs an ffmpeg\.wasm core URL/);
+    expect(result.current.error).toContain('Animated GIF export');
+    // The whole point: no capture, no encode, no palette pass.
+    expect(mocks.frameInit).not.toHaveBeenCalled();
+    expect(mocks.captureFrame).not.toHaveBeenCalled();
+    expect(mocks.gifTranscode).not.toHaveBeenCalled();
 
     unmount();
   });
@@ -139,7 +170,7 @@ describe('useVideoExport GIF flow', () => {
 
     let exportPromise!: Promise<void>;
     await act(async () => {
-      exportPromise = result.current.startExport(doc, { outputFormat: 'gif' });
+      exportPromise = result.current.startExport(doc, { outputFormat: 'gif', ffmpegWasm: CORE });
       await vi.waitFor(() => expect(mocks.gifTranscode).toHaveBeenCalledOnce());
     });
     const signal = mocks.gifTranscode.mock.calls[0][3] as AbortSignal;

@@ -43,8 +43,10 @@ import type {
 import { readFrontmatterThemeId } from '@bendyline/squisq/markdown';
 
 import { createPackage } from '../ooxml/writer.js';
+import { RelIdAllocator } from '../ooxml/relIds.js';
 import { xmlDeclaration, escapeXml } from '../ooxml/xmlUtils.js';
 import { stripHtmlTags } from '../shared/text.js';
+import { normalizeOoxmlHex } from '../shared/ooxmlColor.js';
 import { sanitizeOfficeHyperlink } from '../shared/officeHyperlinks.js';
 import {
   inlineNodesToRuns,
@@ -199,7 +201,14 @@ export async function docToDocx(doc: Doc, options: DocxExportOptions = {}): Prom
  * footnote bodies, and embedded images.
  */
 class ExportContext {
-  private nextRelId = 1;
+  /**
+   * One id source per rels part — see `RelIdAllocator`. Hyperlink, image AND
+   * fixed (styles/numbering/settings/…) rels all draw from this, keyed by the
+   * story part they belong to, so `word/_rels/document.xml.rels` cannot
+   * contain a duplicate `Id` no matter how many hyperlinks/images a document
+   * has.
+   */
+  private readonly relIds = new RelIdAllocator();
   private nextNumId = 1;
   private nextFootnoteId = 1; // 0 is separator, start user footnotes at 1
 
@@ -275,11 +284,15 @@ class ExportContext {
       // installed on the reader's machine).
       themeFont = firstFontFromStack(resolveFontFamily(theme.typography?.bodyFont, ''));
       themeTitleFont = firstFontFromStack(resolveFontFamily(theme.typography?.titleFont, ''));
-      const stripHash = (c: string) => (c.startsWith('#') ? c.slice(1) : c);
-      if (theme.colors?.primary) themeHeadingColor = stripHash(theme.colors.primary);
-      if (theme.colors?.text) themeBodyColor = stripHash(theme.colors.text);
-      if (theme.colors?.textMuted) themeMutedColor = stripHash(theme.colors.textMuted);
-      if (theme.colors?.background) themeBackgroundColor = stripHash(theme.colors.background);
+      // Normalize at the boundary: `ST_HexColorRGB` is exactly six hex
+      // digits, but a valid theme may carry `#rgb` shorthand and a
+      // programmatic Doc's `customThemes` skip validation entirely — so an
+      // arbitrary string can reach here. Anything unparseable becomes
+      // `undefined`, which omits the color and lets Word use its default.
+      themeHeadingColor = normalizeOoxmlHex(theme.colors?.primary);
+      themeBodyColor = normalizeOoxmlHex(theme.colors?.text);
+      themeMutedColor = normalizeOoxmlHex(theme.colors?.textMuted);
+      themeBackgroundColor = normalizeOoxmlHex(theme.colors?.background);
     }
 
     this.font = options.defaultFont ?? themeFont ?? DEFAULT_FONT;
@@ -296,9 +309,14 @@ class ExportContext {
     this.signal = options.signal;
   }
 
-  /** Allocate a new relationship ID */
+  /** Allocate a relationship ID on the story part currently being converted. */
   allocRelId(): string {
-    return `rId${this.nextRelId++}`;
+    return this.allocRelIdFor(this.relationshipSource);
+  }
+
+  /** Allocate a relationship ID on a specific story part. */
+  allocRelIdFor(source: DocxStoryPart): string {
+    return this.relIds.alloc(docxStoryPartPath(source));
   }
 
   setRelationshipSource(source: DocxStoryPart): void {
@@ -364,6 +382,13 @@ class ExportContext {
 }
 
 type DocxStoryPart = 'document' | 'header' | 'footer';
+
+/** Zip path of the part that owns a story's relationships. */
+function docxStoryPartPath(source: DocxStoryPart): string {
+  if (source === 'header') return 'word/header1.xml';
+  if (source === 'footer') return 'word/footer1.xml';
+  return 'word/document.xml';
+}
 
 interface NumberingDef {
   numId: number;
@@ -928,25 +953,26 @@ async function buildDocxPackage(
 ): Promise<ArrayBuffer> {
   const pkg = createPackage();
 
-  // --- Register fixed relationships ---
-  let relCounter = 100; // Start high to avoid collisions with dynamic rels
-  const stylesRelId = `rId${relCounter++}`;
-  const numberingRelId = `rId${relCounter++}`;
-  const settingsRelId = `rId${relCounter++}`;
-  const fontTableRelId = `rId${relCounter++}`;
-  const footnotesRelId = `rId${relCounter++}`;
-  const headerRelId = `rId${relCounter++}`;
-  const footerRelId = `rId${relCounter++}`;
   const hasHeader = headerXml.trim().length > 0;
   const hasFooter = footerXml.trim().length > 0;
 
+  // --- Register fixed relationships ---
+  // These are allocated from the SAME per-part counter that already handed
+  // out the hyperlink/image rels during conversion, so document.xml.rels has
+  // exactly one id source and duplicate `Id`s are impossible by construction.
+  // (The previous scheme started fixed rels at a hardcoded rId100, which
+  // collided as soon as a document reached 99 hyperlinks/images — Word then
+  // refuses the file or "repairs" it by dropping content.)
+  const stylesRelId = ctx.allocRelIdFor('document');
+  const settingsRelId = ctx.allocRelIdFor('document');
+  const fontTableRelId = ctx.allocRelIdFor('document');
+  const numberingRelId = ctx.hasLists ? ctx.allocRelIdFor('document') : undefined;
+  const footnotesRelId = ctx.hasFootnotes ? ctx.allocRelIdFor('document') : undefined;
+  const headerRelId = hasHeader ? ctx.allocRelIdFor('document') : undefined;
+  const footerRelId = hasFooter ? ctx.allocRelIdFor('document') : undefined;
+
   // --- word/document.xml ---
-  const documentXml = buildDocumentXml(
-    bodyXml,
-    ctx.backgroundColor,
-    hasHeader ? headerRelId : undefined,
-    hasFooter ? footerRelId : undefined,
-  );
+  const documentXml = buildDocumentXml(bodyXml, ctx.backgroundColor, headerRelId, footerRelId);
   pkg.addPart('word/document.xml', documentXml, CONTENT_TYPE_DOCX_DOCUMENT);
 
   if (hasHeader) {
@@ -1007,7 +1033,7 @@ async function buildDocxPackage(
     target: 'fontTable.xml',
   });
 
-  if (ctx.hasLists) {
+  if (numberingRelId) {
     pkg.addRelationship('word/document.xml', {
       id: numberingRelId,
       type: REL_NUMBERING,
@@ -1015,7 +1041,7 @@ async function buildDocxPackage(
     });
   }
 
-  if (ctx.hasFootnotes) {
+  if (footnotesRelId) {
     pkg.addRelationship('word/document.xml', {
       id: footnotesRelId,
       type: REL_FOOTNOTES,
@@ -1023,7 +1049,7 @@ async function buildDocxPackage(
     });
   }
 
-  if (hasHeader) {
+  if (headerRelId) {
     pkg.addRelationship('word/document.xml', {
       id: headerRelId,
       type: REL_HEADER,
@@ -1031,7 +1057,7 @@ async function buildDocxPackage(
     });
   }
 
-  if (hasFooter) {
+  if (footerRelId) {
     pkg.addRelationship('word/document.xml', {
       id: footerRelId,
       type: REL_FOOTER,
@@ -1041,13 +1067,7 @@ async function buildDocxPackage(
 
   // --- Dynamic relationships (hyperlinks, images) ---
   for (const rel of ctx.relationships) {
-    const sourcePart =
-      rel.source === 'header'
-        ? 'word/header1.xml'
-        : rel.source === 'footer'
-          ? 'word/footer1.xml'
-          : 'word/document.xml';
-    pkg.addRelationship(sourcePart, {
+    pkg.addRelationship(docxStoryPartPath(rel.source), {
       id: rel.id,
       type: rel.type,
       target: rel.target,

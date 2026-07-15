@@ -1329,9 +1329,35 @@ function inlineToMdast(node: MarkdownInlineNode): MdastNode {
 // Helpers
 // ============================================
 
+/** Escape text for interpolation into HTML character data. */
+function escapeHtmlText(value: string): string {
+  return value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+/**
+ * Recursively flatten a markdown node tree to its plain-text content.
+ *
+ * Deliberately structure-agnostic: any node contributes its own `value` and
+ * then its children's text, so terms/descriptions keep the text of nested
+ * inline formatting (`strong`, `emphasis`, `link`, …) and of multi-block
+ * descriptions instead of dropping to the top-level text nodes only.
+ */
+function nodeTreeText(node: unknown): string {
+  if (!node || typeof node !== 'object') return '';
+  const candidate = node as { value?: unknown; children?: unknown };
+  if (typeof candidate.value === 'string') return candidate.value;
+  if (Array.isArray(candidate.children)) return candidate.children.map(nodeTreeText).join('');
+  return '';
+}
+
 /**
  * Convert a MarkdownDefinitionList to an HTML <dl> string.
  * Fallback for serialization since mdast doesn't support definition lists.
+ *
+ * Both halves are real content: a description used to serialize as the
+ * literal placeholder `...`, which silently DESTROYED the content of every
+ * definition list on stringify, and the term was interpolated with no entity
+ * escaping at all (a term containing markup flowed raw into the output).
  */
 function definitionListToHtml(list: {
   children: Array<{ type: string; children?: unknown[] }>;
@@ -1339,13 +1365,13 @@ function definitionListToHtml(list: {
   let html = '<dl>\n';
   for (const child of list.children) {
     if (child.type === 'definitionTerm') {
-      // Extract plain text from inline children
-      const text = (child.children as Array<{ value?: string; children?: unknown[] }>)
-        .map((c) => c.value ?? '')
-        .join('');
-      html += `  <dt>${text}</dt>\n`;
+      const text = (child.children ?? []).map(nodeTreeText).join('');
+      html += `  <dt>${escapeHtmlText(text)}</dt>\n`;
     } else if (child.type === 'definitionDescription') {
-      html += `  <dd>...</dd>\n`;
+      // Descriptions hold BLOCK children; flatten each to text and join so
+      // multi-paragraph descriptions don't run together.
+      const text = (child.children ?? []).map(nodeTreeText).join(' ').trim();
+      html += `  <dd>${escapeHtmlText(text)}</dd>\n`;
     }
   }
   html += '</dl>';

@@ -16,6 +16,33 @@
 import type { Command } from 'commander';
 import { detectFfmpegDetailed, getFfmpegVersion } from '../util/detectFfmpeg.js';
 
+/** Injectable process/browser boundary used to test every diagnostic branch. */
+export interface DoctorRuntime {
+  nodeVersion: string;
+  detectFfmpeg: typeof detectFfmpegDetailed;
+  getFfmpegVersion: typeof getFfmpegVersion;
+  launchChromium: () => Promise<{
+    executablePath: string;
+    close: () => Promise<void>;
+  }>;
+  log: (line: string) => void;
+}
+
+const defaultDoctorRuntime: DoctorRuntime = {
+  nodeVersion: process.version,
+  detectFfmpeg: detectFfmpegDetailed,
+  getFfmpegVersion,
+  async launchChromium() {
+    const { chromium } = await import('playwright-core');
+    const browser = await chromium.launch({ headless: true });
+    return {
+      executablePath: chromium.executablePath(),
+      close: () => browser.close(),
+    };
+  },
+  log: (line) => console.error(line),
+};
+
 export function registerDoctorCommand(program: Command): void {
   program
     .command('doctor')
@@ -26,48 +53,47 @@ export function registerDoctorCommand(program: Command): void {
     });
 }
 
-async function runDoctor(): Promise<boolean> {
+export async function runDoctor(runtime: DoctorRuntime = defaultDoctorRuntime): Promise<boolean> {
   let allPresent = true;
 
   // ── Node ─────────────────────────────────────────────────────────
-  console.error(`Node:     ${process.version}`);
+  runtime.log(`Node:     ${runtime.nodeVersion}`);
 
   // ── ffmpeg ───────────────────────────────────────────────────────
   try {
-    const detection = await detectFfmpegDetailed();
+    const detection = await runtime.detectFfmpeg();
     if (detection) {
-      const version = await getFfmpegVersion(detection.path);
-      console.error(
+      const version = await runtime.getFfmpegVersion(detection.path);
+      runtime.log(
         `ffmpeg:   ${detection.path} (source: ${detection.source}) — ${version ?? 'version unknown'}`,
       );
     } else {
       allPresent = false;
-      console.error('ffmpeg:   not found.');
-      console.error('          Install it with:');
-      console.error('            macOS:   brew install ffmpeg');
-      console.error('            Ubuntu:  sudo apt install ffmpeg');
-      console.error('            Windows: winget install ffmpeg');
-      console.error('          Or: npm install ffmpeg-static, or set SQUISQ_FFMPEG.');
+      runtime.log('ffmpeg:   not found.');
+      runtime.log('          Install it with:');
+      runtime.log('            macOS:   brew install ffmpeg');
+      runtime.log('            Ubuntu:  sudo apt install ffmpeg');
+      runtime.log('            Windows: winget install ffmpeg');
+      runtime.log('          Or: npm install ffmpeg-static, or set SQUISQ_FFMPEG.');
     }
   } catch (err: unknown) {
     // detectFfmpegDetailed throws when SQUISQ_FFMPEG is set but broken
     allPresent = false;
-    console.error(`ffmpeg:   ${err instanceof Error ? err.message : String(err)}`);
+    runtime.log(`ffmpeg:   ${err instanceof Error ? err.message : String(err)}`);
   }
 
   // ── Playwright Chromium ──────────────────────────────────────────
   try {
-    const { chromium } = await import('playwright-core');
-    const browser = await chromium.launch({ headless: true });
+    const browser = await runtime.launchChromium();
     await browser.close();
-    console.error(`Chromium: available (${chromium.executablePath()})`);
+    runtime.log(`Chromium: available (${browser.executablePath})`);
   } catch (err: unknown) {
     allPresent = false;
     const detail = err instanceof Error ? err.message.split('\n')[0] : String(err);
-    console.error(`Chromium: not available — ${detail}`);
-    console.error('          Run: npx playwright install chromium');
+    runtime.log(`Chromium: not available — ${detail}`);
+    runtime.log('          Run: npx playwright install chromium');
   }
 
-  console.error(allPresent ? '\n✓ All checks passed' : '\n✗ Some checks failed');
+  runtime.log(allPresent ? '\n✓ All checks passed' : '\n✗ Some checks failed');
   return allPresent;
 }

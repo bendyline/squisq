@@ -160,9 +160,21 @@ function analyzeLine(line: string): AnalyzedLine | null {
   let label = chars.slice(i).join('').replace(/\s+$/u, '');
   if (label.length === 0) return null;
 
-  // Trailing comment: ` # …`, ` <-- …`, or ` // …` (needs a leading space).
+  // Trailing comment: `␣␣# …`, `␣␣<-- …`, or `␣␣// …`.
+  //
+  // The delimiter is a GAP (≥2 whitespace) before the marker, not merely a
+  // space. A single space cannot separate a comment, because a label is
+  // allowed to contain a marker: `release # notes` is one label, and under a
+  // one-space rule the renderer had no way to emit it — every round-trip
+  // silently amputated it into `release` + comment `notes`.
+  //
+  // The gap is the same disambiguator the diagram codec's side-label scan
+  // uses, and it costs nothing in practice: comment columns in real tree art
+  // are gap-aligned (`main.go       # entrypoint`). Render collapses
+  // whitespace runs inside a label, so a rendered label can never contain a
+  // gap and the delimiter stays unambiguous in both directions.
   let comment: string | undefined;
-  const commentMatch = /\s+(?:#|<--|\/\/)\s?(.*)$/.exec(label);
+  const commentMatch = /\s{2,}(?:#|<--|\/\/)\s?(.*)$/.exec(label);
   if (commentMatch) {
     comment = commentMatch[1].trim() || undefined;
     label = label.slice(0, commentMatch.index).replace(/\s+$/u, '');

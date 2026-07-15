@@ -9,7 +9,7 @@ import { buildNarrationScript } from '@bendyline/squisq/narration';
 import { DEFAULT_THEME } from '@bendyline/squisq/schemas';
 import { TeleprompterView } from '../teleprompter/TeleprompterView';
 import { stepScroll, targetOffsetFor, type TokenLineMap } from '../teleprompter/scrollModel';
-import { detectFloatTiers } from '../teleprompter/floatingWindow';
+import { createFloatingWindowManager, detectFloatTiers } from '../teleprompter/floatingWindow';
 import { PCM_WORKLET_SOURCE, PCM_WORKLET_NAME } from '../teleprompter/pcmWorklet';
 import { vadConfigForSensitivity } from '../teleprompter/useTeleprompter';
 
@@ -76,6 +76,159 @@ describe('detectFloatTiers', () => {
       expect(detectFloatTiers()[0]).toBe('document-pip');
     } finally {
       delete win.documentPictureInPicture;
+    }
+  });
+});
+
+/**
+ * Regression coverage for orphaned floating windows.
+ *
+ * The bug: `manager.open()` had no generation guard around its awaits
+ * (`documentPictureInPicture.requestWindow()`, `video.play()`,
+ * `requestPictureInPicture()`). A `close()`/`dispose()` landing while one of
+ * those was pending — the user leaving Narrate, the view unmounting, or a
+ * double-click producing two opens — still assigned the resolved float to
+ * `active`. After `dispose()` that meant an always-on-top Document-PiP window
+ * with an empty root, no owner, and nothing that would ever close it.
+ *
+ * The fix: a float resolving after a close/dispose (or superseded by a newer
+ * open) is disposed on arrival, never adopted.
+ */
+describe('createFloatingWindowManager — late-resolving floats', () => {
+  interface PipStub {
+    closed: boolean;
+    document: Document;
+    addEventListener: () => void;
+    removeEventListener: () => void;
+    close: () => void;
+  }
+
+  /**
+   * Installs a Document-PiP API whose `requestWindow` stays pending until the
+   * returned `release()` runs — the window in which close/dispose can race.
+   */
+  function installDeferredDocPip() {
+    const opened: PipStub[] = [];
+    let release: (() => void) | null = null;
+    const pending = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const win = window as Window & { documentPictureInPicture?: unknown };
+    win.documentPictureInPicture = {
+      requestWindow: async () => {
+        await pending;
+        const doc = document.implementation.createHTMLDocument('float');
+        const stub: PipStub = {
+          closed: false,
+          document: doc,
+          addEventListener: () => {},
+          removeEventListener: () => {},
+          close: () => {
+            stub.closed = true;
+          },
+        };
+        opened.push(stub);
+        return stub as unknown as Window;
+      },
+    };
+    return {
+      opened,
+      release: () => release?.(),
+      cleanup: () => delete win.documentPictureInPicture,
+    };
+  }
+
+  const OPTS = {
+    width: 320,
+    height: 480,
+    title: 'Prompter',
+    preferredTier: 'document-pip' as const,
+  };
+
+  it('closes (not adopts) a float that resolves after close()', async () => {
+    const pip = installDeferredDocPip();
+    try {
+      const manager = createFloatingWindowManager({ styleCss: '' });
+      const opening = manager.open(OPTS);
+
+      manager.close(); // user brings the prompter back while PiP is pending
+      pip.release();
+      const tier = await opening;
+
+      expect(tier).toBe('docked');
+      expect(manager.isOpen).toBe(false);
+      expect(manager.getPortalTarget()).toBeNull();
+      // The window did open — it must have been closed on arrival.
+      expect(pip.opened).toHaveLength(1);
+      expect(pip.opened[0].closed).toBe(true);
+    } finally {
+      pip.cleanup();
+    }
+  });
+
+  it('closes a float that resolves after dispose()', async () => {
+    const pip = installDeferredDocPip();
+    try {
+      const manager = createFloatingWindowManager({ styleCss: '' });
+      const opening = manager.open(OPTS);
+
+      manager.dispose(); // view unmounted mid-open
+      pip.release();
+      const tier = await opening;
+
+      expect(tier).toBe('docked');
+      expect(manager.isOpen).toBe(false);
+      // Otherwise: an always-on-top window with an empty root and no owner.
+      expect(pip.opened[0].closed).toBe(true);
+    } finally {
+      pip.cleanup();
+    }
+  });
+
+  it('keeps only the newest float when opens overlap', async () => {
+    const first = installDeferredDocPip();
+    const manager = createFloatingWindowManager({ styleCss: '' });
+    try {
+      const firstOpen = manager.open(OPTS);
+      // A second open supersedes the first (double-click on the float button).
+      const second = installDeferredDocPip();
+      try {
+        const secondOpen = manager.open(OPTS);
+        first.release();
+        second.release();
+        const [firstTier, secondTier] = await Promise.all([firstOpen, secondOpen]);
+
+        expect(firstTier).toBe('docked');
+        expect(secondTier).toBe('document-pip');
+        expect(manager.isOpen).toBe(true);
+        // The superseded float must not linger.
+        expect(first.opened[0].closed).toBe(true);
+        expect(second.opened[0].closed).toBe(false);
+      } finally {
+        second.cleanup();
+      }
+    } finally {
+      manager.dispose();
+      first.cleanup();
+    }
+  });
+
+  it('still adopts an uncontested float', async () => {
+    const pip = installDeferredDocPip();
+    const manager = createFloatingWindowManager({ styleCss: '' });
+    try {
+      const opening = manager.open(OPTS);
+      pip.release();
+      const tier = await opening;
+
+      // The guard must not break the path it protects.
+      expect(tier).toBe('document-pip');
+      expect(manager.isOpen).toBe(true);
+      expect(manager.getPortalTarget()).not.toBeNull();
+      expect(pip.opened[0].closed).toBe(false);
+    } finally {
+      manager.dispose();
+      pip.cleanup();
     }
   });
 });

@@ -1,5 +1,5 @@
 import { describe, expect, it, beforeEach } from 'vitest';
-import { MemoryContentContainer } from '../storage/ContentContainer';
+import { MemoryContentContainer, type ContentContainer } from '../storage/ContentContainer';
 import { scopeContainer } from '../storage/ScopedContentContainer';
 import {
   DocumentVersionManager,
@@ -151,6 +151,35 @@ describe('saveVersion', () => {
     await saveVersion(container, { now: new Date(Date.UTC(2026, 3, 30, 15, 20, 31)) });
 
     expect(await readUtf8(container, '.gitignore')).toBe('generated/\r\n.versions/\r\n');
+  });
+
+  // Committing version history is a legitimate deliberate choice. Appending
+  // our rule after a user's `!.versions/` would win under Git's
+  // last-match-wins semantics and silently revert that choice.
+  it('honours an explicit !.versions/ negation', async () => {
+    await container.writeDocument('# hello', 'index.md');
+    await container.writeFile(
+      '.gitignore',
+      new TextEncoder().encode('.versions/\n!.versions/\n'),
+      'text/plain',
+    );
+
+    await saveVersion(container, { now: new Date(Date.UTC(2026, 3, 30, 15, 20, 30)) });
+
+    expect(await readUtf8(container, '.gitignore')).toBe('.versions/\n!.versions/\n');
+  });
+
+  it('honours a bare !.versions/ negation with no prior ignore rule', async () => {
+    await container.writeDocument('# hello', 'index.md');
+    await container.writeFile(
+      '.gitignore',
+      new TextEncoder().encode('!.versions/\n'),
+      'text/plain',
+    );
+
+    await saveVersion(container, { now: new Date(Date.UTC(2026, 3, 30, 15, 20, 30)) });
+
+    expect(await readUtf8(container, '.gitignore')).toBe('!.versions/\n');
   });
 
   it('backfills .gitignore when an existing snapshot is unchanged', async () => {
@@ -369,6 +398,82 @@ describe('revertToVersion', () => {
   it('returns reverted: false for missing snapshot', async () => {
     const result = await revertToVersion(container, '.versions/missing.20260430T100000Z.md');
     expect(result.reverted).toBe(false);
+    expect(result.reason).toBe('missing-snapshot');
+  });
+
+  it('snapshots the caller-supplied live content, not the stale container doc', async () => {
+    // Hosts that keep the live document outside the container (an editor
+    // buffer) would otherwise have their unsaved work snapshotted as
+    // whatever stale bytes the container happens to hold.
+    await container.writeDocument('# v1', 'index.md');
+    const r1 = await saveVersion(container, { now: new Date(Date.UTC(2026, 3, 30, 10, 0, 0)) });
+
+    const result = await revertToVersion(container, r1.version!, {
+      content: '# unsaved draft only in the editor',
+    });
+
+    expect(result.reverted).toBe(true);
+    expect(await container.readDocument()).toBe('# v1');
+    const snapshot = await readVersion(container, result.snapshotted!);
+    expect(snapshot).toBe('# unsaved draft only in the editor');
+  });
+
+  it('abandons the revert when there is no current document to snapshot', async () => {
+    // The host keeps the live document outside the container, so the
+    // container holds snapshots but no primary doc. Snapshotting yields
+    // `no-document`, meaning the current state is NOT recoverable —
+    // reverting anyway would destroy it, so we must decline.
+    const stamp = new Date(Date.UTC(2026, 3, 30, 10, 0, 0));
+    const path = buildVersionPath('index', stamp);
+    await container.writeFile(path, new TextEncoder().encode('# v1'), 'text/markdown');
+
+    const result = await revertToVersion(container, path);
+
+    expect(result.reverted).toBe(false);
+    expect(result.reason).toBe('snapshot-failed');
+    expect(await container.readDocument()).toBeNull();
+  });
+
+  it('does not overwrite the document when the safety snapshot throws', async () => {
+    // A storage failure mid-snapshot must not leave the revert half-done:
+    // the in-flight document has to survive.
+    await container.writeDocument('# v1', 'index.md');
+    const r1 = await saveVersion(container, { now: new Date(Date.UTC(2026, 3, 30, 10, 0, 0)) });
+    await container.writeDocument('# v2 in flight', 'index.md');
+
+    // Delegate everything to the real container except snapshot writes,
+    // which fail the way a full disk / revoked permission would.
+    const realWrite = container.writeFileExclusive.bind(container);
+    const failing: ContentContainer = Object.create(container, {
+      writeFileExclusive: {
+        value: async (
+          path: string,
+          data: ArrayBuffer | Uint8Array,
+          mimeType?: string,
+        ): Promise<boolean> => {
+          if (path.startsWith(VERSIONS_PREFIX)) throw new Error('disk full');
+          return realWrite(path, data, mimeType);
+        },
+      },
+    });
+
+    await expect(revertToVersion(failing, r1.version!)).rejects.toThrow('disk full');
+    // The in-flight document is untouched.
+    expect(await container.readDocument()).toBe('# v2 in flight');
+  });
+
+  it('reverts when the current content already matches the newest snapshot', async () => {
+    // `unchanged` is not a failure — the current state is already
+    // recoverable, so there is nothing to protect.
+    await container.writeDocument('# v1', 'index.md');
+    const r1 = await saveVersion(container, { now: new Date(Date.UTC(2026, 3, 30, 10, 0, 0)) });
+    await container.writeDocument('# v2', 'index.md');
+    await saveVersion(container, { now: new Date(Date.UTC(2026, 3, 30, 11, 0, 0)) });
+
+    const result = await revertToVersion(container, r1.version!);
+
+    expect(result.reverted).toBe(true);
+    expect(await container.readDocument()).toBe('# v1');
   });
 });
 
@@ -433,6 +538,66 @@ describe('pruneVersions', () => {
     expect(deleted).toHaveLength(2);
     expect((await listVersions(container)).map((v) => v.timestamp.getUTCHours())).toEqual([12, 10]);
   });
+
+  // Retention is per-DOCUMENT. One container can hold several documents'
+  // snapshots; applying a policy to the flat list lets a busy document evict
+  // a quiet one's history entirely.
+  describe('multi-document containers', () => {
+    async function saveAt(basename: string, content: string, hour: number): Promise<void> {
+      await saveVersion(container, {
+        basename,
+        content,
+        now: new Date(Date.UTC(2026, 3, 30, hour, 0, 0)),
+      });
+    }
+
+    it('keep-last-n applies its budget per basename', async () => {
+      // `notes` has 3 snapshots, all OLDER than `index`'s 2. A flat cap of 2
+      // spends the whole budget on `index` and deletes every `notes` snapshot.
+      await saveAt('notes', 'n1', 10);
+      await saveAt('notes', 'n2', 11);
+      await saveAt('notes', 'n3', 12);
+      await saveAt('index', 'i1', 13);
+      await saveAt('index', 'i2', 14);
+
+      await pruneVersions(container, { type: 'keep-last-n', n: 2 });
+
+      expect(
+        (await listVersions(container, 'notes')).map((v) => v.timestamp.getUTCHours()),
+      ).toEqual([12, 11]);
+      expect(
+        (await listVersions(container, 'index')).map((v) => v.timestamp.getUTCHours()),
+      ).toEqual([14, 13]);
+    });
+
+    it('predicate sees only the document it is deciding about', async () => {
+      await saveAt('notes', 'n1', 10);
+      await saveAt('index', 'i1', 11);
+      await saveAt('index', 'i2', 12);
+
+      const seen = new Map<string, number>();
+      await pruneVersions(container, {
+        type: 'predicate',
+        keep: (v, all) => {
+          seen.set(v.basename, all.length);
+          return true;
+        },
+      });
+
+      expect(seen.get('notes')).toBe(1);
+      expect(seen.get('index')).toBe(2);
+    });
+
+    it('returns deletions newest-first across documents', async () => {
+      await saveAt('notes', 'n1', 10);
+      await saveAt('index', 'i1', 11);
+      await saveAt('notes', 'n2', 12);
+      await saveAt('index', 'i2', 13);
+
+      const deleted = await pruneVersions(container, { type: 'keep-last-n', n: 0 });
+      expect(deleted.map((v) => v.timestamp.getUTCHours())).toEqual([13, 12, 11, 10]);
+    });
+  });
 });
 
 describe('coalesceVersions', () => {
@@ -483,6 +648,56 @@ describe('coalesceVersions', () => {
     expect(deleted).toHaveLength(2);
     const remaining = await listVersions(container);
     expect(remaining.map((v) => v.timestamp.getTime() - base)).toEqual([90_000, 0]);
+  });
+
+  it('never coalesces one document against another document', async () => {
+    // Two docs in one container. `notes` has a SINGLE snapshot — it has no
+    // adjacent snapshot of its own, so nothing about it can be coalesced.
+    // Comparing timestamps across basenames made `index`'s later save (10s
+    // apart) collapse `notes`'s only version, destroying that history.
+    const container = new MemoryContentContainer();
+    const base = Date.UTC(2026, 3, 30, 10, 0, 0);
+    await saveVersion(container, { basename: 'notes', content: 'n1', now: new Date(base) });
+    await saveVersion(container, {
+      basename: 'index',
+      content: 'i1',
+      now: new Date(base + 10_000),
+    });
+
+    const deleted = await coalesceVersions(container, { windowMs: 60_000 });
+
+    expect(deleted).toHaveLength(0);
+    expect(await listVersions(container, 'notes')).toHaveLength(1);
+    expect(await listVersions(container, 'index')).toHaveLength(1);
+  });
+
+  it('interleaved documents coalesce along their own timelines', async () => {
+    // index: t=0, t+10s (adjacent, within window → older dropped)
+    // notes: t+5s, t+120s (two minutes apart → both kept)
+    // A flat walk sees 0/5/10/120 interleaved and collapses across docs.
+    const container = new MemoryContentContainer();
+    const base = Date.UTC(2026, 3, 30, 10, 0, 0);
+    await saveVersion(container, { basename: 'index', content: 'i1', now: new Date(base) });
+    await saveVersion(container, { basename: 'notes', content: 'n1', now: new Date(base + 5_000) });
+    await saveVersion(container, {
+      basename: 'index',
+      content: 'i2',
+      now: new Date(base + 10_000),
+    });
+    await saveVersion(container, {
+      basename: 'notes',
+      content: 'n2',
+      now: new Date(base + 120_000),
+    });
+
+    const deleted = await coalesceVersions(container, { windowMs: 60_000 });
+
+    expect(deleted).toHaveLength(1);
+    expect(deleted[0]!.basename).toBe('index');
+    expect(deleted[0]!.timestamp.getTime()).toBe(base);
+    expect(
+      (await listVersions(container, 'notes')).map((v) => v.timestamp.getTime() - base),
+    ).toEqual([120_000, 5_000]);
   });
 });
 

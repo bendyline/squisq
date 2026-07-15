@@ -252,13 +252,18 @@ export async function markdownDocToEpub(
     const audioInfo = chapterAudio[i] ?? null;
 
     // Render XHTML with element IDs for SMIL references when audio is present
-    const xhtml = renderChapterXhtml(chap.nodes, title, resolvedImages, audioInfo !== null);
+    const { xhtml, ids } = renderChapterXhtml(
+      chap.nodes,
+      title,
+      resolvedImages,
+      audioInfo !== null,
+    );
     zip.file(`OEBPS/chapters/${filename}`, xhtml);
 
     let smilFilename: string | undefined;
     if (audioInfo) {
       smilFilename = `${id}.smil`;
-      const smil = generateSmil(filename, audioInfo, chap.nodes);
+      const smil = generateSmil(filename, audioInfo, ids);
       zip.file(`OEBPS/chapters/${smilFilename}`, smil);
     }
 
@@ -426,16 +431,30 @@ function collectDocImages(nodes: MarkdownBlockNode[]): Set<string> {
 
 type ImageMap = Map<string, { data: ArrayBuffer; mime: string; filename: string }>;
 
+/**
+ * Render one chapter's XHTML, reporting the element IDs actually emitted.
+ *
+ * The ID list is returned rather than recomputed by the SMIL generator on
+ * purpose: any second traversal that has to predict which nodes render an ID
+ * is a copy of this function's logic, and the two WILL drift (they did — SMIL
+ * counted nodes that `blockToXhtml` renders as nothing, producing `<text>`
+ * refs to IDs that exist nowhere in the XHTML, which fails epubcheck).
+ * Reporting the real IDs makes the drift unrepresentable.
+ */
 function renderChapterXhtml(
   nodes: MarkdownBlockNode[],
   bookTitle: string,
   images: ImageMap,
   addIds = false,
-): string {
-  let elementCounter = 0;
-  const nextId = () => `p${++elementCounter}`;
+): { xhtml: string; ids: string[] } {
+  const ids: string[] = [];
+  const nextId = () => {
+    const id = `p${ids.length + 1}`;
+    ids.push(id);
+    return id;
+  };
   const body = nodes.map((n) => blockToXhtml(n, images, addIds ? nextId : undefined)).join('\n');
-  return `<?xml version="1.0" encoding="UTF-8"?>
+  const xhtml = `<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE html>
 <html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops">
 <head>
@@ -447,48 +466,58 @@ function renderChapterXhtml(
 ${body}
 </body>
 </html>`;
+  return { xhtml, ids };
 }
 
 function blockToXhtml(node: MarkdownBlockNode, images: ImageMap, nextId?: () => string): string {
-  const idAttr = nextId ? ` id="${nextId()}"` : '';
+  // Allocate the ID LAZILY — only the branches that actually emit `idAttr`
+  // should consume one. Allocating eagerly here burned an ID for node types
+  // that render to '' (footnoteDefinition, containerDirective, …), which is
+  // what left the SMIL overlay pointing at IDs that were never written.
+  let cached: string | undefined;
+  const idAttr = (): string => {
+    if (!nextId) return '';
+    cached ??= ` id="${nextId()}"`;
+    return cached;
+  };
 
   switch (node.type) {
     case 'heading': {
       const tag = `h${node.depth}`;
-      return `<${tag}${idAttr}>${inlinesToXhtml(node.children, images)}</${tag}>`;
+      return `<${tag}${idAttr()}>${inlinesToXhtml(node.children, images)}</${tag}>`;
     }
 
     case 'paragraph':
-      return `<p${idAttr}>${inlinesToXhtml(node.children, images)}</p>`;
+      return `<p${idAttr()}>${inlinesToXhtml(node.children, images)}</p>`;
 
     case 'blockquote':
-      return `<blockquote${idAttr}>\n${node.children.map((c) => blockToXhtml(c, images, nextId)).join('\n')}\n</blockquote>`;
+      return `<blockquote${idAttr()}>\n${node.children.map((c) => blockToXhtml(c, images, nextId)).join('\n')}\n</blockquote>`;
 
     case 'list': {
       const tag = node.ordered ? 'ol' : 'ul';
       const startAttr =
         node.ordered && node.start && node.start !== 1 ? ` start="${node.start}"` : '';
       const items = node.children.map((item) => listItemToXhtml(item, images)).join('\n');
-      return `<${tag}${idAttr}${startAttr}>\n${items}\n</${tag}>`;
+      return `<${tag}${idAttr()}${startAttr}>\n${items}\n</${tag}>`;
     }
 
     case 'code': {
       const langAttr = node.lang ? ` class="language-${escapeXml(node.lang)}"` : '';
-      return `<pre${idAttr}><code${langAttr}>${escapeXml(node.value)}</code></pre>`;
+      return `<pre${idAttr()}><code${langAttr}>${escapeXml(node.value)}</code></pre>`;
     }
 
     case 'thematicBreak':
-      return `<hr${idAttr}/>`;
+      return `<hr${idAttr()}/>`;
 
     case 'table':
-      return tableToXhtml(node as MarkdownTable, images, idAttr);
+      return tableToXhtml(node as MarkdownTable, images, idAttr());
 
     case 'htmlBlock':
       // Strip HTML tags for XHTML safety — raw HTML may not be well-formed XML
-      return `<p${idAttr}>${escapeXml(node.rawHtml.replace(/<[^>]+>/g, ''))}</p>`;
+      return `<p${idAttr()}>${escapeXml(node.rawHtml.replace(/<[^>]+>/g, ''))}</p>`;
 
     case 'math':
-      return `<p${idAttr} class="math">${escapeXml(node.value)}</p>`;
+      return `<p${idAttr()} class="math">${escapeXml(node.value)}</p>`;
 
     default:
       return '';
@@ -621,6 +650,20 @@ function safeArchiveBasename(path: string, fallback: string): string {
   return !safe || safe === '.' || safe === '..' ? fallback : safe;
 }
 
+/**
+ * Derive an OPF manifest `id` from a filename that collides with no prior
+ * manifest entry. The `<prefix>-` head keeps the result a valid XML NCName
+ * (which may not start with a digit); `used` is mutated with the result.
+ */
+function uniqueManifestId(prefix: string, filename: string, used: Set<string>): string {
+  const base = `${prefix}-${filename.replace(/[^a-zA-Z0-9]/g, '-')}`;
+  let id = base;
+  let suffix = 2;
+  while (used.has(id)) id = `${base}-${suffix++}`;
+  used.add(id);
+  return id;
+}
+
 /** Return a basename that does not collide with a prior archive member. */
 function uniqueFilename(filename: string, used: ReadonlySet<string>): string {
   if (!used.has(filename)) return filename;
@@ -637,34 +680,40 @@ function uniqueFilename(filename: string, used: ReadonlySet<string>): string {
 /**
  * Generate an EPUB 3 Media Overlay (SMIL) file for a chapter.
  * Maps block-level elements to audio clip ranges for synchronized narration.
+ *
+ * `elementIds` are the IDs `renderChapterXhtml` actually emitted — every
+ * `<text src>` below therefore resolves to a real element by construction.
+ * Do NOT re-derive them by walking the nodes again: epubcheck rejects a
+ * fragment pointing at a nonexistent ID, and a node that renders to nothing
+ * is exactly the case a second traversal gets wrong.
  */
 function generateSmil(
   chapterFilename: string,
   audioInfo: ChapterAudioInfo,
-  nodes: MarkdownBlockNode[],
+  elementIds: readonly string[],
 ): string {
-  // Count block elements to match the IDs generated by blockToXhtml.
-  // Must mirror blockToXhtml's recursion: each block gets an ID,
-  // blockquote children recurse (they pass nextId), but list items do not.
-  let elementCount = 0;
-  function countBlocks(node: MarkdownBlockNode): void {
-    elementCount++;
-    if (node.type === 'blockquote') node.children.forEach(countBlocks);
+  // A chapter with no addressable elements gets no pars — emitting one that
+  // referenced a nonexistent `#p1` is precisely the bug being fixed.
+  if (elementIds.length === 0) {
+    return `<?xml version="1.0" encoding="UTF-8"?>
+<smil xmlns="http://www.w3.org/ns/SMIL" xmlns:epub="http://www.idpf.org/2007/ops" version="3.0">
+  <body>
+    <seq id="seq-1" epub:textref="${chapterFilename}">
+    </seq>
+  </body>
+</smil>`;
   }
-  nodes.forEach(countBlocks);
-
-  if (elementCount === 0) elementCount = 1;
 
   // Distribute audio duration evenly across elements (best effort without word-level timing)
-  const clipDuration = audioInfo.duration / elementCount;
+  const clipDuration = audioInfo.duration / elementIds.length;
   const pars: string[] = [];
 
-  for (let i = 0; i < elementCount; i++) {
+  for (let i = 0; i < elementIds.length; i++) {
     const clipStart = formatTime(audioInfo.clipStart + i * clipDuration, true);
     const clipEnd = formatTime(audioInfo.clipStart + (i + 1) * clipDuration, true);
     pars.push(
       `    <par id="par-${i + 1}">` +
-        `\n      <text src="${chapterFilename}#p${i + 1}"/>` +
+        `\n      <text src="${chapterFilename}#${escapeXml(elementIds[i]!)}"/>` +
         `\n      <audio src="../audio/${escapeXml(audioInfo.audioFilename)}" clipBegin="${clipStart}" clipEnd="${clipEnd}"/>` +
         `\n    </par>`,
     );
@@ -756,13 +805,25 @@ function generateContentOpf(params: OpfParams): string {
     }
   }
 
+  // Manifest IDs are xml:id values — they MUST be unique across the whole
+  // package. Deriving one by squashing every non-alphanumeric character to
+  // '-' is lossy, so distinct filenames collapse onto the same ID
+  // (`photo-1.png` and `photo 1.png` both yield `img-photo-1-png`),
+  // producing a duplicate xml:id and an invalid OPF. Uniquify the derived
+  // ID rather than pretend the mapping is injective.
+  const usedManifestIds = new Set<string>(['cover-image', 'cover-page']);
+  for (const chap of chapters) {
+    usedManifestIds.add(chap.id);
+    if (chap.smilFilename) usedManifestIds.add(`${chap.id}-overlay`);
+  }
+
   // Audio files in manifest
   if (audioFiles) {
     const usedAudioNames = new Set<string>();
     for (const af of audioFiles) {
       if (usedAudioNames.has(af.filename)) continue;
       usedAudioNames.add(af.filename);
-      const audioId = `audio-${af.filename.replace(/[^a-zA-Z0-9]/g, '-')}`;
+      const audioId = uniqueManifestId('audio', af.filename, usedManifestIds);
       manifestItems.push(
         `    <item id="${audioId}" href="audio/${escapeXml(af.filename)}" media-type="${af.mime}"/>`,
       );
@@ -773,7 +834,7 @@ function generateContentOpf(params: OpfParams): string {
   for (const [, img] of images) {
     if (usedFilenames.has(img.filename)) continue;
     usedFilenames.add(img.filename);
-    const imgId = `img-${img.filename.replace(/[^a-zA-Z0-9]/g, '-')}`;
+    const imgId = uniqueManifestId('img', img.filename, usedManifestIds);
     manifestItems.push(
       `    <item id="${imgId}" href="images/${escapeXml(img.filename)}" media-type="${img.mime}"/>`,
     );

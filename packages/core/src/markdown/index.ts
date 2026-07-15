@@ -167,6 +167,7 @@ export {
   parseFrontmatter,
   formatBlockScalar,
   formatFrontmatterValue,
+  formatFrontmatterYaml,
   setFrontmatterValues,
   inferDocumentTitle,
   readFrontmatterThemeId,

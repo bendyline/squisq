@@ -156,10 +156,12 @@ describe('convert command', () => {
     expect(result.stderr).to.include("unknown option '--format'");
   });
 
+  // An unknown format id is now a hard error rather than a skipped warning —
+  // see formatValidation.test.ts. This case is the all-unknown variant.
   it('errors when --formats contains no valid formats', async () => {
     const result = await runCliAllowError('convert', FIXTURE_MD, '--formats', 'bogus');
     expect(result.exitCode).to.equal(1);
-    expect(result.stderr).to.include('No valid formats specified');
+    expect(result.stderr).to.include('Unknown format');
   });
 
   it('dispatches .pptx input to a text export format', async () => {

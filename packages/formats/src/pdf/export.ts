@@ -52,6 +52,7 @@ import type {
 } from '@bendyline/squisq/markdown';
 import { readFrontmatterThemeId, sanitizeUrl } from '@bendyline/squisq/markdown';
 
+import { WinAnsiTracker } from './winAnsi.js';
 import {
   PAGE_WIDTH_LETTER,
   PAGE_HEIGHT_LETTER,
@@ -114,6 +115,14 @@ export interface PdfExportOptions {
   themeId?: string;
   /** Explicit caller-owned registry for non-document custom themes. */
   themeRegistry?: ThemeRegistry;
+  /**
+   * Receives non-fatal notes about the export — today, the one-shot summary
+   * raised when characters outside the standard PDF fonts' WinAnsi encoding
+   * had to be substituted. When omitted, such notes go to `console.warn`.
+   * The registry passes a collector so the message reaches
+   * `ConversionResult.warnings` instead.
+   */
+  onWarning?: (message: string) => void;
 }
 
 /**
@@ -135,6 +144,14 @@ export async function markdownDocToPdf(
   const ctx = await createExportContext(pdfDoc, options, doc);
 
   renderBlocks(doc.children, ctx, 0);
+
+  // Report unencodable-character substitution ONCE for the whole export,
+  // rather than per character (a CJK document would emit thousands).
+  const warning = ctx.text.warning();
+  if (warning) {
+    if (options.onWarning) options.onWarning(warning);
+    else console.warn(warning);
+  }
 
   const bytes = await pdfDoc.save();
   return bytes.buffer as ArrayBuffer;
@@ -190,6 +207,13 @@ interface ExportContext {
     heading: RgbColor;
     link: RgbColor;
   };
+  /**
+   * WinAnsi safety net. EVERY string handed to pdf-lib — whether to draw it or
+   * merely to measure it — must go through `ctx.text.clean()`, both because
+   * pdf-lib throws on unencodable code points and because measuring the raw
+   * string while drawing the sanitized one would desynchronize layout.
+   */
+  text: WinAnsiTracker;
   signal?: AbortSignal;
 }
 
@@ -245,6 +269,7 @@ async function createExportContext(
     contentWidth: pageWidth - 2 * margin,
     bottomY: margin,
     colors: { text: colorText, heading: colorHeading, link: colorLink },
+    text: new WinAnsiTracker(),
     signal: options.signal,
   };
 }
@@ -305,7 +330,7 @@ function flattenInlines(
             : ctx.fonts.mono
           : pickFont(ctx, state.bold, state.italic);
         spans.push({
-          text: (node as MarkdownText).value,
+          text: ctx.text.clean((node as MarkdownText).value),
           font,
           fontSize: state.code ? CODE_FONT_SIZE : ctx.fontSize,
           color: state.code ? COLOR_CODE_TEXT : (state.color ?? ctx.colors.text),
@@ -338,7 +363,7 @@ function flattenInlines(
 
       case 'inlineCode': {
         spans.push({
-          text: (node as MarkdownInlineCode).value,
+          text: ctx.text.clean((node as MarkdownInlineCode).value),
           font: ctx.fonts.mono,
           fontSize: CODE_FONT_SIZE,
           color: COLOR_CODE_TEXT,
@@ -363,7 +388,7 @@ function flattenInlines(
       case 'image': {
         const imgNode = node as MarkdownImage;
         spans.push({
-          text: imgNode.alt ? `[Image: ${imgNode.alt}]` : '[Image]',
+          text: ctx.text.clean(imgNode.alt ? `[Image: ${imgNode.alt}]` : '[Image]'),
           font: ctx.fonts.italic,
           fontSize: ctx.fontSize,
           color: COLOR_BLOCKQUOTE_TEXT,
@@ -372,6 +397,11 @@ function flattenInlines(
       }
 
       case 'break':
+        // Deliberately NOT sanitized: this "\n" is our own control token, not
+        // document text. `wrapSpans` matches it exactly to force a line break
+        // and consumes it, so it never reaches pdf-lib. (Newlines occurring
+        // *inside* author text are sanitized to spaces like any other
+        // unencodable character.)
         spans.push({
           text: '\n',
           font: ctx.fonts.regular,
@@ -384,7 +414,7 @@ function flattenInlines(
         const html = (node as MarkdownInlineHtml).rawHtml;
         if (html) {
           spans.push({
-            text: html,
+            text: ctx.text.clean(html),
             font: ctx.fonts.mono,
             fontSize: CODE_FONT_SIZE,
             color: COLOR_CODE_TEXT,
@@ -395,7 +425,7 @@ function flattenInlines(
 
       case 'inlineMath':
         spans.push({
-          text: (node as MarkdownInlineMath).value,
+          text: ctx.text.clean((node as MarkdownInlineMath).value),
           font: ctx.fonts.mono,
           fontSize: CODE_FONT_SIZE,
           color: COLOR_CODE_TEXT,
@@ -405,7 +435,7 @@ function flattenInlines(
       case 'footnoteReference': {
         const ref = node as MarkdownFootnoteReference;
         spans.push({
-          text: `[${ref.identifier}]`,
+          text: ctx.text.clean(`[${ref.identifier}]`),
           font: ctx.fonts.regular,
           fontSize: ctx.fontSize * 0.75,
           color: ctx.colors.link,
@@ -420,7 +450,7 @@ function flattenInlines(
           spans.push(...flattenInlines(fallback.children, ctx, state));
         } else if (fallback.value) {
           spans.push({
-            text: fallback.value,
+            text: ctx.text.clean(fallback.value),
             font: pickFont(ctx, state.bold, state.italic),
             fontSize: ctx.fontSize,
             color: state.color ?? ctx.colors.text,
@@ -800,7 +830,9 @@ function renderListItem(
 function renderCodeBlock(node: MarkdownCodeBlock, ctx: ExportContext, extraIndent: number): void {
   const x0 = ctx.margin + extraIndent;
   const _w = ctx.contentWidth - extraIndent;
-  const lines = node.value.split('\n');
+  // Split BEFORE sanitizing: the sanitizer maps a newline to a space, which
+  // would flatten the fence into one line if applied to the whole value.
+  const lines = node.value.split('\n').map((line) => ctx.text.clean(line));
   const lineH = CODE_FONT_SIZE * LINE_HEIGHT_FACTOR;
   const totalHeight = lines.length * lineH + 12; // 12 = vertical padding
 
@@ -974,8 +1006,9 @@ function renderThematicBreak(ctx: ExportContext, extraIndent: number): void {
 
 function renderHtmlBlock(node: MarkdownHtmlBlock, ctx: ExportContext, extraIndent: number): void {
   if (!node.rawHtml) return;
-  // Render raw HTML as monospace text (best effort)
-  const lines = node.rawHtml.split('\n');
+  // Render raw HTML as monospace text (best effort). Split before sanitizing
+  // so line structure survives — see renderCodeBlock.
+  const lines = node.rawHtml.split('\n').map((line) => ctx.text.clean(line));
   const x0 = ctx.margin + extraIndent;
   for (const line of lines) {
     if (line.trim().length === 0) continue;
@@ -996,8 +1029,9 @@ function renderHtmlBlock(node: MarkdownHtmlBlock, ctx: ExportContext, extraInden
 // ---- Math Block ----
 
 function renderMathBlock(node: MarkdownMathBlock, ctx: ExportContext, extraIndent: number): void {
-  // Render LaTeX source in monospace as fallback
-  const lines = node.value.split('\n');
+  // Render LaTeX source in monospace as fallback. Split before sanitizing so
+  // line structure survives — see renderCodeBlock.
+  const lines = node.value.split('\n').map((line) => ctx.text.clean(line));
   const x0 = ctx.margin + extraIndent;
   for (const line of lines) {
     const lineH = CODE_FONT_SIZE * LINE_HEIGHT_FACTOR;
@@ -1024,7 +1058,7 @@ function renderFootnoteDefinition(
   extraIndent: number,
 ): void {
   // Draw footnote identifier
-  const label = `[${node.identifier}]`;
+  const label = ctx.text.clean(`[${node.identifier}]`);
   const lineH = ctx.fontSize * LINE_HEIGHT_FACTOR;
   ensureSpace(ctx, lineH);
 
@@ -1081,7 +1115,7 @@ function renderFallbackBlock(
   } else if (fallback.value && typeof fallback.value === 'string') {
     const lineH = ctx.fontSize * LINE_HEIGHT_FACTOR;
     ensureSpace(ctx, lineH);
-    ctx.page.drawText(fallback.value, {
+    ctx.page.drawText(ctx.text.clean(fallback.value), {
       x: ctx.margin + extraIndent,
       y: ctx.y - ctx.fontSize,
       size: ctx.fontSize,

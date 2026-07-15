@@ -54,7 +54,14 @@ interface ParsedBox extends Rect {
 }
 
 const MAX_TITLE_RUN = 60;
-const MAX_BRIDGE_GAP = 40;
+/**
+ * Widest run of label cells a `──label──` bridge (or a `│ label` side label)
+ * can span. This is a PARSER capability, so the renderer imports it rather
+ * than keeping its own copy: art embedding a label wider than this re-parses
+ * as two unglued runs, and both halves are dropped as `dangling-edge` — the
+ * edge disappears. See `edgeLabelFitsBridge` in `render.ts`.
+ */
+export const MAX_BRIDGE_GAP = 40;
 const MAX_LOOSE_WARNINGS = 10;
 /**
  * Consecutive non-border cells tolerated while walking a box's side wall.
@@ -315,47 +322,32 @@ function traceBoxFrom(grid: string[][], r0: number, c0: number, repair = false):
   const H = grid.length;
   const W = grid[0]?.length ?? 0;
 
-  // -- Top border walk: collect TR candidates; allow one embedded title run.
+  // -- Top border walk: collect every closing-corner CANDIDATE.
+  //
+  // The walk deliberately reads no meaning into the cells between the
+  // corners — the title is recovered per-candidate by `scanBorderTitle`
+  // below, from the span the candidate actually encloses. (The previous
+  // "one embedded title run" walk had to classify each cell as border /
+  // arrow / title as it went, and any second run — which is all a hyphen
+  // in `co-op` is, since `-` is a flat border char — ended the walk before
+  // a corner was ever collected, silently dropping the box.)
   const trCandidates: number[] = [];
-  let titleRun: { from: number; to: number } | null = null;
-  let c = c0 + 1;
-  while (c < W) {
+  for (let c = c0 + 1; c < W; c++) {
     const ch = grid[r0][c];
     if (isTrCorner(ch)) {
       trCandidates.push(c);
-      break; // a Unicode TR corner definitively ends the border
-    }
-    if (isPlus(ch) || isJunction(ch)) {
-      trCandidates.push(c); // ambiguous: candidate AND possible continuation
-      c++;
+      // A corner with a side wall under it definitively closes the border
+      // (unchanged behaviour for every well-formed box). One WITHOUT a wall
+      // under it is either ragged art or a corner glyph sitting inside a
+      // title — keep scanning so the real corner is still found. Candidates
+      // stay in ascending order and the first that closes wins, so this can
+      // only rescue boxes that used to be lost, never re-shape a box that
+      // already traced.
+      if (isSideBorderChar(grid[r0 + 1]?.[c] ?? ' ')) break;
       continue;
     }
-    if (isFlatBorderChar(ch)) {
-      c++;
-      continue;
-    }
-    // An arrowhead embedded in the border (`┌───▼──┐`, `┌─▼──▼──▼─┐`) is a
-    // stem where an edge attaches, not a title — walk through it so the box
-    // still closes (and so a border can hold several arrival points). Edge
-    // extraction connects the line above/below to this box.
-    if (arrowDirection(ch) !== null) {
-      c++;
-      continue;
-    }
-    // Possible embedded title (`┌── Title ──┐`): a single non-border run
-    // bounded by border chars on both sides.
-    if (titleRun) break;
-    let end = c;
-    let sawText = false;
-    while (end < W && end - c <= MAX_TITLE_RUN) {
-      const tch = grid[r0][end];
-      if (isFlatBorderChar(tch) || isTrCorner(tch) || arrowDirection(tch) !== null) break;
-      if (tch !== ' ') sawText = true;
-      end++;
-    }
-    if (end >= W || end - c > MAX_TITLE_RUN || !sawText || end === c) break;
-    titleRun = { from: c, to: end - 1 };
-    c = end;
+    // `+` (ASCII) and junctions are ambiguous: candidate AND continuation.
+    if (isPlus(ch) || isJunction(ch)) trCandidates.push(c);
   }
   if (trCandidates.length === 0) return null;
 
@@ -366,6 +358,10 @@ function traceBoxFrom(grid: string[][], r0: number, c0: number, repair = false):
 
   for (const c1 of trCandidates) {
     if (c1 < c0 + 2) continue; // minimum width 3
+
+    // -- Title enclosed by this candidate (`┌── Title ──┐`), if any.
+    const titleScan = scanBorderTitle(grid[r0], c0, c1);
+    if (!titleScan.ok) continue; // unbounded text across the border → not a box
 
     // -- Right wall for this candidate.
     const rightCandidates = walkSideWall(grid, c1, r0, H, isBrCorner, repair);
@@ -399,17 +395,47 @@ function traceBoxFrom(grid: string[][], r0: number, c0: number, repair = false):
         if (hasSideBorderNear(grid[ir], c1, win)) rightBorders++;
       }
       if (leftBorders === 0 || rightBorders === 0) continue;
-      const title =
-        titleRun && titleRun.to < c1
-          ? grid[r0]
-              .slice(titleRun.from, titleRun.to + 1)
-              .join('')
-              .trim()
-          : undefined;
-      return { r0, c0, r1, c1, ...(title ? { borderTitle: title } : {}) };
+      return { r0, c0, r1, c1, ...(titleScan.title ? { borderTitle: titleScan.title } : {}) };
     }
   }
   return null;
+}
+
+/**
+ * Recover the title embedded in a box's top border (`┌── co-op ──┐`).
+ *
+ * The border is `filler … title … filler`, where filler is the drawing
+ * vocabulary of a top border: flat border chars AND arrowheads (an arrow in
+ * a border is an edge's attachment stem — `┌──▼──┐` is a plain box, not a
+ * box titled `▼`). Stripping filler from BOTH ENDS and keeping whatever
+ * remains — rather than scanning left-to-right for one uninterrupted run of
+ * non-border chars — is what lets structural characters live INSIDE a title:
+ * `co-op`, `v1-beta`, `A + B`, `a│b` and `▼ down` all come back verbatim,
+ * because the renderer always pads a title with a space, so the strip stops
+ * at that space and never eats into the text.
+ *
+ * `ok: false` rejects the candidate outright: an over-long span of
+ * non-border cells is prose crossing the row, not a title, and must not be
+ * allowed to close a phantom box (the old walk got this for free by ending
+ * at the first stray run).
+ */
+function scanBorderTitle(
+  row: string[],
+  c0: number,
+  c1: number,
+): { ok: true; title?: string } | { ok: false } {
+  const isFiller = (ch: string): boolean => isFlatBorderChar(ch) || arrowDirection(ch) !== null;
+  let lo = c0 + 1;
+  let hi = c1 - 1;
+  while (lo <= hi && isFiller(row[lo])) lo++;
+  while (hi >= lo && isFiller(row[hi])) hi--;
+  if (lo > hi) return { ok: true }; // all border: an untitled box
+  if (hi - lo + 1 > MAX_TITLE_RUN) return { ok: false };
+  const title = row
+    .slice(lo, hi + 1)
+    .join('')
+    .trim();
+  return title.length > 0 ? { ok: true, title } : { ok: true };
 }
 
 /**
@@ -563,8 +589,18 @@ function buildBoxes(grid: string[][], rects: TracedRect[], warnings: string[]): 
   return boxes;
 }
 
-/** A leaf interior row that is purely a horizontal divider (`├────┤` style). */
+/**
+ * A leaf interior row that is purely a horizontal divider (`├────┤` style).
+ *
+ * A divider is drawn wall-to-wall, so its interior slice has no padding. A
+ * LABEL is always padded — the renderer sizes every box to `label + 4`, so a
+ * label line keeps at least one blank cell on each side. That padding is the
+ * only thing separating `│ ---- │` (a node labelled `----`) from `├──────┤`
+ * (a divider), so it is what this test reads. Without it, a label made
+ * entirely of dashes would be silently swallowed as a rule.
+ */
 function isDividerRow(rowText: string): boolean {
+  if (rowText.length === 0 || rowText !== rowText.trim()) return false;
   let sawLine = false;
   for (const ch of rowText) {
     if (ch === ' ') continue;
@@ -646,17 +682,21 @@ function extractEdges(
       while (g < W && g - runEnd - 1 <= MAX_BRIDGE_GAP) {
         const gch = grid[r][g];
         const gidx = r * W + g;
-        if (mask[gidx] || isVert(gch)) {
+        if (mask[gidx]) {
           failed = true;
           break;
         }
-        if (isHoriz(gch)) break;
-        if (isLineChar(gch) || arrowDirection(gch) !== null) {
-          failed = true;
-          break;
+        if (isHoriz(gch)) {
+          // The bridge's far end — unless this dash is label text. A dash
+          // that is part of a word (`read-only`) starts a run that peters
+          // out into more text; the run that CLOSES the bridge always ends
+          // in structure (the continuing line, its arrowhead, or a border).
+          if (horizRunReachesStructure(grid, mask, r, g, W)) break;
+          while (g < W && isHoriz(grid[r][g])) g++;
+          sawText = true;
+          continue;
         }
-        const asc = asciiArrowDirection(gch);
-        if (asc && asciiArrowGate(grid, r, g, asc)) {
+        if (isStructuralInGap(grid, r, g)) {
           failed = true;
           break;
         }
@@ -994,6 +1034,60 @@ function extractEdges(
   }
   for (const idx of sideLabelCells) edgeCells.add(idx);
   return { edges, edgeCells };
+}
+
+/**
+ * Does the horizontal run starting at `c` end in structure (a line char, an
+ * arrowhead, a box border, or the edge of the grid)?
+ *
+ * This is what separates the `──` that closes a `── label ──` bridge from a
+ * hyphen living inside the label. The closing run is drawn by (or drawn to
+ * meet) the rest of the edge, so it always terminates in structure; a dash
+ * inside a word terminates in more word.
+ */
+function horizRunReachesStructure(
+  grid: string[][],
+  mask: Uint8Array,
+  r: number,
+  c: number,
+  W: number,
+): boolean {
+  let end = c;
+  while (end < W && isHoriz(grid[r][end]) && !mask[r * W + end]) end++;
+  if (end >= W || mask[r * W + end]) return true;
+  const ch = grid[r][end];
+  if (isLineChar(ch) || arrowDirection(ch) !== null) return true;
+  const asc = asciiArrowDirection(ch);
+  return asc !== null && asciiArrowGate(grid, r, end, asc);
+}
+
+/**
+ * Is the (non-horizontal) drawing char at `(r, c)` real structure crossing a
+ * bridge gap, or is it label text that merely LOOKS structural?
+ *
+ * An ARROWHEAD is always structure: it is some edge's own terminus, never
+ * label text. It is checked first and unconditionally, because a horizontal
+ * arrowhead has nothing above or below it — subjecting it to the continuity
+ * test below would read `│ A │──────►  ◄────────│ B │` as ONE undirected
+ * edge labelled `►  ◄` instead of two independent directed edges.
+ *
+ * For a vertical rule, a turn, or a junction, continuity is the evidence: one
+ * that genuinely crosses a horizontal run belongs to another edge, so it
+ * continues vertically (a crossing the renderer itself draws as `┼`). A `|`
+ * in `stdin | out`, a `+` in `A + B`, or a stray `┐` in a label has nothing
+ * above or below it — which is what lets those survive in a label verbatim
+ * instead of being escaped or stripped at the render boundary.
+ */
+function isStructuralInGap(grid: string[][], r: number, c: number): boolean {
+  const ch = grid[r][c];
+  if (arrowDirection(ch) !== null) return true;
+  const asc = asciiArrowDirection(ch);
+  if (asc !== null && asciiArrowGate(grid, r, c, asc)) return true;
+  if (!isLineChar(ch)) return false;
+
+  const isDrawing = (x: string | undefined): boolean =>
+    x !== undefined && (isLineChar(x) || arrowDirection(x) !== null);
+  return isDrawing(grid[r - 1]?.[c]) || isDrawing(grid[r + 1]?.[c]);
 }
 
 /** ASCII arrow chars count only when a matching line char sits behind them. */

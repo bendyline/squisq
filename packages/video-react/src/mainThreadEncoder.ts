@@ -21,6 +21,13 @@ export interface EncoderConfig {
   fps: number;
   quality: 'draft' | 'normal' | 'high';
   /**
+   * Total frames the caller intends to submit, when known. Unused by the
+   * main-thread encoder (the caller owns the progress bar) but forwarded by
+   * {@link createWorkerEncoder} so the worker can report real progress instead
+   * of guessing from the frames it happens to have seen.
+   */
+  totalFrames?: number;
+  /**
    * When present, the underlying muxer is configured with an AAC audio track
    * and {@link MainThreadEncoder.addAudioChunk} becomes usable. Absent → the
    * encoder produces a video-only MP4 exactly as before.
@@ -97,7 +104,25 @@ export function createEncoder(config: EncoderConfig): MainThreadEncoder {
   });
 
   let closed = false;
+  /**
+   * First fatal error reported by the encoder's async error callback.
+   *
+   * `VideoEncoder` surfaces failures out-of-band, so this must be latched and
+   * re-thrown from the next caller-facing operation. Previously it was only
+   * logged: a failed encode either resurfaced later as an opaque
+   * `InvalidStateError` from `encode()`/`flush()`, or — when the encoder dropped
+   * frames without entering a closed state — never surfaced at all, and the
+   * export reported "Export complete" over a truncated MP4.
+   */
+  let fatalError: Error | null = null;
   const frameDuration = 1_000_000 / config.fps; // microseconds per frame
+
+  /** Tear the encoder down and surface the latched (or supplied) failure. */
+  function fail(err: Error): Error {
+    closed = true;
+    if (encoder.state !== 'closed') encoder.close();
+    return fatalError ?? err;
+  }
 
   const encoder = new VideoEncoder({
     output(chunk, meta) {
@@ -105,7 +130,7 @@ export function createEncoder(config: EncoderConfig): MainThreadEncoder {
       muxer.addVideoChunk(chunk, meta ?? undefined);
     },
     error(err) {
-      console.error('WebCodecs encoder error:', err.message);
+      fatalError ??= new Error(`WebCodecs encoder error: ${err.message}`);
     },
   });
 
@@ -122,6 +147,12 @@ export function createEncoder(config: EncoderConfig): MainThreadEncoder {
 
   return {
     async encodeFrame(bitmap: ImageBitmap, frameIndex: number): Promise<void> {
+      // Check the latched error first: once the encoder has failed, every
+      // subsequent frame is wasted work and the export must stop here.
+      if (fatalError) {
+        bitmap.close();
+        throw fail(fatalError);
+      }
       if (closed) {
         bitmap.close();
         throw new Error('Encoder already closed');
@@ -141,7 +172,17 @@ export function createEncoder(config: EncoderConfig): MainThreadEncoder {
 
     async finalize(): Promise<ArrayBuffer> {
       if (closed) throw new Error('Encoder already closed');
-      await encoder.flush();
+      if (fatalError) throw fail(fatalError);
+      try {
+        await encoder.flush();
+      } catch (err: unknown) {
+        // Prefer the latched encoder error: `flush()` typically rejects with a
+        // generic InvalidStateError that hides the real cause.
+        throw fail(err instanceof Error ? err : new Error(String(err)));
+      }
+      // The error callback can fire during flush, after in-flight frames drain.
+      // Finalizing here would emit a silently truncated MP4.
+      if (fatalError) throw fail(fatalError);
       encoder.close();
       closed = true;
       return muxer.finalize();

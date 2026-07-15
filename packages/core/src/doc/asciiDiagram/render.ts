@@ -15,8 +15,51 @@
  * moving children can never orphan them outside their box.
  */
 
-import { ASCII_VOCAB, UNICODE_VOCAB, type StyleVocab } from './chars.js';
+import { ASCII_VOCAB, UNICODE_VOCAB, cellWidth, toCells, type StyleVocab } from './chars.js';
+import { MAX_BRIDGE_GAP } from './parse.js';
 import type { AsciiDiagram, AsciiDiagramEdge, AsciiDiagramNode } from './types.js';
+
+/**
+ * Render-time label normalization — the ONLY normalization applied to
+ * authored text, and applied so that `parse(render(d)) === d`:
+ *
+ * - Node labels: per-line trim, blank lines dropped. The parser trims each
+ *   interior row and skips blank ones, so an un-normalized label would come
+ *   back different and the second render would differ from the first.
+ * - Edge labels: whitespace runs collapse to one space, then trim. An edge
+ *   label lives on a single row; a newline/tab has no grid meaning, and the
+ *   parser's side-label scan stops at a double space.
+ *
+ * Structural characters (`| - + │ ─ ┐ …`) are deliberately NOT stripped:
+ * the parser disambiguates them from structure by continuity, so labels
+ * like `stdin | out`, `read-only`, and `co-op` survive verbatim.
+ */
+function normalizeLabelLines(label: string): string[] {
+  return label
+    .split('\n')
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0);
+}
+
+function normalizeEdgeLabel(label: string | undefined): string | undefined {
+  if (label === undefined) return undefined;
+  const collapsed = label.replace(/\s+/gu, ' ').trim();
+  return collapsed.length > 0 ? collapsed : undefined;
+}
+
+/**
+ * Can the re-parse bridge span this ` label ` text?
+ *
+ * The parser's bridge scan gives up after {@link MAX_BRIDGE_GAP} label
+ * cells, at which point the run it was gluing splits in two and BOTH halves
+ * are dropped as `dangling-edge` — embedding an over-long label destroys the
+ * edge itself. Refusing to embed it costs the label but always keeps the
+ * edge, and the un-embedded line re-renders identically, so the result stays
+ * byte-stable. (The same trade the tight-gap case makes below.)
+ */
+function edgeLabelFitsBridge(text: readonly string[]): boolean {
+  return text.length <= MAX_BRIDGE_GAP;
+}
 
 export interface RenderAsciiDiagramOptions {
   /** Character vocabulary; defaults to the diagram's own detected style. */
@@ -158,11 +201,11 @@ function layoutNodes(
   // Recursively size + place a subtree; returns its bounding rect.
   const layoutSubtree = (id: string, depth: number): Rect => {
     const node = byId.get(id) as AsciiDiagramNode;
-    const labelLines = node.label.length > 0 ? node.label.split('\n') : [];
+    const labelLines = normalizeLabelLines(node.label);
     const children = childIds.get(id) ?? [];
 
     if (children.length === 0) {
-      const innerW = labelLines.reduce((w, l) => Math.max(w, l.length), 0);
+      const innerW = labelLines.reduce((w, l) => Math.max(w, cellWidth(l)), 0);
       // Attachment gap: a side with K edges needs ≥ 2K+1 inner cells so the
       // spread (`from + round((i+1)*inner/(K+1))`) leaves a blank column
       // between consecutive attachments and off the corners.
@@ -190,15 +233,18 @@ function layoutNodes(
     const childRects = placeSiblings(children, (childId) => layoutSubtree(childId, depth + 1));
     const bbox = unionRects(childRects);
     const extraRows = Math.max(0, labelLines.length - 1);
-    const titleLen = (labelLines[0] ?? '').length;
+    const titleLen = cellWidth(labelLines[0] ?? '');
     const rect: Rect = {
       r0: bbox.r0 - 2 - extraRows,
       c0: bbox.c0 - 2,
       r1: bbox.r1 + 2,
       c1: bbox.c1 + 2,
     };
-    // Top border must host `── Title ──` with ≥1 line char each side.
-    const minW = titleLen > 0 ? titleLen + 6 : 3;
+    // Top border must host `── Title ──` with ≥1 line char each side; the
+    // remaining label lines sit inside and need ≥1 blank cell each side
+    // (a truncated interior line would silently lose label text).
+    const innerLinesW = labelLines.slice(1).reduce((w, l) => Math.max(w, cellWidth(l)), 0);
+    const minW = Math.max(titleLen > 0 ? titleLen + 6 : 3, innerLinesW > 0 ? innerLinesW + 4 : 3);
     if (rect.c1 - rect.c0 + 1 < minW) rect.c1 = rect.c0 + minW - 1;
     // Never shrink below the parsed size (visual stability for wide containers).
     if (rect.c1 - rect.c0 + 1 < node.wCols) rect.c1 = rect.c0 + node.wCols - 1;
@@ -321,7 +367,7 @@ function drawBox(canvas: Canvas, p: PlacedNode, vocab: StyleVocab): void {
   // Top border (containers embed their first label line as a title).
   canvas.set(rect.r0, rect.c0, vocab.tl, 'border');
   canvas.set(rect.r0, rect.c1, vocab.tr, 'border');
-  const title = isContainer && labelLines.length > 0 ? ` ${labelLines[0]} ` : null;
+  const title = isContainer && labelLines.length > 0 ? toCells(` ${labelLines[0]} `) : null;
   if (title && title.length <= innerW - 2) {
     const left = Math.floor((innerW - title.length) / 2);
     for (let i = 0; i < innerW; i++) {
@@ -351,9 +397,10 @@ function drawBox(canvas: Canvas, p: PlacedNode, vocab: StyleVocab): void {
       ? rect.r0 + 1
       : rect.r0 + 1 + Math.max(0, Math.floor((innerH - interiorLines.length) / 2));
     interiorLines.forEach((line, i) => {
-      const pad = Math.max(0, Math.floor((innerW - line.length) / 2));
-      for (let j = 0; j < line.length && pad + j < innerW; j++) {
-        canvas.set(startRow + i, rect.c0 + 1 + pad + j, line[j], 'label');
+      const cells = toCells(line);
+      const pad = Math.max(0, Math.floor((innerW - cells.length) / 2));
+      for (let j = 0; j < cells.length && pad + j < innerW; j++) {
+        canvas.set(startRow + i, rect.c0 + 1 + pad + j, cells[j], 'label');
       }
     });
   }
@@ -436,16 +483,17 @@ function drawEdges(
   // vertical and whose neighboring cells are all free — right side
   // (`│ label`) preferred, left side (`label │`) as fallback.
   for (const req of sideLabelRequests) {
+    const cells = toCells(req.label);
     let done = false;
     for (const side of ['right', 'left'] as const) {
       if (done) break;
       for (const { row, col } of req.candidates) {
         if (canvas.kindAt(row, col) !== 'line-v') continue;
-        const startCol = side === 'right' ? col + 2 : col - 1 - req.label.length;
+        const startCol = side === 'right' ? col + 2 : col - 1 - cells.length;
         if (startCol < 0) continue;
         const gapCol = side === 'right' ? col + 1 : col - 1;
         let free = canvas.kindAt(row, gapCol) === 'empty';
-        for (let i = 0; free && i < req.label.length; i++) {
+        for (let i = 0; free && i < cells.length; i++) {
           if (canvas.kindAt(row, startCol + i) !== 'empty') free = false;
         }
         // Left-side runs must not merge into earlier art on their left.
@@ -453,8 +501,8 @@ function drawEdges(
           free = canvas.kindAt(row, startCol - 1) === 'empty';
         }
         if (!free) continue;
-        for (let i = 0; i < req.label.length; i++) {
-          canvas.set(row, startCol + i, req.label[i], 'label');
+        for (let i = 0; i < cells.length; i++) {
+          canvas.set(row, startCol + i, cells[i], 'label');
         }
         done = true;
         break;
@@ -585,7 +633,7 @@ function routeEdge(
     canvas,
     directed: plan.edge.directed,
     biDir: plan.biDir,
-    label: plan.edge.label,
+    label: normalizeEdgeLabel(plan.edge.label),
     vocab,
     junction,
     stagger,
@@ -736,8 +784,10 @@ function drawVertical(
     for (let c = lo + 1; c <= hi - 1; c++) segment.push(vocab.h);
     // `+ 4` (not `+ 2`): at least one line char must survive on each side
     // of ` label `, or the re-parse bridge can't glue the run back together.
-    if (label && segment.length >= label.length + 4) {
-      const text = ` ${label} `;
+    // (The jog's arrowheads sit on the vertical legs, outside this segment,
+    // so nothing here needs reserving — unlike the straight cases below.)
+    const text = label ? toCells(` ${label} `) : null;
+    if (text && edgeLabelFitsBridge(text) && segment.length >= text.length + 2) {
       const left = Math.floor((segment.length - text.length) / 2);
       segment = segment.map((ch, i) => (i >= left && i < left + text.length ? text[i - left] : ch));
       labelEmbedded = true;
@@ -805,15 +855,44 @@ function drawHorizontal(
   const lastFree = enterCol - dir;
   const gap = (lastFree - firstFree) * dir + 1;
 
-  const drawH = (row: number, cA: number, cB: number, hostLabel: boolean): void => {
+  /**
+   * Draw a horizontal run, optionally embedding ` label ` in it.
+   *
+   * `reserveLo`/`reserveHi` are cells at each end that an arrowhead will
+   * later OVERWRITE. They must be excluded from the label's room: the
+   * re-parse bridge needs a horizontal char to survive on each side of the
+   * label text to glue the run back into one component, and an arrowhead
+   * landing on that char splits the run into two one-attachment fragments
+   * that are both dropped as `dangling-edge`. Budgeting for the arrows here
+   * (rather than testing the raw gap) keeps the `+ 4` invariant true of the
+   * cells that actually remain — for every gap, not just the one that
+   * happened to fail.
+   */
+  const drawH = (
+    row: number,
+    cA: number,
+    cB: number,
+    hostLabel: boolean,
+    reserveLo = 0,
+    reserveHi = 0,
+  ): void => {
     const lo = Math.min(cA, cB);
     const hi = Math.max(cA, cB);
     let segment: string[] = [];
     for (let c = lo; c <= hi; c++) segment.push(vocab.h);
-    if (hostLabel && label && segment.length >= label.length + 4) {
-      const text = ` ${label} `;
-      const left = Math.floor((segment.length - text.length) / 2);
-      segment = segment.map((ch, i) => (i >= left && i < left + text.length ? text[i - left] : ch));
+    const text = hostLabel && label ? toCells(` ${label} `) : null;
+    if (text && edgeLabelFitsBridge(text)) {
+      const from = reserveLo;
+      const to = segment.length - 1 - reserveHi;
+      const room = to - from + 1;
+      // `+ 2` on the arrow-free room = the documented `label.length + 4`
+      // total: ` label ` plus ≥1 surviving line char on each side.
+      if (room >= text.length + 2) {
+        const left = from + Math.floor((room - text.length) / 2);
+        segment = segment.map((ch, i) =>
+          i >= left && i < left + text.length ? text[i - left] : ch,
+        );
+      }
     }
     segment.forEach((ch, i) => {
       canvas.drawEdgeCell(row, lo + i, ch, ch === vocab.h ? 'line-h' : 'label', vocab);
@@ -829,7 +908,16 @@ function drawHorizontal(
     junction(sRow, exitCol, dir === 1 ? 'right' : 'left');
     junction(tRow, enterCol, dir === 1 ? 'left' : 'right');
     if (sRow === tRow && gap >= 1) {
-      drawH(sRow, firstFree, lastFree, true);
+      // The directed arrowhead lands on `lastFree`, the bidirectional one on
+      // `firstFree`; which end of the [lo, hi] span those are flips with `dir`.
+      drawH(
+        sRow,
+        firstFree,
+        lastFree,
+        true,
+        (dir === 1 ? biDir : directed) ? 1 : 0,
+        (dir === 1 ? directed : biDir) ? 1 : 0,
+      );
       if (directed) {
         canvas.drawEdgeCell(
           sRow,
@@ -860,7 +948,18 @@ function drawHorizontal(
   );
   junction(exitRow, exitCol, dir === 1 ? 'right' : 'left');
   junction(enterRow, enterCol, dir === 1 ? 'left' : 'right');
-  if (Math.abs(midCol - exitCol) >= 2) drawH(exitRow, firstFree, midCol - dir, true);
+  // Only the bidirectional arrowhead shares the label-hosting exit leg; the
+  // forward one lands on the enter leg, a different row.
+  if (Math.abs(midCol - exitCol) >= 2) {
+    drawH(
+      exitRow,
+      firstFree,
+      midCol - dir,
+      true,
+      dir === 1 && biDir ? 1 : 0,
+      dir === -1 && biDir ? 1 : 0,
+    );
+  }
   if (Math.abs(enterCol - midCol) >= 2) drawH(enterRow, midCol + dir, lastFree, false);
   if (exitRow === enterRow) {
     canvas.drawEdgeCell(exitRow, midCol, vocab.h, 'line-h', vocab);

@@ -139,4 +139,37 @@ describe('TableLayer', () => {
     // 80% of 1080 = 864
     expect(fo?.getAttribute('height')).toBe('864');
   });
+
+  // `getAnimationStyle` returns `{ className, style }`. Spreading that object
+  // into a `style` prop drops the class (no keyframes ever run) and buries the
+  // CSS vars one level too deep, so a themed entrance on a dataTable block
+  // silently does nothing in the player AND in video-export frames.
+  describe('animation', () => {
+    const animated = () => {
+      const layer = makeTableLayer();
+      layer.animation = { type: 'fadeIn', duration: 2, delay: 0.5, easing: 'ease-in-out' };
+      return renderTableLayer(layer);
+    };
+
+    it('applies the animation class to a rendered element', () => {
+      const { container } = animated();
+      const g = container.querySelector('g.block-layer--table');
+      expect(g).toBeTruthy();
+      expect(g?.classList.contains('anim-fadeIn')).toBe(true);
+    });
+
+    it('applies the animation CSS custom properties to that same element', () => {
+      const { container } = animated();
+      const g = container.querySelector<SVGGElement>('g.block-layer--table');
+      expect(g?.style.getPropertyValue('--anim-duration')).toBe('2s');
+      expect(g?.style.getPropertyValue('--anim-delay')).toBe('0.5s');
+      expect(g?.style.getPropertyValue('--anim-easing')).toBe('ease-in-out');
+    });
+
+    it('renders no animation class when the layer has no animation', () => {
+      const { container } = renderTableLayer();
+      const g = container.querySelector('g.block-layer--table');
+      expect(g?.getAttribute('class')?.trim()).toBe('block-layer block-layer--table');
+    });
+  });
 });

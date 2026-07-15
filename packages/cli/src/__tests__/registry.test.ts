@@ -10,7 +10,7 @@
 
 import { describe, it } from 'mocha';
 import { expect } from 'chai';
-import { createCliRegistry, convert } from '../api.js';
+import { createCliRegistry, convert, prepareConversion } from '../api.js';
 
 describe('CLI format registry', () => {
   it('registers the mp4 format on top of the built-ins', () => {
@@ -55,6 +55,26 @@ describe('CLI format registry', () => {
     // proving convert() is pre-bound (HTML export throws without it).
     const html = new TextDecoder().decode(result.bytes);
     expect(html).to.include('SquisqPlayer');
+  });
+
+  it('prepares once and exports the same source to multiple targets', async () => {
+    const prepared = await prepareConversion({
+      kind: 'markdown',
+      markdown: '# Prepared\n\nOne normalized document.',
+      baseName: 'prepared',
+    });
+
+    const [markdown, html] = await Promise.all([
+      prepared.convert('md'),
+      prepared.convert('html', { title: 'Prepared HTML' }),
+    ]);
+
+    expect(markdown.suggestedFilename).to.equal('prepared.md');
+    expect(new TextDecoder().decode(markdown.bytes)).to.include('# Prepared');
+    expect(html.suggestedFilename).to.equal('prepared.html');
+    const htmlText = new TextDecoder().decode(html.bytes);
+    expect(htmlText).to.include('<title>Prepared HTML</title>');
+    expect(htmlText).to.include('SquisqPlayer');
   });
 
   for (const format of ['mp4', 'gif'] as const) {

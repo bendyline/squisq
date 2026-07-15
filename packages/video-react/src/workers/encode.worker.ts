@@ -16,7 +16,11 @@ import type {
   InitMessage,
   FrameMessage,
 } from './workerTypes.js';
-import { bitrateForQuality, ffmpegVideoQualityArgs } from '@bendyline/squisq-video';
+import {
+  bitrateForQuality,
+  ffmpegVideoQualityArgs,
+  resolveFfmpegWasmLoad,
+} from '@bendyline/squisq-video';
 import type { FFmpeg } from '@ffmpeg/ffmpeg';
 
 import { createMp4Muxer, type Mp4MuxerHandle } from '../mp4Mux.js';
@@ -37,6 +41,8 @@ let ffmpegConfig: InitMessage | null = null;
 
 // Frame tracking
 let totalFramesReceived = 0;
+/** Frames the caller said it would send; 0 means "unknown" (indeterminate). */
+let totalFramesExpected = 0;
 
 // ── Helpers ────────────────────────────────────────────────────────
 
@@ -46,6 +52,24 @@ function post(msg: WorkerToMainMessage, transfer?: Transferable[]) {
 
 function postProgress(percent: number, phase: string) {
   post({ type: 'progress', percent, phase });
+}
+
+/**
+ * Report frame-ingest progress as a real fraction of the expected frame count,
+ * scaled into the `0..scale` share of the export this phase represents.
+ *
+ * When the caller did not supply `totalFrames` we report `indeterminate` rather
+ * than inventing a number. (The previous `n / (n + 1) * scale` formula was pure
+ * fiction: it reached ~90% of `scale` after ten frames and then crept
+ * asymptotically toward `scale` forever, regardless of the real total.)
+ */
+function postFrameProgress(scale: number, phase: string) {
+  if (totalFramesExpected <= 0) {
+    post({ type: 'progress', percent: 0, phase, indeterminate: true });
+    return;
+  }
+  const ratio = Math.min(totalFramesReceived / totalFramesExpected, 1);
+  post({ type: 'progress', percent: Math.round(ratio * scale), phase });
 }
 
 function postError(message: string) {
@@ -136,10 +160,14 @@ async function encodeFrameWebCodecs(msg: FrameMessage) {
   msg.bitmap.close();
   totalFramesReceived++;
 
-  postProgress(
-    Math.round((totalFramesReceived / (totalFramesReceived + 1)) * 50),
-    `Encoding frame ${totalFramesReceived}`,
-  );
+  postFrameProgress(50, frameLabel('Encoding'));
+}
+
+/** "Encoding frame 12/300" when the total is known, "Encoding frame 12" when not. */
+function frameLabel(verb: string): string {
+  return totalFramesExpected > 0
+    ? `${verb} frame ${totalFramesReceived}/${totalFramesExpected}`
+    : `${verb} frame ${totalFramesReceived}`;
 }
 
 async function finalizeWebCodecs() {
@@ -166,16 +194,19 @@ async function initFfmpegWasm(config: InitMessage) {
   totalFramesReceived = 0;
 
   // Lazy-load ffmpeg.wasm
+  // Resolve runtime assets before touching the runtime. An unconfigured core
+  // throws here with setup instructions instead of inheriting @ffmpeg/ffmpeg's
+  // unpkg CDN default — this error is intentionally NOT wrapped by the generic
+  // "Failed to load ffmpeg.wasm" handler below, which would bury the hint.
+  const load = resolveFfmpegWasmLoad(config.ffmpegWasm, 'The ffmpeg.wasm encoder fallback', {
+    classWorkerURL: new URL('./ffmpeg.class-worker.js', import.meta.url).href,
+  });
+
   let ffmpeg: FFmpeg | null = null;
   try {
     const { FFmpeg } = await import('@ffmpeg/ffmpeg');
     ffmpeg = new FFmpeg();
-    await ffmpeg.load({
-      ...config.ffmpegWasm,
-      classWorkerURL:
-        config.ffmpegWasm?.classWorkerURL ??
-        new URL('./ffmpeg.class-worker.js', import.meta.url).href,
-    });
+    await ffmpeg.load(load);
     ffmpegInstance = ffmpeg;
   } catch (err: unknown) {
     ffmpeg?.terminate();
@@ -210,10 +241,7 @@ async function encodeFrameFfmpeg(msg: FrameMessage) {
   ffmpegFrames.push({ data: new Uint8Array(arrayBuffer), index: msg.frameIndex });
   totalFramesReceived++;
 
-  postProgress(
-    Math.round((totalFramesReceived / (totalFramesReceived + 1)) * 40),
-    `Collecting frame ${totalFramesReceived}`,
-  );
+  postFrameProgress(80, frameLabel('Collecting'));
 
   // Batch encode every ~10 seconds worth of frames
   const batchSize = (ffmpegConfig?.fps ?? 30) * 10;
@@ -247,7 +275,11 @@ async function encodeFfmpegBatch() {
   const config = ffmpegConfig!;
   const batchIndex = ffmpegSegments.length;
 
-  postProgress(40 + batchIndex * 5, `Encoding batch ${batchIndex + 1}…`);
+  // Frames are collected and encoded incrementally, so ingest fraction is the
+  // only honest signal here. Batching is an internal memory detail — reporting
+  // `40 + batchIndex * 5` made the bar climb with segment count and run past
+  // 100% on any export longer than ~2 minutes.
+  postFrameProgress(80, `Encoding batch ${batchIndex + 1}…`);
 
   // Write frames to virtual filesystem
   for (const frame of ffmpegFrames) {
@@ -357,6 +389,10 @@ async function handleMessage(msg: MainToWorkerMessage): Promise<void> {
     case 'init': {
       cancelled = false;
       totalFramesReceived = 0;
+      totalFramesExpected =
+        typeof msg.totalFrames === 'number' && Number.isFinite(msg.totalFrames)
+          ? Math.max(0, Math.floor(msg.totalFrames))
+          : 0;
 
       if (await supportsWebCodecsH264(msg)) {
         backend = 'webcodecs';
@@ -414,6 +450,7 @@ async function handleMessage(msg: MainToWorkerMessage): Promise<void> {
       disposeFfmpeg();
       ffmpegFrames = [];
       ffmpegSegments.length = 0;
+      totalFramesExpected = 0;
       backend = null;
       break;
     }

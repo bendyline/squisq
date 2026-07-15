@@ -149,9 +149,16 @@ which requires `SharedArrayBuffer` (i.e. Cross-Origin-Isolation headers on the
 host page). Animated GIF always performs an ffmpeg.wasm palette pass and therefore
 also requires `SharedArrayBuffer`. The packaged class worker is bundler-safe.
 
-`@ffmpeg/core` is pinned as a runtime dependency. Hosts should publish its ESM
+Video dimensions must be **even**: an odd `width`/`height` is rejected before
+capture starts rather than rounded (H.264's `yuv420p` cannot encode odd
+dimensions, and GIF export muxes an H.264 intermediate).
+
+### ffmpeg.wasm runtime assets (required)
+
+`@ffmpeg/core` is pinned as a runtime dependency. Hosts **must** publish its ESM
 `ffmpeg-core.js` and `ffmpeg-core.wasm` files from the same origin and pass their
-URLs, especially for offline or Content-Security-Policy-controlled deployments:
+URLs. Every ffmpeg.wasm path — the encoder fallback, the GIF palette pass, and
+tier-2 audio muxing — throws an actionable error when `coreURL` is absent:
 
 ```ts
 const config = {
@@ -163,6 +170,16 @@ const config = {
   },
 };
 ```
+
+This is not merely recommended for offline/CSP deployments — it is required.
+`@ffmpeg/ffmpeg`'s `load()` otherwise falls back to a hard-coded
+`https://unpkg.com/@ffmpeg/core@<version>/…` URL, silently fetching and executing
+unpinned third-party code mid-export. Squisq refuses to trigger that fallback; a
+GIF export with no `ffmpegWasm` now fails immediately instead of after capturing
+every frame. `packages/site/vite.config.ts` + `packages/site/src/ffmpegWasmConfig.ts`
+are a complete worked example for Vite (including the GPL notice that must travel
+with the core files). To deliberately use a remote core, name that URL as
+`coreURL` explicitly.
 
 Use `supportsWebCodecs()` to probe at runtime:
 

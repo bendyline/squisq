@@ -16,12 +16,35 @@ export interface RenderTreeOptions {
   style?: 'unicode' | 'ascii';
 }
 
+/**
+ * Render-time text normalization — the ONLY normalization applied to authored
+ * text, and applied so that `parseTree(renderTree(t))` returns `t`.
+ *
+ * Whitespace runs collapse to one space, then trim. A node's text occupies a
+ * single line, so a newline/tab has no meaning in the art; more importantly
+ * the parser reads a GAP (≥2 spaces) before `#`/`<--`/`//` as the comment
+ * delimiter, so a label carrying a gap of its own would re-parse as a
+ * comment. Collapsing makes that impossible: after normalization the only
+ * gap on a line is the one this renderer emits.
+ *
+ * Comment MARKERS inside a label (`release # notes`) are deliberately NOT
+ * stripped or escaped — with the gap rule they are unambiguous, so such
+ * labels survive verbatim, matching how the diagram codec keeps `stdin | out`
+ * intact by disambiguating structure from text instead of escaping it.
+ */
+function normalizeText(text: string): string {
+  return text.replace(/\s+/gu, ' ').trim();
+}
+
 export function renderTree(tree: Tree, options: RenderTreeOptions = {}): string {
   const vocab = (options.style ?? tree.style) === 'ascii' ? ASCII_TREE_VOCAB : UNICODE_TREE_VOCAB;
   const lines: string[] = [];
 
-  const label = (node: TreeNode): string =>
-    node.comment ? `${node.label}  # ${node.comment}` : node.label;
+  const label = (node: TreeNode): string => {
+    const text = normalizeText(node.label);
+    const comment = node.comment ? normalizeText(node.comment) : '';
+    return comment ? `${text}  # ${comment}` : text;
+  };
 
   const walk = (nodes: readonly TreeNode[], prefix: string): void => {
     nodes.forEach((node, i) => {

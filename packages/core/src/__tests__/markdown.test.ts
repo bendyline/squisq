@@ -12,11 +12,13 @@ import {
   createDocument,
   parseFrontmatter,
   setFrontmatterValues,
+  formatFrontmatterYaml,
   plainTextFromInlineHtml,
 } from '../markdown/index';
 import type {
   MarkdownDocument,
   MarkdownHeading,
+  MarkdownInlineCode,
   MarkdownParagraph,
   MarkdownList,
   MarkdownListItem,
@@ -955,6 +957,424 @@ describe('multi-line frontmatter round-trips', () => {
   });
 });
 
+// ============================================
+// Regression: nested frontmatter was flattened (silent corruption)
+// ============================================
+
+describe('parseFrontmatter — nested structures', () => {
+  it('parses a nested map instead of flattening it to empty strings', () => {
+    // The exact verified failure: `author` and `tags` became '' and `name`
+    // was hoisted to the top level.
+    const result = parseFrontmatter('author:\n  name: Bob\ntags:\n  - a\n  - b');
+    expect(result).toEqual({ author: { name: 'Bob' }, tags: ['a', 'b'] });
+  });
+
+  it('parses deeply nested maps', () => {
+    const result = parseFrontmatter('a:\n  b:\n    c: deep\n  d: 2\ne: top');
+    expect(result).toEqual({ a: { b: { c: 'deep' }, d: 2 }, e: 'top' });
+  });
+
+  it('parses a sequence at the key indent (canonical hand-authored form)', () => {
+    expect(parseFrontmatter('tags:\n- a\n- b\nnext: x')).toEqual({
+      tags: ['a', 'b'],
+      next: 'x',
+    });
+  });
+
+  it('parses a sequence of maps', () => {
+    const result = parseFrontmatter('items:\n  - name: a\n    id: 1\n  - name: b\n    id: 2');
+    expect(result).toEqual({
+      items: [
+        { name: 'a', id: 1 },
+        { name: 'b', id: 2 },
+      ],
+    });
+  });
+
+  it('parses a sequence of maps nested under a map', () => {
+    const result = parseFrontmatter('cfg:\n  items:\n    - k: v\n  on: true');
+    expect(result).toEqual({ cfg: { items: [{ k: 'v' }], on: true } });
+  });
+
+  it('reads null forms and empty values as null', () => {
+    expect(parseFrontmatter('a: null\nb: ~\nc:\nd: NULL')).toEqual({
+      a: null,
+      b: null,
+      c: null,
+      d: null,
+    });
+  });
+
+  it('reads capitalized boolean casings', () => {
+    expect(parseFrontmatter('a: True\nb: FALSE')).toEqual({ a: true, b: false });
+  });
+
+  it('keeps a key named __proto__ as an own property at every depth', () => {
+    const result = parseFrontmatter('__proto__:\n  polluted: yes');
+    expect(Object.prototype.hasOwnProperty.call(result, '__proto__')).toBe(true);
+    expect(({} as Record<string, unknown>).polluted).toBeUndefined();
+  });
+});
+
+describe('parseFrontmatter — number coercion keeps authored form', () => {
+  it('does not destroy trailing zeros, exponents, hex, or zero padding', () => {
+    // Verified failures: 1.10 -> 1.1, 1e5 -> 100000, 0x10 -> 16, 007 -> 7.
+    expect(parseFrontmatter('version: 1.10\nid: 1e5\nmask: 0x10\ncode: 007')).toEqual({
+      version: '1.10',
+      id: '1e5',
+      mask: '0x10',
+      code: '007',
+    });
+  });
+
+  it('still coerces canonical decimals', () => {
+    expect(parseFrontmatter('a: 42\nb: 3.14\nc: -5\nd: 0')).toEqual({
+      a: 42,
+      b: 3.14,
+      c: -5,
+      d: 0,
+    });
+  });
+
+  it('keeps values that Number() would accept but YAML 1.2 would not', () => {
+    expect(parseFrontmatter('a: Infinity\nb: +5\nc: 1_000\nd: 0.0')).toEqual({
+      a: 'Infinity',
+      b: '+5',
+      c: '1_000',
+      d: '0.0',
+    });
+  });
+
+  it('keeps integers beyond float precision as strings rather than rounding', () => {
+    expect(parseFrontmatter('big: 12345678901234567890')).toEqual({
+      big: '12345678901234567890',
+    });
+  });
+});
+
+describe('parseFrontmatter — opaque flow payloads stay verbatim strings', () => {
+  it('keeps a single-line JSON object payload as its exact string', () => {
+    // The custom-templates / custom-themes codecs depend on this: the value
+    // is written unquoted and must come back as the same JSON string.
+    const payload = '{"hero":{"lb":"Hero","ly":[{"ty":"text"}]}}';
+    const result = parseFrontmatter(`squisq-custom-templates: ${payload}\ntitle: T`);
+    expect(result).toEqual({ 'squisq-custom-templates': payload, title: 'T' });
+  });
+
+  it('does not split an inner colon of a JSON payload into a key', () => {
+    expect(parseFrontmatter('inline: {"a":1}')).toEqual({ inline: '{"a":1}' });
+  });
+
+  it('reads only the empty flow forms as real collections', () => {
+    expect(parseFrontmatter('a: []\nb: {}')).toEqual({ a: [], b: {} });
+  });
+});
+
+describe('parseFrontmatter — block scalars', () => {
+  it('round-trips a folded `>` scalar, joining lines with spaces', () => {
+    expect(parseFrontmatter('note: >\n  one\n  two\n\n  three')).toEqual({
+      note: 'one two\nthree',
+    });
+  });
+
+  it('supports `>-` and keeps a following key', () => {
+    expect(parseFrontmatter('note: >-\n  a\n  b\nafter: x')).toEqual({ note: 'a b', after: 'x' });
+  });
+
+  it('does not treat an indented `key: value` body line as a top-level key', () => {
+    const result = parseFrontmatter('data: |-\n  name: inner\n  other: 2\ntitle: After');
+    expect(result).toEqual({ data: 'name: inner\nother: 2', title: 'After' });
+  });
+});
+
+describe('formatFrontmatterYaml — structured values round-trip with stable types', () => {
+  it('emits nested maps and sequences as block YAML, not JSON', () => {
+    const frontmatter = { author: { name: 'Bob' }, tags: ['a', 'b'] };
+    expect(formatFrontmatterYaml(frontmatter)).toBe('author:\n  name: Bob\ntags:\n  - a\n  - b');
+    expect(parseFrontmatter(formatFrontmatterYaml(frontmatter))).toEqual(frontmatter);
+  });
+
+  it('round-trips a sequence of maps', () => {
+    const frontmatter = { items: [{ name: 'a', id: 1 }, { name: 'b' }] };
+    const yaml = formatFrontmatterYaml(frontmatter);
+    expect(yaml).toBe('items:\n  - name: a\n    id: 1\n  - name: b');
+    expect(parseFrontmatter(yaml)).toEqual(frontmatter);
+  });
+
+  it('round-trips empty collections without confusing them with the strings "[]" / "{}"', () => {
+    const frontmatter = { emptyList: [], emptyMap: {}, literal: '[]' };
+    const yaml = formatFrontmatterYaml(frontmatter);
+    expect(yaml).toBe('emptyList: []\nemptyMap: {}\nliteral: "[]"');
+    expect(parseFrontmatter(yaml)).toEqual(frontmatter);
+  });
+
+  it('round-trips null and skips undefined', () => {
+    const yaml = formatFrontmatterYaml({ a: null, b: undefined, c: 1 });
+    expect(yaml).toBe('a: null\nc: 1');
+    expect(parseFrontmatter(yaml)).toEqual({ a: null, c: 1 });
+  });
+
+  it('round-trips numbers whose String() form is exponential', () => {
+    // `String` switches to exponent notation outside 1e-7…1e21, so the
+    // writer emits `1e+21` / `1e-7`. Rejecting the exponent form on read
+    // turned those into STRINGS — a silent type change on a pure
+    // parse→stringify pass.
+    const frontmatter = { big: 1e21, small: 1e-7, plain: 42, float: 3.14 };
+    const yaml = formatFrontmatterYaml(frontmatter);
+    expect(yaml).toBe('big: 1e+21\nsmall: 1e-7\nplain: 42\nfloat: 3.14');
+    expect(parseFrontmatter(yaml)).toEqual(frontmatter);
+  });
+
+  it('still keeps non-canonical numeric-looking strings as strings', () => {
+    // The exponent branch must not let authored forms get coerced.
+    expect(parseFrontmatter('a: 1e5\nb: 1.10\nc: 007\nd: +5\ne: 0x10')).toEqual({
+      a: '1e5',
+      b: '1.10',
+      c: '007',
+      d: '+5',
+      e: '0x10',
+    });
+  });
+
+  it('quotes a key with leading/trailing spaces instead of silently renaming it', () => {
+    // The parser trims around the `:`, so a BARE `key : v` reads back as
+    // `key` — a different key than the one written.
+    const frontmatter = { 'key ': 'v', ' lead': 'w', 'mid space': 'x' };
+    const yaml = formatFrontmatterYaml(frontmatter);
+    expect(parseFrontmatter(yaml)).toEqual(frontmatter);
+    // Interior spaces are still safe to write bare.
+    expect(yaml).toContain('mid space: x');
+  });
+
+  it('indents a multi-line string nested inside a map as a block scalar', () => {
+    const frontmatter = { outer: { payload: 'one\ntwo' } };
+    const yaml = formatFrontmatterYaml(frontmatter);
+    expect(yaml).toBe('outer:\n  payload: |-\n    one\n    two');
+    expect(parseFrontmatter(yaml)).toEqual(frontmatter);
+  });
+
+  it('quotes a key that would otherwise re-read as something else', () => {
+    const frontmatter = { 'a: b': 'v' };
+    expect(parseFrontmatter(formatFrontmatterYaml(frontmatter))).toEqual(frontmatter);
+  });
+});
+
+describe('structured frontmatter survives a pure parse → stringify pass', () => {
+  it('does not flatten nested maps or lists (the verified corruption)', () => {
+    const md = '---\nauthor:\n  name: Bob\ntags:\n  - a\n  - b\n---\n\n# Hi\n';
+    const doc = parseMarkdown(md);
+    expect(doc.frontmatter).toEqual({ author: { name: 'Bob' }, tags: ['a', 'b'] });
+    // And the emitted YAML must parse back to the same structure.
+    expect(parseMarkdown(stringifyMarkdown(doc)).frontmatter).toEqual(doc.frontmatter);
+  });
+
+  it('keeps object-valued frontmatter an object across repeated passes', () => {
+    const doc = createDocument();
+    doc.frontmatter = { nested: { a: 1, b: ['x'] } };
+    const once = stringifyMarkdown(doc);
+    const twice = stringifyMarkdown(parseMarkdown(once));
+    expect(twice).toBe(once);
+    expect(parseMarkdown(twice).frontmatter).toEqual(doc.frontmatter);
+  });
+
+  it('keeps version-like and id-like values in their authored form', () => {
+    const md = '---\nversion: 1.10\nid: 1e5\n---\n\n# Hi\n';
+    const doc = parseMarkdown(md);
+    expect(doc.frontmatter).toEqual({ version: '1.10', id: '1e5' });
+    expect(stringifyMarkdown(doc)).toContain('version: "1.10"');
+    expect(parseMarkdown(stringifyMarkdown(doc)).frontmatter).toEqual(doc.frontmatter);
+  });
+
+  it('keeps a compact JSON payload byte-identical through a pass', () => {
+    const payload = '{"hero":{"lb":"Hero","ly":[{"ty":"text"}]}}';
+    const md = `---\nsquisq-custom-templates: ${payload}\n---\n\n# Hi\n`;
+    const out = stringifyMarkdown(parseMarkdown(md));
+    expect(out).toContain(`squisq-custom-templates: ${payload}`);
+    expect(parseMarkdown(out).frontmatter).toEqual({ 'squisq-custom-templates': payload });
+  });
+});
+
+describe('setFrontmatterValues — block-scalar and nested awareness', () => {
+  it('removes a block-scalar key together with its indented body', () => {
+    const source = '---\ndata: |-\n  line one\n  line two\ntitle: Keep\n---\n\n# Body\n';
+    const out = setFrontmatterValues(source, { data: null });
+    expect(out).toBe('---\ntitle: Keep\n---\n\n# Body\n');
+    expect(parseMarkdown(out).frontmatter).toEqual({ title: 'Keep' });
+  });
+
+  it('replaces a block-scalar key without orphaning its body lines', () => {
+    const source = '---\ndata: |-\n  line one\n  line two\ntitle: Keep\n---\n\n# Body\n';
+    const out = setFrontmatterValues(source, { data: 'now scalar' });
+    expect(out).toBe('---\ndata: now scalar\ntitle: Keep\n---\n\n# Body\n');
+    expect(parseMarkdown(out).frontmatter).toEqual({ data: 'now scalar', title: 'Keep' });
+  });
+
+  it('never rewrites an indented body line that looks like a top-level key', () => {
+    // `name: X` lives inside `data`'s block scalar — updating `name` must
+    // append a new top-level key, not corrupt the scalar body.
+    const source = '---\ndata: |-\n  name: inner\ntitle: T\n---\n\n# Body\n';
+    const out = setFrontmatterValues(source, { name: 'outer' });
+    expect(out).toContain('  name: inner');
+    expect(parseMarkdown(out).frontmatter).toEqual({
+      data: 'name: inner',
+      title: 'T',
+      name: 'outer',
+    });
+  });
+
+  it('removes a nested-map key together with its whole subtree', () => {
+    const source = '---\nauthor:\n  name: Bob\n  email: b@x.com\ntitle: Keep\n---\n\n# Body\n';
+    const out = setFrontmatterValues(source, { author: null });
+    expect(out).toBe('---\ntitle: Keep\n---\n\n# Body\n');
+    expect(parseMarkdown(out).frontmatter).toEqual({ title: 'Keep' });
+  });
+
+  it('leaves an untouched nested key and its subtree intact', () => {
+    const source = '---\nauthor:\n  name: Bob\ntitle: Old\n---\n\n# Body\n';
+    const out = setFrontmatterValues(source, { title: 'New' });
+    expect(out).toBe('---\nauthor:\n  name: Bob\ntitle: New\n---\n\n# Body\n');
+    expect(parseMarkdown(out).frontmatter).toEqual({ author: { name: 'Bob' }, title: 'New' });
+  });
+
+  it('replaces a compact JSON payload key in place', () => {
+    const source = '---\nsquisq-custom-themes: {"a":1}\ntitle: T\n---\n\n# Body\n';
+    const out = setFrontmatterValues(source, { 'squisq-custom-themes': '{"b":2}' });
+    expect(out).toBe('---\nsquisq-custom-themes: {"b":2}\ntitle: T\n---\n\n# Body\n');
+  });
+});
+
+// ============================================
+// Regression: unescape passes corrupted code content
+// ============================================
+
+describe('code content survives the annotation unescape passes', () => {
+  it('keeps authored backslashes inside a fenced code block', () => {
+    // Verified failure: the fence body came back as "{[x]}" / "{foo: bar}".
+    const md = '```js\nconst a = "{\\[x]}"; const b = "{foo\\: bar}";\n```\n';
+    const doc = parseMarkdown(md);
+    expect(stringifyMarkdown(doc)).toBe(md);
+  });
+
+  it('keeps a `# heading`-looking line inside a fence untouched', () => {
+    const md = '```sh\n# not a heading {\\[x]}\n```\n';
+    expect(stringifyMarkdown(parseMarkdown(md))).toBe(md);
+  });
+
+  it('keeps authored backslashes inside an inline code span', () => {
+    const md = 'Use `{foo\\: bar}` and `{\\[x]}` inline.\n';
+    const doc = parseMarkdown(md);
+    const codes = findNodesByType<MarkdownInlineCode>(doc, 'inlineCode');
+    expect(codes.map((c) => c.value)).toEqual(['{foo\\: bar}', '{\\[x]}']);
+    expect(stringifyMarkdown(doc)).toBe(md);
+  });
+
+  it('protects a fence nested inside a list item', () => {
+    const md = '- item\n\n  ```js\n  const a = "{foo\\: bar}";\n  ```\n';
+    expect(stringifyMarkdown(parseMarkdown(md))).toBe(md);
+  });
+
+  it('protects a tilde fence', () => {
+    const doc: MarkdownDocument = {
+      type: 'document',
+      children: [{ type: 'code', lang: 'js', value: 'const b = "{foo\\: bar}";' }],
+    };
+    const out = stringifyMarkdown(doc, { fence: '~' });
+    expect(out).toContain('const b = "{foo\\: bar}";');
+    expect(out.startsWith('~~~js')).toBe(true);
+  });
+
+  it('protects a fence that contains a nested fence', () => {
+    const md = '````md\n```js\nconst a = "{foo\\: bar}";\n```\n````\n';
+    expect(stringifyMarkdown(parseMarkdown(md))).toBe(md);
+  });
+
+  it('protects an unterminated fence to end of document', () => {
+    const doc: MarkdownDocument = {
+      type: 'document',
+      children: [{ type: 'code', lang: 'js', value: 'x = "{a\\: b}";' }],
+    };
+    expect(stringifyMarkdown(doc)).toContain('x = "{a\\: b}";');
+  });
+
+  it('still unescapes annotations in prose that sits between code blocks', () => {
+    const md = '```js\nconst a = "{foo\\: bar}";\n```\n\n# Title {[hero]}\n';
+    const out = stringifyMarkdown(parseMarkdown(md));
+    expect(out).toContain('const a = "{foo\\: bar}";'); // code untouched
+    expect(out).toContain('# Title {[hero]}'); // prose annotation still unescaped
+  });
+
+  it('still unescapes annotations when the doc carries a literal NUL', () => {
+    // Masking uses NUL as its placeholder, but a doc built in memory (or
+    // imported from DOCX/PPTX/XLSX/CSV/HTML) can contain one. Bailing out of
+    // the whole transform left every annotation escaped as `{\[hero]}`, which
+    // `markdownToDoc` no longer recognizes — silently dropping the template.
+    const NUL = String.fromCharCode(0);
+    const doc: MarkdownDocument = {
+      type: 'document',
+      children: [
+        { type: 'heading', depth: 1, children: [{ type: 'text', value: 'Title {[hero]}' }] },
+        { type: 'code', lang: 'js', value: 'const a = "{foo\\: bar}";' },
+        { type: 'paragraph', children: [{ type: 'text', value: `has a ${NUL} nul` }] },
+      ],
+    };
+    const out = stringifyMarkdown(doc);
+    expect(out).toContain('# Title {[hero]}'); // annotation unescaped
+    expect(out).toContain('const a = "{foo\\: bar}";'); // code still protected
+    expect(out).toContain(NUL); // the author's NUL survives
+  });
+});
+
+describe('annotation unescaping still works in ordinary prose', () => {
+  it('unescapes a template span on a heading', () => {
+    const md = '# Title {[hero]}\n';
+    expect(stringifyMarkdown(parseMarkdown(md))).toBe(md);
+  });
+
+  it('unescapes a template span with quoted values containing punctuation', () => {
+    // The quoted run holds `:` and `,`, both of which remark escapes in a
+    // text node; the span regex must see through the quotes to the real `]}`.
+    const md = '# Title {[hero label="a: b, c"]}\n';
+    expect(stringifyMarkdown(parseMarkdown(md))).toBe(md);
+  });
+
+  it('unescapes `\\:` inside a Pandoc-style brace span', () => {
+    const md = '# Node {#n1 connectsTo=foo:flow}\n';
+    expect(stringifyMarkdown(parseMarkdown(md))).toBe(md);
+  });
+
+  it('unescapes a trailing Pandoc span followed by a template span', () => {
+    const md = '# Node {#n1 connectsTo=foo:flow} {[diagram]}\n';
+    expect(stringifyMarkdown(parseMarkdown(md))).toBe(md);
+  });
+
+  it('unescapes an inline icon annotation inside a nested list item', () => {
+    const md = '- a\n  - b {[icon fa-star]} c\n';
+    expect(stringifyMarkdown(parseMarkdown(md))).toBe(md);
+  });
+
+  it('unescapes a `\\:` brace span in a paragraph', () => {
+    const md = 'Text {key=a:b} more.\n';
+    expect(stringifyMarkdown(parseMarkdown(md))).toBe(md);
+  });
+});
+
+describe('stringifyMarkdown code emission (premise of the masking scan)', () => {
+  it('always fences code nodes, so indented code blocks never appear in output', () => {
+    // The code-region scanner only recognizes fences. If remark ever starts
+    // emitting indented code again, this fails loudly instead of silently
+    // exposing indented code to the unescape passes.
+    expect(
+      stringifyMarkdown({
+        type: 'document',
+        children: [{ type: 'code', value: 'plain code\nline two' }],
+      }),
+    ).toBe('```\nplain code\nline two\n```\n');
+    expect(stringifyMarkdown(parseMarkdown('    indented code\n    more\n'))).toBe(
+      '```\nindented code\nmore\n```\n',
+    );
+  });
+});
+
 describe('frontmatter in parseMarkdown', () => {
   it('extracts frontmatter from markdown with YAML header', () => {
     const md = '---\ndocument-render-as: landscape\ntitle: Test\n---\n\n# Hello';
@@ -1005,5 +1425,100 @@ describe('plainTextFromInlineHtml', () => {
 
   it('returns empty string for empty input', () => {
     expect(plainTextFromInlineHtml('')).toBe('');
+  });
+});
+
+// ============================================
+// Definition lists (regression)
+// ============================================
+
+describe('definitionList stringify', () => {
+  /**
+   * Definition lists have no mdast equivalent, so stringify emits an HTML
+   * `<dl>` block. Descriptions used to serialize as the literal placeholder
+   * `...` — silently DESTROYING the content of every definition list — and
+   * terms were interpolated with no entity escaping.
+   */
+  function docWithDefinitionList(term: string, description: string): MarkdownDocument {
+    return {
+      type: 'document',
+      children: [
+        {
+          type: 'definitionList',
+          children: [
+            { type: 'definitionTerm', children: [{ type: 'text', value: term }] },
+            {
+              type: 'definitionDescription',
+              children: [{ type: 'paragraph', children: [{ type: 'text', value: description }] }],
+            },
+          ],
+        },
+      ],
+    };
+  }
+
+  it('preserves description content instead of emitting a placeholder', () => {
+    const out = stringifyMarkdown(docWithDefinitionList('Squisq', 'A rendering library.'));
+    expect(out).toContain('<dt>Squisq</dt>');
+    expect(out).toContain('<dd>A rendering library.</dd>');
+    expect(out).not.toContain('<dd>...</dd>');
+  });
+
+  it('keeps the text of nested inline formatting in a term', () => {
+    const doc: MarkdownDocument = {
+      type: 'document',
+      children: [
+        {
+          type: 'definitionList',
+          children: [
+            {
+              type: 'definitionTerm',
+              children: [
+                { type: 'text', value: 'a ' },
+                { type: 'strong', children: [{ type: 'text', value: 'bold' }] },
+                { type: 'text', value: ' term' },
+              ],
+            },
+            {
+              type: 'definitionDescription',
+              children: [{ type: 'paragraph', children: [{ type: 'text', value: 'desc' }] }],
+            },
+          ],
+        },
+      ],
+    };
+    expect(stringifyMarkdown(doc)).toContain('<dt>a bold term</dt>');
+  });
+
+  it('preserves each paragraph of a multi-block description', () => {
+    const doc: MarkdownDocument = {
+      type: 'document',
+      children: [
+        {
+          type: 'definitionList',
+          children: [
+            { type: 'definitionTerm', children: [{ type: 'text', value: 'Term' }] },
+            {
+              type: 'definitionDescription',
+              children: [
+                { type: 'paragraph', children: [{ type: 'text', value: 'First.' }] },
+                { type: 'paragraph', children: [{ type: 'text', value: 'Second.' }] },
+              ],
+            },
+          ],
+        },
+      ],
+    };
+    const out = stringifyMarkdown(doc);
+    expect(out).toContain('First.');
+    expect(out).toContain('Second.');
+  });
+
+  it('escapes HTML entities in terms and descriptions', () => {
+    const out = stringifyMarkdown(docWithDefinitionList('<script>alert(1)</script>', 'a & b < c'));
+    // The markup must arrive as escaped TEXT, never as a live tag.
+    expect(out).toContain('&lt;script&gt;alert(1)&lt;/script&gt;');
+    expect(out).not.toContain('<script>');
+    expect(out).toContain('a &amp; b &lt; c');
   });
 });

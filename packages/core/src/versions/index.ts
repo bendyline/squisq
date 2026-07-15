@@ -30,6 +30,8 @@ export type {
   SaveVersionResult,
   PrunePolicy,
   RevertOptions,
+  RevertResult,
+  RevertFailureReason,
   CoalesceOptions,
 } from './types.js';
 

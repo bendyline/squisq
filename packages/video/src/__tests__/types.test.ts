@@ -124,4 +124,55 @@ describe('validateVideoExportOptions', () => {
       'Unknown video orientation',
     );
   });
+
+  /**
+   * Regression: H.264/yuv420p cannot encode odd dimensions. Without this gate,
+   * `--width 851` captured every frame and only then died inside libx264
+   * ("width not divisible by 2"), and in-browser it made isConfigSupported
+   * return false so the export fell through to ffmpeg.wasm and failed there.
+   */
+  describe('even-dimension policy', () => {
+    it('rejects an odd width', () => {
+      expect(() => validateVideoExportOptions({ width: 851 })).toThrow(
+        /Video width must be an even number of pixels \(got 851\)/,
+      );
+    });
+
+    it('rejects an odd height', () => {
+      expect(() => validateVideoExportOptions({ height: 1081 })).toThrow(
+        /Video height must be an even number of pixels \(got 1081\)/,
+      );
+    });
+
+    it('names the two nearest legal values', () => {
+      expect(() => validateVideoExportOptions({ width: 851 })).toThrow(/Use 850 or 852\./);
+    });
+
+    it('explains why, so the message is actionable', () => {
+      expect(() => validateVideoExportOptions({ width: 851 })).toThrow(/H\.264/);
+    });
+
+    it('rejects rather than rounding — odd input never becomes a silent even output', () => {
+      // resolveDimensions is the shared entry point for every H.264 path; it
+      // must surface the error, not quietly hand back 850.
+      expect(() => resolveDimensions({ width: 851, height: 480 })).toThrow(/even number of pixels/);
+    });
+
+    it('accepts even dimensions', () => {
+      expect(() => validateVideoExportOptions({ width: 850, height: 480 })).not.toThrow();
+    });
+
+    it('accepts every built-in orientation default', () => {
+      for (const dims of Object.values(ORIENTATION_DIMENSIONS)) {
+        expect(() => validateVideoExportOptions(dims)).not.toThrow();
+      }
+    });
+
+    it('still reports a non-integer dimension as a positive-integer problem', () => {
+      // NaN (from a bad `parseInt`) must not be mislabelled as "odd".
+      expect(() => validateVideoExportOptions({ width: NaN })).toThrow(
+        'Video width must be a positive integer.',
+      );
+    });
+  });
 });

@@ -79,6 +79,44 @@ export interface RevertOptions {
    * Defaults to `true` so a revert is always recoverable.
    */
   snapshotCurrent?: boolean;
+  /**
+   * Content to capture as the pre-revert snapshot. Hosts that keep the
+   * live document outside the container (an editor buffer, say) MUST pass
+   * it: without it the snapshot falls back to reading the container, which
+   * is stale whenever there are unsaved edits and yields `no-document`
+   * when the container holds no markdown at all. In both cases the
+   * pre-revert state would not actually be recoverable.
+   *
+   * Ignored when `snapshotCurrent` is `false`.
+   */
+  content?: string;
+  /**
+   * Override the document basename used to file the pre-revert snapshot.
+   * Defaults to the container's resolved primary document. Ignored when
+   * `snapshotCurrent` is `false`.
+   */
+  basename?: string;
+}
+
+/**
+ * Why a {@link revertToVersion} call declined to revert.
+ *
+ * - `'missing-snapshot'` — the requested version could not be read.
+ * - `'snapshot-failed'`  — the pre-revert snapshot could not be written, so
+ *   reverting would have destroyed the current state irrecoverably.
+ */
+export type RevertFailureReason = 'missing-snapshot' | 'snapshot-failed';
+
+/**
+ * Result of a {@link revertToVersion} call.
+ */
+export interface RevertResult {
+  /** True when the document was replaced with the snapshot's content. */
+  reverted: boolean;
+  /** The pre-revert snapshot, when one was written. */
+  snapshotted: Version | null;
+  /** Present only when `reverted` is false. */
+  reason?: RevertFailureReason;
 }
 
 /**

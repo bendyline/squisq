@@ -51,6 +51,8 @@ export {
   type SaveImageEditVersionOptions,
   type SaveImageEditVersionResult,
   type RevertImageEditOptions,
+  type RevertImageEditResult,
+  type RevertImageEditFailureReason,
 } from './versions.js';
 
 // Manager

@@ -48,15 +48,24 @@ export function comparisonBar(input: ComparisonBarInput, context: TemplateContex
   const topBarY = 36;
   const bottomBarY = 58;
 
+  // Bar GEOMETRY is driven by the non-negative part of each value. A bar has
+  // no negative extent to draw: `width: '-32%'` is an invalid SVG rect that
+  // renderers silently drop, and the trailing label — positioned relative to
+  // the bar's end — lands at a negative x, off the left edge of the block.
+  // A negative value therefore draws no bar; its label still reports the real
+  // number, so the block stays honest rather than inventing a magnitude.
+  const leftExtent = Math.max(0, leftValue);
+  const rightExtent = Math.max(0, rightValue);
+
   // Calculate proportional bar widths. The widest bar must leave room
   // for its trailing value label inside a 96% safe area — otherwise a
   // long label ("84 clarity score") runs off the right edge of the block.
-  const maxValue = Math.max(leftValue, rightValue, 1);
+  const maxValue = Math.max(leftExtent, rightExtent, 1);
   const longestLabelPx = Math.max(leftDisplay.length, rightDisplay.length) * valueFontSize * 0.58;
   const labelWidthPct = (longestLabelPx / viewport.width) * 100;
   const maxBarWidth = Math.max(20, Math.min(65, 96 - barStartX - labelWidthPct - 2));
-  const leftBarWidth = (leftValue / maxValue) * maxBarWidth;
-  const rightBarWidth = (rightValue / maxValue) * maxBarWidth;
+  const leftBarWidth = (leftExtent / maxValue) * maxBarWidth;
+  const rightBarWidth = (rightExtent / maxValue) * maxBarWidth;
 
   return [
     // Background

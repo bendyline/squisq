@@ -241,8 +241,28 @@ export function getPinnedBlockMeta(block: Block): CoercedBlockMeta {
 
 /**
  * Rebuild a block list, lifting standalone `{[…]}` template annotations out of
- * each block's body into heading-less sibling blocks (recursing into children
- * first). See {@link extractTemplateBlocksFromContents}.
+ * each block's body into heading-less blocks (recursing into children first).
+ * See {@link extractTemplateBlocksFromContents}.
+ *
+ * **Placement rule:** a produced block is inserted at the document position
+ * immediately following the containing block's own `contents`.
+ *
+ * That position matters because a block's `contents` are exactly the nodes
+ * between its own heading and the *next heading of any depth* — so a
+ * standalone annotation in a block's body always precedes that block's
+ * sub-headings in the source. Every consumer that reads document order
+ * (`docToMarkdown`'s `emitBlock`, {@link flattenBlocks},
+ * {@link flattenRenderableBlocks}) walks the tree pre-order: heading →
+ * contents → children. So "right after this block's contents" is reached as
+ * the block's LEADING CHILDREN when it has sub-headings, and as the very next
+ * sibling when it does not. Both encode the same authored position; the tree
+ * shape just follows the walk.
+ *
+ * Appending unconditionally as a sibling (the previous behavior) put the
+ * produced block after the containing block's whole sub-tree instead, which
+ * moved a mid-section annotation past that section's sub-headings in BOTH
+ * source order and slide order — and re-parented it again on every further
+ * round-trip, so `docToMarkdown(markdownToDoc(md))` never settled.
  */
 function expandStandaloneAnnotations(
   blocks: Block[],
@@ -258,10 +278,24 @@ function expandStandaloneAnnotations(
       makeId,
       defaultDuration,
     });
-    if (produced.length > 0) {
-      block.contents = leading;
+    if (produced.length === 0) {
+      out.push(block);
+      continue;
     }
-    out.push(block, ...produced);
+    block.contents = leading;
+
+    // Container templates (diagram/drawing/layout) are excluded: their
+    // children are consumed by the parent's render as nodes/shapes, so a
+    // produced block nested there would become a diagram node rather than a
+    // slide — and would suppress the parent's ASCII-fence parsing
+    // ("native children win"). Those keep the sibling slot.
+    const nestable = (block.children?.length ?? 0) > 0 && !isContainerTemplate(block.template);
+    if (nestable) {
+      block.children = [...produced, ...block.children!];
+      out.push(block);
+    } else {
+      out.push(block, ...produced);
+    }
   }
   return out;
 }
@@ -450,8 +484,10 @@ export function markdownToDoc(markdownDoc: MarkdownDocument, options?: MarkdownT
   // template blocks; the body after each one, up to the next annotation,
   // becomes its `contents`. Done after media extraction (so media names keep
   // their meaning) and before structured-data parsing (so `json data` fences
-  // attach to the produced blocks). Produced blocks are inserted as siblings
-  // following the block whose body held the annotation.
+  // attach to the produced blocks). Produced blocks land at the document
+  // position right after the containing block's contents — see
+  // {@link expandStandaloneAnnotations} for why that is a leading child of a
+  // block with sub-headings and a sibling otherwise.
   const makeStandaloneId = (parsed: ParsedAnnotation): string => {
     const base = parsed.params.title ?? parsed.template ?? 'block';
     return idGenerator ? idGenerator.fromText(base) : slugify(base);

@@ -57,6 +57,25 @@ function sanitizeZipPath(path: string): string | null {
   return normalized;
 }
 
+/**
+ * Return a basename that does not collide with a prior archive member.
+ *
+ * Audio is flattened into a single `audio/` folder, so two segments from
+ * different source directories can arrive with the same basename (e.g.
+ * `takes/1/narration.webm` and `takes/2/narration.webm`). Without this,
+ * the second write silently clobbers the first AND both map entries point
+ * at the same bytes — the doc plays the wrong take with no error anywhere.
+ */
+function uniqueFilename(filename: string, used: ReadonlySet<string>): string {
+  if (!used.has(filename)) return filename;
+  const dot = filename.lastIndexOf('.');
+  const base = dot > 0 ? filename.slice(0, dot) : filename;
+  const ext = dot > 0 ? filename.slice(dot) : '';
+  let suffix = 2;
+  while (used.has(`${base}-${suffix}${ext}`)) suffix++;
+  return `${base}-${suffix}${ext}`;
+}
+
 export interface HtmlZipExportOptions extends HtmlExportOptions {
   /**
    * Map of audio segment identifiers to binary audio data.
@@ -160,7 +179,15 @@ export async function docToHtmlZip(doc: Doc, options: HtmlZipExportOptions): Pro
     for (const [originalPath, buffer] of images.entries()) {
       if ((imageIndex++ & 63) === 0) options.signal?.throwIfAborted();
       const zipPath = sanitizeZipPath(originalPath);
-      if (!zipPath) continue;
+      if (!zipPath) {
+        // The doc still references this image, so dropping it silently
+        // leaves a broken reference in an otherwise "successful" export.
+        console.warn(
+          `[squisq] docToHtmlZip: skipped image with unsafe path "${originalPath}" — ` +
+            'the exported document will have a broken reference to it.',
+        );
+        continue;
+      }
       zip.file(zipPath, buffer);
       imagePathMap[originalPath] = zipPath;
     }
@@ -170,11 +197,16 @@ export async function docToHtmlZip(doc: Doc, options: HtmlZipExportOptions): Pro
   const audioPathMap: Record<string, string> = {};
   if (audio) {
     let audioIndex = 0;
+    const usedAudioNames = new Set<string>();
     for (const [segmentKey, buffer] of audio.entries()) {
       if ((audioIndex++ & 63) === 0) options.signal?.throwIfAborted();
       const filename = extractFilename(segmentKey);
       // Ensure .mp3 extension
-      const finalName = filename.includes('.') ? filename : `${filename}.mp3`;
+      const named = filename.includes('.') ? filename : `${filename}.mp3`;
+      // Flattening to audio/<basename> can collide across source folders —
+      // disambiguate rather than let the later segment win.
+      const finalName = uniqueFilename(named, usedAudioNames);
+      usedAudioNames.add(finalName);
       const zipPath = `audio/${finalName}`;
       zip.file(zipPath, buffer);
       audioPathMap[segmentKey] = zipPath;

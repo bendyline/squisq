@@ -8,6 +8,7 @@
 
 import {
   ffmpegGifOutputArgs,
+  resolveFfmpegWasmLoad,
   type FfmpegWasmLoadConfig,
   type GifOutputOptions,
 } from '@bendyline/squisq-video';
@@ -34,6 +35,12 @@ export async function transcodeMp4ToGifWithFfmpegWasm(
     throw new DOMException('Animated GIF export was cancelled.', 'AbortError');
   }
 
+  // Validate runtime assets before allocating the runtime, so an unconfigured
+  // core fails cleanly instead of reaching for @ffmpeg/ffmpeg's CDN default.
+  const load = resolveFfmpegWasmLoad(loadConfig, 'Animated GIF export', {
+    classWorkerURL: new URL('./workers/ffmpeg.class-worker.js', import.meta.url).href,
+  });
+
   const args = buildGifFfmpegArgs(options);
   const { FFmpeg } = await import('@ffmpeg/ffmpeg');
   const ffmpeg = new FFmpeg();
@@ -46,12 +53,7 @@ export async function transcodeMp4ToGifWithFfmpegWasm(
   const handleAbort = () => terminate();
   signal?.addEventListener('abort', handleAbort, { once: true });
   try {
-    await ffmpeg.load({
-      ...loadConfig,
-      classWorkerURL:
-        loadConfig?.classWorkerURL ??
-        new URL('./workers/ffmpeg.class-worker.js', import.meta.url).href,
-    });
+    await ffmpeg.load(load);
     if (signal?.aborted) {
       throw new DOMException('Animated GIF export was cancelled.', 'AbortError');
     }

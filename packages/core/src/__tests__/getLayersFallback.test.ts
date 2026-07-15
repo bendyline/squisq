@@ -26,6 +26,20 @@ describe('materializeBlockLayers — graceful degradation', () => {
     expect(text).toContain('Unknown template "photGrid"');
   });
 
+  // The notice color was built by string concat (`${colors.text}99`). Theme
+  // scheme colors may be 3-digit `#rgb` (the validator accepts them), and
+  // `#abc99` is not valid CSS — the notice silently lost its color, on the
+  // one layer whose whole job is explaining why the block degraded.
+  it('renders the notice in a valid translucent CSS color', () => {
+    const block = firstBlock('## My Section {[photGrid]}\n\nBody.');
+    const notice = materializeLayers(block).find((l) => l.id === 'fallback-notice');
+
+    expect(notice).toBeDefined();
+    const color = (notice as { content: { style: { color: string } } }).content.style.color;
+    expect(color).toMatch(/^rgba\(/);
+    expect(color).toContain('0.6');
+  });
+
   it('renders a fallback card when a template function throws', () => {
     (templateRegistry as Record<string, unknown>)['__boom'] = () => {
       throw new Error('kaboom');

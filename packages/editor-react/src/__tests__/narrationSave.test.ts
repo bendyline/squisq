@@ -14,6 +14,7 @@ import {
   narrationAnnotationLine,
 } from '../teleprompter/recording/insertPreamble';
 import { buildNarrationSavePlan } from '../teleprompter/recording/narrationSave';
+import { buildFilename } from '../recorder/formats';
 
 describe('insertNarrationPreamble', () => {
   it('inserts at the top of a plain document', () => {
@@ -48,6 +49,135 @@ describe('insertNarrationPreamble', () => {
     expect(retaken).toContain('{[audio src=audio/narration-new.webm anchor=document]}');
     // No duplicate annotations.
     expect(retaken.match(/\{\[audio /g)?.length).toBe(1);
+  });
+
+  /**
+   * Regression: the camera matcher used to require a `narration-cam-`
+   * prefix (trailing hyphen), but `buildFilename('video', ext,
+   * 'narration-cam')` short-circuits the timestamp when a basename is
+   * given and emits `video/narration-cam.webm` — no hyphen. The matcher
+   * never fired, so every retake APPENDED another `<video>` line.
+   *
+   * This asserts against the REAL filename the plan produces rather than
+   * a hand-crafted `narration-cam-old.webm`, which is what let the bug
+   * hide in the previous version of this suite.
+   */
+  it('replaces the camera line across retakes using the REAL produced filename', () => {
+    const cameraPath = `video/${buildFilename('video', '.webm', 'narration-cam')}`;
+    // Guard the premise: no timestamp, no trailing hyphen.
+    expect(cameraPath).toBe('video/narration-cam.webm');
+
+    const first = insertNarrationPreamble(
+      '# Title\n\nBody.\n',
+      'audio/narration-1.webm',
+      cameraPath,
+    );
+    const second = insertNarrationPreamble(first, 'audio/narration-2.webm', cameraPath);
+
+    // Exactly one of each after two consecutive saves — not stacked.
+    expect(second.match(/<video /g)?.length).toBe(1);
+    expect(second.match(/\{\[audio /g)?.length).toBe(1);
+    expect(second).toContain('{[audio src=audio/narration-2.webm anchor=document]}');
+    expect(second).not.toContain('narration-1');
+
+    // And a third take still holds the line.
+    const third = insertNarrationPreamble(second, 'audio/narration-3.webm', cameraPath);
+    expect(third.match(/<video /g)?.length).toBe(1);
+    expect(third.match(/\{\[audio /g)?.length).toBe(1);
+  });
+
+  /**
+   * Role matching alone is too broad: document-anchored audio the USER wrote
+   * further down (background music) is not our preamble, and neither is
+   * whichever `<video>` happens to follow it. Only the preamble region — the
+   * blank-padded run at the insertion point — is ours to rewrite.
+   */
+  it("leaves the user's own document-anchored audio and video alone", () => {
+    const source = [
+      '# Title',
+      '',
+      'Body.',
+      '',
+      '{[audio src=music/bgm.mp3 anchor=document]}',
+      '',
+      '<video src="clips/my-demo.mp4" controls></video>',
+      '',
+    ].join('\n');
+
+    const next = insertNarrationPreamble(source, 'audio/narration-1.webm', null);
+
+    // The user's content survives untouched...
+    expect(next).toContain('{[audio src=music/bgm.mp3 anchor=document]}');
+    expect(next).toContain('<video src="clips/my-demo.mp4" controls></video>');
+    // ...and the narration was inserted rather than swapped into their slot.
+    expect(next).toContain('{[audio src=audio/narration-1.webm anchor=document]}');
+    expect(next.indexOf('narration-1')).toBeLessThan(next.indexOf('bgm.mp3'));
+  });
+
+  it('replaces only the preamble take when the user also has doc-anchored audio below', () => {
+    const withTake = insertNarrationPreamble(
+      '# Title\n\nBody.\n\n{[audio src=music/bgm.mp3 anchor=document]}\n',
+      'audio/narration-1.webm',
+      'video/narration-cam.webm',
+    );
+    const retaken = insertNarrationPreamble(withTake, 'audio/narration-2.webm', null);
+
+    expect(retaken).not.toContain('narration-1');
+    expect(retaken).not.toContain('narration-cam');
+    expect(retaken).toContain('music/bgm.mp3'); // user's line intact
+    // Ours replaced, theirs kept → exactly two audio annotations.
+    expect(retaken.match(/\{\[audio /g)?.length).toBe(2);
+  });
+
+  /**
+   * Regression: `MediaProvider.addMedia`'s returned path is authoritative
+   * and providers may rename/relocate. A path-prefix matcher would miss
+   * its own annotation and stack a second document-anchored track.
+   */
+  it('replaces a take whose audio path the provider renamed', () => {
+    const first = insertNarrationPreamble(
+      '# Title\n\nBody.\n',
+      'assets/media/take-8f3c21.webm',
+      'assets/media/cam-8f3c21.webm',
+    );
+    expect(first).toContain('{[audio src=assets/media/take-8f3c21.webm anchor=document]}');
+
+    const second = insertNarrationPreamble(
+      first,
+      'assets/media/take-b7a904.webm',
+      'assets/media/cam-b7a904.webm',
+    );
+    expect(second.match(/\{\[audio /g)?.length).toBe(1);
+    expect(second.match(/<video /g)?.length).toBe(1);
+    expect(second).not.toContain('8f3c21');
+    expect(second).toContain('{[audio src=assets/media/take-b7a904.webm anchor=document]}');
+  });
+
+  it('still yields exactly one documentMedia entry after a provider-renamed retake', () => {
+    // Renamed paths on purpose: with the old path-prefix matcher this
+    // parses to TWO document-anchored audio tracks, i.e. two narrations
+    // playing over each other.
+    const first = insertNarrationPreamble(
+      '---\ntitle: Doc\n---\n\n# Title\n\nBody.\n',
+      'assets/take-1.webm',
+      'assets/cam-1.webm',
+    );
+    const second = insertNarrationPreamble(first, 'assets/take-2.webm', 'assets/cam-2.webm');
+
+    const doc = markdownToDoc(parseMarkdown(second));
+    expect(doc.documentMedia?.length).toBe(1);
+    expect(doc.documentMedia![0].src).toBe('assets/take-2.webm');
+    expect(doc.documentMedia![0].anchor).toBe('document');
+  });
+
+  it('leaves a non-document-anchored audio annotation alone', () => {
+    // Block-anchored audio is a different slot — a narration retake must
+    // not consume it.
+    const source = '# Title\n\n{[audio src=audio/sfx.mp3]}\n\nBody.\n';
+    const next = insertNarrationPreamble(source, 'audio/narration-1.webm', null);
+    expect(next).toContain('{[audio src=audio/sfx.mp3]}');
+    expect(next).toContain('{[audio src=audio/narration-1.webm anchor=document]}');
+    expect(next.match(/\{\[audio /g)?.length).toBe(2);
   });
 
   it('adds the camera companion as an inline video line', () => {
@@ -108,7 +238,10 @@ describe('buildNarrationSavePlan', () => {
       cameraOffsetSec: 0.02,
     });
     expect(plan.audioRelativeName).toMatch(/^audio\/narration-.*\.webm$/);
-    expect(plan.cameraRelativeName).toMatch(/^video\/narration-cam.*\.webm$/);
+    // Exact, not `/^video\/narration-cam.*\.webm$/` — the loose matcher
+    // passed either way and hid the fact that `buildFilename` emits no
+    // timestamp (and so no trailing hyphen) when given a basename.
+    expect(plan.cameraRelativeName).toBe('video/narration-cam.webm');
     expect(plan.sidecarPathFor('audio/renamed.webm')).toBe('audio/renamed.webm.timing.json');
 
     const parsed = parseNarrationTimingJson(JSON.stringify(plan.sidecarPayload));

@@ -15,17 +15,21 @@ const EQUIVALENT_VERSIONS_RULE = /^(!?)\/?\.versions\/?$/;
 /**
  * Ensure the container-root `.gitignore` ignores its `.versions/` folder.
  * Existing rules and newline style are preserved.
+ *
+ * A user's explicit `!.versions/` un-ignore is HONORED, not overwritten:
+ * committing history is a legitimate deliberate choice, and appending our
+ * rule after their negation would silently win under Git's last-match-wins
+ * semantics and revert that choice. Absence of any rule is the only signal
+ * that we may add one; an existing rule of either polarity means the file
+ * already says what the user wants.
  */
 export async function ensureVersionsGitIgnored(container: ContentContainer): Promise<void> {
   const data = await container.readFile(GITIGNORE_PATH);
   const existing = data ? decoder.decode(data) : '';
 
-  let alreadyIgnored = false;
   for (const line of existing.split(/\r?\n/)) {
-    const match = EQUIVALENT_VERSIONS_RULE.exec(line.trim());
-    if (match) alreadyIgnored = match[1] !== '!';
+    if (EQUIVALENT_VERSIONS_RULE.test(line.trim())) return;
   }
-  if (alreadyIgnored) return;
 
   const newline = existing.includes('\r\n') ? '\r\n' : '\n';
   const separator = existing.length > 0 && !existing.endsWith('\n') ? newline : '';

@@ -507,7 +507,18 @@ export function RecorderModal({
 
   // Toggles lock while a stream is live (acquiring or recording) — changing
   // the capture config then would tear down the in-progress take.
-  const togglesLocked = recorder.state === 'recording' || recorder.state === 'requesting';
+  //
+  // They also lock in review while an UNSAVED take is in hand: flipping any
+  // source rewrites `captureKey`, and that effect calls `recorder.cancel()`,
+  // which drops the blob. Silently destroying a recording the user has not
+  // saved is unrecoverable, so reconfiguring goes through the explicit
+  // "Discard & re-record" button (already the affordance in this state),
+  // which clears the take and re-enables these toggles.
+  const togglesLocked =
+    recorder.state === 'recording' || recorder.state === 'requesting' || canSave;
+  const toggleLockReason = canSave
+    ? 'Save or discard this recording before changing sources'
+    : undefined;
   const toggleActiveFor = (key: 'mic' | 'camera' | 'screen') =>
     key === 'mic' ? micOn : video === key;
   const onToggle = (key: 'mic' | 'camera' | 'screen') => {
@@ -553,6 +564,7 @@ export function RecorderModal({
                 style={active ? toggleActive : toggleBase}
                 onClick={() => onToggle(t.key)}
                 disabled={togglesLocked}
+                title={toggleLockReason}
               >
                 {t.label}
               </button>

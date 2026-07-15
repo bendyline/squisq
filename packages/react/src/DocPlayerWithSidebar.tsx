@@ -94,7 +94,7 @@ export function DocPlayerWithSidebar({
   // Use a counter to force sidebar re-renders at controlled intervals
   const [, setTick] = useState(0);
 
-  // Update ref without triggering re-render
+  // Update ref without triggering a re-render per timeupdate
   const handleStateChange = useCallback(
     (state: PlaybackState) => {
       stateRef.current = state;
@@ -102,6 +102,12 @@ export function DocPlayerWithSidebar({
         wasPlayingRef.current = state.isPlaying;
         onPlayingChange(state.isPlaying);
       }
+      // While playing, the interval below throttles the high-frequency
+      // timeupdate stream into a steady 4 renders/sec. While paused it is idle,
+      // so paint changes as they arrive — they are rare (a scrub, a caption
+      // toggle, the pause itself) and skipping them would leave the sidebar
+      // showing a stale position after a paused seek.
+      if (!state.isPlaying) setTick((t) => t + 1);
     },
     [onPlayingChange],
   );
@@ -116,9 +122,17 @@ export function DocPlayerWithSidebar({
     [],
   );
 
-  // Periodically sync the ref to trigger sidebar UI updates
+  // Periodically sync the ref to trigger sidebar UI updates while playing.
+  //
+  // `handleStateChange` writes to a ref rather than state, so this interval is
+  // how the moving time/progress display gets painted. Those values only change
+  // while audio is playing: ticking unconditionally cost embedded hosts 4
+  // re-renders/sec of the sidebar forever, on an idle tab, for identical output.
+  // The interval stays mounted (playback can start at any time) and cheap-checks
+  // the ref; paused updates are painted by `handleStateChange` instead.
   useEffect(() => {
     const interval = setInterval(() => {
+      if (!stateRef.current.isPlaying) return;
       setTick((t) => t + 1);
     }, 250); // 4 updates per second is smooth enough for time/progress display
     return () => clearInterval(interval);

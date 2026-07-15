@@ -103,6 +103,15 @@ interface ActiveFloat {
 
 export function createFloatingWindowManager(deps: { styleCss: string }): FloatingWindowManager {
   let active: ActiveFloat | null = null;
+  // Bumped by every open()/close()/dispose(). Opening a float is async (PiP
+  // permission, requestWindow, video.play), and the window can be closed,
+  // superseded, or the whole manager disposed while those awaits are pending.
+  // An attempt whose generation is stale must dispose the float it just
+  // opened instead of adopting it — otherwise `active` points at a float
+  // nobody asked for, or (after dispose) an always-on-top window with an
+  // empty root, no owner, and nothing left that would ever close it.
+  let generation = 0;
+  let disposed = false;
   const listeners: Record<FloatEvent, Set<(tier: FloatTier) => void>> = {
     closed: new Set(),
     tierchange: new Set(),
@@ -296,6 +305,10 @@ export function createFloatingWindowManager(deps: { styleCss: string }): Floatin
     },
     async open(opts: FloatOpenOptions): Promise<FloatTier> {
       manager.close();
+      if (disposed) return 'docked';
+      const attempt = ++generation;
+      // Stale once a close/dispose/newer open has bumped the generation.
+      const superseded = () => generation !== attempt || disposed;
       const supported = detectFloatTiers();
       const ladder =
         opts.preferredTier && supported.includes(opts.preferredTier)
@@ -303,22 +316,34 @@ export function createFloatingWindowManager(deps: { styleCss: string }): Floatin
           : supported;
       for (const tier of ladder) {
         if (tier === 'docked') break;
+        if (superseded()) return 'docked';
+        let opened: ActiveFloat | null = null;
         try {
-          if (tier === 'document-pip') active = await openDocumentPip(opts);
-          else if (tier === 'video-pip') active = await openVideoPip(opts);
-          else if (tier === 'popup') active = openPopup(opts);
-          if (active) {
-            emit('tierchange', active.tier);
-            return active.tier;
-          }
+          if (tier === 'document-pip') opened = await openDocumentPip(opts);
+          else if (tier === 'video-pip') opened = await openVideoPip(opts);
+          else if (tier === 'popup') opened = openPopup(opts);
         } catch {
-          active = null; // fall through to the next tier
+          opened = null; // fall through to the next tier
         }
+        if (!opened) continue;
+        if (superseded()) {
+          // Resolved too late to be wanted. Dispose it here — assigning it to
+          // `active` would resurrect a float past its close/dispose.
+          opened.dispose();
+          return 'docked';
+        }
+        active = opened;
+        emit('tierchange', active.tier);
+        return active.tier;
       }
+      if (superseded()) return 'docked';
       emit('tierchange', 'docked');
       return 'docked';
     },
     close() {
+      // Bump unconditionally: a close during an in-flight open must invalidate
+      // it even though there is no `active` float to tear down yet.
+      generation++;
       if (!active) return;
       const closing = active;
       active = null;
@@ -340,6 +365,10 @@ export function createFloatingWindowManager(deps: { styleCss: string }): Floatin
     },
     dispose() {
       manager.close();
+      // Latch: listeners are gone after this, so a float resolving later has
+      // no owner and no way to report itself. `superseded()` reads this and
+      // disposes it on arrival.
+      disposed = true;
       if (typeof window !== 'undefined') {
         window.removeEventListener('pagehide', openerPageHide);
       }

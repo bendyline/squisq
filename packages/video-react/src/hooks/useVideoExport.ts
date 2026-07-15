@@ -29,7 +29,12 @@ import type {
   AudioTimelineClip,
   FfmpegWasmLoadConfig,
 } from '@bendyline/squisq-video';
-import { resolveDimensions, computeAudioTimeline, QUALITY_PRESETS } from '@bendyline/squisq-video';
+import {
+  resolveDimensions,
+  computeAudioTimeline,
+  resolveFfmpegWasmLoad,
+  QUALITY_PRESETS,
+} from '@bendyline/squisq-video';
 import type { CaptionMode } from '@bendyline/squisq-react';
 import {
   createEncoder,
@@ -357,6 +362,12 @@ export function useVideoExport(): VideoExportResult {
               '(Cross-Origin-Isolation headers).',
           );
         }
+        // GIF always finishes with an ffmpeg.wasm palette pass. Validate its
+        // runtime assets now: discovering an unconfigured core after capturing
+        // every frame wastes the whole export.
+        if (effectiveOutputFormat === 'gif') {
+          resolveFfmpegWasmLoad(config.ffmpegWasm, 'Animated GIF export');
+        }
         if (!webCodecsAvailable && !sharedArrayBufferAvailable) {
           throw new Error(
             'No video encoder available. WebCodecs requires Chrome 94+ / Edge 94+, ' +
@@ -433,6 +444,10 @@ export function useVideoExport(): VideoExportResult {
         if (docDuration <= 0) {
           throw new Error('Document has zero duration — nothing to export');
         }
+
+        // Known up front, so the worker encoder can report true progress
+        // instead of extrapolating from the frames it has happened to receive.
+        const totalFrames = Math.ceil(docDuration * fps);
 
         // ── Step 2: Create encoder ────────────────────────────────
         setPhase('Starting encoder…');
@@ -543,6 +558,7 @@ export function useVideoExport(): VideoExportResult {
             height,
             fps,
             quality,
+            totalFrames,
             ffmpegWasm: config.ffmpegWasm,
           });
           encoder = workerEncoder;
@@ -565,7 +581,6 @@ export function useVideoExport(): VideoExportResult {
 
         // ── Step 3: Capture frames and encode ─────────────────────
         setState('capturing');
-        const totalFrames = Math.ceil(docDuration * fps);
 
         const captureStartTime = performance.now();
         // Throttle UI updates to every ~10 frames to avoid excessive re-renders.

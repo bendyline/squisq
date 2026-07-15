@@ -122,6 +122,60 @@ describe('SeededRandom', () => {
     expect(v).toBeGreaterThanOrEqual(0);
     expect(v).toBeLessThan(1);
   });
+
+  // Mulberry32 wraps its state increment to 32 bits. Omitting the wrap keeps
+  // the state as an ever-growing float; the bitwise ops still coerce mod 2^32
+  // so the output matches — until the state passes 2^53, `+= 0x6d2b79f5`
+  // stops being exact, and the sequence silently drifts from the algorithm.
+  describe('Mulberry32 conformance', () => {
+    /** Reference Mulberry32 with an explicit uint32 state. */
+    function reference(seed: number): () => number {
+      let a = seed >>> 0;
+      if (a === 0) a = 0xdeadbeef;
+      return () => {
+        a = (a + 0x6d2b79f5) >>> 0;
+        let t = a;
+        t = Math.imul(t ^ (t >>> 15), t | 1);
+        t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+        return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+      };
+    }
+
+    it('matches reference Mulberry32 across long streams', () => {
+      for (const seed of [0, 1, 42, 0xdeadbeef, 123456789]) {
+        const rng = new SeededRandom(seed);
+        const ref = reference(seed);
+        // Well past the ~4.9M draw where an unwrapped float state loses
+        // low-bit precision and diverges.
+        for (let i = 0; i < 5_200_000; i++) {
+          if (rng.next() !== ref()) {
+            throw new Error(`seed ${seed} diverged from Mulberry32 at draw ${i}`);
+          }
+        }
+      }
+    });
+
+    it('keeps the state a uint32', () => {
+      const rng = new SeededRandom(42);
+      for (let i = 0; i < 1000; i++) {
+        rng.next();
+        const state = rng.getState();
+        expect(Number.isInteger(state)).toBe(true);
+        expect(state).toBeGreaterThanOrEqual(0);
+        expect(state).toBeLessThanOrEqual(0xffffffff);
+      }
+    });
+
+    it('derive stays keyed to the wrapped state', () => {
+      const a = new SeededRandom(42);
+      const b = new SeededRandom(42);
+      for (let i = 0; i < 10; i++) {
+        a.next();
+        b.next();
+      }
+      expect(a.derive('x').next()).toBe(b.derive('x').next());
+    });
+  });
 });
 
 describe('hashString', () => {

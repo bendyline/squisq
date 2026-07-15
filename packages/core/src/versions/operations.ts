@@ -18,6 +18,7 @@ import type {
   CoalesceOptions,
   PrunePolicy,
   RevertOptions,
+  RevertResult,
   SaveVersionOptions,
   SaveVersionResult,
   Version,
@@ -93,20 +94,36 @@ export async function saveVersion(
 /**
  * Revert the document to a prior snapshot. By default, the *current*
  * document is snapshotted first so the revert is itself recoverable.
+ *
+ * When that snapshot cannot be written, the revert is ABANDONED rather
+ * than performed unrecoverably — losing the current state is a worse
+ * outcome than a revert that didn't happen. Callers that have already
+ * preserved the current state themselves should pass
+ * `snapshotCurrent: false`; callers whose live document lives outside the
+ * container should pass `content` so the right bytes get snapshotted (see
+ * {@link RevertOptions.content}).
  */
 export async function revertToVersion(
   container: ContentContainer,
   version: Version | string,
   options: RevertOptions = {},
-): Promise<{ reverted: boolean; snapshotted: Version | null }> {
+): Promise<RevertResult> {
   const content = await readVersion(container, version);
   if (content === null) {
-    return { reverted: false, snapshotted: null };
+    return { reverted: false, snapshotted: null, reason: 'missing-snapshot' };
   }
 
   let snapshotted: Version | null = null;
   if (options.snapshotCurrent !== false) {
-    const result = await saveVersion(container);
+    const saveOptions: SaveVersionOptions = {};
+    if (options.content !== undefined) saveOptions.content = options.content;
+    if (options.basename !== undefined) saveOptions.basename = options.basename;
+    const result = await saveVersion(container, saveOptions);
+    // `unchanged` means the current state already equals the newest
+    // snapshot, so it remains recoverable — that counts as success.
+    if (!result.saved && result.reason !== 'unchanged') {
+      return { reverted: false, snapshotted: null, reason: 'snapshot-failed' };
+    }
     snapshotted = result.version;
   }
 

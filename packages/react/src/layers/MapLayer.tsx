@@ -14,9 +14,11 @@
 
 import { useId, useState, useEffect } from 'react';
 import type { MapLayer as MapLayerType } from '@bendyline/squisq/schemas';
+import { ResourcePolicyError } from '@bendyline/squisq/markdown';
 import { getAnimationStyle } from '../utils/animationUtils';
 import { resolveValue, getAnchorOffset } from '../utils/layerUtils';
 import { composeMapImage } from '../utils/mapTileUtils';
+import { useMediaUrl, useResourcePolicy } from '../hooks/MediaContext';
 
 interface MapLayerProps {
   layer: MapLayerType;
@@ -34,6 +36,7 @@ export function MapLayer({ layer, basePath, viewport, blockTime }: MapLayerProps
   const [mapImageUrl, setMapImageUrl] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [blockedByPolicy, setBlockedByPolicy] = useState(false);
 
   // Resolve position values to pixels
   const x = resolveValue(position.x, viewport.width);
@@ -46,16 +49,26 @@ export function MapLayer({ layer, basePath, viewport, blockTime }: MapLayerProps
   const finalX = x + offset.x;
   const finalY = y + offset.y;
 
+  // `staticSrc` is document-controlled, so it must travel the same path as
+  // every other media URL: the resource policy governs it (a host rendering
+  // untrusted docs with LOCAL_ONLY blocks remote fetches) and the
+  // MediaProvider resolves container-backed paths (`images/map.png`) to blob
+  // URLs so single-file HTML exports keep working. Blocked URLs resolve to ''.
+  const staticSrc = useMediaUrl(content.staticSrc ?? '', basePath);
+
+  // Tile composition contacts the provider, so it answers to the same policy
+  // as every other document-controlled URL rather than being the one media
+  // path that quietly reaches the network regardless.
+  const resourcePolicy = useResourcePolicy();
+
   // Use static image if provided, otherwise fetch and compose tiles
   useEffect(() => {
     let cancelled = false;
 
     if (content.staticSrc) {
-      // Use pre-rendered static image
-      const src = content.staticSrc.startsWith('http')
-        ? content.staticSrc
-        : `${basePath}/${content.staticSrc}`;
-      setMapImageUrl(src);
+      // An empty resolution means the policy blocked the URL; surface it as a
+      // load failure rather than falling through to composing live tiles.
+      setMapImageUrl(staticSrc || null);
       setIsLoading(false);
       return;
     }
@@ -63,6 +76,7 @@ export function MapLayer({ layer, basePath, viewport, blockTime }: MapLayerProps
     // Compose map from tiles
     setIsLoading(true);
     setError(null);
+    setBlockedByPolicy(false);
 
     composeMapImage({
       center: content.center,
@@ -72,6 +86,7 @@ export function MapLayer({ layer, basePath, viewport, blockTime }: MapLayerProps
       height,
       markers: content.markers,
       showAttribution: content.showAttribution !== false,
+      policy: resourcePolicy,
     })
       .then((dataUrl) => {
         if (!cancelled) {
@@ -81,8 +96,13 @@ export function MapLayer({ layer, basePath, viewport, blockTime }: MapLayerProps
       })
       .catch((err: unknown) => {
         if (!cancelled) {
-          console.error('Failed to compose map:', err);
+          // A policy block is a configuration outcome, not a failure — don't
+          // cry wolf in the host's error console for a document behaving
+          // exactly as the deployer intended.
+          const blocked = err instanceof ResourcePolicyError;
+          if (!blocked) console.error('Failed to compose map:', err);
           setError(err instanceof Error ? err.message : String(err));
+          setBlockedByPolicy(blocked);
           setIsLoading(false);
         }
       });
@@ -95,11 +115,13 @@ export function MapLayer({ layer, basePath, viewport, blockTime }: MapLayerProps
     content.zoom,
     content.style,
     content.staticSrc,
+    staticSrc,
     content.markers,
     content.showAttribution,
     width,
     height,
     basePath,
+    resourcePolicy,
   ]);
 
   // Get animation styles
@@ -137,17 +159,23 @@ export function MapLayer({ layer, basePath, viewport, blockTime }: MapLayerProps
         style={animStyle.style}
         data-layer-id={layer.id}
       >
-        <rect x={finalX} y={finalY} width={width} height={height} fill="#fef2f2" />
+        <rect
+          x={finalX}
+          y={finalY}
+          width={width}
+          height={height}
+          fill={blockedByPolicy ? '#f3f4f6' : '#fef2f2'}
+        />
         <text
           x={finalX + width / 2}
           y={finalY + height / 2}
           textAnchor="middle"
           dominantBaseline="middle"
-          fill="#dc2626"
+          fill={blockedByPolicy ? '#6b7280' : '#dc2626'}
           fontSize="18"
           fontFamily="system-ui, sans-serif"
         >
-          Map failed to load
+          {blockedByPolicy ? 'Map unavailable offline' : 'Map failed to load'}
         </text>
       </g>
     );

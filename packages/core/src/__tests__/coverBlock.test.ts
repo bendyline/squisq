@@ -4,8 +4,12 @@ import {
   expandCoverBlock,
   startBlockToCoverInput,
   fitCoverTitleSize,
+  coverScrimAlphaAtY,
+  COVER_SCRIM_STOPS,
 } from '../doc/templates/coverBlock';
 import { createTemplateContext, DEFAULT_THEME, VIEWPORT_PRESETS } from '../doc/templates/index';
+import { THEMES } from '../schemas/themeLibrary';
+import { contrastRatio } from '../schemas/colorUtils';
 import type { StartBlockConfig } from '../schemas/Doc';
 import type { CoverBlockInput } from '../doc/templates/coverBlock';
 import type { ImageLayer, TextLayer, ShapeLayer } from '../schemas/Doc';
@@ -251,6 +255,160 @@ describe('coverBlock long-title auto-fit', () => {
       'cover-title',
     );
     expect(longTitle!.content.style.fontSize).toBeLessThan(shortTitle!.content.style.fontSize);
+  });
+});
+
+// ── Hero scrim contrast (all built-in themes) ───────────────────────
+
+/** Parse `#rrggbb` into a 0..1 sRGB triplet. */
+function parseHex(hex: string): [number, number, number] {
+  const body = hex.replace('#', '');
+  expect(body).toMatch(/^[0-9a-f]{6}$/i);
+  return [
+    parseInt(body.slice(0, 2), 16) / 255,
+    parseInt(body.slice(2, 4), 16) / 255,
+    parseInt(body.slice(4, 6), 16) / 255,
+  ];
+}
+
+function toHex(rgb: [number, number, number]): string {
+  return (
+    '#' +
+    rgb
+      .map((c) =>
+        Math.max(0, Math.min(255, Math.round(c * 255)))
+          .toString(16)
+          .padStart(2, '0'),
+      )
+      .join('')
+  );
+}
+
+/**
+ * Composite the theme-tinted scrim at opacity `alpha` over an underlying
+ * photo pixel — i.e. what the text actually sits on. `photo` is the extreme
+ * case (pure black / pure white hero), which is what the scrim has to survive.
+ */
+function scrimOver(background: string, photo: string, alpha: number): string {
+  const bg = parseHex(background);
+  const px = parseHex(photo);
+  return toHex([
+    alpha * bg[0] + (1 - alpha) * px[0],
+    alpha * bg[1] + (1 - alpha) * px[1],
+    alpha * bg[2] + (1 - alpha) * px[2],
+  ]);
+}
+
+const PHOTO_EXTREMES = [
+  ['black hero', '#000000'],
+  ['white hero', '#ffffff'],
+] as const;
+
+describe('coverBlock hero scrim contrast', () => {
+  const allThemes = Object.values(THEMES);
+
+  it('covers all 11 built-in themes', () => {
+    expect(allThemes.length).toBe(11);
+  });
+
+  it('scrim is tinted from the theme background, never hard-coded black', () => {
+    for (const theme of allThemes) {
+      const context = createTemplateContext(theme, 0, 1, VIEWPORT_PRESETS.landscape);
+      const gradient = findShape(
+        coverBlock({ heroSrc: 'h.jpg', title: 'T', subtitle: 'S' }, context),
+        'cover-gradient',
+      );
+      const fill = gradient!.content.fill as string;
+      expect(fill).toContain('linear-gradient(0deg');
+
+      // Every stop carries the theme background's own channels.
+      const [r, g, b] = parseHex(theme.colors.background).map((c) => Math.round(c * 255));
+      expect(fill).toContain(`rgba(${r}, ${g}, ${b},`);
+      // The old hard-coded black scrim is gone (unless the theme IS black).
+      if (theme.colors.background.toLowerCase() !== '#000000') {
+        expect(fill).not.toContain('rgba(0,0,0');
+        expect(fill).not.toContain('rgba(0, 0, 0,');
+      }
+    }
+  });
+
+  // The real bug: a black scrim + `theme.colors.text` rendered near-black
+  // title text on a near-black band for every light theme (standard,
+  // minimalist, morning-light). Assert actual WCAG contrast at the position
+  // the text is placed, against the worst hero photo the scrim must survive.
+  it('title text clears WCAG AA against the scrim it sits on, on every theme', () => {
+    for (const theme of allThemes) {
+      const context = createTemplateContext(theme, 0, 1, VIEWPORT_PRESETS.landscape);
+
+      for (const subtitle of [undefined, 'A subtitle']) {
+        const layers = coverBlock({ heroSrc: 'h.jpg', title: 'Title', subtitle }, context);
+        const title = findText(layers, 'cover-title')!;
+        const y = parseFloat(String(title.position.y));
+        const alpha = coverScrimAlphaAtY(y);
+
+        for (const [label, photo] of PHOTO_EXTREMES) {
+          const band = scrimOver(theme.colors.background, photo, alpha);
+          const ratio = contrastRatio(title.content.style.color as string, band);
+          expect(
+            ratio,
+            `${theme.id} title over ${label} at y=${y}% (scrim alpha ${alpha.toFixed(2)}) — got ${ratio.toFixed(2)}`,
+          ).toBeGreaterThanOrEqual(4.5);
+        }
+      }
+    }
+  });
+
+  it('subtitle text clears WCAG AA-large against the scrim it sits on, on every theme', () => {
+    for (const theme of allThemes) {
+      const context = createTemplateContext(theme, 0, 1, VIEWPORT_PRESETS.landscape);
+      const layers = coverBlock({ heroSrc: 'h.jpg', title: 'Title', subtitle: 'Sub' }, context);
+      const subtitle = findText(layers, 'cover-subtitle')!;
+      const y = parseFloat(String(subtitle.position.y));
+      const alpha = coverScrimAlphaAtY(y);
+
+      for (const [label, photo] of PHOTO_EXTREMES) {
+        const band = scrimOver(theme.colors.background, photo, alpha);
+        const ratio = contrastRatio(subtitle.content.style.color as string, band);
+        // The subtitle is large (40px base) muted text; its ceiling is the
+        // theme's own textMuted-on-background ratio (3.79 on morning-light).
+        expect(
+          ratio,
+          `${theme.id} subtitle over ${label} at y=${y}% (scrim alpha ${alpha.toFixed(2)}) — got ${ratio.toFixed(2)}`,
+        ).toBeGreaterThanOrEqual(3);
+      }
+    }
+  });
+
+  it('holds the whole wrapped-title band, not just the anchor line', () => {
+    // A 120px title anchored at 70% can wrap to ~59%–81% of the frame.
+    for (const theme of allThemes) {
+      for (let y = 59; y <= 82; y++) {
+        const alpha = coverScrimAlphaAtY(y);
+        for (const [, photo] of PHOTO_EXTREMES) {
+          const band = scrimOver(theme.colors.background, photo, alpha);
+          const ratio = contrastRatio(theme.colors.text, band);
+          expect(
+            ratio,
+            `${theme.id} title band at y=${y}% — got ${ratio.toFixed(2)}`,
+          ).toBeGreaterThanOrEqual(4.5);
+        }
+      }
+    }
+  });
+
+  it('leaves the top of the hero readable as a photograph', () => {
+    // The scrim must not flatten the image it exists to caption.
+    expect(coverScrimAlphaAtY(0)).toBe(0);
+    expect(coverScrimAlphaAtY(20)).toBeLessThan(0.15);
+    expect(coverScrimAlphaAtY(40)).toBeLessThan(0.5);
+  });
+
+  it('scrim ramp thickens monotonically toward the bottom of the frame', () => {
+    for (let y = 1; y <= 100; y++) {
+      expect(coverScrimAlphaAtY(y)).toBeGreaterThanOrEqual(coverScrimAlphaAtY(y - 1));
+    }
+    // y=100 is the frame's bottom edge — the first stop (pos 0 from bottom).
+    expect(coverScrimAlphaAtY(100)).toBeCloseTo(COVER_SCRIM_STOPS[0].alpha);
   });
 });
 

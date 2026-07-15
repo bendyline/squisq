@@ -500,6 +500,11 @@ const PASSTHROUGH_ATTRS: Record<string, string> = {
   rel: 'rel',
 };
 
+/** Link targets that reuse an existing browsing context, so carry no
+ *  `window.opener` exposure and need no `rel="noopener"`. An empty target is
+ *  equivalent to `_self`. */
+const RE_USED_TARGETS = new Set(['', '_self', '_parent', '_top']);
+
 function reactPropsFromAttrs(
   attrs: Record<string, string>,
   ctx: RenderCtx,
@@ -527,6 +532,22 @@ function reactPropsFromAttrs(
     }
     out[propName] = value;
   }
+
+  // A target that opens a NEW browsing context (`_blank`, or any named frame
+  // that does not yet exist) hands the destination a live `window.opener`
+  // handle to this page unless `noopener` is set — the classic
+  // reverse-tabnabbing vector. Markdown-native links hardcode
+  // `rel="noopener noreferrer"`; authored raw HTML must not be able to opt out.
+  // `_self`/`_parent`/`_top` reuse an existing context and are unaffected.
+  // Only `noopener` is forced: `noreferrer` is a privacy choice that stays the
+  // author's, and an explicit `opener` token is dropped as it contradicts.
+  if (typeof out.target === 'string' && !RE_USED_TARGETS.has(out.target.toLowerCase())) {
+    const rel = typeof out.rel === 'string' ? out.rel : '';
+    const tokens = rel.split(/\s+/).filter((t) => t && t.toLowerCase() !== 'opener');
+    if (!tokens.some((t) => t.toLowerCase() === 'noopener')) tokens.push('noopener');
+    out.rel = tokens.join(' ');
+  }
+
   return out;
 }
 

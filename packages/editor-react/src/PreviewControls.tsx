@@ -26,13 +26,19 @@ import { createPortal } from 'react-dom';
 import type { DisplayMode, CaptionStyle } from '@bendyline/squisq-react';
 import type { ViewportPreset, ViewportConfig } from '@bendyline/squisq/schemas';
 import { VIEWPORT_PRESETS, getThemeSummaries } from '@bendyline/squisq/schemas';
-import type { Theme } from '@bendyline/squisq/schemas';
+import type { CustomTemplateDefinition, Theme } from '@bendyline/squisq/schemas';
 import { ThemePicker } from './ThemePicker';
 import { getTransformStyleSummaries } from '@bendyline/squisq/transform';
 import type { Doc } from '@bendyline/squisq/schemas';
-import { readFrontmatterThemeId, setFrontmatterValues } from '@bendyline/squisq/markdown';
+import {
+  parseMarkdown,
+  readFrontmatterThemeId,
+  setFrontmatterValues,
+} from '@bendyline/squisq/markdown';
 import {
   resolveThemeForDoc,
+  readCustomThemesFromFrontmatter,
+  readCustomTemplatesFromFrontmatter,
   writeCustomThemesToFrontmatter,
   writeCustomTemplatesToFrontmatter,
   FRONTMATTER_CUSTOM_THEMES_KEY,
@@ -90,6 +96,13 @@ export interface PreviewSettings {
   /** Config for the docked theme designer, or null when closed. Rendered by
    *  `<ThemeDesignerDock>` in the editor's content row. */
   themeDesigner: ThemeDesignerConfig | null;
+  /**
+   * Set when a theme write was ABORTED because the document source could not
+   * be read. The write is skipped rather than merged onto an empty list (which
+   * would erase the doc's other custom themes/templates), so this must be
+   * shown — otherwise the save looks like a silent no-op.
+   */
+  themeSaveError: string | null;
 }
 
 /** Everything `<ThemeDesignerDock>` needs to render the designer pane. */
@@ -212,6 +225,47 @@ function readFrontmatterKey(
   return Object.prototype.hasOwnProperty.call(fm, canonical) ? fm[canonical] : fm[legacy];
 }
 
+/** The doc's persisted custom themes + templates, read from live markdown. */
+interface DocCustoms {
+  themes: Theme[];
+  templates: CustomTemplateDefinition[];
+}
+
+/**
+ * Read the document's custom themes + templates from the AUTHORITATIVE
+ * markdown source.
+ *
+ * Any write that REPLACES the whole `squisq-custom-themes` /
+ * `squisq-custom-templates` frontmatter key must merge onto what is in the
+ * source right now — never onto the parsed `Doc`. `Doc` is 150ms debounced
+ * and is set to `null` whenever the source fails to parse, so merging onto
+ * it drops every theme/template authored since the last successful parse
+ * (or, when `doc === null`, ALL of them). Reading the same source we are
+ * about to rewrite closes that window.
+ *
+ * Returns `null` when the source cannot be read at all (parse failure, size
+ * limits) — callers MUST abort rather than fall back to an empty list, which
+ * would erase the keys they are merging into.
+ */
+function readDocCustomsFromSource(source: string): DocCustoms | null {
+  try {
+    const frontmatter = parseMarkdown(source).frontmatter;
+    return {
+      themes: readCustomThemesFromFrontmatter(frontmatter) ?? [],
+      templates: readCustomTemplatesFromFrontmatter(frontmatter) ?? [],
+    };
+  } catch (err: unknown) {
+    console.error(
+      '[squisq-editor] could not read the document source to merge custom themes:',
+      err instanceof Error ? err.message : String(err),
+    );
+    return null;
+  }
+}
+
+const THEME_WRITE_ABORTED =
+  'Could not read the document, so the theme was not saved (saving would have erased the document’s other custom themes). Fix the document, then try again.';
+
 export function PreviewSettingsProvider({
   doc,
   children,
@@ -279,6 +333,7 @@ export function PreviewSettingsProvider({
   // In-progress theme from the designer dialog; previews live without mutating
   // the doc until the user saves.
   const [previewTheme, setPreviewTheme] = useState<Theme | null>(null);
+  const [themeSaveError, setThemeSaveError] = useState<string | null>(null);
   const [designer, setDesigner] = useState<{ open: boolean; editing: Theme | null }>({
     open: false,
     editing: null,
@@ -290,10 +345,11 @@ export function PreviewSettingsProvider({
   const activeTheme = previewTheme ?? themeOverride ?? resolvedTheme;
   const handleSetThemeId = useCallback(
     (id: string | null) => {
-      setSelectedThemeId(id);
-      if (id === null) return;
+      if (id === null) {
+        setSelectedThemeId(null);
+        return;
+      }
       const selectedCustom = customThemes.find((theme) => theme.id === id);
-      const alreadyDocScoped = docThemes.some((theme) => theme.id === id);
       const updates: Record<string, string | null> = {
         [FRONTMATTER_SETTING_KEYS.theme.canonical]: omitFrontmatterDefault(
           id,
@@ -302,22 +358,36 @@ export function PreviewSettingsProvider({
         [FRONTMATTER_SETTING_KEYS.theme.legacy[0]]: null,
         [FRONTMATTER_SETTING_KEYS.theme.legacy[1]]: null,
       };
-      if (selectedCustom && !alreadyDocScoped) {
-        updates[FRONTMATTER_CUSTOM_THEMES_KEY] =
-          writeCustomThemesToFrontmatter([...docThemes, selectedCustom]) ?? null;
+      // A built-in selection only writes the id — nothing to merge, so it can
+      // never clobber the custom-themes key. Copying a library theme into the
+      // doc rewrites that key wholesale, so it must merge onto the live source.
+      if (selectedCustom) {
+        const existing = readDocCustomsFromSource(markdownSource);
+        if (!existing) {
+          setThemeSaveError(THEME_WRITE_ABORTED);
+          return;
+        }
+        if (!existing.themes.some((theme) => theme.id === id)) {
+          updates[FRONTMATTER_CUSTOM_THEMES_KEY] =
+            writeCustomThemesToFrontmatter([...existing.themes, selectedCustom]) ?? null;
+        }
       }
+      setThemeSaveError(null);
+      setSelectedThemeId(id);
       persistFrontmatter(updates);
     },
-    [customThemes, docThemes, persistFrontmatter],
+    [customThemes, markdownSource, persistFrontmatter],
   );
 
   const openThemeDesigner = useCallback((theme: Theme | null) => {
     setDesigner({ open: true, editing: theme });
     setPreviewTheme(theme);
+    setThemeSaveError(null);
   }, []);
   const closeThemeDesigner = useCallback(() => {
     setDesigner({ open: false, editing: null });
     setPreviewTheme(null);
+    setThemeSaveError(null);
   }, []);
   const handleDesignerSave = useCallback(
     (theme: Theme, target: ThemeSaveTarget, extras?: ThemeSaveExtras) => {
@@ -329,29 +399,42 @@ export function PreviewSettingsProvider({
         // templates in a SINGLE frontmatter update. Separate
         // `setMarkdownSource` calls would each derive from the same stale
         // source, so later writes would clobber earlier ones.
-        const docThemes = custom?.docThemes ?? [];
-        const idx = docThemes.findIndex((t) => t.id === theme.id);
+        //
+        // Both keys are REPLACED wholesale, so the lists we merge into must
+        // come from the live source: the parsed `doc` lags the source by the
+        // parse debounce and is null outright while the source doesn't parse,
+        // either of which would silently erase the other themes/templates.
+        const existing = readDocCustomsFromSource(markdownSource);
+        if (!existing) {
+          // Abort with the designer still open: the user's draft survives and
+          // nothing destructive reaches the document.
+          setThemeSaveError(THEME_WRITE_ABORTED);
+          return;
+        }
+        const idx = existing.themes.findIndex((t) => t.id === theme.id);
         const nextThemes =
-          idx >= 0 ? docThemes.map((t, i) => (i === idx ? theme : t)) : [...docThemes, theme];
+          idx >= 0
+            ? existing.themes.map((t, i) => (i === idx ? theme : t))
+            : [...existing.themes, theme];
         const updates: Record<string, string | null> = {
           [FRONTMATTER_CUSTOM_THEMES_KEY]: writeCustomThemesToFrontmatter(nextThemes) ?? null,
           [FRONTMATTER_SETTING_KEYS.theme.canonical]: theme.id,
         };
         if (extras?.templates && extras.templates.length > 0) {
-          const existing = doc?.customTemplates ?? [];
           const merged = [
-            ...existing.filter((t) => !extras.templates!.some((n) => n.name === t.name)),
+            ...existing.templates.filter((t) => !extras.templates!.some((n) => n.name === t.name)),
             ...extras.templates,
           ];
           updates[FRONTMATTER_CUSTOM_TEMPLATES_KEY] =
             writeCustomTemplatesToFrontmatter(merged) ?? null;
         }
+        setThemeSaveError(null);
         persistFrontmatter(updates);
         setSelectedThemeId(theme.id);
       }
       closeThemeDesigner();
     },
-    [custom, doc, persistFrontmatter, closeThemeDesigner],
+    [custom, markdownSource, persistFrontmatter, closeThemeDesigner],
   );
   const deleteCustomTheme = useCallback(
     (id: string) => {
@@ -497,6 +580,7 @@ export function PreviewSettingsProvider({
       openThemeDesigner,
       deleteCustomTheme,
       themeDesigner,
+      themeSaveError,
     }),
     [
       activePreset,
@@ -516,6 +600,7 @@ export function PreviewSettingsProvider({
       openThemeDesigner,
       deleteCustomTheme,
       themeDesigner,
+      themeSaveError,
     ],
   );
 
@@ -531,15 +616,24 @@ export function PreviewSettingsProvider({
  * closed. Must be mounted inside a `PreviewSettingsProvider`.
  */
 export function ThemeDesignerDock() {
-  const { themeDesigner } = usePreviewSettings();
+  const { themeDesigner, themeSaveError } = usePreviewSettings();
   if (!themeDesigner) return null;
   return (
-    <CustomThemeDialog
-      value={themeDesigner.value}
-      onChange={themeDesigner.onChange}
-      onSave={themeDesigner.onSave}
-      onClose={themeDesigner.onClose}
-    />
+    <>
+      {/* An aborted save keeps the designer open with the draft intact; the
+          banner explains why nothing was written. */}
+      {themeSaveError && (
+        <div className="squisq-theme-save-error" role="alert" style={themeSaveErrorStyle}>
+          {themeSaveError}
+        </div>
+      )}
+      <CustomThemeDialog
+        value={themeDesigner.value}
+        onChange={themeDesigner.onChange}
+        onSave={themeDesigner.onSave}
+        onClose={themeDesigner.onClose}
+      />
+    </>
   );
 }
 
@@ -652,6 +746,15 @@ const labelStyle: React.CSSProperties = {
   color: 'var(--squisq-text-muted, #6b7280)',
   fontSize: '12px',
   whiteSpace: 'nowrap',
+};
+
+const themeSaveErrorStyle: React.CSSProperties = {
+  padding: '8px 10px',
+  border: '1px solid var(--squisq-danger-border, #d88a8a)',
+  background: 'var(--squisq-danger-bg, #fceeee)',
+  color: 'var(--squisq-danger-text, #8c2a2a)',
+  fontSize: '12px',
+  maxWidth: '320px',
 };
 
 const selectStyle: React.CSSProperties = {
@@ -844,6 +947,18 @@ export function PreviewToolbarControls() {
                 <path d="M9.5 4.5l2 2" />
               </svg>
             </button>
+            {/* Copying a library theme into the doc can abort (unreadable
+                source). Surface it here — the designer isn't open on this path. */}
+            {s.themeSaveError && (
+              <span
+                className="squisq-theme-save-error"
+                role="alert"
+                title={s.themeSaveError}
+                style={{ color: 'var(--squisq-danger-text, #8c2a2a)', fontSize: '12px' }}
+              >
+                ⚠ Theme not saved
+              </span>
+            )}
           </div>
         );
       case 'transform':

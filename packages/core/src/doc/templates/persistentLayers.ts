@@ -222,28 +222,42 @@ function expandTitleCaption(config: TitleCaptionConfig): Layer[] {
 
   // Even padding around the pill (3% from edges)
   const pad = 3; // percent
+  const thumbPad = 1.5; // padding inside pill around thumbnail (percent)
 
   // Pill dimensions — taller when subtitle present
   const pillHeight = hasSubtitle ? '15%' : '7%';
   // Position above player controls
   const bgYPos = isBottom ? (hasSubtitle ? '78%' : '84%') : '2%';
-  const bgXPos = isLeft ? `${pad}%` : '68%';
+
+  // Horizontal geometry is derived from ONE pill rect so both sides stay
+  // coherent. Everything else (thumbnail, text box) is placed relative to
+  // `pillX`/`pillW` rather than re-deriving edges from literals: a
+  // right-positioned caption used to draw the pill at 68%–96% while the text
+  // was still hard-coded to the left-edge offset (4.5%), so the title floated
+  // over the slide with no backing and the pill sat empty. Mirroring the pill
+  // around the same `pad` also keeps the right thumbnail inside it (it used to
+  // sit at 93%+6% = 99%, overhanging the pill's 98% edge).
+  const pillW = config.showThumbnail ? 30 : 28;
+  const pillX = isLeft ? pad : 100 - pad - pillW;
+  const bgXPos = `${pillX}%`;
 
   // Thumbnail sizing — use different width/height to appear square in 16:9 viewport
   // In 16:9, 6% of width ≈ 10.7% of height in pixels, so use ~6%w x 10%h for visual square
-  const thumbW = hasSubtitle ? '6%' : '5%';
+  const thumbWNum = hasSubtitle ? 6 : 5;
+  const thumbW = `${thumbWNum}%`;
   const thumbH = hasSubtitle ? '10%' : '5%';
-  const thumbPad = 1.5; // padding inside pill around thumbnail (percent)
 
-  // Text X offset: after thumbnail + padding, or just pill padding
-  const textX =
-    config.showThumbnail && isLeft
-      ? `${pad + thumbPad + 6 + thumbPad}%` // pill edge + thumb padding + thumb width + gap
-      : `${pad + thumbPad}%`;
-  // Text area width: pill width minus thumbnail area minus padding
+  // The pill's inner box, inset by `thumbPad` on both sides.
+  const innerX = pillX + thumbPad;
+  const innerW = pillW - thumbPad * 2;
+
+  // The thumbnail hugs the pill's OUTER edge (left edge on the left, right
+  // edge on the right) and the text takes the remaining inner width on the
+  // other side, so text always reads away from the slide's frame.
+  const textX = config.showThumbnail && isLeft ? `${innerX + thumbWNum + thumbPad}%` : `${innerX}%`;
   const textWidth = config.showThumbnail
-    ? '19%' // narrower when thumbnail takes space
-    : '24%';
+    ? `${innerW - thumbWNum - thumbPad}%` // narrower when thumbnail takes space
+    : `${innerW}%`;
 
   // Title Y: top of text area inside pill
   const titleYPos = isBottom ? (hasSubtitle ? '80%' : '86%') : '4%';
@@ -260,14 +274,14 @@ function expandTitleCaption(config: TitleCaptionConfig): Layer[] {
     position: {
       x: bgXPos,
       y: bgYPos,
-      width: config.showThumbnail ? '30%' : '28%',
+      width: `${pillW}%`,
       height: pillHeight,
     },
   });
 
   // Thumbnail if configured
   if (config.showThumbnail && config.thumbnailSrc) {
-    const thumbX = isLeft ? `${pad + thumbPad}%` : '93%';
+    const thumbX = isLeft ? `${innerX}%` : `${pillX + pillW - thumbPad - thumbWNum}%`;
     // Center thumbnail vertically in pill
     const thumbY = isBottom ? (hasSubtitle ? `${78 + thumbPad}%` : '85%') : '3%';
 

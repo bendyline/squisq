@@ -242,13 +242,21 @@ export function defaultFormats(): FormatDefinition[] {
       const { markdownDocToPdf } = await import('../pdf/index.js');
       const raw = optionsFor(options, 'pdf');
       const markdownDoc = await markdownOf(input);
+      // PDF export substitutes characters the standard-14 fonts can't encode
+      // (emoji/CJK/Cyrillic/…) rather than failing. Route that note into the
+      // structured warnings channel instead of letting it hit console.warn.
+      const pdfWarnings: string[] = [];
       const buf = await markdownDocToPdf(markdownDoc, {
         ...raw,
         ...(options.title !== undefined ? { title: options.title } : {}),
         themeId: resolveThemeId(input, options),
         themeRegistry: options.themeRegistry ?? raw.themeRegistry,
+        onWarning: (message) => pdfWarnings.push(message),
       });
-      return ok(await toBytes(buf), MIME.pdf, markdownFidelityWarnings(markdownDoc, 'pdf'));
+      return ok(await toBytes(buf), MIME.pdf, [
+        ...markdownFidelityWarnings(markdownDoc, 'pdf'),
+        ...pdfWarnings,
+      ]);
     },
   };
 

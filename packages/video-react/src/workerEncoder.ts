@@ -113,6 +113,7 @@ export function createWorkerEncoder(
     height: config.height,
     fps: config.fps,
     quality: config.quality,
+    ...(config.totalFrames !== undefined ? { totalFrames: config.totalFrames } : {}),
     ...(config.ffmpegWasm ? { ffmpegWasm: config.ffmpegWasm } : {}),
   });
 

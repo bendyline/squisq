@@ -17,9 +17,22 @@ import type { RefObject } from 'react';
 import type { AudioTrack } from '@bendyline/squisq/schemas';
 import { fetchResourceBytes, isResourceUrlAllowed } from '@bendyline/squisq/markdown';
 import type { AudioController } from './AudioController';
+import { calculateSegmentTiming, findSegmentAtTime } from './AudioController';
 import { useResourcePolicy } from './MediaContext';
 
 export type AudioSyncMode = 'media' | 'synthetic';
+
+/**
+ * Backstop for a cross-segment seek whose completion is driven by media events.
+ * `applyPendingSeek` normally settles the promise on `canplay` (or an immediate
+ * `readyState` check), and load failures settle it explicitly — but a media
+ * element that never reports either state must not strand `await seekTo(...)`
+ * (and therefore `restart()`) forever. The blob is fully fetched before the src
+ * is assigned, so a healthy decode is near-instant and never reaches this.
+ */
+const SEEK_COMPLETION_TIMEOUT_MS = 15_000;
+
+const UNLOADABLE_MESSAGE = 'Audio could not be loaded. Check that the media file is available.';
 
 function resolveAudioUrl(src: string, basePath: string): string {
   // Preserve absolute/protocol-relative/data/blob URLs. Prefixing an absolute
@@ -62,6 +75,22 @@ export function useAudioSync(
   const activeSegmentSrc = useRef<string | undefined>(undefined);
   activeSegmentSrc.current = audioTrack?.segments[currentSegment]?.src;
 
+  // Which segment the <audio> element is currently bound to, and the URL that
+  // was actually assigned (read back post-assignment so it is comparable to the
+  // element's own resolved `src`). Identity here is exact: matching the segment
+  // key by URL suffix instead would let `1.mp3` claim a loaded `.../11.mp3`,
+  // skip the load, and seek inside the wrong file.
+  const boundSource = useRef<{ key: string; url: string } | null>(null);
+
+  // `seekTo` and `play` are awaited across state commits, so a caller can still
+  // hold a callback captured before the segment changed (`restart` awaits
+  // `seekTo` and then calls the `play` from that same render). Reading the live
+  // segment from a ref keeps a stale closure from mistaking an already-applied
+  // switch for a new one — which would set a pending seek that no effect ever
+  // consumes, hanging the returned promise.
+  const currentSegmentRef = useRef(0);
+  currentSegmentRef.current = currentSegment;
+
   // Fallback timer: when audio.play() is blocked (e.g., autoplay policy),
   // advance currentTime synthetically so blocks still progress without audio.
   const fallbackMode = useRef(false);
@@ -73,6 +102,9 @@ export function useAudioSync(
     pendingSeekCompletion.current = null;
     shouldPlayAfterLoad.current = false;
     fallbackMode.current = false;
+    // The previous track's blob URLs are revoked by the cleanup below, so any
+    // binding to them is stale — a new track reusing a segment name must load.
+    boundSource.current = null;
     setCurrentTime(0);
     setCurrentSegment(0);
     setIsPlaying(false);
@@ -87,13 +119,9 @@ export function useAudioSync(
       return;
     }
 
-    let time = 0;
-    segmentStarts.current = audioTrack.segments.map((seg) => {
-      const start = time;
-      time += seg.duration;
-      return start;
-    });
-    setTotalDuration(time);
+    const timing = calculateSegmentTiming(audioTrack.segments);
+    segmentStarts.current = timing.segmentStarts;
+    setTotalDuration(timing.totalDuration);
     if (mode === 'synthetic') setIsAudioReady(true);
   }, [audioTrack, enabled, mode]);
 
@@ -228,7 +256,16 @@ export function useAudioSync(
       setIsAudioReady(true);
       setIsPlaying(false);
       setIsAvailable(false);
-      setUnavailableMessage('Audio could not be loaded. Check that the media file is available.');
+      setUnavailableMessage(UNLOADABLE_MESSAGE);
+      // A source that errors will never reach `canplay`, so any seek awaiting
+      // this segment's load has to be settled here or it hangs forever.
+      shouldPlayAfterLoad.current = false;
+      if (pendingSeekTime.current !== null) {
+        setCurrentTime(pendingSeekTime.current);
+        pendingSeekTime.current = null;
+      }
+      pendingSeekCompletion.current?.();
+      pendingSeekCompletion.current = null;
     };
     const handleEnded = () => {
       // Move to next segment or end
@@ -293,12 +330,13 @@ export function useAudioSync(
       }
     };
 
-    // Check if we're already on this source (avoid unnecessary reload)
-    // For blob URLs, check by segment src key
+    // Check if we're already on this source (avoid unnecessary reload).
+    // Both the segment key and the assigned URL must match: the key alone would
+    // go stale if the element's src were swapped elsewhere, and the URL alone
+    // cannot distinguish two segments that resolve to the same file.
     const currentSrc = audio.src;
-    const cachedBlobUrl = blobUrls.current.get(segment.src);
-    const isSameSource =
-      currentSrc && (currentSrc === cachedBlobUrl || currentSrc.endsWith(segment.src));
+    const bound = boundSource.current;
+    const isSameSource = !!currentSrc && bound?.key === segment.src && bound.url === currentSrc;
 
     let cancelled = false;
     let handleCanPlay: (() => void) | null = null;
@@ -309,6 +347,31 @@ export function useAudioSync(
         const blobUrl = await preloadAudio(segment.src);
         if (cancelled) return;
 
+        if (!blobUrl) {
+          // Policy-blocked or failed fetch: there is no source to hand the
+          // element, so `canplay` will never fire. Detach any stale source (a
+          // previous segment must not play in this one's place) and settle the
+          // pending seek here — otherwise `await seekTo(...)` never returns and
+          // `restart()` is dead for the rest of the session.
+          audio.removeAttribute('src');
+          audio.load();
+          boundSource.current = null;
+          shouldPlayAfterLoad.current = false;
+          setIsAudioReady(true);
+          setIsPlaying(false);
+          setIsAvailable(false);
+          setUnavailableMessage(UNLOADABLE_MESSAGE);
+          if (pendingSeekTime.current !== null) {
+            // Keep the reported position where the caller asked for it; only
+            // the audio is missing, and block timing still drives the doc.
+            setCurrentTime(pendingSeekTime.current);
+            pendingSeekTime.current = null;
+          }
+          pendingSeekCompletion.current?.();
+          pendingSeekCompletion.current = null;
+          return;
+        }
+
         handleCanPlay = () => {
           if (cancelled) return;
           setIsAudioReady(true);
@@ -318,6 +381,9 @@ export function useAudioSync(
 
         audio.addEventListener('canplay', handleCanPlay);
         audio.src = blobUrl;
+        // Read the src back: the element resolves a relative URL to an absolute
+        // one, and the comparison above is against that resolved form.
+        boundSource.current = { key: segment.src, url: audio.src };
         audio.load();
 
         // If audio is already ready (blob is instant), canplay might not fire
@@ -342,6 +408,82 @@ export function useAudioSync(
     };
   }, [audioRef, currentSegment, audioTrack, preloadAudio, enabled, mode]);
 
+  const seekTo = useCallback(
+    async (time: number): Promise<void> => {
+      const audio = audioRef.current;
+      if (!audioTrack?.segments) return;
+
+      // Clamp time to valid range.
+      // When totalDuration is 0 (no audio segments), don't clamp — allow
+      // seeking by block timing alone (used in render mode / preview).
+      const clampedTime =
+        totalDuration > 0 ? Math.max(0, Math.min(time, totalDuration)) : Math.max(0, time);
+
+      // Find which segment this time falls into. `segmentStarts.current` is
+      // populated by the track effect; fall back to deriving the starts when it
+      // has not been (the hook is disabled, so the effect cleared the ref while
+      // seeking by block timing alone stays supported).
+      const starts =
+        segmentStarts.current.length === audioTrack.segments.length
+          ? segmentStarts.current
+          : calculateSegmentTiming(audioTrack.segments).segmentStarts;
+      const { segmentIndex, segmentStart } = findSegmentAtTime(
+        clampedTime,
+        audioTrack.segments,
+        starts,
+      );
+
+      const wasPlaying = mode === 'synthetic' ? isPlaying : !audio?.paused;
+      setIsEnded(false);
+
+      if (!audio && mode === 'media') {
+        setCurrentSegment(segmentIndex);
+        setCurrentTime(clampedTime);
+        return;
+      }
+
+      // Check if we need to switch segments
+      if (segmentIndex !== currentSegmentRef.current) {
+        // Store pending seek time - will be applied after segment loads
+        pendingSeekTime.current = clampedTime;
+        shouldPlayAfterLoad.current = wasPlaying;
+        const completion = new Promise<void>((resolve) => {
+          pendingSeekCompletion.current?.();
+          // Resolve (never reject) so callers such as `restart` — which awaits
+          // this seek and then plays — still make progress when the segment
+          // cannot load. A rejection here would surface as an unhandled
+          // rejection in every fire-and-forget `seekTo(...)` call site.
+          let settled = false;
+          const settle = () => {
+            if (settled) return;
+            settled = true;
+            clearTimeout(timer);
+            if (pendingSeekCompletion.current === settle) pendingSeekCompletion.current = null;
+            resolve();
+          };
+          const timer = setTimeout(settle, SEEK_COMPLETION_TIMEOUT_MS);
+          pendingSeekCompletion.current = settle;
+        });
+        setCurrentSegment(segmentIndex);
+        if (mode === 'synthetic') {
+          setCurrentTime(clampedTime);
+          pendingSeekTime.current = null;
+          pendingSeekCompletion.current?.();
+          pendingSeekCompletion.current = null;
+        }
+        await completion;
+      } else {
+        // Same segment - seek directly
+        const segmentTime = clampedTime - segmentStart;
+        if (audio && mode === 'media') audio.currentTime = Math.max(0, segmentTime);
+        setCurrentTime(clampedTime);
+      }
+    },
+    [audioRef, audioTrack, isPlaying, mode, totalDuration],
+  );
+
+  // Declared after `seekTo` because replaying an ended track must route through
+  // it (see below), and the dependency array is evaluated during render.
   const play = useCallback(async () => {
     if (mode === 'synthetic') {
       fallbackMode.current = true;
@@ -351,9 +493,14 @@ export function useAudioSync(
     const audio = audioRef.current;
     if (audio) {
       if (isEnded) {
-        // Restart from beginning
-        setCurrentSegment(0);
-        setIsEnded(false);
+        // Rewind through the seek machinery rather than just resetting segment
+        // state. `setCurrentSegment(0)` does not touch `audio.src` — React has
+        // not re-rendered yet — so playing here would blip the LAST segment,
+        // and the load effect would then swap the src with no pending seek and
+        // no play-after-load flag, stalling with `isPlaying` stuck true.
+        // `seekTo` owns the src swap, the seek, and the resume. This mirrors
+        // `restart`, which has always been correct for exactly this reason.
+        await seekTo(0);
       }
       try {
         await audio.play();
@@ -372,7 +519,7 @@ export function useAudioSync(
         }
       }
     }
-  }, [audioRef, isEnded, mode]);
+  }, [audioRef, isEnded, mode, seekTo]);
 
   const pause = useCallback(() => {
     const audio = audioRef.current;
@@ -396,69 +543,6 @@ export function useAudioSync(
       pause();
     }
   }, [audioRef, isPlaying, mode, play, pause]);
-
-  const seekTo = useCallback(
-    async (time: number): Promise<void> => {
-      const audio = audioRef.current;
-      if (!audioTrack?.segments) return;
-
-      // Clamp time to valid range.
-      // When totalDuration is 0 (no audio segments), don't clamp — allow
-      // seeking by block timing alone (used in render mode / preview).
-      const clampedTime =
-        totalDuration > 0 ? Math.max(0, Math.min(time, totalDuration)) : Math.max(0, time);
-
-      // Find which segment this time falls into
-      let segmentIndex = 0;
-      let segmentStart = 0;
-      for (let i = 0; i < audioTrack.segments.length; i++) {
-        const segEnd = segmentStart + audioTrack.segments[i].duration;
-        if (clampedTime < segEnd) {
-          segmentIndex = i;
-          break;
-        }
-        segmentStart = segEnd;
-        // Handle edge case: time exactly at end goes to last segment
-        if (i === audioTrack.segments.length - 1) {
-          segmentIndex = i;
-        }
-      }
-
-      const wasPlaying = mode === 'synthetic' ? isPlaying : !audio?.paused;
-      setIsEnded(false);
-
-      if (!audio && mode === 'media') {
-        setCurrentSegment(segmentIndex);
-        setCurrentTime(clampedTime);
-        return;
-      }
-
-      // Check if we need to switch segments
-      if (segmentIndex !== currentSegment) {
-        // Store pending seek time - will be applied after segment loads
-        pendingSeekTime.current = clampedTime;
-        shouldPlayAfterLoad.current = wasPlaying;
-        const completion = new Promise<void>((resolve) => {
-          pendingSeekCompletion.current?.();
-          pendingSeekCompletion.current = resolve;
-        });
-        setCurrentSegment(segmentIndex);
-        if (mode === 'synthetic') {
-          setCurrentTime(clampedTime);
-          pendingSeekTime.current = null;
-          pendingSeekCompletion.current?.();
-          pendingSeekCompletion.current = null;
-        }
-        await completion;
-      } else {
-        // Same segment - seek directly
-        const segmentTime = clampedTime - segmentStart;
-        if (audio && mode === 'media') audio.currentTime = Math.max(0, segmentTime);
-        setCurrentTime(clampedTime);
-      }
-    },
-    [audioRef, audioTrack, currentSegment, isPlaying, mode, totalDuration],
-  );
 
   const skipToSegment = useCallback(
     (index: number) => {

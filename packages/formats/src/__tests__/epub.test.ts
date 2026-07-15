@@ -612,6 +612,77 @@ describe('markdownDocToEpub', () => {
       expect(opf).toContain('media:active-class');
     });
 
+    // ── Regression: dangling SMIL fragment references ──────────────
+    //
+    // blockToXhtml used to consume an ID before its switch, but nodes that
+    // render to '' (footnoteDefinition, containerDirective, …) never emit it.
+    // generateSmil counted those nodes anyway, so it produced <text src="…#pN"/>
+    // pointing at IDs present nowhere in the XHTML — which fails epubcheck.
+
+    /** Every `#fragment` a chapter's SMIL references. */
+    async function smilFragments(zip: JSZip, chapter: string): Promise<string[]> {
+      const smil = await zip.file(`OEBPS/chapters/${chapter}.smil`)!.async('string');
+      const xml = new DOMParser().parseFromString(smil, 'application/xml');
+      expect(xml.querySelector('parsererror')).toBeNull();
+      return [...xml.getElementsByTagName('text')]
+        .map((el) => el.getAttribute('src') ?? '')
+        .map((src) => src.split('#')[1] ?? '');
+    }
+
+    /** Every element id present in a chapter's XHTML. */
+    async function xhtmlIds(zip: JSZip, chapter: string): Promise<string[]> {
+      const xhtml = await zip.file(`OEBPS/chapters/${chapter}.xhtml`)!.async('string');
+      const dom = new DOMParser().parseFromString(xhtml, 'application/xhtml+xml');
+      expect(dom.querySelector('parsererror')).toBeNull();
+      return [...dom.querySelectorAll('[id]')].map((el) => el.getAttribute('id')!);
+    }
+
+    it('emits no SMIL reference to a nonexistent id when a block renders nothing', async () => {
+      // footnoteDefinition hits blockToXhtml's `default:` → renders ''.
+      const doc = makeDoc([
+        heading(1, 'Intro'),
+        paragraph('Visible text'),
+        {
+          type: 'footnoteDefinition',
+          identifier: 'fn1',
+          label: 'fn1',
+          children: [paragraph('A footnote body.')],
+        },
+        paragraph('More visible text'),
+      ]);
+      const zip = await exportAndUnzip(doc, {
+        audio: new Map([['audio/intro.mp3', audioData]]),
+        audioSegments: [audioSegments[0]],
+        totalDuration: 15,
+      });
+
+      const ids = await xhtmlIds(zip, 'chapter-001');
+      const fragments = await smilFragments(zip, 'chapter-001');
+
+      expect(fragments.length).toBeGreaterThan(0);
+      // EVERY fragment must resolve to a real element.
+      for (const fragment of fragments) expect(ids).toContain(fragment);
+    });
+
+    it('keeps SMIL fragments resolvable for nested blockquote content', async () => {
+      const doc = makeDoc([
+        heading(1, 'Intro'),
+        { type: 'blockquote', children: [paragraph('Quoted line')] },
+        { type: 'footnoteDefinition', identifier: 'x', label: 'x', children: [paragraph('note')] },
+        paragraph('Tail'),
+      ]);
+      const zip = await exportAndUnzip(doc, {
+        audio: new Map([['audio/intro.mp3', audioData]]),
+        audioSegments: [audioSegments[0]],
+        totalDuration: 15,
+      });
+
+      const ids = await xhtmlIds(zip, 'chapter-001');
+      for (const fragment of await smilFragments(zip, 'chapter-001')) {
+        expect(ids).toContain(fragment);
+      }
+    });
+
     it('chapter XHTML has element IDs for SMIL references', async () => {
       const doc = makeDoc([heading(1, 'Title'), paragraph('First'), paragraph('Second')]);
       const zip = await exportAndUnzip(doc, {
@@ -644,6 +715,35 @@ describe('markdownDocToEpub', () => {
       // No audio directory
       const audioDir = Object.keys(zip.files).filter((f) => f.startsWith('OEBPS/audio/'));
       expect(audioDir).toHaveLength(0);
+    });
+  });
+
+  // ── Regression: colliding OPF manifest ids ────────────────────────
+  describe('manifest id uniqueness', () => {
+    it('gives distinct manifest ids to filenames that sanitize identically', async () => {
+      // `photo-1.png` and `photo 1.png` both squash to `img-photo-1-png`,
+      // producing a duplicate xml:id and an invalid OPF.
+      const png = new Uint8Array([0x89, 0x50, 0x4e, 0x47]).buffer;
+      const doc = makeDoc([
+        heading(1, 'Gallery'),
+        imageParagraph('one', 'photo-1.png'),
+        imageParagraph('two', 'photo 1.png'),
+      ]);
+      const zip = await exportAndUnzip(doc, {
+        images: new Map([
+          ['photo-1.png', png],
+          ['photo 1.png', png],
+        ]),
+      });
+
+      const opf = await zip.file('OEBPS/content.opf')!.async('string');
+      const xml = new DOMParser().parseFromString(opf, 'application/xml');
+      expect(xml.querySelector('parsererror')).toBeNull();
+
+      const ids = [...xml.getElementsByTagName('item')].map((el) => el.getAttribute('id')!);
+      // Both images must be manifested, under DISTINCT ids.
+      expect(ids.filter((id) => id.startsWith('img-'))).toHaveLength(2);
+      expect(new Set(ids).size).toBe(ids.length);
     });
   });
 });

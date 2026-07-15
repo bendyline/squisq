@@ -30,6 +30,9 @@ export {
   bitrateForQuality,
 } from './types.js';
 
+// ── ffmpeg.wasm runtime assets ─────────────────────────────────────
+export { resolveFfmpegWasmLoad, FFMPEG_WASM_SETUP_HINT } from './ffmpegCore.js';
+
 // ── Audio Timeline ─────────────────────────────────────────────────
 export type { AudioTimelineClip } from './audioTimeline.js';
 export { computeAudioTimeline } from './audioTimeline.js';

@@ -216,6 +216,46 @@ describe('imageEdit/versions', () => {
     expect(current?.layers[0]!.id).toBe('a');
   });
 
+  it('revertToImageEditVersion snapshots the caller-supplied live state', async () => {
+    // An editor holding unsaved in-memory edits must get THOSE bytes
+    // snapshotted, not the stale state.json the container still holds.
+    const docA = addLayer(createEmptyImageEditDoc(100, 100), text('a'));
+    await writeImageEditDoc(sidecar, docA);
+    const v1 = await saveImageEditVersion(sidecar, {
+      doc: docA,
+      now: new Date('2026-01-01T00:00:00Z'),
+    });
+
+    const unsaved = addLayer(createEmptyImageEditDoc(100, 100), text('unsaved-in-editor'));
+    const result = await revertToImageEditVersion(sidecar, v1.version!, { doc: unsaved });
+
+    expect(result.reverted).toBe(true);
+    const snapshot = await readImageEditVersion(sidecar, result.snapshotted!);
+    expect(snapshot?.layers[0]!.id).toBe('unsaved-in-editor');
+  });
+
+  it('revertToImageEditVersion abandons the revert when there is no state to snapshot', async () => {
+    // No state.json to snapshot means the current state is not
+    // recoverable — reverting anyway would destroy it silently.
+    const docA = addLayer(createEmptyImageEditDoc(100, 100), text('a'));
+    const v1 = await saveImageEditVersion(sidecar, {
+      doc: docA,
+      now: new Date('2026-01-01T00:00:00Z'),
+    });
+
+    const result = await revertToImageEditVersion(sidecar, v1.version!);
+
+    expect(result.reverted).toBe(false);
+    expect(result.reason).toBe('snapshot-failed');
+    expect(await readImageEditDoc(sidecar)).toBeNull();
+  });
+
+  it('revertToImageEditVersion reports a missing snapshot', async () => {
+    const result = await revertToImageEditVersion(sidecar, '.versions/state.20260101T000000Z.json');
+    expect(result.reverted).toBe(false);
+    expect(result.reason).toBe('missing-snapshot');
+  });
+
   it('pruneImageEditVersions keep-last-n drops older snapshots', async () => {
     for (let i = 0; i < 5; i++) {
       await saveImageEditVersion(sidecar, {

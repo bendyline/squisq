@@ -21,9 +21,18 @@ export class SeededRandom {
     }
   }
 
-  /** Random float in [0, 1). */
+  /**
+   * Random float in [0, 1).
+   *
+   * The state increment wraps to 32 bits, as Mulberry32 specifies. Leaving it
+   * unwrapped (the shape of the widely-copied reference snippet) keeps the
+   * state as an ever-growing float: the bitwise ops below still coerce it
+   * mod 2^32, so the OUTPUT is identical — until the state passes 2^53 and
+   * `+= 0x6d2b79f5` stops being exact. From that point the low bits rot and
+   * the sequence silently drifts from Mulberry32 (measured: draw 4,917,758).
+   */
   next(): number {
-    let t = (this.state += 0x6d2b79f5);
+    let t = (this.state = (this.state + 0x6d2b79f5) >>> 0);
     t = Math.imul(t ^ (t >>> 15), t | 1);
     t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
     return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
@@ -102,9 +111,9 @@ export class SeededRandom {
     return items[items.length - 1]?.item;
   }
 
-  /** Current internal state (for debugging / serialization). */
+  /** Current internal state as a uint32 (for debugging / serialization). */
   getState(): number {
-    return this.state;
+    return this.state >>> 0;
   }
 
   /** Create an independent sub-stream keyed by a modifier. */

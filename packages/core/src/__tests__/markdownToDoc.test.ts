@@ -1,7 +1,13 @@
 import { describe, it, expect } from 'vitest';
 import { parseMarkdown, stringifyMarkdown } from '../markdown/index';
 import type { MarkdownText } from '../markdown/types';
-import { markdownToDoc, flattenBlocks, countBlocks, getBlockDepth } from '../doc/markdownToDoc';
+import {
+  markdownToDoc,
+  flattenBlocks,
+  flattenRenderableBlocks,
+  countBlocks,
+  getBlockDepth,
+} from '../doc/markdownToDoc';
 import { docToMarkdown } from '../doc/docToMarkdown';
 
 // Helper: parse markdown and return the first top-level block.
@@ -392,6 +398,84 @@ describe('template annotation in markdownToDoc', () => {
     const output = stringifyMarkdown(roundTripped);
 
     expect(output).toContain('{[factCard style=minimal]}');
+  });
+
+  // `hasExplicitTemplate` compared against the literal 'sectionHeader'
+  // instead of the defaultTemplate the doc was actually parsed with, so any
+  // other default made every plain heading come back annotated.
+  it('docToMarkdown respects a non-default defaultTemplate', () => {
+    const input = '# A\n\nbody\n\n# B\n\nmore\n';
+    const doc = markdownToDoc(parseMarkdown(input), { defaultTemplate: 'title' });
+
+    const output = stringifyMarkdown(docToMarkdown(doc, { defaultTemplate: 'title' }));
+
+    expect(output).not.toContain('{[');
+    expect(output).toBe(input);
+  });
+
+  it('docToMarkdown still annotates a template that is not the doc default', () => {
+    const doc = markdownToDoc(parseMarkdown('# A\n\nbody\n'), { defaultTemplate: 'title' });
+    doc.blocks[0].template = 'quote';
+
+    const output = stringifyMarkdown(docToMarkdown(doc, { defaultTemplate: 'title' }));
+
+    expect(output).toContain('{[quote]}');
+  });
+
+  it('docToMarkdown keeps an explicitly authored default-template annotation', () => {
+    // The author wrote it out; it is not an implicit default, so it stays.
+    const input = '# A {[sectionHeader]}\n\nbody\n';
+    const doc = markdownToDoc(parseMarkdown(input));
+
+    expect(stringifyMarkdown(docToMarkdown(doc))).toBe(input);
+  });
+
+  // ensureAnnotation only SYNTHESIZED a missing annotation — it never
+  // reconciled an existing one with the block, so programmatic edits to an
+  // already-annotated block silently vanished on the way back out.
+  it('docToMarkdown reflects a programmatic template change on an annotated block', () => {
+    const doc = markdownToDoc(parseMarkdown('# A {[quote]}\n\nbody\n'));
+    doc.blocks[0].template = 'statHighlight';
+
+    const output = stringifyMarkdown(docToMarkdown(doc));
+
+    expect(output).toContain('{[statHighlight]}');
+    expect(output).not.toContain('{[quote]}');
+  });
+
+  it('docToMarkdown reflects programmatic param edits on an annotated block', () => {
+    const doc = markdownToDoc(parseMarkdown('# A {[statHighlight colorScheme=blue]}\n\nbody\n'));
+    doc.blocks[0].templateOverrides = { colorScheme: 'red', size: 'large' };
+
+    const output = stringifyMarkdown(docToMarkdown(doc));
+
+    expect(output).toContain('{[statHighlight colorScheme=red size=large]}');
+  });
+
+  it('docToMarkdown drops the annotation when a block loses its template', () => {
+    const doc = markdownToDoc(parseMarkdown('# A {[quote]}\n\nbody\n'));
+    doc.blocks[0].template = 'sectionHeader';
+    delete doc.blocks[0].templateOverrides;
+
+    expect(stringifyMarkdown(docToMarkdown(doc))).toBe('# A\n\nbody\n');
+  });
+
+  it('docToMarkdown does not rewrite a legacy template spelling that still resolves', () => {
+    // `titleBlock` resolves to `title`; re-emitting the canonical name would
+    // churn the author's bytes for no semantic gain.
+    const input = '# A {[titleBlock]}\n\nbody\n';
+    const doc = markdownToDoc(parseMarkdown(input));
+
+    expect(doc.blocks[0].template).toBe('title');
+    expect(stringifyMarkdown(docToMarkdown(doc))).toBe(input);
+  });
+
+  it('docToMarkdown never annotates a content-derived autoTemplate', () => {
+    const input = '# A\n\n> a pulled quote\n';
+    const doc = markdownToDoc(parseMarkdown(input));
+
+    expect(doc.blocks[0].autoTemplate).toBe(true);
+    expect(stringifyMarkdown(docToMarkdown(doc))).toBe(input);
   });
 
   it('docToMarkdown injects transition params into the squiggly annotation', () => {
@@ -953,5 +1037,108 @@ describe('standalone annotation blocks (S2)', () => {
     const md = '# H\n\n{[statHighlight title="Q1 Revenue" colorScheme=blue]}\n\nbody\n';
     const out = stringifyMarkdown(docToMarkdown(toDoc(md)));
     expect(out).toBe(md);
+  });
+});
+
+describe('standalone annotation blocks keep their authored position', () => {
+  const toDoc = (md: string) =>
+    markdownToDoc(parseMarkdown(md), { articleId: 't', generateCoverBlock: false });
+  const roundTrip = (md: string) => stringifyMarkdown(docToMarkdown(toDoc(md)));
+  const slideOrder = (md: string) => flattenRenderableBlocks(toDoc(md).blocks).map((b) => b.id);
+
+  // Regression: a standalone annotation used to be appended as a SIBLING after
+  // the containing block, but `emitBlock` walks pre-order (heading → contents →
+  // children). So the annotation was emitted after the section's whole sub-tree
+  // — its content migrated out of Section and past Sub, changing source order
+  // AND slide order, and re-parenting again on every further round-trip.
+  it('does not migrate a mid-section annotation past a following sub-heading', () => {
+    const md = '## Section\n\npara1\n\n{[quote]}\n\nquoted text\n\n### Sub\n\nsub body\n';
+
+    const once = roundTrip(md);
+    expect(once).toBe(md);
+
+    // Idempotent: the round-trip is a fixpoint, not a slow drift.
+    expect(roundTrip(once)).toBe(once);
+  });
+
+  it('places the mid-section annotation between the section body and its sub-heading', () => {
+    const md = '## Section\n\npara1\n\n{[quote]}\n\nquoted text\n\n### Sub\n\nsub body\n';
+    const doc = toDoc(md);
+
+    // The quote is authored inside Section, before Sub — a pre-order walk
+    // reaches that position as Section's leading child.
+    const section = doc.blocks[0];
+    expect(doc.blocks).toHaveLength(1);
+    expect(section.title).toBe('Section');
+    expect(section.contents?.map((n) => n.type)).toEqual(['paragraph']);
+    expect(section.children?.map((b) => b.template)).toEqual(['quote', 'sectionHeader']);
+
+    const quote = section.children![0];
+    expect(quote.standaloneAnnotation).toBe(true);
+    expect(quote.sourceHeading).toBeUndefined();
+    // The quoted text stayed with the quote, not with Sub.
+    expect(quote.contents?.map((n) => n.type)).toEqual(['paragraph']);
+
+    // Slide order follows the authored order.
+    expect(slideOrder(md)).toEqual(['section', 'quote', 'sub']);
+  });
+
+  it('round-trips an annotation before any heading', () => {
+    const md = '{[quote]}\n\nquoted\n\n# Heading\n\nbody\n';
+    expect(roundTrip(md)).toBe(md);
+    expect(roundTrip(roundTrip(md))).toBe(md);
+    expect(slideOrder(md)).toEqual(['quote', 'heading']);
+  });
+
+  it('round-trips an annotation between paragraphs of the preamble', () => {
+    const md = 'intro\n\n{[quote]}\n\nquoted\n\n# Heading\n\nbody\n';
+    expect(roundTrip(md)).toBe(md);
+    expect(roundTrip(roundTrip(md))).toBe(md);
+  });
+
+  it('round-trips an annotation immediately before a sub-heading (no body between)', () => {
+    const md = '## Section\n\n{[quote]}\n\nquoted\n\n### Sub\n\nsub body\n';
+    expect(roundTrip(md)).toBe(md);
+    expect(roundTrip(roundTrip(md))).toBe(md);
+    expect(slideOrder(md)).toEqual(['section', 'quote', 'sub']);
+  });
+
+  it('round-trips an annotation at the end of a section (no sub-headings)', () => {
+    const md = '## Section\n\npara\n\n{[quote]}\n\nquoted\n';
+    expect(roundTrip(md)).toBe(md);
+    expect(roundTrip(roundTrip(md))).toBe(md);
+    // With no sub-headings the sibling slot IS the authored position, so the
+    // historical shape (heading-less block at the section's own level) holds.
+    const doc = toDoc(md);
+    expect(doc.blocks.map((b) => b.template)).toEqual(['sectionHeader', 'quote']);
+  });
+
+  it('round-trips an annotation nested two levels deep', () => {
+    const md = '# A\n\na body\n\n## B\n\nb body\n\n{[quote]}\n\nquoted\n\n### C\n\nc body\n';
+    expect(roundTrip(md)).toBe(md);
+    expect(roundTrip(roundTrip(md))).toBe(md);
+    expect(slideOrder(md)).toEqual(['a', 'b', 'quote', 'c']);
+
+    const b = toDoc(md).blocks[0].children![0];
+    expect(b.title).toBe('B');
+    expect(b.children?.map((x) => x.id)).toEqual(['quote', 'c']);
+  });
+
+  it('round-trips consecutive annotations before a sub-heading in authored order', () => {
+    const md = '## Section\n\np1\n\n{[quote]}\n\nq\n\n{[factCard]}\n\nf\n\n### Sub\n\nsub body\n';
+    expect(roundTrip(md)).toBe(md);
+    expect(roundTrip(roundTrip(md))).toBe(md);
+    expect(slideOrder(md)).toEqual(['section', 'quote', 'factcard', 'sub']);
+  });
+
+  it('keeps a produced block out of a container template’s children', () => {
+    // A diagram's children are consumed by its render as nodes — a standalone
+    // block must never be nested into them.
+    const md = '## D {[diagram]}\n\n{[quote]}\n\nquoted\n\n### Node1\n\nn\n';
+    const doc = toDoc(md);
+    const d = doc.blocks[0];
+    expect(d.template).toBe('diagram');
+    expect(d.children?.map((b) => b.title)).toEqual(['Node1']);
+    expect(doc.blocks[1].template).toBe('quote');
   });
 });

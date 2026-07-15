@@ -77,12 +77,44 @@ async function readWorkbook(pkg: OoxmlPackage): Promise<WorkbookInfo> {
   };
 }
 
+/** True when `el` has an `<rPh>` (phonetic guide) ancestor at or below `root`. */
+function isPhonetic(el: Element, root: Element): boolean {
+  for (let node: Node | null = el.parentNode; node && node !== root; node = node.parentNode) {
+    if (node.nodeType !== 1) continue;
+    const parent = node as Element;
+    if (parent.localName === 'rPh' && parent.namespaceURI === NS_SML) return true;
+  }
+  return false;
+}
+
+/**
+ * Text of a SpreadsheetML string item — a shared `<si>` or an inline `<is>`.
+ *
+ * Both may carry rich text as a sequence of `<r>` runs, so every `<t>` has to
+ * be concatenated; reading only the first drops all but the opening run.
+ *
+ * `textContent` is not a valid shortcut either: `<si>` may also hold `<rPh>`
+ * phonetic (furigana) guides, whose `<t>` is a *pronunciation annotation* of
+ * the neighbouring run rather than part of the cell's value. Splicing those in
+ * turns Japanese "漢字" into "漢字かんじ". Skip any `<t>` under an `<rPh>`.
+ */
+function stringItemText(root: Element): string {
+  const tEls = root.getElementsByTagNameNS(NS_SML, 't');
+  let out = '';
+  for (let i = 0; i < tEls.length; i++) {
+    const t = tEls[i]!;
+    if (isPhonetic(t, root)) continue;
+    out += t.textContent ?? '';
+  }
+  return out;
+}
+
 async function readSharedStrings(pkg: OoxmlPackage): Promise<string[]> {
   const doc = await getPartXml(pkg, 'xl/sharedStrings.xml');
   if (!doc) return [];
   const siEls = doc.getElementsByTagNameNS(NS_SML, 'si');
   const out: string[] = [];
-  for (let i = 0; i < siEls.length; i++) out.push(siEls[i]!.textContent ?? '');
+  for (let i = 0; i < siEls.length; i++) out.push(stringItemText(siEls[i]!));
   return out;
 }
 
@@ -215,8 +247,8 @@ function formattedNumberText(raw: string, style: CellStyle | undefined, date1904
 function cellText(cell: Element, shared: string[], styles: CellStyle[], date1904: boolean): string {
   const t = cell.getAttribute('t');
   if (t === 'inlineStr') {
-    const is = cell.getElementsByTagNameNS(NS_SML, 't');
-    return is.length ? (is[0]!.textContent ?? '') : '';
+    const is = cell.getElementsByTagNameNS(NS_SML, 'is')[0];
+    return is ? stringItemText(is) : '';
   }
   const vEls = cell.getElementsByTagNameNS(NS_SML, 'v');
   const v = vEls.length ? (vEls[0]!.textContent ?? '') : '';
@@ -236,9 +268,19 @@ async function sheetToGrid(
   const doc = await getPartXml(pkg, path);
   if (!doc) return [];
   const rowEls = doc.getElementsByTagNameNS(NS_SML, 'row');
-  const grid: string[][] = [];
+
+  // SpreadsheetML OMITS empty rows entirely — a sheet whose data starts at
+  // row 3 simply has no <row r="1">/<row r="2">. Reading rows in document
+  // order and appending would slide that data up, silently promoting the
+  // first data row to the markdown table's HEADER. The `r` attribute is
+  // 1-based and authoritative, so use it to restore row gaps the same way
+  // cell refs restore column gaps.
+  const byIndex = new Map<number, string[]>();
+  let maxContentIdx = -1;
+  let fallbackIdx = 0;
   for (let r = 0; r < rowEls.length; r++) {
-    const cells = rowEls[r]!.getElementsByTagNameNS(NS_SML, 'c');
+    const rowEl = rowEls[r]!;
+    const cells = rowEl.getElementsByTagNameNS(NS_SML, 'c');
     const rowArr: string[] = [];
     for (let c = 0; c < cells.length; c++) {
       const cell = cells[c]!;
@@ -247,8 +289,19 @@ async function sheetToGrid(
       while (rowArr.length < idx) rowArr.push('');
       rowArr[idx] = cellText(cell, shared, styles, date1904);
     }
-    grid.push(rowArr);
+    const rowRef = Number.parseInt(rowEl.getAttribute('r') ?? '', 10);
+    const rowIdx = Number.isFinite(rowRef) && rowRef > 0 ? rowRef - 1 : fallbackIdx;
+    fallbackIdx = rowIdx + 1;
+    byIndex.set(rowIdx, rowArr);
+    // Excel also writes style-only rows (`<row r="5000" s="1"/>`) far below
+    // the data. Tracking the last row with actual CONTENT means those don't
+    // materialize thousands of trailing blank table rows — while leading and
+    // interior blanks, which are structural, are preserved.
+    if (rowArr.some((v) => v !== '')) maxContentIdx = Math.max(maxContentIdx, rowIdx);
   }
+
+  const grid: string[][] = [];
+  for (let i = 0; i <= maxContentIdx; i++) grid.push(byIndex.get(i) ?? []);
   return grid;
 }
 

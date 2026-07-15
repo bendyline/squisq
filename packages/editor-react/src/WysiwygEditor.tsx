@@ -74,6 +74,23 @@ type ImageMutationView = Pick<ProseMirrorView, 'state' | 'dispatch'>;
  * picked at random per editor mount. Hosts can override by passing the
  * `placeholder` prop with a fixed string.
  */
+
+/**
+ * `@tiptap/extension-link`'s default attributes are href/target/rel/class —
+ * a markdown link title (`[a](url "T")`) has nowhere to live and is dropped
+ * on the way through the editor, so an author's title silently disappears the
+ * first time a document is opened in WYSIWYG. `tiptapBridge` round-trips the
+ * title on both sides; this is the node-schema half of that contract.
+ */
+export const LinkWithTitle = Link.extend({
+  addAttributes() {
+    return {
+      ...this.parent?.(),
+      title: { default: null },
+    };
+  },
+});
+
 const EMPTY_PROMPTS = [
   'Start typing your content, or drop images on top of me...',
   'Write anything -- paste markdown, drag in images, or just start typing...',
@@ -216,7 +233,7 @@ export function WysiwygEditor({
       TableHeader,
       TaskList,
       TaskItem.configure({ nested: true }),
-      Link.configure({
+      LinkWithTitle.configure({
         openOnClick: false,
         autolink: true,
         HTMLAttributes: { rel: 'noopener noreferrer', target: '_blank' },

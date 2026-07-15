@@ -363,12 +363,9 @@ export function VideoExportModal({
         aria-modal="true"
         aria-labelledby={titleId}
         tabIndex={-1}
-       
         style={themedModalStyle}
-       
         data-squisq-video-export-modal
         onClick={(e) => e.stopPropagation()}
-      
       >
         <h2 id={titleId} style={themedTitleStyle}>
           {outputFormat === 'gif' ? 'Export Animated GIF' : 'Export Video'}
@@ -510,9 +507,7 @@ export function VideoExportModal({
               aria-valuemin={0}
               aria-valuemax={100}
               aria-valuenow={progress}
-             
               style={{ ...progressBarOuterStyle, background: palette.secondary }}
-            
               data-squisq-video-export-progress-track
             >
               <div

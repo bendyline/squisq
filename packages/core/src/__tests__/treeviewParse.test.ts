@@ -115,4 +115,46 @@ describe('parseTree — renditions', () => {
     const art = 'a/\r\n├── b\r\n└── c';
     expect(flat(parseTree(art).roots)).toEqual(['0:a/', '1:b', '1:c']);
   });
+
+  // A comment is delimited by a GAP (≥2 whitespace) before the marker. Under
+  // the old one-space rule a label was forbidden from containing `#`/`//`/
+  // `<--` at all: the renderer had no form that survived a re-parse, so every
+  // round-trip amputated `release # notes` into `release` + comment `notes`.
+  describe('comment delimiter is a gap, not a single space', () => {
+    it('keeps a single-spaced marker as label text', () => {
+      expect(flat(parseTree(['p/', '└── release # notes'].join('\n')).roots)).toEqual([
+        '0:p/',
+        '1:release # notes',
+      ]);
+    });
+
+    it('keeps single-spaced // and <-- markers as label text', () => {
+      expect(flat(parseTree(['p/', '├── a // b', '└── c <-- d'].join('\n')).roots)).toEqual([
+        '0:p/',
+        '1:a // b',
+        '1:c <-- d',
+      ]);
+    });
+
+    it('still reads gap-aligned comments — the form real tree art uses', () => {
+      const art = ['p/', '├── main.go       # entrypoint', '└── go.mod  <-- deps'].join('\n');
+      expect(flat(parseTree(art).roots)).toEqual([
+        '0:p/',
+        '1:main.go #entrypoint',
+        '1:go.mod #deps',
+      ]);
+    });
+
+    it('splits at the gap even when the label itself contains a marker', () => {
+      const art = ['p/', '└── release # notes  # generated'].join('\n');
+      expect(flat(parseTree(art).roots)).toEqual(['0:p/', '1:release # notes #generated']);
+    });
+
+    it('keeps a marker with no preceding whitespace in the label', () => {
+      expect(flat(parseTree(['p/', '└── #hashtag'].join('\n')).roots)).toEqual([
+        '0:p/',
+        '1:#hashtag',
+      ]);
+    });
+  });
 });

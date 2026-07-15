@@ -367,6 +367,10 @@ function DocPlayerContent({
   // Always clear the grace timer on unmount
   useEffect(() => () => clearTimeout(coverGraceTimer.current), []);
 
+  // Same for the tap-feedback timer: a pending 600ms callback that outlives the
+  // player would call setTapFeedback on an unmounted component.
+  useEffect(() => () => clearTimeout(tapFeedbackTimer.current), []);
+
   // Determine if we should show the cover block
   // Show cover when: has cover block, not playing, at time 0, not in render mode
   // OR during the grace period after first play, OR when coverForced (render mode)
@@ -964,6 +968,18 @@ function DocPlayerContent({
       // Linear mode: no keyboard shortcuts (native scrolling handles it)
       if (isLinearMode) return;
 
+      // Fullscreen is mode-independent and host-owned: the control variants
+      // advertise "(F)" only when `toggleFullscreen` is wired, so the shortcut
+      // is live under exactly the same condition. Without a handler `f` is left
+      // alone (no preventDefault) so it stays available to the host page.
+      // Caps lock yields 'F' without shiftKey, which the guard above requires.
+      if (e.key === 'f' || e.key === 'F') {
+        if (!onFullscreenToggle) return;
+        e.preventDefault();
+        onFullscreenToggle();
+        return;
+      }
+
       if (isSlideshowMode) {
         // Slideshow mode: arrow keys navigate slides
         switch (e.key) {
@@ -1008,7 +1024,7 @@ function DocPlayerContent({
         }
       }
     },
-    [isSlideshowMode, isLinearMode, toggle, seekTo, slideNavActions],
+    [isSlideshowMode, isLinearMode, toggle, seekTo, slideNavActions, onFullscreenToggle],
   );
 
   const handleKeyDown = useCallback(

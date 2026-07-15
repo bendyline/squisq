@@ -19,11 +19,38 @@ import {
 } from '@bendyline/squisq/markdown';
 
 // Hoisted regex patterns for inline markdown ↔ HTML conversion
-const RE_BOLD_STAR = /\*\*(.+?)\*\*/g;
-const RE_BOLD_UNDER = /__(.+?)__/g;
-const RE_ITALIC_STAR = /\*(.+?)\*/g;
-const RE_ITALIC_UNDER = /_(.+?)_/g;
+//
+// Emphasis carries CommonMark-ish flanking guards. Two rules matter:
+//
+//  1. A delimiter run may not open when followed by whitespace, nor close
+//     when preceded by whitespace. Without this, prose arithmetic such as
+//     `2 * 3 * 4` silently became `2 <em> 3 </em> 4`.
+//  2. `_` additionally may not open when preceded by, nor close when
+//     followed by, an alphanumeric — CommonMark forbids intraword `_`
+//     emphasis. Without this, `snake_case_name` and `my_file_v2.txt`
+//     became `snake<em>case</em>name` in the editor and were rewritten to
+//     `snake*case*name` on the way out: permanent byte corruption of any
+//     document mentioning an identifier or a filename. `*` IS allowed
+//     intraword in CommonMark, so the star rules stay boundary-free.
+//
+// The `[\s*]` / `[\s_]` guards also stop a single-delimiter rule from
+// pairing ACROSS a double-delimiter run (`** bold **` must stay literal
+// rather than becoming `<em>* bold *</em>`).
+//
+// Backslash-escaped delimiters never reach these patterns: `inlineToHtml`
+// swaps them for opaque sentinels first (see ESCAPABLE_MD_CHARS).
+const RE_BOLD_STAR = /\*\*(?![\s*])(.+?)(?<![\s*])\*\*/g;
+const RE_BOLD_UNDER = /(?<![\p{L}\p{N}_])__(?![\s_])(.+?)(?<![\s_])__(?![\p{L}\p{N}_])/gu;
+const RE_ITALIC_STAR = /\*(?![\s*])(.+?)(?<![\s*])\*/g;
+const RE_ITALIC_UNDER = /(?<![\p{L}\p{N}_])_(?![\s_])(.+?)(?<![\s_])_(?![\p{L}\p{N}_])/gu;
 const RE_STRIKETHROUGH = /~~(.+?)~~/g;
+
+// The delimiters whose backslash escapes this pass understands. `\\` is
+// included so an even backslash run collapses correctly instead of
+// leaking a literal backslash in front of live emphasis.
+const ESCAPABLE_MD_CHARS: readonly string[] = ['*', '_', '~', '\\'];
+const RE_MD_ESCAPE = /\\([*_~\\])/g;
+
 const RE_INLINE_CODE = /`(.+?)`/g;
 // `*?` on the alt — an empty alt (`![](foo.png)`) is valid markdown and
 // the most common shape for pasted/uploaded images that don't yet have
@@ -50,7 +77,11 @@ const RE_I_TAG = /<i>(.*?)<\/i>/g;
 const RE_S_TAG = /<s>(.*?)<\/s>/g;
 const RE_DEL_TAG = /<del>(.*?)<\/del>/g;
 const RE_CODE_TAG = /<code>(.*?)<\/code>/g;
-const RE_A_TAG = /<a[^>]+href="([^"]*)"[^>]*>(.*?)<\/a>/g;
+// Attribute-order agnostic: Tiptap's Link extension renders
+// `<a target rel href>` while `markdownToTiptap` emits `<a href title>`.
+// The attrs are parsed out of the capture rather than positionally so a
+// `title` on either side of `href` is still found.
+const RE_A_TAG = /<a\b([^>]*)>(.*?)<\/a>/g;
 // Matches any `<img>` tag and captures its `src` + `alt` regardless of
 // attribute order. TipTap's Image extension renders `<img src="..."
 // alt="...">` (src first), while some other producers — including our
@@ -74,16 +105,54 @@ export function markdownToTiptap(markdown: string): string {
 
   // Process blocks line by line for accurate conversion
   const lines = html.split('\n');
+  // Line index of a leading YAML frontmatter block's CLOSING `---`, or -1.
+  // The bridge has never understood frontmatter (it renders the fences as
+  // <hr> and the keys as paragraphs), but the setext-heading rule below must
+  // still not reach across it: `squisq-theme: fresh` sitting above the
+  // closing `---` looks exactly like a setext h2, and claiming it would eat
+  // the fence and destroy the whole frontmatter block.
+  const frontmatterEnd = findFrontmatterEnd(lines);
   const outputBlocks: string[] = [];
   let inCodeBlock = false;
   let codeBlockLang = '';
   let codeBlockLines: string[] = [];
-  let inList = false;
-  let listItems: string[] = [];
-  let listType: 'ul' | 'ol' | 'task' = 'ul';
+  // Open list levels, shallowest first. A markdown list nests by INDENT,
+  // but Tiptap nests by markup (the child `<ul>` is a child of the parent
+  // `<li>`, a sibling of that item's `<p>`). The stack bridges the two: an
+  // item stays "open" until we know whether a deeper list follows it, so
+  // the sublist can be appended inside it. A flat accumulator could not
+  // express this and dropped indented items out of the list entirely.
+  interface ListLevel {
+    indent: number;
+    /**
+     * Shallowest indent still considered INSIDE this level's parent item.
+     * An item above this column closes the level; one below it merely snaps
+     * the level's own indent down (a ragged dedent stays a sibling rather
+     * than escaping to the parent list) — matching core's CommonMark parser.
+     */
+    minIndent: number;
+    type: 'ul' | 'ol' | 'task';
+    /**
+     * First ordinal of an `ol` (the number the author actually wrote). Only
+     * the FIRST item's number counts — CommonMark ignores the rest and so
+     * does `<ol start>`. Dropping this renumbered any list that continues
+     * after an interruption (`5.` came back as `1.`).
+     */
+    start: number | null;
+    items: string[];
+    openAttrs: string | null;
+    openContent: string;
+  }
+  const listStack: ListLevel[] = [];
   let inTable = false;
   let tableLines: string[] = [];
   let pendingBlankLines = 0;
+  /**
+   * Whether the most recently emitted TOP-LEVEL block was a list. Only the
+   * indented-code detector reads it: a 4-space line right after a list is list
+   * continuation (core reads `- a\n\n    - b` as a nested list), not code.
+   */
+  let lastBlockWasList = false;
 
   const flushPendingBlankParagraphs = () => {
     if (pendingBlankLines === 0) return;
@@ -98,16 +167,108 @@ export function markdownToTiptap(markdown: string): string {
   const pushBlock = (block: string) => {
     flushPendingBlankParagraphs();
     outputBlocks.push(block);
+    lastBlockWasList = false;
+  };
+
+  const sealOpenItem = (level: ListLevel) => {
+    if (level.openAttrs === null) return;
+    level.items.push(`<li${level.openAttrs}>${level.openContent}</li>`);
+    level.openAttrs = null;
+    level.openContent = '';
+  };
+
+  /** Close the deepest level, nesting its markup into the parent's open item. */
+  const popListLevel = () => {
+    const level = listStack.pop();
+    if (!level) return;
+    sealOpenItem(level);
+    if (level.items.length === 0) return;
+    const tag = level.type === 'ol' ? 'ol' : 'ul';
+    let attr = level.type === 'task' ? ' data-type="taskList"' : '';
+    // `start` is the ProseMirror OrderedList attribute; Tiptap round-trips it
+    // and only renders it when it differs from the default of 1.
+    if (level.type === 'ol' && level.start != null && level.start !== 1) {
+      attr += ` start="${level.start}"`;
+    }
+    const html = `<${tag}${attr}>${level.items.join('')}</${tag}>`;
+    const parent = listStack[listStack.length - 1];
+    if (!parent) {
+      pushBlock(html);
+      lastBlockWasList = true;
+      return;
+    }
+    if (parent.openAttrs === null) {
+      // A sublist with no preceding sibling item — give it an empty host
+      // item so the nesting still has somewhere valid to live.
+      parent.openAttrs = parent.type === 'task' ? ' data-type="taskItem"' : '';
+      parent.openContent = '<p></p>';
+    }
+    parent.openContent += html;
   };
 
   const flushList = () => {
-    if (inList && listItems.length > 0) {
-      const tag = listType === 'ol' ? 'ol' : 'ul';
-      const attr = listType === 'task' ? ' data-type="taskList"' : '';
-      pushBlock(`<${tag}${attr}>${listItems.join('')}</${tag}>`);
-      listItems = [];
-      inList = false;
+    while (listStack.length > 0) popListLevel();
+  };
+
+  const addListItem = (
+    indent: number,
+    type: 'ul' | 'ol' | 'task',
+    attrs: string,
+    content: string,
+    /** Ordinal the author wrote, for `ol` only. Used when OPENING a level. */
+    start: number | null = null,
+  ) => {
+    while (listStack.length > 0 && indent < listStack[listStack.length - 1].minIndent) {
+      popListLevel();
     }
+    const top = listStack[listStack.length - 1];
+    if (!top) {
+      listStack.push({
+        indent,
+        minIndent: 0,
+        type,
+        start,
+        items: [],
+        openAttrs: attrs,
+        openContent: content,
+      });
+      return;
+    }
+    if (indent > top.indent) {
+      // Deeper than the current level's marker — open a nested list inside
+      // the level's open item. Anything indented past the parent's marker
+      // stays inside that item.
+      listStack.push({
+        indent,
+        minIndent: top.indent + 1,
+        type,
+        start,
+        items: [],
+        openAttrs: attrs,
+        openContent: content,
+      });
+      return;
+    }
+    // Same level (or a ragged dedent that is still inside the parent item).
+    if (indent < top.indent) top.indent = indent;
+    if (top.type !== type) {
+      // A different marker at the same depth starts a sibling list.
+      const { indent: depth, minIndent } = top;
+      popListLevel();
+      listStack.push({
+        indent: depth,
+        minIndent,
+        type,
+        start,
+        items: [],
+        openAttrs: attrs,
+        openContent: content,
+      });
+      return;
+    }
+    sealOpenItem(top);
+    top.openAttrs = attrs;
+    top.openContent = content;
   };
 
   const flushTable = () => {
@@ -173,6 +334,14 @@ export function markdownToTiptap(markdown: string): string {
     if (line.startsWith('```')) {
       if (!inCodeBlock) {
         flushList();
+        // A fence is the ONE block start reached before the generic
+        // "line is not a table row → flushTable()" guard below (that guard
+        // runs after the in-code-block early-continue, which a fence must
+        // precede). Without this call the buffered table rows stayed queued
+        // and were flushed by the fence's own `pushBlock`, emitting the
+        // <pre> BEFORE the <table>: a table immediately followed by a fence
+        // came back with its blocks in the opposite ORDER.
+        flushTable();
         flushPendingBlankParagraphs();
         inCodeBlock = true;
         codeBlockLang = line.slice(3).trim();
@@ -205,69 +374,66 @@ export function markdownToTiptap(markdown: string): string {
       continue;
     }
 
+    // Must be sampled BEFORE flushPendingBlankParagraphs() zeroes the count.
+    // An indented code block may not interrupt a paragraph, so it needs to
+    // know whether a blank line (or the document start) precedes it.
+    const precededByBlank = pendingBlankLines > 0 || outputBlocks.length === 0;
+
+    // Indented (4-space / tab) code block. Checked before every other block
+    // start because in CommonMark an indent of 4+ columns disqualifies ATX
+    // headings, thematic breaks and list markers alike: `    - item` after a
+    // blank line is code that READS "- item", not a bullet. Previously these
+    // lines fell through to the paragraph branch, where `preserveLeadingSpaces`
+    // turned the indent into nbsp and — far worse — the inline-emphasis
+    // regexes ran over the code text, rewriting `*ptr` and `y_z` as emphasis.
+    //
+    // The guards keep this away from list content, which is the OTHER meaning
+    // of a 4-space indent: an open list level means we are inside item content,
+    // and `lastBlockWasList` covers the case where a blank line already
+    // closed the bridge's list stack but core would still read the indented
+    // line as that list's continuation (`- a\n\n    - b` is a nested list).
+    if (
+      precededByBlank &&
+      !inTable &&
+      listStack.length === 0 &&
+      !lastBlockWasList &&
+      isIndentedCodeLine(line)
+    ) {
+      const codeLines: string[] = [];
+      let scan = i;
+      for (; scan < lines.length; scan++) {
+        const scanned = lines[scan];
+        // A blank line inside the block belongs to the code (core reads
+        // `    a\n\n    b` as one code block whose value is "a\n\nb").
+        if (scanned.trim() === '') {
+          codeLines.push('');
+          continue;
+        }
+        if (!isIndentedCodeLine(scanned)) break;
+        codeLines.push(stripCodeIndent(scanned));
+      }
+      // Trailing blanks belong to whatever follows, not to the code block.
+      let end = codeLines.length;
+      while (end > 0 && codeLines[end - 1] === '') end--;
+      const trailingBlanks = codeLines.length - end;
+      codeLines.length = end;
+      // Hand the trailing blank lines back to the loop so the normal
+      // blank-line accounting still sees them.
+      i = scan - trailingBlanks - 1;
+      // No info string: an indented code block has no language, exactly like
+      // a bare ``` fence. Both are `code` with a null lang in core's mdast,
+      // and core's own serializer normalizes indented code to a fence too.
+      pushBlock(`<pre><code>${escapeHtml(codeLines.join('\n'))}</code></pre>`);
+      continue;
+    }
+
     flushPendingBlankParagraphs();
 
-    // Headings
+    // Headings (ATX — `# Title`)
     const headingMatch = line.match(/^(#{1,6})\s+(.+)$/);
     if (headingMatch) {
       flushList();
-      const level = headingMatch[1].length;
-      let text = headingMatch[2];
-      let attrs = '';
-
-      // Peel off trailing brace-blocks in any order: the squisq-native
-      // `{[template …]}` annotation and the Pandoc `{#id .class key=value}`
-      // attribute block may both appear at the end of the heading line.
-      // Loop until neither matches. The matchers are imported from core so
-      // this stays in sync with packages/core/src/markdown/convert.ts.
-      let templateInner: string | null = null;
-      let pandocInner: string | null = null;
-      for (let pass = 0; pass < 4; pass++) {
-        let matched = false;
-        if (templateInner == null) {
-          const m = matchTrailingTemplateAnnotation(text);
-          if (m) {
-            templateInner = m.inner.trim();
-            text = text.slice(0, m.index).trimEnd();
-            matched = true;
-          }
-        }
-        if (pandocInner == null) {
-          const m = matchTrailingPandocAttr(text);
-          if (m) {
-            pandocInner = m.inner.trim();
-            text = text.slice(0, m.index).trimEnd();
-            matched = true;
-          }
-        }
-        if (!matched) break;
-      }
-
-      if (templateInner != null) {
-        // Quote-aware tokenization (shared with the core parser) keeps a
-        // quoted value like caption="Beach at sunset" as one token. The
-        // tokens are stored raw — quotes included — so tiptapToMarkdown
-        // can re-join them into the annotation verbatim.
-        const tokens = tokenizeAttrTokens(templateInner);
-        if (tokens.length === 0) {
-          // Preserve an authored `{[]}` through the editable Tiptap document
-          // while keeping the raw marker out of the visible heading text.
-          attrs += ' data-template-empty="true"';
-        }
-        const firstIsParam = tokens.length > 0 && tokens[0].indexOf('=') > 0;
-        if (!firstIsParam && tokens[0]) {
-          attrs += ` data-template="${escapeHtml(tokens[0])}"`;
-        }
-        const params = tokens.slice(firstIsParam ? 0 : 1).filter((t) => t.includes('='));
-        if (params.length > 0) {
-          attrs += ` data-template-params="${escapeHtml(params.join(' '))}"`;
-        }
-      }
-      if (pandocInner != null) {
-        attrs += ` data-block-attrs="${escapeHtml(pandocInner)}"`;
-      }
-
-      pushBlock(`<h${level}${attrs}>${inlineToHtml(text)}</h${level}>`);
+      pushBlock(headingToHtml(headingMatch[1].length, headingMatch[2]));
       continue;
     }
 
@@ -296,41 +462,35 @@ export function markdownToTiptap(markdown: string): string {
     // survive a round-trip. The checkbox itself is drawn by TaskItem's node
     // view from the data-checked attribute, so we only emit the text content
     // (in a paragraph, matching Tiptap's own node structure).
-    const taskMatch = line.match(/^[-*+]\s+\[([xX ])\]\s*(.*)$/);
+    const taskMatch = line.match(/^([ \t]*)[-*+]\s+\[([xX ])\]\s*(.*)$/);
     if (taskMatch) {
-      if (!inList || listType !== 'task') {
-        flushList();
-        inList = true;
-        listType = 'task';
-      }
-      const checkedAttr = taskMatch[1].toLowerCase() === 'x' ? ' data-checked="true"' : '';
-      listItems.push(
-        `<li data-type="taskItem"${checkedAttr}><p>${inlineToHtml(taskMatch[2])}</p></li>`,
+      const checkedAttr = taskMatch[2].toLowerCase() === 'x' ? ' data-checked="true"' : '';
+      addListItem(
+        indentWidth(taskMatch[1]),
+        'task',
+        ` data-type="taskItem"${checkedAttr}`,
+        `<p>${inlineToHtml(taskMatch[3])}</p>`,
       );
       continue;
     }
 
     // Unordered list item
-    const ulMatch = line.match(/^[-*+]\s+(.+)$/);
+    const ulMatch = line.match(/^([ \t]*)[-*+]\s+(.+)$/);
     if (ulMatch) {
-      if (!inList || listType !== 'ul') {
-        flushList();
-        inList = true;
-        listType = 'ul';
-      }
-      listItems.push(`<li><p>${inlineToHtml(ulMatch[1])}</p></li>`);
+      addListItem(indentWidth(ulMatch[1]), 'ul', '', `<p>${inlineToHtml(ulMatch[2])}</p>`);
       continue;
     }
 
     // Ordered list item
-    const olMatch = line.match(/^\d+\.\s+(.+)$/);
+    const olMatch = line.match(/^([ \t]*)(\d+)\.\s+(.+)$/);
     if (olMatch) {
-      if (!inList || listType !== 'ol') {
-        flushList();
-        inList = true;
-        listType = 'ol';
-      }
-      listItems.push(`<li><p>${inlineToHtml(olMatch[1])}</p></li>`);
+      addListItem(
+        indentWidth(olMatch[1]),
+        'ol',
+        '',
+        `<p>${inlineToHtml(olMatch[3])}</p>`,
+        parseInt(olMatch[2], 10),
+      );
       continue;
     }
 
@@ -380,6 +540,25 @@ export function markdownToTiptap(markdown: string): string {
     if (/^<(?:video|audio)\b[^>]*>(?:[\s\S]*?<\/(?:video|audio)>)?$/i.test(trimmed)) {
       flushList();
       pushBlock(trimmed);
+      continue;
+    }
+
+    // Setext heading (`Title` over `===` / `---`). Deliberately the LAST
+    // check: a setext underline may only follow a PARAGRAPH, so this line
+    // must be one that no other block start claimed. That ordering is what
+    // keeps `- foo\n---` a list plus a thematic break and `# H\n---` an ATX
+    // heading plus a thematic break, matching core.
+    //
+    // Without this the underline was reached on its own and the heading was
+    // silently destroyed: `My Title\n---` became a paragraph plus an <hr>
+    // (`===` fared worse — two plain paragraphs), so any setext-authored
+    // document lost its headings on the first WYSIWYG keystroke.
+    const setextLevel =
+      i + 1 < lines.length && i + 1 > frontmatterEnd ? matchSetextUnderline(lines[i + 1]) : null;
+    if (setextLevel !== null) {
+      flushList();
+      i++; // consume the underline
+      pushBlock(headingToHtml(setextLevel, line.trim()));
       continue;
     }
 
@@ -570,47 +749,26 @@ export function tiptapToMarkdown(html: string): string {
       continue;
     }
 
-    // Task list
-    const taskListMatch = remaining.match(/^<ul[^>]*data-type="taskList"[^>]*>(.*?)<\/ul>/s);
-    if (taskListMatch) {
-      const items = taskListMatch[1].matchAll(/<li[^>]*data-type="taskItem"[^>]*>.*?<\/li>/gs);
-      for (const item of items) {
-        // Read checked state from the attribute value only — a bare
-        // includes('checked') matches the substring in data-checked="false".
-        const checked = /data-checked="true"/.test(item[0]);
-        // Drop the checkbox chrome (<label>…</label>) before reading text;
-        // Tiptap puts the task text in the trailing content node, not the label.
-        const body = item[0].replace(/<label\b[^>]*>.*?<\/label>/s, '');
-        const text = htmlToInline(body.replace(/<[^>]+>/g, '').trim());
-        lines.push(`- [${checked ? 'x' : ' '}] ${text}`.trimEnd());
+    // Lists — unordered, ordered and task lists all funnel through one
+    // balanced-tag walk. The previous lazy `/^<ul>(.*?)<\/ul>/s` anchors
+    // stopped at the first `</ul>`, so any nested list (the shape Tiptap
+    // emits for every indented bullet, and what pasting from Google Docs
+    // or Word produces) truncated the outer list mid-item: the child's
+    // text fused into the parent bullet and every following sibling lost
+    // its marker. `matchBalancedTag` counts depth instead.
+    const listOpenMatch = remaining.match(/^<(ul|ol)\b([^>]*)>/i);
+    if (listOpenMatch) {
+      const tag = listOpenMatch[1].toLowerCase();
+      const matched = matchBalancedTag(remaining, 0, tag);
+      if (matched) {
+        const isTask = /data-type="taskList"/i.test(listOpenMatch[2] ?? '');
+        lines.push(
+          ...renderList(matched.inner, tag === 'ol', isTask, '', readListStart(listOpenMatch[2])),
+        );
+        lines.push('');
+        remaining = remaining.slice(matched.end);
+        continue;
       }
-      lines.push('');
-      remaining = remaining.slice(taskListMatch[0].length);
-      continue;
-    }
-
-    // Unordered list
-    const ulMatch = remaining.match(/^<ul>(.*?)<\/ul>/s);
-    if (ulMatch) {
-      const items = ulMatch[1].matchAll(/<li>(.*?)<\/li>/gs);
-      for (const item of items) {
-        lines.push(...renderListItem('- ', item[1]));
-      }
-      lines.push('');
-      remaining = remaining.slice(ulMatch[0].length);
-      continue;
-    }
-
-    // Ordered list
-    const olMatch = remaining.match(/^<ol[^>]*>(.*?)<\/ol>/s);
-    if (olMatch) {
-      const items = [...olMatch[1].matchAll(/<li>(.*?)<\/li>/gs)];
-      items.forEach((item, idx) => {
-        lines.push(...renderListItem(`${idx + 1}. `, item[1]));
-      });
-      lines.push('');
-      remaining = remaining.slice(olMatch[0].length);
-      continue;
     }
 
     // Paragraph
@@ -684,13 +842,164 @@ export function tiptapToMarkdown(html: string): string {
 }
 
 /**
+ * Find the tag opened at `start` and return its inner HTML plus the index
+ * just past its matching close tag, counting nested opens of the same tag.
+ *
+ * A lazy `/^<ul>(.*?)<\/ul>/s` cannot do this: it stops at the FIRST
+ * `</ul>`, which for any nested list is the INNER list's close tag. That
+ * truncation is what fused a child bullet's text into its parent and
+ * dropped the following siblings' markers entirely.
+ */
+function matchBalancedTag(
+  html: string,
+  start: number,
+  tag: string,
+): { inner: string; end: number } | null {
+  const re = new RegExp(`<${tag}\\b[^>]*>|</${tag}\\s*>`, 'gi');
+  re.lastIndex = start;
+  let depth = 0;
+  let innerStart = -1;
+  let match: RegExpExecArray | null;
+  while ((match = re.exec(html)) !== null) {
+    if (match[0][1] === '/') {
+      depth--;
+      if (depth === 0)
+        return { inner: html.slice(innerStart, match.index), end: match.index + match[0].length };
+      if (depth < 0) return null;
+    } else {
+      if (depth === 0) {
+        if (match.index !== start) return null;
+        innerStart = match.index + match[0].length;
+      }
+      depth++;
+    }
+  }
+  return null;
+}
+
+/** Split a list's inner HTML into its top-level `<li>` items (depth-counted). */
+function splitTopLevelListItems(inner: string): { attrs: string; inner: string }[] {
+  const items: { attrs: string; inner: string }[] = [];
+  const re = /<li\b([^>]*)>|<\/li\s*>/gi;
+  let depth = 0;
+  let itemStart = -1;
+  let itemAttrs = '';
+  let match: RegExpExecArray | null;
+  while ((match = re.exec(inner)) !== null) {
+    if (match[0][1] === '/') {
+      depth--;
+      if (depth === 0 && itemStart >= 0) {
+        items.push({ attrs: itemAttrs, inner: inner.slice(itemStart, match.index) });
+      }
+      if (depth < 0) depth = 0;
+    } else {
+      if (depth === 0) {
+        itemStart = match.index + match[0].length;
+        itemAttrs = match[1] ?? '';
+      }
+      depth++;
+    }
+  }
+  return items;
+}
+
+interface NestedList {
+  ordered: boolean;
+  task: boolean;
+  inner: string;
+  start: number;
+}
+
+/** Read an `<ol start="N">` attribute, defaulting to ProseMirror's start of 1. */
+function readListStart(attrs: string | undefined): number {
+  const parsed = parseInt(/\bstart="(\d+)"/i.exec(attrs ?? '')?.[1] ?? '', 10);
+  return Number.isFinite(parsed) ? parsed : 1;
+}
+
+/**
+ * Separate an `<li>`'s own content from the lists nested inside it. Tiptap
+ * nests a sublist as a CHILD of the `<li>`, as a sibling of the item's
+ * `<p>` — so the nested markup must be lifted out before the item's text is
+ * rendered, or it would be flattened into that text.
+ */
+function splitItemContent(itemHtml: string): { content: string; nested: NestedList[] } {
+  const nested: NestedList[] = [];
+  let content = '';
+  let cursor = 0;
+  const re = /<(ul|ol)\b([^>]*)>/gi;
+  let match: RegExpExecArray | null;
+  while ((match = re.exec(itemHtml)) !== null) {
+    const tag = match[1].toLowerCase();
+    const matched = matchBalancedTag(itemHtml, match.index, tag);
+    if (!matched) break;
+    content += itemHtml.slice(cursor, match.index);
+    nested.push({
+      ordered: tag === 'ol',
+      task: /data-type="taskList"/i.test(match[2] ?? ''),
+      inner: matched.inner,
+      start: readListStart(match[2]),
+    });
+    cursor = matched.end;
+    // Skip past the whole nested list so only TOP-level lists are collected.
+    re.lastIndex = matched.end;
+  }
+  return { content: content + itemHtml.slice(cursor), nested };
+}
+
+/**
+ * Render a `<ul>`/`<ol>` (including task lists) as markdown lines, recursing
+ * into nested lists at any depth. Sub-items are indented to the parent
+ * marker's content column, which is what makes them re-parse as children.
+ *
+ * `start` is the first ordinal of an ordered list. Hard-coding it to 1 reset
+ * every list that continues after an interruption, so `5. five` came back as
+ * `1. five`. Marker WIDTH follows from the real ordinal, so the child indent
+ * below stays correct for two-digit markers too.
+ */
+function renderList(
+  inner: string,
+  ordered: boolean,
+  task: boolean,
+  indent: string,
+  start = 1,
+): string[] {
+  const lines: string[] = [];
+  const items = splitTopLevelListItems(inner);
+
+  items.forEach((item, idx) => {
+    const { content, nested } = splitItemContent(item.inner);
+    const marker = ordered ? `${start + idx}. ` : '- ';
+
+    if (task) {
+      // Read checked state from the attribute value only — a bare
+      // includes('checked') matches the substring in data-checked="false".
+      const checked = /data-checked="true"/.test(item.attrs);
+      // Drop the checkbox chrome (<label>…</label>) before reading text;
+      // Tiptap puts the task text in the trailing content node, not the label.
+      const body = content.replace(/<label\b[^>]*>.*?<\/label>/s, '');
+      const text = htmlToInline(body.replace(/<[^>]+>/g, '').trim());
+      lines.push(`${indent}- [${checked ? 'x' : ' '}] ${text}`.trimEnd());
+    } else {
+      lines.push(...renderListItem(marker, content, indent));
+    }
+
+    const childIndent = indent + ' '.repeat(task ? 2 : marker.length);
+    for (const child of nested) {
+      lines.push(...renderList(child.inner, child.ordered, child.task, childIndent, child.start));
+    }
+  });
+
+  return lines;
+}
+
+/**
  * Render a list item's HTML content as one or more markdown lines.
  * Handles `<p>` paragraph breaks (blank line) and `<br>` hard breaks
  * (two trailing spaces). Continuation lines are indented to keep them
  * inside the list item.
  */
-function renderListItem(prefix: string, html: string): string[] {
-  const indent = ' '.repeat(prefix.length);
+function renderListItem(prefix: string, html: string, outerIndent = ''): string[] {
+  const indent = outerIndent + ' '.repeat(prefix.length);
 
   // Pull out any block-level media nested in the item (e.g. a recording
   // dropped onto a list bullet, or a clip dragged into one). The inline
@@ -722,7 +1031,7 @@ function renderListItem(prefix: string, html: string): string[] {
     const subLines = inline.split('\n');
     subLines.forEach((sub, sIdx) => {
       if (pIdx === 0 && sIdx === 0) {
-        textLines.push(prefix + sub);
+        textLines.push(outerIndent + prefix + sub);
       } else {
         // Blank line separator between paragraphs (sIdx === 0 means new paragraph)
         if (sIdx === 0) textLines.push('');
@@ -731,7 +1040,7 @@ function renderListItem(prefix: string, html: string): string[] {
     });
   });
 
-  if (textLines.length === 0 && media.length === 0) return [prefix];
+  if (textLines.length === 0 && media.length === 0) return [outerIndent + prefix];
 
   // Text first (its first line carries the bullet marker), then each media
   // tag as its own indented continuation block. If the item is media-only,
@@ -744,13 +1053,122 @@ function renderListItem(prefix: string, html: string): string[] {
       result.push(indent + tag);
     }
   } else {
-    result.push(prefix + media[0]);
+    result.push(outerIndent + prefix + media[0]);
     for (const tag of media.slice(1)) {
       result.push('');
       result.push(indent + tag);
     }
   }
   return result;
+}
+
+/**
+ * Line index of the closing `---` of a leading YAML frontmatter block, or -1
+ * when the document has none. Mirrors core: a `---` on the FIRST line opens
+ * frontmatter that runs to the next `---` line, and core's parser really does
+ * read `---\nfoo\n---\nbar` that way (frontmatter + one paragraph).
+ */
+function findFrontmatterEnd(lines: string[]): number {
+  if (lines[0]?.trim() !== '---') return -1;
+  for (let i = 1; i < lines.length; i++) {
+    if (lines[i].trim() === '---') return i;
+  }
+  return -1;
+}
+
+/**
+ * Match a setext heading underline, returning the heading level it implies
+ * (`=` → 1, `-` → 2) or null. Per CommonMark the run may be any length —
+ * a single `-` counts — and may be indented up to three columns.
+ */
+function matchSetextUnderline(line: string): 1 | 2 | null {
+  const match = /^ {0,3}(=+|-+)[ \t]*$/.exec(line);
+  if (!match) return null;
+  return match[1][0] === '=' ? 1 : 2;
+}
+
+/** A line that is indented far enough (4 columns / one tab) to be code. */
+function isIndentedCodeLine(line: string): boolean {
+  return /^(?: {4}|\t)/.test(line) && line.trim() !== '';
+}
+
+/** Remove the 4-column indent that marks a line as indented code. */
+function stripCodeIndent(line: string): string {
+  return line.startsWith('\t') ? line.slice(1) : line.slice(4);
+}
+
+/**
+ * Render a heading line's text as Tiptap heading HTML, peeling off any
+ * trailing brace-blocks into data attributes.
+ *
+ * Shared by the ATX (`# Title`) and setext (`Title` / `---`) branches: the two
+ * markdown spellings produce the SAME heading node, so annotation handling
+ * must not depend on which one the author used.
+ */
+function headingToHtml(level: number, rawText: string): string {
+  let text = rawText;
+  let attrs = '';
+
+  // Peel off trailing brace-blocks in any order: the squisq-native
+  // `{[template …]}` annotation and the Pandoc `{#id .class key=value}`
+  // attribute block may both appear at the end of the heading line.
+  // Loop until neither matches. The matchers are imported from core so
+  // this stays in sync with packages/core/src/markdown/convert.ts.
+  let templateInner: string | null = null;
+  let pandocInner: string | null = null;
+  for (let pass = 0; pass < 4; pass++) {
+    let matched = false;
+    if (templateInner == null) {
+      const m = matchTrailingTemplateAnnotation(text);
+      if (m) {
+        templateInner = m.inner.trim();
+        text = text.slice(0, m.index).trimEnd();
+        matched = true;
+      }
+    }
+    if (pandocInner == null) {
+      const m = matchTrailingPandocAttr(text);
+      if (m) {
+        pandocInner = m.inner.trim();
+        text = text.slice(0, m.index).trimEnd();
+        matched = true;
+      }
+    }
+    if (!matched) break;
+  }
+
+  if (templateInner != null) {
+    // Quote-aware tokenization (shared with the core parser) keeps a
+    // quoted value like caption="Beach at sunset" as one token. The
+    // tokens are stored raw — quotes included — so tiptapToMarkdown
+    // can re-join them into the annotation verbatim.
+    const tokens = tokenizeAttrTokens(templateInner);
+    if (tokens.length === 0) {
+      // Preserve an authored `{[]}` through the editable Tiptap document
+      // while keeping the raw marker out of the visible heading text.
+      attrs += ' data-template-empty="true"';
+    }
+    const firstIsParam = tokens.length > 0 && tokens[0].indexOf('=') > 0;
+    if (!firstIsParam && tokens[0]) {
+      attrs += ` data-template="${escapeHtml(tokens[0])}"`;
+    }
+    const params = tokens.slice(firstIsParam ? 0 : 1).filter((t) => t.includes('='));
+    if (params.length > 0) {
+      attrs += ` data-template-params="${escapeHtml(params.join(' '))}"`;
+    }
+  }
+  if (pandocInner != null) {
+    attrs += ` data-block-attrs="${escapeHtml(pandocInner)}"`;
+  }
+
+  return `<h${level}${attrs}>${inlineToHtml(text)}</h${level}>`;
+}
+
+/** Leading-whitespace width of a list line, counting a tab as 4 columns. */
+function indentWidth(raw: string): number {
+  let width = 0;
+  for (const ch of raw) width += ch === '\t' ? 4 : 1;
+  return width;
 }
 
 // ─── Table helpers ───────────────────────────────────────
@@ -887,13 +1305,31 @@ function inlineToHtml(text: string): string {
     );
   });
 
-  // Links: [text](url) — stash but keep the link text available to
-  // inline formatting by recursing.
-  staged = replaceMarkdownLinks(staged, (linkText, href) =>
-    stash(`<a href="${escapeHtml(href)}">${inlineToHtml(linkText)}</a>`),
-  );
+  // Links: [text](url) / [text](url "title") — stash but keep the link text
+  // available to inline formatting by recursing. The destination must be
+  // SPLIT from the optional title first: folding the whole thing into the
+  // href produced `href="http://x.com &quot;T&quot;"`, a link that is broken
+  // for as long as the document is open in the editor.
+  staged = replaceMarkdownLinks(staged, (linkText, destination) => {
+    const { url, title } = splitLinkDestination(destination);
+    const titleAttr = title === null ? '' : ` title="${escapeHtml(title)}"`;
+    return stash(`<a href="${escapeHtml(url)}"${titleAttr}>${inlineToHtml(linkText)}</a>`);
+  });
 
   let result = escapeHtml(staged);
+
+  // Neutralize backslash-escaped emphasis delimiters BEFORE the emphasis
+  // regexes run. `\*not italic\*` previously matched RE_ITALIC_STAR from
+  // the inner `*`, rendering real emphasis with stray visible backslashes
+  // (`\<em>not italic\</em>`). Reusing the stash idiom keeps the escape
+  // invisible to every pattern below, and the restore step swaps in the
+  // BARE character, so no backslash survives into the editor either.
+  // `\\*x*` still emphasizes: the even backslash run is consumed as one
+  // escaped backslash before the delimiter is ever considered.
+  result = result.replace(
+    RE_MD_ESCAPE,
+    (_m, ch: string) => `\u0000ESC${ESCAPABLE_MD_CHARS.indexOf(ch)}\u0000`,
+  );
 
   // Bold: **text** or __text__
   result = result.replace(RE_BOLD_STAR, '<strong>$1</strong>');
@@ -905,6 +1341,14 @@ function inlineToHtml(text: string): string {
 
   // Strikethrough: ~~text~~
   result = result.replace(RE_STRIKETHROUGH, '<s>$1</s>');
+
+  // Restore escaped delimiters as their literal character. split/join
+  // rather than a regex: the sentinel is a control character, which a
+  // RegExp literal cannot carry cleanly (and the placeholder restore
+  // below already uses this same idiom).
+  for (let index = 0; index < ESCAPABLE_MD_CHARS.length; index++) {
+    result = result.split(`\u0000ESC${index}\u0000`).join(ESCAPABLE_MD_CHARS[index]);
+  }
 
   // Restore newest placeholders first. A link placeholder can contain an
   // older code/icon placeholder from its label, so a single regex replacement
@@ -968,6 +1412,56 @@ function replaceMarkdownLinks(
   return output + text.slice(consumedThrough);
 }
 
+/**
+ * Split a link destination into its URL and optional title.
+ *
+ * CommonMark allows `[t](url "title")`, `'title'` and `(title)`. Only a title
+ * that runs to the very end of the destination counts, which is what keeps a
+ * URL that merely CONTAINS quotes or parens — `http://x.com/a_(b)` — intact:
+ * no separating whitespace, so the whole string stays the URL.
+ */
+function splitLinkDestination(destination: string): { url: string; title: string | null } {
+  // Keyed by CLOSER: the title always ends the destination, so the final
+  // character is what tells us which delimiter to look for.
+  const OPENER_FOR: Record<string, string> = { '"': '"', "'": "'", ')': '(' };
+  const trimmed = destination.trimEnd();
+  const opener = OPENER_FOR[trimmed[trimmed.length - 1] ?? ''];
+  if (!opener) return { url: destination.trim(), title: null };
+
+  // Walk backwards from just inside the closer. `"` and `'` are their own
+  // closer, so scanning FORWARD (or taking the last index outright) would
+  // land on the closing delimiter rather than the opening one.
+  for (let index = trimmed.length - 2; index > 0; index--) {
+    if (trimmed[index] !== opener) continue;
+    if (isEscapedMarkdownCharacter(trimmed, index)) continue;
+    // A title must be separated from the URL by whitespace. Without this,
+    // `http://x.com/a_(b)` would lose `(b)` to a phantom title.
+    if (!/\s/.test(trimmed[index - 1])) continue;
+    const url = trimmed.slice(0, index).trim();
+    if (!url) continue;
+    return {
+      url,
+      // Backslash escapes inside a title are real escapes (`\"` is a literal
+      // quote), matching core's parser.
+      title: trimmed.slice(index + 1, -1).replace(/\\([\\"'()])/g, '$1'),
+    };
+  }
+  return { url: destination.trim(), title: null };
+}
+
+/**
+ * Markdown-escape a link title that is still in its HTML-ESCAPED form.
+ *
+ * Every `htmlToInline` handler leaves attribute values entity-encoded and lets
+ * the single trailing `unescapeHtml` decode them once; unescaping here instead
+ * would decode a title twice (a literal `&amp;` would collapse to `&`). So the
+ * quote is escaped through its entity: `\&quot;` decodes to `\"` on that final
+ * pass. Backslashes go first so the one added for the quote isn't doubled.
+ */
+function escapeLinkTitleAttr(attrValue: string): string {
+  return attrValue.replace(/\\/g, '\\\\').replace(/&quot;/g, '\\&quot;');
+}
+
 function findMatchingMarkdownDelimiter(
   text: string,
   start: number,
@@ -993,6 +1487,114 @@ function isEscapedMarkdownCharacter(text: string, index: number): boolean {
   return backslashes % 2 === 1;
 }
 
+function isMarkdownWordChar(ch: string | undefined): boolean {
+  return ch !== undefined && /[\p{L}\p{N}_]/u.test(ch);
+}
+
+/** Start/end of a text run counts as whitespace, matching CommonMark flanking. */
+function isMarkdownSpace(ch: string | undefined): boolean {
+  return ch === undefined || /\s/.test(ch);
+}
+
+/**
+ * Bare URLs that GFM will autolink on re-parse. Their delimiters must NOT be
+ * escaped: a backslash inside an autolink destination is not an escape, it is
+ * a literal character of the URL (`.../_next/` would come back as
+ * `.../\_next/`, a different — broken — link). Inside the autolink's extent
+ * the delimiters are inert anyway, because the autolink consumes them before
+ * emphasis pairing runs.
+ *
+ * Markdown-syntax links (`[x](url)`) don't need this: they're already stashed
+ * out of the text before escaping.
+ */
+const RE_BARE_URL = /(?:https?:\/\/|ftp:\/\/|www\.)(?:\([^\s<>()]*\)|[^\s<>[\]()])+/gi;
+
+/**
+ * Escape the markdown delimiters in a run of literal TEXT so it survives a
+ * re-parse as text rather than turning into emphasis.
+ *
+ * A delimiter reaching this function came from a text node, so by definition
+ * it was NOT emphasis in the editor — escaping it can never lose meaning,
+ * only add bytes. The escape is therefore deliberately MINIMAL rather than
+ * blanket: a char is escaped only where the inbound rules above would
+ * actually re-read it as a delimiter. That is what keeps `snake_case_name`,
+ * `my_file_v2.txt`, `2 * 3 * 4` and `~/home` byte-identical through a
+ * round-trip while still neutering `*not italic*`.
+ *
+ * Bare URLs are passed through verbatim (see {@link RE_BARE_URL}).
+ *
+ * NOTE on why `*` is escaped conservatively (whenever it could flank) rather
+ * than only when a partner exists in the same text node: emphasis pairs
+ * ACROSS text nodes. `a*b <em>x</em> c*d` serializes to `a*b *x* c*d`, whose
+ * four delimiters re-pair into nested emphasis. Per-node pair counting is
+ * therefore unsound, and the extra backslash is the price of correctness.
+ */
+function escapeMarkdownText(text: string): string {
+  let out = '';
+  let cursor = 0;
+  RE_BARE_URL.lastIndex = 0;
+  let url: RegExpExecArray | null;
+  while ((url = RE_BARE_URL.exec(text)) !== null) {
+    out += escapeMarkdownRun(text.slice(cursor, url.index));
+    out += url[0];
+    cursor = url.index + url[0].length;
+  }
+  return out + escapeMarkdownRun(text.slice(cursor));
+}
+
+/** Escape delimiters in a run of text known to contain no bare URL. */
+function escapeMarkdownRun(text: string): string {
+  let out = '';
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    const prev = text[i - 1];
+    const next = text[i + 1];
+
+    if (ch === '\\') {
+      // Only double a backslash that would otherwise escape a delimiter we
+      // handle; `C:\path` must stay `C:\path`.
+      out += ESCAPABLE_MD_CHARS.includes(next ?? '') ? '\\\\' : '\\';
+      continue;
+    }
+    if (ch === '~') {
+      // Only `~~` opens strikethrough; a lone `~` (e.g. `~/home`) is literal.
+      out += prev === '~' || next === '~' ? '\\~' : '~';
+      continue;
+    }
+    if (ch === '*') {
+      out += !isMarkdownSpace(next) || !isMarkdownSpace(prev) ? '\\*' : '*';
+      continue;
+    }
+    if (ch === '_') {
+      const canOpen = !isMarkdownWordChar(prev) && !isMarkdownSpace(next);
+      const canClose = !isMarkdownWordChar(next) && !isMarkdownSpace(prev);
+      out += canOpen || canClose ? '\\_' : '_';
+      continue;
+    }
+    out += ch;
+  }
+  return out;
+}
+
+/**
+ * Apply `escapeMarkdownText` to the text nodes of an HTML fragment, leaving
+ * tags (and the literal contents of `<code>` spans) untouched. Must run
+ * BEFORE the tag→markdown conversions below, otherwise it would escape the
+ * `*` / `~~` delimiters those conversions legitimately emit.
+ */
+function escapeMarkdownTextNodes(html: string): string {
+  let out = '';
+  let cursor = 0;
+  const re = /<code\b[^>]*>[\s\S]*?<\/code>|<[^>]+>/gi;
+  let match: RegExpExecArray | null;
+  while ((match = re.exec(html)) !== null) {
+    out += escapeMarkdownText(html.slice(cursor, match.index));
+    out += match[0];
+    cursor = match.index + match[0].length;
+  }
+  return out + escapeMarkdownText(html.slice(cursor));
+}
+
 /** Convert inline HTML back to markdown */
 function htmlToInline(html: string): string {
   let result = html;
@@ -1000,6 +1602,11 @@ function htmlToInline(html: string): string {
   // Soft line breaks — convert <br> to GFM hard-break syntax (two trailing
   // spaces + newline) before stripping tags so the newline survives.
   result = result.replace(/<br\s*\/?>/gi, '  \n');
+
+  // Escape literal markdown delimiters in the text BEFORE any tag becomes
+  // markdown. Without this, prose the user typed as `\*not italic\*` came
+  // back as a live `*not italic*` and rendered italic on the next parse.
+  result = escapeMarkdownTextNodes(result);
 
   // FontAwesome inline icons — emit the original token. Must run before
   // RE_I_TAG (which matches a bare `<i>` and would otherwise eat icon
@@ -1032,8 +1639,16 @@ function htmlToInline(html: string): string {
     return `@[${label}](${kind}:${id})`;
   });
 
-  // Links
-  result = result.replace(RE_A_TAG, '[$2]($1)');
+  // Links — re-emit the title as `[text](url "title")` when the anchor
+  // carries one. Attributes are read by name so Tiptap's own
+  // `<a target rel href>` ordering works as well as our `<a href title>`.
+  result = result.replace(RE_A_TAG, (match, attrs: string, text: string) => {
+    const href = /\bhref="([^"]*)"/i.exec(attrs)?.[1];
+    if (href === undefined) return match;
+    const title = /\btitle="([^"]*)"/i.exec(attrs)?.[1];
+    const titlePart = title ? ` "${escapeLinkTitleAttr(title)}"` : '';
+    return `[${text}](${href}${titlePart})`;
+  });
 
   // Images — order-agnostic attribute parsing (tiptap emits src-first,
   // our markdown-to-html emits alt-first; either must serialize back).

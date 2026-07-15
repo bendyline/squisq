@@ -204,30 +204,77 @@ async function withContainerMutationLock<T>(
   }
 }
 
+/**
+ * Split a newest-first snapshot list into one newest-first list per basename.
+ *
+ * Retention is a property of a DOCUMENT's history, never of the container:
+ * one container can hold several documents' snapshots side by side. Applying
+ * a policy to the flat list lets doc B's activity evict doc A's history —
+ * a keep-last-n cap consumes its budget on whichever doc saved most recently,
+ * and a coalesce window collapses A's only snapshot against B's unrelated one.
+ * Every retention decision is therefore made within a basename group.
+ *
+ * Insertion order follows the (already sorted) input, so each group stays
+ * newest-first without a second sort.
+ */
+function groupByBasename(versions: readonly Version[]): Map<string, Version[]> {
+  const groups = new Map<string, Version[]>();
+  for (const version of versions) {
+    const group = groups.get(version.basename);
+    if (group) group.push(version);
+    else groups.set(version.basename, [version]);
+  }
+  return groups;
+}
+
+/**
+ * Re-order a set of per-group deletions back into the caller-facing
+ * newest-first order documented by `pruneVersions` / `coalesceVersions`.
+ */
+function inListOrder(versions: readonly Version[], toDelete: ReadonlySet<Version>): Version[] {
+  return versions.filter((version) => toDelete.has(version));
+}
+
 export async function pruneSnapshots(
   container: ContentContainer,
   strategy: SnapshotPathStrategy,
   policy: PrunePolicy,
   basename?: string,
 ): Promise<Version[]> {
-  const versions = await listSnapshots(container, strategy, basename);
-  let toDelete: Version[];
-
-  if (policy.type === 'keep-last-n') {
-    if (!Number.isSafeInteger(policy.n) || policy.n < 0) {
-      throw new RangeError('keep-last-n requires a non-negative safe integer');
-    }
-    toDelete = versions.slice(policy.n);
-  } else if (policy.type === 'older-than') {
-    const cutoff = policy.date.getTime();
-    if (!Number.isFinite(cutoff)) throw new TypeError('older-than requires a valid date');
-    toDelete = versions.filter((version) => version.timestamp.getTime() < cutoff);
-  } else {
-    toDelete = versions.filter((version) => !policy.keep(version, versions));
+  // Validate before listing so an invalid policy never deletes anything.
+  if (policy.type === 'keep-last-n' && (!Number.isSafeInteger(policy.n) || policy.n < 0)) {
+    throw new RangeError('keep-last-n requires a non-negative safe integer');
+  }
+  if (policy.type === 'older-than' && !Number.isFinite(policy.date.getTime())) {
+    throw new TypeError('older-than requires a valid date');
   }
 
-  await removeSnapshots(container, toDelete);
-  return toDelete;
+  const versions = await listSnapshots(container, strategy, basename);
+  const toDelete = new Set<Version>();
+
+  for (const group of groupByBasename(versions).values()) {
+    if (policy.type === 'keep-last-n') {
+      for (const version of group.slice(policy.n)) toDelete.add(version);
+    } else if (policy.type === 'older-than') {
+      // Basename-independent, but grouped for uniformity — an absolute
+      // cutoff yields the same set either way.
+      const cutoff = policy.date.getTime();
+      for (const version of group) {
+        if (version.timestamp.getTime() < cutoff) toDelete.add(version);
+      }
+    } else {
+      // The predicate sees the document's OWN history as `all`, matching the
+      // per-document framing of the other policies (and of an explicit
+      // `basename` filter, where `all` is already scoped to one document).
+      for (const version of group) {
+        if (!policy.keep(version, group)) toDelete.add(version);
+      }
+    }
+  }
+
+  const deleted = inListOrder(versions, toDelete);
+  await removeSnapshots(container, deleted);
+  return deleted;
 }
 
 export async function coalesceSnapshots(
@@ -241,24 +288,27 @@ export async function coalesceSnapshots(
     throw new RangeError('windowMs must be a non-negative finite number');
   }
   const versions = await listSnapshots(container, strategy, basename);
-  const toDelete: Version[] = [];
+  const toDelete = new Set<Version>();
 
-  // Compare against the last kept snapshot. Pairwise comparison against a
-  // deleted neighbor would chain through a dense run and over-prune it.
-  if (versions.length > 0) {
-    let anchor = versions[0]!;
-    for (let index = 1; index < versions.length; index++) {
-      const candidate = versions[index]!;
+  // Walk each document's history independently: "adjacent" means adjacent
+  // among THAT document's snapshots. Compare against the last kept snapshot —
+  // pairwise comparison against a deleted neighbor would chain through a
+  // dense run and over-prune it.
+  for (const group of groupByBasename(versions).values()) {
+    let anchor = group[0]!;
+    for (let index = 1; index < group.length; index++) {
+      const candidate = group[index]!;
       if (anchor.timestamp.getTime() - candidate.timestamp.getTime() <= windowMs) {
-        toDelete.push(candidate);
+        toDelete.add(candidate);
       } else {
         anchor = candidate;
       }
     }
   }
 
-  await removeSnapshots(container, toDelete);
-  return toDelete;
+  const deleted = inListOrder(versions, toDelete);
+  await removeSnapshots(container, deleted);
+  return deleted;
 }
 
 async function removeSnapshots(

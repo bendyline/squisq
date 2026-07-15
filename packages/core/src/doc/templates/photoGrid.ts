@@ -147,6 +147,10 @@ function getGridPositions(count: number, gridHeight: number, stacked: boolean): 
   const halfH = gridHeight / 2 - GAP / 2;
 
   switch (count) {
+    case 1:
+      // A lone image fills the frame. Without this it fell through to the 2x2
+      // default and rendered in the top-left quadrant beside three empty ones.
+      return [{ x: 0, y: 0, w: 100, h: gridHeight }];
     case 2:
       if (stacked) {
         // Portrait: stack top/bottom
