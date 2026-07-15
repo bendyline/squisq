@@ -1,3 +1,9 @@
+## @bendyline/squisq-editor-react [2.3.1](https://github.com/bendyline/squisq/compare/@bendyline/squisq-editor-react@2.3.0...@bendyline/squisq-editor-react@2.3.1) (2026-07-15)
+
+### Bug Fixes
+
+* Monaco peer work ([#28](https://github.com/bendyline/squisq/issues/28)) ([1b772f7](https://github.com/bendyline/squisq/commit/1b772f73cb99806c9f74b6de9587f5d54b366925))
+
 ## @bendyline/squisq-editor-react [2.3.0](https://github.com/bendyline/squisq/compare/@bendyline/squisq-editor-react@2.2.0...@bendyline/squisq-editor-react@2.3.0) (2026-07-15)
 
 ### Features
