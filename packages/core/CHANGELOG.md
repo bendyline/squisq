@@ -1,3 +1,13 @@
+## @bendyline/squisq [2.3.0](https://github.com/bendyline/squisq/compare/@bendyline/squisq@2.2.0...@bendyline/squisq@2.3.0) (2026-07-15)
+
+### Features
+
+* Print button ([#26](https://github.com/bendyline/squisq/issues/26)) ([a06a4bb](https://github.com/bendyline/squisq/commit/a06a4bba8c07f5252eea2fdcf9ff6fa5a5effba5))
+
+### Bug Fixes
+
+* Additional layouts ([#27](https://github.com/bendyline/squisq/issues/27)) ([c8b08ce](https://github.com/bendyline/squisq/commit/c8b08cebbde276909c5f845604cf580db84d8a07))
+
 ## @bendyline/squisq [2.2.0](https://github.com/bendyline/squisq/compare/@bendyline/squisq@2.1.0...@bendyline/squisq@2.2.0) (2026-07-15)
 
 ### Features
