@@ -46,7 +46,7 @@ import type {
 
 import type { ContentContainer } from '@bendyline/squisq/storage';
 import { buildContainer } from '../shared/container.js';
-import UPNG from '@pdf-lib/upng';
+import { upngEncoder } from './upng.js';
 
 import {
   DEFAULT_FONT_SIZE,
@@ -384,7 +384,8 @@ function imageDataToPng(img: PdfjsImageData): ArrayBuffer | null {
 
     const owned = new Uint8Array(rgba.byteLength);
     owned.set(rgba);
-    return UPNG.encode([owned.buffer], img.width, img.height, 0);
+    if (!upngEncoder) return null;
+    return upngEncoder.encode([owned.buffer], img.width, img.height, 0);
   } catch {
     return null;
   }

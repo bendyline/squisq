@@ -221,6 +221,7 @@ export function Toolbar({
   } = useEditorContext();
   const previewSettings = usePreviewSettingsOptional();
   const [useModeMenuRequest, requestUseModeMenu] = useReducer((count: number) => count + 1, 0);
+  const [recorderOpen, setRecorderOpen] = useState(false);
   // When a canvas textbox is being edited, its Tiptap instance takes over
   // the formatting buttons; otherwise they drive the document editor. The
   // `level` gates which buttons apply (inline labels vs. rich textboxes).
@@ -932,7 +933,9 @@ export function Toolbar({
   const handleCodeSnippetInsert = useCallback(
     (language: CodeSnippetLanguage) => {
       if (activeView === 'wysiwyg' && tiptapEditor) {
-        insertFenceBlock(tiptapEditor, language.starter, language.fenceLanguage);
+        insertFenceBlock(tiptapEditor, language.starter, language.fenceLanguage, {
+          focusInsertedCodeSnippet: true,
+        });
         closeInsertMenu();
         return;
       }
@@ -946,7 +949,7 @@ export function Toolbar({
         const markdown = codeSnippetMarkdown(language.fenceLanguage, source);
         monacoEditor.executeEdits('toolbar-code-snippet', [{ range: selection, text: markdown }]);
         if (selectedText.length === 0) {
-          const sourceOffset = 5 + language.fenceLanguage.length;
+          const sourceOffset = 5 + language.fenceLanguage.length + source.length;
           const sourcePosition = model.getPositionAt(
             model.getOffsetAt(selection.getStartPosition()) + sourceOffset,
           );
@@ -2146,21 +2149,10 @@ export function Toolbar({
           and a container is wired up. The component owns its own button
           and popover; we just give it a slot in the toolbar. */}
       {versioning && !isCodeMode && <VersionHistoryPanel />}
-      {/* Media recorder — surfaces when the host has a mediaProvider
-          and hasn't opted out. RecorderEntry returns null when no
-          provider is wired, so this stays a no-op for hosts that
-          haven't enabled media at all. */}
-      {allowRecording && !isCodeMode && mediaProvider && <RecorderEntry />}
-      {!isCodeMode && (
-        <button
-          type="button"
-          className="squisq-toolbar-button"
-          onClick={() => setShowDocSettings(true)}
-          data-tooltip="Document settings"
-          aria-label="Document settings"
-        >
-          <Icon icon="fa-solid fa-file-lines" />
-        </button>
+      {/* Keep the recorder controller mounted while its Insert menu closes so
+          the portaled modal retains its open state. */}
+      {allowRecording && !isCodeMode && mediaProvider && (
+        <RecorderEntry open={recorderOpen} onOpenChange={setRecorderOpen} showTrigger={false} />
       )}
       {!isCodeMode && (
         <button
@@ -2174,6 +2166,17 @@ export function Toolbar({
         </button>
       )}
       {!isCodeMode && <ViewMenuPanel />}
+      {!isCodeMode && (
+        <button
+          type="button"
+          className="squisq-toolbar-button"
+          onClick={() => setShowDocSettings(true)}
+          data-tooltip="Document settings"
+          aria-label="Document settings"
+        >
+          <Icon icon="fa-solid fa-file-lines" />
+        </button>
+      )}
       {/* Files toggle — visible when callback is provided */}
       {onToggleFiles && (
         <button
@@ -2292,6 +2295,23 @@ export function Toolbar({
                 </button>
               );
             })}
+            {allowRecording && mediaProvider && (
+              <button
+                type="button"
+                className="squisq-toolbar-overflow-item"
+                onClick={() => {
+                  setRecorderOpen(true);
+                  closeInsertMenu();
+                }}
+                role="menuitem"
+                aria-label="Record media"
+              >
+                <span className="squisq-toolbar-overflow-icon">
+                  <Icon icon="fa-solid fa-microphone" />
+                </span>
+                <span>Record media</span>
+              </button>
+            )}
             <button
               className="squisq-toolbar-overflow-item"
               onClick={(event) => {

@@ -5109,6 +5109,10 @@
   display: inline-flex;
   align-items: center;
   gap: 5px;
+  /* Match the template trigger's 29px outer height, which is set naturally
+     by its 17px thumbnail plus thumbnail/trigger padding and borders. */
+  box-sizing: border-box;
+  height: 29px;
   padding: 3px 8px;
   font-size: 12px;
   font-weight: 500;

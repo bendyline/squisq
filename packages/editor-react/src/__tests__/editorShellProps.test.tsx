@@ -426,6 +426,18 @@ describe('<EditorShell> Files badge', () => {
 });
 
 describe('<Toolbar> Files badge', () => {
+  it('places Document settings immediately before the Files button', () => {
+    render(
+      <EditorProvider initialMarkdown="# hi" initialView="raw" allowRecording={false}>
+        <Toolbar onToggleFiles={() => {}} />
+      </EditorProvider>,
+    );
+
+    const documentSettings = screen.getByRole('button', { name: 'Document settings' });
+    const files = screen.getByRole('button', { name: 'Toggle Files panel' });
+    expect(documentSettings.nextElementSibling).toBe(files);
+  });
+
   it('self-scans mediaProvider when fileCount is not controlled by a parent', async () => {
     const { container } = render(
       <EditorProvider
@@ -468,6 +480,25 @@ describe('<Toolbar> Files badge', () => {
 });
 
 describe('<Toolbar> Insert menu', () => {
+  it('opens media recording from the Insert menu instead of the main toolbar', async () => {
+    render(
+      <EditorProvider
+        initialMarkdown="Intro"
+        initialView="raw"
+        mediaProvider={mediaProviderWith(0)}
+      >
+        <Toolbar />
+      </EditorProvider>,
+    );
+
+    expect(screen.queryByRole('button', { name: 'Record media' })).toBeNull();
+    fireEvent.click(screen.getByLabelText('Insert'));
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Record media' }));
+
+    expect(screen.queryByRole('menu')).toBeNull();
+    expect(screen.getByRole('dialog', { name: 'Record media' })).toBeTruthy();
+  });
+
   it('adds a default task list from the Insert menu in raw fallback mode', async () => {
     render(
       <EditorProvider initialMarkdown="Intro" initialView="raw" allowRecording={false}>

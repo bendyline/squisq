@@ -14,6 +14,7 @@ import type { Editor } from '@tiptap/react';
 import { createElement } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { CodeSnippetWidget } from './CodeSnippetWidget';
+import { CODE_SNIPPET_FOCUS_INSERTED_META } from './codeSnippetFocus';
 import { isCodeSnippetFenceLanguage } from './codeSnippetLanguages';
 
 export interface CodeSnippetBlockEntry {
@@ -27,6 +28,8 @@ export interface CodeSnippetPluginState {
   entries: CodeSnippetBlockEntry[];
   decorations: DecorationSet;
   seq: number;
+  /** One-shot mount target supplied by the transaction that inserted the snippet. */
+  focusBlockId: string | null;
 }
 
 export interface CodeSnippetExtensionOptions {
@@ -57,6 +60,7 @@ function buildDecorations(
   doc: PMNode,
   entries: readonly CodeSnippetBlockEntry[],
   editor: Editor,
+  focusBlockId: string | null = null,
 ): DecorationSet {
   const decorations: Decoration[] = [];
   for (const entry of entries) {
@@ -83,6 +87,7 @@ function buildDecorations(
               editor,
               blockId,
               host: view.dom.parentElement ?? view.dom,
+              focusOnMount: entry.id === focusBlockId,
             }),
           );
           (
@@ -153,10 +158,16 @@ function applyState(
 ): CodeSnippetPluginState {
   if (!tr.docChanged) return previous;
   const { entries, seq } = remapEntries(tr, previous, doc);
+  const requestedFocusPos = tr.getMeta(CODE_SNIPPET_FOCUS_INSERTED_META);
+  const focusBlockId =
+    typeof requestedFocusPos === 'number'
+      ? (entries.find((entry) => entry.pos === requestedFocusPos)?.id ?? null)
+      : null;
   return {
     entries,
     seq,
-    decorations: buildDecorations(doc, entries, editor),
+    focusBlockId,
+    decorations: buildDecorations(doc, entries, editor, focusBlockId),
   };
 }
 
@@ -186,6 +197,7 @@ export const CodeSnippetExtension = Extension.create<CodeSnippetExtensionOptions
             return {
               entries,
               seq,
+              focusBlockId: null,
               decorations: buildDecorations(state.doc, entries, editor),
             };
           },

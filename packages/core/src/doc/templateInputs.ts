@@ -45,6 +45,15 @@ export interface FirstImage {
   height?: number;
 }
 
+/** First-class video reference discovered in a block body. */
+export interface EmbeddedVideo {
+  src: string;
+  posterSrc?: string;
+  alt: string;
+}
+
+const VIDEO_FILE_RE = /\.(?:webm|mp4|mov|m4v|ogv)(?:[?#].*)?$/i;
+
 /** Plain text of a block's body contents (excluding the heading). */
 export function extractBodyPlainText(contents?: MarkdownBlockNode[]): string {
   if (!contents || contents.length === 0) return '';
@@ -139,6 +148,86 @@ export function extractImages(
 /** First image in a block's body, or null. */
 export function extractFirstImage(contents: MarkdownBlockNode[] | undefined): FirstImage | null {
   return extractImages(contents, 1)[0] ?? null;
+}
+
+/**
+ * Find playable video references in block contents.
+ *
+ * Recorder output is raw HTML (`<video src="...">`), sometimes with a
+ * nested `<source>`. Direct markdown links/images to video files are also
+ * accepted. Hosted watch-page/iframe URLs are deliberately excluded: an
+ * HTML5 VideoLayer cannot play those URLs directly.
+ */
+export function extractEmbeddedVideos(
+  contents: MarkdownBlockNode[] | undefined,
+  limit = Infinity,
+): EmbeddedVideo[] {
+  if (!contents || contents.length === 0) return [];
+  const found: EmbeddedVideo[] = [];
+  const seen = new Set<string>();
+
+  const add = (video: EmbeddedVideo): void => {
+    if (!video.src || found.length >= limit || seen.has(video.src)) return;
+    seen.add(video.src);
+    found.push(video);
+  };
+
+  function nestedSource(children: unknown): string | undefined {
+    if (!Array.isArray(children)) return undefined;
+    for (const child of children) {
+      if (!child || typeof child !== 'object') continue;
+      const node = child as Record<string, unknown>;
+      if (node.tagName === 'source') {
+        const attrs = node.attributes as Record<string, string> | undefined;
+        if (typeof attrs?.src === 'string' && attrs.src) return attrs.src;
+      }
+      const nested = nestedSource(node.children);
+      if (nested) return nested;
+    }
+    return undefined;
+  }
+
+  function walk(node: unknown): void {
+    if (found.length >= limit || !node || typeof node !== 'object') return;
+    const n = node as Record<string, unknown>;
+
+    if (n.type === 'htmlElement' && n.tagName === 'video') {
+      const attrs = n.attributes as Record<string, string> | undefined;
+      const src = attrs?.src || nestedSource(n.children);
+      if (src) {
+        add({
+          src,
+          ...(attrs?.poster ? { posterSrc: attrs.poster } : {}),
+          alt: attrs?.['aria-label'] || attrs?.title || attrs?.alt || '',
+        });
+      }
+    } else if (
+      (n.type === 'link' || n.type === 'image') &&
+      typeof n.url === 'string' &&
+      VIDEO_FILE_RE.test(n.url)
+    ) {
+      add({
+        src: n.url,
+        alt:
+          typeof n.alt === 'string'
+            ? n.alt
+            : extractPlainText(n as unknown as MarkdownBlockNode).trim(),
+      });
+    }
+
+    if (Array.isArray(n.children)) n.children.forEach(walk);
+    if (Array.isArray(n.htmlChildren)) n.htmlChildren.forEach(walk);
+  }
+
+  contents.forEach(walk);
+  return found;
+}
+
+/** First directly playable video in a block body, or null. */
+export function extractFirstEmbeddedVideo(
+  contents: MarkdownBlockNode[] | undefined,
+): EmbeddedVideo | null {
+  return extractEmbeddedVideos(contents, 1)[0] ?? null;
 }
 
 /** Extract table data (headers, rows, alignment) from block contents. */
@@ -354,6 +443,16 @@ export function deriveTemplateInputs(
       if (images.length < 2) return placeholders ? {} : null;
       return {
         images: images.map((i) => ({ src: i.src, alt: i.alt })),
+        caption: headingText,
+      };
+    }
+    case 'videoWithCaption': {
+      const video = extractFirstEmbeddedVideo(contents);
+      if (!video) return placeholders ? { caption: headingText } : null;
+      return {
+        videoSrc: video.src,
+        posterSrc: video.posterSrc,
+        videoAlt: video.alt || headingText,
         caption: headingText,
       };
     }

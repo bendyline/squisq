@@ -29,8 +29,6 @@
   display: flex;
   min-height: 34px;
   align-items: center;
-  justify-content: space-between;
-  gap: 12px;
   padding: 0 10px;
   border-bottom: 1px solid var(--squisq-border, #d1d5db);
   background: var(--squisq-surface-muted, #f8fafc);
@@ -47,14 +45,6 @@
   gap: 7px;
   color: var(--squisq-text, #334155);
   font-weight: 600;
-}
-
-.squisq-code-snippet-header code {
-  overflow: hidden;
-  color: inherit;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .squisq-code-snippet-editor {

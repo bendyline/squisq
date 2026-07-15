@@ -1,9 +1,11 @@
 import { describe, expect, it, vi } from 'vitest';
 import { DEFAULT_THEME, expandDocBlocks } from '../doc/templates/index.js';
+import { markdownToDoc } from '../doc/markdownToDoc.js';
 import { materializeBlockLayers } from '../doc/materializeBlockLayers.js';
+import { parseMarkdown } from '../markdown/parse.js';
 import type { CustomTemplateDefinition } from '../schemas/CustomTemplates.js';
-import type { Block, Layer, TextLayer } from '../schemas/Doc.js';
-import type { TemplateBlock } from '../schemas/BlockTemplates.js';
+import type { Block, Layer, TextLayer, VideoLayer } from '../schemas/Doc.js';
+import type { DocBlock, TemplateBlock } from '../schemas/BlockTemplates.js';
 
 const titleBlock: TemplateBlock = {
   template: 'title',
@@ -69,6 +71,66 @@ describe('materializeBlockLayers', () => {
     expect(templated.source).toBe('template');
     expect(templated.layers.some((layer) => layer.type === 'text')).toBe(true);
     expect(templated.layers.some((layer) => layer.type === 'mermaid')).toBe(true);
+  });
+
+  it('promotes an embedded video into explicitly templated slideshow blocks', () => {
+    const doc = markdownToDoc(
+      parseMarkdown(`# About {[title]}
+
+Supporting copy.
+
+<video src="video/demo.webm" poster="video/poster.png" aria-label="Product demo" controls></video>`),
+      { generateCoverBlock: false },
+    );
+    const source = doc.blocks[0] as DocBlock;
+    const direct = materializeBlockLayers(source, { persistentLayers: false });
+    const video = direct.layers.find((layer): layer is VideoLayer => layer.type === 'video');
+
+    expect(direct.layers.some((layer) => layer.type === 'text')).toBe(true);
+    expect(video).toMatchObject({
+      id: 'about-embedded-video-1',
+      content: {
+        src: 'video/demo.webm',
+        posterSrc: 'video/poster.png',
+        alt: 'Product demo',
+        fit: 'contain',
+        clipStart: 0,
+        clipEnd: source.duration,
+      },
+    });
+
+    // Slideshow and rendered-video playback both consume timed expansion of
+    // this same materialization contract.
+    const [scheduled] = expandDocBlocks([source], { persistentLayers: false });
+    expect(scheduled.layers?.some((layer) => layer.type === 'video')).toBe(true);
+  });
+
+  it('auto-selects the video template without duplicating its derived layer', () => {
+    const doc = markdownToDoc(
+      parseMarkdown('# Demo\n\n<video src="clips/demo.mp4"><source src="ignored.webm"></video>'),
+      { generateCoverBlock: false },
+    );
+    const source = doc.blocks[0] as DocBlock;
+    const materialized = materializeBlockLayers(source, { persistentLayers: false });
+    const videos = materialized.layers.filter(
+      (layer): layer is VideoLayer => layer.type === 'video',
+    );
+
+    expect(source).toMatchObject({
+      template: 'videoWithCaption',
+      autoTemplate: true,
+      templateData: {
+        videoSrc: 'clips/demo.mp4',
+        videoAlt: 'Demo',
+        caption: 'Demo',
+      },
+    });
+    expect(videos).toHaveLength(1);
+    expect(videos[0].content).toMatchObject({
+      src: 'clips/demo.mp4',
+      clipStart: 0,
+      clipEnd: source.duration,
+    });
   });
 
   it('resolves document-scoped custom templates in the on-demand API', () => {

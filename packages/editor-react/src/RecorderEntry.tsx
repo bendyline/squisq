@@ -73,7 +73,13 @@ function annotateMonacoHeading(
   return false;
 }
 
-export function RecorderEntry() {
+export interface RecorderEntryProps {
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
+  showTrigger?: boolean;
+}
+
+export function RecorderEntry({ open, onOpenChange, showTrigger = true }: RecorderEntryProps = {}) {
   const {
     mediaProvider,
     workspaceContainer,
@@ -157,6 +163,9 @@ export function RecorderEntry() {
       colorScheme={colorScheme}
       onSave={handleSave}
       className="squisq-toolbar-button"
+      open={open}
+      onOpenChange={onOpenChange}
+      showTrigger={showTrigger}
     />
   );
 }

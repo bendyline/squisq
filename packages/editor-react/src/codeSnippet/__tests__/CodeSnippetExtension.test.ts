@@ -10,6 +10,7 @@ import {
   CodeSnippetExtension,
   findCodeSnippetBlockPos,
 } from '../CodeSnippetExtension';
+import { insertFenceBlock } from '../../toolbar/sceneBlockInserts';
 
 vi.mock('../CodeSnippetWidget', () => ({
   CodeSnippetWidget: () => null,
@@ -80,6 +81,21 @@ describe('CodeSnippetExtension', () => {
     const node = editor.state.doc.nodeAt(findCodeSnippetBlockPos(editor, entry.id) ?? -1);
     expect(node?.textContent).toBe('');
     expect(node?.attrs.language).toBe('json');
+  });
+
+  it('marks only the newly inserted snippet for end-of-boilerplate focus', () => {
+    const editor = makeEditor('Intro\n');
+
+    insertFenceBlock(editor, '{\n  "key": "value"\n}', 'json', {
+      focusInsertedCodeSnippet: true,
+    });
+
+    const state = CODE_SNIPPET_KEY.getState(editor.state);
+    expect(state?.entries).toHaveLength(1);
+    expect(state?.focusBlockId).toBe(state?.entries[0]?.id);
+
+    editor.commands.insertContentAt(0, 'Before ');
+    expect(CODE_SNIPPET_KEY.getState(editor.state)?.focusBlockId).toBeNull();
   });
 
   it('round-trips the language tag and source byte-for-byte', () => {
