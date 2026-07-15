@@ -481,8 +481,12 @@ export function deriveTemplateInputs(
       return inputs;
     }
     case 'quote': {
-      const quote = extractBlockquoteText(contents) || bodyText || headingText;
-      return { quote, ...(headingText ? { title: headingText } : {}) };
+      const quote = extractBlockquoteText(contents) || bodyText;
+      if (quote) return { quote, ...(headingText ? { title: headingText } : {}) };
+      // A heading-only quote promotes the heading into the quote slot. Do not
+      // also return it as the optional title, or renderers display the same
+      // authored text twice.
+      return { quote: headingText };
     }
     case 'fullBleedQuote':
     case 'pullQuote': {

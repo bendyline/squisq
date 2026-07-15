@@ -2404,6 +2404,19 @@ export function Toolbar({
             aria-label="Code snippet language"
           >
             <div className="squisq-insert-menu-header">Code Snippet</div>
+            <button
+              className="squisq-toolbar-overflow-item squisq-code-snippet-language"
+              onClick={() => {
+                handleAction('codeblock');
+                closeInsertMenu();
+              }}
+              role="menuitem"
+              aria-label="Insert Generic Code"
+              disabled={!buttonAllowed('codeblock')}
+            >
+              <span>Generic Code</span>
+              <code>plain</code>
+            </button>
             {CODE_SNIPPET_LANGUAGES.map((language) => (
               <button
                 key={language.fenceLanguage}

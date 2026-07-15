@@ -6,6 +6,10 @@ function statInputs(heading: string, body: string): Record<string, unknown> | nu
   return deriveTemplateInputs('statHighlight', heading, parseMarkdown(body).children);
 }
 
+function quoteInputs(heading: string, body: string): Record<string, unknown> | null {
+  return deriveTemplateInputs('quote', heading, parseMarkdown(body).children);
+}
+
 describe('statHighlight template input derivation', () => {
   it('uses a leading bold metric as the hero stat', () => {
     expect(
@@ -64,6 +68,19 @@ describe('statHighlight template input derivation', () => {
     expect(statInputs('A Result', 'Supporting context')).toEqual({
       stat: 'A Result',
       description: 'Supporting context',
+    });
+  });
+});
+
+describe('quote template input derivation', () => {
+  it('uses a heading-only block as the quote without duplicating it as a title', () => {
+    expect(quoteInputs('Words worth quoting', '')).toEqual({ quote: 'Words worth quoting' });
+  });
+
+  it('keeps the heading as a title when the block has quote text', () => {
+    expect(quoteInputs('Context', '> Words worth quoting')).toEqual({
+      quote: 'Words worth quoting',
+      title: 'Context',
     });
   });
 });

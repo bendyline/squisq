@@ -37,6 +37,18 @@ import {
 
 export { TEMPLATE_METADATA } from './metadata.js';
 export type { TemplateMetadata } from './metadata.js';
+export { BLOCK_MEDIA_LAYOUT_POLICIES, getBlockMediaLayoutPolicy } from './mediaLayoutPolicy.js';
+export type {
+  BlockMediaLayoutPolicy,
+  BuiltInTemplateName,
+  NativeMediaLayout,
+  NoMediaLayout,
+  SupplementalMediaLayoutVariant,
+  SupplementalMediaShape,
+  SupplementalMediaVariantMatrix,
+  TemplateMediaOwnership,
+  UnconsumedMediaBehavior,
+} from './mediaLayoutPolicy.js';
 
 /**
  * Registry mapping template ids (the strings that appear in

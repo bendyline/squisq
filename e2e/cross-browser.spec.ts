@@ -4,7 +4,7 @@ import { selectUseMode, switchView } from './view-tabs';
 test.describe('cross-browser critical path', () => {
   test.beforeEach(async ({ page }) => {
     await page.goto('/');
-    await page.waitForLoadState('networkidle');
+    await expect(page.locator('.tiptap.ProseMirror')).toBeVisible();
   });
 
   test('edits rich text and renders both HTML and SVG views', async ({ page }) => {

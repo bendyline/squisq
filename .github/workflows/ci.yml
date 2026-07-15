@@ -170,7 +170,12 @@ jobs:
       - name: Typecheck
         run: npm run typecheck
 
+      - name: Unit and path/ZIP tests (Windows)
+        if: runner.os == 'Windows'
+        run: npm test -- --maxWorkers=2
+
       - name: Unit and path/ZIP tests
+        if: runner.os != 'Windows'
         run: npm test
 
       - name: Published-package contract tests
