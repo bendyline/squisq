@@ -1,5 +1,6 @@
 import { act, render, waitFor } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { THEMES } from '@bendyline/squisq/schemas';
 import { MermaidDiagram } from '../mermaid/MermaidDiagram';
 
 const { renderMermaidSvg } = vi.hoisted(() => ({
@@ -20,6 +21,10 @@ function deferred<T>() {
 }
 
 describe('MermaidDiagram', () => {
+  beforeEach(() => {
+    renderMermaidSvg.mockReset();
+  });
+
   it('hides the previous SVG while rendering updated source', async () => {
     renderMermaidSvg.mockResolvedValueOnce({
       svg: '<svg><text>First diagram</text></svg>',
@@ -50,6 +55,25 @@ describe('MermaidDiagram', () => {
     });
     expect(container.querySelector('.squisq-mermaid-render-svg')?.textContent).toBe(
       'Second diagram',
+    );
+  });
+
+  it('re-renders unchanged source when the active theme changes', async () => {
+    renderMermaidSvg.mockResolvedValue({
+      svg: '<svg><text>Themed diagram</text></svg>',
+      diagramType: 'flowchart-v2',
+    });
+    const source = 'flowchart LR; a --> b';
+    const { rerender } = render(<MermaidDiagram source={source} theme={THEMES.standard} />);
+    await waitFor(() => expect(renderMermaidSvg).toHaveBeenCalledTimes(1));
+
+    rerender(<MermaidDiagram source={source} theme={THEMES.magazine} />);
+    await waitFor(() => expect(renderMermaidSvg).toHaveBeenCalledTimes(2));
+    expect(renderMermaidSvg).toHaveBeenLastCalledWith(
+      expect.any(String),
+      source,
+      undefined,
+      THEMES.magazine,
     );
   });
 });

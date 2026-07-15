@@ -17,6 +17,7 @@ import { createRoot, type Root } from 'react-dom/client';
 import { MermaidDiagramWidget } from './MermaidDiagramWidget';
 import { containFenceWidgetEvents } from '../fenceWidgets/fenceWidgetHost';
 import { mapFenceEntries, type FenceBlockEntry } from '../fenceWidgets/fenceRegistry';
+import type { MermaidThemeStore } from './mermaidThemeStore';
 
 export type MermaidDiagramBlockEntry = FenceBlockEntry;
 
@@ -30,6 +31,8 @@ export interface MermaidDiagramPluginState {
 export interface MermaidDiagramExtensionOptions {
   /** When false, leave Mermaid fences as ordinary code blocks. */
   enabled?: boolean;
+  /** Active-theme bridge for widgets mounted in separate React roots. */
+  themeStore?: MermaidThemeStore;
 }
 
 export const MERMAID_DIAGRAM_KEY = new PluginKey<MermaidDiagramPluginState>(
@@ -69,6 +72,7 @@ function buildDecorations(
   entries: readonly MermaidDiagramBlockEntry[],
   sourceVisible: ReadonlySet<string>,
   editor: Editor,
+  themeStore?: MermaidThemeStore,
 ): DecorationSet {
   const decorations: Decoration[] = [];
   for (const entry of entries) {
@@ -98,6 +102,7 @@ function buildDecorations(
               editor,
               blockId,
               host: view.dom.parentElement ?? view.dom,
+              themeStore,
             }),
           );
           (container as HTMLElement & { __squisqMermaidRoot?: WidgetRootRef }).__squisqMermaidRoot =
@@ -143,6 +148,7 @@ function applyState(
   previous: MermaidDiagramPluginState,
   editor: Editor,
   doc: PMNode,
+  themeStore?: MermaidThemeStore,
 ): MermaidDiagramPluginState {
   const meta = tr.getMeta(MERMAID_DIAGRAM_KEY) as { toggleSource?: string } | undefined;
   let sourceVisible = previous.sourceVisible;
@@ -158,7 +164,7 @@ function applyState(
     return {
       ...previous,
       sourceVisible,
-      decorations: buildDecorations(doc, previous.entries, sourceVisible, editor),
+      decorations: buildDecorations(doc, previous.entries, sourceVisible, editor, themeStore),
     };
   }
 
@@ -169,7 +175,7 @@ function applyState(
     entries,
     seq,
     sourceVisible: prunedSourceVisible,
-    decorations: buildDecorations(doc, entries, prunedSourceVisible, editor),
+    decorations: buildDecorations(doc, entries, prunedSourceVisible, editor, themeStore),
   };
 }
 
@@ -183,6 +189,7 @@ export const MermaidDiagramExtension = Extension.create<MermaidDiagramExtensionO
   addProseMirrorPlugins() {
     if (this.options.enabled === false) return [];
     const editor = this.editor as Editor;
+    const themeStore = this.options.themeStore;
     return [
       new Plugin<MermaidDiagramPluginState>({
         key: MERMAID_DIAGRAM_KEY,
@@ -201,11 +208,11 @@ export const MermaidDiagramExtension = Extension.create<MermaidDiagramExtensionO
               entries,
               seq,
               sourceVisible,
-              decorations: buildDecorations(state.doc, entries, sourceVisible, editor),
+              decorations: buildDecorations(state.doc, entries, sourceVisible, editor, themeStore),
             };
           },
           apply: (tr, previous, _oldState, newState) =>
-            applyState(tr, previous, editor, newState.doc),
+            applyState(tr, previous, editor, newState.doc, themeStore),
         },
         props: {
           decorations(state) {

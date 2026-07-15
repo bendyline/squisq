@@ -12,10 +12,10 @@ Third-party components remain under their respective license terms.
 | @ffmpeg/ffmpeg    | 0.12.15 | MIT     | https://github.com/ffmpegwasm/ffmpeg.wasm |
 | @ffmpeg/util      | 0.12.2  | MIT     | https://github.com/ffmpegwasm/ffmpeg.wasm |
 
-The `@ffmpeg/ffmpeg` and `@ffmpeg/util` packages provide JavaScript APIs and
-utilities. This npm package does not include `@ffmpeg/core`,
-`ffmpeg-core.js`, or `ffmpeg-core.wasm`; applications that use a WebAssembly
-core supply and distribute it separately.
+The @ffmpeg/ffmpeg and @ffmpeg/util packages provide JavaScript APIs and
+utilities. This npm package does not include @ffmpeg/core, ffmpeg-core.js, or
+ffmpeg-core.wasm; applications that use a WebAssembly core supply and
+distribute it separately.
 
 Copyright and complete license texts for the listed dependencies are included
 in their respective npm distributions and source repositories.

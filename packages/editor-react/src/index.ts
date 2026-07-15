@@ -341,11 +341,18 @@ export type {
   MermaidEditableEdge,
   MermaidEditableModel,
   MermaidEditableNode,
+  MermaidEditableText,
+  MermaidEditableTextTarget,
   MermaidFlowchartDirection,
   MermaidFlowchartModel,
+  MermaidSelection,
   MermaidSourceEditableModel,
 } from './mermaid/mermaidModel.js';
-export { mermaidDiagramProperties, mermaidEditCapabilities } from './mermaid/mermaidModel.js';
+export {
+  mermaidDiagramProperties,
+  mermaidEditCapabilities,
+  mermaidEditableTexts,
+} from './mermaid/mermaidModel.js';
 export {
   DEFAULT_MERMAID_DIAGRAM_TYPE,
   MERMAID_DIAGRAM_TYPES,

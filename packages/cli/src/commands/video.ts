@@ -60,7 +60,7 @@ export function registerVideoCommand(program: Command): void {
   program
     .command('video')
     .description('Render a squisq document to MP4 video or animated GIF')
-    .argument('<input>', 'Path to .md file, .zip/.dbk container, or folder')
+    .argument('<input>', 'Path to .md/.json file, .zip/.dbk container, or folder')
     .argument('[output]', 'Output .mp4 or .gif path (default: <input>.<format>)')
     .option('-o, --output <path>', 'Output .mp4 or .gif path (format inferred from extension)')
     .option('--format <format>', `Output format: ${VALID_FORMATS.join(', ')} (default: mp4)`)

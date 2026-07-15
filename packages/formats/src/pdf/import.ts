@@ -510,6 +510,30 @@ interface TextLine {
   text: string;
 }
 
+/**
+ * PDF.js omits whitespace-only text items from many PDFs, including Squisq's
+ * own exports. Recover a word separator from the horizontal gap without
+ * inventing spaces at punctuation or an inline-style boundary inside a word.
+ */
+function hasInterItemSpace(previous: TextItem | undefined, current: TextItem): boolean {
+  if (!previous) return false;
+  if (/\s$/.test(previous.str) || /^\s/.test(current.str)) return false;
+
+  const gap = current.x - (previous.x + previous.width);
+  const referenceHeight = Math.min(previous.height, current.height);
+  return gap > Math.max(0.5, referenceHeight * 0.08);
+}
+
+function joinTextItems(items: TextItem[]): string {
+  let text = '';
+  for (let index = 0; index < items.length; index++) {
+    const item = items[index]!;
+    if (hasInterItemSpace(items[index - 1], item)) text += ' ';
+    text += item.str;
+  }
+  return text;
+}
+
 // ============================================
 // PDF Text Extraction (pdfjs-dist)
 // ============================================
@@ -677,7 +701,7 @@ async function extractTextLines(
       const fontNames = lineItems.map((i) => i.fontName);
       const fontName = modeStr(fontNames) || '';
       const minX = Math.min(...lineItems.map((i) => i.x));
-      const text = lineItems.map((i) => i.str).join(' ');
+      const text = joinTextItems(lineItems);
 
       allLines.push({
         items: lineItems,
@@ -978,9 +1002,14 @@ function buildInlineNodes(line: TextLine, options: PdfImportOptions): MarkdownIn
   const nodes: MarkdownInlineNode[] = [];
   const detectLinksOpt = options.detectLinks !== false;
 
-  for (const item of line.items) {
+  for (let itemIndex = 0; itemIndex < line.items.length; itemIndex++) {
+    const item = line.items[itemIndex]!;
     const text = item.str;
     if (!text || text.trim().length === 0) continue;
+
+    if (hasInterItemSpace(line.items[itemIndex - 1], item)) {
+      nodes.push({ type: 'text', value: ' ' } as MarkdownText);
+    }
 
     const bold = isBoldFont(item.fontName);
     const italic = isItalicFont(item.fontName);

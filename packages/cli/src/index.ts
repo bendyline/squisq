@@ -10,8 +10,8 @@
  *   squisq --help
  *
  * THIS MODULE IS THE `squisq` BIN ENTRY POINT ONLY. Importing it runs the CLI:
- * the module body prints a banner and calls `program.parse()` against the host
- * process's argv. It is therefore deliberately NOT reachable through the
+ * the module body may print a TTY banner and calls `program.parse()` against
+ * the host process's argv. It is therefore deliberately NOT reachable through the
  * package's `exports` map — `main`/`exports["."]` resolve to `./dist/api.js`,
  * and the programmatic surface lives at `@bendyline/squisq-cli/api`. Only the
  * `bin` field (which bypasses `exports`) points here.
@@ -29,10 +29,12 @@ import { registerDoctorCommand } from './commands/doctor.js';
 const require = createRequire(import.meta.url);
 const { version } = require('../package.json') as { version: string };
 
-// Colored banner: cyan brackets, bold white text, dim version
-console.error(
-  `\x1b[36m{[\x1b[0m \x1b[1msquiggly square\x1b[0m \x1b[2m—\x1b[0m \x1b[1msquisq\x1b[0m \x1b[2m—\x1b[0m \x1b[33mv${version}\x1b[0m \x1b[36m]}\x1b[0m`,
-);
+// Keep scripted stdout/stderr quiet; the colored identity is terminal chrome.
+if (process.stderr.isTTY) {
+  console.error(
+    `\x1b[36m{[\x1b[0m \x1b[1msquiggly square\x1b[0m \x1b[2m—\x1b[0m \x1b[1msquisq\x1b[0m \x1b[2m—\x1b[0m \x1b[33mv${version}\x1b[0m \x1b[36m]}\x1b[0m`,
+  );
+}
 
 const program = new Command();
 

@@ -4,14 +4,17 @@ import { MERMAID_DIAGRAM_TYPES } from '../mermaidDiagramTypes';
 import {
   addAdapterNode,
   connectAdapterNodes,
+  deleteAdapterText,
   deleteAdapterNode,
   disconnectAdapterEdge,
   duplicateAdapterNode,
   inspectMermaidSourceAdapter,
+  renameAdapterText,
   renameAdapterNode,
   setAdapterEdgeLabel,
   setAdapterProperty,
 } from '../mermaidSourceAdapters';
+import { mermaidEditableTexts } from '../mermaidModel';
 
 beforeAll(() => {
   mermaid.initialize({ startOnLoad: false, suppressErrorRendering: true, securityLevel: 'strict' });
@@ -146,11 +149,105 @@ describe('Mermaid source adapters', () => {
     await expect(mermaid.parse(result.source)).resolves.toBeTruthy();
   });
 
-  it('models each event on a Timeline period as an editable node', () => {
+  it('models Timeline titles, periods, and events as editable rendered items', () => {
     const timeline = MERMAID_DIAGRAM_TYPES.find((type) => type.id === 'timeline')!;
     const model = inspectMermaidSourceAdapter(timeline.starter)!;
     expect(model.kind).toBe('timeline');
     expect(model.nodes.map((node) => node.label)).toEqual(['Research', 'Build', 'Test', 'Launch']);
+    expect(
+      mermaidEditableTexts(model).map((text) => [
+        text.label,
+        text.target,
+        text.deletable,
+        text.origin?.role,
+      ]),
+    ).toEqual([
+      ['Research', 'node', true, undefined],
+      ['Build', 'node', true, undefined],
+      ['Test', 'node', true, undefined],
+      ['Launch', 'node', true, undefined],
+      ['Product launch', 'property', true, undefined],
+      ['Q1', 'source', false, 'timeline-period'],
+      ['Q2', 'source', false, 'timeline-period'],
+      ['Q3', 'source', false, 'timeline-period'],
+    ]);
     expect(model.capabilities.connectionHint).toContain('chronological order');
   });
+
+  it('renames Timeline titles and periods without changing their events', async () => {
+    const timeline = MERMAID_DIAGRAM_TYPES.find((type) => type.id === 'timeline')!;
+    const model = inspectMermaidSourceAdapter(timeline.starter)!;
+    const texts = mermaidEditableTexts(model);
+    const title = texts.find((text) => text.target === 'property' && text.targetId === 'title')!;
+    const period = texts.find((text) => text.origin?.role === 'timeline-period')!;
+
+    const renamedTitle = renameAdapterText(timeline.starter, model, title, 'Release plan');
+    expect(renamedTitle.ok).toBe(true);
+    expect(renamedTitle.source).toContain('title Release plan');
+    expect(renamedTitle.source).toContain('Q1 : Research');
+    await expect(mermaid.parse(renamedTitle.source)).resolves.toBeTruthy();
+
+    const renamedPeriod = renameAdapterText(timeline.starter, model, period, 'First quarter');
+    expect(renamedPeriod.ok).toBe(true);
+    expect(renamedPeriod.source).toContain('First quarter : Research');
+    expect(renamedPeriod.source).toContain('title Product launch');
+    await expect(mermaid.parse(renamedPeriod.source)).resolves.toBeTruthy();
+
+    const deletedTitle = deleteAdapterText(timeline.starter, model, title);
+    expect(deletedTitle.ok).toBe(true);
+    expect(deletedTitle.source).not.toContain('title Product launch');
+    expect(deleteAdapterText(timeline.starter, model, period).ok).toBe(false);
+  });
+
+  it('deletes one Timeline event without dropping its period siblings', async () => {
+    const timeline = MERMAID_DIAGRAM_TYPES.find((type) => type.id === 'timeline')!;
+    const model = inspectMermaidSourceAdapter(timeline.starter)!;
+    const build = mermaidEditableTexts(model).find((text) => text.label === 'Build')!;
+    const deleted = deleteAdapterText(timeline.starter, model, build);
+    expect(deleted.ok).toBe(true);
+    expect(deleted.source).toContain('Q2 : Test');
+    expect(deleted.source).not.toContain('Build');
+    await expect(mermaid.parse(deleted.source)).resolves.toBeTruthy();
+  });
+
+  it.each([
+    ['architecture', 'API', 'Platform'],
+    ['class', '+String name', '+String title'],
+    ['gantt', 'Build', 'Delivery'],
+    ['git-graph', 'feature', 'release'],
+    ['journey', 'Discover', 'Explore'],
+    ['kanban', 'To do', 'Backlog'],
+    ['quadrant', 'Low effort', 'Small effort'],
+    ['xy-chart', 'Jan', 'May'],
+  ] as const)('renames authored %s labels through the text contract', async (kind, from, to) => {
+    const diagram = MERMAID_DIAGRAM_TYPES.find((type) => type.id === kind)!;
+    const model = inspectMermaidSourceAdapter(diagram.starter)!;
+    const selected = mermaidEditableTexts(model).find((text) => text.label === from)!;
+    const renamed = renameAdapterText(diagram.starter, model, selected, to);
+    expect(renamed.ok, renamed.reason).toBe(true);
+    expect(renamed.source).toContain(to);
+    await expect(mermaid.parse(renamed.source)).resolves.toBeTruthy();
+  });
+
+  it('deletes only source labels whose surrounding construct remains valid', async () => {
+    const journey = MERMAID_DIAGRAM_TYPES.find((type) => type.id === 'journey')!;
+    const model = inspectMermaidSourceAdapter(journey.starter)!;
+    const section = mermaidEditableTexts(model).find((text) => text.label === 'Discover')!;
+    const deleted = deleteAdapterText(journey.starter, model, section);
+    expect(deleted.ok).toBe(true);
+    expect(deleted.source).not.toContain('section Discover');
+    expect(deleted.source).toContain('Find product: 5: Customer');
+    await expect(mermaid.parse(deleted.source)).resolves.toBeTruthy();
+  });
+
+  it.each(['entity-relationship', 'sankey', 'requirement'])(
+    'does not advertise deletion for required %s relationship text',
+    (kind) => {
+      const diagram = MERMAID_DIAGRAM_TYPES.find((type) => type.id === kind)!;
+      const model = inspectMermaidSourceAdapter(diagram.starter)!;
+      const relationships = mermaidEditableTexts(model).filter((text) => text.target === 'edge');
+      expect(relationships.length).toBeGreaterThan(0);
+      expect(relationships.every((text) => !text.deletable)).toBe(true);
+    },
+  );
 });

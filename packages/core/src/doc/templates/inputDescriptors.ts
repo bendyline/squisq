@@ -138,6 +138,7 @@ export const TEMPLATE_INPUT_DESCRIPTORS: Readonly<
     { key: 'colorScheme', description: 'Color scheme for the stat', valueHint: COLOR_SCHEME_HINT },
   ],
   quote: [
+    { key: 'title', description: 'Optional heading above the quote' },
     { key: 'quote', description: 'The quote text' },
     { key: 'attribution', description: 'Attribution (author, source)' },
   ],

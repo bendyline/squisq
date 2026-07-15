@@ -1,8 +1,8 @@
 # Third-Party Notices for @bendyline/squisq
 
-This notice applies to the `@bendyline/squisq` npm package. Squisq-authored
-code is licensed under the MIT license in `LICENSE`. Third-party components
-remain under their respective license terms.
+This notice applies to the `@bendyline/squisq` npm package.
+Squisq-authored code is licensed under the MIT license in `LICENSE`.
+Third-party components remain under their respective license terms.
 
 ## Runtime dependencies
 

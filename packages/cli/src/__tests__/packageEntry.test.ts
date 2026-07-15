@@ -115,7 +115,15 @@ describe('package entry points', () => {
 
   it('still runs the CLI through the bin entry', async () => {
     const { stderr } = await exec('node', [CLI_PATH, '--help'], { timeout: 60_000 });
-    expect(stderr).to.contain('squiggly square');
+    expect(stderr).to.equal('');
+  });
+
+  it('documents JSON as a supported video input', async () => {
+    const { stdout, stderr } = await exec('node', [CLI_PATH, 'video', '--help'], {
+      timeout: 60_000,
+    });
+    expect(stdout).to.contain('.md/.json');
+    expect(stderr).to.equal('');
   });
 
   it('points every exports target at a file that was actually built', async () => {

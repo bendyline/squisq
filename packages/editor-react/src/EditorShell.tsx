@@ -38,6 +38,12 @@ import {
   ThemeDesignerDock,
 } from './PreviewControls';
 import { PresentationModeControl, PresentationModeProvider } from './presentation/PresentationMode';
+import {
+  PrintModeControl,
+  PrintModeProvider,
+  PrintPreviewToolbar,
+  usePrintMode,
+} from './print/PrintMode';
 import { CustomThemeProvider, useDocCustomThemes } from './customThemes';
 import { MediaBin } from './MediaBin';
 import { DropZoneOverlay } from './DropZoneOverlay';
@@ -63,7 +69,12 @@ import {
   createMediaProviderFromContainer,
 } from '@bendyline/squisq/storage';
 import type { PrunePolicy, SaveVersionResult } from '@bendyline/squisq/versions';
-import type { CSSProperties, KeyboardEvent as ReactKeyboardEvent, ReactNode } from 'react';
+import type {
+  CSSProperties,
+  KeyboardEvent as ReactKeyboardEvent,
+  ReactNode,
+  RefObject,
+} from 'react';
 import { MediaContext } from '@bendyline/squisq-react';
 import { writeCanvasSettingsStyle, type WriteCanvasSettings } from './writeCanvasSettings';
 import { useModalDialog } from './modal/useModalDialog';
@@ -615,6 +626,32 @@ interface EditorShellInnerProps {
   themeOverride: Theme | null;
 }
 
+function UseModeToolbarControls() {
+  const printMode = usePrintMode();
+  if (printMode.active) return <PrintPreviewToolbar />;
+  return (
+    <>
+      <PreviewToolbarControls />
+      <PresentationModeControl />
+      <PrintModeControl />
+    </>
+  );
+}
+
+function UseModeProviders({
+  rootRef,
+  children,
+}: {
+  rootRef: RefObject<HTMLElement>;
+  children: ReactNode;
+}) {
+  return (
+    <PresentationModeProvider rootRef={rootRef}>
+      <PrintModeProvider rootRef={rootRef}>{children}</PrintModeProvider>
+    </PresentationModeProvider>
+  );
+}
+
 function EditorShellInner({
   basePath,
   onChange,
@@ -918,7 +955,7 @@ function EditorShellInner({
     >
       <CustomThemeProvider docThemes={docThemes} onDocThemesChange={onDocThemesChange}>
         <PreviewSettingsProvider doc={doc} themeOverride={themeOverride}>
-          <PresentationModeProvider rootRef={shellRef}>
+          <UseModeProviders rootRef={shellRef}>
             {/* Header. In image mode the full markdown/code Toolbar is replaced
             with a minimal slot bar — view tabs, formatting, and preview
             controls don't apply to a binary asset. */}
@@ -937,15 +974,7 @@ function EditorShellInner({
                   fileCount={mediaCount}
                   onToggleFiles={!isCodeMode && filesToggleEnabled ? handleToggleFiles : undefined}
                   slotLeft={toolbarSlotLeft}
-                  slotAfterTabs={
-                    !isCodeMode &&
-                    isPreview && (
-                      <>
-                        <PreviewToolbarControls />
-                        <PresentationModeControl />
-                      </>
-                    )
-                  }
+                  slotAfterTabs={!isCodeMode && isPreview && <UseModeToolbarControls />}
                   slotAfterActions={toolbarSlotAfterActions}
                   slotRight={toolbarSlotRight}
                   showPlayTab={showPlayTab}
@@ -1140,7 +1169,7 @@ function EditorShellInner({
             composers where the stats are noise. The image viewer has its
             own dimension/zoom status row, so suppress here too. */}
             {statusBarVisible && !isImageMode && <StatusBar slotRight={statusBarSlotRight} />}
-          </PresentationModeProvider>
+          </UseModeProviders>
         </PreviewSettingsProvider>
       </CustomThemeProvider>
       <TooltipLayer />

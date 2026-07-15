@@ -15,6 +15,7 @@
  */
 
 import { Fragment } from 'react';
+import type { Theme } from '@bendyline/squisq/schemas';
 import {
   sanitizeHtmlNodes,
   sanitizeUrl,
@@ -50,12 +51,15 @@ export interface MarkdownRendererProps {
    * never allowed regardless. See {@link SanitizeUrlOptions}.
    */
   linkSchemes?: readonly string[];
+  /** Resolved Squisq theme inherited by embedded Mermaid diagrams. */
+  theme?: Theme;
 }
 
 /** Options threaded through the recursive renderers. */
 interface RenderCtx {
   htmlPolicy: HtmlPolicy;
   linkSchemes?: readonly string[];
+  theme?: Theme;
 }
 
 const DEFAULT_CTX: RenderCtx = { htmlPolicy: 'sanitize' };
@@ -271,6 +275,7 @@ function renderBlock(
             source={node.value}
             className="squisq-md-mermaid"
             ariaLabel="Mermaid diagram"
+            theme={ctx.theme}
           />
         );
       }
@@ -645,12 +650,13 @@ export function MarkdownRenderer({
   className,
   htmlPolicy = 'sanitize',
   linkSchemes,
+  theme,
 }: MarkdownRendererProps) {
   if (!nodes || nodes.length === 0) return null;
 
   return (
     <div className={`squisq-md ${className || ''}`}>
-      {renderBlocks(nodes, '', { htmlPolicy, linkSchemes })}
+      {renderBlocks(nodes, '', { htmlPolicy, linkSchemes, theme })}
     </div>
   );
 }

@@ -44,6 +44,10 @@ export interface MermaidDiagramProperty {
   readonly type?: 'text' | 'boolean' | 'select';
   readonly options?: readonly { readonly value: string; readonly label: string }[];
   readonly placeholder?: string;
+  /** The property's value is rendered as one selectable text label. */
+  readonly rendered?: boolean;
+  /** Removing the rendered label can safely remove the property statement. */
+  readonly deletable?: boolean;
 }
 
 export interface MermaidEditableNode {
@@ -54,6 +58,25 @@ export interface MermaidEditableNode {
   classes: readonly string[];
   /** Source adapter metadata. Never serialized into the Mermaid SVG. */
   origin?: Readonly<Record<string, string | number | boolean>>;
+}
+
+export type MermaidEditableTextTarget = 'node' | 'edge' | 'property' | 'source';
+
+/** One authored text label that can be mapped safely back to Mermaid source. */
+export interface MermaidEditableText {
+  id: string;
+  label: string;
+  target: MermaidEditableTextTarget;
+  targetId: string;
+  deletable: boolean;
+  /** Source adapter metadata. Never serialized into the Mermaid SVG. */
+  origin?: Readonly<Record<string, string | number | boolean>>;
+}
+
+/** A single selection replaces the former independent node/edge selection state. */
+export interface MermaidSelection {
+  kind: 'node' | 'edge' | 'text';
+  id: string;
 }
 
 export interface MermaidEditableEdge {
@@ -73,12 +96,14 @@ export interface MermaidFlowchartModel {
   direction: MermaidFlowchartDirection;
   nodes: readonly MermaidEditableNode[];
   edges: readonly MermaidEditableEdge[];
+  texts?: readonly MermaidEditableText[];
 }
 
 export interface MermaidSourceEditableModel {
   kind: Exclude<MermaidEditableDiagramKind, 'flowchart'>;
   nodes: readonly MermaidEditableNode[];
   edges: readonly MermaidEditableEdge[];
+  texts?: readonly MermaidEditableText[];
   capabilities: MermaidEditCapabilities;
   properties: readonly MermaidDiagramProperty[];
   nodeNoun: string;
@@ -104,6 +129,45 @@ export const FLOWCHART_EDIT_CAPABILITIES: MermaidEditCapabilities = {
 
 export function mermaidEditCapabilities(model: MermaidEditableModel): MermaidEditCapabilities {
   return model.kind === 'flowchart' ? FLOWCHART_EDIT_CAPABILITIES : model.capabilities;
+}
+
+/** All authored labels selectable in the rendered SVG, regardless of owner. */
+export function mermaidEditableTexts(model: MermaidEditableModel): readonly MermaidEditableText[] {
+  const caps = mermaidEditCapabilities(model);
+  const properties = model.kind === 'flowchart' ? [] : model.properties;
+  return [
+    ...model.nodes
+      .filter((node) => caps.renameNode && node.label.trim())
+      .map((node) => ({
+        id: `node:${node.id}`,
+        label: node.label,
+        target: 'node' as const,
+        targetId: node.id,
+        deletable: caps.deleteNode,
+      })),
+    ...model.edges
+      .filter((edge) => caps.edgeLabel && edge.label.trim())
+      .map((edge) => ({
+        id: `edge:${edge.id}`,
+        label: edge.label,
+        target: 'edge' as const,
+        targetId: edge.id,
+        deletable: edge.origin?.labelDeletable !== false,
+      })),
+    ...properties
+      .filter(
+        (property) =>
+          property.rendered && typeof property.value === 'string' && property.value.trim(),
+      )
+      .map((property) => ({
+        id: `property:${property.id}`,
+        label: String(property.value),
+        target: 'property' as const,
+        targetId: property.id,
+        deletable: property.deletable === true,
+      })),
+    ...(model.texts ?? []),
+  ];
 }
 
 export function mermaidDiagramProperties(

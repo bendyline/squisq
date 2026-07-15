@@ -384,6 +384,69 @@ export interface DeriveTemplateInputsOptions {
    * input can't be derived (preview surfaces). Default false (strict).
    */
   placeholders?: boolean;
+  /**
+   * Keep the source heading visible when a template normally promotes only
+   * body content. Used by automatic templates; explicit annotations retain
+   * their historical input derivation.
+   */
+  preserveSourceHeading?: boolean;
+}
+
+function normalizeCoverageText(value: string): string {
+  return value.replace(/\s+/g, ' ').trim();
+}
+
+/**
+ * Whether an automatically selected template can represent every authored
+ * node in the block. Auto-selection must be conservative: the source remains
+ * round-trippable either way, but a successful render may not hide sibling
+ * content that the chosen template has no slot for.
+ */
+export function autoTemplatePreservesContent(
+  templateName: string,
+  contents: MarkdownBlockNode[] | undefined,
+): boolean {
+  const nodes = contents ?? [];
+
+  switch (templateName) {
+    case 'quote':
+      return nodes.length === 1 && nodes[0]?.type === 'blockquote';
+    case 'dataTable':
+      return nodes.length === 1 && nodes[0]?.type === 'table';
+    case 'list':
+      return nodes.length === 1 && nodes[0]?.type === 'list';
+    case 'diagram':
+    case 'timeline':
+      return nodes.length === 1 && nodes[0]?.type === 'code';
+    case 'tree':
+      return nodes.length === 1 && (nodes[0]?.type === 'code' || nodes[0]?.type === 'list');
+    case 'photoGrid': {
+      const images = extractImages(nodes);
+      if (images.length < 2 || images.length > 4) return false;
+      const bodyText = normalizeCoverageText(extractBodyPlainText(nodes));
+      const representedText = normalizeCoverageText(
+        images
+          .map((image) => image.alt)
+          .filter(Boolean)
+          .join(' '),
+      );
+      return bodyText === '' || bodyText === representedText;
+    }
+    case 'videoWithCaption': {
+      const videos = extractEmbeddedVideos(nodes);
+      if (videos.length !== 1) return false;
+      const bodyText = normalizeCoverageText(extractBodyPlainText(nodes));
+      return bodyText === normalizeCoverageText(videos[0]?.alt ?? '');
+    }
+    case 'leftFeature':
+    case 'rightFeature':
+    case 'statHighlight':
+      // Feature bodies retain all plain text; stat auto-derivation uses the
+      // preserveSourceHeading mode below and retains the remaining body.
+      return true;
+    default:
+      return false;
+  }
 }
 
 /**
@@ -401,11 +464,25 @@ export function deriveTemplateInputs(
   const bodyText = extractBodyPlainText(contents);
 
   switch (templateName) {
-    case 'statHighlight':
-      return deriveStatHighlightInputs(headingText, contents, bodyText);
+    case 'statHighlight': {
+      const inputs = deriveStatHighlightInputs(headingText, contents, bodyText);
+      if (
+        options.preserveSourceHeading &&
+        headingText &&
+        inputs.stat !== headingText &&
+        inputs.description !== headingText
+      ) {
+        return {
+          ...inputs,
+          description: headingText,
+          ...(inputs.description ? { detail: inputs.description } : {}),
+        };
+      }
+      return inputs;
+    }
     case 'quote': {
       const quote = extractBlockquoteText(contents) || bodyText || headingText;
-      return { quote };
+      return { quote, ...(headingText ? { title: headingText } : {}) };
     }
     case 'fullBleedQuote':
     case 'pullQuote': {
@@ -421,7 +498,7 @@ export function deriveTemplateInputs(
         : null;
     case 'list': {
       const items = extractListItems(contents);
-      if (items.length > 0) return { items };
+      if (items.length > 0) return { items, ...(headingText ? { title: headingText } : {}) };
       return placeholders ? { items: ['Item 1', 'Item 2', 'Item 3'] } : null;
     }
     case 'definitionCard':
@@ -430,7 +507,7 @@ export function deriveTemplateInputs(
       return { date: headingText, description: bodyText || headingText };
     case 'dataTable': {
       const tableData = extractTableFromContents(contents);
-      if (tableData) return tableData;
+      if (tableData) return { ...tableData, ...(headingText ? { title: headingText } : {}) };
       return placeholders ? { headers: ['Column'], rows: [['Data']] } : null;
     }
     case 'imageWithCaption': {

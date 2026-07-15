@@ -9,6 +9,7 @@ import type {
   MermaidEditCapabilities,
   MermaidEditableEdge,
   MermaidEditableNode,
+  MermaidEditableText,
   MermaidFlowchartDirection,
   MermaidSourceEditableModel,
 } from './mermaidModel';
@@ -125,7 +126,9 @@ function edge(
   return { id, source, target, label, origin: { line, ...extra } };
 }
 
-function sourceLine(item: MermaidEditableNode | MermaidEditableEdge): number | null {
+function sourceLine(
+  item: MermaidEditableNode | MermaidEditableEdge | MermaidEditableText,
+): number | null {
   const line = item.origin?.line;
   return typeof line === 'number' ? line : null;
 }
@@ -141,6 +144,15 @@ function propertyLine(
     .map((line) => new RegExp(`^\\s*${keyword}\\s+(.+?)\\s*$`, 'i').exec(line))
     .find(Boolean);
   return { id, label, value: match ? unquote(match[1]) : '', ...options };
+}
+
+function renderedPropertyLine(
+  lines: readonly string[],
+  id: string,
+  label: string,
+  keyword = id,
+): MermaidDiagramProperty {
+  return propertyLine(lines, id, label, keyword, { rendered: true, deletable: true });
 }
 
 function directionProperty(lines: readonly string[]): MermaidDiagramProperty {
@@ -159,6 +171,7 @@ function model(
   caps: MermaidEditCapabilities,
   nodeNoun = 'Node',
   edgeNoun = 'Connection',
+  texts: readonly MermaidEditableText[] = [],
 ): MermaidSourceEditableModel {
   const rawDirection = properties.find((property) => property.id === 'direction')?.value;
   const direction = DIRECTIONS.includes(rawDirection as MermaidFlowchartDirection)
@@ -169,10 +182,29 @@ function model(
     nodes,
     edges,
     properties,
+    texts,
     capabilities: caps,
     nodeNoun,
     edgeNoun,
     ...(direction ? { direction } : {}),
+  };
+}
+
+function sourceText(
+  id: string,
+  label: string,
+  line: number,
+  role: string,
+  deletable: boolean,
+  extra: Readonly<Record<string, string | number | boolean>> = {},
+): MermaidEditableText {
+  return {
+    id,
+    label,
+    target: 'source',
+    targetId: id,
+    deletable,
+    origin: { line, role, ...extra },
   };
 }
 
@@ -278,21 +310,37 @@ function inspectState(lines: readonly string[]): MermaidSourceEditableModel {
 function inspectClass(lines: readonly string[]): MermaidSourceEditableModel {
   const nodes = new Map<string, MermaidEditableNode>();
   const edges: MermaidEditableEdge[] = [];
+  const texts: MermaidEditableText[] = [];
   const declaration = new RegExp(`^\\s*class\\s+(${ID})(?:\\["([^"]+)"\\])?(?:\\s*\\{)?\\s*$`, 'i');
   const relation = new RegExp(
     `^\\s*(${ID})(?:\\s+"[^"]+")?\\s+([<|>*o.()\\-]+)\\s+(?:"[^"]+"\\s+)?(${ID})(?:\\s*:\\s*(.*?))?\\s*$`,
   );
+  let openClass: string | null = null;
   lines.forEach((line, index) => {
+    if (openClass && /^\s*}\s*$/.test(line)) {
+      openClass = null;
+      return;
+    }
+    if (openClass && line.trim()) {
+      texts.push(sourceText(`class-member-${index}`, line.trim(), index, 'line-content', true));
+      return;
+    }
     const declared = declaration.exec(line);
     if (declared) {
       nodes.set(
         declared[1],
         node(declared[1], declared[2] ?? declared[1], index, { declaration: true }),
       );
+      if (/\{\s*$/.test(line)) openClass = declared[1];
       return;
     }
     const linked = relation.exec(line);
-    if (!linked || !/--|\.\./.test(linked[2])) return;
+    if (!linked || !/--|\.\./.test(linked[2])) {
+      const member = new RegExp(`^\\s*(${ID})\\s*:\\s*(.+?)\\s*$`).exec(line);
+      if (member)
+        texts.push(sourceText(`class-member-${index}`, member[2], index, 'after-colon', true));
+      return;
+    }
     for (const id of [linked[1], linked[3]]) {
       if (!nodes.has(id)) nodes.set(id, node(id, id, index));
     }
@@ -308,18 +356,29 @@ function inspectClass(lines: readonly string[]): MermaidSourceEditableModel {
     capabilities({ connect: true, disconnect: true, edgeLabel: true, direction: true }),
     'Class',
     'Relationship',
+    texts,
   );
 }
 
 function inspectEr(lines: readonly string[]): MermaidSourceEditableModel {
   const nodes = new Map<string, MermaidEditableNode>();
   const edges: MermaidEditableEdge[] = [];
+  const texts: MermaidEditableText[] = [];
   const relation = new RegExp(
     `^\\s*(${ID})\\s+([|}{o]+--[|}{o]+)\\s+(${ID})\\s*:\\s*(.*?)\\s*$`,
     'i',
   );
   const block = new RegExp(`^\\s*(${ID})\\s*\\{\\s*$`);
+  let openEntity = false;
   lines.forEach((line, index) => {
+    if (openEntity && /^\s*}\s*$/.test(line)) {
+      openEntity = false;
+      return;
+    }
+    if (openEntity && line.trim()) {
+      texts.push(sourceText(`er-attribute-${index}`, line.trim(), index, 'line-content', true));
+      return;
+    }
     const opened = block.exec(line);
     if (opened && !nodes.has(opened[1])) {
       const close = lines.findIndex(
@@ -332,6 +391,7 @@ function inspectEr(lines: readonly string[]): MermaidSourceEditableModel {
           endLine: close >= 0 ? close : index,
         }),
       );
+      openEntity = true;
     }
     const linked = relation.exec(line);
     if (!linked) return;
@@ -339,7 +399,10 @@ function inspectEr(lines: readonly string[]): MermaidSourceEditableModel {
       if (!nodes.has(id)) nodes.set(id, node(id, id, index));
     }
     edges.push(
-      edge(`er-${index}`, linked[1], linked[3], linked[4], index, { operator: linked[2] }),
+      edge(`er-${index}`, linked[1], linked[3], linked[4], index, {
+        operator: linked[2],
+        labelDeletable: false,
+      }),
     );
   });
   return model(
@@ -350,6 +413,7 @@ function inspectEr(lines: readonly string[]): MermaidSourceEditableModel {
     capabilities({ connect: true, disconnect: true, edgeLabel: true, direction: true }),
     'Entity',
     'Relationship',
+    texts,
   );
 }
 
@@ -434,7 +498,7 @@ function inspectC4(lines: readonly string[]): MermaidSourceEditableModel {
     'c4',
     [...nodes.values()],
     edges,
-    [propertyLine(lines, 'title', 'Title')],
+    [renderedPropertyLine(lines, 'title', 'Title')],
     capabilities({ connect: true, disconnect: true, edgeLabel: true }),
     'Element',
     'Relationship',
@@ -444,6 +508,8 @@ function inspectC4(lines: readonly string[]): MermaidSourceEditableModel {
 function inspectArchitecture(lines: readonly string[]): MermaidSourceEditableModel {
   const nodes = new Map<string, MermaidEditableNode>();
   const edges: MermaidEditableEdge[] = [];
+  const texts: MermaidEditableText[] = [];
+  const group = new RegExp(`^\\s*group\\s+(${ID})\\([^)]+\\)\\[([^\\]]+)\\]\\s*$`, 'i');
   const declaration = new RegExp(
     `^\\s*service\\s+(${ID})\\(([^)]+)\\)\\[([^\\]]+)\\](?:\\s+in\\s+(${ID}))?\\s*$`,
     'i',
@@ -453,6 +519,13 @@ function inspectArchitecture(lines: readonly string[]): MermaidSourceEditableMod
     'i',
   );
   lines.forEach((line, index) => {
+    const grouped = group.exec(line);
+    if (grouped) {
+      texts.push(
+        sourceText(`architecture-group-${grouped[1]}`, grouped[2], index, 'bracket-label', false),
+      );
+      return;
+    }
     const declared = declaration.exec(line);
     if (declared) {
       nodes.set(
@@ -475,6 +548,7 @@ function inspectArchitecture(lines: readonly string[]): MermaidSourceEditableMod
     capabilities({ connect: true, disconnect: true, properties: false }),
     'Service',
     'Connection',
+    texts,
   );
 }
 
@@ -498,7 +572,13 @@ function ganttTaskId(parts: readonly string[], line: number): string {
 function inspectGantt(lines: readonly string[]): MermaidSourceEditableModel {
   const nodes: MermaidEditableNode[] = [];
   const edges: MermaidEditableEdge[] = [];
+  const texts: MermaidEditableText[] = [];
   lines.forEach((line, index) => {
+    const section = /^\s*section\s+(.+?)\s*$/i.exec(line);
+    if (section) {
+      texts.push(sourceText(`gantt-section-${index}`, section[1], index, 'section', true));
+      return;
+    }
     const match = /^\s*([^:%][^:]*)\s*:\s*(.+?)\s*$/.exec(line);
     if (
       !match ||
@@ -527,7 +607,7 @@ function inspectGantt(lines: readonly string[]): MermaidSourceEditableModel {
     nodes,
     edges,
     [
-      propertyLine(lines, 'title', 'Title'),
+      renderedPropertyLine(lines, 'title', 'Title'),
       propertyLine(lines, 'dateFormat', 'Date format'),
       propertyLine(lines, 'axisFormat', 'Axis format'),
       propertyLine(lines, 'tickInterval', 'Tick interval'),
@@ -537,37 +617,60 @@ function inspectGantt(lines: readonly string[]): MermaidSourceEditableModel {
     capabilities({ connect: true, disconnect: true }),
     'Task',
     'Dependency',
+    texts,
   );
 }
 
 function inspectTimeline(lines: readonly string[]): MermaidSourceEditableModel {
   const nodes: MermaidEditableNode[] = [];
+  const texts: MermaidEditableText[] = [];
   lines.forEach((line, index) => {
-    if (/^\s*(timeline|title|section)\b/i.test(line) || !line.includes(':')) return;
+    if (/^\s*title\b/i.test(line)) return;
+    const section = /^\s*section\s+(.+?)\s*$/i.exec(line);
+    if (section) {
+      texts.push(sourceText(`timeline-section-${index}`, section[1], index, 'section', true));
+      return;
+    }
+    if (/^\s*timeline\b/i.test(line) || !line.includes(':')) return;
     const parts = line.split(':').map((part) => part.trim());
     const period = parts.shift() ?? '';
+    if (period) {
+      texts.push(sourceText(`timeline-period-${index}`, period, index, 'timeline-period', false));
+    }
     parts.forEach((label, segment) => {
       if (label)
-        nodes.push(node(`timeline-${index}-${segment}`, label, index, { segment, period }));
+        nodes.push(
+          node(`timeline-${index}-${segment}`, label, index, {
+            segment,
+            period,
+          }),
+        );
     });
   });
   return model(
     'timeline',
     nodes,
     [],
-    [propertyLine(lines, 'title', 'Title')],
+    [renderedPropertyLine(lines, 'title', 'Title')],
     capabilities({
       connectionHint: 'Mermaid timelines use chronological order rather than explicit connections.',
     }),
     'Event',
     'Connection',
+    texts,
   );
 }
 
 function inspectJourney(lines: readonly string[]): MermaidSourceEditableModel {
   const nodes: MermaidEditableNode[] = [];
+  const texts: MermaidEditableText[] = [];
   lines.forEach((line, index) => {
-    if (/^\s*(journey|title|section)\b/i.test(line)) return;
+    const section = /^\s*section\s+(.+?)\s*$/i.exec(line);
+    if (section) {
+      texts.push(sourceText(`journey-section-${index}`, section[1], index, 'section', true));
+      return;
+    }
+    if (/^\s*(journey|title)\b/i.test(line)) return;
     const match = /^\s*(.+?)\s*:\s*(\d+)\s*:\s*(.+?)\s*$/.exec(line);
     if (match)
       nodes.push(node(`journey-${index}`, match[1], index, { score: match[2], actors: match[3] }));
@@ -576,18 +679,20 @@ function inspectJourney(lines: readonly string[]): MermaidSourceEditableModel {
     'journey',
     nodes,
     [],
-    [propertyLine(lines, 'title', 'Title')],
+    [renderedPropertyLine(lines, 'title', 'Title')],
     capabilities({
       connectionHint:
         'User Journey tasks are ordered within sections and do not have explicit connections.',
     }),
     'Task',
     'Connection',
+    texts,
   );
 }
 
 function inspectKanban(lines: readonly string[]): MermaidSourceEditableModel {
   const nodes: MermaidEditableNode[] = [];
+  const texts: MermaidEditableText[] = [];
   const item = new RegExp(`^(\\s+)(${ID})\\[([^\\]]*)\\]\\s*$`);
   let columnIndent = Number.POSITIVE_INFINITY;
   for (const line of lines) {
@@ -596,7 +701,12 @@ function inspectKanban(lines: readonly string[]): MermaidSourceEditableModel {
   }
   lines.forEach((line, index) => {
     const match = item.exec(line);
-    if (!match || match[1].length <= columnIndent) return;
+    if (!match) return;
+    if (match[1].length === columnIndent) {
+      texts.push(sourceText(`kanban-column-${match[2]}`, match[3], index, 'bracket-label', false));
+      return;
+    }
+    if (match[1].length < columnIndent) return;
     nodes.push(node(match[2], match[3], index, { indent: match[1], columnIndent }));
   });
   return model(
@@ -611,12 +721,23 @@ function inspectKanban(lines: readonly string[]): MermaidSourceEditableModel {
     }),
     'Task',
     'Connection',
+    texts,
   );
 }
 
 function inspectGit(lines: readonly string[]): MermaidSourceEditableModel {
   const nodes: MermaidEditableNode[] = [];
+  const texts: MermaidEditableText[] = [];
   lines.forEach((line, index) => {
+    const branch = /^\s*branch\s+([^\s]+)\s*$/i.exec(line);
+    if (branch) {
+      texts.push(
+        sourceText(`git-branch-${branch[1]}`, branch[1], index, 'git-branch', false, {
+          branch: branch[1],
+        }),
+      );
+      return;
+    }
     if (!/^\s*commit\b/i.test(line)) return;
     const custom = /\bid\s*:\s*"([^"]+)"/i.exec(line);
     const label = custom?.[1] ?? `Commit ${nodes.length + 1}`;
@@ -634,6 +755,7 @@ function inspectGit(lines: readonly string[]): MermaidSourceEditableModel {
     }),
     'Commit',
     'Connection',
+    texts,
   );
 }
 
@@ -648,7 +770,7 @@ function inspectPie(lines: readonly string[]): MermaidSourceEditableModel {
     nodes,
     [],
     [
-      propertyLine(lines, 'title', 'Title'),
+      renderedPropertyLine(lines, 'title', 'Title'),
       {
         id: 'showData',
         label: 'Show values',
@@ -666,7 +788,20 @@ function inspectPie(lines: readonly string[]): MermaidSourceEditableModel {
 
 function inspectQuadrant(lines: readonly string[]): MermaidSourceEditableModel {
   const nodes: MermaidEditableNode[] = [];
+  const texts: MermaidEditableText[] = [];
   lines.forEach((line, index) => {
+    const axis = /^\s*(x-axis|y-axis)\s+(.+?)\s*-->\s*(.+?)\s*$/i.exec(line);
+    if (axis) {
+      texts.push(
+        sourceText(`quadrant-${axis[1]}-start`, unquote(axis[2]), index, 'axis-endpoint', false, {
+          side: 'start',
+        }),
+        sourceText(`quadrant-${axis[1]}-end`, unquote(axis[3]), index, 'axis-endpoint', false, {
+          side: 'end',
+        }),
+      );
+      return;
+    }
     const match = /^\s*"?([^":]+?)"?\s*:\s*\[\s*([\d.]+)\s*,\s*([\d.]+)\s*]\s*$/.exec(line);
     if (match) nodes.push(node(`quadrant-${index}`, match[1], index, { x: match[2], y: match[3] }));
   });
@@ -675,11 +810,14 @@ function inspectQuadrant(lines: readonly string[]): MermaidSourceEditableModel {
     nodes,
     [],
     [
-      propertyLine(lines, 'title', 'Title'),
+      renderedPropertyLine(lines, 'title', 'Title'),
       propertyLine(lines, 'xAxis', 'X axis', 'x-axis'),
       propertyLine(lines, 'yAxis', 'Y axis', 'y-axis'),
       ...[1, 2, 3, 4].map((number) =>
-        propertyLine(lines, `quadrant${number}`, `Quadrant ${number}`, `quadrant-${number}`),
+        propertyLine(lines, `quadrant${number}`, `Quadrant ${number}`, `quadrant-${number}`, {
+          rendered: true,
+          deletable: true,
+        }),
       ),
     ],
     capabilities({
@@ -687,6 +825,7 @@ function inspectQuadrant(lines: readonly string[]): MermaidSourceEditableModel {
     }),
     'Point',
     'Connection',
+    texts,
   );
 }
 
@@ -704,7 +843,7 @@ function inspectSankey(lines: readonly string[]): MermaidSourceEditableModel {
     if (!row || !Number.isFinite(Number(row[2]))) return;
     if (!nodes.has(row[0])) nodes.set(row[0], node(row[0], row[0], index));
     if (!nodes.has(row[1])) nodes.set(row[1], node(row[1], row[1], index));
-    edges.push(edge(`sankey-${index}`, row[0], row[1], row[2], index));
+    edges.push(edge(`sankey-${index}`, row[0], row[1], row[2], index, { labelDeletable: false }));
   });
   return model(
     'sankey',
@@ -726,7 +865,30 @@ function inspectSankey(lines: readonly string[]): MermaidSourceEditableModel {
 
 function inspectXy(lines: readonly string[]): MermaidSourceEditableModel {
   const nodes: MermaidEditableNode[] = [];
+  const texts: MermaidEditableText[] = [];
   lines.forEach((line, index) => {
+    const xAxis = /^\s*x-axis\s+(?:"([^"]+)"\s+)?\[([^\]]*)]\s*$/i.exec(line);
+    if (xAxis) {
+      if (xAxis[1])
+        texts.push(sourceText('xy-x-axis-title', xAxis[1], index, 'quoted-label', false));
+      xAxis[2]
+        .split(',')
+        .map((value) => unquote(value))
+        .filter(Boolean)
+        .forEach((label, itemIndex) =>
+          texts.push(
+            sourceText(`xy-x-axis-${itemIndex}`, label, index, 'xy-category', false, {
+              itemIndex,
+            }),
+          ),
+        );
+      return;
+    }
+    const yAxis = /^\s*y-axis\s+"([^"]+)"/i.exec(line);
+    if (yAxis) {
+      texts.push(sourceText('xy-y-axis-title', yAxis[1], index, 'quoted-label', false));
+      return;
+    }
     const match = /^\s*(bar|line)\s+(\[[^\]]*])\s*$/i.exec(line);
     if (match)
       nodes.push(
@@ -743,7 +905,7 @@ function inspectXy(lines: readonly string[]): MermaidSourceEditableModel {
     nodes,
     [],
     [
-      propertyLine(lines, 'title', 'Title'),
+      renderedPropertyLine(lines, 'title', 'Title'),
       propertyLine(lines, 'xAxis', 'X axis', 'x-axis'),
       propertyLine(lines, 'yAxis', 'Y axis', 'y-axis'),
     ],
@@ -753,6 +915,7 @@ function inspectXy(lines: readonly string[]): MermaidSourceEditableModel {
     }),
     'Series',
     'Connection',
+    texts,
   );
 }
 
@@ -787,7 +950,12 @@ function inspectRequirement(lines: readonly string[]): MermaidSourceEditableMode
       return;
     }
     const linked = relation.exec(line);
-    if (linked) edges.push(edge(`requirement-${index}`, linked[1], linked[3], linked[2], index));
+    if (linked)
+      edges.push(
+        edge(`requirement-${index}`, linked[1], linked[3], linked[2], index, {
+          labelDeletable: false,
+        }),
+      );
   });
   return model(
     'requirement',
@@ -992,6 +1160,21 @@ export function renameAdapterNode(
         return `${indentation(line)}${next.replace(/:/g, ' -')} ${line.slice(colon)}`;
       });
     case 'timeline': {
+      const timelineRole = selected.origin?.timelineRole;
+      if (timelineRole === 'title') {
+        return rewriteNodeLine(
+          source,
+          selected,
+          (line) => `${indentation(line)}title ${next.replace(/\r?\n/g, ' ')}`,
+        );
+      }
+      if (timelineRole === 'period') {
+        return rewriteNodeLine(source, selected, (line) => {
+          const colon = line.indexOf(':');
+          if (colon < 0) return line;
+          return `${indentation(line)}${next.replace(/:/g, ' -')} ${line.slice(colon)}`;
+        });
+      }
       const segment = Number(selected.origin?.segment ?? 0);
       return rewriteNodeLine(source, selected, (line) => {
         const parts = line.split(':');
@@ -1145,6 +1328,20 @@ export function deleteAdapterNode(
     )
       end += 1;
     lines.splice(index, end - index);
+    return sourceResult(source, lines);
+  }
+  if (model.kind === 'timeline') {
+    const parts = lines[index].split(':');
+    const segment = Number(selected.origin?.segment ?? 0);
+    if (parts[segment + 1] === undefined)
+      return failure(source, 'This timeline event can only be deleted in Source.');
+    parts.splice(segment + 1, 1);
+    if (parts.length <= 1) lines.splice(index, 1);
+    else
+      lines[index] = parts
+        .map((part) => part.trim())
+        .join(' : ')
+        .trimEnd();
     return sourceResult(source, lines);
   }
   if (model.kind === 'requirement' || model.kind === 'er') {
@@ -1435,5 +1632,132 @@ export function setAdapterProperty(
       : `  ${sourceKeyword} ${text}`;
   if (existing >= 0) lines[existing] = `${indentation(lines[existing])}${rendered.trimStart()}`;
   else lines.splice(headerIndex + 1, 0, rendered);
+  return sourceResult(source, lines);
+}
+
+/** Update any authored text item exposed by a source adapter. */
+export function renameAdapterText(
+  source: string,
+  model: MermaidSourceEditableModel,
+  selected: MermaidEditableText,
+  label: string,
+): MermaidSourceEditResult {
+  const next = label.trim();
+  if (!next) return failure(source, 'A Mermaid text label cannot be empty.');
+  if (next === selected.label) return failure(source, 'The label is unchanged.');
+
+  if (selected.target === 'node') {
+    const target = model.nodes.find((node) => node.id === selected.targetId);
+    return target
+      ? renameAdapterNode(source, model, target, next)
+      : failure(source, 'The selected Mermaid node no longer exists.');
+  }
+  if (selected.target === 'edge') {
+    const target = model.edges.find((edge) => edge.id === selected.targetId);
+    return target
+      ? setAdapterEdgeLabel(source, model, target, next)
+      : failure(source, 'The selected Mermaid connection no longer exists.');
+  }
+  if (selected.target === 'property') {
+    return setAdapterProperty(source, model, selected.targetId, next);
+  }
+
+  const index = sourceLine(selected);
+  if (index === null) return failure(source, 'This label can only be changed in Source.');
+  const lines = linesOf(source);
+  const line = lines[index];
+  switch (selected.origin?.role) {
+    case 'section':
+      lines[index] = `${indentation(line)}section ${next.replace(/\r?\n/g, ' ')}`;
+      break;
+    case 'bracket-label':
+      lines[index] = line.replace(/\[[^\]]*]/, `[${next.replace(/]/g, '')}]`);
+      break;
+    case 'line-content':
+      lines[index] = `${indentation(line)}${next.replace(/\r?\n/g, ' ')}`;
+      break;
+    case 'after-colon': {
+      const colon = line.indexOf(':');
+      if (colon < 0) return failure(source, 'This label can only be changed in Source.');
+      lines[index] = `${line.slice(0, colon + 1)} ${next.replace(/\r?\n/g, ' ')}`;
+      break;
+    }
+    case 'timeline-period': {
+      const colon = line.indexOf(':');
+      if (colon < 0) return failure(source, 'This timeline period can only be changed in Source.');
+      lines[index] = `${indentation(line)}${next.replace(/:/g, ' -')} ${line.slice(colon)}`;
+      break;
+    }
+    case 'git-branch': {
+      if (!safeId(next)) return failure(source, 'Choose a Mermaid-safe branch name.');
+      const previous = String(selected.origin?.branch ?? selected.label);
+      return sourceResult(
+        source,
+        lines.map((candidate) =>
+          /^\s*(branch|checkout|merge)\b/i.test(candidate)
+            ? replaceId(candidate, previous, next)
+            : candidate,
+        ),
+      );
+    }
+    case 'axis-endpoint': {
+      const match = /^(\s*(?:x-axis|y-axis)\s+)(.+?)(\s*-->\s*)(.+?)\s*$/i.exec(line);
+      if (!match) return failure(source, 'This axis label can only be changed in Source.');
+      lines[index] =
+        selected.origin?.side === 'start'
+          ? `${match[1]}${next}${match[3]}${match[4]}`
+          : `${match[1]}${match[2]}${match[3]}${next}`;
+      break;
+    }
+    case 'quoted-label':
+      if (!/"[^"]*"/.test(line))
+        return failure(source, 'This label can only be changed in Source.');
+      lines[index] = line.replace(/"[^"]*"/, `"${next.replace(/"/g, "'")}"`);
+      break;
+    case 'xy-category': {
+      const match = /^(.*\[)([^\]]*)(].*)$/.exec(line);
+      if (!match) return failure(source, 'This category can only be changed in Source.');
+      const values = match[2].split(',').map((value) => value.trim());
+      const itemIndex = Number(selected.origin?.itemIndex ?? -1);
+      if (itemIndex < 0 || itemIndex >= values.length)
+        return failure(source, 'This category can only be changed in Source.');
+      values[itemIndex] = next.replace(/[,\]]/g, ' ');
+      lines[index] = `${match[1]}${values.join(', ')}${match[3]}`;
+      break;
+    }
+    default:
+      return failure(source, 'This label can only be changed in Source.');
+  }
+  return sourceResult(source, lines);
+}
+
+/** Remove an authored text label only when its source construct permits it safely. */
+export function deleteAdapterText(
+  source: string,
+  model: MermaidSourceEditableModel,
+  selected: MermaidEditableText,
+): MermaidSourceEditResult {
+  if (!selected.deletable) {
+    return failure(source, 'This label is required by its Mermaid source construct.');
+  }
+  if (selected.target === 'node') {
+    const target = model.nodes.find((node) => node.id === selected.targetId);
+    return target
+      ? deleteAdapterNode(source, model, target)
+      : failure(source, 'The selected Mermaid node no longer exists.');
+  }
+  if (selected.target === 'edge') {
+    const target = model.edges.find((edge) => edge.id === selected.targetId);
+    return target
+      ? setAdapterEdgeLabel(source, model, target, '')
+      : failure(source, 'The selected Mermaid connection no longer exists.');
+  }
+  if (selected.target === 'property') {
+    return setAdapterProperty(source, model, selected.targetId, '');
+  }
+  const index = sourceLine(selected);
+  if (index === null) return failure(source, 'This label can only be removed in Source.');
+  const lines = linesOf(source);
+  lines.splice(index, 1);
   return sourceResult(source, lines);
 }

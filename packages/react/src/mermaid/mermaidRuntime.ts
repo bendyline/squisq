@@ -1,8 +1,19 @@
 /** Browser-only, lazy official Mermaid renderer shared by page and slide views. */
 
 import type { RenderResult } from 'mermaid';
+import type { Theme } from '@bendyline/squisq/schemas';
+import { buildMermaidThemeVariables } from '@bendyline/squisq/schemas';
+import { DEFAULT_THEME } from '@bendyline/squisq/doc';
 
 let mermaidPromise: Promise<typeof import('mermaid').default> | null = null;
+
+const MERMAID_BASE_CONFIG = {
+  startOnLoad: false,
+  securityLevel: 'strict' as const,
+  suppressErrorRendering: true,
+  deterministicIds: false,
+  logLevel: 'error' as const,
+};
 
 interface MermaidQueueHost {
   __squisqMermaidWorkQueue?: Promise<void>;
@@ -11,16 +22,7 @@ interface MermaidQueueHost {
 async function loadMermaid(): Promise<typeof import('mermaid').default> {
   if (!mermaidPromise) {
     mermaidPromise = import('mermaid')
-      .then(({ default: mermaid }) => {
-        mermaid.initialize({
-          startOnLoad: false,
-          securityLevel: 'strict',
-          suppressErrorRendering: true,
-          deterministicIds: false,
-          logLevel: 'error',
-        });
-        return mermaid;
-      })
+      .then(({ default: mermaid }) => mermaid)
       .catch((error: unknown) => {
         mermaidPromise = null;
         throw error;
@@ -48,9 +50,15 @@ export function renderMermaidSvg(
   id: string,
   source: string,
   container?: Element,
+  theme: Theme = DEFAULT_THEME,
 ): Promise<Pick<RenderResult, 'svg' | 'diagramType'>> {
   return enqueue(async () => {
     const mermaid = await loadMermaid();
+    mermaid.initialize({
+      ...MERMAID_BASE_CONFIG,
+      theme: 'base',
+      themeVariables: buildMermaidThemeVariables(theme),
+    });
     const { svg, diagramType } = await mermaid.render(id, source, container);
     return { svg, diagramType };
   });

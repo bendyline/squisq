@@ -63,6 +63,20 @@ describe('format content-flow matrix', () => {
     });
   });
 
+  it('preserves inter-word spacing when importing a Squisq-exported PDF', async () => {
+    const source = ROUNDTRIP_FIXTURES.mixed;
+    const roundTrip = await pdfToMarkdownDoc(await markdownDocToPdf(source.doc), {
+      bodyFontSize: 11,
+    });
+    const text = extractNormalizedText(roundTrip);
+
+    expect(text).toContain('ops weekly');
+    expect(text).toContain(
+      'this week we tracked launch readiness quality signals and risk burn-down',
+    );
+    expect(text).toContain('launch readiness improved and support tickets declined');
+  });
+
   it('round-trips markdown through CSV for table-centric content', async () => {
     const source = ROUNDTRIP_FIXTURES.table;
     const csv = markdownDocToCsv(source.doc);

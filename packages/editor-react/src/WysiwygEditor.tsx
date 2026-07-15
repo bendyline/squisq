@@ -33,6 +33,7 @@ import { RepairableDiagramExtension } from './asciiDiagram/RepairableDiagramExte
 import { applyRepairCommand } from './asciiDiagram/asciiDiagramCommands';
 import { shouldPasteAsAsciiFence } from './asciiDiagram/asciiPaste';
 import { MermaidDiagramExtension } from './mermaid/MermaidDiagramExtension';
+import { createMermaidThemeStore, type MermaidThemeStore } from './mermaid/mermaidThemeStore';
 import { CodeSnippetExtension } from './codeSnippet/CodeSnippetExtension';
 import { TreeViewExtension } from './treeview/TreeViewExtension';
 import { shouldPasteAsTreeFence } from './treeview/treePaste';
@@ -155,6 +156,16 @@ export function WysiwygEditor({
     bumpMediaRevision,
     sceneTextChannel,
   } = useEditorContext();
+  const previewSettings = usePreviewSettingsOptional();
+  const activeTheme = previewSettings?.activeTheme;
+  const mermaidThemeStoreRef = useRef<MermaidThemeStore | null>(null);
+  if (mermaidThemeStoreRef.current === null) {
+    mermaidThemeStoreRef.current = createMermaidThemeStore(activeTheme ?? DEFAULT_THEME);
+  }
+  const mermaidThemeStore = mermaidThemeStoreRef.current;
+  useEffect(() => {
+    mermaidThemeStore.setTheme(activeTheme ?? DEFAULT_THEME);
+  }, [activeTheme, mermaidThemeStore]);
   // Custom templates inlined in the active doc's frontmatter + the
   // persist callback that writes a new list back into the source.
   const { docTemplates, onDocTemplatesChange } = useDocCustomTemplates();
@@ -226,7 +237,7 @@ export function WysiwygEditor({
       HeadingWithTemplate.configure({ levels: [1, 2, 3, 4, 5, 6] }),
       BlockTagActivityExtension,
       AsciiDiagramExtension.configure({ textChannel: sceneTextChannel }),
-      MermaidDiagramExtension,
+      MermaidDiagramExtension.configure({ themeStore: mermaidThemeStore }),
       CodeSnippetExtension,
       RepairableDiagramExtension.configure({ onRepair: applyRepairCommand }),
       TimelineViewExtension,
@@ -608,8 +619,6 @@ export function WysiwygEditor({
   // Pushed as CSS custom properties on the container so the stylesheet
   // can pick them up (with sensible fallbacks for hosts that don't have
   // a PreviewSettingsProvider in scope).
-  const previewSettings = usePreviewSettingsOptional();
-  const activeTheme = previewSettings?.activeTheme;
   const badgePreviewSource = useMemo(() => {
     if (!badgeMenu) return undefined;
     try {

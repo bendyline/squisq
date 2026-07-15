@@ -7,7 +7,7 @@
  */
 
 import { useId } from 'react';
-import type { Block, Layer, Transition } from '@bendyline/squisq/schemas';
+import type { Block, Layer, Theme, Transition } from '@bendyline/squisq/schemas';
 import { resolveTransitionDuration } from '@bendyline/squisq/schemas';
 import { ImageLayer } from './layers/ImageLayer';
 import { TextLayer } from './layers/TextLayer';
@@ -55,6 +55,8 @@ interface BlockRendererProps {
    * layers continue to advance normally.
    */
   animationsEnabled?: boolean;
+  /** Resolved theme inherited by rich-media renderers such as Mermaid. */
+  theme?: Theme;
 }
 
 export function BlockRenderer({
@@ -67,6 +69,7 @@ export function BlockRenderer({
   viewport = DEFAULT_VIEWPORT,
   isPlaying,
   animationsEnabled = true,
+  theme,
 }: BlockRendererProps) {
   // Build transition class and inline style for dynamic duration
   let transitionClass = '';
@@ -114,6 +117,7 @@ export function BlockRenderer({
             blockTime={blockTime}
             isPlaying={isPlaying}
             animationsEnabled={animationsEnabled}
+            theme={theme}
           />
         ))}
       </g>
@@ -128,6 +132,7 @@ interface LayerRendererProps {
   blockTime: number;
   isPlaying?: boolean;
   animationsEnabled: boolean;
+  theme?: Theme;
 }
 
 /**
@@ -140,6 +145,7 @@ function LayerRenderer({
   blockTime,
   isPlaying,
   animationsEnabled,
+  theme,
 }: LayerRendererProps) {
   // Render policy must not mutate caller-owned Docs. A shallow copy is enough:
   // every layer renderer reads animation only from the base layer field.
@@ -187,7 +193,14 @@ function LayerRenderer({
     case 'tree':
       return <TreeLayer layer={renderedLayer} viewport={viewport} blockTime={blockTime} />;
     case 'mermaid':
-      return <MermaidLayer layer={renderedLayer} viewport={viewport} blockTime={blockTime} />;
+      return (
+        <MermaidLayer
+          layer={renderedLayer}
+          viewport={viewport}
+          blockTime={blockTime}
+          theme={theme}
+        />
+      );
     default:
       console.warn(`Unknown layer type: ${(renderedLayer as Layer).type}`);
       return null;

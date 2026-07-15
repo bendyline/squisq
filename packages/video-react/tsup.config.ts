@@ -3,6 +3,9 @@ import { defineConfig } from 'tsup';
 export default defineConfig({
   entry: {
     index: 'src/index.ts',
+    'components/index': 'src/entries/components.ts',
+    'hooks/index': 'src/entries/hooks.ts',
+    'encoder/index': 'src/entries/encoder.ts',
     // The encoder worker is loaded at runtime via `new URL('./workers/encode.worker.js', import.meta.url)`
     // (see workerEncoder.ts), so it must ship as a separate file alongside dist/index.js.
     'workers/encode.worker': 'src/workers/encode.worker.ts',
@@ -21,9 +24,11 @@ export default defineConfig({
     '@ffmpeg/ffmpeg',
     '@ffmpeg/util',
     'html2canvas',
-    'mp4-muxer',
   ],
-  noExternal: ['@ffmpeg/ffmpeg/worker'],
+  // mp4-muxer is a legacy implementation detail whose declaration package
+  // installs conflicting global WebCodecs types. Bundle its runtime so those
+  // types never enter a consumer dependency tree.
+  noExternal: ['@ffmpeg/ffmpeg/worker', 'mp4-muxer'],
   esbuildOptions(options) {
     options.jsx = 'automatic';
   },

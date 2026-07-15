@@ -184,6 +184,8 @@ export interface StatHighlightInput extends BaseTemplateBlock {
  */
 export interface QuoteBlockInput extends BaseTemplateBlock {
   template: 'quote';
+  /** Optional heading above the quote. */
+  title?: string;
   /** The quote text (supports \n for line breaks) */
   quote: string;
   /** Attribution (author, source) */

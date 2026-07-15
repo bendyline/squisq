@@ -24,6 +24,9 @@
     "access": "public"
   },
   "type": "module",
+  "engines": {
+    "node": ">=22.14.0"
+  },
   "main": "./dist/index.js",
   "module": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -96,7 +99,7 @@
     }
   },
   "scripts": {
-    "build": "tsup",
+    "build": "tsup && node ../../scripts/remove-empty-chunks.mjs dist",
     "dev": "concurrently -n js,dts -c blue,gray -r \"tsup --watch --no-dts --no-clean\" \"tsup --watch --dts-only --no-clean\"",
     "typecheck": "tsc --noEmit"
   },

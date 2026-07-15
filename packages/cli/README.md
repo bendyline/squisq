@@ -248,7 +248,7 @@ await extractThumbnails({
 - `MemoryContentContainer` (re-export from `@bendyline/squisq/storage`)
 - `VideoQuality`, `VideoOrientation` types (re-exports from `@bendyline/squisq-video`)
 
-See the full [API Reference](../../docs/API.md#bendylinesquisq-cli) for all types and options.
+See the full [API Reference](https://github.com/bendyline/squisq/blob/main/docs/API.md#bendylinesquisq-cli) for all types and options.
 
 ## Related Packages
 

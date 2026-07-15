@@ -157,6 +157,7 @@ const quote: SectionExtractor = (input) => {
     kind: 'quote-band',
     variant: 'plain',
     slots: {
+      title: q.title,
       body: { text: q.quote ?? '' },
       attribution: q.attribution,
       media: accentImageMedia(q.accentImage),

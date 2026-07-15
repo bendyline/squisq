@@ -46,6 +46,8 @@
     "lint": "eslint .",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
+    "notices": "node scripts/generate-notices.mjs",
+    "notices:check": "node scripts/generate-notices.mjs --check",
     "prettierfix": "prettier --write .",
     "release": "multi-semantic-release"
   },

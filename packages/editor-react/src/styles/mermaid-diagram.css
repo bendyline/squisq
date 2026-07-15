@@ -53,16 +53,19 @@
   margin: 0 auto;
 }
 
-.squisq-mermaid-svg [data-squisq-node-id] {
+.squisq-mermaid-svg [data-squisq-node-id],
+.squisq-mermaid-svg [data-squisq-text-id] {
   cursor: pointer;
 }
 
-.squisq-mermaid-svg [data-squisq-node-id]:focus-visible {
+.squisq-mermaid-svg [data-squisq-node-id]:focus-visible,
+.squisq-mermaid-svg [data-squisq-text-id]:focus-visible {
   outline: none;
   filter: drop-shadow(0 0 4px #4f46e5);
 }
 
-.squisq-mermaid-svg .squisq-mermaid-node-selected {
+.squisq-mermaid-svg .squisq-mermaid-node-selected,
+.squisq-mermaid-svg .squisq-mermaid-text-selected {
   filter: drop-shadow(0 0 5px #4f46e5);
 }
 

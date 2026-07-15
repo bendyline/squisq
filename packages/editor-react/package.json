@@ -22,6 +22,9 @@
     "access": "public"
   },
   "type": "module",
+  "engines": {
+    "node": ">=22.14.0"
+  },
   "main": "./dist/index.js",
   "module": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -40,10 +43,30 @@
       "types": "./dist/monaco.d.ts",
       "import": "./dist/monaco.js"
     },
+    "./shell": {
+      "types": "./dist/shell/index.d.ts",
+      "import": "./dist/shell/index.js"
+    },
+    "./json-editor": {
+      "types": "./dist/json-editor/index.d.ts",
+      "import": "./dist/json-editor/index.js"
+    },
+    "./image-editor": {
+      "types": "./dist/image-editor/index.d.ts",
+      "import": "./dist/image-editor/index.js"
+    },
+    "./recorder": {
+      "types": "./dist/recorder/index.d.ts",
+      "import": "./dist/recorder/index.js"
+    },
+    "./teleprompter": {
+      "types": "./dist/teleprompter/index.d.ts",
+      "import": "./dist/teleprompter/index.js"
+    },
     "./styles": "./dist/styles/index.css"
   },
   "scripts": {
-    "build": "tsup && node ../../scripts/build-styles.mjs",
+    "build": "tsup && node ../../scripts/build-styles.mjs && node ../../scripts/remove-empty-chunks.mjs dist",
     "dev": "concurrently -n js,dts -c blue,gray -r \"tsup --watch --no-dts --no-clean\" \"tsup --watch --dts-only --no-clean\"",
     "typecheck": "tsc --noEmit"
   },
@@ -62,7 +85,6 @@
     "@bendyline/squisq-formats": "2.1.0",
     "@bendyline/squisq-react": "2.1.0",
     "@fortawesome/fontawesome-free": "7.2.0",
-    "@monaco-editor/react": "4.7.0",
     "@tiptap/extension-image": "2.27.2",
     "@tiptap/extension-link": "2.27.2",
     "@tiptap/extension-mention": "2.27.2",
@@ -81,6 +103,7 @@
     "type-fest": "4.41.0"
   },
   "devDependencies": {
+    "@monaco-editor/react": "4.7.0",
     "@types/react": "18.3.28",
     "@types/react-dom": "18.3.7",
     "react": "18.3.1",
