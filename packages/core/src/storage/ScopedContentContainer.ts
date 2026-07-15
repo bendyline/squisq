@@ -71,11 +71,22 @@ export class ScopedContentContainer implements ContentContainer {
   readonly prefix: string;
   /** Prefix with trailing slash. */
   private readonly prefixSlash: string;
+  readonly mutationLock: object;
+  readonly writeFileExclusive?: (
+    path: string,
+    data: ArrayBuffer | Uint8Array,
+    mimeType?: string,
+  ) => Promise<boolean>;
 
   constructor(parent: ContentContainer, prefix: string) {
     this.parent = parent;
     this.prefix = normalizePrefix(prefix);
     this.prefixSlash = `${this.prefix}/`;
+    this.mutationLock = parent.mutationLock ?? parent;
+    if (parent.writeFileExclusive) {
+      this.writeFileExclusive = (path, data, mimeType) =>
+        parent.writeFileExclusive!(this.toParent(path), data, mimeType);
+    }
   }
 
   private toParent(path: string, options: NormalizePathOptions = {}): string {

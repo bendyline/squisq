@@ -44,39 +44,29 @@ const MIME_MAP: Record<string, string> = {
   avif: 'image/avif',
 };
 
-/** Convert an ArrayBuffer to a base64 data URI using chunked encoding (O(n)). */
-function arrayBufferToDataUrl(buffer: ArrayBuffer, mime: string): string {
-  const bytes = new Uint8Array(buffer);
-  const chunks: string[] = [];
-  const CHUNK = 8192;
-  for (let i = 0; i < bytes.length; i += CHUNK) {
-    chunks.push(String.fromCharCode(...bytes.subarray(i, i + CHUNK)));
-  }
-  return `data:${mime};base64,${btoa(chunks.join(''))}`;
-}
-
 /**
- * Create an inline MediaProvider from a map of paths to ArrayBuffers.
+ * Create a temporary MediaProvider backed by blob URLs. This avoids retaining
+ * a second, base64-expanded copy of every export asset in JavaScript strings.
  */
-function createInlineProvider(images: Map<string, ArrayBuffer>): MediaProvider {
-  const dataUrls = new Map<string, string>();
+export function createInlineProvider(images: Map<string, ArrayBuffer>): MediaProvider {
+  const blobUrls = new Map<string, string>();
   const mimeTypes = new Map<string, string>();
   for (const [path, buffer] of images) {
     const ext = path.split('.').pop()?.toLowerCase() ?? '';
     const mime = MIME_MAP[ext] ?? 'application/octet-stream';
-    dataUrls.set(path, arrayBufferToDataUrl(buffer, mime));
+    blobUrls.set(path, URL.createObjectURL(new Blob([buffer], { type: mime })));
     mimeTypes.set(path, mime);
   }
 
   return {
     async resolveUrl(relativePath: string): Promise<string> {
-      return dataUrls.get(relativePath) ?? relativePath;
+      return blobUrls.get(relativePath) ?? relativePath;
     },
     async listMedia() {
-      return [...dataUrls.keys()].map((name) => ({
+      return [...blobUrls.keys()].map((name) => ({
         name,
         mimeType: mimeTypes.get(name) ?? 'application/octet-stream',
-        size: 0,
+        size: images.get(name)?.byteLength ?? 0,
       }));
     },
     async addMedia() {
@@ -85,7 +75,10 @@ function createInlineProvider(images: Map<string, ArrayBuffer>): MediaProvider {
     async removeMedia() {
       throw new Error('Read-only');
     },
-    dispose() {},
+    dispose() {
+      blobUrls.forEach((url) => URL.revokeObjectURL(url));
+      blobUrls.clear();
+    },
   };
 }
 
@@ -96,6 +89,7 @@ export function useFrameCapture(): FrameCaptureHandle {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const rootRef = useRef<Root | null>(null);
   const renderAPIRef = useRef<SquisqRenderAPI | null>(null);
+  const mediaProviderRef = useRef<MediaProvider | null>(null);
   const dimensionsRef = useRef<{ width: number; height: number }>({ width: 1920, height: 1080 });
 
   const init = useCallback(
@@ -107,16 +101,19 @@ export function useFrameCapture(): FrameCaptureHandle {
       // Clean up any existing container.
       // Defer unmount to avoid "synchronously unmount a root while React
       // was already rendering" when init() is called from a React handler.
-      if (rootRef.current || containerRef.current) {
+      if (rootRef.current || containerRef.current || mediaProviderRef.current) {
         const oldRoot = rootRef.current;
         const oldContainer = containerRef.current;
+        const oldMediaProvider = mediaProviderRef.current;
         rootRef.current = null;
         containerRef.current = null;
         renderAPIRef.current = null;
+        mediaProviderRef.current = null;
         await new Promise<void>((resolve) => {
           setTimeout(() => {
             if (oldRoot) oldRoot.unmount();
             if (oldContainer) oldContainer.remove();
+            oldMediaProvider?.dispose();
             resolve();
           }, 0);
         });
@@ -145,6 +142,7 @@ export function useFrameCapture(): FrameCaptureHandle {
       const mediaProvider = renderOptions.images
         ? createInlineProvider(renderOptions.images)
         : null;
+      mediaProviderRef.current = mediaProvider;
 
       // Mount DocPlayer in renderMode via React
       const root = createRoot(renderRoot);
@@ -259,6 +257,8 @@ export function useFrameCapture(): FrameCaptureHandle {
       containerRef.current.remove();
       containerRef.current = null;
     }
+    mediaProviderRef.current?.dispose();
+    mediaProviderRef.current = null;
     renderAPIRef.current = null;
   }, []);
 

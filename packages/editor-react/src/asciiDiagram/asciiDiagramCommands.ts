@@ -50,6 +50,12 @@ export interface ApplyAsciiDiagramCommandOptions {
  * is re-recognized even after it's flattened. No-op (returns false) only when
  * BOTH the text is already identical AND the language already matches, so
  * history stays clean on a true no-op.
+ *
+ * This is the single write boundary for the diagram, tree AND timeline
+ * families, so it is also where the editor's read-only authority is enforced.
+ * A mounted canvas/outline outlives the render that created its controls, so
+ * a host flipping the editor read-only (saving, locked, permission change)
+ * must not leave a stale drag/click able to rewrite the fence.
  */
 export function replaceAsciiFenceText(
   editor: Editor,
@@ -57,6 +63,7 @@ export function replaceAsciiFenceText(
   nextText: string,
   ensureLanguage?: string,
 ): boolean {
+  if (!editor.isEditable) return false;
   return editor
     .chain()
     .command(({ tr, state }) => {
@@ -84,6 +91,8 @@ export function replaceAsciiFenceText(
  * block is gone or nothing recoverable (the button simply no-ops).
  */
 export function applyRepairCommand(editor: Editor, blockId: string): boolean {
+  // The banner button may outlive the render that mounted it.
+  if (!editor.isEditable) return false;
   const pos = findRepairableBlockPos(editor, blockId);
   if (pos === null) return false;
   const node = editor.state.doc.nodeAt(pos);
@@ -133,6 +142,10 @@ export function applyAsciiDiagramCommand(
   cmd: DiagramCommand,
   options: ApplyAsciiDiagramCommandOptions = {},
 ): boolean {
+  // Commands may outlive the render that created their controls. Enforce the
+  // editor's current authority at dispatch time, not only in widget props.
+  if (!editor.isEditable) return false;
+
   const apply = (op: (diagram: AsciiDiagram) => AsciiDiagram) =>
     applyOp(editor, blockId, op, options.diagramOffset);
   switch (cmd.kind) {

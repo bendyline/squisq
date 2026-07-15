@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { Editor } from '@tiptap/core';
+import Link from '@tiptap/extension-link';
 import StarterKit from '@tiptap/starter-kit';
 import { markdownToTiptap, tiptapToMarkdown } from '../tiptapBridge';
 
@@ -65,6 +66,50 @@ describe('markdownToTiptap', () => {
     const html = markdownToTiptap('Visit [Example](https://example.com)');
     expect(html).toContain('href="https://example.com"');
     expect(html).toContain('Example');
+  });
+
+  it('preserves inline code in a link label', () => {
+    const md = 'Read the [`convert()`](https://example.com/api) docs.';
+    const html = markdownToTiptap(md);
+
+    expect(html).toContain('<a href="https://example.com/api"><code>convert()</code></a>');
+    expect(tiptapToMarkdown(html).trim()).toBe(md);
+  });
+
+  it('does not merge standalone bracketed prose into a later link', () => {
+    const md = 'We start with [squiggly square], or [squisq](https://squisq.com) as I call it.';
+    const html = markdownToTiptap(md);
+
+    expect(html).toContain('We start with [squiggly square], or ');
+    expect(html).toContain('<a href="https://squisq.com">squisq</a>');
+    expect(html.match(/<a\b/g)).toHaveLength(1);
+    expect(tiptapToMarkdown(html).trim()).toBe(md);
+  });
+
+  it('preserves bracketed prose beside a link through Tiptap normalization', () => {
+    const md = 'We start with [squiggly square], or [squisq](https://squisq.com) as I call it.';
+    const editor = new Editor({
+      extensions: [StarterKit, Link],
+      content: markdownToTiptap(md),
+    });
+
+    const html = editor.getHTML();
+    expect(html.match(/<a\b/g)).toHaveLength(1);
+    expect(tiptapToMarkdown(html)).toBe(md + '\n');
+    editor.destroy();
+  });
+
+  it('keeps squiggly-square and link syntax literal inside inline code', () => {
+    const md =
+      'Write `{[github]}` or `[not a link](https://example.com)`, then visit [squisq](https://squisq.com).';
+    const html = markdownToTiptap(md);
+
+    expect(html).toContain('<code>{[github]}</code>');
+    expect(html).toContain('<code>[not a link](https://example.com)</code>');
+    expect(html).toContain('<a href="https://squisq.com">squisq</a>');
+    expect(html).not.toContain('data-icon=');
+    expect(html.match(/<a\b/g)).toHaveLength(1);
+    expect(tiptapToMarkdown(html).trim()).toBe(md);
   });
 
   it('converts mentions to chip spans', () => {

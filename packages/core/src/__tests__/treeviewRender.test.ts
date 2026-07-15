@@ -5,6 +5,7 @@ import {
   treeFromTemplateData,
   treeToTemplateData,
   type Tree,
+  type TreeNode,
 } from '../doc/treeview/index.js';
 import { TREE_FIXTURES } from './fixtures/treeviewFixtures.js';
 
@@ -40,8 +41,17 @@ describe('renderTree — output', () => {
   });
 
   it('renders trailing comments', () => {
-    const t = parseTree(['p/', '└── a.ts # note'].join('\n'));
+    const t = parseTree(['p/', '└── a.ts   # note'].join('\n'));
     expect(renderTree(t)).toContain('a.ts  # note');
+  });
+
+  // A comment is delimited by a GAP (≥2 spaces) before the marker. One space
+  // reads as part of the label, which is what lets a label legitimately
+  // contain `#`/`//`/`<--` and survive a round-trip.
+  it('treats a single-spaced marker as label text, not a comment', () => {
+    const t = parseTree(['p/', '└── a.ts # note'].join('\n'));
+    expect(semantic(t)).toEqual(['0:p/', '1:a.ts # note']);
+    expect(renderTree(t)).toContain('└── a.ts # note');
   });
 
   it('roots carry no connector; children do', () => {
@@ -65,6 +75,59 @@ describe('renderTree ↔ parseTree fixpoint', () => {
       expect(t3).toBe(t1);
     });
   }
+
+  // Structural-fixpoint violation: a label containing a comment marker was
+  // silently split into label + comment by parse(render(t)).
+  describe('labels containing comment markers survive', () => {
+    const roundTrip = (label: string, comment?: string): TreeNode => {
+      const tree = treeFromTemplateData([
+        { id: 'n', label, children: [], ...(comment ? { comment } : {}) },
+      ]);
+      return parseTree(renderTree(tree)).roots[0];
+    };
+
+    for (const label of [
+      'release # notes',
+      'a // b',
+      'x <-- y',
+      'C# bindings',
+      'https://example.com/a',
+    ]) {
+      it(`preserves ${JSON.stringify(label)}`, () => {
+        const node = roundTrip(label);
+        expect(node.label).toBe(label);
+        expect(node.comment).toBeUndefined();
+      });
+    }
+
+    it('still round-trips a real label + comment pair', () => {
+      const node = roundTrip('main.go', 'entrypoint');
+      expect(node.label).toBe('main.go');
+      expect(node.comment).toBe('entrypoint');
+    });
+
+    it('round-trips a marker-bearing label that ALSO has a comment', () => {
+      const node = roundTrip('release # notes', 'generated');
+      expect(node.label).toBe('release # notes');
+      expect(node.comment).toBe('generated');
+    });
+
+    it('stays byte-stable after one normalization cycle', () => {
+      const tree = treeFromTemplateData([
+        { id: 'n', label: 'release # notes', children: [], comment: 'generated' },
+      ]);
+      const r1 = renderTree(tree);
+      expect(renderTree(parseTree(r1))).toBe(r1);
+    });
+
+    it('collapses whitespace runs so a label can never forge the delimiter', () => {
+      // A gap inside a label would re-parse as a comment; normalization at
+      // the render boundary makes the emitted delimiter the only gap present.
+      const node = roundTrip('release  # notes');
+      expect(node.label).toBe('release # notes');
+      expect(node.comment).toBeUndefined();
+    });
+  });
 
   it('anti-churn: a structural edit only changes locally, then is stable', () => {
     const t = parseTree(['a/', '├── b', '└── c'].join('\n'));

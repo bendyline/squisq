@@ -64,10 +64,17 @@ function mixAudioTracks(streams: MediaStream[]): {
 /**
  * Handle returned by {@link requestScreenStream}. The `stream` is what
  * gets handed to `MediaRecorder`; the `dispose()` callback shuts down
- * any auxiliary resources (e.g. the mic-mix `AudioContext`). Callers
- * must also stop the stream's tracks via `stream.getTracks().forEach(t
- * => t.stop())` when done — `dispose()` cleans up everything that isn't
- * the stream itself.
+ * any auxiliary resources (the mic-mix `AudioContext` plus the raw
+ * source tracks feeding it). Callers must also stop the stream's tracks
+ * via `stream.getTracks().forEach(t => t.stop())` when done —
+ * `dispose()` cleans up everything that isn't the stream itself.
+ *
+ * IMPORTANT for callers: when the microphone is mixed in, the raw
+ * system-audio / mic tracks are deliberately NOT members of `stream`
+ * (only the single mixed output track is). So stopping `stream`'s tracks
+ * alone leaves those captures live — `dispose()` is what releases them,
+ * and it must always be called alongside the stream teardown or the
+ * screen-share indicator stays lit.
  */
 export interface ScreenStreamHandle {
   stream: MediaStream;
@@ -147,14 +154,28 @@ export async function requestScreenStream(
   if (videoTrack) output.addTrack(videoTrack);
   output.addTrack(mix.track);
 
-  // Stop the now-unused raw audio tracks so the browser releases them;
-  // the mixed output keeps its own copies via the AudioContext graph.
-  displayStream.getAudioTracks().forEach((t) => t.stop());
+  // The system-audio tracks must stay LIVE for the lifetime of the mixed
+  // output. `new MediaStream([track])` does not clone the track, so a
+  // `MediaStreamAudioSourceNode` whose track has ended outputs pure
+  // silence — stopping them here (as this code used to) silently dropped
+  // the captured tab/system audio from every screen+mic recording.
+  //
+  // They aren't members of `output`, so the caller's `stream.getTracks()`
+  // teardown can't reach them: `dispose()` owns stopping them, which is
+  // what keeps a released capture from leaving the share indicator lit.
+  const systemAudioTracks = displayStream.getAudioTracks();
 
+  let disposed = false;
   const dispose = () => {
-    // Keep mic alive until disposal so the mix keeps producing audio.
+    // Idempotent — `dispose()` is documented as safe to call repeatedly,
+    // and useMediaRecorder can reach it from both cancel() and unmount.
+    if (disposed) return;
+    disposed = true;
+    // Keep mic + system audio alive until disposal so the mix keeps
+    // producing audio for as long as the output stream is in use.
     micStream?.getTracks().forEach((t) => t.stop());
     micStream = null;
+    systemAudioTracks.forEach((t) => t.stop());
     void mix.context.close().catch(() => {});
   };
 

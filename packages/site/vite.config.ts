@@ -94,43 +94,55 @@ function sampleContentPlugin(): Plugin {
 /**
  * Serve and publish ffmpeg.wasm's pinned core beside the demo site. GIF export
  * always needs the core, and a same-origin module avoids CDN/CORS failures in
- * cross-origin-isolated workers.
+ * cross-origin-isolated workers. The GPL notice and license travel with those
+ * files; the repo-level MIT license and complete third-party notice are also
+ * published under /legal so a static deployment is self-describing.
  */
 function ffmpegCorePlugin(): Plugin {
+  const repoDir = path.resolve(__dirname, '../..');
   const coreDir = path.resolve(__dirname, '../../node_modules/@ffmpeg/core/dist/esm');
-  const allowedFiles = new Set(['ffmpeg-core.js', 'ffmpeg-core.wasm']);
+  const ffmpegNoticeDir = path.join(repoDir, 'third_party', 'ffmpeg-core');
+  const publishedFiles = new Map<string, string>([
+    ['/ffmpeg-core/ffmpeg-core.js', path.join(coreDir, 'ffmpeg-core.js')],
+    ['/ffmpeg-core/ffmpeg-core.wasm', path.join(coreDir, 'ffmpeg-core.wasm')],
+    ['/ffmpeg-core/NOTICE.md', path.join(ffmpegNoticeDir, 'NOTICE.md')],
+    ['/ffmpeg-core/COPYING.GPL-2.0.txt', path.join(ffmpegNoticeDir, 'COPYING.GPL-2.0.txt')],
+    ['/legal/LICENSE.txt', path.join(repoDir, 'LICENSE')],
+    ['/legal/NOTICE.md', path.join(repoDir, 'NOTICE.md')],
+  ]);
 
-  const serveCore: Connect.NextHandleFunction = (req, res, next) => {
+  const servePublishedFile: Connect.NextHandleFunction = (req, res, next) => {
     const pathname = req.url?.split('?', 1)[0] ?? '';
-    if (!pathname.startsWith('/ffmpeg-core/')) return next();
-    const fileName = pathname.slice('/ffmpeg-core/'.length);
-    if (!allowedFiles.has(fileName)) return next();
-
-    const filePath = path.join(coreDir, fileName);
+    const filePath = publishedFiles.get(pathname);
+    if (!filePath) return next();
     if (!fs.existsSync(filePath)) return next();
     const stat = fs.statSync(filePath);
     res.setHeader('Content-Length', stat.size);
-    res.setHeader(
-      'Content-Type',
-      fileName.endsWith('.wasm') ? 'application/wasm' : 'text/javascript; charset=utf-8',
-    );
+    const contentType = pathname.endsWith('.wasm')
+      ? 'application/wasm'
+      : pathname.endsWith('.js')
+        ? 'text/javascript; charset=utf-8'
+        : pathname.endsWith('.md')
+          ? 'text/markdown; charset=utf-8'
+          : 'text/plain; charset=utf-8';
+    res.setHeader('Content-Type', contentType);
     fs.createReadStream(filePath).pipe(res);
   };
 
   return {
     name: 'ffmpeg-core',
     configureServer(server) {
-      server.middlewares.use(serveCore);
+      server.middlewares.use(servePublishedFile);
     },
     configurePreviewServer(server) {
-      server.middlewares.use(serveCore);
+      server.middlewares.use(servePublishedFile);
     },
     writeBundle(options) {
       const outDir = options.dir ?? path.resolve(__dirname, 'dist');
-      const destDir = path.join(outDir, 'ffmpeg-core');
-      fs.mkdirSync(destDir, { recursive: true });
-      for (const fileName of allowedFiles) {
-        fs.copyFileSync(path.join(coreDir, fileName), path.join(destDir, fileName));
+      for (const [publicPath, sourcePath] of publishedFiles) {
+        const destinationPath = path.join(outDir, ...publicPath.slice(1).split('/'));
+        fs.mkdirSync(path.dirname(destinationPath), { recursive: true });
+        fs.copyFileSync(sourcePath, destinationPath);
       }
     },
   };

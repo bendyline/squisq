@@ -16,13 +16,14 @@
  * the editor's light/dark chrome scheme.
  */
 
-import { useCallback, useEffect, useRef, useState, type CSSProperties } from 'react';
+import { useCallback, useEffect, useId, useRef, useState, type CSSProperties } from 'react';
 import type { MediaProvider } from '@bendyline/squisq/schemas';
 import type { ContentContainer } from '@bendyline/squisq/storage';
 import { useMediaRecorder, type RecorderSource } from './hooks/useMediaRecorder.js';
 import { useStreamPreview } from './hooks/useStreamPreview.js';
 import { buildFilename } from './formats.js';
 import { buildTimingJson, encodeTimingJson, timingPathFor } from './timingJson.js';
+import { useModalDialog } from '../modal/useModalDialog.js';
 
 // ── Types ──────────────────────────────────────────────────────────
 
@@ -351,6 +352,9 @@ export function RecorderModal({
   const [saveError, setSaveError] = useState<string | null>(null);
   const [playbackUrl, setPlaybackUrl] = useState<string | null>(null);
 
+  const overlayRef = useRef<HTMLDivElement>(null);
+  const dialogRef = useRef<HTMLDivElement>(null);
+  const headingId = useId();
   const previewRef = useRef<HTMLVideoElement | null>(null);
 
   // Toggle state → the recorder's capture mode. `source` is null when nothing
@@ -407,6 +411,7 @@ export function RecorderModal({
     recorder.cancel();
     onClose();
   }, [recorder, onClose]);
+  useModalDialog({ rootRef: overlayRef, dialogRef, onClose: handleClose });
 
   const handleRequest = useCallback(async () => {
     setSaveError(null);
@@ -502,7 +507,18 @@ export function RecorderModal({
 
   // Toggles lock while a stream is live (acquiring or recording) — changing
   // the capture config then would tear down the in-progress take.
-  const togglesLocked = recorder.state === 'recording' || recorder.state === 'requesting';
+  //
+  // They also lock in review while an UNSAVED take is in hand: flipping any
+  // source rewrites `captureKey`, and that effect calls `recorder.cancel()`,
+  // which drops the blob. Silently destroying a recording the user has not
+  // saved is unrecoverable, so reconfiguring goes through the explicit
+  // "Discard & re-record" button (already the affordance in this state),
+  // which clears the take and re-enables these toggles.
+  const togglesLocked =
+    recorder.state === 'recording' || recorder.state === 'requesting' || canSave;
+  const toggleLockReason = canSave
+    ? 'Save or discard this recording before changing sources'
+    : undefined;
   const toggleActiveFor = (key: 'mic' | 'camera' | 'screen') =>
     key === 'mic' ? micOn : video === key;
   const onToggle = (key: 'mic' | 'camera' | 'screen') => {
@@ -517,15 +533,25 @@ export function RecorderModal({
 
   return (
     <div
+      ref={overlayRef}
       className="squisq-editor-shell squisq-recorder-overlay"
       data-theme={colorScheme}
       style={{ ...overlayStyle, ...recorderThemeStyle(colorScheme) }}
-      role="dialog"
-      aria-modal="true"
-      aria-label="Record media"
     >
-      <div style={modalStyle} onClick={(e) => e.stopPropagation()}>
-        <h2 style={titleStyle}>Record media</h2>
+      <div
+        ref={dialogRef}
+        className="squisq-editor-shell"
+        data-theme={colorScheme}
+        style={{ ...modalStyle, ...recorderThemeStyle(colorScheme) }}
+        onClick={(e) => e.stopPropagation()}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={headingId}
+        tabIndex={-1}
+      >
+        <h2 id={headingId} style={titleStyle}>
+          Record media
+        </h2>
 
         <div style={toggleRowStyle} role="group" aria-label="Capture sources">
           {TOGGLES.map((t) => {
@@ -538,6 +564,7 @@ export function RecorderModal({
                 style={active ? toggleActive : toggleBase}
                 onClick={() => onToggle(t.key)}
                 disabled={togglesLocked}
+                title={toggleLockReason}
               >
                 {t.label}
               </button>

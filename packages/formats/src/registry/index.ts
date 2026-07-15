@@ -34,6 +34,8 @@ export type {
   PreparedExportOptions,
 } from './types.js';
 export { BUILTIN_FORMAT_IDS } from './types.js';
+export { DEFAULT_CONVERSION_LIMITS, resolveConversionLimits } from './limits.js';
+export type { ConversionLimits } from './limits.js';
 
 export { ConversionError } from './errors.js';
 export type { ConversionErrorCode, ConversionErrorOptions } from './errors.js';

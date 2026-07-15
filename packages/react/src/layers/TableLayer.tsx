@@ -35,8 +35,10 @@ export function TableLayer({ layer, viewport, blockTime }: TableLayerProps) {
   const finalX = x + offset.x;
   const finalY = y + offset.y;
 
-  // Build animation style
-  const animStyle = animation ? getAnimationStyle(animation, blockTime) : {};
+  // Build animation style. `getAnimationStyle` returns `{ className, style }`:
+  // the class carries the keyframes and the style carries its CSS custom
+  // properties, so the two must be applied to a real element separately.
+  const animStyle = getAnimationStyle(animation, blockTime);
 
   const cellAlign = (ci: number): React.CSSProperties | undefined => {
     const a = align?.[ci];
@@ -46,84 +48,90 @@ export function TableLayer({ layer, viewport, blockTime }: TableLayerProps) {
   const borderRadius = style.borderRadius ?? 8;
 
   return (
-    <foreignObject x={finalX} y={finalY} width={width} height={height} style={animStyle}>
-      <div
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        {...({ xmlns: 'http://www.w3.org/1999/xhtml' } as any)}
-        style={{
-          width: `${width}px`,
-          height: `${height}px`,
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          padding: '16px',
-          boxSizing: 'border-box',
-        }}
-      >
-        <table
+    <g
+      className={`block-layer block-layer--table ${animStyle.className}`}
+      style={animStyle.style}
+      data-layer-id={layer.id}
+    >
+      <foreignObject x={finalX} y={finalY} width={width} height={height}>
+        <div
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          {...({ xmlns: 'http://www.w3.org/1999/xhtml' } as any)}
           style={{
-            width: '100%',
-            borderCollapse: 'separate',
-            borderSpacing: 0,
-            fontSize: `${style.fontSize}px`,
-            fontFamily: style.fontFamily ?? 'system-ui, sans-serif',
-            overflow: 'hidden',
-            borderRadius: `${borderRadius}px`,
-            border: `1px solid ${style.borderColor}`,
+            width: `${width}px`,
+            height: `${height}px`,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: '16px',
+            boxSizing: 'border-box',
           }}
         >
-          {headers.length > 0 && (
-            <thead>
-              <tr>
-                {headers.map((header, ci) => (
-                  <th
-                    key={ci}
-                    style={{
-                      background: style.headerBackground,
-                      color: style.headerColor,
-                      fontFamily:
-                        style.headerFontFamily ?? style.fontFamily ?? 'system-ui, sans-serif',
-                      fontWeight: 600,
-                      padding: '12px 16px',
-                      borderBottom: `2px solid ${style.borderColor}`,
-                      borderRight:
-                        ci < headers.length - 1 ? `1px solid ${style.borderColor}` : undefined,
-                      ...cellAlign(ci),
-                    }}
-                  >
-                    {header}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-          )}
-          {rows.length > 0 && (
-            <tbody>
-              {rows.map((row, ri) => (
-                <tr key={ri}>
-                  {row.map((cell, ci) => (
-                    <td
+          <table
+            style={{
+              width: '100%',
+              borderCollapse: 'separate',
+              borderSpacing: 0,
+              fontSize: `${style.fontSize}px`,
+              fontFamily: style.fontFamily ?? 'system-ui, sans-serif',
+              overflow: 'hidden',
+              borderRadius: `${borderRadius}px`,
+              border: `1px solid ${style.borderColor}`,
+            }}
+          >
+            {headers.length > 0 && (
+              <thead>
+                <tr>
+                  {headers.map((header, ci) => (
+                    <th
                       key={ci}
                       style={{
-                        background: style.cellBackground,
-                        color: style.cellColor,
-                        padding: '10px 16px',
-                        borderBottom:
-                          ri < rows.length - 1 ? `1px solid ${style.borderColor}` : undefined,
+                        background: style.headerBackground,
+                        color: style.headerColor,
+                        fontFamily:
+                          style.headerFontFamily ?? style.fontFamily ?? 'system-ui, sans-serif',
+                        fontWeight: 600,
+                        padding: '12px 16px',
+                        borderBottom: `2px solid ${style.borderColor}`,
                         borderRight:
-                          ci < row.length - 1 ? `1px solid ${style.borderColor}` : undefined,
+                          ci < headers.length - 1 ? `1px solid ${style.borderColor}` : undefined,
                         ...cellAlign(ci),
                       }}
                     >
-                      {cell}
-                    </td>
+                      {header}
+                    </th>
                   ))}
                 </tr>
-              ))}
-            </tbody>
-          )}
-        </table>
-      </div>
-    </foreignObject>
+              </thead>
+            )}
+            {rows.length > 0 && (
+              <tbody>
+                {rows.map((row, ri) => (
+                  <tr key={ri}>
+                    {row.map((cell, ci) => (
+                      <td
+                        key={ci}
+                        style={{
+                          background: style.cellBackground,
+                          color: style.cellColor,
+                          padding: '10px 16px',
+                          borderBottom:
+                            ri < rows.length - 1 ? `1px solid ${style.borderColor}` : undefined,
+                          borderRight:
+                            ci < row.length - 1 ? `1px solid ${style.borderColor}` : undefined,
+                          ...cellAlign(ci),
+                        }}
+                      >
+                        {cell}
+                      </td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            )}
+          </table>
+        </div>
+      </foreignObject>
+    </g>
   );
 }

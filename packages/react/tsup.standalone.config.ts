@@ -1,59 +1,55 @@
-/**
- * Standalone IIFE Build Configuration
- *
- * Builds a self-contained squisq-player.iife.js that bundles:
- * - Preact (aliased as React via preact/compat)
- * - @bendyline/squisq core (schemas, templates, doc utilities)
- * - All squisq-react rendering components (DocPlayer, BlockRenderer, layers, hooks)
- * - doc-animations.css (injected at runtime)
- *
- * The output is a single IIFE that exposes `window.SquisqPlayer`.
- */
-
+/** Builds light and full self-contained browser IIFE players. */
 import { defineConfig } from 'tsup';
-import { readFileSync } from 'fs';
-import { resolve } from 'path';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 
-// Read version from package.json
 const pkg = JSON.parse(readFileSync(resolve(import.meta.dirname, 'package.json'), 'utf-8'));
 
-export default defineConfig({
-  entry: { 'squisq-player': 'src/standalone-entry.tsx' },
-  format: ['iife'],
-  // Resolve conditional exports (notably vfile's path/process/url shims) for
-  // the runtime we actually ship. Leaving tsup's Node default here produces an
-  // IIFE with external Node built-ins and only hides the problem post-build.
-  platform: 'browser',
+const common = {
+  format: ['iife'] as const,
+  platform: 'browser' as const,
   globalName: 'SquisqPlayer',
   outDir: 'dist',
-  // Bundle everything — no external dependencies
-  noExternal: [/.*/],
   minify: true,
-  sourcemap: true,
-  // Don't clean dist — the main tsup build already wrote ESM there
+  sourcemap: false,
   clean: false,
-  // Tree-shake to drop unused code (spatial, storage, etc.)
   treeshake: true,
-  // Disable CSS injection — we handle CSS as a text import
   injectStyle: false,
   esbuildOptions(options) {
     options.jsx = 'automatic';
-    // Alias React to Preact for the standalone bundle
     options.alias = {
       react: 'preact/compat',
       'react-dom': 'preact/compat',
       'react-dom/client': 'preact/compat/client',
       'react/jsx-runtime': 'preact/jsx-runtime',
     };
-    // Inject version constant
     options.define = {
       ...options.define,
       __SQUISQ_VERSION__: JSON.stringify(pkg.version),
     };
-    // Handle CSS imports as text (for runtime injection instead of CSS extraction)
-    options.loader = {
-      ...options.loader,
-      '.css': 'text',
-    };
+    options.loader = { ...options.loader, '.css': 'text' };
   },
-});
+};
+
+export default defineConfig([
+  {
+    ...common,
+    entry: { 'squisq-player': 'src/standalone-entry.tsx' },
+    // Mermaid is optional in the default player. An import map can provide it
+    // on demand; documents that need a zero-configuration Mermaid renderer can
+    // choose the full variant instead.
+    noExternal: [/.*/],
+    esbuildOptions(options) {
+      common.esbuildOptions(options);
+      options.alias = {
+        ...options.alias,
+        mermaid: resolve(import.meta.dirname, 'src/standalone-mermaid-stub.ts'),
+      };
+    },
+  },
+  {
+    ...common,
+    entry: { 'squisq-player.full': 'src/standalone-entry.tsx' },
+    noExternal: [/.*/],
+  },
+]);

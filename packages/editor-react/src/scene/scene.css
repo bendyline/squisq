@@ -22,6 +22,7 @@
 
 .squisq-editor-shell[data-theme='dark'] .squisq-scene-shell {
   --squisq-surface: #0f172a;
+  --squisq-surface-raised: #111827;
   --squisq-surface-hover: #1e293b;
   --squisq-border: #475569;
   --squisq-text: #f8fafc;
@@ -31,8 +32,8 @@
 .squisq-editor-shell[data-theme='dark'] .squisq-scene-root,
 .squisq-editor-shell[data-theme='dark'] .squisq-scene-inline,
 .squisq-editor-shell[data-theme='dark'] .squisq-diagram-inline {
-  background: #0f172a;
-  border-color: #475569;
+  background: var(--squisq-surface, #0f172a);
+  border-color: var(--squisq-border, #475569);
 }
 
 .squisq-editor-shell[data-theme='dark'] .squisq-scene-layer--shape,
@@ -104,15 +105,15 @@
 
 .squisq-scene-selection-outline {
   fill: none;
-  stroke: #6366f1;
+  stroke: var(--squisq-accent, #6366f1);
   stroke-width: 1.5;
   stroke-dasharray: 4 3;
   vector-effect: non-scaling-stroke;
 }
 
 .squisq-scene-selection-handle {
-  fill: #ffffff;
-  stroke: #6366f1;
+  fill: var(--squisq-surface, #ffffff);
+  stroke: var(--squisq-accent, #6366f1);
   stroke-width: 1.5;
   vector-effect: non-scaling-stroke;
 }
@@ -120,8 +121,8 @@
 /* ── Tool overlays ────────────────────────────────────────── */
 
 .squisq-scene-marquee {
-  fill: rgba(99, 102, 241, 0.08);
-  stroke: #6366f1;
+  fill: color-mix(in srgb, var(--squisq-accent, #6366f1) 12%, transparent);
+  stroke: var(--squisq-accent, #6366f1);
   stroke-width: 1;
   stroke-dasharray: 4 3;
   vector-effect: non-scaling-stroke;
@@ -129,7 +130,7 @@
 
 .squisq-scene-connect-preview {
   fill: none;
-  stroke: #6366f1;
+  stroke: var(--squisq-accent, #6366f1);
   stroke-width: 2;
   stroke-dasharray: 6 4;
   vector-effect: non-scaling-stroke;
@@ -137,15 +138,15 @@
 }
 
 .squisq-scene-connection-point {
-  fill: #ffffff;
-  stroke: #6366f1;
+  fill: var(--squisq-surface, #ffffff);
+  stroke: var(--squisq-accent, #6366f1);
   stroke-width: 2;
   vector-effect: non-scaling-stroke;
   pointer-events: none;
 }
 
 .squisq-scene-connection-point--active {
-  fill: #6366f1;
+  fill: var(--squisq-accent, #6366f1);
 }
 
 /* ── Toolbar ──────────────────────────────────────────────── */
@@ -160,8 +161,8 @@
   flex-wrap: wrap;
   gap: 4px;
   padding: 4px;
-  background: #ffffff;
-  border: 1px solid #cbd5e1;
+  background: var(--squisq-surface-raised, var(--squisq-surface, #ffffff));
+  border: 1px solid var(--squisq-border, #cbd5e1);
   border-radius: 6px;
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.12);
   max-width: calc(100% - 16px);
@@ -174,10 +175,10 @@
   min-width: 28px;
   height: 28px;
   padding: 0 8px;
-  background: #ffffff;
+  background: var(--squisq-surface-raised, var(--squisq-surface, #ffffff));
   border: 1px solid transparent;
   border-radius: 4px;
-  color: #1e293b;
+  color: var(--squisq-text, #1e293b);
   cursor: pointer;
   font-size: 11px;
   font-weight: 600;
@@ -186,26 +187,26 @@
 }
 
 .squisq-scene-tool:hover {
-  background: #f1f5f9;
-  border-color: #cbd5e1;
-  color: #1e293b;
+  background: var(--squisq-surface-hover, #f1f5f9);
+  border-color: var(--squisq-border, #cbd5e1);
+  color: var(--squisq-text, #1e293b);
 }
 
 .squisq-scene-tool:focus-visible {
-  outline: 2px solid #6366f1;
+  outline: 2px solid var(--squisq-accent, #6366f1);
   outline-offset: 1px;
 }
 
 .squisq-scene-tool--active {
-  background: #eef2ff;
-  border-color: #6366f1;
-  color: #4338ca;
+  background: var(--squisq-accent, #6366f1);
+  border-color: var(--squisq-accent-hover, #4f46e5);
+  color: var(--squisq-text-on-accent, #ffffff);
 }
 
 .squisq-scene-tool--active:hover {
-  background: #e0e7ff;
-  border-color: #4f46e5;
-  color: #4338ca;
+  background: var(--squisq-accent-hover, #4f46e5);
+  border-color: var(--squisq-accent-hover, #4f46e5);
+  color: var(--squisq-text-on-accent, #ffffff);
 }
 
 .squisq-scene-tool-label {
@@ -238,7 +239,7 @@
   flex-wrap: wrap;
   gap: 4px;
   padding: 3px;
-  background: var(--squisq-surface, #ffffff);
+  background: var(--squisq-surface-raised, var(--squisq-surface, #ffffff));
   border: 1px solid var(--squisq-border, #cbd5e1);
   border-radius: 6px;
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
@@ -250,10 +251,10 @@
   gap: 4px;
   height: 28px;
   padding: 0 10px;
-  background: #ffffff;
+  background: var(--squisq-surface-raised, var(--squisq-surface, #ffffff));
   border: 1px solid transparent;
   border-radius: 4px;
-  color: #1e293b;
+  color: var(--squisq-text, #1e293b);
   cursor: pointer;
   font-size: 11px;
   font-weight: 600;
@@ -262,15 +263,15 @@
 }
 
 .squisq-scene-action:hover:not(:disabled) {
-  background: #f1f5f9;
-  border-color: #cbd5e1;
+  background: var(--squisq-surface-hover, #f1f5f9);
+  border-color: var(--squisq-border, #cbd5e1);
 }
 
 .squisq-scene-action--active,
 .squisq-scene-action--active:hover:not(:disabled) {
-  background: #e0e7ff;
-  border-color: #4f46e5;
-  color: #4338ca;
+  background: var(--squisq-accent, #6366f1);
+  border-color: var(--squisq-accent-hover, #4f46e5);
+  color: var(--squisq-text-on-accent, #ffffff);
 }
 
 .squisq-scene-action-popover-anchor {
@@ -279,7 +280,7 @@
 }
 
 .squisq-scene-action:focus-visible {
-  outline: 2px solid #6366f1;
+  outline: 2px solid var(--squisq-accent, #6366f1);
   outline-offset: 1px;
 }
 
@@ -314,32 +315,32 @@
 .squisq-editor-shell[data-theme='dark'] .squisq-scene-block-tools,
 .squisq-editor-shell[data-theme='dark'] .squisq-scene-block-actions,
 .squisq-editor-shell[data-theme='dark'] .squisq-scene-block-props {
-  background: #111827;
-  border-color: #475569;
-  color: #e5e7eb;
+  background: var(--squisq-surface-raised, #111827);
+  border-color: var(--squisq-border, #475569);
+  color: var(--squisq-text, #e5e7eb);
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.32);
 }
 
 .squisq-editor-shell[data-theme='dark'] .squisq-scene-tool,
 .squisq-editor-shell[data-theme='dark'] .squisq-scene-action {
-  background: #111827;
-  color: #e5e7eb;
+  background: var(--squisq-surface-raised, #111827);
+  color: var(--squisq-text, #e5e7eb);
 }
 
 .squisq-editor-shell[data-theme='dark'] .squisq-scene-tool:hover,
 .squisq-editor-shell[data-theme='dark'] .squisq-scene-action:hover:not(:disabled) {
-  background: #1f2937;
-  border-color: #64748b;
-  color: #f8fafc;
+  background: var(--squisq-surface-hover, #1f2937);
+  border-color: var(--squisq-border, #64748b);
+  color: var(--squisq-text, #f8fafc);
 }
 
 .squisq-editor-shell[data-theme='dark'] .squisq-scene-tool--active,
 .squisq-editor-shell[data-theme='dark'] .squisq-scene-tool--active:hover,
 .squisq-editor-shell[data-theme='dark'] .squisq-scene-action--active,
 .squisq-editor-shell[data-theme='dark'] .squisq-scene-action--active:hover:not(:disabled) {
-  background: #312e81;
-  border-color: #818cf8;
-  color: #f8fafc;
+  background: var(--squisq-accent, #6366f1);
+  border-color: var(--squisq-accent-hover, #818cf8);
+  color: var(--squisq-text-on-accent, #ffffff);
 }
 
 .squisq-editor-shell[data-theme='dark'] .squisq-scene-action--danger {
@@ -488,20 +489,21 @@
 }
 
 .squisq-scene-view-fit[data-active='true'] {
-  color: #4338ca;
+  background: var(--squisq-accent, #6366f1);
+  color: var(--squisq-text-on-accent, #ffffff);
   font-weight: 600;
 }
 
 .squisq-editor-shell[data-theme='dark'] .squisq-scene-view-controls {
-  background: #111827;
-  border-color: #475569;
-  color: #e5e7eb;
+  background: var(--squisq-surface-raised, #111827);
+  border-color: var(--squisq-border, #475569);
+  color: var(--squisq-text, #e5e7eb);
 }
 
 .squisq-editor-shell[data-theme='dark'] .squisq-scene-view-controls button:hover,
 .squisq-editor-shell[data-theme='dark'] .squisq-scene-view-fit[data-active='true'] {
-  background: #312e81;
-  color: #f8fafc;
+  background: var(--squisq-accent, #6366f1);
+  color: var(--squisq-text-on-accent, #ffffff);
 }
 
 .squisq-scene-maximize-btn {
@@ -514,33 +516,33 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  background: #ffffff;
-  border: 1px solid #cbd5e1;
+  background: var(--squisq-surface-raised, var(--squisq-surface, #ffffff));
+  border: 1px solid var(--squisq-border, #cbd5e1);
   border-radius: 6px;
   cursor: pointer;
   font-size: 16px;
   line-height: 1;
-  color: #1e293b;
+  color: var(--squisq-text, #1e293b);
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
 }
 
 .squisq-scene-maximize-btn:hover {
-  background: #f1f5f9;
-  border-color: #94a3b8;
-  color: #0f172a;
+  background: var(--squisq-surface-hover, #f1f5f9);
+  border-color: var(--squisq-border, #94a3b8);
+  color: var(--squisq-text, #0f172a);
 }
 
 .squisq-editor-shell[data-theme='dark'] .squisq-scene-maximize-btn {
-  background: #111827;
-  border-color: #475569;
-  color: #e5e7eb;
+  background: var(--squisq-surface-raised, #111827);
+  border-color: var(--squisq-border, #475569);
+  color: var(--squisq-text, #e5e7eb);
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.32);
 }
 
 .squisq-editor-shell[data-theme='dark'] .squisq-scene-maximize-btn:hover {
-  background: #1f2937;
-  border-color: #64748b;
-  color: #f8fafc;
+  background: var(--squisq-surface-hover, #1f2937);
+  border-color: var(--squisq-border, #64748b);
+  color: var(--squisq-text, #f8fafc);
 }
 
 /* ── Diagram node card (used by nodeCard.tsx) ─────────────── */
@@ -569,7 +571,7 @@
 }
 
 .squisq-scene-node-handle:hover {
-  fill: #6366f1;
+  fill: var(--squisq-accent, #6366f1);
 }
 
 .squisq-scene-edge-path {
@@ -862,13 +864,13 @@
   padding: 6px 12px;
   font-size: 12px;
   font-weight: 500;
-  color: #ffffff;
-  background: #6366f1;
+  color: var(--squisq-text-on-accent, #ffffff);
+  background: var(--squisq-accent, #6366f1);
   border: none;
   border-radius: 6px;
   cursor: pointer;
 }
 
 .squisq-scene-empty-btn:hover {
-  background: #4f46e5;
+  background: var(--squisq-accent-hover, #4f46e5);
 }

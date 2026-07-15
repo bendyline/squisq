@@ -20,12 +20,17 @@ describe('@bendyline/squisq-react standalone browser contract', () => {
   });
 
   it('resolves vfile through its browser conditional exports', () => {
-    const map = JSON.parse(
-      readFileSync(resolve(pkg.dist, 'squisq-player.global.js.map'), 'utf8'),
-    ) as { sources: string[] };
-    expect(map.sources).not.toContain('../../../node_modules/vfile/lib/minpath.js');
-    expect(map.sources).not.toContain('../../../node_modules/vfile/lib/minproc.js');
-    expect(map.sources).not.toContain('../../../node_modules/vfile/lib/minurl.js');
+    const bundle = readFileSync(resolve(pkg.dist, 'squisq-player.global.js'), 'utf8');
+    expect(bundle).not.toContain('node:path');
+    expect(bundle).not.toContain('node:process');
+    expect(bundle).not.toContain('node:url');
+  });
+
+  it('keeps the default player below the light-bundle budget and offers a full variant', () => {
+    const light = readFileSync(resolve(pkg.dist, 'squisq-player.global.js'));
+    const full = readFileSync(resolve(pkg.dist, 'squisq-player.full.global.js'));
+    expect(light.byteLength).toBeLessThan(2_000_000);
+    expect(full.byteLength).toBeGreaterThan(light.byteLength);
   });
 
   it('publishes the callback API and options-object playback signature', () => {

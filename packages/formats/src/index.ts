@@ -82,6 +82,8 @@ export {
   defaultFormats,
   ConversionError,
   BUILTIN_FORMAT_IDS,
+  DEFAULT_CONVERSION_LIMITS,
+  resolveConversionLimits,
 } from './registry/index.js';
 
 // Shared bounded-decompression errors/options used by DBK and OOXML imports.
@@ -106,4 +108,5 @@ export type {
   DbkFormatOptions,
   PreparedConversion,
   PreparedExportOptions,
+  ConversionLimits,
 } from './registry/index.js';

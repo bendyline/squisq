@@ -101,7 +101,29 @@ export interface EncoderResult {
   duration: number;
 }
 
-/** Fail fast with actionable errors before launching an encoder or browser. */
+/**
+ * Fail fast with actionable errors before launching an encoder or browser.
+ *
+ * Dimensions must be EVEN. Every H.264 path encodes yuv420p, whose 2x2 chroma
+ * subsampling cannot represent an odd width or height — libx264 rejects it
+ * outright ("width not divisible by 2") and WebCodecs' `isConfigSupported`
+ * reports the config unsupported. This validator is the one gate every render
+ * path shares (CLI `renderDocToMp4`/`renderDocToGif`, `framesToMp4Native`,
+ * `framesToMp4Wasm`, the main-thread and worker WebCodecs encoders, and the
+ * browser GIF export's H.264 intermediate via {@link resolveDimensions}), so an
+ * odd dimension is rejected before any frame capture happens rather than after.
+ *
+ * The rule is applied uniformly to MP4 and GIF rather than only where H.264 is
+ * strictly involved. Native GIF encoding could technically accept odd sizes, but
+ * browser GIF export cannot (it muxes an H.264 intermediate), and a dimension
+ * rule that silently depends on output format and runtime is worse than one the
+ * user can learn once.
+ *
+ * Odd values are REJECTED, not silently rounded: width/height are explicit user
+ * intent, and quietly shipping a file at dimensions the caller never asked for
+ * corrupts aspect-ratio-sensitive pipelines in a way that is very hard to
+ * notice. The error names the two nearest legal values so the fix is one edit.
+ */
 export function validateVideoExportOptions(options: VideoExportOptions): void {
   if (
     options.fps !== undefined &&
@@ -115,6 +137,12 @@ export function validateVideoExportOptions(options: VideoExportOptions): void {
   ] as const) {
     if (value !== undefined && (!Number.isSafeInteger(value) || value <= 0)) {
       throw new RangeError(`Video ${label} must be a positive integer.`);
+    }
+    if (value !== undefined && value % 2 !== 0) {
+      throw new RangeError(
+        `Video ${label} must be an even number of pixels (got ${value}) — ` +
+          `H.264 (yuv420p) cannot encode odd dimensions. Use ${value - 1} or ${value + 1}.`,
+      );
     }
   }
   if (

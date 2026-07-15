@@ -12,7 +12,12 @@ import type { ContentContainer } from '@bendyline/squisq/storage';
 import type { TransformStyleInput, TransformStyleRegistry } from '@bendyline/squisq/transform';
 import { ConversionError } from './errors.js';
 import { defaultRegistry } from './registry.js';
-import { openBoundedZipArchive, ZipSafetyError } from '../shared/zipSafety.js';
+import {
+  openBoundedZipArchive,
+  resolveZipSafetyLimits,
+  ZipSafetyError,
+  type ZipSafetyLimits,
+} from '../shared/zipSafety.js';
 import type {
   BuiltinFormatOptions,
   ConversionResult,
@@ -25,9 +30,32 @@ import type {
   PreparedConversion,
   PreparedExportOptions,
 } from './types.js';
+import {
+  assertDocWithinConversionLimits,
+  markdownLimitsFromConversion,
+  resolveConversionLimits,
+} from './limits.js';
 
 function markdownFormatOptions(options: ConvertOptions): BuiltinFormatOptions['md'] {
   return (options.formatOptions?.md ?? {}) as BuiltinFormatOptions['md'];
+}
+
+function parseOptions(options: ConvertOptions): BuiltinFormatOptions['md']['parse'] {
+  const raw = markdownFormatOptions(options).parse ?? {};
+  return {
+    ...raw,
+    signal: options.signal,
+    limits: raw.limits ?? markdownLimitsFromConversion(options.limits),
+  };
+}
+
+function stringifyOptions(options: ConvertOptions): BuiltinFormatOptions['md']['stringify'] {
+  const raw = markdownFormatOptions(options).stringify ?? {};
+  return {
+    ...raw,
+    signal: options.signal,
+    limits: raw.limits ?? markdownLimitsFromConversion(options.limits),
+  };
 }
 
 function throwIfAborted(signal?: AbortSignal): void {
@@ -51,17 +79,50 @@ function hasPrefix(bytes: Uint8Array, prefix: number[]): boolean {
 const ZIP_MAGIC = [0x50, 0x4b, 0x03, 0x04]; // "PK\x03\x04"
 const PDF_MAGIC = [0x25, 0x50, 0x44, 0x46]; // "%PDF"
 
+/** The ZIP-based formats {@link sniffZip} can resolve to. */
+const ZIP_SNIFF_CANDIDATES = ['docx', 'pptx', 'xlsx', 'dbk'] as const;
+
+/**
+ * ZIP limits for the sniff pass.
+ *
+ * Sniffing happens *before* the format is known, so no single format's
+ * `ZipSafetyLimits` applies yet. Opening at hard-coded defaults would hand a
+ * hostile archive one free pass at default budgets even when the caller
+ * tightened every ZIP format.
+ *
+ * Instead, take the **most permissive** effective limit across the candidate
+ * formats: the sniff is then never stricter than the importer that will
+ * actually run (so a legitimate file is never falsely rejected), while a caller
+ * who tightened *all* ZIP formats gets that tighter budget applied at sniff
+ * time too. An unconfigured candidate resolves to the default, which keeps the
+ * maximum at the default — matching today's behavior exactly.
+ */
+function sniffZipLimits(options: ConvertOptions): ZipSafetyLimits {
+  const effective = ZIP_SNIFF_CANDIDATES.map((id) =>
+    resolveZipSafetyLimits((options.formatOptions?.[id] ?? {}) as ZipSafetyLimits),
+  );
+  return {
+    signal: options.signal,
+    maxEntries: Math.max(...effective.map((l) => l.maxEntries)),
+    maxUncompressedBytes: Math.max(...effective.map((l) => l.maxUncompressedBytes)),
+    maxEntryUncompressedBytes: Math.max(...effective.map((l) => l.maxEntryUncompressedBytes)),
+    maxCompressionRatio: Math.max(...effective.map((l) => l.maxCompressionRatio)),
+  };
+}
+
 /**
  * Disambiguate a ZIP-based file. OOXML formats (docx/pptx/xlsx) all carry a
  * `[Content_Types].xml` whose content-type strings name the flavor; a squisq
  * container (.dbk) is a plain ZIP with no such part, so absence of the OOXML
  * marker means `dbk`.
  */
-async function sniffZip(bytes: Uint8Array): Promise<FormatId> {
-  const archive = await openBoundedZipArchive(bytes).catch((cause: unknown) => {
-    if (cause instanceof ZipSafetyError && cause.code !== 'invalid-archive') throw cause;
-    throw new ConversionError('invalid-input', 'Input is not a readable ZIP archive.', { cause });
-  });
+async function sniffZip(bytes: Uint8Array, options: ConvertOptions): Promise<FormatId> {
+  const archive = await openBoundedZipArchive(bytes, sniffZipLimits(options)).catch(
+    (cause: unknown) => {
+      if (cause instanceof ZipSafetyError && cause.code !== 'invalid-archive') throw cause;
+      throw new ConversionError('invalid-input', 'Input is not a readable ZIP archive.', { cause });
+    },
+  );
   const contentTypes = archive.entries.find((entry) => entry.path === '[Content_Types].xml');
   if (!contentTypes) return 'dbk';
   const maxContentTypesBytes = 1024 * 1024;
@@ -93,7 +154,7 @@ async function detectByteFormat(
   }
 
   if (hasPrefix(bytes, PDF_MAGIC)) return 'pdf';
-  if (hasPrefix(bytes, ZIP_MAGIC)) return sniffZip(bytes);
+  if (hasPrefix(bytes, ZIP_MAGIC)) return sniffZip(bytes, options);
 
   // No magic and no recognized extension → assume UTF-8 markdown.
   return 'md';
@@ -131,6 +192,15 @@ async function normalizeBytes(
   registry: FormatRegistry,
 ): Promise<Normalized> {
   const bytes = source.data instanceof Uint8Array ? source.data : new Uint8Array(source.data);
+  if (
+    options.limits !== false &&
+    bytes.byteLength > resolveConversionLimits(options.limits).maxInputBytes
+  ) {
+    throw new ConversionError(
+      'invalid-input',
+      `Input exceeds the ${resolveConversionLimits(options.limits).maxInputBytes}-byte safety limit.`,
+    );
+  }
   const buffer = bytes.buffer.slice(
     bytes.byteOffset,
     bytes.byteOffset + bytes.byteLength,
@@ -163,28 +233,28 @@ async function normalizeBytes(
 
   if (fromDef.importContainer) {
     container = await fromDef.importContainer(buffer, options);
-    // PDF embedded-image extraction needs a browser canvas; under Node it's
-    // skipped inside pdfToContainer. importContainer has no warnings channel of
-    // its own, so surface that degraded path here where warnings are collected.
-    if (fromDef.id === 'pdf' && typeof document === 'undefined') {
-      warnings.push(
-        'PDF embedded images were skipped — image decoding requires a browser canvas (running under Node).',
-      );
-    }
     const text = await container.readDocument();
     markdownDoc = text
-      ? parseMarkdown(text, markdownFormatOptions(options).parse)
+      ? parseMarkdown(text, parseOptions(options))
       : { type: 'document', children: [] };
   } else {
     // importDoc is guaranteed present by the guard above.
     markdownDoc = await fromDef.importDoc!(buffer, options);
     const { MemoryContentContainer } = await import('@bendyline/squisq/storage');
     const mem = new MemoryContentContainer();
-    await mem.writeDocument(stringifyMarkdown(markdownDoc));
+    await mem.writeDocument(stringifyMarkdown(markdownDoc, stringifyOptions(options)));
     container = mem;
   }
 
+  const { assertMarkdownDocumentWithinLimits } = await import('@bendyline/squisq/markdown');
+  assertMarkdownDocumentWithinLimits(
+    markdownDoc,
+    markdownLimitsFromConversion(options.limits),
+    options.signal,
+  );
+
   const doc = markdownToDoc(markdownDoc, { autoTemplates: options.autoTemplates });
+  assertDocWithinConversionLimits(doc, options.limits, options.signal);
   const baseName = source.filename ? baseNameOf(source.filename) : 'document';
 
   return {
@@ -204,8 +274,14 @@ async function normalizeMarkdown(
 
   const markdownDoc =
     typeof source.markdown === 'string'
-      ? parseMarkdown(source.markdown, markdownFormatOptions(options).parse)
+      ? parseMarkdown(source.markdown, parseOptions(options))
       : source.markdown;
+  const { assertMarkdownDocumentWithinLimits } = await import('@bendyline/squisq/markdown');
+  assertMarkdownDocumentWithinLimits(
+    markdownDoc,
+    markdownLimitsFromConversion(options.limits),
+    options.signal,
+  );
 
   let container = source.container;
   if (!container) {
@@ -213,24 +289,31 @@ async function normalizeMarkdown(
     // (dbk) and media resolution have the markdown to serialize.
     const { MemoryContentContainer } = await import('@bendyline/squisq/storage');
     const mem = new MemoryContentContainer();
-    await mem.writeDocument(stringifyMarkdown(markdownDoc));
+    await mem.writeDocument(stringifyMarkdown(markdownDoc, stringifyOptions(options)));
     container = mem;
   }
 
   const doc = markdownToDoc(markdownDoc, { autoTemplates: options.autoTemplates });
+  assertDocWithinConversionLimits(doc, options.limits, options.signal);
   const baseName = source.baseName ?? 'document';
 
   return { input: { doc, markdownDoc, container, baseName }, warnings: [] };
 }
 
-async function normalizeDoc(source: Extract<ConvertSource, { kind: 'doc' }>): Promise<Normalized> {
+async function normalizeDoc(
+  source: Extract<ConvertSource, { kind: 'doc' }>,
+  options: ConvertOptions,
+): Promise<Normalized> {
+  assertDocWithinConversionLimits(source.doc, options.limits, options.signal);
   let container = source.container;
   if (!container) {
     const { MemoryContentContainer } = await import('@bendyline/squisq/storage');
     const { docToMarkdown } = await import('@bendyline/squisq/doc');
     const { stringifyMarkdown } = await import('@bendyline/squisq/markdown');
     const mem = new MemoryContentContainer();
-    await mem.writeDocument(stringifyMarkdown(docToMarkdown(source.doc)));
+    await mem.writeDocument(
+      stringifyMarkdown(docToMarkdown(source.doc), stringifyOptions(options)),
+    );
     container = mem;
   }
   const baseName = source.baseName ?? 'document';
@@ -249,7 +332,7 @@ async function normalize(
     case 'markdown':
       return normalizeMarkdown(source, options);
     case 'doc':
-      return normalizeDoc(source);
+      return normalizeDoc(source, options);
   }
 }
 

@@ -289,6 +289,9 @@ export function LinearDocView({
     <div
       ref={scrollRef}
       className={`squisq-linear ${className || ''}`}
+      role="region"
+      aria-label="Document page"
+      tabIndex={thinMargins ? undefined : 0}
       style={{
         width: '100%',
         // Thin-margins mode is the "embedded in someone else's container"

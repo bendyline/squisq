@@ -1,9 +1,17 @@
 /**
  * @vitest-environment jsdom
  */
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { compileTheme } from '@bendyline/squisq/schemas';
+import type { CustomTemplateDefinition, Theme } from '@bendyline/squisq/schemas';
+import { setFrontmatterValues } from '@bendyline/squisq/markdown';
+import {
+  writeCustomThemesToFrontmatter,
+  writeCustomTemplatesToFrontmatter,
+  FRONTMATTER_CUSTOM_THEMES_KEY,
+  FRONTMATTER_CUSTOM_TEMPLATES_KEY,
+} from '@bendyline/squisq/doc';
 import { EditorProvider, useEditorContext } from '../EditorContext';
 import {
   PreviewModeSwitch,
@@ -525,6 +533,146 @@ describe('Use tab mode menu', () => {
     expect(screen.getByTestId('active-view').textContent).toBe('preview');
     expect(screen.getByRole('tab', { name: 'Document' })).toBeTruthy();
     expect(screen.queryByRole('menu', { name: 'Use mode' })).toBeNull();
+  });
+});
+
+/**
+ * Regression coverage for the custom-theme write path.
+ *
+ * The bug: saving a theme (or copying a library theme into the doc) REPLACES
+ * the whole `squisq-custom-themes` / `squisq-custom-templates` frontmatter
+ * key, but derived the list it merged into from the parsed `Doc` — which is
+ * 150ms debounced and is set to `null` outright whenever the source fails to
+ * parse. Either way the merge base collapsed to `[]`, so the write erased
+ * every OTHER custom theme and template in the document.
+ *
+ * `doc={null}` below is exactly the state EditorContext lands in on a parse
+ * failure, and is also what the provider sees during the debounce window
+ * right after a frontmatter write. The fix reads the merge base back out of
+ * the live markdown source instead.
+ */
+describe('custom-theme writes merge onto the live source', () => {
+  const keeperTheme = compileTheme({
+    id: 'keeper',
+    name: 'Keeper',
+    seedColors: { primary: '#112233' },
+  });
+  const keeperTemplate: CustomTemplateDefinition = {
+    name: 'keeper-layout',
+    label: 'Keeper Layout',
+    viewport: { width: 1920, height: 1080 },
+    layers: [],
+  };
+
+  /** A document that already carries one custom theme and one custom template. */
+  const populatedMarkdown = setFrontmatterValues('# Hello', {
+    [FRONTMATTER_CUSTOM_THEMES_KEY]: writeCustomThemesToFrontmatter([keeperTheme]) ?? null,
+    [FRONTMATTER_CUSTOM_TEMPLATES_KEY]: writeCustomTemplatesToFrontmatter([keeperTemplate]) ?? null,
+  });
+
+  function SaveProbe({ theme }: { theme: Theme }) {
+    const s = usePreviewSettings();
+    const { markdownSource } = useEditorContext();
+    return (
+      <>
+        <button type="button" onClick={() => s.openThemeDesigner(null)}>
+          Open designer
+        </button>
+        <button type="button" onClick={() => s.themeDesigner?.onSave(theme, 'doc')}>
+          Save designed theme
+        </button>
+        <button type="button" onClick={() => s.setSelectedThemeId('library-theme')}>
+          Select library theme
+        </button>
+        <div data-testid="theme-save-error">{s.themeSaveError ?? ''}</div>
+        <pre data-testid="markdown-source">{markdownSource}</pre>
+      </>
+    );
+  }
+
+  /**
+   * Pins `doc={null}` — the post-parse-failure / pre-debounce state whose
+   * empty derived lists were the whole bug.
+   */
+  function StaleDocHarness({ theme, markdown }: { theme: Theme; markdown: string }) {
+    return (
+      <EditorProvider initialMarkdown={markdown}>
+        <CustomThemeProvider docThemes={[]} onDocThemesChange={() => {}}>
+          <PreviewSettingsProvider doc={null}>
+            <SaveProbe theme={theme} />
+          </PreviewSettingsProvider>
+        </CustomThemeProvider>
+      </EditorProvider>
+    );
+  }
+
+  it('preserves other custom themes and templates when the parsed doc is null/stale', async () => {
+    const fresh = compileTheme({ id: 'fresh', name: 'Fresh', seedColors: { primary: '#445566' } });
+    render(<StaleDocHarness theme={fresh} markdown={populatedMarkdown} />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Open designer' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Save designed theme' }));
+
+    await waitFor(() => {
+      const source = screen.getByTestId('markdown-source').textContent ?? '';
+      // The new theme landed...
+      expect(source).toContain('"fresh"');
+      expect(source).toContain('squisq-theme: fresh');
+      // ...without taking the pre-existing theme or template with it.
+      expect(source).toContain('"keeper"');
+      expect(source).toContain('keeper-layout');
+    });
+    expect(screen.getByTestId('theme-save-error').textContent).toBe('');
+  });
+
+  it('preserves other custom themes when copying a library theme into a stale doc', async () => {
+    saveLibraryTheme(
+      compileTheme({
+        id: 'library-theme',
+        name: 'Library Theme',
+        seedColors: { primary: '#456789' },
+      }),
+    );
+    const fresh = compileTheme({ id: 'fresh', name: 'Fresh' });
+    render(<StaleDocHarness theme={fresh} markdown={populatedMarkdown} />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Select library theme' }));
+
+    await waitFor(() => {
+      const source = screen.getByTestId('markdown-source').textContent ?? '';
+      expect(source).toContain('squisq-theme: library-theme');
+      expect(source).toContain('"library-theme"');
+      // The doc's own theme survives the copy.
+      expect(source).toContain('"keeper"');
+    });
+  });
+
+  it('aborts the save (rather than writing a destructive default) when the source cannot be read', async () => {
+    // 200 nested blockquotes blows core's maxDepth parse limit, so
+    // parseMarkdown throws — the same condition that drives EditorContext's
+    // doc to null. The merge base is unknowable, so nothing may be written.
+    const unreadable = `${populatedMarkdown}\n\n${'> '.repeat(200)}too deep`;
+    const errors = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      const fresh = compileTheme({ id: 'fresh', name: 'Fresh' });
+      render(<StaleDocHarness theme={fresh} markdown={unreadable} />);
+
+      fireEvent.click(screen.getByRole('button', { name: 'Open designer' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Save designed theme' }));
+
+      await waitFor(() => {
+        expect(screen.getByTestId('theme-save-error').textContent).toContain('Could not read');
+      });
+      const source = screen.getByTestId('markdown-source').textContent ?? '';
+      // Nothing written at all — crucially, the existing theme/template are
+      // untouched rather than replaced by a `[fresh]`-only list.
+      expect(source).toContain('"keeper"');
+      expect(source).toContain('keeper-layout');
+      expect(source).not.toContain('"fresh"');
+      expect(errors).toHaveBeenCalled();
+    } finally {
+      errors.mockRestore();
+    }
   });
 });
 

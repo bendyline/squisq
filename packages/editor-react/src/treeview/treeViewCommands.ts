@@ -71,6 +71,10 @@ function applyOp(editor: Editor, blockId: string, op: (t: Tree) => Tree): boolea
 }
 
 export function applyTreeCommand(editor: Editor, blockId: string, cmd: TreeCommand): boolean {
+  // Commands may outlive the render that created their controls. Enforce the
+  // editor's current authority at dispatch time, not only in widget props.
+  if (!editor.isEditable) return false;
+
   switch (cmd.kind) {
     case 'addItem':
       return applyOp(editor, blockId, (t) =>

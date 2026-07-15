@@ -17,6 +17,8 @@ import { arrayBufferToBase64DataUrl, inferMimeType } from './imageUtils.js';
 // ── Types ──────────────────────────────────────────────────────────
 
 export interface HtmlExportOptions {
+  /** Cancel before synchronous generation and during asset checkpoints. */
+  signal?: AbortSignal;
   /** The IIFE player bundle source code (from @bendyline/squisq-react/standalone-source) */
   playerScript: string;
 
@@ -212,10 +214,72 @@ function scanTemplateImageFields(obj: Record<string, unknown>, paths: Set<string
 
 /**
  * Escape a string for safe embedding in a `<script>` tag.
- * Prevents `</script>` from closing the tag prematurely.
+ *
+ * Escaping only `</script` is NOT enough. The HTML tokenizer treats the
+ * contents of a script element as a mini state machine: an opening `<!--`
+ * switches it into "script data escaped" state, and a subsequent `<script`
+ * pushes it into "script data DOUBLE escaped" state — where `</script>` no
+ * longer closes the element. So doc text containing `<!--<script>` makes the
+ * real closing tag inert and the parser swallows the REST OF THE PAGE as
+ * script text, rendering blank.
+ *
+ * Neutralizing all three of `<!--`, `<script`, and `</script` keeps the
+ * tokenizer in its normal state regardless of content.
+ *
+ * The `<` is replaced with a `<` escape rather than a `\`-prefix, which
+ * matters because these values land in two different layers:
+ *
+ * - The doc / image JSON is emitted inside a JS string that is then
+ *   `JSON.parse`d, so the escape must be valid JSON. `<` is; ad-hoc
+ *   escapes like `\!` or `\s` are NOT and would make `JSON.parse` throw.
+ * - The player bundle is emitted as raw JS. `<` means `<` inside both
+ *   string and regex literals, whereas `\s` would silently become the
+ *   whitespace class if `<script` ever appeared inside a bundled regex.
+ *
+ * Only the `<` of a dangerous sequence is escaped — a bare `<` in doc text is
+ * inert in script data, so ordinary content pays nothing.
  */
 function escapeForScript(str: string): string {
-  return str.replace(/<\/(script)/gi, '<\\/$1');
+  return str.replace(/<(?=!--|\/?script)/gi, '\\u003c');
+}
+
+/**
+ * Split an image map into base64 payloads plus an alias table.
+ *
+ * Callers key the same asset under BOTH its container path and its bare
+ * basename (see `collectContainerImages`) because the resolver matches
+ * against either. Emitting a data URL per key would embed every payload
+ * TWICE in the JSON — ~2.66x the original bytes per image instead of the
+ * ~1.33x base64 costs — which is brutal on multi-MB photo docs.
+ *
+ * So each distinct buffer is encoded exactly once under a canonical key,
+ * and every additional key that shares that buffer becomes a cheap
+ * `alias -> canonical` entry. The runtime re-expands the aliases into the
+ * same flat `images` object the player already expects, so nothing
+ * downstream has to know this happened.
+ */
+function buildInlineImageMaps(images: Map<string, ArrayBuffer> | undefined): {
+  imageMap: Record<string, string>;
+  imageAliases: Record<string, string>;
+} {
+  const imageMap: Record<string, string> = {};
+  const imageAliases: Record<string, string> = {};
+  if (!images) return { imageMap, imageAliases };
+
+  // Keyed on buffer IDENTITY: two images that merely have equal bytes stay
+  // separate entries, while the path/basename aliases of one asset (which
+  // share a reference) collapse.
+  const canonicalKeyFor = new Map<ArrayBuffer, string>();
+  for (const [path, buffer] of images.entries()) {
+    const canonical = canonicalKeyFor.get(buffer);
+    if (canonical !== undefined) {
+      imageAliases[path] = canonical;
+      continue;
+    }
+    canonicalKeyFor.set(buffer, path);
+    imageMap[path] = arrayBufferToBase64DataUrl(buffer, inferMimeType(path));
+  }
+  return { imageMap, imageAliases };
 }
 
 /**
@@ -238,17 +302,11 @@ export function generateInlineHtml(doc: Doc, options: HtmlExportOptions): string
 
   doc = applyThemeSelection(doc, themeId, themeRegistry);
 
-  // Build base64 image map
-  const imageMap: Record<string, string> = {};
-  if (images) {
-    for (const [path, buffer] of images.entries()) {
-      const mimeType = inferMimeType(path);
-      imageMap[path] = arrayBufferToBase64DataUrl(buffer, mimeType);
-    }
-  }
+  const { imageMap, imageAliases } = buildInlineImageMaps(images);
 
   const docJson = escapeForScript(JSON.stringify(doc));
   const imageMapJson = escapeForScript(JSON.stringify(imageMap));
+  const imageAliasJson = escapeForScript(JSON.stringify(imageAliases));
 
   return `<!DOCTYPE html>
 <html lang="en">
@@ -270,6 +328,14 @@ ${mode === 'static' ? '#squisq-root{display:block}' : ''}
 (function(){
   var doc = JSON.parse(${JSON.stringify(docJson)});
   var images = JSON.parse(${JSON.stringify(imageMapJson)});
+  // Re-expand path/basename aliases that share a payload (see
+  // buildInlineImageMaps) so \`images\` has every key the resolver may ask for.
+  var aliases = JSON.parse(${JSON.stringify(imageAliasJson)});
+  for (var alias in aliases) {
+    if (Object.prototype.hasOwnProperty.call(aliases, alias)) {
+      images[alias] = images[aliases[alias]];
+    }
+  }
   SquisqPlayer.mount(document.getElementById("squisq-root"), doc, {
     mode: ${JSON.stringify(mode)},
     images: images,

@@ -43,8 +43,11 @@ import type {
 import { readFrontmatterThemeId } from '@bendyline/squisq/markdown';
 
 import { createPackage } from '../ooxml/writer.js';
+import { RelIdAllocator } from '../ooxml/relIds.js';
 import { xmlDeclaration, escapeXml } from '../ooxml/xmlUtils.js';
 import { stripHtmlTags } from '../shared/text.js';
+import { normalizeOoxmlHex } from '../shared/ooxmlColor.js';
+import { sanitizeOfficeHyperlink } from '../shared/officeHyperlinks.js';
 import {
   inlineNodesToRuns,
   inlineNodeToRuns,
@@ -93,6 +96,8 @@ import {
  * Options for DOCX export.
  */
 export interface DocxExportOptions {
+  /** Cancel at bounded export checkpoints. */
+  signal?: AbortSignal;
   /** Document title (appears in core properties) */
   title?: string;
   /** Document author */
@@ -117,6 +122,8 @@ export interface DocxExportOptions {
    * as binary parts instead of emitting placeholder text.
    */
   images?: Map<string, { data: ArrayBuffer | Uint8Array; contentType: string }>;
+  /** Permit carefully validated relative hyperlink targets. Default: false. */
+  allowRelativeHyperlinks?: boolean;
 }
 
 /**
@@ -130,6 +137,7 @@ export async function markdownDocToDocx(
   doc: MarkdownDocument,
   options: DocxExportOptions = {},
 ): Promise<ArrayBuffer> {
+  options.signal?.throwIfAborted();
   // Mirror the PPTX export: fall back to the doc's frontmatter themeId
   // when the caller didn't pass one explicitly. Lets the editor's
   // `squisq-theme: …` frontmatter flow straight through without each
@@ -193,7 +201,14 @@ export async function docToDocx(doc: Doc, options: DocxExportOptions = {}): Prom
  * footnote bodies, and embedded images.
  */
 class ExportContext {
-  private nextRelId = 1;
+  /**
+   * One id source per rels part — see `RelIdAllocator`. Hyperlink, image AND
+   * fixed (styles/numbering/settings/…) rels all draw from this, keyed by the
+   * story part they belong to, so `word/_rels/document.xml.rels` cannot
+   * contain a duplicate `Id` no matter how many hyperlinks/images a document
+   * has.
+   */
+  private readonly relIds = new RelIdAllocator();
   private nextNumId = 1;
   private nextFootnoteId = 1; // 0 is separator, start user footnotes at 1
 
@@ -245,6 +260,8 @@ class ExportContext {
 
   /** Pre-resolved image data keyed by markdown image URL */
   readonly resolvedImages: Map<string, { data: ArrayBuffer | Uint8Array; contentType: string }>;
+  readonly allowRelativeHyperlinks: boolean;
+  readonly signal: AbortSignal | undefined;
 
   private nextDocPrId = 1;
 
@@ -267,11 +284,15 @@ class ExportContext {
       // installed on the reader's machine).
       themeFont = firstFontFromStack(resolveFontFamily(theme.typography?.bodyFont, ''));
       themeTitleFont = firstFontFromStack(resolveFontFamily(theme.typography?.titleFont, ''));
-      const stripHash = (c: string) => (c.startsWith('#') ? c.slice(1) : c);
-      if (theme.colors?.primary) themeHeadingColor = stripHash(theme.colors.primary);
-      if (theme.colors?.text) themeBodyColor = stripHash(theme.colors.text);
-      if (theme.colors?.textMuted) themeMutedColor = stripHash(theme.colors.textMuted);
-      if (theme.colors?.background) themeBackgroundColor = stripHash(theme.colors.background);
+      // Normalize at the boundary: `ST_HexColorRGB` is exactly six hex
+      // digits, but a valid theme may carry `#rgb` shorthand and a
+      // programmatic Doc's `customThemes` skip validation entirely — so an
+      // arbitrary string can reach here. Anything unparseable becomes
+      // `undefined`, which omits the color and lets Word use its default.
+      themeHeadingColor = normalizeOoxmlHex(theme.colors?.primary);
+      themeBodyColor = normalizeOoxmlHex(theme.colors?.text);
+      themeMutedColor = normalizeOoxmlHex(theme.colors?.textMuted);
+      themeBackgroundColor = normalizeOoxmlHex(theme.colors?.background);
     }
 
     this.font = options.defaultFont ?? themeFont ?? DEFAULT_FONT;
@@ -284,11 +305,18 @@ class ExportContext {
     this.mutedColor = themeMutedColor;
     this.backgroundColor = themeBackgroundColor;
     this.resolvedImages = options.images ?? new Map();
+    this.allowRelativeHyperlinks = options.allowRelativeHyperlinks ?? false;
+    this.signal = options.signal;
   }
 
-  /** Allocate a new relationship ID */
+  /** Allocate a relationship ID on the story part currently being converted. */
   allocRelId(): string {
-    return `rId${this.nextRelId++}`;
+    return this.allocRelIdFor(this.relationshipSource);
+  }
+
+  /** Allocate a relationship ID on a specific story part. */
+  allocRelIdFor(source: DocxStoryPart): string {
+    return this.relIds.alloc(docxStoryPartPath(source));
   }
 
   setRelationshipSource(source: DocxStoryPart): void {
@@ -296,12 +324,16 @@ class ExportContext {
   }
 
   /** Add a hyperlink relationship and return the rId */
-  addHyperlink(url: string): string {
+  addHyperlink(url: string): string | null {
+    const target = sanitizeOfficeHyperlink(url, {
+      allowRelative: this.allowRelativeHyperlinks,
+    });
+    if (!target) return null;
     const id = this.allocRelId();
     this.relationships.push({
       id,
       type: REL_HYPERLINK,
-      target: url,
+      target,
       targetMode: 'External',
       source: this.relationshipSource,
     });
@@ -351,6 +383,13 @@ class ExportContext {
 
 type DocxStoryPart = 'document' | 'header' | 'footer';
 
+/** Zip path of the part that owns a story's relationships. */
+function docxStoryPartPath(source: DocxStoryPart): string {
+  if (source === 'header') return 'word/header1.xml';
+  if (source === 'footer') return 'word/footer1.xml';
+  return 'word/document.xml';
+}
+
 interface NumberingDef {
   numId: number;
   ordered: boolean;
@@ -398,7 +437,9 @@ function firstFontFromStack(stack: string): string {
 
 function convertBlocks(nodes: MarkdownBlockNode[], ctx: ExportContext): string {
   const parts: string[] = [];
-  for (const node of nodes) {
+  for (let index = 0; index < nodes.length; index++) {
+    if ((index & 255) === 0) ctx.signal?.throwIfAborted();
+    const node = nodes[index]!;
     parts.push(convertBlock(node, ctx, 0));
   }
   return parts.join('');
@@ -714,17 +755,18 @@ function convertInline(node: MarkdownInlineNode, ctx: ExportContext, format: Inl
 function makeRun(text: string, format: InlineFormat): string {
   if (!text) return '';
 
+  // `w:rPr` children must follow the ECMA-376 `EG_RPrBase` sequence:
+  // rStyle → rFonts → b → i → strike → color → sz → u. Word tolerates other
+  // orders, but strict OOXML validators (and other consumers) reject them.
   const rPrParts: string[] = [];
+  if (format.code) {
+    rPrParts.push(`<w:rFonts w:ascii="${DEFAULT_CODE_FONT}" w:hAnsi="${DEFAULT_CODE_FONT}"/>`);
+  }
   if (format.bold) rPrParts.push('<w:b/>');
   if (format.italic) rPrParts.push('<w:i/>');
   if (format.strike) rPrParts.push('<w:strike/>');
   if (format.color) rPrParts.push(`<w:color w:val="${format.color}"/>`);
-  if (format.code) {
-    rPrParts.push(
-      `<w:rFonts w:ascii="${DEFAULT_CODE_FONT}" w:hAnsi="${DEFAULT_CODE_FONT}"/>`,
-      `<w:sz w:val="${DEFAULT_CODE_FONT_SIZE}"/>`,
-    );
-  }
+  if (format.code) rPrParts.push(`<w:sz w:val="${DEFAULT_CODE_FONT_SIZE}"/>`);
 
   const rPr = rPrParts.length > 0 ? `<w:rPr>${rPrParts.join('')}</w:rPr>` : '';
 
@@ -734,6 +776,7 @@ function makeRun(text: string, format: InlineFormat): string {
 
 function convertLink(node: MarkdownLink, ctx: ExportContext, format: InlineFormat): string {
   const rId = ctx.addHyperlink(node.url);
+  if (!rId) return convertInlines(node.children, ctx, format);
   const styledRuns = convertInlinesWithHyperlinkStyle(node.children, ctx, format);
 
   return `<w:hyperlink r:id="${rId}">${styledRuns}</w:hyperlink>`;
@@ -759,13 +802,11 @@ function convertInlinesWithHyperlinkStyle(
 function makeHyperlinkRun(text: string, format: InlineFormat): string {
   if (!text) return '';
 
-  const rPrParts: string[] = [
-    '<w:rStyle w:val="Hyperlink"/>',
-    `<w:color w:val="${HYPERLINK_COLOR}"/>`,
-    '<w:u w:val="single"/>',
-  ];
+  // ECMA-376 `EG_RPrBase` sequence: rStyle → b → i → color → u.
+  const rPrParts: string[] = ['<w:rStyle w:val="Hyperlink"/>'];
   if (format.bold) rPrParts.push('<w:b/>');
   if (format.italic) rPrParts.push('<w:i/>');
+  rPrParts.push(`<w:color w:val="${HYPERLINK_COLOR}"/>`, '<w:u w:val="single"/>');
 
   return (
     `<w:r><w:rPr>${rPrParts.join('')}</w:rPr>` +
@@ -911,25 +952,26 @@ async function buildDocxPackage(
 ): Promise<ArrayBuffer> {
   const pkg = createPackage();
 
-  // --- Register fixed relationships ---
-  let relCounter = 100; // Start high to avoid collisions with dynamic rels
-  const stylesRelId = `rId${relCounter++}`;
-  const numberingRelId = `rId${relCounter++}`;
-  const settingsRelId = `rId${relCounter++}`;
-  const fontTableRelId = `rId${relCounter++}`;
-  const footnotesRelId = `rId${relCounter++}`;
-  const headerRelId = `rId${relCounter++}`;
-  const footerRelId = `rId${relCounter++}`;
   const hasHeader = headerXml.trim().length > 0;
   const hasFooter = footerXml.trim().length > 0;
 
+  // --- Register fixed relationships ---
+  // These are allocated from the SAME per-part counter that already handed
+  // out the hyperlink/image rels during conversion, so document.xml.rels has
+  // exactly one id source and duplicate `Id`s are impossible by construction.
+  // (The previous scheme started fixed rels at a hardcoded rId100, which
+  // collided as soon as a document reached 99 hyperlinks/images — Word then
+  // refuses the file or "repairs" it by dropping content.)
+  const stylesRelId = ctx.allocRelIdFor('document');
+  const settingsRelId = ctx.allocRelIdFor('document');
+  const fontTableRelId = ctx.allocRelIdFor('document');
+  const numberingRelId = ctx.hasLists ? ctx.allocRelIdFor('document') : undefined;
+  const footnotesRelId = ctx.hasFootnotes ? ctx.allocRelIdFor('document') : undefined;
+  const headerRelId = hasHeader ? ctx.allocRelIdFor('document') : undefined;
+  const footerRelId = hasFooter ? ctx.allocRelIdFor('document') : undefined;
+
   // --- word/document.xml ---
-  const documentXml = buildDocumentXml(
-    bodyXml,
-    ctx.backgroundColor,
-    hasHeader ? headerRelId : undefined,
-    hasFooter ? footerRelId : undefined,
-  );
+  const documentXml = buildDocumentXml(bodyXml, ctx.backgroundColor, headerRelId, footerRelId);
   pkg.addPart('word/document.xml', documentXml, CONTENT_TYPE_DOCX_DOCUMENT);
 
   if (hasHeader) {
@@ -990,7 +1032,7 @@ async function buildDocxPackage(
     target: 'fontTable.xml',
   });
 
-  if (ctx.hasLists) {
+  if (numberingRelId) {
     pkg.addRelationship('word/document.xml', {
       id: numberingRelId,
       type: REL_NUMBERING,
@@ -998,7 +1040,7 @@ async function buildDocxPackage(
     });
   }
 
-  if (ctx.hasFootnotes) {
+  if (footnotesRelId) {
     pkg.addRelationship('word/document.xml', {
       id: footnotesRelId,
       type: REL_FOOTNOTES,
@@ -1006,7 +1048,7 @@ async function buildDocxPackage(
     });
   }
 
-  if (hasHeader) {
+  if (headerRelId) {
     pkg.addRelationship('word/document.xml', {
       id: headerRelId,
       type: REL_HEADER,
@@ -1014,7 +1056,7 @@ async function buildDocxPackage(
     });
   }
 
-  if (hasFooter) {
+  if (footerRelId) {
     pkg.addRelationship('word/document.xml', {
       id: footerRelId,
       type: REL_FOOTER,
@@ -1024,13 +1066,7 @@ async function buildDocxPackage(
 
   // --- Dynamic relationships (hyperlinks, images) ---
   for (const rel of ctx.relationships) {
-    const sourcePart =
-      rel.source === 'header'
-        ? 'word/header1.xml'
-        : rel.source === 'footer'
-          ? 'word/footer1.xml'
-          : 'word/document.xml';
-    pkg.addRelationship(sourcePart, {
+    pkg.addRelationship(docxStoryPartPath(rel.source), {
       id: rel.id,
       type: rel.type,
       target: rel.target,

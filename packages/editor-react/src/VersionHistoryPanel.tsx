@@ -115,7 +115,7 @@ function formatBytes(n: number): string {
 }
 
 export function VersionHistoryPanel() {
-  const { versioning, replaceAll, markdownSource, colorScheme } = useEditorContext();
+  const { versioning, saveVersion, replaceAll, markdownSource, colorScheme } = useEditorContext();
   const [open, setOpen] = useState(false);
   const [state, setState] = useState<PanelState>(initialState);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -167,12 +167,20 @@ export function VersionHistoryPanel() {
         setState((s) => ({ ...s, selected: null }));
         return;
       }
-      const content = await versioning.readVersion(version);
-      if (content === null) {
-        setState((s) => ({ ...s, error: 'Snapshot is no longer available.' }));
-        return;
+      try {
+        const content = await versioning.readVersion(version);
+        if (content === null) {
+          setState((s) => ({ ...s, error: 'Snapshot is no longer available.' }));
+          return;
+        }
+        setState((s) => ({ ...s, selected: { version, content }, error: null }));
+      } catch (err: unknown) {
+        // The caller invokes this as `void handleSelect(v)`, so a rejection
+        // here would otherwise be an unhandled rejection and a silently
+        // dead popover — `content === null` was handled, a throw was not.
+        const message = err instanceof Error ? err.message : 'Failed to read snapshot';
+        setState((s) => ({ ...s, error: message, selected: null }));
       }
-      setState((s) => ({ ...s, selected: { version, content }, error: null }));
     },
     [versioning, state.selected],
   );
@@ -181,7 +189,32 @@ export function VersionHistoryPanel() {
     async (version: Version) => {
       if (!versioning) return;
       try {
-        const result = await versioning.revertToVersion(version, { snapshotCurrent: true });
+        // Snapshot the LIVE draft before reverting, so the confirm
+        // dialog's promise ("your current draft will be saved as a new
+        // snapshot first") is actually true. It used to pass
+        // `snapshotCurrent: true`, which snapshots `container.readDocument()`
+        // — stale whenever the host's autosave hasn't flushed, and empty in
+        // hosts whose markdown lives outside the container — so the revert
+        // overwrote unsaved edits that were never captured.
+        //
+        // `revertToVersion(v, { content })` would also snapshot the right
+        // bytes, but going through the context's `saveVersion` is deliberate:
+        // it fires the host's `onSaveVersion` hook and prune policy, which
+        // core's internal snapshot does not.
+        const snapshot = await saveVersion({ content: markdownSource });
+        // `unchanged` means the draft already matches the newest snapshot,
+        // so it is safely recoverable — that's a pass, not a failure.
+        if (!snapshot.saved && snapshot.reason !== 'unchanged') {
+          setState((s) => ({
+            ...s,
+            error:
+              `Could not save your current draft as a snapshot (${snapshot.reason}). ` +
+              'Revert cancelled so your unsaved edits are not lost.',
+          }));
+          return;
+        }
+
+        const result = await versioning.revertToVersion(version, { snapshotCurrent: false });
         if (!result.reverted) {
           setState((s) => ({ ...s, error: 'Revert failed — snapshot missing.' }));
           return;
@@ -193,11 +226,14 @@ export function VersionHistoryPanel() {
         setState((s) => ({ ...s, pendingRevert: null, selected: null }));
         await refresh();
       } catch (err: unknown) {
+        // Includes a throwing snapshot step — in that case the revert has
+        // not run and the draft is still intact, which is the point: never
+        // destroy the draft because the safety step failed.
         const message = err instanceof Error ? err.message : 'Revert failed';
         setState((s) => ({ ...s, error: message }));
       }
     },
-    [versioning, replaceAll, refresh],
+    [versioning, saveVersion, markdownSource, replaceAll, refresh],
   );
 
   // Hide the most recent snapshot when its content is byte-identical to
@@ -339,7 +375,7 @@ export function VersionHistoryPanel() {
                             <button
                               type="button"
                               className="squisq-version-history-link squisq-version-history-link--primary"
-                              onClick={() => handleRevertConfirm(v)}
+                              onClick={() => void handleRevertConfirm(v)}
                             >
                               Revert
                             </button>

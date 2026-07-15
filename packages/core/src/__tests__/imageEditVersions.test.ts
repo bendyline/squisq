@@ -216,6 +216,92 @@ describe('imageEdit/versions', () => {
     expect(current?.layers[0]!.id).toBe('a');
   });
 
+  it('revertToImageEditVersion snapshots the caller-supplied live state', async () => {
+    // An editor holding unsaved in-memory edits must get THOSE bytes
+    // snapshotted, not the stale state.json the container still holds.
+    const docA = addLayer(createEmptyImageEditDoc(100, 100), text('a'));
+    await writeImageEditDoc(sidecar, docA);
+    const v1 = await saveImageEditVersion(sidecar, {
+      doc: docA,
+      now: new Date('2026-01-01T00:00:00Z'),
+    });
+
+    const unsaved = addLayer(createEmptyImageEditDoc(100, 100), text('unsaved-in-editor'));
+    const result = await revertToImageEditVersion(sidecar, v1.version!, { doc: unsaved });
+
+    expect(result.reverted).toBe(true);
+    const snapshot = await readImageEditVersion(sidecar, result.snapshotted!);
+    expect(snapshot?.layers[0]!.id).toBe('unsaved-in-editor');
+  });
+
+  it('revertToImageEditVersion abandons the revert when there is no state to snapshot', async () => {
+    // No state.json to snapshot means the current state is not
+    // recoverable — reverting anyway would destroy it silently.
+    const docA = addLayer(createEmptyImageEditDoc(100, 100), text('a'));
+    const v1 = await saveImageEditVersion(sidecar, {
+      doc: docA,
+      now: new Date('2026-01-01T00:00:00Z'),
+    });
+
+    const result = await revertToImageEditVersion(sidecar, v1.version!);
+
+    expect(result.reverted).toBe(false);
+    expect(result.reason).toBe('snapshot-failed');
+    expect(await readImageEditDoc(sidecar)).toBeNull();
+  });
+
+  /**
+   * `readImageEditVersion` bare-cast the parsed JSON, so a corrupt snapshot
+   * survived the revert and was written straight into `state.json` — after
+   * which every `readImageEditDoc` threw and the editor was wedged on a file
+   * that had loaded fine moments earlier. Validating on read means the revert
+   * aborts and the current state survives.
+   */
+  it('refuses to revert to a corrupt snapshot, leaving state.json intact', async () => {
+    const good = addLayer(createEmptyImageEditDoc(100, 100), text('keep-me'));
+    await writeImageEditDoc(sidecar, good);
+    const v1 = await saveImageEditVersion(sidecar, {
+      doc: good,
+      now: new Date('2026-01-01T00:00:00Z'),
+    });
+
+    // Hand-corrupt the snapshot the way a bad merge or an editor would.
+    await sidecar.writeFile(
+      v1.version!.path,
+      new TextEncoder().encode('{"version":1,"canvas":{"width":"wide"},"layers":[]}'),
+      'application/json',
+    );
+
+    await expect(revertToImageEditVersion(sidecar, v1.version!)).rejects.toThrow(
+      /readImageEditVersion/,
+    );
+    // The live state is untouched and still loads.
+    expect((await readImageEditDoc(sidecar))?.layers[0]!.id).toBe('keep-me');
+  });
+
+  it('refuses to revert to a snapshot that is not valid JSON', async () => {
+    const good = addLayer(createEmptyImageEditDoc(100, 100), text('keep-me'));
+    await writeImageEditDoc(sidecar, good);
+    const v1 = await saveImageEditVersion(sidecar, {
+      doc: good,
+      now: new Date('2026-01-01T00:00:00Z'),
+    });
+    await sidecar.writeFile(
+      v1.version!.path,
+      new TextEncoder().encode('{ truncated'),
+      'application/json',
+    );
+
+    await expect(revertToImageEditVersion(sidecar, v1.version!)).rejects.toThrow(/not valid JSON/);
+    expect((await readImageEditDoc(sidecar))?.layers[0]!.id).toBe('keep-me');
+  });
+
+  it('revertToImageEditVersion reports a missing snapshot', async () => {
+    const result = await revertToImageEditVersion(sidecar, '.versions/state.20260101T000000Z.json');
+    expect(result.reverted).toBe(false);
+    expect(result.reason).toBe('missing-snapshot');
+  });
+
   it('pruneImageEditVersions keep-last-n drops older snapshots', async () => {
     for (let i = 0; i < 5; i++) {
       await saveImageEditVersion(sidecar, {

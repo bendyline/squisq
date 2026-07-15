@@ -8,6 +8,35 @@
  * Internal to the asciiDiagram module — not exported from the barrel.
  */
 
+/**
+ * THE GRID CELL UNIT: one Unicode CODE POINT = one grid cell.
+ *
+ * The parser builds its grid with `for (const ch of line)`, which iterates
+ * code points, so the renderer MUST measure and index label text the same
+ * way. Using `String.prototype.length` / `s[i]` (UTF-16 code units) instead
+ * splits an astral-plane char (emoji) across two cells; the emitted line
+ * then re-forms it as one code point and every column after it is off by
+ * one in parse space, which desyncs the box borders and loses the box.
+ *
+ * Deliberate consequence: a char's cell count is its code-point count, NOT
+ * its terminal display width. A CJK ideograph or an emoji occupies ONE cell
+ * here but renders two columns wide in a monospace terminal, so such a box
+ * looks ragged on screen even though it is internally consistent. Grid-cell
+ * agreement between render and parse is the hard requirement (it is what
+ * the fixpoint rests on); visual width is secondary and would break that
+ * agreement unless the parser also measured width — which it cannot do
+ * without guessing the viewer's font. The parser reports `wide-chars` so
+ * callers can surface the caveat.
+ */
+export function toCells(s: string): string[] {
+  return Array.from(s);
+}
+
+/** Grid cell count of a string (code points — see {@link toCells}). */
+export function cellWidth(s: string): number {
+  return toCells(s).length;
+}
+
 const TL_CORNERS = new Set(['┌', '╭', '┏', '╔']);
 const TR_CORNERS = new Set(['┐', '╮', '┓', '╗']);
 const BL_CORNERS = new Set(['└', '╰', '┗', '╚']);

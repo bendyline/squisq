@@ -133,6 +133,28 @@ export type { KnownBlockMetaKey, BlockMetaKeyDescriptor } from './annotationCoer
 export { parseHtmlToNodes, stringifyHtmlNodes } from './htmlParse.js';
 export { sanitizeHtmlNodes, sanitizeUrl } from './sanitize.js';
 export type { HtmlPolicy, SanitizeUrlOptions, UrlKind } from './sanitize.js';
+export {
+  DEFAULT_MARKDOWN_SAFETY_LIMITS,
+  MarkdownLimitError,
+  assertMarkdownSourceWithinLimits,
+  assertMarkdownDocumentWithinLimits,
+  resolveMarkdownSafetyLimits,
+} from './limits.js';
+export type { MarkdownSafetyLimits } from './limits.js';
+export {
+  DEFAULT_INTERACTIVE_RESOURCE_POLICY,
+  LOCAL_ONLY_RESOURCE_POLICY,
+  DEFAULT_RESOURCE_MAX_BYTES,
+  DEFAULT_RESOURCE_TIMEOUT_MS,
+  ResourcePolicyError,
+  isResourceUrlAllowed,
+  fetchResourceBytes,
+} from './resourcePolicy.js';
+export type {
+  ResourcePolicy,
+  FetchResourceBytesOptions,
+  FetchedResource,
+} from './resourcePolicy.js';
 
 // Tree utilities
 export {
@@ -145,6 +167,7 @@ export {
   parseFrontmatter,
   formatBlockScalar,
   formatFrontmatterValue,
+  formatFrontmatterYaml,
   setFrontmatterValues,
   inferDocumentTitle,
   readFrontmatterThemeId,

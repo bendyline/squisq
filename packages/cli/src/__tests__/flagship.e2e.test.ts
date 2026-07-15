@@ -7,9 +7,8 @@
  * `convert(..., 'mp4')` surface — which drives the standalone player under
  * headless Chromium and encodes frames + audio with native ffmpeg.
  *
- * It SELF-SKIPS when either tool is missing, so it never fails on a machine
- * without ffmpeg or Playwright Chromium installed. When both are present it
- * asserts the output is a real MP4 (an `ftyp` box at bytes[4..8]).
+ * Local development may skip when native tools are absent. CI/release set
+ * SQUISQ_REQUIRE_NATIVE_E2E=1, which turns a missing dependency into a failure.
  */
 
 import { after, before, describe, it } from 'mocha';
@@ -66,6 +65,9 @@ describe('flagship pptx → mp4 e2e', function () {
       const missing = [!ffmpegPath && 'ffmpeg', !hasChromium && 'Playwright Chromium']
         .filter(Boolean)
         .join(' and ');
+      if (process.env.SQUISQ_REQUIRE_NATIVE_E2E === '1') {
+        throw new Error(`Required flagship MP4 dependencies are missing: ${missing}`);
+      }
       console.error(`  (skipping flagship mp4 e2e — missing ${missing})`);
       this.skip();
     }

@@ -51,9 +51,12 @@ import type {
 import { readFrontmatterThemeId } from '@bendyline/squisq/markdown';
 
 import { createPackage } from '../ooxml/writer.js';
+import { RelIdAllocator } from '../ooxml/relIds.js';
 import { xmlDeclaration, escapeXml } from '../ooxml/xmlUtils.js';
 import { inferMimeType } from '../html/imageUtils.js';
 import { stripHtmlTags, extractPlainText } from '../shared/text.js';
+import { toOoxmlHex } from '../shared/ooxmlColor.js';
+import { sanitizeOfficeHyperlink } from '../shared/officeHyperlinks.js';
 import {
   inlineNodesToRuns,
   inlineNodeToRuns,
@@ -109,6 +112,8 @@ import {
  * Options for PPTX export.
  */
 export interface PptxExportOptions {
+  /** Cancel at bounded export checkpoints. */
+  signal?: AbortSignal;
   /** Presentation title (appears in core properties) */
   title?: string;
   /** Presentation author */
@@ -140,6 +145,8 @@ export interface PptxExportOptions {
    * showing `[Image: alt]` placeholders.
    */
   images?: Map<string, ArrayBuffer>;
+  /** Permit carefully validated relative hyperlink targets. Default: false. */
+  allowRelativeHyperlinks?: boolean;
 }
 
 /**
@@ -149,6 +156,7 @@ export async function markdownDocToPptx(
   doc: MarkdownDocument,
   options: PptxExportOptions = {},
 ): Promise<ArrayBuffer> {
+  options.signal?.throwIfAborted();
   // Resolve theme from options or frontmatter. The frontmatter lookup
   // accepts the editor's canonical `squisq-theme` key as well as the
   // shorter legacy `themeId` / `theme` aliases — see
@@ -167,7 +175,14 @@ export async function markdownDocToPptx(
   const slideContexts: SlideContext[] = [];
 
   for (let i = 0; i < slides.length; i++) {
-    const ctx = new SlideContext(style, options.images, i);
+    if ((i & 31) === 0) options.signal?.throwIfAborted();
+    const ctx = new SlideContext(
+      style,
+      options.images,
+      i,
+      options.allowRelativeHyperlinks ?? false,
+      options.signal,
+    );
     const xml = buildSlideXml(slides[i], ctx);
     slideXmls.push(xml);
     slideContexts.push(ctx);
@@ -229,21 +244,22 @@ function resolveSlideStyle(
   const theme: Theme = resolveThemeForDoc(doc, themeId, options.themeRegistry);
   const c = theme.colors;
 
+  // Normalize at the boundary: `ST_HexColorRGB` (`<a:srgbClr val>`) is
+  // exactly six hex digits, but a valid theme may carry `#rgb` shorthand
+  // and a programmatic Doc's `customThemes` skip validation entirely — so
+  // an arbitrary string can reach here. Unparseable colors fall back to the
+  // same neutral defaults the unthemed branch above uses.
   return {
-    background: stripHash(c.background),
-    text: stripHash(c.text),
-    titleColor: stripHash(c.highlight || c.secondary || c.text),
-    mutedColor: stripHash(c.textMuted || c.text),
+    background: toOoxmlHex(c.background, 'FFFFFF'),
+    text: toOoxmlHex(c.text, '333333'),
+    titleColor: toOoxmlHex(c.highlight || c.secondary || c.text, '333333'),
+    mutedColor: toOoxmlHex(c.textMuted || c.text, '666666'),
     titleFont: resolveFontFamily(theme.typography?.titleFont, DEFAULT_TITLE_FONT),
     bodyFont: resolveFontFamily(theme.typography?.bodyFont, options.defaultFont || DEFAULT_FONT),
     codeFont: resolveFontFamily(theme.typography?.monoFont, DEFAULT_CODE_FONT),
-    codeColor: stripHash(c.textMuted || c.text),
+    codeColor: toOoxmlHex(c.textMuted || c.text, '333333'),
     hasTheme: true,
   };
-}
-
-function stripHash(color: string): string {
-  return color.startsWith('#') ? color.slice(1) : color;
 }
 
 // ============================================
@@ -299,7 +315,13 @@ interface EmbeddedImage {
 }
 
 class SlideContext {
-  private nextRelId = 1;
+  /**
+   * One id source for this slide's rels part — see `RelIdAllocator`. There is
+   * exactly one SlideContext per `ppt/slides/slideN.xml`, and EVERY rel on
+   * that part (layout, hyperlinks, images) is allocated here, so duplicate
+   * `Id`s are impossible by construction.
+   */
+  private readonly relIds = new RelIdAllocator();
 
   readonly relationships: Array<{
     id: string;
@@ -313,27 +335,50 @@ class SlideContext {
   readonly slideIndex: number;
   readonly embeddedImages: EmbeddedImage[] = [];
   private nextShapeId = 4; // 1=group, 2=title, 3=body
+  private readonly allowRelativeHyperlinks: boolean;
+  readonly signal: AbortSignal | undefined;
 
-  constructor(style: SlideStyle, images: Map<string, ArrayBuffer> | undefined, slideIndex: number) {
+  constructor(
+    style: SlideStyle,
+    images: Map<string, ArrayBuffer> | undefined,
+    slideIndex: number,
+    allowRelativeHyperlinks: boolean,
+    signal?: AbortSignal,
+  ) {
     this.style = style;
     this.images = images;
     this.slideIndex = slideIndex;
+    this.allowRelativeHyperlinks = allowRelativeHyperlinks;
+    this.signal = signal;
+    // Every slide relates to the shared layout. Allocate it from this slide's
+    // own counter (first, so it keeps the conventional rId1) rather than
+    // hardcoding an id in the package builder alongside a separate counter —
+    // that split is exactly what let fixed and dynamic rels collide.
+    this.relationships.push({
+      id: this.allocRelId(),
+      type: REL_SLIDE_LAYOUT,
+      target: '../slideLayouts/slideLayout1.xml',
+    });
   }
 
   allocRelId(): string {
-    return `rId${this.nextRelId++ + 1}`;
+    return this.relIds.alloc();
   }
 
   allocShapeId(): number {
     return this.nextShapeId++;
   }
 
-  addHyperlink(url: string): string {
+  addHyperlink(url: string): string | null {
+    const target = sanitizeOfficeHyperlink(url, {
+      allowRelative: this.allowRelativeHyperlinks,
+    });
+    if (!target) return null;
     const id = this.allocRelId();
     this.relationships.push({
       id,
       type: REL_HYPERLINK,
-      target: url,
+      target,
       targetMode: 'External',
     });
     return id;
@@ -876,9 +921,10 @@ function convertCodeBlock(node: MarkdownCodeBlock, ctx: SlideContext): string {
     parts.push(
       `<a:p>` +
         `<a:r>` +
+        // Fill group precedes `a:latin` per CT_TextCharacterProperties.
         `<a:rPr lang="en-US" sz="${DEFAULT_CODE_SIZE}" dirty="0">` +
-        `<a:latin typeface="${escapeXml(ctx.style.codeFont)}"/>` +
         `<a:solidFill><a:srgbClr val="${ctx.style.codeColor}"/></a:solidFill>` +
+        `<a:latin typeface="${escapeXml(ctx.style.codeFont)}"/>` +
         `</a:rPr>` +
         `<a:t>${escapeXml(line || ' ')}</a:t>` +
         `</a:r>` +
@@ -976,11 +1022,15 @@ function makeRun(text: string, format: InlineFormat, style: SlideStyle): string 
   if (format.italic) rPrParts.push(`i="1"`);
   if (format.strike) rPrParts.push(`strike="sngStrike"`);
 
+  // `a:rPr` children must follow the ECMA-376 `CT_TextCharacterProperties`
+  // sequence: ln → EG_FillProperties (solidFill) → EG_EffectProperties →
+  // highlight → underline groups → latin → ea → cs → … The fill group must
+  // precede `a:latin`; PowerPoint is lenient, strict validators are not.
   let innerParts = '';
 
   if (format.code) {
-    innerParts += `<a:latin typeface="${escapeXml(style.codeFont)}"/>`;
     innerParts += `<a:solidFill><a:srgbClr val="${style.codeColor}"/></a:solidFill>`;
+    innerParts += `<a:latin typeface="${escapeXml(style.codeFont)}"/>`;
     rPrParts.push(`sz="${DEFAULT_CODE_SIZE}"`);
   } else if (style.hasTheme) {
     innerParts += `<a:solidFill><a:srgbClr val="${style.text}"/></a:solidFill>`;
@@ -996,6 +1046,7 @@ function makeRun(text: string, format: InlineFormat, style: SlideStyle): string 
 
 function convertLink(node: MarkdownLink, ctx: SlideContext, format: InlineFormat): string {
   const rId = ctx.addHyperlink(node.url);
+  if (!rId) return convertInlines(node.children, ctx, format);
   const parts: string[] = [];
 
   for (const child of node.children) {
@@ -1054,13 +1105,22 @@ async function buildPptxPackage(
   const pkg = createPackage();
   const slideCount = slideXmls.length;
 
-  const slideMasterRelId = 'rId100';
-  const themeRelId = 'rId101';
-  const slideRelIds: string[] = [];
+  // One allocator, keyed by rels part — see `RelIdAllocator`. The slide,
+  // slideMaster and theme rels all live in ppt/_rels/presentation.xml.rels,
+  // so they must share a counter. Previously slides counted up from rId1
+  // while slideMaster/theme were hardcoded to rId100/rId101, which meant a
+  // 100-slide deck emitted a duplicate rId100 and PowerPoint rejected it.
+  const relIds = new RelIdAllocator();
+  const PRESENTATION_PART = 'ppt/presentation.xml';
+  const SLIDE_MASTER_PART = 'ppt/slideMasters/slideMaster1.xml';
+  const SLIDE_LAYOUT_PART = 'ppt/slideLayouts/slideLayout1.xml';
 
+  const slideRelIds: string[] = [];
   for (let i = 0; i < slideCount; i++) {
-    slideRelIds.push(`rId${i + 1}`);
+    slideRelIds.push(relIds.alloc(PRESENTATION_PART));
   }
+  const slideMasterRelId = relIds.alloc(PRESENTATION_PART);
+  const themeRelId = relIds.alloc(PRESENTATION_PART);
 
   // --- ppt/presentation.xml ---
   const presentationXml = buildPresentationXml(
@@ -1076,13 +1136,8 @@ async function buildPptxPackage(
     const slidePath = `ppt/slides/slide${i + 1}.xml`;
     pkg.addPart(slidePath, slideXmls[i], CONTENT_TYPE_PPTX_SLIDE);
 
-    pkg.addRelationship(slidePath, {
-      id: 'rId1',
-      type: REL_SLIDE_LAYOUT,
-      target: '../slideLayouts/slideLayout1.xml',
-    });
-
-    // Per-slide relationships (hyperlinks + images)
+    // Per-slide relationships: layout + hyperlinks + images, all allocated
+    // from the slide's own counter inside SlideContext.
     const ctx = slideContexts[i];
     for (const rel of ctx.relationships) {
       pkg.addRelationship(slidePath, {
@@ -1100,26 +1155,26 @@ async function buildPptxPackage(
   }
 
   // --- Slide layout ---
-  const layoutMasterRelId = 'rId1';
+  const layoutMasterRelId = relIds.alloc(SLIDE_LAYOUT_PART);
   const slideLayoutXml = buildSlideLayoutXml(layoutMasterRelId);
-  pkg.addPart('ppt/slideLayouts/slideLayout1.xml', slideLayoutXml, CONTENT_TYPE_PPTX_SLIDE_LAYOUT);
-  pkg.addRelationship('ppt/slideLayouts/slideLayout1.xml', {
+  pkg.addPart(SLIDE_LAYOUT_PART, slideLayoutXml, CONTENT_TYPE_PPTX_SLIDE_LAYOUT);
+  pkg.addRelationship(SLIDE_LAYOUT_PART, {
     id: layoutMasterRelId,
     type: REL_SLIDE_MASTER,
     target: '../slideMasters/slideMaster1.xml',
   });
 
   // --- Slide master ---
-  const masterLayoutRelId = 'rId1';
-  const masterThemeRelId = 'rId2';
+  const masterLayoutRelId = relIds.alloc(SLIDE_MASTER_PART);
+  const masterThemeRelId = relIds.alloc(SLIDE_MASTER_PART);
   const slideMasterXml = buildSlideMasterXml(masterLayoutRelId);
-  pkg.addPart('ppt/slideMasters/slideMaster1.xml', slideMasterXml, CONTENT_TYPE_PPTX_SLIDE_MASTER);
-  pkg.addRelationship('ppt/slideMasters/slideMaster1.xml', {
+  pkg.addPart(SLIDE_MASTER_PART, slideMasterXml, CONTENT_TYPE_PPTX_SLIDE_MASTER);
+  pkg.addRelationship(SLIDE_MASTER_PART, {
     id: masterLayoutRelId,
     type: REL_SLIDE_LAYOUT,
     target: '../slideLayouts/slideLayout1.xml',
   });
-  pkg.addRelationship('ppt/slideMasters/slideMaster1.xml', {
+  pkg.addRelationship(SLIDE_MASTER_PART, {
     id: masterThemeRelId,
     type: REL_THEME,
     target: '../theme/theme1.xml',

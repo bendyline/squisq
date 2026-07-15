@@ -186,4 +186,77 @@ describe('computeAudioTimeline', () => {
       durationSec: 5,
     });
   });
+
+  // ── NaN safety ────────────────────────────────────────────────────
+  //
+  // A malformed doc (hand-written doc.json, a bad generator) can carry a
+  // non-finite duration. `cursor += NaN` used to poison EVERY later segment's
+  // startSec, which reaches ffmpeg as `adelay=NaN` or the browser as
+  // `node.start(NaN)`. One bad segment must not corrupt the rest.
+  describe('non-finite inputs', () => {
+    const badDurations: Array<[string, number]> = [
+      ['NaN', NaN],
+      ['Infinity', Infinity],
+      ['-Infinity', -Infinity],
+    ];
+
+    for (const [label, bad] of badDurations) {
+      it(`drops a ${label}-duration segment without shifting later segments`, () => {
+        const doc = docWith({
+          audio: {
+            segments: [
+              { src: 'audio/a.mp3', name: 'a', duration: 5, startTime: 0 },
+              { src: 'audio/bad.mp3', name: 'bad', duration: bad, startTime: 5 },
+              { src: 'audio/c.mp3', name: 'c', duration: 3, startTime: 5 },
+              { src: 'audio/d.mp3', name: 'd', duration: 4, startTime: 8 },
+            ],
+          },
+        });
+
+        expect(computeAudioTimeline(doc)).toEqual([
+          { src: 'audio/a.mp3', startSec: 0, sourceInSec: 0, durationSec: 5 },
+          { src: 'audio/c.mp3', startSec: 5, sourceInSec: 0, durationSec: 3 },
+          { src: 'audio/d.mp3', startSec: 8, sourceInSec: 0, durationSec: 4 },
+        ]);
+      });
+    }
+
+    it('never emits a non-finite startSec or durationSec', () => {
+      const doc = docWith({
+        audio: {
+          segments: [
+            { src: 'audio/bad.mp3', name: 'bad', duration: NaN, startTime: 0 },
+            { src: 'audio/ok.mp3', name: 'ok', duration: 2, startTime: 0 },
+          ],
+        },
+      });
+
+      const timeline = computeAudioTimeline(doc, NaN);
+      expect(timeline.length).toBeGreaterThan(0);
+      for (const clip of timeline) {
+        expect(Number.isFinite(clip.startSec)).toBe(true);
+        expect(Number.isFinite(clip.durationSec)).toBe(true);
+        expect(Number.isFinite(clip.sourceInSec)).toBe(true);
+      }
+    });
+
+    it('drops a media clip with a non-finite schedule window', () => {
+      const doc = docWith({
+        duration: 5,
+        documentMedia: [
+          {
+            id: 'bad',
+            src: 'audio/bad.mp3',
+            kind: 'audio',
+            startAt: NaN,
+            clipEnd: 5,
+            anchor: 'document',
+          },
+        ],
+      });
+
+      // `NaN <= 0` is false, so an unguarded positivity check would emit this.
+      expect(computeAudioTimeline(doc)).toEqual([]);
+    });
+  });
 });

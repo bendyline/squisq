@@ -67,6 +67,7 @@ export class LocalForageAdapter implements StorageAdapter {
       await this.store.removeItem(this.prefix + key);
     } catch (e: unknown) {
       console.warn('[Storage] remove (IndexedDB) failed:', key, e);
+      throw e;
     }
   }
 
@@ -83,6 +84,7 @@ export class LocalForageAdapter implements StorageAdapter {
       }
     } catch (e: unknown) {
       console.error('[Storage] clear (IndexedDB) failed:', e);
+      throw e;
     }
   }
 

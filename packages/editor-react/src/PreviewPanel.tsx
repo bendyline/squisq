@@ -353,6 +353,7 @@ export function PreviewPanel({ basePath = '/', className, workspaceContainer }: 
         key={`${audience ? 'audience' : 'primary'}-${activeTransformStyle || 'none'}`}
         doc={previewDoc!}
         basePath={basePath}
+        audioMode={previewProjection?.contentDoc.audio?.segments?.length ? 'media' : 'synthetic'}
         showControls={!audience}
         muted
         forceViewport={activeViewport}

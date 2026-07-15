@@ -17,6 +17,7 @@ import type { ContentContainer } from '../storage/ContentContainer.js';
 import type { ImageEditCanvas, ImageEditDoc, ImageEditLayer } from '../schemas/ImageEditDoc.js';
 import type { MarkerStyle, Position } from '../schemas/Doc.js';
 import { markerPath, shapePath } from '../doc/utils/shapeGeometry.js';
+import { bytesToBase64 } from '../base64.js';
 
 /** Supported export formats. */
 export type ImageEditExportFormat = 'png' | 'jpeg' | 'webp';
@@ -315,15 +316,7 @@ async function loadAssetAsDataUrl(container: ContentContainer, src: string): Pro
 
 function arrayBufferToDataUrl(data: ArrayBuffer, mime: string): string {
   const bytes = new Uint8Array(data);
-  let binary = '';
-  // chunk to avoid call-stack limits with large images
-  const CHUNK = 0x8000;
-  for (let i = 0; i < bytes.length; i += CHUNK) {
-    binary += String.fromCharCode.apply(null, Array.from(bytes.subarray(i, i + CHUNK)));
-  }
-  // btoa exists in browsers and modern Node (>= 16); fall back to Buffer for older runtimes.
-  const b64 = typeof btoa === 'function' ? btoa(binary) : Buffer.from(bytes).toString('base64');
-  return `data:${mime};base64,${b64}`;
+  return `data:${mime};base64,${bytesToBase64(bytes)}`;
 }
 
 function guessMime(path: string): string {

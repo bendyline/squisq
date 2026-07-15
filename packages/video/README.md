@@ -65,8 +65,8 @@ const { data, duration } = await framesToMp4Wasm(
     fps: 30, // default 30
     quality: 'normal', // 'draft' | 'normal' | 'high' (default 'normal')
     orientation: 'landscape', // 'landscape' | 'portrait' (default 'landscape')
-    // width / height override the orientation defaults
-    // Optional for offline/CSP-controlled hosting:
+    // width / height override the orientation defaults (both must be EVEN)
+    // REQUIRED — see "ffmpeg.wasm runtime assets" below:
     ffmpegWasm: {
       coreURL: '/vendor/ffmpeg-core.js',
       wasmURL: '/vendor/ffmpeg-core.wasm',
@@ -78,6 +78,29 @@ const { data, duration } = await framesToMp4Wasm(
 ```
 
 Encoding is H.264 (`libx264`, `yuv420p`) with optional AAC audio; frames are scaled/padded to the target dimensions preserving aspect ratio. ffmpeg.wasm needs `SharedArrayBuffer`, which normally means serving COOP/COEP headers. `framesToMp4Wasm` is browser-only; Node callers can use `framesToMp4Native` or `framesToMp4NativeBytes` from `@bendyline/squisq-cli/api`.
+
+**Dimensions must be even.** `validateVideoExportOptions` (called by `resolveDimensions`, and therefore by every render path) rejects an odd `width`/`height` up front rather than rounding: H.264's `yuv420p` chroma subsampling cannot represent odd dimensions, and silently shipping a size the caller never asked for breaks aspect-ratio-sensitive pipelines. The rule is applied uniformly to MP4 and GIF so it does not depend on output format or runtime.
+
+### ffmpeg.wasm runtime assets
+
+**`ffmpegWasm.coreURL` is required for every ffmpeg.wasm code path** (`framesToMp4Wasm`, plus GIF transcode and audio muxing in `@bendyline/squisq-video-react`). Omitting it throws an actionable error.
+
+This is deliberate. `@ffmpeg/ffmpeg`'s own `load()` falls back to a hard-coded `https://unpkg.com/@ffmpeg/core@<version>/…` URL, which would make this library fetch and execute unpinned third-party code at runtime — an opaque failure on offline/CSP-restricted hosts and a supply-chain surface for every consumer. Squisq never triggers that fallback.
+
+Host wiring: install `@ffmpeg/core`, publish its assets at a same-origin path, and point `ffmpegWasm` at them.
+
+```ts
+import type { FfmpegWasmLoadConfig } from '@bendyline/squisq-video';
+
+// Copy node_modules/@ffmpeg/core/dist/esm/ffmpeg-core.{js,wasm}
+// into your app's static assets, then:
+export const FFMPEG_WASM: FfmpegWasmLoadConfig = {
+  coreURL: '/ffmpeg-core/ffmpeg-core.js',
+  wasmURL: '/ffmpeg-core/ffmpeg-core.wasm',
+};
+```
+
+`packages/site/vite.config.ts` (the `ffmpegCorePlugin`) plus `packages/site/src/ffmpegWasmConfig.ts` are a complete worked example for Vite, including the GPL notice that must travel with the core files. To deliberately accept a remote core, pass that URL as `coreURL` explicitly — the requirement is that the choice is yours, not a silent default.
 
 ### Schedule a Doc's Audio
 

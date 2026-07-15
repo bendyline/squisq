@@ -34,6 +34,7 @@
 import type { Layer } from '../schemas/Doc.js';
 import type { CustomTemplateDefinition } from '../schemas/CustomTemplates.js';
 import { FRONTMATTER_CUSTOM_TEMPLATES_KEY } from '../schemas/CustomTemplates.js';
+import { base64ToUtf8 } from '../base64.js';
 
 const DEFAULT_VIEWPORT = { width: 1920, height: 1080 };
 
@@ -128,17 +129,6 @@ function renameKeys(value: unknown, map: Readonly<Record<string, string>>): unkn
 
 function isDefaultViewport(v: { width: number; height: number } | undefined): boolean {
   return !v || (v.width === DEFAULT_VIEWPORT.width && v.height === DEFAULT_VIEWPORT.height);
-}
-
-/** UTF-8 safe `atob`. */
-function base64ToUtf8(b64: string): string {
-  if (typeof globalThis.atob === 'function') {
-    const binary = globalThis.atob(b64);
-    const bytes = new Uint8Array(binary.length);
-    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-    return new TextDecoder().decode(bytes);
-  }
-  return Buffer.from(b64, 'base64').toString('utf-8');
 }
 
 // ─── Definition list read / write ───────────────────────────────────

@@ -13,12 +13,14 @@
  */
 
 import Mention from '@tiptap/extension-mention';
+import type { MentionNodeAttrs } from '@tiptap/extension-mention';
 import { PluginKey } from '@tiptap/pm/state';
 import type { Editor, Range } from '@tiptap/core';
+import type { SuggestionKeyDownProps, SuggestionProps } from '@tiptap/suggestion';
 import type { MentionCandidate, MentionProvider } from './EditorContext';
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-type SuggestionProps = any;
+type MentionSelection = Pick<MentionCandidate, 'id' | 'label'> & { kind: string };
+type MentionSuggestionProps = SuggestionProps<MentionCandidate, MentionSelection>;
 
 /**
  * Fallback namespace for defensive code paths — used when a mention node
@@ -96,11 +98,19 @@ export function buildMentionExtension(getProvider: () => MentionProvider | null)
           // Custom plugin key so the mention suggestion doesn't collide
           // with any future `:` or `/` popovers.
           pluginKey: new PluginKey('mentionSuggestion'),
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          command: ({ editor, range, props }: { editor: Editor; range: Range; props: any }) => {
-            const id = (props?.id as string | null) ?? '';
-            const label = (props?.label as string | null) ?? id;
-            const kind = (props?.kind as string | undefined) ?? FALLBACK_KIND;
+          command: ({
+            editor,
+            range,
+            props,
+          }: {
+            editor: Editor;
+            range: Range;
+            props: MentionNodeAttrs;
+          }) => {
+            const id = props.id ?? '';
+            const label = props.label ?? id;
+            const kind =
+              'kind' in props && typeof props.kind === 'string' ? props.kind : FALLBACK_KIND;
             editor
               .chain()
               .focus()
@@ -138,7 +148,7 @@ function renderSuggestionFactory() {
   return () => {
     let container: HTMLDivElement | null = null;
     let state: SuggestionState = { items: [], selected: 0 };
-    let currentProps: SuggestionProps | null = null;
+    let currentProps: MentionSuggestionProps | null = null;
 
     const update = () => {
       if (!container || !currentProps) return;
@@ -179,15 +189,11 @@ function renderSuggestionFactory() {
     const selectAt = (index: number) => {
       const item = state.items[index];
       if (!item || !currentProps) return;
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const command = (currentProps as any).command;
-      if (typeof command === 'function') {
-        command({ id: item.id, label: item.label, kind: item.scheme });
-      }
+      currentProps.command({ id: item.id, label: item.label, kind: item.scheme });
     };
 
     return {
-      onStart: (props: SuggestionProps) => {
+      onStart: (props: MentionSuggestionProps) => {
         currentProps = props;
         state = { items: props.items ?? [], selected: 0 };
         if (!container) {
@@ -199,14 +205,14 @@ function renderSuggestionFactory() {
         }
         update();
       },
-      onUpdate: (props: SuggestionProps) => {
+      onUpdate: (props: MentionSuggestionProps) => {
         currentProps = props;
         if (Array.isArray(props.items)) {
           state = { items: props.items, selected: 0 };
         }
         update();
       },
-      onKeyDown: ({ event }: { event: KeyboardEvent }) => {
+      onKeyDown: ({ event }: SuggestionKeyDownProps) => {
         if (!state.items.length) return false;
         if (event.key === 'ArrowDown') {
           state.selected = (state.selected + 1) % state.items.length;

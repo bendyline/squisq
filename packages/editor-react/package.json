@@ -27,7 +27,9 @@
   "types": "./dist/index.d.ts",
   "files": [
     "dist",
-    "src"
+    "!dist/**/*.map",
+    "LICENSE",
+    "NOTICE.md"
   ],
   "exports": {
     ".": {
@@ -75,7 +77,8 @@
     "@tiptap/react": "2.27.2",
     "@tiptap/starter-kit": "2.27.2",
     "@tiptap/suggestion": "2.27.2",
-    "mermaid": "11.16.0"
+    "mermaid": "11.16.0",
+    "type-fest": "4.41.0"
   },
   "devDependencies": {
     "@types/react": "18.3.28",

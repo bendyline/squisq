@@ -6,8 +6,9 @@
  * VideoExportModal must accept being rendered without it.
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { fireEvent, render, renderHook } from '@testing-library/react';
+import axe from 'axe-core';
 import { VideoExportButton } from '../VideoExportButton';
 import { VideoExportModal } from '../VideoExportModal';
 import { useVideoExport } from '../hooks/useVideoExport';
@@ -47,9 +48,34 @@ describe('VideoExportButton', () => {
     fireEvent.click(getByRole('button', { name: 'Export Video' }));
     expect(document.querySelector('[data-color-scheme="dark"]')).toBeTruthy();
   });
+
+  it('forwards host palette overrides to its portaled modal', () => {
+    const { getByRole } = render(
+      <VideoExportButton doc={minimalDoc()} uiPalette={{ surface: '#123456' }} />,
+    );
+    fireEvent.click(getByRole('button', { name: 'Export Video' }));
+    const modal = document.querySelector<HTMLElement>('[data-squisq-video-export-modal]');
+    expect(modal?.style.background).toBe('rgb(18, 52, 86)');
+  });
 });
 
 describe('VideoExportModal', () => {
+  it('has dialog semantics, keyboard dismissal, and no automated WCAG A/AA violations', async () => {
+    const onClose = vi.fn();
+    const { getByRole } = render(<VideoExportModal doc={minimalDoc()} onClose={onClose} />);
+    const dialog = getByRole('dialog', { name: 'Export Video' });
+    expect(dialog.getAttribute('aria-modal')).toBe('true');
+
+    const results = await axe.run(dialog, {
+      runOnly: { type: 'tag', values: ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'] },
+      rules: { 'color-contrast': { enabled: false } },
+    });
+    expect(results.violations).toEqual([]);
+
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(onClose).toHaveBeenCalledOnce();
+  });
+
   it('renders the configure state without a playerScript prop', () => {
     const { container } = render(<VideoExportModal doc={minimalDoc()} onClose={() => {}} />);
     expect(container.textContent).toContain('Export Video');
@@ -87,6 +113,23 @@ describe('VideoExportModal', () => {
       (container.querySelector('[aria-label="Animations and transitions"]') as HTMLSelectElement)
         .value,
     ).toBe('enabled');
+    expect(
+      (container.querySelector('[aria-label="Audio handling"]') as HTMLSelectElement).value,
+    ).toBe('require');
+  });
+
+  it('allows an explicit best-effort or omit audio policy', () => {
+    const { container } = render(
+      <VideoExportModal
+        doc={minimalDoc()}
+        defaultConfig={{ audioPolicy: 'best-effort' }}
+        onClose={() => {}}
+      />,
+    );
+    const select = container.querySelector('[aria-label="Audio handling"]') as HTMLSelectElement;
+    expect(select.value).toBe('best-effort');
+    fireEvent.change(select, { target: { value: 'omit' } });
+    expect(select.value).toBe('omit');
   });
 
   it('defaults GIF export to 10fps with animations and transitions disabled', () => {
@@ -135,6 +178,30 @@ describe('VideoExportModal', () => {
     expect(modal?.style.colorScheme).toBe('dark');
     expect(modal?.style.background).toBe('rgb(17, 24, 39)');
     expect(select?.style.colorScheme).toBe('dark');
+  });
+
+  it('applies host palette overrides to the dialog, controls, and primary action', () => {
+    const { container, getByRole } = render(
+      <VideoExportModal
+        doc={minimalDoc()}
+        uiPalette={{
+          surface: '#123456',
+          control: '#234567',
+          primary: '#345678',
+          primaryBorder: '#456789',
+          primaryText: '#f1f2f3',
+        }}
+        onClose={() => {}}
+      />,
+    );
+    const modal = container.querySelector<HTMLElement>('[data-squisq-video-export-modal]');
+    const select = container.querySelector<HTMLSelectElement>('select');
+    const primary = getByRole('button', { name: 'Export Video' });
+    expect(modal?.style.background).toBe('rgb(18, 52, 86)');
+    expect(select?.style.background).toBe('rgb(35, 69, 103)');
+    expect(primary.style.background).toBe('rgb(52, 86, 120)');
+    expect(primary.style.borderColor).toBe('rgb(69, 103, 137)');
+    expect(primary.style.color).toBe('rgb(241, 242, 243)');
   });
 });
 

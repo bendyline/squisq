@@ -16,7 +16,7 @@ export type {
 } from './types.js';
 
 export { chooseControl, primaryType, arrayItemKind } from './chooseControl.js';
-export { evaluateWhen, resolveFlag } from './evaluateWhen.js';
+export { evaluateWhen, isSafeConditionRegex, resolveFlag } from './evaluateWhen.js';
 export {
   escapePointerSegment,
   appendPointer,

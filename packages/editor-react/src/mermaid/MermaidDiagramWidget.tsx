@@ -19,11 +19,13 @@ import { MermaidShapePalette } from './MermaidShapePalette';
 import { applyMermaidSourceEdit } from './mermaidCommands';
 import { useMermaidDiagramData } from './mermaidData';
 import type {
+  MermaidDiagramProperty,
   MermaidEditableEdge,
   MermaidEditableModel,
   MermaidEditableNode,
   MermaidFlowchartDirection,
 } from './mermaidModel';
+import { mermaidDiagramProperties, mermaidEditCapabilities } from './mermaidModel';
 import {
   addMermaidNode,
   changeMermaidNodeShape,
@@ -36,12 +38,24 @@ import {
   setMermaidFlowchartDirection,
   type MermaidSourceEditResult,
 } from './mermaidSourceOps';
+import {
+  addAdapterNode,
+  connectAdapterNodes,
+  deleteAdapterNode,
+  disconnectAdapterEdge,
+  duplicateAdapterNode,
+  renameAdapterNode,
+  setAdapterEdgeLabel,
+  setAdapterProperty,
+} from './mermaidSourceAdapters';
 import type { MermaidFlowchartShapeId } from './mermaidShapes';
 
 const MIN_DIAGRAM_HEIGHT = 160;
 const DEFAULT_DIAGRAM_HEIGHT = 420;
 const DIRECTION_PICKER_WIDTH = 344;
 const DIRECTION_PICKER_MAX_HEIGHT = 360;
+const PROPERTIES_PICKER_WIDTH = 320;
+const PROPERTIES_PICKER_MAX_HEIGHT = 520;
 const DIRECTION_PICKER_GAP = 6;
 const VIEWPORT_GUTTER = 8;
 
@@ -69,7 +83,7 @@ export function MermaidDiagramWidget({ editor, blockId, host }: MermaidDiagramWi
   const [renamingEdgeId, setRenamingEdgeId] = useState<string | null>(null);
   const [connecting, setConnecting] = useState(false);
   const [connectSourceId, setConnectSourceId] = useState<string | null>(null);
-  const [openPopover, setOpenPopover] = useState<'shape' | 'direction' | null>(null);
+  const [openPopover, setOpenPopover] = useState<'shape' | 'direction' | 'properties' | null>(null);
   const [editNotice, setEditNotice] = useState('');
   const [maximized, setMaximized] = useState(false);
   const [height, setHeight] = useState<number | null>(null);
@@ -99,9 +113,10 @@ export function MermaidDiagramWidget({ editor, blockId, host }: MermaidDiagramWi
     [blockId, editor],
   );
 
-  const flowchart = model?.kind === 'flowchart' ? model : null;
-  const selectedNode = flowchart?.nodes.find((node) => node.id === selectedNodeId) ?? null;
-  const selectedEdge = flowchart?.edges.find((edge) => edge.id === selectedEdgeId) ?? null;
+  const selectedNode = model?.nodes.find((node) => node.id === selectedNodeId) ?? null;
+  const selectedEdge = model?.edges.find((edge) => edge.id === selectedEdgeId) ?? null;
+  const editCapabilities = model ? mermaidEditCapabilities(model) : null;
+  const diagramProperties = model ? mermaidDiagramProperties(model) : [];
 
   const beginRename = useCallback((node: MermaidEditableNode) => {
     setSelectedNodeId(node.id);
@@ -121,32 +136,42 @@ export function MermaidDiagramWidget({ editor, blockId, host }: MermaidDiagramWi
 
   const commitRename = useCallback(
     (nodeId: string, label: string): boolean => {
-      const node = flowchart?.nodes.find((candidate) => candidate.id === nodeId);
+      const node = model?.nodes.find((candidate) => candidate.id === nodeId);
       if (!data || !node) return false;
       if (label.trim() === node.label) {
         setRenamingNodeId(null);
         return true;
       }
-      const applied = applyEdit(renameMermaidNode(data.source, node, label));
+      const applied = applyEdit(
+        model?.kind === 'flowchart'
+          ? renameMermaidNode(data.source, node, label)
+          : model
+            ? renameAdapterNode(data.source, model, node, label)
+            : { ok: false, source: data.source },
+      );
       if (applied) setRenamingNodeId(null);
       return applied;
     },
-    [applyEdit, data, flowchart],
+    [applyEdit, data, model],
   );
 
   const commitEdgeLabel = useCallback(
     (edgeId: string, label: string): boolean => {
-      const edge = flowchart?.edges.find((candidate) => candidate.id === edgeId);
-      if (!data || !flowchart || !edge) return false;
+      const edge = model?.edges.find((candidate) => candidate.id === edgeId);
+      if (!data || !model || !edge) return false;
       if (label.trim() === edge.label.trim()) {
         setRenamingEdgeId(null);
         return true;
       }
-      const applied = applyEdit(setMermaidEdgeLabel(data.source, flowchart, edge, label));
+      const applied = applyEdit(
+        model.kind === 'flowchart'
+          ? setMermaidEdgeLabel(data.source, model, edge, label)
+          : setAdapterEdgeLabel(data.source, model, edge, label),
+      );
       if (applied) setRenamingEdgeId(null);
       return applied;
     },
-    [applyEdit, data, flowchart],
+    [applyEdit, data, model],
   );
 
   const beginConnect = useCallback((nodeId?: string) => {
@@ -160,7 +185,7 @@ export function MermaidDiagramWidget({ editor, blockId, host }: MermaidDiagramWi
 
   const handleSelectNode = useCallback(
     (nodeId: string | null) => {
-      if (!connecting || !nodeId || !flowchart || !data) {
+      if (!connecting || !nodeId || !model || !data) {
         setSelectedNodeId(nodeId);
         setRenamingNodeId((current) => (current === nodeId ? current : null));
         if (nodeId) setRenamingEdgeId(null);
@@ -172,7 +197,9 @@ export function MermaidDiagramWidget({ editor, blockId, host }: MermaidDiagramWi
         return;
       }
       const applied = applyEdit(
-        connectMermaidNodes(data.source, flowchart, connectSourceId, nodeId),
+        model.kind === 'flowchart'
+          ? connectMermaidNodes(data.source, model, connectSourceId, nodeId)
+          : connectAdapterNodes(data.source, model, connectSourceId, nodeId),
       );
       if (applied) {
         setConnecting(false);
@@ -180,13 +207,13 @@ export function MermaidDiagramWidget({ editor, blockId, host }: MermaidDiagramWi
         setSelectedNodeId(nodeId);
       }
     },
-    [applyEdit, connectSourceId, connecting, data, flowchart],
+    [applyEdit, connectSourceId, connecting, data, model],
   );
 
   const handleNodeAction = useCallback(
     (action: MermaidNodeCanvasAction, nodeId: string) => {
-      if (!flowchart || !data) return;
-      const node = flowchart.nodes.find((candidate) => candidate.id === nodeId);
+      if (!model || !data) return;
+      const node = model.nodes.find((candidate) => candidate.id === nodeId);
       if (!node) return;
       setSelectedNodeId(nodeId);
       setSelectedEdgeId(null);
@@ -196,38 +223,53 @@ export function MermaidDiagramWidget({ editor, blockId, host }: MermaidDiagramWi
           beginRename(node);
           break;
         case 'shape':
-          setOpenPopover('shape');
+          if (editCapabilities?.shape) setOpenPopover('shape');
           break;
         case 'duplicate': {
-          const result = duplicateMermaidNode(data.source, flowchart, node);
+          const result =
+            model.kind === 'flowchart'
+              ? duplicateMermaidNode(data.source, model, node)
+              : duplicateAdapterNode(data.source, model, node);
           if (applyEdit(result) && result.nodeId) setSelectedNodeId(result.nodeId);
           break;
         }
         case 'connect':
-          beginConnect(nodeId);
+          if (editCapabilities?.connect) beginConnect(nodeId);
           break;
         case 'delete':
-          if (applyEdit(deleteMermaidNode(data.source, flowchart, nodeId))) {
+          if (
+            applyEdit(
+              model.kind === 'flowchart'
+                ? deleteMermaidNode(data.source, model, nodeId)
+                : deleteAdapterNode(data.source, model, node),
+            )
+          ) {
             setSelectedNodeId(null);
             setConnectSourceId(null);
           }
           break;
       }
     },
-    [applyEdit, beginConnect, beginRename, data, flowchart],
+    [applyEdit, beginConnect, beginRename, data, editCapabilities, model],
   );
 
   const handleDisconnect = useCallback(
     (edgeId: string) => {
-      if (!flowchart || !data) return;
-      const edge = flowchart.edges.find((candidate) => candidate.id === edgeId);
+      if (!model || !data) return;
+      const edge = model.edges.find((candidate) => candidate.id === edgeId);
       if (!edge) return;
-      if (applyEdit(disconnectMermaidEdge(data.source, flowchart, edge))) {
+      if (
+        applyEdit(
+          model.kind === 'flowchart'
+            ? disconnectMermaidEdge(data.source, model, edge)
+            : disconnectAdapterEdge(data.source, model, edge),
+        )
+      ) {
         setSelectedEdgeId(null);
         setRenamingEdgeId(null);
       }
     },
-    [applyEdit, data, flowchart],
+    [applyEdit, data, model],
   );
 
   const onResizeStart = useCallback(
@@ -268,18 +310,27 @@ export function MermaidDiagramWidget({ editor, blockId, host }: MermaidDiagramWi
 
   if (!data) return null;
   const sourceVisible = isMermaidSourceVisible(editor, blockId);
-  const structured = flowchart !== null;
+  const structured = model !== null;
+  const nodeNoun = model && model.kind !== 'flowchart' ? model.nodeNoun : 'Node';
+  const hasNonDirectionProperties = diagramProperties.some(
+    (property) => property.id !== 'direction',
+  );
 
   const actions: SceneBlockAction[] = [
     {
       id: 'add-node',
-      label: 'Node',
+      label: nodeNoun,
       icon: <Icon icon="fa-solid fa-plus" />,
-      title: structured ? 'Add Mermaid node' : 'Structured actions require a flowchart',
-      disabled: !structured,
+      title: editCapabilities?.addNode
+        ? `Add Mermaid ${nodeNoun.toLowerCase()}`
+        : 'This Mermaid grammar cannot represent an isolated node',
+      disabled: !editCapabilities?.addNode,
       onClick: () => {
-        if (!flowchart) return;
-        const result = addMermaidNode(data.source, flowchart);
+        if (!model) return;
+        const result =
+          model.kind === 'flowchart'
+            ? addMermaidNode(data.source, model)
+            : addAdapterNode(data.source, model);
         if (applyEdit(result) && result.nodeId) setSelectedNodeId(result.nodeId);
       },
     },
@@ -287,8 +338,13 @@ export function MermaidDiagramWidget({ editor, blockId, host }: MermaidDiagramWi
       id: 'connect',
       label: 'Connect',
       icon: <Icon icon="fa-solid fa-link" />,
-      title: connecting ? 'Cancel connection' : 'Connect two Mermaid nodes',
-      disabled: !structured,
+      title: connecting
+        ? 'Cancel connection'
+        : editCapabilities?.connect
+          ? `Connect two Mermaid ${nodeNoun.toLowerCase()}s`
+          : (editCapabilities?.connectionHint ??
+            'This Mermaid grammar has no explicit connections'),
+      disabled: !editCapabilities?.connect,
       active: connecting,
       onClick: () => {
         if (connecting) {
@@ -302,7 +358,9 @@ export function MermaidDiagramWidget({ editor, blockId, host }: MermaidDiagramWi
       label: selectedEdge ? 'Label' : 'Rename',
       icon: <Icon icon="fa-solid fa-pen" />,
       title: selectedEdge ? 'Edit connection label' : 'Rename Mermaid node',
-      disabled: !selectedNode && !selectedEdge,
+      disabled:
+        (!selectedNode || !editCapabilities?.renameNode) &&
+        (!selectedEdge || !editCapabilities?.edgeLabel),
       active: renamingNodeId === selectedNode?.id || renamingEdgeId === selectedEdge?.id,
       onClick: () => {
         if (selectedNode) beginRename(selectedNode);
@@ -313,7 +371,10 @@ export function MermaidDiagramWidget({ editor, blockId, host }: MermaidDiagramWi
       id: 'node-shape',
       label: 'Shape',
       icon: <Icon icon="fa-solid fa-shapes" />,
-      disabled: !selectedNode,
+      title: editCapabilities?.shape
+        ? 'Change Mermaid node shape'
+        : 'Shapes are defined by this diagram grammar',
+      disabled: !selectedNode || !editCapabilities?.shape,
       active: openPopover === 'shape',
       onClick: () => setOpenPopover((value) => (value === 'shape' ? null : 'shape')),
       popover:
@@ -332,14 +393,14 @@ export function MermaidDiagramWidget({ editor, blockId, host }: MermaidDiagramWi
       id: 'duplicate-node',
       label: 'Duplicate',
       icon: <Icon icon="fa-solid fa-copy" />,
-      disabled: !selectedNode,
+      disabled: !selectedNode || !editCapabilities?.duplicateNode,
       onClick: () => selectedNode && handleNodeAction('duplicate', selectedNode.id),
     },
     {
       id: 'disconnect-edge',
       label: 'Disconnect',
       icon: <Icon icon="fa-solid fa-link-slash" />,
-      disabled: !selectedEdge,
+      disabled: !selectedEdge || !editCapabilities?.disconnect,
       onClick: () => selectedEdge && handleDisconnect(selectedEdge.id),
     },
     {
@@ -347,23 +408,57 @@ export function MermaidDiagramWidget({ editor, blockId, host }: MermaidDiagramWi
       label: 'Delete',
       icon: <Icon icon="fa-solid fa-trash" />,
       danger: true,
-      disabled: !selectedNode,
+      disabled: !selectedNode || !editCapabilities?.deleteNode,
       onClick: () => selectedNode && handleNodeAction('delete', selectedNode.id),
     },
     {
       id: 'direction',
       label: 'Direction',
       icon: <Icon icon="fa-solid fa-arrows-up-down-left-right" />,
-      disabled: !structured,
+      disabled: !editCapabilities?.direction,
       active: openPopover === 'direction',
       onClick: () => setOpenPopover((value) => (value === 'direction' ? null : 'direction')),
       popover:
-        openPopover === 'direction' && flowchart ? (
+        openPopover === 'direction' && model?.direction ? (
           <MermaidDirectionPicker
-            selected={flowchart.direction}
+            selected={model.direction}
             onClose={() => setOpenPopover(null)}
             onPick={(direction) => {
-              applyEdit(setMermaidFlowchartDirection(data.source, direction));
+              applyEdit(
+                model.kind === 'flowchart'
+                  ? setMermaidFlowchartDirection(data.source, direction)
+                  : setAdapterProperty(data.source, model, 'direction', direction),
+              );
+              setOpenPopover(null);
+            }}
+          />
+        ) : undefined,
+    },
+    {
+      id: 'diagram-properties',
+      label: 'Properties',
+      icon: <Icon icon="fa-solid fa-sliders" />,
+      title: 'Edit Mermaid diagram properties',
+      disabled: !structured || !hasNonDirectionProperties,
+      active: openPopover === 'properties',
+      onClick: () => setOpenPopover((value) => (value === 'properties' ? null : 'properties')),
+      popover:
+        openPopover === 'properties' && model && hasNonDirectionProperties ? (
+          <MermaidPropertiesPalette
+            properties={diagramProperties.filter((property) => property.id !== 'direction')}
+            onClose={() => setOpenPopover(null)}
+            onApply={(values) => {
+              let nextSource = data.source;
+              for (const [propertyId, value] of Object.entries(values)) {
+                if (model.kind === 'flowchart') continue;
+                const next = setAdapterProperty(nextSource, model, propertyId, value);
+                if (next.ok) nextSource = next.source;
+              }
+              applyEdit({
+                ok: nextSource !== data.source,
+                source: nextSource,
+                reason: 'The diagram properties are unchanged.',
+              });
               setOpenPopover(null);
             }}
           />
@@ -403,7 +498,7 @@ export function MermaidDiagramWidget({ editor, blockId, host }: MermaidDiagramWi
       }}
       onNodeAction={handleNodeAction}
       onEditEdgeLabel={(id) => {
-        const edge = flowchart?.edges.find((candidate) => candidate.id === id);
+        const edge = model?.edges.find((candidate) => candidate.id === id);
         if (edge) beginRenameEdge(edge);
       }}
       onCommitRename={commitRename}
@@ -461,17 +556,10 @@ export function MermaidDiagramWidget({ editor, blockId, host }: MermaidDiagramWi
   );
 }
 
-function MermaidDirectionPicker({
-  selected,
-  onPick,
-  onClose,
-}: {
-  selected: MermaidFlowchartDirection;
-  onPick: (direction: MermaidFlowchartDirection) => void;
-  onClose: () => void;
-}) {
-  const [position, setPosition] = useState<DirectionPickerPosition | null>(null);
-  const ref = useRef<HTMLDivElement>(null);
+function useDismissibleMermaidPopover(
+  ref: { readonly current: Element | null },
+  onClose: () => void,
+) {
   useEffect(() => {
     const onPointerDown = (event: PointerEvent) => {
       const target = event.target as Element | null;
@@ -487,8 +575,15 @@ function MermaidDirectionPicker({
       document.removeEventListener('pointerdown', onPointerDown);
       document.removeEventListener('keydown', onKeyDown);
     };
-  }, [onClose]);
+  }, [onClose, ref]);
+}
 
+function useClampedMermaidPopoverPosition(
+  ref: { readonly current: HTMLElement | null },
+  preferredWidth: number,
+  preferredMaxHeight: number,
+): DirectionPickerPosition | null {
+  const [position, setPosition] = useState<DirectionPickerPosition | null>(null);
   useLayoutEffect(() => {
     const picker = ref.current;
     const anchor = picker?.parentElement;
@@ -496,7 +591,6 @@ function MermaidDirectionPicker({
 
     const editorShell = picker.closest('.squisq-editor-shell') as HTMLElement | null;
     const statusBar = editorShell?.querySelector('.squisq-status-bar') as HTMLElement | null;
-
     const measure = () => {
       const anchorRect = anchor.getBoundingClientRect();
       const shellRect = editorShell?.getBoundingClientRect();
@@ -507,7 +601,7 @@ function MermaidDirectionPicker({
       const boundaryBottom =
         Math.min(viewportHeight, statusRect?.top ?? viewportHeight) - VIEWPORT_GUTTER;
       const targetHeight = Math.min(
-        DIRECTION_PICKER_MAX_HEIGHT,
+        preferredMaxHeight,
         picker.scrollHeight,
         Math.floor(viewportHeight * 0.7),
       );
@@ -520,10 +614,7 @@ function MermaidDirectionPicker({
       const top = opensAbove
         ? Math.max(boundaryTop, anchorRect.top - DIRECTION_PICKER_GAP - maxHeight)
         : belowTop;
-      const width = Math.max(
-        0,
-        Math.min(DIRECTION_PICKER_WIDTH, viewportWidth - VIEWPORT_GUTTER * 2),
-      );
+      const width = Math.max(0, Math.min(preferredWidth, viewportWidth - VIEWPORT_GUTTER * 2));
       const opensLeft = Boolean(anchor.closest('.squisq-scene-side-toolbar'));
       const preferredLeft = opensLeft
         ? anchorRect.left - DIRECTION_PICKER_GAP - width
@@ -532,7 +623,6 @@ function MermaidDirectionPicker({
         VIEWPORT_GUTTER,
         Math.min(preferredLeft, viewportWidth - width - VIEWPORT_GUTTER),
       );
-
       const next: DirectionPickerPosition = {
         position: 'fixed',
         top: Math.round(top),
@@ -564,7 +654,130 @@ function MermaidDirectionPicker({
       window.removeEventListener('resize', measure);
       window.removeEventListener('scroll', measure, true);
     };
-  }, []);
+  }, [preferredMaxHeight, preferredWidth, ref]);
+  return position;
+}
+
+function MermaidPropertiesPalette({
+  properties,
+  onApply,
+  onClose,
+}: {
+  properties: readonly MermaidDiagramProperty[];
+  onApply: (values: Readonly<Record<string, string | boolean>>) => void;
+  onClose: () => void;
+}) {
+  const [values, setValues] = useState<Record<string, string | boolean>>(() =>
+    Object.fromEntries(properties.map((property) => [property.id, property.value])),
+  );
+  const ref = useRef<HTMLFormElement>(null);
+  useDismissibleMermaidPopover(ref, onClose);
+  const position = useClampedMermaidPopoverPosition(
+    ref,
+    PROPERTIES_PICKER_WIDTH,
+    PROPERTIES_PICKER_MAX_HEIGHT,
+  );
+
+  return (
+    <form
+      ref={ref}
+      className="squisq-mermaid-properties"
+      role="dialog"
+      aria-label="Mermaid diagram properties"
+      style={position ?? { visibility: 'hidden' }}
+      onSubmit={(event) => {
+        event.preventDefault();
+        onApply(values);
+      }}
+    >
+      <div className="squisq-mermaid-properties-header">
+        <strong>Diagram properties</strong>
+        <button type="button" onClick={onClose} aria-label="Close diagram properties">
+          <Icon icon="fa-solid fa-xmark" />
+        </button>
+      </div>
+      <div className="squisq-mermaid-properties-fields">
+        {properties.map((property) => (
+          <label key={property.id}>
+            {property.type === 'boolean' ? (
+              <span className="squisq-mermaid-property-toggle">
+                <input
+                  type="checkbox"
+                  checked={values[property.id] === true}
+                  onChange={(event) =>
+                    setValues((current) => ({
+                      ...current,
+                      [property.id]: event.currentTarget.checked,
+                    }))
+                  }
+                />
+                <span>{property.label}</span>
+              </span>
+            ) : (
+              <>
+                <span>{property.label}</span>
+                {property.type === 'select' ? (
+                  <select
+                    value={String(values[property.id] ?? '')}
+                    onChange={(event) =>
+                      setValues((current) => ({
+                        ...current,
+                        [property.id]: event.currentTarget.value,
+                      }))
+                    }
+                  >
+                    {property.options?.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <input
+                    type="text"
+                    value={String(values[property.id] ?? '')}
+                    placeholder={property.placeholder}
+                    onChange={(event) =>
+                      setValues((current) => ({
+                        ...current,
+                        [property.id]: event.currentTarget.value,
+                      }))
+                    }
+                  />
+                )}
+              </>
+            )}
+          </label>
+        ))}
+      </div>
+      <div className="squisq-mermaid-properties-footer">
+        <button type="button" onClick={onClose}>
+          Cancel
+        </button>
+        <button type="submit" data-primary="true">
+          Apply
+        </button>
+      </div>
+    </form>
+  );
+}
+
+function MermaidDirectionPicker({
+  selected,
+  onPick,
+  onClose,
+}: {
+  selected: MermaidFlowchartDirection;
+  onPick: (direction: MermaidFlowchartDirection) => void;
+  onClose: () => void;
+}) {
+  const ref = useRef<HTMLDivElement>(null);
+  useDismissibleMermaidPopover(ref, onClose);
+  const position = useClampedMermaidPopoverPosition(
+    ref,
+    DIRECTION_PICKER_WIDTH,
+    DIRECTION_PICKER_MAX_HEIGHT,
+  );
 
   const directions: {
     id: Exclude<MermaidFlowchartDirection, 'TD'>;
@@ -582,7 +795,7 @@ function MermaidDirectionPicker({
       className="squisq-mermaid-direction-picker"
       role="dialog"
       aria-label="Flowchart layout gallery"
-      style={position ?? undefined}
+      style={position ?? { visibility: 'hidden' }}
     >
       <div className="squisq-mermaid-direction-heading">
         <strong>Flow direction</strong>

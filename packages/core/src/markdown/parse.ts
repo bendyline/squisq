@@ -14,6 +14,7 @@ import remarkFrontmatter from 'remark-frontmatter';
 import type { MarkdownDocument, ParseOptions } from './types.js';
 import { fromMdast } from './convert.js';
 import { parseFrontmatter } from './utils.js';
+import { assertMarkdownDocumentWithinLimits, assertMarkdownSourceWithinLimits } from './limits.js';
 
 // Cache the default processor (all extensions enabled) to avoid rebuilding on every call.
 let defaultProcessor: any;
@@ -37,6 +38,8 @@ let defaultProcessor: any;
  * ```
  */
 export function parseMarkdown(markdown: string, options?: ParseOptions): MarkdownDocument {
+  options?.signal?.throwIfAborted();
+  assertMarkdownSourceWithinLimits(markdown, options?.limits);
   // Use cached default processor when all extensions are enabled (the common case).
   const useDefaults =
     !options ||
@@ -87,6 +90,7 @@ export function parseMarkdown(markdown: string, options?: ParseOptions): Markdow
   const doc = fromMdast(mdastTree as Parameters<typeof fromMdast>[0], {
     parseHtml: options?.parseHtml,
   });
+  assertMarkdownDocumentWithinLimits(doc, options?.limits, options?.signal);
 
   // Extract YAML frontmatter if present
   if (options?.frontmatter !== false) {

@@ -55,7 +55,8 @@ export function getNeighbors(hash: string): string[] {
 
 /**
  * Get a 3x3 grid of geohash4 cells (center + 8 neighbors).
- * Used for landing bonus expansions in Fly mode.
+ * Useful for expanding a query to the cells adjacent to a center cell, so a
+ * point near a cell boundary still matches its neighbors' contents.
  *
  * @param geohash4 - Center geohash4 cell
  * @returns Array of 9 geohash4 cells (center first, then neighbors)

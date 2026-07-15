@@ -95,6 +95,12 @@ A self-contained global build is available for non-React environments. It
 exposes a `SquisqPlayer` global with `mount`, `getHandle`, `unmount`, and
 `version`. `mount` returns an instance handle.
 
+The default build is the light player and omits Mermaid's multi-megabyte parser
+and layout engines. Documents that contain Mermaid fences should use the full
+variant at `dist/squisq-player.full.global.js` (also exported as
+`@bendyline/squisq-react/standalone/full`). Other diagrams are supported by
+both variants.
+
 The former `mountStatic()` shortcut was removed; pass `mode: 'static'` to
 `mount()`. Render methods are instance-scoped and are no longer copied to
 top-level `window.seekTo` / `window.getDuration` properties.

@@ -15,7 +15,7 @@
  * storing a redundant value.
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useId, useMemo, useRef, useState } from 'react';
 import {
   inferDocumentTitle,
   parseMarkdown,
@@ -30,6 +30,7 @@ import {
   FRONTMATTER_SETTING_KEYS,
   omitFrontmatterDefault,
 } from './frontmatterSettings';
+import { useModalDialog } from './modal/useModalDialog';
 
 // ── Frontmatter key constants ─────────────────────────────────────
 
@@ -94,20 +95,11 @@ export function DocumentSettingsDialog({
   const [transform, setTransform] = useState(currentTransform);
   const [captions, setCaptions] = useState(currentCaptions);
 
+  const overlayRef = useRef<HTMLDivElement>(null);
+  const dialogRef = useRef<HTMLFormElement>(null);
   const titleRef = useRef<HTMLInputElement>(null);
-  useEffect(() => {
-    titleRef.current?.focus();
-    titleRef.current?.select();
-  }, []);
-
-  // Esc closes; click on backdrop closes (but not on dialog itself).
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
-    };
-    document.addEventListener('keydown', onKey);
-    return () => document.removeEventListener('keydown', onKey);
-  }, [onClose]);
+  const headingId = useId();
+  useModalDialog({ rootRef: overlayRef, dialogRef, initialFocusRef: titleRef, onClose });
 
   const handleBackdrop = useCallback(
     (e: React.MouseEvent<HTMLDivElement>) => {
@@ -163,10 +155,20 @@ export function DocumentSettingsDialog({
   );
 
   return (
-    <div className="squisq-doc-settings-overlay" onMouseDown={handleBackdrop}>
-      <form className="squisq-doc-settings-dialog" onSubmit={handleSave}>
+    <div ref={overlayRef} className="squisq-doc-settings-overlay" onMouseDown={handleBackdrop}>
+      <form
+        ref={dialogRef}
+        className="squisq-doc-settings-dialog"
+        onSubmit={handleSave}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={headingId}
+        tabIndex={-1}
+      >
         <div className="squisq-doc-settings-header">
-          <h2 className="squisq-doc-settings-title">Document settings</h2>
+          <h2 id={headingId} className="squisq-doc-settings-title">
+            Document settings
+          </h2>
           <button
             type="button"
             className="squisq-doc-settings-close"

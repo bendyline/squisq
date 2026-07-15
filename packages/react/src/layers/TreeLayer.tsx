@@ -42,37 +42,39 @@ export function TreeLayer({ layer, viewport, blockTime }: TreeLayerProps) {
   const width = position.width ? resolveValue(position.width, viewport.width) : viewport.width;
   const height = position.height ? resolveValue(position.height, viewport.height) : viewport.height;
   const offset = getAnchorOffset(position.anchor, width, height);
-  const animStyle = animation ? getAnimationStyle(animation, blockTime) : {};
+  // `getAnimationStyle` returns `{ className, style }`: the class carries the
+  // keyframes and the style carries its CSS custom properties, so the two must
+  // be applied to a real element separately.
+  const animStyle = getAnimationStyle(animation, blockTime);
 
   return (
-    <foreignObject
-      x={x + offset.x}
-      y={y + offset.y}
-      width={width}
-      height={height}
-      style={animStyle}
+    <g
+      className={`block-layer block-layer--tree ${animStyle.className}`}
+      style={animStyle.style}
+      data-layer-id={layer.id}
     >
-      <div
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        {...({ xmlns: 'http://www.w3.org/1999/xhtml' } as any)}
-        className="squisq-treelayer"
-        style={{
-          width: `${width}px`,
-          height: `${height}px`,
-          display: 'flex',
-          flexDirection: 'column',
-          justifyContent: 'center',
-          padding: '24px 32px',
-          boxSizing: 'border-box',
-          fontFamily: style.fontFamily ?? 'system-ui, sans-serif',
-          fontSize: `${style.fontSize}px`,
-          lineHeight: 1.7,
-          overflow: 'hidden',
-        }}
-      >
-        <TreeList items={items} depth={0} style={style} />
-      </div>
-    </foreignObject>
+      <foreignObject x={x + offset.x} y={y + offset.y} width={width} height={height}>
+        <div
+          {...({ xmlns: 'http://www.w3.org/1999/xhtml' } as Record<string, string>)}
+          className="squisq-treelayer"
+          style={{
+            width: `${width}px`,
+            height: `${height}px`,
+            display: 'flex',
+            flexDirection: 'column',
+            justifyContent: 'center',
+            padding: '24px 32px',
+            boxSizing: 'border-box',
+            fontFamily: style.fontFamily ?? 'system-ui, sans-serif',
+            fontSize: `${style.fontSize}px`,
+            lineHeight: 1.7,
+            overflow: 'hidden',
+          }}
+        >
+          <TreeList items={items} depth={0} style={style} />
+        </div>
+      </foreignObject>
+    </g>
   );
 }
 

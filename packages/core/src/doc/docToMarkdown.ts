@@ -25,6 +25,7 @@
 import type { Doc, Block } from '../schemas/Doc.js';
 import type { MediaClip } from '../schemas/Media.js';
 import type {
+  HeadingTemplateAnnotation,
   MarkdownDocument,
   MarkdownBlockNode,
   MarkdownHeading,
@@ -32,6 +33,7 @@ import type {
 } from '../markdown/types.js';
 import { serializeAnnotation } from '../markdown/attrTokens.js';
 import { flattenBlocks } from './markdownToDoc.js';
+import { resolveTemplateName } from './templates/templateNames.js';
 import {
   FRONTMATTER_CUSTOM_TEMPLATES_KEY,
   writeCustomTemplatesToFrontmatter,
@@ -43,6 +45,23 @@ import {
 
 const TRANSITION_PARAM_KEYS = ['transition', 'transitionDuration', 'transitionDirection'] as const;
 
+/** The `markdownToDoc` default, mirrored here so the round-trip agrees by default. */
+const DEFAULT_TEMPLATE = 'sectionHeader';
+
+export interface DocToMarkdownOptions {
+  /**
+   * The template `markdownToDoc` assigned to un-annotated headings when this
+   * doc was parsed — i.e. the `MarkdownToDocOptions.defaultTemplate` used.
+   * Defaults to `'sectionHeader'`, matching that option's own default.
+   *
+   * Blocks carrying exactly this template are treated as IMPLICIT: no
+   * `{[…]}` annotation is emitted for them, because none was authored.
+   * Passing a value that disagrees with how the doc was parsed makes the
+   * round-trip inject annotations onto headings that never had any.
+   */
+  defaultTemplate?: string;
+}
+
 /**
  * Convert a Doc with heading-driven blocks back to a MarkdownDocument.
  *
@@ -50,14 +69,17 @@ const TRANSITION_PARAM_KEYS = ['transition', 'transitionDuration', 'transitionDi
  * in document order. Blocks without a `sourceHeading` (preamble blocks)
  * emit only their contents.
  *
- * If a block has a `template` or `templateOverrides` that aren't already
- * reflected in the heading's `templateAnnotation`, the annotation is
- * injected so the round-trip preserves template assignments.
+ * A block's `template` / `templateOverrides` are RECONCILED with its
+ * heading's `templateAnnotation`, so programmatic edits to either round-trip.
+ * Annotations that already agree are reused verbatim (including legacy
+ * template spellings), keeping untouched documents byte-identical.
  *
  * @param doc - A Doc whose blocks may have `sourceHeading`, `contents`, and `children`
+ * @param options - Round-trip options; see {@link DocToMarkdownOptions.defaultTemplate}
  * @returns A MarkdownDocument that can be stringified back to markdown
  */
-export function docToMarkdown(doc: Doc): MarkdownDocument {
+export function docToMarkdown(doc: Doc, options: DocToMarkdownOptions = {}): MarkdownDocument {
+  const defaultTemplate = resolveTemplateName(options.defaultTemplate ?? DEFAULT_TEMPLATE);
   const children: MarkdownBlockNode[] = [];
 
   // Media clips were LIFTED out of block contents at parse time
@@ -86,7 +108,7 @@ export function docToMarkdown(doc: Doc): MarkdownDocument {
   function emitBlock(block: Block): void {
     // Emit the heading node if present
     if (block.sourceHeading) {
-      const heading = ensureAnnotation(block, block.sourceHeading);
+      const heading = ensureAnnotation(block, block.sourceHeading, defaultTemplate);
       children.push(heading);
     } else if (block.standaloneAnnotation) {
       // Heading-less standalone block: re-emit its `{[…]}` annotation as a
@@ -200,22 +222,35 @@ function synthesizeMediaParagraph(clip: MediaClip): MarkdownParagraph {
 }
 
 /**
- * Ensure the heading's `templateAnnotation` reflects the block's
+ * Ensure the heading's `templateAnnotation` reflects the block's CURRENT
  * template and templateOverrides. Returns a (possibly cloned) heading.
+ *
+ * The block — not the parsed heading — is the source of truth, so a
+ * programmatic `block.template = 'statHighlight'` re-serializes as
+ * `{[statHighlight]}` rather than silently re-emitting the parsed
+ * annotation. The reconciled annotation is compared against the existing
+ * one and the ORIGINAL object is reused when they agree, so a doc nobody
+ * touched still stringifies byte-for-byte identically.
  */
-function ensureAnnotation(block: Block, heading: MarkdownHeading): MarkdownHeading {
+function ensureAnnotation(
+  block: Block,
+  heading: MarkdownHeading,
+  defaultTemplate: string,
+): MarkdownHeading {
   const { attributes, transitionParams } = ensureTransitionMetadata(block, heading);
+  const existing = heading.templateAnnotation;
 
-  // If the block has a non-default template or overrides, inject an annotation
-  const hasExplicitTemplate =
-    block.template && block.template !== 'sectionHeader' && block.autoTemplate !== true;
-  const hasOverrides = block.templateOverrides && Object.keys(block.templateOverrides).length > 0;
+  const template = resolveAnnotationTemplate(block, existing, defaultTemplate);
+  const overrides =
+    block.templateOverrides && Object.keys(block.templateOverrides).length > 0
+      ? block.templateOverrides
+      : undefined;
 
-  let templateAnnotation = heading.templateAnnotation;
-  if (!templateAnnotation && (hasExplicitTemplate || hasOverrides || transitionParams)) {
+  let templateAnnotation: HeadingTemplateAnnotation | undefined;
+  if (template !== undefined || overrides !== undefined) {
     templateAnnotation = {
-      ...(hasExplicitTemplate ? { template: block.template ?? 'sectionHeader' } : {}),
-      ...(hasOverrides ? { params: block.templateOverrides } : {}),
+      ...(template !== undefined ? { template } : {}),
+      ...(overrides ? { params: overrides } : {}),
     };
   }
 
@@ -229,11 +264,69 @@ function ensureAnnotation(block: Block, heading: MarkdownHeading): MarkdownHeadi
     };
   }
 
+  // Reuse the parsed annotation when the reconciled one says the same thing;
+  // the identity check below then short-circuits the whole heading clone.
+  if (annotationsEqual(existing, templateAnnotation)) templateAnnotation = existing;
+
   if (attributes === heading.attributes && templateAnnotation === heading.templateAnnotation) {
     return heading;
   }
 
   return { ...heading, children: [...heading.children], attributes, templateAnnotation };
+}
+
+/**
+ * The template name to serialize into `{[…]}`, or undefined for none.
+ *
+ * A template is only ANNOTATED when the author actually asked for it:
+ *
+ * - `autoTemplate` blocks carry an ephemeral, content-derived template that
+ *   was never written down — emitting it would bake a guess into the source.
+ * - A template equal to the `defaultTemplate` the doc was parsed with is what
+ *   an un-annotated heading gets for free; annotating it would add `{[…]}` to
+ *   every plain heading in the file. (Hard-coding `'sectionHeader'` here made
+ *   `markdownToDoc(md, { defaultTemplate: 'title' })` do exactly that.)
+ * - Otherwise the block's template wins — that is the programmatic edit.
+ */
+function resolveAnnotationTemplate(
+  block: Block,
+  existing: HeadingTemplateAnnotation | undefined,
+  defaultTemplate: string,
+): string | undefined {
+  if (!block.template || block.autoTemplate === true) return existing?.template;
+
+  const template = resolveTemplateName(block.template);
+  // The annotation already says what the block says: keep the author's
+  // spelling verbatim — including legacy aliases like `titleBlock`, and
+  // including a default written out explicitly — so a round-trip never
+  // rewrites bytes just to canonicalize or tidy a name.
+  if (existing?.template && resolveTemplateName(existing.template) === template) {
+    return existing.template;
+  }
+  // Reached only when the block's template DISAGREES with the annotation (or
+  // there is none). Landing on the default means no annotation is needed.
+  if (template === defaultTemplate) return undefined;
+  return block.template;
+}
+
+function annotationsEqual(
+  a: HeadingTemplateAnnotation | undefined,
+  b: HeadingTemplateAnnotation | undefined,
+): boolean {
+  if (a === b) return true;
+  if (!a || !b) return false;
+  return a.template === b.template && paramsEqual(a.params, b.params);
+}
+
+function paramsEqual(
+  a: Record<string, string> | undefined,
+  b: Record<string, string> | undefined,
+): boolean {
+  if (a === b) return true;
+  if (!a || !b) return false;
+  const keys = Object.keys(a);
+  if (keys.length !== Object.keys(b).length) return false;
+  return keys.every((key) => Object.prototype.hasOwnProperty.call(b, key) && a[key] === b[key]);
 }
 
 function ensureTransitionMetadata(

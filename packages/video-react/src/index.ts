@@ -14,7 +14,7 @@
 
 // ── Components ─────────────────────────────────────────────────────
 export { VideoExportModal } from './VideoExportModal.js';
-export type { VideoExportModalProps } from './VideoExportModal.js';
+export type { VideoExportModalProps, VideoExportPalette } from './VideoExportModal.js';
 
 export { VideoExportButton } from './VideoExportButton.js';
 export type { VideoExportButtonProps } from './VideoExportButton.js';
@@ -26,6 +26,7 @@ export type {
   VideoExportConfig,
   VideoExportResult,
   VideoOutputFormat,
+  VideoAudioPolicy,
 } from './hooks/useVideoExport.js';
 
 export { useFrameCapture } from './hooks/useFrameCapture.js';

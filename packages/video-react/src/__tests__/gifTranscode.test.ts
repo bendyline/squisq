@@ -36,6 +36,9 @@ vi.mock('@ffmpeg/ffmpeg', () => ({
 import { buildGifFfmpegArgs, transcodeMp4ToGifWithFfmpegWasm } from '../gifTranscode.js';
 
 describe('GIF ffmpeg.wasm transcode', () => {
+  /** Self-hosted core assets are mandatory — see the CDN regression test below. */
+  const CORE = { coreURL: '/vendor/core.js', wasmURL: '/vendor/core.wasm' };
+
   beforeEach(() => {
     ffmpegState.exitCode = 0;
     ffmpegState.loadConfig = undefined;
@@ -82,16 +85,30 @@ describe('GIF ffmpeg.wasm transcode', () => {
   it('reports ffmpeg failures and still terminates the runtime', async () => {
     ffmpegState.exitCode = 7;
     await expect(
-      transcodeMp4ToGifWithFfmpegWasm(new Uint8Array([1]), { width: 960, height: 540 }),
+      transcodeMp4ToGifWithFfmpegWasm(new Uint8Array([1]), { width: 960, height: 540 }, CORE),
     ).rejects.toThrow('GIF transcode failed with exit code 7');
     expect(ffmpegState.terminate).toHaveBeenCalledOnce();
   });
 
   it('rejects an empty MP4 before allocating the runtime', async () => {
     await expect(
-      transcodeMp4ToGifWithFfmpegWasm(new Uint8Array(), { width: 960, height: 540 }),
+      transcodeMp4ToGifWithFfmpegWasm(new Uint8Array(), { width: 960, height: 540 }, CORE),
     ).rejects.toThrow('empty MP4');
     expect(ffmpegState.terminate).not.toHaveBeenCalled();
+  });
+
+  /**
+   * Regression: omitting `loadConfig` made `ffmpeg.load()` fall back to
+   * @ffmpeg/ffmpeg's built-in `https://unpkg.com/@ffmpeg/core@…` URL, silently
+   * fetching remote code mid-export.
+   */
+  it('refuses an unconfigured core rather than fetching the unpkg CDN', async () => {
+    await expect(
+      transcodeMp4ToGifWithFfmpegWasm(new Uint8Array([1]), { width: 960, height: 540 }),
+    ).rejects.toThrow(/needs an ffmpeg\.wasm core URL/);
+    // Failed before constructing the runtime at all.
+    expect(ffmpegState.terminate).not.toHaveBeenCalled();
+    expect(ffmpegState.loadConfig).toBeUndefined();
   });
 
   it('terminates an in-progress palette transcode when aborted', async () => {
@@ -103,7 +120,7 @@ describe('GIF ffmpeg.wasm transcode', () => {
     const pending = transcodeMp4ToGifWithFfmpegWasm(
       new Uint8Array([1]),
       { width: 960, height: 540 },
-      undefined,
+      CORE,
       controller.signal,
     );
 

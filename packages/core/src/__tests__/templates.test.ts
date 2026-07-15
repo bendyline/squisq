@@ -698,6 +698,275 @@ describe('shared template materialization', () => {
   });
 });
 
+describe('template input defects (regressions)', () => {
+  const context = () => createTemplateContext(DEFAULT_THEME, 0, 10, VIEWPORT_PRESETS.landscape);
+
+  const layersOf = (block: TemplateBlock): Layer[] =>
+    materializeTemplateForTest(block, context()).layers ?? [];
+
+  // `captionPosition` is documented, coerced and lint-checked, but the
+  // template destructured it to `_captionPosition` and never read it — so
+  // `{[imageWithCaption captionPosition=top]}` linted clean and did nothing.
+  describe('imageWithCaption captionPosition', () => {
+    const imageBlock = (captionPosition?: 'bottom' | 'top' | 'center'): TemplateBlock => ({
+      template: 'imageWithCaption',
+      id: 'img',
+      duration: 10,
+      audioSegment: 0,
+      imageSrc: 'image.jpg',
+      imageAlt: 'Image',
+      caption: 'A caption',
+      ...(captionPosition ? { captionPosition } : {}),
+    });
+
+    const captionY = (block: TemplateBlock): string | number | undefined =>
+      layersOf(block).find((l) => l.type === 'text' && l.id === 'caption')?.position.y;
+    const bandY = (block: TemplateBlock): string | number | undefined =>
+      layersOf(block).find((l) => l.id === 'caption-gradient')?.position.y;
+
+    it('honours top / center / bottom', () => {
+      expect(captionY(imageBlock('top'))).toBe('13%');
+      expect(captionY(imageBlock('center'))).toBe('48%');
+      expect(captionY(imageBlock('bottom'))).toBe('74%');
+    });
+
+    it('moves the caption band with the caption', () => {
+      expect(bandY(imageBlock('top'))).toBe('7%');
+      expect(bandY(imageBlock('center'))).toBe('42%');
+      expect(bandY(imageBlock('bottom'))).toBe('68%');
+    });
+
+    it('defaults to bottom', () => {
+      expect(captionY(imageBlock())).toBe(captionY(imageBlock('bottom')));
+    });
+
+    it('places captions identically to videoWithCaption for the same param', () => {
+      // Same authored param, same placement, whether the media is a still or
+      // a clip — videoWithCaption already honoured this.
+      for (const pos of ['top', 'center', 'bottom'] as const) {
+        const video: TemplateBlock = {
+          template: 'videoWithCaption',
+          id: 'vid',
+          duration: 10,
+          audioSegment: 0,
+          videoSrc: 'video.mp4',
+          videoAlt: 'Video',
+          clipStart: 0,
+          clipEnd: 10,
+          caption: 'A caption',
+          captionPosition: pos,
+        };
+        expect(captionY(imageBlock(pos))).toBe(captionY(video));
+        expect(bandY(imageBlock(pos))).toBe(bandY(video));
+      }
+    });
+  });
+
+  // Negative values were unguarded (only NaN → 0), producing `width: '-32%'`
+  // — an invalid SVG rect renderers silently drop — and a value label at a
+  // negative x, off the left edge of the block.
+  describe('comparisonBar negative values', () => {
+    const bars = (leftValue: number, rightValue: number): Layer[] =>
+      layersOf({
+        template: 'comparisonBar',
+        id: 'cmp',
+        duration: 10,
+        audioSegment: 0,
+        leftLabel: 'Left',
+        rightLabel: 'Right',
+        leftValue,
+        rightValue,
+      });
+
+    const pct = (value: string | number | undefined): number => parseFloat(String(value));
+
+    it('never emits a negative bar width or an off-canvas label', () => {
+      for (const [l, r] of [
+        [-5, 10],
+        [10, -5],
+        [-5, -10],
+        [-1e6, 3],
+      ]) {
+        for (const layer of bars(l, r)) {
+          if (layer.id.endsWith('-bar')) {
+            expect(pct(layer.position.width)).toBeGreaterThanOrEqual(0);
+          }
+          expect(pct(layer.position.x)).toBeGreaterThanOrEqual(0);
+        }
+      }
+    });
+
+    it('draws no bar for a negative value but still reports it', () => {
+      const layers = bars(-5, 10);
+      expect(pct(layers.find((l) => l.id === 'left-bar')!.position.width)).toBe(0);
+      expect(pct(layers.find((l) => l.id === 'right-bar')!.position.width)).toBeGreaterThan(0);
+      const label = layers.find((l): l is TextLayer => l.type === 'text' && l.id === 'left-value');
+      expect(label!.content.text).toContain('-5');
+    });
+
+    it('still scales a normal pair proportionally', () => {
+      const layers = bars(50, 100);
+      const left = pct(layers.find((l) => l.id === 'left-bar')!.position.width);
+      const right = pct(layers.find((l) => l.id === 'right-bar')!.position.width);
+      expect(left).toBeCloseTo(right / 2, 5);
+    });
+  });
+
+  // `count === 1` fell through to the 2x2 default, rendering the lone image
+  // in the top-left quadrant with three empty ones beside it.
+  describe('photoGrid single image', () => {
+    it('renders one image full-bleed', () => {
+      const layers = layersOf({
+        template: 'photoGrid',
+        id: 'grid',
+        duration: 10,
+        audioSegment: 0,
+        images: [{ src: 'one.jpg', alt: 'One' }],
+      });
+
+      const image = layers.find((l) => l.id === 'grid-img-0')!;
+      expect(image.position.width).toBe('100%');
+      expect(image.position.height).toBe('100%');
+      expect(image.position.x).toBe('0%');
+      expect(image.position.y).toBe('0%');
+      expect(layers.some((l) => l.id === 'grid-img-1')).toBe(false);
+    });
+
+    it('leaves the multi-image layouts alone', () => {
+      const two = layersOf({
+        template: 'photoGrid',
+        id: 'grid2',
+        duration: 10,
+        audioSegment: 0,
+        images: [
+          { src: 'one.jpg', alt: 'One' },
+          { src: 'two.jpg', alt: 'Two' },
+        ],
+      });
+      expect(two.find((l) => l.id === 'grid-img-0')!.position.width).not.toBe('100%');
+    });
+  });
+
+  // sectionHeader / pullQuote passed the authored `ambientMotion` token
+  // straight through as an animation type; every other image template routes
+  // it through mapAmbientMotion, so the same input animated differently.
+  describe('ambientMotion routing', () => {
+    it('sectionHeader maps ambientMotion like imageWithCaption', () => {
+      const image = layersOf({
+        template: 'sectionHeader',
+        id: 'sh',
+        duration: 10,
+        audioSegment: 0,
+        title: 'Section',
+        imageSrc: 'bg.jpg',
+        ambientMotion: 'panLeft',
+      }).find((l) => l.id === 'bg-image')!;
+
+      expect(image.animation).toEqual({ type: 'slowZoom', panDirection: 'left', duration: 8 });
+    });
+
+    it('sectionHeader keeps its default Ken Burns without ambientMotion', () => {
+      const image = layersOf({
+        template: 'sectionHeader',
+        id: 'sh2',
+        duration: 10,
+        audioSegment: 0,
+        title: 'Section',
+        imageSrc: 'bg.jpg',
+      }).find((l) => l.id === 'bg-image')!;
+
+      expect(image.animation).toEqual({ type: 'slowZoom', duration: 8, direction: 'in' });
+    });
+
+    it('pullQuote maps ambientMotion instead of passing the token through', () => {
+      const image = layersOf({
+        template: 'pullQuote',
+        id: 'pq',
+        duration: 10,
+        audioSegment: 0,
+        text: 'A quote',
+        backgroundImage: { src: 'bg.jpg', alt: 'bg' },
+        ambientMotion: 'zoomIn',
+      }).find((l) => l.id === 'bg-image')!;
+
+      expect(image.animation).toEqual({ type: 'slowZoom', direction: 'in', duration: 15 });
+    });
+
+    it('every image template agrees on the same authored token', () => {
+      const sectionImage = layersOf({
+        template: 'sectionHeader',
+        id: 'sh3',
+        duration: 10,
+        audioSegment: 0,
+        title: 'S',
+        imageSrc: 'bg.jpg',
+        ambientMotion: 'zoomOut',
+      }).find((l) => l.id === 'bg-image')!;
+      const captionImage = layersOf({
+        template: 'imageWithCaption',
+        id: 'iwc',
+        duration: 10,
+        audioSegment: 0,
+        imageSrc: 'bg.jpg',
+        imageAlt: 'Background',
+        ambientMotion: 'zoomOut',
+      }).find((l) => l.id === 'bg-image')!;
+
+      expect(sectionImage.animation!.type).toBe(captionImage.animation!.type);
+      expect(sectionImage.animation!.direction).toBe(captionImage.animation!.direction);
+    });
+  });
+
+  // Alpha was applied by string concat (`${colors.text}33`). The theme
+  // validator accepts 3-digit `#rgb`, and `#abc33` is not valid CSS — the
+  // decoration silently lost its color.
+  describe('alpha colors are valid CSS', () => {
+    const VALID_COLOR = /^(?:#(?:[0-9a-f]{3}|[0-9a-f]{6})|rgba?\(|hsla?\()/i;
+
+    it('sectionHeader decorative lines survive a 3-digit theme color', () => {
+      const shortHexTheme = {
+        ...DEFAULT_THEME,
+        colorSchemes: {
+          ...DEFAULT_THEME.colorSchemes,
+          blue: { ...DEFAULT_THEME.colorSchemes.blue, text: '#abc', bg: '#123' },
+        },
+      };
+      const ctx = createTemplateContext(shortHexTheme, 0, 10, VIEWPORT_PRESETS.landscape);
+      const layers =
+        materializeTemplateForTest(
+          {
+            template: 'sectionHeader',
+            id: 'sh-alpha',
+            duration: 10,
+            audioSegment: 0,
+            title: 'Section',
+            colorScheme: 'blue',
+          },
+          ctx,
+        ).layers ?? [];
+
+      for (const id of ['line-top', 'line-bottom']) {
+        const fill = layers.find((l) => l.id === id)!.content as { fill: string };
+        expect(fill.fill).toMatch(VALID_COLOR);
+        expect(fill.fill).not.toBe('#abc33');
+      }
+    });
+
+    it('sectionHeader lines are translucent, not opaque', () => {
+      const layers = layersOf({
+        template: 'sectionHeader',
+        id: 'sh-alpha2',
+        duration: 10,
+        audioSegment: 0,
+        title: 'Section',
+      });
+      const fill = (layers.find((l) => l.id === 'line-top')!.content as { fill: string }).fill;
+      expect(fill).toMatch(/^rgba\(/);
+      expect(fill).toContain('0.2');
+    });
+  });
+});
+
 describe('VIEWPORT_PRESETS', () => {
   it('has landscape and portrait presets', () => {
     expect(VIEWPORT_PRESETS).toHaveProperty('landscape');

@@ -68,10 +68,7 @@ function allocateRescaled(blocks: Array<Block | TemplateBlock>, totalDuration: n
   // Scale durations to fit the total
   const rawTotal = durations.reduce((sum, d) => sum + d, 0);
   if (rawTotal > 0 && effectiveDuration > 0) {
-    const scale = effectiveDuration / rawTotal;
-    for (let i = 0; i < durations.length; i++) {
-      durations[i] = clampDuration(durations[i] * scale);
-    }
+    fitDurations(durations, effectiveDuration);
   }
 
   // Second pass: assign startTimes and build output Blocks
@@ -224,6 +221,84 @@ function toOutputBlock(block: Block | TemplateBlock, startTime: number, duration
 /** Clamp a duration to the min/max range. */
 function clampDuration(d: number): number {
   return Math.max(MIN_BLOCK_DURATION, Math.min(MAX_BLOCK_DURATION, d));
+}
+
+/** Bisection passes used to solve for the scale factor. */
+const SCALE_SEARCH_ITERATIONS = 60;
+
+/** The timeline length produced by scaling every raw duration by `scale`. */
+function totalAtScale(durations: readonly number[], scale: number): number {
+  let sum = 0;
+  for (const d of durations) sum += clampDuration(d * scale);
+  return sum;
+}
+
+/**
+ * Scale `durations` in place so the timeline sums to `target` while every
+ * block stays within the 3–20 s clamp.
+ *
+ * Scaling once and clamping afterwards silently discards the budget of
+ * every block the clamp moved, so the timeline drifts away from the audio
+ * even when a valid allocation exists — durations [1, 1, 100] into 60 s
+ * lands on 26 s although [20, 20, 20] fits exactly. Because `clampDuration`
+ * is monotone non-decreasing in `scale`, so is the summed timeline, which
+ * makes the correct scale findable by bisection.
+ *
+ * The reachable range is [n × MIN, n × MAX]. A target outside it is
+ * over-constrained — 40 blocks can never fill only 60 s with a 3 s floor —
+ * and the search then saturates every block at the nearest bound. That is
+ * the closest the clamp permits and matches the historical output for
+ * those cases; the drift is inherent, not an artifact of the algorithm.
+ */
+function fitDurations(durations: number[], target: number): void {
+  const rawTotal = durations.reduce((sum, d) => sum + d, 0);
+  if (rawTotal <= 0) return;
+
+  // Fast path: when a plain proportional scale clamps nothing it already
+  // hits the target exactly, and skipping the search keeps the historical
+  // arithmetic bit-for-bit for the common case.
+  const plain = target / rawTotal;
+  const clampsNothing = durations.every((d) => {
+    const scaled = d * plain;
+    return scaled >= MIN_BLOCK_DURATION && scaled <= MAX_BLOCK_DURATION;
+  });
+  if (clampsNothing) {
+    for (let i = 0; i < durations.length; i++) durations[i] *= plain;
+    return;
+  }
+
+  // Bracket the solution, doubling until the timeline reaches the target
+  // (or the clamp saturates and it never can).
+  let lo = 0;
+  let hi = 1;
+  for (let i = 0; i < SCALE_SEARCH_ITERATIONS && totalAtScale(durations, hi) < target; i++) {
+    hi *= 2;
+  }
+  for (let i = 0; i < SCALE_SEARCH_ITERATIONS; i++) {
+    const mid = (lo + hi) / 2;
+    if (totalAtScale(durations, mid) < target) lo = mid;
+    else hi = mid;
+  }
+  const scale = (lo + hi) / 2;
+
+  // With the clamped set pinned down, the blocks still free to move solve
+  // exactly — this turns the bisection's approximation into the precise
+  // scale. When every block is clamped (an over-constrained target) there
+  // is nothing left to solve for, so the saturated scale stands.
+  let clampedTotal = 0;
+  let freeRaw = 0;
+  for (const d of durations) {
+    const scaled = d * scale;
+    if (scaled < MIN_BLOCK_DURATION) clampedTotal += MIN_BLOCK_DURATION;
+    else if (scaled > MAX_BLOCK_DURATION) clampedTotal += MAX_BLOCK_DURATION;
+    else freeRaw += d;
+  }
+  const exact = freeRaw > 0 ? (target - clampedTotal) / freeRaw : scale;
+  const finalScale = Number.isFinite(exact) && exact > 0 ? exact : scale;
+
+  for (let i = 0; i < durations.length; i++) {
+    durations[i] = clampDuration(durations[i] * finalScale);
+  }
 }
 
 /** Estimate a total duration from block contents when no audio is available. */

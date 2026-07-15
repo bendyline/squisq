@@ -99,8 +99,8 @@
   padding: 6px 12px;
   font-size: 12px;
   font-weight: 500;
-  color: #ffffff;
-  background: #6366f1;
+  color: var(--squisq-text-on-accent, #ffffff);
+  background: var(--squisq-accent, #6366f1);
   border: none;
   border-radius: 6px;
   cursor: pointer;
@@ -108,7 +108,7 @@
 }
 
 .squisq-diagram-empty-btn:hover {
-  background: #4f46e5;
+  background: var(--squisq-accent-hover, #4f46e5);
 }
 
 .squisq-diagram-maximize-btn {

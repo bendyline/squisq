@@ -16,49 +16,69 @@ vi.mock('mermaid', () => ({
   default: {
     initialize: vi.fn(),
     mermaidAPI: {
-      getDiagramFromText: vi.fn(async () => ({
-        type: 'flowchart-v2',
-        db: {
-          getVertices: () =>
-            new Map([
-              [
-                'start',
-                {
-                  id: 'start',
-                  domId: 'flowchart-start-0',
-                  text: 'Start',
-                  type: 'square',
-                  classes: [],
+      getDiagramFromText: vi.fn(async (source: string) =>
+        /^\s*gantt\b/.test(source)
+          ? { type: 'gantt', db: {} }
+          : /^\s*timeline\b/.test(source)
+            ? { type: 'timeline', db: {} }
+            : {
+                type: 'flowchart-v2',
+                db: {
+                  getVertices: () =>
+                    new Map([
+                      [
+                        'start',
+                        {
+                          id: 'start',
+                          domId: 'flowchart-start-0',
+                          text: 'Start',
+                          type: 'square',
+                          classes: [],
+                        },
+                      ],
+                      [
+                        'next',
+                        {
+                          id: 'next',
+                          domId: 'flowchart-next-1',
+                          text: 'Next',
+                          type: 'square',
+                          classes: [],
+                        },
+                      ],
+                    ]),
+                  getEdges: () => [
+                    {
+                      id: 'L_start_next_0',
+                      start: 'start',
+                      end: 'next',
+                      text: '',
+                      type: 'arrow_point',
+                    },
+                  ],
+                  getDirection: () => 'LR',
                 },
-              ],
-              [
-                'next',
-                {
-                  id: 'next',
-                  domId: 'flowchart-next-1',
-                  text: 'Next',
-                  type: 'square',
-                  classes: [],
-                },
-              ],
-            ]),
-          getEdges: () => [
-            {
-              id: 'L_start_next_0',
-              start: 'start',
-              end: 'next',
-              text: '',
-              type: 'arrow_point',
-            },
-          ],
-          getDirection: () => 'LR',
-        },
-      })),
+              },
+      ),
     },
-    render: vi.fn(async (id: string) => ({
-      svg: `<svg id="${id}" viewBox="0 0 200 100"><g class="node" id="${id}-flowchart-start-0"><rect x="5" y="10" width="70" height="40" /></g><g class="node" id="${id}-flowchart-next-1"><rect x="125" y="10" width="70" height="40" /></g><path class="flowchart-link" data-id="L_start_next_0" d="M75 30L125 30" /></svg>`,
-      diagramType: 'flowchart-v2',
-    })),
+    render: vi.fn(async (id: string, source: string) => {
+      if (/^\s*gantt\b/.test(source)) {
+        return {
+          svg: `<svg id="${id}" viewBox="0 0 400 120"><g class="task"><rect x="10" y="20" width="100" height="30"/><text x="60" y="40">Design</text></g><g class="task"><rect x="130" y="20" width="100" height="30"/><text x="180" y="40">Implement</text></g><g class="task"><rect x="250" y="20" width="100" height="30"/><text x="300" y="40">Ship</text></g></svg>`,
+          diagramType: 'gantt',
+        };
+      }
+      if (/^\s*timeline\b/.test(source)) {
+        return {
+          svg: `<svg id="${id}" viewBox="0 0 400 120"><g class="timeline-event"><text x="40" y="40">Research</text></g><g class="timeline-event"><text x="140" y="40">Build</text></g><g class="timeline-event"><text x="240" y="40">Test</text></g><g class="timeline-event"><text x="340" y="40">Launch</text></g></svg>`,
+          diagramType: 'timeline',
+        };
+      }
+      return {
+        svg: `<svg id="${id}" viewBox="0 0 200 100"><g class="node" id="${id}-flowchart-start-0"><rect x="5" y="10" width="70" height="40" /></g><g class="node" id="${id}-flowchart-next-1"><rect x="125" y="10" width="70" height="40" /></g><path class="flowchart-link" data-id="L_start_next_0" d="M75 30L125 30" /></svg>`,
+        diagramType: 'flowchart-v2',
+      };
+    }),
   },
 }));
 
@@ -153,6 +173,96 @@ describe('MermaidDiagramExtension', () => {
     const markdown = `\`\`\`mermaid\n${SAMPLE}\n\`\`\`\n`;
     const editor = makeEditor(markdown);
     expect(tiptapToMarkdown(editor.getHTML())).toBe(markdown);
+  });
+
+  it('exposes Gantt task CRUD, dependencies, and diagram properties', async () => {
+    const editor = makeEditor(
+      '```mermaid\ngantt\n  title Project plan\n  dateFormat YYYY-MM-DD\n  section Build\n  Design :done, design, 2026-01-01, 3d\n  Implement :active, build, after design, 5d\n  Ship :milestone, after build, 0d\n```\n',
+    );
+    const root = editor.view.dom;
+    await vi.waitFor(() => {
+      expect(root.querySelector('[data-squisq-node-id="design"]')).not.toBeNull();
+    });
+
+    const taskButton = [...root.querySelectorAll<HTMLButtonElement>('button')].find(
+      (button) => button.textContent?.trim() === 'Task',
+    );
+    const connectButton = [...root.querySelectorAll<HTMLButtonElement>('button')].find(
+      (button) => button.textContent?.trim() === 'Connect',
+    );
+    const directionButton = [...root.querySelectorAll<HTMLButtonElement>('button')].find(
+      (button) => button.textContent?.trim() === 'Direction',
+    );
+    const propertiesButton = [...root.querySelectorAll<HTMLButtonElement>('button')].find(
+      (button) => button.textContent?.trim() === 'Properties',
+    );
+    expect(taskButton?.disabled).toBe(false);
+    expect(connectButton?.disabled).toBe(false);
+    expect(directionButton?.disabled).toBe(true);
+    expect(propertiesButton?.disabled).toBe(false);
+
+    fireEvent.doubleClick(root.querySelector('[data-squisq-node-id="design"]')!);
+    await vi.waitFor(() => {
+      expect(root.querySelector<HTMLInputElement>('[aria-label="Mermaid node label"]')?.value).toBe(
+        'Design',
+      );
+    });
+    const label = root.querySelector<HTMLInputElement>('[aria-label="Mermaid node label"]')!;
+    fireEvent.change(label, { target: { value: 'Plan' } });
+    fireEvent.keyDown(label, { key: 'Enter' });
+    await vi.waitFor(() => {
+      expect(tiptapToMarkdown(editor.getHTML())).toContain('Plan :done, design, 2026-01-01, 3d');
+    });
+
+    propertiesButton?.click();
+    await vi.waitFor(() => {
+      expect(root.querySelector('[aria-label="Mermaid diagram properties"]')).not.toBeNull();
+    });
+    expect(
+      root.querySelectorAll('[aria-label="Mermaid diagram properties"] input[type="text"]'),
+    ).toHaveLength(6);
+  });
+
+  it('edits Timeline events while explaining its ordered, connection-free grammar', async () => {
+    const editor = makeEditor(
+      '```mermaid\ntimeline\n  title Product launch\n  Q1 : Research\n  Q2 : Build : Test\n  Q3 : Launch\n```\n',
+    );
+    const root = editor.view.dom;
+    await vi.waitFor(() => {
+      expect(root.querySelector('[data-squisq-node-id="timeline-2-0"]')).not.toBeNull();
+    });
+
+    const eventButton = [...root.querySelectorAll<HTMLButtonElement>('button')].find(
+      (button) => button.textContent?.trim() === 'Event',
+    );
+    const connectButton = [...root.querySelectorAll<HTMLButtonElement>('button')].find(
+      (button) => button.textContent?.trim() === 'Connect',
+    );
+    expect(eventButton?.disabled).toBe(false);
+    expect(connectButton?.disabled).toBe(true);
+    expect(connectButton?.title).toContain('chronological order');
+
+    root
+      .querySelector('[data-squisq-node-id="timeline-2-0"]')
+      ?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    await vi.waitFor(() => {
+      expect(root.querySelector('[aria-label="Selected Mermaid node actions"]')).not.toBeNull();
+    });
+    expect(
+      root.querySelectorAll('[aria-label="Selected Mermaid node actions"] button'),
+    ).toHaveLength(3);
+
+    fireEvent.doubleClick(root.querySelector('[data-squisq-node-id="timeline-2-0"]')!);
+    const label = await vi.waitFor(() => {
+      const input = root.querySelector<HTMLInputElement>('[aria-label="Mermaid node label"]');
+      expect(input?.value).toBe('Research');
+      return input!;
+    });
+    fireEvent.change(label, { target: { value: 'Discovery' } });
+    fireEvent.keyDown(label, { key: 'Enter' });
+    await vi.waitFor(() => {
+      expect(tiptapToMarkdown(editor.getHTML())).toContain('Q1 : Discovery');
+    });
   });
 
   it('selects rendered nodes and exposes palette plus on-canvas edit gestures', async () => {

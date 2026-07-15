@@ -17,6 +17,7 @@ import {
   themedImageTreatment,
 } from '../utils/themeUtils.js';
 import { estimateTextHeight } from './captionUtils.js';
+import { mapAmbientMotion } from './accentImage.js';
 
 export function pullQuote(input: PullQuoteInput, context: TemplateContext): Layer[] {
   const { text, attribution, backgroundImage, ambientMotion } = input;
@@ -47,7 +48,10 @@ export function pullQuote(input: PullQuoteInput, context: TemplateContext): Laye
         ...(treatment ? { treatment } : {}),
       },
       position: { x: 0, y: 0, width: '100%', height: '100%' },
-      animation: ambientMotion ? { type: ambientMotion, duration: 15 } : undefined,
+      // Same authored `ambientMotion` vocabulary as every other image
+      // template — map it to a real Ken Burns animation rather than passing
+      // the token straight through as an animation type.
+      animation: mapAmbientMotion(ambientMotion, 15),
     },
 
     // Dark overlay for text readability

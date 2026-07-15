@@ -5,7 +5,7 @@
  * embedded script, and image handling. ZIP exports are also validated.
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import JSZip from 'jszip';
 import type { Doc, Block, ImageLayer } from '@bendyline/squisq/schemas';
 import { compileTheme, createThemeRegistry } from '@bendyline/squisq/schemas';
@@ -435,5 +435,210 @@ describe('docToHtmlZip', () => {
     const zip = await JSZip.loadAsync(await blobToUint8Array(blob));
     const js = await zip.file('squisq-player.js')!.async('text');
     expect(js).toBe(MOCK_PLAYER_SCRIPT);
+  });
+});
+
+// ============================================
+// Regression: payload duplication, script escaping, ZIP collisions
+// ============================================
+
+/** The options the exported page's boot script hands to SquisqPlayer.mount. */
+interface MountedOptions {
+  images: Record<string, string>;
+  audio?: Record<string, string> | null;
+}
+
+/**
+ * Parse the exported HTML and RUN its boot script against a stub player,
+ * returning what the real player would have received.
+ *
+ * Parsing (rather than string-matching) is load-bearing for these tests: the
+ * escaping bugs are about whether the HTML tokenizer agrees the script element
+ * closed where we think it did, and executing the result proves the payload
+ * survived escaping intact rather than merely "looking right".
+ */
+function bootExportedHtml(html: string): { doc: Doc; options: MountedOptions } {
+  const parsed = new DOMParser().parseFromString(html, 'text/html');
+  const scripts = [...parsed.querySelectorAll('script')];
+  const bootScript = scripts[scripts.length - 1]!.textContent ?? '';
+
+  let captured: { doc: Doc; options: MountedOptions } | undefined;
+  const player = {
+    mount: (_el: unknown, doc: Doc, options: MountedOptions) => {
+      captured = { doc, options };
+    },
+  };
+  new Function('SquisqPlayer', 'document', bootScript)(player, {
+    getElementById: () => ({}),
+  });
+  if (!captured) throw new Error('boot script did not call SquisqPlayer.mount');
+  return captured;
+}
+
+describe('docToHtml — inline image payloads (regression)', () => {
+  it('embeds each distinct image payload exactly once despite path+basename aliases', () => {
+    const buffer = makeImageBuffer();
+    // Exactly the shape collectContainerImages produces: the SAME buffer
+    // under both the container path and the bare basename.
+    const images = new Map<string, ArrayBuffer>([
+      ['assets/photo.png', buffer],
+      ['photo.png', buffer],
+    ]);
+
+    const html = docToHtml(makeDoc({ blocks: [makeImageBlock('assets/photo.png')] }), {
+      playerScript: MOCK_PLAYER_SCRIPT,
+      images,
+    });
+
+    const base64 = arrayBufferToBase64DataUrl(buffer, 'image/png').split(',')[1]!;
+    expect(base64.length).toBeGreaterThan(0);
+    expect(html.split(base64).length - 1).toBe(1);
+  });
+
+  it('keeps both the path and basename aliases resolvable at runtime', () => {
+    const buffer = makeImageBuffer();
+    const images = new Map<string, ArrayBuffer>([
+      ['assets/photo.png', buffer],
+      ['photo.png', buffer],
+    ]);
+
+    const html = docToHtml(makeDoc({ blocks: [makeImageBlock('assets/photo.png')] }), {
+      playerScript: MOCK_PLAYER_SCRIPT,
+      images,
+    });
+
+    const { options } = bootExportedHtml(html);
+    const expected = arrayBufferToBase64DataUrl(buffer, 'image/png');
+    expect(options.images['assets/photo.png']).toBe(expected);
+    expect(options.images['photo.png']).toBe(expected);
+  });
+
+  it('keeps distinct images that share a basename separate', () => {
+    const first = makeImageBuffer();
+    const second = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x01, 0x02]).buffer;
+    const images = new Map<string, ArrayBuffer>([
+      ['one/photo.png', first],
+      ['two/photo.png', second],
+    ]);
+
+    const { options } = bootExportedHtml(
+      docToHtml(makeDoc(), { playerScript: MOCK_PLAYER_SCRIPT, images }),
+    );
+
+    expect(options.images['one/photo.png']).toBe(arrayBufferToBase64DataUrl(first, 'image/png'));
+    expect(options.images['two/photo.png']).toBe(arrayBufferToBase64DataUrl(second, 'image/png'));
+    expect(options.images['one/photo.png']).not.toBe(options.images['two/photo.png']);
+  });
+});
+
+describe('docToHtml — script escaping (regression)', () => {
+  // Drives the HTML tokenizer into "script data double escaped" state, where
+  // a subsequent </script> no longer closes the element.
+  const HOSTILE = '<!--<script>';
+
+  it('does not let doc text swallow the rest of the page', () => {
+    const html = docToHtml(makeDoc({ articleId: `hostile-${HOSTILE}` }), {
+      playerScript: MOCK_PLAYER_SCRIPT,
+    });
+
+    const parsed = new DOMParser().parseFromString(html, 'text/html');
+    const scripts = [...parsed.querySelectorAll('script')];
+    expect(scripts).toHaveLength(2);
+    // If the script never closed, the trailing markup gets parsed as script
+    // text instead of as elements.
+    expect(scripts.some((s) => (s.textContent ?? '').includes('</html>'))).toBe(false);
+    expect(parsed.querySelector('#squisq-root')).not.toBeNull();
+  });
+
+  it('round-trips hostile doc text through the embedded JSON byte-for-byte', () => {
+    const html = docToHtml(makeDoc({ articleId: `hostile-${HOSTILE}` }), {
+      playerScript: MOCK_PLAYER_SCRIPT,
+    });
+
+    // JSON.parse must succeed (an invalid escape would throw) and preserve
+    // the original text exactly.
+    const { doc } = bootExportedHtml(html);
+    expect(doc.articleId).toBe(`hostile-${HOSTILE}`);
+  });
+
+  it('survives a player bundle containing the hostile sequences', () => {
+    const script = `var SquisqPlayer={mount:function(){}};var probe=${JSON.stringify('<!--<script>x</script>')};var re=/<script/;`;
+    const html = docToHtml(makeDoc(), { playerScript: script });
+
+    const parsed = new DOMParser().parseFromString(html, 'text/html');
+    const scripts = [...parsed.querySelectorAll('script')];
+    expect(scripts).toHaveLength(2);
+
+    // The bundle's string literal AND regex literal must keep their MEANING.
+    // (`re.source` legitimately shows the escape — what must not change is
+    // what the regex matches. This is why the escape is `<`: a `\s`-style
+    // escape would silently turn `<script` into "< whitespace cript".)
+    const out = new Function(
+      `${scripts[0]!.textContent};return [probe, re.test('<script')];`,
+    )() as [string, boolean];
+    expect(out[0]).toBe('<!--<script>x</script>');
+    expect(out[1]).toBe(true);
+  });
+
+  it('escapes hostile doc text in the external (ZIP) HTML too', async () => {
+    const blob = await docToHtmlZip(makeDoc({ articleId: `hostile-${HOSTILE}` }), {
+      playerScript: MOCK_PLAYER_SCRIPT,
+    });
+    const zip = await JSZip.loadAsync(await blobToUint8Array(blob));
+    const html = await zip.file('index.html')!.async('text');
+
+    const parsed = new DOMParser().parseFromString(html, 'text/html');
+    expect(parsed.querySelector('#squisq-root')).not.toBeNull();
+    expect(
+      [...parsed.querySelectorAll('script')].some((s) => (s.textContent ?? '').includes('</html>')),
+    ).toBe(false);
+  });
+});
+
+describe('docToHtmlZip — asset naming and skips (regression)', () => {
+  it('keeps two same-basename audio segments as distinct archive members', async () => {
+    const first = new Uint8Array([1, 1, 1, 1]).buffer;
+    const second = new Uint8Array([2, 2, 2, 2]).buffer;
+    const audio = new Map<string, ArrayBuffer>([
+      ['takes/1/narration.webm', first],
+      ['takes/2/narration.webm', second],
+    ]);
+
+    const blob = await docToHtmlZip(makeDoc(), { playerScript: MOCK_PLAYER_SCRIPT, audio });
+    const zip = await JSZip.loadAsync(await blobToUint8Array(blob));
+
+    expect(
+      Object.keys(zip.files).filter((f) => f.startsWith('audio/') && !f.endsWith('/')),
+    ).toHaveLength(2);
+
+    const html = await zip.file('index.html')!.async('text');
+    const { options } = bootExportedHtml(html);
+    const pathA = options.audio?.['takes/1/narration.webm'];
+    const pathB = options.audio?.['takes/2/narration.webm'];
+    expect(pathA).toBeDefined();
+    expect(pathB).toBeDefined();
+    expect(pathA).not.toBe(pathB);
+
+    // Each mapped path must resolve to ITS OWN bytes, not the last writer's.
+    expect([...(await zip.file(pathA!)!.async('uint8array'))]).toEqual([1, 1, 1, 1]);
+    expect([...(await zip.file(pathB!)!.async('uint8array'))]).toEqual([2, 2, 2, 2]);
+  });
+
+  it('warns rather than silently dropping an image with an unsafe path', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    try {
+      // `..` segments are rejected so the archive can't be extracted outside
+      // its root — but the doc still references the image, so the export
+      // carries a broken reference and must say so.
+      const images = new Map<string, ArrayBuffer>([['../escape.png', makeImageBuffer()]]);
+      const blob = await docToHtmlZip(makeDoc(), { playerScript: MOCK_PLAYER_SCRIPT, images });
+      const zip = await JSZip.loadAsync(await blobToUint8Array(blob));
+
+      expect(Object.keys(zip.files).some((f) => f.includes('escape.png'))).toBe(false);
+      expect(warn).toHaveBeenCalledTimes(1);
+      expect(String(warn.mock.calls[0]![0])).toContain('../escape.png');
+    } finally {
+      warn.mockRestore();
+    }
   });
 });

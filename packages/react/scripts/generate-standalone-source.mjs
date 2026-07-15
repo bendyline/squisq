@@ -9,7 +9,7 @@
  *   const html = `<script>${PLAYER_BUNDLE}</script>`;
  */
 
-import { readFileSync, writeFileSync } from 'fs';
+import { readFileSync, unlinkSync, writeFileSync } from 'fs';
 import { resolve, dirname } from 'path';
 import { fileURLToPath } from 'url';
 
@@ -17,7 +17,10 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const distDir = resolve(__dirname, '..', 'dist');
 const iifeFile = resolve(distDir, 'squisq-player.global.js');
 const cssFile = resolve(distDir, 'squisq-player.css');
+const fullIifeFile = resolve(distDir, 'squisq-player.full.global.js');
+const fullCssFile = resolve(distDir, 'squisq-player.full.css');
 const outJs = resolve(distDir, 'standalone-source.js');
+const outDts = resolve(distDir, 'standalone-source.d.ts');
 
 const source = readFileSync(iifeFile, 'utf-8');
 const css = readFileSync(cssFile, 'utf-8');
@@ -28,6 +31,11 @@ const browserReadySource = inlineCssSource(source, css);
 // sidecar CSS file. The standalone build itself targets the browser, so Node
 // built-ins never enter this artifact.
 writeFileSync(iifeFile, browserReadySource, 'utf-8');
+writeFileSync(
+  fullIifeFile,
+  inlineCssSource(readFileSync(fullIifeFile, 'utf-8'), readFileSync(fullCssFile, 'utf-8')),
+  'utf-8',
+);
 
 // Write ESM module that exports the source as a string. The matching
 // .d.ts lives at `src/standalone-source.d.ts` and is committed —
@@ -38,6 +46,9 @@ writeFileSync(
   `/** Auto-generated — do not edit. Contains the squisq-player IIFE bundle as a string. */\nexport const PLAYER_BUNDLE = ${JSON.stringify(browserReadySource)};\n`,
   'utf-8',
 );
+writeFileSync(outDts, 'export declare const PLAYER_BUNDLE: string;\n', 'utf-8');
+unlinkSync(cssFile);
+unlinkSync(fullCssFile);
 
 // eslint-disable-next-line no-undef, no-console
 console.log(

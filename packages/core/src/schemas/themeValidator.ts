@@ -161,6 +161,17 @@ class V {
       }
       if (!this.isString(c.name) || c.name.length === 0) {
         this.err(`${path}.custom.name`, 'expected non-empty string');
+      } else if (
+        /[<>{};]/.test(c.name) ||
+        [...c.name].some((char) => {
+          const code = char.codePointAt(0)!;
+          return code < 32 || code === 127;
+        })
+      ) {
+        this.err(
+          `${path}.custom.name`,
+          'font name contains control characters or CSS/HTML delimiters',
+        );
       }
       if (!this.isString(c.fallback) || !VALID_FALLBACK.has(c.fallback)) {
         this.err(

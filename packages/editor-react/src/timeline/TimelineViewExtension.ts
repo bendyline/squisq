@@ -19,13 +19,10 @@ import {
   type AsciiTimeline,
 } from '@bendyline/squisq/doc';
 import { TimelineEditorWidget } from './TimelineEditorWidget';
+import { containFenceWidgetEvents } from '../fenceWidgets/fenceWidgetHost';
+import { mapFenceEntries, type FenceBlockEntry } from '../fenceWidgets/fenceRegistry';
 
-export interface TimelineBlockEntry {
-  /** Synthetic session id, stable across edits to one fence. */
-  id: string;
-  /** Current document position of the codeBlock node. */
-  pos: number;
-}
+export type TimelineBlockEntry = FenceBlockEntry;
 
 export interface TimelineViewPluginState {
   entries: TimelineBlockEntry[];
@@ -122,22 +119,7 @@ function buildDecorations(
           // decoration. Keep their complete edit/composition stream inside
           // the React root so browser/IME `beforeinput` events cannot also be
           // interpreted as text insertion at the document selection.
-          for (const eventName of [
-            'pointerdown',
-            'mousedown',
-            'keydown',
-            'keyup',
-            'beforeinput',
-            'input',
-            'change',
-            'compositionstart',
-            'compositionupdate',
-            'compositionend',
-            'paste',
-            'cut',
-          ]) {
-            container.addEventListener(eventName, (event) => event.stopPropagation());
-          }
+          containFenceWidgetEvents(container);
           const root = createRoot(container);
           root.render(createElement(TimelineEditorWidget, { editor, blockId: entry.id }));
           container.__squisqTimelineRoot = root;
@@ -166,26 +148,7 @@ function applyState(
 ): TimelineViewPluginState {
   if (!tr.docChanged) return previous;
 
-  const mapped = new Map<number, string>();
-  const claimed = new Set<string>();
-  for (const entry of previous.entries) {
-    const result = tr.mapping.mapResult(entry.pos, 1);
-    if (!result.deleted) {
-      mapped.set(result.pos, entry.id);
-      claimed.add(entry.id);
-    }
-  }
-  // `setNodeMarkup` during language promotion can mark the opening token as
-  // deleted even though the codeBlock still occupies the mapped position.
-  for (const entry of previous.entries) {
-    if (claimed.has(entry.id)) continue;
-    const result = tr.mapping.mapResult(entry.pos, 1);
-    if (mapped.has(result.pos)) continue;
-    if (doc.nodeAt(result.pos)?.type.name === 'codeBlock') {
-      mapped.set(result.pos, entry.id);
-      claimed.add(entry.id);
-    }
-  }
+  const mapped = mapFenceEntries(tr, previous.entries, doc);
 
   let seq = previous.seq;
   const entries: TimelineBlockEntry[] = [];

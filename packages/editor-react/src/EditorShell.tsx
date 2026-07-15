@@ -66,6 +66,7 @@ import type { PrunePolicy, SaveVersionResult } from '@bendyline/squisq/versions'
 import type { CSSProperties, KeyboardEvent as ReactKeyboardEvent, ReactNode } from 'react';
 import { MediaContext } from '@bendyline/squisq-react';
 import { writeCanvasSettingsStyle, type WriteCanvasSettings } from './writeCanvasSettings';
+import { useModalDialog } from './modal/useModalDialog';
 
 export type { EditorColorScheme } from './EditorContext';
 
@@ -162,6 +163,8 @@ export interface EditorShellProps {
   toolbarSlotAfterActions?: ReactNode;
   /** Content rendered at the rightmost end of the toolbar, after all other elements. */
   toolbarSlotRight?: ReactNode;
+  /** Host-supplied content rendered at the right edge of the bottom status bar. */
+  statusBarSlotRight?: ReactNode;
   /**
    * Whether to show the "Play" (preview) tab in the toolbar. When false, the
    * tab and its preview panel are hidden, and ⌘3 becomes a no-op. Use this
@@ -218,8 +221,8 @@ export interface EditorShellProps {
    */
   writeCanvasSettings?: WriteCanvasSettings;
   /**
-   * Render the bottom status bar (word / character / line / block counts
-   * and parse-state indicator). Defaults to `true`. Set to `false` in
+   * Render the bottom status bar (word / character / line / block counts,
+   * parse errors, and optional host status). Defaults to `true`. Set to `false` in
    * embedded surfaces — chat composers and other short-form inputs —
    * where the stats are noise.
    */
@@ -275,6 +278,14 @@ export interface EditorShellProps {
    * remote API, …) implement this; the editor stays agnostic.
    */
   documentLinkProvider?: DocumentLinkProvider | null;
+  /**
+   * Extra link schemes this host resolves itself (e.g. an app-internal
+   * navigation protocol). The link dialog validates typed URLs against
+   * core's `sanitizeUrl` with these allowed, so an author isn't told a
+   * scheme the host DOES handle is unsupported. Executable schemes
+   * (`javascript:`, `vbscript:`, `data:`) are refused regardless.
+   */
+  linkSchemes?: readonly string[];
   /**
    * Whether the in-editor media recorder is surfaced in the toolbar.
    * Defaults to true — when a `mediaProvider` is wired, a record
@@ -440,6 +451,7 @@ export function EditorShell({
   toolbarSlotLeft,
   toolbarSlotAfterActions,
   toolbarSlotRight,
+  statusBarSlotRight,
   showPlayTab = true,
   submitOnEnter,
   codeContext,
@@ -455,6 +467,7 @@ export function EditorShell({
   onFindModeChange,
   mentionProvider,
   documentLinkProvider,
+  linkSchemes,
   allowRecording = true,
   allowNarrate = true,
   placeholder,
@@ -512,6 +525,7 @@ export function EditorShell({
         imageDisplayMode={imageDisplayMode}
         mentionProvider={mentionProvider}
         documentLinkProvider={documentLinkProvider}
+        linkSchemes={linkSchemes}
         allowRecording={allowRecording}
         allowNarrate={allowNarrate}
         fileName={fileName}
@@ -541,6 +555,7 @@ export function EditorShell({
           toolbarSlotLeft={toolbarSlotLeft}
           toolbarSlotAfterActions={toolbarSlotAfterActions}
           toolbarSlotRight={toolbarSlotRight}
+          statusBarSlotRight={statusBarSlotRight}
           showPlayTab={showPlayTab}
           submitOnEnter={submitOnEnter}
           codeContext={codeContext}
@@ -579,6 +594,7 @@ interface EditorShellInnerProps {
   toolbarSlotLeft?: ReactNode;
   toolbarSlotAfterActions?: ReactNode;
   toolbarSlotRight?: ReactNode;
+  statusBarSlotRight?: ReactNode;
   showPlayTab: boolean;
   submitOnEnter?: () => void;
   codeContext?: CodeContext;
@@ -613,6 +629,7 @@ function EditorShellInner({
   toolbarSlotLeft,
   toolbarSlotAfterActions,
   toolbarSlotRight,
+  statusBarSlotRight,
   showPlayTab,
   submitOnEnter,
   codeContext,
@@ -1122,7 +1139,7 @@ function EditorShellInner({
             suppress via `showStatusBar={false}` for embedded chat-style
             composers where the stats are noise. The image viewer has its
             own dimension/zoom status row, so suppress here too. */}
-            {statusBarVisible && !isImageMode && <StatusBar />}
+            {statusBarVisible && !isImageMode && <StatusBar slotRight={statusBarSlotRight} />}
           </PresentationModeProvider>
         </PreviewSettingsProvider>
       </CustomThemeProvider>
@@ -1189,8 +1206,7 @@ function ImageEditModal({
 }: ImageEditModalProps) {
   const modalRef = useRef<HTMLDivElement>(null);
   const surfaceRef = useRef<HTMLDivElement>(null);
-  const onCloseRef = useRef(onClose);
-  onCloseRef.current = onClose;
+  useModalDialog({ rootRef: modalRef, dialogRef: surfaceRef, onClose });
   const extension = relativePath.split(/[?#]/, 1)[0]?.split('.').pop()?.toLowerCase();
   const saveFormat: 'png' | 'jpeg' | 'webp' | null =
     extension === 'png'
@@ -1250,54 +1266,6 @@ function ImageEditModal({
     },
     [mediaProvider, relativePath, onSaved],
   );
-
-  // Close on Escape — global listener so it works regardless of focus.
-  useEffect(() => {
-    const previousFocus = document.activeElement as HTMLElement | null;
-    const shell = modalRef.current?.closest('.squisq-editor-shell');
-    const inertSiblings = shell
-      ? Array.from(shell.children).filter((element) => !element.contains(modalRef.current))
-      : [];
-    inertSiblings.forEach((element) => {
-      (element as HTMLElement).inert = true;
-    });
-    surfaceRef.current
-      ?.querySelector<HTMLElement>(
-        'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])',
-      )
-      ?.focus();
-    const handler = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        e.preventDefault();
-        onCloseRef.current();
-        return;
-      }
-      if (e.key !== 'Tab' || !surfaceRef.current) return;
-      const focusable = Array.from(
-        surfaceRef.current.querySelectorAll<HTMLElement>(
-          'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
-        ),
-      );
-      if (focusable.length === 0) return;
-      const first = focusable[0];
-      const last = focusable[focusable.length - 1];
-      if (e.shiftKey && document.activeElement === first) {
-        e.preventDefault();
-        last.focus();
-      } else if (!e.shiftKey && document.activeElement === last) {
-        e.preventDefault();
-        first.focus();
-      }
-    };
-    window.addEventListener('keydown', handler);
-    return () => {
-      window.removeEventListener('keydown', handler);
-      inertSiblings.forEach((element) => {
-        (element as HTMLElement).inert = false;
-      });
-      previousFocus?.focus();
-    };
-  }, []);
 
   return (
     <div

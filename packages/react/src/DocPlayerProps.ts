@@ -1,0 +1,53 @@
+import type { Doc, SurfaceScheme, Theme } from '@bendyline/squisq/schemas';
+import type { ViewportConfig } from '@bendyline/squisq/doc';
+import type { AudioController } from './hooks/AudioController';
+import type {
+  BlockMarker,
+  CaptionStyle,
+  DisplayMode,
+  PlaybackActions,
+  PlaybackState,
+  SquisqRenderAPI,
+} from './types';
+
+export interface DocPlayerProps {
+  /** The Doc to play. Wins over `markdown` when both are provided. */
+  doc?: Doc;
+  /** Markdown source to convert when `doc` is absent. */
+  markdown?: string;
+  /** Base path for resolving media URLs (default: `'.'`). */
+  basePath?: string;
+  /** Render mode for deterministic video capture. */
+  renderMode?: boolean;
+  /** Render slide transitions and per-layer animations (default: true). */
+  animationsEnabled?: boolean;
+  /** Receives the instance-scoped render API, and `null` on cleanup. */
+  onRenderAPIReady?: (api: SquisqRenderAPI | null) => void;
+  autoPlay?: boolean;
+  onEnded?: () => void;
+  onTimeUpdate?: (time: number) => void;
+  /** Optional host-owned audio controller. */
+  audioController?: AudioController;
+  /** Explicit synthetic clock for timed documents that intentionally have no audio asset. */
+  audioMode?: 'media' | 'synthetic';
+  showControls?: boolean;
+  showScrubber?: boolean;
+  muted?: boolean;
+  captionsEnabled?: boolean;
+  onCaptionsToggle?: (enabled: boolean) => void;
+  onPlaybackStateChange?: (state: PlaybackState) => void;
+  onControlsReady?: (controls: PlaybackActions & { play: () => void; pause: () => void }) => void;
+  isFullscreen?: boolean;
+  onFullscreenToggle?: () => void;
+  onBlockMarkers?: (markers: BlockMarker[]) => void;
+  forceViewport?: ViewportConfig;
+  theme?: Theme;
+  surface?: SurfaceScheme | 'auto';
+  /** Video, manual slideshow, or long-scrolling linear rendition. */
+  displayMode?: DisplayMode;
+  showCoverSlide?: boolean;
+  coverVisible?: boolean;
+  captionStyle?: CaptionStyle;
+  enableSwipe?: boolean;
+  globalKeyboardShortcuts?: boolean;
+}

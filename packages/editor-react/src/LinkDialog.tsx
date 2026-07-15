@@ -12,8 +12,20 @@
  * `home.md → resume.md` without typing the relative path by hand.
  */
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
+import { sanitizeUrl } from '@bendyline/squisq/markdown';
 import type { DocumentLinkProvider, DocumentLinkCandidate } from './EditorContext';
+import { useModalDialog } from './modal/useModalDialog';
+
+/**
+ * Display-only: name the offending scheme in the error message. The
+ * ALLOW/REJECT decision is always core's `sanitizeUrl` — this regex never
+ * gates anything, so it cannot drift into a second policy.
+ */
+function schemeForMessage(raw: string): string | null {
+  const match = /^\s*([a-z][a-z0-9+.-]*)\s*:/i.exec(raw);
+  return match ? match[1]!.toLowerCase() : null;
+}
 
 export interface LinkDialogProps {
   /** Whether this is a brand-new link (Insert) or an existing one (Update). */
@@ -36,12 +48,26 @@ export interface LinkDialogProps {
    * types and offers click-to-pick suggestions.
    */
   documentLinkProvider?: DocumentLinkProvider | null;
+  /**
+   * Extra link schemes the host intercepts itself (e.g. an app-internal
+   * navigation protocol). Threaded straight into core's `sanitizeUrl` so
+   * the dialog accepts exactly what the renderer will later accept —
+   * executable schemes stay refused regardless of what's listed here.
+   */
+  linkSchemes?: readonly string[];
 }
 
 /**
  * Centered modal with Text and URL inputs. Submits on Enter, dismisses
  * on Escape or backdrop click. Auto-focuses URL when the text field is
  * already populated; otherwise focuses Text.
+ *
+ * The URL is validated against core's `sanitizeUrl` — the SAME function
+ * `MarkdownRenderer` re-runs on every href at render time. A rejected
+ * scheme (`javascript:`, `data:`, `ftp:`, …) is already inert in the
+ * player and in exported HTML, so this is not a security boundary; it
+ * exists so the author is told immediately instead of silently
+ * authoring a link that will never resolve anywhere.
  */
 export function LinkDialog({
   mode,
@@ -50,6 +76,7 @@ export function LinkDialog({
   onConfirm,
   onClose,
   documentLinkProvider,
+  linkSchemes,
 }: LinkDialogProps) {
   const [text, setText] = useState(initialText);
   const [url, setUrl] = useState(initialUrl);
@@ -60,14 +87,12 @@ export function LinkDialog({
   const textRef = useRef<HTMLInputElement>(null);
   const urlRef = useRef<HTMLInputElement>(null);
   const docSearchRef = useRef<HTMLInputElement>(null);
-
-  useEffect(() => {
-    // If we have a caption already, the URL is what the user is most
-    // likely here to edit; otherwise focus the caption field first.
-    const target = initialText ? urlRef.current : textRef.current;
-    target?.focus();
-    target?.select();
-  }, [initialText]);
+  const overlayRef = useRef<HTMLDivElement>(null);
+  const dialogRef = useRef<HTMLFormElement>(null);
+  const headingId = useId();
+  const urlErrorId = useId();
+  const initialFocusRef = initialText ? urlRef : textRef;
+  useModalDialog({ rootRef: overlayRef, dialogRef, initialFocusRef, onClose });
 
   // Refresh the document candidate list whenever the user types into
   // the picker or first opens it. Empty query = initial list.
@@ -102,23 +127,34 @@ export function LinkDialog({
     return undefined;
   }, [tab]);
 
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        e.stopPropagation();
-        onClose();
-      }
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [onClose]);
+  // An empty URL is legitimate — callers read it as "remove link" (update)
+  // or "do nothing" (insert), so it is never an error here. Anything else
+  // must survive the renderer's own sanitizer.
+  const urlError = useMemo<string | null>(() => {
+    const trimmed = url.trim();
+    if (!trimmed) return null;
+    const allowed = sanitizeUrl(
+      trimmed,
+      'link',
+      linkSchemes ? { extraLinkSchemes: linkSchemes } : undefined,
+    );
+    if (allowed !== null) return null;
+    const scheme = schemeForMessage(trimmed);
+    return scheme
+      ? `“${scheme}:” links aren’t supported — they won’t open when the document is viewed or exported. Use https:, mailto:, tel:, an anchor like #section, or a relative path.`
+      : 'That URL isn’t supported. Use https:, mailto:, tel:, an anchor like #section, or a relative path.';
+  }, [url, linkSchemes]);
 
   const handleSubmit = useCallback(
     (e: React.FormEvent) => {
       e.preventDefault();
+      if (urlError) {
+        urlRef.current?.focus();
+        return;
+      }
       onConfirm(text, url);
     },
-    [text, url, onConfirm],
+    [text, url, onConfirm, urlError],
   );
 
   const handleBackdropClick = useCallback(
@@ -143,10 +179,20 @@ export function LinkDialog({
   }, []);
 
   return (
-    <div className="squisq-link-dialog-overlay" onMouseDown={handleBackdropClick}>
-      <form className="squisq-link-dialog" onSubmit={handleSubmit}>
+    <div ref={overlayRef} className="squisq-link-dialog-overlay" onMouseDown={handleBackdropClick}>
+      <form
+        ref={dialogRef}
+        className="squisq-link-dialog"
+        onSubmit={handleSubmit}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={headingId}
+        tabIndex={-1}
+      >
         <div className="squisq-link-dialog-header">
-          <h2 className="squisq-link-dialog-title">{heading}</h2>
+          <h2 id={headingId} className="squisq-link-dialog-title">
+            {heading}
+          </h2>
           <button
             type="button"
             className="squisq-link-dialog-close"
@@ -196,13 +242,20 @@ export function LinkDialog({
               <input
                 ref={urlRef}
                 type="text"
-                className="squisq-link-dialog-input"
+                className={`squisq-link-dialog-input${urlError ? ' squisq-link-dialog-input--invalid' : ''}`}
                 value={url}
                 onChange={(e) => setUrl(e.target.value)}
                 placeholder="https://example.com"
                 spellCheck={false}
                 autoComplete="off"
+                aria-invalid={urlError ? true : undefined}
+                aria-describedby={urlError ? urlErrorId : undefined}
               />
+              {urlError ? (
+                <span id={urlErrorId} className="squisq-link-dialog-error" role="alert">
+                  {urlError}
+                </span>
+              ) : null}
             </label>
           ) : (
             <div className="squisq-link-dialog-doc-picker">
@@ -266,7 +319,11 @@ export function LinkDialog({
           >
             Cancel
           </button>
-          <button type="submit" className="squisq-link-dialog-btn squisq-link-dialog-btn--primary">
+          <button
+            type="submit"
+            className="squisq-link-dialog-btn squisq-link-dialog-btn--primary"
+            disabled={urlError !== null}
+          >
             {submitLabel}
           </button>
         </div>

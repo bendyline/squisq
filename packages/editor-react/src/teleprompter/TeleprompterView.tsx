@@ -25,7 +25,12 @@ import { TeleprompterSelfView } from './TeleprompterSelfView';
 import { drawPrompterFrame, type CanvasPrompterFrame } from './canvasRenderer';
 import { ensureTeleprompterStyles, TELEPROMPTER_CSS } from './teleprompterTheme';
 import { useNarrationRecorder } from './recording/useNarrationRecorder';
-import { buildNarrationSavePlan, executeNarrationSave } from './recording/narrationSave';
+import {
+  buildNarrationSavePlan,
+  discardNarrationSaveProgress,
+  executeNarrationSave,
+  type NarrationSaveProgress,
+} from './recording/narrationSave';
 
 /** Editor plumbing the recording flow needs; omit for prompter-only use. */
 export interface TeleprompterRecordingDeps {
@@ -73,6 +78,52 @@ export function TeleprompterView(props: TeleprompterViewProps) {
   });
   const recorderRef = useRef(recorder);
   recorderRef.current = recorder;
+
+  // `recording` is re-created every render (it carries the live markdown
+  // source), but handleSave's closure freezes whatever it saw at click time.
+  // Read through the ref so the preamble composes from the CURRENT source
+  // rather than a snapshot taken before the awaited media writes.
+  const recordingRef = useRef(recording);
+  recordingRef.current = recording;
+
+  // What THIS take's save attempts have already committed. A retry resumes
+  // from here instead of writing a second timestamped audio file; a
+  // retake/discard cleans the orphans up. Keyed by take identity so a new
+  // recording never inherits the previous take's artifacts.
+  const saveProgressRef = useRef<{ take: unknown; progress: NarrationSaveProgress } | null>(null);
+
+  const progressForTake = useCallback((take: unknown): NarrationSaveProgress => {
+    const existing = saveProgressRef.current;
+    if (existing && existing.take === take) return existing.progress;
+    const fresh = { take, progress: {} };
+    saveProgressRef.current = fresh;
+    return fresh.progress;
+  }, []);
+
+  /** Drop any half-written artifacts for the take being abandoned. */
+  const cleanupAbandonedSave = useCallback(() => {
+    const pending = saveProgressRef.current;
+    saveProgressRef.current = null;
+    const deps = recordingRef.current;
+    if (!pending || !deps) return;
+    if (pending.progress.audioPath === undefined && pending.progress.sidecarPath === undefined) {
+      return;
+    }
+    void discardNarrationSaveProgress(pending.progress, {
+      mediaProvider: deps.mediaProvider,
+      container: deps.container,
+    });
+  }, []);
+
+  const handleRetake = useCallback(() => {
+    cleanupAbandonedSave();
+    recorderRef.current.retake();
+  }, [cleanupAbandonedSave]);
+
+  const handleDiscard = useCallback(() => {
+    cleanupAbandonedSave();
+    recorderRef.current.discard();
+  }, [cleanupAbandonedSave]);
 
   // The docked chrome (controls, float note) also uses prompter classes.
   useEffect(() => {
@@ -155,13 +206,21 @@ export function TeleprompterView(props: TeleprompterViewProps) {
         baseWpm: controllerRef.current.prefs.baseWpm,
         ...(take.cameraOffsetSec !== undefined ? { cameraOffsetSec: take.cameraOffsetSec } : {}),
       });
-      const result = await executeNarrationSave(plan, take, {
-        mediaProvider: recording.mediaProvider,
-        container: recording.container,
-        markdownSource: recording.markdownSource,
-        setMarkdownSource: recording.setMarkdownSource,
-        bumpMediaRevision: recording.bumpMediaRevision,
-      });
+      const result = await executeNarrationSave(
+        plan,
+        take,
+        {
+          mediaProvider: recording.mediaProvider,
+          container: recording.container,
+          getMarkdownSource: () => recordingRef.current?.markdownSource ?? '',
+          setMarkdownSource: recording.setMarkdownSource,
+          bumpMediaRevision: recording.bumpMediaRevision,
+        },
+        progressForTake(take),
+      );
+      // Committed: the markdown now references these paths, so they are no
+      // longer orphan candidates.
+      saveProgressRef.current = null;
       recorderRef.current.finishSave(true);
       setSaveNotice(
         `Saved ${result.audioPath}${take.alignment ? ' — blocks re-timed to your voice' : ''}`,
@@ -169,7 +228,7 @@ export function TeleprompterView(props: TeleprompterViewProps) {
     } catch (err: unknown) {
       recorderRef.current.finishSave(false, err instanceof Error ? err : new Error(String(err)));
     }
-  }, [recording]);
+  }, [recording, progressForTake]);
 
   const surfaceProps = useMemo(
     () => ({
@@ -314,10 +373,10 @@ export function TeleprompterView(props: TeleprompterViewProps) {
           <button type="button" onClick={() => void handleSave()}>
             ✓ Save narration
           </button>
-          <button type="button" onClick={recorder.retake}>
+          <button type="button" onClick={handleRetake}>
             ↺ Retake
           </button>
-          <button type="button" onClick={recorder.discard}>
+          <button type="button" onClick={handleDiscard}>
             ✕ Discard
           </button>
           {recorder.error ? <span>⚠ {recorder.error.message}</span> : null}

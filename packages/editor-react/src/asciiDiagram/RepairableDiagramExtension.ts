@@ -24,13 +24,9 @@ import { Decoration, DecorationSet } from '@tiptap/pm/view';
 import type { Node as PMNode } from '@tiptap/pm/model';
 import type { Editor } from '@tiptap/react';
 import { isEligibleAsciiFenceLang, isRepairableDiagram } from '@bendyline/squisq/doc';
+import { mapFenceEntries, type FenceBlockEntry } from '../fenceWidgets/fenceRegistry';
 
-export interface RepairableBlockEntry {
-  /** Synthetic session id (`repair-N`), stable across edits for one block. */
-  id: string;
-  /** Document position of the codeBlock node at the current state. */
-  pos: number;
-}
+export type RepairableBlockEntry = FenceBlockEntry;
 
 export interface RepairablePluginState {
   entries: RepairableBlockEntry[];
@@ -123,24 +119,7 @@ function applyState(
 ): RepairablePluginState {
   if (!tr.docChanged) return prev;
 
-  const mapped = new Map<number, string>();
-  const claimed = new Set<string>();
-  for (const entry of prev.entries) {
-    const result = tr.mapping.mapResult(entry.pos, 1);
-    if (!result.deleted) {
-      mapped.set(result.pos, entry.id);
-      claimed.add(entry.id);
-    }
-  }
-  for (const entry of prev.entries) {
-    if (claimed.has(entry.id)) continue;
-    const result = tr.mapping.mapResult(entry.pos, 1);
-    if (mapped.has(result.pos)) continue;
-    if (doc.nodeAt(result.pos)?.type.name === 'codeBlock') {
-      mapped.set(result.pos, entry.id);
-      claimed.add(entry.id);
-    }
-  }
+  const mapped = mapFenceEntries(tr, prev.entries, doc);
 
   let seq = prev.seq;
   const entries: RepairableBlockEntry[] = [];

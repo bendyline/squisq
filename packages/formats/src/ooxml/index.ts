@@ -38,6 +38,8 @@ export {
   getPartXml,
   getPartBinary,
   getCoreProperties,
+  resolveMainPartPath,
+  requireMainPartPath,
 } from './reader.js';
 
 // Read utilities

@@ -49,6 +49,27 @@ describe('generateRenderHtml', () => {
     expect(html).toContain('hero.png');
   });
 
+  // The encoder builds the binary string in 32 KiB chunks rather than one byte
+  // at a time (per-byte rope allocation was ~6-9x slower at 8-32 MB). Chunking
+  // must not corrupt bytes at a chunk boundary or drop a partial final chunk.
+  it('base64-encodes payloads spanning chunk boundaries byte-exactly', () => {
+    // Deliberately not a multiple of the 32 KiB chunk size, so the last chunk
+    // is partial. All 256 byte values appear, including NUL and high bytes.
+    const size = 0x8000 * 2 + 1234;
+    const bytes = new Uint8Array(size);
+    for (let i = 0; i < size; i++) bytes[i] = i % 256;
+
+    const images = new Map<string, ArrayBuffer>([['big.png', bytes.buffer]]);
+    const html = generateRenderHtml(minimalDoc(), { playerScript: PLAYER_STUB, images });
+
+    const match = html.match(/data:image\/png;base64,([A-Za-z0-9+/=]+)/);
+    expect(match).not.toBeNull();
+
+    const decoded = Uint8Array.from(atob(match![1]), (c) => c.charCodeAt(0));
+    expect(decoded.length).toBe(size);
+    expect(Array.from(decoded)).toEqual(Array.from(bytes));
+  });
+
   it('passes a null audio map when no audio is supplied', () => {
     const html = generateRenderHtml(minimalDoc(), { playerScript: PLAYER_STUB });
     expect(html).toContain('var audio = null;');

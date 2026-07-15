@@ -16,6 +16,12 @@ export interface InitMessage {
   height: number;
   fps: number;
   quality: VideoQuality;
+  /**
+   * Total frames the caller intends to submit, when known. The worker cannot
+   * derive this itself (frames simply arrive until `finalize`), so without it
+   * frame progress is reported as indeterminate rather than guessed.
+   */
+  totalFrames?: number;
   ffmpegWasm?: FfmpegWasmLoadConfig;
 }
 
@@ -54,10 +60,16 @@ export interface CapabilitiesMessage {
 /** Progress update during encoding. */
 export interface ProgressMessage {
   type: 'progress';
-  /** 0–100 completion percentage */
+  /** 0–100 completion percentage. Meaningless when {@link indeterminate}. */
   percent: number;
   /** Human-readable phase description */
   phase: string;
+  /**
+   * True when the worker cannot compute a real completion ratio (no
+   * `totalFrames` was supplied at init). Consumers should show a busy
+   * indicator and ignore `percent` rather than render a fake bar.
+   */
+  indeterminate?: boolean;
 }
 
 /** Encoding complete — MP4 data returned. */

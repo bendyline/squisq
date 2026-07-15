@@ -5,7 +5,7 @@
  * resulting ArrayBuffers with pdf-lib to verify structure/metadata.
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { PDFDocument } from 'pdf-lib';
 import type {
   MarkdownDocument,
@@ -112,7 +112,7 @@ describe('markdownDocToPdf', () => {
     expect(pdf.getPageCount()).toBe(1);
   });
 
-  it('renders a link', async () => {
+  it('renders a clickable link annotation', async () => {
     const doc: MarkdownDocument = {
       type: 'document',
       children: [
@@ -131,6 +131,27 @@ describe('markdownDocToPdf', () => {
     };
     const pdf = await exportAndLoad(doc);
     expect(pdf.getPageCount()).toBe(1);
+    expect(pdf.getPage(0).node.Annots()?.size()).toBe(1);
+  });
+
+  it('does not create annotations for unsafe link schemes', async () => {
+    const doc: MarkdownDocument = {
+      type: 'document',
+      children: [
+        {
+          type: 'paragraph',
+          children: [
+            {
+              type: 'link',
+              url: 'javascript:alert(1)',
+              children: [text('Unsafe')],
+            } as MarkdownLink,
+          ],
+        } as MarkdownParagraph,
+      ],
+    };
+    const pdf = await exportAndLoad(doc);
+    expect(pdf.getPage(0).node.Annots()?.size() ?? 0).toBe(0);
   });
 
   it('renders unordered and ordered lists', async () => {
@@ -318,5 +339,142 @@ describe('docToPdf', () => {
     const buffer = await docToPdf(doc);
     expect(buffer).toBeInstanceOf(ArrayBuffer);
     expect(buffer.byteLength).toBeGreaterThan(0);
+  });
+});
+
+// ============================================
+// Unencodable Characters (regression)
+// ============================================
+
+describe('markdownDocToPdf with characters outside WinAnsi', () => {
+  /** Emoji + CJK + Cyrillic + arrows across every text-bearing block type. */
+  function nastyDoc(): MarkdownDocument {
+    return {
+      type: 'document',
+      children: [
+        {
+          type: 'heading',
+          depth: 1,
+          children: [text('Status \u{1F600} — “ready”')],
+        } as MarkdownHeading,
+        {
+          type: 'paragraph',
+          children: [
+            text('Cyrillic Жизнь, CJK 中文, arrow → done. '),
+            { type: 'strong', children: [text('Ещё \u{1F680}')] } as MarkdownStrong,
+            { type: 'inlineCode', value: 'ключ → значение' } as MarkdownInlineCode,
+          ],
+        } as MarkdownParagraph,
+        {
+          type: 'code',
+          value: 'const emoji = "\u{1F600}";\n\tconst 中文 = "value";',
+        } as MarkdownCodeBlock,
+        {
+          type: 'blockquote',
+          children: [{ type: 'paragraph', children: [text('引用 — quoted \u{1F4A1}')] }],
+        } as MarkdownBlockquote,
+        {
+          type: 'list',
+          ordered: false,
+          children: [
+            {
+              type: 'listItem',
+              children: [{ type: 'paragraph', children: [text('Пункт → один')] }],
+            },
+          ],
+        } as MarkdownList,
+        {
+          type: 'table',
+          children: [
+            {
+              type: 'tableRow',
+              children: [
+                { type: 'tableCell', isHeader: true, children: [text('列 \u{1F4CA}')] },
+                { type: 'tableCell', isHeader: true, children: [text('Значение')] },
+              ],
+            },
+            {
+              type: 'tableRow',
+              children: [
+                { type: 'tableCell', children: [text('中文 → x')] },
+                { type: 'tableCell', children: [text('\u{1F44D}')] },
+              ],
+            },
+          ],
+        } as MarkdownTable,
+      ],
+    };
+  }
+
+  it('resolves instead of throwing, and produces a real PDF', async () => {
+    // The bug: pdf-lib throws `WinAnsi cannot encode "…"`, so ONE emoji
+    // anywhere failed the whole conversion.
+    const buffer = await markdownDocToPdf(nastyDoc(), { onWarning: () => {} });
+
+    expect(buffer).toBeInstanceOf(ArrayBuffer);
+    expect(buffer.byteLength).toBeGreaterThan(1000);
+
+    const loaded = await PDFDocument.load(buffer);
+    expect(loaded.getPageCount()).toBeGreaterThanOrEqual(1);
+  });
+
+  it('does not reject a document whose only flaw is a single emoji', async () => {
+    const doc: MarkdownDocument = {
+      type: 'document',
+      children: [
+        {
+          type: 'paragraph',
+          children: [text('All fine except this \u{1F600}')],
+        } as MarkdownParagraph,
+      ],
+    };
+    await expect(markdownDocToPdf(doc, { onWarning: () => {} })).resolves.toBeInstanceOf(
+      ArrayBuffer,
+    );
+  });
+
+  it('survives a literal tab and an embedded newline in author text', async () => {
+    const doc: MarkdownDocument = {
+      type: 'document',
+      children: [
+        { type: 'paragraph', children: [text('col1\tcol2\nsecond line')] } as MarkdownParagraph,
+      ],
+    };
+    await expect(markdownDocToPdf(doc)).resolves.toBeInstanceOf(ArrayBuffer);
+  });
+
+  it('warns exactly once per export through the onWarning channel', async () => {
+    const warnings: string[] = [];
+    await markdownDocToPdf(nastyDoc(), { onWarning: (m) => warnings.push(m) });
+
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toContain('character(s)');
+    expect(warnings[0]).toContain('embedded Unicode font');
+  });
+
+  it('stays silent for documents the standard fonts can render', async () => {
+    const warnings: string[] = [];
+    const doc: MarkdownDocument = {
+      type: 'document',
+      children: [
+        {
+          type: 'paragraph',
+          children: [text('Café — “smart quotes”, en–dash, ellipsis… €5 ™')],
+        } as MarkdownParagraph,
+      ],
+    };
+    await markdownDocToPdf(doc, { onWarning: (m) => warnings.push(m) });
+    expect(warnings).toEqual([]);
+  });
+
+  it('falls back to console.warn when no onWarning is supplied', async () => {
+    const spy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      await markdownDocToPdf(nastyDoc());
+      expect(spy).toHaveBeenCalledTimes(1);
+      expect(String(spy.mock.calls[0]![0])).toContain('PDF export replaced');
+    } finally {
+      spy.mockRestore();
+    }
   });
 });

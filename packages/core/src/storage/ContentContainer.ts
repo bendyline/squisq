@@ -33,11 +33,30 @@ export interface ContentEntry {
  * with no leading slash. Example: 'images/hero.jpg', 'index.md'.
  */
 export interface ContentContainer {
+  /**
+   * Shared identity used to serialize in-process mutations across multiple
+   * scoped views of the same backing store. Implementations may omit it; the
+   * container object itself is then used.
+   */
+  readonly mutationLock?: object;
+
   /** Read a file's binary content. Returns null if the file does not exist. */
   readFile(path: string): Promise<ArrayBuffer | null>;
 
   /** Write a file. Creates or overwrites. */
   writeFile(path: string, data: ArrayBuffer | Uint8Array, mimeType?: string): Promise<void>;
+
+  /**
+   * Atomically create a file only when the path does not already exist.
+   * Returns false on collision. Persistent adapters should implement this
+   * with their datastore/filesystem's exclusive-create primitive so callers
+   * are safe across tabs and processes.
+   */
+  writeFileExclusive?(
+    path: string,
+    data: ArrayBuffer | Uint8Array,
+    mimeType?: string,
+  ): Promise<boolean>;
 
   /** Remove a file. No-op if the file does not exist. */
   removeFile(path: string): Promise<void>;
@@ -117,6 +136,7 @@ interface MemoryFile {
  */
 export class MemoryContentContainer implements ContentContainer {
   private files = new Map<string, MemoryFile>();
+  readonly mutationLock: object = this;
 
   async readFile(path: string): Promise<ArrayBuffer | null> {
     const stored = this.files.get(path)?.data;
@@ -145,6 +165,16 @@ export class MemoryContentContainer implements ContentContainer {
       data: owned.buffer,
       mimeType: mimeType ?? guessMimeType(path),
     });
+  }
+
+  async writeFileExclusive(
+    path: string,
+    data: ArrayBuffer | Uint8Array,
+    mimeType?: string,
+  ): Promise<boolean> {
+    if (this.files.has(path)) return false;
+    await this.writeFile(path, data, mimeType);
+    return true;
   }
 
   async removeFile(path: string): Promise<void> {

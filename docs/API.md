@@ -2635,10 +2635,22 @@ and `animationsEnabled: false` for compact output. It skips audio entirely and
 uses ffmpeg.wasm for the final palette pass, so it requires cross-origin
 isolation / `SharedArrayBuffer` in the browser.
 
-For reliable offline/CSP operation, publish
+**`ffmpegWasm.coreURL` is required for every ffmpeg.wasm path** (the encoder
+fallback, the GIF palette pass, and tier-2 audio muxing). Publish
 `node_modules/@ffmpeg/core/dist/esm/ffmpeg-core.{js,wasm}` from the same origin
 and provide those URLs through `VideoExportConfig.ffmpegWasm`. The demo site's
 Vite build does this automatically.
+
+Omitting it throws an actionable error rather than falling back to
+`@ffmpeg/ffmpeg`'s hard-coded `https://unpkg.com/@ffmpeg/core@<version>/…` URL —
+a silent remote-code fetch that breaks offline/CSP hosts and is a supply-chain
+surface. A GIF export with no `ffmpegWasm` fails immediately, before capturing
+any frames, rather than at the final palette pass. To use a remote core
+deliberately, name that URL as `coreURL` explicitly.
+
+Video `width`/`height` must be **even** and are rejected (never rounded) when
+odd: H.264's `yuv420p` cannot encode odd dimensions, and GIF export muxes an
+H.264 intermediate. Validation happens before capture starts.
 
 ### Components
 
@@ -2689,10 +2701,10 @@ interface VideoExportConfig {
   mediaProvider?: MediaProvider;
   captionMode?: CaptionMode; // default 'off'
   playerScript?: string; // unused by the browser export path; kept for CLI/Playwright
-  ffmpegWasm?: FfmpegWasmLoadConfig; // optional self-hosted fallback assets
+  ffmpegWasm?: FfmpegWasmLoadConfig; // REQUIRED for GIF + any ffmpeg.wasm path
 }
 interface FfmpegWasmLoadConfig {
-  coreURL?: string;
+  coreURL?: string; // required at use time; no CDN fallback
   wasmURL?: string;
   workerURL?: string;
   classWorkerURL?: string;

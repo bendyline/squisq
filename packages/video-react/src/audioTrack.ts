@@ -19,6 +19,7 @@
 
 import {
   ffmpegAudioMuxArgs,
+  resolveFfmpegWasmLoad,
   type AudioTimelineClip,
   type FfmpegWasmLoadConfig,
 } from '@bendyline/squisq-video';
@@ -300,15 +301,16 @@ export async function muxAudioWithFfmpegWasm(
   audioBitrate: number,
   loadConfig?: FfmpegWasmLoadConfig,
 ): Promise<Uint8Array> {
+  // Validate runtime assets first: an unconfigured core must fail with an
+  // actionable message rather than silently fetching the unpkg CDN default.
+  const load = resolveFfmpegWasmLoad(loadConfig, 'ffmpeg.wasm audio muxing', {
+    classWorkerURL: new URL('./workers/ffmpeg.class-worker.js', import.meta.url).href,
+  });
+
   const { FFmpeg } = await import('@ffmpeg/ffmpeg');
   const ffmpeg = new FFmpeg();
   try {
-    await ffmpeg.load({
-      ...loadConfig,
-      classWorkerURL:
-        loadConfig?.classWorkerURL ??
-        new URL('./workers/ffmpeg.class-worker.js', import.meta.url).href,
-    });
+    await ffmpeg.load(load);
     await ffmpeg.writeFile('video.mp4', videoMp4);
     await ffmpeg.writeFile('audio.wav', wav);
     const exitCode = await ffmpeg.exec([

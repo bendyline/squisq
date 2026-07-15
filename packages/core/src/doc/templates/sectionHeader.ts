@@ -9,7 +9,7 @@
  * This is shared code used by both site and efb-app doc renderers.
  */
 
-import type { Layer, AnimationType } from '../../schemas/Doc.js';
+import type { Layer } from '../../schemas/Doc.js';
 import type { SectionHeaderInput, TemplateContext } from '../../schemas/BlockTemplates.js';
 import {
   resolveColorScheme,
@@ -20,6 +20,8 @@ import {
   themedScrim,
   themedImageTreatment,
 } from '../utils/themeUtils.js';
+import { withAlpha } from '../../schemas/colorUtils.js';
+import { mapAmbientMotion } from './accentImage.js';
 
 export function sectionHeader(input: SectionHeaderInput, context: TemplateContext): Layer[] {
   const { title = '', colorScheme = 'blue', imageSrc, imageAlt, ambientMotion } = input;
@@ -48,9 +50,15 @@ export function sectionHeader(input: SectionHeaderInput, context: TemplateContex
         ...(treatment ? { treatment } : {}),
       },
       position: { x: 0, y: 0, width: '100%', height: '100%' },
-      animation: ambientMotion
-        ? { type: ambientMotion as AnimationType, duration: 8 }
-        : { type: 'slowZoom', duration: 8, direction: 'in' },
+      // Route through mapAmbientMotion like every other image template: the
+      // authored vocabulary (`zoomIn`/`panLeft`/…) are NOT AnimationTypes, so
+      // passing them raw produced an unknown animation here while the same
+      // input animated correctly on imageWithCaption/coverBlock/accentImage.
+      animation: mapAmbientMotion(ambientMotion, 8) ?? {
+        type: 'slowZoom',
+        duration: 8,
+        direction: 'in',
+      },
     });
 
     // Theme-tinted overlay for text readability — light themes get a
@@ -80,13 +88,13 @@ export function sectionHeader(input: SectionHeaderInput, context: TemplateContex
     layers.push({
       type: 'shape',
       id: 'line-top',
-      content: { shape: 'rect', fill: `${colors.text}33` },
+      content: { shape: 'rect', fill: withAlpha(colors.text, 0.2) },
       position: { x: '50%', y: '40%', width: '20%', height: '2px', anchor: 'center' },
     });
     layers.push({
       type: 'shape',
       id: 'line-bottom',
-      content: { shape: 'rect', fill: `${colors.text}33` },
+      content: { shape: 'rect', fill: withAlpha(colors.text, 0.2) },
       position: { x: '50%', y: '60%', width: '20%', height: '2px', anchor: 'center' },
     });
   }

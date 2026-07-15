@@ -25,7 +25,7 @@ export function imageWithCaption(input: ImageWithCaptionInput, context: Template
     imageSrc,
     imageAlt,
     caption: rawCaption,
-    captionPosition: _captionPosition = 'bottom',
+    captionPosition = 'bottom',
     ambientMotion,
     isTitle,
     subtitle,
@@ -138,8 +138,15 @@ export function imageWithCaption(input: ImageWithCaptionInput, context: Template
     return layers;
   }
 
-  // STANDARD MODE: Caption at bottom
+  // STANDARD MODE: Caption band, positioned per `captionPosition`. The band
+  // offsets mirror videoWithCaption's so the same authored param produces the
+  // same placement whether the media is an image or a clip.
   if (caption) {
+    const captionBgY =
+      captionPosition === 'top' ? '7%' : captionPosition === 'center' ? '42%' : '68%';
+    const captionY =
+      captionPosition === 'top' ? '13%' : captionPosition === 'center' ? '48%' : '74%';
+
     // Compact caption band raised above media controls. Long archival captions
     // are clamped so they don't sprawl across the image.
     layers.push({
@@ -151,7 +158,7 @@ export function imageWithCaption(input: ImageWithCaptionInput, context: Template
       },
       position: {
         x: 0,
-        y: '68%',
+        y: captionBgY,
         width: '100%',
         height: '16%',
       },
@@ -174,7 +181,7 @@ export function imageWithCaption(input: ImageWithCaptionInput, context: Template
       },
       position: {
         x: '50%',
-        y: '74%',
+        y: captionY,
         anchor: 'center',
         width: '78%',
       },

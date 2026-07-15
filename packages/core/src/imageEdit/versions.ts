@@ -20,7 +20,7 @@ import {
   readTextSnapshot,
   saveTextSnapshot,
 } from '../versions/snapshotStore.js';
-import { readImageEditDoc, writeImageEditDoc } from './persistence.js';
+import { assertImageEditDoc, readImageEditDoc, writeImageEditDoc } from './persistence.js';
 import { IMAGE_EDIT_STATE_FILENAME } from './state.js';
 import { IMAGE_EDIT_DEFAULT_BASENAME, IMAGE_EDIT_VERSION_PATHS } from './versionPaths.js';
 
@@ -54,6 +54,30 @@ export interface RevertImageEditOptions {
   snapshotCurrent?: boolean;
   /** Override the source filename. Defaults to `state.json`. */
   stateFilename?: string;
+  /**
+   * State to capture as the pre-revert snapshot. Hosts holding unsaved
+   * in-memory edits MUST pass it: without it the snapshot reads
+   * `state.json` from the container, which is stale whenever the editor
+   * has not flushed. Ignored when `snapshotCurrent` is `false`.
+   */
+  doc?: ImageEditDoc;
+}
+
+/**
+ * Why a {@link revertToImageEditVersion} call declined to revert.
+ *
+ * - `'missing-snapshot'` — the requested version could not be read.
+ * - `'snapshot-failed'`  — the pre-revert snapshot could not be written, so
+ *   reverting would have destroyed the current state irrecoverably.
+ */
+export type RevertImageEditFailureReason = 'missing-snapshot' | 'snapshot-failed';
+
+/** Result of a {@link revertToImageEditVersion} call. */
+export interface RevertImageEditResult {
+  reverted: boolean;
+  snapshotted: Version | null;
+  /** Present only when `reverted` is false. */
+  reason?: RevertImageEditFailureReason;
 }
 
 /** List image-edit snapshots in the sidecar, newest-first. */
@@ -72,14 +96,31 @@ export async function readImageEditVersionText(
   return readTextSnapshot(container, version);
 }
 
-/** Read and parse a snapshot. Returns `null` if missing. */
+/**
+ * Read and parse a snapshot. Returns `null` if missing.
+ *
+ * A snapshot that EXISTS but is malformed throws rather than returning null:
+ * `null` means "no such version", and conflating the two let
+ * {@link revertToImageEditVersion} write garbage into `state.json` — wedging
+ * the editor on a file that loaded fine before the revert. Throwing here means
+ * the revert aborts and the current state survives.
+ */
 export async function readImageEditVersion(
   container: ContentContainer,
   version: Version | string,
 ): Promise<ImageEditDoc | null> {
   const text = await readImageEditVersionText(container, version);
   if (text === null) return null;
-  return JSON.parse(text) as ImageEditDoc;
+  const path = typeof version === 'string' ? version : version.path;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(text);
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    throw new Error(`readImageEditVersion: ${path} is not valid JSON: ${msg}`);
+  }
+  assertImageEditDoc(parsed, path, 'readImageEditVersion');
+  return parsed;
 }
 
 /**
@@ -112,20 +153,34 @@ export async function saveImageEditVersion(
   });
 }
 
-/** Revert `state.json` to a prior snapshot. Snapshots the current state first by default. */
+/**
+ * Revert `state.json` to a prior snapshot. Snapshots the current state first
+ * by default.
+ *
+ * When that snapshot cannot be written, the revert is ABANDONED rather than
+ * performed unrecoverably — losing the current state is a worse outcome than
+ * a revert that didn't happen. Mirrors `revertToVersion` in `versions/`.
+ */
 export async function revertToImageEditVersion(
   container: ContentContainer,
   version: Version | string,
   options: RevertImageEditOptions = {},
-): Promise<{ reverted: boolean; snapshotted: Version | null }> {
+): Promise<RevertImageEditResult> {
   const doc = await readImageEditVersion(container, version);
   if (!doc) {
-    return { reverted: false, snapshotted: null };
+    return { reverted: false, snapshotted: null, reason: 'missing-snapshot' };
   }
 
   let snapshotted: Version | null = null;
   if (options.snapshotCurrent !== false) {
-    const result = await saveImageEditVersion(container, { stateFilename: options.stateFilename });
+    const saveOptions: SaveImageEditVersionOptions = { stateFilename: options.stateFilename };
+    if (options.doc !== undefined) saveOptions.doc = options.doc;
+    const result = await saveImageEditVersion(container, saveOptions);
+    // `unchanged` means the current state already equals the newest
+    // snapshot, so it remains recoverable — that counts as success.
+    if (!result.saved && result.reason !== 'unchanged') {
+      return { reverted: false, snapshotted: null, reason: 'snapshot-failed' };
+    }
     snapshotted = result.version;
   }
 

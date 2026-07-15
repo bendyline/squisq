@@ -132,6 +132,22 @@ describe('RepairableDiagramExtension', () => {
     expect(ASCII_DIAGRAM_KEY.getState(editor.state)?.entries.length).toBe(1);
   });
 
+  it('does not repair while the editor is read-only (BUG B)', () => {
+    // The banner button may outlive the render that mounted it: a host can
+    // flip the editor read-only between paint and click.
+    const editor = makeEditor(fenced(BROKEN));
+    const id = repairId(editor)!;
+    const before = JSON.stringify(editor.state.doc.toJSON());
+
+    editor.setEditable(false);
+
+    expect(applyRepairCommand(editor, id)).toBe(false);
+    expect(JSON.stringify(editor.state.doc.toJSON())).toBe(before);
+
+    editor.setEditable(true);
+    expect(applyRepairCommand(editor, id)).toBe(true);
+  });
+
   it('one undo restores the original broken art', () => {
     const editor = makeEditor(fenced(BROKEN));
     const before = fenceOf(editor).text;

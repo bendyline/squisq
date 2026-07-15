@@ -19,6 +19,7 @@ import type {
   CoalesceOptions,
   PrunePolicy,
   RevertOptions,
+  RevertResult,
   SaveVersionOptions,
   SaveVersionResult,
   Version,
@@ -53,11 +54,11 @@ export class DocumentVersionManager {
     return readVersion(this.container, version);
   }
 
-  revertToVersion(
-    version: Version | string,
-    options?: RevertOptions,
-  ): Promise<{ reverted: boolean; snapshotted: Version | null }> {
-    return revertToVersion(this.container, version, options);
+  revertToVersion(version: Version | string, options?: RevertOptions): Promise<RevertResult> {
+    // Thread the manager's basename so the pre-revert snapshot is filed
+    // against the same document this manager reads and prunes, rather than
+    // whatever the container resolves as its primary doc.
+    return revertToVersion(this.container, version, { basename: this.basename, ...options });
   }
 
   pruneVersions(policy: PrunePolicy): Promise<Version[]> {

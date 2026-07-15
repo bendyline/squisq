@@ -30,6 +30,10 @@ import {
 } from '@bendyline/squisq/markdown';
 
 export interface HtmlImportOptions {
+  /** Cancel before parsing. */
+  signal?: AbortSignal;
+  /** Maximum HTML source characters. Default: 16 MiB. */
+  maxInputChars?: number;
   /**
    * Strip scripts / styles / event handlers / dangerous URLs before walking
    * the tree. Default `true` — HTML email is untrusted; only disable for
@@ -278,6 +282,14 @@ export function htmlToMarkdownDocSync(
   html: string,
   options: HtmlImportOptions = {},
 ): MarkdownDocument {
+  options.signal?.throwIfAborted();
+  const maxInputChars = options.maxInputChars ?? 16 * 1024 * 1024;
+  if (!Number.isSafeInteger(maxInputChars) || maxInputChars < 0) {
+    throw new RangeError('maxInputChars must be a non-negative safe integer');
+  }
+  if (html.length > maxInputChars) {
+    throw new RangeError(`HTML exceeds the ${maxInputChars}-character safety limit`);
+  }
   let nodes = parseHtmlToNodes(html);
   if (options.sanitize !== false) nodes = sanitizeHtmlNodes(nodes);
   return { type: 'document', children: blocksFromNodes(nodes) };
@@ -293,5 +305,5 @@ export async function htmlToMarkdownDoc(
 
 /** Convenience string→string conversion (used for email HTML bodies). */
 export function htmlToMarkdown(html: string, options: HtmlImportOptions = {}): string {
-  return stringifyMarkdown(htmlToMarkdownDocSync(html, options));
+  return stringifyMarkdown(htmlToMarkdownDocSync(html, options), { signal: options.signal });
 }

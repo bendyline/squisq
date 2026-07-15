@@ -17,7 +17,7 @@
  * persist to the doc, the library, or both.
  */
 
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useId, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { MediaContext } from '@bendyline/squisq-react';
 import type {
@@ -42,6 +42,7 @@ import { TOKEN_DEFS, TOKEN_DRAG_MIME } from './tokenDefs';
 import { SHAPE_DEFS, SHAPE_DRAG_MIME, buildShapeLayer } from './shapeDefs';
 import { partitionFiles, processMediaFiles } from '../utils/dropUtils';
 import { LayerToolbar } from './LayerToolbar';
+import { useModalDialog } from '../modal/useModalDialog';
 
 export type DesignerSaveTarget = 'doc' | 'library';
 
@@ -116,6 +117,10 @@ export function TemplateDesigner({
   mediaProvider = null,
   colorScheme = 'light',
 }: TemplateDesignerProps) {
+  const overlayRef = useRef<HTMLDivElement>(null);
+  const dialogRef = useRef<HTMLDivElement>(null);
+  const titleId = useId();
+  useModalDialog({ rootRef: overlayRef, dialogRef, onClose });
   const [name, setName] = useState(initial?.name ?? '');
   const [label, setLabel] = useState(initial?.label ?? '');
   const [description, setDescription] = useState(initial?.description ?? '');
@@ -266,16 +271,21 @@ export function TemplateDesigner({
 
   const panel = (
     <div
+      ref={dialogRef}
       className={`squisq-template-designer-panel${
         embedded ? ' squisq-template-designer-panel--embedded' : ''
       }`}
+      role={embedded ? undefined : 'dialog'}
+      aria-modal={embedded ? undefined : 'true'}
+      aria-labelledby={embedded ? undefined : titleId}
+      tabIndex={embedded ? undefined : -1}
     >
       {/* Standalone modal owns its title + close button. Embedded in the
           Custom Layout Manager, the host frame provides both, so the
           designer drops its header entirely. */}
       {!embedded && (
         <header className="squisq-template-designer-header">
-          <h2 className="squisq-template-designer-title">
+          <h2 id={titleId} className="squisq-template-designer-title">
             {initial ? 'Edit layout' : 'New layout'}
           </h2>
           <button
@@ -416,11 +426,9 @@ export function TemplateDesigner({
   // Standalone: full-screen modal over a click-to-dismiss backdrop.
   return createPortal(
     <div
+      ref={overlayRef}
       className="squisq-editor-shell squisq-template-designer-overlay"
       data-theme={colorScheme}
-      role="dialog"
-      aria-modal="true"
-      aria-label="Custom layout designer"
       onClick={(e) => {
         // Click on the backdrop (not the panel) closes the modal.
         if (e.target === e.currentTarget) onClose();

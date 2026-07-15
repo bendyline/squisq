@@ -46,6 +46,7 @@ import type {
 
 import type { ContentContainer } from '@bendyline/squisq/storage';
 import { buildContainer } from '../shared/container.js';
+import UPNG from '@pdf-lib/upng';
 
 import {
   DEFAULT_FONT_SIZE,
@@ -67,6 +68,14 @@ import {
  * Options for PDF import.
  */
 export interface PdfImportOptions {
+  /** Cancel between pages and image operations. */
+  signal?: AbortSignal;
+  /** Maximum pages processed. Default: 5,000. */
+  maxPages?: number;
+  /** Maximum positioned text items processed. Default: 1,000,000. */
+  maxTextItems?: number;
+  /** Maximum cumulative decoded image pixels. Default: 100 megapixels. */
+  maxImagePixels?: number;
   /**
    * Hint for the body font size used in the PDF (in points).
    * Text items larger than this are considered headings.
@@ -100,6 +109,7 @@ export async function pdfToMarkdownDoc(
   data: ArrayBuffer | Uint8Array | Blob,
   options: PdfImportOptions = {},
 ): Promise<MarkdownDocument> {
+  options.signal?.throwIfAborted();
   const bytes =
     data instanceof Blob
       ? new Uint8Array(await data.arrayBuffer())
@@ -107,9 +117,9 @@ export async function pdfToMarkdownDoc(
         ? new Uint8Array(data)
         : data;
 
-  const loaded = await loadPdfDocument(bytes);
+  const loaded = await loadPdfDocument(bytes, options.signal);
   try {
-    const textLines = await extractTextLines(loaded.pdf);
+    const textLines = await extractTextLines(loaded.pdf, options);
 
     if (textLines.length === 0) {
       return { type: 'document', children: [] };
@@ -155,6 +165,7 @@ export async function pdfToContainer(
   data: ArrayBuffer | Uint8Array | Blob,
   options: PdfImportOptions = {},
 ): Promise<ContentContainer> {
+  options.signal?.throwIfAborted();
   const bytes =
     data instanceof Blob
       ? new Uint8Array(await data.arrayBuffer())
@@ -162,20 +173,17 @@ export async function pdfToContainer(
         ? new Uint8Array(data)
         : data;
 
-  const loaded = await loadPdfDocument(bytes);
+  const loaded = await loadPdfDocument(bytes, options.signal);
   let textLines: TextLine[];
   let images: ExtractedImage[];
   try {
-    [textLines, images] = await Promise.all([extractTextLines(loaded.pdf), extractImages(loaded)]);
+    [textLines, images] = await Promise.all([
+      extractTextLines(loaded.pdf, options),
+      extractImages(loaded, options),
+    ]);
   } finally {
     await loaded.pdf.destroy?.();
   }
-
-  // Under Node there is no DOM/canvas, so extractImages() returns [] via its
-  // environment guard and embedded images can't be decoded. The registry's
-  // `importContainer` wrapper surfaces this (typeof document === 'undefined')
-  // as a ConversionResult warning; direct callers of pdfToContainer get no
-  // signal, which is an accepted trade-off for the degraded Node path.
 
   const bodySize = options.bodyFontSize ?? detectBodyFontSize(textLines);
 
@@ -190,7 +198,7 @@ export async function pdfToContainer(
 
   const markdownDoc: MarkdownDocument = { type: 'document', children: blocks };
 
-  // pdf image extraction only ever produces PNG (canvas re-encode), so every
+  // PDF image extraction only ever produces PNG (lossless re-encode), so every
   // entry gets image/png.
   return buildContainer(
     stringifyMarkdown(markdownDoc),
@@ -217,20 +225,28 @@ export interface ExtractedImage {
 
 /**
  * Extract embedded images from a PDF using pdfjs-dist operator list API.
- * Requires browser canvas for PNG encoding.
+ * Uses a runtime-independent PNG encoder.
  */
-async function extractImages(loaded: LoadedPdf): Promise<ExtractedImage[]> {
+async function extractImages(
+  loaded: LoadedPdf,
+  options: PdfImportOptions,
+): Promise<ExtractedImage[]> {
   // Canvas is required for PNG encoding — skip in non-browser environments
-  if (typeof document === 'undefined') return [];
-
   const { pdfjsLib, pdf } = loaded;
 
   const OPS_paintImageXObject = pdfjsLib.OPS?.paintImageXObject ?? 85;
+  const OPS_paintInlineImageXObject = pdfjsLib.OPS?.paintInlineImageXObject ?? 86;
 
   const images: ExtractedImage[] = [];
   let counter = 0;
+  let totalPixels = 0;
+  const maxPages = safetyLimit('maxPages', options.maxPages ?? 5_000);
+  const maxImagePixels = safetyLimit('maxImagePixels', options.maxImagePixels ?? 100_000_000);
+  if (pdf.numPages > maxPages)
+    throw new RangeError(`PDF exceeds the ${maxPages}-page safety limit`);
 
   for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
+    options.signal?.throwIfAborted();
     const page = (await pdf.getPage(pageNum)) as PdfjsPageFull;
     if (!page.getOperatorList) continue;
 
@@ -238,15 +254,32 @@ async function extractImages(loaded: LoadedPdf): Promise<ExtractedImage[]> {
     const seen = new Set<string>();
 
     for (let i = 0; i < opList.fnArray.length; i++) {
-      if (opList.fnArray[i] !== OPS_paintImageXObject) continue;
+      const operation = opList.fnArray[i];
+      if (operation !== OPS_paintImageXObject && operation !== OPS_paintInlineImageXObject)
+        continue;
 
-      const imgName = opList.argsArray[i]?.[0];
-      if (!imgName || typeof imgName !== 'string' || seen.has(imgName)) continue;
-      seen.add(imgName);
+      const operand = opList.argsArray[i]?.[0];
+      let imgData: PdfjsImageData | null = null;
+      if (operation === OPS_paintImageXObject) {
+        if (!operand || typeof operand !== 'string' || seen.has(operand)) continue;
+        seen.add(operand);
+        try {
+          imgData = await getPdfImageObject(page.objs, operand, options.signal);
+        } catch {
+          continue;
+        }
+      } else if (operand && typeof operand === 'object') {
+        imgData = operand as PdfjsImageData;
+      }
 
       try {
-        const imgData = page.objs?.get(imgName) as PdfjsImageData | null;
         if (!imgData?.data || !imgData.width || !imgData.height) continue;
+        totalPixels += imgData.width * imgData.height;
+        if (totalPixels > maxImagePixels) {
+          throw new RangeError(
+            `PDF decoded images exceed the ${maxImagePixels}-pixel safety limit`,
+          );
+        }
 
         const pngData = imageDataToPng(imgData);
         if (!pngData) continue;
@@ -258,7 +291,8 @@ async function extractImages(loaded: LoadedPdf): Promise<ExtractedImage[]> {
           page: pageNum - 1,
           y: 0,
         });
-      } catch {
+      } catch (error) {
+        if (error instanceof RangeError) throw error;
         // Skip images that fail to extract
       }
     }
@@ -278,58 +312,79 @@ interface PdfjsImageData {
 /** Extended PdfjsPage with operator list and objs access. */
 interface PdfjsPageFull extends PdfjsPage {
   getOperatorList(): Promise<{ fnArray: number[]; argsArray: unknown[][] }>;
-  objs?: { get(name: string): unknown; has?(name: string): boolean };
+  objs?: {
+    get(name: string, callback?: (value: unknown) => void): unknown;
+    has?(name: string): boolean;
+  };
 }
 
-/** Encode pdfjs image data to PNG using a canvas element. */
+function getPdfImageObject(
+  objects: PdfjsPageFull['objs'],
+  name: string,
+  signal?: AbortSignal,
+): Promise<PdfjsImageData | null> {
+  if (!objects) return Promise.resolve(null);
+  return new Promise((resolve, reject) => {
+    let settled = false;
+    const finish = (value: unknown): void => {
+      if (settled) return;
+      settled = true;
+      signal?.removeEventListener('abort', onAbort);
+      resolve(value as PdfjsImageData | null);
+    };
+    const onAbort = (): void => {
+      if (settled) return;
+      settled = true;
+      reject(signal?.reason ?? new DOMException('PDF image extraction cancelled', 'AbortError'));
+    };
+    if (signal?.aborted) {
+      onAbort();
+      return;
+    }
+    signal?.addEventListener('abort', onAbort, { once: true });
+    try {
+      const immediate = objects.get(name, finish);
+      if (immediate !== undefined && immediate !== null) finish(immediate);
+    } catch (error) {
+      signal?.removeEventListener('abort', onAbort);
+      reject(error);
+    }
+  });
+}
+
+/** Encode pdfjs image data to PNG without DOM or native-canvas dependencies. */
 function imageDataToPng(img: PdfjsImageData): ArrayBuffer | null {
   try {
-    const canvas = document.createElement('canvas');
-    canvas.width = img.width;
-    canvas.height = img.height;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return null;
-
     // pdfjs kind=1 is GRAYSCALE, kind=2 is RGB, kind=3 is RGBA
-    let imageData: ImageData;
+    let rgba: Uint8ClampedArray;
     if (img.kind === 3 || img.data.length === img.width * img.height * 4) {
       // RGBA — use directly
-      imageData = new ImageData(new Uint8ClampedArray(img.data), img.width, img.height);
+      rgba = new Uint8ClampedArray(img.data);
     } else if (img.kind === 2 || img.data.length === img.width * img.height * 3) {
       // RGB — expand to RGBA
-      const rgba = new Uint8ClampedArray(img.width * img.height * 4);
+      rgba = new Uint8ClampedArray(img.width * img.height * 4);
       for (let j = 0, k = 0; j < img.data.length; j += 3, k += 4) {
         rgba[k] = img.data[j];
         rgba[k + 1] = img.data[j + 1];
         rgba[k + 2] = img.data[j + 2];
         rgba[k + 3] = 255;
       }
-      imageData = new ImageData(rgba, img.width, img.height);
     } else if (img.kind === 1 || img.data.length === img.width * img.height) {
       // Grayscale — expand to RGBA
-      const rgba = new Uint8ClampedArray(img.width * img.height * 4);
+      rgba = new Uint8ClampedArray(img.width * img.height * 4);
       for (let j = 0, k = 0; j < img.data.length; j++, k += 4) {
         rgba[k] = img.data[j];
         rgba[k + 1] = img.data[j];
         rgba[k + 2] = img.data[j];
         rgba[k + 3] = 255;
       }
-      imageData = new ImageData(rgba, img.width, img.height);
     } else {
       return null;
     }
 
-    ctx.putImageData(imageData, 0, 0);
-
-    // Convert canvas to PNG ArrayBuffer
-    const dataUrl = canvas.toDataURL('image/png');
-    const base64 = dataUrl.split(',')[1];
-    const binaryStr = atob(base64);
-    const bytes = new Uint8Array(binaryStr.length);
-    for (let i = 0; i < binaryStr.length; i++) {
-      bytes[i] = binaryStr.charCodeAt(i);
-    }
-    return bytes.buffer;
+    const owned = new Uint8Array(rgba.byteLength);
+    owned.set(rgba);
+    return UPNG.encode([owned.buffer], img.width, img.height, 0);
   } catch {
     return null;
   }
@@ -527,7 +582,8 @@ async function applyWorkerConfig(pdfjsLib: PdfjsLib): Promise<void> {
   // Node.js the caller must have called configurePdfWorker() first.
 }
 
-async function loadPdfDocument(data: Uint8Array): Promise<LoadedPdf> {
+async function loadPdfDocument(data: Uint8Array, signal?: AbortSignal): Promise<LoadedPdf> {
+  signal?.throwIfAborted();
   // Dynamic import — the legacy build bundles a fake-worker fallback
   // that avoids a real Web Worker in environments that don't support it.
   let pdfjsLib: PdfjsLib & { OPS?: Record<string, number> };
@@ -549,13 +605,24 @@ async function loadPdfDocument(data: Uint8Array): Promise<LoadedPdf> {
     useSystemFonts: true,
   });
 
-  return { pdfjsLib, pdf: await loadingTask.promise };
+  const pdf = await loadingTask.promise;
+  signal?.throwIfAborted();
+  return { pdfjsLib, pdf };
 }
 
-async function extractTextLines(pdf: PdfjsDocument): Promise<TextLine[]> {
+async function extractTextLines(
+  pdf: PdfjsDocument,
+  options: PdfImportOptions,
+): Promise<TextLine[]> {
   const allLines: TextLine[] = [];
+  const maxPages = safetyLimit('maxPages', options.maxPages ?? 5_000);
+  const maxTextItems = safetyLimit('maxTextItems', options.maxTextItems ?? 1_000_000);
+  let textItemCount = 0;
+  if (pdf.numPages > maxPages)
+    throw new RangeError(`PDF exceeds the ${maxPages}-page safety limit`);
 
   for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
+    options.signal?.throwIfAborted();
     const page = await pdf.getPage(pageNum);
     const content = await page.getTextContent();
 
@@ -565,6 +632,9 @@ async function extractTextLines(pdf: PdfjsDocument): Promise<TextLine[]> {
     // Group text items into lines by y-coordinate
     const items: TextItem[] = [];
     for (const item of content.items) {
+      if (++textItemCount > maxTextItems) {
+        throw new RangeError(`PDF exceeds the ${maxTextItems}-text-item safety limit`);
+      }
       if (!item.str || item.str.trim().length === 0) continue;
       const transform = item.transform || [1, 0, 0, 1, 0, 0];
       const x = transform[4];
@@ -622,6 +692,13 @@ async function extractTextLines(pdf: PdfjsDocument): Promise<TextLine[]> {
   }
 
   return allLines;
+}
+
+function safetyLimit(name: string, value: number): number {
+  if (!Number.isSafeInteger(value) || value < 0) {
+    throw new RangeError(`${name} must be a non-negative safe integer`);
+  }
+  return value;
 }
 
 // ============================================

@@ -19,6 +19,7 @@ import type {
   FormatDefinition,
   NormalizedInput,
 } from './types.js';
+import { markdownLimitsFromConversion } from './limits.js';
 
 // ── MIME constants ──────────────────────────────────────────────────
 
@@ -63,7 +64,10 @@ function optionsFor<K extends keyof BuiltinFormatOptions>(
   options: ConvertOptions,
   id: K,
 ): BuiltinFormatOptions[K] {
-  return (options.formatOptions?.[id] ?? {}) as BuiltinFormatOptions[K];
+  return {
+    ...((options.formatOptions?.[id] ?? {}) as object),
+    ...(options.signal ? { signal: options.signal } : {}),
+  } as BuiltinFormatOptions[K];
 }
 
 /** The markdown shape an exporter needs — reuse the source's, else derive it. */
@@ -80,10 +84,13 @@ async function markdownOf(input: NormalizedInput): Promise<MarkdownDocument> {
  */
 async function collectContainerImages(
   container: ContentContainer,
+  signal?: AbortSignal,
 ): Promise<Map<string, ArrayBuffer>> {
   const images = new Map<string, ArrayBuffer>();
   const files = await container.listFiles();
-  for (const file of files) {
+  for (let index = 0; index < files.length; index++) {
+    if ((index & 63) === 0) signal?.throwIfAborted();
+    const file = files[index]!;
     if (!/\.(jpg|jpeg|png|gif|webp|svg|bmp|avif)$/i.test(file.path)) continue;
     const data = await container.readFile(file.path);
     if (!data) continue;
@@ -96,8 +103,9 @@ async function collectContainerImages(
 
 async function collectContainerDocxImages(
   container: ContentContainer,
+  signal?: AbortSignal,
 ): Promise<Map<string, { data: ArrayBuffer; contentType: string }>> {
-  const images = await collectContainerImages(container);
+  const images = await collectContainerImages(container, signal);
   const { extToMime } = await import('../shared/images.js');
   return new Map(
     [...images].map(([path, data]) => [
@@ -108,11 +116,16 @@ async function collectContainerDocxImages(
 }
 
 /** Copy a container and make its primary document match the normalized source. */
-async function snapshotContainerWithDocument(input: NormalizedInput): Promise<ContentContainer> {
+async function snapshotContainerWithDocument(
+  input: NormalizedInput,
+  signal?: AbortSignal,
+): Promise<ContentContainer> {
   const { MemoryContentContainer } = await import('@bendyline/squisq/storage');
   const snapshot = new MemoryContentContainer();
   const entries = await input.container.listFiles();
-  for (const entry of entries) {
+  for (let index = 0; index < entries.length; index++) {
+    if ((index & 63) === 0) signal?.throwIfAborted();
+    const entry = entries[index]!;
     const data = await input.container.readFile(entry.path);
     if (data) await snapshot.writeFile(entry.path, new Uint8Array(data), entry.mimeType);
   }
@@ -163,11 +176,21 @@ export function defaultFormats(): FormatDefinition[] {
     extensions: ['.md', '.markdown'],
     async importDoc(data, options): Promise<MarkdownDocument> {
       const { parseMarkdown } = await import('@bendyline/squisq/markdown');
-      return parseMarkdown(new TextDecoder().decode(data), optionsFor(options, 'md').parse);
+      const raw = optionsFor(options, 'md').parse ?? {};
+      return parseMarkdown(new TextDecoder().decode(data), {
+        ...raw,
+        signal: options.signal,
+        limits: raw.limits ?? markdownLimitsFromConversion(options.limits),
+      });
     },
     async exportDoc(input, options): Promise<ConversionResult> {
       const { stringifyMarkdown } = await import('@bendyline/squisq/markdown');
-      const text = stringifyMarkdown(await markdownOf(input), optionsFor(options, 'md').stringify);
+      const raw = optionsFor(options, 'md').stringify ?? {};
+      const text = stringifyMarkdown(await markdownOf(input), {
+        ...raw,
+        signal: options.signal,
+        limits: raw.limits ?? markdownLimitsFromConversion(options.limits),
+      });
       return ok(new TextEncoder().encode(text), MIME.md);
     },
   };
@@ -189,7 +212,7 @@ export function defaultFormats(): FormatDefinition[] {
       const { markdownDocToDocx } = await import('../docx/index.js');
       const raw = optionsFor(options, 'docx');
       const markdownDoc = await markdownOf(input);
-      const containerImages = await collectContainerDocxImages(input.container);
+      const containerImages = await collectContainerDocxImages(input.container, options.signal);
       const images = new Map([...containerImages, ...(raw.images ?? new Map())]);
       const buf = await markdownDocToDocx(markdownDoc, {
         ...raw,
@@ -219,13 +242,21 @@ export function defaultFormats(): FormatDefinition[] {
       const { markdownDocToPdf } = await import('../pdf/index.js');
       const raw = optionsFor(options, 'pdf');
       const markdownDoc = await markdownOf(input);
+      // PDF export substitutes characters the standard-14 fonts can't encode
+      // (emoji/CJK/Cyrillic/…) rather than failing. Route that note into the
+      // structured warnings channel instead of letting it hit console.warn.
+      const pdfWarnings: string[] = [];
       const buf = await markdownDocToPdf(markdownDoc, {
         ...raw,
         ...(options.title !== undefined ? { title: options.title } : {}),
         themeId: resolveThemeId(input, options),
         themeRegistry: options.themeRegistry ?? raw.themeRegistry,
+        onWarning: (message) => pdfWarnings.push(message),
       });
-      return ok(await toBytes(buf), MIME.pdf, markdownFidelityWarnings(markdownDoc, 'pdf'));
+      return ok(await toBytes(buf), MIME.pdf, [
+        ...markdownFidelityWarnings(markdownDoc, 'pdf'),
+        ...pdfWarnings,
+      ]);
     },
   };
 
@@ -246,7 +277,7 @@ export function defaultFormats(): FormatDefinition[] {
       const { markdownDocToPptx } = await import('../pptx/index.js');
       const raw = optionsFor(options, 'pptx');
       const markdownDoc = await markdownOf(input);
-      const containerImages = await collectContainerImages(input.container);
+      const containerImages = await collectContainerImages(input.container, options.signal);
       const images = new Map([...containerImages, ...(raw.images ?? new Map())]);
       const buf = await markdownDocToPptx(markdownDoc, {
         ...raw,
@@ -329,7 +360,7 @@ export function defaultFormats(): FormatDefinition[] {
       const playerScript = await requirePlayerScript(options, 'html');
       const { docToHtml } = await import('../html/index.js');
       const raw = optionsFor(options, 'html');
-      const containerImages = await collectContainerImages(input.container);
+      const containerImages = await collectContainerImages(input.container, options.signal);
       const images = new Map([...containerImages, ...(raw.images ?? new Map())]);
       const htmlText = docToHtml(input.doc, {
         ...raw,
@@ -353,7 +384,7 @@ export function defaultFormats(): FormatDefinition[] {
       const playerScript = await requirePlayerScript(options, 'htmlzip');
       const { docToHtmlZip } = await import('../html/index.js');
       const raw = optionsFor(options, 'htmlzip');
-      const containerImages = await collectContainerImages(input.container);
+      const containerImages = await collectContainerImages(input.container, options.signal);
       const images = new Map([...containerImages, ...(raw.images ?? new Map())]);
       const blob = await docToHtmlZip(input.doc, {
         ...raw,
@@ -377,7 +408,7 @@ export function defaultFormats(): FormatDefinition[] {
       const { markdownDocToEpub } = await import('../epub/index.js');
       const raw = optionsFor(options, 'epub');
       const markdownDoc = await markdownOf(input);
-      const containerImages = await collectContainerImages(input.container);
+      const containerImages = await collectContainerImages(input.container, options.signal);
       const images = new Map([...containerImages, ...(raw.images ?? new Map())]);
       const buf = await markdownDocToEpub(markdownDoc, {
         ...raw,
@@ -402,7 +433,7 @@ export function defaultFormats(): FormatDefinition[] {
     async exportDoc(input, options): Promise<ConversionResult> {
       const { containerToZip } = await import('../container/index.js');
       const blob = await containerToZip(
-        await snapshotContainerWithDocument(input),
+        await snapshotContainerWithDocument(input, options.signal),
         optionsFor(options, 'dbk'),
       );
       return ok(await toBytes(blob), MIME.zip);

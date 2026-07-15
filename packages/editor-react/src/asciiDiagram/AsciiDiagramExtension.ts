@@ -41,13 +41,10 @@ import {
 } from '@bendyline/squisq/doc';
 import { AsciiDiagramWidget } from './AsciiDiagramWidget';
 import type { SceneTextChannel } from '../scene/text/sceneTextChannel';
+import { containFenceWidgetEvents } from '../fenceWidgets/fenceWidgetHost';
+import { mapFenceEntries, type FenceBlockEntry } from '../fenceWidgets/fenceRegistry';
 
-export interface AsciiDiagramBlockEntry {
-  /** Synthetic session id (`ascii-N`), stable across edits for one block. */
-  id: string;
-  /** Document position of the codeBlock node at the current state. */
-  pos: number;
-}
+export type AsciiDiagramBlockEntry = FenceBlockEntry;
 
 export interface AsciiDiagramPluginState {
   entries: AsciiDiagramBlockEntry[];
@@ -168,10 +165,10 @@ function buildDecorations(
           const container = document.createElement('div');
           container.className = 'squisq-ascii-diagram-widget-host';
           container.contentEditable = 'false';
-          // Keep ProseMirror from treating clicks/keys inside the widget
-          // as document interactions.
-          container.addEventListener('mousedown', (e) => e.stopPropagation());
-          container.addEventListener('keydown', (e) => e.stopPropagation());
+          // Keep the widget's whole interaction stream — pointer, keys, text
+          // input, IME composition, clipboard — from reaching ProseMirror and
+          // being replayed at the document selection.
+          containFenceWidgetEvents(container);
           const root = createRoot(container);
           root.render(
             createElement(AsciiDiagramWidget, {
@@ -229,34 +226,9 @@ function applyState(
     };
   }
 
-  // Doc changed: remap known positions (bias 1 so an insertion exactly at
-  // the block's start shifts the tracked position forward WITH the node),
+  // Doc changed: remap known positions through the shared registry rule,
   // then walk the new doc and reconcile.
-  const mapped = new Map<number, string>();
-  const claimed = new Set<string>();
-  // Pass 1: survivors whose start position wasn't touched.
-  for (const entry of prev.entries) {
-    const result = tr.mapping.mapResult(entry.pos, 1);
-    if (!result.deleted) {
-      mapped.set(result.pos, entry.id);
-      claimed.add(entry.id);
-    }
-  }
-  // Pass 2: boundary-churn survivors. An attrs-only `setNodeMarkup` (the
-  // language-promotion step) rewrites the codeBlock's opening token, so
-  // `mapResult` reports the start as `deleted` even though the block is still
-  // there. Adopt the old id when a codeBlock still sits at the mapped position
-  // and that slot isn't already claimed — this keeps the widget's React root
-  // (pan/zoom) alive across the one-time promotion, instead of remounting.
-  for (const entry of prev.entries) {
-    if (claimed.has(entry.id)) continue;
-    const result = tr.mapping.mapResult(entry.pos, 1);
-    if (mapped.has(result.pos)) continue;
-    if (doc.nodeAt(result.pos)?.type.name === 'codeBlock') {
-      mapped.set(result.pos, entry.id);
-      claimed.add(entry.id);
-    }
-  }
+  const mapped = mapFenceEntries(tr, prev.entries, doc);
 
   let seq = prev.seq;
   const entries: AsciiDiagramBlockEntry[] = [];

@@ -13,9 +13,22 @@
  * - watercolor: Stadia/Stamen Watercolor (free tier)
  *
  * See docs/MAP_TILES.md for full provider details and terms.
+ *
+ * PRIVACY: composing a map is the only path in this package that necessarily
+ * contacts a third party — a tile request discloses the viewer's IP and the
+ * coordinates being viewed to the provider above. It is therefore governed by
+ * the caller's `ResourcePolicy` exactly like every other document-controlled
+ * URL: `LOCAL_ONLY_RESOURCE_POLICY` (or an `allowedHosts` list that omits the
+ * provider) blocks composition instead of leaking, and `staticSrc` remains the
+ * way to render a map with zero remote requests.
  */
 
 import type { MapTileStyle, MapMarker } from '@bendyline/squisq/schemas';
+import {
+  isResourceUrlAllowed,
+  ResourcePolicyError,
+  type ResourcePolicy,
+} from '@bendyline/squisq/markdown';
 
 /**
  * Tile provider configuration.
@@ -186,6 +199,20 @@ export interface ComposeMapOptions {
   markers?: MapMarker[];
   /** Show attribution (default: true) */
   showAttribution?: boolean;
+  /**
+   * Governs whether the tile host may be contacted.
+   *
+   * Tiles are remote by definition, so this is the one media path that CANNOT
+   * be satisfied locally: composing a map necessarily discloses the viewer's
+   * IP and the coordinates being viewed to the tile provider. A policy without
+   * `allowRemote` (e.g. `LOCAL_ONLY_RESOURCE_POLICY`), or one whose
+   * `allowedHosts` omits the provider, blocks composition outright rather than
+   * leaking. Authors who need a map under such a policy should supply
+   * `staticSrc` instead, which resolves through the MediaProvider.
+   *
+   * Defaults to the interactive policy, which permits remote hosts.
+   */
+  policy?: ResourcePolicy;
 }
 
 /**
@@ -201,6 +228,21 @@ export async function composeMapImage(options: ComposeMapOptions): Promise<strin
   const provider = TILE_PROVIDERS[style];
   const tileSize = provider.tileSize || 256;
   const clampedZoom = Math.min(zoom, provider.maxZoom);
+
+  // Check the provider against the policy BEFORE any request. Every tile in a
+  // compose comes from this one host, so a single up-front check is decisive —
+  // and it must fail loudly: the per-tile catch below swallows load errors, so
+  // a blocked provider would otherwise render as a plausible-looking blank map
+  // WITH attribution, hiding the fact that the policy stopped it.
+  const probeUrl = buildTileUrl(provider, 0, 0, clampedZoom);
+  if (!isResourceUrlAllowed(probeUrl, options.policy)) {
+    throw new ResourcePolicyError(
+      'RESOURCE_BLOCKED',
+      `Map tiles for style "${style}" are blocked by the resource policy (${provider.url}). ` +
+        'Composing a map contacts the tile host; supply the map as `staticSrc` to render ' +
+        'it without any remote request.',
+    );
+  }
 
   // Create canvas
   const canvas = document.createElement('canvas');

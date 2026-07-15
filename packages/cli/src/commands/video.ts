@@ -20,8 +20,10 @@ import {
   assertValidTransformStyle,
 } from '../util/applyTransformPipeline.js';
 import { renderDocToGif, renderDocToMp4 } from '../api.js';
+import { assertOutputsWritable } from '../util/outputGuard.js';
 
 import type { GifDither, VideoQuality, VideoOrientation } from '@bendyline/squisq-video';
+import { validateVideoExportOptions } from '@bendyline/squisq-video';
 
 type CaptionOption = 'off' | 'standard' | 'social';
 type VideoOutputFormat = 'mp4' | 'gif';
@@ -36,6 +38,8 @@ interface VideoCommandOptions {
   captions?: CaptionOption;
   width?: string;
   height?: string;
+  /** Replace an existing output file instead of refusing to clobber it. */
+  overwrite?: boolean;
   theme?: string;
   transform?: string;
   coverPreroll?: string;
@@ -89,8 +93,9 @@ export function registerVideoCommand(program: Command): void {
       'Seconds of cover-slide pre-roll before the story starts (default: 2)',
       '2',
     )
-    .option('--width <pixels>', 'Override video width')
-    .option('--height <pixels>', 'Override video height')
+    .option('--width <pixels>', 'Override video width (must be even for MP4)')
+    .option('--height <pixels>', 'Override video height (must be even for MP4)')
+    .option('--overwrite', 'Replace an existing output file (default: refuse and exit non-zero)')
     .option('--animations', 'Enable slide animations/transitions (GIF default: disabled)')
     .option('--no-animations', 'Disable slide animations/transitions')
     .option('--loop <count>', 'GIF repeat count: 0 forever, -1 no loop (default: 0)')
@@ -161,6 +166,18 @@ async function runVideo(inputPath: string, opts: VideoCommandOptions): Promise<v
     );
   }
 
+  // Parse and validate dimension overrides BEFORE reading the document or
+  // launching a browser. `--width 851` used to capture every frame — minutes of
+  // work — and only then die inside libx264 with "width not divisible by 2",
+  // surfaced as an opaque "ffmpeg failed: …".
+  // One rule for both formats, matching browser export: dimensions must be even
+  // and are rejected, never rounded. (Native GIF could technically take odd
+  // sizes, but browser GIF export muxes an H.264 intermediate and cannot — a
+  // dimension rule that depends on format and runtime is worse than one rule.)
+  const width = opts.width === undefined ? undefined : parseInt(opts.width, 10);
+  const height = opts.height === undefined ? undefined : parseInt(opts.height, 10);
+  validateVideoExportOptions({ width, height, orientation });
+
   const captions = opts.captions ?? 'off';
   if (!VALID_CAPTIONS.includes(captions as (typeof VALID_CAPTIONS)[number])) {
     throw new Error(`Invalid captions "${captions}". Valid: ${VALID_CAPTIONS.join(', ')}`);
@@ -210,6 +227,9 @@ async function runVideo(inputPath: string, opts: VideoCommandOptions): Promise<v
   const outputPath = opts.output
     ? resolve(opts.output)
     : resolve(dirname(resolvedInput), `${baseName}.${outputFormat}`);
+
+  // Refuse to clobber an existing render before spending minutes producing one.
+  await assertOutputsWritable([outputPath], opts.overwrite);
 
   // Ensure output directory exists
   await mkdir(dirname(outputPath), { recursive: true });
@@ -265,8 +285,8 @@ async function runVideo(inputPath: string, opts: VideoCommandOptions): Promise<v
     outputPath,
     fps,
     orientation: orientation as VideoOrientation,
-    width: opts.width ? parseInt(opts.width, 10) : undefined,
-    height: opts.height ? parseInt(opts.height, 10) : undefined,
+    width,
+    height,
     captionStyle,
     coverPreRoll,
     animationsEnabled,

@@ -18,13 +18,23 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 import type { Doc } from '@bendyline/squisq/schemas';
 import type { MediaProvider } from '@bendyline/squisq/schemas';
+import {
+  DEFAULT_INTERACTIVE_RESOURCE_POLICY,
+  fetchResourceBytes,
+  type ResourcePolicy,
+} from '@bendyline/squisq/markdown';
 import type {
   VideoQuality,
   VideoOrientation,
   AudioTimelineClip,
   FfmpegWasmLoadConfig,
 } from '@bendyline/squisq-video';
-import { resolveDimensions, computeAudioTimeline, QUALITY_PRESETS } from '@bendyline/squisq-video';
+import {
+  resolveDimensions,
+  computeAudioTimeline,
+  resolveFfmpegWasmLoad,
+  QUALITY_PRESETS,
+} from '@bendyline/squisq-video';
 import type { CaptionMode } from '@bendyline/squisq-react';
 import {
   createEncoder,
@@ -46,6 +56,38 @@ import {
 import { transcodeMp4ToGifWithFfmpegWasm } from '../gifTranscode.js';
 import { useFrameCapture } from './useFrameCapture.js';
 
+const MAX_EXPORT_MEDIA_FILES = 256;
+const MAX_EXPORT_MEDIA_FILE_BYTES = 64 * 1024 * 1024;
+const MAX_EXPORT_MEDIA_TOTAL_BYTES = 256 * 1024 * 1024;
+
+function toArrayBuffer(bytes: Uint8Array): ArrayBuffer {
+  return bytes.slice().buffer as ArrayBuffer;
+}
+
+/** Collect exact string values from the document that may name stored media. */
+export function collectDocumentMediaReferences(doc: Doc): Set<string> {
+  const references = new Set<string>();
+  const seen = new WeakSet<object>();
+
+  const visit = (value: unknown): void => {
+    if (typeof value === 'string') {
+      references.add(value);
+      if (value.startsWith('./')) references.add(value.slice(2));
+      return;
+    }
+    if (!value || typeof value !== 'object' || seen.has(value)) return;
+    seen.add(value);
+    if (Array.isArray(value)) {
+      value.forEach(visit);
+      return;
+    }
+    Object.values(value as Record<string, unknown>).forEach(visit);
+  };
+
+  visit(doc);
+  return references;
+}
+
 // ── Audio resolution ───────────────────────────────────────────────
 
 /**
@@ -60,6 +102,7 @@ async function resolveAudioBuffers(
     audio?: Map<string, ArrayBuffer>;
     images?: Map<string, ArrayBuffer>;
     mediaProvider?: MediaProvider;
+    resourcePolicy?: ResourcePolicy;
   },
 ): Promise<Map<string, ArrayBuffer>> {
   const srcs = new Set(clips.map((c) => c.src));
@@ -69,8 +112,10 @@ async function resolveAudioBuffers(
     if (!data && sources.mediaProvider) {
       try {
         const url = await sources.mediaProvider.resolveUrl(src);
-        const res = await fetch(url);
-        if (res.ok) data = await res.arrayBuffer();
+        const resource = await fetchResourceBytes(url, {
+          policy: sources.resourcePolicy,
+        });
+        data = toArrayBuffer(resource.bytes);
       } catch {
         // Unresolvable source; skip it.
       }
@@ -92,10 +137,18 @@ export type VideoExportState =
 
 /** Browser export container format. */
 export type VideoOutputFormat = 'mp4' | 'gif';
+export type VideoAudioPolicy = 'require' | 'best-effort' | 'omit';
 
 export interface VideoExportConfig {
   /** Output container (default: 'mp4') */
   outputFormat?: VideoOutputFormat;
+  /**
+   * How authored MP4 audio is handled. `require` (default) fails before
+   * capture when audio cannot be loaded/decoded and fails the export if later
+   * encoding or muxing fails. `best-effort` explicitly permits video-only
+   * degradation; `omit` intentionally skips audio.
+   */
+  audioPolicy?: VideoAudioPolicy;
   /** Render authored animations and slide transitions (default: true for MP4, false for GIF). */
   animationsEnabled?: boolean;
   /** Encoding quality preset (default: 'normal') */
@@ -120,6 +173,8 @@ export interface VideoExportConfig {
   audio?: Map<string, ArrayBuffer>;
   /** MediaProvider to resolve media URLs (alternative to passing images directly) */
   mediaProvider?: MediaProvider;
+  /** Policy and byte/time limits for MediaProvider URLs. */
+  resourcePolicy?: ResourcePolicy;
   /** Caption mode for the exported video (default: 'off') */
   captionMode?: CaptionMode;
   /** Player IIFE bundle (unused in browser export, kept for CLI/Playwright path) */
@@ -277,6 +332,7 @@ export function useVideoExport(): VideoExportResult {
       const fps = config.fps ?? (effectiveOutputFormat === 'gif' ? 10 : 30);
       const orientation = config.orientation ?? 'landscape';
       const animationsEnabled = config.animationsEnabled ?? effectiveOutputFormat === 'mp4';
+      const audioPolicy = config.audioPolicy ?? 'require';
       setOutputFormat(effectiveOutputFormat);
 
       try {
@@ -306,6 +362,12 @@ export function useVideoExport(): VideoExportResult {
               '(Cross-Origin-Isolation headers).',
           );
         }
+        // GIF always finishes with an ffmpeg.wasm palette pass. Validate its
+        // runtime assets now: discovering an unconfigured core after capturing
+        // every frame wastes the whole export.
+        if (effectiveOutputFormat === 'gif') {
+          resolveFfmpegWasmLoad(config.ffmpegWasm, 'Animated GIF export');
+        }
         if (!webCodecsAvailable && !sharedArrayBufferAvailable) {
           throw new Error(
             'No video encoder available. WebCodecs requires Chrome 94+ / Edge 94+, ' +
@@ -328,18 +390,45 @@ export function useVideoExport(): VideoExportResult {
           setElapsed(Math.floor((performance.now() - startTimeRef.current) / 1000));
         }, 1000);
 
-        // Collect images from MediaProvider if provided and images not passed directly
+        // Resolve only assets referenced by this document. Providers can hold an
+        // entire workspace; downloading that workspace makes export memory scale
+        // with unrelated customer files instead of with the exported document.
         let images = config.images;
         if (!images && config.mediaProvider) {
           images = new Map<string, ArrayBuffer>();
           const entries = await config.mediaProvider.listMedia();
-          for (const entry of entries) {
-            const url = await config.mediaProvider.resolveUrl(entry.name);
-            const res = await fetch(url);
-            if (res.ok) {
-              const data = await res.arrayBuffer();
-              images.set(entry.name, data);
+          const references = collectDocumentMediaReferences(doc);
+          const neededEntries = entries.filter(
+            (entry) => references.has(entry.name) || references.has(`./${entry.name}`),
+          );
+          if (neededEntries.length > MAX_EXPORT_MEDIA_FILES) {
+            throw new Error(
+              `Document references ${neededEntries.length} media files; browser export supports at most ${MAX_EXPORT_MEDIA_FILES}.`,
+            );
+          }
+          let totalMediaBytes = 0;
+          for (const entry of neededEntries) {
+            if (cancelledRef.current) return;
+            if (entry.size > MAX_EXPORT_MEDIA_FILE_BYTES) {
+              throw new Error(`Media file "${entry.name}" is too large for browser video export.`);
             }
+            const url = await config.mediaProvider.resolveUrl(entry.name);
+            const resource = await fetchResourceBytes(url, {
+              policy: {
+                ...DEFAULT_INTERACTIVE_RESOURCE_POLICY,
+                ...config.resourcePolicy,
+                maxBytes: Math.min(
+                  config.resourcePolicy?.maxBytes ?? MAX_EXPORT_MEDIA_FILE_BYTES,
+                  MAX_EXPORT_MEDIA_FILE_BYTES,
+                ),
+              },
+            });
+            const data = toArrayBuffer(resource.bytes);
+            totalMediaBytes += data.byteLength;
+            if (totalMediaBytes > MAX_EXPORT_MEDIA_TOTAL_BYTES) {
+              throw new Error('Referenced media exceeds the browser video export memory limit.');
+            }
+            images.set(entry.name, data);
           }
         }
 
@@ -355,6 +444,10 @@ export function useVideoExport(): VideoExportResult {
         if (docDuration <= 0) {
           throw new Error('Document has zero duration — nothing to export');
         }
+
+        // Known up front, so the worker encoder can report true progress
+        // instead of extrapolating from the frames it has happened to receive.
+        const totalFrames = Math.ceil(docDuration * fps);
 
         // ── Step 2: Create encoder ────────────────────────────────
         setPhase('Starting encoder…');
@@ -375,7 +468,10 @@ export function useVideoExport(): VideoExportResult {
         const audioBitrate = (QUALITY_PRESETS[quality] ?? QUALITY_PRESETS.normal).audioBitrate;
         // GIF has no audio track. An empty timeline skips preparation and
         // muxing without reporting the format limitation as an export error.
-        const timeline = effectiveOutputFormat === 'mp4' ? computeAudioTimeline(doc, 0) : [];
+        const timeline =
+          effectiveOutputFormat === 'mp4' && audioPolicy !== 'omit'
+            ? computeAudioTimeline(doc, 0)
+            : [];
         const aacSupported =
           timeline.length > 0
             ? await supportsWebCodecsAac(EXPORT_AUDIO_SAMPLE_RATE, EXPORT_AUDIO_CHANNELS)
@@ -391,6 +487,10 @@ export function useVideoExport(): VideoExportResult {
         let audioIncludedLocal = false;
         let audioReasonLocal: string | null = tierDecision.reason;
 
+        if (timeline.length > 0 && tierDecision.tier === 3 && audioPolicy === 'require') {
+          throw new Error(tierDecision.reason ?? 'This browser cannot include the document audio.');
+        }
+
         if (tierDecision.tier === 1 || tierDecision.tier === 2) {
           setPhase('Preparing audio…');
           try {
@@ -398,9 +498,17 @@ export function useVideoExport(): VideoExportResult {
               audio: config.audio,
               images,
               mediaProvider: config.mediaProvider,
+              resourcePolicy: config.resourcePolicy,
             });
+            const missingSources = [...new Set(timeline.map((clip) => clip.src))].filter(
+              (src) => !buffers.has(src),
+            );
+            if (missingSources.length > 0) {
+              audioReasonLocal = `Audio files could not be loaded: ${missingSources.join(', ')}`;
+              if (audioPolicy === 'require') throw new Error(audioReasonLocal);
+            }
             if (buffers.size === 0) {
-              audioReasonLocal = 'Audio files for this document could not be loaded.';
+              audioReasonLocal ??= 'Audio files for this document could not be loaded.';
             } else {
               const totalAudioDur = timeline.reduce(
                 (max, c) => Math.max(max, c.startSec + c.durationSec),
@@ -418,6 +526,7 @@ export function useVideoExport(): VideoExportResult {
             audioReasonLocal = `Audio could not be prepared: ${
               audioErr instanceof Error ? audioErr.message : String(audioErr)
             }`;
+            if (audioPolicy === 'require') throw new Error(audioReasonLocal);
           }
         }
 
@@ -449,6 +558,7 @@ export function useVideoExport(): VideoExportResult {
             height,
             fps,
             quality,
+            totalFrames,
             ffmpegWasm: config.ffmpegWasm,
           });
           encoder = workerEncoder;
@@ -471,7 +581,6 @@ export function useVideoExport(): VideoExportResult {
 
         // ── Step 3: Capture frames and encode ─────────────────────
         setState('capturing');
-        const totalFrames = Math.ceil(docDuration * fps);
 
         const captureStartTime = performance.now();
         // Throttle UI updates to every ~10 frames to avoid excessive re-renders.
@@ -527,6 +636,7 @@ export function useVideoExport(): VideoExportResult {
             audioReasonLocal = `Audio encoding failed: ${
               audioErr instanceof Error ? audioErr.message : String(audioErr)
             }`;
+            if (audioPolicy === 'require') throw new Error(audioReasonLocal);
           }
         }
 
@@ -576,6 +686,7 @@ export function useVideoExport(): VideoExportResult {
             audioReasonLocal = `Audio muxing failed: ${
               audioErr instanceof Error ? audioErr.message : String(audioErr)
             }`;
+            if (audioPolicy === 'require') throw new Error(audioReasonLocal);
           }
         }
 

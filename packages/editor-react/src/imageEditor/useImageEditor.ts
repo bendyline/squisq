@@ -11,6 +11,11 @@ import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'r
 import type { ContentContainer } from '@bendyline/squisq/storage';
 import type { ImageEditDoc, ImageEditLayer } from '@bendyline/squisq/schemas';
 import {
+  DEFAULT_INTERACTIVE_RESOURCE_POLICY,
+  fetchResourceBytes,
+  type ResourcePolicy,
+} from '@bendyline/squisq/markdown';
+import {
   IMAGE_EDIT_ASSETS_PREFIX,
   IMAGE_EDIT_STATE_FILENAME,
   ImageEditVersionManager,
@@ -34,6 +39,8 @@ export interface UseImageEditorOptions {
    * `assets/source.<ext>` so the doc is portable.
    */
   initialSrc?: string;
+  /** Policy and byte/time limits for fetching `initialSrc`. */
+  resourcePolicy?: ResourcePolicy;
   /** Override the state filename. Defaults to `state.json`. */
   stateFilename?: string;
   /** Enable version history. Default: `false`. */
@@ -71,6 +78,7 @@ export function useImageEditor(options: UseImageEditorOptions): UseImageEditorRe
   const {
     container,
     initialSrc,
+    resourcePolicy = DEFAULT_INTERACTIVE_RESOURCE_POLICY,
     stateFilename = IMAGE_EDIT_STATE_FILENAME,
     allowVersioning = false,
     versioningAutoSaveIdleMs = 5000,
@@ -94,6 +102,7 @@ export function useImageEditor(options: UseImageEditorOptions): UseImageEditorRe
   // ── Initial load (or seed from initialSrc) ────────────────────────────
   useEffect(() => {
     let cancelled = false;
+    const controller = new AbortController();
     setReady(false);
     setError(null);
 
@@ -107,7 +116,12 @@ export function useImageEditor(options: UseImageEditorOptions): UseImageEditorRe
           return;
         }
         // No existing state — seed.
-        const seeded = await seedFromSource(container, initialSrc);
+        const seeded = await seedFromSource(
+          container,
+          initialSrc,
+          resourcePolicy,
+          controller.signal,
+        );
         if (cancelled) return;
         await writeImageEditDoc(container, seeded, stateFilename);
         if (cancelled) return;
@@ -126,8 +140,9 @@ export function useImageEditor(options: UseImageEditorOptions): UseImageEditorRe
 
     return () => {
       cancelled = true;
+      controller.abort();
     };
-  }, [container, stateFilename, initialSrc]);
+  }, [container, stateFilename, initialSrc, resourcePolicy]);
 
   // ── Debounced persistence of state.json ────────────────────────────────
   const persistTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -318,23 +333,34 @@ export function useImageEditor(options: UseImageEditorOptions): UseImageEditorRe
 async function seedFromSource(
   container: ContentContainer,
   initialSrc: string | undefined,
+  resourcePolicy: ResourcePolicy,
+  signal: AbortSignal,
 ): Promise<ImageEditDoc> {
   if (!initialSrc) {
     return createEmptyImageEditDoc(800, 600);
   }
   // Fetch the source bytes (works for blob:, data:, http(s):, and same-origin
   // relative URLs).
-  const resp = await fetch(initialSrc);
-  if (!resp.ok) throw new Error(`useImageEditor: failed to fetch initialSrc (${resp.status})`);
-  const blob = await resp.blob();
-  const ext = guessExtensionFromMime(blob.type) ?? 'png';
+  const resource = await fetchResourceBytes(initialSrc, {
+    policy: resourcePolicy,
+    signal,
+    contentTypePrefixes: ['image/', 'application/octet-stream'],
+  });
+  const mime = resource.contentType || 'application/octet-stream';
+  const blob = new Blob([resource.bytes.slice().buffer as ArrayBuffer], { type: mime });
+  const ext = guessExtensionFromMime(mime) ?? extensionFromName(resource.finalUrl) ?? 'png';
   const assetPath = `${IMAGE_EDIT_ASSETS_PREFIX}source.${ext}`;
-  await container.writeFile(assetPath, await blob.arrayBuffer(), blob.type || undefined);
+  await container.writeFile(assetPath, resource.bytes, mime || undefined);
 
-  // Probe natural dimensions by loading into an Image.
-  const dims = await probeImageDimensions(initialSrc);
+  // Probe the already-bounded bytes. Do not trigger a second network request.
+  const objectUrl = URL.createObjectURL(blob);
+  const dims = await probeImageDimensions(objectUrl);
+  URL.revokeObjectURL(objectUrl);
   const w = dims?.width ?? 800;
   const h = dims?.height ?? 600;
+  if (w * h > 100_000_000) {
+    throw new Error('useImageEditor: source image exceeds the 100-megapixel safety limit');
+  }
 
   const layer: ImageEditLayer = {
     id: 'base',

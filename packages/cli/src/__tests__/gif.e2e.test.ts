@@ -77,6 +77,9 @@ describe('native animated GIF e2e', function () {
       const missing = [!hasFfmpeg && 'ffmpeg', !hasChromium && 'Playwright Chromium']
         .filter(Boolean)
         .join(' and ');
+      if (process.env.SQUISQ_REQUIRE_NATIVE_E2E === '1') {
+        throw new Error(`Required native GIF dependencies are missing: ${missing}`);
+      }
       console.error(`  (skipping animated GIF e2e — missing ${missing})`);
       this.skip();
     }

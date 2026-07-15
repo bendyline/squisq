@@ -230,6 +230,124 @@ describe('DocPlayer smoke test', () => {
     expect(audioController.seekTo).not.toHaveBeenCalled();
   });
 
+  // The tap-to-toggle feedback schedules a 600ms `setTapFeedback(null)`. Left
+  // pending across unmount it fires into a dead component — the cover-grace
+  // timer next to it has always had this cleanup.
+  it('clears the pending tap-feedback timer on unmount', () => {
+    const setTimeoutSpy = vi.spyOn(globalThis, 'setTimeout');
+    const clearTimeoutSpy = vi.spyOn(globalThis, 'clearTimeout');
+    try {
+      const { container, unmount } = render(
+        <DocPlayer doc={minimalDoc()} audioController={controller({ totalDuration: 5 })} />,
+      );
+
+      fireEvent.click(container.querySelector<HTMLElement>('.doc-player')!);
+
+      const tapTimerIndex = setTimeoutSpy.mock.calls.findIndex((call) => call[1] === 600);
+      expect(tapTimerIndex).toBeGreaterThanOrEqual(0);
+      const tapTimerId = setTimeoutSpy.mock.results[tapTimerIndex].value;
+
+      unmount();
+
+      expect(clearTimeoutSpy).toHaveBeenCalledWith(tapTimerId);
+    } finally {
+      setTimeoutSpy.mockRestore();
+      clearTimeoutSpy.mockRestore();
+    }
+  });
+
+  // DocControlsOverlay/Sidebar advertise "Fullscreen (F)" in their tooltips
+  // whenever `onFullscreenToggle` is wired, so the shortcut must actually
+  // exist under exactly that condition.
+  describe('fullscreen shortcut', () => {
+    it('toggles fullscreen with f when the host wired a handler', () => {
+      const onFullscreenToggle = vi.fn();
+      render(
+        <DocPlayer
+          doc={docWithThreeSlides()}
+          audioController={controller({ currentTime: 5, totalDuration: 15 })}
+          onFullscreenToggle={onFullscreenToggle}
+          globalKeyboardShortcuts
+        />,
+      );
+
+      fireEvent.keyDown(document, { key: 'f' });
+
+      expect(onFullscreenToggle).toHaveBeenCalledTimes(1);
+    });
+
+    it('also toggles in slideshow mode without changing slides', () => {
+      const onFullscreenToggle = vi.fn();
+      const audioController = controller({ currentTime: 5, totalDuration: 15 });
+      render(
+        <DocPlayer
+          doc={docWithThreeSlides()}
+          audioController={audioController}
+          displayMode="slideshow"
+          onFullscreenToggle={onFullscreenToggle}
+          globalKeyboardShortcuts
+        />,
+      );
+
+      fireEvent.keyDown(document, { key: 'f' });
+
+      expect(onFullscreenToggle).toHaveBeenCalledTimes(1);
+      expect(audioController.seekTo).not.toHaveBeenCalled();
+    });
+
+    it('accepts an uppercase F (caps lock, which sets no shiftKey)', () => {
+      const onFullscreenToggle = vi.fn();
+      render(
+        <DocPlayer
+          doc={docWithThreeSlides()}
+          audioController={controller({ currentTime: 5, totalDuration: 15 })}
+          onFullscreenToggle={onFullscreenToggle}
+          globalKeyboardShortcuts
+        />,
+      );
+
+      fireEvent.keyDown(document, { key: 'F' });
+
+      expect(onFullscreenToggle).toHaveBeenCalledTimes(1);
+    });
+
+    it('does not intercept f typed into an editable field', () => {
+      const onFullscreenToggle = vi.fn();
+      render(
+        <>
+          <input aria-label="Editable field" />
+          <DocPlayer
+            doc={docWithThreeSlides()}
+            audioController={controller({ currentTime: 5, totalDuration: 15 })}
+            onFullscreenToggle={onFullscreenToggle}
+            globalKeyboardShortcuts
+          />
+        </>,
+      );
+
+      fireEvent.keyDown(screen.getByRole('textbox', { name: 'Editable field' }), { key: 'f' });
+
+      expect(onFullscreenToggle).not.toHaveBeenCalled();
+    });
+
+    it('leaves f to the host page when no handler is wired', () => {
+      render(
+        <DocPlayer
+          doc={docWithThreeSlides()}
+          audioController={controller({ currentTime: 5, totalDuration: 15 })}
+          globalKeyboardShortcuts
+        />,
+      );
+
+      // No handler means the tooltips are not shown either; the key must stay
+      // available to the host rather than being swallowed.
+      const event = new KeyboardEvent('keydown', { key: 'f', cancelable: true, bubbles: true });
+      document.dispatchEvent(event);
+
+      expect(event.defaultPrevented).toBe(false);
+    });
+  });
+
   it('shows the managed cover as the first slideshow entry by default', async () => {
     const { container } = render(
       <DocPlayer doc={docWithCover()} basePath="/test" displayMode="slideshow" />,

@@ -67,6 +67,66 @@ function isStandardLightCover(context: TemplateContext): boolean {
   return theme.id === 'standard' && relativeLuminance(theme.colors.background) > 0.85;
 }
 
+/** One stop of the hero scrim. `pos` is the distance from the frame's BOTTOM (0..100). */
+export interface CoverScrimStop {
+  /** Percent up from the bottom of the frame — matches `linear-gradient(0deg, …)`. */
+  pos: number;
+  /** Opacity of the theme background tint at this stop. */
+  alpha: number;
+}
+
+/**
+ * Opacity ramp of the hero scrim, from the frame's bottom edge upward.
+ *
+ * The scrim is tinted from `theme.colors.background` (never a hard-coded
+ * black), so `theme.colors.text` painted on top stays legible *by
+ * construction* on light and dark themes alike — the same rule
+ * `imageWithCaption` and `sectionHeader` follow.
+ *
+ * Because the tint is the theme background rather than black, the ramp has to
+ * carry the readability that a black scrim used to get for free from being
+ * dark: the hero photo underneath is arbitrary, so the composite of
+ * scrim-over-photo only converges on the theme background where alpha is
+ * high. The title band (~59%–82% from the top; see the `y` values below) is
+ * therefore held at alpha ≥ 0.79, which keeps the worst case across all 11
+ * built-in themes — light theme text over a black photo, or dark theme text
+ * over a white one — above WCAG AA. Above that band the ramp falls away
+ * quickly so the top ~40% of the hero reads as a photograph.
+ */
+export const COVER_SCRIM_STOPS: readonly CoverScrimStop[] = [
+  { pos: 0, alpha: 0.95 },
+  { pos: 38, alpha: 0.86 },
+  { pos: 58, alpha: 0.4 },
+  { pos: 78, alpha: 0.1 },
+  { pos: 100, alpha: 0 },
+];
+
+/**
+ * Scrim opacity at a vertical position, expressed the way layer positions are
+ * (`y` percent DOWN from the top of the frame). Linear interpolation between
+ * {@link COVER_SCRIM_STOPS} — the same ramp the CSS gradient renders.
+ */
+export function coverScrimAlphaAtY(yPctFromTop: number): number {
+  const pos = 100 - yPctFromTop;
+  const stops = COVER_SCRIM_STOPS;
+  if (pos <= stops[0].pos) return stops[0].alpha;
+  for (let i = 1; i < stops.length; i++) {
+    const prev = stops[i - 1];
+    const next = stops[i];
+    if (pos <= next.pos) {
+      const t = (pos - prev.pos) / (next.pos - prev.pos);
+      return prev.alpha + (next.alpha - prev.alpha) * t;
+    }
+  }
+  return stops[stops.length - 1].alpha;
+}
+
+/** Build the hero scrim's CSS gradient, tinted from the theme background. */
+function coverScrimGradient(background: string): string {
+  const stops = COVER_SCRIM_STOPS.map((s) => `${withAlpha(background, s.alpha)} ${s.pos}%`);
+  return `linear-gradient(0deg, ${stops.join(', ')})`;
+}
+
 /**
  * Generate cover block layers from StartBlockConfig.
  */
@@ -114,7 +174,7 @@ export function coverBlock(input: CoverBlockInput, context: TemplateContext): La
         id: 'cover-gradient',
         content: {
           shape: 'rect',
-          fill: 'linear-gradient(0deg, rgba(0,0,0,0.8) 0%, rgba(0,0,0,0.4) 40%, rgba(0,0,0,0.1) 70%, transparent 100%)',
+          fill: coverScrimGradient(theme.colors.background),
         },
         position: { x: 0, y: 0, width: '100%', height: '100%' },
       },

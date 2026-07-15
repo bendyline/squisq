@@ -42,7 +42,12 @@ export interface NarrationTimingJsonV3 {
   /** Per-word timings: { id: `word-${i}`, time, charOffset, textFragment }. */
   bookmarks: AudioBookmark[];
   blocks: NarrationTimingBlock[];
-  /** Start skew of the companion camera recording, when one exists. */
+  /**
+   * SIGNED start skew of the companion camera recording, when one exists:
+   * `cameraStart - audioStart`, in seconds. Negative when the camera pipeline
+   * began first — which is reachable, since the two `MediaRecorder`s report
+   * their start asynchronously and independently.
+   */
   cameraOffsetSec?: number;
   /** Provenance of the timing data. */
   generator?: { name: string; method: 'dsp-align'; baseWpm?: number };
@@ -84,7 +89,11 @@ export function buildNarrationTimingJson(
     duration: Number.isFinite(durationSec) && durationSec >= 0 ? durationSec : 0,
     bookmarks,
     blocks,
-    ...(options?.cameraOffsetSec !== undefined ? { cameraOffsetSec: options.cameraOffsetSec } : {}),
+    // Write only what `parseNarrationTimingJson` will read back, so the codec
+    // is a round-trip pair. A non-finite value would serialize to `null`
+    // (JSON has no NaN) and be dropped on parse anyway — omitting it here
+    // keeps the emitted sidecar honest rather than carrying a dead field.
+    ...(finiteNumber(options?.cameraOffsetSec) ? { cameraOffsetSec: options.cameraOffsetSec } : {}),
     generator: {
       name: 'squisq-teleprompter',
       method: 'dsp-align',
@@ -95,6 +104,18 @@ export function buildNarrationTimingJson(
 
 function finiteNonNegative(value: unknown): value is number {
   return typeof value === 'number' && Number.isFinite(value) && value >= 0;
+}
+
+/**
+ * A SIGNED finite number. `cameraOffsetSec` is a start *skew*, not a duration:
+ * the camera and the mic are independent `MediaRecorder` pipelines whose
+ * `onstart` events fire asynchronously, so an already-warm camera can begin
+ * before the mic and yield a legitimately negative offset. Validating it as
+ * non-negative silently DROPPED those takes' offsets on reload, and the camera
+ * video then played with uncorrected skew.
+ */
+function finiteNumber(value: unknown): value is number {
+  return typeof value === 'number' && Number.isFinite(value);
 }
 
 /**
@@ -176,7 +197,7 @@ export function parseNarrationTimingJson(
       duration: raw.duration,
       bookmarks,
       blocks,
-      ...(finiteNonNegative(raw.cameraOffsetSec) ? { cameraOffsetSec: raw.cameraOffsetSec } : {}),
+      ...(finiteNumber(raw.cameraOffsetSec) ? { cameraOffsetSec: raw.cameraOffsetSec } : {}),
       ...(typeof raw.generator === 'object' && raw.generator !== null
         ? { generator: raw.generator as NarrationTimingJsonV3['generator'] }
         : {}),

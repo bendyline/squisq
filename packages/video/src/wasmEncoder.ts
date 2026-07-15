@@ -12,6 +12,7 @@ import { fetchFile } from '@ffmpeg/util';
 
 import type { VideoExportOptions, EncoderResult } from './types.js';
 import { resolveDimensions } from './types.js';
+import { resolveFfmpegWasmLoad } from './ffmpegCore.js';
 import { ffmpegVideoQualityArgs, audioBitrateArg, ffmpegAudioMuxArgs } from './ffmpegArgs.js';
 
 /**
@@ -45,6 +46,10 @@ export async function framesToMp4Wasm(
     );
   }
 
+  // Resolve runtime assets before allocating anything: an unconfigured core
+  // must fail here, not silently fetch @ffmpeg/ffmpeg's unpkg CDN default.
+  const loadConfig = resolveFfmpegWasmLoad(options.ffmpegWasm, 'framesToMp4Wasm');
+
   const duration = frames.length / fps;
 
   // Initialize ffmpeg.wasm
@@ -58,7 +63,7 @@ export async function framesToMp4Wasm(
       }
     });
 
-    await ffmpeg.load(options.ffmpegWasm);
+    await ffmpeg.load(loadConfig);
 
     onProgress?.(0, 'writing frames');
 

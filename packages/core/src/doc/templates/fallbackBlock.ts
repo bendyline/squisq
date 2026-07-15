@@ -15,6 +15,7 @@ import type { Layer } from '../../schemas/Doc.js';
 import type { Block } from '../../schemas/Doc.js';
 import type { DocBlock, TemplateContext } from '../../schemas/BlockTemplates.js';
 import { resolveColorScheme, getThemeFont, themedFontSize } from '../utils/themeUtils.js';
+import { withAlpha } from '../../schemas/colorUtils.js';
 import { extractPlainText } from '../../markdown/utils.js';
 
 /** Cap body text so a long section doesn't overflow the card. */
@@ -101,7 +102,7 @@ export function fallbackBlockLayers(
       style: {
         fontSize: themedFontSize(18, context),
         fontFamily: getThemeFont(context, 'body'),
-        color: `${colors.text}99`,
+        color: withAlpha(colors.text, 0.6),
         textAlign: 'center',
       },
     },

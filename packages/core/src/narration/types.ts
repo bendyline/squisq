@@ -228,6 +228,12 @@ export const DEFAULT_PACING_CONFIG: PacingConfig = Object.freeze({
 });
 
 export interface AlignConfig {
+  /** Maximum take duration accepted by the batch aligner. */
+  maxDurationSec: number;
+  /** Maximum PCM samples accepted by the batch aligner. */
+  maxPcmSamples: number;
+  /** Maximum script tokens accepted by the batch aligner. */
+  maxScriptTokens: number;
   /** Fine analysis hop for the offline pass (s). */
   hopSec: number;
   /** Non-speech runs at least this long become GAP events (s). */
@@ -253,6 +259,9 @@ export interface AlignConfig {
 }
 
 export const DEFAULT_ALIGN_CONFIG: AlignConfig = Object.freeze({
+  maxDurationSec: 2 * 60 * 60,
+  maxPcmSamples: 200_000_000,
+  maxScriptTokens: 250_000,
   hopSec: 0.01,
   gapMinSec: 0.35,
   bandRadiusSec: 1.5,

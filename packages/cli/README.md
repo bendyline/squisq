@@ -40,6 +40,7 @@ squisq convert input.md --theme cinematic --transform magazine --formats pptx
 | `-o, --output <file>` | **Single** output file; format inferred from its extension (cannot combine with `--formats`)                | —             |
 | `-d, --output-dir`    | Output directory (multi-format mode)                                                                        | same as input |
 | `-f, --formats`       | Comma-separated: `docx`, `pptx`, `pdf`, `html`, `htmlzip`, `epub`, `dbk`, `md`, `xlsx`, `csv`, `mp4`, `gif` | default set   |
+| `--overwrite`         | Replace existing output files (otherwise the run refuses and exits non-zero)                                | off           |
 | `-t, --theme`         | Squisq theme id — built-in or a custom theme inlined in the doc's frontmatter                               | none          |
 | `--transform`         | Transform style applied before export (e.g. `documentary`, `magazine`, `minimal`)                           | none          |
 | `--no-auto-templates` | Disable content-aware template auto-picking for unannotated headings                                        | (auto on)     |
@@ -48,6 +49,8 @@ squisq convert input.md --theme cinematic --transform magazine --formats pptx
 
 Notes:
 
+- **Existing files are never overwritten by default.** A bare `convert report.md` writes several files next to the input; if any already exists the run refuses up front (before converting anything) and exits 1. Pass `--overwrite` to replace them. The flag is `--overwrite`, not `-f`, because `-f` is `--formats`. There is no prompt — this stays scriptable.
+- **An unknown `--formats` id is a hard error.** `-f docx,pfd` fails with `Unknown format: "pfd" (did you mean "pdf"?)` and produces nothing, rather than warning and exiting 0 with the PDF silently missing.
 - `html` produces a single self-contained file with the standalone player inlined (static mode); `htmlzip` produces a `<name>.html.zip` archive with external assets and optional audio.
 - `epub` embeds images from the input container and, when the doc has narration segments, generates EPUB 3 Media Overlays.
 - `xlsx` export is tables-only; `csv` export emits the first table; `mp4` and `gif` require the render toolchain (see Install).
@@ -83,8 +86,15 @@ squisq video doc.json -o out.mp4
 | `-t, --theme`                      | Squisq theme id to apply                                             | none                      |
 | `--transform`                      | Transform style to apply before rendering                            | none                      |
 | `--cover-preroll`                  | Seconds of cover-slide pre-roll before the story starts              | 2                         |
-| `--width` / `--height`             | Dimension overrides in pixels                                        | MP4 1080p; GIF 960×540    |
+| `--width` / `--height`             | Dimension overrides in pixels — **must be even**                     | MP4 1080p; GIF 960×540    |
+| `--overwrite`                      | Replace an existing output file (otherwise refuse and exit non-zero) | off                       |
 | `--no-auto-templates`              | Disable content-aware template auto-picking for unannotated headings | (auto on)                 |
+
+Notes:
+
+- **Dimensions must be even.** `--width 851` is rejected immediately — before the document is read or a browser launches — with `Video width must be an even number of pixels (got 851) … Use 850 or 852.` Odd values are rejected rather than rounded, so a render never silently ships at a size you did not ask for. The rule is the same for MP4 and GIF, and matches browser export.
+- **An existing output file is never overwritten by default.** The check runs before rendering, so a colliding path costs you a second rather than a full capture. Pass `--overwrite` to replace.
+- FFmpeg failures report the one relevant line (e.g. `[libx264] width not divisible by 2 (851x480) (exit code 1)`) rather than dumping the whole command line and stderr buffer.
 
 ### `squisq doctor`
 

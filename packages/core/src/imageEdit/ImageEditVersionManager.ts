@@ -14,6 +14,7 @@ import {
   revertToImageEditVersion,
   saveImageEditVersion,
   type RevertImageEditOptions,
+  type RevertImageEditResult,
   type SaveImageEditVersionOptions,
   type SaveImageEditVersionResult,
 } from './versions.js';
@@ -56,7 +57,7 @@ export class ImageEditVersionManager {
   revertToVersion(
     version: Version | string,
     options: RevertImageEditOptions = {},
-  ): Promise<{ reverted: boolean; snapshotted: Version | null }> {
+  ): Promise<RevertImageEditResult> {
     return revertToImageEditVersion(this.container, version, {
       stateFilename: this.stateFilename,
       ...options,

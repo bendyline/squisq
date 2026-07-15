@@ -30,6 +30,7 @@ const CUSTOM_THEME_STORAGE_KEY = 'squisq-site:customTheme';
 const COLOR_MODE_STORAGE_KEY = 'squisq-site:colorMode';
 const WRITE_CANVAS_STORAGE_KEY = 'squisq-site:writeCanvasSettings';
 const DEFAULT_SAMPLE_KEY = 'about-squisq';
+const SITE_BASE_URL = import.meta.env.BASE_URL;
 const SAMPLE_KEYS = [
   DEFAULT_SAMPLE_KEY,
   ...Object.keys(SAMPLES).filter((key) => key !== DEFAULT_SAMPLE_KEY),
@@ -634,7 +635,7 @@ export function App() {
         />
 
         <a
-          href="https://github.com/bendyline/squisq/blob/main/LICENSE"
+          href={`${SITE_BASE_URL}legal/LICENSE.txt`}
           target="_blank"
           rel="noopener noreferrer"
           style={{
@@ -645,10 +646,10 @@ export function App() {
             whiteSpace: 'nowrap',
           }}
         >
-          Terms of Use
+          Squisq license
         </a>
         <a
-          href="https://github.com/bendyline/squisq/blob/main/NOTICE.md"
+          href={`${SITE_BASE_URL}legal/NOTICE.md`}
           target="_blank"
           rel="noopener noreferrer"
           style={{

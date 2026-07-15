@@ -38,7 +38,10 @@ from a live in-page `DocPlayer`, so the standalone bundle is only needed for
 CLI/Playwright-style pipelines. A new `defaultConfig?: Partial<VideoExportConfig>`
 prop seeds the modal's initial quality/fps/orientation/caption selections.
 Both components also accept `colorScheme="light" | "dark"` so their portaled
-modal can match the host application; the default remains `light`.
+modal can match the host application; the default remains `light`. Hosts with
+their own theme tokens can pass `uiPalette?: Partial<VideoExportPalette>` to
+override dialog surfaces, controls, status colors, and the shared primary color
+used by the export action and progress bar.
 
 ### Full Export Modal
 
@@ -146,9 +149,16 @@ which requires `SharedArrayBuffer` (i.e. Cross-Origin-Isolation headers on the
 host page). Animated GIF always performs an ffmpeg.wasm palette pass and therefore
 also requires `SharedArrayBuffer`. The packaged class worker is bundler-safe.
 
-`@ffmpeg/core` is pinned as a runtime dependency. Hosts should publish its ESM
+Video dimensions must be **even**: an odd `width`/`height` is rejected before
+capture starts rather than rounded (H.264's `yuv420p` cannot encode odd
+dimensions, and GIF export muxes an H.264 intermediate).
+
+### ffmpeg.wasm runtime assets (required)
+
+`@ffmpeg/core` is pinned as a runtime dependency. Hosts **must** publish its ESM
 `ffmpeg-core.js` and `ffmpeg-core.wasm` files from the same origin and pass their
-URLs, especially for offline or Content-Security-Policy-controlled deployments:
+URLs. Every ffmpeg.wasm path — the encoder fallback, the GIF palette pass, and
+tier-2 audio muxing — throws an actionable error when `coreURL` is absent:
 
 ```ts
 const config = {
@@ -160,6 +170,16 @@ const config = {
   },
 };
 ```
+
+This is not merely recommended for offline/CSP deployments — it is required.
+`@ffmpeg/ffmpeg`'s `load()` otherwise falls back to a hard-coded
+`https://unpkg.com/@ffmpeg/core@<version>/…` URL, silently fetching and executing
+unpinned third-party code mid-export. Squisq refuses to trigger that fallback; a
+GIF export with no `ffmpegWasm` now fails immediately instead of after capturing
+every frame. `packages/site/vite.config.ts` + `packages/site/src/ffmpegWasmConfig.ts`
+are a complete worked example for Vite (including the GPL notice that must travel
+with the core files). To deliberately use a remote core, name that URL as
+`coreURL` explicitly.
 
 Use `supportsWebCodecs()` to probe at runtime:
 
@@ -198,7 +218,14 @@ for complete prop tables, `VideoExportConfig`, and the encoder utilities.
 
 ## License
 
-[MIT](https://github.com/bendyline/squisq/blob/main/LICENSE)
+Squisq-authored code in this package is
+[MIT licensed](https://github.com/bendyline/squisq/blob/main/LICENSE).
 
-The separately distributed `@ffmpeg/core` runtime retains its own
-GPL-2.0-or-later license.
+The separately distributed `@ffmpeg/core` WebAssembly runtime has an upstream
+dependency on FFmpeg and external libraries. The 0.12.9 package declares
+GPL-2.0-or-later and is distributed under those terms. This package ships
+[`NOTICE.md`](./NOTICE.md) and the complete
+[`COPYING.GPL-2.0.txt`](./COPYING.GPL-2.0.txt). Hosts that publish
+`ffmpeg-core.js` or `ffmpeg-core.wasm` must publish those materials with the
+runtime and preserve equivalent access to the exact corresponding source
+identified in the notice.

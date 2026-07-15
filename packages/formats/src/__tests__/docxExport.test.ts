@@ -489,3 +489,195 @@ describe('docToDocx', () => {
     expect(xmlText).toContain('Body text');
   });
 });
+
+// ============================================
+// Relationship ID Allocation (regression)
+// ============================================
+
+/**
+ * A 24-byte PNG header — enough for `readImageDimensions` to read a 1x1 size.
+ * The pixel data is irrelevant; these tests only inspect the OOXML wiring.
+ */
+const TINY_PNG = new Uint8Array([
+  0x89,
+  0x50,
+  0x4e,
+  0x47,
+  0x0d,
+  0x0a,
+  0x1a,
+  0x0a, // signature
+  0x00,
+  0x00,
+  0x00,
+  0x0d,
+  0x49,
+  0x48,
+  0x44,
+  0x52, // IHDR chunk header
+  0x00,
+  0x00,
+  0x00,
+  0x01,
+  0x00,
+  0x00,
+  0x00,
+  0x01, // width = 1, height = 1
+]);
+
+async function getRelationships(zip: JSZip, path: string): Promise<Element[]> {
+  const file = zip.file(path);
+  expect(file, `expected ${path} to exist`).toBeTruthy();
+  const xml = new DOMParser().parseFromString(await file!.async('text'), 'application/xml');
+  return Array.from(xml.getElementsByTagName('Relationship'));
+}
+
+const REL_TYPE_STYLES =
+  'http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles';
+const REL_TYPE_NUMBERING =
+  'http://schemas.openxmlformats.org/officeDocument/2006/relationships/numbering';
+const REL_TYPE_HYPERLINK =
+  'http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink';
+const REL_TYPE_IMAGE = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/image';
+
+describe('DOCX relationship ID allocation', () => {
+  const COUNT = 120;
+
+  /** 120 paragraphs, each carrying one hyperlink and one image, plus a list. */
+  function bigDoc(): {
+    doc: MarkdownDocument;
+    images: Map<string, { data: Uint8Array; contentType: string }>;
+  } {
+    const images = new Map<string, { data: Uint8Array; contentType: string }>();
+    const children: MarkdownDocument['children'] = [];
+
+    for (let i = 0; i < COUNT; i++) {
+      const url = `assets/img${i}.png`;
+      images.set(url, { data: TINY_PNG, contentType: 'image/png' });
+      children.push({
+        type: 'paragraph',
+        children: [
+          {
+            type: 'link',
+            url: `https://example.com/page-${i}`,
+            children: [{ type: 'text', value: `link ${i}` }],
+          } as MarkdownLink,
+          { type: 'image', url, alt: `image ${i}` },
+        ],
+      });
+    }
+
+    // A list forces numbering.xml + its relationship into the package.
+    children.push({
+      type: 'list',
+      ordered: true,
+      children: [
+        {
+          type: 'listItem',
+          children: [{ type: 'paragraph', children: [{ type: 'text', value: 'item' }] }],
+        } as MarkdownListItem,
+      ],
+    } as MarkdownList);
+
+    return { doc: { type: 'document', children }, images };
+  }
+
+  it('emits unique relationship Ids with 120 hyperlinks and 120 images', async () => {
+    const { doc, images } = bigDoc();
+    const zip = await exportAndParse(doc, { images });
+    const rels = await getRelationships(zip, 'word/_rels/document.xml.rels');
+
+    const ids = rels.map((r) => r.getAttribute('Id')!);
+    // The real bug: fixed rels started at a hardcoded rId100 while dynamic
+    // rels counted up from rId1, so the 99th hyperlink duplicated the styles
+    // rel and Word refused (or silently "repaired") the file.
+    const duplicates = ids.filter((id, i) => ids.indexOf(id) !== i);
+    expect(duplicates).toEqual([]);
+    expect(new Set(ids).size).toBe(ids.length);
+
+    // Sanity: we really did generate enough rels to cross the old cliff.
+    expect(rels.filter((r) => r.getAttribute('Type') === REL_TYPE_HYPERLINK)).toHaveLength(COUNT);
+    expect(rels.filter((r) => r.getAttribute('Type') === REL_TYPE_IMAGE)).toHaveLength(COUNT);
+    expect(ids.length).toBeGreaterThan(100);
+  });
+
+  it('keeps the styles and numbering relationships intact alongside 120+ dynamic rels', async () => {
+    const { doc, images } = bigDoc();
+    const zip = await exportAndParse(doc, { images });
+    const rels = await getRelationships(zip, 'word/_rels/document.xml.rels');
+
+    const byType = (type: string) => rels.filter((r) => r.getAttribute('Type') === type);
+
+    const styles = byType(REL_TYPE_STYLES);
+    expect(styles).toHaveLength(1);
+    expect(styles[0]!.getAttribute('Target')).toBe('styles.xml');
+    expect(zip.file('word/styles.xml')).toBeTruthy();
+
+    const numbering = byType(REL_TYPE_NUMBERING);
+    expect(numbering).toHaveLength(1);
+    expect(numbering[0]!.getAttribute('Target')).toBe('numbering.xml');
+    expect(zip.file('word/numbering.xml')).toBeTruthy();
+
+    // The styles rel must not have been shadowed by a hyperlink/image rel.
+    const stylesId = styles[0]!.getAttribute('Id');
+    expect(rels.filter((r) => r.getAttribute('Id') === stylesId)).toHaveLength(1);
+  });
+
+  it('resolves every r:id referenced by document.xml to a declared relationship', async () => {
+    const { doc, images } = bigDoc();
+    const zip = await exportAndParse(doc, { images });
+    const rels = await getRelationships(zip, 'word/_rels/document.xml.rels');
+    const declared = new Set(rels.map((r) => r.getAttribute('Id')!));
+
+    const xmlText = await zip.file('word/document.xml')!.async('text');
+    const referenced = [...xmlText.matchAll(/r:(?:id|embed)="([^"]+)"/g)].map((m) => m[1]!);
+
+    expect(referenced.length).toBe(COUNT * 2); // one hyperlink + one blip each
+    const dangling = [...new Set(referenced)].filter((id) => !declared.has(id));
+    expect(dangling).toEqual([]);
+  });
+
+  it('gives header and footer stories their own independent rels parts', async () => {
+    const doc: MarkdownDocument = {
+      type: 'document',
+      children: [
+        {
+          type: 'paragraph',
+          children: [
+            {
+              type: 'link',
+              url: 'https://example.com/body',
+              children: [{ type: 'text', value: 'body' }],
+            } as MarkdownLink,
+          ],
+        },
+        {
+          type: 'containerDirective',
+          name: 'docx-header',
+          children: [
+            {
+              type: 'paragraph',
+              children: [
+                {
+                  type: 'link',
+                  url: 'https://example.com/head',
+                  children: [{ type: 'text', value: 'head' }],
+                } as MarkdownLink,
+              ],
+            },
+          ],
+        } as MarkdownContainerDirective,
+      ],
+    };
+
+    const zip = await exportAndParse(doc);
+    for (const path of ['word/_rels/document.xml.rels', 'word/_rels/header1.xml.rels']) {
+      const ids = (await getRelationships(zip, path)).map((r) => r.getAttribute('Id')!);
+      expect(new Set(ids).size).toBe(ids.length);
+    }
+
+    // The header's hyperlink must be declared on the header's own rels part.
+    const headerRels = await getRelationships(zip, 'word/_rels/header1.xml.rels');
+    expect(headerRels.filter((r) => r.getAttribute('Type') === REL_TYPE_HYPERLINK)).toHaveLength(1);
+  });
+});

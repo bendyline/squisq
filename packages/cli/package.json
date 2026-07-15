@@ -27,13 +27,13 @@
   "bin": {
     "squisq": "./dist/index.js"
   },
-  "main": "./dist/index.js",
-  "types": "./dist/index.d.ts",
+  "main": "./dist/api.js",
+  "types": "./dist/api.d.ts",
   "exports": {
     ".": {
-      "types": "./dist/index.d.ts",
-      "import": "./dist/index.js",
-      "default": "./dist/index.js"
+      "types": "./dist/api.d.ts",
+      "import": "./dist/api.js",
+      "default": "./dist/api.js"
     },
     "./api": {
       "types": "./dist/api.d.ts",
@@ -42,12 +42,16 @@
     }
   },
   "files": [
-    "dist"
+    "dist",
+    "!dist/**/*.map",
+    "LICENSE",
+    "NOTICE.md"
   ],
   "scripts": {
     "build": "tsup",
     "typecheck": "tsc --noEmit",
-    "test": "mocha"
+    "test": "mocha",
+    "test:native": "mocha --grep \"flagship pptx|native animated GIF\""
   },
   "dependencies": {
     "@bendyline/squisq": "2.1.0",
@@ -55,8 +59,7 @@
     "@bendyline/squisq-react": "2.1.0",
     "@bendyline/squisq-video": "2.0.2",
     "commander": "12.1.0",
-    "playwright-core": "1.58.2",
-    "vite": "8.0.14"
+    "playwright-core": "1.58.2"
   },
   "devDependencies": {
     "@types/chai": "5.2.3",

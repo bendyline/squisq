@@ -107,6 +107,18 @@ function mixdownToMono(buffer: AudioBuffer): Float32Array {
   return out;
 }
 
+/**
+ * Thrown internally when an in-flight `start()` is superseded — by a `stop()`
+ * pressed during startup, or by unmount/retake/discard. Not a user-facing
+ * failure: the attempt unwinds to 'idle', not 'error'.
+ */
+class StartAborted extends Error {
+  constructor() {
+    super('Narration start aborted');
+    this.name = 'StartAborted';
+  }
+}
+
 function stopRecorder(recorder: MediaRecorder): Promise<void> {
   if (recorder.state === 'inactive') return Promise.resolve();
   return new Promise((resolve) => {
@@ -131,10 +143,35 @@ export function useNarrationRecorder(
   const [take, setTake] = useState<NarrationTake | null>(null);
 
   const captureRef = useRef<ActiveCapture | null>(null);
+  // `stop()` nulls captureRef BEFORE it decodes/aligns, so from that moment
+  // the unmount teardown can no longer see the take in flight. These two make
+  // the loss observable: `processingRef` marks the decode/align window,
+  // `takeRef` mirrors the take state a teardown would drop on the floor.
+  const processingRef = useRef(false);
+  const takeRef = useRef<NarrationTake | null>(null);
+  const unmountedRef = useRef(false);
+  // Bumped whenever an in-flight start() must be abandoned (stop during
+  // startup, unmount, retake, discard, or a newer start). start() compares
+  // its own generation after every await and unwinds if it no longer matches,
+  // so a superseded attempt can never install itself or reach 'recording'.
+  const generationRef = useRef(0);
+  const startingRef = useRef(false);
   const optionsRef = useRef(options);
   optionsRef.current = options;
 
+  /** Invalidate any start() currently between awaits. */
+  const cancelPendingStart = useCallback(() => {
+    generationRef.current++;
+  }, []);
+
+  /** Keep `takeRef` in lockstep with the take state the teardown reports on. */
+  const applyTake = useCallback((next: NarrationTake | null) => {
+    takeRef.current = next;
+    setTake(next);
+  }, []);
+
   const teardownCapture = useCallback(() => {
+    cancelPendingStart();
     const capture = captureRef.current;
     captureRef.current = null;
     if (!capture) return;
@@ -155,14 +192,42 @@ export function useNarrationRecorder(
     }
     for (const track of capture.cameraStream?.getTracks() ?? []) track.stop();
     setCameraStream(null);
-  }, []);
+  }, [cancelPendingStart]);
 
   const start = useCallback(async () => {
-    if (captureRef.current) return;
+    if (captureRef.current || startingRef.current) return;
     const opts = optionsRef.current;
+    const generation = ++generationRef.current;
+    const superseded = () => generationRef.current !== generation;
+    startingRef.current = true;
     setError(null);
-    setTake(null);
+    applyTake(null);
     setState('starting');
+
+    // Everything this attempt acquires, tracked locally: until `capture` is
+    // installed on captureRef, teardownCapture() cannot see any of it, so an
+    // abort/throw anywhere below must release these itself or the camera
+    // indicator stays lit until the tab closes.
+    let camera: MediaStream | null = null;
+    let audioRecorder: MediaRecorder | null = null;
+    let cameraRecorder: MediaRecorder | null = null;
+    let traceTimer: ReturnType<typeof setInterval> | null = null;
+    const releaseStartupMedia = () => {
+      if (traceTimer !== null) clearInterval(traceTimer);
+      for (const recorder of [audioRecorder, cameraRecorder]) {
+        if (recorder && recorder.state !== 'inactive') {
+          try {
+            recorder.stop();
+          } catch {
+            // Already stopping / never started.
+          }
+        }
+      }
+      // The mic stream belongs to useMicAnalysis (it paces the prompter) —
+      // only the camera was acquired by this hook, so only it is ours to stop.
+      for (const track of camera?.getTracks() ?? []) track.stop();
+    };
+
     try {
       // Recording always needs the mic — voice pacing or not. Use the
       // stream `start()` resolves with; the handle's `stream` FIELD is a
@@ -171,20 +236,23 @@ export function useNarrationRecorder(
         opts.mic.status === 'live' && opts.mic.stream
           ? opts.mic.stream
           : await opts.mic.start(opts.getMicDeviceId());
+      if (superseded()) throw new StartAborted();
       if (!micStream) throw opts.mic.error ?? new Error('Microphone unavailable');
 
       const audioFormat = resolveFormat('audio');
-      const audioRecorder = new MediaRecorder(
+      audioRecorder = new MediaRecorder(
         micStream,
         audioFormat.mimeType ? { mimeType: audioFormat.mimeType } : undefined,
       );
 
-      let cameraRecorder: MediaRecorder | null = null;
-      let camera: MediaStream | null = null;
       let cameraMime: string | null = null;
       let cameraExt: string | null = null;
       if (withCamera) {
         camera = await requestCameraStream({ video: true, audio: false });
+        // Stop pressed (or unmounted) while the camera permission was
+        // pending: release the tracks we just took instead of lighting the
+        // indicator for a recording nobody is going to make.
+        if (superseded()) throw new StartAborted();
         const videoFormat = resolveFormat('video');
         cameraRecorder = new MediaRecorder(
           camera,
@@ -225,33 +293,62 @@ export function useNarrationRecorder(
         };
       }
 
+      // Last chance to bail before any bytes are captured.
+      if (superseded()) throw new StartAborted();
+
       audioRecorder.start(1000);
       cameraRecorder?.start(1000);
-      capture.traceTimer = setInterval(() => {
+      traceTimer = setInterval(() => {
         const base = capture.audioStartMs ?? capture.startedAtMs;
         capture.traceSamples.push({
           tMs: performance.now() - base,
           wordPos: optionsRef.current.getWordPos(),
         });
       }, TRACE_INTERVAL_MS);
+      capture.traceTimer = traceTimer;
 
+      // Installed: from here teardownCapture()/stop() own this media.
       captureRef.current = capture;
       setCameraStream(camera);
       setState('recording');
       opts.onRecordingStart?.();
     } catch (err: unknown) {
+      // Release what this attempt acquired, then teardownCapture() in case we
+      // failed *after* installing (a throwing onRecordingStart). Stopping an
+      // already-stopped track/recorder is a no-op, so the overlap is safe.
+      releaseStartupMedia();
       teardownCapture();
-      setError(err instanceof Error ? err : new Error(String(err)));
-      setState('error');
+      setCameraStream(null);
+      if (err instanceof StartAborted) {
+        // A stop/unmount raced the startup. Nothing was captured and the
+        // media is released — unwind quietly to idle rather than 'error'.
+        setState('idle');
+      } else {
+        setError(err instanceof Error ? err : new Error(String(err)));
+        setState('error');
+      }
+    } finally {
+      startingRef.current = false;
     }
-  }, [teardownCapture, withCamera]);
+  }, [applyTake, teardownCapture, withCamera]);
 
   const stop = useCallback(async () => {
     const capture = captureRef.current;
-    if (!capture) return;
+    if (!capture) {
+      // Stop pressed during 'starting': the Stop button is live in that state,
+      // so a swallowed stop would let the pending start() complete and begin
+      // recording anyway. Invalidate it — start() unwinds and releases the
+      // media it acquired.
+      if (startingRef.current) {
+        cancelPendingStart();
+        setState('idle');
+      }
+      return;
+    }
     captureRef.current = null;
     if (capture.traceTimer !== null) clearInterval(capture.traceTimer);
     optionsRef.current.onRecordingStop?.();
+    processingRef.current = true;
     setState('processing');
 
     await stopRecorder(capture.audioRecorder);
@@ -296,7 +393,21 @@ export function useNarrationRecorder(
       }
     }
 
-    setTake({
+    processingRef.current = false;
+
+    // Decode + alignment take seconds on a long take. If the view was torn
+    // down in that window (mode switch, tab change) there is nothing left to
+    // render the take into, and the recording is gone. Say so — a silent drop
+    // of audio the user just performed is the worst possible outcome here.
+    if (unmountedRef.current) {
+      console.warn(
+        '[squisq-editor] Narration take discarded: the teleprompter was closed while the ' +
+          `${wallClockSec.toFixed(1)}s recording was still being aligned. The audio was not saved.`,
+      );
+      return;
+    }
+
+    applyTake({
       audioBlob,
       audioMime,
       audioExt: capture.audioExt,
@@ -319,36 +430,64 @@ export function useNarrationRecorder(
       },
     });
     setState('review');
-  }, []);
+  }, [applyTake, cancelPendingStart]);
 
   const retake = useCallback(() => {
     teardownCapture();
-    setTake(null);
+    applyTake(null);
     setError(null);
     setState('idle');
-  }, [teardownCapture]);
+  }, [applyTake, teardownCapture]);
 
   const discard = useCallback(() => {
     teardownCapture();
-    setTake(null);
+    applyTake(null);
     setError(null);
     setState('idle');
-  }, [teardownCapture]);
+  }, [applyTake, teardownCapture]);
 
   const beginSave = useCallback(() => setState('saving'), []);
-  const finishSave = useCallback((ok: boolean, saveError?: Error) => {
-    if (ok) {
-      setTake(null);
-      setError(null);
-      setState('idle');
-    } else {
-      setError(saveError ?? new Error('Save failed'));
-      setState('review');
-    }
-  }, []);
+  const finishSave = useCallback(
+    (ok: boolean, saveError?: Error) => {
+      if (ok) {
+        applyTake(null);
+        setError(null);
+        setState('idle');
+      } else {
+        setError(saveError ?? new Error('Save failed'));
+        setState('review');
+      }
+    },
+    [applyTake],
+  );
 
   // Hard stop on unmount (mode switch, shell teardown).
-  useEffect(() => teardownCapture, [teardownCapture]);
+  //
+  // The take lives in this hook's state, so ANY unmount after `stop()` drops
+  // it. During 'review' that is at least user-informed — they can see the take
+  // and chose to navigate away. During 'processing' it is not: the UI says
+  // "Aligning take…", offers no save affordance, and the recording vanishes.
+  // Neither case can be rescued from inside the hook (there is no surface left
+  // to render into and no I/O deps here), so the least we owe the user is a
+  // record that their audio was thrown away.
+  useEffect(() => {
+    unmountedRef.current = false;
+    return () => {
+      unmountedRef.current = true;
+      if (processingRef.current) {
+        console.warn(
+          '[squisq-editor] Narration take discarded: the teleprompter was closed while a ' +
+            'recording was still being aligned. The audio was not saved.',
+        );
+      } else if (takeRef.current) {
+        console.warn(
+          '[squisq-editor] Unsaved narration take discarded: the teleprompter was closed ' +
+            'before the take was saved.',
+        );
+      }
+      teardownCapture();
+    };
+  }, [teardownCapture]);
 
   return {
     state,

@@ -8,6 +8,13 @@
  *   squisq convert <input> [options]
  *   squisq video <input> [output.mp4|output.gif] [options]
  *   squisq --help
+ *
+ * THIS MODULE IS THE `squisq` BIN ENTRY POINT ONLY. Importing it runs the CLI:
+ * the module body prints a banner and calls `program.parse()` against the host
+ * process's argv. It is therefore deliberately NOT reachable through the
+ * package's `exports` map — `main`/`exports["."]` resolve to `./dist/api.js`,
+ * and the programmatic surface lives at `@bendyline/squisq-cli/api`. Only the
+ * `bin` field (which bypasses `exports`) points here.
  */
 
 import { createRequire } from 'node:module';
