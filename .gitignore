@@ -152,3 +152,4 @@ reports/
 # Gezel
 .gezel/
 /.claude/worktrees
+/.stryker-tmp

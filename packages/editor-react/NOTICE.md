@@ -8,9 +8,6 @@ Third-party components remain under their respective license terms.
 
 | Package                           | Version              | License                       | Repository                                    |
 | --------------------------------- | -------------------- | ----------------------------- | --------------------------------------------- |
-| @bendyline/squisq                 | 2.1.0                | MIT                           | https://github.com/bendyline/squisq           |
-| @bendyline/squisq-formats         | 2.1.0                | MIT                           | https://github.com/bendyline/squisq           |
-| @bendyline/squisq-react           | 2.1.0                | MIT                           | https://github.com/bendyline/squisq           |
 | @fortawesome/fontawesome-free     | 7.2.0                | CC-BY-4.0 AND OFL-1.1 AND MIT | https://github.com/FortAwesome/Font-Awesome   |
 | @tiptap/extension-image           | 2.27.2               | MIT                           | https://github.com/ueberdosis/tiptap          |
 | @tiptap/extension-link            | 2.27.2               | MIT                           | https://github.com/ueberdosis/tiptap          |

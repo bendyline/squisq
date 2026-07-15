@@ -78,7 +78,7 @@ describe('third-party notices stay in sync', () => {
         ...Object.keys(manifest.dependencies ?? {}),
         ...Object.keys(manifest.optionalDependencies ?? {}),
         ...Object.keys(manifest.peerDependencies ?? {}),
-      ];
+      ].filter((name) => !name.startsWith('@bendyline/'));
       const missing = dependencies.filter(
         (name) => !new RegExp(`\\|\\s*${escapeRegExp(name)}(?:\\s|_)`).test(packageNotice),
       );
@@ -87,6 +87,18 @@ describe('third-party notices stay in sync', () => {
         'NOTICE.md',
       );
       expect(manifest.files, `${entry.name} must explicitly publish LICENSE`).toContain('LICENSE');
+    }
+  });
+
+  it('does not treat Squisq workspace packages as third-party dependencies', () => {
+    for (const entry of readdirSync(packagesDir, { withFileTypes: true })) {
+      if (!entry.isDirectory()) continue;
+      const manifest = JSON.parse(
+        readFileSync(resolve(packagesDir, entry.name, 'package.json'), 'utf8'),
+      ) as PackageManifest;
+      if (manifest.private) continue;
+      const packageNotice = readFileSync(resolve(packagesDir, entry.name, 'NOTICE.md'), 'utf8');
+      expect(packageNotice, `${entry.name}/NOTICE.md`).not.toMatch(/\|\s*@bendyline\//);
     }
   });
 

@@ -337,8 +337,9 @@ npm run dev                # Build runtime packages, start their watchers, then 
                            # (Vite, port 5199) after every initial ESM watch build is ready
 npm run lint               # ESLint
 npm run format             # Prettier format
-npm run all                # install:safe + build + lint + format:check + typecheck + test +
-                           #   test:published + test:cli + test:e2e:built (the full pre-release sweep)
+npm run all                # install:safe + build + lint + format:check + typecheck + coverage +
+                           #   mutation + published + CLI + required native MP4/GIF + browser E2E
+                           #   (the full pre-release sweep; requires FFmpeg + Playwright browsers)
 ```
 
 For CI / clean reproducible installs, run `npm ci && node scripts/run-install-allowlist.mjs`

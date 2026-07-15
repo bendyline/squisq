@@ -6,18 +6,15 @@ Third-party components remain under their respective license terms.
 
 ## Runtime, peer, and bundled dependencies
 
-| Package                 | Version              | License          | Repository                                |
-| ----------------------- | -------------------- | ---------------- | ----------------------------------------- |
-| @bendyline/squisq       | 2.1.0                | MIT              | https://github.com/bendyline/squisq       |
-| @bendyline/squisq-video | 2.0.2                | MIT              | https://github.com/bendyline/squisq       |
-| @bendyline/squisq-react | 2.1.0                | MIT              | https://github.com/bendyline/squisq       |
-| @ffmpeg/core            | 0.12.9               | GPL-2.0-or-later | https://github.com/ffmpegwasm/ffmpeg.wasm |
-| @ffmpeg/ffmpeg          | 0.12.15              | MIT              | https://github.com/ffmpegwasm/ffmpeg.wasm |
-| @ffmpeg/util            | 0.12.2               | MIT              | https://github.com/ffmpegwasm/ffmpeg.wasm |
-| html2canvas             | 1.4.1                | MIT              | https://github.com/niklasvh/html2canvas   |
-| mp4-muxer _(bundled)_   | 5.2.2                | MIT              | https://github.com/Vanilagy/mp4-muxer     |
-| react _(peer)_          | ^18.0.0 \|\| ^19.0.0 | MIT              | https://github.com/facebook/react         |
-| react-dom _(peer)_      | ^18.0.0 \|\| ^19.0.0 | MIT              | https://github.com/facebook/react         |
+| Package               | Version              | License          | Repository                                |
+| --------------------- | -------------------- | ---------------- | ----------------------------------------- |
+| @ffmpeg/core          | 0.12.9               | GPL-2.0-or-later | https://github.com/ffmpegwasm/ffmpeg.wasm |
+| @ffmpeg/ffmpeg        | 0.12.15              | MIT              | https://github.com/ffmpegwasm/ffmpeg.wasm |
+| @ffmpeg/util          | 0.12.2               | MIT              | https://github.com/ffmpegwasm/ffmpeg.wasm |
+| html2canvas           | 1.4.1                | MIT              | https://github.com/niklasvh/html2canvas   |
+| mp4-muxer _(bundled)_ | 5.2.2                | MIT              | https://github.com/Vanilagy/mp4-muxer     |
+| react _(peer)_        | ^18.0.0 \|\| ^19.0.0 | MIT              | https://github.com/facebook/react         |
+| react-dom _(peer)_    | ^18.0.0 \|\| ^19.0.0 | MIT              | https://github.com/facebook/react         |
 
 ## @ffmpeg/core WebAssembly runtime
 

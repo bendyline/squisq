@@ -8,7 +8,6 @@ Third-party components remain under their respective license terms.
 
 | Package            | Version              | License | Repository                            |
 | ------------------ | -------------------- | ------- | ------------------------------------- |
-| @bendyline/squisq  | 2.1.0                | MIT     | https://github.com/bendyline/squisq   |
 | mermaid            | 11.16.0              | MIT     | https://github.com/mermaid-js/mermaid |
 | preact _(bundled)_ | 10.29.0              | MIT     | https://github.com/preactjs/preact    |
 | react _(peer)_     | ^18.0.0 \|\| ^19.0.0 | MIT     | https://github.com/facebook/react     |

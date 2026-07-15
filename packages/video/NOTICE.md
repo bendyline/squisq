@@ -6,11 +6,10 @@ Third-party components remain under their respective license terms.
 
 ## Runtime dependencies
 
-| Package           | Version | License | Repository                                |
-| ----------------- | ------- | ------- | ----------------------------------------- |
-| @bendyline/squisq | 2.1.0   | MIT     | https://github.com/bendyline/squisq       |
-| @ffmpeg/ffmpeg    | 0.12.15 | MIT     | https://github.com/ffmpegwasm/ffmpeg.wasm |
-| @ffmpeg/util      | 0.12.2  | MIT     | https://github.com/ffmpegwasm/ffmpeg.wasm |
+| Package        | Version | License | Repository                                |
+| -------------- | ------- | ------- | ----------------------------------------- |
+| @ffmpeg/ffmpeg | 0.12.15 | MIT     | https://github.com/ffmpegwasm/ffmpeg.wasm |
+| @ffmpeg/util   | 0.12.2  | MIT     | https://github.com/ffmpegwasm/ffmpeg.wasm |
 
 The @ffmpeg/ffmpeg and @ffmpeg/util packages provide JavaScript APIs and
 utilities. This npm package does not include @ffmpeg/core, ffmpeg-core.js, or

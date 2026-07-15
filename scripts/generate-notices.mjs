@@ -13,10 +13,6 @@ const workspaceByName = new Map(
 );
 
 const repositoryOverrides = {
-  '@bendyline/squisq': 'https://github.com/bendyline/squisq',
-  '@bendyline/squisq-formats': 'https://github.com/bendyline/squisq',
-  '@bendyline/squisq-react': 'https://github.com/bendyline/squisq',
-  '@bendyline/squisq-video': 'https://github.com/bendyline/squisq',
   '@monaco-editor/loader': 'https://github.com/suren-atoyan/monaco-loader',
   '@monaco-editor/react': 'https://github.com/suren-atoyan/monaco-react',
   '@pdf-lib/upng': 'https://github.com/Hopding/upng',
@@ -134,6 +130,7 @@ for (const [dir, config] of Object.entries(configs)) {
   const rows = [];
 
   for (const [name, version] of Object.entries(manifest.dependencies ?? {})) {
+    if (workspaceByName.has(name)) continue;
     rows.push(dependencyRow(name, version));
   }
   for (const name of config.bundled ?? []) {
@@ -142,6 +139,7 @@ for (const [dir, config] of Object.entries(configs)) {
   }
   if (config.peers) {
     for (const [name, version] of Object.entries(manifest.peerDependencies ?? {})) {
+      if (workspaceByName.has(name)) continue;
       rows.push(dependencyRow(name, version, 'peer'));
     }
   }
