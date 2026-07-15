@@ -1,3 +1,14 @@
+## @bendyline/squisq-react [2.3.0](https://github.com/bendyline/squisq/compare/@bendyline/squisq-react@2.2.0...@bendyline/squisq-react@2.3.0) (2026-07-15)
+
+### Features
+
+* Print button ([#26](https://github.com/bendyline/squisq/issues/26)) ([a06a4bb](https://github.com/bendyline/squisq/commit/a06a4bba8c07f5252eea2fdcf9ff6fa5a5effba5))
+
+
+### Dependencies
+
+* **@bendyline/squisq:** upgraded to 2.3.0
+
 ## @bendyline/squisq-react [2.2.0](https://github.com/bendyline/squisq/compare/@bendyline/squisq-react@2.1.0...@bendyline/squisq-react@2.2.0) (2026-07-15)
 
 ### Features
