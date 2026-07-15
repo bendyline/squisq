@@ -197,12 +197,98 @@ async function readMarkdownFile(filePath: string, signal?: AbortSignal): Promise
 }
 
 /**
+ * Parse and validate a Doc JSON payload.
+ *
+ * Without this, `JSON.parse(...) as Doc` let any shape through and the failure
+ * surfaced far downstream as `Cannot read properties of undefined (reading
+ * 'blocks')` — useless to the user. A malformed `duration` was worse than
+ * useless: a NaN/string duration propagates into the audio timeline and reaches
+ * ffmpeg as `adelay=NaN`.
+ *
+ * Deliberately a focused structural guard, not a full schema validation: it
+ * checks the fields the CLI pipeline dereferences, and names the offending
+ * field plus the file so the message is actionable.
+ *
+ * @param content - Raw JSON text.
+ * @param source - Path/label used in error messages.
+ */
+export function parseDocJson(content: string, source: string): Doc {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(content);
+  } catch (error: unknown) {
+    const detail = error instanceof Error ? error.message : String(error);
+    throw new Error(`${source} is not valid JSON: ${detail}`);
+  }
+
+  const fail = (detail: string): never => {
+    throw new Error(`${source} is not a valid squisq Doc: ${detail}`);
+  };
+
+  if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
+    fail(`expected a JSON object, got ${Array.isArray(parsed) ? 'an array' : typeof parsed}`);
+  }
+  const doc = parsed as Partial<Doc>;
+
+  if (!Array.isArray(doc.blocks)) {
+    fail(`"blocks" must be an array${doc.blocks === undefined ? ' (field is missing)' : ''}`);
+  }
+  for (const [index, block] of doc.blocks!.entries()) {
+    if (typeof block !== 'object' || block === null || Array.isArray(block)) {
+      fail(`"blocks[${index}]" must be an object`);
+    }
+  }
+
+  if (doc.duration !== undefined && !isFiniteNumber(doc.duration)) {
+    fail(`"duration" must be a finite number, got ${describe(doc.duration)}`);
+  }
+
+  if (doc.audio !== undefined) {
+    if (typeof doc.audio !== 'object' || doc.audio === null || Array.isArray(doc.audio)) {
+      fail('"audio" must be an object');
+    }
+    const segments = (doc.audio as Partial<Doc['audio']>).segments;
+    if (segments !== undefined) {
+      if (!Array.isArray(segments)) fail('"audio.segments" must be an array');
+      for (const [index, segment] of segments.entries()) {
+        if (typeof segment !== 'object' || segment === null) {
+          fail(`"audio.segments[${index}]" must be an object`);
+        }
+        if (!isFiniteNumber(segment.duration)) {
+          fail(
+            `"audio.segments[${index}].duration" must be a finite number, ` +
+              `got ${describe(segment.duration)}`,
+          );
+        }
+      }
+    }
+  }
+
+  // Normalize the optional-but-dereferenced fields so downstream code (and the
+  // audio timeline) never sees a missing track.
+  return {
+    ...(doc as Doc),
+    audio: doc.audio ?? { segments: [] },
+  };
+}
+
+function isFiniteNumber(value: unknown): value is number {
+  return typeof value === 'number' && Number.isFinite(value);
+}
+
+function describe(value: unknown): string {
+  if (typeof value === 'number') return Number.isNaN(value) ? 'NaN' : String(value);
+  if (typeof value === 'string') return JSON.stringify(value);
+  return value === null ? 'null' : typeof value;
+}
+
+/**
  * Read a standalone Doc JSON file. The container is empty (no media bundled);
  * callers should populate it or set basePath for media resolution.
  */
 async function readDocJsonFile(filePath: string, signal?: AbortSignal): Promise<ReadInputResult> {
   const content = await readUtf8File(filePath, signal);
-  const doc = JSON.parse(content) as Doc;
+  const doc = parseDocJson(content, filePath);
   const container = new MemoryContentContainer();
   return { doc, container, sourceFormat: 'json' };
 }
@@ -272,7 +358,7 @@ async function resolveContainer(
     const jsonData = await container.readFile(name);
     throwIfAborted(signal);
     if (jsonData) {
-      const doc = JSON.parse(new TextDecoder().decode(jsonData)) as Doc;
+      const doc = parseDocJson(new TextDecoder().decode(jsonData), name);
       return { doc, container, sourceFormat };
     }
   }

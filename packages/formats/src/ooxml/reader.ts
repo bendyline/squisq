@@ -11,7 +11,14 @@
 
 import { DOMParser as XmldomDOMParser } from '@xmldom/xmldom';
 import type { OoxmlPackage, ContentTypeMap, Relationship, CoreProperties } from './types.js';
-import { NS_RELATIONSHIPS, NS_DC, NS_DCTERMS, NS_CORE_PROPERTIES } from './namespaces.js';
+import {
+  NS_RELATIONSHIPS,
+  NS_DC,
+  NS_DCTERMS,
+  NS_CORE_PROPERTIES,
+  REL_OFFICE_DOCUMENT,
+} from './namespaces.js';
+import { resolveTarget } from './readUtils.js';
 import {
   openBoundedZipArchive,
   type BoundedZipArchive,
@@ -97,6 +104,72 @@ export async function openPackage(
   packageArchives.set(pkg, archive);
   if (limits.signal) packageSignals.set(pkg, limits.signal);
   return pkg;
+}
+
+// ============================================
+// Main Part Resolution
+// ============================================
+
+/** True when the archive actually contains `path`. */
+function hasPackagePart(pkg: OoxmlPackage, path: string): boolean {
+  const archive = packageArchives.get(pkg);
+  if (!archive) {
+    throw new TypeError('Invalid OoxmlPackage: create packages with openPackage().');
+  }
+  return archive.entries.some((entry) => entry.path === path);
+}
+
+/**
+ * Resolve a package's main part (the "office document" part).
+ *
+ * Per OPC (ECMA-376 Part 2), the main part is whatever the **root**
+ * `officeDocument` relationship targets — the conventional paths
+ * (`word/document.xml`, `xl/workbook.xml`, `ppt/presentation.xml`) are a
+ * convention, not a rule. Real generators (and some Office save paths) emit
+ * e.g. `word/document2.xml`; reading the conventional path literally imports
+ * such a package as an empty document with no error.
+ *
+ * Resolution order:
+ *   1. The root `officeDocument` relationship target, when that part exists.
+ *   2. The conventional path, when it exists (covers packages with a missing
+ *      or malformed root relationship).
+ *   3. `null` — no main part; callers must fail loudly rather than return empty.
+ *
+ * @param pkg - The opened package.
+ * @param conventionalPath - The format's by-convention main part path.
+ * @returns The resolved part path within the archive, or `null` if absent.
+ */
+export function resolveMainPartPath(pkg: OoxmlPackage, conventionalPath: string): string | null {
+  const rel = pkg.rootRelationships.find(
+    (r) => r.type === REL_OFFICE_DOCUMENT && r.targetMode !== 'External',
+  );
+  if (rel) {
+    const resolved = resolveTarget('', rel.target);
+    if (resolved && hasPackagePart(pkg, resolved)) return resolved;
+  }
+  return hasPackagePart(pkg, conventionalPath) ? conventionalPath : null;
+}
+
+/**
+ * Like {@link resolveMainPartPath}, but throws when no main part exists.
+ *
+ * @param pkg - The opened package.
+ * @param conventionalPath - The format's by-convention main part path.
+ * @param formatLabel - Human-readable format name for the error message.
+ */
+export function requireMainPartPath(
+  pkg: OoxmlPackage,
+  conventionalPath: string,
+  formatLabel: string,
+): string {
+  const path = resolveMainPartPath(pkg, conventionalPath);
+  if (!path) {
+    throw new Error(
+      `Invalid ${formatLabel} package: no main document part found. Expected the root ` +
+        `officeDocument relationship to target an existing part, or "${conventionalPath}" to exist.`,
+    );
+  }
+  return path;
 }
 
 // ============================================

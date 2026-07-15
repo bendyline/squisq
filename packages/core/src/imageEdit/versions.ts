@@ -20,7 +20,7 @@ import {
   readTextSnapshot,
   saveTextSnapshot,
 } from '../versions/snapshotStore.js';
-import { readImageEditDoc, writeImageEditDoc } from './persistence.js';
+import { assertImageEditDoc, readImageEditDoc, writeImageEditDoc } from './persistence.js';
 import { IMAGE_EDIT_STATE_FILENAME } from './state.js';
 import { IMAGE_EDIT_DEFAULT_BASENAME, IMAGE_EDIT_VERSION_PATHS } from './versionPaths.js';
 
@@ -96,14 +96,31 @@ export async function readImageEditVersionText(
   return readTextSnapshot(container, version);
 }
 
-/** Read and parse a snapshot. Returns `null` if missing. */
+/**
+ * Read and parse a snapshot. Returns `null` if missing.
+ *
+ * A snapshot that EXISTS but is malformed throws rather than returning null:
+ * `null` means "no such version", and conflating the two let
+ * {@link revertToImageEditVersion} write garbage into `state.json` — wedging
+ * the editor on a file that loaded fine before the revert. Throwing here means
+ * the revert aborts and the current state survives.
+ */
 export async function readImageEditVersion(
   container: ContentContainer,
   version: Version | string,
 ): Promise<ImageEditDoc | null> {
   const text = await readImageEditVersionText(container, version);
   if (text === null) return null;
-  return JSON.parse(text) as ImageEditDoc;
+  const path = typeof version === 'string' ? version : version.path;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(text);
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    throw new Error(`readImageEditVersion: ${path} is not valid JSON: ${msg}`);
+  }
+  assertImageEditDoc(parsed, path, 'readImageEditVersion');
+  return parsed;
 }
 
 /**

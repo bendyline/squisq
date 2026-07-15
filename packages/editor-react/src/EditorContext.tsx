@@ -366,6 +366,13 @@ export interface EditorContextValue extends EditorState, EditorActions {
    * path link. When unset, the dialog falls back to URL-only.
    */
   documentLinkProvider: DocumentLinkProvider | null;
+  /**
+   * Extra link schemes the host intercepts itself (e.g. an app-internal
+   * navigation protocol). The link dialog validates against core's
+   * `sanitizeUrl` with these allowed, so authors aren't told a scheme the
+   * host DOES resolve is unsupported. Executable schemes stay refused.
+   */
+  linkSchemes: readonly string[] | undefined;
 }
 
 export type ImageDisplayMode = 'inline' | 'thumbnail';
@@ -446,6 +453,12 @@ export interface EditorProviderProps {
    * Omit to fall back to URL-only link insertion.
    */
   documentLinkProvider?: DocumentLinkProvider | null;
+  /**
+   * Extra link schemes this host resolves itself. Threaded into the link
+   * dialog's `sanitizeUrl` check so a host-custom protocol is accepted;
+   * executable schemes are refused regardless.
+   */
+  linkSchemes?: readonly string[];
   /**
    * Whether the in-editor media recorder is available in the toolbar.
    * Defaults to true. Set to false to suppress the recorder affordance
@@ -584,6 +597,7 @@ export function EditorProvider({
   imageDisplayMode = 'inline',
   mentionProvider = null,
   documentLinkProvider = null,
+  linkSchemes,
   allowRecording = true,
   allowNarrate = true,
   fileName,
@@ -1028,21 +1042,26 @@ export function EditorProvider({
     [activeView, tiptapEditor, monacoEditor],
   );
 
-  const replaceAll = useCallback(
-    (text: string) => {
-      setMarkdownSourceRaw(text);
-
-      // Push to editors if mounted
-      if (tiptapEditor) {
-        const html = markdownToTiptap(text);
-        tiptapEditor.commands.setContent(html);
-      }
-      if (monacoEditor) {
-        monacoEditor.setValue(text);
-      }
-    },
-    [tiptapEditor, monacoEditor],
-  );
+  /**
+   * Replace the whole document (file drop, version revert, host reset).
+   *
+   * Writing `markdownSource` is the ONLY thing this needs to do: both editing
+   * surfaces already sync themselves from `editorSource` (WysiwygEditor and
+   * RawEditor each run an effect on it), and each applies the transform its
+   * own view requires — Tiptap strips frontmatter and holds it aside, Monaco
+   * keeps the raw text, and in `block` layout mode both scope to the active
+   * block's slice rather than the whole file.
+   *
+   * This used to ALSO push `text` straight into the editors, which bypassed
+   * every one of those transforms: Tiptap received frontmatter-inclusive
+   * markdown, so YAML rendered as an `<hr>` plus literal `title: …`
+   * paragraphs until the sync effect corrected it a paint later (a visible
+   * flash and a needless second content reset), and in block mode the whole
+   * document was momentarily loaded into a block-scoped editor.
+   */
+  const replaceAll = useCallback((text: string) => {
+    setMarkdownSourceRaw(text);
+  }, []);
 
   // ── Versioning ─────────────────────────────────────────
   // Build a manager only when versioning is opted in *and* a workspace
@@ -1104,9 +1123,26 @@ export function EditorProvider({
   // directory). Using the editor's live state also ensures the snapshot
   // captures the most recent edit even if the host's autosave to the
   // container hasn't flushed yet.
+  //
+  // The timer DOES arm on mount, deliberately: that first tick captures the
+  // document as-opened, which is the baseline a user reverts to. It is not
+  // churn — `saveVersion` dedupes a byte-identical repeat, so a document whose
+  // stored form already matches stamps nothing, and one whose live form
+  // differs (a host that normalizes line endings on load, say) stamps exactly
+  // ONCE: the next open compares against that new snapshot and dedupes.
+  // Measured: three opens of a CRLF document normalized to LF produce
+  // reasons ['saved', 'unchanged', 'unchanged'] — one snapshot, not one
+  // per open.
+  const autoSaveSourceRef = useRef<string | null>(null);
   useEffect(() => {
     if (!versioning) return;
     if (versioningAutoSaveIdleMs <= 0) return;
+    const previous = autoSaveSourceRef.current;
+    autoSaveSourceRef.current = markdownSource;
+    // Identical source means the effect re-ran for a non-edit reason
+    // (container/prop identity), so re-arming would just restart the idle
+    // clock for nothing. `previous === null` (mount) still arms — see above.
+    if (previous !== null && previous === markdownSource) return;
     const timer = setTimeout(() => {
       saveVersion({ content: markdownSource }).catch((err: unknown) => {
         console.warn(
@@ -1179,6 +1215,7 @@ export function EditorProvider({
       imageDisplayMode,
       mentionProvider,
       documentLinkProvider,
+      linkSchemes,
       setMarkdownSource,
       setEditorSource,
       setLayoutMode,
@@ -1238,6 +1275,7 @@ export function EditorProvider({
       imageDisplayMode,
       mentionProvider,
       documentLinkProvider,
+      linkSchemes,
       setMarkdownSource,
       setEditorSource,
       setLayoutMode,

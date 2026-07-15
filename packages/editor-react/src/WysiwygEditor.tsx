@@ -191,6 +191,11 @@ export function WysiwygEditor({
   const resolvedPlaceholder = useMemo(() => placeholder ?? pickEmptyPrompt(), [placeholder]);
   const isExternalUpdate = useRef(false);
   const lastSourceRef = useRef(editorSource);
+  // React may commit several rapid editor updates one at a time. Remember
+  // every locally emitted value so an intermediate commit is not mistaken
+  // for an external replacement and fed back through setContent(), which
+  // resets the selection (most visibly in Firefox during fast typing).
+  const pendingLocalSourcesRef = useRef<string[]>([]);
   // Keep a ref so the editor's drop/paste handlers (created once) always
   // see the current MediaProvider without needing to recreate the editor.
   const mediaProviderRef = useRef(mediaProvider);
@@ -257,6 +262,7 @@ export function WysiwygEditor({
       // reintroduce parse-on-every-keystroke work.
       const bodyMd = tiptapToMarkdown(ed.getHTML());
       const newSource = frontmatterRef.current + bodyMd;
+      pendingLocalSourcesRef.current.push(newSource);
       lastSourceRef.current = newSource;
       setEditorSource(newSource);
     },
@@ -561,6 +567,17 @@ export function WysiwygEditor({
   // path reloads the card with the newly selected block's slice.
   useEffect(() => {
     if (!editor) return;
+    const pendingIndex = pendingLocalSourcesRef.current.lastIndexOf(editorSource);
+    if (pendingIndex >= 0) {
+      // This state value came from Tiptap itself. Drop it and every older
+      // emission; any later entries still describe edits React has not
+      // committed yet, so keep lastSourceRef pointing at the newest one.
+      pendingLocalSourcesRef.current.splice(0, pendingIndex + 1);
+      if (pendingLocalSourcesRef.current.length === 0) {
+        lastSourceRef.current = editorSource;
+      }
+      return;
+    }
     if (editorSource === lastSourceRef.current) return;
     // In block/timeline mode `setEditorSource` normalizes the slice's trailing
     // whitespace (a `\n\n` before the next block) before splicing, so the
@@ -573,6 +590,7 @@ export function WysiwygEditor({
     }
     isExternalUpdate.current = true;
     const { body, frontmatter } = stripFrontmatter(editorSource);
+    pendingLocalSourcesRef.current = [];
     frontmatterRef.current = frontmatter;
     const content = markdownToTiptap(body);
     editor.commands.setContent(content);

@@ -214,6 +214,7 @@ export function Toolbar({
     versioning,
     allowRecording,
     documentLinkProvider,
+    linkSchemes,
     colorScheme,
     mediaRevision,
     bumpMediaRevision,
@@ -2217,6 +2218,7 @@ export function Toolbar({
           onConfirm={handleLinkConfirm}
           onClose={() => setLinkDialog(null)}
           documentLinkProvider={documentLinkProvider}
+          linkSchemes={linkSchemes}
         />
       )}
 

@@ -921,9 +921,10 @@ function convertCodeBlock(node: MarkdownCodeBlock, ctx: SlideContext): string {
     parts.push(
       `<a:p>` +
         `<a:r>` +
+        // Fill group precedes `a:latin` per CT_TextCharacterProperties.
         `<a:rPr lang="en-US" sz="${DEFAULT_CODE_SIZE}" dirty="0">` +
-        `<a:latin typeface="${escapeXml(ctx.style.codeFont)}"/>` +
         `<a:solidFill><a:srgbClr val="${ctx.style.codeColor}"/></a:solidFill>` +
+        `<a:latin typeface="${escapeXml(ctx.style.codeFont)}"/>` +
         `</a:rPr>` +
         `<a:t>${escapeXml(line || ' ')}</a:t>` +
         `</a:r>` +
@@ -1021,11 +1022,15 @@ function makeRun(text: string, format: InlineFormat, style: SlideStyle): string 
   if (format.italic) rPrParts.push(`i="1"`);
   if (format.strike) rPrParts.push(`strike="sngStrike"`);
 
+  // `a:rPr` children must follow the ECMA-376 `CT_TextCharacterProperties`
+  // sequence: ln → EG_FillProperties (solidFill) → EG_EffectProperties →
+  // highlight → underline groups → latin → ea → cs → … The fill group must
+  // precede `a:latin`; PowerPoint is lenient, strict validators are not.
   let innerParts = '';
 
   if (format.code) {
-    innerParts += `<a:latin typeface="${escapeXml(style.codeFont)}"/>`;
     innerParts += `<a:solidFill><a:srgbClr val="${style.codeColor}"/></a:solidFill>`;
+    innerParts += `<a:latin typeface="${escapeXml(style.codeFont)}"/>`;
     rPrParts.push(`sz="${DEFAULT_CODE_SIZE}"`);
   } else if (style.hasTheme) {
     innerParts += `<a:solidFill><a:srgbClr val="${style.text}"/></a:solidFill>`;

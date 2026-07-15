@@ -118,6 +118,58 @@ describe('allocateTiming fallback', () => {
     expect(result[1].duration).toBe(10);
   });
 
+  it('still fills the total when the 3-20s clamp moves some blocks', () => {
+    // A plain scale-then-clamp pass drops the budget of every clamped
+    // block: these raw durations scale to [0.59, 0.59, 58.8], clamp to
+    // [3, 3, 20] and strand the timeline at 26s against 60s of audio.
+    // [20, 20, 20] is in range and fits exactly, so it must be found.
+    const skewed: TemplateBlock[] = [
+      { template: 'sectionHeader', id: 'a', duration: 1, audioSegment: 0, title: 'A' },
+      { template: 'sectionHeader', id: 'b', duration: 1, audioSegment: 0, title: 'B' },
+      { template: 'sectionHeader', id: 'c', duration: 100, audioSegment: 0, title: 'C' },
+    ];
+    const result = allocateTiming(skewed, 60);
+    const end = result[2].startTime + result[2].duration;
+    expect(end).toBeCloseTo(60, 5);
+    for (const block of result) {
+      expect(block.duration).toBeGreaterThanOrEqual(3);
+      expect(block.duration).toBeLessThanOrEqual(20);
+    }
+  });
+
+  it('redistributes the budget freed by a block clamped at the 20s ceiling', () => {
+    // Only the 200s block hits the ceiling; the three small blocks must
+    // absorb the remaining 20s rather than sitting at the 3s floor.
+    const blocks: TemplateBlock[] = [
+      { template: 'sectionHeader', id: 'a', duration: 1, audioSegment: 0, title: 'A' },
+      { template: 'sectionHeader', id: 'b', duration: 1, audioSegment: 0, title: 'B' },
+      { template: 'sectionHeader', id: 'c', duration: 1, audioSegment: 0, title: 'C' },
+      { template: 'sectionHeader', id: 'd', duration: 200, audioSegment: 0, title: 'D' },
+    ];
+    const result = allocateTiming(blocks, 40);
+    expect(result[3].duration).toBeCloseTo(20, 5);
+    expect(result[0].duration).toBeCloseTo(20 / 3, 5);
+    const end = result[3].startTime + result[3].duration;
+    expect(end).toBeCloseTo(40, 5);
+  });
+
+  it('saturates at the nearest bound when the clamp cannot reach the total', () => {
+    // 40 blocks at a 3s floor can never fit into 60s — the system is
+    // over-constrained, so the closest reachable timeline (40 x 3 = 120s)
+    // is the least-bad answer rather than a scale that ignores the floor.
+    const many: TemplateBlock[] = Array.from({ length: 40 }, (_, i) => ({
+      template: 'sectionHeader',
+      id: `b${i}`,
+      duration: 1.5,
+      audioSegment: 0,
+      title: `B${i}`,
+    }));
+    const result = allocateTiming(many, 60);
+    for (const block of result) expect(block.duration).toBe(3);
+    const end = result[39].startTime + result[39].duration;
+    expect(end).toBeCloseTo(120, 5);
+  });
+
   it('anchored blocks keep their positions; floats fill the gaps', () => {
     const blocks: TemplateBlock[] = [
       // A floating intro before the first anchor.

@@ -31,7 +31,13 @@ import type {
 } from '@bendyline/squisq/markdown';
 import { stringifyMarkdown } from '@bendyline/squisq/markdown';
 import type { CustomTemplateDefinition, Theme } from '@bendyline/squisq/schemas';
-import { getPartBinary, getPartRelationships, getPartXml, openPackage } from '../ooxml/reader.js';
+import {
+  getPartBinary,
+  getPartRelationships,
+  getPartXml,
+  openPackage,
+  requireMainPartPath,
+} from '../ooxml/reader.js';
 import type { OoxmlOpenOptions } from '../ooxml/reader.js';
 import type { OoxmlPackage } from '../ooxml/types.js';
 import { NS_DRAWINGML, NS_PML, NS_R } from '../ooxml/namespaces.js';
@@ -41,6 +47,9 @@ import { buildContainer } from '../shared/container.js';
 import { extToMime } from '../shared/images.js';
 import type { ExtractedFileTheme } from '../infer/types.js';
 import type { AnalyzedLayout, PptxLayoutInference } from './layouts.js';
+
+/** Conventional main part path; the root `officeDocument` rel wins when present. */
+const PPTX_MAIN_PART = 'ppt/presentation.xml';
 
 export interface PptxImportOptions extends OoxmlOpenOptions {
   /**
@@ -81,17 +90,19 @@ interface ImportContext {
   usedCustomTemplates: Map<string, CustomTemplateDefinition>;
 }
 
-async function orderedSlidePaths(pkg: OoxmlPackage): Promise<string[]> {
-  const pres = await getPartXml(pkg, 'ppt/presentation.xml');
-  if (!pres) return [];
-  const rels = await getPartRelationships(pkg, 'ppt/presentation.xml');
+async function orderedSlidePaths(pkg: OoxmlPackage, mainPart: string): Promise<string[]> {
+  const pres = await getPartXml(pkg, mainPart);
+  if (!pres) {
+    throw new Error(`Invalid PPTX package: presentation part "${mainPart}" could not be parsed.`);
+  }
+  const rels = await getPartRelationships(pkg, mainPart);
   const relById = new Map(rels.map((r) => [r.id, r.target]));
   const out: string[] = [];
   const ids = pres.getElementsByTagNameNS(NS_PML, 'sldId');
   for (let i = 0; i < ids.length; i++) {
     const rid = attrNS(ids[i]!, NS_R, 'id', 'r:id');
     const target = rid ? relById.get(rid) : undefined;
-    if (target) out.push(resolveTarget('ppt', target));
+    if (target) out.push(resolveTarget(baseDirOf(mainPart), target));
   }
   return out;
 }
@@ -393,7 +404,7 @@ async function importDocument(
     }
   }
 
-  const paths = await orderedSlidePaths(pkg);
+  const paths = await orderedSlidePaths(pkg, requireMainPartPath(pkg, PPTX_MAIN_PART, 'PPTX'));
   const children: MarkdownBlockNode[] = [];
   for (let i = 0; i < paths.length; i++) {
     children.push(...(await convertSlide(paths[i]!, i, ctx)));

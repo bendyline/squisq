@@ -44,13 +44,17 @@ export interface AudioTimelineClip {
  *   clip, matching the cover-slide pre-roll frames. Default 0.
  */
 export function computeAudioTimeline(doc: Doc, coverPreRoll = 0): AudioTimelineClip[] {
-  const preRoll = coverPreRoll > 0 ? coverPreRoll : 0;
+  const preRoll = safeSeconds(coverPreRoll);
   const clips: AudioTimelineClip[] = [];
 
   // ── Narration: laid sequentially (matches the CLI's ordered concat). ──
+  // A non-finite duration contributes 0 to the cursor rather than poisoning it:
+  // `cursor += NaN` would make EVERY later segment's startSec NaN, which reaches
+  // ffmpeg as `adelay=NaN` or the browser as `node.start(NaN)`. One bad segment
+  // is dropped; the rest of the timeline stays intact.
   let cursor = 0;
   for (const seg of doc.audio?.segments ?? []) {
-    const durationSec = Math.max(0, seg.duration);
+    const durationSec = safeSeconds(seg.duration);
     if (durationSec > 0 && seg.src) {
       clips.push({ src: seg.src, startSec: cursor + preRoll, sourceInSec: 0, durationSec });
     }
@@ -60,15 +64,23 @@ export function computeAudioTimeline(doc: Doc, coverPreRoll = 0): AudioTimelineC
   // ── Timed media clips: absolute positions from the shared schedule. ──
   for (const clip of resolveMediaSchedule(doc)) {
     if (clip.kind !== 'audio') continue;
+    // Guard the endpoints before subtracting: `NaN <= 0` is false, so a NaN
+    // duration would otherwise sail past the positivity check and be emitted.
+    if (!Number.isFinite(clip.absoluteStart) || !Number.isFinite(clip.absoluteEnd)) continue;
     const durationSec = Math.max(0, clip.absoluteEnd - clip.absoluteStart);
     if (durationSec <= 0 || !clip.src) continue;
     clips.push({
       src: clip.src,
-      startSec: clip.absoluteStart + preRoll,
-      sourceInSec: clip.sourceIn,
+      startSec: safeSeconds(clip.absoluteStart) + preRoll,
+      sourceInSec: safeSeconds(clip.sourceIn),
       durationSec,
     });
   }
 
   return clips;
+}
+
+/** Clamp to a finite, non-negative second count. NaN/Infinity/negative → 0. */
+function safeSeconds(value: number): number {
+  return Number.isFinite(value) && value > 0 ? value : 0;
 }

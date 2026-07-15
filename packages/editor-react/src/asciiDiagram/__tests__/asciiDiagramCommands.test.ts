@@ -282,3 +282,78 @@ describe('replaceAsciiFenceText', () => {
     expect(replaceAsciiFenceText(editor, pos, ART)).toBe(false);
   });
 });
+
+describe('read-only authority (BUG B)', () => {
+  // A mounted canvas outlives the render that created its controls, so a host
+  // flipping the editor read-only (saving, locked, permission change) must not
+  // leave a stale drag/click able to rewrite the fence.
+  it('rejects a canvas command after the editor becomes read-only', () => {
+    const editor = makeEditor('```\n' + ART + '\n```\n');
+    const blockId = firstBlockId(editor);
+    const before = JSON.stringify(editor.state.doc.toJSON());
+
+    editor.setEditable(false);
+
+    expect(
+      applyAsciiDiagramCommand(editor, blockId, {
+        kind: 'renameNode',
+        nodeId: 'alpha',
+        newLabel: 'Injected',
+      }),
+    ).toBe(false);
+    expect(JSON.stringify(editor.state.doc.toJSON())).toBe(before);
+  });
+
+  it('rejects a move/drag command after the editor becomes read-only', () => {
+    const editor = makeEditor('```\n' + ART + '\n```\n');
+    const blockId = firstBlockId(editor);
+    const before = JSON.stringify(editor.state.doc.toJSON());
+
+    editor.setEditable(false);
+
+    expect(
+      applyAsciiDiagramCommand(editor, blockId, {
+        kind: 'moveNode',
+        nodeId: 'alpha',
+        x: ASCII_CHAR_W * 20,
+        y: ASCII_CHAR_H * 10,
+      }),
+    ).toBe(false);
+    expect(JSON.stringify(editor.state.doc.toJSON())).toBe(before);
+  });
+
+  it('rejects a direct fence rewrite while read-only', () => {
+    const editor = makeEditor('```\n' + ART + '\n```\n');
+    const pos = ASCII_DIAGRAM_KEY.getState(editor.state)?.entries[0].pos as number;
+    const before = JSON.stringify(editor.state.doc.toJSON());
+
+    editor.setEditable(false);
+
+    expect(replaceAsciiFenceText(editor, pos, 'injected text')).toBe(false);
+    expect(JSON.stringify(editor.state.doc.toJSON())).toBe(before);
+  });
+
+  it('resumes accepting commands once the host restores editability', () => {
+    const editor = makeEditor('```\n' + ART + '\n```\n');
+    const blockId = firstBlockId(editor);
+
+    editor.setEditable(false);
+    expect(
+      applyAsciiDiagramCommand(editor, blockId, {
+        kind: 'renameNode',
+        nodeId: 'alpha',
+        newLabel: 'Gamma',
+      }),
+    ).toBe(false);
+
+    editor.setEditable(true);
+    expect(
+      applyAsciiDiagramCommand(editor, blockId, {
+        kind: 'renameNode',
+        nodeId: 'alpha',
+        newLabel: 'Gamma',
+      }),
+    ).toBe(true);
+    expect(fenceOf(editor).text).toContain('Gamma');
+  });
+});

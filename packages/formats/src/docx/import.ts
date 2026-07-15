@@ -48,7 +48,13 @@ import type {
   MarkdownContainerDirective,
 } from '@bendyline/squisq/markdown';
 
-import { openPackage, getPartXml, getPartBinary, getPartRelationships } from '../ooxml/reader.js';
+import {
+  openPackage,
+  getPartXml,
+  getPartBinary,
+  getPartRelationships,
+  requireMainPartPath,
+} from '../ooxml/reader.js';
 import type { OoxmlOpenOptions } from '../ooxml/reader.js';
 import type { OoxmlPackage, Relationship } from '../ooxml/types.js';
 import { NS_WML, NS_R } from '../ooxml/namespaces.js';
@@ -67,6 +73,9 @@ import {
 // ============================================
 // Public API
 // ============================================
+
+/** Conventional main part path; the root `officeDocument` rel wins when present. */
+const DOCX_MAIN_PART = 'word/document.xml';
 
 /**
  * Options for DOCX import.
@@ -92,11 +101,12 @@ export async function docxToMarkdownDoc(
   options: DocxImportOptions = {},
 ): Promise<MarkdownDocument> {
   const pkg = await openPackage(data, options);
-  const ctx = await buildImportContext(pkg, options);
+  const mainPart = requireMainPartPath(pkg, DOCX_MAIN_PART, 'DOCX');
+  const ctx = await buildImportContext(pkg, options, mainPart);
 
-  const documentXml = await getPartXml(pkg, 'word/document.xml');
+  const documentXml = await getPartXml(pkg, mainPart);
   if (!documentXml) {
-    return { type: 'document', children: [] };
+    throw new Error(`Invalid DOCX package: main document part "${mainPart}" could not be parsed.`);
   }
 
   const body = getFirstElement(documentXml, 'body');
@@ -142,10 +152,13 @@ export async function docxToContainer(
   options: DocxImportOptions = {},
 ): Promise<ContentContainer> {
   const pkg = await openPackage(data, options);
-  const ctx = await buildImportContext(pkg, { ...options, extractImages: true });
+  const mainPart = requireMainPartPath(pkg, DOCX_MAIN_PART, 'DOCX');
+  const ctx = await buildImportContext(pkg, { ...options, extractImages: true }, mainPart);
 
-  const documentXml = await getPartXml(pkg, 'word/document.xml');
-  if (!documentXml) return buildContainer('', []);
+  const documentXml = await getPartXml(pkg, mainPart);
+  if (!documentXml) {
+    throw new Error(`Invalid DOCX package: main document part "${mainPart}" could not be parsed.`);
+  }
 
   const body = getFirstElement(documentXml, 'body');
   if (!body) return buildContainer('', []);
@@ -179,6 +192,8 @@ interface ImportContext {
   endnotes: Map<string, Element>;
   /** Part whose relationships are active while converting runs. */
   currentPartPath: string;
+  /** The resolved main document part (may differ from the conventional path). */
+  mainPartPath: string;
   /** Reference to the OOXML package (for extracting images) */
   pkg: OoxmlPackage;
   /** Import options */
@@ -196,6 +211,7 @@ interface NumberingInfo {
 async function buildImportContext(
   pkg: OoxmlPackage,
   options: DocxImportOptions,
+  mainPartPath: string = DOCX_MAIN_PART,
 ): Promise<ImportContext> {
   const ctx: ImportContext = {
     headingStyles: new Map(),
@@ -206,7 +222,8 @@ async function buildImportContext(
     numbering: new Map(),
     footnotes: new Map(),
     endnotes: new Map(),
-    currentPartPath: 'word/document.xml',
+    currentPartPath: mainPartPath,
+    mainPartPath,
     pkg,
     options,
     extractedImages: new Map(),
@@ -231,7 +248,7 @@ async function buildImportContext(
   await parseStyles(pkg, ctx);
 
   // Parse document relationships
-  const rels = await getPartRelationships(pkg, 'word/document.xml');
+  const rels = await getPartRelationships(pkg, mainPartPath);
   for (const rel of rels) {
     ctx.documentRels.set(rel.id, rel);
   }
@@ -416,7 +433,7 @@ async function convertRelatedStories(
   for (const relationship of documentRelationships.values()) {
     if (!relationship.type.endsWith(relationshipTypeSuffix)) continue;
 
-    const partPath = resolveTarget(baseDirOf('word/document.xml'), relationship.target);
+    const partPath = resolveTarget(baseDirOf(ctx.mainPartPath), relationship.target);
     const part = await getPartXml(ctx.pkg, partPath);
     if (!part?.documentElement) continue;
 

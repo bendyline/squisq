@@ -105,23 +105,46 @@ describe('composeMapImage resource policy', () => {
     ).rejects.toThrow(/satellite[\s\S]*staticSrc/);
   });
 
+  /**
+   * Negative controls: the gate must be a POLICY check, not a blanket refusal.
+   *
+   * jsdom ships no canvas backend, so a compose that gets past the gate dies
+   * at `getContext`. Stub it to return null so that failure is our own
+   * controlled error rather than jsdom's "Not implemented" console spew — the
+   * assertion is the same (it did NOT throw ResourcePolicyError, i.e. it
+   * reached the drawing stage), but the suite output stays clean.
+   */
+  function stubMissingCanvas(): () => void {
+    const spy = vi
+      .spyOn(HTMLCanvasElement.prototype, 'getContext')
+      .mockReturnValue(null as unknown as CanvasRenderingContext2D);
+    return () => spy.mockRestore();
+  }
+
   it('does NOT block when the policy permits the provider', async () => {
-    // Negative control: the gate must be a policy check, not a blanket refusal.
-    // jsdom has no canvas backend, so getting past the gate surfaces as the
-    // canvas error — which is exactly the proof we want.
-    await expect(
-      composeMapImage({ ...BASE, style: 'road', policy: DEFAULT_INTERACTIVE_RESOURCE_POLICY }),
-    ).rejects.not.toBeInstanceOf(ResourcePolicyError);
+    const restore = stubMissingCanvas();
+    try {
+      await expect(
+        composeMapImage({ ...BASE, style: 'road', policy: DEFAULT_INTERACTIVE_RESOURCE_POLICY }),
+      ).rejects.not.toBeInstanceOf(ResourcePolicyError);
+    } finally {
+      restore();
+    }
   });
 
   it('does NOT block when the provider host is explicitly allowed', async () => {
-    const host = new URL(TILE_PROVIDERS.road.url).hostname;
-    await expect(
-      composeMapImage({
-        ...BASE,
-        style: 'road',
-        policy: { allowRemote: true, allowedHosts: [host] },
-      }),
-    ).rejects.not.toBeInstanceOf(ResourcePolicyError);
+    const restore = stubMissingCanvas();
+    try {
+      const host = new URL(TILE_PROVIDERS.road.url).hostname;
+      await expect(
+        composeMapImage({
+          ...BASE,
+          style: 'road',
+          policy: { allowRemote: true, allowedHosts: [host] },
+        }),
+      ).rejects.not.toBeInstanceOf(ResourcePolicyError);
+    } finally {
+      restore();
+    }
   });
 });

@@ -143,6 +143,13 @@ export function useNarrationRecorder(
   const [take, setTake] = useState<NarrationTake | null>(null);
 
   const captureRef = useRef<ActiveCapture | null>(null);
+  // `stop()` nulls captureRef BEFORE it decodes/aligns, so from that moment
+  // the unmount teardown can no longer see the take in flight. These two make
+  // the loss observable: `processingRef` marks the decode/align window,
+  // `takeRef` mirrors the take state a teardown would drop on the floor.
+  const processingRef = useRef(false);
+  const takeRef = useRef<NarrationTake | null>(null);
+  const unmountedRef = useRef(false);
   // Bumped whenever an in-flight start() must be abandoned (stop during
   // startup, unmount, retake, discard, or a newer start). start() compares
   // its own generation after every await and unwinds if it no longer matches,
@@ -155,6 +162,12 @@ export function useNarrationRecorder(
   /** Invalidate any start() currently between awaits. */
   const cancelPendingStart = useCallback(() => {
     generationRef.current++;
+  }, []);
+
+  /** Keep `takeRef` in lockstep with the take state the teardown reports on. */
+  const applyTake = useCallback((next: NarrationTake | null) => {
+    takeRef.current = next;
+    setTake(next);
   }, []);
 
   const teardownCapture = useCallback(() => {
@@ -188,7 +201,7 @@ export function useNarrationRecorder(
     const superseded = () => generationRef.current !== generation;
     startingRef.current = true;
     setError(null);
-    setTake(null);
+    applyTake(null);
     setState('starting');
 
     // Everything this attempt acquires, tracked locally: until `capture` is
@@ -317,7 +330,7 @@ export function useNarrationRecorder(
     } finally {
       startingRef.current = false;
     }
-  }, [teardownCapture, withCamera]);
+  }, [applyTake, teardownCapture, withCamera]);
 
   const stop = useCallback(async () => {
     const capture = captureRef.current;
@@ -335,6 +348,7 @@ export function useNarrationRecorder(
     captureRef.current = null;
     if (capture.traceTimer !== null) clearInterval(capture.traceTimer);
     optionsRef.current.onRecordingStop?.();
+    processingRef.current = true;
     setState('processing');
 
     await stopRecorder(capture.audioRecorder);
@@ -379,7 +393,21 @@ export function useNarrationRecorder(
       }
     }
 
-    setTake({
+    processingRef.current = false;
+
+    // Decode + alignment take seconds on a long take. If the view was torn
+    // down in that window (mode switch, tab change) there is nothing left to
+    // render the take into, and the recording is gone. Say so — a silent drop
+    // of audio the user just performed is the worst possible outcome here.
+    if (unmountedRef.current) {
+      console.warn(
+        '[squisq-editor] Narration take discarded: the teleprompter was closed while the ' +
+          `${wallClockSec.toFixed(1)}s recording was still being aligned. The audio was not saved.`,
+      );
+      return;
+    }
+
+    applyTake({
       audioBlob,
       audioMime,
       audioExt: capture.audioExt,
@@ -402,36 +430,64 @@ export function useNarrationRecorder(
       },
     });
     setState('review');
-  }, [cancelPendingStart]);
+  }, [applyTake, cancelPendingStart]);
 
   const retake = useCallback(() => {
     teardownCapture();
-    setTake(null);
+    applyTake(null);
     setError(null);
     setState('idle');
-  }, [teardownCapture]);
+  }, [applyTake, teardownCapture]);
 
   const discard = useCallback(() => {
     teardownCapture();
-    setTake(null);
+    applyTake(null);
     setError(null);
     setState('idle');
-  }, [teardownCapture]);
+  }, [applyTake, teardownCapture]);
 
   const beginSave = useCallback(() => setState('saving'), []);
-  const finishSave = useCallback((ok: boolean, saveError?: Error) => {
-    if (ok) {
-      setTake(null);
-      setError(null);
-      setState('idle');
-    } else {
-      setError(saveError ?? new Error('Save failed'));
-      setState('review');
-    }
-  }, []);
+  const finishSave = useCallback(
+    (ok: boolean, saveError?: Error) => {
+      if (ok) {
+        applyTake(null);
+        setError(null);
+        setState('idle');
+      } else {
+        setError(saveError ?? new Error('Save failed'));
+        setState('review');
+      }
+    },
+    [applyTake],
+  );
 
   // Hard stop on unmount (mode switch, shell teardown).
-  useEffect(() => teardownCapture, [teardownCapture]);
+  //
+  // The take lives in this hook's state, so ANY unmount after `stop()` drops
+  // it. During 'review' that is at least user-informed — they can see the take
+  // and chose to navigate away. During 'processing' it is not: the UI says
+  // "Aligning take…", offers no save affordance, and the recording vanishes.
+  // Neither case can be rescued from inside the hook (there is no surface left
+  // to render into and no I/O deps here), so the least we owe the user is a
+  // record that their audio was thrown away.
+  useEffect(() => {
+    unmountedRef.current = false;
+    return () => {
+      unmountedRef.current = true;
+      if (processingRef.current) {
+        console.warn(
+          '[squisq-editor] Narration take discarded: the teleprompter was closed while a ' +
+            'recording was still being aligned. The audio was not saved.',
+        );
+      } else if (takeRef.current) {
+        console.warn(
+          '[squisq-editor] Unsaved narration take discarded: the teleprompter was closed ' +
+            'before the take was saved.',
+        );
+      }
+      teardownCapture();
+    };
+  }, [teardownCapture]);
 
   return {
     state,

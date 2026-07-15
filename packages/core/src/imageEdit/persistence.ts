@@ -43,21 +43,37 @@ export async function writeImageEditDoc(
   await container.writeFile(filename, encoder.encode(text), 'application/json');
 }
 
-function assertImageEditDoc(value: unknown, filename: string): asserts value is ImageEditDoc {
+/**
+ * Validate a parsed value as an {@link ImageEditDoc}, throwing with an
+ * actionable message.
+ *
+ * Exported so every path that turns stored JSON back into a doc validates
+ * identically. `readImageEditVersion` used to bare-cast instead, which let a
+ * corrupt snapshot survive a revert and land in `state.json` — after which
+ * every subsequent `readImageEditDoc` threw and the editor was wedged on a
+ * file that had loaded fine moments earlier.
+ *
+ * @param context - The calling API, used to prefix errors.
+ */
+export function assertImageEditDoc(
+  value: unknown,
+  filename: string,
+  context = 'readImageEditDoc',
+): asserts value is ImageEditDoc {
   if (!value || typeof value !== 'object') {
-    throw new Error(`readImageEditDoc: ${filename} root must be an object`);
+    throw new Error(`${context}: ${filename} root must be an object`);
   }
   const v = value as Partial<ImageEditDoc>;
   if (v.version !== 1) {
     throw new Error(
-      `readImageEditDoc: ${filename} has unsupported schema version ${String(v.version)} (expected 1)`,
+      `${context}: ${filename} has unsupported schema version ${String(v.version)} (expected 1)`,
     );
   }
   if (!v.canvas || typeof v.canvas.width !== 'number' || typeof v.canvas.height !== 'number') {
-    throw new Error(`readImageEditDoc: ${filename} canvas.width/height must be numbers`);
+    throw new Error(`${context}: ${filename} canvas.width/height must be numbers`);
   }
   if (!Array.isArray(v.layers)) {
-    throw new Error(`readImageEditDoc: ${filename} layers must be an array`);
+    throw new Error(`${context}: ${filename} layers must be an array`);
   }
   v.layers.forEach((layer, i) => assertLayer(layer, i, filename));
 }

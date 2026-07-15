@@ -15,10 +15,19 @@ import type {
   MarkdownTableCell,
   MarkdownTableRow,
 } from '@bendyline/squisq/markdown';
-import { getPartXml, getPartRelationships, openPackage } from '../ooxml/reader.js';
+import {
+  getPartXml,
+  getPartRelationships,
+  openPackage,
+  requireMainPartPath,
+} from '../ooxml/reader.js';
 import type { OoxmlOpenOptions } from '../ooxml/reader.js';
 import type { OoxmlPackage } from '../ooxml/types.js';
+import { baseDirOf } from '../ooxml/readUtils.js';
 import { NS_R, NS_SML } from '../ooxml/namespaces.js';
+
+/** Conventional main part path; the root `officeDocument` rel wins when present. */
+const XLSX_MAIN_PART = 'xl/workbook.xml';
 
 export interface XlsxImportOptions extends OoxmlOpenOptions {
   /** Which sheet to import (0-based index or sheet name). Default: all sheets. */
@@ -55,10 +64,12 @@ function resolveTarget(baseDir: string, target: string): string {
   return stack.join('/');
 }
 
-async function readWorkbook(pkg: OoxmlPackage): Promise<WorkbookInfo> {
-  const wb = await getPartXml(pkg, 'xl/workbook.xml');
-  if (!wb) return { sheets: [], date1904: false };
-  const rels = await getPartRelationships(pkg, 'xl/workbook.xml');
+async function readWorkbook(pkg: OoxmlPackage, mainPart: string): Promise<WorkbookInfo> {
+  const wb = await getPartXml(pkg, mainPart);
+  if (!wb) {
+    throw new Error(`Invalid XLSX package: workbook part "${mainPart}" could not be parsed.`);
+  }
+  const rels = await getPartRelationships(pkg, mainPart);
   const relById = new Map(rels.map((r) => [r.id, r.target]));
   const out: SheetRef[] = [];
   const sheetEls = wb.getElementsByTagNameNS(NS_SML, 'sheet');
@@ -67,7 +78,7 @@ async function readWorkbook(pkg: OoxmlPackage): Promise<WorkbookInfo> {
     const name = el.getAttribute('name') ?? `Sheet${i + 1}`;
     const rid = attrNS(el, NS_R, 'id', 'r:id');
     const target = rid ? relById.get(rid) : undefined;
-    if (target) out.push({ name, path: resolveTarget('xl', target) });
+    if (target) out.push({ name, path: resolveTarget(baseDirOf(mainPart), target) });
   }
   const workbookPr = wb.getElementsByTagNameNS(NS_SML, 'workbookPr')[0];
   const date1904Value = workbookPr?.getAttribute('date1904');
@@ -327,8 +338,9 @@ export async function xlsxToMarkdownDoc(
   options: XlsxImportOptions = {},
 ): Promise<MarkdownDocument> {
   const pkg = await openPackage(data, options);
+  const mainPart = requireMainPartPath(pkg, XLSX_MAIN_PART, 'XLSX');
   const [{ sheets, date1904 }, shared, styles] = await Promise.all([
-    readWorkbook(pkg),
+    readWorkbook(pkg, mainPart),
     readSharedStrings(pkg),
     readCellStyles(pkg),
   ]);

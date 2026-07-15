@@ -15,13 +15,10 @@ import type { Editor } from '@tiptap/react';
 import { createElement } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { MermaidDiagramWidget } from './MermaidDiagramWidget';
+import { containFenceWidgetEvents } from '../fenceWidgets/fenceWidgetHost';
+import { mapFenceEntries, type FenceBlockEntry } from '../fenceWidgets/fenceRegistry';
 
-export interface MermaidDiagramBlockEntry {
-  /** Synthetic session id, stable while this code block remains in the doc. */
-  id: string;
-  /** Current ProseMirror position of the `codeBlock`. */
-  pos: number;
-}
+export type MermaidDiagramBlockEntry = FenceBlockEntry;
 
 export interface MermaidDiagramPluginState {
   entries: MermaidDiagramBlockEntry[];
@@ -92,8 +89,9 @@ function buildDecorations(
           const container = document.createElement('div');
           container.className = 'squisq-mermaid-diagram-widget-host';
           container.contentEditable = 'false';
-          container.addEventListener('mousedown', (event) => event.stopPropagation());
-          container.addEventListener('keydown', (event) => event.stopPropagation());
+          // The canvas mounts inline rename fields; contain their whole
+          // edit/composition/clipboard stream so it never reaches ProseMirror.
+          containFenceWidgetEvents(container);
           const root = createRoot(container);
           root.render(
             createElement(MermaidDiagramWidget, {
@@ -127,28 +125,7 @@ function remapEntries(
   previous: MermaidDiagramPluginState,
   doc: PMNode,
 ): { entries: MermaidDiagramBlockEntry[]; seq: number } {
-  const mapped = new Map<number, string>();
-  const claimed = new Set<string>();
-
-  for (const entry of previous.entries) {
-    const result = tr.mapping.mapResult(entry.pos, 1);
-    if (!result.deleted) {
-      mapped.set(result.pos, entry.id);
-      claimed.add(entry.id);
-    }
-  }
-
-  // Attribute and content edits can mark the opening token as replaced even
-  // when the same code block remains at the mapped position.
-  for (const entry of previous.entries) {
-    if (claimed.has(entry.id)) continue;
-    const result = tr.mapping.mapResult(entry.pos, 1);
-    if (mapped.has(result.pos)) continue;
-    if (doc.nodeAt(result.pos)?.type.name === 'codeBlock') {
-      mapped.set(result.pos, entry.id);
-      claimed.add(entry.id);
-    }
-  }
+  const mapped = mapFenceEntries(tr, previous.entries, doc);
 
   let seq = previous.seq;
   const entries: MermaidDiagramBlockEntry[] = [];

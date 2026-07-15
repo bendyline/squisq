@@ -29,13 +29,10 @@ import {
   type Tree,
 } from '@bendyline/squisq/doc';
 import { TreeOutlineWidget } from './TreeOutlineWidget';
+import { containFenceWidgetEvents } from '../fenceWidgets/fenceWidgetHost';
+import { mapFenceEntries, type FenceBlockEntry } from '../fenceWidgets/fenceRegistry';
 
-export interface TreeBlockEntry {
-  /** Synthetic session id (`tree-N`), stable across edits for one block. */
-  id: string;
-  /** Document position of the codeBlock node at the current state. */
-  pos: number;
-}
+export type TreeBlockEntry = FenceBlockEntry;
 
 export interface TreeViewPluginState {
   entries: TreeBlockEntry[];
@@ -120,8 +117,10 @@ function buildDecorations(doc: PMNode, entries: TreeBlockEntry[], editor: Editor
           const container = document.createElement('div');
           container.className = 'squisq-tree-widget-host';
           container.contentEditable = 'false';
-          container.addEventListener('mousedown', (e) => e.stopPropagation());
-          container.addEventListener('keydown', (e) => e.stopPropagation());
+          // The outline mounts real `<input>` rename fields inside a
+          // decoration; contain their whole edit/composition/clipboard stream
+          // so ProseMirror cannot replay it at the document selection.
+          containFenceWidgetEvents(container);
           const root = createRoot(container);
           root.render(
             createElement(TreeOutlineWidget, {
@@ -160,31 +159,7 @@ function applyState(
 ): TreeViewPluginState {
   if (!tr.docChanged) return prev;
 
-  const mapped = new Map<number, string>();
-  const claimed = new Set<string>();
-  // Pass 1: survivors whose start position wasn't touched.
-  for (const entry of prev.entries) {
-    const result = tr.mapping.mapResult(entry.pos, 1);
-    if (!result.deleted) {
-      mapped.set(result.pos, entry.id);
-      claimed.add(entry.id);
-    }
-  }
-  // Pass 2: boundary-churn survivors. An attrs-only `setNodeMarkup` (the
-  // language-promotion step) rewrites the codeBlock's opening token, so
-  // `mapResult` reports the start as `deleted` even though the block is still
-  // there. Adopt the old id when a codeBlock still sits at the mapped position
-  // and that slot isn't already claimed — keeps the widget alive across the
-  // one-time promotion instead of remounting it.
-  for (const entry of prev.entries) {
-    if (claimed.has(entry.id)) continue;
-    const result = tr.mapping.mapResult(entry.pos, 1);
-    if (mapped.has(result.pos)) continue;
-    if (doc.nodeAt(result.pos)?.type.name === 'codeBlock') {
-      mapped.set(result.pos, entry.id);
-      claimed.add(entry.id);
-    }
-  }
+  const mapped = mapFenceEntries(tr, prev.entries, doc);
 
   let seq = prev.seq;
   const entries: TreeBlockEntry[] = [];

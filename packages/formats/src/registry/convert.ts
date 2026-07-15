@@ -12,7 +12,12 @@ import type { ContentContainer } from '@bendyline/squisq/storage';
 import type { TransformStyleInput, TransformStyleRegistry } from '@bendyline/squisq/transform';
 import { ConversionError } from './errors.js';
 import { defaultRegistry } from './registry.js';
-import { openBoundedZipArchive, ZipSafetyError } from '../shared/zipSafety.js';
+import {
+  openBoundedZipArchive,
+  resolveZipSafetyLimits,
+  ZipSafetyError,
+  type ZipSafetyLimits,
+} from '../shared/zipSafety.js';
 import type {
   BuiltinFormatOptions,
   ConversionResult,
@@ -74,17 +79,50 @@ function hasPrefix(bytes: Uint8Array, prefix: number[]): boolean {
 const ZIP_MAGIC = [0x50, 0x4b, 0x03, 0x04]; // "PK\x03\x04"
 const PDF_MAGIC = [0x25, 0x50, 0x44, 0x46]; // "%PDF"
 
+/** The ZIP-based formats {@link sniffZip} can resolve to. */
+const ZIP_SNIFF_CANDIDATES = ['docx', 'pptx', 'xlsx', 'dbk'] as const;
+
+/**
+ * ZIP limits for the sniff pass.
+ *
+ * Sniffing happens *before* the format is known, so no single format's
+ * `ZipSafetyLimits` applies yet. Opening at hard-coded defaults would hand a
+ * hostile archive one free pass at default budgets even when the caller
+ * tightened every ZIP format.
+ *
+ * Instead, take the **most permissive** effective limit across the candidate
+ * formats: the sniff is then never stricter than the importer that will
+ * actually run (so a legitimate file is never falsely rejected), while a caller
+ * who tightened *all* ZIP formats gets that tighter budget applied at sniff
+ * time too. An unconfigured candidate resolves to the default, which keeps the
+ * maximum at the default — matching today's behavior exactly.
+ */
+function sniffZipLimits(options: ConvertOptions): ZipSafetyLimits {
+  const effective = ZIP_SNIFF_CANDIDATES.map((id) =>
+    resolveZipSafetyLimits((options.formatOptions?.[id] ?? {}) as ZipSafetyLimits),
+  );
+  return {
+    signal: options.signal,
+    maxEntries: Math.max(...effective.map((l) => l.maxEntries)),
+    maxUncompressedBytes: Math.max(...effective.map((l) => l.maxUncompressedBytes)),
+    maxEntryUncompressedBytes: Math.max(...effective.map((l) => l.maxEntryUncompressedBytes)),
+    maxCompressionRatio: Math.max(...effective.map((l) => l.maxCompressionRatio)),
+  };
+}
+
 /**
  * Disambiguate a ZIP-based file. OOXML formats (docx/pptx/xlsx) all carry a
  * `[Content_Types].xml` whose content-type strings name the flavor; a squisq
  * container (.dbk) is a plain ZIP with no such part, so absence of the OOXML
  * marker means `dbk`.
  */
-async function sniffZip(bytes: Uint8Array): Promise<FormatId> {
-  const archive = await openBoundedZipArchive(bytes).catch((cause: unknown) => {
-    if (cause instanceof ZipSafetyError && cause.code !== 'invalid-archive') throw cause;
-    throw new ConversionError('invalid-input', 'Input is not a readable ZIP archive.', { cause });
-  });
+async function sniffZip(bytes: Uint8Array, options: ConvertOptions): Promise<FormatId> {
+  const archive = await openBoundedZipArchive(bytes, sniffZipLimits(options)).catch(
+    (cause: unknown) => {
+      if (cause instanceof ZipSafetyError && cause.code !== 'invalid-archive') throw cause;
+      throw new ConversionError('invalid-input', 'Input is not a readable ZIP archive.', { cause });
+    },
+  );
   const contentTypes = archive.entries.find((entry) => entry.path === '[Content_Types].xml');
   if (!contentTypes) return 'dbk';
   const maxContentTypesBytes = 1024 * 1024;
@@ -116,7 +154,7 @@ async function detectByteFormat(
   }
 
   if (hasPrefix(bytes, PDF_MAGIC)) return 'pdf';
-  if (hasPrefix(bytes, ZIP_MAGIC)) return sniffZip(bytes);
+  if (hasPrefix(bytes, ZIP_MAGIC)) return sniffZip(bytes, options);
 
   // No magic and no recognized extension → assume UTF-8 markdown.
   return 'md';

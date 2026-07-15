@@ -7,6 +7,7 @@ export {
   DEFAULT_MAX_ZIP_COMPRESSION_RATIO,
   assertSafeZipPath,
   validateZipArchive,
+  resolveZipSafetyLimits,
 } from './zipLimits.js';
 export type {
   ZipSafetyLimits,

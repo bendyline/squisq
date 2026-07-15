@@ -85,4 +85,47 @@ describe('narration sidecar v3', () => {
     const parsed = parseNarrationTimingJson(JSON.stringify(payload));
     expect(parsed!.bookmarks.length).toBe(1);
   });
+
+  /**
+   * `cameraOffsetSec` is a start SKEW (`cameraStart - audioStart`), not a
+   * duration, and it is genuinely signed: the camera and mic are independent
+   * `MediaRecorder` pipelines whose `onstart` events fire asynchronously, so an
+   * already-warm camera can begin BEFORE the mic. Validating it as
+   * non-negative silently discarded those takes' offsets on reload, and the
+   * inline camera video then played with uncorrected skew.
+   */
+  describe('cameraOffsetSec round-trips as a signed skew', () => {
+    const build = (offset: number): string =>
+      JSON.stringify(
+        buildNarrationTimingJson(script, alignment, take.durationSec, {
+          cameraOffsetSec: offset,
+        }),
+      );
+
+    it.each([
+      ['camera started after the mic', 0.42],
+      ['camera started before the mic', -0.42],
+      ['no skew', 0],
+    ])('%s', (_name, offset) => {
+      const parsed = parseNarrationTimingJson(build(offset));
+      expect(parsed?.cameraOffsetSec).toBe(offset);
+    });
+
+    it('omits a non-finite offset rather than emitting a field that parses away', () => {
+      // JSON has no NaN — it would serialize to `null` and be dropped on read.
+      const json = buildNarrationTimingJson(script, alignment, take.durationSec, {
+        cameraOffsetSec: Number.NaN,
+      });
+      expect(json.cameraOffsetSec).toBeUndefined();
+      expect(JSON.stringify(json)).not.toContain('cameraOffsetSec');
+    });
+
+    it('ignores a non-numeric offset in a hand-edited file', () => {
+      const parsed = parseNarrationTimingJson(
+        JSON.stringify({ sourceText: 'a b', duration: 5, cameraOffsetSec: 'soon' }),
+      );
+      expect(parsed).not.toBeNull();
+      expect(parsed!.cameraOffsetSec).toBeUndefined();
+    });
+  });
 });

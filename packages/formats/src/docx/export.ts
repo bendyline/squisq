@@ -755,17 +755,18 @@ function convertInline(node: MarkdownInlineNode, ctx: ExportContext, format: Inl
 function makeRun(text: string, format: InlineFormat): string {
   if (!text) return '';
 
+  // `w:rPr` children must follow the ECMA-376 `EG_RPrBase` sequence:
+  // rStyle → rFonts → b → i → strike → color → sz → u. Word tolerates other
+  // orders, but strict OOXML validators (and other consumers) reject them.
   const rPrParts: string[] = [];
+  if (format.code) {
+    rPrParts.push(`<w:rFonts w:ascii="${DEFAULT_CODE_FONT}" w:hAnsi="${DEFAULT_CODE_FONT}"/>`);
+  }
   if (format.bold) rPrParts.push('<w:b/>');
   if (format.italic) rPrParts.push('<w:i/>');
   if (format.strike) rPrParts.push('<w:strike/>');
   if (format.color) rPrParts.push(`<w:color w:val="${format.color}"/>`);
-  if (format.code) {
-    rPrParts.push(
-      `<w:rFonts w:ascii="${DEFAULT_CODE_FONT}" w:hAnsi="${DEFAULT_CODE_FONT}"/>`,
-      `<w:sz w:val="${DEFAULT_CODE_FONT_SIZE}"/>`,
-    );
-  }
+  if (format.code) rPrParts.push(`<w:sz w:val="${DEFAULT_CODE_FONT_SIZE}"/>`);
 
   const rPr = rPrParts.length > 0 ? `<w:rPr>${rPrParts.join('')}</w:rPr>` : '';
 
@@ -801,13 +802,11 @@ function convertInlinesWithHyperlinkStyle(
 function makeHyperlinkRun(text: string, format: InlineFormat): string {
   if (!text) return '';
 
-  const rPrParts: string[] = [
-    '<w:rStyle w:val="Hyperlink"/>',
-    `<w:color w:val="${HYPERLINK_COLOR}"/>`,
-    '<w:u w:val="single"/>',
-  ];
+  // ECMA-376 `EG_RPrBase` sequence: rStyle → b → i → color → u.
+  const rPrParts: string[] = ['<w:rStyle w:val="Hyperlink"/>'];
   if (format.bold) rPrParts.push('<w:b/>');
   if (format.italic) rPrParts.push('<w:i/>');
+  rPrParts.push(`<w:color w:val="${HYPERLINK_COLOR}"/>`, '<w:u w:val="single"/>');
 
   return (
     `<w:r><w:rPr>${rPrParts.join('')}</w:rPr>` +

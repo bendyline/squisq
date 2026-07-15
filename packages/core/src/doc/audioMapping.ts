@@ -204,13 +204,19 @@ async function discoverNarrationAudio(container: ContentContainer): Promise<Narr
     const filename = file.path.split('/').pop() ?? file.path;
     let timing: AudioTimingData | null = null;
 
-    // Try consolidated timing first: match section name from filename
+    // Try consolidated timing first: match section name from filename.
+    // Several sections can suffix-match the same file — `take-re-intro`
+    // ends with both `-intro` and `-re-intro` — and taking the first hit
+    // would let `Object.entries` order decide which timing data (and so
+    // which duration and segment start) a recording gets. The longest
+    // match is the most specific one, so it wins regardless of key order.
     if (consolidatedSections) {
       const audioBase = stripAudioExtension(filename);
+      let matchedName = '';
       for (const [sectionName, sectionTiming] of Object.entries(consolidatedSections)) {
-        if (audioBase.endsWith(`-${sectionName}`)) {
+        if (audioBase.endsWith(`-${sectionName}`) && sectionName.length > matchedName.length) {
+          matchedName = sectionName;
           timing = sectionTiming;
-          break;
         }
       }
     }

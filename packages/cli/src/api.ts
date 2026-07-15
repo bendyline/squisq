@@ -47,6 +47,7 @@ import { detectFfmpegDetailed } from './util/detectFfmpeg.js';
 import { buildMixedAudioTrack } from './util/audioMix.js';
 import { CapturedFrameCollector } from './util/capturedFrameBudget.js';
 import { resolveAppliedCoverPreRoll } from './util/coverPreRoll.js';
+import { createMediaBudget } from './util/mediaBudget.js';
 import { GIF_EXPORT_DEFAULTS } from './util/nativeEncoder.js';
 import { runFfmpeg } from './util/runFfmpeg.js';
 import { createCliRegistry } from './registry.js';
@@ -299,12 +300,16 @@ async function captureDocFrames(
   signal?.throwIfAborted();
   const { collectImagePaths } = await import('@bendyline/squisq-formats/html');
   signal?.throwIfAborted();
+  const budget = createMediaBudget();
   const images = new Map<string, ArrayBuffer>();
   for (const imgPath of collectImagePaths(doc)) {
     signal?.throwIfAborted();
     const data = await container.readFile(imgPath);
     signal?.throwIfAborted();
-    if (data) images.set(imgPath, data);
+    if (data) {
+      budget.admit(imgPath, data);
+      images.set(imgPath, data);
+    }
   }
 
   // Audio remains available to the headless player even for silent GIF output:
@@ -315,6 +320,7 @@ async function captureDocFrames(
     const data = await container.readFile(seg.src);
     signal?.throwIfAborted();
     if (data) {
+      budget.admit(seg.src, data);
       audio.set(seg.src, data);
       audio.set(seg.name, data);
     }
@@ -331,7 +337,10 @@ async function captureDocFrames(
     if (images.has(src)) continue;
     const data = await container.readFile(src);
     signal?.throwIfAborted();
-    if (data) images.set(src, data);
+    if (data) {
+      budget.admit(src, data);
+      images.set(src, data);
+    }
   }
 
   onProgress?.('generating render HTML', 10);

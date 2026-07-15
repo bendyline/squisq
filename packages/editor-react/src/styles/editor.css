@@ -4351,6 +4351,23 @@
   box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2);
 }
 
+.squisq-link-dialog-input--invalid,
+.squisq-link-dialog-input--invalid:focus {
+  border-color: #dc2626;
+  box-shadow: 0 0 0 2px rgba(220, 38, 38, 0.18);
+}
+
+.squisq-link-dialog-error {
+  font-size: 12px;
+  line-height: 1.4;
+  color: #dc2626;
+}
+
+.squisq-link-dialog-btn--primary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 .squisq-link-dialog-footer {
   display: flex;
   justify-content: flex-end;

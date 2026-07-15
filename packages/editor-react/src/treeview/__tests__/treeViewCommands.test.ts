@@ -177,3 +177,57 @@ describe('applyTreeCommand', () => {
     );
   });
 });
+
+describe('read-only authority (BUG B)', () => {
+  // A mounted outline outlives the render that created its controls, so a host
+  // flipping the editor read-only (saving, locked, permission change) must not
+  // leave a stale click/drag able to rewrite the fence.
+  it('rejects a rename after the editor becomes read-only', () => {
+    const editor = makeEditor('```\n' + ART + '\n```\n');
+    const id = firstId(editor);
+    const before = JSON.stringify(editor.state.doc.toJSON());
+
+    editor.setEditable(false);
+
+    expect(
+      applyTreeCommand(editor, id, { kind: 'renameItem', id: 'index-ts', label: 'injected.ts' }),
+    ).toBe(false);
+    expect(JSON.stringify(editor.state.doc.toJSON())).toBe(before);
+  });
+
+  it('rejects a structural edit after the editor becomes read-only', () => {
+    const editor = makeEditor('```\n' + ART + '\n```\n');
+    const id = firstId(editor);
+    const before = JSON.stringify(editor.state.doc.toJSON());
+
+    editor.setEditable(false);
+
+    expect(applyTreeCommand(editor, id, { kind: 'removeItem', id: 'index-ts' })).toBe(false);
+    expect(applyTreeCommand(editor, id, { kind: 'indentItem', id: 'config-ts' })).toBe(false);
+    expect(
+      applyTreeCommand(editor, id, {
+        kind: 'moveItem',
+        id: 'config-ts',
+        targetId: 'utils',
+        position: 'child',
+      }),
+    ).toBe(false);
+    expect(JSON.stringify(editor.state.doc.toJSON())).toBe(before);
+  });
+
+  it('resumes accepting commands once the host restores editability', () => {
+    const editor = makeEditor('```\n' + ART + '\n```\n');
+    const id = firstId(editor);
+
+    editor.setEditable(false);
+    expect(
+      applyTreeCommand(editor, id, { kind: 'renameItem', id: 'index-ts', label: 'app.ts' }),
+    ).toBe(false);
+
+    editor.setEditable(true);
+    expect(
+      applyTreeCommand(editor, id, { kind: 'renameItem', id: 'index-ts', label: 'app.ts' }),
+    ).toBe(true);
+    expect(fenceOf(editor).text).toContain('app.ts');
+  });
+});

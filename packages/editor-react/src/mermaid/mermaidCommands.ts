@@ -9,6 +9,9 @@ export function replaceMermaidFenceSource(
   blockId: string,
   nextSource: string,
 ): boolean {
+  // Gestures may outlive the render that created their controls. Enforce the
+  // editor's current authority at dispatch time, not only in widget props.
+  if (!editor.isEditable) return false;
   const pos = findMermaidDiagramBlockPos(editor, blockId);
   if (pos === null) return false;
   return editor

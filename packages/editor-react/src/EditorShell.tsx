@@ -279,6 +279,14 @@ export interface EditorShellProps {
    */
   documentLinkProvider?: DocumentLinkProvider | null;
   /**
+   * Extra link schemes this host resolves itself (e.g. an app-internal
+   * navigation protocol). The link dialog validates typed URLs against
+   * core's `sanitizeUrl` with these allowed, so an author isn't told a
+   * scheme the host DOES handle is unsupported. Executable schemes
+   * (`javascript:`, `vbscript:`, `data:`) are refused regardless.
+   */
+  linkSchemes?: readonly string[];
+  /**
    * Whether the in-editor media recorder is surfaced in the toolbar.
    * Defaults to true — when a `mediaProvider` is wired, a record
    * button appears next to the version history. Pass `false` to
@@ -459,6 +467,7 @@ export function EditorShell({
   onFindModeChange,
   mentionProvider,
   documentLinkProvider,
+  linkSchemes,
   allowRecording = true,
   allowNarrate = true,
   placeholder,
@@ -516,6 +525,7 @@ export function EditorShell({
         imageDisplayMode={imageDisplayMode}
         mentionProvider={mentionProvider}
         documentLinkProvider={documentLinkProvider}
+        linkSchemes={linkSchemes}
         allowRecording={allowRecording}
         allowNarrate={allowNarrate}
         fileName={fileName}
