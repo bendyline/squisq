@@ -1,6 +1,6 @@
 {
   "name": "@bendyline/squisq-cli",
-  "version": "2.2.0",
+  "version": "2.3.0",
   "description": "Squisq CLI — convert documents and render MP4 video or animated GIF",
   "license": "MIT",
   "author": "Bendyline",
@@ -57,10 +57,10 @@
     "test:native": "mocha --grep \"flagship pptx|native animated GIF\""
   },
   "dependencies": {
-    "@bendyline/squisq": "2.2.0",
-    "@bendyline/squisq-formats": "2.2.0",
-    "@bendyline/squisq-react": "2.2.0",
-    "@bendyline/squisq-video": "2.1.0",
+    "@bendyline/squisq": "2.3.0",
+    "@bendyline/squisq-formats": "2.3.0",
+    "@bendyline/squisq-react": "2.3.0",
+    "@bendyline/squisq-video": "2.2.0",
     "commander": "12.1.0",
     "playwright-core": "1.58.2"
   },
