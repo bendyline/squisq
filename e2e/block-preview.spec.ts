@@ -6,10 +6,10 @@ import { test, expect, type Page } from '@playwright/test';
  * document mode the same toggle drives the inline-preview gutter instead.
  */
 
-async function load(page: Page) {
+async function load(page: Page, sample = 'hello-world') {
   await page.goto('/');
   await page.waitForLoadState('networkidle');
-  await page.locator('select').first().selectOption('hello-world');
+  await page.locator('select').first().selectOption(sample);
   await page.locator('.tiptap.ProseMirror').waitFor({ state: 'visible', timeout: 5_000 });
 }
 
@@ -72,7 +72,7 @@ test('toggling previews off hides the panel', async ({ page }) => {
 });
 
 test('document mode still uses the inline-preview gutter, not the panel', async ({ page }) => {
-  await load(page);
+  await load(page, 'about-squisq');
   await configureView(page, { layout: 'Document', previews: true });
   await expect(page.locator('.squisq-inline-preview-gutter')).toBeVisible();
   await expect(panel(page)).toHaveCount(0);

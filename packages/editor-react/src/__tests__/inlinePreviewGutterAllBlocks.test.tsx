@@ -43,7 +43,7 @@ function renderWithMatchingDom(markdown: string, headingHtml: string) {
 }
 
 describe('InlinePreviewGutter — all-block bracket lines', () => {
-  it('renders a vertical-extent bar per heading even when none are annotated', async () => {
+  it('keeps the whole gutter collapsed when no headings are annotated', () => {
     const md = '# Hello World\n\nBody\n\n## Getting Started\n\nBody\n\n## Tips\n\nBody\n';
     const { container } = renderWithMatchingDom(
       md,
@@ -55,19 +55,7 @@ describe('InlinePreviewGutter — all-block bracket lines', () => {
         '<p>Body</p>',
     );
 
-    await waitFor(
-      () => {
-        const bars = container.querySelectorAll('.squisq-inline-preview-extent');
-        expect(bars.length).toBe(3);
-      },
-      { timeout: 1000 },
-    );
-
-    // All three should be the untagged variant (no `data-template` on any).
-    const bars = container.querySelectorAll('.squisq-inline-preview-extent');
-    bars.forEach((bar) =>
-      expect(bar.classList.contains('squisq-inline-preview-extent--untagged')).toBe(true),
-    );
+    expect(container.querySelector('[data-testid="inline-preview-gutter"]')).toBeNull();
   });
 
   it('renders a strong tagged bar for annotated headings + lighter bars for the rest', async () => {

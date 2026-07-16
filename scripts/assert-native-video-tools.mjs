@@ -1,5 +1,6 @@
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
+import { hasFfmpegListEntry } from './ffmpeg-list.mjs';
 
 const run = promisify(execFile);
 const ffmpeg = process.env.SQUISQ_FFMPEG || 'ffmpeg';
@@ -21,8 +22,8 @@ const filters = await output(['-hide_banner', '-filters']);
 const missing = [];
 if (!/\b(?:libx264|h264_[a-z0-9_]+|h264)\b/i.test(encoders)) missing.push('H.264 encoder');
 if (!/^\s*[A-Z.]{6}\s+aac\s/im.test(encoders)) missing.push('AAC encoder');
-if (!/^\s*[A-Z.]{3}\s+palettegen\s/im.test(filters)) missing.push('palettegen filter');
-if (!/^\s*[A-Z.]{3}\s+paletteuse\s/im.test(filters)) missing.push('paletteuse filter');
+if (!hasFfmpegListEntry(filters, 'palettegen')) missing.push('palettegen filter');
+if (!hasFfmpegListEntry(filters, 'paletteuse')) missing.push('paletteuse filter');
 
 if (missing.length > 0) {
   throw new Error(`FFmpeg is present but lacks: ${missing.join(', ')}`);

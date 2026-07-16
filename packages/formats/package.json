@@ -34,7 +34,8 @@
     "dist",
     "!dist/**/*.map",
     "LICENSE",
-    "NOTICE.md"
+    "NOTICE.md",
+    "THIRD_PARTY_LICENSES.txt"
   ],
   "exports": {
     ".": {
@@ -99,7 +100,7 @@
     }
   },
   "scripts": {
-    "build": "tsup && node ../../scripts/remove-empty-chunks.mjs dist",
+    "build": "tsup && node ../../scripts/generate-bundle-licenses.mjs . && node ../../scripts/remove-empty-chunks.mjs dist",
     "dev": "concurrently -n js,dts -c blue,gray -r \"tsup --watch --no-dts --no-clean\" \"tsup --watch --dts-only --no-clean\"",
     "typecheck": "tsc --noEmit"
   },

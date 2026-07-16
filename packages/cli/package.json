@@ -48,10 +48,11 @@
     "dist",
     "!dist/**/*.map",
     "LICENSE",
-    "NOTICE.md"
+    "NOTICE.md",
+    "THIRD_PARTY_LICENSES.txt"
   ],
   "scripts": {
-    "build": "tsup && node ../../scripts/remove-empty-chunks.mjs dist",
+    "build": "tsup && node ../../scripts/generate-bundle-licenses.mjs . && node scripts/copy-player-bundle.mjs && node ../../scripts/remove-empty-chunks.mjs dist",
     "typecheck": "tsc --noEmit",
     "test": "mocha",
     "test:native": "mocha --grep \"flagship pptx|native animated GIF\""
@@ -59,7 +60,6 @@
   "dependencies": {
     "@bendyline/squisq": "2.3.0",
     "@bendyline/squisq-formats": "2.3.0",
-    "@bendyline/squisq-react": "2.3.0",
     "@bendyline/squisq-video": "2.2.0",
     "commander": "12.1.0",
     "playwright-core": "1.58.2"

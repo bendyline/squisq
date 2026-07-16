@@ -2,6 +2,7 @@
 import { defineConfig } from 'tsup';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { bundleLicenseMetadata } from '../../scripts/bundle-license-plugin.mjs';
 
 const pkg = JSON.parse(readFileSync(resolve(import.meta.dirname, 'package.json'), 'utf-8'));
 
@@ -35,6 +36,7 @@ export default defineConfig([
   {
     ...common,
     entry: { 'squisq-player': 'src/standalone-entry.tsx' },
+    esbuildPlugins: [bundleLicenseMetadata(import.meta.dirname, 'standalone-light')],
     // Mermaid is optional in the default player. An import map can provide it
     // on demand; documents that need a zero-configuration Mermaid renderer can
     // choose the full variant instead.
@@ -50,6 +52,7 @@ export default defineConfig([
   {
     ...common,
     entry: { 'squisq-player.full': 'src/standalone-entry.tsx' },
+    esbuildPlugins: [bundleLicenseMetadata(import.meta.dirname, 'standalone-full')],
     noExternal: [/.*/],
   },
 ]);

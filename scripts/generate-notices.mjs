@@ -55,21 +55,22 @@ const licenseOverrides = {
 };
 
 const footers = {
-  core: `Copyright and complete license texts for these dependencies are included in
-their respective npm distributions and source repositories.`,
+  core: `The generated icon catalog incorporates Font Awesome Free metadata. Exact
+third-party license texts for bundled code and data are shipped in
+THIRD_PARTY_LICENSES.txt.`,
   formats: `Squisq uses jszip under its MIT license option. Copyright and complete license
 texts for these dependencies are included in their respective npm
 distributions and source repositories.`,
   react: `Mermaid is Copyright (c) 2014-2022 Knut Sveidqvist and is distributed under
-the MIT License. Preact is used by the standalone browser bundles. Copyright
-and complete license texts for these dependencies are included in their
-respective distributions and source repositories.`,
+the MIT License. Preact is used by the standalone browser bundles. Exact
+third-party license texts for the complete standalone bundle graph are shipped
+in THIRD_PARTY_LICENSES.txt.`,
   'editor-react': `Font Awesome Free contains icon artwork under CC-BY-4.0, font files under
 OFL-1.1, and CSS/JavaScript under MIT. Attribution is required when its icon
 artwork is redistributed. The Monaco React adapter, loader, and state-local
 are bundled so consumers do not inherit the adapter's mandatory Monaco peer.
-Complete license texts remain available in the respective distributions and
-source repositories.`,
+Exact third-party license texts for the bundled adapter, loader, state helper,
+and Font Awesome assets are shipped in THIRD_PARTY_LICENSES.txt.`,
   video: `The @ffmpeg/ffmpeg and @ffmpeg/util packages provide JavaScript APIs and
 utilities. This npm package does not include @ffmpeg/core, ffmpeg-core.js, or
 ffmpeg-core.wasm; applications that use a WebAssembly core supply and
@@ -97,13 +98,17 @@ that package version:
 - https://ffmpegwasm.netlify.app/docs/contribution/core/
 
 mp4-muxer is bundled as a private runtime implementation detail so its legacy
-global WebCodecs declaration dependencies are not installed for consumers.`,
+global WebCodecs declaration dependencies are not installed for consumers. Its
+exact license text is shipped in THIRD_PARTY_LICENSES.txt.`,
   cli: `Copyright and complete license texts for these dependencies are included in
 their respective npm distributions and source repositories.`,
 };
 
 const configs = {
-  core: { heading: 'Runtime dependencies' },
+  core: {
+    heading: 'Runtime and generated-data dependencies',
+    bundled: ['@fortawesome/fontawesome-free'],
+  },
   formats: { heading: 'Runtime dependencies' },
   react: {
     heading: 'Runtime, peer, and bundled dependencies',

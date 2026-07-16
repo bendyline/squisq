@@ -121,6 +121,22 @@ describe('validateMarkdownSource — assets', () => {
     expect(d!.message).toContain('images/hero.jpg');
   });
 
+  it('reports a body image once at its authored line when template data derives the same URL', () => {
+    const result = validateMarkdownSource(
+      '## Same {#same}\n\n## Same {#same}\n\n![hero](images/missing.jpg)\n',
+      { assets: new Set<string>() },
+    );
+    const missing = result.diagnostics.filter((item) => item.code === 'missing-asset');
+    expect(missing).toEqual([
+      {
+        severity: 'warning',
+        code: 'missing-asset',
+        message: 'Referenced asset "images/missing.jpg" was not found in the bundle',
+        line: 5,
+      },
+    ]);
+  });
+
   it('passes when the asset exists, and skips absolute/external URLs', () => {
     const md =
       '## X\n\n![a](images/hero.jpg)\n\n![b](https://example.com/x.jpg)\n\n![c](data:image/png;base64,AA==)\n';

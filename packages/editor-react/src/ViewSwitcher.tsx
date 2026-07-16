@@ -5,11 +5,12 @@
  */
 
 import { useEditorContext, type EditorView } from './EditorContext';
+import { platformShortcut } from './platformShortcuts';
 
-const VIEWS: { id: EditorView; label: string; shortLabel?: string; shortcut: string }[] = [
-  { id: 'wysiwyg', label: 'Write', shortcut: '⌘1' },
-  { id: 'raw', label: 'Source', shortcut: '⌘2' },
-  { id: 'preview', label: 'Use', shortcut: '⌘3' },
+const VIEWS: { id: EditorView; label: string; shortLabel?: string; shortcutKey: string }[] = [
+  { id: 'wysiwyg', label: 'Write', shortcutKey: '1' },
+  { id: 'raw', label: 'Source', shortcutKey: '2' },
+  { id: 'preview', label: 'Use', shortcutKey: '3' },
 ];
 
 export interface ViewSwitcherProps {
@@ -41,7 +42,7 @@ export function ViewSwitcher({ className }: ViewSwitcherProps) {
           aria-selected={activeView === view.id}
           className={`squisq-view-tab ${activeView === view.id ? 'squisq-view-tab--active' : ''}`}
           onClick={() => setActiveView(view.id)}
-          title={`${view.label} (${view.shortcut})`}
+          title={`${view.label} (${platformShortcut(view.shortcutKey)})`}
         >
           <span className="squisq-view-tab-label squisq-view-tab-label--long">{view.label}</span>
           {view.shortLabel && view.shortLabel !== view.label && (

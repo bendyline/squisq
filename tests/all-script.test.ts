@@ -22,4 +22,15 @@ describe('npm run all', () => {
     expect(workflow).toContain('run: npm test');
     expect(all).toContain('npm run test:coverage');
   });
+
+  it('leaves mutation testing to the opt-in extended test suite', () => {
+    const manifest = JSON.parse(readFileSync(resolve(process.cwd(), 'package.json'), 'utf8')) as {
+      scripts: Record<string, string>;
+    };
+    const workflow = readFileSync(resolve(process.cwd(), '.github/workflows/ci.yml'), 'utf8');
+
+    expect(manifest.scripts['test:extended']).toContain('npm run test:mutation');
+    expect(manifest.scripts.all).not.toContain('test:mutation');
+    expect(workflow).not.toContain('test:mutation');
+  });
 });

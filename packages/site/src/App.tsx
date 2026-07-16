@@ -25,6 +25,7 @@ import { CodeContextDemo } from './CodeContextDemo';
 import { createSlotMediaProvider } from './slotStorage';
 import type { MediaProvider, Theme } from '@bendyline/squisq/schemas';
 import { parseTheme } from '@bendyline/squisq/schemas';
+import { openExternalLink } from './externalLinks';
 
 const CUSTOM_THEME_STORAGE_KEY = 'squisq-site:customTheme';
 const COLOR_MODE_STORAGE_KEY = 'squisq-site:colorMode';
@@ -303,6 +304,8 @@ export function App() {
   const handleChange = useCallback((source: string) => {
     setCurrentSource(source);
   }, []);
+
+  const handleLinkClick = useCallback((href: string) => openExternalLink(href), []);
 
   const handleImport = useCallback((markdown: string) => {
     setCurrentSource(markdown);
@@ -686,6 +689,7 @@ export function App() {
                 initialMarkdown={currentSource}
                 articleId={selectedSample || 'uploaded'}
                 onChange={handleChange}
+                onLinkClick={handleLinkClick}
                 colorScheme={colorScheme}
                 height="100%"
                 mediaProvider={mediaProvider}

@@ -89,7 +89,15 @@ describe('video command flag validation', () => {
 
   it('rejects invalid fps', async () => {
     const stderr = await runCliExpectingError('video', FIXTURE_MD, '--fps', '0');
-    expect(stderr).to.include('FPS must be a number between 1 and 120');
+    expect(stderr).to.include('FPS must be an integer between 1 and 120');
+  });
+
+  it('rejects fractional and partially numeric fps values', async () => {
+    for (const value of ['1.9', '30fps']) {
+      const stderr = await runCliExpectingError('video', FIXTURE_MD, '--fps', value);
+      expect(stderr).to.include('FPS must be an integer between 1 and 120');
+      expect(stderr).to.not.include('Reading:');
+    }
   });
 
   it('rejects an unknown output format', async () => {
@@ -99,7 +107,19 @@ describe('video command flag validation', () => {
 
   it('infers GIF from the output extension and applies its FPS limit', async () => {
     const stderr = await runCliExpectingError('video', FIXTURE_MD, '-o', 'out.gif', '--fps', '101');
-    expect(stderr).to.include('FPS must be a number between 1 and 100');
+    expect(stderr).to.include('FPS must be an integer between 1 and 100');
+  });
+
+  it('rejects positional and flagged outputs together', async () => {
+    const stderr = await runCliExpectingError(
+      'video',
+      FIXTURE_MD,
+      'positional.mp4',
+      '--output',
+      'flag.mp4',
+    );
+    expect(stderr).to.include('positional output and --output cannot be used together');
+    expect(stderr).to.not.include('Reading:');
   });
 
   it('rejects a format that conflicts with the output extension', async () => {

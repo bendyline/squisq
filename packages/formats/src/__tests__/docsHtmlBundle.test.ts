@@ -34,9 +34,10 @@ function listZipPaths(zip: JSZip): string[] {
 }
 
 function readEmbeddedDoc(html: string): unknown {
-  const encoded = /var doc = JSON\.parse\((.+)\);/.exec(html)?.[1];
-  if (!encoded) throw new Error('Rendered page did not contain an embedded Doc');
-  return JSON.parse(JSON.parse(encoded) as string) as unknown;
+  const parsed = new DOMParser().parseFromString(html, 'text/html');
+  const payload = parsed.querySelector('script[data-squisq-doc="1"]')?.textContent;
+  if (!payload) throw new Error('Rendered page did not contain an embedded Doc');
+  return JSON.parse(payload) as unknown;
 }
 
 describe('markdownDocsToHtmlBundle', () => {

@@ -107,10 +107,10 @@ export function registerVideoCommand(program: Command): void {
     .option('--bayer-scale <number>', 'GIF Bayer dither strength from 0 to 5 (default: 3)')
     .action(async (inputPath: string, outputArg: string | undefined, opts: VideoCommandOptions) => {
       try {
-        // Use the positional output only when -o/--output was not supplied.
-        if (outputArg && !opts.output) {
-          opts.output = outputArg;
+        if (outputArg && opts.output) {
+          throw new Error('The positional output and --output cannot be used together.');
         }
+        if (outputArg) opts.output = outputArg;
         await runVideo(inputPath, opts);
       } catch (err: unknown) {
         const message = err instanceof Error ? err.message : String(err);
@@ -146,9 +146,9 @@ async function runVideo(inputPath: string, opts: VideoCommandOptions): Promise<v
   // Resolve format-specific defaults before validating. GIF frame delays are
   // centisecond-based, so rates above 100 cannot be represented precisely.
   const maxFps = outputFormat === 'gif' ? 100 : 120;
-  const fps = parseInt(opts.fps ?? (outputFormat === 'gif' ? '10' : '30'), 10);
-  if (isNaN(fps) || fps < 1 || fps > maxFps) {
-    throw new Error(`FPS must be a number between 1 and ${maxFps}`);
+  const fps = Number(opts.fps ?? (outputFormat === 'gif' ? '10' : '30'));
+  if (!Number.isSafeInteger(fps) || fps < 1 || fps > maxFps) {
+    throw new Error(`FPS must be an integer between 1 and ${maxFps}`);
   }
 
   const quality = opts.quality ?? 'normal';
@@ -174,8 +174,8 @@ async function runVideo(inputPath: string, opts: VideoCommandOptions): Promise<v
   // and are rejected, never rounded. (Native GIF could technically take odd
   // sizes, but browser GIF export muxes an H.264 intermediate and cannot — a
   // dimension rule that depends on format and runtime is worse than one rule.)
-  const width = opts.width === undefined ? undefined : parseInt(opts.width, 10);
-  const height = opts.height === undefined ? undefined : parseInt(opts.height, 10);
+  const width = opts.width === undefined ? undefined : Number(opts.width);
+  const height = opts.height === undefined ? undefined : Number(opts.height);
   validateVideoExportOptions({ width, height, orientation });
 
   const captions = opts.captions ?? 'off';
@@ -184,8 +184,8 @@ async function runVideo(inputPath: string, opts: VideoCommandOptions): Promise<v
   }
   const captionStyle = captions === 'off' ? undefined : (captions as 'standard' | 'social');
 
-  const coverPreRoll = parseFloat(opts.coverPreroll ?? '2');
-  if (isNaN(coverPreRoll) || coverPreRoll < 0) {
+  const coverPreRoll = Number(opts.coverPreroll ?? '2');
+  if (!Number.isFinite(coverPreRoll) || coverPreRoll < 0) {
     throw new Error('Cover pre-roll must be a number of seconds >= 0');
   }
 

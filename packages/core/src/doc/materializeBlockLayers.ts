@@ -16,10 +16,13 @@ import type {
   VideoLayer,
 } from '../schemas/Doc.js';
 import type {
+  DiagramBlockInput,
   DocBlock,
   PersistentLayerConfig,
   TemplateBlock,
   TemplateContext,
+  TimelineBlockInput,
+  TreeBlockInput,
 } from '../schemas/BlockTemplates.js';
 import type { CustomTemplateDefinition } from '../schemas/CustomTemplates.js';
 import type { Theme } from '../schemas/Theme.js';
@@ -36,7 +39,28 @@ import { fallbackBlockLayers } from './templates/fallbackBlock.js';
 import { expandPersistentLayers, wrapWithPersistentLayers } from './templates/persistentLayers.js';
 import { resolveTemplateName } from './templates/templateNames.js';
 import { deriveTemplateInputs, extractEmbeddedVideos, extractImages } from './templateInputs.js';
-import { resolveSupplementalMediaLayout, type LayerRect } from './richMediaLayout.js';
+import {
+  placeLayersInRect,
+  resolveSupplementalMediaLayout,
+  type LayerRect,
+} from './richMediaLayout.js';
+import {
+  detectAsciiDiagram,
+  isEligibleAsciiFenceLang,
+  isExplicitDiagramLang,
+} from './asciiDiagram/detect.js';
+import { asciiDiagramToTemplateData } from './asciiDiagram/mapping.js';
+import {
+  detectAsciiTimeline,
+  isEligibleAsciiTimelineFenceLang,
+  isExplicitTimelineLang,
+} from './asciiTimeline/detect.js';
+import { asciiTimelineToTemplateData } from './asciiTimeline/mapping.js';
+import { detectTree, isEligibleTreeFenceLang, isExplicitTreeLang } from './treeview/detect.js';
+import { treeToTemplateData } from './treeview/mapping.js';
+import { diagramBlock } from './templates/diagramBlock.js';
+import { timelineBlock } from './templates/timelineBlock.js';
+import { treeBlock } from './templates/treeBlock.js';
 import {
   buildRegistry,
   templateRegistry,
@@ -267,7 +291,64 @@ function mermaidSources(block: Block): string[] {
 type RichMediaItem =
   | { kind: 'image'; src: string; alt: string; aspectRatio?: number }
   | { kind: 'video'; src: string; posterSrc?: string; alt: string; aspectRatio: number }
-  | { kind: 'mermaid'; source: string; aspectRatio: number };
+  | { kind: 'mermaid'; source: string; aspectRatio: number }
+  | {
+      kind: 'spatial';
+      template: 'diagram' | 'tree' | 'timeline';
+      data: Record<string, unknown>;
+      aspectRatio: number;
+    };
+
+/** Detect spatial fences that an explicitly different outer template did not consume. */
+function embeddedSpatialMedia(block: Block): RichMediaItem[] {
+  const canonicalTemplate = block.template ? resolveTemplateName(block.template) : undefined;
+  const fences = (block.contents ?? []).filter(
+    (node): node is MarkdownCodeBlock => node.type === 'code',
+  );
+  const items: RichMediaItem[] = [];
+  for (const fence of fences) {
+    if (canonicalTemplate !== 'diagram' && isEligibleAsciiFenceLang(fence.lang)) {
+      const detection = detectAsciiDiagram(fence.value, {
+        explicit: isExplicitDiagramLang(fence.lang),
+      });
+      if (detection.isDiagram && detection.diagram) {
+        items.push({
+          kind: 'spatial',
+          template: 'diagram',
+          data: asciiDiagramToTemplateData(detection.diagram),
+          aspectRatio: 16 / 9,
+        });
+        continue;
+      }
+    }
+    if (canonicalTemplate !== 'tree' && isEligibleTreeFenceLang(fence.lang)) {
+      const detection = detectTree(fence.value, { explicit: isExplicitTreeLang(fence.lang) });
+      if (detection.isTree && detection.tree) {
+        items.push({
+          kind: 'spatial',
+          template: 'tree',
+          data: treeToTemplateData(detection.tree),
+          aspectRatio: 3 / 4,
+        });
+        continue;
+      }
+    }
+    if (canonicalTemplate !== 'timeline' && isEligibleAsciiTimelineFenceLang(fence.lang)) {
+      const detection = detectAsciiTimeline(fence.value, {
+        explicit: isExplicitTimelineLang(fence.lang),
+      });
+      if (detection.isTimeline && detection.timeline) {
+        items.push({
+          kind: 'spatial',
+          template: 'timeline',
+          data: asciiTimelineToTemplateData(detection.timeline),
+          aspectRatio: 16 / 9,
+        });
+      }
+    }
+  }
+  return items;
+}
 
 function collectRichMediaItems(layers: readonly Layer[], block: Block): RichMediaItem[] {
   const existingImages = new Set(
@@ -316,6 +397,7 @@ function collectRichMediaItems(layers: readonly Layer[], block: Block): RichMedi
       }),
     ),
     ...sources.map((source): RichMediaItem => ({ kind: 'mermaid', source, aspectRatio: 16 / 9 })),
+    ...embeddedSpatialMedia(block),
   ];
 }
 
@@ -359,56 +441,90 @@ function effectiveImageTreatment(theme: Theme, block: Block): ImageTreatment | u
   return base.type === 'duotone' && !base.color ? { ...base, color: theme.colors.primary } : base;
 }
 
-function richMediaLayer(
+function richMediaLayers(
   item: RichMediaItem,
   position: LayerRect,
   block: Block,
   theme: Theme,
   kindIndex: number,
-): ImageLayer | VideoLayer | MermaidLayer {
+): Layer[] {
   if (item.kind === 'image') {
     const treatment = effectiveImageTreatment(theme, block);
-    return {
-      id: `${block.id}-embedded-image-${kindIndex}`,
-      type: 'image',
-      position,
-      content: {
-        src: item.src,
-        alt: item.alt || block.title || 'Embedded image',
-        fit: 'contain',
-        ...(treatment ? { treatment } : {}),
+    return [
+      {
+        id: `${block.id}-embedded-image-${kindIndex}`,
+        type: 'image',
+        position,
+        content: {
+          src: item.src,
+          alt: item.alt || block.title || 'Embedded image',
+          fit: 'contain',
+          ...(treatment ? { treatment } : {}),
+        },
       },
-    };
+    ];
   }
   if (item.kind === 'video') {
-    return {
-      id: `${block.id}-embedded-video-${kindIndex}`,
-      type: 'video',
-      position,
-      content: {
-        src: item.src,
-        ...(item.posterSrc ? { posterSrc: item.posterSrc } : {}),
-        alt: item.alt || block.title || 'Embedded video',
-        fit: 'contain',
-        clipStart: 0,
-        clipEnd: Math.max(0, block.duration),
+    return [
+      {
+        id: `${block.id}-embedded-video-${kindIndex}`,
+        type: 'video',
+        position,
+        content: {
+          src: item.src,
+          ...(item.posterSrc ? { posterSrc: item.posterSrc } : {}),
+          alt: item.alt || block.title || 'Embedded video',
+          fit: 'contain',
+          clipStart: 0,
+          clipEnd: Math.max(0, block.duration),
+        },
       },
-    };
+    ];
   }
-  return {
-    id: `${block.id}-mermaid-${kindIndex}`,
-    type: 'mermaid',
-    position,
-    content: {
-      source: item.source,
-      background: theme.colors.backgroundLight,
-      foreground: theme.colors.text,
-      padding: Math.max(12, Math.round(Math.min(position.width, position.height) * 0.025)),
-    },
+  if (item.kind === 'mermaid') {
+    return [
+      {
+        id: `${block.id}-mermaid-${kindIndex}`,
+        type: 'mermaid',
+        position,
+        content: {
+          source: item.source,
+          background: theme.colors.backgroundLight,
+          foreground: theme.colors.text,
+          padding: Math.max(12, Math.round(Math.min(position.width, position.height) * 0.025)),
+        },
+      },
+    ];
+  }
+
+  const localViewport: ViewportConfig = {
+    width: position.width,
+    height: position.height,
+    name: `Embedded ${item.template}`,
   };
+  const context = createTemplateContext(theme, 0, 1, localViewport);
+  context.block = cloneData(block);
+  const base = {
+    id: `${block.id}-embedded-${item.template}-${kindIndex}`,
+    duration: block.duration,
+    audioSegment: block.audioSegment,
+    ...item.data,
+  };
+  const localLayers =
+    item.template === 'timeline'
+      ? timelineBlock({ ...base, template: 'timeline' } as TimelineBlockInput, context)
+      : item.template === 'tree'
+        ? treeBlock({ ...base, template: 'tree' } as TreeBlockInput, context)
+        : diagramBlock({ ...base, template: 'diagram' } as DiagramBlockInput, context);
+  return placeLayersInRect(
+    localLayers,
+    localViewport,
+    position,
+    `${block.id}-embedded-${item.template}-${kindIndex}`,
+  );
 }
 
-/** Promote unconsumed images, videos, and Mermaid fences through one layout path. */
+/** Promote unconsumed images, videos, and rich diagram fences through one layout path. */
 function appendRichContentLayers(
   layers: Layer[],
   block: Block,
@@ -426,10 +542,15 @@ function appendRichContentLayers(
     items.map((item) => item.aspectRatio),
   );
   const cells = gridCells(layout.mediaRect, items.length, viewport, layout.framed);
-  const counters: Record<RichMediaItem['kind'], number> = { image: 0, video: 0, mermaid: 0 };
-  const mediaLayers = items.map((item, index) => {
+  const counters: Record<RichMediaItem['kind'], number> = {
+    image: 0,
+    video: 0,
+    mermaid: 0,
+    spatial: 0,
+  };
+  const mediaLayers = items.flatMap((item, index) => {
     counters[item.kind] += 1;
-    return richMediaLayer(item, cells[index], block, theme, counters[item.kind]);
+    return richMediaLayers(item, cells[index], block, theme, counters[item.kind]);
   });
   const frame: ShapeLayer | undefined = layout.framed
     ? {

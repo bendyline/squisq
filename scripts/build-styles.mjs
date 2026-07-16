@@ -13,6 +13,7 @@
  */
 
 import { build } from 'esbuild';
+import { writeFile } from 'node:fs/promises';
 import { resolve } from 'path';
 
 const pkgDir = process.cwd();
@@ -30,3 +31,5 @@ await build({
   },
   logLevel: 'info',
 });
+
+await writeFile(resolve(pkgDir, 'dist/styles/index.d.ts'), 'export {};\n', 'utf8');

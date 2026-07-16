@@ -1,4 +1,5 @@
 import { defineConfig } from 'tsup';
+import { bundleLicenseMetadata } from '../../scripts/bundle-license-plugin.mjs';
 
 export default defineConfig([
   // CLI binary entry point
@@ -10,6 +11,7 @@ export default defineConfig([
     dts: true,
     sourcemap: false,
     clean: true,
+    esbuildPlugins: [bundleLicenseMetadata(import.meta.dirname, 'binary')],
     target: 'node22',
     banner: {
       js: '#!/usr/bin/env node',
@@ -17,7 +19,6 @@ export default defineConfig([
     external: [
       '@bendyline/squisq',
       '@bendyline/squisq-formats',
-      '@bendyline/squisq-react',
       '@bendyline/squisq-video',
       'commander',
       'playwright-core',
@@ -31,11 +32,11 @@ export default defineConfig([
     format: ['esm'],
     dts: true,
     sourcemap: false,
+    esbuildPlugins: [bundleLicenseMetadata(import.meta.dirname, 'api')],
     target: 'node22',
     external: [
       '@bendyline/squisq',
       '@bendyline/squisq-formats',
-      '@bendyline/squisq-react',
       '@bendyline/squisq-video',
       'playwright-core',
     ],

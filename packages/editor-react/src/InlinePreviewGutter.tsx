@@ -432,6 +432,8 @@ export function InlinePreviewGutter({
   }, [items, connectorTops]);
 
   const isEmpty = items.length === 0;
+  if (isEmpty) return null;
+
   const totalWidth = width + connectorWidth;
   const gutterStyle: CSSProperties = {
     position: 'relative',
@@ -529,62 +531,53 @@ export function InlinePreviewGutter({
         </svg>
       )}
 
-      {/* Card area — empty placeholder OR positioned cards. */}
-      {isEmpty ? (
-        <div
-          className="squisq-inline-preview-empty"
-          style={{ position: 'absolute', top: 12, left: connectorWidth + 12, right: 12 }}
-        >
-          <p>Tag a heading with a template to see a preview here.</p>
-        </div>
-      ) : (
-        <MediaContext.Provider value={mediaProvider ?? null}>
-          {items.map((item) => {
-            const top = positions.get(item.id);
-            const hidden = top == null;
-            return (
-              <div
-                key={item.id}
-                className="squisq-inline-preview-card"
-                data-template={item.template}
-                style={{
-                  position: 'absolute',
-                  top: `${top ?? 0}px`,
-                  left: connectorWidth + CARD_LEFT_INSET,
-                  right: 12,
-                  visibility: hidden ? 'hidden' : 'visible',
-                }}
-                onClick={() => scrollToBlock(item.block)}
-              >
-                <div className="squisq-inline-preview-card-label">
-                  <span className="squisq-inline-preview-card-template">
-                    {templateLabel(item.template)}
-                  </span>
-                  {item.headingText && (
-                    <>
-                      <span className="squisq-inline-preview-card-sep">—</span>
-                      <span className="squisq-inline-preview-card-title">{item.headingText}</span>
-                    </>
-                  )}
-                </div>
-                <div
-                  className="squisq-inline-preview-card-svg"
-                  style={{
-                    aspectRatio: `${viewport.width} / ${viewport.height}`,
-                  }}
-                >
-                  <BlockRenderer
-                    block={item.block}
-                    blockTime={0}
-                    basePath={basePath}
-                    viewport={viewport}
-                  />
-                </div>
+      {/* Positioned preview cards. */}
+      <MediaContext.Provider value={mediaProvider ?? null}>
+        {items.map((item) => {
+          const top = positions.get(item.id);
+          const hidden = top == null;
+          return (
+            <div
+              key={item.id}
+              className="squisq-inline-preview-card"
+              data-template={item.template}
+              style={{
+                position: 'absolute',
+                top: `${top ?? 0}px`,
+                left: connectorWidth + CARD_LEFT_INSET,
+                right: 12,
+                visibility: hidden ? 'hidden' : 'visible',
+              }}
+              onClick={() => scrollToBlock(item.block)}
+            >
+              <div className="squisq-inline-preview-card-label">
+                <span className="squisq-inline-preview-card-template">
+                  {templateLabel(item.template)}
+                </span>
+                {item.headingText && (
+                  <>
+                    <span className="squisq-inline-preview-card-sep">—</span>
+                    <span className="squisq-inline-preview-card-title">{item.headingText}</span>
+                  </>
+                )}
               </div>
-            );
-          })}
-        </MediaContext.Provider>
-      )}
+              <div
+                className="squisq-inline-preview-card-svg"
+                style={{
+                  aspectRatio: `${viewport.width} / ${viewport.height}`,
+                }}
+              >
+                <BlockRenderer
+                  block={item.block}
+                  blockTime={0}
+                  basePath={basePath}
+                  viewport={viewport}
+                />
+              </div>
+            </div>
+          );
+        })}
+      </MediaContext.Provider>
     </aside>
   );
 }

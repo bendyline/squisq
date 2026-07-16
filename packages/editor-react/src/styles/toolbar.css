@@ -404,6 +404,7 @@
 
 .squisq-toolbar-view-tab-label {
   display: inline-block;
+  transform: translateY(1px);
 }
 
 .squisq-toolbar-view-tab-label--short {
@@ -458,6 +459,10 @@
   justify-content: center;
   width: 32px;
   height: 28px;
+  /* Preserve the centered 28px hitbox while optically lowering its contents
+     by 1px. Without this compensation, glyphs rasterize a pixel high in the
+     toolbar at common fractional device scales. */
+  padding: 2px 0 0;
   flex-shrink: 0;
   border: none;
   border-radius: 4px;

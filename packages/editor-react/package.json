@@ -32,7 +32,8 @@
     "dist",
     "!dist/**/*.map",
     "LICENSE",
-    "NOTICE.md"
+    "NOTICE.md",
+    "THIRD_PARTY_LICENSES.txt"
   ],
   "exports": {
     ".": {
@@ -63,15 +64,18 @@
       "types": "./dist/teleprompter/index.d.ts",
       "import": "./dist/teleprompter/index.js"
     },
-    "./styles": "./dist/styles/index.css"
+    "./styles": {
+      "types": "./dist/styles/index.d.ts",
+      "default": "./dist/styles/index.css"
+    }
   },
   "scripts": {
-    "build": "tsup && node ../../scripts/build-styles.mjs && node ../../scripts/remove-empty-chunks.mjs dist",
+    "build": "tsup && node ../../scripts/build-styles.mjs && node ../../scripts/generate-bundle-licenses.mjs . @fortawesome/fontawesome-free && node ../../scripts/remove-empty-chunks.mjs dist",
     "dev": "concurrently -n js,dts -c blue,gray -r \"tsup --watch --no-dts --no-clean\" \"tsup --watch --dts-only --no-clean\"",
     "typecheck": "tsc --noEmit"
   },
   "peerDependencies": {
-    "monaco-editor": ">=0.50.0",
+    "monaco-editor": "~0.50.0",
     "react": "^18.0.0 || ^19.0.0",
     "react-dom": "^18.0.0 || ^19.0.0"
   },

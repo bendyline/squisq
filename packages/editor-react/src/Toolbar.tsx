@@ -68,11 +68,12 @@ import {
 } from './mermaid/mermaidDiagramTypes';
 import { MermaidDiagramTypeThumbnail } from './mermaid/MermaidDiagramTypeThumbnail';
 import { FindToolbar } from './find/FindToolbar';
+import { platformShortcut } from './platformShortcuts';
 
-const VIEWS: { id: EditorView; label: string; shortLabel?: string; shortcut: string }[] = [
-  { id: 'wysiwyg', label: 'Write', shortcut: '⌘1' },
-  { id: 'raw', label: 'Source', shortcut: '⌘2' },
-  { id: 'preview', label: 'Use', shortcut: '⌘3' },
+const VIEWS: { id: EditorView; label: string; shortLabel?: string; shortcutKey: string }[] = [
+  { id: 'wysiwyg', label: 'Write', shortcutKey: '1' },
+  { id: 'raw', label: 'Source', shortcutKey: '2' },
+  { id: 'preview', label: 'Use', shortcutKey: '3' },
 ];
 
 const BLOCK_META_KEYS = new Set<string>(Object.keys(KNOWN_BLOCK_META_KEYS));
@@ -1674,7 +1675,7 @@ export function Toolbar({
                   }
                   setActiveView(view.id);
                 }}
-                data-tooltip={`${viewLabel} (${view.shortcut})`}
+                data-tooltip={`${viewLabel} (${platformShortcut(view.shortcutKey)})`}
               >
                 <span
                   className="squisq-toolbar-view-tab-label squisq-toolbar-view-tab-label--long"

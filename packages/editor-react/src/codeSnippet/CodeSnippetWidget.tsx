@@ -9,6 +9,18 @@ import { replaceCodeSnippetText } from './codeSnippetCommands';
 import { useCodeSnippetData } from './codeSnippetData';
 import { focusCodeSnippetAtEnd } from './codeSnippetFocus';
 import { codeSnippetFenceLanguageToken } from './codeSnippetLanguages';
+import { CODE_SNIPPET_LINE_HEIGHT, codeSnippetAutoHeight } from './codeSnippetSizing';
+
+// A block id is stable only within one Tiptap editor. Old decoration roots
+// unmount asynchronously, so two editor generations can briefly overlap.
+// Give each widget mount its own Monaco model namespace; otherwise the old
+// widget's cleanup can dispose the replacement widget's same-path model.
+let nextCodeSnippetModelInstanceId = 0;
+
+function allocateCodeSnippetModelInstanceId(): number {
+  nextCodeSnippetModelInstanceId += 1;
+  return nextCodeSnippetModelInstanceId;
+}
 
 export interface CodeSnippetWidgetProps {
   editor: Editor;
@@ -59,6 +71,7 @@ export function CodeSnippetWidget({
   const { ready } = useMonacoLoader();
   const colorScheme = useHostColorScheme(host);
   const editable = useEditorEditable(editor);
+  const [modelInstanceId] = useState(allocateCodeSnippetModelInstanceId);
 
   const handleChange: OnChange = useCallback(
     (value) => {
@@ -81,7 +94,11 @@ export function CodeSnippetWidget({
   );
 
   return (
-    <div className="squisq-code-snippet-shell" data-language={data.fenceLanguage}>
+    <div
+      className="squisq-code-snippet-shell"
+      data-language={data.fenceLanguage}
+      style={{ height: codeSnippetAutoHeight(data.source) }}
+    >
       <div className="squisq-code-snippet-header">
         <span className="squisq-code-snippet-title">
           <Icon icon="fa-solid fa-file-code" />
@@ -91,7 +108,7 @@ export function CodeSnippetWidget({
       <div className="squisq-code-snippet-editor" aria-label={`${data.label} code editor`}>
         {ready ? (
           <MonacoEditor
-            path={`inmemory://squisq/code-snippet/${blockId}.${modelSuffix || 'txt'}`}
+            path={`inmemory://squisq/code-snippet/${modelInstanceId}/${blockId}.${modelSuffix || 'txt'}`}
             language={data.monacoLanguage}
             theme={colorScheme === 'dark' ? 'vs-dark' : 'vs'}
             value={data.source}
@@ -102,6 +119,7 @@ export function CodeSnippetWidget({
               contextmenu: true,
               folding: true,
               fontSize: 13,
+              lineHeight: CODE_SNIPPET_LINE_HEIGHT,
               lineNumbers: 'on',
               minimap: { enabled: false },
               padding: { top: 10, bottom: 10 },

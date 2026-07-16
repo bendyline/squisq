@@ -248,7 +248,7 @@ describe('docToHtml', () => {
     });
 
     expect(html).toContain('External Tenant Brand');
-    expect(html).toContain('\\"themeId\\":\\"tenant-brand\\"');
+    expect(html).toContain('"themeId":"tenant-brand"');
   });
 
   it('keeps a document-scoped theme ahead of the explicit registry', () => {
@@ -468,9 +468,7 @@ function bootExportedHtml(html: string): { doc: Doc; options: MountedOptions } {
       captured = { doc, options };
     },
   };
-  new Function('SquisqPlayer', 'document', bootScript)(player, {
-    getElementById: () => ({}),
-  });
+  new Function('SquisqPlayer', 'document', bootScript)(player, parsed);
   if (!captured) throw new Error('boot script did not call SquisqPlayer.mount');
   return captured;
 }
@@ -543,7 +541,7 @@ describe('docToHtml — script escaping (regression)', () => {
 
     const parsed = new DOMParser().parseFromString(html, 'text/html');
     const scripts = [...parsed.querySelectorAll('script')];
-    expect(scripts).toHaveLength(2);
+    expect(scripts).toHaveLength(3);
     // If the script never closed, the trailing markup gets parsed as script
     // text instead of as elements.
     expect(scripts.some((s) => (s.textContent ?? '').includes('</html>'))).toBe(false);
@@ -567,14 +565,14 @@ describe('docToHtml — script escaping (regression)', () => {
 
     const parsed = new DOMParser().parseFromString(html, 'text/html');
     const scripts = [...parsed.querySelectorAll('script')];
-    expect(scripts).toHaveLength(2);
+    expect(scripts).toHaveLength(3);
 
     // The bundle's string literal AND regex literal must keep their MEANING.
     // (`re.source` legitimately shows the escape — what must not change is
     // what the regex matches. This is why the escape is `<`: a `\s`-style
     // escape would silently turn `<script` into "< whitespace cript".)
     const out = new Function(
-      `${scripts[0]!.textContent};return [probe, re.test('<script')];`,
+      `${scripts.find((script) => script.getAttribute('type') !== 'application/json')!.textContent};return [probe, re.test('<script')];`,
     )() as [string, boolean];
     expect(out[0]).toBe('<!--<script>x</script>');
     expect(out[1]).toBe(true);

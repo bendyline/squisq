@@ -554,9 +554,10 @@ export const PAGE_BASE_CSS = `
 .squisq-page-prose p + p { margin-top: 1.25em; }
 .squisq-page-prose > * + * { margin-top: 1.1em; }
 .squisq-page-prose a { color: var(--squisq-page-primary); text-decoration-color: color-mix(in srgb, var(--squisq-page-primary) 40%, transparent); }
-.squisq-page-prose code { font-family: var(--squisq-page-mono-font); font-size: 0.9em; background: color-mix(in srgb, var(--squisq-page-text) 8%, transparent); border-radius: 4px; padding: 0.12em 0.35em; }
+.squisq-page-prose code { font-family: var(--squisq-page-mono-font); font-size: 0.9em; }
+.squisq-page-prose :not(pre) > code { background: color-mix(in srgb, var(--squisq-page-text) 8%, transparent); border-radius: 4px; padding: 0.12em 0.35em; }
 .squisq-page-prose pre { background: color-mix(in srgb, var(--squisq-page-text) 6%, transparent); border-radius: var(--squisq-page-radius); padding: 1em 1.25em; overflow-x: auto; }
-.squisq-page-prose pre code { background: none; padding: 0; }
+.squisq-page-prose pre code { background: none; border-radius: 0; padding: 0; }
 .squisq-page-prose blockquote { margin: 0; border-left: 4px solid var(--squisq-page-accent); padding-left: 1.25em; color: var(--squisq-page-text-muted); }
 .squisq-page-prose ul, .squisq-page-prose ol { padding-left: 1.5em; margin: 0; }
 .squisq-page-prose li + li { margin-top: 0.4em; }

@@ -222,6 +222,12 @@ A few tags turn **child** headings into parts. Under \`{[diagram]}\`, each \`###
 ## Author once. Render everywhere. {[fullBleedQuote colorScheme=blue]}
 
 That is the whole idea behind SquigglySquare.
+
+## Explore SquigglySquare {[list colorScheme=teal]}
+
+- [squigglysquare.com](https://squigglysquare.com)
+- {[github]} [GitHub repository](https://github.com/bendyline/squisq)
+- [Create an Issue](https://github.com/bendyline/squisq/issues/new)
 `,
 
   'features-demo': `# Features Demo

@@ -176,6 +176,106 @@ describe('<EditorShell> colorScheme prop', () => {
   });
 });
 
+describe('<EditorShell> link delegation', () => {
+  it('passes the literal href to the host and suppresses browser navigation', () => {
+    const onLinkClick = vi.fn();
+    render(
+      <EditorShell
+        initialMarkdown="# hi"
+        initialView="raw"
+        onLinkClick={onLinkClick}
+        toolbarSlotRight={
+          <a href="../guide/agent-loop.md?mode=read#start">
+            <span>Agent loop</span>
+          </a>
+        }
+      />,
+    );
+
+    const link = screen.getByRole('link', { name: 'Agent loop' });
+    const event = new MouseEvent('click', { bubbles: true, cancelable: true });
+    link.querySelector('span')?.dispatchEvent(event);
+
+    expect(onLinkClick).toHaveBeenCalledWith('../guide/agent-loop.md?mode=read#start');
+    expect(event.defaultPrevented).toBe(true);
+  });
+
+  it('allows the browser default when the host returns false', () => {
+    render(
+      <EditorShell
+        initialMarkdown="# hi"
+        initialView="raw"
+        onLinkClick={() => false}
+        toolbarSlotRight={<a href="#section">Section</a>}
+      />,
+    );
+
+    const event = new MouseEvent('click', { bubbles: true, cancelable: true });
+    screen.getByRole('link', { name: 'Section' }).dispatchEvent(event);
+
+    expect(event.defaultPrevented).toBe(false);
+  });
+
+  it('marks delegated links as interactive and shows their href while hovered', () => {
+    const { container } = render(
+      <EditorShell
+        initialMarkdown="# hi"
+        initialView="raw"
+        onLinkClick={vi.fn()}
+        toolbarSlotRight={<a href="https://example.com/docs">Documentation</a>}
+      />,
+    );
+
+    const shell = container.querySelector('.squisq-editor-shell');
+    const link = screen.getByRole('link', { name: 'Documentation' });
+    expect(shell?.getAttribute('data-link-handler')).toBe('true');
+    expect(link.getAttribute('title')).toBeNull();
+
+    fireEvent.mouseOver(link);
+    expect(link.getAttribute('title')).toBe('https://example.com/docs');
+
+    fireEvent.mouseOut(link, { relatedTarget: document.body });
+    expect(link.getAttribute('title')).toBeNull();
+  });
+
+  it('does not add delegated-link affordances without a handler', () => {
+    const { container } = render(
+      <EditorShell
+        initialMarkdown="# hi"
+        initialView="raw"
+        toolbarSlotRight={<a href="https://example.com/docs">Documentation</a>}
+      />,
+    );
+
+    const shell = container.querySelector('.squisq-editor-shell');
+    const link = screen.getByRole('link', { name: 'Documentation' });
+    fireEvent.mouseOver(link);
+
+    expect(shell?.getAttribute('data-link-handler')).toBeNull();
+    expect(link.getAttribute('title')).toBeNull();
+  });
+
+  it('preserves an authored link title', () => {
+    render(
+      <EditorShell
+        initialMarkdown="# hi"
+        initialView="raw"
+        onLinkClick={vi.fn()}
+        toolbarSlotRight={
+          <a href="https://example.com/docs" title="Read the documentation">
+            Documentation
+          </a>
+        }
+      />,
+    );
+
+    const link = screen.getByRole('link', { name: 'Documentation' });
+    fireEvent.mouseOver(link);
+
+    expect(link.getAttribute('title')).toBe('Read the documentation');
+  });
+});
+
 describe('<EditorShell> Write canvas settings', () => {
   it('exposes host settings as live CSS variables on the shell', () => {
     const { container, rerender } = render(
@@ -317,10 +417,22 @@ describe('<EditorShell> Files badge', () => {
     expect(container.querySelector('.squisq-toolbar-files-badge')?.textContent).toBe('1');
   });
 
-  it('hides .gitignore entries from the Files panel and its count', async () => {
+  it('hides internal metadata and version entries from the Files panel and its count', async () => {
     const { provider } = mutableMediaProviderWith([
       { name: '.gitignore', mimeType: 'text/plain', size: 11 },
       { name: 'notes_files/.gitignore', mimeType: 'text/plain', size: 11 },
+      { name: '.versions/index.20260101T000000Z.md', mimeType: 'text/markdown', size: 24 },
+      {
+        name: '.imageEdits/hero-png-123/.versions/state.20260101T000000Z.json',
+        mimeType: 'application/json',
+        size: 256,
+      },
+      {
+        name: '.imageEdits/hero-png-123/state.json',
+        mimeType: 'application/json',
+        size: 256,
+      },
+      { name: 'legacy_files/state.json', mimeType: 'application/json', size: 256 },
       { name: 'notes_files/hero.png', mimeType: 'image/png', size: 1024 },
     ]);
 
@@ -333,6 +445,7 @@ describe('<EditorShell> Files badge', () => {
 
     expect(await screen.findByText('hero.png')).toBeTruthy();
     expect(screen.queryByText('.gitignore')).toBeNull();
+    expect(screen.queryByText('state.json')).toBeNull();
     expect(screen.getByText('Files (1)')).toBeTruthy();
   });
 

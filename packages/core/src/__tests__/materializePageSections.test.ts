@@ -402,6 +402,18 @@ describe('page CSS', () => {
     expect(css).toContain(PAGE_BASE_CSS.slice(0, 60).trim());
   });
 
+  it('applies inline-code decoration only outside preformatted blocks', () => {
+    const sharedCodeRule = PAGE_BASE_CSS.match(/\.squisq-page-prose code \{([^}]*)\}/)?.[1];
+
+    expect(sharedCodeRule).toContain('font-family: var(--squisq-page-mono-font)');
+    expect(sharedCodeRule).not.toContain('background:');
+    expect(sharedCodeRule).not.toContain('padding:');
+    expect(PAGE_BASE_CSS).toContain('.squisq-page-prose :not(pre) > code {');
+    expect(PAGE_BASE_CSS).toContain(
+      '.squisq-page-prose pre code { background: none; border-radius: 0; padding: 0; }',
+    );
+  });
+
   it('resolvePageStyle derives a style for themes without pageStyle', () => {
     const theme = createTheme(DEFAULT_THEME, { id: 'legacy' });
     delete (theme as unknown as Record<string, unknown>).pageStyle;
