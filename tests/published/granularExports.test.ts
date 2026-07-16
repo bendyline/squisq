@@ -48,4 +48,18 @@ describe('granular UI exports', () => {
       }
     });
   }
+
+  for (const packageDir of ['react', 'editor-react']) {
+    it(`${packageDir} ships a typed CSS export`, () => {
+      const manifest = JSON.parse(
+        readFileSync(resolve(root, 'packages', packageDir, 'package.json'), 'utf8'),
+      ) as {
+        exports: Record<string, { default?: string; types?: string }>;
+      };
+      const styles = manifest.exports['./styles'];
+      expect(styles).toBeDefined();
+      expect(existsSync(resolve(root, 'packages', packageDir, styles.default!))).toBe(true);
+      expect(existsSync(resolve(root, 'packages', packageDir, styles.types!))).toBe(true);
+    });
+  }
 });

@@ -87,6 +87,12 @@ describe('third-party notices stay in sync', () => {
         'NOTICE.md',
       );
       expect(manifest.files, `${entry.name} must explicitly publish LICENSE`).toContain('LICENSE');
+      expect(
+        manifest.files,
+        `${entry.name} must explicitly publish bundled third-party licenses`,
+      ).toContain('THIRD_PARTY_LICENSES.txt');
+      const bundledLicenses = readFileSync(resolve(packageDir, 'THIRD_PARTY_LICENSES.txt'), 'utf8');
+      expect(bundledLicenses).toContain(`THIRD-PARTY LICENSES FOR ${manifest.name}`);
     }
   });
 

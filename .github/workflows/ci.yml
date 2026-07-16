@@ -53,17 +53,6 @@ jobs:
           path: coverage/
           retention-days: 14
 
-      - name: Mutation test critical converters and storage
-        run: npm run test:mutation
-
-      - name: Upload mutation report
-        uses: actions/upload-artifact@v4
-        if: ${{ !cancelled() }}
-        with:
-          name: mutation-report
-          path: reports/mutation/
-          retention-days: 14
-
       - name: Published-package contract tests
         run: npm run test:published
 

@@ -106,6 +106,93 @@ describe('materializeBlockLayers', () => {
     expect(mermaid?.position.y as number).toBeGreaterThan(frame?.position.y as number);
   });
 
+  it('materializes an explicit timeline fence as media inside a title block', () => {
+    const timeline = [
+      '                                          ▲ Start {#start column=12}                    ▲ Ship {#ship column=58}',
+      'Milestones {#milestones start=12 end=76}: ●─────────────────────●───────────────────────●─────────────────────►',
+      '                                                                ▼ Review {#review column=34}',
+      '',
+      '                                                           ▲ New event {#new-event column=29.007}',
+      'New line {#new-line start=12 end=76}:     ─────────────────●──────────────────────────────────────────────────►',
+    ].join('\n');
+    const markdown = [
+      '# About SquigglySquare {[title]}',
+      '',
+      'SquigglySquare -- **squisq** for short -- turns plain Markdown into designed, animated documents.',
+      '',
+      '```timeline',
+      timeline,
+      '```',
+    ].join('\n');
+    const doc = markdownToDoc(parseMarkdown(markdown), { generateCoverBlock: false });
+    const source = doc.blocks[0] as DocBlock;
+    const materialized = materializeBlockLayers(source, { persistentLayers: false });
+    const frame = materialized.layers.find(
+      (layer) => layer.id === 'about-squigglysquare-rich-media-frame',
+    );
+    const track = materialized.layers.find((layer) =>
+      layer.id.startsWith('about-squigglysquare-embedded-timeline-1-timeline-track-'),
+    );
+    const eventLabels = materialized.layers
+      .filter(
+        (layer): layer is TextLayer =>
+          layer.type === 'text' &&
+          layer.id.startsWith('about-squigglysquare-embedded-timeline-1-timeline-event-label-'),
+      )
+      .map((layer) => layer.content.text);
+    const pathStart =
+      track?.type === 'path' ? /^M\s+([\d.]+)\s+([\d.]+)/.exec(track.content.d) : null;
+
+    expect(source.template).toBe('title');
+    expect(frame?.type).toBe('shape');
+    expect(track?.type).toBe('path');
+    expect(track?.position.y as number).toBeGreaterThan(frame?.position.y as number);
+    expect(Number(pathStart?.[1])).toBeGreaterThan(frame?.position.x as number);
+    expect(Number(pathStart?.[2])).toBeGreaterThan(frame?.position.y as number);
+    expect(eventLabels).toEqual(expect.arrayContaining(['Start', 'Review', 'Ship', 'New event']));
+  });
+
+  it.each([
+    {
+      name: 'diagram',
+      art: ['┌────────┐', '│  API   │', '└────────┘'].join('\n'),
+      expectedLayerType: 'shape',
+      expectedIdPart: 'node-card-',
+      expectedPlacement: 'stacked',
+    },
+    {
+      name: 'tree',
+      art: ['src/', '├── index.ts', '└── utils/'].join('\n'),
+      expectedLayerType: 'tree',
+      expectedIdPart: '-tree',
+      expectedPlacement: 'split',
+    },
+  ])(
+    'materializes an explicit $name fence through the same title-media path',
+    ({ name, art, expectedLayerType, expectedIdPart, expectedPlacement }) => {
+      const markdown = [`# Embedded ${name} {[title]}`, '', `\`\`\`${name}`, art, '```'].join('\n');
+      const doc = markdownToDoc(parseMarkdown(markdown), { generateCoverBlock: false });
+      const block = doc.blocks[0] as DocBlock;
+      const materialized = materializeBlockLayers(block, { persistentLayers: false });
+      const frame = materialized.layers.find(
+        (layer) => layer.id === `embedded-${name}-rich-media-frame`,
+      );
+      const embedded = materialized.layers.find(
+        (layer) =>
+          layer.id.startsWith(`embedded-${name}-embedded-${name}-1-`) &&
+          layer.id.includes(expectedIdPart) &&
+          layer.type === expectedLayerType,
+      );
+
+      expect(embedded?.type).toBe(expectedLayerType);
+      if (expectedPlacement === 'split') {
+        expect(frame?.position.x as number).toBeGreaterThan(VIEWPORT_PRESETS.landscape.width * 0.5);
+      } else {
+        expect(frame?.position.y).toBe(VIEWPORT_PRESETS.landscape.height * 0.4);
+      }
+    },
+  );
+
   it('grids multiple unconsumed images inside one reserved title-media rectangle', () => {
     const doc = markdownToDoc(
       parseMarkdown(`# Gallery {[title]}

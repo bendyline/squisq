@@ -26,7 +26,7 @@ describe('@bendyline/squisq-editor-react/monaco published output', () => {
     const declarations = readFileSync(resolve(dist, 'index.d.ts'), 'utf8');
 
     expect(declarations).toMatch(/from ['"]monaco-editor['"]/);
-    expect(manifest.peerDependencies?.['monaco-editor']).toBe('>=0.50.0');
+    expect(manifest.peerDependencies?.['monaco-editor']).toBe('~0.50.0');
     expect(manifest.peerDependenciesMeta?.['monaco-editor']?.optional).not.toBe(true);
     expect(manifest.devDependencies?.['monaco-editor']).toBe('0.50.0');
   });

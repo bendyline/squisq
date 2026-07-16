@@ -14,7 +14,7 @@ npm install @bendyline/squisq-editor-react @bendyline/squisq @bendyline/squisq-r
 ```
 
 **Peer dependencies:** `react` and `react-dom` (v18 or v19), plus
-`monaco-editor` (>=0.50.0). Monaco is loaded lazily at runtime, but it is a
+`monaco-editor` (~0.50.0). Monaco is loaded lazily at runtime, but it is a
 required peer because the package's public TypeScript declarations expose
 Monaco editor types. Tiptap is bundled as a regular dependency — you don't
 need to install it yourself.

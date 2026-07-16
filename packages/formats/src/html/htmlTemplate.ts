@@ -323,10 +323,11 @@ ${mode === 'static' ? '#squisq-root{display:block}' : ''}
 </head>
 <body>
 <div id="squisq-root"></div>
+<script type="application/json" id="squisq-doc" data-squisq-doc="1">${docJson}</script>
 <script>${escapeForScript(playerScript)}</script>
 <script>
 (function(){
-  var doc = JSON.parse(${JSON.stringify(docJson)});
+  var doc = JSON.parse(document.getElementById("squisq-doc").textContent);
   var images = JSON.parse(${JSON.stringify(imageMapJson)});
   // Re-expand path/basename aliases that share a payload (see
   // buildInlineImageMaps) so \`images\` has every key the resolver may ask for.
@@ -399,10 +400,11 @@ ${mode === 'static' ? '#squisq-root{display:block}' : ''}
 </head>
 <body>
 <div id="squisq-root"></div>
+<script type="application/json" id="squisq-doc" data-squisq-doc="1">${docJson}</script>
 <script src="${escapeHtml(playerScriptPath)}"></script>
 <script>
 (function(){
-  var doc = JSON.parse(${JSON.stringify(docJson)});
+  var doc = JSON.parse(document.getElementById("squisq-doc").textContent);
   var images = JSON.parse(${JSON.stringify(imageMapJson)});
   var audio = ${audioMapJson};
   SquisqPlayer.mount(document.getElementById("squisq-root"), doc, {

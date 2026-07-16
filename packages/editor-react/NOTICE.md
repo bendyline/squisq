@@ -28,7 +28,7 @@ Third-party components remain under their respective license terms.
 | @monaco-editor/react _(bundled)_  | 4.7.0                | MIT                           | https://github.com/suren-atoyan/monaco-react  |
 | @monaco-editor/loader _(bundled)_ | 1.7.0                | MIT                           | https://github.com/suren-atoyan/monaco-loader |
 | state-local _(bundled)_           | 1.0.7                | MIT                           | https://github.com/suren-atoyan/state-local   |
-| monaco-editor _(peer)_            | >=0.50.0             | MIT                           | https://github.com/microsoft/monaco-editor    |
+| monaco-editor _(peer)_            | ~0.50.0              | MIT                           | https://github.com/microsoft/monaco-editor    |
 | react _(peer)_                    | ^18.0.0 \|\| ^19.0.0 | MIT                           | https://github.com/facebook/react             |
 | react-dom _(peer)_                | ^18.0.0 \|\| ^19.0.0 | MIT                           | https://github.com/facebook/react             |
 
@@ -36,5 +36,5 @@ Font Awesome Free contains icon artwork under CC-BY-4.0, font files under
 OFL-1.1, and CSS/JavaScript under MIT. Attribution is required when its icon
 artwork is redistributed. The Monaco React adapter, loader, and state-local
 are bundled so consumers do not inherit the adapter's mandatory Monaco peer.
-Complete license texts remain available in the respective distributions and
-source repositories.
+Exact third-party license texts for the bundled adapter, loader, state helper,
+and Font Awesome assets are shipped in THIRD_PARTY_LICENSES.txt.

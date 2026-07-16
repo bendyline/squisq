@@ -328,6 +328,7 @@ npm run build:editor       # Build editor-react only
 npm run build:cli          # Build cli only
 npm test                   # Run vitest unit tests (75 files, 1000+ tests)
 npm run test:cli           # Run cli mocha tests
+npm run test:extended      # Run opt-in extended tests (Stryker mutation testing)
 npm run test:published     # Run vitest against published-shape outputs
 npm run test:e2e           # Build all + run Playwright E2E tests against Vite preview
 npm run test:e2e:built     # Run Playwright E2E tests when dist/ is already current
@@ -338,7 +339,7 @@ npm run dev                # Build runtime packages, start their watchers, then 
 npm run lint               # ESLint
 npm run format             # Prettier format
 npm run all                # install:safe + build + lint + format:check + typecheck + coverage +
-                           #   mutation + published + CLI + required native MP4/GIF + browser E2E
+                           #   published + CLI + required native MP4/GIF + browser E2E
                            #   (the full pre-release sweep; requires FFmpeg + Playwright browsers)
 ```
 

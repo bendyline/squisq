@@ -17,7 +17,7 @@
 
 import { mkdir } from 'node:fs/promises';
 import { dirname, basename, extname, join, resolve } from 'node:path';
-import type { Command } from 'commander';
+import { Option, type Command } from 'commander';
 import { BUILTIN_FORMAT_IDS, ConversionError } from '@bendyline/squisq-formats';
 import type { ConvertSource, FormatId } from '@bendyline/squisq-formats';
 import { readInput } from '../util/readInput.js';
@@ -80,6 +80,14 @@ function parseFormats(value: string): FormatId[] {
     );
   }
 
+  const duplicates = [...new Set(requested.filter((id, index) => requested.indexOf(id) !== index))];
+  if (duplicates.length > 0) {
+    throw new Error(
+      `Duplicate format${duplicates.length > 1 ? 's' : ''}: ${duplicates.map((id) => `"${id}"`).join(', ')}. ` +
+        'Each format may only be requested once.',
+    );
+  }
+
   return requested as FormatId[];
 }
 
@@ -122,14 +130,23 @@ export function registerConvertCommand(program: Command): void {
       'Convert a document to DOCX, PPTX, PDF, HTML, EPUB, MP4, animated GIF, and container formats',
     )
     .argument('<input>', 'Path to .md/.docx/.pptx/.pdf/.xlsx/.csv/.html file, .zip/.dbk, or folder')
-    .option('-o, --output <file>', 'Single output file (format inferred from its extension)')
-    .option(
-      '-d, --output-dir <dir>',
-      'Output directory for multi-format export (default: same as input)',
+    .addOption(
+      new Option(
+        '-o, --output <file>',
+        'Single output file (format inferred from its extension)',
+      ).conflicts(['outputDir', 'formats']),
     )
-    .option(
-      '-f, --formats <list>',
-      `Comma-separated formats to produce (default: a standard set). Valid: ${VALID_FORMATS.join(', ')}`,
+    .addOption(
+      new Option(
+        '-d, --output-dir <dir>',
+        'Output directory for multi-format export (default: same as input)',
+      ).conflicts('output'),
+    )
+    .addOption(
+      new Option(
+        '-f, --formats <list>',
+        `Comma-separated formats to produce (default: a standard set). Valid: ${VALID_FORMATS.join(', ')}`,
+      ).conflicts('output'),
     )
     .option('--overwrite', 'Replace existing output files (default: refuse and exit non-zero)')
     .option('-t, --theme <id>', 'Squisq theme ID to apply (e.g., documentary, cinematic, bold)')

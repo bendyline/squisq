@@ -25,6 +25,7 @@
  *   });
  */
 
+import { readFile } from 'node:fs/promises';
 import type { Doc } from '@bendyline/squisq/schemas';
 import { resolveMediaSchedule } from '@bendyline/squisq/schemas';
 import { flattenBlocks } from '@bendyline/squisq/doc';
@@ -52,6 +53,16 @@ import { GIF_EXPORT_DEFAULTS } from './util/nativeEncoder.js';
 import { runFfmpeg } from './util/runFfmpeg.js';
 import { createCliRegistry } from './registry.js';
 import type { GifFormatOptions, Mp4FormatOptions } from './registry.js';
+
+let playerBundlePromise: Promise<string> | undefined;
+
+function loadPlayerBundle(): Promise<string> {
+  playerBundlePromise ??= readFile(
+    new URL('../dist/squisq-player.global.js', import.meta.url),
+    'utf8',
+  );
+  return playerBundlePromise;
+}
 
 // Re-export utility types and functions callers may need
 export type { GifDither, VideoQuality, VideoOrientation } from '@bendyline/squisq-video';
@@ -121,8 +132,7 @@ export async function convert(
 ): Promise<ConversionResult> {
   return formatsConvert(source, to, {
     registry: createCliRegistry(),
-    resolvePlayerScript: () =>
-      import('@bendyline/squisq-react/standalone-source').then((m) => m.PLAYER_BUNDLE),
+    resolvePlayerScript: loadPlayerBundle,
     ...options,
   });
 }
@@ -134,8 +144,7 @@ export async function prepareConversion(
 ): Promise<PreparedConversion> {
   return formatsPrepareConversion(source, {
     registry: createCliRegistry(),
-    resolvePlayerScript: () =>
-      import('@bendyline/squisq-react/standalone-source').then((m) => m.PLAYER_BUNDLE),
+    resolvePlayerScript: loadPlayerBundle,
     ...options,
   });
 }
@@ -345,10 +354,10 @@ async function captureDocFrames(
 
   onProgress?.('generating render HTML', 10);
   signal?.throwIfAborted();
-  const { PLAYER_BUNDLE } = await import('@bendyline/squisq-react/standalone-source');
+  const playerBundle = await loadPlayerBundle();
   signal?.throwIfAborted();
   const renderHtml = generateRenderHtml(doc, {
-    playerScript: PLAYER_BUNDLE,
+    playerScript: playerBundle,
     images,
     audio: audio.size > 0 ? audio : undefined,
     width,

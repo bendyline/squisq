@@ -137,6 +137,21 @@ describe('convert command', () => {
     expect(html).to.include('SquisqPlayer');
   });
 
+  it('round-trips its generated HTML back to meaningful Markdown', async () => {
+    const htmlPath = join(tempDir, 'exported.html');
+    const markdownPath = join(tempDir, 'reimported.md');
+
+    await runCli('convert', FIXTURE_MD, '-o', htmlPath);
+    await runCli('convert', htmlPath, '-o', markdownPath);
+
+    const markdown = await readFile(markdownPath, 'utf8');
+    expect(markdown).to.include('# Test Document');
+    expect(markdown).to.include('This is a simple test document for the Squisq CLI.');
+    expect(markdown).to.include('## Introduction');
+    expect(markdown).to.include('- First item');
+    expect(markdown).to.include('> A blockquote to finish things off.');
+  });
+
   it('errors when -o is combined with --formats', async () => {
     const result = await runCliAllowError(
       'convert',
@@ -147,7 +162,39 @@ describe('convert command', () => {
       'pdf',
     );
     expect(result.exitCode).to.equal(1);
-    expect(result.stderr).to.include('cannot be combined');
+    expect(result.stderr).to.include('cannot be used with option');
+  });
+
+  it('rejects duplicate formats before producing output', async () => {
+    const result = await runCliAllowError(
+      'convert',
+      FIXTURE_MD,
+      '--output-dir',
+      tempDir,
+      '--formats',
+      'pdf,pdf',
+    );
+    expect(result.exitCode).to.equal(1);
+    expect(result.stderr).to.include('Duplicate format: "pdf"');
+    try {
+      await stat(join(tempDir, 'test.pdf'));
+      expect.fail('duplicate formats must not leave a partial output');
+    } catch (error) {
+      expect((error as NodeJS.ErrnoException).code).to.equal('ENOENT');
+    }
+  });
+
+  it('rejects --output with --output-dir instead of silently ignoring the directory', async () => {
+    const result = await runCliAllowError(
+      'convert',
+      FIXTURE_MD,
+      '--output',
+      join(tempDir, 'chosen.md'),
+      '--output-dir',
+      join(tempDir, 'ignored'),
+    );
+    expect(result.exitCode).to.equal(1);
+    expect(result.stderr).to.include('cannot be used with option');
   });
 
   it('errors when the removed singular --format flag is used', async () => {

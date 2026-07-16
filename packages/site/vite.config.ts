@@ -237,6 +237,11 @@ export default defineConfig({
               priority: 18,
             },
             {
+              name: 'pdf-vendor',
+              test: /node_modules[\\/]pdfjs-dist[\\/]/,
+              priority: 17,
+            },
+            {
               name: 'squisq-standalone-player',
               test: /packages[\\/]react[\\/](src|dist)[\\/]standalone-source/,
               priority: 17,

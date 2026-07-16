@@ -1,4 +1,7 @@
 import { describe, expect, it } from 'vitest';
+import { markdownToDoc } from '@bendyline/squisq/doc';
+import { parseMarkdown } from '@bendyline/squisq/markdown';
+import { docToHtml } from '../html/index.js';
 import { htmlToMarkdown, htmlToMarkdownDocSync } from '../html/import.js';
 
 describe('htmlToMarkdown', () => {
@@ -53,5 +56,25 @@ describe('htmlToMarkdown', () => {
   it('handles unwrapped div/span containers', () => {
     const md = htmlToMarkdown('<div><span>plain </span><em>text</em></div>');
     expect(md).toContain('plain *text*');
+  });
+
+  it('recovers the canonical Doc embedded by the Squisq HTML exporter', () => {
+    const source =
+      '# Ship Report\n\nOpening paragraph.\n\n## Findings {[quote]}\n\n> Preserve this quote.\n';
+    const html = docToHtml(markdownToDoc(parseMarkdown(source)), {
+      playerScript: 'var SquisqPlayer={mount:function(){}};',
+    });
+
+    const roundTripped = htmlToMarkdown(html);
+    expect(roundTripped).toContain('# Ship Report');
+    expect(roundTripped).toContain('Opening paragraph.');
+    expect(roundTripped).toContain('## Findings {[quote]}');
+    expect(roundTripped).toContain('> Preserve this quote.');
+  });
+
+  it('rejects a malformed explicit embedded Doc instead of returning page-script noise', () => {
+    expect(() =>
+      htmlToMarkdown('<script type="application/json" data-squisq-doc="1">{bad</script>'),
+    ).toThrow('Invalid embedded Squisq Doc JSON');
   });
 });

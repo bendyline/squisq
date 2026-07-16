@@ -36,4 +36,5 @@ that package version:
 - https://ffmpegwasm.netlify.app/docs/contribution/core/
 
 mp4-muxer is bundled as a private runtime implementation detail so its legacy
-global WebCodecs declaration dependencies are not installed for consumers.
+global WebCodecs declaration dependencies are not installed for consumers. Its
+exact license text is shipped in THIRD_PARTY_LICENSES.txt.

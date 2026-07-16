@@ -24,7 +24,9 @@ const PACKED_SIZE_BUDGETS: Record<string, number> = {
   '@bendyline/squisq-video': 25_000,
   '@bendyline/squisq-video-react': 50_000,
   '@bendyline/squisq-editor-react': 800_000,
-  '@bendyline/squisq-cli': 50_000,
+  // Includes the compressed light standalone player so CLI-only installs no
+  // longer pull the complete React/Mermaid dependency graph.
+  '@bendyline/squisq-cli': 450_000,
 };
 
 function dryRunPack(directory: string, cache: string): PackResult {

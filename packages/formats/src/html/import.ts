@@ -28,6 +28,8 @@ import {
   sanitizeHtmlNodes,
   stringifyMarkdown,
 } from '@bendyline/squisq/markdown';
+import { docToMarkdown } from '@bendyline/squisq/doc';
+import type { Doc } from '@bendyline/squisq/schemas';
 
 export interface HtmlImportOptions {
   /** Cancel before parsing. */
@@ -277,6 +279,46 @@ function toHtmlString(data: ArrayBuffer | Uint8Array | string): string {
   return new TextDecoder('utf-8').decode(bytes);
 }
 
+function findEmbeddedSquisqDoc(nodes: HtmlNode[]): HtmlElement | undefined {
+  for (const node of nodes) {
+    if (!isElement(node)) continue;
+    if (node.tagName.toLowerCase() === 'script' && 'data-squisq-doc' in node.attributes) {
+      return node;
+    }
+    const nested = findEmbeddedSquisqDoc(node.children);
+    if (nested) return nested;
+  }
+  return undefined;
+}
+
+function parseEmbeddedSquisqDoc(script: HtmlElement): Doc {
+  const version = script.attributes['data-squisq-doc'];
+  if (version !== '1') {
+    throw new Error(`Unsupported embedded Squisq Doc version "${version || '(missing)'}"`);
+  }
+
+  let value: unknown;
+  try {
+    value = JSON.parse(textContent(script));
+  } catch {
+    throw new SyntaxError('Invalid embedded Squisq Doc JSON');
+  }
+
+  if (
+    value === null ||
+    typeof value !== 'object' ||
+    typeof (value as Partial<Doc>).articleId !== 'string' ||
+    !Number.isFinite((value as Partial<Doc>).duration) ||
+    !Array.isArray((value as Partial<Doc>).blocks) ||
+    (value as Partial<Doc>).audio === null ||
+    typeof (value as Partial<Doc>).audio !== 'object'
+  ) {
+    throw new TypeError('Embedded Squisq Doc has an invalid shape');
+  }
+
+  return value as Doc;
+}
+
 /** Parse HTML into a squisq `MarkdownDocument`. */
 export function htmlToMarkdownDocSync(
   html: string,
@@ -291,6 +333,8 @@ export function htmlToMarkdownDocSync(
     throw new RangeError(`HTML exceeds the ${maxInputChars}-character safety limit`);
   }
   let nodes = parseHtmlToNodes(html);
+  const embedded = findEmbeddedSquisqDoc(nodes);
+  if (embedded) return docToMarkdown(parseEmbeddedSquisqDoc(embedded));
   if (options.sanitize !== false) nodes = sanitizeHtmlNodes(nodes);
   return { type: 'document', children: blocksFromNodes(nodes) };
 }

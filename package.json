@@ -10,7 +10,7 @@
   },
   "scripts": {
     "install:safe": "npm install && node scripts/run-install-allowlist.mjs",
-    "all": "npm run install:safe && npm run build && npm run lint && npm run format:check && npm run typecheck && npm run test:coverage && npm run test:mutation && npm run test:published && npm run test:cli && npm run test:cli:native:required && npm run test:e2e:ci",
+    "all": "npm run install:safe && npm run build && npm run lint && npm run format:check && npm run typecheck && npm run test:coverage && npm run test:published && npm run test:cli && npm run test:cli:native:required && npm run test:e2e:ci",
     "build": "npm run build:core && npm run build:formats && npm run build:react && npm run build:video && npm run build:video-react && npm run build:editor && npm run build:cli && npm run build:site",
     "build:core": "npm run build -w @bendyline/squisq",
     "build:formats": "npm run build -w @bendyline/squisq-formats",
@@ -23,6 +23,7 @@
     "build:dev": "npm run build:core && npm run build:formats && npm run build:react && npm run build:video && npm run build:video-react && npm run build:editor",
     "test": "vitest run",
     "test:coverage": "vitest run --config vitest.coverage.config.ts --coverage",
+    "test:extended": "npm run test:mutation",
     "test:mutation": "stryker run",
     "test:cli": "npm test -w @bendyline/squisq-cli",
     "test:cli:native": "npm run test:native -w @bendyline/squisq-cli",

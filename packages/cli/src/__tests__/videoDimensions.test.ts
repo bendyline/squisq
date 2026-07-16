@@ -123,6 +123,22 @@ describe('video dimension validation', () => {
     expect(result.stderr).to.contain('Video width must be a positive integer');
   });
 
+  it('rejects fractional and partially numeric dimensions before reading input', async () => {
+    for (const value of ['320.9', '320px']) {
+      const result = await runCliAllowError(
+        'video',
+        FIXTURE_MD,
+        '-o',
+        join(tempDir, `out-${value.replace('.', '-')}.mp4`),
+        '--width',
+        value,
+      );
+      expect(result.exitCode).to.equal(1);
+      expect(result.stderr).to.contain('Video width must be a positive integer');
+      expect(result.stderr).to.not.contain('Reading:');
+    }
+  });
+
   it('rejects a zero --width', async () => {
     const result = await runCliAllowError(
       'video',

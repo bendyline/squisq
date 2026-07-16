@@ -11,8 +11,8 @@ import { InlinePreviewGutter } from '../InlinePreviewGutter';
  *
  * We deliberately don't snapshot the SVG — the BlockRenderer covers that
  * elsewhere. Here we just assert (a) the gutter mounts, (b) it renders
- * one card per annotated block, and (c) the empty state shows when there
- * are no annotated blocks.
+ * one card per annotated block, and (c) the gutter stays collapsed when
+ * there are no annotated blocks.
  */
 
 function renderGutter(markdown: string) {
@@ -24,9 +24,9 @@ function renderGutter(markdown: string) {
 }
 
 describe('InlinePreviewGutter', () => {
-  it('renders the empty state when no blocks are template-annotated', async () => {
-    renderGutter('# Plain heading\n\nSome body text.\n');
-    expect(await screen.findByText(/tag a heading with a template/i)).toBeTruthy();
+  it('stays collapsed when no blocks are template-annotated', () => {
+    const { container } = renderGutter('# Plain heading\n\nSome body text.\n');
+    expect(container.querySelector('[data-testid="inline-preview-gutter"]')).toBeNull();
   });
 
   it('renders one card per template-annotated block', async () => {

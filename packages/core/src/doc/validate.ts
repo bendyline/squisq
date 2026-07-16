@@ -511,13 +511,22 @@ function checkAssets(
     });
   };
 
+  // Markdown references own their source locations. `templateData` often
+  // derives the same URL from the body and must not report it again at the
+  // heading line.
+  const markdownUrls = new Set<string>();
+
   // Markdown image nodes + raw-HTML <img src>.
   const walk = (node: MarkdownNode): void => {
     if (node.type === 'image') {
+      markdownUrls.add(node.url);
       report(node.url, node.position?.start.line);
     }
     if (node.type === 'htmlBlock' || node.type === 'htmlInline') {
-      walkHtmlImages(node.htmlChildren, (src) => report(src, node.position?.start.line));
+      walkHtmlImages(node.htmlChildren, (src) => {
+        markdownUrls.add(src);
+        report(src, node.position?.start.line);
+      });
     }
     for (const child of getChildren(node)) walk(child);
   };
@@ -525,16 +534,23 @@ function checkAssets(
 
   // Media references in template params / structured data.
   for (const block of blocks) {
-    const sources: Array<Record<string, unknown> | undefined> = [
-      block.templateOverrides,
-      block.templateData,
+    const authoredUrls = new Set<string>();
+    const sources: Array<{
+      value: Record<string, unknown> | undefined;
+      derived: boolean;
+    }> = [
+      { value: block.templateOverrides, derived: false },
+      { value: block.templateData, derived: true },
     ];
-    for (const source of sources) {
+    for (const { value: source, derived } of sources) {
       if (!source) continue;
       for (const key of ASSET_PARAM_KEYS) {
         const value = source[key];
         if (typeof value === 'string') {
-          report(value, block.sourceHeading?.position?.start.line, block.id);
+          if (!derived) authoredUrls.add(value);
+          if (!derived || (!markdownUrls.has(value) && !authoredUrls.has(value))) {
+            report(value, block.sourceHeading?.position?.start.line, block.id);
+          }
         }
       }
       const images = source['images'];
@@ -545,7 +561,10 @@ function checkAssets(
             ? images.filter((i): i is string => typeof i === 'string')
             : [];
       for (const img of list) {
-        report(img, block.sourceHeading?.position?.start.line, block.id);
+        if (!derived) authoredUrls.add(img);
+        if (!derived || (!markdownUrls.has(img) && !authoredUrls.has(img))) {
+          report(img, block.sourceHeading?.position?.start.line, block.id);
+        }
       }
     }
   }

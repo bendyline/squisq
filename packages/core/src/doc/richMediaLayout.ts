@@ -229,6 +229,122 @@ function mapPosition(
   return mapped;
 }
 
+/**
+ * Translate a template rendered against a local viewport into a root-level
+ * media rectangle. Spatial templates emit absolute SVG path coordinates, so
+ * those coordinates must move with ordinary layer positions.
+ */
+export function placeLayersInRect(
+  layers: readonly Layer[],
+  sourceViewport: ViewportConfig,
+  target: LayerRect,
+  idPrefix: string,
+): Layer[] {
+  const scaleX = target.width / sourceViewport.width;
+  const scaleY = target.height / sourceViewport.height;
+  const fontScale = Math.min(scaleX, scaleY);
+  return layers.map((layer) => {
+    const position: Position = {
+      ...layer.position,
+      x: target.x + resolvePositionValue(layer.position.x, sourceViewport.width) * scaleX,
+      y: target.y + resolvePositionValue(layer.position.y, sourceViewport.height) * scaleY,
+      ...(layer.position.width !== undefined
+        ? {
+            width: resolvePositionValue(layer.position.width, sourceViewport.width) * scaleX,
+          }
+        : {}),
+      ...(layer.position.height !== undefined
+        ? {
+            height: resolvePositionValue(layer.position.height, sourceViewport.height) * scaleY,
+          }
+        : {}),
+    };
+    const base = { ...layer, id: `${idPrefix}-${layer.id}`, position };
+    if (layer.type === 'path') {
+      return {
+        ...base,
+        type: 'path',
+        content: {
+          ...layer.content,
+          d: transformAbsoluteSvgPath(layer.content.d, scaleX, scaleY, target.x, target.y),
+          ...(layer.content.strokeWidth !== undefined
+            ? { strokeWidth: layer.content.strokeWidth * fontScale }
+            : {}),
+        },
+      };
+    }
+    if (layer.type === 'text' && fontScale !== 1) {
+      return {
+        ...base,
+        type: 'text',
+        content: {
+          ...layer.content,
+          style: {
+            ...layer.content.style,
+            fontSize: Math.max(10, layer.content.style.fontSize * fontScale),
+          },
+        },
+      };
+    }
+    return base as Layer;
+  });
+}
+
+/** Affine-transform the absolute SVG commands emitted by spatial templates. */
+function transformAbsoluteSvgPath(
+  d: string,
+  scaleX: number,
+  scaleY: number,
+  translateX: number,
+  translateY: number,
+): string {
+  const tokens = d.match(/[a-zA-Z]|[-+]?(?:\d+\.?\d*|\.\d+)(?:e[-+]?\d+)?/gi);
+  if (!tokens) return d;
+  let command = '';
+  let parameterIndex = 0;
+  return tokens
+    .map((token) => {
+      if (/^[a-zA-Z]$/.test(token)) {
+        command = token;
+        parameterIndex = 0;
+        return token;
+      }
+      const value = Number(token);
+      if (!Number.isFinite(value) || command === command.toLowerCase()) {
+        parameterIndex++;
+        return token;
+      }
+      const index = parameterIndex++;
+      let transformed = value;
+      switch (command) {
+        case 'M':
+        case 'L':
+        case 'T':
+        case 'C':
+        case 'S':
+        case 'Q':
+          transformed = index % 2 === 0 ? value * scaleX + translateX : value * scaleY + translateY;
+          break;
+        case 'H':
+          transformed = value * scaleX + translateX;
+          break;
+        case 'V':
+          transformed = value * scaleY + translateY;
+          break;
+        case 'A': {
+          const arcIndex = index % 7;
+          if (arcIndex === 0) transformed = value * scaleX;
+          else if (arcIndex === 1) transformed = value * scaleY;
+          else if (arcIndex === 5) transformed = value * scaleX + translateX;
+          else if (arcIndex === 6) transformed = value * scaleY + translateY;
+          break;
+        }
+      }
+      return String(Math.round(transformed * 1000) / 1000);
+    })
+    .join(' ');
+}
+
 function mapForegroundLayers(
   layers: readonly Layer[],
   contentRect: LayerRect,

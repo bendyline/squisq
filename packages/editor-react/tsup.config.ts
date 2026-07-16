@@ -1,4 +1,5 @@
 import { defineConfig } from 'tsup';
+import { bundleLicenseMetadata } from '../../scripts/bundle-license-plugin.mjs';
 
 export default defineConfig({
   entry: {
@@ -14,6 +15,7 @@ export default defineConfig({
   dts: true,
   sourcemap: false,
   clean: true,
+  esbuildPlugins: [bundleLicenseMetadata(import.meta.dirname, 'esm')],
   external: ['react', 'react-dom', '@bendyline/squisq', '@bendyline/squisq-react', 'monaco-editor'],
   // Bundle the React adapter and loader. Keeping them as a runtime dependency
   // makes npm auto-install Monaco (and its nested DOMPurify) even for hosts
