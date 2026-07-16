@@ -27,10 +27,33 @@
  * ```
  */
 
-import type { Doc, Transition, TransitionDirection } from '@bendyline/squisq/schemas';
-import { resolveFontFamily } from '@bendyline/squisq/schemas';
+import type {
+  Block,
+  Doc,
+  Layer,
+  PathLayer,
+  Position,
+  ShapeLayer,
+  TableLayer,
+  TextLayer,
+  TextStyle,
+  Transition,
+  TransitionDirection,
+  TreeLayerItem,
+} from '@bendyline/squisq/schemas';
+import { resolveFontFamily, VIEWPORT_PRESETS } from '@bendyline/squisq/schemas';
 import type { Theme, ThemeRegistry } from '@bendyline/squisq/schemas';
-import { docToMarkdown, resolveThemeForDoc } from '@bendyline/squisq/doc';
+import {
+  createTemplateContext,
+  docToMarkdown,
+  expandCoverBlock,
+  expandDocBlocks,
+  flattenRenderableBlocks,
+  isTemplateBlock,
+  resolvePersistentLayers,
+  resolveThemeForDoc,
+} from '@bendyline/squisq/doc';
+import { stripIconMarkers } from '@bendyline/squisq/icon-marker';
 import type {
   MarkdownDocument,
   MarkdownBlockNode,
@@ -96,6 +119,8 @@ import {
   BODY_TOP,
   BODY_WIDTH,
   BODY_HEIGHT,
+  SLIDE_HEIGHT,
+  SLIDE_WIDTH,
 } from './styles.js';
 import {
   buildPresentationXml,
@@ -147,6 +172,12 @@ export interface PptxExportOptions {
   images?: Map<string, ArrayBuffer>;
   /** Permit carefully validated relative hyperlink targets. Default: false. */
   allowRelativeHyperlinks?: boolean;
+  /**
+   * Include the Doc's managed cover (`startBlock`) as slide 1. Defaults to
+   * the document's `squisq-cover-slide` / `cover-slide` setting, then true.
+   * MarkdownDocument export is unaffected because it has no managed cover.
+   */
+  includeCoverSlide?: boolean;
 }
 
 /**
@@ -194,15 +225,81 @@ export async function markdownDocToPptx(
 /**
  * Convert a squisq Doc to a .pptx ArrayBuffer.
  *
- * Convenience wrapper: Doc -> MarkdownDocument -> PPTX.
+ * Template-backed Docs are exported through the same canonical slideshow
+ * expansion as the player, then their materialized visual layers are mapped
+ * to native DrawingML shapes. Plain, non-template Docs retain the semantic
+ * Markdown export path for backward compatibility.
  */
 export async function docToPptx(doc: Doc, options: PptxExportOptions = {}): Promise<ArrayBuffer> {
-  const markdownDoc = docToMarkdown(doc);
-  // Carry themeId from Doc if not set in options
-  if (!options.themeId && doc.themeId) {
-    options = { ...options, themeId: doc.themeId };
+  options.signal?.throwIfAborted();
+  const effectiveOptions =
+    !options.themeId && doc.themeId ? { ...options, themeId: doc.themeId } : options;
+  const flatBlocks = flattenRenderableBlocks(doc.blocks);
+
+  // A plain Markdown-derived Doc has no fully-specified template inputs.
+  // Preserve the established semantic exporter for that shape. Player-ready
+  // Docs (including buildPreviewDoc/applyTransform output) take the visual path.
+  if (!flatBlocks.some(isTemplateBlock)) {
+    return markdownDocToPptx(docToMarkdown(doc), effectiveOptions);
   }
-  return markdownDocToPptx(markdownDoc, options);
+
+  const theme = resolveThemeForDoc(doc, effectiveOptions.themeId, effectiveOptions.themeRegistry);
+  const style = slideStyleFromTheme(theme, effectiveOptions);
+  const audioSegments = doc.audio?.segments?.map((segment) => ({
+    startTime: segment.startTime,
+    duration: segment.duration,
+  }));
+  const persistentLayers = resolvePersistentLayers(
+    { persistentLayers: doc.persistentLayers },
+    theme,
+  );
+  const expanded = expandDocBlocks(flatBlocks, {
+    audioSegments,
+    viewport: VIEWPORT_PRESETS.landscape,
+    persistentLayers,
+    theme,
+    customTemplates: doc.customTemplates,
+  });
+
+  const slideBlocks: Block[] = [];
+  if (shouldIncludeCoverSlide(doc, effectiveOptions) && doc.startBlock) {
+    const coverContext = createTemplateContext(
+      theme,
+      0,
+      Math.max(1, expanded.length + 1),
+      VIEWPORT_PRESETS.landscape,
+    );
+    slideBlocks.push({
+      id: 'cover-block',
+      startTime: -1,
+      duration: 0,
+      audioSegment: -1,
+      layers: expandCoverBlock(doc.startBlock, coverContext),
+    });
+  }
+  slideBlocks.push(...expanded);
+
+  // The OOXML package contract always contains at least one slide.
+  if (slideBlocks.length === 0) {
+    slideBlocks.push({ id: 'empty-slide', startTime: 0, duration: 0, audioSegment: 0, layers: [] });
+  }
+
+  const slideXmls: string[] = [];
+  const slideContexts: SlideContext[] = [];
+  for (let index = 0; index < slideBlocks.length; index++) {
+    if ((index & 31) === 0) effectiveOptions.signal?.throwIfAborted();
+    const ctx = new SlideContext(
+      style,
+      effectiveOptions.images,
+      index,
+      effectiveOptions.allowRelativeHyperlinks ?? false,
+      effectiveOptions.signal,
+    );
+    slideXmls.push(buildLayerSlideXml(slideBlocks[index], ctx));
+    slideContexts.push(ctx);
+  }
+
+  return buildPptxPackage(slideXmls, slideContexts, effectiveOptions);
 }
 
 // ============================================
@@ -220,6 +317,16 @@ interface SlideStyle {
   codeFont: string;
   codeColor: string;
   hasTheme: boolean;
+}
+
+/** DrawingML accepts one typeface, not a CSS fallback stack. */
+function officeTypeface(family: Parameters<typeof resolveFontFamily>[0], fallback: string): string {
+  const resolved = resolveFontFamily(family, fallback);
+  const first = resolved
+    .split(',')[0]
+    ?.trim()
+    .replace(/^['"]|['"]$/g, '');
+  return first || fallback;
 }
 
 function resolveSlideStyle(
@@ -242,6 +349,10 @@ function resolveSlideStyle(
   }
 
   const theme: Theme = resolveThemeForDoc(doc, themeId, options.themeRegistry);
+  return slideStyleFromTheme(theme, options);
+}
+
+function slideStyleFromTheme(theme: Theme, options: PptxExportOptions): SlideStyle {
   const c = theme.colors;
 
   // Normalize at the boundary: `ST_HexColorRGB` (`<a:srgbClr val>`) is
@@ -254,12 +365,39 @@ function resolveSlideStyle(
     text: toOoxmlHex(c.text, '333333'),
     titleColor: toOoxmlHex(c.highlight || c.secondary || c.text, '333333'),
     mutedColor: toOoxmlHex(c.textMuted || c.text, '666666'),
-    titleFont: resolveFontFamily(theme.typography?.titleFont, DEFAULT_TITLE_FONT),
-    bodyFont: resolveFontFamily(theme.typography?.bodyFont, options.defaultFont || DEFAULT_FONT),
-    codeFont: resolveFontFamily(theme.typography?.monoFont, DEFAULT_CODE_FONT),
+    titleFont: officeTypeface(theme.typography?.titleFont, DEFAULT_TITLE_FONT),
+    bodyFont: officeTypeface(theme.typography?.bodyFont, options.defaultFont || DEFAULT_FONT),
+    codeFont: officeTypeface(theme.typography?.monoFont, DEFAULT_CODE_FONT),
     codeColor: toOoxmlHex(c.textMuted || c.text, '333333'),
     hasTheme: true,
   };
+}
+
+function shouldIncludeCoverSlide(doc: Doc, options: PptxExportOptions): boolean {
+  if (options.includeCoverSlide !== undefined) return options.includeCoverSlide;
+  const frontmatterValue =
+    doc.frontmatter?.['squisq-cover-slide'] ?? doc.frontmatter?.['cover-slide'];
+  if (typeof frontmatterValue === 'boolean') return frontmatterValue;
+  if (typeof frontmatterValue === 'string') {
+    const normalized = frontmatterValue.trim().toLowerCase();
+    if (
+      normalized === 'false' ||
+      normalized === 'no' ||
+      normalized === 'off' ||
+      normalized === '0'
+    ) {
+      return false;
+    }
+    if (
+      normalized === 'true' ||
+      normalized === 'yes' ||
+      normalized === 'on' ||
+      normalized === '1'
+    ) {
+      return true;
+    }
+  }
+  return true;
 }
 
 // ============================================
@@ -498,6 +636,619 @@ function buildSlideXml(slide: SlideData, ctx: SlideContext): string {
     transitionXml +
     `</p:sld>`
   );
+}
+
+/** Build a slide from the exact materialized layer stack used by DocPlayer. */
+function buildLayerSlideXml(block: Block, ctx: SlideContext): string {
+  const shapes: string[] = [
+    `<p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr>` + `<p:grpSpPr/>`,
+  ];
+
+  const textLayerY = (block.layers ?? [])
+    .filter((layer): layer is TextLayer => layer.type === 'text')
+    .map((layer) => resolvePositionValue(layer.position.y, 1080));
+
+  for (let index = 0; index < (block.layers?.length ?? 0); index++) {
+    if ((index & 31) === 0) ctx.signal?.throwIfAborted();
+    const layer = block.layers![index];
+    const currentY =
+      layer.type === 'text' ? resolvePositionValue(layer.position.y, 1080) : undefined;
+    const nextTextY =
+      currentY === undefined
+        ? undefined
+        : textLayerY.filter((candidate) => candidate > currentY + 1).sort((a, b) => a - b)[0];
+    shapes.push(
+      ...convertLayerToShapes(
+        layer,
+        ctx,
+        nextTextY === undefined || currentY === undefined
+          ? undefined
+          : Math.max(currentY + 1, nextTextY - 8),
+      ),
+    );
+  }
+
+  const bgXml = ctx.style.hasTheme
+    ? `<p:bg><p:bgPr><a:solidFill><a:srgbClr val="${ctx.style.background}"/></a:solidFill><a:effectLst/></p:bgPr></p:bg>`
+    : '';
+  const transitionXml = buildTransitionXml(block.transition);
+  const extensionAttrs = transitionXml.includes('p14:')
+    ? ` xmlns:mc="${NS_MC}" xmlns:p14="${NS_PML_2010}" mc:Ignorable="p14"`
+    : '';
+
+  return (
+    xmlDeclaration() +
+    `<p:sld xmlns:a="${NS_DRAWINGML}" xmlns:r="${NS_R}" xmlns:p="${NS_PML}"${extensionAttrs}>` +
+    `<p:cSld>${bgXml}<p:spTree>${shapes.join('')}</p:spTree></p:cSld>` +
+    transitionXml +
+    `</p:sld>`
+  );
+}
+
+function convertLayerToShapes(layer: Layer, ctx: SlideContext, textBottom?: number): string[] {
+  switch (layer.type) {
+    case 'text':
+      return [buildLayerTextShape(layer, ctx.allocShapeId(), textBottom)];
+    case 'shape':
+      return [buildLayerShape(layer, ctx.allocShapeId())];
+    case 'image': {
+      const data = ctx.images?.get(layer.content.src);
+      if (data) {
+        const image = ctx.addImage(layer.content.src, data, layer.content.alt);
+        const rect = toEmuRect(resolveLayerRect(layer.position, 1920, 1080));
+        const embedded = ctx.embeddedImages.find((candidate) => candidate.relId === image)!;
+        return [
+          buildImageShape(embedded, ctx.allocShapeId(), rect.x, rect.y, rect.width, rect.height),
+        ];
+      }
+      return [
+        buildLayerTextShape(
+          textLayerForPlaceholder(
+            layer.position,
+            `[Image: ${layer.content.alt || layer.content.src}]`,
+            ctx,
+          ),
+          ctx.allocShapeId(),
+        ),
+      ];
+    }
+    case 'table':
+      return buildTableLayerShapes(layer, ctx);
+    case 'tree':
+      return [
+        buildLayerTextShape(
+          {
+            ...layer,
+            type: 'text',
+            content: {
+              text: treeItemsToText(layer.content.items),
+              style: {
+                fontSize: layer.content.style.fontSize,
+                fontFamily: layer.content.style.fontFamily,
+                color: layer.content.style.rowColor,
+                lineHeight: 1.35,
+              },
+            },
+          },
+          ctx.allocShapeId(),
+        ),
+      ];
+    case 'path':
+      return buildPathLayerShapes(layer, ctx);
+    case 'map': {
+      const staticSrc = layer.content.staticSrc;
+      const data = staticSrc ? ctx.images?.get(staticSrc) : undefined;
+      if (staticSrc && data) {
+        const relId = ctx.addImage(staticSrc, data, 'Map');
+        const embedded = ctx.embeddedImages.find((candidate) => candidate.relId === relId)!;
+        const rect = toEmuRect(resolveLayerRect(layer.position, 1920, 1080));
+        return [
+          buildImageShape(embedded, ctx.allocShapeId(), rect.x, rect.y, rect.width, rect.height),
+        ];
+      }
+      return [
+        buildLayerTextShape(
+          textLayerForPlaceholder(
+            layer.position,
+            `Map: ${layer.content.center.lat.toFixed(4)}, ${layer.content.center.lng.toFixed(4)}`,
+            ctx,
+          ),
+          ctx.allocShapeId(),
+        ),
+      ];
+    }
+    case 'video': {
+      const poster = layer.content.posterSrc;
+      const data = poster ? ctx.images?.get(poster) : undefined;
+      if (poster && data) {
+        const relId = ctx.addImage(poster, data, layer.content.alt);
+        const embedded = ctx.embeddedImages.find((candidate) => candidate.relId === relId)!;
+        const rect = toEmuRect(resolveLayerRect(layer.position, 1920, 1080));
+        return [
+          buildImageShape(embedded, ctx.allocShapeId(), rect.x, rect.y, rect.width, rect.height),
+        ];
+      }
+      return [
+        buildLayerTextShape(
+          textLayerForPlaceholder(
+            layer.position,
+            `[Video: ${layer.content.alt || layer.content.src}]`,
+            ctx,
+          ),
+          ctx.allocShapeId(),
+        ),
+      ];
+    }
+    case 'mermaid':
+      return [
+        buildLayerTextShape(
+          textLayerForPlaceholder(layer.position, layer.content.source, ctx),
+          ctx.allocShapeId(),
+        ),
+      ];
+  }
+}
+
+interface LayerRect {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+interface EmuRect {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+function resolvePositionValue(value: number | string | undefined, dimension: number): number {
+  if (typeof value === 'number') return value;
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (trimmed.endsWith('%')) {
+      const percent = Number.parseFloat(trimmed);
+      if (Number.isFinite(percent)) return (percent / 100) * dimension;
+    }
+    const numeric = Number.parseFloat(trimmed);
+    if (Number.isFinite(numeric)) return numeric;
+  }
+  return 0;
+}
+
+function resolveLayerRect(
+  position: Position,
+  defaultWidth: number,
+  defaultHeight: number,
+): LayerRect {
+  const width = Math.max(
+    1,
+    position.width != null ? resolvePositionValue(position.width, 1920) : defaultWidth,
+  );
+  const height = Math.max(
+    1,
+    position.height != null ? resolvePositionValue(position.height, 1080) : defaultHeight,
+  );
+  let x = resolvePositionValue(position.x, 1920);
+  let y = resolvePositionValue(position.y, 1080);
+  const anchor = position.anchor ?? 'top-left';
+  if (anchor === 'center') {
+    x -= width / 2;
+    y -= height / 2;
+  } else {
+    if (anchor.endsWith('right')) x -= width;
+    if (anchor.startsWith('bottom')) y -= height;
+  }
+  // BlockRenderer clips the complete layer stack to the 1920x1080 viewBox.
+  // Native PowerPoint shapes are not implicitly clipped, so trim their boxes
+  // to that same canvas instead of letting long text create off-slide content.
+  const clippedX = Math.min(1919, Math.max(0, x));
+  const clippedY = Math.min(1079, Math.max(0, y));
+  const clippedWidth = Math.max(1, Math.min(width - (clippedX - x), 1920 - clippedX));
+  const clippedHeight = Math.max(1, Math.min(height - (clippedY - y), 1080 - clippedY));
+  return { x: clippedX, y: clippedY, width: clippedWidth, height: clippedHeight };
+}
+
+function toEmuRect(rect: LayerRect): EmuRect {
+  return {
+    x: Math.round((rect.x / 1920) * SLIDE_WIDTH),
+    y: Math.round((rect.y / 1080) * SLIDE_HEIGHT),
+    width: Math.max(1, Math.round((rect.width / 1920) * SLIDE_WIDTH)),
+    height: Math.max(1, Math.round((rect.height / 1080) * SLIDE_HEIGHT)),
+  };
+}
+
+function buildLayerTextShape(layer: TextLayer, shapeId: number, maxBottom?: number): string {
+  const text = stripIconMarkers(layer.content.text ?? '');
+  const style = layer.content.style;
+  const padding = style.padding ?? 0;
+  const rawLines = text.split('\n');
+  const estimatedWidth = Math.min(
+    1920,
+    Math.max(1, Math.max(...rawLines.map((line) => line.length), 1) * style.fontSize * 0.55),
+  );
+  const boxWidth =
+    layer.position.width != null
+      ? resolvePositionValue(layer.position.width, 1920)
+      : estimatedWidth;
+  // Large one-line display titles are authored to remain on one line in the
+  // SVG player. Office font metrics are wider than the player's lightweight
+  // wrap estimate, so cap those titles before PowerPoint introduces a second
+  // line that collides with the next layer.
+  const fittedFontSize =
+    rawLines.length === 1 && style.fontSize >= 80 && text.length > 0
+      ? Math.min(style.fontSize, boxWidth / (text.length * 0.78))
+      : style.fontSize;
+  const charsPerLine = Math.max(1, Math.floor(boxWidth / Math.max(1, fittedFontSize * 0.58)));
+  const wrappedLineCount = Math.max(
+    1,
+    rawLines.reduce((count, line) => count + Math.max(1, Math.ceil(line.length / charsPerLine)), 0),
+  );
+  const estimatedHeight = Math.max(
+    fittedFontSize * (style.lineHeight ?? 1.4) * wrappedLineCount + padding * 2,
+    fittedFontSize,
+  );
+  const resolvedRect = resolveLayerRect(layer.position, boxWidth, estimatedHeight);
+  // Leave a small bottom inset for Office/LibreOffice glyph descenders and
+  // antialiasing. The SVG player clips exactly at 1080; rasterizers otherwise
+  // report a one-pixel bleed even when the text box itself ends on-canvas.
+  const safeBottom = Math.min(1060, maxBottom ?? 1060);
+  const virtualRect = {
+    ...resolvedRect,
+    y: Math.min(resolvedRect.y, safeBottom - 1),
+    height: Math.max(1, Math.min(resolvedRect.height, safeBottom - resolvedRect.y)),
+  };
+  const heightScale = Math.min(1, virtualRect.height / estimatedHeight);
+  const renderedFontSize = Math.max(1, fittedFontSize * heightScale * (heightScale < 1 ? 0.9 : 1));
+  const renderedStyle =
+    renderedFontSize === style.fontSize ? style : { ...style, fontSize: renderedFontSize };
+  const rect = toEmuRect(virtualRect);
+  const align = style.textAlign === 'center' ? 'ctr' : style.textAlign === 'right' ? 'r' : 'l';
+  const vertical =
+    style.verticalAlign === 'bottom' ? 'b' : style.verticalAlign === 'middle' ? 'ctr' : 't';
+  const inset = Math.max(0, Math.round((padding / 1920) * SLIDE_WIDTH));
+  const bodyPr =
+    `<a:bodyPr wrap="square" anchor="${vertical}" vertOverflow="clip" horzOverflow="clip"` +
+    ` lIns="${inset}" rIns="${inset}" tIns="${inset}" bIns="${inset}">` +
+    `<a:noAutofit/></a:bodyPr>`;
+  const paragraphs = text
+    .split('\n')
+    .map((line) => buildLayerTextParagraph(line, renderedStyle, align))
+    .join('');
+
+  return (
+    `<p:sp>` +
+    `<p:nvSpPr><p:cNvPr id="${shapeId}" name="${escapeXml(layer.id)}"/>` +
+    `<p:cNvSpPr txBox="1"/><p:nvPr/></p:nvSpPr>` +
+    `<p:spPr><a:xfrm><a:off x="${rect.x}" y="${rect.y}"/>` +
+    `<a:ext cx="${rect.width}" cy="${rect.height}"/></a:xfrm>` +
+    `<a:prstGeom prst="rect"><a:avLst/></a:prstGeom>` +
+    fillXml(style.background, style.backgroundOpacity, style.backgroundGradient) +
+    lineXml(style.borderColor, style.borderWidth, style.borderStyle) +
+    `</p:spPr>` +
+    `<p:txBody>${bodyPr}<a:lstStyle/>${paragraphs}</p:txBody>` +
+    `</p:sp>`
+  );
+}
+
+function buildLayerTextParagraph(text: string, style: TextStyle, align: string): string {
+  const size = Math.max(100, Math.round(style.fontSize * 75));
+  const color = parseCssColor(style.color, '000000');
+  const typeface = officeTypeface(style.fontFamily, DEFAULT_FONT);
+  const runProperties = [
+    `lang="en-US"`,
+    `dirty="0"`,
+    `sz="${size}"`,
+    ...(style.fontWeight === 'bold' ? ['b="1"'] : []),
+    ...(style.fontStyle === 'italic' ? ['i="1"'] : []),
+  ].join(' ');
+  const lineSpacing = Math.max(10000, Math.round((style.lineHeight ?? 1.4) * 100000));
+  return (
+    `<a:p><a:pPr algn="${align}"><a:lnSpc><a:spcPct val="${lineSpacing}"/></a:lnSpc></a:pPr>` +
+    `<a:r><a:rPr ${runProperties}>${solidColorXml(color)}` +
+    `<a:latin typeface="${escapeXml(typeface)}"/></a:rPr>` +
+    `<a:t>${escapeXml(text || ' ')}</a:t></a:r></a:p>`
+  );
+}
+
+function buildLayerShape(layer: ShapeLayer, shapeId: number): string {
+  const rect = toEmuRect(resolveLayerRect(layer.position, 100, 100));
+  const geometry =
+    layer.content.shape === 'circle'
+      ? 'ellipse'
+      : layer.content.shape === 'line'
+        ? 'line'
+        : layer.content.borderRadius
+          ? 'roundRect'
+          : 'rect';
+  const fill =
+    layer.content.shape === 'line'
+      ? '<a:noFill/>'
+      : fillXml(layer.content.fill, layer.content.fillOpacity, layer.content.gradient);
+  const stroke = lineXml(
+    layer.content.stroke ?? (layer.content.shape === 'line' ? '#ffffff' : undefined),
+    layer.content.strokeWidth ?? (layer.content.shape === 'line' ? 2 : undefined),
+    layer.content.borderStyle,
+  );
+  return (
+    `<p:sp><p:nvSpPr><p:cNvPr id="${shapeId}" name="${escapeXml(layer.id)}"/>` +
+    `<p:cNvSpPr/><p:nvPr/></p:nvSpPr><p:spPr>` +
+    `<a:xfrm><a:off x="${rect.x}" y="${rect.y}"/><a:ext cx="${rect.width}" cy="${rect.height}"/></a:xfrm>` +
+    `<a:prstGeom prst="${geometry}"><a:avLst/></a:prstGeom>` +
+    fill +
+    stroke +
+    `</p:spPr></p:sp>`
+  );
+}
+
+function buildTableLayerShapes(layer: TableLayer, ctx: SlideContext): string[] {
+  const rows = [layer.content.headers, ...layer.content.rows];
+  const columnCount = Math.max(1, ...rows.map((row) => row.length));
+  const rowCount = Math.max(1, rows.length);
+  const rect = resolveLayerRect(layer.position, 1920, 1080);
+  const cellWidth = rect.width / columnCount;
+  const cellHeight = rect.height / rowCount;
+  const shapes: string[] = [];
+
+  for (let rowIndex = 0; rowIndex < rows.length; rowIndex++) {
+    for (let columnIndex = 0; columnIndex < columnCount; columnIndex++) {
+      const isHeader = rowIndex === 0;
+      const text = rows[rowIndex]?.[columnIndex] ?? '';
+      shapes.push(
+        buildLayerTextShape(
+          {
+            id: `${layer.id}-${rowIndex}-${columnIndex}`,
+            type: 'text',
+            position: {
+              x: rect.x + columnIndex * cellWidth,
+              y: rect.y + rowIndex * cellHeight,
+              width: cellWidth,
+              height: cellHeight,
+            },
+            content: {
+              text,
+              style: {
+                fontSize: layer.content.style.fontSize,
+                fontFamily: isHeader
+                  ? (layer.content.style.headerFontFamily ?? layer.content.style.fontFamily)
+                  : layer.content.style.fontFamily,
+                fontWeight: isHeader ? 'bold' : 'normal',
+                color: isHeader ? layer.content.style.headerColor : layer.content.style.cellColor,
+                background: isHeader
+                  ? layer.content.style.headerBackground
+                  : layer.content.style.cellBackground,
+                borderColor: layer.content.style.borderColor,
+                borderWidth: 1,
+                padding: Math.max(4, layer.content.style.fontSize * 0.25),
+                verticalAlign: 'middle',
+                textAlign: layer.content.align?.[columnIndex] ?? 'left',
+                lineHeight: 1.2,
+              },
+            },
+          },
+          ctx.allocShapeId(),
+        ),
+      );
+    }
+  }
+  return shapes;
+}
+
+function treeItemsToText(items: TreeLayerItem[], depth = 0): string {
+  const lines: string[] = [];
+  for (const item of items) {
+    lines.push(
+      `${'  '.repeat(depth)}${item.isDir ? '▾ ' : '• '}${item.label}${item.comment ? ` — ${item.comment}` : ''}`,
+    );
+    if (item.children.length > 0) lines.push(treeItemsToText(item.children, depth + 1));
+  }
+  return lines.filter(Boolean).join('\n');
+}
+
+function buildPathLayerShapes(layer: PathLayer, ctx: SlideContext): string[] {
+  if (layer.content.shapeKind) {
+    const shape: ShapeLayer = {
+      id: layer.id,
+      type: 'shape',
+      position: layer.position,
+      content: {
+        shape: layer.content.shapeKind === 'circle' ? 'circle' : 'rect',
+        fill: layer.content.fill,
+        fillOpacity: layer.content.fillOpacity,
+        gradient: layer.content.gradient,
+        stroke: layer.content.stroke,
+        strokeWidth: layer.content.strokeWidth,
+        borderStyle: layer.content.borderStyle,
+      },
+    };
+    return [buildLayerShape(shape, ctx.allocShapeId())];
+  }
+
+  const numbers = layer.content.d.match(/-?\d+(?:\.\d+)?/g)?.map(Number);
+  if (!numbers || numbers.length < 4) return [];
+  const x1 = numbers[0];
+  const y1 = numbers[1];
+  const x2 = numbers[numbers.length - 2];
+  const y2 = numbers[numbers.length - 1];
+  const rect = toEmuRect({
+    x: Math.min(x1, x2),
+    y: Math.min(y1, y2),
+    width: Math.max(1, Math.abs(x2 - x1)),
+    height: Math.max(1, Math.abs(y2 - y1)),
+  });
+  const flipH = x2 < x1 ? ' flipH="1"' : '';
+  const flipV = y2 < y1 ? ' flipV="1"' : '';
+  const stroke = parseCssColor(layer.content.stroke, 'FFFFFF');
+  const width = Math.max(1, Math.round((layer.content.strokeWidth ?? 2) * 9525));
+  const head = markerXml('headEnd', layer.content.startMarker);
+  const tail = markerXml('tailEnd', layer.content.endMarker);
+  const dash = dashXml(layer.content.borderStyle, layer.content.dasharray);
+  const shapeId = ctx.allocShapeId();
+  return [
+    `<p:sp><p:nvSpPr><p:cNvPr id="${shapeId}" name="${escapeXml(layer.id)}"/>` +
+      `<p:cNvSpPr/><p:nvPr/></p:nvSpPr><p:spPr>` +
+      `<a:xfrm${flipH}${flipV}><a:off x="${rect.x}" y="${rect.y}"/>` +
+      `<a:ext cx="${rect.width}" cy="${rect.height}"/></a:xfrm>` +
+      `<a:prstGeom prst="line"><a:avLst/></a:prstGeom><a:noFill/>` +
+      `<a:ln w="${width}">${solidColorXml(stroke)}${dash}${head}${tail}</a:ln>` +
+      `</p:spPr></p:sp>`,
+  ];
+}
+
+function textLayerForPlaceholder(position: Position, text: string, ctx: SlideContext): TextLayer {
+  return {
+    id: `placeholder-${ctx.allocShapeId()}`,
+    type: 'text',
+    position,
+    content: {
+      text,
+      style: {
+        fontSize: 28,
+        fontFamily: ctx.style.bodyFont,
+        fontStyle: 'italic',
+        color: `#${ctx.style.mutedColor}`,
+        textAlign: 'center',
+        verticalAlign: 'middle',
+        padding: 12,
+      },
+    },
+  };
+}
+
+interface ParsedColor {
+  hex: string;
+  alpha: number;
+}
+
+function parseCssColor(color: string | undefined, fallback: string): ParsedColor {
+  if (!color) return { hex: toOoxmlHex(fallback), alpha: 100000 };
+  const trimmed = color.trim();
+  if (trimmed === 'transparent' || trimmed === 'none') return { hex: '000000', alpha: 0 };
+
+  const hexMatch = /^#?([0-9a-f]{3}|[0-9a-f]{6}|[0-9a-f]{8})$/i.exec(trimmed);
+  if (hexMatch) {
+    const raw = hexMatch[1];
+    const expanded =
+      raw.length === 3
+        ? raw
+            .split('')
+            .map((char) => char + char)
+            .join('')
+        : raw;
+    const alpha =
+      expanded.length === 8
+        ? Math.round((Number.parseInt(expanded.slice(6, 8), 16) / 255) * 100000)
+        : 100000;
+    return { hex: expanded.slice(0, 6).toUpperCase(), alpha };
+  }
+
+  const rgbMatch =
+    /^rgba?\(\s*([\d.]+)\s*,\s*([\d.]+)\s*,\s*([\d.]+)(?:\s*,\s*([\d.]+))?\s*\)$/i.exec(trimmed);
+  if (rgbMatch) {
+    const channel = (value: string): string =>
+      Math.max(0, Math.min(255, Math.round(Number(value))))
+        .toString(16)
+        .padStart(2, '0');
+    const alpha = rgbMatch[4]
+      ? Math.round(Math.max(0, Math.min(1, Number(rgbMatch[4]))) * 100000)
+      : 100000;
+    return {
+      hex: `${channel(rgbMatch[1])}${channel(rgbMatch[2])}${channel(rgbMatch[3])}`.toUpperCase(),
+      alpha,
+    };
+  }
+
+  const named: Record<string, string> = {
+    black: '000000',
+    white: 'FFFFFF',
+    red: 'FF0000',
+    blue: '0000FF',
+    green: '008000',
+    gray: '808080',
+    grey: '808080',
+  };
+  return { hex: named[trimmed.toLowerCase()] ?? toOoxmlHex(fallback), alpha: 100000 };
+}
+
+function solidColorXml(color: ParsedColor): string {
+  const alpha = color.alpha < 100000 ? `<a:alpha val="${color.alpha}"/>` : '';
+  return `<a:solidFill><a:srgbClr val="${color.hex}">${alpha}</a:srgbClr></a:solidFill>`;
+}
+
+function fillXml(
+  fill: string | undefined,
+  opacity: number | undefined,
+  gradient: { from: string; to: string; angle?: number } | undefined,
+): string {
+  if (gradient) return gradientFillXml(gradient.from, gradient.to, gradient.angle ?? 0, opacity);
+  if (!fill || fill === 'none' || fill === 'transparent') return '<a:noFill/>';
+  if (fill.includes('gradient(')) {
+    const colors = fill.match(/#[0-9a-f]{3,8}|rgba?\([^)]*\)/gi) ?? [];
+    if (colors.length >= 2) {
+      const angle = Number.parseFloat(
+        /(?:linear-gradient\()\s*([\d.-]+)deg/i.exec(fill)?.[1] ?? '0',
+      );
+      return gradientFillXml(colors[0]!, colors[colors.length - 1]!, angle, opacity);
+    }
+  }
+  const color = parseCssColor(fill, '000000');
+  if (opacity !== undefined)
+    color.alpha = Math.round(color.alpha * Math.max(0, Math.min(1, opacity)));
+  return solidColorXml(color);
+}
+
+function gradientFillXml(
+  from: string,
+  to: string,
+  angle: number,
+  opacity: number | undefined,
+): string {
+  const first = parseCssColor(from, '000000');
+  const second = parseCssColor(to, first.hex);
+  if (opacity !== undefined) {
+    const factor = Math.max(0, Math.min(1, opacity));
+    first.alpha = Math.round(first.alpha * factor);
+    second.alpha = Math.round(second.alpha * factor);
+  }
+  const ooxmlAngle = Math.round(((((90 - angle) % 360) + 360) % 360) * 60000);
+  return (
+    `<a:gradFill rotWithShape="1"><a:gsLst>` +
+    `<a:gs pos="0"><a:srgbClr val="${first.hex}">${first.alpha < 100000 ? `<a:alpha val="${first.alpha}"/>` : ''}</a:srgbClr></a:gs>` +
+    `<a:gs pos="100000"><a:srgbClr val="${second.hex}">${second.alpha < 100000 ? `<a:alpha val="${second.alpha}"/>` : ''}</a:srgbClr></a:gs>` +
+    `</a:gsLst><a:lin ang="${ooxmlAngle}" scaled="1"/></a:gradFill>`
+  );
+}
+
+function lineXml(
+  color: string | undefined,
+  widthPx: number | undefined,
+  borderStyle: 'solid' | 'dashed' | 'dotted' | undefined,
+): string {
+  if (!color || !widthPx || widthPx <= 0) return '<a:ln><a:noFill/></a:ln>';
+  const width = Math.max(1, Math.round(widthPx * 9525));
+  return `<a:ln w="${width}">${solidColorXml(parseCssColor(color, '000000'))}${dashXml(borderStyle)}</a:ln>`;
+}
+
+function dashXml(style: 'solid' | 'dashed' | 'dotted' | undefined, dasharray?: string): string {
+  if (style === 'dashed' || (dasharray && dasharray !== 'none')) return '<a:prstDash val="dash"/>';
+  if (style === 'dotted') return '<a:prstDash val="dot"/>';
+  return '';
+}
+
+function markerXml(tag: 'headEnd' | 'tailEnd', marker: PathLayer['content']['endMarker']): string {
+  if (!marker || marker === 'none') return '';
+  const type =
+    marker === 'arrow'
+      ? 'triangle'
+      : marker === 'open'
+        ? 'arrow'
+        : marker === 'diamond'
+          ? 'diamond'
+          : marker === 'circle'
+            ? 'oval'
+            : 'square';
+  return `<a:${tag} type="${type}" w="med" len="med"/>`;
 }
 
 interface TransitionXml {

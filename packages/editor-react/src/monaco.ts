@@ -30,6 +30,14 @@
 
 // Side-effect: register the full editor + all language contributions.
 import 'monaco-editor/esm/vs/editor/editor.main.js';
+import * as monaco from 'monaco-editor/esm/vs/editor/editor.api.js';
+import { registerJsoncLanguage } from './monacoJsonc.js';
+
+// Monaco's rich JSON service intentionally uses the `json` id for both JSON
+// and JSON-with-comments. Register a lightweight `jsonc` tokenizer as well so
+// Markdown's dynamic fenced-code embedding (` ```jsonc `) can resolve that id
+// and apply JSON-style highlighting in the raw editor.
+registerJsoncLanguage(monaco);
 
 // Typed API surface (the only barrel Monaco publishes declarations for).
 export * from 'monaco-editor/esm/vs/editor/editor.api.js';

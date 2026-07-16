@@ -95,6 +95,16 @@ const MARKDOWN_MODE_LANGUAGES = new Set(['markdown', 'plaintext']);
 const IMAGE_MODE_LANGUAGES = new Set(['image']);
 
 /**
+ * Friendly language names accepted by the shell that are not standalone
+ * Monaco language-service ids. JSONC intentionally uses Monaco's `json`
+ * service: it provides the same tokenizer, formatter, folding, and schema
+ * support, and Monaco's JSON defaults already allow line/block comments.
+ */
+const MONACO_LANGUAGE_ALIASES: Readonly<Record<string, string>> = {
+  jsonc: 'json',
+};
+
+/**
  * Pull the lowercase extension (no leading dot) from a file name or bare
  * extension string. Returns null when none is discernible.
  *
@@ -140,7 +150,10 @@ export function detectLanguageFromFileName(fileName: string): string | null {
  * `fileName`. When nothing matches, falls back to markdown mode.
  */
 export function resolveFileKind(fileName?: string, language?: string): FileKind {
-  const resolvedLanguage = language ?? (fileName ? detectLanguageFromFileName(fileName) : null);
+  const requestedLanguage = language ?? (fileName ? detectLanguageFromFileName(fileName) : null);
+  const resolvedLanguage = requestedLanguage
+    ? (MONACO_LANGUAGE_ALIASES[requestedLanguage.toLowerCase()] ?? requestedLanguage)
+    : null;
 
   if (!resolvedLanguage) {
     return { mode: 'markdown', language: 'markdown' };

@@ -14,8 +14,8 @@
 // Slide Dimensions (EMU)
 // ============================================
 
-/** Widescreen slide width: 10 inches */
-export const SLIDE_WIDTH = 9144000;
+/** Widescreen slide width: 13.333 inches (16:9). */
+export const SLIDE_WIDTH = 12192000;
 
 /** Widescreen slide height: 7.5 inches */
 export const SLIDE_HEIGHT = 6858000;

@@ -1832,6 +1832,13 @@ PPTX export and import are both implemented. Import reads slide order from
 `ppt/presentation.xml`, converting each slide's title, body (as a bullet list),
 and tables (`<a:tbl>`).
 
+`docToPptx` has a visual-deck path for template-backed/player-ready Docs. It
+uses the same renderable-block flattening and `expandDocBlocks` scheduling as
+slideshow view, includes the managed cover by default, and maps the resulting
+materialized layers to a 16:9 deck. This keeps slide counts, themes, and
+transitions aligned with the player. `markdownDocToPptx` retains the semantic
+heading-delimited path documented by `slideBreak`.
+
 **Slide-image extraction (v1.5):** import can now extract slide-level embedded
 images — the bitmaps referenced by a slide's `<p:pic>` shapes — into `images/`
 as image nodes. `pptxToContainer` returns a `ContentContainer` with those files
@@ -1866,6 +1873,7 @@ interface PptxExportOptions {
   themeId?: string;
   themeRegistry?: ThemeRegistry;
   images?: Map<string, ArrayBuffer>;
+  includeCoverSlide?: boolean; // Doc export: frontmatter setting, then true
 }
 interface PptxImportOptions {
   extractImages?: boolean; // default false (pptxToMarkdownDoc); forced true in pptxToContainer

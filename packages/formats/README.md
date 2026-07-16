@@ -136,6 +136,7 @@ Chapters split at H1/H2 boundaries. Providing `audio` + `audioSegments` generate
 
 ```ts
 import {
+  docToPptx,
   markdownDocToPptx,
   pptxToMarkdownDoc,
   pptxToContainer,
@@ -145,6 +146,10 @@ import {
 // slideBreak: 'h1' | 'h2' (default — H1 and H2 both break) | 'heading'
 const pptxBytes = await markdownDocToPptx(markdownDoc, { slideBreak: 'h2', images });
 
+// Export: player-ready Doc -> 16:9 PPTX using the slideshow's canonical
+// block expansion and materialized visual layers (managed cover included by default)
+const visualDeck = await docToPptx(slideshowDoc, { images });
+
 // Import: PPTX → MarkdownDocument (add { extractImages: true } to reference slide images)
 const imported = await pptxToMarkdownDoc(pptxBuffer);
 
@@ -152,7 +157,7 @@ const imported = await pptxToMarkdownDoc(pptxBuffer);
 const container = await pptxToContainer(pptxBuffer);
 ```
 
-**Fidelity:** export preserves inline formatting as DrawingML runs and embeds images when provided via `options.images`. Import reads slide order from `ppt/presentation.xml` and converts each slide's title (→ H2), body text (→ bullet list), and tables. **Slide-image extraction (v1.5):** import can now extract slide-level `<p:pic>` bitmaps into `images/` — `pptxToContainer` returns a container with those files and forces `extractImages: true`, while `pptxToMarkdownDoc` leaves it off by default. Honest limit: only slide-level `<p:pic>` bitmaps are extracted — layout/master images, charts, SmartArt, and picture-fills are **not**.
+**Fidelity:** `markdownDocToPptx` preserves inline formatting as DrawingML runs. `docToPptx` treats a template-backed/player-ready `Doc` as a visual deck: it uses the same renderable-block flattening, timing expansion, managed-cover policy, theme, transitions, and materialized layer stack as slideshow view, so the PPTX has the same slide count and a matching 16:9 canvas. Text, shapes, tables, paths, and supplied images become editable native PowerPoint objects; browser-only map/video/Mermaid layers degrade to a static image when supplied or a labeled text fallback. Import reads slide order from `ppt/presentation.xml` and converts each slide's title (→ H2), body text (→ bullet list), and tables. **Slide-image extraction (v1.5):** import can now extract slide-level `<p:pic>` bitmaps into `images/` — `pptxToContainer` returns a container with those files and forces `extractImages: true`, while `pptxToMarkdownDoc` leaves it off by default. Honest limit: only slide-level `<p:pic>` bitmaps are extracted — layout/master images, charts, SmartArt, and picture-fills are **not**.
 
 ### CSV
 
