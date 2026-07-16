@@ -152,16 +152,21 @@ test.describe('WYSIWYG editing', () => {
   test('keeps block controls on the empty heading line after a Markdown shortcut', async ({
     page,
   }) => {
-    const editor = await focusWysiwygParagraph(page);
-    await editor.evaluate((element) => {
-      const range = document.createRange();
-      range.selectNodeContents(element);
-      range.collapse(false);
-      const selection = window.getSelection();
-      selection?.removeAllRanges();
-      selection?.addRange(range);
-      (element as HTMLElement).focus();
-    });
+    // Start from top-level prose. The sample may end in a list (where `# `
+    // correctly creates another list item instead of a Markdown heading).
+    const editor = await focusWysiwygParagraph(page, 'first');
+    await editor
+      .locator(':scope > p')
+      .first()
+      .evaluate((paragraph) => {
+        const range = document.createRange();
+        range.selectNodeContents(paragraph);
+        range.collapse(false);
+        const selection = window.getSelection();
+        selection?.removeAllRanges();
+        selection?.addRange(range);
+        (paragraph.parentElement as HTMLElement).focus();
+      });
     await page.keyboard.press('Enter');
     await page.keyboard.type('# ');
 

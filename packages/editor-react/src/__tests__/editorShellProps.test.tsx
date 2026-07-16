@@ -176,6 +176,106 @@ describe('<EditorShell> colorScheme prop', () => {
   });
 });
 
+describe('<EditorShell> link delegation', () => {
+  it('passes the literal href to the host and suppresses browser navigation', () => {
+    const onLinkClick = vi.fn();
+    render(
+      <EditorShell
+        initialMarkdown="# hi"
+        initialView="raw"
+        onLinkClick={onLinkClick}
+        toolbarSlotRight={
+          <a href="../guide/agent-loop.md?mode=read#start">
+            <span>Agent loop</span>
+          </a>
+        }
+      />,
+    );
+
+    const link = screen.getByRole('link', { name: 'Agent loop' });
+    const event = new MouseEvent('click', { bubbles: true, cancelable: true });
+    link.querySelector('span')?.dispatchEvent(event);
+
+    expect(onLinkClick).toHaveBeenCalledWith('../guide/agent-loop.md?mode=read#start');
+    expect(event.defaultPrevented).toBe(true);
+  });
+
+  it('allows the browser default when the host returns false', () => {
+    render(
+      <EditorShell
+        initialMarkdown="# hi"
+        initialView="raw"
+        onLinkClick={() => false}
+        toolbarSlotRight={<a href="#section">Section</a>}
+      />,
+    );
+
+    const event = new MouseEvent('click', { bubbles: true, cancelable: true });
+    screen.getByRole('link', { name: 'Section' }).dispatchEvent(event);
+
+    expect(event.defaultPrevented).toBe(false);
+  });
+
+  it('marks delegated links as interactive and shows their href while hovered', () => {
+    const { container } = render(
+      <EditorShell
+        initialMarkdown="# hi"
+        initialView="raw"
+        onLinkClick={vi.fn()}
+        toolbarSlotRight={<a href="https://example.com/docs">Documentation</a>}
+      />,
+    );
+
+    const shell = container.querySelector('.squisq-editor-shell');
+    const link = screen.getByRole('link', { name: 'Documentation' });
+    expect(shell?.getAttribute('data-link-handler')).toBe('true');
+    expect(link.getAttribute('title')).toBeNull();
+
+    fireEvent.mouseOver(link);
+    expect(link.getAttribute('title')).toBe('https://example.com/docs');
+
+    fireEvent.mouseOut(link, { relatedTarget: document.body });
+    expect(link.getAttribute('title')).toBeNull();
+  });
+
+  it('does not add delegated-link affordances without a handler', () => {
+    const { container } = render(
+      <EditorShell
+        initialMarkdown="# hi"
+        initialView="raw"
+        toolbarSlotRight={<a href="https://example.com/docs">Documentation</a>}
+      />,
+    );
+
+    const shell = container.querySelector('.squisq-editor-shell');
+    const link = screen.getByRole('link', { name: 'Documentation' });
+    fireEvent.mouseOver(link);
+
+    expect(shell?.getAttribute('data-link-handler')).toBeNull();
+    expect(link.getAttribute('title')).toBeNull();
+  });
+
+  it('preserves an authored link title', () => {
+    render(
+      <EditorShell
+        initialMarkdown="# hi"
+        initialView="raw"
+        onLinkClick={vi.fn()}
+        toolbarSlotRight={
+          <a href="https://example.com/docs" title="Read the documentation">
+            Documentation
+          </a>
+        }
+      />,
+    );
+
+    const link = screen.getByRole('link', { name: 'Documentation' });
+    fireEvent.mouseOver(link);
+
+    expect(link.getAttribute('title')).toBe('Read the documentation');
+  });
+});
+
 describe('<EditorShell> Write canvas settings', () => {
   it('exposes host settings as live CSS variables on the shell', () => {
     const { container, rerender } = render(

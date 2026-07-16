@@ -2171,6 +2171,7 @@ interface EditorShellProps {
   articleId?: string; // default 'untitled'
   basePath?: string; // default '/'
   onChange?: (source: string) => void;
+  onLinkClick?: (href: string) => boolean | undefined; // false allows browser navigation
   colorScheme?: EditorColorScheme; // 'light' | 'dark', default 'light'
   className?: string;
   height?: string; // default '100vh'

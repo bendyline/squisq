@@ -72,6 +72,7 @@ import type { PrunePolicy, SaveVersionResult } from '@bendyline/squisq/versions'
 import type {
   CSSProperties,
   KeyboardEvent as ReactKeyboardEvent,
+  MouseEvent as ReactMouseEvent,
   ReactNode,
   RefObject,
 } from 'react';
@@ -93,6 +94,12 @@ export interface EditorShellProps {
   basePath?: string;
   /** Called when markdown source changes */
   onChange?: (source: string) => void;
+  /**
+   * Delegate link activation to the embedding host. The callback receives the
+   * literal href as authored. Return `false` to allow the browser's default
+   * navigation; any other return (or void) marks the link as handled.
+   */
+  onLinkClick?: (href: string) => boolean | undefined;
   /**
    * Light/dark chrome color scheme for the editor shell — toolbar, tabs,
    * status bar, and side panes (default: `'light'`). This is the editor's
@@ -446,6 +453,7 @@ export function EditorShell({
   articleId = 'untitled',
   basePath = '/',
   onChange,
+  onLinkClick,
   colorScheme = 'light',
   className,
   height = '100vh',
@@ -555,6 +563,7 @@ export function EditorShell({
         <EditorShellInner
           basePath={basePath}
           onChange={onChange}
+          onLinkClick={onLinkClick}
           className={className}
           height={height}
           minHeight={minHeight}
@@ -594,6 +603,7 @@ export function EditorShell({
 interface EditorShellInnerProps {
   basePath: string;
   onChange?: (source: string) => void;
+  onLinkClick?: (href: string) => boolean | undefined;
   className?: string;
   height: string;
   minHeight?: string;
@@ -655,6 +665,7 @@ function UseModeProviders({
 function EditorShellInner({
   basePath,
   onChange,
+  onLinkClick,
   className,
   height,
   minHeight,
@@ -918,14 +929,57 @@ function EditorShellInner({
     [showPlayTab],
   );
 
+  const handleShellLinkClick = useCallback(
+    (event: ReactMouseEvent<HTMLDivElement>) => {
+      if (!onLinkClick || event.button !== 0) return;
+      const anchor = (event.target as HTMLElement).closest?.('a[href]');
+      if (!anchor || !event.currentTarget.contains(anchor)) return;
+      const href = anchor.getAttribute('href');
+      if (!href || onLinkClick(href) === false) return;
+      event.preventDefault();
+      event.stopPropagation();
+    },
+    [onLinkClick],
+  );
+
+  const handleShellLinkMouseOver = useCallback(
+    (event: ReactMouseEvent<HTMLDivElement>) => {
+      if (!onLinkClick) return;
+      const anchor = (event.target as HTMLElement).closest?.('a[href]');
+      if (!anchor || !event.currentTarget.contains(anchor)) return;
+      const href = anchor.getAttribute('href');
+      if (
+        !href ||
+        (anchor.hasAttribute('title') && !anchor.hasAttribute('data-squisq-link-title'))
+      ) {
+        return;
+      }
+      anchor.setAttribute('title', href);
+      anchor.setAttribute('data-squisq-link-title', 'true');
+    },
+    [onLinkClick],
+  );
+
+  const handleShellLinkMouseOut = useCallback((event: ReactMouseEvent<HTMLDivElement>) => {
+    const anchor = (event.target as HTMLElement).closest?.('a[data-squisq-link-title]');
+    if (!anchor || !event.currentTarget.contains(anchor)) return;
+    if (event.relatedTarget instanceof Node && anchor.contains(event.relatedTarget)) return;
+    anchor.removeAttribute('title');
+    anchor.removeAttribute('data-squisq-link-title');
+  }, []);
+
   const autoGrow = minHeight !== undefined || maxHeight !== undefined;
 
   return (
     <div
       ref={shellRef}
       onKeyDown={handleShellKeyDown}
+      onClickCapture={handleShellLinkClick}
+      onMouseOverCapture={handleShellLinkMouseOver}
+      onMouseOutCapture={handleShellLinkMouseOut}
       className={`squisq-editor-shell ${className || ''}`}
       data-theme={colorScheme}
+      data-link-handler={onLinkClick ? 'true' : undefined}
       data-full-width={fullWidth ? 'true' : undefined}
       data-thin-margins={thinMargins ? 'true' : undefined}
       data-outline-visible={isMarkdownMode && outlineVisible ? 'true' : undefined}

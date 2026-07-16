@@ -1189,6 +1189,12 @@
   text-underline-offset: 2px;
 }
 
+/* A host-delegated link is actionable even inside an editable text surface,
+   where the inherited cursor would otherwise remain an I-beam. */
+.squisq-editor-shell[data-link-handler='true'] a[href] {
+  cursor: pointer;
+}
+
 /* Tiptap placeholder */
 .squisq-wysiwyg-editor p.is-editor-empty:first-child::before {
   content: attr(data-placeholder);
