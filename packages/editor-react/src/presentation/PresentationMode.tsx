@@ -28,6 +28,7 @@ interface PresentationModeContextValue {
   selectedTarget: PresentationTarget;
   activeTarget: PresentationTarget | null;
   popupRoot: HTMLElement | null;
+  availableTargets: readonly PresentationTarget[];
   fullscreenSupported: boolean;
   selectTarget: (target: PresentationTarget) => void;
   start: () => Promise<void>;
@@ -52,6 +53,10 @@ export function usePresentationModeOptional(): PresentationModeContextValue | nu
 export interface PresentationModeProviderProps {
   rootRef: RefObject<HTMLElement>;
   children: ReactNode;
+  /** Whether the host supports opening the audience view in a separate window. */
+  allowWindow?: boolean;
+  /** Whether the host supports presenting through the browser Fullscreen API. */
+  allowFullscreen?: boolean;
 }
 
 const POPUP_WIDTH = 1280;
@@ -114,7 +119,12 @@ function presentationTitle(docTitle: unknown): string {
     : 'Squisq Presentation';
 }
 
-export function PresentationModeProvider({ rootRef, children }: PresentationModeProviderProps) {
+export function PresentationModeProvider({
+  rootRef,
+  children,
+  allowWindow = true,
+  allowFullscreen = true,
+}: PresentationModeProviderProps) {
   const { activeView, colorScheme, doc } = useEditorContext();
   const popupNameId = useId().replace(/[^a-zA-Z0-9_-]/g, '');
   const [selectedTarget, setSelectedTarget] = useState<PresentationTarget>('control');
@@ -131,6 +141,14 @@ export function PresentationModeProvider({ rootRef, children }: PresentationMode
   const fullscreenSupported =
     typeof document !== 'undefined' &&
     typeof document.documentElement.requestFullscreen === 'function';
+  const availableTargets = useMemo<readonly PresentationTarget[]>(
+    () => [
+      'control',
+      ...(allowWindow ? (['window'] as const) : []),
+      ...(allowFullscreen ? (['fullscreen'] as const) : []),
+    ],
+    [allowFullscreen, allowWindow],
+  );
 
   const releasePopup = useCallback((closeWindow: boolean) => {
     const popup = popupRef.current;
@@ -191,6 +209,7 @@ export function PresentationModeProvider({ rootRef, children }: PresentationMode
     }
 
     if (selectedTarget === 'fullscreen') {
+      if (!allowFullscreen) return;
       if (typeof root.requestFullscreen !== 'function') {
         setError('Browser full screen is not available here.');
         return;
@@ -205,6 +224,8 @@ export function PresentationModeProvider({ rootRef, children }: PresentationMode
       }
       return;
     }
+
+    if (!allowWindow) return;
 
     let popup: Window | null = null;
     try {
@@ -247,16 +268,34 @@ export function PresentationModeProvider({ rootRef, children }: PresentationMode
       else if (popup && !popup.closed) popup.close();
       setError('The presentation window was blocked. Allow pop-ups and try again.');
     }
-  }, [doc?.frontmatter?.title, popupNameId, releasePopup, rootRef, selectedTarget]);
+  }, [
+    allowFullscreen,
+    allowWindow,
+    doc?.frontmatter?.title,
+    popupNameId,
+    releasePopup,
+    rootRef,
+    selectedTarget,
+  ]);
 
   const selectTarget = useCallback(
     (target: PresentationTarget) => {
+      if (!availableTargets.includes(target)) return;
       if (target === selectedTarget) return;
       setSelectedTarget(target);
       if (activeTargetRef.current !== null) void stop();
     },
-    [selectedTarget, stop],
+    [availableTargets, selectedTarget, stop],
   );
+
+  // Hosts can change capabilities without remounting the editor. Leave any
+  // now-unavailable presentation and return the split button to its safe,
+  // in-control destination.
+  useEffect(() => {
+    if (availableTargets.includes(selectedTarget)) return;
+    setSelectedTarget('control');
+    if (activeTargetRef.current !== null) void stop();
+  }, [availableTargets, selectedTarget, stop]);
 
   // Fullscreen can end outside React (normally via the browser's Escape key).
   useEffect(() => {
@@ -341,12 +380,22 @@ export function PresentationModeProvider({ rootRef, children }: PresentationMode
       selectedTarget,
       activeTarget,
       popupRoot,
+      availableTargets,
       fullscreenSupported,
       selectTarget,
       start,
       stop,
     }),
-    [selectedTarget, activeTarget, popupRoot, fullscreenSupported, selectTarget, start, stop],
+    [
+      selectedTarget,
+      activeTarget,
+      popupRoot,
+      availableTargets,
+      fullscreenSupported,
+      selectTarget,
+      start,
+      stop,
+    ],
   );
 
   const exitButton = activeTarget ? (
@@ -414,16 +463,23 @@ const MENU_GAP = 4;
 
 /** Fixed Use-toolbar split button: launch on the left, destination on the right. */
 export function PresentationModeControl() {
-  const { selectedTarget, activeTarget, fullscreenSupported, selectTarget, start, stop } =
-    usePresentationMode();
+  const {
+    selectedTarget,
+    activeTarget,
+    availableTargets,
+    fullscreenSupported,
+    selectTarget,
+    start,
+    stop,
+  } = usePresentationMode();
   const { colorScheme } = useEditorContext();
   const triggerRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
   const [open, setOpen] = useState(false);
   const [anchor, setAnchor] = useState<{ top: number; left: number } | null>(null);
+  const options = PRESENTATION_OPTIONS.filter((option) => availableTargets.includes(option.target));
   const selected =
-    PRESENTATION_OPTIONS.find((option) => option.target === selectedTarget) ??
-    PRESENTATION_OPTIONS[0];
+    options.find((option) => option.target === selectedTarget) ?? PRESENTATION_OPTIONS[0];
 
   const updatePosition = useCallback(() => {
     const trigger = triggerRef.current;
@@ -493,25 +549,27 @@ export function PresentationModeControl() {
       >
         <Icon icon="fa-solid fa-display" />
       </button>
-      <button
-        ref={triggerRef}
-        type="button"
-        className={`squisq-presentation-menu-trigger${open ? ' squisq-presentation-menu-trigger--open' : ''}`}
-        aria-label="Presentation options"
-        aria-haspopup="menu"
-        aria-expanded={open}
-        title={`Presentation destination: ${selected.label}`}
-        onClick={() => (open ? closeMenu() : openMenu())}
-        onKeyDown={(event) => {
-          if (event.key !== 'ArrowDown') return;
-          event.preventDefault();
-          openMenu();
-        }}
-      >
-        <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true">
-          <path d="M2 3.5 5 6.5 8 3.5" fill="none" stroke="currentColor" strokeWidth="1.4" />
-        </svg>
-      </button>
+      {options.length > 1 && (
+        <button
+          ref={triggerRef}
+          type="button"
+          className={`squisq-presentation-menu-trigger${open ? ' squisq-presentation-menu-trigger--open' : ''}`}
+          aria-label="Presentation options"
+          aria-haspopup="menu"
+          aria-expanded={open}
+          title={`Presentation destination: ${selected.label}`}
+          onClick={() => (open ? closeMenu() : openMenu())}
+          onKeyDown={(event) => {
+            if (event.key !== 'ArrowDown') return;
+            event.preventDefault();
+            openMenu();
+          }}
+        >
+          <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true">
+            <path d="M2 3.5 5 6.5 8 3.5" fill="none" stroke="currentColor" strokeWidth="1.4" />
+          </svg>
+        </button>
+      )}
       {open && anchor
         ? createPortal(
             <div
@@ -547,7 +605,7 @@ export function PresentationModeControl() {
                 items[nextIndex]?.focus();
               }}
             >
-              {PRESENTATION_OPTIONS.map((option) => {
+              {options.map((option) => {
                 const isSelected = option.target === selectedTarget;
                 const disabled = option.target === 'fullscreen' && !fullscreenSupported;
                 return (

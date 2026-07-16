@@ -15,7 +15,7 @@
  * Call once, before the first editor mounts (typically in the app entry):
  *
  * ```ts
- * import { configureMonacoWorkers } from '@bendyline/squisq-editor-react';
+ * import { configureMonacoWorkers } from '@bendyline/squisq-editor-react/monaco-workers';
  * import EditorWorker from 'monaco-editor/esm/vs/editor/editor.worker?worker';
  * import JsonWorker   from 'monaco-editor/esm/vs/language/json/json.worker?worker';
  * import CssWorker    from 'monaco-editor/esm/vs/language/css/css.worker?worker';

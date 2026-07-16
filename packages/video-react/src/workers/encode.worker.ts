@@ -24,6 +24,11 @@ import {
 import type { FFmpeg } from '@ffmpeg/ffmpeg';
 
 import { createMp4Muxer, type Mp4MuxerHandle } from '../mp4Mux.js';
+import {
+  applyWebCodecsBackpressure,
+  resolveWebCodecsQueueLimit,
+  shouldEncodeFfmpegBatch,
+} from '../encoderMemory.js';
 
 // ── State ──────────────────────────────────────────────────────────
 
@@ -33,10 +38,12 @@ let cancelled = false;
 // WebCodecs state
 let videoEncoder: VideoEncoder | null = null;
 let muxer: Mp4MuxerHandle | null = null;
+let webCodecsQueueLimit = 1;
 
 // ffmpeg.wasm state
 let ffmpegInstance: FFmpeg | null = null;
 let ffmpegFrames: Array<{ data: Uint8Array; index: number }> = [];
+let ffmpegFrameBytes = 0;
 let ffmpegConfig: InitMessage | null = null;
 
 // Frame tracking
@@ -145,6 +152,7 @@ function initWebCodecs(config: InitMessage) {
     bitrate: bitrateForQuality(config.quality, config.width, config.height),
     framerate: config.fps,
   });
+  webCodecsQueueLimit = resolveWebCodecsQueueLimit(config);
 }
 
 async function encodeFrameWebCodecs(msg: FrameMessage) {
@@ -153,12 +161,21 @@ async function encodeFrameWebCodecs(msg: FrameMessage) {
     return;
   }
 
-  const frame = new VideoFrame(msg.bitmap, { timestamp: msg.timestamp });
-  const keyFrame = msg.frameIndex % 30 === 0; // Key frame every 30 frames
-  videoEncoder.encode(frame, { keyFrame });
-  frame.close();
-  msg.bitmap.close();
-  totalFramesReceived++;
+  try {
+    await applyWebCodecsBackpressure(videoEncoder, webCodecsQueueLimit);
+    if (cancelled || videoEncoder.state === 'closed') return;
+
+    const frame = new VideoFrame(msg.bitmap, { timestamp: msg.timestamp });
+    try {
+      const keyFrame = msg.frameIndex % 30 === 0; // Key frame every 30 frames
+      videoEncoder.encode(frame, { keyFrame });
+    } finally {
+      frame.close();
+    }
+    totalFramesReceived++;
+  } finally {
+    msg.bitmap.close();
+  }
 
   postFrameProgress(50, frameLabel('Encoding'));
 }
@@ -190,6 +207,7 @@ async function finalizeWebCodecs() {
 async function initFfmpegWasm(config: InitMessage) {
   ffmpegConfig = config;
   ffmpegFrames = [];
+  ffmpegFrameBytes = 0;
   ffmpegSegments.length = 0;
   totalFramesReceived = 0;
 
@@ -238,14 +256,16 @@ async function encodeFrameFfmpeg(msg: FrameMessage) {
 
   const blob = await canvas.convertToBlob({ type: 'image/png' });
   const arrayBuffer = await blob.arrayBuffer();
-  ffmpegFrames.push({ data: new Uint8Array(arrayBuffer), index: msg.frameIndex });
+  const frameData = new Uint8Array(arrayBuffer);
+  ffmpegFrames.push({ data: frameData, index: msg.frameIndex });
+  ffmpegFrameBytes += frameData.byteLength;
   totalFramesReceived++;
 
   postFrameProgress(80, frameLabel('Collecting'));
 
-  // Batch encode every ~10 seconds worth of frames
-  const batchSize = (ffmpegConfig?.fps ?? 30) * 10;
-  if (ffmpegFrames.length >= batchSize) {
+  // Encode and release PNGs after at most six seconds or 64 MiB. A time-only
+  // limit can still retain hundreds of noisy 1080p frames.
+  if (shouldEncodeFfmpegBatch(ffmpegFrames.length, ffmpegFrameBytes, ffmpegConfig?.fps ?? 30)) {
     await encodeFfmpegBatch();
   }
 }
@@ -325,6 +345,7 @@ async function encodeFfmpegBatch() {
 
   // Free batch memory
   ffmpegFrames = [];
+  ffmpegFrameBytes = 0;
 }
 
 async function finalizeFfmpeg() {
@@ -449,6 +470,7 @@ async function handleMessage(msg: MainToWorkerMessage): Promise<void> {
       muxer = null;
       disposeFfmpeg();
       ffmpegFrames = [];
+      ffmpegFrameBytes = 0;
       ffmpegSegments.length = 0;
       totalFramesExpected = 0;
       backend = null;

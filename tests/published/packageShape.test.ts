@@ -18,15 +18,18 @@ interface PackResult {
 }
 
 const PACKED_SIZE_BUDGETS: Record<string, number> = {
-  '@bendyline/squisq': 500_000,
-  '@bendyline/squisq-formats': 160_000,
-  '@bendyline/squisq-react': 2_200_000,
-  '@bendyline/squisq-video': 25_000,
-  '@bendyline/squisq-video-react': 50_000,
-  '@bendyline/squisq-editor-react': 800_000,
+  // These are coarse release guardrails, not byte-level regression targets.
+  // Keep enough headroom that normal feature work does not require continually
+  // ratcheting the limits while still catching accidental payload additions.
+  '@bendyline/squisq': 650_000,
+  '@bendyline/squisq-formats': 200_000,
+  '@bendyline/squisq-react': 2_750_000,
+  '@bendyline/squisq-video': 35_000,
+  '@bendyline/squisq-video-react': 75_000,
+  '@bendyline/squisq-editor-react': 1_000_000,
   // Includes the compressed light standalone player so CLI-only installs no
   // longer pull the complete React/Mermaid dependency graph.
-  '@bendyline/squisq-cli': 450_000,
+  '@bendyline/squisq-cli': 550_000,
 };
 
 function dryRunPack(directory: string, cache: string): PackResult {

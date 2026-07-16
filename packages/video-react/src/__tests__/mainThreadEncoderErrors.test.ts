@@ -35,9 +35,14 @@ import { createEncoder } from '../mainThreadEncoder.js';
 let errorCallback: ((err: DOMException) => void) | null = null;
 let flushBehavior: () => Promise<void> = async () => {};
 let encoderState: 'unconfigured' | 'configured' | 'closed' = 'unconfigured';
+let encodeQueueSize = 0;
+let flushCount = 0;
 
 class FakeVideoEncoder {
   state = 'unconfigured';
+  get encodeQueueSize() {
+    return encodeQueueSize;
+  }
   constructor(init: { output: (chunk: unknown) => void; error: (err: DOMException) => void }) {
     errorCallback = init.error;
   }
@@ -45,9 +50,13 @@ class FakeVideoEncoder {
     this.state = 'configured';
     encoderState = 'configured';
   }
-  encode() {}
+  encode() {
+    encodeQueueSize++;
+  }
   async flush() {
+    flushCount++;
     await flushBehavior();
+    encodeQueueSize = 0;
   }
   close() {
     this.state = 'closed';
@@ -73,6 +82,8 @@ describe('mainThreadEncoder error propagation', () => {
   beforeEach(() => {
     errorCallback = null;
     encoderState = 'unconfigured';
+    encodeQueueSize = 0;
+    flushCount = 0;
     flushBehavior = async () => {};
     muxerState.finalize.mockClear();
     muxerState.addVideoChunk.mockClear();
@@ -156,5 +167,16 @@ describe('mainThreadEncoder error propagation', () => {
     await encoder.encodeFrame(fakeBitmap(), 0);
     await expect(encoder.finalize()).resolves.toBeInstanceOf(ArrayBuffer);
     expect(muxerState.finalize).toHaveBeenCalledOnce();
+  });
+
+  it('drains a saturated WebCodecs queue before accepting more raw frames', async () => {
+    const encoder = createEncoder({ ...CONFIG, width: 1920, height: 1080 });
+
+    // 1080p RGBA frames are bounded by the 64 MiB limit at eight queued
+    // frames. The ninth submission must wait for a flush before encoding.
+    for (let i = 0; i < 9; i++) await encoder.encodeFrame(fakeBitmap(), i);
+
+    expect(flushCount).toBe(1);
+    expect(encodeQueueSize).toBe(1);
   });
 });

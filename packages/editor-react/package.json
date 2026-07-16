@@ -44,6 +44,10 @@
       "types": "./dist/monaco.d.ts",
       "import": "./dist/monaco.js"
     },
+    "./monaco-workers": {
+      "types": "./dist/monaco-workers/index.d.ts",
+      "import": "./dist/monaco-workers/index.js"
+    },
     "./shell": {
       "types": "./dist/shell/index.d.ts",
       "import": "./dist/shell/index.js"

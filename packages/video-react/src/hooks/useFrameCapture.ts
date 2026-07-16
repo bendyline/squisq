@@ -44,6 +44,40 @@ const MIME_MAP: Record<string, string> = {
   avif: 'image/avif',
 };
 
+const VISUAL_UPDATE_FALLBACK_MS = 100;
+
+/**
+ * Let React and the browser present DOM changes without waiting forever for
+ * animation frames that Chromium may suspend in a background tab/window.
+ */
+export function waitForVisualUpdate(frameCount = 1): Promise<void> {
+  return new Promise((resolve) => {
+    let settled = false;
+    let animationFrame: number | null = null;
+    const finish = (): void => {
+      if (settled) return;
+      settled = true;
+      window.clearTimeout(fallback);
+      if (animationFrame !== null) window.cancelAnimationFrame(animationFrame);
+      resolve();
+    };
+    const fallback = window.setTimeout(
+      finish,
+      document.visibilityState === 'visible' ? VISUAL_UPDATE_FALLBACK_MS : 0,
+    );
+
+    if (document.visibilityState !== 'visible') return;
+
+    const waitForFrame = (remaining: number): void => {
+      animationFrame = window.requestAnimationFrame(() => {
+        if (remaining <= 1) finish();
+        else waitForFrame(remaining - 1);
+      });
+    };
+    waitForFrame(Math.max(1, frameCount));
+  });
+}
+
 /**
  * Create a temporary MediaProvider backed by blob URLs. This avoids retaining
  * a second, base64-expanded copy of every export asset in JavaScript strings.
@@ -221,10 +255,9 @@ export function useFrameCapture(): FrameCaptureHandle {
     // Seek the player to the target time
     await api.seekTo(time);
 
-    // Wait for the DOM to update after seek
-    await new Promise<void>((resolve) =>
-      requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
-    );
+    // Wait for the DOM to update after seek. Keep a task-based fallback so a
+    // backgrounded browser/Electron renderer cannot deadlock the export.
+    await waitForVisualUpdate(2);
 
     const root = container.querySelector('#squisq-capture-root') as HTMLElement;
     if (!root) {
@@ -243,9 +276,16 @@ export function useFrameCapture(): FrameCaptureHandle {
       logging: false,
     });
 
-    // Convert to ImageBitmap (transferable to worker — zero-copy)
-    const bitmap = await createImageBitmap(canvas);
-    return bitmap;
+    // Convert to ImageBitmap (transferable to worker — zero-copy). html2canvas
+    // creates a fresh backing store for every frame; resize it immediately once
+    // the bitmap owns its snapshot so long exports do not wait for a later GC
+    // cycle to reclaim gigabytes of cumulative canvas allocations.
+    try {
+      return await createImageBitmap(canvas);
+    } finally {
+      canvas.width = 0;
+      canvas.height = 0;
+    }
   }, []);
 
   const destroy = useCallback(() => {

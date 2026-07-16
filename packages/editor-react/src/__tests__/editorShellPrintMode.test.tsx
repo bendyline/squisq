@@ -26,6 +26,23 @@ beforeEach(() => {
 });
 
 describe('<EditorShell> print mode', () => {
+  it('honors presentation and print capabilities supplied by an embedded host', () => {
+    render(
+      <EditorShell
+        initialMarkdown="# Embedded"
+        initialView="preview"
+        showStatusBar={false}
+        allowPresentationWindow={false}
+        allowPresentationFullscreen={false}
+        allowPrint={false}
+      />,
+    );
+
+    expect(screen.getByRole('button', { name: 'Present: Fill Squisq' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Presentation options' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Print' })).toBeNull();
+  });
+
   it('places Print after Present and replaces the Use controls until Close', () => {
     render(
       <EditorShell initialMarkdown="# Print me" initialView="preview" showStatusBar={false} />,

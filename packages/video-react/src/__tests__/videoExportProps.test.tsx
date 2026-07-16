@@ -60,9 +60,11 @@ describe('VideoExportButton', () => {
 });
 
 describe('VideoExportModal', () => {
-  it('has dialog semantics, keyboard dismissal, and no automated WCAG A/AA violations', async () => {
+  it('is only dismissed by explicit controls and has no automated WCAG A/AA violations', async () => {
     const onClose = vi.fn();
-    const { getByRole } = render(<VideoExportModal doc={minimalDoc()} onClose={onClose} />);
+    const { container, getByRole } = render(
+      <VideoExportModal doc={minimalDoc()} onClose={onClose} />,
+    );
     const dialog = getByRole('dialog', { name: 'Export Video' });
     expect(dialog.getAttribute('aria-modal')).toBe('true');
 
@@ -72,7 +74,20 @@ describe('VideoExportModal', () => {
     });
     expect(results.violations).toEqual([]);
 
+    fireEvent.click(container.querySelector('[data-color-scheme="light"]')!);
     fireEvent.keyDown(document, { key: 'Escape' });
+    expect(onClose).not.toHaveBeenCalled();
+
+    fireEvent.click(getByRole('button', { name: 'Close export dialog' }));
+    expect(onClose).toHaveBeenCalledOnce();
+  });
+
+  it('closes from the explicit Cancel button', () => {
+    const onClose = vi.fn();
+    const { getByRole } = render(<VideoExportModal doc={minimalDoc()} onClose={onClose} />);
+
+    fireEvent.click(getByRole('button', { name: 'Cancel' }));
+
     expect(onClose).toHaveBeenCalledOnce();
   });
 

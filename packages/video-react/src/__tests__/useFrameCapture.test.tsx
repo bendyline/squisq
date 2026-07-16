@@ -1,7 +1,11 @@
 import { renderHook } from '@testing-library/react';
 import type { Doc } from '@bendyline/squisq/schemas';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { createInlineProvider, useFrameCapture } from '../hooks/useFrameCapture';
+import {
+  createInlineProvider,
+  useFrameCapture,
+  waitForVisualUpdate,
+} from '../hooks/useFrameCapture';
 
 const frameCaptureMocks = vi.hoisted(() => {
   const render = vi.fn();
@@ -23,8 +27,38 @@ vi.mock('html2canvas', () => ({ default: frameCaptureMocks.html2canvas }));
 
 beforeEach(() => vi.clearAllMocks());
 afterEach(() => {
+  vi.useRealTimers();
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
+});
+
+describe('waitForVisualUpdate', () => {
+  it('settles through its timeout when Chromium suspends animation frames', async () => {
+    vi.useFakeTimers();
+    vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('visible');
+    const requestFrame = vi.fn(() => 1);
+    vi.stubGlobal('requestAnimationFrame', requestFrame);
+    vi.stubGlobal('cancelAnimationFrame', vi.fn());
+
+    const pending = waitForVisualUpdate(2);
+    await vi.advanceTimersByTimeAsync(100);
+
+    await expect(pending).resolves.toBeUndefined();
+    expect(requestFrame).toHaveBeenCalledOnce();
+  });
+
+  it('uses an immediate task when the document is already hidden', async () => {
+    vi.useFakeTimers();
+    vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('hidden');
+    const requestFrame = vi.fn(() => 1);
+    vi.stubGlobal('requestAnimationFrame', requestFrame);
+
+    const pending = waitForVisualUpdate(2);
+    await vi.advanceTimersByTimeAsync(0);
+
+    await expect(pending).resolves.toBeUndefined();
+    expect(requestFrame).not.toHaveBeenCalled();
+  });
 });
 
 describe('createInlineProvider', () => {
@@ -137,6 +171,8 @@ describe('useFrameCapture', () => {
       expect.objectContaining({ width: 800, height: 450, backgroundColor: '#000000' }),
     );
     expect(createBitmap).toHaveBeenCalledWith(canvas);
+    expect(canvas.width).toBe(0);
+    expect(canvas.height).toBe(0);
 
     result.current.destroy();
     expect(frameCaptureMocks.unmount).toHaveBeenCalledTimes(2);

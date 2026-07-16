@@ -81,7 +81,12 @@ export function createMp4Muxer(options: Mp4MuxerOptions): Mp4MuxerHandle {
           },
         }
       : {}),
-    fastStart: 'in-memory',
+    // The result is already complete before it is downloaded or passed to the
+    // GIF transcode, so browser-style fast start provides no benefit here.
+    // `in-memory` retains every encoded sample until finalize; regular MP4
+    // layout writes each compressed chunk into the output as it arrives and
+    // releases the sample payload immediately.
+    fastStart: false,
   });
 
   return {

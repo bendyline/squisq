@@ -191,6 +191,18 @@ export interface EditorShellProps {
    */
   showPlayTab?: boolean;
   /**
+   * Whether Use mode may open its audience view in a separate browser window.
+   * Defaults to true. Disable this in embedded hosts that block popups.
+   */
+  allowPresentationWindow?: boolean;
+  /**
+   * Whether Use mode may enter browser full screen. Defaults to true. Disable
+   * this in embedded hosts whose webview does not support the Fullscreen API.
+   */
+  allowPresentationFullscreen?: boolean;
+  /** Whether to offer print preview and browser printing. Defaults to true. */
+  allowPrint?: boolean;
+  /**
    * Optional "submit on Enter" callback. When provided, a plain Enter
    * keypress fires this callback instead of inserting a newline, and
    * Cmd/Ctrl+Enter inserts a newline instead. Matches chat-composer UX
@@ -472,6 +484,9 @@ export function EditorShell({
   toolbarSlotRight,
   statusBarSlotRight,
   showPlayTab = true,
+  allowPresentationWindow = true,
+  allowPresentationFullscreen = true,
+  allowPrint = true,
   submitOnEnter,
   codeContext,
   fullWidth = false,
@@ -577,6 +592,9 @@ export function EditorShell({
           toolbarSlotRight={toolbarSlotRight}
           statusBarSlotRight={statusBarSlotRight}
           showPlayTab={showPlayTab}
+          allowPresentationWindow={allowPresentationWindow}
+          allowPresentationFullscreen={allowPresentationFullscreen}
+          allowPrint={allowPrint}
           submitOnEnter={submitOnEnter}
           codeContext={codeContext}
           fullWidth={fullWidth}
@@ -617,6 +635,9 @@ interface EditorShellInnerProps {
   toolbarSlotRight?: ReactNode;
   statusBarSlotRight?: ReactNode;
   showPlayTab: boolean;
+  allowPresentationWindow: boolean;
+  allowPresentationFullscreen: boolean;
+  allowPrint: boolean;
   submitOnEnter?: () => void;
   codeContext?: CodeContext;
   fullWidth: boolean;
@@ -636,14 +657,14 @@ interface EditorShellInnerProps {
   themeOverride: Theme | null;
 }
 
-function UseModeToolbarControls() {
+function UseModeToolbarControls({ allowPrint }: { allowPrint: boolean }) {
   const printMode = usePrintMode();
   if (printMode.active) return <PrintPreviewToolbar />;
   return (
     <>
       <PreviewToolbarControls />
       <PresentationModeControl />
-      <PrintModeControl />
+      {allowPrint && <PrintModeControl />}
     </>
   );
 }
@@ -651,12 +672,20 @@ function UseModeToolbarControls() {
 function UseModeProviders({
   rootRef,
   children,
+  allowPresentationWindow,
+  allowPresentationFullscreen,
 }: {
   rootRef: RefObject<HTMLElement>;
   children: ReactNode;
+  allowPresentationWindow: boolean;
+  allowPresentationFullscreen: boolean;
 }) {
   return (
-    <PresentationModeProvider rootRef={rootRef}>
+    <PresentationModeProvider
+      rootRef={rootRef}
+      allowWindow={allowPresentationWindow}
+      allowFullscreen={allowPresentationFullscreen}
+    >
       <PrintModeProvider rootRef={rootRef}>{children}</PrintModeProvider>
     </PresentationModeProvider>
   );
@@ -679,6 +708,9 @@ function EditorShellInner({
   toolbarSlotRight,
   statusBarSlotRight,
   showPlayTab,
+  allowPresentationWindow,
+  allowPresentationFullscreen,
+  allowPrint,
   submitOnEnter,
   codeContext,
   fullWidth,
@@ -1009,7 +1041,11 @@ function EditorShellInner({
     >
       <CustomThemeProvider docThemes={docThemes} onDocThemesChange={onDocThemesChange}>
         <PreviewSettingsProvider doc={doc} themeOverride={themeOverride}>
-          <UseModeProviders rootRef={shellRef}>
+          <UseModeProviders
+            rootRef={shellRef}
+            allowPresentationWindow={allowPresentationWindow}
+            allowPresentationFullscreen={allowPresentationFullscreen}
+          >
             {/* Header. In image mode the full markdown/code Toolbar is replaced
             with a minimal slot bar — view tabs, formatting, and preview
             controls don't apply to a binary asset. */}
@@ -1028,7 +1064,9 @@ function EditorShellInner({
                   fileCount={mediaCount}
                   onToggleFiles={!isCodeMode && filesToggleEnabled ? handleToggleFiles : undefined}
                   slotLeft={toolbarSlotLeft}
-                  slotAfterTabs={!isCodeMode && isPreview && <UseModeToolbarControls />}
+                  slotAfterTabs={
+                    !isCodeMode && isPreview && <UseModeToolbarControls allowPrint={allowPrint} />
+                  }
                   slotAfterActions={toolbarSlotAfterActions}
                   slotRight={toolbarSlotRight}
                   showPlayTab={showPlayTab}

@@ -686,6 +686,33 @@ describe('DocPlayer smoke test', () => {
     expect(firstController.seekTo).not.toHaveBeenCalled();
   });
 
+  it('settles render-mode seeks when Chromium suspends animation frames', async () => {
+    vi.useFakeTimers();
+    const requestFrame = vi.spyOn(window, 'requestAnimationFrame').mockImplementation(() => 1);
+    try {
+      const observed: Array<SquisqRenderAPI | null> = [];
+      render(
+        <DocPlayer
+          doc={minimalDoc()}
+          renderMode
+          audioController={controller()}
+          onRenderAPIReady={(api) => observed.push(api)}
+        />,
+      );
+      const api = observed[observed.length - 1];
+      expect(api).not.toBeNull();
+
+      const pendingSeek = api!.seekTo(2.5);
+      await vi.advanceTimersByTimeAsync(200);
+
+      await expect(pendingSeek).resolves.toBeUndefined();
+      expect(requestFrame).toHaveBeenCalled();
+    } finally {
+      requestFrame.mockRestore();
+      vi.useRealTimers();
+    }
+  });
+
   it('refreshes instance render metadata when the doc prop changes', () => {
     const firstDoc: Doc = { ...minimalDoc(), captions: { version: 1, phrases: [] } };
     const observed: Array<SquisqRenderAPI | null> = [];

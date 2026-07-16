@@ -14,6 +14,7 @@
 import { bitrateForQuality, validateVideoExportOptions } from '@bendyline/squisq-video';
 
 import { createMp4Muxer, type Mp4MuxerHandle } from './mp4Mux.js';
+import { applyWebCodecsBackpressure, resolveWebCodecsQueueLimit } from './encoderMemory.js';
 
 export interface EncoderConfig {
   width: number;
@@ -116,6 +117,7 @@ export function createEncoder(config: EncoderConfig): MainThreadEncoder {
    */
   let fatalError: Error | null = null;
   const frameDuration = 1_000_000 / config.fps; // microseconds per frame
+  const queueLimit = resolveWebCodecsQueueLimit(config);
 
   /** Tear the encoder down and surface the latched (or supplied) failure. */
   function fail(err: Error): Error {
@@ -157,12 +159,28 @@ export function createEncoder(config: EncoderConfig): MainThreadEncoder {
         bitmap.close();
         throw new Error('Encoder already closed');
       }
-      const timestamp = Math.round(frameIndex * frameDuration);
-      const frame = new VideoFrame(bitmap, { timestamp });
-      const keyFrame = frameIndex % 30 === 0;
-      encoder.encode(frame, { keyFrame });
-      frame.close();
-      bitmap.close();
+      try {
+        // `encode()` is asynchronous and closing the VideoFrame does not mean
+        // Chromium has released its pixels. A software encoder can otherwise
+        // trail capture by hundreds of frames and eventually force the renderer
+        // into memory-pressure thrashing.
+        await applyWebCodecsBackpressure(encoder, queueLimit);
+        if (fatalError) throw fail(fatalError);
+        if (closed) throw new Error('Encoder already closed');
+
+        const timestamp = Math.round(frameIndex * frameDuration);
+        const frame = new VideoFrame(bitmap, { timestamp });
+        try {
+          const keyFrame = frameIndex % 30 === 0;
+          encoder.encode(frame, { keyFrame });
+        } finally {
+          frame.close();
+        }
+      } catch (err: unknown) {
+        throw fail(err instanceof Error ? err : new Error(String(err)));
+      } finally {
+        bitmap.close();
+      }
     },
 
     addAudioChunk(chunk: EncodedAudioChunk, meta?: EncodedAudioChunkMetadata) {
