@@ -9,6 +9,7 @@ import { replaceCodeSnippetText } from './codeSnippetCommands';
 import { useCodeSnippetData } from './codeSnippetData';
 import { focusCodeSnippetAtEnd } from './codeSnippetFocus';
 import { codeSnippetFenceLanguageToken } from './codeSnippetLanguages';
+import { CODE_SNIPPET_LINE_HEIGHT, codeSnippetAutoHeight } from './codeSnippetSizing';
 
 export interface CodeSnippetWidgetProps {
   editor: Editor;
@@ -81,7 +82,11 @@ export function CodeSnippetWidget({
   );
 
   return (
-    <div className="squisq-code-snippet-shell" data-language={data.fenceLanguage}>
+    <div
+      className="squisq-code-snippet-shell"
+      data-language={data.fenceLanguage}
+      style={{ height: codeSnippetAutoHeight(data.source) }}
+    >
       <div className="squisq-code-snippet-header">
         <span className="squisq-code-snippet-title">
           <Icon icon="fa-solid fa-file-code" />
@@ -102,6 +107,7 @@ export function CodeSnippetWidget({
               contextmenu: true,
               folding: true,
               fontSize: 13,
+              lineHeight: CODE_SNIPPET_LINE_HEIGHT,
               lineNumbers: 'on',
               minimap: { enabled: false },
               padding: { top: 10, bottom: 10 },

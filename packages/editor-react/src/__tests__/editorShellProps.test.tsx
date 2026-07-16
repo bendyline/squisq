@@ -317,10 +317,22 @@ describe('<EditorShell> Files badge', () => {
     expect(container.querySelector('.squisq-toolbar-files-badge')?.textContent).toBe('1');
   });
 
-  it('hides .gitignore entries from the Files panel and its count', async () => {
+  it('hides internal metadata and version entries from the Files panel and its count', async () => {
     const { provider } = mutableMediaProviderWith([
       { name: '.gitignore', mimeType: 'text/plain', size: 11 },
       { name: 'notes_files/.gitignore', mimeType: 'text/plain', size: 11 },
+      { name: '.versions/index.20260101T000000Z.md', mimeType: 'text/markdown', size: 24 },
+      {
+        name: '.imageEdits/hero-png-123/.versions/state.20260101T000000Z.json',
+        mimeType: 'application/json',
+        size: 256,
+      },
+      {
+        name: '.imageEdits/hero-png-123/state.json',
+        mimeType: 'application/json',
+        size: 256,
+      },
+      { name: 'legacy_files/state.json', mimeType: 'application/json', size: 256 },
       { name: 'notes_files/hero.png', mimeType: 'image/png', size: 1024 },
     ]);
 
@@ -333,6 +345,7 @@ describe('<EditorShell> Files badge', () => {
 
     expect(await screen.findByText('hero.png')).toBeTruthy();
     expect(screen.queryByText('.gitignore')).toBeNull();
+    expect(screen.queryByText('state.json')).toBeNull();
     expect(screen.getByText('Files (1)')).toBeTruthy();
   });
 
