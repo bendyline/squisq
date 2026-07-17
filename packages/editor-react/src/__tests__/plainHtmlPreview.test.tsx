@@ -26,6 +26,37 @@ describe('PlainHtmlPreview', () => {
     expect(sandbox).not.toContain('allow-scripts');
   });
 
+  it('delegates iframe link clicks with the literal href', () => {
+    const onLinkClick = vi.fn();
+    render(<PlainHtmlPreview markdown={'[Guide](../guide.md#start)'} onLinkClick={onLinkClick} />);
+    const iframe = screen.getByTestId('plain-html-preview') as HTMLIFrameElement;
+    const anchor = iframe.contentDocument!.createElement('a');
+    anchor.setAttribute('href', '../guide.md#start');
+    anchor.textContent = 'Guide';
+    iframe.contentDocument!.body.append(anchor);
+    fireEvent.load(iframe);
+
+    const event = new MouseEvent('click', { bubbles: true, cancelable: true });
+    anchor.dispatchEvent(event);
+
+    expect(onLinkClick).toHaveBeenCalledWith('../guide.md#start');
+    expect(event.defaultPrevented).toBe(true);
+  });
+
+  it('allows native iframe navigation when the host returns false', () => {
+    render(<PlainHtmlPreview markdown={'[Section](#section)'} onLinkClick={() => false} />);
+    const iframe = screen.getByTestId('plain-html-preview') as HTMLIFrameElement;
+    const anchor = iframe.contentDocument!.createElement('a');
+    anchor.setAttribute('href', '#section');
+    iframe.contentDocument!.body.append(anchor);
+    fireEvent.load(iframe);
+
+    const event = new MouseEvent('click', { bubbles: true, cancelable: true });
+    anchor.dispatchEvent(event);
+
+    expect(event.defaultPrevented).toBe(false);
+  });
+
   it('globally scrolls the iframe with up and down arrows when enabled', () => {
     render(<PlainHtmlPreview markdown={'# Scroll me'} globalKeyboardShortcuts />);
     const iframe = screen.getByTestId('plain-html-preview') as HTMLIFrameElement;

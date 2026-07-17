@@ -133,6 +133,39 @@ describe('canonical template materialization', () => {
     expect((result.layers ?? []).length).toBeGreaterThan(0);
   });
 
+  it('adds breathing room before the subtitle when a title wraps', () => {
+    const block: TemplateBlock = {
+      template: 'title',
+      id: 'wrapped-title',
+      duration: 10,
+      audioSegment: 0,
+      title: 'DocBlocks: one Markdown file, many finished forms',
+      subtitle: 'Local-first writing for pages, documents, slideshows, and video',
+    };
+    const viewport = VIEWPORT_PRESETS.landscape;
+    const context = createTemplateContext(DEFAULT_THEME, 0, 1, viewport);
+    const result = materializeTemplateForTest(block, context);
+    const title = (result.layers ?? []).find(
+      (layer): layer is TextLayer => layer.type === 'text' && layer.id === 'title',
+    );
+    const subtitle = (result.layers ?? []).find(
+      (layer): layer is TextLayer => layer.type === 'text' && layer.id === 'subtitle',
+    );
+    expect(title).toBeDefined();
+    expect(subtitle).toBeDefined();
+
+    const yPx = (layer: TextLayer) =>
+      (Number.parseFloat(String(layer.position.y)) / 100) * viewport.height;
+    const titleFontSize = title!.content.style.fontSize;
+    const subtitleFontSize = subtitle!.content.style.fontSize;
+    const estimatedTwoLineTitleBottom = yPx(title!) + titleFontSize * 1.15;
+    const estimatedSubtitleTop = yPx(subtitle!) - (subtitleFontSize * 1.5) / 2;
+
+    expect(estimatedSubtitleTop - estimatedTwoLineTitleBottom).toBeGreaterThanOrEqual(
+      56 + titleFontSize * 0.24,
+    );
+  });
+
   it('expands leftFeature template with image on the left half and left-aligned text right', () => {
     const block: TemplateBlock = {
       template: 'leftFeature',

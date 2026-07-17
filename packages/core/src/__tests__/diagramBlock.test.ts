@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { diagramBlock } from '../doc/templates/diagramBlock.js';
 import { createTemplateContext } from '../schemas/BlockTemplates.js';
-import { DEFAULT_THEME } from '../schemas/themeLibrary.js';
+import { DEFAULT_THEME, resolveTheme } from '../schemas/themeLibrary.js';
 import { VIEWPORT_PRESETS } from '../schemas/Viewport.js';
 import type { Block, Layer, ShapeLayer, PathLayer, TextLayer } from '../schemas/Doc.js';
 import type { DiagramBlockInput } from '../schemas/BlockTemplates.js';
@@ -39,6 +39,35 @@ describe('diagramBlock template', () => {
     expect(texts.length).toBe(2);
     expect(texts[0].content.text).toBe('Alpha');
     expect(texts[1].content.text).toBe('Beta');
+  });
+
+  it('inherits node, edge, and label colors from the active theme by default', () => {
+    const theme = resolveTheme('warm-earth');
+    const ctx = createTemplateContext(theme, 0, 1, VIEWPORT_PRESETS.landscape);
+    ctx.children = [
+      makeBlock({ id: 'a', title: 'Alpha', x: 100, y: 100, connectsTo: [{ target: 'b' }] }),
+      makeBlock({ id: 'b', title: 'Beta', x: 400, y: 100 }),
+    ];
+
+    const layers = diagramBlock(makeInput(), ctx);
+    const card = layers.find(
+      (layer): layer is ShapeLayer => layer.type === 'shape' && layer.id === 'node-card-a',
+    );
+    const edge = layers.find((layer): layer is PathLayer => layer.type === 'path');
+    const label = layers.find(
+      (layer): layer is TextLayer => layer.type === 'text' && layer.id === 'node-label-a',
+    );
+    expect(card?.content.fill).toBe(theme.colors.backgroundLight);
+    expect(card?.content.stroke).toBe(theme.colors.primary);
+    expect(edge?.content.stroke).toBe(theme.colors.primary);
+    expect(label?.content.style.color).toBe(theme.colors.text);
+
+    const explicit = diagramBlock(makeInput({ colorScheme: 'blue' }), ctx);
+    const explicitCard = explicit.find(
+      (layer): layer is ShapeLayer => layer.type === 'shape' && layer.id === 'node-card-a',
+    );
+    expect(explicitCard?.content.fill).toBe(theme.colorSchemes.blue.bg);
+    expect(explicitCard?.content.stroke).toBe(theme.colorSchemes.blue.text);
   });
 
   it('emits a path layer with arrow for each connectsTo entry', () => {

@@ -38,6 +38,8 @@ export interface PreviewPanelProps {
    * `timing.json` reading.
    */
   workspaceContainer?: ContentContainer | null;
+  /** Delegate authored link activation to the embedding host. */
+  onLinkClick?: (href: string) => boolean | undefined;
 }
 
 // ── Component ──────────────────────────────────────────────────────
@@ -47,7 +49,12 @@ export interface PreviewPanelProps {
  * or document view. Controls (viewport, mode, theme, transform, captions)
  * are rendered in the main toolbar via PreviewToolbarControls.
  */
-export function PreviewPanel({ basePath = '/', className, workspaceContainer }: PreviewPanelProps) {
+export function PreviewPanel({
+  basePath = '/',
+  className,
+  workspaceContainer,
+  onLinkClick,
+}: PreviewPanelProps) {
   const {
     doc,
     parseError,
@@ -314,6 +321,7 @@ export function PreviewPanel({ basePath = '/', className, workspaceContainer }: 
           mediaRevision={mediaRevision}
           theme={activeTheme}
           globalKeyboardShortcuts={!audience}
+          onLinkClick={onLinkClick}
         />
       );
     }

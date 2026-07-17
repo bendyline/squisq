@@ -11,7 +11,12 @@
  * 4. Synthesize a dummy audio segment for timer-based playback
  */
 
-import { deriveTemplateInputs, flattenRenderableBlocks, hasTemplate } from '@bendyline/squisq/doc';
+import {
+  coerceTemplateParams,
+  deriveTemplateInputs,
+  flattenRenderableBlocks,
+  hasTemplate,
+} from '@bendyline/squisq/doc';
 import { extractPlainText, KNOWN_BLOCK_META_KEYS } from '@bendyline/squisq/markdown';
 import { getChildren } from '@bendyline/squisq/markdown';
 import { iconMarker } from '@bendyline/squisq/icon-marker';
@@ -221,6 +226,10 @@ function blockToSlide(
   const recognized = hasTemplate(requestedTemplate) || isCustomTemplate;
   const template = recognized ? requestedTemplate : 'sectionHeader';
   const defaults = getTemplateDefaults(template, headingText, block);
+  const templateOverrides = omitStringBlockMeta(block.templateOverrides);
+  const coercedTemplateOverrides = templateOverrides
+    ? coerceTemplateParams(template, templateOverrides).input
+    : undefined;
 
   const {
     id: _id,
@@ -272,7 +281,7 @@ function blockToSlide(
     // `transition=vortex` into the string `"vortex"`, which the player can't
     // animate. Omit them from the content spreads so the typed fields win.
     ...omitBlockMeta(block.templateData),
-    ...omitBlockMeta(block.templateOverrides),
+    ...coercedTemplateOverrides,
   };
 }
 
@@ -286,6 +295,23 @@ function omitBlockMeta(
   if (!data) return data;
   let hit = false;
   const out: Record<string, unknown> = {};
+  for (const key of Object.keys(data)) {
+    if (BLOCK_META_KEYS.has(key)) {
+      hit = true;
+      continue;
+    }
+    out[key] = data[key];
+  }
+  return hit ? out : data;
+}
+
+/** String-preserving variant used before template-input coercion. */
+function omitStringBlockMeta(
+  data: Record<string, string> | undefined,
+): Record<string, string> | undefined {
+  if (!data) return data;
+  let hit = false;
+  const out: Record<string, string> = {};
   for (const key of Object.keys(data)) {
     if (BLOCK_META_KEYS.has(key)) {
       hit = true;

@@ -39,6 +39,7 @@ import type {
 } from '../../schemas/BlockTemplates.js';
 import type { MarkdownBlockNode } from '../../markdown/types.js';
 import { extractPlainText } from '../../markdown/utils.js';
+import { extractRichListItems } from '../templateInputs.js';
 import type { PageEmphasis } from '../../schemas/PageStyle.js';
 import type { PageMedia, PageRichText, PageSection, PageSpatialKind } from './PageSection.js';
 
@@ -281,11 +282,16 @@ const fullBleedQuote: SectionExtractor = (input) => {
 
 const list: SectionExtractor = (input) => {
   const l = input as ListBlockInput;
+  const contents = (input as unknown as { contents?: MarkdownBlockNode[] }).contents;
+  const richItems = extractRichListItems(contents);
   return {
     kind: 'item-list',
     slots: {
       title: l.title,
-      items: (l.items ?? []).map((item) => ({ body: item })),
+      items: (l.items ?? []).map((item, index) => ({
+        body: item,
+        ...(richItems[index]?.text === item ? { markdown: richItems[index].markdown } : {}),
+      })),
       media: accentImageMedia(l.accentImage),
     },
     colorScheme: l.colorScheme,

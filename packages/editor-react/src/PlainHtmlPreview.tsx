@@ -72,6 +72,11 @@ export interface PlainHtmlPreviewProps {
   globalKeyboardShortcuts?: boolean;
   /** Receives the rendered iframe, primarily for printing its isolated document. */
   onFrameChange?: (frame: HTMLIFrameElement | null) => void;
+  /**
+   * Delegate link activation from the isolated iframe to the embedding host.
+   * Return `false` to allow the iframe's default navigation.
+   */
+  onLinkClick?: (href: string) => boolean | undefined;
 }
 
 const IFRAME_STYLE: CSSProperties = {
@@ -93,8 +98,10 @@ export function PlainHtmlPreview({
   style,
   globalKeyboardShortcuts = false,
   onFrameChange,
+  onLinkClick,
 }: PlainHtmlPreviewProps) {
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
+  const removeFrameLinkHandlerRef = useRef<() => void>(() => undefined);
   const setIframeRef = useCallback(
     (frame: HTMLIFrameElement | null) => {
       iframeRef.current = frame;
@@ -175,6 +182,35 @@ export function PlainHtmlPreview({
     [renderFn, mdDoc, title, mergedImages, theme, iconsCss],
   );
 
+  const installFrameLinkHandler = useCallback(() => {
+    removeFrameLinkHandlerRef.current();
+    removeFrameLinkHandlerRef.current = () => undefined;
+
+    const frameDocument = iframeRef.current?.contentDocument;
+    const FrameElement = frameDocument?.defaultView?.Element;
+    if (!frameDocument || !FrameElement || !onLinkClick) return;
+
+    const handleClick = (event: MouseEvent) => {
+      if (event.button !== 0) return;
+      const target = event.target instanceof FrameElement ? event.target : null;
+      const anchor = target?.closest('a[href]');
+      if (!anchor || !frameDocument.contains(anchor)) return;
+      const href = anchor.getAttribute('href');
+      if (!href || onLinkClick(href) === false) return;
+      event.preventDefault();
+      event.stopPropagation();
+    };
+
+    frameDocument.addEventListener('click', handleClick, true);
+    removeFrameLinkHandlerRef.current = () =>
+      frameDocument.removeEventListener('click', handleClick, true);
+  }, [onLinkClick]);
+
+  useEffect(() => {
+    installFrameLinkHandler();
+    return () => removeFrameLinkHandlerRef.current();
+  }, [html, installFrameLinkHandler]);
+
   useEffect(() => {
     if (!globalKeyboardShortcuts) return;
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -216,6 +252,7 @@ export function PlainHtmlPreview({
       data-testid="plain-html-preview"
       title={title ?? 'HTML preview'}
       srcDoc={html}
+      onLoad={installFrameLinkHandler}
       // `allow-same-origin` is required so the iframe can fetch blob:
       // URLs created by the host's media provider. We intentionally do
       // NOT include `allow-scripts` — the rendered HTML is plain-output

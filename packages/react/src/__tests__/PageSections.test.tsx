@@ -3,6 +3,7 @@ import { render } from '@testing-library/react';
 import { LinearDocView } from '../LinearDocView';
 import type { Doc, Block } from '@bendyline/squisq/schemas';
 import { THEMES } from '@bendyline/squisq/schemas';
+import { parseMarkdown } from '@bendyline/squisq/markdown';
 
 // ── Helpers ────────────────────────────────────────────────────────
 
@@ -126,7 +127,11 @@ describe('page section rendering', () => {
         rows: [['Ada', '99']],
         align: [null, 'right'],
       }),
-      tmpl('list', 'lst', { title: 'Steps', items: ['One', 'Two', 'Three'] }),
+      tmpl('list', 'lst', {
+        title: 'Steps',
+        items: ['One', 'Two', 'Three'],
+        contents: parseMarkdown('- [One](../one.md)\n- Two\n- Three').children,
+      }),
     ]);
     const { container } = render(<LinearDocView doc={doc} />);
     const table = container.querySelector('.squisq-page-table')!;
@@ -134,6 +139,7 @@ describe('page section rendering', () => {
     expect(table.textContent).toContain('Ada');
     const items = container.querySelectorAll('.squisq-page-items li');
     expect(items).toHaveLength(3);
+    expect(items[0].querySelector('a')?.getAttribute('href')).toBe('../one.md');
     expect(items[2].textContent).toBe('Three');
   });
 

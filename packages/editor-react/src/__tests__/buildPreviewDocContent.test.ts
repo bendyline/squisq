@@ -46,6 +46,30 @@ describe('buildPreviewDoc content mapping', () => {
     });
   });
 
+  it('coerces structured annotation inputs before materializing a preview slide', () => {
+    const slide = firstPreviewSlide(
+      '## Local or installed {[twoColumn header="Work where files make sense" ' +
+        'left="Web|Browser-local workspaces" right="Desktop|Real folders and native menus"]}',
+    );
+
+    expect(slide).toMatchObject({
+      template: 'twoColumn',
+      left: { label: 'Web', sublabel: 'Browser-local workspaces' },
+      right: { label: 'Desktop', sublabel: 'Real folders and native menus' },
+    });
+
+    const { layers } = materializeBlockLayers(slide as unknown as DocBlock);
+    expect(layers.map((layer) => layer.id)).toEqual(
+      expect.arrayContaining([
+        'header',
+        'left-label',
+        'left-sublabel',
+        'right-label',
+        'right-sublabel',
+      ]),
+    );
+  });
+
   it('keeps Mermaid source available to the slide materializer for every template', () => {
     const slide = firstPreviewSlide(
       '# Architecture\n\n```mermaid\nflowchart LR\n  client --> server\n```',

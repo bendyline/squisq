@@ -10,7 +10,7 @@ import {
 } from '@bendyline/squisq/doc';
 import { docToPptx, markdownDocToPptx } from '../pptx/export';
 import { openPackage, getPartXml } from '../ooxml/reader';
-import { NS_PML, NS_PML_2010 } from '../ooxml/namespaces';
+import { NS_DRAWINGML, NS_PML, NS_PML_2010 } from '../ooxml/namespaces';
 
 function docWithSecondSlideTransition(transition: Transition): MarkdownDocument {
   return {
@@ -357,6 +357,61 @@ async function pptxSlideCount(bytes: ArrayBuffer): Promise<number> {
   expect(presentation).not.toBeNull();
   return presentation!.getElementsByTagNameNS(NS_PML, 'sldId').length;
 }
+
+function namedShape(slide: Document, name: string): Element {
+  const shape = Array.from(slide.getElementsByTagNameNS(NS_PML, 'sp')).find((candidate) =>
+    Array.from(candidate.getElementsByTagNameNS(NS_PML, 'cNvPr')).some(
+      (properties) => properties.getAttribute('name') === name,
+    ),
+  );
+  expect(shape, `expected shape ${name}`).toBeDefined();
+  return shape!;
+}
+
+describe('PPTX template text geometry', () => {
+  it('reserves Office font-metric slack for title and subtitle text boxes', async () => {
+    const doc = {
+      articleId: 'display-type-metrics',
+      duration: 5,
+      audio: {
+        segments: [{ src: '', name: 'preview', duration: 5, startTime: 0 }],
+      },
+      blocks: [
+        {
+          id: 'display-title',
+          template: 'title',
+          title: 'DocBlocks: one Markdown file, many finished forms',
+          subtitle: 'Local-first writing for pages, documents, slideshows, and video',
+          startTime: 0,
+          duration: 5,
+          audioSegment: 0,
+        },
+      ],
+    } as unknown as Doc;
+
+    const pkg = await openPackage(
+      await docToPptx(doc, { themeId: 'warm-earth', includeCoverSlide: false }),
+    );
+    const slide = await getPartXml(pkg, 'ppt/slides/slide1.xml');
+    expect(slide).not.toBeNull();
+
+    for (const name of ['title', 'subtitle']) {
+      const shape = namedShape(slide!, name);
+      const extent = shape.getElementsByTagNameNS(NS_DRAWINGML, 'ext')[0];
+      const runProperties = shape.getElementsByTagNameNS(NS_DRAWINGML, 'rPr')[0];
+      const lineSpacing = shape.getElementsByTagNameNS(NS_DRAWINGML, 'spcPct')[0];
+      expect(extent, `${name} extent`).toBeDefined();
+      expect(runProperties, `${name} run properties`).toBeDefined();
+      expect(lineSpacing, `${name} line spacing`).toBeDefined();
+
+      const heightPx =
+        (Number(extent!.getAttribute('cy')) / 6_858_000) * VIEWPORT_PRESETS.landscape.height;
+      const fontSizePx = Number(runProperties!.getAttribute('sz')) / 75;
+      const lineHeight = Number(lineSpacing!.getAttribute('val')) / 100_000;
+      expect(heightPx, `${name} height`).toBeGreaterThanOrEqual(fontSizePx * (lineHeight + 0.75));
+    }
+  });
+});
 
 describe('docToPptx slideshow parity', () => {
   it('matches the player slide count across representative content and every built-in theme', async () => {

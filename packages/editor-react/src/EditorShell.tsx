@@ -1211,7 +1211,11 @@ function EditorShellInner({
                   </div>
                 )}
                 {isMarkdownMode && isPreview && (
-                  <PreviewPanel basePath={basePath} workspaceContainer={workspaceContainer} />
+                  <PreviewPanel
+                    basePath={basePath}
+                    workspaceContainer={workspaceContainer}
+                    onLinkClick={onLinkClick}
+                  />
                 )}
               </div>
 

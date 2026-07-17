@@ -46,6 +46,11 @@ export function titleBlock(input: TitleBlockInput, context: TemplateContext): La
   // stranded the subtitle when the title wrapped.
   const maxWidthPx = (parseFloat(layout.maxTextWidth) / 100) * viewport.width;
   const titleH = estimateTextHeight(title, titleFontSize, maxWidthPx, 1.15);
+  const titleLineCount = Math.max(1, Math.round(titleH / (titleFontSize * 1.15)));
+  // A wrapped display face uses more of its final line box than a one-line
+  // heading. Give the subtitle a little extra breathing room only after a
+  // wrap, while preserving the established composition for short titles.
+  const titleSubtitleGapPx = 56 + (titleLineCount > 1 ? titleFontSize * 0.25 : 0);
   const titleYPct = subtitle ? 42 : 48;
   const px = (v: number) => (v / viewport.height) * 100;
 
@@ -138,7 +143,7 @@ export function titleBlock(input: TitleBlockInput, context: TemplateContext): La
       },
       position: {
         x: '50%',
-        y: `${titleYPct + px(titleH / 2 + 56 + subH / 2)}%`,
+        y: `${titleYPct + px(titleH / 2 + titleSubtitleGapPx + subH / 2)}%`,
         anchor: 'center',
         width: layout.maxTextWidth,
       },
