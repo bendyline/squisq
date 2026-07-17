@@ -15,6 +15,7 @@
 
 import type { Command } from 'commander';
 import { detectFfmpegDetailed, getFfmpegVersion } from '../util/detectFfmpeg.js';
+import { launchHeadlessChromium } from '../util/launchChromium.js';
 
 /** Injectable process/browser boundary used to test every diagnostic branch. */
 export interface DoctorRuntime {
@@ -33,10 +34,9 @@ const defaultDoctorRuntime: DoctorRuntime = {
   detectFfmpeg: detectFfmpegDetailed,
   getFfmpegVersion,
   async launchChromium() {
-    const { chromium } = await import('playwright-core');
-    const browser = await chromium.launch({ headless: true });
+    const browser = await launchHeadlessChromium();
     return {
-      executablePath: chromium.executablePath(),
+      executablePath: browser.browserType().executablePath(),
       close: () => browser.close(),
     };
   },

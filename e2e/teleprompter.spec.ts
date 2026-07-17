@@ -100,6 +100,14 @@ test('fake mic drives the level meter and voice pacing advances the prompter', a
   // Voice pacing is on by default; starting requests the (fake) mic.
   await page.locator('#squisq-prompter-countdown').selectOption('0');
   await page.getByRole('button', { name: 'Start prompter', exact: true }).click();
+  // The meter is mounted while getUserMedia is still starting. Wait for the
+  // audio graph to be live so a busy full-suite run cannot spend the entire
+  // sampling window observing the meter's initial zero value.
+  await expect(page.getByTestId('teleprompter-controls')).toHaveAttribute(
+    'data-mic-status',
+    'live',
+    { timeout: 10_000 },
+  );
   await expect(page.locator('.squisq-teleprompter-meter')).toBeVisible();
 
   // Chromium's fake device beeps on a 500 ms on/off cycle — regular

@@ -9,11 +9,11 @@ import type { Doc } from '@bendyline/squisq/schemas';
 import { MemoryContentContainer } from '@bendyline/squisq/storage';
 import { renderDocToGif } from '../api.js';
 import { detectFfmpegDetailed } from '../util/detectFfmpeg.js';
+import { launchHeadlessChromium } from '../util/launchChromium.js';
 
 async function chromiumAvailable(): Promise<boolean> {
   try {
-    const { chromium } = await import('playwright-core');
-    const browser = await chromium.launch({ headless: true });
+    const browser = await launchHeadlessChromium();
     await browser.close();
     return true;
   } catch {

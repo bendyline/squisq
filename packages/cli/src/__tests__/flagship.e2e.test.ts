@@ -14,6 +14,7 @@
 import { after, before, describe, it } from 'mocha';
 import { expect } from 'chai';
 import { detectFfmpegDetailed } from '../util/detectFfmpeg.js';
+import { launchHeadlessChromium } from '../util/launchChromium.js';
 
 // 1×1 transparent PNG (68 bytes). Enough for the pptx image-extraction path.
 const PNG_1x1_BASE64 =
@@ -35,8 +36,7 @@ const SAMPLE_MD = [
 /** Probe whether Playwright Chromium can actually launch here. */
 async function chromiumAvailable(): Promise<boolean> {
   try {
-    const { chromium } = await import('playwright-core');
-    const browser = await chromium.launch({ headless: true });
+    const browser = await launchHeadlessChromium();
     await browser.close();
     return true;
   } catch {

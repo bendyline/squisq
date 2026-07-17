@@ -50,6 +50,7 @@ import { CapturedFrameCollector } from './util/capturedFrameBudget.js';
 import { resolveAppliedCoverPreRoll } from './util/coverPreRoll.js';
 import { createMediaBudget } from './util/mediaBudget.js';
 import { GIF_EXPORT_DEFAULTS } from './util/nativeEncoder.js';
+import { launchHeadlessChromium } from './util/launchChromium.js';
 import { runFfmpeg } from './util/runFfmpeg.js';
 import { createCliRegistry } from './registry.js';
 import type { GifFormatOptions, Mp4FormatOptions } from './registry.js';
@@ -368,11 +369,10 @@ async function captureDocFrames(
 
   onProgress?.('launching browser', 15);
   signal?.throwIfAborted();
-  const { chromium } = await import('playwright-core');
   signal?.throwIfAborted();
   let browser: import('playwright-core').Browser;
   try {
-    browser = await chromium.launch({ headless: true });
+    browser = await launchHeadlessChromium();
   } catch (err: unknown) {
     signal?.throwIfAborted();
     const detail = err instanceof Error ? err.message.split('\n')[0] : String(err);
