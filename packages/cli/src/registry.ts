@@ -83,6 +83,7 @@ const GIF_DEFAULTS = {
 function mp4Format(): FormatDefinition {
   return {
     id: 'mp4',
+    templateAnnotationHandling: 'rendered',
     label: 'MP4 Video',
     mimeType: 'video/mp4',
     extensions: ['.mp4'],
@@ -139,6 +140,7 @@ function mp4Format(): FormatDefinition {
 function gifFormat(): FormatDefinition {
   return {
     id: 'gif',
+    templateAnnotationHandling: 'rendered',
     label: 'Animated GIF',
     mimeType: 'image/gif',
     extensions: ['.gif'],

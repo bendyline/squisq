@@ -10,6 +10,7 @@
 
 import type { Layer } from '../../schemas/Doc.js';
 import type { ListBlockInput, TemplateContext } from '../../schemas/BlockTemplates.js';
+import { extractRichListItems } from '../templateInputs.js';
 import {
   getThemeFont,
   shouldUseShadow,
@@ -64,6 +65,7 @@ export function listBlock(input: ListBlockInput, context: TemplateContext): Laye
   // so we render the title-and-background frame instead of blowing up
   // every keystroke with a TypeError.
   const items: string[] = Array.isArray(input.items) ? input.items : [];
+  const richItems = extractRichListItems(context.block?.contents);
   const { theme } = context;
 
   // Get layout adjustments if accent image is present
@@ -148,6 +150,7 @@ export function listBlock(input: ListBlockInput, context: TemplateContext): Laye
   // List items with staggered animation
   for (let i = 0; i < items.length; i++) {
     const itemText = items[i]!;
+    const itemHtml = richItems[i]?.text === itemText ? richItems[i]?.html : undefined;
     const lineCount = estimateWrappedLineCount(itemText, itemFontSize, bodyWidthPx);
     const animation = themedEntrance(context, 'text', {
       type: 'fadeIn',
@@ -182,6 +185,7 @@ export function listBlock(input: ListBlockInput, context: TemplateContext): Laye
       id: `item-${i}`,
       content: {
         text: itemText,
+        ...(itemHtml ? { html: itemHtml } : {}),
         style: {
           fontSize: itemFontSize,
           fontFamily: getThemeFont(context, 'body'),

@@ -885,9 +885,16 @@ function buildLayerTextShape(layer: TextLayer, shapeId: number, maxBottom?: numb
     1,
     rawLines.reduce((count, line) => count + Math.max(1, Math.ceil(line.length / charsPerLine)), 0),
   );
+  // DrawingML's no-autofit text layout needs more vertical room than the
+  // nominal line spacing, especially for substituted serif/display fonts.
+  // Without this font-metric reserve PowerPoint clips the lower half of
+  // large template titles and subtitles at the shape boundary.
+  const officeFontMetricSlack = fittedFontSize * 0.8;
   const estimatedHeight = Math.max(
-    fittedFontSize * (style.lineHeight ?? 1.4) * wrappedLineCount + padding * 2,
-    fittedFontSize,
+    fittedFontSize * (style.lineHeight ?? 1.4) * wrappedLineCount +
+      officeFontMetricSlack +
+      padding * 2,
+    fittedFontSize + officeFontMetricSlack + padding * 2,
   );
   const resolvedRect = resolveLayerRect(layer.position, boxWidth, estimatedHeight);
   // Leave a small bottom inset for Office/LibreOffice glyph descenders and

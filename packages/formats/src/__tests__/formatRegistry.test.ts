@@ -90,6 +90,24 @@ describe('defaultRegistry', () => {
     expect(reg.list()).toHaveLength(BUILTIN_FORMAT_IDS.length);
   });
 
+  it('declares template annotation handling for every built-in exporter', () => {
+    const handling = Object.fromEntries(
+      defaultFormats().map((d) => [d.id, d.templateAnnotationHandling]),
+    );
+    expect(handling).toEqual({
+      md: 'preserved',
+      dbk: 'preserved',
+      pptx: 'rendered',
+      html: 'rendered',
+      htmlzip: 'rendered',
+      docx: 'ignored',
+      pdf: 'ignored',
+      xlsx: 'ignored',
+      csv: 'ignored',
+      epub: 'ignored',
+    });
+  });
+
   it('defaultFormats matches BUILTIN_FORMAT_IDS exactly', () => {
     const ids = defaultFormats()
       .map((d) => d.id)

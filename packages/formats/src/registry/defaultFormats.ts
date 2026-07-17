@@ -171,6 +171,7 @@ function pptxImportOptionsFrom(options: ConvertOptions): BuiltinFormatOptions['p
 export function defaultFormats(): FormatDefinition[] {
   const md: FormatDefinition = {
     id: 'md',
+    templateAnnotationHandling: 'preserved',
     label: 'Markdown',
     mimeType: MIME.md,
     extensions: ['.md', '.markdown'],
@@ -197,6 +198,7 @@ export function defaultFormats(): FormatDefinition[] {
 
   const docx: FormatDefinition = {
     id: 'docx',
+    templateAnnotationHandling: 'ignored',
     label: 'Word (DOCX)',
     mimeType: MIME.docx,
     extensions: ['.docx'],
@@ -227,6 +229,7 @@ export function defaultFormats(): FormatDefinition[] {
 
   const pdf: FormatDefinition = {
     id: 'pdf',
+    templateAnnotationHandling: 'ignored',
     label: 'PDF',
     mimeType: MIME.pdf,
     extensions: ['.pdf'],
@@ -262,6 +265,7 @@ export function defaultFormats(): FormatDefinition[] {
 
   const pptx: FormatDefinition = {
     id: 'pptx',
+    templateAnnotationHandling: 'rendered',
     label: 'PowerPoint (PPTX)',
     mimeType: MIME.pptx,
     extensions: ['.pptx'],
@@ -292,6 +296,7 @@ export function defaultFormats(): FormatDefinition[] {
 
   const xlsx: FormatDefinition = {
     id: 'xlsx',
+    templateAnnotationHandling: 'ignored',
     label: 'Excel (XLSX)',
     mimeType: MIME.xlsx,
     extensions: ['.xlsx'],
@@ -322,6 +327,7 @@ export function defaultFormats(): FormatDefinition[] {
 
   const csv: FormatDefinition = {
     id: 'csv',
+    templateAnnotationHandling: 'ignored',
     label: 'CSV',
     mimeType: MIME.csv,
     extensions: ['.csv'],
@@ -347,6 +353,7 @@ export function defaultFormats(): FormatDefinition[] {
 
   const html: FormatDefinition = {
     id: 'html',
+    templateAnnotationHandling: 'rendered',
     label: 'HTML (single file)',
     mimeType: MIME.html,
     extensions: ['.html', '.htm'],
@@ -377,6 +384,7 @@ export function defaultFormats(): FormatDefinition[] {
 
   const htmlzip: FormatDefinition = {
     id: 'htmlzip',
+    templateAnnotationHandling: 'rendered',
     label: 'HTML (ZIP archive)',
     mimeType: MIME.zip,
     extensions: ['.html.zip'],
@@ -401,6 +409,7 @@ export function defaultFormats(): FormatDefinition[] {
 
   const epub: FormatDefinition = {
     id: 'epub',
+    templateAnnotationHandling: 'ignored',
     label: 'EPUB',
     mimeType: MIME.epub,
     extensions: ['.epub'],
@@ -423,6 +432,7 @@ export function defaultFormats(): FormatDefinition[] {
 
   const dbk: FormatDefinition = {
     id: 'dbk',
+    templateAnnotationHandling: 'preserved',
     label: 'Squisq container (DBK)',
     mimeType: MIME.zip,
     extensions: ['.dbk', '.zip'],

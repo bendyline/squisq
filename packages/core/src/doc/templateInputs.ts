@@ -21,9 +21,11 @@
 import type {
   MarkdownBlockNode,
   MarkdownCodeBlock,
+  MarkdownInlineNode,
   MarkdownList,
   MarkdownTable,
 } from '../markdown/types.js';
+import { sanitizeUrl } from '../markdown/sanitize.js';
 import { extractPlainText } from '../markdown/utils.js';
 import { matchNumberHighlight } from '../recommend/numberHighlight.js';
 import {
@@ -66,14 +68,96 @@ export function extractBodyPlainText(contents?: MarkdownBlockNode[]): string {
 
 /** Extract list items as plain text. */
 export function extractListItems(contents?: MarkdownBlockNode[]): string[] {
-  if (!contents) return [];
-  const items: string[] = [];
-  for (const node of contents) {
-    if (node.type === 'list') {
-      for (const item of (node as MarkdownList).children) {
-        const text = extractPlainText(item).trim();
-        if (text) items.push(text);
+  return extractRichListItems(contents).map((item) => item.text);
+}
+
+/** One authored Markdown list item with both plain and rich projections. */
+export interface RichListItem {
+  text: string;
+  markdown: MarkdownBlockNode[];
+  html?: string;
+}
+
+function escapeInlineHtml(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function renderInlineHtml(nodes: MarkdownInlineNode[]): string {
+  return nodes
+    .map((node) => {
+      switch (node.type) {
+        case 'text':
+          return escapeInlineHtml(node.value);
+        case 'emphasis':
+          return `<em>${renderInlineHtml(node.children)}</em>`;
+        case 'strong':
+          return `<strong>${renderInlineHtml(node.children)}</strong>`;
+        case 'delete':
+          return `<del>${renderInlineHtml(node.children)}</del>`;
+        case 'inlineCode':
+          return `<code>${escapeInlineHtml(node.value)}</code>`;
+        case 'link': {
+          const label = renderInlineHtml(node.children);
+          const href = sanitizeUrl(node.url, 'link');
+          if (!href) return label;
+          const title = node.title ? ` title="${escapeInlineHtml(node.title)}"` : '';
+          return `<a href="${escapeInlineHtml(href)}"${title}>${label}</a>`;
+        }
+        case 'break':
+          return '<br>';
+        case 'image':
+          return escapeInlineHtml(node.alt ?? '');
+        case 'inlineMath':
+          return escapeInlineHtml(`$${node.value}$`);
+        case 'footnoteReference':
+          return escapeInlineHtml(`[^${node.label ?? node.identifier}]`);
+        case 'linkReference':
+        case 'textDirective':
+          return renderInlineHtml(node.children);
+        case 'imageReference':
+          return escapeInlineHtml(node.alt ?? '');
+        case 'mention':
+          return escapeInlineHtml(`@${node.displayName}`);
+        case 'inlineIcon':
+          return escapeInlineHtml(`{[${node.token}]}`);
+        case 'htmlInline':
+          return escapeInlineHtml(node.rawHtml);
       }
+    })
+    .join('');
+}
+
+function renderListItemHtml(markdown: MarkdownBlockNode[]): string {
+  return markdown
+    .map((node) =>
+      node.type === 'paragraph' || node.type === 'heading'
+        ? renderInlineHtml(node.children)
+        : escapeInlineHtml(extractPlainText(node)),
+    )
+    .join('<br>');
+}
+
+/** Extract list items without discarding their inline Markdown formatting. */
+export function extractRichListItems(contents?: MarkdownBlockNode[]): RichListItem[] {
+  if (!contents) return [];
+  const items: RichListItem[] = [];
+  for (const node of contents) {
+    if (node.type !== 'list') continue;
+    for (const item of (node as MarkdownList).children) {
+      const text = extractPlainText(item).trim();
+      if (!text) continue;
+      const html = renderListItemHtml(item.children);
+      const plainHtml = escapeInlineHtml(text).replace(/\r?\n/g, '<br>');
+      items.push({
+        text,
+        markdown: item.children,
+        ...(html && html !== plainHtml ? { html } : {}),
+      });
     }
   }
   return items;

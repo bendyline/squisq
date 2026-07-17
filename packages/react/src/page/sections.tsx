@@ -373,6 +373,7 @@ export function CardGridSection({ section }: SectionProps) {
 // ── Item list ──────────────────────────────────────────────────────
 
 export function ItemListSection({ section }: SectionProps) {
+  const { theme } = usePageView();
   const items = section.slots.items ?? [];
   return (
     <>
@@ -381,7 +382,9 @@ export function ItemListSection({ section }: SectionProps) {
       )}
       <ol className="squisq-page-items">
         {items.map((item, i) => (
-          <li key={i}>{item.body}</li>
+          <li key={i}>
+            {item.markdown ? <MarkdownRenderer nodes={item.markdown} theme={theme} /> : item.body}
+          </li>
         ))}
       </ol>
     </>

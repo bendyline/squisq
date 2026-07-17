@@ -77,6 +77,8 @@ export type PageMedia =
 export interface PageSectionItem {
   title?: string;
   body?: string;
+  /** Original rich body nodes when this item came from authored Markdown. */
+  markdown?: MarkdownBlockNode[];
   /** Large numeral / value for stat and comparison items. */
   value?: string | number;
   media?: PageMedia;

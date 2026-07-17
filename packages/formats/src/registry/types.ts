@@ -139,12 +139,22 @@ export interface PreparedConversion {
   convert(to: FormatId, options?: PreparedExportOptions): Promise<ConversionResult>;
 }
 
+/**
+ * How a format's exporter treats Squisq template annotations: `rendered`
+ * materializes template visuals into the output, `preserved` keeps annotations
+ * intact for round-tripping, and `ignored` flattens blocks to semantic content
+ * so annotations have no effect on the exported result.
+ */
+export type TemplateAnnotationHandling = 'rendered' | 'preserved' | 'ignored';
+
 /** Describes how a single format imports to / exports from the squisq model. */
 export interface FormatDefinition {
   id: FormatId;
   label: string;
   mimeType: string;
   extensions: readonly string[];
+  /** Exporter treatment of template annotations. Absent means unspecified. */
+  templateAnnotationHandling?: TemplateAnnotationHandling;
   /** Import raw bytes to a MarkdownDocument. */
   importDoc?(data: ArrayBuffer, options: ConvertOptions): Promise<MarkdownDocument>;
   /** Import raw bytes to a ContentContainer (markdown + extracted media). */

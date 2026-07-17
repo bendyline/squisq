@@ -160,7 +160,7 @@ function nodesFromTemplateData(input: DiagramBlockInput): ResolvedDiagram {
 
 export function diagramBlock(input: DiagramBlockInput, context: TemplateContext): Layer[] {
   const { theme, viewport, children = [] } = context;
-  const colors = resolveColorScheme(context, input.colorScheme ?? 'blue');
+  const colors = input.colorScheme ? resolveColorScheme(context, input.colorScheme) : undefined;
 
   const resolved =
     children.length > 0
@@ -260,9 +260,9 @@ export function diagramBlock(input: DiagramBlockInput, context: TemplateContext)
       id: `node-card-${node.id}`,
       content: {
         shape: 'rect',
-        fill: colors.bg ?? theme.colors.backgroundLight,
+        fill: colors?.bg ?? theme.colors.backgroundLight,
         fillOpacity: 0.25,
-        stroke: colors.text ?? theme.colors.primary,
+        stroke: colors?.text ?? theme.colors.primary,
         strokeWidth: Math.max(1, strokeW - 1),
         borderRadius: 10,
       },
@@ -298,7 +298,7 @@ export function diagramBlock(input: DiagramBlockInput, context: TemplateContext)
       id: `edge-${edge.id}`,
       content: {
         d: connectorPath(edge.routing ?? input.edgeStyle ?? 'curved', start, end),
-        stroke: colors.text ?? theme.colors.primary,
+        stroke: colors?.text ?? theme.colors.primary,
         strokeWidth: strokeW,
         fill: 'none',
         ...(edgeDash ? { dasharray: edgeDash } : {}),
@@ -341,8 +341,8 @@ export function diagramBlock(input: DiagramBlockInput, context: TemplateContext)
       id: `node-card-${node.id}`,
       content: {
         shape: 'rect',
-        fill: colors.bg ?? theme.colors.backgroundLight,
-        stroke: colors.text ?? theme.colors.primary,
+        fill: colors?.bg ?? theme.colors.backgroundLight,
+        stroke: colors?.text ?? theme.colors.primary,
         strokeWidth: strokeW,
         borderRadius: input.nodeShape === 'pill' ? t.h / 2 : 10,
       },
@@ -361,7 +361,7 @@ export function diagramBlock(input: DiagramBlockInput, context: TemplateContext)
           fontSize: fit.fontSize,
           fontFamily: getThemeFont(context, 'body'),
           fontWeight: 'bold',
-          color: colors.text ?? theme.colors.text,
+          color: colors?.text ?? theme.colors.text,
           textAlign: 'center',
           lineHeight: DIAGRAM_LABEL_LINE_HEIGHT,
         },

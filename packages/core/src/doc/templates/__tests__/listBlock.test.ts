@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { parseMarkdown } from '../../../markdown/parse.js';
 import { createTemplateContext } from '../../../schemas/BlockTemplates.js';
 import type { TextLayer } from '../../../schemas/Doc.js';
 import { DEFAULT_THEME } from '../../../schemas/themeLibrary.js';
@@ -60,5 +61,35 @@ describe('listBlock', () => {
     // The third entry fits on one line, so the final advance is compact.
     const oneLineAdvance = ((fontSize * 1.2 + 18) / context.viewport.height) * 100;
     expect(yPositions[3]! - yPositions[2]!).toBeCloseTo(oneLineAdvance);
+  });
+
+  it('preserves authored links as rich HTML on slideshow item layers', () => {
+    const context = {
+      ...createTemplateContext(DEFAULT_THEME, 0, 1, VIEWPORT_PRESETS.landscape),
+      block: {
+        id: 'linked-list',
+        startTime: 0,
+        duration: 10,
+        audioSegment: 0,
+        contents: parseMarkdown('- Visit [Docs](https://example.com/docs "Read docs")').children,
+      },
+    };
+    const layers = listBlock(
+      {
+        template: 'list',
+        id: 'linked-list',
+        duration: 10,
+        audioSegment: 0,
+        items: ['Visit Docs'],
+      },
+      context,
+    );
+    const item = layers.find(
+      (layer): layer is TextLayer => layer.type === 'text' && layer.id === 'item-0',
+    );
+
+    expect(item?.content.html).toBe(
+      'Visit <a href="https://example.com/docs" title="Read docs">Docs</a>',
+    );
   });
 });

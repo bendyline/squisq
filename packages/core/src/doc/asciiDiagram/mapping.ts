@@ -64,9 +64,9 @@ interface EdgeAnchorPair {
 }
 
 /**
- * Recover the visual intent carried by orthogonal ASCII art. Fan-out ports
- * spread across the source face; fan-in ports spread across the target face.
- * A single endpoint stays centered on its facing side.
+ * Recover the visual intent carried by orthogonal ASCII art. Aligned fan-outs
+ * share a centered source port so their orthogonal routes form one trunk;
+ * fan-in ports still spread across the target face to keep arrivals legible.
  */
 function inferEdgeAnchors(
   nodes: readonly DiagramTemplateNode[],
@@ -114,7 +114,68 @@ function inferEdgeAnchors(
 
   distributeOffsets(pairs, edges, nodes, 'source');
   distributeOffsets(pairs, edges, nodes, 'target');
+  coalesceAlignedFanOutAnchors(pairs, edges, nodes);
   return pairs;
+}
+
+/**
+ * When every target in a fan-out sits wholly on the same side of its source,
+ * preserve the bus/trunk topology visible in the ASCII art. Centered matching
+ * ports make `connectorPath('orthogonal', ...)` share the initial segment and
+ * crossbar instead of drawing a bundle of unrelated elbows.
+ */
+function coalesceAlignedFanOutAnchors(
+  pairs: EdgeAnchorPair[],
+  edges: readonly AsciiDiagramEdge[],
+  nodes: readonly DiagramTemplateNode[],
+): void {
+  const nodeById = new Map(nodes.map((node) => [node.id, node]));
+  const groups = new Map<string, number[]>();
+  edges.forEach((edge, index) => {
+    const group = groups.get(edge.source) ?? [];
+    group.push(index);
+    groups.set(edge.source, group);
+  });
+
+  for (const [sourceId, indexes] of groups) {
+    if (indexes.length < 2) continue;
+    const source = nodeById.get(sourceId);
+    const targets = indexes
+      .map((index) => nodeById.get(edges[index].target))
+      .filter((node): node is DiagramTemplateNode => node !== undefined);
+    if (!source || targets.length !== indexes.length) continue;
+
+    const sourceW = source.w ?? ASCII_CHAR_W * 12;
+    const sourceH = source.h ?? ASCII_CHAR_H * 3;
+    const sourceRight = source.x + sourceW;
+    const sourceBottom = source.y + sourceH;
+    const targetRight = (target: DiagramTemplateNode) => target.x + (target.w ?? ASCII_CHAR_W * 12);
+    const targetBottom = (target: DiagramTemplateNode) => target.y + (target.h ?? ASCII_CHAR_H * 3);
+
+    let sourceSide: DiagramEdgeAnchor['side'] | undefined;
+    let targetSide: DiagramEdgeAnchor['side'] | undefined;
+    if (targets.every((target) => target.y >= sourceBottom)) {
+      sourceSide = 'bottom';
+      targetSide = 'top';
+    } else if (targets.every((target) => targetBottom(target) <= source.y)) {
+      sourceSide = 'top';
+      targetSide = 'bottom';
+    } else if (targets.every((target) => target.x >= sourceRight)) {
+      sourceSide = 'right';
+      targetSide = 'left';
+    } else if (targets.every((target) => targetRight(target) <= source.x)) {
+      sourceSide = 'left';
+      targetSide = 'right';
+    }
+    if (!sourceSide || !targetSide) continue;
+
+    for (const index of indexes) {
+      pairs[index] = {
+        sourceAnchor: { side: sourceSide, offset: 0.5 },
+        targetAnchor: { side: targetSide, offset: 0.5 },
+      };
+    }
+  }
 }
 
 function distributeOffsets(
