@@ -1,3 +1,16 @@
+## @bendyline/squisq-video-react [2.2.2](https://github.com/bendyline/squisq/compare/@bendyline/squisq-video-react@2.2.1...@bendyline/squisq-video-react@2.2.2) (2026-07-17)
+
+### Bug Fixes
+
+* PPTX work ([#30](https://github.com/bendyline/squisq/issues/30)) ([6cd2a12](https://github.com/bendyline/squisq/commit/6cd2a122aed1a5323471609bb077a0ae2e0c7eaf))
+
+
+### Dependencies
+
+* **@bendyline/squisq:** upgraded to 2.3.2
+* **@bendyline/squisq-video:** upgraded to 2.2.2
+* **@bendyline/squisq-react:** upgraded to 2.3.2
+
 ## @bendyline/squisq-video-react [2.2.1](https://github.com/bendyline/squisq/compare/@bendyline/squisq-video-react@2.2.0...@bendyline/squisq-video-react@2.2.1) (2026-07-16)
 
 ### Bug Fixes
