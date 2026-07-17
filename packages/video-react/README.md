@@ -33,6 +33,10 @@ To open directly in the compact GIF preset:
 <VideoExportButton doc={myDoc} defaultConfig={{ outputFormat: 'gif' }} />
 ```
 
+Animated GIF export defaults to standard captions when the document has a
+caption track. Pass `captionMode: 'off'` in `defaultConfig` to disable them, or
+choose None in the export modal. MP4 continues to default to captions off.
+
 **v1.5:** `playerScript` is now **optional** — the browser export captures frames
 from a live in-page `DocPlayer`, so the standalone bundle is only needed for
 CLI/Playwright-style pipelines. A new `defaultConfig?: Partial<VideoExportConfig>`
@@ -69,10 +73,10 @@ function App() {
 
 ## Components
 
-| Component           | Description                                                              |
-| ------------------- | ------------------------------------------------------------------------ |
-| `VideoExportModal`  | Full modal UI — configure MP4/GIF, motion, quality, fps, and orientation |
-| `VideoExportButton` | Drop-in button that opens the export modal via portal                    |
+| Component           | Description                                                                        |
+| ------------------- | ---------------------------------------------------------------------------------- |
+| `VideoExportModal`  | Full modal UI — configure MP4/GIF, captions, motion, quality, fps, and orientation |
+| `VideoExportButton` | Drop-in button that opens the export modal via portal                              |
 
 ## Hooks
 

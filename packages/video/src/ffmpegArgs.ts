@@ -62,14 +62,14 @@ export function ffmpegAudioMuxArgs(bitrate: string | number): string[] {
   return ['-c:a', 'aac', '-b:a', String(bitrate), '-af', 'apad', '-shortest'];
 }
 
-/**
- * Build a high-quality, compression-friendly GIF palette filter graph.
- *
- * A single palette is derived from the parts of the frame that change, while
- * `diff_mode=rectangle` keeps error diffusion inside the changed rectangle so
- * static slide backgrounds remain byte-stable and compress efficiently.
- */
-export function ffmpegGifFilterGraph(options: GifFilterOptions): string {
+interface ResolvedGifFilterOptions {
+  width: number;
+  height: number;
+  maxColors: number;
+  ditherArgs: string;
+}
+
+function resolveGifFilterOptions(options: GifFilterOptions): ResolvedGifFilterOptions {
   const { width, height } = options;
   const maxColors = options.maxColors ?? 256;
   const dither = options.dither ?? 'sierra2_4a';
@@ -93,22 +93,80 @@ export function ffmpegGifFilterGraph(options: GifFilterOptions): string {
     throw new RangeError('GIF bayerScale must be an integer between 0 and 5.');
   }
 
-  const ditherArgs =
-    dither === 'bayer' ? `dither=bayer:bayer_scale=${bayerScale}` : `dither=${dither}`;
+  return {
+    width,
+    height,
+    maxColors,
+    ditherArgs: dither === 'bayer' ? `dither=bayer:bayer_scale=${bayerScale}` : `dither=${dither}`,
+  };
+}
+
+function gifScaleFilter({ width, height }: ResolvedGifFilterOptions): string {
   return (
-    `[0:v]scale=${width}:${height}:force_original_aspect_ratio=decrease:flags=lanczos,` +
-    `pad=${width}:${height}:(ow-iw)/2:(oh-ih)/2:black,split[gif_frames][gif_palette_source];` +
-    `[gif_palette_source]palettegen=stats_mode=diff:max_colors=${maxColors}:reserve_transparent=0[gif_palette];` +
-    `[gif_frames][gif_palette]paletteuse=${ditherArgs}:diff_mode=rectangle[gif_out]`
+    `scale=${width}:${height}:force_original_aspect_ratio=decrease:flags=lanczos,` +
+    `pad=${width}:${height}:(ow-iw)/2:(oh-ih)/2:black`
   );
 }
 
-/** Build the output-side FFmpeg arguments for an animated GIF. */
-export function ffmpegGifOutputArgs(options: GifOutputOptions): string[] {
+/** First pass of the bounded-memory GIF workflow: video -> one palette image. */
+export function ffmpegGifPaletteGenerationFilter(options: GifFilterOptions): string {
+  const resolved = resolveGifFilterOptions(options);
+  return (
+    `${gifScaleFilter(resolved)},` +
+    `palettegen=stats_mode=diff:max_colors=${resolved.maxColors}:reserve_transparent=0`
+  );
+}
+
+/** Second pass of the bounded-memory GIF workflow: video + palette -> GIF frames. */
+export function ffmpegGifPaletteApplicationGraph(options: GifFilterOptions): string {
+  const resolved = resolveGifFilterOptions(options);
+  return (
+    `[0:v]${gifScaleFilter(resolved)}[gif_frames];` +
+    `[gif_frames][1:v]paletteuse=${resolved.ditherArgs}:diff_mode=rectangle[gif_out]`
+  );
+}
+
+/** Output arguments for the second, two-input pass of GIF encoding. */
+export function ffmpegGifPaletteApplicationArgs(options: GifOutputOptions): string[] {
+  const loop = resolveGifLoop(options);
+  return [
+    '-filter_complex',
+    ffmpegGifPaletteApplicationGraph(options),
+    '-map',
+    '[gif_out]',
+    '-an',
+    '-loop',
+    String(loop),
+  ];
+}
+
+/**
+ * Build a high-quality, compression-friendly GIF palette filter graph.
+ *
+ * A single palette is derived from the parts of the frame that change, while
+ * `diff_mode=rectangle` keeps error diffusion inside the changed rectangle so
+ * static slide backgrounds remain byte-stable and compress efficiently.
+ */
+export function ffmpegGifFilterGraph(options: GifFilterOptions): string {
+  const resolved = resolveGifFilterOptions(options);
+  return (
+    `[0:v]${gifScaleFilter(resolved)},split[gif_frames][gif_palette_source];` +
+    `[gif_palette_source]palettegen=stats_mode=diff:max_colors=${resolved.maxColors}:reserve_transparent=0[gif_palette];` +
+    `[gif_frames][gif_palette]paletteuse=${resolved.ditherArgs}:diff_mode=rectangle[gif_out]`
+  );
+}
+
+function resolveGifLoop(options: GifOutputOptions): number {
   const loop = options.loop ?? 0;
   if (!Number.isSafeInteger(loop) || loop < -1 || loop > 65_535) {
     throw new RangeError('GIF loop must be an integer between -1 and 65535.');
   }
+  return loop;
+}
+
+/** Build the output-side FFmpeg arguments for an animated GIF. */
+export function ffmpegGifOutputArgs(options: GifOutputOptions): string[] {
+  const loop = resolveGifLoop(options);
   return [
     '-filter_complex',
     ffmpegGifFilterGraph(options),

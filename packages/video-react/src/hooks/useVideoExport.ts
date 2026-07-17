@@ -40,6 +40,7 @@ import {
   createEncoder,
   supportsWebCodecs,
   supportsWebCodecsH264,
+  type EncoderFrameSource,
   type MainThreadEncoder,
 } from '../mainThreadEncoder.js';
 import { createWorkerEncoder } from '../workerEncoder.js';
@@ -65,6 +66,10 @@ const FRAME_CAPTURE_TIMEOUT_MS = 60_000;
 const FRAME_ENCODE_TIMEOUT_MS = 60_000;
 const CAPTURE_PROGRESS_START = 7;
 const CAPTURE_PROGRESS_END = 95;
+
+function releaseEncoderFrame(frame: EncoderFrameSource): void {
+  if ('close' in frame) frame.close();
+}
 
 /**
  * Bound browser APIs whose promises are allowed to remain pending forever.
@@ -219,7 +224,7 @@ export interface VideoExportConfig {
   mediaProvider?: MediaProvider;
   /** Policy and byte/time limits for MediaProvider URLs. */
   resourcePolicy?: ResourcePolicy;
-  /** Caption mode for the exported video (default: 'off') */
+  /** Caption mode for the exported video (default: 'off' for MP4, 'standard' for GIF). */
   captionMode?: CaptionMode;
   /** Player IIFE bundle (unused in browser export, kept for CLI/Playwright path) */
   playerScript?: string;
@@ -376,6 +381,8 @@ export function useVideoExport(): VideoExportResult {
       const fps = config.fps ?? (effectiveOutputFormat === 'gif' ? 10 : 30);
       const orientation = config.orientation ?? 'landscape';
       const animationsEnabled = config.animationsEnabled ?? effectiveOutputFormat === 'mp4';
+      const captionMode =
+        config.captionMode ?? (effectiveOutputFormat === 'gif' ? 'standard' : 'off');
       const audioPolicy = config.audioPolicy ?? 'require';
       setOutputFormat(effectiveOutputFormat);
 
@@ -479,7 +486,7 @@ export function useVideoExport(): VideoExportResult {
         const docDuration = await frameCapture.init(
           doc,
           { images, audio: config.audio, width, height, animationsEnabled },
-          config.captionMode,
+          captionMode,
         );
 
         if (cancelledRef.current) return;
@@ -645,15 +652,18 @@ export function useVideoExport(): VideoExportResult {
 
           const time = i / fps;
 
-          const bitmap = await settleWithin(
-            frameCapture.captureFrame(time),
+          const captureOperation: Promise<EncoderFrameSource> = canUseWebCodecs
+            ? frameCapture.captureCanvasFrame(time, { reuseIfUnchanged: true })
+            : frameCapture.captureFrame(time, { reuseIfUnchanged: true });
+          const frame = await settleWithin(
+            captureOperation,
             FRAME_CAPTURE_TIMEOUT_MS,
             `Frame capture stopped responding at frame ${i + 1}/${totalFrames}.`,
-            (lateBitmap) => lateBitmap.close(),
+            releaseEncoderFrame,
           );
 
           if (cancelledRef.current) {
-            bitmap.close();
+            releaseEncoderFrame(frame);
             return;
           }
 
@@ -662,7 +672,7 @@ export function useVideoExport(): VideoExportResult {
           // actual wait visible instead of blaming the next frame capture.
           setPhase(`Encoding frame ${i + 1}/${totalFrames} (${time.toFixed(1)}s)`);
           await settleWithin(
-            encoder.encodeFrame(bitmap, i),
+            encoder.encodeFrame(frame, i),
             FRAME_ENCODE_TIMEOUT_MS,
             `Video encoding stopped responding at frame ${i + 1}/${totalFrames}.`,
           );

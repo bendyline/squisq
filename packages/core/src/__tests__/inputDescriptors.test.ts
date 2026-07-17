@@ -81,7 +81,7 @@ describe('coerceTemplateParams', () => {
 
 describe('lintTemplateParams', () => {
   it('returns [] for a template without descriptors', () => {
-    expect(lintTemplateParams('sectionHeader', { foo: 'bar' })).toEqual([]);
+    expect(lintTemplateParams('factCard', { foo: 'bar' })).toEqual([]);
   });
 
   it('flags an unknown input with a did-you-mean suggestion', () => {

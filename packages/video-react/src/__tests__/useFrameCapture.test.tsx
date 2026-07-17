@@ -3,6 +3,7 @@ import type { Doc } from '@bendyline/squisq/schemas';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   createInlineProvider,
+  getFrameVisualStateKey,
   useFrameCapture,
   waitForVisualUpdate,
 } from '../hooks/useFrameCapture';
@@ -102,6 +103,43 @@ describe('createInlineProvider', () => {
   });
 });
 
+describe('getFrameVisualStateKey', () => {
+  it('reuses static DOM but invalidates for DOM changes and opaque animated media', () => {
+    const root = document.createElement('div');
+    root.innerHTML = '<div>Static hold</div>';
+
+    expect(getFrameVisualStateKey(root, 0)).toBe(getFrameVisualStateKey(root, 3));
+
+    const beforeChange = getFrameVisualStateKey(root, 0);
+    root.innerHTML = '<div>Next slide</div>';
+    expect(getFrameVisualStateKey(root, 0)).not.toBe(beforeChange);
+
+    root.innerHTML = '<img src="loop.gif" alt="Animated">';
+    expect(getFrameVisualStateKey(root, 0)).not.toBe(getFrameVisualStateKey(root, 0.1));
+  });
+
+  it('tracks animation progress but reuses a settled animation hold', () => {
+    const root = document.createElement('div');
+    let progress = 0.25;
+    Object.defineProperty(root, 'getAnimations', {
+      configurable: true,
+      value: () => [
+        {
+          playState: 'paused',
+          effect: { getComputedTiming: () => ({ progress, currentIteration: 0 }) },
+        },
+      ],
+    });
+
+    const quarterFrame = getFrameVisualStateKey(root, 0.25);
+    progress = 0.5;
+    expect(getFrameVisualStateKey(root, 0.5)).not.toBe(quarterFrame);
+
+    progress = 1;
+    expect(getFrameVisualStateKey(root, 1)).toBe(getFrameVisualStateKey(root, 3));
+  });
+});
+
 describe('useFrameCapture', () => {
   it('returns a stable handle and rejects capture before initialization', async () => {
     const { result, rerender } = renderHook(() => useFrameCapture());
@@ -126,8 +164,14 @@ describe('useFrameCapture', () => {
       const ready = element.props.onRenderAPIReady as (value: typeof api) => void;
       ready(api);
     });
-    const canvas = document.createElement('canvas');
-    frameCaptureMocks.html2canvas.mockResolvedValue(canvas);
+    frameCaptureMocks.html2canvas.mockImplementation(
+      async (_root: HTMLElement, options: { canvas: HTMLCanvasElement }) => options.canvas,
+    );
+    const captureContext = {
+      setTransform: vi.fn(),
+      clearRect: vi.fn(),
+    } as unknown as CanvasRenderingContext2D;
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(captureContext);
     const bitmap = { close: vi.fn() } as unknown as ImageBitmap;
     const createBitmap = vi.fn(async () => bitmap);
     vi.stubGlobal('createImageBitmap', createBitmap);
@@ -164,17 +208,56 @@ describe('useFrameCapture', () => {
     expect(document.querySelectorAll('#squisq-capture-root')).toHaveLength(1);
 
     expect(await result.current.captureFrame(2.25)).toBe(bitmap);
-    expect(api.seekTo).toHaveBeenCalledWith(2.25);
+    const canvasFrame = await result.current.captureCanvasFrame(2.35, {
+      reuseIfUnchanged: true,
+    });
+    const reusedCanvasFrame = await result.current.captureCanvasFrame(2.45, {
+      reuseIfUnchanged: true,
+    });
+    expect(api.seekTo).toHaveBeenNthCalledWith(1, 2.25);
+    expect(api.seekTo).toHaveBeenNthCalledWith(2, 2.35);
+    expect(api.seekTo).toHaveBeenNthCalledWith(3, 2.45);
     const root = document.querySelector<HTMLElement>('#squisq-capture-root');
-    expect(frameCaptureMocks.html2canvas).toHaveBeenCalledWith(
+    expect(frameCaptureMocks.html2canvas).toHaveBeenNthCalledWith(
+      1,
       root,
-      expect.objectContaining({ width: 800, height: 450, backgroundColor: '#000000' }),
+      expect.objectContaining({
+        canvas: expect.any(HTMLCanvasElement),
+        width: 800,
+        height: 450,
+        backgroundColor: '#000000',
+      }),
     );
-    expect(createBitmap).toHaveBeenCalledWith(canvas);
-    expect(canvas.width).toBe(0);
-    expect(canvas.height).toBe(0);
+    const captureOptions = frameCaptureMocks.html2canvas.mock.calls[0][1];
+    const ignoreElements = captureOptions.ignoreElements as (element: Element) => boolean;
+    const captureDescendant = document.createElement('span');
+    root!.appendChild(captureDescendant);
+    const unrelatedSibling = document.createElement('div');
+    document.body.appendChild(unrelatedSibling);
+    expect(ignoreElements(document.documentElement)).toBe(false);
+    expect(ignoreElements(document.head)).toBe(false);
+    expect(ignoreElements(root!)).toBe(false);
+    expect(ignoreElements(captureDescendant)).toBe(false);
+    expect(ignoreElements(unrelatedSibling)).toBe(true);
+    captureDescendant.remove();
+    unrelatedSibling.remove();
+    const firstCanvas = frameCaptureMocks.html2canvas.mock.calls[0][1].canvas as HTMLCanvasElement;
+    const secondCanvas = frameCaptureMocks.html2canvas.mock.calls[1][1].canvas as HTMLCanvasElement;
+    expect(canvasFrame).toBe(firstCanvas);
+    expect(reusedCanvasFrame).toBe(firstCanvas);
+    expect(secondCanvas).toBe(firstCanvas);
+    expect(frameCaptureMocks.html2canvas).toHaveBeenCalledTimes(2);
+    expect(captureContext.setTransform).toHaveBeenCalledTimes(2);
+    expect(captureContext.clearRect).toHaveBeenNthCalledWith(1, 0, 0, 800, 450);
+    expect(captureContext.clearRect).toHaveBeenNthCalledWith(2, 0, 0, 800, 450);
+    expect(createBitmap).toHaveBeenNthCalledWith(1, firstCanvas);
+    expect(createBitmap).toHaveBeenCalledOnce();
+    expect(firstCanvas.width).toBe(800);
+    expect(firstCanvas.height).toBe(450);
 
     result.current.destroy();
+    expect(firstCanvas.width).toBe(0);
+    expect(firstCanvas.height).toBe(0);
     expect(frameCaptureMocks.unmount).toHaveBeenCalledTimes(2);
     expect(document.querySelector('#squisq-capture-root')).toBeNull();
   });

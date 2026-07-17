@@ -8,10 +8,13 @@ const mocks = vi.hoisted(() => {
     bitmap,
     frameInit: vi.fn(async () => 0.1),
     captureFrame: vi.fn(async () => bitmap),
+    captureCanvasFrame: vi.fn(async () => ({}) as HTMLCanvasElement),
     destroy: vi.fn(),
     supportsH264: vi.fn(async () => true),
     createWorkerEncoder: vi.fn(),
-    encodeFrame: vi.fn(async (frame: ImageBitmap) => frame.close()),
+    encodeFrame: vi.fn(async (frame: ImageBitmap | HTMLCanvasElement) => {
+      if ('close' in frame) frame.close();
+    }),
     finalize: vi.fn(async () => new Uint8Array([0, 0, 0, 1]).buffer),
     closeEncoder: vi.fn(),
     computeAudioTimeline: vi.fn(() => []),
@@ -27,6 +30,7 @@ vi.mock('../hooks/useFrameCapture.js', () => {
   const frameCaptureHandle = {
     init: mocks.frameInit,
     captureFrame: mocks.captureFrame,
+    captureCanvasFrame: mocks.captureCanvasFrame,
     destroy: mocks.destroy,
   };
   return { useFrameCapture: () => frameCaptureHandle };
@@ -93,7 +97,12 @@ describe('useVideoExport GIF flow', () => {
     vi.clearAllMocks();
     mocks.frameInit.mockReset().mockResolvedValue(0.1);
     mocks.captureFrame.mockReset().mockResolvedValue(mocks.bitmap);
-    mocks.encodeFrame.mockReset().mockImplementation(async (frame: ImageBitmap) => frame.close());
+    mocks.captureCanvasFrame.mockReset().mockResolvedValue({} as HTMLCanvasElement);
+    mocks.encodeFrame
+      .mockReset()
+      .mockImplementation(async (frame: ImageBitmap | HTMLCanvasElement) => {
+        if ('close' in frame) frame.close();
+      });
     mocks.finalize.mockReset().mockResolvedValue(new Uint8Array([0, 0, 0, 1]).buffer);
     mocks.supportsH264.mockResolvedValue(true);
     mocks.createWorkerEncoder.mockReset();
@@ -140,9 +149,11 @@ describe('useVideoExport GIF flow', () => {
     expect(mocks.frameInit).toHaveBeenCalledWith(
       doc,
       expect.objectContaining({ width: 960, height: 540, animationsEnabled: false }),
-      undefined,
+      'standard',
     );
-    expect(mocks.captureFrame).toHaveBeenCalledTimes(1);
+    expect(mocks.captureCanvasFrame).toHaveBeenCalledTimes(1);
+    expect(mocks.captureCanvasFrame).toHaveBeenCalledWith(0, { reuseIfUnchanged: true });
+    expect(mocks.captureFrame).not.toHaveBeenCalled();
     expect(mocks.computeAudioTimeline).not.toHaveBeenCalled();
     expect(mocks.supportsAac).not.toHaveBeenCalled();
     expect(mocks.gifTranscode).toHaveBeenCalledWith(
@@ -162,17 +173,57 @@ describe('useVideoExport GIF flow', () => {
     unmount();
   });
 
+  it('enables repeated-frame reuse for MP4 exports too', async () => {
+    const { result, unmount } = renderHook(() => useVideoExport());
+
+    await act(async () => {
+      await result.current.startExport(doc, {
+        outputFormat: 'mp4',
+        animationsEnabled: false,
+        audioPolicy: 'omit',
+      });
+    });
+
+    expect(mocks.frameInit).toHaveBeenCalledWith(
+      doc,
+      expect.objectContaining({ animationsEnabled: false }),
+      'off',
+    );
+    expect(mocks.captureCanvasFrame).toHaveBeenCalledWith(0, { reuseIfUnchanged: true });
+    expect(mocks.captureFrame).not.toHaveBeenCalled();
+    expect(mocks.gifTranscode).not.toHaveBeenCalled();
+    expect((createObjectUrl.mock.calls[0][0] as Blob).type).toBe('video/mp4');
+
+    unmount();
+  });
+
+  it('preserves an explicit captions-off override for GIF exports', async () => {
+    const { result, unmount } = renderHook(() => useVideoExport());
+
+    await act(async () => {
+      await result.current.startExport(doc, {
+        outputFormat: 'gif',
+        captionMode: 'off',
+        ffmpegWasm: CORE,
+      });
+    });
+
+    expect(mocks.frameInit).toHaveBeenCalledWith(doc, expect.any(Object), 'off');
+
+    unmount();
+  });
+
   it('reports the current frame and progress from frames that actually completed', async () => {
     const progressDoc: Doc = {
       ...doc,
       duration: 0.3,
       blocks: [{ ...doc.blocks[0], duration: 0.3 }],
     };
-    let resolveSecondFrame!: (bitmap: ImageBitmap) => void;
+    let resolveSecondFrame!: (canvas: HTMLCanvasElement) => void;
     mocks.frameInit.mockResolvedValue(0.3);
-    mocks.captureFrame.mockResolvedValueOnce(mocks.bitmap).mockImplementationOnce(
+    mocks.captureCanvasFrame.mockResolvedValueOnce({} as HTMLCanvasElement).mockImplementationOnce(
       () =>
-        new Promise<ImageBitmap>((resolve) => {
+        new Promise<HTMLCanvasElement>((resolve) => {
           resolveSecondFrame = resolve;
         }),
     );
@@ -184,14 +235,14 @@ describe('useVideoExport GIF flow', () => {
         outputFormat: 'gif',
         ffmpegWasm: CORE,
       });
-      await vi.waitFor(() => expect(mocks.captureFrame).toHaveBeenCalledTimes(2));
+      await vi.waitFor(() => expect(mocks.captureCanvasFrame).toHaveBeenCalledTimes(2));
     });
 
     expect(result.current.phase).toBe('Capturing frame 2/3 (0.1s)');
     expect(result.current.progress).toBe(36.3);
 
     await act(async () => {
-      resolveSecondFrame(mocks.bitmap);
+      resolveSecondFrame({} as HTMLCanvasElement);
       await exportPromise;
     });
     expect(result.current.state).toBe('complete');
@@ -246,6 +297,7 @@ describe('useVideoExport GIF flow', () => {
     // The whole point: no capture, no encode, no palette pass.
     expect(mocks.frameInit).not.toHaveBeenCalled();
     expect(mocks.captureFrame).not.toHaveBeenCalled();
+    expect(mocks.captureCanvasFrame).not.toHaveBeenCalled();
     expect(mocks.gifTranscode).not.toHaveBeenCalled();
 
     unmount();

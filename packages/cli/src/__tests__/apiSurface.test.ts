@@ -37,6 +37,7 @@ describe('@bendyline/squisq-cli/api native encoding surface', () => {
       formatOptions: {
         gif: {
           fps: 10,
+          captionStyle: 'off',
           animationsEnabled: false,
           loop: 0,
           maxColors: 256,

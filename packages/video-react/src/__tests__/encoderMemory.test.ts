@@ -24,6 +24,18 @@ describe('encoder memory bounds', () => {
     expect(flush).toHaveBeenCalledOnce();
   });
 
+  it('flushes retained native inputs even when the visible queue has drained', async () => {
+    const flush = vi.fn(async () => undefined);
+
+    await expect(applyWebCodecsBackpressure({ encodeQueueSize: 0, flush }, 10, 9)).resolves.toBe(
+      false,
+    );
+    await expect(applyWebCodecsBackpressure({ encodeQueueSize: 0, flush }, 10, 10)).resolves.toBe(
+      true,
+    );
+    expect(flush).toHaveBeenCalledOnce();
+  });
+
   it('flushes fallback PNGs at six seconds or the byte limit', () => {
     expect(shouldEncodeFfmpegBatch(59, 1, 10)).toBe(false);
     expect(shouldEncodeFfmpegBatch(60, 1, 10)).toBe(true);

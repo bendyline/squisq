@@ -131,6 +131,18 @@ export const TEMPLATE_INPUT_DESCRIPTORS: Readonly<
     { key: 'subtitle', description: 'Subtitle or tagline' },
     { key: 'backgroundColor', description: 'Background color', valueHint: 'CSS color' },
   ],
+  sectionHeader: [
+    { key: 'title', description: 'Section title' },
+    {
+      key: 'colorScheme',
+      description: 'Fallback background color scheme',
+      valueHint: COLOR_SCHEME_HINT,
+    },
+    { key: 'imageSrc', description: 'Optional background image path' },
+    { key: 'imageAlt', description: 'Alt text for the background image' },
+    { key: 'ambientMotion', description: 'Slow zoom/pan effect', values: AMBIENT_MOTION_VALUES },
+  ],
+  content: [{ key: 'title', description: 'Heading shown above the complete body' }],
   statHighlight: [
     { key: 'stat', description: 'The statistic (e.g. "89%", "2x")' },
     { key: 'description', description: 'What the stat means' },

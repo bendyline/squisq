@@ -7,7 +7,7 @@
  *
  * Uses React directly — no script injection, no iframes, no eval.
  *
- * Returns an ImageBitmap for each frame (transferable to a Worker).
+ * Returns either a reusable canvas or an ImageBitmap snapshot for a Worker.
  */
 
 import { createElement } from 'react';
@@ -19,6 +19,15 @@ import { DocPlayer, MediaContext } from '@bendyline/squisq-react';
 import type { SquisqRenderAPI, CaptionMode, CaptionStyle } from '@bendyline/squisq-react';
 import html2canvas from 'html2canvas';
 
+export interface FrameCaptureOptions {
+  /**
+   * Reuse the previous raster when seeking produced the same visual state.
+   * The timeline is still advanced so animations, captions, and media remain
+   * correct; only the expensive html2canvas pass is skipped.
+   */
+  reuseIfUnchanged?: boolean;
+}
+
 export interface FrameCaptureHandle {
   /** Initialize the hidden player. Returns the video duration in seconds. */
   init: (
@@ -27,7 +36,12 @@ export interface FrameCaptureHandle {
     captionMode?: CaptionMode,
   ) => Promise<number>;
   /** Capture a single frame at the given time (seconds). Returns an ImageBitmap. */
-  captureFrame: (time: number) => Promise<ImageBitmap>;
+  captureFrame: (time: number, options?: FrameCaptureOptions) => Promise<ImageBitmap>;
+  /**
+   * Render into the hook's reusable canvas without allocating an ImageBitmap.
+   * The canvas remains valid until the next capture or destroy call.
+   */
+  captureCanvasFrame: (time: number, options?: FrameCaptureOptions) => Promise<HTMLCanvasElement>;
   /** Clean up resources. */
   destroy: () => void;
 }
@@ -45,6 +59,8 @@ const MIME_MAP: Record<string, string> = {
 };
 
 const VISUAL_UPDATE_FALLBACK_MS = 100;
+const POTENTIALLY_ANIMATED_IMAGE_URL =
+  /(?:^data:image\/(?:gif|webp|avif)[;,]|\.(?:gif|webp|avif)(?:[?#]|$))/i;
 
 /**
  * Let React and the browser present DOM changes without waiting forever for
@@ -116,6 +132,84 @@ export function createInlineProvider(images: Map<string, ArrayBuffer>): MediaPro
   };
 }
 
+/** Keep html2canvas's document clone limited to the rendered player and styles. */
+function shouldIgnoreCaptureSibling(element: Element, captureRoot: HTMLElement): boolean {
+  const { head } = captureRoot.ownerDocument;
+  const isInDocumentHead = element === head || head.contains(element);
+  const isInCaptureBranch =
+    element === captureRoot || element.contains(captureRoot) || captureRoot.contains(element);
+  return !isInDocumentHead && !isInCaptureBranch;
+}
+
+function finiteMediaTime(value: number): string {
+  return Number.isFinite(value) ? value.toFixed(6) : 'unknown';
+}
+
+/**
+ * Describe everything in the capture subtree that can affect its pixels at a
+ * point on the document timeline. Equal keys mean the previous raster can be
+ * reused safely. This is deliberately conservative for visual sources whose
+ * internal state cannot be inspected (animated images, canvas, embeds, SMIL).
+ */
+export function getFrameVisualStateKey(captureRoot: HTMLElement, timelineTime: number): string {
+  const markup = captureRoot.innerHTML;
+  let needsTimelineKey = false;
+
+  const animationStates: string[] = [];
+  if (typeof captureRoot.getAnimations === 'function') {
+    const animations = captureRoot.getAnimations({ subtree: true });
+    animations.forEach((animation, index) => {
+      try {
+        const timing = animation.effect?.getComputedTiming();
+        if (!timing) {
+          needsTimelineKey = true;
+          return;
+        }
+        animationStates.push(
+          `${index}:${animation.playState}:${String(timing.progress)}:${String(
+            timing.currentIteration,
+          )}`,
+        );
+      } catch {
+        needsTimelineKey = true;
+      }
+    });
+  } else if (/\b(?:anim-|transition-)|animation(?:-name)?\s*:/i.test(markup)) {
+    needsTimelineKey = true;
+  }
+
+  const imageStates = Array.from(captureRoot.querySelectorAll('img')).map((image) => {
+    const src = image.currentSrc || image.src;
+    if (POTENTIALLY_ANIMATED_IMAGE_URL.test(src)) needsTimelineKey = true;
+    return `${src}:${image.complete}:${image.naturalWidth}x${image.naturalHeight}`;
+  });
+  if (POTENTIALLY_ANIMATED_IMAGE_URL.test(markup)) needsTimelineKey = true;
+
+  const videoStates = Array.from(captureRoot.querySelectorAll('video')).map(
+    (video) =>
+      `${video.currentSrc || video.src}:${finiteMediaTime(video.currentTime)}:${video.readyState}:` +
+      `${video.videoWidth}x${video.videoHeight}`,
+  );
+
+  if (
+    captureRoot.querySelector(
+      'canvas, iframe, object, embed, animate, animateMotion, animateTransform, set',
+    )
+  ) {
+    needsTimelineKey = true;
+  }
+
+  const fontStatus = captureRoot.ownerDocument.fonts?.status ?? 'unsupported';
+  return JSON.stringify({
+    markup,
+    animationStates,
+    imageStates,
+    videoStates,
+    fontStatus,
+    timelineTime: needsTimelineKey ? timelineTime.toFixed(6) : null,
+  });
+}
+
 /**
  * Hook that manages a hidden div for frame capture.
  */
@@ -124,6 +218,9 @@ export function useFrameCapture(): FrameCaptureHandle {
   const rootRef = useRef<Root | null>(null);
   const renderAPIRef = useRef<SquisqRenderAPI | null>(null);
   const mediaProviderRef = useRef<MediaProvider | null>(null);
+  const captureCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  const lastVisualStateKeyRef = useRef<string | null>(null);
+  const hasCapturedFrameRef = useRef(false);
   const dimensionsRef = useRef<{ width: number; height: number }>({ width: 1920, height: 1080 });
 
   const init = useCallback(
@@ -135,19 +232,32 @@ export function useFrameCapture(): FrameCaptureHandle {
       // Clean up any existing container.
       // Defer unmount to avoid "synchronously unmount a root while React
       // was already rendering" when init() is called from a React handler.
-      if (rootRef.current || containerRef.current || mediaProviderRef.current) {
+      if (
+        rootRef.current ||
+        containerRef.current ||
+        mediaProviderRef.current ||
+        captureCanvasRef.current
+      ) {
         const oldRoot = rootRef.current;
         const oldContainer = containerRef.current;
         const oldMediaProvider = mediaProviderRef.current;
+        const oldCaptureCanvas = captureCanvasRef.current;
         rootRef.current = null;
         containerRef.current = null;
         renderAPIRef.current = null;
         mediaProviderRef.current = null;
+        captureCanvasRef.current = null;
+        lastVisualStateKeyRef.current = null;
+        hasCapturedFrameRef.current = false;
         await new Promise<void>((resolve) => {
           setTimeout(() => {
             if (oldRoot) oldRoot.unmount();
             if (oldContainer) oldContainer.remove();
             oldMediaProvider?.dispose();
+            if (oldCaptureCanvas) {
+              oldCaptureCanvas.width = 0;
+              oldCaptureCanvas.height = 0;
+            }
             resolve();
           }, 0);
         });
@@ -157,6 +267,20 @@ export function useFrameCapture(): FrameCaptureHandle {
       const height = renderOptions.height ?? 1080;
       const animationsEnabled = renderOptions.animationsEnabled ?? true;
       dimensionsRef.current = { width, height };
+
+      // Keep one html2canvas destination for the full export. The main-thread
+      // WebCodecs path can consume this canvas directly, avoiding a second
+      // full-resolution ImageBitmap allocation for every frame. Chromium may
+      // retain those bitmap surfaces long after close(), which is what makes a
+      // long export eventually hit memory-pressure thrashing.
+      const captureCanvas = document.createElement('canvas');
+      captureCanvas.width = width;
+      captureCanvas.height = height;
+      captureCanvas.style.width = `${width}px`;
+      captureCanvas.style.height = `${height}px`;
+      captureCanvasRef.current = captureCanvas;
+      lastVisualStateKeyRef.current = null;
+      hasCapturedFrameRef.current = false;
 
       // Create a hidden container
       const container = document.createElement('div');
@@ -243,50 +367,79 @@ export function useFrameCapture(): FrameCaptureHandle {
     [],
   );
 
-  const captureFrame = useCallback(async (time: number): Promise<ImageBitmap> => {
-    const container = containerRef.current;
-    const api = renderAPIRef.current;
-    if (!container || !api) {
-      throw new Error('Frame capture not initialized — call init() first');
-    }
+  const captureCanvasFrame = useCallback(
+    async (time: number, options: FrameCaptureOptions = {}): Promise<HTMLCanvasElement> => {
+      const container = containerRef.current;
+      const api = renderAPIRef.current;
+      const captureCanvas = captureCanvasRef.current;
+      if (!container || !api || !captureCanvas) {
+        throw new Error('Frame capture not initialized — call init() first');
+      }
 
-    const { width, height } = dimensionsRef.current;
+      const { width, height } = dimensionsRef.current;
 
-    // Seek the player to the target time
-    await api.seekTo(time);
+      // Seek the player to the target time
+      await api.seekTo(time);
 
-    // Wait for the DOM to update after seek. Keep a task-based fallback so a
-    // backgrounded browser/Electron renderer cannot deadlock the export.
-    await waitForVisualUpdate(2);
+      // Wait for the DOM to update after seek. Keep a task-based fallback so a
+      // backgrounded browser/Electron renderer cannot deadlock the export.
+      await waitForVisualUpdate(2);
 
-    const root = container.querySelector('#squisq-capture-root') as HTMLElement;
-    if (!root) {
-      throw new Error('Capture root element not found');
-    }
+      const root = container.querySelector('#squisq-capture-root') as HTMLElement;
+      if (!root) {
+        throw new Error('Capture root element not found');
+      }
 
-    // Render the DOM to a canvas via html2canvas.
-    // We're in the same document (no iframe), so COEP doesn't block cloning.
-    const canvas = await html2canvas(root, {
-      width,
-      height,
-      scale: 1,
-      useCORS: true,
-      allowTaint: true,
-      backgroundColor: '#000000',
-      logging: false,
-    });
+      const visualStateKey = options.reuseIfUnchanged ? getFrameVisualStateKey(root, time) : null;
+      if (
+        visualStateKey !== null &&
+        hasCapturedFrameRef.current &&
+        lastVisualStateKeyRef.current === visualStateKey
+      ) {
+        return captureCanvas;
+      }
 
-    // Convert to ImageBitmap (transferable to worker — zero-copy). html2canvas
-    // creates a fresh backing store for every frame; resize it immediately once
-    // the bitmap owns its snapshot so long exports do not wait for a later GC
-    // cycle to reclaim gigabytes of cumulative canvas allocations.
-    try {
-      return await createImageBitmap(canvas);
-    } finally {
-      canvas.width = 0;
-      canvas.height = 0;
-    }
-  }, []);
+      // html2canvas scales/translates a supplied context but does not reset it
+      // between calls. Restore the reusable surface to its initial state and
+      // clear the previous frame before rendering the next one.
+      const captureContext = captureCanvas.getContext('2d');
+      if (!captureContext) throw new Error('Could not create the frame capture canvas context');
+      captureContext.setTransform(1, 0, 0, 1, 0, 0);
+      captureContext.clearRect(0, 0, width, height);
+
+      // Render the DOM to the bounded, reusable canvas via html2canvas.
+      // We're in the same document (no iframe), so COEP doesn't block cloning.
+      const canvas = await html2canvas(root, {
+        canvas: captureCanvas,
+        width,
+        height,
+        scale: 1,
+        useCORS: true,
+        allowTaint: true,
+        backgroundColor: '#000000',
+        logging: false,
+        // html2canvas starts cloning at documentElement. Do not clone the rest
+        // of the editor/site UI on every frame; only the capture root, its
+        // ancestors, descendants, and document styles can affect this render.
+        ignoreElements: (element) => shouldIgnoreCaptureSibling(element, root),
+      });
+
+      hasCapturedFrameRef.current = true;
+      lastVisualStateKeyRef.current = visualStateKey;
+
+      // The reusable canvas is returned directly for the main-thread encoder.
+      return canvas;
+    },
+    [],
+  );
+
+  const captureFrame = useCallback(
+    async (time: number, options: FrameCaptureOptions = {}): Promise<ImageBitmap> => {
+      const canvas = await captureCanvasFrame(time, options);
+      return createImageBitmap(canvas);
+    },
+    [captureCanvasFrame],
+  );
 
   const destroy = useCallback(() => {
     if (rootRef.current) {
@@ -299,10 +452,20 @@ export function useFrameCapture(): FrameCaptureHandle {
     }
     mediaProviderRef.current?.dispose();
     mediaProviderRef.current = null;
+    if (captureCanvasRef.current) {
+      captureCanvasRef.current.width = 0;
+      captureCanvasRef.current.height = 0;
+      captureCanvasRef.current = null;
+    }
+    lastVisualStateKeyRef.current = null;
+    hasCapturedFrameRef.current = false;
     renderAPIRef.current = null;
   }, []);
 
   // Return a stable object to prevent useEffect cleanup loops
   // in consumers that depend on the handle reference.
-  return useMemo(() => ({ init, captureFrame, destroy }), [init, captureFrame, destroy]);
+  return useMemo(
+    () => ({ init, captureFrame, captureCanvasFrame, destroy }),
+    [init, captureFrame, captureCanvasFrame, destroy],
+  );
 }

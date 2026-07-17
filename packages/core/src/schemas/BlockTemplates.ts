@@ -12,6 +12,7 @@
  * Template Types:
  * - title: Doc intro with title + subtitle
  * - sectionHeader: Colored section divider
+ * - content: Heading with the complete Markdown body
  * - statHighlight: Big number/stat with description
  * - quote: Large centered quote
  * - factCard: Key fact with explanation
@@ -160,6 +161,19 @@ export interface SectionHeaderInput extends BaseTemplateBlock {
   imageAlt?: string;
   /** Ambient motion for background image */
   ambientMotion?: 'zoomIn' | 'zoomOut' | 'panLeft' | 'panRight';
+}
+
+/**
+ * Content block - loss-averse heading and body layout.
+ *
+ * This is the safe default for agent-authored presentation drafts: it renders
+ * the complete plain-text projection of the block body and lets preview
+ * diagnostics report overflow before a later visual-optimization pass.
+ */
+export interface ContentBlockInput extends BaseTemplateBlock {
+  template: 'content';
+  /** Heading shown above the body. */
+  title: string;
 }
 
 /**
@@ -721,6 +735,7 @@ export interface DataTableInput extends BaseTemplateBlock {
 export type TemplateBlock =
   | TitleBlockInput
   | SectionHeaderInput
+  | ContentBlockInput
   | StatHighlightInput
   | QuoteBlockInput
   | FactCardInput

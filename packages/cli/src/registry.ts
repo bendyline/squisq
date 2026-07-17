@@ -28,7 +28,7 @@ export interface Mp4FormatOptions {
   orientation?: VideoOrientation;
   width?: number;
   height?: number;
-  captionStyle?: 'standard' | 'social';
+  captionStyle?: 'off' | 'standard' | 'social';
   coverPreRoll?: number;
   animationsEnabled?: boolean;
 }
@@ -40,7 +40,7 @@ export interface GifFormatOptions {
   orientation?: VideoOrientation;
   width?: number;
   height?: number;
-  captionStyle?: 'standard' | 'social';
+  captionStyle?: 'off' | 'standard' | 'social';
   coverPreRoll?: number;
   animationsEnabled?: boolean;
   loop?: number;

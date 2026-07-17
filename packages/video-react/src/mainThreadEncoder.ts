@@ -39,9 +39,11 @@ export interface EncoderConfig {
   };
 }
 
+export type EncoderFrameSource = ImageBitmap | HTMLCanvasElement;
+
 export interface MainThreadEncoder {
-  /** Encode a single frame. The bitmap is closed after encoding. */
-  encodeFrame(bitmap: ImageBitmap, frameIndex: number): Promise<void>;
+  /** Encode a single frame. ImageBitmap sources are closed after encoding. */
+  encodeFrame(frame: EncoderFrameSource, frameIndex: number): Promise<void>;
   /**
    * Hand an encoded audio chunk (from a WebCodecs `AudioEncoder`) to the muxer.
    * Only valid when the encoder was created with an `audio` config; otherwise a
@@ -118,6 +120,7 @@ export function createEncoder(config: EncoderConfig): MainThreadEncoder {
   let fatalError: Error | null = null;
   const frameDuration = 1_000_000 / config.fps; // microseconds per frame
   const queueLimit = resolveWebCodecsQueueLimit(config);
+  let framesSinceFlush = 0;
 
   /** Tear the encoder down and surface the latched (or supplied) failure. */
   function fail(err: Error): Error {
@@ -148,15 +151,15 @@ export function createEncoder(config: EncoderConfig): MainThreadEncoder {
   });
 
   return {
-    async encodeFrame(bitmap: ImageBitmap, frameIndex: number): Promise<void> {
+    async encodeFrame(source: EncoderFrameSource, frameIndex: number): Promise<void> {
       // Check the latched error first: once the encoder has failed, every
       // subsequent frame is wasted work and the export must stop here.
       if (fatalError) {
-        bitmap.close();
+        if ('close' in source) source.close();
         throw fail(fatalError);
       }
       if (closed) {
-        bitmap.close();
+        if ('close' in source) source.close();
         throw new Error('Encoder already closed');
       }
       try {
@@ -164,22 +167,24 @@ export function createEncoder(config: EncoderConfig): MainThreadEncoder {
         // Chromium has released its pixels. A software encoder can otherwise
         // trail capture by hundreds of frames and eventually force the renderer
         // into memory-pressure thrashing.
-        await applyWebCodecsBackpressure(encoder, queueLimit);
+        const drained = await applyWebCodecsBackpressure(encoder, queueLimit, framesSinceFlush);
+        if (drained) framesSinceFlush = 0;
         if (fatalError) throw fail(fatalError);
         if (closed) throw new Error('Encoder already closed');
 
         const timestamp = Math.round(frameIndex * frameDuration);
-        const frame = new VideoFrame(bitmap, { timestamp });
+        const frame = new VideoFrame(source, { timestamp });
         try {
           const keyFrame = frameIndex % 30 === 0;
           encoder.encode(frame, { keyFrame });
+          framesSinceFlush++;
         } finally {
           frame.close();
         }
       } catch (err: unknown) {
         throw fail(err instanceof Error ? err : new Error(String(err)));
       } finally {
-        bitmap.close();
+        if ('close' in source) source.close();
       }
     },
 

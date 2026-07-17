@@ -218,8 +218,8 @@ describe('validateMarkdownSource — template inputs', () => {
   });
 
   it('does not lint templates without descriptors', () => {
-    // sectionHeader has no input descriptors → arbitrary keys are not flagged.
-    expect(codes('## Break {[sectionHeader whatever=5]}')).toEqual([]);
+    // factCard derives inputs from heading/body and has no override descriptors.
+    expect(codes('## Fact {[factCard whatever=5]}')).toEqual([]);
   });
 
   it('leaves a clean, fully-specified block with no findings', () => {

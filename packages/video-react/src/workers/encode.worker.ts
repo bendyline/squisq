@@ -39,6 +39,7 @@ let cancelled = false;
 let videoEncoder: VideoEncoder | null = null;
 let muxer: Mp4MuxerHandle | null = null;
 let webCodecsQueueLimit = 1;
+let webCodecsFramesSinceFlush = 0;
 
 // ffmpeg.wasm state
 let ffmpegInstance: FFmpeg | null = null;
@@ -153,6 +154,7 @@ function initWebCodecs(config: InitMessage) {
     framerate: config.fps,
   });
   webCodecsQueueLimit = resolveWebCodecsQueueLimit(config);
+  webCodecsFramesSinceFlush = 0;
 }
 
 async function encodeFrameWebCodecs(msg: FrameMessage) {
@@ -162,13 +164,19 @@ async function encodeFrameWebCodecs(msg: FrameMessage) {
   }
 
   try {
-    await applyWebCodecsBackpressure(videoEncoder, webCodecsQueueLimit);
+    const drained = await applyWebCodecsBackpressure(
+      videoEncoder,
+      webCodecsQueueLimit,
+      webCodecsFramesSinceFlush,
+    );
+    if (drained) webCodecsFramesSinceFlush = 0;
     if (cancelled || videoEncoder.state === 'closed') return;
 
     const frame = new VideoFrame(msg.bitmap, { timestamp: msg.timestamp });
     try {
       const keyFrame = msg.frameIndex % 30 === 0; // Key frame every 30 frames
       videoEncoder.encode(frame, { keyFrame });
+      webCodecsFramesSinceFlush++;
     } finally {
       frame.close();
     }

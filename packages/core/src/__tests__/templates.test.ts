@@ -49,6 +49,7 @@ describe('templateRegistry', () => {
     const expected = [
       'title',
       'sectionHeader',
+      'content',
       'statHighlight',
       'quote',
       'factCard',
@@ -96,6 +97,24 @@ describe('hasTemplate', () => {
 });
 
 describe('canonical template materialization', () => {
+  it('renders the complete body with the content template', () => {
+    const markdown = parseMarkdown(
+      '# Operational detail {[content]}\n\nFirst complete paragraph.\n\nSecond complete paragraph.',
+    );
+    const doc = markdownToDoc(markdown);
+    const block = doc.blocks[0] as TemplateBlock;
+    const context = createTemplateContext(DEFAULT_THEME, 0, 1, VIEWPORT_PRESETS.landscape);
+    const result = materializeTemplateForTest(block, context);
+    const renderedText = (result.layers ?? [])
+      .filter((layer): layer is TextLayer => layer.type === 'text')
+      .map((layer) => layer.content.text)
+      .join('\n');
+
+    expect(renderedText).toContain('Operational detail');
+    expect(renderedText).toContain('First complete paragraph.');
+    expect(renderedText).toContain('Second complete paragraph.');
+  });
+
   it('expands titleSlide template into layers', () => {
     const block: TemplateBlock = {
       template: 'title',

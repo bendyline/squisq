@@ -31,6 +31,10 @@ export const TEMPLATE_METADATA: Record<string, TemplateMetadata> = {
     label: 'Section Header',
     description: 'A clean section break with a prominent title and optional background image.',
   },
+  content: {
+    label: 'Content',
+    description: 'Shows a heading and the complete body in a loss-averse content-first layout.',
+  },
   statHighlight: {
     label: 'Stat Highlight',
     description: 'Showcases a single key number or metric with supporting context.',

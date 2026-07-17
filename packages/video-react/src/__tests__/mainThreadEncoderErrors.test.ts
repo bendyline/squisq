@@ -169,6 +169,17 @@ describe('mainThreadEncoder error propagation', () => {
     expect(muxerState.finalize).toHaveBeenCalledOnce();
   });
 
+  it('encodes a reusable canvas without treating it as a disposable bitmap', async () => {
+    const encoder = createEncoder(CONFIG);
+    const canvas = document.createElement('canvas');
+
+    await encoder.encodeFrame(canvas, 0);
+
+    expect(encodeQueueSize).toBe(1);
+    expect(canvas.width).toBe(300);
+    expect(canvas.height).toBe(150);
+  });
+
   it('drains a saturated WebCodecs queue before accepting more raw frames', async () => {
     const encoder = createEncoder({ ...CONFIG, width: 1920, height: 1080 });
 
@@ -178,5 +189,19 @@ describe('mainThreadEncoder error propagation', () => {
 
     expect(flushCount).toBe(1);
     expect(encodeQueueSize).toBe(1);
+  });
+
+  it('flushes periodically when Chromium drains the visible queue early', async () => {
+    const encoder = createEncoder({ ...CONFIG, width: 960, height: 540, fps: 10 });
+
+    for (let i = 0; i < 10; i++) {
+      await encoder.encodeFrame(fakeBitmap(), i);
+      // Model Chromium accepting each request immediately while retaining its
+      // native input surface until flush().
+      encodeQueueSize = 0;
+    }
+    await encoder.encodeFrame(fakeBitmap(), 10);
+
+    expect(flushCount).toBe(1);
   });
 });

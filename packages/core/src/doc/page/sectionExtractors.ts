@@ -16,6 +16,7 @@ import type { Block } from '../../schemas/Doc.js';
 import type {
   AccentImage,
   ComparisonBarInput,
+  ContentBlockInput,
   DataTableInput,
   DateEventInput,
   DefinitionCardInput,
@@ -134,6 +135,14 @@ const sectionHeader: SectionExtractor = (input) => {
     slots: { title: s.title, media },
     colorScheme: s.colorScheme,
     mediaBackground: !!s.imageSrc,
+  };
+};
+
+const content: SectionExtractor = (input) => {
+  const c = input as ContentBlockInput;
+  return {
+    kind: 'prose',
+    slots: { title: c.title, body: bodyRichText(input) },
   };
 };
 
@@ -441,6 +450,7 @@ const layout: SectionExtractor = (input, ctx) =>
 export const sectionExtractors: Record<string, SectionExtractor> = {
   title,
   sectionHeader,
+  content,
   statHighlight,
   quote,
   factCard,

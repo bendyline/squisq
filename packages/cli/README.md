@@ -77,7 +77,7 @@ squisq video doc.json -o out.mp4
 | `--fps`                            | Frames per second (MP4 1–120; GIF 1–100)                             | MP4 30; GIF 10            |
 | `--quality`                        | MP4-only quality: `draft`, `normal`, or `high`                       | normal                    |
 | `--orientation`                    | `landscape` or `portrait`                                            | landscape                 |
-| `--captions`                       | `off`, `standard`, or `social`                                       | off                       |
+| `--captions`                       | `off`, `standard`, or `social`                                       | MP4 off; GIF standard     |
 | `--animations` / `--no-animations` | Enable/disable layer animations and block transitions                | MP4 enabled; GIF disabled |
 | `--loop`                           | GIF repeat count (`0` forever, `-1` no loop)                         | 0                         |
 | `--max-colors`                     | GIF palette size, 2–256                                              | 256                       |
@@ -169,7 +169,7 @@ const result = await renderDocToMp4(doc, input.container, {
   fps: 30, // default 30
   quality: 'high', // 'draft' | 'normal' | 'high' (default 'normal')
   orientation: 'landscape', // 'landscape' | 'portrait' (default 'landscape')
-  captionStyle: 'social', // 'standard' | 'social' — omit for no captions
+  captionStyle: 'social', // 'off' | 'standard' | 'social' (default 'off')
   animationsEnabled: false, // static slide changes; media/timing remain active
   coverPreRoll: 2, // seconds of cover-slide pre-roll (default 0)
   onProgress: (phase, pct) => console.log(`${phase}: ${pct}%`),
@@ -188,15 +188,17 @@ import { renderDocToGif } from '@bendyline/squisq-cli/api';
 const result = await renderDocToGif(doc, input.container, {
   outputPath: './output.gif',
   fps: 10,
+  captionStyle: 'off', // override the default 'standard' captions
   animationsEnabled: false,
   maxColors: 256,
   loop: 0,
 });
 ```
 
-GIF defaults to 960×540 landscape (540×960 portrait), 10 fps, an infinite
-loop, and disabled slide animations/transitions. Embedded video still advances,
-but all audio is omitted and reported through `result.warnings`.
+GIF defaults to 960×540 landscape (540×960 portrait), 10 fps, standard
+captions, an infinite loop, and disabled slide animations/transitions. Set
+`captionStyle: 'off'` to omit captions. Embedded video still advances, but all
+audio is omitted and reported through `result.warnings`.
 
 ### Native frame encoding
 

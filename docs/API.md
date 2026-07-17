@@ -530,7 +530,7 @@ interface LayoutHints {
 
 ### Subpath: Doc
 
-**Import:** `@bendyline/squisq/doc` — the template registry, all 25 templates,
+**Import:** `@bendyline/squisq/doc` — the template registry, all 26 templates,
 markdown↔doc conversion, canonical layer materialization, and
 theme/validation helpers.
 
@@ -654,9 +654,14 @@ function isContainerTemplate(name: string): boolean;
 function buildRegistry(custom?: readonly CustomTemplateDefinition[]): RuntimeTemplateRegistry;
 ```
 
-All 25 built-in templates register at import time under their canonical short
+All 26 built-in templates register at import time under their canonical short
 ids. `resolveTemplateName` continues to read legacy ids such as `titleBlock`
 and `diagramNode`, while the compatibility table itself remains internal.
+
+`TEMPLATE_AUTHORING_METADATA` is the exhaustive agent-oriented companion to
+the registry. It declares each template's semantic role, whether body prose is
+complete, derived, structured, or ignored, and whether the template is safe as
+a loss-averse content-first default.
 
 > There is no global `registerTemplate()`. Custom templates travel with the doc
 > (`Doc.customTemplates`, from the `squisq-custom-templates` frontmatter key) and
@@ -2557,6 +2562,9 @@ function ffmpegAudioMuxArgs(bitrate: string | number): string[];
 // native and browser animated-GIF exporters.
 function ffmpegGifFilterGraph(options: GifFilterOptions): string;
 function ffmpegGifOutputArgs(options: GifOutputOptions): string[];
+function ffmpegGifPaletteGenerationFilter(options: GifFilterOptions): string;
+function ffmpegGifPaletteApplicationGraph(options: GifFilterOptions): string;
+function ffmpegGifPaletteApplicationArgs(options: GifOutputOptions): string[];
 type GifDither = 'bayer' | 'sierra2_4a' | 'none';
 interface GifFilterOptions {
   width: number;
@@ -2708,7 +2716,7 @@ interface VideoExportConfig {
   images?: Map<string, ArrayBuffer>;
   audio?: Map<string, ArrayBuffer>;
   mediaProvider?: MediaProvider;
-  captionMode?: CaptionMode; // default 'off'
+  captionMode?: CaptionMode; // MP4 default 'off'; GIF default 'standard'
   playerScript?: string; // unused by the browser export path; kept for CLI/Playwright
   ffmpegWasm?: FfmpegWasmLoadConfig; // REQUIRED for GIF + any ffmpeg.wasm path
 }
@@ -2814,21 +2822,21 @@ Render a document to MP4 or animated GIF (Playwright headless frame capture +
 native ffmpeg encode). In addition to markdown/container/folder input, accepts
 a pre-built Doc as a `.json` file.
 
-| Option                                 | Description                                      | Default              |
-| -------------------------------------- | ------------------------------------------------ | -------------------- |
-| `-o, --output`                         | Output `.mp4` or `.gif` path                     | `<input>.mp4`        |
-| `--format`                             | `mp4` or `gif`                                   | inferred / mp4       |
-| `--fps`                                | Frames per second (MP4 1–120; GIF 1–100)         | MP4 30; GIF 10       |
-| `--quality`                            | MP4 only: draft, normal, or high                 | normal               |
-| `--orientation`                        | landscape or portrait                            | landscape            |
-| `--captions`                           | off, standard, or social                         | off                  |
-| `--animations` / `--no-animations`     | Layer animations and block transitions           | MP4 on; GIF off      |
-| `--loop` / `--max-colors` / `--dither` | GIF loop and palette controls                    | 0 / 256 / sierra2_4a |
-| `-t, --theme`                          | Squisq theme id to apply                         | none                 |
-| `--transform`                          | Transform style to apply before rendering        | none                 |
-| `--cover-preroll`                      | Seconds of cover-slide pre-roll before the story | 2                    |
-| `--width` / `--height`                 | Dimension overrides                              | auto                 |
-| `--no-auto-templates`                  | Disable auto template pick                       | (auto on)            |
+| Option                                 | Description                                      | Default               |
+| -------------------------------------- | ------------------------------------------------ | --------------------- |
+| `-o, --output`                         | Output `.mp4` or `.gif` path                     | `<input>.mp4`         |
+| `--format`                             | `mp4` or `gif`                                   | inferred / mp4        |
+| `--fps`                                | Frames per second (MP4 1–120; GIF 1–100)         | MP4 30; GIF 10        |
+| `--quality`                            | MP4 only: draft, normal, or high                 | normal                |
+| `--orientation`                        | landscape or portrait                            | landscape             |
+| `--captions`                           | off, standard, or social                         | MP4 off; GIF standard |
+| `--animations` / `--no-animations`     | Layer animations and block transitions           | MP4 on; GIF off       |
+| `--loop` / `--max-colors` / `--dither` | GIF loop and palette controls                    | 0 / 256 / sierra2_4a  |
+| `-t, --theme`                          | Squisq theme id to apply                         | none                  |
+| `--transform`                          | Transform style to apply before rendering        | none                  |
+| `--cover-preroll`                      | Seconds of cover-slide pre-roll before the story | 2                     |
+| `--width` / `--height`                 | Dimension overrides                              | auto                  |
+| `--no-auto-templates`                  | Disable auto template pick                       | (auto on)             |
 
 **Requires:** ffmpeg and Playwright (chromium). ffmpeg is resolved from the
 `SQUISQ_FFMPEG` env var, then `PATH`, then an optionally-installed `ffmpeg-static`
@@ -2944,7 +2952,7 @@ interface RenderDocToMp4Options {
   orientation?: 'landscape' | 'portrait'; // default 'landscape'
   width?: number;
   height?: number;
-  captionStyle?: 'standard' | 'social';
+  captionStyle?: 'off' | 'standard' | 'social'; // default 'off'
   animationsEnabled?: boolean; // default true
   coverPreRoll?: number; // seconds shown only when a cover exists, default 0
   onProgress?: (phase: string, percent: number) => void;
@@ -2966,7 +2974,7 @@ interface RenderDocToGifOptions {
   orientation?: VideoOrientation;
   width?: number; // default 960 landscape / 540 portrait
   height?: number; // default 540 landscape / 960 portrait
-  captionStyle?: 'standard' | 'social';
+  captionStyle?: 'off' | 'standard' | 'social'; // default 'standard'
   coverPreRoll?: number;
   animationsEnabled?: boolean; // default false
   loop?: number; // default 0 (forever)

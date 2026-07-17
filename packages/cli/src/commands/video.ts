@@ -76,8 +76,7 @@ export function registerVideoCommand(program: Command): void {
     )
     .option(
       '--captions <style>',
-      `Caption style: ${VALID_CAPTIONS.join(', ')} (default: off)`,
-      'off',
+      `Caption style: ${VALID_CAPTIONS.join(', ')} (default: off for MP4, standard for GIF)`,
     )
     .option(
       '--no-auto-templates',
@@ -178,11 +177,10 @@ async function runVideo(inputPath: string, opts: VideoCommandOptions): Promise<v
   const height = opts.height === undefined ? undefined : Number(opts.height);
   validateVideoExportOptions({ width, height, orientation });
 
-  const captions = opts.captions ?? 'off';
+  const captions = opts.captions ?? (outputFormat === 'gif' ? 'standard' : 'off');
   if (!VALID_CAPTIONS.includes(captions as (typeof VALID_CAPTIONS)[number])) {
     throw new Error(`Invalid captions "${captions}". Valid: ${VALID_CAPTIONS.join(', ')}`);
   }
-  const captionStyle = captions === 'off' ? undefined : (captions as 'standard' | 'social');
 
   const coverPreRoll = Number(opts.coverPreroll ?? '2');
   if (!Number.isFinite(coverPreRoll) || coverPreRoll < 0) {
@@ -287,7 +285,7 @@ async function runVideo(inputPath: string, opts: VideoCommandOptions): Promise<v
     orientation: orientation as VideoOrientation,
     width,
     height,
-    captionStyle,
+    captionStyle: captions,
     coverPreRoll,
     animationsEnabled,
     onProgress: (phase: string, percent: number) => writeProgress(phase, percent, 100),

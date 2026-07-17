@@ -30,11 +30,11 @@ export type {
 } from './hooks/useVideoExport.js';
 
 export { useFrameCapture } from './hooks/useFrameCapture.js';
-export type { FrameCaptureHandle } from './hooks/useFrameCapture.js';
+export type { FrameCaptureHandle, FrameCaptureOptions } from './hooks/useFrameCapture.js';
 
 // ── Encoder Utilities (for advanced usage) ─────────────────────────
 export { supportsWebCodecs, supportsWebCodecsH264, createEncoder } from './mainThreadEncoder.js';
-export type { MainThreadEncoder, EncoderConfig } from './mainThreadEncoder.js';
+export type { MainThreadEncoder, EncoderConfig, EncoderFrameSource } from './mainThreadEncoder.js';
 export type { FfmpegWasmLoadConfig } from '@bendyline/squisq-video';
 
 // ── Audio (capability probe) ───────────────────────────────────────

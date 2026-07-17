@@ -7,4 +7,4 @@ export type {
   VideoAudioPolicy,
 } from '../hooks/useVideoExport.js';
 export { useFrameCapture } from '../hooks/useFrameCapture.js';
-export type { FrameCaptureHandle } from '../hooks/useFrameCapture.js';
+export type { FrameCaptureHandle, FrameCaptureOptions } from '../hooks/useFrameCapture.js';

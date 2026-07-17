@@ -35,12 +35,18 @@ export function resolveWebCodecsQueueLimit({ width, height, fps }: FrameMemoryCo
   return Math.min(framesByBytes, framesByTime);
 }
 
-/** Drain a saturated WebCodecs queue before accepting another bitmap. */
+/**
+ * Drain WebCodecs before either its visible request queue or the number of
+ * submitted frames reaches the high-water mark. Chromium can dequeue an
+ * encode request while retaining its native input surface, so
+ * `encodeQueueSize` alone does not bound long-running renderer memory.
+ */
 export async function applyWebCodecsBackpressure(
   encoder: Pick<VideoEncoder, 'encodeQueueSize' | 'flush'>,
   queueLimit: number,
+  submittedSinceFlush = encoder.encodeQueueSize,
 ): Promise<boolean> {
-  if (encoder.encodeQueueSize < queueLimit) return false;
+  if (encoder.encodeQueueSize < queueLimit && submittedSinceFlush < queueLimit) return false;
   await encoder.flush();
   return true;
 }
