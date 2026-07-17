@@ -1,3 +1,14 @@
+## @bendyline/squisq-react [2.3.2](https://github.com/bendyline/squisq/compare/@bendyline/squisq-react@2.3.1...@bendyline/squisq-react@2.3.2) (2026-07-17)
+
+### Bug Fixes
+
+* PPTX work ([#30](https://github.com/bendyline/squisq/issues/30)) ([6cd2a12](https://github.com/bendyline/squisq/commit/6cd2a122aed1a5323471609bb077a0ae2e0c7eaf))
+
+
+### Dependencies
+
+* **@bendyline/squisq:** upgraded to 2.3.2
+
 ## @bendyline/squisq-react [2.3.1](https://github.com/bendyline/squisq/compare/@bendyline/squisq-react@2.3.0...@bendyline/squisq-react@2.3.1) (2026-07-16)
 
 ### Bug Fixes
