@@ -11,11 +11,21 @@ import {
   PresentationModeProvider,
 } from '../presentation/PresentationMode';
 
-function Harness() {
+function Harness({
+  allowWindow,
+  allowFullscreen,
+}: {
+  allowWindow?: boolean;
+  allowFullscreen?: boolean;
+} = {}) {
   const rootRef = useRef<HTMLDivElement>(null);
   return (
     <div ref={rootRef} data-testid="shell">
-      <PresentationModeProvider rootRef={rootRef}>
+      <PresentationModeProvider
+        rootRef={rootRef}
+        allowWindow={allowWindow}
+        allowFullscreen={allowFullscreen}
+      >
         <PresentationModeControl />
         <div data-testid="content">Preview</div>
       </PresentationModeProvider>
@@ -23,10 +33,10 @@ function Harness() {
   );
 }
 
-function renderHarness() {
+function renderHarness(props?: { allowWindow?: boolean; allowFullscreen?: boolean }) {
   return render(
     <EditorProvider initialMarkdown="# Presentation" initialView="preview">
-      <Harness />
+      <Harness {...props} />
     </EditorProvider>,
   );
 }
@@ -37,6 +47,15 @@ afterEach(() => {
 });
 
 describe('PresentationModeControl', () => {
+  it('omits presentation destinations disabled by the host', () => {
+    renderHarness({ allowWindow: false, allowFullscreen: false });
+
+    expect(screen.getByRole('button', { name: 'Present: Fill Squisq' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Presentation options' })).toBeNull();
+    expect(screen.queryByText('New window')).toBeNull();
+    expect(screen.queryByText('Browser full screen')).toBeNull();
+  });
+
   it('chooses the launch behavior from an accessible radio menu', () => {
     renderHarness();
 

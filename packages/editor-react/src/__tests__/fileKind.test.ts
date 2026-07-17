@@ -6,6 +6,7 @@ describe('detectLanguageFromFileName', () => {
     expect(detectLanguageFromFileName('foo.ts')).toBe('typescript');
     expect(detectLanguageFromFileName('app.py')).toBe('python');
     expect(detectLanguageFromFileName('data.json')).toBe('json');
+    expect(detectLanguageFromFileName('settings.jsonc')).toBe('json');
     expect(detectLanguageFromFileName('index.html')).toBe('html');
     expect(detectLanguageFromFileName('styles.css')).toBe('css');
     expect(detectLanguageFromFileName('README.md')).toBe('markdown');
@@ -77,6 +78,12 @@ describe('resolveFileKind', () => {
       mode: 'code',
       language: 'typescript',
     });
+  });
+
+  it('routes an explicit JSONC language through Monaco JSON support', () => {
+    expect(resolveFileKind('settings.jsonc')).toEqual({ mode: 'code', language: 'json' });
+    expect(resolveFileKind(undefined, 'jsonc')).toEqual({ mode: 'code', language: 'json' });
+    expect(resolveFileKind(undefined, 'JSONC')).toEqual({ mode: 'code', language: 'json' });
   });
 
   it('stays in markdown mode when language override is markdown or plaintext', () => {

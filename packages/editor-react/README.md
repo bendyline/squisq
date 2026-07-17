@@ -78,6 +78,8 @@ and block-at-a-time / timeline editing primitives (`useBlockNavigator`,
   SVG preview gutter, `inlinePreviewWidth` default 320).
 - **Code & image modes** — pass `fileName` / `language` to get a Monaco-only
   code editor, or `imageSrc` (+ `imageMode: 'edit'`) for the image surface.
+  `.jsonc` files, `language="jsonc"`, and fenced `jsonc` snippets use JSON
+  highlighting with line and block comment support.
 - **Host-triggered Find mode** — control `findMode` and
   `onFindModeChange` (or call `setFindMode` from context) to replace the
   toolbar's editing actions with live search, previous/next navigation, and

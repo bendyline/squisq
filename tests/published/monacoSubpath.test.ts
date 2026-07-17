@@ -31,3 +31,15 @@ describe('@bendyline/squisq-editor-react/monaco published output', () => {
     expect(manifest.devDependencies?.['monaco-editor']).toBe('0.50.0');
   });
 });
+
+describe('@bendyline/squisq-editor-react/monaco-workers published output', () => {
+  const dist = resolve(REPO_ROOT, 'packages/editor-react/dist');
+
+  it('exposes worker configuration without importing the editor or Monaco runtime', () => {
+    const source = readFileSync(resolve(dist, 'monaco-workers/index.js'), 'utf8');
+
+    expect(source).toContain('configureMonacoWorkers');
+    expect(source).not.toContain('EditorShell');
+    expect(source).not.toContain('monaco-editor');
+  });
+});

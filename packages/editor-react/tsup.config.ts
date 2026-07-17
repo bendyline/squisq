@@ -5,6 +5,7 @@ export default defineConfig({
   entry: {
     index: 'src/index.ts',
     monaco: 'src/monaco.ts',
+    'monaco-workers/index': 'src/entries/monaco-workers.ts',
     'shell/index': 'src/entries/shell.ts',
     'json-editor/index': 'src/entries/json-editor.ts',
     'image-editor/index': 'src/entries/image-editor.ts',

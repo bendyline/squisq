@@ -44,7 +44,7 @@ export function buildPresentationXml(
     `<p:sldMasterId id="2147483648" r:id="${slideMasterRelId}"/>` +
     `</p:sldMasterIdLst>` +
     `<p:sldIdLst>${sldIdList.join('')}</p:sldIdLst>` +
-    `<p:sldSz cx="${SLIDE_WIDTH}" cy="${SLIDE_HEIGHT}" type="screen4x3"/>` +
+    `<p:sldSz cx="${SLIDE_WIDTH}" cy="${SLIDE_HEIGHT}" type="screen16x9"/>` +
     `<p:notesSz cx="${SLIDE_HEIGHT}" cy="${SLIDE_WIDTH}"/>` +
     `</p:presentation>`
   );

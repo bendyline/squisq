@@ -43,6 +43,14 @@ export const CODE_SNIPPET_LANGUAGES: readonly CodeSnippetLanguage[] = [
     starter: '{\n  "key": "value"\n}',
   },
   {
+    fenceLanguage: 'jsonc',
+    label: 'JSONC',
+    // Monaco exposes JSON-with-comments through its `json` language service;
+    // it does not register a separate rich-service `jsonc` language id.
+    monacoLanguage: 'json',
+    starter: '{\n  // Comments are allowed.\n  "key": "value"\n}',
+  },
+  {
     fenceLanguage: 'html',
     label: 'HTML',
     monacoLanguage: 'html',
@@ -173,6 +181,7 @@ const MONACO_LANGUAGE_ALIASES: Readonly<Record<string, string>> = {
   htm: 'html',
   js: 'javascript',
   jsx: 'javascript',
+  jsonc: 'json',
   md: 'markdown',
   py: 'python',
   rb: 'ruby',

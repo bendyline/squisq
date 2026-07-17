@@ -177,4 +177,25 @@ describe('video command flag validation', () => {
     expect(stderr).to.not.include('unknown option');
     expect(stderr).to.include('Unknown theme "bogus-theme"');
   });
+
+  it('accepts an explicit captions-off override for GIF output', async () => {
+    const stderr = await runCliExpectingError(
+      'video',
+      FIXTURE_MD,
+      '--format',
+      'gif',
+      '--captions',
+      'off',
+      '--theme',
+      'bogus-theme',
+    );
+    expect(stderr).to.not.include('Invalid captions');
+    expect(stderr).to.include('Unknown theme "bogus-theme"');
+  });
+
+  it('rejects an unknown caption mode before rendering', async () => {
+    const stderr = await runCliExpectingError('video', FIXTURE_MD, '--captions', 'karaoke');
+    expect(stderr).to.include('Invalid captions "karaoke". Valid: off, standard, social');
+    expect(stderr).to.not.include('Reading:');
+  });
 });

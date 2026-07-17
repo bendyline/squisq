@@ -171,8 +171,8 @@ export interface RenderDocToMp4Options {
   /** Override video height in pixels. */
   height?: number;
 
-  /** Caption style to bake into the video (default: none). */
-  captionStyle?: 'standard' | 'social';
+  /** Caption mode to bake into the video (default: off). */
+  captionStyle?: 'off' | 'standard' | 'social';
 
   /** Render layer animations and block transitions (default: true). */
   animationsEnabled?: boolean;
@@ -206,8 +206,8 @@ export interface RenderDocToGifOptions {
   width?: number;
   /** Override output height (default: 540 landscape / 960 portrait). */
   height?: number;
-  /** Caption style to bake into the GIF (default: none). */
-  captionStyle?: 'standard' | 'social';
+  /** Caption mode to bake into the GIF (default: standard). */
+  captionStyle?: 'off' | 'standard' | 'social';
   /** Seconds of cover-slide pre-roll (default: 0). */
   coverPreRoll?: number;
   /** Render layer animations and block transitions (default: false). */
@@ -517,7 +517,7 @@ export async function renderDocToMp4(
     fps,
     width: dimensions.width,
     height: dimensions.height,
-    captionStyle: options.captionStyle,
+    captionStyle: options.captionStyle === 'off' ? undefined : options.captionStyle,
     coverPreRoll: options.coverPreRoll ?? 0,
     animationsEnabled: options.animationsEnabled ?? true,
     onProgress: options.onProgress,
@@ -592,7 +592,7 @@ export async function renderDocToGif(
     fps,
     width,
     height,
-    captionStyle: options.captionStyle,
+    captionStyle: options.captionStyle === 'off' ? undefined : (options.captionStyle ?? 'standard'),
     coverPreRoll: options.coverPreRoll ?? 0,
     animationsEnabled: options.animationsEnabled ?? false,
     onProgress: options.onProgress,

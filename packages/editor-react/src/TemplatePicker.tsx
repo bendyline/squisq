@@ -117,13 +117,27 @@ export const TEMPLATE_ENTRIES: TemplateEntry[] = [
   {
     name: 'sectionHeader',
     label: 'Section Header',
-    description: 'A clean section break with a prominent title and optional subtitle.',
+    description: 'A clean section break with a prominent title and optional background image.',
     icon: (
       <TemplateIcon>
         <rect x={4} y={4} width={3} height={32} rx={1} fill={FA} />
         <rect x={11} y={8} width={36} height={6} rx={1} fill={F2} />
         <rect x={11} y={18} width={28} height={3} rx={1} fill={F1} />
         <rect x={11} y={24} width={20} height={2.5} rx={1} fill={F1} opacity={0.7} />
+      </TemplateIcon>
+    ),
+  },
+  {
+    name: 'content',
+    label: 'Content',
+    description: 'Shows a heading and the complete body in a loss-averse content-first layout.',
+    icon: (
+      <TemplateIcon>
+        <rect x={7} y={7} width={34} height={5} rx={1} fill={FA} />
+        <rect x={7} y={17} width={42} height={2.5} rx={1} fill={F2} />
+        <rect x={7} y={22} width={38} height={2.5} rx={1} fill={F1} />
+        <rect x={7} y={27} width={41} height={2.5} rx={1} fill={F1} />
+        <rect x={7} y={32} width={30} height={2.5} rx={1} fill={F1} opacity={0.7} />
       </TemplateIcon>
     ),
   },

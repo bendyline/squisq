@@ -60,9 +60,11 @@ describe('VideoExportButton', () => {
 });
 
 describe('VideoExportModal', () => {
-  it('has dialog semantics, keyboard dismissal, and no automated WCAG A/AA violations', async () => {
+  it('is only dismissed by explicit controls and has no automated WCAG A/AA violations', async () => {
     const onClose = vi.fn();
-    const { getByRole } = render(<VideoExportModal doc={minimalDoc()} onClose={onClose} />);
+    const { container, getByRole } = render(
+      <VideoExportModal doc={minimalDoc()} onClose={onClose} />,
+    );
     const dialog = getByRole('dialog', { name: 'Export Video' });
     expect(dialog.getAttribute('aria-modal')).toBe('true');
 
@@ -72,7 +74,20 @@ describe('VideoExportModal', () => {
     });
     expect(results.violations).toEqual([]);
 
+    fireEvent.click(container.querySelector('[data-color-scheme="light"]')!);
     fireEvent.keyDown(document, { key: 'Escape' });
+    expect(onClose).not.toHaveBeenCalled();
+
+    fireEvent.click(getByRole('button', { name: 'Close export dialog' }));
+    expect(onClose).toHaveBeenCalledOnce();
+  });
+
+  it('closes from the explicit Cancel button', () => {
+    const onClose = vi.fn();
+    const { getByRole } = render(<VideoExportModal doc={minimalDoc()} onClose={onClose} />);
+
+    fireEvent.click(getByRole('button', { name: 'Cancel' }));
+
     expect(onClose).toHaveBeenCalledOnce();
   });
 
@@ -132,7 +147,7 @@ describe('VideoExportModal', () => {
     expect(select.value).toBe('omit');
   });
 
-  it('defaults GIF export to 10fps with animations and transitions disabled', () => {
+  it('defaults GIF export to 10fps, standard captions, and animations disabled', () => {
     const { container, getByRole } = render(
       <VideoExportModal
         doc={minimalDoc()}
@@ -149,6 +164,9 @@ describe('VideoExportModal', () => {
       (container.querySelector('[aria-label="Animations and transitions"]') as HTMLSelectElement)
         .value,
     ).toBe('disabled');
+    expect((container.querySelector('[aria-label="Captions"]') as HTMLSelectElement).value).toBe(
+      'standard',
+    );
     expect(container.textContent).toContain('Landscape (960 × 540)');
     expect(getByRole('button', { name: 'Export GIF' })).toBeTruthy();
   });
@@ -166,6 +184,23 @@ describe('VideoExportModal', () => {
       (container.querySelector('[aria-label="Animations and transitions"]') as HTMLSelectElement)
         .value,
     ).toBe('disabled');
+    expect((container.querySelector('[aria-label="Captions"]') as HTMLSelectElement).value).toBe(
+      'standard',
+    );
+  });
+
+  it('preserves an explicit captions-off override for GIF export', () => {
+    const { container } = render(
+      <VideoExportModal
+        doc={minimalDoc()}
+        defaultConfig={{ outputFormat: 'gif', captionMode: 'off' }}
+        onClose={() => {}}
+      />,
+    );
+
+    expect((container.querySelector('[aria-label="Captions"]') as HTMLSelectElement).value).toBe(
+      'off',
+    );
   });
 
   it('applies dark colors to the modal surface and native controls', () => {

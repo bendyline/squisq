@@ -120,7 +120,11 @@ export function createWorkerEncoder(
   return {
     ready,
 
-    encodeFrame(bitmap: ImageBitmap, frameIndex: number): Promise<void> {
+    encodeFrame(frame, frameIndex: number): Promise<void> {
+      if (typeof HTMLCanvasElement !== 'undefined' && frame instanceof HTMLCanvasElement) {
+        return Promise.reject(new Error('Worker encoding requires a transferable ImageBitmap'));
+      }
+      const bitmap = frame as ImageBitmap;
       if (state !== 'open' || fatalError) {
         bitmap.close();
         return Promise.reject(fatalError ?? new Error('Encoder is not accepting frames'));

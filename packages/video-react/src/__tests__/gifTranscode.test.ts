@@ -2,9 +2,13 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const ffmpegState = vi.hoisted(() => ({
   exitCode: 0,
+  exitCodes: [] as number[],
   loadConfig: undefined as unknown,
   writes: [] as Array<[string, Uint8Array]>,
-  execArgs: [] as string[],
+  execCalls: [] as string[][],
+  deletedPaths: [] as string[],
+  logMessages: [] as string[],
+  logListener: null as ((event: { message: string }) => void) | null,
   readPath: '',
   execPromise: null as Promise<number> | null,
   terminate: vi.fn(),
@@ -20,12 +24,23 @@ vi.mock('@ffmpeg/ffmpeg', () => ({
       ffmpegState.writes.push([path, data]);
     }
     async exec(args: string[]): Promise<number> {
-      ffmpegState.execArgs = args;
-      return ffmpegState.execPromise ?? ffmpegState.exitCode;
+      ffmpegState.execCalls.push(args);
+      ffmpegState.logMessages.forEach((message) => ffmpegState.logListener?.({ message }));
+      return ffmpegState.execPromise ?? ffmpegState.exitCodes.shift() ?? ffmpegState.exitCode;
     }
     async readFile(path: string): Promise<Uint8Array> {
       ffmpegState.readPath = path;
       return new Uint8Array([0x47, 0x49, 0x46, 0x38, 0x39, 0x61]);
+    }
+    async deleteFile(path: string): Promise<boolean> {
+      ffmpegState.deletedPaths.push(path);
+      return true;
+    }
+    on(event: string, listener: (event: { message: string }) => void): void {
+      if (event === 'log') ffmpegState.logListener = listener;
+    }
+    off(event: string, listener: (event: { message: string }) => void): void {
+      if (event === 'log' && ffmpegState.logListener === listener) ffmpegState.logListener = null;
     }
     terminate(): void {
       ffmpegState.terminate();
@@ -33,7 +48,11 @@ vi.mock('@ffmpeg/ffmpeg', () => ({
   },
 }));
 
-import { buildGifFfmpegArgs, transcodeMp4ToGifWithFfmpegWasm } from '../gifTranscode.js';
+import {
+  buildGifFfmpegArgs,
+  buildGifPaletteFfmpegArgs,
+  transcodeMp4ToGifWithFfmpegWasm,
+} from '../gifTranscode.js';
 
 describe('GIF ffmpeg.wasm transcode', () => {
   /** Self-hosted core assets are mandatory — see the CDN regression test below. */
@@ -41,21 +60,37 @@ describe('GIF ffmpeg.wasm transcode', () => {
 
   beforeEach(() => {
     ffmpegState.exitCode = 0;
+    ffmpegState.exitCodes = [];
     ffmpegState.loadConfig = undefined;
     ffmpegState.writes = [];
-    ffmpegState.execArgs = [];
+    ffmpegState.execCalls = [];
+    ffmpegState.deletedPaths = [];
+    ffmpegState.logMessages = [];
+    ffmpegState.logListener = null;
     ffmpegState.readPath = '';
     ffmpegState.execPromise = null;
     ffmpegState.terminate.mockClear();
   });
 
-  it('builds a looping palette-based GIF command from the shared argument builder', () => {
-    const args = buildGifFfmpegArgs({ width: 960, height: 540, loop: 0 });
-    expect(args.slice(0, 3)).toEqual(['-y', '-i', 'video.mp4']);
-    expect(args).toContain('-filter_complex');
-    expect(args.join(' ')).toContain('palettegen=stats_mode=diff');
-    expect(args.join(' ')).toContain('paletteuse=dither=sierra2_4a:diff_mode=rectangle');
-    expect(args.slice(-3)).toEqual(['-loop', '0', 'out.gif']);
+  it('builds two bounded palette passes instead of a split full-stream graph', () => {
+    const paletteArgs = buildGifPaletteFfmpegArgs({ width: 960, height: 540, loop: 0 });
+    const gifArgs = buildGifFfmpegArgs({ width: 960, height: 540, loop: 0 });
+
+    expect(paletteArgs.slice(0, 3)).toEqual(['-y', '-i', 'video.mp4']);
+    expect(paletteArgs.join(' ')).toContain('palettegen=stats_mode=diff');
+    expect(paletteArgs.join(' ')).not.toContain('split');
+    expect(paletteArgs.at(-1)).toBe('palette.png');
+    expect(gifArgs.slice(0, 6)).toEqual([
+      '-y',
+      '-i',
+      'video.mp4',
+      '-i',
+      'palette.png',
+      '-filter_complex',
+    ]);
+    expect(gifArgs.join(' ')).not.toContain('palettegen');
+    expect(gifArgs.join(' ')).toContain('paletteuse=dither=sierra2_4a:diff_mode=rectangle');
+    expect(gifArgs.slice(-3)).toEqual(['-loop', '0', 'out.gif']);
   });
 
   it('writes the MP4 intermediate, reads GIF89a bytes, and threads runtime URLs', async () => {
@@ -76,7 +111,10 @@ describe('GIF ffmpeg.wasm transcode', () => {
       classWorkerURL: '/vendor/class-worker.js',
     });
     expect(ffmpegState.writes).toEqual([['video.mp4', input]]);
-    expect(ffmpegState.execArgs.at(-1)).toBe('out.gif');
+    expect(ffmpegState.execCalls).toHaveLength(2);
+    expect(ffmpegState.execCalls[0].at(-1)).toBe('palette.png');
+    expect(ffmpegState.execCalls[1].at(-1)).toBe('out.gif');
+    expect(ffmpegState.deletedPaths).toEqual(['video.mp4', 'palette.png']);
     expect(ffmpegState.readPath).toBe('out.gif');
     expect(new TextDecoder().decode(output)).toBe('GIF89a');
     expect(ffmpegState.terminate).toHaveBeenCalledOnce();
@@ -84,9 +122,21 @@ describe('GIF ffmpeg.wasm transcode', () => {
 
   it('reports ffmpeg failures and still terminates the runtime', async () => {
     ffmpegState.exitCode = 7;
+    ffmpegState.logMessages = ['Error: memory access out of bounds'];
     await expect(
       transcodeMp4ToGifWithFfmpegWasm(new Uint8Array([1]), { width: 960, height: 540 }, CORE),
-    ).rejects.toThrow('GIF transcode failed with exit code 7');
+    ).rejects.toThrow(
+      'GIF transcode failed during palette generation with exit code 7: Error: memory access out of bounds',
+    );
+    expect(ffmpegState.terminate).toHaveBeenCalledOnce();
+  });
+
+  it('identifies a failure in the second palette-application pass', async () => {
+    ffmpegState.exitCodes = [0, 9];
+    await expect(
+      transcodeMp4ToGifWithFfmpegWasm(new Uint8Array([1]), { width: 960, height: 540 }, CORE),
+    ).rejects.toThrow('GIF transcode failed during palette application with exit code 9');
+    expect(ffmpegState.execCalls).toHaveLength(2);
     expect(ffmpegState.terminate).toHaveBeenCalledOnce();
   });
 
@@ -124,7 +174,7 @@ describe('GIF ffmpeg.wasm transcode', () => {
       controller.signal,
     );
 
-    await vi.waitFor(() => expect(ffmpegState.execArgs).not.toEqual([]));
+    await vi.waitFor(() => expect(ffmpegState.execCalls).not.toEqual([]));
     controller.abort();
     expect(ffmpegState.terminate).toHaveBeenCalledOnce();
     finishExec(0);

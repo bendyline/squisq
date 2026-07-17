@@ -62,18 +62,6 @@ function formatDuration(seconds: number): string {
   return `${m}m ${s}s`;
 }
 
-function encoderLabel(
-  outputFormat: VideoOutputFormat,
-  backend: 'webcodecs' | 'ffmpeg-wasm',
-): string {
-  if (outputFormat === 'gif') {
-    return backend === 'webcodecs'
-      ? 'WebCodecs (H.264) → ffmpeg.wasm (GIF)'
-      : 'ffmpeg.wasm (H.264 → GIF)';
-  }
-  return backend === 'webcodecs' ? 'WebCodecs (H.264)' : 'ffmpeg.wasm (H.264)';
-}
-
 // ── Styles ─────────────────────────────────────────────────────────
 
 export interface VideoExportPalette {
@@ -138,6 +126,7 @@ const overlayStyle: React.CSSProperties = {
 };
 
 const modalStyle: React.CSSProperties = {
+  position: 'relative',
   borderRadius: 0,
   padding: '24px 28px',
   minWidth: 380,
@@ -148,8 +137,24 @@ const modalStyle: React.CSSProperties = {
 
 const titleStyle: React.CSSProperties = {
   margin: '0 0 16px 0',
+  paddingRight: 32,
   fontSize: 18,
   fontWeight: 600,
+};
+
+const closeButtonStyle: React.CSSProperties = {
+  position: 'absolute',
+  top: 12,
+  right: 12,
+  width: 32,
+  height: 32,
+  padding: 0,
+  border: 0,
+  background: 'transparent',
+  fontFamily: 'inherit',
+  fontSize: 24,
+  lineHeight: 1,
+  cursor: 'pointer',
 };
 
 const labelStyle: React.CSSProperties = {
@@ -224,7 +229,9 @@ export function VideoExportModal({
   const [orientation, setOrientation] = useState<VideoOrientation>(
     defaultConfig?.orientation ?? 'landscape',
   );
-  const [captionMode, setCaptionMode] = useState<CaptionMode>(defaultConfig?.captionMode ?? 'off');
+  const [captionMode, setCaptionMode] = useState<CaptionMode>(
+    defaultConfig?.captionMode ?? (initialOutputFormat === 'gif' ? 'standard' : 'off'),
+  );
   const [animationsEnabled, setAnimationsEnabled] = useState(
     defaultConfig?.animationsEnabled ?? initialOutputFormat === 'mp4',
   );
@@ -268,7 +275,7 @@ export function VideoExportModal({
   const {
     state,
     progress,
-    backend,
+    phase,
     outputFormat: completedOutputFormat,
     downloadUrl,
     fileSize,
@@ -287,9 +294,11 @@ export function VideoExportModal({
     if (next === 'gif') {
       setFps(10);
       setAnimationsEnabled(false);
+      setCaptionMode('standard');
     } else {
       setFps(24);
       setAnimationsEnabled(true);
+      setCaptionMode('off');
     }
   }, []);
 
@@ -342,20 +351,26 @@ export function VideoExportModal({
   const handleClose = useCallback(() => {
     if (state === 'capturing' || state === 'encoding' || state === 'preparing') {
       cancelExport();
+    } else {
+      resetExport();
     }
-    resetExport();
     onClose();
   }, [state, cancelExport, resetExport, onClose]);
 
   const isExporting = state === 'preparing' || state === 'capturing' || state === 'encoding';
-  useModalDialog({ rootRef: overlayRef, dialogRef, onClose: handleClose });
+  useModalDialog({
+    rootRef: overlayRef,
+    dialogRef,
+    closeOnEscape: false,
+    onClose: handleClose,
+  });
 
   return (
     <div
       ref={overlayRef}
       style={{ ...overlayStyle, background: palette.overlay }}
       data-color-scheme={colorScheme}
-      onClick={handleClose}
+      onClick={(event) => event.stopPropagation()}
     >
       <div
         ref={dialogRef}
@@ -370,6 +385,14 @@ export function VideoExportModal({
         <h2 id={titleId} style={themedTitleStyle}>
           {outputFormat === 'gif' ? 'Export Animated GIF' : 'Export Video'}
         </h2>
+        <button
+          type="button"
+          aria-label="Close export dialog"
+          style={{ ...closeButtonStyle, color: palette.label }}
+          onClick={handleClose}
+        >
+          <span aria-hidden="true">×</span>
+        </button>
 
         {/* ── Configure State ── */}
         {state === 'idle' && (
@@ -495,12 +518,6 @@ export function VideoExportModal({
         {/* ── Exporting State ── */}
         {isExporting && (
           <>
-            {backend && (
-              <p style={{ fontSize: 12, color: palette.muted, margin: '0 0 8px 0' }}>
-                Encoder: {encoderLabel(completedOutputFormat, backend)}
-              </p>
-            )}
-
             <div
               role="progressbar"
               aria-label="Video export progress"
@@ -522,13 +539,21 @@ export function VideoExportModal({
             </div>
 
             <p style={{ fontSize: 13, margin: '0 0 4px 0' }}>{progress}% complete</p>
+            {phase && (
+              <p
+                style={{ fontSize: 12, color: palette.label, margin: '0 0 4px 0' }}
+                data-squisq-video-export-phase
+              >
+                {phase}
+              </p>
+            )}
             <p style={{ fontSize: 12, color: palette.muted, margin: 0 }}>
               {formatDuration(elapsed)} elapsed
               {estimatedRemaining > 0 && ` · ~${formatDuration(estimatedRemaining)} remaining`}
             </p>
 
             <div style={footerStyle}>
-              <button style={themedSecondaryButtonStyle} onClick={cancelExport}>
+              <button style={themedSecondaryButtonStyle} onClick={handleClose}>
                 Cancel
               </button>
             </div>
@@ -557,12 +582,6 @@ export function VideoExportModal({
                 Video only{audioSkippedReason ? ` — ${audioSkippedReason}` : ''}
               </p>
             )}
-            {backend && (
-              <p style={{ fontSize: 12, color: palette.muted, margin: '0 0 12px 0' }}>
-                Encoded with {encoderLabel(completedOutputFormat, backend)}
-              </p>
-            )}
-
             <div style={footerStyle}>
               <button style={themedSecondaryButtonStyle} onClick={handleClose}>
                 Close

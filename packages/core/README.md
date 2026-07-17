@@ -18,7 +18,7 @@ npm install @bendyline/squisq
 | Module       | Description                                                                      |
 | ------------ | -------------------------------------------------------------------------------- |
 | **schemas**  | Type definitions — `Doc`, `BlockTemplate`, `Viewport`, `Theme`, `LayoutStrategy` |
-| **doc**      | Template registry, 25 block templates, animation/theme utilities                 |
+| **doc**      | Template registry, 26 block templates, animation/theme utilities                 |
 | **markdown** | Markdown parsing, stringifying, AST types (`MarkdownDocument`), tree utilities   |
 | **spatial**  | Haversine distance, Geohash encode/decode                                        |
 | **storage**  | `StorageAdapter` interface, Memory + LocalStorage + LocalForage adapters         |

@@ -140,7 +140,7 @@ const DENSE_VARIANTS: SupplementalMediaVariantMatrix = {
 };
 
 /**
- * Canonical media contract for all 25 built-in templates. Entries are kept
+ * Canonical media contract for all built-in templates. Entries are kept
  * in registry/gallery order to make policy reviews easy to scan.
  */
 export const BLOCK_MEDIA_LAYOUT_POLICIES = {
@@ -160,6 +160,14 @@ export const BLOCK_MEDIA_LAYOUT_POLICIES = {
     additionalMediaLayout: 'overlay-inset',
     unconsumedMedia: 'reserve-when-no-native-media',
     variants: TITLE_VARIANTS,
+  },
+  content: {
+    summary:
+      'Preserves the complete heading and body; supplemental media receives a companion field.',
+    noMedia: 'template-default',
+    ownership: 'supplemental',
+    unconsumedMedia: 'reserved-slot',
+    variants: TEXT_VARIANTS,
   },
   statHighlight: {
     summary:

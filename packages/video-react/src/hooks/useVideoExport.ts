@@ -40,6 +40,7 @@ import {
   createEncoder,
   supportsWebCodecs,
   supportsWebCodecsH264,
+  type EncoderFrameSource,
   type MainThreadEncoder,
 } from '../mainThreadEncoder.js';
 import { createWorkerEncoder } from '../workerEncoder.js';
@@ -59,6 +60,54 @@ import { useFrameCapture } from './useFrameCapture.js';
 const MAX_EXPORT_MEDIA_FILES = 256;
 const MAX_EXPORT_MEDIA_FILE_BYTES = 64 * 1024 * 1024;
 const MAX_EXPORT_MEDIA_TOTAL_BYTES = 256 * 1024 * 1024;
+const ENCODER_PROBE_TIMEOUT_MS = 5_000;
+const ENCODER_START_TIMEOUT_MS = 60_000;
+const FRAME_CAPTURE_TIMEOUT_MS = 60_000;
+const FRAME_ENCODE_TIMEOUT_MS = 60_000;
+const CAPTURE_PROGRESS_START = 7;
+const CAPTURE_PROGRESS_END = 95;
+
+function releaseEncoderFrame(frame: EncoderFrameSource): void {
+  if ('close' in frame) frame.close();
+}
+
+/**
+ * Bound browser APIs whose promises are allowed to remain pending forever.
+ * Late results are observed (and optionally disposed) so a timed-out export
+ * cannot create an unhandled rejection or leak an ImageBitmap.
+ */
+export function settleWithin<T>(
+  operation: Promise<T>,
+  timeoutMs: number,
+  timeoutMessage: string,
+  onLateResult?: (value: T) => void,
+): Promise<T> {
+  return new Promise((resolve, reject) => {
+    let settled = false;
+    const timeout = globalThis.setTimeout(() => {
+      settled = true;
+      reject(new Error(timeoutMessage));
+    }, timeoutMs);
+
+    void operation.then(
+      (value) => {
+        if (settled) {
+          onLateResult?.(value);
+          return;
+        }
+        settled = true;
+        globalThis.clearTimeout(timeout);
+        resolve(value);
+      },
+      (caught: unknown) => {
+        if (settled) return;
+        settled = true;
+        globalThis.clearTimeout(timeout);
+        reject(caught);
+      },
+    );
+  });
+}
 
 function toArrayBuffer(bytes: Uint8Array): ArrayBuffer {
   return bytes.slice().buffer as ArrayBuffer;
@@ -175,7 +224,7 @@ export interface VideoExportConfig {
   mediaProvider?: MediaProvider;
   /** Policy and byte/time limits for MediaProvider URLs. */
   resourcePolicy?: ResourcePolicy;
-  /** Caption mode for the exported video (default: 'off') */
+  /** Caption mode for the exported video (default: 'off' for MP4, 'standard' for GIF). */
   captionMode?: CaptionMode;
   /** Player IIFE bundle (unused in browser export, kept for CLI/Playwright path) */
   playerScript?: string;
@@ -332,6 +381,8 @@ export function useVideoExport(): VideoExportResult {
       const fps = config.fps ?? (effectiveOutputFormat === 'gif' ? 10 : 30);
       const orientation = config.orientation ?? 'landscape';
       const animationsEnabled = config.animationsEnabled ?? effectiveOutputFormat === 'mp4';
+      const captionMode =
+        config.captionMode ?? (effectiveOutputFormat === 'gif' ? 'standard' : 'off');
       const audioPolicy = config.audioPolicy ?? 'require';
       setOutputFormat(effectiveOutputFormat);
 
@@ -435,7 +486,7 @@ export function useVideoExport(): VideoExportResult {
         const docDuration = await frameCapture.init(
           doc,
           { images, audio: config.audio, width, height, animationsEnabled },
-          config.captionMode,
+          captionMode,
         );
 
         if (cancelledRef.current) return;
@@ -450,7 +501,7 @@ export function useVideoExport(): VideoExportResult {
         const totalFrames = Math.ceil(docDuration * fps);
 
         // ── Step 2: Create encoder ────────────────────────────────
-        setPhase('Starting encoder…');
+        setPhase('Checking video encoder…');
         setProgress(5);
 
         // Prefer main-thread WebCodecs (fast), but probe whether H.264
@@ -458,7 +509,12 @@ export function useVideoExport(): VideoExportResult {
         // no proprietary H.264 codec — fall back to the worker, which
         // loads ffmpeg.wasm in that case.
         const canUseWebCodecs =
-          webCodecsAvailable && (await supportsWebCodecsH264({ width, height, fps, quality }));
+          webCodecsAvailable &&
+          (await settleWithin(
+            supportsWebCodecsH264({ width, height, fps, quality }),
+            ENCODER_PROBE_TIMEOUT_MS,
+            'The browser did not finish checking WebCodecs support.',
+          ).catch(() => false));
 
         // ── Audio: tier selection + (best-effort) render ──────────
         // The browser frame-capture path has no cover pre-roll (Playwright
@@ -551,8 +607,11 @@ export function useVideoExport(): VideoExportResult {
                 }
               : {}),
           });
+          encoderRef.current = encoder;
           setBackend('webcodecs');
         } else if (sharedArrayBufferAvailable) {
+          setProgress(6);
+          setPhase('Loading export engine…');
           const workerEncoder = createWorkerEncoder({
             width,
             height,
@@ -562,59 +621,82 @@ export function useVideoExport(): VideoExportResult {
             ffmpegWasm: config.ffmpegWasm,
           });
           encoder = workerEncoder;
-          const selectedBackend = await workerEncoder.ready;
-          setBackend(selectedBackend);
-          setPhase(
-            selectedBackend === 'ffmpeg-wasm'
-              ? 'Starting encoder (ffmpeg.wasm)…'
-              : 'Starting encoder…',
+          // Publish ownership before awaiting readiness so Cancel can stop a
+          // worker that is still loading/compiling ffmpeg.wasm.
+          encoderRef.current = workerEncoder;
+          const selectedBackend = await settleWithin(
+            workerEncoder.ready,
+            ENCODER_START_TIMEOUT_MS,
+            'The browser export engine did not start within 60 seconds.',
           );
+          setBackend(selectedBackend);
         } else {
           throw new Error(
             'WebCodecs H.264 is unavailable in this browser and the ffmpeg.wasm ' +
               'fallback requires SharedArrayBuffer (Cross-Origin-Isolation headers).',
           );
         }
-        encoderRef.current = encoder;
 
         if (cancelledRef.current) return;
+
+        setProgress(CAPTURE_PROGRESS_START);
+        setPhase(`Capturing frame 1/${totalFrames} (0.0s)`);
 
         // ── Step 3: Capture frames and encode ─────────────────────
         setState('capturing');
 
         const captureStartTime = performance.now();
-        // Throttle UI updates to every ~10 frames to avoid excessive re-renders.
-        // Each setState between awaits triggers a separate render cycle.
-        const UI_UPDATE_INTERVAL = 10;
 
         for (let i = 0; i < totalFrames; i++) {
           if (cancelledRef.current) return;
 
           const time = i / fps;
 
-          // Update UI periodically (not every frame)
-          if (i % UI_UPDATE_INTERVAL === 0 || i === totalFrames - 1) {
-            const captureProgress = Math.round((i / totalFrames) * 90);
-            setProgress(5 + captureProgress);
-            setPhase(`Capturing frame ${i + 1}/${totalFrames} (${time.toFixed(1)}s)`);
-
-            if (i > 0) {
-              const elapsedCapture = (performance.now() - captureStartTime) / 1000;
-              const avgPerFrame = elapsedCapture / i;
-              const remaining = Math.round(avgPerFrame * (totalFrames - i));
-              setEstimatedRemaining(remaining);
-            }
-          }
-
-          const bitmap = await frameCapture.captureFrame(time);
+          const captureOperation: Promise<EncoderFrameSource> = canUseWebCodecs
+            ? frameCapture.captureCanvasFrame(time, { reuseIfUnchanged: true })
+            : frameCapture.captureFrame(time, { reuseIfUnchanged: true });
+          const frame = await settleWithin(
+            captureOperation,
+            FRAME_CAPTURE_TIMEOUT_MS,
+            `Frame capture stopped responding at frame ${i + 1}/${totalFrames}.`,
+            releaseEncoderFrame,
+          );
 
           if (cancelledRef.current) {
-            bitmap.close();
+            releaseEncoderFrame(frame);
             return;
           }
 
-          // Encode immediately — WebCodecs is fast and async internally
-          await encoder.encodeFrame(bitmap, i);
+          // Normally this state is too brief to paint. When backpressure has
+          // paused capture to drain a saturated encoder queue, it makes the
+          // actual wait visible instead of blaming the next frame capture.
+          setPhase(`Encoding frame ${i + 1}/${totalFrames} (${time.toFixed(1)}s)`);
+          await settleWithin(
+            encoder.encodeFrame(frame, i),
+            FRAME_ENCODE_TIMEOUT_MS,
+            `Video encoding stopped responding at frame ${i + 1}/${totalFrames}.`,
+          );
+
+          // Progress represents completed work, not the frame we are about to
+          // start. Tenths keep long exports visibly moving without inventing
+          // progress or waiting for ten-frame batches.
+          const completedFrames = i + 1;
+          setPhase(
+            completedFrames < totalFrames
+              ? `Capturing frame ${completedFrames + 1}/${totalFrames} (${(
+                  completedFrames / fps
+                ).toFixed(1)}s)`
+              : `Captured ${totalFrames.toLocaleString()} frames…`,
+          );
+          const captureRatio = completedFrames / totalFrames;
+          const captureProgress =
+            CAPTURE_PROGRESS_START + captureRatio * (CAPTURE_PROGRESS_END - CAPTURE_PROGRESS_START);
+          setProgress(Math.round(captureProgress * 10) / 10);
+
+          const elapsedCapture = (performance.now() - captureStartTime) / 1000;
+          const avgPerFrame = elapsedCapture / completedFrames;
+          setEstimatedRemaining(Math.round(avgPerFrame * (totalFrames - completedFrames)));
+          setElapsed(Math.floor((performance.now() - startTimeRef.current) / 1000));
         }
 
         if (cancelledRef.current) return;

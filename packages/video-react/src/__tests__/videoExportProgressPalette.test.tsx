@@ -55,5 +55,16 @@ describe('VideoExportModal progress palette', () => {
     expect(track?.style.background).toBe('rgb(18, 52, 86)');
     expect(progress?.style.background).toBe('rgb(52, 86, 120)');
     expect(progress?.style.width).toBe('37%');
+    expect(
+      container.querySelector<HTMLElement>('[data-squisq-video-export-phase]')?.textContent,
+    ).toBe('Encoding');
+  });
+
+  it('keeps encoder implementation details out of the progress dialog', () => {
+    const { container } = render(<VideoExportModal doc={doc} onClose={() => {}} />);
+
+    expect(container.textContent).not.toContain('Encoder:');
+    expect(container.textContent).not.toContain('H.264');
+    expect(container.textContent).not.toContain('ffmpeg.wasm');
   });
 });

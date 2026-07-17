@@ -79,6 +79,36 @@ function isDevEnvironment(): boolean {
 // warning fires at most once per page, not once per player instance).
 let warnedMissingStyles = false;
 
+const VISUAL_UPDATE_FALLBACK_MS = 100;
+
+/**
+ * Wait for the browser to present a React/DOM update without depending on
+ * requestAnimationFrame forever. Chromium suspends animation frames when a
+ * tab or Electron renderer is backgrounded; render-mode callers still need
+ * their seek promise to settle so offline frame capture can continue.
+ */
+function waitForVisualUpdate(): Promise<void> {
+  return new Promise((resolve) => {
+    let settled = false;
+    let animationFrame: number | null = null;
+    const finish = (): void => {
+      if (settled) return;
+      settled = true;
+      window.clearTimeout(fallback);
+      if (animationFrame !== null) window.cancelAnimationFrame(animationFrame);
+      resolve();
+    };
+    const fallback = window.setTimeout(
+      finish,
+      document.visibilityState === 'visible' ? VISUAL_UPDATE_FALLBACK_MS : 0,
+    );
+
+    if (document.visibilityState !== 'visible') return;
+
+    animationFrame = window.requestAnimationFrame(finish);
+  });
+}
+
 /**
  * Front-door component: resolves the `doc` / `markdown` props into a Doc
  * and renders a themed empty state when neither is provided. The playback
@@ -473,7 +503,7 @@ function DocPlayerContent({
       // Without this, animations restart from zero on each seekTo because
       // they run on the browser's real clock, not doc time.
       return new Promise<void>((resolve) => {
-        requestAnimationFrame(() => {
+        void waitForVisualUpdate().then(() => {
           // Find the current block's start time
           let blockStartTime = 0;
           for (let i = expandedBlocks.length - 1; i >= 0; i--) {
@@ -559,9 +589,10 @@ function DocPlayerContent({
             );
           });
 
-          // Wait for video seeks + one more frame for the browser to render
+          // Wait for video seeks + one more render opportunity. The timeout
+          // path is load-bearing when Chromium suspends animation frames.
           Promise.all(videoSeekPromises).then(() => {
-            requestAnimationFrame(() => resolve());
+            void waitForVisualUpdate().then(resolve);
           });
         });
       });
@@ -609,11 +640,11 @@ function DocPlayerContent({
     // Cover block control for video pre-roll -- force-show or hide the cover block
     const showCover = () => {
       setCoverForced(true);
-      return new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+      return waitForVisualUpdate();
     };
     const hideCover = () => {
       setCoverForced(false);
-      return new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+      return waitForVisualUpdate();
     };
     const hasCoverBlock = () => !!coverBlock;
 

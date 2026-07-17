@@ -1,8 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import type { MarkdownBlockNode, MarkdownDocument } from '@bendyline/squisq/markdown';
-import type { Transition } from '@bendyline/squisq/schemas';
-import { TRANSITION_TYPES } from '@bendyline/squisq/schemas';
-import { markdownDocToPptx } from '../pptx/export';
+import type { Doc, Transition } from '@bendyline/squisq/schemas';
+import { THEMES, TRANSITION_TYPES, VIEWPORT_PRESETS } from '@bendyline/squisq/schemas';
+import {
+  expandDocBlocks,
+  flattenRenderableBlocks,
+  resolvePersistentLayers,
+  resolveThemeForDoc,
+} from '@bendyline/squisq/doc';
+import { docToPptx, markdownDocToPptx } from '../pptx/export';
 import { openPackage, getPartXml } from '../ooxml/reader';
 import { NS_PML, NS_PML_2010 } from '../ooxml/namespaces';
 
@@ -238,5 +244,148 @@ describe('PPTX relationship ID allocation', () => {
         rels.filter((r) => r.getAttribute('Type') === `${OFFICE_REL}/slideLayout`),
       ).toHaveLength(1);
     }
+  });
+});
+
+// ============================================
+// Slideshow parity (Doc -> PPTX)
+// ============================================
+
+const SLIDESHOW_CORPUS: Doc[] = [
+  {
+    articleId: 'narrative-list',
+    duration: 65,
+    audio: {
+      segments: [{ src: '', name: 'preview', duration: 65, startTime: 0 }],
+    },
+    startBlock: { title: 'Narrative List', subtitle: 'A managed cover' },
+    blocks: [
+      {
+        id: 'opening',
+        template: 'sectionHeader',
+        title: 'Opening',
+        startTime: 0,
+        duration: 5,
+        audioSegment: 0,
+      },
+      {
+        id: 'long-list',
+        template: 'list',
+        title: 'Seven considerations',
+        items: [
+          'Scope and ownership',
+          'Compatibility and upgrades',
+          'Security boundaries',
+          'Performance budgets',
+          'Testing and observability',
+          'Documentation freshness',
+          'Release readiness',
+        ],
+        startTime: 5,
+        duration: 60,
+        audioSegment: 0,
+      },
+    ],
+  } as unknown as Doc,
+  {
+    articleId: 'data-table',
+    duration: 35,
+    audio: {
+      segments: [{ src: '', name: 'preview', duration: 35, startTime: 0 }],
+    },
+    blocks: [
+      {
+        id: 'table',
+        template: 'dataTable',
+        title: 'Risk register',
+        headers: ['Risk', 'Likelihood', 'Mitigation'],
+        rows: [
+          ['Version drift', 'High', 'Pin and verify'],
+          ['Flaky capture', 'Medium', 'Deterministic fixtures'],
+          ['Scope growth', 'High', 'Vertical slices'],
+        ],
+        startTime: 0,
+        duration: 35,
+        audioSegment: 0,
+      },
+    ],
+  } as unknown as Doc,
+  {
+    articleId: 'mixed-cards',
+    duration: 30,
+    audio: {
+      segments: [{ src: '', name: 'preview', duration: 30, startTime: 0 }],
+    },
+    blocks: [
+      {
+        id: 'stat',
+        template: 'statHighlight',
+        stat: '42%',
+        description: 'Representative metric',
+        startTime: 0,
+        duration: 15,
+        audioSegment: 0,
+      },
+      {
+        id: 'quote',
+        template: 'quote',
+        quote: 'A representative quotation.',
+        attribution: 'Sample corpus',
+        startTime: 15,
+        duration: 15,
+        audioSegment: 0,
+      },
+    ],
+  } as unknown as Doc,
+];
+
+function expectedSlideshowSlideCount(doc: Doc, themeId: string): number {
+  const theme = resolveThemeForDoc(doc, themeId);
+  const blocks = expandDocBlocks(flattenRenderableBlocks(doc.blocks), {
+    audioSegments: doc.audio.segments.map(({ startTime, duration }) => ({ startTime, duration })),
+    viewport: VIEWPORT_PRESETS.landscape,
+    persistentLayers: resolvePersistentLayers({ persistentLayers: doc.persistentLayers }, theme),
+    theme,
+    customTemplates: doc.customTemplates,
+  });
+  return blocks.length + (doc.startBlock ? 1 : 0);
+}
+
+async function pptxSlideCount(bytes: ArrayBuffer): Promise<number> {
+  const pkg = await openPackage(bytes);
+  const presentation = await getPartXml(pkg, 'ppt/presentation.xml');
+  expect(presentation).not.toBeNull();
+  return presentation!.getElementsByTagNameNS(NS_PML, 'sldId').length;
+}
+
+describe('docToPptx slideshow parity', () => {
+  it('matches the player slide count across representative content and every built-in theme', async () => {
+    for (const source of SLIDESHOW_CORPUS) {
+      for (const themeId of Object.keys(THEMES)) {
+        const doc = { ...source, themeId };
+        const expected = expectedSlideshowSlideCount(doc, themeId);
+        const actual = await pptxSlideCount(await docToPptx(doc, { themeId }));
+        expect(actual, `${source.articleId} / ${themeId}`).toBe(expected);
+      }
+    }
+  });
+
+  it('honors the managed-cover setting without changing expanded block parity', async () => {
+    const doc = SLIDESHOW_CORPUS[0]!;
+    const withCover = await pptxSlideCount(await docToPptx(doc, { themeId: 'documentary' }));
+    const withoutCover = await pptxSlideCount(
+      await docToPptx(doc, { themeId: 'documentary', includeCoverSlide: false }),
+    );
+    expect(withCover).toBe(withoutCover + 1);
+  });
+
+  it('uses the same 16:9 canvas as the landscape slideshow viewport', async () => {
+    const bytes = await docToPptx(SLIDESHOW_CORPUS[2]!, { themeId: 'documentary' });
+    const pkg = await openPackage(bytes);
+    const presentation = await getPartXml(pkg, 'ppt/presentation.xml');
+    const size = presentation!.getElementsByTagNameNS(NS_PML, 'sldSz')[0]!;
+    expect(size.getAttribute('cx')).toBe('12192000');
+    expect(size.getAttribute('cy')).toBe('6858000');
+    expect(size.getAttribute('type')).toBe('screen16x9');
   });
 });

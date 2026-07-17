@@ -48,6 +48,9 @@ export {
   audioBitrateArg,
   ffmpegAudioMuxArgs,
   ffmpegGifFilterGraph,
+  ffmpegGifPaletteGenerationFilter,
+  ffmpegGifPaletteApplicationGraph,
+  ffmpegGifPaletteApplicationArgs,
   ffmpegGifOutputArgs,
 } from './ffmpegArgs.js';
 

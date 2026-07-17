@@ -4,6 +4,9 @@ import {
   audioBitrateArg,
   ffmpegAudioMuxArgs,
   ffmpegGifFilterGraph,
+  ffmpegGifPaletteGenerationFilter,
+  ffmpegGifPaletteApplicationGraph,
+  ffmpegGifPaletteApplicationArgs,
   ffmpegGifOutputArgs,
 } from '../ffmpegArgs.js';
 import { QUALITY_PRESETS, type VideoQuality } from '../types.js';
@@ -68,6 +71,18 @@ describe('animated GIF arguments', () => {
     expect(graph).toContain('scale=960:540:force_original_aspect_ratio=decrease:flags=lanczos');
     expect(graph).toContain('palettegen=stats_mode=diff:max_colors=256:reserve_transparent=0');
     expect(graph).toContain('paletteuse=dither=sierra2_4a:diff_mode=rectangle');
+  });
+
+  it('builds bounded two-pass palette filters without a split frame buffer', () => {
+    const palette = ffmpegGifPaletteGenerationFilter({ width: 960, height: 540 });
+    const application = ffmpegGifPaletteApplicationGraph({ width: 960, height: 540 });
+    const args = ffmpegGifPaletteApplicationArgs({ width: 960, height: 540, loop: 2 });
+
+    expect(palette).toContain('palettegen=stats_mode=diff:max_colors=256');
+    expect(palette).not.toContain('split');
+    expect(application).toContain('[gif_frames][1:v]paletteuse=');
+    expect(application).not.toContain('palettegen');
+    expect(args).toContain('2');
   });
 
   it('supports deterministic Bayer dithering and finite looping', () => {

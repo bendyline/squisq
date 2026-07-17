@@ -14,6 +14,7 @@ describe('code snippet languages', () => {
     expect(new Set(languages).size).toBe(languages.length);
     expect(languages).toContain('typescript');
     expect(languages).toContain('json');
+    expect(languages).toContain('jsonc');
     expect(languages).toContain('python');
   });
 
@@ -39,6 +40,8 @@ describe('code snippet languages', () => {
     expect(codeSnippetFenceLanguageToken('  json data  ')).toBe('json');
     expect(monacoLanguageForFence('ts highlight-lines')).toBe('typescript');
     expect(monacoLanguageForFence('yml')).toBe('yaml');
+    expect(monacoLanguageForFence('jsonc')).toBe('json');
+    expect(codeSnippetLanguageLabel('jsonc')).toBe('JSONC');
     expect(codeSnippetLanguageLabel('csharp')).toBe('C#');
   });
 

@@ -36,6 +36,12 @@ import {
 } from '../materializeBlockLayers.js';
 
 export { TEMPLATE_METADATA } from './metadata.js';
+export { TEMPLATE_AUTHORING_METADATA } from './authoringMetadata.js';
+export type {
+  TemplateAuthoringMetadata,
+  TemplateAuthoringRole,
+  TemplateBodyPolicy,
+} from './authoringMetadata.js';
 export type { TemplateMetadata } from './metadata.js';
 export { BLOCK_MEDIA_LAYOUT_POLICIES, getBlockMediaLayoutPolicy } from './mediaLayoutPolicy.js';
 export type {
@@ -602,6 +608,7 @@ export {
 // Re-export individual templates for direct access
 export { titleBlock } from './titleBlock.js';
 export { sectionHeader } from './sectionHeader.js';
+export { contentBlock } from './contentBlock.js';
 export { statHighlight } from './statHighlight.js';
 export { quoteBlock } from './quoteBlock.js';
 export { factCard } from './factCard.js';

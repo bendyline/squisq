@@ -17,6 +17,8 @@ export interface ModalDialogOptions {
   initialFocusRef?: RefObject<HTMLElement | null>;
   /** Explicit opener/owner to restore after unmount (important when a child uses autofocus). */
   returnFocusRef?: RefObject<HTMLElement | null>;
+  /** Whether Escape requests that the dialog close. Defaults to true. */
+  closeOnEscape?: boolean;
   onClose: () => void;
 }
 
@@ -52,6 +54,7 @@ export function useModalDialog({
   dialogRef,
   initialFocusRef,
   returnFocusRef,
+  closeOnEscape = true,
   onClose,
 }: ModalDialogOptions): void {
   const onCloseRef = useRef(onClose);
@@ -84,7 +87,7 @@ export function useModalDialog({
       if (event.key === 'Escape') {
         event.preventDefault();
         event.stopPropagation();
-        onCloseRef.current();
+        if (closeOnEscape) onCloseRef.current();
         return;
       }
       if (event.key !== 'Tab') return;
@@ -127,5 +130,5 @@ export function useModalDialog({
       }
       if (previousFocus?.isConnected) previousFocus.focus();
     };
-  }, [dialogRef, initialFocusRef, returnFocusRef, rootRef]);
+  }, [closeOnEscape, dialogRef, initialFocusRef, returnFocusRef, rootRef]);
 }
