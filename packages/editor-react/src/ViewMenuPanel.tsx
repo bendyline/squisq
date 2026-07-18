@@ -13,6 +13,7 @@
 import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import { useEditorContext, type ThemeInheritance, type LayoutMode } from './EditorContext';
 import { Icon } from './Icon';
+import { useEscapeDismissal } from './useEscapeDismissal';
 
 export function ViewMenuPanel() {
   const {
@@ -31,6 +32,10 @@ export function ViewMenuPanel() {
   } = useEditorContext();
   const [open, setOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const close = useCallback(() => setOpen(false), []);
+
+  useEscapeDismissal(open, close, triggerRef);
 
   // Click-outside to close, mirroring VersionHistoryPanel.
   useEffect(() => {
@@ -59,6 +64,7 @@ export function ViewMenuPanel() {
   return (
     <div className="squisq-view-menu" ref={containerRef}>
       <button
+        ref={triggerRef}
         type="button"
         className={`squisq-toolbar-button squisq-view-menu-trigger${
           open ? ' squisq-toolbar-button--active' : ''

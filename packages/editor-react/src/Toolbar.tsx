@@ -69,6 +69,7 @@ import {
 import { MermaidDiagramTypeThumbnail } from './mermaid/MermaidDiagramTypeThumbnail';
 import { FindToolbar } from './find/FindToolbar';
 import { platformShortcut } from './platformShortcuts';
+import { useEscapeDismissal } from './useEscapeDismissal';
 
 const VIEWS: { id: EditorView; label: string; shortLabel?: string; shortcutKey: string }[] = [
   { id: 'wysiwyg', label: 'Write', shortcutKey: '1' },
@@ -318,6 +319,8 @@ export function Toolbar({
   // Insert menu — toolbar-anchored dropdown that replaces the individual media-group
   // buttons with a single "+" button. Portaled out to avoid overflow:hidden clipping.
   const insertMenuButtonRef = useRef<HTMLButtonElement | null>(null);
+  const insertMenuReturnFocusRef = useRef<HTMLElement | null>(null);
+  const overflowTriggerRef = useRef<HTMLButtonElement>(null);
   const insertMenuRef = useRef<HTMLDivElement | null>(null);
   const codeSnippetMenuRef = useRef<HTMLDivElement | null>(null);
   const mermaidTypeMenuRef = useRef<HTMLDivElement | null>(null);
@@ -336,6 +339,9 @@ export function Toolbar({
   const openInsertMenu = useCallback((trigger?: HTMLElement | null) => {
     const btn = trigger ?? insertMenuButtonRef.current;
     if (!btn) return;
+    insertMenuReturnFocusRef.current = trigger
+      ? overflowTriggerRef.current
+      : insertMenuButtonRef.current;
     const rect = btn.getBoundingClientRect();
     const gap = 4;
     const margin = 8;
@@ -397,6 +403,9 @@ export function Toolbar({
   const [clippedContextualKey, setClippedContextualKey] = useState('');
   const [showOverflow, setShowOverflow] = useState(false);
   const overflowRef = useRef<HTMLDivElement>(null);
+
+  useEscapeDismissal(showOverflow, () => setShowOverflow(false), overflowTriggerRef);
+  useEscapeDismissal(insertMenuAnchor !== null, closeInsertMenu, insertMenuReturnFocusRef);
 
   // Document settings (frontmatter) dialog
   const [showDocSettings, setShowDocSettings] = useState(false);
@@ -1972,6 +1981,7 @@ export function Toolbar({
       {showToolbarOverflow && (
         <div className="squisq-toolbar-overflow" ref={overflowRef}>
           <button
+            ref={overflowTriggerRef}
             className={`squisq-toolbar-button squisq-toolbar-overflow-trigger${showOverflow ? ' squisq-toolbar-button--active' : ''}`}
             data-tooltip="More actions"
             onClick={() => setShowOverflow((v) => !v)}

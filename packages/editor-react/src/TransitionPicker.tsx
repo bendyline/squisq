@@ -26,6 +26,7 @@ import {
   transitionLabel,
   type TransitionCatalogEntry,
 } from './transitionCatalog';
+import { useEscapeDismissal } from './useEscapeDismissal';
 
 export interface TransitionPickerProps {
   value: TransitionFields;
@@ -54,6 +55,8 @@ export function TransitionPicker({
   const [open, setOpen] = useState(false);
   const [style, setStyle] = useState<React.CSSProperties>({});
   const triggerRef = useRef<HTMLButtonElement>(null);
+
+  useEscapeDismissal(open, () => setOpen(false), triggerRef);
 
   const updatePosition = () => {
     if (!triggerRef.current) return;
@@ -101,16 +104,6 @@ export function TransitionPicker({
     };
     document.addEventListener('mousedown', handler);
     return () => document.removeEventListener('mousedown', handler);
-  }, [open]);
-
-  // Close on Escape
-  useEffect(() => {
-    if (!open) return;
-    const handler = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setOpen(false);
-    };
-    document.addEventListener('keydown', handler);
-    return () => document.removeEventListener('keydown', handler);
   }, [open]);
 
   // Reposition on scroll/resize while open (and once after mount for width)

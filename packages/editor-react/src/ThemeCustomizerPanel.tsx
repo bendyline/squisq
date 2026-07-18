@@ -49,6 +49,7 @@ import {
 } from './customThemes/themeDraft';
 import { Section, SeedColorRow, FontPicker, PresetRow } from './customThemes/themeControls';
 import { ImportThemeSection } from './customThemes/ImportThemeSection';
+import { useEscapeDismissal } from './useEscapeDismissal';
 
 const POPOVER_WIDTH = 360;
 const POPOVER_GUTTER = 8;
@@ -87,6 +88,10 @@ export function ThemeCustomizerPanel({
   const [draft, setDraft] = useState<Draft>(() => themeToDraft(value));
   const [popoverPosition, setPopoverPosition] = useState<PopoverPosition | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const close = useCallback(() => setOpen(false), []);
+
+  useEscapeDismissal(open, close, triggerRef);
 
   // Whenever an external value lands (e.g., page load with persisted theme),
   // sync the draft. Internal edits update both draft and value via onChange.
@@ -197,6 +202,7 @@ export function ThemeCustomizerPanel({
   return (
     <div className="squisq-theme-customizer" ref={containerRef}>
       <button
+        ref={triggerRef}
         type="button"
         className={`squisq-toolbar-button squisq-theme-customizer-trigger${
           triggerLabel ? ' squisq-theme-customizer-trigger--label' : ''

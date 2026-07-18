@@ -114,6 +114,26 @@ describe('versioning wiring + VersionHistoryPanel', () => {
     expect(screen.queryByRole('button', { name: 'Version history' })).toBeNull();
   });
 
+  it('closes on global Escape and returns focus to its trigger', async () => {
+    const container = new MemoryContentContainer();
+    await container.writeDocument('# hi', 'index.md');
+    render(
+      <EditorProvider workspaceContainer={container} allowVersioning>
+        <Harness />
+      </EditorProvider>,
+    );
+    const trigger = screen.getByRole('button', { name: 'Version history' });
+    fireEvent.click(trigger);
+    await waitFor(() =>
+      expect(screen.getByRole('dialog', { name: 'Version history' })).toBeTruthy(),
+    );
+
+    fireEvent.keyDown(document, { key: 'Escape' });
+
+    expect(screen.queryByRole('dialog', { name: 'Version history' })).toBeNull();
+    expect(document.activeElement).toBe(trigger);
+  });
+
   it('warns and stays disabled when allowVersioning is set without a container', () => {
     render(
       <EditorProvider allowVersioning>

@@ -593,6 +593,23 @@ describe('<Toolbar> Files badge', () => {
 });
 
 describe('<Toolbar> Insert menu', () => {
+  it('closes on global Escape and returns focus to the Insert trigger', async () => {
+    render(
+      <EditorProvider initialMarkdown="Intro" initialView="raw" allowRecording={false}>
+        <Toolbar />
+      </EditorProvider>,
+    );
+
+    const trigger = screen.getByLabelText('Insert');
+    fireEvent.click(trigger);
+    expect(await screen.findByRole('menu')).toBeTruthy();
+
+    fireEvent.keyDown(document, { key: 'Escape' });
+
+    expect(screen.queryByRole('menu')).toBeNull();
+    expect(document.activeElement).toBe(trigger);
+  });
+
   it('opens media recording from the Insert menu instead of the main toolbar', async () => {
     render(
       <EditorProvider

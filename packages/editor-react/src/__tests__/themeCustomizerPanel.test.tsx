@@ -48,4 +48,15 @@ describe('ThemeCustomizerPanel', () => {
     expect(dialog.style.width).toBe('135px');
     expect(dialog.style.maxHeight).toBe('748px');
   });
+
+  it('closes on Escape and returns focus to its trigger', () => {
+    render(<ThemeCustomizerPanel value={null} onChange={() => undefined} />);
+    const trigger = screen.getByRole('button', { name: 'Customize theme' });
+    fireEvent.click(trigger);
+
+    fireEvent.keyDown(document, { key: 'Escape' });
+
+    expect(screen.queryByRole('dialog', { name: 'Customize theme' })).toBeNull();
+    expect(document.activeElement).toBe(trigger);
+  });
 });

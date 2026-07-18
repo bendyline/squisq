@@ -15,6 +15,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { CSSProperties } from 'react';
+import { useEscapeDismissal } from './useEscapeDismissal';
 import { PICKER_CATEGORIES, searchPickerEntries } from './emojiData';
 import type { PickerEntry } from './emojiData';
 
@@ -117,6 +118,8 @@ export function EmojiPicker({
   const [activeCategory, setActiveCategory] = useState<string>(PICKER_CATEGORIES[0].id);
   const [query, setQuery] = useState('');
   const popoverRef = useRef<HTMLDivElement>(null);
+
+  useEscapeDismissal(open, onClose, anchorRef);
   const searchInputRef = useRef<HTMLInputElement>(null);
 
   // Focus the search box when the popover opens; reset query when it
@@ -132,7 +135,7 @@ export function EmojiPicker({
     return undefined;
   }, [open]);
 
-  // Close on outside click and Escape.
+  // Close on outside click. Escape is shared with the other toolbar popovers.
   useEffect(() => {
     if (!open) return;
     const onPointerDown = (e: MouseEvent) => {
@@ -142,14 +145,9 @@ export function EmojiPicker({
       if (anchorRef?.current?.contains(target)) return;
       onClose();
     };
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
-    };
     document.addEventListener('mousedown', onPointerDown);
-    document.addEventListener('keydown', onKey);
     return () => {
       document.removeEventListener('mousedown', onPointerDown);
-      document.removeEventListener('keydown', onKey);
     };
   }, [open, onClose, anchorRef]);
 

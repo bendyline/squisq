@@ -12,7 +12,59 @@ function firstPreviewSlide(markdown: string): Record<string, unknown> {
   return buildPreviewDoc(source).blocks[0] as unknown as Record<string, unknown>;
 }
 
+function previewSlides(markdown: string): Record<string, unknown>[] {
+  const source = markdownToDoc(parseMarkdown(markdown), {
+    articleId: 'content-first-test',
+    generateCoverBlock: false,
+  });
+  return buildPreviewDoc(source).blocks as unknown as Record<string, unknown>[];
+}
+
 describe('buildPreviewDoc content mapping', () => {
+  it('uses the complete-body content template for unannotated mixed Markdown blocks', () => {
+    const slides = previewSlides(`# Ship Review
+
+A **bold** statement with an [example link](https://example.com).
+
+## Checklist
+
+- First item
+- Second item
+
+> A quoted note.
+
+\`inline code\``);
+
+    expect(slides.map((slide) => slide.template)).toEqual(['content', 'content']);
+
+    const { layers } = materializeBlockLayers(slides[1] as unknown as DocBlock);
+    const renderedText = layers
+      .filter((layer): layer is TextLayer => layer.type === 'text')
+      .map((layer) => layer.content.text)
+      .join('\n');
+    expect(renderedText).toContain('Checklist');
+    expect(renderedText).toContain('First item');
+    expect(renderedText).toContain('Second item');
+    expect(renderedText).toContain('A quoted note.');
+    expect(renderedText).toContain('inline code');
+  });
+
+  it('keeps an explicitly authored section header as a title-only divider', () => {
+    const slide = firstPreviewSlide('# Chapter {[sectionHeader]}\n\nSupporting body.');
+    expect(slide.template).toBe('sectionHeader');
+  });
+
+  it('does not treat an authored transition as permission to hide body content', () => {
+    const slide = firstPreviewSlide('# Chapter {transition=dissolve}\n\nSupporting body.');
+    expect(slide.template).toBe('content');
+    expect(slide.transition).toEqual({ type: 'dissolve' });
+  });
+
+  it('preserves a lossless content-aware auto template', () => {
+    const slide = firstPreviewSlide('# Steps\n\n- First\n- Second');
+    expect(slide.template).toBe('list');
+  });
+
   it('maps the leading bold metric to the large stat layer', () => {
     const slide = firstPreviewSlide(`### The Big Number {[statHighlight colorScheme=green]}
 

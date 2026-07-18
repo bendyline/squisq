@@ -309,6 +309,10 @@ function DocPlayerContent({
     viewport: activeViewport,
     theme: effectiveTheme,
     onSeek: seekTo,
+    // A synthetic track is only the timer used by an unnarrated preview.
+    // Narration pacing may compact short visual beats, but it must never
+    // remove authored slides from the default loss-averse projection.
+    useAudioSegmentTiming: audioMode !== 'synthetic',
   });
 
   // Expand cover block (startBlock) if present - uses active viewport

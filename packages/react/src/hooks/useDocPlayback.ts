@@ -72,6 +72,13 @@ export interface UseDocPlaybackOptions {
   theme?: Theme;
   /** Host seek callback used by block navigation actions. */
   onSeek?: (time: number) => void;
+  /**
+   * Whether real audio-segment timing should reshape the authored block
+   * sequence. Synthetic preview tracks are only a playback clock; treating
+   * them as narration can merge short authored slides to satisfy narration
+   * pacing rules.
+   */
+  useAudioSegmentTiming?: boolean;
 }
 
 export function useDocPlayback(
@@ -79,7 +86,12 @@ export function useDocPlayback(
   currentTime: number,
   options: UseDocPlaybackOptions = {},
 ): PlaybackState & PlaybackActions {
-  const { viewport = VIEWPORT_PRESETS.landscape, theme, onSeek } = options;
+  const {
+    viewport = VIEWPORT_PRESETS.landscape,
+    theme,
+    onSeek,
+    useAudioSegmentTiming = true,
+  } = options;
   // Expand any template blocks into full blocks
   const blocks = useMemo(() => {
     if (!script?.blocks) {
@@ -107,10 +119,12 @@ export function useDocPlayback(
 
     if (hasTemplates) {
       // Extract audio segment timing for proper block synchronization
-      const audioSegments = script.audio?.segments?.map((seg) => ({
-        startTime: seg.startTime,
-        duration: seg.duration,
-      }));
+      const audioSegments = useAudioSegmentTiming
+        ? script.audio?.segments?.map((seg) => ({
+            startTime: seg.startTime,
+            duration: seg.duration,
+          }))
+        : undefined;
 
       // Expand template blocks with audio segment timing, viewport, and persistent layers
       const expanded = expandDocBlocks(flatBlocks as DocBlock[], {
@@ -140,6 +154,7 @@ export function useDocPlayback(
     script?.customTemplates,
     viewport,
     theme,
+    useAudioSegmentTiming,
   ]);
 
   // Find current block based on time

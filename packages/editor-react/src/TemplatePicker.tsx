@@ -8,6 +8,7 @@
 
 import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
+import { useEscapeDismissal } from './useEscapeDismissal';
 import type { CustomTemplateDefinition } from '@bendyline/squisq/schemas';
 import { TEMPLATE_METADATA, resolveTemplateName } from '@bendyline/squisq/doc';
 import { extractPlainText } from '@bendyline/squisq/markdown';
@@ -624,6 +625,8 @@ export function TemplatePicker({
   const dialogRef = useRef<HTMLDivElement>(null);
   const dialogId = `${TEMPLATE_GALLERY_DIALOG_ID}-${useId().replace(/:/g, '')}`;
 
+  useEscapeDismissal(open, () => setOpen(false), triggerRef);
+
   const updateDialogBounds = () => {
     if (!triggerRef.current) return;
     setDialogStyle(computeDialogStyle(triggerRef.current));
@@ -647,16 +650,6 @@ export function TemplatePicker({
     };
     document.addEventListener('mousedown', handler);
     return () => document.removeEventListener('mousedown', handler);
-  }, [open]);
-
-  // Close on Escape
-  useEffect(() => {
-    if (!open) return;
-    const handler = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setOpen(false);
-    };
-    document.addEventListener('keydown', handler);
-    return () => document.removeEventListener('keydown', handler);
   }, [open]);
 
   // Reposition on scroll/resize while open

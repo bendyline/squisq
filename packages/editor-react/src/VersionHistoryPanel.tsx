@@ -17,6 +17,7 @@ import type { Version } from '@bendyline/squisq/versions';
 import { useEditorContext } from './EditorContext';
 import { useMonacoLoader } from './useMonacoLoader';
 import { Icon } from './Icon';
+import { useEscapeDismissal } from './useEscapeDismissal';
 
 interface LazyDiffEditorProps {
   original: string;
@@ -119,6 +120,10 @@ export function VersionHistoryPanel() {
   const [open, setOpen] = useState(false);
   const [state, setState] = useState<PanelState>(initialState);
   const containerRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const close = useCallback(() => setOpen(false), []);
+
+  useEscapeDismissal(open, close, triggerRef);
 
   const refresh = useCallback(async () => {
     if (!versioning) return;
@@ -257,6 +262,7 @@ export function VersionHistoryPanel() {
   return (
     <div className="squisq-version-history" ref={containerRef}>
       <button
+        ref={triggerRef}
         type="button"
         className={`squisq-toolbar-button squisq-version-history-trigger${
           open ? ' squisq-toolbar-button--active' : ''

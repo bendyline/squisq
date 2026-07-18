@@ -14,10 +14,16 @@ import { getThemeFont, shouldUseShadow, themedFontSize } from '../utils/themeUti
 import { createBackgroundLayer } from './captionUtils.js';
 
 function completeBodyText(context: TemplateContext): string {
-  return (context.block?.contents ?? [])
-    .map((node) => extractPlainText(node))
-    .join('\n')
-    .trim();
+  return (
+    (context.block?.contents ?? [])
+      // Mermaid source is already materialized as a visual layer. Repeating the
+      // fence text as prose makes the loss-averse default noisy without
+      // preserving any additional authored meaning.
+      .filter((node) => !(node.type === 'code' && node.lang?.trim().toLowerCase() === 'mermaid'))
+      .map((node) => extractPlainText(node))
+      .join('\n')
+      .trim()
+  );
 }
 
 function bodyFontSize(body: string, context: TemplateContext): number {

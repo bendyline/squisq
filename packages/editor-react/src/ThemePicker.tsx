@@ -11,6 +11,7 @@
 
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
+import { useEscapeDismissal } from './useEscapeDismissal';
 import {
   getThemeSummaries,
   resolveTheme,
@@ -135,6 +136,8 @@ export function ThemePicker({
   const [popoverStyle, setPopoverStyle] = useState<React.CSSProperties>({});
   const triggerRef = useRef<HTMLButtonElement>(null);
   const popoverRef = useRef<HTMLDivElement>(null);
+
+  useEscapeDismissal(open, () => setOpen(false), triggerRef);
   const popoverId = `squisq-theme-picker-popover-${useId().replace(/:/g, '')}`;
 
   // Custom entries are computed per-render (built-ins stay static at module
@@ -226,7 +229,7 @@ export function ThemePicker({
     setOpen((v) => !v);
   };
 
-  // Close on outside click / Esc; reposition on scroll/resize while open.
+  // Close on outside click; reposition on scroll/resize while open.
   useEffect(() => {
     if (!open) return;
     const onDown = (e: MouseEvent) => {
@@ -236,18 +239,13 @@ export function ThemePicker({
       if (popoverEl?.contains(target)) return;
       setOpen(false);
     };
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setOpen(false);
-    };
     const onReposition = () => updatePosition();
     document.addEventListener('mousedown', onDown);
-    document.addEventListener('keydown', onKey);
     window.addEventListener('scroll', onReposition, true);
     window.addEventListener('resize', onReposition);
     requestAnimationFrame(updatePosition);
     return () => {
       document.removeEventListener('mousedown', onDown);
-      document.removeEventListener('keydown', onKey);
       window.removeEventListener('scroll', onReposition, true);
       window.removeEventListener('resize', onReposition);
     };
