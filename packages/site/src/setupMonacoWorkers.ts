@@ -6,7 +6,7 @@
  * label→worker mapping via configureMonacoWorkers; we just supply the five
  * constructors. Imported for side effect from main.tsx before the app mounts.
  */
-import { configureMonacoWorkers } from '@bendyline/squisq-editor-react';
+import { configureMonacoWorkers } from '@bendyline/squisq-editor-react/monaco-workers';
 import EditorWorker from 'monaco-editor/esm/vs/editor/editor.worker?worker';
 import JsonWorker from 'monaco-editor/esm/vs/language/json/json.worker?worker';
 import CssWorker from 'monaco-editor/esm/vs/language/css/css.worker?worker';

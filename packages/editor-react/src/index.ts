@@ -189,8 +189,12 @@ export {
 
 // Monaco lazy loader — exported so hosts embedding RawEditor-like surfaces
 // can share the same load-once Monaco bootstrap.
-export { useMonacoLoader } from './useMonacoLoader.js';
+export { preloadMonaco, preloadMonacoSuggestions, useMonacoLoader } from './useMonacoLoader.js';
 export type { UseMonacoLoaderResult } from './useMonacoLoader.js';
+export type {
+  MonacoLanguageLoadOptions,
+  MonacoLanguageRequest,
+} from './monacoLanguageDetection.js';
 
 // Monaco language-service worker wiring — the host supplies the `?worker`
 // constructors, this owns the label→worker mapping. See monacoWorkers.ts.

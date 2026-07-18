@@ -6,7 +6,7 @@
  * Syncs changes back to EditorContext on every keystroke (debounced).
  */
 
-import { useRef, useCallback, useEffect } from 'react';
+import { useRef, useCallback, useEffect, useState } from 'react';
 import Editor, { type OnMount, type OnChange, type BeforeMount } from '@monaco-editor/react';
 import type * as monaco from 'monaco-editor';
 import { useEditorContext } from './EditorContext';
@@ -20,29 +20,16 @@ import {
   isMarkdownFencedCodeModelLine,
   ownsMonacoModel,
 } from './rawEditorIsolation';
-import { useMonacoLoader } from './useMonacoLoader';
+import { preloadMonacoSuggestions, useMonacoLoader } from './useMonacoLoader';
+import { monacoLanguagesForDocument, normalizeMonacoLanguage } from './monacoLanguageDetection';
 
 // Monaco is loaded lazily through `useMonacoLoader` (see the hook for the
 // rationale). The type-only `import type * as monaco from 'monaco-editor'`
 // above gives us `monaco.editor.IStandaloneCodeEditor`, `monaco.Range`,
 // etc. for typing without pulling the package into the static module
-// graph — which is the whole point: a consumer importing `JsonEditor` or
-// a type from the package barrel no longer drags ~9MB of language
-// services into the resolver.
-//
-// Consumers that *do* want the raw editor can still slim the bundle by
-// aliasing `monaco-editor` to a custom entry in their bundler config.
-// For example with Vite:
-//
-//   resolve: { alias: [{ find: /^monaco-editor$/, replacement: './monaco-slim.ts' }] }
-//
-// Where monaco-slim.ts re-exports 'monaco-editor/esm/vs/editor/editor.api'
-// plus only the language contributions actually needed
-// (`basic-languages/monaco.contribution` for the broad TM grammars,
-// and any of `language/{css,html,json,typescript}/monaco.contribution`
-// for the rich language services). Skipping the language contributions
-// entirely means `defaultLanguage` becomes inert — no tokenizer
-// registered, so every file renders as plain foreground text.
+// graph. The hook also registers only this document's language plus explicit
+// Markdown fence languages. Full worker-backed services are reserved for code
+// files; Markdown source and fenced-code insets use lightweight tokenizers.
 
 // Squisq Monaco themes: same syntax highlighting as vs / vs-dark, but with
 // Monaco's internal gutter (line numbers + folding margin) and overview
@@ -60,6 +47,22 @@ const SQUISQ_THEMES: Record<string, string> = {
   vs: 'squisq-light',
   'vs-dark': 'squisq-dark',
 };
+
+function useDocumentMonacoLanguages(language: string, source: string): readonly string[] {
+  const [requested, setRequested] = useState<readonly string[]>(() =>
+    monacoLanguagesForDocument(language, source),
+  );
+
+  useEffect(() => {
+    const delay = normalizeMonacoLanguage(language) === 'markdown' ? 250 : 0;
+    const timer = window.setTimeout(() => {
+      setRequested(monacoLanguagesForDocument(language, source));
+    }, delay);
+    return () => window.clearTimeout(timer);
+  }, [language, source]);
+
+  return requested;
+}
 
 export interface RawEditorProps {
   /**
@@ -102,8 +105,13 @@ export function RawEditor({
 }: RawEditorProps) {
   const { editorSource, setEditorSource, setMonacoEditor, language, mentionProvider, doc } =
     useEditorContext();
-  const { monaco: monacoNs, ready: monacoReady } = useMonacoLoader();
+  const requestedLanguages = useDocumentMonacoLanguages(language, editorSource);
+  const languageServices = !['markdown', 'plaintext'].includes(normalizeMonacoLanguage(language));
+  const { monaco: monacoNs, ready: monacoReady } = useMonacoLoader(requestedLanguages, {
+    languageServices,
+  });
   const editorRef = useRef<monaco.editor.IStandaloneCodeEditor | null>(null);
+  const fallbackSelection = useRef<{ start: number; end: number } | null>(null);
   const isExternalUpdate = useRef(false);
   const completionDisposable = useRef<monaco.IDisposable | null>(null);
   const mentionCompletionDisposable = useRef<monaco.IDisposable | null>(null);
@@ -186,6 +194,19 @@ export function RawEditor({
     (editor, monaco) => {
       editorRef.current = editor;
       setMonacoEditor(editor);
+      const selection = fallbackSelection.current;
+      const model = editor.getModel();
+      if (selection && model) {
+        const start = model.getPositionAt(selection.start);
+        const end = model.getPositionAt(selection.end);
+        editor.setSelection({
+          startLineNumber: start.lineNumber,
+          startColumn: start.column,
+          endLineNumber: end.lineNumber,
+          endColumn: end.column,
+        });
+        fallbackSelection.current = null;
+      }
       editor.focus();
 
       // Dispose any previous completion provider (from a prior mount)
@@ -506,6 +527,7 @@ export function RawEditor({
       // Cmd/Ctrl+Enter falls through so the native newline still works.
       keyDisposable.current?.dispose();
       keyDisposable.current = editor.onKeyDown((e) => {
+        void preloadMonacoSuggestions().catch(() => undefined);
         if (e.keyCode !== monaco.KeyCode.Enter) return;
         if (!submitOnEnterRef.current) return;
         if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
@@ -682,22 +704,56 @@ export function RawEditor({
   // exact regression the lazy-loading move is meant to avoid.
   if (!monacoReady) {
     return (
-      <div
+      <textarea
         className={className}
+        aria-label="Document source"
+        aria-busy="true"
+        autoFocus
+        readOnly={readOnly}
+        spellCheck={false}
+        value={editorSource}
+        onChange={(event) => {
+          if (!readOnly) setEditorSource(event.currentTarget.value);
+        }}
+        onSelect={(event) => {
+          fallbackSelection.current = {
+            start: event.currentTarget.selectionStart,
+            end: event.currentTarget.selectionEnd,
+          };
+        }}
+        onKeyDown={(event) => {
+          if (
+            event.key === 'Enter' &&
+            submitOnEnterRef.current &&
+            !event.metaKey &&
+            !event.ctrlKey &&
+            !event.shiftKey &&
+            !event.altKey
+          ) {
+            event.preventDefault();
+            event.stopPropagation();
+            submitOnEnterRef.current();
+          }
+        }}
         style={{
           width: '100%',
           height: '100%',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          color: 'var(--squisq-editor-muted-foreground, #6a6258)',
-          fontSize: 13,
+          boxSizing: 'border-box',
+          resize: 'none',
+          border: 0,
+          outline: 0,
+          padding: '12px 22px',
+          background: 'var(--squisq-editor-background, #ffffff)',
+          color: 'var(--squisq-editor-foreground, #1f2937)',
+          fontFamily: 'var(--squisq-code-font, monospace)',
+          fontSize,
+          lineHeight: 1.5,
+          whiteSpace: wordWrap === 'off' ? 'pre' : 'pre-wrap',
+          overflowWrap: wordWrap === 'off' ? 'normal' : 'anywhere',
         }}
         data-testid="raw-editor"
         data-monaco-loading
-      >
-        Loading editor…
-      </div>
+      />
     );
   }
 

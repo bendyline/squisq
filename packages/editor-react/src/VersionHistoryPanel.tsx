@@ -16,6 +16,7 @@ import { DiffEditor } from '@monaco-editor/react';
 import type { Version } from '@bendyline/squisq/versions';
 import { useEditorContext } from './EditorContext';
 import { useMonacoLoader } from './useMonacoLoader';
+import { monacoLanguagesForDocument } from './monacoLanguageDetection';
 import { Icon } from './Icon';
 import { useEscapeDismissal } from './useEscapeDismissal';
 
@@ -47,7 +48,9 @@ const lazyLoadingStyle: CSSProperties = {
  * fires when a snapshot is actually selected.
  */
 function LazyDiffEditor({ original, modified, theme }: LazyDiffEditorProps) {
-  const { ready } = useMonacoLoader();
+  const { ready } = useMonacoLoader(
+    monacoLanguagesForDocument('markdown', `${original}\n${modified}`),
+  );
   if (!ready) {
     return <div style={lazyLoadingStyle}>Loading diff…</div>;
   }

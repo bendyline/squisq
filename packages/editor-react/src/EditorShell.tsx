@@ -60,7 +60,7 @@ import {
   removeMediaReferencesFromMarkdown,
 } from './mediaReferences';
 import { filterVisibleMediaEntries } from './mediaEntries';
-import type { MediaProvider, Theme } from '@bendyline/squisq/schemas';
+import type { MediaProvider, Theme, ViewportPreset } from '@bendyline/squisq/schemas';
 import { DARK_SURFACE, LIGHT_SURFACE } from '@bendyline/squisq/schemas';
 import type { ContentContainer } from '@bendyline/squisq/storage';
 import {
@@ -88,6 +88,12 @@ export interface EditorShellProps {
   /** Initial active view */
   /** Initial active view (default: 'wysiwyg') */
   initialView?: EditorView;
+  /**
+   * Viewport preset used by slideshow/video preview when neither the document
+   * nor the user has selected one. Defaults to landscape. Hosts may update it
+   * responsively; explicit document and user choices remain authoritative.
+   */
+  defaultViewportPreset?: ViewportPreset;
   /** Article ID for Doc generation */
   articleId?: string;
   /** Base path for media URLs in preview */
@@ -462,6 +468,7 @@ export interface EditorShellProps {
 export function EditorShell({
   initialMarkdown = '',
   initialView = 'wysiwyg',
+  defaultViewportPreset = 'landscape',
   articleId = 'untitled',
   basePath = '/',
   onChange,
@@ -577,6 +584,7 @@ export function EditorShell({
       >
         <EditorShellInner
           basePath={basePath}
+          defaultViewportPreset={defaultViewportPreset}
           onChange={onChange}
           onLinkClick={onLinkClick}
           className={className}
@@ -620,6 +628,7 @@ export function EditorShell({
 
 interface EditorShellInnerProps {
   basePath: string;
+  defaultViewportPreset: ViewportPreset;
   onChange?: (source: string) => void;
   onLinkClick?: (href: string) => boolean | undefined;
   className?: string;
@@ -693,6 +702,7 @@ function UseModeProviders({
 
 function EditorShellInner({
   basePath,
+  defaultViewportPreset,
   onChange,
   onLinkClick,
   className,
@@ -1040,7 +1050,11 @@ function EditorShellInner({
       {...containerProps}
     >
       <CustomThemeProvider docThemes={docThemes} onDocThemesChange={onDocThemesChange}>
-        <PreviewSettingsProvider doc={doc} themeOverride={themeOverride}>
+        <PreviewSettingsProvider
+          doc={doc}
+          defaultViewportPreset={defaultViewportPreset}
+          themeOverride={themeOverride}
+        >
           <UseModeProviders
             rootRef={shellRef}
             allowPresentationWindow={allowPresentationWindow}

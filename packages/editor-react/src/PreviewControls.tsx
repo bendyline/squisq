@@ -208,6 +208,12 @@ export interface PreviewSettingsProviderProps {
   doc: Doc | null;
   children: ReactNode;
   /**
+   * Viewport preset to use when the document does not declare
+   * `document-render-as` and the user has not selected a format. Hosts can
+   * make this responsive to their available surface. Defaults to landscape.
+   */
+  defaultViewportPreset?: ViewportPreset;
+  /**
    * Optional Theme to use for the preview, regardless of `Doc.themeId` or
    * the user's theme dropdown selection. Used by the theme customizer to
    * preview an in-progress theme without mutating the document. When
@@ -269,6 +275,7 @@ const THEME_WRITE_ABORTED =
 export function PreviewSettingsProvider({
   doc,
   children,
+  defaultViewportPreset = 'landscape',
   themeOverride,
 }: PreviewSettingsProviderProps) {
   const frontmatter = doc?.frontmatter;
@@ -284,16 +291,6 @@ export function PreviewSettingsProvider({
     [markdownSource, setMarkdownSource],
   );
 
-  // Viewport
-  const fmPreset = useMemo(
-    () => resolveRenderAs(frontmatter?.['document-render-as']),
-    [frontmatter],
-  );
-  const [selectedPreset, setSelectedPreset] = useState<ViewportPreset | null>(null);
-  useEffect(() => setSelectedPreset(null), [fmPreset]);
-  const activePreset = selectedPreset ?? fmPreset ?? 'landscape';
-  const activeViewport = VIEWPORT_PRESETS[activePreset];
-
   // Display mode. A frontmatter-forced `narrate` clamps back to video when
   // the host disabled the mode, so hostile frontmatter can't turn it on.
   const fmMode = useMemo(() => resolveDisplayMode(frontmatter?.['display-mode']), [frontmatter]);
@@ -302,6 +299,22 @@ export function PreviewSettingsProvider({
   const requestedDisplayMode = selectedDisplayMode ?? fmMode ?? 'slideshow';
   const activeDisplayMode =
     requestedDisplayMode === 'narrate' && !allowNarrate ? 'video' : requestedDisplayMode;
+
+  // Viewport. The host default is deliberately limited to the fixed-canvas
+  // slideshow/video modes; Page and Document keep their historical landscape
+  // fallback unless the document or user explicitly chooses another format.
+  const fmPreset = useMemo(
+    () => resolveRenderAs(frontmatter?.['document-render-as']),
+    [frontmatter],
+  );
+  const [selectedPreset, setSelectedPreset] = useState<ViewportPreset | null>(null);
+  useEffect(() => setSelectedPreset(null), [fmPreset]);
+  const playbackDefaultPreset =
+    activeDisplayMode === 'slideshow' || activeDisplayMode === 'video'
+      ? defaultViewportPreset
+      : 'landscape';
+  const activePreset = selectedPreset ?? fmPreset ?? playbackDefaultPreset;
+  const activeViewport = VIEWPORT_PRESETS[activePreset];
 
   // Custom themes (doc + browser library). `useCustomThemes` returns null when
   // no provider is mounted; document-scoped themes still remain available.

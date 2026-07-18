@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { registerJsoncLanguage } from '../monacoJsonc';
+import { registerJsonLanguage, registerJsoncLanguage } from '../monacoJsonc';
 
 function monacoStub(existingLanguages: readonly { id: string }[] = []) {
   return {
@@ -39,5 +39,21 @@ describe('registerJsoncLanguage', () => {
     expect(monaco.languages.register).not.toHaveBeenCalled();
     expect(monaco.languages.setLanguageConfiguration).not.toHaveBeenCalled();
     expect(monaco.languages.setMonarchTokensProvider).not.toHaveBeenCalled();
+  });
+});
+
+describe('registerJsonLanguage', () => {
+  it('registers lightweight JSON without starting the rich language service', () => {
+    const monaco = monacoStub();
+
+    registerJsonLanguage(monaco);
+
+    expect(monaco.languages.register).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'json', extensions: ['.json'] }),
+    );
+    expect(monaco.languages.setMonarchTokensProvider).toHaveBeenCalledWith(
+      'json',
+      expect.objectContaining({ tokenPostfix: '.json' }),
+    );
   });
 });

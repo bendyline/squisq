@@ -2,7 +2,7 @@
 
 import type { languages } from 'monaco-editor';
 
-const JSONC_LANGUAGE: languages.IMonarchLanguage = {
+const JSON_LANGUAGE: languages.IMonarchLanguage = {
   defaultToken: '',
   // Reuse Monaco's JSON token scopes so built-in and host themes color JSONC
   // exactly like JSON instead of requiring JSONC-specific theme rules.
@@ -62,5 +62,19 @@ export function registerJsoncLanguage(monaco: typeof import('monaco-editor')): v
     mimetypes: ['application/jsonc'],
   });
   monaco.languages.setLanguageConfiguration('jsonc', JSONC_CONFIGURATION);
-  monaco.languages.setMonarchTokensProvider('jsonc', JSONC_LANGUAGE);
+  monaco.languages.setMonarchTokensProvider('jsonc', JSON_LANGUAGE);
+}
+
+/** Lightweight JSON highlighting for syntax-only editors (no worker/service). */
+export function registerJsonLanguage(monaco: typeof import('monaco-editor')): void {
+  if (monaco.languages.getLanguages().some(({ id }) => id === 'json')) return;
+
+  monaco.languages.register({
+    id: 'json',
+    aliases: ['JSON', 'json'],
+    extensions: ['.json'],
+    mimetypes: ['application/json'],
+  });
+  monaco.languages.setLanguageConfiguration('json', JSONC_CONFIGURATION);
+  monaco.languages.setMonarchTokensProvider('json', JSON_LANGUAGE);
 }

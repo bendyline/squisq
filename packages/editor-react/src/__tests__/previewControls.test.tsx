@@ -4,7 +4,12 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { compileTheme } from '@bendyline/squisq/schemas';
-import type { CustomTemplateDefinition, Theme } from '@bendyline/squisq/schemas';
+import type {
+  CustomTemplateDefinition,
+  Doc,
+  Theme,
+  ViewportPreset,
+} from '@bendyline/squisq/schemas';
 import { setFrontmatterValues } from '@bendyline/squisq/markdown';
 import {
   writeCustomThemesToFrontmatter,
@@ -37,6 +42,39 @@ function ModeProbe() {
     >
       {activeDisplayMode}
     </div>
+  );
+}
+
+function ViewportProbe() {
+  const { activePreset, setSelectedPreset, setSelectedDisplayMode } = usePreviewSettings();
+  return (
+    <>
+      <button type="button" onClick={() => setSelectedDisplayMode('page')}>
+        Choose document
+      </button>
+      <button type="button" onClick={() => setSelectedDisplayMode('video')}>
+        Choose video
+      </button>
+      <button type="button" onClick={() => setSelectedPreset('square')}>
+        Choose square
+      </button>
+      <div data-testid="active-preset">{activePreset}</div>
+    </>
+  );
+}
+
+function ViewportHarness({
+  defaultViewportPreset,
+  docOverride,
+}: {
+  defaultViewportPreset?: ViewportPreset;
+  docOverride?: Doc;
+}) {
+  const { doc } = useEditorContext();
+  return (
+    <PreviewSettingsProvider doc={docOverride ?? doc} defaultViewportPreset={defaultViewportPreset}>
+      <ViewportProbe />
+    </PreviewSettingsProvider>
   );
 }
 
@@ -265,6 +303,49 @@ describe('PreviewModeSwitch', () => {
       expect(source).toContain('squisq-custom-themes:');
       expect(source).toContain('library-theme');
     });
+  });
+});
+
+describe('preview viewport default', () => {
+  it('follows a responsive host default until the user selects a format', () => {
+    const renderHarness = (defaultViewportPreset: ViewportPreset) => (
+      <EditorProvider initialMarkdown="# Hello">
+        <ViewportHarness defaultViewportPreset={defaultViewportPreset} />
+      </EditorProvider>
+    );
+    const { rerender } = render(renderHarness('portrait'));
+
+    expect(screen.getByTestId('active-preset').textContent).toBe('portrait');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Choose document' }));
+    expect(screen.getByTestId('active-preset').textContent).toBe('landscape');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Choose video' }));
+    expect(screen.getByTestId('active-preset').textContent).toBe('portrait');
+
+    rerender(renderHarness('landscape'));
+    expect(screen.getByTestId('active-preset').textContent).toBe('landscape');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Choose square' }));
+    rerender(renderHarness('portrait'));
+    expect(screen.getByTestId('active-preset').textContent).toBe('square');
+  });
+
+  it('keeps the document viewport authoritative over the host default', () => {
+    const doc: Doc = {
+      articleId: 'test',
+      duration: 0,
+      blocks: [],
+      audio: { segments: [] },
+      frontmatter: { 'document-render-as': 'landscape' },
+    };
+    render(
+      <EditorProvider initialMarkdown="# Hello">
+        <ViewportHarness defaultViewportPreset="portrait" docOverride={doc} />
+      </EditorProvider>,
+    );
+
+    expect(screen.getByTestId('active-preset').textContent).toBe('landscape');
   });
 });
 

@@ -1,82 +1,111 @@
 /**
- * useMonacoLoader
+ * Lazy, shared Monaco loader.
  *
- * Idempotently dynamic-imports `monaco-editor` and points the
- * `@monaco-editor/react` singleton loader at the bundled copy. Replaces
- * the historical top-of-module `import * as monaco from 'monaco-editor';
- * loader.config({ monaco })` pattern, which forced every consumer of
- * `@bendyline/squisq-editor-react` — including ones that only import
- * `JsonEditor` or a type — to drag in monaco's ~9MB worth of language
- * services and workers at module evaluation time.
- *
- * Hosts that want the smallest possible bundle can keep aliasing
- * `monaco-editor` to a slim entry as before; the behavior is identical
- * once the dynamic import settles.
- *
- * The promise is cached at module scope so the first subscriber
- * anywhere in the app pays the import cost and every later subscriber
- * reuses the same settled value.
+ * The first subscriber imports Squisq's compact Monaco core and configures the
+ * `@monaco-editor/react` singleton. Each caller also names the languages it
+ * needs and whether a full code file warrants worker-backed language services.
+ * Core, grammar, feature, and service promises are cached across editors.
  */
 
 import { useEffect, useState } from 'react';
 import { loader } from '@monaco-editor/react';
+import {
+  monacoLanguageRequestKey,
+  type MonacoLanguageLoadOptions,
+  type MonacoLanguageRequest,
+} from './monacoLanguageDetection.js';
 
-/** In-flight (or settled) dynamic import shared across all callers. */
-let monacoPromise: Promise<typeof import('monaco-editor')> | null = null;
+type SquisqMonacoModule = typeof import('./monaco.js');
 
-/** Settled namespace once the promise resolves — read synchronously by mount-time consumers. */
+let monacoPromise: Promise<SquisqMonacoModule> | null = null;
+let monacoSuggestionsPromise: Promise<void> | null = null;
 let monacoNamespace: typeof import('monaco-editor') | null = null;
+const loadedLanguageProfiles = new Set<string>();
 
 export interface UseMonacoLoaderResult {
-  /** The monaco namespace once loaded, or `null` while the import is in flight. */
+  /** The Monaco namespace once loaded, or `null` while the core is in flight. */
   monaco: typeof import('monaco-editor') | null;
-  /** Flips to `true` after the import settles. Gate `<Editor>` / `<DiffEditor>` renders on this. */
+  /** True after the compact core and this caller's language profile are ready. */
   ready: boolean;
 }
 
-/**
- * Subscribe to the lazy-loaded monaco namespace. The first caller
- * triggers `import('monaco-editor')` and configures the
- * `@monaco-editor/react` loader; subsequent callers receive the same
- * cached value.
- */
-export function useMonacoLoader(): UseMonacoLoaderResult {
-  const [state, setState] = useState<UseMonacoLoaderResult>(() => ({
-    monaco: monacoNamespace,
-    ready: monacoNamespace !== null,
-  }));
+function languagesFromRequestKey(requestKey: string): string[] {
+  const separator = requestKey.indexOf(':');
+  const languages = separator === -1 ? '' : requestKey.slice(separator + 1);
+  return languages ? languages.split(',') : [];
+}
+
+async function loadMonacoProfile(
+  requestKey: string,
+  languageServices: boolean,
+): Promise<typeof import('monaco-editor')> {
+  const monaco = await loadMonacoModule();
+
+  if (!loadedLanguageProfiles.has(requestKey)) {
+    await monaco.loadMonacoLanguages(languagesFromRequestKey(requestKey), { languageServices });
+    loadedLanguageProfiles.add(requestKey);
+  }
+  return monaco;
+}
+
+async function loadMonacoModule(): Promise<SquisqMonacoModule> {
+  if (!monacoPromise) {
+    monacoPromise = import('./monaco.js').then((monaco) => {
+      loader.config({ monaco });
+      monacoNamespace = monaco;
+      return monaco;
+    });
+  }
+
+  return monacoPromise;
+}
+
+/** Start Monaco and the requested language profile before a React editor mounts. */
+export function preloadMonaco(
+  requestedLanguages: MonacoLanguageRequest = [],
+  options: MonacoLanguageLoadOptions = {},
+): Promise<typeof import('monaco-editor')> {
+  const languageServices = options.languageServices === true;
+  const requestKey = monacoLanguageRequestKey(requestedLanguages, { languageServices });
+  return loadMonacoProfile(requestKey, languageServices);
+}
+
+/** Load completion and snippet UI after the compact editor is already usable. */
+export function preloadMonacoSuggestions(): Promise<void> {
+  monacoSuggestionsPromise ??= loadMonacoModule()
+    .then((monaco) => monaco.loadMonacoSuggestions())
+    .catch((error: unknown) => {
+      monacoSuggestionsPromise = null;
+      throw error;
+    });
+  return monacoSuggestionsPromise;
+}
+
+/** Subscribe to the shared Monaco namespace and a demand-loaded language profile. */
+export function useMonacoLoader(
+  requestedLanguages: MonacoLanguageRequest = [],
+  options: MonacoLanguageLoadOptions = {},
+): UseMonacoLoaderResult {
+  const languageServices = options.languageServices === true;
+  const requestKey = monacoLanguageRequestKey(requestedLanguages, { languageServices });
+  const [initialReady, setInitialReady] = useState(
+    () => monacoNamespace !== null && loadedLanguageProfiles.has(requestKey),
+  );
 
   useEffect(() => {
-    if (state.ready) return;
-    if (!monacoPromise) {
-      // Load Monaco through squisq's canonical `./monaco` entry (see that
-      // file for exactly which slice of Monaco ships and why). Centralizing
-      // the choice there means the editor and any downstream app that imports
-      // `@bendyline/squisq-editor-react/monaco` share ONE instance and feature
-      // set — no host aliasing, no hand-rolled slim entry that silently drops
-      // the suggest widget. The import is dynamic so consumers that only use
-      // types or `JsonEditor` never pull Monaco into their graph.
-      //
-      // `./monaco` re-exports `editor.api` (the only barrel with a `.d.ts`)
-      // after side-effect-importing `editor.main.js`; the `as unknown as` cast
-      // pins the settled module to the full monaco namespace.
-      monacoPromise = (
-        import('./monaco.js') as unknown as Promise<typeof import('monaco-editor')>
-      ).then((m) => {
-        loader.config({ monaco: m });
-        monacoNamespace = m;
-        return m;
-      });
-    }
     let cancelled = false;
-    void monacoPromise.then((m) => {
-      if (cancelled) return;
-      setState({ monaco: m, ready: true });
+    void loadMonacoProfile(requestKey, languageServices).then(() => {
+      if (!cancelled) setInitialReady(true);
     });
     return () => {
       cancelled = true;
     };
-  }, [state.ready]);
+  }, [languageServices, requestKey]);
 
-  return state;
+  return {
+    monaco: monacoNamespace,
+    // Once this mounted consumer has completed its first profile, later
+    // language additions register in place without unmounting the editor.
+    ready: monacoNamespace !== null && initialReady,
+  };
 }
