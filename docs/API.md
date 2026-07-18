@@ -421,6 +421,13 @@ Required fields are shown without `?`. Every template also inherits the
 | `videoWithCaption` | `videoSrc`, `videoAlt`, `clipStart`, `clipEnd`                          | `posterSrc`, `sourceDuration`, `caption`, `captionPosition`, `videoCredit`, `videoLicense`                                      |
 | `videoPullQuote`   | `text`, `backgroundVideo {src, posterSrc?, alt, clipStart, clipEnd, …}` | `attribution`                                                                                                                   |
 | `dataTable`        | `headers[]`, `rows[][]`                                                 | `title`, `align`, `colorScheme`                                                                                                 |
+| `barChart`         | — (`headers`/`rows` derive from the block's markdown table)             | `title`, `labelColumn`, `valueColumns[]`, `stacked`, `showTable`, `showLegend`, `showValues`, `unit`, `colorScheme`             |
+| `columnChart`      | — (`headers`/`rows` derive from the block's markdown table)             | `title`, `labelColumn`, `valueColumns[]`, `stacked`, `showTable`, `showLegend`, `showValues`, `unit`, `colorScheme`             |
+| `pieChart`         | — (`headers`/`rows` derive from the block's markdown table)             | `title`, `labelColumn`, `valueColumns[]`, `showTable`, `showLegend`, `showValues`, `unit`, `colorScheme`                        |
+| `donutChart`       | — (`headers`/`rows` derive from the block's markdown table)             | `title`, `labelColumn`, `valueColumns[]`, `showTable`, `showLegend`, `showValues`, `unit`, `colorScheme`                        |
+| `lineChart`        | — (`headers`/`rows` derive from the block's markdown table)             | `title`, `labelColumn`, `valueColumns[]`, `showTable`, `showLegend`, `showValues`, `unit`, `colorScheme`                        |
+| `areaChart`        | — (`headers`/`rows` derive from the block's markdown table)             | `title`, `labelColumn`, `valueColumns[]`, `showTable`, `showLegend`, `showValues`, `unit`, `colorScheme`                        |
+| `scatterChart`     | — (`headers`/`rows` derive from the block's markdown table)             | `title`, `labelColumn`, `valueColumns[]`, `showTable`, `showLegend`, `showValues`, `unit`, `colorScheme`                        |
 | `diagram`          | — (nodes/edges come from child headings)                                | `title`, `colorScheme`, `nodeShape`, `edgeStyle`, `startStyle`, `endStyle`, `lineStyle`                                         |
 | `tree`             | — (`items` derive from an ASCII tree fence)                             | `items`, `title`, `colorScheme`                                                                                                 |
 | `timeline`         | — (`tracks` derive from an ASCII timeline fence)                        | `tracks`, `links`, `title`, `colorScheme`                                                                                       |
@@ -530,7 +537,7 @@ interface LayoutHints {
 
 ### Subpath: Doc
 
-**Import:** `@bendyline/squisq/doc` — the template registry, all 26 templates,
+**Import:** `@bendyline/squisq/doc` — the template registry, all 33 templates,
 markdown↔doc conversion, canonical layer materialization, and
 theme/validation helpers.
 

@@ -40,6 +40,7 @@ import type {
 import type { MarkdownBlockNode } from '../../markdown/types.js';
 import { extractPlainText } from '../../markdown/utils.js';
 import { extractRichListItems } from '../templateInputs.js';
+import { buildChartData } from '../templates/chart/parse.js';
 import type { PageEmphasis } from '../../schemas/PageStyle.js';
 import type { PageMedia, PageRichText, PageSection, PageSpatialKind } from './PageSection.js';
 
@@ -438,6 +439,26 @@ const dataTable: SectionExtractor = (input) => {
   };
 };
 
+// Charts embed their SVG rendition (same layers as the slide pipeline), so
+// page mode and every HTML export show the identical themed chart.
+const chartExtractor: SectionExtractor = (input, ctx) => {
+  // A chart with no chartable table falls back to a native prose section
+  // (mirroring the slide engine's content fallback) instead of embedding a
+  // fixed-aspect canvas of prose.
+  const chart = input as unknown as {
+    headers?: string[];
+    rows?: string[][];
+    labelColumn?: string;
+    valueColumns?: string[];
+  };
+  const chartable =
+    Array.isArray(chart.headers) &&
+    Array.isArray(chart.rows) &&
+    buildChartData({ headers: chart.headers, rows: chart.rows }, chart) !== null;
+  if (chartable) return canvasDraft('chart', ctx, input as unknown as Block);
+  return content(input, ctx);
+};
+
 const diagram: SectionExtractor = (input, ctx) =>
   canvasDraft('diagram', ctx, input as unknown as Block);
 const tree: SectionExtractor = (input, ctx) => canvasDraft('tree', ctx, input as unknown as Block);
@@ -475,6 +496,13 @@ export const sectionExtractors: Record<string, SectionExtractor> = {
   videoWithCaption,
   videoPullQuote,
   dataTable,
+  barChart: chartExtractor,
+  columnChart: chartExtractor,
+  pieChart: chartExtractor,
+  donutChart: chartExtractor,
+  lineChart: chartExtractor,
+  areaChart: chartExtractor,
+  scatterChart: chartExtractor,
   diagram,
   tree,
   timeline,

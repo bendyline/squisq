@@ -43,7 +43,11 @@ import type {
 import { extractPlainText, readFrontmatterThemeId } from '../markdown/utils.js';
 import { coerceAnnotationValues, type CoercedBlockMeta } from '../markdown/annotationCoercion.js';
 import { estimateReadingTime } from '../timing/readingTime.js';
-import { resolveTemplateName, isContainerTemplate } from './templates/index.js';
+import {
+  resolveTemplateName,
+  isContainerTemplate,
+  TABLE_FED_TEMPLATES,
+} from './templates/index.js';
 import { isDataFence, parseDataFence, findFirstTable, extractTableData } from './structuredData.js';
 import { extractMediaFromContents } from './mediaAnnotations.js';
 import { extractTemplateBlocksFromContents } from './annotationBlocks.js';
@@ -741,8 +745,9 @@ function lineOf(block: Block): { line: number } | Record<string, never> {
  * Populate `block.templateData` from structured body content:
  * 1. Every ```json data / ```yaml data fence in the body merges its parsed
  *    object in (later fences override earlier keys).
- * 2. For `dataTable` blocks, the first GFM table supplies headers/rows/align
- *    unless the author already provided them via a fence or `{[…]}` params.
+ * 2. For table-fed blocks (`dataTable` + the chart family), the first GFM
+ *    table supplies headers/rows/align unless the author already provided
+ *    them via a fence or `{[…]}` params.
  * Parse failures are recorded on `diagnostics` and skip the fence.
  */
 function applyStructuredData(block: Block, diagnostics: DocDiagnostic[]): void {
@@ -764,7 +769,7 @@ function applyStructuredData(block: Block, diagnostics: DocDiagnostic[]): void {
     data = { ...data, ...result.data };
   }
 
-  if (block.template === 'dataTable') {
+  if (TABLE_FED_TEMPLATES.has(resolveTemplateName(block.template ?? ''))) {
     const provided = (key: string) =>
       (data && key in data) || (block.templateOverrides && key in block.templateOverrides);
     if (!provided('headers') && !provided('rows')) {

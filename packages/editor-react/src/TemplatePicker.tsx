@@ -432,6 +432,120 @@ export const TEMPLATE_ENTRIES: TemplateEntry[] = [
     ),
   },
   {
+    name: 'barChart',
+    label: 'Bar Chart',
+    description: "Horizontal bars from the block's markdown table — one bar per row.",
+    icon: (
+      <TemplateIcon>
+        <rect x={8} y={6} width={40} height={5} rx={1} fill={FA} opacity={0.85} />
+        <rect x={8} y={14} width={28} height={5} rx={1} fill={F2} opacity={0.8} />
+        <rect x={8} y={22} width={34} height={5} rx={1} fill={FA} opacity={0.6} />
+        <rect x={8} y={30} width={18} height={5} rx={1} fill={F1} opacity={0.8} />
+        <line x1={8} y1={4} x2={8} y2={37} stroke={F1} strokeWidth={1.5} />
+      </TemplateIcon>
+    ),
+  },
+  {
+    name: 'columnChart',
+    label: 'Column Chart',
+    description: "Vertical columns from the block's markdown table — one column per row.",
+    icon: (
+      <TemplateIcon>
+        <rect x={8} y={18} width={7} height={16} rx={1} fill={F2} opacity={0.8} />
+        <rect x={19} y={10} width={7} height={24} rx={1} fill={FA} opacity={0.85} />
+        <rect x={30} y={14} width={7} height={20} rx={1} fill={FA} opacity={0.6} />
+        <rect x={41} y={22} width={7} height={12} rx={1} fill={F1} opacity={0.8} />
+        <line x1={5} y1={34} x2={51} y2={34} stroke={F1} strokeWidth={1.5} />
+      </TemplateIcon>
+    ),
+  },
+  {
+    name: 'pieChart',
+    label: 'Pie Chart',
+    description: "A pie of the block's markdown table — each row becomes a labeled slice.",
+    icon: (
+      <TemplateIcon>
+        <circle cx={28} cy={20} r={14} fill={F1} opacity={0.6} />
+        <path d="M 28 20 L 28 6 A 14 14 0 0 1 41.4 24.1 Z" fill={FA} opacity={0.85} />
+        <path d="M 28 20 L 41.4 24.1 A 14 14 0 0 1 20.5 32.9 Z" fill={F2} opacity={0.8} />
+      </TemplateIcon>
+    ),
+  },
+  {
+    name: 'donutChart',
+    label: 'Donut Chart',
+    description: "A donut of the block's markdown table — each row becomes a labeled slice.",
+    icon: (
+      <TemplateIcon>
+        <circle cx={28} cy={20} r={14} fill={F1} opacity={0.6} />
+        <path d="M 28 20 L 28 6 A 14 14 0 0 1 41.4 24.1 Z" fill={FA} opacity={0.85} />
+        <path d="M 28 20 L 41.4 24.1 A 14 14 0 0 1 20.5 32.9 Z" fill={F2} opacity={0.8} />
+        <circle cx={28} cy={20} r={7} fill="white" />
+      </TemplateIcon>
+    ),
+  },
+  {
+    name: 'lineChart',
+    label: 'Line Chart',
+    description: "Lines from the block's markdown table — one line per value column.",
+    icon: (
+      <TemplateIcon>
+        <line x1={6} y1={12} x2={50} y2={12} stroke={F1} strokeWidth={1} opacity={0.5} />
+        <line x1={6} y1={22} x2={50} y2={22} stroke={F1} strokeWidth={1} opacity={0.5} />
+        <line x1={6} y1={32} x2={50} y2={32} stroke={F1} strokeWidth={1} opacity={0.5} />
+        <polyline
+          points="8,28 20,16 32,20 48,8"
+          fill="none"
+          stroke={FA}
+          strokeWidth={2.5}
+          opacity={0.85}
+        />
+        <polyline
+          points="8,32 20,26 32,30 48,20"
+          fill="none"
+          stroke={F2}
+          strokeWidth={2}
+          opacity={0.7}
+        />
+      </TemplateIcon>
+    ),
+  },
+  {
+    name: 'areaChart',
+    label: 'Area Chart',
+    description: "Filled area lines from the block's markdown table — one area per value column.",
+    icon: (
+      <TemplateIcon>
+        <path d="M 8 28 L 20 16 L 32 20 L 48 8 L 48 34 L 8 34 Z" fill={FA} opacity={0.4} />
+        <polyline
+          points="8,28 20,16 32,20 48,8"
+          fill="none"
+          stroke={FA}
+          strokeWidth={2.5}
+          opacity={0.85}
+        />
+        <line x1={6} y1={34} x2={50} y2={34} stroke={F1} strokeWidth={1.5} />
+      </TemplateIcon>
+    ),
+  },
+  {
+    name: 'scatterChart',
+    label: 'Scatter Chart',
+    description: "An x/y scatter plot from the block's markdown table's numeric columns.",
+    icon: (
+      <TemplateIcon>
+        <line x1={8} y1={4} x2={8} y2={34} stroke={F1} strokeWidth={1.5} />
+        <line x1={8} y1={34} x2={50} y2={34} stroke={F1} strokeWidth={1.5} />
+        <circle cx={16} cy={26} r={2.5} fill={F2} opacity={0.8} />
+        <circle cx={22} cy={18} r={2.5} fill={FA} opacity={0.85} />
+        <circle cx={28} cy={22} r={2.5} fill={F2} opacity={0.8} />
+        <circle cx={34} cy={12} r={2.5} fill={FA} opacity={0.85} />
+        <circle cx={40} cy={16} r={2.5} fill={F2} opacity={0.8} />
+        <circle cx={45} cy={9} r={2.5} fill={FA} opacity={0.85} />
+      </TemplateIcon>
+    ),
+  },
+  {
     name: 'diagram',
     label: 'Diagram',
     description:

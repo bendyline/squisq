@@ -29,6 +29,15 @@ import { pullQuote } from './pullQuote.js';
 import { videoWithCaption } from './videoWithCaption.js';
 import { videoPullQuote } from './videoPullQuote.js';
 import { dataTable } from './dataTable.js';
+import {
+  areaChart,
+  barChart,
+  columnChart,
+  donutChart,
+  lineChart,
+  pieChart,
+  scatterChart,
+} from './chartBlock.js';
 import { diagramBlock } from './diagramBlock.js';
 import { treeBlock } from './treeBlock.js';
 import { timelineBlock } from './timelineBlock.js';
@@ -58,6 +67,13 @@ export const templateRegistry: TemplateRegistry = {
   videoWithCaption,
   videoPullQuote,
   dataTable,
+  barChart,
+  columnChart,
+  pieChart,
+  donutChart,
+  lineChart,
+  areaChart,
+  scatterChart,
   diagram: diagramBlock,
   tree: treeBlock,
   timeline: timelineBlock,

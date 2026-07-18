@@ -213,6 +213,21 @@ function buildTemplatePreviewInputs(
       return {
         inputs: block.children && block.children.length > 0 ? { title: headingText } : null,
       };
+    case 'barChart':
+    case 'columnChart':
+    case 'pieChart':
+    case 'donutChart':
+    case 'lineChart':
+    case 'areaChart':
+    case 'scatterChart': {
+      const chartInputs = deriveTemplateInputs(templateName, headingText, contents, {
+        placeholders: false,
+      });
+      return {
+        inputs: chartInputs,
+        ...(chartInputs ? {} : { warning: 'No table found in this block' }),
+      };
+    }
     default:
       return {
         inputs: deriveTemplateInputs(templateName, headingText, contents, { placeholders: false }),

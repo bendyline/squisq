@@ -109,6 +109,7 @@ export interface ToolbarProps {
 import {
   BUTTONS,
   BUTTON_INDEX_BY_ID,
+  CHART_TYPE_MENU_WIDTH,
   CODE_SNIPPET_MENU_WIDTH,
   CONVERT_BUTTONS,
   fileCountBadge,
@@ -132,6 +133,7 @@ import {
 import {
   DIAGRAM_STARTER_MARKDOWN,
   insertAsciiDiagramBlock,
+  insertChartBlock,
   insertFenceBlock,
   insertLayoutBlock,
   insertMermaidDiagramBlock,
@@ -143,6 +145,13 @@ import {
   TIMELINE_STARTER_MARKDOWN,
   TREE_STARTER_MARKDOWN,
 } from './toolbar/sceneBlockInserts';
+import {
+  CHART_TYPES,
+  chartStarterMarkdown,
+  DEFAULT_CHART_TYPE,
+  type ChartTypeEntry,
+} from './chart/chartTypes';
+import { ChartTypeThumbnail } from './chart/ChartTypeThumbnail';
 
 function findBlockBySourceLine(blocks: readonly Block[], lineNumber: number): Block | null {
   for (const block of blocks) {
@@ -324,6 +333,7 @@ export function Toolbar({
   const insertMenuRef = useRef<HTMLDivElement | null>(null);
   const codeSnippetMenuRef = useRef<HTMLDivElement | null>(null);
   const mermaidTypeMenuRef = useRef<HTMLDivElement | null>(null);
+  const chartTypeMenuRef = useRef<HTMLDivElement | null>(null);
   const [insertMenuAnchor, setInsertMenuAnchor] = useState<{ top: number; left: number } | null>(
     null,
   );
@@ -332,6 +342,10 @@ export function Toolbar({
     left: number;
   } | null>(null);
   const [mermaidTypeMenuAnchor, setMermaidTypeMenuAnchor] = useState<{
+    top: number;
+    left: number;
+  } | null>(null);
+  const [chartTypeMenuAnchor, setChartTypeMenuAnchor] = useState<{
     top: number;
     left: number;
   } | null>(null);
@@ -353,6 +367,7 @@ export function Toolbar({
     setInsertMenuAnchor({ top: rect.bottom + gap, left });
     setCodeSnippetMenuAnchor(null);
     setMermaidTypeMenuAnchor(null);
+    setChartTypeMenuAnchor(null);
   }, []);
 
   const openCodeSnippetMenu = useCallback((trigger: HTMLElement) => {
@@ -369,6 +384,7 @@ export function Toolbar({
     const top = Math.max(margin, Math.min(rect.top, vh - maxMenuHeight - margin));
     setCodeSnippetMenuAnchor({ top, left });
     setMermaidTypeMenuAnchor(null);
+    setChartTypeMenuAnchor(null);
   }, []);
 
   const openMermaidTypeMenu = useCallback((trigger: HTMLElement) => {
@@ -385,12 +401,31 @@ export function Toolbar({
     const top = Math.max(margin, Math.min(rect.top, vh - maxMenuHeight - margin));
     setMermaidTypeMenuAnchor({ top, left });
     setCodeSnippetMenuAnchor(null);
+    setChartTypeMenuAnchor(null);
+  }, []);
+
+  const openChartTypeMenu = useCallback((trigger: HTMLElement) => {
+    const rect = trigger.getBoundingClientRect();
+    const gap = 4;
+    const margin = 8;
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
+    let left = rect.right + gap;
+    if (left + CHART_TYPE_MENU_WIDTH + margin > vw) {
+      left = Math.max(margin, rect.left - CHART_TYPE_MENU_WIDTH - gap);
+    }
+    const maxMenuHeight = Math.min(600, vh - margin * 2);
+    const top = Math.max(margin, Math.min(rect.top, vh - maxMenuHeight - margin));
+    setChartTypeMenuAnchor({ top, left });
+    setCodeSnippetMenuAnchor(null);
+    setMermaidTypeMenuAnchor(null);
   }, []);
 
   const closeInsertMenu = useCallback(() => {
     setInsertMenuAnchor(null);
     setCodeSnippetMenuAnchor(null);
     setMermaidTypeMenuAnchor(null);
+    setChartTypeMenuAnchor(null);
   }, []);
 
   // ── Overflow detection ────────────────────────────────
@@ -515,6 +550,7 @@ export function Toolbar({
       if (insertMenuRef.current?.contains(e.target as Node)) return;
       if (codeSnippetMenuRef.current?.contains(e.target as Node)) return;
       if (mermaidTypeMenuRef.current?.contains(e.target as Node)) return;
+      if (chartTypeMenuRef.current?.contains(e.target as Node)) return;
       closeInsertMenu();
     };
     document.addEventListener('mousedown', handleClick);
@@ -639,6 +675,14 @@ export function Toolbar({
           break;
         case 'tasklist':
           insertTaskList(tiptapEditor);
+          break;
+        case 'chart':
+          // Overflow-menu path (no flyout): insert the default chart starter.
+          insertChartBlock(tiptapEditor, {
+            template: DEFAULT_CHART_TYPE.id,
+            headingText: DEFAULT_CHART_TYPE.headingText,
+            table: DEFAULT_CHART_TYPE.table,
+          });
           break;
         case 'diagram':
           // Diagrams are ASCII-art code fences; the AsciiDiagramExtension
@@ -814,6 +858,12 @@ export function Toolbar({
             newCursorOffset = replacement.length;
             break;
           }
+          case 'chart': {
+            // Default chart starter: annotated heading + sample table.
+            replacement = chartStarterMarkdown(DEFAULT_CHART_TYPE);
+            newCursorOffset = replacement.length;
+            break;
+          }
           case 'diagram': {
             // A diagram is an ASCII-art code fence; the WYSIWYG view
             // renders its editable canvas, preview renders it as a slide.
@@ -913,6 +963,9 @@ export function Toolbar({
           case 'tasklist':
             insertion = `\n${TASK_LIST_MARKDOWN}\n`;
             break;
+          case 'chart':
+            insertion = chartStarterMarkdown(DEFAULT_CHART_TYPE);
+            break;
           case 'diagram':
             insertion = DIAGRAM_STARTER_MARKDOWN;
             break;
@@ -974,6 +1027,40 @@ export function Toolbar({
       setMarkdownSource(
         markdownSource + codeSnippetMarkdown(language.fenceLanguage, language.starter),
       );
+      closeInsertMenu();
+    },
+    [activeView, closeInsertMenu, markdownSource, monacoEditor, setMarkdownSource, tiptapEditor],
+  );
+
+  const handleChartTypeInsert = useCallback(
+    (entry: ChartTypeEntry) => {
+      if (activeView === 'wysiwyg' && tiptapEditor) {
+        insertChartBlock(tiptapEditor, {
+          template: entry.id,
+          headingText: entry.headingText,
+          table: entry.table,
+        });
+        closeInsertMenu();
+        return;
+      }
+
+      const markdown = chartStarterMarkdown(entry);
+      if (monacoEditor) {
+        const selection = monacoEditor.getSelection();
+        const model = monacoEditor.getModel();
+        if (!selection || !model) return;
+        monacoEditor.executeEdits('toolbar-chart', [{ range: selection, text: markdown }]);
+        const endPosition = model.getPositionAt(
+          model.getOffsetAt(selection.getStartPosition()) + markdown.length,
+        );
+        monacoEditor.setPosition(endPosition);
+        monacoEditor.revealPositionInCenterIfOutsideViewport(endPosition);
+        monacoEditor.focus();
+        closeInsertMenu();
+        return;
+      }
+
+      setMarkdownSource(markdownSource + markdown);
       closeInsertMenu();
     },
     [activeView, closeInsertMenu, markdownSource, monacoEditor, setMarkdownSource, tiptapEditor],
@@ -2281,6 +2368,11 @@ export function Toolbar({
               const stripped = btn.title.replace(/^Insert\s+/i, '');
               const label = stripped.charAt(0).toUpperCase() + stripped.slice(1);
               const hasMermaidTypeMenu = btn.id === 'complexdiagram';
+              const hasChartTypeMenu = btn.id === 'chart';
+              const hasSubmenu = hasMermaidTypeMenu || hasChartTypeMenu;
+              const submenuOpen = hasMermaidTypeMenu
+                ? mermaidTypeMenuAnchor !== null
+                : chartTypeMenuAnchor !== null;
               return (
                 <button
                   key={btn.id}
@@ -2293,16 +2385,21 @@ export function Toolbar({
                       else openMermaidTypeMenu(event.currentTarget);
                       return;
                     }
+                    if (hasChartTypeMenu) {
+                      if (chartTypeMenuAnchor) setChartTypeMenuAnchor(null);
+                      else openChartTypeMenu(event.currentTarget);
+                      return;
+                    }
                     handleAction(btn.id);
                     if (btn.id !== 'emoji') closeInsertMenu();
                   }}
                   role="menuitem"
-                  aria-haspopup={hasMermaidTypeMenu ? 'menu' : undefined}
-                  aria-expanded={hasMermaidTypeMenu ? mermaidTypeMenuAnchor !== null : undefined}
+                  aria-haspopup={hasSubmenu ? 'menu' : undefined}
+                  aria-expanded={hasSubmenu ? submenuOpen : undefined}
                 >
                   <span className="squisq-toolbar-overflow-icon">{buttonIcon(btn)}</span>
                   <span>{label}</span>
-                  {hasMermaidTypeMenu && <Icon icon="fa-solid fa-chevron-right" />}
+                  {hasSubmenu && <Icon icon="fa-solid fa-chevron-right" />}
                 </button>
               );
             })}
@@ -2396,6 +2493,54 @@ export function Toolbar({
                 </div>
               </section>
             ))}
+          </div>,
+          document.body,
+        )}
+
+      {chartTypeMenuAnchor &&
+        createPortal(
+          <div
+            ref={chartTypeMenuRef}
+            className="squisq-insert-menu squisq-mermaid-type-menu squisq-chart-type-menu"
+            data-theme={colorScheme}
+            style={{
+              position: 'fixed',
+              top: chartTypeMenuAnchor.top,
+              left: chartTypeMenuAnchor.left,
+              width: CHART_TYPE_MENU_WIDTH,
+            }}
+            role="menu"
+            aria-label="Chart type"
+          >
+            <div className="squisq-mermaid-type-menu-heading">
+              <strong>Chart</strong>
+              <span>
+                Choose a chart type. The starter table becomes the chart&apos;s data — edit it to
+                update the chart.
+              </span>
+            </div>
+            <section className="squisq-mermaid-type-section">
+              <div className="squisq-mermaid-type-grid">
+                {CHART_TYPES.map((entry) => (
+                  <button
+                    key={entry.id}
+                    type="button"
+                    className="squisq-mermaid-type-card"
+                    onClick={() => handleChartTypeInsert(entry)}
+                    role="menuitem"
+                    aria-label={`Insert ${entry.label} chart`}
+                  >
+                    <span className="squisq-mermaid-type-thumbnail">
+                      <ChartTypeThumbnail preview={entry.preview} />
+                    </span>
+                    <span className="squisq-mermaid-type-copy">
+                      <span className="squisq-mermaid-type-title">{entry.label}</span>
+                      <span className="squisq-mermaid-type-description">{entry.description}</span>
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </section>
           </div>,
           document.body,
         )}

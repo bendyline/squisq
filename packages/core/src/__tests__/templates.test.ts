@@ -67,6 +67,14 @@ describe('templateRegistry', () => {
       'pullQuote',
       'videoWithCaption',
       'videoPullQuote',
+      'dataTable',
+      'barChart',
+      'columnChart',
+      'pieChart',
+      'donutChart',
+      'lineChart',
+      'areaChart',
+      'scatterChart',
     ];
     for (const name of expected) {
       expect(templateRegistry).toHaveProperty(name);

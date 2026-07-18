@@ -122,6 +122,14 @@ export const BUTTONS: ToolbarButton[] = [
     faIcon: 'fa-solid fa-list-check',
   },
   {
+    id: 'chart',
+    label: 'chart',
+    icon: '',
+    title: 'Insert chart',
+    group: 'media',
+    faIcon: 'fa-solid fa-chart-column',
+  },
+  {
     id: 'diagram',
     label: 'diagram',
     icon: '',
@@ -193,6 +201,7 @@ export const CONVERT_BUTTONS = MEDIA_BUTTONS.filter((b) => b.id === 'table' || b
 export const INSERT_MENU_WIDTH = 200;
 export const CODE_SNIPPET_MENU_WIDTH = 220;
 export const MERMAID_TYPE_MENU_WIDTH = 520;
+export const CHART_TYPE_MENU_WIDTH = 360;
 export const TASK_LIST_ITEMS = ['Task 1', 'Task 2', 'Task 3'] as const;
 export const TASK_LIST_MARKDOWN = TASK_LIST_ITEMS.map((item) => `- [ ] ${item}`).join('\n');
 
