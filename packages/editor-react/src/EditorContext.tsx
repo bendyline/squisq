@@ -220,6 +220,15 @@ export interface EditorState {
    */
   allowNarrate: boolean;
   /**
+   * Whether the Write view transparently unwraps hard-wrapped paragraph
+   * prose for editing and re-applies the document's detected wrap
+   * convention when serializing (see `detectMarkdownWrapState`). Without
+   * it, a hard-wrapped document renders as one choppy paragraph per
+   * physical line in Write view — and the first edit persists that
+   * chopped structure. Defaults to true; document layout mode only.
+   */
+  preserveSourceWrapping: boolean;
+  /**
    * Document layout mode. `'document'` (default) edits the whole document;
    * `'block'` activates the block-at-a-time card view. Initialized from the
    * EditorShell `layoutMode` prop; the View menu can toggle it at runtime.
@@ -473,6 +482,12 @@ export interface EditorProviderProps {
    */
   allowNarrate?: boolean;
   /**
+   * Whether the Write view transparently unwraps hard-wrapped prose and
+   * re-applies the detected wrap convention on save. Defaults to true;
+   * pass false for literal behavior (Tiptap sees the wrapped source).
+   */
+  preserveSourceWrapping?: boolean;
+  /**
    * File name (e.g. `foo.ts`) or bare extension — used to pick a Monaco
    * language and decide between markdown vs. code mode.
    */
@@ -600,6 +615,7 @@ export function EditorProvider({
   linkSchemes,
   allowRecording = true,
   allowNarrate = true,
+  preserveSourceWrapping = true,
   fileName,
   language,
   findMode: controlledFindMode,
@@ -1204,6 +1220,7 @@ export function EditorProvider({
       mediaRevision,
       allowRecording,
       allowNarrate,
+      preserveSourceWrapping,
       tiptapEditor,
       monacoEditor,
       activeSceneText,
@@ -1302,6 +1319,7 @@ export function EditorProvider({
       mediaRevision,
       allowRecording,
       allowNarrate,
+      preserveSourceWrapping,
       openImageEdit,
       closeImageEdit,
       bumpMediaRevision,

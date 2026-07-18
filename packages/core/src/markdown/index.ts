@@ -165,6 +165,7 @@ export {
   countNodes,
   createDocument,
   parseFrontmatter,
+  splitFrontmatterBlock,
   formatBlockScalar,
   formatFrontmatterValue,
   formatFrontmatterYaml,
@@ -173,3 +174,24 @@ export {
   readFrontmatterThemeId,
   plainTextFromInlineHtml,
 } from './utils.js';
+
+// Source transforms (unwrap / wrap / cleanup) + wrap-state detection.
+// Distinct from `@bendyline/squisq/transform` (slideshow style pipeline):
+// these rewrite markdown SOURCE TEXT.
+export {
+  MARKDOWN_SOURCE_TRANSFORMS,
+  DEFAULT_WRAP_WIDTH,
+  applyMarkdownSourceTransform,
+  unwrapMarkdownSource,
+  wrapMarkdownSource,
+  cleanupMarkdownSource,
+  detectMarkdownWrapState,
+} from './sourceTransforms.js';
+export type {
+  MarkdownSourceTransform,
+  MarkdownSourceTransformId,
+  MarkdownSourceTransformOptions,
+  MarkdownSourceTransformResult,
+  MarkdownSourceEdit,
+  MarkdownWrapState,
+} from './sourceTransforms.js';

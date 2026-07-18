@@ -23,6 +23,7 @@ import { useEditorContext, type EditorView } from './EditorContext';
 import { VersionHistoryPanel } from './VersionHistoryPanel';
 import { RecorderEntry } from './RecorderEntry';
 import { ViewMenuPanel } from './ViewMenuPanel';
+import { TransformMenu } from './TransformMenu';
 import {
   TemplatePicker,
   TEMPLATE_NAMES,
@@ -2263,6 +2264,7 @@ export function Toolbar({
           <Icon icon="fa-solid fa-shapes" />
         </button>
       )}
+      {!isCodeMode && <TransformMenu />}
       {!isCodeMode && <ViewMenuPanel />}
       {!isCodeMode && (
         <button

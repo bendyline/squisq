@@ -70,6 +70,28 @@ describe('chart templates from markdown tables', () => {
     }
   });
 
+  it('bar value labels clear the bar ends and stay inside the viewport', () => {
+    const layers = materializeLayers(
+      chartBlock('barChart', 'showValues=true unit="km" valueColumns="Q1"'),
+    );
+    const marks = shapes(layers, 'mark-');
+    const labels = layers.filter(
+      (l): l is TextLayer => l.type === 'text' && l.id.startsWith('val-'),
+    );
+    expect(labels).toHaveLength(marks.length);
+    for (const label of labels) {
+      const mark = marks.find((m) => m.id === label.id.replace('val-', 'mark-'))!;
+      const barEnd = Number(mark.position.x) + Number(mark.position.width);
+      const fontSize = label.content.style.fontSize;
+      const halfWidth = (label.content.text.length * fontSize * 0.58) / 2;
+      const labelLeft = Number(label.position.x) - halfWidth; // anchor: center
+      // The label's near edge starts past the bar end (no overlap)...
+      expect(labelLeft).toBeGreaterThan(barEnd);
+      // ...and its far edge stays inside the viewport.
+      expect(Number(label.position.x) + halfWidth).toBeLessThanOrEqual(1920);
+    }
+  });
+
   it('stacked columns partition each category into cumulative segments', () => {
     const layers = materializeLayers(chartBlock('columnChart', 'stacked=true'));
     const marks = shapes(layers, 'mark-');

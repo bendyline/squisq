@@ -1,6 +1,7 @@
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { preview } from 'vite';
+import { ensureTeleprompterFakeMic } from './fakeMicFixture';
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -14,6 +15,8 @@ function readSelectedPort(): number {
 }
 
 export default async function globalSetup(): Promise<() => Promise<void>> {
+  await ensureTeleprompterFakeMic();
+
   const server = await preview({
     root: path.join(repoRoot, 'packages/site'),
     logLevel: 'warn',

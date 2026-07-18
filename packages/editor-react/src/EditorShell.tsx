@@ -340,6 +340,15 @@ export interface EditorShellProps {
    */
   allowNarrate?: boolean;
   /**
+   * Whether the Write view transparently unwraps hard-wrapped paragraph
+   * prose for editing and re-applies the document's detected wrap
+   * convention when serializing. Defaults to true — without it, a
+   * hard-wrapped document renders one choppy paragraph per physical line
+   * in Write view and the first edit persists that chopped structure.
+   * Pass `false` for literal behavior. Document layout mode only.
+   */
+  preserveSourceWrapping?: boolean;
+  /**
    * Placeholder text shown in the WYSIWYG editor while the document is
    * empty. When omitted, the editor rotates through its own generic
    * "start typing…" prompts; pass a value here to override with copy
@@ -511,6 +520,7 @@ export function EditorShell({
   linkSchemes,
   allowRecording = true,
   allowNarrate = true,
+  preserveSourceWrapping = true,
   placeholder,
   readOnly = false,
   imageSrc,
@@ -569,6 +579,7 @@ export function EditorShell({
         linkSchemes={linkSchemes}
         allowRecording={allowRecording}
         allowNarrate={allowNarrate}
+        preserveSourceWrapping={preserveSourceWrapping}
         fileName={fileName}
         language={language}
         findMode={findMode}

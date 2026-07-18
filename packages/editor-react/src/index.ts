@@ -122,6 +122,9 @@ export type { ToolbarProps } from './Toolbar.js';
 
 export { VersionHistoryPanel } from './VersionHistoryPanel.js';
 export { ViewMenuPanel } from './ViewMenuPanel.js';
+export { TransformMenu } from './TransformMenu.js';
+export { ingestForWrite, persistFromWrite } from './wrapPolicy.js';
+export type { WrapPolicyIngest } from './wrapPolicy.js';
 export { OutlinePanel } from './OutlinePanel.js';
 export type { OutlinePanelProps } from './OutlinePanel.js';
 export { ThemeCustomizerPanel } from './ThemeCustomizerPanel.js';

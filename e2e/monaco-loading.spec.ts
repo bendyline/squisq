@@ -48,15 +48,27 @@ test('loads the compact Markdown editor only when Source is opened', async ({ pa
         name.startsWith('markdownHoverParticipant-'),
     ),
   ).toBe(false);
-  expect(startedWorkers.length).toBeGreaterThan(0);
+  // Markdown uses grammar-only highlighting. Monaco can opportunistically
+  // start its base editor worker (for links/word operations) depending on
+  // browser scheduling, but it must not start a rich language-service worker.
   expect(
     startedWorkers.every((url) =>
       (new URL(url).pathname.split('/').at(-1) ?? '').startsWith('editor.worker-'),
     ),
   ).toBe(true);
 
+  // The page is already network-idle here, so another waitForLoadState can
+  // resolve before the keydown's dynamic import starts. Wait for the specific
+  // request that proves first keyboard use crossed the lazy-load boundary.
+  const suggestionsRequest = page.waitForRequest((request) => {
+    const pathname = new URL(request.url()).pathname;
+    return (
+      pathname.endsWith('.js') &&
+      (pathname.split('/').at(-1) ?? '').startsWith('monacoSuggestions-')
+    );
+  });
   await page.locator('textarea.inputarea').press('KeyA');
-  await page.waitForLoadState('networkidle');
+  await suggestionsRequest;
   expect(
     requestedScripts.some((url) =>
       (new URL(url).pathname.split('/').at(-1) ?? '').startsWith('monacoSuggestions-'),

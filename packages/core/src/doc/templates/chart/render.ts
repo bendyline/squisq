@@ -468,8 +468,24 @@ function paintBars(paint: Paint): Layer[] {
     gridColor,
   } = paint;
   const scale = valueTicks('bar', data, input);
+
+  // With printed value labels, reserve room past the longest bar so the
+  // label sits fully OUTSIDE its bar (comparisonBar's safe-area lesson):
+  // shrink the value axis by the widest label + gap, keeping ticks,
+  // gridlines, and bars on one consistent scale.
+  const labelGap = axisFontSize * 0.6;
+  const labelWidthPx = (value: number): number =>
+    formatChartValue(value, input.unit).length * axisFontSize * 0.58;
+  const showValueLabels = input.showValues === true && !(input.stacked === true);
+  const reservedForLabels = showValueLabels
+    ? data.series
+        .flatMap((series) => series.values)
+        .filter((v): v is number => v !== null)
+        .reduce((max, v) => Math.max(max, labelWidthPx(v)), 0) + labelGap
+    : 0;
+  const axisWidth = Math.max(20, frame.plot.width - reservedForLabels);
   const xFor = (v: number): number =>
-    frame.plot.x + frame.plot.width * ((v - scale.niceMin) / (scale.niceMax - scale.niceMin));
+    frame.plot.x + axisWidth * ((v - scale.niceMin) / (scale.niceMax - scale.niceMin));
 
   const layers: Layer[] = [];
   // Vertical gridlines + value ticks along the bottom.
@@ -559,8 +575,11 @@ function paintBars(paint: Paint): Layer[] {
         position: { x: left, y, width, height: barHeight },
         animation: entrance(i + s),
       });
-      if (input.showValues === true && value !== null && !stacked) {
-        const labelX = value >= 0 ? left + width + axisFontSize * 1.6 : left - axisFontSize * 1.6;
+      if (showValueLabels && value !== null) {
+        // Anchor-centered text: offset by half the label's width plus a gap
+        // so its near edge clears the bar end instead of overlapping it.
+        const half = labelWidthPx(value) / 2;
+        const labelX = value >= 0 ? left + width + labelGap + half : left - labelGap - half;
         layers.push(valueLabel(paint, `val-${s}-${i}`, value, labelX, y + barHeight / 2));
       }
     });

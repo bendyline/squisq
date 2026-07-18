@@ -299,103 +299,6 @@ Visit [Squisq on GitHub](https://github.com/example/squisq) for more.
 That's the full feature set!
 `,
 
-  'block-templates': `# Block Templates Demo
-
-This document shows how the heading hierarchy maps to Doc blocks.
-
-## Introduction
-
-This introduction section becomes a block. The paragraph content is
-stored in the block's \`contents\` property.
-
-## Statistics
-
-### Revenue Growth
-
-Revenue grew by **42%** year over year, exceeding all expectations.
-
-### User Adoption
-
-The platform reached **1 million** active users in Q3.
-
-## Deep Dive
-
-### Architecture
-
-The system uses a microservices architecture with the following components:
-
-1. API Gateway
-2. Auth Service
-3. Content Service
-4. Search Index
-
-### Performance
-
-Response times improved across all endpoints:
-
-| Endpoint | Before | After |
-|----------|--------|-------|
-| /api/search | 450ms | 120ms |
-| /api/content | 200ms | 45ms |
-| /api/auth | 150ms | 30ms |
-
-## Conclusion
-
-> The results speak for themselves. The architecture redesign
-> delivered significant improvements across every metric.
-
-This concluding section wraps up the presentation.
-`,
-
-  'deep-nesting': `# Document with Deep Nesting
-
-## Section A
-
-Content under Section A.
-
-### Subsection A.1
-
-Content under A.1.
-
-#### Detail A.1.1
-
-Deep content about a specific topic.
-
-#### Detail A.1.2
-
-Another focused detail.
-
-### Subsection A.2
-
-Content under A.2.
-
-## Section B
-
-Content under Section B.
-
-### Subsection B.1
-
-Some content here.
-
-### Subsection B.2
-
-More content here.
-
-#### Detail B.2.1
-
-##### Even Deeper B.2.1.1
-
-This is deeply nested content to test the hierarchy handling.
-
-###### Maximum Depth H6
-
-H6 is the deepest heading level in markdown.
-
-## Section C
-
-Final top-level section with a simple paragraph.
-`,
-
   'all-templates': `---
 document-render-as: landscape
 ---
@@ -552,6 +455,126 @@ A box drawn around other boxes becomes a container -- it groups its children on 
 \`\`\`
 `,
   'diagram-gallery': DIAGRAM_GALLERY_SAMPLE,
+  // Chart-template showcase: every chart kind rendered from an ordinary
+  // markdown table, plus column-role params, formatted-number parsing,
+  // gap handling, showTable, and the no-table content fallback.
+  'chart-gallery': `---
+title: Chart Gallery
+---
+
+# Chart Gallery
+
+Every chart is an ordinary markdown table — annotate the heading with a chart template and the table becomes the data. Edit the table, and the chart follows.
+
+## Quarterly results {[columnChart]}
+
+Grouped columns, one series per numeric column. Formatted cells ($, commas) parse cleanly.
+
+| Quarter | Revenue | Costs |
+| --- | ---: | ---: |
+| Q1 | $1,200 | $860 |
+| Q2 | $1,450 | $910 |
+| Q3 | $1,380 | $905 |
+| Q4 | $1,720 | $980 |
+
+## Energy mix by year {[columnChart stacked=true]}
+
+The same template with stacked=true stacks the series instead of grouping them.
+
+| Year | Solar | Wind | Hydro |
+| --- | ---: | ---: | ---: |
+| 2022 | 14 | 22 | 31 |
+| 2023 | 21 | 26 | 30 |
+| 2024 | 29 | 31 | 28 |
+| 2025 | 38 | 33 | 27 |
+
+## Longest trails {[barChart showValues=true unit="km"]}
+
+Horizontal bars with printed value labels and a unit suffix.
+
+| Trail | Length |
+| --- | ---: |
+| Pacific Crest | 4,265 |
+| Continental Divide | 4,873 |
+| Appalachian | 3,540 |
+| Te Araroa | 3,000 |
+
+## Browser share {[pieChart]}
+
+Each row becomes a labeled slice; the legend lists the categories.
+
+| Browser | Share |
+| --- | ---: |
+| Chrome | 65% |
+| Safari | 18% |
+| Edge | 5% |
+| Firefox | 3% |
+| Other | 9% |
+
+## Team budget {[donutChart showValues=true colorScheme=green]}
+
+A donut with percentage labels, seeded from the green color scheme.
+
+| Area | Allocation |
+| --- | ---: |
+| Engineering | 45 |
+| Design | 20 |
+| Research | 20 |
+| Operations | 15 |
+
+## Monthly active users {[lineChart]}
+
+One line per series. The missing March cell (—) renders as a gap, not a zero.
+
+| Month | Free | Pro |
+| --- | ---: | ---: |
+| Jan | 4,100 | 1,150 |
+| Feb | 4,650 | 1,300 |
+| Mar | — | 1,420 |
+| Apr | 5,900 | 1,610 |
+| May | 6,800 | 1,890 |
+| Jun | 7,450 | 2,140 |
+
+## Cumulative downloads {[areaChart colorScheme=blue]}
+
+A filled line on a zero-based axis.
+
+| Week | Downloads |
+| --- | ---: |
+| W1 | 800 |
+| W2 | 2,100 |
+| W3 | 4,000 |
+| W4 | 6,600 |
+| W5 | 9,800 |
+
+## Practice vs score {[scatterChart unit="pts"]}
+
+A numeric first column becomes the x-axis.
+
+| Hours | Score |
+| ---: | ---: |
+| 1 | 42 |
+| 2 | 51 |
+| 3 | 58 |
+| 5 | 71 |
+| 6 | 74 |
+| 8 | 90 |
+| 10 | 94 |
+
+## City growth {[columnChart labelColumn=City valueColumns="2023,2024" showTable=true]}
+
+Column-role params pick the label and value columns by header name — the Notes column stays out of the chart — and showTable=true prints the source table beneath it.
+
+| City | 2023 | 2024 | Notes |
+| --- | ---: | ---: | --- |
+| Austin | 82 | 96 | new campus |
+| Denver | 64 | 71 | steady |
+| Raleigh | 47 | 63 | fastest growth |
+
+## No table? No problem {[barChart]}
+
+A chart block without a chartable table simply renders its contents — so you can annotate a heading first and add the table whenever the data is ready.
+`,
   'tree-project-scaffold': `# Project Scaffold
 
 An ASCII file tree renders as an interactive filesystem treeview -- edit it as an outline (add / rename / indent / move / delete items); the fence stays the source of truth.

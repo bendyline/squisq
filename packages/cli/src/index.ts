@@ -23,6 +23,7 @@ import { registerConvertCommand } from './commands/convert.js';
 import { registerVideoCommand } from './commands/video.js';
 import { registerValidateCommand } from './commands/validate.js';
 import { registerDoctorCommand } from './commands/doctor.js';
+import { registerTransformCommand } from './commands/transform.js';
 
 // Read the real version from package.json at runtime (ESM-safe). From the built
 // `dist/index.js`, `../package.json` resolves to `packages/cli/package.json`.
@@ -47,5 +48,6 @@ registerConvertCommand(program);
 registerVideoCommand(program);
 registerValidateCommand(program);
 registerDoctorCommand(program);
+registerTransformCommand(program);
 
 program.parse();

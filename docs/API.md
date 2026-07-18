@@ -2873,6 +2873,26 @@ Diagnostics are reported at three severities — `error`, `warning`, and `info`
 only: `0` clean, warnings-only, or info-only; `1` errors (or any warning with
 `--strict`); `2` input unreadable.
 
+#### `squisq transform <input>`
+
+Apply one-time markdown **source** transforms (from core's
+`MARKDOWN_SOURCE_TRANSFORMS` registry) to a `.md` file, in the order given.
+Distinct from the `--transform <style>` slideshow-style flag on
+`convert`/`video` — this rewrites the markdown text itself. Output goes to
+stdout by default; status goes to stderr.
+
+| Option         | Description                                                                |
+| -------------- | -------------------------------------------------------------------------- |
+| `--ops <list>` | Comma-separated transforms, applied in order (`unwrap`, `wrap`, `cleanup`) |
+| `--width <n>`  | Column width for `wrap` (20–500, default 80)                               |
+| `-o <file>`    | Write the result to a file (guarded by `--overwrite`)                      |
+| `--in-place`   | Rewrite the input file (conflicts with `-o`)                               |
+| `--overwrite`  | Allow `-o` to replace an existing file                                     |
+
+Transforms run strict: each reparses its output and structurally compares it
+against the input; on any mismatch the command exits `1` without emitting.
+Exit codes: `0` success, `1` transform/output failure, `2` input unreadable.
+
 ### Programmatic API
 
 **Import:** `@bendyline/squisq-cli/api`
