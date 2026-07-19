@@ -88,7 +88,9 @@ and block-at-a-time / timeline editing primitives (`useBlockNavigator`,
 - **Embedding** — `readOnly`, `placeholder`, `submitOnEnter`, `fullWidth`,
   `thinMargins`, `minHeight`/`maxHeight` auto-grow for chat-composer use, plus
   host-controlled Write typography through `writeCanvasSettings` (`textSize`
-  and `lineSpacing`).
+  and `lineSpacing`). Set `hostMode="chat"` to keep the shell in Write view,
+  remove its view tabs, and hide Custom layouts, Transform, View options, and
+  Document settings.
 - **Color scheme** — pass `colorScheme="light" | "dark"` for the editor chrome
   (**v1.5:** renamed from the old `theme` prop; `RawEditor`'s own `theme` prop is
   now `monacoTheme`).

@@ -2188,6 +2188,7 @@ The top-level component. Its props interface is large; the notable props:
 interface EditorShellProps {
   initialMarkdown?: string; // default ''
   initialView?: EditorView; // default 'wysiwyg'
+  hostMode?: EditorHostMode; // 'document' (default) | 'chat'; chat uses Write without document controls
   articleId?: string; // default 'untitled'
   basePath?: string; // default '/'
   onChange?: (source: string) => void;
@@ -2279,6 +2280,7 @@ function useEditorContext(): EditorContextValue; // markdown/doc state, theme, v
 
 type EditorView = 'raw' | 'wysiwyg' | 'preview';
 type EditorColorScheme = 'light' | 'dark'; // v1.5: renamed from `EditorTheme`
+type EditorHostMode = 'document' | 'chat';
 type EditorMode = 'markdown' | 'code' | 'image';
 type LayoutMode = 'document' | 'block' | 'timeline';
 type ThemeInheritance = 'none' | 'fonts' | 'fonts-colors';

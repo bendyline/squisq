@@ -71,6 +71,7 @@ import { MermaidDiagramTypeThumbnail } from './mermaid/MermaidDiagramTypeThumbna
 import { FindToolbar } from './find/FindToolbar';
 import { platformShortcut } from './platformShortcuts';
 import { useEscapeDismissal } from './useEscapeDismissal';
+import type { EditorHostMode } from './editorHostMode';
 
 const VIEWS: { id: EditorView; label: string; shortLabel?: string; shortcutKey: string }[] = [
   { id: 'wysiwyg', label: 'Write', shortcutKey: '1' },
@@ -105,6 +106,12 @@ export interface ToolbarProps {
    * editing free-form prompts — can pass false to suppress it.
    */
   showPlayTab?: boolean;
+  /**
+   * Semantic embedding mode inherited from EditorShell. Chat mode exposes
+   * only the Write surface, which suppresses the view tabs and their
+   * keyboard-switch targets. Defaults to `'document'`.
+   */
+  hostMode?: EditorHostMode;
 }
 
 import {
@@ -207,6 +214,7 @@ export function Toolbar({
   slotAfterActions,
   slotRight,
   showPlayTab = true,
+  hostMode = 'document',
 }: ToolbarProps) {
   const {
     activeView,
@@ -240,9 +248,11 @@ export function Toolbar({
   const formattingEditor = activeSceneText?.editor ?? tiptapEditor;
   const sceneTextLevel = activeSceneText?.level ?? null;
   const isCodeMode = editorMode === 'code';
+  const showDocumentChrome = !isCodeMode && hostMode !== 'chat';
   // In code mode only the raw view is meaningful; the WYSIWYG and Preview
   // surfaces aren't mounted, so hide their tabs.
   const visibleViews = VIEWS.filter((v) => {
+    if (hostMode === 'chat') return v.id === 'wysiwyg';
     if (isCodeMode) return v.id === 'raw';
     if (v.id === 'preview' && !showPlayTab) return false;
     return true;
@@ -2253,7 +2263,7 @@ export function Toolbar({
       {allowRecording && !isCodeMode && mediaProvider && (
         <RecorderEntry open={recorderOpen} onOpenChange={setRecorderOpen} showTrigger={false} />
       )}
-      {!isCodeMode && (
+      {showDocumentChrome && (
         <button
           type="button"
           className={`squisq-toolbar-button${showLayoutManager ? ' squisq-toolbar-button--active' : ''}`}
@@ -2264,9 +2274,9 @@ export function Toolbar({
           <Icon icon="fa-solid fa-shapes" />
         </button>
       )}
-      {!isCodeMode && <TransformMenu />}
-      {!isCodeMode && <ViewMenuPanel />}
-      {!isCodeMode && (
+      {showDocumentChrome && <TransformMenu />}
+      {showDocumentChrome && <ViewMenuPanel />}
+      {showDocumentChrome && (
         <button
           type="button"
           className="squisq-toolbar-button"
@@ -2298,7 +2308,7 @@ export function Toolbar({
       {slotRight}
 
       {/* Document settings (frontmatter) dialog */}
-      {showDocSettings && (
+      {showDocumentChrome && showDocSettings && (
         <DocumentSettingsDialog
           markdownSource={markdownSource}
           onSave={(next) => {
@@ -2310,7 +2320,9 @@ export function Toolbar({
       )}
 
       {/* Custom layout manager — full-window list + designer dialog. */}
-      {showLayoutManager && <CustomLayoutManager onClose={() => setShowLayoutManager(false)} />}
+      {showDocumentChrome && showLayoutManager && (
+        <CustomLayoutManager onClose={() => setShowLayoutManager(false)} />
+      )}
 
       {/* Link insert/edit dialog — shared by WYSIWYG and Raw views. */}
       {linkDialog && (

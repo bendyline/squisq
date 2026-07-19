@@ -20,6 +20,7 @@
 // Shell (top-level component)
 export { EditorShell } from './EditorShell.js';
 export type { EditorShellProps, EditorColorScheme } from './EditorShell.js';
+export type { EditorHostMode } from './editorHostMode.js';
 
 // Code-context sections (host-supplied markdown injected into the code surface)
 export { CodeContextZones } from './codeContext/CodeContextZones.js';

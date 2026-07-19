@@ -67,10 +67,13 @@ function loadLanguage(language: string, languageServices: boolean): Promise<void
   const existing = languagePromises.get(cacheKey);
   if (existing) return existing;
 
-  const loader = serviceLoader ?? SYNTAX_LOADERS[language];
+  const syntaxLoader = SYNTAX_LOADERS[language];
   const promise = (async () => {
     if (serviceLoader) {
-      await Promise.all([import('./monacoSuggestions.js'), serviceLoader()]);
+      // Monaco ships tokenization and IntelliSense as separate contributions.
+      // Rich language mode needs both; the service contribution alone leaves
+      // every token on the editor's default foreground color.
+      await Promise.all([import('./monacoSuggestions.js'), syntaxLoader?.(), serviceLoader()]);
       if (language === 'jsonc') await registerLightweightJson('jsonc');
       return;
     }
@@ -78,7 +81,7 @@ function loadLanguage(language: string, languageServices: boolean): Promise<void
       await registerLightweightJson(language);
       return;
     }
-    await loader?.();
+    await syntaxLoader?.();
   })().catch((error: unknown) => {
     languagePromises.delete(cacheKey);
     throw error;

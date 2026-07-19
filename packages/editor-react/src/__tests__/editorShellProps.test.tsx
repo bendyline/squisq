@@ -370,6 +370,37 @@ describe('<EditorShell> instance boundaries', () => {
   });
 });
 
+describe('<EditorShell> hostMode', () => {
+  it('keeps chat embeds in Write view without rendering view tabs', () => {
+    const { container } = render(
+      <EditorShell
+        initialMarkdown="Chat draft"
+        initialView="raw"
+        hostMode="chat"
+        toolbarSlotRight={<button type="button">Send</button>}
+      />,
+    );
+
+    const shell = container.querySelector<HTMLElement>('.squisq-editor-shell')!;
+    expect(shell.dataset.hostMode).toBe('chat');
+    expect(within(shell).getByTestId('wysiwyg-editor-stub')).toBeTruthy();
+    expect(within(shell).queryByRole('tab', { name: /Write/ })).toBeNull();
+    expect(within(shell).queryByRole('tab', { name: /Source/ })).toBeNull();
+    expect(within(shell).queryByRole('button', { name: 'Custom layouts' })).toBeNull();
+    expect(within(shell).queryByRole('button', { name: 'Transform document' })).toBeNull();
+    expect(within(shell).queryByRole('button', { name: 'View options' })).toBeNull();
+    expect(within(shell).queryByRole('button', { name: 'Document settings' })).toBeNull();
+
+    fireEvent.keyDown(within(shell).getByTestId('wysiwyg-editor-stub'), {
+      key: '2',
+      ctrlKey: true,
+    });
+    expect(within(shell).getByTestId('wysiwyg-editor-stub')).toBeTruthy();
+    expect(within(shell).queryByTestId('raw-editor-stub')).toBeNull();
+    expect(within(shell).getByRole('button', { name: 'Send' })).toBeTruthy();
+  });
+});
+
 describe('<EditorShell> Files badge', () => {
   it('shows the mediaProvider file count on the paperclip button', async () => {
     const { container } = render(

@@ -79,15 +79,23 @@ import type {
 import { MediaContext } from '@bendyline/squisq-react';
 import { writeCanvasSettingsStyle, type WriteCanvasSettings } from './writeCanvasSettings';
 import { useModalDialog } from './modal/useModalDialog';
+import type { EditorHostMode } from './editorHostMode';
 
 export type { EditorColorScheme } from './EditorContext';
 
 export interface EditorShellProps {
   /** Initial markdown content */
   initialMarkdown?: string;
-  /** Initial active view */
   /** Initial active view (default: 'wysiwyg') */
   initialView?: EditorView;
+  /**
+   * Semantic mode for the surface embedding the editor. `'document'`
+   * (default) exposes the normal multi-view authoring shell. `'chat'`
+   * starts and stays in Write view through the shell's own controls, hides
+   * the view tabs, and removes document-level layout, transform, view, and
+   * settings controls from the toolbar.
+   */
+  hostMode?: EditorHostMode;
   /**
    * Viewport preset used by slideshow/video preview when neither the document
    * nor the user has selected one. Defaults to landscape. Hosts may update it
@@ -477,6 +485,7 @@ export interface EditorShellProps {
 export function EditorShell({
   initialMarkdown = '',
   initialView = 'wysiwyg',
+  hostMode = 'document',
   defaultViewportPreset = 'landscape',
   articleId = 'untitled',
   basePath = '/',
@@ -554,10 +563,11 @@ export function EditorShell({
   // Show the toggle when explicitly opted in, or when mediaProvider prop was passed at all
   const filesToggleEnabled = showFilesToggle ?? effectiveMediaProvider !== undefined;
 
-  // If the host hides the Play tab but asked for it as the initial view,
-  // fall back to wysiwyg so we don't boot into a tab the user can't leave.
+  // Chat is a single-surface composer: always boot into Write. Otherwise,
+  // if the host hides the Play tab but asked for it as the initial view,
+  // fall back to Write so we don't boot into a tab the user can't leave.
   const effectiveInitialView: EditorView =
-    !showPlayTab && initialView === 'preview' ? 'wysiwyg' : initialView;
+    hostMode === 'chat' || (!showPlayTab && initialView === 'preview') ? 'wysiwyg' : initialView;
 
   return (
     <MediaContext.Provider value={effectiveMediaProvider ?? null}>
@@ -611,6 +621,7 @@ export function EditorShell({
           toolbarSlotRight={toolbarSlotRight}
           statusBarSlotRight={statusBarSlotRight}
           showPlayTab={showPlayTab}
+          hostMode={hostMode}
           allowPresentationWindow={allowPresentationWindow}
           allowPresentationFullscreen={allowPresentationFullscreen}
           allowPrint={allowPrint}
@@ -655,6 +666,7 @@ interface EditorShellInnerProps {
   toolbarSlotRight?: ReactNode;
   statusBarSlotRight?: ReactNode;
   showPlayTab: boolean;
+  hostMode: EditorHostMode;
   allowPresentationWindow: boolean;
   allowPresentationFullscreen: boolean;
   allowPrint: boolean;
@@ -729,6 +741,7 @@ function EditorShellInner({
   toolbarSlotRight,
   statusBarSlotRight,
   showPlayTab,
+  hostMode,
   allowPresentationWindow,
   allowPresentationFullscreen,
   allowPrint,
@@ -1032,6 +1045,7 @@ function EditorShellInner({
       onMouseOutCapture={handleShellLinkMouseOut}
       className={`squisq-editor-shell ${className || ''}`}
       data-theme={colorScheme}
+      data-host-mode={hostMode}
       data-link-handler={onLinkClick ? 'true' : undefined}
       data-full-width={fullWidth ? 'true' : undefined}
       data-thin-margins={thinMargins ? 'true' : undefined}
@@ -1095,6 +1109,7 @@ function EditorShellInner({
                   slotAfterActions={toolbarSlotAfterActions}
                   slotRight={toolbarSlotRight}
                   showPlayTab={showPlayTab}
+                  hostMode={hostMode}
                 />
               </div>
             )}

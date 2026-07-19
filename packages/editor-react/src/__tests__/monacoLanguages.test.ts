@@ -1,9 +1,11 @@
 import { describe, expect, it } from 'vitest';
+import * as monaco from 'monaco-editor/esm/vs/editor/editor.api.js';
 import {
   monacoLanguageRequestKey,
   monacoLanguagesForDocument,
   normalizeMonacoLanguage,
 } from '../monacoLanguageDetection';
+import { loadMonacoLanguages } from '../monacoLanguages';
 
 describe('Monaco language demand detection', () => {
   it('normalizes common filename and fence aliases', () => {
@@ -48,6 +50,19 @@ describe('Monaco language demand detection', () => {
     expect(monacoLanguageRequestKey(['python', 'md', 'python'])).toBe('syntax:markdown,python');
     expect(monacoLanguageRequestKey(['md', 'python'], { languageServices: true })).toBe(
       'services:markdown,python',
+    );
+  });
+});
+
+describe('Monaco language demand loading', () => {
+  it('loads TypeScript syntax registration together with its language service', async () => {
+    await loadMonacoLanguages('typescript', { languageServices: true });
+
+    expect(monaco.languages.getLanguages()).toContainEqual(
+      expect.objectContaining({
+        id: 'typescript',
+        extensions: expect.arrayContaining(['.ts']),
+      }),
     );
   });
 });
