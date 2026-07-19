@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { parseMarkdown, stringifyMarkdown } from '../markdown/index';
-import { markdownToDoc } from '../doc/markdownToDoc';
+import { flattenBlocks, markdownToDoc } from '../doc/markdownToDoc';
 import { docToMarkdown } from '../doc/docToMarkdown';
 
 /** One full normalization cycle: md → doc → md. */
@@ -44,6 +44,28 @@ describe('docToMarkdown media round-trip', () => {
     expect(withMedia?.media?.[0].spillover).toBe(true);
   });
 
+  it('round-trips toolbar-authored HTML video placement byte-stably', () => {
+    const md = `# Scene\n\n<video src="video/presenter.mp4" controls data-squisq-video-placement="picture-in-picture"></video>\n`;
+    const once = expectStable(md);
+    expect(once).toContain('data-squisq-video-placement="picture-in-picture"');
+    const reparsed = markdownToDoc(parseMarkdown(once));
+    const withMedia = flattenBlocks(reparsed.blocks).find((block) => block.media?.length);
+    expect(withMedia?.media?.[0].placement).toBe('picture-in-picture');
+  });
+
+  it('round-trips an unlocked independently timed HTML video byte-stably', () => {
+    const md = `# Scene\n\n<video src="video/presenter.mp4" controls data-squisq-video-placement="overlay" data-squisq-video-lock-to-block="false" data-squisq-video-start-at="2" data-squisq-video-clip-end="9"></video>\n`;
+    const once = expectStable(md);
+    expect(once).toContain('data-squisq-video-lock-to-block="false"');
+    const reparsed = markdownToDoc(parseMarkdown(once));
+    expect(reparsed.documentMedia?.[0]).toMatchObject({
+      lockToBlock: false,
+      anchor: 'document',
+      startAt: 2,
+      clipEnd: 9,
+    });
+  });
+
   it('preserves a document-anchored annotation authored inside a section body', () => {
     const md = `# Section\n\nSome text.\n\n{[audio src=audio/full.mp3 anchor=document startAt=0:30]}\n\nMore text.\n`;
     const once = expectStable(md);
@@ -73,6 +95,22 @@ describe('docToMarkdown media round-trip', () => {
     const reparsed = markdownToDoc(parseMarkdown(md));
     expect(reparsed.documentMedia?.length).toBe(1);
     expect(stringifyMarkdown(docToMarkdown(reparsed))).toBe(md);
+  });
+
+  it('serializes programmatic video placement canonically', () => {
+    const doc = markdownToDoc(parseMarkdown('# Title\n\nBody.\n'));
+    doc.blocks[0].media = [
+      {
+        id: 'overlay',
+        src: 'video/overlay.mp4',
+        kind: 'video',
+        placement: 'overlay',
+        startAt: 0,
+        anchor: 'block',
+      },
+    ];
+    const md = stringifyMarkdown(docToMarkdown(doc));
+    expect(md).toContain('{[video src=video/overlay.mp4 placement=overlay]}');
   });
 
   it('leaves docs without media untouched', () => {

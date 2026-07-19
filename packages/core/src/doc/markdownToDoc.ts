@@ -626,6 +626,21 @@ export function markdownToDoc(markdownDoc: MarkdownDocument, options?: MarkdownT
     currentTime += block.duration;
   }
 
+  // An unlocked HTML video is document-timed. On the first unlock it has no
+  // explicit absolute start yet, so begin it where its owning block begins.
+  // Once the timeline moves it, `data-squisq-video-start-at` is authored and
+  // that explicit value wins on every subsequent parse.
+  const blockById = new Map(allBlocks.map((block) => [block.id, block]));
+  for (const clip of documentMedia) {
+    if (
+      clip.lockToBlock === false &&
+      clip.origin?.format === 'html' &&
+      !/\bdata-squisq-video-start-at\s*=/i.test(clip.origin.raw ?? '')
+    ) {
+      clip.startAt = blockById.get(clip.origin.blockId)?.startTime ?? 0;
+    }
+  }
+
   // `generatedAt` is only stamped when the caller provides a timestamp —
   // conversion itself never reads the clock, so identical markdown always
   // converts to an identical Doc.

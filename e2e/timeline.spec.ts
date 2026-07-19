@@ -80,6 +80,119 @@ test.describe('Timeline view', () => {
     await expect(page.locator('.monaco-editor').first()).not.toContainText('<video');
   });
 
+  test('returning to document view preserves embedded video', async ({ page }) => {
+    await page.goto('/');
+    await page.waitForLoadState('networkidle');
+    await page.locator('select').first().selectOption('timeline-media');
+    await page.locator('.tiptap.ProseMirror').waitFor({ state: 'visible', timeout: 5_000 });
+    await expect(page.locator('.tiptap.ProseMirror video')).toHaveCount(1);
+
+    await enterTimelineMode(page);
+    await expect(page.locator('.tiptap.ProseMirror video')).toHaveCount(1);
+
+    await page.getByRole('button', { name: 'View options' }).click();
+    await page.getByRole('menuitemradio', { name: 'Document' }).click();
+    await page.keyboard.press('Escape');
+    await expect(page.locator('[data-testid="timeline-track"]')).toHaveCount(0);
+    await expect(page.locator('.tiptap.ProseMirror video')).toHaveCount(1);
+
+    // The durable markdown is the source of truth; the view transition must
+    // not merely leave a stale player node behind after dropping its tag.
+    await switchView(page, 'Markdown');
+    await page.locator('[data-testid="raw-editor"]').waitFor({ state: 'visible' });
+    await expect(page.locator('.monaco-editor').first()).toContainText('<video');
+  });
+
+  test('returning to document view preserves a newly recorded video', async ({ page }) => {
+    await page.addInitScript(() => {
+      class FakeMediaRecorder {
+        static isTypeSupported() {
+          return true;
+        }
+
+        state: 'inactive' | 'recording' = 'inactive';
+        mimeType: string;
+        ondataavailable: ((event: { data: Blob }) => void) | null = null;
+        onstop: (() => void) | null = null;
+        onerror: ((event: unknown) => void) | null = null;
+
+        constructor(
+          public stream: MediaStream,
+          options?: { mimeType?: string },
+        ) {
+          this.mimeType = options?.mimeType ?? 'video/webm';
+        }
+
+        start() {
+          this.state = 'recording';
+        }
+
+        stop() {
+          this.state = 'inactive';
+          this.ondataavailable?.({ data: new Blob(['take'], { type: this.mimeType }) });
+          this.onstop?.();
+        }
+      }
+
+      Object.defineProperty(window, 'MediaRecorder', {
+        configurable: true,
+        value: FakeMediaRecorder,
+      });
+      Object.defineProperty(navigator, 'mediaDevices', {
+        configurable: true,
+        value: {
+          getUserMedia: async () => new MediaStream(),
+          getDisplayMedia: async () => new MediaStream(),
+        },
+      });
+    });
+
+    await page.goto('/');
+    await page.waitForLoadState('networkidle');
+    await page.locator('select').first().selectOption('about-squisq');
+    const editor = page.locator('.tiptap.ProseMirror');
+    await editor.waitFor({ state: 'visible', timeout: 5_000 });
+    const firstParagraph = editor.locator('p').first();
+    await firstParagraph.click();
+    await page.keyboard.press(process.platform === 'darwin' ? 'Meta+ArrowRight' : 'End');
+
+    await page.getByRole('button', { name: 'Insert' }).click();
+    await page.getByRole('menuitem', { name: 'Record media' }).click();
+    const dialog = page.getByRole('dialog', { name: 'Record media' });
+    await expect(dialog).toBeVisible();
+    await dialog.getByRole('button', { name: 'Camera' }).click();
+    await dialog.getByRole('button', { name: 'Start preview' }).click();
+    await dialog.getByRole('button', { name: 'Record' }).click();
+    await dialog.getByRole('button', { name: 'Stop' }).click();
+    await dialog.getByRole('button', { name: 'Save to document' }).click();
+    await expect(dialog).toHaveCount(0);
+    await expect(editor.locator('video')).toHaveCount(1);
+    await editor.locator('video').evaluate((video) => {
+      video.setAttribute('data-e2e-recording-instance', 'preserved');
+    });
+
+    await enterTimelineMode(page);
+    await expect(page.locator('.tiptap.ProseMirror video')).toHaveCount(1);
+    await expect(page.locator('.tiptap.ProseMirror video')).toHaveAttribute(
+      'data-e2e-recording-instance',
+      'preserved',
+    );
+
+    await page.getByRole('button', { name: 'View options' }).click();
+    await page.getByRole('menuitemradio', { name: 'Document' }).click();
+    await page.keyboard.press('Escape');
+    await expect(page.locator('[data-testid="timeline-track"]')).toHaveCount(0);
+    await expect(page.locator('.tiptap.ProseMirror video')).toHaveCount(1);
+    await expect(page.locator('.tiptap.ProseMirror video')).toHaveAttribute(
+      'data-e2e-recording-instance',
+      'preserved',
+    );
+
+    await switchView(page, 'Markdown');
+    await page.locator('[data-testid="raw-editor"]').waitFor({ state: 'visible' });
+    await expect(page.locator('.monaco-editor').first()).toContainText('<video');
+  });
+
   test('typing in block mode keeps the caret in place (no jump to end)', async ({ page }) => {
     await page.goto('/');
     await page.waitForLoadState('networkidle');

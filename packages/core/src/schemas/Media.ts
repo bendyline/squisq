@@ -18,6 +18,15 @@
 import type { Block, Doc } from './Doc.js';
 
 /**
+ * How an authored video participates in the composed document frame.
+ *
+ * `content` videos remain in the block body and are laid out by the block
+ * template. The other placements are scheduled player-level video and sit
+ * above the composed slide.
+ */
+export type VideoPlacement = 'content' | 'picture-in-picture' | 'overlay';
+
+/**
  * A timed piece of media attached to a block (or the document).
  */
 export interface MediaClip {
@@ -26,6 +35,14 @@ export interface MediaClip {
   /** Source path (mp3/mp4/…), relative to the article media dir. */
   src: string;
   kind: 'audio' | 'video';
+  /** Per-video placement. Omitted audio and legacy video use player defaults. */
+  placement?: Exclude<VideoPlacement, 'content'>;
+  /**
+   * Whether a placed video is locked to its owning block's timeline span.
+   * `true` clips start with and are capped by the block. `false` clips are
+   * document-timed and may cross block boundaries. Omitted for legacy media.
+   */
+  lockToBlock?: boolean;
   /**
    * Seconds from the parent block's start when this clip begins. For an
    * `anchor='document'` clip, seconds from the document start. Default 0.
@@ -60,7 +77,13 @@ export interface MediaClip {
    * when present, a re-serialized annotation otherwise. Absent for
    * programmatically built clips (those emit at the document top).
    */
-  origin?: { blockId: string; index: number; raw?: string };
+  origin?: {
+    blockId: string;
+    index: number;
+    raw?: string;
+    /** Raw authoring form; omitted means a squiggly media annotation. */
+    format?: 'html';
+  };
 }
 
 /**
@@ -72,6 +95,10 @@ export interface ScheduledClip {
   id: string;
   src: string;
   kind: 'audio' | 'video';
+  /** Per-video placement carried through to the player-level compositor. */
+  placement?: Exclude<VideoPlacement, 'content'>;
+  /** Authored placed-video lock state, when applicable. */
+  lockToBlock?: boolean;
   /** Absolute doc-timeline second the clip starts. */
   absoluteStart: number;
   /** Absolute doc-timeline second the clip ends (exclusive). */
@@ -138,6 +165,8 @@ export function resolveMediaSchedule(doc: Doc): ScheduledClip[] {
         id: clip.id,
         src: clip.src,
         kind: clip.kind,
+        ...(clip.placement ? { placement: clip.placement } : {}),
+        ...(clip.lockToBlock != null ? { lockToBlock: clip.lockToBlock } : {}),
         absoluteStart: start,
         absoluteEnd: Math.max(start, end),
         sourceIn: clip.clipStart ?? 0,
@@ -156,6 +185,8 @@ export function resolveMediaSchedule(doc: Doc): ScheduledClip[] {
       id: clip.id,
       src: clip.src,
       kind: clip.kind,
+      ...(clip.placement ? { placement: clip.placement } : {}),
+      ...(clip.lockToBlock != null ? { lockToBlock: clip.lockToBlock } : {}),
       absoluteStart: start,
       absoluteEnd: Math.max(start, end),
       sourceIn: clip.clipStart ?? 0,

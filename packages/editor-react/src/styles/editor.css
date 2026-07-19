@@ -544,6 +544,105 @@
     text;
 }
 
+/* Contextual placement controls for authored video nodes. The persisted
+   choice is a valid data-* attribute on the opening <video> tag, so the
+   toolbar is editing document source rather than editor-only state. */
+.squisq-wysiwyg-editor .squisq-video-node {
+  display: block;
+  width: min(100%, 640px);
+  max-width: 640px;
+  margin: 0.75em auto;
+  overflow: hidden;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  background: #111827;
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.12);
+}
+
+.squisq-wysiwyg-editor .squisq-video-node--selected {
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.24);
+}
+
+.squisq-video-placement-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 34px;
+  padding: 4px 6px;
+  border-bottom: 1px solid #d1d5db;
+  background: #f9fafb;
+  color: #374151;
+  font-family: var(--squisq-ux-font, system-ui, sans-serif);
+  user-select: none;
+}
+
+.squisq-video-placement-label {
+  margin: 0 4px 0 2px;
+  color: #6b7280;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
+.squisq-video-placement-button {
+  min-height: 24px;
+  padding: 2px 8px;
+  border: 1px solid transparent;
+  border-radius: 5px;
+  background: transparent;
+  color: #4b5563;
+  font: 500 11px/1 var(--squisq-ux-font, system-ui, sans-serif);
+  cursor: pointer;
+}
+
+.squisq-video-placement-button:hover {
+  background: #e5e7eb;
+  color: #111827;
+}
+
+.squisq-video-placement-button[aria-pressed='true'] {
+  border-color: #60a5fa;
+  background: #dbeafe;
+  color: #1d4ed8;
+}
+
+.squisq-video-placement-button--lock {
+  margin-left: auto;
+  border-color: #d1d5db;
+}
+
+.squisq-wysiwyg-editor .squisq-video-node video {
+  margin: 0;
+  border-radius: 0;
+}
+
+.squisq-editor-shell[data-theme='dark'] .squisq-video-placement-toolbar {
+  border-bottom-color: #374151;
+  background: #111827;
+  color: #d1d5db;
+}
+
+.squisq-editor-shell[data-theme='dark'] .squisq-video-placement-label {
+  color: #9ca3af;
+}
+
+.squisq-editor-shell[data-theme='dark'] .squisq-video-placement-button {
+  color: #d1d5db;
+}
+
+.squisq-editor-shell[data-theme='dark'] .squisq-video-placement-button:hover {
+  background: #1f2937;
+  color: #f9fafb;
+}
+
+.squisq-editor-shell[data-theme='dark'] .squisq-video-placement-button[aria-pressed='true'] {
+  border-color: #60a5fa;
+  background: #172554;
+  color: #93c5fd;
+}
+
 /* ── Drop cursor (I-beam) ─────────────────────────────────────
    ProseMirror's Dropcursor extension (bundled with StarterKit) renders
    a horizontal bar at the prospective drop position when an image or
@@ -1368,13 +1467,26 @@
   color: #dc2626;
 }
 
-/* Bounded presentation keeps the host page intact while giving the entire
-   EditorShell to the active Use surface. Browser fullscreen uses the same
-   chrome suppression, then lets the Fullscreen API size the shell. */
+/* Canvas presentation promotes the EditorShell above its host so the active
+   Use surface owns the complete renderer canvas. Native fullscreen uses the
+   same chrome suppression, then lets the Fullscreen API size the shell. */
 .squisq-editor-shell[data-presentation-mode='control'],
 .squisq-editor-shell[data-presentation-mode='fullscreen'] {
   position: relative;
-  background: #000;
+  background: var(--squisq-bg, #f5f5f5);
+}
+
+.squisq-editor-shell[data-presentation-mode='control'] {
+  position: fixed !important;
+  z-index: 2147483000 !important;
+  inset: 0 !important;
+  width: 100vw !important;
+  height: 100vh !important;
+  height: 100dvh !important;
+  min-width: 0 !important;
+  min-height: 0 !important;
+  max-width: none !important;
+  max-height: none !important;
 }
 
 .squisq-editor-shell[data-presentation-mode='control'] > .squisq-editor-header,
@@ -1396,7 +1508,7 @@
 .squisq-editor-shell[data-presentation-mode='control'] .squisq-preview-player,
 .squisq-editor-shell[data-presentation-mode='fullscreen'] .squisq-preview-player {
   padding: 0;
-  background: #000;
+  background: var(--squisq-bg, #f5f5f5);
 }
 
 .squisq-editor-shell[data-presentation-mode='fullscreen']:fullscreen {
@@ -1411,30 +1523,41 @@
 .squisq-presentation-exit {
   position: absolute;
   z-index: 1001;
-  top: 12px;
-  right: 12px;
+  bottom: max(16px, env(safe-area-inset-bottom));
+  left: 50%;
   display: inline-flex;
   align-items: center;
   gap: 7px;
   min-height: 34px;
   padding: 7px 11px;
-  border: 1px solid rgba(255, 255, 255, 0.35);
+  border: 1px solid var(--squisq-presentation-control-border, var(--squisq-border, #d1d5db));
   border-radius: 7px;
-  background: rgba(15, 23, 42, 0.78);
-  color: #fff;
+  background: color-mix(
+    in srgb,
+    var(--squisq-presentation-control-bg, var(--squisq-input-bg, #fff)) 88%,
+    transparent
+  );
+  color: var(--squisq-presentation-control-text, var(--squisq-text, #1f2937));
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.2);
   font: 600 12px/1 var(--squisq-ux-font, sans-serif);
   cursor: pointer;
   opacity: 0.72;
   backdrop-filter: blur(8px);
+  transform: translateX(-50%);
   transition:
     opacity 0.12s ease,
-    background 0.12s ease;
+    background 0.12s ease,
+    border-color 0.12s ease;
 }
 
 .squisq-presentation-exit:hover,
 .squisq-presentation-exit:focus-visible {
   outline: none;
-  background: rgba(15, 23, 42, 0.94);
+  border-color: var(
+    --squisq-presentation-control-border,
+    var(--squisq-accent, var(--squisq-text, #1f2937))
+  );
+  background: var(--squisq-presentation-control-bg, var(--squisq-input-bg, #fff));
   opacity: 1;
 }
 
@@ -1443,7 +1566,7 @@
   height: 100%;
   display: flex;
   overflow: hidden;
-  background: #000;
+  background: inherit;
 }
 
 .squisq-presentation-window-preview,
@@ -1461,7 +1584,7 @@
 
 .squisq-presentation-window-surface {
   padding: 0;
-  background: #000;
+  background: inherit;
   pointer-events: none;
 }
 
@@ -1472,7 +1595,7 @@
 }
 
 .squisq-presentation-connecting {
-  color: rgba(255, 255, 255, 0.72);
+  color: var(--squisq-text-muted, #6b7280);
   font: 500 14px/1.4 var(--squisq-ux-font, sans-serif);
 }
 
@@ -2201,7 +2324,18 @@
   letter-spacing: 0.05em;
 }
 
+.squisq-media-bin-actions {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.squisq-media-bin-record,
 .squisq-media-bin-upload {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
   font-size: 11px;
   padding: 2px 8px;
   cursor: pointer;
@@ -2211,10 +2345,27 @@
   border-radius: 4px;
 }
 
+.squisq-media-bin-record-dot {
+  width: 7px;
+  height: 7px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  background: #dc2626;
+  box-shadow: 0 0 0 1px rgba(127, 29, 29, 0.24);
+}
+
+.squisq-media-bin-record:hover,
 .squisq-media-bin-upload:hover {
   background: #d1d5db;
 }
 
+.squisq-media-bin-record:focus-visible,
+.squisq-media-bin-upload:focus-visible {
+  outline: 2px solid #93c5fd;
+  outline-offset: 1px;
+}
+
+.squisq-media-bin-record:disabled,
 .squisq-media-bin-upload:disabled {
   cursor: default;
   opacity: 0.5;
@@ -2396,15 +2547,19 @@
   color: #d1d5db;
 }
 
-.squisq-media-bin--dark .squisq-media-bin-upload,
-.squisq-editor-shell[data-theme='dark'] .squisq-media-bin .squisq-media-bin-upload {
+.squisq-media-bin--dark :is(.squisq-media-bin-record, .squisq-media-bin-upload),
+.squisq-editor-shell[data-theme='dark']
+  .squisq-media-bin
+  :is(.squisq-media-bin-record, .squisq-media-bin-upload) {
   background: #374151;
   color: #d1d5db;
   border-color: #4b5563;
 }
 
-.squisq-media-bin--dark .squisq-media-bin-upload:hover,
-.squisq-editor-shell[data-theme='dark'] .squisq-media-bin .squisq-media-bin-upload:hover {
+.squisq-media-bin--dark :is(.squisq-media-bin-record, .squisq-media-bin-upload):hover,
+.squisq-editor-shell[data-theme='dark']
+  .squisq-media-bin
+  :is(.squisq-media-bin-record, .squisq-media-bin-upload):hover {
   background: #4b5563;
 }
 
@@ -3713,7 +3868,31 @@
    The card itself is the flex child that takes the remaining width; its
    body holds the editor (which fills the height) and the nav bar pins to
    the bottom. */
-.squisq-editor-with-gutter > .squisq-block-card {
+.squisq-editor-with-gutter > .squisq-block-card-frame {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+}
+
+/* This neutral frame stays mounted in document and card layouts so Monaco /
+   Tiptap and media node views keep their identity while card chrome toggles. */
+.squisq-block-card-frame {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+}
+
+.squisq-block-card-frame-body {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  position: relative;
+  display: flex;
+}
+
+.squisq-block-card-frame-body > .squisq-raw-editor-container,
+.squisq-block-card-frame-body > .squisq-wysiwyg-container {
   flex: 1 1 auto;
   min-width: 0;
   min-height: 0;
@@ -3948,6 +4127,246 @@
   overflow: hidden;
 }
 
+/* Timeline-only toolbar for companion previews. Keeping these controls above
+   the work area leaves the narrow transport column dedicated to playback and
+   zoom. */
+.squisq-timeline-toolbar {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 36px;
+  padding: 4px 10px;
+  border-bottom: 1px solid #b0a99a;
+  background: #efece6;
+  color: #374151;
+  font-family: var(--squisq-ux-font, system-ui, sans-serif);
+}
+
+.squisq-timeline-toolbar-title {
+  margin-right: 3px;
+  color: #6b7280;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+.squisq-timeline-pane-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 27px;
+  padding: 3px 9px;
+  border: 1px solid #c8c2b7;
+  border-radius: 6px;
+  background: #ffffff;
+  color: #374151;
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.squisq-timeline-pane-toggle:hover:not(:disabled) {
+  border-color: #9ca3af;
+  background: #f9fafb;
+}
+
+.squisq-timeline-pane-toggle[aria-pressed='true'] {
+  border-color: #2563eb;
+  background: #dbeafe;
+  color: #1d4ed8;
+}
+
+.squisq-timeline-pane-toggle:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+/* Docked video monitors shown beside the block card in Timeline mode. The
+   timeline playhead owns their clock; native controls stay hidden so there is
+   no second, competing seek position. All open panes share the available
+   width, yielding editor + literal + composition as an even three-pane view. */
+.squisq-editor-primary {
+  min-width: 0;
+}
+
+.squisq-timeline-preview-panel {
+  flex: 1 1 0;
+  min-width: 220px;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  background: #171717;
+  border-left: 1px solid #b0a99a;
+}
+
+.squisq-timeline-video-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 34px;
+  padding: 0 8px 0 12px;
+  background: #f9fafb;
+  border-bottom: 1px solid #d1d5db;
+  color: #374151;
+  font-size: 12px;
+}
+
+.squisq-timeline-video-title {
+  font-weight: 600;
+}
+
+.squisq-timeline-video-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #6b7280;
+}
+
+.squisq-timeline-video-time {
+  margin-left: auto;
+  color: #6b7280;
+  font-variant-numeric: tabular-nums;
+}
+
+.squisq-timeline-video-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: #6b7280;
+  font-size: 18px;
+  cursor: pointer;
+}
+
+.squisq-timeline-video-close:hover {
+  background: #e5e7eb;
+  color: #111827;
+}
+
+.squisq-timeline-video-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  overflow: auto;
+}
+
+.squisq-timeline-video-stage {
+  position: relative;
+  width: 100%;
+  max-width: 900px;
+  aspect-ratio: 16 / 9;
+  overflow: hidden;
+  background: #000000;
+  border: 1px solid #374151;
+  border-radius: 6px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.32);
+}
+
+.squisq-timeline-composition-stage {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  max-width: 900px;
+  aspect-ratio: 16 / 9;
+  overflow: hidden;
+  background: #000000;
+  border: 1px solid #374151;
+  border-radius: 6px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.32);
+}
+
+.squisq-timeline-composition-stage > .doc-player {
+  width: 100%;
+  height: 100%;
+}
+
+.squisq-timeline-video-stage .doc-player__media-clips {
+  position: absolute;
+  inset: 0;
+}
+
+.squisq-timeline-video-stage .doc-player__media-video {
+  opacity: 0;
+  visibility: hidden;
+}
+
+.squisq-timeline-video-stage .doc-player__media-video--active {
+  opacity: 1;
+  visibility: visible;
+}
+
+.squisq-timeline-video-empty {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  color: #9ca3af;
+  font-size: 12px;
+  text-align: center;
+}
+
+.squisq-editor-shell[data-theme='dark'] .squisq-timeline-video-header {
+  background: #111827;
+  border-bottom-color: #2a3144;
+  color: #e5e7eb;
+}
+
+.squisq-editor-shell[data-theme='dark'] .squisq-timeline-preview-panel {
+  border-left-color: #2a3144;
+}
+
+.squisq-editor-shell[data-theme='dark'] .squisq-timeline-video-label,
+.squisq-editor-shell[data-theme='dark'] .squisq-timeline-video-time,
+.squisq-editor-shell[data-theme='dark'] .squisq-timeline-video-close {
+  color: #9ca3af;
+}
+
+.squisq-editor-shell[data-theme='dark'] .squisq-timeline-video-close:hover {
+  background: #1f2937;
+  color: #f9fafb;
+}
+
+.squisq-editor-shell[data-theme='dark'] .squisq-timeline-toolbar {
+  border-bottom-color: #2a3144;
+  background: #151923;
+  color: #d1d5db;
+}
+
+.squisq-editor-shell[data-theme='dark'] .squisq-timeline-toolbar-title {
+  color: #9ca3af;
+}
+
+.squisq-editor-shell[data-theme='dark'] .squisq-timeline-pane-toggle {
+  border-color: #374151;
+  background: #111827;
+  color: #d1d5db;
+}
+
+.squisq-editor-shell[data-theme='dark'] .squisq-timeline-pane-toggle:hover:not(:disabled) {
+  background: #1f2937;
+}
+
+.squisq-editor-shell[data-theme='dark'] .squisq-timeline-pane-toggle[aria-pressed='true'] {
+  border-color: #60a5fa;
+  background: #172554;
+  color: #93c5fd;
+}
+
 .squisq-timeline-scroll {
   flex: 1;
   overflow-x: auto;
@@ -4101,7 +4520,7 @@
   background: #2b6cb0;
 }
 
-/* Body-embedded media (recordings, dropped files): snapped to its block,
+/* Body-embedded media (recordings, dropped files): locked to its block,
    outlined to distinguish from authored `{[…]}` clips. Dragging re-times it
    (and converts it to a clip annotation). */
 .squisq-timeline-clip--embedded {
@@ -4118,6 +4537,11 @@
     transparent 6px,
     transparent 12px
   );
+}
+
+.squisq-timeline-clip--locked {
+  cursor: default;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.5);
 }
 
 .squisq-timeline-clip-label {

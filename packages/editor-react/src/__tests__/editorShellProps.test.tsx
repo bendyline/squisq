@@ -402,6 +402,32 @@ describe('<EditorShell> hostMode', () => {
 });
 
 describe('<EditorShell> Files badge', () => {
+  it('opens the recorder dialog from the Files panel Record button', async () => {
+    render(
+      <EditorShell initialMarkdown="# hi" initialView="raw" mediaProvider={mediaProviderWith(0)} />,
+    );
+
+    fireEvent.click(await screen.findByLabelText('Toggle Files panel'));
+    fireEvent.click(await screen.findByRole('button', { name: 'Record media' }));
+
+    expect(screen.getByRole('dialog', { name: 'Record media' })).toBeTruthy();
+  });
+
+  it('hides the Files panel Record button when the host disables recording', async () => {
+    render(
+      <EditorShell
+        initialMarkdown="# hi"
+        initialView="raw"
+        mediaProvider={mediaProviderWith(0)}
+        allowRecording={false}
+      />,
+    );
+
+    fireEvent.click(await screen.findByLabelText('Toggle Files panel'));
+
+    expect(screen.queryByRole('button', { name: 'Record media' })).toBeNull();
+  });
+
   it('shows the mediaProvider file count on the paperclip button', async () => {
     const { container } = render(
       <EditorShell initialMarkdown="# hi" initialView="raw" mediaProvider={mediaProviderWith(3)} />,

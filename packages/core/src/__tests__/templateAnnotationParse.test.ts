@@ -83,6 +83,42 @@ describe('Quoted values in {[…]} annotations', () => {
     });
   });
 
+  it('parses a GFM-autolinked URL inside a quoted template parameter', () => {
+    const source =
+      '## Photo Showcase {[imageWithCaption imageSrc="https://example.com/photo.jpg" imageAlt="Sample photo" caption="A captioned photograph"]}';
+    const h = getHeading(source);
+
+    expect(h.children).toEqual([
+      expect.objectContaining({ type: 'text', value: 'Photo Showcase' }),
+    ]);
+    expect(h.templateAnnotation).toEqual({
+      template: 'imageWithCaption',
+      params: {
+        imageSrc: 'https://example.com/photo.jpg',
+        imageAlt: 'Sample photo',
+        caption: 'A captioned photograph',
+      },
+    });
+
+    const doc = markdownToDoc(parseMarkdown(`${source}\n\nA captioned image block.`));
+    expect(doc.blocks[0]).toMatchObject({
+      template: 'imageWithCaption',
+      templateOverrides: {
+        imageSrc: 'https://example.com/photo.jpg',
+        imageAlt: 'Sample photo',
+        caption: 'A captioned photograph',
+      },
+    });
+
+    const emitted = stringifyMarkdown(parseMarkdown(source)).trim();
+    expect(emitted).toBe(
+      '## Photo Showcase {[imageWithCaption imageSrc=https://example.com/photo.jpg imageAlt="Sample photo" caption="A captioned photograph"]}',
+    );
+    expect(getHeading(emitted).templateAnnotation?.params?.imageSrc).toBe(
+      'https://example.com/photo.jpg',
+    );
+  });
+
   it('parses single-quoted values with spaces', () => {
     const h = getHeading("## X {[quote text='A long caption']}");
     expect(h.templateAnnotation?.params).toEqual({ text: 'A long caption' });

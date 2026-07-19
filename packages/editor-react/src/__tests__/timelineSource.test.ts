@@ -89,6 +89,17 @@ describe('setMediaClipInSource', () => {
   it('returns null for a non-media line', () => {
     expect(setMediaClipInSource(src, 1, { startAt: 1 })).toBeNull();
   });
+
+  it('patches timing attributes on an unlocked toolbar-authored HTML video', () => {
+    const html =
+      '# B {duration=20}\n\n<video src="v.mp4" controls data-squisq-video-placement="overlay" data-squisq-video-lock-to-block="false"></video>\n';
+    const next = setMediaClipInSource(html, 3, { startAt: 6, clipEnd: 14 })!;
+    expect(next).toContain('data-squisq-video-start-at="6"');
+    expect(next).toContain('data-squisq-video-clip-end="14"');
+    expect(next).toContain('data-squisq-video-lock-to-block="false"');
+    const doc = markdownToDoc(parseMarkdown(next), { articleId: 't' });
+    expect(doc.documentMedia?.[0]).toMatchObject({ startAt: 6, clipEnd: 14 });
+  });
 });
 
 describe('buildClipAnnotation', () => {

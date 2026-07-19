@@ -8,7 +8,7 @@
  * media they inserted; editing one converts it to a timed clip annotation.
  */
 
-import type { Block } from '@bendyline/squisq/schemas';
+import type { Block, Doc, ScheduledClip } from '@bendyline/squisq/schemas';
 
 const VIDEO_EXT = new Set(['webm', 'mp4', 'mov', 'm4v', 'ogv']);
 const AUDIO_EXT = new Set(['mp3', 'wav', 'ogg', 'oga', 'm4a', 'aac', 'flac', 'opus']);
@@ -75,4 +75,36 @@ export function collectEmbeddedMedia(block: Block): EmbeddedMedia[] {
 
   (block.contents ?? []).forEach((node) => visit(node, undefined));
   return out;
+}
+
+/**
+ * Adapt body-embedded videos to the scheduled-clip shape consumed by the
+ * timeline monitor. Embedded media is block-scoped, so it starts with its
+ * owning block and stays active for that block's authored duration.
+ */
+export function collectEmbeddedVideoSchedule(doc: Doc): ScheduledClip[] {
+  const schedule: ScheduledClip[] = [];
+
+  const visit = (blocks: Block[]): void => {
+    for (const block of blocks) {
+      collectEmbeddedMedia(block).forEach((media, index) => {
+        if (media.kind !== 'video') return;
+        schedule.push({
+          id: `embedded:${block.id}:${index}`,
+          kind: 'video',
+          src: media.src,
+          absoluteStart: block.startTime,
+          absoluteEnd: block.startTime + block.duration,
+          sourceIn: 0,
+          anchor: 'block',
+          blockId: block.id,
+          ...(media.sourceLine != null ? { sourceLine: media.sourceLine } : {}),
+        });
+      });
+      if (block.children?.length) visit(block.children);
+    }
+  };
+
+  visit(doc.blocks);
+  return schedule;
 }

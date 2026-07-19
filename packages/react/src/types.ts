@@ -19,6 +19,20 @@ import type { Block } from '@bendyline/squisq/schemas';
 export type ControlsLayout = 'overlay' | 'sidebar' | 'bottom';
 
 /**
+ * Placement of scheduled video relative to the rendered slide.
+ *
+ * `'background'` preserves the legacy full-bleed treatment behind the
+ * content. The other variants render above the content for presenter video.
+ */
+export type VideoPresentation = 'background' | 'full-frame' | 'picture-in-picture';
+
+/** Shape of a picture-in-picture presenter video. */
+export type PipShape = 'square' | 'rounded' | 'circle';
+
+/** Corner occupied by a picture-in-picture presenter video. */
+export type PipPosition = 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right';
+
+/**
  * Display mode for DocPlayer.
  *
  * - `'video'` — Traditional video-style playback with play/pause, scrub bar,

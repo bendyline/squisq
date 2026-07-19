@@ -413,6 +413,7 @@ These are read only by the editor's Preview controls (like `document-render-as` 
 | `squisq-transform` (legacy `transform-style`) | Slideshow transform style id applied in preview. Omitted for the default of no transform.                   |
 | `squisq-captions` (legacy `caption-style`)    | Caption mode — `off`, `standard`, or `social` (`instagram`/`tiktok`/`reels` → social). Default: `standard`. |
 | `squisq-cover-slide` (legacy `cover-slide`)   | Whether to show the generated cover slide. Default: `true`.                                                 |
+| `squisq-video-loop` (legacy `video-loop`)     | Whether Video mode restarts automatically after playback ends. Default: `false`.                            |
 
 When the editor writes these settings, values matching their runtime defaults are omitted rather than persisted. The same applies to the default `standard` theme. Choosing a default also removes any legacy alias; non-default values use the canonical `squisq-*` key.
 
@@ -600,18 +601,49 @@ Body text shown while the narration plays.
 {[audio src=narration.mp3 startAt=5 spillover=true]}
 ```
 
-| Key         | Meaning                                                                                        |
-| ----------- | ---------------------------------------------------------------------------------------------- |
-| `src`       | Media file (required), relative to the article media dir                                       |
-| `startAt`   | Seconds into the block before the clip begins (default 0); `startTime` is accepted as an alias |
-| `clipStart` | Source in-point within the file (default 0)                                                    |
-| `clipEnd`   | Source out-point within the file (default: block / file end)                                   |
-| `spillover` | `true` keeps the clip playing past the block's end (default stops at it)                       |
-| `anchor`    | `document` makes the clip span the whole document (see below)                                  |
+| Key           | Meaning                                                                                        |
+| ------------- | ---------------------------------------------------------------------------------------------- |
+| `src`         | Media file (required), relative to the article media dir                                       |
+| `startAt`     | Seconds into the block before the clip begins (default 0); `startTime` is accepted as an alias |
+| `clipStart`   | Source in-point within the file (default 0)                                                    |
+| `clipEnd`     | Source out-point within the file (default: block / file end)                                   |
+| `spillover`   | `true` keeps the clip playing past the block's end (default stops at it)                       |
+| `anchor`      | `document` makes the clip span the whole document (see below)                                  |
+| `placement`   | Video only: `picture-in-picture` or `overlay`; `pip=true` / `overlay=true` are aliases         |
+| `lockToBlock` | Placed video only: `true` follows its block; `false` uses independent document timing          |
 
 All timing keys accept the same time formats as `startTime`/`duration` above.
 So a clip with `startAt=5` inside a block that begins at 3:30 plays at 3:35.
 A `{[video …]}` annotation behaves the same but is rendered as a video.
+
+The Write editor exposes the same choice directly on an inline `<video>`.
+`In layout` leaves the video in block content. PIP and Overlay store a valid
+HTML data attribute and promote the video to the timed compositor:
+
+```html
+<video src="video/presenter.webm" controls data-squisq-video-placement="picture-in-picture"></video>
+```
+
+Because `data-*` attributes are valid HTML, no synthetic heading is required.
+PIP and Overlay videos are locked to their parent block by default: they begin
+with the block, disappear when it ends, and follow block timing edits. Turning
+off **Lock to block** writes an explicit flag and makes the video independently
+movable and resizable on the document timeline:
+
+```html
+<video
+  src="video/presenter.webm"
+  controls
+  data-squisq-video-placement="picture-in-picture"
+  data-squisq-video-lock-to-block="false"
+></video>
+```
+
+The timeline adds `data-squisq-video-start-at`,
+`data-squisq-video-clip-start`, and `data-squisq-video-clip-end` only as those
+independent values are edited. An unlocked video with no explicit start begins
+at its original parent block, and its audio and video may continue across later
+blocks. It does not participate in the original block's automatic duration.
 
 ### Document-spanning media
 

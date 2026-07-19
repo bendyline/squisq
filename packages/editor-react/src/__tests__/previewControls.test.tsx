@@ -160,6 +160,32 @@ function CoverSlideHarness() {
   );
 }
 
+function VideoLoopProbe() {
+  const { activeVideoLoop, setVideoLoopEnabled } = usePreviewSettings();
+  const { markdownSource } = useEditorContext();
+  return (
+    <>
+      <button type="button" onClick={() => setVideoLoopEnabled(true)}>
+        Enable video loop
+      </button>
+      <button type="button" onClick={() => setVideoLoopEnabled(false)}>
+        Disable video loop
+      </button>
+      <div data-testid="active-video-loop">{String(activeVideoLoop)}</div>
+      <pre data-testid="markdown-source">{markdownSource}</pre>
+    </>
+  );
+}
+
+function VideoLoopHarness() {
+  const { doc } = useEditorContext();
+  return (
+    <PreviewSettingsProvider doc={doc}>
+      <VideoLoopProbe />
+    </PreviewSettingsProvider>
+  );
+}
+
 function ManagedDefaultsProbe() {
   const {
     activeThemeId,
@@ -398,6 +424,35 @@ describe('cover-slide frontmatter', () => {
   });
 });
 
+describe('video-loop frontmatter', () => {
+  it('persists enabled looping and removes the default disabled value', async () => {
+    render(
+      <EditorProvider initialMarkdown="# Hello">
+        <VideoLoopHarness />
+      </EditorProvider>,
+    );
+
+    expect(screen.getByTestId('active-video-loop').textContent).toBe('false');
+    fireEvent.click(screen.getByRole('button', { name: 'Enable video loop' }));
+
+    await waitFor(() => {
+      const source = screen.getByTestId('markdown-source').textContent ?? '';
+      expect(source).toContain('squisq-video-loop: true');
+      expect(source).not.toContain('squisq-video-loop: "true"');
+    });
+    expect(screen.getByTestId('active-video-loop').textContent).toBe('true');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Disable video loop' }));
+
+    await waitFor(() => {
+      const source = screen.getByTestId('markdown-source').textContent ?? '';
+      expect(source).not.toContain('squisq-video-loop');
+      expect(source).not.toContain('---');
+    });
+    expect(screen.getByTestId('active-video-loop').textContent).toBe('false');
+  });
+});
+
 describe('managed preview-setting defaults', () => {
   it('removes default theme, transform, and caption values plus their legacy aliases', async () => {
     const markdown = `---
@@ -445,6 +500,31 @@ title: Hello
 });
 
 describe('PreviewToolbarControls', () => {
+  it('shows Loop only in Video mode', () => {
+    const originalResizeObserver = globalThis.ResizeObserver;
+    class ResizeObserverStub implements ResizeObserver {
+      observe() {}
+      unobserve() {}
+      disconnect() {}
+    }
+
+    globalThis.ResizeObserver = ResizeObserverStub;
+    try {
+      renderPreviewToolbar('# Hello');
+      expect(screen.queryByText('Loop')).toBeNull();
+
+      cleanup();
+      renderPreviewToolbar('---\ndisplay-mode: video\n---\n\n# Hello');
+      expect(screen.getAllByText('Loop').length).toBeGreaterThan(0);
+    } finally {
+      if (originalResizeObserver) {
+        globalThis.ResizeObserver = originalResizeObserver;
+      } else {
+        Reflect.deleteProperty(globalThis, 'ResizeObserver');
+      }
+    }
+  });
+
   it('presents transforms as summarization without implying the source is changed', () => {
     const originalResizeObserver = globalThis.ResizeObserver;
     class ResizeObserverStub implements ResizeObserver {

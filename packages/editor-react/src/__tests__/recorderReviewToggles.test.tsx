@@ -115,6 +115,25 @@ describe('RecorderModal — unsaved take is not silently destroyed', () => {
     vi.restoreAllMocks();
   });
 
+  it('shows a themed red dot on the ready-state Record button', async () => {
+    render(<RecorderModal mediaProvider={mediaProvider} onClose={vi.fn()} />);
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Start preview' }));
+    });
+
+    const recordButton = screen.getByRole('button', { name: 'Record' });
+    const dot = recordButton.querySelector('.squisq-recorder-record-dot');
+    const center = dot?.querySelector('.squisq-recorder-record-dot-center');
+
+    expect(dot).not.toBeNull();
+    expect(dot?.getAttribute('aria-hidden')).toBe('true');
+    expect((dot as HTMLElement).style.padding).toBe('2px');
+    expect((dot as HTMLElement).style.background).toBe('rgb(0, 0, 0)');
+    expect((dot as HTMLElement).style.border).toBe('1px solid rgb(156, 163, 175)');
+    expect((center as HTMLElement).style.background).toBe('var(--squisq-recorder-danger)');
+  });
+
   it('locks the capture-source toggles while an unsaved take is in review', async () => {
     render(<RecorderModal mediaProvider={mediaProvider} onClose={vi.fn()} />);
 

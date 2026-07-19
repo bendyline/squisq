@@ -71,6 +71,12 @@ export type { BlockRange, BlockSlice } from './blockRange.js';
 // markdown write-back helpers it commits edits through.
 export { TimelineTrack } from './TimelineTrack.js';
 export type { TimelineTrackProps } from './TimelineTrack.js';
+export { TimelineVideoPanel } from './TimelineVideoPanel.js';
+export type { TimelineVideoPanelProps } from './TimelineVideoPanel.js';
+export { TimelineCompositionPanel } from './TimelineCompositionPanel.js';
+export type { TimelineCompositionPanelProps } from './TimelineCompositionPanel.js';
+export { TimelineToolbar } from './TimelineToolbar.js';
+export type { TimelineToolbarProps } from './TimelineToolbar.js';
 export { formatSeconds, setBlockDurationInSource, setMediaClipInSource } from './timelineSource.js';
 export type { MediaClipPatch } from './timelineSource.js';
 

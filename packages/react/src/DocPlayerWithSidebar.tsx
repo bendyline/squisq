@@ -32,6 +32,8 @@ interface DocPlayerWithSidebarProps {
   /** Base path for resolving media URLs (default: `'.'`) */
   basePath?: string;
   autoPlay?: boolean;
+  /** Restart playback automatically when the video timeline ends. */
+  loop?: boolean;
   onEnded?: () => void;
   onTimeUpdate?: (time: number) => void;
   /** Optional audio controller (if not provided, uses default HTML5 audio) */
@@ -74,6 +76,7 @@ export function DocPlayerWithSidebar({
   doc,
   basePath,
   autoPlay = false,
+  loop = false,
   onEnded,
   onTimeUpdate,
   audioController,
@@ -146,6 +149,7 @@ export function DocPlayerWithSidebar({
           theme={theme}
           basePath={basePath}
           autoPlay={autoPlay}
+          loop={loop}
           onEnded={onEnded}
           onTimeUpdate={onTimeUpdate}
           audioController={audioController}

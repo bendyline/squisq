@@ -143,7 +143,7 @@ function extractText(node: MdastNode): string {
 /**
  * Extract a `{[templateName key=value …]}` annotation from a heading's
  * inline children. Mutates the children array in-place: strips the
- * annotation text from the last text node (or removes the node entirely).
+ * annotation text from the trailing inline run.
  *
  * Matching is delegated to {@link matchTrailingTemplateAnnotation}: a
  * quote-aware grammar (values may contain `]` when quoted) with a legacy
@@ -155,31 +155,73 @@ function extractText(node: MdastNode): string {
 function extractTemplateAnnotation(
   children: MarkdownInlineNode[],
 ): HeadingTemplateAnnotation | null {
-  // Walk backwards to find the last text node
+  // GFM promotes a literal URL to a link node even when the URL appears
+  // inside a quoted annotation value. Reassemble those autolink fragments
+  // with their surrounding text before matching, otherwise a parameter such
+  // as `imageSrc="https://example.com/photo.jpg"` leaves the whole annotation
+  // visible in the heading and the selected template is never activated.
+  const trail: { value: string; index: number }[] = [];
   for (let i = children.length - 1; i >= 0; i--) {
     const child = children[i];
     if (child.type === 'text') {
-      const match = matchTrailingTemplateAnnotation(child.value);
-      if (match) {
-        const inner = match.inner.trim();
-        const annotation = parseAnnotationTokens(inner);
-
-        // Strip the matched portion from the text
-        const stripped = child.value.slice(0, match.index).replace(/\s+$/, '');
-        if (stripped) {
-          (child as { value: string }).value = stripped;
-        } else {
-          // Remove the now-empty text node
-          children.splice(i, 1);
-        }
-        return annotation;
-      }
-      // Only check the last text node (trailing position)
-      break;
+      trail.unshift({ value: child.value, index: i });
+      continue;
     }
-    // If the last child isn't a text node, there's no annotation
+    const autolink = literalAutolinkText(child);
+    if (autolink != null) {
+      trail.unshift({ value: autolink, index: i });
+      continue;
+    }
     break;
   }
+  if (trail.length === 0) return null;
+
+  const joined = trail.map((part) => part.value).join('');
+  const match = matchTrailingTemplateAnnotation(joined);
+  if (!match) return null;
+
+  const annotation = parseAnnotationTokens(match.inner.trim());
+
+  // `match.index` is an offset into the virtual trailing text run. Keep the
+  // heading text before that boundary and remove the annotation fragments.
+  let scannedLength = 0;
+  for (const part of trail) {
+    if (scannedLength + part.value.length <= match.index) {
+      scannedLength += part.value.length;
+      continue;
+    }
+
+    const boundaryNode = children[part.index];
+    const keepLength = match.index - scannedLength;
+    if (boundaryNode.type === 'text' && keepLength > 0) {
+      const stripped = boundaryNode.value.slice(0, keepLength).replace(/\s+$/, '');
+      if (stripped) {
+        boundaryNode.value = stripped;
+        children.splice(part.index + 1);
+      } else {
+        children.splice(part.index);
+      }
+    } else {
+      children.splice(part.index);
+    }
+    return annotation;
+  }
+
+  // The annotation consumes the entire trailing run.
+  children.splice(trail[0].index);
+  return annotation;
+}
+
+/**
+ * Return the authored text for a GFM literal autolink, or null for a normal
+ * Markdown link. `remark-gfm` normalizes a bare `www.` target by adding the
+ * `http://` scheme to `url`, so that spelling is accepted too.
+ */
+function literalAutolinkText(node: MarkdownInlineNode): string | null {
+  if (node.type !== 'link' || node.title != null) return null;
+  const label = extractInlineText(node.children);
+  if (label === node.url) return label;
+  if (/^www\./i.test(label) && node.url === `http://${label}`) return label;
   return null;
 }
 

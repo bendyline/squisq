@@ -44,6 +44,22 @@ function dataTransfer(files: File[], itemTypes: string[]) {
 }
 
 describe('MediaBin image drop target', () => {
+  it('shows a red-dot Record button and delegates opening the recorder to its host', async () => {
+    const { provider } = createProvider();
+    const onRecord = vi.fn();
+    const { container } = render(
+      <MediaBin mediaProvider={provider} isDark onRecord={onRecord} isRecorderOpen />,
+    );
+
+    const recordButton = screen.getByRole('button', { name: 'Record media' });
+    expect(recordButton.getAttribute('aria-haspopup')).toBe('dialog');
+    expect(recordButton.getAttribute('aria-expanded')).toBe('true');
+    expect(container.querySelector('.squisq-media-bin-record-dot')).not.toBeNull();
+
+    fireEvent.click(recordButton);
+    expect(onRecord).toHaveBeenCalledOnce();
+  });
+
   it('shows a drop affordance and uploads a dropped image through the normal callback', async () => {
     const { provider, added } = createProvider();
     const onMediaUploaded = vi.fn();

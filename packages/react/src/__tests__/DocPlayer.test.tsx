@@ -14,6 +14,22 @@ function minimalDoc(): Doc {
   };
 }
 
+function docWithPresenter(): Doc {
+  return {
+    ...minimalDoc(),
+    documentMedia: [
+      {
+        id: 'presenter',
+        src: 'presenter.mp4',
+        kind: 'video',
+        startAt: 0,
+        clipEnd: 4,
+        anchor: 'document',
+      },
+    ],
+  };
+}
+
 function docWithCover(): Doc {
   return {
     ...minimalDoc(),
@@ -139,6 +155,33 @@ describe('DocPlayer smoke test', () => {
   it('renders without crashing in video mode (default)', () => {
     const { container } = render(<DocPlayer doc={minimalDoc()} basePath="/test" />);
     expect(container.firstChild).toBeTruthy();
+  });
+
+  it('restarts Video-mode playback after the timeline ends when loop is enabled', async () => {
+    const audioController = controller({ currentTime: 5, isEnded: true });
+    const onEnded = vi.fn();
+
+    render(
+      <DocPlayer
+        doc={docWithPresenter()}
+        audioController={audioController}
+        loop
+        onEnded={onEnded}
+      />,
+    );
+
+    await waitFor(() => expect(audioController.restart).toHaveBeenCalledOnce());
+    expect(onEnded).toHaveBeenCalledOnce();
+  });
+
+  it('does not restart ended playback when loop is disabled', async () => {
+    const audioController = controller({ currentTime: 5, isEnded: true });
+    const onEnded = vi.fn();
+
+    render(<DocPlayer doc={minimalDoc()} audioController={audioController} onEnded={onEnded} />);
+
+    await waitFor(() => expect(onEnded).toHaveBeenCalledOnce());
+    expect(audioController.restart).not.toHaveBeenCalled();
   });
 
   it('renders without crashing in slideshow mode', () => {

@@ -10,6 +10,7 @@ import {
   PresentationModeControl,
   PresentationModeProvider,
 } from '../presentation/PresentationMode';
+import { PreviewSettingsProvider } from '../PreviewControls';
 
 function Harness({
   allowWindow,
@@ -21,14 +22,16 @@ function Harness({
   const rootRef = useRef<HTMLDivElement>(null);
   return (
     <div ref={rootRef} data-testid="shell">
-      <PresentationModeProvider
-        rootRef={rootRef}
-        allowWindow={allowWindow}
-        allowFullscreen={allowFullscreen}
-      >
-        <PresentationModeControl />
-        <div data-testid="content">Preview</div>
-      </PresentationModeProvider>
+      <PreviewSettingsProvider doc={null}>
+        <PresentationModeProvider
+          rootRef={rootRef}
+          allowWindow={allowWindow}
+          allowFullscreen={allowFullscreen}
+        >
+          <PresentationModeControl />
+          <div data-testid="content">Preview</div>
+        </PresentationModeProvider>
+      </PreviewSettingsProvider>
     </div>
   );
 }
@@ -50,24 +53,24 @@ describe('PresentationModeControl', () => {
   it('omits presentation destinations disabled by the host', () => {
     renderHarness({ allowWindow: false, allowFullscreen: false });
 
-    expect(screen.getByRole('button', { name: 'Present: Fill Squisq' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Present: Fill canvas' })).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'Presentation options' })).toBeNull();
     expect(screen.queryByText('New window')).toBeNull();
-    expect(screen.queryByText('Browser full screen')).toBeNull();
+    expect(screen.queryByText('Full screen')).toBeNull();
   });
 
   it('chooses the launch behavior from an accessible radio menu', () => {
     renderHarness();
 
-    expect(screen.getByRole('button', { name: 'Present: Fill Squisq' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Present: Fill canvas' })).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Presentation options' }));
 
     const menu = screen.getByRole('menu', { name: 'Presentation options' });
     const items = within(menu).getAllByRole('menuitemradio');
     expect(items.map((item) => item.textContent)).toEqual([
-      'Fill SquisqUse the entire Squisq control.',
+      'Fill canvasUse the entire app canvas.',
       'New windowOpen an audience view synced to this one.',
-      'Browser full screenBrowser full screen is unavailable.',
+      'Full screenFull screen is unavailable.',
     ]);
     expect(items[0].getAttribute('aria-checked')).toBe('true');
     expect(items.map((item) => item.tabIndex)).toEqual([0, -1, -1]);
@@ -94,10 +97,10 @@ describe('PresentationModeControl', () => {
     expect(screen.queryByRole('menu', { name: 'Presentation options' })).toBeNull();
   });
 
-  it('fills only the Squisq shell and exits on Escape', async () => {
+  it('fills the host canvas and exits on Escape', async () => {
     renderHarness();
     const shell = screen.getByTestId('shell');
-    const launchButton = screen.getByRole('button', { name: 'Present: Fill Squisq' });
+    const launchButton = screen.getByRole('button', { name: 'Present: Fill canvas' });
 
     launchButton.focus();
     fireEvent.click(launchButton);
@@ -107,7 +110,7 @@ describe('PresentationModeControl', () => {
 
     fireEvent.keyDown(document, { key: 'Escape' });
     await waitFor(() => expect(shell.hasAttribute('data-presentation-mode')).toBe(false));
-    expect(screen.getByRole('button', { name: 'Present: Fill Squisq' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Present: Fill canvas' })).toBeTruthy();
     expect(document.activeElement).toBe(launchButton);
   });
 
@@ -139,13 +142,14 @@ describe('PresentationModeControl', () => {
       renderHarness();
       fireEvent.click(screen.getByRole('button', { name: 'Presentation options' }));
       fireEvent.click(
-        screen.getByRole('menuitemradio', { name: /Browser full screen.*Use the browser/ }),
+        screen.getByRole('menuitemradio', { name: /Full screen.*Use the entire OS screen/ }),
       );
-      fireEvent.click(screen.getByRole('button', { name: 'Present: Browser full screen' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Present: Full screen' }));
 
       const shell = screen.getByTestId('shell');
-      await waitFor(() => expect(requestFullscreen).toHaveBeenCalledWith());
+      await waitFor(() => expect(requestFullscreen).toHaveBeenCalledWith({ navigationUI: 'hide' }));
       await waitFor(() => expect(shell.getAttribute('data-presentation-mode')).toBe('fullscreen'));
+      expect(screen.getByRole('button', { name: 'Exit presentation mode' })).toBeTruthy();
 
       fullscreenElement = null;
       fireEvent(document, new Event('fullscreenchange'));
@@ -193,8 +197,8 @@ describe('PresentationModeControl', () => {
       renderHarness();
       requestedRoot = screen.getByTestId('shell');
       fireEvent.click(screen.getByRole('button', { name: 'Presentation options' }));
-      fireEvent.click(screen.getByRole('menuitemradio', { name: /Browser full screen/ }));
-      fireEvent.click(screen.getByRole('button', { name: 'Present: Browser full screen' }));
+      fireEvent.click(screen.getByRole('menuitemradio', { name: /Full screen/ }));
+      fireEvent.click(screen.getByRole('button', { name: 'Present: Full screen' }));
       await waitFor(() =>
         expect(screen.getByTestId('shell').getAttribute('data-presentation-mode')).toBe(
           'fullscreen',
@@ -203,7 +207,7 @@ describe('PresentationModeControl', () => {
 
       fireEvent.click(screen.getByRole('button', { name: 'Stop presentation' }));
       await waitFor(() =>
-        expect(screen.getByRole('alert').textContent).toContain('could not exit full screen'),
+        expect(screen.getByRole('alert').textContent).toContain('Could not exit full screen'),
       );
       expect(screen.getByTestId('shell').getAttribute('data-presentation-mode')).toBe('fullscreen');
 
@@ -247,8 +251,17 @@ describe('PresentationModeControl', () => {
 
     const shell = screen.getByTestId('shell');
     await waitFor(() => expect(shell.getAttribute('data-presentation-mode')).toBe('window'));
-    expect(popupDocument.querySelector('#squisq-presentation-root')).toBeTruthy();
-    expect(popupDocument.querySelector('[aria-label="Exit presentation mode"]')).toBeTruthy();
+    const popupRoot = popupDocument.querySelector<HTMLElement>('#squisq-presentation-root');
+    expect(popupRoot).toBeTruthy();
+    expect(popupRoot?.classList.contains('squisq-editor-shell')).toBe(true);
+    expect(popupRoot?.dataset.theme).toBe('light');
+    expect(popupRoot?.style.getPropertyValue('--squisq-presentation-bg')).toMatch(/^#/);
+    const popupExit = popupDocument.querySelector<HTMLElement>(
+      '[aria-label="Exit presentation mode"]',
+    );
+    expect(popupExit?.getAttribute('data-theme')).toBe('light');
+    expect(popupExit?.style.getPropertyValue('--squisq-presentation-control-bg')).toMatch(/^#/);
+    expect(popupExit?.style.getPropertyValue('--squisq-presentation-control-text')).toMatch(/^#/);
 
     // Re-selecting the checked destination only closes the menu; it must not
     // tear down the active audience window.

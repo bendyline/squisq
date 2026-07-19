@@ -512,6 +512,8 @@ interface MediaClip {
   id: string;
   src: string;
   kind: 'audio' | 'video';
+  placement?: 'picture-in-picture' | 'overlay'; // per-video compositor override
+  lockToBlock?: boolean; // placed video follows its block vs. independent document timing
   startAt: number; // block-relative (or document-relative when anchor='document'); default 0
   clipStart?: number;
   clipEnd?: number;
@@ -1395,6 +1397,7 @@ interface DocPlayerProps {
   animationsEnabled?: boolean; // default true — false removes layer animations + block transitions
   onRenderAPIReady?: (api: SquisqRenderAPI | null) => void;
   autoPlay?: boolean; // default false
+  loop?: boolean; // default false — restart automatically in Video mode
   onEnded?: () => void;
   onTimeUpdate?: (time: number) => void;
   audioController?: AudioController;
@@ -2269,7 +2272,7 @@ mode. Descendants rendered inside `EditorProvider` can instead call
 
 In the Use view, the Presentation split button can fill only the current
 `EditorShell`, open a read-only audience window synchronized to the main
-playback/scroll position, or request browser full screen. This is ephemeral UI
+playback/scroll position, or take over the entire screen. This is ephemeral UI
 state and is not written to document frontmatter.
 
 ### Context

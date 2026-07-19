@@ -32,6 +32,7 @@ import type {
   MarkdownParagraph,
 } from '../markdown/types.js';
 import { serializeAnnotation } from '../markdown/attrTokens.js';
+import { parseHtmlToNodes } from '../markdown/htmlParse.js';
 import { flattenBlocks } from './markdownToDoc.js';
 import { resolveTemplateName } from './templates/templateNames.js';
 import {
@@ -205,11 +206,20 @@ function synthesizeAnnotationParagraph(block: Block): MarkdownParagraph {
  * param order, and `mm:ss` time forms stay byte-stable. Programmatic clips
  * (no raw) serialize canonically: src, anchor, then timing params.
  */
-function synthesizeMediaParagraph(clip: MediaClip): MarkdownParagraph {
+function synthesizeMediaParagraph(clip: MediaClip): MarkdownBlockNode {
+  if (clip.origin?.format === 'html' && clip.origin.raw) {
+    return {
+      type: 'htmlBlock',
+      rawHtml: clip.origin.raw,
+      htmlChildren: parseHtmlToNodes(clip.origin.raw),
+    };
+  }
   if (clip.origin?.raw) {
     return { type: 'paragraph', children: [{ type: 'text', value: clip.origin.raw }] };
   }
   const params: Record<string, string> = { src: clip.src };
+  if (clip.placement) params.placement = clip.placement;
+  if (clip.lockToBlock != null) params.lockToBlock = String(clip.lockToBlock);
   if (clip.anchor === 'document') params.anchor = 'document';
   if (clip.startAt) params.startAt = String(clip.startAt);
   if (clip.clipStart != null) params.clipStart = String(clip.clipStart);

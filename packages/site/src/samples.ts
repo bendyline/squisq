@@ -39,6 +39,12 @@ export const SAMPLE_LABELS: Record<string, string> = {
   'teleprompter-demo': 'Teleprompter (Narrate mode)',
 };
 
+/** Return the human-readable dropdown label for an inline sample. */
+export function getSampleLabel(key: string): string {
+  const label = SAMPLE_LABELS[key] ?? key.replace(/-/g, ' ');
+  return label.charAt(0).toUpperCase() + label.slice(1);
+}
+
 export const SAMPLES: Record<string, string> = {
   // Single-block fixture for E2E tests that drive the full export
   // pipeline. Kept intentionally tiny -- one block hits the 3-second
@@ -332,9 +338,9 @@ This is a section header -- great for dividing a document into chapters.
 
 **July 20, 1969** -- Humanity set foot on the Moon for the first time when Apollo 11 landed in the Sea of Tranquility.
 
-## Photo Showcase {[imageWithCaption imageSrc="https://picsum.photos/seed/squisq/800/600" imageAlt="Sample landscape" caption="A beautiful landscape photograph"]}
+## Photo Showcase {[imageWithCaption imageSrc="/res/squisq.jpg" imageAlt="Squisq wordmark" caption="The original Squiggly Square mark"]}
 
-A captioned image block for featuring photography.
+A captioned image block using a bundled demo asset.
 
 ## Map View {[map center="48.8566,2.3522" zoom=12 title="Paris, France"]}
 
@@ -862,17 +868,17 @@ The \`gallery\` template (defined in frontmatter) reads a per-block
 \`subtitle\` attribute via \`{attr:subtitle|Featured work}\` and clones one
 thumbnail per image in the block body via a \`repeat\` layer.
 
-## Northwest Trails {[gallery subtitle="Three favorite hikes"]}
+## Bundled Image Assets {[gallery subtitle="Three local image slots"]}
 
-![Rattlesnake Ledge](https://picsum.photos/seed/trail1/600/800)
-![Mount Si](https://picsum.photos/seed/trail2/600/800)
-![Poo Poo Point](https://picsum.photos/seed/trail3/600/800)
+![Squisq wordmark](/res/squisq.jpg)
+![Squisq app icon](/res/packicon192.png)
+![Squisq touch icon](/res/apple-touch-icon.png)
 
-## Studio Work {[gallery]}
+## More Bundled Assets {[gallery]}
 
 No \`subtitle\` here -- the template falls back to its default label.
 
-![Piece one](https://picsum.photos/seed/art1/600/800)
-![Piece two](https://picsum.photos/seed/art2/600/800)
+![Squisq app icon](/res/packicon192.png)
+![Squisq wordmark](/res/squisq.jpg)
 `;
 }

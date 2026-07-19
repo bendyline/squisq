@@ -164,6 +164,12 @@ export function WysiwygEditor({
   // slices are fragments whose "convention" is the document's, not their own.
   const wrapPolicyEnabled = preserveSourceWrapping && layoutMode === 'document';
   const previewSettings = usePreviewSettingsOptional();
+  // Tiptap creates its `onUpdate` callback once. Layout changes replace the
+  // editor source channel (whole-document passthrough vs active-block splice),
+  // so read the current writer through a ref instead of retaining the channel
+  // that happened to exist when this editor instance mounted.
+  const setEditorSourceRef = useRef(setEditorSource);
+  setEditorSourceRef.current = setEditorSource;
   const activeTheme = previewSettings?.activeTheme;
   const mermaidThemeStoreRef = useRef<MermaidThemeStore | null>(null);
   if (mermaidThemeStoreRef.current === null) {
@@ -301,7 +307,7 @@ export function WysiwygEditor({
       const newSource = frontmatterRef.current + bodyMd;
       pendingLocalSourcesRef.current.push(newSource);
       lastSourceRef.current = newSource;
-      setEditorSource(newSource);
+      setEditorSourceRef.current(newSource);
     },
     editorProps: {
       attributes: {

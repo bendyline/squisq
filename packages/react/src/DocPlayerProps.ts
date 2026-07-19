@@ -5,9 +5,12 @@ import type {
   BlockMarker,
   CaptionStyle,
   DisplayMode,
+  PipPosition,
+  PipShape,
   PlaybackActions,
   PlaybackState,
   SquisqRenderAPI,
+  VideoPresentation,
 } from './types';
 
 export interface DocPlayerProps {
@@ -24,6 +27,8 @@ export interface DocPlayerProps {
   /** Receives the instance-scoped render API, and `null` on cleanup. */
   onRenderAPIReady?: (api: SquisqRenderAPI | null) => void;
   autoPlay?: boolean;
+  /** Restart Video-mode playback automatically when the timeline ends. */
+  loop?: boolean;
   onEnded?: () => void;
   onTimeUpdate?: (time: number) => void;
   /** Optional host-owned audio controller. */
@@ -48,6 +53,15 @@ export interface DocPlayerProps {
   showCoverSlide?: boolean;
   coverVisible?: boolean;
   captionStyle?: CaptionStyle;
+  /**
+   * Placement of scheduled video relative to the slide content.
+   * Defaults to `'background'` for backward compatibility.
+   */
+  videoPresentation?: VideoPresentation;
+  /** Shape of presenter video in picture-in-picture mode. */
+  pipShape?: PipShape;
+  /** Corner used by presenter video in picture-in-picture mode. */
+  pipPosition?: PipPosition;
   enableSwipe?: boolean;
   globalKeyboardShortcuts?: boolean;
 }
