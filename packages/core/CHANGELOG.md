@@ -1,3 +1,9 @@
+## @bendyline/squisq [2.4.0](https://github.com/bendyline/squisq/compare/@bendyline/squisq@2.3.3...@bendyline/squisq@2.4.0) (2026-07-19)
+
+### Features
+
+* Charts, better video support ([#32](https://github.com/bendyline/squisq/issues/32)) ([56734bf](https://github.com/bendyline/squisq/commit/56734bfc2e32a62c512ed5aa6e3feb46df927d3a))
+
 ## @bendyline/squisq [2.3.3](https://github.com/bendyline/squisq/compare/@bendyline/squisq@2.3.2...@bendyline/squisq@2.3.3) (2026-07-17)
 
 ### Bug Fixes
