@@ -475,6 +475,25 @@ describe('tiptapToMarkdown', () => {
     expect(md).toContain('   <video src="video/clip.webm" controls width="480"></video>');
   });
 
+  it('preserves the video placement data attribute', () => {
+    const source =
+      '<video src="video/presenter.webm" controls data-squisq-video-placement="picture-in-picture"></video>';
+    const md = tiptapToMarkdown(source);
+    expect(md).toContain('data-squisq-video-placement="picture-in-picture"');
+    expect(markdownToTiptap(md)).toContain('data-squisq-video-placement="picture-in-picture"');
+  });
+
+  it('preserves unlocked video timing data attributes', () => {
+    const source =
+      '<video src="video/presenter.webm" controls data-squisq-video-placement="overlay" data-squisq-video-lock-to-block="false" data-squisq-video-start-at="4" data-squisq-video-clip-start="1" data-squisq-video-clip-end="12"></video>';
+    const md = tiptapToMarkdown(source);
+    expect(md).toContain('data-squisq-video-lock-to-block="false"');
+    expect(md).toContain('data-squisq-video-start-at="4"');
+    expect(md).toContain('data-squisq-video-clip-start="1"');
+    expect(md).toContain('data-squisq-video-clip-end="12"');
+    expect(markdownToTiptap(md)).toContain('data-squisq-video-lock-to-block="false"');
+  });
+
   it('keeps an <audio> nested in a list item', () => {
     const md = tiptapToMarkdown(
       '<ul><li><p>Note</p><audio src="audio/take.webm" controls=""></audio></li></ul>',

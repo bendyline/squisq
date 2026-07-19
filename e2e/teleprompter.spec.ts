@@ -1,4 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
+import { TELEPROMPTER_FAKE_MIC_PATH } from './fakeMicFixture';
 import { switchView, viewTab } from './view-tabs';
 
 /**
@@ -11,7 +12,12 @@ import { switchView, viewTab } from './view-tabs';
 
 test.use({
   launchOptions: {
-    args: ['--use-fake-device-for-media-stream', '--use-fake-ui-for-media-stream'],
+    args: [
+      '--use-fake-device-for-media-stream',
+      '--use-fake-ui-for-media-stream',
+      `--use-file-for-fake-audio-capture=${TELEPROMPTER_FAKE_MIC_PATH}`,
+      '--autoplay-policy=no-user-gesture-required',
+    ],
   },
   permissions: ['microphone'],
 });
@@ -102,7 +108,7 @@ test('fake mic drives the level meter and voice pacing advances the prompter', a
   await page.getByRole('button', { name: 'Start prompter', exact: true }).click();
   await expect(page.locator('.squisq-teleprompter-meter')).toBeVisible();
 
-  // Chromium's fake device beeps on a 500 ms on/off cycle — regular
+  // The deterministic fake device beeps on a 500 ms on/off cycle — regular
   // Playwright polling phase-locks with the quiet half, so sample fast
   // in-page instead and look at the aggregate.
   const summary = await page.evaluate(async () => {

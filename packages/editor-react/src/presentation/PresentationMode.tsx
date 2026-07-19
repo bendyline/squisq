@@ -17,10 +17,11 @@ import {
   useRef,
   useState,
 } from 'react';
-import type { ReactNode, RefObject } from 'react';
+import type { CSSProperties, ReactNode, RefObject } from 'react';
 import { createPortal } from 'react-dom';
 import { useEditorContext } from '../EditorContext';
 import { Icon } from '../Icon';
+import { usePreviewSettings } from '../PreviewControls';
 
 export type PresentationTarget = 'control' | 'window' | 'fullscreen';
 
@@ -84,7 +85,26 @@ function copyDocumentStyles(source: Document, target: Document): void {
   }
 }
 
-function preparePopupDocument(popup: Window, source: Document, title: string): HTMLElement {
+function copyCustomProperties(source: HTMLElement, target: HTMLElement): void {
+  const sourceWindow = source.ownerDocument.defaultView;
+  if (!sourceWindow) return;
+
+  const computed = sourceWindow.getComputedStyle(source);
+  for (let index = 0; index < computed.length; index += 1) {
+    const property = computed.item(index);
+    if (!property.startsWith('--')) continue;
+    target.style.setProperty(property, computed.getPropertyValue(property));
+  }
+}
+
+function preparePopupDocument(
+  popup: Window,
+  sourceRoot: HTMLElement,
+  title: string,
+  colorScheme: 'light' | 'dark',
+  presentationBackground: string,
+): HTMLElement {
+  const source = sourceRoot.ownerDocument;
   const doc = popup.document;
   doc.head.replaceChildren();
   doc.body.replaceChildren();
@@ -103,12 +123,17 @@ function preparePopupDocument(popup: Window, source: Document, title: string): H
 
   const frameStyle = doc.createElement('style');
   frameStyle.textContent =
-    'html,body{width:100%;height:100%;margin:0;overflow:hidden;}body{background:#000;}' +
-    '#squisq-presentation-root{position:relative;width:100%;height:100%;overflow:hidden;}';
+    'html,body{width:100%;height:100%;margin:0;overflow:hidden;}' +
+    '#squisq-presentation-root{position:relative;width:100%;height:100%;overflow:hidden;' +
+    'background:var(--squisq-presentation-bg,var(--squisq-bg,#f5f5f5));}';
   doc.head.appendChild(frameStyle);
 
   const root = doc.createElement('div');
   root.id = 'squisq-presentation-root';
+  root.className = 'squisq-editor-shell squisq-presentation-root';
+  root.dataset.theme = colorScheme;
+  copyCustomProperties(sourceRoot, root);
+  root.style.setProperty('--squisq-presentation-bg', presentationBackground);
   doc.body.appendChild(root);
   return root;
 }
@@ -126,6 +151,7 @@ export function PresentationModeProvider({
   allowFullscreen = true,
 }: PresentationModeProviderProps) {
   const { activeView, colorScheme, doc } = useEditorContext();
+  const { activeTheme } = usePreviewSettings();
   const popupNameId = useId().replace(/[^a-zA-Z0-9_-]/g, '');
   const [selectedTarget, setSelectedTarget] = useState<PresentationTarget>('control');
   const [activeTarget, setActiveTarget] = useState<PresentationTarget | null>(null);
@@ -183,12 +209,12 @@ export function PresentationModeProvider({
           await ownerDocument.exitFullscreen();
         } catch {
           if (ownerDocument.fullscreenElement === root) {
-            setError('The browser could not exit full screen. Press Escape to leave it.');
+            setError('Could not exit full screen. Press Escape to leave it.');
             return;
           }
         }
         if (ownerDocument.fullscreenElement === root) {
-          setError('The browser is still in full screen. Press Escape to leave it.');
+          setError('Still in full screen. Press Escape to leave it.');
           return;
         }
       }
@@ -211,16 +237,18 @@ export function PresentationModeProvider({
     if (selectedTarget === 'fullscreen') {
       if (!allowFullscreen) return;
       if (typeof root.requestFullscreen !== 'function') {
-        setError('Browser full screen is not available here.');
+        setError('Full screen is unavailable here.');
         return;
       }
       try {
-        // Keep this call directly in the user-initiated click path: browsers
+        // Keep this call directly in the user-initiated click path: hosts
         // reject fullscreen requests after the activation has been yielded.
-        await root.requestFullscreen();
+        // Hiding navigation asks Chromium (including Electron) for the complete
+        // OS display instead of a browser-chrome-constrained presentation.
+        await root.requestFullscreen({ navigationUI: 'hide' });
         setActiveTarget('fullscreen');
       } catch {
-        setError('The browser could not enter full screen.');
+        setError('Could not enter full screen.');
       }
       return;
     }
@@ -241,8 +269,10 @@ export function PresentationModeProvider({
       if (!popup) throw new Error('Popup blocked');
       const nextRoot = preparePopupDocument(
         popup,
-        root.ownerDocument,
+        root,
         presentationTitle(doc?.frontmatter?.title),
+        colorScheme,
+        activeTheme.colors.background,
       );
       popupRef.current = popup;
       setPopupRoot(nextRoot);
@@ -271,6 +301,8 @@ export function PresentationModeProvider({
   }, [
     allowFullscreen,
     allowWindow,
+    activeTheme.colors.background,
+    colorScheme,
     doc?.frontmatter?.title,
     popupNameId,
     releasePopup,
@@ -398,10 +430,18 @@ export function PresentationModeProvider({
     ],
   );
 
+  const presentationThemeStyle = {
+    '--squisq-presentation-control-bg': activeTheme.colors.backgroundLight,
+    '--squisq-presentation-control-text': activeTheme.colors.text,
+    '--squisq-presentation-control-border': activeTheme.colors.primary,
+  } as CSSProperties;
+
   const exitButton = activeTarget ? (
     <button
       type="button"
       className="squisq-presentation-exit"
+      data-theme={colorScheme}
+      style={presentationThemeStyle}
       onClick={() => void stop()}
       autoFocus={activeTarget === 'control' || activeTarget === 'fullscreen'}
       aria-label="Exit presentation mode"
@@ -439,8 +479,8 @@ const PRESENTATION_OPTIONS: readonly {
 }[] = [
   {
     target: 'control',
-    label: 'Fill Squisq',
-    summary: 'Use the entire Squisq control.',
+    label: 'Fill canvas',
+    summary: 'Use the entire app canvas.',
     icon: 'fa-solid fa-window-maximize',
   },
   {
@@ -451,8 +491,8 @@ const PRESENTATION_OPTIONS: readonly {
   },
   {
     target: 'fullscreen',
-    label: 'Browser full screen',
-    summary: 'Use the browser full-screen display.',
+    label: 'Full screen',
+    summary: 'Use the entire OS screen.',
     icon: 'fa-solid fa-expand',
   },
 ];
@@ -633,7 +673,7 @@ export function PresentationModeControl() {
                         {option.label}
                       </span>
                       <span className="squisq-use-mode-menu-summary squisq-presentation-menu-summary">
-                        {disabled ? 'Browser full screen is unavailable.' : option.summary}
+                        {disabled ? 'Full screen is unavailable.' : option.summary}
                       </span>
                     </span>
                     <span

@@ -24,7 +24,9 @@
   border: 1px solid var(--squisq-border, #e2e8f0);
   border-radius: 8px;
   overflow: hidden;
-  background: var(--squisq-surface, #ffffff);
+  /* --squisq-surface is optional; --squisq-bg is the editor's canonical
+     light/dark canvas token and must win before the light fallback. */
+  background: var(--squisq-surface, var(--squisq-bg, #ffffff));
 }
 
 .squisq-diagram-canvas {
@@ -148,7 +150,7 @@
   position: relative;
   flex: 1;
   margin: 24px;
-  background: var(--squisq-surface, #ffffff);
+  background: var(--squisq-surface, var(--squisq-bg, #ffffff));
   border-radius: 12px;
   overflow: hidden;
   box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);

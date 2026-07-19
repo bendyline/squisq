@@ -35,12 +35,15 @@ test('a completed swipe does not restore the outgoing slide during the destinati
   await page.mouse.move(box.x + box.width * 0.3, y, { steps: 5 });
   await page.mouse.up();
 
-  await expect(counter).toHaveText(destinationLabel);
+  // A Famous Quote is the slide immediately after The Big Number. Assert the
+  // transient entrance state first so waiting on the counter cannot consume
+  // the short animation window.
   await expect(
     player.locator(
-      '.doc-player__block--active [data-block-id="honey-never-spoils"].transition-fade-enter',
+      '.doc-player__block--active [data-block-id="a-famous-quote"].transition-fade-enter',
     ),
   ).toBeAttached();
+  await expect(counter).toHaveText(destinationLabel);
   await expect(player.locator('.doc-player__block--previous')).toHaveCount(0);
   await expect(player.locator('.doc-player__viewport')).not.toContainText('42%');
 });

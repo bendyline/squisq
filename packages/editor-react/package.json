@@ -116,6 +116,8 @@
     "typescript": "5.9.3"
   },
   "sideEffects": [
-    "**/*.css"
+    "**/*.css",
+    "**/monacoFeatures*",
+    "**/monacoSuggestions*"
   ]
 }

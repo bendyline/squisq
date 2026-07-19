@@ -370,7 +370,64 @@ describe('<EditorShell> instance boundaries', () => {
   });
 });
 
+describe('<EditorShell> hostMode', () => {
+  it('keeps chat embeds in Write view without rendering view tabs', () => {
+    const { container } = render(
+      <EditorShell
+        initialMarkdown="Chat draft"
+        initialView="raw"
+        hostMode="chat"
+        toolbarSlotRight={<button type="button">Send</button>}
+      />,
+    );
+
+    const shell = container.querySelector<HTMLElement>('.squisq-editor-shell')!;
+    expect(shell.dataset.hostMode).toBe('chat');
+    expect(within(shell).getByTestId('wysiwyg-editor-stub')).toBeTruthy();
+    expect(within(shell).queryByRole('tab', { name: /Write/ })).toBeNull();
+    expect(within(shell).queryByRole('tab', { name: /Source/ })).toBeNull();
+    expect(within(shell).queryByRole('button', { name: 'Custom layouts' })).toBeNull();
+    expect(within(shell).queryByRole('button', { name: 'Transform document' })).toBeNull();
+    expect(within(shell).queryByRole('button', { name: 'View options' })).toBeNull();
+    expect(within(shell).queryByRole('button', { name: 'Document settings' })).toBeNull();
+
+    fireEvent.keyDown(within(shell).getByTestId('wysiwyg-editor-stub'), {
+      key: '2',
+      ctrlKey: true,
+    });
+    expect(within(shell).getByTestId('wysiwyg-editor-stub')).toBeTruthy();
+    expect(within(shell).queryByTestId('raw-editor-stub')).toBeNull();
+    expect(within(shell).getByRole('button', { name: 'Send' })).toBeTruthy();
+  });
+});
+
 describe('<EditorShell> Files badge', () => {
+  it('opens the recorder dialog from the Files panel Record button', async () => {
+    render(
+      <EditorShell initialMarkdown="# hi" initialView="raw" mediaProvider={mediaProviderWith(0)} />,
+    );
+
+    fireEvent.click(await screen.findByLabelText('Toggle Files panel'));
+    fireEvent.click(await screen.findByRole('button', { name: 'Record media' }));
+
+    expect(screen.getByRole('dialog', { name: 'Record media' })).toBeTruthy();
+  });
+
+  it('hides the Files panel Record button when the host disables recording', async () => {
+    render(
+      <EditorShell
+        initialMarkdown="# hi"
+        initialView="raw"
+        mediaProvider={mediaProviderWith(0)}
+        allowRecording={false}
+      />,
+    );
+
+    fireEvent.click(await screen.findByLabelText('Toggle Files panel'));
+
+    expect(screen.queryByRole('button', { name: 'Record media' })).toBeNull();
+  });
+
   it('shows the mediaProvider file count on the paperclip button', async () => {
     const { container } = render(
       <EditorShell initialMarkdown="# hi" initialView="raw" mediaProvider={mediaProviderWith(3)} />,
@@ -593,6 +650,23 @@ describe('<Toolbar> Files badge', () => {
 });
 
 describe('<Toolbar> Insert menu', () => {
+  it('closes on global Escape and returns focus to the Insert trigger', async () => {
+    render(
+      <EditorProvider initialMarkdown="Intro" initialView="raw" allowRecording={false}>
+        <Toolbar />
+      </EditorProvider>,
+    );
+
+    const trigger = screen.getByLabelText('Insert');
+    fireEvent.click(trigger);
+    expect(await screen.findByRole('menu')).toBeTruthy();
+
+    fireEvent.keyDown(document, { key: 'Escape' });
+
+    expect(screen.queryByRole('menu')).toBeNull();
+    expect(document.activeElement).toBe(trigger);
+  });
+
   it('opens media recording from the Insert menu instead of the main toolbar', async () => {
     render(
       <EditorProvider

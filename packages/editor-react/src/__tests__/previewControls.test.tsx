@@ -4,7 +4,12 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { compileTheme } from '@bendyline/squisq/schemas';
-import type { CustomTemplateDefinition, Theme } from '@bendyline/squisq/schemas';
+import type {
+  CustomTemplateDefinition,
+  Doc,
+  Theme,
+  ViewportPreset,
+} from '@bendyline/squisq/schemas';
 import { setFrontmatterValues } from '@bendyline/squisq/markdown';
 import {
   writeCustomThemesToFrontmatter,
@@ -37,6 +42,39 @@ function ModeProbe() {
     >
       {activeDisplayMode}
     </div>
+  );
+}
+
+function ViewportProbe() {
+  const { activePreset, setSelectedPreset, setSelectedDisplayMode } = usePreviewSettings();
+  return (
+    <>
+      <button type="button" onClick={() => setSelectedDisplayMode('page')}>
+        Choose document
+      </button>
+      <button type="button" onClick={() => setSelectedDisplayMode('video')}>
+        Choose video
+      </button>
+      <button type="button" onClick={() => setSelectedPreset('square')}>
+        Choose square
+      </button>
+      <div data-testid="active-preset">{activePreset}</div>
+    </>
+  );
+}
+
+function ViewportHarness({
+  defaultViewportPreset,
+  docOverride,
+}: {
+  defaultViewportPreset?: ViewportPreset;
+  docOverride?: Doc;
+}) {
+  const { doc } = useEditorContext();
+  return (
+    <PreviewSettingsProvider doc={docOverride ?? doc} defaultViewportPreset={defaultViewportPreset}>
+      <ViewportProbe />
+    </PreviewSettingsProvider>
   );
 }
 
@@ -118,6 +156,32 @@ function CoverSlideHarness() {
   return (
     <PreviewSettingsProvider doc={doc}>
       <CoverSlideProbe />
+    </PreviewSettingsProvider>
+  );
+}
+
+function VideoLoopProbe() {
+  const { activeVideoLoop, setVideoLoopEnabled } = usePreviewSettings();
+  const { markdownSource } = useEditorContext();
+  return (
+    <>
+      <button type="button" onClick={() => setVideoLoopEnabled(true)}>
+        Enable video loop
+      </button>
+      <button type="button" onClick={() => setVideoLoopEnabled(false)}>
+        Disable video loop
+      </button>
+      <div data-testid="active-video-loop">{String(activeVideoLoop)}</div>
+      <pre data-testid="markdown-source">{markdownSource}</pre>
+    </>
+  );
+}
+
+function VideoLoopHarness() {
+  const { doc } = useEditorContext();
+  return (
+    <PreviewSettingsProvider doc={doc}>
+      <VideoLoopProbe />
     </PreviewSettingsProvider>
   );
 }
@@ -268,6 +332,49 @@ describe('PreviewModeSwitch', () => {
   });
 });
 
+describe('preview viewport default', () => {
+  it('follows a responsive host default until the user selects a format', () => {
+    const renderHarness = (defaultViewportPreset: ViewportPreset) => (
+      <EditorProvider initialMarkdown="# Hello">
+        <ViewportHarness defaultViewportPreset={defaultViewportPreset} />
+      </EditorProvider>
+    );
+    const { rerender } = render(renderHarness('portrait'));
+
+    expect(screen.getByTestId('active-preset').textContent).toBe('portrait');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Choose document' }));
+    expect(screen.getByTestId('active-preset').textContent).toBe('landscape');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Choose video' }));
+    expect(screen.getByTestId('active-preset').textContent).toBe('portrait');
+
+    rerender(renderHarness('landscape'));
+    expect(screen.getByTestId('active-preset').textContent).toBe('landscape');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Choose square' }));
+    rerender(renderHarness('portrait'));
+    expect(screen.getByTestId('active-preset').textContent).toBe('square');
+  });
+
+  it('keeps the document viewport authoritative over the host default', () => {
+    const doc: Doc = {
+      articleId: 'test',
+      duration: 0,
+      blocks: [],
+      audio: { segments: [] },
+      frontmatter: { 'document-render-as': 'landscape' },
+    };
+    render(
+      <EditorProvider initialMarkdown="# Hello">
+        <ViewportHarness defaultViewportPreset="portrait" docOverride={doc} />
+      </EditorProvider>,
+    );
+
+    expect(screen.getByTestId('active-preset').textContent).toBe('landscape');
+  });
+});
+
 describe('cover-slide frontmatter', () => {
   it('writes the non-default as a boolean and removes the default value', async () => {
     render(
@@ -314,6 +421,35 @@ describe('cover-slide frontmatter', () => {
       expect(source).toContain('title: Hello');
     });
     expect(screen.getByTestId('active-cover-slide').textContent).toBe('true');
+  });
+});
+
+describe('video-loop frontmatter', () => {
+  it('persists enabled looping and removes the default disabled value', async () => {
+    render(
+      <EditorProvider initialMarkdown="# Hello">
+        <VideoLoopHarness />
+      </EditorProvider>,
+    );
+
+    expect(screen.getByTestId('active-video-loop').textContent).toBe('false');
+    fireEvent.click(screen.getByRole('button', { name: 'Enable video loop' }));
+
+    await waitFor(() => {
+      const source = screen.getByTestId('markdown-source').textContent ?? '';
+      expect(source).toContain('squisq-video-loop: true');
+      expect(source).not.toContain('squisq-video-loop: "true"');
+    });
+    expect(screen.getByTestId('active-video-loop').textContent).toBe('true');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Disable video loop' }));
+
+    await waitFor(() => {
+      const source = screen.getByTestId('markdown-source').textContent ?? '';
+      expect(source).not.toContain('squisq-video-loop');
+      expect(source).not.toContain('---');
+    });
+    expect(screen.getByTestId('active-video-loop').textContent).toBe('false');
   });
 });
 
@@ -364,6 +500,31 @@ title: Hello
 });
 
 describe('PreviewToolbarControls', () => {
+  it('shows Loop only in Video mode', () => {
+    const originalResizeObserver = globalThis.ResizeObserver;
+    class ResizeObserverStub implements ResizeObserver {
+      observe() {}
+      unobserve() {}
+      disconnect() {}
+    }
+
+    globalThis.ResizeObserver = ResizeObserverStub;
+    try {
+      renderPreviewToolbar('# Hello');
+      expect(screen.queryByText('Loop')).toBeNull();
+
+      cleanup();
+      renderPreviewToolbar('---\ndisplay-mode: video\n---\n\n# Hello');
+      expect(screen.getAllByText('Loop').length).toBeGreaterThan(0);
+    } finally {
+      if (originalResizeObserver) {
+        globalThis.ResizeObserver = originalResizeObserver;
+      } else {
+        Reflect.deleteProperty(globalThis, 'ResizeObserver');
+      }
+    }
+  });
+
   it('presents transforms as summarization without implying the source is changed', () => {
     const originalResizeObserver = globalThis.ResizeObserver;
     class ResizeObserverStub implements ResizeObserver {

@@ -584,6 +584,29 @@ export function formatBlockScalar(value: string): string {
 
 const FRONTMATTER_BLOCK_RE = /^---\r?\n([\s\S]*?)\r?\n---(\r?\n)?/;
 
+/** A frontmatter block with nothing between the fences (`---\n---`). */
+const EMPTY_FRONTMATTER_BLOCK_RE = /^---\r?\n---(\r?\n)?/;
+
+/**
+ * Split a markdown source into its raw leading YAML frontmatter block and
+ * the body that follows.
+ *
+ * `frontmatter` is the exact source bytes of the block — both `---` fence
+ * lines and the trailing newline — or `null` when the source does not start
+ * with one. Unlike {@link parseFrontmatter}, nothing is interpreted:
+ * comment-only and empty blocks are preserved verbatim, which is what
+ * source-level rewriters (`cleanupMarkdownSource`) need to keep authored
+ * YAML byte-identical.
+ */
+export function splitFrontmatterBlock(source: string): {
+  frontmatter: string | null;
+  body: string;
+} {
+  const match = FRONTMATTER_BLOCK_RE.exec(source) ?? EMPTY_FRONTMATTER_BLOCK_RE.exec(source);
+  if (!match) return { frontmatter: null, body: source };
+  return { frontmatter: match[0], body: source.slice(match[0].length) };
+}
+
 /** Quote a frontmatter scalar so it round-trips cleanly through `parseFrontmatter`. */
 export function formatFrontmatterValue(value: string | number | boolean): string {
   if (typeof value === 'boolean' || typeof value === 'number') return String(value);

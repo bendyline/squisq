@@ -46,6 +46,7 @@ vi.mock('@bendyline/squisq-react', async (importOriginal) => {
         data-audience={props.audioController ? 'true' : 'false'}
         data-controls={props.showControls ? 'true' : 'false'}
         data-cover={String(props.coverVisible)}
+        data-loop={String(props.loop)}
       />
     );
   }
@@ -85,6 +86,21 @@ afterEach(() => {
 });
 
 describe('PreviewPanel presentation audience', () => {
+  it('passes the persisted Video loop setting to the primary player', async () => {
+    render(
+      <EditorProvider
+        initialMarkdown={'---\ndisplay-mode: video\nsquisq-video-loop: true\n---\n\n# Loop me'}
+        initialView="preview"
+      >
+        <Harness />
+      </EditorProvider>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId('mock-doc-player').dataset.loop).toBe('true');
+    });
+  });
+
   it('renders a clockless, controlled audience follower in the popup', async () => {
     const popupDocument = document.implementation.createHTMLDocument('');
     const popupEvents = new EventTarget();

@@ -23,6 +23,7 @@ import { useEditorContext, type EditorView } from './EditorContext';
 import { VersionHistoryPanel } from './VersionHistoryPanel';
 import { RecorderEntry } from './RecorderEntry';
 import { ViewMenuPanel } from './ViewMenuPanel';
+import { TransformMenu } from './TransformMenu';
 import {
   TemplatePicker,
   TEMPLATE_NAMES,
@@ -69,6 +70,8 @@ import {
 import { MermaidDiagramTypeThumbnail } from './mermaid/MermaidDiagramTypeThumbnail';
 import { FindToolbar } from './find/FindToolbar';
 import { platformShortcut } from './platformShortcuts';
+import { useEscapeDismissal } from './useEscapeDismissal';
+import type { EditorHostMode } from './editorHostMode';
 
 const VIEWS: { id: EditorView; label: string; shortLabel?: string; shortcutKey: string }[] = [
   { id: 'wysiwyg', label: 'Write', shortcutKey: '1' },
@@ -103,11 +106,18 @@ export interface ToolbarProps {
    * editing free-form prompts — can pass false to suppress it.
    */
   showPlayTab?: boolean;
+  /**
+   * Semantic embedding mode inherited from EditorShell. Chat mode exposes
+   * only the Write surface, which suppresses the view tabs and their
+   * keyboard-switch targets. Defaults to `'document'`.
+   */
+  hostMode?: EditorHostMode;
 }
 
 import {
   BUTTONS,
   BUTTON_INDEX_BY_ID,
+  CHART_TYPE_MENU_WIDTH,
   CODE_SNIPPET_MENU_WIDTH,
   CONVERT_BUTTONS,
   fileCountBadge,
@@ -131,6 +141,7 @@ import {
 import {
   DIAGRAM_STARTER_MARKDOWN,
   insertAsciiDiagramBlock,
+  insertChartBlock,
   insertFenceBlock,
   insertLayoutBlock,
   insertMermaidDiagramBlock,
@@ -142,6 +153,13 @@ import {
   TIMELINE_STARTER_MARKDOWN,
   TREE_STARTER_MARKDOWN,
 } from './toolbar/sceneBlockInserts';
+import {
+  CHART_TYPES,
+  chartStarterMarkdown,
+  DEFAULT_CHART_TYPE,
+  type ChartTypeEntry,
+} from './chart/chartTypes';
+import { ChartTypeThumbnail } from './chart/ChartTypeThumbnail';
 
 function findBlockBySourceLine(blocks: readonly Block[], lineNumber: number): Block | null {
   for (const block of blocks) {
@@ -196,6 +214,7 @@ export function Toolbar({
   slotAfterActions,
   slotRight,
   showPlayTab = true,
+  hostMode = 'document',
 }: ToolbarProps) {
   const {
     activeView,
@@ -229,9 +248,11 @@ export function Toolbar({
   const formattingEditor = activeSceneText?.editor ?? tiptapEditor;
   const sceneTextLevel = activeSceneText?.level ?? null;
   const isCodeMode = editorMode === 'code';
+  const showDocumentChrome = !isCodeMode && hostMode !== 'chat';
   // In code mode only the raw view is meaningful; the WYSIWYG and Preview
   // surfaces aren't mounted, so hide their tabs.
   const visibleViews = VIEWS.filter((v) => {
+    if (hostMode === 'chat') return v.id === 'wysiwyg';
     if (isCodeMode) return v.id === 'raw';
     if (v.id === 'preview' && !showPlayTab) return false;
     return true;
@@ -318,9 +339,12 @@ export function Toolbar({
   // Insert menu — toolbar-anchored dropdown that replaces the individual media-group
   // buttons with a single "+" button. Portaled out to avoid overflow:hidden clipping.
   const insertMenuButtonRef = useRef<HTMLButtonElement | null>(null);
+  const insertMenuReturnFocusRef = useRef<HTMLElement | null>(null);
+  const overflowTriggerRef = useRef<HTMLButtonElement>(null);
   const insertMenuRef = useRef<HTMLDivElement | null>(null);
   const codeSnippetMenuRef = useRef<HTMLDivElement | null>(null);
   const mermaidTypeMenuRef = useRef<HTMLDivElement | null>(null);
+  const chartTypeMenuRef = useRef<HTMLDivElement | null>(null);
   const [insertMenuAnchor, setInsertMenuAnchor] = useState<{ top: number; left: number } | null>(
     null,
   );
@@ -332,10 +356,17 @@ export function Toolbar({
     top: number;
     left: number;
   } | null>(null);
+  const [chartTypeMenuAnchor, setChartTypeMenuAnchor] = useState<{
+    top: number;
+    left: number;
+  } | null>(null);
 
   const openInsertMenu = useCallback((trigger?: HTMLElement | null) => {
     const btn = trigger ?? insertMenuButtonRef.current;
     if (!btn) return;
+    insertMenuReturnFocusRef.current = trigger
+      ? overflowTriggerRef.current
+      : insertMenuButtonRef.current;
     const rect = btn.getBoundingClientRect();
     const gap = 4;
     const margin = 8;
@@ -347,6 +378,7 @@ export function Toolbar({
     setInsertMenuAnchor({ top: rect.bottom + gap, left });
     setCodeSnippetMenuAnchor(null);
     setMermaidTypeMenuAnchor(null);
+    setChartTypeMenuAnchor(null);
   }, []);
 
   const openCodeSnippetMenu = useCallback((trigger: HTMLElement) => {
@@ -363,6 +395,7 @@ export function Toolbar({
     const top = Math.max(margin, Math.min(rect.top, vh - maxMenuHeight - margin));
     setCodeSnippetMenuAnchor({ top, left });
     setMermaidTypeMenuAnchor(null);
+    setChartTypeMenuAnchor(null);
   }, []);
 
   const openMermaidTypeMenu = useCallback((trigger: HTMLElement) => {
@@ -379,12 +412,31 @@ export function Toolbar({
     const top = Math.max(margin, Math.min(rect.top, vh - maxMenuHeight - margin));
     setMermaidTypeMenuAnchor({ top, left });
     setCodeSnippetMenuAnchor(null);
+    setChartTypeMenuAnchor(null);
+  }, []);
+
+  const openChartTypeMenu = useCallback((trigger: HTMLElement) => {
+    const rect = trigger.getBoundingClientRect();
+    const gap = 4;
+    const margin = 8;
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
+    let left = rect.right + gap;
+    if (left + CHART_TYPE_MENU_WIDTH + margin > vw) {
+      left = Math.max(margin, rect.left - CHART_TYPE_MENU_WIDTH - gap);
+    }
+    const maxMenuHeight = Math.min(600, vh - margin * 2);
+    const top = Math.max(margin, Math.min(rect.top, vh - maxMenuHeight - margin));
+    setChartTypeMenuAnchor({ top, left });
+    setCodeSnippetMenuAnchor(null);
+    setMermaidTypeMenuAnchor(null);
   }, []);
 
   const closeInsertMenu = useCallback(() => {
     setInsertMenuAnchor(null);
     setCodeSnippetMenuAnchor(null);
     setMermaidTypeMenuAnchor(null);
+    setChartTypeMenuAnchor(null);
   }, []);
 
   // ── Overflow detection ────────────────────────────────
@@ -397,6 +449,9 @@ export function Toolbar({
   const [clippedContextualKey, setClippedContextualKey] = useState('');
   const [showOverflow, setShowOverflow] = useState(false);
   const overflowRef = useRef<HTMLDivElement>(null);
+
+  useEscapeDismissal(showOverflow, () => setShowOverflow(false), overflowTriggerRef);
+  useEscapeDismissal(insertMenuAnchor !== null, closeInsertMenu, insertMenuReturnFocusRef);
 
   // Document settings (frontmatter) dialog
   const [showDocSettings, setShowDocSettings] = useState(false);
@@ -506,6 +561,7 @@ export function Toolbar({
       if (insertMenuRef.current?.contains(e.target as Node)) return;
       if (codeSnippetMenuRef.current?.contains(e.target as Node)) return;
       if (mermaidTypeMenuRef.current?.contains(e.target as Node)) return;
+      if (chartTypeMenuRef.current?.contains(e.target as Node)) return;
       closeInsertMenu();
     };
     document.addEventListener('mousedown', handleClick);
@@ -630,6 +686,14 @@ export function Toolbar({
           break;
         case 'tasklist':
           insertTaskList(tiptapEditor);
+          break;
+        case 'chart':
+          // Overflow-menu path (no flyout): insert the default chart starter.
+          insertChartBlock(tiptapEditor, {
+            template: DEFAULT_CHART_TYPE.id,
+            headingText: DEFAULT_CHART_TYPE.headingText,
+            table: DEFAULT_CHART_TYPE.table,
+          });
           break;
         case 'diagram':
           // Diagrams are ASCII-art code fences; the AsciiDiagramExtension
@@ -805,6 +869,12 @@ export function Toolbar({
             newCursorOffset = replacement.length;
             break;
           }
+          case 'chart': {
+            // Default chart starter: annotated heading + sample table.
+            replacement = chartStarterMarkdown(DEFAULT_CHART_TYPE);
+            newCursorOffset = replacement.length;
+            break;
+          }
           case 'diagram': {
             // A diagram is an ASCII-art code fence; the WYSIWYG view
             // renders its editable canvas, preview renders it as a slide.
@@ -904,6 +974,9 @@ export function Toolbar({
           case 'tasklist':
             insertion = `\n${TASK_LIST_MARKDOWN}\n`;
             break;
+          case 'chart':
+            insertion = chartStarterMarkdown(DEFAULT_CHART_TYPE);
+            break;
           case 'diagram':
             insertion = DIAGRAM_STARTER_MARKDOWN;
             break;
@@ -965,6 +1038,40 @@ export function Toolbar({
       setMarkdownSource(
         markdownSource + codeSnippetMarkdown(language.fenceLanguage, language.starter),
       );
+      closeInsertMenu();
+    },
+    [activeView, closeInsertMenu, markdownSource, monacoEditor, setMarkdownSource, tiptapEditor],
+  );
+
+  const handleChartTypeInsert = useCallback(
+    (entry: ChartTypeEntry) => {
+      if (activeView === 'wysiwyg' && tiptapEditor) {
+        insertChartBlock(tiptapEditor, {
+          template: entry.id,
+          headingText: entry.headingText,
+          table: entry.table,
+        });
+        closeInsertMenu();
+        return;
+      }
+
+      const markdown = chartStarterMarkdown(entry);
+      if (monacoEditor) {
+        const selection = monacoEditor.getSelection();
+        const model = monacoEditor.getModel();
+        if (!selection || !model) return;
+        monacoEditor.executeEdits('toolbar-chart', [{ range: selection, text: markdown }]);
+        const endPosition = model.getPositionAt(
+          model.getOffsetAt(selection.getStartPosition()) + markdown.length,
+        );
+        monacoEditor.setPosition(endPosition);
+        monacoEditor.revealPositionInCenterIfOutsideViewport(endPosition);
+        monacoEditor.focus();
+        closeInsertMenu();
+        return;
+      }
+
+      setMarkdownSource(markdownSource + markdown);
       closeInsertMenu();
     },
     [activeView, closeInsertMenu, markdownSource, monacoEditor, setMarkdownSource, tiptapEditor],
@@ -1972,6 +2079,7 @@ export function Toolbar({
       {showToolbarOverflow && (
         <div className="squisq-toolbar-overflow" ref={overflowRef}>
           <button
+            ref={overflowTriggerRef}
             className={`squisq-toolbar-button squisq-toolbar-overflow-trigger${showOverflow ? ' squisq-toolbar-button--active' : ''}`}
             data-tooltip="More actions"
             onClick={() => setShowOverflow((v) => !v)}
@@ -2155,7 +2263,7 @@ export function Toolbar({
       {allowRecording && !isCodeMode && mediaProvider && (
         <RecorderEntry open={recorderOpen} onOpenChange={setRecorderOpen} showTrigger={false} />
       )}
-      {!isCodeMode && (
+      {showDocumentChrome && (
         <button
           type="button"
           className={`squisq-toolbar-button${showLayoutManager ? ' squisq-toolbar-button--active' : ''}`}
@@ -2166,8 +2274,9 @@ export function Toolbar({
           <Icon icon="fa-solid fa-shapes" />
         </button>
       )}
-      {!isCodeMode && <ViewMenuPanel />}
-      {!isCodeMode && (
+      {showDocumentChrome && <TransformMenu />}
+      {showDocumentChrome && <ViewMenuPanel />}
+      {showDocumentChrome && (
         <button
           type="button"
           className="squisq-toolbar-button"
@@ -2199,7 +2308,7 @@ export function Toolbar({
       {slotRight}
 
       {/* Document settings (frontmatter) dialog */}
-      {showDocSettings && (
+      {showDocumentChrome && showDocSettings && (
         <DocumentSettingsDialog
           markdownSource={markdownSource}
           onSave={(next) => {
@@ -2211,7 +2320,9 @@ export function Toolbar({
       )}
 
       {/* Custom layout manager — full-window list + designer dialog. */}
-      {showLayoutManager && <CustomLayoutManager onClose={() => setShowLayoutManager(false)} />}
+      {showDocumentChrome && showLayoutManager && (
+        <CustomLayoutManager onClose={() => setShowLayoutManager(false)} />
+      )}
 
       {/* Link insert/edit dialog — shared by WYSIWYG and Raw views. */}
       {linkDialog && (
@@ -2271,6 +2382,11 @@ export function Toolbar({
               const stripped = btn.title.replace(/^Insert\s+/i, '');
               const label = stripped.charAt(0).toUpperCase() + stripped.slice(1);
               const hasMermaidTypeMenu = btn.id === 'complexdiagram';
+              const hasChartTypeMenu = btn.id === 'chart';
+              const hasSubmenu = hasMermaidTypeMenu || hasChartTypeMenu;
+              const submenuOpen = hasMermaidTypeMenu
+                ? mermaidTypeMenuAnchor !== null
+                : chartTypeMenuAnchor !== null;
               return (
                 <button
                   key={btn.id}
@@ -2283,16 +2399,21 @@ export function Toolbar({
                       else openMermaidTypeMenu(event.currentTarget);
                       return;
                     }
+                    if (hasChartTypeMenu) {
+                      if (chartTypeMenuAnchor) setChartTypeMenuAnchor(null);
+                      else openChartTypeMenu(event.currentTarget);
+                      return;
+                    }
                     handleAction(btn.id);
                     if (btn.id !== 'emoji') closeInsertMenu();
                   }}
                   role="menuitem"
-                  aria-haspopup={hasMermaidTypeMenu ? 'menu' : undefined}
-                  aria-expanded={hasMermaidTypeMenu ? mermaidTypeMenuAnchor !== null : undefined}
+                  aria-haspopup={hasSubmenu ? 'menu' : undefined}
+                  aria-expanded={hasSubmenu ? submenuOpen : undefined}
                 >
                   <span className="squisq-toolbar-overflow-icon">{buttonIcon(btn)}</span>
                   <span>{label}</span>
-                  {hasMermaidTypeMenu && <Icon icon="fa-solid fa-chevron-right" />}
+                  {hasSubmenu && <Icon icon="fa-solid fa-chevron-right" />}
                 </button>
               );
             })}
@@ -2386,6 +2507,54 @@ export function Toolbar({
                 </div>
               </section>
             ))}
+          </div>,
+          document.body,
+        )}
+
+      {chartTypeMenuAnchor &&
+        createPortal(
+          <div
+            ref={chartTypeMenuRef}
+            className="squisq-insert-menu squisq-mermaid-type-menu squisq-chart-type-menu"
+            data-theme={colorScheme}
+            style={{
+              position: 'fixed',
+              top: chartTypeMenuAnchor.top,
+              left: chartTypeMenuAnchor.left,
+              width: CHART_TYPE_MENU_WIDTH,
+            }}
+            role="menu"
+            aria-label="Chart type"
+          >
+            <div className="squisq-mermaid-type-menu-heading">
+              <strong>Chart</strong>
+              <span>
+                Choose a chart type. The starter table becomes the chart&apos;s data — edit it to
+                update the chart.
+              </span>
+            </div>
+            <section className="squisq-mermaid-type-section">
+              <div className="squisq-mermaid-type-grid">
+                {CHART_TYPES.map((entry) => (
+                  <button
+                    key={entry.id}
+                    type="button"
+                    className="squisq-mermaid-type-card"
+                    onClick={() => handleChartTypeInsert(entry)}
+                    role="menuitem"
+                    aria-label={`Insert ${entry.label} chart`}
+                  >
+                    <span className="squisq-mermaid-type-thumbnail">
+                      <ChartTypeThumbnail preview={entry.preview} />
+                    </span>
+                    <span className="squisq-mermaid-type-copy">
+                      <span className="squisq-mermaid-type-title">{entry.label}</span>
+                      <span className="squisq-mermaid-type-description">{entry.description}</span>
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </section>
           </div>,
           document.body,
         )}

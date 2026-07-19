@@ -1,5 +1,6 @@
 export { EditorShell } from '../EditorShell.js';
 export type { EditorShellProps, EditorColorScheme } from '../EditorShell.js';
+export type { EditorHostMode } from '../editorHostMode.js';
 export { EditorProvider, useEditorContext } from '../EditorContext.js';
 export type {
   EditorView,

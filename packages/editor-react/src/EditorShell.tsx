@@ -29,6 +29,11 @@ import { CodeContextZones } from './codeContext/CodeContextZones';
 import type { CodeContext } from './codeContext/types';
 import { BlockCardView } from './BlockCardView';
 import { TimelineTrack } from './TimelineTrack';
+import { TimelineVideoPanel } from './TimelineVideoPanel';
+import { TimelineCompositionPanel } from './TimelineCompositionPanel';
+import { TimelineToolbar } from './TimelineToolbar';
+import { useTimelineClock } from './useTimelineClock';
+import { collectEmbeddedVideoSchedule } from './embeddedMedia';
 import { PreviewPanel } from './PreviewPanel';
 import { ImageViewer } from './ImageViewer';
 import { ImageEditor } from './ImageEditor';
@@ -46,6 +51,7 @@ import {
 } from './print/PrintMode';
 import { CustomThemeProvider, useDocCustomThemes } from './customThemes';
 import { MediaBin } from './MediaBin';
+import { RecorderEntry } from './RecorderEntry';
 import { DropZoneOverlay } from './DropZoneOverlay';
 import { TooltipLayer } from './Tooltip';
 import { useFileDrop, type DropTarget } from './hooks/useFileDrop';
@@ -60,8 +66,13 @@ import {
   removeMediaReferencesFromMarkdown,
 } from './mediaReferences';
 import { filterVisibleMediaEntries } from './mediaEntries';
-import type { MediaProvider, Theme } from '@bendyline/squisq/schemas';
-import { DARK_SURFACE, LIGHT_SURFACE } from '@bendyline/squisq/schemas';
+import type { MediaProvider, Theme, ViewportPreset } from '@bendyline/squisq/schemas';
+import {
+  DARK_SURFACE,
+  LIGHT_SURFACE,
+  getDocPlaybackDuration,
+  resolveMediaSchedule,
+} from '@bendyline/squisq/schemas';
 import type { ContentContainer } from '@bendyline/squisq/storage';
 import {
   MemoryContentContainer,
@@ -79,15 +90,29 @@ import type {
 import { MediaContext } from '@bendyline/squisq-react';
 import { writeCanvasSettingsStyle, type WriteCanvasSettings } from './writeCanvasSettings';
 import { useModalDialog } from './modal/useModalDialog';
+import type { EditorHostMode } from './editorHostMode';
 
 export type { EditorColorScheme } from './EditorContext';
 
 export interface EditorShellProps {
   /** Initial markdown content */
   initialMarkdown?: string;
-  /** Initial active view */
   /** Initial active view (default: 'wysiwyg') */
   initialView?: EditorView;
+  /**
+   * Semantic mode for the surface embedding the editor. `'document'`
+   * (default) exposes the normal multi-view authoring shell. `'chat'`
+   * starts and stays in Write view through the shell's own controls, hides
+   * the view tabs, and removes document-level layout, transform, view, and
+   * settings controls from the toolbar.
+   */
+  hostMode?: EditorHostMode;
+  /**
+   * Viewport preset used by slideshow/video preview when neither the document
+   * nor the user has selected one. Defaults to landscape. Hosts may update it
+   * responsively; explicit document and user choices remain authoritative.
+   */
+  defaultViewportPreset?: ViewportPreset;
   /** Article ID for Doc generation */
   articleId?: string;
   /** Base path for media URLs in preview */
@@ -196,7 +221,7 @@ export interface EditorShellProps {
    */
   allowPresentationWindow?: boolean;
   /**
-   * Whether Use mode may enter browser full screen. Defaults to true. Disable
+   * Whether Use mode may enter native full screen. Defaults to true. Disable
    * this in embedded hosts whose webview does not support the Fullscreen API.
    */
   allowPresentationFullscreen?: boolean;
@@ -334,6 +359,15 @@ export interface EditorShellProps {
    */
   allowNarrate?: boolean;
   /**
+   * Whether the Write view transparently unwraps hard-wrapped paragraph
+   * prose for editing and re-applies the document's detected wrap
+   * convention when serializing. Defaults to true — without it, a
+   * hard-wrapped document renders one choppy paragraph per physical line
+   * in Write view and the first edit persists that chopped structure.
+   * Pass `false` for literal behavior. Document layout mode only.
+   */
+  preserveSourceWrapping?: boolean;
+  /**
    * Placeholder text shown in the WYSIWYG editor while the document is
    * empty. When omitted, the editor rotates through its own generic
    * "start typing…" prompts; pass a value here to override with copy
@@ -462,6 +496,8 @@ export interface EditorShellProps {
 export function EditorShell({
   initialMarkdown = '',
   initialView = 'wysiwyg',
+  hostMode = 'document',
+  defaultViewportPreset = 'landscape',
   articleId = 'untitled',
   basePath = '/',
   onChange,
@@ -504,6 +540,7 @@ export function EditorShell({
   linkSchemes,
   allowRecording = true,
   allowNarrate = true,
+  preserveSourceWrapping = true,
   placeholder,
   readOnly = false,
   imageSrc,
@@ -537,10 +574,11 @@ export function EditorShell({
   // Show the toggle when explicitly opted in, or when mediaProvider prop was passed at all
   const filesToggleEnabled = showFilesToggle ?? effectiveMediaProvider !== undefined;
 
-  // If the host hides the Play tab but asked for it as the initial view,
-  // fall back to wysiwyg so we don't boot into a tab the user can't leave.
+  // Chat is a single-surface composer: always boot into Write. Otherwise,
+  // if the host hides the Play tab but asked for it as the initial view,
+  // fall back to Write so we don't boot into a tab the user can't leave.
   const effectiveInitialView: EditorView =
-    !showPlayTab && initialView === 'preview' ? 'wysiwyg' : initialView;
+    hostMode === 'chat' || (!showPlayTab && initialView === 'preview') ? 'wysiwyg' : initialView;
 
   return (
     <MediaContext.Provider value={effectiveMediaProvider ?? null}>
@@ -562,6 +600,7 @@ export function EditorShell({
         linkSchemes={linkSchemes}
         allowRecording={allowRecording}
         allowNarrate={allowNarrate}
+        preserveSourceWrapping={preserveSourceWrapping}
         fileName={fileName}
         language={language}
         findMode={findMode}
@@ -577,6 +616,7 @@ export function EditorShell({
       >
         <EditorShellInner
           basePath={basePath}
+          defaultViewportPreset={defaultViewportPreset}
           onChange={onChange}
           onLinkClick={onLinkClick}
           className={className}
@@ -592,6 +632,7 @@ export function EditorShell({
           toolbarSlotRight={toolbarSlotRight}
           statusBarSlotRight={statusBarSlotRight}
           showPlayTab={showPlayTab}
+          hostMode={hostMode}
           allowPresentationWindow={allowPresentationWindow}
           allowPresentationFullscreen={allowPresentationFullscreen}
           allowPrint={allowPrint}
@@ -620,6 +661,7 @@ export function EditorShell({
 
 interface EditorShellInnerProps {
   basePath: string;
+  defaultViewportPreset: ViewportPreset;
   onChange?: (source: string) => void;
   onLinkClick?: (href: string) => boolean | undefined;
   className?: string;
@@ -635,6 +677,7 @@ interface EditorShellInnerProps {
   toolbarSlotRight?: ReactNode;
   statusBarSlotRight?: ReactNode;
   showPlayTab: boolean;
+  hostMode: EditorHostMode;
   allowPresentationWindow: boolean;
   allowPresentationFullscreen: boolean;
   allowPrint: boolean;
@@ -693,6 +736,7 @@ function UseModeProviders({
 
 function EditorShellInner({
   basePath,
+  defaultViewportPreset,
   onChange,
   onLinkClick,
   className,
@@ -708,6 +752,7 @@ function EditorShellInner({
   toolbarSlotRight,
   statusBarSlotRight,
   showPlayTab,
+  hostMode,
   allowPresentationWindow,
   allowPresentationFullscreen,
   allowPrint,
@@ -754,6 +799,7 @@ function EditorShellInner({
     closeImageEdit,
     bumpMediaRevision,
     mediaRevision,
+    allowRecording,
   } = useEditorContext();
   // Dual-catalog custom themes (doc + browser library), mirroring how
   // CustomTemplateProvider is fed. Wraps the preview subtree so the theme
@@ -770,9 +816,27 @@ function EditorShellInner({
     isMarkdownMode && (layoutMode === 'block' || layoutMode === 'timeline') && !isPreview;
   // Timeline mode additionally shows the horizontal timeline track below.
   const isTimelineMode = isMarkdownMode && layoutMode === 'timeline' && !isPreview;
+  const timelineDuration = useMemo(() => (doc ? getDocPlaybackDuration(doc) : 0), [doc]);
+  const timelineSchedule = useMemo(() => (doc ? resolveMediaSchedule(doc) : []), [doc]);
+  const timelineVideoSchedule = useMemo(
+    () =>
+      doc
+        ? [
+            ...timelineSchedule.filter((clip) => clip.kind === 'video'),
+            ...collectEmbeddedVideoSchedule(doc),
+          ]
+        : [],
+    [doc, timelineSchedule],
+  );
+  const timelineClock = useTimelineClock(isTimelineMode ? timelineDuration : 0);
+  const hasTimelineVideo = timelineVideoSchedule.length > 0;
+  const [timelineVideoVisible, setTimelineVideoVisible] = useState(false);
+  const [timelineCompositionVisible, setTimelineCompositionVisible] = useState(false);
+  const timelinePreviewCount = Number(timelineVideoVisible) + Number(timelineCompositionVisible);
   const [showFiles, setShowFiles] = useState(false);
   const [mediaRefreshKey, setMediaRefreshKey] = useState(0);
   const [mediaCount, setMediaCount] = useState(0);
+  const [mediaBinRecorderOpen, setMediaBinRecorderOpen] = useState(false);
   const mediaListRefreshKey = mediaRefreshKey + mediaRevision;
   const usedMediaPaths = useMemo(
     () => collectMediaReferencesFromMarkdown(markdownSource),
@@ -789,6 +853,14 @@ function EditorShellInner({
   }
   const imageEditFallbackContainer = imageEditFallbackContainerRef.current;
   const isDark = colorScheme === 'dark';
+
+  useEffect(() => {
+    if (!isTimelineMode || !hasTimelineVideo) setTimelineVideoVisible(false);
+  }, [isTimelineMode, hasTimelineVideo]);
+
+  useEffect(() => {
+    if (!isTimelineMode || !doc?.blocks.length) setTimelineCompositionVisible(false);
+  }, [isTimelineMode, doc]);
 
   useEffect(() => {
     if (!mediaProvider) {
@@ -819,6 +891,10 @@ function EditorShellInner({
 
   const handleToggleFiles = useCallback(() => {
     setShowFiles((prev) => !prev);
+  }, []);
+
+  const handleOpenMediaBinRecorder = useCallback(() => {
+    setMediaBinRecorderOpen(true);
   }, []);
 
   // ── Drag-and-drop file handling ──
@@ -1011,6 +1087,7 @@ function EditorShellInner({
       onMouseOutCapture={handleShellLinkMouseOut}
       className={`squisq-editor-shell ${className || ''}`}
       data-theme={colorScheme}
+      data-host-mode={hostMode}
       data-link-handler={onLinkClick ? 'true' : undefined}
       data-full-width={fullWidth ? 'true' : undefined}
       data-thin-margins={thinMargins ? 'true' : undefined}
@@ -1040,7 +1117,11 @@ function EditorShellInner({
       {...containerProps}
     >
       <CustomThemeProvider docThemes={docThemes} onDocThemesChange={onDocThemesChange}>
-        <PreviewSettingsProvider doc={doc} themeOverride={themeOverride}>
+        <PreviewSettingsProvider
+          doc={doc}
+          defaultViewportPreset={defaultViewportPreset}
+          themeOverride={themeOverride}
+        >
           <UseModeProviders
             rootRef={shellRef}
             allowPresentationWindow={allowPresentationWindow}
@@ -1070,6 +1151,7 @@ function EditorShellInner({
                   slotAfterActions={toolbarSlotAfterActions}
                   slotRight={toolbarSlotRight}
                   showPlayTab={showPlayTab}
+                  hostMode={hostMode}
                 />
               </div>
             )}
@@ -1077,6 +1159,7 @@ function EditorShellInner({
             {/* Main content area */}
             <div
               className="squisq-editor-content"
+              data-timeline-preview-count={isTimelineMode ? timelinePreviewCount : undefined}
               style={{
                 flex: autoGrow ? '1 1 auto' : 1,
                 overflowY: autoGrow ? 'auto' : 'hidden',
@@ -1087,6 +1170,7 @@ function EditorShellInner({
               }}
             >
               <div
+                className="squisq-editor-primary"
                 style={{
                   flex: autoGrow ? '1 1 auto' : 1,
                   overflow: autoGrow ? 'visible' : 'hidden',
@@ -1118,24 +1202,15 @@ function EditorShellInner({
                     {isMarkdownMode && outlineVisible && (
                       <OutlinePanel key="outline" width={outlineWidth} readOnly={readOnly} />
                     )}
-                    {isCardMode ? (
-                      <BlockCardView
-                        key="raw-card"
-                        blockCount={blockCount}
-                        activeBlockKey={activeBlockKey}
-                        onPrev={prevBlock}
-                        onNext={nextBlock}
-                        onAdd={addBlock}
-                      >
-                        <div key="raw-editor" className="squisq-raw-editor-container">
-                          <RawEditor
-                            monacoTheme={colorScheme === 'dark' ? 'vs-dark' : 'vs'}
-                            submitOnEnter={submitOnEnter}
-                            readOnly={readOnly}
-                          />
-                        </div>
-                      </BlockCardView>
-                    ) : (
+                    <BlockCardView
+                      key="raw-frame"
+                      active={isCardMode}
+                      blockCount={blockCount}
+                      activeBlockKey={activeBlockKey}
+                      onPrev={prevBlock}
+                      onNext={nextBlock}
+                      onAdd={addBlock}
+                    >
                       <div key="raw-editor" className="squisq-raw-editor-container">
                         <RawEditor
                           monacoTheme={colorScheme === 'dark' ? 'vs-dark' : 'vs'}
@@ -1143,7 +1218,7 @@ function EditorShellInner({
                           readOnly={readOnly}
                         />
                       </div>
-                    )}
+                    </BlockCardView>
                     {/* Renders nothing in normal flow — portals context
                     sections into Monaco view zones via the context's
                     monacoEditor. Code mode only. */}
@@ -1173,30 +1248,22 @@ function EditorShellInner({
                     {outlineVisible && (
                       <OutlinePanel key="outline" width={outlineWidth} readOnly={readOnly} />
                     )}
-                    {isCardMode ? (
-                      <BlockCardView
-                        key="wysiwyg-card"
-                        blockCount={blockCount}
-                        activeBlockKey={activeBlockKey}
-                        onPrev={prevBlock}
-                        onNext={nextBlock}
-                        onAdd={addBlock}
-                      >
-                        <WysiwygEditor
-                          key="wysiwyg-editor"
-                          submitOnEnter={submitOnEnter}
-                          placeholder={placeholder}
-                          readOnly={readOnly}
-                        />
-                      </BlockCardView>
-                    ) : (
+                    <BlockCardView
+                      key="wysiwyg-frame"
+                      active={isCardMode}
+                      blockCount={blockCount}
+                      activeBlockKey={activeBlockKey}
+                      onPrev={prevBlock}
+                      onNext={nextBlock}
+                      onAdd={addBlock}
+                    >
                       <WysiwygEditor
                         key="wysiwyg-editor"
                         submitOnEnter={submitOnEnter}
                         placeholder={placeholder}
                         readOnly={readOnly}
                       />
-                    )}
+                    </BlockCardView>
                     {isCardMode && inlinePreviewVisible && (
                       <BlockPreviewPanel key="block-preview" basePath={basePath} />
                     )}
@@ -1219,6 +1286,26 @@ function EditorShellInner({
                 )}
               </div>
 
+              {isTimelineMode && timelineVideoVisible && (
+                <TimelineVideoPanel
+                  schedule={timelineVideoSchedule}
+                  currentTime={timelineClock.currentTime}
+                  isPlaying={timelineClock.isPlaying}
+                  basePath={basePath}
+                  onClose={() => setTimelineVideoVisible(false)}
+                />
+              )}
+
+              {isTimelineMode && timelineCompositionVisible && (
+                <TimelineCompositionPanel
+                  doc={doc}
+                  clock={timelineClock}
+                  basePath={basePath}
+                  workspaceContainer={workspaceContainer}
+                  onClose={() => setTimelineCompositionVisible(false)}
+                />
+              )}
+
               {isMarkdownMode && showFiles && (
                 <MediaBin
                   mediaProvider={mediaProvider}
@@ -1228,6 +1315,8 @@ function EditorShellInner({
                   onMediaUploaded={handleMediaUploaded}
                   onMediaRemoved={handleMediaRemoved}
                   onCountChange={setMediaCount}
+                  onRecord={allowRecording ? handleOpenMediaBinRecorder : undefined}
+                  isRecorderOpen={mediaBinRecorderOpen}
                 />
               )}
 
@@ -1258,7 +1347,24 @@ function EditorShellInner({
             {/* Timeline track — horizontal strip of block + media bars shown
             below the editor in Timeline view. The card editor above (driven by
             the block navigator) shows whichever block is selected here. */}
-            {isTimelineMode && <TimelineTrack />}
+            {isTimelineMode && (
+              <TimelineToolbar
+                literalVideoVisible={timelineVideoVisible}
+                compositionVisible={timelineCompositionVisible}
+                videoAvailable={hasTimelineVideo}
+                compositionAvailable={Boolean(doc?.blocks.length)}
+                onToggleLiteralVideo={() => setTimelineVideoVisible((visible) => !visible)}
+                onToggleComposition={() => setTimelineCompositionVisible((visible) => !visible)}
+              />
+            )}
+
+            {isTimelineMode && (
+              <TimelineTrack
+                clock={timelineClock}
+                schedule={timelineSchedule}
+                videoVisible={timelineVideoVisible || timelineCompositionVisible}
+              />
+            )}
 
             {/* Status bar — word / char / line / block counts. Host can
             suppress via `showStatusBar={false}` for embedded chat-style
@@ -1269,6 +1375,13 @@ function EditorShellInner({
         </PreviewSettingsProvider>
       </CustomThemeProvider>
       <TooltipLayer />
+      {isMarkdownMode && allowRecording && mediaProvider && (
+        <RecorderEntry
+          open={mediaBinRecorderOpen}
+          onOpenChange={setMediaBinRecorderOpen}
+          showTrigger={false}
+        />
+      )}
       {imageEditTarget !== null && mediaProvider && (
         <ImageEditModal
           relativePath={imageEditTarget}

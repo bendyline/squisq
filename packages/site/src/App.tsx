@@ -15,7 +15,7 @@ import {
   MemoryContentContainer,
 } from '@bendyline/squisq/storage';
 import type { ContentContainer } from '@bendyline/squisq/storage';
-import { SAMPLES, SAMPLE_LABELS, CONTENT_SAMPLES } from './samples';
+import { SAMPLES, CONTENT_SAMPLES, getSampleLabel } from './samples';
 import { DebugPanel } from './DebugPanel';
 import { FileToolbar } from './FileToolbar';
 import { StorageToolbar } from './StorageToolbar';
@@ -394,7 +394,7 @@ export function App() {
           >
             {SAMPLE_KEYS.map((key) => (
               <option key={key} value={key}>
-                {SAMPLE_LABELS[key] ?? key.replace(/-/g, ' ')}
+                {getSampleLabel(key)}
               </option>
             ))}
             <option disabled>{'\u2500'.repeat(16)}</option>

@@ -38,7 +38,7 @@ describe('<EditorShell> print mode', () => {
       />,
     );
 
-    expect(screen.getByRole('button', { name: 'Present: Fill Squisq' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Present: Fill canvas' })).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'Presentation options' })).toBeNull();
     expect(screen.queryByRole('button', { name: 'Print' })).toBeNull();
   });
@@ -48,7 +48,7 @@ describe('<EditorShell> print mode', () => {
       <EditorShell initialMarkdown="# Print me" initialView="preview" showStatusBar={false} />,
     );
 
-    const present = screen.getByRole('button', { name: 'Present: Fill Squisq' });
+    const present = screen.getByRole('button', { name: 'Present: Fill canvas' });
     const print = screen.getByRole('button', { name: 'Print' });
     expect(present.closest('.squisq-presentation-control')?.nextElementSibling).toBe(print);
 
@@ -59,6 +59,6 @@ describe('<EditorShell> print mode', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Close' }));
     expect(screen.queryByLabelText('Print preview controls')).toBeNull();
-    expect(screen.getByRole('button', { name: 'Present: Fill Squisq' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Present: Fill canvas' })).toBeTruthy();
   });
 });

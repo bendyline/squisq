@@ -9,14 +9,16 @@
  * the browser mixes their output.
  *
  * Audio clips play unmuted during live playback (silent in render mode, where
- * frames are captured without sound and audio is muxed offline). Video clips
- * play muted — their audio, if any, is reproduced by the export mux.
+ * frames are captured without sound and audio is muxed offline). Scheduled
+ * video follows the same live-player mute contract, so an independent overlay
+ * may carry its audio across block boundaries.
  */
 
 import { useEffect, useRef } from 'react';
 import type { ScheduledClip } from '@bendyline/squisq/schemas';
 import { useMediaUrl } from './hooks/MediaContext';
 import { useMediaSchedule } from './hooks/useMediaSchedule';
+import type { PipPosition, PipShape, VideoPresentation } from './types';
 
 /** Re-seek an element only when it drifts this far from its target (seconds). */
 const DRIFT = 0.25;
@@ -29,6 +31,14 @@ export interface MediaClipLayerProps {
   renderMode?: boolean;
   /** Silence every scheduled clip during live playback. */
   muted?: boolean;
+  /** Placement of video clips relative to the rendered document. */
+  presentation?: VideoPresentation;
+  /** Shape of a picture-in-guide? */
+  pipShape?: PipShape;
+  /** Corner occupied by picture-in-picture video. */
+  pipPosition?: PipPosition;
+  /** Honor each scheduled video's authored placement override. Default true. */
+  honorClipPresentation?: boolean;
 }
 
 export function MediaClipLayer({
@@ -38,24 +48,55 @@ export function MediaClipLayer({
   basePath,
   renderMode = false,
   muted = false,
+  presentation = 'background',
+  pipShape = 'rounded',
+  pipPosition = 'bottom-right',
+  honorClipPresentation = true,
 }: MediaClipLayerProps) {
   const { renderClips, activeIds } = useMediaSchedule(schedule, currentTime);
   if (renderClips.length === 0) return null;
+
+  const groups = new Map<VideoPresentation, ScheduledClip[]>();
+  for (const clip of renderClips) {
+    const clipPresentation =
+      honorClipPresentation && clip.kind === 'video'
+        ? clip.placement === 'picture-in-picture'
+          ? 'picture-in-picture'
+          : clip.placement === 'overlay'
+            ? 'full-frame'
+            : presentation
+        : presentation;
+    const group = groups.get(clipPresentation) ?? [];
+    group.push(clip);
+    groups.set(clipPresentation, group);
+  }
+
   return (
-    <div className="doc-player__media-clips" aria-hidden>
-      {renderClips.map((clip) => (
-        <MediaClipElement
-          key={clip.id}
-          clip={clip}
-          active={activeIds.has(clip.id)}
-          currentTime={currentTime}
-          isPlaying={isPlaying}
-          basePath={basePath}
-          renderMode={renderMode}
-          muted={muted}
-        />
+    <>
+      {[...groups].map(([groupPresentation, clips]) => (
+        <div
+          key={groupPresentation}
+          className={`doc-player__media-clips doc-player__media-clips--${groupPresentation}`}
+          data-presentation={groupPresentation}
+          data-pip-shape={pipShape}
+          data-pip-position={pipPosition}
+          aria-hidden
+        >
+          {clips.map((clip) => (
+            <MediaClipElement
+              key={clip.id}
+              clip={clip}
+              active={activeIds.has(clip.id)}
+              currentTime={currentTime}
+              isPlaying={isPlaying}
+              basePath={basePath}
+              renderMode={renderMode}
+              muted={muted}
+            />
+          ))}
+        </div>
       ))}
-    </div>
+    </>
   );
 }
 
@@ -89,7 +130,11 @@ function MediaClipElement({
       return;
     }
     const target = Math.max(0, clip.sourceIn + (currentTime - clip.absoluteStart));
-    if (renderMode || Math.abs(el.currentTime - target) > DRIFT) {
+    // While paused, currentTime is being driven by a seek/scrub rather than
+    // natural playback. Always select the exact requested frame in that case;
+    // the drift tolerance remains useful while playing to avoid fighting the
+    // media element's own clock on every animation frame.
+    if (renderMode || !isPlaying || Math.abs(el.currentTime - target) > DRIFT) {
       try {
         el.currentTime = target;
       } catch {
@@ -120,17 +165,12 @@ function MediaClipElement({
     return (
       <video
         {...common}
-        muted
+        className={`doc-player__media-video${active ? ' doc-player__media-video--active' : ''}`}
+        data-active={active ? 'true' : 'false'}
+        data-video-placement={clip.placement ?? 'default'}
+        muted={renderMode || muted}
         playsInline
-        style={{
-          position: 'absolute',
-          inset: 0,
-          width: '100%',
-          height: '100%',
-          objectFit: 'cover',
-          zIndex: 0,
-          pointerEvents: 'none',
-        }}
+        style={{ pointerEvents: 'none' }}
       />
     );
   }

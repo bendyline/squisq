@@ -128,6 +128,57 @@ export function insertFenceBlock(
 }
 
 /**
+ * Insert a chart starter: a `{[barChart]}`-style annotated heading plus a
+ * sample GFM table as one fragment, after the block the caret sits in. The
+ * table is the chart's data — editing it re-renders the chart. If the
+ * schema has no table nodes (a host without the table extension), the
+ * heading still inserts alone and the chart renders its content fallback
+ * until the author adds a table.
+ */
+export function insertChartBlock(
+  editor: TiptapEditor,
+  opts: {
+    template: string;
+    headingText: string;
+    table: { headers: readonly string[]; rows: readonly (readonly string[])[] };
+  },
+): void {
+  editor
+    .chain()
+    .focus()
+    .command(({ tr, state, dispatch }) => {
+      const { heading, paragraph, table, tableRow, tableHeader, tableCell } = state.schema.nodes;
+      if (!heading) return false;
+      const headingNode = heading.create(
+        { level: 2, dataTemplate: opts.template },
+        state.schema.text(opts.headingText),
+      );
+      const nodes = [headingNode];
+      if (paragraph && table && tableRow && tableHeader && tableCell) {
+        const cell = (type: typeof tableCell, text: string) =>
+          type.create(null, paragraph.create(null, text ? state.schema.text(text) : undefined));
+        const headerRow = tableRow.create(
+          null,
+          Fragment.fromArray(opts.table.headers.map((h) => cell(tableHeader, h))),
+        );
+        const bodyRows = opts.table.rows.map((row) =>
+          tableRow.create(null, Fragment.fromArray(row.map((c) => cell(tableCell, c)))),
+        );
+        nodes.push(table.create(null, Fragment.fromArray([headerRow, ...bodyRows])));
+      }
+      const { $from } = state.selection;
+      const insertPos = $from.depth > 0 ? $from.after(1) : state.doc.content.size;
+      if (dispatch) {
+        tr.insert(insertPos, Fragment.fromArray(nodes));
+        // Drop the caret into the new heading's text so it can be renamed.
+        tr.setSelection(TextSelection.create(tr.doc, insertPos + 1));
+      }
+      return true;
+    })
+    .run();
+}
+
+/**
  * Insert a block-level heading carrying a Scene template (`diagram` /
  * `drawing` / `layout`) at the top level, after the block the caret sits
  * in. Going through a command (rather than `insertContent` at the caret)

@@ -27,6 +27,7 @@ import Placeholder from '@tiptap/extension-placeholder';
 import { resolveFontFamily, FONT_FALLBACKS, VIEWPORT_PRESETS } from '@bendyline/squisq/schemas';
 import { DEFAULT_THEME, flattenBlocks, markdownToDoc } from '@bendyline/squisq/doc';
 import { parseMarkdown } from '@bendyline/squisq/markdown';
+import type { MarkdownWrapState } from '@bendyline/squisq/markdown';
 import { HeadingWithTemplate } from './TemplateAnnotation';
 import { AsciiDiagramExtension } from './asciiDiagram/AsciiDiagramExtension';
 import { RepairableDiagramExtension } from './asciiDiagram/RepairableDiagramExtension';
@@ -58,6 +59,7 @@ import type { CustomTemplateDefinition } from '@bendyline/squisq/schemas';
 import { profileBlockContents, recommendTemplatesForBlock } from '@bendyline/squisq/recommend';
 import { findBlockSliceByHeadingIndex } from './blockSlice';
 import { stripFrontmatter } from './frontmatter';
+import { ingestForWrite, persistFromWrite } from './wrapPolicy';
 import { useEditorContext } from './EditorContext';
 import { buildMentionExtension } from './MentionExtension';
 import { markdownToTiptap, tiptapToMarkdown } from './tiptapBridge';
@@ -155,8 +157,19 @@ export function WysiwygEditor({
     colorScheme,
     bumpMediaRevision,
     sceneTextChannel,
+    preserveSourceWrapping,
+    layoutMode,
   } = useEditorContext();
+  // The wrap policy only makes sense over the whole document: block/timeline
+  // slices are fragments whose "convention" is the document's, not their own.
+  const wrapPolicyEnabled = preserveSourceWrapping && layoutMode === 'document';
   const previewSettings = usePreviewSettingsOptional();
+  // Tiptap creates its `onUpdate` callback once. Layout changes replace the
+  // editor source channel (whole-document passthrough vs active-block splice),
+  // so read the current writer through a ref instead of retaining the channel
+  // that happened to exist when this editor instance mounted.
+  const setEditorSourceRef = useRef(setEditorSource);
+  setEditorSourceRef.current = setEditorSource;
   const activeTheme = previewSettings?.activeTheme;
   const mermaidThemeStoreRef = useRef<MermaidThemeStore | null>(null);
   if (mermaidThemeStoreRef.current === null) {
@@ -218,6 +231,25 @@ export function WysiwygEditor({
   // empty string and the splice in `setEditorSource` keeps the doc's real
   // frontmatter intact.
   const frontmatterRef = useRef(stripFrontmatter(editorSource).frontmatter);
+  // The document's detected wrap convention — the wrapping sibling of
+  // frontmatterRef. When set, Tiptap edits the UNWRAPPED body and every
+  // serialize re-applies the convention (`persistFromWrite`); when null the
+  // policy is a pass-through. Refreshed on every EXTERNAL source ingest.
+  const wrapStateRef = useRef<MarkdownWrapState | null>(null);
+  // Lazily ingest the mount-time body exactly once (same pattern as the
+  // mermaid theme store above): the initial Tiptap content must already be
+  // the display form or the first render shows chopped per-line paragraphs.
+  const initialDisplayBodyRef = useRef<string | undefined>(undefined);
+  if (initialDisplayBodyRef.current === undefined) {
+    const body = stripFrontmatter(editorSource).body;
+    if (wrapPolicyEnabled) {
+      const ingest = ingestForWrite(body);
+      wrapStateRef.current = ingest.state;
+      initialDisplayBodyRef.current = ingest.displayBody;
+    } else {
+      initialDisplayBodyRef.current = body;
+    }
+  }
   // Stash the latest submit callback so the editor's handleKeyDown (bound
   // once at creation) always sees the current value.
   const submitOnEnterRef = useRef(submitOnEnter);
@@ -262,7 +294,7 @@ export function WysiwygEditor({
       InlineIcon,
       FindHighlightExtension,
     ],
-    content: markdownToTiptap(stripFrontmatter(editorSource).body),
+    content: markdownToTiptap(initialDisplayBodyRef.current),
     onUpdate: ({ editor: ed }) => {
       if (isExternalUpdate.current) return;
       // Keep the source channel synchronous with Tiptap. Structural actions
@@ -271,11 +303,11 @@ export function WysiwygEditor({
       // selected block into the previous block's range. The expensive full-doc
       // parse remains debounced in EditorContext, so correctness here does not
       // reintroduce parse-on-every-keystroke work.
-      const bodyMd = tiptapToMarkdown(ed.getHTML());
+      const bodyMd = persistFromWrite(tiptapToMarkdown(ed.getHTML()), wrapStateRef.current);
       const newSource = frontmatterRef.current + bodyMd;
       pendingLocalSourcesRef.current.push(newSource);
       lastSourceRef.current = newSource;
-      setEditorSource(newSource);
+      setEditorSourceRef.current(newSource);
     },
     editorProps: {
       attributes: {
@@ -603,11 +635,22 @@ export function WysiwygEditor({
     const { body, frontmatter } = stripFrontmatter(editorSource);
     pendingLocalSourcesRef.current = [];
     frontmatterRef.current = frontmatter;
-    const content = markdownToTiptap(body);
+    // Re-detect the wrap convention on every external ingest (echoes of our
+    // own writes were dropped above, so a manual Wrap/Unwrap transform or a
+    // Source-view edit updates the convention we persist with).
+    let displayBody = body;
+    if (wrapPolicyEnabled) {
+      const ingest = ingestForWrite(body);
+      wrapStateRef.current = ingest.state;
+      displayBody = ingest.displayBody;
+    } else {
+      wrapStateRef.current = null;
+    }
+    const content = markdownToTiptap(displayBody);
     editor.commands.setContent(content);
     lastSourceRef.current = editorSource;
     isExternalUpdate.current = false;
-  }, [editorSource, editor]);
+  }, [editorSource, editor, wrapPolicyEnabled]);
 
   // Match the WYSIWYG editor's appearance to the active Squisq theme when one
   // is set in frontmatter or picked in the preview dropdown. The block-props

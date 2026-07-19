@@ -1215,11 +1215,28 @@ function serializeMediaTag(tag: 'video' | 'audio', attrs: string): string {
   const width = /\bwidth="([^"]*)"/i.exec(attrs)?.[1];
   const height = /\bheight="([^"]*)"/i.exec(attrs)?.[1];
   const poster = tag === 'video' ? /\bposter="([^"]*)"/i.exec(attrs)?.[1] : undefined;
+  const placement =
+    tag === 'video' ? /\bdata-squisq-video-placement="([^"]*)"/i.exec(attrs)?.[1] : undefined;
+  const lockToBlock =
+    tag === 'video' ? /\bdata-squisq-video-lock-to-block="([^"]*)"/i.exec(attrs)?.[1] : undefined;
+  const startAt =
+    tag === 'video' ? /\bdata-squisq-video-start-at="([^"]*)"/i.exec(attrs)?.[1] : undefined;
+  const clipStart =
+    tag === 'video' ? /\bdata-squisq-video-clip-start="([^"]*)"/i.exec(attrs)?.[1] : undefined;
+  const clipEnd =
+    tag === 'video' ? /\bdata-squisq-video-clip-end="([^"]*)"/i.exec(attrs)?.[1] : undefined;
   const parts = [`<${tag} src="${src}"`];
   if (controls) parts.push(' controls');
   if (width) parts.push(` width="${width}"`);
   if (height) parts.push(` height="${height}"`);
   if (poster) parts.push(` poster="${poster}"`);
+  if (placement === 'picture-in-picture' || placement === 'overlay') {
+    parts.push(` data-squisq-video-placement="${placement}"`);
+  }
+  if (lockToBlock === 'false') parts.push(' data-squisq-video-lock-to-block="false"');
+  if (startAt != null) parts.push(` data-squisq-video-start-at="${startAt}"`);
+  if (clipStart != null) parts.push(` data-squisq-video-clip-start="${clipStart}"`);
+  if (clipEnd != null) parts.push(` data-squisq-video-clip-end="${clipEnd}"`);
   parts.push(`></${tag}>`);
   return parts.join('');
 }

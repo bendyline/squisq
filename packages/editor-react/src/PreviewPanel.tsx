@@ -13,13 +13,11 @@ import type { ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { DocPlayer, LinearDocView, useMediaProvider } from '@bendyline/squisq-react';
 import type { AudioController, PlaybackState } from '@bendyline/squisq-react';
-import type { Doc } from '@bendyline/squisq/schemas';
-import { applyTransform, resolveTransformStyle } from '@bendyline/squisq/transform';
-import { resolveAudioMapping } from '@bendyline/squisq/doc';
+import { resolveTransformStyle } from '@bendyline/squisq/transform';
 import type { ContentContainer } from '@bendyline/squisq/storage';
 import { useEditorContext } from './EditorContext';
 import { usePreviewSettings } from './PreviewControls';
-import { buildPreviewDoc } from './buildPreviewDoc';
+import { usePreviewProjection } from './usePreviewProjection';
 import { buildDocumentPreviewMarkdown } from './buildDocumentPreviewMarkdown';
 import { PlainHtmlPreview } from './PlainHtmlPreview';
 import { TeleprompterView } from './teleprompter/TeleprompterView';
@@ -76,6 +74,10 @@ export function PreviewPanel({
     activeTransformStyle,
     activeCaptionStyle,
     activeCaptionsEnabled,
+    activeVideoPresentation,
+    activePipShape,
+    activePipPosition,
+    activeVideoLoop,
     activeCoverSlide,
   } = usePreviewSettings();
   const mainSurfaceRef = useRef<HTMLDivElement>(null);
@@ -94,50 +96,7 @@ export function PreviewPanel({
   // Audio mapping is async (reads container files), so we use a two-phase
   // approach: first build the base doc synchronously, then resolve audio
   // in an effect and update the state.
-  const [previewProjection, setPreviewProjection] = useState<{
-    /** Transformed content model shared by Page and Document. */
-    contentDoc: Doc;
-    /** Flattened/timed player model shared by Slideshow and Video. */
-    playerDoc: Doc;
-  } | null>(null);
-
-  useEffect(() => {
-    if (!doc || !doc.blocks.length) {
-      setPreviewProjection(null);
-      return;
-    }
-
-    // Audio resolution runs BEFORE the transform: a document-anchored
-    // narration take re-times the SOURCE blocks, and the transform's
-    // provenance (`sourceStartTime` in seconds) is derived from those
-    // times — so summarized slides land where the words are spoken.
-    const build = (sourceDoc: Doc) => {
-      const contentDoc = activeTransformStyle
-        ? applyTransform(sourceDoc, activeTransformStyle).doc
-        : sourceDoc;
-      return { contentDoc, playerDoc: buildPreviewDoc(contentDoc) };
-    };
-
-    if (workspaceContainer) {
-      let cancelled = false;
-      resolveAudioMapping(doc, workspaceContainer).then(
-        (audioDoc) => {
-          if (!cancelled) setPreviewProjection(build(audioDoc));
-        },
-        () => {
-          // The synchronous preview below remains valid when optional audio
-          // discovery fails; consume the rejection rather than leaking it.
-        },
-      );
-      // Set an immediate preview without audio while mapping resolves
-      setPreviewProjection(build(doc));
-      return () => {
-        cancelled = true;
-      };
-    }
-
-    setPreviewProjection(build(doc));
-  }, [doc, activeTransformStyle, workspaceContainer]);
+  const previewProjection = usePreviewProjection(doc, activeTransformStyle, workspaceContainer);
 
   const previewDoc = previewProjection?.playerDoc ?? null;
   const contentDoc = previewProjection?.contentDoc ?? null;
@@ -388,6 +347,10 @@ export function PreviewPanel({
         forceViewport={activeViewport}
         displayMode={activeDisplayMode}
         theme={activeTheme}
+        videoPresentation={activeVideoPresentation}
+        pipShape={activePipShape}
+        pipPosition={activePipPosition}
+        loop={!audience && activeDisplayMode === 'video' && activeVideoLoop}
         captionStyle={audienceCaptionMode === 'social' ? 'social' : activeCaptionStyle}
         captionsEnabled={
           audience && audienceCaptionMode ? audienceCaptionMode !== 'off' : activeCaptionsEnabled
@@ -411,6 +374,7 @@ export function PreviewPanel({
     justifyContent: 'center',
     overflow: 'hidden',
     minHeight: 0,
+    background: presentation?.activeTarget ? activeTheme.colors.background : undefined,
   } as const;
 
   return (

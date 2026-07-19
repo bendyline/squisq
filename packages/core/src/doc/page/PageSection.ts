@@ -35,6 +35,7 @@ export type PageSpatialKind =
   | 'tree'
   | 'timeline'
   | 'map'
+  | 'chart'
   | 'drawing'
   | 'layout'
   | 'custom'

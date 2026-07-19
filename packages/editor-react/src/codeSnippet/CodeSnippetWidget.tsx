@@ -68,7 +68,7 @@ export function CodeSnippetWidget({
   focusOnMount = false,
 }: CodeSnippetWidgetProps) {
   const data = useCodeSnippetData(editor, blockId);
-  const { ready } = useMonacoLoader();
+  const { ready } = useMonacoLoader(data?.monacoLanguage);
   const colorScheme = useHostColorScheme(host);
   const editable = useEditorEditable(editor);
   const [modelInstanceId] = useState(allocateCodeSnippetModelInstanceId);

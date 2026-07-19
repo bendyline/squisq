@@ -155,6 +155,48 @@ export const TEMPLATE_AUTHORING_METADATA = {
     safeForContentFirst: false,
     placement: 'heading',
   },
+  barChart: {
+    role: 'data',
+    bodyPolicy: 'structured',
+    safeForContentFirst: false,
+    placement: 'heading',
+  },
+  columnChart: {
+    role: 'data',
+    bodyPolicy: 'structured',
+    safeForContentFirst: false,
+    placement: 'heading',
+  },
+  pieChart: {
+    role: 'data',
+    bodyPolicy: 'structured',
+    safeForContentFirst: false,
+    placement: 'heading',
+  },
+  donutChart: {
+    role: 'data',
+    bodyPolicy: 'structured',
+    safeForContentFirst: false,
+    placement: 'heading',
+  },
+  lineChart: {
+    role: 'data',
+    bodyPolicy: 'structured',
+    safeForContentFirst: false,
+    placement: 'heading',
+  },
+  areaChart: {
+    role: 'data',
+    bodyPolicy: 'structured',
+    safeForContentFirst: false,
+    placement: 'heading',
+  },
+  scatterChart: {
+    role: 'data',
+    bodyPolicy: 'structured',
+    safeForContentFirst: false,
+    placement: 'heading',
+  },
   diagram: {
     role: 'spatial',
     bodyPolicy: 'structured',

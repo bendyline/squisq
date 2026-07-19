@@ -42,6 +42,13 @@ export interface MediaBinProps {
   onMediaRemoved?: (relativePath: string, entry: MediaEntry) => void | Promise<void>;
   /** Fired whenever the panel scans media and knows the current entry count. */
   onCountChange?: (count: number) => void;
+  /**
+   * Opens the host's media recorder. When provided, the Files header shows a
+   * compact Record button beside Upload.
+   */
+  onRecord?: () => void;
+  /** Whether the recorder dialog opened by `onRecord` is currently visible. */
+  isRecorderOpen?: boolean;
 }
 
 // ============================================
@@ -106,6 +113,8 @@ export function MediaBin({
   onMediaUploaded,
   onMediaRemoved,
   onCountChange,
+  onRecord,
+  isRecorderOpen = false,
 }: MediaBinProps) {
   const [entries, setEntries] = useState<MediaEntry[]>([]);
   const [thumbUrls, setThumbUrls] = useState<Record<string, string>>({});
@@ -371,16 +380,37 @@ export function MediaBin({
           Files {entries.length > 0 && `(${entries.length})`}
         </span>
 
-        <button
-          className="squisq-media-bin-upload"
-          onClick={handleUploadClick}
-          disabled={!mediaProvider || loading}
-          title={
-            mediaProvider ? 'Upload files' : 'Load a content zip or select a storage slot first'
-          }
-        >
-          + Upload
-        </button>
+        <div className="squisq-media-bin-actions">
+          {onRecord && (
+            <button
+              type="button"
+              className="squisq-media-bin-record"
+              onClick={onRecord}
+              disabled={!mediaProvider}
+              title={
+                mediaProvider ? 'Record media' : 'Load a content zip or select a storage slot first'
+              }
+              aria-label="Record media"
+              aria-haspopup="dialog"
+              aria-expanded={isRecorderOpen}
+            >
+              <span className="squisq-media-bin-record-dot" aria-hidden="true" />
+              Record
+            </button>
+          )}
+
+          <button
+            type="button"
+            className="squisq-media-bin-upload"
+            onClick={handleUploadClick}
+            disabled={!mediaProvider || loading}
+            title={
+              mediaProvider ? 'Upload files' : 'Load a content zip or select a storage slot first'
+            }
+          >
+            + Upload
+          </button>
+        </div>
       </div>
 
       {/* File list */}

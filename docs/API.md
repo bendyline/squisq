@@ -421,6 +421,13 @@ Required fields are shown without `?`. Every template also inherits the
 | `videoWithCaption` | `videoSrc`, `videoAlt`, `clipStart`, `clipEnd`                          | `posterSrc`, `sourceDuration`, `caption`, `captionPosition`, `videoCredit`, `videoLicense`                                      |
 | `videoPullQuote`   | `text`, `backgroundVideo {src, posterSrc?, alt, clipStart, clipEnd, …}` | `attribution`                                                                                                                   |
 | `dataTable`        | `headers[]`, `rows[][]`                                                 | `title`, `align`, `colorScheme`                                                                                                 |
+| `barChart`         | — (`headers`/`rows` derive from the block's markdown table)             | `title`, `labelColumn`, `valueColumns[]`, `stacked`, `showTable`, `showLegend`, `showValues`, `unit`, `colorScheme`             |
+| `columnChart`      | — (`headers`/`rows` derive from the block's markdown table)             | `title`, `labelColumn`, `valueColumns[]`, `stacked`, `showTable`, `showLegend`, `showValues`, `unit`, `colorScheme`             |
+| `pieChart`         | — (`headers`/`rows` derive from the block's markdown table)             | `title`, `labelColumn`, `valueColumns[]`, `showTable`, `showLegend`, `showValues`, `unit`, `colorScheme`                        |
+| `donutChart`       | — (`headers`/`rows` derive from the block's markdown table)             | `title`, `labelColumn`, `valueColumns[]`, `showTable`, `showLegend`, `showValues`, `unit`, `colorScheme`                        |
+| `lineChart`        | — (`headers`/`rows` derive from the block's markdown table)             | `title`, `labelColumn`, `valueColumns[]`, `showTable`, `showLegend`, `showValues`, `unit`, `colorScheme`                        |
+| `areaChart`        | — (`headers`/`rows` derive from the block's markdown table)             | `title`, `labelColumn`, `valueColumns[]`, `showTable`, `showLegend`, `showValues`, `unit`, `colorScheme`                        |
+| `scatterChart`     | — (`headers`/`rows` derive from the block's markdown table)             | `title`, `labelColumn`, `valueColumns[]`, `showTable`, `showLegend`, `showValues`, `unit`, `colorScheme`                        |
 | `diagram`          | — (nodes/edges come from child headings)                                | `title`, `colorScheme`, `nodeShape`, `edgeStyle`, `startStyle`, `endStyle`, `lineStyle`                                         |
 | `tree`             | — (`items` derive from an ASCII tree fence)                             | `items`, `title`, `colorScheme`                                                                                                 |
 | `timeline`         | — (`tracks` derive from an ASCII timeline fence)                        | `tracks`, `links`, `title`, `colorScheme`                                                                                       |
@@ -505,6 +512,8 @@ interface MediaClip {
   id: string;
   src: string;
   kind: 'audio' | 'video';
+  placement?: 'picture-in-picture' | 'overlay'; // per-video compositor override
+  lockToBlock?: boolean; // placed video follows its block vs. independent document timing
   startAt: number; // block-relative (or document-relative when anchor='document'); default 0
   clipStart?: number;
   clipEnd?: number;
@@ -530,7 +539,7 @@ interface LayoutHints {
 
 ### Subpath: Doc
 
-**Import:** `@bendyline/squisq/doc` — the template registry, all 26 templates,
+**Import:** `@bendyline/squisq/doc` — the template registry, all 33 templates,
 markdown↔doc conversion, canonical layer materialization, and
 theme/validation helpers.
 
@@ -1388,6 +1397,7 @@ interface DocPlayerProps {
   animationsEnabled?: boolean; // default true — false removes layer animations + block transitions
   onRenderAPIReady?: (api: SquisqRenderAPI | null) => void;
   autoPlay?: boolean; // default false
+  loop?: boolean; // default false — restart automatically in Video mode
   onEnded?: () => void;
   onTimeUpdate?: (time: number) => void;
   audioController?: AudioController;
@@ -2181,6 +2191,7 @@ The top-level component. Its props interface is large; the notable props:
 interface EditorShellProps {
   initialMarkdown?: string; // default ''
   initialView?: EditorView; // default 'wysiwyg'
+  hostMode?: EditorHostMode; // 'document' (default) | 'chat'; chat uses Write without document controls
   articleId?: string; // default 'untitled'
   basePath?: string; // default '/'
   onChange?: (source: string) => void;
@@ -2261,7 +2272,7 @@ mode. Descendants rendered inside `EditorProvider` can instead call
 
 In the Use view, the Presentation split button can fill only the current
 `EditorShell`, open a read-only audience window synchronized to the main
-playback/scroll position, or request browser full screen. This is ephemeral UI
+playback/scroll position, or take over the entire screen. This is ephemeral UI
 state and is not written to document frontmatter.
 
 ### Context
@@ -2272,6 +2283,7 @@ function useEditorContext(): EditorContextValue; // markdown/doc state, theme, v
 
 type EditorView = 'raw' | 'wysiwyg' | 'preview';
 type EditorColorScheme = 'light' | 'dark'; // v1.5: renamed from `EditorTheme`
+type EditorHostMode = 'document' | 'chat';
 type EditorMode = 'markdown' | 'code' | 'image';
 type LayoutMode = 'document' | 'block' | 'timeline';
 type ThemeInheritance = 'none' | 'fonts' | 'fonts-colors';
@@ -2865,6 +2877,26 @@ Diagnostics are reported at three severities — `error`, `warning`, and `info`
 (the info tier is counted and shown separately). Exit codes depend on **errors**
 only: `0` clean, warnings-only, or info-only; `1` errors (or any warning with
 `--strict`); `2` input unreadable.
+
+#### `squisq transform <input>`
+
+Apply one-time markdown **source** transforms (from core's
+`MARKDOWN_SOURCE_TRANSFORMS` registry) to a `.md` file, in the order given.
+Distinct from the `--transform <style>` slideshow-style flag on
+`convert`/`video` — this rewrites the markdown text itself. Output goes to
+stdout by default; status goes to stderr.
+
+| Option         | Description                                                                |
+| -------------- | -------------------------------------------------------------------------- |
+| `--ops <list>` | Comma-separated transforms, applied in order (`unwrap`, `wrap`, `cleanup`) |
+| `--width <n>`  | Column width for `wrap` (20–500, default 80)                               |
+| `-o <file>`    | Write the result to a file (guarded by `--overwrite`)                      |
+| `--in-place`   | Rewrite the input file (conflicts with `-o`)                               |
+| `--overwrite`  | Allow `-o` to replace an existing file                                     |
+
+Transforms run strict: each reparses its output and structurally compares it
+against the input; on any mismatch the command exits `1` without emitting.
+Exit codes: `0` success, `1` transform/output failure, `2` input unreadable.
 
 ### Programmatic API
 

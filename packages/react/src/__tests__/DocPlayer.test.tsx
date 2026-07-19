@@ -14,6 +14,22 @@ function minimalDoc(): Doc {
   };
 }
 
+function docWithPresenter(): Doc {
+  return {
+    ...minimalDoc(),
+    documentMedia: [
+      {
+        id: 'presenter',
+        src: 'presenter.mp4',
+        kind: 'video',
+        startAt: 0,
+        clipEnd: 4,
+        anchor: 'document',
+      },
+    ],
+  };
+}
+
 function docWithCover(): Doc {
   return {
     ...minimalDoc(),
@@ -71,6 +87,34 @@ function docWithThreeSlides(): Doc {
   };
 }
 
+function docWithSyntheticTemplateSlides(): Doc {
+  return {
+    articleId: 'synthetic-template-slides',
+    duration: 6,
+    blocks: [
+      {
+        id: 'ship-review',
+        template: 'content',
+        title: 'Ship Review',
+        startTime: 0,
+        duration: 3,
+        audioSegment: 0,
+      },
+      {
+        id: 'checklist',
+        template: 'content',
+        title: 'Checklist',
+        startTime: 3,
+        duration: 3,
+        audioSegment: 0,
+      },
+    ],
+    audio: {
+      segments: [{ src: '', name: 'preview', duration: 6, startTime: 0 }],
+    },
+  };
+}
+
 function controller(overrides: Partial<AudioController> = {}): AudioController {
   return {
     currentTime: 0,
@@ -111,6 +155,33 @@ describe('DocPlayer smoke test', () => {
   it('renders without crashing in video mode (default)', () => {
     const { container } = render(<DocPlayer doc={minimalDoc()} basePath="/test" />);
     expect(container.firstChild).toBeTruthy();
+  });
+
+  it('restarts Video-mode playback after the timeline ends when loop is enabled', async () => {
+    const audioController = controller({ currentTime: 5, isEnded: true });
+    const onEnded = vi.fn();
+
+    render(
+      <DocPlayer
+        doc={docWithPresenter()}
+        audioController={audioController}
+        loop
+        onEnded={onEnded}
+      />,
+    );
+
+    await waitFor(() => expect(audioController.restart).toHaveBeenCalledOnce());
+    expect(onEnded).toHaveBeenCalledOnce();
+  });
+
+  it('does not restart ended playback when loop is disabled', async () => {
+    const audioController = controller({ currentTime: 5, isEnded: true });
+    const onEnded = vi.fn();
+
+    render(<DocPlayer doc={minimalDoc()} audioController={audioController} onEnded={onEnded} />);
+
+    await waitFor(() => expect(onEnded).toHaveBeenCalledOnce());
+    expect(audioController.restart).not.toHaveBeenCalled();
   });
 
   it('renders without crashing in slideshow mode', () => {
@@ -653,6 +724,23 @@ describe('DocPlayer smoke test', () => {
     expect(observed[observed.length - 1]?.getDuration()).toBeGreaterThan(0);
     unmount();
     expect(observed[observed.length - 1]).toBeNull();
+  });
+
+  it('does not let a synthetic preview clock compact authored slides', () => {
+    const observed: Array<SquisqRenderAPI | null> = [];
+    render(
+      <DocPlayer
+        doc={docWithSyntheticTemplateSlides()}
+        audioMode="synthetic"
+        renderMode
+        onRenderAPIReady={(api) => observed.push(api)}
+      />,
+    );
+
+    expect(observed[observed.length - 1]?.getBlocks()).toEqual([
+      { id: 'ship-review', template: 'content', startTime: 0, duration: 3 },
+      { id: 'checklist', template: 'content', startTime: 3, duration: 3 },
+    ]);
   });
 
   it('keeps the render API identity stable while dispatching to the latest controller', async () => {

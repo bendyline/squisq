@@ -48,6 +48,17 @@ function renderViewMenu({
 }
 
 describe('ViewMenuPanel block-tag visibility', () => {
+  it('closes on global Escape and returns focus to its trigger', () => {
+    renderViewMenu();
+    const trigger = screen.getByRole('button', { name: 'View options' });
+    expect(screen.getByRole('menu', { name: 'View options' })).toBeTruthy();
+
+    fireEvent.keyDown(document, { key: 'Escape' });
+
+    expect(screen.queryByRole('menu', { name: 'View options' })).toBeNull();
+    expect(document.activeElement).toBe(trigger);
+  });
+
   it('offers the three visibility choices and defaults to the selected/hovered block', () => {
     const group = renderViewMenu();
 

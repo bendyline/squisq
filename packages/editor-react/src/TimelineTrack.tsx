@@ -32,7 +32,7 @@ import {
 import { collectEmbeddedMedia } from './embeddedMedia';
 import { BlockThumbnail } from './TimelineBlockPreview';
 import { resolveBlockVisual } from './resolveBlockVisual';
-import { useTimelineClock } from './useTimelineClock';
+import { useTimelineClock, type TimelineClock } from './useTimelineClock';
 
 /** Viewport the per-bar thumbnails render at. */
 const PREVIEW_VIEWPORT = VIEWPORT_PRESETS.landscape;
@@ -87,9 +87,20 @@ function headingLine(block: Block): number | undefined {
 
 export interface TimelineTrackProps {
   height?: number;
+  /** Optional shared clock used by docked timeline companions. */
+  clock?: TimelineClock;
+  /** Reuse an already-resolved schedule instead of deriving it from the doc. */
+  schedule?: ScheduledClip[];
+  /** Whether the docked video monitor is currently visible. */
+  videoVisible?: boolean;
 }
 
-export function TimelineTrack({ height = 160 }: TimelineTrackProps) {
+export function TimelineTrack({
+  height = 160,
+  clock,
+  schedule,
+  videoVisible = false,
+}: TimelineTrackProps) {
   const {
     doc,
     markdownSource,
@@ -119,13 +130,18 @@ export function TimelineTrack({ height = 160 }: TimelineTrackProps) {
     }
     return map;
   }, [doc, blocks, previewTheme]);
-  const clips = useMemo<ScheduledClip[]>(() => (doc ? resolveMediaSchedule(doc) : []), [doc]);
+  const derivedClips = useMemo<ScheduledClip[]>(
+    () => (doc ? resolveMediaSchedule(doc) : []),
+    [doc],
+  );
+  const clips = schedule ?? derivedClips;
   const total = useMemo(() => (doc ? getDocPlaybackDuration(doc) : 0), [doc]);
   const width = Math.max(total * pxPerSecond, 200);
 
   // Real-time playback clock for the playhead + media. Starting playback also
   // drops any in-progress edit so the playhead drives.
-  const { currentTime, isPlaying, play, pause, seek } = useTimelineClock(total);
+  const internalClock = useTimelineClock(total);
+  const { currentTime, isPlaying, play, pause, seek } = clock ?? internalClock;
   const startPlay = useCallback(() => {
     setDrag(null);
     play();
@@ -497,7 +513,7 @@ export function TimelineTrack({ height = 160 }: TimelineTrackProps) {
               } else if (drag?.targetId === c.id && drag.kind === 'clip-right') {
                 clipWidth = Math.max(drag.preview * pxPerSecond, 4);
               }
-              const editable = c.sourceLine != null;
+              const editable = c.sourceLine != null && c.lockToBlock !== true;
               const specOf = (): ClipSpec => {
                 const raw = rawClipById.get(c.id);
                 return raw
@@ -515,9 +531,15 @@ export function TimelineTrack({ height = 160 }: TimelineTrackProps) {
                   key={c.id}
                   className={`squisq-timeline-clip squisq-timeline-clip--${c.kind}${
                     c.anchor === 'document' ? ' squisq-timeline-clip--document' : ''
-                  }`}
+                  }${c.lockToBlock === true ? ' squisq-timeline-clip--locked' : ''}`}
                   style={{ left, width: clipWidth }}
-                  title={`${c.src} — ${formatDur(length)}${c.anchor === 'document' ? ' (document)' : ''}`}
+                  title={`${c.src} — ${formatDur(length)}${
+                    c.lockToBlock === true
+                      ? ' (locked to block)'
+                      : c.anchor === 'document'
+                        ? ' (independent)'
+                        : ''
+                  }`}
                   onPointerDown={(e) =>
                     editable &&
                     beginDrag(e, 'clip-move', c.id, c.absoluteStart, (absStart) => {
@@ -532,7 +554,7 @@ export function TimelineTrack({ height = 160 }: TimelineTrackProps) {
                     })
                   }
                   onDoubleClick={() => {
-                    if (c.sourceLine == null) return;
+                    if (!editable || c.sourceLine == null) return;
                     // Toggle spillover (block clips only).
                     const next = setMediaClipInSource(markdownSource, c.sourceLine, {
                       spillover: c.anchor === 'block' ? true : null,
@@ -559,7 +581,7 @@ export function TimelineTrack({ height = 160 }: TimelineTrackProps) {
             })}
 
             {/* Media embedded in a block's body (recordings, dropped files):
-                snapped to the parent block. Editing one converts it to a timed
+                locked to the parent block. Editing one converts it to a timed
                 clip annotation and relocates it to wherever it's dragged. */}
             {blocks.flatMap((b, i) =>
               collectEmbeddedMedia(b).map((m, j) => {
@@ -636,11 +658,13 @@ export function TimelineTrack({ height = 160 }: TimelineTrackProps) {
         </div>
       </div>
 
-      {/* Off-screen host: plays the timed audio clips in sync with the clock. */}
+      {/* Off-screen host: plays timed media in sync with the clock. When the
+          video monitor is open it owns video playback, so this host retains
+          only audio and avoids mounting duplicate video elements. */}
       <div className="squisq-timeline-media-host" aria-hidden>
         <MediaContext.Provider value={mediaProvider ?? null}>
           <MediaClipLayer
-            schedule={clips}
+            schedule={videoVisible ? clips.filter((clip) => clip.kind === 'audio') : clips}
             currentTime={currentTime}
             isPlaying={isPlaying}
             basePath="/"

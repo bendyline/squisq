@@ -217,7 +217,19 @@ function blockToSlide(
     ? extractPlainText(block.sourceHeading)
     : block.title || block.id || `Slide ${index + 1}`;
 
-  const requestedTemplate = block.template || 'sectionHeader';
+  // `markdownToDoc` uses sectionHeader as its structural default so the
+  // authored Markdown can round-trip without materialized annotations. That
+  // default is not a content-preserving presentation choice: sectionHeader
+  // intentionally renders only the heading. In the unsummarized preview,
+  // project an implicit heading block through the loss-averse `content`
+  // template instead. Explicit `{[sectionHeader]}` annotations, content-aware
+  // auto templates, and programmatic/transform-generated blocks remain intact.
+  const implicitSectionHeader =
+    block.template === 'sectionHeader' &&
+    block.autoTemplate !== true &&
+    !!block.sourceHeading &&
+    !block.sourceHeading.templateAnnotation?.template;
+  const requestedTemplate = implicitSectionHeader ? 'content' : (block.template ?? 'content');
   // A template is recognized if it's a built-in OR a user-defined
   // template carried in the doc's `customTemplates` set. Without this,
   // an annotated `{[hero]}` heading would silently fall back to

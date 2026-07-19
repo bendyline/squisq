@@ -23,6 +23,13 @@ const ALL_TEMPLATES = [
   'videoWithCaption',
   'videoPullQuote',
   'dataTable',
+  'barChart',
+  'columnChart',
+  'pieChart',
+  'donutChart',
+  'lineChart',
+  'areaChart',
+  'scatterChart',
 ];
 
 function profileOf(source: string) {
@@ -147,11 +154,18 @@ describe('recommendTemplatesForBlock', () => {
     expect(recommended).toContain('statHighlight');
   });
 
-  it('recommends dataTable + comparisonBar for blocks with tables', () => {
+  it('recommends dataTable + comparisonBar + primary charts for blocks with tables', () => {
     const profile = profileOf('| a | b |\n| --- | --- |\n| 1 | 2 |');
     const { recommended } = recommendTemplatesForBlock(profile, ALL_TEMPLATES);
     expect(recommended).toContain('dataTable');
     expect(recommended).toContain('comparisonBar');
+    expect(recommended).toContain('columnChart');
+    expect(recommended).toContain('barChart');
+    expect(recommended).toContain('lineChart');
+    expect(recommended).toContain('pieChart');
+    // The long-tail chart kinds stay out of the focused recommended set.
+    expect(recommended).not.toContain('donutChart');
+    expect(recommended).not.toContain('scatterChart');
   });
 
   it('omits universal generics (factCard, twoColumn) when specific signal fires', () => {

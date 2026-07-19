@@ -1,7 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { parseMarkdown } from '@bendyline/squisq/markdown';
 import { markdownToDoc } from '@bendyline/squisq/doc';
-import { collectEmbeddedMedia, mediaKindFromUrl } from '../embeddedMedia';
+import {
+  collectEmbeddedMedia,
+  collectEmbeddedVideoSchedule,
+  mediaKindFromUrl,
+} from '../embeddedMedia';
 
 function block(md: string) {
   return markdownToDoc(parseMarkdown(md), { articleId: 't' }).blocks[0];
@@ -44,5 +48,35 @@ describe('collectEmbeddedMedia', () => {
     expect(
       collectEmbeddedMedia(block('# B\n\n![p](pic.png)\n\n[docs](https://x.com/y)\n')),
     ).toEqual([]);
+  });
+});
+
+describe('collectEmbeddedVideoSchedule', () => {
+  it('places an embedded video across its owning block', () => {
+    const doc = markdownToDoc(
+      parseMarkdown(
+        '# First {duration=8}\n\nIntro\n\n# Second {duration=5}\n\n<video src="video/take.webm"></video>\n',
+      ),
+      { articleId: 't' },
+    );
+
+    expect(collectEmbeddedVideoSchedule(doc)).toEqual([
+      expect.objectContaining({
+        kind: 'video',
+        src: 'video/take.webm',
+        absoluteStart: 8,
+        absoluteEnd: 13,
+        sourceIn: 0,
+        anchor: 'block',
+        blockId: doc.blocks[1].id,
+      }),
+    ]);
+  });
+
+  it('does not duplicate embedded audio in the video monitor', () => {
+    const doc = markdownToDoc(parseMarkdown('# Intro\n\n<audio src="take.mp3"></audio>\n'), {
+      articleId: 't',
+    });
+    expect(collectEmbeddedVideoSchedule(doc)).toEqual([]);
   });
 });

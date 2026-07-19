@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { parseMarkdown } from '@bendyline/squisq/markdown';
-import { SAMPLES } from '../samples.js';
+import { CONTENT_SAMPLES, getSampleLabel, SAMPLES } from '../samples.js';
 
 function collectAstNodes(value: unknown, nodes: Array<Record<string, unknown>> = []) {
   if (Array.isArray(value)) {
@@ -14,6 +14,15 @@ function collectAstNodes(value: unknown, nodes: Array<Record<string, unknown>> =
 }
 
 describe('site samples', () => {
+  it('starts every sample dropdown label with a capital letter', () => {
+    for (const key of Object.keys(SAMPLES)) {
+      expect(getSampleLabel(key)).toMatch(/^\p{Lu}/u);
+    }
+    for (const sample of Object.values(CONTENT_SAMPLES)) {
+      expect(sample.label).toMatch(/^\p{Lu}/u);
+    }
+  });
+
   it('keeps the About SquigglySquare footer links and GitHub icon parseable', () => {
     const astNodes = collectAstNodes(parseMarkdown(SAMPLES['about-squisq'] ?? ''));
     const linkUrls = astNodes
@@ -30,5 +39,24 @@ describe('site samples', () => {
     expect(astNodes).toContainEqual(
       expect.objectContaining({ type: 'inlineIcon', family: 'brands', name: 'github' }),
     );
+  });
+
+  it('keeps demo image assets self-hosted', () => {
+    for (const [sampleKey, source] of Object.entries(SAMPLES)) {
+      const astNodes = collectAstNodes(parseMarkdown(source));
+      const imageUrls = astNodes.flatMap((node) => {
+        if (node.type === 'image' && typeof node.url === 'string') return [node.url];
+
+        const annotation = node.templateAnnotation as
+          | { params?: Record<string, string> }
+          | undefined;
+        const imageSrc = annotation?.params?.imageSrc;
+        return imageSrc ? [imageSrc] : [];
+      });
+
+      for (const imageUrl of imageUrls) {
+        expect(imageUrl, `${sampleKey} uses a remote demo image`).not.toMatch(/^https?:\/\//i);
+      }
+    }
   });
 });

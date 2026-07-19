@@ -13,6 +13,7 @@
 import { Node, mergeAttributes } from '@tiptap/core';
 import { NodeViewWrapper, ReactNodeViewRenderer } from '@tiptap/react';
 import type { NodeViewProps } from '@tiptap/react';
+import type { VideoPlacement } from '@bendyline/squisq/schemas';
 import { useResolvedMediaSrc } from './useResolvedMediaSrc.js';
 
 export interface TiptapVideoOptions {
@@ -26,19 +27,51 @@ declare module '@tiptap/core' {
         src: string;
         width?: number | string | null;
         controls?: boolean;
+        placement?: VideoPlacement;
+        lockToBlock?: boolean;
       }) => ReturnType;
     };
   }
 }
 
-function VideoNodeView({ node }: NodeViewProps) {
-  const { src, width, height, poster, controls } = node.attrs as {
+const PLACEMENT_OPTIONS: Array<{ value: VideoPlacement; label: string; title: string }> = [
+  { value: 'content', label: 'In layout', title: 'Participate in the block content layout' },
+  {
+    value: 'picture-in-picture',
+    label: 'PIP',
+    title: 'Show above the composition as picture in picture',
+  },
+  { value: 'overlay', label: 'Overlay', title: 'Show above the composition as full-frame video' },
+];
+
+function normalizeVideoPlacement(value: unknown): VideoPlacement {
+  return value === 'picture-in-picture' || value === 'overlay' ? value : 'content';
+}
+
+function normalizeLockToBlock(value: unknown): boolean {
+  return value !== false && value !== 'false' && value !== 0 && value !== '0';
+}
+
+function VideoNodeView({ node, updateAttributes, selected }: NodeViewProps) {
+  const {
+    src,
+    width,
+    height,
+    poster,
+    controls,
+    placement: rawPlacement,
+    lockToBlock: rawLockToBlock,
+  } = node.attrs as {
     src: string;
     width: string | number | null;
     height: string | number | null;
     poster: string | null;
     controls: boolean;
+    placement: VideoPlacement;
+    lockToBlock: boolean;
   };
+  const placement = normalizeVideoPlacement(rawPlacement);
+  const lockToBlock = normalizeLockToBlock(rawLockToBlock);
   const resolvedSrc = useResolvedMediaSrc(src ?? '');
   // Resolve poster through the same provider when present so a
   // workspace-local frame thumbnail also renders inside the editor.
@@ -46,14 +79,53 @@ function VideoNodeView({ node }: NodeViewProps) {
 
   return (
     <NodeViewWrapper
-      as="span"
-      className="squisq-inline-video-player"
-      // Mark as a drag handle so ProseMirror moves the node when the user
-      // drags it, rather than the browser starting a native media-drag.
-      data-drag-handle
-      draggable
+      as="div"
+      className={`squisq-inline-video-player squisq-video-node${selected ? ' squisq-video-node--selected' : ''}`}
+      data-video-placement={placement}
     >
+      <div
+        className="squisq-video-placement-toolbar"
+        role="toolbar"
+        aria-label="Video placement"
+        contentEditable={false}
+      >
+        <span className="squisq-video-placement-label">Video</span>
+        {PLACEMENT_OPTIONS.map((option) => (
+          <button
+            key={option.value}
+            type="button"
+            className="squisq-video-placement-button"
+            aria-pressed={placement === option.value}
+            title={option.title}
+            onMouseDown={(event) => event.preventDefault()}
+            onClick={() => updateAttributes({ placement: option.value })}
+          >
+            {option.label}
+          </button>
+        ))}
+        {placement !== 'content' && (
+          <button
+            type="button"
+            className="squisq-video-placement-button squisq-video-placement-button--lock"
+            aria-label="Lock to block"
+            aria-pressed={lockToBlock}
+            title={
+              lockToBlock
+                ? 'Locked to this block; turn off for independent document timing'
+                : 'Document-timed; turn on to follow this block'
+            }
+            onMouseDown={(event) => event.preventDefault()}
+            onClick={() => updateAttributes({ lockToBlock: !lockToBlock })}
+          >
+            Lock to block
+          </button>
+        )}
+      </div>
       <video
+        // Mark the media surface as the drag handle so toolbar button presses
+        // never initiate a ProseMirror node drag.
+        data-drag-handle
+        draggable
         src={resolvedSrc || undefined}
         poster={poster ? resolvedPoster : undefined}
         controls={controls}
@@ -83,6 +155,55 @@ export const TiptapVideo = Node.create<TiptapVideoOptions>({
       width: { default: null },
       height: { default: null },
       poster: { default: null },
+      placement: {
+        default: 'content',
+        parseHTML: (el) => normalizeVideoPlacement(el.getAttribute('data-squisq-video-placement')),
+        renderHTML: (attrs) => {
+          const placement = normalizeVideoPlacement(attrs.placement);
+          return placement === 'content' ? {} : { 'data-squisq-video-placement': placement };
+        },
+      },
+      lockToBlock: {
+        default: true,
+        parseHTML: (el) => normalizeLockToBlock(el.getAttribute('data-squisq-video-lock-to-block')),
+        renderHTML: (attrs) => {
+          const placement = normalizeVideoPlacement(attrs.placement);
+          const locked = normalizeLockToBlock(attrs.lockToBlock);
+          return placement !== 'content' && !locked
+            ? { 'data-squisq-video-lock-to-block': 'false' }
+            : {};
+        },
+      },
+      startAt: {
+        default: null,
+        parseHTML: (el) => el.getAttribute('data-squisq-video-start-at'),
+        renderHTML: (attrs) =>
+          normalizeVideoPlacement(attrs.placement) !== 'content' &&
+          !normalizeLockToBlock(attrs.lockToBlock) &&
+          attrs.startAt != null
+            ? { 'data-squisq-video-start-at': String(attrs.startAt) }
+            : {},
+      },
+      clipStart: {
+        default: null,
+        parseHTML: (el) => el.getAttribute('data-squisq-video-clip-start'),
+        renderHTML: (attrs) =>
+          normalizeVideoPlacement(attrs.placement) !== 'content' &&
+          !normalizeLockToBlock(attrs.lockToBlock) &&
+          attrs.clipStart != null
+            ? { 'data-squisq-video-clip-start': String(attrs.clipStart) }
+            : {},
+      },
+      clipEnd: {
+        default: null,
+        parseHTML: (el) => el.getAttribute('data-squisq-video-clip-end'),
+        renderHTML: (attrs) =>
+          normalizeVideoPlacement(attrs.placement) !== 'content' &&
+          !normalizeLockToBlock(attrs.lockToBlock) &&
+          attrs.clipEnd != null
+            ? { 'data-squisq-video-clip-end': String(attrs.clipEnd) }
+            : {},
+      },
       // The HTML5 `controls` attribute is boolean-presence; parse its
       // existence (even with an empty string value) as `true`, otherwise
       // default to true (we want recordings to be playable by default).

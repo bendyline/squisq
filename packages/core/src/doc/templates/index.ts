@@ -101,6 +101,13 @@ export { CONTAINER_TEMPLATES } from './templateNames.js';
 export { isContainerTemplate } from './templateNames.js';
 
 /**
+ * Templates fed by the first GFM table in their block body (dataTable and
+ * the chart family). The parse pipeline promotes that table into
+ * `templateData` unless the author supplied data explicitly.
+ */
+export { TABLE_FED_TEMPLATES } from './templateNames.js';
+
+/**
  * Audio segment timing info for aligning blocks with audio.
  */
 export interface AudioSegmentTiming {

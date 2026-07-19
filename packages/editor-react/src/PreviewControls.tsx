@@ -23,9 +23,19 @@ import {
 } from 'react';
 import type { ReactNode } from 'react';
 import { createPortal } from 'react-dom';
-import type { DisplayMode, CaptionStyle } from '@bendyline/squisq-react';
+import type {
+  CaptionStyle,
+  DisplayMode,
+  PipPosition,
+  PipShape,
+  VideoPresentation,
+} from '@bendyline/squisq-react';
 import type { ViewportPreset, ViewportConfig } from '@bendyline/squisq/schemas';
-import { VIEWPORT_PRESETS, getThemeSummaries } from '@bendyline/squisq/schemas';
+import {
+  VIEWPORT_PRESETS,
+  getThemeSummaries,
+  resolveMediaSchedule,
+} from '@bendyline/squisq/schemas';
 import type { CustomTemplateDefinition, Theme } from '@bendyline/squisq/schemas';
 import { ThemePicker } from './ThemePicker';
 import { getTransformStyleSummaries } from '@bendyline/squisq/transform';
@@ -83,10 +93,22 @@ export interface PreviewSettings {
    *  that style. The single entry point so the toggle buttons persist in one
    *  frontmatter write. */
   setCaptionMode: (mode: CaptionMode) => void;
+  /** Whether the current document schedules any video media. */
+  hasVideoMedia: boolean;
+  activeVideoPresentation: VideoPresentation;
+  setVideoPresentation: (presentation: VideoPresentation) => void;
+  activePipShape: PipShape;
+  setPipShape: (shape: PipShape) => void;
+  activePipPosition: PipPosition;
+  setPipPosition: (position: PipPosition) => void;
   /** Whether Squisq should synthesize and show its managed cover slide. */
   activeCoverSlide: boolean;
   /** Enable/disable the managed cover slide. */
   setCoverSlideEnabled: (enabled: boolean) => void;
+  /** Whether Video mode restarts automatically when playback ends. */
+  activeVideoLoop: boolean;
+  /** Enable/disable automatic Video-mode playback restart. */
+  setVideoLoopEnabled: (enabled: boolean) => void;
   /** User-authored themes (doc + browser library) for the picker's "Custom" group. */
   customThemes: Theme[];
   /** Open the custom-theme designer for a theme (or null to create a new one). */
@@ -193,6 +215,47 @@ function resolveFrontmatterCaptionMode(value: unknown): CaptionMode | null {
   return null;
 }
 
+function resolveVideoPresentation(value: unknown): VideoPresentation | null {
+  if (typeof value !== 'string') return null;
+  const normalized = value.trim().toLowerCase();
+  if (normalized === 'background' || normalized === 'behind') return 'background';
+  if (normalized === 'full-frame' || normalized === 'fullscreen' || normalized === 'full') {
+    return 'full-frame';
+  }
+  if (normalized === 'picture-in-picture' || normalized === 'pip' || normalized === 'overlay') {
+    return 'picture-in-picture';
+  }
+  return null;
+}
+
+function resolvePipShape(value: unknown): PipShape | null {
+  if (typeof value !== 'string') return null;
+  const normalized = value.trim().toLowerCase();
+  if (normalized === 'square' || normalized === 'rectangle') return 'square';
+  if (normalized === 'rounded' || normalized === 'round-square') return 'rounded';
+  if (normalized === 'circle' || normalized === 'circular') return 'circle';
+  return null;
+}
+
+function resolvePipPosition(value: unknown): PipPosition | null {
+  if (typeof value !== 'string') return null;
+  const normalized = value
+    .trim()
+    .toLowerCase()
+    .replace(/[_\s]+/g, '-');
+  const aliases: Record<string, PipPosition> = {
+    'top-left': 'top-left',
+    'upper-left': 'top-left',
+    'top-right': 'top-right',
+    'upper-right': 'top-right',
+    'bottom-left': 'bottom-left',
+    'lower-left': 'bottom-left',
+    'bottom-right': 'bottom-right',
+    'lower-right': 'bottom-right',
+  };
+  return aliases[normalized] ?? null;
+}
+
 function resolveFrontmatterBoolean(value: unknown): boolean | null {
   if (typeof value === 'boolean') return value;
   if (typeof value !== 'string') return null;
@@ -207,6 +270,12 @@ function resolveFrontmatterBoolean(value: unknown): boolean | null {
 export interface PreviewSettingsProviderProps {
   doc: Doc | null;
   children: ReactNode;
+  /**
+   * Viewport preset to use when the document does not declare
+   * `document-render-as` and the user has not selected a format. Hosts can
+   * make this responsive to their available surface. Defaults to landscape.
+   */
+  defaultViewportPreset?: ViewportPreset;
   /**
    * Optional Theme to use for the preview, regardless of `Doc.themeId` or
    * the user's theme dropdown selection. Used by the theme customizer to
@@ -269,6 +338,7 @@ const THEME_WRITE_ABORTED =
 export function PreviewSettingsProvider({
   doc,
   children,
+  defaultViewportPreset = 'landscape',
   themeOverride,
 }: PreviewSettingsProviderProps) {
   const frontmatter = doc?.frontmatter;
@@ -284,16 +354,6 @@ export function PreviewSettingsProvider({
     [markdownSource, setMarkdownSource],
   );
 
-  // Viewport
-  const fmPreset = useMemo(
-    () => resolveRenderAs(frontmatter?.['document-render-as']),
-    [frontmatter],
-  );
-  const [selectedPreset, setSelectedPreset] = useState<ViewportPreset | null>(null);
-  useEffect(() => setSelectedPreset(null), [fmPreset]);
-  const activePreset = selectedPreset ?? fmPreset ?? 'landscape';
-  const activeViewport = VIEWPORT_PRESETS[activePreset];
-
   // Display mode. A frontmatter-forced `narrate` clamps back to video when
   // the host disabled the mode, so hostile frontmatter can't turn it on.
   const fmMode = useMemo(() => resolveDisplayMode(frontmatter?.['display-mode']), [frontmatter]);
@@ -302,6 +362,22 @@ export function PreviewSettingsProvider({
   const requestedDisplayMode = selectedDisplayMode ?? fmMode ?? 'slideshow';
   const activeDisplayMode =
     requestedDisplayMode === 'narrate' && !allowNarrate ? 'video' : requestedDisplayMode;
+
+  // Viewport. The host default is deliberately limited to the fixed-canvas
+  // slideshow/video modes; Page and Document keep their historical landscape
+  // fallback unless the document or user explicitly chooses another format.
+  const fmPreset = useMemo(
+    () => resolveRenderAs(frontmatter?.['document-render-as']),
+    [frontmatter],
+  );
+  const [selectedPreset, setSelectedPreset] = useState<ViewportPreset | null>(null);
+  useEffect(() => setSelectedPreset(null), [fmPreset]);
+  const playbackDefaultPreset =
+    activeDisplayMode === 'slideshow' || activeDisplayMode === 'video'
+      ? defaultViewportPreset
+      : 'landscape';
+  const activePreset = selectedPreset ?? fmPreset ?? playbackDefaultPreset;
+  const activeViewport = VIEWPORT_PRESETS[activePreset];
 
   // Custom themes (doc + browser library). `useCustomThemes` returns null when
   // no provider is mounted; document-scoped themes still remain available.
@@ -479,6 +555,100 @@ export function PreviewSettingsProvider({
   // Caption mode — 'off' | 'standard' | 'social'. Persisted to `squisq-captions`
   // (legacy `caption-style` read for compat). `activeCaptionStyle` is the style
   // used when enabled; `activeCaptionsEnabled` is the off/on split.
+  const hasVideoMedia = useMemo(
+    () => !!doc && resolveMediaSchedule(doc).some((clip) => clip.kind === 'video'),
+    [doc],
+  );
+
+  const fmVideoPresentation = useMemo(
+    () =>
+      resolveVideoPresentation(
+        readFrontmatterKey(
+          frontmatter,
+          FRONTMATTER_SETTING_KEYS.videoPresentation.canonical,
+          FRONTMATTER_SETTING_KEYS.videoPresentation.legacy,
+        ),
+      ),
+    [frontmatter],
+  );
+  const [selectedVideoPresentation, setSelectedVideoPresentation] =
+    useState<VideoPresentation | null>(null);
+  useEffect(() => setSelectedVideoPresentation(null), [fmVideoPresentation]);
+  const activeVideoPresentation =
+    selectedVideoPresentation ??
+    fmVideoPresentation ??
+    FRONTMATTER_SETTING_DEFAULTS.videoPresentation;
+  const handleVideoPresentation = useCallback(
+    (presentation: VideoPresentation) => {
+      setSelectedVideoPresentation(presentation);
+      persistFrontmatter({
+        [FRONTMATTER_SETTING_KEYS.videoPresentation.canonical]: omitFrontmatterDefault(
+          presentation,
+          FRONTMATTER_SETTING_DEFAULTS.videoPresentation,
+        ),
+        [FRONTMATTER_SETTING_KEYS.videoPresentation.legacy]: null,
+      });
+    },
+    [persistFrontmatter],
+  );
+
+  const fmPipShape = useMemo(
+    () =>
+      resolvePipShape(
+        readFrontmatterKey(
+          frontmatter,
+          FRONTMATTER_SETTING_KEYS.pipShape.canonical,
+          FRONTMATTER_SETTING_KEYS.pipShape.legacy,
+        ),
+      ),
+    [frontmatter],
+  );
+  const [selectedPipShape, setSelectedPipShape] = useState<PipShape | null>(null);
+  useEffect(() => setSelectedPipShape(null), [fmPipShape]);
+  const activePipShape = selectedPipShape ?? fmPipShape ?? FRONTMATTER_SETTING_DEFAULTS.pipShape;
+  const handlePipShape = useCallback(
+    (shape: PipShape) => {
+      setSelectedPipShape(shape);
+      persistFrontmatter({
+        [FRONTMATTER_SETTING_KEYS.pipShape.canonical]: omitFrontmatterDefault(
+          shape,
+          FRONTMATTER_SETTING_DEFAULTS.pipShape,
+        ),
+        [FRONTMATTER_SETTING_KEYS.pipShape.legacy]: null,
+      });
+    },
+    [persistFrontmatter],
+  );
+
+  const fmPipPosition = useMemo(
+    () =>
+      resolvePipPosition(
+        readFrontmatterKey(
+          frontmatter,
+          FRONTMATTER_SETTING_KEYS.pipPosition.canonical,
+          FRONTMATTER_SETTING_KEYS.pipPosition.legacy,
+        ),
+      ),
+    [frontmatter],
+  );
+  const [selectedPipPosition, setSelectedPipPosition] = useState<PipPosition | null>(null);
+  useEffect(() => setSelectedPipPosition(null), [fmPipPosition]);
+  const activePipPosition =
+    selectedPipPosition ?? fmPipPosition ?? FRONTMATTER_SETTING_DEFAULTS.pipPosition;
+  const handlePipPosition = useCallback(
+    (position: PipPosition) => {
+      setSelectedPipPosition(position);
+      persistFrontmatter({
+        [FRONTMATTER_SETTING_KEYS.pipPosition.canonical]: omitFrontmatterDefault(
+          position,
+          FRONTMATTER_SETTING_DEFAULTS.pipPosition,
+        ),
+        [FRONTMATTER_SETTING_KEYS.pipPosition.legacy]: null,
+      });
+    },
+    [persistFrontmatter],
+  );
+
   const fmCaptionMode = useMemo(
     () =>
       resolveFrontmatterCaptionMode(
@@ -505,6 +675,37 @@ export function PreviewSettingsProvider({
           FRONTMATTER_SETTING_DEFAULTS.captions,
         ),
         [FRONTMATTER_SETTING_KEYS.captions.legacy]: null,
+      });
+    },
+    [persistFrontmatter],
+  );
+
+  // Video looping is opt-in. Persist only the enabled state so existing
+  // documents retain the default one-shot playback behavior.
+  const fmVideoLoop = useMemo(
+    () =>
+      resolveFrontmatterBoolean(
+        readFrontmatterKey(
+          frontmatter,
+          FRONTMATTER_SETTING_KEYS.videoLoop.canonical,
+          FRONTMATTER_SETTING_KEYS.videoLoop.legacy,
+        ),
+      ),
+    [frontmatter],
+  );
+  const [selectedVideoLoop, setSelectedVideoLoop] = useState<boolean | null>(null);
+  useEffect(() => setSelectedVideoLoop(null), [fmVideoLoop]);
+  const activeVideoLoop =
+    selectedVideoLoop ?? fmVideoLoop ?? FRONTMATTER_SETTING_DEFAULTS.videoLoop;
+  const handleSetVideoLoopEnabled = useCallback(
+    (enabled: boolean) => {
+      setSelectedVideoLoop(enabled);
+      persistFrontmatter({
+        [FRONTMATTER_SETTING_KEYS.videoLoop.canonical]: omitFrontmatterDefault(
+          enabled,
+          FRONTMATTER_SETTING_DEFAULTS.videoLoop,
+        ),
+        [FRONTMATTER_SETTING_KEYS.videoLoop.legacy]: null,
       });
     },
     [persistFrontmatter],
@@ -574,6 +775,15 @@ export function PreviewSettingsProvider({
       activeCaptionStyle,
       activeCaptionsEnabled,
       setCaptionMode: handleSetCaptionMode,
+      hasVideoMedia,
+      activeVideoPresentation,
+      setVideoPresentation: handleVideoPresentation,
+      activePipShape,
+      setPipShape: handlePipShape,
+      activePipPosition,
+      setPipPosition: handlePipPosition,
+      activeVideoLoop,
+      setVideoLoopEnabled: handleSetVideoLoopEnabled,
       activeCoverSlide,
       setCoverSlideEnabled: handleSetCoverSlideEnabled,
       customThemes,
@@ -591,10 +801,19 @@ export function PreviewSettingsProvider({
       activeTransformStyle,
       activeCaptionStyle,
       activeCaptionsEnabled,
+      hasVideoMedia,
+      activeVideoPresentation,
+      activePipShape,
+      activePipPosition,
+      activeVideoLoop,
       activeCoverSlide,
       handleSetThemeId,
       handleSetTransformStyle,
       handleSetCaptionMode,
+      handleVideoPresentation,
+      handlePipShape,
+      handlePipPosition,
+      handleSetVideoLoopEnabled,
       handleSetCoverSlideEnabled,
       customThemes,
       openThemeDesigner,
@@ -651,6 +870,25 @@ const FORMAT_SWITCH_OPTIONS: { key: ViewportPreset; label: string; w: number; h:
   { key: 'standard', label: '4:3', w: 12, h: 9 },
 ];
 
+const VIDEO_PRESENTATION_OPTIONS: Array<{ key: VideoPresentation; label: string }> = [
+  { key: 'background', label: 'Behind' },
+  { key: 'full-frame', label: 'Full frame' },
+  { key: 'picture-in-picture', label: 'Picture in picture' },
+];
+
+const PIP_SHAPE_OPTIONS: Array<{ key: PipShape; label: string }> = [
+  { key: 'square', label: 'Square' },
+  { key: 'rounded', label: 'Rounded' },
+  { key: 'circle', label: 'Circle' },
+];
+
+const PIP_POSITION_OPTIONS: Array<{ key: PipPosition; label: string }> = [
+  { key: 'top-left', label: 'Top left' },
+  { key: 'top-right', label: 'Top right' },
+  { key: 'bottom-left', label: 'Bottom left' },
+  { key: 'bottom-right', label: 'Bottom right' },
+];
+
 const DISPLAY_MODE_OPTIONS: {
   key: DisplayMode;
   label: string;
@@ -704,11 +942,20 @@ const SUMMARIZE_TOOLTIP =
 /**
  * Left-to-right priority order for the preview controls. As the toolbar
  * narrows, controls drop into the overflow menu from the END of this list
- * first (Cover, then Captions, …). Aspect ratio stays inline the longest, but
+ * first (Cover, then Loop, then Captions, …). Aspect ratio stays inline the
+ * longest, but
  * still collapses into the same menu when the toolbar is very constrained.
  */
-type ControlKey = 'format' | 'theme' | 'transform' | 'captions' | 'cover';
-const CONTROL_KEYS: ControlKey[] = ['format', 'theme', 'transform', 'captions', 'cover'];
+type ControlKey = 'format' | 'video' | 'theme' | 'transform' | 'captions' | 'loop' | 'cover';
+const CONTROL_KEYS: ControlKey[] = [
+  'format',
+  'video',
+  'theme',
+  'transform',
+  'captions',
+  'loop',
+  'cover',
+];
 
 /**
  * Controls that apply to the active display mode. Page (`linear`) is a
@@ -717,11 +964,18 @@ const CONTROL_KEYS: ControlKey[] = ['format', 'theme', 'transform', 'captions', 
  * never applied, so both are hidden there. Cover, Theme, and Summarize
  * remain live in every mode.
  */
-function controlKeysForMode(displayMode: string): ControlKey[] {
-  if (displayMode === 'linear') {
-    return CONTROL_KEYS.filter((key) => key !== 'format' && key !== 'captions');
+function controlKeysForMode(displayMode: string, hasVideoMedia: boolean): ControlKey[] {
+  let keys = CONTROL_KEYS;
+  if (displayMode !== 'video') {
+    keys = keys.filter((key) => key !== 'loop');
   }
-  return CONTROL_KEYS;
+  if (!hasVideoMedia || (displayMode !== 'slideshow' && displayMode !== 'video')) {
+    keys = keys.filter((key) => key !== 'video');
+  }
+  if (displayMode === 'linear') {
+    return keys.filter((key) => key !== 'format' && key !== 'captions');
+  }
+  return keys;
 }
 
 const PREVIEW_POPOVER_GAP = 4;
@@ -783,7 +1037,7 @@ const selectStyle: React.CSSProperties = {
  */
 export function PreviewToolbarControls() {
   const s = usePreviewSettings();
-  const controlKeys = controlKeysForMode(s.activeDisplayMode);
+  const controlKeys = controlKeysForMode(s.activeDisplayMode, s.hasVideoMedia);
   const [visibleCount, setVisibleCount] = useState(CONTROL_KEYS.length);
   const [popoverOpen, setPopoverOpen] = useState(false);
   // `rootRef` (flex:1) always spans the toolbar's leftover width, so its
@@ -907,6 +1161,57 @@ export function PreviewToolbarControls() {
             <PreviewFormatSwitch />
           </div>
         );
+      case 'video': {
+        const showPipOptions = s.activeVideoPresentation === 'picture-in-picture';
+        return (
+          <div
+            key="video"
+            className={`squisq-preview-control${compact ? ' squisq-preview-control--compact' : ''}`}
+          >
+            <label style={labelStyle}>Video:</label>
+            <select
+              aria-label="Video presentation"
+              style={selectStyle}
+              value={s.activeVideoPresentation}
+              onChange={(event) => s.setVideoPresentation(event.target.value as VideoPresentation)}
+            >
+              {VIDEO_PRESENTATION_OPTIONS.map((option) => (
+                <option key={option.key} value={option.key}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+            {showPipOptions && (
+              <>
+                <select
+                  aria-label="Picture-in-picture shape"
+                  style={selectStyle}
+                  value={s.activePipShape}
+                  onChange={(event) => s.setPipShape(event.target.value as PipShape)}
+                >
+                  {PIP_SHAPE_OPTIONS.map((option) => (
+                    <option key={option.key} value={option.key}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+                <select
+                  aria-label="Picture-in-picture position"
+                  style={selectStyle}
+                  value={s.activePipPosition}
+                  onChange={(event) => s.setPipPosition(event.target.value as PipPosition)}
+                >
+                  {PIP_POSITION_OPTIONS.map((option) => (
+                    <option key={option.key} value={option.key}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </>
+            )}
+          </div>
+        );
+      }
       case 'theme':
         return (
           <div
@@ -1011,6 +1316,22 @@ export function PreviewToolbarControls() {
           </div>
         );
       }
+      case 'loop':
+        return (
+          <div
+            key="loop"
+            className={`squisq-preview-control${compact ? ' squisq-preview-control--compact' : ''}`}
+          >
+            <label className="squisq-preview-checkbox">
+              <input
+                type="checkbox"
+                checked={s.activeVideoLoop}
+                onChange={(event) => s.setVideoLoopEnabled(event.target.checked)}
+              />
+              <span>Loop</span>
+            </label>
+          </div>
+        );
       case 'cover':
         return (
           <div

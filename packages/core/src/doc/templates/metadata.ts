@@ -107,6 +107,34 @@ export const TEMPLATE_METADATA: Record<string, TemplateMetadata> = {
     label: 'Data Table',
     description: 'Renders tabular data in a clean, styled table with a header row.',
   },
+  barChart: {
+    label: 'Bar Chart',
+    description: "Horizontal bars from the block's markdown table — one bar per row.",
+  },
+  columnChart: {
+    label: 'Column Chart',
+    description: "Vertical columns from the block's markdown table — one column per row.",
+  },
+  pieChart: {
+    label: 'Pie Chart',
+    description: "A pie of the block's markdown table — each row becomes a labeled slice.",
+  },
+  donutChart: {
+    label: 'Donut Chart',
+    description: "A donut of the block's markdown table — each row becomes a labeled slice.",
+  },
+  lineChart: {
+    label: 'Line Chart',
+    description: "Lines from the block's markdown table — one line per value column.",
+  },
+  areaChart: {
+    label: 'Area Chart',
+    description: "Filled area lines from the block's markdown table — one area per value column.",
+  },
+  scatterChart: {
+    label: 'Scatter Chart',
+    description: "An x/y scatter plot from the block's markdown table's numeric columns.",
+  },
   diagram: {
     label: 'Diagram',
     description:

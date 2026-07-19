@@ -121,6 +121,29 @@ squisq validate ./my-folder --strict
 
 Diagnostics are reported at three severities — `error`, `warning`, and `info` (info is counted and shown separately). Exit codes depend on **errors** only: `0` clean, warnings-only, or info-only; `1` errors (or any warning with `--strict`); `2` input unreadable.
 
+### `squisq transform <input>`
+
+Apply one-time markdown **source** transforms to a `.md` file, in the order given: `unwrap` (remove forced line wrapping so each paragraph is one line — hard breaks kept), `wrap` (hard-wrap paragraph prose at a column width on word boundaries — code, tables, and headings untouched), and `cleanup` (canonical house-style normalization: bullets, emphasis, headings, table padding, spacing; annotations and frontmatter preserved). Not to be confused with the `--transform <style>` slideshow-style flag on `convert`/`video` — this command rewrites the markdown text itself.
+
+The transformed markdown goes to stdout by default (status messages go to stderr, so it pipes cleanly).
+
+```bash
+squisq transform doc.md --ops unwrap
+squisq transform doc.md --ops unwrap,cleanup > cleaned.md
+squisq transform doc.md --ops wrap --width 100 --in-place
+squisq transform doc.md --ops cleanup -o cleaned.md
+```
+
+| Option         | Description                                                                |
+| -------------- | -------------------------------------------------------------------------- |
+| `--ops <list>` | Comma-separated transforms, applied in order (`unwrap`, `wrap`, `cleanup`) |
+| `--width <n>`  | Column width for `wrap` (20–500, default 80)                               |
+| `-o <file>`    | Write the result to a file (refuses to overwrite without `--overwrite`)    |
+| `--in-place`   | Rewrite the input file (conflicts with `-o`)                               |
+| `--overwrite`  | Allow `-o` to replace an existing file                                     |
+
+Transforms run in strict mode: each one reparses its output and structurally compares it against the input document; if equivalence cannot be proven, the command exits `1` without emitting anything. Exit codes: `0` success, `1` transform/output failure, `2` input unreadable.
+
 ## Input Formats
 
 All commands accept:

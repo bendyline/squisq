@@ -117,6 +117,43 @@ export interface MediaClipPatch {
   spillover?: boolean | null;
 }
 
+function setHtmlAttribute(openingTag: string, name: string, value: string | null): string {
+  const attr = new RegExp(`\\s+${name}(?:\\s*=\\s*(?:"[^"]*"|'[^']*'|[^\\s>]+))?`, 'i');
+  if (value === null) return openingTag.replace(attr, '');
+  if (attr.test(openingTag)) return openingTag.replace(attr, ` ${name}="${value}"`);
+  return openingTag.replace(/\s*\/?>(?=$)/, (end) => ` ${name}="${value}"${end.trimStart()}`);
+}
+
+/** Patch timeline timing data on a toolbar-authored standalone HTML video. */
+function setHtmlVideoClipInLine(original: string, patch: MediaClipPatch): string | null {
+  if (!/^\s*<video\b/i.test(original)) return null;
+  const opening = /<video\b[^>]*>/i.exec(original);
+  if (!opening) return null;
+  let next = opening[0];
+  if (patch.startAt !== undefined) {
+    next = setHtmlAttribute(
+      next,
+      'data-squisq-video-start-at',
+      patch.startAt == null ? null : formatSeconds(patch.startAt),
+    );
+  }
+  if (patch.clipStart !== undefined) {
+    next = setHtmlAttribute(
+      next,
+      'data-squisq-video-clip-start',
+      patch.clipStart == null ? null : formatSeconds(patch.clipStart),
+    );
+  }
+  if (patch.clipEnd !== undefined) {
+    next = setHtmlAttribute(
+      next,
+      'data-squisq-video-clip-end',
+      patch.clipEnd == null ? null : formatSeconds(patch.clipEnd),
+    );
+  }
+  return `${original.slice(0, opening.index)}${next}${original.slice(opening.index + opening[0].length)}`;
+}
+
 /**
  * Patch the `{[audio …]}` / `{[video …]}` annotation at 1-based `line`.
  * Preserves the template name and any params not in the patch. Returns the
@@ -131,6 +168,11 @@ export function setMediaClipInSource(
   const idx = line - 1;
   if (idx < 0 || idx >= lines.length) return null;
   const original = lines[idx];
+  const htmlVideo = setHtmlVideoClipInLine(original, patch);
+  if (htmlVideo != null) {
+    lines[idx] = htmlVideo;
+    return lines.join('\n');
+  }
   const m = matchTrailingTemplateAnnotation(original);
   if (!m) return null;
 

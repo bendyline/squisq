@@ -20,6 +20,7 @@
 // Shell (top-level component)
 export { EditorShell } from './EditorShell.js';
 export type { EditorShellProps, EditorColorScheme } from './EditorShell.js';
+export type { EditorHostMode } from './editorHostMode.js';
 
 // Code-context sections (host-supplied markdown injected into the code surface)
 export { CodeContextZones } from './codeContext/CodeContextZones.js';
@@ -70,6 +71,12 @@ export type { BlockRange, BlockSlice } from './blockRange.js';
 // markdown write-back helpers it commits edits through.
 export { TimelineTrack } from './TimelineTrack.js';
 export type { TimelineTrackProps } from './TimelineTrack.js';
+export { TimelineVideoPanel } from './TimelineVideoPanel.js';
+export type { TimelineVideoPanelProps } from './TimelineVideoPanel.js';
+export { TimelineCompositionPanel } from './TimelineCompositionPanel.js';
+export type { TimelineCompositionPanelProps } from './TimelineCompositionPanel.js';
+export { TimelineToolbar } from './TimelineToolbar.js';
+export type { TimelineToolbarProps } from './TimelineToolbar.js';
 export { formatSeconds, setBlockDurationInSource, setMediaClipInSource } from './timelineSource.js';
 export type { MediaClipPatch } from './timelineSource.js';
 
@@ -122,6 +129,9 @@ export type { ToolbarProps } from './Toolbar.js';
 
 export { VersionHistoryPanel } from './VersionHistoryPanel.js';
 export { ViewMenuPanel } from './ViewMenuPanel.js';
+export { TransformMenu } from './TransformMenu.js';
+export { ingestForWrite, persistFromWrite } from './wrapPolicy.js';
+export type { WrapPolicyIngest } from './wrapPolicy.js';
 export { OutlinePanel } from './OutlinePanel.js';
 export type { OutlinePanelProps } from './OutlinePanel.js';
 export { ThemeCustomizerPanel } from './ThemeCustomizerPanel.js';
@@ -189,8 +199,12 @@ export {
 
 // Monaco lazy loader — exported so hosts embedding RawEditor-like surfaces
 // can share the same load-once Monaco bootstrap.
-export { useMonacoLoader } from './useMonacoLoader.js';
+export { preloadMonaco, preloadMonacoSuggestions, useMonacoLoader } from './useMonacoLoader.js';
 export type { UseMonacoLoaderResult } from './useMonacoLoader.js';
+export type {
+  MonacoLanguageLoadOptions,
+  MonacoLanguageRequest,
+} from './monacoLanguageDetection.js';
 
 // Monaco language-service worker wiring — the host supplies the `?worker`
 // constructors, this owns the label→worker mapping. See monacoWorkers.ts.

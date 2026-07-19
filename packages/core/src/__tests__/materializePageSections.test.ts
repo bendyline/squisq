@@ -95,6 +95,42 @@ describe('section extractor coverage', () => {
     expect(video.slots.media).toMatchObject({ type: 'video', src: 'v.mp4' });
   });
 
+  it('chart blocks embed a chart canvas when chartable, else fall back to prose', () => {
+    const chart = materializePageSection(
+      templateBlock('columnChart', {
+        headers: ['Region', 'Q1'],
+        rows: [
+          ['West', '100'],
+          ['East', '80'],
+        ],
+      }),
+    ).section;
+    expect(chart.kind).toBe('canvas-embed');
+    expect(chart.slots.media).toMatchObject({ type: 'canvas', spatial: 'chart' });
+
+    // A real prose-only chart block, resolved through the markdown pipeline:
+    // no chartable table → native prose section, never invented sample data.
+    const doc = markdownToDoc(parseMarkdown('## Notes {[barChart]}\n\nJust prose here.\n'), {
+      generateCoverBlock: false,
+    });
+    const prose = materializePageSection(doc.blocks[0]).section;
+    expect(prose.kind).toBe('prose');
+    expect(JSON.stringify(prose)).not.toContain('Quarter'); // placeholder table stays out
+
+    // A table whose cells are all text is not chartable either.
+    const textDoc = markdownToDoc(
+      parseMarkdown('## Roster {[pieChart]}\n\n| Name | Role |\n| --- | --- |\n| A | Dev |\n'),
+      { generateCoverBlock: false },
+    );
+    expect(materializePageSection(textDoc.blocks[0]).section.kind).toBe('prose');
+
+    // A bare annotated heading (no body at all) may show sample data.
+    const emptyDoc = markdownToDoc(parseMarkdown('## Chart {[columnChart]}\n'), {
+      generateCoverBlock: false,
+    });
+    expect(materializePageSection(emptyDoc.blocks[0]).section.kind).toBe('canvas-embed');
+  });
+
   it('pullQuote with a background image becomes a media-backed quote band', () => {
     const { section } = materializePageSection(
       templateBlock('pullQuote', {

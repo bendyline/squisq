@@ -321,6 +321,12 @@ function recommendedNamesForProfile(profile: BlockContentProfile): string[] {
     anyContentSignal = true;
     names.add('dataTable');
     names.add('comparisonBar');
+    // Chart family: recommend the four primary kinds (donut/area/scatter
+    // stay findable in the full gallery without flooding the recommended set).
+    names.add('columnChart');
+    names.add('barChart');
+    names.add('lineChart');
+    names.add('pieChart');
   }
 
   if (profile.hasDate) {

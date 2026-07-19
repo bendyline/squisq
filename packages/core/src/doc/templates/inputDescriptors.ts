@@ -93,6 +93,59 @@ const DATE_EVENT_MOOD_VALUES = ['neutral', 'somber', 'celebratory'] as const;
 /** Shared free-form hint for `colorScheme`-style keys. */
 const COLOR_SCHEME_HINT = "theme color-scheme name — e.g. 'blue', 'green'";
 
+/**
+ * Shared descriptors for the chart templates (all render through the same
+ * engine and accept the same column-role params). `extra` appends
+ * kind-specific keys (bar/column add `stacked`).
+ */
+function CHART_DESCRIPTORS(
+  extra: readonly TemplateInputDescriptor[] = [],
+): readonly TemplateInputDescriptor[] {
+  return [
+    { key: 'title', description: 'Optional title above the chart' },
+    {
+      key: 'labelColumn',
+      description: 'Category/label column',
+      valueHint: 'header name or 0-based index',
+    },
+    {
+      key: 'valueColumns',
+      description: 'Value columns to plot',
+      coerce: 'stringList',
+      valueHint: 'comma-separated header names or 0-based indexes',
+    },
+    {
+      key: 'showTable',
+      description: 'Render the source table beneath the chart',
+      coerce: 'boolean',
+    },
+    { key: 'showLegend', description: 'Show a series legend', coerce: 'boolean' },
+    { key: 'showValues', description: 'Print numeric value labels on marks', coerce: 'boolean' },
+    { key: 'unit', description: 'Unit suffix for tick/value labels (e.g. "km")' },
+    {
+      key: 'colorScheme',
+      description: 'Color scheme seeding the series color rotation',
+      valueHint: COLOR_SCHEME_HINT,
+    },
+    // `headers`/`rows` are normally derived from the block's markdown table;
+    // declared so data-fence-supplied values aren't flagged as unknown.
+    {
+      key: 'headers',
+      description: 'Header cells (normally derived from the table)',
+      coerce: 'stringList',
+    },
+    { key: 'rows', description: 'Table rows (supply via a data fence)' },
+    ...extra,
+  ];
+}
+
+/** `stacked` on bar/column charts. */
+const STACKED_DESCRIPTOR: TemplateInputDescriptor = {
+  key: 'stacked',
+  description: 'Stack series instead of grouping them side by side',
+  coerce: 'boolean',
+};
+
 // ============================================
 // Descriptor tables
 // ============================================
@@ -233,6 +286,13 @@ export const TEMPLATE_INPUT_DESCRIPTORS: Readonly<
     { key: 'align', description: 'Per-column alignment (supply via a data fence)' },
     { key: 'colorScheme', description: 'Header color scheme', valueHint: COLOR_SCHEME_HINT },
   ],
+  barChart: CHART_DESCRIPTORS([STACKED_DESCRIPTOR]),
+  columnChart: CHART_DESCRIPTORS([STACKED_DESCRIPTOR]),
+  pieChart: CHART_DESCRIPTORS(),
+  donutChart: CHART_DESCRIPTORS(),
+  lineChart: CHART_DESCRIPTORS(),
+  areaChart: CHART_DESCRIPTORS(),
+  scatterChart: CHART_DESCRIPTORS(),
   tree: [
     { key: 'title', description: 'Optional title above the tree' },
     { key: 'colorScheme', description: 'Folder-row color scheme', valueHint: COLOR_SCHEME_HINT },

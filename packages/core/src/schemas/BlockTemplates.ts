@@ -730,6 +730,85 @@ export interface DataTableInput extends BaseTemplateBlock {
 }
 
 /**
+ * Fields shared by every chart template. Chart data normally arrives from
+ * the first markdown table in the block body (derived at materialize time);
+ * `headers`/`rows` may also be supplied via a ```json data fence. Column
+ * roles reference headers by name (case-insensitive) or 0-based index.
+ * A chart block with no chartable table renders as ordinary content.
+ */
+export interface ChartBaseFields {
+  /** Optional title displayed above the chart */
+  title?: string;
+  /** Header cells (normally derived from the block's markdown table) */
+  headers?: string[];
+  /** Data rows (normally derived from the block's markdown table) */
+  rows?: string[][];
+  /** Category/label column — header name or 0-based index. Default: first column. */
+  labelColumn?: string;
+  /** Value columns — header names or 0-based indexes. Default: all numeric columns. */
+  valueColumns?: string[];
+  /** Render the source table beneath the chart */
+  showTable?: boolean;
+  /** Show a series legend (default: on whenever it adds information) */
+  showLegend?: boolean;
+  /** Print numeric value labels on marks */
+  showValues?: boolean;
+  /** Unit suffix for tick/value labels (e.g. "km") */
+  unit?: string;
+  /** Color scheme seeding the series color rotation */
+  colorScheme?: ColorScheme;
+}
+
+/** Horizontal bars — one bar (or bar group) per table row. */
+export interface BarChartInput extends BaseTemplateBlock, ChartBaseFields {
+  template: 'barChart';
+  /** Stack series instead of grouping them side by side */
+  stacked?: boolean;
+}
+
+/** Vertical columns — one column (or column group) per table row. */
+export interface ColumnChartInput extends BaseTemplateBlock, ChartBaseFields {
+  template: 'columnChart';
+  /** Stack series instead of grouping them side by side */
+  stacked?: boolean;
+}
+
+/** Pie chart of the first value column (positive values only). */
+export interface PieChartInput extends BaseTemplateBlock, ChartBaseFields {
+  template: 'pieChart';
+}
+
+/** Donut chart of the first value column (positive values only). */
+export interface DonutChartInput extends BaseTemplateBlock, ChartBaseFields {
+  template: 'donutChart';
+}
+
+/** Line chart — one line per value column; unparseable cells become gaps. */
+export interface LineChartInput extends BaseTemplateBlock, ChartBaseFields {
+  template: 'lineChart';
+}
+
+/** Area chart — filled lines, zero-based value axis. */
+export interface AreaChartInput extends BaseTemplateBlock, ChartBaseFields {
+  template: 'areaChart';
+}
+
+/** Scatter plot — numeric label column as x-axis (row index fallback). */
+export interface ScatterChartInput extends BaseTemplateBlock, ChartBaseFields {
+  template: 'scatterChart';
+}
+
+/** Union of the chart template inputs (all render through one shared engine). */
+export type ChartTemplateInput =
+  | BarChartInput
+  | ColumnChartInput
+  | PieChartInput
+  | DonutChartInput
+  | LineChartInput
+  | AreaChartInput
+  | ScatterChartInput;
+
+/**
  * Union of all template block types.
  */
 export type TemplateBlock =
@@ -754,6 +833,13 @@ export type TemplateBlock =
   | VideoWithCaptionInput
   | VideoPullQuoteInput
   | DataTableInput
+  | BarChartInput
+  | ColumnChartInput
+  | PieChartInput
+  | DonutChartInput
+  | LineChartInput
+  | AreaChartInput
+  | ScatterChartInput
   | DiagramBlockInput
   | TreeBlockInput
   | TimelineBlockInput

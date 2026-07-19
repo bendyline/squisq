@@ -143,6 +143,7 @@ function DocPlayerContent({
   renderMode = false,
   animationsEnabled = true,
   autoPlay = false,
+  loop = false,
   onEnded,
   onTimeUpdate,
   audioController: externalAudioController,
@@ -165,6 +166,9 @@ function DocPlayerContent({
   theme,
   surface,
   captionStyle = 'standard',
+  videoPresentation = 'background',
+  pipShape = 'rounded',
+  pipPosition = 'bottom-right',
   enableSwipe = true,
   globalKeyboardShortcuts = false,
 }: DocPlayerContentProps) {
@@ -309,6 +313,10 @@ function DocPlayerContent({
     viewport: activeViewport,
     theme: effectiveTheme,
     onSeek: seekTo,
+    // A synthetic track is only the timer used by an unnarrated preview.
+    // Narration pacing may compact short visual beats, but it must never
+    // remove authored slides from the default loss-averse projection.
+    useAudioSegmentTiming: audioMode !== 'synthetic',
   });
 
   // Expand cover block (startBlock) if present - uses active viewport
@@ -456,8 +464,11 @@ function DocPlayerContent({
   useEffect(() => {
     if (isEnded) {
       onEnded?.();
+      if (loop && !isSlideshowMode && !isLinearMode) {
+        void restart();
+      }
     }
-  }, [isEnded, onEnded]);
+  }, [isEnded, isLinearMode, isSlideshowMode, loop, onEnded, restart]);
 
   // Consumers keep this API object for the lifetime of the mounted player
   // (the standalone handle promise and Playwright both do). The implementation
@@ -1102,6 +1113,7 @@ function DocPlayerContent({
     <div
       ref={containerRef}
       data-player-id={playerId}
+      data-orientation={orientation}
       tabIndex={renderMode ? -1 : 0}
       aria-label="Document player"
       onKeyDown={renderMode ? undefined : handleKeyDown}
@@ -1133,6 +1145,9 @@ function DocPlayerContent({
         basePath={basePath}
         renderMode={renderMode}
         muted={muted}
+        presentation={videoPresentation}
+        pipShape={pipShape}
+        pipPosition={pipPosition}
       />
 
       {/* Block viewport */}

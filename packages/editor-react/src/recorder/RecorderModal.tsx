@@ -185,6 +185,32 @@ const btnDanger: CSSProperties = {
   borderColor: 'var(--squisq-recorder-danger-border)',
 };
 
+const btnRecord: CSSProperties = {
+  ...btnPrimary,
+  display: 'inline-flex',
+  alignItems: 'center',
+  gap: 8,
+};
+
+const recordDotFrameStyle: CSSProperties = {
+  display: 'inline-flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  flex: '0 0 auto',
+  padding: 2,
+  border: '1px solid #9ca3af',
+  borderRadius: '50%',
+  background: '#000',
+};
+
+const recordDotStyle: CSSProperties = {
+  display: 'block',
+  width: 9,
+  height: 9,
+  borderRadius: '50%',
+  background: 'var(--squisq-recorder-danger)',
+};
+
 const toggleRowStyle: CSSProperties = {
   display: 'flex',
   gap: 8,
@@ -705,7 +731,14 @@ export function RecorderModal({
           )}
 
           {canRecord && (
-            <button type="button" style={btnPrimary} onClick={handleStart} disabled={isBusy}>
+            <button type="button" style={btnRecord} onClick={handleStart} disabled={isBusy}>
+              <span
+                className="squisq-recorder-record-dot"
+                style={recordDotFrameStyle}
+                aria-hidden="true"
+              >
+                <span className="squisq-recorder-record-dot-center" style={recordDotStyle} />
+              </span>
               Record
             </button>
           )}

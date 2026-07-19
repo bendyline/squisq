@@ -177,20 +177,15 @@ export default defineConfig({
     strictPort: true,
     headers: crossOriginHeaders,
   },
-  // Optimise the exact Monaco entry points used by editor-react's lazy loader.
-  // Listing only `monaco-editor` is not sufficient: Vite treats the two deep
-  // import specifiers in `editor-react/monaco` as newly discovered dependencies
-  // the first time Source view mounts, optimises them on demand, and reloads the
-  // page. Pre-bundling those specifiers at startup keeps the first Source-view
-  // transition in-app. Exclude the workspace packages
+  // Optimise Monaco's typed API entry used by editor-react's lazy loader.
+  // The feature and language contribution modules stay behind Squisq's own
+  // demand-driven imports; pre-bundling `editor.main` here would rebuild the
+  // full Monaco profile we intentionally avoid. Exclude the workspace packages
   // so Vite serves their `dist/` straight — otherwise pre-bundling caches
   // a snapshot at `node_modules/.vite/` and rebuilds of editor-react et al.
   // don't show up until the dev server is restarted or the cache is cleared.
   optimizeDeps: {
-    include: [
-      'monaco-editor/esm/vs/editor/editor.main.js',
-      'monaco-editor/esm/vs/editor/editor.api',
-    ],
+    include: ['monaco-editor/esm/vs/editor/editor.api.js'],
     exclude: [
       '@bendyline/squisq',
       '@bendyline/squisq-core',
@@ -212,6 +207,11 @@ export default defineConfig({
     format: 'es',
   },
   build: {
+    // The site targets modern ESM browsers. Vite's module-preload polyfill
+    // hoists dependencies shared by dynamic Monaco chunks into the initial
+    // graph, defeating the editor's demand boundary and eagerly fetching rich
+    // features. Native dynamic imports preserve the intended request timing.
+    modulePreload: false,
     rolldownOptions: {
       output: {
         codeSplitting: {
@@ -221,11 +221,11 @@ export default defineConfig({
               test: /node_modules[\\/](react|react-dom)[\\/]/,
               priority: 30,
             },
-            {
-              name: 'monaco-vendor',
-              test: /node_modules[\\/](@monaco-editor|monaco-editor)[\\/]/,
-              priority: 20,
-            },
+            // Keep Monaco out of named manual groups. Its editor modules have
+            // circular internal dependencies, so forcing core, features, and
+            // languages into separate groups creates static cross-chunk edges
+            // that pull the demand-only chunks back into the entry graph.
+            // Native dynamic-import boundaries preserve the correct timing.
             {
               name: 'tiptap-vendor',
               test: /node_modules[\\/]@tiptap[\\/]/,
@@ -251,7 +251,19 @@ export default defineConfig({
                 if (id.includes('/packages/core/')) return 'squisq-core';
                 if (id.includes('/packages/react/')) return 'squisq-react';
                 if (id.includes('/packages/formats/')) return 'squisq-formats';
-                if (id.includes('/packages/editor-react/')) return 'squisq-editor';
+                if (id.includes('/packages/editor-react/')) {
+                  // These modules are reached only through Source/code/diff
+                  // demand. Folding them into the statically imported editor
+                  // package chunk makes Vite modulepreload Monaco at startup.
+                  if (
+                    /packages[\\/]editor-react[\\/](?:src|dist)[\\/]monaco(?:Features|Suggestions)?(?:[.-])/.test(
+                      id,
+                    )
+                  ) {
+                    return null;
+                  }
+                  return 'squisq-editor';
+                }
                 if (id.includes('/packages/video-react/')) return 'squisq-video-react';
                 if (id.includes('/packages/video/')) return 'squisq-video';
                 return null;
@@ -261,7 +273,10 @@ export default defineConfig({
             },
             {
               name: 'vendor',
-              test: /node_modules[\\/]/,
+              // Monaco must remain governed by its native dynamic-import
+              // graph; putting it in this static vendor group eagerly loads
+              // the entire editor and every language contribution.
+              test: /node_modules[\\/](?!monaco-editor[\\/])/,
               priority: 5,
             },
           ],

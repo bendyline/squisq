@@ -598,6 +598,39 @@ export function deriveTemplateInputs(
       if (tableData) return { ...tableData, ...(headingText ? { title: headingText } : {}) };
       return placeholders ? { headers: ['Column'], rows: [['Data']] } : null;
     }
+    case 'barChart':
+    case 'columnChart':
+    case 'pieChart':
+    case 'donutChart':
+    case 'lineChart':
+    case 'areaChart':
+    case 'scatterChart': {
+      // Charts plot the body table; `align` is presentation-only and dropped.
+      const tableData = extractTableFromContents(contents);
+      if (tableData) {
+        return {
+          headers: tableData.headers,
+          rows: tableData.rows,
+          ...(headingText ? { title: headingText } : {}),
+        };
+      }
+      // Placeholder sample data only for a truly empty block (a bare
+      // annotated heading — authoring preview). A block with real body
+      // content but no table must NOT get invented data: returning null
+      // lets the chart engine fall back to content rendering.
+      return placeholders && !bodyText.trim()
+        ? {
+            headers: ['Quarter', 'Revenue', 'Costs'],
+            rows: [
+              ['Q1', '40', '28'],
+              ['Q2', '55', '31'],
+              ['Q3', '48', '30'],
+              ['Q4', '62', '35'],
+            ],
+            ...(headingText ? { title: headingText } : {}),
+          }
+        : null;
+    }
     case 'imageWithCaption': {
       const img = extractFirstImage(contents);
       if (!img) return placeholders ? { caption: headingText } : null;

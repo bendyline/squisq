@@ -44,6 +44,76 @@ describe('markdownToDoc media annotations', () => {
     });
   });
 
+  it('parses per-video PIP and overlay placement aliases', () => {
+    const doc = toDoc(
+      '# B {duration=20}\n\n{[video src=pip.mp4 pip=true]}\n\n{[video src=overlay.mp4 placement=overlay]}\n',
+    );
+    expect(doc.blocks[0].media?.map((clip) => [clip.src, clip.placement])).toEqual([
+      ['pip.mp4', 'picture-in-picture'],
+      ['overlay.mp4', 'overlay'],
+    ]);
+    expect(resolveMediaSchedule(doc).map((clip) => clip.placement)).toEqual([
+      'picture-in-picture',
+      'overlay',
+    ]);
+  });
+
+  it('keeps content videos in the block but promotes placed HTML videos to the schedule', () => {
+    const content = toDoc('# B\n\n<video src="content.mp4" controls></video>\n');
+    expect(content.blocks[0].media).toBeUndefined();
+    expect(JSON.stringify(content.blocks[0].contents)).toContain('content.mp4');
+
+    const pip = toDoc(
+      '# B {duration=12}\n\n<video src="presenter.mp4" controls data-squisq-video-placement="picture-in-picture"></video>\n',
+    );
+    expect(pip.blocks[0].media?.[0]).toMatchObject({
+      src: 'presenter.mp4',
+      kind: 'video',
+      placement: 'picture-in-picture',
+      lockToBlock: true,
+      anchor: 'block',
+    });
+    expect(JSON.stringify(pip.blocks[0].contents)).not.toContain('presenter.mp4');
+  });
+
+  it('makes an unlocked placed video document-timed without changing block duration', () => {
+    const doc = toDoc(
+      '# First {duration=10}\n\nIntro.\n\n# Second {duration=8}\n\n<video src="presenter.mp4" controls data-squisq-video-placement="overlay" data-squisq-video-lock-to-block="false"></video>\n\n# Third {duration=7}\n\nEnd.\n',
+    );
+    expect(doc.blocks[1].media).toBeUndefined();
+    expect(doc.blocks[1].duration).toBe(8);
+    expect(doc.documentMedia?.[0]).toMatchObject({
+      src: 'presenter.mp4',
+      placement: 'overlay',
+      lockToBlock: false,
+      anchor: 'document',
+      startAt: 10,
+    });
+    expect(resolveMediaSchedule(doc)[0]).toMatchObject({
+      absoluteStart: 10,
+      absoluteEnd: 25,
+      lockToBlock: false,
+      anchor: 'document',
+    });
+  });
+
+  it('honors explicit independent HTML video timing', () => {
+    const doc = toDoc(
+      '# B {duration=20}\n\n<video src="presenter.mp4" data-squisq-video-placement="picture-in-picture" data-squisq-video-lock-to-block="false" data-squisq-video-start-at="3" data-squisq-video-clip-start="1" data-squisq-video-clip-end="6"></video>\n',
+    );
+    expect(doc.documentMedia?.[0]).toMatchObject({
+      startAt: 3,
+      clipStart: 1,
+      clipEnd: 6,
+      lockToBlock: false,
+    });
+    expect(resolveMediaSchedule(doc)[0]).toMatchObject({
+      absoluteStart: 3,
+      absoluteEnd: 8,
+      sourceIn: 1,
+    });
+  });
+
   it('accepts startTime as an alias of startAt (startAt wins when both given)', () => {
     const alias = toDoc('# B {duration=20}\n\n{[audio src=a.mp3 startTime=5]}\n');
     expect(alias.blocks[0].media![0].startAt).toBe(5);
