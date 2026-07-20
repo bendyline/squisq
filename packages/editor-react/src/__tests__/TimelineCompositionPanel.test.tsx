@@ -49,6 +49,10 @@ vi.mock('../usePreviewProjection', () => ({
   usePreviewProjection: (doc: unknown) => (doc ? { contentDoc: doc, playerDoc: doc } : null),
 }));
 
+vi.mock('../EditorContext', () => ({
+  useEditorContext: () => ({ fileName: 'composition.md' }),
+}));
+
 afterEach(() => {
   cleanup();
   vi.restoreAllMocks();
