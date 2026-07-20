@@ -12,6 +12,7 @@ import { stepScroll, targetOffsetFor, type TokenLineMap } from '../teleprompter/
 import { createFloatingWindowManager, detectFloatTiers } from '../teleprompter/floatingWindow';
 import { PCM_WORKLET_SOURCE, PCM_WORKLET_NAME } from '../teleprompter/pcmWorklet';
 import { vadConfigForSensitivity } from '../teleprompter/useTeleprompter';
+import { DEFAULT_TELEPROMPTER_PREFS, normalizeTeleprompterPrefs } from '../teleprompter/types';
 
 const MD = `# First Section
 
@@ -263,6 +264,36 @@ describe('vadConfigForSensitivity', () => {
     expect(vadConfigForSensitivity(0.9).enterRatio!).toBeLessThan(
       vadConfigForSensitivity(0.1).enterRatio!,
     );
+  });
+});
+
+describe('normalizeTeleprompterPrefs', () => {
+  it('clamps finite numeric preferences to their supported ranges', () => {
+    expect(
+      normalizeTeleprompterPrefs({ fontSizePx: 10_000, baseWpm: -50, vadSensitivity: 4 }),
+    ).toMatchObject({ fontSizePx: 96, baseWpm: 80, vadSensitivity: 1 });
+  });
+
+  it('rejects invalid persisted types, enum values, and non-finite numbers', () => {
+    expect(
+      normalizeTeleprompterPrefs({
+        fontSizePx: Number.NaN,
+        baseWpm: Number.POSITIVE_INFINITY,
+        mirrored: 'false',
+        voiceTracking: 0,
+        countdownSec: 7,
+        lineGuide: null,
+        micDeviceId: { value: 'device' },
+      }),
+    ).toEqual(DEFAULT_TELEPROMPTER_PREFS);
+  });
+
+  it('uses the current preferences as fallback when sanitizing a patch', () => {
+    const current = { ...DEFAULT_TELEPROMPTER_PREFS, baseWpm: 210, mirrored: true };
+    expect(normalizeTeleprompterPrefs({ ...current, baseWpm: 'fast' }, current)).toMatchObject({
+      baseWpm: 210,
+      mirrored: true,
+    });
   });
 });
 

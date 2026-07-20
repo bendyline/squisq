@@ -49,8 +49,6 @@ test.describe('ASCII diagram gallery screenshots', () => {
     for (let i = 0; i < count; i++) {
       const host = hosts.nth(i);
       await host.scrollIntoViewIfNeeded();
-      // Let the Scene fit-on-mount settle before capture.
-      await page.waitForTimeout(400);
       const slug = DIAGRAM_GALLERY_HEADINGS[i]
         .toLowerCase()
         .replace(/[^a-z0-9]+/g, '-')

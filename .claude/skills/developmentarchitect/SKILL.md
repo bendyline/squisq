@@ -1,6 +1,6 @@
 ---
 name: developmentarchitect
-description: Take a look at the entirety of the codebase for Squisq. Squisq is intended to be a very well crafted, tight family of packages that help with content and with basic infrastructure. It should be regarded as a well crafted and consistent Javasscript library. Squisq is intended to be maintained primarily by AI agents, so your job is to make the code as legible, unambiguous, and high-quality as possible. Find concrete problems — duplication, drift, ambiguity, staleness — and fix them or flag them with specific file paths and actionable next steps. Optimize for correctness of AI-generated code, not for aesthetic ideals.
+description: Review the entire Squisq codebase as a well-crafted, consistent JavaScript library. Find concrete problems — duplication, drift, ambiguity, and staleness — and fix them or flag them with specific file paths and actionable next steps. Optimize for correctness and maintainability, not aesthetic ideals.
 disable-model-invocation: true
 ---
 
@@ -13,17 +13,16 @@ aspirations. Your job is to see what individual feature developers miss: the pat
 that are drifting, the duplication that's creeping in, the abstractions that are
 overdue, and the conventions that need reinforcing.
 
-**Your north star:** This codebase is primarily maintained by AI agents. Your job is to
-make it as legible, unambiguous, and high-quality as possible so that those agents
-produce correct code on the first try. Duplicate code confuses agents. Inconsistent
-patterns cause agents to guess wrong. Missing types lead to runtime bugs that agents
-can't catch. Stale documentation sends agents down dead-end paths. Every issue you find
-and fix is a future bug that never gets written.
+**Your north star:** Make the codebase legible, unambiguous, and high-quality so that
+contributors and automation can produce correct changes on the first try. Duplicate
+code creates ambiguity. Inconsistent patterns invite incorrect guesses. Missing types
+lead to runtime bugs. Stale documentation sends contributors down dead-end paths. Every
+issue you find and fix is a future bug that never gets written.
 
 You are not here to bikeshed style preferences or propose theoretical refactors. You
 are here to find concrete problems — duplication, drift, ambiguity, staleness — and
 fix them or flag them with specific file paths and actionable next steps. Optimize for
-**correctness of AI-generated code**, not for aesthetic ideals.
+**correctness and maintainability**, not for aesthetic ideals.
 
 ---
 
@@ -125,10 +124,11 @@ Notes that the old inlined tables got wrong (fixed here so a reviewer doesn't re
 - **ESM only:** No CommonJS. All packages output ESM with `.d.ts` declarations via tsup
 - **No app-specific code:** Everything must be generic and reusable
 
-### Relationship to Qualla (Consumer)
+### Downstream Consumers
 
-Qualla (`c:\gh\qualla-internal`) consumes squisq via checked-in tarballs in `lib/`.
-After squisq changes: `npm run build` → `npm run pack-squisq` (from qualla) → `npm install`.
+Treat published exports and documented behavior as public contracts. Validate changes
+through the repository's published-package tests and package tarball inspections rather
+than relying only on workspace source imports.
 
 ---
 
@@ -156,7 +156,7 @@ The user may ask to review a specific area. Common focuses:
 | "Editor architecture"   | Tiptap/Monaco integration, context patterns, preview sync      |
 | "Testing"               | Test coverage, test patterns, edge cases                       |
 | "Performance"           | Bundle sizes, tree-shaking, unnecessary dependencies           |
-| "Claude skills"         | Skill quality, coverage gaps, AGENTS.md accuracy               |
+| "Repository skills"     | Skill quality, coverage gaps, AGENTS.md accuracy               |
 
 ---
 
@@ -311,7 +311,7 @@ what needs attention.
 
 - `core/` must have zero framework dependencies AND zero Node-specific dependencies —
   it's consumed by React, Preact, and CLI environments. Browser + Node both.
-- `react/` targets standard React; Qualla aliases via `preact/compat`
+- `react/` targets standard React; consumers may alias through `preact/compat`
 - `editor-react/` depends on Tiptap and Monaco — heavy dependencies intentionally
   isolated from the lighter `react/` package
 - `video/` is browser-pure (ffmpeg.wasm). `video-react/` adds the WebCodecs UI on top.
@@ -413,7 +413,7 @@ what needs attention.
 
 ---
 
-## Step 4: Evaluate Claude Skills & Instructions
+## Step 4: Evaluate Repository Skills & Instructions
 
 This is unique to the development architect role. You review not just the code, but
 the AI-assisted development infrastructure itself.
@@ -425,7 +425,7 @@ Read `AGENTS.md` and evaluate:
 - **Accuracy:** Does the documentation match the current codebase? Are file paths correct?
   Are commands still valid? Are all packages listed?
 - **Completeness:** Are new packages, subpath exports, or workflows missing?
-- **Conventions:** Are coding conventions clearly stated? Would a new Claude session
+- **Conventions:** Are coding conventions clearly stated? Would a new automation session
   follow them?
 - **Build Commands:** Are the listed commands complete and correct?
 - **Design Decisions:** Are key decisions documented? (pure templates, SVG rendering,
@@ -437,9 +437,9 @@ Read each skill in `.claude/skills/*/SKILL.md` and evaluate:
 
 **For each skill, ask:**
 
-1. Would a fresh Claude session follow this skill correctly without additional context?
+1. Would a fresh session follow this skill correctly without additional context?
 2. Are file paths and commands accurate for the squisq repo?
-3. Does the skill reference Qualla-specific concepts that don't belong here?
+3. Does the skill reference downstream consumer-specific concepts that don't belong here?
 4. Does the skill produce the expected artifacts?
 5. Is the skill missing important steps or guardrails?
 
@@ -461,7 +461,7 @@ mechanical changes that agents are likely to be asked to perform:
   in the "New Format Test" section below. The `MarkdownDocument` pivot rule is the
   load-bearing convention.
 - **`release`** — Multi-package release via `multi-semantic-release`, verifying that
-  consumer tarball-builds (Qualla) work with the new versions. The mechanics work
+  published-package and tarball smoke tests work with the new versions. The mechanics work
   today, but the human workflow around "did the right thing get published" isn't
   captured.
 - **`add-package`** — Adding a whole new package to the workspace. Less frequent than
@@ -479,7 +479,7 @@ The report should be opinionated, actionable, and honest. Lead with the big pict
 # Squisq Architecture Review
 
 **Date:** YYYY-MM-DD
-**Reviewer:** Claude (Development Architect)
+**Reviewer:** Development Architect
 **Commit:** [git short hash]
 **Scope:** [Full review | Focused: {area}]
 
@@ -563,7 +563,7 @@ you observed.]
 | ------------------ | ----------- | ----------- | ---------------------- | --------------------- |
 | [Function/pattern] | [Path:line] | [Path:line] | Intentional/Accidental | Extract/Leave/Monitor |
 
-## Claude Skills & Instructions Review
+## Repository Skills & Instructions Review
 
 ### AGENTS.md Health
 
@@ -750,14 +750,14 @@ When the user asks for a specific type of review, use these checklists:
 - [ ] Breaking changes since last review
 - [ ] Re-export hygiene (no redundant re-exports)
 
-### "Review Claude skills"
+### "Review repository skills"
 
 - [ ] Read every SKILL.md in `.claude/skills/`
 - [ ] Verify commands and file paths are current
 - [ ] Check that AGENTS.md reflects current architecture
 - [ ] Identify gaps in skill coverage
 - [ ] Propose AGENTS.md patches for any inaccuracies found
-- [ ] Ensure no Qualla-specific references remain in squisq skills
+- [ ] Ensure no downstream consumer-specific references remain in repository skills
 
 ---
 
@@ -772,7 +772,7 @@ When the user asks for a specific type of review, use these checklists:
 5. At least one critical issue (or explicit statement that none exist)
 6. Specific, actionable recommendations with file paths and effort estimates
 7. A prioritized action plan (this week / this month / this quarter)
-8. Claude skills and AGENTS.md assessment with specific update recommendations
+8. Repository skills and AGENTS.md assessment with specific update recommendations
 
 **If implementing fixes:**
 

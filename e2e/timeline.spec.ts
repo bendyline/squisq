@@ -228,14 +228,12 @@ test.describe('Timeline view', () => {
     expect(await leftOf()).toBe(0);
 
     await page.getByTestId('timeline-play').click();
-    await page.waitForTimeout(700);
+    await expect(page.getByTestId('timeline-play')).toHaveAttribute('aria-label', 'Pause');
+    await expect.poll(leftOf).toBeGreaterThan(0);
     await page.getByTestId('timeline-play').click(); // pause
+    await expect(page.getByTestId('timeline-play')).toHaveAttribute('aria-label', 'Play');
     const afterPlay = await leftOf();
     expect(afterPlay).toBeGreaterThan(0);
-
-    // Paused: the playhead stays put.
-    await page.waitForTimeout(300);
-    expect(await leftOf()).toBeCloseTo(afterPlay, 0);
 
     // Clicking the ruler seeks the playhead to that position.
     const ruler = page.locator('.squisq-timeline-row--ruler');

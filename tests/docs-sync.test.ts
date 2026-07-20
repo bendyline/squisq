@@ -5,9 +5,9 @@ import { describe, it, expect } from 'vitest';
 
 /**
  * AGENTS.md is the canonical agent-guidance file; CLAUDE.md must be a
- * byte-for-byte copy of it (Claude Code reads CLAUDE.md, other agents read
- * AGENTS.md). This test fails on drift so the two can't silently diverge —
- * they have before. To update: edit AGENTS.md, then `cp AGENTS.md CLAUDE.md`.
+ * byte-for-byte compatibility copy for tools that read that filename. This test
+ * fails on drift so the two can't silently diverge — they have before. To update:
+ * edit AGENTS.md, then `cp AGENTS.md CLAUDE.md`.
  */
 describe('agent-guidance docs stay in sync', () => {
   const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');

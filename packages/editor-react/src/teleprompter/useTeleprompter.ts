@@ -27,6 +27,8 @@ import {
 import { useMicAnalysis, type MicAnalysisHandle } from './useMicAnalysis';
 import {
   DEFAULT_TELEPROMPTER_PREFS,
+  normalizeTeleprompterPrefs,
+  TELEPROMPTER_PREF_LIMITS,
   type PrompterTransport,
   type TeleprompterPrefs,
 } from './types';
@@ -65,8 +67,7 @@ function loadPrefs(): TeleprompterPrefs {
   try {
     const raw = globalThis.localStorage?.getItem(PREFS_STORAGE_KEY);
     if (!raw) return { ...DEFAULT_TELEPROMPTER_PREFS };
-    const parsed = JSON.parse(raw) as Partial<TeleprompterPrefs>;
-    return { ...DEFAULT_TELEPROMPTER_PREFS, ...parsed };
+    return normalizeTeleprompterPrefs(JSON.parse(raw));
   } catch {
     return { ...DEFAULT_TELEPROMPTER_PREFS };
   }
@@ -328,15 +329,11 @@ export function useTeleprompter(opts: { doc: Doc | null }): TeleprompterControll
   const setPrefs = useCallback(
     (patch: Partial<TeleprompterPrefs>) => {
       setPrefsState((prev) => {
-        const next = { ...prev, ...patch };
+        const next = normalizeTeleprompterPrefs({ ...prev, ...patch }, prev);
         savePrefs(next);
         // Switching mic device while live restarts capture on the new device.
-        if (
-          patch.micDeviceId !== undefined &&
-          patch.micDeviceId !== prev.micDeviceId &&
-          mic.status === 'live'
-        ) {
-          void mic.start(patch.micDeviceId);
+        if (next.micDeviceId !== prev.micDeviceId && mic.status === 'live') {
+          void mic.start(next.micDeviceId);
         }
         return next;
       });
@@ -373,11 +370,15 @@ export function useTeleprompter(opts: { doc: Doc | null }): TeleprompterControll
           break;
         case '[':
           event.preventDefault();
-          setPrefs({ baseWpm: Math.max(80, prefsRef.current.baseWpm - 10) });
+          setPrefs({
+            baseWpm: Math.max(TELEPROMPTER_PREF_LIMITS.baseWpm.min, prefsRef.current.baseWpm - 10),
+          });
           break;
         case ']':
           event.preventDefault();
-          setPrefs({ baseWpm: Math.min(260, prefsRef.current.baseWpm + 10) });
+          setPrefs({
+            baseWpm: Math.min(TELEPROMPTER_PREF_LIMITS.baseWpm.max, prefsRef.current.baseWpm + 10),
+          });
           break;
         case 'm':
         case 'M':

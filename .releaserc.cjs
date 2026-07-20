@@ -49,6 +49,15 @@ module.exports = {
         message: 'chore(release): ${nextRelease.version} [skip ci]\n\n${nextRelease.notes}',
       },
     ],
-    ['@semantic-release/github'],
+    [
+      '@semantic-release/github',
+      {
+        // Keep the release job at contents:write only; issue/PR notifications
+        // would otherwise require two additional write scopes.
+        successCommentCondition: false,
+        failCommentCondition: false,
+        releasedLabels: false,
+      },
+    ],
   ],
 };

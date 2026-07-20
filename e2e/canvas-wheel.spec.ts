@@ -30,11 +30,27 @@ test('plain wheel over a shape does NOT zoom the canvas', async ({ page }) => {
   const cy = shape.y + shape.height / 2;
 
   const before = await groupTransform(page);
+  await page.evaluate(() => {
+    const state = window as Window & { __squisqWheelPrevented?: boolean | null };
+    state.__squisqWheelPrevented = null;
+    window.addEventListener(
+      'wheel',
+      (event) => {
+        state.__squisqWheelPrevented = event.defaultPrevented;
+      },
+      { once: true },
+    );
+  });
   await page.mouse.move(cx, cy);
   await page.mouse.wheel(0, 240);
-  await page.waitForTimeout(150);
-  await page.mouse.wheel(0, -240);
-  await page.waitForTimeout(150);
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () =>
+          (window as Window & { __squisqWheelPrevented?: boolean | null }).__squisqWheelPrevented,
+      ),
+    )
+    .toBe(false);
 
   // The canvas transform is unchanged — the wheel scrolled the page instead.
   expect(await groupTransform(page)).toBe(before);
@@ -52,8 +68,7 @@ test('Ctrl + wheel still zooms the canvas', async ({ page }) => {
   await page.keyboard.down('Control');
   await page.mouse.wheel(0, -240);
   await page.keyboard.up('Control');
-  await page.waitForTimeout(150);
 
   // The transform changed — Ctrl+wheel zoomed.
-  expect(await groupTransform(page)).not.toBe(before);
+  await expect.poll(() => groupTransform(page)).not.toBe(before);
 });

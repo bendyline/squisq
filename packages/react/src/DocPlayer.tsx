@@ -1114,6 +1114,8 @@ function DocPlayerContent({
       ref={containerRef}
       data-player-id={playerId}
       data-orientation={orientation}
+      data-playback-state={isPlaying ? 'playing' : 'paused'}
+      data-swipe-phase={swipe.phase}
       tabIndex={renderMode ? -1 : 0}
       aria-label="Document player"
       onKeyDown={renderMode ? undefined : handleKeyDown}

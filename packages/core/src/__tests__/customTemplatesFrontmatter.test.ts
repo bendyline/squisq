@@ -16,7 +16,10 @@ import {
 } from '../doc/customTemplatesFrontmatter';
 import { parseMarkdown } from '../markdown/parse';
 import type { Layer } from '../schemas/Doc.js';
-import type { CustomTemplateDefinition } from '../schemas/CustomTemplates.js';
+import {
+  validateCustomTemplateDefinition,
+  type CustomTemplateDefinition,
+} from '../schemas/CustomTemplates.js';
 
 const sampleLayers: Layer[] = [
   {
@@ -164,6 +167,45 @@ describe('writeCustomTemplatesToFrontmatter → readCustomTemplatesFromFrontmatt
   it("returns undefined when the encoded string isn't a valid array", () => {
     const fm = { [FRONTMATTER_CUSTOM_TEMPLATES_KEY]: 'not-base64-of-an-array' };
     expect(readCustomTemplatesFromFrontmatter(fm)).toBeUndefined();
+  });
+
+  it('rejects a malformed layer before it can reach template expansion', () => {
+    const payload = JSON.stringify({
+      broken: {
+        lb: 'Broken',
+        ly: [{ ty: 'text', id: 'missing-content', po: { x: 0, y: 0 } }],
+      },
+    });
+    expect(
+      readCustomTemplatesFromFrontmatter({ [FRONTMATTER_CUSTOM_TEMPLATES_KEY]: payload }),
+    ).toBeUndefined();
+  });
+
+  it('keeps valid definitions when a decoded list also contains malformed entries', () => {
+    const malformed = {
+      name: 'broken',
+      label: 'Broken',
+      viewport: { width: 1920, height: 1080 },
+      layers: [{ id: 'missing-content', type: 'text', position: { x: 0, y: 0 } }],
+    };
+    const out = readCustomTemplatesFromFrontmatter({
+      [FRONTMATTER_CUSTOM_TEMPLATES_KEY]: [malformed, heroDef],
+    });
+    expect(out).toEqual([heroDef]);
+  });
+
+  it('reports the nested path for an invalid custom-template layer', () => {
+    const result = validateCustomTemplateDefinition({
+      name: 'broken',
+      label: 'Broken',
+      viewport: { width: 1920, height: 1080 },
+      layers: [{ id: 'missing-content', type: 'text', position: { x: 0, y: 0 } }],
+    });
+    expect(result.valid).toBe(false);
+    expect(result.errors).toContainEqual({
+      path: '$.layers[0].content',
+      message: 'expected object',
+    });
   });
 });
 

@@ -34,7 +34,7 @@ describe('detectLanguageFromFileName', () => {
 
   it('strips leading paths', () => {
     expect(detectLanguageFromFileName('src/lib/foo.ts')).toBe('typescript');
-    expect(detectLanguageFromFileName('C:\\Users\\me\\app.py')).toBe('python');
+    expect(detectLanguageFromFileName('C:\\workspace\\app.py')).toBe('python');
   });
 
   it('returns null for unknown extensions', () => {

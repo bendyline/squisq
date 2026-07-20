@@ -281,7 +281,6 @@ test.describe('Template picker', () => {
     const para = editor.locator('p').first();
     if (await para.isVisible()) {
       await para.click();
-      await page.waitForTimeout(300);
 
       const picker = page.locator('.squisq-template-picker');
       await expect(picker).not.toBeVisible();

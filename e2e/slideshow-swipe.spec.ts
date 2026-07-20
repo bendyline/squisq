@@ -32,9 +32,8 @@ function counter(page: Page) {
 
 /**
  * Press on the player center and drag horizontally by a fraction of its width.
- * `holdMs` slows the drag so a small movement stays below the flick velocity.
  */
-async function dragPlayer(page: Page, dxFraction: number, holdMs = 0) {
+async function dragPlayer(page: Page, dxFraction: number) {
   const box = await page.locator('.doc-player').boundingBox();
   if (!box) throw new Error('doc-player has no bounding box');
   const y = box.y + box.height / 2;
@@ -43,8 +42,8 @@ async function dragPlayer(page: Page, dxFraction: number, holdMs = 0) {
   await page.mouse.move(startX, y);
   await page.mouse.down();
   await page.mouse.move(endX, y, { steps: 8 });
-  if (holdMs) await page.waitForTimeout(holdMs);
   await page.mouse.up();
+  await expect(page.locator('.doc-player')).toHaveAttribute('data-swipe-phase', 'idle');
 }
 
 test.describe('Slideshow drag-to-swipe', () => {
@@ -69,15 +68,14 @@ test.describe('Slideshow drag-to-swipe', () => {
     await expect(counter(page)).toHaveText(`1 / ${total}`);
   });
 
-  test('a small slow drag snaps back without navigating', async ({ page }) => {
+  test('a micro-drag snaps back without navigating', async ({ page }) => {
     // Move onto slide 2 first so we can distinguish a snap-back from a boundary.
     await dragPlayer(page, -0.6);
     await expect(counter(page)).toHaveText(/^2 \//);
 
-    // 5% of the width over 350ms → below both the distance and flick thresholds.
-    await dragPlayer(page, -0.05, 350);
-    // Wait past the settle window, then confirm the index is unchanged.
-    await page.waitForTimeout(450);
+    // 0.5% of the width is below the minimum flick distance as well as the
+    // distance threshold, so its outcome is deterministic without a timer.
+    await dragPlayer(page, -0.005);
     await expect(counter(page)).toHaveText(/^2 \//);
   });
 
@@ -87,7 +85,6 @@ test.describe('Slideshow drag-to-swipe', () => {
     await expect(counter(page)).toHaveText('Cover');
     // Drag right hard on the first slide — there is no previous slide.
     await dragPlayer(page, 0.6);
-    await page.waitForTimeout(450);
     await expect(counter(page)).toHaveText('Cover');
   });
 });

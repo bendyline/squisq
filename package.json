@@ -6,7 +6,7 @@
     "packages/*"
   ],
   "engines": {
-    "node": ">=22.14.0"
+    "node": "^22.22.2 || ^24.15.0 || >=26.0.0"
   },
   "scripts": {
     "install:safe": "npm install && node scripts/run-install-allowlist.mjs",
@@ -59,7 +59,7 @@
     "@commitlint/cli": "19.8.1",
     "@commitlint/config-conventional": "19.8.1",
     "@eslint/js": "9.39.4",
-    "@playwright/test": "1.58.2",
+    "@playwright/test": "1.61.1",
     "@stryker-mutator/core": "9.6.1",
     "@stryker-mutator/vitest-runner": "9.6.1",
     "@vitest/coverage-v8": "4.1.7",
@@ -76,20 +76,39 @@
     "linkify-it": "5.0.2",
     "markdown-it": "14.3.0",
     "multi-semantic-release": "3.1.0",
-    "mocha": "11.3.0",
+    "mocha": "11.7.6",
     "prettier": "3.8.1",
     "rimraf": "5.0.10",
-    "semantic-release": "25.0.3",
+    "semantic-release": "25.0.8",
     "tsup": "8.5.1",
+    "tsx": "4.23.1",
     "typescript": "5.9.3",
     "typescript-eslint": "8.56.1",
-    "vite": "8.1.4",
+    "vite": "8.1.5",
     "vitest": "4.1.7"
   },
   "overrides": {
+    "@actions/http-client": {
+      "undici": "6.27.0"
+    },
+    "@semantic-release/github": {
+      "undici": "7.28.0"
+    },
+    "esbuild": "0.28.1",
+    "form-data": "4.0.6",
+    "js-yaml": "5.2.1",
     "linkify-it": "5.0.2",
     "markdown-it": "14.3.0",
+    "mocha": {
+      "diff": "8.0.4",
+      "serialize-javascript": "7.0.5"
+    },
+    "npm": "12.0.1",
+    "qs": "6.15.3",
+    "read-yaml-file": {
+      "js-yaml": "3.15.0"
+    },
     "serialize-javascript": "7.0.5",
-    "npm": "11.16.0"
+    "ws": "8.21.1"
   }
 }

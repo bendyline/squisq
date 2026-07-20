@@ -55,6 +55,8 @@ export {
 } from './teleprompterTheme';
 export {
   DEFAULT_TELEPROMPTER_PREFS,
+  TELEPROMPTER_PREF_LIMITS,
+  normalizeTeleprompterPrefs,
   type TeleprompterPrefs,
   type PrompterTransport,
   type FloatTier,

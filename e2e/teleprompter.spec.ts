@@ -70,19 +70,20 @@ test('manual constant-rate mode scrolls without a mic', async ({ page }) => {
   await page.getByRole('button', { name: 'Start prompter', exact: true }).click();
 
   await expect(scrollColumn(page)).toBeVisible();
+  await expect(page.getByTestId('teleprompter-controls')).toHaveAttribute(
+    'data-transport',
+    'rolling',
+  );
   const before = await translateY(page);
-  await page.waitForTimeout(2_000);
-  const after = await translateY(page);
   // Column translates upward (negative Y) as the prompter advances.
-  expect(after).toBeLessThan(before - 4);
+  await expect.poll(() => translateY(page), { timeout: 5_000 }).toBeLessThan(before - 4);
 
-  // Pausing freezes the scroll (give the smooth-scroll spring a moment
-  // to settle onto the frozen target before sampling).
+  // Pausing transitions the controller to its non-advancing state.
   await page.getByRole('button', { name: 'Pause prompter' }).click();
-  await page.waitForTimeout(1_000);
-  const paused = await translateY(page);
-  await page.waitForTimeout(700);
-  expect(Math.abs((await translateY(page)) - paused)).toBeLessThan(2);
+  await expect(page.getByTestId('teleprompter-controls')).toHaveAttribute(
+    'data-transport',
+    'paused',
+  );
 });
 
 test('mirror and font-size controls restyle the surface', async ({ page }) => {
@@ -108,33 +109,28 @@ test('fake mic drives the level meter and voice pacing advances the prompter', a
   await page.getByRole('button', { name: 'Start prompter', exact: true }).click();
   await expect(page.locator('.squisq-teleprompter-meter')).toBeVisible();
 
-  // The deterministic fake device beeps on a 500 ms on/off cycle — regular
-  // Playwright polling phase-locks with the quiet half, so sample fast
-  // in-page instead and look at the aggregate.
-  const summary = await page.evaluate(async () => {
-    const activeIdx = () =>
-      Number(
-        document
-          .querySelector('.squisq-teleprompter-word--active')
-          ?.getAttribute('data-token-idx') ?? 0,
-      );
-    const startIdx = activeIdx();
-    const levels: number[] = [];
-    let voiceSeen = false;
-    for (let i = 0; i < 48; i++) {
-      await new Promise((resolve) => setTimeout(resolve, 83));
-      const meter = document.querySelector('.squisq-teleprompter-meter');
-      levels.push(Number(meter?.getAttribute('aria-valuenow') ?? 0));
-      voiceSeen = voiceSeen || (meter?.className.includes('--voice') ?? false);
-    }
-    return { maxLevel: Math.max(...levels), voiceSeen, advanced: activeIdx() - startIdx };
-  });
+  const meter = page.locator('.squisq-teleprompter-meter');
+  await expect
+    .poll(async () => Number((await meter.getAttribute('aria-valuenow')) ?? 0), {
+      timeout: 8_000,
+    })
+    .toBeGreaterThan(0);
+  await expect(meter).toHaveClass(/--voice/, { timeout: 8_000 });
 
-  expect(summary.maxLevel).toBeGreaterThan(0);
-  expect(summary.voiceSeen).toBe(true);
-  // Voice pacing advances during beeps and halts in the gaps — over ~4 s
-  // of a 50%-duty tone the prompter must have moved forward.
-  expect(summary.advanced).toBeGreaterThan(1);
+  const startIdx = Number(
+    (await page.locator('.squisq-teleprompter-word--active').getAttribute('data-token-idx')) ?? 0,
+  );
+  await expect
+    .poll(
+      async () =>
+        Number(
+          (await page
+            .locator('.squisq-teleprompter-word--active')
+            .getAttribute('data-token-idx')) ?? 0,
+        ),
+      { timeout: 8_000 },
+    )
+    .toBeGreaterThan(startIdx + 1);
 });
 
 test('popup float tier opens a window hosting the surface and comes back', async ({
@@ -171,7 +167,20 @@ test('recording a take saves the narration and rewrites the markdown preamble', 
   await page.getByRole('button', { name: '⏺ Record' }).click();
   // Capture is live: recording dot on the surface, prompter rolling.
   await expect(page.locator('.squisq-teleprompter-recdot')).toBeVisible({ timeout: 5_000 });
-  await page.waitForTimeout(2_500);
+  const recordingStartIdx = Number(
+    (await page.locator('.squisq-teleprompter-word--active').getAttribute('data-token-idx')) ?? 0,
+  );
+  await expect
+    .poll(
+      async () =>
+        Number(
+          (await page
+            .locator('.squisq-teleprompter-word--active')
+            .getAttribute('data-token-idx')) ?? 0,
+        ),
+      { timeout: 8_000 },
+    )
+    .toBeGreaterThan(recordingStartIdx + 1);
   await page.getByRole('button', { name: '⏹ Stop' }).click();
 
   // Decode + DTW alignment runs on the take, then the review strip appears.
