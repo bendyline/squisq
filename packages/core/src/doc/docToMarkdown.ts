@@ -22,7 +22,7 @@
  * ```
  */
 
-import type { Doc, Block } from '../schemas/Doc.js';
+import type { Doc, Block, PromotedBodyAnnotation } from '../schemas/Doc.js';
 import type { MediaClip } from '../schemas/Media.js';
 import type {
   HeadingTemplateAnnotation,
@@ -107,10 +107,20 @@ export function docToMarkdown(doc: Doc, options: DocToMarkdownOptions = {}): Mar
   }
 
   function emitBlock(block: Block): void {
+    // A promoted body tag is round-tripped lazily: while the block is unedited
+    // it stays in the BODY (heading emitted verbatim/unannotated); once edited,
+    // it moves onto the heading via the normal `ensureAnnotation` path.
+    const promoted = block.promotedBodyAnnotation;
+    const promotedUnedited = promoted !== undefined && !isPromotedBodyEdited(block, promoted);
+
     // Emit the heading node if present
     if (block.sourceHeading) {
-      const heading = ensureAnnotation(block, block.sourceHeading, defaultTemplate);
-      children.push(heading);
+      if (promotedUnedited) {
+        children.push(block.sourceHeading);
+      } else {
+        const heading = ensureAnnotation(block, block.sourceHeading, defaultTemplate);
+        children.push(heading);
+      }
     } else if (block.standaloneAnnotation) {
       // Heading-less standalone block: re-emit its `{[…]}` annotation as a
       // paragraph before its contents. The serializer's quoting is paired
@@ -124,8 +134,8 @@ export function docToMarkdown(doc: Doc, options: DocToMarkdownOptions = {}): Mar
     // contents array (which included every annotation), so ascending
     // insertion into the stripped contents reproduces the source order.
     const clips = [...(block.media ?? []), ...(docMediaByBlock.get(block.id) ?? [])];
+    const contents = [...(block.contents ?? [])];
     if (clips.length > 0) {
-      const contents = [...(block.contents ?? [])];
       const anchored = clips
         .filter((clip) => clip.origin)
         .sort((a, b) => a.origin!.index - b.origin!.index);
@@ -140,10 +150,13 @@ export function docToMarkdown(doc: Doc, options: DocToMarkdownOptions = {}): Mar
       for (const clip of clips.filter((c) => !c.origin).reverse()) {
         contents.unshift(synthesizeMediaParagraph(clip));
       }
-      children.push(...contents);
-    } else if (block.contents) {
-      children.push(...block.contents);
     }
+    // Re-insert the unedited promoted body tag verbatim (it was stripped from
+    // `contents` at parse time so it wouldn't render as literal text/an icon).
+    if (promotedUnedited) {
+      reinsertPromotedBodyAnnotation(contents, promoted);
+    }
+    children.push(...contents);
 
     // Recurse into children (sub-headings)
     if (block.children) {
@@ -198,6 +211,52 @@ export function docToMarkdown(doc: Doc, options: DocToMarkdownOptions = {}): Mar
 function synthesizeAnnotationParagraph(block: Block): MarkdownParagraph {
   const text = serializeAnnotation(block.sourceAnnotation?.template, block.templateOverrides);
   return { type: 'paragraph', children: [{ type: 'text', value: text }] };
+}
+
+/**
+ * True when a promoted block's live template/params have diverged from the tag
+ * that was promoted — i.e. the user edited the block. An unedited block keeps
+ * its tag in the body; an edited one relocates it onto the heading. Empty params
+ * and `undefined` are treated as equal (a bare `{[list]}` sets no overrides).
+ */
+function isPromotedBodyEdited(block: Block, p: PromotedBodyAnnotation): boolean {
+  const templateSame =
+    resolveTemplateName(block.template ?? '') === resolveTemplateName(p.template);
+  const paramsSame = paramsEqual(block.templateOverrides ?? {}, p.params ?? {});
+  return !(templateSame && paramsSame);
+}
+
+/**
+ * Re-insert an unedited promoted body tag into the emitted `contents`, mirroring
+ * the original placement so the round-trip is byte-faithful: a whole-paragraph
+ * tag is appended as its own paragraph; a trailing token is re-appended to the
+ * last paragraph's last text child (cloned — never mutate the source Doc).
+ */
+function reinsertPromotedBodyAnnotation(
+  contents: MarkdownBlockNode[],
+  p: PromotedBodyAnnotation,
+): void {
+  if (p.origin.kind === 'paragraph') {
+    contents.push({ type: 'paragraph', children: [{ type: 'text', value: p.origin.raw }] });
+    return;
+  }
+  const last = contents[contents.length - 1];
+  if (last && last.type === 'paragraph') {
+    const children = last.children ?? [];
+    const lastChild = children[children.length - 1];
+    if (lastChild && lastChild.type === 'text') {
+      const cloned = [...children];
+      cloned[cloned.length - 1] = { ...lastChild, value: lastChild.value + p.origin.suffix };
+      contents[contents.length - 1] = { ...last, children: cloned };
+      return;
+    }
+  }
+  // The tail is no longer a plain-text paragraph — keep the tag as its own
+  // paragraph rather than lose it (byte-identity yields to not dropping data).
+  contents.push({
+    type: 'paragraph',
+    children: [{ type: 'text', value: p.origin.suffix.replace(/^\s+/, '') }],
+  });
 }
 
 /**

@@ -31,6 +31,25 @@ export interface ParsedAnnotation {
 }
 
 /**
+ * Parse the INNER text of a `{[…]}` annotation (the part between the braces)
+ * into a template name + params, applying the shared grammar: a leading bare
+ * token is the template name; every `key=value` token is a param. Used by both
+ * the whole-paragraph parser below and the body-annotation promotion detector.
+ */
+export function parseAnnotationInner(inner: string): ParsedAnnotation {
+  const tokens = tokenizeAttrTokens(inner.trim());
+  const firstIsParam = tokens.length > 0 && tokens[0].indexOf('=') > 0;
+  const template = firstIsParam || tokens.length === 0 ? undefined : tokens[0];
+  const startIdx = firstIsParam ? 0 : 1;
+  const params: Record<string, string> = {};
+  for (let i = startIdx; i < tokens.length; i++) {
+    const kv = splitKeyValueToken(tokens[i]);
+    if (kv) params[kv.key] = kv.value;
+  }
+  return { template, params };
+}
+
+/**
  * Parse a paragraph node that is *exactly* a `{[…]}` annotation (nothing
  * before or after). Returns the template + params, or null when the node
  * isn't a standalone annotation (not a paragraph, more than one child, a
@@ -45,14 +64,5 @@ export function parseStandaloneAnnotation(node: MarkdownBlockNode): ParsedAnnota
   // index 0 means the whole (trimmed) paragraph is the annotation.
   if (!match || match.index !== 0) return null;
 
-  const tokens = tokenizeAttrTokens(match.inner.trim());
-  const firstIsParam = tokens.length > 0 && tokens[0].indexOf('=') > 0;
-  const template = firstIsParam || tokens.length === 0 ? undefined : tokens[0];
-  const startIdx = firstIsParam ? 0 : 1;
-  const params: Record<string, string> = {};
-  for (let i = startIdx; i < tokens.length; i++) {
-    const kv = splitKeyValueToken(tokens[i]);
-    if (kv) params[kv.key] = kv.value;
-  }
-  return { template, params };
+  return parseAnnotationInner(match.inner);
 }

@@ -23,6 +23,7 @@ export function usePreviewProjection(
   doc: Doc | null,
   transformStyle: string,
   workspaceContainer?: ContentContainer | null,
+  documentTitle?: string,
 ): PreviewProjection | null {
   const [projection, setProjection] = useState<PreviewProjection | null>(null);
 
@@ -36,7 +37,7 @@ export function usePreviewProjection(
     // any generated slides before the player-ready document is materialized.
     const build = (sourceDoc: Doc): PreviewProjection => {
       const contentDoc = transformStyle ? applyTransform(sourceDoc, transformStyle).doc : sourceDoc;
-      return { contentDoc, playerDoc: buildPreviewDoc(contentDoc) };
+      return { contentDoc, playerDoc: buildPreviewDoc(contentDoc, { documentTitle }) };
     };
 
     if (workspaceContainer) {
@@ -57,7 +58,7 @@ export function usePreviewProjection(
     }
 
     setProjection(build(doc));
-  }, [doc, transformStyle, workspaceContainer]);
+  }, [doc, transformStyle, workspaceContainer, documentTitle]);
 
   return projection;
 }

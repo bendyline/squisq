@@ -382,6 +382,13 @@ export interface EditorContextValue extends EditorState, EditorActions {
    * host DOES resolve is unsupported. Executable schemes stay refused.
    */
   linkSchemes: readonly string[] | undefined;
+  /**
+   * File name the host opened this document as (e.g. `Longview Plan.md`), if
+   * any. Used as a display-title fallback — for example, the header of a
+   * heading-less leading "preamble" block in the slideshow preview when the
+   * document has no frontmatter `title:`.
+   */
+  fileName: string | undefined;
 }
 
 export type ImageDisplayMode = 'inline' | 'thumbnail';
@@ -1233,6 +1240,7 @@ export function EditorProvider({
       mentionProvider,
       documentLinkProvider,
       linkSchemes,
+      fileName,
       setMarkdownSource,
       setEditorSource,
       setLayoutMode,
@@ -1293,6 +1301,7 @@ export function EditorProvider({
       mentionProvider,
       documentLinkProvider,
       linkSchemes,
+      fileName,
       setMarkdownSource,
       setEditorSource,
       setLayoutMode,

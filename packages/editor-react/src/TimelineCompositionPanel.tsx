@@ -14,6 +14,8 @@ import { DocPlayer, type AudioController } from '@bendyline/squisq-react';
 import { usePreviewSettings } from './PreviewControls';
 import type { TimelineClock } from './useTimelineClock';
 import { usePreviewProjection } from './usePreviewProjection';
+import { documentTitleFromFileName } from './buildPreviewDoc';
+import { useEditorContext } from './EditorContext';
 
 export interface TimelineCompositionPanelProps {
   doc: Doc | null;
@@ -41,7 +43,13 @@ export function TimelineCompositionPanel({
     activePipPosition,
     activeCoverSlide,
   } = usePreviewSettings();
-  const projection = usePreviewProjection(doc, activeTransformStyle, workspaceContainer);
+  const { fileName } = useEditorContext();
+  const projection = usePreviewProjection(
+    doc,
+    activeTransformStyle,
+    workspaceContainer,
+    documentTitleFromFileName(fileName),
+  );
   const playerDoc = projection?.playerDoc ?? null;
   const totalDuration = useMemo(
     () => (playerDoc ? getDocPlaybackDuration(playerDoc) : 0),

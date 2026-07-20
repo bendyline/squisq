@@ -18,6 +18,7 @@ import type { ContentContainer } from '@bendyline/squisq/storage';
 import { useEditorContext } from './EditorContext';
 import { usePreviewSettings } from './PreviewControls';
 import { usePreviewProjection } from './usePreviewProjection';
+import { documentTitleFromFileName } from './buildPreviewDoc';
 import { buildDocumentPreviewMarkdown } from './buildDocumentPreviewMarkdown';
 import { PlainHtmlPreview } from './PlainHtmlPreview';
 import { TeleprompterView } from './teleprompter/TeleprompterView';
@@ -63,6 +64,7 @@ export function PreviewPanel({
     bumpMediaRevision,
     allowRecording,
     colorScheme,
+    fileName,
   } = useEditorContext();
   const mediaProvider = useMediaProvider();
   const presentation = usePresentationModeOptional();
@@ -96,7 +98,12 @@ export function PreviewPanel({
   // Audio mapping is async (reads container files), so we use a two-phase
   // approach: first build the base doc synchronously, then resolve audio
   // in an effect and update the state.
-  const previewProjection = usePreviewProjection(doc, activeTransformStyle, workspaceContainer);
+  const previewProjection = usePreviewProjection(
+    doc,
+    activeTransformStyle,
+    workspaceContainer,
+    documentTitleFromFileName(fileName),
+  );
 
   const previewDoc = previewProjection?.playerDoc ?? null;
   const contentDoc = previewProjection?.contentDoc ?? null;

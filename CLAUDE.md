@@ -99,6 +99,15 @@ squisq/
                             #   templates + derived inputs; ephemeral via block.autoTemplate so
                             #   round-trips stay lossless; disable with { autoTemplates: false }
                             #   or frontmatter squisq-auto-templates: false, CLI --no-auto-templates)
+          promoteBodyAnnotation.ts # Body-tag promotion (LLM tolerance): a single trailing
+                            #   {[template …]} tag placed in a block's BODY (whole-paragraph or
+                            #   glued to the last paragraph) under an UNANNOTATED heading is
+                            #   understood as that block's template, stripped from the rendered
+                            #   body, and recorded on block.promotedBodyAnnotation. Round-tripped
+                            #   LAZILY: docToMarkdown re-emits the tag verbatim in the body until
+                            #   the block's template/params are edited, then relocates it onto the
+                            #   heading (# H {[…]}). Multiple body tags or a tag with content after
+                            #   it keep the heading-less standalone-block behavior (annotationBlocks)
         templateInputs.ts # deriveTemplateInputs + body extractors (images/list/table/quote)
           docToMarkdown.ts  # Doc → Markdown AST (re-emits media annotations from MediaClip.origin)
           audioMapping.ts   # resolveAudioMapping, narration linking (runs applyNarrationTiming
@@ -126,6 +135,11 @@ squisq/
         imageEdit/          # Layered raster authoring schema + sidecar persistence + version
                             #   history (mirrors versions/ shape over ImageEditDoc JSON)
         icons/              # FontAwesome Free catalog (ICONS) + resolveIcon, suggestIcons
+                            #   (inline `{[token]}` icon split lives in markdown/convert.ts and
+                            #   RESERVES block-template ids: a bare `{[list]}`/`{[map]}`/`{[tree]}`
+                            #   is a block tag, never an icon — see TEMPLATE_TOKEN_NAMES /
+                            #   isReservedAnnotationToken in templateNames.ts; use the qualified
+                            #   `{[fa-solid:list]}` form for the icon)
         recommend/          # Block-content profiler + template recommendations
         narration/          # Narration/teleprompter engine: script model (Doc → word tokens +
                             #   syllable estimates + pause classes + block ranges), streaming DSP

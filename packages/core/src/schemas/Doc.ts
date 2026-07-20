@@ -198,6 +198,26 @@ export interface Doc {
  * Merge order at render time: template defaults → `templateData` →
  * `templateOverrides`.
  */
+
+/**
+ * Provenance for a template tag that an author (usually an LLM) placed in a
+ * block's BODY instead of on its heading, and which `markdownToDoc` promoted to
+ * the block's template. Ephemeral — like `autoTemplate` — but round-tripped
+ * lazily: `docToMarkdown` re-emits the tag in the body verbatim while the block
+ * is unedited, and relocates it onto the heading (`# Heading {[…]}`) once the
+ * block's `template`/`templateOverrides` change. See `promoteBodyAnnotation.ts`.
+ */
+export interface PromotedBodyAnnotation {
+  /** Authored template name (pre-alias), e.g. `title` or `titleBlock`. */
+  template: string;
+  /** Authored params, unquoted/unescaped. */
+  params: Record<string, string>;
+  /** Where the tag lived in the body, for byte-faithful re-emission. */
+  origin:
+    | { kind: 'paragraph'; index: number; raw: string }
+    | { kind: 'trailing'; index: number; suffix: string };
+}
+
 export interface Block {
   /** Unique identifier for this block.
    *  Defaults to a slug derived from the heading text. May be overridden by
@@ -271,6 +291,14 @@ export interface Block {
    * `standaloneAnnotation` is true.
    */
   sourceAnnotation?: { template?: string; params?: Record<string, string> };
+
+  /**
+   * Set when this block's `template` was PROMOTED from a `{[…]}` tag that
+   * appeared in the block's body (rather than on the heading). Ephemeral and
+   * round-tripped lazily by `docToMarkdown`: the tag stays in the body until the
+   * block is edited, then moves onto the heading. See `promoteBodyAnnotation.ts`.
+   */
+  promotedBodyAnnotation?: PromotedBodyAnnotation;
 
   /**
    * Display title for template rendering.

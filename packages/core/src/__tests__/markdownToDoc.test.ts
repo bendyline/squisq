@@ -1008,10 +1008,15 @@ describe('standalone annotation blocks (S2)', () => {
     expect(doc.blocks[2].contents?.length).toBe(1); // "tail"
   });
 
-  it('handles an annotation as the last node (no trailing contents)', () => {
+  it('promotes a single trailing annotation onto its heading (no separate block)', () => {
+    // A lone trailing {[…]} tag under an unannotated heading is now PROMOTED
+    // onto that heading block rather than lifted into a heading-less sibling —
+    // see promoteBodyAnnotation.test.ts. The block keeps its leading content.
     const doc = toDoc('# H\n\nbody\n\n{[quote]}\n');
-    expect(doc.blocks[1].template).toBe('quote');
-    expect(doc.blocks[1].contents ?? []).toHaveLength(0);
+    expect(doc.blocks).toHaveLength(1);
+    expect(doc.blocks[0].template).toBe('quote');
+    expect(doc.blocks[0].promotedBodyAnnotation?.template).toBe('quote');
+    expect(doc.blocks[0].contents?.length).toBe(1); // "body" survives
   });
 
   it('generates unique slug ids that dedupe against headings', () => {
