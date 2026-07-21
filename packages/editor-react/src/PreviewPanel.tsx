@@ -77,7 +77,7 @@ export function PreviewPanel({
     activeCaptionStyle,
     activeCaptionsEnabled,
     activeVideoPresentation,
-    activePipShape,
+    activePipSize,
     activePipPosition,
     activeVideoLoop,
     activeCoverSlide,
@@ -355,7 +355,7 @@ export function PreviewPanel({
         displayMode={activeDisplayMode}
         theme={activeTheme}
         videoPresentation={activeVideoPresentation}
-        pipShape={activePipShape}
+        pipSize={activePipSize}
         pipPosition={activePipPosition}
         loop={!audience && activeDisplayMode === 'video' && activeVideoLoop}
         captionStyle={audienceCaptionMode === 'social' ? 'social' : activeCaptionStyle}

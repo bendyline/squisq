@@ -164,6 +164,39 @@ export interface ThemeStyle {
    * template via `imageTreatment: 'none'`.
    */
   imageTreatment?: ImageTreatment;
+  /**
+   * Framing for scheduled picture-in-picture presenter video, so a theme can
+   * style the PiP (border, shadow, corner radius) to match. All fields are
+   * optional — anything omitted is derived from the rest of the theme by
+   * `pipStyleVars()`. See {@link PipStyle}.
+   */
+  pip?: PipStyle;
+}
+
+/**
+ * Theme-driven framing for scheduled picture-in-picture presenter video. Every
+ * field is optional; `pipStyleVars()` fills any gaps by deriving a fitting
+ * default from the palette and {@link ThemeStyle.borderRadius}, so a theme that
+ * declares no `pip` block still gets a PiP consistent with its look.
+ */
+export interface PipStyle {
+  /**
+   * Corner radius of the PiP frame — a number (px), a CSS length/percentage
+   * string (e.g. `'18%'`, `'50%'`), or `0` for square corners. Omitted →
+   * derived from {@link ThemeStyle.borderRadius} (0 stays square).
+   */
+  cornerRadius?: number | string;
+  /**
+   * Frame border. `'none'` removes it; an explicit `{ width, color }` sets it.
+   * Omitted → a subtle rim in the theme's text color that reads on both light
+   * and dark slides.
+   */
+  border?: 'none' | { width?: number | string; color?: string };
+  /**
+   * Drop shadow. `false` / `'none'` → no shadow; `true` (or omitted) → a soft
+   * themed shadow; a string → an explicit CSS `box-shadow` value.
+   */
+  shadow?: boolean | string;
 }
 
 // ============================================

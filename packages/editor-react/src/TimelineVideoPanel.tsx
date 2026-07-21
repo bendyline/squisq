@@ -44,7 +44,7 @@ export function TimelineVideoPanel({
       aria-label="Timeline video preview"
     >
       <header className="squisq-timeline-video-header">
-        <span className="squisq-timeline-video-title">Literal video</span>
+        <span className="squisq-timeline-video-title">Video monitor</span>
         <span className="squisq-timeline-video-label" title={activeLabel}>
           {activeLabel}
         </span>

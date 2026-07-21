@@ -22,7 +22,16 @@
  * - types.ts -- Shared control types
  */
 
-import { Fragment, useId, useRef, useState, useEffect, useCallback, useMemo } from 'react';
+import {
+  Fragment,
+  useId,
+  useRef,
+  useState,
+  useEffect,
+  useCallback,
+  useMemo,
+  type CSSProperties,
+} from 'react';
 import type { Doc, Block, TextLayer, StartBlockConfig, DocBlock } from '@bendyline/squisq/schemas';
 import {
   isTemplateBlock,
@@ -31,7 +40,8 @@ import {
   getDocPlaybackDuration,
 } from '@bendyline/squisq/schemas';
 import { MediaClipLayer } from './MediaClipLayer';
-import { applySurface } from '@bendyline/squisq/schemas';
+import { useMediaClipDurations } from './hooks/useMediaClipDurations';
+import { applySurface, pipStyleVars } from '@bendyline/squisq/schemas';
 import { BlockRenderer } from './BlockRenderer';
 import { CaptionOverlay } from './CaptionOverlay';
 import { useAutoSurface } from './hooks/useAutoSurface';
@@ -167,7 +177,7 @@ function DocPlayerContent({
   surface,
   captionStyle = 'standard',
   videoPresentation = 'background',
-  pipShape = 'rounded',
+  pipSize = 'small',
   pipPosition = 'bottom-right',
   enableSwipe = true,
   globalKeyboardShortcuts = false,
@@ -244,7 +254,16 @@ function DocPlayerContent({
   // Timed media clips (block.media + doc.documentMedia) resolved to absolute
   // doc-timeline coordinates. Empty for documents without the media model, so
   // <MediaClipLayer> renders nothing and the legacy audio path is unaffected.
-  const mediaSchedule = useMemo(() => resolveMediaSchedule(doc), [doc]);
+  // An unlocked video with no authored out-point is capped to its own probed
+  // length so it ends (and goes inactive/hidden) instead of freezing on its
+  // last frame until the document ends — the probe map refines the schedule as
+  // durations arrive; without it the historical fill-to-end schedule is used.
+  const rawSchedule = useMemo(() => resolveMediaSchedule(doc), [doc]);
+  const clipDurations = useMediaClipDurations(rawSchedule, basePath);
+  const mediaSchedule = useMemo(
+    () => resolveMediaSchedule(doc, { intrinsicDuration: (clip) => clipDurations.get(clip.src) }),
+    [doc, clipDurations],
+  );
 
   // Refs for frequently-changing values used in the keyboard handler,
   // so the handler callback doesn't need to be recreated every frame.
@@ -294,6 +313,13 @@ function DocPlayerContent({
     const base = theme ?? DEFAULT_THEME;
     return resolvedSurface ? applySurface(base, resolvedSurface) : base;
   }, [theme, resolvedSurface]);
+
+  // Theme-driven picture-in-picture frame (border / shadow / corner radius),
+  // exposed as CSS custom properties on the player root for the PiP stylesheet.
+  const pipVars = useMemo(
+    () => pipStyleVars(effectiveTheme) as CSSProperties,
+    [effectiveTheme],
+  );
 
   // Doc playback hook - pass viewport for responsive template expansion
   const {
@@ -1125,6 +1151,7 @@ function DocPlayerContent({
       onClick={handleContainerClick}
       onPointerDown={swipe.onPointerDown}
       style={{
+        ...pipVars,
         position: 'relative',
         width: '100%',
         aspectRatio: `${activeViewport.width} / ${activeViewport.height}`,
@@ -1148,7 +1175,7 @@ function DocPlayerContent({
         renderMode={renderMode}
         muted={muted}
         presentation={videoPresentation}
-        pipShape={pipShape}
+        pipSize={pipSize}
         pipPosition={pipPosition}
       />
 

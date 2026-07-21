@@ -39,7 +39,7 @@ export function TimelineCompositionPanel({
     activeCaptionStyle,
     activeCaptionsEnabled,
     activeVideoPresentation,
-    activePipShape,
+    activePipSize,
     activePipPosition,
     activeCoverSlide,
   } = usePreviewSettings();
@@ -125,7 +125,7 @@ export function TimelineCompositionPanel({
               displayMode="video"
               theme={activeTheme}
               videoPresentation={activeVideoPresentation}
-              pipShape={activePipShape}
+              pipSize={activePipSize}
               pipPosition={activePipPosition}
               captionStyle={activeCaptionStyle}
               captionsEnabled={activeCaptionsEnabled}

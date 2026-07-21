@@ -6,7 +6,7 @@ import type {
   CaptionStyle,
   DisplayMode,
   PipPosition,
-  PipShape,
+  PipSize,
   PlaybackActions,
   PlaybackState,
   SquisqRenderAPI,
@@ -58,8 +58,8 @@ export interface DocPlayerProps {
    * Defaults to `'background'` for backward compatibility.
    */
   videoPresentation?: VideoPresentation;
-  /** Shape of presenter video in picture-in-picture mode. */
-  pipShape?: PipShape;
+  /** Size of presenter video in picture-in-picture mode (default `'small'`). */
+  pipSize?: PipSize;
   /** Corner used by presenter video in picture-in-picture mode. */
   pipPosition?: PipPosition;
   enableSwipe?: boolean;

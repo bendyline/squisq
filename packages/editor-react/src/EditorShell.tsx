@@ -33,6 +33,7 @@ import { TimelineVideoPanel } from './TimelineVideoPanel';
 import { TimelineCompositionPanel } from './TimelineCompositionPanel';
 import { TimelineToolbar } from './TimelineToolbar';
 import { useTimelineClock } from './useTimelineClock';
+import { usePreviewProjection } from './usePreviewProjection';
 import { collectEmbeddedVideoSchedule } from './embeddedMedia';
 import { PreviewPanel } from './PreviewPanel';
 import { ImageViewer } from './ImageViewer';
@@ -87,7 +88,7 @@ import type {
   ReactNode,
   RefObject,
 } from 'react';
-import { MediaContext } from '@bendyline/squisq-react';
+import { MediaContext, useMediaClipDurations } from '@bendyline/squisq-react';
 import { writeCanvasSettingsStyle, type WriteCanvasSettings } from './writeCanvasSettings';
 import { useModalDialog } from './modal/useModalDialog';
 import type { EditorHostMode } from './editorHostMode';
@@ -816,17 +817,61 @@ function EditorShellInner({
     isMarkdownMode && (layoutMode === 'block' || layoutMode === 'timeline') && !isPreview;
   // Timeline mode additionally shows the horizontal timeline track below.
   const isTimelineMode = isMarkdownMode && layoutMode === 'timeline' && !isPreview;
-  const timelineDuration = useMemo(() => (doc ? getDocPlaybackDuration(doc) : 0), [doc]);
-  const timelineSchedule = useMemo(() => (doc ? resolveMediaSchedule(doc) : []), [doc]);
+  // The timeline mirrors the *played* document, not the raw parse: block bars,
+  // the playhead, and the clock use the same narration-timed projection the
+  // Video composition renders, so an unpinned slide occupies its recorded-voice
+  // length rather than a reading-time estimate and scrubbing lands on the slide
+  // that actually plays. Transform-agnostic (the timeline edits source blocks,
+  // which the projection preserves — sourceHeading intact — with no transform);
+  // gated to timeline mode and falling back to the raw `doc` until the async
+  // projection resolves (or when there's no container to time against).
+  const timelineProjection = usePreviewProjection(
+    isTimelineMode ? doc : null,
+    '',
+    workspaceContainer,
+  );
+  const timelineDoc = timelineProjection?.contentDoc ?? doc;
+  // Probe unlocked videos' intrinsic lengths so the timeline caps them to their
+  // own duration (a ~20s clip no longer scheduled across the whole 3:07 doc):
+  // the clip bar shrinks to the real length and the video goes inactive at its
+  // end instead of holding its last frame. Until a duration arrives (or when no
+  // probe applies) the historical fill-to-end schedule is used.
+  const timelineRawSchedule = useMemo(
+    () => (timelineDoc ? resolveMediaSchedule(timelineDoc) : []),
+    [timelineDoc],
+  );
+  const timelineClipDurations = useMediaClipDurations(
+    timelineRawSchedule,
+    basePath,
+    mediaProvider ?? null,
+  );
+  const timelineDuration = useMemo(
+    () =>
+      timelineDoc
+        ? getDocPlaybackDuration(timelineDoc, {
+            intrinsicDuration: (clip) => timelineClipDurations.get(clip.src),
+          })
+        : 0,
+    [timelineDoc, timelineClipDurations],
+  );
+  const timelineSchedule = useMemo(
+    () =>
+      timelineDoc
+        ? resolveMediaSchedule(timelineDoc, {
+            intrinsicDuration: (clip) => timelineClipDurations.get(clip.src),
+          })
+        : [],
+    [timelineDoc, timelineClipDurations],
+  );
   const timelineVideoSchedule = useMemo(
     () =>
-      doc
+      timelineDoc
         ? [
             ...timelineSchedule.filter((clip) => clip.kind === 'video'),
-            ...collectEmbeddedVideoSchedule(doc),
+            ...collectEmbeddedVideoSchedule(timelineDoc),
           ]
         : [],
-    [doc, timelineSchedule],
+    [timelineDoc, timelineSchedule],
   );
   const timelineClock = useTimelineClock(isTimelineMode ? timelineDuration : 0);
   const hasTimelineVideo = timelineVideoSchedule.length > 0;
@@ -1360,6 +1405,7 @@ function EditorShellInner({
 
             {isTimelineMode && (
               <TimelineTrack
+                doc={timelineDoc}
                 clock={timelineClock}
                 schedule={timelineSchedule}
                 videoVisible={timelineVideoVisible || timelineCompositionVisible}

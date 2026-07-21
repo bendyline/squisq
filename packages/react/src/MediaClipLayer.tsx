@@ -18,7 +18,7 @@ import { useEffect, useRef } from 'react';
 import type { ScheduledClip } from '@bendyline/squisq/schemas';
 import { useMediaUrl } from './hooks/MediaContext';
 import { useMediaSchedule } from './hooks/useMediaSchedule';
-import type { PipPosition, PipShape, VideoPresentation } from './types';
+import type { PipPosition, PipSize, VideoPresentation } from './types';
 
 /** Re-seek an element only when it drifts this far from its target (seconds). */
 const DRIFT = 0.25;
@@ -33,8 +33,8 @@ export interface MediaClipLayerProps {
   muted?: boolean;
   /** Placement of video clips relative to the rendered document. */
   presentation?: VideoPresentation;
-  /** Shape of a picture-in-guide? */
-  pipShape?: PipShape;
+  /** Size of picture-in-picture video (small or large). */
+  pipSize?: PipSize;
   /** Corner occupied by picture-in-picture video. */
   pipPosition?: PipPosition;
   /** Honor each scheduled video's authored placement override. Default true. */
@@ -49,7 +49,7 @@ export function MediaClipLayer({
   renderMode = false,
   muted = false,
   presentation = 'background',
-  pipShape = 'rounded',
+  pipSize = 'small',
   pipPosition = 'bottom-right',
   honorClipPresentation = true,
 }: MediaClipLayerProps) {
@@ -78,7 +78,7 @@ export function MediaClipLayer({
           key={groupPresentation}
           className={`doc-player__media-clips doc-player__media-clips--${groupPresentation}`}
           data-presentation={groupPresentation}
-          data-pip-shape={pipShape}
+          data-pip-size={pipSize}
           data-pip-position={pipPosition}
           aria-hidden
         >

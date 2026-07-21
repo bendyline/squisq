@@ -48,6 +48,7 @@ export { useModalDialog } from './hooks/useModalDialog.js';
 export type { ModalDialogOptions } from './hooks/useModalDialog.js';
 export { useMediaSchedule } from './hooks/useMediaSchedule.js';
 export type { MediaScheduleController } from './hooks/useMediaSchedule.js';
+export { useMediaClipDurations } from './hooks/useMediaClipDurations.js';
 export { useDocPlayback } from './hooks/useDocPlayback.js';
 export type { UseDocPlaybackOptions } from './hooks/useDocPlayback.js';
 export { useViewportOrientation } from './hooks/useViewportOrientation.js';
@@ -71,7 +72,7 @@ export type {
   CaptionStyle,
   CaptionMode,
   PipPosition,
-  PipShape,
+  PipSize,
   VideoPresentation,
   SlideNavActions,
   SquisqRenderAPI,

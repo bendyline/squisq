@@ -39,7 +39,7 @@ vi.mock('../PreviewControls', () => ({
     activeCaptionStyle: 'subtitle',
     activeCaptionsEnabled: true,
     activeVideoPresentation: 'picture-in-picture',
-    activePipShape: 'rounded',
+    activePipSize: 'small',
     activePipPosition: 'bottom-right',
     activeCoverSlide: true,
   }),

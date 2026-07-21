@@ -21,7 +21,7 @@ describe('TimelineToolbar', () => {
       />,
     );
 
-    const literal = screen.getByRole('button', { name: 'Literal video' });
+    const literal = screen.getByRole('button', { name: 'Video monitor' });
     const composition = screen.getByRole('button', { name: 'Video composition' });
     expect(literal.getAttribute('aria-pressed')).toBe('true');
     expect(composition.getAttribute('aria-pressed')).toBe('false');
@@ -45,7 +45,7 @@ describe('TimelineToolbar', () => {
     );
 
     expect(
-      (screen.getByRole('button', { name: 'Literal video' }) as HTMLButtonElement).disabled,
+      (screen.getByRole('button', { name: 'Video monitor' }) as HTMLButtonElement).disabled,
     ).toBe(true);
     expect(
       (screen.getByRole('button', { name: 'Video composition' }) as HTMLButtonElement).disabled,

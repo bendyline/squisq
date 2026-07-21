@@ -26,8 +26,8 @@ export type ControlsLayout = 'overlay' | 'sidebar' | 'bottom';
  */
 export type VideoPresentation = 'background' | 'full-frame' | 'picture-in-picture';
 
-/** Shape of a picture-in-picture presenter video. */
-export type PipShape = 'square' | 'rounded' | 'circle';
+/** Size of a picture-in-picture presenter video. */
+export type PipSize = 'small' | 'large';
 
 /** Corner occupied by a picture-in-picture presenter video. */
 export type PipPosition = 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right';

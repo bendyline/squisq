@@ -27,7 +27,7 @@ import type {
   CaptionStyle,
   DisplayMode,
   PipPosition,
-  PipShape,
+  PipSize,
   VideoPresentation,
 } from '@bendyline/squisq-react';
 import type { ViewportPreset, ViewportConfig } from '@bendyline/squisq/schemas';
@@ -97,8 +97,8 @@ export interface PreviewSettings {
   hasVideoMedia: boolean;
   activeVideoPresentation: VideoPresentation;
   setVideoPresentation: (presentation: VideoPresentation) => void;
-  activePipShape: PipShape;
-  setPipShape: (shape: PipShape) => void;
+  activePipSize: PipSize;
+  setPipSize: (size: PipSize) => void;
   activePipPosition: PipPosition;
   setPipPosition: (position: PipPosition) => void;
   /** Whether Squisq should synthesize and show its managed cover slide. */
@@ -228,12 +228,17 @@ function resolveVideoPresentation(value: unknown): VideoPresentation | null {
   return null;
 }
 
-function resolvePipShape(value: unknown): PipShape | null {
+function resolvePipSize(value: unknown): PipSize | null {
   if (typeof value !== 'string') return null;
   const normalized = value.trim().toLowerCase();
-  if (normalized === 'square' || normalized === 'rectangle') return 'square';
-  if (normalized === 'rounded' || normalized === 'round-square') return 'rounded';
-  if (normalized === 'circle' || normalized === 'circular') return 'circle';
+  if (normalized === 'small' || normalized === 'sm' || normalized === 'pip-small') return 'small';
+  if (
+    normalized === 'large' ||
+    normalized === 'lg' ||
+    normalized === 'big' ||
+    normalized === 'pip-large'
+  )
+    return 'large';
   return null;
 }
 
@@ -592,29 +597,29 @@ export function PreviewSettingsProvider({
     [persistFrontmatter],
   );
 
-  const fmPipShape = useMemo(
+  const fmPipSize = useMemo(
     () =>
-      resolvePipShape(
+      resolvePipSize(
         readFrontmatterKey(
           frontmatter,
-          FRONTMATTER_SETTING_KEYS.pipShape.canonical,
-          FRONTMATTER_SETTING_KEYS.pipShape.legacy,
+          FRONTMATTER_SETTING_KEYS.pipSize.canonical,
+          FRONTMATTER_SETTING_KEYS.pipSize.legacy,
         ),
       ),
     [frontmatter],
   );
-  const [selectedPipShape, setSelectedPipShape] = useState<PipShape | null>(null);
-  useEffect(() => setSelectedPipShape(null), [fmPipShape]);
-  const activePipShape = selectedPipShape ?? fmPipShape ?? FRONTMATTER_SETTING_DEFAULTS.pipShape;
-  const handlePipShape = useCallback(
-    (shape: PipShape) => {
-      setSelectedPipShape(shape);
+  const [selectedPipSize, setSelectedPipSize] = useState<PipSize | null>(null);
+  useEffect(() => setSelectedPipSize(null), [fmPipSize]);
+  const activePipSize = selectedPipSize ?? fmPipSize ?? FRONTMATTER_SETTING_DEFAULTS.pipSize;
+  const handlePipSize = useCallback(
+    (size: PipSize) => {
+      setSelectedPipSize(size);
       persistFrontmatter({
-        [FRONTMATTER_SETTING_KEYS.pipShape.canonical]: omitFrontmatterDefault(
-          shape,
-          FRONTMATTER_SETTING_DEFAULTS.pipShape,
+        [FRONTMATTER_SETTING_KEYS.pipSize.canonical]: omitFrontmatterDefault(
+          size,
+          FRONTMATTER_SETTING_DEFAULTS.pipSize,
         ),
-        [FRONTMATTER_SETTING_KEYS.pipShape.legacy]: null,
+        [FRONTMATTER_SETTING_KEYS.pipSize.legacy]: null,
       });
     },
     [persistFrontmatter],
@@ -778,8 +783,8 @@ export function PreviewSettingsProvider({
       hasVideoMedia,
       activeVideoPresentation,
       setVideoPresentation: handleVideoPresentation,
-      activePipShape,
-      setPipShape: handlePipShape,
+      activePipSize,
+      setPipSize: handlePipSize,
       activePipPosition,
       setPipPosition: handlePipPosition,
       activeVideoLoop,
@@ -803,7 +808,7 @@ export function PreviewSettingsProvider({
       activeCaptionsEnabled,
       hasVideoMedia,
       activeVideoPresentation,
-      activePipShape,
+      activePipSize,
       activePipPosition,
       activeVideoLoop,
       activeCoverSlide,
@@ -811,7 +816,7 @@ export function PreviewSettingsProvider({
       handleSetTransformStyle,
       handleSetCaptionMode,
       handleVideoPresentation,
-      handlePipShape,
+      handlePipSize,
       handlePipPosition,
       handleSetVideoLoopEnabled,
       handleSetCoverSlideEnabled,
@@ -876,10 +881,9 @@ const VIDEO_PRESENTATION_OPTIONS: Array<{ key: VideoPresentation; label: string 
   { key: 'picture-in-picture', label: 'Picture in picture' },
 ];
 
-const PIP_SHAPE_OPTIONS: Array<{ key: PipShape; label: string }> = [
-  { key: 'square', label: 'Square' },
-  { key: 'rounded', label: 'Rounded' },
-  { key: 'circle', label: 'Circle' },
+const PIP_SIZE_OPTIONS: Array<{ key: PipSize; label: string }> = [
+  { key: 'small', label: 'Small' },
+  { key: 'large', label: 'Large' },
 ];
 
 const PIP_POSITION_OPTIONS: Array<{ key: PipPosition; label: string }> = [
@@ -1184,12 +1188,12 @@ export function PreviewToolbarControls() {
             {showPipOptions && (
               <>
                 <select
-                  aria-label="Picture-in-picture shape"
+                  aria-label="Picture-in-picture size"
                   style={selectStyle}
-                  value={s.activePipShape}
-                  onChange={(event) => s.setPipShape(event.target.value as PipShape)}
+                  value={s.activePipSize}
+                  onChange={(event) => s.setPipSize(event.target.value as PipSize)}
                 >
-                  {PIP_SHAPE_OPTIONS.map((option) => (
+                  {PIP_SIZE_OPTIONS.map((option) => (
                     <option key={option.key} value={option.key}>
                       {option.label}
                     </option>

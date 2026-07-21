@@ -12,7 +12,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { Block, MediaClip } from '@bendyline/squisq/schemas';
+import type { Block, Doc, MediaClip } from '@bendyline/squisq/schemas';
 import {
   resolveMediaSchedule,
   getDocPlaybackDuration,
@@ -42,6 +42,8 @@ const ZOOM_MIN = 4;
 const ZOOM_MAX = 160;
 const ZOOM_FACTOR = 1.4;
 const MIN_DURATION = 0.5; // seconds — floor when dragging a block edge
+/** Pointer travel (px) before a press counts as a drag rather than a click. */
+const DRAG_THRESHOLD_PX = 4;
 /** Candidate ruler-tick intervals (seconds); the first wide enough is used. */
 const TICK_STEPS = [1, 2, 5, 10, 15, 30, 60, 120, 300, 600];
 /** Minimum pixels between ruler ticks. */
@@ -65,6 +67,15 @@ interface DragState {
   /** Live preview value (seconds) shown while dragging. */
   preview: number;
   commit: (seconds: number) => void;
+  /**
+   * Optional click action: run on pointer-up when the press did NOT travel past
+   * {@link DRAG_THRESHOLD_PX}. A bare click must never `commit` — for an
+   * embedded `<video>` that silently rewrote it into a `{[video …]}` annotation.
+   * It selects / seeks instead.
+   */
+  onClick?: () => void;
+  /** True once the pointer moved past the click threshold — i.e. a real drag. */
+  moved?: boolean;
   /** Id of the bar/clip being dragged (for live preview geometry). */
   targetId: string;
   /**
@@ -87,6 +98,13 @@ function headingLine(block: Block): number | undefined {
 
 export interface TimelineTrackProps {
   height?: number;
+  /**
+   * Doc used for bar geometry / timing. Callers pass the narration-timed
+   * projection so the track matches what actually plays; falls back to the
+   * editor's raw parse. Editing still round-trips because the projected doc
+   * keeps each block's `sourceHeading`.
+   */
+  doc?: Doc | null;
   /** Optional shared clock used by docked timeline companions. */
   clock?: TimelineClock;
   /** Reuse an already-resolved schedule instead of deriving it from the doc. */
@@ -97,18 +115,22 @@ export interface TimelineTrackProps {
 
 export function TimelineTrack({
   height = 160,
+  doc: docProp,
   clock,
   schedule,
   videoVisible = false,
 }: TimelineTrackProps) {
   const {
-    doc,
+    doc: contextDoc,
     markdownSource,
     setMarkdownSource,
     goToBlockByLine,
     activeBlockStartLine,
     mediaProvider,
   } = useEditorContext();
+  // Prefer the caller's (narration-timed) doc for geometry; fall back to the raw
+  // parse. Source edits still resolve because both carry `sourceHeading` lines.
+  const doc = docProp ?? contextDoc;
   const [drag, setDrag] = useState<DragState | null>(null);
   const [pxPerSecond, setPxPerSecond] = useState(DEFAULT_PX_PER_SECOND);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -303,12 +325,22 @@ export function TimelineTrack({
     const onMove = (e: PointerEvent) => {
       const d = dragRef.current;
       if (!d) return;
-      const deltaSec = (e.clientX - d.startX) / scaleRef.current;
-      setDrag({ ...d, preview: Math.max(d.floor, d.previewBase + deltaSec) });
+      const deltaPx = e.clientX - d.startX;
+      const moved = d.moved || Math.abs(deltaPx) >= DRAG_THRESHOLD_PX;
+      const deltaSec = deltaPx / scaleRef.current;
+      setDrag({ ...d, moved, preview: Math.max(d.floor, d.previewBase + deltaSec) });
     };
     const onUp = () => {
       const d = dragRef.current;
       if (!d) return;
+      if (!d.moved) {
+        // A click, not a drag: never mutate the source. Committing here is what
+        // silently turned an embedded <video> into a {[video …]} tag. Run the
+        // optional select/seek action instead and drop the drag.
+        d.onClick?.();
+        setDrag(null);
+        return;
+      }
       d.commit(d.preview);
       // Keep the preview applied (committed) until the regenerated doc reflects
       // the edit, so the bar doesn't snap back to the old layout for a frame.
@@ -339,7 +371,7 @@ export function TimelineTrack({
       targetId: string,
       base: number,
       commit: (seconds: number) => void,
-      opts?: { pivotIndex?: number; floor?: number },
+      opts?: { pivotIndex?: number; floor?: number; onClick?: () => void },
     ) => {
       e.preventDefault();
       e.stopPropagation();
@@ -355,9 +387,23 @@ export function TimelineTrack({
         commit,
         targetId,
         pivotIndex: opts?.pivotIndex,
+        onClick: opts?.onClick,
       });
     },
     [],
+  );
+
+  // Non-destructive click on a timeline clip: move the playhead to its start and
+  // select its owning block (mirrors clicking a block bar). Never edits source,
+  // so clicking a recording no longer rewrites its <video> into a tag.
+  const selectClipAt = useCallback(
+    (time: number, blockId?: string) => {
+      seek(time);
+      const owner = blockId != null ? blocks.find((b) => b.id === blockId) : undefined;
+      const line = owner ? headingLine(owner) : undefined;
+      if (line != null) goToBlockByLine(line);
+    },
+    [seek, blocks, goToBlockByLine],
   );
 
   if (!doc) return null;
@@ -542,16 +588,23 @@ export function TimelineTrack({
                   }`}
                   onPointerDown={(e) =>
                     editable &&
-                    beginDrag(e, 'clip-move', c.id, c.absoluteStart, (absStart) => {
-                      if (c.anchor === 'document') {
-                        const next = setMediaClipInSource(markdownSource, c.sourceLine!, {
-                          startAt: absStart,
-                        });
-                        if (next) setMarkdownSource(next);
-                      } else {
-                        moveClipToTime(c.sourceLine, c.blockId, specOf(), absStart);
-                      }
-                    })
+                    beginDrag(
+                      e,
+                      'clip-move',
+                      c.id,
+                      c.absoluteStart,
+                      (absStart) => {
+                        if (c.anchor === 'document') {
+                          const next = setMediaClipInSource(markdownSource, c.sourceLine!, {
+                            startAt: absStart,
+                          });
+                          if (next) setMarkdownSource(next);
+                        } else {
+                          moveClipToTime(c.sourceLine, c.blockId, specOf(), absStart);
+                        }
+                      },
+                      { onClick: () => selectClipAt(c.absoluteStart, c.blockId) },
+                    )
                   }
                   onDoubleClick={() => {
                     if (!editable || c.sourceLine == null) return;
@@ -604,9 +657,16 @@ export function TimelineTrack({
                     title={`${m.src} — drag to time / move between blocks`}
                     onPointerDown={(e) =>
                       m.sourceLine != null &&
-                      beginDrag(e, 'embed-move', id, absStart, (newAbsStart) => {
-                        placeEmbeddedClip(m.sourceLine, { ...spec, clipEnd: length }, newAbsStart);
-                      })
+                      beginDrag(
+                        e,
+                        'embed-move',
+                        id,
+                        absStart,
+                        (newAbsStart) => {
+                          placeEmbeddedClip(m.sourceLine, { ...spec, clipEnd: length }, newAbsStart);
+                        },
+                        { onClick: () => selectClipAt(b.startTime, b.id) },
+                      )
                     }
                   >
                     <span className="squisq-timeline-clip-label">{clipName(m.src)}</span>
