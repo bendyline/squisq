@@ -19,12 +19,24 @@ export interface MediaNodeSpec {
   attrs: Record<string, unknown>;
 }
 
-export function insertMediaBlock(editor: Editor, node: MediaNodeSpec): void {
+/**
+ * Insert one or more block-media atoms at the top level, in order, in a single
+ * transaction. Inserting them one-by-one would break for the second node: the
+ * first insert leaves a NodeSelection at depth 0, so a follow-up call would
+ * compute the document end and separate a pair that must stay adjacent (e.g. a
+ * screen clip immediately followed by its camera picture-in-picture).
+ */
+export function insertMediaBlocks(editor: Editor, nodes: MediaNodeSpec[]): void {
+  if (nodes.length === 0) return;
   const { $from } = editor.state.selection;
   // `after(1)` is the position immediately after the depth-1 (top-level)
   // ancestor of the selection — after the whole list / blockquote /
   // paragraph the caret is in. Fall back to the document end for the rare
   // depth-0 (node) selection.
   const pos = $from.depth >= 1 ? $from.after(1) : editor.state.doc.content.size;
-  editor.chain().focus().insertContentAt(pos, node).run();
+  editor.chain().focus().insertContentAt(pos, nodes).run();
+}
+
+export function insertMediaBlock(editor: Editor, node: MediaNodeSpec): void {
+  insertMediaBlocks(editor, [node]);
 }

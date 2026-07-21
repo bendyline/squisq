@@ -25,7 +25,8 @@ import { useCallback, useMemo } from 'react';
 import { resolveThemeForDoc } from '@bendyline/squisq/doc';
 import { RecorderPanel } from './recorder/RecorderPanel.js';
 import type { RecorderNarrationOptions, RecorderSaveResult } from './recorder/RecorderModal.js';
-import { insertMediaBlock } from './recorder/insertMediaBlock.js';
+import { insertMediaBlock, insertMediaBlocks } from './recorder/insertMediaBlock.js';
+import { buildDualClipInsertion } from './recorder/dualClipInsertion.js';
 import { useEditorContext } from './EditorContext';
 import { usePreviewSettingsOptional } from './PreviewControls';
 import { markdownFencedCodeLineMask } from './markdownCodeFence';
@@ -158,6 +159,30 @@ export function RecorderEntry({ open, onOpenChange, showTrigger = true }: Record
         }
         setMarkdownSource(markdownSource ? `${markdownSource}\n\n${audioTag}` : audioTag);
         return;
+      }
+
+      // Screen + camera — two files composed as scheduled clips: the screen
+      // as a full-frame overlay, the camera as a picture-in-picture bubble,
+      // both document-anchored so playback shows the composed replay. Screen
+      // tag first (DOM order = z-order → the bubble sits on top).
+      if (result.source === 'screen+camera' && result.camera) {
+        const dual = buildDualClipInsertion(result);
+        if (dual) {
+          if (activeView === 'wysiwyg' && tiptapEditor) {
+            insertMediaBlocks(tiptapEditor, [
+              { type: 'video', attrs: dual.screenAttrs },
+              { type: 'video', attrs: dual.cameraAttrs },
+            ]);
+            return;
+          }
+          const pair = `${dual.screenTag}\n\n${dual.cameraTag}`;
+          if (activeView === 'raw' && monacoEditor) {
+            insertAtCursor(`\n\n${pair}\n`);
+            return;
+          }
+          setMarkdownSource(markdownSource ? `${markdownSource}\n\n${pair}` : pair);
+          return;
+        }
       }
 
       // Camera / screen / screen+mic — inline video player. We pin

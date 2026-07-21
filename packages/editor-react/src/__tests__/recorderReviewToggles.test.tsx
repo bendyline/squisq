@@ -115,6 +115,9 @@ describe('RecorderModal — unsaved take is not silently destroyed', () => {
     vi.useRealTimers();
     vi.unstubAllGlobals();
     vi.restoreAllMocks();
+    // `userAgentData` is set directly on the jsdom navigator by the system-audio
+    // test (not via vi.stubGlobal), so unstubAllGlobals can't reach it.
+    Reflect.deleteProperty(navigator, 'userAgentData');
   });
 
   it('shows a themed red dot on the ready-state Record button', async () => {
@@ -247,5 +250,95 @@ describe('RecorderModal — unsaved take is not silently destroyed', () => {
       expect(toggle(name).hasAttribute('disabled')).toBe(false);
     }
     expect(screen.queryByRole('button', { name: 'Save to document' })).toBeNull();
+  });
+
+  it('saves a screen+camera take as two video files with a camera companion', async () => {
+    const onSave = vi.fn();
+    render(
+      <RecorderModal
+        initialMode="screen+camera"
+        mediaProvider={mediaProvider}
+        onClose={vi.fn()}
+        onSave={onSave}
+      />,
+    );
+
+    // Both video sources start armed for the dual mode.
+    expect(toggle('Camera').getAttribute('aria-pressed')).toBe('true');
+    expect(toggle('Screen').getAttribute('aria-pressed')).toBe('true');
+
+    await recordATake();
+
+    // Review still locks every source pill with an unsaved take in hand.
+    for (const name of ['Microphone', 'Camera', 'Screen']) {
+      expect(toggle(name).hasAttribute('disabled')).toBe(true);
+      expect(toggle(name).getAttribute('title')).toBe(
+        'Save or discard this recording before changing sources',
+      );
+    }
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Save to document' }));
+    });
+
+    // Two files: screen (video-only display stream → no audio suffix) + camera
+    // (mic-bearing getUserMedia stream → +audio), both under video/.
+    const calls = vi.mocked(mediaProvider.addMedia).mock.calls;
+    expect(calls).toHaveLength(2);
+    expect(calls[0]?.[0]).toMatch(/^video\/screen-\d{8}-\d{6}\.webm$/);
+    expect(calls[1]?.[0]).toMatch(/^video\/camera\+audio-\d{8}-\d{6}\.webm$/);
+
+    expect(onSave).toHaveBeenCalledTimes(1);
+    const payload = onSave.mock.calls[0][0];
+    expect(payload.source).toBe('screen+camera');
+    expect(payload.relativePath).toMatch(/^video\/screen-/);
+    expect(payload.camera?.relativePath).toMatch(/^video\/camera\+audio-/);
+  });
+
+  it('suffixes a typed basename per file in a dual save', async () => {
+    render(
+      <RecorderModal
+        initialMode="screen+camera"
+        mediaProvider={mediaProvider}
+        onClose={vi.fn()}
+        onSave={vi.fn()}
+      />,
+    );
+    fireEvent.change(screen.getByLabelText('Filename (optional)'), {
+      target: { value: 'demo' },
+    });
+    await recordATake();
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Save to document' }));
+    });
+
+    const calls = vi.mocked(mediaProvider.addMedia).mock.calls;
+    expect(calls[0]?.[0]).toBe('video/demo-screen.webm');
+    expect(calls[1]?.[0]).toBe('video/demo-camera.webm');
+  });
+
+  it('offers a System audio pill on Chromium, gated on Screen being on', async () => {
+    Object.defineProperty(navigator, 'userAgentData', {
+      configurable: true,
+      value: { brands: [{ brand: 'Chromium' }], mobile: false },
+    });
+    render(<RecorderModal initialMode="mic" mediaProvider={mediaProvider} onClose={vi.fn()} />);
+
+    // Present, but inert until a display capture is armed.
+    expect(toggle('System audio').hasAttribute('disabled')).toBe(true);
+    expect(toggle('System audio').getAttribute('title')).toBe(
+      'Turn on Screen to capture system audio',
+    );
+
+    await act(async () => {
+      fireEvent.click(toggle('Screen'));
+    });
+    expect(toggle('System audio').hasAttribute('disabled')).toBe(false);
+  });
+
+  it('hides the System audio pill when the platform cannot capture it', () => {
+    // jsdom's UA carries no Chromium token, so supportsSystemAudioCapture() is false.
+    render(<RecorderModal initialMode="mic" mediaProvider={mediaProvider} onClose={vi.fn()} />);
+    expect(screen.queryByRole('button', { name: 'System audio' })).toBeNull();
   });
 });

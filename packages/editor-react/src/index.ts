@@ -499,6 +499,7 @@ export type {
   RecorderModalProps,
   RecorderNarrationOptions,
   RecorderSaveResult,
+  RecorderCameraSaveResult,
 } from './recorder/RecorderModal.js';
 export { RecorderButton } from './recorder/RecorderButton.js';
 export type { RecorderButtonProps } from './recorder/RecorderButton.js';
@@ -510,6 +511,7 @@ export type {
   UseMediaRecorderResult,
   RecorderSource,
   RecorderState,
+  RecorderCameraLane,
 } from './recorder/hooks/useMediaRecorder.js';
 export { useStreamPreview } from './recorder/hooks/useStreamPreview.js';
 export { requestMicStream } from './recorder/sources/micStream.js';

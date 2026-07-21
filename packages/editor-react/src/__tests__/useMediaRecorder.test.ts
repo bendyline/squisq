@@ -11,11 +11,17 @@ import { useMediaRecorder } from '../recorder/hooks/useMediaRecorder.js';
 class FakeMediaStreamTrack {
   readyState: 'live' | 'ended' = 'live';
   kind: 'audio' | 'video';
+  onended: (() => void) | null = null;
   stop = vi.fn(() => {
     this.readyState = 'ended';
   });
   constructor(kind: 'audio' | 'video') {
     this.kind = kind;
+  }
+  /** Simulate the browser ending the track (e.g. the "Stop sharing" button). */
+  end(): void {
+    this.readyState = 'ended';
+    this.onended?.();
   }
 }
 
@@ -43,6 +49,7 @@ interface FakeRecorderHandle {
   mimeType: string;
   stream: FakeMediaStream;
   ondataavailable: ((event: { data: Blob }) => void) | null;
+  onstart: (() => void) | null;
   onstop: (() => void) | null;
   onerror: ((event: unknown) => void) | null;
   start(): void;
@@ -51,12 +58,15 @@ interface FakeRecorderHandle {
 
 let lastRecorder: FakeRecorderHandle | null = null;
 let lastStream: FakeMediaStream | null = null;
+/** Every FakeMediaRecorder constructed this test, in order (0 = primary lane). */
+let recorders: FakeRecorderHandle[] = [];
 
 class FakeMediaRecorder implements FakeRecorderHandle {
   state: 'recording' | 'inactive' = 'inactive';
   mimeType: string;
   stream: FakeMediaStream;
   ondataavailable: ((event: { data: Blob }) => void) | null = null;
+  onstart: (() => void) | null = null;
   onstop: (() => void) | null = null;
   onerror: ((event: unknown) => void) | null = null;
   constructor(stream: FakeMediaStream, options?: { mimeType?: string }) {
@@ -68,12 +78,14 @@ class FakeMediaRecorder implements FakeRecorderHandle {
     // for arrow-function-vs-method `this` confusion.
     // eslint-disable-next-line @typescript-eslint/no-this-alias
     lastRecorder = this;
+    recorders.push(this);
   }
   static isTypeSupported(mime: string): boolean {
     return mime.startsWith('audio/webm') || mime.startsWith('video/webm');
   }
   start() {
     this.state = 'recording';
+    this.onstart?.();
   }
   stop() {
     if (this.state === 'inactive') return;
@@ -89,6 +101,7 @@ const originalNavigator = globalThis.navigator;
 
 beforeEach(() => {
   lastRecorder = null;
+  recorders = [];
   (globalThis as { MediaRecorder?: unknown }).MediaRecorder = FakeMediaRecorder;
   const fakeStream = new FakeMediaStream([new FakeMediaStreamTrack('audio')]);
   lastStream = fakeStream;
@@ -96,6 +109,9 @@ beforeEach(() => {
     value: {
       mediaDevices: {
         getUserMedia: vi.fn().mockResolvedValue(fakeStream),
+        getDisplayMedia: vi
+          .fn()
+          .mockResolvedValue(new FakeMediaStream([new FakeMediaStreamTrack('video')])),
       },
     },
     configurable: true,
@@ -298,5 +314,183 @@ describe('useMediaRecorder lifecycle', () => {
     act(() => complete());
     await first;
     expect(result.current.state).toBe('stopped');
+  });
+
+  it('leaves the camera lane null for a single-stream source', async () => {
+    Object.defineProperty(globalThis, 'navigator', {
+      configurable: true,
+      value: {
+        mediaDevices: {
+          getUserMedia: vi
+            .fn()
+            .mockResolvedValue(
+              new FakeMediaStream([new FakeMediaStreamTrack('video'), new FakeMediaStreamTrack('audio')]),
+            ),
+          getDisplayMedia: vi.fn(),
+        },
+      },
+    });
+    const { result } = renderHook(() => useMediaRecorder({ source: 'camera' }));
+    await act(async () => {
+      await result.current.request();
+    });
+    expect(result.current.camera).toBeNull();
+    expect(result.current.cameraOffsetSec).toBeNull();
+    expect(recorders).toHaveLength(1);
+  });
+});
+
+/** Wire the navigator so screen (getDisplayMedia) and camera (getUserMedia)
+ * resolve to specific streams for the dual `'screen+camera'` path. */
+function stubDualStreams(screen: FakeMediaStream, camera: FakeMediaStream) {
+  const getDisplayMedia = vi.fn().mockResolvedValue(screen);
+  const getUserMedia = vi.fn().mockResolvedValue(camera);
+  Object.defineProperty(globalThis, 'navigator', {
+    configurable: true,
+    value: { mediaDevices: { getUserMedia, getDisplayMedia } },
+  });
+  return { getDisplayMedia, getUserMedia };
+}
+
+describe('useMediaRecorder — screen + camera (dual lane)', () => {
+  it('acquires the screen before the camera and exposes a camera lane', async () => {
+    const screen = new FakeMediaStream([new FakeMediaStreamTrack('video')]);
+    const camera = new FakeMediaStream([
+      new FakeMediaStreamTrack('video'),
+      new FakeMediaStreamTrack('audio'),
+    ]);
+    const { getDisplayMedia, getUserMedia } = stubDualStreams(screen, camera);
+
+    const { result } = renderHook(() => useMediaRecorder({ source: 'screen+camera' }));
+    await act(async () => {
+      await result.current.request();
+    });
+
+    expect(result.current.state).toBe('ready');
+    expect(result.current.directory).toBe('video');
+    expect(result.current.stream).toBe(screen as unknown as MediaStream);
+    expect(result.current.camera?.stream).toBe(camera as unknown as MediaStream);
+    expect(recorders).toHaveLength(2);
+    // Screen must be requested first (it consumes the click's transient activation).
+    expect(getDisplayMedia.mock.invocationCallOrder[0]).toBeLessThan(
+      getUserMedia.mock.invocationCallOrder[0],
+    );
+  });
+
+  it('errors and releases the screen when the camera is denied', async () => {
+    const screenTrack = new FakeMediaStreamTrack('video');
+    const screen = new FakeMediaStream([screenTrack]);
+    const getDisplayMedia = vi.fn().mockResolvedValue(screen);
+    const getUserMedia = vi.fn().mockRejectedValue(new DOMException('denied', 'NotAllowedError'));
+    Object.defineProperty(globalThis, 'navigator', {
+      configurable: true,
+      value: { mediaDevices: { getUserMedia, getDisplayMedia } },
+    });
+
+    const { result } = renderHook(() => useMediaRecorder({ source: 'screen+camera' }));
+    await act(async () => {
+      // getUserMedia rejects with a DOMException; the hook normalizes it, so
+      // assert the rejection propagates rather than pinning its message.
+      await expect(result.current.request()).rejects.toThrow();
+    });
+
+    expect(result.current.state).toBe('error');
+    expect(result.current.camera).toBeNull();
+    // The screen capture acquired first must be released, not left stranded.
+    expect(screenTrack.stop).toHaveBeenCalled();
+  });
+
+  it('starts both lanes and resolves stop only after both flush, with a measured offset', async () => {
+    const screen = new FakeMediaStream([new FakeMediaStreamTrack('video')]);
+    const camera = new FakeMediaStream([
+      new FakeMediaStreamTrack('video'),
+      new FakeMediaStreamTrack('audio'),
+    ]);
+    stubDualStreams(screen, camera);
+
+    const { result } = renderHook(() => useMediaRecorder({ source: 'screen+camera' }));
+    await act(async () => {
+      await result.current.request();
+    });
+    act(() => {
+      result.current.start();
+    });
+    expect(recorders[0].state).toBe('recording');
+    expect(recorders[1].state).toBe('recording');
+
+    let blob: Blob | null = null;
+    await act(async () => {
+      blob = await result.current.stop();
+    });
+    expect(result.current.state).toBe('stopped');
+    expect(blob).toBeInstanceOf(Blob);
+    expect(result.current.blob).toBeInstanceOf(Blob);
+    expect(result.current.camera?.blob).toBeInstanceOf(Blob);
+    expect(result.current.cameraOffsetSec).not.toBeNull();
+  });
+
+  it('cancel() stops the tracks of both the screen and camera streams', async () => {
+    const screenTrack = new FakeMediaStreamTrack('video');
+    const camVideo = new FakeMediaStreamTrack('video');
+    const camAudio = new FakeMediaStreamTrack('audio');
+    stubDualStreams(new FakeMediaStream([screenTrack]), new FakeMediaStream([camVideo, camAudio]));
+
+    const { result } = renderHook(() => useMediaRecorder({ source: 'screen+camera' }));
+    await act(async () => {
+      await result.current.request();
+    });
+    act(() => {
+      result.current.cancel();
+    });
+
+    expect(result.current.state).toBe('idle');
+    expect(result.current.camera).toBeNull();
+    expect(screenTrack.stop).toHaveBeenCalled();
+    expect(camVideo.stop).toHaveBeenCalled();
+    expect(camAudio.stop).toHaveBeenCalled();
+  });
+
+  it('auto-stops the whole take when the screen share ends mid-recording', async () => {
+    const screenTrack = new FakeMediaStreamTrack('video');
+    stubDualStreams(
+      new FakeMediaStream([screenTrack]),
+      new FakeMediaStream([new FakeMediaStreamTrack('video')]),
+    );
+
+    const { result } = renderHook(() => useMediaRecorder({ source: 'screen+camera' }));
+    await act(async () => {
+      await result.current.request();
+    });
+    act(() => {
+      result.current.start();
+    });
+    expect(result.current.state).toBe('recording');
+
+    await act(async () => {
+      screenTrack.end(); // browser "Stop sharing"
+    });
+
+    expect(result.current.state).toBe('stopped');
+    expect(result.current.blob).toBeInstanceOf(Blob);
+    expect(result.current.camera?.blob).toBeInstanceOf(Blob);
+  });
+
+  it('cancels the take (releasing the camera) when the screen share ends before recording', async () => {
+    const screenTrack = new FakeMediaStreamTrack('video');
+    const camVideo = new FakeMediaStreamTrack('video');
+    stubDualStreams(new FakeMediaStream([screenTrack]), new FakeMediaStream([camVideo]));
+
+    const { result } = renderHook(() => useMediaRecorder({ source: 'screen+camera' }));
+    await act(async () => {
+      await result.current.request();
+    });
+    expect(result.current.state).toBe('ready');
+
+    await act(async () => {
+      screenTrack.end();
+    });
+
+    expect(result.current.state).toBe('idle');
+    expect(camVideo.stop).toHaveBeenCalled();
   });
 });

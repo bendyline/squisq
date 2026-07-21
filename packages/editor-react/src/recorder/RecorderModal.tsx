@@ -6,6 +6,11 @@
  * stream, not yet recording) → recording → review (blob in hand) → saved
  * | error. The user can cancel from any state.
  *
+ * Selecting BOTH Camera and Screen records them as two files at once
+ * (`'screen+camera'`): the microphone rides the camera file, system audio
+ * rides the screen file. On save the host inserts the screen clip plus a
+ * camera picture-in-picture clip (see {@link RecorderSaveResult.camera}).
+ *
  * Persists the captured `Blob` into the supplied `MediaProvider` and,
  * for narration mode, writes a `.timing.json` sidecar so
  * `resolveAudioMapping()` in `@bendyline/squisq` picks it up at the next
@@ -16,7 +21,15 @@
  * the editor's light/dark chrome scheme.
  */
 
-import { useCallback, useEffect, useId, useRef, useState, type CSSProperties } from 'react';
+import {
+  Fragment,
+  useCallback,
+  useEffect,
+  useId,
+  useRef,
+  useState,
+  type CSSProperties,
+} from 'react';
 import type { Doc, MediaProvider, Theme } from '@bendyline/squisq/schemas';
 import type { ContentContainer } from '@bendyline/squisq/storage';
 import { useMediaRecorder, type RecorderSource } from './hooks/useMediaRecorder.js';
@@ -92,9 +105,31 @@ export interface RecorderModalProps {
   narration?: RecorderNarrationOptions | null;
 }
 
+/**
+ * The camera companion of a `'screen+camera'` save. Present only on that
+ * source's {@link RecorderSaveResult}; describes the picture-in-picture file
+ * that pairs with the screen recording in {@link RecorderSaveResult}.
+ */
+export interface RecorderCameraSaveResult {
+  /** Path returned by `mediaProvider.addMedia()` for the camera file. */
+  relativePath: string;
+  /** Filename the modal chose for the camera file. */
+  filename: string;
+  /** MIME type of the saved camera blob. */
+  mimeType: string;
+  /** Camera recording length in seconds. */
+  duration: number;
+  /**
+   * Camera start minus screen start, in seconds (may be negative). Drives the
+   * PiP clip's `startAt`/`clipStart` so the bubble lines up with the screen.
+   */
+  offsetSec: number;
+}
+
 /** Payload handed to {@link RecorderModalProps.onSave} on a successful save. */
 export interface RecorderSaveResult {
-  /** Path returned by `mediaProvider.addMedia()` — what the doc should reference. */
+  /** Path returned by `mediaProvider.addMedia()` — what the doc should reference.
+   * For `'screen+camera'` this is the SCREEN file (see {@link RecorderSaveResult.camera}). */
   relativePath: string;
   /** Filename the modal chose (e.g. `narration-20260516-091200.webm`). */
   filename: string;
@@ -108,6 +143,8 @@ export interface RecorderSaveResult {
   hasTimingSidecar: boolean;
   /** Script text the user typed (narration only). */
   sourceText?: string;
+  /** The paired camera file — present only for `source === 'screen+camera'`. */
+  camera?: RecorderCameraSaveResult;
 }
 
 // ── Styles ─────────────────────────────────────────────────────────
@@ -254,6 +291,22 @@ const toggleRowStyle: CSSProperties = {
   display: 'flex',
   gap: 8,
   marginBottom: 16,
+  flexWrap: 'wrap',
+  alignItems: 'center',
+};
+
+/** A pill cluster (mic+camera, or system-audio+screen) inside the toggle row. */
+const toggleGroupStyle: CSSProperties = {
+  display: 'flex',
+  gap: 8,
+};
+
+/** Thin vertical rule separating the two toggle groups. */
+const groupDividerStyle: CSSProperties = {
+  alignSelf: 'stretch',
+  width: 1,
+  background: 'var(--squisq-recorder-border)',
+  margin: '0 4px',
 };
 
 const toggleBase: CSSProperties = {
@@ -412,52 +465,84 @@ function formatDurationMs(ms: number): string {
   return `${m}:${s.toString().padStart(2, '0')}`;
 }
 
-/** The two mutually-exclusive video sources, plus "none" (audio-only). */
-type VideoSource = 'none' | 'camera' | 'screen';
+/** Which of the four capture sources a toggle controls. */
+type ToggleKey = 'mic' | 'camera' | 'screen' | 'systemAudio';
+
+/** The capture-source toggle state driving the recorder mode. */
+interface CaptureToggles {
+  micOn: boolean;
+  cameraOn: boolean;
+  screenOn: boolean;
+}
 
 /**
- * Resolve the toggle state (microphone on/off + which video source) to the
- * recorder's capture mode. Returns null when nothing is selected — there's
- * nothing to capture, so the controls stay disabled.
+ * Resolve the toggle state to the recorder's capture mode. Returns null when
+ * no source is selected — there's nothing to capture, so the controls stay
+ * disabled.
  *
- * Camera + Screen can't be captured together (no compositing), so the two
- * are mutually exclusive; the microphone composes with either, or stands
- * alone as narration.
+ * Camera and Screen can be captured TOGETHER (`'screen+camera'`), each written
+ * to its own file: the microphone rides the camera file, system audio rides
+ * the screen file. With only one video source on, the microphone composes with
+ * it (or stands alone as narration).
  */
-function deriveSource(micOn: boolean, video: VideoSource): RecorderSource | null {
-  if (video === 'camera') return 'camera'; // mic handled via includeMicrophone
-  if (video === 'screen') return micOn ? 'screen+mic' : 'screen';
+function deriveSource({ micOn, cameraOn, screenOn }: CaptureToggles): RecorderSource | null {
+  if (cameraOn && screenOn) return 'screen+camera';
+  if (cameraOn) return 'camera'; // mic handled via includeMicrophone
+  if (screenOn) return micOn ? 'screen+mic' : 'screen';
   return micOn ? 'mic' : null;
 }
 
 /** Initial toggle state for a given starting capture mode. */
-function toggleStateFromMode(mode: RecorderSource): { micOn: boolean; video: VideoSource } {
+function toggleStateFromMode(mode: RecorderSource): CaptureToggles {
   switch (mode) {
     case 'mic':
-      return { micOn: true, video: 'none' };
+      return { micOn: true, cameraOn: false, screenOn: false };
     case 'camera':
-      return { micOn: true, video: 'camera' };
+      return { micOn: true, cameraOn: true, screenOn: false };
     case 'screen':
-      return { micOn: false, video: 'screen' };
+      return { micOn: false, cameraOn: false, screenOn: true };
     case 'screen+mic':
-      return { micOn: true, video: 'screen' };
+      return { micOn: true, cameraOn: false, screenOn: true };
+    case 'screen+camera':
+      return { micOn: true, cameraOn: true, screenOn: true };
   }
 }
 
-const TOGGLES: Array<{ key: 'mic' | 'camera' | 'screen'; label: string }> = [
-  { key: 'mic', label: 'Microphone' },
-  { key: 'camera', label: 'Camera' },
-  { key: 'screen', label: 'Screen' },
+/**
+ * Capture-source pills, grouped so the presenter inputs (mic + camera) read
+ * as a pair distinct from the screen inputs (system audio + screen). System
+ * audio is only offered when the platform can honor it.
+ */
+const TOGGLE_GROUPS: Array<{ label: string; toggles: Array<{ key: ToggleKey; label: string }> }> = [
+  {
+    label: 'Voice and camera',
+    toggles: [
+      { key: 'mic', label: 'Microphone' },
+      { key: 'camera', label: 'Camera' },
+    ],
+  },
+  {
+    label: 'Screen capture',
+    toggles: [
+      { key: 'systemAudio', label: 'System audio' },
+      { key: 'screen', label: 'Screen' },
+    ],
+  },
 ];
 
 /** One-line summary of what the current toggle combination will capture. */
-function captureSummary(micOn: boolean, video: VideoSource): string {
-  if (video === 'camera') {
+function captureSummary(micOn: boolean, cameraOn: boolean, screenOn: boolean): string {
+  if (cameraOn && screenOn) {
+    return micOn
+      ? 'Screen capture plus your camera as picture-in-picture; microphone on the camera clip, system audio on the screen clip when available. Saved as two video clips.'
+      : 'Screen capture plus your camera as picture-in-picture (no microphone). Saved as two video clips.';
+  }
+  if (cameraOn) {
     return micOn
       ? 'Camera video with your microphone. Saved as a video clip.'
       : 'Camera video only (no microphone). Saved as a video clip.';
   }
-  if (video === 'screen') {
+  if (screenOn) {
     return micOn
       ? 'Screen capture with your microphone mixed in. System audio when available.'
       : 'Screen capture (no microphone). System audio when available.';
@@ -486,6 +571,29 @@ function recordingFilenameSeed(
   return hasAudio ? 'screen+audio' : 'screen';
 }
 
+/**
+ * The two filename seeds for a `'screen+camera'` save — one per file. Each
+ * reads its own acquired stream's audio tracks so the name reflects what the
+ * file actually contains (browsers may drop a requested display-audio track).
+ */
+function dualFilenameSeeds(
+  screenStream: MediaStream | null,
+  cameraStream: MediaStream | null,
+  systemAudioRequested: boolean,
+  micRequested: boolean,
+): { screen: RecordingFilenameSeed; camera: RecordingFilenameSeed } {
+  const screenHasAudio = screenStream
+    ? screenStream.getAudioTracks().length > 0
+    : systemAudioRequested;
+  const cameraHasAudio = cameraStream
+    ? cameraStream.getAudioTracks().length > 0
+    : micRequested;
+  return {
+    screen: screenHasAudio ? 'screen+audio' : 'screen',
+    camera: cameraHasAudio ? 'camera+audio' : 'camera',
+  };
+}
+
 // ── Component ──────────────────────────────────────────────────────
 
 export function RecorderModal({
@@ -499,13 +607,15 @@ export function RecorderModal({
 }: RecorderModalProps) {
   const initialToggles = toggleStateFromMode(initialMode);
   const [micOn, setMicOn] = useState(initialToggles.micOn);
-  const [video, setVideo] = useState<VideoSource>(initialToggles.video);
+  const [cameraOn, setCameraOn] = useState(initialToggles.cameraOn);
+  const [screenOn, setScreenOn] = useState(initialToggles.screenOn);
   const [sourceText, setSourceText] = useState('');
   const [basename, setBasename] = useState('');
   const [includeSystemAudio, setIncludeSystemAudio] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [playbackUrl, setPlaybackUrl] = useState<string | null>(null);
+  const [cameraPlaybackUrl, setCameraPlaybackUrl] = useState<string | null>(null);
   const [playbackPositionMs, setPlaybackPositionMs] = useState(0);
   const [narrationOn, setNarrationOn] = useState(false);
   const [narrationRequesting, setNarrationRequesting] = useState(false);
@@ -515,24 +625,26 @@ export function RecorderModal({
   const dialogRef = useRef<HTMLDivElement>(null);
   const headingId = useId();
   const previewRef = useRef<HTMLVideoElement | null>(null);
+  const cameraPreviewRef = useRef<HTMLVideoElement | null>(null);
 
   // Toggle state → the recorder's capture mode. `source` is null when nothing
   // is selected; we feed the hook a harmless default and gate the controls on
   // `canCapture` instead.
-  const derivedSource = deriveSource(micOn, video);
+  const derivedSource = deriveSource({ micOn, cameraOn, screenOn });
   const canCapture = derivedSource !== null;
   const source: RecorderSource = derivedSource ?? 'mic';
+  const isDual = source === 'screen+camera';
   const canIncludeSystemAudio = supportsSystemAudioCapture();
 
   const recorder = useMediaRecorder({
     source,
-    includeMicrophone: video === 'camera' ? micOn : undefined,
-    systemAudio: video === 'screen' && canIncludeSystemAudio ? includeSystemAudio : false,
+    includeMicrophone: cameraOn ? micOn : undefined,
+    systemAudio: screenOn && canIncludeSystemAudio ? includeSystemAudio : false,
   });
   const filenameSeed = recordingFilenameSeed(
     source,
     recorder.stream,
-    micOn || (video === 'screen' && includeSystemAudio),
+    micOn || (screenOn && includeSystemAudio),
   );
 
   // ── Narration mode ─────────────────────────────────────────────────
@@ -662,6 +774,14 @@ export function RecorderModal({
     previewRef,
     narrationOn ? narrationCameraStream : recorder.state === 'stopped' ? null : recorder.stream,
   );
+  // The dual-take camera thumbnail (mirrors where the PiP bubble will land).
+  // Only live before stop; the review players read the recorded blobs instead.
+  useStreamPreview(
+    cameraPreviewRef,
+    !narrationOn && isDual && recorder.state !== 'stopped'
+      ? (recorder.camera?.stream ?? null)
+      : null,
+  );
 
   // Generate (and later revoke) a blob URL for the recorded clip so the
   // playback element has something to point at. The dependency on the
@@ -680,17 +800,35 @@ export function RecorderModal({
     };
   }, [recorder.blob]);
 
+  // Sibling blob URL for the dual-take camera file, auditioned in review.
+  const cameraBlob = recorder.camera?.blob ?? null;
+  useEffect(() => {
+    if (!cameraBlob) {
+      setCameraPlaybackUrl(null);
+      return;
+    }
+    const url = URL.createObjectURL(cameraBlob);
+    setCameraPlaybackUrl(url);
+    return () => {
+      URL.revokeObjectURL(url);
+    };
+  }, [cameraBlob]);
+
   // Switching capture config mid-session: tear down whatever stream/
   // recorder we had so the new mode acquires a fresh one. We key on a
   // signature of everything that changes the acquired stream — including
   // the camera microphone and screen system-audio flags, which don't
   // change `source` on their own. The hook handles its own teardown on
   // unmount; cancel() here covers in-place changes.
-  const captureKey = `${source}:${video === 'camera' ? micOn : ''}:${includeSystemAudio}`;
+  const captureKey = `${source}:${cameraOn ? micOn : ''}:${includeSystemAudio}`;
   const previousKeyRef = useRef(captureKey);
+  // Retry-safe record of which dual files have already been written this save,
+  // so a second `addMedia` that fails doesn't re-upload (and orphan) the first.
+  const dualSaveProgressRef = useRef<{ screenPath?: string; cameraPath?: string }>({});
   useEffect(() => {
     if (previousKeyRef.current !== captureKey) {
       previousKeyRef.current = captureKey;
+      dualSaveProgressRef.current = {};
       recorder.cancel();
     }
   }, [captureKey, recorder]);
@@ -738,6 +876,7 @@ export function RecorderModal({
 
   const handleStart = useCallback(() => {
     setSaveError(null);
+    dualSaveProgressRef.current = {};
     recorder.start();
   }, [recorder]);
 
@@ -751,6 +890,83 @@ export function RecorderModal({
       setSaveError('Nothing to save yet — record something first.');
       return;
     }
+
+    // Dual (screen + camera): two files, retry-safe via the progress ref, then
+    // one save-result carrying both paths + the measured skew for PiP timing.
+    if (isDual) {
+      const cam = recorder.camera;
+      if (!cam?.blob || !cam.mimeType || !cam.extension) {
+        setSaveError('Nothing to save yet — record something first.');
+        return;
+      }
+      setIsSaving(true);
+      setSaveError(null);
+      try {
+        const seeds = dualFilenameSeeds(
+          recorder.stream,
+          cam.stream,
+          screenOn && includeSystemAudio,
+          micOn,
+        );
+        const trimmed = basename.trim();
+        const screenFilename = buildFilename(
+          'video',
+          recorder.extension,
+          trimmed ? `${trimmed}-screen` : undefined,
+          seeds.screen,
+        );
+        const cameraFilename = buildFilename(
+          'video',
+          cam.extension,
+          trimmed ? `${trimmed}-camera` : undefined,
+          seeds.camera,
+        );
+        const progress = dualSaveProgressRef.current;
+        const screenPath =
+          progress.screenPath ??
+          (await mediaProvider.addMedia(
+            `${recorder.directory}/${screenFilename}`,
+            recorder.blob,
+            recorder.mimeType,
+          ));
+        progress.screenPath = screenPath;
+        const cameraPath =
+          progress.cameraPath ??
+          (await mediaProvider.addMedia(
+            `${recorder.directory}/${cameraFilename}`,
+            cam.blob,
+            cam.mimeType,
+          ));
+        progress.cameraPath = cameraPath;
+
+        const duration = recorder.durationMs / 1000;
+        const offsetSec = recorder.cameraOffsetSec ?? 0;
+        const result: RecorderSaveResult = {
+          relativePath: screenPath,
+          filename: screenFilename,
+          source,
+          mimeType: recorder.mimeType,
+          duration,
+          hasTimingSidecar: false,
+          camera: {
+            relativePath: cameraPath,
+            filename: cameraFilename,
+            mimeType: cam.mimeType,
+            duration: Math.max(0, duration - offsetSec),
+            offsetSec,
+          },
+        };
+        dualSaveProgressRef.current = {};
+        onSave?.(result);
+        handleClose();
+      } catch (err: unknown) {
+        setSaveError(err instanceof Error ? err.message : 'Failed to save recording');
+      } finally {
+        setIsSaving(false);
+      }
+      return;
+    }
+
     setIsSaving(true);
     setSaveError(null);
     try {
@@ -810,6 +1026,10 @@ export function RecorderModal({
   }, [
     recorder,
     source,
+    isDual,
+    micOn,
+    screenOn,
+    includeSystemAudio,
     basename,
     filenameSeed,
     sourceText,
@@ -820,6 +1040,7 @@ export function RecorderModal({
   ]);
 
   const handleDiscard = useCallback(() => {
+    dualSaveProgressRef.current = {};
     recorder.reset();
   }, [recorder]);
 
@@ -852,16 +1073,41 @@ export function RecorderModal({
   const toggleLockReason = canSave
     ? 'Save or discard this recording before changing sources'
     : undefined;
-  const toggleActiveFor = (key: 'mic' | 'camera' | 'screen') =>
-    key === 'mic' ? micOn : video === key;
-  const onToggle = (key: 'mic' | 'camera' | 'screen') => {
-    if (key === 'mic') {
-      setMicOn((on) => !on);
-    } else {
-      // Camera and Screen are mutually exclusive — turning one on clears the
-      // other (no camera+screen compositing).
-      setVideo((v) => (v === key ? 'none' : key));
+  // The non-narration capture pills. System audio depends on Screen being on
+  // (it can only be captured as part of a display capture) and is filtered out
+  // entirely when the platform can't honor it. Camera and Screen are no longer
+  // mutually exclusive — both on = `'screen+camera'` dual capture.
+  const simpleToggleProps = (key: ToggleKey) => {
+    const active =
+      key === 'mic'
+        ? micOn
+        : key === 'camera'
+          ? cameraOn
+          : key === 'screen'
+            ? screenOn
+            : includeSystemAudio;
+    if (key === 'systemAudio') {
+      return {
+        active,
+        disabled: togglesLocked || !screenOn,
+        title: togglesLocked
+          ? toggleLockReason
+          : screenOn
+            ? 'Capture tab or system audio with the screen recording'
+            : 'Turn on Screen to capture system audio',
+        onClick: () => setIncludeSystemAudio((on) => !on),
+      };
     }
+    return {
+      active,
+      disabled: togglesLocked,
+      title: toggleLockReason,
+      onClick: () => {
+        if (key === 'mic') setMicOn((on) => !on);
+        else if (key === 'camera') setCameraOn((on) => !on);
+        else setScreenOn((on) => !on);
+      },
+    };
   };
 
   // Narration-mode remaps of the same three toggles: mic is always on (the
@@ -876,10 +1122,10 @@ export function RecorderModal({
     stage.recorder.state === 'saving';
   const narrationToggleDisabled = narrationToggleLocked(
     recorder.state,
-    recorder.blob !== null,
+    recorder.blob !== null || recorder.camera?.blob != null,
     stage.recorder.state,
   );
-  const narrationToggleFor = (key: 'mic' | 'camera' | 'screen') => {
+  const narrationToggleFor = (key: ToggleKey) => {
     switch (key) {
       case 'mic':
         return {
@@ -900,6 +1146,13 @@ export function RecorderModal({
           active: false,
           disabled: true,
           title: "Screen capture isn't available in narration mode — uncheck Show narration mode",
+          onClick: () => {},
+        };
+      case 'systemAudio':
+        return {
+          active: false,
+          disabled: true,
+          title: "System audio isn't available in narration mode",
           onClick: () => {},
         };
     }
@@ -934,44 +1187,40 @@ export function RecorderModal({
         <div style={narrationOn ? bodyRowStyle : undefined}>
           <div style={narrationOn ? leftColStyle : undefined}>
             <div style={toggleRowStyle} role="group" aria-label="Capture sources">
-              {TOGGLES.map((t) => {
-                if (narrationOn) {
-                  const n = narrationToggleFor(t.key);
-                  return (
-                    <button
-                      key={t.key}
-                      type="button"
-                      aria-pressed={n.active}
-                      style={n.active ? toggleActive : toggleBase}
-                      onClick={n.onClick}
-                      disabled={n.disabled}
-                      title={n.title}
-                    >
-                      {t.label}
-                    </button>
-                  );
-                }
-                const active = toggleActiveFor(t.key);
-                return (
-                  <button
-                    key={t.key}
-                    type="button"
-                    aria-pressed={active}
-                    style={active ? toggleActive : toggleBase}
-                    onClick={() => onToggle(t.key)}
-                    disabled={togglesLocked}
-                    title={toggleLockReason}
-                  >
-                    {t.label}
-                  </button>
-                );
-              })}
+              {TOGGLE_GROUPS.map((group, groupIndex) => (
+                <Fragment key={group.label}>
+                  {groupIndex > 0 && <div aria-hidden="true" style={groupDividerStyle} />}
+                  <div style={toggleGroupStyle}>
+                    {group.toggles.map((t) => {
+                      // System audio has no meaning without a display capture,
+                      // and no platform outside desktop Chromium offers it.
+                      if (t.key === 'systemAudio' && !canIncludeSystemAudio) return null;
+                      const props = narrationOn
+                        ? narrationToggleFor(t.key)
+                        : simpleToggleProps(t.key);
+                      return (
+                        <button
+                          key={t.key}
+                          type="button"
+                          aria-pressed={props.active}
+                          style={props.active ? toggleActive : toggleBase}
+                          onClick={props.onClick}
+                          disabled={props.disabled}
+                          title={props.title}
+                        >
+                          {t.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </Fragment>
+              ))}
             </div>
 
             <p style={summaryStyle}>
               {narrationOn
                 ? narrationCaptureSummary(stage.recorder.withCamera)
-                : captureSummary(micOn, video)}
+                : captureSummary(micOn, cameraOn, screenOn)}
             </p>
 
             {narrationAvailable && (
@@ -1075,7 +1324,7 @@ export function RecorderModal({
               </div>
             )}
             {!narrationOn && showPreview && recorder.state !== 'stopped' && !isAudioOnly && (
-              <div style={previewBoxStyle}>
+              <div style={isDual ? { ...previewBoxStyle, position: 'relative' } : previewBoxStyle}>
                 <video
                   ref={previewRef}
                   autoPlay
@@ -1083,6 +1332,25 @@ export function RecorderModal({
                   playsInline
                   style={{ width: '100%', height: '100%', objectFit: 'contain' }}
                 />
+                {isDual && (
+                  <video
+                    ref={cameraPreviewRef}
+                    autoPlay
+                    muted
+                    playsInline
+                    aria-label="Camera preview"
+                    style={{
+                      position: 'absolute',
+                      right: '3%',
+                      bottom: '6%',
+                      width: '22%',
+                      aspectRatio: '16 / 9',
+                      objectFit: 'cover',
+                      background: '#000',
+                      border: '1px solid rgba(255,255,255,0.6)',
+                    }}
+                  />
+                )}
               </div>
             )}
             {!narrationOn && showPreview && recorder.state !== 'stopped' && isAudioOnly && (
@@ -1114,6 +1382,26 @@ export function RecorderModal({
                 </div>
               </div>
             )}
+            {!narrationOn &&
+              recorder.state === 'stopped' &&
+              isDual &&
+              cameraPlaybackUrl && (
+                <div style={{ marginBottom: 12 }}>
+                  <div style={summaryStyle}>Camera (picture-in-picture)</div>
+                  <video
+                    src={cameraPlaybackUrl}
+                    controls
+                    playsInline
+                    aria-label="Camera recording"
+                    style={{
+                      width: '48%',
+                      display: 'block',
+                      marginLeft: 'auto',
+                      background: '#000',
+                    }}
+                  />
+                </div>
+              )}
             {!narrationOn && recorder.state === 'stopped' && playbackUrl && isAudioOnly && (
               <div style={{ marginBottom: 12 }}>
                 <div style={{ ...audioMeterStyle, marginBottom: 8 }}>
@@ -1140,27 +1428,6 @@ export function RecorderModal({
                 />
               </>
             )}
-            {!narrationOn && video === 'screen' && canIncludeSystemAudio && (
-              <label
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 6,
-                  marginBottom: 12,
-                  fontSize: 13,
-                }}
-              >
-                <input
-                  type="checkbox"
-                  style={{ accentColor: 'var(--squisq-recorder-accent)' }}
-                  checked={includeSystemAudio}
-                  onChange={(e) => setIncludeSystemAudio(e.target.checked)}
-                  disabled={recorder.state === 'recording' || recorder.state === 'requesting'}
-                />
-                Include system audio
-              </label>
-            )}
-
             <label style={labelStyle} htmlFor="recorder-basename">
               Filename (optional)
             </label>
@@ -1168,7 +1435,7 @@ export function RecorderModal({
               id="recorder-basename"
               type="text"
               style={inputStyle}
-              placeholder={narrationOn ? 'narration' : filenameSeed}
+              placeholder={narrationOn ? 'narration' : isDual ? 'screen + camera' : filenameSeed}
               value={basename}
               onChange={(e) => setBasename(e.target.value)}
               disabled={narrationOn ? !narrationRecorderIdle : recorder.state === 'recording'}
