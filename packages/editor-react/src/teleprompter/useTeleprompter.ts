@@ -34,8 +34,6 @@ import {
 
 const PREFS_STORAGE_KEY = 'squisq:teleprompter-prefs';
 const PUBLISH_INTERVAL_MS = 66;
-/** Rough words-per-line used by vertical keyboard nudges (without layout knowledge). */
-const LINE_NUDGE_WORDS = 6;
 
 interface TeleprompterKeyEvent {
   readonly defaultPrevented: boolean;
@@ -409,12 +407,6 @@ export function useTeleprompter(opts: { doc: Doc | null }): TeleprompterControll
         return;
       }
       switch (event.key) {
-        case ' ':
-          if (target?.closest('button, a, [role="button"], [role="link"]')) break;
-          event.preventDefault();
-          if (transportRef.current === 'rolling' || transportRef.current === 'countdown') pause();
-          else play();
-          break;
         case 'ArrowLeft':
           event.preventDefault();
           if (event.repeat) break;
@@ -427,11 +419,13 @@ export function useTeleprompter(opts: { doc: Doc | null }): TeleprompterControll
           break;
         case 'ArrowUp':
           event.preventDefault();
-          nudge(-LINE_NUDGE_WORDS);
+          if (event.repeat) break;
+          play();
           break;
         case 'ArrowDown':
           event.preventDefault();
-          nudge(LINE_NUDGE_WORDS);
+          if (event.repeat) break;
+          pause();
           break;
         case '[':
           event.preventDefault();

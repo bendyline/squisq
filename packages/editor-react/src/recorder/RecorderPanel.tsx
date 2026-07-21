@@ -15,6 +15,7 @@ import type { ContentContainer } from '@bendyline/squisq/storage';
 import {
   RecorderModal,
   type RecorderColorScheme,
+  type RecorderNarrationOptions,
   type RecorderSaveResult,
 } from './RecorderModal.js';
 import { Icon } from '../Icon';
@@ -27,6 +28,8 @@ export interface RecorderPanelProps {
   /** Light/dark chrome scheme copied onto the portaled modal. */
   colorScheme?: RecorderColorScheme;
   onSave?: (result: RecorderSaveResult) => void;
+  /** Enables the modal's "Show narration mode" checkbox. */
+  narration?: RecorderNarrationOptions | null;
   /** ARIA / tooltip label. Defaults to `'Record media'`. */
   tooltip?: string;
   /** Optional className for the trigger button. */
@@ -45,6 +48,7 @@ export function RecorderPanel({
   initialMode = 'mic',
   colorScheme = 'light',
   onSave,
+  narration = null,
   tooltip = 'Record media',
   className,
   open: controlledOpen,
@@ -84,6 +88,7 @@ export function RecorderPanel({
             container={container}
             initialMode={initialMode}
             colorScheme={colorScheme}
+            narration={narration}
             onClose={handleClose}
             onSave={(result) => {
               onSave?.(result);

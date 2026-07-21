@@ -6616,11 +6616,31 @@
 }
 
 .squisq-transform-menu-action-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   flex: 0 0 auto;
-  width: 16px;
-  color: var(--squisq-accent, #4f46e5);
-  font-size: 12px;
+  width: 24px;
+  height: 24px;
+  color: #111827;
+  font-size: 15px;
+  line-height: 1;
   text-align: center;
+}
+
+.squisq-transform-menu-action-icon > svg {
+  width: 22px;
+  height: 22px;
+  overflow: visible;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.65;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.squisq-transform-menu-action-icon > i {
+  line-height: 1;
 }
 
 .squisq-transform-menu-action-copy {
@@ -6727,6 +6747,10 @@
 
 .squisq-editor-shell[data-theme='dark'] .squisq-transform-menu-state {
   border-bottom-color: #374151;
+}
+
+.squisq-editor-shell[data-theme='dark'] .squisq-transform-menu-action-icon {
+  color: #fff;
 }
 
 .squisq-editor-shell[data-theme='dark'] .squisq-transform-menu-action:hover:not(:disabled) {

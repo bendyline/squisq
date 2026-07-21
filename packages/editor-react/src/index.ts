@@ -497,6 +497,7 @@ export { RecorderModal } from './recorder/RecorderModal.js';
 export type {
   RecorderColorScheme,
   RecorderModalProps,
+  RecorderNarrationOptions,
   RecorderSaveResult,
 } from './recorder/RecorderModal.js';
 export { RecorderButton } from './recorder/RecorderButton.js';
@@ -531,6 +532,8 @@ export type { TimingJson, RecordedBookmark } from './recorder/timingJson.js';
 // prompter surface, floating-window tiers, and the mic analysis pipeline.
 export {
   TeleprompterView,
+  NarrationStage,
+  useNarrationStage,
   TeleprompterSurface,
   TeleprompterControls,
   useTeleprompter,
@@ -559,6 +562,9 @@ export {
 } from './teleprompter/index.js';
 export type {
   TeleprompterViewProps,
+  NarrationStageProps,
+  NarrationStageHandle,
+  UseNarrationStageOptions,
   TeleprompterSurfaceProps,
   TeleprompterControlsProps,
   TeleprompterController,

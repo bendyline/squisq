@@ -14,6 +14,7 @@ import type { ContentContainer } from '@bendyline/squisq/storage';
 import {
   RecorderModal,
   type RecorderColorScheme,
+  type RecorderNarrationOptions,
   type RecorderSaveResult,
 } from './RecorderModal.js';
 import type { RecorderSource } from './hooks/useMediaRecorder.js';
@@ -29,6 +30,8 @@ export interface RecorderButtonProps {
   colorScheme?: RecorderColorScheme;
   /** Fired after a successful save. */
   onSave?: (result: RecorderSaveResult) => void;
+  /** Enables the modal's "Show narration mode" checkbox. */
+  narration?: RecorderNarrationOptions | null;
   /** Button label. Defaults to `'Record'`. */
   label?: string;
   /** Optional inline button styles. */
@@ -43,6 +46,7 @@ export function RecorderButton({
   initialMode = 'mic',
   colorScheme = 'light',
   onSave,
+  narration = null,
   label = 'Record',
   style,
   disabled,
@@ -70,6 +74,7 @@ export function RecorderButton({
             container={container}
             initialMode={initialMode}
             colorScheme={colorScheme}
+            narration={narration}
             onClose={handleClose}
             onSave={handleSave}
           />,

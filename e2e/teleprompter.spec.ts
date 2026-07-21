@@ -101,7 +101,7 @@ test('mirror and font-size controls restyle the surface', async ({ page }) => {
   expect(parseFloat(sizeAfter)).toBeGreaterThan(parseFloat(sizeBefore));
 });
 
-test('arrow keys and the wheel nudge exactly one visible word', async ({ page }) => {
+test('direct inputs nudge words and control automatic advancement', async ({ page }) => {
   await openTeleprompter(page);
 
   const surface = page.getByTestId('teleprompter-surface');
@@ -123,6 +123,25 @@ test('arrow keys and the wheel nudge exactly one visible word', async ({ page })
   await expect(activeWord).toHaveAttribute('data-token-idx', '2');
   await page.mouse.wheel(0, -1);
   await expect(activeWord).toHaveAttribute('data-token-idx', '1');
+
+  await page.locator('#squisq-prompter-countdown').selectOption('0');
+  const controls = page.getByTestId('teleprompter-controls');
+  await surface.click({ button: 'middle' });
+  await expect(controls).toHaveAttribute('data-transport', 'rolling');
+  await surface.click({ button: 'middle' });
+  await expect(controls).toHaveAttribute('data-transport', 'paused');
+
+  // Up/down work globally even while an ordinary transport button has focus.
+  await page.getByRole('button', { name: 'Restart prompter' }).focus();
+  await page.keyboard.press('ArrowUp');
+  await expect(controls).toHaveAttribute('data-transport', 'rolling');
+  await page.keyboard.press('ArrowDown');
+  await expect(controls).toHaveAttribute('data-transport', 'paused');
+
+  // Space is intentionally left to the browser/control that owns focus.
+  await surface.focus();
+  await page.keyboard.press('Space');
+  await expect(controls).toHaveAttribute('data-transport', 'paused');
 });
 
 test('fake mic drives the level meter and voice pacing advances the prompter', async ({ page }) => {

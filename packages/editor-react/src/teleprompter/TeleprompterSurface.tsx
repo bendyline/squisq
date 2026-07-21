@@ -47,6 +47,8 @@ export interface TeleprompterSurfaceProps {
   onSeekToken?: (tokenIndex: number) => void;
   /** Move by whole words in response to direct surface input. */
   onNudge?: (deltaTokens: number) => void;
+  /** Pause or resume voice/constant-rate automatic advancement. */
+  onToggleAutoAdvance?: () => void;
 }
 
 interface Paragraph {
@@ -123,6 +125,7 @@ export function TeleprompterSurface({
   compact = false,
   onSeekToken,
   onNudge,
+  onToggleAutoAdvance,
 }: TeleprompterSurfaceProps) {
   const surfaceRef = useRef<HTMLDivElement | null>(null);
   const columnRef = useRef<HTMLDivElement | null>(null);
@@ -260,6 +263,23 @@ export function TeleprompterSurface({
       }
     : undefined;
 
+  const handleMouseDown = onToggleAutoAdvance
+    ? (event: ReactMouseEvent<HTMLDivElement>) => {
+        if (event.button !== 1) return;
+        event.preventDefault();
+        onToggleAutoAdvance();
+      }
+    : undefined;
+
+  // Chromium fires auxclick after the middle-button mouse sequence. The
+  // toggle already happened on mousedown; cancelling auxclick prevents the
+  // browser's autoscroll/open behavior without toggling a second time.
+  const handleAuxClick = onToggleAutoAdvance
+    ? (event: ReactMouseEvent<HTMLDivElement>) => {
+        if (event.button === 1) event.preventDefault();
+      }
+    : undefined;
+
   return (
     <div
       ref={surfaceRef}
@@ -267,7 +287,9 @@ export function TeleprompterSurface({
       style={{ ...vars, fontSize: `${fontSizePx}px` }}
       data-testid="teleprompter-surface"
       tabIndex={0}
-      aria-label="Teleprompter script; use left and right arrows or the mouse wheel to adjust the word position; double-click a word to jump"
+      aria-label="Teleprompter script; left and right arrows or the mouse wheel adjust the word position; up starts automatic advancement; down stops it; press the mouse wheel to toggle it; double-click a word to jump"
+      onMouseDown={handleMouseDown}
+      onAuxClick={handleAuxClick}
     >
       <div className="squisq-teleprompter-flip">
         <div

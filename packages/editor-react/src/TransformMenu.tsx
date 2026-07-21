@@ -31,6 +31,31 @@ import { useEscapeDismissal } from './useEscapeDismissal';
 
 const WIDTH_PRESETS = [60, 80, 100, 120];
 
+function TransformActionIcon({ id }: { id: MarkdownSourceTransformId }) {
+  if (id === 'unwrap') {
+    return (
+      <svg viewBox="0 0 24 24" aria-hidden="true" data-transform-icon="unwrap">
+        <path d="M5 3.5h9.5L19 8v12.5H5z" />
+        <path d="M14.5 3.5V8H19" />
+        <path d="M7.8 11.2h8.4M7.8 14.6h8.4M7.8 18h8.4" />
+      </svg>
+    );
+  }
+
+  if (id === 'wrap') {
+    return (
+      <svg viewBox="0 0 24 24" aria-hidden="true" data-transform-icon="wrap">
+        <path d="M5 3.5h9.5L19 8v12.5H5z" />
+        <path d="M14.5 3.5V8H19" />
+        <path d="M12.7 9.7v1.4m0 1.5V14m0 1.5v1.4m0 1.5v1.1" strokeDasharray="1 1.5" />
+        <path d="M7.8 11.2h3.1M7.8 14.6h3.1M7.8 18h3.1" />
+      </svg>
+    );
+  }
+
+  return <Icon icon="fa-solid fa-wand-magic-sparkles" />;
+}
+
 export function TransformMenu() {
   const {
     editorMode,
@@ -143,7 +168,7 @@ export function TransformMenu() {
     wrapState === null
       ? null
       : wrapState.kind === 'wrapped'
-        ? `Detected mode: wrapped at ~${wrapState.width} columns`
+        ? `Detected mode: wrapped at ~${wrapState.width} characters wide`
         : wrapState.kind === 'unwrapped'
           ? 'Detected mode: unwrapped'
           : wrapState.kind === 'mixed'
@@ -152,7 +177,7 @@ export function TransformMenu() {
   const currentMode =
     wrapState?.kind === 'wrapped' ? 'wrap' : wrapState?.kind === 'unwrapped' ? 'unwrap' : null;
   const currentModeLabel =
-    wrapState?.kind === 'wrapped' ? `Current (~${wrapState.width} columns)` : 'Current';
+    wrapState?.kind === 'wrapped' ? `Current (~${wrapState.width} characters wide)` : 'Current';
 
   return (
     <div className="squisq-transform-menu" ref={containerRef}>
@@ -191,7 +216,7 @@ export function TransformMenu() {
                   onClick={() => applyTransform(transform.id)}
                 >
                   <span className="squisq-transform-menu-action-icon" aria-hidden="true">
-                    <Icon icon="fa-solid fa-wand-magic-sparkles" />
+                    <TransformActionIcon id={transform.id} />
                   </span>
                   <span className="squisq-transform-menu-action-copy">
                     <span className="squisq-transform-menu-action-heading">

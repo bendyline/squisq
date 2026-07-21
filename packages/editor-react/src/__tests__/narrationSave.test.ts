@@ -285,6 +285,34 @@ describe('buildNarrationSavePlan', () => {
     const next = plan.nextMarkdown('# One\n\nAlpha beta.\n', 'audio/narration-x.webm', null);
     expect(next).toContain('{[audio src=audio/narration-x.webm anchor=document]}');
   });
+
+  it('honors a user-chosen audioBasename (sanitized, no timestamp)', () => {
+    const plan = buildNarrationSavePlan({
+      script,
+      alignment,
+      durationSec: 10,
+      audioExt: '.webm',
+      cameraExt: '.webm',
+      baseWpm: 150,
+      audioBasename: 'intro take',
+    });
+    // `buildFilename` slugs whitespace and emits no timestamp for a basename.
+    expect(plan.audioRelativeName).toBe('audio/intro-take.webm');
+    // The camera keeps its fixed narration-cam base regardless.
+    expect(plan.cameraRelativeName).toBe('video/narration-cam.webm');
+  });
+
+  it('falls back to the timestamped narration- default without audioBasename', () => {
+    const plan = buildNarrationSavePlan({
+      script,
+      alignment,
+      durationSec: 10,
+      audioExt: '.webm',
+      cameraExt: null,
+      baseWpm: 150,
+    });
+    expect(plan.audioRelativeName).toMatch(/^audio\/narration-\d{8}-\d{6}\.webm$/);
+  });
 });
 
 /**

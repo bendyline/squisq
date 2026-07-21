@@ -1427,17 +1427,22 @@ function EditorShellInner({
             composers where the stats are noise. The image viewer has its
             own dimension/zoom status row, so suppress here too. */}
             {statusBarVisible && !isImageMode && <StatusBar slotRight={statusBarSlotRight} />}
+
+            {/* Media-bin-triggered recorder. Mounted INSIDE the preview
+            settings provider so narration mode picks up the live activeTheme
+            (RecorderEntry falls back to plain doc-scoped resolution without
+            one). The modal itself portals to document.body. */}
+            {isMarkdownMode && allowRecording && mediaProvider && (
+              <RecorderEntry
+                open={mediaBinRecorderOpen}
+                onOpenChange={setMediaBinRecorderOpen}
+                showTrigger={false}
+              />
+            )}
           </UseModeProviders>
         </PreviewSettingsProvider>
       </CustomThemeProvider>
       <TooltipLayer />
-      {isMarkdownMode && allowRecording && mediaProvider && (
-        <RecorderEntry
-          open={mediaBinRecorderOpen}
-          onOpenChange={setMediaBinRecorderOpen}
-          showTrigger={false}
-        />
-      )}
       {imageEditTarget !== null && mediaProvider && (
         <ImageEditModal
           relativePath={imageEditTarget}

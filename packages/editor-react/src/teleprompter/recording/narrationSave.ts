@@ -36,6 +36,8 @@ export interface NarrationSavePlanArgs {
   cameraExt: string | null;
   baseWpm: number;
   cameraOffsetSec?: number;
+  /** User-chosen filename base for the audio file; default timestamped `narration-…`. */
+  audioBasename?: string;
 }
 
 export interface NarrationSavePlan {
@@ -68,7 +70,7 @@ export function buildNarrationSavePlan(args: NarrationSavePlanArgs): NarrationSa
       };
 
   return {
-    audioRelativeName: `audio/${buildFilename('audio', args.audioExt)}`,
+    audioRelativeName: `audio/${buildFilename('audio', args.audioExt, args.audioBasename)}`,
     cameraRelativeName: args.cameraExt
       ? `video/${buildFilename('video', args.cameraExt, 'narration-cam')}`
       : null,

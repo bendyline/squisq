@@ -157,9 +157,7 @@ describe('RecorderModal — unsaved take is not silently destroyed', () => {
   it('shows elapsed and total time while reviewing a recorded video', async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-07-21T12:00:00Z'));
-    render(
-      <RecorderModal initialMode="screen" mediaProvider={mediaProvider} onClose={vi.fn()} />,
-    );
+    render(<RecorderModal initialMode="screen" mediaProvider={mediaProvider} onClose={vi.fn()} />);
 
     await act(async () => {
       fireEvent.click(screen.getByRole('button', { name: 'Start preview' }));

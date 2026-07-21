@@ -8,6 +8,12 @@ export {
   type TeleprompterRecordingDeps,
 } from './TeleprompterView';
 export {
+  useNarrationStage,
+  type UseNarrationStageOptions,
+  type NarrationStageHandle,
+} from './useNarrationStage';
+export { NarrationStage, type NarrationStageProps } from './NarrationStage';
+export {
   useNarrationRecorder,
   type NarrationRecorderController,
   type NarrationRecorderState,

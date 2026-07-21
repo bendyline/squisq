@@ -21,11 +21,13 @@
  * misconfiguration, not a feature.
  */
 
-import { useCallback } from 'react';
+import { useCallback, useMemo } from 'react';
+import { resolveThemeForDoc } from '@bendyline/squisq/doc';
 import { RecorderPanel } from './recorder/RecorderPanel.js';
-import type { RecorderSaveResult } from './recorder/RecorderModal.js';
+import type { RecorderNarrationOptions, RecorderSaveResult } from './recorder/RecorderModal.js';
 import { insertMediaBlock } from './recorder/insertMediaBlock.js';
 import { useEditorContext } from './EditorContext';
+import { usePreviewSettingsOptional } from './PreviewControls';
 import { markdownFencedCodeLineMask } from './markdownCodeFence';
 
 /**
@@ -91,7 +93,40 @@ export function RecorderEntry({ open, onOpenChange, showTrigger = true }: Record
     markdownSource,
     setMarkdownSource,
     colorScheme,
+    doc,
+    allowNarrate,
   } = useEditorContext();
+
+  // Prefer the live preview theme (respects the theme dropdown + custom-theme
+  // registry) when a PreviewSettingsProvider is in scope; hosts composing
+  // RecorderEntry outside one fall back to plain doc-scoped resolution, which
+  // lacks preview-controls overrides.
+  const previewSettings = usePreviewSettingsOptional();
+  const theme = previewSettings?.activeTheme ?? resolveThemeForDoc(doc);
+
+  const narration = useMemo<RecorderNarrationOptions | null>(() => {
+    if (!allowNarrate || !mediaProvider) return null;
+    return {
+      doc,
+      theme,
+      recording: {
+        mediaProvider,
+        container: workspaceContainer ?? null,
+        markdownSource,
+        setMarkdownSource,
+        bumpMediaRevision,
+      },
+    };
+  }, [
+    allowNarrate,
+    mediaProvider,
+    doc,
+    theme,
+    workspaceContainer,
+    markdownSource,
+    setMarkdownSource,
+    bumpMediaRevision,
+  ]);
 
   const handleSave = useCallback(
     (result: RecorderSaveResult) => {
@@ -161,6 +196,7 @@ export function RecorderEntry({ open, onOpenChange, showTrigger = true }: Record
       mediaProvider={mediaProvider}
       container={workspaceContainer}
       colorScheme={colorScheme}
+      narration={narration}
       onSave={handleSave}
       className="squisq-toolbar-button"
       open={open}

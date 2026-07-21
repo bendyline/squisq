@@ -22,9 +22,20 @@ export interface TeleprompterControlsProps {
   float: FloatingWindowHandle;
   /** Phase B mounts the narration Record button here. */
   recordSlot?: ReactNode;
+  /**
+   * Show the Start/Pause transport button (default true). Hosts whose own
+   * chrome drives playback — the Record media dialog starts the prompter
+   * through its Record button — pass false; Restart and Countdown stay.
+   */
+  showPlayPause?: boolean;
 }
 
-export function TeleprompterControls({ controller, float, recordSlot }: TeleprompterControlsProps) {
+export function TeleprompterControls({
+  controller,
+  float,
+  recordSlot,
+  showPlayPause = true,
+}: TeleprompterControlsProps) {
   const { transport, prefs, setPrefs, mic } = controller;
   const rolling = transport === 'rolling' || transport === 'countdown';
   const voiceLive = prefs.voiceTracking && mic.status === 'live';
@@ -38,13 +49,15 @@ export function TeleprompterControls({ controller, float, recordSlot }: Teleprom
       data-voice-live={voiceLive || undefined}
     >
       <span className="squisq-teleprompter-group">
-        <button
-          type="button"
-          onClick={() => (rolling ? controller.pause() : controller.play())}
-          aria-label={rolling ? 'Pause prompter' : 'Start prompter'}
-        >
-          {rolling ? '⏸ Pause' : transport === 'paused' ? '▶ Resume' : '▶ Start'}
-        </button>
+        {showPlayPause ? (
+          <button
+            type="button"
+            onClick={() => (rolling ? controller.pause() : controller.play())}
+            aria-label={rolling ? 'Pause prompter' : 'Start prompter'}
+          >
+            {rolling ? '⏸ Pause' : transport === 'paused' ? '▶ Resume' : '▶ Start'}
+          </button>
+        ) : null}
         <button type="button" onClick={controller.restart} aria-label="Restart prompter">
           ⟲ Restart
         </button>

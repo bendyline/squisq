@@ -26,12 +26,10 @@ afterEach(() => {
 describe('TimelineItemMenu viewport placement', () => {
   it('remeasures and clamps the menu when PIP controls make it taller', () => {
     let resizeCallback: ResizeObserverCallback | undefined;
-    let resizeObserver: ResizeObserver | undefined;
 
     class ResizeObserverStub implements ResizeObserver {
       constructor(callback: ResizeObserverCallback) {
         resizeCallback = callback;
-        resizeObserver = this;
       }
 
       observe(): void {}
@@ -81,7 +79,7 @@ describe('TimelineItemMenu viewport placement', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'PIP' }));
     expect(screen.getByRole('combobox', { name: 'Picture-in-picture size' })).toBeTruthy();
-    act(() => resizeCallback?.([], resizeObserver!));
+    act(() => resizeCallback?.([], ResizeObserverStub.prototype));
 
     expect(menu.style.top).toBe('8px');
     expect(menu.style.maxHeight).toBe('calc(100vh - 16px)');

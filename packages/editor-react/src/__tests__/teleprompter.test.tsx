@@ -380,6 +380,7 @@ describe('TeleprompterView', () => {
       return (
         <div data-testid="input-harness" onKeyDown={controller.handleKeyDown}>
           <output data-testid="word-position">{controller.wordPos}</output>
+          <output data-testid="transport-state">{controller.transport}</output>
           <input aria-label="Editable control" />
           <button type="button">Ordinary button</button>
           <button type="button" role="tab">
@@ -399,10 +400,17 @@ describe('TeleprompterView', () => {
     expect(screen.getByTestId('word-position').textContent).toBe('2');
     fireEvent.keyDown(harness, { key: 'ArrowLeft' });
     expect(screen.getByTestId('word-position').textContent).toBe('1');
-    fireEvent.keyDown(harness, { key: 'ArrowDown' });
-    expect(screen.getByTestId('word-position').textContent).toBe('7');
+
+    // Vertical arrows explicitly control automatic advancement.
     fireEvent.keyDown(harness, { key: 'ArrowUp' });
+    expect(screen.getByTestId('transport-state').textContent).toBe('countdown');
+    fireEvent.keyDown(harness, { key: 'ArrowDown' });
+    expect(screen.getByTestId('transport-state').textContent).toBe('stopped');
     expect(screen.getByTestId('word-position').textContent).toBe('1');
+
+    // Space is deliberately not a Narrate transport shortcut.
+    fireEvent.keyDown(harness, { key: ' ' });
+    expect(screen.getByTestId('transport-state').textContent).toBe('stopped');
 
     // Narrate shortcuts must not steal arrows from its form controls.
     fireEvent.keyDown(screen.getByRole('textbox', { name: 'Editable control' }), {
@@ -428,6 +436,7 @@ describe('TeleprompterView', () => {
     const script = buildNarrationScript(doc);
     const onNudge = vi.fn();
     const onSeekToken = vi.fn();
+    const onToggleAutoAdvance = vi.fn();
     render(
       <TeleprompterSurface
         script={script}
@@ -440,6 +449,7 @@ describe('TeleprompterView', () => {
         theme={DEFAULT_THEME}
         onNudge={onNudge}
         onSeekToken={onSeekToken}
+        onToggleAutoAdvance={onToggleAutoAdvance}
       />,
     );
     const surface = screen.getByTestId('teleprompter-surface');
@@ -473,5 +483,12 @@ describe('TeleprompterView', () => {
     expect(onSeekToken).not.toHaveBeenCalled();
     fireEvent.doubleClick(word);
     expect(onSeekToken).toHaveBeenCalledWith(5);
+
+    fireEvent.mouseDown(surface, { button: 0 });
+    expect(onToggleAutoAdvance).not.toHaveBeenCalled();
+    fireEvent.mouseDown(surface, { button: 1 });
+    expect(onToggleAutoAdvance).toHaveBeenCalledTimes(1);
+    fireEvent(surface, new MouseEvent('auxclick', { bubbles: true, cancelable: true, button: 1 }));
+    expect(onToggleAutoAdvance).toHaveBeenCalledTimes(1);
   });
 });

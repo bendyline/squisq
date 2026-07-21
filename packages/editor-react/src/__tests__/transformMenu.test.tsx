@@ -102,11 +102,32 @@ describe('TransformMenu', () => {
     expect(screen.getByText('Unwrap paragraphs')).toBeTruthy();
     expect(screen.getByText('Wrap at width')).toBeTruthy();
     expect(screen.getByText('Clean up formatting')).toBeTruthy();
-    expect(screen.getByText('Detected mode: wrapped at ~80 columns')).toBeTruthy();
+    expect(screen.getByText('Detected mode: wrapped at ~80 characters wide')).toBeTruthy();
+    expect(
+      screen
+        .getByRole('dialog', { name: 'Transform document' })
+        .querySelectorAll('.squisq-transform-menu-action-icon'),
+    ).toHaveLength(3);
+    expect(
+      screen
+        .getByRole('dialog', { name: 'Transform document' })
+        .querySelector('[data-transform-icon="unwrap"]'),
+    ).toBeTruthy();
+    expect(
+      screen
+        .getByRole('dialog', { name: 'Transform document' })
+        .querySelector('[data-transform-icon="wrap"]'),
+    ).toBeTruthy();
+    expect(
+      screen
+        .getByText('Clean up formatting')
+        .closest('button')
+        ?.querySelector('.fa-wand-magic-sparkles'),
+    ).toBeTruthy();
     expect(screen.getByText('Wrap at width').closest('button')?.getAttribute('aria-current')).toBe(
       'true',
     );
-    expect(screen.getByText('Current (~80 columns)')).toBeTruthy();
+    expect(screen.getByText('Current (~80 characters wide)')).toBeTruthy();
   });
 
   it('applies unwrap as one source write in Write view', async () => {

@@ -711,7 +711,7 @@ export function App() {
             whiteSpace: 'nowrap',
           }}
         >
-          Squisq license
+          MIT license
         </a>
         <a
           href={`${SITE_BASE_URL}legal/NOTICE.md`}
