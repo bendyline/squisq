@@ -88,11 +88,15 @@ function PreviewHarness() {
   );
 }
 
-function PreviewToolbarHarness() {
+function PreviewToolbarHarness({
+  displayMode,
+  showMode = false,
+}: { displayMode?: 'video'; showMode?: boolean } = {}) {
   const { doc } = useEditorContext();
   return (
     <PreviewSettingsProvider doc={doc}>
-      <PreviewToolbarControls />
+      <PreviewToolbarControls displayMode={displayMode} />
+      {showMode && <ModeProbe />}
     </PreviewSettingsProvider>
   );
 }
@@ -182,6 +186,32 @@ function VideoLoopHarness() {
   return (
     <PreviewSettingsProvider doc={doc}>
       <VideoLoopProbe />
+    </PreviewSettingsProvider>
+  );
+}
+
+function PipShapeProbe() {
+  const { activePipShape, setPipShape } = usePreviewSettings();
+  const { markdownSource } = useEditorContext();
+  return (
+    <>
+      <button type="button" onClick={() => setPipShape('wide')}>
+        Use wide PIP
+      </button>
+      <button type="button" onClick={() => setPipShape('square')}>
+        Use default square PIP
+      </button>
+      <div data-testid="active-pip-shape">{activePipShape}</div>
+      <pre data-testid="markdown-source">{markdownSource}</pre>
+    </>
+  );
+}
+
+function PipShapeHarness() {
+  const { doc } = useEditorContext();
+  return (
+    <PreviewSettingsProvider doc={doc}>
+      <PipShapeProbe />
     </PreviewSettingsProvider>
   );
 }
@@ -453,6 +483,34 @@ describe('video-loop frontmatter', () => {
   });
 });
 
+describe('PIP shape frontmatter', () => {
+  it('persists wide and removes square because square is the compatibility default', async () => {
+    render(
+      <EditorProvider initialMarkdown="# Hello">
+        <PipShapeHarness />
+      </EditorProvider>,
+    );
+
+    expect(screen.getByTestId('active-pip-shape').textContent).toBe('square');
+    fireEvent.click(screen.getByRole('button', { name: 'Use wide PIP' }));
+
+    await waitFor(() => {
+      const source = screen.getByTestId('markdown-source').textContent ?? '';
+      expect(source).toContain('squisq-pip-shape: wide');
+    });
+    expect(screen.getByTestId('active-pip-shape').textContent).toBe('wide');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Use default square PIP' }));
+
+    await waitFor(() => {
+      const source = screen.getByTestId('markdown-source').textContent ?? '';
+      expect(source).not.toContain('squisq-pip-shape');
+      expect(source).not.toContain('---');
+    });
+    expect(screen.getByTestId('active-pip-shape').textContent).toBe('square');
+  });
+});
+
 describe('managed preview-setting defaults', () => {
   it('removes default theme, transform, and caption values plus their legacy aliases', async () => {
     const markdown = `---
@@ -500,6 +558,37 @@ title: Hello
 });
 
 describe('PreviewToolbarControls', () => {
+  it('can render the Video control set without changing the active Use mode', () => {
+    const originalResizeObserver = globalThis.ResizeObserver;
+    class ResizeObserverStub implements ResizeObserver {
+      observe() {}
+      unobserve() {}
+      disconnect() {}
+    }
+
+    globalThis.ResizeObserver = ResizeObserverStub;
+    try {
+      render(
+        <EditorProvider initialMarkdown="# Hello">
+          <PreviewToolbarHarness displayMode="video" showMode />
+        </EditorProvider>,
+      );
+
+      expect(screen.getByTestId('active-mode').textContent).toBe('slideshow');
+      expect(screen.getAllByText('Theme:').length).toBeGreaterThan(0);
+      expect(screen.getAllByText('Summarize:').length).toBeGreaterThan(0);
+      expect(screen.getAllByText('Captions:').length).toBeGreaterThan(0);
+      expect(screen.getAllByText('Loop').length).toBeGreaterThan(0);
+      expect(screen.getAllByText('Cover slide').length).toBeGreaterThan(0);
+    } finally {
+      if (originalResizeObserver) {
+        globalThis.ResizeObserver = originalResizeObserver;
+      } else {
+        Reflect.deleteProperty(globalThis, 'ResizeObserver');
+      }
+    }
+  });
+
   it('shows Loop only in Video mode', () => {
     const originalResizeObserver = globalThis.ResizeObserver;
     class ResizeObserverStub implements ResizeObserver {

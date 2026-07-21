@@ -6,6 +6,7 @@ import type {
   CaptionStyle,
   DisplayMode,
   PipPosition,
+  PipShape,
   PipSize,
   PlaybackActions,
   PlaybackState,
@@ -60,6 +61,8 @@ export interface DocPlayerProps {
   videoPresentation?: VideoPresentation;
   /** Size of presenter video in picture-in-picture mode (default `'small'`). */
   pipSize?: PipSize;
+  /** Shape of presenter video in picture-in-picture mode (default `'square'`). */
+  pipShape?: PipShape;
   /** Corner used by presenter video in picture-in-picture mode. */
   pipPosition?: PipPosition;
   enableSwipe?: boolean;

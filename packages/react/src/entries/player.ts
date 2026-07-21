@@ -25,6 +25,7 @@ export type {
   CaptionStyle,
   CaptionMode,
   PipPosition,
+  PipShape,
   PipSize,
   VideoPresentation,
   SlideNavActions,

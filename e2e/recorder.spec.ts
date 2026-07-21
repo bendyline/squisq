@@ -59,7 +59,7 @@ test('Microphone toggles independently; Camera and Screen are mutually exclusive
   await expect(camera).toHaveAttribute('aria-pressed', 'false');
 
   // The system-audio option appears only for Screen.
-  await expect(dialog.getByText('Include system audio (Chrome only)')).toBeVisible();
+  await expect(dialog.getByText('Include system audio')).toBeVisible();
   await camera.click();
-  await expect(dialog.getByText('Include system audio (Chrome only)')).toHaveCount(0);
+  await expect(dialog.getByText('Include system audio')).toHaveCount(0);
 });

@@ -201,6 +201,11 @@ export interface EditorShellProps {
   onSaveVersion?: (result: SaveVersionResult) => void;
   /** Show the Files toggle in the toolbar. Defaults to true when mediaProvider is passed. */
   showFilesToggle?: boolean;
+  /**
+   * Whether the Files panel offers browser downloads for its binary entries.
+   * Defaults to true. Pass false to remove the built-in download affordance.
+   */
+  allowBinaryDownloads?: boolean;
   /** Content rendered at the left edge of the toolbar, before the view tabs. */
   toolbarSlotLeft?: ReactNode;
   /** Content rendered after the formatting controls (in the middle area of the toolbar). */
@@ -516,6 +521,7 @@ export function EditorShell({
   versioningAutoSaveIdleMs,
   onSaveVersion,
   showFilesToggle,
+  allowBinaryDownloads = true,
   toolbarSlotLeft,
   toolbarSlotAfterActions,
   toolbarSlotRight,
@@ -628,6 +634,7 @@ export function EditorShell({
           mediaProvider={effectiveMediaProvider ?? null}
           workspaceContainer={effectiveContainer}
           filesToggleEnabled={filesToggleEnabled}
+          allowBinaryDownloads={allowBinaryDownloads}
           toolbarSlotLeft={toolbarSlotLeft}
           toolbarSlotAfterActions={toolbarSlotAfterActions}
           toolbarSlotRight={toolbarSlotRight}
@@ -673,6 +680,7 @@ interface EditorShellInnerProps {
   mediaProvider: MediaProvider | null;
   workspaceContainer?: ContentContainer | null;
   filesToggleEnabled: boolean;
+  allowBinaryDownloads: boolean;
   toolbarSlotLeft?: ReactNode;
   toolbarSlotAfterActions?: ReactNode;
   toolbarSlotRight?: ReactNode;
@@ -748,6 +756,7 @@ function EditorShellInner({
   mediaProvider,
   workspaceContainer,
   filesToggleEnabled,
+  allowBinaryDownloads,
   toolbarSlotLeft,
   toolbarSlotAfterActions,
   toolbarSlotRight,
@@ -1360,6 +1369,7 @@ function EditorShellInner({
                   onMediaUploaded={handleMediaUploaded}
                   onMediaRemoved={handleMediaRemoved}
                   onCountChange={setMediaCount}
+                  allowBinaryDownloads={allowBinaryDownloads}
                   onRecord={allowRecording ? handleOpenMediaBinRecorder : undefined}
                   isRecorderOpen={mediaBinRecorderOpen}
                 />

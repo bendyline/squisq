@@ -23,8 +23,15 @@
 
 import { createElement } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
-import type { Doc, MediaProvider } from '@bendyline/squisq/schemas';
-import type { Theme } from '@bendyline/squisq/schemas';
+import type {
+  Doc,
+  MediaProvider,
+  Theme,
+  VideoPipPosition,
+  VideoPipShape,
+  VideoPipSize,
+  VideoPresentation,
+} from '@bendyline/squisq/schemas';
 import type { SquisqRenderAPI } from './types';
 import { DocPlayer } from './DocPlayer';
 import { LinearDocView } from './LinearDocView';
@@ -54,6 +61,14 @@ export interface MountOptions {
   audio?: Record<string, string>;
   /** Optional theme override */
   theme?: Theme;
+  /** Player-level video placement override. Omitted values resolve from the Doc. */
+  videoPresentation?: VideoPresentation;
+  /** Picture-in-picture size override. Omitted values resolve from the Doc. */
+  pipSize?: VideoPipSize;
+  /** Picture-in-picture shape override. Omitted values resolve from the Doc. */
+  pipShape?: VideoPipShape;
+  /** Picture-in-picture corner override. Omitted values resolve from the Doc. */
+  pipPosition?: VideoPipPosition;
   /** Auto-play on mount (only for slideshow mode, default: false) */
   autoPlay?: boolean;
   /**
@@ -255,6 +270,10 @@ export function mount(element: Element, doc: Doc, options: MountOptions = {}): S
     audio,
     autoPlay = false,
     theme,
+    videoPresentation,
+    pipSize,
+    pipShape,
+    pipPosition,
     renderMode = false,
     animationsEnabled = true,
     captionStyle,
@@ -290,6 +309,10 @@ export function mount(element: Element, doc: Doc, options: MountOptions = {}): S
       renderMode,
       animationsEnabled,
       theme,
+      videoPresentation,
+      pipSize,
+      pipShape,
+      pipPosition,
       captionsEnabled: !!captionStyle,
       captionStyle: captionStyle ?? 'standard',
       globalKeyboardShortcuts,

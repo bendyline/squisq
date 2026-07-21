@@ -27,6 +27,7 @@ import type {
   CaptionStyle,
   DisplayMode,
   PipPosition,
+  PipShape,
   PipSize,
   VideoPresentation,
 } from '@bendyline/squisq-react';
@@ -99,6 +100,8 @@ export interface PreviewSettings {
   setVideoPresentation: (presentation: VideoPresentation) => void;
   activePipSize: PipSize;
   setPipSize: (size: PipSize) => void;
+  activePipShape: PipShape;
+  setPipShape: (shape: PipShape) => void;
   activePipPosition: PipPosition;
   setPipPosition: (position: PipPosition) => void;
   /** Whether Squisq should synthesize and show its managed cover slide. */
@@ -239,6 +242,14 @@ function resolvePipSize(value: unknown): PipSize | null {
     normalized === 'pip-large'
   )
     return 'large';
+  return null;
+}
+
+function resolvePipShape(value: unknown): PipShape | null {
+  if (typeof value !== 'string') return null;
+  const normalized = value.trim().toLowerCase();
+  if (normalized === 'square' || normalized === '1:1') return 'square';
+  if (normalized === 'wide' || normalized === '16:9' || normalized === 'widescreen') return 'wide';
   return null;
 }
 
@@ -625,6 +636,34 @@ export function PreviewSettingsProvider({
     [persistFrontmatter],
   );
 
+  const fmPipShape = useMemo(
+    () =>
+      resolvePipShape(
+        readFrontmatterKey(
+          frontmatter,
+          FRONTMATTER_SETTING_KEYS.pipShape.canonical,
+          FRONTMATTER_SETTING_KEYS.pipShape.legacy,
+        ),
+      ),
+    [frontmatter],
+  );
+  const [selectedPipShape, setSelectedPipShape] = useState<PipShape | null>(null);
+  useEffect(() => setSelectedPipShape(null), [fmPipShape]);
+  const activePipShape = selectedPipShape ?? fmPipShape ?? FRONTMATTER_SETTING_DEFAULTS.pipShape;
+  const handlePipShape = useCallback(
+    (shape: PipShape) => {
+      setSelectedPipShape(shape);
+      persistFrontmatter({
+        [FRONTMATTER_SETTING_KEYS.pipShape.canonical]: omitFrontmatterDefault(
+          shape,
+          FRONTMATTER_SETTING_DEFAULTS.pipShape,
+        ),
+        [FRONTMATTER_SETTING_KEYS.pipShape.legacy]: null,
+      });
+    },
+    [persistFrontmatter],
+  );
+
   const fmPipPosition = useMemo(
     () =>
       resolvePipPosition(
@@ -785,6 +824,8 @@ export function PreviewSettingsProvider({
       setVideoPresentation: handleVideoPresentation,
       activePipSize,
       setPipSize: handlePipSize,
+      activePipShape,
+      setPipShape: handlePipShape,
       activePipPosition,
       setPipPosition: handlePipPosition,
       activeVideoLoop,
@@ -809,6 +850,7 @@ export function PreviewSettingsProvider({
       hasVideoMedia,
       activeVideoPresentation,
       activePipSize,
+      activePipShape,
       activePipPosition,
       activeVideoLoop,
       activeCoverSlide,
@@ -817,6 +859,7 @@ export function PreviewSettingsProvider({
       handleSetCaptionMode,
       handleVideoPresentation,
       handlePipSize,
+      handlePipShape,
       handlePipPosition,
       handleSetVideoLoopEnabled,
       handleSetCoverSlideEnabled,
@@ -884,6 +927,11 @@ const VIDEO_PRESENTATION_OPTIONS: Array<{ key: VideoPresentation; label: string 
 const PIP_SIZE_OPTIONS: Array<{ key: PipSize; label: string }> = [
   { key: 'small', label: 'Small' },
   { key: 'large', label: 'Large' },
+];
+
+const PIP_SHAPE_OPTIONS: Array<{ key: PipShape; label: string }> = [
+  { key: 'square', label: 'Square' },
+  { key: 'wide', label: 'Wide (16:9)' },
 ];
 
 const PIP_POSITION_OPTIONS: Array<{ key: PipPosition; label: string }> = [
@@ -1039,9 +1087,18 @@ const selectStyle: React.CSSProperties = {
  * inline row and the menu, so the available space is always well used and the
  * row never wraps onto a second line.
  */
-export function PreviewToolbarControls() {
+export interface PreviewToolbarControlsProps {
+  /**
+   * Display mode whose applicable control set should be rendered. Defaults to
+   * the active Use mode. This only controls toolbar visibility; changing a
+   * setting still writes through the shared preview-settings context.
+   */
+  displayMode?: DisplayMode;
+}
+
+export function PreviewToolbarControls({ displayMode }: PreviewToolbarControlsProps = {}) {
   const s = usePreviewSettings();
-  const controlKeys = controlKeysForMode(s.activeDisplayMode, s.hasVideoMedia);
+  const controlKeys = controlKeysForMode(displayMode ?? s.activeDisplayMode, s.hasVideoMedia);
   const [visibleCount, setVisibleCount] = useState(CONTROL_KEYS.length);
   const [popoverOpen, setPopoverOpen] = useState(false);
   // `rootRef` (flex:1) always spans the toolbar's leftover width, so its
@@ -1194,6 +1251,18 @@ export function PreviewToolbarControls() {
                   onChange={(event) => s.setPipSize(event.target.value as PipSize)}
                 >
                   {PIP_SIZE_OPTIONS.map((option) => (
+                    <option key={option.key} value={option.key}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+                <select
+                  aria-label="Picture-in-picture shape"
+                  style={selectStyle}
+                  value={s.activePipShape}
+                  onChange={(event) => s.setPipShape(event.target.value as PipShape)}
+                >
+                  {PIP_SHAPE_OPTIONS.map((option) => (
                     <option key={option.key} value={option.key}>
                       {option.label}
                     </option>

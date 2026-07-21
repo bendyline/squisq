@@ -41,6 +41,11 @@ export { MermaidLayer } from './layers/MermaidLayer.js';
 // Timed media clips (block.media + doc.documentMedia playback)
 export { MediaClipLayer } from './MediaClipLayer.js';
 export type { MediaClipLayerProps } from './MediaClipLayer.js';
+export { resolveDocPlayerAppearance } from './docPlayer/playerAppearance.js';
+export type {
+  DocPlayerAppearanceOverrides,
+  ResolvedDocPlayerAppearance,
+} from './docPlayer/playerAppearance.js';
 
 // Hooks
 export { useAudioSync } from './hooks/useAudioSync.js';
@@ -72,6 +77,7 @@ export type {
   CaptionStyle,
   CaptionMode,
   PipPosition,
+  PipShape,
   PipSize,
   VideoPresentation,
   SlideNavActions,

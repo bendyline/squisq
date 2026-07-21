@@ -13,7 +13,12 @@
 import { Node, mergeAttributes } from '@tiptap/core';
 import { NodeViewWrapper, ReactNodeViewRenderer } from '@tiptap/react';
 import type { NodeViewProps } from '@tiptap/react';
-import type { VideoPlacement } from '@bendyline/squisq/schemas';
+import type {
+  VideoPipPosition,
+  VideoPipShape,
+  VideoPipSize,
+  VideoPlacement,
+} from '@bendyline/squisq/schemas';
 import { useResolvedMediaSrc } from './useResolvedMediaSrc.js';
 
 export interface TiptapVideoOptions {
@@ -29,6 +34,9 @@ declare module '@tiptap/core' {
         controls?: boolean;
         placement?: VideoPlacement;
         lockToBlock?: boolean;
+        pipSize?: VideoPipSize;
+        pipShape?: VideoPipShape;
+        pipPosition?: VideoPipPosition;
       }) => ReturnType;
     };
   }
@@ -173,6 +181,33 @@ export const TiptapVideo = Node.create<TiptapVideoOptions>({
             ? { 'data-squisq-video-lock-to-block': 'false' }
             : {};
         },
+      },
+      pipSize: {
+        default: null,
+        parseHTML: (el) => el.getAttribute('data-squisq-video-pip-size'),
+        renderHTML: (attrs) =>
+          attrs.pipSize === 'small' || attrs.pipSize === 'large'
+            ? { 'data-squisq-video-pip-size': attrs.pipSize }
+            : {},
+      },
+      pipShape: {
+        default: null,
+        parseHTML: (el) => el.getAttribute('data-squisq-video-pip-shape'),
+        renderHTML: (attrs) =>
+          attrs.pipShape === 'square' || attrs.pipShape === 'wide'
+            ? { 'data-squisq-video-pip-shape': attrs.pipShape }
+            : {},
+      },
+      pipPosition: {
+        default: null,
+        parseHTML: (el) => el.getAttribute('data-squisq-video-pip-position'),
+        renderHTML: (attrs) =>
+          attrs.pipPosition === 'top-left' ||
+          attrs.pipPosition === 'top-right' ||
+          attrs.pipPosition === 'bottom-left' ||
+          attrs.pipPosition === 'bottom-right'
+            ? { 'data-squisq-video-pip-position': attrs.pipPosition }
+            : {},
       },
       startAt: {
         default: null,

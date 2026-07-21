@@ -1,17 +1,18 @@
 /**
  * @vitest-environment jsdom
  */
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { parseMarkdown } from '@bendyline/squisq/markdown';
 import { markdownToDoc } from '@bendyline/squisq/doc';
 import { buildNarrationScript } from '@bendyline/squisq/narration';
 import { DEFAULT_THEME } from '@bendyline/squisq/schemas';
 import { TeleprompterView } from '../teleprompter/TeleprompterView';
+import { TeleprompterSurface } from '../teleprompter/TeleprompterSurface';
 import { stepScroll, targetOffsetFor, type TokenLineMap } from '../teleprompter/scrollModel';
 import { createFloatingWindowManager, detectFloatTiers } from '../teleprompter/floatingWindow';
 import { PCM_WORKLET_SOURCE, PCM_WORKLET_NAME } from '../teleprompter/pcmWorklet';
-import { vadConfigForSensitivity } from '../teleprompter/useTeleprompter';
+import { useTeleprompter, vadConfigForSensitivity } from '../teleprompter/useTeleprompter';
 import { DEFAULT_TELEPROMPTER_PREFS, normalizeTeleprompterPrefs } from '../teleprompter/types';
 
 const MD = `# First Section
@@ -370,5 +371,107 @@ describe('TeleprompterView', () => {
     expect(surface.className).not.toContain('--mirrored');
     fireEvent.click(screen.getByRole('button', { name: '⇋ Mirror' }));
     expect(screen.getByTestId('teleprompter-surface').className).toContain('--mirrored');
+  });
+
+  it('nudges one word with left/right arrows while preserving line-sized up/down jumps', () => {
+    const doc = markdownToDoc(parseMarkdown(MD));
+    function Harness() {
+      const controller = useTeleprompter({ doc });
+      return (
+        <div data-testid="input-harness" onKeyDown={controller.handleKeyDown}>
+          <output data-testid="word-position">{controller.wordPos}</output>
+          <input aria-label="Editable control" />
+          <button type="button">Ordinary button</button>
+          <button type="button" role="tab">
+            Arrow-driven tab
+          </button>
+        </div>
+      );
+    }
+    render(<Harness />);
+    const harness = screen.getByTestId('input-harness');
+
+    fireEvent.keyDown(harness, { key: 'ArrowRight' });
+    expect(screen.getByTestId('word-position').textContent).toBe('1');
+    fireEvent.keyDown(harness, { key: 'ArrowRight' });
+    expect(screen.getByTestId('word-position').textContent).toBe('2');
+    fireEvent.keyDown(harness, { key: 'ArrowRight', repeat: true });
+    expect(screen.getByTestId('word-position').textContent).toBe('2');
+    fireEvent.keyDown(harness, { key: 'ArrowLeft' });
+    expect(screen.getByTestId('word-position').textContent).toBe('1');
+    fireEvent.keyDown(harness, { key: 'ArrowDown' });
+    expect(screen.getByTestId('word-position').textContent).toBe('7');
+    fireEvent.keyDown(harness, { key: 'ArrowUp' });
+    expect(screen.getByTestId('word-position').textContent).toBe('1');
+
+    // Narrate shortcuts must not steal arrows from its form controls.
+    fireEvent.keyDown(screen.getByRole('textbox', { name: 'Editable control' }), {
+      key: 'ArrowRight',
+    });
+    expect(screen.getByTestId('word-position').textContent).toBe('1');
+
+    // Ordinary button focus does not disable global Narrate navigation.
+    fireEvent.keyDown(screen.getByRole('button', { name: 'Ordinary button' }), {
+      key: 'ArrowRight',
+    });
+    expect(screen.getByTestId('word-position').textContent).toBe('2');
+
+    // Widgets that own arrow-key navigation retain their native behavior.
+    fireEvent.keyDown(screen.getByRole('tab', { name: 'Arrow-driven tab' }), {
+      key: 'ArrowRight',
+    });
+    expect(screen.getByTestId('word-position').textContent).toBe('2');
+  });
+
+  it('turns wheel travel on the script surface into gentle one-word nudges', () => {
+    const doc = markdownToDoc(parseMarkdown(MD));
+    const script = buildNarrationScript(doc);
+    const onNudge = vi.fn();
+    const onSeekToken = vi.fn();
+    render(
+      <TeleprompterSurface
+        script={script}
+        wordPos={0}
+        fontSizePx={48}
+        mirrored={false}
+        lineGuide={false}
+        countdownRemaining={null}
+        recordingIndicator={false}
+        theme={DEFAULT_THEME}
+        onNudge={onNudge}
+        onSeekToken={onSeekToken}
+      />,
+    );
+    const surface = screen.getByTestId('teleprompter-surface');
+    const wheel = (deltaY: number, timeStamp: number, ctrlKey = false) => {
+      const event = new WheelEvent('wheel', { bubbles: true, cancelable: true, deltaY, ctrlKey });
+      Object.defineProperty(event, 'timeStamp', { value: timeStamp });
+      fireEvent(surface, event);
+    };
+
+    // Even a tiny high-resolution trackpad delta nudges immediately.
+    wheel(1, 1_000);
+    expect(onNudge).toHaveBeenLastCalledWith(1);
+
+    // Sustained gestures can advance again after the shorter 60 ms throttle.
+    wheel(1, 1_050);
+    expect(onNudge).toHaveBeenCalledTimes(1);
+    wheel(1, 1_061);
+    expect(onNudge).toHaveBeenCalledTimes(2);
+
+    // Reversing direction is immediate too.
+    wheel(-1, 1_062);
+    expect(onNudge).toHaveBeenLastCalledWith(-1);
+    expect(onNudge).toHaveBeenCalledTimes(3);
+
+    // Preserve browser zoom gestures.
+    wheel(100, 1_200, true);
+    expect(onNudge).toHaveBeenCalledTimes(3);
+
+    const word = surface.querySelector<HTMLElement>('[data-token-idx="5"]')!;
+    fireEvent.click(word);
+    expect(onSeekToken).not.toHaveBeenCalled();
+    fireEvent.doubleClick(word);
+    expect(onSeekToken).toHaveBeenCalledWith(5);
   });
 });

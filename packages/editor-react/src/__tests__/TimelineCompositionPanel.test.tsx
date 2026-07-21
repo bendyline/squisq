@@ -17,6 +17,8 @@ vi.mock('@bendyline/squisq-react', async (importOriginal) => {
       displayMode: string;
       videoPresentation: string;
       showControls: boolean;
+      showCoverSlide: boolean;
+      coverVisible?: boolean;
     }) => (
       <button
         type="button"
@@ -25,6 +27,8 @@ vi.mock('@bendyline/squisq-react', async (importOriginal) => {
         data-display-mode={props.displayMode}
         data-presentation={props.videoPresentation}
         data-controls={String(props.showControls)}
+        data-show-cover={String(props.showCoverSlide)}
+        data-cover-visible={String(props.coverVisible)}
         onClick={() => void props.audioController.toggle()}
       />
     ),
@@ -32,6 +36,9 @@ vi.mock('@bendyline/squisq-react', async (importOriginal) => {
 });
 
 vi.mock('../PreviewControls', () => ({
+  PreviewToolbarControls: ({ displayMode }: { displayMode?: string }) => (
+    <div data-testid="mock-preview-toolbar" data-display-mode={displayMode} />
+  ),
   usePreviewSettings: () => ({
     activeViewport: { width: 1600, height: 900 },
     activeTheme: {},
@@ -40,6 +47,7 @@ vi.mock('../PreviewControls', () => ({
     activeCaptionsEnabled: true,
     activeVideoPresentation: 'picture-in-picture',
     activePipSize: 'small',
+    activePipShape: 'square',
     activePipPosition: 'bottom-right',
     activeCoverSlide: true,
   }),
@@ -81,8 +89,13 @@ describe('TimelineCompositionPanel', () => {
     expect(player.getAttribute('data-display-mode')).toBe('video');
     expect(player.getAttribute('data-presentation')).toBe('picture-in-picture');
     expect(player.getAttribute('data-controls')).toBe('false');
+    expect(player.getAttribute('data-show-cover')).toBe('true');
+    expect(player.getAttribute('data-cover-visible')).toBe('undefined');
     expect(player.getAttribute('data-current-time')).toBe('3.5');
     expect(screen.getByText('0:03')).toBeTruthy();
+    expect(screen.getByTestId('mock-preview-toolbar').getAttribute('data-display-mode')).toBe(
+      'video',
+    );
 
     fireEvent.click(player);
     expect(toggle).toHaveBeenCalledOnce();

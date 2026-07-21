@@ -28,6 +28,9 @@ import {
 } from './scrollModel';
 import { ensureTeleprompterStyles, prompterVarsFromTheme } from './teleprompterTheme';
 
+/** Maximum wheel/trackpad nudge rate: responsive to a notch, gentle during a gesture. */
+const WHEEL_NUDGE_INTERVAL_MS = 60;
+
 export interface TeleprompterSurfaceProps {
   script: NarrationScript;
   /** Fractional word position; floor is the active token. */
@@ -40,8 +43,10 @@ export interface TeleprompterSurfaceProps {
   theme: Theme;
   /** Hide block markers / tighten padding for small float windows. */
   compact?: boolean;
-  /** Click a word to jump the prompter there. */
+  /** Double-click a word to jump the prompter there. */
   onSeekToken?: (tokenIndex: number) => void;
+  /** Move by whole words in response to direct surface input. */
+  onNudge?: (deltaTokens: number) => void;
 }
 
 interface Paragraph {
@@ -117,6 +122,7 @@ export function TeleprompterSurface({
   theme,
   compact = false,
   onSeekToken,
+  onNudge,
 }: TeleprompterSurfaceProps) {
   const surfaceRef = useRef<HTMLDivElement | null>(null);
   const columnRef = useRef<HTMLDivElement | null>(null);
@@ -130,6 +136,33 @@ export function TeleprompterSurface({
     const doc = surfaceRef.current?.ownerDocument;
     if (doc) ensureTeleprompterStyles(doc);
   }, []);
+
+  // Mouse wheels and trackpads report wildly different delta sizes, so treat
+  // every gesture as directional intent instead of requiring an arbitrary
+  // threshold. Rate limiting keeps a trackpad stream gentle while ensuring a
+  // single physical wheel notch always produces a word nudge.
+  useEffect(() => {
+    const surface = surfaceRef.current;
+    if (!surface || !onNudge) return;
+
+    let lastNudgeAt = Number.NEGATIVE_INFINITY;
+    let lastDirection = 0;
+    const handleWheel = (event: WheelEvent) => {
+      if (event.ctrlKey || event.metaKey || event.altKey || event.deltaY === 0) return;
+      const direction = Math.sign(event.deltaY);
+      event.preventDefault();
+      if (direction === lastDirection && event.timeStamp - lastNudgeAt < WHEEL_NUDGE_INTERVAL_MS) {
+        return;
+      }
+
+      onNudge(direction);
+      lastNudgeAt = event.timeStamp;
+      lastDirection = direction;
+    };
+
+    surface.addEventListener('wheel', handleWheel, { passive: false });
+    return () => surface.removeEventListener('wheel', handleWheel);
+  }, [onNudge]);
 
   // Imperative highlight + smooth scroll on the surface's own window.
   useEffect(() => {
@@ -217,7 +250,7 @@ export function TeleprompterSurface({
     // fontSizePx/compact change the layout → remeasure via effect rerun.
   }, [script, fontSizePx, compact]);
 
-  const handleClick = onSeekToken
+  const handleDoubleClick = onSeekToken
     ? (event: ReactMouseEvent<HTMLDivElement>) => {
         const target = event.target as HTMLElement | null;
         const span = target?.closest<HTMLElement>('[data-token-idx]');
@@ -233,13 +266,15 @@ export function TeleprompterSurface({
       className={`squisq-teleprompter-surface${mirrored ? ' squisq-teleprompter-surface--mirrored' : ''}`}
       style={{ ...vars, fontSize: `${fontSizePx}px` }}
       data-testid="teleprompter-surface"
+      tabIndex={0}
+      aria-label="Teleprompter script; use left and right arrows or the mouse wheel to adjust the word position; double-click a word to jump"
     >
       <div className="squisq-teleprompter-flip">
         <div
           ref={columnRef}
           className="squisq-teleprompter-scroll"
           style={compact ? { padding: '30vh 5% 60vh' } : undefined}
-          onClick={handleClick}
+          onDoubleClick={handleDoubleClick}
         >
           <ScriptColumn script={script} compact={compact} />
         </div>

@@ -58,6 +58,22 @@ describe('markdownToDoc media annotations', () => {
     ]);
   });
 
+  it('carries per-video PIP size, shape, and position into the schedule', () => {
+    const doc = toDoc(
+      '# B {duration=20}\n\n{[video src=pip.mp4 placement=picture-in-picture pipSize=large pipShape=wide pipPosition=top-left]}\n',
+    );
+    expect(doc.blocks[0].media?.[0]).toMatchObject({
+      pipSize: 'large',
+      pipShape: 'wide',
+      pipPosition: 'top-left',
+    });
+    expect(resolveMediaSchedule(doc)[0]).toMatchObject({
+      pipSize: 'large',
+      pipShape: 'wide',
+      pipPosition: 'top-left',
+    });
+  });
+
   it('keeps content videos in the block but promotes placed HTML videos to the schedule', () => {
     const content = toDoc('# B\n\n<video src="content.mp4" controls></video>\n');
     expect(content.blocks[0].media).toBeUndefined();
@@ -74,6 +90,18 @@ describe('markdownToDoc media annotations', () => {
       anchor: 'block',
     });
     expect(JSON.stringify(pip.blocks[0].contents)).not.toContain('presenter.mp4');
+  });
+
+  it('reads per-video PIP size, shape, and position from HTML video attributes', () => {
+    const doc = toDoc(
+      '# B {duration=12}\n\n<video src="presenter.mp4" data-squisq-video-placement="picture-in-picture" data-squisq-video-pip-size="large" data-squisq-video-pip-shape="wide" data-squisq-video-pip-position="top-right"></video>\n',
+    );
+    expect(doc.blocks[0].media?.[0]).toMatchObject({
+      placement: 'picture-in-picture',
+      pipSize: 'large',
+      pipShape: 'wide',
+      pipPosition: 'top-right',
+    });
   });
 
   it('makes an unlocked placed video document-timed without changing block duration', () => {

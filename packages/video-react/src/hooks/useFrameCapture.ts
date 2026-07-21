@@ -28,13 +28,20 @@ export interface FrameCaptureOptions {
   reuseIfUnchanged?: boolean;
 }
 
+export interface FrameCaptureRenderOptions extends Omit<RenderHtmlOptions, 'playerScript'> {
+  /** Whether the hidden player should materialize its managed cover. */
+  showCoverSlide?: boolean;
+}
+
 export interface FrameCaptureHandle {
   /** Initialize the hidden player. Returns the video duration in seconds. */
   init: (
     doc: Doc,
-    renderOptions: Omit<RenderHtmlOptions, 'playerScript'>,
+    renderOptions: FrameCaptureRenderOptions,
     captionMode?: CaptionMode,
   ) => Promise<number>;
+  /** Force the managed cover on or off before capturing export frames. */
+  setCoverVisible: (visible: boolean) => Promise<void>;
   /** Capture a single frame at the given time (seconds). Returns an ImageBitmap. */
   captureFrame: (time: number, options?: FrameCaptureOptions) => Promise<ImageBitmap>;
   /**
@@ -59,6 +66,8 @@ const MIME_MAP: Record<string, string> = {
 };
 
 const VISUAL_UPDATE_FALLBACK_MS = 100;
+const CAPTURE_ASSET_TIMEOUT_MS = 15_000;
+const RENDER_TIME_EPSILON_SECONDS = 0.000_001;
 const POTENTIALLY_ANIMATED_IMAGE_URL =
   /(?:^data:image\/(?:gif|webp|avif)[;,]|\.(?:gif|webp|avif)(?:[?#]|$))/i;
 
@@ -92,6 +101,62 @@ export function waitForVisualUpdate(frameCount = 1): Promise<void> {
     };
     waitForFrame(Math.max(1, frameCount));
   });
+}
+
+async function waitForImageDecode(image: HTMLImageElement): Promise<void> {
+  const src = image.currentSrc || image.src;
+  if (!src) return;
+  const decoded =
+    typeof image.decode === 'function'
+      ? image.decode()
+      : new Promise<void>((resolve, reject) => {
+          if (image.complete) {
+            if (image.naturalWidth > 0) resolve();
+            else reject(new Error(`Image could not be decoded: ${src}`));
+            return;
+          }
+          image.addEventListener('load', () => resolve(), { once: true });
+          image.addEventListener(
+            'error',
+            () => reject(new Error(`Image could not be loaded: ${src}`)),
+            {
+              once: true,
+            },
+          );
+        });
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+  try {
+    await Promise.race([
+      decoded,
+      new Promise<never>((_resolve, reject) => {
+        timeout = setTimeout(
+          () => reject(new Error(`Image did not become ready within 15s: ${src}`)),
+          CAPTURE_ASSET_TIMEOUT_MS,
+        );
+      }),
+    ]);
+  } finally {
+    if (timeout !== undefined) clearTimeout(timeout);
+  }
+}
+
+/** Wait for capture-visible fonts and images without adding refresh delays. */
+export async function waitForCaptureAssets(
+  captureRoot: HTMLElement,
+  decodedImages: WeakSet<HTMLImageElement> = new WeakSet(),
+): Promise<void> {
+  const fonts = captureRoot.ownerDocument.fonts;
+  if (fonts) await fonts.ready;
+
+  const pendingImages = Array.from(captureRoot.querySelectorAll('img')).filter(
+    (image) => !decodedImages.has(image),
+  );
+  await Promise.all(
+    pendingImages.map(async (image) => {
+      await waitForImageDecode(image);
+      decodedImages.add(image);
+    }),
+  );
 }
 
 /**
@@ -143,6 +208,106 @@ function shouldIgnoreCaptureSibling(element: Element, captureRoot: HTMLElement):
 
 function finiteMediaTime(value: number): string {
   return Number.isFinite(value) ? value.toFixed(6) : 'unknown';
+}
+
+export interface CoverSourceRect {
+  sx: number;
+  sy: number;
+  sw: number;
+  sh: number;
+}
+
+/** Source rectangle that implements CSS `object-fit: cover` for canvas drawImage. */
+export function coverSourceRect(
+  sourceWidth: number,
+  sourceHeight: number,
+  destinationWidth: number,
+  destinationHeight: number,
+): CoverSourceRect {
+  const sourceRatio = sourceWidth / sourceHeight;
+  const destinationRatio = destinationWidth / destinationHeight;
+  if (sourceRatio > destinationRatio) {
+    const sw = sourceHeight * destinationRatio;
+    return { sx: (sourceWidth - sw) / 2, sy: 0, sw, sh: sourceHeight };
+  }
+  const sh = sourceWidth / destinationRatio;
+  return { sx: 0, sy: (sourceHeight - sh) / 2, sw: sourceWidth, sh };
+}
+
+/**
+ * html2canvas replaces `<video>` with a bare `<canvas>` before rendering. Its
+ * replacement does not retain the video's class or inline/computed styles and
+ * draws the source stretched to the element box. Re-associate each scheduled
+ * video clone with its original, restore capture-critical presentation, and
+ * redraw the current frame with CSS `object-fit: cover` semantics.
+ */
+export function prepareScheduledVideoClones(
+  originalRoot: HTMLElement,
+  clonedRoot: HTMLElement,
+): void {
+  const videos = Array.from(
+    originalRoot.querySelectorAll<HTMLVideoElement>('.doc-player__media-clips video[data-clip-id]'),
+  );
+  const canvases = Array.from(
+    clonedRoot.querySelectorAll<HTMLCanvasElement>('.doc-player__media-clips canvas'),
+  );
+
+  videos.forEach((video, index) => {
+    const canvas = canvases[index];
+    if (!canvas) return;
+
+    canvas.className = video.className;
+    canvas.style.cssText = video.style.cssText;
+    for (const attribute of Array.from(video.attributes)) {
+      if (attribute.name.startsWith('data-')) {
+        canvas.setAttribute(attribute.name, attribute.value);
+      }
+    }
+    canvas.dataset.videoCaptureClone = 'true';
+
+    const destinationWidth = Math.round(video.clientWidth || video.offsetWidth);
+    const destinationHeight = Math.round(video.clientHeight || video.offsetHeight);
+    if (
+      video.videoWidth <= 0 ||
+      video.videoHeight <= 0 ||
+      destinationWidth <= 0 ||
+      destinationHeight <= 0
+    ) {
+      return;
+    }
+
+    try {
+      const crop = coverSourceRect(
+        video.videoWidth,
+        video.videoHeight,
+        destinationWidth,
+        destinationHeight,
+      );
+      const stagingCanvas = canvas.ownerDocument.createElement('canvas');
+      stagingCanvas.width = destinationWidth;
+      stagingCanvas.height = destinationHeight;
+      const stagingContext = stagingCanvas.getContext('2d');
+      const context = canvas.getContext('2d');
+      if (!stagingContext || !context) return;
+      stagingContext.drawImage(
+        video,
+        crop.sx,
+        crop.sy,
+        crop.sw,
+        crop.sh,
+        0,
+        0,
+        destinationWidth,
+        destinationHeight,
+      );
+      canvas.width = destinationWidth;
+      canvas.height = destinationHeight;
+      context.drawImage(stagingCanvas, 0, 0);
+    } catch {
+      // Keep html2canvas's original clone if this browser cannot redraw the
+      // current video frame (for example, a not-yet-decodable media source).
+    }
+  });
 }
 
 /**
@@ -221,12 +386,13 @@ export function useFrameCapture(): FrameCaptureHandle {
   const captureCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const lastVisualStateKeyRef = useRef<string | null>(null);
   const hasCapturedFrameRef = useRef(false);
+  const decodedImagesRef = useRef(new WeakSet<HTMLImageElement>());
   const dimensionsRef = useRef<{ width: number; height: number }>({ width: 1920, height: 1080 });
 
   const init = useCallback(
     async (
       doc: Doc,
-      renderOptions: Omit<RenderHtmlOptions, 'playerScript'>,
+      renderOptions: FrameCaptureRenderOptions,
       captionMode?: CaptionMode,
     ): Promise<number> => {
       // Clean up any existing container.
@@ -249,6 +415,7 @@ export function useFrameCapture(): FrameCaptureHandle {
         captureCanvasRef.current = null;
         lastVisualStateKeyRef.current = null;
         hasCapturedFrameRef.current = false;
+        decodedImagesRef.current = new WeakSet<HTMLImageElement>();
         await new Promise<void>((resolve) => {
           setTimeout(() => {
             if (oldRoot) oldRoot.unmount();
@@ -281,6 +448,7 @@ export function useFrameCapture(): FrameCaptureHandle {
       captureCanvasRef.current = captureCanvas;
       lastVisualStateKeyRef.current = null;
       hasCapturedFrameRef.current = false;
+      decodedImagesRef.current = new WeakSet<HTMLImageElement>();
 
       // Create a hidden container
       const container = document.createElement('div');
@@ -322,6 +490,12 @@ export function useFrameCapture(): FrameCaptureHandle {
         showControls: false,
         autoPlay: false,
         forceViewport: { width, height, name: 'export' },
+        theme: renderOptions.theme,
+        videoPresentation: renderOptions.videoPresentation,
+        pipSize: renderOptions.pipSize,
+        pipShape: renderOptions.pipShape,
+        pipPosition: renderOptions.pipPosition,
+        showCoverSlide: renderOptions.showCoverSlide,
         captionsEnabled,
         captionStyle,
         onRenderAPIReady: (api: SquisqRenderAPI | null) => {
@@ -358,14 +532,34 @@ export function useFrameCapture(): FrameCaptureHandle {
           );
         }, 15000);
 
-        void renderAPIReady.then((api) => {
-          clearTimeout(timeout);
-          resolve(api.getDuration());
+        void renderAPIReady.then(async (api) => {
+          try {
+            const captureRoot = container.querySelector('#squisq-capture-root');
+            if (!(captureRoot instanceof HTMLElement)) {
+              throw new Error('Capture root element not found after player initialization.');
+            }
+            await waitForCaptureAssets(captureRoot, decodedImagesRef.current);
+            clearTimeout(timeout);
+            resolve(api.getDuration());
+          } catch (assetError) {
+            clearTimeout(timeout);
+            reject(assetError);
+          }
         });
       });
     },
     [],
   );
+
+  const setCoverVisible = useCallback(async (visible: boolean): Promise<void> => {
+    const api = renderAPIRef.current;
+    if (!api) throw new Error('Frame capture not initialized â€” call init() first');
+    if (visible) await api.showCover();
+    else await api.hideCover();
+    // Cover visibility is outside the document clock, so invalidate the
+    // repeated-frame cache even when the next capture seeks to the same time.
+    lastVisualStateKeyRef.current = null;
+  }, []);
 
   const captureCanvasFrame = useCallback(
     async (time: number, options: FrameCaptureOptions = {}): Promise<HTMLCanvasElement> => {
@@ -381,14 +575,18 @@ export function useFrameCapture(): FrameCaptureHandle {
       // Seek the player to the target time
       await api.seekTo(time);
 
-      // Wait for the DOM to update after seek. Keep a task-based fallback so a
-      // backgrounded browser/Electron renderer cannot deadlock the export.
-      await waitForVisualUpdate(2);
+      const renderedTime = api.getRenderedTime();
+      if (Math.abs(renderedTime - time) > RENDER_TIME_EPSILON_SECONDS) {
+        throw new Error(
+          `Player committed ${renderedTime.toFixed(6)}s while capture requested ${time.toFixed(6)}s.`,
+        );
+      }
 
       const root = container.querySelector('#squisq-capture-root') as HTMLElement;
       if (!root) {
         throw new Error('Capture root element not found');
       }
+      await waitForCaptureAssets(root, decodedImagesRef.current);
 
       const visualStateKey = options.reuseIfUnchanged ? getFrameVisualStateKey(root, time) : null;
       if (
@@ -418,6 +616,9 @@ export function useFrameCapture(): FrameCaptureHandle {
         allowTaint: true,
         backgroundColor: '#000000',
         logging: false,
+        onclone: (_clonedDocument, clonedRoot) => {
+          prepareScheduledVideoClones(root, clonedRoot);
+        },
         // html2canvas starts cloning at documentElement. Do not clone the rest
         // of the editor/site UI on every frame; only the capture root, its
         // ancestors, descendants, and document styles can affect this render.
@@ -459,13 +660,14 @@ export function useFrameCapture(): FrameCaptureHandle {
     }
     lastVisualStateKeyRef.current = null;
     hasCapturedFrameRef.current = false;
+    decodedImagesRef.current = new WeakSet<HTMLImageElement>();
     renderAPIRef.current = null;
   }, []);
 
   // Return a stable object to prevent useEffect cleanup loops
   // in consumers that depend on the handle reference.
   return useMemo(
-    () => ({ init, captureFrame, captureCanvasFrame, destroy }),
-    [init, captureFrame, captureCanvasFrame, destroy],
+    () => ({ init, setCoverVisible, captureFrame, captureCanvasFrame, destroy }),
+    [init, setCoverVisible, captureFrame, captureCanvasFrame, destroy],
   );
 }

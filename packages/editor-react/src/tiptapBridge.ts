@@ -1219,6 +1219,12 @@ function serializeMediaTag(tag: 'video' | 'audio', attrs: string): string {
     tag === 'video' ? /\bdata-squisq-video-placement="([^"]*)"/i.exec(attrs)?.[1] : undefined;
   const lockToBlock =
     tag === 'video' ? /\bdata-squisq-video-lock-to-block="([^"]*)"/i.exec(attrs)?.[1] : undefined;
+  const pipSize =
+    tag === 'video' ? /\bdata-squisq-video-pip-size="([^"]*)"/i.exec(attrs)?.[1] : undefined;
+  const pipShape =
+    tag === 'video' ? /\bdata-squisq-video-pip-shape="([^"]*)"/i.exec(attrs)?.[1] : undefined;
+  const pipPosition =
+    tag === 'video' ? /\bdata-squisq-video-pip-position="([^"]*)"/i.exec(attrs)?.[1] : undefined;
   const startAt =
     tag === 'video' ? /\bdata-squisq-video-start-at="([^"]*)"/i.exec(attrs)?.[1] : undefined;
   const clipStart =
@@ -1234,6 +1240,20 @@ function serializeMediaTag(tag: 'video' | 'audio', attrs: string): string {
     parts.push(` data-squisq-video-placement="${placement}"`);
   }
   if (lockToBlock === 'false') parts.push(' data-squisq-video-lock-to-block="false"');
+  if (pipSize === 'small' || pipSize === 'large') {
+    parts.push(` data-squisq-video-pip-size="${pipSize}"`);
+  }
+  if (pipShape === 'square' || pipShape === 'wide') {
+    parts.push(` data-squisq-video-pip-shape="${pipShape}"`);
+  }
+  if (
+    pipPosition === 'top-left' ||
+    pipPosition === 'top-right' ||
+    pipPosition === 'bottom-left' ||
+    pipPosition === 'bottom-right'
+  ) {
+    parts.push(` data-squisq-video-pip-position="${pipPosition}"`);
+  }
   if (startAt != null) parts.push(` data-squisq-video-start-at="${startAt}"`);
   if (clipStart != null) parts.push(` data-squisq-video-clip-start="${clipStart}"`);
   if (clipEnd != null) parts.push(` data-squisq-video-clip-end="${clipEnd}"`);

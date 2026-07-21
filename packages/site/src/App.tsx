@@ -43,7 +43,9 @@ const SAMPLE_KEYS = [
 ];
 
 type DemoColorMode = 'auto' | EditorColorScheme;
-type DemoWriteCanvasSettings = Required<WriteCanvasSettings>;
+// The demo only exercises the numeric Write-canvas levers; the optional
+// headerFont / bodyFont overrides are left to hosts (e.g. DocBlocks).
+type DemoWriteCanvasSettings = Required<Pick<WriteCanvasSettings, 'textSize' | 'lineSpacing'>>;
 
 const DEFAULT_WRITE_CANVAS_SETTINGS: DemoWriteCanvasSettings = {
   textSize: 16,

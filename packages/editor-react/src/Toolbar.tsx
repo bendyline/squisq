@@ -2274,7 +2274,7 @@ export function Toolbar({
           <Icon icon="fa-solid fa-shapes" />
         </button>
       )}
-      {showDocumentChrome && <TransformMenu />}
+      {showDocumentChrome && activeView === 'raw' && <TransformMenu />}
       {showDocumentChrome && <ViewMenuPanel />}
       {showDocumentChrome && (
         <button

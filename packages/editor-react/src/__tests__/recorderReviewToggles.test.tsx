@@ -111,6 +111,7 @@ describe('RecorderModal — unsaved take is not silently destroyed', () => {
 
   afterEach(() => {
     cleanup();
+    vi.useRealTimers();
     vi.unstubAllGlobals();
     vi.restoreAllMocks();
   });
@@ -151,6 +152,35 @@ describe('RecorderModal — unsaved take is not silently destroyed', () => {
         'Save or discard this recording before changing sources',
       );
     }
+  });
+
+  it('shows elapsed and total time while reviewing a recorded video', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-07-21T12:00:00Z'));
+    render(
+      <RecorderModal initialMode="screen" mediaProvider={mediaProvider} onClose={vi.fn()} />,
+    );
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Start preview' }));
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Record' }));
+    await act(async () => {
+      vi.advanceTimersByTime(56_000);
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Stop' }));
+    });
+
+    const timer = screen.getByRole('timer');
+    expect(timer.textContent).toBe('0:00 / 0:56');
+    expect(timer.getAttribute('aria-label')).toBe('Playback time: 0:00 of 0:56');
+
+    const playback = document.querySelector('video[src="blob:take"]') as HTMLVideoElement;
+    Object.defineProperty(playback, 'currentTime', { configurable: true, value: 12 });
+    fireEvent.timeUpdate(playback);
+
+    expect(timer.textContent).toBe('0:12 / 0:56');
   });
 
   it('keeps the recorded take when a source toggle is clicked in review', async () => {

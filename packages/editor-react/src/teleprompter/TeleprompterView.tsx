@@ -135,6 +135,30 @@ export function TeleprompterView(props: TeleprompterViewProps) {
     if (presentationTarget) ensureTeleprompterStyles(presentationTarget.ownerDocument);
   }, [presentationTarget]);
 
+  // Narrate shortcuts belong to the active mode, not to DOM focus. Listen on
+  // every document that can host the surface so arrows keep working after the
+  // user touches ordinary toolbar/transport buttons or a floating window.
+  useEffect(() => {
+    if (!controller.script) return;
+    const documents = new Set<Document>();
+    const ownerDocument = rootRef.current?.ownerDocument;
+    if (ownerDocument) documents.add(ownerDocument);
+    if (float.portalTarget) documents.add(float.portalTarget.ownerDocument);
+    if (presentationTarget) documents.add(presentationTarget.ownerDocument);
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      controllerRef.current.handleKeyDown(event);
+    };
+    for (const targetDocument of documents) {
+      targetDocument.addEventListener('keydown', handleKeyDown);
+    }
+    return () => {
+      for (const targetDocument of documents) {
+        targetDocument.removeEventListener('keydown', handleKeyDown);
+      }
+    };
+  }, [controller.script, float.portalTarget, presentationTarget]);
+
   // ── Video-PiP pump: draw on analysis ticks, never rAF ──────────────
   const canvasFrameRef = useRef<Omit<CanvasPrompterFrame, 'wordPos'> | null>(null);
   canvasFrameRef.current = controller.script
@@ -240,6 +264,7 @@ export function TeleprompterView(props: TeleprompterViewProps) {
       recordingIndicator: recorder.state === 'recording',
       theme,
       onSeekToken: controller.seekToToken,
+      onNudge: controller.nudge,
     }),
     [
       controller.wordPos,
@@ -248,6 +273,7 @@ export function TeleprompterView(props: TeleprompterViewProps) {
       controller.prefs.lineGuide,
       controller.countdownRemaining,
       controller.seekToToken,
+      controller.nudge,
       recorder.state,
       theme,
     ],
@@ -315,13 +341,7 @@ export function TeleprompterView(props: TeleprompterViewProps) {
   ) : null;
 
   return (
-    <div
-      ref={rootRef}
-      className="squisq-teleprompter-root"
-      data-testid="teleprompter-view"
-      tabIndex={0}
-      onKeyDown={controller.handleKeyDown}
-    >
+    <div ref={rootRef} className="squisq-teleprompter-root" data-testid="teleprompter-view">
       <div className="squisq-teleprompter-stage">
         {portalOpen ? (
           <div className="squisq-teleprompter-float-note">

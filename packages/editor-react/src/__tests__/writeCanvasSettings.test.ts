@@ -12,4 +12,25 @@ describe('writeCanvasSettingsStyle', () => {
   it('ignores invalid host values instead of emitting broken CSS', () => {
     expect(writeCanvasSettingsStyle({ textSize: 0, lineSpacing: Number.NaN })).toEqual({});
   });
+
+  it('maps header and body font families to Write canvas CSS variables', () => {
+    expect(
+      writeCanvasSettingsStyle({
+        headerFont: '"Playfair Display", Georgia, serif',
+        bodyFont: '"PT Serif", Georgia, serif',
+      }),
+    ).toEqual({
+      '--squisq-write-header-font': '"Playfair Display", Georgia, serif',
+      '--squisq-write-body-font': '"PT Serif", Georgia, serif',
+    });
+  });
+
+  it('trims font families and drops empty or unsafe values', () => {
+    expect(writeCanvasSettingsStyle({ headerFont: '  Georgia, serif  ' })).toEqual({
+      '--squisq-write-header-font': 'Georgia, serif',
+    });
+    expect(
+      writeCanvasSettingsStyle({ headerFont: '   ', bodyFont: 'serif; color: red }' }),
+    ).toEqual({});
+  });
 });

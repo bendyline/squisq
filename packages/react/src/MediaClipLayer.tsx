@@ -14,11 +14,11 @@
  * may carry its audio across block boundaries.
  */
 
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, type CSSProperties } from 'react';
 import type { ScheduledClip } from '@bendyline/squisq/schemas';
 import { useMediaUrl } from './hooks/MediaContext';
 import { useMediaSchedule } from './hooks/useMediaSchedule';
-import type { PipPosition, PipSize, VideoPresentation } from './types';
+import type { PipPosition, PipShape, PipSize, VideoPresentation } from './types';
 
 /** Re-seek an element only when it drifts this far from its target (seconds). */
 const DRIFT = 0.25;
@@ -35,10 +35,88 @@ export interface MediaClipLayerProps {
   presentation?: VideoPresentation;
   /** Size of picture-in-picture video (small or large). */
   pipSize?: PipSize;
+  /** Shape of picture-in-picture video (square or 16:9 wide). */
+  pipShape?: PipShape;
   /** Corner occupied by picture-in-picture video. */
   pipPosition?: PipPosition;
+  /** Orientation of the rendered player viewport. */
+  pipOrientation?: 'landscape' | 'portrait';
+  /** Resolved theme frame applied directly to PIP video during raster capture. */
+  pipFrameStyle?: Pick<CSSProperties, 'border' | 'borderRadius' | 'boxShadow'>;
   /** Honor each scheduled video's authored placement override. Default true. */
   honorClipPresentation?: boolean;
+}
+
+function mediaGroupStyle(presentation: VideoPresentation): CSSProperties {
+  return {
+    position: 'absolute',
+    inset: 0,
+    zIndex: presentation === 'background' ? 0 : 10,
+    pointerEvents: 'none',
+  };
+}
+
+function pipCornerStyle(position: PipPosition): CSSProperties {
+  switch (position) {
+    case 'top-left':
+      return { top: '4%', left: '3%' };
+    case 'top-right':
+      return { top: '4%', right: '3%' };
+    case 'bottom-left':
+      return { bottom: '6%', left: '3%' };
+    case 'bottom-right':
+      return { right: '3%', bottom: '6%' };
+  }
+}
+
+function pipWidth(size: PipSize, orientation: 'landscape' | 'portrait'): string {
+  if (orientation === 'portrait') return size === 'large' ? '23%' : '15%';
+  return size === 'large' ? '15%' : '9%';
+}
+
+interface MediaVideoStyleOptions {
+  presentation: VideoPresentation;
+  pipSize: PipSize;
+  pipShape: PipShape;
+  pipPosition: PipPosition;
+  pipOrientation: 'landscape' | 'portrait';
+  pipFrameStyle?: Pick<CSSProperties, 'border' | 'borderRadius' | 'boxShadow'>;
+  active: boolean;
+}
+
+/**
+ * Critical scheduled-video compositor styles, kept inline so html2canvas's
+ * cloned export tree does not depend on stylesheet selector matching.
+ */
+function mediaVideoStyle({
+  presentation,
+  pipSize,
+  pipShape,
+  pipPosition,
+  pipOrientation,
+  pipFrameStyle,
+  active,
+}: MediaVideoStyleOptions): CSSProperties {
+  const base: CSSProperties = {
+    position: 'absolute',
+    display: 'block',
+    objectFit: 'cover',
+    opacity: active ? 1 : 0,
+    visibility: active ? 'visible' : 'hidden',
+    pointerEvents: 'none',
+  };
+
+  if (presentation !== 'picture-in-picture') {
+    return { ...base, inset: 0, width: '100%', height: '100%' };
+  }
+
+  return {
+    ...base,
+    width: pipWidth(pipSize, pipOrientation),
+    aspectRatio: pipShape === 'wide' ? '16 / 9' : '1',
+    ...pipFrameStyle,
+    ...pipCornerStyle(pipPosition),
+  };
 }
 
 export function MediaClipLayer({
@@ -50,13 +128,25 @@ export function MediaClipLayer({
   muted = false,
   presentation = 'background',
   pipSize = 'small',
+  pipShape = 'square',
   pipPosition = 'bottom-right',
+  pipOrientation = 'landscape',
+  pipFrameStyle,
   honorClipPresentation = true,
 }: MediaClipLayerProps) {
   const { renderClips, activeIds } = useMediaSchedule(schedule, currentTime);
   if (renderClips.length === 0) return null;
 
-  const groups = new Map<VideoPresentation, ScheduledClip[]>();
+  const groups = new Map<
+    string,
+    {
+      presentation: VideoPresentation;
+      pipSize: PipSize;
+      pipShape: PipShape;
+      pipPosition: PipPosition;
+      clips: ScheduledClip[];
+    }
+  >();
   for (const clip of renderClips) {
     const clipPresentation =
       honorClipPresentation && clip.kind === 'video'
@@ -66,23 +156,35 @@ export function MediaClipLayer({
             ? 'full-frame'
             : presentation
         : presentation;
-    const group = groups.get(clipPresentation) ?? [];
-    group.push(clip);
-    groups.set(clipPresentation, group);
+    const clipPipSize = clip.pipSize ?? pipSize;
+    const clipPipShape = clip.pipShape ?? pipShape;
+    const clipPipPosition = clip.pipPosition ?? pipPosition;
+    const key = `${clipPresentation}:${clipPipSize}:${clipPipShape}:${clipPipPosition}`;
+    const group = groups.get(key) ?? {
+      presentation: clipPresentation,
+      pipSize: clipPipSize,
+      pipShape: clipPipShape,
+      pipPosition: clipPipPosition,
+      clips: [],
+    };
+    group.clips.push(clip);
+    groups.set(key, group);
   }
 
   return (
     <>
-      {[...groups].map(([groupPresentation, clips]) => (
+      {[...groups].map(([key, group]) => (
         <div
-          key={groupPresentation}
-          className={`doc-player__media-clips doc-player__media-clips--${groupPresentation}`}
-          data-presentation={groupPresentation}
-          data-pip-size={pipSize}
-          data-pip-position={pipPosition}
+          key={key}
+          className={`doc-player__media-clips doc-player__media-clips--${group.presentation}`}
+          data-presentation={group.presentation}
+          data-pip-size={group.pipSize}
+          data-pip-shape={group.pipShape}
+          data-pip-position={group.pipPosition}
           aria-hidden
+          style={mediaGroupStyle(group.presentation)}
         >
-          {clips.map((clip) => (
+          {group.clips.map((clip) => (
             <MediaClipElement
               key={clip.id}
               clip={clip}
@@ -92,6 +194,12 @@ export function MediaClipLayer({
               basePath={basePath}
               renderMode={renderMode}
               muted={muted}
+              presentation={group.presentation}
+              pipSize={group.pipSize}
+              pipShape={group.pipShape}
+              pipPosition={group.pipPosition}
+              pipOrientation={pipOrientation}
+              pipFrameStyle={pipFrameStyle}
             />
           ))}
         </div>
@@ -108,6 +216,12 @@ interface MediaClipElementProps {
   basePath: string;
   renderMode: boolean;
   muted: boolean;
+  presentation: VideoPresentation;
+  pipSize: PipSize;
+  pipShape: PipShape;
+  pipPosition: PipPosition;
+  pipOrientation: 'landscape' | 'portrait';
+  pipFrameStyle?: Pick<CSSProperties, 'border' | 'borderRadius' | 'boxShadow'>;
 }
 
 function MediaClipElement({
@@ -118,6 +232,12 @@ function MediaClipElement({
   basePath,
   renderMode,
   muted,
+  presentation,
+  pipSize,
+  pipShape,
+  pipPosition,
+  pipOrientation,
+  pipFrameStyle,
 }: MediaClipElementProps) {
   const ref = useRef<HTMLMediaElement | null>(null);
   const src = useMediaUrl(clip.src, basePath);
@@ -170,7 +290,15 @@ function MediaClipElement({
         data-video-placement={clip.placement ?? 'default'}
         muted={renderMode || muted}
         playsInline
-        style={{ pointerEvents: 'none' }}
+        style={mediaVideoStyle({
+          presentation,
+          pipSize,
+          pipShape,
+          pipPosition,
+          pipOrientation,
+          pipFrameStyle,
+          active,
+        })}
       />
     );
   }

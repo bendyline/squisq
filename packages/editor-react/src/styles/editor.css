@@ -366,7 +366,12 @@
 }
 
 /* ─── Block-properties palette popover (portaled to <body>) ──────────── */
-:is(.squisq-block-props-popover, .squisq-transition-picker, .squisq-transition-flyout) {
+:is(
+  .squisq-block-props-popover,
+  .squisq-transition-picker,
+  .squisq-transition-flyout,
+  .squisq-timeline-item-menu
+) {
   --squisq-block-props-surface: #ffffff;
   --squisq-block-props-surface-hover: #f3f4f6;
   --squisq-block-props-input: #ffffff;
@@ -380,7 +385,8 @@
 :is(
   .squisq-block-props-popover,
   .squisq-transition-picker,
-  .squisq-transition-flyout
+  .squisq-transition-flyout,
+  .squisq-timeline-item-menu
 )[data-theme='dark'] {
   --squisq-block-props-surface: #1f2937;
   --squisq-block-props-surface-hover: #374151;
@@ -522,9 +528,11 @@
   color: var(--squisq-theme-text, #1f2937);
   background: var(--squisq-theme-bg, #fff);
   box-shadow: 0 2px 14px rgba(0, 0, 0, 0.12);
-  /* Body font follows the active squisq theme when one is selected; the
-     fallback inherits from the host page when it isn't. */
-  font-family: var(--squisq-theme-body-font, inherit);
+  /* Body font follows the active squisq theme when one is selected; otherwise
+     the host-provided Write-canvas font (--squisq-write-body-font) applies, and
+     finally the host page is inherited. The theme var is first so a theme
+     override always wins over the Write-canvas font scheme. */
+  font-family: var(--squisq-theme-body-font, var(--squisq-write-body-font, inherit));
   font-size: var(--squisq-write-text-size, inherit);
   /* Explicit caret color so the blinking insertion point stays visible
      even when an ancestor (e.g. a DocBlocks shell with the OS in dark
@@ -667,9 +675,17 @@
 .squisq-wysiwyg-editor h4,
 .squisq-wysiwyg-editor h5,
 .squisq-wysiwyg-editor h6 {
-  /* Headings pick up the theme's titleFont; fall through to body when
-     no theme is active. */
-  font-family: var(--squisq-theme-title-font, var(--squisq-theme-body-font, inherit));
+  /* Headings pick up the theme's titleFont; otherwise the host-provided
+     Write-canvas heading font, then the Write-canvas body font, then body /
+     host inheritance. The theme var is first so a theme override always wins
+     over the Write-canvas font scheme. */
+  font-family: var(
+    --squisq-theme-title-font,
+    var(
+      --squisq-write-header-font,
+      var(--squisq-theme-body-font, var(--squisq-write-body-font, inherit))
+    )
+  );
 }
 
 /* Headings start blocks, so they get a clear break from the previous block and
@@ -2432,6 +2448,40 @@
   flex: 1;
 }
 
+.squisq-media-bin-download {
+  width: 24px;
+  height: 24px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  background: transparent;
+  color: #4b5563;
+  cursor: pointer;
+  font: inherit;
+  font-size: 16px;
+  line-height: 1;
+}
+
+.squisq-media-bin-download:hover {
+  border-color: #d1d5db;
+  background: #e5e7eb;
+}
+
+.squisq-media-bin-download:focus-visible {
+  border-color: #93c5fd;
+  outline: 2px solid #93c5fd;
+  outline-offset: 1px;
+}
+
+.squisq-media-bin-download:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
 .squisq-media-bin-name {
   overflow: hidden;
   text-overflow: ellipsis;
@@ -2589,6 +2639,17 @@
 .squisq-media-bin--dark .squisq-media-bin-size,
 .squisq-editor-shell[data-theme='dark'] .squisq-media-bin .squisq-media-bin-size {
   color: #6b7280;
+}
+
+.squisq-media-bin--dark .squisq-media-bin-download,
+.squisq-editor-shell[data-theme='dark'] .squisq-media-bin .squisq-media-bin-download {
+  color: #d1d5db;
+}
+
+.squisq-media-bin--dark .squisq-media-bin-download:hover,
+.squisq-editor-shell[data-theme='dark'] .squisq-media-bin .squisq-media-bin-download:hover {
+  border-color: #4b5563;
+  background: #374151;
 }
 
 .squisq-media-bin--dark .squisq-media-bin-unused-badge,
@@ -4217,6 +4278,13 @@
   font-weight: 600;
 }
 
+/* Timeline composition is another Video authoring surface, so it reuses the
+   responsive Video-mode settings row. The panel header already supplies its
+   own spacing before the controls. */
+.squisq-timeline-composition-panel .squisq-preview-controls {
+  padding-left: 0;
+}
+
 .squisq-timeline-video-label {
   min-width: 0;
   overflow: hidden;
@@ -4497,6 +4565,60 @@
   padding: 0 4px;
 }
 
+.squisq-timeline-item-menu-trigger {
+  position: absolute;
+  top: 50%;
+  right: 8px;
+  z-index: 4;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  translate: 0 -50%;
+  border: 1px solid rgba(107, 114, 128, 0.45);
+  border-radius: 5px;
+  background: rgba(255, 255, 255, 0.92);
+  color: #374151;
+  font: 700 15px/1 var(--squisq-ux-font, system-ui, sans-serif);
+  cursor: pointer;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.squisq-timeline-block:hover .squisq-timeline-item-menu-trigger,
+.squisq-timeline-block--active .squisq-timeline-item-menu-trigger,
+.squisq-timeline-clip:hover .squisq-timeline-item-menu-trigger,
+.squisq-timeline-item-menu-trigger:focus-visible,
+.squisq-timeline-item-menu-trigger[aria-expanded='true'] {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.squisq-timeline-item-menu-trigger:hover,
+.squisq-timeline-item-menu-trigger:focus-visible {
+  border-color: var(--squisq-outline-accent, #6c5ce7);
+  outline: none;
+}
+
+.squisq-timeline-item-menu-trigger--clip {
+  right: 6px;
+  width: 18px;
+  height: 18px;
+  border-color: rgba(255, 255, 255, 0.55);
+  background: rgba(15, 23, 42, 0.62);
+  color: #ffffff;
+  font-size: 13px;
+}
+
+@media (hover: none) {
+  .squisq-timeline-item-menu-trigger {
+    opacity: 1;
+    pointer-events: auto;
+  }
+}
+
 .squisq-timeline-clip {
   position: absolute;
   top: 0;
@@ -4607,6 +4729,12 @@
   background: rgba(17, 24, 39, 0.82);
 }
 
+.squisq-editor-shell[data-theme='dark'] .squisq-timeline-block .squisq-timeline-item-menu-trigger {
+  border-color: #4b5563;
+  background: rgba(17, 24, 39, 0.92);
+  color: #e5e7eb;
+}
+
 .squisq-editor-shell[data-theme='dark'] .squisq-timeline-zoom-button {
   border-color: #374151;
   background: #111827;
@@ -4632,6 +4760,172 @@
 
 .squisq-editor-shell[data-theme='dark'] .squisq-timeline-tick-label {
   color: #9ca3af;
+}
+
+/* Portaled timeline item menu opened by the ellipsis buttons on block/video
+   bars. It shares the block-properties palette's controls and color tokens. */
+.squisq-timeline-item-menu {
+  box-sizing: border-box;
+  width: 320px;
+  max-width: calc(100vw - 16px);
+  overflow: auto;
+  color: var(--squisq-block-props-text);
+  background: var(--squisq-block-props-surface);
+  border: 1px solid var(--squisq-block-props-divider);
+  border-radius: 10px;
+  box-shadow:
+    0 12px 32px rgba(0, 0, 0, 0.18),
+    0 3px 8px rgba(0, 0, 0, 0.1);
+  font-family: var(--squisq-ux-font, system-ui, sans-serif);
+  user-select: none;
+}
+
+.squisq-timeline-item-menu-header {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+  padding: 9px 12px;
+  border-bottom: 1px solid var(--squisq-block-props-divider);
+}
+
+.squisq-timeline-item-menu-kind {
+  flex: 0 0 auto;
+  color: var(--squisq-block-props-muted);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.squisq-timeline-item-menu-title {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--squisq-block-props-text);
+  font-size: 12px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.squisq-timeline-item-menu-body {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 11px 12px 12px;
+}
+
+.squisq-timeline-item-menu-row,
+.squisq-timeline-item-menu-field,
+.squisq-timeline-item-menu-check {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin: 0;
+}
+
+.squisq-timeline-item-menu-check {
+  justify-content: flex-start;
+  color: var(--squisq-block-props-text);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.squisq-timeline-item-menu-check input {
+  accent-color: var(--squisq-block-props-accent, #6366f1);
+}
+
+.squisq-timeline-item-menu-hint {
+  margin: -5px 0 0 24px;
+  color: var(--squisq-block-props-quiet);
+  font-size: 10px;
+  line-height: 1.35;
+}
+
+.squisq-timeline-item-menu-label {
+  flex: 0 0 auto;
+  color: var(--squisq-block-props-muted);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.squisq-timeline-item-menu-number {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.squisq-timeline-item-menu-number input,
+.squisq-timeline-item-menu-field select {
+  box-sizing: border-box;
+  min-width: 0;
+  padding: 5px 7px;
+  color: var(--squisq-block-props-text);
+  background: var(--squisq-block-props-input);
+  border: 1px solid var(--squisq-block-props-border);
+  border-radius: 5px;
+  font: inherit;
+  font-size: 12px;
+  outline: none;
+}
+
+.squisq-timeline-item-menu-number input {
+  width: 78px;
+}
+
+.squisq-timeline-item-menu-field select {
+  max-width: 205px;
+}
+
+.squisq-timeline-item-menu-number input:focus,
+.squisq-timeline-item-menu-field select:focus {
+  border-color: var(--squisq-block-props-accent, #6366f1);
+}
+
+.squisq-timeline-item-menu-number input:disabled {
+  opacity: 0.55;
+}
+
+.squisq-timeline-item-menu-number > span {
+  color: var(--squisq-block-props-quiet);
+  font-size: 11px;
+}
+
+.squisq-timeline-item-menu-row .squisq-transition-picker-trigger-label {
+  display: none;
+}
+
+.squisq-timeline-item-menu-segments {
+  display: inline-flex;
+  overflow: hidden;
+  border: 1px solid var(--squisq-block-props-border);
+  border-radius: 6px;
+}
+
+.squisq-timeline-item-menu-segments button {
+  padding: 5px 8px;
+  color: var(--squisq-block-props-muted);
+  background: var(--squisq-block-props-surface);
+  border: 0;
+  border-right: 1px solid var(--squisq-block-props-border);
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.squisq-timeline-item-menu-segments button:last-child {
+  border-right: 0;
+}
+
+.squisq-timeline-item-menu-segments button:hover {
+  background: var(--squisq-block-props-surface-hover);
+}
+
+.squisq-timeline-item-menu-segments button[aria-pressed='true'] {
+  color: var(--squisq-block-props-accent, #4338ca);
+  background: color-mix(in oklch, var(--squisq-block-props-accent, #6366f1) 14%, transparent);
+  font-weight: 600;
 }
 
 /* All gutter chrome is parameterized through CSS custom properties so
@@ -6284,23 +6578,76 @@
 }
 
 .squisq-transform-menu-action {
+  box-sizing: border-box;
   display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 2px;
+  align-items: center;
+  gap: 8px;
   width: 100%;
   padding: 6px;
   font: inherit;
   text-align: left;
-  background: transparent;
-  border: none;
+  background: var(--squisq-input-bg, #fff);
+  border: 1px solid var(--squisq-border, #d1d5db);
   border-radius: 4px;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.08);
   color: inherit;
   cursor: pointer;
 }
 
 .squisq-transform-menu-action:hover:not(:disabled) {
   background: var(--squisq-row-hover, #f3f4f6);
+  border-color: var(--squisq-accent, #4f46e5);
+}
+
+.squisq-transform-menu-action:focus-visible {
+  border-color: var(--squisq-accent, #4f46e5);
+  outline: 2px solid var(--squisq-accent, #4f46e5);
+  outline-offset: 1px;
+}
+
+.squisq-transform-menu-action:active:not(:disabled) {
+  box-shadow: none;
+  transform: translateY(1px);
+}
+
+.squisq-transform-menu-action--current {
+  border-color: var(--squisq-accent, #4f46e5);
+  background: color-mix(in oklch, var(--squisq-accent, #4f46e5) 8%, var(--squisq-input-bg, #fff));
+}
+
+.squisq-transform-menu-action-icon {
+  flex: 0 0 auto;
+  width: 16px;
+  color: var(--squisq-accent, #4f46e5);
+  font-size: 12px;
+  text-align: center;
+}
+
+.squisq-transform-menu-action-copy {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+}
+
+.squisq-transform-menu-action-heading {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+
+.squisq-transform-menu-current-badge {
+  padding: 1px 5px;
+  color: var(--squisq-accent, #4f46e5);
+  border: 1px solid currentColor;
+  border-radius: 999px;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  line-height: 1.35;
+  white-space: nowrap;
 }
 
 .squisq-transform-menu-action:disabled {
@@ -6322,6 +6669,7 @@
   display: flex;
   align-items: center;
   gap: 4px;
+  margin-top: 2px;
   padding: 0 6px 6px;
 }
 
@@ -6382,7 +6730,7 @@
 }
 
 .squisq-editor-shell[data-theme='dark'] .squisq-transform-menu-action:hover:not(:disabled) {
-  background: #374151;
+  background: #4b5563;
 }
 
 .squisq-editor-shell[data-theme='dark'] .squisq-transform-menu-width,

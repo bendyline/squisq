@@ -26,6 +26,18 @@ import type { Block, Doc } from './Doc.js';
  */
 export type VideoPlacement = 'content' | 'picture-in-picture' | 'overlay';
 
+/** Player-level placement of scheduled video relative to slide content. */
+export type VideoPresentation = 'background' | 'full-frame' | 'picture-in-picture';
+
+/** Optional per-video override for picture-in-picture size. */
+export type VideoPipSize = 'small' | 'large';
+
+/** Optional per-video override for the picture-in-picture frame shape. */
+export type VideoPipShape = 'square' | 'wide';
+
+/** Optional per-video override for the picture-in-picture corner. */
+export type VideoPipPosition = 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right';
+
 /**
  * A timed piece of media attached to a block (or the document).
  */
@@ -37,6 +49,12 @@ export interface MediaClip {
   kind: 'audio' | 'video';
   /** Per-video placement. Omitted audio and legacy video use player defaults. */
   placement?: Exclude<VideoPlacement, 'content'>;
+  /** Per-video PIP size. Omitted clips use the document/player setting. */
+  pipSize?: VideoPipSize;
+  /** Per-video PIP shape. Omitted clips use the document/player setting. */
+  pipShape?: VideoPipShape;
+  /** Per-video PIP corner. Omitted clips use the document/player setting. */
+  pipPosition?: VideoPipPosition;
   /**
    * Whether a placed video is locked to its owning block's timeline span.
    * `true` clips start with and are capped by the block. `false` clips are
@@ -97,6 +115,12 @@ export interface ScheduledClip {
   kind: 'audio' | 'video';
   /** Per-video placement carried through to the player-level compositor. */
   placement?: Exclude<VideoPlacement, 'content'>;
+  /** Per-video PIP size carried through to the player-level compositor. */
+  pipSize?: VideoPipSize;
+  /** Per-video PIP shape carried through to the player-level compositor. */
+  pipShape?: VideoPipShape;
+  /** Per-video PIP corner carried through to the player-level compositor. */
+  pipPosition?: VideoPipPosition;
   /** Authored placed-video lock state, when applicable. */
   lockToBlock?: boolean;
   /** Absolute doc-timeline second the clip starts. */
@@ -211,6 +235,9 @@ export function resolveMediaSchedule(doc: Doc, opts?: MediaScheduleOptions): Sch
         src: clip.src,
         kind: clip.kind,
         ...(clip.placement ? { placement: clip.placement } : {}),
+        ...(clip.pipSize ? { pipSize: clip.pipSize } : {}),
+        ...(clip.pipShape ? { pipShape: clip.pipShape } : {}),
+        ...(clip.pipPosition ? { pipPosition: clip.pipPosition } : {}),
         ...(clip.lockToBlock != null ? { lockToBlock: clip.lockToBlock } : {}),
         absoluteStart: start,
         absoluteEnd: Math.max(start, end),
@@ -235,6 +262,9 @@ export function resolveMediaSchedule(doc: Doc, opts?: MediaScheduleOptions): Sch
       src: clip.src,
       kind: clip.kind,
       ...(clip.placement ? { placement: clip.placement } : {}),
+      ...(clip.pipSize ? { pipSize: clip.pipSize } : {}),
+      ...(clip.pipShape ? { pipShape: clip.pipShape } : {}),
+      ...(clip.pipPosition ? { pipPosition: clip.pipPosition } : {}),
       ...(clip.lockToBlock != null ? { lockToBlock: clip.lockToBlock } : {}),
       absoluteStart: start,
       absoluteEnd: Math.max(start, end),

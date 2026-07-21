@@ -1,6 +1,7 @@
 import { act, renderHook } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Doc } from '@bendyline/squisq/schemas';
+import { resolveTheme } from '@bendyline/squisq/schemas';
 
 const mocks = vi.hoisted(() => {
   const bitmap = { close: vi.fn() } as unknown as ImageBitmap;
@@ -9,6 +10,7 @@ const mocks = vi.hoisted(() => {
     frameInit: vi.fn(async () => 0.1),
     captureFrame: vi.fn(async () => bitmap),
     captureCanvasFrame: vi.fn(async () => ({}) as HTMLCanvasElement),
+    setCoverVisible: vi.fn(async () => {}),
     destroy: vi.fn(),
     supportsH264: vi.fn(async () => true),
     createWorkerEncoder: vi.fn(),
@@ -31,6 +33,7 @@ vi.mock('../hooks/useFrameCapture.js', () => {
     init: mocks.frameInit,
     captureFrame: mocks.captureFrame,
     captureCanvasFrame: mocks.captureCanvasFrame,
+    setCoverVisible: mocks.setCoverVisible,
     destroy: mocks.destroy,
   };
   return { useFrameCapture: () => frameCaptureHandle };
@@ -71,7 +74,13 @@ vi.mock('@bendyline/squisq-video', async () => {
   return { ...actual, computeAudioTimeline: mocks.computeAudioTimeline };
 });
 
-import { settleWithin, useVideoExport } from '../hooks/useVideoExport.js';
+import {
+  calculateRollingFramesPerSecond,
+  DEFAULT_VIDEO_COVER_PRE_ROLL_SECONDS,
+  resolveVideoExportCover,
+  settleWithin,
+  useVideoExport,
+} from '../hooks/useVideoExport.js';
 
 const doc: Doc = {
   articleId: 'gif-hook-test',
@@ -98,6 +107,7 @@ describe('useVideoExport GIF flow', () => {
     mocks.frameInit.mockReset().mockResolvedValue(0.1);
     mocks.captureFrame.mockReset().mockResolvedValue(mocks.bitmap);
     mocks.captureCanvasFrame.mockReset().mockResolvedValue({} as HTMLCanvasElement);
+    mocks.setCoverVisible.mockReset().mockResolvedValue(undefined);
     mocks.encodeFrame
       .mockReset()
       .mockImplementation(async (frame: ImageBitmap | HTMLCanvasElement) => {
@@ -119,6 +129,33 @@ describe('useVideoExport GIF flow', () => {
     createObjectUrl.mockRestore();
     revokeObjectUrl.mockRestore();
     vi.unstubAllGlobals();
+  });
+
+  it('calculates throughput over no more than the latest 30 frames', () => {
+    const boundaries = [0];
+    for (let index = 0; index < 10; index++) boundaries.push(boundaries.at(-1)! + 1_000);
+    for (let index = 0; index < 30; index++) boundaries.push(boundaries.at(-1)! + 100);
+
+    expect(calculateRollingFramesPerSecond(boundaries)).toBe(10);
+    expect(calculateRollingFramesPerSecond([0])).toBeNull();
+    expect(calculateRollingFramesPerSecond([100, 100])).toBeNull();
+  });
+
+  it('resolves the managed-cover flag and default pre-roll from the document', () => {
+    const coveredDoc: Doc = {
+      ...doc,
+      startBlock: { title: 'Managed cover' },
+    };
+    expect(resolveVideoExportCover(coveredDoc)).toEqual({
+      showCoverSlide: true,
+      coverPreRoll: DEFAULT_VIDEO_COVER_PRE_ROLL_SECONDS,
+    });
+    expect(
+      resolveVideoExportCover({
+        ...coveredDoc,
+        frontmatter: { 'squisq-cover-slide': false },
+      }),
+    ).toEqual({ showCoverSlide: false, coverPreRoll: 0 });
   });
 
   it('bounds a hung browser operation and disposes its late result', async () => {
@@ -173,20 +210,151 @@ describe('useVideoExport GIF flow', () => {
     unmount();
   });
 
+  it('captures an enabled managed cover before story frame zero', async () => {
+    const coveredDoc: Doc = {
+      ...doc,
+      startBlock: { title: 'Managed cover' },
+    };
+    const { result, unmount } = renderHook(() => useVideoExport());
+
+    await act(async () => {
+      await result.current.startExport(coveredDoc, {
+        outputFormat: 'gif',
+        coverPreRoll: 0.2,
+        ffmpegWasm: CORE,
+      });
+    });
+
+    expect(mocks.frameInit).toHaveBeenCalledWith(
+      coveredDoc,
+      expect.objectContaining({ showCoverSlide: true }),
+      'standard',
+    );
+    expect(mocks.setCoverVisible.mock.calls).toEqual([[true], [false]]);
+    expect(mocks.captureCanvasFrame).toHaveBeenNthCalledWith(1, 0, { reuseIfUnchanged: true });
+    expect(mocks.captureCanvasFrame).toHaveBeenNthCalledWith(2, 0, { reuseIfUnchanged: true });
+    expect(mocks.captureCanvasFrame).toHaveBeenNthCalledWith(3, 0, { reuseIfUnchanged: true });
+    expect(result.current.duration).toBe(0.3);
+    unmount();
+  });
+
+  it('shifts MP4 audio by the rendered cover-frame duration', async () => {
+    const coveredDoc: Doc = {
+      ...doc,
+      startBlock: { title: 'Managed cover' },
+    };
+    const { result, unmount } = renderHook(() => useVideoExport());
+
+    await act(async () => {
+      await result.current.startExport(coveredDoc, {
+        outputFormat: 'mp4',
+        fps: 10,
+        coverPreRoll: 0.2,
+      });
+    });
+
+    expect(mocks.computeAudioTimeline).toHaveBeenCalledWith(coveredDoc, 0.2);
+    expect(result.current.duration).toBe(0.3);
+    unmount();
+  });
+
+  it('suppresses cover frames when document frontmatter disables the cover', async () => {
+    const coveredDoc: Doc = {
+      ...doc,
+      startBlock: { title: 'Managed cover' },
+      frontmatter: { 'squisq-cover-slide': false },
+    };
+    const { result, unmount } = renderHook(() => useVideoExport());
+
+    await act(async () => {
+      await result.current.startExport(coveredDoc, {
+        outputFormat: 'gif',
+        coverPreRoll: 0.2,
+        ffmpegWasm: CORE,
+      });
+    });
+
+    expect(mocks.frameInit).toHaveBeenCalledWith(
+      coveredDoc,
+      expect.objectContaining({ showCoverSlide: false }),
+      'standard',
+    );
+    expect(mocks.setCoverVisible).not.toHaveBeenCalled();
+    expect(mocks.captureCanvasFrame).toHaveBeenCalledTimes(1);
+    expect(result.current.duration).toBe(0.1);
+    unmount();
+  });
+
+  it('samples the existing capture raster for previews without changing the export', async () => {
+    const preview = vi.fn();
+    const previewDoc: Doc = {
+      ...doc,
+      duration: 0.5,
+      blocks: [{ ...doc.blocks[0], duration: 0.5 }],
+    };
+    mocks.frameInit.mockResolvedValue(0.5);
+    const { result, unmount } = renderHook(() =>
+      useVideoExport({ onFramePreview: preview, previewEveryNFrames: 2 }),
+    );
+
+    await act(async () => {
+      await result.current.startExport(previewDoc, { outputFormat: 'gif', ffmpegWasm: CORE });
+    });
+
+    expect(preview.mock.calls.map(([frame]) => frame.frameIndex)).toEqual([0, 2, 4]);
+    expect(preview).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({ source: expect.any(Object), totalFrames: 5, time: 0.2 }),
+    );
+    expect(mocks.captureCanvasFrame).toHaveBeenCalledTimes(5);
+    expect(result.current.state).toBe('complete');
+    unmount();
+  });
+
+  it('does not fail the export when a preview observer throws', async () => {
+    const { result, unmount } = renderHook(() =>
+      useVideoExport({
+        onFramePreview: () => {
+          throw new Error('preview surface disappeared');
+        },
+      }),
+    );
+
+    await act(async () => {
+      await result.current.startExport(doc, { outputFormat: 'gif', ffmpegWasm: CORE });
+    });
+
+    expect(result.current.state).toBe('complete');
+    unmount();
+  });
+
   it('enables repeated-frame reuse for MP4 exports too', async () => {
     const { result, unmount } = renderHook(() => useVideoExport());
+    const theme = resolveTheme('tech-dark');
 
     await act(async () => {
       await result.current.startExport(doc, {
         outputFormat: 'mp4',
         animationsEnabled: false,
         audioPolicy: 'omit',
+        theme,
+        videoPresentation: 'picture-in-picture',
+        pipSize: 'large',
+        pipShape: 'wide',
+        pipPosition: 'bottom-right',
       });
     });
 
     expect(mocks.frameInit).toHaveBeenCalledWith(
       doc,
-      expect.objectContaining({ animationsEnabled: false }),
+      expect.objectContaining({
+        animationsEnabled: false,
+        theme,
+        videoPresentation: 'picture-in-picture',
+        pipSize: 'large',
+        pipShape: 'wide',
+        pipPosition: 'bottom-right',
+      }),
       'off',
     );
     expect(mocks.captureCanvasFrame).toHaveBeenCalledWith(0, { reuseIfUnchanged: true });
@@ -238,7 +406,8 @@ describe('useVideoExport GIF flow', () => {
       await vi.waitFor(() => expect(mocks.captureCanvasFrame).toHaveBeenCalledTimes(2));
     });
 
-    expect(result.current.phase).toBe('Capturing frame 2/3 (0.1s)');
+    expect(result.current.phase).toBe('Capturing frame 2/3');
+    expect(result.current.currentFrameTime).toBe(0.1);
     expect(result.current.progress).toBe(36.3);
 
     await act(async () => {
@@ -268,7 +437,8 @@ describe('useVideoExport GIF flow', () => {
       await vi.waitFor(() => expect(mocks.encodeFrame).toHaveBeenCalledOnce());
     });
 
-    expect(result.current.phase).toBe('Encoding frame 1/1 (0.0s)');
+    expect(result.current.phase).toBe('Encoding frame 1/1');
+    expect(result.current.currentFrameTime).toBe(0);
 
     await act(async () => {
       finishEncoding();

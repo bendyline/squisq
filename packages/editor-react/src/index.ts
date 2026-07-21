@@ -77,7 +77,13 @@ export { TimelineCompositionPanel } from './TimelineCompositionPanel.js';
 export type { TimelineCompositionPanelProps } from './TimelineCompositionPanel.js';
 export { TimelineToolbar } from './TimelineToolbar.js';
 export type { TimelineToolbarProps } from './TimelineToolbar.js';
-export { formatSeconds, setBlockDurationInSource, setMediaClipInSource } from './timelineSource.js';
+export {
+  formatSeconds,
+  setBlockDurationInSource,
+  setBlockStartTimeInSource,
+  setBlockTransitionInSource,
+  setMediaClipInSource,
+} from './timelineSource.js';
 export type { MediaClipPatch } from './timelineSource.js';
 
 // File-kind detection — useful for hosts that want to pre-decide chrome
@@ -118,7 +124,7 @@ export {
   PreviewFormatSwitch,
   usePreviewSettings,
 } from './PreviewControls.js';
-export type { PreviewSettings } from './PreviewControls.js';
+export type { PreviewSettings, PreviewToolbarControlsProps } from './PreviewControls.js';
 
 // Chrome (for custom layouts)
 export { ViewSwitcher } from './ViewSwitcher.js';

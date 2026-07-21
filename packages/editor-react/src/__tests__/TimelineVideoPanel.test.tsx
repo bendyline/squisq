@@ -27,7 +27,8 @@ describe('TimelineVideoPanel', () => {
       <TimelineVideoPanel schedule={[clip]} currentTime={4} isPlaying={false} onClose={onClose} />,
     );
 
-    expect(screen.getByText('recording.webm')).toBeTruthy();
+    expect(screen.getByText('recording')).toBeTruthy();
+    expect(screen.queryByText('recording.webm')).toBeNull();
     expect(container.querySelector('video')?.currentTime).toBe(3);
 
     rerender(

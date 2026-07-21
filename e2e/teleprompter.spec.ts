@@ -101,6 +101,30 @@ test('mirror and font-size controls restyle the surface', async ({ page }) => {
   expect(parseFloat(sizeAfter)).toBeGreaterThan(parseFloat(sizeBefore));
 });
 
+test('arrow keys and the wheel nudge exactly one visible word', async ({ page }) => {
+  await openTeleprompter(page);
+
+  const surface = page.getByTestId('teleprompter-surface');
+  const activeWord = page.locator('.squisq-teleprompter-word--active');
+  // Focus stays on an ordinary control outside the script surface; Narrate's
+  // document-level shortcut still owns left/right navigation.
+  await page.getByRole('button', { name: 'Restart prompter' }).focus();
+  await expect(activeWord).toHaveAttribute('data-token-idx', '0');
+
+  await page.keyboard.press('ArrowRight');
+  await expect(activeWord).toHaveAttribute('data-token-idx', '1');
+  await page.keyboard.press('ArrowRight');
+  await expect(activeWord).toHaveAttribute('data-token-idx', '2');
+  await page.keyboard.press('ArrowLeft');
+  await expect(activeWord).toHaveAttribute('data-token-idx', '1');
+
+  await surface.hover();
+  await page.mouse.wheel(0, 1);
+  await expect(activeWord).toHaveAttribute('data-token-idx', '2');
+  await page.mouse.wheel(0, -1);
+  await expect(activeWord).toHaveAttribute('data-token-idx', '1');
+});
+
 test('fake mic drives the level meter and voice pacing advances the prompter', async ({ page }) => {
   await openTeleprompter(page);
 

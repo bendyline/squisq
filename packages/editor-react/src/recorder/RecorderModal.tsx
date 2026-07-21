@@ -21,7 +21,7 @@ import type { MediaProvider } from '@bendyline/squisq/schemas';
 import type { ContentContainer } from '@bendyline/squisq/storage';
 import { useMediaRecorder, type RecorderSource } from './hooks/useMediaRecorder.js';
 import { useStreamPreview } from './hooks/useStreamPreview.js';
-import { buildFilename } from './formats.js';
+import { buildFilename, supportsSystemAudioCapture } from './formats.js';
 import { buildTimingJson, encodeTimingJson, timingPathFor } from './timingJson.js';
 import { useModalDialog } from '../modal/useModalDialog.js';
 
@@ -250,6 +250,19 @@ const previewBoxStyle: CSSProperties = {
   fontSize: 13,
 };
 
+const playbackTimeStyle: CSSProperties = {
+  position: 'absolute',
+  top: 8,
+  right: 8,
+  padding: '3px 7px',
+  background: 'rgba(0, 0, 0, 0.72)',
+  color: '#fff',
+  fontSize: 12,
+  fontVariantNumeric: 'tabular-nums',
+  lineHeight: 1.4,
+  pointerEvents: 'none',
+};
+
 const audioMeterStyle: CSSProperties = {
   width: '100%',
   height: 56,
@@ -377,6 +390,7 @@ export function RecorderModal({
   const [isSaving, setIsSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [playbackUrl, setPlaybackUrl] = useState<string | null>(null);
+  const [playbackPositionMs, setPlaybackPositionMs] = useState(0);
 
   const overlayRef = useRef<HTMLDivElement>(null);
   const dialogRef = useRef<HTMLDivElement>(null);
@@ -389,11 +403,12 @@ export function RecorderModal({
   const derivedSource = deriveSource(micOn, video);
   const canCapture = derivedSource !== null;
   const source: RecorderSource = derivedSource ?? 'mic';
+  const canIncludeSystemAudio = supportsSystemAudioCapture();
 
   const recorder = useMediaRecorder({
     source,
     includeMicrophone: video === 'camera' ? micOn : undefined,
-    systemAudio: video === 'screen' ? includeSystemAudio : false,
+    systemAudio: video === 'screen' && canIncludeSystemAudio ? includeSystemAudio : false,
   });
 
   useStreamPreview(previewRef, recorder.state === 'stopped' ? null : recorder.stream);
@@ -403,6 +418,7 @@ export function RecorderModal({
   // blob identity means a new URL is created every time a fresh
   // recording lands, and the cleanup callback revokes the previous one.
   useEffect(() => {
+    setPlaybackPositionMs(0);
     if (!recorder.blob) {
       setPlaybackUrl(null);
       return;
@@ -524,6 +540,14 @@ export function RecorderModal({
     recorder.reset();
   }, [recorder]);
 
+  const handlePlaybackTimeUpdate = useCallback(
+    (media: HTMLMediaElement) => {
+      const currentMs = Number.isFinite(media.currentTime) ? media.currentTime * 1000 : 0;
+      setPlaybackPositionMs(Math.min(recorder.durationMs, Math.max(0, currentMs)));
+    },
+    [recorder.durationMs],
+  );
+
   const isAudioOnly = source === 'mic';
   const showPreview = recorder.state !== 'idle' && recorder.state !== 'error';
   const canRecord = recorder.state === 'ready';
@@ -636,13 +660,23 @@ export function RecorderModal({
           </div>
         )}
         {recorder.state === 'stopped' && playbackUrl && !isAudioOnly && (
-          <div style={previewBoxStyle}>
+          <div style={{ ...previewBoxStyle, position: 'relative' }}>
             <video
               src={playbackUrl}
               controls
               playsInline
+              onTimeUpdate={(event) => handlePlaybackTimeUpdate(event.currentTarget)}
+              onSeeking={(event) => handlePlaybackTimeUpdate(event.currentTarget)}
+              onEnded={() => setPlaybackPositionMs(recorder.durationMs)}
               style={{ width: '100%', height: '100%', objectFit: 'contain' }}
             />
+            <div
+              role="timer"
+              aria-label={`Playback time: ${formatDurationMs(playbackPositionMs)} of ${formatDurationMs(recorder.durationMs)}`}
+              style={playbackTimeStyle}
+            >
+              {formatDurationMs(playbackPositionMs)} / {formatDurationMs(recorder.durationMs)}
+            </div>
           </div>
         )}
         {recorder.state === 'stopped' && playbackUrl && isAudioOnly && (
@@ -670,7 +704,7 @@ export function RecorderModal({
             />
           </>
         )}
-        {video === 'screen' && (
+        {video === 'screen' && canIncludeSystemAudio && (
           <label
             style={{
               display: 'flex',
@@ -687,7 +721,7 @@ export function RecorderModal({
               onChange={(e) => setIncludeSystemAudio(e.target.checked)}
               disabled={recorder.state === 'recording' || recorder.state === 'requesting'}
             />
-            Include system audio (Chrome only)
+            Include system audio
           </label>
         )}
 

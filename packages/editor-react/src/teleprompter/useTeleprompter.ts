@@ -12,7 +12,6 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { KeyboardEvent as ReactKeyboardEvent } from 'react';
 import type { Doc } from '@bendyline/squisq/schemas';
 import {
   buildNarrationScript,
@@ -35,8 +34,16 @@ import {
 
 const PREFS_STORAGE_KEY = 'squisq:teleprompter-prefs';
 const PUBLISH_INTERVAL_MS = 66;
-/** Rough words-per-line used by keyboard nudges (line granularity without layout). */
-const NUDGE_WORDS = 6;
+/** Rough words-per-line used by vertical keyboard nudges (without layout knowledge). */
+const LINE_NUDGE_WORDS = 6;
+
+interface TeleprompterKeyEvent {
+  readonly defaultPrevented: boolean;
+  readonly key: string;
+  readonly repeat: boolean;
+  readonly target: EventTarget | null;
+  preventDefault: () => void;
+}
 
 export interface TeleprompterController {
   script: NarrationScript | null;
@@ -54,13 +61,13 @@ export interface TeleprompterController {
   play: () => void;
   pause: () => void;
   restart: () => void;
-  /** Move the prompter by whole tokens and re-anchor voice tracking. */
-  nudge: (deltaTokens: number) => void;
+  /** Move by spoken words and re-anchor voice tracking. */
+  nudge: (deltaWords: number) => void;
   /** Jump to an absolute token index (e.g. click a block marker). */
   seekToToken: (tokenIndex: number) => void;
   /** Per-analysis-tick subscription (video-PiP pump). Not throttled. */
   subscribeTick: (cb: (wordPos: number) => void) => () => void;
-  handleKeyDown: (event: ReactKeyboardEvent<HTMLElement>) => void;
+  handleKeyDown: (event: TeleprompterKeyEvent) => void;
 }
 
 function loadPrefs(): TeleprompterPrefs {
@@ -93,6 +100,42 @@ export function vadConfigForSensitivity(sensitivity: number): Partial<VadConfig>
       enterRatio * (DEFAULT_VAD_CONFIG.exitRatio / DEFAULT_VAD_CONFIG.enterRatio),
     ),
   };
+}
+
+/** Resolve a manual nudge against the word the surface visibly highlights. */
+function spokenWordTarget(
+  script: NarrationScript,
+  currentPosition: number,
+  deltaWords: number,
+): number {
+  const tokens = script.tokens;
+  const direction = Math.sign(deltaWords);
+  if (tokens.length === 0 || direction === 0) return currentPosition;
+
+  // The surface highlights the nearest spoken token at or before the raw
+  // fractional position. Start from that same token so one input always
+  // produces one *visible* word step, even around standalone punctuation.
+  let index = Math.min(Math.max(Math.floor(currentPosition), 0), tokens.length);
+  if (index < tokens.length) {
+    // Treat an omitted `spoken` field as spoken for compatibility with
+    // scripts produced by older core bundles; only explicit false is punctuation.
+    while (index >= 0 && tokens[index]?.spoken === false) index -= 1;
+    if (index < 0) index = tokens.findIndex((token) => token.spoken !== false);
+  }
+  if (index < 0) return currentPosition;
+
+  let remaining = Math.abs(Math.trunc(deltaWords));
+  while (remaining > 0) {
+    let candidate = index + direction;
+    while (candidate >= 0 && candidate < tokens.length && tokens[candidate]?.spoken === false) {
+      candidate += direction;
+    }
+    if (candidate < 0) return 0;
+    if (candidate >= tokens.length) return tokens.length;
+    index = candidate;
+    remaining -= 1;
+  }
+  return index;
 }
 
 export function useTeleprompter(opts: { doc: Doc | null }): TeleprompterController {
@@ -322,7 +365,11 @@ export function useTeleprompter(opts: { doc: Doc | null }): TeleprompterControll
   );
 
   const nudge = useCallback(
-    (deltaTokens: number) => seekToToken(Math.round(wordPosRef.current + deltaTokens)),
+    (deltaWords: number) => {
+      const currentScript = scriptRef.current;
+      if (!currentScript) return;
+      seekToToken(spokenWordTarget(currentScript, wordPosRef.current, deltaWords));
+    },
     [seekToToken],
   );
 
@@ -349,24 +396,42 @@ export function useTeleprompter(opts: { doc: Doc | null }): TeleprompterControll
   }, []);
 
   const handleKeyDown = useCallback(
-    (event: ReactKeyboardEvent<HTMLElement>) => {
+    (event: TeleprompterKeyEvent) => {
+      if (event.defaultPrevented) return;
       const target = event.target as HTMLElement | null;
-      if (target?.closest('input, textarea, select, button, a, [contenteditable="true"]')) return;
+      if (target?.closest('input, textarea, select, [contenteditable="true"]')) return;
+      if (
+        event.key.startsWith('Arrow') &&
+        target?.closest(
+          '[role="tab"], [role="menuitem"], [role="option"], [role="slider"], [role="spinbutton"], [role="treeitem"]',
+        )
+      ) {
+        return;
+      }
       switch (event.key) {
         case ' ':
+          if (target?.closest('button, a, [role="button"], [role="link"]')) break;
           event.preventDefault();
           if (transportRef.current === 'rolling' || transportRef.current === 'countdown') pause();
           else play();
           break;
-        case 'ArrowUp':
         case 'ArrowLeft':
           event.preventDefault();
-          nudge(-NUDGE_WORDS);
+          if (event.repeat) break;
+          nudge(-1);
           break;
-        case 'ArrowDown':
         case 'ArrowRight':
           event.preventDefault();
-          nudge(NUDGE_WORDS);
+          if (event.repeat) break;
+          nudge(1);
+          break;
+        case 'ArrowUp':
+          event.preventDefault();
+          nudge(-LINE_NUDGE_WORDS);
+          break;
+        case 'ArrowDown':
+          event.preventDefault();
+          nudge(LINE_NUDGE_WORDS);
           break;
         case '[':
           event.preventDefault();

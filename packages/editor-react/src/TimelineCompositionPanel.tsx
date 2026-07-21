@@ -11,7 +11,7 @@ import type { Doc } from '@bendyline/squisq/schemas';
 import { getDocPlaybackDuration, resolveMediaSchedule } from '@bendyline/squisq/schemas';
 import type { ContentContainer } from '@bendyline/squisq/storage';
 import { DocPlayer, type AudioController } from '@bendyline/squisq-react';
-import { usePreviewSettings } from './PreviewControls';
+import { PreviewToolbarControls, usePreviewSettings } from './PreviewControls';
 import type { TimelineClock } from './useTimelineClock';
 import { usePreviewProjection } from './usePreviewProjection';
 import { documentTitleFromFileName } from './buildPreviewDoc';
@@ -40,6 +40,7 @@ export function TimelineCompositionPanel({
     activeCaptionsEnabled,
     activeVideoPresentation,
     activePipSize,
+    activePipShape,
     activePipPosition,
     activeCoverSlide,
   } = usePreviewSettings();
@@ -98,6 +99,7 @@ export function TimelineCompositionPanel({
         <span className="squisq-timeline-video-label">
           {formatPresentation(effectiveVideoPresentation)}
         </span>
+        <PreviewToolbarControls displayMode="video" />
         <span className="squisq-timeline-video-time">{formatClock(clock.currentTime)}</span>
         {onClose && (
           <button
@@ -126,11 +128,11 @@ export function TimelineCompositionPanel({
               theme={activeTheme}
               videoPresentation={activeVideoPresentation}
               pipSize={activePipSize}
+              pipShape={activePipShape}
               pipPosition={activePipPosition}
               captionStyle={activeCaptionStyle}
               captionsEnabled={activeCaptionsEnabled}
               showCoverSlide={activeCoverSlide}
-              coverVisible={false}
               enableSwipe={false}
               globalKeyboardShortcuts={false}
             />

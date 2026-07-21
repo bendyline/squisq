@@ -278,6 +278,9 @@ function synthesizeMediaParagraph(clip: MediaClip): MarkdownBlockNode {
   }
   const params: Record<string, string> = { src: clip.src };
   if (clip.placement) params.placement = clip.placement;
+  if (clip.pipSize) params.pipSize = clip.pipSize;
+  if (clip.pipShape) params.pipShape = clip.pipShape;
+  if (clip.pipPosition) params.pipPosition = clip.pipPosition;
   if (clip.lockToBlock != null) params.lockToBlock = String(clip.lockToBlock);
   if (clip.anchor === 'document') params.anchor = 'document';
   if (clip.startAt) params.startAt = String(clip.startAt);

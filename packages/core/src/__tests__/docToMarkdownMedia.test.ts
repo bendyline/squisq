@@ -105,12 +105,17 @@ describe('docToMarkdown media round-trip', () => {
         src: 'video/overlay.mp4',
         kind: 'video',
         placement: 'overlay',
+        pipSize: 'large',
+        pipShape: 'wide',
+        pipPosition: 'top-left',
         startAt: 0,
         anchor: 'block',
       },
     ];
     const md = stringifyMarkdown(docToMarkdown(doc));
-    expect(md).toContain('{[video src=video/overlay.mp4 placement=overlay]}');
+    expect(md).toContain(
+      '{[video src=video/overlay.mp4 placement=overlay pipSize=large pipShape=wide pipPosition=top-left]}',
+    );
   });
 
   it('leaves docs without media untouched', () => {

@@ -259,6 +259,10 @@ export async function docToPptx(doc: Doc, options: PptxExportOptions = {}): Prom
     persistentLayers,
     theme,
     customTemplates: doc.customTemplates,
+    // A .pptx is a discrete deck: the >20s pacing split would emit N identical
+    // copies of one authored slide (a long single block became 18 duplicates).
+    // Keep one authored slide as one slide, matching the slideshow.
+    splitLongBlocks: false,
   });
 
   const slideBlocks: Block[] = [];

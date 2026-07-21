@@ -459,6 +459,31 @@ describe('expandDocBlocks', () => {
     expect(result[0].startTime).toBe(0);
   });
 
+  it('paces a long block into repeated parts by default, but not when splitLongBlocks is false', () => {
+    // One content block scheduled for far longer than the ~20s pacing threshold.
+    const blocks: TemplateBlock[] = [
+      {
+        template: 'factCard',
+        id: 'long',
+        duration: 120,
+        audioSegment: 0,
+        fact: 'F',
+        explanation: 'E',
+      },
+    ];
+    const audioSegments = [{ startTime: 0, duration: 120 }];
+
+    // Default: timed playback splits the block into repeated pacing parts.
+    const paced = expandDocBlocks(blocks, { audioSegments });
+    expect(paced.length).toBeGreaterThan(1);
+    expect(paced.some((block) => block.id.includes('-split-'))).toBe(true);
+
+    // Discrete-slide consumers keep one authored slide as one slide.
+    const discrete = expandDocBlocks(blocks, { audioSegments, splitLongBlocks: false });
+    expect(discrete).toHaveLength(1);
+    expect(discrete.some((block) => block.id.includes('-split-'))).toBe(false);
+  });
+
   it('never mutates or aliases raw blocks and persistent layers', () => {
     const rawLayer: Layer = {
       type: 'shape',

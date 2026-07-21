@@ -347,6 +347,10 @@ function expectedSlideshowSlideCount(doc: Doc, themeId: string): number {
     persistentLayers: resolvePersistentLayers({ persistentLayers: doc.persistentLayers }, theme),
     theme,
     customTemplates: doc.customTemplates,
+    // Mirror the discrete deck the exporter emits: the >20s pacing split re-shows
+    // one authored slide as identical copies, which belong to timed video, not a
+    // .pptx. Model the distinct authored slides the same way docToPptx does.
+    splitLongBlocks: false,
   });
   return blocks.length + (doc.startBlock ? 1 : 0);
 }
@@ -423,6 +427,34 @@ describe('docToPptx slideshow parity', () => {
         expect(actual, `${source.articleId} / ${themeId}`).toBe(expected);
       }
     }
+  });
+
+  it('keeps a long single block as one slide instead of repeated pacing copies', async () => {
+    // Regression: a single content block whose scheduled duration exceeds the
+    // ~20s pacing threshold used to be cloned into ceil(duration / 20) identical
+    // slides (a long prose doc exported as ~18 duplicates). That split is timed-
+    // video pacing; a .pptx must keep one authored slide as one slide.
+    const longSingleBlock = {
+      articleId: 'long-single-block',
+      duration: 120,
+      audio: { segments: [{ src: '', name: 'preview', duration: 120, startTime: 0 }] },
+      blocks: [
+        {
+          id: 'essay',
+          template: 'quote',
+          quote: 'A single long passage that pacing would have spread across many slides.',
+          attribution: 'Regression',
+          startTime: 0,
+          duration: 120,
+          audioSegment: 0,
+        },
+      ],
+    } as unknown as Doc;
+
+    const count = await pptxSlideCount(
+      await docToPptx(longSingleBlock, { themeId: 'documentary' }),
+    );
+    expect(count).toBe(1);
   });
 
   it('honors the managed-cover setting without changing expanded block parity', async () => {

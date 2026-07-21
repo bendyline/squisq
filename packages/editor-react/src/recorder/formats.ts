@@ -132,6 +132,36 @@ export function supportsDisplayMedia(): boolean {
   );
 }
 
+interface UserAgentDataLike {
+  brands?: readonly { brand: string }[];
+  mobile?: boolean;
+}
+
+/**
+ * Best-effort probe for display-capture audio support.
+ *
+ * The Screen Capture spec lets a browser accept `audio: true` and still
+ * return video only, and it exposes no pre-permission capability probe for
+ * display audio. Desktop Chromium is the browser family that currently
+ * offers tab/system audio in its display picker, so use UA Client Hints when
+ * available and fall back to the legacy UA string. Keeping this conservative
+ * avoids offering a checkbox that Firefox or Safari cannot honor.
+ */
+export function supportsSystemAudioCapture(): boolean {
+  if (!supportsDisplayMedia()) return false;
+
+  const nav = navigator as Navigator & { userAgentData?: UserAgentDataLike };
+  const uaData = nav.userAgentData;
+  if (uaData?.mobile === true) return false;
+  if (uaData?.brands?.length) {
+    return uaData.brands.some(({ brand }) => /chromium/i.test(brand));
+  }
+
+  const userAgent = nav.userAgent ?? '';
+  if (/Android|Mobile|iPhone|iPad|iPod/i.test(userAgent)) return false;
+  return /(?:Chrome|Chromium|Edg|OPR)\//.test(userAgent);
+}
+
 /**
  * Build a default filename for a recording. `basename` is a hint
  * (e.g. user-typed name); when omitted, a sortable timestamp is used so
