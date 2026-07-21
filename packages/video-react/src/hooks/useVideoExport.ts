@@ -65,8 +65,6 @@ import { transcodeMp4ToGifWithFfmpegWasm } from '../gifTranscode.js';
 import { useFrameCapture } from './useFrameCapture.js';
 
 const MAX_EXPORT_MEDIA_FILES = 256;
-const MAX_EXPORT_MEDIA_FILE_BYTES = 64 * 1024 * 1024;
-const MAX_EXPORT_MEDIA_TOTAL_BYTES = 256 * 1024 * 1024;
 const ENCODER_PROBE_TIMEOUT_MS = 5_000;
 const ENCODER_START_TIMEOUT_MS = 60_000;
 const FRAME_CAPTURE_TIMEOUT_MS = 60_000;
@@ -137,6 +135,27 @@ export function settleWithin<T>(
 
 function toArrayBuffer(bytes: Uint8Array): ArrayBuffer {
   return bytes.slice().buffer as ArrayBuffer;
+}
+
+/**
+ * Resolve the fetch policy for one provider-backed export asset.
+ *
+ * Browser export used to impose a fixed 64 MiB per-file ceiling (plus a
+ * 256 MiB aggregate ceiling). Long camera and screen recordings routinely
+ * exceed those numbers. Use the provider's declared size as the default bound
+ * instead, so the complete known asset can load without making the fetch
+ * unbounded. A caller-supplied maxBytes remains authoritative.
+ */
+export function resolveExportMediaResourcePolicy(
+  declaredSize: number,
+  policy?: ResourcePolicy,
+): ResourcePolicy {
+  const knownSize = Number.isFinite(declaredSize) ? Math.max(0, declaredSize) : 0;
+  return {
+    ...DEFAULT_INTERACTIVE_RESOURCE_POLICY,
+    ...policy,
+    maxBytes: policy?.maxBytes ?? Math.max(DEFAULT_INTERACTIVE_RESOURCE_POLICY.maxBytes, knownSize),
+  };
 }
 
 /** Collect exact string values from the document that may name stored media. */
@@ -585,28 +604,13 @@ export function useVideoExport(options: UseVideoExportOptions = {}): VideoExport
               `Document references ${neededEntries.length} media files; browser export supports at most ${MAX_EXPORT_MEDIA_FILES}.`,
             );
           }
-          let totalMediaBytes = 0;
           for (const entry of neededEntries) {
             if (cancelledRef.current) return;
-            if (entry.size > MAX_EXPORT_MEDIA_FILE_BYTES) {
-              throw new Error(`Media file "${entry.name}" is too large for browser video export.`);
-            }
             const url = await config.mediaProvider.resolveUrl(entry.name);
             const resource = await fetchResourceBytes(url, {
-              policy: {
-                ...DEFAULT_INTERACTIVE_RESOURCE_POLICY,
-                ...config.resourcePolicy,
-                maxBytes: Math.min(
-                  config.resourcePolicy?.maxBytes ?? MAX_EXPORT_MEDIA_FILE_BYTES,
-                  MAX_EXPORT_MEDIA_FILE_BYTES,
-                ),
-              },
+              policy: resolveExportMediaResourcePolicy(entry.size, config.resourcePolicy),
             });
             const data = toArrayBuffer(resource.bytes);
-            totalMediaBytes += data.byteLength;
-            if (totalMediaBytes > MAX_EXPORT_MEDIA_TOTAL_BYTES) {
-              throw new Error('Referenced media exceeds the browser video export memory limit.');
-            }
             images.set(entry.name, data);
           }
         }

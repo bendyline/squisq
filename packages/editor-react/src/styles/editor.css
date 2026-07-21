@@ -4121,7 +4121,7 @@
 
 /* ─── Timeline track ─────────────────────────────────────
    Horizontal strip of block + media bars shown below the editor in Timeline
-   view. Scrolls horizontally; bars are absolutely positioned by time. */
+   view. Scrolls in both directions; bars are absolutely positioned by time. */
 .squisq-timeline {
   position: relative;
   flex-shrink: 0;
@@ -4437,8 +4437,9 @@
 
 .squisq-timeline-scroll {
   flex: 1;
-  overflow-x: auto;
-  overflow-y: hidden;
+  overflow: auto;
+  scrollbar-gutter: stable;
+  overscroll-behavior: contain;
   padding: 8px 0 0;
   min-width: 0;
   min-height: 0;
@@ -4505,7 +4506,19 @@
 
 .squisq-timeline-row--media {
   height: 26px;
-  margin-bottom: 0;
+  margin: 0;
+  flex: 0 0 26px;
+}
+
+/* Every media item owns a lane. Videos in the same block often have identical
+   timing, so sharing one absolute-positioned row made all but the last clip
+   invisible. The lane stack grows naturally and the viewport above supplies
+   the vertical scrollbar once it exceeds the dock height. */
+.squisq-timeline-media-tracks {
+  display: flex;
+  flex: 0 0 auto;
+  flex-direction: column;
+  gap: 4px;
 }
 
 .squisq-timeline-block {
@@ -4642,6 +4655,42 @@
   background: #2b6cb0;
 }
 
+/* Sampled video frames turn a camera/screen bar into a compact filmstrip. The
+   tiles never receive pointer input, so existing drag/resize gestures remain
+   owned by the clip. */
+.squisq-timeline-video-filmstrip {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  display: flex;
+  pointer-events: none;
+  background: #1e3a5f;
+}
+
+.squisq-timeline-video-filmstrip video {
+  display: block;
+  min-width: 0;
+  flex: 1 1 0;
+  height: 100%;
+  border-right: 1px solid rgba(255, 255, 255, 0.18);
+  object-fit: cover;
+  opacity: 0.78;
+}
+
+.squisq-timeline-video-filmstrip video:last-child {
+  border-right: 0;
+}
+
+.squisq-timeline-clip--video .squisq-timeline-clip-label {
+  position: relative;
+  z-index: 2;
+  max-width: calc(100% - 4px);
+  padding: 1px 4px;
+  border-radius: 3px;
+  background: rgba(15, 23, 42, 0.72);
+  text-shadow: 0 1px 1px rgba(0, 0, 0, 0.7);
+}
+
 /* Body-embedded media (recordings, dropped files): locked to its block,
    outlined to distinguish from authored `{[…]}` clips. Dragging re-times it
    (and converts it to a clip annotation). */
@@ -4677,6 +4726,7 @@
 .squisq-timeline-edge {
   position: absolute;
   top: 0;
+  z-index: 3;
   width: 7px;
   height: 100%;
   cursor: ew-resize;

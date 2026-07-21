@@ -59,6 +59,64 @@ function renderTimeline() {
 }
 
 describe('TimelineTrack embedded-clip interaction', () => {
+  it('samples video frames across the background of a media bar', () => {
+    const clip = renderTimeline();
+    const filmstrip = clip.querySelector('.squisq-timeline-video-filmstrip');
+    const frames = filmstrip?.querySelectorAll('video') ?? [];
+
+    expect(filmstrip).not.toBeNull();
+    expect(frames).toHaveLength(3);
+    expect(frames[0]?.getAttribute('src')).toBe('video/rec.webm');
+    expect(frames[0]?.getAttribute('preload')).toBe('metadata');
+  });
+
+  it('renders multiple videos in one block on independent tracks', () => {
+    const multiVideoMarkdown = [
+      '# Intro {[duration=12]}',
+      '',
+      '<video src="video/camera.webm" controls></video>',
+      '<video src="video/screen.webm" controls></video>',
+      '',
+    ].join('\n');
+
+    render(
+      <EditorProvider initialMarkdown={multiVideoMarkdown} initialView="wysiwyg">
+        <TimelineTrack />
+      </EditorProvider>,
+    );
+
+    const cameraTrack = screen.getByText('camera').closest('[data-testid="timeline-media-track"]');
+    const screenTrack = screen.getByText('screen').closest('[data-testid="timeline-media-track"]');
+    expect(cameraTrack).not.toBeNull();
+    expect(screenTrack).not.toBeNull();
+    expect(cameraTrack).not.toBe(screenTrack);
+    expect(screen.getAllByTestId('timeline-media-track')).toHaveLength(2);
+  });
+
+  it('keeps overlapping unlocked videos visible as dedicated tracks', () => {
+    const unlockedVideoMarkdown = [
+      '# Intro {[duration=12]}',
+      '',
+      '<video src="video/presenter.webm" controls data-squisq-video-placement="overlay" data-squisq-video-lock-to-block="false"></video>',
+      '<video src="video/slides.webm" controls data-squisq-video-placement="picture-in-picture" data-squisq-video-lock-to-block="false"></video>',
+      '',
+    ].join('\n');
+
+    render(
+      <EditorProvider initialMarkdown={unlockedVideoMarkdown} initialView="wysiwyg">
+        <TimelineTrack />
+      </EditorProvider>,
+    );
+
+    const presenterTrack = screen
+      .getByText('presenter')
+      .closest('[data-testid="timeline-media-track"]');
+    const slidesTrack = screen.getByText('slides').closest('[data-testid="timeline-media-track"]');
+    expect(presenterTrack).not.toBeNull();
+    expect(slidesTrack).not.toBeNull();
+    expect(presenterTrack).not.toBe(slidesTrack);
+  });
+
   it('does not rewrite an embedded <video> into a tag on a plain click', () => {
     const clip = renderTimeline();
     const before = latestSource;

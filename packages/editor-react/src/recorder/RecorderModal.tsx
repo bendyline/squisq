@@ -22,7 +22,11 @@ import type { ContentContainer } from '@bendyline/squisq/storage';
 import { useMediaRecorder, type RecorderSource } from './hooks/useMediaRecorder.js';
 import { useStreamPreview } from './hooks/useStreamPreview.js';
 import { requestCameraStream } from './sources/cameraStream.js';
-import { buildFilename, supportsSystemAudioCapture } from './formats.js';
+import {
+  buildFilename,
+  supportsSystemAudioCapture,
+  type RecordingFilenameSeed,
+} from './formats.js';
 import { buildTimingJson, encodeTimingJson, timingPathFor } from './timingJson.js';
 import { useModalDialog } from '../modal/useModalDialog.js';
 import {
@@ -463,6 +467,25 @@ function captureSummary(micOn: boolean, video: VideoSource): string {
     : 'Pick at least one source to record.';
 }
 
+/**
+ * Describe the tracks that made it into the acquired stream. This deliberately
+ * reads the result instead of trusting the requested toggles: display capture
+ * may accept an audio request while returning video only.
+ */
+function recordingFilenameSeed(
+  source: RecorderSource,
+  stream: MediaStream | null,
+  audioRequested: boolean,
+): RecordingFilenameSeed {
+  if (source === 'mic') return 'audio';
+  // Before preview, make the filename hint reflect the selected sources. Once
+  // acquired, the stream is authoritative because browsers may omit requested
+  // display audio.
+  const hasAudio = stream ? stream.getAudioTracks().length > 0 : audioRequested;
+  if (source === 'camera') return hasAudio ? 'camera+audio' : 'camera';
+  return hasAudio ? 'screen+audio' : 'screen';
+}
+
 // ── Component ──────────────────────────────────────────────────────
 
 export function RecorderModal({
@@ -506,6 +529,11 @@ export function RecorderModal({
     includeMicrophone: video === 'camera' ? micOn : undefined,
     systemAudio: video === 'screen' && canIncludeSystemAudio ? includeSystemAudio : false,
   });
+  const filenameSeed = recordingFilenameSeed(
+    source,
+    recorder.stream,
+    micOn || (video === 'screen' && includeSystemAudio),
+  );
 
   // ── Narration mode ─────────────────────────────────────────────────
   // Called unconditionally (rules of hooks); the stage hooks are idle-cheap
@@ -730,6 +758,7 @@ export function RecorderModal({
         source === 'mic' ? 'audio' : 'video',
         recorder.extension,
         basename,
+        filenameSeed,
       );
       const relativeName = `${recorder.directory}/${filename}`;
       const relativePath = await mediaProvider.addMedia(
@@ -778,7 +807,17 @@ export function RecorderModal({
     } finally {
       setIsSaving(false);
     }
-  }, [recorder, source, basename, sourceText, mediaProvider, container, onSave, handleClose]);
+  }, [
+    recorder,
+    source,
+    basename,
+    filenameSeed,
+    sourceText,
+    mediaProvider,
+    container,
+    onSave,
+    handleClose,
+  ]);
 
   const handleDiscard = useCallback(() => {
     recorder.reset();
@@ -1129,7 +1168,7 @@ export function RecorderModal({
               id="recorder-basename"
               type="text"
               style={inputStyle}
-              placeholder={source === 'mic' || narrationOn ? 'narration' : 'recording'}
+              placeholder={narrationOn ? 'narration' : filenameSeed}
               value={basename}
               onChange={(e) => setBasename(e.target.value)}
               disabled={narrationOn ? !narrationRecorderIdle : recorder.state === 'recording'}

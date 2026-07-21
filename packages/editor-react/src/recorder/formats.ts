@@ -165,9 +165,18 @@ export function supportsSystemAudioCapture(): boolean {
 /**
  * Build a default filename for a recording. `basename` is a hint
  * (e.g. user-typed name); when omitted, a sortable timestamp is used so
- * concurrent recordings don't collide.
+ * concurrent recordings don't collide. General recorder callers can supply a
+ * source-aware `seed`; dedicated narration callers omit it and retain the
+ * historical `narration-*` default.
  */
-export function buildFilename(kind: CaptureKind, extension: string, basename?: string): string {
+export type RecordingFilenameSeed = 'audio' | 'camera' | 'camera+audio' | 'screen' | 'screen+audio';
+
+export function buildFilename(
+  kind: CaptureKind,
+  extension: string,
+  basename?: string,
+  seed?: RecordingFilenameSeed,
+): string {
   const safe = basename
     ? basename
         .trim()
@@ -184,6 +193,9 @@ export function buildFilename(kind: CaptureKind, extension: string, basename?: s
     now.getHours().toString().padStart(2, '0') +
     now.getMinutes().toString().padStart(2, '0') +
     now.getSeconds().toString().padStart(2, '0');
-  const prefix = kind === 'audio' ? 'narration' : 'recording';
+  // Dedicated narration saves retain their historical `narration-*` default.
+  // The general recorder passes a source-aware seed so its files describe the
+  // tracks they actually contain instead of all collapsing to `recording-*`.
+  const prefix = seed ?? (kind === 'audio' ? 'narration' : 'recording');
   return `${prefix}-${stamp}${extension}`;
 }

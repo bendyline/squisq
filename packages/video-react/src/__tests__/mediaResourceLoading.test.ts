@@ -1,6 +1,9 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { Doc } from '@bendyline/squisq/schemas';
-import { collectDocumentMediaReferences } from '../hooks/useVideoExport.js';
+import {
+  collectDocumentMediaReferences,
+  resolveExportMediaResourcePolicy,
+} from '../hooks/useVideoExport.js';
 import { createInlineProvider } from '../hooks/useFrameCapture.js';
 
 afterEach(() => vi.restoreAllMocks());
@@ -28,5 +31,17 @@ describe('video export media resource loading', () => {
     expect(create).toHaveBeenCalledOnce();
     provider.dispose();
     expect(revoke).toHaveBeenCalledWith('blob:export-media');
+  });
+
+  it('allows a provider-backed recording larger than the old 64 MiB ceiling', () => {
+    const recordingBytes = 384 * 1024 * 1024;
+
+    expect(resolveExportMediaResourcePolicy(recordingBytes).maxBytes).toBe(recordingBytes);
+  });
+
+  it('preserves an explicit host resource limit', () => {
+    expect(
+      resolveExportMediaResourcePolicy(384 * 1024 * 1024, { maxBytes: 96 * 1024 }).maxBytes,
+    ).toBe(96 * 1024);
   });
 });

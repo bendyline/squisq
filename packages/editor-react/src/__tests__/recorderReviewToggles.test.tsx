@@ -93,6 +93,7 @@ const toggle = (name: string) => screen.getByRole('button', { name });
 
 describe('RecorderModal — unsaved take is not silently destroyed', () => {
   beforeEach(() => {
+    vi.clearAllMocks();
     vi.stubGlobal('MediaStream', FakeStream);
     vi.stubGlobal('MediaRecorder', FakeMediaRecorder);
     Object.defineProperty(globalThis.navigator, 'mediaDevices', {
@@ -179,6 +180,42 @@ describe('RecorderModal — unsaved take is not silently destroyed', () => {
     fireEvent.timeUpdate(playback);
 
     expect(timer.textContent).toBe('0:12 / 0:56');
+  });
+
+  it.each([
+    { mode: 'mic' as const, tracks: ['audio'] as const, prefix: 'audio' },
+    {
+      mode: 'camera' as const,
+      tracks: ['video', 'audio'] as const,
+      prefix: 'camera+audio',
+    },
+    {
+      mode: 'screen' as const,
+      tracks: ['video', 'audio'] as const,
+      prefix: 'screen+audio',
+    },
+  ])('names $mode saves from the tracks they contain', async ({ mode, tracks, prefix }) => {
+    const captured = new FakeStream(tracks.map((kind) => new FakeTrack(kind)));
+    if (mode === 'screen') {
+      vi.mocked(navigator.mediaDevices.getDisplayMedia).mockResolvedValue(
+        captured as unknown as MediaStream,
+      );
+    } else {
+      vi.mocked(navigator.mediaDevices.getUserMedia).mockResolvedValue(
+        captured as unknown as MediaStream,
+      );
+    }
+
+    render(<RecorderModal initialMode={mode} mediaProvider={mediaProvider} onClose={vi.fn()} />);
+    await recordATake();
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Save to document' }));
+    });
+
+    const firstSavedPath = vi.mocked(mediaProvider.addMedia).mock.calls[0]?.[0];
+    expect(firstSavedPath).toMatch(
+      new RegExp(`^(?:audio|video)/${prefix.replace('+', '\\+')}-\\d{8}-\\d{6}\\.webm$`),
+    );
   });
 
   it('keeps the recorded take when a source toggle is clicked in review', async () => {
