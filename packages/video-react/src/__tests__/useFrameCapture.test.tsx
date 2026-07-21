@@ -78,14 +78,16 @@ describe('createInlineProvider', () => {
       new Map([
         ['photo.JPG', new Uint8Array([1, 2, 3]).buffer],
         ['drawing.svg', new Uint8Array([4, 5]).buffer],
-        ['unknown.bin', new Uint8Array([6]).buffer],
+        ['recording.webm', new Uint8Array([6]).buffer],
+        ['unknown.bin', new Uint8Array([7]).buffer],
       ]),
     );
 
-    expect(create).toHaveBeenCalledTimes(3);
+    expect(create).toHaveBeenCalledTimes(4);
     expect(blobs.map((blob) => blob.type)).toEqual([
       'image/jpeg',
       'image/svg+xml',
+      'video/webm',
       'application/octet-stream',
     ]);
     expect(await provider.resolveUrl('photo.JPG')).toBe('blob:1');
@@ -93,6 +95,7 @@ describe('createInlineProvider', () => {
     expect(await provider.listMedia()).toEqual([
       { name: 'photo.JPG', mimeType: 'image/jpeg', size: 3 },
       { name: 'drawing.svg', mimeType: 'image/svg+xml', size: 2 },
+      { name: 'recording.webm', mimeType: 'video/webm', size: 1 },
       { name: 'unknown.bin', mimeType: 'application/octet-stream', size: 1 },
     ]);
     await expect(provider.addMedia('new.png', new ArrayBuffer(0), 'image/png')).rejects.toThrow(
@@ -102,7 +105,7 @@ describe('createInlineProvider', () => {
 
     provider.dispose();
 
-    expect(revoke.mock.calls.map(([url]) => url)).toEqual(['blob:1', 'blob:2', 'blob:3']);
+    expect(revoke.mock.calls.map(([url]) => url)).toEqual(['blob:1', 'blob:2', 'blob:3', 'blob:4']);
     expect(await provider.resolveUrl('photo.JPG')).toBe('photo.JPG');
   });
 });
@@ -227,6 +230,77 @@ describe('scheduled video capture clones', () => {
     expect(canvas.height).toBe(200);
     expect(drawImage).toHaveBeenNthCalledWith(1, video, 420, 0, 1080, 1080, 0, 0, 200, 200);
     expect(drawImage).toHaveBeenCalledTimes(2);
+  });
+
+  it('serializes an embedded block frame alongside a scheduled PIP video', () => {
+    const originalRoot = document.createElement('div');
+    originalRoot.innerHTML =
+      '<div class="doc-player__block"><svg><g class="block-layer block-layer--video">' +
+      '<foreignObject x="12" y="34" width="640" height="180">' +
+      '<video data-clip-start="0" data-clip-end="12"></video></foreignObject>' +
+      '</g></svg></div>' +
+      '<div class="doc-player__media-clips">' +
+      '<video data-clip-id="camera" data-active="true"></video>' +
+      '</div>';
+    const clonedRoot = document.createElement('div');
+    clonedRoot.innerHTML =
+      '<div class="doc-player__block"><svg><g class="block-layer block-layer--video">' +
+      '<foreignObject x="12" y="34" width="640" height="180"><canvas></canvas></foreignObject>' +
+      '</g></svg></div>' +
+      '<div class="doc-player__media-clips"><canvas></canvas></div>';
+    const embeddedVideo = originalRoot.querySelector<HTMLVideoElement>(
+      '.block-layer--video video',
+    )!;
+    const pipVideo = originalRoot.querySelector<HTMLVideoElement>(
+      '.doc-player__media-clips video',
+    )!;
+    embeddedVideo.style.objectFit = 'contain';
+    pipVideo.style.objectFit = 'cover';
+    Object.defineProperties(embeddedVideo, {
+      videoWidth: { configurable: true, value: 320 },
+      videoHeight: { configurable: true, value: 180 },
+      clientWidth: { configurable: true, value: 640 },
+      clientHeight: { configurable: true, value: 180 },
+    });
+    Object.defineProperties(pipVideo, {
+      videoWidth: { configurable: true, value: 640 },
+      videoHeight: { configurable: true, value: 480 },
+      clientWidth: { configurable: true, value: 160 },
+      clientHeight: { configurable: true, value: 160 },
+    });
+    const drawImage = vi.fn();
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue({
+      drawImage,
+    } as unknown as CanvasRenderingContext2D);
+    prepareScheduledVideoClones(originalRoot, clonedRoot);
+
+    const embeddedCanvasInSvg = clonedRoot.querySelector<HTMLCanvasElement>(
+      '.block-layer--video canvas',
+    );
+    const embeddedForeignObject = clonedRoot.querySelector('.block-layer--video foreignObject');
+    const embeddedFrame = clonedRoot.querySelector<HTMLCanvasElement>(
+      '.doc-player__block > canvas[data-video-capture-clone]',
+    )!;
+    const pipCanvas = clonedRoot.querySelector<HTMLCanvasElement>(
+      '.doc-player__media-clips canvas',
+    )!;
+    expect(embeddedCanvasInSvg).toBeNull();
+    expect(embeddedForeignObject).toBeNull();
+    expect(embeddedFrame.dataset.videoCaptureClone).toBe('true');
+    expect(embeddedFrame.dataset.clipStart).toBe('0');
+    expect(embeddedFrame.width).toBe(640);
+    expect(embeddedFrame.height).toBe(180);
+    expect(embeddedFrame.style.left).toBe('12px');
+    expect(embeddedFrame.style.top).toBe('34px');
+    expect(embeddedFrame.style.width).toBe('640px');
+    expect(embeddedFrame.style.height).toBe('180px');
+    expect(embeddedFrame.style.zIndex).toBe('3');
+    expect(pipCanvas.dataset.videoCaptureClone).toBe('true');
+    expect(pipCanvas.dataset.clipId).toBe('camera');
+    expect(pipCanvas.width).toBe(160);
+    expect(pipCanvas.height).toBe(160);
+    expect(drawImage).toHaveBeenCalledWith(embeddedVideo, 0, 0, 320, 180, 160, 0, 320, 180);
+    expect(drawImage).toHaveBeenCalledWith(pipVideo, 80, 0, 480, 480, 0, 0, 160, 160);
   });
 });
 

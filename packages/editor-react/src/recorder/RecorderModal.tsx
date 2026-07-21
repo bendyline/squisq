@@ -531,25 +531,40 @@ const TOGGLE_GROUPS: Array<{ label: string; toggles: Array<{ key: ToggleKey; lab
 ];
 
 /** One-line summary of what the current toggle combination will capture. */
-function captureSummary(micOn: boolean, cameraOn: boolean, screenOn: boolean): string {
+function captureSummary(
+  micOn: boolean,
+  cameraOn: boolean,
+  screenOn: boolean,
+  systemAudioOn: boolean,
+): string {
+  // System audio mixed into a non-screen recording is captured through a
+  // screen/tab picker whose video we discard — worth flagging in the summary.
+  const systemNote =
+    ' Your computer’s audio is mixed in — you’ll pick a screen or tab to share it.';
+  const withSystem = systemAudioOn && !screenOn && (micOn || cameraOn);
   if (cameraOn && screenOn) {
+    // Dual capture already routes system audio to the screen clip (described).
     return micOn
       ? 'Screen capture plus your camera as picture-in-picture; microphone on the camera clip, system audio on the screen clip when available. Saved as two video clips.'
       : 'Screen capture plus your camera as picture-in-picture (no microphone). Saved as two video clips.';
   }
   if (cameraOn) {
-    return micOn
+    const base = micOn
       ? 'Camera video with your microphone. Saved as a video clip.'
       : 'Camera video only (no microphone). Saved as a video clip.';
+    return withSystem ? `${base}${systemNote}` : base;
   }
   if (screenOn) {
     return micOn
       ? 'Screen capture with your microphone mixed in. System audio when available.'
       : 'Screen capture (no microphone). System audio when available.';
   }
-  return micOn
-    ? 'Voice-only audio. Pairs with a written script for auto-mapping to blocks.'
-    : 'Pick at least one source to record.';
+  if (micOn) {
+    return systemAudioOn
+      ? `Voice plus your computer’s audio.${systemNote} Saved as an audio clip.`
+      : 'Voice-only audio. Pairs with a written script for auto-mapping to blocks.';
+  }
+  return 'Pick at least one source to record.';
 }
 
 /**
@@ -637,13 +652,12 @@ export function RecorderModal({
   const recorder = useMediaRecorder({
     source,
     includeMicrophone: cameraOn ? micOn : undefined,
-    systemAudio: screenOn && canIncludeSystemAudio ? includeSystemAudio : false,
+    // System audio rides the screen capture when Screen is on, and is otherwise
+    // captured via a separate (video-discarded) display capture mixed into the
+    // mic/camera file — so it is no longer gated on Screen.
+    systemAudio: canIncludeSystemAudio ? includeSystemAudio : false,
   });
-  const filenameSeed = recordingFilenameSeed(
-    source,
-    recorder.stream,
-    micOn || (screenOn && includeSystemAudio),
-  );
+  const filenameSeed = recordingFilenameSeed(source, recorder.stream, micOn || includeSystemAudio);
 
   // ── Narration mode ─────────────────────────────────────────────────
   // Called unconditionally (rules of hooks); the stage hooks are idle-cheap
@@ -1071,10 +1085,13 @@ export function RecorderModal({
   const toggleLockReason = canSave
     ? 'Save or discard this recording before changing sources'
     : undefined;
-  // The non-narration capture pills. System audio depends on Screen being on
-  // (it can only be captured as part of a display capture) and is filtered out
-  // entirely when the platform can't honor it. Camera and Screen are no longer
-  // mutually exclusive — both on = `'screen+camera'` dual capture.
+  // The non-narration capture pills. System audio needs at least one companion
+  // source to attach to (mic, camera, or screen) and is filtered out entirely
+  // when the platform can't honor it. When Screen is on it rides the screen
+  // capture; otherwise it's mixed into the mic/camera file via a separate
+  // display capture (the browser still prompts for a screen/tab to share).
+  // Camera and Screen are no longer mutually exclusive — both on = dual capture.
+  const systemAudioHasCompanion = micOn || cameraOn || screenOn;
   const simpleToggleProps = (key: ToggleKey) => {
     const active =
       key === 'mic'
@@ -1087,12 +1104,14 @@ export function RecorderModal({
     if (key === 'systemAudio') {
       return {
         active,
-        disabled: togglesLocked || !screenOn,
+        disabled: togglesLocked || !systemAudioHasCompanion,
         title: togglesLocked
           ? toggleLockReason
-          : screenOn
-            ? 'Capture tab or system audio with the screen recording'
-            : 'Turn on Screen to capture system audio',
+          : !systemAudioHasCompanion
+            ? 'Turn on Microphone, Camera, or Screen to add system audio'
+            : screenOn
+              ? 'Capture your computer’s audio with the screen recording'
+              : 'Capture your computer’s audio — you’ll pick a screen or tab to share it',
         onClick: () => setIncludeSystemAudio((on) => !on),
       };
     }
@@ -1218,7 +1237,7 @@ export function RecorderModal({
             <p style={summaryStyle}>
               {narrationOn
                 ? narrationCaptureSummary(stage.recorder.withCamera)
-                : captureSummary(micOn, cameraOn, screenOn)}
+                : captureSummary(micOn, cameraOn, screenOn, includeSystemAudio)}
             </p>
 
             {narrationAvailable && (

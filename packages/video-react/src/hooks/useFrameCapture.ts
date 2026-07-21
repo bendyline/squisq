@@ -63,6 +63,11 @@ const MIME_MAP: Record<string, string> = {
   svg: 'image/svg+xml',
   bmp: 'image/bmp',
   avif: 'image/avif',
+  mp3: 'audio/mpeg',
+  wav: 'audio/wav',
+  ogg: 'audio/ogg',
+  mp4: 'video/mp4',
+  webm: 'video/webm',
 };
 
 const VISUAL_UPDATE_FALLBACK_MS = 100;
@@ -217,6 +222,13 @@ export interface CoverSourceRect {
   sh: number;
 }
 
+interface VideoFrameRect extends CoverSourceRect {
+  dx: number;
+  dy: number;
+  dw: number;
+  dh: number;
+}
+
 /** Source rectangle that implements CSS `object-fit: cover` for canvas drawImage. */
 export function coverSourceRect(
   sourceWidth: number,
@@ -234,28 +246,100 @@ export function coverSourceRect(
   return { sx: 0, sy: (sourceHeight - sh) / 2, sw: sourceWidth, sh };
 }
 
+/** Canvas source/destination rectangles matching the video's CSS object-fit. */
+function videoFrameRect(
+  sourceWidth: number,
+  sourceHeight: number,
+  destinationWidth: number,
+  destinationHeight: number,
+  objectFit: string,
+): VideoFrameRect {
+  if (objectFit === 'cover') {
+    return {
+      ...coverSourceRect(sourceWidth, sourceHeight, destinationWidth, destinationHeight),
+      dx: 0,
+      dy: 0,
+      dw: destinationWidth,
+      dh: destinationHeight,
+    };
+  }
+
+  if (objectFit === 'contain' || objectFit === 'scale-down') {
+    const containScale = Math.min(destinationWidth / sourceWidth, destinationHeight / sourceHeight);
+    const scale = objectFit === 'scale-down' ? Math.min(1, containScale) : containScale;
+    const dw = sourceWidth * scale;
+    const dh = sourceHeight * scale;
+    return {
+      sx: 0,
+      sy: 0,
+      sw: sourceWidth,
+      sh: sourceHeight,
+      dx: (destinationWidth - dw) / 2,
+      dy: (destinationHeight - dh) / 2,
+      dw,
+      dh,
+    };
+  }
+
+  if (objectFit === 'none') {
+    return {
+      sx: 0,
+      sy: 0,
+      sw: sourceWidth,
+      sh: sourceHeight,
+      dx: (destinationWidth - sourceWidth) / 2,
+      dy: (destinationHeight - sourceHeight) / 2,
+      dw: sourceWidth,
+      dh: sourceHeight,
+    };
+  }
+
+  // CSS defaults replaced content to `fill`.
+  return {
+    sx: 0,
+    sy: 0,
+    sw: sourceWidth,
+    sh: sourceHeight,
+    dx: 0,
+    dy: 0,
+    dw: destinationWidth,
+    dh: destinationHeight,
+  };
+}
+
 /**
  * html2canvas replaces `<video>` with a bare `<canvas>` before rendering. Its
  * replacement does not retain the video's class or inline/computed styles and
- * draws the source stretched to the element box. Re-associate each scheduled
- * video clone with its original, restore capture-critical presentation, and
- * redraw the current frame with CSS `object-fit: cover` semantics.
+ * draws the source stretched to the element box. Re-associate scheduled and
+ * block-layer video clones with their originals, restore capture-critical
+ * presentation, and redraw the current frame with its authored CSS
+ * `object-fit` semantics.
  */
 export function prepareScheduledVideoClones(
   originalRoot: HTMLElement,
   clonedRoot: HTMLElement,
 ): void {
-  const videos = Array.from(
-    originalRoot.querySelectorAll<HTMLVideoElement>('.doc-player__media-clips video[data-clip-id]'),
-  );
-  const canvases = Array.from(
-    clonedRoot.querySelectorAll<HTMLCanvasElement>('.doc-player__media-clips canvas'),
-  );
+  const captureFamilies = [
+    {
+      original: '.doc-player__media-clips video[data-clip-id]',
+      clone: '.doc-player__media-clips canvas',
+    },
+    {
+      original: '.block-layer--video video[data-clip-start]',
+      clone: '.block-layer--video canvas',
+    },
+  ] as const;
 
-  videos.forEach((video, index) => {
-    const canvas = canvases[index];
-    if (!canvas) return;
+  const pairs = captureFamilies.flatMap(({ original, clone }) => {
+    const videos = Array.from(originalRoot.querySelectorAll<HTMLVideoElement>(original));
+    const canvases = Array.from(clonedRoot.querySelectorAll<HTMLCanvasElement>(clone));
+    return videos.flatMap((video, index) => {
+      const canvas = canvases[index];
+      return canvas ? [{ video, canvas }] : [];
+    });
+  });
 
+  pairs.forEach(({ video, canvas }) => {
     canvas.className = video.className;
     canvas.style.cssText = video.style.cssText;
     for (const attribute of Array.from(video.attributes)) {
@@ -277,11 +361,14 @@ export function prepareScheduledVideoClones(
     }
 
     try {
-      const crop = coverSourceRect(
+      const view = video.ownerDocument.defaultView;
+      const objectFit = video.style.objectFit || view?.getComputedStyle(video).objectFit || 'fill';
+      const frame = videoFrameRect(
         video.videoWidth,
         video.videoHeight,
         destinationWidth,
         destinationHeight,
+        objectFit,
       );
       const stagingCanvas = canvas.ownerDocument.createElement('canvas');
       stagingCanvas.width = destinationWidth;
@@ -291,18 +378,54 @@ export function prepareScheduledVideoClones(
       if (!stagingContext || !context) return;
       stagingContext.drawImage(
         video,
-        crop.sx,
-        crop.sy,
-        crop.sw,
-        crop.sh,
-        0,
-        0,
-        destinationWidth,
-        destinationHeight,
+        frame.sx,
+        frame.sy,
+        frame.sw,
+        frame.sh,
+        frame.dx,
+        frame.dy,
+        frame.dw,
+        frame.dh,
       );
       canvas.width = destinationWidth;
       canvas.height = destinationHeight;
       context.drawImage(stagingCanvas, 0, 0);
+
+      // html2canvas treats the DocPlayer's outer <svg> as one replaced image
+      // and serializes its subtree. Canvas bitmap pixels are not part of DOM
+      // serialization, and nested data-backed images are intentionally not
+      // loaded when Chromium paints an SVG as an image. Lift only an embedded
+      // VideoLayer frame into the cloned slide's HTML stacking context so its
+      // bitmap remains directly paintable. Scheduled/PIP canvases already live
+      // outside SVG and stay in place.
+      const foreignObject = canvas.closest('foreignObject');
+      const svg = canvas.closest('svg');
+      if (foreignObject && svg) {
+        const originalHost = video.closest<HTMLElement>('.doc-player__block') ?? originalRoot;
+        const clonedHost = svg.closest<HTMLElement>('.doc-player__block') ?? clonedRoot;
+        const videoRect = video.getBoundingClientRect();
+        const hostRect = originalHost.getBoundingClientRect();
+        const renderedWidth = videoRect.width || destinationWidth;
+        const renderedHeight = videoRect.height || destinationHeight;
+        const fallbackX = Number.parseFloat(foreignObject.getAttribute('x') ?? '0') || 0;
+        const fallbackY = Number.parseFloat(foreignObject.getAttribute('y') ?? '0') || 0;
+        const left = videoRect.width ? videoRect.left - hostRect.left : fallbackX;
+        const top = videoRect.height ? videoRect.top - hostRect.top : fallbackY;
+
+        foreignObject.remove();
+        if (clonedHost === clonedRoot && !clonedHost.style.position) {
+          clonedHost.style.position = 'relative';
+        }
+        canvas.style.position = 'absolute';
+        canvas.style.left = `${left}px`;
+        canvas.style.top = `${top}px`;
+        canvas.style.width = `${renderedWidth}px`;
+        canvas.style.height = `${renderedHeight}px`;
+        canvas.style.zIndex = '3';
+        canvas.style.margin = '0';
+        canvas.style.transform = 'none';
+        clonedHost.appendChild(canvas);
+      }
     } catch {
       // Keep html2canvas's original clone if this browser cannot redraw the
       // current video frame (for example, a not-yet-decodable media source).

@@ -252,6 +252,31 @@ describe('RecorderModal — unsaved take is not silently destroyed', () => {
     expect(screen.queryByRole('button', { name: 'Save to document' })).toBeNull();
   });
 
+  it('ends screen sharing on Stop and requests a fresh surface for re-recording', async () => {
+    const firstTrack = new FakeTrack('video');
+    const secondTrack = new FakeTrack('video');
+    const getDisplayMedia = vi
+      .fn()
+      .mockResolvedValueOnce(new FakeStream([firstTrack]))
+      .mockResolvedValueOnce(new FakeStream([secondTrack]));
+    vi.mocked(navigator.mediaDevices.getDisplayMedia).mockImplementation(getDisplayMedia);
+
+    render(<RecorderModal initialMode="screen" mediaProvider={mediaProvider} onClose={vi.fn()} />);
+    await recordATake();
+
+    expect(firstTrack.readyState).toBe('ended');
+    expect(screen.getByRole('button', { name: 'Save to document' })).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Discard & re-record' }));
+    expect(screen.getByRole('button', { name: 'Start preview' })).toBeTruthy();
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Start preview' }));
+    });
+    expect(getDisplayMedia).toHaveBeenCalledTimes(2);
+    expect(secondTrack.readyState).toBe('live');
+  });
+
   it('saves a screen+camera take as two video files with a camera companion', async () => {
     const onSave = vi.fn();
     render(
@@ -317,19 +342,27 @@ describe('RecorderModal — unsaved take is not silently destroyed', () => {
     expect(calls[1]?.[0]).toBe('video/demo-camera.webm');
   });
 
-  it('offers a System audio pill on Chromium, gated on Screen being on', async () => {
+  it('enables the System audio pill whenever a source is armed (Chromium)', async () => {
     Object.defineProperty(navigator, 'userAgentData', {
       configurable: true,
       value: { brands: [{ brand: 'Chromium' }], mobile: false },
     });
     render(<RecorderModal initialMode="mic" mediaProvider={mediaProvider} onClose={vi.fn()} />);
 
-    // Present, but inert until a display capture is armed.
+    // Microphone is on → system audio has a companion to attach to (it no
+    // longer requires Screen — without Screen it mixes into the mic/camera file).
+    expect(toggle('System audio').hasAttribute('disabled')).toBe(false);
+
+    // Turn Microphone off → nothing armed → disabled with a hint.
+    await act(async () => {
+      fireEvent.click(toggle('Microphone'));
+    });
     expect(toggle('System audio').hasAttribute('disabled')).toBe(true);
     expect(toggle('System audio').getAttribute('title')).toBe(
-      'Turn on Screen to capture system audio',
+      'Turn on Microphone, Camera, or Screen to add system audio',
     );
 
+    // Arm any source (Screen here) → enabled again.
     await act(async () => {
       fireEvent.click(toggle('Screen'));
     });

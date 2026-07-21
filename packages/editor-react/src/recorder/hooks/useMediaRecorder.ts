@@ -28,6 +28,7 @@ import {
 import { requestMicStream } from '../sources/micStream.js';
 import { requestCameraStream } from '../sources/cameraStream.js';
 import { requestScreenStream, type ScreenStreamHandle } from '../sources/screenStream.js';
+import { requestSystemAudioStream, mixSystemAudio } from '../sources/systemAudioStream.js';
 
 /**
  * Which capture source to use. `screen+mic` mixes the microphone into the
@@ -51,7 +52,7 @@ export type RecorderState =
  * (null for every other source). Its `blob` is null until the take stops.
  */
 export interface RecorderCameraLane {
-  /** Live camera stream (video + mic when `includeMicrophone`); null after teardown. */
+  /** Camera stream (video + mic when requested); inactive after stop, null after teardown. */
   stream: MediaStream | null;
   /** Final camera `Blob` after `stop()` resolves, or null while recording. */
   blob: Blob | null;
@@ -81,10 +82,14 @@ export interface UseMediaRecorderOptions {
    */
   bitsPerSecond?: number;
   /**
-   * Whether to attempt to capture system audio when `source === 'screen'`,
-   * `'screen+mic'`, or `'screen+camera'`. Browser support is limited
-   * (desktop Chromium only); when unsupported the resulting stream simply
-   * omits it. For `'screen+camera'` this rides the SCREEN lane.
+   * Whether to capture system (tab/monitor) audio. Browser support is limited
+   * (desktop Chromium only); when unsupported the resulting stream simply omits
+   * it. How it is obtained depends on the source:
+   * - `'screen'` / `'screen+mic'` / `'screen+camera'` — folded into the screen
+   *   lane's `getDisplayMedia` (rides the SCREEN file for the dual source).
+   * - `'mic'` / `'camera'` — captured via a SEPARATE `getDisplayMedia` whose
+   *   video is discarded, then mixed into the mic/camera file. The browser still
+   *   shows the screen/tab picker (audio-only display capture isn't allowed).
    */
   systemAudio?: boolean;
   /**
@@ -101,8 +106,9 @@ export interface UseMediaRecorderOptions {
 export interface UseMediaRecorderResult {
   /** Current recorder state. */
   state: RecorderState;
-  /** Live `MediaStream` after `request()` succeeds; useful for preview. For
-   * `'screen+camera'` this is the SCREEN stream (see `camera` for the other). */
+  /** `MediaStream` acquired by `request()`; live during preview/recording and
+   * inactive after stop. For `'screen+camera'` this is the SCREEN stream (see
+   * `camera` for the other). */
   stream: MediaStream | null;
   /** Final `Blob` after `stop()` resolves, or `null` while recording. For
    * `'screen+camera'` this is the SCREEN file. */
@@ -139,7 +145,9 @@ export interface UseMediaRecorderResult {
   /**
    * Stop recording and resolve with the resulting `Blob`. Safe to call
    * from `'recording'`; a no-op from any other state (resolves with the
-   * existing `blob`, or `null`).
+   * existing `blob`, or `null`). Once the take has flushed, all capture
+   * tracks are stopped so browser sharing / camera / microphone indicators
+   * do not remain active during review.
    */
   stop: () => Promise<Blob | null>;
   /**
@@ -148,7 +156,7 @@ export interface UseMediaRecorderResult {
    * `'idle'`. Always safe to call.
    */
   cancel: () => void;
-  /** Reset state without releasing the stream. Useful for re-recording. */
+  /** Clear the current take. A new permission request may be needed before re-recording. */
   reset: () => void;
 }
 
@@ -181,14 +189,39 @@ async function acquireStream(
   switch (source) {
     case 'mic': {
       const audio = typeof opts.audioConstraints === 'object' ? opts.audioConstraints : undefined;
+      if (opts.systemAudio) {
+        // System audio only comes from a display capture — take it FIRST (it
+        // needs the click's transient activation), then the mic, then mix.
+        const systemAudio = await requestSystemAudioStream();
+        let base: MediaStream;
+        try {
+          base = await requestMicStream(audio);
+        } catch (err: unknown) {
+          systemAudio?.getTracks().forEach((t) => t.stop());
+          throw err;
+        }
+        if (!systemAudio) return { stream: base, dispose: () => {} };
+        return mixSystemAudio(base, systemAudio);
+      }
       const stream = await requestMicStream(audio);
       return { stream, dispose: () => {} };
     }
     case 'camera': {
-      const stream = await requestCameraStream({
-        video: opts.videoConstraints ?? true,
-        audio: opts.includeMicrophone === false ? false : (opts.audioConstraints ?? true),
-      });
+      const video = opts.videoConstraints ?? true;
+      const audio = opts.includeMicrophone === false ? false : (opts.audioConstraints ?? true);
+      if (opts.systemAudio) {
+        const systemAudio = await requestSystemAudioStream();
+        let base: MediaStream;
+        try {
+          base = await requestCameraStream({ video, audio });
+        } catch (err: unknown) {
+          systemAudio?.getTracks().forEach((t) => t.stop());
+          throw err;
+        }
+        if (!systemAudio) return { stream: base, dispose: () => {} };
+        return mixSystemAudio(base, systemAudio);
+      }
+      const stream = await requestCameraStream({ video, audio });
       return { stream, dispose: () => {} };
     }
     case 'screen':
@@ -321,6 +354,18 @@ export function useMediaRecorder(options: UseMediaRecorderOptions = {}): UseMedi
       clearInterval(tickerRef.current);
       tickerRef.current = null;
     }
+  }, []);
+
+  // End every live capture without discarding the completed take or the
+  // stream objects that describe it. Keeping those inactive stream objects
+  // lets review/save code inspect which tracks were recorded, while stopping
+  // the tracks themselves dismisses the browser's screen-sharing banner and
+  // camera/microphone indicators.
+  const deactivateCapture = useCallback(() => {
+    recorderRef.current?.stream.getTracks().forEach((track) => track.stop());
+    secondaryRef.current?.stream.getTracks().forEach((track) => track.stop());
+    disposeStreamRef.current?.();
+    disposeStreamRef.current = null;
   }, []);
 
   const releaseStream = useCallback(() => {
@@ -480,6 +525,7 @@ export function useMediaRecorder(options: UseMediaRecorderOptions = {}): UseMedi
             const p = primaryStartMsRef.current;
             const c = secondaryStartMsRef.current;
             setCameraOffsetSec(p != null && c != null ? (c - p) / 1000 : null);
+            deactivateCapture();
             transition('stopped');
             clearTicker();
             stopResolversRef.current.splice(0).forEach((resolve) => resolve(primaryBlob));
@@ -515,6 +561,7 @@ export function useMediaRecorder(options: UseMediaRecorderOptions = {}): UseMedi
             const detail = (event as unknown as { error?: DOMException }).error;
             const err = detail instanceof Error ? detail : new Error('Recorder error');
             setError(err);
+            deactivateCapture();
             transition('error');
             clearTicker();
             pendingLanesRef.current = 0;
@@ -600,6 +647,7 @@ export function useMediaRecorder(options: UseMediaRecorderOptions = {}): UseMedi
           const finalBlob = new Blob(chunksRef.current, { type: recordedType });
           chunksRef.current = [];
           setBlob(finalBlob);
+          deactivateCapture();
           transition('stopped');
           clearTicker();
           stopResolversRef.current.splice(0).forEach((resolve) => resolve(finalBlob));
@@ -610,6 +658,7 @@ export function useMediaRecorder(options: UseMediaRecorderOptions = {}): UseMedi
           const detail = (event as unknown as { error?: DOMException }).error;
           const err = detail instanceof Error ? detail : new Error('Recorder error');
           setError(err);
+          deactivateCapture();
           transition('error');
           clearTicker();
           pendingLanesRef.current = 0;
@@ -647,7 +696,7 @@ export function useMediaRecorder(options: UseMediaRecorderOptions = {}): UseMedi
     })();
     requestPromiseRef.current = requestPromise;
     return requestPromise;
-  }, [clearTicker, transition]);
+  }, [clearTicker, deactivateCapture, transition]);
 
   const start = useCallback(() => {
     const rec = recorderRef.current;
@@ -671,6 +720,7 @@ export function useMediaRecorder(options: UseMediaRecorderOptions = {}): UseMedi
       rec.start(1000);
     } catch (err: unknown) {
       setError(err instanceof Error ? err : new Error('Failed to start recorder'));
+      deactivateCapture();
       transition('error');
       return;
     }
@@ -687,6 +737,7 @@ export function useMediaRecorder(options: UseMediaRecorderOptions = {}): UseMedi
           // ignore
         }
         setError(err instanceof Error ? err : new Error('Failed to start camera recorder'));
+        deactivateCapture();
         transition('error');
         return;
       }
@@ -698,7 +749,7 @@ export function useMediaRecorder(options: UseMediaRecorderOptions = {}): UseMedi
         setDurationMs(Date.now() - startTimestampRef.current);
       }
     }, 100);
-  }, [clearTicker, transition]);
+  }, [clearTicker, deactivateCapture, transition]);
 
   const stop = useCallback((): Promise<Blob | null> => {
     if (stopPromiseRef.current) return stopPromiseRef.current;
@@ -717,6 +768,7 @@ export function useMediaRecorder(options: UseMediaRecorderOptions = {}): UseMedi
       } catch (err: unknown) {
         const normalized = err instanceof Error ? err : new Error('Failed to stop recorder');
         setError(normalized);
+        deactivateCapture();
         transition('error');
         clearTicker();
         pendingLanesRef.current = 0;
@@ -738,7 +790,7 @@ export function useMediaRecorder(options: UseMediaRecorderOptions = {}): UseMedi
       if (stopPromiseRef.current === stopPromise) stopPromiseRef.current = null;
     });
     return stopPromise;
-  }, [blob, clearTicker, transition]);
+  }, [blob, clearTicker, deactivateCapture, transition]);
 
   // Keep the latest stop/cancel callbacks reachable from the screen-track
   // `ended` handler, which is bound once at request() time.

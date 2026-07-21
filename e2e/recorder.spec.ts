@@ -7,8 +7,9 @@ import { waitForAppReady } from './appReady';
  * The microphone composes with either video source or stands alone (narration);
  * Camera and Screen can be armed together for a dual (screen + camera
  * picture-in-picture) recording. System audio is a pill in the Screen group,
- * offered only on platforms that can capture it (desktop Chromium) and enabled
- * only while Screen is on.
+ * offered only on platforms that can capture it (desktop Chromium); it needs a
+ * companion source (mic/camera/screen) but no longer requires Screen — without
+ * Screen it mixes into the mic/camera file.
  */
 
 async function openRecorder(page: Page) {
@@ -66,11 +67,16 @@ test('Microphone toggles independently; Camera and Screen compose for dual captu
   await expect(screen).toHaveAttribute('aria-pressed', 'true');
   await expect(camera).toHaveAttribute('aria-pressed', 'true');
 
-  // System audio is a pill in the Screen group (Chromium runs this spec), armed
-  // only while Screen is on.
+  // System audio (Chromium runs this spec) no longer requires Screen — it's
+  // enabled whenever any source is armed, and only disabled when none are.
   await expect(systemAudio).toBeVisible();
   await expect(systemAudio).toBeEnabled();
+  // Turn every source off → system audio has nothing to attach to.
+  await mic.click();
+  await camera.click();
   await screen.click();
-  await expect(screen).toHaveAttribute('aria-pressed', 'false');
   await expect(systemAudio).toBeDisabled();
+  // Arming any single source re-enables it.
+  await camera.click();
+  await expect(systemAudio).toBeEnabled();
 });
