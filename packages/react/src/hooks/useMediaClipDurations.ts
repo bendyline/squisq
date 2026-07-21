@@ -128,8 +128,7 @@ export function useMediaClipDurations(
   mediaProviderOverride?: MediaProvider | null,
 ): Map<string, number> {
   const contextProvider = useMediaProvider();
-  const provider =
-    mediaProviderOverride !== undefined ? mediaProviderOverride : contextProvider;
+  const provider = mediaProviderOverride !== undefined ? mediaProviderOverride : contextProvider;
   const resourcePolicy = useResourcePolicy();
 
   // Distinct video sources, as a stable key so the effect only re-runs when the

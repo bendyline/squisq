@@ -38,7 +38,11 @@ function SourceProbe() {
  * support is patchy) and satisfies both React's delegated `onPointerDown` and
  * the component's own `window` pointer listeners.
  */
-function firePointer(target: EventTarget, type: 'pointerdown' | 'pointermove' | 'pointerup', clientX: number) {
+function firePointer(
+  target: EventTarget,
+  type: 'pointerdown' | 'pointermove' | 'pointerup',
+  clientX: number,
+) {
   act(() => {
     target.dispatchEvent(new MouseEvent(type, { bubbles: true, cancelable: true, clientX }));
   });

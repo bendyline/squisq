@@ -644,9 +644,7 @@ export function App() {
             <select
               aria-label="Write theme inheritance"
               value={writeThemeInheritance}
-              onChange={(event) =>
-                setWriteThemeInheritance(event.target.value as ThemeInheritance)
-              }
+              onChange={(event) => setWriteThemeInheritance(event.target.value as ThemeInheritance)}
               style={{
                 border: '1px solid #c9b98a',
                 background: '#fff',

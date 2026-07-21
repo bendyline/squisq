@@ -316,10 +316,7 @@ function DocPlayerContent({
 
   // Theme-driven picture-in-picture frame (border / shadow / corner radius),
   // exposed as CSS custom properties on the player root for the PiP stylesheet.
-  const pipVars = useMemo(
-    () => pipStyleVars(effectiveTheme) as CSSProperties,
-    [effectiveTheme],
-  );
+  const pipVars = useMemo(() => pipStyleVars(effectiveTheme) as CSSProperties, [effectiveTheme]);
 
   // Doc playback hook - pass viewport for responsive template expansion
   const {

@@ -663,7 +663,11 @@ export function TimelineTrack({
                         id,
                         absStart,
                         (newAbsStart) => {
-                          placeEmbeddedClip(m.sourceLine, { ...spec, clipEnd: length }, newAbsStart);
+                          placeEmbeddedClip(
+                            m.sourceLine,
+                            { ...spec, clipEnd: length },
+                            newAbsStart,
+                          );
                         },
                         { onClick: () => selectClipAt(b.startTime, b.id) },
                       )

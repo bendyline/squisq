@@ -109,7 +109,9 @@ describe('resolveMediaSchedule', () => {
 
     it('never extends a clip past the timeline when the file is longer than the doc', () => {
       const d = doc([block({ id: 'b', startTime: 0, duration: 40 })], {
-        documentMedia: [{ id: 'v', src: 'long.webm', kind: 'video', startAt: 0, anchor: 'document' }],
+        documentMedia: [
+          { id: 'v', src: 'long.webm', kind: 'video', startAt: 0, anchor: 'document' },
+        ],
       });
       const [clip] = resolveMediaSchedule(d, { intrinsicDuration: () => 300 });
       expect(clip.absoluteEnd).toBe(40); // capped at the doc end, never extended
@@ -175,7 +177,9 @@ describe('resolveMediaSchedule', () => {
 
     it('does not cap when the probe has no duration for the clip', () => {
       const d = doc([block({ id: 'b', startTime: 0, duration: 40 })], {
-        documentMedia: [{ id: 'v', src: 'rec.webm', kind: 'video', startAt: 0, anchor: 'document' }],
+        documentMedia: [
+          { id: 'v', src: 'rec.webm', kind: 'video', startAt: 0, anchor: 'document' },
+        ],
       });
       const [clip] = resolveMediaSchedule(d, { intrinsicDuration: () => undefined });
       expect(clip.absoluteEnd).toBe(40);
