@@ -1,4 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
+import { waitForAppReady } from './appReady';
 
 /**
  * A plain mouse wheel over a canvas (drawing/layout/diagram) must scroll the
@@ -8,7 +9,7 @@ import { test, expect, type Page } from '@playwright/test';
 
 async function loadDrawing(page: Page) {
   await page.goto('/');
-  await page.waitForLoadState('networkidle');
+  await waitForAppReady(page);
   await page.locator('select').first().selectOption('drawing-org-chart');
   await page.locator('.squisq-scene-widget-host').waitFor({ state: 'visible', timeout: 5_000 });
   await page

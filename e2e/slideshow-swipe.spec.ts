@@ -1,4 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
+import { waitForAppReady } from './appReady';
 import { selectUseMode, switchView } from './view-tabs';
 
 /**
@@ -49,7 +50,7 @@ async function dragPlayer(page: Page, dxFraction: number) {
 test.describe('Slideshow drag-to-swipe', () => {
   test.beforeEach(async ({ page }) => {
     await page.goto('/');
-    await page.waitForLoadState('networkidle');
+    await waitForAppReady(page);
     await enterSlideshow(page);
   });
 

@@ -1,4 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
+import { waitForAppReady } from './appReady';
 import { selectUseMode, switchView } from './view-tabs';
 
 /**
@@ -42,7 +43,7 @@ test.describe('Caption display', () => {
 
   test.beforeEach(async ({ page }) => {
     await page.goto('/');
-    await page.waitForLoadState('networkidle');
+    await waitForAppReady(page);
     await selectSample(page, 'hello-world');
     await switchView(page, 'Play');
     await selectUseMode(page, 'Video');

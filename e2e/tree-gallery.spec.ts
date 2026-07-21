@@ -1,4 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
+import { waitForAppReady } from './appReady';
 import { selectUseMode, switchView } from './view-tabs';
 
 /**
@@ -10,7 +11,7 @@ import { selectUseMode, switchView } from './view-tabs';
 
 async function enterPlay(page: Page) {
   await page.goto('/');
-  await page.waitForLoadState('networkidle');
+  await waitForAppReady(page);
   await page.locator('select').first().selectOption('tree-gallery');
   await page.locator('.tiptap.ProseMirror').waitFor({ state: 'visible', timeout: 5_000 });
   await switchView(page, 'Play');

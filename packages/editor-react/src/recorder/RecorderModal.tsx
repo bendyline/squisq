@@ -585,9 +585,7 @@ function dualFilenameSeeds(
   const screenHasAudio = screenStream
     ? screenStream.getAudioTracks().length > 0
     : systemAudioRequested;
-  const cameraHasAudio = cameraStream
-    ? cameraStream.getAudioTracks().length > 0
-    : micRequested;
+  const cameraHasAudio = cameraStream ? cameraStream.getAudioTracks().length > 0 : micRequested;
   return {
     screen: screenHasAudio ? 'screen+audio' : 'screen',
     camera: cameraHasAudio ? 'camera+audio' : 'camera',
@@ -1382,26 +1380,23 @@ export function RecorderModal({
                 </div>
               </div>
             )}
-            {!narrationOn &&
-              recorder.state === 'stopped' &&
-              isDual &&
-              cameraPlaybackUrl && (
-                <div style={{ marginBottom: 12 }}>
-                  <div style={summaryStyle}>Camera (picture-in-picture)</div>
-                  <video
-                    src={cameraPlaybackUrl}
-                    controls
-                    playsInline
-                    aria-label="Camera recording"
-                    style={{
-                      width: '48%',
-                      display: 'block',
-                      marginLeft: 'auto',
-                      background: '#000',
-                    }}
-                  />
-                </div>
-              )}
+            {!narrationOn && recorder.state === 'stopped' && isDual && cameraPlaybackUrl && (
+              <div style={{ marginBottom: 12 }}>
+                <div style={summaryStyle}>Camera (picture-in-picture)</div>
+                <video
+                  src={cameraPlaybackUrl}
+                  controls
+                  playsInline
+                  aria-label="Camera recording"
+                  style={{
+                    width: '48%',
+                    display: 'block',
+                    marginLeft: 'auto',
+                    background: '#000',
+                  }}
+                />
+              </div>
+            )}
             {!narrationOn && recorder.state === 'stopped' && playbackUrl && isAudioOnly && (
               <div style={{ marginBottom: 12 }}>
                 <div style={{ ...audioMeterStyle, marginBottom: 8 }}>

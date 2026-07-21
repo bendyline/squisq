@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { waitForAppReady } from './appReady';
 import { readFile } from 'node:fs/promises';
 
 function countGifFrames(bytes: Uint8Array): number {
@@ -62,7 +63,7 @@ test.describe('Video export', () => {
     // `getInitialSampleKey()`, so the export runs against the fixture
     // without anyone having to interact with the sample picker.
     await page.goto('/?sample=e2e-tiny');
-    await page.waitForLoadState('networkidle');
+    await waitForAppReady(page);
 
     // This test exercises the WebCodecs path end-to-end. Linux Chromium ships
     // without the proprietary H.264 encoder, so `VideoEncoder` exists but
@@ -145,7 +146,7 @@ test.describe('Video export', () => {
 
   test('export modal opens from download menu', async ({ page }) => {
     await page.goto('/');
-    await page.waitForLoadState('networkidle');
+    await waitForAppReady(page);
 
     // Open download menu
     const downloadBtn = page.locator('button', { hasText: /Download/i });
@@ -168,7 +169,7 @@ test.describe('Video export', () => {
 
   test('animated GIF selection applies compression-friendly defaults', async ({ page }) => {
     await page.goto('/?sample=e2e-tiny');
-    await page.waitForLoadState('networkidle');
+    await waitForAppReady(page);
 
     await page.locator('button', { hasText: /Download/i }).click();
     await page.getByRole('button', { name: /Video \/ Animated GIF/i }).click();
@@ -195,7 +196,7 @@ test.describe('Video export', () => {
     page.on('pageerror', (err) => consoleLogs.push(`[pageerror] ${err.message}`));
 
     await page.goto('/?sample=e2e-gif');
-    await page.waitForLoadState('networkidle');
+    await waitForAppReady(page);
     const wasmAvailable = await page.evaluate(
       () => crossOriginIsolated && typeof SharedArrayBuffer !== 'undefined',
     );

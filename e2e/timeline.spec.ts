@@ -1,4 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
+import { waitForAppReady } from './appReady';
 import { switchView } from './view-tabs';
 
 /**
@@ -9,7 +10,7 @@ import { switchView } from './view-tabs';
 
 async function loadFeaturesSample(page: Page) {
   await page.goto('/');
-  await page.waitForLoadState('networkidle');
+  await waitForAppReady(page);
   await page.locator('select').first().selectOption('features-demo');
   await page.locator('.tiptap.ProseMirror').waitFor({ state: 'visible', timeout: 5_000 });
 }
@@ -56,7 +57,7 @@ test.describe('Timeline view', () => {
 
   test('embedded media shows on the track and can move to another block', async ({ page }) => {
     await page.goto('/');
-    await page.waitForLoadState('networkidle');
+    await waitForAppReady(page);
     await page.locator('select').first().selectOption('timeline-media');
     await page.locator('.tiptap.ProseMirror').waitFor({ state: 'visible', timeout: 5_000 });
     await enterTimelineMode(page);
@@ -82,7 +83,7 @@ test.describe('Timeline view', () => {
 
   test('returning to document view preserves embedded video', async ({ page }) => {
     await page.goto('/');
-    await page.waitForLoadState('networkidle');
+    await waitForAppReady(page);
     await page.locator('select').first().selectOption('timeline-media');
     await page.locator('.tiptap.ProseMirror').waitFor({ state: 'visible', timeout: 5_000 });
     await expect(page.locator('.tiptap.ProseMirror video')).toHaveCount(1);
@@ -148,7 +149,7 @@ test.describe('Timeline view', () => {
     });
 
     await page.goto('/');
-    await page.waitForLoadState('networkidle');
+    await waitForAppReady(page);
     await page.locator('select').first().selectOption('about-squisq');
     const editor = page.locator('.tiptap.ProseMirror');
     await editor.waitFor({ state: 'visible', timeout: 5_000 });
@@ -195,7 +196,7 @@ test.describe('Timeline view', () => {
 
   test('typing in block mode keeps the caret in place (no jump to end)', async ({ page }) => {
     await page.goto('/');
-    await page.waitForLoadState('networkidle');
+    await waitForAppReady(page);
     await page.locator('select').first().selectOption('hello-world');
     await page.locator('.tiptap.ProseMirror').waitFor({ state: 'visible', timeout: 5_000 });
 

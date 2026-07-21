@@ -1,5 +1,6 @@
 import { test, expect, type Page } from '@playwright/test';
 import { switchView } from './view-tabs';
+import { waitForAppReady } from './appReady';
 
 /**
  * E2E tests for the ASCII-fence diagram editor.
@@ -24,7 +25,7 @@ const NBSP_RE = new RegExp(String.fromCharCode(160), 'g');
 
 async function loadSample(page: Page, sample: string) {
   await page.goto('/');
-  await page.waitForLoadState('networkidle');
+  await waitForAppReady(page);
   await page.locator('select').first().selectOption(sample);
   await page.locator('.tiptap.ProseMirror').waitFor({ state: 'visible', timeout: 5_000 });
 }

@@ -1,4 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
+import { waitForAppReady } from './appReady';
 import { switchView, viewTab, type ViewTab } from './view-tabs';
 
 /**
@@ -34,7 +35,7 @@ async function waitForMonaco(page: Page) {
 test.describe('Editor view switching', () => {
   test.beforeEach(async ({ page }) => {
     await page.goto('/');
-    await page.waitForLoadState('networkidle');
+    await waitForAppReady(page);
   });
 
   test('starts in Editor (WYSIWYG) view by default', async ({ page }) => {
@@ -85,7 +86,7 @@ test.describe('Editor view switching', () => {
 test.describe('Editor toolbar', () => {
   test.beforeEach(async ({ page }) => {
     await page.goto('/');
-    await page.waitForLoadState('networkidle');
+    await waitForAppReady(page);
     // Ensure we're in Editor view
     await switchView(page, 'Editor');
     await waitForWysiwyg(page);
@@ -132,7 +133,7 @@ test.describe('Editor toolbar', () => {
 test.describe('WYSIWYG editing', () => {
   test.beforeEach(async ({ page }) => {
     await page.goto('/');
-    await page.waitForLoadState('networkidle');
+    await waitForAppReady(page);
     await switchView(page, 'Editor');
     await waitForWysiwyg(page);
   });
@@ -206,7 +207,7 @@ test.describe('WYSIWYG editing', () => {
 test.describe('Markdown sync between views', () => {
   test.beforeEach(async ({ page }) => {
     await page.goto('/');
-    await page.waitForLoadState('networkidle');
+    await waitForAppReady(page);
   });
 
   test('Markdown view shows markdown source', async ({ page }) => {
@@ -236,7 +237,7 @@ test.describe('Markdown sync between views', () => {
 test.describe('Sample switching in editor', () => {
   test.beforeEach(async ({ page }) => {
     await page.goto('/');
-    await page.waitForLoadState('networkidle');
+    await waitForAppReady(page);
     await switchView(page, 'Editor');
     await waitForWysiwyg(page);
   });
@@ -258,7 +259,7 @@ test.describe('Sample switching in editor', () => {
 test.describe('Template picker', () => {
   test.beforeEach(async ({ page }) => {
     await page.goto('/');
-    await page.waitForLoadState('networkidle');
+    await waitForAppReady(page);
     await switchView(page, 'Editor');
     await waitForWysiwyg(page);
   });

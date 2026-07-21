@@ -1,4 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
+import { waitForAppReady } from './appReady';
 
 /**
  * E2E for the "Repair as diagram" affordance.
@@ -12,7 +13,7 @@ import { test, expect, type Page } from '@playwright/test';
 
 async function loadSample(page: Page, sample: string) {
   await page.goto('/');
-  await page.waitForLoadState('networkidle');
+  await waitForAppReady(page);
   await page.locator('select').first().selectOption(sample);
   await page.locator('.tiptap.ProseMirror').waitFor({ state: 'visible', timeout: 5_000 });
 }

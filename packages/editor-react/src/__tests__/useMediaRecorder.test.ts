@@ -324,7 +324,10 @@ describe('useMediaRecorder lifecycle', () => {
           getUserMedia: vi
             .fn()
             .mockResolvedValue(
-              new FakeMediaStream([new FakeMediaStreamTrack('video'), new FakeMediaStreamTrack('audio')]),
+              new FakeMediaStream([
+                new FakeMediaStreamTrack('video'),
+                new FakeMediaStreamTrack('audio'),
+              ]),
             ),
           getDisplayMedia: vi.fn(),
         },

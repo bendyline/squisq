@@ -1,4 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
+import { waitForAppReady } from './appReady';
 
 /**
  * Image editor — drawing shape palette parity.
@@ -10,7 +11,7 @@ import { test, expect, type Page } from '@playwright/test';
 
 async function openImageEditor(page: Page) {
   await page.goto('/');
-  await page.waitForLoadState('networkidle');
+  await waitForAppReady(page);
   await page.getByRole('button', { name: 'Image Editor' }).click();
   await page.locator('[data-testid="image-editor"]').waitFor({ state: 'visible', timeout: 8000 });
 }

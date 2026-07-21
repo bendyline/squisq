@@ -1,5 +1,6 @@
 import { resolve } from 'node:path';
 import { expect, test, type Page } from '@playwright/test';
+import { waitForAppReady } from './appReady';
 import { selectUseMode, switchView } from './view-tabs';
 
 const AXE_PATH = resolve(process.cwd(), 'node_modules', 'axe-core', 'axe.min.js');
@@ -51,7 +52,7 @@ async function assertNoSeriousAxeViolations(page: Page, selector = 'body'): Prom
 test.describe('automated accessibility audit', () => {
   test.beforeEach(async ({ page }) => {
     await page.goto('/');
-    await page.waitForLoadState('networkidle');
+    await waitForAppReady(page);
   });
 
   test('editor, template dialog, page view, and player have no serious axe violations', async ({

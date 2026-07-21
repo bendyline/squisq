@@ -1,4 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
+import { waitForAppReady } from './appReady';
 import { selectUseMode, switchView, viewTab, type ViewTab } from './view-tabs';
 
 /**
@@ -68,7 +69,7 @@ async function waitForNextActiveBlock(
 test.describe('Site navigation', () => {
   test.beforeEach(async ({ page }) => {
     await page.goto('/');
-    await page.waitForLoadState('networkidle');
+    await waitForAppReady(page);
   });
 
   test('loads with the default about-squisq sample', async ({ page }) => {
@@ -106,7 +107,7 @@ test.describe('Site navigation', () => {
 test.describe('DocPlayer preview', () => {
   test.beforeEach(async ({ page }) => {
     await page.goto('/');
-    await page.waitForLoadState('networkidle');
+    await waitForAppReady(page);
     await selectSample(page, 'all-templates');
     await switchView(page, 'Play');
     await selectUseMode(page, 'Video');
@@ -163,7 +164,7 @@ test.describe('Template rendering correctness', () => {
   test('all all-templates blocks render with layers', async ({ page }) => {
     test.setTimeout(60_000);
     await page.goto('/');
-    await page.waitForLoadState('networkidle');
+    await waitForAppReady(page);
     await selectSample(page, 'all-templates');
     await switchView(page, 'Play');
     await selectUseMode(page, 'Video');
@@ -189,7 +190,7 @@ test.describe('Template rendering correctness', () => {
 
   test('statHighlight block renders stat text', async ({ page }) => {
     await page.goto('/');
-    await page.waitForLoadState('networkidle');
+    await waitForAppReady(page);
     await selectSample(page, 'all-templates');
     await switchView(page, 'Play');
     await selectUseMode(page, 'Video');
@@ -209,7 +210,7 @@ test.describe('Template rendering correctness', () => {
 test.describe('DocPlayer controls', () => {
   test.beforeEach(async ({ page }) => {
     await page.goto('/');
-    await page.waitForLoadState('networkidle');
+    await waitForAppReady(page);
     await selectSample(page, 'all-templates');
     await switchView(page, 'Play');
     await selectUseMode(page, 'Video');
@@ -241,7 +242,7 @@ test.describe('DocPlayer controls', () => {
 test.describe('Cover block display', () => {
   test.beforeEach(async ({ page }) => {
     await page.goto('/');
-    await page.waitForLoadState('networkidle');
+    await waitForAppReady(page);
     await selectSample(page, 'hello-world');
     await switchView(page, 'Play');
     await waitForDocPlayer(page);
@@ -272,7 +273,7 @@ test.describe('Cover block display', () => {
 test.describe('Sample switching', () => {
   test('switching sample updates the preview content', async ({ page }) => {
     await page.goto('/');
-    await page.waitForLoadState('networkidle');
+    await waitForAppReady(page);
 
     // Start with hello-world in preview
     await switchView(page, 'Play');
@@ -293,7 +294,7 @@ test.describe('Sample switching', () => {
 
   test('switching sample in raw view updates editor content', async ({ page }) => {
     await page.goto('/');
-    await page.waitForLoadState('networkidle');
+    await waitForAppReady(page);
     await switchView(page, 'Markdown');
 
     await selectSample(page, 'features-demo');

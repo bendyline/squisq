@@ -1,4 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
+import { waitForAppReady } from './appReady';
 import { TELEPROMPTER_FAKE_MIC_PATH } from './fakeMicFixture';
 import { switchView, viewTab } from './view-tabs';
 
@@ -25,7 +26,7 @@ test.use({
 /** Load the narrate demo sample and land in the teleprompter surface. */
 async function openTeleprompter(page: Page) {
   await page.goto('/?sample=teleprompter-demo');
-  await page.waitForLoadState('networkidle');
+  await waitForAppReady(page);
   await switchView(page, 'Play');
   await page.getByTestId('teleprompter-view').waitFor({ state: 'visible', timeout: 5_000 });
 }
