@@ -35,11 +35,18 @@ import type {
   MarkdownTable,
   MarkdownTableRow,
   MarkdownTableCell,
+  MarkdownInlineIcon,
 } from '@bendyline/squisq/markdown';
 import { readFrontmatterThemeId, sanitizeUrl } from '@bendyline/squisq/markdown';
 import { escapeXml } from '../ooxml/xmlUtils.js';
 import { inferMimeType, extractFilename } from '../html/imageUtils.js';
 import { extractPlainText } from '../shared/text.js';
+import {
+  collectInlineIconFamilies,
+  fontAwesomeFaces,
+  fontAwesomeGlyph,
+  type FontAwesomeFontFace,
+} from '../shared/fontAwesome.js';
 
 // ── Public API ────────────────────────────────────────────────────
 
@@ -99,6 +106,7 @@ export async function markdownDocToEpub(
   const description = options.description ?? '';
   const publisher = options.publisher ?? '';
   const uuid = createEpubUuid();
+  const embeddedIconFonts = fontAwesomeFaces(collectInlineIconFamilies(doc));
 
   // Split document into chapters
   const chapters = splitIntoChapters(doc.children);
@@ -126,6 +134,7 @@ export async function markdownDocToEpub(
     options.themeId ?? readFrontmatterThemeId(doc.frontmatter),
     doc,
     options.themeRegistry,
+    embeddedIconFonts,
   );
 
   // Build the ZIP
@@ -139,6 +148,11 @@ export async function markdownDocToEpub(
 
   // OEBPS/styles.css
   zip.file('OEBPS/styles.css', css);
+
+  // OEBPS/fonts/* — only the Font Awesome faces used by this book.
+  for (const face of embeddedIconFonts) {
+    zip.file(`OEBPS/fonts/${face.fileStem}.otf`, face.data);
+  }
 
   // OEBPS/images/*
   for (const [, img] of resolvedImages) {
@@ -294,6 +308,7 @@ export async function markdownDocToEpub(
       coverFilename,
       audioFiles: allAudioFiles,
       totalDuration: options.totalDuration,
+      iconFonts: embeddedIconFonts,
     }),
   );
 
@@ -604,6 +619,14 @@ function inlineToXhtml(node: MarkdownInlineNode, images: ImageMap): string {
       // Strip tags for XHTML safety
       return escapeXml(node.rawHtml.replace(/<[^>]+>/g, ''));
 
+    case 'inlineIcon': {
+      const icon = node as MarkdownInlineIcon;
+      const glyph = fontAwesomeGlyph(icon.family, icon.name);
+      return glyph
+        ? `<span class="squisq-fa-${icon.family}">${escapeXml(glyph)}</span>`
+        : escapeXml(`{[${icon.token}]}`);
+    }
+
     default:
       return '';
   }
@@ -758,6 +781,7 @@ interface OpfParams {
   coverFilename?: string;
   audioFiles?: { filename: string; mime: string }[];
   totalDuration?: number;
+  iconFonts: FontAwesomeFontFace[];
 }
 
 function generateContentOpf(params: OpfParams): string {
@@ -773,6 +797,7 @@ function generateContentOpf(params: OpfParams): string {
     coverFilename,
     audioFiles,
     totalDuration,
+    iconFonts,
   } = params;
   const modified = new Date().toISOString().replace(/\.\d+Z$/, 'Z');
   const hasOverlays = chapters.some((c) => c.smilFilename);
@@ -782,6 +807,12 @@ function generateContentOpf(params: OpfParams): string {
     '    <item id="toc" href="toc.xhtml" media-type="application/xhtml+xml" properties="nav"/>',
     '    <item id="css" href="styles.css" media-type="text/css"/>',
   ];
+
+  for (const face of iconFonts) {
+    manifestItems.push(
+      `    <item id="font-${face.family}" href="fonts/${face.fileStem}.otf" media-type="font/otf"/>`,
+    );
+  }
 
   if (coverFilename) {
     const mime = inferMimeType(coverFilename);
@@ -914,6 +945,7 @@ function generateStylesheet(
   themeId: string | undefined,
   doc?: MarkdownDocument,
   registry?: ThemeRegistry,
+  iconFonts: FontAwesomeFontFace[] = [],
 ): string {
   let themeVars = '';
   if (themeId) {
@@ -926,7 +958,25 @@ function generateStylesheet(
   --epub-body-font: ${resolveFontFamily(theme.typography.bodyFont, 'sans-serif')};`;
   }
 
+  const iconCss = iconFonts
+    .map(
+      (face) => `@font-face {
+  font-family: '${face.typeface}';
+  src: url('fonts/${face.fileStem}.otf') format('opentype');
+  font-style: normal;
+  font-weight: normal;
+}
+
+.squisq-fa-${face.family} {
+  font-family: '${face.typeface}';
+  font-style: normal;
+  font-weight: normal;
+}`,
+    )
+    .join('\n\n');
+
   return `/* Squisq EPUB Stylesheet */
+${iconCss}
 :root {${themeVars}
 }
 

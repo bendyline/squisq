@@ -206,10 +206,10 @@ describe('buildFilename', () => {
 
   it.each([
     ['audio', 'audio'],
-    ['camera+audio', 'video'],
-    ['screen+audio', 'video'],
+    ['camera-audio', 'video'],
+    ['screen-audio', 'video'],
   ] as const)('uses the source-aware %s seed for general recorder output', (seed, kind) => {
     const name = buildFilename(kind, '.webm', undefined, seed);
-    expect(name).toMatch(new RegExp(`^${seed.replace('+', '\\+')}-\\d{8}-\\d{6}\\.webm$`));
+    expect(name).toMatch(new RegExp(`^${seed}-\\d{8}-\\d{6}\\.webm$`));
   });
 });

@@ -21,5 +21,5 @@ export default defineConfig({
   sourcemap: false,
   clean: true,
   esbuildPlugins: [bundleLicenseMetadata(import.meta.dirname, 'esm')],
-  external: ['@bendyline/squisq', 'jszip', 'pdf-lib', 'pdfjs-dist'],
+  external: ['@bendyline/squisq', '@pdf-lib/fontkit', 'jszip', 'pdf-lib', 'pdfjs-dist'],
 });

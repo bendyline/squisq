@@ -39,6 +39,7 @@ import type {
   MarkdownLink,
   MarkdownImage,
   MarkdownFootnoteReference,
+  MarkdownInlineIcon,
 } from '@bendyline/squisq/markdown';
 import { readFrontmatterThemeId } from '@bendyline/squisq/markdown';
 
@@ -48,6 +49,14 @@ import { xmlDeclaration, escapeXml } from '../ooxml/xmlUtils.js';
 import { stripHtmlTags } from '../shared/text.js';
 import { normalizeOoxmlHex } from '../shared/ooxmlColor.js';
 import { sanitizeOfficeHyperlink } from '../shared/officeHyperlinks.js';
+import {
+  fontAwesomeFace,
+  fontAwesomeFaces,
+  fontAwesomeGlyph,
+  obfuscateDocxFont,
+  type FontAwesomeFontFace,
+  type IconFamily,
+} from '../shared/fontAwesome.js';
 import {
   inlineNodesToRuns,
   inlineNodeToRuns,
@@ -62,6 +71,7 @@ import {
   REL_NUMBERING,
   REL_SETTINGS,
   REL_FONT_TABLE,
+  REL_FONT,
   REL_HYPERLINK,
   REL_IMAGE,
   REL_FOOTNOTES,
@@ -72,6 +82,7 @@ import {
   CONTENT_TYPE_DOCX_NUMBERING,
   CONTENT_TYPE_DOCX_SETTINGS,
   CONTENT_TYPE_DOCX_FONT_TABLE,
+  CONTENT_TYPE_DOCX_OBFUSCATED_FONT,
   CONTENT_TYPE_DOCX_FOOTNOTES,
   CONTENT_TYPE_DOCX_HEADER,
   CONTENT_TYPE_DOCX_FOOTER,
@@ -262,6 +273,8 @@ class ExportContext {
   readonly resolvedImages: Map<string, { data: ArrayBuffer | Uint8Array; contentType: string }>;
   readonly allowRelativeHyperlinks: boolean;
   readonly signal: AbortSignal | undefined;
+  /** Font Awesome families referenced while converting body/header/footer runs. */
+  readonly iconFamilies = new Set<IconFamily>();
 
   private nextDocPrId = 1;
 
@@ -735,6 +748,7 @@ function docxRunHandlers(ctx: ExportContext): InlineRunHandlers {
     run: (text, format) => makeRun(text, format),
     link: (node, format) => convertLink(node, ctx, format),
     image: (node) => convertImage(node, ctx),
+    icon: (node, format) => makeIconRun(node, format, ctx),
     lineBreak: () => `<w:r><w:br/></w:r>`,
     footnoteRef: (node) => convertFootnoteRef(node, ctx),
   };
@@ -772,6 +786,25 @@ function makeRun(text: string, format: InlineFormat): string {
 
   // Use xml:space="preserve" to keep leading/trailing whitespace
   return `<w:r>${rPr}<w:t xml:space="preserve">${escapeXml(text)}</w:t></w:r>`;
+}
+
+function makeIconRun(node: MarkdownInlineIcon, format: InlineFormat, ctx: ExportContext): string {
+  const glyph = fontAwesomeGlyph(node.family, node.name);
+  if (!glyph) return makeRun(`{[${node.token}]}`, format);
+
+  const face = fontAwesomeFace(node.family);
+  ctx.iconFamilies.add(node.family);
+  const typeface = escapeXml(face.typeface);
+  const rPrParts = [
+    `<w:rFonts w:ascii="${typeface}" w:hAnsi="${typeface}" w:eastAsia="${typeface}" w:cs="${typeface}"/>`,
+  ];
+  if (format.strike) rPrParts.push('<w:strike/>');
+  if (format.color) rPrParts.push(`<w:color w:val="${format.color}"/>`);
+
+  return (
+    `<w:r><w:rPr>${rPrParts.join('')}</w:rPr>` +
+    `<w:t xml:space="preserve">${escapeXml(glyph)}</w:t></w:r>`
+  );
 }
 
 function convertLink(node: MarkdownLink, ctx: ExportContext, format: InlineFormat): string {
@@ -951,6 +984,7 @@ async function buildDocxPackage(
   options: DocxExportOptions,
 ): Promise<ArrayBuffer> {
   const pkg = createPackage();
+  const embeddedIconFonts = fontAwesomeFaces(ctx.iconFamilies);
 
   const hasHeader = headerXml.trim().length > 0;
   const hasFooter = footerXml.trim().length > 0;
@@ -993,8 +1027,23 @@ async function buildDocxPackage(
   pkg.addPart('word/settings.xml', settingsXml, CONTENT_TYPE_DOCX_SETTINGS);
 
   // --- word/fontTable.xml ---
-  const fontTableXml = buildFontTableXml(options);
+  const fontTableXml = buildFontTableXml(options, embeddedIconFonts);
   pkg.addPart('word/fontTable.xml', fontTableXml, CONTENT_TYPE_DOCX_FONT_TABLE);
+
+  for (let index = 0; index < embeddedIconFonts.length; index++) {
+    const face = embeddedIconFonts[index]!;
+    const filename = `${face.fileStem}.odttf`;
+    pkg.addBinaryPart(
+      `word/fonts/${filename}`,
+      obfuscateDocxFont(face),
+      CONTENT_TYPE_DOCX_OBFUSCATED_FONT,
+    );
+    pkg.addRelationship('word/fontTable.xml', {
+      id: `rId${index + 1}`,
+      type: REL_FONT,
+      target: `fonts/${filename}`,
+    });
+  }
 
   // --- word/numbering.xml (only if lists present) ---
   if (ctx.hasLists) {
@@ -1294,11 +1343,25 @@ function buildSettingsXml(displayBackground: boolean): string {
   );
 }
 
-function buildFontTableXml(options: DocxExportOptions): string {
+function buildFontTableXml(
+  options: DocxExportOptions,
+  embeddedIconFonts: FontAwesomeFontFace[],
+): string {
   const font = options.defaultFont ?? DEFAULT_FONT;
+  const embeddedXml = embeddedIconFonts
+    .map(
+      (face, index) =>
+        `<w:font w:name="${escapeXml(face.typeface)}">` +
+        `<w:charset w:val="00"/>` +
+        `<w:family w:val="decorative"/>` +
+        `<w:pitch w:val="variable"/>` +
+        `<w:embedRegular r:id="rId${index + 1}" w:fontKey="{${face.docxFontKey}}"/>` +
+        `</w:font>`,
+    )
+    .join('');
   return (
     xmlDeclaration() +
-    `<w:fonts xmlns:w="${NS_WML}">` +
+    `<w:fonts xmlns:w="${NS_WML}" xmlns:r="${NS_R}">` +
     `<w:font w:name="${escapeXml(font)}">` +
     `<w:panose1 w:val="020F0502020204030204"/>` +
     `<w:charset w:val="00"/>` +
@@ -1316,6 +1379,7 @@ function buildFontTableXml(options: DocxExportOptions): string {
     `<w:family w:val="modern"/>` +
     `<w:pitch w:val="fixed"/>` +
     `</w:font>` +
+    embeddedXml +
     `</w:fonts>`
   );
 }

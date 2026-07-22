@@ -81,6 +81,7 @@ export type {
   MarkdownImageReference,
   MarkdownTextDirective,
   MarkdownMention,
+  MarkdownInlineIcon,
 
   // Union types
   MarkdownBlockNode,

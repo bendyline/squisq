@@ -100,11 +100,12 @@
     }
   },
   "scripts": {
-    "build": "tsup && node ../../scripts/generate-bundle-licenses.mjs . && node ../../scripts/remove-empty-chunks.mjs dist",
+    "build": "tsup && node ../../scripts/generate-bundle-licenses.mjs . @fortawesome/fontawesome-free && node ../../scripts/remove-empty-chunks.mjs dist",
     "dev": "concurrently -n js,dts -c blue,gray -r \"tsup --watch --no-dts --no-clean\" \"tsup --watch --dts-only --no-clean\"",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@pdf-lib/fontkit": "1.1.1",
     "@pdf-lib/upng": "1.0.1",
     "@xmldom/xmldom": "0.9.10",
     "@bendyline/squisq": "2.4.0",
@@ -113,6 +114,7 @@
     "pdfjs-dist": "4.10.38"
   },
   "devDependencies": {
+    "@fortawesome/fontawesome-free": "7.2.0",
     "tsup": "8.5.1",
     "typescript": "5.9.3"
   }

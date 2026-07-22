@@ -58,7 +58,7 @@ Notes:
 
 ### `squisq video <input> [output]`
 
-Render a document to MP4 or animated GIF. Playwright captures deterministic frames from a headless player page; native ffmpeg encodes H.264 + AAC for MP4 or a generated global palette for GIF. GIF has no audio track.
+Render a document to MP4 or animated GIF. Playwright captures deterministic frames from a headless player page; native ffmpeg encodes H.264 + AAC for MP4 or a generated global palette for GIF. Documents with Mermaid fences automatically use the full standalone player so diagrams are captured; other documents keep the smaller light player. GIF has no audio track.
 
 ```bash
 squisq video input.md output.mp4

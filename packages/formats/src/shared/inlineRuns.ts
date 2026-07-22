@@ -20,6 +20,7 @@ import type {
   MarkdownLink,
   MarkdownImage,
   MarkdownFootnoteReference,
+  MarkdownInlineIcon,
 } from '@bendyline/squisq/markdown';
 import { stripHtmlTags } from './text.js';
 
@@ -44,6 +45,8 @@ export interface InlineRunHandlers {
   link(node: MarkdownLink, format: InlineRunFormat): string;
   /** Emit an inline image. */
   image(node: MarkdownImage, format: InlineRunFormat): string;
+  /** Emit a resolved Font Awesome inline icon. */
+  icon(node: MarkdownInlineIcon, format: InlineRunFormat): string;
   /** Emit a hard line break. */
   lineBreak(): string;
   /** Emit a footnote reference. Omit to drop footnote refs (PPTX). */
@@ -88,12 +91,14 @@ export function inlineNodeToRuns(
       return handlers.link(node, format);
     case 'image':
       return handlers.image(node, format);
+    case 'inlineIcon':
+      return handlers.icon(node, format);
     case 'break':
       return handlers.lineBreak();
     case 'footnoteReference':
       return handlers.footnoteRef ? handlers.footnoteRef(node) : '';
     default:
-      // linkReference, imageReference, textDirective, inlineIcon, … — skip.
+      // linkReference, imageReference, textDirective, … — skip.
       return '';
   }
 }

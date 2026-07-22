@@ -6,8 +6,8 @@
  * headings, paragraphs, inline formatting, lists, code blocks,
  * blockquotes, tables, thematic breaks, and hyperlinks.
  *
- * Uses only the 14 standard PDF fonts (no font embedding required),
- * keeping output size small and rendering fast.
+ * Uses the standard PDF fonts for authored text and embeds/subsets Font
+ * Awesome only when the document contains an inline icon.
  *
  * @example
  * ```ts
@@ -20,6 +20,7 @@
  */
 
 import { PDFDocument, StandardFonts, rgb, PDFFont, PDFPage, PDFString } from 'pdf-lib';
+import fontkit from '@pdf-lib/fontkit';
 
 import type { Doc, ThemeRegistry } from '@bendyline/squisq/schemas';
 import { docToMarkdown, resolveThemeForDoc } from '@bendyline/squisq/doc';
@@ -49,10 +50,17 @@ import type {
   MarkdownInlineHtml,
   MarkdownInlineMath,
   MarkdownFootnoteReference,
+  MarkdownInlineIcon,
 } from '@bendyline/squisq/markdown';
 import { readFrontmatterThemeId, sanitizeUrl } from '@bendyline/squisq/markdown';
 
 import { WinAnsiTracker } from './winAnsi.js';
+import {
+  collectInlineIconFamilies,
+  fontAwesomeFaces,
+  fontAwesomeGlyph,
+  type IconFamily,
+} from '../shared/fontAwesome.js';
 import {
   PAGE_WIDTH_LETTER,
   PAGE_HEIGHT_LETTER,
@@ -178,6 +186,7 @@ interface FontSet {
   boldItalic: PDFFont;
   mono: PDFFont;
   monoBold: PDFFont;
+  icons: Partial<Record<IconFamily, PDFFont>>;
 }
 
 interface RgbColor {
@@ -230,6 +239,16 @@ async function createExportContext(
     pdfDoc.embedFont(StandardFonts.Courier),
     pdfDoc.embedFont(StandardFonts.CourierBold),
   ]);
+  const icons: Partial<Record<IconFamily, PDFFont>> = {};
+  const iconFamilies = collectInlineIconFamilies(doc);
+  if (iconFamilies.size > 0) {
+    pdfDoc.registerFontkit(fontkit);
+    await Promise.all(
+      fontAwesomeFaces(iconFamilies).map(async (face) => {
+        icons[face.family] = await pdfDoc.embedFont(face.data, { subset: true });
+      }),
+    );
+  }
 
   const isA4 = options.pageSize === 'a4';
   const pageWidth = isA4 ? PAGE_WIDTH_A4 : PAGE_WIDTH_LETTER;
@@ -259,7 +278,7 @@ async function createExportContext(
 
   return {
     pdfDoc,
-    fonts: { regular, bold, italic, boldItalic, mono, monoBold },
+    fonts: { regular, bold, italic, boldItalic, mono, monoBold, icons },
     pageWidth,
     pageHeight,
     margin,
@@ -393,6 +412,32 @@ function flattenInlines(
           fontSize: ctx.fontSize,
           color: COLOR_BLOCKQUOTE_TEXT,
         });
+        break;
+      }
+
+      case 'inlineIcon': {
+        const iconNode = node as MarkdownInlineIcon;
+        const glyph = fontAwesomeGlyph(iconNode.family, iconNode.name);
+        const font = ctx.fonts.icons[iconNode.family];
+        if (glyph && font) {
+          spans.push({
+            text: glyph,
+            font,
+            fontSize: ctx.fontSize,
+            color: state.color ?? ctx.colors.text,
+            link: state.link,
+            strikethrough: state.strikethrough,
+          });
+        } else {
+          spans.push({
+            text: ctx.text.clean(`{[${iconNode.token}]}`),
+            font: pickFont(ctx, state.bold, state.italic),
+            fontSize: ctx.fontSize,
+            color: state.color ?? ctx.colors.text,
+            link: state.link,
+            strikethrough: state.strikethrough,
+          });
+        }
         break;
       }
 

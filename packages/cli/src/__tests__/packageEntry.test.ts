@@ -114,12 +114,13 @@ describe('package entry points', () => {
     expect((await stat(CLI_PATH)).size).to.be.greaterThan(0);
   });
 
-  it('ships the light player artifact without depending on the full React package', async () => {
+  it('ships light and full player artifacts without depending on the React package at runtime', async () => {
     const pkg = await readPackageJson();
     expect(pkg.dependencies).to.not.have.property('@bendyline/squisq-react');
-    expect((await stat(join(PKG_DIR, 'dist', 'squisq-player.global.js'))).size).to.be.greaterThan(
-      1_000_000,
-    );
+    const lightSize = (await stat(join(PKG_DIR, 'dist', 'squisq-player.global.js'))).size;
+    const fullSize = (await stat(join(PKG_DIR, 'dist', 'squisq-player.full.global.js'))).size;
+    expect(lightSize).to.be.greaterThan(1_000_000);
+    expect(fullSize).to.be.greaterThan(lightSize);
   });
 
   it('still runs the CLI through the bin entry', async () => {
