@@ -1,3 +1,14 @@
+## @bendyline/squisq-formats [2.3.6](https://github.com/bendyline/squisq/compare/@bendyline/squisq-formats@2.3.5...@bendyline/squisq-formats@2.3.6) (2026-07-22)
+
+### Bug Fixes
+
+* Inline icon exporting ([#34](https://github.com/bendyline/squisq/issues/34)) ([af5dd0f](https://github.com/bendyline/squisq/commit/af5dd0f433f5bd5b45d8c91d006fbf4eda8e4149))
+
+
+### Dependencies
+
+* **@bendyline/squisq:** upgraded to 2.4.2
+
 ## @bendyline/squisq-formats [2.3.5](https://github.com/bendyline/squisq/compare/@bendyline/squisq-formats@2.3.4...@bendyline/squisq-formats@2.3.5) (2026-07-22)
 
 ### Bug Fixes
