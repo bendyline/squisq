@@ -29,7 +29,11 @@ export default mergeConfig(
           '**/*.fixtures.ts',
           '**/standalone-entry.tsx',
         ],
-        reporter: ['text', 'json-summary', 'html'],
+        // 'text-summary' prints only the compact totals block, not the full
+        // per-file ASCII table — so a test failure or a threshold breach reads
+        // plainly instead of being buried under hundreds of file rows. The
+        // detailed table still lives in the 'html' report under coverage/.
+        reporter: ['text-summary', 'json-summary', 'html'],
         reportsDirectory: 'coverage',
         reportOnFailure: true,
         thresholds: {

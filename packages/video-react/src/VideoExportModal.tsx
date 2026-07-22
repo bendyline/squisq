@@ -16,6 +16,7 @@ import { useModalDialog, type CaptionMode } from '@bendyline/squisq-react';
 import {
   useVideoExport,
   type VideoExportConfig,
+  type VideoExportFramePreview,
   type VideoOutputFormat,
   type VideoAudioPolicy,
 } from './hooks/useVideoExport.js';
@@ -60,6 +61,40 @@ function formatDuration(seconds: number): string {
   const m = Math.floor(seconds / 60);
   const s = seconds % 60;
   return `${m}m ${s}s`;
+}
+
+function formatProcessingFps(framesPerSecond: number): string {
+  return `${framesPerSecond.toFixed(2)} fps`;
+}
+
+function formatRealtimeMultiplier(processingFps: number, outputFps: number): string {
+  return `${(processingFps / outputFps).toFixed(2)}× realtime`;
+}
+
+const FRAME_PREVIEW_INTERVAL = 15;
+const FRAME_PREVIEW_WIDTH = 480;
+const FRAME_PREVIEW_HEIGHT = 270;
+
+/** Draw a source frame without stretching portrait or non-16:9 exports. */
+export function drawVideoExportPreview(
+  canvas: HTMLCanvasElement,
+  source: VideoExportFramePreview['source'],
+): void {
+  const context = canvas.getContext('2d');
+  if (!context || source.width <= 0 || source.height <= 0) return;
+
+  context.fillStyle = '#000000';
+  context.fillRect(0, 0, canvas.width, canvas.height);
+  const scale = Math.min(canvas.width / source.width, canvas.height / source.height);
+  const width = source.width * scale;
+  const height = source.height * scale;
+  context.drawImage(
+    source,
+    (canvas.width - width) / 2,
+    (canvas.height - height) / 2,
+    width,
+    height,
+  );
 }
 
 // ── Styles ─────────────────────────────────────────────────────────
@@ -221,6 +256,7 @@ export function VideoExportModal({
 }: VideoExportModalProps) {
   const overlayRef = useRef<HTMLDivElement>(null);
   const dialogRef = useRef<HTMLDivElement>(null);
+  const previewCanvasRef = useRef<HTMLCanvasElement>(null);
   const titleId = useId();
   const initialOutputFormat = defaultConfig?.outputFormat ?? 'mp4';
   const [outputFormat, setOutputFormat] = useState<VideoOutputFormat>(initialOutputFormat);
@@ -271,11 +307,20 @@ export function VideoExportModal({
     border: `1px solid ${palette.border}`,
   };
 
-  const exportHook = useVideoExport();
+  const handleFramePreview = useCallback((preview: VideoExportFramePreview) => {
+    const canvas = previewCanvasRef.current;
+    if (canvas) drawVideoExportPreview(canvas, preview.source);
+  }, []);
+  const exportHook = useVideoExport({
+    onFramePreview: handleFramePreview,
+    previewEveryNFrames: FRAME_PREVIEW_INTERVAL,
+  });
   const {
     state,
     progress,
     phase,
+    currentFrameTime,
+    processingFps,
     outputFormat: completedOutputFormat,
     downloadUrl,
     fileSize,
@@ -303,6 +348,12 @@ export function VideoExportModal({
   }, []);
 
   const handleExport = useCallback(async () => {
+    const previewCanvas = previewCanvasRef.current;
+    const previewContext = previewCanvas?.getContext('2d');
+    if (previewCanvas && previewContext) {
+      previewContext.fillStyle = '#000000';
+      previewContext.fillRect(0, 0, previewCanvas.width, previewCanvas.height);
+    }
     const config: VideoExportConfig = {
       // defaultConfig is the base; explicit props/selections win over it.
       ...defaultConfig,
@@ -518,6 +569,24 @@ export function VideoExportModal({
         {/* ── Exporting State ── */}
         {isExporting && (
           <>
+            <canvas
+              ref={previewCanvasRef}
+              width={FRAME_PREVIEW_WIDTH}
+              height={FRAME_PREVIEW_HEIGHT}
+              role="img"
+              aria-label="Latest rendered video frame"
+              data-squisq-video-export-preview
+              style={{
+                display: 'block',
+                width: '100%',
+                height: 'auto',
+                aspectRatio: '16 / 9',
+                boxSizing: 'border-box',
+                background: '#000000',
+                border: `1px solid ${palette.border}`,
+                marginBottom: 12,
+              }}
+            />
             <div
               role="progressbar"
               aria-label="Video export progress"
@@ -538,13 +607,33 @@ export function VideoExportModal({
               />
             </div>
 
-            <p style={{ fontSize: 13, margin: '0 0 4px 0' }}>{progress}% complete</p>
+            <p
+              style={{ fontSize: 13, fontVariantNumeric: 'tabular-nums', margin: '0 0 4px 0' }}
+              data-squisq-video-export-progress-label
+            >
+              {progress.toFixed(1)}% complete
+              {currentFrameTime != null && `, @ ${currentFrameTime.toFixed(1)} seconds`}
+            </p>
             {phase && (
               <p
-                style={{ fontSize: 12, color: palette.label, margin: '0 0 4px 0' }}
+                style={{
+                  fontSize: 12,
+                  fontVariantNumeric: 'tabular-nums',
+                  color: palette.label,
+                  margin: '0 0 4px 0',
+                }}
                 data-squisq-video-export-phase
               >
                 {phase}
+                {processingFps != null && (
+                  <>
+                    {' - '}
+                    <span data-squisq-video-export-frame-metrics>
+                      {formatProcessingFps(processingFps)} ·{' '}
+                      {formatRealtimeMultiplier(processingFps, fps)}
+                    </span>
+                  </>
+                )}
               </p>
             )}
             <p style={{ fontSize: 12, color: palette.muted, margin: 0 }}>

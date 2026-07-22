@@ -11,9 +11,11 @@ import type { Doc } from '@bendyline/squisq/schemas';
 import { getDocPlaybackDuration, resolveMediaSchedule } from '@bendyline/squisq/schemas';
 import type { ContentContainer } from '@bendyline/squisq/storage';
 import { DocPlayer, type AudioController } from '@bendyline/squisq-react';
-import { usePreviewSettings } from './PreviewControls';
+import { PreviewToolbarControls, usePreviewSettings } from './PreviewControls';
 import type { TimelineClock } from './useTimelineClock';
 import { usePreviewProjection } from './usePreviewProjection';
+import { documentTitleFromFileName } from './buildPreviewDoc';
+import { useEditorContext } from './EditorContext';
 
 export interface TimelineCompositionPanelProps {
   doc: Doc | null;
@@ -37,11 +39,18 @@ export function TimelineCompositionPanel({
     activeCaptionStyle,
     activeCaptionsEnabled,
     activeVideoPresentation,
+    activePipSize,
     activePipShape,
     activePipPosition,
     activeCoverSlide,
   } = usePreviewSettings();
-  const projection = usePreviewProjection(doc, activeTransformStyle, workspaceContainer);
+  const { fileName } = useEditorContext();
+  const projection = usePreviewProjection(
+    doc,
+    activeTransformStyle,
+    workspaceContainer,
+    documentTitleFromFileName(fileName),
+  );
   const playerDoc = projection?.playerDoc ?? null;
   const totalDuration = useMemo(
     () => (playerDoc ? getDocPlaybackDuration(playerDoc) : 0),
@@ -90,6 +99,7 @@ export function TimelineCompositionPanel({
         <span className="squisq-timeline-video-label">
           {formatPresentation(effectiveVideoPresentation)}
         </span>
+        <PreviewToolbarControls displayMode="video" />
         <span className="squisq-timeline-video-time">{formatClock(clock.currentTime)}</span>
         {onClose && (
           <button
@@ -117,12 +127,12 @@ export function TimelineCompositionPanel({
               displayMode="video"
               theme={activeTheme}
               videoPresentation={activeVideoPresentation}
+              pipSize={activePipSize}
               pipShape={activePipShape}
               pipPosition={activePipPosition}
               captionStyle={activeCaptionStyle}
               captionsEnabled={activeCaptionsEnabled}
               showCoverSlide={activeCoverSlide}
-              coverVisible={false}
               enableSwipe={false}
               globalKeyboardShortcuts={false}
             />

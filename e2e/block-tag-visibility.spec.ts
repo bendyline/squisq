@@ -1,9 +1,10 @@
 import { expect, test } from '@playwright/test';
+import { waitForAppReady } from './appReady';
 import { switchView } from './view-tabs';
 
 test('selected/hovered mode shows tags for both active blocks', async ({ page }) => {
   await page.goto('/');
-  await page.waitForLoadState('networkidle');
+  await waitForAppReady(page);
   await switchView(page, 'Editor');
 
   const editor = page.locator('.tiptap.ProseMirror');

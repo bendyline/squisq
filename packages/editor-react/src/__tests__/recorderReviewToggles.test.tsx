@@ -93,6 +93,7 @@ const toggle = (name: string) => screen.getByRole('button', { name });
 
 describe('RecorderModal — unsaved take is not silently destroyed', () => {
   beforeEach(() => {
+    vi.clearAllMocks();
     vi.stubGlobal('MediaStream', FakeStream);
     vi.stubGlobal('MediaRecorder', FakeMediaRecorder);
     Object.defineProperty(globalThis.navigator, 'mediaDevices', {
@@ -111,8 +112,12 @@ describe('RecorderModal — unsaved take is not silently destroyed', () => {
 
   afterEach(() => {
     cleanup();
+    vi.useRealTimers();
     vi.unstubAllGlobals();
     vi.restoreAllMocks();
+    // `userAgentData` is set directly on the jsdom navigator by the system-audio
+    // test (not via vi.stubGlobal), so unstubAllGlobals can't reach it.
+    Reflect.deleteProperty(navigator, 'userAgentData');
   });
 
   it('shows a themed red dot on the ready-state Record button', async () => {
@@ -153,6 +158,69 @@ describe('RecorderModal — unsaved take is not silently destroyed', () => {
     }
   });
 
+  it('shows elapsed and total time while reviewing a recorded video', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-07-21T12:00:00Z'));
+    render(<RecorderModal initialMode="screen" mediaProvider={mediaProvider} onClose={vi.fn()} />);
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Start preview' }));
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Record' }));
+    await act(async () => {
+      vi.advanceTimersByTime(56_000);
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Stop' }));
+    });
+
+    const timer = screen.getByRole('timer');
+    expect(timer.textContent).toBe('0:00 / 0:56');
+    expect(timer.getAttribute('aria-label')).toBe('Playback time: 0:00 of 0:56');
+
+    const playback = document.querySelector('video[src="blob:take"]') as HTMLVideoElement;
+    Object.defineProperty(playback, 'currentTime', { configurable: true, value: 12 });
+    fireEvent.timeUpdate(playback);
+
+    expect(timer.textContent).toBe('0:12 / 0:56');
+  });
+
+  it.each([
+    { mode: 'mic' as const, tracks: ['audio'] as const, prefix: 'audio' },
+    {
+      mode: 'camera' as const,
+      tracks: ['video', 'audio'] as const,
+      prefix: 'camera+audio',
+    },
+    {
+      mode: 'screen' as const,
+      tracks: ['video', 'audio'] as const,
+      prefix: 'screen+audio',
+    },
+  ])('names $mode saves from the tracks they contain', async ({ mode, tracks, prefix }) => {
+    const captured = new FakeStream(tracks.map((kind) => new FakeTrack(kind)));
+    if (mode === 'screen') {
+      vi.mocked(navigator.mediaDevices.getDisplayMedia).mockResolvedValue(
+        captured as unknown as MediaStream,
+      );
+    } else {
+      vi.mocked(navigator.mediaDevices.getUserMedia).mockResolvedValue(
+        captured as unknown as MediaStream,
+      );
+    }
+
+    render(<RecorderModal initialMode={mode} mediaProvider={mediaProvider} onClose={vi.fn()} />);
+    await recordATake();
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Save to document' }));
+    });
+
+    const firstSavedPath = vi.mocked(mediaProvider.addMedia).mock.calls[0]?.[0];
+    expect(firstSavedPath).toMatch(
+      new RegExp(`^(?:audio|video)/${prefix.replace('+', '\\+')}-\\d{8}-\\d{6}\\.webm$`),
+    );
+  });
+
   it('keeps the recorded take when a source toggle is clicked in review', async () => {
     render(<RecorderModal mediaProvider={mediaProvider} onClose={vi.fn()} />);
     await recordATake();
@@ -182,5 +250,128 @@ describe('RecorderModal — unsaved take is not silently destroyed', () => {
       expect(toggle(name).hasAttribute('disabled')).toBe(false);
     }
     expect(screen.queryByRole('button', { name: 'Save to document' })).toBeNull();
+  });
+
+  it('ends screen sharing on Stop and requests a fresh surface for re-recording', async () => {
+    const firstTrack = new FakeTrack('video');
+    const secondTrack = new FakeTrack('video');
+    const getDisplayMedia = vi
+      .fn()
+      .mockResolvedValueOnce(new FakeStream([firstTrack]))
+      .mockResolvedValueOnce(new FakeStream([secondTrack]));
+    vi.mocked(navigator.mediaDevices.getDisplayMedia).mockImplementation(getDisplayMedia);
+
+    render(<RecorderModal initialMode="screen" mediaProvider={mediaProvider} onClose={vi.fn()} />);
+    await recordATake();
+
+    expect(firstTrack.readyState).toBe('ended');
+    expect(screen.getByRole('button', { name: 'Save to document' })).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Discard & re-record' }));
+    expect(screen.getByRole('button', { name: 'Start preview' })).toBeTruthy();
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Start preview' }));
+    });
+    expect(getDisplayMedia).toHaveBeenCalledTimes(2);
+    expect(secondTrack.readyState).toBe('live');
+  });
+
+  it('saves a screen+camera take as two video files with a camera companion', async () => {
+    const onSave = vi.fn();
+    render(
+      <RecorderModal
+        initialMode="screen+camera"
+        mediaProvider={mediaProvider}
+        onClose={vi.fn()}
+        onSave={onSave}
+      />,
+    );
+
+    // Both video sources start armed for the dual mode.
+    expect(toggle('Camera').getAttribute('aria-pressed')).toBe('true');
+    expect(toggle('Screen').getAttribute('aria-pressed')).toBe('true');
+
+    await recordATake();
+
+    // Review still locks every source pill with an unsaved take in hand.
+    for (const name of ['Microphone', 'Camera', 'Screen']) {
+      expect(toggle(name).hasAttribute('disabled')).toBe(true);
+      expect(toggle(name).getAttribute('title')).toBe(
+        'Save or discard this recording before changing sources',
+      );
+    }
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Save to document' }));
+    });
+
+    // Two files: screen (video-only display stream → no audio suffix) + camera
+    // (mic-bearing getUserMedia stream → +audio), both under video/.
+    const calls = vi.mocked(mediaProvider.addMedia).mock.calls;
+    expect(calls).toHaveLength(2);
+    expect(calls[0]?.[0]).toMatch(/^video\/screen-\d{8}-\d{6}\.webm$/);
+    expect(calls[1]?.[0]).toMatch(/^video\/camera\+audio-\d{8}-\d{6}\.webm$/);
+
+    expect(onSave).toHaveBeenCalledTimes(1);
+    const payload = onSave.mock.calls[0][0];
+    expect(payload.source).toBe('screen+camera');
+    expect(payload.relativePath).toMatch(/^video\/screen-/);
+    expect(payload.camera?.relativePath).toMatch(/^video\/camera\+audio-/);
+  });
+
+  it('suffixes a typed basename per file in a dual save', async () => {
+    render(
+      <RecorderModal
+        initialMode="screen+camera"
+        mediaProvider={mediaProvider}
+        onClose={vi.fn()}
+        onSave={vi.fn()}
+      />,
+    );
+    fireEvent.change(screen.getByLabelText('Filename (optional)'), {
+      target: { value: 'demo' },
+    });
+    await recordATake();
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Save to document' }));
+    });
+
+    const calls = vi.mocked(mediaProvider.addMedia).mock.calls;
+    expect(calls[0]?.[0]).toBe('video/demo-screen.webm');
+    expect(calls[1]?.[0]).toBe('video/demo-camera.webm');
+  });
+
+  it('enables the System audio pill whenever a source is armed (Chromium)', async () => {
+    Object.defineProperty(navigator, 'userAgentData', {
+      configurable: true,
+      value: { brands: [{ brand: 'Chromium' }], mobile: false },
+    });
+    render(<RecorderModal initialMode="mic" mediaProvider={mediaProvider} onClose={vi.fn()} />);
+
+    // Microphone is on → system audio has a companion to attach to (it no
+    // longer requires Screen — without Screen it mixes into the mic/camera file).
+    expect(toggle('System audio').hasAttribute('disabled')).toBe(false);
+
+    // Turn Microphone off → nothing armed → disabled with a hint.
+    await act(async () => {
+      fireEvent.click(toggle('Microphone'));
+    });
+    expect(toggle('System audio').hasAttribute('disabled')).toBe(true);
+    expect(toggle('System audio').getAttribute('title')).toBe(
+      'Turn on Microphone, Camera, or Screen to add system audio',
+    );
+
+    // Arm any source (Screen here) → enabled again.
+    await act(async () => {
+      fireEvent.click(toggle('Screen'));
+    });
+    expect(toggle('System audio').hasAttribute('disabled')).toBe(false);
+  });
+
+  it('hides the System audio pill when the platform cannot capture it', () => {
+    // jsdom's UA carries no Chromium token, so supportsSystemAudioCapture() is false.
+    render(<RecorderModal initialMode="mic" mediaProvider={mediaProvider} onClose={vi.fn()} />);
+    expect(screen.queryByRole('button', { name: 'System audio' })).toBeNull();
   });
 });

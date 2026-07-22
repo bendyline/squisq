@@ -1,5 +1,6 @@
 import { test, expect, type Page } from '@playwright/test';
 import { switchView } from './view-tabs';
+import { waitForAppReady } from './appReady';
 
 /**
  * E2E tests for the ASCII-fence diagram editor.
@@ -24,7 +25,7 @@ const NBSP_RE = new RegExp(String.fromCharCode(160), 'g');
 
 async function loadSample(page: Page, sample: string) {
   await page.goto('/');
-  await page.waitForLoadState('networkidle');
+  await waitForAppReady(page);
   await page.locator('select').first().selectOption(sample);
   await page.locator('.tiptap.ProseMirror').waitFor({ state: 'visible', timeout: 5_000 });
 }
@@ -88,23 +89,9 @@ async function dragPointer(
 async function readMarkdown(page: Page): Promise<string> {
   await switchView(page, 'Markdown');
   await page.locator('[data-testid="raw-editor"]').waitFor({ state: 'visible' });
-  for (let i = 0; i < 40; i++) {
-    const value = await page.evaluate(() => {
-      interface MonacoModel {
-        getValue(): string;
-      }
-      interface MonacoGlobal {
-        monaco?: { editor?: { getModels?: () => MonacoModel[] } };
-      }
-      const g = window as MonacoGlobal;
-      const models = g.monaco?.editor?.getModels?.() ?? [];
-      const texts = models.map((m) => m.getValue()).filter((v) => v.trim().length > 0);
-      return texts.length > 0 ? texts.join('\n') : null;
-    });
-    if (value) return value.replace(NBSP_RE, ' ');
-    await page.waitForTimeout(100);
-  }
-  const text = await page.locator('.monaco-editor .view-lines').first().innerText();
+  const lines = page.locator('.monaco-editor .view-lines').first();
+  await expect(lines).toContainText(/\S/, { timeout: 4_000 });
+  const text = await lines.innerText();
   return text.replace(NBSP_RE, ' ');
 }
 
@@ -265,20 +252,20 @@ test.describe('ASCII diagram editor', () => {
     await loadDiagramSample(page);
     const from = await cardCenter(page, 'child-3');
     const to = { x: from.x + 70, y: from.y + 50 };
+    const before = await fenceText(page);
     await dragPointer(page, from, to);
-    await page.waitForTimeout(150);
-    const settled = await cardCenter(page, 'child-3');
-    await page.waitForTimeout(400);
-    const later = await cardCenter(page, 'child-3');
-    expect(Math.abs(later.x - settled.x)).toBeLessThan(2);
-    expect(Math.abs(later.y - settled.y)).toBeLessThan(2);
+    await expect.poll(() => fenceText(page)).not.toBe(before);
     // And it actually moved from the origin. The on-screen displacement is
     // much smaller than the 70×50px drag: the fence quantizes to the ASCII
     // char grid and the renderer re-packs neighbours, so a diagonal drag nets
-    // only a cell or two. The point of this assertion is just "it moved" —
-    // the no-snap-back guarantee above is what's actually under test.
-    const moved = Math.hypot(settled.x - from.x, settled.y - from.y);
-    expect(moved).toBeGreaterThan(8);
+    // only a cell or two. The rewritten fence plus this fresh card position
+    // demonstrate that the remounted widget retained the move.
+    await expect
+      .poll(async () => {
+        const settled = await cardCenter(page, 'child-3');
+        return Math.hypot(settled.x - from.x, settled.y - from.y);
+      })
+      .toBeGreaterThan(8);
   });
 
   test('the Insert menu creates a starter ASCII diagram', async ({ page }) => {

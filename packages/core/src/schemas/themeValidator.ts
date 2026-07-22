@@ -226,6 +226,29 @@ class V {
     if (v.imageTreatment !== undefined) {
       this.imageTreatment(`${path}.imageTreatment`, v.imageTreatment);
     }
+    if (v.pip !== undefined) {
+      this.pip(`${path}.pip`, v.pip);
+    }
+  }
+
+  pip(path: string, v: unknown): void {
+    if (!this.isObject(v)) {
+      this.err(path, 'expected object');
+      return;
+    }
+    if (
+      v.cornerRadius !== undefined &&
+      !this.isNumber(v.cornerRadius) &&
+      !this.isString(v.cornerRadius)
+    ) {
+      this.err(`${path}.cornerRadius`, 'expected number or string');
+    }
+    if (v.border !== undefined && v.border !== 'none' && !this.isObject(v.border)) {
+      this.err(`${path}.border`, "expected 'none' or { width?, color? }");
+    }
+    if (v.shadow !== undefined && !this.isBoolean(v.shadow) && !this.isString(v.shadow)) {
+      this.err(`${path}.shadow`, 'expected boolean or string');
+    }
   }
 
   imageTreatment(path: string, v: unknown): void {

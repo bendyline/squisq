@@ -477,9 +477,12 @@ describe('tiptapToMarkdown', () => {
 
   it('preserves the video placement data attribute', () => {
     const source =
-      '<video src="video/presenter.webm" controls data-squisq-video-placement="picture-in-picture"></video>';
+      '<video src="video/presenter.webm" controls data-squisq-video-placement="picture-in-picture" data-squisq-video-pip-size="large" data-squisq-video-pip-shape="wide" data-squisq-video-pip-position="top-left"></video>';
     const md = tiptapToMarkdown(source);
     expect(md).toContain('data-squisq-video-placement="picture-in-picture"');
+    expect(md).toContain('data-squisq-video-pip-size="large"');
+    expect(md).toContain('data-squisq-video-pip-shape="wide"');
+    expect(md).toContain('data-squisq-video-pip-position="top-left"');
     expect(markdownToTiptap(md)).toContain('data-squisq-video-placement="picture-in-picture"');
   });
 

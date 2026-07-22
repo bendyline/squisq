@@ -1,4 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
+import { waitForAppReady } from './appReady';
 import { selectUseMode, switchView } from './view-tabs';
 
 /**
@@ -10,7 +11,7 @@ import { selectUseMode, switchView } from './view-tabs';
 
 async function enterPlay(page: Page) {
   await page.goto('/');
-  await page.waitForLoadState('networkidle');
+  await waitForAppReady(page);
   await page.locator('select').first().selectOption('tree-gallery');
   await page.locator('.tiptap.ProseMirror').waitFor({ state: 'visible', timeout: 5_000 });
   await switchView(page, 'Play');
@@ -34,7 +35,6 @@ test.describe('tree gallery screenshots', () => {
         const text = await tree.textContent();
         if (text && text !== lastText) {
           lastText = text;
-          await page.waitForTimeout(250);
           await page.locator('.doc-player').screenshot({
             path: `test-results/tree-gallery/${String(captured + 1).padStart(2, '0')}-${names[captured]}.png`,
             animations: 'disabled',
@@ -42,9 +42,15 @@ test.describe('tree gallery screenshots', () => {
           captured++;
         }
       }
-      await page.locator('.doc-player').click({ position: { x: 40, y: 40 } });
-      await page.keyboard.press('ArrowRight');
-      await page.waitForTimeout(250);
+      if (captured >= names.length) break;
+      const counter = page.getByTestId('slide-counter');
+      const next = page.getByTestId('slide-next');
+      if (await next.isDisabled()) break;
+      const previousCounter = (await counter.textContent())?.trim() ?? '';
+      await next.click();
+      await expect
+        .poll(async () => (await counter.textContent())?.trim() ?? '')
+        .not.toBe(previousCounter);
     }
     expect(captured).toBeGreaterThanOrEqual(2);
   });

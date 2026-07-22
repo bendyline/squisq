@@ -297,6 +297,23 @@ describe('<EditorShell> Write canvas settings', () => {
     expect(shell.style.getPropertyValue('--squisq-write-text-size')).toBe('20px');
     expect(shell.style.getPropertyValue('--squisq-write-line-spacing')).toBe('2');
   });
+
+  it('exposes host header/body fonts as live CSS variables on the shell', () => {
+    const { container } = render(
+      <EditorShell
+        initialMarkdown="Paragraph"
+        writeCanvasSettings={{
+          headerFont: '"Hanken Grotesk", system-ui, sans-serif',
+          bodyFont: '"Lora", Georgia, serif',
+        }}
+      />,
+    );
+    const shell = container.querySelector<HTMLElement>('.squisq-editor-shell')!;
+    expect(shell.style.getPropertyValue('--squisq-write-header-font')).toBe(
+      '"Hanken Grotesk", system-ui, sans-serif',
+    );
+    expect(shell.style.getPropertyValue('--squisq-write-body-font')).toBe('"Lora", Georgia, serif');
+  });
 });
 
 describe('RawEditor monacoTheme prop', () => {
@@ -426,6 +443,22 @@ describe('<EditorShell> Files badge', () => {
     fireEvent.click(await screen.findByLabelText('Toggle Files panel'));
 
     expect(screen.queryByRole('button', { name: 'Record media' })).toBeNull();
+  });
+
+  it('hides Files panel download actions when the host disables binary downloads', async () => {
+    render(
+      <EditorShell
+        initialMarkdown="# hi"
+        initialView="raw"
+        mediaProvider={mediaProviderWith(1)}
+        allowBinaryDownloads={false}
+      />,
+    );
+
+    fireEvent.click(await screen.findByLabelText('Toggle Files panel, 1 file'));
+
+    expect(await screen.findByText('file-1.png')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Download file-1.png' })).toBeNull();
   });
 
   it('shows the mediaProvider file count on the paperclip button', async () => {

@@ -1,4 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
+import { waitForAppReady } from './appReady';
 import { DIAGRAM_GALLERY_HEADINGS } from '../packages/site/src/diagramGallerySample';
 
 /**
@@ -13,7 +14,7 @@ import { DIAGRAM_GALLERY_HEADINGS } from '../packages/site/src/diagramGallerySam
 
 async function loadGallery(page: Page) {
   await page.goto('/');
-  await page.waitForLoadState('networkidle');
+  await waitForAppReady(page);
   await page.locator('select').first().selectOption('diagram-gallery');
   await page.locator('.tiptap.ProseMirror').waitFor({ state: 'visible', timeout: 5_000 });
   // All nine canvases mount.
@@ -49,8 +50,6 @@ test.describe('ASCII diagram gallery screenshots', () => {
     for (let i = 0; i < count; i++) {
       const host = hosts.nth(i);
       await host.scrollIntoViewIfNeeded();
-      // Let the Scene fit-on-mount settle before capture.
-      await page.waitForTimeout(400);
       const slug = DIAGRAM_GALLERY_HEADINGS[i]
         .toLowerCase()
         .replace(/[^a-z0-9]+/g, '-')

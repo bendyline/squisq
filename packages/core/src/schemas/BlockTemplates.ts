@@ -1,13 +1,13 @@
 /**
  * Block Templates Schema
  *
- * Defines a template system for AI-generated doc blocks. Instead of
- * specifying low-level layers, positions, and animations, AI can use
+ * Defines a template system for generated or programmatic doc blocks. Instead
+ * of specifying low-level layers, positions, and animations, callers can use
  * high-level templates like "title" or "statHighlight" with simple
  * content parameters.
  *
  * Templates are expanded into full Block structures at render time,
- * ensuring consistent styling and reducing AI generation errors.
+ * ensuring consistent styling and reducing generation errors.
  *
  * Template Types:
  * - title: Doc intro with title + subtitle

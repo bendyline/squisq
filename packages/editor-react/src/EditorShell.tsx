@@ -33,6 +33,7 @@ import { TimelineVideoPanel } from './TimelineVideoPanel';
 import { TimelineCompositionPanel } from './TimelineCompositionPanel';
 import { TimelineToolbar } from './TimelineToolbar';
 import { useTimelineClock } from './useTimelineClock';
+import { usePreviewProjection } from './usePreviewProjection';
 import { collectEmbeddedVideoSchedule } from './embeddedMedia';
 import { PreviewPanel } from './PreviewPanel';
 import { ImageViewer } from './ImageViewer';
@@ -87,7 +88,7 @@ import type {
   ReactNode,
   RefObject,
 } from 'react';
-import { MediaContext } from '@bendyline/squisq-react';
+import { MediaContext, useMediaClipDurations } from '@bendyline/squisq-react';
 import { writeCanvasSettingsStyle, type WriteCanvasSettings } from './writeCanvasSettings';
 import { useModalDialog } from './modal/useModalDialog';
 import type { EditorHostMode } from './editorHostMode';
@@ -200,6 +201,11 @@ export interface EditorShellProps {
   onSaveVersion?: (result: SaveVersionResult) => void;
   /** Show the Files toggle in the toolbar. Defaults to true when mediaProvider is passed. */
   showFilesToggle?: boolean;
+  /**
+   * Whether the Files panel offers browser downloads for its binary entries.
+   * Defaults to true. Pass false to remove the built-in download affordance.
+   */
+  allowBinaryDownloads?: boolean;
   /** Content rendered at the left edge of the toolbar, before the view tabs. */
   toolbarSlotLeft?: ReactNode;
   /** Content rendered after the formatting controls (in the middle area of the toolbar). */
@@ -515,6 +521,7 @@ export function EditorShell({
   versioningAutoSaveIdleMs,
   onSaveVersion,
   showFilesToggle,
+  allowBinaryDownloads = true,
   toolbarSlotLeft,
   toolbarSlotAfterActions,
   toolbarSlotRight,
@@ -627,6 +634,7 @@ export function EditorShell({
           mediaProvider={effectiveMediaProvider ?? null}
           workspaceContainer={effectiveContainer}
           filesToggleEnabled={filesToggleEnabled}
+          allowBinaryDownloads={allowBinaryDownloads}
           toolbarSlotLeft={toolbarSlotLeft}
           toolbarSlotAfterActions={toolbarSlotAfterActions}
           toolbarSlotRight={toolbarSlotRight}
@@ -672,6 +680,7 @@ interface EditorShellInnerProps {
   mediaProvider: MediaProvider | null;
   workspaceContainer?: ContentContainer | null;
   filesToggleEnabled: boolean;
+  allowBinaryDownloads: boolean;
   toolbarSlotLeft?: ReactNode;
   toolbarSlotAfterActions?: ReactNode;
   toolbarSlotRight?: ReactNode;
@@ -747,6 +756,7 @@ function EditorShellInner({
   mediaProvider,
   workspaceContainer,
   filesToggleEnabled,
+  allowBinaryDownloads,
   toolbarSlotLeft,
   toolbarSlotAfterActions,
   toolbarSlotRight,
@@ -816,17 +826,61 @@ function EditorShellInner({
     isMarkdownMode && (layoutMode === 'block' || layoutMode === 'timeline') && !isPreview;
   // Timeline mode additionally shows the horizontal timeline track below.
   const isTimelineMode = isMarkdownMode && layoutMode === 'timeline' && !isPreview;
-  const timelineDuration = useMemo(() => (doc ? getDocPlaybackDuration(doc) : 0), [doc]);
-  const timelineSchedule = useMemo(() => (doc ? resolveMediaSchedule(doc) : []), [doc]);
+  // The timeline mirrors the *played* document, not the raw parse: block bars,
+  // the playhead, and the clock use the same narration-timed projection the
+  // Video composition renders, so an unpinned slide occupies its recorded-voice
+  // length rather than a reading-time estimate and scrubbing lands on the slide
+  // that actually plays. Transform-agnostic (the timeline edits source blocks,
+  // which the projection preserves — sourceHeading intact — with no transform);
+  // gated to timeline mode and falling back to the raw `doc` until the async
+  // projection resolves (or when there's no container to time against).
+  const timelineProjection = usePreviewProjection(
+    isTimelineMode ? doc : null,
+    '',
+    workspaceContainer,
+  );
+  const timelineDoc = timelineProjection?.contentDoc ?? doc;
+  // Probe unlocked videos' intrinsic lengths so the timeline caps them to their
+  // own duration (a ~20s clip no longer scheduled across the whole 3:07 doc):
+  // the clip bar shrinks to the real length and the video goes inactive at its
+  // end instead of holding its last frame. Until a duration arrives (or when no
+  // probe applies) the historical fill-to-end schedule is used.
+  const timelineRawSchedule = useMemo(
+    () => (timelineDoc ? resolveMediaSchedule(timelineDoc) : []),
+    [timelineDoc],
+  );
+  const timelineClipDurations = useMediaClipDurations(
+    timelineRawSchedule,
+    basePath,
+    mediaProvider ?? null,
+  );
+  const timelineDuration = useMemo(
+    () =>
+      timelineDoc
+        ? getDocPlaybackDuration(timelineDoc, {
+            intrinsicDuration: (clip) => timelineClipDurations.get(clip.src),
+          })
+        : 0,
+    [timelineDoc, timelineClipDurations],
+  );
+  const timelineSchedule = useMemo(
+    () =>
+      timelineDoc
+        ? resolveMediaSchedule(timelineDoc, {
+            intrinsicDuration: (clip) => timelineClipDurations.get(clip.src),
+          })
+        : [],
+    [timelineDoc, timelineClipDurations],
+  );
   const timelineVideoSchedule = useMemo(
     () =>
-      doc
+      timelineDoc
         ? [
             ...timelineSchedule.filter((clip) => clip.kind === 'video'),
-            ...collectEmbeddedVideoSchedule(doc),
+            ...collectEmbeddedVideoSchedule(timelineDoc),
           ]
         : [],
-    [doc, timelineSchedule],
+    [timelineDoc, timelineSchedule],
   );
   const timelineClock = useTimelineClock(isTimelineMode ? timelineDuration : 0);
   const hasTimelineVideo = timelineVideoSchedule.length > 0;
@@ -1315,6 +1369,7 @@ function EditorShellInner({
                   onMediaUploaded={handleMediaUploaded}
                   onMediaRemoved={handleMediaRemoved}
                   onCountChange={setMediaCount}
+                  allowBinaryDownloads={allowBinaryDownloads}
                   onRecord={allowRecording ? handleOpenMediaBinRecorder : undefined}
                   isRecorderOpen={mediaBinRecorderOpen}
                 />
@@ -1360,6 +1415,7 @@ function EditorShellInner({
 
             {isTimelineMode && (
               <TimelineTrack
+                doc={timelineDoc}
                 clock={timelineClock}
                 schedule={timelineSchedule}
                 videoVisible={timelineVideoVisible || timelineCompositionVisible}
@@ -1371,17 +1427,22 @@ function EditorShellInner({
             composers where the stats are noise. The image viewer has its
             own dimension/zoom status row, so suppress here too. */}
             {statusBarVisible && !isImageMode && <StatusBar slotRight={statusBarSlotRight} />}
+
+            {/* Media-bin-triggered recorder. Mounted INSIDE the preview
+            settings provider so narration mode picks up the live activeTheme
+            (RecorderEntry falls back to plain doc-scoped resolution without
+            one). The modal itself portals to document.body. */}
+            {isMarkdownMode && allowRecording && mediaProvider && (
+              <RecorderEntry
+                open={mediaBinRecorderOpen}
+                onOpenChange={setMediaBinRecorderOpen}
+                showTrigger={false}
+              />
+            )}
           </UseModeProviders>
         </PreviewSettingsProvider>
       </CustomThemeProvider>
       <TooltipLayer />
-      {isMarkdownMode && allowRecording && mediaProvider && (
-        <RecorderEntry
-          open={mediaBinRecorderOpen}
-          onOpenChange={setMediaBinRecorderOpen}
-          showTrigger={false}
-        />
-      )}
       {imageEditTarget !== null && mediaProvider && (
         <ImageEditModal
           relativePath={imageEditTarget}

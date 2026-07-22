@@ -13,7 +13,10 @@
  * `localStorage` is unavailable.
  */
 
-import type { CustomTemplateDefinition } from '@bendyline/squisq/schemas';
+import {
+  isCustomTemplateDefinition,
+  type CustomTemplateDefinition,
+} from '@bendyline/squisq/schemas';
 
 export const LIBRARY_STORAGE_KEY = 'squisq:custom-template-library';
 
@@ -42,25 +45,12 @@ function readPayload(): LibraryPayload {
     if (!raw) return { version: 1, templates: [] };
     const parsed = JSON.parse(raw) as Partial<LibraryPayload>;
     if (parsed && Array.isArray(parsed.templates)) {
-      return { version: 1, templates: parsed.templates.filter(isTemplateDefinition) };
+      return { version: 1, templates: parsed.templates.filter(isCustomTemplateDefinition) };
     }
   } catch {
     // Corrupt payload — drop it.
   }
   return { version: 1, templates: [] };
-}
-
-function isTemplateDefinition(value: unknown): value is CustomTemplateDefinition {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
-  const candidate = value as Partial<CustomTemplateDefinition>;
-  return (
-    typeof candidate.name === 'string' &&
-    typeof candidate.label === 'string' &&
-    !!candidate.viewport &&
-    Number.isFinite(candidate.viewport.width) &&
-    Number.isFinite(candidate.viewport.height) &&
-    Array.isArray(candidate.layers)
-  );
 }
 
 function writePayload(payload: LibraryPayload): void {

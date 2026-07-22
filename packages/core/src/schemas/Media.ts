@@ -26,6 +26,18 @@ import type { Block, Doc } from './Doc.js';
  */
 export type VideoPlacement = 'content' | 'picture-in-picture' | 'overlay';
 
+/** Player-level placement of scheduled video relative to slide content. */
+export type VideoPresentation = 'background' | 'full-frame' | 'picture-in-picture';
+
+/** Optional per-video override for picture-in-picture size. */
+export type VideoPipSize = 'small' | 'large';
+
+/** Optional per-video override for the picture-in-picture frame shape. */
+export type VideoPipShape = 'square' | 'wide';
+
+/** Optional per-video override for the picture-in-picture corner. */
+export type VideoPipPosition = 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right';
+
 /**
  * A timed piece of media attached to a block (or the document).
  */
@@ -37,6 +49,12 @@ export interface MediaClip {
   kind: 'audio' | 'video';
   /** Per-video placement. Omitted audio and legacy video use player defaults. */
   placement?: Exclude<VideoPlacement, 'content'>;
+  /** Per-video PIP size. Omitted clips use the document/player setting. */
+  pipSize?: VideoPipSize;
+  /** Per-video PIP shape. Omitted clips use the document/player setting. */
+  pipShape?: VideoPipShape;
+  /** Per-video PIP corner. Omitted clips use the document/player setting. */
+  pipPosition?: VideoPipPosition;
   /**
    * Whether a placed video is locked to its owning block's timeline span.
    * `true` clips start with and are capped by the block. `false` clips are
@@ -97,6 +115,12 @@ export interface ScheduledClip {
   kind: 'audio' | 'video';
   /** Per-video placement carried through to the player-level compositor. */
   placement?: Exclude<VideoPlacement, 'content'>;
+  /** Per-video PIP size carried through to the player-level compositor. */
+  pipSize?: VideoPipSize;
+  /** Per-video PIP shape carried through to the player-level compositor. */
+  pipShape?: VideoPipShape;
+  /** Per-video PIP corner carried through to the player-level compositor. */
+  pipPosition?: VideoPipPosition;
   /** Authored placed-video lock state, when applicable. */
   lockToBlock?: boolean;
   /** Absolute doc-timeline second the clip starts. */
@@ -121,10 +145,48 @@ function flatten(blocks: Block[], out: Block[] = []): Block[] {
   return out;
 }
 
+/** Options for {@link resolveMediaSchedule} / {@link getDocPlaybackDuration}. */
+export interface MediaScheduleOptions {
+  /**
+   * Optional lookup of a media file's intrinsic duration in seconds (e.g.
+   * probed from the decoded file). When a clip has no authored out-point
+   * (`clipEnd`) and is not locked to its block, its scheduled end is capped at
+   * this natural length instead of filling to the block/document end — so an
+   * unlocked video plays for its own length and then goes inactive rather than
+   * holding its last frame until the timeline ends.
+   *
+   * Applied only as an upper bound: it can pull a clip's end earlier but never
+   * extends it, so the overall timeline length is unchanged. Return undefined
+   * (the default when no probe is wired) to preserve the historical
+   * fill-to-end behavior. Locked clips ignore it — they fill their owning
+   * block by design.
+   */
+  intrinsicDuration?: (clip: MediaClip) => number | undefined;
+}
+
 /** Played length of a clip when known from its in/out points, else null. */
 function clipLength(clip: MediaClip): number | null {
   if (clip.clipEnd == null) return null;
   return Math.max(0, clip.clipEnd - (clip.clipStart ?? 0));
+}
+
+/**
+ * The clip's own played length (seconds) from an externally supplied intrinsic
+ * media duration, measured past its in-point. Used to cap an UNLOCKED clip that
+ * has no authored out-point to its natural length. Null when the clip is locked
+ * (it fills its block by design), already pins an out-point (`clipEnd`), or no
+ * usable duration is known. This value is only ever applied as an upper bound on
+ * a clip's end, so it can pull the end earlier but never extend the timeline.
+ */
+function intrinsicPlayedLength(
+  clip: MediaClip,
+  opts: MediaScheduleOptions | undefined,
+): number | null {
+  if (clip.clipEnd != null || clip.lockToBlock === true) return null;
+  const intrinsic = opts?.intrinsicDuration?.(clip);
+  if (intrinsic == null || !Number.isFinite(intrinsic) || intrinsic <= 0) return null;
+  const played = intrinsic - (clip.clipStart ?? 0);
+  return played > 0 ? played : null;
 }
 
 /**
@@ -142,9 +204,10 @@ function baseTimelineEnd(doc: Doc): number {
 
 /**
  * Flatten every block clip and document clip into absolute-timed
- * `ScheduledClip`s. Pure — depends only on `doc`.
+ * `ScheduledClip`s. Pure — depends only on `doc` (plus the optional intrinsic
+ * media durations in {@link MediaScheduleOptions}).
  */
-export function resolveMediaSchedule(doc: Doc): ScheduledClip[] {
+export function resolveMediaSchedule(doc: Doc, opts?: MediaScheduleOptions): ScheduledClip[] {
   const out: ScheduledClip[] = [];
   const docEnd = baseTimelineEnd(doc);
 
@@ -161,11 +224,20 @@ export function resolveMediaSchedule(doc: Doc): ScheduledClip[] {
       } else {
         end = len != null ? Math.min(start + len, blockEnd) : blockEnd;
       }
+      // An unlocked clip with no authored out-point must not hold past the
+      // media file's own length: cap the end at its natural duration when
+      // probed. Only ever pulls the end earlier — locked clips and authored
+      // out-points are untouched, so the timeline length is unchanged.
+      const natLen = intrinsicPlayedLength(clip, opts);
+      if (natLen != null) end = Math.min(end, start + natLen);
       out.push({
         id: clip.id,
         src: clip.src,
         kind: clip.kind,
         ...(clip.placement ? { placement: clip.placement } : {}),
+        ...(clip.pipSize ? { pipSize: clip.pipSize } : {}),
+        ...(clip.pipShape ? { pipShape: clip.pipShape } : {}),
+        ...(clip.pipPosition ? { pipPosition: clip.pipPosition } : {}),
         ...(clip.lockToBlock != null ? { lockToBlock: clip.lockToBlock } : {}),
         absoluteStart: start,
         absoluteEnd: Math.max(start, end),
@@ -180,12 +252,19 @@ export function resolveMediaSchedule(doc: Doc): ScheduledClip[] {
   for (const clip of doc.documentMedia ?? []) {
     const start = clip.startAt;
     const len = clipLength(clip);
-    const end = len != null ? start + len : docEnd;
+    let end = len != null ? start + len : docEnd;
+    // Cap an unlocked, un-pinned document video to its own probed length so it
+    // stops at its natural end rather than spanning the whole timeline.
+    const natLen = intrinsicPlayedLength(clip, opts);
+    if (natLen != null) end = Math.min(end, start + natLen);
     out.push({
       id: clip.id,
       src: clip.src,
       kind: clip.kind,
       ...(clip.placement ? { placement: clip.placement } : {}),
+      ...(clip.pipSize ? { pipSize: clip.pipSize } : {}),
+      ...(clip.pipShape ? { pipShape: clip.pipShape } : {}),
+      ...(clip.pipPosition ? { pipPosition: clip.pipPosition } : {}),
       ...(clip.lockToBlock != null ? { lockToBlock: clip.lockToBlock } : {}),
       absoluteStart: start,
       absoluteEnd: Math.max(start, end),
@@ -203,8 +282,11 @@ export function resolveMediaSchedule(doc: Doc): ScheduledClip[] {
  * block (or audio segment). Export uses this for the frame count and the
  * player for its effective timeline length.
  */
-export function getDocPlaybackDuration(doc: Doc): number {
+export function getDocPlaybackDuration(doc: Doc, opts?: MediaScheduleOptions): number {
   const base = baseTimelineEnd(doc);
-  const mediaEnd = resolveMediaSchedule(doc).reduce((max, c) => Math.max(max, c.absoluteEnd), 0);
+  const mediaEnd = resolveMediaSchedule(doc, opts).reduce(
+    (max, c) => Math.max(max, c.absoluteEnd),
+    0,
+  );
   return Math.max(base, mediaEnd);
 }

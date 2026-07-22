@@ -1,4 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
+import { waitForAppReady } from './appReady';
 
 /**
  * E2E tests for the block-at-a-time view.
@@ -10,7 +11,7 @@ import { test, expect, type Page } from '@playwright/test';
 
 async function loadFeaturesSample(page: Page) {
   await page.goto('/');
-  await page.waitForLoadState('networkidle');
+  await waitForAppReady(page);
   await page.locator('select').first().selectOption('features-demo');
   await page.locator('.tiptap.ProseMirror').waitFor({ state: 'visible', timeout: 5_000 });
 }

@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { parseMarkdown, stringifyMarkdown } from '../markdown/index.js';
+import { resolveIcon } from '../icons/resolve.js';
 
 describe('inline icon parsing', () => {
   it('detects a unique bare {[name]} as an inlineIcon node', () => {
@@ -100,5 +101,31 @@ describe('inline icons inside headings', () => {
     // either `# Foo {[github]}` (when serialized back via template
     // suffix) — verify the output still matches the source.
     expect(out).toBe(src);
+  });
+});
+
+describe('block-type tags win over inline icons', () => {
+  it('leaves a bare {[list]} literal even though `list` is a FontAwesome icon', () => {
+    // The collision is real: `list` resolves to an icon...
+    expect(resolveIcon('list')).not.toBeNull();
+    // ...but a bare `{[list]}` is a block-type tag name, so it is NOT an icon.
+    const doc = parseMarkdown('See {[list]} here');
+    const para = doc.children[0] as unknown as { children: Array<Record<string, unknown>> };
+    expect(para.children).toHaveLength(1);
+    expect(para.children[0]).toMatchObject({ type: 'text', value: 'See {[list]} here' });
+  });
+
+  it('reserves other template ids that collide with icons ({[map]}, {[tree]})', () => {
+    const doc = parseMarkdown('a {[map]} b {[tree]} c');
+    const para = doc.children[0] as unknown as { children: Array<Record<string, unknown>> };
+    expect(para.children).toHaveLength(1);
+    expect(para.children[0]).toMatchObject({ type: 'text', value: 'a {[map]} b {[tree]} c' });
+  });
+
+  it('still resolves the qualified icon form as an escape hatch', () => {
+    const doc = parseMarkdown('See {[fa-solid:list]} here');
+    const para = doc.children[0] as unknown as { children: Array<Record<string, unknown>> };
+    const icon = para.children.find((c) => c.type === 'inlineIcon');
+    expect(icon).toMatchObject({ type: 'inlineIcon', name: 'list', family: 'solid' });
   });
 });

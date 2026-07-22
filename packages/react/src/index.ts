@@ -41,6 +41,11 @@ export { MermaidLayer } from './layers/MermaidLayer.js';
 // Timed media clips (block.media + doc.documentMedia playback)
 export { MediaClipLayer } from './MediaClipLayer.js';
 export type { MediaClipLayerProps } from './MediaClipLayer.js';
+export { resolveDocPlayerAppearance } from './docPlayer/playerAppearance.js';
+export type {
+  DocPlayerAppearanceOverrides,
+  ResolvedDocPlayerAppearance,
+} from './docPlayer/playerAppearance.js';
 
 // Hooks
 export { useAudioSync } from './hooks/useAudioSync.js';
@@ -48,6 +53,7 @@ export { useModalDialog } from './hooks/useModalDialog.js';
 export type { ModalDialogOptions } from './hooks/useModalDialog.js';
 export { useMediaSchedule } from './hooks/useMediaSchedule.js';
 export type { MediaScheduleController } from './hooks/useMediaSchedule.js';
+export { useMediaClipDurations } from './hooks/useMediaClipDurations.js';
 export { useDocPlayback } from './hooks/useDocPlayback.js';
 export type { UseDocPlaybackOptions } from './hooks/useDocPlayback.js';
 export { useViewportOrientation } from './hooks/useViewportOrientation.js';
@@ -72,6 +78,7 @@ export type {
   CaptionMode,
   PipPosition,
   PipShape,
+  PipSize,
   VideoPresentation,
   SlideNavActions,
   SquisqRenderAPI,

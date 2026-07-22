@@ -1,4 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
+import { waitForAppReady } from './appReady';
 import { selectUseMode, switchView } from './view-tabs';
 
 /**
@@ -21,7 +22,7 @@ async function enterPageMode(page: Page) {
 test.describe('Page mode', () => {
   test.beforeEach(async ({ page }) => {
     await page.goto('/');
-    await page.waitForLoadState('networkidle');
+    await waitForAppReady(page);
   });
 
   test('renders template blocks as variable-height HTML sections', async ({ page }) => {

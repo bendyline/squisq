@@ -16,8 +16,15 @@
  */
 
 import { useState, useRef, useCallback, useEffect } from 'react';
-import type { Doc } from '@bendyline/squisq/schemas';
-import type { MediaProvider } from '@bendyline/squisq/schemas';
+import type {
+  Doc,
+  MediaProvider,
+  Theme,
+  VideoPipPosition,
+  VideoPipShape,
+  VideoPipSize,
+  VideoPresentation,
+} from '@bendyline/squisq/schemas';
 import {
   DEFAULT_INTERACTIVE_RESOURCE_POLICY,
   fetchResourceBytes,
@@ -58,14 +65,31 @@ import { transcodeMp4ToGifWithFfmpegWasm } from '../gifTranscode.js';
 import { useFrameCapture } from './useFrameCapture.js';
 
 const MAX_EXPORT_MEDIA_FILES = 256;
-const MAX_EXPORT_MEDIA_FILE_BYTES = 64 * 1024 * 1024;
-const MAX_EXPORT_MEDIA_TOTAL_BYTES = 256 * 1024 * 1024;
 const ENCODER_PROBE_TIMEOUT_MS = 5_000;
 const ENCODER_START_TIMEOUT_MS = 60_000;
 const FRAME_CAPTURE_TIMEOUT_MS = 60_000;
 const FRAME_ENCODE_TIMEOUT_MS = 60_000;
 const CAPTURE_PROGRESS_START = 7;
 const CAPTURE_PROGRESS_END = 95;
+const FRAME_RATE_WINDOW_SIZE = 30;
+export const DEFAULT_VIDEO_COVER_PRE_ROLL_SECONDS = 2;
+
+/**
+ * Calculate throughput from frame-boundary timestamps in milliseconds.
+ * The most recent 31 boundaries describe the requested rolling 30-frame
+ * window (the first boundary is the start of the oldest included frame).
+ */
+export function calculateRollingFramesPerSecond(
+  frameBoundaryTimes: readonly number[],
+): number | null {
+  if (frameBoundaryTimes.length < 2) return null;
+  const firstIndex = Math.max(0, frameBoundaryTimes.length - (FRAME_RATE_WINDOW_SIZE + 1));
+  const elapsedMs =
+    frameBoundaryTimes[frameBoundaryTimes.length - 1] - frameBoundaryTimes[firstIndex];
+  const completedFrames = frameBoundaryTimes.length - 1 - firstIndex;
+  if (elapsedMs <= 0 || completedFrames <= 0) return null;
+  return (completedFrames * 1000) / elapsedMs;
+}
 
 function releaseEncoderFrame(frame: EncoderFrameSource): void {
   if ('close' in frame) frame.close();
@@ -111,6 +135,27 @@ export function settleWithin<T>(
 
 function toArrayBuffer(bytes: Uint8Array): ArrayBuffer {
   return bytes.slice().buffer as ArrayBuffer;
+}
+
+/**
+ * Resolve the fetch policy for one provider-backed export asset.
+ *
+ * Browser export used to impose a fixed 64 MiB per-file ceiling (plus a
+ * 256 MiB aggregate ceiling). Long camera and screen recordings routinely
+ * exceed those numbers. Use the provider's declared size as the default bound
+ * instead, so the complete known asset can load without making the fetch
+ * unbounded. A caller-supplied maxBytes remains authoritative.
+ */
+export function resolveExportMediaResourcePolicy(
+  declaredSize: number,
+  policy?: ResourcePolicy,
+): ResourcePolicy {
+  const knownSize = Number.isFinite(declaredSize) ? Math.max(0, declaredSize) : 0;
+  return {
+    ...DEFAULT_INTERACTIVE_RESOURCE_POLICY,
+    ...policy,
+    maxBytes: policy?.maxBytes ?? Math.max(DEFAULT_INTERACTIVE_RESOURCE_POLICY.maxBytes, knownSize),
+  };
 }
 
 /** Collect exact string values from the document that may name stored media. */
@@ -226,10 +271,77 @@ export interface VideoExportConfig {
   resourcePolicy?: ResourcePolicy;
   /** Caption mode for the exported video (default: 'off' for MP4, 'standard' for GIF). */
   captionMode?: CaptionMode;
+  /** Theme override for capture. Omitted values resolve from the Doc. */
+  theme?: Theme;
+  /** Player-level video placement override. Omitted values resolve from Doc frontmatter. */
+  videoPresentation?: VideoPresentation;
+  /** Picture-in-picture size override. Omitted values resolve from Doc frontmatter. */
+  pipSize?: VideoPipSize;
+  /** Picture-in-picture shape override. Omitted values resolve from Doc frontmatter. */
+  pipShape?: VideoPipShape;
+  /** Picture-in-picture corner override. Omitted values resolve from Doc frontmatter. */
+  pipPosition?: VideoPipPosition;
+  /** Managed-cover visibility override. Omitted values resolve from Doc frontmatter. */
+  showCoverSlide?: boolean;
+  /** Seconds to hold an enabled managed cover before story frame zero (default: 2). */
+  coverPreRoll?: number;
   /** Player IIFE bundle (unused in browser export, kept for CLI/Playwright path) */
   playerScript?: string;
   /** Optional self-hosted ffmpeg.wasm core URLs for fallback/offline/CSP use. */
   ffmpegWasm?: FfmpegWasmLoadConfig;
+}
+
+export interface ResolvedVideoExportCover {
+  showCoverSlide: boolean;
+  coverPreRoll: number;
+}
+
+function resolveFrontmatterBoolean(value: unknown): boolean | undefined {
+  if (typeof value === 'boolean') return value;
+  if (typeof value !== 'string') return undefined;
+  const normalized = value.trim().toLowerCase();
+  if (
+    normalized === 'true' ||
+    normalized === 'yes' ||
+    normalized === 'on' ||
+    normalized === 'show' ||
+    normalized === 'visible'
+  ) {
+    return true;
+  }
+  if (
+    normalized === 'false' ||
+    normalized === 'no' ||
+    normalized === 'off' ||
+    normalized === 'hide' ||
+    normalized === 'hidden'
+  ) {
+    return false;
+  }
+  return undefined;
+}
+
+/** Resolve the cover segment shared by browser MP4/GIF capture. */
+export function resolveVideoExportCover(
+  doc: Doc,
+  config: Pick<VideoExportConfig, 'showCoverSlide' | 'coverPreRoll'> = {},
+): ResolvedVideoExportCover {
+  const frontmatter = doc.frontmatter;
+  const frontmatterValue = frontmatter
+    ? Object.prototype.hasOwnProperty.call(frontmatter, 'squisq-cover-slide')
+      ? frontmatter['squisq-cover-slide']
+      : frontmatter['cover-slide']
+    : undefined;
+  const showCoverSlide =
+    config.showCoverSlide ?? resolveFrontmatterBoolean(frontmatterValue) ?? true;
+  const requestedPreRoll = config.coverPreRoll ?? DEFAULT_VIDEO_COVER_PRE_ROLL_SECONDS;
+  if (!Number.isFinite(requestedPreRoll) || requestedPreRoll < 0) {
+    throw new Error('Cover pre-roll must be a finite number of seconds greater than or equal to 0');
+  }
+  return {
+    showCoverSlide,
+    coverPreRoll: showCoverSlide && !!doc.startBlock ? requestedPreRoll : 0,
+  };
 }
 
 export interface VideoExportResult {
@@ -239,6 +351,10 @@ export interface VideoExportResult {
   progress: number;
   /** Human-readable description of the current phase */
   phase: string;
+  /** Current timestamp being captured from the output timeline (seconds). */
+  currentFrameTime: number | null;
+  /** Rolling throughput over at most the last 30 completed frames. */
+  processingFps: number | null;
   /** Video duration detected from the doc (seconds) */
   duration: number;
   /** Effective output format for the current or most recent export. */
@@ -276,12 +392,36 @@ export interface VideoExportResult {
   reset: () => void;
 }
 
+export interface VideoExportFramePreview {
+  /** The raster that is about to be submitted to the encoder. Valid only during the callback. */
+  source: EncoderFrameSource;
+  /** Zero-based frame index. */
+  frameIndex: number;
+  /** Total number of frames in the export. */
+  totalFrames: number;
+  /** Timestamp on the output timeline, in seconds. */
+  time: number;
+}
+
+export interface UseVideoExportOptions {
+  /**
+   * Observe an occasional captured frame without performing another rasterization.
+   * The source may be reused or closed as soon as this synchronous callback returns.
+   * Observer errors are ignored so display-only work cannot fail an export.
+   */
+  onFramePreview?: (preview: VideoExportFramePreview) => void;
+  /** Preview the first, last, and every Nth frame. Defaults to 1. */
+  previewEveryNFrames?: number;
+}
+
 // ── Hook ───────────────────────────────────────────────────────────
 
-export function useVideoExport(): VideoExportResult {
+export function useVideoExport(options: UseVideoExportOptions = {}): VideoExportResult {
   const [state, setState] = useState<VideoExportState>('idle');
   const [progress, setProgress] = useState(0);
   const [phase, setPhase] = useState('');
+  const [currentFrameTime, setCurrentFrameTime] = useState<number | null>(null);
+  const [processingFps, setProcessingFps] = useState<number | null>(null);
   const [duration, setDuration] = useState(0);
   const [outputFormat, setOutputFormat] = useState<VideoOutputFormat>('mp4');
   const [backend, setBackend] = useState<'webcodecs' | 'ffmpeg-wasm' | null>(null);
@@ -300,6 +440,8 @@ export function useVideoExport(): VideoExportResult {
   const downloadUrlRef = useRef<string | null>(null);
   const startTimeRef = useRef<number>(0);
   const elapsedTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const previewOptionsRef = useRef(options);
+  previewOptionsRef.current = options;
 
   const frameCapture = useFrameCapture();
 
@@ -333,6 +475,8 @@ export function useVideoExport(): VideoExportResult {
     setState('idle');
     setProgress(0);
     setPhase('');
+    setCurrentFrameTime(null);
+    setProcessingFps(null);
     setDuration(0);
     setOutputFormat('mp4');
     setBackend(null);
@@ -375,6 +519,8 @@ export function useVideoExport(): VideoExportResult {
       setAudioIncluded(false);
       setAudioSkippedReason(null);
       setError(null);
+      setCurrentFrameTime(null);
+      setProcessingFps(null);
 
       const quality = config.quality ?? 'normal';
       const effectiveOutputFormat = config.outputFormat ?? 'mp4';
@@ -387,6 +533,7 @@ export function useVideoExport(): VideoExportResult {
       setOutputFormat(effectiveOutputFormat);
 
       try {
+        const cover = resolveVideoExportCover(doc, config);
         const gifDefaults =
           orientation === 'portrait' ? { width: 540, height: 960 } : { width: 960, height: 540 };
         const { width, height } = resolveDimensions({
@@ -457,48 +604,48 @@ export function useVideoExport(): VideoExportResult {
               `Document references ${neededEntries.length} media files; browser export supports at most ${MAX_EXPORT_MEDIA_FILES}.`,
             );
           }
-          let totalMediaBytes = 0;
           for (const entry of neededEntries) {
             if (cancelledRef.current) return;
-            if (entry.size > MAX_EXPORT_MEDIA_FILE_BYTES) {
-              throw new Error(`Media file "${entry.name}" is too large for browser video export.`);
-            }
             const url = await config.mediaProvider.resolveUrl(entry.name);
             const resource = await fetchResourceBytes(url, {
-              policy: {
-                ...DEFAULT_INTERACTIVE_RESOURCE_POLICY,
-                ...config.resourcePolicy,
-                maxBytes: Math.min(
-                  config.resourcePolicy?.maxBytes ?? MAX_EXPORT_MEDIA_FILE_BYTES,
-                  MAX_EXPORT_MEDIA_FILE_BYTES,
-                ),
-              },
+              policy: resolveExportMediaResourcePolicy(entry.size, config.resourcePolicy),
             });
             const data = toArrayBuffer(resource.bytes);
-            totalMediaBytes += data.byteLength;
-            if (totalMediaBytes > MAX_EXPORT_MEDIA_TOTAL_BYTES) {
-              throw new Error('Referenced media exceeds the browser video export memory limit.');
-            }
             images.set(entry.name, data);
           }
         }
 
         const docDuration = await frameCapture.init(
           doc,
-          { images, audio: config.audio, width, height, animationsEnabled },
+          {
+            images,
+            audio: config.audio,
+            width,
+            height,
+            animationsEnabled,
+            theme: config.theme,
+            videoPresentation: config.videoPresentation,
+            pipSize: config.pipSize,
+            pipShape: config.pipShape,
+            pipPosition: config.pipPosition,
+            showCoverSlide: cover.showCoverSlide,
+          },
           captionMode,
         );
 
         if (cancelledRef.current) return;
 
-        setDuration(docDuration);
         if (docDuration <= 0) {
           throw new Error('Document has zero duration — nothing to export');
         }
 
-        // Known up front, so the worker encoder can report true progress
-        // instead of extrapolating from the frames it has happened to receive.
-        const totalFrames = Math.ceil(docDuration * fps);
+        // Keep the two segments separate so rounding cannot steal a story
+        // frame or drift the audio offset at the cover/story boundary.
+        const coverFrameCount = Math.ceil(cover.coverPreRoll * fps);
+        const storyFrameCount = Math.ceil(docDuration * fps);
+        const totalFrames = coverFrameCount + storyFrameCount;
+        const exportDuration = totalFrames / fps;
+        setDuration(exportDuration);
 
         // ── Step 2: Create encoder ────────────────────────────────
         setPhase('Checking video encoder…');
@@ -517,8 +664,8 @@ export function useVideoExport(): VideoExportResult {
           ).catch(() => false));
 
         // ── Audio: tier selection + (best-effort) render ──────────
-        // The browser frame-capture path has no cover pre-roll (Playwright
-        // only), so the timeline is unshifted. Every audio operation below is
+        // The audio timeline uses the exact rendered cover-frame duration, so
+        // story frame zero and the first authored sound stay aligned. Operations are
         // wrapped so a failure degrades to a silent video with a reason —
         // audio never aborts the export.
         const audioBitrate = (QUALITY_PRESETS[quality] ?? QUALITY_PRESETS.normal).audioBitrate;
@@ -526,7 +673,7 @@ export function useVideoExport(): VideoExportResult {
         // muxing without reporting the format limitation as an export error.
         const timeline =
           effectiveOutputFormat === 'mp4' && audioPolicy !== 'omit'
-            ? computeAudioTimeline(doc, 0)
+            ? computeAudioTimeline(doc, coverFrameCount / fps)
             : [];
         const aacSupported =
           timeline.length > 0
@@ -568,7 +715,7 @@ export function useVideoExport(): VideoExportResult {
             } else {
               const totalAudioDur = timeline.reduce(
                 (max, c) => Math.max(max, c.startSec + c.durationSec),
-                docDuration,
+                exportDuration,
               );
               renderedAudio = await renderAudioTimeline(
                 timeline,
@@ -640,21 +787,28 @@ export function useVideoExport(): VideoExportResult {
         if (cancelledRef.current) return;
 
         setProgress(CAPTURE_PROGRESS_START);
-        setPhase(`Capturing frame 1/${totalFrames} (0.0s)`);
+        setPhase(`Capturing frame 1/${totalFrames}`);
+        setCurrentFrameTime(0);
 
         // ── Step 3: Capture frames and encode ─────────────────────
         setState('capturing');
 
         const captureStartTime = performance.now();
+        const frameBoundaryTimes = [captureStartTime];
+        if (coverFrameCount > 0) await frameCapture.setCoverVisible(true);
 
         for (let i = 0; i < totalFrames; i++) {
           if (cancelledRef.current) return;
 
+          if (coverFrameCount > 0 && i === coverFrameCount) {
+            await frameCapture.setCoverVisible(false);
+          }
           const time = i / fps;
+          const captureTime = i < coverFrameCount ? 0 : (i - coverFrameCount) / fps;
 
           const captureOperation: Promise<EncoderFrameSource> = canUseWebCodecs
-            ? frameCapture.captureCanvasFrame(time, { reuseIfUnchanged: true })
-            : frameCapture.captureFrame(time, { reuseIfUnchanged: true });
+            ? frameCapture.captureCanvasFrame(captureTime, { reuseIfUnchanged: true })
+            : frameCapture.captureFrame(captureTime, { reuseIfUnchanged: true });
           const frame = await settleWithin(
             captureOperation,
             FRAME_CAPTURE_TIMEOUT_MS,
@@ -667,10 +821,24 @@ export function useVideoExport(): VideoExportResult {
             return;
           }
 
+          const previewOptions = previewOptionsRef.current;
+          const previewInterval = Math.max(1, Math.floor(previewOptions.previewEveryNFrames ?? 1));
+          if (
+            previewOptions.onFramePreview &&
+            (i === 0 || i === totalFrames - 1 || i % previewInterval === 0)
+          ) {
+            try {
+              previewOptions.onFramePreview({ source: frame, frameIndex: i, totalFrames, time });
+            } catch {
+              // A display-only observer must never make the export fail.
+            }
+          }
+
           // Normally this state is too brief to paint. When backpressure has
           // paused capture to drain a saturated encoder queue, it makes the
           // actual wait visible instead of blaming the next frame capture.
-          setPhase(`Encoding frame ${i + 1}/${totalFrames} (${time.toFixed(1)}s)`);
+          setPhase(`Encoding frame ${i + 1}/${totalFrames}`);
+          setCurrentFrameTime(time);
           await settleWithin(
             encoder.encodeFrame(frame, i),
             FRAME_ENCODE_TIMEOUT_MS,
@@ -681,11 +849,16 @@ export function useVideoExport(): VideoExportResult {
           // start. Tenths keep long exports visibly moving without inventing
           // progress or waiting for ten-frame batches.
           const completedFrames = i + 1;
+          const completedAt = performance.now();
+          frameBoundaryTimes.push(completedAt);
+          if (frameBoundaryTimes.length > FRAME_RATE_WINDOW_SIZE + 1) {
+            frameBoundaryTimes.shift();
+          }
+          setProcessingFps(calculateRollingFramesPerSecond(frameBoundaryTimes));
+          setCurrentFrameTime(Math.min(completedFrames / fps, exportDuration));
           setPhase(
             completedFrames < totalFrames
-              ? `Capturing frame ${completedFrames + 1}/${totalFrames} (${(
-                  completedFrames / fps
-                ).toFixed(1)}s)`
+              ? `Capturing frame ${completedFrames + 1}/${totalFrames}`
               : `Captured ${totalFrames.toLocaleString()} frames…`,
           );
           const captureRatio = completedFrames / totalFrames;
@@ -823,6 +996,8 @@ export function useVideoExport(): VideoExportResult {
     state,
     progress,
     phase,
+    currentFrameTime,
+    processingFps,
     duration,
     outputFormat,
     backend,

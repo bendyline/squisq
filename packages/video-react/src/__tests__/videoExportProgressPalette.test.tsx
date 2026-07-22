@@ -9,7 +9,7 @@ vi.mock('../hooks/useVideoExport', () => ({
   useVideoExport: useVideoExportMock,
 }));
 
-import { VideoExportModal } from '../VideoExportModal';
+import { drawVideoExportPreview, VideoExportModal } from '../VideoExportModal';
 
 const doc: Doc = {
   articleId: 'export-progress-theme-test',
@@ -24,6 +24,8 @@ describe('VideoExportModal progress palette', () => {
       state: 'encoding',
       progress: 37,
       phase: 'Encoding',
+      currentFrameTime: 16.5,
+      processingFps: 0.625,
       duration: 5,
       outputFormat: 'mp4',
       backend: 'webcodecs',
@@ -55,9 +57,20 @@ describe('VideoExportModal progress palette', () => {
     expect(track?.style.background).toBe('rgb(18, 52, 86)');
     expect(progress?.style.background).toBe('rgb(52, 86, 120)');
     expect(progress?.style.width).toBe('37%');
+    expect(container.querySelector('[data-squisq-video-export-preview]')).not.toBeNull();
+    expect(useVideoExportMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        onFramePreview: expect.any(Function),
+        previewEveryNFrames: 15,
+      }),
+    );
     expect(
       container.querySelector<HTMLElement>('[data-squisq-video-export-phase]')?.textContent,
-    ).toBe('Encoding');
+    ).toBe('Encoding - 0.63 fps · 0.03× realtime');
+    expect(
+      container.querySelector<HTMLElement>('[data-squisq-video-export-progress-label]')
+        ?.textContent,
+    ).toBe('37.0% complete, @ 16.5 seconds');
   });
 
   it('keeps encoder implementation details out of the progress dialog', () => {
@@ -66,5 +79,23 @@ describe('VideoExportModal progress palette', () => {
     expect(container.textContent).not.toContain('Encoder:');
     expect(container.textContent).not.toContain('H.264');
     expect(container.textContent).not.toContain('ffmpeg.wasm');
+  });
+
+  it('letterboxes portrait previews instead of stretching them', () => {
+    const canvas = document.createElement('canvas');
+    canvas.width = 480;
+    canvas.height = 270;
+    const source = { width: 1080, height: 1920 } as HTMLCanvasElement;
+    const context = {
+      fillStyle: '',
+      fillRect: vi.fn(),
+      drawImage: vi.fn(),
+    };
+    vi.spyOn(canvas, 'getContext').mockReturnValue(context as unknown as CanvasRenderingContext2D);
+
+    drawVideoExportPreview(canvas, source);
+
+    expect(context.fillRect).toHaveBeenCalledWith(0, 0, 480, 270);
+    expect(context.drawImage).toHaveBeenCalledWith(source, 164.0625, 0, 151.875, 270);
   });
 });

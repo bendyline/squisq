@@ -148,6 +148,7 @@ test-results/
 reports/
 .DS_Store
 .claude/settings.json
+/.claude/scheduled_tasks.lock
 
 # Gezel
 .gezel/

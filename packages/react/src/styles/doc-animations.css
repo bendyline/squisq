@@ -2256,28 +2256,47 @@
 }
 
 .doc-player__media-clips--picture-in-picture .doc-player__media-video {
-  width: 24%;
+  /* Fallback size when no data-pip-size is set; the size rules below win. */
+  width: 22%;
+  /* Square is the compatibility default; data-pip-shape can opt into wide. */
   aspect-ratio: 1;
-  border: max(1px, 0.12vw) solid rgba(255, 255, 255, 0.72);
-  box-shadow: 0 0.75em 2em rgba(0, 0, 0, 0.34);
+  /* Framed by the theme via CSS custom properties on the player root
+     (derived by pipStyleVars); fall back to the historical look when unset. */
+  border: var(--squisq-pip-border, max(1px, 0.12vw) solid rgba(255, 255, 255, 0.72));
+  border-radius: var(--squisq-pip-radius, 14%);
+  box-shadow: var(--squisq-pip-shadow, 0 0.75em 2em rgba(0, 0, 0, 0.34));
 }
 
+.doc-player__media-clips--picture-in-picture[data-pip-shape='wide'] .doc-player__media-video {
+  aspect-ratio: 16 / 9;
+}
+
+/* Two selectable sizes, orthogonal to the corner (data-pip-position). */
+.doc-player__media-clips--picture-in-picture[data-pip-size='small'] .doc-player__media-video {
+  width: 9%;
+}
+
+.doc-player__media-clips--picture-in-picture[data-pip-size='large'] .doc-player__media-video {
+  width: 15%;
+}
+
+/* Portrait viewports get a proportionally larger PiP so the presenter stays legible. */
 .doc-player[data-orientation='portrait']
   .doc-player__media-clips--picture-in-picture
   .doc-player__media-video {
-  width: 38%;
+  width: 34%;
 }
 
-.doc-player__media-clips--picture-in-picture[data-pip-shape='square'] .doc-player__media-video {
-  border-radius: 0;
+.doc-player[data-orientation='portrait']
+  .doc-player__media-clips--picture-in-picture[data-pip-size='small']
+  .doc-player__media-video {
+  width: 15%;
 }
 
-.doc-player__media-clips[data-pip-shape='rounded'] .doc-player__media-video {
-  border-radius: 14%;
-}
-
-.doc-player__media-clips--picture-in-picture[data-pip-shape='circle'] .doc-player__media-video {
-  border-radius: 50%;
+.doc-player[data-orientation='portrait']
+  .doc-player__media-clips--picture-in-picture[data-pip-size='large']
+  .doc-player__media-video {
+  width: 23%;
 }
 
 .doc-player__media-clips--picture-in-picture[data-pip-position='top-left']

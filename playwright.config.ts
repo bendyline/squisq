@@ -54,7 +54,13 @@ export default defineConfig({
   projects: [
     {
       name: 'chromium',
-      use: { ...devices['Desktop Chrome'] },
+      // Use the full Chromium binary in new-headless mode rather than
+      // Playwright's default lightweight `chromium_headless_shell`. The shell
+      // build ships a stripped-down GPU/media stack that crashes the renderer
+      // during hardware WebCodecs H.264 encode and GPU-backed frame capture
+      // (the browser MP4/GIF export pipeline) — headed runs and full Chromium
+      // both encode fine. See e2e/video-export.spec.ts.
+      use: { ...devices['Desktop Chrome'], channel: 'chromium' },
     },
     {
       name: 'firefox-smoke',

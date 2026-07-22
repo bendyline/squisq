@@ -18,6 +18,13 @@ import {
   splitKeyValueToken,
   quoteAttrValue,
 } from '@bendyline/squisq/markdown';
+import type {
+  VideoPipPosition,
+  VideoPipShape,
+  VideoPipSize,
+  VideoPlacement,
+} from '@bendyline/squisq/schemas';
+import { setHeadingLineTransition, type TransitionFields } from './headingTransition';
 
 /** Format a seconds value compactly: integers bare, else up to 2 decimals. */
 export function formatSeconds(seconds: number): string {
@@ -38,7 +45,25 @@ export function formatSeconds(seconds: number): string {
 export function setBlockDurationInSource(
   source: string,
   line: number,
-  seconds: number,
+  seconds: number | null,
+): string | null {
+  return setBlockTimeInSource(source, line, 'duration', seconds);
+}
+
+/** Set or clear a block's explicit start time on its source heading. */
+export function setBlockStartTimeInSource(
+  source: string,
+  line: number,
+  seconds: number | null,
+): string | null {
+  return setBlockTimeInSource(source, line, 'startTime', seconds);
+}
+
+function setBlockTimeInSource(
+  source: string,
+  line: number,
+  key: 'duration' | 'startTime',
+  seconds: number | null,
 ): string | null {
   const lines = source.split('\n');
   const idx = line - 1;
@@ -46,7 +71,7 @@ export function setBlockDurationInSource(
   const original = lines[idx];
   if (!/^#{1,6}\s/.test(original)) return null;
 
-  const value = formatSeconds(seconds);
+  const value = seconds == null ? null : formatSeconds(seconds);
 
   // Peel the trailing `{[…]}` annotation (if any) off the line; we'll fold
   // `duration` into it. Canonical heading order is `{#pandoc} {[squiggly]}`,
@@ -67,18 +92,32 @@ export function setBlockDurationInSource(
   if (pa) {
     const attrs = parsePandocAttrTokens(pa.inner.trim());
     if (attrs.params) {
-      delete attrs.params.duration;
+      delete attrs.params[key];
       if (Object.keys(attrs.params).length === 0) delete attrs.params;
     }
-    pandocSerialized = serializePandocAttributes(attrs);
+    const serialized = serializePandocAttributes(attrs);
+    pandocSerialized = serialized && serialized !== '{}' ? serialized : null;
     rest = rest.slice(0, pa.index).replace(/\s+$/, '');
   }
 
-  const annotation = setTemplateParam(annotationInner, 'duration', value);
+  const annotation = setTemplateParam(annotationInner, key, value);
   const parts = [rest];
   if (pandocSerialized) parts.push(pandocSerialized);
-  parts.push(annotation);
+  if (annotation) parts.push(annotation);
   lines[idx] = parts.join(' ');
+  return lines.join('\n');
+}
+
+/** Rewrite a block transition on its source heading. */
+export function setBlockTransitionInSource(
+  source: string,
+  line: number,
+  transition: TransitionFields,
+): string | null {
+  const lines = source.split('\n');
+  const idx = line - 1;
+  if (idx < 0 || idx >= lines.length || !/^#{1,6}\s/.test(lines[idx])) return null;
+  lines[idx] = setHeadingLineTransition(lines[idx], transition);
   return lines.join('\n');
 }
 
@@ -87,7 +126,7 @@ export function setBlockDurationInSource(
  * fresh one), setting `key=value` and preserving the template name plus any
  * other params in their original order.
  */
-function setTemplateParam(inner: string | null, key: string, value: string): string {
+function setTemplateParam(inner: string | null, key: string, value: string | null): string | null {
   const tokens = inner ? tokenizeAttrTokens(inner) : [];
   const firstIsParam = tokens.length > 0 && tokens[0].indexOf('=') > 0;
   const template = firstIsParam || tokens.length === 0 ? undefined : tokens[0];
@@ -101,12 +140,18 @@ function setTemplateParam(inner: string | null, key: string, value: string): str
       params[kv.key] = kv.value;
     }
   }
-  if (!(key in params)) order.push(key);
-  params[key] = value;
+  if (value === null) {
+    delete params[key];
+    const index = order.indexOf(key);
+    if (index >= 0) order.splice(index, 1);
+  } else {
+    if (!(key in params)) order.push(key);
+    params[key] = value;
+  }
 
   const parts = template ? [template] : [];
   for (const k of order) parts.push(`${k}=${quoteAttrValue(params[k])}`);
-  return `{[${parts.join(' ')}]}`;
+  return parts.length > 0 ? `{[${parts.join(' ')}]}` : null;
 }
 
 /** A patch to a media clip; numeric values are seconds, `null` removes the key. */
@@ -115,6 +160,11 @@ export interface MediaClipPatch {
   clipStart?: number | null;
   clipEnd?: number | null;
   spillover?: boolean | null;
+  placement?: VideoPlacement | null;
+  lockToBlock?: boolean | null;
+  pipSize?: VideoPipSize | null;
+  pipShape?: VideoPipShape | null;
+  pipPosition?: VideoPipPosition | null;
 }
 
 function setHtmlAttribute(openingTag: string, name: string, value: string | null): string {
@@ -150,6 +200,29 @@ function setHtmlVideoClipInLine(original: string, patch: MediaClipPatch): string
       'data-squisq-video-clip-end',
       patch.clipEnd == null ? null : formatSeconds(patch.clipEnd),
     );
+  }
+  if (patch.placement !== undefined) {
+    next = setHtmlAttribute(
+      next,
+      'data-squisq-video-placement',
+      patch.placement == null || patch.placement === 'content' ? null : patch.placement,
+    );
+  }
+  if (patch.lockToBlock !== undefined) {
+    next = setHtmlAttribute(
+      next,
+      'data-squisq-video-lock-to-block',
+      patch.lockToBlock == null || patch.lockToBlock ? null : 'false',
+    );
+  }
+  if (patch.pipSize !== undefined) {
+    next = setHtmlAttribute(next, 'data-squisq-video-pip-size', patch.pipSize);
+  }
+  if (patch.pipShape !== undefined) {
+    next = setHtmlAttribute(next, 'data-squisq-video-pip-shape', patch.pipShape);
+  }
+  if (patch.pipPosition !== undefined) {
+    next = setHtmlAttribute(next, 'data-squisq-video-pip-position', patch.pipPosition);
   }
   return `${original.slice(0, opening.index)}${next}${original.slice(opening.index + opening[0].length)}`;
 }
@@ -208,6 +281,20 @@ export function setMediaClipInSource(
   if (patch.clipEnd !== undefined)
     apply('clipEnd', patch.clipEnd == null ? null : formatSeconds(patch.clipEnd));
   if (patch.spillover !== undefined) apply('spillover', patch.spillover ? 'true' : null);
+  if (patch.placement !== undefined) {
+    // Normalize all placement aliases onto the canonical key. Clearing must
+    // also clear aliases or `pip=true` would silently keep winning on parse.
+    apply('presentation', null);
+    apply('pip', null);
+    apply('overlay', null);
+    apply('placement', patch.placement);
+  }
+  if (patch.lockToBlock !== undefined) {
+    apply('lockToBlock', patch.lockToBlock == null ? null : patch.lockToBlock ? 'true' : 'false');
+  }
+  if (patch.pipSize !== undefined) apply('pipSize', patch.pipSize);
+  if (patch.pipShape !== undefined) apply('pipShape', patch.pipShape);
+  if (patch.pipPosition !== undefined) apply('pipPosition', patch.pipPosition);
 
   const parts = [template, ...order.map((k) => `${k}=${quoteAttrValue(params[k])}`)];
   const annotation = `{[${parts.join(' ')}]}`;
@@ -223,11 +310,21 @@ export interface ClipSpec {
   clipStart?: number;
   clipEnd?: number;
   spillover?: boolean;
+  placement?: Exclude<VideoPlacement, 'content'>;
+  lockToBlock?: boolean;
+  pipSize?: VideoPipSize;
+  pipShape?: VideoPipShape;
+  pipPosition?: VideoPipPosition;
 }
 
 /** Build a `{[audio|video src=… startAt=… clipEnd=…]}` annotation string. */
 export function buildClipAnnotation(spec: ClipSpec, startAt: number): string {
   const parts: string[] = [spec.kind, `src=${quoteAttrValue(spec.src)}`];
+  if (spec.placement) parts.push(`placement=${spec.placement}`);
+  if (spec.lockToBlock != null) parts.push(`lockToBlock=${spec.lockToBlock}`);
+  if (spec.pipSize) parts.push(`pipSize=${spec.pipSize}`);
+  if (spec.pipShape) parts.push(`pipShape=${spec.pipShape}`);
+  if (spec.pipPosition) parts.push(`pipPosition=${spec.pipPosition}`);
   if (startAt > 0) parts.push(`startAt=${formatSeconds(startAt)}`);
   if (spec.clipStart != null && spec.clipStart > 0) {
     parts.push(`clipStart=${formatSeconds(spec.clipStart)}`);

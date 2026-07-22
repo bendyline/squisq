@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import type { Doc } from '@bendyline/squisq/schemas';
+import { resolveTheme } from '@bendyline/squisq/schemas';
 import { generateRenderHtml } from '../renderHtml.js';
 
 function minimalDoc(): Doc {
@@ -104,5 +105,22 @@ describe('generateRenderHtml', () => {
 
     const defaults = generateRenderHtml(minimalDoc(), { playerScript: PLAYER_STUB });
     expect(defaults).toContain('animationsEnabled: true');
+  });
+
+  it('threads explicit theme and PIP settings to the standalone capture player', () => {
+    const html = generateRenderHtml(minimalDoc(), {
+      playerScript: PLAYER_STUB,
+      theme: resolveTheme('tech-dark'),
+      videoPresentation: 'picture-in-picture',
+      pipSize: 'large',
+      pipShape: 'wide',
+      pipPosition: 'bottom-right',
+    });
+
+    expect(html).toContain('theme: {"schemaVersion":"1","id":"tech-dark"');
+    expect(html).toContain('videoPresentation: "picture-in-picture"');
+    expect(html).toContain('pipSize: "large"');
+    expect(html).toContain('pipShape: "wide"');
+    expect(html).toContain('pipPosition: "bottom-right"');
   });
 });

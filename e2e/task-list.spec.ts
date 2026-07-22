@@ -1,4 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
+import { waitForAppReady } from './appReady';
 import { switchView } from './view-tabs';
 
 /**
@@ -15,7 +16,7 @@ const MOD = process.platform === 'darwin' ? 'Meta' : 'Control';
 
 async function startInEmptyEditor(page: Page) {
   await page.goto('/');
-  await page.waitForLoadState('networkidle');
+  await waitForAppReady(page);
   await switchView(page, 'Editor');
   const editor = page.locator('.tiptap.ProseMirror');
   await editor.waitFor({ state: 'visible', timeout: 5_000 });
@@ -87,7 +88,7 @@ test('existing task-list markdown renders as checkboxes in the editor', async ({
   // path the app uses to ingest markdown, so the WYSIWYG mounts on the exact
   // source we want to verify.
   await page.goto('/?sample=e2e-tasklist');
-  await page.waitForLoadState('networkidle');
+  await waitForAppReady(page);
 
   await switchView(page, 'Editor');
   const editor = page.locator('.tiptap.ProseMirror');

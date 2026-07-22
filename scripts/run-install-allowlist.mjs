@@ -69,13 +69,16 @@ const ALLOWLIST = [
       "are currently using' or 'Cannot find module @esbuild/<platform>'.",
     runner: { kind: 'node', script: 'install.js' },
     reviewed: {
-      version: '0.27.3',
+      version: '0.28.1',
       // Reviewed 2026-07: resolves the platform package for the current
       // os/arch, downloads `@esbuild/<platform>` from registry.npmjs.org at the
-      // version in esbuild's own package.json, extracts the binary from the
-      // tarball, chmods it, and writes the bin shim. Network access is limited
-      // to the npm registry; no arbitrary code is fetched or evaluated.
-      scriptSha256: '10f6fa3644d8d23d066ff67b0ae449074e75884503546a9fedb667f1dcb9ade2',
+      // version in esbuild's own package.json, verifies the binary against the
+      // package's SHA-256 manifest, extracts/chmods it, and writes the bin shim.
+      // Network access is limited to the npm registry; no arbitrary code is
+      // fetched or evaluated. Diffed against the previously reviewed 0.27.3
+      // script; 0.28.1 adds the binary integrity check and rejects invalid tar
+      // sizes and unsupported WASM fallback installs.
+      scriptSha256: '612294e278914443bdcf81cb17f54afec34dbdd2ebd999a6ee187912320cc315',
     },
   },
 ];

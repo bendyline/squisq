@@ -151,4 +151,85 @@ describe('MediaClipLayer', () => {
       container.querySelector('[data-presentation="full-frame"] video[data-clip-id="overlay"]'),
     ).toBeTruthy();
   });
+
+  it('applies per-video PIP size, shape, and position overrides', () => {
+    vi.spyOn(window.HTMLMediaElement.prototype, 'pause').mockImplementation(() => {});
+    const clip: ScheduledClip = {
+      id: 'pip',
+      kind: 'video',
+      src: 'pip.mp4',
+      placement: 'picture-in-picture',
+      pipSize: 'large',
+      pipShape: 'wide',
+      pipPosition: 'top-left',
+      absoluteStart: 0,
+      absoluteEnd: 10,
+      sourceIn: 0,
+      anchor: 'block',
+    };
+    const { container } = render(
+      <MediaClipLayer
+        schedule={[clip]}
+        currentTime={1}
+        isPlaying={false}
+        basePath="."
+        pipSize="small"
+        pipShape="square"
+        pipPosition="bottom-right"
+        muted
+      />,
+    );
+
+    const group = container.querySelector('[data-presentation="picture-in-picture"]')!;
+    expect(group.getAttribute('data-pip-size')).toBe('large');
+    expect(group.getAttribute('data-pip-shape')).toBe('wide');
+    expect(group.getAttribute('data-pip-position')).toBe('top-left');
+  });
+
+  it('inlines capture-safe PIP geometry, crop, and theme frame', () => {
+    vi.spyOn(window.HTMLMediaElement.prototype, 'pause').mockImplementation(() => {});
+    const clip: ScheduledClip = {
+      id: 'pip',
+      kind: 'video',
+      src: 'pip.mp4',
+      absoluteStart: 0,
+      absoluteEnd: 10,
+      sourceIn: 0,
+      anchor: 'document',
+    };
+    const { container } = render(
+      <MediaClipLayer
+        schedule={[clip]}
+        currentTime={1}
+        isPlaying={false}
+        basePath="."
+        presentation="picture-in-picture"
+        pipSize="large"
+        pipShape="wide"
+        pipPosition="bottom-right"
+        pipOrientation="landscape"
+        pipFrameStyle={{
+          border: '3px solid #ff00aa',
+          borderRadius: '18%',
+          boxShadow: '0 2px 4px black',
+        }}
+        muted
+      />,
+    );
+
+    const group = container.querySelector<HTMLElement>('[data-presentation="picture-in-picture"]')!;
+    const video = group.querySelector<HTMLVideoElement>('video')!;
+    expect(group.style.position).toBe('absolute');
+    expect(group.style.inset).toBe('0');
+    expect(group.style.zIndex).toBe('10');
+    expect(video.style.position).toBe('absolute');
+    expect(video.style.objectFit).toBe('cover');
+    expect(video.style.width).toBe('15%');
+    expect(video.style.aspectRatio).toBe('16 / 9');
+    expect(video.style.right).toBe('3%');
+    expect(video.style.bottom).toBe('6%');
+    expect(video.style.border).toBe('3px solid rgb(255, 0, 170)');
+    expect(video.style.borderRadius).toBe('18%');
+    expect(video.style.boxShadow).toBe('0 2px 4px black');
+  });
 });

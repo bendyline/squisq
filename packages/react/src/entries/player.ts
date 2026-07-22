@@ -26,6 +26,7 @@ export type {
   CaptionMode,
   PipPosition,
   PipShape,
+  PipSize,
   VideoPresentation,
   SlideNavActions,
   SquisqRenderAPI,

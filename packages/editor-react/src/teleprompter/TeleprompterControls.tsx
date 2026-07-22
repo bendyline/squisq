@@ -8,7 +8,7 @@
 import type { ReactNode } from 'react';
 import type { TeleprompterController } from './useTeleprompter';
 import type { FloatingWindowHandle } from './useFloatingWindow';
-import type { FloatTier } from './types';
+import { TELEPROMPTER_PREF_LIMITS, type FloatTier } from './types';
 
 const TIER_LABELS: Record<FloatTier, string> = {
   'document-pip': 'Floating window (always on top)',
@@ -22,9 +22,20 @@ export interface TeleprompterControlsProps {
   float: FloatingWindowHandle;
   /** Phase B mounts the narration Record button here. */
   recordSlot?: ReactNode;
+  /**
+   * Show the Start/Pause transport button (default true). Hosts whose own
+   * chrome drives playback — the Record media dialog starts the prompter
+   * through its Record button — pass false; Restart and Countdown stay.
+   */
+  showPlayPause?: boolean;
 }
 
-export function TeleprompterControls({ controller, float, recordSlot }: TeleprompterControlsProps) {
+export function TeleprompterControls({
+  controller,
+  float,
+  recordSlot,
+  showPlayPause = true,
+}: TeleprompterControlsProps) {
   const { transport, prefs, setPrefs, mic } = controller;
   const rolling = transport === 'rolling' || transport === 'countdown';
   const voiceLive = prefs.voiceTracking && mic.status === 'live';
@@ -38,13 +49,15 @@ export function TeleprompterControls({ controller, float, recordSlot }: Teleprom
       data-voice-live={voiceLive || undefined}
     >
       <span className="squisq-teleprompter-group">
-        <button
-          type="button"
-          onClick={() => (rolling ? controller.pause() : controller.play())}
-          aria-label={rolling ? 'Pause prompter' : 'Start prompter'}
-        >
-          {rolling ? '⏸ Pause' : transport === 'paused' ? '▶ Resume' : '▶ Start'}
-        </button>
+        {showPlayPause ? (
+          <button
+            type="button"
+            onClick={() => (rolling ? controller.pause() : controller.play())}
+            aria-label={rolling ? 'Pause prompter' : 'Start prompter'}
+          >
+            {rolling ? '⏸ Pause' : transport === 'paused' ? '▶ Resume' : '▶ Start'}
+          </button>
+        ) : null}
         <button type="button" onClick={controller.restart} aria-label="Restart prompter">
           ⟲ Restart
         </button>
@@ -69,8 +82,8 @@ export function TeleprompterControls({ controller, float, recordSlot }: Teleprom
         <input
           id="squisq-prompter-wpm"
           type="range"
-          min={80}
-          max={260}
+          min={TELEPROMPTER_PREF_LIMITS.baseWpm.min}
+          max={TELEPROMPTER_PREF_LIMITS.baseWpm.max}
           step={5}
           value={prefs.baseWpm}
           onChange={(e) => setPrefs({ baseWpm: Number(e.target.value) })}
@@ -100,8 +113,8 @@ export function TeleprompterControls({ controller, float, recordSlot }: Teleprom
             <input
               id="squisq-prompter-sensitivity"
               type="range"
-              min={0}
-              max={1}
+              min={TELEPROMPTER_PREF_LIMITS.vadSensitivity.min}
+              max={TELEPROMPTER_PREF_LIMITS.vadSensitivity.max}
               step={0.05}
               value={prefs.vadSensitivity}
               onChange={(e) => setPrefs({ vadSensitivity: Number(e.target.value) })}
@@ -146,8 +159,8 @@ export function TeleprompterControls({ controller, float, recordSlot }: Teleprom
         <input
           id="squisq-prompter-fontsize"
           type="range"
-          min={28}
-          max={96}
+          min={TELEPROMPTER_PREF_LIMITS.fontSizePx.min}
+          max={TELEPROMPTER_PREF_LIMITS.fontSizePx.max}
           step={2}
           value={prefs.fontSizePx}
           onChange={(e) => setPrefs({ fontSizePx: Number(e.target.value) })}

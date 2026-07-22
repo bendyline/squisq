@@ -1,4 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
+import { waitForAppReady } from './appReady';
 
 /**
  * E2E for the codeContext feature: host-supplied markdown sections rendered
@@ -11,7 +12,7 @@ import { test, expect, type Page } from '@playwright/test';
 
 async function openDemo(page: Page) {
   await page.goto('/');
-  await page.waitForLoadState('networkidle');
+  await waitForAppReady(page);
   await page.getByTestId('toggle-code-context').click();
   // Monaco mounts lazily; the first zone strip appearing means the whole
   // pipeline (editor → zones → portal) is live.

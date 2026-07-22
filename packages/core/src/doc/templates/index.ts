@@ -134,6 +134,16 @@ export interface ExpandDocBlocksOptions {
    */
   audioSegments?: AudioSegmentTiming[];
   /**
+   * Split any block whose *scheduled* duration exceeds ~20s into repeated parts
+   * so a single slide never lingers too long during timed playback (video).
+   * Each part re-shows the same content — correct for a continuous medium, but
+   * for discrete-slide consumers it produces duplicate slides. Emitters of
+   * discrete slides (e.g. the PPTX exporter) pass `false` so one authored slide
+   * stays one slide, matching the slideshow. Only affects the audio-timed path;
+   * defaults to `true` to preserve video/narration pacing.
+   */
+  splitLongBlocks?: boolean;
+  /**
    * User-defined custom templates to merge onto the built-in registry
    * before expanding blocks. Typically passed straight from
    * `Doc.customTemplates`. Built-in names take precedence on collision.
@@ -225,6 +235,7 @@ export function expandDocBlocks(blocks: DocBlock[], options: ExpandDocBlocksOpti
     customTemplates,
     failureMode = 'fallback',
     onDiagnostic,
+    splitLongBlocks = true,
   } = opts;
   const totalBlocks = blocks.length;
   // Merge user-defined templates once, then share the immutable runtime view.
@@ -511,39 +522,44 @@ export function expandDocBlocks(blocks: DocBlock[], options: ExpandDocBlocksOpti
       }
     }
 
-    // Sixth pass: split blocks that are too long (>20s)
-    // This ensures no single block lingers for too long
+    // Sixth pass: split blocks that are too long (>20s) so no single slide
+    // lingers too long during timed playback. Each part re-shows the same
+    // content, so this is pacing for a continuous medium (video) — not new
+    // slides. Discrete-slide consumers (PPTX export) pass splitLongBlocks:false
+    // so one authored slide stays one slide instead of N identical copies.
     const MAX_BLOCK_DURATION = 20;
 
-    for (let i = 0; i < segmentExpandedBlocks.length; i++) {
-      const block = segmentExpandedBlocks[i];
+    if (splitLongBlocks) {
+      for (let i = 0; i < segmentExpandedBlocks.length; i++) {
+        const block = segmentExpandedBlocks[i];
 
-      if (block.duration > MAX_BLOCK_DURATION) {
-        // Calculate how many parts we need
-        const numParts = Math.ceil(block.duration / MAX_BLOCK_DURATION);
-        const partDuration = block.duration / numParts;
+        if (block.duration > MAX_BLOCK_DURATION) {
+          // Calculate how many parts we need
+          const numParts = Math.ceil(block.duration / MAX_BLOCK_DURATION);
+          const partDuration = block.duration / numParts;
 
-        // Only split if each part would meet minimum transition gap
-        if (partDuration >= MIN_TRANSITION_GAP) {
-          // Shorten original block to first part
-          block.duration = partDuration;
+          // Only split if each part would meet minimum transition gap
+          if (partDuration >= MIN_TRANSITION_GAP) {
+            // Shorten original block to first part
+            block.duration = partDuration;
 
-          // Create additional blocks for remaining parts
-          for (let p = 1; p < numParts; p++) {
-            const splitBlock: Block = {
-              id: `${block.id}-split-${p}`,
-              startTime: block.startTime + p * partDuration,
-              duration: partDuration,
-              audioSegment: block.audioSegment,
-              layers: (block.layers ?? []).map((layer) => ({
-                ...cloneData(layer),
-                id: `${layer.id}-split-${p}`,
-              })),
-              transition: { type: 'dissolve', duration: 1.0 },
-              template: block.template,
-            };
-            // Insert into expanded blocks array
-            expandedBlocks.push(splitBlock);
+            // Create additional blocks for remaining parts
+            for (let p = 1; p < numParts; p++) {
+              const splitBlock: Block = {
+                id: `${block.id}-split-${p}`,
+                startTime: block.startTime + p * partDuration,
+                duration: partDuration,
+                audioSegment: block.audioSegment,
+                layers: (block.layers ?? []).map((layer) => ({
+                  ...cloneData(layer),
+                  id: `${layer.id}-split-${p}`,
+                })),
+                transition: { type: 'dissolve', duration: 1.0 },
+                template: block.template,
+              };
+              // Insert into expanded blocks array
+              expandedBlocks.push(splitBlock);
+            }
           }
         }
       }

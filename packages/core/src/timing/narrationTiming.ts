@@ -5,8 +5,7 @@
  * - Numbers spoken as multiple words (e.g., "1910" → "nineteen ten")
  * - Pauses at commas
  * - Year pronunciation conventions (1000–2099)
- *
- * Ported from qualla-internal's AudioTiming.ts (pure functions, no Node.js deps).
+ * Pure functions with no Node.js dependencies.
  */
 
 /** Numbers are spoken more slowly than regular words (1.3× multiplier). */

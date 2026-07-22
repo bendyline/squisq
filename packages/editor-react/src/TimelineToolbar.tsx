@@ -53,7 +53,7 @@ export function TimelineToolbar({
             strokeLinejoin="round"
           />
         </svg>
-        <span>Literal video</span>
+        <span>Video monitor</span>
       </button>
       <button
         type="button"

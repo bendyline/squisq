@@ -31,6 +31,31 @@ import { useEscapeDismissal } from './useEscapeDismissal';
 
 const WIDTH_PRESETS = [60, 80, 100, 120];
 
+function TransformActionIcon({ id }: { id: MarkdownSourceTransformId }) {
+  if (id === 'unwrap') {
+    return (
+      <svg viewBox="0 0 24 24" aria-hidden="true" data-transform-icon="unwrap">
+        <path d="M5 3.5h9.5L19 8v12.5H5z" />
+        <path d="M14.5 3.5V8H19" />
+        <path d="M7.8 11.2h8.4M7.8 14.6h8.4M7.8 18h8.4" />
+      </svg>
+    );
+  }
+
+  if (id === 'wrap') {
+    return (
+      <svg viewBox="0 0 24 24" aria-hidden="true" data-transform-icon="wrap">
+        <path d="M5 3.5h9.5L19 8v12.5H5z" />
+        <path d="M14.5 3.5V8H19" />
+        <path d="M12.7 9.7v1.4m0 1.5V14m0 1.5v1.4m0 1.5v1.1" strokeDasharray="1 1.5" />
+        <path d="M7.8 11.2h3.1M7.8 14.6h3.1M7.8 18h3.1" />
+      </svg>
+    );
+  }
+
+  return <Icon icon="fa-solid fa-wand-magic-sparkles" />;
+}
+
 export function TransformMenu() {
   const {
     editorMode,
@@ -143,12 +168,16 @@ export function TransformMenu() {
     wrapState === null
       ? null
       : wrapState.kind === 'wrapped'
-        ? `Stored wrap: ~${wrapState.width} columns`
+        ? `Detected mode: wrapped at ~${wrapState.width} characters wide`
         : wrapState.kind === 'unwrapped'
-          ? 'Stored wrap: unwrapped'
+          ? 'Detected mode: unwrapped'
           : wrapState.kind === 'mixed'
-            ? 'Stored wrap: mixed'
-            : 'Stored wrap: no prose to judge';
+            ? 'Detected mode: mixed wrapping'
+            : 'Detected mode: no prose to judge';
+  const currentMode =
+    wrapState?.kind === 'wrapped' ? 'wrap' : wrapState?.kind === 'unwrapped' ? 'unwrap' : null;
+  const currentModeLabel =
+    wrapState?.kind === 'wrapped' ? `Current (~${wrapState.width} characters wide)` : 'Current';
 
   return (
     <div className="squisq-transform-menu" ref={containerRef}>
@@ -173,49 +202,69 @@ export function TransformMenu() {
           aria-label="Transform document"
         >
           {wrapStateLabel && <div className="squisq-transform-menu-state">{wrapStateLabel}</div>}
-          {MARKDOWN_SOURCE_TRANSFORMS.map((transform) => (
-            <div key={transform.id} className="squisq-transform-menu-item">
-              <button
-                type="button"
-                className="squisq-transform-menu-action"
-                disabled={disabled}
-                onClick={() => applyTransform(transform.id)}
-              >
-                <span className="squisq-transform-menu-action-label">{transform.label}</span>
-                <span className="squisq-transform-menu-action-desc">{transform.description}</span>
-              </button>
-              {transform.id === 'wrap' && (
-                <div className="squisq-transform-menu-widths" aria-label="Wrap width">
-                  {WIDTH_PRESETS.map((preset) => (
-                    <button
-                      key={preset}
-                      type="button"
-                      className={`squisq-transform-menu-width${
-                        width === preset ? ' squisq-transform-menu-width--active' : ''
-                      }`}
+          {MARKDOWN_SOURCE_TRANSFORMS.map((transform) => {
+            const isCurrentMode = transform.id === currentMode;
+            return (
+              <div key={transform.id} className="squisq-transform-menu-item">
+                <button
+                  type="button"
+                  className={`squisq-transform-menu-action${
+                    isCurrentMode ? ' squisq-transform-menu-action--current' : ''
+                  }`}
+                  aria-current={isCurrentMode ? 'true' : undefined}
+                  disabled={disabled}
+                  onClick={() => applyTransform(transform.id)}
+                >
+                  <span className="squisq-transform-menu-action-icon" aria-hidden="true">
+                    <TransformActionIcon id={transform.id} />
+                  </span>
+                  <span className="squisq-transform-menu-action-copy">
+                    <span className="squisq-transform-menu-action-heading">
+                      <span className="squisq-transform-menu-action-label">{transform.label}</span>
+                      {isCurrentMode && (
+                        <span className="squisq-transform-menu-current-badge">
+                          {currentModeLabel}
+                        </span>
+                      )}
+                    </span>
+                    <span className="squisq-transform-menu-action-desc">
+                      {transform.description}
+                    </span>
+                  </span>
+                </button>
+                {transform.id === 'wrap' && (
+                  <div className="squisq-transform-menu-widths" aria-label="Wrap width">
+                    {WIDTH_PRESETS.map((preset) => (
+                      <button
+                        key={preset}
+                        type="button"
+                        className={`squisq-transform-menu-width${
+                          width === preset ? ' squisq-transform-menu-width--active' : ''
+                        }`}
+                        disabled={disabled}
+                        onClick={() => setWidth(preset)}
+                      >
+                        {preset}
+                      </button>
+                    ))}
+                    <input
+                      type="number"
+                      className="squisq-transform-menu-width-input"
+                      aria-label="Custom wrap width"
+                      min={20}
+                      max={500}
+                      value={width}
                       disabled={disabled}
-                      onClick={() => setWidth(preset)}
-                    >
-                      {preset}
-                    </button>
-                  ))}
-                  <input
-                    type="number"
-                    className="squisq-transform-menu-width-input"
-                    aria-label="Custom wrap width"
-                    min={20}
-                    max={500}
-                    value={width}
-                    disabled={disabled}
-                    onChange={(e) => {
-                      const next = Number(e.target.value);
-                      if (!Number.isNaN(next)) setWidth(next);
-                    }}
-                  />
-                </div>
-              )}
-            </div>
-          ))}
+                      onChange={(e) => {
+                        const next = Number(e.target.value);
+                        if (!Number.isNaN(next)) setWidth(next);
+                      }}
+                    />
+                  </div>
+                )}
+              </div>
+            );
+          })}
           {disabledNote && <div className="squisq-transform-menu-note">{disabledNote}</div>}
           <div className="squisq-transform-menu-status" role="status" aria-live="polite">
             {status}

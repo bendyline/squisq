@@ -6,6 +6,7 @@ import {
   wrapMarkdownSource,
 } from '@bendyline/squisq/markdown';
 import { EditorProvider, useEditorContext } from '../EditorContext';
+import { Toolbar } from '../Toolbar';
 import { TransformMenu } from '../TransformMenu';
 
 /**
@@ -68,6 +69,26 @@ function openMenu(): void {
 }
 
 describe('TransformMenu', () => {
+  it('shows the toolbar trigger only in Source view', async () => {
+    render(
+      <EditorProvider initialMarkdown={WRAPPED} initialView="wysiwyg" allowRecording={false}>
+        <Toolbar />
+      </EditorProvider>,
+    );
+
+    expect(screen.queryByRole('button', { name: 'Transform document' })).toBeNull();
+
+    fireEvent.click(screen.getByRole('tab', { name: /Source/ }));
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Transform document' })).toBeTruthy();
+    });
+
+    fireEvent.click(screen.getByRole('tab', { name: /Use/ }));
+    await waitFor(() => {
+      expect(screen.queryByRole('button', { name: 'Transform document' })).toBeNull();
+    });
+  });
+
   it('lists the registry transforms and the detected wrap state', async () => {
     render(
       <EditorProvider initialMarkdown={WRAPPED}>
@@ -81,7 +102,32 @@ describe('TransformMenu', () => {
     expect(screen.getByText('Unwrap paragraphs')).toBeTruthy();
     expect(screen.getByText('Wrap at width')).toBeTruthy();
     expect(screen.getByText('Clean up formatting')).toBeTruthy();
-    expect(screen.getByText('Stored wrap: ~80 columns')).toBeTruthy();
+    expect(screen.getByText('Detected mode: wrapped at ~80 characters wide')).toBeTruthy();
+    expect(
+      screen
+        .getByRole('dialog', { name: 'Transform document' })
+        .querySelectorAll('.squisq-transform-menu-action-icon'),
+    ).toHaveLength(3);
+    expect(
+      screen
+        .getByRole('dialog', { name: 'Transform document' })
+        .querySelector('[data-transform-icon="unwrap"]'),
+    ).toBeTruthy();
+    expect(
+      screen
+        .getByRole('dialog', { name: 'Transform document' })
+        .querySelector('[data-transform-icon="wrap"]'),
+    ).toBeTruthy();
+    expect(
+      screen
+        .getByText('Clean up formatting')
+        .closest('button')
+        ?.querySelector('.fa-wand-magic-sparkles'),
+    ).toBeTruthy();
+    expect(screen.getByText('Wrap at width').closest('button')?.getAttribute('aria-current')).toBe(
+      'true',
+    );
+    expect(screen.getByText('Current (~80 characters wide)')).toBeTruthy();
   });
 
   it('applies unwrap as one source write in Write view', async () => {
@@ -97,7 +143,10 @@ describe('TransformMenu', () => {
     });
     expect(screen.getByRole('status').textContent).toBe('Transformed.');
     // The state header follows the live source.
-    expect(screen.getByText('Stored wrap: unwrapped')).toBeTruthy();
+    expect(screen.getByText('Detected mode: unwrapped')).toBeTruthy();
+    expect(
+      screen.getByText('Unwrap paragraphs').closest('button')?.getAttribute('aria-current'),
+    ).toBe('true');
   });
 
   it('reports "No changes needed." on an already-conforming document', async () => {

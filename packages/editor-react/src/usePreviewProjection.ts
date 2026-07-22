@@ -6,7 +6,7 @@
  */
 
 import { useEffect, useState } from 'react';
-import type { Doc } from '@bendyline/squisq/schemas';
+import type { AudioTrack, Doc } from '@bendyline/squisq/schemas';
 import { resolveAudioMapping } from '@bendyline/squisq/doc';
 import { applyTransform } from '@bendyline/squisq/transform';
 import type { ContentContainer } from '@bendyline/squisq/storage';
@@ -19,10 +19,43 @@ export interface PreviewProjection {
   playerDoc: Doc;
 }
 
+function hasEquivalentAudio(left: AudioTrack, right: AudioTrack): boolean {
+  if (left === right) return true;
+  if (left.segments.length !== right.segments.length) return false;
+  return left.segments.every((segment, index) => {
+    const other = right.segments[index];
+    return (
+      segment.src === other.src &&
+      segment.name === other.name &&
+      segment.duration === other.duration &&
+      segment.startTime === other.startTime
+    );
+  });
+}
+
+/**
+ * Re-parsing frontmatter creates a fresh Doc (and therefore a fresh AudioTrack)
+ * even when the playable timeline did not change. DocPlayer intentionally
+ * resets for a genuinely new track, so retain the previous track identity for
+ * equivalent projections and let cosmetic document updates remain in place.
+ */
+function preserveEquivalentAudio(
+  previous: PreviewProjection | null,
+  next: PreviewProjection,
+): PreviewProjection {
+  const previousAudio = previous?.playerDoc.audio;
+  if (!previousAudio || !hasEquivalentAudio(previousAudio, next.playerDoc.audio)) return next;
+  return {
+    ...next,
+    playerDoc: { ...next.playerDoc, audio: previousAudio },
+  };
+}
+
 export function usePreviewProjection(
   doc: Doc | null,
   transformStyle: string,
   workspaceContainer?: ContentContainer | null,
+  documentTitle?: string,
 ): PreviewProjection | null {
   const [projection, setProjection] = useState<PreviewProjection | null>(null);
 
@@ -36,28 +69,43 @@ export function usePreviewProjection(
     // any generated slides before the player-ready document is materialized.
     const build = (sourceDoc: Doc): PreviewProjection => {
       const contentDoc = transformStyle ? applyTransform(sourceDoc, transformStyle).doc : sourceDoc;
-      return { contentDoc, playerDoc: buildPreviewDoc(contentDoc) };
+      return { contentDoc, playerDoc: buildPreviewDoc(contentDoc, { documentTitle }) };
+    };
+    const commit = (next: PreviewProjection) => {
+      setProjection((previous) => preserveEquivalentAudio(previous, next));
     };
 
     if (workspaceContainer) {
       let cancelled = false;
+      const immediate = build(doc);
       resolveAudioMapping(doc, workspaceContainer).then(
         (audioDoc) => {
-          if (!cancelled) setProjection(build(audioDoc));
+          if (!cancelled) commit(build(audioDoc));
         },
         () => {
-          // The immediate projection remains valid if optional audio discovery
+          // Fall back to the immediate projection if optional audio discovery
           // fails. Consume the rejection rather than leaking it.
+          if (!cancelled) commit(immediate);
         },
       );
-      setProjection(build(doc));
+      // Audio discovery is authoritative for workspace previews. While it is
+      // in flight, update the visible content but retain the last resolved
+      // track so a transient synthetic track cannot rewind the player. The
+      // success/failure branch above commits the authoritative next track.
+      setProjection((previous) => {
+        if (!previous) return immediate;
+        return {
+          ...immediate,
+          playerDoc: { ...immediate.playerDoc, audio: previous.playerDoc.audio },
+        };
+      });
       return () => {
         cancelled = true;
       };
     }
 
-    setProjection(build(doc));
-  }, [doc, transformStyle, workspaceContainer]);
+    commit(build(doc));
+  }, [doc, transformStyle, workspaceContainer, documentTitle]);
 
   return projection;
 }

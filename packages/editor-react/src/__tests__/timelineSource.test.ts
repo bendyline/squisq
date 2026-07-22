@@ -4,6 +4,8 @@ import { markdownToDoc } from '@bendyline/squisq/doc';
 import {
   formatSeconds,
   setBlockDurationInSource,
+  setBlockStartTimeInSource,
+  setBlockTransitionInSource,
   setMediaClipInSource,
   buildClipAnnotation,
   placeClipInBlock,
@@ -58,8 +60,33 @@ describe('setBlockDurationInSource', () => {
     expect(durationOf(next, 0)).toBe(9);
   });
 
+  it('clears explicit duration to restore automatic timing', () => {
+    const src = '# Intro {#intro duration=5} {[title duration=9 color=blue]}\n\nBody.\n';
+    const next = setBlockDurationInSource(src, 1, null)!;
+    expect(next).toBe('# Intro {#intro} {[title color=blue]}\n\nBody.\n');
+    expect(durationOf(next, 0)).not.toBe(9);
+  });
+
   it('returns null for a non-heading line', () => {
     expect(setBlockDurationInSource('not a heading\n', 1, 5)).toBeNull();
+  });
+});
+
+describe('other block properties in timeline source', () => {
+  it('sets and clears an explicit start time', () => {
+    const source = '# Intro {[title]}\n\nBody.\n';
+    const set = setBlockStartTimeInSource(source, 1, 2.5)!;
+    expect(set).toContain('{[title startTime=2.5]}');
+    expect(setBlockStartTimeInSource(set, 1, null)).toBe(source);
+  });
+
+  it('sets a transition through the shared heading serializer', () => {
+    const next = setBlockTransitionInSource('# Intro\n', 1, {
+      type: 'fade',
+      direction: '',
+      duration: '0.7',
+    });
+    expect(next).toBe('# Intro {[transition=fade transitionDuration=0.7]}\n');
   });
 });
 
@@ -99,6 +126,54 @@ describe('setMediaClipInSource', () => {
     expect(next).toContain('data-squisq-video-lock-to-block="false"');
     const doc = markdownToDoc(parseMarkdown(next), { articleId: 't' });
     expect(doc.documentMedia?.[0]).toMatchObject({ startAt: 6, clipEnd: 14 });
+  });
+
+  it('patches video composition properties on annotations', () => {
+    const video = '# B {duration=20}\n\n{[video src=v.mp4 pip=true]}\n';
+    const next = setMediaClipInSource(video, 3, {
+      placement: 'picture-in-picture',
+      lockToBlock: false,
+      pipSize: 'large',
+      pipShape: 'wide',
+      pipPosition: 'top-left',
+    })!;
+    expect(next).not.toContain('pip=true');
+    expect(next).toContain('placement=picture-in-picture');
+    expect(next).toContain('lockToBlock=false');
+    expect(next).toContain('pipSize=large');
+    expect(next).toContain('pipShape=wide');
+    expect(next).toContain('pipPosition=top-left');
+    const doc = markdownToDoc(parseMarkdown(next), { articleId: 't' });
+    expect(doc.documentMedia?.[0]).toMatchObject({
+      placement: 'picture-in-picture',
+      lockToBlock: false,
+      pipSize: 'large',
+      pipShape: 'wide',
+      pipPosition: 'top-left',
+    });
+  });
+
+  it('patches and clears video composition properties on HTML video', () => {
+    const html = '# B\n\n<video src="v.mp4" controls></video>\n';
+    const placed = setMediaClipInSource(html, 3, {
+      placement: 'picture-in-picture',
+      pipSize: 'large',
+      pipShape: 'wide',
+      pipPosition: 'top-right',
+    })!;
+    expect(placed).toContain('data-squisq-video-placement="picture-in-picture"');
+    expect(placed).toContain('data-squisq-video-pip-size="large"');
+    expect(placed).toContain('data-squisq-video-pip-shape="wide"');
+    expect(placed).toContain('data-squisq-video-pip-position="top-right"');
+
+    const content = setMediaClipInSource(placed, 3, {
+      placement: 'content',
+      lockToBlock: null,
+      pipSize: null,
+      pipShape: null,
+      pipPosition: null,
+    })!;
+    expect(content).toBe(html);
   });
 });
 

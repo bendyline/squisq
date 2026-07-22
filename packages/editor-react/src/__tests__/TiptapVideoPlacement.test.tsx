@@ -48,4 +48,16 @@ describe('TiptapVideo placement toolbar', () => {
     expect(editor.getHTML()).not.toContain('data-squisq-video-lock-to-block');
     editor.destroy();
   });
+
+  it('preserves per-video PIP size, shape, and position attributes', () => {
+    const editor = new Editor({
+      extensions: [StarterKit, TiptapVideo],
+      content:
+        '<video src="video/presenter.webm" data-squisq-video-placement="picture-in-picture" data-squisq-video-pip-size="large" data-squisq-video-pip-shape="wide" data-squisq-video-pip-position="top-left"></video>',
+    });
+    expect(editor.getHTML()).toContain('data-squisq-video-pip-size="large"');
+    expect(editor.getHTML()).toContain('data-squisq-video-pip-shape="wide"');
+    expect(editor.getHTML()).toContain('data-squisq-video-pip-position="top-left"');
+    editor.destroy();
+  });
 });

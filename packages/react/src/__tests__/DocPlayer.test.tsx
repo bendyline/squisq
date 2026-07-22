@@ -1,7 +1,8 @@
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { DocPlayer } from '../DocPlayer';
 import type { Doc } from '@bendyline/squisq/schemas';
+import { pipStyleVars, resolveTheme } from '@bendyline/squisq/schemas';
 import type { AudioController } from '../hooks/AudioController';
 import type { SquisqRenderAPI } from '../types';
 
@@ -155,6 +156,45 @@ describe('DocPlayer smoke test', () => {
   it('renders without crashing in video mode (default)', () => {
     const { container } = render(<DocPlayer doc={minimalDoc()} basePath="/test" />);
     expect(container.firstChild).toBeTruthy();
+  });
+
+  it('inherits the document theme and PIP settings when export mounts a fresh player', () => {
+    const themedDoc: Doc = {
+      ...docWithPresenter(),
+      themeId: 'tech-dark',
+      frontmatter: {
+        'squisq-video-presentation': 'picture-in-picture',
+        'squisq-pip-size': 'large',
+        'squisq-pip-shape': 'wide',
+        'squisq-pip-position': 'bottom-right',
+      },
+    };
+    const { container } = render(
+      <DocPlayer doc={themedDoc} audioController={controller()} renderMode />,
+    );
+
+    const pip = container.querySelector<HTMLElement>('[data-presentation="picture-in-picture"]');
+    expect(pip?.dataset.pipSize).toBe('large');
+    expect(pip?.dataset.pipShape).toBe('wide');
+    expect(pip?.dataset.pipPosition).toBe('bottom-right');
+
+    const player = container.querySelector<HTMLElement>('.doc-player')!;
+    const expectedVars = pipStyleVars(resolveTheme('tech-dark'));
+    expect(player.style.getPropertyValue('--squisq-pip-radius')).toBe(
+      expectedVars['--squisq-pip-radius'],
+    );
+    expect(player.style.getPropertyValue('--squisq-pip-border')).toBe(
+      expectedVars['--squisq-pip-border'],
+    );
+    const video = pip?.querySelector<HTMLVideoElement>('video');
+    expect(video?.style.objectFit).toBe('cover');
+    expect(video?.style.width).toBe('15%');
+    expect(video?.style.aspectRatio).toBe('16 / 9');
+    expect(video?.style.right).toBe('3%');
+    expect(video?.style.bottom).toBe('6%');
+    expect(video?.style.borderRadius).toBe(expectedVars['--squisq-pip-radius']);
+    expect(video?.style.border).toBe(expectedVars['--squisq-pip-border']);
+    expect(video?.style.boxShadow).toBe(expectedVars['--squisq-pip-shadow']);
   });
 
   it('restarts Video-mode playback after the timeline ends when loop is enabled', async () => {
@@ -434,6 +474,21 @@ describe('DocPlayer smoke test', () => {
         basePath="/test"
         displayMode="slideshow"
         showCoverSlide={false}
+      />,
+    );
+    expect(container.textContent).not.toContain('Managed Cover');
+    expect(screen.getByTestId('slide-counter').textContent).toBe('1 / 1');
+  });
+
+  it('inherits the managed-cover flag from document frontmatter', () => {
+    const { container } = render(
+      <DocPlayer
+        doc={{
+          ...docWithCover(),
+          frontmatter: { 'squisq-cover-slide': false },
+        }}
+        basePath="/test"
+        displayMode="slideshow"
       />,
     );
     expect(container.textContent).not.toContain('Managed Cover');
@@ -772,6 +827,52 @@ describe('DocPlayer smoke test', () => {
     await api!.seekTo(3.25);
     expect(secondController.seekTo).toHaveBeenCalledWith(3.25);
     expect(firstController.seekTo).not.toHaveBeenCalled();
+  });
+
+  it('resolves a render seek after the requested visual time commits with one paint gate', async () => {
+    const requestFrame = vi
+      .spyOn(window, 'requestAnimationFrame')
+      .mockImplementation((callback) => {
+        callback(0);
+        return 1;
+      });
+    const observed: Array<SquisqRenderAPI | null> = [];
+    const audioController = controller({ currentTime: 0, totalDuration: 10 });
+    const { container } = render(
+      <DocPlayer
+        doc={docWithTransition()}
+        renderMode
+        audioController={audioController}
+        onRenderAPIReady={(api) => observed.push(api)}
+      />,
+    );
+    const api = observed[observed.length - 1]!;
+    const animation = {
+      effect: {
+        get target() {
+          return container.querySelector('[data-block-id="second"]');
+        },
+      },
+      currentTime: null as number | null,
+    };
+    Object.defineProperty(container.querySelector('.doc-player')!, 'getAnimations', {
+      configurable: true,
+      value: () => [animation],
+    });
+
+    await act(async () => api.seekTo(5.1));
+
+    expect(api.getRenderedTime()).toBe(5.1);
+    expect(container.querySelector('.doc-player')?.hasAttribute('data-squisq-render-time')).toBe(
+      false,
+    );
+    expect(
+      container.querySelector('.doc-player__block--active [data-block-id="second"]'),
+    ).toBeTruthy();
+    expect(audioController.seekTo).toHaveBeenCalledWith(5.1);
+    expect(animation.currentTime).toBeCloseTo(100);
+    expect(requestFrame).toHaveBeenCalledOnce();
+    requestFrame.mockRestore();
   });
 
   it('settles render-mode seeks when Chromium suspends animation frames', async () => {

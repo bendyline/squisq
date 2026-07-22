@@ -1,11 +1,12 @@
 import { expect, test } from '@playwright/test';
+import { waitForAppReady } from './appReady';
 import { switchView } from './view-tabs';
 
 test('a completed swipe does not restore the outgoing slide during the destination transition', async ({
   page,
 }) => {
   await page.goto('/');
-  await page.waitForLoadState('networkidle');
+  await waitForAppReady(page);
   await switchView(page, 'Play');
 
   const player = page.locator('.doc-player');

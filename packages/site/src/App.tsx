@@ -7,7 +7,11 @@
 
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { EditorShell, ThemeCustomizerPanel } from '@bendyline/squisq-editor-react';
-import type { EditorColorScheme, WriteCanvasSettings } from '@bendyline/squisq-editor-react';
+import type {
+  EditorColorScheme,
+  WriteCanvasSettings,
+  ThemeInheritance,
+} from '@bendyline/squisq-editor-react';
 import '@bendyline/squisq-editor-react/styles';
 import { MediaContext } from '@bendyline/squisq-react';
 import {
@@ -30,6 +34,7 @@ import { openExternalLink } from './externalLinks';
 const CUSTOM_THEME_STORAGE_KEY = 'squisq-site:customTheme';
 const COLOR_MODE_STORAGE_KEY = 'squisq-site:colorMode';
 const WRITE_CANVAS_STORAGE_KEY = 'squisq-site:writeCanvasSettings';
+const WRITE_THEME_STORAGE_KEY = 'squisq-site:writeThemeInheritance';
 const DEFAULT_SAMPLE_KEY = 'about-squisq';
 const SITE_BASE_URL = import.meta.env.BASE_URL;
 const SAMPLE_KEYS = [
@@ -38,7 +43,9 @@ const SAMPLE_KEYS = [
 ];
 
 type DemoColorMode = 'auto' | EditorColorScheme;
-type DemoWriteCanvasSettings = Required<WriteCanvasSettings>;
+// The demo only exercises the numeric Write-canvas levers; the optional
+// headerFont / bodyFont overrides are left to hosts (e.g. DocBlocks).
+type DemoWriteCanvasSettings = Required<Pick<WriteCanvasSettings, 'textSize' | 'lineSpacing'>>;
 
 const DEFAULT_WRITE_CANVAS_SETTINGS: DemoWriteCanvasSettings = {
   textSize: 16,
@@ -47,6 +54,16 @@ const DEFAULT_WRITE_CANVAS_SETTINGS: DemoWriteCanvasSettings = {
 
 const WRITE_TEXT_SIZE_OPTIONS = [12, 14, 15, 16, 17, 18, 20, 22, 24, 28, 32] as const;
 const WRITE_LINE_SPACING_OPTIONS = [1.2, 1.4, 1.5, 1.6, 1.7, 1.8, 2, 2.2, 2.4] as const;
+
+// How much the WYSIWYG "Write" canvas adopts the active Squisq theme. Matches
+// the labels used by the editor's own View menu ("Editor styling from theme").
+// `'fonts'` is the EditorShell default.
+const DEFAULT_WRITE_THEME_INHERITANCE: ThemeInheritance = 'fonts';
+const WRITE_THEME_OPTIONS: ReadonlyArray<{ label: string; value: ThemeInheritance }> = [
+  { label: "Don't inherit", value: 'none' },
+  { label: 'Fonts only', value: 'fonts' },
+  { label: 'Fonts & colors', value: 'fonts-colors' },
+];
 
 const COLOR_MODE_OPTIONS: ReadonlyArray<{ label: string; value: DemoColorMode }> = [
   { label: 'Auto', value: 'auto' },
@@ -103,6 +120,21 @@ function isNumberInRange(value: unknown, min: number, max: number): value is num
   return typeof value === 'number' && Number.isFinite(value) && value >= min && value <= max;
 }
 
+function isThemeInheritance(value: string | null): value is ThemeInheritance {
+  return value === 'none' || value === 'fonts' || value === 'fonts-colors';
+}
+
+function getInitialWriteThemeInheritance(): ThemeInheritance {
+  if (typeof window === 'undefined') return DEFAULT_WRITE_THEME_INHERITANCE;
+  try {
+    const stored = window.localStorage.getItem(WRITE_THEME_STORAGE_KEY);
+    if (isThemeInheritance(stored)) return stored;
+  } catch {
+    // Ignore unavailable storage; the in-memory selection still works.
+  }
+  return DEFAULT_WRITE_THEME_INHERITANCE;
+}
+
 /**
  * Resolve the initial sample from a `?sample=<key>` URL param when one
  * is present and points at an inline `SAMPLES` entry. Used by the E2E
@@ -147,6 +179,9 @@ export function App() {
   const [writeCanvasSettings, setWriteCanvasSettings] = useState<DemoWriteCanvasSettings>(() =>
     getInitialWriteCanvasSettings(),
   );
+  const [writeThemeInheritance, setWriteThemeInheritance] = useState<ThemeInheritance>(() =>
+    getInitialWriteThemeInheritance(),
+  );
   const [systemColorScheme, setSystemColorScheme] = useState<EditorColorScheme>(() =>
     resolveSystemColorScheme(),
   );
@@ -177,6 +212,13 @@ export function App() {
       // Ignore unavailable storage; the in-memory selection still works.
     }
   }, [writeCanvasSettings]);
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(WRITE_THEME_STORAGE_KEY, writeThemeInheritance);
+    } catch {
+      // Ignore unavailable storage; the in-memory selection still works.
+    }
+  }, [writeThemeInheritance]);
   useEffect(() => {
     if (typeof document === 'undefined') return;
     document.documentElement.style.colorScheme = colorScheme;
@@ -599,6 +641,26 @@ export function App() {
               ))}
             </select>
           </label>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+            Theme
+            <select
+              aria-label="Write theme inheritance"
+              value={writeThemeInheritance}
+              onChange={(event) => setWriteThemeInheritance(event.target.value as ThemeInheritance)}
+              style={{
+                border: '1px solid #c9b98a',
+                background: '#fff',
+                color: '#4a3c1f',
+                font: 'inherit',
+              }}
+            >
+              {WRITE_THEME_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </label>
         </div>
 
         {/* Theme customizer — wrapped in editor-shell to inherit BEM dark-theme styles. */}
@@ -649,7 +711,7 @@ export function App() {
             whiteSpace: 'nowrap',
           }}
         >
-          Squisq license
+          MIT license
         </a>
         <a
           href={`${SITE_BASE_URL}legal/NOTICE.md`}
@@ -695,6 +757,7 @@ export function App() {
                 mediaProvider={mediaProvider}
                 themeOverride={customTheme}
                 writeCanvasSettings={writeCanvasSettings}
+                themeInheritance={writeThemeInheritance}
                 findMode={findMode}
                 onFindModeChange={setFindMode}
               />

@@ -5,6 +5,7 @@ export * from './Media.js';
 export * from './BlockTemplates.js';
 export * from './CustomTemplates.js';
 export * from './Theme.js';
+export * from './pipStyle.js';
 export * from './PageStyle.js';
 export * from './pageStyleDefaults.js';
 export * from './themeLibrary.js';

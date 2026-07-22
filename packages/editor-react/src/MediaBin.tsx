@@ -49,6 +49,12 @@ export interface MediaBinProps {
   onRecord?: () => void;
   /** Whether the recorder dialog opened by `onRecord` is currently visible. */
   isRecorderOpen?: boolean;
+  /**
+   * Whether files expose a browser download action. Defaults to true. This
+   * controls the built-in affordance only; it cannot prevent access to media
+   * URLs that the host otherwise exposes to the browser.
+   */
+  allowBinaryDownloads?: boolean;
 }
 
 // ============================================
@@ -101,6 +107,21 @@ function sortMediaEntries(entries: MediaEntry[]): MediaEntry[] {
   });
 }
 
+function basenameForPath(path: string): string {
+  return path.split(/[\\/]/).pop() || path;
+}
+
+function triggerBrowserDownload(url: string, filename: string): void {
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = filename;
+  link.rel = 'noopener';
+  link.style.display = 'none';
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+}
+
 // ============================================
 // Component
 // ============================================
@@ -115,11 +136,13 @@ export function MediaBin({
   onCountChange,
   onRecord,
   isRecorderOpen = false,
+  allowBinaryDownloads = true,
 }: MediaBinProps) {
   const [entries, setEntries] = useState<MediaEntry[]>([]);
   const [thumbUrls, setThumbUrls] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(false);
   const [isDropActive, setIsDropActive] = useState(false);
+  const [downloadingPath, setDownloadingPath] = useState<string | null>(null);
   const [contextMenu, setContextMenu] = useState<{
     entry: MediaEntry;
     x: number;
@@ -331,6 +354,25 @@ export function MediaBin({
     [mediaProvider, onMediaRemoved, updateEntries],
   );
 
+  const handleDownloadEntry = useCallback(
+    async (entry: MediaEntry) => {
+      if (!mediaProvider || downloadingPath !== null) return;
+      setDownloadingPath(entry.name);
+      try {
+        const url = await mediaProvider.resolveUrl(entry.name);
+        triggerBrowserDownload(url, basenameForPath(entry.name));
+      } catch (err: unknown) {
+        console.warn(
+          '[squisq-editor] Failed to download media file:',
+          err instanceof Error ? err.message : err,
+        );
+      } finally {
+        setDownloadingPath(null);
+      }
+    },
+    [downloadingPath, mediaProvider],
+  );
+
   const openContextMenu = useCallback((entry: MediaEntry, x: number, y: number) => {
     setContextMenu({ entry, x, y });
   }, []);
@@ -429,7 +471,7 @@ export function MediaBin({
 
         {entries.map((entry) => {
           const thumb = thumbUrls[entry.name];
-          const basename = entry.name.includes('/') ? entry.name.split('/').pop()! : entry.name;
+          const basename = basenameForPath(entry.name);
           const isImage = isImageMime(entry.mimeType);
           const altText = basename.replace(/\.[^.]+$/, '').replace(/[-_]/g, ' ');
           const isUnused = !!usedMediaPaths && !usedMediaPaths.has(entry.name);
@@ -484,6 +526,24 @@ export function MediaBin({
                   )}
                 </div>
               </div>
+
+              {allowBinaryDownloads && (
+                <button
+                  type="button"
+                  className="squisq-media-bin-download"
+                  title={`Download ${basename}`}
+                  aria-label={`Download ${basename}`}
+                  disabled={!mediaProvider || downloadingPath !== null}
+                  draggable={false}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    void handleDownloadEntry(entry);
+                  }}
+                  onDragStart={(event) => event.preventDefault()}
+                >
+                  <span aria-hidden="true">{downloadingPath === entry.name ? '…' : '↓'}</span>
+                </button>
+              )}
             </div>
           );
         })}

@@ -13,7 +13,13 @@
  * - DocControlsBottom.tsx — Horizontal bottom strip controls
  */
 
-import type { Block } from '@bendyline/squisq/schemas';
+import type {
+  Block,
+  VideoPipPosition,
+  VideoPipShape,
+  VideoPipSize,
+  VideoPresentation as CoreVideoPresentation,
+} from '@bendyline/squisq/schemas';
 
 /** Layout mode for doc player controls */
 export type ControlsLayout = 'overlay' | 'sidebar' | 'bottom';
@@ -24,13 +30,16 @@ export type ControlsLayout = 'overlay' | 'sidebar' | 'bottom';
  * `'background'` preserves the legacy full-bleed treatment behind the
  * content. The other variants render above the content for presenter video.
  */
-export type VideoPresentation = 'background' | 'full-frame' | 'picture-in-picture';
+export type VideoPresentation = CoreVideoPresentation;
+
+/** Size of a picture-in-picture presenter video. */
+export type PipSize = VideoPipSize;
 
 /** Shape of a picture-in-picture presenter video. */
-export type PipShape = 'square' | 'rounded' | 'circle';
+export type PipShape = VideoPipShape;
 
 /** Corner occupied by a picture-in-picture presenter video. */
-export type PipPosition = 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right';
+export type PipPosition = VideoPipPosition;
 
 /**
  * Display mode for DocPlayer.
@@ -178,7 +187,10 @@ export interface RenderChapterInfo {
  * ```
  */
 export interface SquisqRenderAPI {
+  /** Seek and resolve only after the requested visual state is capture-ready. */
   seekTo: (time: number) => Promise<void>;
+  /** Timeline time most recently committed to the player DOM. */
+  getRenderedTime: () => number;
   getDuration: () => number;
   getBlocks: () => RenderBlockInfo[];
   getAudioSegments: () => RenderAudioSegmentInfo[];

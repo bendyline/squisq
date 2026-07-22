@@ -4,6 +4,7 @@ import {
   resolveFormat,
   supportsDisplayMedia,
   supportsMediaRecorder,
+  supportsSystemAudioCapture,
   supportsUserMedia,
 } from '../recorder/formats.js';
 
@@ -71,6 +72,65 @@ describe('supportsUserMedia / supportsDisplayMedia', () => {
     });
     expect(supportsUserMedia()).toBe(true);
     expect(supportsDisplayMedia()).toBe(true);
+  });
+});
+
+describe('supportsSystemAudioCapture', () => {
+  function installNavigator(userAgent: string, userAgentData?: unknown) {
+    Object.defineProperty(globalThis, 'navigator', {
+      value: {
+        mediaDevices: { getDisplayMedia: vi.fn() },
+        userAgent,
+        ...(userAgentData === undefined ? {} : { userAgentData }),
+      },
+      configurable: true,
+    });
+  }
+
+  it('supports desktop Chrome and Edge through their Chromium brand', () => {
+    for (const brand of ['Google Chrome', 'Microsoft Edge']) {
+      installNavigator('reduced-user-agent', {
+        brands: [{ brand: 'Chromium' }, { brand }],
+        mobile: false,
+      });
+      expect(supportsSystemAudioCapture()).toBe(true);
+    }
+  });
+
+  it('hides the option in Firefox and Safari', () => {
+    for (const userAgent of [
+      'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:142.0) Gecko/20100101 Firefox/142.0',
+      'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 Version/18.6 Safari/605.1.15',
+    ]) {
+      installNavigator(userAgent);
+      expect(supportsSystemAudioCapture()).toBe(false);
+    }
+  });
+
+  it('recognizes desktop Edge when UA Client Hints are unavailable', () => {
+    installNavigator(
+      'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/138.0.0.0 Safari/537.36 Edg/138.0.0.0',
+    );
+    expect(supportsSystemAudioCapture()).toBe(true);
+  });
+
+  it('does not offer the option on mobile Chromium', () => {
+    installNavigator('Mozilla/5.0 (Linux; Android 16) Chrome/138.0.0.0 Mobile Safari/537.36', {
+      brands: [{ brand: 'Chromium' }],
+      mobile: true,
+    });
+    expect(supportsSystemAudioCapture()).toBe(false);
+  });
+
+  it('requires getDisplayMedia even in Chromium', () => {
+    Object.defineProperty(globalThis, 'navigator', {
+      value: {
+        mediaDevices: {},
+        userAgent: 'Mozilla/5.0 Chrome/138.0.0.0 Safari/537.36',
+      },
+      configurable: true,
+    });
+    expect(supportsSystemAudioCapture()).toBe(false);
   });
 });
 
@@ -142,5 +202,14 @@ describe('buildFilename', () => {
   it('uses the recording-* prefix for video sources', () => {
     const name = buildFilename('video', '.mp4');
     expect(name).toMatch(/^recording-\d{8}-\d{6}\.mp4$/);
+  });
+
+  it.each([
+    ['audio', 'audio'],
+    ['camera+audio', 'video'],
+    ['screen+audio', 'video'],
+  ] as const)('uses the source-aware %s seed for general recorder output', (seed, kind) => {
+    const name = buildFilename(kind, '.webm', undefined, seed);
+    expect(name).toMatch(new RegExp(`^${seed.replace('+', '\\+')}-\\d{8}-\\d{6}\\.webm$`));
   });
 });

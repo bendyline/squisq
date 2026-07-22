@@ -3,7 +3,7 @@
  *
  * Selects which extracted elements to promote to visual template blocks
  * and handles color scheme rotation, image interleaving, and template
- * variety. Ported and generalized from qualla-internal's TemplateSelector.
+ * variety.
  */
 
 import type { Block, TransitionType } from '../schemas/Doc.js';

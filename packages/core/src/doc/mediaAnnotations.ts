@@ -11,7 +11,13 @@
 
 import { parseTimeSeconds } from '../markdown/annotationCoercion.js';
 import type { HtmlElement, HtmlNode, MarkdownBlockNode } from '../markdown/types.js';
-import type { MediaClip, VideoPlacement } from '../schemas/Media.js';
+import type {
+  MediaClip,
+  VideoPipPosition,
+  VideoPipShape,
+  VideoPipSize,
+  VideoPlacement,
+} from '../schemas/Media.js';
 import { parseStandaloneAnnotation, type ParsedAnnotation } from './standaloneAnnotation.js';
 
 /** Annotation template names that produce a timed media clip. */
@@ -45,6 +51,23 @@ function lockToBlock(raw: string | undefined): boolean {
   return raw !== 'false' && raw !== '0';
 }
 
+function videoPipSize(raw: string | undefined): VideoPipSize | undefined {
+  return raw === 'small' || raw === 'large' ? raw : undefined;
+}
+
+function videoPipShape(raw: string | undefined): VideoPipShape | undefined {
+  return raw === 'square' || raw === 'wide' ? raw : undefined;
+}
+
+function videoPipPosition(raw: string | undefined): VideoPipPosition | undefined {
+  return raw === 'top-left' ||
+    raw === 'top-right' ||
+    raw === 'bottom-left' ||
+    raw === 'bottom-right'
+    ? raw
+    : undefined;
+}
+
 /** Build a {@link MediaClip} from a parsed media annotation, or null if invalid. */
 function toMediaClip(parsed: ParsedAnnotation, id: string): MediaClip | null {
   const { template, params } = parsed;
@@ -70,6 +93,12 @@ function toMediaClip(parsed: ParsedAnnotation, id: string): MediaClip | null {
   // content. Treat `content` as no override instead of emitting an impossible
   // scheduled-content state.
   if (placement && placement !== 'content') clip.placement = placement;
+  const pipSize = videoPipSize(params.pipSize);
+  const pipShape = videoPipShape(params.pipShape);
+  const pipPosition = videoPipPosition(params.pipPosition);
+  if (pipSize) clip.pipSize = pipSize;
+  if (pipShape) clip.pipShape = pipShape;
+  if (pipPosition) clip.pipPosition = pipPosition;
 
   if (kind === 'video' && placement && placement !== 'content' && params.lockToBlock != null) {
     const locked = lockToBlock(params.lockToBlock);
@@ -156,6 +185,12 @@ function htmlVideoClip(node: MarkdownBlockNode, id: string): MediaClip | null {
     startAt: locked ? 0 : (time(element.attributes['data-squisq-video-start-at']) ?? 0),
     anchor: locked ? 'block' : 'document',
   };
+  const pipSize = videoPipSize(element.attributes['data-squisq-video-pip-size']);
+  const pipShape = videoPipShape(element.attributes['data-squisq-video-pip-shape']);
+  const pipPosition = videoPipPosition(element.attributes['data-squisq-video-pip-position']);
+  if (pipSize) clip.pipSize = pipSize;
+  if (pipShape) clip.pipShape = pipShape;
+  if (pipPosition) clip.pipPosition = pipPosition;
   const clipStart = time(element.attributes['data-squisq-video-clip-start']);
   const clipEnd = time(element.attributes['data-squisq-video-clip-end']);
   if (clipStart != null) clip.clipStart = clipStart;

@@ -77,7 +77,13 @@ export { TimelineCompositionPanel } from './TimelineCompositionPanel.js';
 export type { TimelineCompositionPanelProps } from './TimelineCompositionPanel.js';
 export { TimelineToolbar } from './TimelineToolbar.js';
 export type { TimelineToolbarProps } from './TimelineToolbar.js';
-export { formatSeconds, setBlockDurationInSource, setMediaClipInSource } from './timelineSource.js';
+export {
+  formatSeconds,
+  setBlockDurationInSource,
+  setBlockStartTimeInSource,
+  setBlockTransitionInSource,
+  setMediaClipInSource,
+} from './timelineSource.js';
 export type { MediaClipPatch } from './timelineSource.js';
 
 // File-kind detection — useful for hosts that want to pre-decide chrome
@@ -118,7 +124,7 @@ export {
   PreviewFormatSwitch,
   usePreviewSettings,
 } from './PreviewControls.js';
-export type { PreviewSettings } from './PreviewControls.js';
+export type { PreviewSettings, PreviewToolbarControlsProps } from './PreviewControls.js';
 
 // Chrome (for custom layouts)
 export { ViewSwitcher } from './ViewSwitcher.js';
@@ -244,7 +250,11 @@ export type {
 export { markdownToTiptap, tiptapToMarkdown } from './tiptapBridge.js';
 
 // Slideshow builder (shared between PreviewPanel and export flows)
-export { buildPreviewDoc } from './buildPreviewDoc.js';
+export {
+  buildPreviewDoc,
+  documentTitleFromFileName,
+  type BuildPreviewDocOptions,
+} from './buildPreviewDoc.js';
 
 // Tiptap extension: Heading with template annotation support
 export { HeadingWithTemplate } from './TemplateAnnotation.js';
@@ -487,7 +497,9 @@ export { RecorderModal } from './recorder/RecorderModal.js';
 export type {
   RecorderColorScheme,
   RecorderModalProps,
+  RecorderNarrationOptions,
   RecorderSaveResult,
+  RecorderCameraSaveResult,
 } from './recorder/RecorderModal.js';
 export { RecorderButton } from './recorder/RecorderButton.js';
 export type { RecorderButtonProps } from './recorder/RecorderButton.js';
@@ -499,6 +511,7 @@ export type {
   UseMediaRecorderResult,
   RecorderSource,
   RecorderState,
+  RecorderCameraLane,
 } from './recorder/hooks/useMediaRecorder.js';
 export { useStreamPreview } from './recorder/hooks/useStreamPreview.js';
 export { requestMicStream } from './recorder/sources/micStream.js';
@@ -521,6 +534,8 @@ export type { TimingJson, RecordedBookmark } from './recorder/timingJson.js';
 // prompter surface, floating-window tiers, and the mic analysis pipeline.
 export {
   TeleprompterView,
+  NarrationStage,
+  useNarrationStage,
   TeleprompterSurface,
   TeleprompterControls,
   useTeleprompter,
@@ -549,6 +564,9 @@ export {
 } from './teleprompter/index.js';
 export type {
   TeleprompterViewProps,
+  NarrationStageProps,
+  NarrationStageHandle,
+  UseNarrationStageOptions,
   TeleprompterSurfaceProps,
   TeleprompterControlsProps,
   TeleprompterController,

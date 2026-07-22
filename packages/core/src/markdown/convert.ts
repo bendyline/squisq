@@ -25,6 +25,7 @@ import type {
 } from './types.js';
 import { parseHtmlToNodes } from './htmlParse.js';
 import { resolveIcon } from '../icons/resolve.js';
+import { isReservedAnnotationToken } from '../doc/templates/templateNames.js';
 import { coerceAnnotationValues } from './annotationCoercion.js';
 import {
   matchTrailingTemplateAnnotation,
@@ -562,6 +563,10 @@ function splitTextOnIcons(value: string, position?: MarkdownSourcePosition): Mar
   const out: MarkdownInlineNode[] = [];
   while ((match = ICON_TOKEN_RE.exec(value)) !== null) {
     const token = match[1];
+    // Block-type tag names win over icon tokens: a bare `{[list]}` / `{[map]}` /
+    // `{[tree]}` is a template annotation (or literal), never an inline icon.
+    // The qualified form (`{[fa-solid:list]}`) still resolves as an icon.
+    if (isReservedAnnotationToken(token)) continue;
     const icon = resolveIcon(token);
     if (!icon) continue; // leave the literal `{[…]}` in place
     if (match.index > lastIndex) {

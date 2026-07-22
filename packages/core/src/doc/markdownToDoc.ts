@@ -46,11 +46,13 @@ import { estimateReadingTime } from '../timing/readingTime.js';
 import {
   resolveTemplateName,
   isContainerTemplate,
+  hasTemplate,
   TABLE_FED_TEMPLATES,
 } from './templates/index.js';
 import { isDataFence, parseDataFence, findFirstTable, extractTableData } from './structuredData.js';
-import { extractMediaFromContents } from './mediaAnnotations.js';
+import { extractMediaFromContents, isMediaAnnotationName } from './mediaAnnotations.js';
 import { extractTemplateBlocksFromContents } from './annotationBlocks.js';
+import { detectPromotableBodyAnnotation } from './promoteBodyAnnotation.js';
 import type { ParsedAnnotation } from './standaloneAnnotation.js';
 import { profileBlockContents, pickAutoTemplate } from '../recommend/templates.js';
 import { autoTemplatePreservesContent, deriveTemplateInputs } from './templateInputs.js';
@@ -225,6 +227,11 @@ function pinnedHeadingMeta(heading: MarkdownHeading | undefined): CoercedBlockMe
  * same way a heading annotation would.
  */
 function pinnedMeta(block: Block): CoercedBlockMeta {
+  // A tag promoted from the body pins timing the same as a heading annotation
+  // would — its params were authored explicitly (the heading itself is blank).
+  if (block.promotedBodyAnnotation?.params) {
+    return coerceAnnotationValues(block.promotedBodyAnnotation.params).blockMeta;
+  }
   if (block.sourceHeading) return pinnedHeadingMeta(block.sourceHeading);
   if (block.sourceAnnotation?.params) {
     return coerceAnnotationValues(block.sourceAnnotation.params).blockMeta;
@@ -268,6 +275,33 @@ export function getPinnedBlockMeta(block: Block): CoercedBlockMeta {
  * source order and slide order — and re-parented it again on every further
  * round-trip, so `docToMarkdown(markdownToDoc(md))` never settled.
  */
+/**
+ * Promote a block-type tag an author placed in a block's BODY onto the block
+ * itself (the "single trailing tag" rule — see `promoteBodyAnnotation.ts`).
+ * Mutates each eligible block in place: sets `template` / `templateOverrides` /
+ * block-meta, strips the tag from `contents` (so it stops rendering as literal
+ * text or a stray icon), and records `promotedBodyAnnotation` so `docToMarkdown`
+ * can round-trip it lazily. Only unannotated heading blocks are eligible; media
+ * names and unknown templates are left alone.
+ */
+function promoteBodyAnnotations(blocks: Block[]): void {
+  for (const block of blocks) {
+    if (!block.sourceHeading || block.sourceHeading.templateAnnotation?.template) continue;
+    const found = detectPromotableBodyAnnotation(block.contents);
+    if (!found) continue;
+    const { template, params } = found.data;
+    if (isMediaAnnotationName(template) || !hasTemplate(template)) continue;
+
+    block.template = resolveTemplateName(template);
+    if (Object.keys(params).length > 0) {
+      block.templateOverrides = params;
+      applyBlockMeta(block, coerceAnnotationValues(params).blockMeta);
+    }
+    block.contents = found.strippedContents;
+    block.promotedBodyAnnotation = found.data;
+  }
+}
+
 function expandStandaloneAnnotations(
   blocks: Block[],
   makeId: (parsed: ParsedAnnotation) => string,
@@ -483,6 +517,15 @@ export function markdownToDoc(markdownDoc: MarkdownDocument, options?: MarkdownT
   ) {
     rootBlocks.shift();
   }
+
+  // Promote a misplaced block-type tag that an author (usually an LLM) put in a
+  // block's BODY onto its heading block. Understood immediately (the tag is
+  // stripped from the rendered body); the source relocation to the heading is
+  // lazy — `docToMarkdown` re-emits it in the body until the block is edited.
+  // Runs after media extraction (media names keep their meaning) and before the
+  // heading-less standalone pass (a promoted tag is removed from `contents`
+  // first, so it isn't also lifted into a separate block).
+  promoteBodyAnnotations(flattenBlocks(rootBlocks));
 
   // Standalone `{[templateName …]}` paragraphs (non-media) become heading-less
   // template blocks; the body after each one, up to the next annotation,
@@ -907,7 +950,10 @@ function applyAutoTemplates(
   state: { featureIndex: number },
 ): void {
   for (const block of blocks) {
-    const annotated = !!block.sourceHeading?.templateAnnotation?.template;
+    // A promoted body annotation is author-intended — treat it as annotated so a
+    // promoted `{[sectionHeader]}` (== default) isn't re-picked by auto-template.
+    const annotated =
+      !!block.sourceHeading?.templateAnnotation?.template || !!block.promotedBodyAnnotation;
     if (block.sourceHeading && !annotated && block.template === resolvedDefault) {
       const profile = profileBlockContents(block.contents ?? []);
       const picked = pickAutoTemplate(profile, state.featureIndex);

@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { waitForAppReady } from './appReady';
 import { switchView } from './view-tabs';
 
 test.describe('presentation mode', () => {
@@ -6,7 +7,7 @@ test.describe('presentation mode', () => {
 
   test('fills the app canvas with a themed, bottom-centered exit control', async ({ page }) => {
     await page.goto('/');
-    await page.waitForLoadState('networkidle');
+    await waitForAppReady(page);
     await switchView(page, 'Play');
 
     const shell = page.locator('.squisq-editor-shell[data-host-mode="document"]');
@@ -38,7 +39,7 @@ test.describe('presentation mode', () => {
 
   test('takes over the native screen with the same exit control', async ({ page }) => {
     await page.goto('/');
-    await page.waitForLoadState('networkidle');
+    await waitForAppReady(page);
     await switchView(page, 'Play');
 
     const shell = page.locator('.squisq-editor-shell[data-host-mode="document"]');

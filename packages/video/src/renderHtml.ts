@@ -11,7 +11,14 @@
  * Browser-pure: uses only btoa() and Uint8Array — no Node.js APIs.
  */
 
-import type { Doc } from '@bendyline/squisq/schemas';
+import type {
+  Doc,
+  Theme,
+  VideoPipPosition,
+  VideoPipShape,
+  VideoPipSize,
+  VideoPresentation,
+} from '@bendyline/squisq/schemas';
 
 // ── Types ──────────────────────────────────────────────────────────
 
@@ -39,6 +46,21 @@ export interface RenderHtmlOptions {
 
   /** Caption style for the rendered video. Omit for no captions. */
   captionStyle?: 'standard' | 'social';
+
+  /** Theme override for the capture player. Omitted values resolve from the Doc. */
+  theme?: Theme;
+
+  /** Player-level video placement override. Omitted values resolve from Doc frontmatter. */
+  videoPresentation?: VideoPresentation;
+
+  /** Picture-in-picture size override. Omitted values resolve from Doc frontmatter. */
+  pipSize?: VideoPipSize;
+
+  /** Picture-in-picture shape override. Omitted values resolve from Doc frontmatter. */
+  pipShape?: VideoPipShape;
+
+  /** Picture-in-picture corner override. Omitted values resolve from Doc frontmatter. */
+  pipPosition?: VideoPipPosition;
 
   /**
    * Whether Squisq layer animations and block transitions are rendered.
@@ -134,6 +156,11 @@ export function generateRenderHtml(doc: Doc, options: RenderHtmlOptions): string
     width = 1920,
     height = 1080,
     captionStyle,
+    theme,
+    videoPresentation,
+    pipSize,
+    pipShape,
+    pipPosition,
     animationsEnabled = true,
   } = options;
 
@@ -158,6 +185,15 @@ export function generateRenderHtml(doc: Doc, options: RenderHtmlOptions): string
   const docJson = escapeForScript(JSON.stringify(doc));
   const imageMapJson = escapeForScript(JSON.stringify(imageMap));
   const audioMapJson = hasAudio ? escapeForScript(JSON.stringify(audioMap)) : 'null';
+  const playerOptionLines = [
+    `    animationsEnabled: ${JSON.stringify(animationsEnabled)}`,
+    captionStyle ? `    captionStyle: ${JSON.stringify(captionStyle)}` : null,
+    theme ? `    theme: ${escapeForScript(JSON.stringify(theme))}` : null,
+    videoPresentation ? `    videoPresentation: ${JSON.stringify(videoPresentation)}` : null,
+    pipSize ? `    pipSize: ${JSON.stringify(pipSize)}` : null,
+    pipShape ? `    pipShape: ${JSON.stringify(pipShape)}` : null,
+    pipPosition ? `    pipPosition: ${JSON.stringify(pipPosition)}` : null,
+  ].filter((line): line is string => line !== null);
 
   return `<!DOCTYPE html>
 <html lang="en">
@@ -187,7 +223,7 @@ html,body{margin:0;padding:0;width:${width}px;height:${height}px;overflow:hidden
     autoPlay: false,
     basePath: ".",
     renderMode: true,
-    animationsEnabled: ${JSON.stringify(animationsEnabled)}${captionStyle ? `,\n    captionStyle: ${JSON.stringify(captionStyle)}` : ''}
+${playerOptionLines.join(',\n')}
   });
 })();
 </script>

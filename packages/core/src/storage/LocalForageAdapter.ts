@@ -7,9 +7,8 @@
  *
  * Unlike LocalStorageAdapter, this adapter can store binary data
  * (ArrayBuffer, Blob, Uint8Array) natively without JSON serialization.
- *
- * Ported from qualla-internal/shared/services/StorageAdapters.ts with
- * configurable store name and key prefix.
+ * Store name and key prefix are configurable so independent consumers can
+ * share an origin without colliding.
  */
 
 import localforage from 'localforage';

@@ -2,8 +2,7 @@
  * Programmatic Rendered-Media API
  *
  * Provides library-style entry points for rendering Squisq documents to MP4
- * or animated GIF from Node.js callers (e.g., Qualla's pipeline). This avoids
- * the need to shell
+ * or animated GIF from Node.js callers. This avoids the need to shell
  * out to the `squisq video` CLI and gives callers full control over the Doc,
  * MemoryContentContainer, and encoding options.
  *

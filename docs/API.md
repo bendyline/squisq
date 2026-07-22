@@ -1589,6 +1589,7 @@ interface BlockMarker {
 type AudioController = AudioState & AudioActions;
 interface SquisqRenderAPI {
   seekTo(time: number): Promise<void>;
+  getRenderedTime(): number;
   getDuration(): number;
   getBlocks(): RenderBlockInfo[];
   getAudioSegments(): RenderAudioSegmentInfo[];
@@ -2205,6 +2206,7 @@ interface EditorShellProps {
   mediaProvider?: MediaProvider | null; // enables the Files panel
   workspaceContainer?: ContentContainer | null; // doc folder: audio map, versions, siblings, sidecars
   showFilesToggle?: boolean; // default: true when mediaProvider was passed
+  allowBinaryDownloads?: boolean; // default true; hides Files-panel download actions when false
   // Versioning
   allowVersioning?: boolean; // default false
   versionBasename?: string;

@@ -2,7 +2,9 @@
  * TimelineTrack
  *
  * Horizontal timeline strip for the Timeline view. Shows every block as a bar
- * (width ∝ duration, x ∝ startTime) with its media clips as sub-bars below.
+ * (width ∝ duration, x ∝ startTime) with every media clip on an independent
+ * track below. The track viewport scrolls in both directions when the document
+ * is wider or has more media tracks than the dock can show at once.
  * Clicking a block selects it (the editor above follows). Dragging a block's
  * right edge changes its duration; dragging its left edge changes the previous
  * block's duration (the boundary, since startTime is derived). Dragging a media
@@ -12,27 +14,38 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { Block, MediaClip } from '@bendyline/squisq/schemas';
+import type { Block, Doc, MediaClip } from '@bendyline/squisq/schemas';
 import {
   resolveMediaSchedule,
   getDocPlaybackDuration,
   VIEWPORT_PRESETS,
   type ScheduledClip,
 } from '@bendyline/squisq/schemas';
-import { flattenBlocks, DEFAULT_THEME } from '@bendyline/squisq/doc';
+import { flattenBlocks, DEFAULT_THEME, getPinnedBlockMeta } from '@bendyline/squisq/doc';
 import { MediaClipLayer, MediaContext } from '@bendyline/squisq-react';
 import { useEditorContext } from './EditorContext';
 import { usePreviewSettingsOptional } from './PreviewControls';
 import {
   setBlockDurationInSource,
+  setBlockStartTimeInSource,
+  setBlockTransitionInSource,
   setMediaClipInSource,
   placeClipInBlock,
   type ClipSpec,
+  type MediaClipPatch,
 } from './timelineSource';
 import { collectEmbeddedMedia } from './embeddedMedia';
 import { BlockThumbnail } from './TimelineBlockPreview';
 import { resolveBlockVisual } from './resolveBlockVisual';
 import { useTimelineClock, type TimelineClock } from './useTimelineClock';
+import { timelineMediaLabel } from './timelineMediaLabel';
+import { readHeadingLineTransition } from './headingTransition';
+import { useResolvedMediaSrc } from './tiptap/useResolvedMediaSrc';
+import {
+  TimelineItemMenu,
+  type TimelineItemMenuTarget,
+  type TimelineMenuAnchor,
+} from './TimelineItemMenu';
 
 /** Viewport the per-bar thumbnails render at. */
 const PREVIEW_VIEWPORT = VIEWPORT_PRESETS.landscape;
@@ -42,10 +55,76 @@ const ZOOM_MIN = 4;
 const ZOOM_MAX = 160;
 const ZOOM_FACTOR = 1.4;
 const MIN_DURATION = 0.5; // seconds — floor when dragging a block edge
+/** Pointer travel (px) before a press counts as a drag rather than a click. */
+const DRAG_THRESHOLD_PX = 4;
 /** Candidate ruler-tick intervals (seconds); the first wide enough is used. */
 const TICK_STEPS = [1, 2, 5, 10, 15, 30, 60, 120, 300, 600];
 /** Minimum pixels between ruler ticks. */
 const TICK_MIN_PX = 64;
+/** Approximate width of one sampled frame in a video bar. */
+const FILMSTRIP_FRAME_WIDTH = 72;
+/** Keep long recordings from mounting an unbounded number of decoders. */
+const FILMSTRIP_MAX_FRAMES = 8;
+
+interface TimelineVideoFilmstripProps {
+  src: string;
+  sourceStart: number;
+  sourceLength: number;
+  width: number;
+}
+
+/**
+ * A sampled, non-playing frame strip behind a timeline video label. Separate
+ * muted video elements avoid canvas/CORS restrictions and let the browser
+ * share its cache for the resolved media URL.
+ */
+function TimelineVideoFilmstrip({
+  src,
+  sourceStart,
+  sourceLength,
+  width,
+}: TimelineVideoFilmstripProps) {
+  const resolvedSrc = useResolvedMediaSrc(src);
+  const frameCount = Math.min(
+    FILMSTRIP_MAX_FRAMES,
+    Math.max(1, Math.ceil(width / FILMSTRIP_FRAME_WIDTH)),
+  );
+
+  return (
+    <div className="squisq-timeline-video-filmstrip" aria-hidden="true">
+      {Array.from({ length: frameCount }, (_, index) => {
+        const sampleTime =
+          Math.max(0, sourceStart) + Math.max(0, sourceLength) * ((index + 0.5) / frameCount);
+        return (
+          <video
+            key={`${index}:${sampleTime}`}
+            src={resolvedSrc}
+            muted
+            playsInline
+            preload="metadata"
+            tabIndex={-1}
+            draggable={false}
+            onLoadedMetadata={(event) => seekTimelineFrame(event.currentTarget, sampleTime)}
+          />
+        );
+      })}
+    </div>
+  );
+}
+
+/** Seek a filmstrip tile to its sample while respecting finite media bounds. */
+function seekTimelineFrame(video: HTMLVideoElement, sampleTime: number): void {
+  const lastDecodableTime =
+    Number.isFinite(video.duration) && video.duration > 0
+      ? Math.max(0, video.duration - 0.04)
+      : sampleTime;
+  const target = Math.max(0, Math.min(sampleTime, lastDecodableTime));
+  try {
+    video.currentTime = target;
+  } catch {
+    // A malformed or not-yet-seekable source simply keeps its first frame.
+  }
+}
 
 type DragKind =
   | 'block-right'
@@ -65,6 +144,15 @@ interface DragState {
   /** Live preview value (seconds) shown while dragging. */
   preview: number;
   commit: (seconds: number) => void;
+  /**
+   * Optional click action: run on pointer-up when the press did NOT travel past
+   * {@link DRAG_THRESHOLD_PX}. A bare click must never `commit` — for an
+   * embedded `<video>` that silently rewrote it into a `{[video …]}` annotation.
+   * It selects / seeks instead.
+   */
+  onClick?: () => void;
+  /** True once the pointer moved past the click threshold — i.e. a real drag. */
+  moved?: boolean;
   /** Id of the bar/clip being dragged (for live preview geometry). */
   targetId: string;
   /**
@@ -81,12 +169,31 @@ interface DragState {
   committed?: boolean;
 }
 
+type TimelineMenuState =
+  | { kind: 'block'; id: string; sourceLine: number; anchor: TimelineMenuAnchor }
+  | {
+      kind: 'video';
+      id: string;
+      sourceLine: number;
+      src: string;
+      absoluteStart: number;
+      embedded: boolean;
+      anchor: TimelineMenuAnchor;
+    };
+
 function headingLine(block: Block): number | undefined {
   return block.sourceHeading?.position?.start.line;
 }
 
 export interface TimelineTrackProps {
   height?: number;
+  /**
+   * Doc used for bar geometry / timing. Callers pass the narration-timed
+   * projection so the track matches what actually plays; falls back to the
+   * editor's raw parse. Editing still round-trips because the projected doc
+   * keeps each block's `sourceHeading`.
+   */
+  doc?: Doc | null;
   /** Optional shared clock used by docked timeline companions. */
   clock?: TimelineClock;
   /** Reuse an already-resolved schedule instead of deriving it from the doc. */
@@ -97,19 +204,25 @@ export interface TimelineTrackProps {
 
 export function TimelineTrack({
   height = 160,
+  doc: docProp,
   clock,
   schedule,
   videoVisible = false,
 }: TimelineTrackProps) {
   const {
-    doc,
+    doc: contextDoc,
     markdownSource,
     setMarkdownSource,
     goToBlockByLine,
     activeBlockStartLine,
     mediaProvider,
+    colorScheme,
   } = useEditorContext();
+  // Prefer the caller's (narration-timed) doc for geometry; fall back to the raw
+  // parse. Source edits still resolve because both carry `sourceHeading` lines.
+  const doc = docProp ?? contextDoc;
   const [drag, setDrag] = useState<DragState | null>(null);
+  const [itemMenu, setItemMenu] = useState<TimelineMenuState | null>(null);
   const [pxPerSecond, setPxPerSecond] = useState(DEFAULT_PX_PER_SECOND);
   const scrollRef = useRef<HTMLDivElement>(null);
 
@@ -303,12 +416,22 @@ export function TimelineTrack({
     const onMove = (e: PointerEvent) => {
       const d = dragRef.current;
       if (!d) return;
-      const deltaSec = (e.clientX - d.startX) / scaleRef.current;
-      setDrag({ ...d, preview: Math.max(d.floor, d.previewBase + deltaSec) });
+      const deltaPx = e.clientX - d.startX;
+      const moved = d.moved || Math.abs(deltaPx) >= DRAG_THRESHOLD_PX;
+      const deltaSec = deltaPx / scaleRef.current;
+      setDrag({ ...d, moved, preview: Math.max(d.floor, d.previewBase + deltaSec) });
     };
     const onUp = () => {
       const d = dragRef.current;
       if (!d) return;
+      if (!d.moved) {
+        // A click, not a drag: never mutate the source. Committing here is what
+        // silently turned an embedded <video> into a {[video …]} tag. Run the
+        // optional select/seek action instead and drop the drag.
+        d.onClick?.();
+        setDrag(null);
+        return;
+      }
       d.commit(d.preview);
       // Keep the preview applied (committed) until the regenerated doc reflects
       // the edit, so the bar doesn't snap back to the old layout for a frame.
@@ -339,7 +462,7 @@ export function TimelineTrack({
       targetId: string,
       base: number,
       commit: (seconds: number) => void,
-      opts?: { pivotIndex?: number; floor?: number },
+      opts?: { pivotIndex?: number; floor?: number; onClick?: () => void },
     ) => {
       e.preventDefault();
       e.stopPropagation();
@@ -355,12 +478,64 @@ export function TimelineTrack({
         commit,
         targetId,
         pivotIndex: opts?.pivotIndex,
+        onClick: opts?.onClick,
       });
     },
     [],
   );
 
+  // Non-destructive click on a timeline clip: move the playhead to its start and
+  // select its owning block (mirrors clicking a block bar). Never edits source,
+  // so clicking a recording no longer rewrites its <video> into a tag.
+  const selectClipAt = useCallback(
+    (time: number, blockId?: string) => {
+      seek(time);
+      const owner = blockId != null ? blocks.find((b) => b.id === blockId) : undefined;
+      const line = owner ? headingLine(owner) : undefined;
+      if (line != null) goToBlockByLine(line);
+    },
+    [seek, blocks, goToBlockByLine],
+  );
+
   if (!doc) return null;
+
+  let itemMenuTarget: TimelineItemMenuTarget | null = null;
+  if (itemMenu?.kind === 'block') {
+    const block = blocks.find((candidate) => candidate.id === itemMenu.id);
+    if (block) {
+      const pinned = getPinnedBlockMeta(block);
+      const heading = markdownSource.split('\n')[itemMenu.sourceLine - 1] ?? '';
+      itemMenuTarget = {
+        kind: 'block',
+        key: block.id,
+        title: block.title ?? block.id,
+        duration: block.duration,
+        explicitDuration: pinned.duration != null,
+        startTime: pinned.startTime ?? null,
+        transition: readHeadingLineTransition(heading),
+      };
+    }
+  } else if (itemMenu?.kind === 'video') {
+    const clip = itemMenu.embedded
+      ? null
+      : clips.find((candidate) => candidate.id === itemMenu.id && candidate.kind === 'video');
+    const raw = clip ? rawClipById.get(clip.id) : undefined;
+    itemMenuTarget = {
+      kind: 'video',
+      key: itemMenu.id,
+      title: timelineMediaLabel(itemMenu.src, 'video'),
+      placement: itemMenu.embedded ? 'content' : (clip?.placement ?? 'default'),
+      canUseContentPlacement: itemMenu.embedded || raw?.origin?.format === 'html',
+      lockToBlock: itemMenu.embedded || clip?.lockToBlock === true || clip?.anchor === 'block',
+      absoluteStart: clip?.absoluteStart ?? itemMenu.absoluteStart,
+      pipSize: raw?.pipSize,
+      pipShape: raw?.pipShape,
+      pipPosition: raw?.pipPosition,
+      defaultPipSize: previewSettings?.activePipSize ?? 'small',
+      defaultPipShape: previewSettings?.activePipShape ?? 'square',
+      defaultPipPosition: previewSettings?.activePipPosition ?? 'bottom-right',
+    };
+  }
 
   // Live layout while a block edge is dragged: the pivot block previews at the
   // new duration and every block after it shifts by the delta, so the track
@@ -479,6 +654,28 @@ export function TimelineTrack({
                   )}
                   <span className="squisq-timeline-block-label">{b.title ?? b.id}</span>
                   {line != null && (
+                    <button
+                      type="button"
+                      className="squisq-timeline-item-menu-trigger"
+                      aria-label={`Block options for ${b.title ?? b.id}`}
+                      aria-haspopup="dialog"
+                      aria-expanded={itemMenu?.kind === 'block' && itemMenu.id === b.id}
+                      title="Block options"
+                      onPointerDown={(event) => event.stopPropagation()}
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        setItemMenu({
+                          kind: 'block',
+                          id: b.id,
+                          sourceLine: line,
+                          anchor: anchorOf(event.currentTarget),
+                        });
+                      }}
+                    >
+                      …
+                    </button>
+                  )}
+                  {line != null && (
                     <span
                       className="squisq-timeline-edge squisq-timeline-edge--right"
                       onPointerDown={(e) =>
@@ -501,7 +698,7 @@ export function TimelineTrack({
             })}
           </div>
 
-          <div className="squisq-timeline-row squisq-timeline-row--media">
+          <div className="squisq-timeline-media-tracks" aria-label="Media tracks">
             {clips.map((c) => {
               const length = c.absoluteEnd - c.absoluteStart;
               // Live geometry while dragging: follow a block-edge drag's shift,
@@ -520,6 +717,11 @@ export function TimelineTrack({
                   ? {
                       kind: raw.kind,
                       src: raw.src,
+                      placement: raw.placement,
+                      lockToBlock: raw.lockToBlock,
+                      pipSize: raw.pipSize,
+                      pipShape: raw.pipShape,
+                      pipPosition: raw.pipPosition,
                       clipStart: raw.clipStart,
                       clipEnd: raw.clipEnd,
                       spillover: raw.spillover,
@@ -528,54 +730,103 @@ export function TimelineTrack({
               };
               return (
                 <div
-                  key={c.id}
-                  className={`squisq-timeline-clip squisq-timeline-clip--${c.kind}${
-                    c.anchor === 'document' ? ' squisq-timeline-clip--document' : ''
-                  }${c.lockToBlock === true ? ' squisq-timeline-clip--locked' : ''}`}
-                  style={{ left, width: clipWidth }}
-                  title={`${c.src} — ${formatDur(length)}${
-                    c.lockToBlock === true
-                      ? ' (locked to block)'
-                      : c.anchor === 'document'
-                        ? ' (independent)'
-                        : ''
-                  }`}
-                  onPointerDown={(e) =>
-                    editable &&
-                    beginDrag(e, 'clip-move', c.id, c.absoluteStart, (absStart) => {
-                      if (c.anchor === 'document') {
-                        const next = setMediaClipInSource(markdownSource, c.sourceLine!, {
-                          startAt: absStart,
-                        });
-                        if (next) setMarkdownSource(next);
-                      } else {
-                        moveClipToTime(c.sourceLine, c.blockId, specOf(), absStart);
-                      }
-                    })
-                  }
-                  onDoubleClick={() => {
-                    if (!editable || c.sourceLine == null) return;
-                    // Toggle spillover (block clips only).
-                    const next = setMediaClipInSource(markdownSource, c.sourceLine, {
-                      spillover: c.anchor === 'block' ? true : null,
-                    });
-                    if (next) setMarkdownSource(next);
-                  }}
+                  key={`scheduled:${c.id}`}
+                  className="squisq-timeline-row squisq-timeline-row--media"
+                  data-testid="timeline-media-track"
+                  data-track-id={c.id}
                 >
-                  <span className="squisq-timeline-clip-label">{clipName(c.src)}</span>
-                  {editable && (
-                    <span
-                      className="squisq-timeline-edge squisq-timeline-edge--right"
-                      onPointerDown={(e) =>
-                        beginDrag(e, 'clip-right', c.id, length, (len) => {
-                          const next = setMediaClipInSource(markdownSource, c.sourceLine!, {
-                            clipEnd: (c.sourceIn ?? 0) + len,
+                  <div
+                    className={`squisq-timeline-clip squisq-timeline-clip--${c.kind}${
+                      c.anchor === 'document' ? ' squisq-timeline-clip--document' : ''
+                    }${c.lockToBlock === true ? ' squisq-timeline-clip--locked' : ''}`}
+                    style={{ left, width: clipWidth }}
+                    title={`${c.src} — ${formatDur(length)}${
+                      c.lockToBlock === true
+                        ? ' (locked to block)'
+                        : c.anchor === 'document'
+                          ? ' (independent)'
+                          : ''
+                    }`}
+                    onPointerDown={(e) =>
+                      editable &&
+                      beginDrag(
+                        e,
+                        'clip-move',
+                        c.id,
+                        c.absoluteStart,
+                        (absStart) => {
+                          if (c.anchor === 'document') {
+                            const next = setMediaClipInSource(markdownSource, c.sourceLine!, {
+                              startAt: absStart,
+                            });
+                            if (next) setMarkdownSource(next);
+                          } else {
+                            moveClipToTime(c.sourceLine, c.blockId, specOf(), absStart);
+                          }
+                        },
+                        { onClick: () => selectClipAt(c.absoluteStart, c.blockId) },
+                      )
+                    }
+                    onDoubleClick={() => {
+                      if (!editable || c.sourceLine == null) return;
+                      // Toggle spillover (block clips only).
+                      const next = setMediaClipInSource(markdownSource, c.sourceLine, {
+                        spillover: c.anchor === 'block' ? true : null,
+                      });
+                      if (next) setMarkdownSource(next);
+                    }}
+                  >
+                    {c.kind === 'video' && (
+                      <TimelineVideoFilmstrip
+                        src={c.src}
+                        sourceStart={c.sourceIn ?? 0}
+                        sourceLength={length}
+                        width={clipWidth}
+                      />
+                    )}
+                    <span className="squisq-timeline-clip-label">
+                      {timelineMediaLabel(c.src, c.kind)}
+                    </span>
+                    {c.kind === 'video' && c.sourceLine != null && (
+                      <button
+                        type="button"
+                        className="squisq-timeline-item-menu-trigger squisq-timeline-item-menu-trigger--clip"
+                        aria-label={`Video options for ${timelineMediaLabel(c.src, c.kind)}`}
+                        aria-haspopup="dialog"
+                        aria-expanded={itemMenu?.kind === 'video' && itemMenu.id === c.id}
+                        title="Video options"
+                        onPointerDown={(event) => event.stopPropagation()}
+                        onDoubleClick={(event) => event.stopPropagation()}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          setItemMenu({
+                            kind: 'video',
+                            id: c.id,
+                            sourceLine: c.sourceLine!,
+                            src: c.src,
+                            absoluteStart: c.absoluteStart,
+                            embedded: false,
+                            anchor: anchorOf(event.currentTarget),
                           });
-                          if (next) setMarkdownSource(next);
-                        })
-                      }
-                    />
-                  )}
+                        }}
+                      >
+                        …
+                      </button>
+                    )}
+                    {editable && (
+                      <span
+                        className="squisq-timeline-edge squisq-timeline-edge--right"
+                        onPointerDown={(e) =>
+                          beginDrag(e, 'clip-right', c.id, length, (len) => {
+                            const next = setMediaClipInSource(markdownSource, c.sourceLine!, {
+                              clipEnd: (c.sourceIn ?? 0) + len,
+                            });
+                            if (next) setMarkdownSource(next);
+                          })
+                        }
+                      />
+                    )}
+                  </div>
                 </div>
               );
             })}
@@ -598,28 +849,80 @@ export function TimelineTrack({
                 const spec: ClipSpec = { kind: m.kind, src: m.src };
                 return (
                   <div
-                    key={id}
-                    className={`squisq-timeline-clip squisq-timeline-clip--${m.kind} squisq-timeline-clip--embedded`}
-                    style={{ left, width: clipWidth }}
-                    title={`${m.src} — drag to time / move between blocks`}
-                    onPointerDown={(e) =>
-                      m.sourceLine != null &&
-                      beginDrag(e, 'embed-move', id, absStart, (newAbsStart) => {
-                        placeEmbeddedClip(m.sourceLine, { ...spec, clipEnd: length }, newAbsStart);
-                      })
-                    }
+                    key={`embedded:${id}`}
+                    className="squisq-timeline-row squisq-timeline-row--media"
+                    data-testid="timeline-media-track"
+                    data-track-id={id}
                   >
-                    <span className="squisq-timeline-clip-label">{clipName(m.src)}</span>
-                    {m.sourceLine != null && (
-                      <span
-                        className="squisq-timeline-edge squisq-timeline-edge--right"
-                        onPointerDown={(e) =>
-                          beginDrag(e, 'embed-right', id, length, (len) => {
-                            placeEmbeddedClip(m.sourceLine, { ...spec, clipEnd: len }, absStart);
-                          })
-                        }
-                      />
-                    )}
+                    <div
+                      className={`squisq-timeline-clip squisq-timeline-clip--${m.kind} squisq-timeline-clip--embedded`}
+                      style={{ left, width: clipWidth }}
+                      title={`${m.src} — drag to time / move between blocks`}
+                      onPointerDown={(e) =>
+                        m.sourceLine != null &&
+                        beginDrag(
+                          e,
+                          'embed-move',
+                          id,
+                          absStart,
+                          (newAbsStart) => {
+                            placeEmbeddedClip(
+                              m.sourceLine,
+                              { ...spec, clipEnd: length },
+                              newAbsStart,
+                            );
+                          },
+                          { onClick: () => selectClipAt(b.startTime, b.id) },
+                        )
+                      }
+                    >
+                      {m.kind === 'video' && (
+                        <TimelineVideoFilmstrip
+                          src={m.src}
+                          sourceStart={0}
+                          sourceLength={length}
+                          width={clipWidth}
+                        />
+                      )}
+                      <span className="squisq-timeline-clip-label">
+                        {timelineMediaLabel(m.src, m.kind)}
+                      </span>
+                      {m.kind === 'video' && m.sourceLine != null && (
+                        <button
+                          type="button"
+                          className="squisq-timeline-item-menu-trigger squisq-timeline-item-menu-trigger--clip"
+                          aria-label={`Video options for ${timelineMediaLabel(m.src, m.kind)}`}
+                          aria-haspopup="dialog"
+                          aria-expanded={itemMenu?.kind === 'video' && itemMenu.id === id}
+                          title="Video options"
+                          onPointerDown={(event) => event.stopPropagation()}
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            setItemMenu({
+                              kind: 'video',
+                              id,
+                              sourceLine: m.sourceLine!,
+                              src: m.src,
+                              absoluteStart: absStart,
+                              embedded: true,
+                              anchor: anchorOf(event.currentTarget),
+                            });
+                          }}
+                        >
+                          …
+                        </button>
+                      )}
+                      {m.sourceLine != null && (
+                        <span
+                          className="squisq-timeline-edge squisq-timeline-edge--right"
+                          onPointerDown={(e) =>
+                            beginDrag(e, 'embed-right', id, length, (len) => {
+                              placeEmbeddedClip(m.sourceLine, { ...spec, clipEnd: len }, absStart);
+                            })
+                          }
+                        />
+                      )}
+                    </div>
                   </div>
                 );
               }),
@@ -671,8 +974,48 @@ export function TimelineTrack({
           />
         </MediaContext.Provider>
       </div>
+
+      {itemMenu && itemMenuTarget && (
+        <TimelineItemMenu
+          key={`${itemMenu.kind}:${itemMenu.id}`}
+          anchor={itemMenu.anchor}
+          target={itemMenuTarget}
+          colorScheme={colorScheme}
+          accentColor={previewSettings?.activeTheme.colors.primary}
+          onBlockDuration={(seconds) => {
+            if (itemMenu.kind !== 'block') return;
+            const next = setBlockDurationInSource(markdownSource, itemMenu.sourceLine, seconds);
+            if (next) setMarkdownSource(next);
+          }}
+          onBlockStartTime={(seconds) => {
+            if (itemMenu.kind !== 'block') return;
+            const next = setBlockStartTimeInSource(markdownSource, itemMenu.sourceLine, seconds);
+            if (next) setMarkdownSource(next);
+          }}
+          onBlockTransition={(transition) => {
+            if (itemMenu.kind !== 'block') return;
+            const next = setBlockTransitionInSource(
+              markdownSource,
+              itemMenu.sourceLine,
+              transition,
+            );
+            if (next) setMarkdownSource(next);
+          }}
+          onVideoPatch={(patch: MediaClipPatch) => {
+            if (itemMenu.kind !== 'video') return;
+            const next = setMediaClipInSource(markdownSource, itemMenu.sourceLine, patch);
+            if (next) setMarkdownSource(next);
+          }}
+          onClose={() => setItemMenu(null)}
+        />
+      )}
     </div>
   );
+}
+
+function anchorOf(element: HTMLElement): TimelineMenuAnchor {
+  const rect = element.getBoundingClientRect();
+  return { top: rect.top, right: rect.right, bottom: rect.bottom, left: rect.left };
 }
 
 function formatClock(seconds: number): string {
@@ -687,9 +1030,4 @@ function formatDur(seconds: number): string {
   const m = Math.floor(s / 60);
   const rem = Math.round(s - m * 60);
   return `${m}:${String(rem).padStart(2, '0')}`;
-}
-
-function clipName(src: string): string {
-  const base = src.split('/').pop() ?? src;
-  return base;
 }

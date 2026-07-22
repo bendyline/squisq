@@ -125,6 +125,10 @@ Interactive mount:
 
 For headless capture, add `renderMode: true`, then await
 `handle.renderAPI` before calling `seekTo()` or reading render metadata.
+`seekTo()` resolves only after React has committed the requested visual time,
+CSS animations have been positioned, active video has produced its sought
+frame, and one final paint opportunity has completed. `getRenderedTime()`
+returns the timeline time represented by the committed DOM.
 TypeScript hosts can import `MountOptions` and `SquisqPlayerHandle` from the
 package root.
 

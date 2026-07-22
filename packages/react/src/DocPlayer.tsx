@@ -22,7 +22,18 @@
  * - types.ts -- Shared control types
  */
 
-import { Fragment, useId, useRef, useState, useEffect, useCallback, useMemo } from 'react';
+import {
+  Fragment,
+  useId,
+  useRef,
+  useState,
+  useEffect,
+  useLayoutEffect,
+  useCallback,
+  useMemo,
+  type CSSProperties,
+} from 'react';
+import { flushSync } from 'react-dom';
 import type { Doc, Block, TextLayer, StartBlockConfig, DocBlock } from '@bendyline/squisq/schemas';
 import {
   isTemplateBlock,
@@ -31,7 +42,8 @@ import {
   getDocPlaybackDuration,
 } from '@bendyline/squisq/schemas';
 import { MediaClipLayer } from './MediaClipLayer';
-import { applySurface } from '@bendyline/squisq/schemas';
+import { useMediaClipDurations } from './hooks/useMediaClipDurations';
+import { applySurface, pipStyleVars } from '@bendyline/squisq/schemas';
 import { BlockRenderer } from './BlockRenderer';
 import { CaptionOverlay } from './CaptionOverlay';
 import { useAutoSurface } from './hooks/useAutoSurface';
@@ -43,7 +55,6 @@ import {
   expandCoverBlock,
   createTemplateContext,
   markdownToDoc,
-  DEFAULT_THEME,
   VIEWPORT_PRESETS,
 } from '@bendyline/squisq/doc';
 import { parseMarkdown } from '@bendyline/squisq/markdown';
@@ -63,6 +74,8 @@ import type {
 import type { DocPlayerProps } from './DocPlayerProps';
 export type { DocPlayerProps } from './DocPlayerProps';
 import { buildSegmentTitleMap } from './docPlayer/segmentTitles';
+import { resolveDocPlayerAppearance } from './docPlayer/playerAppearance';
+import { seekVideoToFrame } from './docPlayer/renderReadiness';
 
 // Dev-only, browser-safe environment probe. Bundlers substitute the
 // `process.env.NODE_ENV` expression; bare browsers without a bundler have
@@ -80,6 +93,13 @@ function isDevEnvironment(): boolean {
 let warnedMissingStyles = false;
 
 const VISUAL_UPDATE_FALLBACK_MS = 100;
+const RENDER_TIME_EPSILON_SECONDS = 0.000_001;
+
+interface RenderCommitWaiter {
+  time: number;
+  resolve: () => void;
+  reject: (error: Error) => void;
+}
 
 /**
  * Wait for the browser to present a React/DOM update without depending on
@@ -161,14 +181,15 @@ function DocPlayerContent({
   onBlockMarkers,
   forceViewport,
   displayMode = 'video',
-  showCoverSlide = true,
+  showCoverSlide,
   coverVisible,
   theme,
   surface,
   captionStyle = 'standard',
-  videoPresentation = 'background',
-  pipShape = 'rounded',
-  pipPosition = 'bottom-right',
+  videoPresentation,
+  pipSize,
+  pipShape,
+  pipPosition,
   enableSwipe = true,
   globalKeyboardShortcuts = false,
 }: DocPlayerContentProps) {
@@ -185,8 +206,9 @@ function DocPlayerContent({
   // Detect viewport orientation for responsive docs
   // forceViewport takes precedence (used by render mode with explicit viewport and constrained panels)
   // In render mode without forceViewport, default to landscape for backward compatibility
-  const { viewport, orientation } = useViewportOrientation();
+  const { viewport } = useViewportOrientation();
   const activeViewport = forceViewport || (renderMode ? VIEWPORT_PRESETS.landscape : viewport);
+  const activeOrientation = activeViewport.height > activeViewport.width ? 'portrait' : 'landscape';
 
   // Check for debug mode via URL parameter
   const isDebugMode = useMemo(() => {
@@ -225,7 +247,7 @@ function DocPlayerContent({
 
   // Destructure for convenience
   const {
-    currentTime,
+    currentTime: audioCurrentTime,
     isPlaying,
     currentSegment,
     totalDuration,
@@ -241,18 +263,68 @@ function DocPlayerContent({
     restart,
   } = audio;
 
+  // Offline rendering owns a deterministic visual clock. It must not wait for
+  // an audio controller to load or publish a new state snapshot before React
+  // can render the requested frame. Interactive/debug playback keeps using the
+  // controller clock exactly as before.
+  const [renderClock, setRenderClock] = useState<{ doc: Doc; time: number } | null>(null);
+  const renderTimeOverride = renderClock?.doc === doc ? renderClock.time : null;
+  const currentTime = renderMode ? (renderTimeOverride ?? audioCurrentTime) : audioCurrentTime;
+
   // Timed media clips (block.media + doc.documentMedia) resolved to absolute
   // doc-timeline coordinates. Empty for documents without the media model, so
   // <MediaClipLayer> renders nothing and the legacy audio path is unaffected.
-  const mediaSchedule = useMemo(() => resolveMediaSchedule(doc), [doc]);
+  // An unlocked video with no authored out-point is capped to its own probed
+  // length so it ends (and goes inactive/hidden) instead of freezing on its
+  // last frame until the document ends — the probe map refines the schedule as
+  // durations arrive; without it the historical fill-to-end schedule is used.
+  const rawSchedule = useMemo(() => resolveMediaSchedule(doc), [doc]);
+  const clipDurations = useMediaClipDurations(rawSchedule, basePath);
+  const mediaSchedule = useMemo(
+    () => resolveMediaSchedule(doc, { intrinsicDuration: (clip) => clipDurations.get(clip.src) }),
+    [doc, clipDurations],
+  );
 
   // Refs for frequently-changing values used in the keyboard handler,
   // so the handler callback doesn't need to be recreated every frame.
   const currentTimeRef = useRef(currentTime);
   currentTimeRef.current = currentTime;
+  const committedRenderTimeRef = useRef(currentTime);
+  const renderCommitWaitersRef = useRef<RenderCommitWaiter[]>([]);
   const totalDurationRef = useRef(totalDuration);
   totalDurationRef.current = totalDuration;
   const expandedBlocksLenRef = useRef(0);
+
+  // DOM mutations for this render are complete before a layout effect runs.
+  // Resolve seek callers here instead of guessing how many display refreshes
+  // React needs. This works in throttled/background renderers because it does
+  // not depend on requestAnimationFrame.
+  useLayoutEffect(() => {
+    committedRenderTimeRef.current = currentTime;
+    const pending = renderCommitWaitersRef.current;
+    renderCommitWaitersRef.current = pending.filter((waiter) => {
+      if (Math.abs(waiter.time - currentTime) > RENDER_TIME_EPSILON_SECONDS) return true;
+      waiter.resolve();
+      return false;
+    });
+  }, [currentTime]);
+
+  useEffect(
+    () => () => {
+      const error = new Error('DocPlayer unmounted before the requested frame committed.');
+      renderCommitWaitersRef.current.splice(0).forEach((waiter) => waiter.reject(error));
+    },
+    [],
+  );
+
+  const waitForRenderCommit = useCallback((time: number): Promise<void> => {
+    if (Math.abs(committedRenderTimeRef.current - time) <= RENDER_TIME_EPSILON_SECONDS) {
+      return Promise.resolve();
+    }
+    return new Promise<void>((resolve, reject) => {
+      renderCommitWaitersRef.current.push({ time, resolve, reject });
+    });
+  }, []);
 
   // Tap the player surface to toggle play/pause (disabled in slideshow and linear mode)
   const handleContainerClick = useCallback(
@@ -290,10 +362,35 @@ function DocPlayerContent({
   // handing off to downstream renderers. Orthogonal to the editorial theme.
   const autoSurface = useAutoSurface(surface === 'auto');
   const resolvedSurface = surface === 'auto' ? autoSurface : surface;
+  const appearance = useMemo(
+    () =>
+      resolveDocPlayerAppearance(doc, {
+        theme,
+        videoPresentation,
+        pipSize,
+        pipShape,
+        pipPosition,
+        showCoverSlide,
+      }),
+    [doc, theme, videoPresentation, pipSize, pipShape, pipPosition, showCoverSlide],
+  );
   const effectiveTheme = useMemo(() => {
-    const base = theme ?? DEFAULT_THEME;
+    const base = appearance.theme;
     return resolvedSurface ? applySurface(base, resolvedSurface) : base;
-  }, [theme, resolvedSurface]);
+  }, [appearance.theme, resolvedSurface]);
+
+  // Theme-driven picture-in-picture frame (border / shadow / corner radius),
+  // exposed as CSS custom properties on the player root for the PiP stylesheet.
+  const resolvedPipStyle = useMemo(() => pipStyleVars(effectiveTheme), [effectiveTheme]);
+  const pipVars = resolvedPipStyle as CSSProperties;
+  const pipFrameStyle = useMemo(
+    () => ({
+      border: resolvedPipStyle['--squisq-pip-border'],
+      borderRadius: resolvedPipStyle['--squisq-pip-radius'],
+      boxShadow: resolvedPipStyle['--squisq-pip-shadow'],
+    }),
+    [resolvedPipStyle],
+  );
 
   // Doc playback hook - pass viewport for responsive template expansion
   const {
@@ -322,7 +419,7 @@ function DocPlayerContent({
   // Expand cover block (startBlock) if present - uses active viewport
   const coverBlock = useMemo((): Block | null => {
     const startBlockConfig = doc.startBlock as StartBlockConfig | undefined;
-    if (!showCoverSlide) return null;
+    if (!appearance.showCoverSlide) return null;
     if (!startBlockConfig) return null;
 
     const context = createTemplateContext(effectiveTheme, 0, 1, activeViewport);
@@ -335,7 +432,7 @@ function DocPlayerContent({
       audioSegment: -1,
       layers,
     };
-  }, [doc.startBlock, activeViewport, effectiveTheme, showCoverSlide]);
+  }, [doc.startBlock, activeViewport, effectiveTheme, appearance.showCoverSlide]);
 
   // Slideshow mode treats the managed cover as a static slide before block 1.
   // It has no timeline startTime, so keep its visibility separate from audio.
@@ -484,6 +581,7 @@ function DocPlayerContent({
     };
     stableRenderAPIRef.current = {
       seekTo: (time) => current().seekTo(time),
+      getRenderedTime: () => current().getRenderedTime(),
       getDuration: () => current().getDuration(),
       getBlocks: () => current().getBlocks(),
       getAudioSegments: () => current().getAudioSegments(),
@@ -507,106 +605,90 @@ function DocPlayerContent({
       liveRenderAPIRef.current = null;
       return;
     }
-    const renderSeekTo = (time: number) => {
-      seekTo(time);
-      // After React renders the correct block, advance CSS animations
-      // (Ken Burns, transitions) to match the doc timeline position.
-      // Without this, animations restart from zero on each seekTo because
-      // they run on the browser's real clock, not doc time.
-      return new Promise<void>((resolve) => {
-        void waitForVisualUpdate().then(() => {
-          // Find the current block's start time
-          let blockStartTime = 0;
-          for (let i = expandedBlocks.length - 1; i >= 0; i--) {
-            if (time >= expandedBlocks[i].startTime) {
-              blockStartTime = expandedBlocks[i].startTime;
-              break;
-            }
-          }
-          const elapsedMs = (time - blockStartTime) * 1000;
+    const renderSeekTo = async (time: number): Promise<void> => {
+      if (renderMode) {
+        const committed = waitForRenderCommit(time);
+        flushSync(() => setRenderClock({ doc, time }));
+        // Keep the audio controller informed for hosts that observe it, but do
+        // not make visual capture wait for audio loading. Render mode uses the
+        // deterministic clock above and audio is muxed separately by exporters.
+        if (externalAudioController) void seekTo(time).catch(() => undefined);
+        await committed;
+      } else {
+        await seekTo(time);
+      }
 
-          // Set all CSS animations to the correct timeline position
-          (root.getAnimations?.() ?? []).forEach((anim) => {
-            const target = (anim.effect as KeyframeEffect)?.target as Element | null;
-            if (!target) return;
+      // React has committed the requested block/captions. Advance CSS
+      // animations (Ken Burns, transitions) to the same timeline position.
+      // Without this, animations restart from zero on each seek.
+      // Find the current block's start time
+      let blockStartTime = 0;
+      for (let i = expandedBlocks.length - 1; i >= 0; i--) {
+        if (time >= expandedBlocks[i].startTime) {
+          blockStartTime = expandedBlocks[i].startTime;
+          break;
+        }
+      }
+      const elapsedMs = (time - blockStartTime) * 1000;
 
-            // Animations on the active block: use current block elapsed time
-            if (target.closest('.doc-player__block--active')) {
-              anim.currentTime = Math.max(0, elapsedMs);
-            }
-            // Animations on the exiting block (during crossfade): use current
-            // block elapsed for transition animations, keep Ken Burns at their
-            // natural position based on when that block started
-            // eslint-disable-next-line sonarjs/no-duplicated-branches
-            else if (target.closest('.doc-player__block--previous')) {
-              anim.currentTime = Math.max(0, elapsedMs);
-            }
-          });
+      // Set all CSS animations to the correct timeline position
+      (root.getAnimations?.() ?? []).forEach((anim) => {
+        const target = (anim.effect as KeyframeEffect)?.target as Element | null;
+        if (!target) return;
 
-          // Seek <video> elements in the active block to the correct clip position.
-          // Each <video> carries data-clip-start/data-clip-end attributes set by
-          // VideoLayer.tsx; we calculate targetTime = clipStart + blockElapsed.
-          const blockElapsed = time - blockStartTime;
-          const videoSeekPromises: Promise<void>[] = [];
-          const activeBlockEl = root.querySelector('.doc-player__block--active');
-          if (activeBlockEl) {
-            const videos = activeBlockEl.querySelectorAll('video[data-clip-start]');
-            videos.forEach((el) => {
-              const video = el as HTMLVideoElement;
-              const clipStart = parseFloat(video.dataset.clipStart || '0');
-              const clipEnd = parseFloat(video.dataset.clipEnd || '0');
-              // Honor the per-clip startAt offset: before it, hold at the
-              // in-point; after, advance by (blockElapsed - startAt).
-              const startAt = parseFloat(video.dataset.startAt || '0');
-              const targetTime = Math.min(clipStart + Math.max(0, blockElapsed - startAt), clipEnd);
-
-              video.pause();
-              video.currentTime = targetTime;
-
-              videoSeekPromises.push(
-                new Promise<void>((r) => {
-                  if (Math.abs(video.currentTime - targetTime) < 0.1) {
-                    r();
-                  } else {
-                    video.addEventListener('seeked', () => r(), { once: true });
-                    setTimeout(r, 200); // Fallback if seeked never fires
-                  }
-                }),
-              );
-            });
-          }
-
-          // Seek player-level scheduled videos (document-spanning clips
-          // rendered by MediaClipLayer, outside any single block). Each
-          // carries data-abs-start/data-abs-end/data-source-in.
-          root.querySelectorAll('video[data-clip-id]').forEach((el) => {
-            const video = el as HTMLVideoElement;
-            const absStart = parseFloat(video.dataset.absStart || '0');
-            const absEnd = parseFloat(video.dataset.absEnd || '0');
-            const sourceIn = parseFloat(video.dataset.sourceIn || '0');
-            video.pause();
-            if (time < absStart || time >= absEnd) return;
-            const targetTime = sourceIn + (time - absStart);
-            video.currentTime = targetTime;
-            videoSeekPromises.push(
-              new Promise<void>((r) => {
-                if (Math.abs(video.currentTime - targetTime) < 0.1) {
-                  r();
-                } else {
-                  video.addEventListener('seeked', () => r(), { once: true });
-                  setTimeout(r, 200);
-                }
-              }),
-            );
-          });
-
-          // Wait for video seeks + one more render opportunity. The timeout
-          // path is load-bearing when Chromium suspends animation frames.
-          Promise.all(videoSeekPromises).then(() => {
-            void waitForVisualUpdate().then(resolve);
-          });
-        });
+        // Animations on the active block: use current block elapsed time
+        if (target.closest('.doc-player__block--active')) {
+          anim.currentTime = Math.max(0, elapsedMs);
+        }
+        // Animations on the exiting block (during crossfade): use current
+        // block elapsed for transition animations, keep Ken Burns at their
+        // natural position based on when that block started
+        // eslint-disable-next-line sonarjs/no-duplicated-branches
+        else if (target.closest('.doc-player__block--previous')) {
+          anim.currentTime = Math.max(0, elapsedMs);
+        }
       });
+
+      // Seek <video> elements in the active block to the correct clip position.
+      // Each <video> carries data-clip-start/data-clip-end attributes set by
+      // VideoLayer.tsx; we calculate targetTime = clipStart + blockElapsed.
+      const blockElapsed = time - blockStartTime;
+      const videoSeekPromises: Promise<void>[] = [];
+      const activeBlockEl = root.querySelector('.doc-player__block--active');
+      if (activeBlockEl) {
+        const videos = activeBlockEl.querySelectorAll('video[data-clip-start]');
+        videos.forEach((el) => {
+          const video = el as HTMLVideoElement;
+          const clipStart = parseFloat(video.dataset.clipStart || '0');
+          const clipEnd = parseFloat(video.dataset.clipEnd || '0');
+          // Honor the per-clip startAt offset: before it, hold at the
+          // in-point; after, advance by (blockElapsed - startAt).
+          const startAt = parseFloat(video.dataset.startAt || '0');
+          const targetTime = Math.min(clipStart + Math.max(0, blockElapsed - startAt), clipEnd);
+
+          videoSeekPromises.push(seekVideoToFrame(video, targetTime));
+        });
+      }
+
+      // Seek player-level scheduled videos (document-spanning clips
+      // rendered by MediaClipLayer, outside any single block). Each
+      // carries data-abs-start/data-abs-end/data-source-in.
+      root.querySelectorAll('video[data-clip-id]').forEach((el) => {
+        const video = el as HTMLVideoElement;
+        const absStart = parseFloat(video.dataset.absStart || '0');
+        const absEnd = parseFloat(video.dataset.absEnd || '0');
+        const sourceIn = parseFloat(video.dataset.sourceIn || '0');
+        video.pause();
+        if (time < absStart || time >= absEnd) return;
+        const targetTime = sourceIn + (time - absStart);
+        videoSeekPromises.push(seekVideoToFrame(video, targetTime));
+      });
+
+      // Media readiness is explicit. One final presentation opportunity is
+      // retained for computed animation styles; its task fallback remains
+      // load-bearing when Chromium suspends animation frames.
+      await Promise.all(videoSeekPromises);
+      await waitForVisualUpdate();
     };
     const getDuration = () => {
       // The larger of the audio/block timeline and any media that spills
@@ -661,6 +743,7 @@ function DocPlayerContent({
 
     const api: SquisqRenderAPI = {
       seekTo: renderSeekTo,
+      getRenderedTime: () => committedRenderTimeRef.current,
       getDuration,
       getBlocks,
       getAudioSegments,
@@ -675,7 +758,17 @@ function DocPlayerContent({
     return () => {
       if (liveRenderAPIRef.current === api) liveRenderAPIRef.current = null;
     };
-  }, [renderMode, isDebugMode, seekTo, totalDuration, expandedBlocks, coverBlock, doc]);
+  }, [
+    renderMode,
+    isDebugMode,
+    seekTo,
+    totalDuration,
+    expandedBlocks,
+    coverBlock,
+    doc,
+    externalAudioController,
+    waitForRenderCommit,
+  ]);
 
   // Publish/clean up only when the host callback or API availability changes;
   // ordinary playback state changes update the implementation ref above
@@ -1113,7 +1206,9 @@ function DocPlayerContent({
     <div
       ref={containerRef}
       data-player-id={playerId}
-      data-orientation={orientation}
+      data-orientation={activeOrientation}
+      data-playback-state={isPlaying ? 'playing' : 'paused'}
+      data-swipe-phase={swipe.phase}
       tabIndex={renderMode ? -1 : 0}
       aria-label="Document player"
       onKeyDown={renderMode ? undefined : handleKeyDown}
@@ -1123,6 +1218,7 @@ function DocPlayerContent({
       onClick={handleContainerClick}
       onPointerDown={swipe.onPointerDown}
       style={{
+        ...pipVars,
         position: 'relative',
         width: '100%',
         aspectRatio: `${activeViewport.width} / ${activeViewport.height}`,
@@ -1145,9 +1241,12 @@ function DocPlayerContent({
         basePath={basePath}
         renderMode={renderMode}
         muted={muted}
-        presentation={videoPresentation}
-        pipShape={pipShape}
-        pipPosition={pipPosition}
+        presentation={appearance.videoPresentation}
+        pipSize={appearance.pipSize}
+        pipShape={appearance.pipShape}
+        pipPosition={appearance.pipPosition}
+        pipOrientation={activeOrientation}
+        pipFrameStyle={pipFrameStyle}
       />
 
       {/* Block viewport */}
@@ -1280,7 +1379,7 @@ function DocPlayerContent({
             <div>
               <span style={{ color: '#888' }}>viewport:</span>{' '}
               {activeViewport.name || `${activeViewport.width}x${activeViewport.height}`}{' '}
-              <span style={{ color: '#666' }}>({orientation})</span>
+              <span style={{ color: '#666' }}>({activeOrientation})</span>
             </div>
             <div>
               <span style={{ color: '#888' }}>playing:</span>{' '}

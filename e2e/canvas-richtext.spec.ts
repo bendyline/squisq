@@ -1,4 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
+import { waitForAppReady } from './appReady';
 import { switchView } from './view-tabs';
 
 /**
@@ -24,12 +25,12 @@ async function clickInsert(page: Page, name: string) {
 
 async function insertLayout(page: Page) {
   await page.goto('/');
-  await page.waitForLoadState('networkidle');
+  await waitForAppReady(page);
   await page.locator('.tiptap.ProseMirror').waitFor({ state: 'visible', timeout: 5_000 });
   await page.locator('.tiptap.ProseMirror').click();
   await clickInsert(page, 'Layout');
   await page.locator('.squisq-scene-widget-host').waitFor({ state: 'visible' });
-  await page.waitForTimeout(300);
+  await page.locator('[data-layer-id="text-1"]').first().waitFor({ state: 'visible' });
 }
 
 /** Read the rendered Monaco lines around the active edit. The inserted layout
@@ -73,7 +74,7 @@ test('double-click opens an inline editor and the toolbar bolds the selection', 
   // Commit by clicking a neutral spot on the canvas OUTSIDE the textbox
   // overlay (clicking inside it wouldn't blur → wouldn't commit).
   await page.mouse.click(box.x + box.width / 2, box.y - 60);
-  await page.waitForTimeout(400);
+  await expect(page.locator('.squisq-scene-text-overlay')).toHaveCount(0);
 
   // The committed text renders rich (foreignObject HTML with a <strong>).
   await expect(page.locator('.squisq-scene-widget-host strong')).toHaveText('Hello bold', {
@@ -190,12 +191,14 @@ test('drawing shape palette opens from the Shape tool (gutter toolbar, light)', 
   page,
 }) => {
   await page.goto('/');
-  await page.waitForLoadState('networkidle');
+  await waitForAppReady(page);
   await page.locator('.tiptap.ProseMirror').waitFor({ state: 'visible', timeout: 5_000 });
   await page.locator('.tiptap.ProseMirror').click();
   await clickInsert(page, 'Drawing');
   await page.locator('.squisq-scene-widget-host').waitFor({ state: 'visible' });
-  await page.waitForTimeout(300);
+  await page
+    .locator('.squisq-scene-block-toolbar button', { hasText: 'Shape' })
+    .waitFor({ state: 'visible' });
 
   // Clicking the Shape tool opens the palette. The toolbar now lives in the
   // right gutter, so the palette opens toward the canvas (to its LEFT).
@@ -219,7 +222,7 @@ test('drawing shape palette opens from the Shape tool (gutter toolbar, light)', 
 
 test('diagram node label is editable inline (plain text)', async ({ page }) => {
   await page.goto('/');
-  await page.waitForLoadState('networkidle');
+  await waitForAppReady(page);
   await page.locator('select').first().selectOption('diagram-family-tree');
   await page
     .locator('.squisq-ascii-diagram-widget-host')
@@ -239,7 +242,7 @@ test('diagram node label is editable inline (plain text)', async ({ page }) => {
   await page.keyboard.press(SELECT_ALL);
   await page.keyboard.type('Renamed');
   await page.mouse.click(box.x + box.width / 2, box.y - 120);
-  await page.waitForTimeout(400);
+  await expect(page.locator('.squisq-scene-text-overlay')).toHaveCount(0);
 
   // ASCII-diagram node ids derive from labels, so the renamed node re-parses
   // under a fresh id; its label layer carries the new text.

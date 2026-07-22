@@ -10,6 +10,7 @@
 import { useMemo } from 'react';
 import type { ScheduledClip } from '@bendyline/squisq/schemas';
 import { MediaClipLayer } from '@bendyline/squisq-react';
+import { timelineMediaLabel } from './timelineMediaLabel';
 
 export interface TimelineVideoPanelProps {
   schedule: ScheduledClip[];
@@ -32,7 +33,7 @@ export function TimelineVideoPanel({
   );
   const activeLabel =
     activeVideos.length === 1
-      ? clipName(activeVideos[0].src)
+      ? timelineMediaLabel(activeVideos[0].src, 'video')
       : activeVideos.length > 1
         ? `${activeVideos.length} video clips`
         : 'No video at this time';
@@ -44,7 +45,7 @@ export function TimelineVideoPanel({
       aria-label="Timeline video preview"
     >
       <header className="squisq-timeline-video-header">
-        <span className="squisq-timeline-video-title">Literal video</span>
+        <span className="squisq-timeline-video-title">Video monitor</span>
         <span className="squisq-timeline-video-label" title={activeLabel}>
           {activeLabel}
         </span>
@@ -85,8 +86,4 @@ function formatClock(seconds: number): string {
   const whole = Math.max(0, Math.floor(seconds));
   const minutes = Math.floor(whole / 60);
   return `${minutes}:${String(whole % 60).padStart(2, '0')}`;
-}
-
-function clipName(src: string): string {
-  return src.split('/').pop() ?? src;
 }

@@ -212,10 +212,17 @@ function blockToSlide(
   block: Block,
   index: number,
   knownTemplates?: ReadonlySet<string>,
+  documentTitle?: string,
 ): Record<string, unknown> {
+  // A heading-less block (the leading "preamble" that holds body content
+  // before the first heading) has no authored header. Fall back to the block's
+  // own title, then to the document title (frontmatter `title:` or a
+  // host-provided file name), and finally to no header at all. We deliberately
+  // never surface `block.id` — the synthetic preamble id is the literal string
+  // `'preamble'`, which is a placeholder, not a heading anyone wrote.
   const headingText = block.sourceHeading
     ? extractPlainText(block.sourceHeading)
-    : block.title || block.id || `Slide ${index + 1}`;
+    : block.title || documentTitle || '';
 
   // `markdownToDoc` uses sectionHeader as its structural default so the
   // authored Markdown can round-trip without materialized annotations. That
@@ -350,7 +357,41 @@ const IMAGE_MOTIONS: Array<'zoomIn' | 'zoomOut' | 'panLeft' | 'panRight'> = [
  * slide, interleaves images, recalculates timing, and adds a synthetic
  * audio segment.
  */
-export function buildPreviewDoc(doc: Doc): Doc {
+export interface BuildPreviewDocOptions {
+  /**
+   * Human-facing title to use as the header of the leading heading-less
+   * "preamble" block when the document has no frontmatter `title:`. Hosts
+   * typically pass the file name (extension stripped) via
+   * {@link documentTitleFromFileName}. When neither this nor a frontmatter
+   * title is present, the preamble simply renders with no header rather than
+   * the placeholder block id.
+   */
+  documentTitle?: string;
+}
+
+/**
+ * Derive a display title from a file name: strip any directory prefix and the
+ * trailing extension (`docs/Longview Plan.md` → `Longview Plan`). Returns an
+ * empty string for an absent/blank name so callers can pass the result through
+ * without extra guards.
+ */
+export function documentTitleFromFileName(fileName?: string): string {
+  if (!fileName) return '';
+  const base = fileName.split(/[\\/]/).pop() ?? '';
+  return base.replace(/\.[^.]+$/, '').trim();
+}
+
+function resolveDocumentTitle(doc: Doc, provided?: string): string {
+  // An authored frontmatter `title:` is the most intentional header; a
+  // host-supplied name (e.g. the file name) is the fallback.
+  const frontmatterTitle = doc.frontmatter?.title;
+  if (typeof frontmatterTitle === 'string' && frontmatterTitle.trim()) {
+    return frontmatterTitle.trim();
+  }
+  return provided?.trim() ?? '';
+}
+
+export function buildPreviewDoc(doc: Doc, options?: BuildPreviewDocOptions): Doc {
   // Container templates (`diagram`, `drawing`) render their children as
   // nodes/shapes, so those children must not also become preview slides.
   const flat = flattenRenderableBlocks(doc.blocks);
@@ -363,6 +404,7 @@ export function buildPreviewDoc(doc: Doc): Doc {
   const knownTemplates = doc.customTemplates
     ? new Set(doc.customTemplates.map((d) => d.name))
     : undefined;
+  const documentTitle = resolveDocumentTitle(doc, options?.documentTitle);
 
   const slides: Record<string, unknown>[] = [];
   let motionIndex = 0;
@@ -370,7 +412,7 @@ export function buildPreviewDoc(doc: Doc): Doc {
   for (let i = 0; i < flat.length; i++) {
     const block = flat[i];
     const blockImages = extractBlockImages(block.contents);
-    const slide = blockToSlide(block, i, knownTemplates);
+    const slide = blockToSlide(block, i, knownTemplates, documentTitle);
 
     if (blockImages.length > 0 && slide.template === 'sectionHeader') {
       const img = blockImages[0];

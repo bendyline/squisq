@@ -12,18 +12,15 @@ export default tseslint.config(
       '**/dist/**',
       '**/node_modules/**',
       '**/.stryker-tmp/**',
+      // Generated Playwright artifacts (untracked but present after a run;
+      // flat config does not read .gitignore, so ignore them explicitly).
+      'playwright-report/**',
+      'test-results/**',
       '**/*.config.ts',
       '**/*.config.js',
       '**/vitest.setup.ts',
       'scripts/**',
-      // Ad-hoc browser inspection probes. They are intentionally run by hand
-      // against a dev server and use Playwright page.evaluate browser globals.
-      'debug_icons.mjs',
-      'verify_playicons.mjs',
-      'test_h2c.mjs',
-      'packages/site/debug_icons.mjs',
-      'packages/site/verify_playicons.mjs',
-      // Temporary agent worktrees — these are checkouts under .claude and
+      // Tool-created worktrees are checkouts under .claude and
       // must not be linted (their nested paths bypass the path-based
       // overrides below, producing spurious "rule not found" errors).
       '.claude/**',

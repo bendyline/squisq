@@ -31,9 +31,11 @@
  *
  */
 
-import type { Layer } from '../schemas/Doc.js';
 import type { CustomTemplateDefinition } from '../schemas/CustomTemplates.js';
-import { FRONTMATTER_CUSTOM_TEMPLATES_KEY } from '../schemas/CustomTemplates.js';
+import {
+  FRONTMATTER_CUSTOM_TEMPLATES_KEY,
+  validateCustomTemplateDefinition,
+} from '../schemas/CustomTemplates.js';
 import { base64ToUtf8 } from '../base64.js';
 
 const DEFAULT_VIEWPORT = { width: 1920, height: 1080 };
@@ -153,16 +155,15 @@ export function readCustomTemplatesFromFrontmatter(
   for (const entry of candidates) {
     if (!entry || typeof entry !== 'object') continue;
     const e = entry as Record<string, unknown>;
-    if (typeof e.name !== 'string' || typeof e.label !== 'string') continue;
-    if (!Array.isArray(e.layers)) continue;
-    const def: CustomTemplateDefinition = {
+    const candidate: Record<string, unknown> = {
       name: e.name,
       label: e.label,
-      viewport: readViewport(e.viewport),
-      layers: e.layers as Layer[],
+      viewport: e.viewport ?? { ...DEFAULT_VIEWPORT },
+      layers: e.layers,
     };
-    if (typeof e.description === 'string') def.description = e.description;
-    out.push(def);
+    if (e.description !== undefined) candidate.description = e.description;
+    const result = validateCustomTemplateDefinition(candidate);
+    if (result.template) out.push(result.template);
   }
   return out.length > 0 ? out : undefined;
 }
@@ -191,16 +192,6 @@ export function writeCustomTemplatesToFrontmatter(
   // existing docs and snapshots are byte-unchanged. The compact key codec
   // (LONG_TO_SHORT) is applied in both modes.
   return JSON.stringify(map, null, options?.pretty ? 2 : undefined);
-}
-
-function readViewport(raw: unknown): { width: number; height: number } {
-  if (raw && typeof raw === 'object') {
-    const v = raw as Record<string, unknown>;
-    const w = typeof v.width === 'number' ? v.width : DEFAULT_VIEWPORT.width;
-    const h = typeof v.height === 'number' ? v.height : DEFAULT_VIEWPORT.height;
-    return { width: w, height: h };
-  }
-  return DEFAULT_VIEWPORT;
 }
 
 /**

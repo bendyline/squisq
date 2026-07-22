@@ -93,4 +93,18 @@ describe('library', () => {
     );
     expect(listLibraryTemplates().map((template) => template.name)).toEqual(['valid']);
   });
+
+  it('filters definitions whose nested layers are malformed', () => {
+    const malformed = {
+      name: 'broken',
+      label: 'Broken',
+      viewport: { width: 1920, height: 1080 },
+      layers: [{ id: 'missing-content', type: 'text', position: { x: 0, y: 0 } }],
+    };
+    window.localStorage.setItem(
+      LIBRARY_STORAGE_KEY,
+      JSON.stringify({ version: 1, templates: [malformed, defn('valid')] }),
+    );
+    expect(listLibraryTemplates().map((template) => template.name)).toEqual(['valid']);
+  });
 });

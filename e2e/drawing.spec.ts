@@ -1,4 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
+import { waitForAppReady } from './appReady';
 import { switchView } from './view-tabs';
 
 /**
@@ -13,7 +14,7 @@ import { switchView } from './view-tabs';
 
 async function loadDrawingSample(page: Page) {
   await page.goto('/');
-  await page.waitForLoadState('networkidle');
+  await waitForAppReady(page);
   await page.locator('select').first().selectOption('drawing-org-chart');
   await page.locator('.tiptap.ProseMirror').waitFor({ state: 'visible', timeout: 5_000 });
   await page.locator('.squisq-scene-widget-host').waitFor({ state: 'visible', timeout: 5_000 });

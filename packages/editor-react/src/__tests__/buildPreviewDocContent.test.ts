@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { markdownToDoc, materializeBlockLayers } from '@bendyline/squisq/doc';
 import { parseMarkdown } from '@bendyline/squisq/markdown';
 import type { DocBlock, TextLayer } from '@bendyline/squisq/schemas';
-import { buildPreviewDoc } from '../buildPreviewDoc';
+import { buildPreviewDoc, documentTitleFromFileName } from '../buildPreviewDoc';
 
 function firstPreviewSlide(markdown: string): Record<string, unknown> {
   const source = markdownToDoc(parseMarkdown(markdown), {
@@ -137,5 +137,53 @@ A **bold** statement with an [example link](https://example.com).
       .map((layer) => layer.content.text)
       .join('\n');
     expect(narrativeText).not.toContain('flowchart LR');
+  });
+});
+
+describe('buildPreviewDoc preamble header', () => {
+  function preambleDoc(markdown: string) {
+    return markdownToDoc(parseMarkdown(markdown), {
+      articleId: 'preamble-test',
+      generateCoverBlock: false,
+    });
+  }
+
+  it('does not surface the synthetic block id as a header for heading-less content', () => {
+    const slide = buildPreviewDoc(preambleDoc('Just some raw text before any heading.'))
+      .blocks[0] as unknown as Record<string, unknown>;
+    // Regression: the preamble block id is literally 'preamble' and must never
+    // become the visible header.
+    expect(slide.id).toBe('preamble');
+    expect(slide.title).toBe('');
+  });
+
+  it('uses the frontmatter title as the preamble header when present', () => {
+    const slide = buildPreviewDoc(
+      preambleDoc('---\ntitle: Quarterly Plan\n---\n\nRaw text before any heading.'),
+    ).blocks[0] as unknown as Record<string, unknown>;
+    expect(slide.title).toBe('Quarterly Plan');
+  });
+
+  it('uses a host-provided document title (e.g. file name) when there is no heading', () => {
+    const slide = buildPreviewDoc(preambleDoc('Raw text before any heading.'), {
+      documentTitle: 'Longview Plan',
+    }).blocks[0] as unknown as Record<string, unknown>;
+    expect(slide.title).toBe('Longview Plan');
+  });
+
+  it('prefers an authored frontmatter title over the host-provided one', () => {
+    const slide = buildPreviewDoc(preambleDoc('---\ntitle: Authored Title\n---\n\nRaw text.'), {
+      documentTitle: 'file-name',
+    }).blocks[0] as unknown as Record<string, unknown>;
+    expect(slide.title).toBe('Authored Title');
+  });
+});
+
+describe('documentTitleFromFileName', () => {
+  it('strips directory prefixes and the trailing extension', () => {
+    expect(documentTitleFromFileName('docs/Longview Plan.md')).toBe('Longview Plan');
+    expect(documentTitleFromFileName('C:\\notes\\draft.markdown')).toBe('draft');
+    expect(documentTitleFromFileName('README')).toBe('README');
+    expect(documentTitleFromFileName(undefined)).toBe('');
   });
 });

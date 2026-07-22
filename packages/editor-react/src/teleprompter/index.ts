@@ -8,6 +8,12 @@ export {
   type TeleprompterRecordingDeps,
 } from './TeleprompterView';
 export {
+  useNarrationStage,
+  type UseNarrationStageOptions,
+  type NarrationStageHandle,
+} from './useNarrationStage';
+export { NarrationStage, type NarrationStageProps } from './NarrationStage';
+export {
   useNarrationRecorder,
   type NarrationRecorderController,
   type NarrationRecorderState,
@@ -55,6 +61,8 @@ export {
 } from './teleprompterTheme';
 export {
   DEFAULT_TELEPROMPTER_PREFS,
+  TELEPROMPTER_PREF_LIMITS,
+  normalizeTeleprompterPrefs,
   type TeleprompterPrefs,
   type PrompterTransport,
   type FloatTier,

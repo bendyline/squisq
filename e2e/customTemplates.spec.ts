@@ -1,4 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
+import { waitForAppReady } from './appReady';
 
 /**
  * E2E tests for the custom template designer.
@@ -17,7 +18,7 @@ import { test, expect, type Page } from '@playwright/test';
 
 async function loadCustomTemplateSample(page: Page) {
   await page.goto('/');
-  await page.waitForLoadState('networkidle');
+  await waitForAppReady(page);
   await page.locator('select').first().selectOption('custom-template-demo');
   await page.locator('.tiptap.ProseMirror').waitFor({ state: 'visible', timeout: 5_000 });
 }

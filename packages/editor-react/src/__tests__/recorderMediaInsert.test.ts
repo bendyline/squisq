@@ -8,7 +8,9 @@ import { describe, expect, it } from 'vitest';
 import { parseMarkdown } from '@bendyline/squisq/markdown';
 import { markdownToDoc, flattenBlocks } from '@bendyline/squisq/doc';
 import { tiptapToMarkdown } from '../tiptapBridge';
-import { insertMediaBlock } from '../recorder/insertMediaBlock';
+import { insertMediaBlock, insertMediaBlocks } from '../recorder/insertMediaBlock';
+import { buildDualClipInsertion } from '../recorder/dualClipInsertion';
+import type { RecorderSaveResult } from '../recorder/RecorderModal';
 import { collectEmbeddedMedia } from '../embeddedMedia';
 import { TiptapVideo } from '../tiptap/TiptapVideo';
 
@@ -65,6 +67,47 @@ describe('recorder media insertion (caret inside a list)', () => {
     expect(md).toContain('1. First');
     expect(md).toContain('2. Second');
     expect(md).toMatch(/^<video src="video\/clip\.webm"/m);
+  });
+});
+
+describe('dual (screen + camera) insertion', () => {
+  it('inserts both clips as top-level blocks, screen before camera, byte-stable to raw markup', () => {
+    const result: RecorderSaveResult = {
+      source: 'screen+camera',
+      relativePath: 'video/screen-x.webm',
+      filename: 'screen-x.webm',
+      mimeType: 'video/webm',
+      duration: 8,
+      hasTimingSidecar: false,
+      camera: {
+        relativePath: 'video/camera-x.webm',
+        filename: 'camera-x.webm',
+        mimeType: 'video/webm',
+        duration: 7.7,
+        offsetSec: 0.3,
+      },
+    };
+    const dual = buildDualClipInsertion(result)!;
+
+    const editor = new Editor({
+      extensions: [Document, Paragraph, Text, OrderedList, ListItem, TiptapVideo],
+      content: '<p>Intro</p>',
+    });
+    editor.commands.focus('end');
+    insertMediaBlocks(editor, [
+      { type: 'video', attrs: dual.screenAttrs },
+      { type: 'video', attrs: dual.cameraAttrs },
+    ]);
+    const md = tiptapToMarkdown(editor.getHTML());
+    editor.destroy();
+
+    // The WYSIWYG round-trip re-serializes to exactly the raw-view tags.
+    expect(md).toContain(dual.screenTag);
+    expect(md).toContain(dual.cameraTag);
+    // Screen precedes camera (DOM order = z-order), each at column 0.
+    expect(md.indexOf(dual.screenTag)).toBeLessThan(md.indexOf(dual.cameraTag));
+    expect(md).toMatch(/^<video src="video\/screen-x\.webm"/m);
+    expect(md).toMatch(/^<video src="video\/camera-x\.webm"/m);
   });
 });
 

@@ -9,6 +9,7 @@ export const FRONTMATTER_SETTING_KEYS = {
     canonical: 'squisq-video-presentation',
     legacy: 'video-presentation' as const,
   },
+  pipSize: { canonical: 'squisq-pip-size', legacy: 'pip-size' as const },
   pipShape: { canonical: 'squisq-pip-shape', legacy: 'pip-shape' as const },
   pipPosition: { canonical: 'squisq-pip-position', legacy: 'pip-position' as const },
 } as const;
@@ -21,7 +22,8 @@ export const FRONTMATTER_SETTING_DEFAULTS = {
   coverSlide: true,
   videoLoop: false,
   videoPresentation: 'background',
-  pipShape: 'rounded',
+  pipSize: 'small',
+  pipShape: 'square',
   pipPosition: 'bottom-right',
 } as const;
 

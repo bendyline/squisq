@@ -18,6 +18,7 @@ import type { ContentContainer } from '@bendyline/squisq/storage';
 import { useEditorContext } from './EditorContext';
 import { usePreviewSettings } from './PreviewControls';
 import { usePreviewProjection } from './usePreviewProjection';
+import { documentTitleFromFileName } from './buildPreviewDoc';
 import { buildDocumentPreviewMarkdown } from './buildDocumentPreviewMarkdown';
 import { PlainHtmlPreview } from './PlainHtmlPreview';
 import { TeleprompterView } from './teleprompter/TeleprompterView';
@@ -63,6 +64,7 @@ export function PreviewPanel({
     bumpMediaRevision,
     allowRecording,
     colorScheme,
+    fileName,
   } = useEditorContext();
   const mediaProvider = useMediaProvider();
   const presentation = usePresentationModeOptional();
@@ -75,6 +77,7 @@ export function PreviewPanel({
     activeCaptionStyle,
     activeCaptionsEnabled,
     activeVideoPresentation,
+    activePipSize,
     activePipShape,
     activePipPosition,
     activeVideoLoop,
@@ -96,7 +99,12 @@ export function PreviewPanel({
   // Audio mapping is async (reads container files), so we use a two-phase
   // approach: first build the base doc synchronously, then resolve audio
   // in an effect and update the state.
-  const previewProjection = usePreviewProjection(doc, activeTransformStyle, workspaceContainer);
+  const previewProjection = usePreviewProjection(
+    doc,
+    activeTransformStyle,
+    workspaceContainer,
+    documentTitleFromFileName(fileName),
+  );
 
   const previewDoc = previewProjection?.playerDoc ?? null;
   const contentDoc = previewProjection?.contentDoc ?? null;
@@ -215,12 +223,12 @@ export function PreviewPanel({
     presentation?.popupRoot,
   ]);
 
-  // Status overlays for non-ready states. Narrate is exempt: the
-  // teleprompter holds live state (mic capture, an in-flight recording,
-  // pacing position) that an unmount would destroy — e.g. saving a take
-  // rewrites the markdown, which triggers exactly this reparse. It keeps
-  // rendering the last-good doc until the new parse lands.
-  if (isParsing && !isNarrateMode) {
+  // Keep the last-good surface mounted while a source update is being parsed.
+  // Narrate holds live mic/recording/pacing state, while preview settings such
+  // as the theme are persisted through frontmatter; replacing either surface
+  // for that brief parse would discard its current position. Initial loading
+  // still shows the status because no projection exists yet.
+  if (isParsing && !isNarrateMode && !previewDoc) {
     return (
       <div className={`squisq-preview-status ${className || ''}`} data-testid="preview-panel">
         <p>Parsing…</p>
@@ -348,6 +356,7 @@ export function PreviewPanel({
         displayMode={activeDisplayMode}
         theme={activeTheme}
         videoPresentation={activeVideoPresentation}
+        pipSize={activePipSize}
         pipShape={activePipShape}
         pipPosition={activePipPosition}
         loop={!audience && activeDisplayMode === 'video' && activeVideoLoop}

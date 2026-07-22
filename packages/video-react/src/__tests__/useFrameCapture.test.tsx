@@ -1,10 +1,14 @@
 import { renderHook } from '@testing-library/react';
 import type { Doc } from '@bendyline/squisq/schemas';
+import { resolveTheme } from '@bendyline/squisq/schemas';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
+  coverSourceRect,
   createInlineProvider,
   getFrameVisualStateKey,
+  prepareScheduledVideoClones,
   useFrameCapture,
+  waitForCaptureAssets,
   waitForVisualUpdate,
 } from '../hooks/useFrameCapture';
 
@@ -74,14 +78,16 @@ describe('createInlineProvider', () => {
       new Map([
         ['photo.JPG', new Uint8Array([1, 2, 3]).buffer],
         ['drawing.svg', new Uint8Array([4, 5]).buffer],
-        ['unknown.bin', new Uint8Array([6]).buffer],
+        ['recording.webm', new Uint8Array([6]).buffer],
+        ['unknown.bin', new Uint8Array([7]).buffer],
       ]),
     );
 
-    expect(create).toHaveBeenCalledTimes(3);
+    expect(create).toHaveBeenCalledTimes(4);
     expect(blobs.map((blob) => blob.type)).toEqual([
       'image/jpeg',
       'image/svg+xml',
+      'video/webm',
       'application/octet-stream',
     ]);
     expect(await provider.resolveUrl('photo.JPG')).toBe('blob:1');
@@ -89,6 +95,7 @@ describe('createInlineProvider', () => {
     expect(await provider.listMedia()).toEqual([
       { name: 'photo.JPG', mimeType: 'image/jpeg', size: 3 },
       { name: 'drawing.svg', mimeType: 'image/svg+xml', size: 2 },
+      { name: 'recording.webm', mimeType: 'video/webm', size: 1 },
       { name: 'unknown.bin', mimeType: 'application/octet-stream', size: 1 },
     ]);
     await expect(provider.addMedia('new.png', new ArrayBuffer(0), 'image/png')).rejects.toThrow(
@@ -98,8 +105,38 @@ describe('createInlineProvider', () => {
 
     provider.dispose();
 
-    expect(revoke.mock.calls.map(([url]) => url)).toEqual(['blob:1', 'blob:2', 'blob:3']);
+    expect(revoke.mock.calls.map(([url]) => url)).toEqual(['blob:1', 'blob:2', 'blob:3', 'blob:4']);
     expect(await provider.resolveUrl('photo.JPG')).toBe('photo.JPG');
+  });
+});
+
+describe('waitForCaptureAssets', () => {
+  it('decodes each newly mounted image once', async () => {
+    const root = document.createElement('div');
+    root.innerHTML = '<img src="frame.png">';
+    const image = root.querySelector('img')!;
+    const decode = vi.fn(async () => undefined);
+    Object.defineProperty(image, 'decode', { configurable: true, value: decode });
+    const decoded = new WeakSet<HTMLImageElement>();
+
+    await waitForCaptureAssets(root, decoded);
+    await waitForCaptureAssets(root, decoded);
+
+    expect(decode).toHaveBeenCalledOnce();
+  });
+
+  it('surfaces image decode failures instead of capturing a blank asset', async () => {
+    const root = document.createElement('div');
+    root.innerHTML = '<img src="broken.png">';
+    const image = root.querySelector('img')!;
+    Object.defineProperty(image, 'decode', {
+      configurable: true,
+      value: vi.fn(async () => {
+        throw new Error('decode failed');
+      }),
+    });
+
+    await expect(waitForCaptureAssets(root)).rejects.toThrow('decode failed');
   });
 });
 
@@ -140,6 +177,133 @@ describe('getFrameVisualStateKey', () => {
   });
 });
 
+describe('scheduled video capture clones', () => {
+  it('calculates a centered cover crop without stretching', () => {
+    expect(coverSourceRect(1920, 1080, 200, 200)).toEqual({
+      sx: 420,
+      sy: 0,
+      sw: 1080,
+      sh: 1080,
+    });
+    expect(coverSourceRect(1080, 1920, 320, 180)).toEqual({
+      sx: 0,
+      sy: 656.25,
+      sw: 1080,
+      sh: 607.5,
+    });
+  });
+
+  it('restores PIP presentation on html2canvas video replacements', () => {
+    const originalRoot = document.createElement('div');
+    originalRoot.innerHTML =
+      '<div class="doc-player__media-clips"><video data-clip-id="presenter"></video></div>';
+    const clonedRoot = document.createElement('div');
+    clonedRoot.innerHTML = '<div class="doc-player__media-clips"><canvas></canvas></div>';
+    const video = originalRoot.querySelector<HTMLVideoElement>('video')!;
+    video.className = 'doc-player__media-video doc-player__media-video--active';
+    video.dataset.active = 'true';
+    video.style.cssText =
+      'position:absolute;width:15%;aspect-ratio:1;right:3%;bottom:6%;' +
+      'object-fit:cover;border:3px solid rgb(255, 0, 170);border-radius:18%;';
+    Object.defineProperties(video, {
+      videoWidth: { configurable: true, value: 1920 },
+      videoHeight: { configurable: true, value: 1080 },
+      clientWidth: { configurable: true, value: 200 },
+      clientHeight: { configurable: true, value: 200 },
+    });
+    const drawImage = vi.fn();
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue({
+      drawImage,
+    } as unknown as CanvasRenderingContext2D);
+
+    prepareScheduledVideoClones(originalRoot, clonedRoot);
+
+    const canvas = clonedRoot.querySelector<HTMLCanvasElement>('canvas')!;
+    expect(canvas.className).toBe('doc-player__media-video doc-player__media-video--active');
+    expect(canvas.dataset.clipId).toBe('presenter');
+    expect(canvas.dataset.active).toBe('true');
+    expect(canvas.dataset.videoCaptureClone).toBe('true');
+    expect(canvas.style.right).toBe('3%');
+    expect(canvas.style.bottom).toBe('6%');
+    expect(canvas.style.borderRadius).toBe('18%');
+    expect(canvas.width).toBe(200);
+    expect(canvas.height).toBe(200);
+    expect(drawImage).toHaveBeenNthCalledWith(1, video, 420, 0, 1080, 1080, 0, 0, 200, 200);
+    expect(drawImage).toHaveBeenCalledTimes(2);
+  });
+
+  it('serializes an embedded block frame alongside a scheduled PIP video', () => {
+    const originalRoot = document.createElement('div');
+    originalRoot.innerHTML =
+      '<div class="doc-player__block"><svg><g class="block-layer block-layer--video">' +
+      '<foreignObject x="12" y="34" width="640" height="180">' +
+      '<video data-clip-start="0" data-clip-end="12"></video></foreignObject>' +
+      '</g></svg></div>' +
+      '<div class="doc-player__media-clips">' +
+      '<video data-clip-id="camera" data-active="true"></video>' +
+      '</div>';
+    const clonedRoot = document.createElement('div');
+    clonedRoot.innerHTML =
+      '<div class="doc-player__block"><svg><g class="block-layer block-layer--video">' +
+      '<foreignObject x="12" y="34" width="640" height="180"><canvas></canvas></foreignObject>' +
+      '</g></svg></div>' +
+      '<div class="doc-player__media-clips"><canvas></canvas></div>';
+    const embeddedVideo = originalRoot.querySelector<HTMLVideoElement>(
+      '.block-layer--video video',
+    )!;
+    const pipVideo = originalRoot.querySelector<HTMLVideoElement>(
+      '.doc-player__media-clips video',
+    )!;
+    embeddedVideo.style.objectFit = 'contain';
+    pipVideo.style.objectFit = 'cover';
+    Object.defineProperties(embeddedVideo, {
+      videoWidth: { configurable: true, value: 320 },
+      videoHeight: { configurable: true, value: 180 },
+      clientWidth: { configurable: true, value: 640 },
+      clientHeight: { configurable: true, value: 180 },
+    });
+    Object.defineProperties(pipVideo, {
+      videoWidth: { configurable: true, value: 640 },
+      videoHeight: { configurable: true, value: 480 },
+      clientWidth: { configurable: true, value: 160 },
+      clientHeight: { configurable: true, value: 160 },
+    });
+    const drawImage = vi.fn();
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue({
+      drawImage,
+    } as unknown as CanvasRenderingContext2D);
+    prepareScheduledVideoClones(originalRoot, clonedRoot);
+
+    const embeddedCanvasInSvg = clonedRoot.querySelector<HTMLCanvasElement>(
+      '.block-layer--video canvas',
+    );
+    const embeddedForeignObject = clonedRoot.querySelector('.block-layer--video foreignObject');
+    const embeddedFrame = clonedRoot.querySelector<HTMLCanvasElement>(
+      '.doc-player__block > canvas[data-video-capture-clone]',
+    )!;
+    const pipCanvas = clonedRoot.querySelector<HTMLCanvasElement>(
+      '.doc-player__media-clips canvas',
+    )!;
+    expect(embeddedCanvasInSvg).toBeNull();
+    expect(embeddedForeignObject).toBeNull();
+    expect(embeddedFrame.dataset.videoCaptureClone).toBe('true');
+    expect(embeddedFrame.dataset.clipStart).toBe('0');
+    expect(embeddedFrame.width).toBe(640);
+    expect(embeddedFrame.height).toBe(180);
+    expect(embeddedFrame.style.left).toBe('12px');
+    expect(embeddedFrame.style.top).toBe('34px');
+    expect(embeddedFrame.style.width).toBe('640px');
+    expect(embeddedFrame.style.height).toBe('180px');
+    expect(embeddedFrame.style.zIndex).toBe('3');
+    expect(pipCanvas.dataset.videoCaptureClone).toBe('true');
+    expect(pipCanvas.dataset.clipId).toBe('camera');
+    expect(pipCanvas.width).toBe(160);
+    expect(pipCanvas.height).toBe(160);
+    expect(drawImage).toHaveBeenCalledWith(embeddedVideo, 0, 0, 320, 180, 160, 0, 320, 180);
+    expect(drawImage).toHaveBeenCalledWith(pipVideo, 80, 0, 480, 480, 0, 0, 160, 160);
+  });
+});
+
 describe('useFrameCapture', () => {
   it('returns a stable handle and rejects capture before initialization', async () => {
     const { result, rerender } = renderHook(() => useFrameCapture());
@@ -149,13 +313,20 @@ describe('useFrameCapture', () => {
 
     expect(result.current).toBe(firstHandle);
     await expect(result.current.captureFrame(0)).rejects.toThrow(/not initialized/i);
+    await expect(result.current.setCoverVisible(true)).rejects.toThrow(/not initialized/i);
     expect(() => result.current.destroy()).not.toThrow();
   });
 
   it('initializes, replaces an existing player, captures a frame, and destroys resources', async () => {
+    let renderedTime = 0;
     const api = {
       getDuration: vi.fn(() => 4.5),
-      seekTo: vi.fn(async () => undefined),
+      getRenderedTime: vi.fn(() => renderedTime),
+      seekTo: vi.fn(async (time: number) => {
+        renderedTime = time;
+      }),
+      showCover: vi.fn(async () => {}),
+      hideCover: vi.fn(async () => {}),
     };
     const renderedProps: Array<Record<string, unknown>> = [];
     frameCaptureMocks.render.mockImplementation((node: unknown) => {
@@ -175,10 +346,11 @@ describe('useFrameCapture', () => {
     const bitmap = { close: vi.fn() } as unknown as ImageBitmap;
     const createBitmap = vi.fn(async () => bitmap);
     vi.stubGlobal('createImageBitmap', createBitmap);
-    vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
+    const requestFrame = vi.fn((callback: FrameRequestCallback) => {
       callback(0);
       return 1;
     });
+    vi.stubGlobal('requestAnimationFrame', requestFrame);
     const doc = {
       articleId: 'frame-capture-test',
       duration: 4.5,
@@ -186,11 +358,22 @@ describe('useFrameCapture', () => {
       audio: { segments: [] },
     } as Doc;
     const { result } = renderHook(() => useFrameCapture());
+    const theme = resolveTheme('tech-dark');
 
     expect(
       await result.current.init(
         doc,
-        { width: 640, height: 360, animationsEnabled: false },
+        {
+          width: 640,
+          height: 360,
+          animationsEnabled: false,
+          theme,
+          videoPresentation: 'picture-in-picture',
+          pipSize: 'large',
+          pipShape: 'wide',
+          pipPosition: 'bottom-right',
+          showCoverSlide: true,
+        },
         'social',
       ),
     ).toBe(4.5);
@@ -200,12 +383,23 @@ describe('useFrameCapture', () => {
       captionStyle: 'social',
       animationsEnabled: false,
       forceViewport: { width: 640, height: 360, name: 'export' },
+      theme,
+      videoPresentation: 'picture-in-picture',
+      pipSize: 'large',
+      pipShape: 'wide',
+      pipPosition: 'bottom-right',
+      showCoverSlide: true,
     });
 
     // Reinitializing must dispose the old hidden React root before replacing it.
     expect(await result.current.init(doc, { width: 800, height: 450 })).toBe(4.5);
     expect(frameCaptureMocks.unmount).toHaveBeenCalledOnce();
     expect(document.querySelectorAll('#squisq-capture-root')).toHaveLength(1);
+
+    await result.current.setCoverVisible(true);
+    await result.current.setCoverVisible(false);
+    expect(api.showCover).toHaveBeenCalledOnce();
+    expect(api.hideCover).toHaveBeenCalledOnce();
 
     expect(await result.current.captureFrame(2.25)).toBe(bitmap);
     const canvasFrame = await result.current.captureCanvasFrame(2.35, {
@@ -229,6 +423,7 @@ describe('useFrameCapture', () => {
       }),
     );
     const captureOptions = frameCaptureMocks.html2canvas.mock.calls[0][1];
+    expect(captureOptions.onclone).toEqual(expect.any(Function));
     const ignoreElements = captureOptions.ignoreElements as (element: Element) => boolean;
     const captureDescendant = document.createElement('span');
     root!.appendChild(captureDescendant);
@@ -252,6 +447,7 @@ describe('useFrameCapture', () => {
     expect(captureContext.clearRect).toHaveBeenNthCalledWith(2, 0, 0, 800, 450);
     expect(createBitmap).toHaveBeenNthCalledWith(1, firstCanvas);
     expect(createBitmap).toHaveBeenCalledOnce();
+    expect(requestFrame).not.toHaveBeenCalled();
     expect(firstCanvas.width).toBe(800);
     expect(firstCanvas.height).toBe(450);
 
