@@ -43,6 +43,9 @@ export const REL_NUMBERING =
 export const REL_FONT_TABLE =
   'http://schemas.openxmlformats.org/officeDocument/2006/relationships/fontTable';
 
+/** Relationship type: embedded font data */
+export const REL_FONT = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/font';
+
 /** Relationship type: Settings */
 export const REL_SETTINGS =
   'http://schemas.openxmlformats.org/officeDocument/2006/relationships/settings';
@@ -165,6 +168,10 @@ export const CONTENT_TYPE_DOCX_SETTINGS =
 export const CONTENT_TYPE_DOCX_FONT_TABLE =
   'application/vnd.openxmlformats-officedocument.wordprocessingml.fontTable+xml';
 
+/** WordprocessingML obfuscated OpenType/TrueType font part. */
+export const CONTENT_TYPE_DOCX_OBFUSCATED_FONT =
+  'application/vnd.openxmlformats-officedocument.obfuscatedFont';
+
 export const CONTENT_TYPE_DOCX_FOOTNOTES =
   'application/vnd.openxmlformats-officedocument.wordprocessingml.footnotes+xml';
 
@@ -190,6 +197,9 @@ export const CONTENT_TYPE_PPTX_SLIDE_MASTER =
   'application/vnd.openxmlformats-officedocument.presentationml.slideMaster+xml';
 
 export const CONTENT_TYPE_PPTX_THEME = 'application/vnd.openxmlformats-officedocument.theme+xml';
+
+/** PresentationML embedded OpenType/TrueType font part. */
+export const CONTENT_TYPE_PPTX_FONT = 'application/x-fontdata';
 
 /** Relationship type: Slide */
 export const REL_SLIDE =

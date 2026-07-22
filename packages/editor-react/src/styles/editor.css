@@ -803,6 +803,13 @@
   margin: 0.25em 0;
 }
 
+/* Tiptap wraps even a single-line list item in a paragraph. Do not let that
+   structural wrapper inherit the spacing used between authored prose blocks;
+   the list item itself already supplies the intended inter-item rhythm. */
+.squisq-wysiwyg-editor li > p {
+  margin: 0;
+}
+
 /* Task lists (GFM checkboxes). TaskItem renders
    `<li data-type="taskItem"><label><input type="checkbox"><span></span></label><div>…</div></li>`
    inside `<ul data-type="taskList">`. Drop the bullet/indent and lay each item
@@ -1000,10 +1007,14 @@
   color: #111827;
 }
 
-.squisq-preview-seg-btn--active,
+.squisq-preview-seg-btn--active {
+  background: var(--squisq-accent, #2563eb);
+  color: var(--squisq-text-on-accent, #fff);
+}
+
 .squisq-preview-seg-btn--active:hover {
-  background: #2563eb;
-  color: #fff;
+  background: var(--squisq-accent-hover, var(--squisq-accent, #2563eb));
+  color: var(--squisq-text-on-accent, #fff);
 }
 
 /* Flex-filler root: spans the toolbar's leftover width, which is the budget
@@ -1645,6 +1656,10 @@
   --squisq-input-bg: #fff;
   --squisq-text: #1f2937;
   --squisq-text-muted: #6b7280;
+  /* Match Monaco's canvas while its lazy-loaded editor is being prepared.
+     RawEditor uses these for its editable loading fallback. */
+  --squisq-editor-background: #ffffff;
+  --squisq-editor-foreground: #1f2937;
 }
 
 .squisq-editor-shell[data-theme='dark'] {
@@ -1653,6 +1668,8 @@
   --squisq-input-bg: #374151;
   --squisq-text: #e5e7eb;
   --squisq-text-muted: #9ca3af;
+  --squisq-editor-background: #1e1e1e;
+  --squisq-editor-foreground: #d4d4d4;
 }
 
 /* ─── Dark mode ──────────────────────────────────────── */
@@ -1801,10 +1818,14 @@
   color: #f9fafb;
 }
 
-.squisq-editor-shell[data-theme='dark'] .squisq-preview-seg-btn--active,
+.squisq-editor-shell[data-theme='dark'] .squisq-preview-seg-btn--active {
+  background: var(--squisq-accent, #2563eb);
+  color: var(--squisq-text-on-accent, #fff);
+}
+
 .squisq-editor-shell[data-theme='dark'] .squisq-preview-seg-btn--active:hover {
-  background: #2563eb;
-  color: #fff;
+  background: var(--squisq-accent-hover, var(--squisq-accent, #2563eb));
+  color: var(--squisq-text-on-accent, #fff);
 }
 
 /* Overflow menu (dark) */
@@ -3857,6 +3878,13 @@
   flex: 1 1 auto;
   min-width: 0;
   min-height: 0;
+}
+
+/* Keep the surface dark through the one-frame handoff from RawEditor's
+   textarea fallback to @monaco-editor/react's internal loading wrapper. */
+.squisq-raw-editor-container {
+  background: var(--squisq-editor-background, #ffffff);
+  color: var(--squisq-editor-foreground, #1f2937);
 }
 
 /* Frame the white code area inside Monaco. The outline + inline-preview

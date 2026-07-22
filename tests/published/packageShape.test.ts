@@ -48,14 +48,16 @@ const PACKED_SIZE_BUDGETS: Record<string, number> = {
   // Keep enough headroom that normal feature work does not require continually
   // ratcheting the limits while still catching accidental payload additions.
   '@bendyline/squisq': 650_000,
-  '@bendyline/squisq-formats': 200_000,
+  // Includes the three Font Awesome OpenType faces embedded for portable
+  // DOCX/PDF/PPTX/EPUB inline-icon export.
+  '@bendyline/squisq-formats': 700_000,
   '@bendyline/squisq-react': 2_750_000,
   '@bendyline/squisq-video': 35_000,
   '@bendyline/squisq-video-react': 75_000,
   '@bendyline/squisq-editor-react': 1_000_000,
-  // Includes the compressed light standalone player so CLI-only installs no
-  // longer pull the complete React/Mermaid dependency graph.
-  '@bendyline/squisq-cli': 550_000,
+  // Includes compressed light and full standalone players so CLI video export
+  // can render Mermaid without pulling the React/Mermaid dependency graph.
+  '@bendyline/squisq-cli': 2_000_000,
 };
 
 function dryRunPack(directory: string, cache: string): PackResult {

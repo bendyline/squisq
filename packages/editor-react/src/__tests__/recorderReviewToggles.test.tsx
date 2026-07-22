@@ -190,12 +190,12 @@ describe('RecorderModal — unsaved take is not silently destroyed', () => {
     {
       mode: 'camera' as const,
       tracks: ['video', 'audio'] as const,
-      prefix: 'camera+audio',
+      prefix: 'camera-audio',
     },
     {
       mode: 'screen' as const,
       tracks: ['video', 'audio'] as const,
-      prefix: 'screen+audio',
+      prefix: 'screen-audio',
     },
   ])('names $mode saves from the tracks they contain', async ({ mode, tracks, prefix }) => {
     const captured = new FakeStream(tracks.map((kind) => new FakeTrack(kind)));
@@ -307,17 +307,17 @@ describe('RecorderModal — unsaved take is not silently destroyed', () => {
     });
 
     // Two files: screen (video-only display stream → no audio suffix) + camera
-    // (mic-bearing getUserMedia stream → +audio), both under video/.
+    // (mic-bearing getUserMedia stream → -audio suffix), both under video/.
     const calls = vi.mocked(mediaProvider.addMedia).mock.calls;
     expect(calls).toHaveLength(2);
     expect(calls[0]?.[0]).toMatch(/^video\/screen-\d{8}-\d{6}\.webm$/);
-    expect(calls[1]?.[0]).toMatch(/^video\/camera\+audio-\d{8}-\d{6}\.webm$/);
+    expect(calls[1]?.[0]).toMatch(/^video\/camera-audio-\d{8}-\d{6}\.webm$/);
 
     expect(onSave).toHaveBeenCalledTimes(1);
     const payload = onSave.mock.calls[0][0];
     expect(payload.source).toBe('screen+camera');
     expect(payload.relativePath).toMatch(/^video\/screen-/);
-    expect(payload.camera?.relativePath).toMatch(/^video\/camera\+audio-/);
+    expect(payload.camera?.relativePath).toMatch(/^video\/camera-audio-/);
   });
 
   it('suffixes a typed basename per file in a dual save', async () => {

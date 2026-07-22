@@ -53,7 +53,7 @@ import {
   resolvePersistentLayers,
   resolveThemeForDoc,
 } from '@bendyline/squisq/doc';
-import { stripIconMarkers } from '@bendyline/squisq/icon-marker';
+import { splitIconMarkers } from '@bendyline/squisq/icon-marker';
 import type {
   MarkdownDocument,
   MarkdownBlockNode,
@@ -70,6 +70,7 @@ import type {
   MarkdownMathBlock,
   MarkdownLink,
   MarkdownImage,
+  MarkdownInlineIcon,
 } from '@bendyline/squisq/markdown';
 import { readFrontmatterThemeId } from '@bendyline/squisq/markdown';
 
@@ -80,6 +81,12 @@ import { inferMimeType } from '../html/imageUtils.js';
 import { stripHtmlTags, extractPlainText } from '../shared/text.js';
 import { toOoxmlHex } from '../shared/ooxmlColor.js';
 import { sanitizeOfficeHyperlink } from '../shared/officeHyperlinks.js';
+import {
+  fontAwesomeFace,
+  fontAwesomeFaces,
+  fontAwesomeGlyph,
+  type IconFamily,
+} from '../shared/fontAwesome.js';
 import {
   inlineNodesToRuns,
   inlineNodeToRuns,
@@ -98,11 +105,13 @@ import {
   REL_THEME,
   REL_HYPERLINK,
   REL_IMAGE,
+  REL_FONT,
   CONTENT_TYPE_PPTX_PRESENTATION,
   CONTENT_TYPE_PPTX_SLIDE,
   CONTENT_TYPE_PPTX_SLIDE_LAYOUT,
   CONTENT_TYPE_PPTX_SLIDE_MASTER,
   CONTENT_TYPE_PPTX_THEME,
+  CONTENT_TYPE_PPTX_FONT,
 } from '../ooxml/namespaces.js';
 import {
   DEFAULT_FONT,
@@ -409,7 +418,7 @@ function shouldIncludeCoverSlide(doc: Doc, options: PptxExportOptions): boolean 
 // ============================================
 
 interface SlideData {
-  title?: string;
+  title?: MarkdownInlineNode[];
   titleDepth?: number;
   transition?: Transition;
   bodyNodes: MarkdownBlockNode[];
@@ -427,7 +436,7 @@ function segmentIntoSlides(
     if (node.type === 'heading' && node.depth <= maxDepth) {
       if (current) slides.push(current);
       current = {
-        title: extractPlainText(node.children),
+        title: node.children,
         titleDepth: node.depth,
         transition: node.attributes?.blockMeta?.transition,
         bodyNodes: [],
@@ -479,6 +488,8 @@ class SlideContext {
   private nextShapeId = 4; // 1=group, 2=title, 3=body
   private readonly allowRelativeHyperlinks: boolean;
   readonly signal: AbortSignal | undefined;
+  /** Font Awesome families referenced by semantic or materialized text runs. */
+  readonly iconFamilies = new Set<IconFamily>();
 
   constructor(
     style: SlideStyle,
@@ -556,8 +567,8 @@ function buildSlideXml(slide: SlideData, ctx: SlideContext): string {
     `<p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr>` + `<p:grpSpPr/>`,
   );
 
-  if (slide.title) {
-    shapes.push(buildTitleShape(slide.title, ctx.style));
+  if (slide.title?.length) {
+    shapes.push(buildTitleShape(slide.title, ctx));
   }
 
   // Convert body blocks and collect any image-only paragraphs
@@ -651,6 +662,13 @@ function buildLayerSlideXml(block: Block, ctx: SlideContext): string {
   const textLayerY = (block.layers ?? [])
     .filter((layer): layer is TextLayer => layer.type === 'text')
     .map((layer) => resolvePositionValue(layer.position.y, 1080));
+
+  for (const layer of block.layers ?? []) {
+    if (layer.type !== 'text') continue;
+    for (const run of splitIconMarkers(layer.content.text ?? '')) {
+      if (run.type === 'icon') ctx.iconFamilies.add(run.family);
+    }
+  }
 
   for (let index = 0; index < (block.layers?.length ?? 0); index++) {
     if ((index & 31) === 0) ctx.signal?.throwIfAborted();
@@ -864,7 +882,13 @@ function toEmuRect(rect: LayerRect): EmuRect {
 }
 
 function buildLayerTextShape(layer: TextLayer, shapeId: number, maxBottom?: number): string {
-  const text = stripIconMarkers(layer.content.text ?? '');
+  const sourceText = layer.content.text ?? '';
+  // One marker occupies roughly one text character once rendered as its glyph.
+  // Measuring the sentinel payload would wildly overestimate the text box;
+  // stripping it entirely would underestimate mixed icon/text lines.
+  const text = splitIconMarkers(sourceText)
+    .map((run) => (run.type === 'text' ? run.text : 'M'))
+    .join('');
   const style = layer.content.style;
   const padding = style.padding ?? 0;
   const rawLines = text.split('\n');
@@ -923,7 +947,7 @@ function buildLayerTextShape(layer: TextLayer, shapeId: number, maxBottom?: numb
     `<a:bodyPr wrap="square" anchor="${vertical}" vertOverflow="clip" horzOverflow="clip"` +
     ` lIns="${inset}" rIns="${inset}" tIns="${inset}" bIns="${inset}">` +
     `<a:noAutofit/></a:bodyPr>`;
-  const paragraphs = text
+  const paragraphs = sourceText
     .split('\n')
     .map((line) => buildLayerTextParagraph(line, renderedStyle, align))
     .join('');
@@ -947,7 +971,7 @@ function buildLayerTextParagraph(text: string, style: TextStyle, align: string):
   const size = Math.max(100, Math.round(style.fontSize * 75));
   const color = parseCssColor(style.color, '000000');
   const typeface = officeTypeface(style.fontFamily, DEFAULT_FONT);
-  const runProperties = [
+  const textRunProperties = [
     `lang="en-US"`,
     `dirty="0"`,
     `sz="${size}"`,
@@ -955,11 +979,33 @@ function buildLayerTextParagraph(text: string, style: TextStyle, align: string):
     ...(style.fontStyle === 'italic' ? ['i="1"'] : []),
   ].join(' ');
   const lineSpacing = Math.max(10000, Math.round((style.lineHeight ?? 1.4) * 100000));
+  const runs = splitIconMarkers(text)
+    .map((run) => {
+      if (run.type === 'text') {
+        if (!run.text) return '';
+        return (
+          `<a:r><a:rPr ${textRunProperties}>${solidColorXml(color)}` +
+          `<a:latin typeface="${escapeXml(typeface)}"/></a:rPr>` +
+          `<a:t>${escapeXml(run.text)}</a:t></a:r>`
+        );
+      }
+
+      const glyph = fontAwesomeGlyph(run.family, run.name);
+      if (!glyph) return '';
+      const iconTypeface = fontAwesomeFace(run.family).typeface;
+      return (
+        `<a:r><a:rPr lang="en-US" dirty="0" sz="${size}">${solidColorXml(color)}` +
+        `<a:latin typeface="${escapeXml(iconTypeface)}"/></a:rPr>` +
+        `<a:t>${escapeXml(glyph)}</a:t></a:r>`
+      );
+    })
+    .join('');
   return (
     `<a:p><a:pPr algn="${align}"><a:lnSpc><a:spcPct val="${lineSpacing}"/></a:lnSpc></a:pPr>` +
-    `<a:r><a:rPr ${runProperties}>${solidColorXml(color)}` +
-    `<a:latin typeface="${escapeXml(typeface)}"/></a:rPr>` +
-    `<a:t>${escapeXml(text || ' ')}</a:t></a:r></a:p>`
+    (runs ||
+      `<a:r><a:rPr ${textRunProperties}>${solidColorXml(color)}` +
+        `<a:latin typeface="${escapeXml(typeface)}"/></a:rPr><a:t> </a:t></a:r>`) +
+    `</a:p>`
   );
 }
 
@@ -1445,7 +1491,8 @@ function inOutDir(direction: TransitionDirection | undefined, fallback: 'in' | '
   return direction === 'out' ? 'out' : direction === 'in' ? 'in' : fallback;
 }
 
-function buildTitleShape(title: string, style: SlideStyle): string {
+function buildTitleShape(title: MarkdownInlineNode[], ctx: SlideContext): string {
+  const runs = inlineNodesToRuns(title, titleRunHandlers(ctx));
   return (
     `<p:sp>` +
     `<p:nvSpPr>` +
@@ -1461,16 +1508,56 @@ function buildTitleShape(title: string, style: SlideStyle): string {
     `<a:bodyPr/>` +
     `<a:lstStyle/>` +
     `<a:p>` +
-    `<a:r>` +
-    `<a:rPr lang="en-US" sz="${DEFAULT_TITLE_SIZE}" dirty="0">` +
-    `<a:solidFill><a:srgbClr val="${style.titleColor}"/></a:solidFill>` +
-    `<a:latin typeface="${escapeXml(style.titleFont)}"/>` +
-    `</a:rPr>` +
-    `<a:t>${escapeXml(title)}</a:t>` +
-    `</a:r>` +
+    runs +
     `</a:p>` +
     `</p:txBody>` +
     `</p:sp>`
+  );
+}
+
+function titleRunHandlers(ctx: SlideContext): InlineRunHandlers {
+  const handlers: InlineRunHandlers = {
+    run: (text, format) => makeTitleRun(text, format, ctx.style),
+    link: (node, format) => inlineNodesToRuns(node.children, handlers, format),
+    image: (node, format) => makeTitleRun(node.alt ?? '', format, ctx.style),
+    icon: (node, format) => makeTitleIconRun(node, format, ctx),
+    lineBreak: () => `<a:br/>`,
+  };
+  return handlers;
+}
+
+function makeTitleRun(text: string, format: InlineFormat, style: SlideStyle): string {
+  if (!text) return '';
+  const attrs = [`lang="en-US"`, `dirty="0"`, `sz="${DEFAULT_TITLE_SIZE}"`];
+  if (format.bold) attrs.push(`b="1"`);
+  if (format.italic) attrs.push(`i="1"`);
+  if (format.strike) attrs.push(`strike="sngStrike"`);
+  const typeface = format.code ? style.codeFont : style.titleFont;
+  return (
+    `<a:r><a:rPr ${attrs.join(' ')}>` +
+    `<a:solidFill><a:srgbClr val="${style.titleColor}"/></a:solidFill>` +
+    `<a:latin typeface="${escapeXml(typeface)}"/></a:rPr>` +
+    `<a:t>${escapeXml(text)}</a:t></a:r>`
+  );
+}
+
+function makeTitleIconRun(
+  node: MarkdownInlineIcon,
+  format: InlineFormat,
+  ctx: SlideContext,
+): string {
+  const glyph = fontAwesomeGlyph(node.family, node.name);
+  if (!glyph) return makeTitleRun(`{[${node.token}]}`, format, ctx.style);
+
+  const face = fontAwesomeFace(node.family);
+  ctx.iconFamilies.add(node.family);
+  const attrs = [`lang="en-US"`, `dirty="0"`, `sz="${DEFAULT_TITLE_SIZE}"`];
+  if (format.strike) attrs.push(`strike="sngStrike"`);
+  return (
+    `<a:r><a:rPr ${attrs.join(' ')}>` +
+    `<a:solidFill><a:srgbClr val="${ctx.style.titleColor}"/></a:solidFill>` +
+    `<a:latin typeface="${escapeXml(face.typeface)}"/></a:rPr>` +
+    `<a:t>${escapeXml(glyph)}</a:t></a:r>`
   );
 }
 
@@ -1759,6 +1846,7 @@ function pptxRunHandlers(ctx: SlideContext): InlineRunHandlers {
     run: (text, format) => makeRun(text, format, ctx.style),
     link: (node, format) => convertLink(node, ctx, format),
     image: (node, format) => convertImage(node, format, ctx),
+    icon: (node, format) => makeIconRun(node, format, ctx),
     lineBreak: () => `<a:br/>`,
   };
 }
@@ -1803,6 +1891,25 @@ function makeRun(text: string, format: InlineFormat, style: SlideStyle): string 
     `<a:rPr ${rPrParts.join(' ')}>${innerParts}</a:rPr>` +
     `<a:t>${escapeXml(text)}</a:t>` +
     `</a:r>`
+  );
+}
+
+function makeIconRun(node: MarkdownInlineIcon, format: InlineFormat, ctx: SlideContext): string {
+  const glyph = fontAwesomeGlyph(node.family, node.name);
+  if (!glyph) return makeRun(`{[${node.token}]}`, format, ctx.style);
+
+  const face = fontAwesomeFace(node.family);
+  ctx.iconFamilies.add(node.family);
+  const attrs = [`lang="en-US"`, `dirty="0"`];
+  if (format.strike) attrs.push(`strike="sngStrike"`);
+  const fill = ctx.style.hasTheme
+    ? `<a:solidFill><a:srgbClr val="${ctx.style.text}"/></a:solidFill>`
+    : '';
+  return (
+    `<a:r><a:rPr ${attrs.join(' ')}>` +
+    fill +
+    `<a:latin typeface="${escapeXml(face.typeface)}"/>` +
+    `</a:rPr><a:t>${escapeXml(glyph)}</a:t></a:r>`
   );
 }
 
@@ -1883,6 +1990,14 @@ async function buildPptxPackage(
   }
   const slideMasterRelId = relIds.alloc(PRESENTATION_PART);
   const themeRelId = relIds.alloc(PRESENTATION_PART);
+  const usedIconFamilies = new Set<IconFamily>();
+  for (const ctx of slideContexts) {
+    for (const family of ctx.iconFamilies) usedIconFamilies.add(family);
+  }
+  const embeddedIconFonts = fontAwesomeFaces(usedIconFamilies).map((face) => ({
+    face,
+    relId: relIds.alloc(PRESENTATION_PART),
+  }));
 
   // --- ppt/presentation.xml ---
   const presentationXml = buildPresentationXml(
@@ -1890,6 +2005,7 @@ async function buildPptxPackage(
     slideRelIds,
     slideMasterRelId,
     themeRelId,
+    embeddedIconFonts.map(({ face, relId }) => ({ typeface: face.typeface, relId })),
   );
   pkg.addPart('ppt/presentation.xml', presentationXml, CONTENT_TYPE_PPTX_PRESENTATION);
 
@@ -1971,6 +2087,15 @@ async function buildPptxPackage(
     type: REL_THEME,
     target: 'theme/theme1.xml',
   });
+  for (const { face, relId } of embeddedIconFonts) {
+    const filename = `${face.fileStem}.fntdata`;
+    pkg.addBinaryPart(`ppt/fonts/${filename}`, face.data, CONTENT_TYPE_PPTX_FONT);
+    pkg.addRelationship('ppt/presentation.xml', {
+      id: relId,
+      type: REL_FONT,
+      target: `fonts/${filename}`,
+    });
+  }
 
   // --- Core properties ---
   if (options.title || options.author || options.description) {

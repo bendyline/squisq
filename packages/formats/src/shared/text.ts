@@ -28,6 +28,10 @@ export function inlineToPlainText(node: MarkdownInlineNode): string {
       return extractPlainText(node.children);
     case 'image':
       return node.alt ?? '';
+    case 'inlineIcon':
+      // Plain-text formats cannot associate one character with an embedded
+      // icon face. Preserve the authored token instead of silently dropping it.
+      return `{[${node.token}]}`;
     case 'break':
       return ' ';
     default:

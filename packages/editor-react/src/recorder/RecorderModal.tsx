@@ -582,8 +582,8 @@ function recordingFilenameSeed(
   // acquired, the stream is authoritative because browsers may omit requested
   // display audio.
   const hasAudio = stream ? stream.getAudioTracks().length > 0 : audioRequested;
-  if (source === 'camera') return hasAudio ? 'camera+audio' : 'camera';
-  return hasAudio ? 'screen+audio' : 'screen';
+  if (source === 'camera') return hasAudio ? 'camera-audio' : 'camera';
+  return hasAudio ? 'screen-audio' : 'screen';
 }
 
 /**
@@ -602,8 +602,8 @@ function dualFilenameSeeds(
     : systemAudioRequested;
   const cameraHasAudio = cameraStream ? cameraStream.getAudioTracks().length > 0 : micRequested;
   return {
-    screen: screenHasAudio ? 'screen+audio' : 'screen',
-    camera: cameraHasAudio ? 'camera+audio' : 'camera',
+    screen: screenHasAudio ? 'screen-audio' : 'screen',
+    camera: cameraHasAudio ? 'camera-audio' : 'camera',
   };
 }
 

@@ -373,7 +373,17 @@ function RichTextLayer({ layer, viewport, blockTime }: TextLayerProps) {
 
   return (
     <g className={`block-layer block-layer--text ${animStyle.className}`} data-layer-id={layer.id}>
-      <foreignObject x={boxX} y={boxY} width={boxWidth} height={boxHeight}>
+      <foreignObject
+        x={boxX}
+        y={boxY}
+        width={boxWidth}
+        height={boxHeight}
+        // html2canvas rasterizes the complete SVG as an image. Keep the SVG
+        // `color` property aligned with the XHTML text so that a dark host
+        // page cannot supply white currentColor while that image is decoded.
+        color={style.color}
+        style={{ color: style.color }}
+      >
         {/* xmlns is required for HTML inside SVG foreignObject (see TableLayer) */}
         <div
           {...({ xmlns: 'http://www.w3.org/1999/xhtml' } as Record<string, string>)}
@@ -383,7 +393,16 @@ function RichTextLayer({ layer, viewport, blockTime }: TextLayerProps) {
           <div
             className={cls}
             aria-label={content.text}
-            style={{ width: '100%', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}
+            // Keep the foreground on the XHTML content itself. html2canvas
+            // serializes the surrounding SVG before rasterizing it, and
+            // Chromium can lose color inherited from the foreignObject's
+            // outer sizing box during that round-trip.
+            style={{
+              width: '100%',
+              color: style.color,
+              whiteSpace: 'pre-wrap',
+              wordBreak: 'break-word',
+            }}
             dangerouslySetInnerHTML={{ __html: safeHtml }}
           />
         </div>

@@ -169,7 +169,7 @@ export function supportsSystemAudioCapture(): boolean {
  * source-aware `seed`; dedicated narration callers omit it and retain the
  * historical `narration-*` default.
  */
-export type RecordingFilenameSeed = 'audio' | 'camera' | 'camera+audio' | 'screen' | 'screen+audio';
+export type RecordingFilenameSeed = 'audio' | 'camera' | 'camera-audio' | 'screen' | 'screen-audio';
 
 export function buildFilename(
   kind: CaptureKind,

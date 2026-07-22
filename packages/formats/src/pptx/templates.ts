@@ -6,7 +6,7 @@
  * don't change per-document but are required for PowerPoint to open the file.
  */
 
-import { xmlDeclaration } from '../ooxml/xmlUtils.js';
+import { escapeXml, xmlDeclaration } from '../ooxml/xmlUtils.js';
 import { NS_PML, NS_DRAWINGML, NS_R } from '../ooxml/namespaces.js';
 import {
   SLIDE_WIDTH,
@@ -29,12 +29,25 @@ export function buildPresentationXml(
   slideRelIds: string[],
   slideMasterRelId: string,
   _themeRelId: string,
+  embeddedFonts: Array<{ typeface: string; relId: string }> = [],
 ): string {
   const sldIdList: string[] = [];
   for (let i = 0; i < slideCount; i++) {
     // Slide IDs start at 256 (PowerPoint convention)
     sldIdList.push(`<p:sldId id="${256 + i}" r:id="${slideRelIds[i]}"/>`);
   }
+  const embeddedFontList =
+    embeddedFonts.length > 0
+      ? `<p:embeddedFontLst>${embeddedFonts
+          .map(
+            ({ typeface, relId }) =>
+              `<p:embeddedFont>` +
+              `<p:font typeface="${escapeXml(typeface)}" charset="0" pitchFamily="34"/>` +
+              `<p:regular r:id="${escapeXml(relId)}"/>` +
+              `</p:embeddedFont>`,
+          )
+          .join('')}</p:embeddedFontLst>`
+      : '';
 
   return (
     xmlDeclaration() +
@@ -46,6 +59,7 @@ export function buildPresentationXml(
     `<p:sldIdLst>${sldIdList.join('')}</p:sldIdLst>` +
     `<p:sldSz cx="${SLIDE_WIDTH}" cy="${SLIDE_HEIGHT}" type="screen16x9"/>` +
     `<p:notesSz cx="${SLIDE_HEIGHT}" cy="${SLIDE_WIDTH}"/>` +
+    embeddedFontList +
     `</p:presentation>`
   );
 }

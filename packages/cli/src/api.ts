@@ -49,11 +49,13 @@ import { CapturedFrameCollector } from './util/capturedFrameBudget.js';
 import { resolveAppliedCoverPreRoll } from './util/coverPreRoll.js';
 import { createMediaBudget } from './util/mediaBudget.js';
 import { GIF_EXPORT_DEFAULTS } from './util/nativeEncoder.js';
+import { selectStandalonePlayerVariant } from './util/playerBundle.js';
 import { runFfmpeg } from './util/runFfmpeg.js';
 import { createCliRegistry } from './registry.js';
 import type { GifFormatOptions, Mp4FormatOptions } from './registry.js';
 
 let playerBundlePromise: Promise<string> | undefined;
+let fullPlayerBundlePromise: Promise<string> | undefined;
 
 function loadPlayerBundle(): Promise<string> {
   playerBundlePromise ??= readFile(
@@ -61,6 +63,14 @@ function loadPlayerBundle(): Promise<string> {
     'utf8',
   );
   return playerBundlePromise;
+}
+
+function loadFullPlayerBundle(): Promise<string> {
+  fullPlayerBundlePromise ??= readFile(
+    new URL('../dist/squisq-player.full.global.js', import.meta.url),
+    'utf8',
+  );
+  return fullPlayerBundlePromise;
 }
 
 // Re-export utility types and functions callers may need
@@ -353,7 +363,9 @@ async function captureDocFrames(
 
   onProgress?.('generating render HTML', 10);
   signal?.throwIfAborted();
-  const playerBundle = await loadPlayerBundle();
+  const playerBundle = await (selectStandalonePlayerVariant(doc) === 'full'
+    ? loadFullPlayerBundle()
+    : loadPlayerBundle());
   signal?.throwIfAborted();
   const renderHtml = generateRenderHtml(doc, {
     playerScript: playerBundle,
