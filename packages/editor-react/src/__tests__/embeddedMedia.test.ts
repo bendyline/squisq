@@ -3,6 +3,8 @@ import { parseMarkdown } from '@bendyline/squisq/markdown';
 import { markdownToDoc } from '@bendyline/squisq/doc';
 import {
   collectEmbeddedMedia,
+  collectEmbeddedMediaSchedule,
+  collectTimelinePlaybackSchedule,
   collectEmbeddedVideoSchedule,
   mediaKindFromUrl,
 } from '../embeddedMedia';
@@ -78,5 +80,59 @@ describe('collectEmbeddedVideoSchedule', () => {
       articleId: 't',
     });
     expect(collectEmbeddedVideoSchedule(doc)).toEqual([]);
+  });
+});
+
+describe('collectTimelinePlaybackSchedule', () => {
+  it('includes embedded audio and video so every audible timeline source can mix', () => {
+    const doc = markdownToDoc(
+      parseMarkdown(
+        '# Intro {duration=8}\n\n<audio src="audio/music.mp3"></audio>\n\n<video src="video/camera.webm"></video>\n',
+      ),
+      { articleId: 't' },
+    );
+
+    expect(collectEmbeddedMediaSchedule(doc)).toEqual([
+      expect.objectContaining({ kind: 'audio', src: 'audio/music.mp3' }),
+      expect.objectContaining({ kind: 'video', src: 'video/camera.webm' }),
+    ]);
+
+    const playback = collectTimelinePlaybackSchedule(doc, []);
+    expect(playback).toEqual([
+      expect.objectContaining({ kind: 'audio', src: 'audio/music.mp3' }),
+      expect.objectContaining({ kind: 'video', src: 'video/camera.webm' }),
+    ]);
+  });
+
+  it('adds legacy narration once when its source is not already scheduled', () => {
+    const doc = markdownToDoc(parseMarkdown('# Intro {duration=8}\n\nBody.\n'), {
+      articleId: 't',
+    });
+    doc.audio.segments = [
+      { src: 'audio/take.mp3', name: 'Take', startTime: 1, duration: 5 },
+      { src: 'audio/other.mp3', name: 'Other', startTime: 2, duration: 3 },
+    ];
+    const scheduled = [
+      {
+        id: 'scheduled-take',
+        kind: 'audio' as const,
+        src: 'audio/take.mp3',
+        absoluteStart: 1,
+        absoluteEnd: 6,
+        sourceIn: 0,
+        anchor: 'document' as const,
+      },
+    ];
+
+    const playback = collectTimelinePlaybackSchedule(doc, scheduled);
+    expect(playback.filter((clip) => clip.src === 'audio/take.mp3')).toHaveLength(1);
+    expect(playback).toContainEqual(
+      expect.objectContaining({
+        id: 'narration:1',
+        src: 'audio/other.mp3',
+        absoluteStart: 2,
+        absoluteEnd: 5,
+      }),
+    );
   });
 });

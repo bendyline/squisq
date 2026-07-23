@@ -48,7 +48,9 @@ export async function buildMixedAudioTrack(
   signal?: AbortSignal,
 ): Promise<Uint8Array | null> {
   signal?.throwIfAborted();
-  const timeline = computeAudioTimeline(doc, coverPreRoll);
+  // The native mixer currently consumes authored audio files. Browser MP4
+  // export additionally demuxes the audio stream carried by video clips.
+  const timeline = computeAudioTimeline(doc, coverPreRoll, { includeVideoAudio: false });
   if (timeline.length === 0) return null;
 
   // Load each clip's bytes, caching reads by `src` (a src may back several clips).

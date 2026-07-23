@@ -44,6 +44,44 @@ describe('readInput', () => {
     expect(docContent).to.be.a('string').that.includes('# Test Document');
   });
 
+  it('hydrates referenced sibling image, audio, font, and timing assets without escaping the source directory', async () => {
+    const sourceDir = join(tempDir, 'bare-source');
+    await mkdir(join(sourceDir, 'assets'), { recursive: true });
+    await mkdir(join(sourceDir, 'fonts'), { recursive: true });
+    await writeFile(join(sourceDir, 'assets', 'hero.svg'), '<svg></svg>');
+    await writeFile(join(sourceDir, 'fonts', 'report.woff2'), Buffer.from([1, 2, 3]));
+    await writeFile(join(sourceDir, 'narration.mp3'), Buffer.from([4, 5, 6]));
+    await writeFile(
+      join(sourceDir, 'narration.mp3.timing.json'),
+      JSON.stringify({ sourceText: '', bookmarks: [], duration: 1 }),
+    );
+    await writeFile(join(tempDir, 'outside.svg'), '<svg id="secret"></svg>');
+
+    const markdown = [
+      '<style>@font-face { font-family: Report; src: url("fonts/report.woff2"); }</style>',
+      '',
+      '# Bare assets',
+      '',
+      '![Hero](assets/hero.svg)',
+      '',
+      '[Narration](narration.mp3)',
+      '',
+      '![Must stay confined](../outside.svg)',
+    ].join('\n');
+    const markdownPath = join(sourceDir, 'article.md');
+    await writeFile(markdownPath, markdown);
+
+    const result = await readInput(markdownPath);
+    expect(await result.container.readFile('assets/hero.svg')).to.not.equal(null);
+    expect(await result.container.readFile('fonts/report.woff2')).to.not.equal(null);
+    expect(await result.container.readFile('narration.mp3')).to.not.equal(null);
+    expect(await result.container.readFile('narration.mp3.timing.json')).to.not.equal(null);
+    expect(await result.container.readFile('../outside.svg')).to.equal(null);
+    expect((await result.container.listFiles()).map((entry) => entry.path)).to.not.include(
+      '../outside.svg',
+    );
+  });
+
   it('preserves the exact reason of a pre-aborted read', async () => {
     const controller = new AbortController();
     const reason = new Error('caller cancelled input read');

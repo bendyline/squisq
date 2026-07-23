@@ -9,6 +9,8 @@
 
 import { describe, it, expect } from 'vitest';
 import type { Doc, Block } from '@bendyline/squisq/schemas';
+import { markdownToDoc } from '@bendyline/squisq/doc';
+import { parseMarkdown } from '@bendyline/squisq/markdown';
 import { computeAudioTimeline } from '../audioTimeline.js';
 
 function block(over: Partial<Block> & Pick<Block, 'id' | 'startTime' | 'duration'>): Block {
@@ -131,7 +133,7 @@ describe('computeAudioTimeline', () => {
     ]);
   });
 
-  it('ignores video clips and zero-length audio', () => {
+  it('includes the audio stream carried by scheduled video clips', () => {
     const doc = docWith({
       duration: 10,
       blocks: [
@@ -154,7 +156,51 @@ describe('computeAudioTimeline', () => {
         }),
       ],
     });
-    expect(computeAudioTimeline(doc)).toEqual([]);
+    expect(computeAudioTimeline(doc)).toEqual([
+      {
+        src: 'video/clip.mp4',
+        startSec: 0,
+        sourceInSec: 0,
+        durationSec: 10,
+        sourceKind: 'video',
+      },
+    ]);
+  });
+
+  it('includes video rendered from block content/template layers', () => {
+    const doc = markdownToDoc(
+      parseMarkdown('# Camera\n\n<video src="video/camera.webm" controls></video>'),
+      { generateCoverBlock: false },
+    );
+
+    expect(computeAudioTimeline(doc)).toEqual([
+      {
+        src: 'video/camera.webm',
+        startSec: 0,
+        sourceInSec: 0,
+        durationSec: doc.blocks[0].duration,
+        sourceKind: 'video',
+      },
+    ]);
+  });
+
+  it('can retain audio-only scheduling for consumers that cannot demux video', () => {
+    const doc = docWith({
+      duration: 10,
+      blocks: [
+        block({
+          id: 'b1',
+          startTime: 0,
+          duration: 10,
+          media: [{ id: 'v', src: 'video/clip.mp4', kind: 'video', startAt: 0, anchor: 'block' }],
+        }),
+      ],
+    });
+    expect(
+      computeAudioTimeline(doc, 0, {
+        includeVideoAudio: false,
+      }),
+    ).toEqual([]);
   });
 
   it('combines narration and media in one timeline', () => {

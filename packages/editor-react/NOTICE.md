@@ -9,6 +9,8 @@ Third-party components remain under their respective license terms.
 | Package                           | Version              | License                       | Repository                                    |
 | --------------------------------- | -------------------- | ----------------------------- | --------------------------------------------- |
 | @fortawesome/fontawesome-free     | 7.2.0                | CC-BY-4.0 AND OFL-1.1 AND MIT | https://github.com/FortAwesome/Font-Awesome   |
+| @tiptap/core                      | 2.27.2               | MIT                           | https://github.com/ueberdosis/tiptap          |
+| @tiptap/extension-heading         | 2.27.2               | MIT                           | https://github.com/ueberdosis/tiptap          |
 | @tiptap/extension-image           | 2.27.2               | MIT                           | https://github.com/ueberdosis/tiptap          |
 | @tiptap/extension-link            | 2.27.2               | MIT                           | https://github.com/ueberdosis/tiptap          |
 | @tiptap/extension-mention         | 2.27.2               | MIT                           | https://github.com/ueberdosis/tiptap          |

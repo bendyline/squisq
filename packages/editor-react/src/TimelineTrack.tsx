@@ -34,7 +34,7 @@ import {
   type ClipSpec,
   type MediaClipPatch,
 } from './timelineSource';
-import { collectEmbeddedMedia } from './embeddedMedia';
+import { collectEmbeddedMedia, collectTimelinePlaybackSchedule } from './embeddedMedia';
 import { BlockThumbnail } from './TimelineBlockPreview';
 import { resolveBlockVisual } from './resolveBlockVisual';
 import { useTimelineClock, type TimelineClock } from './useTimelineClock';
@@ -187,6 +187,8 @@ function headingLine(block: Block): number | undefined {
 
 export interface TimelineTrackProps {
   height?: number;
+  /** Base path used when a media source is not resolved by MediaContext. */
+  basePath?: string;
   /**
    * Doc used for bar geometry / timing. Callers pass the narration-timed
    * projection so the track matches what actually plays; falls back to the
@@ -198,16 +200,19 @@ export interface TimelineTrackProps {
   clock?: TimelineClock;
   /** Reuse an already-resolved schedule instead of deriving it from the doc. */
   schedule?: ScheduledClip[];
-  /** Whether the docked video monitor is currently visible. */
+  /**
+   * @deprecated Preview panes are visual-only and no longer take audio
+   * ownership. Retained so existing callers remain source-compatible.
+   */
   videoVisible?: boolean;
 }
 
 export function TimelineTrack({
   height = 160,
+  basePath = '/',
   doc: docProp,
   clock,
   schedule,
-  videoVisible = false,
 }: TimelineTrackProps) {
   const {
     doc: contextDoc,
@@ -248,13 +253,18 @@ export function TimelineTrack({
     [doc],
   );
   const clips = schedule ?? derivedClips;
+  const playbackClips = useMemo(
+    () => (doc ? collectTimelinePlaybackSchedule(doc, clips) : clips),
+    [clips, doc],
+  );
   const total = useMemo(() => (doc ? getDocPlaybackDuration(doc) : 0), [doc]);
   const width = Math.max(total * pxPerSecond, 200);
 
   // Real-time playback clock for the playhead + media. Starting playback also
   // drops any in-progress edit so the playhead drives.
   const internalClock = useTimelineClock(total);
-  const { currentTime, isPlaying, play, pause, seek } = clock ?? internalClock;
+  const activeClock = clock ?? internalClock;
+  const { currentTime, isPlaying, play, pause, seek } = activeClock;
   const startPlay = useCallback(() => {
     setDrag(null);
     play();
@@ -961,16 +971,16 @@ export function TimelineTrack({
         </div>
       </div>
 
-      {/* Off-screen host: plays timed media in sync with the clock. When the
-          video monitor is open it owns video playback, so this host retains
-          only audio and avoids mounting duplicate video elements. */}
-      <div className="squisq-timeline-media-host" aria-hidden>
+      {/* Single audio owner for Timeline playback. Preview panes stay muted,
+          while this off-screen host plays every scheduled/embedded audio or
+          video source. Concurrent audible clips are mixed by the browser. */}
+      <div ref={activeClock.registerMediaHost} className="squisq-timeline-media-host" aria-hidden>
         <MediaContext.Provider value={mediaProvider ?? null}>
           <MediaClipLayer
-            schedule={videoVisible ? clips.filter((clip) => clip.kind === 'audio') : clips}
+            schedule={playbackClips}
             currentTime={currentTime}
             isPlaying={isPlaying}
-            basePath="/"
+            basePath={basePath}
           />
         </MediaContext.Provider>
       </div>

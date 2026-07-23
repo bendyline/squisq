@@ -47,6 +47,7 @@ vi.mock('@bendyline/squisq-react', async (importOriginal) => {
         data-controls={props.showControls ? 'true' : 'false'}
         data-cover={String(props.coverVisible)}
         data-loop={String(props.loop)}
+        data-muted={String(props.muted)}
       />
     );
   }
@@ -98,6 +99,7 @@ describe('PreviewPanel presentation audience', () => {
 
     await waitFor(() => {
       expect(screen.getByTestId('mock-doc-player').dataset.loop).toBe('true');
+      expect(screen.getByTestId('mock-doc-player').dataset.muted).toBe('false');
     });
   });
 
@@ -137,6 +139,7 @@ describe('PreviewPanel presentation audience', () => {
       expect(audience).toBeTruthy();
       expect(audience?.dataset.controls).toBe('false');
       expect(audience?.dataset.cover).toBe('true');
+      expect(audience?.dataset.muted).toBe('true');
     });
   });
 });

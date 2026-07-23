@@ -374,8 +374,8 @@ export interface VideoExportResult {
   /**
    * Why audio is absent, when `audioIncluded` is false. `null` means the doc
    * simply had no audio (not a failure); a non-null string explains a genuine
-   * capability shortfall or runtime failure. Audio problems never fail the
-   * export — the video always completes.
+   * capability shortfall or runtime failure. The default `require` policy
+   * fails the export instead of returning a misleading video-only success.
    */
   audioSkippedReason: string | null;
   /** Error message (populated when state === 'error') */
@@ -663,11 +663,11 @@ export function useVideoExport(options: UseVideoExportOptions = {}): VideoExport
             'The browser did not finish checking WebCodecs support.',
           ).catch(() => false));
 
-        // ── Audio: tier selection + (best-effort) render ──────────
+        // ── Audio: tier selection + render ───────────────────────
         // The audio timeline uses the exact rendered cover-frame duration, so
-        // story frame zero and the first authored sound stay aligned. Operations are
-        // wrapped so a failure degrades to a silent video with a reason —
-        // audio never aborts the export.
+        // story frame zero and the first authored sound stay aligned. Scheduled
+        // video sources participate too: their audio stream is demuxed into the
+        // composed MP4 instead of being lost during raster frame capture.
         const audioBitrate = (QUALITY_PRESETS[quality] ?? QUALITY_PRESETS.normal).audioBitrate;
         // GIF has no audio track. An empty timeline skips preparation and
         // muxing without reporting the format limitation as an export error.
@@ -723,6 +723,9 @@ export function useVideoExport(options: UseVideoExportOptions = {}): VideoExport
                 totalAudioDur,
                 EXPORT_AUDIO_SAMPLE_RATE,
               );
+              if (!renderedAudio) {
+                audioReasonLocal = 'No included video source contained a decodable audio track.';
+              }
             }
           } catch (audioErr: unknown) {
             renderedAudio = null;

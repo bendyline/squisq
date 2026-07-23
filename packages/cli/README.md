@@ -177,17 +177,16 @@ const result = await convert({ kind: 'markdown', markdown: '# Hello' }, 'docx');
 
 ```ts
 import { renderDocToMp4, readInput } from '@bendyline/squisq-cli/api';
-import { markdownToDoc } from '@bendyline/squisq/doc';
 
 // Load a document from disk (.md, .zip/.dbk, folder, or Doc .json)
 const input = await readInput('./my-article.md');
 
-// readInput returns { container, markdownDoc, doc? } — doc is only set for
-// JSON input, so build the Doc from markdown when needed:
-const doc = input.doc ?? markdownToDoc(input.markdownDoc!);
+// `doc` is always normalized and ready to render. `markdownDoc` is present
+// only when the source was markdown-shaped; `sourceFormat` identifies the input.
+const { doc, container, markdownDoc, sourceFormat } = input;
 
 // Render to MP4
-const result = await renderDocToMp4(doc, input.container, {
+const result = await renderDocToMp4(doc, container, {
   outputPath: './output.mp4',
   fps: 30, // default 30
   quality: 'high', // 'draft' | 'normal' | 'high' (default 'normal')
@@ -269,7 +268,7 @@ await extractThumbnails({
 
 ### Other exports
 
-- `readInput(inputPath)` → `{ container: MemoryContentContainer, markdownDoc: MarkdownDocument | null, doc?: Doc }`
+- `readInput(inputPath)` → `{ doc: Doc, container: ContentContainer, markdownDoc?: MarkdownDocument, sourceFormat: FormatId }`
 - `MemoryContentContainer` (re-export from `@bendyline/squisq/storage`)
 - `VideoQuality`, `VideoOrientation` types (re-exports from `@bendyline/squisq-video`)
 

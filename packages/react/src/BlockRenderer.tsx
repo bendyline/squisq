@@ -49,6 +49,8 @@ interface BlockRendererProps {
   viewport?: ViewportDimensions;
   /** Whether the doc is currently playing (controls video playback) */
   isPlaying?: boolean;
+  /** Silence audio carried by video layers. */
+  muted?: boolean;
   /**
    * Whether to render block transitions and layer animations (default: true).
    * Disabling this only removes authored/render-style motion; timed video
@@ -68,6 +70,7 @@ export function BlockRenderer({
   transition,
   viewport = DEFAULT_VIEWPORT,
   isPlaying,
+  muted = false,
   animationsEnabled = true,
   theme,
 }: BlockRendererProps) {
@@ -116,6 +119,7 @@ export function BlockRenderer({
             viewport={viewport}
             blockTime={blockTime}
             isPlaying={isPlaying}
+            muted={muted}
             animationsEnabled={animationsEnabled}
             theme={theme}
           />
@@ -131,6 +135,7 @@ interface LayerRendererProps {
   viewport: { width: number; height: number };
   blockTime: number;
   isPlaying?: boolean;
+  muted: boolean;
   animationsEnabled: boolean;
   theme?: Theme;
 }
@@ -144,6 +149,7 @@ function LayerRenderer({
   viewport,
   blockTime,
   isPlaying,
+  muted,
   animationsEnabled,
   theme,
 }: LayerRendererProps) {
@@ -186,6 +192,7 @@ function LayerRenderer({
           viewport={viewport}
           blockTime={blockTime}
           isPlaying={isPlaying}
+          muted={muted}
         />
       );
     case 'table':

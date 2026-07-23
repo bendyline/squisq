@@ -129,11 +129,13 @@ describe('VideoExportModal', () => {
         .value,
     ).toBe('enabled');
     expect(
-      (container.querySelector('[aria-label="Audio handling"]') as HTMLSelectElement).value,
-    ).toBe('require');
+      (container.querySelector('[aria-label="Include audio"]') as HTMLInputElement).checked,
+    ).toBe(true);
+    expect(container.textContent).toContain('Include audio');
+    expect(container.textContent).not.toContain('Best effort');
   });
 
-  it('allows an explicit best-effort or omit audio policy', () => {
+  it('normalizes the internal best-effort policy to the simple include-audio choice', () => {
     const { container } = render(
       <VideoExportModal
         doc={minimalDoc()}
@@ -141,10 +143,10 @@ describe('VideoExportModal', () => {
         onClose={() => {}}
       />,
     );
-    const select = container.querySelector('[aria-label="Audio handling"]') as HTMLSelectElement;
-    expect(select.value).toBe('best-effort');
-    fireEvent.change(select, { target: { value: 'omit' } });
-    expect(select.value).toBe('omit');
+    const checkbox = container.querySelector('[aria-label="Include audio"]') as HTMLInputElement;
+    expect(checkbox.checked).toBe(true);
+    fireEvent.click(checkbox);
+    expect(checkbox.checked).toBe(false);
   });
 
   it('defaults GIF export to 10fps, standard captions, and animations disabled', () => {

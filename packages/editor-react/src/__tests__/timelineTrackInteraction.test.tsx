@@ -7,7 +7,7 @@
  * bare click must never mutate the source; only an actual drag may.
  */
 
-import { describe, it, expect, afterEach } from 'vitest';
+import { describe, it, expect, afterEach, vi } from 'vitest';
 import { render, screen, act, cleanup, fireEvent } from '@testing-library/react';
 import type { Doc } from '@bendyline/squisq/schemas';
 import { EditorProvider, useEditorContext } from '../EditorContext';
@@ -91,6 +91,37 @@ describe('TimelineTrack embedded-clip interaction', () => {
     expect(screenTrack).not.toBeNull();
     expect(cameraTrack).not.toBe(screenTrack);
     expect(screen.getAllByTestId('timeline-media-track')).toHaveLength(2);
+  });
+
+  it('plays embedded videos through one unmuted host even when a preview pane is visible', () => {
+    const play = vi
+      .spyOn(window.HTMLMediaElement.prototype, 'play')
+      .mockImplementation(() => Promise.resolve());
+    vi.spyOn(window.HTMLMediaElement.prototype, 'pause').mockImplementation(() => {});
+    const multiVideoMarkdown = [
+      '# Intro {[duration=12]}',
+      '',
+      '<video src="video/camera.webm" controls></video>',
+      '<video src="video/screen.webm" controls></video>',
+      '',
+    ].join('\n');
+
+    const { container } = render(
+      <EditorProvider initialMarkdown={multiVideoMarkdown} initialView="wysiwyg">
+        <TimelineTrack videoVisible />
+      </EditorProvider>,
+    );
+
+    const playbackVideos = container.querySelectorAll(
+      '.squisq-timeline-media-host video[data-clip-id]',
+    );
+    expect(playbackVideos).toHaveLength(2);
+    expect([...playbackVideos].every((video) => !(video as HTMLVideoElement).muted)).toBe(true);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Play' }));
+    for (const video of playbackVideos) {
+      expect(play.mock.instances).toContain(video);
+    }
   });
 
   it('keeps overlapping unlocked videos visible as dedicated tracks', () => {

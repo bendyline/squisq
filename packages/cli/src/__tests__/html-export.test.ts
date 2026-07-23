@@ -136,22 +136,22 @@ describe('HTML export with images', () => {
   });
 
   it('standalone HTML with plain .md file also embeds images from container', async () => {
-    // Test with a folder input instead of container
-    const folderDir = join(tempDir, 'folder-input');
-    await mkdir(folderDir, { recursive: true });
+    const sourceDir = join(tempDir, 'bare-input');
+    await mkdir(sourceDir, { recursive: true });
 
     const md = ['# Folder Test', '', '![My Image](test-image.png)', '', 'Text content.'].join('\n');
 
-    await writeFile(join(folderDir, 'index.md'), md);
-    await writeFile(join(folderDir, 'test-image.png'), createTestPng());
+    const markdownPath = join(sourceDir, 'article.md');
+    await writeFile(markdownPath, md);
+    await writeFile(join(sourceDir, 'test-image.png'), createTestPng());
 
     const outDir = join(tempDir, 'folder-html-out');
     await mkdir(outDir, { recursive: true });
 
-    const { stderr } = await runCli('convert', folderDir, '-d', outDir, '-f', 'html');
+    const { stderr } = await runCli('convert', markdownPath, '-d', outDir, '-f', 'html');
     expect(stderr).to.include('Done.');
 
-    const htmlPath = join(outDir, `${folderDir.split(/[\\/]/).pop()}.html`);
+    const htmlPath = join(outDir, 'article.html');
     const html = await readFile(htmlPath, 'utf-8');
 
     // Image should be embedded

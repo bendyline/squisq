@@ -1418,7 +1418,7 @@ function EditorShellInner({
                 doc={timelineDoc}
                 clock={timelineClock}
                 schedule={timelineSchedule}
-                videoVisible={timelineVideoVisible || timelineCompositionVisible}
+                basePath={basePath}
               />
             )}
 

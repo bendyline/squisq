@@ -3040,9 +3040,10 @@ interface ThumbnailSpec {
 // Read a .md file, .zip/.dbk container, folder, or Doc .json into a container.
 function readInput(inputPath: string): Promise<ReadInputResult>;
 interface ReadInputResult {
-  container: MemoryContentContainer;
-  markdownDoc: MarkdownDocument | null; // null when input is a Doc JSON file
-  doc?: Doc; // present when input is .json or the container holds doc.json
+  doc: Doc; // always normalized and ready for conversion or rendering
+  container: ContentContainer;
+  markdownDoc?: MarkdownDocument; // present when the source was markdown-shaped
+  sourceFormat: FormatId; // detected registry id, or md/json/dbk/folder
 }
 
 // Re-exports

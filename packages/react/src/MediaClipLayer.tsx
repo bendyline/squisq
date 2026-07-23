@@ -275,6 +275,7 @@ function MediaClipElement({
     src,
     preload: 'auto' as const,
     'data-clip-id': clip.id,
+    'data-active': active ? 'true' : 'false',
     'data-abs-start': clip.absoluteStart,
     'data-abs-end': clip.absoluteEnd,
     'data-source-in': clip.sourceIn,
@@ -286,7 +287,6 @@ function MediaClipElement({
       <video
         {...common}
         className={`doc-player__media-video${active ? ' doc-player__media-video--active' : ''}`}
-        data-active={active ? 'true' : 'false'}
         data-video-placement={clip.placement ?? 'default'}
         muted={renderMode || muted}
         playsInline

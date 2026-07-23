@@ -683,9 +683,36 @@ export async function extractThumbnails(options: ExtractThumbnailsOptions): Prom
   const { videoPath, outputDir, slug, sizes, force, signal } = options;
   const { existsSync } = await import('node:fs');
   const { rm } = await import('node:fs/promises');
-  const { join } = await import('node:path');
+  const { isAbsolute, relative, resolve, sep } = await import('node:path');
 
   signal?.throwIfAborted();
+  if (
+    typeof slug !== 'string' ||
+    !/^[A-Za-z0-9](?:[A-Za-z0-9._-]{0,126}[A-Za-z0-9])?$/.test(slug)
+  ) {
+    throw new TypeError(
+      'Thumbnail slug must be 1–128 filename-safe characters (letters, numbers, dot, dash, or underscore) and must start and end with a letter or number.',
+    );
+  }
+  for (const [index, thumb] of sizes.entries()) {
+    if (!Number.isSafeInteger(thumb.width) || thumb.width <= 0) {
+      throw new TypeError(`Thumbnail sizes[${index}].width must be a positive integer.`);
+    }
+    if (!Number.isSafeInteger(thumb.height) || thumb.height <= 0) {
+      throw new TypeError(`Thumbnail sizes[${index}].height must be a positive integer.`);
+    }
+  }
+
+  const resolvedOutputDir = resolve(outputDir);
+  const outputPaths = sizes.map((thumb) => {
+    const outputPath = resolve(resolvedOutputDir, `${slug}-${thumb.width}x${thumb.height}.jpg`);
+    const rel = relative(resolvedOutputDir, outputPath);
+    if (rel === '..' || rel.startsWith(`..${sep}`) || isAbsolute(rel)) {
+      throw new TypeError('Thumbnail output path must remain inside outputDir.');
+    }
+    return outputPath;
+  });
+
   const ffmpegPath = (await detectFfmpegDetailed(signal))?.path ?? null;
   if (!ffmpegPath) {
     throw new Error(
@@ -699,9 +726,9 @@ export async function extractThumbnails(options: ExtractThumbnailsOptions): Prom
 
   const generatedPaths: string[] = [];
   try {
-    for (const thumb of sizes) {
+    for (const [index, thumb] of sizes.entries()) {
       signal?.throwIfAborted();
-      const outputPath = join(outputDir, `${slug}-${thumb.width}x${thumb.height}.jpg`);
+      const outputPath = outputPaths[index]!;
       if (!force && existsSync(outputPath)) continue;
 
       try {

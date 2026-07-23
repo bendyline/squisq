@@ -285,6 +285,40 @@ function DocPlayerContent({
     [doc, clipDurations],
   );
 
+  /**
+   * Start audible timeline media while the browser still associates the call
+   * with the user's Play gesture. Waiting for the `isPlaying` render and then
+   * calling `play()` from VideoLayer/MediaClipLayer effects loses Chromium's
+   * transient user activation. The resulting NotAllowedError used to leave a
+   * recorded camera clip on its first frame and its scheduled narration mute.
+   *
+   * The normal follower effects still own seeking, drift correction, and
+   * pause/end behavior; this is only the gesture-time playback unlock.
+   */
+  const startActiveTimelineMedia = useCallback(() => {
+    if (renderMode) return;
+    const root = containerRef.current;
+    if (!root) return;
+
+    const activeMedia = root.querySelectorAll<HTMLMediaElement>(
+      '.doc-player__block--active video[data-clip-start], [data-clip-id][data-active="true"]',
+    );
+    activeMedia.forEach((element) => {
+      const playPromise = element.play();
+      if (playPromise) playPromise.catch(() => {});
+    });
+  }, [renderMode]);
+
+  const playWithTimelineMedia = useCallback(() => {
+    startActiveTimelineMedia();
+    return play();
+  }, [play, startActiveTimelineMedia]);
+
+  const toggleWithTimelineMedia = useCallback(() => {
+    if (!isPlaying) startActiveTimelineMedia();
+    return toggle();
+  }, [isPlaying, startActiveTimelineMedia, toggle]);
+
   // Refs for frequently-changing values used in the keyboard handler,
   // so the handler callback doesn't need to be recreated every frame.
   const currentTimeRef = useRef(currentTime);
@@ -348,14 +382,14 @@ function DocPlayerContent({
       )
         return;
       containerRef.current?.focus({ preventScroll: true });
-      toggle();
+      toggleWithTimelineMedia();
       // Show visual feedback (show the state we're transitioning TO)
       const nextState = isPlaying ? 'pause' : 'play';
       setTapFeedback(nextState);
       clearTimeout(tapFeedbackTimer.current);
       tapFeedbackTimer.current = setTimeout(() => setTapFeedback(null), 600);
     },
-    [renderMode, toggle, isPlaying, isSlideshowMode, isLinearMode],
+    [renderMode, toggleWithTimelineMedia, isPlaying, isSlideshowMode, isLinearMode],
   );
 
   // Resolve surface (light/dark paper) and apply it to the theme before
@@ -548,9 +582,9 @@ function DocPlayerContent({
   useEffect(() => {
     if (isAudioReady && autoPlay && !hasAutoPlayed.current) {
       hasAutoPlayed.current = true;
-      play();
+      playWithTimelineMedia();
     }
-  }, [isAudioReady, autoPlay, play]);
+  }, [isAudioReady, autoPlay, playWithTimelineMedia]);
 
   // Callback for time updates
   useEffect(() => {
@@ -876,14 +910,21 @@ function DocPlayerContent({
   // Build shared playback actions for extracted controls
   const playbackActions: PlaybackActions = useMemo(
     () => ({
-      toggle,
+      toggle: toggleWithTimelineMedia,
       restart,
       seekTo,
       setCaptionsEnabled,
       cycleCaptionMode,
       toggleFullscreen: onFullscreenToggle,
     }),
-    [toggle, restart, seekTo, setCaptionsEnabled, cycleCaptionMode, onFullscreenToggle],
+    [
+      toggleWithTimelineMedia,
+      restart,
+      seekTo,
+      setCaptionsEnabled,
+      cycleCaptionMode,
+      onFullscreenToggle,
+    ],
   );
 
   // Slide navigation actions for slideshow mode
@@ -990,8 +1031,8 @@ function DocPlayerContent({
   // Fires every time playbackActions change so the external sidebar always holds
   // fresh function references (toggle closes over isPlaying, so it changes often).
   useEffect(() => {
-    onControlsReady?.({ play, pause, ...playbackActions });
-  }, [play, pause, playbackActions, onControlsReady]);
+    onControlsReady?.({ play: playWithTimelineMedia, pause, ...playbackActions });
+  }, [playWithTimelineMedia, pause, playbackActions, onControlsReady]);
 
   // Extract display title from a block (handles both template and expanded blocks)
   const getBlockTitle = useCallback((block: Block): string => {
@@ -1146,7 +1187,7 @@ function DocPlayerContent({
         switch (e.key) {
           case ' ':
             e.preventDefault();
-            toggle();
+            toggleWithTimelineMedia();
             break;
           case 'ArrowRight':
             e.preventDefault();
@@ -1159,7 +1200,14 @@ function DocPlayerContent({
         }
       }
     },
-    [isSlideshowMode, isLinearMode, toggle, seekTo, slideNavActions, onFullscreenToggle],
+    [
+      isSlideshowMode,
+      isLinearMode,
+      toggleWithTimelineMedia,
+      seekTo,
+      slideNavActions,
+      onFullscreenToggle,
+    ],
   );
 
   const handleKeyDown = useCallback(
@@ -1260,6 +1308,7 @@ function DocPlayerContent({
               basePath={basePath}
               isEntering={false}
               viewport={activeViewport}
+              muted={renderMode || muted}
               animationsEnabled={animationsEnabled}
               theme={effectiveTheme}
             />
@@ -1280,21 +1329,36 @@ function DocPlayerContent({
               isExiting={true}
               transition={currentBlock?.transition}
               viewport={activeViewport}
+              muted={renderMode || muted}
               animationsEnabled={animationsEnabled}
               theme={effectiveTheme}
             />
           </div>
         )}
 
-        {/* Current block */}
-        {!showCoverBlock && currentBlock && (
+        {/* Current block
+
+            Keep it mounted underneath the managed cover. Embedded videos need
+            to exist when the user presses Play so Chromium can authorize their
+            audible playback in that gesture. Previously the whole block was
+            mounted only after the three-second cover grace period, leaving
+            layout/supplemental videos stuck on their first frame. */}
+        {currentBlock && (
           <div
             key={currentBlock.id}
             className={`doc-player__block doc-player__block--active${
               swipe.phase !== 'idle' ? ` doc-player__block--${swipe.phase}` : ''
             }`}
+            aria-hidden={showCoverBlock || undefined}
             style={
-              swipe.phase !== 'idle' ? { transform: `translateX(${swipe.offsetPx}px)` } : undefined
+              showCoverBlock || swipe.phase !== 'idle'
+                ? {
+                    ...(swipe.phase !== 'idle'
+                      ? { transform: `translateX(${swipe.offsetPx}px)` }
+                      : {}),
+                    ...(showCoverBlock ? { opacity: 0, pointerEvents: 'none' } : {}),
+                  }
+                : undefined
             }
           >
             <BlockRenderer
@@ -1304,6 +1368,7 @@ function DocPlayerContent({
               isEntering={animationsEnabled && isEntering}
               viewport={activeViewport}
               isPlaying={isPlaying}
+              muted={renderMode || muted}
               animationsEnabled={animationsEnabled}
               theme={effectiveTheme}
             />

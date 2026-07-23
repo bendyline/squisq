@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, it } from 'mocha';
 import { expect } from 'chai';
-import { access, chmod, mkdir, rm, writeFile } from 'node:fs/promises';
+import { access, chmod, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { extractThumbnails } from '../api.js';
@@ -44,6 +44,72 @@ describe('extractThumbnails cancellation', () => {
     }
 
     expect(caught).to.equal(reason);
+  });
+
+  it('rejects POSIX, Windows, mixed-separator, drive, and UNC path slugs before FFmpeg detection', async () => {
+    const unsafe = [
+      '../escaped',
+      '..\\escaped',
+      'mixed/..\\escaped',
+      '/absolute',
+      'C:\\absolute',
+      '\\\\server\\share',
+      'folder/name',
+      'folder\\name',
+      '.',
+      '..',
+      'bad:slug',
+    ];
+
+    for (const slug of unsafe) {
+      let caught: unknown;
+      try {
+        await extractThumbnails({
+          videoPath: join(tempDir, 'input.mp4'),
+          outputDir: tempDir,
+          slug,
+          sizes: [{ name: 'preview', width: 640, height: 360, filter: 'scale=640:360' }],
+        });
+      } catch (error: unknown) {
+        caught = error;
+      }
+      expect(caught, slug).to.be.instanceOf(TypeError);
+      expect((caught as Error).message, slug).to.contain('Thumbnail slug');
+    }
+  });
+
+  it('preserves a pre-existing thumbnail when force is false', async function () {
+    if (process.platform === 'win32') this.skip();
+
+    const invokedPath = join(tempDir, 'invoked');
+    const fakeFfmpeg = join(tempDir, 'fake-ffmpeg-skip');
+    await writeFile(
+      fakeFfmpeg,
+      '#!/bin/sh\n' +
+        'if [ "$1" = "-version" ]; then echo "ffmpeg version 0.0-test"; exit 0; fi\n' +
+        `touch "${invokedPath}"\n` +
+        'exit 1\n',
+    );
+    await chmod(fakeFfmpeg, 0o755);
+    process.env.SQUISQ_FFMPEG = fakeFfmpeg;
+
+    const outputPath = join(tempDir, 'preview-640x360.jpg');
+    await writeFile(outputPath, 'original');
+    await extractThumbnails({
+      videoPath: join(tempDir, 'input.mp4'),
+      outputDir: tempDir,
+      slug: 'preview',
+      sizes: [{ name: 'preview', width: 640, height: 360, filter: 'scale=640:360' }],
+    });
+
+    expect(await readFile(outputPath, 'utf8')).to.equal('original');
+    let invoked = true;
+    try {
+      await access(invokedPath);
+    } catch {
+      invoked = false;
+    }
+    expect(invoked).to.equal(false);
   });
 
   it('terminates an active FFmpeg child and preserves the exact reason', async function () {
