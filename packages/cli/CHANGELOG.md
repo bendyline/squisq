@@ -1,3 +1,16 @@
+## @bendyline/squisq-cli [2.4.3](https://github.com/bendyline/squisq/compare/@bendyline/squisq-cli@2.4.2...@bendyline/squisq-cli@2.4.3) (2026-07-23)
+
+### Bug Fixes
+
+* Update audio support throughout ([#35](https://github.com/bendyline/squisq/issues/35)) ([26b2d0f](https://github.com/bendyline/squisq/commit/26b2d0f8bbe906d1e821d15fd11654bccc853305))
+
+
+### Dependencies
+
+* **@bendyline/squisq:** upgraded to 2.4.3
+* **@bendyline/squisq-formats:** upgraded to 2.3.7
+* **@bendyline/squisq-video:** upgraded to 2.2.7
+
 ## @bendyline/squisq-cli [2.4.2](https://github.com/bendyline/squisq/compare/@bendyline/squisq-cli@2.4.1...@bendyline/squisq-cli@2.4.2) (2026-07-22)
 
 ### Bug Fixes
