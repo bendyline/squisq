@@ -6,6 +6,19 @@ function formatMediaTime(time: number): string {
   return Number.isFinite(time) ? `${time.toFixed(3)}s` : String(time);
 }
 
+function reachableMediaTime(video: HTMLVideoElement, targetTime: number): number {
+  const duration = video.duration;
+  if (!Number.isFinite(duration)) return targetTime;
+  return Math.max(0, Math.min(targetTime, duration));
+}
+
+function isAtReachableMediaTime(video: HTMLVideoElement, targetTime: number): boolean {
+  return (
+    Math.abs(video.currentTime - reachableMediaTime(video, targetTime)) <=
+    VIDEO_TIME_TOLERANCE_SECONDS
+  );
+}
+
 function isVisiblyPresented(video: HTMLVideoElement): boolean {
   if (!video.isConnected) return false;
   const view = video.ownerDocument.defaultView;
@@ -44,7 +57,7 @@ export function seekVideoToFrame(
   const alreadyReady =
     !video.seeking &&
     video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA &&
-    Math.abs(video.currentTime - targetTime) <= VIDEO_TIME_TOLERANCE_SECONDS;
+    isAtReachableMediaTime(video, targetTime);
   if (alreadyReady) return Promise.resolve();
 
   return new Promise<void>((resolve, reject) => {
@@ -75,7 +88,9 @@ export function seekVideoToFrame(
         new Error(
           `Video frame did not become ready at ${formatMediaTime(targetTime)} ` +
             `within ${timeoutMs}ms ` +
-            `(currentTime=${formatMediaTime(video.currentTime)}, readyState=${video.readyState}, ` +
+            `(currentTime=${formatMediaTime(video.currentTime)}, ` +
+            `reachableTime=${formatMediaTime(reachableMediaTime(video, targetTime))}, ` +
+            `duration=${formatMediaTime(video.duration)}, readyState=${video.readyState}, ` +
             `seeking=${String(video.seeking)}, visible=${String(isVisiblyPresented(video))}).`,
         ),
       );
@@ -85,7 +100,7 @@ export function seekVideoToFrame(
         settled ||
         video.seeking ||
         video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA ||
-        Math.abs(video.currentTime - targetTime) > VIDEO_TIME_TOLERANCE_SECONDS
+        !isAtReachableMediaTime(video, targetTime)
       ) {
         return;
       }
@@ -118,7 +133,7 @@ export function seekVideoToFrame(
     video.addEventListener('canplay', handleMediaReady);
 
     try {
-      video.currentTime = targetTime;
+      video.currentTime = reachableMediaTime(video, targetTime);
       // Some engines complete an in-buffer seek synchronously without firing
       // another event. The microtask observes the final seeking/readyState.
       queueMicrotask(requestPresentedFrame);
