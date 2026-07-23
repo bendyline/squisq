@@ -1,3 +1,14 @@
+## @bendyline/squisq-editor-react [2.4.4](https://github.com/bendyline/squisq/compare/@bendyline/squisq-editor-react@2.4.3...@bendyline/squisq-editor-react@2.4.4) (2026-07-23)
+
+### Bug Fixes
+
+* Audio fixes 2 ([#36](https://github.com/bendyline/squisq/issues/36)) ([7fe05ad](https://github.com/bendyline/squisq/commit/7fe05ad11cd700ad8d18744b5a66de806198d5b1))
+
+
+### Dependencies
+
+* **@bendyline/squisq-react:** upgraded to 2.4.4
+
 ## @bendyline/squisq-editor-react [2.4.3](https://github.com/bendyline/squisq/compare/@bendyline/squisq-editor-react@2.4.2...@bendyline/squisq-editor-react@2.4.3) (2026-07-23)
 
 ### Bug Fixes
