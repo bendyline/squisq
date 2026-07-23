@@ -51,6 +51,7 @@ export function TimelineCompositionPanel({
     workspaceContainer,
     documentTitleFromFileName(fileName),
   );
+  const contentDoc = projection?.contentDoc ?? null;
   const playerDoc = projection?.playerDoc ?? null;
   const totalDuration = useMemo(
     () => (playerDoc ? getDocPlaybackDuration(playerDoc) : 0),
@@ -120,6 +121,11 @@ export function TimelineCompositionPanel({
               doc={playerDoc}
               basePath={basePath}
               audioController={audioController}
+              // The timeline clock already follows the projected block
+              // schedule. A generated preview track is only its duration
+              // source; treating it as narration would pace the slides a
+              // second time and can compact a short trailing block away.
+              audioMode={contentDoc?.audio?.segments?.length ? 'media' : 'synthetic'}
               showControls={false}
               showScrubber={false}
               muted

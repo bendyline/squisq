@@ -103,6 +103,23 @@ describe('seekVideoToFrame', () => {
     await expect(pending).resolves.toBeUndefined();
   });
 
+  it('observes a completed hidden seek when the browser omits readiness events', async () => {
+    vi.useFakeTimers();
+    const { video, setSeeking, setReadyState } = controllableVideo();
+    const captureSurface = document.createElement('div');
+    captureSurface.style.opacity = '0';
+    captureSurface.appendChild(video);
+    document.body.appendChild(captureSurface);
+
+    const pending = seekVideoToFrame(video, 3, 250);
+    setReadyState(HTMLMediaElement.HAVE_ENOUGH_DATA);
+    setSeeking(false);
+
+    await vi.advanceTimersByTimeAsync(16);
+    await expect(pending).resolves.toBeUndefined();
+    captureSurface.remove();
+  });
+
   it('reports a video that never produces the requested frame', async () => {
     vi.useFakeTimers();
     const { video } = controllableVideo();
