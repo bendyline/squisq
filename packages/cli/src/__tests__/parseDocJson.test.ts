@@ -14,7 +14,7 @@ describe('parseDocJson', () => {
   const valid = JSON.stringify({
     articleId: 'a',
     duration: 5,
-    blocks: [{ id: 'b1', startTime: 0, duration: 5, layers: [] }],
+    blocks: [{ id: 'b1', startTime: 0, duration: 5, audioSegment: 0, layers: [] }],
     audio: { segments: [{ src: 'audio/a.mp3', name: 'a', duration: 5, startTime: 0 }] },
   });
 
@@ -24,9 +24,10 @@ describe('parseDocJson', () => {
     expect(doc.audio.segments).to.have.length(1);
   });
 
-  it('defaults a missing audio track so downstream never sees undefined', () => {
-    const doc = parseDocJson(JSON.stringify({ articleId: 'a', blocks: [] }), 'doc.json');
-    expect(doc.audio).to.deep.equal({ segments: [] });
+  it('rejects a missing required audio track at the JSON boundary', () => {
+    const parse = () =>
+      parseDocJson(JSON.stringify({ articleId: 'a', duration: 0, blocks: [] }), 'doc.json');
+    expect(parse).to.throw(/"audio" must be an object \(field is missing\)/);
   });
 
   it('names the file and the JSON error for unparseable input', () => {
@@ -37,44 +38,79 @@ describe('parseDocJson', () => {
 
   it('rejects a non-object payload', () => {
     expect(() => parseDocJson('[]', 'doc.json')).to.throw(/expected a JSON object, got an array/);
-    expect(() => parseDocJson('"hi"', 'doc.json')).to.throw(/expected a JSON object, got string/);
+    expect(() => parseDocJson('"hi"', 'doc.json')).to.throw(/expected a JSON object/);
     expect(() => parseDocJson('null', 'doc.json')).to.throw(/expected a JSON object/);
   });
 
   it('rejects a missing blocks array with an actionable message', () => {
-    expect(() => parseDocJson(JSON.stringify({ articleId: 'a' }), 'doc.json')).to.throw(
-      /"blocks" must be an array \(field is missing\)/,
-    );
+    expect(() =>
+      parseDocJson(
+        JSON.stringify({ articleId: 'a', duration: 0, audio: { segments: [] } }),
+        'doc.json',
+      ),
+    ).to.throw(/"blocks" must be an array \(field is missing\)/);
   });
 
   it('rejects a non-array blocks field', () => {
-    expect(() => parseDocJson(JSON.stringify({ blocks: {} }), 'doc.json')).to.throw(
-      /"blocks" must be an array/,
-    );
+    expect(() =>
+      parseDocJson(
+        JSON.stringify({ articleId: 'a', duration: 0, blocks: {}, audio: { segments: [] } }),
+        'doc.json',
+      ),
+    ).to.throw(/"blocks" must be an array/);
   });
 
   it('rejects a non-object block entry', () => {
-    expect(() => parseDocJson(JSON.stringify({ blocks: ['nope'] }), 'doc.json')).to.throw(
-      /"blocks\[0\]" must be an object/,
-    );
+    expect(() =>
+      parseDocJson(
+        JSON.stringify({
+          articleId: 'a',
+          duration: 0,
+          blocks: ['nope'],
+          audio: { segments: [] },
+        }),
+        'doc.json',
+      ),
+    ).to.throw(/"blocks\[0\]" must be an object/);
+  });
+
+  it('rejects malformed required block fields and nested children', () => {
+    const malformed = JSON.stringify({
+      articleId: 'a',
+      duration: 1,
+      blocks: [{ id: 42, startTime: 0, duration: 'forever', audioSegment: 0, children: 'x' }],
+      audio: { segments: [] },
+    });
+    const parse = () => parseDocJson(malformed, 'doc.json');
+    expect(parse).to.throw(/"blocks\[0\]\.id" must be a string/);
+    expect(parse).to.throw(/"blocks\[0\]\.duration" must be a finite number/);
+    expect(parse).to.throw(/"blocks\[0\]\.children" must be an array/);
   });
 
   it('rejects a NaN duration (JSON null round-trip of NaN)', () => {
     // JSON.stringify(NaN) emits `null`, which is exactly how a NaN duration
     // reaches disk in practice.
-    expect(() => parseDocJson(JSON.stringify({ blocks: [], duration: NaN }), 'doc.json')).to.throw(
-      /"duration" must be a finite number, got null/,
-    );
+    expect(() =>
+      parseDocJson(
+        JSON.stringify({ articleId: 'a', blocks: [], duration: NaN, audio: { segments: [] } }),
+        'doc.json',
+      ),
+    ).to.throw(/"duration" must be a finite number \(got null\)/);
   });
 
   it('rejects a string duration', () => {
-    expect(() => parseDocJson(JSON.stringify({ blocks: [], duration: '5' }), 'doc.json')).to.throw(
-      /"duration" must be a finite number, got "5"/,
-    );
+    expect(() =>
+      parseDocJson(
+        JSON.stringify({ articleId: 'a', blocks: [], duration: '5', audio: { segments: [] } }),
+        'doc.json',
+      ),
+    ).to.throw(/"duration" must be a finite number \(got "5"\)/);
   });
 
   it('rejects a non-finite audio segment duration — the adelay=NaN source', () => {
     const bad = JSON.stringify({
+      articleId: 'a',
+      duration: 0,
       blocks: [],
       audio: { segments: [{ src: 'a.mp3', name: 'a', duration: NaN, startTime: 0 }] },
     });
@@ -85,6 +121,8 @@ describe('parseDocJson', () => {
 
   it('reports the index of the offending segment', () => {
     const bad = JSON.stringify({
+      articleId: 'a',
+      duration: 0,
       blocks: [],
       audio: {
         segments: [
@@ -97,11 +135,17 @@ describe('parseDocJson', () => {
   });
 
   it('rejects a malformed audio track', () => {
-    expect(() => parseDocJson(JSON.stringify({ blocks: [], audio: [] }), 'doc.json')).to.throw(
-      /"audio" must be an object/,
-    );
     expect(() =>
-      parseDocJson(JSON.stringify({ blocks: [], audio: { segments: 'x' } }), 'doc.json'),
+      parseDocJson(
+        JSON.stringify({ articleId: 'a', duration: 0, blocks: [], audio: [] }),
+        'doc.json',
+      ),
+    ).to.throw(/"audio" must be an object/);
+    expect(() =>
+      parseDocJson(
+        JSON.stringify({ articleId: 'a', duration: 0, blocks: [], audio: { segments: 'x' } }),
+        'doc.json',
+      ),
     ).to.throw(/"audio\.segments" must be an array/);
   });
 });

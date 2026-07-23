@@ -14,17 +14,34 @@
  * derives the `Doc` via `markdownToDoc()` when the source is markdown-shaped.
  */
 
-import { readFile, readdir, stat } from 'node:fs/promises';
-import { join, extname } from 'node:path';
+import { readFile, readdir, realpath, stat } from 'node:fs/promises';
+import {
+  basename,
+  dirname,
+  extname,
+  isAbsolute,
+  join,
+  posix,
+  relative,
+  resolve,
+  sep,
+  win32,
+} from 'node:path';
 import { parseMarkdown, stringifyMarkdown } from '@bendyline/squisq/markdown';
 import type { MarkdownDocument } from '@bendyline/squisq/markdown';
 import { markdownToDoc, resolveAudioMapping } from '@bendyline/squisq/doc';
-import type { Doc } from '@bendyline/squisq/schemas';
+import { resolveMediaSchedule, validateDocSchema } from '@bendyline/squisq/schemas';
+import type { Doc, DocDiagnostic, DocSchemaIssue } from '@bendyline/squisq/schemas';
 import type { ContentContainer } from '@bendyline/squisq/storage';
 import { MemoryContentContainer } from '@bendyline/squisq/storage';
 import { zipToContainer } from '@bendyline/squisq-formats/container';
 import { defaultRegistry } from '@bendyline/squisq-formats';
 import type { FormatId } from '@bendyline/squisq-formats';
+import {
+  MAX_RENDER_MEDIA_FILES,
+  MAX_RENDER_MEDIA_FILE_BYTES,
+  MAX_RENDER_MEDIA_TOTAL_BYTES,
+} from './mediaBudget.js';
 
 export interface ReadInputResult {
   /** The resolved document. Always present. */
@@ -53,6 +70,32 @@ export interface ReadInputOptions {
   inferLayouts?: boolean;
 }
 
+/** Schema failure carrying diagnostics suitable for `squisq validate --json`. */
+export class DocInputValidationError extends Error {
+  readonly diagnostics: DocDiagnostic[];
+  readonly issues: DocSchemaIssue[];
+
+  constructor(source: string, issues: DocSchemaIssue[]) {
+    const detail = issues.map(formatSchemaIssueForError).join('; ');
+    super(`${source} is not a valid squisq Doc: ${detail}`);
+    this.name = 'DocInputValidationError';
+    this.issues = issues;
+    this.diagnostics = issues.map((issue) => ({
+      severity: 'error',
+      code: 'invalid-doc-schema',
+      message: `${issue.path} ${issue.message}`,
+    }));
+  }
+}
+
+function formatSchemaIssueForError(issue: DocSchemaIssue): string {
+  if (issue.path === '$') {
+    const got = /\(got ([^)]+)\)/.exec(issue.message)?.[1] ?? 'an invalid value';
+    return `expected a JSON object, got ${got}`;
+  }
+  return `"${issue.path}" ${issue.message}`;
+}
+
 /** MIME type lookup by extension (common content types) */
 const MIME_TYPES: Record<string, string> = {
   '.md': 'text/markdown',
@@ -69,6 +112,10 @@ const MIME_TYPES: Record<string, string> = {
   '.ogg': 'audio/ogg',
   '.mp4': 'video/mp4',
   '.webm': 'video/webm',
+  '.woff': 'font/woff',
+  '.woff2': 'font/woff2',
+  '.ttf': 'font/ttf',
+  '.otf': 'font/otf',
 };
 
 /**
@@ -116,12 +163,14 @@ export async function readInput(
   throwIfAborted(options?.signal);
   const result = await readInputRaw(inputPath, options);
   throwIfAborted(options?.signal);
+  assertValidDoc(result.doc, inputPath);
   // Audio rides in the container: a document-anchored narration take
   // (`{[audio src=… anchor=document]}` + timing sidecar) re-times the
   // block timeline, and per-block audio files map into segments — so
   // `squisq convert`/`video` exports pace exactly like the editor preview.
   const doc = await resolveAudioMapping(result.doc, result.container);
   throwIfAborted(options?.signal);
+  assertValidDoc(doc, inputPath);
   return doc === result.doc ? result : { ...result, doc };
 }
 
@@ -189,11 +238,209 @@ async function readUtf8File(filePath: string, signal?: AbortSignal): Promise<str
 
 async function readMarkdownFile(filePath: string, signal?: AbortSignal): Promise<ReadInputResult> {
   const content = await readUtf8File(filePath, signal);
-  const container = new MemoryContentContainer();
-  await container.writeDocument(content);
-  throwIfAborted(signal);
   const markdownDoc = parseMarkdown(content);
-  return { doc: markdownToDoc(markdownDoc), container, markdownDoc, sourceFormat: 'md' };
+  const doc = markdownToDoc(markdownDoc);
+  const container = await buildBareMarkdownContainer(filePath, content, doc, signal);
+  return { doc, container, markdownDoc, sourceFormat: 'md' };
+}
+
+const NARRATION_EXTENSIONS = new Set(['.aac', '.flac', '.m4a', '.mp3', '.ogg', '.wav']);
+
+/**
+ * Build the same useful container shape for a bare markdown file that folder
+ * and DBK inputs already provide. Only authored references, conventional
+ * timing sidecars, and immediate sibling narration files are admitted; this
+ * avoids sweeping an arbitrary source directory (for example a repository
+ * root) into memory.
+ */
+async function buildBareMarkdownContainer(
+  filePath: string,
+  content: string,
+  doc: Doc,
+  signal?: AbortSignal,
+): Promise<MemoryContentContainer> {
+  const container = new MemoryContentContainer();
+  await container.writeDocument(content, basename(filePath));
+  throwIfAborted(signal);
+
+  const refs = collectAuthoredAssetRefs(content, doc);
+  const root = dirname(resolve(filePath));
+
+  // Preserve the long-standing sibling-audio discovery behavior of folder
+  // inputs without copying unrelated files from the whole directory tree.
+  for (const entry of await readdir(root, { withFileTypes: true })) {
+    throwIfAborted(signal);
+    if (entry.isFile() && NARRATION_EXTENSIONS.has(extname(entry.name).toLowerCase())) {
+      refs.add(entry.name);
+    }
+  }
+
+  // Narration mapping recognizes both a consolidated timing.json and
+  // per-file `<audio>.timing.json` sidecars.
+  refs.add('timing.json');
+  for (const ref of [...refs]) {
+    if (NARRATION_EXTENSIONS.has(extname(stripUrlSuffix(ref)).toLowerCase())) {
+      refs.add(`${stripUrlSuffix(ref)}.timing.json`);
+    }
+  }
+
+  const rootReal = await realpath(root);
+  let fileCount = 0;
+  let totalBytes = 0;
+  for (const authoredRef of refs) {
+    throwIfAborted(signal);
+    const safe = normalizeAssetReference(authoredRef);
+    if (!safe) continue;
+
+    const absolute = resolve(root, ...safe.split('/'));
+    if (!isContainedPath(root, absolute)) continue;
+
+    let assetReal: string;
+    let info: Awaited<ReturnType<typeof stat>>;
+    try {
+      assetReal = await realpath(absolute);
+      if (!isContainedPath(rootReal, assetReal)) continue;
+      info = await stat(assetReal);
+    } catch (error: unknown) {
+      if (isMissingFileError(error)) continue;
+      throw error;
+    }
+    if (!info.isFile()) continue;
+
+    if (info.size > MAX_RENDER_MEDIA_FILE_BYTES) {
+      throw new Error(
+        `Sibling asset "${safe}" exceeds the ${formatMiB(MAX_RENDER_MEDIA_FILE_BYTES)} ` +
+          'per-file input limit.',
+      );
+    }
+    if (fileCount + 1 > MAX_RENDER_MEDIA_FILES) {
+      throw new Error(
+        `Bare markdown input references more than ${MAX_RENDER_MEDIA_FILES} sibling assets.`,
+      );
+    }
+    if (totalBytes + info.size > MAX_RENDER_MEDIA_TOTAL_BYTES) {
+      throw new Error(
+        `Sibling assets exceed the ${formatMiB(MAX_RENDER_MEDIA_TOTAL_BYTES)} total input limit.`,
+      );
+    }
+
+    const data = await readBinaryFile(assetReal, signal);
+    // Recheck the bytes actually read in case the file changed after stat().
+    if (data.byteLength > MAX_RENDER_MEDIA_FILE_BYTES) {
+      throw new Error(
+        `Sibling asset "${safe}" exceeds the ${formatMiB(MAX_RENDER_MEDIA_FILE_BYTES)} ` +
+          'per-file input limit.',
+      );
+    }
+    if (totalBytes + data.byteLength > MAX_RENDER_MEDIA_TOTAL_BYTES) {
+      throw new Error(
+        `Sibling assets exceed the ${formatMiB(MAX_RENDER_MEDIA_TOTAL_BYTES)} total input limit.`,
+      );
+    }
+    await container.writeFile(safe, data, mimeFromExt(safe));
+    fileCount += 1;
+    totalBytes += data.byteLength;
+  }
+
+  return container;
+}
+
+function collectAuthoredAssetRefs(content: string, doc: Doc): Set<string> {
+  const refs = new Set<string>();
+  const add = (value: unknown): void => {
+    if (typeof value === 'string' && value.trim()) refs.add(value.trim());
+  };
+
+  const scanObject = (value: unknown, seen = new Set<object>()): void => {
+    if (!value || typeof value !== 'object') return;
+    if (seen.has(value)) return;
+    seen.add(value);
+    if (Array.isArray(value)) {
+      for (const item of value) scanObject(item, seen);
+      return;
+    }
+    for (const [key, item] of Object.entries(value as Record<string, unknown>)) {
+      if (
+        typeof item === 'string' &&
+        ['src', 'url', 'heroSrc', 'posterSrc', 'staticSrc', 'videoSrc', 'imageSrc'].includes(key)
+      ) {
+        add(item);
+      } else {
+        scanObject(item, seen);
+      }
+    }
+  };
+  scanObject(doc);
+
+  for (const segment of doc.audio.segments) add(segment.src);
+  for (const clip of resolveMediaSchedule(doc)) add(clip.src);
+
+  // Raw HTML media, CSS font/image URLs, markdown destinations, and Squisq
+  // annotations are all legal authoring paths. The filesystem confinement
+  // check below remains authoritative for every extracted spelling.
+  const patterns = [
+    /\b(?:src|href)\s*=\s*(?:"([^"]+)"|'([^']+)'|([^\s>]+))/gi,
+    /\b(?:src|audio|video|image|font)\s*=\s*(?:"([^"]+)"|'([^']+)'|([^\s}\]]+))/gi,
+    /\burl\(\s*(?:"([^"]+)"|'([^']+)'|([^\s)]+))\s*\)/gi,
+    /!?\[[^\]]*\]\(\s*<?([^\s)>]+)>?/g,
+  ];
+  for (const pattern of patterns) {
+    let match: RegExpExecArray | null;
+    while ((match = pattern.exec(content))) add(match.slice(1).find(Boolean));
+  }
+
+  return refs;
+}
+
+function normalizeAssetReference(authoredRef: string): string | null {
+  let value = stripUrlSuffix(authoredRef.trim().replace(/^<|>$/g, ''));
+  try {
+    value = decodeURIComponent(value);
+  } catch {
+    return null;
+  }
+  if (
+    !value ||
+    value.includes('\0') ||
+    /^[a-z][a-z\d+.-]*:/i.test(value) ||
+    posix.isAbsolute(value) ||
+    win32.isAbsolute(value) ||
+    isAbsolute(value)
+  ) {
+    return null;
+  }
+  const parts = value.replace(/\\/g, '/').split('/');
+  if (parts.some((part) => part === '..')) return null;
+  const normalized = parts.filter((part) => part && part !== '.').join('/');
+  return normalized || null;
+}
+
+function stripUrlSuffix(value: string): string {
+  return value.split(/[?#]/, 1)[0] ?? value;
+}
+
+function isContainedPath(root: string, candidate: string): boolean {
+  const rel = relative(root, candidate);
+  return rel === '' || (!rel.startsWith(`..${sep}`) && rel !== '..' && !isAbsolute(rel));
+}
+
+function isMissingFileError(error: unknown): boolean {
+  return (
+    typeof error === 'object' &&
+    error !== null &&
+    'code' in error &&
+    ((error as { code?: unknown }).code === 'ENOENT' ||
+      (error as { code?: unknown }).code === 'ENOTDIR')
+  );
+}
+
+function formatMiB(bytes: number): string {
+  return `${Math.round(bytes / (1024 * 1024))} MB`;
+}
+
+function assertValidDoc(value: unknown, source: string): asserts value is Doc {
+  const issues = validateDocSchema(value);
+  if (issues.length > 0) throw new DocInputValidationError(source, issues);
 }
 
 /**
@@ -205,9 +452,9 @@ async function readMarkdownFile(filePath: string, signal?: AbortSignal): Promise
  * useless: a NaN/string duration propagates into the audio timeline and reaches
  * ffmpeg as `adelay=NaN`.
  *
- * Deliberately a focused structural guard, not a full schema validation: it
- * checks the fields the CLI pipeline dereferences, and names the offending
- * field plus the file so the message is actionable.
+ * Validation is delegated to the canonical runtime schema in
+ * `@bendyline/squisq/schemas`, so JSON input receives the same structural
+ * contract as every other normalized CLI input.
  *
  * @param content - Raw JSON text.
  * @param source - Path/label used in error messages.
@@ -221,65 +468,8 @@ export function parseDocJson(content: string, source: string): Doc {
     throw new Error(`${source} is not valid JSON: ${detail}`);
   }
 
-  const fail = (detail: string): never => {
-    throw new Error(`${source} is not a valid squisq Doc: ${detail}`);
-  };
-
-  if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
-    fail(`expected a JSON object, got ${Array.isArray(parsed) ? 'an array' : typeof parsed}`);
-  }
-  const doc = parsed as Partial<Doc>;
-
-  if (!Array.isArray(doc.blocks)) {
-    fail(`"blocks" must be an array${doc.blocks === undefined ? ' (field is missing)' : ''}`);
-  }
-  for (const [index, block] of doc.blocks!.entries()) {
-    if (typeof block !== 'object' || block === null || Array.isArray(block)) {
-      fail(`"blocks[${index}]" must be an object`);
-    }
-  }
-
-  if (doc.duration !== undefined && !isFiniteNumber(doc.duration)) {
-    fail(`"duration" must be a finite number, got ${describe(doc.duration)}`);
-  }
-
-  if (doc.audio !== undefined) {
-    if (typeof doc.audio !== 'object' || doc.audio === null || Array.isArray(doc.audio)) {
-      fail('"audio" must be an object');
-    }
-    const segments = (doc.audio as Partial<Doc['audio']>).segments;
-    if (segments !== undefined) {
-      if (!Array.isArray(segments)) fail('"audio.segments" must be an array');
-      for (const [index, segment] of segments.entries()) {
-        if (typeof segment !== 'object' || segment === null) {
-          fail(`"audio.segments[${index}]" must be an object`);
-        }
-        if (!isFiniteNumber(segment.duration)) {
-          fail(
-            `"audio.segments[${index}].duration" must be a finite number, ` +
-              `got ${describe(segment.duration)}`,
-          );
-        }
-      }
-    }
-  }
-
-  // Normalize the optional-but-dereferenced fields so downstream code (and the
-  // audio timeline) never sees a missing track.
-  return {
-    ...(doc as Doc),
-    audio: doc.audio ?? { segments: [] },
-  };
-}
-
-function isFiniteNumber(value: unknown): value is number {
-  return typeof value === 'number' && Number.isFinite(value);
-}
-
-function describe(value: unknown): string {
-  if (typeof value === 'number') return Number.isNaN(value) ? 'NaN' : String(value);
-  if (typeof value === 'string') return JSON.stringify(value);
-  return value === null ? 'null' : typeof value;
+  assertValidDoc(parsed, source);
+  return parsed;
 }
 
 /**

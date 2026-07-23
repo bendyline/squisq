@@ -6,13 +6,13 @@
  * visually consistent with the page that opened it.
  */
 
-import { useState, useCallback, useMemo, useRef } from 'react';
+import { useState, useCallback, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { stringifyMarkdown, inferDocumentTitle } from '@bendyline/squisq/markdown';
 import { markdownToDoc, resolveAudioMapping } from '@bendyline/squisq/doc';
 import { getThemeSummaries, resolveTheme } from '@bendyline/squisq/schemas';
 import { getTransformStyleSummaries } from '@bendyline/squisq/transform';
-import type { MediaProvider, Theme } from '@bendyline/squisq/schemas';
+import type { Doc, MediaProvider, Theme } from '@bendyline/squisq/schemas';
 import type { MarkdownDocument } from '@bendyline/squisq/markdown';
 import { MemoryContentContainer } from '@bendyline/squisq/storage';
 import type { ContentContainer } from '@bendyline/squisq/storage';
@@ -24,8 +24,8 @@ import { slugifyTitle } from './exportFilename';
 import { SITE_FFMPEG_WASM_CONFIG } from './ffmpegWasmConfig';
 import {
   createEntryAwareDocumentReader,
-  prepareExportDoc,
   prepareExportMarkdown,
+  prepareVideoExportDoc,
 } from './exportPreparation';
 
 // ── Types ──────────────────────────────────────────────────────────
@@ -393,6 +393,7 @@ export function ExportConfigModal({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showVideoModal, setShowVideoModal] = useState(false);
+  const [videoExportDoc, setVideoExportDoc] = useState<Doc | null>(null);
 
   const playerScriptRef = useRef<string | null>(null);
 
@@ -434,11 +435,6 @@ export function ExportConfigModal({
   const showModeSelector = isHtmlFormat && htmlStyle !== 'plain';
   const showStyleSelector = isHtmlFormat;
   const showPreview = isHtmlFormat && htmlStyle === 'plain';
-  const preparedVideoDoc = useMemo(
-    () => prepareExportDoc(currentSource, { transformStyle, themeId }),
-    [currentSource, transformStyle, themeId],
-  );
-
   /** Collect raw images by mediaProvider name (for pptx and other formats). */
   const collectImagesByName = useCallback(async () => {
     const images = new Map<string, ArrayBuffer>();
@@ -470,13 +466,26 @@ export function ExportConfigModal({
   const handleExport = useCallback(async () => {
     // Video format delegates to VideoExportModal
     if (format === 'video') {
-      if (!playerScriptRef.current) {
-        setBusy(true);
-        const { PLAYER_BUNDLE } = await import('@bendyline/squisq-react/standalone-source');
-        playerScriptRef.current = PLAYER_BUNDLE;
+      setBusy(true);
+      setError(null);
+      try {
+        const docPromise = prepareVideoExportDoc(
+          currentSource,
+          { transformStyle, themeId },
+          workspaceContainer,
+        );
+        if (!playerScriptRef.current) {
+          const { PLAYER_BUNDLE } = await import('@bendyline/squisq-react/standalone-source');
+          playerScriptRef.current = PLAYER_BUNDLE;
+        }
+        setVideoExportDoc(await docPromise);
+        setShowVideoModal(true);
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : String(err);
+        setError(message);
+      } finally {
         setBusy(false);
       }
-      setShowVideoModal(true);
       return;
     }
 
@@ -634,6 +643,8 @@ export function ExportConfigModal({
     followLinks,
     workspaceContainer,
     themeId,
+    transformStyle,
+    currentSource,
     mediaProvider,
     onClose,
     collectImagesByName,
@@ -859,16 +870,18 @@ export function ExportConfigModal({
 
       {/* Video export modal — opened when format is 'video' */}
       {showVideoModal &&
+        videoExportDoc &&
         playerScriptRef.current &&
         createPortal(
           <VideoExportModal
-            doc={preparedVideoDoc}
+            doc={videoExportDoc}
             playerScript={playerScriptRef.current}
             mediaProvider={mediaProvider ?? undefined}
             defaultConfig={{ ffmpegWasm: SITE_FFMPEG_WASM_CONFIG }}
             colorScheme={colorScheme}
             onClose={() => {
               setShowVideoModal(false);
+              setVideoExportDoc(null);
               onClose();
             }}
           />,

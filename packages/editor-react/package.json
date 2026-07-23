@@ -88,6 +88,8 @@
     "@bendyline/squisq-formats": "2.3.6",
     "@bendyline/squisq-react": "2.4.2",
     "@fortawesome/fontawesome-free": "7.2.0",
+    "@tiptap/core": "2.27.2",
+    "@tiptap/extension-heading": "2.27.2",
     "@tiptap/extension-image": "2.27.2",
     "@tiptap/extension-link": "2.27.2",
     "@tiptap/extension-mention": "2.27.2",

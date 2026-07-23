@@ -97,9 +97,13 @@ export async function runTransform(inputPath: string, opts: TransformOpts): Prom
     }
   }
 
-  const width = Number.parseInt(opts.width, 10);
-  if (Number.isNaN(width)) {
-    console.error(`Error: --width must be a number (got "${opts.width}")`);
+  if (!/^\d+$/.test(opts.width)) {
+    console.error(`Error: --width must be an integer between 20 and 500 (got "${opts.width}")`);
+    return 1;
+  }
+  const width = Number(opts.width);
+  if (!Number.isSafeInteger(width) || width < 20 || width > 500) {
+    console.error(`Error: --width must be an integer between 20 and 500 (got "${opts.width}")`);
     return 1;
   }
 

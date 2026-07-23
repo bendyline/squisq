@@ -29,6 +29,28 @@ afterEach(() => {
 });
 
 describe('VideoLayer playback synchronization', () => {
+  it('lets a recorded clip carry audio unless the player explicitly mutes it', () => {
+    const props = {
+      layer,
+      basePath: '/media',
+      viewport: { width: 640, height: 360 },
+      blockTime: 0,
+    };
+    const { container, rerender } = render(
+      <svg>
+        <VideoLayer {...props} />
+      </svg>,
+    );
+    expect(container.querySelector('video')?.muted).toBe(false);
+
+    rerender(
+      <svg>
+        <VideoLayer {...props} muted />
+      </svg>,
+    );
+    expect(container.querySelector('video')?.muted).toBe(true);
+  });
+
   it('joins the document clock when mounted partway through a block', async () => {
     const { container, rerender } = render(
       <svg>

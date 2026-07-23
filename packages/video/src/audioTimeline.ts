@@ -11,14 +11,16 @@
  *    concatenates the segment files in order.
  *  - Timed media clips (`block.media` + `doc.documentMedia`) are placed at
  *    their **absolute** doc-timeline positions via the shared
- *    `resolveMediaSchedule()` helper (the same one the CLI calls), honouring
- *    each clip's trim window (`sourceIn` / `absoluteEnd - absoluteStart`).
+ *    `resolveMediaSchedule()` helper, honouring each clip's trim window
+ *    (`sourceIn` / `absoluteEnd - absoluteStart`). This includes the audio
+ *    stream carried by scheduled video clips unless explicitly disabled.
  *  - Every start time is shifted by `coverPreRoll` so a cover pre-roll padding
  *    (silent leading frames) keeps audio in sync.
  */
 
 import type { Doc } from '@bendyline/squisq/schemas';
 import { resolveMediaSchedule } from '@bendyline/squisq/schemas';
+import { flattenRenderableBlocks, materializeBlockLayers } from '@bendyline/squisq/doc';
 
 /** One audio source placed on the absolute export timeline. */
 export interface AudioTimelineClip {
@@ -30,6 +32,21 @@ export interface AudioTimelineClip {
   sourceInSec: number;
   /** Played length in seconds (the trimmed window of the source). */
   durationSec: number;
+  /**
+   * Video sources may legitimately contain no audio stream. The browser mixer
+   * probes them independently and skips only the silent ones. Omitted means an
+   * authored audio/narration source, whose decode failure remains an error.
+   */
+  sourceKind?: 'video';
+}
+
+export interface ComputeAudioTimelineOptions {
+  /**
+   * Include the audio stream carried by scheduled video clips. Defaults to
+   * true for composed MP4 export. Consumers that cannot demux video audio may
+   * explicitly retain the legacy audio-only behavior.
+   */
+  includeVideoAudio?: boolean;
 }
 
 /**
@@ -43,8 +60,13 @@ export interface AudioTimelineClip {
  * @param coverPreRoll - Leading silent padding (seconds) added ahead of every
  *   clip, matching the cover-slide pre-roll frames. Default 0.
  */
-export function computeAudioTimeline(doc: Doc, coverPreRoll = 0): AudioTimelineClip[] {
+export function computeAudioTimeline(
+  doc: Doc,
+  coverPreRoll = 0,
+  options: ComputeAudioTimelineOptions = {},
+): AudioTimelineClip[] {
   const preRoll = safeSeconds(coverPreRoll);
+  const includeVideoAudio = options.includeVideoAudio ?? true;
   const clips: AudioTimelineClip[] = [];
 
   // ── Narration: laid sequentially (matches the CLI's ordered concat). ──
@@ -63,7 +85,7 @@ export function computeAudioTimeline(doc: Doc, coverPreRoll = 0): AudioTimelineC
 
   // ── Timed media clips: absolute positions from the shared schedule. ──
   for (const clip of resolveMediaSchedule(doc)) {
-    if (clip.kind !== 'audio') continue;
+    if (clip.kind !== 'audio' && !includeVideoAudio) continue;
     // Guard the endpoints before subtracting: `NaN <= 0` is false, so a NaN
     // duration would otherwise sail past the positivity check and be emitted.
     if (!Number.isFinite(clip.absoluteStart) || !Number.isFinite(clip.absoluteEnd)) continue;
@@ -74,10 +96,54 @@ export function computeAudioTimeline(doc: Doc, coverPreRoll = 0): AudioTimelineC
       startSec: safeSeconds(clip.absoluteStart) + preRoll,
       sourceInSec: safeSeconds(clip.sourceIn),
       durationSec,
+      ...(clip.kind === 'video' ? { sourceKind: 'video' as const } : {}),
+    });
+  }
+
+  // Content/template videos are rendered as VideoLayers rather than MediaClips.
+  // Frame capture sees those layers, but resolveMediaSchedule intentionally
+  // does not. Materialize the exact layer graph the renderer consumes so the
+  // video's audio stream follows its visible source into the composed MP4.
+  if (includeVideoAudio) {
+    const blocks = flattenRenderableBlocks(doc.blocks);
+    const existing = new Set(clips.map(timelineKey));
+    blocks.forEach((block, blockIndex) => {
+      const materialized = materializeBlockLayers(block, {
+        blockIndex,
+        totalBlocks: blocks.length,
+        customTemplates: doc.customTemplates,
+        persistentLayers: false,
+      });
+      for (const layer of materialized.layers) {
+        if (layer.type !== 'video' || !layer.content.src) continue;
+        const startAt = safeSeconds(layer.content.startAt ?? 0);
+        const sourceInSec = safeSeconds(layer.content.clipStart);
+        const clipDuration = Math.max(0, layer.content.clipEnd - sourceInSec);
+        const blockRemainder = Math.max(0, safeSeconds(block.duration) - startAt);
+        const durationSec = layer.content.spillover
+          ? clipDuration
+          : Math.min(clipDuration, blockRemainder);
+        if (durationSec <= 0) continue;
+        const candidate: AudioTimelineClip = {
+          src: layer.content.src,
+          startSec: safeSeconds(block.startTime) + startAt + preRoll,
+          sourceInSec,
+          durationSec,
+          sourceKind: 'video',
+        };
+        const key = timelineKey(candidate);
+        if (existing.has(key)) continue;
+        existing.add(key);
+        clips.push(candidate);
+      }
     });
   }
 
   return clips;
+}
+
+function timelineKey(clip: AudioTimelineClip): string {
+  return `${clip.src}\u0000${clip.startSec}\u0000${clip.sourceInSec}\u0000${clip.durationSec}`;
 }
 
 /** Clamp to a finite, non-negative second count. NaN/Infinity/negative → 0. */

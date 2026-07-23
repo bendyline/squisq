@@ -18,7 +18,6 @@ import {
   type VideoExportConfig,
   type VideoExportFramePreview,
   type VideoOutputFormat,
-  type VideoAudioPolicy,
 } from './hooks/useVideoExport.js';
 
 // ── Types ──────────────────────────────────────────────────────────
@@ -271,9 +270,7 @@ export function VideoExportModal({
   const [animationsEnabled, setAnimationsEnabled] = useState(
     defaultConfig?.animationsEnabled ?? initialOutputFormat === 'mp4',
   );
-  const [audioPolicy, setAudioPolicy] = useState<VideoAudioPolicy>(
-    defaultConfig?.audioPolicy ?? 'require',
-  );
+  const [includeAudio, setIncludeAudio] = useState(defaultConfig?.audioPolicy !== 'omit');
   const palette: VideoExportPalette = {
     ...VIDEO_EXPORT_PALETTES[colorScheme],
     ...uiPalette,
@@ -363,7 +360,7 @@ export function VideoExportModal({
       fps,
       orientation,
       captionMode,
-      audioPolicy,
+      audioPolicy: includeAudio ? 'require' : 'omit',
       images,
       audio,
       mediaProvider,
@@ -379,7 +376,7 @@ export function VideoExportModal({
     fps,
     orientation,
     captionMode,
-    audioPolicy,
+    includeAudio,
     images,
     audio,
     mediaProvider,
@@ -524,16 +521,25 @@ export function VideoExportModal({
             {outputFormat === 'mp4' && (
               <div>
                 <label style={themedLabelStyle}>Audio</label>
-                <select
-                  aria-label="Audio handling"
-                  style={themedSelectStyle}
-                  value={audioPolicy}
-                  onChange={(e) => setAudioPolicy(e.target.value as VideoAudioPolicy)}
+                <label
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 8,
+                    marginBottom: 12,
+                    fontSize: 14,
+                    color: palette.text,
+                    cursor: 'pointer',
+                  }}
                 >
-                  <option value="require">Require document audio</option>
-                  <option value="best-effort">Best effort — allow video-only fallback</option>
-                  <option value="omit">Omit audio intentionally</option>
-                </select>
+                  <input
+                    type="checkbox"
+                    aria-label="Include audio"
+                    checked={includeAudio}
+                    onChange={(e) => setIncludeAudio(e.target.checked)}
+                  />
+                  Include audio
+                </label>
               </div>
             )}
 
@@ -661,6 +667,10 @@ export function VideoExportModal({
             {completedOutputFormat === 'gif' ? (
               <p style={{ fontSize: 12, color: palette.muted, margin: '0 0 4px 0' }}>
                 Animated GIF does not include audio.
+              </p>
+            ) : !includeAudio ? (
+              <p style={{ fontSize: 12, color: palette.muted, margin: '0 0 4px 0' }}>
+                Audio excluded
               </p>
             ) : audioIncluded ? (
               <p style={{ fontSize: 12, color: palette.success, margin: '0 0 4px 0' }}>

@@ -130,15 +130,17 @@ function resolveOfflineAudioContext(): OfflineCtor {
  *
  * Decodes each unique source once, then schedules an `AudioBufferSourceNode`
  * per clip at its `startSec` with the trim window (`offset = sourceInSec`,
- * `duration = durationSec`). Undecodable sources are skipped rather than
- * failing the whole render.
+ * `duration = durationSec`). Authored audio/narration sources must decode.
+ * Video sources are optional because a valid video can be silent: each is
+ * decoded independently, silent ones are skipped, and every audible video is
+ * connected to the same destination so overlapping tracks are mixed.
  */
 export async function renderAudioTimeline(
   clips: AudioTimelineClip[],
   buffers: Map<string, ArrayBuffer>,
   totalDurationSec: number,
   sampleRate: number = EXPORT_AUDIO_SAMPLE_RATE,
-): Promise<AudioBuffer> {
+): Promise<AudioBuffer | null> {
   const Ctor = resolveOfflineAudioContext();
   const channels = EXPORT_AUDIO_CHANNELS;
   const length = Math.max(1, Math.ceil(totalDurationSec * sampleRate));
@@ -147,17 +149,30 @@ export async function renderAudioTimeline(
   // Decode each unique source once. decodeAudioData detaches the buffer, so
   // hand it a copy to keep the caller's ArrayBuffer reusable.
   const decoded = new Map<string, AudioBuffer>();
+  const decodeFailures: string[] = [];
   for (const [src, data] of buffers) {
     try {
       decoded.set(src, await ctx.decodeAudioData(data.slice(0)));
     } catch {
-      // Skip undecodable sources; the clip is simply omitted.
+      decodeFailures.push(src);
     }
   }
+  const requiredFailures = decodeFailures.filter((src) =>
+    clips.some((clip) => clip.src === src && clip.sourceKind !== 'video'),
+  );
+  if (requiredFailures.length > 0) {
+    throw new Error(`No decodable audio track was found in: ${requiredFailures.join(', ')}`);
+  }
 
+  let scheduledNodes = 0;
   for (const clip of clips) {
     const buffer = decoded.get(clip.src);
-    if (!buffer) continue;
+    if (!buffer) {
+      // A video can legitimately have no audio stream. Its visual frames still
+      // export; this source simply contributes silence to the mixed track.
+      if (clip.sourceKind === 'video') continue;
+      throw new Error(`Audio source was not decoded: ${clip.src}`);
+    }
     const node = ctx.createBufferSource();
     node.buffer = buffer;
     node.connect(ctx.destination);
@@ -165,8 +180,10 @@ export async function renderAudioTimeline(
     const offset = Math.max(0, clip.sourceInSec);
     const duration = Math.max(0, clip.durationSec);
     node.start(when, offset, duration);
+    scheduledNodes++;
   }
 
+  if (scheduledNodes === 0) return null;
   return ctx.startRendering();
 }
 

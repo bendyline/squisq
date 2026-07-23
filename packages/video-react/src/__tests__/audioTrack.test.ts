@@ -8,13 +8,18 @@
  * degrade to `false` when `AudioEncoder` is undefined (jsdom's state).
  */
 
-import { describe, it, expect } from 'vitest';
+import { afterEach, describe, it, expect, vi } from 'vitest';
 import {
   selectAudioTier,
   supportsWebCodecsAac,
   REASON_NO_AAC_NO_SAB,
   audioBufferToWav,
+  renderAudioTimeline,
 } from '../audioTrack.js';
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
 
 describe('selectAudioTier', () => {
   it('tier 1 when AAC is supported on the main-thread WebCodecs encoder', () => {
@@ -79,6 +84,107 @@ describe('supportsWebCodecsAac', () => {
   it('returns false when AudioEncoder is undefined (jsdom/Node)', async () => {
     expect(typeof AudioEncoder).toBe('undefined');
     await expect(supportsWebCodecsAac()).resolves.toBe(false);
+  });
+});
+
+describe('renderAudioTimeline', () => {
+  it('rejects an undecodable authored audio source', async () => {
+    class RejectingOfflineAudioContext {
+      destination = {};
+
+      async decodeAudioData(): Promise<AudioBuffer> {
+        throw new Error('no audio stream');
+      }
+
+      createBufferSource(): AudioBufferSourceNode {
+        throw new Error('unreachable');
+      }
+
+      async startRendering(): Promise<AudioBuffer> {
+        throw new Error('unreachable');
+      }
+    }
+    vi.stubGlobal('OfflineAudioContext', RejectingOfflineAudioContext);
+
+    await expect(
+      renderAudioTimeline(
+        [{ src: 'audio/narration.webm', startSec: 0, sourceInSec: 0, durationSec: 5 }],
+        new Map([['audio/narration.webm', new Uint8Array([1, 2, 3]).buffer]]),
+        5,
+      ),
+    ).rejects.toThrow('No decodable audio track was found in: audio/narration.webm');
+  });
+
+  it('skips a silent video and mixes every video source that has audio', async () => {
+    const decoded = new Map<number, AudioBuffer>([
+      [1, { id: 'camera-1' } as unknown as AudioBuffer],
+      [2, { id: 'camera-2' } as unknown as AudioBuffer],
+    ]);
+    const output = { id: 'mixed' } as unknown as AudioBuffer;
+    const starts: Array<{ buffer: AudioBuffer | null; args: number[] }> = [];
+
+    class SelectiveOfflineAudioContext {
+      destination = {};
+
+      async decodeAudioData(data: ArrayBuffer): Promise<AudioBuffer> {
+        const marker = new Uint8Array(data)[0];
+        const buffer = decoded.get(marker);
+        if (!buffer) throw new Error('no audio stream');
+        return buffer;
+      }
+
+      createBufferSource(): AudioBufferSourceNode {
+        const node = {
+          buffer: null as AudioBuffer | null,
+          connect: vi.fn(),
+          start: (...args: number[]) => starts.push({ buffer: node.buffer, args }),
+        };
+        return node as unknown as AudioBufferSourceNode;
+      }
+
+      async startRendering(): Promise<AudioBuffer> {
+        return output;
+      }
+    }
+    vi.stubGlobal('OfflineAudioContext', SelectiveOfflineAudioContext);
+
+    const result = await renderAudioTimeline(
+      [
+        {
+          src: 'video/camera-1.webm',
+          startSec: 0,
+          sourceInSec: 0,
+          durationSec: 5,
+          sourceKind: 'video',
+        },
+        {
+          src: 'video/screen.webm',
+          startSec: 0,
+          sourceInSec: 0,
+          durationSec: 5,
+          sourceKind: 'video',
+        },
+        {
+          src: 'video/camera-2.webm',
+          startSec: 2,
+          sourceInSec: 1,
+          durationSec: 3,
+          sourceKind: 'video',
+        },
+      ],
+      new Map([
+        ['video/camera-1.webm', new Uint8Array([1]).buffer],
+        ['video/screen.webm', new Uint8Array([0]).buffer],
+        ['video/camera-2.webm', new Uint8Array([2]).buffer],
+      ]),
+      5,
+    );
+
+    expect(result).toBe(output);
+    expect(starts).toEqual([
+      { buffer: decoded.get(1), args: [0, 0, 5] },
+      { buffer: decoded.get(2), args: [2, 1, 3] },
+    ]);
   });
 });
 

@@ -342,6 +342,8 @@ export function PreviewPanel({
     }
 
     const audienceCaptionMode = playbackState?.captionMode;
+    // The primary preview owns audible playback. A synchronized audience
+    // window follows its clock but stays silent to avoid echo.
     return (
       <DocPlayer
         // A style change replaces the slide sequence. Remounting clears state
@@ -351,7 +353,7 @@ export function PreviewPanel({
         basePath={basePath}
         audioMode={previewProjection?.contentDoc.audio?.segments?.length ? 'media' : 'synthetic'}
         showControls={!audience}
-        muted
+        muted={audience}
         forceViewport={activeViewport}
         displayMode={activeDisplayMode}
         theme={activeTheme}

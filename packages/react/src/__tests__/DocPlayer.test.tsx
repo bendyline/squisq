@@ -3,6 +3,8 @@ import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { DocPlayer } from '../DocPlayer';
 import type { Doc } from '@bendyline/squisq/schemas';
 import { pipStyleVars, resolveTheme } from '@bendyline/squisq/schemas';
+import { markdownToDoc } from '@bendyline/squisq/doc';
+import { parseMarkdown } from '@bendyline/squisq/markdown';
 import type { AudioController } from '../hooks/AudioController';
 import type { SquisqRenderAPI } from '../types';
 
@@ -29,6 +31,37 @@ function docWithPresenter(): Doc {
       },
     ],
   };
+}
+
+function docWithBlockVideo(): Doc {
+  return {
+    ...minimalDoc(),
+    blocks: [
+      {
+        id: 'recorded-video',
+        startTime: 0,
+        duration: 5,
+        audioSegment: 0,
+        layers: [
+          {
+            id: 'recording',
+            type: 'video',
+            content: { src: 'recording.webm', alt: 'Recorded clip', clipStart: 0, clipEnd: 5 },
+            position: { x: 0, y: 0, width: 640, height: 360 },
+          },
+        ],
+      },
+    ],
+  };
+}
+
+function docWithEmbeddedLayoutVideo(): Doc {
+  return markdownToDoc(
+    parseMarkdown(
+      '# About SquigglySquare {[title duration=5]}\n\n' +
+        '<video src="recording.webm" controls></video>\n',
+    ),
+  );
 }
 
 function docWithCover(): Doc {
@@ -156,6 +189,79 @@ describe('DocPlayer smoke test', () => {
   it('renders without crashing in video mode (default)', () => {
     const { container } = render(<DocPlayer doc={minimalDoc()} basePath="/test" />);
     expect(container.firstChild).toBeTruthy();
+  });
+
+  it('lets block videos carry audio in live playback and honors muted/render mode', () => {
+    const doc = docWithBlockVideo();
+    const audioController = controller();
+    const { container, rerender } = render(
+      <DocPlayer doc={doc} audioController={audioController} />,
+    );
+    expect(container.querySelector('video')?.muted).toBe(false);
+
+    rerender(<DocPlayer doc={doc} audioController={audioController} muted />);
+    expect(container.querySelector('video')?.muted).toBe(true);
+
+    rerender(<DocPlayer doc={doc} audioController={audioController} renderMode />);
+    expect(container.querySelector('video')?.muted).toBe(true);
+  });
+
+  it('starts audible recorded media inside the Play-button gesture', () => {
+    const doc: Doc = {
+      ...docWithBlockVideo(),
+      documentMedia: [
+        {
+          id: 'narration',
+          kind: 'audio',
+          src: 'narration.webm',
+          startAt: 0,
+          anchor: 'document',
+        },
+      ],
+    };
+    const started: string[] = [];
+    const playSpy = vi
+      .spyOn(window.HTMLMediaElement.prototype, 'play')
+      .mockImplementation(function (this: HTMLMediaElement) {
+        started.push(this.tagName.toLowerCase());
+        return Promise.resolve();
+      });
+
+    const audioController = controller();
+    render(<DocPlayer doc={doc} audioController={audioController} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Play' }));
+
+    expect(started).toEqual(expect.arrayContaining(['audio', 'video']));
+    expect(audioController.toggle).toHaveBeenCalledOnce();
+    playSpy.mockRestore();
+  });
+
+  it('starts an embedded layout video while the managed cover is still visible', () => {
+    const started: HTMLMediaElement[] = [];
+    const playSpy = vi
+      .spyOn(window.HTMLMediaElement.prototype, 'play')
+      .mockImplementation(function (this: HTMLMediaElement) {
+        started.push(this);
+        return Promise.resolve();
+      });
+
+    const audioController = controller();
+    const { container } = render(
+      <DocPlayer doc={docWithEmbeddedLayoutVideo()} audioController={audioController} />,
+    );
+    const cover = container.querySelector('.doc-player__block--cover');
+    const active = container.querySelector<HTMLElement>('.doc-player__block--active');
+    const video = active?.querySelector<HTMLVideoElement>('video[data-clip-start]');
+
+    expect(cover).not.toBeNull();
+    expect(active?.style.opacity).toBe('0');
+    expect(video).not.toBeNull();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Play' }));
+
+    expect(started).toContain(video);
+    expect(audioController.toggle).toHaveBeenCalledOnce();
+    playSpy.mockRestore();
   });
 
   it('inherits the document theme and PIP settings when export mounts a fresh player', () => {

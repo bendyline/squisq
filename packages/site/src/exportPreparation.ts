@@ -1,4 +1,4 @@
-import { markdownToDoc, docToMarkdown } from '@bendyline/squisq/doc';
+import { markdownToDoc, docToMarkdown, resolveAudioMapping } from '@bendyline/squisq/doc';
 import { parseMarkdown } from '@bendyline/squisq/markdown';
 import type { MarkdownDocument } from '@bendyline/squisq/markdown';
 import type { Doc } from '@bendyline/squisq/schemas';
@@ -12,11 +12,7 @@ export interface ExportPreparationOptions {
   applyTransform?: boolean;
 }
 
-function prepareDocFromMarkdown(
-  markdown: MarkdownDocument,
-  options: ExportPreparationOptions,
-): Doc {
-  let doc = markdownToDoc(markdown);
+function applyExportOptions(doc: Doc, options: ExportPreparationOptions): Doc {
   if (options.applyTransform !== false && options.transformStyle) {
     doc = applyTransform(doc, options.transformStyle, {
       themeId: options.themeId || undefined,
@@ -29,9 +25,35 @@ function prepareDocFromMarkdown(
   return doc;
 }
 
+function prepareDocFromMarkdown(
+  markdown: MarkdownDocument,
+  options: ExportPreparationOptions,
+): Doc {
+  return applyExportOptions(markdownToDoc(markdown), options);
+}
+
 /** Prepare the visual Doc used by previews and video export. */
 export function prepareExportDoc(source: string, options: ExportPreparationOptions = {}): Doc {
   return prepareDocFromMarkdown(parseMarkdown(source), options);
+}
+
+/**
+ * Prepare a video Doc after resolving narration media and its timing sidecar.
+ *
+ * Resolution deliberately precedes visual transforms: transformed slides then
+ * inherit the recorded block timings instead of being paced from reading-time
+ * estimates, and the MP4 audio timeline receives the full narration duration.
+ */
+export async function prepareVideoExportDoc(
+  source: string,
+  options: ExportPreparationOptions = {},
+  workspaceContainer?: ContentContainer | null,
+): Promise<Doc> {
+  let doc = markdownToDoc(parseMarkdown(source));
+  if (workspaceContainer) {
+    doc = await resolveAudioMapping(doc, workspaceContainer);
+  }
+  return applyExportOptions(doc, options);
 }
 
 /** Prepare markdown-based formats while allowing plain HTML to stay lossless. */

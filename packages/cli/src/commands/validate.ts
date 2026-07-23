@@ -14,12 +14,11 @@
  *   squisq validate <input> [--json] [--strict]
  */
 
-import { existsSync, statSync } from 'node:fs';
-import { dirname, extname, join, resolve } from 'node:path';
+import { resolve } from 'node:path';
 import type { Command } from 'commander';
 import type { DocDiagnostic } from '@bendyline/squisq/schemas';
 import { validateMarkdownDoc } from '@bendyline/squisq/doc';
-import { readInput } from '../util/readInput.js';
+import { DocInputValidationError, readInput } from '../util/readInput.js';
 
 interface ValidateOpts {
   json?: boolean;
@@ -38,6 +37,10 @@ export function registerValidateCommand(program: Command): void {
         const exitCode = await runValidate(inputPath, opts);
         process.exitCode = exitCode;
       } catch (err: unknown) {
+        if (err instanceof DocInputValidationError) {
+          process.exitCode = report(err.diagnostics, opts);
+          return;
+        }
         const message = err instanceof Error ? err.message : String(err);
         console.error(`Error: ${message}`);
         process.exitCode = 2;
@@ -50,24 +53,19 @@ async function runValidate(inputPath: string, opts: ValidateOpts): Promise<numbe
   const { container, markdownDoc, doc } = await readInput(resolvedInput);
 
   if (!markdownDoc) {
-    // Doc-JSON input: nothing markdown-level to validate. Surface any
-    // diagnostics already recorded on the doc.
+    // Runtime schema validation already ran at the shared input boundary.
+    // Surface any document-authored diagnostics that remain.
     const diagnostics = doc.diagnostics ?? [];
-    return report(diagnostics, opts, 'doc.json input — markdown-level checks skipped');
+    return report(diagnostics, opts, 'doc.json input — canonical schema valid');
   }
 
-  // Asset check source: container file list (dbk/zip/folder) or, for a bare
-  // .md file, the filesystem relative to the document's folder.
+  // Every input form now carries its confined assets in the container,
+  // including bare markdown. Never probe authored paths directly here: doing
+  // so could accidentally bless a `../outside.png` traversal as a valid asset.
   const entries = await container.listFiles();
   const containerPaths = new Set(entries.map((e) => e.path));
-  const isBareMarkdown =
-    statSync(resolvedInput).isFile() &&
-    !['.zip', '.dbk'].includes(extname(resolvedInput).toLowerCase());
-  const baseDir = dirname(resolvedInput);
   const hasAsset = (path: string): boolean => {
-    if (containerPaths.has(path) || containerPaths.has(path.replace(/^\.\//, ''))) return true;
-    if (isBareMarkdown) return existsSync(join(baseDir, path));
-    return false;
+    return containerPaths.has(path) || containerPaths.has(path.replace(/^\.\//, ''));
   };
 
   const result = validateMarkdownDoc(markdownDoc, { assets: hasAsset });

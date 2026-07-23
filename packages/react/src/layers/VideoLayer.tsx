@@ -3,7 +3,9 @@
  *
  * Renders a video clip layer within an SVG block. Uses an HTML5 <video> element
  * inside a <foreignObject> (same pattern as ImageLayer for cover-mode images).
- * Videos are always muted — narration audio is the only sound track.
+ * Video audio follows the player-level mute contract. Interactive playback
+ * lets recorded clips carry their own audio, while muted/render callers keep
+ * the layer silent.
  *
  * Two modes of operation:
  * 1. Normal playback: Video auto-plays from clipStart to clipEnd on mount,
@@ -38,9 +40,18 @@ interface VideoLayerProps {
   blockTime: number;
   /** Whether the doc is currently playing */
   isPlaying?: boolean;
+  /** Silence the video's own audio track. */
+  muted?: boolean;
 }
 
-export function VideoLayer({ layer, basePath, viewport, blockTime, isPlaying }: VideoLayerProps) {
+export function VideoLayer({
+  layer,
+  basePath,
+  viewport,
+  blockTime,
+  isPlaying,
+  muted = false,
+}: VideoLayerProps) {
   const { content, position } = layer;
   const videoRef = useRef<HTMLVideoElement>(null);
   const hasStartedRef = useRef(false);
@@ -69,7 +80,6 @@ export function VideoLayer({ layer, basePath, viewport, blockTime, isPlaying }: 
   const posterSrc = content.posterSrc ? resolvedPoster : undefined;
 
   // On mount: seek to clipStart and set up clipEnd boundary.
-  // The video will be muted and play silently alongside the narration.
   useEffect(() => {
     const video = videoRef.current;
     if (!video) return;
@@ -148,7 +158,7 @@ export function VideoLayer({ layer, basePath, viewport, blockTime, isPlaying }: 
           ref={videoRef}
           src={src}
           poster={posterSrc}
-          muted
+          muted={muted}
           playsInline
           preload="auto"
           data-clip-start={content.clipStart}

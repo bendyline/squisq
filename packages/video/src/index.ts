@@ -34,7 +34,7 @@ export {
 export { resolveFfmpegWasmLoad, FFMPEG_WASM_SETUP_HINT } from './ffmpegCore.js';
 
 // ── Audio Timeline ─────────────────────────────────────────────────
-export type { AudioTimelineClip } from './audioTimeline.js';
+export type { AudioTimelineClip, ComputeAudioTimelineOptions } from './audioTimeline.js';
 export { computeAudioTimeline } from './audioTimeline.js';
 
 // ── Render HTML ────────────────────────────────────────────────────

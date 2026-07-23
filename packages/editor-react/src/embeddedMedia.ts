@@ -78,20 +78,19 @@ export function collectEmbeddedMedia(block: Block): EmbeddedMedia[] {
 }
 
 /**
- * Adapt body-embedded videos to the scheduled-clip shape consumed by the
- * timeline monitor. Embedded media is block-scoped, so it starts with its
+ * Adapt body-embedded audio/video to the scheduled-clip shape consumed by
+ * timeline playback. Embedded media is block-scoped, so it starts with its
  * owning block and stays active for that block's authored duration.
  */
-export function collectEmbeddedVideoSchedule(doc: Doc): ScheduledClip[] {
+export function collectEmbeddedMediaSchedule(doc: Doc): ScheduledClip[] {
   const schedule: ScheduledClip[] = [];
 
   const visit = (blocks: Block[]): void => {
     for (const block of blocks) {
       collectEmbeddedMedia(block).forEach((media, index) => {
-        if (media.kind !== 'video') return;
         schedule.push({
           id: `embedded:${block.id}:${index}`,
-          kind: 'video',
+          kind: media.kind,
           src: media.src,
           absoluteStart: block.startTime,
           absoluteEnd: block.startTime + block.duration,
@@ -107,4 +106,48 @@ export function collectEmbeddedVideoSchedule(doc: Doc): ScheduledClip[] {
 
   visit(doc.blocks);
   return schedule;
+}
+
+/**
+ * Video-only projection used by the docked timeline monitors.
+ *
+ * Audio ownership remains with the timeline's off-screen media host so opening
+ * or closing a monitor cannot duplicate or suppress a clip's sound.
+ */
+export function collectEmbeddedVideoSchedule(doc: Doc): ScheduledClip[] {
+  return collectEmbeddedMediaSchedule(doc).filter((clip) => clip.kind === 'video');
+}
+
+/**
+ * Build the complete set of media elements owned by Timeline playback.
+ *
+ * Scheduled clips can overlap and intentionally remain independent: the
+ * browser mixes every active audible element. Body embeds are added because
+ * they do not appear in `resolveMediaSchedule()`. Legacy narration segments
+ * are added only when their source is not already represented by a scheduled
+ * clip, preventing the same narration take from playing twice.
+ */
+export function collectTimelinePlaybackSchedule(
+  doc: Doc,
+  scheduled: ScheduledClip[],
+): ScheduledClip[] {
+  const scheduledSources = new Set(scheduled.map((clip) => clip.src));
+  const narration = doc.audio.segments
+    .map<ScheduledClip | null>((segment, index) => {
+      if (scheduledSources.has(segment.src)) return null;
+      return {
+        id: `narration:${index}`,
+        kind: 'audio',
+        src: segment.src,
+        absoluteStart: Math.max(0, segment.startTime),
+        absoluteEnd: Math.max(0, segment.startTime) + Math.max(0, segment.duration),
+        sourceIn: 0,
+        anchor: 'document',
+      };
+    })
+    .filter(
+      (clip): clip is ScheduledClip => clip !== null && clip.absoluteEnd > clip.absoluteStart,
+    );
+
+  return [...scheduled, ...collectEmbeddedMediaSchedule(doc), ...narration];
 }

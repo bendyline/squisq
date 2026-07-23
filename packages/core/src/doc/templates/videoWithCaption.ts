@@ -2,8 +2,9 @@
  * Video With Caption Template
  *
  * Full-screen background video clip with text overlay. Mirrors the structure of
- * imageWithCaption but uses a VideoLayer instead of an ImageLayer. The video
- * plays muted — narration audio is the only sound track.
+ * imageWithCaption but uses a VideoLayer instead of an ImageLayer. Interactive
+ * players may play the video's own audio; muted and render-mode players keep it
+ * silent.
  *
  * Adapts caption positioning and font sizes for different viewports.
  *

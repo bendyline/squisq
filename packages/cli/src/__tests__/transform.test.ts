@@ -86,6 +86,16 @@ describe('transform command', () => {
     for (const line of lines) expect(line.length).to.be.at.most(40);
   });
 
+  it('rejects partially numeric, fractional, and out-of-range widths', async () => {
+    const mdPath = await writeDoc(WRAPPED_DOC);
+    for (const width of ['40junk', '40.5', '19', '501', '-40']) {
+      const result = await runCli('transform', mdPath, '--ops', 'wrap', '--width', width);
+      expect(result.exitCode, width).to.equal(1);
+      expect(result.stderr, width).to.contain('--width must be an integer between 20 and 500');
+      expect(result.stdout, width).to.equal('');
+    }
+  });
+
   it('rejects unknown ops with a helpful error', async () => {
     const mdPath = await writeDoc(WRAPPED_DOC);
     const result = await runCli('transform', mdPath, '--ops', 'unwrap,frobnicate');

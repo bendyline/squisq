@@ -96,6 +96,17 @@ describe('validate command', () => {
     expect(clean.stderr).to.contain('No problems found');
   });
 
+  it('does not treat an existing asset outside the markdown root as valid', async () => {
+    const sourceDir = join(tempDir, 'confined');
+    await mkdir(sourceDir, { recursive: true });
+    await writeFile(join(tempDir, 'outside.jpg'), Buffer.from([0xff, 0xd8]));
+    const mdPath = join(sourceDir, 'doc.md');
+    await writeFile(mdPath, '# Title\n\n![outside](../outside.jpg)\n');
+
+    const result = await runCli('validate', mdPath);
+    expect(result.stderr).to.contain('missing-asset');
+  });
+
   it('--json emits machine-readable diagnostics', async () => {
     const mdPath = await writeDoc('## Gallery {[photGrid]}\n');
     const result = await runCli('validate', mdPath, '--json');
@@ -110,6 +121,36 @@ describe('validate command', () => {
     expect(parsed.infoCount).to.equal(0);
     expect(parsed.diagnostics[0].code).to.equal('unknown-template');
     expect(parsed.diagnostics[0].line).to.equal(1);
+  });
+
+  it('--json reports canonical Doc schema failures as structured errors', async () => {
+    const jsonPath = join(tempDir, 'invalid-doc.json');
+    await writeFile(
+      jsonPath,
+      JSON.stringify({
+        articleId: 'invalid',
+        duration: 1,
+        blocks: [{ id: 42, startTime: 0, duration: 'forever', audioSegment: 0, children: 'x' }],
+        audio: { segments: [] },
+      }),
+    );
+
+    const result = await runCli('validate', jsonPath, '--json');
+    expect(result.exitCode).to.equal(1);
+    const parsed = JSON.parse(result.stdout) as {
+      errorCount: number;
+      diagnostics: Array<{ severity: string; code: string; message: string }>;
+    };
+    expect(parsed.errorCount).to.be.greaterThan(0);
+    expect(parsed.diagnostics.every((diagnostic) => diagnostic.severity === 'error')).to.equal(
+      true,
+    );
+    expect(
+      parsed.diagnostics.every((diagnostic) => diagnostic.code === 'invalid-doc-schema'),
+    ).to.equal(true);
+    expect(
+      parsed.diagnostics.some((diagnostic) => diagnostic.message.includes('blocks[0].id')),
+    ).to.equal(true);
   });
 
   it('reports info diagnostics, labels them info, and exits 0', async () => {
