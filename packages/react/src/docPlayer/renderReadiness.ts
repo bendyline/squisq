@@ -1,4 +1,5 @@
 const DEFAULT_VIDEO_FRAME_TIMEOUT_MS = 2_000;
+const VIDEO_FRAME_READINESS_POLL_MS = 16;
 const VIDEO_TIME_TOLERANCE_SECONDS = 0.01;
 
 function formatMediaTime(time: number): string {
@@ -52,6 +53,7 @@ export function seekVideoToFrame(
 
     const cleanup = (): void => {
       clearTimeout(timeout);
+      clearInterval(readinessPoll);
       video.removeEventListener('seeked', handleMediaReady);
       video.removeEventListener('loadeddata', handleMediaReady);
       video.removeEventListener('canplay', handleMediaReady);
@@ -79,7 +81,14 @@ export function seekVideoToFrame(
       );
     };
     const requestPresentedFrame = (): void => {
-      if (settled || video.seeking || video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) return;
+      if (
+        settled ||
+        video.seeking ||
+        video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA ||
+        Math.abs(video.currentTime - targetTime) > VIDEO_TIME_TOLERANCE_SECONDS
+      ) {
+        return;
+      }
       if (typeof video.requestVideoFrameCallback !== 'function' || !isVisiblyPresented(video)) {
         finish();
         return;
@@ -98,6 +107,12 @@ export function seekVideoToFrame(
     }
 
     const timeout = setTimeout(fail, timeoutMs);
+    // Chromium can complete an in-buffer seek without dispatching another
+    // media readiness event, particularly when the export player lives under
+    // an opacity-zero capture root. Polling is only a missed-event fallback:
+    // ordinary seeks still settle immediately from `seeked`, while a decoded
+    // hidden frame no longer waits until the hard timeout.
+    const readinessPoll = setInterval(requestPresentedFrame, VIDEO_FRAME_READINESS_POLL_MS);
     video.addEventListener('seeked', handleMediaReady);
     video.addEventListener('loadeddata', handleMediaReady);
     video.addEventListener('canplay', handleMediaReady);
