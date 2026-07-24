@@ -255,6 +255,13 @@ export async function primeIndeterminateCaptureVideos(
         'loading capture metadata',
         () => video.readyState >= HTMLMediaElement.HAVE_METADATA,
       );
+      if (video.videoWidth <= 0 && video.videoHeight <= 0) {
+        // Legacy narration saves could author an Opus-only WebM as <video>.
+        // Audio is mixed by the export timeline; there is no visual frame to
+        // index, seek, clone, or include in the render-readiness barrier.
+        primedVideos.add(video);
+        return;
+      }
       if (Number.isFinite(video.duration)) {
         primedVideos.add(video);
         return;

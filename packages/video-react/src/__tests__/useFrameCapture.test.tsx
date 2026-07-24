@@ -200,6 +200,8 @@ describe('primeIndeterminateCaptureVideos', () => {
       readyState: { configurable: true, get: () => HTMLMediaElement.HAVE_ENOUGH_DATA },
       seeking: { configurable: true, get: () => seeking },
       pause: { configurable: true, value: vi.fn() },
+      videoWidth: { configurable: true, value: 640 },
+      videoHeight: { configurable: true, value: 480 },
     });
     const primed = new WeakSet<HTMLVideoElement>();
 
@@ -213,6 +215,29 @@ describe('primeIndeterminateCaptureVideos', () => {
     expect(assignments).toEqual([1e101, 12.5]);
   });
 
+  it('skips an Opus-only source authored with a video element', async () => {
+    const root = document.createElement('div');
+    root.innerHTML = '<video src="audio/narration.webm"></video>';
+    const video = root.querySelector('video')!;
+    const setCurrentTime = vi.fn();
+    Object.defineProperties(video, {
+      currentSrc: { configurable: true, get: () => 'blob:narration-webm' },
+      duration: { configurable: true, value: Number.POSITIVE_INFINITY },
+      currentTime: { configurable: true, get: () => 66, set: setCurrentTime },
+      readyState: { configurable: true, value: HTMLMediaElement.HAVE_METADATA },
+      videoWidth: { configurable: true, value: 0 },
+      videoHeight: { configurable: true, value: 0 },
+      pause: { configurable: true, value: vi.fn() },
+    });
+    const primed = new WeakSet<HTMLVideoElement>();
+
+    expect(await primeIndeterminateCaptureVideos(root, primed)).toBe(0);
+    expect(await primeIndeterminateCaptureVideos(root, primed)).toBe(0);
+    expect(setCurrentTime).not.toHaveBeenCalled();
+    expect(video.pause).not.toHaveBeenCalled();
+    expect(video.dataset.captureSequential).toBeUndefined();
+  });
+
   it('leaves ordinary finite-duration video at its current frame', async () => {
     const root = document.createElement('div');
     root.innerHTML = '<video src="indexed.mp4"></video>';
@@ -224,6 +249,8 @@ describe('primeIndeterminateCaptureVideos', () => {
       currentTime: { configurable: true, get: () => 4, set: setCurrentTime },
       readyState: { configurable: true, value: HTMLMediaElement.HAVE_METADATA },
       pause: { configurable: true, value: vi.fn() },
+      videoWidth: { configurable: true, value: 640 },
+      videoHeight: { configurable: true, value: 480 },
     });
 
     expect(await primeIndeterminateCaptureVideos(root)).toBe(0);

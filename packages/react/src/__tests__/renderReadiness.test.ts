@@ -10,7 +10,9 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-function controllableVideo(options: { duration?: number; clampToDuration?: boolean } = {}): {
+function controllableVideo(
+  options: { duration?: number; clampToDuration?: boolean; audioOnly?: boolean } = {},
+): {
   video: HTMLVideoElement;
   setSeeking: (value: boolean) => void;
   setReadyState: (value: number) => void;
@@ -37,6 +39,8 @@ function controllableVideo(options: { duration?: number; clampToDuration?: boole
     duration: { configurable: true, get: () => duration },
     seeking: { configurable: true, get: () => seeking },
     readyState: { configurable: true, get: () => readyState },
+    videoWidth: { configurable: true, get: () => (options.audioOnly ? 0 : 640) },
+    videoHeight: { configurable: true, get: () => (options.audioOnly ? 0 : 480) },
   });
   vi.spyOn(video, 'pause').mockImplementation(() => undefined);
   return {
@@ -55,6 +59,21 @@ function controllableVideo(options: { duration?: number; clampToDuration?: boole
 }
 
 describe('seekVideoToFrame', () => {
+  it('skips an audio-only source authored with a video element', async () => {
+    const { video, setReadyState, assignedTimes } = controllableVideo({
+      duration: 246,
+      audioOnly: true,
+    });
+    const play = vi.spyOn(video, 'play').mockResolvedValue(undefined);
+    video.dataset.captureSequential = 'true';
+    setReadyState(HTMLMediaElement.HAVE_METADATA);
+
+    await expect(seekVideoToFrame(video, 66)).resolves.toBeUndefined();
+    expect(play).not.toHaveBeenCalled();
+    expect(video.pause).toHaveBeenCalledOnce();
+    expect(assignedTimes).toEqual([]);
+  });
+
   it('waits for the requested decoded frame instead of trusting currentTime assignment', async () => {
     const { video, setSeeking, setReadyState } = controllableVideo();
     let presentFrame: VideoFrameRequestCallback | null = null;
@@ -211,39 +230,28 @@ describe('seekVideoToFrame', () => {
     expect(video.pause).toHaveBeenCalledOnce();
   });
 
-  it('waits for focus when a covered browser window suspends playback', async () => {
+  it('continues recorder playback when a visible browser window loses focus', async () => {
     vi.useFakeTimers();
-    let focused = false;
-    vi.spyOn(document, 'hasFocus').mockImplementation(() => focused);
+    vi.spyOn(document, 'hasFocus').mockReturnValue(false);
+    vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('visible');
     const { video, setReadyState, advanceTime } = controllableVideo({
       duration: 304.534,
     });
     const play = vi.spyOn(video, 'play').mockResolvedValue(undefined);
     video.dataset.captureSequential = 'true';
     setReadyState(HTMLMediaElement.HAVE_ENOUGH_DATA);
-    let settled = false;
 
     const pending = seekVideoToFrame(video, 1 / 30, 250);
-    void pending.then(
-      () => {
-        settled = true;
-      },
-      () => {
-        settled = true;
-      },
-    );
     await Promise.resolve();
-    expect(play).not.toHaveBeenCalled();
-
-    await vi.advanceTimersByTimeAsync(2_000);
-    expect(settled).toBe(false);
-
-    focused = true;
-    window.dispatchEvent(new Event('focus'));
     expect(play).toHaveBeenCalledOnce();
+
+    window.dispatchEvent(new Event('blur'));
+    expect(video.pause).not.toHaveBeenCalled();
+
     advanceTime(0.034);
     video.dispatchEvent(new Event('timeupdate'));
     await expect(pending).resolves.toBeUndefined();
+    expect(video.pause).toHaveBeenCalledOnce();
   });
 
   it('pauses an ahead recorder WebM instead of seeking it backward', async () => {

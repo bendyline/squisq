@@ -139,9 +139,7 @@ function advanceSequentialCaptureVideo(
     let settled = false;
     let timeout: ReturnType<typeof setTimeout> | null = null;
     const ownerDocument = video.ownerDocument;
-    const ownerWindow = ownerDocument.defaultView;
-    let blurred = ownerWindow ? !ownerDocument.hasFocus() : false;
-    const isInactive = (): boolean => ownerDocument.visibilityState !== 'visible' || blurred;
+    const isInactive = (): boolean => ownerDocument.visibilityState !== 'visible';
     const clearWatchdog = (): void => {
       if (timeout === null) return;
       clearTimeout(timeout);
@@ -155,8 +153,6 @@ function advanceSequentialCaptureVideo(
       video.removeEventListener('canplay', check);
       video.removeEventListener('error', fail);
       ownerDocument.removeEventListener('visibilitychange', handleVisibilityChange);
-      ownerWindow?.removeEventListener('blur', handleBlur);
-      ownerWindow?.removeEventListener('focus', handleFocus);
     };
     const finish = (): void => {
       if (!settled) {
@@ -238,15 +234,6 @@ function advanceSequentialCaptureVideo(
         pauseWhileInactive();
         return;
       }
-      blurred = !ownerDocument.hasFocus();
-      resumeWhenActive();
-    }
-    function handleBlur(): void {
-      blurred = true;
-      pauseWhileInactive();
-    }
-    function handleFocus(): void {
-      blurred = false;
       resumeWhenActive();
     }
 
@@ -256,9 +243,7 @@ function advanceSequentialCaptureVideo(
     video.addEventListener('canplay', check);
     video.addEventListener('error', fail, { once: true });
     ownerDocument.addEventListener('visibilitychange', handleVisibilityChange);
-    ownerWindow?.addEventListener('blur', handleBlur);
-    ownerWindow?.addEventListener('focus', handleFocus);
-    // Install every frame and activity monitor before play(). Each short
+    // Install every frame and visibility monitor before play(). Each short
     // monotonic playback step ends by pausing at its requested timestamp.
     resumeWhenActive();
   });
@@ -278,6 +263,14 @@ export function seekVideoToFrame(
   targetTime: number,
   timeoutMs = DEFAULT_VIDEO_FRAME_TIMEOUT_MS,
 ): Promise<void> {
+  if (
+    video.readyState >= HTMLMediaElement.HAVE_METADATA &&
+    video.videoWidth <= 0 &&
+    video.videoHeight <= 0
+  ) {
+    video.pause();
+    return Promise.resolve();
+  }
   const reachableTargetTime = reachableMediaTime(video, targetTime);
   const step = reachableTargetTime - video.currentTime;
   if (video.dataset.captureSequential === 'true') {

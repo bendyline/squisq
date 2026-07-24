@@ -176,18 +176,15 @@ describe('useVideoExport GIF flow', () => {
     expect(lateBitmap.close).toHaveBeenCalledOnce();
   });
 
-  it('does not spend a browser-operation deadline while its window is unfocused', async () => {
+  it('continues a browser-operation deadline while its visible window is unfocused', async () => {
     vi.useFakeTimers();
-    let focused = true;
-    vi.spyOn(document, 'hasFocus').mockImplementation(() => focused);
+    vi.spyOn(document, 'hasFocus').mockReturnValue(false);
     vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('visible');
     const operation = new Promise<ImageBitmap>(() => undefined);
     const bounded = settleWithin(operation, 1_000, 'Frame timed out', undefined, document);
     let settled = false;
     void bounded.then(
-      () => {
-        settled = true;
-      },
+      () => {},
       () => {
         settled = true;
       },
@@ -195,14 +192,8 @@ describe('useVideoExport GIF flow', () => {
     const rejection = expect(bounded).rejects.toThrow('Frame timed out');
 
     await vi.advanceTimersByTimeAsync(500);
-    focused = false;
     window.dispatchEvent(new Event('blur'));
-    await vi.advanceTimersByTimeAsync(10_000);
-    expect(settled).toBe(false);
-
-    focused = true;
-    window.dispatchEvent(new Event('focus'));
-    await vi.advanceTimersByTimeAsync(999);
+    await vi.advanceTimersByTimeAsync(499);
     expect(settled).toBe(false);
     await vi.advanceTimersByTimeAsync(1);
     await rejection;

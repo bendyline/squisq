@@ -101,9 +101,10 @@ function releaseEncoderFrame(frame: EncoderFrameSource): void {
  * cannot create an unhandled rejection or leak an ImageBitmap.
  *
  * When an activity document is supplied, the deadline counts only time while
- * its window is focused and visible. Chromium may suspend media, canvas, or
- * WebCodecs work when a browser window is covered, backgrounded, or minimized;
- * that temporary suspension must not discard a long-running export.
+ * it remains visible. Chromium may suspend media, canvas, or WebCodecs work
+ * when a tab or window is hidden/minimized; that temporary suspension must not
+ * discard a long-running export. Mere loss of focus is not suspension: a
+ * visible browser covered by another window should continue exporting.
  */
 export function settleWithin<T>(
   operation: Promise<T>,
@@ -115,11 +116,9 @@ export function settleWithin<T>(
   return new Promise((resolve, reject) => {
     let settled = false;
     let timeout: ReturnType<typeof setTimeout> | null = null;
-    const activityWindow = activityDocument?.defaultView ?? null;
-    let blurred = activityDocument ? !activityDocument.hasFocus() : false;
 
     const isInactive = (): boolean =>
-      activityDocument !== undefined && (activityDocument.visibilityState !== 'visible' || blurred);
+      activityDocument !== undefined && activityDocument.visibilityState !== 'visible';
     const clearDeadline = (): void => {
       if (timeout === null) return;
       globalThis.clearTimeout(timeout);
@@ -128,8 +127,6 @@ export function settleWithin<T>(
     const cleanup = (): void => {
       clearDeadline();
       activityDocument?.removeEventListener('visibilitychange', handleVisibilityChange);
-      activityWindow?.removeEventListener('blur', handleBlur);
-      activityWindow?.removeEventListener('focus', handleFocus);
     };
     const fail = (): void => {
       timeout = null;
@@ -148,21 +145,10 @@ export function settleWithin<T>(
         clearDeadline();
         return;
       }
-      blurred = !activityDocument.hasFocus();
-      armDeadline();
-    }
-    function handleBlur(): void {
-      blurred = true;
-      clearDeadline();
-    }
-    function handleFocus(): void {
-      blurred = false;
       armDeadline();
     }
 
     activityDocument?.addEventListener('visibilitychange', handleVisibilityChange);
-    activityWindow?.addEventListener('blur', handleBlur);
-    activityWindow?.addEventListener('focus', handleFocus);
     armDeadline();
 
     void operation.then(
